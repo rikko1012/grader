@@ -72,6 +72,7 @@ input:focus,select:focus{border-color:var(--accent)}
 .side .k{font-size:12px;color:var(--muted)} .side .v{font:700 20px system-ui,sans-serif}
 .bar{height:6px;background:var(--line);border-radius:99px;margin-top:6px;overflow:hidden}
 .bar i{display:block;height:100%;background:var(--accent)}
+.value{margin-top:12px;padding:10px 12px;border:1px dashed var(--line);border-radius:10px;display:grid;gap:4px;font-size:14px}
 .stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px}
 .stat{background:var(--panel-2);border-radius:10px;padding:9px 11px}
 .stat .k{font-size:11.5px;color:var(--muted)} .stat .v{font:600 17px system-ui,sans-serif;margin-top:1px}
@@ -105,7 +106,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 </head>
 <body>
 <div class="wrap">
-  <header><h1>CS2 Prop Grader</h1><span>Maps 1–2 · v7.2</span></header>
+  <header><h1>CS2 Prop Grader</h1><span>Maps 1–2 · v7.3</span></header>
 
   <form id="f" autocomplete="off">
     <div class="field">
@@ -210,7 +211,9 @@ function render(d) {
   let h = "";
 
   // ---- headline
-  const head = v.side ? `Play ${v.side} ${g.line}` : (g.status === "NO GRADE" ? "No grade" : "No play");
+  const head = v.side ? `Play ${v.side} ${g.line}`
+    : g.status === "NO GRADE" ? "No grade"
+    : v.lean ? `Lean ${v.lean} ${g.line} · no bet` : "No play";
   const gateStop = !("p_more" in g);   // stopped by a gate - the reason shows as a pill instead
   const sub = v.side ? `${pct(v.p)} chance · ${v.units}U` : gateStop ? "" : esc(v.reason || "");
   h += `<section class="card"><div class="hero">
@@ -227,6 +230,13 @@ function render(d) {
       <div class="side"><div class="k">More · grade ${esc(g.grade)} · ${g.units || 0}U</div><div class="v">${pct(g.p_more)}</div><div class="bar"><i style="width:${g.p_more*100}%"></i></div></div>
       <div class="side"><div class="k">Less · grade ${esc(g.grade_less)} · ${g.units_less || 0}U</div><div class="v">${pct(g.p_less)}</div><div class="bar"><i style="width:${g.p_less*100}%"></i></div></div>
     </div>
+    ${g.value ? `<div class="value">
+      <div><span class="muted small">More is a bet at</span> <b>${g.value.more_playable_at_or_below} or lower</b>
+        <span class="muted small">(A− at ${g.value.more_a_minus_at_or_below} or lower)</span></div>
+      ${g.value.less_playable_at_or_above != null ? `<div><span class="muted small">Less is a bet at</span> <b>${g.value.less_playable_at_or_above} or higher</b>
+        <span class="muted small">(A− at ${g.value.less_a_minus_at_or_above} or higher)</span></div>` : ""}
+      <div class="muted small">Fair line ${g.value.fair_line} · a line needs about ${(0.33 * g.sd).toFixed(1)} ${stat} of edge to be worth a bet, because Maps 1–2 totals swing about ±${g.sd.toFixed(0)} from match to match</div>
+    </div>` : ""}
     <div class="stats" style="margin-top:10px">
       <div class="stat"><div class="k">Projection</div><div class="v">${num(g.lambda_final,1)}</div><div class="n">${stat}, Maps 1–2</div></div>
       <div class="stat"><div class="k">Line</div><div class="v">${g.line}</div><div class="n">${g.lambda_final < g.line ? "above projection" : "below projection"}</div></div>

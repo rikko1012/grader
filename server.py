@@ -128,13 +128,16 @@ def verdict(g):
         return {"side": "Less", "grade": g["grade_less"], "p": g["p_less"], "units": g["units_less"]}
     best = "More" if g["p_more"] >= g["p_less"] else "Less"
     p = max(g["p_more"], g["p_less"])
+    val = g.get("value") or {}
+    stat = "headshots" if g.get("prop") == "hs" else "kills"
+    gap = abs(g["lambda_final"] - g["line"])
     if g.get("form_fight"):
         why = f"FORM FIGHT - model leans {g['form_fight']} but his last 10 matches disagree"
-    elif p >= 0.57:
-        why = f"Lean {best} ({p:.0%}) - below B+ (63%), no edge after PrizePicks' break-even (57.7%)"
     else:
-        why = "Neither side reaches 57%"
-    return {"side": None, "grade": "C" if p < 0.57 else "B", "p": p, "units": 0.0, "reason": why}
+        why = (f"Lean {best} ({p:.0%}): projection {g['lambda_final']:.1f} vs line {g['line']} is only "
+               f"{gap:.1f} {stat} - inside the normal swing (about ±{g['sd']:.0f}), not enough edge to bet")
+    return {"side": None, "lean": best if p > 0.5 else None, "grade": "C" if p < 0.57 else "B", "p": p,
+            "units": 0.0, "reason": why}
 
 
 def public(res):

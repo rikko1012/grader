@@ -340,6 +340,23 @@ def grade_leg(d, cfg=CONFIG):
     for z in zero_units:
         flags.append(f"0 units: {z}")
     status = "PLAY" if u_more > 0 else "NO PLAY"
+
+    # value lines: where each side becomes playable (B+ = 63%) for THIS projection and spread
+    def line_where(target_more):
+        """Highest .5 line with P(More) >= target (More side) - solved on the same curve."""
+        z = {0.63: 0.3319, 0.68: 0.4677}[target_more]
+        return math.floor(lam_final - 0.5 - z * sd) + 0.5
+    more_at, more_a = line_where(0.63), line_where(0.68)
+    less_at = math.ceil(lam_final - 0.5 + 0.3319 * sd) - 0.5
+    less_a = math.ceil(lam_final - 0.5 + 0.4677 * sd) - 0.5
+    if prop == "kills" and cfg["p_cap_kills"] < 0.68:
+        more_a = less_a = None
+    value = {"fair_line": round(lam_final - 0.5, 1),
+             "more_playable_at_or_below": more_at, "more_a_minus_at_or_below": more_a,
+             "less_playable_at_or_above": less_at if less_ok else None,
+             "less_a_minus_at_or_above": less_a if less_ok else None,
+             "edge_kills": round(lam_final - line - 0.5, 1)}
+    out.update(value=value)
     out.update(
         status=status, grade=grade, model_grade=model_grade, h2h=h2h_note,
         p_more=round(pm, 3), p_less=round(1 - pm, 3), p_more_model=round(pm_model, 3),
