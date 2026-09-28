@@ -24,7 +24,7 @@ import time
 from datetime import datetime, timezone
 
 import cs2_scout
-from bo3 import BO3
+from bo3 import BO3, prune, storage_report
 from grader import units_for
 from polymarket import match_odds, upcoming_events
 
@@ -43,11 +43,25 @@ PLAYABLE = ("A+", "A", "A-", "B+", "B")
 PRELOAD_STATUS = {"enabled": PRELOAD, "players_ready": 0, "last_pass": None, "current": None, "errors": 0}
 
 
+STORAGE = {"last_cleanup": None, "freed_mb": 0.0}
+
+
+def cleanup():
+    """Keep the volume from filling: slim/compress old files, drop stale ones."""
+    try:
+        freed = prune() + cs2_scout.prune_misc()
+        STORAGE["freed_mb"] = round(STORAGE["freed_mb"] + freed / 1e6, 1)
+        STORAGE["last_cleanup"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    except Exception:
+        traceback.print_exc()
+
+
 def preload_forever():
     """Grade every rostered player of every upcoming match once, so members' look-ups hit
     saved data. Matches with a Polymarket market first (those get prop lines), then by start."""
     warmed = {}   # slug -> time loaded
     while True:
+        cleanup()
         try:
             b = BO3(background=True)
             try:
@@ -150,7 +164,8 @@ class Handler(BaseHTTPRequestHandler):
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         try:
             if u.path == "/health":
-                return self.send(200, {"ok": True, "faceit_key": bool(faceit_key()), "preload": PRELOAD_STATUS})
+                return self.send(200, {"ok": True, "faceit_key": bool(faceit_key()), "preload": PRELOAD_STATUS,
+                                       "storage": dict(storage_report(), **STORAGE)})
             if u.path in ("/", "/index.html"):
                 return self.send(200, (WEB / "index.html").read_bytes(), "text/html; charset=utf-8")
             if u.path == "/api/search":
@@ -196,7 +211,9 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     if PRELOAD:
-        threading.Thread(target=preload_forever, daemon=True, name="preload").start()
+        threading.Thread(target=preload_forever, daemon=True, name="preload").start()   # cleans up first
+    else:
+        threading.Thread(target=cleanup, daemon=True, name="cleanup").start()
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"cs2_scout running on {HOST}:{PORT} - open http://localhost:{PORT}  (Ctrl+C to stop)", flush=True)
     try:

@@ -99,11 +99,14 @@ def save_id(hltv_nick, team, res):
                  "faceit_id": res.get("player_id") or "", "confidence": res["confidence"],
                  "evidence": " | ".join(res.get("evidence", [])), "checked": date.today().isoformat()})
     tmp = IDS_CSV.with_suffix(f".{os.getpid()}.tmp")
-    with tmp.open("w", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=IDS_FIELDS)
-        w.writeheader()
-        w.writerows(rows)
-    os.replace(tmp, IDS_CSV)   # atomic - pre-loading and look-ups can both save
+    try:
+        with tmp.open("w", encoding="utf-8", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=IDS_FIELDS)
+            w.writeheader()
+            w.writerows(rows)
+        os.replace(tmp, IDS_CSV)   # atomic - pre-loading and look-ups can both save
+    except OSError:
+        pass   # disk full/read-only: the match is still returned, just not remembered
 
 
 # ---------------------------------------------------------------- resolver

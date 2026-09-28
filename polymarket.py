@@ -19,6 +19,8 @@ import requests
 GAMMA = "https://gamma-api.polymarket.com"
 CS2_SERIES = 10310          # Polymarket's CS2 series id
 MAX_SPREAD = 0.10           # wider bid/ask than this = use last price, flag it
+LIVE_HOURS = 4              # a BO3 is over by then - older markets are finished, awaiting settlement
+SETTLED = 0.03              # a started match priced at <=3% / >=97% is decided - never a pre-match price
 THIN_LIQUIDITY = 500        # USD; below this the price is easy to push around
 GENERIC = {"team", "esports", "esport", "gaming", "club", "academy", "gg", "the"}
 
@@ -82,13 +84,36 @@ def _side(m, team_idx):
     return None if p is None else {"team_prob": round(p, 3), "opp_prob": round(1 - p, 3), "source": src}
 
 
+def _start(ml):
+    try:
+        return datetime.fromisoformat(ml["gameStartTime"].replace(" ", "T").replace("+00", "+00:00"))
+    except (KeyError, AttributeError, ValueError):
+        return None
+
+
+def _finished(ml):
+    """Played already: started over LIVE_HOURS ago, or started and priced as decided."""
+    start = _start(ml)
+    now = datetime.now(timezone.utc)
+    if not start or start > now:
+        return False
+    if now - start > timedelta(hours=LIVE_HOURS):
+        return True
+    try:
+        p = float(json.loads(ml.get("outcomePrices") or "[]")[0])
+    except (ValueError, IndexError, TypeError):
+        return False
+    return p <= SETTLED or p >= 1 - SETTLED
+
+
 def match_odds(team, opponent=None, events=None):
-    """Best upcoming Polymarket match for `team` (optionally vs `opponent`)."""
+    """Best upcoming (or live) Polymarket match for `team` (optionally vs `opponent`).
+    Finished matches still waiting to settle are skipped - their price is the result, not odds."""
     events = upcoming_events() if events is None else events
     best = None
     for ev in events:
         ml = next((m for m in ev.get("markets", []) if m.get("sportsMarketType") == "moneyline"), None)
-        if not ml:
+        if not ml or ml.get("closed") or _finished(ml):
             continue
         outcomes = json.loads(ml.get("outcomes") or "[]")
         if len(outcomes) != 2:

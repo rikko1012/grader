@@ -37,7 +37,7 @@ from pathlib import Path
 
 import requests
 
-from bo3 import BO3
+from bo3 import BO3, _read as bo3_read, _write as bo3_write
 from faceit_resolve import Resolver
 from grader import CONFIG as GRADER_CONFIG, grade_leg
 from polymarket import match_odds
@@ -75,21 +75,31 @@ def norm(s):
 
 
 def cache_get(key, ttl_hours):
-    p = CACHE_DIR / (hashlib.sha1(key.encode()).hexdigest() + ".json")
-    if ttl_hours > 0 and p.exists() and time.time() - p.stat().st_mtime < ttl_hours * 3600:
-        try:
-            return json.loads(p.read_text(encoding="utf-8"))
-        except (ValueError, OSError):
-            return None
+    p = CACHE_DIR / (hashlib.sha1(key.encode()).hexdigest() + ".json.gz")
+    try:
+        if ttl_hours > 0 and time.time() - p.stat().st_mtime < ttl_hours * 3600:
+            return bo3_read(p)
+    except OSError:
+        pass
     return None
 
 
 def cache_put(key, value):
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    p = CACHE_DIR / (hashlib.sha1(key.encode()).hexdigest() + ".json")
-    tmp = p.with_suffix(f".{os.getpid()}.{threading.get_ident()}.tmp")
-    tmp.write_text(json.dumps(value), encoding="utf-8")
-    os.replace(tmp, p)   # atomic
+    bo3_write(CACHE_DIR / (hashlib.sha1(key.encode()).hexdigest() + ".json.gz"), value)   # gzip, atomic, never fatal
+
+
+def prune_misc(keep_days=7):
+    """FACEIT/odds answers: delete anything older than keep_days, old-format files, temp files."""
+    freed, now = 0, time.time()
+    if CACHE_DIR.exists():
+        for p in CACHE_DIR.iterdir():
+            try:
+                if p.is_file() and (p.suffix in (".tmp", ".json") or now - p.stat().st_mtime > keep_days * 86400):
+                    freed += p.stat().st_size
+                    p.unlink()
+            except OSError:
+                continue
+    return freed
 
 
 def load_igl():
