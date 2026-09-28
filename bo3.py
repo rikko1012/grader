@@ -180,7 +180,9 @@ HONEST_HEADERS = {
     "accept": "application/json",
     "user-agent": "cs2_scout/0.2 (CS2 stats tool; python-aiohttp)",
 }
-MIN_GAP = 1.0          # seconds between requests - shared by every BO3 client in this process
+MIN_GAP = 0.25         # seconds between requests (4/s) - shared by every BO3 client in this process
+_MEM = {}              # finished-map scoreboards/vetoes never change: kept in memory after first read
+_MEM_MAX = 60000
 FOREVER = 10 ** 6      # hours - finished map stats never change
 
 # One request schedule for the whole process (member look-ups + background pre-loading), so
@@ -224,9 +226,14 @@ class BO3:
             fresh = ttl > 0 and time.time() - path.stat().st_mtime < ttl * 3600
         except OSError:
             fresh = False
+        forever = ttl >= FOREVER
+        if forever and key in _MEM:
+            return _MEM[key]
         if fresh:
             data = _read(path)
             if data is not None:
+                if forever and len(_MEM) < _MEM_MAX:
+                    _MEM[key] = data
                 return data
         while self.background and _members_active[0] > 0:
             await asyncio.sleep(0.5)                    # a member is waiting - step aside
@@ -244,6 +251,8 @@ class BO3:
         self.requests += 1
         data = slim(endpoint, data)
         _write(path, data)
+        if forever and len(_MEM) < _MEM_MAX:
+            _MEM[key] = data
         return data
 
     def _run(self, coro, ttl=None):
@@ -296,6 +305,18 @@ class BO3:
 
     def team_upcoming(self, team_id):
         return self._run(self.cs2.get_team_upcoming_matches(team_id), ttl=0.5)
+
+    def game_players_many(self, game_ids):
+        """Fetch many scoreboards at once (in flight together, still paced by the shared slot)."""
+        async def go():
+            return await asyncio.gather(*[self.cs2._api._make_request(f"/games/{gid}/players_stats")
+                                          for gid in game_ids])
+        return dict(zip(game_ids, self._run(go(), ttl=FOREVER))) if game_ids else {}
+
+    def match_veto_many(self, slugs):
+        async def go():
+            return await asyncio.gather(*[self.cs2.get_match_details(s) for s in slugs], return_exceptions=True)
+        return dict(zip(slugs, self._run(go(), ttl=FOREVER))) if slugs else {}
 
     def match_veto(self, slug):
         """A finished match's full veto (bans/picks in order, by team) - never changes."""

@@ -181,6 +181,12 @@ def window_games(b, matches, days, cap=None):
     One scoreboard covers all 10 players, so teammates come for free."""
     since = (date.today() - timedelta(days=days)).isoformat()
     cap = cap or MAX_WINDOW_MAPS
+    ids = []
+    for mt in matches:
+        if mt.get("status") != "finished" or (mt.get("start_date") or "")[:10] < since:
+            continue
+        ids += [g["id"] for g in mt.get("games") or [] if g.get("state") == "done"]
+    b.game_players_many(ids[:cap])          # parallel download of anything not saved yet
     out = []
     for mt in matches:
         if mt.get("status") != "finished" or (mt.get("start_date") or "")[:10] < since:
@@ -281,34 +287,37 @@ def awp_status(ratio, body_hits):
 
 
 def map_rows(b, player_id, matches, want_games):
-    """Per-map rows for this player from the given matches (newest first)."""
-    rows = []
+    """Per-map rows for this player from the given matches (newest first). The games are picked
+    in one pass (want_games may count matches), downloaded together, then read."""
+    chosen = []
     for mt in matches:
         if mt.get("status") != "finished":
             continue
-        teams = {mt.get("team1_id"): mt.get("team1") or {}, mt.get("team2_id"): mt.get("team2") or {}}
         for g in sorted(mt.get("games") or [], key=lambda g: g.get("number") or 0):
-            if g.get("state") != "done" or not want_games(mt, g):
-                continue
-            me = next((r for r in b.game_players(g["id"])
-                       if (r.get("steam_profile") or {}).get("player_id") == player_id), None)
-            if not me:
-                continue
-            my_team = (me.get("team_clan") or {}).get("team_id")
-            opp_id = next((t for t in teams if t != my_team), None)
-            rows.append({
-                "game_id": g["id"], "match_id": mt["id"], "match": mt.get("slug"),
-                "date": (g.get("begin_at") or mt.get("start_date") or "")[:10],
-                "number": g.get("number"), "map": g.get("map_name"),
-                "team_id": my_team, "team": (teams.get(my_team) or {}).get("name") or me.get("clan_name"),
-                "opponent_id": opp_id, "opponent": (teams.get(opp_id) or {}).get("name") or me.get("enemy_clan_name"),
-                "kills": me.get("kills"), "headshots": me.get("headshots"), "deaths": me.get("death"),
-                "kast": me.get("kast"), "rounds": (g.get("winner_clan_score") or 0) + (g.get("loser_clan_score") or 0),
-                "won": bool(me.get("win")), "steam_id": (me.get("steam_profile") or {}).get("steam_id_64"),
-                "lineup": [((r.get("steam_profile") or {}).get("player") or {}).get("slug")
-                           for r in b.game_players(g["id"])
-                           if (r.get("team_clan") or {}).get("team_id") == my_team],
-            })
+            if g.get("state") == "done" and want_games(mt, g):
+                chosen.append((mt, g))
+    b.game_players_many([g["id"] for _, g in chosen])
+    rows = []
+    for mt, g in chosen:
+        teams = {mt.get("team1_id"): mt.get("team1") or {}, mt.get("team2_id"): mt.get("team2") or {}}
+        ps = b.game_players(g["id"])
+        me = next((r for r in ps if (r.get("steam_profile") or {}).get("player_id") == player_id), None)
+        if not me:
+            continue
+        my_team = (me.get("team_clan") or {}).get("team_id")
+        opp_id = next((t for t in teams if t != my_team), None)
+        rows.append({
+            "game_id": g["id"], "match_id": mt["id"], "match": mt.get("slug"),
+            "date": (g.get("begin_at") or mt.get("start_date") or "")[:10],
+            "number": g.get("number"), "map": g.get("map_name"),
+            "team_id": my_team, "team": (teams.get(my_team) or {}).get("name") or me.get("clan_name"),
+            "opponent_id": opp_id, "opponent": (teams.get(opp_id) or {}).get("name") or me.get("enemy_clan_name"),
+            "kills": me.get("kills"), "headshots": me.get("headshots"), "deaths": me.get("death"),
+            "kast": me.get("kast"), "rounds": (g.get("winner_clan_score") or 0) + (g.get("loser_clan_score") or 0),
+            "won": bool(me.get("win")), "steam_id": (me.get("steam_profile") or {}).get("steam_id_64"),
+            "lineup": [((r.get("steam_profile") or {}).get("player") or {}).get("slug")
+                       for r in ps if (r.get("team_clan") or {}).get("team_id") == my_team],
+        })
     return rows
 
 
@@ -564,7 +573,11 @@ def veto_profile(b, team_id, before=None):
     ref = date.fromisoformat(before) if before else date.today()
     since = (ref - timedelta(days=VETO_DAYS)).isoformat()
     picks, bans, pool, n = {}, {}, set(), 0
-    for m in b.team_recent(team_id, limit=60 if before else 30).get("results") or []:
+    recent_ms = b.team_recent(team_id, limit=60 if before else 30).get("results") or []
+    b.match_veto_many([m["slug"] for m in recent_ms
+                       if (m.get("start_date") or "")[:10] >= since and (not before or m["start_date"][:10] < before)
+                       ][:VETO_MATCHES * 2])
+    for m in recent_ms:
         start = (m.get("start_date") or "")[:10]
         if before and start >= before:
             continue
@@ -1061,10 +1074,11 @@ def run(args, res, b, ttl):
                 pb["standin_for"] = tname
         pb["scout"] = nxt is None          # no upcoming match -> SCOUT card, no grade/units
         if nxt:
-            try:
-                res["opponent_defense"] = opponent_defense(b, nxt.get("opponent_id"))   # shadow only
-            except Exception:
-                res["opponent_defense"] = None
+            if b.background:   # shadow feature: computed by the pre-loader, never on a member's clock
+                try:
+                    res["opponent_defense"] = opponent_defense(b, nxt.get("opponent_id"))
+                except Exception:
+                    res["opponent_defense"] = None
             res["next_match"] = nxt
             args.opponent = nxt["opponent"]
             if not args.maps and nxt["maps"]:

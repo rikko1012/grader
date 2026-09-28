@@ -50,8 +50,22 @@ def prob_to_american(p):
     return round(-100 * p / (1 - p)) if p >= 0.5 else round(100 * (1 - p) / p)
 
 
+_EVENTS = {"at": 0.0, "data": None}
+EVENTS_TTL = 60   # seconds - the market list is shared by every grade in that minute
+
+
 def upcoming_events(days_back=1):
-    """Open CS2 events whose end date hasn't passed (skips stale never-closed ones)."""
+    """Open CS2 events whose end date hasn't passed (skips stale never-closed ones).
+    Cached in memory for 60 seconds."""
+    import time as _t
+    if _EVENTS["data"] is not None and _t.time() - _EVENTS["at"] < EVENTS_TTL:
+        return _EVENTS["data"]
+    data = _fetch_events(days_back)
+    _EVENTS.update(at=_t.time(), data=data)
+    return data
+
+
+def _fetch_events(days_back):
     since = (datetime.now(timezone.utc) - timedelta(days=days_back)).strftime("%Y-%m-%dT%H:%M:%SZ")
     events, offset = [], 0
     while True:
