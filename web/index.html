@@ -237,7 +237,7 @@ function render(d) {
       <div class="stat"><div class="k">Projection</div><div class="v">${num(g.lambda_final,1)}</div><div class="n">${stat}, Maps 1–2</div></div>
       <div class="stat"><div class="k">Line</div><div class="v">${g.line}</div><div class="n">${g.lambda_final < g.line ? "above projection" : "below projection"}</div></div>
       <div class="stat"><div class="k">Fair line</div><div class="v">${g.value ? g.value.fair_line : "–"}</div><div class="n">where More and Less are even</div></div>
-      <div class="stat"><div class="k">Edge vs PP</div><div class="v">${edge == null ? "–" : (edge > 0 ? "+" : "") + (edge * 100).toFixed(1) + "%"}</div><div class="n">${esc(edgeSide)} side</div></div>
+      <div class="stat"><div class="k">Last 10 median</div><div class="v">${pb.recent_form?.median_total ?? "–"}</div><div class="n">${pb.recent_form?.overs ?? "–"}/${pb.recent_form?.matches ?? "–"} over ${g.line}</div></div>
     </div>`;
   }
   h += `</section>`;

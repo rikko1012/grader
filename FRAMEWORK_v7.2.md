@@ -182,3 +182,12 @@ The calibrated core (c, kills cap, 44/40 rounds, map blend, role 0%, H2H, thresh
 | Opponent defense | SHADOW ONLY - kills/round the opponent allowed on its last 15 Maps 1-2, logged for Phase 10, not in the projection |
 | Phase 10 | Every GRADE logged once (player+prop+line+type+match), auto-settled from BO3.gg 3h after start (Maps 1-2 actual, hit/miss; forfeits/BO1 void), closing line entered on /admin for CLV. Report: printed % vs actual, by units |
 | Not added (by decision) | FACEIT in the projection; role multipliers; Grok's 60/40 last-10 blend (double-counts recent form); opponent defense in λ until Phase 10 proves it |
+
+## v7.4.1 - win/loss measured, not assumed (2026-09-28)
+Measured on 450 real series: actual / base projection when the team won both Maps 1-2 / split /
+lost both = kills 1.043 / 0.969 / 0.871, headshots 1.022 / 0.956 / 0.893. The projection now uses
+the expected factor over those outcomes (series win chance -> per-map q, P(series) = q^2(3-2q)),
+replacing the untested 1.05/0.85 split and 0.12 blowout factor (which penalised a 33.5% underdog
+-5.4% vs the measured -1.9%). The separate stomp cut to 40 rounds is off (the factors already
+include lopsided maps). Calibration after the change: kills B+ 65.4 -> 66.7, A- 70.9 -> 71.2,
+A 76.4 -> 77.9; HS A- 71.0 -> 70.2, A 76.9 -> 77.1, A+ 86.1 -> 86.7.

@@ -26,7 +26,12 @@ CONFIG = {
     "c_hs": 1.30,                # headshots
     "p_cap_kills": 0.78,         # printed 81% kills hit only 69% (fat tails) - no A+ on kills
     "rounds_per_map": 22,        # real CS2 maps average ~21.8 (44 over Maps 1-2; was 23/46)
-    "stomp_rounds_per_map": 20,  # stomp (40 over Maps 1-2)
+    "stomp_rounds_per_map": 22,  # was 20 (40): the measured map-outcome factors below already
+                                 # include short lopsided maps - a separate cut double-counted it
+    # Measured on 450 real series (2026-09-28): actual / base projection by Maps 1-2 outcome.
+    # Replaces the untested 1.05/0.85 win/loss split and the 0.12 blowout factor, which penalised
+    # underdogs ~3x too much (33.5% dog: -5.4% vs measured -1.9%).
+    "map_outcome": {"kills": (1.043, 0.969, 0.871), "hs": (1.022, 0.956, 0.893)},   # (won both, split, lost both)
     "stomp_ml": -400,            # either side at -400 or heavier (P(win) >= 0.80) = stomp
     "thin_maps": 20,             # under 20 Maps 1-2 = thin data: wider SD, 1U cap
     "map_blend_k": 12,           # map KPR weight = n / (n + 12): 8 maps -> 40%, 12 -> 50%
@@ -280,18 +285,25 @@ def grade_leg(d, cfg=CONFIG):
     if prop == "hs" and rank is not None and rank >= 3:
         zero_units.append("HS prop on a #3+ player")
 
-    # 3b Swing, 3c Blowout, cap
+    # 3b Swing, cap
     rs = d.get("round_swing") or 0.0
     swing = 1 + clamp(rs * 3, -6, 6) / 100
-    bf = 1 + 0.12 * (p_win - 0.5)
-    raw_stack = role * swing * bf
+    bf = 1.0                       # blowout now lives inside the measured map-outcome factors
+    raw_stack = role * swing
     stack = clamp(raw_stack, 0.75, 1.20)
     if stack != raw_stack:
         flags.append(f"Stack capped ({raw_stack:.3f} -> {stack:.3f})")
 
-    # 3d Win/loss split
+    # 3d Win/loss: expected factor over Maps 1-2 outcomes (won both / split / lost both), from the
+    # series win chance -> per-map win chance q (BO3: P(series) = q^2 (3 - 2q))
+    lo, hi = 0.0, 1.0
+    for _ in range(40):
+        q = (lo + hi) / 2
+        lo, hi = (q, hi) if q * q * (3 - 2 * q) < p_win else (lo, q)
+    w_both, w_split, w_lost = cfg["map_outcome"]["hs" if prop == "hs" else "kills"]
+    outcome = q * q * w_both + 2 * q * (1 - q) * w_split + (1 - q) ** 2 * w_lost
     lam_adj = lam * stack
-    lam_final = p_win * lam_adj * 1.05 + (1 - p_win) * lam_adj * 0.85
+    lam_final = lam_adj * outcome
 
     # Phase 7 H2H - adjusts lambda; a letter bump needs a real sample
     h = d.get("h2h") or {}
@@ -415,7 +427,8 @@ def grade_leg(d, cfg=CONFIG):
         units=u_more, units_less=u_less, form_fight=fight, tape_fight=tape, scout=scout,
         market_quality=mq,
         lambda_base=round(lam, 2), lambda_final=round(lam_final, 2), sd=round(sd, 2),
-        detail={"rounds": rpm * 2, "stomp": stomp, "p_win": round(p_win, 3),
+        detail={"rounds": rpm * 2, "stomp": stomp, "p_win": round(p_win, 3), "p_map": round(q, 3),
+                "outcome_mult": round(outcome, 3),
                 "role": role_tag, "role_mult": role, "rank": rank, "swing_mult": round(swing, 3),
                 "bf": round(bf, 3), "stack": round(stack, 3), "c": c,
                 "sd_widen": round(sd_mult, 3), "sd_reasons": sd_reasons,
