@@ -650,16 +650,33 @@ def _joined(pb):
     return date.fromisoformat(pb["joined_team"]) if pb.get("joined_team") else None
 
 
-def next_match(b, team_id):
-    """The team's next match on BO3.gg that has NOT started: opponent + vetoed maps in order.
-    A match in progress is skipped - its props are locked, and the grade is for the next one."""
+def upcoming_matches(b, team_id):
+    """Every match the team has on BO3.gg that has NOT started and has a known opponent, earliest
+    first. A team can play 2+ times in a day - the member picks which one the line is for."""
     now = datetime.now(timezone.utc).isoformat()
-    ms = [m for m in (b.team_upcoming(team_id).get("results") or [])
+    # BO3.gg's per-team search misses some matches (e.g. a 2nd match the same day), so the full
+    # 3-day schedule is merged in
+    rows = {m.get("slug"): m for m in (b.team_upcoming(team_id).get("results") or [])}
+    try:
+        for m in _slate_raw(b, 72):
+            if team_id in (m.get("team1_id"), m.get("team2_id")):
+                rows.setdefault(m.get("slug"), m)
+    except Exception:
+        pass
+    ms = [m for m in rows.values()
           if (m.get("team1") or {}).get("name") and (m.get("team2") or {}).get("name")
           and m.get("status") == "upcoming" and (m.get("start_date") or "") > now[:19]]
-    if not ms:
-        return None
-    m = min(ms, key=lambda m: m.get("start_date") or "9999")
+    return [_match_info(m, team_id) for m in sorted(ms, key=lambda m: m.get("start_date") or "9999")]
+
+
+def next_match(b, team_id, want=None):
+    """The team's next match that has NOT started (or the one with slug `want`): opponent + vetoed
+    maps in order. A match in progress is skipped - its props are locked."""
+    ms = upcoming_matches(b, team_id)
+    return next((m for m in ms if want and m["slug"] == want), ms[0] if ms else None)
+
+
+def _match_info(m, team_id):
     opp = m["team2"] if m.get("team1_id") == team_id else m["team1"]
     return {"start": m.get("start_date"), "slug": m.get("slug"), "opponent": opp.get("name"),
             "team1_id": m.get("team1_id"), "team2_id": m.get("team2_id"),
@@ -803,17 +820,8 @@ def grader_inputs(pb, args, odds=None, hh=None):
 
 # ---------------------------------------------------------------- slate
 def slate(b, hours=36):
-    now = datetime.now(timezone.utc)
-    params = {
-        "scope": "widget-matches", "page[offset]": 0, "page[limit]": 100, "sort": "start_date",
-        "filter[matches.status][in]": "upcoming,current",
-        "filter[matches.start_date][gt]": now.strftime("%Y-%m-%d %H:%M"),
-        "filter[matches.start_date][lt]": (now + timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M"),
-        "filter[matches.discipline_id][eq]": 1, "with": "teams,tournament,games",
-    }
-    data = b._run(b.cs2._api._make_request("/matches", params), ttl=0.5)
     out = []
-    for m in data.get("results") or []:
+    for m in _slate_raw(b, hours):
         t1, t2 = m.get("team1") or {}, m.get("team2") or {}
         if not t1.get("name") or not t2.get("name"):
             continue
@@ -823,6 +831,26 @@ def slate(b, hours=36):
                     "team2": t2.get("name"), "team2_slug": t2.get("slug"),
                     "maps": [g.get("map_name") for g in sorted(m.get("games") or [], key=lambda g: g.get("number") or 0)
                              if g.get("map_name")]})
+    return out
+
+
+def _slate_raw(b, hours=36):
+    """Every CS2 match starting in the next `hours` (raw BO3.gg rows, cached 30 min). Times are
+    rounded to the hour so every grade in the same half hour shares one cached schedule."""
+    now = datetime.now(timezone.utc)
+    out = []
+    for page in range(4):
+        params = {
+            "scope": "widget-matches", "page[offset]": 100 * page, "page[limit]": 100, "sort": "start_date",
+            "filter[matches.status][in]": "upcoming,current",
+            "filter[matches.start_date][gt]": now.strftime("%Y-%m-%d %H:00"),
+            "filter[matches.start_date][lt]": (now + timedelta(hours=hours)).strftime("%Y-%m-%d %H:00"),
+            "filter[matches.discipline_id][eq]": 1, "with": "teams,tournament,games",
+        }
+        batch = b._run(b.cs2._api._make_request("/matches", params), ttl=0.5).get("results") or []
+        out += batch
+        if len(batch) < 100:
+            break
     return out
 
 
@@ -1025,13 +1053,14 @@ def main():
 
 
 def grade(name, line, prop="kills", line_type="standard", slug=None, faceit_key=None, ttl=12,
-          background=False):
+          background=False, match=None):
     """One-call entry point for the web interface: everything 'full' does, returned as a dict.
     background=True (pre-loading) gives way to member look-ups."""
     args = argparse.Namespace(
         cmd="full", name=name, bo3_slug=slug, team=None, maps=None, opponent=None, line=line,
         prop=prop, line_type=line_type, team_ml=None, opp_ml=None, faceit=None,
-        faceit_key=faceit_key or os.environ.get("FACEIT_API_KEY"), n=20, refresh=False, ttl=ttl)
+        faceit_key=faceit_key or os.environ.get("FACEIT_API_KEY"), n=20, refresh=False, ttl=ttl,
+        match=match)
     res = {"generated": datetime.now(timezone.utc).isoformat(timespec="seconds"), "command": "grade"}
     b = BO3(ttl_hours=ttl, background=background)
     try:
@@ -1063,12 +1092,17 @@ def run(args, res, b, ttl):
                 teams[r["team_id"]] = r["team"]
         options = []
         for tid, tname in teams.items():
-            nm_ = next_match(b, tid)
-            if nm_:
+            for nm_ in upcoming_matches(b, tid):
                 options.append((nm_["start"] or "9999", tid, tname, nm_))
+        options.sort(key=lambda o: o[0])
+        # two+ matches in a day: grade the one the member picked, else the earliest; list the rest
+        res["match_options"] = [{"slug": o[3]["slug"], "opponent": o[3]["opponent"], "start": o[3]["start"],
+                                 "team": o[2], "event": o[3]["event"]} for o in options[:6]]
+        want = getattr(args, "match", None)
+        chosen = next((o for o in options if want and o[3]["slug"] == want), options[0] if options else None)
         nxt = None
-        if options:
-            _, tid, tname, nxt = min(options, key=lambda o: o[0])
+        if chosen:
+            _, tid, tname, nxt = chosen
             pb["playing_for"], pb["playing_for_id"] = tname, tid
             if tid != pb["team_id"]:
                 pb["standin_for"] = tname
