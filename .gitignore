@@ -1,0 +1,13 @@
+# saved data - lives on the Railway volume, not in the code
+.cache/
+output/
+faceit_ids.csv
+picks_log.csv
+
+# local only
+.claude/
+.hltv_profile/
+__pycache__/
+*.pyc
+Start CS2 Grader.bat
+.env

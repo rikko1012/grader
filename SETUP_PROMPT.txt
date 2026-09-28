@@ -1,0 +1,60 @@
+Paste everything below into the Code tab of the Claude desktop app,
+with this cs2_scout folder selected.
+-------------------------------------------------------------------
+
+I'm not a coder. Explain each step in plain English and ask before running commands.
+
+Goal: a web app my Whop members use. They pick a CS2 player, choose Kills or
+Headshots, enter the line and line type, and get a full v7.2 grade.
+Read README.md and FRAMEWORK_v7.2.md first.
+- cs2_scout.py = the HLTV + FACEIT data scraper
+- grader.py = the finished v7.2 grading math. It is tested. Do NOT change its
+  math; only call grade_leg(), grade_pair(), log_pick(), record_result(), calibration().
+
+1. SETUP: check Python, install requirements.txt, run "playwright install chromium".
+   Ask me for my FACEIT API key and save it as the FACEIT_API_KEY environment
+   variable. Never write it into a file.
+
+2. DONE 2026-09-27 - HLTV replaced by BO3.gg (cs2api wrapper, bo3.py). HLTV's
+   Cloudflare check can't run unattended.
+
+3. DONE 2026-09-27 - roster/stand-in, teammate ratings, all-time-on-team step,
+   AWPer check (replaces Sniping), FACEIT by Steam ID, Polymarket odds, and
+   grader_inputs() mapping into grade_leg(). "python cs2_scout.py full ..." grades.
+   See README.md for what replaced each HLTV-only number.
+
+4. DATABASE: a free hosted database (Supabase or Netlify Blobs, whichever is
+   simpler) holding each player's scraped data and a request queue.
+
+5. MORNING PRE-LOAD (on MY computer, daily 8am): "cs2_scout.py slate" for the
+   next 36 hours, run the scraper for every player on every team playing, save to
+   the database. Keep bo3.py's delays and caching.
+
+6. QUEUE WORKER (on MY computer, while it's awake): every 2 minutes, scrape
+   any player members searched that isn't loaded, save to the database.
+
+7. WEB APP (deploy to Netlify, mobile-first, dark theme). Member inputs:
+   pick a match from the slate -> pick a player from its rosters -> Kills or
+   Headshots -> line -> line type (Standard/Goblin/Demon). Nothing else: team,
+   opponent, maps (once vetoed), odds and FACEIT are all filled in automatically.
+   Members never type player names and never see "unverified"/admin messages.
+   Team odds come automatically from Polymarket (polymarket.py match_odds ->
+   team_ml / opp_ml); show the price, liquidity and any flags. Only ask the
+   member to type moneylines when Polymarket has no market for the match. Run grade_leg() on stored data (port it to JavaScript
+   exactly, or run it in a Netlify Python function) and show: grade, P(More),
+   P(Less), units, lambda, all flags and gates, role, H2H result, and the
+   market edge vs PrizePicks. If a player isn't loaded, queue them and show
+   "Fetching, check back in a few minutes." Add a two-leg pair checker using
+   grade_pair(). Add a live FACEIT section using FACEIT_API_KEY stored only
+   as a Netlify environment variable.
+
+8. IGL LIST: make igl.csv (player, team) I can edit, and feed is_igl from it.
+
+9. LOGGING (Phase 10): a private admin page only I can open where I log
+   picks before matches, enter results after, and see calibration().
+
+10. Make it embeddable in Whop, give me the link, and write me a one-page
+    plain-English guide: daily routine, how to check it's running, what to
+    do if something breaks.
+
+Test everything yourself before telling me it's done.

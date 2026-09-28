@@ -1,0 +1,146 @@
+# CS2 PrizePicks Grading Logic — v7.2
+
+Map 1-2 kills and headshot props. Not financial advice.
+The math lives in `grader.py`; the data comes from `cs2_scout.py`. The last section lists how
+each rule is applied now that BO3.gg replaced HLTV, and every rule change the owner approved.
+
+## Changelog (v7.2)
+1. **CS2 round count** fixed to MR12: **46 standard / 40 stomp** (old CSGO MR15 52/44 inflated every projection).
+2. **Mandatory live roster + role gate** before any projection. Role is overall rating vs teammates, **not** entry rating.
+3. **Sample-size hard gate**: under 10 maps = variance flag; under 5 maps = **NO GRADE**.
+4. **Phase 10**: results logging and calibration loop.
+
+## Core discipline
+Most factors are already inside KPR, HS%, Round Swing, Rating, KAST. Do **not** stack extra
+multipliers for utility, smokes, eco, positioning, or map "bonuses".
+v7 does six things:
+1. Fold map and side into the **base** via filters, not extra bonuses.
+2. Replace cliff thresholds with **smooth continuous functions**.
+3. Compute P(More) from a **distribution**, not a lookup table.
+4. **Cap** the adjustment stack.
+5. Separate **grade** (point estimate) from **confidence** (unit size).
+6. Use sub-ratings to **confirm role**, not add new multipliers.
+
+## PHASE 0 — Intake and hard gates
+**Prop type fork**
+- HS prop: λ = KPR × rounds × HS%
+- Kills prop: λ = KPR × rounds
+
+**Gate A — AWPer on HS prop.** Sniping >40/100 on an HS prop = **NO PLAY**. Near 0 = pure rifler, allowed.
+
+**Gate B — Confirmed IGL.** Apply **-15%** volume. Remove from fragger hierarchy. Do not NO PLAY.
+
+**Gate C — Live roster + role (mandatory).** Pull current lineup at grade time.
+- Confirm player is on the listed team and not a stand-in.
+- Rank by **overall rating vs teammates**.
+- Tag nationality from current roster only.
+- If roster cannot be confirmed, disable regional H2H extension.
+
+**Gate D — Sample size (mandatory)**
+- <10 maps on deepest filter: variance flag, inflate SD, cap **1U**.
+- <5 maps: **NO GRADE**.
+
+## PHASE 1 — Data pull
+**Waterfall (current team; map filter when maps known)**
+1. Last 3 months if maps ≥10
+2. Else last 6 months
+3. Else last 12 months
+4. Else all-time current team, flag ±8% variance
+
+Map filter is mandatory when maps are known.
+**Pull:** KPR, filtered HS% (never career as primary), Round Swing, Sniping, Rating, KAST, DPR, ADR,
+Multi-kill %, four teammate ratings.
+**Recency:** if last 5 maps trend hard vs window, blend **70% window / 30% last-5**.
+**Role signal:** overall rating hierarchy, then AWPer/IGL gates. Entry rating is **not** the
+hierarchy. Confirm with Firepower + Opening. High Trading + low Firepower = support cap.
+**Transfer check:** current team and current teammates only.
+
+## PHASE 2 — Base lambda
+Rounds (CS2 MR12, first to 13): Standard **46**; Stomp **40** when favorite is **-400 or heavier**. Never 52/44.
+
+## PHASE 3 — Bounded adjustment stack (in this order, then clamp)
+- **3a Role:** Primary +5% (gap >0.10 to #2 → +6%); Secondary 0%; 3rd or lower -10%; confirmed IGL -15% and out of hierarchy.
+- **3b Round Swing:** SwingAdj% = clamp(RoundSwing × 3, -6%, +6%)
+- **3c Blowout Factor:** moneyline → P(win); BF = 1 + 0.12 × (P(win) − 0.5)
+- **3d Win/Loss weighting (last):** λ_final = P(win)·λ·1.05 + P(loss)·λ·0.85
+- **Stack cap:** role × swing × BF clamped to **[0.75, 1.20]** before the win/loss split.
+
+## PHASE 4 — Distribution and P(More)
+SD ≈ √λ_final × c (c starts 1.0–1.15, calibrated from logged results).
+P(More than L) = 1 − Φ((L + 0.5 − λ_final) / SD). Continuity correction +0.5.
+
+## PHASE 5 — Grade scale
+| Grade | P(More) |
+|---|---|
+| A+ | ≥80% |
+| A | 74–79% |
+| A- | 68–73% |
+| B+ | 63–67% |
+| B | 57–62% |
+| C | <57% → **NO PLAY** as a core leg |
+
+Pairs require **both legs B+ or better**.
+
+## PHASE 6 — Confidence and sizing
+Widen SD or drop a half-grade for: sample <10 maps; poor DPR + KAST; stomp compression on overs;
+underdog HS prop (needs elite HS% to survive); unconfirmed transfer/role shift.
+**Units:** 2U A+ legs or pairs +60% EV · 1.5U A/A- legs, pairs +30–60% EV · 1U B+ or pairs
++15–30% EV · 0.5U/skip under +15% EV, double-underdog, small-sample flags.
+
+## PHASE 7 — H2H override
+Trigger: **≥4 maps** of player-level H2H across all past teams/IGNs *(owner changed to ≥2 maps /
+1 series — see below)*. Build Maps 1-2 pairs in chronological order **within each series**. Never
+sliding-window across series.
+- ≥65% hit rate and clears in wins → **+1 grade**
+- ≥70% hit rate and floor clears even in losses → **+2 grades**
+- <45% hit rate → full underdog compression
+- 45–65% → no H2H bump
+
+Regional extension only if exact-opponent sample is too small **and** live roster is confirmed.
+
+## PHASE 8 — Pair construction
+Both legs B+ or better · no reused props · strong with strong · different matches = independent by
+default · same-match correlation only if justified and the locked multiplier hasn't nerfed it ·
+EV = P(both) × payout − 1.
+
+## PHASE 9 — Market layer
+PP lines in CS2 are soft; edge comes from lag on roster, role, veto, and form.
+Break-even (independent legs): 2-pick 3x ≈ **57.7%**/leg; 3-pick 6x ≈ **55.0%**/leg.
+A **B** sits on the vig line. Real edge starts at **A- (68%+)**.
+Demon = raised line, usually a trap. Goblin = lowered line, low-variance anchor only if EV is better.
+
+## PHASE 10 — Logging and calibration
+Log **before** the match: player, line, λ, P(More), grade, flags, units, EV. Log **after**: actual
+stat and hit/miss. Never edit pre-game fields. Calibrate by grade tier at ~20+ legs per tier. Main
+dials: SD constant c; adjustment weights (esp. underdog HS and stomp rounds). Never recalibrate off
+one slate.
+
+## Hard rules that never move
+- Verify current team first. Transfers flip the math.
+- Career HS% is invalid as primary input.
+- Map order in H2H is chronological within a series.
+- The **line** is the variable, not the projection.
+- Missing data is a fetch trigger, not a guess.
+- **Kills props beat HS props at equal EV.**
+- Two different matches are independent unless you prove otherwise.
+
+**One line:** confirm live roster and role, pull filtered data, use 46/40 CS2 rounds, apply a
+small capped stack, turn λ into P(More) with a distribution, check the line against vig, size with
+confidence, then log every result so the model calibrates.
+
+---
+
+## How each rule is applied with BO3.gg (owner-approved, 2026-09-27)
+| Rule | Implementation |
+|---|---|
+| Live roster (Gate C) | BO3.gg team page: 5 players (coach excluded). Stand-in = not on the roster. Confirmed = latest map's lineup matches 4+ of them. |
+| Nationality tag (Gate C) | From the opponent's **current roster only**. 3+ players from one country — or from one region in `regions.csv` — = the team is from there. Mixed rosters get no tag and the regional rule doesn't apply. Nothing is guessed: player countries come straight from BO3.gg. |
+| Regions | `regions.csv`: all 254 countries in BO3.gg's 8 regions (Europe, CIS, South America, North America, Asia, Oceania, Africa, Other). Owner override: Ukraine moved from Europe to CIS. Edit the file to change any country. |
+| Regional extension (Phase 7) | Only when there's **no** exact-opponent series (one series counts on its own) **and** the roster is confirmed: adds the player's latest series (Maps 1-2) vs other teams with the same tag, up to 4 series. Marked "regional" in the output. |
+| H2H trigger (Phase 7) | **≥2 maps (1 series)** instead of 4 — `grader.py` CONFIG `h2h_min_maps`. |
+| Sniping (Gate A) | No weapon data on BO3.gg. AWP kills are one body shot: body-shot kills per body hit ≥0.30 = AWPer (Sniping 100 → HS NO PLAY), ≤0.22 = rifler (0), between/too few hits = unknown (flag). |
+| Rating (role) | BO3.gg rating ÷ 6.0 so an average pro = 1.00 (keeps the 0.10 gap rule). |
+| Round Swing (3b) | Not available — 0 (no swing adjustment). |
+| Trading/Firepower support cap | Not available — skipped. |
+| IGL (Gate B) | `igl.csv` (owner-maintained); BO3.gg doesn't record IGLs. |
+| Moneyline (3c/3d, stomp) | Polymarket series price, auto. No market = 50/50, flagged. |
