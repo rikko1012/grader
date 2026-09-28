@@ -225,3 +225,10 @@ Old H2H letter bumps, +/-2% nudges and -15% compression removed. Old 15%-trigger
 removed. H2H vs TAPE gate kept: H2H average and last-10 average on opposite sides of the line -> 0U
 (units hit rate kills 68.9 -> 69.3%, HS 76.6 -> 78.8%). Calibration unchanged: kills B+ 65.4->66.7,
 A- 70.9->71.2, A 76.4->77.9; HS B+ 65.5->68.9, A- 71.0->70.2, A 76.9->77.1, A+ 86.1->86.7.
+
+## v7.5 step 2 - 3/6/12-month form blend (2026-09-28, owner-approved rule: ship only if better)
+KPR and HS% (Maps 1-2) = 0.50 x 3m + 0.30 x 6m + 0.20 x 12m, any window with <10 Maps 1-2 dropped
+and the rest renormalized (full windows, up to 250 maps). Walk-forward, 900 cases: avg miss kills
+6.07 -> 6.01, HS 3.76 -> 3.69 (both better -> shipped into the projection). Calibration: kills
+B+ 65.4->65.1, A- 71.0->72.8, A 76.4->77.5; HS B+ 65.5->68.0, A- 71.1->71.9, A 77.0->76.7, A+ 86.0->87.0.
+The single window (first with 10+ maps) still drives DPR/KAST/ADR risk flags and per-map numbers.

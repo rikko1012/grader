@@ -53,6 +53,8 @@ FACEIT_API = "https://open.faceit.com/data/v4"
 WINDOWS = [("last_3m", 90), ("last_6m", 180), ("last_12m", 365)]
 MIN_MAPS = 10
 MAX_WINDOW_MAPS = 80        # maps (all numbers) read per window, newest first
+BLEND_MAX_MAPS = 250        # form blend reads full 3/6/12-month windows (as tested)
+FORM_BLEND = {"3m": (90, 0.50), "6m": (180, 0.30), "12m": (365, 0.20)}   # v7.5 step 2
 RECENT_MATCHES = 10         # recent form: last 10 matches, Maps 1-2 only
 STANDIN_DAYS = 14           # teams he played for in the last 14 days count as "his" for the next match
 AWP_RATIO, RIFLE_RATIO = 0.30, 0.22   # body-shot kills per body hit
@@ -174,10 +176,11 @@ def hltv_rating(s, kast):
     return round(fit + t * (approx - fit), 3)
 
 
-def window_games(b, matches, days):
+def window_games(b, matches, days, cap=None):
     """Finished maps in the window with their scoreboards, newest first (MAX_WINDOW_MAPS max).
     One scoreboard covers all 10 players, so teammates come for free."""
     since = (date.today() - timedelta(days=days)).isoformat()
+    cap = cap or MAX_WINDOW_MAPS
     out = []
     for mt in matches:
         if mt.get("status") != "finished" or (mt.get("start_date") or "")[:10] < since:
@@ -185,7 +188,7 @@ def window_games(b, matches, days):
         for g in sorted(mt.get("games") or [], key=lambda g: g.get("number") or 0):
             if g.get("state") != "done":
                 continue
-            if len(out) >= MAX_WINDOW_MAPS:
+            if len(out) >= cap:
                 return out
             out.append((g, b.game_players(g["id"])))
     return out
@@ -380,6 +383,23 @@ def run_player(b, name, args):
 
     # stats behind the projection: Maps 1-2 only, from each map's scoreboard
     overall, games = waterfall(b, matches, p["id"], joined)
+    # v7.5 step 2: KPR and HS% = 0.50 x 3m + 0.30 x 6m + 0.20 x 12m (Maps 1-2), dropping any window
+    # with <10 Maps 1-2. Walk-forward (900 cases): miss kills 6.07 -> 6.01, HS 3.76 -> 3.69.
+    windows = {}
+    for label, (wdays, _) in FORM_BLEND.items():
+        a = agg([r for r in player_rows(window_games(b, matches, wdays, BLEND_MAX_MAPS), p["id"]) if r["number"] <= 2])
+        windows[label] = {"maps": a["maps_played"], "kpr": a["kpr"], "hs_pct": a["hs_pct"]}
+    use = {k: v for k, v in windows.items() if v["maps"] >= MIN_MAPS and v["kpr"]}
+    overall["form_windows"] = windows
+    if use:
+        s_ = sum(FORM_BLEND[k][1] for k in use)
+        overall["kpr_single_window"], overall["hs_single_window"] = overall["kpr"], overall["hs_pct"]
+        overall["kpr"] = round(sum(FORM_BLEND[k][1] * v["kpr"] for k, v in use.items()) / s_, 3)
+        hs_use = {k: v for k, v in use.items() if v["hs_pct"] is not None}
+        if hs_use:
+            overall["hs_pct"] = round(sum(FORM_BLEND[k][1] * v["hs_pct"] for k, v in hs_use.items())
+                                      / sum(FORM_BLEND[k][1] for k in hs_use), 1)
+        overall["form_blend"] = "+".join(k for k in FORM_BLEND if k in use)
     out["overall"] = overall
     days = overall["days"]
     out["kast"] = overall["kast"]

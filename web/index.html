@@ -274,7 +274,8 @@ function render(d) {
   const rf = pb.recent_form || {};
   h += `<section class="card"><h2>Stats · Maps 1–2 only · ${esc((o.window || "").replace("last_", "last ").replace(/_/g, " "))} · ${o.maps_played ?? "–"} maps</h2>
     <div class="stats">
-      <div class="stat"><div class="k">Kills / round</div><div class="v">${num(o.kpr,3)}</div></div>
+      <div class="stat"><div class="k">Kills / round</div><div class="v">${num(o.kpr,3)}</div><div class="n">${o.form_blend ? "50% 3m · 30% 6m · 20% 12m" : ""}</div></div>
+      ${o.form_windows ? ["3m", "6m", "12m"].map(k => o.form_windows[k] ? `<div class="stat"><div class="k">${k} KPR · HS%</div><div class="v">${num(o.form_windows[k].kpr,3)}</div><div class="n">${o.form_windows[k].hs_pct ?? "–"}% HS · ${o.form_windows[k].maps} maps${o.form_windows[k].maps < 10 ? " (dropped)" : ""}</div></div>` : "").join("") : ""}
       <div class="stat"><div class="k">Headshot %</div><div class="v">${o.hs_pct ?? "–"}%</div></div>
       <div class="stat"><div class="k">Rating</div><div class="v">${num(o.rating)}</div><div class="n">HLTV-style · all maps</div></div>
       <div class="stat"><div class="k">KAST</div><div class="v">${pb.kast ?? "–"}%</div></div>
