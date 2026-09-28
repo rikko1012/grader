@@ -33,7 +33,8 @@ CONFIG = {
     "h2h_nudge": 0.02,           # 2-3 H2H maps: tiny lambda nudge only, never a letter bump
     "h2h_bump1_maps": 4,         # +1 grade needs 4+ Maps 1-2 of H2H
     "h2h_bump2_maps": 8,         # +2 grades needs 8+ and the floor clears in losses
-    "form_fight_gap": 0.5,       # last-10 smoothed hit rate on the other side of 50% = FORM FIGHT
+    "form_fight_margin": 0.14,   # veto only when the record clearly disagrees: smoothed hit rate
+                                 # <=36% vs a More lean (3/10 or worse) or >=64% vs a Less lean
     "poor_adr": 65.0,
     "recency_trend": 0.15,       # last-5 KPR off window by 15%+ = "trending hard"
     "sd_widen": 1.10,            # per risk condition
@@ -307,13 +308,16 @@ def grade_leg(d, cfg=CONFIG):
     fight = None
     if rec.get("n"):
         sm = (rec["overs"] + 2) / (rec["n"] + 4)          # smoothed last-10 hit rate over the line
-        if pm >= 0.57 and sm < cfg["form_fight_gap"]:
-            fight, pm = "More", min(pm, sm)
-        elif (1 - pm) >= 0.57 and (1 - sm) < cfg["form_fight_gap"]:
-            fight, pm = "Less", max(pm, sm)
+        m = cfg["form_fight_margin"]
+        if pm >= 0.57 and sm <= 0.5 - m:
+            fight = "More"
+        elif (1 - pm) >= 0.57 and sm >= 0.5 + m:
+            fight = "Less"
         if fight:
+            # a veto cancels the bet - it never flips the lean to the other side
+            pm = 0.5
             flags.append(f"FORM FIGHT: model says {fight} but the last {rec['n']} matches went over "
-                         f"{rec['overs']}/{rec['n']} - probability capped at the smoothed record, 0 units")
+                         f"{rec['overs']}/{rec['n']} - no bet either way")
 
     grade = grade_from_p(pm)
     model_grade = grade
@@ -342,13 +346,14 @@ def grade_leg(d, cfg=CONFIG):
     status = "PLAY" if u_more > 0 else "NO PLAY"
 
     # value lines: where each side becomes playable (B+ = 63%) for THIS projection and spread
-    def line_where(target_more):
-        """Highest .5 line with P(More) >= target (More side) - solved on the same curve."""
-        z = {0.63: 0.3319, 0.68: 0.4677}[target_more]
-        return math.floor(lam_final - 0.5 - z * sd) + 0.5
-    more_at, more_a = line_where(0.63), line_where(0.68)
-    less_at = math.ceil(lam_final - 0.5 + 0.3319 * sd) - 0.5
-    less_a = math.ceil(lam_final - 0.5 + 0.4677 * sd) - 0.5
+    # P(More at line L) = 1 - PHI((L + 0.5 - lam)/sd): More reaches p at L <= lam - 0.5 - z*sd,
+    # Less reaches p at L >= lam - 0.5 + z*sd. Lines are x.5, so round to the right x.5.
+    def more_line(z):   # highest x.5 line at or below the threshold
+        return math.floor(lam_final - 0.5 - z * sd - 0.5) + 0.5
+    def less_line(z):   # lowest x.5 line at or above the threshold
+        return math.ceil(lam_final - 0.5 + z * sd - 0.5) + 0.5
+    more_at, more_a = more_line(0.3319), more_line(0.4677)
+    less_at, less_a = less_line(0.3319), less_line(0.4677)
     if prop == "kills" and cfg["p_cap_kills"] < 0.68:
         more_a = less_a = None
     value = {"fair_line": round(lam_final - 0.5, 1),

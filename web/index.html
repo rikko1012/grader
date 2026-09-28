@@ -205,7 +205,7 @@ function render(d) {
   const nm = d.next_match, od = d.odds, hh = d.h2h, fc = d.faceit, det = g.detail || {};
   const stat = g.prop === "hs" ? "headshots" : "kills";
   // edge and the vig note follow the side we recommend (More when nothing is playable)
-  const edgeSide = v.side || "More";
+  const edgeSide = v.side || v.lean || "More";
   const implied = g.market?.pp_implied_more;
   const edge = implied == null ? null : (edgeSide === "Less" ? g.p_less : g.p_more) - implied;
   let h = "";
