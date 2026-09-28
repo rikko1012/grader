@@ -720,6 +720,7 @@ def grader_inputs(pb, args, odds=None, hh=None):
                           if ((odds or {}).get("maps") or {}).get(k) else None for k in ("map1", "map2")]
                          if (odds or {}).get("found") else None,
         "recent_avg": (pb.get("recent_form") or {}).get("avg_total"),
+        "recent_n": (pb.get("recent_form") or {}).get("matches"),
         "scout": bool(pb.get("scout")), "standin_for": pb.get("standin_for"),
         "recent": ({"n": rf["matches"], "overs": rf["overs"]}
                    if (rf := pb.get("recent_form") or {}).get("overs") is not None else None),
@@ -732,8 +733,11 @@ def grader_inputs(pb, args, odds=None, hh=None):
         d["team_ml"] = args.team_ml
     if args.opp_ml is not None:
         d["opp_ml"] = args.opp_ml
-    if hh and hh.get("hit_rate") is not None:
-        d["h2h"] = {k: hh[k] for k in ("maps", "hit_rate", "clears_in_wins", "clears_in_losses")}
+    if hh and hh.get("series"):
+        # exact-opponent series only (regional stand-ins are shown with weight 0)
+        today = date.today()
+        d["h2h_series"] = [{"age_days": (today - date.fromisoformat(x["date"])).days, "total": x["total"]}
+                           for x in hh["series"] if not x.get("regional") and x.get("date")]
     return d
 
 

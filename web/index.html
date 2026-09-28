@@ -304,6 +304,7 @@ function render(d) {
       <td class="small">${s.maps.map(mapName).join(" · ")}</td><td class="num">${s.values.join(" + ")} = <b>${s.total}</b></td>
       <td>${esc(s.result)}</td><td class="${s.total > g.line ? "hit" : "miss"}">${s.total > g.line ? "Over" : "Under"}</td></tr>`;
     h += `</tbody></table></div><div class="small muted" style="margin-top:8px">${esc(g.h2h || "")}</div>`;
+    if (g.flags?.some(f => f.startsWith("0 units: H2H vs TAPE"))) h += `<div class="small" style="margin-top:4px;color:var(--warn)">H2H vs TAPE: head-to-head and last 10 disagree about this line → 0U</div>`;
   } else h += `<div class="muted">No previous series found.</div>`;
   h += `</section>`;
 
@@ -314,7 +315,7 @@ function render(d) {
     for (const s of rf.series) h += `<tr><td class="num" style="text-align:left">${esc(s.date)}</td><td>${esc(s.opponent)}</td>
       <td class="small">${s.maps.map(mapName).join(" · ")}</td><td class="num">${s.values.join(" + ")} = <b>${s.total}</b></td>
       <td>${esc(s.result)}</td><td class="${s.total > g.line ? "hit" : "miss"}">${s.total > g.line ? "Over" : "Under"}</td></tr>`;
-    h += `</tbody></table></div><div class="small muted" style="margin-top:8px">Average ${rf.avg_total} · median ${rf.median_total} ${stat} on Maps 1–2</div>`;
+    h += `</tbody></table></div><div class="small muted" style="margin-top:8px">Average ${rf.avg_total} · median ${rf.median_total} ${stat} on Maps 1–2 · weight in the projection: 0 (tested - his 3-month numbers already include these matches)</div>`;
   } else h += `<div class="muted">No recent matches with two maps.</div>`;
   h += `</section>`;
 

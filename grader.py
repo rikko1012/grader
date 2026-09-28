@@ -34,12 +34,19 @@ CONFIG = {
     "map_outcome": {"kills": (1.043, 0.969, 0.871), "hs": (1.022, 0.956, 0.893)},   # (won both, split, lost both)
     "outcome_clamp": (0.90, 1.08),
     "tape_gap": {"kills": 2.0, "hs": 1.0},     # projection this far from the last-10 average = TAPE note
+    # --- v7.5 step 1 (2026-09-28, owner-specified) ---
+    # Weights MEASURED on 900 walk-forward cases (694 with prior H2H): blending either into the
+    # projection made it slightly LESS accurate (kills miss 6.07 -> 6.10 each; the 3-month window
+    # already contains the last 10). Both are computed and shown on every card at weight 0.
+    "last10_weight": 0.0,        # owner's formula was 0.30 - tested, weight 0
+    "h2h_weight": 0.0,           # owner's formula edge x age x size - tested, weight 0 (shown as "would add")
+    "last10_min": 5,             # need 5+ recent two-map matches to blend
+    "h2h_half": 120,             # H2H series weight = exp(-days_old / 120)
+    "h2h_full_maps": 8,          # size weight = min(maps / 8, 1)
+    "h2h_cap": {"kills": 3.0, "hs": 2.0},
     "stomp_ml": -400,            # either side at -400 or heavier (P(win) >= 0.80) = stomp
     "thin_maps": 20,             # under 20 Maps 1-2 = thin data: wider SD, 1U cap
     "map_blend_k": 12,           # map KPR weight = n / (n + 12): 8 maps -> 40%, 12 -> 50%
-    "h2h_nudge": 0.02,           # 2-3 H2H maps: tiny lambda nudge only, never a letter bump
-    "h2h_bump1_maps": 4,         # +1 grade needs 4+ Maps 1-2 of H2H
-    "h2h_bump2_maps": 8,         # +2 grades needs 8+ and the floor clears in losses
     "form_fight_margin": 0.14,   # veto only when the record clearly disagrees: smoothed hit rate
                                  # <=36% vs a More lean (3/10 or worse) or >=64% vs a Less lean
     "poor_adr": 65.0,
@@ -107,7 +114,7 @@ def p_more(line, lam, sd):
 
 
 def units_for_p(p, cap=None):
-    """Units follow the probability, never a letter after an H2H bump.
+    """Units follow the probability.
     C (<57%) is 0U: it loses in every walk-forward slice."""
     # B (57-63%) = 0.25U since 2026-09-28: after the measured win/loss fix, B hits 59.6% in the
     # walk-forward (kills and HS) vs PrizePicks' 57.7% 2-pick break-even - small edge, small stake.
@@ -221,14 +228,7 @@ def grade_leg(d, cfg=CONFIG):
     kpr = d.get("kpr")
     if not kpr:
         return stop("NO GRADE", "Missing KPR - fetch trigger")
-    ratio = 1.0
-    k5 = d.get("kpr_last5")
-    if k5:
-        trend = (k5 - kpr) / kpr
-        if abs(trend) >= cfg["recency_trend"]:
-            blended = 0.7 * kpr + 0.3 * k5
-            ratio = blended / kpr
-            flags.append(f"Last 10 trending {trend:+.0%} - 70/30 blend applied (KPR {kpr:.3f} -> {blended:.3f})")
+    ratio = 1.0   # (the old 15%-trigger KPR blend is replaced by the always-on last-10 blend below)
 
     hs_pct = d.get("hs_pct")
     if prop == "hs" and hs_pct is None:
@@ -319,30 +319,31 @@ def grade_leg(d, cfg=CONFIG):
     lam_adj = lam * stack
     lam_final = lam_adj * outcome
 
-    # Phase 7 H2H - adjusts lambda; a letter bump needs a real sample
-    h = d.get("h2h") or {}
-    h2h_maps, r = h.get("maps", 0), h.get("hit_rate")
-    h2h_note, bump = "No H2H", 0
-    if h2h_maps >= cfg["h2h_min_maps"] and r is not None:
-        if r < 0.45:
-            if h2h_maps >= cfg["h2h_bump1_maps"]:
-                lam_final = lam_adj * 0.85
-                h2h_note = f"H2H {r:.0%} over {h2h_maps} maps - full underdog compression applied"
-            else:
-                lam_final *= 1 - cfg["h2h_nudge"]
-                h2h_note = f"H2H {r:.0%} over {h2h_maps} maps - small nudge down (-{cfg['h2h_nudge']:.0%})"
-        elif r >= 0.65:
-            if r >= 0.70 and h.get("clears_in_losses") and h2h_maps >= cfg["h2h_bump2_maps"]:
-                bump, h2h_note = 2, f"H2H {r:.0%} over {h2h_maps} maps, clears in losses - +2 grades"
-            elif h.get("clears_in_wins") and h2h_maps >= cfg["h2h_bump1_maps"]:
-                bump, h2h_note = 1, f"H2H {r:.0%} over {h2h_maps} maps, clears in wins - +1 grade"
-            else:
-                lam_final *= 1 + cfg["h2h_nudge"]
-                h2h_note = f"H2H {r:.0%} over {h2h_maps} maps - small nudge up (+{cfg['h2h_nudge']:.0%}), no letter bump"
-        else:
-            h2h_note = f"H2H {r:.0%} over {h2h_maps} maps - no adjustment"
-    elif h2h_maps:
-        h2h_note = f"H2H only {h2h_maps} maps - no trigger" + ("" if regional_ok else " (regional extension disabled)")
+    lam_model = lam_final
+
+    # Last 10 (v7.5): 70% model + 30% his last-10 Maps 1-2 average for this stat, always
+    ra, rn = d.get("recent_avg"), (d.get("recent") or {}).get("n") or d.get("recent_n") or 0
+    last10_mult = 1.0
+    if ra is not None and rn >= cfg["last10_min"] and cfg["last10_weight"] > 0:
+        w10 = cfg["last10_weight"]
+        blended = (1 - w10) * lam_final + w10 * ra
+        last10_mult = blended / lam_final if lam_final else 1.0
+        lam_final = blended
+
+    # H2H (v7.5): moves the projection, weighted by age and sample - never a letter bump
+    series = [s for s in (d.get("h2h_series") or []) if s.get("total") is not None]
+    h2h_note, h2h_edge, h2h_avg = "No H2H", 0.0, None
+    if series:
+        ws = [math.exp(-max(s["age_days"], 0) / cfg["h2h_half"]) for s in series]
+        h2h_avg = sum(w * s["total"] for w, s in zip(ws, series)) / sum(ws)
+        age_w = sum(ws) / len(ws)
+        size_w = min(2 * len(series) / cfg["h2h_full_maps"], 1.0)
+        cap = cfg["h2h_cap"]["hs" if prop == "hs" else "kills"]
+        h2h_edge = clamp((h2h_avg - lam_final) * age_w * size_w, -cap, cap)
+        lam_final += h2h_edge * cfg["h2h_weight"]
+        h2h_note = (f"H2H avg {h2h_avg:.1f} over {len(series)} series ({2 * len(series)} maps) - "
+                    f"age weight {age_w:.2f}, size weight {size_w:.2f} -> would add {h2h_edge:+.2f} "
+                    f"(applied x{cfg['h2h_weight']:g}: tested, didn't improve accuracy)")
 
     # Confidence -> SD
     dpr, kast, adr = d.get("dpr"), d.get("kast"), d.get("adr")
@@ -398,8 +399,6 @@ def grade_leg(d, cfg=CONFIG):
 
     grade = grade_from_p(pm)
     model_grade = grade
-    if bump and not fight:
-        grade = GRADES[min(GRADES.index(grade) + bump, 5)] if grade != "C" else grade
 
     # Phase 9 market layer
     implied = cfg["pp_implied"].get(line_type, 0.485)
@@ -415,6 +414,11 @@ def grade_leg(d, cfg=CONFIG):
         flags.append("Kills props beat HS props at equal EV")
 
     # units follow P (not the letter); B is display-only
+    # H2H vs TAPE (v7.5): head-to-head and last 10 point opposite ways at this line -> 0U
+    if h2h_avg is not None and ra is not None and rn >= cfg["last10_min"]:
+        if (h2h_avg > line) != (ra > line):
+            zero_units.append(f"H2H vs TAPE - H2H avg {h2h_avg:.1f} and last-10 avg {ra} disagree about {line}")
+
     scout = bool(d.get("scout"))
     if scout:
         zero_units.append("SCOUT - no upcoming match found")
@@ -451,7 +455,8 @@ def grade_leg(d, cfg=CONFIG):
         lambda_base=round(lam, 2), lambda_final=round(lam_final, 2), sd=round(sd, 2),
         detail={"rounds": rpm * 2, "stomp": stomp, "p_win": round(p_win, 3), "p_map": round(q, 3),
                 "outcome_mult": round(outcome, 3), "p_map1": round(q1, 3), "p_map2": round(q2, 3),
-                "tape_gap": tape_gap,
+                "tape_gap": tape_gap, "lambda_model": round(lam_model, 2), "last10_mult": round(last10_mult, 3),
+                "h2h_edge": round(h2h_edge, 2), "h2h_avg": None if h2h_avg is None else round(h2h_avg, 1),
                 "role": role_tag, "role_mult": role, "rank": rank, "swing_mult": round(swing, 3),
                 "bf": round(bf, 3), "stack": round(stack, 3), "c": c,
                 "sd_widen": round(sd_mult, 3), "sd_reasons": sd_reasons,

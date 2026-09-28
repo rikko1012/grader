@@ -215,3 +215,13 @@ profile team lags behind stand-ins/loans and doesn't list stand-ins on upcoming 
 soonest match belongs to a team other than his profile team, he is graded as a STAND-IN for it:
 that team's opponent, Polymarket odds and H2H, plus a risk flag (SD +10%) and a 0.5U cap.
 (Original Gate C said NO GRADE for stand-ins; the owner wants them graded.)
+
+## v7.5 step 1 - H2H and last 10 (2026-09-28, owner-approved)
+Owner's formulas were built and tested on 900 walk-forward cases (694 with prior H2H):
+last-10 blend 30% and H2H edge (exp(-days/120) x min(maps/8,1), capped +/-2 HS / +/-3 kills) each
+made projections slightly LESS accurate (kills avg miss 6.07 -> 6.10; both 6.13). Shipped with
+weight 0 in the projection - both computed and shown on every card ("would add +x", weight 0).
+Old H2H letter bumps, +/-2% nudges and -15% compression removed. Old 15%-trigger KPR recency blend
+removed. H2H vs TAPE gate kept: H2H average and last-10 average on opposite sides of the line -> 0U
+(units hit rate kills 68.9 -> 69.3%, HS 76.6 -> 78.8%). Calibration unchanged: kills B+ 65.4->66.7,
+A- 70.9->71.2, A 76.4->77.9; HS B+ 65.5->68.9, A- 71.0->70.2, A 76.9->77.1, A+ 86.1->86.7.
