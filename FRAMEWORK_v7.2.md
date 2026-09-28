@@ -191,3 +191,14 @@ replacing the untested 1.05/0.85 split and 0.12 blowout factor (which penalised 
 -5.4% vs the measured -1.9%). The separate stomp cut to 40 rounds is off (the factors already
 include lopsided maps). Calibration after the change: kills B+ 65.4 -> 66.7, A- 70.9 -> 71.2,
 A 76.4 -> 77.9; HS A- 71.0 -> 70.2, A 76.9 -> 77.1, A+ 86.1 -> 86.7.
+
+## v7.4.2 (2026-09-28, owner-approved)
+- Win/loss factor clamped to [0.90, 1.08]; uses Polymarket Map 1 / Map 2 winner prices when
+  listed (P 2-0 = q1*q2, P 0-2 = (1-q1)(1-q2)), else derives q from the series price.
+- "HS prop on a #3+ player = 0U" DELETED. Role rank is display only. Units follow P only
+  (thin data still caps 1U, FORM/TAPE FIGHT still 0U).
+- TAPE note (display only) when the projection is 1.0+ HS / 2.0+ kills from the last-10 average.
+- Card shows base, win/loss factor, projection, line (+fair), edge (projection - line), last-10.
+- Walk-forward after the change: kills B+ 65.4->66.7, A- 70.9->71.2, A 76.4->77.9; HS B+ 65.5->68.9,
+  A- 71.0->70.2, A 76.9->77.1, A+ 86.1->86.7. HS 0.5U picks 202 -> 573 lines, hit 67.7%.
+  Underdog-only slice not testable (no historical pre-match odds) - Phase 10 will show it.

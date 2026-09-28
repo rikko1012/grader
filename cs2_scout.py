@@ -715,6 +715,10 @@ def grader_inputs(pb, args, odds=None, hh=None):
         "firepower": None, "trading": None, "opening": None,
         "dpr": o.get("dpr"), "kast": pb.get("kast"), "adr": o.get("adr"),
         "market_quality": market_quality(odds), "days_since_last_map": pb.get("days_since_last_map"),
+        "map_win_probs": [((odds or {}).get("maps") or {}).get(k, {}).get("team_prob")
+                          if ((odds or {}).get("maps") or {}).get(k) else None for k in ("map1", "map2")]
+                         if (odds or {}).get("found") else None,
+        "recent_avg": (pb.get("recent_form") or {}).get("avg_total"),
         "scout": bool(pb.get("scout")),
         "recent": ({"n": rf["matches"], "overs": rf["overs"]}
                    if (rf := pb.get("recent_form") or {}).get("overs") is not None else None),

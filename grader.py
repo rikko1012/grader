@@ -32,6 +32,8 @@ CONFIG = {
     # Replaces the untested 1.05/0.85 win/loss split and the 0.12 blowout factor, which penalised
     # underdogs ~3x too much (33.5% dog: -5.4% vs measured -1.9%).
     "map_outcome": {"kills": (1.043, 0.969, 0.871), "hs": (1.022, 0.956, 0.893)},   # (won both, split, lost both)
+    "outcome_clamp": (0.90, 1.08),
+    "tape_gap": {"kills": 2.0, "hs": 1.0},     # projection this far from the last-10 average = TAPE note
     "stomp_ml": -400,            # either side at -400 or heavier (P(win) >= 0.80) = stomp
     "thin_maps": 20,             # under 20 Maps 1-2 = thin data: wider SD, 1U cap
     "map_blend_k": 12,           # map KPR weight = n / (n + 12): 8 maps -> 40%, 12 -> 50%
@@ -282,8 +284,6 @@ def grade_leg(d, cfg=CONFIG):
     tr, fp = d.get("trading"), d.get("firepower")
     if tr is not None and fp is not None and tr >= cfg["support_trading"] and fp <= cfg["support_firepower"]:
         flags.append("Support profile (high Trading, low Firepower) - treat as volume cap")
-    if prop == "hs" and rank is not None and rank >= 3:
-        zero_units.append("HS prop on a #3+ player")
 
     # 3b Swing, cap
     rs = d.get("round_swing") or 0.0
@@ -300,8 +300,12 @@ def grade_leg(d, cfg=CONFIG):
     for _ in range(40):
         q = (lo + hi) / 2
         lo, hi = (q, hi) if q * q * (3 - 2 * q) < p_win else (lo, q)
+    mw = d.get("map_win_probs") or []           # Polymarket Map 1 / Map 2 winner prices when listed
+    q1 = mw[0] if len(mw) > 0 and mw[0] is not None else q
+    q2 = mw[1] if len(mw) > 1 and mw[1] is not None else q
     w_both, w_split, w_lost = cfg["map_outcome"]["hs" if prop == "hs" else "kills"]
-    outcome = q * q * w_both + 2 * q * (1 - q) * w_split + (1 - q) ** 2 * w_lost
+    p20, p02 = q1 * q2, (1 - q1) * (1 - q2)
+    outcome = clamp(p20 * w_both + (1 - p20 - p02) * w_split + p02 * w_lost, *cfg["outcome_clamp"])
     lam_adj = lam * stack
     lam_final = lam_adj * outcome
 
@@ -345,6 +349,14 @@ def grade_leg(d, cfg=CONFIG):
         cap = cfg["p_cap_kills"]
         pm = min(max(pm, 1 - cap), cap)
     pm_model = pm
+
+    # TAPE note (display only): projection far from what he has actually been doing
+    ra = d.get("recent_avg")
+    tape_gap = None
+    if ra is not None:
+        tape_gap = round(lam_final - ra, 1)
+        if abs(tape_gap) >= cfg["tape_gap"]["hs" if prop == "hs" else "kills"]:
+            flags.append(f"TAPE: projection {lam_final:.1f} vs last-10 average {ra} ({tape_gap:+.1f}) - display only")
 
     # Last-10 veto: the model can't out-vote what actually happened at this line
     rec = d.get("recent") or {}
@@ -428,7 +440,8 @@ def grade_leg(d, cfg=CONFIG):
         market_quality=mq,
         lambda_base=round(lam, 2), lambda_final=round(lam_final, 2), sd=round(sd, 2),
         detail={"rounds": rpm * 2, "stomp": stomp, "p_win": round(p_win, 3), "p_map": round(q, 3),
-                "outcome_mult": round(outcome, 3),
+                "outcome_mult": round(outcome, 3), "p_map1": round(q1, 3), "p_map2": round(q2, 3),
+                "tape_gap": tape_gap,
                 "role": role_tag, "role_mult": role, "rank": rank, "swing_mult": round(swing, 3),
                 "bf": round(bf, 3), "stack": round(stack, 3), "c": c,
                 "sd_widen": round(sd_mult, 3), "sd_reasons": sd_reasons,
