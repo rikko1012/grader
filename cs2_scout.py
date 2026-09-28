@@ -30,6 +30,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -76,14 +77,19 @@ def norm(s):
 def cache_get(key, ttl_hours):
     p = CACHE_DIR / (hashlib.sha1(key.encode()).hexdigest() + ".json")
     if ttl_hours > 0 and p.exists() and time.time() - p.stat().st_mtime < ttl_hours * 3600:
-        return json.loads(p.read_text(encoding="utf-8"))
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            return None
     return None
 
 
 def cache_put(key, value):
-    CACHE_DIR.mkdir(exist_ok=True)
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
     p = CACHE_DIR / (hashlib.sha1(key.encode()).hexdigest() + ".json")
-    p.write_text(json.dumps(value), encoding="utf-8")
+    tmp = p.with_suffix(f".{os.getpid()}.{threading.get_ident()}.tmp")
+    tmp.write_text(json.dumps(value), encoding="utf-8")
+    os.replace(tmp, p)   # atomic
 
 
 def load_igl():
@@ -776,14 +782,16 @@ def main():
     print(f"\nSaved: {out}")
 
 
-def grade(name, line, prop="kills", line_type="standard", slug=None, faceit_key=None, ttl=12):
-    """One-call entry point for the web interface: everything 'full' does, returned as a dict."""
+def grade(name, line, prop="kills", line_type="standard", slug=None, faceit_key=None, ttl=12,
+          background=False):
+    """One-call entry point for the web interface: everything 'full' does, returned as a dict.
+    background=True (pre-loading) gives way to member look-ups."""
     args = argparse.Namespace(
         cmd="full", name=name, bo3_slug=slug, team=None, maps=None, opponent=None, line=line,
         prop=prop, line_type=line_type, team_ml=None, opp_ml=None, faceit=None,
         faceit_key=faceit_key or os.environ.get("FACEIT_API_KEY"), n=20, refresh=False, ttl=ttl)
     res = {"generated": datetime.now(timezone.utc).isoformat(timespec="seconds"), "command": "grade"}
-    b = BO3(ttl_hours=ttl)
+    b = BO3(ttl_hours=ttl, background=background)
     try:
         run(args, res, b, ttl)
     except LookupError as e:

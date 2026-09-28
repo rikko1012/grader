@@ -20,17 +20,73 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import time
+from datetime import datetime, timezone
+
 import cs2_scout
 from bo3 import BO3
 from grader import units_for
+from polymarket import match_odds, upcoming_events
 
 BASE = Path(__file__).resolve().parent
 WEB = BASE / "web"
 PORT = int(os.environ.get("PORT", 8000))
 # on a host (Railway sets PORT) listen on all interfaces; locally only this computer
 HOST = os.environ.get("HOST") or ("0.0.0.0" if "PORT" in os.environ else "127.0.0.1")
+# pre-load upcoming matches in the background: on by default on the host, off on a PC
+PRELOAD = os.environ.get("PRELOAD", "1" if "PORT" in os.environ else "0") == "1"
+PRELOAD_HOURS = 36          # matches starting within this window
+PRELOAD_EVERY = 30 * 60     # seconds between passes
+REFRESH_AFTER = 6 * 3600    # re-load a player at most every 6 hours
 GRADE_LOCK = threading.Lock()
 PLAYABLE = ("A+", "A", "A-", "B+", "B")
+PRELOAD_STATUS = {"enabled": PRELOAD, "players_ready": 0, "last_pass": None, "current": None, "errors": 0}
+
+
+def preload_forever():
+    """Grade every rostered player of every upcoming match once, so members' look-ups hit
+    saved data. Matches with a Polymarket market first (those get prop lines), then by start."""
+    warmed = {}   # slug -> time loaded
+    while True:
+        try:
+            b = BO3(background=True)
+            try:
+                slate = cs2_scout.slate(b, PRELOAD_HOURS)
+                try:
+                    events = upcoming_events()
+                    for m in slate:
+                        m["pm"] = match_odds(m["team1"], m["team2"], events).get("found", False)
+                except Exception:
+                    for m in slate:
+                        m["pm"] = False
+                slate.sort(key=lambda m: (not m["pm"], m["start"] or ""))
+                queue = []
+                for m in slate:
+                    for side, other in (("team1", "team2"), ("team2", "team1")):
+                        try:
+                            roster = [p for p in (b.team(m[side + "_slug"]).get("players") or [])
+                                      if not p.get("is_coach")]
+                        except Exception:
+                            continue
+                        queue += [(p["nickname"], p["slug"]) for p in roster]
+            finally:
+                b.close()
+            for nick, slug in queue:
+                if time.time() - warmed.get(slug, 0) < REFRESH_AFTER:
+                    continue
+                PRELOAD_STATUS["current"] = nick
+                try:
+                    cs2_scout.grade(nick, 20.5, slug=slug, faceit_key=None, background=True)
+                    warmed[slug] = time.time()
+                except Exception:
+                    PRELOAD_STATUS["errors"] += 1
+                PRELOAD_STATUS["players_ready"] = sum(1 for t in warmed.values() if time.time() - t < REFRESH_AFTER * 2)
+            PRELOAD_STATUS["current"] = None
+            PRELOAD_STATUS["last_pass"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        except Exception:
+            traceback.print_exc()
+            PRELOAD_STATUS["errors"] += 1
+        time.sleep(PRELOAD_EVERY)
 
 
 def faceit_key():
@@ -94,7 +150,7 @@ class Handler(BaseHTTPRequestHandler):
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         try:
             if u.path == "/health":
-                return self.send(200, {"ok": True, "faceit_key": bool(faceit_key())})
+                return self.send(200, {"ok": True, "faceit_key": bool(faceit_key()), "preload": PRELOAD_STATUS})
             if u.path in ("/", "/index.html"):
                 return self.send(200, (WEB / "index.html").read_bytes(), "text/html; charset=utf-8")
             if u.path == "/api/search":
@@ -139,6 +195,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    if PRELOAD:
+        threading.Thread(target=preload_forever, daemon=True, name="preload").start()
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"cs2_scout running on {HOST}:{PORT} - open http://localhost:{PORT}  (Ctrl+C to stop)", flush=True)
     try:

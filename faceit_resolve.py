@@ -98,10 +98,12 @@ def save_id(hltv_nick, team, res):
     rows.append({"hltv_nick": hltv_nick, "team": team or "", "faceit_nickname": res.get("nickname") or "",
                  "faceit_id": res.get("player_id") or "", "confidence": res["confidence"],
                  "evidence": " | ".join(res.get("evidence", [])), "checked": date.today().isoformat()})
-    with IDS_CSV.open("w", encoding="utf-8", newline="") as f:
+    tmp = IDS_CSV.with_suffix(f".{os.getpid()}.tmp")
+    with tmp.open("w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=IDS_FIELDS)
         w.writeheader()
         w.writerows(rows)
+    os.replace(tmp, IDS_CSV)   # atomic - pre-loading and look-ups can both save
 
 
 # ---------------------------------------------------------------- resolver
