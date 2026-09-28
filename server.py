@@ -152,7 +152,7 @@ def verdict(g):
     if g.get("form_fight"):
         why = f"FORM FIGHT - his last 10 matches disagree with the model, so confidence is halved"
     elif g.get("tape_fight"):
-        why = (f"TAPE FIGHT - model {side} {p:.0%}, but his recent record at this line disagrees - 0 units")
+        why = (f"TAPE FIGHT - model {side} {p:.0%}, but his recent record at this line disagrees - max 0.25U")
     elif units > 0:
         why = f"Projection {g['lambda_final']:.1f} vs line {g['line']} ({gap:+.1f} {stat})"
     else:

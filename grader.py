@@ -57,6 +57,7 @@ CONFIG = {
     # --- v7.4 (2026-09-28): market selection, not new multipliers ---
     "tape_more_max": 0.50,       # TAPE FIGHT: More lean but last-10 over-rate <= 50% -> 0 units
     "tape_less_min": 0.60,       #             Less lean but last-10 over-rate >= 60% -> 0 units
+    "tape_fight_cap": 0.25,      # 2026-09-28: TAPE FIGHT picks hit 59-66% when tested -> max 0.25U, not 0U
     "soft_market_cap": 1.0,      # no usable Polymarket price (SOFT/NONE) -> max 1U
     "veto_mass_min": 0.45,       # predicted maps: top-2 mass under 45% in a slot = veto uncertainty
     "rust_note_days": 8, "rust_flag_days": 15, "rust_cap_days": 29,   # days since last official map
@@ -403,7 +404,7 @@ def grade_leg(d, cfg=CONFIG):
             tape = "Less"
         if tape:
             flags.append(f"TAPE FIGHT: model {tape} {max(pm, 1 - pm):.0%} but last {rec['n']} went over "
-                         f"{rec['overs']}/{rec['n']} - 0 units")
+                         f"{rec['overs']}/{rec['n']} - max {cfg['tape_fight_cap']:g}U")
 
     grade = grade_from_p(pm)
     model_grade = grade
@@ -423,16 +424,24 @@ def grade_leg(d, cfg=CONFIG):
 
     # units follow P (not the letter); B is display-only
     # H2H vs TAPE (v7.5): head-to-head and last 10 point opposite ways at this line -> 0U
+    # Tested 2026-09-28 (900 cases, lines near his recent average): picks this rule zeroed hit
+    # 68.4% kills / 68.2% HS - as well as the rest. Shown as a note, weight 0 on units.
     if h2h_avg is not None and ra is not None and rn >= cfg["last10_min"]:
         if (h2h_avg > line) != (ra > line):
-            zero_units.append(f"H2H vs TAPE - H2H avg {h2h_avg:.1f} and last-10 avg {ra} disagree about {line}")
+            flags.append(f"H2H vs TAPE (note, weight 0 - tested): H2H avg {h2h_avg:.1f} and last-10 "
+                         f"avg {ra} disagree about {line}")
 
     scout = bool(d.get("scout"))
     if scout:
         zero_units.append("SCOUT - no upcoming match found")
-    u_more = 0.0 if (fight == "More" or tape == "More" or zero_units) else units_for_p(pm, unit_cap)
+    # TAPE FIGHT tested 2026-09-28: its picks hit 59.4% kills / 65.7% HS - above the 57.7%
+    # break-even, so a small stake (B size) instead of 0U.
+    tcap = cfg["tape_fight_cap"]
+    u_more = 0.0 if (fight == "More" or zero_units) else units_for_p(
+        pm, min(unit_cap if unit_cap is not None else 9, tcap) if tape == "More" else unit_cap)
     less_ok = line_type == "standard"
-    u_less = 0.0 if (not less_ok or fight == "Less" or tape == "Less" or zero_units) else units_for_p(1 - pm, unit_cap)
+    u_less = 0.0 if (not less_ok or fight == "Less" or zero_units) else units_for_p(
+        1 - pm, min(unit_cap if unit_cap is not None else 9, tcap) if tape == "Less" else unit_cap)
     for z in zero_units:
         flags.append(f"0 units: {z}")
     status = "SCOUT" if scout else "PLAY" if u_more > 0 else "NO PLAY"
