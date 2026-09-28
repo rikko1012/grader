@@ -72,8 +72,13 @@ def load_ids():
     if not IDS_CSV.exists():
         return []
     # utf-8-sig: Excel/Notepad on Windows add a BOM when the file is edited by hand
-    with IDS_CSV.open(encoding="utf-8-sig", newline="") as f:
-        return [r for r in csv.DictReader(f) if r.get("hltv_nick")]
+    try:
+        with IDS_CSV.open(encoding="utf-8-sig", newline="") as f:
+            # keep only known columns - a damaged line (e.g. from a full disk) must not break saving
+            return [{k: (r.get(k) or "") for k in IDS_FIELDS} for r in csv.DictReader(f)
+                    if r.get("hltv_nick") and None not in r]
+    except (OSError, csv.Error, UnicodeDecodeError):
+        return []
 
 
 def _saved(hltv_nick, team):
@@ -101,7 +106,7 @@ def save_id(hltv_nick, team, res):
     tmp = IDS_CSV.with_suffix(f".{os.getpid()}.tmp")
     try:
         with tmp.open("w", encoding="utf-8", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=IDS_FIELDS)
+            w = csv.DictWriter(f, fieldnames=IDS_FIELDS, extrasaction="ignore")
             w.writeheader()
             w.writerows(rows)
         os.replace(tmp, IDS_CSV)   # atomic - pre-loading and look-ups can both save

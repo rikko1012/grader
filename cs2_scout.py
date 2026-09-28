@@ -1041,20 +1041,29 @@ def run(args, res, b, ttl):
     if args.cmd == "odds" or (args.cmd == "full" and (args.team or pb)):
         team = args.name if args.cmd == "odds" else (args.team or pb.get("current_team"))
         res["odds"] = match_odds(team, args.opponent)  # always live, no cache
-    if args.cmd == "faceit" or (args.cmd == "full" and args.faceit_key):
-        fc = FaceitClient(args.faceit_key, ttl)
-        if args.faceit:
-            ident = {"nickname": args.faceit, "player_id": None, "confidence": "manual",
-                     "evidence": ["given with --faceit"], "alternatives": [], "show_to_members": True}
-        else:
-            ident = Resolver(fc).resolve(pb["player"]["nick"], pb.get("current_team"), pb["teammates"],
-                                         use_saved=not args.refresh, steam_id=pb.get("steam_id"))
-        res["faceit_identity"] = ident
-        if ident.get("nickname"):
-            res["faceit"] = fc.summary(ident["nickname"], args.n, ident.get("player_id"))
+    if args.cmd == "full" and args.faceit_key:
+        try:
+            _faceit(args, res, pb, ttl)
+        except Exception as e:          # FACEIT is display-only: it can never break a grade
+            res["faceit_error"] = str(e)[:200]
+    elif args.cmd == "faceit":
+        _faceit(args, res, pb, ttl)
     if args.cmd == "full" and args.line is not None:
         res["grader_inputs"] = grader_inputs(pb, args, res.get("odds"), res.get("h2h"))
         res["grade"] = grade_leg(res["grader_inputs"])
+
+
+def _faceit(args, res, pb, ttl):
+    fc = FaceitClient(args.faceit_key, ttl)
+    if args.faceit:
+        ident = {"nickname": args.faceit, "player_id": None, "confidence": "manual",
+                 "evidence": ["given with --faceit"], "alternatives": [], "show_to_members": True}
+    else:
+        ident = Resolver(fc).resolve(pb["player"]["nick"], pb.get("current_team"), pb["teammates"],
+                                     use_saved=not args.refresh, steam_id=pb.get("steam_id"))
+    res["faceit_identity"] = ident
+    if ident.get("nickname"):
+        res["faceit"] = fc.summary(ident["nickname"], args.n, ident.get("player_id"))
 
 
 if __name__ == "__main__":
