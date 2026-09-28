@@ -232,3 +232,11 @@ and the rest renormalized (full windows, up to 250 maps). Walk-forward, 900 case
 6.07 -> 6.01, HS 3.76 -> 3.69 (both better -> shipped into the projection). Calibration: kills
 B+ 65.4->65.1, A- 71.0->72.8, A 76.4->77.5; HS B+ 65.5->68.0, A- 71.1->71.9, A 77.0->76.7, A+ 86.0->87.0.
 The single window (first with 10+ maps) still drives DPR/KAST/ADR risk flags and per-map numbers.
+
+## v7.5 step 3 - match simulation (2026-09-28, tested; NOT shipped into the grade)
+20,000 runs per grade: map (actual or veto-drawn) -> map winner (Polymarket map price / series-
+derived) -> rounds from the empirical 13-x/OT table (7,627 earlier maps, mean 21.8) -> Poisson kills
+(won map x1.083, lost map x0.880 per round) -> Binomial headshots. Walk-forward, same 900 cases:
+miss kills 6.015 vs curve 6.007, HS 3.711 vs 3.695 (neither better), and kills A+ printed 81.7% hit
+75.2% (too thin-tailed). Owner's bar not met -> the grade keeps the curve + c; the simulation's
+P(More) is printed on the card at weight 0 (sim.py).

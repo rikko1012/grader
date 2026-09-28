@@ -234,6 +234,7 @@ function render(d) {
       <div class="side"><div class="k">More · grade ${esc(g.grade)} · ${g.units || 0}U</div><div class="v">${pct(g.p_more)}</div><div class="bar"><i style="width:${g.p_more*100}%"></i></div></div>
       <div class="side"><div class="k">Less · grade ${esc(g.grade_less)} · ${g.units_less || 0}U</div><div class="v">${pct(g.p_less)}</div><div class="bar"><i style="width:${g.p_less*100}%"></i></div></div>
     </div>
+    ${d.simulation ? `<div class="small muted" style="margin-top:8px">Match simulation (${d.simulation.runs.toLocaleString()} runs): <b>${pct(d.simulation.p_more)} More</b> · average ${d.simulation.mean} · weight 0 (tested: the grade's curve was as accurate and better calibrated)</div>` : ""}
     <div class="stats" style="margin-top:10px">
       <div class="stat"><div class="k">Base</div><div class="v">${num(g.lambda_base,1)}</div><div class="n">KPR × 44${g.prop === "hs" ? " × HS%" : ""}</div></div>
       <div class="stat"><div class="k">Win/loss factor</div><div class="v">×${num(det.outcome_mult,3)}</div><div class="n">${pct(det.p_win,0)} to win</div></div>

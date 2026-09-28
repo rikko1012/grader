@@ -1097,6 +1097,12 @@ def run(args, res, b, ttl):
     if args.cmd == "full" and args.line is not None:
         res["grader_inputs"] = grader_inputs(pb, args, res.get("odds"), res.get("h2h"))
         res["grade"] = grade_leg(res["grader_inputs"])
+        try:   # 20,000-run match simulation - display only (weight 0, tested vs the curve)
+            from sim import simulate
+            res["simulation"] = simulate(res["grader_inputs"])
+        except Exception as e:
+            res["simulation"] = None
+            res["simulation_error"] = str(e)[:200]
 
 
 def _faceit(args, res, pb, ttl):
