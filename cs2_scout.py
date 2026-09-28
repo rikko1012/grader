@@ -51,7 +51,7 @@ FACEIT_API = "https://open.faceit.com/data/v4"
 
 WINDOWS = [("last_3m", 90), ("last_6m", 180), ("last_12m", 365)]
 MIN_MAPS = 10
-MAX_WINDOW_MAPS = 60        # maps scanned for KAST in the stats window (newest first)
+MAX_WINDOW_MAPS = 80        # maps (all numbers) read per window, newest first
 RECENT_MATCHES = 10         # recent form: last 10 matches, Maps 1-2 only
 AWP_RATIO, RIFLE_RATIO = 0.30, 0.22   # body-shot kills per body hit
 AWP_MIN_HITS = 150          # need this many chest+stomach hits to judge
@@ -143,23 +143,57 @@ def hltv_rating(s, kast):
     return round(0.0073 * kast + 0.3591 * kpr - 0.5329 * dpr + 0.2372 * impact + 0.0032 * adr + 0.1587, 3)
 
 
-def window_kast(b, matches, days):
-    """KAST% per player id over the maps in the stats window (the player's team's maps, so
-    teammates come for free). Newest first, at most MAX_WINDOW_MAPS maps."""
+def window_games(b, matches, days):
+    """Finished maps in the window with their scoreboards, newest first (MAX_WINDOW_MAPS max).
+    One scoreboard covers all 10 players, so teammates come for free."""
     since = (date.today() - timedelta(days=days)).isoformat()
-    per, n = {}, 0
+    out = []
     for mt in matches:
         if mt.get("status") != "finished" or (mt.get("start_date") or "")[:10] < since:
             continue
-        for g in mt.get("games") or []:
-            if g.get("state") != "done" or n >= MAX_WINDOW_MAPS:
+        for g in sorted(mt.get("games") or [], key=lambda g: g.get("number") or 0):
+            if g.get("state") != "done":
                 continue
-            n += 1
-            for r in b.game_players(g["id"]):
-                pid = (r.get("steam_profile") or {}).get("player_id")
-                if pid and r.get("kast") is not None:
-                    per.setdefault(pid, []).append(100 * r["kast"])
-    return {pid: (round(sum(v) / len(v), 1), len(v)) for pid, v in per.items()}, n
+            if len(out) >= MAX_WINDOW_MAPS:
+                return out
+            out.append((g, b.game_players(g["id"])))
+    return out
+
+
+def player_rows(games, pid):
+    """One row per map this player played in the given games."""
+    rows = []
+    for g, ps in games:
+        me = next((r for r in ps if (r.get("steam_profile") or {}).get("player_id") == pid), None)
+        if me:
+            rows.append({"number": g.get("number") or 9, "map": g.get("map_name"),
+                         "rounds": (g.get("winner_clan_score") or 0) + (g.get("loser_clan_score") or 0),
+                         "kills": me.get("kills") or 0, "deaths": me.get("death") or 0,
+                         "assists": me.get("assists") or 0, "damage": me.get("damage") or 0,
+                         "headshots": me.get("headshots") or 0,
+                         "kast": 100 * me["kast"] if me.get("kast") is not None else None})
+    return rows
+
+
+def agg(rows):
+    """Per-round stats over a set of maps."""
+    r = sum(x["rounds"] for x in rows)
+    k = sum(x["kills"] for x in rows)
+    kast = [x["kast"] for x in rows if x["kast"] is not None]
+    if not r:
+        return {"maps_played": len(rows), "kpr": None, "dpr": None, "apr": None, "adr": None,
+                "hs_pct": None, "kast": None, "rounds": 0}
+    return {"maps_played": len(rows), "rounds": r,
+            "kpr": round(k / r, 3), "dpr": round(sum(x["deaths"] for x in rows) / r, 3),
+            "apr": round(sum(x["assists"] for x in rows) / r, 3),
+            "adr": round(sum(x["damage"] for x in rows) / r, 1),
+            "hs_pct": round(100 * sum(x["headshots"] for x in rows) / k, 1) if k else None,
+            "kast": round(sum(kast) / len(kast), 1) if kast else None}
+
+
+def rating_of(rows):
+    a = agg(rows)
+    return hltv_rating(a, a["kast"]), a["maps_played"]
 
 
 def chain(joined):
@@ -172,26 +206,32 @@ def chain(joined):
     return steps
 
 
-def waterfall(b, slug, joined):
-    s = None
+def waterfall(b, matches, pid, joined):
+    """3m -> 6m -> 12m -> all-time on team until 10+ MAPS 1-2 (the prop maps). Returns the
+    Maps 1-2 stats and the window's games (all maps, for the rating)."""
+    s, games = None, []
     for label, days in chain(joined):
-        s = window_stats(b, slug, days)
-        if s["maps_played"] is None:
-            return dict(s, window=label, flags=["No BO3.gg stats for this player"])
+        games = window_games(b, matches, days)
+        s = dict(agg([r for r in player_rows(games, pid) if r["number"] <= 2]), window=label, days=days)
         if s["maps_played"] >= MIN_MAPS:
-            flags = ["All-time on current team used (+/-8% variance flag)"] if label == "all_time_on_team" else []
-            return dict(s, window=label, flags=flags)
-    return dict(s, window=label, flags=[f"Only {s['maps_played']} maps even at the widest window - widen SD"])
+            s["flags"] = ["All-time on current team used (+/-8% variance flag)"] if label == "all_time_on_team" else []
+            return s, games
+    s["flags"] = ([f"Only {s['maps_played']} Map 1-2s even at the widest window - widen SD"]
+                  if s["maps_played"] else ["No BO3.gg map data for this player"])
+    return s, games
 
 
-def map_waterfall(b, slug, joined, map_code):
-    """First window with 10+ maps on this map, else the widest one."""
+def map_waterfall(b, matches, pid, joined, map_code):
+    """This map as Map 1 or 2: first window with 10+ such maps, else the widest one."""
     best = None
     for label, days in chain(joined):
-        m = window_stats(b, slug, days)["per_map"].get(map_code)
-        if m:
-            best = dict(m, map=map_code, window=label)
-            if (m["maps_played"] or 0) >= MIN_MAPS:
+        rows = [r for r in player_rows(window_games(b, matches, days), pid)
+                if r["number"] <= 2 and r["map"] == map_code]
+        if rows:
+            a = agg(rows)
+            best = {"map": map_code, "window": label, "maps_played": a["maps_played"], "kpr": a["kpr"],
+                    "hs_pct": a["hs_pct"]}
+            if a["maps_played"] >= MIN_MAPS:
                 break
     return best or {"map": map_code, "maps_played": 0, "kpr": None, "window": None}
 
@@ -301,30 +341,30 @@ def run_player(b, name, args):
                                                              norm(listed) == norm(team.get("slug")))
         out["transfer_check"] = "OK" if out["on_listed_team"] else f"MISMATCH - BO3.gg shows {team.get('name')}, not {listed}"
 
-    overall = waterfall(b, slug, joined)
-    out["overall"] = overall
-    days = overall["days"]
-
-    maps = [x.strip().lower() for x in (args.maps or "").split(",") if x.strip()]
-    out["per_map"] = [map_waterfall(b, slug, joined, m if m.startswith("de_") else f"de_{m}") for m in maps]
-
-    snip, awp_note = awp_status(overall.get("awp_ratio"), overall.get("body_hits") or 0)
-    out["sniping_equiv"], out["awp_note"] = snip, awp_note
-
     matches = b.player_matches(p["id"]).get("results") or []
 
-    # KAST over the window's maps -> HLTV-style rating for him and every teammate (same window)
-    kast, window_maps = window_kast(b, matches, days)
-    k, n = kast.get(p["id"], (None, 0))
-    overall["kast"], overall["kast_maps"] = k, n
-    overall["rating"] = hltv_rating(overall, k)
-    out["kast"] = k
+    # stats behind the projection: Maps 1-2 only, from each map's scoreboard
+    overall, games = waterfall(b, matches, p["id"], joined)
+    out["overall"] = overall
+    days = overall["days"]
+    out["kast"] = overall["kast"]
+
+    maps = [x.strip().lower() for x in (args.maps or "").split(",") if x.strip()]
+    out["per_map"] = [map_waterfall(b, matches, p["id"], joined, m if m.startswith("de_") else f"de_{m}")
+                      for m in maps]
+
+    # AWP check uses BO3.gg's hit-group totals for the same window (all maps - a role, not a prop stat)
+    acc = window_stats(b, slug, days)
+    snip, awp_note = awp_status(acc.get("awp_ratio"), acc.get("body_hits") or 0)
+    out["sniping_equiv"], out["awp_note"] = snip, awp_note
+
+    # rating (role rank): ALL maps in the window, like HLTV - him and every teammate, same maps
+    overall["rating"], overall["rating_maps"] = rating_of(player_rows(games, p["id"]))
     mates = [x for x in roster if x.get("id") != p["id"]]
     out["teammate_ratings"], out["teammate_rating_maps"] = {}, {}
     for x in mates:
-        mk, mn = kast.get(x["id"], (None, 0))
-        out["teammate_ratings"][x["nickname"]] = hltv_rating(window_stats(b, x["slug"], days), mk)
-        out["teammate_rating_maps"][x["nickname"]] = mn
+        out["teammate_ratings"][x["nickname"]], out["teammate_rating_maps"][x["nickname"]] = \
+            rating_of(player_rows(games, x["id"]))
     out["teammates"] = [x["nickname"] for x in mates]
     out["is_igl"] = is_igl(p.get("nickname"), team.get("name"))
 
@@ -608,9 +648,9 @@ def print_summary(res):
         print(f"Roster: {', '.join(p['roster'])}")
         if p.get("roster_note"):
             print(f"  ! {p['roster_note']}")
-        print(f"Window: {o.get('window')}  maps={o.get('maps_played')}  KPR={o.get('kpr')}  DPR={o.get('dpr')}  "
-              f"HS%={o.get('hs_pct')}  ADR={o.get('adr')}  KAST={p.get('kast')}  rating={o.get('rating')} "
-              f"(BO3 {o.get('rating_bo3')})")
+        print(f"Window: {o.get('window')}  Maps 1-2: {o.get('maps_played')}  KPR={o.get('kpr')}  DPR={o.get('dpr')}  "
+              f"HS%={o.get('hs_pct')}  ADR={o.get('adr')}  KAST={p.get('kast')}  |  "
+              f"rating={o.get('rating')} (all {o.get('rating_maps')} maps)")
         for m in p["per_map"]:
             print(f"  {m['map']}: {m.get('window')} maps={m.get('maps_played')} KPR={m.get('kpr')}")
         for fl in o.get("flags", []):
@@ -770,7 +810,8 @@ def run(args, res, b, ttl):
             args.opponent = nxt["opponent"]
             if not args.maps and nxt["maps"]:
                 args.maps = ",".join(nxt["maps"][:2])
-                pb["per_map"] = [map_waterfall(b, pb["player"]["slug"], _joined(pb), m) for m in nxt["maps"][:2]]
+                pb["per_map"] = [map_waterfall(b, pb["_matches"], pb["player"]["id"], _joined(pb), m)
+                                 for m in nxt["maps"][:2]]
     if args.cmd == "h2h" or (args.cmd == "full" and args.opponent):
         if not args.opponent:
             raise SystemExit("h2h needs --opponent")

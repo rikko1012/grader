@@ -256,11 +256,11 @@ function render(d) {
   mates.sort((a, b) => (b.r || 0) - (a.r || 0));
   const maxR = Math.max(...mates.map(m => m.r || 0), 1.2);
   const rf = pb.recent_form || {};
-  h += `<section class="card"><h2>Stats · ${esc((o.window || "").replace("last_", "last ").replace("_", " "))} · ${o.maps_played ?? "–"} maps</h2>
+  h += `<section class="card"><h2>Stats · Maps 1–2 only · ${esc((o.window || "").replace("last_", "last ").replace(/_/g, " "))} · ${o.maps_played ?? "–"} maps</h2>
     <div class="stats">
       <div class="stat"><div class="k">Kills / round</div><div class="v">${num(o.kpr,3)}</div></div>
       <div class="stat"><div class="k">Headshot %</div><div class="v">${o.hs_pct ?? "–"}%</div></div>
-      <div class="stat"><div class="k">Rating</div><div class="v">${num(o.rating)}</div><div class="n">HLTV-style</div></div>
+      <div class="stat"><div class="k">Rating</div><div class="v">${num(o.rating)}</div><div class="n">HLTV-style · all maps</div></div>
       <div class="stat"><div class="k">KAST</div><div class="v">${pb.kast ?? "–"}%</div></div>
       <div class="stat"><div class="k">Deaths / round</div><div class="v">${num(o.dpr,3)}</div></div>
       <div class="stat"><div class="k">ADR</div><div class="v">${o.adr ?? "–"}</div></div>
