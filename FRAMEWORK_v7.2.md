@@ -59,7 +59,7 @@ hierarchy. Confirm with Firepower + Opening. High Trading + low Firepower = supp
 Rounds (CS2 MR12, first to 13): Standard **46**; Stomp **40** when favorite is **-400 or heavier**. Never 52/44.
 
 ## PHASE 3 — Bounded adjustment stack (in this order, then clamp)
-- **3a Role:** Primary +5% (gap >0.10 to #2 → +6%); Secondary 0%; 3rd or lower -10%; confirmed IGL -15% and out of hierarchy.
+- **3a Role:** ~~Primary +5% (gap >0.10 to #2 → +6%); Secondary 0%; 3rd or lower -10%~~ **0% for every rank (owner change 2026-09-27)** — KPR already carries role, so the multiplier double-counted it (check: #3-5 under-projected ~7%, primaries over-projected ~6%). Rank still shown. Confirmed IGL -15% and out of hierarchy (unchanged; `grader.py` CONFIG `role_igl`).
 - **3b Round Swing:** SwingAdj% = clamp(RoundSwing × 3, -6%, +6%)
 - **3c Blowout Factor:** moneyline → P(win); BF = 1 + 0.12 × (P(win) − 0.5)
 - **3d Win/Loss weighting (last):** λ_final = P(win)·λ·1.05 + P(loss)·λ·0.85

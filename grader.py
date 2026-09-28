@@ -31,7 +31,12 @@ CONFIG = {
     "underdog_hs_min": 65.0,     # underdog HS prop needs this HS% to survive
     "support_trading": 60,       # high Trading + low Firepower = support flag
     "support_firepower": 40,
-    "h2h_min_maps": 2,           # H2H counts from 1 series (2 maps); was 4 - changed 2026-09-27 at owner's request
+    # role multipliers - all 1.0 since 2026-09-27 (owner-approved): KPR already reflects a
+    # player's role, so +5%/-10% double-counted it (29-player check: #3-5 under-projected ~7%,
+    # primaries over-projected ~6%). Role rank is still reported.
+    "role_primary": 1.0, "role_primary_gap": 1.0, "role_secondary": 1.0, "role_other": 1.0,
+    "role_igl": 0.85,
+    "h2h_min_maps": 2,          # H2H counts from 1 series (2 maps); was 4 - changed 2026-09-27 at owner's request
     "pp_implied": {"standard": 0.485, "goblin": 0.65, "demon": 0.35},
     "break_even": {"2-pick 3x": 0.577, "3-pick 6x": 0.550, "3-pick 5x": 0.585,
                    "4-pick 10x": 0.562, "5-pick 20x": 0.549, "6-pick 37.5x": 0.547},
@@ -175,7 +180,7 @@ def grade_leg(d, cfg=CONFIG):
     # 3a Role
     rating, mates = d.get("rating"), [t for t in (d.get("teammate_ratings") or []) if t is not None]
     if d.get("is_igl"):
-        role, role_tag = 0.85, "IGL (-15%, out of hierarchy)"
+        role, role_tag = cfg["role_igl"], f"IGL ({cfg['role_igl'] - 1:+.0%}, out of hierarchy)"
     elif rating is None or len(mates) < 4:
         role, role_tag = 1.0, "unconfirmed (need player + 4 teammate ratings)"
         flags.append("Role unconfirmed - 0% role adjustment")
@@ -183,11 +188,12 @@ def grade_leg(d, cfg=CONFIG):
         rank = 1 + sum(1 for t in mates if t > rating)
         if rank == 1:
             gap = rating - max(mates)
-            role, role_tag = (1.06, "primary, gap >0.10") if gap > 0.10 else (1.05, "primary")
+            role, role_tag = ((cfg["role_primary_gap"], "primary, gap >0.10") if gap > 0.10
+                              else (cfg["role_primary"], "primary"))
         elif rank == 2:
-            role, role_tag = 1.0, "secondary"
+            role, role_tag = cfg["role_secondary"], "secondary"
         else:
-            role, role_tag = 0.90, f"#{rank} on team"
+            role, role_tag = cfg["role_other"], f"#{rank} on team"
     tr, fp = d.get("trading"), d.get("firepower")
     if tr is not None and fp is not None and tr >= cfg["support_trading"] and fp <= cfg["support_firepower"]:
         flags.append("Support profile (high Trading, low Firepower) - treat as volume cap")
