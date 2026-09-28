@@ -198,8 +198,9 @@ def grade_leg(d, cfg=CONFIG):
     mls = [float(x) for x in (d.get("team_ml"), d.get("opp_ml")) if x is not None]
     stomp = any(m <= cfg["stomp_ml"] for m in mls)
     rpm = cfg["stomp_rounds_per_map"] if stomp else cfg["rounds_per_map"]
-    if stomp:
-        sd_reasons.append("stomp compression")
+    if stomp:   # no SD widening: measured 2026-09-28, spread when his team won both maps (HS x1.11,
+                # kills x1.32) is no wider than on split maps (x1.19 / x1.28) - shown as a note only
+        flags.append("Heavy favourite (-400 or shorter): note only - measured, spread is not wider")
 
     # Market quality (v7.4): HARD = liquid, tight Polymarket book; SOFT = thin/wide/none
     mq = d.get("market_quality") or ("HARD" if d.get("team_ml") is not None else "NONE")
@@ -360,7 +361,9 @@ def grade_leg(d, cfg=CONFIG):
             (kast is not None and kast <= cfg["poor_kast"]) or (adr is not None and adr <= cfg["poor_adr"])):
         sd_reasons.append("poor DPR + KAST/ADR")
     if prop == "hs" and p_win < 0.5 and (hs_pct or 0) < cfg["underdog_hs_min"]:
-        sd_reasons.append("underdog HS prop")
+        # no SD widening: measured 2026-09-28, HS spread when his team lost both maps is x1.14 vs
+        # x1.19 on split maps - not wider. Kept as a note (the -outcome factor already lowers lambda).
+        flags.append("Underdog HS prop: note only - measured, spread is not wider")
     sd_mult = min(cfg["sd_widen"] ** len(sd_reasons), cfg["sd_widen_max"])
     c = d.get("c") or (cfg["c_hs"] if prop == "hs" else cfg["c"])
     sd = math.sqrt(lam_final) * c * sd_mult
