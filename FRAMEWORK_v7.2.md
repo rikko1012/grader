@@ -245,3 +245,7 @@ P(More) is printed on the card at weight 0 (sim.py).
 lambda x (1 + beta x (share - 20%)), beta fitted on half the teams and scored on the other half:
 miss kills 6.050 vs 6.007, HS 3.733 vs 3.695 - worse; beta flipped sign between halves (+0.17 / -2.1),
 i.e. no consistent signal beyond KPR. Shown on the card ("x% of team kills, weight 0").
+
+## v7.5 step 4b - opening kills (2026-09-28, tested; weight 0)
+lambda x (1 + beta x (opening kills per round / mean - 1)), cross-validated by team: miss kills 6.187
+vs 6.007, HS 3.755 vs 3.695 - worse; beta flipped sign between halves. Shown on the card.

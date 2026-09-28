@@ -414,6 +414,18 @@ def run_player(b, name, args):
             mk += me.get("kills") or 0
             tk += sum(r.get("kills") or 0 for r in ps if (r.get("team_clan") or {}).get("team_id") == tid)
     out["team_kill_share"] = round(mk / tk, 3) if tk else None
+    # 4b (tested 2026-09-28, weight 0): opening kills per round on Maps 1-2 in the window
+    fk = fd = rr_ = 0
+    for g, ps in games:
+        if (g.get("number") or 9) > 2:
+            continue
+        me = next((r for r in ps if (r.get("steam_profile") or {}).get("player_id") == p["id"]), None)
+        if me:
+            fk += me.get("first_kills") or 0
+            fd += me.get("first_death") or 0
+            rr_ += (g.get("winner_clan_score") or 0) + (g.get("loser_clan_score") or 0)
+    out["opening"] = {"kills_per_round": round(fk / rr_, 3) if rr_ else None,
+                      "duel_win": round(fk / (fk + fd), 3) if fk + fd else None}
 
     # his Maps 1-2 numbers on every map in the window (used when the maps are predicted)
     by_map = {}
