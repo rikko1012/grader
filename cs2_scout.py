@@ -56,6 +56,7 @@ MAX_WINDOW_MAPS = 80        # maps (all numbers) read per window, newest first
 RECENT_MATCHES = 10         # recent form: last 10 matches, Maps 1-2 only
 AWP_RATIO, RIFLE_RATIO = 0.30, 0.22   # body-shot kills per body hit
 AWP_MIN_HITS = 150          # need this many chest+stomach hits to judge
+AWP_HS_MAX, AWP_HS_KPR = 40.0, 0.70   # or: HS% under 40 with KPR 0.70+ = AWPer
 NATIONALITY_MIN = 3         # 3+ players of one country = the team is from that country
 REGIONAL_MAX_SERIES = 4    # regional H2H extension: at most this many same-nationality series
 REGIONAL_MAX_LOOKUPS = 40   # team pages checked while looking for them (polite to BO3.gg)
@@ -377,6 +378,13 @@ def run_player(b, name, args):
     out["overall"] = overall
     days = overall["days"]
     out["kast"] = overall["kast"]
+    # his Maps 1-2 numbers on every map in the window (used when the maps are predicted)
+    by_map = {}
+    for r in player_rows(games, p["id"]):
+        if r["number"] <= 2:
+            by_map.setdefault(r["map"], []).append(r)
+    out["map_table"] = {m: {k: v for k, v in agg(rs).items() if k in ("kpr", "hs_pct", "maps_played")}
+                        for m, rs in by_map.items()}
 
     maps = [x.strip().lower() for x in (args.maps or "").split(",") if x.strip()]
     out["per_map"] = [map_waterfall(b, matches, p["id"], joined, m if m.startswith("de_") else f"de_{m}")
@@ -385,6 +393,10 @@ def run_player(b, name, args):
     # AWP check uses BO3.gg's hit-group totals for the same window (all maps - a role, not a prop stat)
     acc = window_stats(b, slug, days)
     snip, awp_note = awp_status(acc.get("awp_ratio"), acc.get("body_hits") or 0)
+    # second AWP test (owner's rule): low headshot share with a high kill rate = AWPer
+    hs, kpr = overall.get("hs_pct"), overall.get("kpr")
+    if snip != 100 and hs is not None and kpr is not None and hs < AWP_HS_MAX and kpr >= AWP_HS_KPR:
+        snip, awp_note = 100, f"AWPer (Maps 1-2 HS% {hs} < {AWP_HS_MAX} with KPR {kpr})"
     out["sniping_equiv"], out["awp_note"] = snip, awp_note
 
     # rating (role rank): ALL maps in the window, like HLTV - him and every teammate, same maps
@@ -485,6 +497,83 @@ def regional_rows(b, pb, opp_id, tag):
     return rows
 
 
+# ---------------------------------------------------------------- map prediction (before the veto)
+# Checked on 21 real BO3 vetoes: order is always ban-ban-pick-pick-ban-ban-decider, Map 1 is the
+# first pick, Map 2 the second, and the team that bans first also picks first - on BO3.gg that is
+# the second-listed team (19 of 21).
+VETO_MATCHES = 15          # each team's last 15 BO3 vetoes
+VETO_DAYS = 150
+P_TEAM2_STARTS = 0.9       # measured 19/21
+VETO_SMOOTH = 0.5          # add-half smoothing so an unseen map is unlikely, not impossible
+
+
+def veto_profile(b, team_id, before=None):
+    """How often a team picks / first-bans each map in its recent BO3s (optionally only
+    matches before a date - used to test predictions honestly)."""
+    ref = date.fromisoformat(before) if before else date.today()
+    since = (ref - timedelta(days=VETO_DAYS)).isoformat()
+    picks, bans, pool, n = {}, {}, set(), 0
+    for m in b.team_recent(team_id, limit=60 if before else 30).get("results") or []:
+        start = (m.get("start_date") or "")[:10]
+        if before and start >= before:
+            continue
+        if n >= VETO_MATCHES or start < since:
+            break
+        try:
+            d = b.match_veto(m["slug"])
+        except Exception:
+            continue
+        vs = sorted(d.get("match_maps") or [], key=lambda v: v.get("order") or 0)
+        if d.get("bo_type") != 3 or len(vs) < 7:
+            continue
+        n += 1
+        for v in vs:
+            name = v.get("map_name") or (v.get("maps") or {}).get("map_name")   # slim or full format
+            if not name:
+                continue
+            pool.add(name)
+            if v.get("team_id") != team_id:
+                continue
+            if v.get("choice_type") == 1:
+                picks[name] = picks.get(name, 0) + 1
+            elif v.get("choice_type") == 2 and (v.get("order") or 9) <= 2:
+                bans[name] = bans.get(name, 0) + 1
+    return {"n": n, "picks": picks, "bans": bans, "pool": pool}
+
+
+def _pick_probs(me, opp, pool, exclude=None):
+    """P(this team picks each map): its pick habit, minus maps it or the opponent tends to ban."""
+    k = len(pool)
+    w = {}
+    for m in pool:
+        if m == exclude:
+            continue
+        pick = (me["picks"].get(m, 0) + VETO_SMOOTH) / (me["n"] + k * VETO_SMOOTH)
+        my_ban = (me["bans"].get(m, 0) + VETO_SMOOTH) / (me["n"] + k * VETO_SMOOTH)
+        opp_ban = (opp["bans"].get(m, 0) + VETO_SMOOTH) / (opp["n"] + k * VETO_SMOOTH)
+        w[m] = pick * (1 - my_ban) * (1 - opp_ban)
+    s = sum(w.values()) or 1
+    return {m: v / s for m, v in w.items()}
+
+
+def predict_maps(b, team1_id, team2_id, before=None):
+    """Probability of each map being Map 1 and Map 2, from both teams' veto habits."""
+    p1, p2 = veto_profile(b, team1_id, before), veto_profile(b, team2_id, before)
+    pool = p1["pool"] | p2["pool"]
+    if not pool or (p1["n"] + p2["n"]) < 3:
+        return None
+    slot1, slot2 = {}, {}
+    for starter, other, ps in ((p2, p1, P_TEAM2_STARTS), (p1, p2, 1 - P_TEAM2_STARTS)):
+        first = _pick_probs(starter, other, pool)
+        for m, pm in first.items():
+            slot1[m] = slot1.get(m, 0) + ps * pm
+            for m2, pm2 in _pick_probs(other, starter, pool, exclude=m).items():
+                slot2[m2] = slot2.get(m2, 0) + ps * pm * pm2
+    top = lambda d: dict(sorted(((m, round(p, 3)) for m, p in d.items() if p >= 0.005),
+                                key=lambda x: -x[1]))
+    return {"map1": top(slot1), "map2": top(slot2), "vetoes_used": {"team1": p1["n"], "team2": p2["n"]}}
+
+
 def _joined(pb):
     return date.fromisoformat(pb["joined_team"]) if pb.get("joined_team") else None
 
@@ -501,6 +590,7 @@ def next_match(b, team_id):
     m = min(ms, key=lambda m: m.get("start_date") or "9999")
     opp = m["team2"] if m.get("team1_id") == team_id else m["team1"]
     return {"start": m.get("start_date"), "slug": m.get("slug"), "opponent": opp.get("name"),
+            "team1_id": m.get("team1_id"), "team2_id": m.get("team2_id"),
             "opponent_id": opp.get("id"), "opponent_slug": opp.get("slug"), "event": (m.get("tournament") or {}).get("name"),
             "maps": [g["map_name"] for g in sorted(m.get("games") or [], key=lambda g: g.get("number") or 0)
                      if g.get("map_name")]}
@@ -565,12 +655,17 @@ def grader_inputs(pb, args, odds=None, hh=None):
         "maps_played": o.get("maps_played"), "kpr": o.get("kpr"), "hs_pct": o.get("hs_pct"),
         "kpr_last5": (pb.get("recent_form") or {}).get("kpr_recent"),  # last 10 matches, Maps 1-2
         "round_swing": None,  # HLTV-only - no swing adjustment
-        "per_map": [{"map": m["map"], "kpr": m.get("kpr"), "hs_pct": None, "maps_played": m.get("maps_played")}
+        "per_map": [{"map": m["map"], "kpr": m.get("kpr"), "hs_pct": m.get("hs_pct"), "maps_played": m.get("maps_played")}
                     for m in pb["per_map"]],
+        "map_probs": ([pb["map_prediction"]["map1"], pb["map_prediction"]["map2"]]
+                      if pb.get("map_prediction") and not pb["per_map"] else None),
+        "map_stats": pb.get("map_table"),
         "rating": o.get("rating"), "teammate_ratings": list(pb["teammate_ratings"].values()),
         "is_igl": pb["is_igl"], "sniping": pb["sniping_equiv"],
         "firepower": None, "trading": None, "opening": None,
-        "dpr": o.get("dpr"), "kast": pb.get("kast"),
+        "dpr": o.get("dpr"), "kast": pb.get("kast"), "adr": o.get("adr"),
+        "recent": ({"n": rf["matches"], "overs": rf["overs"]}
+                   if (rf := pb.get("recent_form") or {}).get("overs") is not None else None),
         "on_listed_team": pb.get("on_listed_team"), "is_standin": pb["is_standin"],
         "roster_confirmed": pb["roster_confirmed"],
     }
@@ -846,6 +941,12 @@ def run(args, res, b, ttl):
                 args.maps = ",".join(nxt["maps"][:2])
                 pb["per_map"] = [map_waterfall(b, pb["_matches"], pb["player"]["id"], _joined(pb), m)
                                  for m in nxt["maps"][:2]]
+            elif not args.maps and nxt.get("team1_id") and nxt.get("team2_id"):
+                # veto not done yet: predict Maps 1-2 from both teams' veto habits
+                try:
+                    pb["map_prediction"] = predict_maps(b, nxt["team1_id"], nxt["team2_id"])
+                except Exception:
+                    pb["map_prediction"] = None
     if args.cmd == "h2h" or (args.cmd == "full" and args.opponent):
         if not args.opponent:
             raise SystemExit("h2h needs --opponent")

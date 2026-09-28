@@ -145,3 +145,23 @@ confidence, then log every result so the model calibrates.
 | Trading/Firepower support cap | Not available — skipped. |
 | IGL (Gate B) | `igl.csv` (owner-maintained); BO3.gg doesn't record IGLs. |
 | Moneyline (3c/3d, stomp) | Polymarket series price, auto. No market = 50/50, flagged. |
+
+## v7.3 calibration (2026-09-28, owner-approved; tested out-of-sample before going live)
+Test: 45 players' last 10 matches graded with ONLY data from before each match, 13 lines each
+(5,850 kill lines + 5,850 HS lines). Live settings, printed -> actual:
+kills B+ 65.4 -> 64.3, A- 71.0 -> 71.4, A 76.4 -> 76.3 | HS B+ 65.4 -> 64.5, A- 71.0 -> 70.5, A 77.0 -> 77.3, A+ 86.1 -> 86.5.
+
+| Setting | Now | Why |
+|---|---|---|
+| SD constant c (kills) | **1.55** | out-of-sample spread; 1.26 (in-sample) still printed 65% for 60% |
+| c (headshots) | **1.30** | best out-of-sample fit (gap 0.8%) |
+| Kills probability cap | **78%** (no A+ on kills) | printed 81% hit 69% - fat tails |
+| Rounds | **22/map (44)**, stomp 40 when either side is -400 or heavier | real maps average 21.8 |
+| Role multiplier | **0%** (rank shown) | owner asked for it back on; out-of-sample it made projections 1.9 kills too low and failed the 63-67% target |
+| Map KPR | blended: weight n/(n+12) (8 maps = 40%) | no hard switch at 5 maps |
+| Thin data | <20 Maps 1-2: wider SD, 1U cap (<5 still NO GRADE) | BO3.gg under-covers tier 2/3 |
+| H2H | 2-3 maps: +/-2% projection nudge only; +1 grade needs 4+ maps; +2 needs 8+ and clears in losses; units never follow a bump | one series is one night |
+| FORM FIGHT | if last 10 matches' smoothed hit rate at the line is on the other side of 50%, P capped at it and 0 units | the record vetoes the model |
+| Units | follow P: 2U 80%+, 1.5U 74%+, 1U 68%+, 0.5U 63%+, 0U below; B = display only; 0U on form fight or HS prop on a #3+ player | B sits on break-even (57.7%) |
+| AWP gate | body-shot kill rate >= 0.30 **or** Maps 1-2 HS% < 40 with KPR >= 0.70 | owner's HS% rule added |
+| Map prediction (before the veto) | each team's picks/first-bans over its last 15 BO3s; Map 1 = first-banning team's pick (BO3.gg's 2nd-listed team, 19/21); projection = probability-weighted over maps | tested on 74 matches: top guess right 30%, actual map gets 23% on average vs 13% random - weighting, never a single guess |

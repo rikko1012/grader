@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 
 import cs2_scout
 from bo3 import BO3, prune, storage_report
-from grader import units_for
+
 from polymarket import match_odds, upcoming_events
 
 BASE = Path(__file__).resolve().parent
@@ -39,7 +39,7 @@ PRELOAD_HOURS = 36          # matches starting within this window
 PRELOAD_EVERY = 30 * 60     # seconds between passes
 REFRESH_AFTER = 6 * 3600    # re-load a player at most every 6 hours
 GRADE_LOCK = threading.Lock()
-PLAYABLE = ("A+", "A", "A-", "B+", "B")
+
 PRELOAD_STATUS = {"enabled": PRELOAD, "players_ready": 0, "last_pass": None, "current": None, "errors": 0}
 
 
@@ -121,15 +121,20 @@ def verdict(g):
     if not g or "p_more" not in g:
         return {"side": None, "grade": (g or {}).get("grade", "NO GRADE"), "units": 0.0,
                 "reason": (g or {}).get("reason")}
-    small = any("Gate D" in f for f in g["flags"])
-    more, less = g["grade"], g.get("grade_less")
-    if g["status"] == "PLAY":
-        return {"side": "More", "grade": more, "p": g["p_more"], "units": g["units"]}
-    if less in PLAYABLE:
-        return {"side": "Less", "grade": less, "p": g["p_less"], "units": units_for(less, small)}
-    return {"side": None, "grade": "C", "p": max(g["p_more"], g["p_less"]), "units": 0.0,
-            "reason": "Neither side reaches B (57%)" if g["line_type"] == "standard"
-            else "More is below B and this line type has no Less"}
+    # units come from the grader and follow P: B (57-62%) is display-only, 0 units
+    if g.get("units", 0) > 0:
+        return {"side": "More", "grade": g["grade"], "p": g["p_more"], "units": g["units"]}
+    if g.get("units_less", 0) > 0:
+        return {"side": "Less", "grade": g["grade_less"], "p": g["p_less"], "units": g["units_less"]}
+    best = "More" if g["p_more"] >= g["p_less"] else "Less"
+    p = max(g["p_more"], g["p_less"])
+    if g.get("form_fight"):
+        why = f"FORM FIGHT - model leans {g['form_fight']} but his last 10 matches disagree"
+    elif p >= 0.57:
+        why = f"Lean {best} ({p:.0%}) - below B+ (63%), no edge after PrizePicks' break-even (57.7%)"
+    else:
+        why = "Neither side reaches 57%"
+    return {"side": None, "grade": "C" if p < 0.57 else "B", "p": p, "units": 0.0, "reason": why}
 
 
 def public(res):

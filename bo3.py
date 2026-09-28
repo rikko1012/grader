@@ -81,9 +81,19 @@ def _slim_row(r):
     return out
 
 
+MATCH_DETAIL = re.compile(r"^/matches/[^/]+$")
+
+
+def _slim_veto(v):
+    return {"order": v.get("order"), "team_id": v.get("team_id"), "choice_type": v.get("choice_type"),
+            "map_name": (v.get("maps") or {}).get("map_name")}
+
+
 def slim(endpoint, data):
     if endpoint == "/matches" and isinstance(data, dict) and isinstance(data.get("results"), list):
         return dict(_pick(data, ("total",)), results=[_slim_match(m) for m in data["results"]])
+    if MATCH_DETAIL.match(endpoint) and isinstance(data, dict) and "match_maps" in data:
+        return dict(_slim_match(data), match_maps=[_slim_veto(v) for v in data.get("match_maps") or []])
     if GAME_ENDPOINT.match(endpoint) and isinstance(data, list):
         return [_slim_row(r) for r in data]
     return data
@@ -286,6 +296,17 @@ class BO3:
 
     def team_upcoming(self, team_id):
         return self._run(self.cs2.get_team_upcoming_matches(team_id), ttl=0.5)
+
+    def match_veto(self, slug):
+        """A finished match's full veto (bans/picks in order, by team) - never changes."""
+        return self._run(self.cs2.get_match_details(slug), ttl=FOREVER)
+
+    def team_recent(self, team_id, limit=30):
+        """A team's latest finished matches (newest first)."""
+        return self._run(self.cs2._api._make_request("/matches", {
+            "scope": "widget-matches", "page[offset]": "0", "page[limit]": str(limit), "sort": "-start_date",
+            "filter[matches.status][in]": "finished", "filter[matches.team_ids][overlap]": str(team_id),
+            "filter[matches.discipline_id][eq]": "1", "with": "teams,games"}))
 
     # ------------------------------------------------------------ endpoints the wrapper doesn't cover
     def game_players(self, game_id, finished=True):

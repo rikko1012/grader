@@ -214,17 +214,18 @@ function render(d) {
   const gateStop = !("p_more" in g);   // stopped by a gate - the reason shows as a pill instead
   const sub = v.side ? `${pct(v.p)} chance · ${v.units}U` : gateStop ? "" : esc(v.reason || "");
   h += `<section class="card"><div class="hero">
-    <div class="badge ${gClass(v.side ? v.grade : "C")}">${esc(v.side ? v.grade : (g.status === "NO GRADE" ? "–" : "C"))}</div>
+    <div class="badge ${gClass(v.side ? v.grade : "C")}">${esc(g.status === "NO GRADE" ? "–" : v.grade || "C")}</div>
     <div><h3>${esc(head)}</h3>
       <div class="sub">${esc(pb.player?.nick || "")} · ${esc(pb.current_team || "")} · ${g.line} ${stat} · ${esc(g.line_type || "")}</div>
       <div class="sub">${sub}</div>
       ${gateStop ? `<span class="pill bad">${esc(g.reason || g.status)}</span>` : ""}
+      ${g.form_fight ? `<span class="pill warn">FORM FIGHT - model leans ${esc(g.form_fight)}, last 10 disagree</span>` : ""}
       ${g.market?.note_line ? `<span class="pill warn">${esc(g.market.note_line)}</span>` : ""}
     </div></div>`;
   if ("p_more" in g) {
     h += `<div class="sides">
-      <div class="side"><div class="k">More · grade ${esc(g.grade)}</div><div class="v">${pct(g.p_more)}</div><div class="bar"><i style="width:${g.p_more*100}%"></i></div></div>
-      <div class="side"><div class="k">Less · grade ${esc(g.grade_less)}</div><div class="v">${pct(g.p_less)}</div><div class="bar"><i style="width:${g.p_less*100}%"></i></div></div>
+      <div class="side"><div class="k">More · grade ${esc(g.grade)} · ${g.units || 0}U</div><div class="v">${pct(g.p_more)}</div><div class="bar"><i style="width:${g.p_more*100}%"></i></div></div>
+      <div class="side"><div class="k">Less · grade ${esc(g.grade_less)} · ${g.units_less || 0}U</div><div class="v">${pct(g.p_less)}</div><div class="bar"><i style="width:${g.p_less*100}%"></i></div></div>
     </div>
     <div class="stats" style="margin-top:10px">
       <div class="stat"><div class="k">Projection</div><div class="v">${num(g.lambda_final,1)}</div><div class="n">${stat}, Maps 1–2</div></div>
@@ -240,7 +241,13 @@ function render(d) {
   if (nm) h += `<div class="kv"><span>Opponent</span><span>${esc(nm.opponent)}${d.opponent_nationality?.id ? ` <span class="muted small">(${esc(d.opponent_nationality.label)})</span>` : ""}</span></div>
     <div class="kv"><span>Starts</span><span>${when(nm.start)}</span></div>
     <div class="kv"><span>Event</span><span>${esc(nm.event || "–")}</span></div>
-    <div class="kv"><span>Maps 1–2</span><span>${nm.maps?.length ? nm.maps.slice(0,2).map(mapName).join(" · ") : "Not announced yet – using all-maps stats"}</span></div>`;
+    <div class="kv"><span>Maps 1–2</span><span>${nm.maps?.length ? nm.maps.slice(0,2).map(mapName).join(" · ")
+      : pb.map_prediction ? "Predicted from both teams' vetoes (below)" : "Not announced yet – using all-maps stats"}</span></div>`;
+  if (!nm?.maps?.length && pb.map_prediction) {
+    const top = o => Object.entries(o).slice(0, 3).map(([m, p]) => `${mapName(m)} ${pct(p, 0)}`).join(" · ");
+    h += `<div class="kv"><span>Map 1 (predicted)</span><span>${esc(top(pb.map_prediction.map1))}</span></div>
+      <div class="kv"><span>Map 2 (predicted)</span><span>${esc(top(pb.map_prediction.map2))}</span></div>`;
+  }
   else h += `<div class="muted">No upcoming match found for ${esc(pb.current_team || "this team")}.</div>`;
   if (od?.found) {
     h += `<div class="kv"><span>Win chance (Polymarket)</span><span>${esc(od.team)} ${pct(od.team_prob)} · ${esc(od.opponent)} ${pct(od.opp_prob)}</span></div>`;
