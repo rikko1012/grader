@@ -11,3 +11,4 @@ __pycache__/
 *.pyc
 Start CS2 Grader.bat
 .env
+picks.db

@@ -36,6 +36,12 @@ CONFIG = {
     "form_fight_margin": 0.14,   # veto only when the record clearly disagrees: smoothed hit rate
                                  # <=36% vs a More lean (3/10 or worse) or >=64% vs a Less lean
     "poor_adr": 65.0,
+    # --- v7.4 (2026-09-28): market selection, not new multipliers ---
+    "tape_more_max": 0.50,       # TAPE FIGHT: More lean but last-10 over-rate <= 50% -> 0 units
+    "tape_less_min": 0.60,       #             Less lean but last-10 over-rate >= 60% -> 0 units
+    "soft_market_cap": 1.0,      # no usable Polymarket price (SOFT/NONE) -> max 1U
+    "veto_mass_min": 0.45,       # predicted maps: top-2 mass under 45% in a slot = veto uncertainty
+    "rust_note_days": 8, "rust_flag_days": 15, "rust_cap_days": 29,   # days since last official map
     "recency_trend": 0.15,       # last-5 KPR off window by 15%+ = "trending hard"
     "sd_widen": 1.10,            # per risk condition
     "sd_widen_max": 1.25,
@@ -173,6 +179,27 @@ def grade_leg(d, cfg=CONFIG):
     if stomp:
         sd_reasons.append("stomp compression")
 
+    # Market quality (v7.4): HARD = liquid, tight Polymarket book; SOFT = thin/wide/none
+    mq = d.get("market_quality") or ("HARD" if d.get("team_ml") is not None else "NONE")
+    if mq != "HARD":
+        unit_cap = min(unit_cap or cfg["soft_market_cap"], cfg["soft_market_cap"])
+        flags.append(f"{'SOFT BOOK' if mq == 'SOFT' else 'NO MARKET'}: win chance "
+                     f"{'from a thin/wide Polymarket book' if mq == 'SOFT' else 'set to 50/50'} - max "
+                     f"{cfg['soft_market_cap']:g}U")
+
+    # Rust (v7.4): time since his last official map
+    rust = d.get("days_since_last_map")
+    if rust is not None:
+        if rust >= cfg["rust_cap_days"]:
+            sd_reasons.append("rust >28d")
+            unit_cap = min(unit_cap or 0.5, 0.5)
+            flags.append(f"RUST: last official map {rust} days ago - SD inflated, max 0.5U")
+        elif rust >= cfg["rust_flag_days"]:
+            sd_reasons.append("rust 15-28d")
+            flags.append(f"RUST: last official map {rust} days ago - SD inflated")
+        elif rust >= cfg["rust_note_days"]:
+            flags.append(f"Note: last official map {rust} days ago")
+
     # KPR + recency blend
     kpr = d.get("kpr")
     if not kpr:
@@ -219,6 +246,10 @@ def grade_leg(d, cfg=CONFIG):
             likely = ", ".join(f"{n.replace('de_', '').title()} {p:.0%}"
                                for n, p in list(probs.items())[:3])
             parts.append((f"Map {slot} predicted ({likely})", ek, eh / ek if ek else hs_pct))
+            top2 = sum(sorted((p / tot for p in probs.values()), reverse=True)[:2])
+            if top2 < cfg["veto_mass_min"] and "veto uncertainty" not in sd_reasons:
+                sd_reasons.append("veto uncertainty")
+                flags.append(f"VETO UNCERTAINTY: Map {slot} top-2 maps hold only {top2:.0%} - SD inflated")
     while len(parts) < 2:
         parts.append(("unknown", kpr, hs_pct))
     lam = 0.0
@@ -319,6 +350,18 @@ def grade_leg(d, cfg=CONFIG):
             flags.append(f"FORM FIGHT: model says {fight} but the last {rec['n']} matches went over "
                          f"{rec['overs']}/{rec['n']} - confidence halved, 0 units")
 
+    # TAPE FIGHT (v7.4): softer disagreement than FORM FIGHT - keeps the side and %, 0 units
+    tape = None
+    if rec.get("n") and not fight:
+        rate = rec["overs"] / rec["n"]
+        if pm >= 0.57 and rate <= cfg["tape_more_max"]:
+            tape = "More"
+        elif (1 - pm) >= 0.57 and rate >= cfg["tape_less_min"]:
+            tape = "Less"
+        if tape:
+            flags.append(f"TAPE FIGHT: model {tape} {max(pm, 1 - pm):.0%} but last {rec['n']} went over "
+                         f"{rec['overs']}/{rec['n']} - 0 units")
+
     grade = grade_from_p(pm)
     model_grade = grade
     if bump and not fight:
@@ -338,12 +381,15 @@ def grade_leg(d, cfg=CONFIG):
         flags.append("Kills props beat HS props at equal EV")
 
     # units follow P (not the letter); B is display-only
-    u_more = 0.0 if (fight == "More" or zero_units) else units_for_p(pm, unit_cap)
+    scout = bool(d.get("scout"))
+    if scout:
+        zero_units.append("SCOUT - no upcoming match found")
+    u_more = 0.0 if (fight == "More" or tape == "More" or zero_units) else units_for_p(pm, unit_cap)
     less_ok = line_type == "standard"
-    u_less = 0.0 if (not less_ok or fight == "Less" or zero_units) else units_for_p(1 - pm, unit_cap)
+    u_less = 0.0 if (not less_ok or fight == "Less" or tape == "Less" or zero_units) else units_for_p(1 - pm, unit_cap)
     for z in zero_units:
         flags.append(f"0 units: {z}")
-    status = "PLAY" if u_more > 0 else "NO PLAY"
+    status = "SCOUT" if scout else "PLAY" if u_more > 0 else "NO PLAY"
 
     # value lines: where each side becomes playable (B+ = 63%) for THIS projection and spread
     # P(More at line L) = 1 - PHI((L + 0.5 - lam)/sd): More reaches p at L <= lam - 0.5 - z*sd,
@@ -366,7 +412,8 @@ def grade_leg(d, cfg=CONFIG):
         status=status, grade=grade, model_grade=model_grade, h2h=h2h_note,
         p_more=round(pm, 3), p_less=round(1 - pm, 3), p_more_model=round(pm_model, 3),
         grade_less=grade_from_p(1 - pm) if less_ok else "n/a (no Less on this line)",
-        units=u_more, units_less=u_less, form_fight=fight,
+        units=u_more, units_less=u_less, form_fight=fight, tape_fight=tape, scout=scout,
+        market_quality=mq,
         lambda_base=round(lam, 2), lambda_final=round(lam_final, 2), sd=round(sd, 2),
         detail={"rounds": rpm * 2, "stomp": stomp, "p_win": round(p_win, 3),
                 "role": role_tag, "role_mult": role, "rank": rank, "swing_mult": round(swing, 3),

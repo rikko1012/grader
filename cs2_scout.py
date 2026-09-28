@@ -330,7 +330,9 @@ def recent_form(rows, window_kpr, line=None, stat="kills"):
         return {"matches": len(out_series), "series": out_series}
     kpr = sum(r["kills"] for r in kr) / sum(r["rounds"] for r in kr)
     trend = (kpr - window_kpr) / window_kpr * 100
-    out = {"matches": len(out_series), "series": out_series, "kpr_recent": round(kpr, 3),
+    totals = sorted(s["total"] for s in out_series)
+    med = (totals[(len(totals) - 1) // 2] + totals[len(totals) // 2]) / 2 if totals else None
+    out = {"matches": len(out_series), "series": out_series, "kpr_recent": round(kpr, 3), "median_total": med,
            "trend_pct_vs_window": round(trend, 1), "avg_total": round(sum(s["total"] for s in out_series)
                                                                         / len(out_series), 1) if out_series else None}
     if abs(trend) >= 15:
@@ -372,6 +374,8 @@ def run_player(b, name, args):
         out["transfer_check"] = "OK" if out["on_listed_team"] else f"MISMATCH - BO3.gg shows {team.get('name')}, not {listed}"
 
     matches = b.player_matches(p["id"]).get("results") or []
+    last = next((m.get("start_date") for m in matches if m.get("status") == "finished"), None)
+    out["days_since_last_map"] = (date.today() - date.fromisoformat(last[:10])).days if last else None
 
     # stats behind the projection: Maps 1-2 only, from each map's scoreboard
     overall, games = waterfall(b, matches, p["id"], joined)
@@ -541,12 +545,20 @@ def veto_profile(b, team_id, before=None):
     return {"n": n, "picks": picks, "bans": bans, "pool": pool}
 
 
+PERMABAN = 0.70           # a team that first-bans a map 70%+ of the time (5+ vetoes) removes it
+
+
+def _permabanned(team, m):
+    return team["n"] >= 5 and team["bans"].get(m, 0) / team["n"] >= PERMABAN
+
+
 def _pick_probs(me, opp, pool, exclude=None):
-    """P(this team picks each map): its pick habit, minus maps it or the opponent tends to ban."""
+    """P(this team picks each map): its pick habit, minus maps it or the opponent tends to ban.
+    A map either team (near-)always bans first is treated as gone."""
     k = len(pool)
     w = {}
     for m in pool:
-        if m == exclude:
+        if m == exclude or _permabanned(me, m) or _permabanned(opp, m):
             continue
         pick = (me["picks"].get(m, 0) + VETO_SMOOTH) / (me["n"] + k * VETO_SMOOTH)
         my_ban = (me["bans"].get(m, 0) + VETO_SMOOTH) / (me["n"] + k * VETO_SMOOTH)
@@ -647,6 +659,44 @@ def h2h(rows, opponent, line=None, stat="kills"):
     return out
 
 
+HARD_LIQUIDITY = 1000   # USD
+
+
+def market_quality(odds):
+    """HARD: liquid Polymarket book priced off the bid/ask midpoint. SOFT: thin or wide book.
+    NONE: no pre-match market (win chance falls back to 50/50)."""
+    if not odds or not odds.get("found") or odds.get("team_ml") is None:
+        return "NONE"
+    return "HARD" if (odds.get("liquidity") or 0) >= HARD_LIQUIDITY and odds.get("source") == "midpoint" else "SOFT"
+
+
+def opponent_defense(b, opp_id, maps=15):
+    """SHADOW ONLY (logged, not in the projection yet): kills per round the opponent allowed per
+    player on its last Maps 1-2, and how many of those maps it won. Tested against real results in
+    Phase 10 before it is ever allowed to move a grade."""
+    if not opp_id:
+        return None
+    kills = rounds = won = n = 0
+    for m in b.team_recent(opp_id).get("results") or []:
+        for g in sorted(m.get("games") or [], key=lambda g: g.get("number") or 0):
+            if n >= maps or g.get("state") != "done" or (g.get("number") or 9) > 2:
+                continue
+            ps = b.game_players(g["id"])
+            them = [r for r in ps if (r.get("team_clan") or {}).get("team_id") != opp_id]
+            if len(them) < 5:
+                continue
+            r_ = (g.get("winner_clan_score") or 0) + (g.get("loser_clan_score") or 0)
+            kills += sum(r.get("kills") or 0 for r in them)
+            rounds += r_ * len(them)
+            won += any(r.get("win") for r in ps if (r.get("team_clan") or {}).get("team_id") == opp_id)
+            n += 1
+        if n >= maps:
+            break
+    if not rounds:
+        return None
+    return {"kpr_allowed": round(kills / rounds, 3), "maps": n, "map_win_rate": round(won / n, 2)}
+
+
 def grader_inputs(pb, args, odds=None, hh=None):
     """Map everything into the keys grade_leg() documents."""
     o = pb["overall"]
@@ -664,6 +714,8 @@ def grader_inputs(pb, args, odds=None, hh=None):
         "is_igl": pb["is_igl"], "sniping": pb["sniping_equiv"],
         "firepower": None, "trading": None, "opening": None,
         "dpr": o.get("dpr"), "kast": pb.get("kast"), "adr": o.get("adr"),
+        "market_quality": market_quality(odds), "days_since_last_map": pb.get("days_since_last_map"),
+        "scout": bool(pb.get("scout")),
         "recent": ({"n": rf["matches"], "overs": rf["overs"]}
                    if (rf := pb.get("recent_form") or {}).get("overs") is not None else None),
         "on_listed_team": pb.get("on_listed_team"), "is_standin": pb["is_standin"],
@@ -934,7 +986,12 @@ def run(args, res, b, ttl):
             res["player_block"] = pb
     if args.cmd in ("h2h", "full") and not args.opponent and pb and pb.get("team_id"):
         nxt = next_match(b, pb["team_id"])
+        pb["scout"] = nxt is None          # no upcoming match -> SCOUT card, no grade/units
         if nxt:
+            try:
+                res["opponent_defense"] = opponent_defense(b, nxt.get("opponent_id"))   # shadow only
+            except Exception:
+                res["opponent_defense"] = None
             res["next_match"] = nxt
             args.opponent = nxt["opponent"]
             if not args.maps and nxt["maps"]:

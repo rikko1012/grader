@@ -165,3 +165,20 @@ kills B+ 65.4 -> 64.3, A- 71.0 -> 71.4, A 76.4 -> 76.3 | HS B+ 65.4 -> 64.5, A- 
 | Units | follow P: 2U 80%+, 1.5U 74%+, 1U 68%+, 0.5U 63%+, 0U below; B = display only; 0U on form fight or HS prop on a #3+ player | B sits on break-even (57.7%) |
 | AWP gate | body-shot kill rate >= 0.30 **or** Maps 1-2 HS% < 40 with KPR >= 0.70 | owner's HS% rule added |
 | Map prediction (before the veto) | each team's picks/first-bans over its last 15 BO3s; Map 1 = first-banning team's pick (BO3.gg's 2nd-listed team, 19/21); projection = probability-weighted over maps | tested on 74 matches: top guess right 30%, actual map gets 23% on average vs 13% random - weighting, never a single guess |
+
+## v7.4 - market selection (2026-09-28, owner-approved)
+The calibrated core (c, kills cap, 44/40 rounds, map blend, role 0%, H2H, thresholds) is untouched.
+
+| Addition | Rule |
+|---|---|
+| Pick display | Always a side (owner's choice), with grade, %, units and confidence |
+| SCOUT | No upcoming match found for his team: shows the lean, projection and form, no grade/units, never logged as a wager |
+| Market quality | HARD = Polymarket pre-match midpoint with $1,000+ liquidity. SOFT = thin/wide book. NONE = no market (50/50). SOFT/NONE -> max 1U |
+| TAPE FIGHT | Model 57%+ More but last-10 over-rate <= 50%, or 57%+ Less but >= 60% -> 0 units (side and % kept). FORM FIGHT (3/10 or 7/10) still halves confidence |
+| Last-10 median | Shown next to the average |
+| Veto uncertainty | Predicted maps: a slot whose top-2 maps hold < 45% -> risk flag (wider SD) |
+| Permabans | A team that first-bans a map 70%+ of the time (5+ vetoes) removes it from the prediction |
+| Rust | Days since last official map: 8-14 note; 15-28 risk flag; 29+ risk flag + max 0.5U |
+| Opponent defense | SHADOW ONLY - kills/round the opponent allowed on its last 15 Maps 1-2, logged for Phase 10, not in the projection |
+| Phase 10 | Every GRADE logged once (player+prop+line+type+match), auto-settled from BO3.gg 3h after start (Maps 1-2 actual, hit/miss; forfeits/BO1 void), closing line entered on /admin for CLV. Report: printed % vs actual, by units |
+| Not added (by decision) | FACEIT in the projection; role multipliers; Grok's 60/40 last-10 blend (double-counts recent form); opponent defense in λ until Phase 10 proves it |
