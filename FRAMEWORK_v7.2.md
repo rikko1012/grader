@@ -249,3 +249,9 @@ i.e. no consistent signal beyond KPR. Shown on the card ("x% of team kills, weig
 ## v7.5 step 4b - opening kills (2026-09-28, tested; weight 0)
 lambda x (1 + beta x (opening kills per round / mean - 1)), cross-validated by team: miss kills 6.187
 vs 6.007, HS 3.755 vs 3.695 - worse; beta flipped sign between halves. Shown on the card.
+
+## v7.5 step 4c - trade kills (2026-09-28, owner-approved: kills props only)
+lambda_kills x (1 - 0.129 x (trade kills per round / 0.1283 - 1)) - roughly x1.05 for a 0.08 trader,
+x0.94 for a 0.184 trader. Cross-validated by team: kills miss 6.007 -> 5.976 (same sign in both
+halves); HS 3.695 -> 3.708 (sign flipped) -> weight 0 on headshot props. Shown on the card for both.
+Shipped walk-forward: kills B+ 65.4->65.9, A- 71.0->72.3, A 76.3->77.6; HS unchanged.

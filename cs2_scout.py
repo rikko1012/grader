@@ -415,7 +415,7 @@ def run_player(b, name, args):
             tk += sum(r.get("kills") or 0 for r in ps if (r.get("team_clan") or {}).get("team_id") == tid)
     out["team_kill_share"] = round(mk / tk, 3) if tk else None
     # 4b (tested 2026-09-28, weight 0): opening kills per round on Maps 1-2 in the window
-    fk = fd = rr_ = 0
+    fk = fd = rr_ = trk = 0
     for g, ps in games:
         if (g.get("number") or 9) > 2:
             continue
@@ -423,9 +423,11 @@ def run_player(b, name, args):
         if me:
             fk += me.get("first_kills") or 0
             fd += me.get("first_death") or 0
+            trk += me.get("trade_kills") or 0
             rr_ += (g.get("winner_clan_score") or 0) + (g.get("loser_clan_score") or 0)
     out["opening"] = {"kills_per_round": round(fk / rr_, 3) if rr_ else None,
                       "duel_win": round(fk / (fk + fd), 3) if fk + fd else None}
+    out["trade_pr"] = round(trk / rr_, 4) if rr_ else None   # 4c: in the grade for kills props
 
     # his Maps 1-2 numbers on every map in the window (used when the maps are predicted)
     by_map = {}
@@ -765,6 +767,7 @@ def grader_inputs(pb, args, odds=None, hh=None):
                          if (odds or {}).get("found") else None,
         "recent_avg": (pb.get("recent_form") or {}).get("avg_total"),
         "recent_n": (pb.get("recent_form") or {}).get("matches"),
+        "trade_pr": pb.get("trade_pr"),
         "scout": bool(pb.get("scout")), "standin_for": pb.get("standin_for"),
         "recent": ({"n": rf["matches"], "overs": rf["overs"]}
                    if (rf := pb.get("recent_form") or {}).get("overs") is not None else None),

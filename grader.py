@@ -41,6 +41,10 @@ CONFIG = {
     "last10_weight": 0.0,        # owner's formula was 0.30 - tested, weight 0
     "h2h_weight": 0.0,           # owner's formula edge x age x size - tested, weight 0 (shown as "would add")
     "last10_min": 5,             # need 5+ recent two-map matches to blend
+    # 4c (2026-09-28, owner-approved for KILLS props only): trade kills per round. Cross-validated
+    # by team on 900 cases: kills miss 6.007 -> 5.976 (same sign in both halves); HS 3.695 -> 3.708
+    # (no signal) -> weight 0 on headshots. Heavy traders score slightly fewer kills than KPR says.
+    "trade_beta_kills": -0.129, "trade_mean": 0.1283,
     "h2h_half": 120,             # H2H series weight = exp(-days_old / 120)
     "h2h_full_maps": 8,          # size weight = min(maps / 8, 1)
     "h2h_cap": {"kills": 3.0, "hs": 2.0},
@@ -272,6 +276,10 @@ def grade_leg(d, cfg=CONFIG):
     lam = 0.0
     for _, k, h in parts:
         lam += k * ratio * rpm * ((h / 100) if prop == "hs" else 1)
+    trade_mult = 1.0
+    if prop == "kills" and d.get("trade_pr"):
+        trade_mult = 1 + cfg["trade_beta_kills"] * (d["trade_pr"] / cfg["trade_mean"] - 1)
+        lam *= trade_mult
 
     # 3a Role (rank by HLTV-style rating vs the 4 teammates)
     rating, mates = d.get("rating"), [t for t in (d.get("teammate_ratings") or []) if t is not None]
@@ -455,7 +463,7 @@ def grade_leg(d, cfg=CONFIG):
         lambda_base=round(lam, 2), lambda_final=round(lam_final, 2), sd=round(sd, 2),
         detail={"rounds": rpm * 2, "stomp": stomp, "p_win": round(p_win, 3), "p_map": round(q, 3),
                 "outcome_mult": round(outcome, 3), "p_map1": round(q1, 3), "p_map2": round(q2, 3),
-                "tape_gap": tape_gap, "lambda_model": round(lam_model, 2), "last10_mult": round(last10_mult, 3),
+                "tape_gap": tape_gap, "lambda_model": round(lam_model, 2), "trade_mult": round(trade_mult, 3), "last10_mult": round(last10_mult, 3),
                 "h2h_edge": round(h2h_edge, 2), "h2h_avg": None if h2h_avg is None else round(h2h_avg, 1),
                 "role": role_tag, "role_mult": role, "rank": rank, "swing_mult": round(swing, 3),
                 "bf": round(bf, 3), "stack": round(stack, 3), "c": c,
