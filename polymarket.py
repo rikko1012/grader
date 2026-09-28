@@ -19,8 +19,6 @@ import requests
 GAMMA = "https://gamma-api.polymarket.com"
 CS2_SERIES = 10310          # Polymarket's CS2 series id
 MAX_SPREAD = 0.10           # wider bid/ask than this = use last price, flag it
-LIVE_HOURS = 4              # a BO3 is over by then - older markets are finished, awaiting settlement
-SETTLED = 0.03              # a started match priced at <=3% / >=97% is decided - never a pre-match price
 THIN_LIQUIDITY = 500        # USD; below this the price is easy to push around
 GENERIC = {"team", "esports", "esport", "gaming", "club", "academy", "gg", "the"}
 
@@ -91,29 +89,22 @@ def _start(ml):
         return None
 
 
-def _finished(ml):
-    """Played already: started over LIVE_HOURS ago, or started and priced as decided."""
+def _started(ml):
+    """Only PRE-MATCH prices are valid for grading. Once a match starts, the price is an in-game
+    price (a team down a map can sit at 9%), and after it ends it is the result - both would
+    wreck the win chance, blowout factor and stomp rounds. Props lock at the start anyway."""
     start = _start(ml)
-    now = datetime.now(timezone.utc)
-    if not start or start > now:
-        return False
-    if now - start > timedelta(hours=LIVE_HOURS):
-        return True
-    try:
-        p = float(json.loads(ml.get("outcomePrices") or "[]")[0])
-    except (ValueError, IndexError, TypeError):
-        return False
-    return p <= SETTLED or p >= 1 - SETTLED
+    return start is not None and start <= datetime.now(timezone.utc)
 
 
 def match_odds(team, opponent=None, events=None):
-    """Best upcoming (or live) Polymarket match for `team` (optionally vs `opponent`).
-    Finished matches still waiting to settle are skipped - their price is the result, not odds."""
+    """Next Polymarket match for `team` (optionally vs `opponent`) that has NOT started yet.
+    Live and finished matches are skipped - their price isn't a pre-match win chance."""
     events = upcoming_events() if events is None else events
     best = None
     for ev in events:
         ml = next((m for m in ev.get("markets", []) if m.get("sportsMarketType") == "moneyline"), None)
-        if not ml or ml.get("closed") or _finished(ml):
+        if not ml or ml.get("closed") or _started(ml):
             continue
         outcomes = json.loads(ml.get("outcomes") or "[]")
         if len(outcomes) != 2:
@@ -144,12 +135,6 @@ def match_odds(team, opponent=None, events=None):
     if side and side["source"] != "midpoint":
         flags.append("Wide bid/ask spread - using last traded price")
     start = ml.get("gameStartTime")
-    try:
-        started = datetime.fromisoformat(start.replace(" ", "T").replace("+00", "+00:00")) <= datetime.now(timezone.utc)
-    except (AttributeError, ValueError):
-        started = False
-    if started:
-        flags.append("Match already started - this is a live in-play price")
 
     maps = {}
     for m in ev.get("markets", []):

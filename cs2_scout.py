@@ -490,9 +490,12 @@ def _joined(pb):
 
 
 def next_match(b, team_id):
-    """The team's next (or live) match on BO3.gg: opponent + vetoed maps in order."""
+    """The team's next match on BO3.gg that has NOT started: opponent + vetoed maps in order.
+    A match in progress is skipped - its props are locked, and the grade is for the next one."""
+    now = datetime.now(timezone.utc).isoformat()
     ms = [m for m in (b.team_upcoming(team_id).get("results") or [])
-          if (m.get("team1") or {}).get("name") and (m.get("team2") or {}).get("name")]
+          if (m.get("team1") or {}).get("name") and (m.get("team2") or {}).get("name")
+          and m.get("status") == "upcoming" and (m.get("start_date") or "") > now[:19]]
     if not ms:
         return None
     m = min(ms, key=lambda m: m.get("start_date") or "9999")
