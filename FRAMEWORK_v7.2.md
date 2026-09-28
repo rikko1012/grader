@@ -50,7 +50,7 @@ v7 does six things:
 Map filter is mandatory when maps are known.
 **Pull:** KPR, filtered HS% (never career as primary), Round Swing, Sniping, Rating, KAST, DPR, ADR,
 Multi-kill %, four teammate ratings.
-**Recency:** if last 5 maps trend hard vs window, blend **70% window / 30% last-5**.
+**Recency:** if the last 10 matches (Maps 1-2 only) trend hard vs window, blend **70% window / 30% recent** *(owner change from last 5 maps, 2026-09-27)*.
 **Role signal:** overall rating hierarchy, then AWPer/IGL gates. Entry rating is **not** the
 hierarchy. Confirm with Firepower + Opening. High Trading + low Firepower = support cap.
 **Transfer check:** current team and current teammates only.
@@ -139,7 +139,8 @@ confidence, then log every result so the model calibrates.
 | Regional extension (Phase 7) | Only when there's **no** exact-opponent series (one series counts on its own) **and** the roster is confirmed: adds the player's latest series (Maps 1-2) vs other teams with the same tag, up to 4 series. Marked "regional" in the output. |
 | H2H trigger (Phase 7) | **≥2 maps (1 series)** instead of 4 — `grader.py` CONFIG `h2h_min_maps`. |
 | Sniping (Gate A) | No weapon data on BO3.gg. AWP kills are one body shot: body-shot kills per body hit ≥0.30 = AWPer (Sniping 100 → HS NO PLAY), ≤0.22 = rifler (0), between/too few hits = unknown (flag). |
-| Rating (role) | BO3.gg rating ÷ 6.0 so an average pro = 1.00 (keeps the 0.10 gap rule). |
+| Rating (role) | HLTV-style rating computed from raw BO3.gg stats over the same window for the player and all 4 teammates, using the public approximation of HLTV Rating 2.0: 0.0073·KAST + 0.3591·KPR − 0.5329·DPR + 0.2372·Impact + 0.0032·ADR + 0.1587, Impact = 2.13·KPR + 0.42·APR − 0.41. Check: ZywOo 3m = 1.326 vs HLTV 1.32. (Replaced BO3 rating ÷ 6, which misranked players, 2026-09-27.) |
+| Recency (Phase 1) | Owner change: **last 10 matches, Maps 1-2 only** (was last 5 maps). Their KPR drives the 70/30 blend; each match's Maps 1-2 total is shown vs the line with the over-count. |
 | Round Swing (3b) | Not available — 0 (no swing adjustment). |
 | Trading/Firepower support cap | Not available — skipped. |
 | IGL (Gate B) | `igl.csv` (owner-maintained); BO3.gg doesn't record IGLs. |

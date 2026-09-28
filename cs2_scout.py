@@ -51,10 +51,10 @@ FACEIT_API = "https://open.faceit.com/data/v4"
 
 WINDOWS = [("last_3m", 90), ("last_6m", 180), ("last_12m", 365)]
 MIN_MAPS = 10
-RATING_SCALE = 6.0          # BO3.gg rating / 6.0 ~ HLTV scale (average pro = 1.00)
+MAX_WINDOW_MAPS = 60        # maps scanned for KAST in the stats window (newest first)
+RECENT_MATCHES = 10         # recent form: last 10 matches, Maps 1-2 only
 AWP_RATIO, RIFLE_RATIO = 0.30, 0.22   # body-shot kills per body hit
 AWP_MIN_HITS = 150          # need this many chest+stomach hits to judge
-RECENT_MAPS = 10            # maps scanned for KAST, last-5, Steam ID, lineup
 NATIONALITY_MIN = 3         # 3+ players of one country = the team is from that country
 REGIONAL_MAX_SERIES = 4    # regional H2H extension: at most this many same-nationality series
 REGIONAL_MAX_LOOKUPS = 40   # team pages checked while looking for them (polite to BO3.gg)
@@ -120,17 +120,46 @@ def window_stats(b, slug, days):
         "rounds": rounds,
         "kpr": round(kills / rounds, 3) if kills is not None and rounds else None,
         "dpr": round(deaths / rounds, 3) if deaths is not None and rounds else None,
+        "apr": round(g["assists_sum"] / rounds, 3) if g.get("assists_sum") is not None and rounds else None,
         "adr": round(g["damage_sum"] / rounds, 1) if g.get("damage_sum") and rounds else None,
         "hs_pct": round(100 * head / acc_kills, 1) if acc_kills else None,
-        "rating": round(rating / RATING_SCALE, 3) if rating else None,
+        "rating": None,   # HLTV-style, filled in once KAST for the window is known (hltv_rating)
         "rating_bo3": round(rating, 2) if rating else None,
         "awp_ratio": round(body_kills / body_hits, 3) if body_hits else None,
         "body_hits": body_hits,
         "per_map": {m["map_name"]: {"maps_played": m.get("maps_count"), "kpr": round(m["avg_kills"], 3)
-                                    if m.get("avg_kills") is not None else None,
-                                    "rating": round((m.get("avg_player_rating") or 0) / RATING_SCALE, 3)}
+                                    if m.get("avg_kills") is not None else None}
                     for m in ms if m.get("map_name")},
     }
+
+
+def hltv_rating(s, kast):
+    """HLTV-style rating from raw stats. HLTV doesn't publish its formula; this is the widely
+    used public approximation of Rating 2.0 (checked: ZywOo 3m = 1.33 vs HLTV's 1.32)."""
+    kpr, dpr, apr, adr = s.get("kpr"), s.get("dpr"), s.get("apr"), s.get("adr")
+    if None in (kpr, dpr, apr, adr, kast):
+        return None
+    impact = 2.13 * kpr + 0.42 * apr - 0.41
+    return round(0.0073 * kast + 0.3591 * kpr - 0.5329 * dpr + 0.2372 * impact + 0.0032 * adr + 0.1587, 3)
+
+
+def window_kast(b, matches, days):
+    """KAST% per player id over the maps in the stats window (the player's team's maps, so
+    teammates come for free). Newest first, at most MAX_WINDOW_MAPS maps."""
+    since = (date.today() - timedelta(days=days)).isoformat()
+    per, n = {}, 0
+    for mt in matches:
+        if mt.get("status") != "finished" or (mt.get("start_date") or "")[:10] < since:
+            continue
+        for g in mt.get("games") or []:
+            if g.get("state") != "done" or n >= MAX_WINDOW_MAPS:
+                continue
+            n += 1
+            for r in b.game_players(g["id"]):
+                pid = (r.get("steam_profile") or {}).get("player_id")
+                if pid and r.get("kast") is not None:
+                    per.setdefault(pid, []).append(100 * r["kast"])
+    return {pid: (round(sum(v) / len(v), 1), len(v)) for pid, v in per.items()}, n
 
 
 def chain(joined):
@@ -209,16 +238,36 @@ def map_rows(b, player_id, matches, want_games):
     return rows
 
 
-def last5(rows, window_kpr):
-    r5 = [r for r in rows if r["rounds"]][:5]
-    if len(r5) < 5 or not window_kpr:
-        return None
-    kpr5 = sum(r["kills"] for r in r5) / sum(r["rounds"] for r in r5)
-    trend = (kpr5 - window_kpr) / window_kpr * 100
-    out = {"kpr_last5": round(kpr5, 3), "trend_pct_vs_window": round(trend, 1),
-           "maps": [f"{r['date']} {r['map']} {r['kills']}k/{r['rounds']}r" for r in r5]}
+def recent_form(rows, window_kpr, line=None, stat="kills"):
+    """Last 10 matches, Maps 1-2 only: KPR (for the recency blend) and each match's Maps 1-2
+    total vs the line."""
+    series = {}
+    for r in rows:
+        series.setdefault(r["match_id"], []).append(r)
+    out_series = []
+    for mid, maps in series.items():
+        maps.sort(key=lambda m: m["number"] or 9)
+        if len(maps) < 2:
+            continue  # BO1s and forfeits have no Map 2
+        m12 = maps[:2]
+        out_series.append({"date": m12[0]["date"], "opponent": m12[0]["opponent"],
+                           "maps": [m["map"] for m in m12], "values": [m[stat] for m in m12],
+                           "total": sum(m[stat] for m in m12), "rounds": sum(m["rounds"] for m in m12),
+                           "result": {2: "W", 1: "split", 0: "L"}[sum(m["won"] for m in m12)]})
+    out_series.sort(key=lambda s: s["date"], reverse=True)
+    kr = [r for r in rows if r["rounds"] and len(series[r["match_id"]]) >= 2]
+    if not kr or not window_kpr:
+        return {"matches": len(out_series), "series": out_series}
+    kpr = sum(r["kills"] for r in kr) / sum(r["rounds"] for r in kr)
+    trend = (kpr - window_kpr) / window_kpr * 100
+    out = {"matches": len(out_series), "series": out_series, "kpr_recent": round(kpr, 3),
+           "trend_pct_vs_window": round(trend, 1), "avg_total": round(sum(s["total"] for s in out_series)
+                                                                        / len(out_series), 1) if out_series else None}
     if abs(trend) >= 15:
         out["note"] = "Trending hard vs window - 70/30 blend applies"
+    if line is not None and out_series:
+        overs = sum(1 for s in out_series if s["total"] > line)
+        out.update(line=line, overs=overs, hit_rate=round(overs / len(out_series), 3))
     return out
 
 
@@ -262,22 +311,36 @@ def run_player(b, name, args):
     snip, awp_note = awp_status(overall.get("awp_ratio"), overall.get("body_hits") or 0)
     out["sniping_equiv"], out["awp_note"] = snip, awp_note
 
+    matches = b.player_matches(p["id"]).get("results") or []
+
+    # KAST over the window's maps -> HLTV-style rating for him and every teammate (same window)
+    kast, window_maps = window_kast(b, matches, days)
+    k, n = kast.get(p["id"], (None, 0))
+    overall["kast"], overall["kast_maps"] = k, n
+    overall["rating"] = hltv_rating(overall, k)
+    out["kast"] = k
     mates = [x for x in roster if x.get("id") != p["id"]]
-    out["teammate_ratings"] = {x["nickname"]: window_stats(b, x["slug"], days)["rating"] for x in mates}
+    out["teammate_ratings"], out["teammate_rating_maps"] = {}, {}
+    for x in mates:
+        mk, mn = kast.get(x["id"], (None, 0))
+        out["teammate_ratings"][x["nickname"]] = hltv_rating(window_stats(b, x["slug"], days), mk)
+        out["teammate_rating_maps"][x["nickname"]] = mn
     out["teammates"] = [x["nickname"] for x in mates]
     out["is_igl"] = is_igl(p.get("nickname"), team.get("name"))
 
-    matches = b.player_matches(p["id"]).get("results") or []
-    count = {"n": 0}
+    # recent form: last 10 matches, Maps 1-2 only
+    seen = []
 
     def recent(mt, g):
-        count["n"] += 1
-        return count["n"] <= RECENT_MAPS
+        if mt["id"] not in seen:
+            if len(seen) >= RECENT_MATCHES:
+                return False
+            seen.append(mt["id"])
+        return (g.get("number") or 9) <= 2
     recent_rows = map_rows(b, p["id"], matches, recent)
     out["recent_maps"] = recent_rows
-    out["last5"] = last5(recent_rows, overall.get("kpr"))
-    kasts = [r["kast"] for r in recent_rows if r["kast"] is not None]
-    out["kast"] = round(100 * sum(kasts) / len(kasts), 1) if kasts else None
+    out["recent_form"] = recent_form(recent_rows, overall.get("kpr"), args.line,
+                                     "headshots" if getattr(args, "prop", "kills") == "hs" else "kills")
     out["steam_id"] = next((r["steam_id"] for r in recent_rows if r["steam_id"]), None)
 
     # stand-in / roster confirmation from the latest lineup
@@ -428,7 +491,7 @@ def grader_inputs(pb, args, odds=None, hh=None):
     d = {
         "prop": args.prop, "line": args.line, "line_type": args.line_type,
         "maps_played": o.get("maps_played"), "kpr": o.get("kpr"), "hs_pct": o.get("hs_pct"),
-        "kpr_last5": (pb.get("last5") or {}).get("kpr_last5"),
+        "kpr_last5": (pb.get("recent_form") or {}).get("kpr_recent"),  # last 10 matches, Maps 1-2
         "round_swing": None,  # HLTV-only - no swing adjustment
         "per_map": [{"map": m["map"], "kpr": m.get("kpr"), "hs_pct": None, "maps_played": m.get("maps_played")}
                     for m in pb["per_map"]],
@@ -556,9 +619,15 @@ def print_summary(res):
         print(f"Gate B: {'IGL (from igl.csv)' if p['is_igl'] else 'not in igl.csv - treated as non-IGL'}")
         tm = ", ".join(f"{k} {v}" for k, v in p["teammate_ratings"].items())
         print(f"Teammate ratings: {tm}")
-        if p.get("last5"):
-            print(f"Last 5: KPR {p['last5']['kpr_last5']} ({p['last5']['trend_pct_vs_window']:+}% vs window)"
-                  + (f" - {p['last5']['note']}" if p['last5'].get('note') else ""))
+        rf = p.get("recent_form") or {}
+        if rf.get("kpr_recent") is not None:
+            print(f"Last {rf['matches']} matches (Maps 1-2): KPR {rf['kpr_recent']} "
+                  f"({rf['trend_pct_vs_window']:+}% vs window), avg {rf['avg_total']}"
+                  + (f", over {rf['line']} in {rf['overs']}/{rf['matches']}" if "overs" in rf else "")
+                  + (f" - {rf['note']}" if rf.get('note') else ""))
+            for s in rf["series"]:
+                print(f"    {s['date']}  v {s['opponent']:18} {s['values']} = {s['total']}  [{s['result']}]"
+                      + (f"  {'OVER' if s['total'] > rf['line'] else 'under'}" if "line" in rf else ""))
     nm = res.get("next_match")
     if nm:
         print(f"\nNext match (auto): vs {nm['opponent']}  {nm['start'][:16]}  {nm['event']}  "

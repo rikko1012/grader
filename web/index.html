@@ -255,16 +255,16 @@ function render(d) {
   mates.push({n: pb.player?.nick, r: o.rating, me: true});
   mates.sort((a, b) => (b.r || 0) - (a.r || 0));
   const maxR = Math.max(...mates.map(m => m.r || 0), 1.2);
-  const l5 = pb.last5;
+  const rf = pb.recent_form || {};
   h += `<section class="card"><h2>Stats · ${esc((o.window || "").replace("last_", "last ").replace("_", " "))} · ${o.maps_played ?? "–"} maps</h2>
     <div class="stats">
       <div class="stat"><div class="k">Kills / round</div><div class="v">${num(o.kpr,3)}</div></div>
       <div class="stat"><div class="k">Headshot %</div><div class="v">${o.hs_pct ?? "–"}%</div></div>
-      <div class="stat"><div class="k">Rating</div><div class="v">${num(o.rating)}</div></div>
-      <div class="stat"><div class="k">KAST</div><div class="v">${pb.kast ?? "–"}%</div><div class="n">last 10 maps</div></div>
+      <div class="stat"><div class="k">Rating</div><div class="v">${num(o.rating)}</div><div class="n">HLTV-style</div></div>
+      <div class="stat"><div class="k">KAST</div><div class="v">${pb.kast ?? "–"}%</div></div>
       <div class="stat"><div class="k">Deaths / round</div><div class="v">${num(o.dpr,3)}</div></div>
       <div class="stat"><div class="k">ADR</div><div class="v">${o.adr ?? "–"}</div></div>
-      ${l5 ? `<div class="stat"><div class="k">Last 5 maps KPR</div><div class="v">${num(l5.kpr_last5,3)}</div><div class="n">${l5.trend_pct_vs_window > 0 ? "+" : ""}${l5.trend_pct_vs_window}% vs window</div></div>` : ""}
+      ${rf.kpr_recent != null ? `<div class="stat"><div class="k">Recent KPR</div><div class="v">${num(rf.kpr_recent,3)}</div><div class="n">${rf.trend_pct_vs_window > 0 ? "+" : ""}${rf.trend_pct_vs_window}% vs window</div></div>` : ""}
     </div>`;
   if ((pb.per_map || []).length) h += `<div class="stats" style="margin-top:8px">${pb.per_map.map(m => `<div class="stat"><div class="k">${mapName(m.map)} KPR</div><div class="v">${num(m.kpr,3)}</div><div class="n">${m.maps_played ?? 0} maps</div></div>`).join("")}</div>`;
   h += `</section>`;
@@ -291,15 +291,23 @@ function render(d) {
   } else h += `<div class="muted">No previous series found.</div>`;
   h += `</section>`;
 
-  // ---- recent maps + FACEIT
-  const rec = (pb.recent_maps || []).slice(0, 5);
-  h += `<div class="two"><section class="card"><h2>Last 5 maps</h2>`;
-  h += rec.length ? `<table><tbody>${rec.map(r => `<tr><td class="small">${esc(r.date)}</td><td>${mapName(r.map)}</td><td class="small muted">v ${esc(r.opponent)}</td><td class="num">${r.kills}k / ${r.headshots}hs</td></tr>`).join("")}</tbody></table>` : `<div class="muted">–</div>`;
-  h += `</section><section class="card"><h2>FACEIT form</h2>`;
+  // ---- recent form: last 10 matches, Maps 1-2
+  h += `<section class="card"><h2>Last ${rf.matches ?? 10} matches · Maps 1–2${rf.hit_rate != null ? ` · over ${g.line} in ${rf.overs}/${rf.matches} (${pct(rf.hit_rate,0)})` : ""}</h2>`;
+  if (rf.series?.length) {
+    h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th>Maps 1–2</th><th class="num">${stat}</th><th>Result</th><th></th></tr></thead><tbody>`;
+    for (const s of rf.series) h += `<tr><td class="num" style="text-align:left">${esc(s.date)}</td><td>${esc(s.opponent)}</td>
+      <td class="small">${s.maps.map(mapName).join(" · ")}</td><td class="num">${s.values.join(" + ")} = <b>${s.total}</b></td>
+      <td>${esc(s.result)}</td><td class="${s.total > g.line ? "hit" : "miss"}">${s.total > g.line ? "Over" : "Under"}</td></tr>`;
+    h += `</tbody></table></div><div class="small muted" style="margin-top:8px">Average ${rf.avg_total} ${stat} on Maps 1–2</div>`;
+  } else h += `<div class="muted">No recent matches with two maps.</div>`;
+  h += `</section>`;
+
+  // ---- FACEIT
+  h += `<section class="card"><h2>FACEIT form</h2>`;
   h += fc ? `<div class="kv"><span>Account</span><span>${esc(fc.nickname)} · lvl ${fc.level} · ${fc.elo} elo</span></div>
       <div class="kv"><span>Last ${fc.recent_n} games</span><span>${fc.avg_kills} kills · KPR ${fc.kpr}</span></div>
       <div class="kv"><span>HS%</span><span>${fc.avg_hs_pct}%</span></div>` : `<div class="muted">No confirmed FACEIT account.</div>`;
-  h += `</section></div>`;
+  h += `</section>`;
 
   // ---- flags
   const flags = [...(g.flags || [])];
