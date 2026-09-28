@@ -205,24 +205,23 @@ function render(d) {
   const nm = d.next_match, od = d.odds, hh = d.h2h, fc = d.faceit, det = g.detail || {};
   const stat = g.prop === "hs" ? "headshots" : "kills";
   // edge and the vig note follow the side we recommend (More when nothing is playable)
-  const edgeSide = v.side || v.lean || "More";
+  const edgeSide = v.side || "More";
   const implied = g.market?.pp_implied_more;
   const edge = implied == null ? null : (edgeSide === "Less" ? g.p_less : g.p_more) - implied;
   let h = "";
 
   // ---- headline
-  const head = v.side ? `Play ${v.side} ${g.line}`
-    : g.status === "NO GRADE" ? "No grade"
-    : v.lean ? `Lean ${v.lean} ${g.line} · no bet` : "No play";
+  const head = v.side ? `${v.side} ${g.line}` : g.status === "NO GRADE" ? "No grade" : "No play";
   const gateStop = !("p_more" in g);   // stopped by a gate - the reason shows as a pill instead
-  const sub = v.side ? `${pct(v.p)} chance · ${v.units}U` : gateStop ? "" : esc(v.reason || "");
+  const sub = v.side ? `${pct(v.p)} chance · ${v.units}U · ${esc(v.confidence)} confidence<div class="small muted" style="margin-top:4px">${esc(v.reason || "")}</div>`
+    : gateStop ? "" : esc(v.reason || "");
   h += `<section class="card"><div class="hero">
-    <div class="badge ${gClass(v.side ? v.grade : "C")}">${esc(g.status === "NO GRADE" ? "–" : v.grade || "C")}</div>
+    <div class="badge ${gClass(v.grade)}">${esc(g.status === "NO GRADE" ? "–" : v.grade || "C")}</div>
     <div><h3>${esc(head)}</h3>
       <div class="sub">${esc(pb.player?.nick || "")} · ${esc(pb.current_team || "")} · ${g.line} ${stat} · ${esc(g.line_type || "")}</div>
       <div class="sub">${sub}</div>
       ${gateStop ? `<span class="pill bad">${esc(g.reason || g.status)}</span>` : ""}
-      ${g.form_fight ? `<span class="pill warn">FORM FIGHT - model leans ${esc(g.form_fight)}, last 10 disagree</span>` : ""}
+      ${g.form_fight ? `<span class="pill warn">FORM FIGHT - last 10 matches disagree, confidence halved</span>` : ""}
       ${g.market?.note_line ? `<span class="pill warn">${esc(g.market.note_line)}</span>` : ""}
     </div></div>`;
   if ("p_more" in g) {
@@ -231,11 +230,11 @@ function render(d) {
       <div class="side"><div class="k">Less · grade ${esc(g.grade_less)} · ${g.units_less || 0}U</div><div class="v">${pct(g.p_less)}</div><div class="bar"><i style="width:${g.p_less*100}%"></i></div></div>
     </div>
     ${g.value ? `<div class="value">
-      <div><span class="muted small">More is a bet at</span> <b>${g.value.more_playable_at_or_below} or lower</b>
+      <div><span class="muted small">More reaches B+ at</span> <b>${g.value.more_playable_at_or_below} or lower</b>
         <span class="muted small">(A− at ${g.value.more_a_minus_at_or_below} or lower)</span></div>
-      ${g.value.less_playable_at_or_above != null ? `<div><span class="muted small">Less is a bet at</span> <b>${g.value.less_playable_at_or_above} or higher</b>
+      ${g.value.less_playable_at_or_above != null ? `<div><span class="muted small">Less reaches B+ at</span> <b>${g.value.less_playable_at_or_above} or higher</b>
         <span class="muted small">(A− at ${g.value.less_a_minus_at_or_above} or higher)</span></div>` : ""}
-      <div class="muted small">Fair line ${g.value.fair_line} · a line needs about ${(0.33 * g.sd).toFixed(1)} ${stat} of edge to be worth a bet, because Maps 1–2 totals swing about ±${g.sd.toFixed(0)} from match to match</div>
+      <div class="muted small">Fair line ${g.value.fair_line} · a side needs about ${(0.33 * g.sd).toFixed(1)} ${stat} of edge for B+ (units), because Maps 1–2 totals swing about ±${g.sd.toFixed(0)} from match to match</div>
     </div>` : ""}
     <div class="stats" style="margin-top:10px">
       <div class="stat"><div class="k">Projection</div><div class="v">${num(g.lambda_final,1)}</div><div class="n">${stat}, Maps 1–2</div></div>

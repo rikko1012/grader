@@ -117,27 +117,31 @@ def faceit_key():
 
 
 def verdict(g):
-    """Which side to play, for the headline. Sizing uses the framework's unit table."""
+    """Always a side: the one the numbers favour, with its grade. Units follow P - B/C carry
+    0 units (they hit below PrizePicks' 57.7% break-even in testing) but are still a pick."""
     if not g or "p_more" not in g:
         return {"side": None, "grade": (g or {}).get("grade", "NO GRADE"), "units": 0.0,
                 "reason": (g or {}).get("reason")}
-    # units come from the grader and follow P: B (57-62%) is display-only, 0 units
-    if g.get("units", 0) > 0:
-        return {"side": "More", "grade": g["grade"], "p": g["p_more"], "units": g["units"]}
-    if g.get("units_less", 0) > 0:
-        return {"side": "Less", "grade": g["grade_less"], "p": g["p_less"], "units": g["units_less"]}
-    best = "More" if g["p_more"] >= g["p_less"] else "Less"
-    p = max(g["p_more"], g["p_less"])
-    val = g.get("value") or {}
-    stat = "headshots" if g.get("prop") == "hs" else "kills"
-    gap = abs(g["lambda_final"] - g["line"])
-    if g.get("form_fight"):
-        why = f"FORM FIGHT - model leans {g['form_fight']} but his last 10 matches disagree"
+    if g["p_more"] != g["p_less"]:
+        side = "More" if g["p_more"] > g["p_less"] else "Less"
     else:
-        why = (f"Lean {best} ({p:.0%}): projection {g['lambda_final']:.1f} vs line {g['line']} is only "
-               f"{gap:.1f} {stat} - inside the normal swing (about ±{g['sd']:.0f}), not enough edge to bet")
-    return {"side": None, "lean": best if p > 0.5 else None, "grade": "C" if p < 0.57 else "B", "p": p,
-            "units": 0.0, "reason": why}
+        side = "More" if g["lambda_final"] > g["line"] else "Less"
+    if side == "Less" and g["line_type"] != "standard":
+        side = "More"   # goblin/demon lines have no Less on PrizePicks
+    p = g["p_more"] if side == "More" else g["p_less"]
+    grade = g["grade"] if side == "More" else g["grade_less"]
+    units = g.get("units", 0) if side == "More" else g.get("units_less", 0)
+    stat = "headshots" if g.get("prop") == "hs" else "kills"
+    gap = g["lambda_final"] - g["line"]
+    if g.get("form_fight"):
+        why = f"FORM FIGHT - his last 10 matches disagree with the model, so confidence is halved"
+    elif units > 0:
+        why = f"Projection {g['lambda_final']:.1f} vs line {g['line']} ({gap:+.1f} {stat})"
+    else:
+        why = (f"Low confidence: projection {g['lambda_final']:.1f} vs line {g['line']} ({gap:+.1f} {stat}) "
+               f"is small next to the normal swing (about ±{g['sd']:.0f}) - 0 units suggested")
+    return {"side": side, "grade": grade, "p": p, "units": units, "reason": why,
+            "confidence": "high" if p >= 0.68 else "medium" if p >= 0.63 else "low"}
 
 
 def public(res):

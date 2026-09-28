@@ -314,10 +314,10 @@ def grade_leg(d, cfg=CONFIG):
         elif (1 - pm) >= 0.57 and sm >= 0.5 + m:
             fight = "Less"
         if fight:
-            # a veto cancels the bet - it never flips the lean to the other side
-            pm = 0.5
+            # the record disagrees: keep the model's side but halve its confidence (never flip it)
+            pm = 0.5 + (pm - 0.5) / 2
             flags.append(f"FORM FIGHT: model says {fight} but the last {rec['n']} matches went over "
-                         f"{rec['overs']}/{rec['n']} - no bet either way")
+                         f"{rec['overs']}/{rec['n']} - confidence halved, 0 units")
 
     grade = grade_from_p(pm)
     model_grade = grade
