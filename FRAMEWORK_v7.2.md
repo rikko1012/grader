@@ -208,3 +208,10 @@ Units: 80%+ 2U · 74%+ 1.5U · 68%+ 1U · 63%+ 0.5U · **57%+ (B) 0.25U** · und
 Walk-forward after the win/loss fix: B (57-63%) hits 59.6% for kills and HS vs PrizePicks' 57.7%
 2-pick break-even (C: 52-56%, loses in every slice). Caps unchanged (thin data 1U, soft/no market
 1U, rust 0.5U, FORM/TAPE FIGHT 0U).
+
+## v7.4.4 - stand-ins (2026-09-28, owner-approved)
+The next match is taken from every team the player played for in the last 14 days (BO3.gg's
+profile team lags behind stand-ins/loans and doesn't list stand-ins on upcoming matches). If the
+soonest match belongs to a team other than his profile team, he is graded as a STAND-IN for it:
+that team's opponent, Polymarket odds and H2H, plus a risk flag (SD +10%) and a 0.5U cap.
+(Original Gate C said NO GRADE for stand-ins; the owner wants them graded.)

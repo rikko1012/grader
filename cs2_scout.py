@@ -54,6 +54,7 @@ WINDOWS = [("last_3m", 90), ("last_6m", 180), ("last_12m", 365)]
 MIN_MAPS = 10
 MAX_WINDOW_MAPS = 80        # maps (all numbers) read per window, newest first
 RECENT_MATCHES = 10         # recent form: last 10 matches, Maps 1-2 only
+STANDIN_DAYS = 14           # teams he played for in the last 14 days count as "his" for the next match
 AWP_RATIO, RIFLE_RATIO = 0.30, 0.22   # body-shot kills per body hit
 AWP_MIN_HITS = 150          # need this many chest+stomach hits to judge
 AWP_HS_MAX, AWP_HS_KPR = 40.0, 0.70   # or: HS% under 40 with KPR 0.70+ = AWPer
@@ -719,7 +720,7 @@ def grader_inputs(pb, args, odds=None, hh=None):
                           if ((odds or {}).get("maps") or {}).get(k) else None for k in ("map1", "map2")]
                          if (odds or {}).get("found") else None,
         "recent_avg": (pb.get("recent_form") or {}).get("avg_total"),
-        "scout": bool(pb.get("scout")),
+        "scout": bool(pb.get("scout")), "standin_for": pb.get("standin_for"),
         "recent": ({"n": rf["matches"], "overs": rf["overs"]}
                    if (rf := pb.get("recent_form") or {}).get("overs") is not None else None),
         "on_listed_team": pb.get("on_listed_team"), "is_standin": pb["is_standin"],
@@ -989,7 +990,24 @@ def run(args, res, b, ttl):
         if args.cmd != "faceit":
             res["player_block"] = pb
     if args.cmd in ("h2h", "full") and not args.opponent and pb and pb.get("team_id"):
-        nxt = next_match(b, pb["team_id"])
+        # every team he has played for in the last 14 days (stand-ins, loans, recent moves) -
+        # grade against whichever of them plays next
+        cutoff = (date.today() - timedelta(days=STANDIN_DAYS)).isoformat()
+        teams = {pb["team_id"]: pb.get("current_team")}
+        for r in pb.get("recent_maps") or []:
+            if r["date"] >= cutoff and r["team_id"] and r["team_id"] not in teams:
+                teams[r["team_id"]] = r["team"]
+        options = []
+        for tid, tname in teams.items():
+            nm_ = next_match(b, tid)
+            if nm_:
+                options.append((nm_["start"] or "9999", tid, tname, nm_))
+        nxt = None
+        if options:
+            _, tid, tname, nxt = min(options, key=lambda o: o[0])
+            pb["playing_for"], pb["playing_for_id"] = tname, tid
+            if tid != pb["team_id"]:
+                pb["standin_for"] = tname
         pb["scout"] = nxt is None          # no upcoming match -> SCOUT card, no grade/units
         if nxt:
             try:
@@ -1043,7 +1061,7 @@ def run(args, res, b, ttl):
                                         f"Regional extension: no recent series vs other {tag['label']} teams found")
         res["h2h"] = h2h(rows, args.opponent, args.line, stat)
     if args.cmd == "odds" or (args.cmd == "full" and (args.team or pb)):
-        team = args.name if args.cmd == "odds" else (args.team or pb.get("current_team"))
+        team = args.name if args.cmd == "odds" else (args.team or pb.get("playing_for") or pb.get("current_team"))
         res["odds"] = match_odds(team, args.opponent)  # always live, no cache
     if args.cmd == "full" and args.faceit_key:
         try:

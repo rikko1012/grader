@@ -197,6 +197,13 @@ def grade_leg(d, cfg=CONFIG):
                      f"{'from a thin/wide Polymarket book' if mq == 'SOFT' else 'set to 50/50'} - max "
                      f"{cfg['soft_market_cap']:g}U")
 
+    # Stand-in (v7.4.4): playing for another team than his own - graded, with a risk flag + 0.5U cap
+    if d.get("standin_for"):
+        sd_reasons.append("stand-in")
+        unit_cap = min(unit_cap or 0.5, 0.5)
+        flags.append(f"STAND-IN for {d['standin_for']}: different team and role than his usual - "
+                     f"SD inflated, max 0.5U")
+
     # Rust (v7.4): time since his last official map
     rust = d.get("days_since_last_map")
     if rust is not None:

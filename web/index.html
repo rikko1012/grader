@@ -220,10 +220,11 @@ function render(d) {
   h += `<section class="card"><div class="hero">
     <div class="badge ${v.state === "SCOUT" ? "g-scout" : gClass(v.grade)}">${esc(g.status === "NO GRADE" ? "–" : v.state === "SCOUT" ? "S" : v.grade || "C")}</div>
     <div><h3>${esc(head)}</h3>
-      <div class="sub">${esc(pb.player?.nick || "")} · ${esc(pb.current_team || "")} · ${g.line} ${stat} · ${esc(g.line_type || "")}</div>
+      <div class="sub">${esc(pb.player?.nick || "")} · ${pb.standin_for ? `${esc(pb.current_team || "")} → <b>stand-in for ${esc(pb.standin_for)}</b>` : esc(pb.current_team || "")} · ${g.line} ${stat} · ${esc(g.line_type || "")}</div>
       <div class="sub">${sub}</div>
       ${gateStop ? `<span class="pill bad">${esc(g.reason || g.status)}</span>` : ""}
       ${g.form_fight ? `<span class="pill warn">FORM FIGHT - last 10 matches disagree, confidence halved</span>` : ""}
+      ${pb.standin_for ? `<span class="pill warn">STAND-IN for ${esc(pb.standin_for)} · max 0.5U</span>` : ""}
       ${g.tape_fight ? `<span class="pill warn">TAPE FIGHT - recent record at this line disagrees · 0U</span>` : ""}
       ${g.market_quality && g.market_quality !== "HARD" && v.state !== "SCOUT" ? `<span class="pill">${g.market_quality === "SOFT" ? "SOFT BOOK" : "NO MARKET"} · max 1U</span>` : ""}
       ${g.market?.note_line ? `<span class="pill warn">${esc(g.market.note_line)}</span>` : ""}
