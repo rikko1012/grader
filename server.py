@@ -128,8 +128,8 @@ def faceit_key():
 
 
 def verdict(g):
-    """Always a side: the one the numbers favour, with its grade. Units follow P - B/C carry
-    0 units (they hit below PrizePicks' 57.7% break-even in testing) but are still a pick."""
+    """Always a side: the one the numbers favour, with its grade. Units follow P: B = 0.25U
+    (small edge), C = 0U (loses in testing) but is still a pick."""
     if not g or "p_more" not in g:
         return {"side": None, "grade": (g or {}).get("grade", "NO GRADE"), "units": 0.0,
                 "reason": (g or {}).get("reason")}
@@ -160,7 +160,7 @@ def verdict(g):
                f"is small next to the normal swing (about ±{g['sd']:.0f}) - 0 units suggested")
     return {"side": side, "state": "GRADE", "grade": grade, "p": p, "units": units, "reason": why,
             "market": g.get("market_quality"),
-            "confidence": "high" if p >= 0.68 else "medium" if p >= 0.63 else "low"}
+            "confidence": "high" if p >= 0.68 else "medium" if p >= 0.63 else "small" if p >= 0.57 else "low"}
 
 
 def public(res):

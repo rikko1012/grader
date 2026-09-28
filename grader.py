@@ -108,8 +108,11 @@ def p_more(line, lam, sd):
 
 def units_for_p(p, cap=None):
     """Units follow the probability, never a letter after an H2H bump.
-    B (57-62%) is display-only: break-even on a 2-pick is 57.7%."""
-    u = 2.0 if p >= 0.80 else 1.5 if p >= 0.74 else 1.0 if p >= 0.68 else 0.5 if p >= 0.63 else 0.0
+    C (<57%) is 0U: it loses in every walk-forward slice."""
+    # B (57-63%) = 0.25U since 2026-09-28: after the measured win/loss fix, B hits 59.6% in the
+    # walk-forward (kills and HS) vs PrizePicks' 57.7% 2-pick break-even - small edge, small stake.
+    u = (2.0 if p >= 0.80 else 1.5 if p >= 0.74 else 1.0 if p >= 0.68 else 0.5 if p >= 0.63
+         else 0.25 if p >= 0.57 else 0.0)
     return min(u, cap) if cap is not None else u
 
 

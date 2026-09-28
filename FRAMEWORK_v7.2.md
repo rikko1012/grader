@@ -202,3 +202,9 @@ A 76.4 -> 77.9; HS A- 71.0 -> 70.2, A 76.9 -> 77.1, A+ 86.1 -> 86.7.
 - Walk-forward after the change: kills B+ 65.4->66.7, A- 70.9->71.2, A 76.4->77.9; HS B+ 65.5->68.9,
   A- 71.0->70.2, A 76.9->77.1, A+ 86.1->86.7. HS 0.5U picks 202 -> 573 lines, hit 67.7%.
   Underdog-only slice not testable (no historical pre-match odds) - Phase 10 will show it.
+
+## v7.4.3 - B gets a small stake (2026-09-28, owner-approved)
+Units: 80%+ 2U · 74%+ 1.5U · 68%+ 1U · 63%+ 0.5U · **57%+ (B) 0.25U** · under 57% (C) 0U.
+Walk-forward after the win/loss fix: B (57-63%) hits 59.6% for kills and HS vs PrizePicks' 57.7%
+2-pick break-even (C: 52-56%, loses in every slice). Caps unchanged (thin data 1U, soft/no market
+1U, rust 0.5U, FORM/TAPE FIGHT 0U).
