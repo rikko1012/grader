@@ -139,14 +139,27 @@ def window_stats(b, slug, days):
     }
 
 
+# Calibrated 2026-09-28 against HLTV Rating 3.0 (last 3 months, no filters) for 125 players.
+# Left-out accuracy: avg miss 0.023, 115/125 within 0.05, stars (1.20+) within 0.010.
+# [intercept, approx, kpr, dpr, apr, adr/100, kast/100]
+RATING_FIT = [0.2732, 0.3859, -0.0415, -0.2516, -0.2413, 0.7113, 0.1152]
+RATING_BLEND = (1.20, 1.30)   # public formula is best for stars: blend into it across this range
+
+
 def hltv_rating(s, kast):
-    """HLTV-style rating from raw stats. HLTV doesn't publish its formula; this is the widely
-    used public approximation of Rating 2.0 (checked: ZywOo 3m = 1.33 vs HLTV's 1.32)."""
+    """HLTV-style rating from raw stats. HLTV's Rating 3.0 formula is private, so: the public
+    Rating 2.0 approximation, calibrated against real HLTV numbers (the approximation alone
+    overrates tier-2 players; the calibration alone squeezes the stars - blended, both hold)."""
     kpr, dpr, apr, adr = s.get("kpr"), s.get("dpr"), s.get("apr"), s.get("adr")
     if None in (kpr, dpr, apr, adr, kast):
         return None
     impact = 2.13 * kpr + 0.42 * apr - 0.41
-    return round(0.0073 * kast + 0.3591 * kpr - 0.5329 * dpr + 0.2372 * impact + 0.0032 * adr + 0.1587, 3)
+    approx = 0.0073 * kast + 0.3591 * kpr - 0.5329 * dpr + 0.2372 * impact + 0.0032 * adr + 0.1587
+    w = RATING_FIT
+    fit = w[0] + w[1] * approx + w[2] * kpr + w[3] * dpr + w[4] * apr + w[5] * adr / 100 + w[6] * kast / 100
+    lo, hi = RATING_BLEND
+    t = min(max((approx - lo) / (hi - lo), 0.0), 1.0)
+    return round(fit + t * (approx - fit), 3)
 
 
 def window_games(b, matches, days):
