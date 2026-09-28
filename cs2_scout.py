@@ -403,6 +403,18 @@ def run_player(b, name, args):
     out["overall"] = overall
     days = overall["days"]
     out["kast"] = overall["kast"]
+    # 4a (tested 2026-09-28, weight 0): his share of his team's Maps 1-2 kills in the window
+    mk = tk = 0
+    for g, ps in games:
+        if (g.get("number") or 9) > 2:
+            continue
+        me = next((r for r in ps if (r.get("steam_profile") or {}).get("player_id") == p["id"]), None)
+        if me:
+            tid = (me.get("team_clan") or {}).get("team_id")
+            mk += me.get("kills") or 0
+            tk += sum(r.get("kills") or 0 for r in ps if (r.get("team_clan") or {}).get("team_id") == tid)
+    out["team_kill_share"] = round(mk / tk, 3) if tk else None
+
     # his Maps 1-2 numbers on every map in the window (used when the maps are predicted)
     by_map = {}
     for r in player_rows(games, p["id"]):

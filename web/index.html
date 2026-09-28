@@ -287,7 +287,7 @@ function render(d) {
   if ((pb.per_map || []).length) h += `<div class="stats" style="margin-top:8px">${pb.per_map.map(m => `<div class="stat"><div class="k">${mapName(m.map)} KPR</div><div class="v">${num(m.kpr,3)}</div><div class="n">${m.maps_played ?? 0} maps</div></div>`).join("")}</div>`;
   h += `</section>`;
 
-  h += `<div class="two"><section class="card"><h2>Role · ${esc(det.role || "–")}</h2><div class="mates">
+  h += `<div class="two"><section class="card"><h2>Role · ${esc(det.role || "–")}${pb.team_kill_share != null ? ` · ${pct(pb.team_kill_share)} of team kills (weight 0)` : ""}</h2><div class="mates">
     ${mates.map(m => `<div class="mate ${m.me ? "me" : ""}"><span>${esc(m.n)}</span><div class="bar"><i style="width:${(m.r || 0) / maxR * 100}%"></i></div><span class="num">${num(m.r)}</span></div>`).join("")}
     </div></section>
     <section class="card"><h2>Checks</h2>

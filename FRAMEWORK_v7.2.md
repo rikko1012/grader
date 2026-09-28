@@ -240,3 +240,8 @@ derived) -> rounds from the empirical 13-x/OT table (7,627 earlier maps, mean 21
 miss kills 6.015 vs curve 6.007, HS 3.711 vs 3.695 (neither better), and kills A+ printed 81.7% hit
 75.2% (too thin-tailed). Owner's bar not met -> the grade keeps the curve + c; the simulation's
 P(More) is printed on the card at weight 0 (sim.py).
+
+## v7.5 step 4a - share of team kills (2026-09-28, tested; weight 0)
+lambda x (1 + beta x (share - 20%)), beta fitted on half the teams and scored on the other half:
+miss kills 6.050 vs 6.007, HS 3.733 vs 3.695 - worse; beta flipped sign between halves (+0.17 / -2.1),
+i.e. no consistent signal beyond KPR. Shown on the card ("x% of team kills, weight 0").
