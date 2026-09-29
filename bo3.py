@@ -304,9 +304,10 @@ class BO3:
     def player_stats(self, slug, days):
         return self._run(self.cs2.get_player_stats(slug, days))
 
-    def player_matches(self, player_id, pages=3):
-        """Newest first. The wrapper returns the latest 100; later pages use the same query."""
-        first = self._run(self.cs2.get_player_matches(player_id))
+    def player_matches(self, player_id, pages=3, ttl=None):
+        """Newest first. The wrapper returns the latest 100; later pages use the same query.
+        ttl (hours) overrides the client default - settling needs a fresh list."""
+        first = self._run(self.cs2.get_player_matches(player_id), ttl=ttl)
         results = list(first.get("results") or [])
         total = (first.get("total") or {}).get("count") or 0
         for page in range(1, pages):

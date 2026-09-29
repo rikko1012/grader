@@ -103,7 +103,8 @@ def settle(b, map_rows):
             continue
         if now < start + timedelta(hours=SETTLE_AFTER_H):
             continue
-        ms = b.player_matches(r["player_id"], pages=1).get("results") or []
+        # fresh list (15 min): a 12-hour-old copy still shows finished matches as upcoming
+        ms = b.player_matches(r["player_id"], pages=1, ttl=0.25).get("results") or []
         mt = next((m for m in ms if m.get("slug") == r["match_slug"]), None)
         upd = None
         if mt and mt.get("status") == "finished":
@@ -111,8 +112,11 @@ def settle(b, map_rows):
             if len(maps) == 2:
                 stat = "headshots" if r["prop"] == "hs" else "kills"
                 actual = sum(x[stat] for x in maps)
-                hit = actual > r["line"] if r["pick"] == "More" else actual < r["line"]
-                upd = ("settled", json.dumps([x["map"] for x in maps]), actual, int(hit))
+                if actual == r["line"]:                   # whole-number line landed exactly: push
+                    upd = ("push", json.dumps([x["map"] for x in maps]), actual, None)
+                else:
+                    hit = actual > r["line"] if r["pick"] == "More" else actual < r["line"]
+                    upd = ("settled", json.dumps([x["map"] for x in maps]), actual, int(hit))
             else:
                 upd = ("void", json.dumps([x["map"] for x in maps]), None, None)   # forfeit / BO1 / sat out
         elif now > start + timedelta(days=VOID_AFTER_D):
@@ -138,6 +142,16 @@ def set_closing(pick_id, closing):
             con.execute("UPDATE picks SET closing_line = ?, clv = ? WHERE id = ?", (closing, round(clv, 2), pick_id))
             con.commit()
         con.close()
+
+
+def resettle_pushes():
+    """One-off: rows settled as a miss when the total landed exactly on a whole-number line."""
+    with _LOCK:
+        con = _db()
+        n = con.execute("UPDATE picks SET status='push', hit=NULL WHERE status='settled' AND actual = line").rowcount
+        con.commit()
+        con.close()
+    return n
 
 
 def mark_tests(ids):
@@ -182,6 +196,7 @@ def report():
     return {
         "total": len(rows), "open": sum(r["status"] == "open" for r in rows), "settled": len(settled),
         "void": sum(r["status"] == "void" for r in rows),
+        "push": sum(r["status"] == "push" for r in rows),
         "by_printed_pct": bucket(settled, "p_pick", pbounds),
         "by_units": bucket(settled, "units", ubounds),
         "hit_rate_all": round(sum(r["hit"] for r in settled) / len(settled), 3) if settled else None,

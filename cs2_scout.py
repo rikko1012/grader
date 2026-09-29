@@ -502,6 +502,7 @@ def run_player(b, name, args):
 
 
 _REGIONS = {"mtime": None, "data": {}}
+GROUPED_REGIONS = {"CIS", "Oceania", "South America"}
 _NAT = {}                   # team slug -> (time, tag): rosters change rarely, 30-min memory
 _NAT_TTL = 1800
 
@@ -514,9 +515,12 @@ def load_regions():
     except OSError:
         return {}
     if _REGIONS["mtime"] != mt:
+        # Owner rule 2026-09-29: regional series follow the opponent's COUNTRY (a Polish core ->
+        # only Polish teams), except these regions, which stay grouped as one.
         with REGIONS_CSV.open(encoding="utf-8-sig", newline="") as f:
             _REGIONS["data"] = {r["country_code"].strip().upper(): r["region"].strip()
-                                for r in csv.DictReader(f) if r.get("country_code") and r.get("region")}
+                                for r in csv.DictReader(f)
+                                if r.get("country_code") and (r.get("region") or "").strip() in GROUPED_REGIONS}
         _REGIONS["mtime"] = mt
     return _REGIONS["data"]
 
