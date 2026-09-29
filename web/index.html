@@ -223,12 +223,13 @@ function render(d) {
 
   // ---- headline
   const head = v.state === "SCOUT" ? `SCOUT · leans ${v.side} ${g.line}`
+    : v.grade === "NO PLAY" && v.side ? `NO PLAY · leans ${v.side} ${g.line}`
     : v.side ? `${v.side} ${g.line}` : g.status === "NO GRADE" ? "No grade" : "No play";
   const gateStop = !("p_more" in g);   // stopped by a gate - the reason shows as a pill instead
   const sub = v.side ? `${pct(v.p)} chance · ${v.units}U · ${esc(v.confidence)} confidence<div class="small muted" style="margin-top:4px">${esc(v.reason || "")}</div>`
     : gateStop ? "" : esc(v.reason || "");
   h += `<section class="card"><div class="hero">
-    <div class="badge ${v.state === "SCOUT" ? "g-scout" : gClass(v.grade)}">${esc(g.status === "NO GRADE" ? "–" : v.state === "SCOUT" ? "S" : v.grade || "C")}</div>
+    <div class="badge ${v.state === "SCOUT" ? "g-scout" : gClass(v.grade)}">${esc(g.status === "NO GRADE" ? "–" : v.state === "SCOUT" ? "S" : v.grade === "NO PLAY" ? "–" : v.grade || "C")}</div>
     <div><h3>${esc(head)}</h3>
       <div class="sub">${esc(pb.player?.nick || "")} · ${pb.standin_for ? `${esc(pb.current_team || "")} → <b>stand-in for ${esc(pb.standin_for)}</b>` : esc(pb.current_team || "")} · ${g.line} ${stat} · ${esc(g.line_type || "")}</div>
       <div class="sub">${sub}</div>

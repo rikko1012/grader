@@ -52,7 +52,11 @@ CONFIG = {
     "h2h_cap": {"kills": 3.0, "hs": 2.0},
     "stomp_ml": -400,            # either side at -400 or heavier (P(win) >= 0.80) = stomp
     "thin_maps": 20,             # under 20 Maps 1-2 = thin data: wider SD, 1U cap
-    "map_blend_k": 12,           # map KPR weight = n / (n + 12): 8 maps -> 40%, 12 -> 50%
+    "map_blend_k": 12,
+    # owner's map HS% adjustments - tested 2026-09-29 on 900 cases (fixed numbers, nothing fitted):
+    # HS miss 3.695 -> 3.685, Brier 0.2120 -> 0.2103, grades still calibrated; kills unaffected
+    "map_hs_mod": {"de_mirage": .06, "de_inferno": .04, "de_ancient": .03, "de_vertigo": .05,
+                   "de_nuke": -.03, "de_dust2": -.05},           # map KPR weight = n / (n + 12): 8 maps -> 40%, 12 -> 50%
     "form_fight_margin": 0.14,   # veto only when the record clearly disagrees: smoothed hit rate
                                  # <=36% vs a More lean (3/10 or worse) or >=64% vs a Less lean
     "poor_adr": 65.0,
@@ -245,13 +249,15 @@ def grade_leg(d, cfg=CONFIG):
     # Base lambda over Maps 1-2. Map numbers are blended with the overall ones by sample size
     # (weight n/(n+12): 8 maps -> 40%) - one hot series on a map never becomes the projection.
     def blended(name, mstats):
-        """His KPR/HS% on a map, pulled toward his overall numbers by sample size."""
+        """His KPR/HS% on a map, pulled toward his overall numbers by sample size, then the
+        owner's map HS% adjustment (Mirage +6% ... Dust2 -5%)."""
+        hmod = 1 + cfg["map_hs_mod"].get(name or "", 0.0)
         n = (mstats or {}).get("maps_played") or 0
         if not n or not (mstats or {}).get("kpr"):
-            return kpr, hs_pct, 0
+            return kpr, (hs_pct or 0) * hmod, 0
         w = n / (n + cfg["map_blend_k"])
         return (w * mstats["kpr"] + (1 - w) * kpr,
-                w * (mstats.get("hs_pct") or hs_pct or 0) + (1 - w) * (hs_pct or 0), n)
+                (w * (mstats.get("hs_pct") or hs_pct or 0) + (1 - w) * (hs_pct or 0)) * hmod, n)
 
     parts = []
     for m in (d.get("per_map") or [])[:2]:            # maps known (veto done)
