@@ -237,14 +237,14 @@ class BO3:
         except OSError:
             fresh = False
         forever = ttl >= FOREVER
-        if forever and key in _MEM:
+        if forever and _MEM.get(key):
             return _MEM[key]
         hit = _TMEM.get(key) if ttl > 0 else None       # changing data (schedules, rosters): memory
         if hit and time.time() - hit[0] < ttl * 3600:   # copy until it expires - no disk read
             return hit[1]
         if fresh:
             data = _read(path)
-            if data is not None:
+            if data is not None and not (forever and not data):   # saved empty scoreboard = re-fetch
                 if forever and len(_MEM) < _MEM_MAX:
                     _MEM[key] = data
                 elif not forever:
@@ -268,6 +268,8 @@ class BO3:
                 await asyncio.sleep(10 * (attempt + 1))
         self.requests += 1
         data = slim(endpoint, data)
+        if forever and not data:
+            return data       # empty scoreboard = stats not published yet: never keep it "forever"
         _write(path, data)
         if forever and len(_MEM) < _MEM_MAX:
             _MEM[key] = data

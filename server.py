@@ -475,6 +475,10 @@ class Handler(BaseHTTPRequestHandler):
                 ids = [int(x) for x in (q.get("ids") or "").split(",") if x.strip().isdigit()]
                 picklog.mark_tests(ids)
                 return self.send(200, {"marked": len(ids), "pushes_fixed": picklog.resettle_pushes()})
+            if u.path == "/admin/reopen" and self.authed(q.get("token")):
+                ids = [int(x) for x in (q.get("ids") or "").split(",") if x.strip().isdigit()]
+                picklog.reopen(ids)
+                return self.send(200, {"reopened": len(ids)})
             if u.path == "/admin/settle_now" and self.authed(q.get("token")):
                 sb = BO3(background=True)
                 try:

@@ -117,6 +117,9 @@ def settle(b, map_rows):
                 else:
                     hit = actual > r["line"] if r["pick"] == "More" else actual < r["line"]
                     upd = ("settled", json.dumps([x["map"] for x in maps]), actual, int(hit))
+            elif (len([g for g in mt.get("games") or [] if (g.get("number") or 9) <= 2]) >= 2
+                  and now < start + timedelta(days=VOID_AFTER_D)):
+                continue      # Maps 1-2 were played but BO3.gg hasn't published the stats yet: wait
             else:
                 upd = ("void", json.dumps([x["map"] for x in maps]), None, None)   # forfeit / BO1 / sat out
         elif mt and mt.get("status") == "defwin":            # forfeit: no maps played
@@ -154,6 +157,16 @@ def resettle_pushes():
         con.commit()
         con.close()
     return n
+
+
+def reopen(ids):
+    """Admin: put rows back to open (e.g. voided before BO3.gg published the map stats)."""
+    with _LOCK:
+        con = _db()
+        con.executemany("UPDATE picks SET status='open', actual=NULL, hit=NULL, actual_maps=NULL, settled_at=NULL "
+                        "WHERE id = ?", [(i,) for i in ids])
+        con.commit()
+        con.close()
 
 
 def mark_tests(ids):
