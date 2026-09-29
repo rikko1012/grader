@@ -61,7 +61,7 @@ AWP_RATIO, RIFLE_RATIO = 0.30, 0.22   # body-shot kills per body hit
 AWP_MIN_HITS = 150          # need this many chest+stomach hits to judge
 AWP_HS_MAX, AWP_HS_KPR = 40.0, 0.70   # or: HS% under 40 with KPR 0.70+ = AWPer
 NATIONALITY_MIN = 3         # 3+ players of one country = the team is from that country
-REGIONAL_MAX_SERIES = 4    # regional H2H extension: at most this many same-nationality series
+REGIONAL_MAX_SERIES = 8    # regional series: at most this many vs same-nationality teams (was 4)
 REGIONAL_MAX_LOOKUPS = 40   # team pages checked while looking for them (polite to BO3.gg)
 
 
@@ -815,6 +815,8 @@ def grader_inputs(pb, args, odds=None, hh=None):
         today = date.today()
         d["h2h_series"] = [{"age_days": (today - date.fromisoformat(x["date"])).days, "total": x["total"]}
                            for x in hh["series"] if not x.get("regional") and x.get("date")]
+        d["regional_series"] = [{"age_days": (today - date.fromisoformat(x["date"])).days, "total": x["total"]}
+                                for x in hh["series"] if x.get("regional") and x.get("date")]
     return d
 
 
@@ -1143,10 +1145,9 @@ def run(args, res, b, ttl):
         # Gate C nationality tag + Phase 7 regional extension
         tag = nationality(b, opp_slug) if opp_slug else None
         res["opponent_nationality"] = tag
-        # one exact series (h2h_min_maps) counts on its own; extend only when there's none
-        need = GRADER_CONFIG["h2h_min_maps"]
-        exact_maps = 2 * len({r["match_id"] for r in rows if (r["number"] or 9) <= 2})
-        if exact_maps < need:
+        # regional series are ALWAYS added (owner rule 2026-09-28), next to any exact H2H -
+        # shown separately and weighted by their own tested weight
+        if True:
             if not pb["roster_confirmed"]:
                 res["regional_note"] = "Regional extension disabled - roster not confirmed"
             elif not tag or tag["id"] is None:

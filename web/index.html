@@ -317,7 +317,7 @@ function render(d) {
     for (const s of hh.series) h += `<tr><td class="num" style="text-align:left">${esc(s.date)}</td><td>${esc(s.opponent)}${s.regional ? ` <span class="pill">regional</span>` : ""}</td>
       <td class="small">${s.maps.map(mapName).join(" · ")}</td><td class="num">${s.values.join(" + ")} = <b>${s.total}</b></td>
       <td>${esc(s.result)}</td><td class="${s.total > g.line ? "hit" : "miss"}">${s.total > g.line ? "Over" : "Under"}</td></tr>`;
-    h += `</tbody></table></div><div class="small muted" style="margin-top:8px">${esc(g.h2h || "")}</div>`;
+    h += `</tbody></table></div><div class="small muted" style="margin-top:8px">${esc(g.h2h || "")}</div>${g.regional && g.regional !== "No regional series" ? `<div class="small muted" style="margin-top:4px">${esc(g.regional)}</div>` : ""}`;
     if (g.flags?.some(f => f.startsWith("H2H vs TAPE"))) h += `<div class="small" style="margin-top:4px;color:var(--warn)">H2H vs TAPE: head-to-head and last 10 disagree about this line (note only - tested, no effect on units)</div>`;
   } else h += `<div class="muted">No previous series found.</div>`;
   h += `</section>`;

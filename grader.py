@@ -45,6 +45,8 @@ CONFIG = {
     # by team on 900 cases: kills miss 6.007 -> 5.976 (same sign in both halves); HS 3.695 -> 3.708
     # (no signal) -> weight 0 on headshots. Heavy traders score slightly fewer kills than KPR says.
     "trade_beta_kills": -0.129, "trade_mean": 0.1283,
+    "regional_weight": 0.0,      # 2026-09-28: tested on 847 cases (team-split): kills best weight 0 in both
+                                 # halves; HS held-out miss 3.695 -> 3.721 (worse). Always shown, weight 0.
     "h2h_half": 120,             # H2H series weight = exp(-days_old / 120)
     "h2h_full_maps": 8,          # size weight = min(maps / 8, 1)
     "h2h_cap": {"kills": 3.0, "hs": 2.0},
@@ -355,6 +357,22 @@ def grade_leg(d, cfg=CONFIG):
                     f"age weight {age_w:.2f}, size weight {size_w:.2f} -> would add {h2h_edge:+.2f} "
                     f"(applied x{cfg['h2h_weight']:g}: tested, didn't improve accuracy)")
 
+    # Regional (always, next to exact H2H): his series vs OTHER teams from the opponent's
+    # country/region, same age x size formula, its own tested weight
+    rseries = [s for s in (d.get("regional_series") or []) if s.get("total") is not None]
+    reg_note, reg_edge, reg_avg = "No regional series", 0.0, None
+    if rseries:
+        ws = [math.exp(-max(s["age_days"], 0) / cfg["h2h_half"]) for s in rseries]
+        reg_avg = sum(w * s["total"] for w, s in zip(ws, rseries)) / sum(ws)
+        age_w = sum(ws) / len(ws)
+        size_w = min(2 * len(rseries) / cfg["h2h_full_maps"], 1.0)
+        cap = cfg["h2h_cap"]["hs" if prop == "hs" else "kills"]
+        reg_edge = clamp((reg_avg - lam_final) * age_w * size_w, -cap, cap)
+        lam_final += reg_edge * cfg["regional_weight"]
+        reg_note = (f"Regional avg {reg_avg:.1f} over {len(rseries)} series vs same-region teams - age "
+                    f"weight {age_w:.2f}, size weight {size_w:.2f} -> would add {reg_edge:+.2f} (applied "
+                    f"x{cfg['regional_weight']:g}: tested on 847 cases, made projections less accurate)")
+
     # Confidence -> SD
     dpr, kast, adr = d.get("dpr"), d.get("kast"), d.get("adr")
     if dpr is not None and dpr >= cfg["poor_dpr"] and (
@@ -467,7 +485,7 @@ def grade_leg(d, cfg=CONFIG):
              "edge_kills": round(lam_final - line - 0.5, 1)}
     out.update(value=value)
     out.update(
-        status=status, grade=grade, model_grade=model_grade, h2h=h2h_note,
+        status=status, grade=grade, model_grade=model_grade, h2h=h2h_note, regional=reg_note,
         p_more=round(pm, 3), p_less=round(1 - pm, 3), p_more_model=round(pm_model, 3),
         grade_less=grade_from_p(1 - pm) if less_ok else "n/a (no Less on this line)",
         units=u_more, units_less=u_less, form_fight=fight, tape_fight=tape, scout=scout,
@@ -476,7 +494,8 @@ def grade_leg(d, cfg=CONFIG):
         detail={"rounds": rpm * 2, "stomp": stomp, "p_win": round(p_win, 3), "p_map": round(q, 3),
                 "outcome_mult": round(outcome, 3), "p_map1": round(q1, 3), "p_map2": round(q2, 3),
                 "tape_gap": tape_gap, "lambda_model": round(lam_model, 2), "trade_mult": round(trade_mult, 3), "last10_mult": round(last10_mult, 3),
-                "h2h_edge": round(h2h_edge, 2), "h2h_avg": None if h2h_avg is None else round(h2h_avg, 1),
+                "h2h_edge": round(h2h_edge, 2), "regional_edge": round(reg_edge, 2),
+                "regional_avg": None if reg_avg is None else round(reg_avg, 1), "h2h_avg": None if h2h_avg is None else round(h2h_avg, 1),
                 "role": role_tag, "role_mult": role, "rank": rank, "swing_mult": round(swing, 3),
                 "bf": round(bf, 3), "stack": round(stack, 3), "c": c,
                 "sd_widen": round(sd_mult, 3), "sd_reasons": sd_reasons,
