@@ -15,7 +15,7 @@ Switched OFF until these Railway variables exist (so deploying this can't lock a
   WHOP_CLIENT_ID       app_...   (the app's ID)
   WHOP_CLIENT_SECRET   from the app's OAuth settings (sent if set)
   WHOP_API_KEY         API key allowed to check access
-  WHOP_PRODUCT_IDS     prod_... of the PAID product(s), comma separated
+  WHOP_PRODUCT_IDS     optional: prod_/exp_ IDs that grant access (default: the Plays experience)
 Optional: SESSION_SECRET (signs cookies; else derived from the client secret / API key),
           PUBLIC_URL (default https://cs2-scout-production.up.railway.app), WHOP_UPGRADE_URL.
 """
@@ -50,8 +50,16 @@ def enabled():
     return bool(_env("WHOP_CLIENT_ID") and _env("WHOP_API_KEY") and products())
 
 
+# 1timeesports "Plays" (owner, 2026-09-29): the paid experience. Only memberships on the paid plans
+# (Weekly plan_4zOzRl7roBDFf, Monthly plan_8d2GVuU7671mD, Quarterly plan_fuM25oisxzQEH, 6-month
+# plan_0n9qau7Yt9G5r, Annual plan_G9ohvBxAxCheT, Lifetime plan_ZSpLGB3mTmagK) unlock it; the free
+# product does not. Whop checks access per product/experience, so we check this experience.
+PAID_RESOURCES = "exp_W6a3m1Ps4dxbCG"
+JOIN_URL = "https://whop.com/1timeesports/exp_W6a3m1Ps4dxbCG/app/"
+
+
 def products():
-    return [p.strip() for p in _env("WHOP_PRODUCT_IDS").split(",") if p.strip()]
+    return [p.strip() for p in _env("WHOP_PRODUCT_IDS", PAID_RESOURCES).split(",") if p.strip()]
 
 
 def public_url():
@@ -59,7 +67,7 @@ def public_url():
 
 
 def upgrade_url():
-    return _env("WHOP_UPGRADE_URL") or None
+    return _env("WHOP_UPGRADE_URL", JOIN_URL)
 
 
 def _secret():
