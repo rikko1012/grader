@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 
 import cs2_scout
 import picklog
-from bo3 import BO3, prune, storage_report
+from bo3 import BO3, DATA_DIR, prune, storage_report
 
 from polymarket import match_odds, upcoming_events
 
@@ -40,21 +40,96 @@ PRELOAD = os.environ.get("PRELOAD", "1" if "PORT" in os.environ else "0") == "1"
 PRELOAD_HOURS = 36          # matches starting within this window
 PRELOAD_EVERY = 30 * 60     # seconds between passes
 REFRESH_AFTER = 6 * 3600    # re-load a player at most every 6 hours
-# Grades run side by side (no single global lock - one cold look-up used to freeze every member
-# for ~60 s). Up to MAX_GRADES at once; the same player is only fetched once at a time.
-MAX_GRADES = 8
-GRADE_SLOTS = threading.BoundedSemaphore(MAX_GRADES)
+# ---------------------------------------------------------------- load handling (700 at once)
+# Grades run side by side (a single global lock once froze every member for ~60 s behind one
+# cold look-up). Three layers:
+# 1. identical requests share ONE computation, and its answer is reused for RESULT_TTL seconds
+#    (a slate drop = hundreds of members grading the same props)
+# 2. players already loaded run in the fast lane; players never seen get a few cold slots of
+#    their own, so cold look-ups can never fill the fast lane
+# 3. the same player is only assembled by one thread at a time (no duplicate BO3.gg fetches)
+RESULT_TTL = 60
+FAST_SLOTS = threading.BoundedSemaphore(6)    # CPU-bound (one Python core): more threads only thrash
+COLD_SLOTS = threading.BoundedSemaphore(3)    # mostly waiting on BO3.gg (4 req/s shared)
+WARM_FOR = 6 * 3600
+_WARM = {}                                   # player key -> last successful grade time
+WARM_FILE = DATA_DIR / ".cache" / "warm_players.json"   # survives restarts/deploys (volume)
+_WARM_SAVED = [0.0]
+
+
+def _load_warm():
+    try:
+        now = time.time()
+        _WARM.update({k: v for k, v in json.loads(WARM_FILE.read_text("utf-8")).items() if now - v < WARM_FOR})
+    except Exception:
+        pass
+
+
+def mark_warm(*keys):
+    now = time.time()
+    for k in keys:
+        if k:
+            _WARM[k.strip().lower()] = now
+    if now - _WARM_SAVED[0] > 30:                # write at most every 30 s
+        _WARM_SAVED[0] = now
+        try:
+            WARM_FILE.parent.mkdir(parents=True, exist_ok=True)
+            tmp = WARM_FILE.with_suffix(f".{threading.get_ident()}.tmp")
+            tmp.write_text(json.dumps({k: v for k, v in list(_WARM.items()) if now - v < WARM_FOR}), "utf-8")
+            os.replace(tmp, WARM_FILE)
+        except Exception:
+            pass
+
+
+_load_warm()
+WARM_START = {"done": 0, "total": 0, "finished": False}
+
+
+def warm_start():
+    """After a restart/deploy, memory is empty and each player's first grade re-reads ~500 files
+    (4-6 s). Reload the most recently used players in the background, newest first, so members
+    don't pay that. Uses background priority: members' own look-ups always go first."""
+    keys = sorted(_WARM, key=_WARM.get, reverse=True)[:400]
+    WARM_START["total"] = len(keys)
+    seen = set()
+    for k in keys:
+        try:
+            res = cs2_scout.grade(k, 20.5, faceit_key=None, background=True)
+            slug = ((res.get("player_block") or {}).get("player") or {}).get("slug")
+            if slug in seen:
+                continue
+            seen.add(slug)
+        except Exception:
+            pass
+        WARM_START["done"] += 1
+    WARM_START["finished"] = True
+
+
+_RESULTS, _INFLIGHT, _RG = {}, {}, threading.Lock()
 _PLAYER_LOCKS, _PLAYER_LOCKS_GUARD = {}, threading.Lock()
-
-
-RATE_LIMIT = 20                      # grades per minute per member (IP) - stops floods/scripts
+RATE_LIMIT = int(os.environ.get("RATE_LIMIT", 20))   # grades per minute per member (IP)
 _HITS, _HITS_GUARD = {}, threading.Lock()
+
+
+_STORE = {"at": 0.0, "data": {}, "lock": threading.Lock()}
+
+
+def storage_cached():
+    """Disk usage for /health - scanning the cache folder is slow, so at most once a minute and
+    never by two requests at once (400 parallel /health calls used to jam the server)."""
+    if time.time() - _STORE["at"] > 60 and _STORE["lock"].acquire(blocking=False):
+        try:
+            _STORE["data"] = storage_report()
+            _STORE["at"] = time.time()
+        finally:
+            _STORE["lock"].release()
+    return _STORE["data"]
 
 
 def rate_ok(ip):
     now = time.time()
     with _HITS_GUARD:
-        if len(_HITS) > 20000:
+        if len(_HITS) > 50000:
             _HITS.clear()
         hits = [t for t in _HITS.get(ip, []) if now - t < 60]
         ok = len(hits) < RATE_LIMIT
@@ -70,6 +145,43 @@ def player_lock(name):
         if len(_PLAYER_LOCKS) > 5000:
             _PLAYER_LOCKS.clear()
         return _PLAYER_LOCKS.setdefault(key, threading.Lock())
+
+
+def shared(key, compute, ttl=RESULT_TTL):
+    """Run compute() once per key: callers arriving while it runs wait for that answer, callers
+    within `ttl` seconds after get it instantly. compute() returns (status, body_bytes)."""
+    now = time.time()
+    with _RG:
+        hit = _RESULTS.get(key)
+        if hit and now - hit[0] < ttl:
+            return hit[1], hit[2]
+        ev = _INFLIGHT.get(key)
+        leader = ev is None
+        if leader:
+            ev = _INFLIGHT[key] = threading.Event()
+    if not leader:
+        ev.wait(900)
+        with _RG:
+            hit = _RESULTS.get(key)
+        if hit:
+            return hit[1], hit[2]
+        return shared(key, compute, ttl)                # the leader failed - try once ourselves
+    try:
+        status, body = compute()
+        if status in (200, 404):
+            with _RG:
+                if len(_RESULTS) > 20000:
+                    cut = time.time() - ttl
+                    for k in [k for k, v in _RESULTS.items() if v[0] < cut]:
+                        del _RESULTS[k]
+                _RESULTS[key] = (time.time(), status, body)
+        return status, body
+    finally:
+        with _RG:
+            _INFLIGHT.pop(key, None)
+        ev.set()
+
+
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN")   # set on Railway; no token = admin page disabled
 
 PRELOAD_STATUS = {"enabled": PRELOAD, "players_ready": 0, "last_pass": None, "current": None, "errors": 0}
@@ -132,6 +244,7 @@ def preload_forever():
                 try:
                     cs2_scout.grade(nick, 20.5, slug=slug, faceit_key=None, background=True)
                     warmed[slug] = time.time()
+                    mark_warm(slug, nick)
                 except Exception:
                     PRELOAD_STATUS["errors"] += 1
                 PRELOAD_STATUS["players_ready"] = sum(1 for t in warmed.values() if time.time() - t < REFRESH_AFTER * 2)
@@ -202,6 +315,9 @@ def public(res):
     if not fi.get("show_to_members"):
         res.pop("faceit", None)
     res.pop("grader_inputs", None)
+    res.pop("_h2h_rows", None)
+    res.pop("_h2h_opp", None)
+    (res.get("player_block") or {}).pop("_rf_kpr", None)
     res.pop("opponent_defense", None)      # shadow feature - admin log only until it is proven
     pb = res.get("player_block") or {}
     for r in pb.get("recent_maps") or []:
@@ -229,8 +345,8 @@ class Handler(BaseHTTPRequestHandler):
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         try:
             if u.path == "/health":
-                return self.send(200, {"ok": True, "faceit_key": bool(faceit_key()), "preload": PRELOAD_STATUS,
-                                       "storage": dict(storage_report(), **STORAGE)})
+                return self.send(200, {"ok": True, "faceit_key": bool(faceit_key()), "preload": PRELOAD_STATUS, "warm_start": WARM_START,
+                                       "storage": dict(storage_cached(), **STORAGE)})
             if u.path in ("/", "/index.html"):
                 return self.send(200, (WEB / "index.html").read_bytes(), "text/html; charset=utf-8")
             if u.path == "/api/search":
@@ -251,23 +367,38 @@ class Handler(BaseHTTPRequestHandler):
     def search(self, q):
         if len(q) < 2:
             return self.send(200, {"results": []})
-        b = BO3()
-        try:
-            hits = b.search_players(q, 8).get("results") or []
-        finally:
-            b.close()
-        return self.send(200, {"results": [
-            {"slug": h["slug"], "nick": h.get("nickname"),
-             "name": " ".join(x for x in (h.get("first_name"), h.get("last_name")) if x),
-             "country": (h.get("country") or {}).get("code"), "image": h.get("image_url")}
-            for h in hits]})
+        ql = q.lower()
+        # typing: a longer query can be answered from a shorter one's complete list (<8 hits)
+        with _RG:
+            prefixes = [(k[1], v) for k, v in _RESULTS.items() if len(k) == 2 and k[0] == "search"]
+        for pq, (t, st, body) in prefixes:
+            if ql.startswith(pq) and time.time() - t < 3600:
+                prev = json.loads(body)["results"]
+                if len(prev) < 8:
+                    keep = [h for h in prev if ql in (h["nick"] or "").lower() or ql in (h["name"] or "").lower()]
+                    return self.send(200, {"results": keep})
+
+        def compute():
+            b = BO3()
+            try:
+                hits = b.search_players(q, 8).get("results") or []
+            finally:
+                b.close()
+            return 200, json.dumps({"results": [
+                {"slug": h["slug"], "nick": h.get("nickname"),
+                 "name": " ".join(x for x in (h.get("first_name"), h.get("last_name")) if x),
+                 "country": (h.get("country") or {}).get("code"), "image": h.get("image_url")}
+                for h in hits]}).encode()
+        status, body = shared(("search", ql), compute, ttl=3600)
+        return self.send(status, body)
 
     def client_ip(self):
         fwd = self.headers.get("X-Forwarded-For") or ""          # Railway's proxy puts the member first
         return fwd.split(",")[0].strip() or self.client_address[0]
 
     def grade(self, q):
-        if not rate_ok(self.client_ip()):
+        load_test = bool(ADMIN_TOKEN) and self.headers.get("X-Load-Test") == ADMIN_TOKEN   # owner's own tests
+        if not load_test and not rate_ok(self.client_ip()):
             return self.send(429, {"error": f"Too many grades - limit is {RATE_LIMIT} a minute. "
                                             f"Wait a moment and try again."})
         name = q.get("player", "").strip()
@@ -279,18 +410,30 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(400, {"error": "Enter a player name"})
         prop = q.get("prop", "kills") if q.get("prop") in ("kills", "hs") else "kills"
         lt = q.get("line_type", "standard") if q.get("line_type") in ("standard", "goblin", "demon") else "standard"
-        with GRADE_SLOTS, player_lock(q.get("slug") or name):
-            res = cs2_scout.grade(name, line, prop, lt, slug=q.get("slug") or None, faceit_key=faceit_key(),
-                                    match=q.get("match") or None,
-                                    opponent=(q.get("opponent") or "")[:60] or None)
-        if res.get("error"):
-            return self.send(404, {"error": res["error"][0].upper() + res["error"][1:]})
-        res["verdict"] = verdict(res.get("grade"))
-        try:
-            picklog.log_grade(res, res["verdict"])     # Phase 10: real lines only, GRADE state only
-        except Exception:
-            traceback.print_exc()
-        return self.send(200, public(res))
+        slug, match = q.get("slug") or None, q.get("match") or None
+        opp = (q.get("opponent") or "")[:60].strip() or None
+        pkey = (slug or name).lower()
+        key = (pkey, line, prop, lt, match, (opp or "").lower())
+
+        def compute():
+            with player_lock(pkey):                     # one assembly per player at a time
+                warm = time.time() - _WARM.get(pkey, 0) < WARM_FOR
+                with (FAST_SLOTS if warm else COLD_SLOTS):
+                    res = cs2_scout.grade(name, line, prop, lt, slug=slug, faceit_key=faceit_key(),
+                                          match=match, opponent=opp)
+            if res.get("error"):
+                return 404, json.dumps({"error": res["error"][0].upper() + res["error"][1:]}).encode()
+            pb_ = res.get("player_block") or {}
+            mark_warm(pkey, name, (pb_.get("player") or {}).get("slug"), (pb_.get("player") or {}).get("nick"))
+            res["verdict"] = verdict(res.get("grade"))
+            try:
+                picklog.log_grade(res, res["verdict"])  # Phase 10: real lines only, GRADE state only
+            except Exception:
+                traceback.print_exc()
+            return 200, json.dumps(public(res), default=str).encode()
+
+        status, body = shared(key, compute)
+        return self.send(status, body)
 
     # ------------------------------------------------------------ Phase 10 admin (private)
     def authed(self, token):
@@ -356,10 +499,13 @@ th{{color:#8b95a8}}input{{background:#1a2130;color:#e8ecf3;border:1px solid #252
 
 
 if __name__ == "__main__":
+    threading.Thread(target=warm_start, daemon=True, name="warm-start").start()
     if PRELOAD:
         threading.Thread(target=preload_forever, daemon=True, name="preload").start()   # cleans up first
     else:
         threading.Thread(target=cleanup, daemon=True, name="cleanup").start()
+    ThreadingHTTPServer.request_queue_size = 2048     # accept hundreds of connections at once
+    ThreadingHTTPServer.daemon_threads = True
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"cs2_scout running on {HOST}:{PORT} - open http://localhost:{PORT}  (Ctrl+C to stop)", flush=True)
     try:

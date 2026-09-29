@@ -184,6 +184,14 @@ MIN_GAP = 0.25         # seconds between requests (4/s) - shared by every BO3 cl
 QUEUE_PLACES = 2       # queued requests one look-up may hold at once (fair turns between members)
 _MEM = {}              # finished-map scoreboards/vetoes never change: kept in memory after first read
 _MEM_MAX = 60000
+_TMEM = {}             # key -> (fetched_at, data) for data that expires (schedules, rosters, lists)
+_TMEM_MAX = 20000
+
+
+def _tmem_put(key, data, at):
+    if len(_TMEM) >= _TMEM_MAX:
+        _TMEM.clear()                                   # simple bound - refills from disk
+    _TMEM[key] = (at, data)
 FOREVER = 10 ** 6      # hours - finished map stats never change
 
 # One request schedule for the whole process (member look-ups + background pre-loading), so
@@ -231,11 +239,16 @@ class BO3:
         forever = ttl >= FOREVER
         if forever and key in _MEM:
             return _MEM[key]
+        hit = _TMEM.get(key) if ttl > 0 else None       # changing data (schedules, rosters): memory
+        if hit and time.time() - hit[0] < ttl * 3600:   # copy until it expires - no disk read
+            return hit[1]
         if fresh:
             data = _read(path)
             if data is not None:
                 if forever and len(_MEM) < _MEM_MAX:
                     _MEM[key] = data
+                elif not forever:
+                    _tmem_put(key, data, path.stat().st_mtime)
                 return data
         while self.background and _members_active[0] > 0:
             await asyncio.sleep(0.5)                    # a member is waiting - step aside
@@ -258,6 +271,8 @@ class BO3:
         _write(path, data)
         if forever and len(_MEM) < _MEM_MAX:
             _MEM[key] = data
+        elif not forever:
+            _tmem_put(key, data, time.time())
         return data
 
     def _turns(self):

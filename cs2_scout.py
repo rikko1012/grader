@@ -24,6 +24,7 @@ HLTV-only numbers BO3.gg doesn't have, and what replaces them (approved 2026-09-
   IGL                -> igl.csv (player,team) - BO3.gg doesn't record it
 """
 import argparse
+import copy
 import csv
 import hashlib
 import json
@@ -480,6 +481,7 @@ def run_player(b, name, args):
         return (g.get("number") or 9) <= 2
     recent_rows = map_rows(b, p["id"], matches, recent)
     out["recent_maps"] = recent_rows
+    out["_rf_kpr"] = overall.get("kpr")          # kept so a new line only redoes the cheap part
     out["recent_form"] = recent_form(recent_rows, overall.get("kpr"), args.line,
                                      "headshots" if getattr(args, "prop", "kills") == "hs" else "kills")
     out["steam_id"] = next((r["steam_id"] for r in recent_rows if r["steam_id"]), None)
@@ -495,16 +497,40 @@ def run_player(b, name, args):
     return out
 
 
+_REGIONS = {"mtime": None, "data": {}}
+_NAT = {}                   # team slug -> (time, tag): rosters change rarely, 30-min memory
+_NAT_TTL = 1800
+
+
 def load_regions():
-    """regions.csv: country_code -> region the owner groups it with (e.g. RU/UA/KZ)."""
-    if not REGIONS_CSV.exists():
+    """regions.csv: country_code -> region the owner groups it with (e.g. RU/UA/KZ).
+    Read once and kept in memory (re-read only if the file changes)."""
+    try:
+        mt = REGIONS_CSV.stat().st_mtime
+    except OSError:
         return {}
-    with REGIONS_CSV.open(encoding="utf-8-sig", newline="") as f:
-        return {r["country_code"].strip().upper(): r["region"].strip()
-                for r in csv.DictReader(f) if r.get("country_code") and r.get("region")}
+    if _REGIONS["mtime"] != mt:
+        with REGIONS_CSV.open(encoding="utf-8-sig", newline="") as f:
+            _REGIONS["data"] = {r["country_code"].strip().upper(): r["region"].strip()
+                                for r in csv.DictReader(f) if r.get("country_code") and r.get("region")}
+        _REGIONS["mtime"] = mt
+    return _REGIONS["data"]
 
 
 def nationality(b, team_slug):
+    """Gate C nationality tag (memory-cached 30 min per team)."""
+    hit = _NAT.get(team_slug)
+    if hit and time.time() - hit[0] < _NAT_TTL:
+        return hit[1]
+    tag = _nationality(b, team_slug)
+    if tag is not None:
+        if len(_NAT) > 5000:
+            _NAT.clear()
+        _NAT[team_slug] = (time.time(), tag)
+    return tag
+
+
+def _nationality(b, team_slug):
     """Gate C nationality tag, from the CURRENT roster only: 3+ players from one country, or
     from one region in regions.csv, = the team is from there. Mixed rosters get no tag (rule
     doesn't apply). Nothing is inferred - a player with no country on record doesn't count."""
@@ -1066,6 +1092,26 @@ def grade(name, line, prop="kills", line_type="standard", slug=None, faceit_key=
         faceit_key=faceit_key or os.environ.get("FACEIT_API_KEY"), n=20, refresh=False, ttl=ttl,
         match=match, member_opponent=(opponent or "").strip() or None)
     args.opponent = args.member_opponent
+    # Shared context (stats, match, maps, odds, H2H series, FACEIT, CS API) is the same for every
+    # line and prop of a player: built once, reused for CONTEXT_TTL seconds - a new line only
+    # redoes finish_line(). Keeps hundreds of members on the same slate cheap.
+    ckey = ((name or "").strip().lower(), (slug or "").lower(), match, (args.member_opponent or "").lower(),
+            bool(args.faceit_key), background)
+    hit = _CONTEXT.get(ckey)
+    if hit and time.time() - hit[0] < CONTEXT_TTL:
+        res = copy.deepcopy(hit[1])
+        res["generated"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        if (res.get("csapi") or {}).get("pending"):      # background check may have finished since
+            try:
+                import csapi
+                pb_ = res.get("player_block") or {}
+                res["csapi"] = csapi.player_check_async((pb_.get("player") or {}).get("nick"), pb_.get("current_team"),
+                                                        (pb_.get("recent_maps") or [{}])[0].get("date"))
+            except Exception:
+                pass
+        if not res.get("error"):
+            finish_line(res, args)
+        return res
     res = {"generated": datetime.now(timezone.utc).isoformat(timespec="seconds"), "command": "grade"}
     b = BO3(ttl_hours=ttl, background=background)
     try:
@@ -1076,7 +1122,14 @@ def grade(name, line, prop="kills", line_type="standard", slug=None, faceit_key=
         b.close()
     if res.get("player_block"):
         res["player_block"].pop("_matches", None)
+    if len(_CONTEXT) > 3000:
+        _CONTEXT.clear()
+    _CONTEXT[ckey] = (time.time(), copy.deepcopy(res))
     return res
+
+
+_CONTEXT = {}
+CONTEXT_TTL = 120
 
 
 def run(args, res, b, ttl):
@@ -1236,6 +1289,7 @@ def run(args, res, b, ttl):
                 res["regional_note"] = (f"Regional extension: {n} series vs other {tag['label']} teams" if n else
                                         f"Regional extension: no recent series vs other {tag['label']} teams found")
         res["h2h"] = h2h(rows, args.opponent, args.line, stat)
+        res["_h2h_rows"], res["_h2h_opp"] = rows, args.opponent
     if args.cmd == "odds" or (args.cmd == "full" and (args.team or pb)):
         team = args.name if args.cmd == "odds" else (args.team or pb.get("playing_for") or pb.get("current_team"))
         res["odds"] = match_odds(team, args.opponent)  # always live, no cache
@@ -1254,7 +1308,7 @@ def run(args, res, b, ttl):
         try:
             import csapi
             last = (pb.get("recent_maps") or [{}])[0].get("date")
-            res["csapi"] = csapi.player_check(pb["player"]["nick"], pb.get("current_team"), last)
+            res["csapi"] = csapi.player_check_async(pb["player"]["nick"], pb.get("current_team"), last)
         except Exception:
             res["csapi"] = None
     if args.cmd == "full" and args.faceit_key:
@@ -1265,14 +1319,26 @@ def run(args, res, b, ttl):
     elif args.cmd == "faceit":
         _faceit(args, res, pb, ttl)
     if args.cmd == "full" and args.line is not None:
-        res["grader_inputs"] = grader_inputs(pb, args, res.get("odds"), res.get("h2h"))
-        res["grade"] = grade_leg(res["grader_inputs"])
-        try:   # 20,000-run match simulation - display only (weight 0, tested vs the curve)
-            from sim import simulate
-            res["simulation"] = simulate(res["grader_inputs"])
-        except Exception as e:
-            res["simulation"] = None
-            res["simulation_error"] = str(e)[:200]
+        finish_line(res, args)
+
+
+def finish_line(res, args):
+    """The only part of a grade that depends on the line / prop: last-10 vs the line, H2H hit
+    rates, grader inputs, the grade, the simulation. Everything else is shared context."""
+    pb = res.get("player_block") or {}
+    stat = "headshots" if args.prop == "hs" else "kills"
+    if pb.get("recent_maps") is not None:
+        pb["recent_form"] = recent_form(pb["recent_maps"], pb.get("_rf_kpr"), args.line, stat)
+    if res.get("_h2h_rows") is not None:
+        res["h2h"] = h2h(list(res["_h2h_rows"]), res.get("_h2h_opp"), args.line, stat)
+    res["grader_inputs"] = grader_inputs(pb, args, res.get("odds"), res.get("h2h"))
+    res["grade"] = grade_leg(res["grader_inputs"])
+    try:   # 20,000-run match simulation - display only (weight 0, tested vs the curve)
+        from sim import simulate
+        res["simulation"] = simulate(res["grader_inputs"])
+    except Exception as e:
+        res["simulation"] = None
+        res["simulation_error"] = str(e)[:200]
 
 
 def _faceit(args, res, pb, ttl):

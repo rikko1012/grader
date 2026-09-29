@@ -14,11 +14,13 @@ Its data runs weeks behind: every answer carries the newest match date it knows 
 Use:  python csapi.py ZywOo
 """
 import json
+import os
 import re
 import sys
 import threading
 import time
 from datetime import date, timedelta
+from pathlib import Path
 
 import requests
 
@@ -105,6 +107,70 @@ def player_check(nick, bo3_team=None, bo3_last_date=None, today=None):
         return out
     except Exception as e:
         return {"found": False, "note": f"CS API unavailable ({type(e).__name__})"}
+
+
+# ---------------------------------------------------------------- never block a grade
+# The check is weight 0 context, so grades never wait for it: the first request queues it for a
+# single background worker (paced, one at a time) and the card shows it from the next grade on.
+# Answers are kept 6 h in memory and on disk, so a restart/deploy doesn't lose them.
+_DONE = {}                       # key -> (time, result)
+_PENDING, _QLOCK = [], threading.Lock()
+_WAKE = threading.Event()
+_FILE = Path(os.environ.get("CS2_DATA_DIR") or Path(__file__).resolve().parent) / ".cache" / "csapi_checks.json"
+_SAVED = [0.0]
+
+
+def _load():
+    try:
+        now = time.time()
+        _DONE.update({k: tuple(v) for k, v in json.loads(_FILE.read_text("utf-8")).items() if now - v[0] < TTL})
+    except Exception:
+        pass
+
+
+def _save():
+    if time.time() - _SAVED[0] < 30:
+        return
+    _SAVED[0] = time.time()
+    try:
+        _FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _FILE.with_suffix(f".{threading.get_ident()}.tmp")
+        tmp.write_text(json.dumps(dict(list(_DONE.items())), default=str), "utf-8")
+        os.replace(tmp, _FILE)
+    except Exception:
+        pass
+
+
+def _worker():
+    while True:
+        _WAKE.wait(30)
+        _WAKE.clear()
+        while True:
+            with _QLOCK:
+                if not _PENDING:
+                    break
+                key, args = _PENDING.pop(0)
+            _DONE[key] = (time.time(), player_check(*args))
+            if len(_DONE) > 5000:
+                _DONE.clear()
+            _save()
+
+
+def player_check_async(nick, bo3_team=None, bo3_last_date=None):
+    """Cached answer right away, or a 'loading' note while the background worker fetches it."""
+    key = "|".join(str(x or "").lower() for x in (nick, bo3_team, (bo3_last_date or "")[:10]))
+    hit = _DONE.get(key)
+    if hit and time.time() - hit[0] < TTL:
+        return hit[1]
+    with _QLOCK:
+        if key not in {k for k, _ in _PENDING} and len(_PENDING) < 500:
+            _PENDING.append((key, (nick, bo3_team, bo3_last_date)))
+    _WAKE.set()
+    return {"found": False, "pending": True, "note": "CS API check is loading - it shows on the next grade"}
+
+
+_load()
+threading.Thread(target=_worker, daemon=True, name="csapi").start()
 
 
 if __name__ == "__main__":

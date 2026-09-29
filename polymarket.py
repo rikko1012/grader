@@ -51,6 +51,8 @@ def prob_to_american(p):
 
 
 _EVENTS = {"at": 0.0, "data": None}
+import threading as _threading
+_EVENTS_LOCK = _threading.Lock()
 EVENTS_TTL = 60   # seconds - the market list is shared by every grade in that minute
 
 
@@ -60,9 +62,17 @@ def upcoming_events(days_back=1):
     import time as _t
     if _EVENTS["data"] is not None and _t.time() - _EVENTS["at"] < EVENTS_TTL:
         return _EVENTS["data"]
-    data = _fetch_events(days_back)
-    _EVENTS.update(at=_t.time(), data=data)
-    return data
+    with _EVENTS_LOCK:                   # one download for everyone waiting (no stampede)
+        if _EVENTS["data"] is not None and _t.time() - _EVENTS["at"] < EVENTS_TTL:
+            return _EVENTS["data"]
+        try:
+            data = _fetch_events(days_back)
+        except Exception:
+            if _EVENTS["data"] is not None:          # Polymarket hiccup: keep the last list
+                return _EVENTS["data"]
+            raise
+        _EVENTS.update(at=_t.time(), data=data)
+        return data
 
 
 def _fetch_events(days_back):
