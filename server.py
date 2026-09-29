@@ -26,6 +26,7 @@ from datetime import datetime, timezone
 
 import cs2_scout
 import picklog
+import bo3
 from bo3 import BO3, DATA_DIR, prune, storage_report
 
 from polymarket import match_odds, upcoming_events
@@ -328,6 +329,15 @@ def public(res):
     return res
 
 
+def memory_mb():
+    """Resident memory of this process (Linux/Railway); None elsewhere."""
+    try:
+        with open("/proc/self/status") as f:
+            return round(int(next(l for l in f if l.startswith("VmRSS")).split()[1]) / 1024)
+    except Exception:
+        return None
+
+
 _PAGE = {"mtime": None, "data": b""}
 
 
@@ -373,6 +383,9 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if u.path == "/health":
                 return self.send(200, {"ok": True, "faceit_key": bool(faceit_key()), "preload": PRELOAD_STATUS, "warm_start": WARM_START,
+                                       "memory_mb": memory_mb(), "threads": threading.active_count(),
+                                       "caches": {"results": len(_RESULTS), "contexts": len(cs2_scout._CONTEXT),
+                                                  "scoreboards": len(bo3._MEM), "expiring": len(bo3._TMEM)},
                                        "traffic": {"requests": STATS["requests"], "errors_5xx": STATS["errors_5xx"],
                                                    "avg_server_ms": round(STATS["ms_total"] / max(STATS["requests"], 1), 1),
                                                    "since": datetime.fromtimestamp(STATS["since"], timezone.utc).isoformat(timespec="seconds")},
