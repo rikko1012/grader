@@ -57,7 +57,8 @@ def enabled():
 PAID_RESOURCES = "exp_W6a3m1Ps4dxbCG"
 PAID_PLANS = {"plan_4zOzRl7roBDFf", "plan_8d2GVuU7671mD", "plan_fuM25oisxzQEH", "plan_0n9qau7Yt9G5r",
               "plan_G9ohvBxAxCheT", "plan_ZSpLGB3mTmagK"}          # Weekly .. Lifetime
-LIVE_STATUSES = {"active", "trialing", "canceling"}          # canceling = paid until the period ends
+LIVE_STATUSES = {"active", "trialing", "canceling"}
+LIFETIME_PLAN = "plan_ZSpLGB3mTmagK"                         # lifetime memberships show "completed"          # canceling = paid until the period ends
 MEMBERSHIPS = "https://api.whop.com/api/v1/memberships"
 NO_RECHECK_MIN = 10          # a "no" is re-asked after 10 min (someone who just paid gets in fast)
 JOIN_URL = "https://whop.com/1timeesports/exp_W6a3m1Ps4dxbCG/app/"
@@ -188,7 +189,8 @@ def plan_access(user_id):
     if r.status_code != 200:
         _log_fail("memberships", r)
         raise RuntimeError(f"memberships HTTP {r.status_code}")
-    return any(m.get("plan_id") in paid_plans() and m.get("status") in LIVE_STATUSES
+    return any(m.get("plan_id") in paid_plans() and (m.get("status") in LIVE_STATUSES or
+               (m.get("plan_id") == LIFETIME_PLAN and m.get("status") == "completed"))   # one-time payment
                for m in r.json().get("data") or [])
 
 
