@@ -26,7 +26,7 @@ GENERIC = {"team", "esports", "esport", "gaming", "club", "gg", "the"}
 
 
 def key():
-    return os.environ.get("PANDASCORE_API_KEY")
+    return os.environ.get("PANDASCORE_API_KEY") or os.environ.get("panda_score_api")   # Railway name
 
 
 def _get(path, ttl, **params):

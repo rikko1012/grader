@@ -32,7 +32,7 @@ FIX_TTL = 600
 
 
 def key():
-    return os.environ.get("ODDSPAPI_API_KEY")
+    return os.environ.get("ODDSPAPI_API_KEY") or os.environ.get("odds_papi_api")   # Railway name
 
 
 def _get(path, **params):
