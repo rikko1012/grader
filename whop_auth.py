@@ -55,6 +55,11 @@ def enabled():
 # plan_0n9qau7Yt9G5r, Annual plan_G9ohvBxAxCheT, Lifetime plan_ZSpLGB3mTmagK) unlock it; the free
 # product does not. Whop checks access per product/experience, so we check this experience.
 PAID_RESOURCES = "exp_W6a3m1Ps4dxbCG"
+PAID_PLANS = {"plan_4zOzRl7roBDFf", "plan_8d2GVuU7671mD", "plan_fuM25oisxzQEH", "plan_0n9qau7Yt9G5r",
+              "plan_G9ohvBxAxCheT", "plan_ZSpLGB3mTmagK"}          # Weekly .. Lifetime
+LIVE_STATUSES = {"active", "trialing", "canceling"}          # canceling = paid until the period ends
+MEMBERSHIPS = "https://api.whop.com/api/v1/memberships"
+NO_RECHECK_MIN = 10          # a "no" is re-asked after 10 min (someone who just paid gets in fast)
 JOIN_URL = "https://whop.com/1timeesports/exp_W6a3m1Ps4dxbCG/app/"
 
 
@@ -171,14 +176,38 @@ def finish_login(code, state, pkce_cookie):
 
 
 # ---------------------------------------------------------------- membership
+def paid_plans():
+    extra = {p.strip() for p in _env("WHOP_PLAN_IDS").split(",") if p.strip()}
+    return PAID_PLANS | extra
+
+
+def plan_access(user_id):
+    """True if the user has a live membership on any paid plan (the owner's rule, plan by plan)."""
+    r = requests.get(MEMBERSHIPS, params={"user_id": user_id, "first": 50}, timeout=15,
+                     headers={"Authorization": f"Bearer {_env('WHOP_API_KEY')}"})
+    if r.status_code != 200:
+        _log_fail("memberships", r)
+        raise RuntimeError(f"memberships HTTP {r.status_code}")
+    return any(m.get("plan_id") in paid_plans() and m.get("status") in LIVE_STATUSES
+               for m in r.json().get("data") or [])
+
+
 def has_access(user_id, force=False):
-    """True if the user has an active customer/admin membership to any PAID product. Cached a day."""
+    """True if the user can use the grader: Whop says they can open the paid Plays experience
+    (owner/team 'admin' included), OR they hold a live membership on any paid plan.
+    A 'yes' is kept a day, a 'no' only 10 minutes."""
     with _LOCK:
         hit = _ACCESS_CACHE.get(user_id)
-    if hit and not force and time.time() - hit[0] < RECHECK_H * 3600:
-        return hit[1]
+    if hit and not force:
+        age = time.time() - hit[0]
+        if age < (RECHECK_H * 3600 if hit[1] else NO_RECHECK_MIN * 60):
+            return hit[1]
     ok = False
-    for prod in products():
+    try:
+        ok = plan_access(user_id)
+    except Exception:
+        pass
+    for prod in ([] if ok else products()):
         try:
             r = requests.get(ACCESS.format(user=user_id, resource=prod), timeout=15,
                              headers={"Authorization": f"Bearer {_env('WHOP_API_KEY')}"})

@@ -530,6 +530,21 @@ class Handler(BaseHTTPRequestHandler):
                 ids = [int(x) for x in (q.get("ids") or "").split(",") if x.strip().isdigit()]
                 picklog.mark_tests(ids)
                 return self.send(200, {"marked": len(ids), "pushes_fixed": picklog.resettle_pushes()})
+            if u.path == "/admin/whop_plan" and self.authed(q.get("token")) and whop_auth.enabled():
+                # private: members on one plan and whether the grader lets each in (Whop read-only)
+                import requests as _rq
+                r = _rq.get(whop_auth.MEMBERSHIPS, timeout=20,
+                            params={"plan_id": q.get("plan", ""), "first": int(q.get("n", 15))},
+                            headers={"Authorization": f"Bearer {os.environ.get('WHOP_API_KEY', '')}"})
+                if r.status_code != 200:
+                    return self.send(200, {"whop_status": r.status_code, "whop_error": whop_auth._why(r)})
+                rows = []
+                for m in r.json().get("data") or []:
+                    uid = m.get("user_id")
+                    rows.append({"membership": m.get("id"), "status": m.get("status"), "plan": m.get("plan_id"),
+                                 "product": m.get("product_id"),
+                                 "grader_allows": whop_auth.has_access(uid, force=True) if uid else None})
+                return self.send(200, {"plan": q.get("plan"), "memberships": rows})
             if u.path == "/admin/reopen" and self.authed(q.get("token")):
                 ids = [int(x) for x in (q.get("ids") or "").split(",") if x.strip().isdigit()]
                 picklog.reopen(ids)
