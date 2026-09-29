@@ -139,6 +139,12 @@ def finish_login(code, state, pkce_cookie):
     step = "token"
     try:
         tok = requests.post(TOKEN, json=body, timeout=15)
+        if tok.status_code >= 400 and "client_secret" in body:
+            # PKCE works without a secret; a key lacking oauth:token_exchange is refused, so retry bare
+            bare = {k: v for k, v in body.items() if k != "client_secret"}
+            tok2 = requests.post(TOKEN, json=bare, timeout=15)
+            if tok2.status_code < 400:
+                tok = tok2
         if tok.status_code >= 400:                       # some OAuth servers want a form body
             tok2 = requests.post(TOKEN, data=body, timeout=15)
             if tok2.status_code < 400:
