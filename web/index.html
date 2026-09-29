@@ -245,7 +245,7 @@ function render(d) {
       <div class="stat"><div class="k">Win/loss factor</div><div class="v">×${num(det.outcome_mult,3)}</div><div class="n">${pct(det.p_win,0)} to win</div></div>
       <div class="stat"><div class="k">Projection</div><div class="v">${num(g.lambda_final,1)}</div><div class="n">${stat}, Maps 1–2</div></div>
       <div class="stat"><div class="k">Line</div><div class="v">${g.line}</div><div class="n">fair ${g.value ? g.value.fair_line : "–"}</div></div>
-      <div class="stat"><div class="k">Edge</div><div class="v">${(g.lambda_final - g.line > 0 ? "+" : "") + (g.lambda_final - g.line).toFixed(1)}</div><div class="n">projection − line</div></div>
+      <div class="stat"><div class="k">Edge</div><div class="v">${(g.lambda_final - g.line - 0.5 > 0 ? "+" : "") + (g.lambda_final - g.line - 0.5).toFixed(1)}</div><div class="n">projection − ${g.line + 0.5} needed</div></div>
       <div class="stat"><div class="k">Last 10</div><div class="v">${pb.recent_form?.avg_total ?? "–"}</div><div class="n">median ${pb.recent_form?.median_total ?? "–"} · ${pb.recent_form?.overs ?? "–"}/${pb.recent_form?.matches ?? "–"} over</div></div>
     </div>`;
   }

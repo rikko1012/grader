@@ -143,7 +143,8 @@ def verdict(g):
     grade = g["grade"] if side == "More" else g["grade_less"]
     units = g.get("units", 0) if side == "More" else g.get("units_less", 0)
     stat = "headshots" if g.get("prop") == "hs" else "kills"
-    gap = g["lambda_final"] - g["line"]
+    need = g["line"] + 0.5                  # 15.5 line -> he needs 16 for More
+    gap = g["lambda_final"] - need          # > 0 always means More, < 0 always Less
     if g.get("scout"):
         return {"side": side, "state": "SCOUT", "grade": "SCOUT", "p": p, "units": 0.0,
                 "confidence": "scout",
@@ -154,9 +155,9 @@ def verdict(g):
     elif g.get("tape_fight"):
         why = (f"TAPE FIGHT - model {side} {p:.0%}, but his recent record at this line disagrees - max 0.25U")
     elif units > 0:
-        why = f"Projection {g['lambda_final']:.1f} vs line {g['line']} ({gap:+.1f} {stat})"
+        why = f"Projection {g['lambda_final']:.1f} vs {need:g} needed ({gap:+.1f} {stat})"
     else:
-        why = (f"Low confidence: projection {g['lambda_final']:.1f} vs line {g['line']} ({gap:+.1f} {stat}) "
+        why = (f"Low confidence: projection {g['lambda_final']:.1f} vs {need:g} needed ({gap:+.1f} {stat}) "
                f"is small next to the normal swing (about ±{g['sd']:.0f}) - 0 units suggested")
     return {"side": side, "state": "GRADE", "grade": grade, "p": p, "units": units, "reason": why,
             "market": g.get("market_quality"),
