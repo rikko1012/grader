@@ -1172,11 +1172,16 @@ def run(args, res, b, ttl):
                 pb["team_source"] = "Liquipedia"
         else:
             teams[pb["team_id"]] = pb.get("current_team")
+        today_utc = datetime.now(timezone.utc).date()          # same answer on every server clock
         if not no_team or member_opp:
-            cutoff = (date.today() - timedelta(days=45 if no_team else STANDIN_DAYS)).isoformat()
+            cutoff = (today_utc - timedelta(days=45 if no_team else STANDIN_DAYS)).isoformat()
             for r in pb.get("recent_maps") or []:
                 if r["date"] >= cutoff and r["team_id"] and r["team_id"] not in teams:
                     teams[r["team_id"]] = r["team"]
+        rm0 = (pb.get("recent_maps") or [None])[0]
+        if (not no_team and rm0 and rm0.get("team_id") and rm0["team_id"] not in teams
+                and rm0["date"] >= (today_utc - timedelta(days=60)).isoformat()):
+            teams[rm0["team_id"]] = rm0["team"]    # the team of his latest map is always a candidate
         # Only teams he actually plays for now: the team of his most recent map, teams whose
         # current roster lists him, or his profile team if it lists him. A team he stood in for
         # earlier, or an old team he has left, is dropped (it used to make false "stand-ins").
