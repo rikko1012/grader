@@ -312,6 +312,7 @@ def map_rows(b, player_id, matches, want_games):
             "date": (g.get("begin_at") or mt.get("start_date") or "")[:10],
             "number": g.get("number"), "map": g.get("map_name"),
             "team_id": my_team, "team": (teams.get(my_team) or {}).get("name") or me.get("clan_name"),
+            "team_slug": (teams.get(my_team) or {}).get("slug"),
             "opponent_id": opp_id, "opponent": (teams.get(opp_id) or {}).get("name") or me.get("enemy_clan_name"),
             "kills": me.get("kills"), "headshots": me.get("headshots"), "deaths": me.get("death"),
             "kast": me.get("kast"), "rounds": (g.get("winner_clan_score") or 0) + (g.get("loser_clan_score") or 0),
@@ -489,7 +490,10 @@ def run_player(b, name, args):
     # stand-in / roster confirmation from the latest lineup
     last_lineup = set(recent_rows[0]["lineup"]) if recent_rows else set()
     roster_slugs = {x.get("slug") for x in roster}
-    out["is_standin"] = bool(roster) and not in_roster
+    # Being missing from his own team's roster page is not "stand-in" (sixth men, 5-man pages,
+    # a profile BO3.gg hasn't updated). Stand-in is decided in run(), once we know who he plays for.
+    out["on_profile_roster"] = in_roster
+    out["is_standin"] = False
     out["roster_confirmed"] = in_roster and len(roster) >= 5 and len(last_lineup & roster_slugs) >= 4
     if recent_rows and recent_rows[0]["team_id"] != team.get("id"):
         out["roster_note"] = f"Last map was played for {recent_rows[0]['team']}, not {team.get('name')}"
@@ -704,9 +708,11 @@ def next_match(b, team_id, want=None):
 
 def _match_info(m, team_id):
     opp = m["team2"] if m.get("team1_id") == team_id else m["team1"]
+    mine = m["team1"] if m.get("team1_id") == team_id else m["team2"]
     return {"start": m.get("start_date"), "slug": m.get("slug"), "opponent": opp.get("name"),
             "team1_id": m.get("team1_id"), "team2_id": m.get("team2_id"),
-            "opponent_id": opp.get("id"), "opponent_slug": opp.get("slug"), "event": (m.get("tournament") or {}).get("name"),
+            "opponent_id": opp.get("id"), "opponent_slug": opp.get("slug"), "team_slug": (mine or {}).get("slug"),
+            "event": (m.get("tournament") or {}).get("name"),
             "maps": [g["map_name"] for g in sorted(m.get("games") or [], key=lambda g: g.get("number") or 0)
                      if g.get("map_name")]}
 
@@ -1171,6 +1177,39 @@ def run(args, res, b, ttl):
             for r in pb.get("recent_maps") or []:
                 if r["date"] >= cutoff and r["team_id"] and r["team_id"] not in teams:
                     teams[r["team_id"]] = r["team"]
+        # Only teams he actually plays for now: the team of his most recent map, teams whose
+        # current roster lists him, or his profile team if it lists him. A team he stood in for
+        # earlier, or an old team he has left, is dropped (it used to make false "stand-ins").
+        pid = pb["player"]["id"]
+        rm = pb.get("recent_maps") or []
+        newest = rm[0]["team_id"] if rm else None
+        slugs = {}
+        for r in rm:
+            slugs.setdefault(r["team_id"], r.get("team_slug"))
+        if pb.get("team_id"):
+            slugs.setdefault(pb["team_id"], pb.get("team_slug"))
+
+        def lists_him(tid):
+            try:
+                return any(x.get("id") == pid for x in (b.team(slugs[tid]).get("players") or [])) if slugs.get(tid) else False
+            except Exception:
+                return False
+
+        def played_their_last(tid):
+            """Was he in that team's own latest match? (team data updates faster than his match list)"""
+            try:
+                last = next((m for m in b.team_recent(tid, limit=5).get("results") or []
+                             if m.get("status") == "finished"), None)
+                g = sorted((last or {}).get("games") or [], key=lambda g: g.get("number") or 0)
+                return bool(g) and any((r.get("steam_profile") or {}).get("player_id") == pid
+                                       for r in b.game_players(g[0]["id"]))
+            except Exception:
+                return True                       # can't check: keep the team rather than guess
+        if not member_opp:
+            teams = {tid: tn for tid, tn in teams.items()
+                     if not isinstance(tid, int) or tid == newest or lists_him(tid)
+                     or (tid == pb.get("team_id") and pb.get("on_profile_roster"))
+                     or played_their_last(tid)}
         options = []
         for tid, tname in teams.items():
             if not isinstance(tid, int):
@@ -1236,7 +1275,19 @@ def run(args, res, b, ttl):
             if no_team:
                 pb["current_team"], pb["team_id"] = tname, tid     # the team playing the named match
             elif tid != pb["team_id"]:
-                pb["standin_for"] = tname
+                slugs.setdefault(tid, nxt.get("team_slug"))
+                if lists_him(tid):
+                    # that team's roster lists him: it IS his team - BO3.gg's profile is behind
+                    pb["team_note"] = f"BO3.gg profile still shows {pb.get('current_team')}; {tname}'s roster lists him"
+                    pb["current_team"], pb["team_id"] = tname, tid
+                    pb["roster_confirmed"] = newest == tid        # listed + his last map was for them
+                elif pb.get("on_profile_roster"):
+                    pb["standin_for"] = tname                     # real stand-in: his own team still lists him
+                else:
+                    # left his profile team, not on the new roster page yet: a move, not a stand-in
+                    pb["team_note"] = (f"Now playing for {tname} (not on its BO3.gg roster page yet); "
+                                       f"profile still shows {pb.get('current_team')}")
+                    pb["current_team"], pb["team_id"] = tname, tid
         pb["scout"] = nxt is None          # no upcoming match -> SCOUT card, no grade/units
         if nxt:
             if b.background:   # shadow feature: computed by the pre-loader, never on a member's clock

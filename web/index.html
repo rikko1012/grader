@@ -318,7 +318,7 @@ function render(d) {
     ${mates.map(m => `<div class="mate ${m.me ? "me" : ""}"><span>${esc(m.n)}</span><div class="bar"><i style="width:${(m.r || 0) / maxR * 100}%"></i></div><span class="num">${num(m.r)}</span></div>`).join("")}
     </div></section>
     <section class="card"><h2>Checks</h2>
-      <div class="kv"><span>Roster</span><span>${pb.roster_confirmed ? "Confirmed" : "Not confirmed"}${pb.is_standin ? " · stand-in" : ""}</span></div>
+      <div class="kv"><span>Roster</span><span>${pb.roster_confirmed ? "Confirmed" : "Not confirmed"}${pb.standin_for ? " · stand-in" : ""}</span></div>${pb.team_note ? `<div class="small muted" style="margin:-2px 0 6px">${esc(pb.team_note)}</div>` : ""}
       <div class="kv"><span>AWP</span><span>${esc(pb.awp_note || "–")}</span></div>
       <div class="kv"><span>IGL</span><span>${pb.is_igl ? "Yes (−15%)" : "No"}</span></div>
       ${pb.trade_pr != null ? `<div class="kv"><span>Trade kills</span><span>${num(pb.trade_pr,3)}/round · ${g.prop === "kills" ? `projection ×${num(det.trade_mult,3)}` : "weight 0 on headshots"}</span></div>` : ""}
