@@ -159,9 +159,6 @@ def verdict(g):
     else:
         why = (f"Projection {g['lambda_final']:.1f} vs {need:g} needed ({gap:+.1f} {stat}) is small next "
                f"to the normal swing (about ±{g['sd']:.0f}) - leans {side} {p:.0%}, 0 units")
-    if grade == "C":
-        # owner spec 2026-09-29: under 57% the headline is NO PLAY (the lean is still shown), not "More · C"
-        grade = "NO PLAY"
     return {"side": side, "state": "GRADE", "grade": grade, "p": p, "units": units, "reason": why,
             "market": g.get("market_quality"),
             "confidence": "high" if p >= 0.68 else "medium" if p >= 0.63 else "small" if p >= 0.57 else "low"}
