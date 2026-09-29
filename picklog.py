@@ -119,6 +119,8 @@ def settle(b, map_rows):
                     upd = ("settled", json.dumps([x["map"] for x in maps]), actual, int(hit))
             else:
                 upd = ("void", json.dumps([x["map"] for x in maps]), None, None)   # forfeit / BO1 / sat out
+        elif mt and mt.get("status") == "defwin":            # forfeit: no maps played
+            upd = ("void", None, None, None)
         elif now > start + timedelta(days=VOID_AFTER_D):
             upd = ("void", None, None, None)
         if upd:
