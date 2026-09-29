@@ -106,6 +106,7 @@ def warm_start():
 
 
 _RESULTS, _INFLIGHT, _RG = {}, {}, threading.Lock()
+_SEARCH = {}                                  # query -> (time, body, n_results, rows)
 _PLAYER_LOCKS, _PLAYER_LOCKS_GUARD = {}, threading.Lock()
 RATE_LIMIT = int(os.environ.get("RATE_LIMIT", 20))   # grades per minute per member (IP)
 _HITS, _HITS_GUARD = {}, threading.Lock()
@@ -327,12 +328,37 @@ def public(res):
     return res
 
 
+_PAGE = {"mtime": None, "data": b""}
+
+
+def page():
+    """index.html from memory (re-read only when the file changes)."""
+    f = WEB / "index.html"
+    mt = f.stat().st_mtime
+    if _PAGE["mtime"] != mt:
+        _PAGE["data"], _PAGE["mtime"] = f.read_bytes(), mt
+    return _PAGE["data"]
+
+
+STATS = {"requests": 0, "ms_total": 0.0, "since": time.time(), "errors_5xx": 0}
+
+
 class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"      # keep-alive: browsers/Railway's proxy reuse connections
+    timeout = 30                       # idle keep-alive connections are closed after 30 s
+
     def log_message(self, fmt, *a):
+        pass                           # no line per request (700 members = thousands of log lines)
+
+    def log_error(self, fmt, *a):
         sys.stderr.write("  " + fmt % a + "\n")
 
     def send(self, code, body, ctype="application/json"):
         data = body if isinstance(body, bytes) else json.dumps(body, default=str).encode()
+        STATS["requests"] += 1
+        STATS["ms_total"] += (time.time() - getattr(self, "_t0", time.time())) * 1000
+        if code >= 500:
+            STATS["errors_5xx"] += 1
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
@@ -341,14 +367,18 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
+        self._t0 = time.time()
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         try:
             if u.path == "/health":
                 return self.send(200, {"ok": True, "faceit_key": bool(faceit_key()), "preload": PRELOAD_STATUS, "warm_start": WARM_START,
+                                       "traffic": {"requests": STATS["requests"], "errors_5xx": STATS["errors_5xx"],
+                                                   "avg_server_ms": round(STATS["ms_total"] / max(STATS["requests"], 1), 1),
+                                                   "since": datetime.fromtimestamp(STATS["since"], timezone.utc).isoformat(timespec="seconds")},
                                        "storage": dict(storage_cached(), **STORAGE)})
             if u.path in ("/", "/index.html"):
-                return self.send(200, (WEB / "index.html").read_bytes(), "text/html; charset=utf-8")
+                return self.send(200, page(), "text/html; charset=utf-8")
             if u.path == "/api/search":
                 return self.search(q.get("q", "").strip())
             if u.path == "/api/grade":
@@ -369,14 +399,16 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, {"results": []})
         ql = q.lower()
         # typing: a longer query can be answered from a shorter one's complete list (<8 hits)
-        with _RG:
-            prefixes = [(k[1], v) for k, v in _RESULTS.items() if len(k) == 2 and k[0] == "search"]
-        for pq, (t, st, body) in prefixes:
-            if ql.startswith(pq) and time.time() - t < 3600:
-                prev = json.loads(body)["results"]
-                if len(prev) < 8:
-                    keep = [h for h in prev if ql in (h["nick"] or "").lower() or ql in (h["name"] or "").lower()]
-                    return self.send(200, {"results": keep})
+        hit = _SEARCH.get(ql)
+        if hit and time.time() - hit[0] < 3600:
+            return self.send(200, hit[1])
+        for k in range(len(ql) - 1, 1, -1):              # typing: a shorter query's complete list
+            prev = _SEARCH.get(ql[:k])
+            if prev and time.time() - prev[0] < 3600 and prev[2] < 8:
+                keep = [h for h in prev[3] if ql in (h["nick"] or "").lower() or ql in (h["name"] or "").lower()]
+                body = json.dumps({"results": keep}).encode()
+                _SEARCH[ql] = (time.time(), body, len(keep), keep)
+                return self.send(200, body)
 
         def compute():
             b = BO3()
@@ -390,6 +422,11 @@ class Handler(BaseHTTPRequestHandler):
                  "country": (h.get("country") or {}).get("code"), "image": h.get("image_url")}
                 for h in hits]}).encode()
         status, body = shared(("search", ql), compute, ttl=3600)
+        if status == 200:
+            rows = json.loads(body)["results"]
+            if len(_SEARCH) > 20000:
+                _SEARCH.clear()
+            _SEARCH[ql] = (time.time(), body, len(rows), rows)
         return self.send(status, body)
 
     def client_ip(self):
@@ -451,6 +488,7 @@ class Handler(BaseHTTPRequestHandler):
             pass
         self.send_response(303)
         self.send_header("Location", "/admin?token=" + form.get("token", ""))
+        self.send_header("Content-Length", "0")      # keep-alive needs an explicit length
         self.end_headers()
 
     def admin(self, q):
