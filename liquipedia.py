@@ -23,6 +23,7 @@ UA = "cs2-scout/1.0 (CS2 prop grader; https://github.com/rikko1012/cs2-scout)"
 MIN_GAP = 2.1            # seconds between requests (terms: max 1 per 2 s)
 TTL = 12 * 3600
 _LOCK = threading.Lock()
+_MEMLOCK = threading.Lock()       # the in-memory cache (separate from request pacing)
 _LAST = [0.0]
 _SESSION = requests.Session()
 _SESSION.headers.update({"User-Agent": UA, "Accept-Encoding": "gzip"})
@@ -44,12 +45,14 @@ def _cache():
 
 def _save():
     try:
+        with _MEMLOCK:
+            snap = dict(_MEM)
         os.makedirs(os.path.dirname(_CACHE_FILE), exist_ok=True)
-        tmp = _CACHE_FILE + ".tmp"
+        tmp = f"{_CACHE_FILE}.{os.getpid()}.{threading.get_ident()}.tmp"
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(_MEM, f)
+            json.dump(snap, f)
         os.replace(tmp, _CACHE_FILE)
-    except OSError:
+    except Exception:
         pass                       # the cache is a convenience - never fatal
 
 
@@ -100,7 +103,8 @@ def player_team(nick):
                         "url": f"https://liquipedia.net/counterstrike/{title}"}
     except Exception:
         return None                                    # network trouble: don't cache, don't fail
-    c[key] = {"at": time.time(), "data": data}
+    with _MEMLOCK:
+        c[key] = {"at": time.time(), "data": data}
     _save()
     return data
 

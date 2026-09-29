@@ -40,7 +40,36 @@ PRELOAD = os.environ.get("PRELOAD", "1" if "PORT" in os.environ else "0") == "1"
 PRELOAD_HOURS = 36          # matches starting within this window
 PRELOAD_EVERY = 30 * 60     # seconds between passes
 REFRESH_AFTER = 6 * 3600    # re-load a player at most every 6 hours
-GRADE_LOCK = threading.Lock()
+# Grades run side by side (no single global lock - one cold look-up used to freeze every member
+# for ~60 s). Up to MAX_GRADES at once; the same player is only fetched once at a time.
+MAX_GRADES = 8
+GRADE_SLOTS = threading.BoundedSemaphore(MAX_GRADES)
+_PLAYER_LOCKS, _PLAYER_LOCKS_GUARD = {}, threading.Lock()
+
+
+RATE_LIMIT = 20                      # grades per minute per member (IP) - stops floods/scripts
+_HITS, _HITS_GUARD = {}, threading.Lock()
+
+
+def rate_ok(ip):
+    now = time.time()
+    with _HITS_GUARD:
+        if len(_HITS) > 20000:
+            _HITS.clear()
+        hits = [t for t in _HITS.get(ip, []) if now - t < 60]
+        ok = len(hits) < RATE_LIMIT
+        if ok:
+            hits.append(now)
+        _HITS[ip] = hits
+        return ok
+
+
+def player_lock(name):
+    key = (name or "").strip().lower()
+    with _PLAYER_LOCKS_GUARD:
+        if len(_PLAYER_LOCKS) > 5000:
+            _PLAYER_LOCKS.clear()
+        return _PLAYER_LOCKS.setdefault(key, threading.Lock())
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN")   # set on Railway; no token = admin page disabled
 
 PRELOAD_STATUS = {"enabled": PRELOAD, "players_ready": 0, "last_pass": None, "current": None, "errors": 0}
@@ -233,7 +262,14 @@ class Handler(BaseHTTPRequestHandler):
              "country": (h.get("country") or {}).get("code"), "image": h.get("image_url")}
             for h in hits]})
 
+    def client_ip(self):
+        fwd = self.headers.get("X-Forwarded-For") or ""          # Railway's proxy puts the member first
+        return fwd.split(",")[0].strip() or self.client_address[0]
+
     def grade(self, q):
+        if not rate_ok(self.client_ip()):
+            return self.send(429, {"error": f"Too many grades - limit is {RATE_LIMIT} a minute. "
+                                            f"Wait a moment and try again."})
         name = q.get("player", "").strip()
         try:
             line = float(q.get("line", ""))
@@ -243,7 +279,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(400, {"error": "Enter a player name"})
         prop = q.get("prop", "kills") if q.get("prop") in ("kills", "hs") else "kills"
         lt = q.get("line_type", "standard") if q.get("line_type") in ("standard", "goblin", "demon") else "standard"
-        with GRADE_LOCK:
+        with GRADE_SLOTS, player_lock(q.get("slug") or name):
             res = cs2_scout.grade(name, line, prop, lt, slug=q.get("slug") or None, faceit_key=faceit_key(),
                                     match=q.get("match") or None,
                                     opponent=(q.get("opponent") or "")[:60] or None)

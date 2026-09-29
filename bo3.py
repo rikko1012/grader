@@ -181,6 +181,7 @@ HONEST_HEADERS = {
     "user-agent": "cs2_scout/0.2 (CS2 stats tool; python-aiohttp)",
 }
 MIN_GAP = 0.25         # seconds between requests (4/s) - shared by every BO3 client in this process
+QUEUE_PLACES = 2       # queued requests one look-up may hold at once (fair turns between members)
 _MEM = {}              # finished-map scoreboards/vetoes never change: kept in memory after first read
 _MEM_MAX = 60000
 FOREVER = 10 ** 6      # hours - finished map stats never change
@@ -215,6 +216,7 @@ class BO3:
         self.cs2._api._make_request = self._request     # every wrapper method goes through here
         self._ttl_now = ttl_hours
         self.requests = 0
+        self._sem = None
 
     # ------------------------------------------------------------ plumbing
     async def _request(self, endpoint, params=None):
@@ -237,9 +239,12 @@ class BO3:
                 return data
         while self.background and _members_active[0] > 0:
             await asyncio.sleep(0.5)                    # a member is waiting - step aside
-        wait = _reserve_slot()                          # spaced out across the whole process
-        if wait > 0:
-            await asyncio.sleep(wait)
+        # Fair turns: each look-up holds at most 2 places in the shared queue, so a small grade
+        # never waits behind a cold look-up's 100 queued downloads (process rate is still 4/s)
+        async with self._turns():
+            wait = _reserve_slot()                      # spaced out across the whole process
+            if wait > 0:
+                await asyncio.sleep(wait)
         for attempt in range(3):
             try:
                 data = await self._raw(endpoint, params)
@@ -254,6 +259,11 @@ class BO3:
         if forever and len(_MEM) < _MEM_MAX:
             _MEM[key] = data
         return data
+
+    def _turns(self):
+        if self._sem is None:                            # created inside this client's own loop
+            self._sem = asyncio.Semaphore(QUEUE_PLACES)
+        return self._sem
 
     def _run(self, coro, ttl=None):
         self._ttl_now = self.ttl if ttl is None else (ttl if self.ttl > 0 else 0)

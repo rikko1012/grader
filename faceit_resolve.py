@@ -32,6 +32,7 @@ FACEIT nickname in and set confidence to "manual".
 """
 import csv
 import os
+import threading
 import re
 from datetime import date, timedelta
 from pathlib import Path
@@ -103,7 +104,7 @@ def save_id(hltv_nick, team, res):
     rows.append({"hltv_nick": hltv_nick, "team": team or "", "faceit_nickname": res.get("nickname") or "",
                  "faceit_id": res.get("player_id") or "", "confidence": res["confidence"],
                  "evidence": " | ".join(res.get("evidence", [])), "checked": date.today().isoformat()})
-    tmp = IDS_CSV.with_suffix(f".{os.getpid()}.tmp")
+    tmp = IDS_CSV.with_suffix(f".{os.getpid()}.{threading.get_ident()}.tmp")
     try:
         with tmp.open("w", encoding="utf-8", newline="") as f:
             w = csv.DictWriter(f, fieldnames=IDS_FIELDS, extrasaction="ignore")
