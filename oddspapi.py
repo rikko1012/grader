@@ -148,13 +148,16 @@ def probe():
         fx = fixtures()
         out["fixtures"] = len(fx)
         out["sample"] = fx[:3]
-        with_odds = next((f for f in fx if not _started(f) and f.get("hasOdds", True)), None)
-        if with_odds:
-            o = _get("/odds", fixtureId=with_odds["fixtureId"])
-            bm = o.get("bookmakerOdds") or {}
-            out["odds_books"] = sorted(bm)[:30]
-            out["odds_sample_pinnacle"] = json.dumps(bm.get("pinnacle"))[:1500] if "pinnacle" in bm else None
-            out["odds_top_keys"] = sorted(o)[:30]
+        up = [f for f in fx if not _started(f) and f.get("hasOdds")]
+        out["upcoming_with_odds"] = len(up)
+        out["lookups"] = []
+        for f in up[:3]:          # the real lookup members' grades use
+            r = match_odds(f.get("participant1Name"), f.get("participant2Name"))
+            out["lookups"].append({k: r.get(k) for k in ("found", "team", "opponent", "book", "team_prob", "note")})
+        if up:
+            bm = (_ODDS.get(up[0]["fixtureId"]) or (0, {}))[1].get("bookmakerOdds") or {}
+            out["has_pinnacle"] = "pinnacle" in bm
+            out["books_count"] = len(bm)
     except Exception as e:
         out["error"] = str(e)[:300]
     return out
