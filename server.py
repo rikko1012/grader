@@ -281,11 +281,15 @@ def verdict(g):
         side = "More" if g["p_more"] > g["p_less"] else "Less"
     else:
         side = "More" if g["lambda_final"] > g["line"] else "Less"
-    if side == "Less" and g["line_type"] != "standard":
-        side = "More"   # goblin/demon lines have no Less on PrizePicks
+    # goblin/demon lines have no Less on PrizePicks. If the model expects UNDER, say so (Lean
+    # Under, 0 units - skip it) instead of headlining a More it thinks loses (azukay 17.5 demon:
+    # printed "More 42%", he went under).
+    no_less_side = side == "Less" and g["line_type"] != "standard"
     p = g["p_more"] if side == "More" else g["p_less"]
-    grade = g["grade"] if side == "More" else g["grade_less"]
+    grade = g["grade"] if side == "More" else (g["grade_less"] if not no_less_side else "C")
     units = g.get("units", 0) if side == "More" else g.get("units_less", 0)
+    if no_less_side:
+        units = 0.0
     stat = "headshots" if g.get("prop") == "hs" else "kills"
     need = g["line"] + 0.5                  # 15.5 line -> he needs 16 for More
     gap = g["lambda_final"] - need          # > 0 always means More, < 0 always Less
@@ -294,7 +298,10 @@ def verdict(g):
                 "confidence": "scout",
                 "reason": f"No upcoming match found for his team - scouting view only. Leans {side} "
                           f"({p:.0%}): projection {g['lambda_final']:.1f} vs line {g['line']}"}
-    if g.get("form_fight"):
+    if no_less_side:
+        why = (f"{g['line_type'].title()} line - PrizePicks only offers More here, but the model expects "
+               f"UNDER ({p:.0%}); More is only {g['p_more']:.0%}. Skip it.")
+    elif g.get("form_fight"):
         why = f"FORM FIGHT - his last 10 matches disagree with the model, so confidence is halved"
     elif g.get("tape_fight"):
         why = (f"TAPE FIGHT - model {side} {p:.0%}, but his recent record at this line disagrees - max 0.25U")
