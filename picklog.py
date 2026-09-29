@@ -109,6 +109,14 @@ def settle(b, map_rows):
         upd = None
         if mt and mt.get("status") == "finished":
             maps = map_rows(b, r["player_id"], [mt], lambda m, g: (g.get("number") or 9) <= 2)
+            done12 = [g for g in mt.get("games") or [] if (g.get("number") or 9) <= 2 and g.get("state") == "done"]
+            if len(maps) < 2 and len(done12) >= 2:
+                for g in done12:                          # maps done but a scoreboard read empty:
+                    try:                                  # fetch it fresh once and look again
+                        b.game_players_fresh(g["id"])
+                    except Exception:
+                        pass
+                maps = map_rows(b, r["player_id"], [mt], lambda m, g: (g.get("number") or 9) <= 2)
             if len(maps) == 2:
                 stat = "headshots" if r["prop"] == "hs" else "kills"
                 actual = sum(x[stat] for x in maps)
