@@ -27,6 +27,7 @@ _LOCK, _LAST = threading.Lock(), [0.0]
 _SESSION = requests.Session()
 _SESSION.headers.update({"User-Agent": "cs2-scout/1.0 (https://github.com/rikko1012/cs2-scout)"})
 _FIX = {"at": 0.0, "data": None}
+_ODDS = {}
 FIX_TTL = 600
 
 
@@ -117,7 +118,12 @@ def match_odds(team, opponent=None):
         if not best:
             return {"found": False, "note": "No OddsPapi fixture for this match"}
         fx, ti, mine, theirs = best
-        odds = _get("/odds", fixtureId=fx["fixtureId"])
+        hit = _ODDS.get(fx["fixtureId"])                 # limited free quota: 10-minute cache
+        if hit and time.time() - hit[0] < FIX_TTL:
+            odds = hit[1]
+        else:
+            odds = _get("/odds", fixtureId=fx["fixtureId"])
+            _ODDS[fx["fixtureId"]] = (time.time(), odds)
         for book in BOOKS:
             d1, d2 = _price(odds, book, "171"), _price(odds, book, "172")
             if d1 and d2 and d1 > 1 and d2 > 1:

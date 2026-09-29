@@ -339,6 +339,22 @@ function render(d) {
   } else h += `<div class="muted">No recent matches with two maps.</div>`;
   h += `</section>`;
 
+  // ---- CS API cross-check (top teams; context only, weight 0)
+  const ca = d.csapi;
+  if (ca && ca.found) {
+    h += `<section class="card"><h2>CS API check <span class="muted small">· all maps · last ${esc(ca.window)} · ${ca.maps} maps · weight 0</span></h2>
+      <div class="kv"><span>Team (CS API)</span><span>${esc(ca.team || "–")}${ca.vrs_rank ? ` · VRS #${ca.vrs_rank}` : ""}</span></div>
+      <div class="kv"><span>On that roster</span><span>${ca.on_roster === true ? "Yes" : ca.on_roster === false ? "No" : "–"}</span></div>
+      <div class="kv"><span>Kills / map</span><span>${num(ca.kills_per_map, 1)} · rating ${num(ca.rating)}</span></div>
+      <div class="kv"><span>Round Swing</span><span>${ca.swing != null ? (ca.swing > 0 ? "+" : "") + num(ca.swing) + "%" : "–"}</span></div>
+      <div class="kv"><span>ADR · KAST</span><span>${num(ca.adr, 1)} · ${num(ca.kast, 1)}%</span></div>
+      <div class="kv"><span>CT · T kills/map</span><span>${num(ca.ct?.k, 1)} · ${num(ca.t?.k, 1)}</span></div>
+      <div class="kv"><span>Data up to</span><span>${esc(ca.newest_match || "–")}</span></div>`;
+    if (ca.team_mismatch) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(ca.team_mismatch)}</div>`;
+    if (ca.stale) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(ca.stale)}</div>`;
+    h += `</section>`;
+  }
+
   // ---- FACEIT
   h += `<section class="card"><h2>FACEIT form</h2>`;
   h += fc ? `<div class="kv"><span>Account</span><span>${esc(fc.nickname)} · lvl ${fc.level} · ${fc.elo} elo</span></div>
@@ -350,7 +366,7 @@ function render(d) {
   const flags = [...(g.flags || [])];
   if (v.side && v.p < 0.68) flags.push(`${v.side} is below A- (68%) - near the vig line, no real edge`);
   if (flags.length) h += `<section class="card"><h2>Notes</h2><ul class="flags">${flags.map(f => `<li>${esc(f)}</li>`).join("")}</ul></section>`;
-  h += `<div class="small muted" style="text-align:center">Data: BO3.gg · Polymarket · FACEIT${d.liquipedia ? ` · team from <a href="${esc(d.liquipedia.url)}" target="_blank" rel="noopener">Liquipedia</a> (CC-BY-SA 3.0)` : ""} · Not financial advice</div>`;
+  h += `<div class="small muted" style="text-align:center">Data: BO3.gg · Polymarket · FACEIT${d.csapi?.found ? " · CS API" : ""}${d.next_match?.source === "pandascore" ? " · PandaScore" : ""}${d.odds?.book ? " · " + esc(d.odds.book) + " via OddsPapi" : ""}${d.liquipedia ? ` · team from <a href="${esc(d.liquipedia.url)}" target="_blank" rel="noopener">Liquipedia</a> (CC-BY-SA 3.0)` : ""} · Not financial advice</div>`;
   $("#out").innerHTML = h;
 }
 </script>

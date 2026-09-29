@@ -744,6 +744,8 @@ def market_quality(odds):
     NONE: no pre-match market (win chance falls back to 50/50)."""
     if not odds or not odds.get("found") or odds.get("team_ml") is None:
         return "NONE"
+    if odds.get("book"):                 # OddsPapi: Pinnacle / exchange = sharp; others soft
+        return "HARD" if odds["book"] in ("pinnacle", "betfair-ex") else "SOFT"
     return "HARD" if (odds.get("liquidity") or 0) >= HARD_LIQUIDITY and odds.get("source") == "midpoint" else "SOFT"
 
 
@@ -1146,14 +1148,34 @@ def run(args, res, b, ttl):
                     if o.get("found"):
                         pm = o
                         break
+            src = "Polymarket"
+            if not pm and not b.background:   # limited free quota: members' grades only, after Polymarket
+                # PandaScore's free schedule covers events BO3.gg misses (e.g. CIS LAN Championship)
+                try:
+                    import pandascore
+                    cand = []
+                    for tname in [n for n in teams.values() if n]:
+                        cand += [m for m in pandascore.upcoming(tname)
+                                 if not member_opp or name_match(member_opp, m["opponent"])]
+                    if not cand and member_opp:
+                        # none of his known teams plays them: the typed opponent's next match -
+                        # the other side is his team
+                        cand = [dict(m, team=m["opponent"], opponent=m["team"])
+                                for m in pandascore.upcoming(member_opp)]
+                    if cand:
+                        m = min(cand, key=lambda m: m["start"] or "9999")
+                        pm, src = {"team": m["team"], "opponent": m["opponent"], "start": m["start"],
+                                   "title": f"{m['team']} vs {m['opponent']} (BO{m.get('bo') or '?'}) - {m['event']}"}, "PandaScore"
+                except Exception:
+                    pass
             if pm:
                 nxt = {"start": pm.get("start"), "slug": None, "opponent": pm["opponent"],
-                       "event": pm.get("title"), "maps": [], "source": "polymarket",
+                       "event": pm.get("title"), "maps": [], "source": src.lower(),
                        "opponent_id": None, "opponent_slug": None}
                 pb["playing_for"] = pm["team"]
                 if no_team or norm(pm["team"]) != norm(pb.get("current_team") or ""):
                     pb["current_team"] = pm["team"]
-                res["match_note"] = ("Match not on BO3.gg - found on Polymarket. Maps unknown until the "
+                res["match_note"] = (f"Match not on BO3.gg - found on {src}. Maps unknown until the "
                                      "veto: all-maps numbers used.")
         if chosen:
             _, tid, tname, nxt = chosen
@@ -1217,6 +1239,24 @@ def run(args, res, b, ttl):
     if args.cmd == "odds" or (args.cmd == "full" and (args.team or pb)):
         team = args.name if args.cmd == "odds" else (args.team or pb.get("playing_for") or pb.get("current_team"))
         res["odds"] = match_odds(team, args.opponent)  # always live, no cache
+        if args.cmd == "full" and args.opponent and not res["odds"].get("found") and not b.background:
+            # no Polymarket market: bookmaker price (Pinnacle first) from OddsPapi
+            try:
+                import oddspapi
+                alt = oddspapi.match_odds(team, args.opponent)
+                if alt.get("found"):
+                    alt["polymarket_note"] = res["odds"].get("note")
+                    res["odds"] = alt
+            except Exception:
+                pass
+    if args.cmd == "full" and pb and not b.background:
+        # CS API (top teams): second-opinion roster, VRS rank, rating/swing context, staleness
+        try:
+            import csapi
+            last = (pb.get("recent_maps") or [{}])[0].get("date")
+            res["csapi"] = csapi.player_check(pb["player"]["nick"], pb.get("current_team"), last)
+        except Exception:
+            res["csapi"] = None
     if args.cmd == "full" and args.faceit_key:
         try:
             _faceit(args, res, pb, ttl)
