@@ -398,6 +398,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.grade(q)
             if u.path == "/admin":
                 return self.admin(q)
+            if u.path == "/admin/picks.json" and self.authed(q.get("token")):
+                return self.send(200, {"picks": picklog.export()})
+            if u.path == "/admin/mark_tests" and self.authed(q.get("token")):
+                ids = [int(x) for x in (q.get("ids") or "").split(",") if x.strip().isdigit()]
+                picklog.mark_tests(ids)
+                return self.send(200, {"marked": len(ids)})
             if u.path == "/admin/probe" and self.authed(q.get("token")):
                 # private: raw shape of the backup data sources (keys never included)
                 import oddspapi
@@ -477,7 +483,7 @@ class Handler(BaseHTTPRequestHandler):
             mark_warm(pkey, name, (pb_.get("player") or {}).get("slug"), (pb_.get("player") or {}).get("nick"))
             res["verdict"] = verdict(res.get("grade"))
             try:
-                picklog.log_grade(res, res["verdict"])  # Phase 10: real lines only, GRADE state only
+                picklog.log_grade(res, res["verdict"], test=load_test)   # Phase 10: GRADE state only
             except Exception:
                 traceback.print_exc()
             return 200, json.dumps(public(res), default=str).encode()

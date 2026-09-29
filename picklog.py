@@ -39,11 +39,16 @@ def _db():
     con = sqlite3.connect(DB, timeout=30)
     con.row_factory = sqlite3.Row
     con.execute(f"CREATE TABLE IF NOT EXISTS picks ({COLUMNS})")
+    try:                                   # added 2026-09-29: owner's load tests are not real picks
+        con.execute("ALTER TABLE picks ADD COLUMN test INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass                               # column already there
     return con
 
 
-def log_grade(res, verdict):
-    """Log a member's graded line. Returns the row id (or None when it isn't a wager)."""
+def log_grade(res, verdict, test=False):
+    """Log a member's graded line. Returns the row id (or None when it isn't a wager).
+    test=True (owner's load tests) is stored but left out of the report."""
     g, pb, nm = res.get("grade") or {}, res.get("player_block") or {}, res.get("next_match") or {}
     if not verdict or verdict.get("state") != "GRADE" or "p_more" not in g or not nm.get("slug"):
         return None
@@ -63,13 +68,16 @@ def log_grade(res, verdict):
         "rec_median": rf.get("median_total"),
         "rec_hit": f"{rf.get('overs')}/{rf.get('matches')}" if rf.get("overs") is not None else None,
         "flags": json.dumps(g.get("flags")), "opp_def": json.dumps(res.get("opponent_defense")),
+        "test": int(bool(test)),
     }
     with _LOCK:
         con = _db()
         try:
             cur = con.execute("SELECT id FROM picks WHERE key = ?", (key,)).fetchone()
             if cur:
-                con.execute("UPDATE picks SET requests = requests + 1 WHERE id = ?", (cur["id"],))
+                # a real member asking for a line first seen in a test makes it a real pick
+                con.execute("UPDATE picks SET requests = requests + 1, test = CASE WHEN ? THEN test ELSE 0 END "
+                            "WHERE id = ?", (int(bool(test)), cur["id"]))
                 con.commit()
                 return cur["id"]
             cols = ", ".join(row)
@@ -132,10 +140,27 @@ def set_closing(pick_id, closing):
         con.close()
 
 
+def mark_tests(ids):
+    """Admin: flag rows that came from the owner's own testing (not members' real lines)."""
+    with _LOCK:
+        con = _db()
+        con.executemany("UPDATE picks SET test = 1 WHERE id = ?", [(i,) for i in ids])
+        con.commit()
+        con.close()
+
+
+def export():
+    with _LOCK:
+        con = _db()
+        rows = [dict(r) for r in con.execute("SELECT * FROM picks ORDER BY id")]
+        con.close()
+    return rows
+
+
 def report():
     with _LOCK:
         con = _db()
-        rows = [dict(r) for r in con.execute("SELECT * FROM picks ORDER BY id DESC")]
+        rows = [dict(r) for r in con.execute("SELECT * FROM picks WHERE COALESCE(test, 0) = 0 ORDER BY id DESC")]
         con.close()
     settled = [r for r in rows if r["status"] == "settled"]
 
