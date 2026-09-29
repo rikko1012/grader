@@ -1088,16 +1088,38 @@ def run(args, res, b, ttl):
     member_opp = getattr(args, "member_opponent", None)   # typed on the form (PrizePicks card)
     if args.cmd in ("h2h", "full") and (not args.opponent or member_opp) and pb:
         # every team he has played for in the last 14 days (stand-ins, loans, recent moves) -
-        # grade against whichever of them plays next. No team listed on BO3.gg (between teams,
-        # e.g. ct0m): look back 45 days - his most recent team first.
+        # grade against whichever of them plays next.
+        # No team on BO3.gg (between teams, e.g. ct0m): NEVER guess from an old team. Order:
+        # Liquipedia's current team -> old teams only if the member typed an opponent they play ->
+        # Polymarket by the typed opponent -> otherwise SCOUT (asks for the opponent).
         no_team = not pb.get("team_id")
-        cutoff = (date.today() - timedelta(days=45 if no_team else STANDIN_DAYS)).isoformat()
-        teams = {} if no_team else {pb["team_id"]: pb.get("current_team")}
-        for r in pb.get("recent_maps") or []:
-            if r["date"] >= cutoff and r["team_id"] and r["team_id"] not in teams:
-                teams[r["team_id"]] = r["team"]
+        teams = {}
+        if no_team:
+            try:
+                import liquipedia
+                lp = liquipedia.player_team(pb["player"]["nick"])
+            except Exception:
+                lp = None
+            if lp and lp.get("team"):
+                res["liquipedia"] = lp
+                try:
+                    hits = b._run(b.cs2.search_teams(lp["team"], 5)).get("results") or []
+                    t = next((t for t in hits if norm(t.get("name")) == norm(lp["team"])), None)
+                except Exception:
+                    t = None
+                teams[t["id"] if t else f"lp:{lp['team']}"] = lp["team"]
+                pb["team_source"] = "Liquipedia"
+        else:
+            teams[pb["team_id"]] = pb.get("current_team")
+        if not no_team or member_opp:
+            cutoff = (date.today() - timedelta(days=45 if no_team else STANDIN_DAYS)).isoformat()
+            for r in pb.get("recent_maps") or []:
+                if r["date"] >= cutoff and r["team_id"] and r["team_id"] not in teams:
+                    teams[r["team_id"]] = r["team"]
         options = []
         for tid, tname in teams.items():
+            if not isinstance(tid, int):
+                continue                      # Liquipedia-only team: no BO3.gg id to search
             for nm_ in upcoming_matches(b, tid):
                 options.append((nm_["start"] or "9999", tid, tname, nm_))
         options.sort(key=lambda o: o[0])
@@ -1137,7 +1159,7 @@ def run(args, res, b, ttl):
             _, tid, tname, nxt = chosen
             pb["playing_for"], pb["playing_for_id"] = tname, tid
             if no_team:
-                pb["current_team"], pb["team_id"] = tname, tid     # his latest team is the one playing
+                pb["current_team"], pb["team_id"] = tname, tid     # the team playing the named match
             elif tid != pb["team_id"]:
                 pb["standin_for"] = tname
         pb["scout"] = nxt is None          # no upcoming match -> SCOUT card, no grade/units
