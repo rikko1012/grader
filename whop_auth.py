@@ -94,6 +94,26 @@ def _unsign(value):
 
 
 # ---------------------------------------------------------------- OAuth
+LAST_ERRORS = []          # admin/health: Whop's own error text (never tokens or secrets)
+
+
+def _why(resp):
+    """Whop's error message, without echoing anything secret."""
+    try:
+        d = resp.json()
+        return str(d.get("error_description") or d.get("error") or d.get("message") or d)[:160]
+    except Exception:
+        return (resp.text or "")[:160]
+
+
+def _log_fail(step, resp):
+    import sys
+    msg = f"{time.strftime('%H:%M:%S')} {step} HTTP {resp.status_code}: {_why(resp)}"
+    LAST_ERRORS.append(msg)
+    del LAST_ERRORS[:-10]
+    sys.stderr.write("  whop sign-in " + msg + "\n")
+
+
 def start_login():
     """-> (redirect URL, value for the short-lived PKCE cookie)."""
     verifier = secrets.token_urlsafe(48)[:64]
@@ -116,15 +136,25 @@ def finish_login(code, state, pkce_cookie):
             "redirect_uri": public_url() + "/auth/callback", "code_verifier": p["v"]}
     if _env("WHOP_CLIENT_SECRET"):
         body["client_secret"] = _env("WHOP_CLIENT_SECRET")
+    step = "token"
     try:
         tok = requests.post(TOKEN, json=body, timeout=15)
-        tok.raise_for_status()
+        if tok.status_code >= 400:                       # some OAuth servers want a form body
+            tok2 = requests.post(TOKEN, data=body, timeout=15)
+            if tok2.status_code < 400:
+                tok = tok2
+        if tok.status_code >= 400:
+            _log_fail("token", tok)
+            return None, f"Whop sign-in failed at the token step ({tok.status_code}: {_why(tok)})"
         access_token = tok.json()["access_token"]
+        step = "userinfo"
         info = requests.get(USERINFO, headers={"Authorization": f"Bearer {access_token}"}, timeout=15)
-        info.raise_for_status()
+        if info.status_code >= 400:
+            _log_fail("userinfo", info)
+            return None, f"Whop sign-in failed at the profile step ({info.status_code}: {_why(info)})"
         info = info.json()
     except Exception as e:
-        return None, f"Whop sign-in failed ({type(e).__name__}) - please try again"
+        return None, f"Whop sign-in failed at the {step} step ({type(e).__name__}) - please try again"
     uid = info.get("sub")
     if not uid:
         return None, "Whop didn't return your account - please try again"

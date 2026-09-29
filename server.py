@@ -485,6 +485,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if u.path == "/health":
                 return self.send(200, {"ok": True, "faceit_key": bool(faceit_key()), "preload": PRELOAD_STATUS, "warm_start": WARM_START,
+                                       "whop_signin": {"on": whop_auth.enabled(), "recent_errors": whop_auth.LAST_ERRORS[-3:]},
                                        "memory_mb": memory_mb(), "threads": threading.active_count(),
                                        "caches": {"results": len(_RESULTS), "contexts": len(cs2_scout._CONTEXT),
                                                   "scoreboards": len(bo3._MEM), "expiring": len(bo3._TMEM)},
