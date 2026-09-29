@@ -35,6 +35,8 @@ input:focus,select:focus{border-color:var(--accent)}
 .seg{display:inline-flex;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:3px}
 .seg button{background:none;border:0;color:var(--muted);padding:8px 14px;border-radius:8px;font:inherit;cursor:pointer}
 .seg button.on{background:var(--accent);color:#fff}
+#gate a:not(.go),#who a{color:var(--accent)}
+#gate a.go{color:#fff}
 .row2 .field{flex:0 0 150px}
 .go{margin-left:auto;background:var(--accent);color:#fff;border:0;border-radius:10px;padding:11px 22px;
   font:600 15px system-ui,sans-serif;cursor:pointer}
@@ -109,6 +111,8 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 <div class="wrap">
   <header><h1>CS2 Prop Grader</h1><span>Maps 1–2 · v7.3</span></header>
 
+  <div id="gate" class="card" hidden style="text-align:center;padding:28px 18px"></div>
+  <div id="who" class="small muted" hidden style="text-align:right;margin:-6px 0 8px"></div>
   <form id="f" autocomplete="off">
     <div class="field">
       <label for="player">Player</label>
@@ -162,6 +166,32 @@ const pct = (x, d = 1) => x == null ? "–" : (x * 100).toFixed(d) + "%";
 const num = (x, d = 2) => x == null ? "–" : Number(x).toFixed(d);
 // Busy moments (hundreds of members at once): a refused connection or a "busy" answer from the
 // host is retried automatically (1 s, 2 s, 4 s) - members never see it.
+// ---------- members only (Sign in with Whop - paid product). Off until the server enables it.
+function showGate(state) {
+  const g = $("#gate"), up = state.upgrade;
+  $("#f").style.display = "none"; $("#out").innerHTML = ""; g.hidden = false;
+  const err = new URLSearchParams(location.search).get("signin_error");
+  g.innerHTML = state.signed_in
+    ? `<h3 style="margin:0 0 8px">Your Whop account doesn't have access yet</h3>
+       <div class="small muted" style="margin-bottom:14px">The grader is for paid members only.</div>
+       ${up ? `<a class="go" style="display:inline-block;text-decoration:none;padding:10px 18px" href="${esc(up)}">Upgrade on Whop</a>` : ""}
+       <div class="small" style="margin-top:14px"><a href="/auth/logout">Sign out</a> · <a href="/auth/login">Signed up just now? Check again</a></div>`
+    : `<h3 style="margin:0 0 8px">Members only</h3>
+       <div class="small muted" style="margin-bottom:14px">Sign in with the Whop account you joined with.</div>
+       <a class="go" style="display:inline-block;text-decoration:none;padding:10px 18px" href="/auth/login">Sign in with Whop</a>
+       ${err ? `<div class="small" style="margin-top:12px;color:var(--warn)">${esc(err)}</div>` : ""}
+       ${up ? `<div class="small" style="margin-top:14px">Not a member? <a href="${esc(up)}">Join on Whop</a></div>` : ""}`;
+}
+(async () => {
+  try {
+    const s = await fetch("/auth/me").then(r => r.json());
+    if (!s.required) return;
+    if (!s.member) return showGate(s);
+    $("#who").hidden = false;
+    $("#who").innerHTML = `Signed in${s.name ? " as " + esc(s.name) : ""} · <a href="/auth/logout">Sign out</a>`;
+  } catch {}
+})();
+
 async function fetchRetry(url, tries = 4) {
   for (let i = 0; ; i++) {
     try {
@@ -230,6 +260,7 @@ $("#f").onsubmit = async e => {
   try {
     const r = await fetchRetry("/api/grade?" + qs);
     const d = await r.json();
+    if (r.status === 401 && d.error === "members_only") { st.hidden = true; return showGate(d); }   // session ended
     if (!r.ok) throw new Error(d.error || "Something went wrong");
     st.hidden = true; render(d);
   } catch (err) {

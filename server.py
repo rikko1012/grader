@@ -19,13 +19,14 @@ import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import html as htmllib
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 import time
 from datetime import datetime, timezone
 
 import cs2_scout
 import picklog
+import whop_auth
 import bo3
 from bo3 import BO3, DATA_DIR, prune, storage_report
 
@@ -447,6 +448,36 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def cookie(self, name):
+        for part in (self.headers.get("Cookie") or "").split(";"):
+            k, _, v = part.strip().partition("=")
+            if k == name:
+                return v
+        return None
+
+    def member(self):
+        """The signed-in Whop member's session (or None)."""
+        return whop_auth.session(self.cookie(whop_auth.COOKIE)) if whop_auth.enabled() else None
+
+    def allowed(self):
+        """Grading/search: open while Whop sign-in is off; else paid members, admin tests only."""
+        if not whop_auth.enabled():
+            return True
+        if ADMIN_TOKEN and self.headers.get("X-Load-Test") == ADMIN_TOKEN:
+            return True
+        sess = self.member()
+        return bool(sess and sess["ok"])
+
+    def redirect(self, location, cookies=()):
+        STATS["requests"] += 1
+        self.send_response(302)
+        self.send_header("Location", location)
+        for c in cookies:
+            self.send_header("Set-Cookie", c)
+        self.send_header("Content-Length", "0")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+
     def do_GET(self):
         self._t0 = time.time()
         u = urlparse(self.path)
@@ -463,6 +494,29 @@ class Handler(BaseHTTPRequestHandler):
                                        "storage": dict(storage_cached(), **STORAGE)})
             if u.path in ("/", "/index.html"):
                 return self.send(200, page(), "text/html; charset=utf-8")
+            # ---- Sign in with Whop (paid product only). Off until the WHOP_* variables are set.
+            if u.path == "/auth/me":
+                sess = self.member()
+                return self.send(200, {"required": whop_auth.enabled(), "signed_in": bool(sess),
+                                       "member": bool(sess and sess["ok"]), "name": (sess or {}).get("name"),
+                                       "upgrade": whop_auth.upgrade_url()})
+            if u.path == "/auth/login" and whop_auth.enabled():
+                url, pkce = whop_auth.start_login()
+                return self.redirect(url, [f"{whop_auth.PKCE_COOKIE}={pkce}; Max-Age=900; Path=/; HttpOnly; Secure; SameSite=Lax"])
+            if u.path == "/auth/callback" and whop_auth.enabled():
+                value, msg = whop_auth.finish_login(q.get("code", ""), q.get("state", ""),
+                                                     self.cookie(whop_auth.PKCE_COOKIE))
+                if not value:
+                    return self.redirect("/?signin_error=" + quote(msg))
+                return self.redirect("/", [f"{whop_auth.COOKIE}={value}; Max-Age={whop_auth.SESSION_DAYS * 86400}; "
+                                           f"Path=/; HttpOnly; Secure; SameSite=Lax",
+                                           f"{whop_auth.PKCE_COOKIE}=; Max-Age=0; Path=/"])
+            if u.path == "/auth/logout":
+                return self.redirect("/", [f"{whop_auth.COOKIE}=; Max-Age=0; Path=/"])
+            if u.path in ("/api/search", "/api/grade") and not self.allowed():
+                sess = self.member()
+                return self.send(401, {"error": "members_only", "signed_in": bool(sess),
+                                       "upgrade": whop_auth.upgrade_url()})
             if u.path == "/api/search":
                 return self.search(q.get("q", "").strip())
             if u.path == "/api/grade":
