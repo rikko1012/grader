@@ -123,14 +123,21 @@ def match_odds(team, opponent=None, events=None):
         outcomes = json.loads(ml.get("outcomes") or "[]")
         if len(outcomes) != 2:
             continue
-        scores = [name_match(team, o) for o in outcomes]
-        ti = max(range(2), key=lambda i: scores[i])
-        if scores[ti] == 0:
-            continue
-        oi = 1 - ti
-        oscore = name_match(opponent, outcomes[oi]) if opponent else 1
-        if opponent and oscore == 0:
-            continue
+        if team:
+            scores = [name_match(team, o) for o in outcomes]
+            ti = max(range(2), key=lambda i: scores[i])
+            if scores[ti] == 0:
+                continue
+            oi = 1 - ti
+            oscore = name_match(opponent, outcomes[oi]) if opponent else 1
+            if opponent and oscore == 0:
+                continue
+        else:   # player's team unknown (not on BO3.gg): find the match by the opponent alone
+            oscores = [name_match(opponent, o) for o in outcomes]
+            oi = max(range(2), key=lambda i: oscores[i])
+            if oscores[oi] == 0:
+                continue
+            ti, scores, oscore = 1 - oi, [0, 0], oscores[oi]
         key = (scores[ti] + oscore, ml.get("gameStartTime") or "")
         # highest name score wins; on a tie, the earliest start
         if best is None or key[0] > best[0][0] or (key[0] == best[0][0] and key[1] < best[0][1]):

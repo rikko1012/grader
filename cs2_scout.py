@@ -40,7 +40,7 @@ import requests
 from bo3 import BO3, _read as bo3_read, _write as bo3_write
 from faceit_resolve import Resolver
 from grader import CONFIG as GRADER_CONFIG, grade_leg
-from polymarket import match_odds
+from polymarket import match_odds, name_match
 
 BASE = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get("CS2_DATA_DIR") or BASE)   # persistent storage on the host
@@ -1055,14 +1055,15 @@ def main():
 
 
 def grade(name, line, prop="kills", line_type="standard", slug=None, faceit_key=None, ttl=12,
-          background=False, match=None):
+          background=False, match=None, opponent=None):
     """One-call entry point for the web interface: everything 'full' does, returned as a dict.
     background=True (pre-loading) gives way to member look-ups."""
     args = argparse.Namespace(
         cmd="full", name=name, bo3_slug=slug, team=None, maps=None, opponent=None, line=line,
         prop=prop, line_type=line_type, team_ml=None, opp_ml=None, faceit=None,
         faceit_key=faceit_key or os.environ.get("FACEIT_API_KEY"), n=20, refresh=False, ttl=ttl,
-        match=match)
+        match=match, member_opponent=(opponent or "").strip() or None)
+    args.opponent = args.member_opponent
     res = {"generated": datetime.now(timezone.utc).isoformat(timespec="seconds"), "command": "grade"}
     b = BO3(ttl_hours=ttl, background=background)
     try:
@@ -1084,7 +1085,8 @@ def run(args, res, b, ttl):
         pb = run_player(b, args.name, args)
         if args.cmd != "faceit":
             res["player_block"] = pb
-    if args.cmd in ("h2h", "full") and not args.opponent and pb:
+    member_opp = getattr(args, "member_opponent", None)   # typed on the form (PrizePicks card)
+    if args.cmd in ("h2h", "full") and (not args.opponent or member_opp) and pb:
         # every team he has played for in the last 14 days (stand-ins, loans, recent moves) -
         # grade against whichever of them plays next. No team listed on BO3.gg (between teams,
         # e.g. ct0m): look back 45 days - his most recent team first.
@@ -1099,12 +1101,38 @@ def run(args, res, b, ttl):
             for nm_ in upcoming_matches(b, tid):
                 options.append((nm_["start"] or "9999", tid, tname, nm_))
         options.sort(key=lambda o: o[0])
+        if member_opp:   # the member named the opponent: only matches against them
+            options = [o for o in options if name_match(member_opp, o[3]["opponent"])]
         # two+ matches in a day: grade the one the member picked, else the earliest; list the rest
         res["match_options"] = [{"slug": o[3]["slug"], "opponent": o[3]["opponent"], "start": o[3]["start"],
                                  "team": o[2], "event": o[3]["event"]} for o in options[:6]]
         want = getattr(args, "match", None)
         chosen = next((o for o in options if want and o[3]["slug"] == want), options[0] if options else None)
         nxt = None
+        if not chosen:
+            # BO3.gg doesn't have the match (smaller events, e.g. CIS LAN): use Polymarket's
+            # pre-match listing - by his team's exact name, or by the opponent the member typed
+            pm = None
+            for tname in ([n for n in teams.values() if n] if not member_opp else []):
+                o = match_odds(tname)
+                if o.get("found") and norm(o["team"]) == norm(tname):
+                    pm = o
+                    break
+            if member_opp and not pm:
+                for tname in [n for n in teams.values() if n] + [None]:
+                    o = match_odds(tname, member_opp)
+                    if o.get("found"):
+                        pm = o
+                        break
+            if pm:
+                nxt = {"start": pm.get("start"), "slug": None, "opponent": pm["opponent"],
+                       "event": pm.get("title"), "maps": [], "source": "polymarket",
+                       "opponent_id": None, "opponent_slug": None}
+                pb["playing_for"] = pm["team"]
+                if no_team or norm(pm["team"]) != norm(pb.get("current_team") or ""):
+                    pb["current_team"] = pm["team"]
+                res["match_note"] = ("Match not on BO3.gg - found on Polymarket. Maps unknown until the "
+                                     "veto: all-maps numbers used.")
         if chosen:
             _, tid, tname, nxt = chosen
             pb["playing_for"], pb["playing_for_id"] = tname, tid

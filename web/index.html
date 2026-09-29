@@ -119,6 +119,10 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
       <label for="line">Line</label>
       <input id="line" inputmode="decimal" placeholder="27.5" required>
     </div>
+    <div class="field">
+      <label for="opp">Opponent <span class="muted small">(optional – from the PrizePicks card, if the grader can't find the match)</span></label>
+      <input id="opp" placeholder="e.g. Krytiepacani">
+    </div>
     <div class="row2">
       <div class="field" style="flex:0 0 auto">
         <label>Prop</label>
@@ -149,7 +153,7 @@ let prop = "kills", slug = null, match = null;   // match: which upcoming match 
 // picking another match on the card re-grades the same player + line for that match
 document.addEventListener("click", e => { const b = e.target.closest("[data-match]"); if (!b) return;
   match = b.dataset.match; $("#f").requestSubmit(); });
-["#player", "#line"].forEach(id => $(id).addEventListener("input", () => { match = null; }));
+["#player", "#line", "#opp"].forEach(id => $(id).addEventListener("input", () => { match = null; }));
 $("#prop").onclick = e => { const b = e.target.closest("button"); if (!b) return;
   prop = b.dataset.v; [...$("#prop").children].forEach(x => x.classList.toggle("on", x === b)); };
 
@@ -191,6 +195,7 @@ $("#f").onsubmit = async e => {
   const qs = new URLSearchParams({player, line, prop, line_type: $("#lt").value});
   if (slug) qs.set("slug", slug);
   if (match) qs.set("match", match);
+  if ($("#opp").value.trim()) qs.set("opponent", $("#opp").value.trim());
   $("#go").disabled = true; $("#out").innerHTML = "";
   const st = $("#status"); st.hidden = false; st.className = "status";
   const t0 = Date.now();
@@ -268,7 +273,8 @@ function render(d) {
     h += `<div class="kv"><span>Map 1 (predicted)</span><span>${esc(top(pb.map_prediction.map1))}</span></div>
       <div class="kv"><span>Map 2 (predicted)</span><span>${esc(top(pb.map_prediction.map2))}</span></div>`;
   }
-  else h += `<div class="muted">No upcoming match found for ${esc(pb.current_team || "this team")}.</div>`;
+  else h += `<div class="muted">No upcoming match found for ${esc(pb.current_team || "this player's team")}. If PrizePicks shows his opponent, type it in the Opponent box and grade again.</div>`;
+  if (d.match_note) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(d.match_note)}</div>`;
   if (od?.found) {
     h += `<div class="kv"><span>Win chance (Polymarket)</span><span>${esc(od.team)} ${pct(od.team_prob)} · ${esc(od.opponent)} ${pct(od.opp_prob)}</span></div>`;
     if (od.maps?.map1 || od.maps?.map2) h += `<div class="kv"><span>Map winners</span><span>${["map1","map2"].filter(k=>od.maps[k]).map(k=>`${k.replace("map","Map ")}: ${pct(od.maps[k].team_prob,0)}`).join(" · ")}</span></div>`;

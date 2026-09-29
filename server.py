@@ -6,7 +6,7 @@ server.py - the web interface for cs2_scout.
 
 GET /                   the page (web/index.html)
 GET /api/search?q=      player suggestions from BO3.gg
-GET /api/grade?player=&line=&prop=kills|hs&line_type=standard|goblin|demon[&slug=][&match=]
+GET /api/grade?player=&line=&prop=kills|hs&line_type=standard|goblin|demon[&slug=][&match=][&opponent=]
                         the full grade + supporting data
 
 One grade runs at a time (keeps requests to BO3.gg polite). Standard library only.
@@ -238,7 +238,8 @@ class Handler(BaseHTTPRequestHandler):
         lt = q.get("line_type", "standard") if q.get("line_type") in ("standard", "goblin", "demon") else "standard"
         with GRADE_LOCK:
             res = cs2_scout.grade(name, line, prop, lt, slug=q.get("slug") or None, faceit_key=faceit_key(),
-                                    match=q.get("match") or None)
+                                    match=q.get("match") or None,
+                                    opponent=(q.get("opponent") or "")[:60] or None)
         if res.get("error"):
             return self.send(404, {"error": res["error"][0].upper() + res["error"][1:]})
         res["verdict"] = verdict(res.get("grade"))
