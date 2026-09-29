@@ -1084,11 +1084,13 @@ def run(args, res, b, ttl):
         pb = run_player(b, args.name, args)
         if args.cmd != "faceit":
             res["player_block"] = pb
-    if args.cmd in ("h2h", "full") and not args.opponent and pb and pb.get("team_id"):
+    if args.cmd in ("h2h", "full") and not args.opponent and pb:
         # every team he has played for in the last 14 days (stand-ins, loans, recent moves) -
-        # grade against whichever of them plays next
-        cutoff = (date.today() - timedelta(days=STANDIN_DAYS)).isoformat()
-        teams = {pb["team_id"]: pb.get("current_team")}
+        # grade against whichever of them plays next. No team listed on BO3.gg (between teams,
+        # e.g. ct0m): look back 45 days - his most recent team first.
+        no_team = not pb.get("team_id")
+        cutoff = (date.today() - timedelta(days=45 if no_team else STANDIN_DAYS)).isoformat()
+        teams = {} if no_team else {pb["team_id"]: pb.get("current_team")}
         for r in pb.get("recent_maps") or []:
             if r["date"] >= cutoff and r["team_id"] and r["team_id"] not in teams:
                 teams[r["team_id"]] = r["team"]
@@ -1106,7 +1108,9 @@ def run(args, res, b, ttl):
         if chosen:
             _, tid, tname, nxt = chosen
             pb["playing_for"], pb["playing_for_id"] = tname, tid
-            if tid != pb["team_id"]:
+            if no_team:
+                pb["current_team"], pb["team_id"] = tname, tid     # his latest team is the one playing
+            elif tid != pb["team_id"]:
                 pb["standin_for"] = tname
         pb["scout"] = nxt is None          # no upcoming match -> SCOUT card, no grade/units
         if nxt:
