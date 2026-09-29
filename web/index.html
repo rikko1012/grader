@@ -136,6 +136,21 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
     </div>
   </form>
 
+  <details class="card how" style="margin-top:12px">
+    <summary style="cursor:pointer;font-weight:600">How grades work</summary>
+    <div class="small" style="margin-top:10px;line-height:1.55">
+      <p><b>Built from official pro matches, Maps 1 and 2 only</b> – the maps PrizePicks counts. Map 3 and FACEIT games never go into a projection.</p>
+      <p><b>Recent form counts most.</b> A player's last few months weigh more than older matches, so a player in form (or in a slump) shows up quickly without one hot series taking over.</p>
+      <p><b>The maps matter.</b> If the veto is out we use those two maps; if not, we predict them from both teams' recent vetoes and use how the player performs on each.</p>
+      <p><b>Match context.</b> Betting markets tell us who is favoured – winning and losing teams put up different numbers. We also check the roster (stand-ins, new teams), how long since his last official match, and how big his sample is. Anything uncertain lowers the stake, not the honesty of the number.</p>
+      <p><b>Projection → chance → grade.</b> The projection is compared with the number he actually needs (a 15.5 line needs 16), and turned into a win chance based on how much a player's totals normally swing from match to match.</p>
+      <p><b>Tested before it counts.</b> Every factor was tested on 900+ past matches, using only information available before each one. If it didn't make grades more accurate, it doesn't move the grade – head-to-head, last 10, regional form and the match simulation are shown on the card for context.</p>
+      <p><b>What the grades mean</b> (chance the pick wins): A+ 80%+ · A 74%+ · A− 68%+ · B+ 63%+ · B 57%+ · <i>Lean</i> under 57% (no units).<br>
+      <b>Units:</b> A+ 2U · A 1.5U · A− 1U · B+ 0.5U · B 0.25U · Lean 0U. Thin markets, small samples, stand-ins and rust cap the units.</p>
+      <p class="muted">Grades are probabilities, not guarantees – a 60% pick still loses 4 times in 10. Not financial advice.</p>
+    </div>
+  </details>
+
   <div id="status" class="status" hidden></div>
   <div id="out"></div>
 </div>
@@ -255,12 +270,11 @@ function render(d) {
       <div class="side"><div class="k">More · ${g.grade === "C" ? "lean" : "grade " + esc(g.grade)} · ${g.units || 0}U</div><div class="v">${pct(g.p_more)}</div><div class="bar"><i style="width:${g.p_more*100}%"></i></div></div>
       <div class="side"><div class="k">Less · ${g.grade_less === "C" ? "lean" : "grade " + esc(g.grade_less)} · ${g.units_less || 0}U</div><div class="v">${pct(g.p_less)}</div><div class="bar"><i style="width:${g.p_less*100}%"></i></div></div>
     </div>
-    ${d.simulation ? `<div class="small muted" style="margin-top:8px">Match simulation (${d.simulation.runs.toLocaleString()} runs): <b>${pct(d.simulation.p_more)} More</b> · average ${d.simulation.mean} · weight 0 (tested: the grade's curve was as accurate and better calibrated)</div>` : ""}
+    ${d.simulation ? `<div class="small muted" style="margin-top:8px">Match simulation: <b>${pct(d.simulation.p_more)} More</b> · average ${d.simulation.mean} (shown for context)</div>` : ""}
     <div class="stats" style="margin-top:10px">
-      <div class="stat"><div class="k">Base</div><div class="v">${num(g.lambda_base,1)}</div><div class="n">KPR × 44${g.prop === "hs" ? " × HS%" : ""}</div></div>
-      <div class="stat"><div class="k">Win/loss factor</div><div class="v">×${num(det.outcome_mult,3)}</div><div class="n">${pct(det.p_win,0)} to win</div></div>
       <div class="stat"><div class="k">Projection</div><div class="v">${num(g.lambda_final,1)}</div><div class="n">${stat}, Maps 1–2</div></div>
-      <div class="stat"><div class="k">Line</div><div class="v">${g.line}</div><div class="n">fair ${g.value ? g.value.fair_line : "–"}</div></div>
+      <div class="stat"><div class="k">Line</div><div class="v">${g.line}</div><div class="n">needs ${g.line + 0.5} for More</div></div>
+      <div class="stat"><div class="k">Team win chance</div><div class="v">${det.p_win != null ? pct(det.p_win,0) : "–"}</div><div class="n">from betting markets</div></div>
       <div class="stat"><div class="k">Edge</div><div class="v">${(g.lambda_final - g.line - 0.5 > 0 ? "+" : "") + (g.lambda_final - g.line - 0.5).toFixed(1)}</div><div class="n">projection − ${g.line + 0.5} needed</div></div>
       <div class="stat"><div class="k">Last 10</div><div class="v">${pb.recent_form?.avg_total ?? "–"}</div><div class="n">median ${pb.recent_form?.median_total ?? "–"} · ${pb.recent_form?.overs ?? "–"}/${pb.recent_form?.matches ?? "–"} over</div></div>
     </div>`;
@@ -291,7 +305,6 @@ function render(d) {
     if (od.maps?.map1 || od.maps?.map2) h += `<div class="kv"><span>Map winners</span><span>${["map1","map2"].filter(k=>od.maps[k]).map(k=>`${k.replace("map","Map ")}: ${pct(od.maps[k].team_prob,0)}`).join(" · ")}</span></div>`;
     for (const f of od.flags || []) h += `<div class="small muted" style="margin-top:6px">⚠ ${esc(f)}</div>`;
   } else if (od) h += `<div class="kv"><span>Win chance</span><span class="muted">${esc(od.note)}</span></div>`;
-  if (det.p_win != null) h += `<div class="kv"><span>Rounds used</span><span>${det.rounds}${det.stomp ? " (stomp)" : ""}</span></div>`;
   h += `</section>`;
 
   // ---- stats + role
@@ -302,10 +315,8 @@ function render(d) {
   const rf = pb.recent_form || {};
   h += `<section class="card"><h2>Stats · Maps 1–2 only · ${esc((o.window || "").replace("last_", "last ").replace(/_/g, " "))} · ${o.maps_played ?? "–"} maps</h2>
     <div class="stats">
-      <div class="stat"><div class="k">Kills / round</div><div class="v">${num(o.kpr,3)}</div><div class="n">${o.form_blend ? "50% 3m · 30% 6m · 20% 12m" : ""}</div></div>
-      ${o.form_windows ? ["3m", "6m", "12m"].map(k => o.form_windows[k] ? `<div class="stat"><div class="k">${k} KPR · HS%</div><div class="v">${num(o.form_windows[k].kpr,3)}</div><div class="n">${o.form_windows[k].hs_pct ?? "–"}% HS · ${o.form_windows[k].maps} maps${o.form_windows[k].maps < 10 ? " (dropped)" : ""}</div></div>` : "").join("") : ""}
-      <div class="stat"><div class="k">Headshot %</div><div class="v">${o.hs_pct ?? "–"}%</div></div>
-      <div class="stat"><div class="k">Rating</div><div class="v">${num(o.rating)}</div><div class="n">HLTV-style · all maps</div></div>
+      ${o.form_windows ? ["3m", "6m", "12m"].map(k => o.form_windows[k] ? `<div class="stat"><div class="k">${k} KPR · HS%</div><div class="v">${num(o.form_windows[k].kpr,3)}</div><div class="n">${o.form_windows[k].hs_pct ?? "–"}% HS · ${o.form_windows[k].maps} maps</div></div>` : "").join("") : ""}
+      <div class="stat"><div class="k">Rating</div><div class="v">${num(o.rating)}</div><div class="n">all maps</div></div>
       <div class="stat"><div class="k">KAST</div><div class="v">${pb.kast ?? "–"}%</div></div>
       <div class="stat"><div class="k">Deaths / round</div><div class="v">${num(o.dpr,3)}</div></div>
       <div class="stat"><div class="k">ADR</div><div class="v">${o.adr ?? "–"}</div></div>
@@ -314,15 +325,15 @@ function render(d) {
   if ((pb.per_map || []).length) h += `<div class="stats" style="margin-top:8px">${pb.per_map.map(m => `<div class="stat"><div class="k">${mapName(m.map)} KPR</div><div class="v">${num(m.kpr,3)}</div><div class="n">${m.maps_played ?? 0} maps</div></div>`).join("")}</div>`;
   h += `</section>`;
 
-  h += `<div class="two"><section class="card"><h2>Role · ${esc(det.role || "–")}${pb.team_kill_share != null ? ` · ${pct(pb.team_kill_share)} of team kills (weight 0)` : ""}</h2><div class="mates">
+  h += `<div class="two"><section class="card"><h2>Role · ${esc(det.role || "–")}${pb.team_kill_share != null ? ` · ${pct(pb.team_kill_share)} of team kills` : ""}</h2><div class="mates">
     ${mates.map(m => `<div class="mate ${m.me ? "me" : ""}"><span>${esc(m.n)}</span><div class="bar"><i style="width:${(m.r || 0) / maxR * 100}%"></i></div><span class="num">${num(m.r)}</span></div>`).join("")}
     </div></section>
     <section class="card"><h2>Checks</h2>
       <div class="kv"><span>Roster</span><span>${pb.roster_confirmed ? "Confirmed" : "Not confirmed"}${pb.standin_for ? " · stand-in" : ""}</span></div>${pb.team_note ? `<div class="small muted" style="margin:-2px 0 6px">${esc(pb.team_note)}</div>` : ""}
       <div class="kv"><span>AWP</span><span>${esc(pb.awp_note || "–")}</span></div>
-      <div class="kv"><span>IGL</span><span>${pb.is_igl ? "Yes (−15%)" : "No"}</span></div>
-      ${pb.trade_pr != null ? `<div class="kv"><span>Trade kills</span><span>${num(pb.trade_pr,3)}/round · ${g.prop === "kills" ? `projection ×${num(det.trade_mult,3)}` : "weight 0 on headshots"}</span></div>` : ""}
-      ${pb.opening?.kills_per_round != null ? `<div class="kv"><span>Opening kills</span><span>${num(pb.opening.kills_per_round,3)}/round · ${pct(pb.opening.duel_win,0)} duels won · weight 0</span></div>` : ""}
+      <div class="kv"><span>IGL</span><span>${pb.is_igl ? "Yes" : "No"}</span></div>
+      ${pb.trade_pr != null ? `<div class="kv"><span>Trade kills</span><span>${num(pb.trade_pr,3)}/round</span></div>` : ""}
+      ${pb.opening?.kills_per_round != null ? `<div class="kv"><span>Opening kills</span><span>${num(pb.opening.kills_per_round,3)}/round · ${pct(pb.opening.duel_win,0)} duels won</span></div>` : ""}
       ${o.flags?.length ? `<div class="kv"><span>Sample</span><span>${esc(o.flags.join("; "))}</span></div>` : ""}
     </section></div>`;
 
@@ -334,8 +345,8 @@ function render(d) {
     for (const s of hh.series) h += `<tr><td class="num" style="text-align:left">${esc(s.date)}</td><td>${esc(s.opponent)}${s.regional ? ` <span class="pill">regional</span>` : ""}</td>
       <td class="small">${s.maps.map(mapName).join(" · ")}</td><td class="num">${s.values.join(" + ")} = <b>${s.total}</b></td>
       <td>${esc(s.result)}</td><td class="${s.total > g.line ? "hit" : "miss"}">${s.total > g.line ? "Over" : "Under"}</td></tr>`;
-    h += `</tbody></table></div><div class="small muted" style="margin-top:8px">${esc(g.h2h || "")}</div>${g.regional && g.regional !== "No regional series" ? `<div class="small muted" style="margin-top:4px">${esc(g.regional)}</div>` : ""}`;
-    if (g.flags?.some(f => f.startsWith("H2H vs TAPE"))) h += `<div class="small" style="margin-top:4px;color:var(--warn)">H2H vs TAPE: head-to-head and last 10 disagree about this line (note only - tested, no effect on units)</div>`;
+    h += `</tbody></table></div>`;
+    if (g.flags?.some(f => f.startsWith("H2H and his last 10"))) h += `<div class="small" style="margin-top:4px;color:var(--warn)">Head-to-head and his last 10 disagree about this line</div>`;
   } else h += `<div class="muted">No previous series found.</div>`;
   h += `</section>`;
 
@@ -346,14 +357,14 @@ function render(d) {
     for (const s of rf.series) h += `<tr><td class="num" style="text-align:left">${esc(s.date)}</td><td>${esc(s.opponent)}</td>
       <td class="small">${s.maps.map(mapName).join(" · ")}</td><td class="num">${s.values.join(" + ")} = <b>${s.total}</b></td>
       <td>${esc(s.result)}</td><td class="${s.total > g.line ? "hit" : "miss"}">${s.total > g.line ? "Over" : "Under"}</td></tr>`;
-    h += `</tbody></table></div><div class="small muted" style="margin-top:8px">Average ${rf.avg_total} · median ${rf.median_total} ${stat} on Maps 1–2 · weight in the projection: 0 (tested - his 3-month numbers already include these matches)</div>`;
+    h += `</tbody></table></div><div class="small muted" style="margin-top:8px">Average ${rf.avg_total} · median ${rf.median_total} ${stat} on Maps 1–2</div>`;
   } else h += `<div class="muted">No recent matches with two maps.</div>`;
   h += `</section>`;
 
   // ---- CS API cross-check (top teams; context only, weight 0)
   const ca = d.csapi;
   if (ca && ca.found) {
-    h += `<section class="card"><h2>CS API check <span class="muted small">· all maps · last ${esc(ca.window)} · ${ca.maps} maps · weight 0</span></h2>
+    h += `<section class="card"><h2>Second source check <span class="muted small">· all maps · last ${esc(ca.window)} · ${ca.maps} maps</span></h2>
       <div class="kv"><span>Team (CS API)</span><span>${esc(ca.team || "–")}${ca.vrs_rank ? ` · VRS #${ca.vrs_rank}` : ""}</span></div>
       <div class="kv"><span>On that roster</span><span>${ca.on_roster === true ? "Yes" : ca.on_roster === false ? "No" : "–"}</span></div>
       <div class="kv"><span>Kills / map</span><span>${num(ca.kills_per_map, 1)} · rating ${num(ca.rating)}</span></div>

@@ -302,14 +302,14 @@ def verdict(g):
         why = (f"{g['line_type'].title()} line - PrizePicks only offers More here, but the model expects "
                f"UNDER ({p:.0%}); More is only {g['p_more']:.0%}. Skip it.")
     elif g.get("form_fight"):
-        why = f"FORM FIGHT - his last 10 matches disagree with the model, so confidence is halved"
+        why = f"FORM FIGHT - his last 10 matches disagree with the projection - no units"
     elif g.get("tape_fight"):
         why = (f"TAPE FIGHT - model {side} {p:.0%}, but his recent record at this line disagrees - max 0.25U")
     elif units > 0:
         why = f"Projection {g['lambda_final']:.1f} vs {need:g} needed ({gap:+.1f} {stat})"
     else:
         why = (f"Projection {g['lambda_final']:.1f} vs {need:g} needed ({gap:+.1f} {stat}) is small next "
-               f"to the normal swing (about ±{g['sd']:.0f}) - leans {side} {p:.0%}, 0 units")
+               f"to how much his totals swing from match to match - leans {side} {p:.0%}, 0 units")
     if grade == "C":
         # owner 2026-09-29: under 57% the card says "Lean Over" / "Lean Under" instead of a C
         grade = "LEAN"
@@ -333,7 +333,71 @@ def public(res):
         r.pop("steam_id", None)
         r.pop("lineup", None)
     pb.pop("steam_id", None)
+    protect_recipe(res)
     return res
+
+
+# ---------------------------------------------------------------- keep the recipe private
+# Members see inputs (stats, form, H2H, match, odds) and outputs (projection, chance, grade,
+# units). The recipe - weights, constants, spread, multipliers, internal factors - never leaves
+# the server (the page AND the raw API response), so the grader can't be copied from it.
+KEEP_DETAIL = {"p_win", "p_map1", "p_map2", "maps_used", "role", "rank"}
+_FLAG_RULES = (   # (starts with, member-friendly text or None = not shown)
+    ("Gate C: roster", "Roster not confirmed - extra caution"),
+    ("Gate D: only", "Small sample of recent official maps - extra caution, unit size limited"),
+    ("Thin data", "Small sample of recent official maps - extra caution, unit size limited"),
+    ("Gate A", None), ("Heavy favourite", None), ("Underdog HS", None), ("Role unconfirmed", None),
+    ("Support profile", None), ("Stack capped", None), ("Kills props beat", None),
+    ("No moneyline", None), ("Only one moneyline", None),
+    ("SOFT BOOK", "Thin betting market - unit size limited"),
+    ("NO MARKET", "No betting market for this match - unit size limited"),
+    ("STAND-IN", "Stand-in - playing for another team, unit size limited"),
+    ("VETO UNCERTAINTY", "Map veto is hard to predict - extra caution"),
+    ("FORM FIGHT", "FORM FIGHT - his recent record at this line disagrees - no units"),
+    ("TAPE FIGHT", "TAPE FIGHT - his recent record at this line disagrees - small stake only"),
+    ("H2H vs TAPE", "H2H and his last 10 disagree about this line"),
+    ("0 units: SCOUT", "No upcoming match found - scouting view only"),
+    ("0 units", None),
+)
+_REASONS = (("Gate A", "AWPer on a headshot prop - no play"), ("Gate D", "Not enough recent official maps to grade"),
+            ("Gate C", "Not on this team's roster"), ("Missing", "Not enough data to grade"))
+
+
+def _public_flag(f):
+    if f.startswith("RUST") or f.startswith("Note: last official map"):
+        days = next((w for w in f.split() if w.isdigit()), None)
+        return (f"Last official map {days} days ago" + (" - extra caution" if f.startswith("RUST") else "")) if days else None
+    if f.startswith("TAPE:"):
+        return "Projection differs from his last-10 average"
+    if ": no Maps 1-2 on this map" in f:
+        return f.split(" - ")[0]
+    for start, text in _FLAG_RULES:
+        if f.startswith(start):
+            return text
+    return None                                     # anything not listed stays private
+
+
+def protect_recipe(res):
+    g = res.get("grade")
+    if isinstance(g, dict):
+        flags = []
+        for f in g.get("flags") or []:
+            t = _public_flag(f)
+            if t and t not in flags:
+                flags.append(t)
+        g["flags"] = flags
+        g["detail"] = {k: v for k, v in (g.get("detail") or {}).items() if k in KEEP_DETAIL}
+        for k in ("lambda_base", "sd", "value", "market", "model_grade", "p_more_model", "h2h", "regional"):
+            g.pop(k, None)
+        if g.get("reason"):
+            g["reason"] = next((t for k, t in _REASONS if g["reason"].startswith(k)), "Not graded")
+    sim = res.get("simulation")
+    if isinstance(sim, dict):
+        res["simulation"] = {"p_more": sim.get("p_more"), "mean": sim.get("mean")}
+    res.pop("simulation_error", None)
+    o = (res.get("player_block") or {}).get("overall") or {}
+    for k in ("kpr", "hs_pct", "form_blend", "kpr_single_window", "hs_single_window"):
+        o.pop(k, None)                              # blended numbers + their weights stay private
 
 
 def memory_mb():
