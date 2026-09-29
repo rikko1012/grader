@@ -109,7 +109,7 @@ def warm_start():
 _RESULTS, _INFLIGHT, _RG = {}, {}, threading.Lock()
 _SEARCH = {}                                  # query -> (time, body, n_results, rows)
 _PLAYER_LOCKS, _PLAYER_LOCKS_GUARD = {}, threading.Lock()
-RATE_LIMIT = int(os.environ.get("RATE_LIMIT", 20))   # grades per minute per member (IP)
+RATE_LIMIT = int(os.environ.get("RATE_LIMIT", 60))   # grades per minute per IP (phone carriers share IPs)
 _HITS, _HITS_GUARD = {}, threading.Lock()
 
 

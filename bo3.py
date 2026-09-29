@@ -183,7 +183,7 @@ HONEST_HEADERS = {
 MIN_GAP = 0.25         # seconds between requests (4/s) - shared by every BO3 client in this process
 QUEUE_PLACES = 2       # queued requests one look-up may hold at once (fair turns between members)
 _MEM = {}              # finished-map scoreboards/vetoes never change: kept in memory after first read
-_MEM_MAX = 60000
+_MEM_MAX = 40000       # ~2 GB worst case - stays well inside the Railway service memory
 _TMEM = {}             # key -> (fetched_at, data) for data that expires (schedules, rosters, lists)
 _TMEM_MAX = 20000
 
