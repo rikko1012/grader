@@ -49,10 +49,10 @@ def dsn():
 
 
 def swing_enabled():
-    # Default OFF (2026-09-30): the swing formula (clamp(swing x 3, +-6%)) made projections LESS
-    # accurate in the 900-case walk-forward (kills miss 6.053 -> 6.112, HS 3.705 -> 3.789, swing from
-    # before each match). Shown on the card; HLTV_SWING=1 turns it on once HLTV's own swing passes.
-    return os.environ.get("HLTV_SWING", "0") == "1"
+    # ON by default - owner's decision (2026-09-30), as the hltv-scraper setup specifies.
+    # For the record: on the 900-case walk-forward, HLTV swing (pre-match values) gave kills miss
+    # 5.970 -> 6.023 and HS 3.730 -> 3.831. HLTV_SWING=0 turns it off.
+    return os.environ.get("HLTV_SWING", "1") != "0"
 
 
 def _norm(s):
