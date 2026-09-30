@@ -4,112 +4,181 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CS2 Prop Grader</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#0b0e13; --panel:#131821; --panel-2:#1a2130; --line:#252e3f;
-  --text:#e8ecf3; --muted:#8b95a8; --faint:#5d6679;
-  --accent:#4f8cff;
-  --good:#2fbf71; --good-bg:rgba(47,191,113,.12);
-  --warn:#f0b429; --warn-bg:rgba(240,180,41,.12);
-  --bad:#ef5a5a;  --bad-bg:rgba(239,90,90,.12);
-  --radius:14px;
+  --bg:#080a0f; --panel:#10151d; --panel-2:#161c27; --line:#212a38; --line-2:#2b3547;
+  --text:#eef2f8; --muted:#8e98ab; --faint:#5d6679;
+  --accent:#ff7a1a; --accent-2:#ffa53a; --accent-glow:rgba(255,122,26,.28);
+  --good:#22d27a; --good-bg:rgba(34,210,122,.10);
+  --warn:#f5c542; --warn-bg:rgba(245,197,66,.10);
+  --bad:#ff5566;  --bad-bg:rgba(255,85,102,.10);
+  --radius:16px;
+  --display:"Chakra Petch",system-ui,sans-serif;
   --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 }
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--text);
-  font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:880px;margin:0 auto;padding:20px 16px 60px}
-header{display:flex;align-items:baseline;gap:10px;margin-bottom:16px}
-header h1{font-size:18px;margin:0;letter-spacing:.2px}
-header span{color:var(--muted);font-size:13px}
+html,body{margin:0;color:var(--text);
+  font:15px/1.5 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+body{background:radial-gradient(900px 420px at 80% -8%,rgba(255,122,26,.09),transparent 65%),var(--bg);min-height:100vh}
+.wrap{max-width:1160px;margin:0 auto;padding:0 20px 60px}
+header{display:flex;align-items:center;gap:12px;margin:0 -20px 20px;padding:14px 20px;position:sticky;top:0;z-index:20;background:rgba(8,10,15,.82);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.logo{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;flex:0 0 auto;
+  background:linear-gradient(135deg,var(--accent),var(--accent-2))}
+header h1{font:700 20px var(--display);margin:0;letter-spacing:.6px;text-transform:uppercase}
+header h1 em{font-style:normal;color:var(--accent)}
+header .grow{flex:1}
+header .tag{font-size:12px;color:var(--muted)}
 
 /* search */
-form{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px;
-  display:grid;grid-template-columns:1fr 120px;gap:10px}
-.field{position:relative;display:flex;flex-direction:column;gap:5px}
-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+form{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;
+  display:grid;grid-template-columns:2fr 1fr 2fr;gap:12px}
+.field{position:relative;display:flex;flex-direction:column;gap:6px}
+label{font-size:12px;font-weight:500;color:var(--muted)}
 input,select{width:100%;background:var(--panel-2);border:1px solid var(--line);color:var(--text);
-  border-radius:10px;padding:11px 12px;font:inherit;outline:none}
-input:focus,select:focus{border-color:var(--accent)}
-.row2{grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap;align-items:end}
-.seg{display:inline-flex;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:3px}
-.seg button{background:none;border:0;color:var(--muted);padding:8px 14px;border-radius:8px;font:inherit;cursor:pointer}
-.seg button.on{background:var(--accent);color:#fff}
-#gate a:not(.go),#who a{color:var(--accent)}
-#gate a.go{color:#fff}
+  border-radius:11px;padding:12px 13px;font:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
+input::placeholder{color:var(--faint)}
+input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(255,122,26,.14)}
+.row2{grid-column:1/-1;display:flex;gap:12px;flex-wrap:wrap;align-items:end}
+.seg{display:inline-flex;background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:3px;gap:2px}
+.seg button{background:none;border:0;color:var(--muted);padding:9px 16px;border-radius:8px;font:500 14px Inter,system-ui,sans-serif;cursor:pointer;transition:all .15s}
+.seg button:hover{color:var(--text)}
+.seg button.on{background:var(--accent);color:#170b00;font-weight:600}
+#gate a:not(.go),#who a{color:var(--accent-2)}
+#gate a.go{color:#170b00}
 .row2 .field{flex:0 0 150px}
-.go{margin-left:auto;background:var(--accent);color:#fff;border:0;border-radius:10px;padding:11px 22px;
-  font:600 15px system-ui,sans-serif;cursor:pointer}
-.go:disabled{opacity:.5;cursor:wait}
-.suggest{position:absolute;top:100%;left:0;right:0;z-index:5;margin-top:4px;background:var(--panel-2);
-  border:1px solid var(--line);border-radius:10px;overflow:hidden;display:none}
-.suggest div{padding:9px 12px;cursor:pointer;display:flex;gap:10px;align-items:center}
-.suggest div:hover,.suggest div.hl{background:var(--line)}
+.go{margin-left:auto;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#170b00;border:0;border-radius:11px;
+  padding:12px 30px;font:700 15px var(--display);letter-spacing:1px;text-transform:uppercase;cursor:pointer;
+  transition:transform .12s,box-shadow .12s}
+.go:hover{transform:translateY(-1px);box-shadow:0 8px 24px var(--accent-glow)}
+.go:disabled{opacity:.55;cursor:wait;transform:none;box-shadow:none}
+.suggest{position:absolute;top:100%;left:0;right:0;z-index:5;margin-top:6px;background:#131a25;
+  border:1px solid var(--line-2);border-radius:12px;overflow:hidden;display:none;box-shadow:0 16px 40px rgba(0,0,0,.5)}
+.suggest div{padding:10px 12px;cursor:pointer;display:flex;gap:10px;align-items:center}
+.suggest div:hover,.suggest div.hl{background:rgba(255,122,26,.10)}
 .suggest small{color:var(--muted)}
-.cc{font:600 11px var(--mono);color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:1px 4px}
+.cc{font:600 11px var(--mono);color:var(--muted);border:1px solid var(--line-2);border-radius:4px;padding:1px 4px}
 
 /* states */
 .status{margin-top:18px;padding:18px;border-radius:var(--radius);background:var(--panel);border:1px solid var(--line);color:var(--muted)}
 .status.err{color:var(--bad);border-color:var(--bad);background:var(--bad-bg)}
-.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);
-  border-radius:50%;animation:s 1s linear infinite;vertical-align:-2px;margin-right:8px}
+.spin{display:inline-block;width:15px;height:15px;border:2px solid var(--line-2);border-top-color:var(--accent);
+  border-radius:50%;animation:s .8s linear infinite;vertical-align:-2px;margin-right:9px}
 @keyframes s{to{transform:rotate(360deg)}}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
+/* layout: grade on top, main read left, match + checks right */
+.cols{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(0,1fr);gap:14px;align-items:start}
+.cols > div{display:grid;gap:14px;min-width:0}
+.cols .two{grid-template-columns:1fr}
+/* hit-rate chips */
+.rates{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.rate{display:flex;flex-direction:column;align-items:center;min-width:74px;padding:7px 10px;border-radius:11px;background:var(--panel-2);border:1px solid var(--line)}
+.rate b{font:700 17px var(--display)} .rate span{font-size:11px;color:var(--muted)}
+.rate.hi b{color:var(--good)} .rate.hi{border-color:rgba(34,210,122,.35)}
+.rate.lo b{color:var(--bad)} .rate.lo{border-color:rgba(255,85,102,.35)}
+/* last-games chart */
+.chart{width:100%;height:auto;display:block;margin:2px 0 12px}
+.chart text{font:600 11px Inter,system-ui,sans-serif;fill:var(--muted)}
+.chart .val{fill:var(--text);font-weight:700}
+.chart .ln{stroke:var(--accent);stroke-width:1.5;stroke-dasharray:5 4}
+.chart .lnl{fill:var(--accent-2)}
+.chart .pj{stroke:#7d8aa3;stroke-width:1;stroke-dasharray:2 4}
 /* result */
 #out{margin-top:18px;display:grid;gap:14px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
-.card h2{margin:0 0 12px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;font-weight:600}
-.hero{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:center}
-.badge{width:96px;height:96px;border-radius:18px;display:grid;place-items:center;font:800 40px system-ui,sans-serif}
+#out > *{animation:rise .3s ease both}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+.card h2{margin:0 0 12px;font:600 13px var(--display);color:var(--muted);text-transform:uppercase;letter-spacing:1.1px}
+details.card > summary{cursor:pointer;font:600 13px var(--display);letter-spacing:1.1px;text-transform:uppercase;color:var(--muted);list-style:none;display:flex;align-items:center;gap:8px}
+details.card > summary::-webkit-details-marker{display:none}
+details.card > summary::before{content:"+";width:18px;height:18px;border-radius:5px;display:grid;place-items:center;background:var(--panel-2);color:var(--accent-2);font:700 14px Inter,sans-serif}
+details.card[open] > summary::before{content:"–"}
+details.card > summary:hover{color:var(--text)}
+details.how p{margin:0 0 10px;color:#c4cbd8} details.how b{color:var(--text)}
+.more{display:grid;gap:14px;margin-top:14px}
+.more .card{background:var(--panel-2);border-color:var(--line)}
+.herocard{position:relative;overflow:hidden}
+.herocard::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:var(--hc,var(--line-2))}
+.herocard.g-good{--hc:var(--good)} .herocard.g-warn{--hc:var(--warn)} .herocard.g-bad{--hc:var(--bad)} .herocard.g-scout{--hc:var(--line-2)}
+.herocard.g-good,.herocard.g-warn,.herocard.g-bad,.herocard.g-scout{background:var(--panel);color:inherit;border:1px solid var(--line)}
+.hero{display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:center}
+.badge{width:100px;height:100px;border-radius:22px;display:grid;place-items:center;font:700 44px var(--display)}
 .g-good{background:var(--good-bg);color:var(--good);border:1px solid var(--good)}
 .g-warn{background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn)}
 .g-bad{background:var(--bad-bg);color:var(--bad);border:1px solid var(--bad)}
-.g-scout{background:var(--panel-2);color:var(--muted);border:1px dashed var(--line)}
+.g-scout{background:var(--panel-2);color:var(--muted);border:1px dashed var(--line-2)}
+.badge.g-good{box-shadow:0 0 34px rgba(34,210,122,.22)} .badge.g-warn{box-shadow:0 0 30px rgba(245,197,66,.16)}
 .hero > div{min-width:0}
-.hero h3{margin:0;font-size:22px}
-.hero .sub{color:var(--muted);margin-top:2px}
-.pill{display:inline-block;font-size:12px;padding:3px 9px;border-radius:99px;border:1px solid var(--line);color:var(--muted);margin:6px 6px 0 0}
-.pill.good{color:var(--good);border-color:var(--good)} .pill.bad{color:var(--bad);border-color:var(--bad)} .pill.warn{color:var(--warn);border-color:var(--warn)}
-.sides{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
-.side{background:var(--panel-2);border-radius:10px;padding:10px 12px}
-.side .k{font-size:12px;color:var(--muted)} .side .v{font:700 20px system-ui,sans-serif}
-.bar{height:6px;background:var(--line);border-radius:99px;margin-top:6px;overflow:hidden}
-.bar i{display:block;height:100%;background:var(--accent)}
+.hero h3{margin:0;font:700 25px var(--display);letter-spacing:.4px;text-transform:uppercase}
+.hero .sub{color:var(--muted);margin-top:3px}
+.hero .sub b{color:var(--text)}
+.pill{display:inline-block;font-size:12px;font-weight:500;padding:3px 10px;border-radius:99px;border:1px solid var(--line-2);color:var(--muted);margin:7px 6px 0 0}
+.pill.good{color:var(--good);border-color:var(--good);background:var(--good-bg)} .pill.bad{color:var(--bad);border-color:var(--bad);background:var(--bad-bg)} .pill.warn{color:var(--warn);border-color:var(--warn);background:var(--warn-bg)}
+.sides{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
+.side{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.side.pick{border-color:var(--accent)}
+.side .k{font-size:12px;color:var(--muted);font-weight:500} .side .v{font:700 25px var(--display);margin-top:2px}
+.side.pick .k{color:var(--accent-2)}
+.bar{height:6px;background:rgba(255,255,255,.06);border-radius:99px;margin-top:7px;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:99px;background:#4b5a74}
+.side.pick .bar i{background:linear-gradient(90deg,var(--accent),var(--accent-2))}
 .value{margin-top:12px;padding:10px 12px;border:1px dashed var(--line);border-radius:10px;display:grid;gap:4px;font-size:14px}
-.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px}
-.stat{background:var(--panel-2);border-radius:10px;padding:9px 11px}
-.stat .k{font-size:11.5px;color:var(--muted)} .stat .v{font:600 17px system-ui,sans-serif;margin-top:1px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(122px,1fr));gap:8px}
+.stat{background:var(--panel-2);border-radius:12px;padding:10px 12px}
+.stat .k{font-size:11.5px;color:var(--muted);font-weight:500}
+.stat .v{font:700 20px var(--display);margin-top:1px}
 .stat .n{font-size:11.5px;color:var(--faint)}
+.stat.up .v{color:var(--good)} .stat.down .v{color:var(--bad)}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 table{width:100%;border-collapse:collapse;font-size:14px}
-th{text-align:left;font-size:11.5px;color:var(--muted);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line);text-transform:uppercase;letter-spacing:.5px}
-td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{text-align:left;font-size:11.5px;font-weight:500;color:var(--muted);padding:7px 8px;border-bottom:1px solid var(--line-2)}
+td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+tbody tr:hover td{background:rgba(255,255,255,.02)}
 tr:last-child td{border-bottom:0}
 .num{font-family:var(--mono);text-align:right;white-space:nowrap}
-.hit{color:var(--good);font-weight:700} .miss{color:var(--bad);font-weight:700}
+.hit{color:var(--good);font-weight:600} .miss{color:var(--bad);font-weight:600}
+td.hit::before,td.miss::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:currentColor;margin-right:6px;vertical-align:1px}
 .muted{color:var(--muted)} .small{font-size:12.5px}
-ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flags li{margin:3px 0}
-.kv{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line);font-size:14px}
+ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flags li{margin:4px 0} ul.flags li::marker{color:var(--accent)}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
 .kv:last-child{border-bottom:0} .kv span:first-child{color:var(--muted);flex:0 0 auto}
 .kv > span:last-child{text-align:right;min-width:0;overflow-wrap:anywhere}
 .card{min-width:0} .pill{max-width:100%;white-space:normal}
-.mates{display:flex;flex-direction:column;gap:6px}
+.mates{display:flex;flex-direction:column;gap:8px}
 .mate{display:grid;grid-template-columns:90px 1fr 44px;gap:8px;align-items:center;font-size:13.5px}
-.mate.me{font-weight:700}
-.mate .bar{margin:0} .mate.me .bar i{background:var(--good)}
+.mate.me{font-weight:600;color:var(--accent-2)}
+.mate .bar{margin:0} .mate.me .bar i{background:var(--accent)}
 .scroll{overflow-x:auto}
+.foot{text-align:center;margin-top:4px} .foot a{color:var(--muted)}
+@media (max-width:900px){
+  .cols{grid-template-columns:1fr}
+}
 @media (max-width:640px){
   form{grid-template-columns:1fr 96px}
+  #opp{grid-column:auto}
+  form > .field:nth-child(3){grid-column:1/-1}
   .row2 .field{flex:1 1 130px}
   .go{width:100%;margin-left:0}
   .two{grid-template-columns:1fr}
-  .badge{width:78px;height:78px;font-size:32px}
+  .hero{gap:14px}
+  .badge{width:78px;height:78px;font-size:34px;border-radius:18px}
+  .hero h3{font-size:20px}
+  .side .v{font-size:21px}
+  table{font-size:12.5px} th,td{padding:7px 3px} .card{padding:15px}
+  .num{font-family:inherit;font-variant-numeric:tabular-nums}
+  .dot{display:block;height:0;overflow:hidden}
+  .parts{display:block;font-size:11px;color:var(--muted)}
+  header{padding:11px 16px;margin:0 -16px 16px} header .tag{display:none} header h1{font-size:17px} .logo{width:32px;height:32px}
+  .wrap{padding:0 16px 50px}
+  td.hit::before,td.miss::before{margin-right:4px}
 }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header><h1>CS2 Prop Grader</h1><span>Maps 1–2 · v7.3</span></header>
+  <header><div class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#170b00" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg></div><h1>CS2 <em>Prop</em> Grader</h1><span class="grow"></span><span class="tag">Maps 1–2 kills &amp; headshots</span></header>
 
   <div id="gate" class="card" hidden style="text-align:center;padding:28px 18px"></div>
   <div id="who" class="small muted" hidden style="text-align:right;margin:-6px 0 8px"></div>
@@ -141,7 +210,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
   </form>
 
   <details class="card how" style="margin-top:12px">
-    <summary style="cursor:pointer;font-weight:600">How grades work</summary>
+    <summary>How grades work</summary>
     <div class="small" style="margin-top:10px;line-height:1.55">
       <p><b>Built from official pro matches, Maps 1 and 2 only</b> – the maps PrizePicks counts. Map 3 and FACEIT games never go into a projection.</p>
       <p><b>Recent form counts most.</b> A player's last few months weigh more than older matches, so a player in form (or in a slump) shows up quickly without one hot series taking over.</p>
@@ -201,6 +270,7 @@ async function fetchRetry(url, tries = 4) {
     await new Promise(res => setTimeout(res, 1000 * 2 ** i));
   }
 }
+const shortDate = x => { const d = new Date(String(x) + "T12:00:00Z"); return isNaN(d) ? esc(x) : d.toLocaleDateString([], {month: "short", day: "numeric", timeZone: "UTC"}); };
 const mapName = m => m ? m.replace(/^de_/, "").replace(/^./, c => c.toUpperCase()) : "–";
 const gClass = g => ["A+","A","A-"].includes(g) ? "g-good" : ["B+","B"].includes(g) ? "g-warn" : g === "LEAN" ? "g-scout" : "g-bad";
 const when = s => { if (!s) return "–"; const d = new Date(s); return isNaN(d) ? s : d.toLocaleString([], {weekday:"short", month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"}); };
@@ -268,10 +338,27 @@ $("#f").onsubmit = async e => {
   } finally { clearInterval(iv); $("#go").disabled = false; }
 };
 
+function chart(series, line, proj) {
+  const s = [...series].reverse(), W = 640, H = 190, top = 22, bot = 26, n = s.length;
+  const max = Math.max(...s.map(x => x.total), line, proj || 0) * 1.12 || 1;
+  const y = v => top + (H - top - bot) * (1 - v / max), bw = Math.min(46, (W - 20) / n * 0.62), step = (W - 20) / n;
+  let o = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Last ${n} matches against the line">`;
+  s.forEach((x, i) => {
+    const cx = 10 + step * i + step / 2, yy = y(x.total), c = x.total > line ? "var(--good)" : "var(--bad)";
+    o += `<rect x="${cx - bw / 2}" y="${yy}" width="${bw}" height="${Math.max(H - bot - yy, 2)}" rx="5" fill="${c}" opacity=".85"/>`
+      + `<text class="val" x="${cx}" y="${yy - 6}" text-anchor="middle">${x.total}</text>`
+      + `<text x="${cx}" y="${H - 8}" text-anchor="middle">${esc(String(x.opponent || "").slice(0, 7))}</text>`;
+  });
+  if (proj) o += `<line class="pj" x1="0" x2="${W}" y1="${y(proj)}" y2="${y(proj)}"/>`;
+  o += `<line class="ln" x1="0" x2="${W}" y1="${y(line)}" y2="${y(line)}"/><text class="lnl" x="${W - 4}" y="${y(line) - 5}" text-anchor="end">Line ${line}</text>`;
+  return o + `</svg>`;
+}
+
 function render(d) {
   const g = d.grade || {}, v = d.verdict || {}, pb = d.player_block || {}, o = pb.overall || {};
   const nm = d.next_match, od = d.odds, hh = d.h2h, fc = d.faceit, det = g.detail || {};
   const stat = g.prop === "hs" ? "headshots" : "kills";
+  const rf = pb.recent_form || {};
   // edge and the vig note follow the side we recommend (More when nothing is playable)
   const edgeSide = v.side || "More";
   const implied = g.market?.pp_implied_more;
@@ -284,8 +371,9 @@ function render(d) {
   const gateStop = !("p_more" in g);   // stopped by a gate - the reason shows as a pill instead
   const sub = v.side ? `${pct(v.p)} chance · ${v.units}U · ${esc(v.confidence)} confidence<div class="small muted" style="margin-top:4px">${esc(v.reason || "")}</div>`
     : gateStop ? "" : esc(v.reason || "");
-  h += `<section class="card"><div class="hero">
-    <div class="badge ${v.state === "SCOUT" ? "g-scout" : gClass(v.grade)}">${esc(g.status === "NO GRADE" ? "–" : v.state === "SCOUT" ? "S" : v.grade === "LEAN" ? "L" : v.grade || "C")}</div>
+  const hc = g.status === "NO GRADE" || v.state === "SCOUT" ? "g-scout" : gClass(v.grade);
+  h += `<section class="card herocard ${hc}"><div class="hero">
+    <div class="badge ${hc}">${esc(g.status === "NO GRADE" ? "–" : v.state === "SCOUT" ? "S" : v.grade === "LEAN" ? "L" : v.grade || "C")}</div>
     <div><h3>${esc(head)}</h3>
       <div class="sub">${esc(pb.player?.nick || "")} · ${pb.standin_for ? `${esc(pb.current_team || "")} → <b>stand-in for ${esc(pb.standin_for)}</b>` : esc(pb.current_team || "")} · ${g.line} ${stat} · ${esc(g.line_type || "")}</div>
       <div class="sub">${sub}</div>
@@ -298,22 +386,30 @@ function render(d) {
     </div></div>`;
   if ("p_more" in g) {
     h += `<div class="sides">
-      <div class="side"><div class="k">More · ${g.grade === "C" ? "lean" : "grade " + esc(g.grade)} · ${g.units || 0}U</div><div class="v">${pct(g.p_more)}</div><div class="bar"><i style="width:${g.p_more*100}%"></i></div></div>
-      <div class="side"><div class="k">Less · ${g.grade_less === "C" ? "lean" : "grade " + esc(g.grade_less)} · ${g.units_less || 0}U</div><div class="v">${pct(g.p_less)}</div><div class="bar"><i style="width:${g.p_less*100}%"></i></div></div>
+      <div class="side ${v.side === "More" ? "pick" : ""}"><div class="k">More · ${g.grade === "C" ? "lean" : "grade " + esc(g.grade)} · ${g.units || 0}U</div><div class="v">${pct(g.p_more)}</div><div class="bar"><i style="width:${g.p_more*100}%"></i></div></div>
+      <div class="side ${v.side === "Less" ? "pick" : ""}"><div class="k">Less · ${g.grade_less === "C" ? "lean" : "grade " + esc(g.grade_less)} · ${g.units_less || 0}U</div><div class="v">${pct(g.p_less)}</div><div class="bar"><i style="width:${g.p_less*100}%"></i></div></div>
     </div>
     ${d.simulation ? `<div class="small muted" style="margin-top:8px">Match simulation: <b>${pct(d.simulation.p_more)} More</b> · average ${d.simulation.mean} (shown for context)</div>` : ""}
     <div class="stats" style="margin-top:10px">
       <div class="stat"><div class="k">Projection</div><div class="v">${num(g.lambda_final,1)}</div><div class="n">${stat}, Maps 1–2</div></div>
       <div class="stat"><div class="k">Line</div><div class="v">${g.line}</div><div class="n">needs ${g.line + 0.5} for More</div></div>
       <div class="stat"><div class="k">Team win chance</div><div class="v">${det.p_win != null ? pct(det.p_win,0) : "–"}</div><div class="n">from betting markets</div></div>
-      <div class="stat"><div class="k">Edge</div><div class="v">${(g.lambda_final - g.line - 0.5 > 0 ? "+" : "") + (g.lambda_final - g.line - 0.5).toFixed(1)}</div><div class="n">projection − ${g.line + 0.5} needed</div></div>
+      <div class="stat ${g.lambda_final - g.line - 0.5 > 0 ? "up" : "down"}"><div class="k">Edge</div><div class="v">${(g.lambda_final - g.line - 0.5 > 0 ? "+" : "") + (g.lambda_final - g.line - 0.5).toFixed(1)}</div><div class="n">projection − ${g.line + 0.5} needed</div></div>
       <div class="stat"><div class="k">Last 10</div><div class="v">${pb.recent_form?.avg_total ?? "–"}</div><div class="n">median ${pb.recent_form?.median_total ?? "–"} · ${pb.recent_form?.overs ?? "–"}/${pb.recent_form?.matches ?? "–"} over</div></div>
     </div>`;
+  }
+  {
+    const ser = rf.series || [], over = x => x.total > g.line;
+    const chip = (lab, k, n) => n ? `<div class="rate ${k / n >= .6 ? "hi" : k / n <= .4 ? "lo" : ""}"><b>${k}/${n}</b><span>${lab}</span></div>` : "";
+    const l5 = ser.slice(0, 5), hs2 = hh?.series || [];
+    const r = chip("Last 5", l5.filter(over).length, l5.length) + chip("Last 10", ser.filter(over).length, ser.length)
+      + chip("H2H", hs2.filter(over).length, hs2.length);
+    if (r && "p_more" in g) h += `<div class="rates">${r}</div>`;
   }
   h += `</section>`;
 
   // ---- match
-  h += `<section class="card"><h2>Match</h2>`;
+  h += `<section class="card sc"><h2>Match</h2>`;
   const mo = d.match_options || [];
   if (nm && mo.length > 1) {
     h += `<div class="small" style="margin-bottom:8px">${esc(pb.player?.nick || "He")} has ${mo.length} upcoming matches – grading vs <b>${esc(nm.opponent)}</b>. Is your line for another one?</div><div class="seg" style="flex-wrap:wrap;margin-bottom:10px">`
@@ -339,12 +435,36 @@ function render(d) {
   } else if (od) h += `<div class="kv"><span>Win chance</span><span class="muted">${esc(od.note)}</span></div>`;
   h += `</section>`;
 
+  // ---- recent form: last 10 matches, Maps 1-2
+  h += `<section class="card"><h2>Last ${rf.matches ?? 10} matches · Maps 1–2${rf.hit_rate != null ? ` · over ${g.line} in ${rf.overs}/${rf.matches} (${pct(rf.hit_rate,0)})` : ""}</h2>`;
+  if (rf.series?.length) {
+    h += chart(rf.series, g.line, g.lambda_final);
+    h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th>Maps 1–2</th><th class="num">${g.prop === "hs" ? "HS" : "Kills"}</th><th>Result</th><th></th></tr></thead><tbody>`;
+    for (const s of rf.series) h += `<tr><td class="num" style="text-align:left">${shortDate(s.date)}</td><td>${esc(s.opponent)}</td>
+      <td class="small">${s.maps.map(mapName).join('<span class="dot"> · </span>')}</td><td class="num"><span class="parts">${s.values.join(" + ")} = </span><b>${s.total}</b></td>
+      <td>${esc(s.result)}</td><td class="${s.total > g.line ? "hit" : "miss"}">${s.total > g.line ? "Over" : "Under"}</td></tr>`;
+    h += `</tbody></table></div><div class="small muted" style="margin-top:8px">Average ${rf.avg_total} · median ${rf.median_total} ${stat} on Maps 1–2</div>`;
+  } else h += `<div class="muted">No recent matches with two maps.</div>`;
+  h += `</section>`;
+
+  // ---- H2H
+  h += `<section class="card"><h2>Head-to-head vs ${esc(hh?.opponent_query || nm?.opponent || "opponent")}${hh?.hit_rate != null ? ` · ${pct(hh.hit_rate,0)} over ${hh.line}` : ""}</h2>`;
+  if (d.regional_note) h += `<div class="small muted" style="margin-bottom:8px">${esc(d.regional_note)}</div>`;
+  if (hh?.series?.length) {
+    h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th>Maps 1–2</th><th class="num">${g.prop === "hs" ? "HS" : "Kills"}</th><th>Result</th><th></th></tr></thead><tbody>`;
+    for (const s of hh.series) h += `<tr><td class="num" style="text-align:left">${shortDate(s.date)}</td><td>${esc(s.opponent)}${s.regional ? ` <span class="pill">regional</span>` : ""}</td>
+      <td class="small">${s.maps.map(mapName).join('<span class="dot"> · </span>')}</td><td class="num"><span class="parts">${s.values.join(" + ")} = </span><b>${s.total}</b></td>
+      <td>${esc(s.result)}</td><td class="${s.total > g.line ? "hit" : "miss"}">${s.total > g.line ? "Over" : "Under"}</td></tr>`;
+    h += `</tbody></table></div>`;
+    if (g.flags?.some(f => f.startsWith("H2H and his last 10"))) h += `<div class="small" style="margin-top:4px;color:var(--warn)">Head-to-head and his last 10 disagree about this line</div>`;
+  } else h += `<div class="muted">No previous series found.</div>`;
+  h += `</section>`;
+
   // ---- stats + role
   const mates = Object.entries(pb.teammate_ratings || {}).map(([n, r]) => ({n, r}));
   mates.push({n: pb.player?.nick, r: o.rating, me: true});
   mates.sort((a, b) => (b.r || 0) - (a.r || 0));
   const maxR = Math.max(...mates.map(m => m.r || 0), 1.2);
-  const rf = pb.recent_form || {};
   h += `<section class="card"><h2>Stats · Maps 1–2 only · ${esc((o.window || "").replace("last_", "last ").replace(/_/g, " "))} · ${o.maps_played ?? "–"} maps</h2>
     <div class="stats">
       ${o.form_windows ? ["3m", "6m", "12m"].map(k => o.form_windows[k] ? `<div class="stat"><div class="k">${k} KPR · HS%</div><div class="v">${num(o.form_windows[k].kpr,3)}</div><div class="n">${o.form_windows[k].hs_pct ?? "–"}% HS · ${o.form_windows[k].maps} maps</div></div>` : "").join("") : ""}
@@ -357,7 +477,7 @@ function render(d) {
   if ((pb.per_map || []).length) h += `<div class="stats" style="margin-top:8px">${pb.per_map.map(m => `<div class="stat"><div class="k">${mapName(m.map)} KPR</div><div class="v">${num(m.kpr,3)}</div><div class="n">${m.maps_played ?? 0} maps</div></div>`).join("")}</div>`;
   h += `</section>`;
 
-  h += `<div class="two"><section class="card"><h2>Role · ${esc(det.role || "–")}${pb.team_kill_share != null ? ` · ${pct(pb.team_kill_share)} of team kills` : ""}</h2><div class="mates">
+  h += `<div class="two sc"><section class="card"><h2>Role · ${esc(det.role || "–")}${pb.team_kill_share != null ? ` · ${pct(pb.team_kill_share)} of team kills` : ""}</h2><div class="mates">
     ${mates.map(m => `<div class="mate ${m.me ? "me" : ""}"><span>${esc(m.n)}</span><div class="bar"><i style="width:${(m.r || 0) / maxR * 100}%"></i></div><span class="num">${num(m.r)}</span></div>`).join("")}
     </div></section>
     <section class="card"><h2>Checks</h2>
@@ -369,52 +489,12 @@ function render(d) {
       ${o.flags?.length ? `<div class="kv"><span>Sample</span><span>${esc(o.flags.join("; "))}</span></div>` : ""}
     </section></div>`;
 
-  // ---- H2H
-  h += `<section class="card"><h2>Head-to-head vs ${esc(hh?.opponent_query || nm?.opponent || "opponent")}${hh?.hit_rate != null ? ` · ${pct(hh.hit_rate,0)} over ${hh.line}` : ""}</h2>`;
-  if (d.regional_note) h += `<div class="small muted" style="margin-bottom:8px">${esc(d.regional_note)}</div>`;
-  if (hh?.series?.length) {
-    h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th>Maps 1–2</th><th class="num">${stat}</th><th>Result</th><th></th></tr></thead><tbody>`;
-    for (const s of hh.series) h += `<tr><td class="num" style="text-align:left">${esc(s.date)}</td><td>${esc(s.opponent)}${s.regional ? ` <span class="pill">regional</span>` : ""}</td>
-      <td class="small">${s.maps.map(mapName).join(" · ")}</td><td class="num">${s.values.join(" + ")} = <b>${s.total}</b></td>
-      <td>${esc(s.result)}</td><td class="${s.total > g.line ? "hit" : "miss"}">${s.total > g.line ? "Over" : "Under"}</td></tr>`;
-    h += `</tbody></table></div>`;
-    if (g.flags?.some(f => f.startsWith("H2H and his last 10"))) h += `<div class="small" style="margin-top:4px;color:var(--warn)">Head-to-head and his last 10 disagree about this line</div>`;
-  } else h += `<div class="muted">No previous series found.</div>`;
-  h += `</section>`;
-
-  // ---- recent form: last 10 matches, Maps 1-2
-  h += `<section class="card"><h2>Last ${rf.matches ?? 10} matches · Maps 1–2${rf.hit_rate != null ? ` · over ${g.line} in ${rf.overs}/${rf.matches} (${pct(rf.hit_rate,0)})` : ""}</h2>`;
-  if (rf.series?.length) {
-    h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th>Maps 1–2</th><th class="num">${stat}</th><th>Result</th><th></th></tr></thead><tbody>`;
-    for (const s of rf.series) h += `<tr><td class="num" style="text-align:left">${esc(s.date)}</td><td>${esc(s.opponent)}</td>
-      <td class="small">${s.maps.map(mapName).join(" · ")}</td><td class="num">${s.values.join(" + ")} = <b>${s.total}</b></td>
-      <td>${esc(s.result)}</td><td class="${s.total > g.line ? "hit" : "miss"}">${s.total > g.line ? "Over" : "Under"}</td></tr>`;
-    h += `</tbody></table></div><div class="small muted" style="margin-top:8px">Average ${rf.avg_total} · median ${rf.median_total} ${stat} on Maps 1–2</div>`;
-  } else h += `<div class="muted">No recent matches with two maps.</div>`;
-  h += `</section>`;
-
-  // ---- CS API cross-check (top teams; context only, weight 0)
-  const ca = d.csapi;
-  if (ca && ca.found) {
-    h += `<section class="card"><h2>Second source check <span class="muted small">· all maps · last ${esc(ca.window)} · ${ca.maps} maps</span></h2>
-      <div class="kv"><span>Team (CS API)</span><span>${esc(ca.team || "–")}${ca.vrs_rank ? ` · VRS #${ca.vrs_rank}` : ""}</span></div>
-      <div class="kv"><span>On that roster</span><span>${ca.on_roster === true ? "Yes" : ca.on_roster === false ? "No" : "–"}</span></div>
-      <div class="kv"><span>Kills / map</span><span>${num(ca.kills_per_map, 1)} · rating ${num(ca.rating)}</span></div>
-      <div class="kv"><span>Round Swing</span><span>${ca.swing != null ? (ca.swing > 0 ? "+" : "") + num(ca.swing) + "%" : "–"}</span></div>
-      <div class="kv"><span>ADR · KAST</span><span>${num(ca.adr, 1)} · ${num(ca.kast, 1)}%</span></div>
-      <div class="kv"><span>CT · T kills/map</span><span>${num(ca.ct?.k, 1)} · ${num(ca.t?.k, 1)}</span></div>
-      <div class="kv"><span>Data up to</span><span>${esc(ca.newest_match || "–")}</span></div>`;
-    if (ca.team_mismatch) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(ca.team_mismatch)}</div>`;
-    if (ca.stale) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(ca.stale)}</div>`;
-    h += `</section>`;
-  }
-
   // ---- HLTV (hltv-scraper database). Round Swing can feed the grade; everything else is display
   // only. Wrapped so a bad or partial HLTV answer can never break the rest of the card.
   try {
     const hl = d.hltv, hc = d.hltv_context || {};
     if ((hl && hl.found) || hc.found) {
-      h += `<section class="card"><h2>HLTV${hl?.found ? ` <span class="muted small">· last ${esc(hl.window)} · ${hl.maps} maps</span>` : ""}</h2>`;
+      h += `<section class="card sc"><h2>HLTV${hl?.found ? ` <span class="muted small">· last ${esc(hl.window)} · ${hl.maps} maps</span>` : ""}</h2>`;
       if (hl?.found) {
         h += `<div class="kv"><span>Rating 3.0</span><span>${num(hl.rating)}${hl.ct_rating != null ? ` · CT ${num(hl.ct_rating)} · T ${num(hl.t_rating)}` : ""}</span></div>
           <div class="kv"><span>Round Swing</span><span>${hl.round_swing != null ? (hl.round_swing > 0 ? "+" : "") + num(hl.round_swing) + "%" : "–"}${hl.use_swing && !hl.team_mismatch ? " · used in grade" : " · context only"}</span></div>
@@ -456,8 +536,24 @@ function render(d) {
     }
   } catch (e) { console.warn("HLTV card skipped:", e); }
 
+  // ---- CS API cross-check (top teams; context only, weight 0)
+  const ca = d.csapi;
+  if (ca && ca.found) {
+    h += `<section class="card sc"><h2>Second source check <span class="muted small">· all maps · last ${esc(ca.window)} · ${ca.maps} maps</span></h2>
+      <div class="kv"><span>Team (CS API)</span><span>${esc(ca.team || "–")}${ca.vrs_rank ? ` · VRS #${ca.vrs_rank}` : ""}</span></div>
+      <div class="kv"><span>On that roster</span><span>${ca.on_roster === true ? "Yes" : ca.on_roster === false ? "No" : "–"}</span></div>
+      <div class="kv"><span>Kills / map</span><span>${num(ca.kills_per_map, 1)} · rating ${num(ca.rating)}</span></div>
+      <div class="kv"><span>Round Swing</span><span>${ca.swing != null ? (ca.swing > 0 ? "+" : "") + num(ca.swing) + "%" : "–"}</span></div>
+      <div class="kv"><span>ADR · KAST</span><span>${num(ca.adr, 1)} · ${num(ca.kast, 1)}%</span></div>
+      <div class="kv"><span>CT · T kills/map</span><span>${num(ca.ct?.k, 1)} · ${num(ca.t?.k, 1)}</span></div>
+      <div class="kv"><span>Data up to</span><span>${esc(ca.newest_match || "–")}</span></div>`;
+    if (ca.team_mismatch) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(ca.team_mismatch)}</div>`;
+    if (ca.stale) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(ca.stale)}</div>`;
+    h += `</section>`;
+  }
+
   // ---- FACEIT
-  h += `<section class="card"><h2>FACEIT form</h2>`;
+  h += `<section class="card sc"><h2>FACEIT form</h2>`;
   h += fc ? `<div class="kv"><span>Account</span><span>${esc(fc.nickname)} · lvl ${fc.level} · ${fc.elo} elo</span></div>
       <div class="kv"><span>Last ${fc.recent_n} games</span><span>${fc.avg_kills} kills · KPR ${fc.kpr}</span></div>
       <div class="kv"><span>HS%</span><span>${fc.avg_hs_pct}%</span></div>` : `<div class="muted">No confirmed FACEIT account.</div>`;
@@ -466,9 +562,13 @@ function render(d) {
   // ---- flags
   const flags = [...(g.flags || [])];
   if (v.side && v.p < 0.68) flags.push(`${v.side} is below A- (68%) - near the vig line, no real edge`);
-  if (flags.length) h += `<section class="card"><h2>Notes</h2><ul class="flags">${flags.map(f => `<li>${esc(f)}</li>`).join("")}</ul></section>`;
-  h += `<div class="small muted" style="text-align:center">Data: BO3.gg · Polymarket · FACEIT${d.hltv?.found || d.hltv_context?.found ? " · HLTV" : ""}${d.csapi?.found ? " · CS API" : ""}${d.next_match?.source === "pandascore" ? " · PandaScore" : ""}${d.next_match?.source === "hltv" ? " · schedule from HLTV" : ""}${d.odds?.book ? " · " + esc(d.odds.book) + " via OddsPapi" : ""}${d.liquipedia ? ` · team from <a href="${esc(d.liquipedia.url)}" target="_blank" rel="noopener">Liquipedia</a> (CC-BY-SA 3.0)` : ""} · Not financial advice</div>`;
-  $("#out").innerHTML = h;
+  if (flags.length) h += `<section class="card full"><h2>Notes</h2><ul class="flags">${flags.map(f => `<li>${esc(f)}</li>`).join("")}</ul></section>`;
+  h += `<div class="small muted foot">Data: BO3.gg · Polymarket · FACEIT${d.hltv?.found || d.hltv_context?.found ? " · HLTV" : ""}${d.csapi?.found ? " · CS API" : ""}${d.next_match?.source === "pandascore" ? " · PandaScore" : ""}${d.next_match?.source === "hltv" ? " · schedule from HLTV" : ""}${d.odds?.book ? " · " + esc(d.odds.book) + " via OddsPapi" : ""}${d.liquipedia ? ` · team from <a href="${esc(d.liquipedia.url)}" target="_blank" rel="noopener">Liquipedia</a> (CC-BY-SA 3.0)` : ""} · Not financial advice</div>`;
+  const out = $("#out"); out.innerHTML = h;
+  const kids = [...out.children], cols = document.createElement("div"), main = document.createElement("div"), side = document.createElement("div");
+  cols.className = "cols"; cols.append(main, side);
+  kids.slice(1).forEach(k => { if (!k.classList.contains("full") && !k.classList.contains("foot")) (k.classList.contains("sc") ? side : main).appendChild(k); });
+  out.insertBefore(cols, kids[0].nextSibling);
 }
 </script>
 </body>
