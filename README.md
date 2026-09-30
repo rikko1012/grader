@@ -72,7 +72,13 @@ so a grade never waits on HLTV.
 - **Round Swing feeds the grade** (grade_leg's swing multiplier, math unchanged) when the player has
   10+ HLTV maps in the window (3m -> 6m -> 12m) *and* those maps are for the same team. Otherwise it
   stays 0 exactly as before. `HLTV_SWING=0` turns it off.
-- Database missing, down, or player unknown = no HLTV card, grade unchanged.
+- The card also shows (display only, never used in the grade): his HLTV stats on the prop maps
+  (KPR, rating, ADR), eco-adjusted K/D/ADR/KAST, his last 5 HLTV maps, team vs opponent series record
+  and map win rates, the team's VRS rank trend, the next match from HLTV's schedule, and a note when
+  some maps came from the scraper's backup data source.
+- Database missing, down, or player unknown = no HLTV card, grade unchanged. Each part of the card is
+  fetched separately, so one failing part doesn't hide the others. A database that's down trips a
+  circuit breaker: HLTV is skipped instantly for 5 minutes instead of every grade waiting on it.
 
 ```
 python hltv.py ZywOo Vitality      # what the grader will see for a player
