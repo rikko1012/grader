@@ -194,6 +194,62 @@ def grade_swing(info):
     return None
 
 
+# ---------------------------------------------------------------- schedule
+SCHEDULE_MAX_AGE_H = 6    # an HLTV schedule snapshot older than this is not trusted
+SCHEDULE_TTL = 5 * 60
+
+
+def upcoming_for(team_names, matcher, hours=72):
+    """Not-yet-started matches on HLTV's schedule for any of `team_names` in the next `hours`,
+    earliest first: [{"team", "opponent", "start" (datetime, UTC), "event", "format", "url"}].
+    `matcher(a, b)` scores team-name similarity (polymarket.name_match). Never raises; [] when the
+    database is down/unconfigured or the snapshot is older than SCHEDULE_MAX_AGE_H."""
+    names = [n for n in (team_names or []) if n]
+    if not dsn() or not names:
+        return []
+    rows = _schedule_rows()
+    if not rows:
+        return []
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    out = []
+    for time_, live, t1, t2, event, fmt, url in rows:
+        if live or time_ is None or not (now < time_ <= now + timedelta(hours=hours)):
+            continue   # live matches are locked for props; past ones are over
+        for mine, other in ((t1, t2), (t2, t1)):
+            if other and _norm(other) != "tbd" and any(matcher(n, mine) >= 2 for n in names):
+                out.append({"team": mine, "opponent": other, "start": time_, "event": event or "",
+                            "format": fmt or "", "url": url})
+                break
+    return sorted(out, key=lambda m: m["start"])
+
+
+def _schedule_rows():
+    with _LOCK:
+        hit = _CACHE.get("schedule")
+        if hit and time.time() - hit[0] < SCHEDULE_TTL:
+            return hit[1]
+    rows = []
+    try:
+        con = _connect()
+        try:
+            with con.cursor() as cur:
+                cur.execute("SELECT max(scraped_at) >= now() - make_interval(hours => %s) FROM upcoming_matches",
+                            (SCHEDULE_MAX_AGE_H,))
+                fresh = cur.fetchone()[0]
+                if fresh:
+                    cur.execute("SELECT time, live, team1, team2, event, format, url FROM upcoming_matches")
+                    rows = cur.fetchall()
+        finally:
+            con.close()
+    except Exception:
+        rows = []
+    with _LOCK:
+        _CACHE["schedule"] = (time.time(), rows)
+    return rows
+
+
 # ---------------------------------------------------------------- display-only context
 def _map_key(name):
     return _norm(str(name or "").lower().removeprefix("de_"))
