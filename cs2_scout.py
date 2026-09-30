@@ -16,7 +16,8 @@ Commands:
   full    - everything above, plus the finished grade when --line is given
 
 HLTV-only numbers BO3.gg doesn't have, and what replaces them (approved 2026-09-27):
-  round swing        -> not available: 0 (no swing adjustment), flagged
+  round swing        -> from the hltv-scraper database via hltv.py when configured (HLTV_DB_DSN)
+                        and the player has 10+ HLTV maps in the window; otherwise 0, flagged
   Sniping (Gate A)   -> AWP detection from body-shot kills per body hit
                         (one-shot AWP kills): >= 0.30 AWPer, <= 0.22 rifler
   Trading/Firepower  -> not available: support flag skipped
@@ -812,6 +813,26 @@ def opponent_defense(b, opp_id, maps=15):
     return {"kpr_allowed": round(kills / rounds, 3), "maps": n, "map_win_rate": round(won / n, 2)}
 
 
+def _hltv_swing(pb):
+    try:
+        import hltv
+        return hltv.grade_swing(pb.get("hltv"))
+    except Exception:
+        return None
+
+
+def _attach_hltv(pb):
+    """HLTV numbers from the hltv-scraper database (hltv.py). Context, plus the round swing."""
+    if not pb or "hltv" in pb:
+        return
+    try:
+        import hltv
+        last = (pb.get("recent_maps") or [{}])[0].get("date")
+        pb["hltv"] = hltv.player_numbers((pb.get("player") or {}).get("nick"), pb.get("current_team"), last)
+    except Exception as e:   # HLTV data is optional: it can never break a grade
+        pb["hltv"] = {"found": False, "error": str(e)[:200]}
+
+
 def grader_inputs(pb, args, odds=None, hh=None):
     """Map everything into the keys grade_leg() documents."""
     o = pb["overall"]
@@ -819,7 +840,7 @@ def grader_inputs(pb, args, odds=None, hh=None):
         "prop": args.prop, "line": args.line, "line_type": args.line_type,
         "maps_played": o.get("maps_played"), "kpr": o.get("kpr"), "hs_pct": o.get("hs_pct"),
         "kpr_last5": (pb.get("recent_form") or {}).get("kpr_recent"),  # last 10 matches, Maps 1-2
-        "round_swing": None,  # HLTV-only - no swing adjustment
+        "round_swing": _hltv_swing(pb),  # HLTV via hltv.py when available, else None (no swing adjustment)
         "per_map": [{"map": m["map"], "kpr": m.get("kpr"), "hs_pct": m.get("hs_pct"), "maps_played": m.get("maps_played")}
                     for m in pb["per_map"]],
         "map_probs": ([pb["map_prediction"]["map1"], pb["map_prediction"]["map2"]]
@@ -1391,6 +1412,8 @@ def finish_line(res, args):
         pb["recent_form"] = recent_form(pb["recent_maps"], pb.get("_rf_kpr"), args.line, stat)
     if res.get("_h2h_rows") is not None:
         res["h2h"] = h2h(list(res["_h2h_rows"]), res.get("_h2h_opp"), args.line, stat)
+    _attach_hltv(pb)
+    res["hltv"] = pb.get("hltv")
     res["grader_inputs"] = grader_inputs(pb, args, res.get("odds"), res.get("h2h"))
     res["grade"] = grade_leg(res["grader_inputs"])
     try:   # 20,000-run match simulation - display only (weight 0, tested vs the curve)
