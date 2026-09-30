@@ -833,6 +833,47 @@ def _attach_hltv(pb):
         pb["hltv"] = {"found": False, "error": str(e)[:200]}
 
 
+def _hltv_schedule(team_names, member_opp=None):
+    """His teams' upcoming matches on HLTV's schedule (hltv.py); [] on any problem."""
+    try:
+        import hltv
+        hl = hltv.upcoming_for(team_names, name_match)
+        return [m for m in hl if not member_opp or name_match(member_opp, m["opponent"])]
+    except Exception:
+        return []
+
+
+def _iso(s):
+    try:
+        return datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _hltv_check_bo3(chosen, options, h):
+    """Compare BO3.gg's next match with HLTV's. Returns (chosen or None, heads-up note or None).
+
+    None for `chosen` means: BO3.gg is missing his real next match - HLTV lists an earlier one
+    (90+ minutes before BO3.gg's) against an opponent BO3.gg has no match with at all. The caller
+    then grades HLTV's match. Same opponent at a different time only adds a note."""
+    bo3 = chosen[3]
+    start = _iso(bo3.get("start"))
+    if start and start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    when = h["start"].strftime("%a %H:%M UTC")
+    if name_match(h["opponent"], bo3.get("opponent") or "") or name_match(bo3.get("opponent") or "", h["opponent"]):
+        if start and abs(h["start"] - start) > timedelta(minutes=30):
+            return chosen, (f"HLTV has this match at {when} "
+                            f"(BO3.gg: {start.strftime('%a %H:%M UTC')}) - check the start time")
+        return chosen, None
+    on_bo3 = any(name_match(h["opponent"], o[3].get("opponent") or "") for o in options)
+    if start and h["start"] < start - timedelta(minutes=90) and not on_bo3:
+        return None, (f"BO3.gg is missing his team's next match: HLTV lists {h['team']} vs {h['opponent']} "
+                      f"at {when}, before BO3.gg's match vs {bo3.get('opponent')} - graded the HLTV match. "
+                      "Maps unknown until the veto: all-maps numbers used.")
+    return chosen, None
+
+
 def _hltv_context(pb, args):
     """Everything else the HLTV scraper has for this grade (hltv.context). Display only: nothing
     here reaches grade_leg(), and any failure just leaves the section out."""
@@ -1272,11 +1313,26 @@ def run(args, res, b, ttl):
         want = getattr(args, "match", None)
         chosen = next((o for o in options if want and o[3]["slug"] == want), options[0] if options else None)
         nxt = None
+        # HLTV's schedule (hltv-scraper database) is the most complete: it fills in matches BO3.gg
+        # doesn't have, and corrects BO3.gg when it's missing his team's real next match.
+        hl = _hltv_schedule([n for n in teams.values() if n], member_opp)
+        if chosen and hl and not want and not member_opp:
+            chosen, note = _hltv_check_bo3(chosen, options, hl[0])
+            if note:
+                res["schedule_correction" if chosen is None else "schedule_heads_up"] = note
         if not chosen:
+            pm, src = None, "Polymarket"
+            if hl:
+                # HLTV first: a local database read - instant, free, and the most accurate schedule
+                m = hl[0]
+                mine = next((n for n in teams.values() if n and name_match(n, m["team"]) >= 2), m["team"])
+                pm, src = {"team": mine, "opponent": m["opponent"],
+                           "start": m["start"].strftime("%Y-%m-%dT%H:%M:%SZ"),
+                           "title": f"{mine} vs {m['opponent']}{' (' + m['format'].upper() + ')' if m['format'] else ''}"
+                                    f"{' - ' + m['event'] if m['event'] else ''}"}, "HLTV"
             # BO3.gg doesn't have the match (smaller events, e.g. CIS LAN): use Polymarket's
             # pre-match listing - by his team's exact name, or by the opponent the member typed
-            pm = None
-            for tname in ([n for n in teams.values() if n] if not member_opp else []):
+            for tname in ([n for n in teams.values() if n] if not member_opp and not pm else []):
                 o = match_odds(tname)
                 if o.get("found") and norm(o["team"]) == norm(tname):
                     pm = o
@@ -1287,7 +1343,6 @@ def run(args, res, b, ttl):
                     if o.get("found"):
                         pm = o
                         break
-            src = "Polymarket"
             if not pm and not b.background:   # limited free quota: members' grades only, after Polymarket
                 # PandaScore's free schedule covers events BO3.gg misses (e.g. CIS LAN Championship)
                 try:
@@ -1314,8 +1369,8 @@ def run(args, res, b, ttl):
                 pb["playing_for"] = pm["team"]
                 if no_team or norm(pm["team"]) != norm(pb.get("current_team") or ""):
                     pb["current_team"] = pm["team"]
-                res["match_note"] = (f"Match not on BO3.gg - found on {src}. Maps unknown until the "
-                                     "veto: all-maps numbers used.")
+                res["match_note"] = res.get("schedule_correction") or (
+                    f"Match not on BO3.gg - found on {src}. Maps unknown until the veto: all-maps numbers used.")
         if chosen:
             _, tid, tname, nxt = chosen
             pb["playing_for"], pb["playing_for_id"] = tname, tid

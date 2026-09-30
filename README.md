@@ -76,6 +76,12 @@ so a grade never waits on HLTV.
   (KPR, rating, ADR), eco-adjusted K/D/ADR/KAST, his last 5 HLTV maps, team vs opponent series record
   and map win rates, the team's VRS rank trend, the next match from HLTV's schedule, and a note when
   some maps came from the scraper's backup data source.
+- **Schedule:** HLTV's schedule is checked on every grade. If BO3.gg has no match for his team, HLTV's
+  is used first (before Polymarket and PandaScore). If BO3.gg's next match is against a different
+  opponent and HLTV lists an earlier match (90+ minutes before) that BO3.gg doesn't have at all, the
+  grade switches to HLTV's match and says so. Same opponent at a different time = a heads-up note
+  only. A match the member picked or an opponent they typed is never overridden, and an HLTV
+  schedule snapshot older than 6 hours is ignored.
 - Database missing, down, or player unknown = no HLTV card, grade unchanged. Each part of the card is
   fetched separately, so one failing part doesn't hide the others. A database that's down trips a
   circuit breaker: HLTV is skipped instantly for 5 minutes instead of every grade waiting on it.
