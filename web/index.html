@@ -408,18 +408,52 @@ function render(d) {
     h += `</section>`;
   }
 
-  // ---- HLTV (hltv-scraper database): real Rating 3.0 + Round Swing (swing feeds the grade)
-  const hl = d.hltv;
-  if (hl && hl.found) {
-    h += `<section class="card"><h2>HLTV <span class="muted small">· last ${esc(hl.window)} · ${hl.maps} maps</span></h2>
-      <div class="kv"><span>Rating 3.0</span><span>${num(hl.rating)}${hl.ct_rating != null ? ` · CT ${num(hl.ct_rating)} · T ${num(hl.t_rating)}` : ""}</span></div>
-      <div class="kv"><span>Round Swing</span><span>${hl.round_swing != null ? (hl.round_swing > 0 ? "+" : "") + num(hl.round_swing) + "%" : "–"}${hl.use_swing && !hl.team_mismatch ? " · used in grade" : " · context only"}</span></div>
-      <div class="kv"><span>ADR · KAST · K/D</span><span>${num(hl.adr, 1)} · ${num(hl.kast, 1)}% · ${num(hl.kd)}</span></div>
-      <div class="kv"><span>Data up to</span><span>${esc(hl.newest_map || "–")}</span></div>`;
-    if (hl.team_mismatch) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(hl.team_mismatch)}</div>`;
-    if (hl.stale) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(hl.stale)}</div>`;
-    h += `</section>`;
-  }
+  // ---- HLTV (hltv-scraper database). Round Swing can feed the grade; everything else is display
+  // only. Wrapped so a bad or partial HLTV answer can never break the rest of the card.
+  try {
+    const hl = d.hltv, hc = d.hltv_context || {};
+    if ((hl && hl.found) || hc.found) {
+      h += `<section class="card"><h2>HLTV${hl?.found ? ` <span class="muted small">· last ${esc(hl.window)} · ${hl.maps} maps</span>` : ""}</h2>`;
+      if (hl?.found) {
+        h += `<div class="kv"><span>Rating 3.0</span><span>${num(hl.rating)}${hl.ct_rating != null ? ` · CT ${num(hl.ct_rating)} · T ${num(hl.t_rating)}` : ""}</span></div>
+          <div class="kv"><span>Round Swing</span><span>${hl.round_swing != null ? (hl.round_swing > 0 ? "+" : "") + num(hl.round_swing) + "%" : "–"}${hl.use_swing && !hl.team_mismatch ? " · used in grade" : " · context only"}</span></div>
+          <div class="kv"><span>ADR · KAST · K/D</span><span>${num(hl.adr, 1)} · ${num(hl.kast, 1)}% · ${num(hl.kd)}</span></div>`;
+      }
+      const eco = hc.eco;
+      if (eco) h += `<div class="kv"><span>Eco-adjusted K/D · ADR · KAST</span><span>${num(eco.ekd)} · ${num(eco.eadr, 1)} · ${num(eco.ekast, 1)}%</span></div>`;
+      const rk = hc.ranking;
+      if (rk) h += `<div class="kv"><span>Team VRS rank</span><span>#${rk.rank}${rk.change ? ` (${rk.change > 0 ? "▲" : "▼"}${Math.abs(rk.change)} in 4 weeks)` : ""}</span></div>`;
+      const nm = hc.next_match;
+      if (nm) h += `<div class="kv"><span>Next match (HLTV)</span><span>${nm.live ? "LIVE" : esc((nm.time || "").slice(0, 16).replace("T", " ")) + " UTC"} vs ${esc(nm.opponent)} · ${esc(nm.format || "")}</span></div>`;
+      if (hl?.found) h += `<div class="kv"><span>Data up to</span><span>${esc(hl.newest_map || "–")}</span></div>`;
+
+      if (Array.isArray(hc.prop_maps) && hc.prop_maps.length) {
+        h += `<div class="small muted" style="margin-top:10px">On the prop maps · last 6 months</div><div class="scroll"><table><thead><tr><th>Map</th><th>Maps</th><th>KPR</th><th>Rating</th><th>ADR</th></tr></thead><tbody>`;
+        for (const m of hc.prop_maps) h += `<tr><td>${esc(m.map)}</td><td>${m.maps}</td><td>${num(m.kpr, 2)}</td><td>${num(m.rating)}</td><td>${num(m.adr, 1)}</td></tr>`;
+        h += `</tbody></table></div>`;
+      }
+      const hh = hc.h2h;
+      if (hh) {
+        h += `<div class="small muted" style="margin-top:10px">Team vs opponent · last 12 months: ${hh.wins}-${hh.losses} in series</div>`;
+        if (Array.isArray(hh.map_win_rates) && hh.map_win_rates.length) {
+          const wr = x => x && x.played ? `${Math.round(100 * x.won / x.played)}% (${x.played})` : "–";
+          h += `<div class="scroll"><table><thead><tr><th>Map</th><th>Team win %</th><th>Opp win %</th></tr></thead><tbody>`;
+          for (const m of hh.map_win_rates) h += `<tr><td>${esc(m.map)}</td><td>${wr(m.team)}</td><td>${wr(m.opponent)}</td></tr>`;
+          h += `</tbody></table></div>`;
+        }
+      }
+      if (Array.isArray(hc.last5) && hc.last5.length) {
+        h += `<div class="small muted" style="margin-top:10px">Last ${hc.last5.length} HLTV maps</div><div class="scroll"><table><thead><tr><th>Date</th><th>Map</th><th>vs</th><th>Score</th><th>K-D</th><th>Rating</th></tr></thead><tbody>`;
+        for (const m of hc.last5) h += `<tr><td>${esc(m.date)}</td><td>${esc(m.map)}${m.backup ? "*" : ""}</td><td>${esc(m.opponent)}</td><td>${esc(m.score)}</td><td>${esc(m.kd)}</td><td>${num(m.rating)}</td></tr>`;
+        h += `</tbody></table></div>`;
+      }
+      const bk = hc.backup_source;
+      if (bk || hl?.backup_maps) h += `<div class="small" style="margin-top:6px;color:var(--warn)">* ${bk ? bk.backup_maps : hl.backup_maps} map(s) came from the backup data source (less complete than HLTV; replaced automatically when HLTV data arrives)</div>`;
+      if (hl?.team_mismatch) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(hl.team_mismatch)}</div>`;
+      if (hl?.stale) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(hl.stale)}</div>`;
+      h += `<div class="small muted" style="margin-top:6px">Only Round Swing can affect the grade; the rest is context.</div></section>`;
+    }
+  } catch (e) { console.warn("HLTV card skipped:", e); }
 
   // ---- FACEIT
   h += `<section class="card"><h2>FACEIT form</h2>`;
@@ -432,7 +466,7 @@ function render(d) {
   const flags = [...(g.flags || [])];
   if (v.side && v.p < 0.68) flags.push(`${v.side} is below A- (68%) - near the vig line, no real edge`);
   if (flags.length) h += `<section class="card"><h2>Notes</h2><ul class="flags">${flags.map(f => `<li>${esc(f)}</li>`).join("")}</ul></section>`;
-  h += `<div class="small muted" style="text-align:center">Data: BO3.gg · Polymarket · FACEIT${d.hltv?.found ? " · HLTV" : ""}${d.csapi?.found ? " · CS API" : ""}${d.next_match?.source === "pandascore" ? " · PandaScore" : ""}${d.odds?.book ? " · " + esc(d.odds.book) + " via OddsPapi" : ""}${d.liquipedia ? ` · team from <a href="${esc(d.liquipedia.url)}" target="_blank" rel="noopener">Liquipedia</a> (CC-BY-SA 3.0)` : ""} · Not financial advice</div>`;
+  h += `<div class="small muted" style="text-align:center">Data: BO3.gg · Polymarket · FACEIT${d.hltv?.found || d.hltv_context?.found ? " · HLTV" : ""}${d.csapi?.found ? " · CS API" : ""}${d.next_match?.source === "pandascore" ? " · PandaScore" : ""}${d.odds?.book ? " · " + esc(d.odds.book) + " via OddsPapi" : ""}${d.liquipedia ? ` · team from <a href="${esc(d.liquipedia.url)}" target="_blank" rel="noopener">Liquipedia</a> (CC-BY-SA 3.0)` : ""} · Not financial advice</div>`;
   $("#out").innerHTML = h;
 }
 </script>

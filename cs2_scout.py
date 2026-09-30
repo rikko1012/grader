@@ -823,14 +823,31 @@ def _hltv_swing(pb):
 
 def _attach_hltv(pb):
     """HLTV numbers from the hltv-scraper database (hltv.py). Context, plus the round swing."""
-    if not pb or "hltv" in pb:
-        return
+    if not pb:
+        return   # looked up every grade: hltv.py caches 15 min and short-circuits when the DB is down
     try:
         import hltv
         last = (pb.get("recent_maps") or [{}])[0].get("date")
         pb["hltv"] = hltv.player_numbers((pb.get("player") or {}).get("nick"), pb.get("current_team"), last)
     except Exception as e:   # HLTV data is optional: it can never break a grade
         pb["hltv"] = {"found": False, "error": str(e)[:200]}
+
+
+def _hltv_context(pb, args):
+    """Everything else the HLTV scraper has for this grade (hltv.context). Display only: nothing
+    here reaches grade_leg(), and any failure just leaves the section out."""
+    try:
+        import hltv
+        maps = [m.get("map") for m in pb.get("per_map") or [] if m.get("map")]
+        if not maps and pb.get("map_prediction"):   # no maps given: the most likely Map 1 and Map 2
+            mp = pb["map_prediction"]
+            maps = [next(iter(mp.get(k) or {}), None) for k in ("map1", "map2")]
+            maps = [m for i, m in enumerate(maps) if m and m not in maps[:i]]
+        last = (pb.get("recent_maps") or [{}])[0].get("date")
+        return hltv.context((pb.get("player") or {}).get("nick"), pb.get("current_team"),
+                            getattr(args, "opponent", None), maps, last)
+    except Exception as e:
+        return {"found": False, "error": str(e)[:200]}
 
 
 def grader_inputs(pb, args, odds=None, hh=None):
@@ -1414,6 +1431,7 @@ def finish_line(res, args):
         res["h2h"] = h2h(list(res["_h2h_rows"]), res.get("_h2h_opp"), args.line, stat)
     _attach_hltv(pb)
     res["hltv"] = pb.get("hltv")
+    res["hltv_context"] = _hltv_context(pb, args)
     res["grader_inputs"] = grader_inputs(pb, args, res.get("odds"), res.get("h2h"))
     res["grade"] = grade_leg(res["grader_inputs"])
     try:   # 20,000-run match simulation - display only (weight 0, tested vs the curve)
