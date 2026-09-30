@@ -545,6 +545,10 @@ class Handler(BaseHTTPRequestHandler):
                                  "product": m.get("product_id"),
                                  "grader_allows": whop_auth.has_access(uid, force=True) if uid else None})
                 return self.send(200, {"plan": q.get("plan"), "memberships": rows})
+            if u.path == "/admin/hltv_history" and self.authed(q.get("token")):
+                import hltv
+                items = json.loads(q.get("items") or "[]")[:60]      # [[nick, cutoff, team], ...]
+                return self.send(200, {"rows": [dict(hltv.history(n, c, t), nick=n, cutoff=c) for n, c, t in items]})
             if u.path == "/admin/reopen" and self.authed(q.get("token")):
                 ids = [int(x) for x in (q.get("ids") or "").split(",") if x.strip().isdigit()]
                 picklog.reopen(ids)

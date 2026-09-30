@@ -49,7 +49,10 @@ def dsn():
 
 
 def swing_enabled():
-    return os.environ.get("HLTV_SWING", "1") != "0"
+    # Default OFF (2026-09-30): the swing formula (clamp(swing x 3, +-6%)) made projections LESS
+    # accurate in the 900-case walk-forward (kills miss 6.053 -> 6.112, HS 3.705 -> 3.789, swing from
+    # before each match). Shown on the card; HLTV_SWING=1 turns it on once HLTV's own swing passes.
+    return os.environ.get("HLTV_SWING", "0") == "1"
 
 
 def _norm(s):
@@ -185,6 +188,41 @@ def _player_numbers(nick, team, bo3_last_date):
         except ValueError:
             pass
     return out
+
+
+def history(nick, cutoff, team=None):
+    """Admin/testing: his HLTV window numbers using ONLY maps before `cutoff` (YYYY-MM-DD), same
+    3/6/12-month rule as player_numbers(). Never raises."""
+    from datetime import date, timedelta
+    try:
+        cut = date.fromisoformat(cutoff[:10])
+        con = _connect()
+        try:
+            with con.cursor() as cur:
+                cur.execute(_SQL.replace("current_date", "%(cut)s::date").replace(
+                    "ORDER BY mo.date DESC", "AND mo.date < %(cut)s::date ORDER BY mo.date DESC")
+                    .replace("mo.source", "'hltv'"), {"nick": _norm(nick), "cut": cut.isoformat()})
+                rows = cur.fetchall()
+        finally:
+            con.close()
+    except Exception as e:
+        return {"found": False, "error": f"{type(e).__name__}: {str(e)[:160]}"}
+    if not rows:
+        return {"found": False}
+    by = {}
+    for r in rows:
+        by.setdefault(r[0], []).append(r)
+    pid = max(by, key=lambda k: (bool(team) and _norm(team) in {_norm(r[2]) for r in by[k]}, len(by[k])))
+    rows = by[pid]
+    for months in WINDOWS:
+        total = [r for r in rows if r[5] == "total" and r[3] >= cut - timedelta(days=int(months * 30.4))]
+        if len(total) >= MIN_MAPS:
+            break
+    sw = [r[7] for r in total if r[7] is not None]
+    rt = [r[6] for r in total if r[6] is not None]
+    return {"found": True, "maps": len(total), "swing_maps": len(sw),
+            "round_swing": round(sum(sw) / len(sw), 3) if sw else None,
+            "rating": round(sum(rt) / len(rt), 3) if rt else None}
 
 
 def grade_swing(info):
