@@ -545,6 +545,17 @@ class Handler(BaseHTTPRequestHandler):
                                  "product": m.get("product_id"),
                                  "grader_allows": whop_auth.has_access(uid, force=True) if uid else None})
                 return self.send(200, {"plan": q.get("plan"), "memberships": rows})
+            if u.path == "/admin/hltv_schema" and self.authed(q.get("token")):
+                import hltv
+                con = hltv._connect()
+                try:
+                    with con.cursor() as cur:
+                        cur.execute("""SELECT table_name, string_agg(column_name || ':' || data_type, ', ' ORDER BY ordinal_position)
+                                       FROM information_schema.columns WHERE table_schema = 'public'
+                                       GROUP BY table_name ORDER BY table_name""")
+                        return self.send(200, {"tables": {t: c for t, c in cur.fetchall()}})
+                finally:
+                    con.close()
             if u.path == "/admin/hltv_history" and self.authed(q.get("token")):
                 import hltv
                 items = json.loads(q.get("items") or "[]")[:60]      # [[nick, cutoff, team], ...]
