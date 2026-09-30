@@ -408,6 +408,19 @@ function render(d) {
     h += `</section>`;
   }
 
+  // ---- HLTV (hltv-scraper database): real Rating 3.0 + Round Swing (swing feeds the grade)
+  const hl = d.hltv;
+  if (hl && hl.found) {
+    h += `<section class="card"><h2>HLTV <span class="muted small">· last ${esc(hl.window)} · ${hl.maps} maps</span></h2>
+      <div class="kv"><span>Rating 3.0</span><span>${num(hl.rating)}${hl.ct_rating != null ? ` · CT ${num(hl.ct_rating)} · T ${num(hl.t_rating)}` : ""}</span></div>
+      <div class="kv"><span>Round Swing</span><span>${hl.round_swing != null ? (hl.round_swing > 0 ? "+" : "") + num(hl.round_swing) + "%" : "–"}${hl.use_swing && !hl.team_mismatch ? " · used in grade" : " · context only"}</span></div>
+      <div class="kv"><span>ADR · KAST · K/D</span><span>${num(hl.adr, 1)} · ${num(hl.kast, 1)}% · ${num(hl.kd)}</span></div>
+      <div class="kv"><span>Data up to</span><span>${esc(hl.newest_map || "–")}</span></div>`;
+    if (hl.team_mismatch) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(hl.team_mismatch)}</div>`;
+    if (hl.stale) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(hl.stale)}</div>`;
+    h += `</section>`;
+  }
+
   // ---- FACEIT
   h += `<section class="card"><h2>FACEIT form</h2>`;
   h += fc ? `<div class="kv"><span>Account</span><span>${esc(fc.nickname)} · lvl ${fc.level} · ${fc.elo} elo</span></div>
@@ -419,7 +432,7 @@ function render(d) {
   const flags = [...(g.flags || [])];
   if (v.side && v.p < 0.68) flags.push(`${v.side} is below A- (68%) - near the vig line, no real edge`);
   if (flags.length) h += `<section class="card"><h2>Notes</h2><ul class="flags">${flags.map(f => `<li>${esc(f)}</li>`).join("")}</ul></section>`;
-  h += `<div class="small muted" style="text-align:center">Data: BO3.gg · Polymarket · FACEIT${d.csapi?.found ? " · CS API" : ""}${d.next_match?.source === "pandascore" ? " · PandaScore" : ""}${d.odds?.book ? " · " + esc(d.odds.book) + " via OddsPapi" : ""}${d.liquipedia ? ` · team from <a href="${esc(d.liquipedia.url)}" target="_blank" rel="noopener">Liquipedia</a> (CC-BY-SA 3.0)` : ""} · Not financial advice</div>`;
+  h += `<div class="small muted" style="text-align:center">Data: BO3.gg · Polymarket · FACEIT${d.hltv?.found ? " · HLTV" : ""}${d.csapi?.found ? " · CS API" : ""}${d.next_match?.source === "pandascore" ? " · PandaScore" : ""}${d.odds?.book ? " · " + esc(d.odds.book) + " via OddsPapi" : ""}${d.liquipedia ? ` · team from <a href="${esc(d.liquipedia.url)}" target="_blank" rel="noopener">Liquipedia</a> (CC-BY-SA 3.0)` : ""} · Not financial advice</div>`;
   $("#out").innerHTML = h;
 }
 </script>

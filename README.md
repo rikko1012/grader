@@ -59,7 +59,24 @@ Results print to the screen and save to `output/<player>_<command>_<date>.json`.
 - **FACEIT:** Steam ID from BO3.gg match data -> exact FACEIT account. Falls back to the
   name/teammate check in `faceit_resolve.py`. `show_to_members` is only true when it's certain.
 
-Not available without HLTV: round swing (treated as 0) and the Trading/Firepower support flag.
+Round swing comes from HLTV when the HLTV database is connected (see below); without it, round
+swing is treated as 0. The Trading/Firepower support flag is still not available.
+
+## HLTV data (optional): real Round Swing + Rating 3.0
+[hltv-scraper](https://github.com/rikko1012/hltv-scraper) runs on its own schedule, gets past HLTV's
+Cloudflare check, and writes HLTV match stats into PostgreSQL. `hltv.py` only reads that database,
+so a grade never waits on HLTV.
+
+- Set `HLTV_DB_DSN` to the scraper's database (Railway: `${{Postgres.DATABASE_URL}}`).
+- Each grade then shows an **HLTV** card: Rating 3.0 (CT/T), Round Swing, ADR/KAST/K-D, data date.
+- **Round Swing feeds the grade** (grade_leg's swing multiplier, math unchanged) when the player has
+  10+ HLTV maps in the window (3m -> 6m -> 12m) *and* those maps are for the same team. Otherwise it
+  stays 0 exactly as before. `HLTV_SWING=0` turns it off.
+- Database missing, down, or player unknown = no HLTV card, grade unchanged.
+
+```
+python hltv.py ZywOo Vitality      # what the grader will see for a player
+```
 
 ## Being a good guest
 BO3.gg has no official API or terms, and its robots.txt asks bots to stay out of `/api/`.
