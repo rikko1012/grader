@@ -897,6 +897,7 @@ def grader_inputs(pb, args, odds=None, hh=None):
     d = {
         "prop": args.prop, "line": args.line, "line_type": args.line_type,
         "maps_played": o.get("maps_played"), "kpr": o.get("kpr"), "hs_pct": o.get("hs_pct"),
+        "sample_maps": max((w.get("maps") or 0 for w in (o.get("form_windows") or {}).values()), default=None),
         "kpr_last5": (pb.get("recent_form") or {}).get("kpr_recent"),  # last 10 matches, Maps 1-2
         "round_swing": _hltv_swing(pb),  # HLTV via hltv.py when available, else None (no swing adjustment)
         "per_map": [{"map": m["map"], "kpr": m.get("kpr"), "hs_pct": m.get("hs_pct"), "maps_played": m.get("maps_played")}

@@ -53,6 +53,8 @@ CONFIG = {
     "stomp_ml": -400,            # either side at -400 or heavier (P(win) >= 0.80) = stomp
     "thin_maps": 20,             # under 20 Maps 1-2 = thin data: wider SD, 1U cap
     "map_blend_k": 12,
+    "shrink_k": {"kills": 10, "hs": 30},   # thin-sample pull toward the pro average (tested 2026-09-30)
+    "pop_kpr": 0.672, "pop_hs": 51.5,
     # owner's map HS% adjustments - tested 2026-09-29 on 900 cases (fixed numbers, nothing fitted):
     # HS miss 3.695 -> 3.685, Brier 0.2120 -> 0.2103, grades still calibrated; kills unaffected
     "map_hs_mod": {"de_mirage": .06, "de_inferno": .04, "de_ancient": .03, "de_vertigo": .05,
@@ -245,6 +247,17 @@ def grade_leg(d, cfg=CONFIG):
     hs_pct = d.get("hs_pct")
     if prop == "hs" and hs_pct is None:
         return stop("NO GRADE", "Missing HS% - fetch trigger")
+
+    # Thin samples are pulled toward the pro average by n/(n+k), n = Maps 1-2 in his widest window.
+    # Walk-forward 2026-09-30 (2,300 cases, top + lower tier, fitted on half the teams, scored on
+    # the rest): kills miss 5.908 -> 5.902, HS 3.732 -> 3.711, log-loss better on both tiers.
+    n_s = d.get("sample_maps")
+    k_s = cfg["shrink_k"].get(prop, 0)
+    if n_s and k_s:
+        a = n_s / (n_s + k_s)
+        kpr = a * kpr + (1 - a) * cfg["pop_kpr"]
+        if hs_pct is not None:
+            hs_pct = a * hs_pct + (1 - a) * cfg["pop_hs"]
 
     # Base lambda over Maps 1-2. Map numbers are blended with the overall ones by sample size
     # (weight n/(n+12): 8 maps -> 40%) - one hot series on a map never becomes the projection.
