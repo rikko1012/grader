@@ -356,6 +356,11 @@ class BO3:
             "filter[matches.discipline_id][eq]": "1", "with": "teams,games"}))
 
     # ------------------------------------------------------------ endpoints the wrapper doesn't cover
+    def game_short_stats(self, game_id):
+        """Quick per-map scoreboard (kills_sum, headshots_sum per player) - BO3.gg publishes it right
+        after the match, hours before the full players_stats. Re-checked every 15 minutes."""
+        return self._run(self.cs2._api._make_request(f"/games/{game_id}/short_players_stats"), ttl=0.25)
+
     def game_players_fresh(self, game_id):
         """Re-download one scoreboard now (settling: stats published after a first empty read)."""
         return self._run(self.cs2._api._make_request(f"/games/{game_id}/players_stats"), ttl=0)

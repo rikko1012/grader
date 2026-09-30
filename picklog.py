@@ -88,6 +88,21 @@ def log_grade(res, verdict, test=False):
             con.close()
 
 
+def _quick_rows(b, player_id, mt):
+    """Maps 1-2 kills/headshots from BO3.gg's quick scoreboard (published right after the match)."""
+    out = []
+    for g in sorted((g for g in mt.get("games") or [] if (g.get("number") or 9) <= 2),
+                    key=lambda g: g.get("number") or 0):
+        try:
+            row = next((x for x in b.game_short_stats(g["id"]) or [] if x.get("player_id") == player_id), None)
+        except Exception:
+            row = None
+        if not row or row.get("kills_sum") is None:
+            return []
+        out.append({"map": g.get("map_name"), "kills": row["kills_sum"], "headshots": row.get("headshots_sum") or 0})
+    return out if len(out) == 2 else []
+
+
 def settle(b, map_rows):
     """Fill in actual Maps 1-2 totals for matches that have finished."""
     now = datetime.now(timezone.utc)
@@ -117,6 +132,8 @@ def settle(b, map_rows):
                     except Exception:
                         pass
                 maps = map_rows(b, r["player_id"], [mt], lambda m, g: (g.get("number") or 9) <= 2)
+            if len(maps) < 2:
+                maps = _quick_rows(b, r["player_id"], mt) or maps   # full stats not out yet
             if len(maps) == 2:
                 stat = "headshots" if r["prop"] == "hs" else "kills"
                 actual = sum(x[stat] for x in maps)
