@@ -598,3 +598,53 @@ def settle_totals(nick, team, hltv_match):
     hs = [r["headshots"] for r in m12]
     return {"found": True, "kills": sum(r["kills"] for r in m12),
             "headshots": None if None in hs else sum(hs), "maps": [r["map"] for r in m12]}
+
+
+def match_maps_detail(nick, team, day):
+    """Admin analysis: his HLTV numbers per map for matches on `day` (or the day after - time
+    zones): map number (if the scraper has the order), map, kills, deaths, headshots, rounds, won,
+    margin, ADR, KAST, rating, round swing, CT and T kills. [] when unknown."""
+    if not dsn():
+        return []
+    con = _connect()
+    try:
+        with con.cursor() as cur:
+            ids = _player_ids(cur, nick, team)
+            if not ids:
+                return []
+            cur.execute("""SELECT mo.matchid, mo.date, mp.name, ps.sideid, ps.k, ps.d, ps.adr, ps.kast, ps.rating,
+                                  ps.roundswing, own.score, opp.score, t2.name
+                           FROM player_stats ps
+                           JOIN match_overview mo USING (matchid)
+                           JOIN maps mp USING (mapid)
+                           JOIN matches own ON own.matchid = ps.matchid AND own.teamid = ps.teamid
+                                           AND own.mapid = ps.mapid AND own.sideid = 0
+                           JOIN matches opp ON opp.matchid = ps.matchid AND opp.teamid <> ps.teamid
+                                           AND opp.mapid = ps.mapid AND opp.sideid = 0
+                           JOIN teams t2 ON t2.teamid = opp.teamid
+                           WHERE ps.playerid = ANY(%s) AND ps.mapid <> 0
+                             AND mo.date BETWEEN %s::date - 1 AND %s::date + 1""", (ids, day, day))
+            rows = cur.fetchall()
+            order, hs = {}, {}
+            try:
+                cur.execute("""SELECT mm.matchid, mp.name, mm.number, h.hs FROM match_maps mm JOIN maps mp USING (mapid)
+                               LEFT JOIN map_headshots h ON h.mapstatsid = mm.mapstatsid AND h.playerid = ANY(%s)
+                               WHERE mm.matchid = ANY(%s)""", (ids, list({r[0] for r in rows})))
+                for mid, mname, num, h in cur.fetchall():
+                    order[(mid, mname)] = num
+                    hs[(mid, mname)] = h
+            except Exception:
+                pass
+    finally:
+        con.close()
+    maps = {}
+    for mid, d, mname, side, k, dth, adr, kast, rating, swing, own, opp, oname in rows:
+        m = maps.setdefault((mid, mname), {"match": mid, "date": d.isoformat(), "map": mname, "opponent": oname,
+                                           "number": order.get((mid, mname)), "hs": hs.get((mid, mname)),
+                                           "rounds": (own or 0) + (opp or 0), "won": (own or 0) > (opp or 0),
+                                           "margin": abs((own or 0) - (opp or 0))})
+        if side == 0:
+            m.update(k=k, d=dth, adr=adr, kast=kast, rating=rating, swing=swing)
+        else:
+            m["ct_k" if side == 1 else "t_k"] = k
+    return sorted(maps.values(), key=lambda m: (m["date"], m["match"], m["number"] or 9))

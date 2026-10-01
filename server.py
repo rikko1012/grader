@@ -593,6 +593,16 @@ class Handler(BaseHTTPRequestHandler):
                         return self.send(200, {"matches": rows})
                 finally:
                     con.close()
+            if u.path == "/admin/hltv_maps" and self.authed(q.get("token")):
+                import hltv
+                items = json.loads(q.get("items") or "[]")[:80]      # [[nick, team, day], ...]
+                out = []
+                for n, t, dday in items:
+                    try:
+                        out.append({"nick": n, "team": t, "day": dday, "maps": hltv.match_maps_detail(n, t, dday)})
+                    except Exception as e:
+                        out.append({"nick": n, "team": t, "day": dday, "error": str(e)[:200]})
+                return self.send(200, {"rows": out})
             if u.path == "/admin/hltv_history" and self.authed(q.get("token")):
                 import hltv
                 items = json.loads(q.get("items") or "[]")[:60]      # [[nick, cutoff, team], ...]
