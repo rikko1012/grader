@@ -217,7 +217,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
       <p><b>The maps matter.</b> If the veto is out we use those two maps; if not, we predict them from both teams' recent vetoes and use how the player performs on each.</p>
       <p><b>Match context.</b> Betting markets tell us who is favoured – winning and losing teams put up different numbers. We also check the roster (stand-ins, new teams), how long since his last official match, and how big his sample is. Anything uncertain lowers the stake, not the honesty of the number.</p>
       <p><b>Projection → chance → grade.</b> The projection is compared with the number he actually needs (a 15.5 line needs 16), and turned into a win chance based on how much a player's totals normally swing from match to match.</p>
-      <p><b>Tested before it counts.</b> Every factor was tested on 900+ past matches, using only information available before each one. If it didn't make grades more accurate, it doesn't move the grade – head-to-head, last 10, regional form and the match simulation are shown on the card for context.</p>
+      <p><b>Tested before it counts.</b> Every factor was tested on 900+ past matches, using only information available before each one. Head-to-head and his last 10 matches both nudge the projection, with head-to-head counting a little more. Regional form and the match simulation are shown on the card for context.</p>
       <p><b>What the grades mean</b> (chance the pick wins): A+ 80%+ · A 74%+ · A− 68%+ · B+ 63%+ · B 57%+ · <i>Lean</i> under 57% (no units).<br>
       <b>Units:</b> A+ 2U · A 1.5U · A− 1U · B+ 0.5U · B 0.25U · Lean 0U. Thin markets, small samples, stand-ins and rust cap the units.</p>
       <p class="muted">Grades are probabilities, not guarantees – a 60% pick still loses 4 times in 10. Not financial advice.</p>
@@ -456,7 +456,6 @@ function render(d) {
       <td class="small">${s.maps.map(mapName).join('<span class="dot"> · </span>')}</td><td class="num"><span class="parts">${s.values.join(" + ")} = </span><b>${s.total}</b></td>
       <td>${esc(s.result)}</td><td class="${s.total > g.line ? "hit" : "miss"}">${s.total > g.line ? "Over" : "Under"}</td></tr>`;
     h += `</tbody></table></div>`;
-    if (g.flags?.some(f => f.startsWith("H2H and his last 10"))) h += `<div class="small" style="margin-top:4px;color:var(--warn)">Head-to-head and his last 10 disagree about this line</div>`;
   } else h += `<div class="muted">No previous series found.</div>`;
   h += `</section>`;
 

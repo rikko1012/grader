@@ -356,7 +356,6 @@ _FLAG_RULES = (   # (starts with, member-friendly text or None = not shown)
     ("VETO UNCERTAINTY", "Map veto is hard to predict - extra caution"),
     ("FORM FIGHT", "FORM FIGHT - his recent record at this line disagrees - no units"),
     ("TAPE FIGHT", "TAPE FIGHT - his recent record at this line disagrees - small stake only"),
-    ("H2H vs TAPE", "H2H and his last 10 disagree about this line"),
     ("0 units: SCOUT", "No upcoming match found - scouting view only"),
     ("0 units", None),
 )

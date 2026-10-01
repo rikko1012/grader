@@ -38,8 +38,11 @@ CONFIG = {
     # Weights MEASURED on 900 walk-forward cases (694 with prior H2H): blending either into the
     # projection made it slightly LESS accurate (kills miss 6.07 -> 6.10 each; the 3-month window
     # already contains the last 10). Both are computed and shown on every card at weight 0.
-    "last10_weight": 0.0,        # owner's formula was 0.30 - tested, weight 0
-    "h2h_weight": 0.0,           # owner's formula edge x age x size - tested, weight 0 (shown as "would add")
+    # Owner's decision 2026-09-30: H2H and last 10 both move the projection, H2H more. Walk-forward
+    # (2,300 cases): no weight improved accuracy; at these small weights B+ bets hit the same
+    # (kills 67.4% -> 67.4%, HS 70.1% -> 70.0%), miss +0.006 kills / -0.002 HS. Heavier costs hits.
+    "last10_weight": 0.05,
+    "h2h_weight": 0.10,
     "last10_min": 5,             # need 5+ recent two-map matches to blend
     # 4c (2026-09-28, owner-approved for KILLS props only): trade kills per round. Cross-validated
     # by team on 900 cases: kills miss 6.007 -> 5.976 (same sign in both halves); HS 3.695 -> 3.708
@@ -374,7 +377,7 @@ def grade_leg(d, cfg=CONFIG):
         lam_final += h2h_edge * cfg["h2h_weight"]
         h2h_note = (f"H2H avg {h2h_avg:.1f} over {len(series)} series ({2 * len(series)} maps) - "
                     f"age weight {age_w:.2f}, size weight {size_w:.2f} -> would add {h2h_edge:+.2f} "
-                    f"(applied x{cfg['h2h_weight']:g}: tested, didn't improve accuracy)")
+                    f"(applied x{cfg['h2h_weight']:g})")
 
     # Regional (always, next to exact H2H): his series vs OTHER teams from the opponent's
     # country/region, same age x size formula, its own tested weight
@@ -463,13 +466,6 @@ def grade_leg(d, cfg=CONFIG):
         flags.append("Kills props beat HS props at equal EV")
 
     # units follow P (not the letter); B is display-only
-    # H2H vs TAPE (v7.5): head-to-head and last 10 point opposite ways at this line -> 0U
-    # Tested 2026-09-28 (900 cases, lines near his recent average): picks this rule zeroed hit
-    # 68.4% kills / 68.2% HS - as well as the rest. Shown as a note, weight 0 on units.
-    if h2h_avg is not None and ra is not None and rn >= cfg["last10_min"]:
-        if (h2h_avg > line) != (ra > line):
-            flags.append(f"H2H vs TAPE (note, weight 0 - tested): H2H avg {h2h_avg:.1f} and last-10 "
-                         f"avg {ra} disagree about {line}")
 
     scout = bool(d.get("scout"))
     if scout:
