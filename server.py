@@ -12,6 +12,7 @@ GET /api/grade?player=&line=&prop=kills|hs&line_type=standard|goblin|demon[&slug
 One grade runs at a time (keeps requests to BO3.gg polite). Standard library only.
 """
 import json
+import shutil
 import os
 import sys
 import threading
@@ -555,6 +556,24 @@ class Handler(BaseHTTPRequestHandler):
                         return self.send(200, {"tables": {t: c for t, c in cur.fetchall()}})
                 finally:
                     con.close()
+            if u.path == "/admin/disk" and self.authed(q.get("token")):
+                # private: what takes space on the volume (bytes vs blocks actually allocated)
+                from bo3 import DATA_DIR
+                rows = {}
+                for p in Path(DATA_DIR).rglob("*"):
+                    try:
+                        if p.is_file():
+                            st = p.stat()
+                            top = p.relative_to(DATA_DIR).parts
+                            k = "/".join(top[:2]) if len(top) > 2 else top[0]
+                            r = rows.setdefault(k, [0, 0, 0])
+                            r[0] += 1; r[1] += st.st_size; r[2] += getattr(st, "st_blocks", 0) * 512
+                    except OSError:
+                        pass
+                du = shutil.disk_usage(DATA_DIR)
+                return self.send(200, {"dir": str(DATA_DIR), "total_mb": round(du.total / 1e6), "used_mb": round(du.used / 1e6),
+                                       "parts": sorted(({"path": k, "files": a, "mb": round(b / 1e6, 1), "on_disk_mb": round(c / 1e6, 1)}
+                                                        for k, (a, b, c) in rows.items()), key=lambda x: -x["on_disk_mb"])[:40]})
             if u.path == "/admin/hltv_match" and self.authed(q.get("token")):
                 # private, read-only: a team's HLTV matches on a date + the stored raw page (inspection)
                 import gzip as _gz, hltv
