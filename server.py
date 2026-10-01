@@ -555,6 +555,25 @@ class Handler(BaseHTTPRequestHandler):
                         return self.send(200, {"tables": {t: c for t, c in cur.fetchall()}})
                 finally:
                     con.close()
+            if u.path == "/admin/hltv_match" and self.authed(q.get("token")):
+                # private, read-only: a team's HLTV matches on a date + the stored raw page (inspection)
+                import gzip as _gz, hltv
+                con = hltv._connect()
+                try:
+                    with con.cursor() as cur:
+                        cur.execute("""SELECT DISTINCT mo.matchid, mo.event, mo.date FROM match_overview mo
+                                       JOIN matches m USING (matchid) JOIN teams t ON t.teamid = m.teamid
+                                       WHERE lower(t.name) = lower(%s) AND mo.date = %s ORDER BY mo.matchid""",
+                                    (q.get("team", ""), q.get("date", "")))
+                        rows = [{"matchid": a, "event": b, "date": str(c)} for a, b, c in cur.fetchall()]
+                        for r in rows:
+                            cur.execute("SELECT url, html_gz FROM raw_pages WHERE matchid = %s", (r["matchid"],))
+                            pg = cur.fetchall()
+                            r["pages"] = [{"url": u_, "html": _gz.decompress(bytes(h)).decode("utf-8", "replace")
+                                           if q.get("html") else None, "bytes": len(h or b"")} for u_, h in pg]
+                        return self.send(200, {"matches": rows})
+                finally:
+                    con.close()
             if u.path == "/admin/hltv_history" and self.authed(q.get("token")):
                 import hltv
                 items = json.loads(q.get("items") or "[]")[:60]      # [[nick, cutoff, team], ...]
