@@ -515,3 +515,86 @@ if __name__ == "__main__":
     maps = sys.argv[4].split(",") if len(sys.argv) > 4 else ()
     print(json.dumps({"numbers": player_numbers(nick, team), "context": context(nick, team, opp, maps)},
                      indent=2, default=str))
+
+
+# ---------------------------------------------------------------- Maps 1-2 series (form + settling)
+# Needs the scraper's match_maps (map order) and map_headshots tables; on an older scraper database
+# these return [] / None and nothing changes.
+_SERIES_SQL = """
+SELECT mo.matchid, mo.date, mm.number, mp.name, ps.k, h.hs, own.score, opp.score, t2.name, t.name
+FROM match_maps mm
+JOIN match_overview mo USING (matchid)
+JOIN maps mp ON mp.mapid = mm.mapid
+JOIN player_stats ps ON ps.matchid = mm.matchid AND ps.mapid = mm.mapid AND ps.sideid = 0
+JOIN teams t ON t.teamid = ps.teamid
+JOIN matches own ON own.matchid = mm.matchid AND own.teamid = ps.teamid AND own.mapid = mm.mapid AND own.sideid = 0
+JOIN matches opp ON opp.matchid = mm.matchid AND opp.teamid <> ps.teamid AND opp.mapid = mm.mapid AND opp.sideid = 0
+JOIN teams t2 ON t2.teamid = opp.teamid
+LEFT JOIN map_headshots h ON h.mapstatsid = mm.mapstatsid AND h.playerid = ps.playerid
+WHERE ps.playerid = ANY(%(ids)s) AND mm.number <= 2 AND mo.date >= %(since)s {extra}
+ORDER BY mo.date DESC, mo.matchid DESC, mm.number
+"""
+
+
+def _series_rows(cur, ids, since, extra="", params=None):
+    cur.execute(_SERIES_SQL.format(extra=extra), dict(params or {}, ids=ids, since=since))
+    by_match = {}
+    for mid, d, num, mname, k, hs, own, opp, oname, tname in cur.fetchall():
+        by_match.setdefault(mid, []).append({
+            "match_id": f"hltv-{mid}", "hltv_match": mid, "date": d.isoformat(), "number": num,
+            "map": "de_" + _norm(mname), "kills": k, "headshots": hs, "rounds": (own or 0) + (opp or 0),
+            "won": (own or 0) > (opp or 0), "opponent": oname, "team": tname, "source": "hltv"})
+    return [m for maps in by_match.values() if {x["number"] for x in maps} >= {1, 2} for m in maps]
+
+
+def recent_series(nick, team=None, since=None):
+    """His HLTV Maps 1-2 (both maps known) on or after `since` (YYYY-MM-DD), as map rows shaped like
+    BO3.gg's (match_id 'hltv-<id>', number, map, kills, headshots - None until the scraper has read
+    the map-stats page -, rounds, won, opponent). [] on any problem. Cached 15 minutes."""
+    if not dsn() or not nick or not since:
+        return []
+    key = ("series", _norm(nick), _norm(team), since)
+    with _LOCK:
+        hit = _CACHE.get(key)
+        if hit and time.time() - hit[0] < TTL:
+            return hit[1]
+    try:
+        con = _connect()
+    except Exception:
+        return []
+    try:
+        with con.cursor() as cur:
+            ids = _player_ids(cur, nick, team)
+            out = _series_rows(cur, ids, since) if ids else []
+    except Exception:
+        out = []
+    finally:
+        con.close()
+    with _LOCK:
+        _CACHE[key] = (time.time(), out)
+    return out
+
+
+def settle_totals(nick, team, hltv_match):
+    """Maps 1-2 kills and headshots for one HLTV match: {"kills", "headshots" (None until read),
+    "found"}. Not cached: used by the pick log's settle."""
+    if not dsn():
+        return {"found": False}
+    try:
+        con = _connect()
+    except Exception:
+        return {"found": False}
+    try:
+        with con.cursor() as cur:
+            ids = _player_ids(cur, nick, team)
+            rows = _series_rows(cur, ids, "2000-01-01", "AND mo.matchid = %(mid)s", {"mid": int(hltv_match)}) if ids else []
+    except Exception:
+        rows = []
+    finally:
+        con.close()
+    if not rows:
+        return {"found": False}
+    m12 = sorted(rows, key=lambda r: r["number"])[:2]
+    hs = [r["headshots"] for r in m12]
+    return {"found": True, "kills": sum(r["kills"] for r in m12),
+            "headshots": None if None in hs else sum(hs), "maps": [r["map"] for r in m12]}

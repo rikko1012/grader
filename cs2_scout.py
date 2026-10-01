@@ -336,12 +336,15 @@ def recent_form(rows, window_kpr, line=None, stat="kills"):
         if len(maps) < 2:
             continue  # BO1s and forfeits have no Map 2
         m12 = maps[:2]
+        if any(m[stat] is None for m in m12):
+            continue  # HLTV series whose headshots the scraper hasn't read yet
         out_series.append({"date": m12[0]["date"], "opponent": m12[0]["opponent"],
+                           "source": "HLTV" if m12[0].get("source") == "hltv" else None,
                            "maps": [m["map"] for m in m12], "values": [m[stat] for m in m12],
                            "total": sum(m[stat] for m in m12), "rounds": sum(m["rounds"] for m in m12),
                            "result": {2: "W", 1: "split", 0: "L"}[sum(m["won"] for m in m12)]})
     out_series.sort(key=lambda s: s["date"], reverse=True)
-    kr = [r for r in rows if r["rounds"] and len(series[r["match_id"]]) >= 2]
+    kr = [r for r in rows if r["rounds"] and r["kills"] is not None and len(series[r["match_id"]]) >= 2]
     if not kr or not window_kpr:
         return {"matches": len(out_series), "series": out_series}
     kpr = sum(r["kills"] for r in kr) / sum(r["rounds"] for r in kr)
@@ -1330,7 +1333,8 @@ def run(args, res, b, ttl):
                 pm, src = {"team": mine, "opponent": m["opponent"],
                            "start": m["start"].strftime("%Y-%m-%dT%H:%M:%SZ"),
                            "title": f"{mine} vs {m['opponent']}{' (' + m['format'].upper() + ')' if m['format'] else ''}"
-                                    f"{' - ' + m['event'] if m['event'] else ''}"}, "HLTV"
+                                    f"{' - ' + m['event'] if m['event'] else ''}",
+                           "hltv_match": (re.search(r"/matches/(\d+)", m.get("url") or "") or [None, None])[1]}, "HLTV"
             # BO3.gg doesn't have the match (smaller events, e.g. CIS LAN): use Polymarket's
             # pre-match listing - by his team's exact name, or by the opponent the member typed
             for tname in ([n for n in teams.values() if n] if not member_opp and not pm else []):
@@ -1366,7 +1370,8 @@ def run(args, res, b, ttl):
             if pm:
                 nxt = {"start": pm.get("start"), "slug": None, "opponent": pm["opponent"],
                        "event": pm.get("title"), "maps": [], "source": src.lower(),
-                       "opponent_id": None, "opponent_slug": None}
+                       "opponent_id": None, "opponent_slug": None,
+                       "hltv_match": pm.get("hltv_match")}   # logged + settled from HLTV (picklog)
                 pb["playing_for"] = pm["team"]
                 if no_team or norm(pm["team"]) != norm(pb.get("current_team") or ""):
                     pb["current_team"] = pm["team"]
@@ -1476,13 +1481,41 @@ def run(args, res, b, ttl):
         finish_line(res, args)
 
 
+def _form_rows(pb):
+    """BO3.gg's recent Maps 1-2 rows plus newer series only HLTV has (events BO3.gg doesn't cover,
+    e.g. CIS LANs), newest first, RECENT_MATCHES series in total. Kept out of pb["recent_maps"]:
+    team / stand-in checks rely on BO3.gg's team ids there."""
+    rows = list(pb.get("recent_maps") or [])
+    try:
+        import hltv
+        since = rows[0]["date"] if rows else (date.today() - timedelta(days=120)).isoformat()
+        extra = [r for r in hltv.recent_series((pb.get("player") or {}).get("nick"), pb.get("current_team"), since)
+                 if not any(x["date"] == r["date"] and (name_match(r["opponent"], x["opponent"] or "")
+                                                        or name_match(x["opponent"] or "", r["opponent"]))
+                            for x in rows)]
+    except Exception:
+        extra = []
+    if not extra:
+        return rows
+    newest = max(r["date"] for r in extra)
+    if not rows or newest > rows[0]["date"]:
+        pb["days_since_last_map"] = (date.today() - date.fromisoformat(newest)).days
+    merged = sorted(extra + rows, key=lambda r: (r["date"], str(r["match_id"])), reverse=True)
+    keep = []
+    for r in merged:
+        if r["match_id"] not in keep:
+            keep.append(r["match_id"])
+    keep = set(keep[:RECENT_MATCHES])
+    return [r for r in merged if r["match_id"] in keep]
+
+
 def finish_line(res, args):
     """The only part of a grade that depends on the line / prop: last-10 vs the line, H2H hit
     rates, grader inputs, the grade, the simulation. Everything else is shared context."""
     pb = res.get("player_block") or {}
     stat = "headshots" if args.prop == "hs" else "kills"
     if pb.get("recent_maps") is not None:
-        pb["recent_form"] = recent_form(pb["recent_maps"], pb.get("_rf_kpr"), args.line, stat)
+        pb["recent_form"] = recent_form(_form_rows(pb), pb.get("_rf_kpr"), args.line, stat)
     if res.get("_h2h_rows") is not None:
         res["h2h"] = h2h(list(res["_h2h_rows"]), res.get("_h2h_opp"), args.line, stat)
     _attach_hltv(pb)

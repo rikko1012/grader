@@ -50,8 +50,10 @@ def log_grade(res, verdict, test=False):
     """Log a member's graded line. Returns the row id (or None when it isn't a wager).
     test=True (owner's load tests) is stored but left out of the report."""
     g, pb, nm = res.get("grade") or {}, res.get("player_block") or {}, res.get("next_match") or {}
-    if not verdict or verdict.get("state") != "GRADE" or "p_more" not in g or not nm.get("slug"):
+    slug = nm.get("slug") or (f"hltv-{nm['hltv_match']}" if nm.get("hltv_match") else None)
+    if not verdict or verdict.get("state") != "GRADE" or "p_more" not in g or not slug:
         return None
+    nm = dict(nm, slug=slug)   # matches only HLTV has are logged as hltv-<HLTV match id>
     rf = pb.get("recent_form") or {}
     key = "|".join(str(x) for x in (pb["player"]["slug"], g["prop"], g["line"], g["line_type"], nm["slug"]))
     row = {
@@ -118,6 +120,18 @@ def settle(b, map_rows):
             continue
         if now < start + timedelta(hours=SETTLE_AFTER_H):
             continue
+        if (r["match_slug"] or "").startswith("hltv-"):
+            upd = _settle_hltv(r, now, start)
+            if upd is None:
+                continue
+            with _LOCK:
+                con = _db()
+                con.execute("UPDATE picks SET status=?, actual_maps=?, actual=?, hit=?, settled_at=? WHERE id=?",
+                            (*upd, now.isoformat(timespec="seconds"), r["id"]))
+                con.commit()
+                con.close()
+            done += 1
+            continue
         # fresh list (15 min): a 12-hour-old copy still shows finished matches as upcoming
         ms = b.player_matches(r["player_id"], pages=1, ttl=0.25).get("results") or []
         mt = next((m for m in ms if m.get("slug") == r["match_slug"]), None)
@@ -160,6 +174,24 @@ def settle(b, map_rows):
                 con.close()
             done += 1
     return done
+
+
+def _settle_hltv(r, now, start):
+    """A match only HLTV has: Maps 1-2 kills / headshots from the hltv-scraper database.
+    None = not yet (stats or headshots not scraped); void after VOID_AFTER_D days without them."""
+    try:
+        import hltv
+        tot = hltv.settle_totals(r["player"], r["team"], int(r["match_slug"].split("-", 1)[1]))
+    except Exception:
+        tot = {"found": False}
+    actual = tot.get("headshots" if r["prop"] == "hs" else "kills") if tot.get("found") else None
+    if actual is None:
+        return ("void", None, None, None) if now > start + timedelta(days=VOID_AFTER_D) else None
+    maps = json.dumps(tot.get("maps"))
+    if actual == r["line"]:
+        return ("push", maps, actual, None)
+    hit = actual > r["line"] if r["pick"] == "More" else actual < r["line"]
+    return ("settled", maps, actual, int(hit))
 
 
 def set_closing(pick_id, closing):

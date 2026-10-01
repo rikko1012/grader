@@ -440,7 +440,7 @@ function render(d) {
   if (rf.series?.length) {
     h += chart(rf.series, g.line, g.lambda_final);
     h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th>Maps 1–2</th><th class="num">${g.prop === "hs" ? "HS" : "Kills"}</th><th>Result</th><th></th></tr></thead><tbody>`;
-    for (const s of rf.series) h += `<tr><td class="num" style="text-align:left">${shortDate(s.date)}</td><td>${esc(s.opponent)}</td>
+    for (const s of rf.series) h += `<tr><td class="num" style="text-align:left">${shortDate(s.date)}</td><td>${esc(s.opponent)}${s.source ? ` <span class="pill" title="Match from HLTV (BO3.gg does not have it)">${esc(s.source)}</span>` : ""}</td>
       <td class="small">${s.maps.map(mapName).join('<span class="dot"> · </span>')}</td><td class="num"><span class="parts">${s.values.join(" + ")} = </span><b>${s.total}</b></td>
       <td>${esc(s.result)}</td><td class="${s.total > g.line ? "hit" : "miss"}">${s.total > g.line ? "Over" : "Under"}</td></tr>`;
     h += `</tbody></table></div><div class="small muted" style="margin-top:8px">Average ${rf.avg_total} · median ${rf.median_total} ${stat} on Maps 1–2</div>`;
