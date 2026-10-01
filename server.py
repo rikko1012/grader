@@ -317,7 +317,7 @@ def verdict(g):
         grade = "LEAN"
     return {"side": side, "state": "GRADE", "grade": grade, "p": p, "units": units, "reason": why,
             "market": g.get("market_quality"),
-            "confidence": "high" if p >= 0.68 else "medium" if p >= 0.63 else "low"}
+            "confidence": "high" if p >= 0.68 else "medium" if p >= 0.63 else "small" if p >= 0.57 else "low"}
 
 
 def public(res):
