@@ -38,11 +38,16 @@ CONFIG = {
     # Weights MEASURED on 900 walk-forward cases (694 with prior H2H): blending either into the
     # projection made it slightly LESS accurate (kills miss 6.07 -> 6.10 each; the 3-month window
     # already contains the last 10). Both are computed and shown on every card at weight 0.
-    # Owner's decision 2026-09-30: H2H and last 10 both move the projection, H2H more. Walk-forward
-    # (2,300 cases): no weight improved accuracy; at these small weights B+ bets hit the same
-    # (kills 67.4% -> 67.4%, HS 70.1% -> 70.0%), miss +0.006 kills / -0.002 HS. Heavier costs hits.
-    "last10_weight": 0.05,
+    # Last 10 = 0.5 since 2026-10-01: on members' real PrizePicks lines (209 props, 3 days) the
+    # last-10 average was the strongest signal - its side alone hit 126/205; held out day by day,
+    # w 0.05 -> 0.5 took bets from 47% to 62% (Sep 29 5/12 -> 7/11, Sep 30 11/28 -> 11/24,
+    # Oct 1 24/45 -> 34/49) and log-loss 0.705 -> 0.683. (The walk-forward had rejected it because
+    # its lines were set at the recent average itself.) H2H: owner's decision 2026-09-30.
+    "last10_weight": 0.5,
     "h2h_weight": 0.10,
+    # Predicted maps (veto not out) are off since 2026-10-01: the top Map 1 pick was right 17/106
+    # on members' props - chance level - so they only added noise. All-maps numbers instead.
+    "use_predicted_maps": False,
     "last10_min": 5,             # need 5+ recent two-map matches to blend
     # 4c (2026-09-28, owner-approved for KILLS props only): trade kills per round. Cross-validated
     # by team on 900 cases: kills miss 6.007 -> 5.976 (same sign in both halves); HS 3.695 -> 3.708
@@ -281,7 +286,7 @@ def grade_leg(d, cfg=CONFIG):
         if not n:
             flags.append(f"{m.get('map')}: no Maps 1-2 on this map in the window - using all-maps numbers")
         parts.append((m.get("map"), mk, mh))
-    if not parts and d.get("map_probs"):              # veto not done: expected value over predicted maps
+    if not parts and d.get("map_probs") and cfg.get("use_predicted_maps", True):   # veto not done
         ms = d.get("map_stats") or {}
         for slot, probs in enumerate(d["map_probs"][:2], 1):
             tot = sum(probs.values()) or 1
