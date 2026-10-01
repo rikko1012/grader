@@ -393,7 +393,7 @@ function render(d) {
     <div class="stats" style="margin-top:10px">
       <div class="stat"><div class="k">Projection</div><div class="v">${num(g.lambda_final,1)}</div><div class="n">${stat}, Maps 1–2</div></div>
       <div class="stat"><div class="k">Line</div><div class="v">${g.line}</div><div class="n">needs ${g.line + 0.5} for More</div></div>
-      <div class="stat"><div class="k">Team win chance</div><div class="v">${det.p_win != null ? pct(det.p_win,0) : "–"}</div><div class="n">from betting markets</div></div>
+      <div class="stat"><div class="k">Team win chance</div><div class="v">${det.p_win != null ? pct(det.p_win,0) : "–"}</div><div class="n">${g.market_quality === "NO MARKET" ? "no odds found – treated as even" : "from betting markets"}</div></div>
       <div class="stat ${g.lambda_final - g.line - 0.5 > 0 ? "up" : "down"}"><div class="k">Edge</div><div class="v">${(g.lambda_final - g.line - 0.5 > 0 ? "+" : "") + (g.lambda_final - g.line - 0.5).toFixed(1)}</div><div class="n">projection − ${g.line + 0.5} needed</div></div>
       <div class="stat"><div class="k">Last 10</div><div class="v">${pb.recent_form?.avg_total ?? "–"}</div><div class="n">median ${pb.recent_form?.median_total ?? "–"} · ${pb.recent_form?.overs ?? "–"}/${pb.recent_form?.matches ?? "–"} over</div></div>
     </div>`;
