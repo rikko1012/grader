@@ -39,7 +39,8 @@ from pathlib import Path
 
 import requests
 
-from bo3 import BO3, _read as bo3_read, _write as bo3_write
+from bo3 import BO3
+import kvstore
 from faceit_resolve import Resolver
 from grader import CONFIG as GRADER_CONFIG, grade_leg
 from polymarket import match_odds, name_match
@@ -81,26 +82,25 @@ def norm(s):
 
 
 def cache_get(key, ttl_hours):
-    p = CACHE_DIR / (hashlib.sha1(key.encode()).hexdigest() + ".json.gz")
-    try:
-        if ttl_hours > 0 and time.time() - p.stat().st_mtime < ttl_hours * 3600:
-            return bo3_read(p)
-    except OSError:
-        pass
-    return None
+    if ttl_hours <= 0:
+        return None
+    got = kvstore.get("misc", hashlib.sha1(key.encode()).hexdigest())
+    return got[1] if got and time.time() - got[0] < ttl_hours * 3600 else None
 
 
 def cache_put(key, value):
-    bo3_write(CACHE_DIR / (hashlib.sha1(key.encode()).hexdigest() + ".json.gz"), value)   # gzip, atomic, never fatal
+    kvstore.put("misc", hashlib.sha1(key.encode()).hexdigest(), value)   # packed cache, never fatal
 
 
 def prune_misc(keep_days=7):
-    """FACEIT/odds answers: delete anything older than keep_days, old-format files, temp files."""
-    freed, now = 0, time.time()
+    """FACEIT/odds answers: drop anything older than keep_days; old-format answer files and temp
+    files. (Other files in .cache - CS API checks, Liquipedia, warm list - are left alone.)"""
+    freed, now = kvstore.prune("misc", keep_days), time.time()
     if CACHE_DIR.exists():
         for p in CACHE_DIR.iterdir():
             try:
-                if p.is_file() and (p.suffix in (".tmp", ".json") or now - p.stat().st_mtime > keep_days * 86400):
+                if p.is_file() and (p.suffix == ".tmp" or (p.name.endswith(".json.gz")
+                                                          and now - p.stat().st_mtime > keep_days * 86400)):
                     freed += p.stat().st_size
                     p.unlink()
             except OSError:

@@ -761,6 +761,14 @@ th{{color:#8b95a8}}input{{background:#1a2130;color:#e8ecf3;border:1px solid #252
 
 if __name__ == "__main__":
     threading.Thread(target=warm_start, daemon=True, name="warm-start").start()
+    def _pack_cache():   # one-time: old per-file cache -> one packed file (same data, ~1/3 the disk)
+        try:
+            import kvstore
+            n = kvstore.migrate()
+            STORAGE["migrated_files"] = n
+        except Exception:
+            traceback.print_exc()
+    threading.Thread(target=_pack_cache, daemon=True, name="pack-cache").start()
     if PRELOAD:
         threading.Thread(target=preload_forever, daemon=True, name="preload").start()   # cleans up first
     else:

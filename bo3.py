@@ -25,6 +25,7 @@ import time
 from pathlib import Path
 
 from cs2api import CS2
+import kvstore
 
 # CS2_DATA_DIR = persistent storage on the host (e.g. a Railway volume); defaults to this folder
 DATA_DIR = Path(os.environ.get("CS2_DATA_DIR") or Path(__file__).resolve().parent)
@@ -130,8 +131,13 @@ def _write(path, data):
 
 
 def prune():
-    """Free space: delete temp files and anything unused for KEEP_DAYS (map scoreboards:
-    KEEP_GAME_DAYS), and shrink files saved in the old uncompressed format."""
+    """Free space: answers older than KEEP_DAYS (map scoreboards: KEEP_GAME_DAYS) leave the packed
+    cache (kvstore); then the old per-file cache below, until migrate() has emptied it."""
+    freed = kvstore.prune("bo3", KEEP_DAYS) + kvstore.prune("games", KEEP_GAME_DAYS)
+    return freed + _prune_files()
+
+
+def _prune_files():
     freed, now = 0, time.time()
     if not CACHE_DIR.exists():
         return 0
@@ -174,7 +180,7 @@ def storage_report():
                 files += 1
                 total += p.stat().st_size
     du = shutil.disk_usage(DATA_DIR)
-    return {"cache_mb": round(total / 1e6, 1), "cache_files": files,
+    return {"packed_cache": kvstore.report(), "old_cache_mb": round(total / 1e6, 1), "old_cache_files": files,
             "disk_used_pct": round(100 * du.used / du.total, 1), "disk_free_mb": round(du.free / 1e6)}
 HONEST_HEADERS = {
     "accept": "application/json",
@@ -229,27 +235,23 @@ class BO3:
     # ------------------------------------------------------------ plumbing
     async def _request(self, endpoint, params=None):
         key = endpoint + "?" + json.dumps(params or {}, sort_keys=True, default=str)
-        folder = GAMES_DIR if GAME_ENDPOINT.match(endpoint) else CACHE_DIR
-        path = folder / (hashlib.sha1(key.encode()).hexdigest() + ".json.gz")
+        bucket = "games" if GAME_ENDPOINT.match(endpoint) else "bo3"
+        name = hashlib.sha1(key.encode()).hexdigest()
         ttl = self._ttl_now
-        try:
-            fresh = ttl > 0 and time.time() - path.stat().st_mtime < ttl * 3600
-        except OSError:
-            fresh = False
         forever = ttl >= FOREVER
         if forever and key in _MEM:
             return _MEM[key]
         hit = _TMEM.get(key) if ttl > 0 else None       # changing data (schedules, rosters): memory
         if hit and time.time() - hit[0] < ttl * 3600:   # copy until it expires - no disk read
             return hit[1]
-        if fresh:
-            data = _read(path)
-            if data is not None:
-                if forever and len(_MEM) < _MEM_MAX:
-                    _MEM[key] = data
-                elif not forever:
-                    _tmem_put(key, data, path.stat().st_mtime)
-                return data
+        got = kvstore.get(bucket, name) if ttl > 0 else None
+        if got and time.time() - got[0] < ttl * 3600:
+            at, data = got
+            if forever and len(_MEM) < _MEM_MAX:
+                _MEM[key] = data
+            elif not forever:
+                _tmem_put(key, data, at)
+            return data
         while self.background and _members_active[0] > 0:
             await asyncio.sleep(0.5)                    # a member is waiting - step aside
         # Fair turns: each look-up holds at most 2 places in the shared queue, so a small grade
@@ -268,7 +270,7 @@ class BO3:
                 await asyncio.sleep(10 * (attempt + 1))
         self.requests += 1
         data = slim(endpoint, data)
-        _write(path, data)
+        kvstore.put(bucket, name, data)
         if forever and len(_MEM) < _MEM_MAX:
             _MEM[key] = data
         elif not forever:
