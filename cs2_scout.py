@@ -1481,24 +1481,46 @@ def run(args, res, b, ttl):
         finish_line(res, args)
 
 
-def _form_rows(pb):
-    """BO3.gg's recent Maps 1-2 rows plus newer series only HLTV has (events BO3.gg doesn't cover,
-    e.g. CIS LANs), newest first, RECENT_MATCHES series in total. Kept out of pb["recent_maps"]:
-    team / stand-in checks rely on BO3.gg's team ids there."""
+def _form_rows(pb, stat="kills"):
+    """His recent Maps 1-2 rows, newest first, RECENT_MATCHES series in total: BO3.gg's, with HLTV's
+    numbers swapped in for every match HLTV also has (HLTV is the official record - BO3.gg's quick
+    scoreboards and map order are sometimes off), plus series only HLTV has (events BO3.gg doesn't
+    cover, e.g. CIS LANs). Kept out of pb["recent_maps"]: team / stand-in checks use BO3.gg's ids."""
     rows = list(pb.get("recent_maps") or [])
     try:
         import hltv
-        since = rows[0]["date"] if rows else (date.today() - timedelta(days=120)).isoformat()
-        extra = [r for r in hltv.recent_series((pb.get("player") or {}).get("nick"), pb.get("current_team"), since)
-                 if not any(x["date"] == r["date"] and (name_match(r["opponent"], x["opponent"] or "")
-                                                        or name_match(x["opponent"] or "", r["opponent"]))
-                            for x in rows)]
+        since = (min(r["date"] for r in rows) if rows else (date.today() - timedelta(days=120)).isoformat())
+        since = (date.fromisoformat(since) - timedelta(days=1)).isoformat()
+        hl = hltv.recent_series((pb.get("player") or {}).get("nick"), pb.get("current_team"), since)
     except Exception:
-        extra = []
+        hl = []
+    if not hl:
+        return rows
+    by_match = {}
+    for r in hl:
+        by_match.setdefault(r["match_id"], []).append(r)
+
+    def same(h, x):
+        try:
+            near = abs((date.fromisoformat(h["date"]) - date.fromisoformat(x["date"])).days) <= 1
+        except ValueError:
+            return False
+        return near and (name_match(h["opponent"], x["opponent"] or "") >= 2 or name_match(x["opponent"] or "", h["opponent"]) >= 2)
+
+    extra = []
+    for mid, hrows in by_match.items():
+        usable = all(r[stat] is not None for r in hrows)
+        twin = {x["match_id"] for x in rows if same(hrows[0], x)}
+        if twin:
+            if usable:                                   # HLTV's numbers replace BO3.gg's for this match
+                rows = [x for x in rows if x["match_id"] not in twin]
+                extra += hrows
+        elif usable or stat == "kills":
+            extra += hrows                               # a match only HLTV has
     if not extra:
         return rows
     newest = max(r["date"] for r in extra)
-    if not rows or newest > rows[0]["date"]:
+    if not rows or newest > max(r["date"] for r in rows):
         pb["days_since_last_map"] = (date.today() - date.fromisoformat(newest)).days
     merged = sorted(extra + rows, key=lambda r: (r["date"], str(r["match_id"])), reverse=True)
     keep = []
@@ -1515,7 +1537,7 @@ def finish_line(res, args):
     pb = res.get("player_block") or {}
     stat = "headshots" if args.prop == "hs" else "kills"
     if pb.get("recent_maps") is not None:
-        pb["recent_form"] = recent_form(_form_rows(pb), pb.get("_rf_kpr"), args.line, stat)
+        pb["recent_form"] = recent_form(_form_rows(pb, stat), pb.get("_rf_kpr"), args.line, stat)
     if res.get("_h2h_rows") is not None:
         res["h2h"] = h2h(list(res["_h2h_rows"]), res.get("_h2h_opp"), args.line, stat)
     _attach_hltv(pb)

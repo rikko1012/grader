@@ -648,3 +648,32 @@ def match_maps_detail(nick, team, day):
         else:
             m["ct_k" if side == 1 else "t_k"] = k
     return sorted(maps.values(), key=lambda m: (m["date"], m["match"], m["number"] or 9))
+
+
+def settle_by_day(nick, team, day, opponent):
+    """HLTV's Maps 1-2 totals for his match on `day` (+-1 day, time zones) against `opponent`
+    (HLTV is the official record - preferred over BO3.gg when both have the match).
+    {"found": False} when HLTV doesn't have it; kills/headshots None until scraped."""
+    if not dsn():
+        return {"found": False}
+    try:
+        con = _connect()
+    except Exception:
+        return {"found": False}
+    try:
+        with con.cursor() as cur:
+            ids = _player_ids(cur, nick, team)
+            rows = _series_rows(cur, ids, "2000-01-01", "AND mo.date BETWEEN %(d)s::date - 1 AND %(d)s::date + 1",
+                                {"d": day}) if ids else []
+    except Exception:
+        rows = []
+    finally:
+        con.close()
+    on = [r for r in rows if not opponent or _norm(opponent) in _norm(r["opponent"]) or _norm(r["opponent"]) in _norm(opponent)]
+    if not on:
+        return {"found": False}
+    mid = on[0]["hltv_match"]
+    m12 = sorted((r for r in on if r["hltv_match"] == mid), key=lambda r: r["number"])[:2]
+    hs = [r["headshots"] for r in m12]
+    return {"found": True, "hltv_match": mid, "kills": sum(r["kills"] for r in m12),
+            "headshots": None if None in hs else sum(hs), "maps": [r["map"] for r in m12]}

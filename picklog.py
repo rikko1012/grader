@@ -132,6 +132,20 @@ def settle(b, map_rows):
                 con.close()
             done += 1
             continue
+        # HLTV first - the official record (BO3.gg's quick scoreboards and map order are sometimes off)
+        hv = _hltv_totals(r)
+        if hv == "wait" and now < start + timedelta(hours=HLTV_WAIT_H):
+            continue          # HLTV has the match but not this stat yet (scraped every ~2 h)
+        if isinstance(hv, tuple):
+            upd = hv
+            with _LOCK:
+                con = _db()
+                con.execute("UPDATE picks SET status=?, actual_maps=?, actual=?, hit=?, settled_at=? WHERE id=?",
+                            (*upd, now.isoformat(timespec="seconds"), r["id"]))
+                con.commit()
+                con.close()
+            done += 1
+            continue
         # fresh list (15 min): a 12-hour-old copy still shows finished matches as upcoming
         ms = b.player_matches(r["player_id"], pages=1, ttl=0.25).get("results") or []
         mt = next((m for m in ms if m.get("slug") == r["match_slug"]), None)
@@ -174,6 +188,50 @@ def settle(b, map_rows):
                 con.close()
             done += 1
     return done
+
+
+HLTV_WAIT_H = 12   # HLTV has the match but not its headshots yet: wait this long before BO3.gg
+
+
+def _outcome(r, actual, maps):
+    if actual == r["line"]:
+        return ("push", json.dumps(maps), actual, None)
+    hit = actual > r["line"] if r["pick"] == "More" else actual < r["line"]
+    return ("settled", json.dumps(maps), actual, int(hit))
+
+
+def _hltv_totals(r):
+    """HLTV's Maps 1-2 result for a pick: an update tuple, "wait" (match there, stat not yet), or None."""
+    try:
+        import hltv
+        tot = hltv.settle_by_day(r["player"], r["team"], (r["match_start"] or "")[:10], r["opponent"])
+    except Exception:
+        return None
+    if not tot.get("found"):
+        return None
+    actual = tot.get("headshots" if r["prop"] == "hs" else "kills")
+    return "wait" if actual is None else _outcome(r, actual, tot.get("maps"))
+
+
+def recheck_with_hltv():
+    """Admin: re-settle already-settled picks from HLTV where HLTV has the match (corrects BO3.gg).
+    Returns the rows that changed."""
+    with _LOCK:
+        con = _db()
+        rows = con.execute("SELECT * FROM picks WHERE status IN ('settled', 'push')").fetchall()
+        con.close()
+    changed = []
+    for r in rows:
+        hv = _hltv_totals(r)
+        if isinstance(hv, tuple) and (hv[2] != r["actual"] or hv[0] != r["status"]):
+            with _LOCK:
+                con = _db()
+                con.execute("UPDATE picks SET status=?, actual_maps=?, actual=?, hit=? WHERE id=?", (*hv, r["id"]))
+                con.commit()
+                con.close()
+            changed.append({"id": r["id"], "player": r["player"], "prop": r["prop"], "line": r["line"],
+                            "pick": r["pick"], "bo3": r["actual"], "hltv": hv[2], "was_hit": r["hit"], "now_hit": hv[3]})
+    return changed
 
 
 def _settle_hltv(r, now, start):
