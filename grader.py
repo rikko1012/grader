@@ -121,7 +121,8 @@ def grade_from_p(p):
     if p >= 0.74: return "A"
     if p >= 0.68: return "A-"
     if p >= 0.63: return "B+"
-    if p >= 0.57: return "B"
+    # 57-63% (was "B") is a Lean since 2026-10-01, owner's decision: on members' real PrizePicks
+    # lines it hit 31/71 (44%) over the first 3 days (5/11, 8/22, 18/38) vs ~60% printed.
     return "C"
 
 
@@ -132,10 +133,8 @@ def p_more(line, lam, sd):
 def units_for_p(p, cap=None):
     """Units follow the probability.
     C (<57%) is 0U: it loses in every walk-forward slice."""
-    # B (57-63%) = 0.25U since 2026-09-28: after the measured win/loss fix, B hits 59.6% in the
-    # walk-forward (kills and HS) vs PrizePicks' 57.7% 2-pick break-even - small edge, small stake.
-    u = (2.0 if p >= 0.80 else 1.5 if p >= 0.74 else 1.0 if p >= 0.68 else 0.5 if p >= 0.63
-         else 0.25 if p >= 0.57 else 0.0)
+    # 57-63% (old B, 0.25U) is 0U since 2026-10-01: 44% on members' real lines (see grade_from_p).
+    u = (2.0 if p >= 0.80 else 1.5 if p >= 0.74 else 1.0 if p >= 0.68 else 0.5 if p >= 0.63 else 0.0)
     return min(u, cap) if cap is not None else u
 
 
