@@ -198,6 +198,23 @@ STORAGE = {"last_cleanup": None, "freed_mb": 0.0}
 # ---------------------------------------------------------------- Underdog board (graded in the background)
 BOARD = {}              # Underdog line id -> board row + its grade summary
 BOARD_EVERY = 15 * 60   # re-grade a line at most this often (members' grades are cached anyway)
+BOARD_FILE = DATA_DIR / ".cache" / "board.json"
+
+
+def _board_save():
+    try:
+        tmp = BOARD_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(BOARD, default=str), encoding="utf-8")
+        os.replace(tmp, BOARD_FILE)
+    except Exception:
+        pass
+
+
+def _board_load():
+    try:
+        BOARD.update(json.loads(BOARD_FILE.read_text(encoding="utf-8")))
+    except Exception:
+        pass
 
 
 def board_payload():
@@ -208,10 +225,12 @@ def board_payload():
         if r.get("start") and r["start"] < now:
             continue                                  # started: locked on Underdog
         g = BOARD.get(r["id"]) or {}
+        if not g.get("side"):
+            continue                                  # not graded yet: never shown
         rows.append(dict(r, **{k: g.get(k) for k in ("grade", "side", "p", "units", "proj", "reason", "graded_at",
                                                      "nick", "state", "edge", "l10_over", "l10_n", "l10_avg",
                                                      "hs_pct", "p_win", "market", "team_name", "opp_name")}))
-    return {"updated": b["at"], "error": b["error"], "rows": rows}
+    return {"updated": b["at"], "error": b["error"], "rows": rows, "total": len(b["rows"])}
 
 
 def members_idle(quiet=8, max_wait=60):
@@ -228,7 +247,8 @@ def board_forever():
     """Grade every Underdog CS2 line in the background (gives way to members), so the Board tab is
     instant. Each graded line is also logged (test=2: not a member's pick) so it settles and the
     grader can be measured on a large, unbiased set of real lines."""
-    time.sleep(90)                                    # let the warm start go first
+    _board_load()                                     # last grades show right away after a restart
+    time.sleep(20)
     while True:
         try:
             rows = underdog.board(wait=True)["rows"]
@@ -265,7 +285,10 @@ def board_forever():
                         traceback.print_exc()
                 except Exception:
                     traceback.print_exc()
-                time.sleep(2.0)
+                if len(BOARD) % 10 == 0:
+                    _board_save()
+                time.sleep(0.3)
+            _board_save()
             if len(BOARD) > 5000:
                 BOARD.clear()
         except Exception:

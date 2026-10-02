@@ -699,8 +699,7 @@ async function loadBoard(force) {
     const r = await fetchRetry("/api/board"); const d = await r.json();
     if (r.status === 401 && d.error === "members_only") return showGate(d);
     boardRows = d.rows || [];
-    const graded = boardRows.filter(x => x.side).length;
-    $("#bstatus").textContent = `${boardRows.length} lines · ${graded} graded` + (graded < boardRows.length ? " (the rest are grading – refresh in a minute)" : "")
+    $("#bstatus").textContent = `${boardRows.length} graded Underdog lines`
       + (d.updated ? ` · board from ${new Date(d.updated * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})}` : "");
   } catch (e) { $("#bstatus").textContent = e.message; }
   drawBoard();

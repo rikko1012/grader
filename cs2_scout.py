@@ -1206,11 +1206,19 @@ def grade(name, line, prop="kills", line_type="standard", slug=None, faceit_key=
     # line and prop of a player: built once, reused for CONTEXT_TTL seconds - a new line only
     # redoes finish_line(). Keeps hundreds of members on the same slate cheap.
     ckey = ((name or "").strip().lower(), (slug or "").lower(), match, (args.member_opponent or "").lower(),
-            bool(args.faceit_key), background)
+            bool(args.faceit_key))     # shared by member grades and the board (same data)
     hit = _CONTEXT.get(ckey)
     if hit and time.time() - hit[0] < CONTEXT_TTL:
         res = copy.deepcopy(hit[1])
         res["generated"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        if not background and not res.get("csapi"):       # context built by the board: add the CS API check
+            try:
+                import csapi
+                pb_ = res.get("player_block") or {}
+                res["csapi"] = csapi.player_check_async((pb_.get("player") or {}).get("nick"), pb_.get("current_team"),
+                                                        (pb_.get("recent_maps") or [{}])[0].get("date"))
+            except Exception:
+                pass
         if (res.get("csapi") or {}).get("pending"):      # background check may have finished since
             try:
                 import csapi
