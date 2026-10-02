@@ -393,7 +393,6 @@ $("#f").onsubmit = async e => {
     if (r.status === 401 && d.error === "members_only") { st.hidden = true; return showGate(d); }   // session ended
     if (!r.ok) throw new Error(d.error || "Something went wrong");
     st.hidden = true; render(d); remember(d);
-    try { history.replaceState(null, "", shareUrl(d)); } catch {}
   } catch (err) {
     st.className = "status err"; st.textContent = err.message;
   } finally { clearInterval(iv); $("#go").disabled = false; }
@@ -460,7 +459,7 @@ document.addEventListener("click", e => {
   if (hb) { const x = store.get("cs2s_hist", [])[+hb.dataset.hist]; if (x) gradeNow(x.p, x.l, x.t, x.lt); return; }
   const a = e.target.closest("[data-act]"); if (!a) return;
   const act = a.dataset.act;
-  if (act === "clearhist") { store.set("cs2s_hist", []); return showRecent(); }
+  if (act === "clearhist") { store.set("cs2s_hist", []); try { history.replaceState(null, "", location.pathname); } catch {} return showRecent(); }
   if (!lastCard) return;
   if (act === "copy") copy(pickLine(lastCard));
   if (act === "slip") addToSlip(lastCard);
@@ -619,7 +618,10 @@ drawSlip();
 
 // a shared link (?p=ZywOo&l=27.5&t=kills) grades on open
 (() => { const q = new URLSearchParams(location.search);
-  if (q.get("p") && q.get("l")) setTimeout(() => gradeNow(q.get("p"), q.get("l"), q.get("t") === "hs" ? "hs" : "kills", q.get("lt") || "standard"), 0); })();
+  if (q.get("p") && q.get("l")) {
+    try { history.replaceState(null, "", location.pathname); } catch {}   // a refresh later = the start page
+    setTimeout(() => gradeNow(q.get("p"), q.get("l"), q.get("t") === "hs" ? "hs" : "kills", q.get("lt") || "standard"), 0);
+  } })();
 
 function chart(series, line, proj) {
   const s = [...series].reverse(), W = 640, H = 190, top = 22, bot = 26, n = s.length;
