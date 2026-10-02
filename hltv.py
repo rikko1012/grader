@@ -320,6 +320,7 @@ def context(nick, team=None, opponent=None, maps=(), bo3_last_date=None):
                 "last5": lambda: _last5(cur, ids),
                 "h2h": lambda: _h2h(cur, team_id, opp_id, maps),
                 "ranking": lambda: _ranking(cur, team_id),
+                "opp_ranking": lambda: _ranking(cur, opp_id),
                 "next_match": lambda: _next_match(cur, team),
                 "backup_source": lambda: _backup(cur, ids),
             }

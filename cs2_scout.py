@@ -936,6 +936,7 @@ def grader_inputs(pb, args, odds=None, hh=None):
         "recent_median": (pb.get("recent_form") or {}).get("median_total"),
         "recent_n": (pb.get("recent_form") or {}).get("matches"),
         "trade_pr": pb.get("trade_pr"),
+        "opp_rank": pb.get("_opp_rank"),          # opponent's VRS rank (HLTV) - elite-opponent drop
         "scout": bool(pb.get("scout")), "standin_for": pb.get("standin_for"),
         "recent": ({"n": rf["matches"], "overs": rf["overs"]}
                    if (rf := pb.get("recent_form") or {}).get("overs") is not None else None),
@@ -1572,6 +1573,7 @@ def finish_line(res, args):
     _attach_hltv(pb)
     res["hltv"] = pb.get("hltv")
     res["hltv_context"] = _hltv_context(pb, args)
+    pb["_opp_rank"] = ((res["hltv_context"] or {}).get("opp_ranking") or {}).get("rank")
     res["grader_inputs"] = grader_inputs(pb, args, res.get("odds"), res.get("h2h"))
     res["grade"] = grade_leg(res["grader_inputs"])
     try:   # 20,000-run match simulation - display only (weight 0, tested vs the curve)

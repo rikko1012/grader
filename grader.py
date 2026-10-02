@@ -69,7 +69,8 @@ CONFIG = {
     "stomp_ml": -400,            # either side at -400 or heavier (P(win) >= 0.80) = stomp
     "thin_maps": 20,             # under 20 Maps 1-2 = thin data: wider SD, 1U cap
     "map_blend_k": 12,
-    "underdog_k": 1.15,          # heavy-underdog extra (see grade_leg), fitted on HLTV player-maps
+    "underdog_k": 1.15,
+    "elite_k": 0.5,              # extra vs a top-10 opponent (VRS rank from HLTV), same data          # heavy-underdog extra (see grade_leg), fitted on HLTV player-maps
     "shrink_k": {"kills": 10, "hs": 30},   # thin-sample pull toward the pro average (tested 2026-09-30)
     "pop_kpr": 0.672, "pop_hs": 51.5,
     # owner's map HS% adjustments - tested 2026-09-29 on 900 cases (fixed numbers, nothing fitted):
@@ -374,6 +375,10 @@ def grade_leg(d, cfg=CONFIG):
     # top-10 opponent -14% (-5%); favourites already matched. Extra = 1 - k * (0.40 - q)^2 below q 0.40.
     qm = (q1 + q2) / 2
     dog = 1 - cfg["underdog_k"] * max(0.0, 0.40 - qm) ** 2
+    # vs a top-10 team the drop is bigger still (same HLTV data: team ranked 11-30 vs top 10 -7.6%
+    # real vs -3.3% modelled at q~0.32; ranked 31-60 -14% vs -7% at q~0.24): 0.5 x (0.40 - q) more
+    if (d.get("opp_rank") or 999) <= 10:
+        dog *= 1 - cfg["elite_k"] * max(0.0, 0.40 - qm)
     if dog < 1:
         flags.append(f"Heavy underdog (map win chance {qm:.0%}) - projection lowered {1 - dog:.1%}")
     lam_adj = lam * stack
