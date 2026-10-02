@@ -708,6 +708,28 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/admin/recheck_hltv" and self.authed(q.get("token")):
                 changed = picklog.recheck_with_hltv()
                 return self.send(200, {"changed": len(changed), "rows": changed})
+            if u.path == "/admin/hltv_rank_rows" and self.authed(q.get("token")):
+                # private analysis: every player-map (total side) with both teams' VRS rank at the time
+                import hltv
+                con = hltv._connect()
+                try:
+                    with con.cursor() as cur:
+                        cur.execute("SET statement_timeout = 60000")
+                        cur.execute("""
+                            SELECT mo.matchid, mo.date::text, ps.playerid, ps.teamid, opp.teamid, ps.mapid, ps.k,
+                                   own.score, opp.score, mm.number,
+                                   (SELECT rank FROM team_rankings tr WHERE tr.teamid = ps.teamid AND tr.date <= mo.date ORDER BY tr.date DESC LIMIT 1),
+                                   (SELECT rank FROM team_rankings tr WHERE tr.teamid = opp.teamid AND tr.date <= mo.date ORDER BY tr.date DESC LIMIT 1)
+                            FROM player_stats ps
+                            JOIN match_overview mo USING (matchid)
+                            JOIN matches own ON own.matchid = ps.matchid AND own.teamid = ps.teamid AND own.mapid = ps.mapid AND own.sideid = 0
+                            JOIN matches opp ON opp.matchid = ps.matchid AND opp.teamid <> ps.teamid AND opp.mapid = ps.mapid AND opp.sideid = 0
+                            LEFT JOIN match_maps mm ON mm.matchid = ps.matchid AND mm.mapid = ps.mapid
+                            WHERE ps.sideid = 0 AND ps.mapid <> 0 AND mo.date >= current_date - %s""", (int(q.get("days") or 120),))
+                        rows = cur.fetchall()
+                    return self.send(200, {"rows": rows})
+                finally:
+                    con.close()
             if u.path == "/admin/hltv_status" and self.authed(q.get("token")):
                 import hltv
                 con = hltv._connect()
