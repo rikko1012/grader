@@ -201,10 +201,17 @@ BOARD_EVERY = 15 * 60   # re-grade a line at most this often (members' grades ar
 BOARD_FILE = DATA_DIR / ".cache" / "board.json"
 
 
+def _grader_version():
+    """Changes whenever the grading formula (grader.py) changes: saved board grades from an older
+    formula are dropped on startup instead of being shown."""
+    import hashlib
+    return hashlib.sha1(Path(__file__).with_name("grader.py").read_bytes()).hexdigest()[:12]
+
+
 def _board_save():
     try:
         tmp = BOARD_FILE.with_suffix(".tmp")
-        tmp.write_text(json.dumps(BOARD, default=str), encoding="utf-8")
+        tmp.write_text(json.dumps({"version": _grader_version(), "rows": BOARD}, default=str), encoding="utf-8")
         os.replace(tmp, BOARD_FILE)
     except Exception:
         pass
@@ -212,7 +219,9 @@ def _board_save():
 
 def _board_load():
     try:
-        BOARD.update(json.loads(BOARD_FILE.read_text(encoding="utf-8")))
+        saved = json.loads(BOARD_FILE.read_text(encoding="utf-8"))
+        if saved.get("version") == _grader_version():
+            BOARD.update(saved.get("rows") or {})
     except Exception:
         pass
 
