@@ -1572,6 +1572,8 @@ def finish_line(res, args):
         res["h2h"] = h2h(list(res["_h2h_rows"]), res.get("_h2h_opp"), args.line, stat)
     _attach_hltv(pb)
     res["hltv"] = pb.get("hltv")
+    if not getattr(args, "opponent", None):            # reused context: the opponent comes from the match
+        args.opponent = (res.get("next_match") or {}).get("opponent")
     res["hltv_context"] = _hltv_context(pb, args)
     pb["_opp_rank"] = ((res["hltv_context"] or {}).get("opp_ranking") or {}).get("rank")
     res["grader_inputs"] = grader_inputs(pb, args, res.get("odds"), res.get("h2h"))
