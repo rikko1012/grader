@@ -214,13 +214,12 @@ def board_payload():
     return {"updated": b["at"], "error": b["error"], "rows": rows}
 
 
-def members_idle(quiet=20, max_wait=120):
+def members_idle(quiet=8, max_wait=60):
     """Wait until no member look-up is running and member traffic has been quiet `quiet` seconds
     (at most `max_wait` - then one board grade goes through, slowly, so the board never freezes)."""
-    import bo3 as _b
     t0 = time.time()
     while time.time() - t0 < max_wait:
-        if _b._members_active[0] == 0 and time.time() - LAST_MEMBER[0] >= quiet:
+        if time.time() - LAST_MEMBER[0] >= quiet:       # real member requests only (not pre-loading)
             return
         time.sleep(3)
 
