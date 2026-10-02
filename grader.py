@@ -69,6 +69,7 @@ CONFIG = {
     "stomp_ml": -400,            # either side at -400 or heavier (P(win) >= 0.80) = stomp
     "thin_maps": 20,             # under 20 Maps 1-2 = thin data: wider SD, 1U cap
     "map_blend_k": 12,
+    "underdog_k": 1.15,          # heavy-underdog extra (see grade_leg), fitted on HLTV player-maps
     "shrink_k": {"kills": 10, "hs": 30},   # thin-sample pull toward the pro average (tested 2026-09-30)
     "pop_kpr": 0.672, "pop_hs": 51.5,
     # owner's map HS% adjustments - tested 2026-09-29 on 900 cases (fixed numbers, nothing fitted):
@@ -367,8 +368,16 @@ def grade_leg(d, cfg=CONFIG):
     w_both, w_split, w_lost = cfg["map_outcome"]["hs" if prop == "hs" else "kills"]
     p20, p02 = q1 * q2, (1 - q1) * (1 - q2)
     outcome = clamp(p20 * w_both + (1 - p20 - p02) * w_split + p02 * w_lost, *cfg["outcome_clamp"])
+    # Heavy underdogs lose more than the win/loss factor alone says: better teams also hold them to
+    # fewer kills per round. Measured 2026-10-02 on 41,702 HLTV player-maps (kills vs the player's own
+    # rate elsewhere): opponent 100+ ranks better -10% (factor gave -6%), 50-99 better -7% (-4%),
+    # top-10 opponent -14% (-5%); favourites already matched. Extra = 1 - k * (0.40 - q)^2 below q 0.40.
+    qm = (q1 + q2) / 2
+    dog = 1 - cfg["underdog_k"] * max(0.0, 0.40 - qm) ** 2
+    if dog < 1:
+        flags.append(f"Heavy underdog (map win chance {qm:.0%}) - projection lowered {1 - dog:.1%}")
     lam_adj = lam * stack
-    lam_final = lam_adj * outcome
+    lam_final = lam_adj * outcome * dog
 
     lam_model = lam_final
 
@@ -381,6 +390,10 @@ def grade_leg(d, cfg=CONFIG):
         # members' real lines, log-loss 0.6782 -> 0.6747) - one blow-up game moves it less
         rmed = d.get("recent_median")
         level = (ra + rmed) / 2 if rmed is not None else ra
+        # his last 10 came against his usual opponents: scale it to THIS matchup the same way the model
+        # part is (win/loss factor x underdog correction, relative to an even match)
+        even = 0.25 * w_both + 0.5 * w_split + 0.25 * w_lost
+        level *= (outcome * dog) / even
         blended = (1 - w10) * lam_final + w10 * level
         last10_mult = blended / lam_final if lam_final else 1.0
         lam_final = blended
@@ -535,7 +548,7 @@ def grade_leg(d, cfg=CONFIG):
         market_quality=mq,
         lambda_base=round(lam, 2), lambda_final=round(lam_final, 2), sd=round(sd, 2),
         detail={"rounds": rpm * 2, "stomp": stomp, "p_win": round(p_win, 3), "p_map": round(q, 3),
-                "outcome_mult": round(outcome, 3), "p_map1": round(q1, 3), "p_map2": round(q2, 3),
+                "outcome_mult": round(outcome, 3), "underdog_mult": round(dog, 3), "p_map1": round(q1, 3), "p_map2": round(q2, 3),
                 "tape_gap": tape_gap, "lambda_model": round(lam_model, 2), "trade_mult": round(trade_mult, 3), "last10_mult": round(last10_mult, 3),
                 "h2h_edge": round(h2h_edge, 2), "regional_edge": round(reg_edge, 2),
                 "regional_avg": None if reg_avg is None else round(reg_avg, 1), "h2h_avg": None if h2h_avg is None else round(h2h_avg, 1),
