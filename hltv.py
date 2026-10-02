@@ -466,6 +466,30 @@ def _h2h(cur, team_id, opp_id, maps):
             "map_win_rates": map_rates}
 
 
+def team_ranks():
+    """{normalized team name: latest VRS rank} for every ranked team (cached 1 hour)."""
+    key = ("ranks",)
+    with _LOCK:
+        hit = _CACHE.get(key)
+        if hit and time.time() - hit[0] < 3600:
+            return hit[1]
+    out = {}
+    try:
+        con = _connect()
+        try:
+            with con.cursor() as cur:
+                cur.execute("""SELECT DISTINCT ON (r.teamid) t.name, r.rank FROM team_rankings r
+                               JOIN teams t USING (teamid) ORDER BY r.teamid, r.date DESC""")
+                out = {_norm(n): rk for n, rk in cur.fetchall()}
+        finally:
+            con.close()
+    except Exception:
+        return {}
+    with _LOCK:
+        _CACHE[key] = (time.time(), out)
+    return out
+
+
 def _rank_band(cur, ids, opp_id, band=10, months=12):
     """His HLTV maps (last `months`) against teams ranked within `band` of tonight's opponent, next to
     all his maps: {"opp_rank", "maps", "kpr", "kpr_all", "ratio", "teams"}. Each team's rank is its

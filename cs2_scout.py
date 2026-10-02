@@ -213,6 +213,7 @@ def player_rows(games, pid):
                          "kills": me.get("kills") or 0, "deaths": me.get("death") or 0,
                          "assists": me.get("assists") or 0, "damage": me.get("damage") or 0,
                          "headshots": me.get("headshots") or 0,
+                         "opponent": me.get("enemy_clan_name"),
                          "kast": 100 * me["kast"] if me.get("kast") is not None else None})
     return rows
 
@@ -402,7 +403,10 @@ def run_player(b, name, args):
     # with <10 Maps 1-2. Walk-forward (900 cases): miss kills 6.07 -> 6.01, HS 3.76 -> 3.69.
     windows = {}
     for label, (wdays, _) in FORM_BLEND.items():
-        a = agg([r for r in player_rows(window_games(b, matches, wdays, BLEND_MAX_MAPS), p["id"]) if r["number"] <= 2])
+        wrows = player_rows(window_games(b, matches, wdays, BLEND_MAX_MAPS), p["id"])
+        if label == "12m":
+            out["_opp_rows"] = [(r["opponent"], r["kills"], r["rounds"]) for r in wrows if r["rounds"] and r["opponent"]]
+        a = agg([r for r in wrows if r["number"] <= 2])
         windows[label] = {"maps": a["maps_played"], "kpr": a["kpr"], "hs_pct": a["hs_pct"]}
     use = {k: v for k, v in windows.items() if v["maps"] >= MIN_MAPS and v["kpr"]}
     overall["form_windows"] = windows
@@ -1562,6 +1566,43 @@ def _form_rows(pb, stat="kills"):
     return [r for r in merged if r["match_id"] in keep]
 
 
+def _bo3_rank_band(pb, band=10):
+    """His BO3.gg maps of the last 12 months vs teams ranked (HLTV VRS) within `band` of tonight's
+    opponent - BO3.gg reaches back further than the HLTV database."""
+    orank, rows = pb.get("_opp_rank"), pb.get("_opp_rows") or []
+    if not orank or not rows:
+        return None
+    try:
+        import hltv
+        ranks = hltv.team_ranks()
+    except Exception:
+        return None
+    if not ranks:
+        return None
+    cache = {}
+
+    def rank_of(name):
+        if name not in cache:
+            n = norm(name)
+            cache[name] = ranks.get(n) or next((rk for t, rk in ranks.items() if len(n) > 3 and (n in t or t in n)), None)
+        return cache[name]
+    k_all = sum(k for _, k, r in rows)
+    r_all = sum(r for _, k, r in rows)
+    sim = [(o, k, r) for o, k, r in rows if rank_of(o) is not None and abs(rank_of(o) - orank) <= band]
+    r_b = sum(r for _, k, r in sim)
+    if not r_all or not r_b:
+        return {"opp_rank": orank, "band": band, "maps": 0, "source": "BO3.gg 12 months"}
+    kpr, kpr_all = sum(k for _, k, r in sim) / r_b, k_all / r_all
+    return {"opp_rank": orank, "band": band, "maps": len(sim), "kpr": round(kpr, 3), "kpr_all": round(kpr_all, 3),
+            "ratio": round(kpr / kpr_all, 3), "teams": sorted({o for o, _, _ in sim})[:8], "source": "BO3.gg 12 months"}
+
+
+def _best_rank_band(pb, hltv_band):
+    bo3_band = _bo3_rank_band(pb)
+    cands = [x for x in (bo3_band, hltv_band) if x]
+    return max(cands, key=lambda x: x.get("maps") or 0) if cands else None
+
+
 def finish_line(res, args):
     """The only part of a grade that depends on the line / prop: last-10 vs the line, H2H hit
     rates, grader inputs, the grade, the simulation. Everything else is shared context."""
@@ -1577,7 +1618,7 @@ def finish_line(res, args):
         args.opponent = (res.get("next_match") or {}).get("opponent")
     res["hltv_context"] = _hltv_context(pb, args)
     pb["_opp_rank"] = ((res["hltv_context"] or {}).get("opp_ranking") or {}).get("rank")
-    pb["_rank_band"] = (res["hltv_context"] or {}).get("rank_band")
+    pb["_rank_band"] = _best_rank_band(pb, (res["hltv_context"] or {}).get("rank_band"))
     res["grader_inputs"] = grader_inputs(pb, args, res.get("odds"), res.get("h2h"))
     res["grade"] = grade_leg(res["grader_inputs"])
     try:   # 20,000-run match simulation - display only (weight 0, tested vs the curve)

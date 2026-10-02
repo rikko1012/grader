@@ -445,6 +445,11 @@ def public(res):
     res.pop("_h2h_rows", None)
     res.pop("_h2h_opp", None)
     (res.get("player_block") or {}).pop("_rf_kpr", None)
+    for k in ("_opp_rows", "_opp_rank"):
+        (res.get("player_block") or {}).pop(k, None)
+    rb = (res.get("player_block") or {}).pop("_rank_band", None)
+    if rb and isinstance(res.get("hltv_context"), dict):
+        res["hltv_context"]["rank_band"] = rb          # the one the grade used
     res.pop("opponent_defense", None)      # shadow feature - admin log only until it is proven
     pb = res.get("player_block") or {}
     for r in pb.get("recent_maps") or []:
