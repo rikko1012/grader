@@ -596,6 +596,32 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/admin/recheck_hltv" and self.authed(q.get("token")):
                 changed = picklog.recheck_with_hltv()
                 return self.send(200, {"changed": len(changed), "rows": changed})
+            if u.path == "/admin/hltv_status" and self.authed(q.get("token")):
+                import hltv
+                con = hltv._connect()
+                try:
+                    with con.cursor() as cur:
+                        out = {}
+                        for lab, sql in (
+                            ("matches_45d", "SELECT count(*) FROM match_overview WHERE date >= current_date - 45"),
+                            ("matches_7d", "SELECT count(*) FROM match_overview WHERE date >= current_date - 7"),
+                            ("maps_45d", "SELECT count(*) FROM match_maps mm JOIN match_overview mo USING (matchid) WHERE mo.date >= current_date - 45"),
+                            ("maps_with_hs_45d", "SELECT count(DISTINCT h.mapstatsid) FROM map_headshots h JOIN match_overview mo USING (matchid) WHERE mo.date >= current_date - 45"),
+                            ("maps_with_hs_7d", "SELECT count(DISTINCT h.mapstatsid) FROM map_headshots h JOIN match_overview mo USING (matchid) WHERE mo.date >= current_date - 7"),
+                            ("maps_7d", "SELECT count(*) FROM match_maps mm JOIN match_overview mo USING (matchid) WHERE mo.date >= current_date - 7"),
+                            ("hs_failures", "SELECT count(*) FROM mapstats_status"),
+                            ("teams", "SELECT count(*) FROM teams"),
+                            ("newest_match", "SELECT max(date)::text FROM match_overview")):
+                            try:
+                                cur.execute(sql); out[lab] = cur.fetchone()[0]
+                            except Exception as e:
+                                con.rollback() if not con.autocommit else None
+                                out[lab] = f"error: {str(e)[:80]}"
+                        cur.execute("SELECT last_error, count(*) FROM mapstats_status GROUP BY 1 ORDER BY 2 DESC LIMIT 3")
+                        out["hs_failure_reasons"] = cur.fetchall()
+                        return self.send(200, out)
+                finally:
+                    con.close()
             if u.path == "/admin/veto_backtest" and self.authed(q.get("token")):
                 import hltv
                 return self.send(200, hltv.veto_backtest(int(q.get("days") or 30), int(q.get("limit") or 250)))
