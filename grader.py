@@ -51,6 +51,11 @@ CONFIG = {
     # Predicted maps (veto not out) are off since 2026-10-01: the top Map 1 pick was right 17/106
     # on members' props - chance level - so they only added noise. All-maps numbers instead.
     "use_predicted_maps": False,
+    # Unders need a bigger edge (2026-10-02): on members' real lines, Under bets that cleared the
+    # bar by less than 1 kill (0.6 HS) hit 25/45 (56%) - below PrizePicks' 57.7% break-even
+    # (overtime and players popping off hit Unders hardest). Chosen on 3 of 4 held-out days;
+    # Under bets 44/70 -> 19/25, Overs unchanged.
+    "under_margin": {"kills": 1.0, "hs": 0.6},
     "last10_min": 5,             # need 5+ recent two-map matches to blend
     # 4c (2026-09-28, owner-approved for KILLS props only): trade kills per round. Cross-validated
     # by team on 900 cases: kills miss 6.007 -> 5.976 (same sign in both halves); HS 3.695 -> 3.708
@@ -419,6 +424,12 @@ def grade_leg(d, cfg=CONFIG):
     if prop == "kills":                                   # fat tails: no side above the cap
         cap = cfg["p_cap_kills"]
         pm = min(max(pm, 1 - cap), cap)
+    m_u = cfg.get("under_margin", {}).get(prop, 0.0)
+    if pm < 0.5 and m_u:          # an Under is scored as if he projected m_u higher (never flips side)
+        pu = p_more(line, lam_final + m_u, sd)
+        if prop == "kills":
+            pu = min(max(pu, 1 - cfg["p_cap_kills"]), cfg["p_cap_kills"])
+        pm = min(pu, 0.5)
     pm_model = pm
 
     # TAPE note (display only): projection far from what he has actually been doing
@@ -495,8 +506,8 @@ def grade_leg(d, cfg=CONFIG):
     # Less reaches p at L >= lam - 0.5 + z*sd. Lines are x.5, so round to the right x.5.
     def more_line(z):   # highest x.5 line at or below the threshold
         return math.floor(lam_final - 0.5 - z * sd - 0.5) + 0.5
-    def less_line(z):   # lowest x.5 line at or above the threshold
-        return math.ceil(lam_final - 0.5 + z * sd - 0.5) + 0.5
+    def less_line(z):   # lowest x.5 line at or above the threshold (Unders need the extra margin)
+        return math.ceil(lam_final + m_u - 0.5 + z * sd - 0.5) + 0.5
     more_at, more_a = more_line(0.3319), more_line(0.4677)
     less_at, less_a = less_line(0.3319), less_line(0.4677)
     if prop == "kills" and cfg["p_cap_kills"] < 0.68:
