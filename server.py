@@ -718,8 +718,8 @@ class Handler(BaseHTTPRequestHandler):
                         cur.execute("""
                             SELECT mo.matchid, mo.date::text, ps.playerid, ps.teamid, opp.teamid, ps.mapid, ps.k,
                                    own.score, opp.score, mm.number,
-                                   (SELECT rank FROM team_rankings tr WHERE tr.teamid = ps.teamid AND tr.date <= mo.date ORDER BY tr.date DESC LIMIT 1),
-                                   (SELECT rank FROM team_rankings tr WHERE tr.teamid = opp.teamid AND tr.date <= mo.date ORDER BY tr.date DESC LIMIT 1)
+                                   (SELECT rank FROM team_rankings tr WHERE tr.teamid = ps.teamid ORDER BY abs(tr.date - mo.date) LIMIT 1),
+                                   (SELECT rank FROM team_rankings tr WHERE tr.teamid = opp.teamid ORDER BY abs(tr.date - mo.date) LIMIT 1)
                             FROM player_stats ps
                             JOIN match_overview mo USING (matchid)
                             JOIN matches own ON own.matchid = ps.matchid AND own.teamid = ps.teamid AND own.mapid = ps.mapid AND own.sideid = 0
