@@ -43,7 +43,10 @@ CONFIG = {
     # w 0.05 -> 0.5 took bets from 47% to 62% (Sep 29 5/12 -> 7/11, Sep 30 11/28 -> 11/24,
     # Oct 1 24/45 -> 34/49) and log-loss 0.705 -> 0.683. (The walk-forward had rejected it because
     # its lines were set at the recent average itself.) H2H: owner's decision 2026-09-30.
-    "last10_weight": 0.5,
+    # 0.5 -> 0.7 on 2026-10-02 with Oct 1-2 settled (235 props, 4 days, each day held out):
+    # log-loss better on 3 of 4 days (0.6859 -> 0.6809), bets 57/96 -> 66/110. Rounds-by-closeness
+    # and a wider spread were also tried and not chosen.
+    "last10_weight": 0.7,
     "h2h_weight": 0.10,
     # Predicted maps (veto not out) are off since 2026-10-01: the top Map 1 pick was right 17/106
     # on members' props - chance level - so they only added noise. All-maps numbers instead.
