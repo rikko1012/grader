@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 
 import cs2_scout
 import picklog
+import underdog
 import whop_auth
 import bo3
 from bo3 import BO3, DATA_DIR, prune, storage_report
@@ -192,6 +193,63 @@ PRELOAD_STATUS = {"enabled": PRELOAD, "players_ready": 0, "last_pass": None, "cu
 
 
 STORAGE = {"last_cleanup": None, "freed_mb": 0.0}
+
+
+# ---------------------------------------------------------------- Underdog board (graded in the background)
+BOARD = {}              # Underdog line id -> board row + its grade summary
+BOARD_EVERY = 15 * 60   # re-grade a line at most this often (members' grades are cached anyway)
+
+
+def board_payload():
+    b = underdog.board()
+    now = datetime.now(timezone.utc).isoformat()
+    rows = []
+    for r in b["rows"]:
+        if r.get("start") and r["start"] < now:
+            continue                                  # started: locked on Underdog
+        g = BOARD.get(r["id"]) or {}
+        rows.append(dict(r, **{k: g.get(k) for k in ("grade", "side", "p", "units", "proj", "reason", "graded_at",
+                                                     "nick", "state")}))
+    return {"updated": b["at"], "error": b["error"], "rows": rows}
+
+
+def board_forever():
+    """Grade every Underdog CS2 line in the background (gives way to members), so the Board tab is
+    instant. Each graded line is also logged (test=2: not a member's pick) so it settles and the
+    grader can be measured on a large, unbiased set of real lines."""
+    time.sleep(90)                                    # let the warm start go first
+    while True:
+        try:
+            rows = underdog.board(wait=True)["rows"]
+            now = datetime.now(timezone.utc).isoformat()
+            todo = [r for r in rows if not r["alt"] and (not r.get("start") or r["start"] > now)
+                    and time.time() - (BOARD.get(r["id"]) or {}).get("at", 0) > BOARD_EVERY]
+            for r in todo:
+                try:
+                    res = cs2_scout.grade(r["player"], r["line"], r["prop"], "standard", faceit_key=faceit_key(),
+                                          background=True)
+                    if res.get("error"):
+                        BOARD[r["id"]] = {"at": time.time(), "state": "NOT FOUND", "reason": res["error"]}
+                        continue
+                    v = verdict(res.get("grade"))
+                    g = res.get("grade") or {}
+                    BOARD[r["id"]] = {"at": time.time(), "graded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                                      "grade": v.get("grade"), "side": v.get("side"), "p": v.get("p"),
+                                      "units": v.get("units"), "proj": g.get("lambda_final"), "state": v.get("state"),
+                                      "reason": v.get("reason"), "nick": ((res.get("player_block") or {}).get("player") or {}).get("nick")}
+                    res["verdict"] = v
+                    try:
+                        picklog.log_grade(res, v, test=2)
+                    except Exception:
+                        traceback.print_exc()
+                except Exception:
+                    traceback.print_exc()
+                time.sleep(0.5)
+            if len(BOARD) > 5000:
+                BOARD.clear()
+        except Exception:
+            traceback.print_exc()
+        time.sleep(60)
 
 
 def cleanup():
@@ -519,7 +577,7 @@ class Handler(BaseHTTPRequestHandler):
                                            f"{whop_auth.PKCE_COOKIE}=; Max-Age=0; Path=/"])
             if u.path == "/auth/logout":
                 return self.redirect("/", [f"{whop_auth.COOKIE}=; Max-Age=0; Path=/"])
-            if u.path in ("/api/search", "/api/grade") and not self.allowed():
+            if u.path in ("/api/search", "/api/grade", "/api/board") and not self.allowed():
                 sess = self.member()
                 return self.send(401, {"error": "members_only", "signed_in": bool(sess),
                                        "upgrade": whop_auth.upgrade_url()})
@@ -527,6 +585,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.search(q.get("q", "").strip())
             if u.path == "/api/grade":
                 return self.grade(q)
+            if u.path == "/api/board":
+                return self.send(200, board_payload())
             if u.path == "/admin":
                 return self.admin(q)
             if u.path == "/admin/picks.json" and self.authed(q.get("token")):
@@ -734,6 +794,10 @@ class Handler(BaseHTTPRequestHandler):
             mark_warm(pkey, name, (pb_.get("player") or {}).get("slug"), (pb_.get("player") or {}).get("nick"))
             res["verdict"] = verdict(res.get("grade"))
             try:
+                res["underdog"] = underdog.line_for((pb_.get("player") or {}).get("nick") or name, prop)
+            except Exception:
+                res["underdog"] = None
+            try:
                 picklog.log_grade(res, res["verdict"], test=load_test)   # Phase 10: GRADE state only
             except Exception:
                 traceback.print_exc()
@@ -808,6 +872,7 @@ th{{color:#8b95a8}}input{{background:#1a2130;color:#e8ecf3;border:1px solid #252
 
 if __name__ == "__main__":
     threading.Thread(target=warm_start, daemon=True, name="warm-start").start()
+    threading.Thread(target=board_forever, daemon=True, name="underdog-board").start()
     def _pack_cache():   # one-time: old per-file cache -> one packed file (same data, ~1/3 the disk)
         try:
             import kvstore

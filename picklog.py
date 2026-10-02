@@ -105,7 +105,7 @@ def log_grade(res, verdict, test=False):
         "rec_median": rf.get("median_total"),
         "rec_hit": f"{rf.get('overs')}/{rf.get('matches')}" if rf.get("overs") is not None else None,
         "flags": json.dumps(g.get("flags")), "opp_def": json.dumps(res.get("opponent_defense")),
-        "test": int(bool(test)),
+        "test": test if test == 2 else int(bool(test)),   # 1 = owner's tests, 2 = Underdog board (not a member pick)
         "factors": json.dumps(_factors(res), default=str),
     }
     with _LOCK:
