@@ -679,3 +679,133 @@ def settle_by_day(nick, team, day, opponent):
             "headshots": None if None in hs else sum(hs), "maps": [r["map"] for r in m12],
             "rounds": [r["rounds"] for r in m12], "won": [r["won"] for r in m12],
             "per_map": [[r["kills"], r["headshots"]] for r in m12]}
+
+
+# ---------------------------------------------------------------- map vetoes (from stored match pages)
+_VETO = re.compile(r"<div>\s*(\d)\.\s*(.+?)\s+(removed|picked)\s+(.+?)\s*</div>")
+_LEFT = re.compile(r"<div>\s*(\d)\.\s*(.+?)\s+was left over\s*</div>")
+_VETO_CACHE = {}
+
+
+def _vetoes(cur, match_id):
+    """[(step, team_norm, 'removed'|'picked'|'left', map_key)] for one stored match page (cached)."""
+    if match_id in _VETO_CACHE:
+        return _VETO_CACHE[match_id]
+    import gzip as _gz
+    cur.execute("SELECT html_gz FROM raw_pages WHERE matchid = %s", (match_id,))
+    row = cur.fetchone()
+    out = []
+    if row:
+        html = _gz.decompress(bytes(row[0])).decode("utf-8", "replace")
+        box = html[html.find("veto-box"):][:6000]
+        out = [(int(n), _norm(t), act, _map_key(m)) for n, t, act, m in _VETO.findall(box)]
+        out += [(int(n), None, "left", _map_key(m)) for n, m in _LEFT.findall(box)]
+        out.sort()
+    if len(_VETO_CACHE) > 20000:
+        _VETO_CACHE.clear()
+    _VETO_CACHE[match_id] = out
+    return out
+
+
+def _team_history(cur, team_name, before, n=25):
+    """His team's last `n` BO3 vetoes before `before`: ban / pick counts by step role."""
+    cur.execute("""SELECT DISTINCT mo.matchid, mo.date FROM match_overview mo JOIN matches m USING (matchid)
+                   JOIN teams t ON t.teamid = m.teamid
+                   WHERE lower(regexp_replace(t.name, '[^a-zA-Z0-9]', '', 'g')) = %s AND mo.date < %s
+                   ORDER BY mo.date DESC LIMIT %s""", (_norm(team_name), before, n * 2))
+    hist = {"ban1": {}, "pick": {}, "ban2": {}, "n": 0}
+    me = _norm(team_name)
+    for mid, _ in cur.fetchall():
+        v = _vetoes(cur, mid)
+        if len(v) != 7 or hist["n"] >= n:          # BO3 vetoes only (2 bans, 2 picks, 2 bans, decider)
+            continue
+        hist["n"] += 1
+        for step, team, act, mp in v:
+            if team != me:
+                continue
+            role = "pick" if act == "picked" else "ban1" if step <= 2 else "ban2"
+            hist[role][mp] = hist[role].get(mp, 0) + 1
+    return hist
+
+
+def predict_maps(team_a, team_b, before, pool=None, runs=4000, seed=7):
+    """P(Map 1 = m) and P(Map 2 = m) from both teams' HLTV veto history (BO3 order: A ban, B ban,
+    A pick = Map 1, B pick = Map 2, A ban, B ban, decider). Who goes first is unknown: both orders."""
+    import random
+    if not dsn():
+        return None
+    con = _connect()
+    try:
+        with con.cursor() as cur:
+            ha, hb = _team_history(cur, team_a, before), _team_history(cur, team_b, before)
+    finally:
+        con.close()
+    if ha["n"] < 3 or hb["n"] < 3:
+        return None
+    pool = pool or sorted({m for h in (ha, hb) for r in ("ban1", "pick", "ban2") for m in h[r]})
+    if len(pool) < 7:
+        return None
+    rnd = random.Random(seed)
+
+    def choose(h, role, left):
+        w = [h[role].get(m, 0) + 0.3 for m in left]
+        if role == "pick":                       # a team doesn't pick what it usually bans
+            w = [x / (1 + h["ban1"].get(m, 0) + h["ban2"].get(m, 0)) for x, m in zip(w, left)]
+        return rnd.choices(left, weights=w)[0]
+    m1, m2 = {}, {}
+    for i in range(runs):
+        first, second = (ha, hb) if i % 2 == 0 else (hb, ha)
+        left = list(pool)
+        for h, role in ((first, "ban1"), (second, "ban1")):
+            left.remove(choose(h, role, left))
+        a = choose(first, "pick", left); left.remove(a)
+        b = choose(second, "pick", left)
+        m1[a] = m1.get(a, 0) + 1
+        m2[b] = m2.get(b, 0) + 1
+    return {"map1": {k: v / runs for k, v in sorted(m1.items(), key=lambda x: -x[1])},
+            "map2": {k: v / runs for k, v in sorted(m2.items(), key=lambda x: -x[1])},
+            "history": [ha["n"], hb["n"]]}
+
+
+def veto_backtest(days=30, limit=250):
+    """Admin: predict Map 1 / Map 2 for recent HLTV BO3s using only vetoes from before each match."""
+    con = _connect()
+    try:
+        with con.cursor() as cur:
+            cur.execute("""SELECT mo.matchid, mo.date FROM match_overview mo
+                           WHERE mo.date >= current_date - %s ORDER BY mo.date DESC LIMIT %s""", (days, limit * 3))
+            ms = cur.fetchall()
+            cases = []
+            for mid, d in ms:
+                v = _vetoes(cur, mid)
+                if len(v) != 7:
+                    continue
+                picks = [x for x in v if x[2] == "picked"]
+                if len(picks) != 2 or v[0][1] is None or v[1][1] is None:
+                    continue
+                cur.execute("""SELECT t.name FROM matches m JOIN teams t USING (teamid) WHERE m.matchid = %s
+                               GROUP BY t.name""", (mid,))
+                names = [r[0] for r in cur.fetchall()]
+                a = next((n for n in names if _norm(n) == v[0][1]), None)
+                b = next((n for n in names if _norm(n) == v[1][1]), None)
+                if a and b:
+                    cases.append((mid, d.isoformat(), a, b, picks[0][3], picks[1][3]))
+                if len(cases) >= limit:
+                    break
+    finally:
+        con.close()
+    res = {"cases": 0, "map1_top1": 0, "map1_top2": 0, "map2_top1": 0, "map2_top2": 0, "either_pick_in_top2": 0, "ll": 0.0}
+    import math
+    for mid, d, a, b, p1, p2 in cases:
+        pr = predict_maps(a, b, d)
+        if not pr:
+            continue
+        res["cases"] += 1
+        r1, r2 = list(pr["map1"]), list(pr["map2"])
+        res["map1_top1"] += r1[:1] == [p1]; res["map1_top2"] += p1 in r1[:2]
+        res["map2_top1"] += r2[:1] == [p2]; res["map2_top2"] += p2 in r2[:2]
+        res["either_pick_in_top2"] += p1 in r1[:2] and p2 in r2[:2]
+        res["ll"] += -math.log(max(pr["map1"].get(p1, 0), 0.01)) - math.log(max(pr["map2"].get(p2, 0), 0.01))
+    if res["cases"]:
+        res["ll"] = round(res["ll"] / (2 * res["cases"]), 3)
+    return res

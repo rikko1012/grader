@@ -596,6 +596,9 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/admin/recheck_hltv" and self.authed(q.get("token")):
                 changed = picklog.recheck_with_hltv()
                 return self.send(200, {"changed": len(changed), "rows": changed})
+            if u.path == "/admin/veto_backtest" and self.authed(q.get("token")):
+                import hltv
+                return self.send(200, hltv.veto_backtest(int(q.get("days") or 30), int(q.get("limit") or 250)))
             if u.path == "/admin/hltv_maps" and self.authed(q.get("token")):
                 import hltv
                 items = json.loads(q.get("items") or "[]")[:80]      # [[nick, team, day], ...]
