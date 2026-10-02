@@ -698,9 +698,12 @@ def _vetoes(cur, match_id):
     if row:
         html = _gz.decompress(bytes(row[0])).decode("utf-8", "replace")
         box = html[html.find("veto-box"):][:6000]
-        out = [(int(n), _norm(t), act, _map_key(m)) for n, t, act, m in _VETO.findall(box)]
-        out += [(int(n), None, "left", _map_key(m)) for n, m in _LEFT.findall(box)]
-        out.sort()
+        steps = {}
+        for n, t, act, m in _VETO.findall(box):
+            steps.setdefault(int(n), (int(n), _norm(t), act, _map_key(m)))
+        for n, m in _LEFT.findall(box):
+            steps.setdefault(int(n), (int(n), None, "left", _map_key(m)))
+        out = [steps[k] for k in sorted(steps)]          # one entry per step (pages can repeat the box)
     if len(_VETO_CACHE) > 20000:
         _VETO_CACHE.clear()
     _VETO_CACHE[match_id] = out
