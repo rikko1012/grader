@@ -214,6 +214,17 @@ def board_payload():
     return {"updated": b["at"], "error": b["error"], "rows": rows}
 
 
+def members_idle(quiet=20, max_wait=120):
+    """Wait until no member look-up is running and member traffic has been quiet `quiet` seconds
+    (at most `max_wait` - then one board grade goes through, slowly, so the board never freezes)."""
+    import bo3 as _b
+    t0 = time.time()
+    while time.time() - t0 < max_wait:
+        if _b._members_active[0] == 0 and time.time() - LAST_MEMBER[0] >= quiet:
+            return
+        time.sleep(3)
+
+
 def board_forever():
     """Grade every Underdog CS2 line in the background (gives way to members), so the Board tab is
     instant. Each graded line is also logged (test=2: not a member's pick) so it settles and the
@@ -226,9 +237,10 @@ def board_forever():
             todo = [r for r in rows if not r["alt"] and (not r.get("start") or r["start"] > now)
                     and time.time() - (BOARD.get(r["id"]) or {}).get("at", 0) > BOARD_EVERY]
             for r in todo:
+                members_idle()                            # members always first
                 try:
                     res = cs2_scout.grade(r["player"], r["line"], r["prop"], "standard", faceit_key=faceit_key(),
-                                          background=True)
+                                          background=True, light=True)
                     if res.get("error"):
                         BOARD[r["id"]] = {"at": time.time(), "state": "NOT FOUND", "reason": res["error"]}
                         continue
@@ -254,7 +266,7 @@ def board_forever():
                         traceback.print_exc()
                 except Exception:
                     traceback.print_exc()
-                time.sleep(0.5)
+                time.sleep(2.0)
             if len(BOARD) > 5000:
                 BOARD.clear()
         except Exception:
@@ -496,6 +508,7 @@ def page():
 
 
 STATS = {"requests": 0, "ms_total": 0.0, "since": time.time(), "errors_5xx": 0}
+LAST_MEMBER = [0.0]     # last member request on /api/* (the board worker steps aside while members are active)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -593,6 +606,8 @@ class Handler(BaseHTTPRequestHandler):
                                        "upgrade": whop_auth.upgrade_url()})
             if u.path == "/api/search":
                 return self.search(q.get("q", "").strip())
+            if u.path.startswith("/api/") and u.path != "/api/board":
+                LAST_MEMBER[0] = time.time()
             if u.path == "/api/grade":
                 return self.grade(q)
             if u.path == "/api/board":

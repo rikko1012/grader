@@ -1193,14 +1193,14 @@ def main():
 
 
 def grade(name, line, prop="kills", line_type="standard", slug=None, faceit_key=None, ttl=12,
-          background=False, match=None, opponent=None):
+          background=False, match=None, opponent=None, light=False):
     """One-call entry point for the web interface: everything 'full' does, returned as a dict.
     background=True (pre-loading) gives way to member look-ups."""
     args = argparse.Namespace(
         cmd="full", name=name, bo3_slug=slug, team=None, maps=None, opponent=None, line=line,
         prop=prop, line_type=line_type, team_ml=None, opp_ml=None, faceit=None,
         faceit_key=faceit_key or os.environ.get("FACEIT_API_KEY"), n=20, refresh=False, ttl=ttl,
-        match=match, member_opponent=(opponent or "").strip() or None)
+        match=match, member_opponent=(opponent or "").strip() or None, light=light)
     args.opponent = args.member_opponent
     # Shared context (stats, match, maps, odds, H2H series, FACEIT, CS API) is the same for every
     # line and prop of a player: built once, reused for CONTEXT_TTL seconds - a new line only
@@ -1568,7 +1568,7 @@ def finish_line(res, args):
     res["grade"] = grade_leg(res["grader_inputs"])
     try:   # 20,000-run match simulation - display only (weight 0, tested vs the curve)
         from sim import simulate
-        res["simulation"] = simulate(res["grader_inputs"])
+        res["simulation"] = None if getattr(args, "light", False) else simulate(res["grader_inputs"])
     except Exception as e:
         res["simulation"] = None
         res["simulation_error"] = str(e)[:200]
