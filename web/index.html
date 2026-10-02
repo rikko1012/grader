@@ -10,7 +10,7 @@
 <style>
 :root{
   --bg:#080a0f; --panel:#10151d; --panel-2:#161c27; --line:#212a38; --line-2:#2b3547;
-  --text:#eef2f8; --muted:#8e98ab; --faint:#5d6679;
+  --text:#eef2f8; --muted:#a3adbf; --faint:#7d879a;
   --accent:#ff7a1a; --accent-2:#ffa53a; --accent-glow:rgba(255,122,26,.28);
   --good:#22d27a; --good-bg:rgba(34,210,122,.10);
   --warn:#f5c542; --warn-bg:rgba(245,197,66,.10);
@@ -90,7 +90,7 @@ input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(25
 #out{margin-top:18px;display:grid;gap:14px}
 #out > *{animation:rise .3s ease both}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
-.card h2{margin:0 0 12px;font:600 13px var(--display);color:var(--muted);text-transform:uppercase;letter-spacing:1.1px}
+.card h2{margin:0 0 12px;font:600 15px var(--display);color:#c9d1de;text-transform:uppercase;letter-spacing:1px}
 details.card > summary{cursor:pointer;font:600 13px var(--display);letter-spacing:1.1px;text-transform:uppercase;color:var(--muted);list-style:none;display:flex;align-items:center;gap:8px}
 details.card > summary::-webkit-details-marker{display:none}
 details.card > summary::before{content:"+";width:18px;height:18px;border-radius:5px;display:grid;place-items:center;background:var(--panel-2);color:var(--accent-2);font:700 14px Inter,sans-serif}
@@ -119,7 +119,7 @@ details.how p{margin:0 0 10px;color:#c4cbd8} details.how b{color:var(--text)}
 .sides{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
 .side{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
 .side.pick{border-color:var(--accent)}
-.side .k{font-size:12px;color:var(--muted);font-weight:500} .side .v{font:700 25px var(--display);margin-top:2px}
+.side .k{font-size:12px;color:var(--muted);font-weight:500} .side .v{font:700 20px var(--display);margin-top:2px}
 .side.pick .k{color:var(--accent-2)}
 .bar{height:6px;background:rgba(255,255,255,.06);border-radius:99px;margin-top:7px;overflow:hidden}
 .bar i{display:block;height:100%;border-radius:99px;background:#4b5a74}
@@ -169,6 +169,17 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 .gtag{display:inline-block;min-width:34px;text-align:center;font:700 12px var(--display);padding:3px 7px;border-radius:7px}
 .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--panel-2);border:1px solid var(--accent);color:var(--text);padding:9px 16px;border-radius:10px;font-size:13.5px;z-index:50;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.on{opacity:1}
+.g-bplus{background:rgba(163,214,74,.10);color:#a3d64a;border:1px solid #a3d64a}
+.badge.g-bplus{box-shadow:0 0 30px rgba(163,214,74,.18)} .herocard.g-bplus{--hc:#a3d64a;background:var(--panel);color:inherit;border:1px solid var(--line)}
+/* sticky one-line grade bar (shows once the main form scrolls away) */
+.mini{display:none;gap:6px;align-items:center;flex:1;justify-content:flex-end}
+.mini.on{display:flex}
+.mini input{width:150px;padding:7px 10px;border-radius:9px;font-size:14px}
+.mini input.l{width:70px}
+.mini .seg button{padding:6px 10px;font-size:13px}
+.mini .go{padding:8px 16px;font-size:13px;margin-left:0}
+.examples{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;align-items:center}
+.src{color:var(--accent-2);font-size:11px;margin-left:3px;vertical-align:super}
 @media (max-width:900px){
   .cols{grid-template-columns:1fr}
 }
@@ -182,7 +193,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
   .hero{gap:14px}
   .badge{width:78px;height:78px;font-size:34px;border-radius:18px}
   .hero h3{font-size:20px}
-  .side .v{font-size:21px}
+  .side .v{font-size:18px}
   table{font-size:12.5px} th,td{padding:7px 3px} .card{padding:15px}
   .num{font-family:inherit;font-variant-numeric:tabular-nums}
   .dot{display:block;height:0;overflow:hidden}
@@ -190,12 +201,16 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
   header{padding:11px 16px;margin:0 -16px 16px} header .tag{display:none} header h1{font-size:17px} .logo{width:32px;height:32px}
   .wrap{padding:0 16px 50px}
   td.hit::before,td.miss::before{margin-right:4px}
+  .mini input{min-width:0;padding:7px 8px;flex:1 1 90px} .mini input.l{width:56px;flex:0 0 56px} .mini .seg{display:none}
+  .mini .go{padding:8px 11px} header.mini-on h1,header.mini-on .grow{display:none} .mini.on{min-width:0}
 }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header><div class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#170b00" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg></div><h1>CS2 <em>Prop</em> Grader</h1><span class="grow"></span><span class="tag">Maps 1–2 kills &amp; headshots</span></header>
+  <header><div class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#170b00" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg></div><h1>CS2 <em>Prop</em> Grader</h1><span class="grow"></span><form class="mini" id="mini" autocomplete="off"><input id="mp" placeholder="Player"><input id="ml" class="l" inputmode="decimal" placeholder="Line">
+    <div class="seg" id="mprop"><button type="button" data-v="kills">K</button><button type="button" data-v="hs">HS</button></div><button class="go">Grade</button></form>
+    <span class="tag" id="tag">Maps 1–2 kills &amp; headshots</span></header>
 
   <div id="gate" class="card" hidden style="text-align:center;padding:28px 18px"></div>
   <div id="who" class="small muted" hidden style="text-align:right;margin:-6px 0 8px"></div>
@@ -235,6 +250,10 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
   </form>
 
   <div class="recent" id="recent"></div>
+  <div class="examples" id="examples"><span class="small muted">Try:</span>
+    <button type="button" class="chipbtn" data-try="ZywOo|27.5|kills">ZywOo 27.5 kills</button>
+    <button type="button" class="chipbtn" data-try="donk|30.5|kills">donk 30.5 kills</button>
+    <button type="button" class="chipbtn" data-try="m0NESY|14.5|hs">m0NESY 14.5 HS</button></div>
   <details class="card how" style="margin-top:12px">
     <summary>How grades work</summary>
     <div class="small" style="margin-top:10px;line-height:1.55">
@@ -299,7 +318,7 @@ async function fetchRetry(url, tries = 4) {
 }
 const shortDate = x => { const d = new Date(String(x) + "T12:00:00Z"); return isNaN(d) ? esc(x) : d.toLocaleDateString([], {month: "short", day: "numeric", timeZone: "UTC"}); };
 const mapName = m => m ? m.replace(/^de_/, "").replace(/^./, c => c.toUpperCase()) : "–";
-const gClass = g => ["A+","A","A-"].includes(g) ? "g-good" : ["B+","B"].includes(g) ? "g-warn" : g === "LEAN" ? "g-scout" : "g-bad";
+const gClass = g => ["A+","A","A-"].includes(g) ? "g-good" : g === "B+" ? "g-bplus" : g === "B" ? "g-warn" : g === "LEAN" ? "g-scout" : "g-bad";
 const until = d => { const m = Math.round((d - Date.now()) / 60000); if (m <= 0) return m > -150 ? "started" : ""; const h = Math.floor(m / 60);
   return "in " + (h >= 24 ? `${Math.floor(h / 24)}d ${h % 24}h` : h ? `${h}h ${m % 60}m` : `${m}m`); };
 const when = s => { if (!s) return "–"; const d = new Date(String(s).replace(" ", "T")); if (isNaN(d)) return esc(s);
@@ -500,6 +519,25 @@ $("#slatego").onclick = async () => {
   await Promise.all([0, 1].map(async () => { while (queue.length) await one(queue.shift()); }));   // 2 at a time
   $("#slatego").disabled = false;
 };
+// sticky one-line grade bar: appears once the main form scrolls away
+(() => {
+  const mini = $("#mini"), tag = $("#tag");
+  const syncProp = () => [...$("#mprop").children].forEach(x => x.classList.toggle("on", x.dataset.v === prop));
+  $("#mprop").onclick = e => { const b = e.target.closest("button"); if (b) { setProp(b.dataset.v); syncProp(); } };
+  mini.onsubmit = e => { e.preventDefault(); const p = $("#mp").value.trim(), l = $("#ml").value.trim();
+    if (p && l) gradeNow(p, l, prop, $("#lt").value); };
+  try {
+    new IntersectionObserver(([en]) => {
+      const show = !en.isIntersecting && $("#f").style.display !== "none" && $("#gate").hidden;
+      mini.classList.toggle("on", show); tag.hidden = show; mini.parentElement.classList.toggle("mini-on", show);
+      if (show) { $("#mp").value = $("#player").value; $("#ml").value = $("#line").value; syncProp(); }
+    }, {rootMargin: "-60px 0px 0px 0px"}).observe($("#f"));
+  } catch {}
+})();
+document.addEventListener("click", e => { const t = e.target.closest("[data-try]"); if (!t) return;
+  const [p, l, pr] = t.dataset.try.split("|"); gradeNow(p, l, pr, "standard"); });
+const showExamples = () => { $("#examples").hidden = store.get("cs2s_hist", []).length > 0; };
+showExamples(); const _sr = showRecent; showRecent = () => { _sr(); showExamples(); };
 // a shared link (?p=ZywOo&l=27.5&t=kills) grades on open
 (() => { const q = new URLSearchParams(location.search);
   if (q.get("p") && q.get("l")) setTimeout(() => gradeNow(q.get("p"), q.get("l"), q.get("t") === "hs" ? "hs" : "kills", q.get("lt") || "standard"), 0); })();
@@ -536,7 +574,8 @@ function render(d) {
   const head = v.state === "SCOUT" ? `SCOUT · leans ${v.side} ${g.line}`    : v.grade === "LEAN" && v.side ? `Lean ${v.side === "More" ? "Over" : "Under"} ${g.line}`
     : v.side ? `${v.side} ${g.line}` : g.status === "NO GRADE" ? "No grade" : "No play";
   const gateStop = !("p_more" in g);   // stopped by a gate - the reason shows as a pill instead
-  const sub = v.side ? `${pct(v.p)} chance · ${v.units}U · ${esc(v.confidence)} confidence<div class="small muted" style="margin-top:4px">${esc(v.reason || "")}</div>`
+  const why = v.reason && !/^Projection [\d.]+ vs [\d.]+ needed \([^)]*\)$/.test(v.reason) ? v.reason : "";
+  const sub = v.side ? `${pct(v.p)} chance · ${v.units}U · ${esc(v.confidence)} confidence${why ? `<div class="small muted" style="margin-top:4px">${esc(why)}</div>` : ""}`
     : gateStop ? "" : esc(v.reason || "");
   const hc = g.status === "NO GRADE" || v.state === "SCOUT" ? "g-scout" : gClass(v.grade);
   h += `<section class="card herocard ${hc}"><div class="hero">
@@ -610,11 +649,11 @@ function render(d) {
   h += `<section class="card"><h2>Last ${rf.matches ?? 10} matches · Maps 1–2${rf.hit_rate != null ? ` · over ${g.line} in ${rf.overs}/${rf.matches} (${pct(rf.hit_rate,0)})` : ""}</h2>`;
   if (rf.series?.length) {
     h += chart(rf.series, g.line, g.lambda_final);
-    h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th>Maps 1–2</th><th class="num">${g.prop === "hs" ? "HS" : "Kills"}</th><th>Result</th><th></th></tr></thead><tbody>`;
-    for (const s of rf.series) h += `<tr><td class="num" style="text-align:left">${shortDate(s.date)}</td><td>${esc(s.opponent)}${s.source ? ` <span class="pill" title="Match from HLTV (BO3.gg does not have it)">${esc(s.source)}</span>` : ""}</td>
+    h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th>Maps 1–2</th><th class="num">${g.prop === "hs" ? "HS" : "Kills"}</th><th>Team result</th><th>Prop</th></tr></thead><tbody>`;
+    for (const s of rf.series) h += `<tr><td class="num" style="text-align:left">${shortDate(s.date)}</td><td>${esc(s.opponent)}${s.source ? `<span class="src" title="Numbers from HLTV">H</span>` : ""}</td>
       <td class="small">${s.maps.map(mapName).join('<span class="dot"> · </span>')}</td><td class="num"><span class="parts">${s.values.join(" + ")} = </span><b>${s.total}</b></td>
       <td>${esc(s.result)}</td><td class="${s.total > g.line ? "hit" : "miss"}">${s.total > g.line ? "Over" : "Under"}</td></tr>`;
-    h += `</tbody></table></div><div class="small muted" style="margin-top:8px">Average ${rf.avg_total} · median ${rf.median_total} ${stat} on Maps 1–2</div>`;
+    h += `</tbody></table></div><div class="small muted" style="margin-top:8px">Average ${rf.avg_total} · median ${rf.median_total} ${stat} on Maps 1–2${rf.series.some(x => x.source) ? ` · <span class="src" style="vertical-align:baseline">H</span> = numbers from HLTV` : ""}</div>`;
   } else h += `<div class="muted">No recent matches with two maps.</div>`;
   h += `</section>`;
 
@@ -622,8 +661,8 @@ function render(d) {
   h += `<section class="card"><h2>Head-to-head vs ${esc(hh?.opponent_query || nm?.opponent || "opponent")}${hh?.hit_rate != null ? ` · ${pct(hh.hit_rate,0)} over ${hh.line}` : ""}</h2>`;
   if (d.regional_note) h += `<div class="small muted" style="margin-bottom:8px">${esc(d.regional_note)}</div>`;
   if (hh?.series?.length) {
-    h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th>Maps 1–2</th><th class="num">${g.prop === "hs" ? "HS" : "Kills"}</th><th>Result</th><th></th></tr></thead><tbody>`;
-    for (const s of hh.series) h += `<tr><td class="num" style="text-align:left">${shortDate(s.date)}</td><td>${esc(s.opponent)}${s.regional ? ` <span class="pill">regional</span>` : ""}</td>
+    h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th>Maps 1–2</th><th class="num">${g.prop === "hs" ? "HS" : "Kills"}</th><th>Team result</th><th>Prop</th></tr></thead><tbody>`;
+    for (const s of hh.series) h += `<tr><td class="num" style="text-align:left">${shortDate(s.date)}</td><td>${esc(s.opponent)}${s.regional ? `<span class="src" title="Same-region team">R</span>` : ""}</td>
       <td class="small">${s.maps.map(mapName).join('<span class="dot"> · </span>')}</td><td class="num"><span class="parts">${s.values.join(" + ")} = </span><b>${s.total}</b></td>
       <td>${esc(s.result)}</td><td class="${s.total > g.line ? "hit" : "miss"}">${s.total > g.line ? "Over" : "Under"}</td></tr>`;
     h += `</tbody></table></div>`;
@@ -708,7 +747,7 @@ function render(d) {
   // ---- CS API cross-check (top teams; context only, weight 0)
   const ca = d.csapi;
   if (ca && ca.found) {
-    h += `<section class="card sc"><h2>Second source check <span class="muted small">· all maps · last ${esc(ca.window)} · ${ca.maps} maps</span></h2>
+    h += `<section class="card"><h2>Second source check <span class="muted small">· all maps · last ${esc(ca.window)} · ${ca.maps} maps</span></h2>
       <div class="kv"><span>Team (CS API)</span><span>${esc(ca.team || "–")}${ca.vrs_rank ? ` · VRS #${ca.vrs_rank}` : ""}</span></div>
       <div class="kv"><span>On that roster</span><span>${ca.on_roster === true ? "Yes" : ca.on_roster === false ? "No" : "–"}</span></div>
       <div class="kv"><span>Kills / map</span><span>${num(ca.kills_per_map, 1)} · rating ${num(ca.rating)}</span></div>
@@ -721,7 +760,7 @@ function render(d) {
   }
 
   // ---- FACEIT
-  h += `<section class="card sc"><h2>FACEIT form</h2>`;
+  h += `<section class="card"><h2>FACEIT form</h2>`;
   h += fc ? `<div class="kv"><span>Account</span><span>${esc(fc.nickname)} · lvl ${fc.level} · ${fc.elo} elo</span></div>
       <div class="kv"><span>Last ${fc.recent_n} games</span><span>${fc.avg_kills} kills · KPR ${fc.kpr}</span></div>
       <div class="kv"><span>HS%</span><span>${fc.avg_hs_pct}%</span></div>` : `<div class="muted">No confirmed FACEIT account.</div>`;
