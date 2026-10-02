@@ -682,8 +682,8 @@ def settle_by_day(nick, team, day, opponent):
 
 
 # ---------------------------------------------------------------- map vetoes (from stored match pages)
-_VETO = re.compile(r"<div>\s*(\d)\.\s*(.+?)\s+(removed|picked)\s+(.+?)\s*</div>")
-_LEFT = re.compile(r"<div>\s*(\d)\.\s*(.+?)\s+was left over\s*</div>")
+_VETO = re.compile(r"<div>\s*(\d)\.\s*([^<]+?)\s+(removed|picked)\s+([^<]+?)\s*</div>")
+_LEFT = re.compile(r"<div>\s*(\d)\.\s*([^<]+?)\s+was left over\s*</div>")
 _VETO_CACHE = {}
 
 
