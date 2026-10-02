@@ -208,7 +208,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
   .brow .gtag{grid-area:g} .brow .who{grid-area:who;min-width:0} .brow .bslip{grid-area:add}
   .brow .pk{grid-area:pick;display:flex;justify-content:space-between;align-items:baseline;gap:8px;border-top:1px solid var(--line);padding-top:8px}
   .brow .bstats{grid-area:st;grid-template-columns:repeat(6,1fr);gap:2px}
-  .bstat .k{font-size:9.5px;letter-spacing:.3px} .bstat .v{font-size:13px} .bstat .s{display:none} .bstat .s.keep{display:block}
+  .bstat .k{font-size:9.5px;letter-spacing:.3px;white-space:normal;line-height:1.15;min-height:22px;display:flex;align-items:flex-end;justify-content:center} .bstat .v{font-size:13px} .bstat .s{display:none} .bstat .s.keep{display:block}
   .modes .small{display:none}
   /* phone grade card: compact */
   .herocard{padding:14px} .hero{gap:12px;grid-template-columns:62px 1fr}
@@ -742,7 +742,7 @@ function drawBoard() {
           ${st("Last 10", r.l10_n ? `${r.l10_over}/${r.l10_n}` : "–", "", r.l10_avg != null ? "avg " + r.l10_avg : "").replace('class="s"', 'class="s keep"')}
           ${st("Units", r.units != null ? r.units + "U" : "–", (r.units || 0) > 0 ? "up" : "")}
           ${st("HS%", r.hs_pct != null ? Math.round(r.hs_pct) + "%" : "–", "", "3 months")}
-          ${st("Win", win, "", "team odds")}
+          ${st("Team win %", win, "", "betting odds")}
         </div>
         ${r.side ? `<button type="button" class="bslip ${onSlip.has(nick.toLowerCase()) ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}">${onSlip.has(nick.toLowerCase()) ? "On slip" : "+ Slip"}</button>` : "<span></span>"}
       </div>`; }).join("") + `</div><div class="small muted" style="margin-top:10px">Underdog's Maps 1–2 lines, graded. Tap a row for the full card. Underdog payouts differ from PrizePicks'.</div>`
@@ -828,7 +828,7 @@ function render(d) {
     <div class="stats" style="margin-top:10px">
       <div class="stat"><div class="k">Projection</div><div class="v">${num(g.lambda_final,1)}</div><div class="n">${stat}, Maps 1–2</div></div>
       <div class="stat"><div class="k">Line</div><div class="v">${g.line}</div><div class="n">needs ${g.line + 0.5} for More</div></div>
-      <div class="stat"><div class="k">Team win</div><div class="v">${det.p_win != null ? pct(det.p_win,0) : "–"}</div><div class="n">${g.market_quality === "NO MARKET" ? "no odds found – treated as even" : "from betting markets"}</div></div>
+      <div class="stat"><div class="k">Team win %</div><div class="v">${det.p_win != null ? pct(det.p_win,0) : "–"}</div><div class="n">${g.market_quality === "NO MARKET" ? "no odds found – treated as even" : "from betting markets"}</div></div>
       <div class="stat ${g.lambda_final - g.line - 0.5 > 0 ? "up" : "down"}"><div class="k">Edge</div><div class="v">${(g.lambda_final - g.line - 0.5 > 0 ? "+" : "") + (g.lambda_final - g.line - 0.5).toFixed(1)}</div><div class="n">projection − ${g.line + 0.5} needed</div></div>
       <div class="stat"><div class="k">Last 10</div><div class="v">${pb.recent_form?.avg_total ?? "–"}</div><div class="n">median ${pb.recent_form?.median_total ?? "–"} · ${pb.recent_form?.overs ?? "–"}/${pb.recent_form?.matches ?? "–"} over</div></div>
     </div>`;
