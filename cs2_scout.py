@@ -917,6 +917,7 @@ def grader_inputs(pb, args, odds=None, hh=None):
                           if ((odds or {}).get("maps") or {}).get(k) else None for k in ("map1", "map2")]
                          if (odds or {}).get("found") else None,
         "recent_avg": (pb.get("recent_form") or {}).get("avg_total"),
+        "recent_median": (pb.get("recent_form") or {}).get("median_total"),
         "recent_n": (pb.get("recent_form") or {}).get("matches"),
         "trade_pr": pb.get("trade_pr"),
         "scout": bool(pb.get("scout")), "standin_for": pb.get("standin_for"),

@@ -43,7 +43,35 @@ def _db():
         con.execute("ALTER TABLE picks ADD COLUMN test INTEGER DEFAULT 0")
     except sqlite3.OperationalError:
         pass                               # column already there
+    for col in ("factors", "result"):      # added 2026-10-02: every factor's value at grade time and
+        try:                               # what happened (rounds, OT, map wins) - each measurable
+            con.execute(f"ALTER TABLE picks ADD COLUMN {col} TEXT")
+        except sqlite3.OperationalError:
+            pass
     return con
+
+
+def _factors(res):
+    """Every input and every adjustment behind this grade (for measuring each factor later)."""
+    gi, g, pb = res.get("grader_inputs") or {}, res.get("grade") or {}, res.get("player_block") or {}
+    keep = ("kpr", "hs_pct", "maps_played", "sample_maps", "recent_avg", "recent_median", "recent_n", "kpr_last5",
+            "round_swing", "rating", "teammate_ratings", "is_igl", "sniping", "dpr", "kast", "adr",
+            "market_quality", "days_since_last_map", "map_win_probs", "trade_pr", "standin_for", "is_standin",
+            "roster_confirmed", "on_listed_team", "recent", "per_map")
+    out = {k: gi.get(k) for k in keep if k in gi}
+    out["h2h_series"] = len(gi.get("h2h_series") or [])
+    out["regional_series"] = len(gi.get("regional_series") or [])
+    out["detail"] = g.get("detail")
+    out["lambda_base"] = g.get("lambda_base")
+    out["sd"] = g.get("sd")
+    out["form_fight"], out["tape_fight"] = g.get("form_fight"), g.get("tape_fight")
+    out["form_windows"] = (pb.get("overall") or {}).get("form_windows")
+    out["team_kill_share"] = pb.get("team_kill_share")
+    out["opening"] = pb.get("opening")
+    out["hltv"] = {k: (res.get("hltv") or {}).get(k) for k in ("rating", "round_swing", "adr", "kast", "maps")}
+    out["opponent_defense"] = res.get("opponent_defense")
+    out["sim"] = (res.get("simulation") or {}).get("p_more")
+    return out
 
 
 def log_grade(res, verdict, test=False):
@@ -71,6 +99,7 @@ def log_grade(res, verdict, test=False):
         "rec_hit": f"{rf.get('overs')}/{rf.get('matches')}" if rf.get("overs") is not None else None,
         "flags": json.dumps(g.get("flags")), "opp_def": json.dumps(res.get("opponent_defense")),
         "test": int(bool(test)),
+        "factors": json.dumps(_factors(res), default=str),
     }
     with _LOCK:
         con = _db()
@@ -163,6 +192,9 @@ def settle(b, map_rows):
             if len(maps) < 2:
                 maps = _quick_rows(b, r["player_id"], mt) or maps   # full stats not out yet
             if len(maps) == 2:
+                _save_result(r["id"], {"source": "bo3", "rounds": [x.get("rounds") for x in maps],
+                                       "won": [x.get("won") for x in maps],
+                                       "per_map": [[x.get("kills"), x.get("headshots")] for x in maps]})
                 stat = "headshots" if r["prop"] == "hs" else "kills"
                 actual = sum(x[stat] for x in maps)
                 if actual == r["line"]:                   # whole-number line landed exactly: push
@@ -190,6 +222,17 @@ def settle(b, map_rows):
     return done
 
 
+def _save_result(pick_id, result):
+    try:
+        with _LOCK:
+            con = _db()
+            con.execute("UPDATE picks SET result = ? WHERE id = ?", (json.dumps(result, default=str), pick_id))
+            con.commit()
+            con.close()
+    except sqlite3.Error:
+        pass
+
+
 HLTV_WAIT_H = 12   # HLTV has the match but not its headshots yet: wait this long before BO3.gg
 
 
@@ -210,6 +253,9 @@ def _hltv_totals(r):
     if not tot.get("found"):
         return None
     actual = tot.get("headshots" if r["prop"] == "hs" else "kills")
+    if actual is not None:
+        _save_result(r["id"], {"source": "hltv", "rounds": tot.get("rounds"), "won": tot.get("won"),
+                               "per_map": tot.get("per_map")})
     return "wait" if actual is None else _outcome(r, actual, tot.get("maps"))
 
 

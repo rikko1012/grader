@@ -373,7 +373,11 @@ def grade_leg(d, cfg=CONFIG):
     last10_mult = 1.0
     if ra is not None and rn >= cfg["last10_min"] and cfg["last10_weight"] > 0:
         w10 = cfg["last10_weight"]
-        blended = (1 - w10) * lam_final + w10 * ra
+        # his last-10 level = half average, half median (2026-10-02: chosen on all 4 held-out days of
+        # members' real lines, log-loss 0.6782 -> 0.6747) - one blow-up game moves it less
+        rmed = d.get("recent_median")
+        level = (ra + rmed) / 2 if rmed is not None else ra
+        blended = (1 - w10) * lam_final + w10 * level
         last10_mult = blended / lam_final if lam_final else 1.0
         lam_final = blended
 

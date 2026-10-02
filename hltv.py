@@ -676,4 +676,6 @@ def settle_by_day(nick, team, day, opponent):
     m12 = sorted((r for r in on if r["hltv_match"] == mid), key=lambda r: r["number"])[:2]
     hs = [r["headshots"] for r in m12]
     return {"found": True, "hltv_match": mid, "kills": sum(r["kills"] for r in m12),
-            "headshots": None if None in hs else sum(hs), "maps": [r["map"] for r in m12]}
+            "headshots": None if None in hs else sum(hs), "maps": [r["map"] for r in m12],
+            "rounds": [r["rounds"] for r in m12], "won": [r["won"] for r in m12],
+            "per_map": [[r["kills"], r["headshots"]] for r in m12]}
