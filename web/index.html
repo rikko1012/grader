@@ -36,7 +36,7 @@ header .tag{font-size:12px;color:var(--muted)}
 
 /* search */
 form{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;
-  display:grid;grid-template-columns:2fr 1fr 2fr;gap:12px}
+  display:grid;grid-template-columns:2fr 1fr;gap:12px}
 .field{position:relative;display:flex;flex-direction:column;gap:6px}
 label{font-size:12px;font-weight:500;color:var(--muted)}
 input,select{width:100%;background:var(--panel-2);border:1px solid var(--line);color:var(--text);
@@ -194,8 +194,6 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 }
 @media (max-width:640px){
   form{grid-template-columns:1fr 96px}
-  #opp{grid-column:auto}
-  form > .field:nth-child(3){grid-column:1/-1}
   .row2 .field{flex:1 1 130px}
   .go{width:100%;margin-left:0}
   .two{grid-template-columns:1fr}
@@ -241,10 +239,6 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
     <div class="field">
       <label for="line">Line</label>
       <input id="line" inputmode="decimal" placeholder="27.5" required>
-    </div>
-    <div class="field">
-      <label for="opp">Opponent <span class="muted small">(optional – from the PrizePicks card, if the grader can't find the match)</span></label>
-      <input id="opp" placeholder="e.g. Krytiepacani">
     </div>
     <div class="row2">
       <div class="field" style="flex:0 0 auto">
@@ -340,7 +334,7 @@ let prop = "kills", slug = null, match = null;   // match: which upcoming match 
 // picking another match on the card re-grades the same player + line for that match
 document.addEventListener("click", e => { const b = e.target.closest("[data-match]"); if (!b) return;
   match = b.dataset.match; $("#f").requestSubmit(); });
-["#player", "#line", "#opp"].forEach(id => $(id).addEventListener("input", () => { match = null; }));
+["#player", "#line"].forEach(id => $(id).addEventListener("input", () => { match = null; }));
 
 
 // ---------- suggestions
@@ -381,7 +375,6 @@ $("#f").onsubmit = async e => {
   const qs = new URLSearchParams({player, line, prop, line_type: $("#lt").value});
   if (slug) qs.set("slug", slug);
   if (match) qs.set("match", match);
-  if ($("#opp").value.trim()) qs.set("opponent", $("#opp").value.trim());
   $("#go").disabled = true; $("#out").innerHTML = "";
   const st = $("#status"); st.hidden = false; st.className = "status";
   const t0 = Date.now();
@@ -562,8 +555,8 @@ document.addEventListener("click", e => { const t = e.target.closest("[data-try]
   const [p, l, pr] = t.dataset.try.split("|"); gradeNow(p, l, pr, "standard"); });
 // "Try" chips only on a fresh start screen: gone once there are recent grades, a card, or anything typed
 const showExamples = () => { $("#examples").hidden = store.get("cs2s_hist", []).length > 0 || !!lastCard
-  || ["#player", "#line", "#opp"].some(id => $(id).value.trim()); };
-["#player", "#line", "#opp"].forEach(id => $(id).addEventListener("input", showExamples));
+  || ["#player", "#line"].some(id => $(id).value.trim()); };
+["#player", "#line"].forEach(id => $(id).addEventListener("input", showExamples));
 showExamples(); const _sr = showRecent; showRecent = () => { _sr(); showExamples(); };
 // bet slip: add single props, build a 2-6 pick entry (saved in this browser)
 const PAYOUT = {2: 3, 3: 6, 4: 10, 5: 20, 6: 37.5};   // PrizePicks Power Play (check the app for current payouts)
@@ -717,7 +710,7 @@ function render(d) {
     h += `<div class="kv"><span>Likely Map 1 <span class="muted small">(context only)</span></span><span>${esc(top(pb.map_prediction.map1))}</span></div>
       <div class="kv"><span>Likely Map 2 <span class="muted small">(context only)</span></span><span>${esc(top(pb.map_prediction.map2))}</span></div>`;
   }
-  if (!nm) h += `<div class="muted">No upcoming match found for ${esc(pb.current_team || "this player's team")}. If PrizePicks shows his opponent, type it in the Opponent box and grade again.</div>`;
+  if (!nm) h += `<div class="muted">No upcoming match found for ${esc(pb.current_team || "this player's team")} yet.</div>`;
   if (d.match_note) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(d.match_note)}</div>`;
   if (d.schedule_heads_up) h += `<div class="small" style="margin-top:6px;color:var(--warn)">HLTV heads-up: ${esc(d.schedule_heads_up)}</div>`;
   if (od?.found) {
