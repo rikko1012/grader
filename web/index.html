@@ -560,7 +560,10 @@ $("#slatego").onclick = async () => {
 })();
 document.addEventListener("click", e => { const t = e.target.closest("[data-try]"); if (!t) return;
   const [p, l, pr] = t.dataset.try.split("|"); gradeNow(p, l, pr, "standard"); });
-const showExamples = () => { $("#examples").hidden = store.get("cs2s_hist", []).length > 0; };
+// "Try" chips only on a fresh start screen: gone once there are recent grades, a card, or anything typed
+const showExamples = () => { $("#examples").hidden = store.get("cs2s_hist", []).length > 0 || !!lastCard
+  || ["#player", "#line", "#opp"].some(id => $(id).value.trim()); };
+["#player", "#line", "#opp"].forEach(id => $(id).addEventListener("input", showExamples));
 showExamples(); const _sr = showRecent; showRecent = () => { _sr(); showExamples(); };
 // bet slip: add single props, build a 2-6 pick entry (saved in this browser)
 const PAYOUT = {2: 3, 3: 6, 4: 10, 5: 20, 6: 37.5};   // PrizePicks Power Play (check the app for current payouts)
