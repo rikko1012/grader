@@ -413,6 +413,8 @@ document.addEventListener("keydown", e => {
   if (e.key === "h" || e.key === "H") setProp("hs");
 });
 const propWord = p => p === "hs" ? "HS" : "kills";
+const ltTag = lt => lt === "goblin" ? ` <span class="pill" style="margin:0;padding:1px 7px;color:#22d27a;border-color:#22d27a">goblin</span>`
+  : lt === "demon" ? ` <span class="pill" style="margin:0;padding:1px 7px;color:#ff5566;border-color:#ff5566">demon</span>` : "";
 const lineWarn = (p, l) => p === "hs" && +l >= 24 ? `${l} headshots is a kills-sized line – did you mean kills?`
   : p !== "hs" && +l <= 12 ? `${l} kills is a headshot-sized line – did you mean HS?` : "";
 const sideWord = v => v.grade === "LEAN" ? `Lean ${v.side === "More" ? "Over" : "Under"}` : v.side || "–";
@@ -439,7 +441,7 @@ function remember(d) {
 function showRecent() {
   const h = store.get("cs2s_hist", []);
   $("#recent").innerHTML = h.length ? `<span class="small muted" style="align-self:center">Recent:</span>` + h.map((x, i) =>
-    `<button type="button" class="chipbtn" data-hist="${i}">${esc(x.p)} ${x.l} ${propWord(x.t)} · <b>${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : `${esc(x.g)} ${esc(x.s)}`}</b></button>`).join("")
+    `<button type="button" class="chipbtn" data-hist="${i}">${esc(x.p)} ${x.l} ${propWord(x.t)}${x.lt && x.lt !== "standard" ? " " + x.lt : ""} · <b>${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : `${esc(x.g)} ${esc(x.s)}`}</b></button>`).join("")
     + `<button type="button" class="chipbtn" data-act="clearhist" title="Clear recent">✕</button>` : "";
 }
 function gradeNow(p, l, t, lt) {
@@ -489,7 +491,7 @@ function slateRow(x, i) {
   const g = x.d.grade || {}, v = x.d.verdict || {}, nm = x.d.next_match || {};
   const lab = !v.side ? "–" : v.state === "SCOUT" ? "S" : v.grade === "LEAN" ? "L" : v.grade || "–";
   const side = sideWord(v), note = noteOf(x.d, x);
-  return `<tr data-row="${i}"><td><b>${esc(x.d.player_block?.player?.nick || x.player)}</b></td><td class="num" style="text-align:left">${g.line ?? esc(x.line)} ${propWord(g.prop || x.prop)}</td>
+  return `<tr data-row="${i}"><td><b>${esc(x.d.player_block?.player?.nick || x.player)}</b></td><td class="num" style="text-align:left">${g.line ?? esc(x.line)} ${propWord(g.prop || x.prop)}${ltTag(g.line_type || x.lt)}</td>
     <td>${esc(side)}</td><td><span class="gtag ${v.state === "SCOUT" ? "g-scout" : gClass(v.grade)}">${esc(lab)}</span></td>
     <td class="num">${v.p != null ? Math.round(v.p * 100) + "%" : "–"}</td><td class="num">${v.units ?? 0}U</td>
     <td class="num">${g.lambda_final != null ? num(g.lambda_final, 1) : "–"}</td><td class="small">${esc(nm.opponent ? "vs " + nm.opponent : "")}</td>
@@ -559,14 +561,23 @@ const showExamples = () => { $("#examples").hidden = store.get("cs2s_hist", []).
 ["#player", "#line"].forEach(id => $(id).addEventListener("input", showExamples));
 showExamples(); const _sr = showRecent; showRecent = () => { _sr(); showExamples(); };
 // bet slip: add single props, build a 2-6 pick entry (saved in this browser)
-const PAYOUT = {2: 3, 3: 6, 4: 10, 5: 20, 6: 37.5};   // PrizePicks Power Play (check the app for current payouts)
+const PAYOUT = {2: 3, 3: 5, 4: 10, 5: 20, 6: 37.5};   // PrizePicks Power Play (check the app for current payouts)
+// PrizePicks standard Flex: payout by number of hits (check the app - they change)
+const FLEX = {3: {3: 3, 2: 1}, 4: {4: 6, 3: 1.5}, 5: {5: 10, 4: 2, 3: 0.4}, 6: {6: 25, 5: 2, 4: 0.4}};
+function hitDist(ps) {           // P(exactly k legs hit), legs treated as independent
+  let d = [1];
+  for (const p of ps) { const n = new Array(d.length + 1).fill(0); d.forEach((v, k) => { n[k] += v * (1 - p); n[k + 1] += v * p; }); d = n; }
+  return d;
+}
+const retLine = (lab, avg) => `<div class="kv"><span>${lab}</span><span style="color:${avg >= 1 ? "var(--good)" : "var(--bad)"}"><b>${avg.toFixed(2)}U</b> back per 1U (${avg >= 1 ? "+" : ""}${(avg - 1).toFixed(2)}U)</span></div>`;
 const legKey = l => String(l.p).toLowerCase();   // PrizePicks: one prop per player in an entry
 function addToSlip(d) {
   const g = d.grade || {}, v = d.verdict || {}, nick = d.player_block?.player?.nick;
   if (!nick || !v.side) return;
   let s = store.get("cs2s_slip", []);
   const leg = {p: nick, l: g.line, t: g.prop, lt: g.line_type, s: v.side, g: v.grade, pc: v.p, u: v.units,
-               m: d.next_match?.slug || d.next_match?.opponent || "", vs: d.next_match?.opponent || "", tm: d.player_block?.current_team || ""};
+               m: d.next_match?.slug || [d.player_block?.current_team || "", d.next_match?.opponent || ""].map(x => x.toLowerCase().replace(/[^a-z0-9]/g, "")).sort().join("|"),
+               vs: d.next_match?.opponent || "", tm: d.player_block?.current_team || ""};
   if (s.some(x => legKey(x) === legKey(leg))) { toast(`${nick} is already on the slip – PrizePicks allows one prop per player`); return openSlip(); }
   if (s.length >= 6) { toast("A slip holds 6 picks max"); return openSlip(); }
   s.push(leg); store.set("cs2s_slip", s); toast(`Added – ${s.length} on the slip`); drawSlip();
@@ -582,18 +593,22 @@ function drawSlip() {
   const same = Object.values(teams).some(c => c > 1);
   const leans = s.filter(x => x.g === "LEAN").length;
   $("#slip").innerHTML = `<h4>Bet slip · ${n}-pick</h4>` + s.map((x, i) =>
-    `<div class="leg"><span><b>${esc(x.p)}</b> ${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : esc(x.s)} ${x.l} ${propWord(x.t)}
+    `<div class="leg"><span><b>${esc(x.p)}</b> ${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : esc(x.s)} ${x.l} ${propWord(x.t)}${ltTag(x.lt)}
       <span class="muted small">· ${x.g === "LEAN" ? "Lean" : esc(x.g)} · ${Math.round((x.pc || 0) * 100)}%${x.vs ? " · vs " + esc(x.vs) : ""}</span></span>
       <button type="button" class="x" data-rmleg="${i}" title="Remove">✕</button></div>`).join("")
     + (n < 2 ? `<div class="small muted" style="margin-top:10px">Add at least 2 picks (up to 6).</div>`
-       : `<div class="kv"><span>All ${n} hit (grader's %)</span><span><b>${(all * 100).toFixed(1)}%</b></span></div>
-          <div class="kv"><span>Power Play payout</span><span>${pay}x</span></div>
-          <div class="kv"><span>Expected return per 1U</span><span style="color:${all * pay >= 1 ? "var(--good)" : "var(--bad)"}"><b>${(all * pay).toFixed(2)}U</b></span></div>`)
+       : (() => { const dist = hitDist(s.map(x => x.pc || 0.5)), fx = FLEX[n];
+          const flexAvg = fx ? Object.entries(fx).reduce((a, [k, m]) => a + (dist[+k] || 0) * m, 0) : null;
+          return `<div class="kv"><span>All ${n} hit (grader's %)</span><span><b>${(all * 100).toFixed(1)}%</b></span></div>`
+            + `<div class="kv"><span>Power Play (${pay}x if all hit)</span><span></span></div>` + retLine("&nbsp;&nbsp;average payout", all * pay)
+            + (fx ? `<div class="kv"><span>Flex (${Object.entries(fx).sort((a, b) => b[0] - a[0]).map(([k, m]) => `${k}/${n} pays ${m}x`).join(", ")})</span><span></span></div>` + retLine("&nbsp;&nbsp;average payout", flexAvg) : "")
+            + `<div class="small muted" style="margin-top:4px">Average payout = what 1U returns on average, stake included. Above 1.00U means the grader expects a profit.</div>`; })())
     + (same ? `<div class="warn">Two or more picks from the same match – their results move together, so the real odds differ from the %.</div>` : "")
+    + (s.some(x => x.lt && x.lt !== "standard") ? `<div class="warn">Goblin / demon legs change the payout (goblins pay less, demons more) – check PrizePicks for this entry's real multipliers.</div>` : "")
     + (leans ? `<div class="warn">${leans} pick${leans > 1 ? "s are" : " is a"} Lean${leans > 1 ? "s" : ""} (under 57%) – the weakest legs on the slip.</div>` : "")
     + `<div class="actions"><button type="button" class="chipbtn" id="slipcopy">Copy slip</button><button type="button" class="chipbtn" id="slipclear">Clear</button>
        <button type="button" class="chipbtn" id="slipclose">Close</button></div>
-       <div class="small muted" style="margin-top:8px">Payouts are PrizePicks' standard Power Play – check the app for the current ones. Not financial advice.</div>`;
+       <div class="small muted" style="margin-top:8px">Payouts are PrizePicks' standard Power Play / Flex – check the app for the current ones. Not financial advice.</div>`;
 }
 $("#slipbtn").onclick = () => { $("#slip").hidden ? openSlip() : ($("#slip").hidden = true); };
 $("#slip").addEventListener("click", e => {
