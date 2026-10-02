@@ -183,11 +183,12 @@ def grade_leg(d, cfg=CONFIG):
         out.update(status=status, grade=status, units=0.0, units_less=0.0, reason=why)
         return out
 
+    # Gates never remove the side (owner: always Lean Over / Lean Under) - they set 0 units + a reason.
     # Gate C - live roster
     if d.get("on_listed_team") is False:
-        return stop("NO GRADE", "Gate C: player is not on the listed team (transfer)")
+        zero_units.append("not on the listed team (transfer)")
     if d.get("is_standin"):
-        return stop("NO GRADE", "Gate C: player is a stand-in")
+        zero_units.append("stand-in")
     regional_ok = d.get("roster_confirmed") is True
     if not regional_ok:
         flags.append("Gate C: roster not confirmed - regional H2H extension disabled")
@@ -195,8 +196,11 @@ def grade_leg(d, cfg=CONFIG):
 
     # Gate D - sample size (Maps 1-2)
     maps = d.get("maps_played")
-    if maps is None or maps < 5:
-        return stop("NO GRADE", f"Gate D: {maps} Maps 1-2 in the window (need 5+)")
+    if not maps:
+        return stop("NO GRADE", "Gate D: no Maps 1-2 in the window")
+    if maps < 5:
+        zero_units.append(f"only {maps} recent Maps 1-2")
+        sd_reasons.append("sample <5 maps")
     small = maps < cfg["thin_maps"]
     if maps < 10:
         flags.append(f"Gate D: only {maps} Maps 1-2 - variance flag, SD inflated, capped 1U")
@@ -213,7 +217,7 @@ def grade_leg(d, cfg=CONFIG):
         if snip is None:
             flags.append("Gate A: Sniping unknown - fetch before playing an HS prop")
         elif snip > 40:
-            return stop("NO PLAY", f"Gate A: Sniping {snip}/100 - AWPer on HS prop")
+            zero_units.append("AWPer on a headshot prop")
 
     # Win probability + stomp (either side at -400 or heavier = P(win) >= 0.80 or <= 0.20)
     p_win, note = win_prob(d.get("team_ml"), d.get("opp_ml"))
@@ -503,6 +507,7 @@ def grade_leg(d, cfg=CONFIG):
         1 - pm, min(unit_cap if unit_cap is not None else 9, tcap) if tape == "Less" else unit_cap)
     for z in zero_units:
         flags.append(f"0 units: {z}")
+    out["zero_reason"] = "; ".join(z for z in zero_units if not z.startswith("SCOUT")) or None
     status = "SCOUT" if scout else "PLAY" if u_more > 0 else "NO PLAY"
 
     # value lines: where each side becomes playable (B+ = 63%) for THIS projection and spread

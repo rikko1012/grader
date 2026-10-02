@@ -312,6 +312,11 @@ def verdict(g):
     else:
         why = (f"Projection {g['lambda_final']:.1f} vs {need:g} needed ({gap:+.1f} {stat}) is small next "
                f"to how much his totals swing from match to match - leans {side} {p:.0%}, 0 units")
+    if g.get("zero_reason") and not no_less_side:
+        # a gate (AWPer on HS, stand-in, transfer, tiny sample): still a side, never "no play"
+        grade, units = "LEAN", 0.0
+        why = (f"Leans {side} {p:.0%} (projection {g['lambda_final']:.1f} vs {need:g} needed) - 0 units: "
+               f"{g['zero_reason']}")
     if grade == "C":
         # owner 2026-09-29: under 57% the card says "Lean Over" / "Lean Under" instead of a C
         grade = "LEAN"
@@ -360,7 +365,7 @@ _FLAG_RULES = (   # (starts with, member-friendly text or None = not shown)
     ("0 units: SCOUT", "No upcoming match found - scouting view only"),
     ("0 units", None),
 )
-_REASONS = (("Gate A", "AWPer on a headshot prop - no play"), ("Gate D", "Not enough recent official maps to grade"),
+_REASONS = (("Gate A", "AWPer on a headshot prop"), ("Gate D", "No recent official maps to grade"),
             ("Gate C", "Not on this team's roster"), ("Missing", "Not enough data to grade"))
 
 

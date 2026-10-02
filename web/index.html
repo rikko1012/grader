@@ -180,6 +180,13 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 .mini .go{padding:8px 16px;font-size:13px;margin-left:0}
 .examples{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;align-items:center}
 .src{color:var(--accent-2);font-size:11px;margin-left:3px;vertical-align:super}
+.slipbtn{position:fixed;right:18px;bottom:18px;z-index:40;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#170b00;border:0;border-radius:99px;padding:12px 18px;font:700 14px var(--display);letter-spacing:.6px;text-transform:uppercase;cursor:pointer;box-shadow:0 8px 26px rgba(0,0,0,.5)}
+.slip{position:fixed;right:18px;bottom:74px;z-index:41;width:min(420px,calc(100vw - 32px));max-height:min(70vh,640px);overflow:auto;background:#121925;border:1px solid var(--line-2);border-radius:16px;padding:16px;box-shadow:0 20px 50px rgba(0,0,0,.6)}
+.slip h4{margin:0 0 10px;font:700 15px var(--display);text-transform:uppercase;letter-spacing:.8px}
+.slip .leg{display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.slip .leg span{flex:1;min-width:0}
+.slip .x{background:none;border:0;color:var(--muted);cursor:pointer;font-size:16px}
+.slip .warn{color:var(--warn);font-size:12.5px;margin-top:8px}
 @media (max-width:900px){
   .cols{grid-template-columns:1fr}
 }
@@ -218,8 +225,8 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
     <span class="small muted">Shortcuts: <b>K</b> kills &middot; <b>H</b> headshots</span></div>
   <section class="card" id="slate" hidden>
     <textarea id="slatetxt" spellcheck="false" placeholder="ZywOo 27.5 K&#10;ropz 22.5 HS&#10;donk 30.5&#10;m0NESY 14.5 hs goblin"></textarea>
-    <div class="help">One prop per line: player, line, then K or HS (default: the prop picked in single mode), optionally goblin / demon. Up to 15 lines.</div>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="go" id="slatego" type="button" style="margin-left:0">Grade slate</button><span id="slatestatus" class="small muted"></span></div>
+    <div class="help">One prop per line: player, line, then K or HS (no K/HS = kills), optionally goblin / demon. Up to 15 lines.</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="go" id="slatego" type="button" style="margin-left:0">Grade slate</button><span id="slatestatus" class="small muted"></span><button type="button" class="chipbtn" id="slateedit" hidden>Edit lines</button></div>
     <div id="slateout" style="margin-top:14px"></div>
   </section>
   <form id="f" autocomplete="off">
@@ -273,6 +280,8 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
   <div id="out"></div>
 </div>
 <div class="toast" id="toast"></div>
+<button type="button" class="slipbtn" id="slipbtn" hidden>Slip (0)</button>
+<div class="slip" id="slip" hidden></div>
 
 <script>
 const $ = s => document.querySelector(s);
@@ -402,11 +411,18 @@ $("#lt").value = store.get("cs2s_lt", "standard");
 $("#lt").onchange = () => store.set("cs2s_lt", $("#lt").value);
 $("#prop").onclick = e => { const b = e.target.closest("button"); if (b) setProp(b.dataset.v); };
 document.addEventListener("keydown", e => {
-  if (e.ctrlKey || e.metaKey || e.altKey || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || "")) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const el = e.target, ae = document.activeElement;
+  if ((el && el.closest && el.closest("input,textarea,select,[contenteditable]")) || /INPUT|TEXTAREA|SELECT/.test(ae?.tagName || "")) return;
   if (e.key === "k" || e.key === "K") setProp("kills");
   if (e.key === "h" || e.key === "H") setProp("hs");
 });
 const propWord = p => p === "hs" ? "HS" : "kills";
+const lineWarn = (p, l) => p === "hs" && +l >= 24 ? `${l} headshots is a kills-sized line – did you mean kills?`
+  : p !== "hs" && +l <= 12 ? `${l} kills is a headshot-sized line – did you mean HS?` : "";
+const sideWord = v => v.grade === "LEAN" ? `Lean ${v.side === "More" ? "Over" : "Under"}` : v.side || "–";
+const noteOf = (d, x) => { const v = d?.verdict || {}, g = d?.grade || {};
+  return lineWarn(g.prop || x?.prop, g.line ?? x?.line) || ((v.units || 0) === 0 && /0 units: (.+)$/.exec(v.reason || "")?.[1]) || ""; };
 function pickLine(d) {
   const g = d.grade || {}, v = d.verdict || {}, nick = d.player_block?.player?.nick || "";
   const side = v.grade === "LEAN" ? `Lean ${v.side === "More" ? "Over" : "Under"}` : (v.side === "More" ? "MORE" : "LESS");
@@ -428,7 +444,7 @@ function remember(d) {
 function showRecent() {
   const h = store.get("cs2s_hist", []);
   $("#recent").innerHTML = h.length ? `<span class="small muted" style="align-self:center">Recent:</span>` + h.map((x, i) =>
-    `<button type="button" class="chipbtn" data-hist="${i}">${esc(x.p)} ${x.l} ${propWord(x.t)} · <b>${x.g === "LEAN" ? "L" : esc(x.g)} ${x.s === "More" ? "O" : "U"}</b></button>`).join("")
+    `<button type="button" class="chipbtn" data-hist="${i}">${esc(x.p)} ${x.l} ${propWord(x.t)} · <b>${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : `${esc(x.g)} ${esc(x.s)}`}</b></button>`).join("")
     + `<button type="button" class="chipbtn" data-act="clearhist" title="Clear recent">✕</button>` : "";
 }
 function gradeNow(p, l, t, lt) {
@@ -444,6 +460,7 @@ document.addEventListener("click", e => {
   if (act === "clearhist") { store.set("cs2s_hist", []); return showRecent(); }
   if (!lastCard) return;
   if (act === "copy") copy(pickLine(lastCard));
+  if (act === "slip") addToSlip(lastCard);
   if (act === "link") copy(shareUrl(lastCard));
   if (act === "nudge") { const g = lastCard.grade; gradeNow(lastCard.player_block?.player?.nick, String(g.line + +a.dataset.d), g.prop, g.line_type); }
 });
@@ -466,21 +483,22 @@ function parseSlate(txt) {
     if (!m) { out.push({bad: s}); continue; }
     const rest = m[3].toLowerCase();
     out.push({player: m[1].trim(), line: m[2].replace(",", "."),
-              prop: /\b(hs|h|headshots?)\b/.test(rest) ? "hs" : /\b(k|kills?)\b/.test(rest) ? "kills" : prop,
+              prop: /\b(hs|h|headshots?)\b/.test(rest) ? "hs" : "kills",
               lt: /goblin/.test(rest) ? "goblin" : /demon/.test(rest) ? "demon" : "standard"});
   }
   return out.slice(0, 15);
 }
 function slateRow(x, i) {
-  if (x.error) return `<tr><td>${esc(x.player || x.bad)}</td><td colspan="7" class="muted">${esc(x.error)}</td></tr>`;
-  if (!x.d) return `<tr><td>${esc(x.player)}</td><td>${esc(x.line)} ${propWord(x.prop)}</td><td colspan="6" class="muted"><span class="spin"></span>grading…</td></tr>`;
+  if (x.error) return `<tr><td>${esc(x.player || x.bad)}</td><td colspan="8" class="muted">${esc(x.error)}</td></tr>`;
+  if (!x.d) return `<tr><td>${esc(x.player)}</td><td>${esc(x.line)} ${propWord(x.prop)}</td><td colspan="7" class="muted"><span class="spin"></span>grading…</td></tr>`;
   const g = x.d.grade || {}, v = x.d.verdict || {}, nm = x.d.next_match || {};
-  const lab = v.state === "SCOUT" ? "S" : v.grade === "LEAN" ? "L" : v.grade || "–";
-  const side = v.side ? (v.grade === "LEAN" ? `Lean ${v.side === "More" ? "Over" : "Under"}` : v.side) : "–";
+  const lab = !v.side ? "–" : v.state === "SCOUT" ? "S" : v.grade === "LEAN" ? "L" : v.grade || "–";
+  const side = sideWord(v), note = noteOf(x.d, x);
   return `<tr data-row="${i}"><td><b>${esc(x.d.player_block?.player?.nick || x.player)}</b></td><td class="num" style="text-align:left">${g.line ?? esc(x.line)} ${propWord(g.prop || x.prop)}</td>
     <td>${esc(side)}</td><td><span class="gtag ${v.state === "SCOUT" ? "g-scout" : gClass(v.grade)}">${esc(lab)}</span></td>
     <td class="num">${v.p != null ? Math.round(v.p * 100) + "%" : "–"}</td><td class="num">${v.units ?? 0}U</td>
-    <td class="num">${g.lambda_final != null ? num(g.lambda_final, 1) : "–"}</td><td class="small">${esc(nm.opponent ? "vs " + nm.opponent : "")}</td></tr>`;
+    <td class="num">${g.lambda_final != null ? num(g.lambda_final, 1) : "–"}</td><td class="small">${esc(nm.opponent ? "vs " + nm.opponent : "")}</td>
+    <td class="small" style="color:var(--warn)">${esc(note)}</td></tr>`;
 }
 function drawSlate() {
   const key = r => { const v = r.d?.verdict || {}, g = r.d?.grade || {};
@@ -488,14 +506,15 @@ function drawSlate() {
   const rows = slate.map((x, i) => [x, i]).sort((a, b) => { const A = key(a[0]), B = key(b[0]); return (A > B ? 1 : A < B ? -1 : 0) * slateSort.dir; });
   const th = (k, l) => `<th data-sort="${k}">${l}${slateSort.k === k ? (slateSort.dir < 0 ? " ▾" : " ▴") : ""}</th>`;
   const bets = slate.filter(x => (x.d?.verdict?.units || 0) > 0);
-  $("#slateout").innerHTML = slate.length ? `<div class="scroll"><table class="slatetab"><thead><tr>${th("pl", "Player")}<th>Line</th><th>Pick</th><th>Grade</th>${th("p", "Chance")}${th("u", "Units")}${th("pr", "Proj")}<th>Match</th></tr></thead>
+  $("#slateout").innerHTML = slate.length ? `<div class="scroll"><table class="slatetab"><thead><tr>${th("pl", "Player")}<th>Line</th><th>Pick</th><th>Grade</th>${th("p", "Chance")}${th("u", "Units")}${th("pr", "Proj")}<th>Match</th><th>Note</th></tr></thead>
     <tbody>${rows.map(([x, i]) => slateRow(x, i)).join("")}</tbody></table></div>
-    <div class="actions"><button type="button" class="chipbtn" id="copyslip" ${bets.length ? "" : "disabled"}>Copy ${bets.length} bet${bets.length === 1 ? "" : "s"}</button>
+    <div class="actions"><button type="button" class="chipbtn" id="slipall" ${bets.length ? "" : "disabled"} style="border-color:var(--accent)">+ Add ${bets.length} bet${bets.length === 1 ? "" : "s"} to slip</button><button type="button" class="chipbtn" id="copyslip" ${bets.length ? "" : "disabled"}>Copy ${bets.length} bet${bets.length === 1 ? "" : "s"}</button>
     <span class="small muted" style="align-self:center">Tap a row for its full card.</span></div>` : "";
 }
 $("#slateout").addEventListener("click", e => {
   const s = e.target.closest("[data-sort]");
   if (s) { slateSort = {k: s.dataset.sort, dir: slateSort.k === s.dataset.sort ? -slateSort.dir : -1}; return drawSlate(); }
+  if (e.target.closest("#slipall")) return slate.filter(x => (x.d?.verdict?.units || 0) > 0).forEach(x => addToSlip(x.d));
   if (e.target.closest("#copyslip")) return copy(slate.filter(x => (x.d?.verdict?.units || 0) > 0).map(x => pickLine(x.d)).join("\n"));
   const r = e.target.closest("[data-row]");
   if (r) { const d = slate[+r.dataset.row]?.d; if (d) { render(d); $("#out").scrollIntoView({behavior: "smooth"}); } }
@@ -513,7 +532,7 @@ $("#slatego").onclick = async () => {
       if (r.status === 401 && d.error === "members_only") return showGate(d);
       if (!r.ok) x.error = d.error || "Something went wrong"; else { x.d = d; remember(d); }
     } catch (e) { x.error = e.message; }
-    done++; $("#slatestatus").textContent = `${done}/${todo.length} graded`; drawSlate();
+    done++; $("#slatestatus").textContent = `${done}/${todo.length} graded`; $("#slateedit").hidden = false; drawSlate();
   };
   const queue = [...todo];
   await Promise.all([0, 1].map(async () => { while (queue.length) await one(queue.shift()); }));   // 2 at a time
@@ -538,6 +557,57 @@ document.addEventListener("click", e => { const t = e.target.closest("[data-try]
   const [p, l, pr] = t.dataset.try.split("|"); gradeNow(p, l, pr, "standard"); });
 const showExamples = () => { $("#examples").hidden = store.get("cs2s_hist", []).length > 0; };
 showExamples(); const _sr = showRecent; showRecent = () => { _sr(); showExamples(); };
+// bet slip: add single props, build a 2-6 pick entry (saved in this browser)
+const PAYOUT = {2: 3, 3: 6, 4: 10, 5: 20, 6: 37.5};   // PrizePicks Power Play (check the app for current payouts)
+const legKey = l => String(l.p).toLowerCase();   // PrizePicks: one prop per player in an entry
+function addToSlip(d) {
+  const g = d.grade || {}, v = d.verdict || {}, nick = d.player_block?.player?.nick;
+  if (!nick || !v.side) return;
+  let s = store.get("cs2s_slip", []);
+  const leg = {p: nick, l: g.line, t: g.prop, lt: g.line_type, s: v.side, g: v.grade, pc: v.p, u: v.units,
+               m: d.next_match?.slug || d.next_match?.opponent || "", vs: d.next_match?.opponent || "", tm: d.player_block?.current_team || ""};
+  if (s.some(x => legKey(x) === legKey(leg))) { toast(`${nick} is already on the slip – PrizePicks allows one prop per player`); return openSlip(); }
+  if (s.length >= 6) { toast("A slip holds 6 picks max"); return openSlip(); }
+  s.push(leg); store.set("cs2s_slip", s); toast(`Added – ${s.length} on the slip`); drawSlip();
+}
+function openSlip() { $("#slip").hidden = false; drawSlip(); }
+function drawSlip() {
+  const s = store.get("cs2s_slip", []);
+  $("#slipbtn").hidden = !s.length; $("#slipbtn").textContent = `Slip (${s.length})`;
+  if ($("#slip").hidden) return;
+  if (!s.length) { $("#slip").hidden = true; return; }
+  const n = s.length, all = s.reduce((a, x) => a * (x.pc || 0.5), 1), pay = PAYOUT[n];
+  const teams = {}; s.forEach(x => { const k = x.m || x.tm; teams[k] = (teams[k] || 0) + 1; });
+  const same = Object.values(teams).some(c => c > 1);
+  const leans = s.filter(x => x.g === "LEAN").length;
+  $("#slip").innerHTML = `<h4>Bet slip · ${n}-pick</h4>` + s.map((x, i) =>
+    `<div class="leg"><span><b>${esc(x.p)}</b> ${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : esc(x.s)} ${x.l} ${propWord(x.t)}
+      <span class="muted small">· ${x.g === "LEAN" ? "Lean" : esc(x.g)} · ${Math.round((x.pc || 0) * 100)}%${x.vs ? " · vs " + esc(x.vs) : ""}</span></span>
+      <button type="button" class="x" data-rmleg="${i}" title="Remove">✕</button></div>`).join("")
+    + (n < 2 ? `<div class="small muted" style="margin-top:10px">Add at least 2 picks (up to 6).</div>`
+       : `<div class="kv"><span>All ${n} hit (grader's %)</span><span><b>${(all * 100).toFixed(1)}%</b></span></div>
+          <div class="kv"><span>Power Play payout</span><span>${pay}x</span></div>
+          <div class="kv"><span>Expected return per 1U</span><span style="color:${all * pay >= 1 ? "var(--good)" : "var(--bad)"}"><b>${(all * pay).toFixed(2)}U</b></span></div>`)
+    + (same ? `<div class="warn">Two or more picks from the same match – their results move together, so the real odds differ from the %.</div>` : "")
+    + (leans ? `<div class="warn">${leans} pick${leans > 1 ? "s are" : " is a"} Lean${leans > 1 ? "s" : ""} (under 57%) – the weakest legs on the slip.</div>` : "")
+    + `<div class="actions"><button type="button" class="chipbtn" id="slipcopy">Copy slip</button><button type="button" class="chipbtn" id="slipclear">Clear</button>
+       <button type="button" class="chipbtn" id="slipclose">Close</button></div>
+       <div class="small muted" style="margin-top:8px">Payouts are PrizePicks' standard Power Play – check the app for the current ones. Not financial advice.</div>`;
+}
+$("#slipbtn").onclick = () => { $("#slip").hidden ? openSlip() : ($("#slip").hidden = true); };
+$("#slip").addEventListener("click", e => {
+  const rm = e.target.closest("[data-rmleg]");
+  if (rm) { const s = store.get("cs2s_slip", []); s.splice(+rm.dataset.rmleg, 1); store.set("cs2s_slip", s); return drawSlip(); }
+  if (e.target.closest("#slipclear")) { store.set("cs2s_slip", []); return drawSlip(); }
+  if (e.target.closest("#slipclose")) { $("#slip").hidden = true; return; }
+  if (e.target.closest("#slipcopy")) {
+    const s = store.get("cs2s_slip", []);
+    copy(`${s.length}-pick slip\n` + s.map(x => `${x.p} ${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : x.s.toUpperCase()} ${x.l} ${propWord(x.t)} · ${x.g === "LEAN" ? "Lean" : x.g} · ${Math.round((x.pc || 0) * 100)}%`).join("\n"));
+  }
+});
+$("#slateedit") && ($("#slateedit").onclick = () => { $("#slatetxt").focus(); $("#slatetxt").scrollIntoView({behavior: "smooth", block: "center"}); });
+drawSlip();
+
 // a shared link (?p=ZywOo&l=27.5&t=kills) grades on open
 (() => { const q = new URLSearchParams(location.search);
   if (q.get("p") && q.get("l")) setTimeout(() => gradeNow(q.get("p"), q.get("l"), q.get("t") === "hs" ? "hs" : "kills", q.get("lt") || "standard"), 0); })();
@@ -572,14 +642,14 @@ function render(d) {
 
   // ---- headline
   const head = v.state === "SCOUT" ? `SCOUT · leans ${v.side} ${g.line}`    : v.grade === "LEAN" && v.side ? `Lean ${v.side === "More" ? "Over" : "Under"} ${g.line}`
-    : v.side ? `${v.side} ${g.line}` : g.status === "NO GRADE" ? "No grade" : "No play";
+    : v.side ? `${v.side} ${g.line}` : "No grade";
   const gateStop = !("p_more" in g);   // stopped by a gate - the reason shows as a pill instead
   const why = v.reason && !/^Projection [\d.]+ vs [\d.]+ needed \([^)]*\)$/.test(v.reason) ? v.reason : "";
   const sub = v.side ? `${pct(v.p)} chance · ${v.units}U · ${esc(v.confidence)} confidence${why ? `<div class="small muted" style="margin-top:4px">${esc(why)}</div>` : ""}`
     : gateStop ? "" : esc(v.reason || "");
   const hc = g.status === "NO GRADE" || v.state === "SCOUT" ? "g-scout" : gClass(v.grade);
   h += `<section class="card herocard ${hc}"><div class="hero">
-    <div class="badge ${hc}">${esc(g.status === "NO GRADE" ? "–" : v.state === "SCOUT" ? "S" : v.grade === "LEAN" ? "L" : v.grade || "C")}</div>
+    <div class="badge ${hc}">${esc(!v.side ? "–" : v.state === "SCOUT" ? "S" : v.grade === "LEAN" ? "L" : (v.grade || "L").slice(0, 2))}</div>
     <div><h3>${esc(head)}</h3>
       <div class="sub">${esc(pb.player?.nick || "")} · ${pb.standin_for ? `${esc(pb.current_team || "")} → <b>stand-in for ${esc(pb.standin_for)}</b>` : esc(pb.current_team || "")} · ${g.line} ${stat} · ${esc(g.line_type || "")}</div>
       <div class="sub">${sub}</div>
@@ -589,6 +659,7 @@ function render(d) {
       ${g.tape_fight ? `<span class="pill warn">TAPE FIGHT - recent record at this line disagrees · max 0.25U</span>` : ""}
       ${g.market_quality && g.market_quality !== "HARD" && v.state !== "SCOUT" ? `<span class="pill">${g.market_quality === "SOFT" ? "SOFT BOOK" : "NO MARKET"} · max 1U</span>` : ""}
       ${g.market?.note_line ? `<span class="pill warn">${esc(g.market.note_line)}</span>` : ""}
+      ${lineWarn(g.prop, g.line) ? `<span class="pill warn">${esc(lineWarn(g.prop, g.line))}</span>` : ""}
     </div></div>`;
   if ("p_more" in g) {
     h += `<div class="sides">
@@ -612,7 +683,7 @@ function render(d) {
       + chip("H2H", hs2.filter(over).length, hs2.length);
     if (r && "p_more" in g) h += `<div class="rates">${r}</div>`;
   }
-  if ("p_more" in g) h += `<div class="actions"><button type="button" class="chipbtn" data-act="copy">Copy pick</button>
+  if ("p_more" in g) h += `<div class="actions"><button type="button" class="chipbtn" data-act="slip" style="border-color:var(--accent)">+ Add to slip</button><button type="button" class="chipbtn" data-act="copy">Copy pick</button>
     <button type="button" class="chipbtn" data-act="link">Copy link</button>
     <button type="button" class="chipbtn" data-act="nudge" data-d="-1">Line &minus;1</button>
     <button type="button" class="chipbtn" data-act="nudge" data-d="1">Line +1</button></div>`;
