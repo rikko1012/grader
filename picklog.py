@@ -71,6 +71,13 @@ def _factors(res):
     out["hltv"] = {k: (res.get("hltv") or {}).get(k) for k in ("rating", "round_swing", "adr", "kast", "maps")}
     out["opponent_defense"] = res.get("opponent_defense")
     out["sim"] = (res.get("simulation") or {}).get("p_more")
+    out["map_prediction"] = (res.get("player_block") or {}).get("map_prediction")
+    try:   # what the projection would be if predicted maps counted (to test them on real lines)
+        from grader import grade_leg, CONFIG
+        if gi.get("map_probs"):
+            out["lambda_with_pred_maps"] = grade_leg(gi, dict(CONFIG, use_predicted_maps=True))["lambda_final"]
+    except Exception:
+        pass
     return out
 
 

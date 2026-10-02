@@ -684,6 +684,22 @@ def predict_maps(b, team1_id, team2_id, before=None):
     return {"map1": top(slot1), "map2": top(slot2), "vetoes_used": {"team1": p1["n"], "team2": p2["n"]}}
 
 
+def _hltv_map_prediction(team, opponent):
+    """Likely Map 1 / Map 2 from both teams' HLTV vetoes (hltv.predict_maps); None if unknown."""
+    if not team or not opponent:
+        return None
+    try:
+        import hltv
+        pr = hltv.predict_maps(team, opponent, date.today().isoformat())
+    except Exception:
+        return None
+    if not pr:
+        return None
+    fix = lambda d: {("de_" + k): round(v, 3) for k, v in d.items() if v >= 0.005}
+    return {"map1": fix(pr["map1"]), "map2": fix(pr["map2"]), "source": "HLTV vetoes",
+            "vetoes_used": {"team1": pr["history"][0], "team2": pr["history"][1]}}
+
+
 def _joined(pb):
     return date.fromisoformat(pb["joined_team"]) if pb.get("joined_team") else None
 
@@ -1410,12 +1426,16 @@ def run(args, res, b, ttl):
                 args.maps = ",".join(nxt["maps"][:2])
                 pb["per_map"] = [map_waterfall(b, pb["_matches"], pb["player"]["id"], _joined(pb), m)
                                  for m in nxt["maps"][:2]]
-            elif not args.maps and nxt.get("team1_id") and nxt.get("team2_id"):
-                # veto not done yet: predict Maps 1-2 from both teams' veto habits
-                try:
-                    pb["map_prediction"] = predict_maps(b, nxt["team1_id"], nxt["team2_id"])
-                except Exception:
-                    pb["map_prediction"] = None
+            elif not args.maps:
+                # veto not done yet: likely Maps 1-2 - HLTV's real veto history first (Map 1 right
+                # 30% / top-2 50% on 191 past BO3s vs 16% for BO3.gg's), then BO3.gg's
+                pb["map_prediction"] = _hltv_map_prediction(pb.get("playing_for") or pb.get("current_team"),
+                                                            nxt.get("opponent"))
+                if not pb["map_prediction"] and nxt.get("team1_id") and nxt.get("team2_id"):
+                    try:
+                        pb["map_prediction"] = predict_maps(b, nxt["team1_id"], nxt["team2_id"])
+                    except Exception:
+                        pb["map_prediction"] = None
     if args.cmd == "h2h" or (args.cmd == "full" and args.opponent):
         if not args.opponent:
             raise SystemExit("h2h needs --opponent")
