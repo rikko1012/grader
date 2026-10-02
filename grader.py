@@ -70,7 +70,8 @@ CONFIG = {
     "thin_maps": 20,             # under 20 Maps 1-2 = thin data: wider SD, 1U cap
     "map_blend_k": 12,
     "underdog_k": 1.15,
-    "elite_k": 0.5,              # extra vs a top-10 opponent (VRS rank from HLTV), same data          # heavy-underdog extra (see grade_leg), fitted on HLTV player-maps
+    "elite_k": 0.5,
+    "rank_band_w": 0.5, "rank_band_k": 20,   # vs similar-rank teams (see grade_leg)              # extra vs a top-10 opponent (VRS rank from HLTV), same data          # heavy-underdog extra (see grade_leg), fitted on HLTV player-maps
     "shrink_k": {"kills": 10, "hs": 30},   # thin-sample pull toward the pro average (tested 2026-09-30)
     "pop_kpr": 0.672, "pop_hs": 51.5,
     # owner's map HS% adjustments - tested 2026-09-29 on 900 cases (fixed numbers, nothing fitted):
@@ -384,6 +385,16 @@ def grade_leg(d, cfg=CONFIG):
     lam_adj = lam * stack
     lam_final = lam_adj * outcome * dog
 
+    # vs teams ranked within 10 of tonight's opponent (HLTV, last 12 months): his kills per round there
+    # vs his overall rate, weight 0.5 x maps / (maps + 20). Tested 2026-10-02 on 27,466 HLTV player-maps
+    # (only earlier matches, fitted on half the players): held-out miss 4.214 -> 4.208 and 4.293 -> 4.291.
+    rb = d.get("rank_band") or {}
+    band_mult = 1.0
+    if rb.get("maps") and rb.get("ratio"):
+        a = cfg["rank_band_w"] * rb["maps"] / (rb["maps"] + cfg["rank_band_k"])
+        band_mult = 1 + a * (clamp(rb["ratio"], 0.7, 1.3) - 1)
+        lam_final *= band_mult
+
     lam_model = lam_final
 
     # Last 10 (v7.5): 70% model + 30% his last-10 Maps 1-2 average for this stat, always
@@ -398,7 +409,7 @@ def grade_leg(d, cfg=CONFIG):
         # his last 10 came against his usual opponents: scale it to THIS matchup the same way the model
         # part is (win/loss factor x underdog correction, relative to an even match)
         even = 0.25 * w_both + 0.5 * w_split + 0.25 * w_lost
-        level *= (outcome * dog) / even
+        level *= (outcome * dog) / even * band_mult       # ...and to how he does vs teams of this level
         blended = (1 - w10) * lam_final + w10 * level
         last10_mult = blended / lam_final if lam_final else 1.0
         lam_final = blended
@@ -553,7 +564,7 @@ def grade_leg(d, cfg=CONFIG):
         market_quality=mq,
         lambda_base=round(lam, 2), lambda_final=round(lam_final, 2), sd=round(sd, 2),
         detail={"rounds": rpm * 2, "stomp": stomp, "p_win": round(p_win, 3), "p_map": round(q, 3),
-                "outcome_mult": round(outcome, 3), "underdog_mult": round(dog, 3), "p_map1": round(q1, 3), "p_map2": round(q2, 3),
+                "outcome_mult": round(outcome, 3), "underdog_mult": round(dog, 3), "rank_band_mult": round(band_mult, 3), "p_map1": round(q1, 3), "p_map2": round(q2, 3),
                 "tape_gap": tape_gap, "lambda_model": round(lam_model, 2), "trade_mult": round(trade_mult, 3), "last10_mult": round(last10_mult, 3),
                 "h2h_edge": round(h2h_edge, 2), "regional_edge": round(reg_edge, 2),
                 "regional_avg": None if reg_avg is None else round(reg_avg, 1), "h2h_avg": None if h2h_avg is None else round(h2h_avg, 1),

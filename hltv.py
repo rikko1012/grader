@@ -321,6 +321,7 @@ def context(nick, team=None, opponent=None, maps=(), bo3_last_date=None):
                 "h2h": lambda: _h2h(cur, team_id, opp_id, maps),
                 "ranking": lambda: _ranking(cur, team_id),
                 "opp_ranking": lambda: _ranking(cur, opp_id),
+                "rank_band": lambda: _rank_band(cur, ids, opp_id),
                 "next_match": lambda: _next_match(cur, team),
                 "backup_source": lambda: _backup(cur, ids),
             }
@@ -463,6 +464,40 @@ def _h2h(cur, team_id, opp_id, maps):
                   "team": ours.get(k), "opponent": theirs.get(k)} for k in keys]
     return {"series": series, "wins": sum(s["won"] for s in series), "losses": sum(not s["won"] for s in series),
             "map_win_rates": map_rates}
+
+
+def _rank_band(cur, ids, opp_id, band=10, months=12):
+    """His HLTV maps (last `months`) against teams ranked within `band` of tonight's opponent, next to
+    all his maps: {"opp_rank", "maps", "kpr", "kpr_all", "ratio", "teams"}. Each team's rank is its
+    most recent VRS snapshot."""
+    if not ids or not opp_id:
+        return None
+    cur.execute("SELECT rank FROM team_rankings WHERE teamid = %s ORDER BY date DESC LIMIT 1", (opp_id,))
+    r = cur.fetchone()
+    if not r:
+        return None
+    orank = r[0]
+    cur.execute("""WITH ranks AS (SELECT DISTINCT ON (teamid) teamid, rank FROM team_rankings ORDER BY teamid, date DESC)
+                   SELECT sum(ps.k), sum(own.score + opp.score),
+                          sum(ps.k) FILTER (WHERE abs(rk.rank - %(orank)s) <= %(band)s),
+                          sum(own.score + opp.score) FILTER (WHERE abs(rk.rank - %(orank)s) <= %(band)s),
+                          count(*) FILTER (WHERE abs(rk.rank - %(orank)s) <= %(band)s),
+                          array_agg(DISTINCT t2.name) FILTER (WHERE abs(rk.rank - %(orank)s) <= %(band)s)
+                   FROM player_stats ps
+                   JOIN match_overview mo USING (matchid)
+                   JOIN matches own ON own.matchid = ps.matchid AND own.teamid = ps.teamid AND own.mapid = ps.mapid AND own.sideid = 0
+                   JOIN matches opp ON opp.matchid = ps.matchid AND opp.teamid <> ps.teamid AND opp.mapid = ps.mapid AND opp.sideid = 0
+                   JOIN teams t2 ON t2.teamid = opp.teamid
+                   LEFT JOIN ranks rk ON rk.teamid = opp.teamid
+                   WHERE ps.playerid = ANY(%(ids)s) AND ps.sideid = 0 AND ps.mapid <> 0
+                     AND mo.date >= current_date - make_interval(months => %(months)s)""",
+                {"ids": ids, "orank": orank, "band": band, "months": months})
+    k_all, r_all, k_b, r_b, n_b, teams = cur.fetchone()
+    if not r_all or not r_b:
+        return {"opp_rank": orank, "maps": 0}
+    kpr, kpr_all = k_b / r_b, k_all / r_all
+    return {"opp_rank": orank, "band": band, "maps": n_b, "kpr": round(kpr, 3), "kpr_all": round(kpr_all, 3),
+            "ratio": round(kpr / kpr_all, 3), "teams": sorted(teams or [])[:8]}
 
 
 def _ranking(cur, team_id):

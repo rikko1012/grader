@@ -316,7 +316,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
       <p><b>Built from official pro matches, Maps 1 and 2 only</b> – the maps PrizePicks counts. Map 3 and FACEIT games never go into a projection.</p>
       <p><b>Recent form counts most.</b> A player's last few months weigh more than older matches, so a player in form (or in a slump) shows up quickly without one hot series taking over.</p>
       <p><b>The maps matter.</b> If the veto is out we use how the player performs on those two maps; if not, his numbers across all maps.</p>
-      <p><b>Match context.</b> Betting markets tell us who is favoured – winning and losing teams put up different numbers. We also check the roster (stand-ins, new teams), how long since his last official match, and how big his sample is. Anything uncertain lowers the stake, not the honesty of the number.</p>
+      <p><b>Match context.</b> Betting markets tell us who is favoured – winning and losing teams put up different numbers. Heavy underdogs (especially against top-10 teams) are marked down, and a player's record against teams ranked close to tonight's opponent counts too. We also check the roster (stand-ins, new teams), how long since his last official match, and how big his sample is. Anything uncertain lowers the stake, not the honesty of the number.</p>
       <p><b>Projection → chance → grade.</b> The projection is compared with the number he actually needs (a 15.5 line needs 16), and turned into a win chance based on how much a player's totals normally swing from match to match. Unders need a slightly bigger edge than Overs – overtimes and big games make kill totals run over more often than under.</p>
       <p><b>Tested before it counts.</b> Every factor was tested on 900+ past matches, using only information available before each one. His last 10 matches carry a lot of weight (they proved the strongest signal on real lines), and head-to-head nudges the projection. Regional form and the match simulation are shown on the card for context.</p>
       <p><b>What the grades mean</b> (chance the pick wins): A+ 80%+ · A 74%+ · A− 68%+ · B+ 63%+ · B 57%+ · <i>Lean</i> under 57% (no units).<br>
@@ -939,6 +939,8 @@ function render(d) {
       }
       const eco = hc.eco;
       if (eco) h += `<div class="kv"><span>Eco-adjusted K/D · ADR · KAST</span><span>${num(eco.ekd)} · ${num(eco.eadr, 1)} · ${num(eco.ekast, 1)}%</span></div>`;
+      const rb = hc.rank_band;
+      if (rb && rb.maps) h += `<div class="kv"><span>Vs teams ranked #${Math.max(1, rb.opp_rank - rb.band)}–${rb.opp_rank + rb.band} <span class="muted small">(opponent #${rb.opp_rank})</span></span><span>${rb.maps} maps · ${num(rb.kpr * 22, 1)} kills/map · <span style="color:${rb.ratio >= 1 ? "var(--good)" : "var(--bad)"}">${rb.ratio >= 1 ? "+" : ""}${Math.round((rb.ratio - 1) * 100)}%</span> vs his usual</span></div>`;
       const rk = hc.ranking;
       if (rk) h += `<div class="kv"><span>Team VRS rank</span><span>#${rk.rank}${rk.change ? ` (${rk.change > 0 ? "▲" : "▼"}${Math.abs(rk.change)} in 4 weeks)` : ""}</span></div>`;
       const nm = hc.next_match;
@@ -968,7 +970,7 @@ function render(d) {
       const bk = hc.backup_source;
       if (bk || hl?.backup_maps) h += `<div class="small" style="margin-top:6px;color:var(--warn)">* ${bk ? bk.backup_maps : hl.backup_maps} map(s) came from the backup data source (less complete than HLTV; replaced automatically when HLTV data arrives)</div>`;
       if (hl?.team_mismatch) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(hl.team_mismatch)}</div>`;
-      h += `<div class="small muted" style="margin-top:6px">Only Round Swing can affect the grade; the rest is context.</div></section>`;
+      h += `<div class="small muted" style="margin-top:6px">Round Swing and his record vs similar-ranked teams feed the grade; the rest is context.</div></section>`;
     }
   } catch (e) { console.warn("HLTV card skipped:", e); }
 
