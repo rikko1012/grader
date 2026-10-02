@@ -739,6 +739,30 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(200, {"rows": rows})
                 finally:
                     con.close()
+            if u.path == "/admin/hltv_player_opps" and self.authed(q.get("token")):
+                # private: a player's HLTV opponents (12 months) with their latest rank
+                import hltv
+                con = hltv._connect()
+                try:
+                    with con.cursor() as cur:
+                        cur.execute("""SELECT p.playerid, p.name, count(*) FROM players p JOIN player_stats ps USING (playerid)
+                                       WHERE lower(regexp_replace(p.name, '[^a-zA-Z0-9]', '', 'g')) = %s GROUP BY 1, 2""",
+                                    (hltv._norm(q.get("nick")),))
+                        cands = cur.fetchall()
+                        ids = hltv._player_ids(cur, q.get("nick"), q.get("team"))
+                        cur.execute("""WITH ranks AS (SELECT DISTINCT ON (teamid) teamid, rank FROM team_rankings ORDER BY teamid, date DESC)
+                                       SELECT t2.name, rk.rank, count(*), min(mo.date)::text, max(mo.date)::text
+                                       FROM player_stats ps JOIN match_overview mo USING (matchid)
+                                       JOIN matches opp ON opp.matchid = ps.matchid AND opp.teamid <> ps.teamid AND opp.mapid = ps.mapid AND opp.sideid = 0
+                                       JOIN teams t2 ON t2.teamid = opp.teamid LEFT JOIN ranks rk ON rk.teamid = opp.teamid
+                                       WHERE ps.playerid = ANY(%s) AND ps.sideid = 0 AND ps.mapid <> 0
+                                       GROUP BY 1, 2 ORDER BY 2 NULLS LAST""", (ids,))
+                        opps = cur.fetchall()
+                        cur.execute("SELECT min(date)::text, max(date)::text, count(*) FROM match_overview")
+                        span = cur.fetchone()
+                    return self.send(200, {"candidates": cands, "ids_used": ids, "opponents": opps, "db_span": span})
+                finally:
+                    con.close()
             if u.path == "/admin/hltv_status" and self.authed(q.get("token")):
                 import hltv
                 con = hltv._connect()
