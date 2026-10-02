@@ -152,6 +152,23 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 .mate .bar{margin:0} .mate.me .bar i{background:var(--accent)}
 .scroll{overflow-x:auto}
 .foot{text-align:center;margin-top:4px} .foot a{color:var(--muted)}
+/* QOL: mode tabs, slate, recent, card actions */
+.modes{display:flex;gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap}
+.recent{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.recent:empty{display:none}
+.chipbtn{background:var(--panel-2);border:1px solid var(--line);color:var(--text);border-radius:99px;padding:5px 11px;font:500 12.5px Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap}
+.chipbtn:hover{border-color:var(--accent)} .chipbtn b{color:var(--accent-2);font-weight:600}
+.chipbtn:disabled{opacity:.5;cursor:default}
+.actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;position:relative;z-index:1}
+.actions .chipbtn{padding:6px 12px}
+#slate textarea{width:100%;min-height:150px;background:var(--panel-2);border:1px solid var(--line);color:var(--text);border-radius:11px;padding:12px 13px;font:14px/1.5 var(--mono);resize:vertical;outline:none}
+#slate textarea:focus{border-color:var(--accent)}
+#slate .help{font-size:12.5px;color:var(--muted);margin:8px 0 10px}
+.slatetab th{cursor:pointer;user-select:none} .slatetab th:hover{color:var(--text)}
+.slatetab tbody tr{cursor:pointer}
+.gtag{display:inline-block;min-width:34px;text-align:center;font:700 12px var(--display);padding:3px 7px;border-radius:7px}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--panel-2);border:1px solid var(--accent);color:var(--text);padding:9px 16px;border-radius:10px;font-size:13.5px;z-index:50;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.on{opacity:1}
 @media (max-width:900px){
   .cols{grid-template-columns:1fr}
 }
@@ -182,6 +199,14 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 
   <div id="gate" class="card" hidden style="text-align:center;padding:28px 18px"></div>
   <div id="who" class="small muted" hidden style="text-align:right;margin:-6px 0 8px"></div>
+  <div class="modes" id="modes"><div class="seg" id="mode"><button type="button" data-v="one" class="on">Single prop</button><button type="button" data-v="slate">Slate</button></div>
+    <span class="small muted">Shortcuts: <b>K</b> kills &middot; <b>H</b> headshots</span></div>
+  <section class="card" id="slate" hidden>
+    <textarea id="slatetxt" spellcheck="false" placeholder="ZywOo 27.5 K&#10;ropz 22.5 HS&#10;donk 30.5&#10;m0NESY 14.5 hs goblin"></textarea>
+    <div class="help">One prop per line: player, line, then K or HS (default: the prop picked in single mode), optionally goblin / demon. Up to 15 lines.</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="go" id="slatego" type="button" style="margin-left:0">Grade slate</button><span id="slatestatus" class="small muted"></span></div>
+    <div id="slateout" style="margin-top:14px"></div>
+  </section>
   <form id="f" autocomplete="off">
     <div class="field">
       <label for="player">Player</label>
@@ -209,6 +234,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
     </div>
   </form>
 
+  <div class="recent" id="recent"></div>
   <details class="card how" style="margin-top:12px">
     <summary>How grades work</summary>
     <div class="small" style="margin-top:10px;line-height:1.55">
@@ -227,6 +253,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
   <div id="status" class="status" hidden></div>
   <div id="out"></div>
 </div>
+<div class="toast" id="toast"></div>
 
 <script>
 const $ = s => document.querySelector(s);
@@ -273,15 +300,17 @@ async function fetchRetry(url, tries = 4) {
 const shortDate = x => { const d = new Date(String(x) + "T12:00:00Z"); return isNaN(d) ? esc(x) : d.toLocaleDateString([], {month: "short", day: "numeric", timeZone: "UTC"}); };
 const mapName = m => m ? m.replace(/^de_/, "").replace(/^./, c => c.toUpperCase()) : "–";
 const gClass = g => ["A+","A","A-"].includes(g) ? "g-good" : ["B+","B"].includes(g) ? "g-warn" : g === "LEAN" ? "g-scout" : "g-bad";
-const when = s => { if (!s) return "–"; const d = new Date(s); return isNaN(d) ? s : d.toLocaleString([], {weekday:"short", month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"}); };
+const until = d => { const m = Math.round((d - Date.now()) / 60000); if (m <= 0) return m > -150 ? "started" : ""; const h = Math.floor(m / 60);
+  return "in " + (h >= 24 ? `${Math.floor(h / 24)}d ${h % 24}h` : h ? `${h}h ${m % 60}m` : `${m}m`); };
+const when = s => { if (!s) return "–"; const d = new Date(String(s).replace(" ", "T")); if (isNaN(d)) return esc(s);
+  const u = until(d); return d.toLocaleString([], {weekday:"short", month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"}) + (u ? ` <span class="muted small">(${u})</span>` : ""); };
 
 let prop = "kills", slug = null, match = null;   // match: which upcoming match (2+ in a day)
 // picking another match on the card re-grades the same player + line for that match
 document.addEventListener("click", e => { const b = e.target.closest("[data-match]"); if (!b) return;
   match = b.dataset.match; $("#f").requestSubmit(); });
 ["#player", "#line", "#opp"].forEach(id => $(id).addEventListener("input", () => { match = null; }));
-$("#prop").onclick = e => { const b = e.target.closest("button"); if (!b) return;
-  prop = b.dataset.v; [...$("#prop").children].forEach(x => x.classList.toggle("on", x === b)); };
+
 
 // ---------- suggestions
 let t, sel = -1, items = [];
@@ -332,11 +361,148 @@ $("#f").onsubmit = async e => {
     const d = await r.json();
     if (r.status === 401 && d.error === "members_only") { st.hidden = true; return showGate(d); }   // session ended
     if (!r.ok) throw new Error(d.error || "Something went wrong");
-    st.hidden = true; render(d);
+    st.hidden = true; render(d); remember(d);
+    try { history.replaceState(null, "", shareUrl(d)); } catch {}
   } catch (err) {
     st.className = "status err"; st.textContent = err.message;
   } finally { clearInterval(iv); $("#go").disabled = false; }
 };
+
+// ---------- quality of life: saved settings, shortcuts, recent grades, copy/share, slate
+const store = {get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+               set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }};
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("on"), 1800); }
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); toast("Copied"); }
+  catch { const a = document.createElement("textarea"); a.value = text; document.body.append(a); a.select();
+          try { document.execCommand("copy"); toast("Copied"); } catch {} a.remove(); }
+}
+function setProp(v) { prop = v; [...$("#prop").children].forEach(x => x.classList.toggle("on", x.dataset.v === v)); store.set("cs2s_prop", v); }
+setProp(store.get("cs2s_prop", "kills"));
+$("#lt").value = store.get("cs2s_lt", "standard");
+$("#lt").onchange = () => store.set("cs2s_lt", $("#lt").value);
+$("#prop").onclick = e => { const b = e.target.closest("button"); if (b) setProp(b.dataset.v); };
+document.addEventListener("keydown", e => {
+  if (e.ctrlKey || e.metaKey || e.altKey || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || "")) return;
+  if (e.key === "k" || e.key === "K") setProp("kills");
+  if (e.key === "h" || e.key === "H") setProp("hs");
+});
+const propWord = p => p === "hs" ? "HS" : "kills";
+function pickLine(d) {
+  const g = d.grade || {}, v = d.verdict || {}, nick = d.player_block?.player?.nick || "";
+  const side = v.grade === "LEAN" ? `Lean ${v.side === "More" ? "Over" : "Under"}` : (v.side === "More" ? "MORE" : "LESS");
+  return `${nick} ${side} ${g.line} ${propWord(g.prop)} · ${v.grade === "LEAN" ? "Lean" : v.grade} · ${v.units}U · ${Math.round((v.p || 0) * 100)}%`;
+}
+function shareUrl(d) {
+  const g = d.grade || {}, u = new URL(location.origin + location.pathname);
+  u.searchParams.set("p", d.player_block?.player?.nick || ""); u.searchParams.set("l", g.line); u.searchParams.set("t", g.prop);
+  if (g.line_type && g.line_type !== "standard") u.searchParams.set("lt", g.line_type);
+  return u.toString();
+}
+function remember(d) {
+  const g = d.grade || {}, v = d.verdict || {}, nick = d.player_block?.player?.nick;
+  if (!nick || !("p_more" in g)) return;
+  const h = store.get("cs2s_hist", []).filter(x => !(x.p === nick && x.l === g.line && x.t === g.prop && x.lt === g.line_type));
+  h.unshift({p: nick, l: g.line, t: g.prop, lt: g.line_type, g: v.grade, s: v.side, u: v.units, pc: v.p, at: Date.now()});
+  store.set("cs2s_hist", h.slice(0, 20)); showRecent();
+}
+function showRecent() {
+  const h = store.get("cs2s_hist", []);
+  $("#recent").innerHTML = h.length ? `<span class="small muted" style="align-self:center">Recent:</span>` + h.map((x, i) =>
+    `<button type="button" class="chipbtn" data-hist="${i}">${esc(x.p)} ${x.l} ${propWord(x.t)} · <b>${x.g === "LEAN" ? "L" : esc(x.g)} ${x.s === "More" ? "O" : "U"}</b></button>`).join("")
+    + `<button type="button" class="chipbtn" data-act="clearhist" title="Clear recent">✕</button>` : "";
+}
+function gradeNow(p, l, t, lt) {
+  $("#player").value = p; $("#line").value = l; setProp(t || "kills"); $("#lt").value = lt || "standard";
+  slug = null; match = null; setMode("one"); $("#f").requestSubmit();
+}
+let lastCard = null;
+document.addEventListener("click", e => {
+  const hb = e.target.closest("[data-hist]");
+  if (hb) { const x = store.get("cs2s_hist", [])[+hb.dataset.hist]; if (x) gradeNow(x.p, x.l, x.t, x.lt); return; }
+  const a = e.target.closest("[data-act]"); if (!a) return;
+  const act = a.dataset.act;
+  if (act === "clearhist") { store.set("cs2s_hist", []); return showRecent(); }
+  if (!lastCard) return;
+  if (act === "copy") copy(pickLine(lastCard));
+  if (act === "link") copy(shareUrl(lastCard));
+  if (act === "nudge") { const g = lastCard.grade; gradeNow(lastCard.player_block?.player?.nick, String(g.line + +a.dataset.d), g.prop, g.line_type); }
+});
+showRecent();
+
+// modes: one prop / slate
+function setMode(m) {
+  [...$("#mode").children].forEach(x => x.classList.toggle("on", x.dataset.v === m));
+  $("#slate").hidden = m !== "slate"; $("#f").style.display = m === "slate" ? "none" : "";
+}
+$("#mode").onclick = e => { const b = e.target.closest("button"); if (b) setMode(b.dataset.v); };
+
+// slate: several props at once -> sortable table; a row opens its full card
+let slate = [], slateSort = {k: "p", dir: -1};
+function parseSlate(txt) {
+  const out = [];
+  for (const raw of txt.split(/\n+/)) {
+    const s = raw.trim(); if (!s) continue;
+    const m = s.match(/^(.+?)\s+(\d+(?:[.,]\d+)?)\s*(.*)$/);
+    if (!m) { out.push({bad: s}); continue; }
+    const rest = m[3].toLowerCase();
+    out.push({player: m[1].trim(), line: m[2].replace(",", "."),
+              prop: /\b(hs|h|headshots?)\b/.test(rest) ? "hs" : /\b(k|kills?)\b/.test(rest) ? "kills" : prop,
+              lt: /goblin/.test(rest) ? "goblin" : /demon/.test(rest) ? "demon" : "standard"});
+  }
+  return out.slice(0, 15);
+}
+function slateRow(x, i) {
+  if (x.error) return `<tr><td>${esc(x.player || x.bad)}</td><td colspan="7" class="muted">${esc(x.error)}</td></tr>`;
+  if (!x.d) return `<tr><td>${esc(x.player)}</td><td>${esc(x.line)} ${propWord(x.prop)}</td><td colspan="6" class="muted"><span class="spin"></span>grading…</td></tr>`;
+  const g = x.d.grade || {}, v = x.d.verdict || {}, nm = x.d.next_match || {};
+  const lab = v.state === "SCOUT" ? "S" : v.grade === "LEAN" ? "L" : v.grade || "–";
+  const side = v.side ? (v.grade === "LEAN" ? `Lean ${v.side === "More" ? "Over" : "Under"}` : v.side) : "–";
+  return `<tr data-row="${i}"><td><b>${esc(x.d.player_block?.player?.nick || x.player)}</b></td><td class="num" style="text-align:left">${g.line ?? esc(x.line)} ${propWord(g.prop || x.prop)}</td>
+    <td>${esc(side)}</td><td><span class="gtag ${v.state === "SCOUT" ? "g-scout" : gClass(v.grade)}">${esc(lab)}</span></td>
+    <td class="num">${v.p != null ? Math.round(v.p * 100) + "%" : "–"}</td><td class="num">${v.units ?? 0}U</td>
+    <td class="num">${g.lambda_final != null ? num(g.lambda_final, 1) : "–"}</td><td class="small">${esc(nm.opponent ? "vs " + nm.opponent : "")}</td></tr>`;
+}
+function drawSlate() {
+  const key = r => { const v = r.d?.verdict || {}, g = r.d?.grade || {};
+    return {p: v.p ?? -1, u: v.units ?? -1, pl: (r.player || "").toLowerCase(), pr: g.lambda_final ?? -1}[slateSort.k]; };
+  const rows = slate.map((x, i) => [x, i]).sort((a, b) => { const A = key(a[0]), B = key(b[0]); return (A > B ? 1 : A < B ? -1 : 0) * slateSort.dir; });
+  const th = (k, l) => `<th data-sort="${k}">${l}${slateSort.k === k ? (slateSort.dir < 0 ? " ▾" : " ▴") : ""}</th>`;
+  const bets = slate.filter(x => (x.d?.verdict?.units || 0) > 0);
+  $("#slateout").innerHTML = slate.length ? `<div class="scroll"><table class="slatetab"><thead><tr>${th("pl", "Player")}<th>Line</th><th>Pick</th><th>Grade</th>${th("p", "Chance")}${th("u", "Units")}${th("pr", "Proj")}<th>Match</th></tr></thead>
+    <tbody>${rows.map(([x, i]) => slateRow(x, i)).join("")}</tbody></table></div>
+    <div class="actions"><button type="button" class="chipbtn" id="copyslip" ${bets.length ? "" : "disabled"}>Copy ${bets.length} bet${bets.length === 1 ? "" : "s"}</button>
+    <span class="small muted" style="align-self:center">Tap a row for its full card.</span></div>` : "";
+}
+$("#slateout").addEventListener("click", e => {
+  const s = e.target.closest("[data-sort]");
+  if (s) { slateSort = {k: s.dataset.sort, dir: slateSort.k === s.dataset.sort ? -slateSort.dir : -1}; return drawSlate(); }
+  if (e.target.closest("#copyslip")) return copy(slate.filter(x => (x.d?.verdict?.units || 0) > 0).map(x => pickLine(x.d)).join("\n"));
+  const r = e.target.closest("[data-row]");
+  if (r) { const d = slate[+r.dataset.row]?.d; if (d) { render(d); $("#out").scrollIntoView({behavior: "smooth"}); } }
+});
+$("#slatego").onclick = async () => {
+  const items = parseSlate($("#slatetxt").value);
+  if (!items.length) return;
+  slate = items.map(x => x.bad ? {bad: x.bad, error: "Couldn't read this line – use: player line K/HS"} : x);
+  $("#slatego").disabled = true; drawSlate();
+  let done = 0; const todo = slate.filter(x => !x.error);
+  const one = async x => {
+    const qs = new URLSearchParams({player: x.player, line: x.line, prop: x.prop, line_type: x.lt});
+    try {
+      const r = await fetchRetry("/api/grade?" + qs); const d = await r.json();
+      if (r.status === 401 && d.error === "members_only") return showGate(d);
+      if (!r.ok) x.error = d.error || "Something went wrong"; else { x.d = d; remember(d); }
+    } catch (e) { x.error = e.message; }
+    done++; $("#slatestatus").textContent = `${done}/${todo.length} graded`; drawSlate();
+  };
+  const queue = [...todo];
+  await Promise.all([0, 1].map(async () => { while (queue.length) await one(queue.shift()); }));   // 2 at a time
+  $("#slatego").disabled = false;
+};
+// a shared link (?p=ZywOo&l=27.5&t=kills) grades on open
+(() => { const q = new URLSearchParams(location.search);
+  if (q.get("p") && q.get("l")) setTimeout(() => gradeNow(q.get("p"), q.get("l"), q.get("t") === "hs" ? "hs" : "kills", q.get("lt") || "standard"), 0); })();
 
 function chart(series, line, proj) {
   const s = [...series].reverse(), W = 640, H = 190, top = 22, bot = 26, n = s.length;
@@ -355,6 +521,7 @@ function chart(series, line, proj) {
 }
 
 function render(d) {
+  lastCard = d;
   const g = d.grade || {}, v = d.verdict || {}, pb = d.player_block || {}, o = pb.overall || {};
   const nm = d.next_match, od = d.odds, hh = d.h2h, fc = d.faceit, det = g.detail || {};
   const stat = g.prop === "hs" ? "headshots" : "kills";
@@ -406,6 +573,10 @@ function render(d) {
       + chip("H2H", hs2.filter(over).length, hs2.length);
     if (r && "p_more" in g) h += `<div class="rates">${r}</div>`;
   }
+  if ("p_more" in g) h += `<div class="actions"><button type="button" class="chipbtn" data-act="copy">Copy pick</button>
+    <button type="button" class="chipbtn" data-act="link">Copy link</button>
+    <button type="button" class="chipbtn" data-act="nudge" data-d="-1">Line &minus;1</button>
+    <button type="button" class="chipbtn" data-act="nudge" data-d="1">Line +1</button></div>`;
   h += `</section>`;
 
   // ---- match
@@ -425,7 +596,7 @@ function render(d) {
     h += `<div class="kv"><span>Likely Map 1 <span class="muted small">(context only)</span></span><span>${esc(top(pb.map_prediction.map1))}</span></div>
       <div class="kv"><span>Likely Map 2 <span class="muted small">(context only)</span></span><span>${esc(top(pb.map_prediction.map2))}</span></div>`;
   }
-  else h += `<div class="muted">No upcoming match found for ${esc(pb.current_team || "this player's team")}. If PrizePicks shows his opponent, type it in the Opponent box and grade again.</div>`;
+  if (!nm) h += `<div class="muted">No upcoming match found for ${esc(pb.current_team || "this player's team")}. If PrizePicks shows his opponent, type it in the Opponent box and grade again.</div>`;
   if (d.match_note) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(d.match_note)}</div>`;
   if (d.schedule_heads_up) h += `<div class="small" style="margin-top:6px;color:var(--warn)">HLTV heads-up: ${esc(d.schedule_heads_up)}</div>`;
   if (od?.found) {
@@ -504,7 +675,7 @@ function render(d) {
       const rk = hc.ranking;
       if (rk) h += `<div class="kv"><span>Team VRS rank</span><span>#${rk.rank}${rk.change ? ` (${rk.change > 0 ? "▲" : "▼"}${Math.abs(rk.change)} in 4 weeks)` : ""}</span></div>`;
       const nm = hc.next_match;
-      if (nm) h += `<div class="kv"><span>Next match (HLTV)</span><span>${nm.live ? "LIVE" : esc((nm.time || "").slice(0, 16).replace("T", " ")) + " UTC"} vs ${esc(nm.opponent)} · ${esc(nm.format || "")}</span></div>`;
+      if (nm) h += `<div class="kv"><span>Next match (HLTV)</span><span>${nm.live ? "LIVE" : when(nm.time)} vs ${esc(nm.opponent)} · ${esc(nm.format || "")}</span></div>`;
       if (hl?.found) h += `<div class="kv"><span>Data up to</span><span>${esc(hl.newest_map || "–")}</span></div>`;
 
       if (Array.isArray(hc.prop_maps) && hc.prop_maps.length) {
@@ -530,7 +701,6 @@ function render(d) {
       const bk = hc.backup_source;
       if (bk || hl?.backup_maps) h += `<div class="small" style="margin-top:6px;color:var(--warn)">* ${bk ? bk.backup_maps : hl.backup_maps} map(s) came from the backup data source (less complete than HLTV; replaced automatically when HLTV data arrives)</div>`;
       if (hl?.team_mismatch) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(hl.team_mismatch)}</div>`;
-      if (hl?.stale) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(hl.stale)}</div>`;
       h += `<div class="small muted" style="margin-top:6px">Only Round Swing can affect the grade; the rest is context.</div></section>`;
     }
   } catch (e) { console.warn("HLTV card skipped:", e); }
@@ -547,7 +717,6 @@ function render(d) {
       <div class="kv"><span>CT · T kills/map</span><span>${num(ca.ct?.k, 1)} · ${num(ca.t?.k, 1)}</span></div>
       <div class="kv"><span>Data up to</span><span>${esc(ca.newest_match || "–")}</span></div>`;
     if (ca.team_mismatch) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(ca.team_mismatch)}</div>`;
-    if (ca.stale) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(ca.stale)}</div>`;
     h += `</section>`;
   }
 
