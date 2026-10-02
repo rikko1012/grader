@@ -209,7 +209,8 @@ def board_payload():
             continue                                  # started: locked on Underdog
         g = BOARD.get(r["id"]) or {}
         rows.append(dict(r, **{k: g.get(k) for k in ("grade", "side", "p", "units", "proj", "reason", "graded_at",
-                                                     "nick", "state")}))
+                                                     "nick", "state", "edge", "l10_over", "l10_n", "l10_avg",
+                                                     "hs_pct", "p_win", "market", "team_name", "opp_name")}))
     return {"updated": b["at"], "error": b["error"], "rows": rows}
 
 
@@ -233,10 +234,19 @@ def board_forever():
                         continue
                     v = verdict(res.get("grade"))
                     g = res.get("grade") or {}
+                    pb = res.get("player_block") or {}
+                    rf = pb.get("recent_form") or {}
+                    fw = ((pb.get("overall") or {}).get("form_windows") or {}).get("3m") or {}
                     BOARD[r["id"]] = {"at": time.time(), "graded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                                       "grade": v.get("grade"), "side": v.get("side"), "p": v.get("p"),
                                       "units": v.get("units"), "proj": g.get("lambda_final"), "state": v.get("state"),
-                                      "reason": v.get("reason"), "nick": ((res.get("player_block") or {}).get("player") or {}).get("nick")}
+                                      "reason": v.get("reason"), "nick": (pb.get("player") or {}).get("nick"),
+                                      "edge": round(g["lambda_final"] - r["line"] - 0.5, 1) if g.get("lambda_final") is not None else None,
+                                      "l10_over": rf.get("overs"), "l10_n": rf.get("matches"), "l10_avg": rf.get("avg_total"),
+                                      "hs_pct": fw.get("hs_pct"), "p_win": (g.get("detail") or {}).get("p_win"),
+                                      "market": g.get("market_quality"),
+                                      "team_name": pb.get("playing_for") or pb.get("current_team"),
+                                      "opp_name": (res.get("next_match") or {}).get("opponent")}
                     res["verdict"] = v
                     try:
                         picklog.log_grade(res, v, test=2)

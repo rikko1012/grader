@@ -189,6 +189,47 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 .slip .leg span{flex:1;min-width:0}
 .slip .x{background:none;border:0;color:var(--muted);cursor:pointer;font-size:16px}
 .slip .warn{color:var(--warn);font-size:12.5px;margin-top:8px}
+.blist{display:flex;flex-direction:column;gap:8px}
+.brow{display:grid;grid-template-columns:46px minmax(150px,1.2fr) minmax(150px,1fr) minmax(340px,2.4fr) auto;gap:12px;align-items:center;
+  background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;cursor:pointer;transition:border-color .15s}
+.brow:hover{border-color:rgba(255,122,26,.5)}
+.brow .gtag{min-width:40px;font-size:14px;padding:6px 0}
+.brow .who b{font-size:15px} .brow .meta{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brow .pick{font:600 14.5px var(--display);letter-spacing:.3px;white-space:nowrap} .brow .pick .pc{color:var(--accent-2)}
+.brow .other{font-size:12px;color:var(--faint);margin-top:2px}
+.bstats{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.bstat{text-align:center;min-width:0} .bstat .k{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;white-space:nowrap}
+.bstat .v{font:700 14px var(--display);white-space:nowrap} .bstat .v.up{color:var(--good)} .bstat .v.dn{color:var(--bad)}
+.bstat .s{font-size:10.5px;color:var(--faint);white-space:nowrap}
+.bslip{background:none;border:1px solid var(--accent);color:var(--accent-2);border-radius:99px;padding:6px 11px;font:600 12.5px Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap}
+.bslip:hover{background:rgba(255,122,26,.1)} .bslip.on{background:var(--accent);color:#170b00}
+@media (max-width:760px){
+  .brow{grid-template-columns:40px 1fr auto;grid-template-areas:"g who add" "pick pick pick" "st st st";gap:8px 10px;padding:11px}
+  .brow .gtag{grid-area:g} .brow .who{grid-area:who;min-width:0} .brow .bslip{grid-area:add}
+  .brow .pk{grid-area:pick;display:flex;justify-content:space-between;align-items:baseline;gap:8px;border-top:1px solid var(--line);padding-top:8px}
+  .brow .bstats{grid-area:st;grid-template-columns:repeat(6,1fr);gap:2px}
+  .bstat .k{font-size:9.5px;letter-spacing:.3px} .bstat .v{font-size:13px} .bstat .s{display:none} .bstat .s.keep{display:block}
+  .modes .small{display:none}
+  /* phone grade card: compact */
+  .herocard{padding:14px} .hero{gap:12px;grid-template-columns:62px 1fr}
+  .herocard .hero .badge{width:62px;height:62px;font-size:28px;border-radius:15px}
+  .herocard .hero h3{font-size:19px} .herocard .hero .sub{font-size:13px;margin-top:2px;line-height:1.4}
+  .sides{gap:8px;margin-top:12px} .side{padding:8px 10px} .side .k{font-size:11px} .side .v{font-size:18px} .bar{height:5px;margin-top:5px}
+  .herocard .stats{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+  .herocard .stat{padding:7px 8px;min-width:0} .herocard .stat .k{font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .herocard .stat .v{font-size:16px}
+  .herocard .stat .n{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rates{gap:6px;margin-top:10px} .rate{min-width:0;flex:1;padding:6px 6px} .rate b{font-size:15px} .rate span{font-size:10.5px}
+  .actions{gap:5px} .actions .chipbtn{padding:6px 10px;font-size:12px}
+  .herocard .small.muted{font-size:11.5px}
+  .card{padding:14px} .card h2{font-size:13.5px}
+  #board > div:first-child{gap:8px} #bsort{flex:1 1 150px} #brefresh{padding:7px 10px}
+}
+.boardtab td,.boardtab th{white-space:nowrap;padding:8px 9px}
+.boardtab td.pl{white-space:normal;min-width:150px}
+.boardtab .mt{font-size:11.5px;color:var(--muted);margin-top:1px}
+.boardtab .ol{font-size:11.5px;color:var(--faint)}
+.boardtab .up{color:var(--good);font-weight:600} .boardtab .dn{color:var(--bad);font-weight:600}
+.boardtab tbody tr:hover td{background:rgba(255,122,26,.05)}
 @media (max-width:900px){
   .cols{grid-template-columns:1fr}
 }
@@ -232,9 +273,12 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
   </section>
   <section class="card" id="board" hidden>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-      <div class="seg" id="bprop"><button type="button" data-v="all" class="on">All</button><button type="button" data-v="kills">Kills</button><button type="button" data-v="hs">HS</button></div>
-      <label class="small" style="display:flex;gap:6px;align-items:center;text-transform:none;letter-spacing:0"><input type="checkbox" id="bbets" style="width:auto"> Bets only</label>
-      <button type="button" class="chipbtn" id="brefresh">Refresh</button><span id="bstatus" class="small muted"></span>
+      <div class="seg" id="bprop"><button type="button" data-v="kills" class="on">Kills</button><button type="button" data-v="hs">Headshots</button></div>
+      <select id="bsort" style="width:auto;padding:8px 10px"><option value="g">Best grade first</option><option value="p">Highest chance</option><option value="e">Biggest edge</option><option value="t">Starting soonest</option></select>
+      <label class="small" style="display:flex;gap:6px;align-items:center;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="bbets" style="width:auto"> Bets only</label>
+      <button type="button" class="chipbtn" id="brefresh" title="Refresh the board">↻ Refresh</button></div>
+    <div id="bstatus" class="small muted" style="margin:-2px 0 10px"></div>
+    <div>
     </div>
     <div id="boardout"></div>
   </section>
@@ -476,6 +520,7 @@ function setMode(m) {
   [...$("#mode").children].forEach(x => x.classList.toggle("on", x.dataset.v === m));
   $("#slate").hidden = m !== "slate"; $("#board").hidden = m !== "board"; $("#f").style.display = m === "one" ? "" : "none";
   if (m === "board") loadBoard();
+  try { showExamples(); } catch {}
 }
 $("#mode").onclick = e => { const b = e.target.closest("button"); if (b) setMode(b.dataset.v); };
 
@@ -565,7 +610,7 @@ $("#slatego").onclick = async () => {
 document.addEventListener("click", e => { const t = e.target.closest("[data-try]"); if (!t) return;
   const [p, l, pr] = t.dataset.try.split("|"); gradeNow(p, l, pr, "standard"); });
 // "Try" chips only on a fresh start screen: gone once there are recent grades, a card, or anything typed
-const showExamples = () => { $("#examples").hidden = store.get("cs2s_hist", []).length > 0 || !!lastCard
+const showExamples = () => { $("#examples").hidden = store.get("cs2s_hist", []).length > 0 || !!lastCard || $("#f").style.display === "none"
   || ["#player", "#line"].some(id => $(id).value.trim()); };
 ["#player", "#line"].forEach(id => $(id).addEventListener("input", showExamples));
 showExamples(); const _sr = showRecent; showRecent = () => { _sr(); showExamples(); };
@@ -592,9 +637,11 @@ function addToSlip(d) {
   s.push(leg); store.set("cs2s_slip", s); toast(`Added – ${s.length} on the slip`); drawSlip();
 }
 function openSlip() { $("#slip").hidden = false; drawSlip(); }
+const _drawSlip = () => { if (!$("#board").hidden && typeof boardRows !== "undefined" && boardRows.length) drawBoard(); };
 function drawSlip() {
   const s = store.get("cs2s_slip", []);
   $("#slipbtn").hidden = !s.length; $("#slipbtn").textContent = `Slip (${s.length})`;
+  try { _drawSlip(); } catch {}
   if ($("#slip").hidden) return;
   if (!s.length) { $("#slip").hidden = true; return; }
   const n = s.length, all = s.reduce((a, x) => a * (x.pc || 0.5), 1), pay = PAYOUT[n];
@@ -643,7 +690,8 @@ function udPill(d) {
   const better = v.side === "More" ? u.line < g.line : u.line > g.line;
   return `<span class="pill ${better ? "good" : ""}">Underdog: ${u.line}${pay} – ${better ? `easier for ${v.side}` : `PrizePicks' ${g.line} is easier for ${v.side}`}</span>`;
 }
-let boardRows = [], boardSort = {k: "p", dir: -1}, bprop = "all";
+let boardRows = [], bprop = "kills";
+const G_RANK = {"A+": 0, "A": 1, "A-": 2, "B+": 3, "B": 4, "LEAN": 5};
 async function loadBoard(force) {
   if (boardRows.length && !force) return drawBoard();
   $("#bstatus").textContent = "loading…";
@@ -651,38 +699,67 @@ async function loadBoard(force) {
     const r = await fetchRetry("/api/board"); const d = await r.json();
     if (r.status === 401 && d.error === "members_only") return showGate(d);
     boardRows = d.rows || [];
-    const graded = boardRows.filter(x => x.grade).length;
+    const graded = boardRows.filter(x => x.side).length;
     $("#bstatus").textContent = `${boardRows.length} lines · ${graded} graded` + (graded < boardRows.length ? " (the rest are grading – refresh in a minute)" : "")
       + (d.updated ? ` · board from ${new Date(d.updated * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})}` : "");
   } catch (e) { $("#bstatus").textContent = e.message; }
   drawBoard();
 }
+const shortWhen = s => { if (!s) return ""; const d = new Date(s); if (isNaN(d)) return "";
+  const u = until(d); return d.toLocaleString([], {weekday: "short", hour: "numeric", minute: "2-digit"}) + (u ? " · " + u : ""); };
+function boardCard(r) {     // a board row in the shape addToSlip / pickLine expect
+  return {grade: {line: r.line, prop: r.prop, line_type: "standard"},
+          verdict: {side: r.side, grade: r.grade, p: r.p, units: r.units},
+          player_block: {player: {nick: r.nick || r.player}, current_team: r.team_name || r.team},
+          next_match: {opponent: r.opp_name || r.opponent}};
+}
 function drawBoard() {
-  const key = r => ({p: r.p ?? -1, u: r.units ?? -1, pl: (r.player || "").toLowerCase(), t: r.start || "", pr: r.proj ?? -1}[boardSort.k]);
-  let rows = boardRows.filter(r => (bprop === "all" || r.prop === bprop) && (!$("#bbets").checked || (r.units || 0) > 0));
-  rows = rows.map((r, i) => [r, i]).sort((a, b) => { const A = key(a[0]), B = key(b[0]); return (A > B ? 1 : A < B ? -1 : 0) * boardSort.dir; });
-  const th = (k, l) => `<th data-bsort="${k}">${l}${boardSort.k === k ? (boardSort.dir < 0 ? " ▾" : " ▴") : ""}</th>`;
-  $("#boardout").innerHTML = rows.length ? `<div class="scroll"><table class="slatetab"><thead><tr>${th("pl", "Player")}<th>Line</th><th>Pick</th><th>Grade</th>${th("p", "Chance")}${th("u", "Units")}${th("pr", "Proj")}${th("t", "Starts")}</tr></thead><tbody>`
-    + rows.map(([r]) => {
-        const v = {grade: r.grade, side: r.side};
-        const lab = !r.side ? "…" : r.state === "SCOUT" ? "S" : r.grade === "LEAN" ? "L" : r.grade;
-        return `<tr data-bl="${esc(r.nick || r.player)}|${r.line}|${r.prop}"><td><b>${esc(r.nick || r.player)}</b><div class="small muted">${esc(r.team || "")}${r.opponent ? " vs " + esc(r.opponent) : ""}</div></td>
-          <td class="num" style="text-align:left">${r.line} ${propWord(r.prop)}${r.alt ? ` <span class="pill" style="margin:0;padding:1px 7px">alt ${r.higher ?? "–"}x/${r.lower ?? "–"}x</span>` : ""}</td>
-          <td>${r.side ? esc(sideWord(v)) : '<span class="muted small">grading…</span>'}</td><td>${r.side ? `<span class="gtag ${r.state === "SCOUT" ? "g-scout" : gClass(r.grade)}">${esc(lab)}</span>` : ""}</td>
-          <td class="num">${r.p != null ? Math.round(r.p * 100) + "%" : "–"}</td><td class="num">${r.units ?? "–"}${r.units != null ? "U" : ""}</td>
-          <td class="num">${r.proj != null ? num(r.proj, 1) : "–"}</td><td class="small">${when(r.start)}</td></tr>`; }).join("")
-    + `</tbody></table></div><div class="small muted" style="margin-top:8px">Underdog's Maps 1–2 lines, graded by the grader. Tap a row for the full card (add it to your slip from there). Underdog payouts differ from PrizePicks'.</div>`
+  const sortBy = $("#bsort").value;
+  const rank = r => !r.side ? 9 : r.state === "SCOUT" ? 7 : (G_RANK[r.grade] ?? 6);
+  const key = r => sortBy === "g" ? [rank(r), -(r.p ?? 0)] : sortBy === "p" ? [-(r.p ?? -1)] : sortBy === "e" ? [-Math.abs(r.edge ?? 0)] : [r.start || "9"];
+  const cmp = (a, b) => { const A = key(a), B = key(b); for (let i = 0; i < A.length; i++) if (A[i] !== B[i]) return A[i] > B[i] ? 1 : -1; return 0; };
+  const other = {};
+  boardRows.forEach(r => { other[(r.nick || r.player).toLowerCase() + "|" + r.prop] = r; });
+  const onSlip = new Set(store.get("cs2s_slip", []).map(x => String(x.p).toLowerCase()));
+  const rows = boardRows.filter(r => r.prop === bprop && (!$("#bbets").checked || (r.units || 0) > 0)).sort(cmp);
+  const pct0 = x => x == null ? "–" : Math.round(x * 100) + "%";
+  const st = (k, v, cls = "", sub = "") => `<div class="bstat"><div class="k">${k}</div><div class="v ${cls}">${v}</div>${sub ? `<div class="s">${sub}</div>` : ""}</div>`;
+  $("#boardout").innerHTML = rows.length ? `<div class="blist">` + rows.map(r => {
+      const nick = r.nick || r.player, v = {grade: r.grade, side: r.side};
+      const lab = !r.side ? "…" : r.state === "SCOUT" ? "S" : r.grade === "LEAN" ? "L" : r.grade;
+      const o = other[nick.toLowerCase() + "|" + (r.prop === "hs" ? "kills" : "hs")];
+      const team = r.team_name || r.team, opp = r.opp_name || r.opponent;
+      const win = r.p_win != null && r.market !== "NO MARKET" ? pct0(r.p_win) : "–";
+      return `<div class="brow" data-bl="${esc(nick)}|${r.line}|${r.prop}">
+        <span class="gtag ${!r.side ? "g-scout" : r.state === "SCOUT" ? "g-scout" : gClass(r.grade)}">${esc(lab)}</span>
+        <div class="who"><b>${esc(nick)}</b><div class="meta">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}</div><div class="meta">${shortWhen(r.start)}</div></div>
+        <div class="pk"><div><div class="pick">${r.side ? esc(sideWord(v)) : "grading…"} ${r.line} ${propWord(r.prop)} ${r.p != null ? `<span class="pc">· ${pct0(r.p)} to hit</span>` : ""}</div>
+          <div class="other">${o ? `${propWord(o.prop)} line ${o.line}` : ""}${r.alt ? ` · alt ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}</div></div>
+</div>
+        <div class="bstats">
+          ${st("Proj", r.proj != null ? num(r.proj, 1) : "–")}
+          ${st("Edge", r.edge == null ? "–" : (r.edge > 0 ? "+" : "") + r.edge, r.edge == null ? "" : r.edge > 0 ? "up" : "dn")}
+          ${st("Last 10", r.l10_n ? `${r.l10_over}/${r.l10_n}` : "–", "", r.l10_avg != null ? "avg " + r.l10_avg : "").replace('class="s"', 'class="s keep"')}
+          ${st("Units", r.units != null ? r.units + "U" : "–", (r.units || 0) > 0 ? "up" : "")}
+          ${st("HS%", r.hs_pct != null ? Math.round(r.hs_pct) + "%" : "–", "", "3 months")}
+          ${st("Win", win, "", "team odds")}
+        </div>
+        ${r.side ? `<button type="button" class="bslip ${onSlip.has(nick.toLowerCase()) ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}">${onSlip.has(nick.toLowerCase()) ? "On slip" : "+ Slip"}</button>` : "<span></span>"}
+      </div>`; }).join("") + `</div><div class="small muted" style="margin-top:10px">Underdog's Maps 1–2 lines, graded. Tap a row for the full card. Underdog payouts differ from PrizePicks'.</div>`
     : `<div class="muted">${boardRows.length ? "No lines match this filter." : "No Underdog CS2 lines right now."}</div>`;
 }
 $("#boardout").addEventListener("click", e => {
-  const s = e.target.closest("[data-bsort]");
-  if (s) { boardSort = {k: s.dataset.bsort, dir: boardSort.k === s.dataset.bsort ? -boardSort.dir : (s.dataset.bsort === "t" || s.dataset.bsort === "pl" ? 1 : -1)}; return drawBoard(); }
+  const b = e.target.closest("[data-bslip]");
+  if (b) { e.stopPropagation(); const [p, l, t] = b.dataset.bslip.split("|");
+    const r = boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t);
+    if (r) { addToSlip(boardCard(r)); drawBoard(); } return; }
   const r = e.target.closest("[data-bl]");
   if (r) { const [p, l, t] = r.dataset.bl.split("|"); gradeNow(p, l, t, "standard"); setTimeout(() => $("#out").scrollIntoView({behavior: "smooth"}), 50); }
 });
 $("#bprop").onclick = e => { const b = e.target.closest("button"); if (!b) return; bprop = b.dataset.v;
   [...$("#bprop").children].forEach(x => x.classList.toggle("on", x === b)); drawBoard(); };
 $("#bbets").onchange = drawBoard;
+$("#bsort").onchange = drawBoard;
 $("#brefresh").onclick = () => loadBoard(true);
 
 // a shared link (?p=ZywOo&l=27.5&t=kills) grades on open
@@ -751,7 +828,7 @@ function render(d) {
     <div class="stats" style="margin-top:10px">
       <div class="stat"><div class="k">Projection</div><div class="v">${num(g.lambda_final,1)}</div><div class="n">${stat}, Maps 1–2</div></div>
       <div class="stat"><div class="k">Line</div><div class="v">${g.line}</div><div class="n">needs ${g.line + 0.5} for More</div></div>
-      <div class="stat"><div class="k">Team win chance</div><div class="v">${det.p_win != null ? pct(det.p_win,0) : "–"}</div><div class="n">${g.market_quality === "NO MARKET" ? "no odds found – treated as even" : "from betting markets"}</div></div>
+      <div class="stat"><div class="k">Team win</div><div class="v">${det.p_win != null ? pct(det.p_win,0) : "–"}</div><div class="n">${g.market_quality === "NO MARKET" ? "no odds found – treated as even" : "from betting markets"}</div></div>
       <div class="stat ${g.lambda_final - g.line - 0.5 > 0 ? "up" : "down"}"><div class="k">Edge</div><div class="v">${(g.lambda_final - g.line - 0.5 > 0 ? "+" : "") + (g.lambda_final - g.line - 0.5).toFixed(1)}</div><div class="n">projection − ${g.line + 0.5} needed</div></div>
       <div class="stat"><div class="k">Last 10</div><div class="v">${pb.recent_form?.avg_total ?? "–"}</div><div class="n">median ${pb.recent_form?.median_total ?? "–"} · ${pb.recent_form?.overs ?? "–"}/${pb.recent_form?.matches ?? "–"} over</div></div>
     </div>`;
