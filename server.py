@@ -582,9 +582,11 @@ class Handler(BaseHTTPRequestHandler):
         return whop_auth.session(self.cookie(whop_auth.COOKIE)) if whop_auth.enabled() else None
 
     def allowed(self):
-        """Grading/search: open while Whop sign-in is off; else paid members, admin tests only."""
+        """Grading/search/board: paid Whop members (and the owner's load tests) only. On Railway the data
+        stays locked if the Whop settings are ever missing - it never opens up to everyone."""
         if not whop_auth.enabled():
-            return True
+            return not (os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("RAILWAY_ENVIRONMENT_NAME")
+                        or os.environ.get("REQUIRE_WHOP"))
         if ADMIN_TOKEN and self.headers.get("X-Load-Test") == ADMIN_TOKEN:
             return True
         sess = self.member()

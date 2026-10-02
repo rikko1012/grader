@@ -36,7 +36,7 @@ TOKEN = "https://api.whop.com/oauth/token"
 USERINFO = "https://api.whop.com/oauth/userinfo"
 ACCESS = "https://api.whop.com/api/v1/users/{user}/access/{resource}"
 SESSION_DAYS = 7
-RECHECK_H = 24
+RECHECK_H = 6            # paid members re-checked every 6 h (a cancelled plan loses access within 6 h)
 COOKIE = "cs2s"
 PKCE_COOKIE = "cs2s_pkce"
 _ACCESS_CACHE, _LOCK = {}, threading.Lock()
@@ -60,7 +60,7 @@ PAID_PLANS = {"plan_4zOzRl7roBDFf", "plan_8d2GVuU7671mD", "plan_fuM25oisxzQEH", 
 LIVE_STATUSES = {"active", "trialing", "canceling"}
 LIFETIME_PLAN = "plan_ZSpLGB3mTmagK"                         # lifetime memberships show "completed"          # canceling = paid until the period ends
 MEMBERSHIPS = "https://api.whop.com/api/v1/memberships"
-NO_RECHECK_MIN = 10          # a "no" is re-asked after 10 min (someone who just paid gets in fast)
+NO_RECHECK_MIN = 1       # "no access" re-checked every minute: a new member gets in ~1 min after paying
 JOIN_URL = "https://whop.com/1timeesports/exp_W6a3m1Ps4dxbCG/app/"
 
 

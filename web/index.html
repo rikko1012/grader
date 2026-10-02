@@ -340,7 +340,11 @@ const num = (x, d = 2) => x == null ? "–" : Number(x).toFixed(d);
 // Busy moments (hundreds of members at once): a refused connection or a "busy" answer from the
 // host is retried automatically (1 s, 2 s, 4 s) - members never see it.
 // ---------- members only (Sign in with Whop - paid product). Off until the server enables it.
+let gatePoll = null;
 function showGate(state) {
+  if (state.signed_in && !gatePoll) gatePoll = setInterval(async () => {     // paying right now: let them in as soon as Whop says so
+    try { const s = await fetch("/auth/me").then(r => r.json()); if (s.member) location.reload(); } catch {}
+  }, 20000);
   const g = $("#gate"), up = state.upgrade;
   $("#f").style.display = "none"; $("#out").innerHTML = ""; g.hidden = false;
   const err = new URLSearchParams(location.search).get("signin_error");
@@ -348,7 +352,8 @@ function showGate(state) {
     ? `<h3 style="margin:0 0 8px">Your Whop account doesn't have access yet</h3>
        <div class="small muted" style="margin-bottom:14px">The grader is for paid members only.</div>
        ${up ? `<a class="go" style="display:inline-block;text-decoration:none;padding:10px 18px" href="${esc(up)}">Upgrade on Whop</a>` : ""}
-       <div class="small" style="margin-top:14px"><a href="/auth/logout">Sign out</a> · <a href="/auth/login">Signed up just now? Check again</a></div>`
+       <div class="small" style="margin-top:14px"><a href="/auth/logout">Sign out</a> · <a href="/auth/login">Signed up just now? Check again</a></div>
+       <div class="small muted" style="margin-top:8px">Just joined? This page lets you in automatically within a minute.</div>`
     : `<h3 style="margin:0 0 8px">Members only</h3>
        <div class="small muted" style="margin-bottom:14px">Sign in with the Whop account you joined with.</div>
        <a class="go" style="display:inline-block;text-decoration:none;padding:10px 18px" href="/auth/login">Sign in with Whop</a>
