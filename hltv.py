@@ -737,6 +737,18 @@ def predict_maps(team_a, team_b, before, pool=None, runs=4000, seed=7):
     import random
     if not dsn():
         return None
+    key = ("veto", _norm(team_a), _norm(team_b), before, runs)
+    with _LOCK:
+        hit = _CACHE.get(key)
+        if hit and time.time() - hit[0] < TTL:
+            return hit[1]
+    out = _predict_maps(team_a, team_b, before, pool, runs, seed, random)
+    with _LOCK:
+        _CACHE[key] = (time.time(), out)
+    return out
+
+
+def _predict_maps(team_a, team_b, before, pool, runs, seed, random):
     con = _connect()
     try:
         with con.cursor() as cur:
