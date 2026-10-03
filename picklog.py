@@ -22,7 +22,6 @@ from pathlib import Path
 
 DB = Path(os.environ.get("CS2_DATA_DIR") or Path(__file__).resolve().parent) / "picks.db"
 _LOCK = threading.Lock()
-SETTLE_AFTER_H = 3        # a BO3 is over well within 3 hours of its start
 VOID_AFTER_D = 3          # never found finished after 3 days -> void
 
 COLUMNS = """id INTEGER PRIMARY KEY, key TEXT UNIQUE, logged_at TEXT, requests INTEGER DEFAULT 1,
@@ -154,7 +153,21 @@ def settle(b, map_rows):
             start = datetime.fromisoformat((r["match_start"] or "").replace("Z", "+00:00"))
         except ValueError:
             continue
-        if now < start + timedelta(hours=SETTLE_AFTER_H):
+        # the data decides, not the clock: HLTV's result settles a pick as soon as the scraper has it
+        # (listed start times are often off); BO3.gg's only after SETTLE_MIN minutes
+        early = now < start + timedelta(minutes=SETTLE_MIN)
+        if now < start - timedelta(hours=12):
+            continue                                  # far in the future: nothing to look for yet
+        if early and not (r["match_slug"] or "").startswith("hltv-"):
+            hv = _hltv_totals(r, same_day_only=True)
+            if isinstance(hv, tuple):
+                with _LOCK:
+                    con = _db()
+                    con.execute("UPDATE picks SET status=?, actual_maps=?, actual=?, hit=?, settled_at=? WHERE id=?",
+                                (*hv, now.isoformat(timespec="seconds"), r["id"]))
+                    con.commit()
+                    con.close()
+                done += 1
             continue
         if (r["match_slug"] or "").startswith("hltv-"):
             upd = _settle_hltv(r, now, start)
@@ -240,6 +253,7 @@ def _save_result(pick_id, result):
         pass
 
 
+SETTLE_MIN = 75     # BO3.gg results are trusted this long after the listed start (Maps 1-2 can't be faster)
 HLTV_WAIT_H = 12   # HLTV has the match but not its headshots yet: wait this long before BO3.gg
 
 
@@ -250,7 +264,7 @@ def _outcome(r, actual, maps):
     return ("settled", json.dumps(maps), actual, int(hit))
 
 
-def _hltv_totals(r):
+def _hltv_totals(r, same_day_only=False):
     """HLTV's Maps 1-2 result for a pick: an update tuple, "wait" (match there, stat not yet), or None."""
     try:
         import hltv
@@ -259,6 +273,8 @@ def _hltv_totals(r):
         return None
     if not tot.get("found"):
         return None
+    if same_day_only and (tot.get("date") or "") < (r["match_start"] or "")[:10]:
+        return None                                   # before the listed day: an earlier meeting, not this match
     actual = tot.get("headshots" if r["prop"] == "hs" else "kills")
     if actual is not None:
         _save_result(r["id"], {"source": "hltv", "rounds": tot.get("rounds"), "won": tot.get("won"),

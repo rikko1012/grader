@@ -70,6 +70,7 @@ CONFIG = {
     "thin_maps": 20,             # under 20 Maps 1-2 = thin data: wider SD, 1U cap
     "map_blend_k": 12,
     "underdog_k": 1.15,
+    "matchup_slope": 0.15,       # extra matchup shift (see grade_leg)
     "elite_k": 0.5,
     "rank_band_w": 0.5, "rank_band_k": 20,   # vs similar-rank teams (see grade_leg)              # extra vs a top-10 opponent (VRS rank from HLTV), same data          # heavy-underdog extra (see grade_leg), fitted on HLTV player-maps
     "shrink_k": {"kills": 10, "hs": 30},   # thin-sample pull toward the pro average (tested 2026-09-30)
@@ -375,7 +376,10 @@ def grade_leg(d, cfg=CONFIG):
     # rate elsewhere): opponent 100+ ranks better -10% (factor gave -6%), 50-99 better -7% (-4%),
     # top-10 opponent -14% (-5%); favourites already matched. Extra = 1 - k * (0.40 - q)^2 below q 0.40.
     qm = (q1 + q2) / 2
-    dog = 1 - cfg["underdog_k"] * max(0.0, 0.40 - qm) ** 2
+    # bigger matchup shift: (1 + 0.15 x (map win chance - 0.5)). Chosen on all 5 held-out days of members'
+    # real lines (827 props, log-loss 0.6969 -> 0.6947, bets 167/305 -> 172/315) and on HLTV history.
+    dog = 1 + cfg["matchup_slope"] * (qm - 0.5)
+    dog *= 1 - cfg["underdog_k"] * max(0.0, 0.40 - qm) ** 2
     # vs a top-10 team the drop is bigger still (same HLTV data: team ranked 11-30 vs top 10 -7.6%
     # real vs -3.3% modelled at q~0.32; ranked 31-60 -14% vs -7% at q~0.24): 0.5 x (0.40 - q) more
     if (d.get("opp_rank") or 999) <= 10:
