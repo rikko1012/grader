@@ -197,6 +197,7 @@ STORAGE = {"last_cleanup": None, "freed_mb": 0.0}
 
 # ---------------------------------------------------------------- Underdog board (graded in the background)
 BOARD = {}              # Underdog line id -> board row + its grade summary
+BOARD_WORKERS = 3       # lines graded side by side (one at a time left most of the board ungraded for hours)
 BOARD_EVERY = 15 * 60   # re-grade a line at most this often (members' grades are cached anyway)
 BOARD_FILE = DATA_DIR / ".cache" / "board.json"
 
@@ -208,7 +209,15 @@ def _grader_version():
     return hashlib.sha1(Path(__file__).with_name("grader.py").read_bytes()).hexdigest()[:12]
 
 
+_BOARD_SAVE = threading.Lock()
+
+
 def _board_save():
+    with _BOARD_SAVE:
+        _board_save_locked()
+
+
+def _board_save_locked():
     try:
         tmp = BOARD_FILE.with_suffix(".tmp")
         tmp.write_text(json.dumps({"version": _grader_version(), "rows": BOARD}, default=str), encoding="utf-8")
@@ -264,14 +273,16 @@ def board_forever():
             now = datetime.now(timezone.utc).isoformat()
             todo = [r for r in rows if not r["alt"] and (not r.get("start") or r["start"] > now)
                     and time.time() - (BOARD.get(r["id"]) or {}).get("at", 0) > BOARD_EVERY]
-            for r in todo:
-                members_idle()                            # members always first
+            todo.sort(key=lambda r: r.get("start") or "9")   # soonest matches first
+
+            def one(r):
+                members_idle(quiet=4, max_wait=8)         # members first, but the board never stalls
                 try:
                     res = cs2_scout.grade(r["player"], r["line"], r["prop"], "standard", faceit_key=faceit_key(),
                                           background=True, light=True)
                     if res.get("error"):
                         BOARD[r["id"]] = {"at": time.time(), "state": "NOT FOUND", "reason": res["error"]}
-                        continue
+                        return
                     v = verdict(res.get("grade"))
                     g = res.get("grade") or {}
                     pb = res.get("player_block") or {}
@@ -296,7 +307,10 @@ def board_forever():
                     traceback.print_exc()
                 if len(BOARD) % 10 == 0:
                     _board_save()
-                time.sleep(0.3)
+
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(BOARD_WORKERS, thread_name_prefix="board") as ex:
+                list(ex.map(one, todo))
             _board_save()
             if len(BOARD) > 5000:
                 BOARD.clear()
