@@ -251,14 +251,19 @@ def board_payload():
     return {"updated": b["at"], "error": b["error"], "rows": rows, "total": len(b["rows"])}
 
 
-def members_idle(quiet=8, max_wait=60):
-    """Wait until no member look-up is running and member traffic has been quiet `quiet` seconds
-    (at most `max_wait` - then one board grade goes through, slowly, so the board never freezes)."""
+MEMBER_GRADES = [0]     # member grades running right now (the board steps aside while any are)
+_MG_LOCK = threading.Lock()
+_BOARD_BUSY = threading.Lock()   # while members are grading, only one board grade runs at a time
+
+
+def members_idle(max_wait=45):
+    """Wait until no member grade is running (at most `max_wait` - then one board grade goes
+    through, so the board never freezes during a rush). Quiet site: no wait at all."""
     t0 = time.time()
     while time.time() - t0 < max_wait:
-        if time.time() - LAST_MEMBER[0] >= quiet:       # real member requests only (not pre-loading)
+        if MEMBER_GRADES[0] <= 0:
             return
-        time.sleep(3)
+        time.sleep(2)
 
 
 def board_forever():
@@ -276,10 +281,15 @@ def board_forever():
             todo.sort(key=lambda r: r.get("start") or "9")   # soonest matches first
 
             def one(r):
-                members_idle(quiet=4, max_wait=8)         # members first, but the board never stalls
+                members_idle()                            # members first, but the board never stalls
                 try:
-                    res = cs2_scout.grade(r["player"], r["line"], r["prop"], "standard", faceit_key=faceit_key(),
-                                          background=True, light=True)
+                    if MEMBER_GRADES[0] > 0:              # members still busy: one board grade at a time
+                        with _BOARD_BUSY:
+                            res = cs2_scout.grade(r["player"], r["line"], r["prop"], "standard",
+                                                  faceit_key=faceit_key(), background=True, light=True)
+                    else:
+                        res = cs2_scout.grade(r["player"], r["line"], r["prop"], "standard", faceit_key=faceit_key(),
+                                              background=True, light=True)
                     if res.get("error"):
                         BOARD[r["id"]] = {"at": time.time(), "state": "NOT FOUND", "reason": res["error"]}
                         return
@@ -663,7 +673,13 @@ class Handler(BaseHTTPRequestHandler):
             if u.path.startswith("/api/") and u.path != "/api/board":
                 LAST_MEMBER[0] = time.time()
             if u.path == "/api/grade":
-                return self.grade(q)
+                with _MG_LOCK:
+                    MEMBER_GRADES[0] += 1
+                try:
+                    return self.grade(q)
+                finally:
+                    with _MG_LOCK:
+                        MEMBER_GRADES[0] -= 1
             if u.path == "/api/board":
                 return self.send(200, board_payload())
             if u.path == "/admin":
