@@ -22,10 +22,9 @@ CONFIG = {
     # --- calibration 2026-09-28 (owner-approved) - measured on 373 real Maps 1-2 series ---
     # c tuned OUT-OF-SAMPLE on 450 player-series x 13 lines (stats from before each match only):
     # kills 1.55 -> printed 65%/71%/76% hit 64%/71%/77%; headshots 1.30 -> gap 0.8%
-    # x1.2 on 2026-10-05: on 833 real lines (Oct 2-4, each day held out) a wider spread was chosen
-    # on every day (log-loss 0.7095 -> 0.6971 with last-10 0.3); B printed 60% but hit 49%.
-    "c": 1.86,                   # SD constant for kills (1.55 before 2026-10-05)
-    "c_hs": 1.56,                # headshots (1.30 before 2026-10-05)
+    "c": 1.55,                   # SD constant for kills (in-sample 1.26 was still too tight)
+    "c_hs": 1.30,                # headshots (a x1.2 wider spread was tried 2026-10-05 and reverted:
+                                 # owner - make grades more accurate, don't just lower the percentages)
     "p_cap_kills": 0.78,         # printed 81% kills hit only 69% (fat tails) - no A+ on kills
     "rounds_per_map": 22,        # real CS2 maps average ~21.8 (44 over Maps 1-2; was 23/46)
     "stomp_rounds_per_map": 22,  # was 20 (40): the measured map-outcome factors below already
