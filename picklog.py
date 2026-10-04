@@ -15,6 +15,7 @@ Stored in SQLite on the data volume (CS2_DATA_DIR/picks.db).
 import json
 import os
 import sqlite3
+import queue
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -33,10 +34,17 @@ flags TEXT, opp_def TEXT, status TEXT DEFAULT 'open', actual_maps TEXT, actual R
 closing_line REAL, clv REAL, settled_at TEXT"""
 
 
+_SCHEMA_OK = [False]
+
+
 def _db():
-    DB.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(DB, timeout=30)
     con.row_factory = sqlite3.Row
+    con.execute("PRAGMA synchronous=NORMAL")   # with WAL: safe, and writes don't wait on a full disk sync
+    if _SCHEMA_OK[0]:
+        return con
+    DB.parent.mkdir(parents=True, exist_ok=True)
+    con.execute("PRAGMA journal_mode=WAL")     # readers and the writer no longer block each other
     con.execute(f"CREATE TABLE IF NOT EXISTS picks ({COLUMNS})")
     try:                                   # added 2026-09-29: owner's load tests are not real picks
         con.execute("ALTER TABLE picks ADD COLUMN test INTEGER DEFAULT 0")
@@ -47,6 +55,7 @@ def _db():
             con.execute(f"ALTER TABLE picks ADD COLUMN {col} TEXT")
         except sqlite3.OperationalError:
             pass
+    _SCHEMA_OK[0] = True
     return con
 
 
@@ -80,9 +89,45 @@ def _factors(res):
     return out
 
 
+_QUEUE = queue.Queue()
+_WRITER = [None]
+
+
+def log_async(res, verdict, test=False):
+    """log_grade() without making the member wait: the row is built now (small) and written by one
+    background writer (a busy pick log used to add 2-15 s to every grade)."""
+    try:
+        row = pick_row(res, verdict, test)
+    except Exception:
+        return
+    if row is None:
+        return
+    _QUEUE.put(row)
+    if _WRITER[0] is None or not _WRITER[0].is_alive():
+        with _LOCK:
+            if _WRITER[0] is None or not _WRITER[0].is_alive():
+                _WRITER[0] = threading.Thread(target=_writer, daemon=True, name="picklog-writer")
+                _WRITER[0].start()
+
+
+def _writer():
+    while True:
+        row = _QUEUE.get()
+        try:
+            write_row(row)
+        except Exception:
+            import traceback
+            traceback.print_exc()
+
+
 def log_grade(res, verdict, test=False):
     """Log a member's graded line. Returns the row id (or None when it isn't a wager).
     test=True (owner's load tests) is stored but left out of the report."""
+    return write_row(pick_row(res, verdict, test))
+
+
+def pick_row(res, verdict, test=False):
+    """The pick-log row for this grade (None when it isn't a wager)."""
     g, pb, nm = res.get("grade") or {}, res.get("player_block") or {}, res.get("next_match") or {}
     slug = nm.get("slug") or (f"hltv-{nm['hltv_match']}" if nm.get("hltv_match") else None)
     if not verdict or verdict.get("state") != "GRADE" or "p_more" not in g or not slug:
@@ -107,6 +152,13 @@ def log_grade(res, verdict, test=False):
         "test": test if test == 2 else int(bool(test)),   # 1 = owner's tests, 2 = Underdog board (not a member pick)
         "factors": json.dumps(_factors(res), default=str),
     }
+    return row
+
+
+def write_row(row):
+    if row is None:
+        return None
+    key, test = row["key"], row["test"]
     with _LOCK:
         con = _db()
         try:

@@ -312,7 +312,7 @@ def board_forever():
                                       "opp_name": (res.get("next_match") or {}).get("opponent")}
                     res["verdict"] = v
                     try:
-                        picklog.log_grade(res, v, test=2)
+                        picklog.log_async(res, v, test=2)
                     except Exception:
                         traceback.print_exc()
                 except Exception:
@@ -958,7 +958,7 @@ class Handler(BaseHTTPRequestHandler):
             tm["underdog"] = round(time.time() - t0, 2)
             t0 = time.time()
             try:
-                picklog.log_grade(res, res["verdict"], test=load_test)   # Phase 10: GRADE state only
+                picklog.log_async(res, res["verdict"], test=load_test)   # written in the background
             except Exception:
                 traceback.print_exc()
             tm["log"] = round(time.time() - t0, 2)
