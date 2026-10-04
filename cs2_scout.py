@@ -1236,7 +1236,7 @@ def grade(name, line, prop="kills", line_type="standard", slug=None, faceit_key=
     hit = _CONTEXT.get(ckey)
     t0 = time.time()
     age = time.time() - hit[0] if hit else None
-    if hit and CONTEXT_TTL <= age < CONTEXT_STALE:
+    if hit and CONTEXT_TTL <= age < CONTEXT_STALE and not background:   # members only - the board never triggers one
         _refresh_context(ckey, args, ttl)     # this grade uses the saved data; fresh data is built meanwhile
     if hit and age < CONTEXT_STALE:
         res = copy.deepcopy(hit[1])
@@ -1293,7 +1293,7 @@ def _timing_done(res, name, kind, background, t0):
 
 
 _CONTEXT = {}
-CONTEXT_TTL = 120          # older than this: rebuilt in the background (the grade doesn't wait)
+CONTEXT_TTL = 600          # older than this: rebuilt in the background (the grade doesn't wait)
 CONTEXT_STALE = 30 * 60    # older than this: rebuilt before grading
 _REFRESHING, _REFRESH_LOCK = set(), threading.Lock()
 _REFRESH_SLOTS = threading.BoundedSemaphore(2)
@@ -1302,8 +1302,11 @@ _REFRESH_SLOTS = threading.BoundedSemaphore(2)
 def _refresh_context(ckey, args, ttl):
     """Rebuild one player's shared context in the background (one rebuild per player at a time).
     Members kept waiting 10-40 s behind a rebuild every 2 minutes under load before this."""
+    if not _REFRESH_SLOTS.acquire(blocking=False):   # both refreshers busy: skip (no thread pile-up)
+        return
     with _REFRESH_LOCK:
         if ckey in _REFRESHING:
+            _REFRESH_SLOTS.release()
             return
         _REFRESHING.add(ckey)
     a = copy.copy(args)
@@ -1311,7 +1314,7 @@ def _refresh_context(ckey, args, ttl):
 
     def work():
         try:
-            with _REFRESH_SLOTS:
+            if True:                            # slot already held (released below)
                 res = {"generated": datetime.now(timezone.utc).isoformat(timespec="seconds"), "command": "grade"}
                 b = BO3(ttl_hours=ttl, background=True)
                 try:
@@ -1327,6 +1330,7 @@ def _refresh_context(ckey, args, ttl):
         finally:
             with _REFRESH_LOCK:
                 _REFRESHING.discard(ckey)
+            _REFRESH_SLOTS.release()
     threading.Thread(target=work, daemon=True, name="ctx-refresh").start()
 
 
