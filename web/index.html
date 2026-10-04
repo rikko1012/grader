@@ -50,6 +50,13 @@ input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(25
 .seg button.on{background:var(--accent);color:#170b00;font-weight:600}
 #gate a:not(.go),#who a{color:var(--accent-2)}
 #gate a.go{color:#170b00}
+/* not a member (or not checked yet): only the logo and the sign-in card show */
+body.locked .wrap > :not(header):not(#gate), body.locked header > :not(.logo):not(h1),
+body.locked #slipbtn, body.locked #slip{display:none !important}
+.perks{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin:18px 0 6px;text-align:left}
+.perk{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.perk b{display:block;font-family:var(--display);font-size:15px;margin-bottom:4px;color:var(--text)}
+.perk span{font-size:13px;line-height:1.45;color:var(--muted)}
 .row2 .field{flex:0 0 150px}
 .go{margin-left:auto;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#170b00;border:0;border-radius:11px;
   padding:12px 30px;font:700 15px var(--display);letter-spacing:1px;text-transform:uppercase;cursor:pointer;
@@ -255,7 +262,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 }
 </style>
 </head>
-<body>
+<body class="locked">
 <div class="wrap">
   <header><div class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#170b00" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg></div><h1>CS2 <em>Prop</em> Grader</h1><span class="grow"></span><form class="mini" id="mini" autocomplete="off"><input id="mp" placeholder="Player"><input id="ml" class="l" inputmode="decimal" placeholder="Line">
     <div class="seg" id="mprop"><button type="button" data-v="kills">K</button><button type="button" data-v="hs">HS</button></div><button class="go">Grade</button></form>
@@ -346,6 +353,11 @@ function showGate(state) {
     try { const s = await fetch("/auth/me").then(r => r.json()); if (s.member) location.reload(); } catch {}
   }, 20000);
   const g = $("#gate"), up = state.upgrade;
+  const perks = `<div class="perks">
+       <div class="perk"><b>Single prop</b><span>Grade any CS2 player's Maps 1–2 kills or headshots line: A–F grade, More or Less, hit chance, projection and units.</span></div>
+       <div class="perk"><b>Slate</b><span>Paste up to 15 props and grade them all at once, then build a 2–6 pick slip with Power and Flex payouts.</span></div>
+       <div class="perk"><b>Underdog board</b><span>Every Underdog CS2 line graded ahead of time, best first, with last-10 hit rate, edge, projection and team win %.</span></div></div>
+     <div class="small muted" style="margin-top:8px">Built on HLTV, BO3.gg and Polymarket data: recent form, same-roster head-to-head, map picks and opponent strength.</div>`;
   $("#f").style.display = "none"; $("#out").innerHTML = ""; g.hidden = false;
   const err = new URLSearchParams(location.search).get("signin_error");
   g.innerHTML = state.signed_in
@@ -353,21 +365,22 @@ function showGate(state) {
        <div class="small muted" style="margin-bottom:14px">The grader is for paid members only.</div>
        ${up ? `<a class="go" style="display:inline-block;text-decoration:none;padding:10px 18px" href="${esc(up)}">Upgrade on Whop</a>` : ""}
        <div class="small" style="margin-top:14px"><a href="/auth/logout">Sign out</a> · <a href="/auth/login">Signed up just now? Check again</a></div>
-       <div class="small muted" style="margin-top:8px">Just joined? This page lets you in automatically within a minute.</div>`
+       <div class="small muted" style="margin-top:8px">Just joined? This page lets you in automatically within a minute.</div>${perks}`
     : `<h3 style="margin:0 0 8px">Members only</h3>
        <div class="small muted" style="margin-bottom:14px">Sign in with the Whop account you joined with.</div>
        <a class="go" style="display:inline-block;text-decoration:none;padding:10px 18px" href="/auth/login">Sign in with Whop</a>
        ${err ? `<div class="small" style="margin-top:12px;color:var(--warn)">${esc(err)}</div>` : ""}
-       ${up ? `<div class="small" style="margin-top:14px">Not a member? <a href="${esc(up)}">Join on Whop</a></div>` : ""}`;
+       ${up ? `<div class="small" style="margin-top:14px">Not a member? <a href="${esc(up)}">Join on Whop</a></div>` : ""}${perks}`;
 }
 (async () => {
   try {
     const s = await fetch("/auth/me").then(r => r.json());
-    if (!s.required) return;
+    if (!s.required) return document.body.classList.remove("locked");
     if (!s.member) return showGate(s);
+    document.body.classList.remove("locked");
     $("#who").hidden = false;
     $("#who").innerHTML = `Signed in${s.name ? " as " + esc(s.name) : ""} · <a href="/auth/logout">Sign out</a>`;
-  } catch {}
+  } catch { document.body.classList.remove("locked"); }   // the server still refuses every grade to non-members
 })();
 
 async function fetchRetry(url, tries = 4) {
