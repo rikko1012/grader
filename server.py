@@ -11,6 +11,7 @@ GET /api/grade?player=&line=&prop=kills|hs&line_type=standard|goblin|demon[&slug
 
 One grade runs at a time (keeps requests to BO3.gg polite). Standard library only.
 """
+import collections
 import json
 import shutil
 import os
@@ -251,6 +252,7 @@ def board_payload():
     return {"updated": b["at"], "error": b["error"], "rows": rows, "total": len(b["rows"])}
 
 
+REQ_TIMES = collections.deque(maxlen=300)   # member grade requests, step by step (admin timings)
 MEMBER_GRADES = [0]     # member grades running right now (the board steps aside while any are)
 _MG_LOCK = threading.Lock()
 _BOARD_BUSY = threading.Lock()   # while members are grading, only one board grade runs at a time
@@ -859,6 +861,7 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/admin/timings" and self.authed(q.get("token")):
                 return self.send(200, {"member_grades_now": MEMBER_GRADES[0], "board_size": len(BOARD),
                                        "threads": [t.name for t in threading.enumerate()],
+                                       "requests": list(REQ_TIMES)[-int(q.get("n", 60)):],
                                        "recent": list(cs2_scout.TIMINGS)[-int(q.get("n", 60)):]})
             if u.path == "/admin/probe" and self.authed(q.get("token")):
                 # private: raw shape of the backup data sources (keys never included)
@@ -927,12 +930,22 @@ class Handler(BaseHTTPRequestHandler):
         pkey = (slug or name).lower()
         key = (pkey, line, prop, lt, match, (opp or "").lower())
 
+        t_in = time.time()
+
         def compute():
+            tm = {"queued": round(time.time() - t_in, 2)}
+            t0 = time.time()
             with player_lock(pkey):                     # one assembly per player at a time
+                tm["player_lock"] = round(time.time() - t0, 2)
                 warm = time.time() - _WARM.get(pkey, 0) < WARM_FOR
+                t0 = time.time()
                 with (FAST_SLOTS if warm else COLD_SLOTS):
+                    tm["slot"], tm["warm"] = round(time.time() - t0, 2), warm
+                    t0 = time.time()
                     res = cs2_scout.grade(name, line, prop, lt, slug=slug, faceit_key=faceit_key(),
                                           match=match, opponent=opp)
+                    tm["grade"] = round(time.time() - t0, 2)
+            t0 = time.time()
             if res.get("error"):
                 return 404, json.dumps({"error": res["error"][0].upper() + res["error"][1:]}).encode()
             pb_ = res.get("player_block") or {}
@@ -942,11 +955,18 @@ class Handler(BaseHTTPRequestHandler):
                 res["underdog"] = underdog.line_for((pb_.get("player") or {}).get("nick") or name, prop)
             except Exception:
                 res["underdog"] = None
+            tm["underdog"] = round(time.time() - t0, 2)
+            t0 = time.time()
             try:
                 picklog.log_grade(res, res["verdict"], test=load_test)   # Phase 10: GRADE state only
             except Exception:
                 traceback.print_exc()
-            return 200, json.dumps(public(res), default=str).encode()
+            tm["log"] = round(time.time() - t0, 2)
+            t0 = time.time()
+            body = json.dumps(public(res), default=str).encode()
+            tm["json"] = round(time.time() - t0, 2)
+            REQ_TIMES.append(dict(tm, player=name, at=round(time.time()), total=round(time.time() - t_in, 2)))
+            return 200, body
 
         status, body = shared(key, compute)
         return self.send(status, body)
