@@ -194,37 +194,68 @@ def plan_access(user_id):
                for m in r.json().get("data") or [])
 
 
-def has_access(user_id, force=False):
-    """True if the user can use the grader: Whop says they can open the paid Plays experience
-    (owner/team 'admin' included), OR they hold a live membership on any paid plan.
-    A 'yes' is kept a day, a 'no' only 10 minutes."""
+def has_access(user_id, force=False, last_known=None):
+    """True if the user can use the grader: a live membership on any paid plan, OR Whop says they can
+    open the paid Plays experience (owner/team 'admin' included). A 'yes' is kept RECHECK_H hours,
+    a 'no' NO_RECHECK_MIN minutes. Only a clear answer from Whop counts: if Whop errors, times out or
+    rate-limits, the member keeps their last known access (never locked out by a Whop hiccup)."""
     with _LOCK:
         hit = _ACCESS_CACHE.get(user_id)
-    if hit and not force:
-        age = time.time() - hit[0]
-        if age < (RECHECK_H * 3600 if hit[1] else NO_RECHECK_MIN * 60):
-            return hit[1]
-    ok = False
-    try:
-        ok = plan_access(user_id)
-    except Exception:
-        pass
-    for prod in ([] if ok else products()):
-        try:
-            r = requests.get(ACCESS.format(user=user_id, resource=prod), timeout=15,
-                             headers={"Authorization": f"Bearer {_env('WHOP_API_KEY')}"})
-            d = r.json() if r.status_code == 200 else {}
-            if d.get("has_access") and d.get("access_level") in ("customer", "admin"):
-                ok = True
-                break
-        except Exception:
-            if hit:                          # Whop hiccup: keep yesterday's answer rather than lock out
+        if hit and not force:
+            age = time.time() - hit[0]
+            if age < (RECHECK_H * 3600 if hit[1] else NO_RECHECK_MIN * 60):
                 return hit[1]
-    with _LOCK:
-        if len(_ACCESS_CACHE) > 100000:
-            _ACCESS_CACHE.clear()
-        _ACCESS_CACHE[user_id] = (time.time(), ok)
-    return ok
+        flight = _CHECKING.get(user_id)
+        lead = flight is None
+        if lead:
+            flight = _CHECKING[user_id] = threading.Event()
+    if not lead:                              # same member's other requests wait for the one check
+        flight.wait(20)
+        with _LOCK:
+            h2 = _ACCESS_CACHE.get(user_id)
+        return h2[1] if h2 else (hit[1] if hit else bool(last_known))
+    try:
+        ok, sure = False, True
+        try:
+            ok = plan_access(user_id)
+        except Exception as e:
+            sure = False
+            _note(f"memberships check failed: {type(e).__name__}")
+        for prod in ([] if ok else products()):
+            try:
+                r = requests.get(ACCESS.format(user=user_id, resource=prod), timeout=15,
+                                 headers={"Authorization": f"Bearer {_env('WHOP_API_KEY')}"})
+                if r.status_code != 200:
+                    sure = False
+                    _log_fail("access", r)
+                    continue
+                d = r.json()
+                if d.get("has_access") and d.get("access_level") in ("customer", "admin"):
+                    ok = True
+                    break
+            except Exception as e:
+                sure = False
+                _note(f"access check failed: {type(e).__name__}")
+        if not ok and not sure:               # Whop didn't give a clear answer: keep what we knew
+            prev = hit[1] if hit else bool(last_known)
+            return prev
+        with _LOCK:
+            if len(_ACCESS_CACHE) > 100000:
+                _ACCESS_CACHE.clear()
+            _ACCESS_CACHE[user_id] = (time.time(), ok)
+        return ok
+    finally:
+        with _LOCK:
+            _CHECKING.pop(user_id, None)
+        flight.set()
+
+
+_CHECKING = {}
+
+
+def _note(msg):
+    LAST_ERRORS.append(f"{time.strftime('%H:%M:%S')} {msg}")
+    del LAST_ERRORS[:-10]
 
 
 def session(cookie_value):
@@ -234,5 +265,5 @@ def session(cookie_value):
         return None
     ok = s.get("ok", False)
     if time.time() - s.get("chk", 0) > RECHECK_H * 3600 or not ok:
-        ok = has_access(s["u"])
+        ok = has_access(s["u"], last_known=s.get("ok"))
     return {"user": s["u"], "name": s.get("n", ""), "ok": ok}
