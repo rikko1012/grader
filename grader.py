@@ -47,7 +47,10 @@ CONFIG = {
     # log-loss better on 3 of 4 days (0.6859 -> 0.6809), bets 57/96 -> 66/110. Rounds-by-closeness
     # and a wider spread were also tried and not chosen.
     "last10_weight": 0.7,
-    "h2h_weight": 0.10,
+    # H2H: same-roster meetings only (opponent kept 4+ of today's 5), weight 0.25, 1-year half-life.
+    # HLTV year test (6,122 later results with earlier meetings): roster-matched H2H cut the miss
+    # 6.1362 -> 6.1317 (twice the gain of counting every meeting); weight 0.25 / half-life 365 fitted.
+    "h2h_weight": 0.25,
     # Predicted maps (veto not out) are off since 2026-10-01: the top Map 1 pick was right 17/106
     # on members' props - chance level - so they only added noise. All-maps numbers instead.
     "use_predicted_maps": False,
@@ -63,7 +66,7 @@ CONFIG = {
     "trade_beta_kills": -0.129, "trade_mean": 0.1283,
     "regional_weight": 0.0,      # 2026-09-28: tested on 847 cases (team-split): kills best weight 0 in both
                                  # halves; HS held-out miss 3.695 -> 3.721 (worse). Always shown, weight 0.
-    "h2h_half": 120,             # H2H series weight = exp(-days_old / 120)
+    "h2h_half": 365,             # H2H series weight = exp(-days_old / 365)
     "h2h_full_maps": 8,          # size weight = min(maps / 8, 1)
     "h2h_cap": {"kills": 3.0, "hs": 2.0},
     "stomp_ml": -400,            # either side at -400 or heavier (P(win) >= 0.80) = stomp

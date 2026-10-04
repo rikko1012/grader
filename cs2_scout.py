@@ -321,6 +321,8 @@ def map_rows(b, player_id, matches, want_games):
             "won": bool(me.get("win")), "steam_id": (me.get("steam_profile") or {}).get("steam_id_64"),
             "lineup": [((r.get("steam_profile") or {}).get("player") or {}).get("slug")
                        for r in ps if (r.get("team_clan") or {}).get("team_id") == my_team],
+            "opp_lineup": [((r.get("steam_profile") or {}).get("player") or {}).get("slug")
+                           for r in ps if (r.get("team_clan") or {}).get("team_id") == opp_id],
         })
     return rows
 
@@ -762,7 +764,10 @@ def h2h_rows(b, player_block, opp_query, opp_id=None):
     return map_rows(b, player_block["player"]["id"], player_block["_matches"], vs)
 
 
-def h2h(rows, opponent, line=None, stat="kills"):
+SAME_ROSTER = 4   # past meeting counts only if the opponent fielded 4+ of today's players (HLTV year test)
+
+
+def h2h(rows, opponent, line=None, stat="kills", opp_roster=None):
     groups = {}
     for r in rows:
         groups.setdefault(r["match_id"], []).append(r)
@@ -778,7 +783,11 @@ def h2h(rows, opponent, line=None, stat="kills"):
                        "maps": [m["map"] for m in m12], "values": [m[stat] for m in m12],
                        "total": sum(m[stat] for m in m12),
                        "result": {2: "W", 1: "split", 0: "L"}[sum(wins)],
-                       "regional": bool(m12[0].get("regional"))})
+                       "regional": bool(m12[0].get("regional")),
+                       "same_roster": (None if not opp_roster or not m12[0].get("opp_lineup") else
+                                       len(set(m12[0]["opp_lineup"]) & set(opp_roster)) >= SAME_ROSTER),
+                       "roster_overlap": (len(set(m12[0].get("opp_lineup") or []) & set(opp_roster))
+                                          if opp_roster and m12[0].get("opp_lineup") else None)})
     series.sort(key=lambda s: s["date"], reverse=True)
     reg = sum(1 for s in series if s["regional"])
     out = {"opponent_query": opponent, "stat": stat, "maps": 2 * len(series), "series": series,
@@ -958,7 +967,8 @@ def grader_inputs(pb, args, odds=None, hh=None):
         # exact-opponent series only (regional stand-ins are shown with weight 0)
         today = date.today()
         d["h2h_series"] = [{"age_days": (today - date.fromisoformat(x["date"])).days, "total": x["total"]}
-                           for x in hh["series"] if not x.get("regional") and x.get("date")]
+                           for x in hh["series"] if not x.get("regional") and x.get("date")
+                           and x.get("same_roster") is not False]
         d["regional_series"] = [{"age_days": (today - date.fromisoformat(x["date"])).days, "total": x["total"]}
                                 for x in hh["series"] if x.get("regional") and x.get("date")]
     return d
@@ -1465,6 +1475,11 @@ def run(args, res, b, ttl):
             pass
         stat = "headshots" if args.prop == "hs" else "kills"
         rows = h2h_rows(b, pb, args.opponent, opp_id)
+        try:                                   # tonight's opponent roster, to keep only same-roster meetings
+            res["_opp_roster"] = [x.get("slug") for x in (b.team(opp_slug).get("players") or [])
+                                  if not x.get("is_coach")] if opp_slug else None
+        except Exception:
+            res["_opp_roster"] = None
         # Gate C nationality tag + Phase 7 regional extension
         tag = nationality(b, opp_slug) if opp_slug else None
         res["opponent_nationality"] = tag
@@ -1482,7 +1497,7 @@ def run(args, res, b, ttl):
                 n = len({r["match_id"] for r in reg})
                 res["regional_note"] = (f"Regional extension: {n} series vs other {tag['label']} teams" if n else
                                         f"Regional extension: no recent series vs other {tag['label']} teams found")
-        res["h2h"] = h2h(rows, args.opponent, args.line, stat)
+        res["h2h"] = h2h(rows, args.opponent, args.line, stat, res.get("_opp_roster"))
         res["_h2h_rows"], res["_h2h_opp"] = rows, args.opponent
     if args.cmd == "odds" or (args.cmd == "full" and (args.team or pb)):
         team = args.name if args.cmd == "odds" else (args.team or pb.get("playing_for") or pb.get("current_team"))
@@ -1611,7 +1626,7 @@ def finish_line(res, args):
     if pb.get("recent_maps") is not None:
         pb["recent_form"] = recent_form(_form_rows(pb, stat), pb.get("_rf_kpr"), args.line, stat)
     if res.get("_h2h_rows") is not None:
-        res["h2h"] = h2h(list(res["_h2h_rows"]), res.get("_h2h_opp"), args.line, stat)
+        res["h2h"] = h2h(list(res["_h2h_rows"]), res.get("_h2h_opp"), args.line, stat, res.get("_opp_roster"))
     _attach_hltv(pb)
     res["hltv"] = pb.get("hltv")
     if not getattr(args, "opponent", None):            # reused context: the opponent comes from the match

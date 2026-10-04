@@ -895,7 +895,7 @@ function render(d) {
   if (d.regional_note) h += `<div class="small muted" style="margin-bottom:8px">${esc(d.regional_note)}</div>`;
   if (hh?.series?.length) {
     h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th>Maps 1–2</th><th class="num">${g.prop === "hs" ? "HS" : "Kills"}</th><th>Team result</th><th>Prop</th></tr></thead><tbody>`;
-    for (const s of hh.series) h += `<tr><td class="num" style="text-align:left">${shortDate(s.date)}</td><td>${esc(s.opponent)}${s.regional ? `<span class="src" title="Same-region team">R</span>` : ""}</td>
+    for (const s of hh.series) h += `<tr><td class="num" style="text-align:left">${shortDate(s.date)}</td><td>${esc(s.opponent)}${s.regional ? `<span class="src" title="Same-region team">R</span>` : ""}${s.same_roster === false ? ` <span class="pill" style="margin:0;padding:1px 7px" title="Opponent had a different roster then (${s.roster_overlap} of today's players) - not counted in the grade">old roster</span>` : ""}</td>
       <td class="small">${s.maps.map(mapName).join('<span class="dot"> · </span>')}</td><td class="num"><span class="parts">${s.values.join(" + ")} = </span><b>${s.total}</b></td>
       <td>${esc(s.result)}</td><td class="${s.total > g.line ? "hit" : "miss"}">${s.total > g.line ? "Over" : "Under"}</td></tr>`;
     h += `</tbody></table></div>`;
