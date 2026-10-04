@@ -1235,7 +1235,10 @@ def grade(name, line, prop="kills", line_type="standard", slug=None, faceit_key=
             bool(args.faceit_key))     # shared by member grades and the board (same data)
     hit = _CONTEXT.get(ckey)
     t0 = time.time()
-    if hit and time.time() - hit[0] < CONTEXT_TTL:
+    age = time.time() - hit[0] if hit else None
+    if hit and CONTEXT_TTL <= age < CONTEXT_STALE:
+        _refresh_context(ckey, args, ttl)     # this grade uses the saved data; fresh data is built meanwhile
+    if hit and age < CONTEXT_STALE:
         res = copy.deepcopy(hit[1])
         _tick(res, "copy", t0)
         res["generated"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -1290,7 +1293,41 @@ def _timing_done(res, name, kind, background, t0):
 
 
 _CONTEXT = {}
-CONTEXT_TTL = 120
+CONTEXT_TTL = 120          # older than this: rebuilt in the background (the grade doesn't wait)
+CONTEXT_STALE = 30 * 60    # older than this: rebuilt before grading
+_REFRESHING, _REFRESH_LOCK = set(), threading.Lock()
+_REFRESH_SLOTS = threading.BoundedSemaphore(2)
+
+
+def _refresh_context(ckey, args, ttl):
+    """Rebuild one player's shared context in the background (one rebuild per player at a time).
+    Members kept waiting 10-40 s behind a rebuild every 2 minutes under load before this."""
+    with _REFRESH_LOCK:
+        if ckey in _REFRESHING:
+            return
+        _REFRESHING.add(ckey)
+    a = copy.copy(args)
+    a.light = True
+
+    def work():
+        try:
+            with _REFRESH_SLOTS:
+                res = {"generated": datetime.now(timezone.utc).isoformat(timespec="seconds"), "command": "grade"}
+                b = BO3(ttl_hours=ttl, background=True)
+                try:
+                    run(a, res, b, ttl)
+                finally:
+                    b.close()
+                if res.get("player_block"):
+                    res["player_block"].pop("_matches", None)
+                if not res.get("error"):
+                    _CONTEXT[ckey] = (time.time(), copy.deepcopy(res))
+        except Exception:
+            pass                                # keep the saved context; the next grade tries again
+        finally:
+            with _REFRESH_LOCK:
+                _REFRESHING.discard(ckey)
+    threading.Thread(target=work, daemon=True, name="ctx-refresh").start()
 
 
 def run(args, res, b, ttl):
