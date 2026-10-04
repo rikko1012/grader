@@ -367,6 +367,9 @@ def recent_form(rows, window_kpr, line=None, stat="kills"):
 
 def run_player(b, name, args):
     hits = b.search_players(name, 10).get("results") or []
+    if not hits and re.sub(r"[\W_]+$|^[\W_]+", "", name) != name:   # Underdog's "m0NESY-"
+        name = re.sub(r"[\W_]+$|^[\W_]+", "", name)
+        hits = b.search_players(name, 10).get("results") or []
     if args.bo3_slug:
         slug = args.bo3_slug
     elif hits:
@@ -384,7 +387,13 @@ def run_player(b, name, args):
     # Gate C - roster
     roster = []
     if team.get("slug"):
-        td = b.team(team["slug"])
+        td = {}
+        for slug in dict.fromkeys(x for x in (team["slug"], norm(team.get("name"))) if x):
+            try:                                   # BO3.gg sometimes renames a team's page (mousesports -> mouz)
+                td = b.team(slug)
+                break
+            except Exception:
+                continue
         roster = [x for x in td.get("players") or [] if not x.get("is_coach")]
     out["roster"] = [x.get("nickname") for x in roster]
     in_roster = any(x.get("id") == p["id"] for x in roster)
@@ -1618,12 +1627,41 @@ def _best_rank_band(pb, hltv_band):
     return max(cands, key=lambda x: x.get("maps") or 0) if cands else None
 
 
+def _hltv_only_overall(pb):
+    """BO3.gg has no maps for him (teams it doesn't cover, e.g. ShindeN): his rates come from his
+    HLTV Maps 1-2 of the last 10 series instead, so the line still gets a real grade and a side."""
+    o = pb.get("overall") or {}
+    if o.get("maps_played") or pb.get("_hltv_overall_tried"):
+        return
+    pb["_hltv_overall_tried"] = True
+    rows = _form_rows(pb, "kills")
+    by = {}
+    for r in rows:
+        by.setdefault(r["match_id"], []).append(r)
+    m12 = [m for ms in by.values() if len(ms) >= 2 for m in sorted(ms, key=lambda m: m["number"] or 9)[:2]]
+    m12 = [m for m in m12 if m.get("rounds") and m.get("kills") is not None]
+    if not m12:
+        return
+    k, r = sum(m["kills"] for m in m12), sum(m["rounds"] for m in m12)
+    hs_rows = [m for m in m12 if m.get("headshots") is not None]
+    hs_k = sum(m["kills"] for m in hs_rows)
+    hs_pct = round(100 * sum(m["headshots"] for m in hs_rows) / hs_k, 1) if hs_k else None
+    o.update(maps_played=len(m12), kpr=round(k / r, 3), source="HLTV (BO3.gg has no maps for him)")
+    if hs_pct is not None:
+        o["hs_pct"] = hs_pct
+    fw = o.setdefault("form_windows", {})
+    fw["3m"] = {"maps": len(m12), "kpr": round(k / r, 3), "hs_pct": hs_pct}
+    pb["overall"] = o
+    pb["_rf_kpr"] = round(k / r, 3)
+
+
 def finish_line(res, args):
     """The only part of a grade that depends on the line / prop: last-10 vs the line, H2H hit
     rates, grader inputs, the grade, the simulation. Everything else is shared context."""
     pb = res.get("player_block") or {}
     stat = "headshots" if args.prop == "hs" else "kills"
     if pb.get("recent_maps") is not None:
+        _hltv_only_overall(pb)
         pb["recent_form"] = recent_form(_form_rows(pb, stat), pb.get("_rf_kpr"), args.line, stat)
     if res.get("_h2h_rows") is not None:
         res["h2h"] = h2h(list(res["_h2h_rows"]), res.get("_h2h_opp"), args.line, stat, res.get("_opp_roster"))

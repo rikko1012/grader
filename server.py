@@ -459,6 +459,7 @@ def public(res):
     res.pop("_h2h_rows", None)
     res.pop("_h2h_opp", None)
     (res.get("player_block") or {}).pop("_rf_kpr", None)
+    (res.get("player_block") or {}).pop("_hltv_overall_tried", None)
     res.pop("_opp_roster", None)
     for k in ("_opp_rows", "_opp_rank"):
         (res.get("player_block") or {}).pop(k, None)
