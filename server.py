@@ -759,6 +759,26 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/admin/recheck_hltv" and self.authed(q.get("token")):
                 changed = picklog.recheck_with_hltv()
                 return self.send(200, {"changed": len(changed), "rows": changed})
+            if u.path == "/admin/hltv_team_maps" and self.authed(q.get("token")):
+                # private analysis: every map since `since` - date, event, number, map, both teams + scores
+                import hltv
+                con = hltv._connect()
+                try:
+                    with con.cursor() as cur:
+                        cur.execute("SET statement_timeout = 60000")
+                        cur.execute("""SELECT mo.matchid, mo.date::text, mo.event, mm.number, mp.name, t1.name, a.score,
+                                              t2.name, b.score
+                                       FROM match_maps mm JOIN match_overview mo USING (matchid) JOIN maps mp ON mp.mapid = mm.mapid
+                                       JOIN matches a ON a.matchid = mm.matchid AND a.mapid = mm.mapid AND a.sideid = 0
+                                       JOIN matches b ON b.matchid = mm.matchid AND b.mapid = mm.mapid AND b.sideid = 0
+                                                      AND b.teamid > a.teamid
+                                       JOIN teams t1 ON t1.teamid = a.teamid JOIN teams t2 ON t2.teamid = b.teamid
+                                       WHERE mo.date >= %s ORDER BY mo.date, mo.matchid, mm.number""",
+                                    (q.get("since", "2025-09-01"),))
+                        rows = cur.fetchall()
+                finally:
+                    con.close()
+                return self.send(200, {"rows": rows})
             if u.path == "/admin/hltv_rank_rows" and self.authed(q.get("token")):
                 # private analysis: every player-map (total side) with both teams' VRS rank at the time
                 import hltv
