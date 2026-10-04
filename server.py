@@ -761,7 +761,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, {"changed": len(changed), "rows": changed})
             if u.path == "/admin/ud_moves" and self.authed(q.get("token")):
                 import sqlite3
-                db = DATA_DIR / ".cache" / "ud_moves.db"
+                db = BOARD_FILE.parent / "ud_moves.db"
                 if not db.exists():
                     return self.send(200, {"rows": []})
                 con = sqlite3.connect(db, timeout=10)
