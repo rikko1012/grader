@@ -281,6 +281,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
   <section class="card" id="board" hidden>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
       <div class="seg" id="bprop"><button type="button" data-v="kills" class="on">Kills</button><button type="button" data-v="hs">Headshots</button></div>
+      <div class="seg" id="bside" title="Show the grader's Overs, Unders, or both"><button type="button" data-v="More">Overs</button><button type="button" data-v="both" class="on">Both</button><button type="button" data-v="Less">Unders</button></div>
       <select id="bsort" style="width:auto;padding:8px 10px"><option value="g">Best grade first</option><option value="p">Highest chance</option><option value="e">Biggest edge</option><option value="t">Starting soonest</option></select>
       <label class="small" style="display:flex;gap:6px;align-items:center;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="bbets" style="width:auto"> Bets only</label>
       <button type="button" class="chipbtn" id="brefresh" title="Refresh the board">↻ Refresh</button></div>
@@ -708,7 +709,7 @@ function udPill(d) {
   const better = v.side === "More" ? u.line < g.line : u.line > g.line;
   return `<span class="pill ${better ? "good" : ""}">Underdog: ${u.line}${pay} – ${better ? `easier for ${v.side}` : `PrizePicks' ${g.line} is easier for ${v.side}`}</span>`;
 }
-let boardRows = [], bprop = "kills";
+let boardRows = [], bprop = "kills", bside = "both";   // bside: the grader's pick - More (Overs), Less (Unders) or both
 const G_RANK = {"A+": 0, "A": 1, "A-": 2, "B+": 3, "B": 4, "LEAN": 5};
 async function loadBoard(force) {
   if (boardRows.length && !force) return drawBoard();
@@ -738,7 +739,8 @@ function drawBoard() {
   const other = {};
   boardRows.forEach(r => { other[(r.nick || r.player).toLowerCase() + "|" + r.prop] = r; });
   const onSlip = new Set(store.get("cs2s_slip", []).map(x => String(x.p).toLowerCase()));
-  const rows = boardRows.filter(r => r.prop === bprop && (!$("#bbets").checked || (r.units || 0) > 0)).sort(cmp);
+  const rows = boardRows.filter(r => r.prop === bprop && (bside === "both" || r.side === bside)
+                                    && (!$("#bbets").checked || (r.units || 0) > 0)).sort(cmp);
   const pct0 = x => x == null ? "–" : Math.round(x * 100) + "%";
   const st = (k, v, cls = "", sub = "") => `<div class="bstat"><div class="k">${k}</div><div class="v ${cls}">${v}</div>${sub ? `<div class="s">${sub}</div>` : ""}</div>`;
   $("#boardout").innerHTML = rows.length ? `<div class="blist">` + rows.map(r => {
@@ -775,6 +777,8 @@ $("#boardout").addEventListener("click", e => {
 });
 $("#bprop").onclick = e => { const b = e.target.closest("button"); if (!b) return; bprop = b.dataset.v;
   [...$("#bprop").children].forEach(x => x.classList.toggle("on", x === b)); drawBoard(); };
+$("#bside").onclick = e => { const b = e.target.closest("button"); if (!b) return; bside = b.dataset.v;
+  [...$("#bside").children].forEach(x => x.classList.toggle("on", x === b)); drawBoard(); };
 $("#bbets").onchange = drawBoard;
 $("#bsort").onchange = drawBoard;
 $("#brefresh").onclick = () => loadBoard(true);
