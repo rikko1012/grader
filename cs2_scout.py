@@ -25,6 +25,7 @@ HLTV-only numbers BO3.gg doesn't have, and what replaces them (approved 2026-09-
   IGL                -> igl.csv (player,team) - BO3.gg doesn't record it
 """
 import argparse
+import collections
 import copy
 import csv
 import hashlib
@@ -1233,8 +1234,10 @@ def grade(name, line, prop="kills", line_type="standard", slug=None, faceit_key=
     ckey = ((name or "").strip().lower(), (slug or "").lower(), match, (args.member_opponent or "").lower(),
             bool(args.faceit_key))     # shared by member grades and the board (same data)
     hit = _CONTEXT.get(ckey)
+    t0 = time.time()
     if hit and time.time() - hit[0] < CONTEXT_TTL:
         res = copy.deepcopy(hit[1])
+        _tick(res, "copy", t0)
         res["generated"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
         if not background and not res.get("csapi"):       # context built by the board: add the CS API check
             try:
@@ -1254,6 +1257,7 @@ def grade(name, line, prop="kills", line_type="standard", slug=None, faceit_key=
                 pass
         if not res.get("error"):
             finish_line(res, args)
+        _timing_done(res, name, "hit", background, t0)
         return res
     res = {"generated": datetime.now(timezone.utc).isoformat(timespec="seconds"), "command": "grade"}
     b = BO3(ttl_hours=ttl, background=background)
@@ -1268,7 +1272,21 @@ def grade(name, line, prop="kills", line_type="standard", slug=None, faceit_key=
     if len(_CONTEXT) > 3000:
         _CONTEXT.clear()
     _CONTEXT[ckey] = (time.time(), copy.deepcopy(res))
+    _timing_done(res, name, "miss", background, t0)
     return res
+
+
+TIMINGS = collections.deque(maxlen=300)   # recent grades' step times (admin /health) - finding slow steps
+
+
+def _tick(res, step, t0):
+    res.setdefault("_t", {})[step] = round(time.time() - t0, 2)
+
+
+def _timing_done(res, name, kind, background, t0):
+    t = res.pop("_t", {}) or {}
+    TIMINGS.append({"at": round(time.time()), "player": name, "kind": kind, "board": bool(background),
+                    "total": round(time.time() - t0, 2), **t})
 
 
 _CONTEXT = {}
@@ -1660,23 +1678,31 @@ def finish_line(res, args):
     rates, grader inputs, the grade, the simulation. Everything else is shared context."""
     pb = res.get("player_block") or {}
     stat = "headshots" if args.prop == "hs" else "kills"
+    t0 = time.time()
     if pb.get("recent_maps") is not None:
         _hltv_only_overall(pb)
         pb["recent_form"] = recent_form(_form_rows(pb, stat), pb.get("_rf_kpr"), args.line, stat)
+    _tick(res, "form", t0)
     if res.get("_h2h_rows") is not None:
         res["h2h"] = h2h(list(res["_h2h_rows"]), res.get("_h2h_opp"), args.line, stat, res.get("_opp_roster"))
+    _tick(res, "h2h", t0)
     _attach_hltv(pb)
     res["hltv"] = pb.get("hltv")
+    _tick(res, "hltv_player", t0)
     if not getattr(args, "opponent", None):            # reused context: the opponent comes from the match
         args.opponent = (res.get("next_match") or {}).get("opponent")
     res["hltv_context"] = _hltv_context(pb, args)
+    _tick(res, "hltv_context", t0)
     pb["_opp_rank"] = ((res["hltv_context"] or {}).get("opp_ranking") or {}).get("rank")
     pb["_rank_band"] = _best_rank_band(pb, (res["hltv_context"] or {}).get("rank_band"))
+    _tick(res, "rank_band", t0)
     res["grader_inputs"] = grader_inputs(pb, args, res.get("odds"), res.get("h2h"))
     res["grade"] = grade_leg(res["grader_inputs"])
+    _tick(res, "grade", t0)
     try:   # 20,000-run match simulation - display only (weight 0, tested vs the curve)
         from sim import simulate
         res["simulation"] = None if getattr(args, "light", False) else simulate(res["grader_inputs"])
+        _tick(res, "sim", t0)
     except Exception as e:
         res["simulation"] = None
         res["simulation_error"] = str(e)[:200]

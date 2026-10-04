@@ -856,6 +856,10 @@ class Handler(BaseHTTPRequestHandler):
                 finally:
                     sb.close()
                 return self.send(200, {"settled": n})
+            if u.path == "/admin/timings" and self.authed(q.get("token")):
+                return self.send(200, {"member_grades_now": MEMBER_GRADES[0], "board_size": len(BOARD),
+                                       "threads": [t.name for t in threading.enumerate()],
+                                       "recent": list(cs2_scout.TIMINGS)[-int(q.get("n", 60)):]})
             if u.path == "/admin/probe" and self.authed(q.get("token")):
                 # private: raw shape of the backup data sources (keys never included)
                 import oddspapi
