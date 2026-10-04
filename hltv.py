@@ -466,6 +466,62 @@ def _h2h(cur, team_id, opp_id, maps):
             "map_win_rates": map_rates}
 
 
+_INDEX = {"at": 0.0, "rows": [], "busy": False}
+
+
+def _load_index():
+    """Every player with HLTV maps in the last 12 months: nick, latest team, maps (last 90 days / year)."""
+    try:
+        con = _connect()
+        try:
+            with con.cursor() as cur:
+                cur.execute("SET statement_timeout = 60000")
+                cur.execute("""SELECT p.name, t.name, mo.date, count(*) FILTER (WHERE mo.date >= current_date - 90),
+                                      count(*)
+                               FROM player_stats ps JOIN players p USING (playerid) JOIN teams t ON t.teamid = ps.teamid
+                               JOIN match_overview mo ON mo.matchid = ps.matchid
+                               WHERE ps.sideid = 0 AND mo.date >= current_date - 365
+                               GROUP BY p.playerid, p.name, t.name, mo.date""")
+                best = {}
+                for nick, team, d, recent, maps in cur.fetchall():
+                    k = _norm(nick)
+                    b = best.setdefault(k, {"nick": nick, "team": team, "last": d, "recent": 0, "maps": 0})
+                    b["recent"] += recent
+                    b["maps"] += maps
+                    if d > b["last"]:
+                        b.update(team=team, last=d, nick=nick)
+        finally:
+            con.close()
+        rows = [dict(v, key=k) for k, v in best.items() if k]
+        rows.sort(key=lambda r: (-r["recent"], -r["maps"]))
+        if rows:
+            _INDEX.update(at=time.time(), rows=rows)
+    except Exception:
+        pass
+    finally:
+        _INDEX["busy"] = False
+
+
+def search_players(q, limit=8):
+    """Player search from the HLTV database (in memory, reloaded hourly in the background).
+    None when the index isn't available (HLTV database down) - the caller falls back to BO3.gg."""
+    if not dsn():
+        return None
+    if time.time() - _INDEX["at"] > 3600 and not _INDEX["busy"]:
+        _INDEX["busy"] = True
+        threading.Thread(target=_load_index, daemon=True, name="hltv-index").start()
+    rows = _INDEX["rows"]
+    if not rows:
+        return None
+    k = _norm(q)
+    if not k:
+        return []
+    starts = [r for r in rows if r["key"].startswith(k)]
+    has = [r for r in rows if k in r["key"] and not r["key"].startswith(k)]
+    return [{"slug": None, "nick": r["nick"], "name": r["team"], "country": "", "image": None}
+            for r in (starts + has)[:limit]]
+
+
 def team_ranks():
     """{normalized team name: latest VRS rank} for every ranked team (cached 1 hour)."""
     key = ("ranks",)

@@ -27,6 +27,7 @@ import time
 from datetime import datetime, timezone
 
 import cs2_scout
+import hltv
 import picklog
 import underdog
 import whop_auth
@@ -877,6 +878,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, {"results": []})
         ql = q.lower()
         # typing: a longer query can be answered from a shorter one's complete list (<8 hits)
+        try:                                             # HLTV first (instant, in memory); BO3.gg only if it's down
+            hl = hltv.search_players(q, 8)
+        except Exception:
+            hl = None
+        if hl is not None:
+            return self.send(200, {"results": hl})
         hit = _SEARCH.get(ql)
         if hit and time.time() - hit[0] < 3600:
             return self.send(200, hit[1])
@@ -1050,6 +1057,10 @@ if __name__ == "__main__":
         threading.Thread(target=preload_forever, daemon=True, name="preload").start()   # cleans up first
     else:
         threading.Thread(target=cleanup, daemon=True, name="cleanup").start()
+    try:
+        hltv.search_players("a")                      # loads the HLTV player-search index in the background
+    except Exception:
+        pass
     ThreadingHTTPServer.request_queue_size = 2048     # accept hundreds of connections at once
     ThreadingHTTPServer.daemon_threads = True
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
