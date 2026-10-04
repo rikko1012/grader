@@ -759,6 +759,17 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/admin/recheck_hltv" and self.authed(q.get("token")):
                 changed = picklog.recheck_with_hltv()
                 return self.send(200, {"changed": len(changed), "rows": changed})
+            if u.path == "/admin/ud_moves" and self.authed(q.get("token")):
+                import sqlite3
+                db = DATA_DIR / ".cache" / "ud_moves.db"
+                if not db.exists():
+                    return self.send(200, {"rows": []})
+                con = sqlite3.connect(db, timeout=10)
+                try:
+                    rows = con.execute("SELECT * FROM moves WHERE at >= ? ORDER BY at", (q.get("since", ""),)).fetchall()
+                finally:
+                    con.close()
+                return self.send(200, {"rows": rows})
             if u.path == "/admin/hltv_team_maps" and self.authed(q.get("token")):
                 # private analysis: every map since `since` - date, event, number, map, both teams + scores
                 import hltv

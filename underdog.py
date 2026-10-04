@@ -73,12 +73,50 @@ def parse(body):
     return rows
 
 
+_LAST_SEEN = {}     # (player, prop, start) -> (line, higher, lower) - only changes are logged
+
+
+def _log_moves(rows):
+    """Every new Underdog line and every change of line or payout, with the time (line-movement
+    history: tested later against results - tracking only, never used in grades untested)."""
+    import os
+    import sqlite3
+    from pathlib import Path
+    try:
+        db = Path(os.environ.get("CS2_DATA_DIR") or Path(__file__).resolve().parent) / ".cache" / "ud_moves.db"
+        db.parent.mkdir(parents=True, exist_ok=True)
+        new = []
+        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        for r in rows:
+            if r["alt"]:
+                continue
+            k = (norm(r["player"]), r["prop"], r["start"])
+            v = (r["line"], r["higher"], r["lower"])
+            if _LAST_SEEN.get(k) != v:
+                new.append((now, r["player"], r["team"], r["opponent"], r["start"], r["prop"], r["line"],
+                            r["higher"], r["lower"], r["id"]))
+                _LAST_SEEN[k] = v
+        if not new:
+            return
+        con = sqlite3.connect(db, timeout=10)
+        try:
+            con.execute("""CREATE TABLE IF NOT EXISTS moves (at TEXT, player TEXT, team TEXT, opponent TEXT,
+                           start TEXT, prop TEXT, line REAL, higher REAL, lower REAL, line_id TEXT)""")
+            con.executemany("INSERT INTO moves VALUES (?,?,?,?,?,?,?,?,?,?)", new)
+            con.commit()
+        finally:
+            con.close()
+    except Exception:
+        pass
+
+
 def _refresh():
     import requests
     try:
         r = requests.get(URL, headers=HEADERS, timeout=25)
         r.raise_for_status()
         rows = parse(r.json())
+        _log_moves(rows)
         with _LOCK:
             _BOARD.update(at=time.time(), rows=rows, error=None)
     except Exception as e:                              # keep the last board; try again later
