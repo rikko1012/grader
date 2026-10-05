@@ -502,6 +502,22 @@ def _load_index():
         _INDEX["busy"] = False
 
 
+_LOOSE = str.maketrans("013457", "oieast")
+
+
+def _loose(s):
+    """Typos members make: 'monesy' = 'm0NESY', 'simple' = 's1mple'."""
+    return _norm(s).translate(_LOOSE)
+
+
+def canonical_nick(q):
+    """The real HLTV nick for a typed name (exact, then loose match; most active player first)."""
+    rows = _INDEX["rows"]
+    k, lk = _norm(q), _loose(q)
+    hit = next((r for r in rows if r["key"] == k), None) or next((r for r in rows if _loose(r["key"]) == lk), None)
+    return hit["nick"] if hit else None
+
+
 def search_players(q, limit=8):
     """Player search from the HLTV database (in memory, reloaded hourly in the background).
     None when the index isn't available (HLTV database down) - the caller falls back to BO3.gg."""
@@ -516,8 +532,10 @@ def search_players(q, limit=8):
     k = _norm(q)
     if not k:
         return []
-    starts = [r for r in rows if r["key"].startswith(k)]
-    has = [r for r in rows if k in r["key"] and not r["key"].startswith(k)]
+    lk = _loose(q)
+    starts = [r for r in rows if r["key"].startswith(k) or _loose(r["key"]).startswith(lk)]
+    seen = {id(r) for r in starts}
+    has = [r for r in rows if id(r) not in seen and (k in r["key"] or lk in _loose(r["key"]))]
     return [{"slug": None, "nick": r["nick"], "name": r["team"], "country": "", "image": None}
             for r in (starts + has)[:limit]]
 

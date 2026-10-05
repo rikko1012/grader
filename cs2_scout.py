@@ -282,7 +282,7 @@ def map_waterfall(b, matches, pid, joined, map_code):
 
 def awp_status(ratio, body_hits):
     if ratio is None or body_hits < AWP_MIN_HITS:
-        return None, f"AWPer status unknown (only {body_hits} body hits on record)"
+        return None, ("AWP: unknown (no data)" if not body_hits else f"AWP: unknown (only {body_hits} body-shot kills on record)")
     if ratio >= AWP_RATIO:
         return 100, f"AWPer (body-shot kill rate {ratio:.2f} >= {AWP_RATIO})"
     if ratio <= RIFLE_RATIO:
@@ -371,6 +371,15 @@ def run_player(b, name, args):
     if not hits and re.sub(r"[\W_]+$|^[\W_]+", "", name) != name:   # Underdog's "m0NESY-"
         name = re.sub(r"[\W_]+$|^[\W_]+", "", name)
         hits = b.search_players(name, 10).get("results") or []
+    if not hits:                                   # typo ("monesy"): the real nick from HLTV's player list
+        try:
+            import hltv
+            real = hltv.canonical_nick(name)
+        except Exception:
+            real = None
+        if real and norm(real) != norm(name):
+            name = real
+            hits = b.search_players(name, 10).get("results") or []
     if args.bo3_slug:
         slug = args.bo3_slug
     elif hits:

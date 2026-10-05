@@ -379,6 +379,7 @@ function showGate(state) {
     if (!s.required) return document.body.classList.remove("locked");
     if (!s.member) return showGate(s);
     document.body.classList.remove("locked");
+    try { if (matchMedia("(pointer: fine)").matches && !$("#player").value) $("#player").focus(); } catch {}
     $("#who").hidden = false;
     $("#who").innerHTML = `Signed in${s.name ? " as " + esc(s.name) : ""} · <a href="/auth/logout">Sign out</a>`;
   } catch { document.body.classList.remove("locked"); }   // the server still refuses every grade to non-members
@@ -709,7 +710,7 @@ function udPill(d) {
   const better = v.side === "More" ? u.line < g.line : u.line > g.line;
   return `<span class="pill ${better ? "good" : ""}">Underdog: ${u.line}${pay} – ${better ? `easier for ${v.side}` : `PrizePicks' ${g.line} is easier for ${v.side}`}</span>`;
 }
-let boardRows = [], bprop = "kills", bside = "both";   // bside: the grader's pick - More (Overs), Less (Unders) or both
+let boardRows = [], bprop = "kills", bside = "both", boardAt = 0;   // bside: the grader's pick - More (Overs), Less (Unders) or both
 const G_RANK = {"A+": 0, "A": 1, "A-": 2, "B+": 3, "B": 4, "LEAN": 5};
 async function loadBoard(force) {
   if (boardRows.length && !force) return drawBoard();
@@ -717,7 +718,7 @@ async function loadBoard(force) {
   try {
     const r = await fetchRetry("/api/board"); const d = await r.json();
     if (r.status === 401 && d.error === "members_only") return showGate(d);
-    boardRows = d.rows || [];
+    boardRows = d.rows || []; boardAt = d.updated || 0;
     $("#bstatus").textContent = `${boardRows.length} graded Underdog lines`
       + (d.updated ? ` · board from ${new Date(d.updated * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})}` : "");
   } catch (e) { $("#bstatus").textContent = e.message; }
@@ -748,7 +749,7 @@ function drawBoard() {
       const lab = !r.side ? "…" : r.state === "SCOUT" ? "S" : r.grade === "LEAN" ? "L" : r.grade;
       const o = other[nick.toLowerCase() + "|" + (r.prop === "hs" ? "kills" : "hs")];
       const team = r.team_name || r.team, opp = r.opp_name || r.opponent;
-      const win = r.p_win != null && r.market !== "NO MARKET" ? pct0(r.p_win) : "–";
+      const win = r.p_win != null && !["NO MARKET", "NONE"].includes(r.market) ? pct0(r.p_win) : "–";
       return `<div class="brow" data-bl="${esc(nick)}|${r.line}|${r.prop}">
         <span class="gtag ${!r.side ? "g-scout" : r.state === "SCOUT" ? "g-scout" : gClass(r.grade)}">${esc(lab)}</span>
         <div class="who"><b>${esc(nick)}</b><div class="meta">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}</div><div class="meta">${shortWhen(r.start)}</div></div>
@@ -765,7 +766,7 @@ function drawBoard() {
         </div>
         ${r.side ? `<button type="button" class="bslip ${onSlip.has(nick.toLowerCase()) ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}">${onSlip.has(nick.toLowerCase()) ? "On slip" : "+ Slip"}</button>` : "<span></span>"}
       </div>`; }).join("") + `</div><div class="small muted" style="margin-top:10px">Underdog's Maps 1–2 lines, graded. Tap a row for the full card. Underdog payouts differ from PrizePicks'.</div>`
-    : `<div class="muted">${boardRows.length ? "No lines match this filter." : "No Underdog CS2 lines right now."}</div>`;
+    : `<div class="muted">${boardRows.length ? "No lines match this filter." : `No Underdog CS2 lines right now.${boardAt ? ` Checked ${new Date(boardAt * 1000).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})} · checks again every 5 minutes – new lines are graded automatically.` : ""}`}</div>`;
 }
 $("#boardout").addEventListener("click", e => {
   const b = e.target.closest("[data-bslip]");
@@ -817,6 +818,9 @@ function render(d) {
   const implied = g.market?.pp_implied_more;
   const edge = implied == null ? null : (edgeSide === "Less" ? g.p_less : g.p_more) - implied;
   let h = "";
+  // a strong grade with 0 units: say why right next to it (no match scheduled, stand-in, AWPer on HS...)
+  const zWhy = v.state === "SCOUT" ? "no match scheduled" : (g.zero_reason || "");
+  const zTag = (gr, u) => !u && gr && gr !== "C" && zWhy ? ` — ${esc(zWhy)}` : "";
 
   // ---- headline
   const head = v.state === "SCOUT" ? `SCOUT · leans ${v.side} ${g.line}`    : v.grade === "LEAN" && v.side ? `Lean ${v.side === "More" ? "Over" : "Under"} ${g.line}`
@@ -829,7 +833,7 @@ function render(d) {
   h += `<section class="card herocard ${hc}"><div class="hero">
     <div class="badge ${hc}">${esc(!v.side ? "–" : v.state === "SCOUT" ? "S" : v.grade === "LEAN" ? "L" : (v.grade || "L").slice(0, 2))}</div>
     <div><h3>${esc(head)}</h3>
-      <div class="sub">${esc(pb.player?.nick || "")} · ${pb.standin_for ? `${esc(pb.current_team || "")} → <b>stand-in for ${esc(pb.standin_for)}</b>` : esc(pb.current_team || "")} · ${g.line} ${stat} · ${esc(g.line_type || "")}</div>
+      <div class="sub">${esc(pb.player?.nick || "")} · ${pb.standin_for ? `${esc(pb.current_team || "")} → <b>stand-in for ${esc(pb.standin_for)}</b>` : esc(pb.current_team || "")}${nm?.opponent ? ` vs ${esc(nm.opponent)}${nm.start ? ` · ${shortWhen(nm.start)}` : ""}` : ""} · ${g.line} ${stat} · ${esc(g.line_type || "")}</div>
       <div class="sub">${sub}</div>
       ${gateStop ? `<span class="pill bad">${esc(g.reason || g.status)}</span>` : ""}
       ${g.form_fight ? `<span class="pill warn">FORM FIGHT - last 10 matches disagree, confidence halved</span>` : ""}
@@ -842,14 +846,14 @@ function render(d) {
     </div></div>`;
   if ("p_more" in g) {
     h += `<div class="sides">
-      <div class="side ${v.side === "More" ? "pick" : ""}"><div class="k">More · ${g.grade === "C" ? "lean" : "grade " + esc(g.grade)} · ${g.units || 0}U</div><div class="v">${pct(g.p_more)}</div><div class="bar"><i style="width:${g.p_more*100}%"></i></div></div>
-      <div class="side ${v.side === "Less" ? "pick" : ""}"><div class="k">Less · ${g.grade_less === "C" ? "lean" : "grade " + esc(g.grade_less)} · ${g.units_less || 0}U</div><div class="v">${pct(g.p_less)}</div><div class="bar"><i style="width:${g.p_less*100}%"></i></div></div>
+      <div class="side ${v.side === "More" ? "pick" : ""}"><div class="k">More · ${g.grade === "C" ? "lean" : "grade " + esc(g.grade)} · ${g.units || 0}U${zTag(g.grade, g.units)}</div><div class="v">${pct(g.p_more)}</div><div class="bar"><i style="width:${g.p_more*100}%"></i></div></div>
+      <div class="side ${v.side === "Less" ? "pick" : ""}"><div class="k">Less · ${g.grade_less === "C" ? "lean" : "grade " + esc(g.grade_less)} · ${g.units_less || 0}U${zTag(g.grade_less, g.units_less)}</div><div class="v">${pct(g.p_less)}</div><div class="bar"><i style="width:${g.p_less*100}%"></i></div></div>
     </div>
     ${d.simulation ? `<div class="small muted" style="margin-top:8px">Match simulation: <b>${pct(d.simulation.p_more)} More</b> · average ${d.simulation.mean} (shown for context)</div>` : ""}
     <div class="stats" style="margin-top:10px">
       <div class="stat"><div class="k">Projection</div><div class="v">${num(g.lambda_final,1)}</div><div class="n">${stat}, Maps 1–2</div></div>
       <div class="stat"><div class="k">Line</div><div class="v">${g.line}</div><div class="n">needs ${g.line + 0.5} for More</div></div>
-      <div class="stat"><div class="k">Team win %</div><div class="v">${det.p_win != null ? pct(det.p_win,0) : "–"}</div><div class="n">${g.market_quality === "NO MARKET" ? "no odds found – treated as even" : "from betting markets"}</div></div>
+      <div class="stat"><div class="k">Team win %</div><div class="v">${det.p_win != null && !["NO MARKET", "NONE"].includes(g.market_quality) ? pct(det.p_win,0) : "–"}</div><div class="n">${["NO MARKET", "NONE"].includes(g.market_quality) ? "no market – graded as even" : "from betting markets"}</div></div>
       <div class="stat ${g.lambda_final - g.line - 0.5 > 0 ? "up" : "down"}"><div class="k">Edge</div><div class="v">${(g.lambda_final - g.line - 0.5 > 0 ? "+" : "") + (g.lambda_final - g.line - 0.5).toFixed(1)}</div><div class="n">projection − ${g.line + 0.5} needed</div></div>
       <div class="stat"><div class="k">Last 10</div><div class="v">${pb.recent_form?.avg_total ?? "–"}</div><div class="n">median ${pb.recent_form?.median_total ?? "–"} · ${pb.recent_form?.overs ?? "–"}/${pb.recent_form?.matches ?? "–"} over</div></div>
     </div>`;
@@ -986,7 +990,7 @@ function render(d) {
       }
       if (Array.isArray(hc.last5) && hc.last5.length) {
         h += `<div class="small muted" style="margin-top:10px">Last ${hc.last5.length} HLTV maps</div><div class="scroll"><table><thead><tr><th>Date</th><th>Map</th><th>vs</th><th>Score</th><th>K-D</th><th>Rating</th></tr></thead><tbody>`;
-        for (const m of hc.last5) h += `<tr><td>${esc(m.date)}</td><td>${esc(m.map)}${m.backup ? "*" : ""}</td><td>${esc(m.opponent)}</td><td>${esc(m.score)}</td><td>${esc(m.kd)}</td><td>${num(m.rating)}</td></tr>`;
+        for (const m of hc.last5) h += `<tr><td style="white-space:nowrap">${shortDate(m.date)}</td><td>${esc(m.map)}${m.backup ? "*" : ""}</td><td>${esc(m.opponent)}</td><td>${esc(m.score)}</td><td style="white-space:nowrap">${esc(m.kd)}</td><td>${num(m.rating)}</td></tr>`;
         h += `</tbody></table></div>`;
       }
       const bk = hc.backup_source;
