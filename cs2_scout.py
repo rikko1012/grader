@@ -758,7 +758,7 @@ def next_match(b, team_id, want=None):
 def _match_info(m, team_id):
     opp = m["team2"] if m.get("team1_id") == team_id else m["team1"]
     mine = m["team1"] if m.get("team1_id") == team_id else m["team2"]
-    return {"start": m.get("start_date"), "slug": m.get("slug"), "opponent": opp.get("name"),
+    return {"start": m.get("start_date"), "slug": m.get("slug"), "opponent": opp.get("name"), "bo": m.get("bo_type"),
             "team1_id": m.get("team1_id"), "team2_id": m.get("team2_id"),
             "opponent_id": opp.get("id"), "opponent_slug": opp.get("slug"), "team_slug": (mine or {}).get("slug"),
             "event": (m.get("tournament") or {}).get("name"),
@@ -947,6 +947,7 @@ def grader_inputs(pb, args, odds=None, hh=None):
     o = pb["overall"]
     d = {
         "prop": args.prop, "line": args.line, "line_type": args.line_type,
+        "scope": getattr(args, "scope", "12") or "12",
         "maps_played": o.get("maps_played"), "kpr": o.get("kpr"), "hs_pct": o.get("hs_pct"),
         "sample_maps": max((w.get("maps") or 0 for w in (o.get("form_windows") or {}).values()), default=None),
         "kpr_last5": (pb.get("recent_form") or {}).get("kpr_recent"),  # last 10 matches, Maps 1-2
@@ -1228,14 +1229,15 @@ def main():
 
 
 def grade(name, line, prop="kills", line_type="standard", slug=None, faceit_key=None, ttl=12,
-          background=False, match=None, opponent=None, light=False):
+          background=False, match=None, opponent=None, light=False, scope="12"):
     """One-call entry point for the web interface: everything 'full' does, returned as a dict.
     background=True (pre-loading) gives way to member look-ups."""
     args = argparse.Namespace(
         cmd="full", name=name, bo3_slug=slug, team=None, maps=None, opponent=None, line=line,
         prop=prop, line_type=line_type, team_ml=None, opp_ml=None, faceit=None,
         faceit_key=faceit_key or os.environ.get("FACEIT_API_KEY"), n=20, refresh=False, ttl=ttl,
-        match=match, member_opponent=(opponent or "").strip() or None, light=light)
+        match=match, member_opponent=(opponent or "").strip() or None, light=light,
+        scope=scope if scope in ("12", "123", "1") else "12")
     args.opponent = args.member_opponent
     # Shared context (stats, match, maps, odds, H2H series, FACEIT, CS API) is the same for every
     # line and prop of a player: built once, reused for CONTEXT_TTL seconds - a new line only

@@ -36,6 +36,20 @@ def _sides(title):
     return (parts[0].strip(), parts[1].strip()) if len(parts) == 2 else ("", "")
 
 
+def _scope(code, label):
+    """Which maps a line covers: "12" Maps 1+2, "123" Maps 1+2+3 / 1-3, "1" Map 1 (BO1); None = other."""
+    t = (code or label or "").lower().replace(" ", "")
+    if "map" not in t:
+        return "12" if ("kill" in t or "headshot" in t) else None
+    if re.search(r"maps?_?1(_|\+|-|&)2(_|\+|-|&)3|maps?_?1(_|-)3", t):
+        return "123"
+    if re.search(r"maps?_?1(_|\+|-|&)2$", t) or re.search(r"maps?1\+2(?![+\-&]?3)", t):
+        return "12"
+    if re.search(r"maps?_?1$", t):
+        return "1"
+    return None
+
+
 def parse(body):
     apps = {a["id"]: a for a in body.get("appearances", [])}
     players = {p["id"]: p for p in body.get("players", [])}
@@ -49,12 +63,9 @@ def parse(body):
         code = (stat.get("stat") or "").lower()
         # Maps 1+2 only (what the grader grades). Underdog's stat code is exact ("kills_on_maps_1_2");
         # a "Maps 1+2+3" / "Maps 1-3" line must never be graded as Maps 1-2.
-        if code:
-            if "map" in code and not re.search(r"maps?_1_2$", code):
-                continue
-        elif "map" in label and (not re.search(r"maps?\s*1\s*[+\-&]\s*2", label)
-                                 or re.search(r"[+\-&]\s*3|1\s*-\s*3", label)):
-            continue
+        scope = _scope(code, label)
+        if scope is None:
+            continue                                   # a map set the grader doesn't grade
         prop = "hs" if "headshot" in label else "kills" if "kill" in label else None
         app = apps.get(stat.get("appearance_id"))
         try:
@@ -73,7 +84,7 @@ def parse(body):
         pay = {o.get("choice"): o.get("payout_multiplier") for o in ln.get("options") or []}
         hi, lo = pay.get("higher"), pay.get("lower")
         alt = not (str(hi) in ("1.0", "1", "None") and str(lo) in ("1.0", "1", "None"))
-        rows.append({"id": ln.get("id"), "player": name, "team": team, "opponent": opp, "matchup": title,
+        rows.append({"id": ln.get("id"), "scope": scope, "player": name, "team": team, "opponent": opp, "matchup": title,
                      "start": game.get("scheduled_at"), "prop": prop, "line": value,
                      "higher": float(hi) if hi not in (None, "") else None,
                      "lower": float(lo) if lo not in (None, "") else None, "alt": alt})
@@ -151,6 +162,6 @@ def board(wait=False):
 def line_for(nick, prop):
     """Underdog's standard line for this player and prop (from the cached board), or None."""
     n = norm(nick)
-    rows = [r for r in board()["rows"] if r["prop"] == prop and norm(r["player"]) == n]
+    rows = [r for r in board()["rows"] if r["prop"] == prop and norm(r["player"]) == n and r.get("scope", "12") == "12"]
     rows.sort(key=lambda r: (r["alt"], r["start"] or ""))
     return rows[0] if rows else None

@@ -477,27 +477,46 @@ def grade_leg(d, cfg=CONFIG):
         flags.append("Underdog HS prop: note only - measured, spread is not wider")
     sd_mult = min(cfg["sd_widen"] ** len(sd_reasons), cfg["sd_widen_max"])
     c = d.get("c") or (cfg["c_hs"] if prop == "hs" else cfg["c"])
+    # Which maps the line covers (owner 2026-10-06): "12" Maps 1-2 (everything above is in Maps 1-2
+    # units), "123" Maps 1-3 (map 3 is only played when Maps 1-2 split: expected total = Maps 1-2 +
+    # P(1-1) x one more map, and the chance over the line mixes the 2-map and 3-map outcomes),
+    # "1" Map 1 only (BO1 lines): one map = half the Maps 1-2 projection.
+    scope = d.get("scope") or "12"
+    lam12, p3, lam3 = lam_final, None, lam_final / 2
+    if scope == "1":
+        lam_final = lam12 / 2
+    elif scope == "123":
+        p3 = q1 * (1 - q2) + (1 - q1) * q2
+        lam_final = lam12 + p3 * lam3
+    scale = lam_final / lam12 if lam12 else 1.0
     sd = math.sqrt(lam_final) * c * sd_mult
-    pm = p_more(line, lam_final, sd)
+
+    def pmore(shift=0.0):
+        if scope == "123":
+            a, b = lam12 + shift, lam12 + lam3 + shift
+            return ((1 - p3) * p_more(line, a, math.sqrt(max(a, 1)) * c * sd_mult)
+                    + p3 * p_more(line, b, math.sqrt(max(b, 1)) * c * sd_mult))
+        return p_more(line, lam_final + shift, sd)
+    pm = pmore()
     if prop == "kills":                                   # fat tails: no side above the cap
         cap = cfg["p_cap_kills"]
         pm = min(max(pm, 1 - cap), cap)
-    m_o = cfg.get("over_margin", {}).get(prop, 0.0)
+    m_o = cfg.get("over_margin", {}).get(prop, 0.0) * min(scale, 1.2)
     if pm > 0.5 and m_o:          # an Over is scored as if he projected m_o lower (never flips side)
-        po = p_more(line, lam_final - m_o, sd)
+        po = pmore(-m_o)
         if prop == "kills":
             po = min(max(po, 1 - cfg["p_cap_kills"]), cfg["p_cap_kills"])
         pm = max(po, 0.5)
-    m_u = cfg.get("under_margin", {}).get(prop, 0.0)
+    m_u = cfg.get("under_margin", {}).get(prop, 0.0) * min(scale, 1.2)
     if pm < 0.5 and m_u:          # an Under is scored as if he projected m_u higher (never flips side)
-        pu = p_more(line, lam_final + m_u, sd)
+        pu = pmore(m_u)
         if prop == "kills":
             pu = min(max(pu, 1 - cfg["p_cap_kills"]), cfg["p_cap_kills"])
         pm = min(pu, 0.5)
     pm_model = pm
 
     # TAPE note (display only): projection far from what he has actually been doing
-    ra = d.get("recent_avg")
+    ra = d.get("recent_avg") if scope == "12" else None   # his record is Maps 1-2 totals
     tape_gap = None
     if ra is not None:
         tape_gap = round(lam_final - ra, 1)
@@ -505,7 +524,7 @@ def grade_leg(d, cfg=CONFIG):
             flags.append(f"TAPE: projection {lam_final:.1f} vs last-10 average {ra} ({tape_gap:+.1f}) - display only")
 
     # Last-10 veto: the model can't out-vote what actually happened at this line
-    rec = d.get("recent") or {}
+    rec = (d.get("recent") or {}) if scope == "12" else {}   # Maps 1-2 record vs a Maps 1-2 line only
     fight = None
     if rec.get("n"):
         sm = (rec["overs"] + 2) / (rec["n"] + 4)          # smoothed last-10 hit rate over the line
@@ -590,6 +609,7 @@ def grade_leg(d, cfg=CONFIG):
         units=u_more, units_less=u_less, form_fight=fight, tape_fight=tape, scout=scout,
         market_quality=mq,
         lambda_base=round(lam, 2), lambda_final=round(lam_final, 2), sd=round(sd, 2),
+        scope=scope, lambda_maps12=round(lam12, 2), p_map3=None if p3 is None else round(p3, 3),
         detail={"rounds": rpm * 2, "stomp": stomp, "p_win": round(p_win, 3), "p_map": round(q, 3),
                 "outcome_mult": round(outcome, 3), "underdog_mult": round(dog, 3), "rank_band_mult": round(band_mult, 3), "p_map1": round(q1, 3), "p_map2": round(q2, 3),
                 "tape_gap": tape_gap, "lambda_model": round(lam_model, 2), "trade_mult": round(trade_mult, 3), "last10_mult": round(last10_mult, 3),

@@ -250,6 +250,7 @@ def board_payload():
         rows.append(dict(r, **{k: g.get(k) for k in ("grade", "side", "p", "units", "proj", "reason", "graded_at",
                                                      "nick", "state", "edge", "l10_over", "l10_n", "l10_avg",
                                                      "hs_pct", "p_win", "market", "team_name", "opp_name")}))
+        rows[-1]["scope"] = r.get("scope") or "12"
     return {"updated": b["at"], "error": b["error"], "rows": rows, "total": len(b["rows"])}
 
 
@@ -288,10 +289,10 @@ def board_forever():
                 try:
                     if MEMBER_GRADES[0] > 0:              # members still busy: one board grade at a time
                         with _BOARD_BUSY:
-                            res = cs2_scout.grade(r["player"], r["line"], r["prop"], "standard",
+                            res = cs2_scout.grade(r["player"], r["line"], r["prop"], "standard", scope=r.get("scope") or "12",
                                                   faceit_key=faceit_key(), background=True, light=True)
                     else:
-                        res = cs2_scout.grade(r["player"], r["line"], r["prop"], "standard", faceit_key=faceit_key(),
+                        res = cs2_scout.grade(r["player"], r["line"], r["prop"], "standard", scope=r.get("scope") or "12", faceit_key=faceit_key(),
                                               background=True, light=True)
                     if res.get("error"):
                         BOARD[r["id"]] = {"at": time.time(), "state": "NOT FOUND", "reason": res["error"]}
@@ -963,10 +964,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(400, {"error": "Enter a player name"})
         prop = q.get("prop", "kills") if q.get("prop") in ("kills", "hs") else "kills"
         lt = q.get("line_type", "standard") if q.get("line_type") in ("standard", "goblin", "demon") else "standard"
+        scope = q.get("maps") if q.get("maps") in ("12", "123", "1") else "12"
         slug, match = q.get("slug") or None, q.get("match") or None
         opp = (q.get("opponent") or "")[:60].strip() or None
         pkey = (slug or name).lower()
-        key = (pkey, line, prop, lt, match, (opp or "").lower())
+        key = (pkey, line, prop, lt, match, (opp or "").lower(), scope)
 
         t_in = time.time()
 
@@ -980,7 +982,7 @@ class Handler(BaseHTTPRequestHandler):
                 with (FAST_SLOTS if warm else COLD_SLOTS):
                     tm["slot"], tm["warm"] = round(time.time() - t0, 2), warm
                     t0 = time.time()
-                    res = cs2_scout.grade(name, line, prop, lt, slug=slug, faceit_key=faceit_key(),
+                    res = cs2_scout.grade(name, line, prop, lt, slug=slug, faceit_key=faceit_key(), scope=scope,
                                           match=match, opponent=opp)
                     tm["grade"] = round(time.time() - t0, 2)
             t0 = time.time()

@@ -50,6 +50,10 @@ def _db():
         con.execute("ALTER TABLE picks ADD COLUMN test INTEGER DEFAULT 0")
     except sqlite3.OperationalError:
         pass                               # column already there
+    try:                                   # added 2026-10-06: which maps the line covers
+        con.execute("ALTER TABLE picks ADD COLUMN scope TEXT DEFAULT '12'")
+    except sqlite3.OperationalError:
+        pass
     for col in ("factors", "result"):      # added 2026-10-02: every factor's value at grade time and
         try:                               # what happened (rounds, OT, map wins) - each measurable
             con.execute(f"ALTER TABLE picks ADD COLUMN {col} TEXT")
@@ -134,7 +138,10 @@ def pick_row(res, verdict, test=False):
         return None
     nm = dict(nm, slug=slug)   # matches only HLTV has are logged as hltv-<HLTV match id>
     rf = pb.get("recent_form") or {}
+    scope = g.get("scope") or "12"
     key = "|".join(str(x) for x in (pb["player"]["slug"], g["prop"], g["line"], g["line_type"], nm["slug"]))
+    if scope != "12":
+        key += "|maps" + scope                         # Maps 1-2 keys unchanged
     row = {
         "key": key, "logged_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "player": pb["player"]["nick"], "slug": pb["player"]["slug"], "player_id": pb["player"]["id"],
@@ -151,6 +158,7 @@ def pick_row(res, verdict, test=False):
         "flags": json.dumps(g.get("flags")), "opp_def": json.dumps(res.get("opponent_defense")),
         "test": test if test == 2 else int(bool(test)),   # 1 = owner's tests, 2 = Underdog board (not a member pick)
         "factors": json.dumps(_factors(res), default=str),
+        "scope": scope,
     }
     return row
 
@@ -210,6 +218,17 @@ def settle(b, map_rows):
         early = now < start + timedelta(minutes=SETTLE_MIN)
         if now < start - timedelta(hours=12):
             continue                                  # far in the future: nothing to look for yet
+        if (_col(r, "scope") or "12") != "12":         # Maps 1-3 / Map 1 lines: HLTV only (has map 3 and BO1)
+            upd = _settle_scope(r, now, start)
+            if upd is not None:
+                with _LOCK:
+                    con = _db()
+                    con.execute("UPDATE picks SET status=?, actual_maps=?, actual=?, hit=?, settled_at=? WHERE id=?",
+                                (*upd, now.isoformat(timespec="seconds"), r["id"]))
+                    con.commit()
+                    con.close()
+                done += 1
+            continue
         if early and not (r["match_slug"] or "").startswith("hltv-"):
             hv = _hltv_totals(r, same_day_only=True)
             if isinstance(hv, tuple):
@@ -314,6 +333,28 @@ def _outcome(r, actual, maps):
         return ("push", json.dumps(maps), actual, None)
     hit = actual > r["line"] if r["pick"] == "More" else actual < r["line"]
     return ("settled", json.dumps(maps), actual, int(hit))
+
+
+def _col(r, k):
+    try:
+        return r[k]
+    except (IndexError, KeyError):
+        return None
+
+
+def _settle_scope(r, now, start):
+    """A Maps 1-3 or Map 1 line, from HLTV. None = not yet; void after VOID_AFTER_D days without it."""
+    try:
+        import hltv
+        tot = hltv.settle_scope(r["player"], r["team"], (r["match_start"] or "")[:10], r["opponent"], _col(r, "scope"))
+    except Exception:
+        tot = {"found": False}
+    actual = tot.get("headshots" if r["prop"] == "hs" else "kills") if tot.get("found") and not tot.get("wait") else None
+    if actual is None:
+        return ("void", None, None, None) if now > start + timedelta(days=VOID_AFTER_D) else None
+    _save_result(r["id"], {"source": "hltv", "rounds": tot.get("rounds"), "won": tot.get("won"),
+                           "per_map": tot.get("per_map")})
+    return _outcome(r, actual, tot.get("maps"))
 
 
 def _hltv_totals(r, same_day_only=False):

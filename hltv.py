@@ -665,20 +665,20 @@ JOIN matches own ON own.matchid = mm.matchid AND own.teamid = ps.teamid AND own.
 JOIN matches opp ON opp.matchid = mm.matchid AND opp.teamid <> ps.teamid AND opp.mapid = mm.mapid AND opp.sideid = 0
 JOIN teams t2 ON t2.teamid = opp.teamid
 LEFT JOIN map_headshots h ON h.mapstatsid = mm.mapstatsid AND h.playerid = ps.playerid
-WHERE ps.playerid = ANY(%(ids)s) AND mm.number <= 2 AND mo.date >= %(since)s {extra}
+WHERE ps.playerid = ANY(%(ids)s) AND mm.number <= {maxn} AND mo.date >= %(since)s {extra}
 ORDER BY mo.date DESC, mo.matchid DESC, mm.number
 """
 
 
-def _series_rows(cur, ids, since, extra="", params=None):
-    cur.execute(_SERIES_SQL.format(extra=extra), dict(params or {}, ids=ids, since=since))
+def _series_rows(cur, ids, since, extra="", params=None, maxn=2, need=(1, 2)):
+    cur.execute(_SERIES_SQL.format(extra=extra, maxn=int(maxn)), dict(params or {}, ids=ids, since=since))
     by_match = {}
     for mid, d, num, mname, k, hs, own, opp, oname, tname in cur.fetchall():
         by_match.setdefault(mid, []).append({
             "match_id": f"hltv-{mid}", "hltv_match": mid, "date": d.isoformat(), "number": num,
             "map": "de_" + _norm(mname), "kills": k, "headshots": hs, "rounds": (own or 0) + (opp or 0),
             "won": (own or 0) > (opp or 0), "opponent": oname, "team": tname, "source": "hltv"})
-    return [m for maps in by_match.values() if {x["number"] for x in maps} >= {1, 2} for m in maps]
+    return [m for maps in by_match.values() if {x["number"] for x in maps} >= set(need) for m in maps]
 
 
 def recent_series(nick, team=None, since=None):
@@ -813,6 +813,44 @@ def settle_by_day(nick, team, day, opponent):
             "headshots": None if None in hs else sum(hs), "maps": [r["map"] for r in m12],
             "rounds": [r["rounds"] for r in m12], "won": [r["won"] for r in m12],
             "per_map": [[r["kills"], r["headshots"]] for r in m12]}
+
+
+def settle_scope(nick, team, day, opponent, scope):
+    """HLTV result for a Maps 1-3 ("123") or Map 1 ("1") line: {"found", "kills", "headshots", "maps",
+    "rounds", "won", "per_map"} - Maps 1-3 counts every map played (2 or 3); "wait" while map 3 of a
+    1-1 series isn't in yet."""
+    if not dsn():
+        return {"found": False}
+    try:
+        con = _connect()
+    except Exception:
+        return {"found": False}
+    try:
+        with con.cursor() as cur:
+            ids = _player_ids(cur, nick, team)
+            rows = _series_rows(cur, ids, "2000-01-01", "AND mo.date BETWEEN %(d)s::date - 1 AND %(d)s::date + 1",
+                                {"d": day}, maxn=3, need=(1,)) if ids else []
+    except Exception:
+        rows = []
+    finally:
+        con.close()
+    on = [r for r in rows if not opponent or _norm(opponent) in _norm(r["opponent"]) or _norm(r["opponent"]) in _norm(opponent)]
+    if not on:
+        return {"found": False}
+    mid = on[0]["hltv_match"]
+    ms = sorted((r for r in on if r["hltv_match"] == mid), key=lambda r: r["number"])
+    if scope == "1":
+        ms = ms[:1]
+    else:
+        if len(ms) == 2 and ms[0]["won"] != ms[1]["won"]:
+            return {"found": True, "wait": True}       # 1-1 after two maps: map 3 not in yet
+        if len(ms) < 2:
+            return {"found": True, "wait": True}
+    hs = [r["headshots"] for r in ms]
+    return {"found": True, "hltv_match": mid, "date": ms[0]["date"], "kills": sum(r["kills"] for r in ms),
+            "headshots": None if None in hs else sum(hs), "maps": [r["map"] for r in ms],
+            "rounds": [r["rounds"] for r in ms], "won": [r["won"] for r in ms],
+            "per_map": [[r["kills"], r["headshots"]] for r in ms]}
 
 
 # ---------------------------------------------------------------- map vetoes (from stored match pages)

@@ -309,6 +309,10 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
         <label for="lt">Line type</label>
         <select id="lt"><option value="standard">Standard</option><option value="goblin">Goblin</option><option value="demon">Demon</option></select>
       </div>
+      <div class="field" style="flex:0 0 auto">
+        <label for="scope">Maps</label>
+        <select id="scope" title="Which maps the line covers"><option value="12">Maps 1–2</option><option value="123">Maps 1–3</option><option value="1">Map 1 (BO1)</option></select>
+      </div>
       <button class="go" id="go">Grade</button>
     </div>
   </form>
@@ -326,7 +330,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
       <p><b>The maps matter.</b> If the veto is out we use how the player performs on those two maps; if not, his numbers across all maps.</p>
       <p><b>Match context.</b> Betting markets tell us who is favoured – winning and losing teams put up different numbers. Heavy underdogs (especially against top-10 teams) are marked down, and a player's record against teams ranked close to tonight's opponent counts too. We also check the roster (stand-ins, new teams), how long since his last official match, and how big his sample is. Anything uncertain lowers the stake, not the honesty of the number.</p>
       <p><b>Projection → chance → grade.</b> The projection is compared with the number he actually needs (a 15.5 line needs 16), and turned into a win chance based on how much a player's totals normally swing from match to match. Unders need a slightly bigger edge than Overs – overtimes and big games make kill totals run over more often than under.</p>
-      <p><b>Tested before it counts.</b> Every factor was tested on 900+ past matches, using only information available before each one. His last 10 matches carry a lot of weight (they proved the strongest signal on real lines), and head-to-head nudges the projection. Regional form and the match simulation are shown on the card for context.</p>
+      <p><b>Tested before it counts.</b> Every factor was tested on 900+ past matches, using only information available before each one. His last 10 matches carry a lot of weight (they proved the strongest signal on real lines), and head-to-head nudges the projection. Regional form is shown on the card for context.</p>
       <p><b>What the grades mean</b> (chance the pick wins): A+ 80%+ · A 74%+ · A− 68%+ · B+ 63%+ · B 57%+ · <i>Lean</i> under 57% (no units).<br>
       <b>Units:</b> A+ 2U · A 1.5U · A− 1U · B+ 0.5U · B 0.25U · Lean 0U. Thin markets, small samples, stand-ins and rust cap the units.</p>
       <p class="muted">Grades are probabilities, not guarantees – a 60% pick still loses 4 times in 10. Not financial advice.</p>
@@ -444,7 +448,7 @@ $("#f").onsubmit = async e => {
   e.preventDefault(); hideSug();
   const player = $("#player").value.trim(), line = $("#line").value.trim().replace(",", ".");
   if (!player || !line) return;
-  const qs = new URLSearchParams({player, line, prop, line_type: $("#lt").value});
+  const qs = new URLSearchParams({player, line, prop, line_type: $("#lt").value, maps: $("#scope").value});
   if (slug) qs.set("slug", slug);
   if (match) qs.set("match", match);
   $("#go").disabled = true; $("#out").innerHTML = "";
@@ -492,10 +496,11 @@ const lineWarn = (p, l) => p === "hs" && +l >= 24 ? `${l} headshots is a kills-s
 const sideWord = v => v.grade === "LEAN" ? `Lean ${v.side === "More" ? "Over" : "Under"}` : v.side || "–";
 const noteOf = (d, x) => { const v = d?.verdict || {}, g = d?.grade || {};
   return lineWarn(g.prop || x?.prop, g.line ?? x?.line) || ((v.units || 0) === 0 && /0 units: (.+)$/.exec(v.reason || "")?.[1]) || ""; };
+const mapsWord = sc => sc === "123" ? " (Maps 1–3)" : sc === "1" ? " (Map 1)" : "";
 function pickLine(d) {
   const g = d.grade || {}, v = d.verdict || {}, nick = d.player_block?.player?.nick || "";
   const side = v.grade === "LEAN" ? `Lean ${v.side === "More" ? "Over" : "Under"}` : (v.side === "More" ? "MORE" : "LESS");
-  return `${nick} ${side} ${g.line} ${propWord(g.prop)} · ${v.grade === "LEAN" ? "Lean" : v.grade} · ${v.units}U · ${Math.round((v.p || 0) * 100)}%`;
+  return `${nick} ${side} ${g.line} ${propWord(g.prop)}${mapsWord(g.scope)} · ${v.grade === "LEAN" ? "Lean" : v.grade} · ${v.units}U · ${Math.round((v.p || 0) * 100)}%`;
 }
 function shareUrl(d) {
   const g = d.grade || {}, u = new URL(location.origin + location.pathname);
@@ -516,8 +521,8 @@ function showRecent() {
     `<button type="button" class="chipbtn" data-hist="${i}">${esc(x.p)} ${x.l} ${propWord(x.t)}${x.lt && x.lt !== "standard" ? " " + x.lt : ""} · <b>${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : `${esc(x.g)} ${esc(x.s)}`}</b></button>`).join("")
     + `<button type="button" class="chipbtn" data-act="clearhist" title="Clear recent">✕</button>` : "";
 }
-function gradeNow(p, l, t, lt) {
-  $("#player").value = p; $("#line").value = l; setProp(t || "kills"); $("#lt").value = lt || "standard";
+function gradeNow(p, l, t, lt, sc) {
+  $("#player").value = p; $("#line").value = l; setProp(t || "kills"); $("#lt").value = lt || "standard"; $("#scope").value = sc || "12";
   slug = null; match = null; setMode("one"); $("#f").requestSubmit();
 }
 let lastCard = null;
@@ -555,17 +560,18 @@ function parseSlate(txt) {
     const rest = m[3].toLowerCase();
     out.push({player: m[1].trim(), line: m[2].replace(",", "."),
               prop: /\b(hs|h|headshots?)\b/.test(rest) ? "hs" : "kills",
-              lt: /goblin/.test(rest) ? "goblin" : /demon/.test(rest) ? "demon" : "standard"});
+              lt: /goblin/.test(rest) ? "goblin" : /demon/.test(rest) ? "demon" : "standard",
+              sc: /\b(m13|1-3|maps?\s*1-3|maps?\s*123)\b/.test(rest) ? "123" : /\b(bo1|m1|map\s*1)\b/.test(rest) ? "1" : "12"});
   }
   return out.slice(0, 15);
 }
 function slateRow(x, i) {
   if (x.error) return `<tr><td>${esc(x.player || x.bad)}</td><td colspan="8" class="muted">${esc(x.error)}</td></tr>`;
-  if (!x.d) return `<tr><td>${esc(x.player)}</td><td>${esc(x.line)} ${propWord(x.prop)}</td><td colspan="7" class="muted"><span class="spin"></span>grading…</td></tr>`;
+  if (!x.d) return `<tr><td>${esc(x.player)}</td><td>${esc(x.line)} ${propWord(x.prop)}${mapsWord(x.sc)}</td><td colspan="7" class="muted"><span class="spin"></span>grading…</td></tr>`;
   const g = x.d.grade || {}, v = x.d.verdict || {}, nm = x.d.next_match || {};
   const lab = !v.side ? "–" : v.state === "SCOUT" ? "S" : v.grade === "LEAN" ? "L" : v.grade || "–";
   const side = sideWord(v), note = noteOf(x.d, x);
-  return `<tr data-row="${i}"><td><b>${esc(x.d.player_block?.player?.nick || x.player)}</b></td><td class="num" style="text-align:left">${g.line ?? esc(x.line)} ${propWord(g.prop || x.prop)}${ltTag(g.line_type || x.lt)}</td>
+  return `<tr data-row="${i}"><td><b>${esc(x.d.player_block?.player?.nick || x.player)}</b></td><td class="num" style="text-align:left">${g.line ?? esc(x.line)} ${propWord(g.prop || x.prop)}${mapsWord(g.scope || x.sc)}${ltTag(g.line_type || x.lt)}</td>
     <td>${esc(side)}</td><td><span class="gtag ${v.state === "SCOUT" ? "g-scout" : gClass(v.grade)}">${esc(lab)}</span></td>
     <td class="num">${v.p != null ? Math.round(v.p * 100) + "%" : "–"}</td><td class="num">${v.units ?? 0}U</td>
     <td class="num">${g.lambda_final != null ? num(g.lambda_final, 1) : "–"}</td><td class="small">${esc(nm.opponent ? "vs " + nm.opponent : "")}</td>
@@ -597,7 +603,7 @@ $("#slatego").onclick = async () => {
   $("#slatego").disabled = true; drawSlate();
   let done = 0; const todo = slate.filter(x => !x.error);
   const one = async x => {
-    const qs = new URLSearchParams({player: x.player, line: x.line, prop: x.prop, line_type: x.lt});
+    const qs = new URLSearchParams({player: x.player, line: x.line, prop: x.prop, line_type: x.lt, maps: x.sc || "12"});
     try {
       const r = await fetchRetry("/api/grade?" + qs); const d = await r.json();
       if (r.status === 401 && d.error === "members_only") return showGate(d);
@@ -649,7 +655,7 @@ function addToSlip(d) {
   const g = d.grade || {}, v = d.verdict || {}, nick = d.player_block?.player?.nick;
   if (!nick || !v.side) return;
   let s = store.get("cs2s_slip", []);
-  const leg = {p: nick, l: g.line, t: g.prop, lt: g.line_type, s: v.side, g: v.grade, pc: v.p, u: v.units,
+  const leg = {p: nick, l: g.line, t: g.prop, lt: g.line_type, sc: g.scope || "12", s: v.side, g: v.grade, pc: v.p, u: v.units,
                m: d.next_match?.slug || [d.player_block?.current_team || "", d.next_match?.opponent || ""].map(x => x.toLowerCase().replace(/[^a-z0-9]/g, "")).sort().join("|"),
                vs: d.next_match?.opponent || "", tm: d.player_block?.current_team || ""};
   if (s.some(x => legKey(x) === legKey(leg))) { toast(`${nick} is already on the slip – PrizePicks allows one prop per player`); return openSlip(); }
@@ -669,7 +675,7 @@ function drawSlip() {
   const same = Object.values(teams).some(c => c > 1);
   const leans = s.filter(x => x.g === "LEAN").length;
   $("#slip").innerHTML = `<h4>Bet slip · ${n}-pick</h4>` + s.map((x, i) =>
-    `<div class="leg"><span><b>${esc(x.p)}</b> ${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : esc(x.s)} ${x.l} ${propWord(x.t)}${ltTag(x.lt)}
+    `<div class="leg"><span><b>${esc(x.p)}</b> ${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : esc(x.s)} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${ltTag(x.lt)}
       <span class="muted small">· ${x.g === "LEAN" ? "Lean" : esc(x.g)} · ${Math.round((x.pc || 0) * 100)}%${x.vs ? " · vs " + esc(x.vs) : ""}</span></span>
       <button type="button" class="x" data-rmleg="${i}" title="Remove">✕</button></div>`).join("")
     + (n < 2 ? `<div class="small muted" style="margin-top:10px">Add at least 2 picks (up to 6).</div>`
@@ -694,7 +700,7 @@ $("#slip").addEventListener("click", e => {
   if (e.target.closest("#slipclose")) { $("#slip").hidden = true; return; }
   if (e.target.closest("#slipcopy")) {
     const s = store.get("cs2s_slip", []);
-    copy(`${s.length}-pick slip\n` + s.map(x => `${x.p} ${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : x.s.toUpperCase()} ${x.l} ${propWord(x.t)} · ${x.g === "LEAN" ? "Lean" : x.g} · ${Math.round((x.pc || 0) * 100)}%`).join("\n"));
+    copy(`${s.length}-pick slip\n` + s.map(x => `${x.p} ${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : x.s.toUpperCase()} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)} · ${x.g === "LEAN" ? "Lean" : x.g} · ${Math.round((x.pc || 0) * 100)}%`).join("\n"));
   }
 });
 $("#slateedit") && ($("#slateedit").onclick = () => { $("#slatetxt").focus(); $("#slatetxt").scrollIntoView({behavior: "smooth", block: "center"}); });
@@ -704,7 +710,7 @@ drawSlip();
 // ---------- Underdog: line on each card + the graded board
 function udPill(d) {
   const u = d.underdog, g = d.grade || {}, v = d.verdict || {};
-  if (!u || u.line == null) return "";
+  if (!u || u.line == null || (g.scope && g.scope !== "12")) return "";   // Underdog's line is Maps 1-2
   const pay = u.alt ? ` (higher ${u.higher ?? "–"}x / lower ${u.lower ?? "–"}x)` : "";
   if (u.line === g.line || !v.side) return `<span class="pill">Underdog: same line ${u.line}${pay}</span>`;
   const better = v.side === "More" ? u.line < g.line : u.line > g.line;
@@ -727,7 +733,7 @@ async function loadBoard(force) {
 const shortWhen = s => { if (!s) return ""; const d = new Date(s); if (isNaN(d)) return "";
   const u = until(d); return d.toLocaleString([], {weekday: "short", hour: "numeric", minute: "2-digit"}) + (u ? " · " + u : ""); };
 function boardCard(r) {     // a board row in the shape addToSlip / pickLine expect
-  return {grade: {line: r.line, prop: r.prop, line_type: "standard"},
+  return {grade: {line: r.line, prop: r.prop, line_type: "standard", scope: r.scope || "12"},
           verdict: {side: r.side, grade: r.grade, p: r.p, units: r.units},
           player_block: {player: {nick: r.nick || r.player}, current_team: r.team_name || r.team},
           next_match: {opponent: r.opp_name || r.opponent}};
@@ -750,10 +756,10 @@ function drawBoard() {
       const o = other[nick.toLowerCase() + "|" + (r.prop === "hs" ? "kills" : "hs")];
       const team = r.team_name || r.team, opp = r.opp_name || r.opponent;
       const win = r.p_win != null && !["NO MARKET", "NONE"].includes(r.market) ? pct0(r.p_win) : "–";
-      return `<div class="brow" data-bl="${esc(nick)}|${r.line}|${r.prop}">
+      return `<div class="brow" data-bl="${esc(nick)}|${r.line}|${r.prop}|${r.scope || "12"}">
         <span class="gtag ${!r.side ? "g-scout" : r.state === "SCOUT" ? "g-scout" : gClass(r.grade)}">${esc(lab)}</span>
         <div class="who"><b>${esc(nick)}</b><div class="meta">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}</div><div class="meta">${shortWhen(r.start)}</div></div>
-        <div class="pk"><div><div class="pick">${r.side ? esc(sideWord(v)) : "grading…"} ${r.line} ${propWord(r.prop)} ${r.p != null ? `<span class="pc">· ${pct0(r.p)} to hit</span>` : ""}</div>
+        <div class="pk"><div><div class="pick">${r.side ? esc(sideWord(v)) : "grading…"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)} ${r.p != null ? `<span class="pc">· ${pct0(r.p)} to hit</span>` : ""}</div>
           <div class="other">${o ? `${propWord(o.prop)} line ${o.line}` : ""}${r.alt ? ` · alt ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}</div></div>
 </div>
         <div class="bstats">
@@ -774,7 +780,7 @@ $("#boardout").addEventListener("click", e => {
     const r = boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t);
     if (r) { addToSlip(boardCard(r)); drawBoard(); } return; }
   const r = e.target.closest("[data-bl]");
-  if (r) { const [p, l, t] = r.dataset.bl.split("|"); gradeNow(p, l, t, "standard"); setTimeout(() => $("#out").scrollIntoView({behavior: "smooth"}), 50); }
+  if (r) { const [p, l, t, sc] = r.dataset.bl.split("|"); gradeNow(p, l, t, "standard", sc); setTimeout(() => $("#out").scrollIntoView({behavior: "smooth"}), 50); }
 });
 $("#bprop").onclick = e => { const b = e.target.closest("button"); if (!b) return; bprop = b.dataset.v;
   [...$("#bprop").children].forEach(x => x.classList.toggle("on", x === b)); drawBoard(); };
@@ -833,7 +839,7 @@ function render(d) {
   h += `<section class="card herocard ${hc}"><div class="hero">
     <div class="badge ${hc}">${esc(!v.side ? "–" : v.state === "SCOUT" ? "S" : v.grade === "LEAN" ? "L" : (v.grade || "L").slice(0, 2))}</div>
     <div><h3>${esc(head)}</h3>
-      <div class="sub">${esc(pb.player?.nick || "")} · ${pb.standin_for ? `${esc(pb.current_team || "")} → <b>stand-in for ${esc(pb.standin_for)}</b>` : esc(pb.current_team || "")}${nm?.opponent ? ` vs ${esc(nm.opponent)}${nm.start ? ` · ${shortWhen(nm.start)}` : ""}` : ""} · ${g.line} ${stat} · ${esc(g.line_type || "")}</div>
+      <div class="sub">${esc(pb.player?.nick || "")} · ${pb.standin_for ? `${esc(pb.current_team || "")} → <b>stand-in for ${esc(pb.standin_for)}</b>` : esc(pb.current_team || "")}${nm?.opponent ? ` vs ${esc(nm.opponent)}${nm.start ? ` · ${shortWhen(nm.start)}` : ""}` : ""} · ${g.line} ${stat}${mapsWord(g.scope) || " (Maps 1–2)"} · ${esc(g.line_type || "")}</div>
       <div class="sub">${sub}</div>
       ${gateStop ? `<span class="pill bad">${esc(g.reason || g.status)}</span>` : ""}
       ${g.form_fight ? `<span class="pill warn">FORM FIGHT - last 10 matches disagree, confidence halved</span>` : ""}
@@ -842,6 +848,8 @@ function render(d) {
       ${g.market_quality && g.market_quality !== "HARD" && v.state !== "SCOUT" ? `<span class="pill">${g.market_quality === "SOFT" ? "SOFT BOOK" : "NO MARKET"} · max 1U</span>` : ""}
       ${g.market?.note_line ? `<span class="pill warn">${esc(g.market.note_line)}</span>` : ""}
       ${lineWarn(g.prop, g.line) ? `<span class="pill warn">${esc(lineWarn(g.prop, g.line))}</span>` : ""}
+      ${nm?.bo === 1 && g.scope !== "1" ? `<span class="pill warn">BO1 match – grade it as Map 1 (BO1)</span>` : ""}
+      ${g.scope === "123" && g.p_map3 != null ? `<span class="pill">Map 3 is only played if Maps 1–2 split: ${pct(g.p_map3, 0)} chance</span>` : ""}
       ${udPill(d)}
     </div></div>`;
   if ("p_more" in g) {
@@ -849,9 +857,8 @@ function render(d) {
       <div class="side ${v.side === "More" ? "pick" : ""}"><div class="k">More · ${g.grade === "C" ? "lean" : "grade " + esc(g.grade)} · ${g.units || 0}U${zTag(g.grade, g.units)}</div><div class="v">${pct(g.p_more)}</div><div class="bar"><i style="width:${g.p_more*100}%"></i></div></div>
       <div class="side ${v.side === "Less" ? "pick" : ""}"><div class="k">Less · ${g.grade_less === "C" ? "lean" : "grade " + esc(g.grade_less)} · ${g.units_less || 0}U${zTag(g.grade_less, g.units_less)}</div><div class="v">${pct(g.p_less)}</div><div class="bar"><i style="width:${g.p_less*100}%"></i></div></div>
     </div>
-    ${d.simulation ? `<div class="small muted" style="margin-top:8px">Match simulation: <b>${pct(d.simulation.p_more)} More</b> · average ${d.simulation.mean} (shown for context)</div>` : ""}
     <div class="stats" style="margin-top:10px">
-      <div class="stat"><div class="k">Projection</div><div class="v">${num(g.lambda_final,1)}</div><div class="n">${stat}, Maps 1–2</div></div>
+      <div class="stat"><div class="k">Projection</div><div class="v">${num(g.lambda_final,1)}</div><div class="n">${stat}, ${g.scope === "123" ? "Maps 1–3" : g.scope === "1" ? "Map 1" : "Maps 1–2"}</div></div>
       <div class="stat"><div class="k">Line</div><div class="v">${g.line}</div><div class="n">needs ${g.line + 0.5} for More</div></div>
       <div class="stat"><div class="k">Team win %</div><div class="v">${det.p_win != null && !["NO MARKET", "NONE"].includes(g.market_quality) ? pct(det.p_win,0) : "–"}</div><div class="n">${["NO MARKET", "NONE"].includes(g.market_quality) ? "no market – graded as even" : "from betting markets"}</div></div>
       <div class="stat ${g.lambda_final - g.line - 0.5 > 0 ? "up" : "down"}"><div class="k">Edge</div><div class="v">${(g.lambda_final - g.line - 0.5 > 0 ? "+" : "") + (g.lambda_final - g.line - 0.5).toFixed(1)}</div><div class="n">projection − ${g.line + 0.5} needed</div></div>
