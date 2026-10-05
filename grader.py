@@ -76,6 +76,7 @@ CONFIG = {
     "thin_maps": 20,             # under 20 Maps 1-2 = thin data: wider SD, 1U cap
     "map_blend_k": 12,
     "underdog_k": 1.15,
+    "dog_drop": 0.3,
     "matchup_slope": 0.15,       # extra matchup shift (see grade_leg)
     "elite_k": 0.5,
     "rank_band_w": 0.5, "rank_band_k": 20,   # vs similar-rank teams (see grade_leg)              # extra vs a top-10 opponent (VRS rank from HLTV), same data          # heavy-underdog extra (see grade_leg), fitted on HLTV player-maps
@@ -386,6 +387,11 @@ def grade_leg(d, cfg=CONFIG):
     # real lines (827 props, log-loss 0.6969 -> 0.6947, bets 167/305 -> 172/315) and on HLTV history.
     dog = 1 + cfg["matchup_slope"] * (qm - 0.5)
     dog *= 1 - cfg["underdog_k"] * max(0.0, 0.40 - qm) ** 2
+    # underdog teams' players finish below projection on real lines: 2026-10-05, 833 real Underdog/
+    # PrizePicks lines Oct 2-4, each day held out - Overs on underdogs hit 46%, Unders 76%; this drop
+    # (0.3 x (0.45 - match win chance)) chosen on held-out days, log-loss 0.7106 -> 0.7083, bets
+    # 153/317 -> 157/319 (same number of playable grades)
+    dog *= 1 - cfg["dog_drop"] * max(0.0, 0.45 - p_win)
     # vs a top-10 team the drop is bigger still (same HLTV data: team ranked 11-30 vs top 10 -7.6%
     # real vs -3.3% modelled at q~0.32; ranked 31-60 -14% vs -7% at q~0.24): 0.5 x (0.40 - q) more
     if (d.get("opp_rank") or 999) <= 10:
