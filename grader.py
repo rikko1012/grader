@@ -61,7 +61,12 @@ CONFIG = {
     # bar by less than 1 kill (0.6 HS) hit 25/45 (56%) - below PrizePicks' 57.7% break-even
     # (overtime and players popping off hit Unders hardest). Chosen on 3 of 4 held-out days;
     # Under bets 44/70 -> 19/25, Overs unchanged.
-    "under_margin": {"kills": 1.0, "hs": 0.6},
+    # 2026-10-06: margin moved from Unders to Overs. On 4 days of real lines (Oct 2-5) Overs bets went
+    # 73/174 (-9.0U) and Unders 93/170 (+8.75U) - books shade lines up (the public bets Overs). Overs
+    # needing +1 kill / +0.6 HS and Unders none: bets 367 -> 423, hit 49% -> 54%, +8.0U -> +25.5U,
+    # every day positive (Oct 2-5: +0.5 / +2.25 / +10.75 / +12.0).
+    "under_margin": {"kills": 0.0, "hs": 0.0},
+    "over_margin": {"kills": 1.0, "hs": 0.6},
     "last10_min": 5,             # need 5+ recent two-map matches to blend
     # 4c (2026-09-28, owner-approved for KILLS props only): trade kills per round. Cross-validated
     # by team on 900 cases: kills miss 6.007 -> 5.976 (same sign in both halves); HS 3.695 -> 3.708
@@ -477,6 +482,12 @@ def grade_leg(d, cfg=CONFIG):
     if prop == "kills":                                   # fat tails: no side above the cap
         cap = cfg["p_cap_kills"]
         pm = min(max(pm, 1 - cap), cap)
+    m_o = cfg.get("over_margin", {}).get(prop, 0.0)
+    if pm > 0.5 and m_o:          # an Over is scored as if he projected m_o lower (never flips side)
+        po = p_more(line, lam_final - m_o, sd)
+        if prop == "kills":
+            po = min(max(po, 1 - cfg["p_cap_kills"]), cfg["p_cap_kills"])
+        pm = max(po, 0.5)
     m_u = cfg.get("under_margin", {}).get(prop, 0.0)
     if pm < 0.5 and m_u:          # an Under is scored as if he projected m_u higher (never flips side)
         pu = p_more(line, lam_final + m_u, sd)
