@@ -398,7 +398,9 @@ async function fetchRetry(url, tries = 4) {
     await new Promise(res => setTimeout(res, 1000 * 2 ** i));
   }
 }
-const shortDate = x => { const d = new Date(String(x) + "T12:00:00Z"); return isNaN(d) ? esc(x) : d.toLocaleDateString([], {month: "short", day: "numeric", timeZone: "UTC"}); };
+const shortDate = x => { const d = new Date(String(x) + "T12:00:00Z"); if (isNaN(d)) return esc(x);
+  const old = (Date.now() - d) > 300 * 86400000;   // older than ~10 months: show the year
+  return d.toLocaleDateString([], {month: "short", day: "numeric", year: old ? "numeric" : undefined, timeZone: "UTC"}); };
 const mapName = m => m ? m.replace(/^de_/, "").replace(/^./, c => c.toUpperCase()) : "–";
 const gClass = g => ["A+","A","A-"].includes(g) ? "g-good" : g === "B+" ? "g-bplus" : g === "B" ? "g-warn" : g === "LEAN" ? "g-scout" : "g-bad";
 const until = d => { const m = Math.round((d - Date.now()) / 60000); if (m <= 0) return m > -150 ? "started" : ""; const h = Math.floor(m / 60);
@@ -878,9 +880,9 @@ function render(d) {
     const ser = rf.series || [], over = x => x.total > g.line;
     const hhs = sc === "1" ? map1(hh?.series) : (hh?.series || []);
     const chip = (lab, k, n) => n ? `<div class="rate ${k / n >= .6 ? "hi" : k / n <= .4 ? "lo" : ""}"><b>${k}/${n}</b><span>${lab}</span></div>` : "";
-    const l5 = ser.slice(0, 5), hs2 = hhs;
+    const l5 = ser.slice(0, 5), hs2 = hhs.filter(x => x.same_roster !== false && !x.regional);   // what the grade counts
     const r = chip("Last 5", l5.filter(over).length, l5.length) + chip("Last 10", ser.filter(over).length, ser.length)
-      + chip("H2H", hs2.filter(over).length, hs2.length);
+      + chip(hhs.some(x => x.same_roster === false) ? "H2H same roster" : "H2H", hs2.filter(over).length, hs2.length);
     if (r && "p_more" in g && cmpLine != null) h += `<div class="rates">${r}</div>`;
   }
   if ("p_more" in g) h += `<div class="actions"><button type="button" class="chipbtn" data-act="slip" style="border-color:var(--accent)">+ Add to slip</button><button type="button" class="chipbtn" data-act="copy">Copy pick</button>
@@ -930,7 +932,9 @@ function render(d) {
   h += `</section>`;
 
   // ---- H2H
-  h += `<section class="card"><h2>Head-to-head vs ${esc(hh?.opponent_query || nm?.opponent || "opponent")}${hh?.hit_rate != null && sc === "12" ? ` · ${pct(hh.hit_rate,0)} over ${hh.line}` : sc !== "12" ? ` · Maps 1–2 totals` : ""}</h2>`;
+  h += `<section class="card"><h2>Head-to-head vs ${esc(hh?.opponent_query || nm?.opponent || "opponent")}${(() => { if (sc !== "12") return " · Maps 1–2 totals"; const cnt = (hh?.series || []).filter(x => x.same_roster !== false && !x.regional);
+      if (!cnt.length) return ""; const o = cnt.filter(x => x.total > g.line).length;
+      return ` · over ${g.line} in ${o}/${cnt.length}${(hh.series || []).some(x => x.same_roster === false) ? " vs this roster" : ""}`; })()}</h2>`;
   if (d.regional_note) h += `<div class="small muted" style="margin-bottom:8px">${esc(d.regional_note)}</div>`;
   if (hh?.series?.length) {
     h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th>Maps 1–2</th><th class="num">${g.prop === "hs" ? "HS" : "Kills"}</th><th>Team result</th><th>Prop</th></tr></thead><tbody>`;
