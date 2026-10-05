@@ -46,8 +46,15 @@ def parse(body):
             continue
         stat = (ln.get("over_under") or {}).get("appearance_stat") or {}
         label = (stat.get("display_stat") or "").lower()
-        if "map" in label and not re.search(r"maps?\s*1\s*[+\-&]\s*2", label):
-            continue                                   # Maps 1+2 only (what the grader grades)
+        code = (stat.get("stat") or "").lower()
+        # Maps 1+2 only (what the grader grades). Underdog's stat code is exact ("kills_on_maps_1_2");
+        # a "Maps 1+2+3" / "Maps 1-3" line must never be graded as Maps 1-2.
+        if code:
+            if "map" in code and not re.search(r"maps?_1_2$", code):
+                continue
+        elif "map" in label and (not re.search(r"maps?\s*1\s*[+\-&]\s*2", label)
+                                 or re.search(r"[+\-&]\s*3|1\s*-\s*3", label)):
+            continue
         prop = "hs" if "headshot" in label else "kills" if "kill" in label else None
         app = apps.get(stat.get("appearance_id"))
         try:
