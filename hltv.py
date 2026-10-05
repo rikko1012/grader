@@ -510,6 +510,12 @@ def _loose(s):
     return _norm(s).translate(_LOOSE)
 
 
+def team_of(nick):
+    """His latest team in HLTV's player list (index), or None."""
+    k = _norm(nick)
+    return next((r["team"] for r in _INDEX["rows"] if r["key"] == k), None)
+
+
 def canonical_nick(q):
     """The real HLTV nick for a typed name (exact, then loose match; most active player first)."""
     rows = _INDEX["rows"]

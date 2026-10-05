@@ -289,10 +289,10 @@ def board_forever():
                 try:
                     if MEMBER_GRADES[0] > 0:              # members still busy: one board grade at a time
                         with _BOARD_BUSY:
-                            res = cs2_scout.grade(r["player"], r["line"], r["prop"], "standard", scope=r.get("scope") or "12",
+                            res = cs2_scout.grade(r["player"], r["line"], r["prop"], "standard", scope=r.get("scope") or "12", team_hint=r.get("team"),
                                                   faceit_key=faceit_key(), background=True, light=True)
                     else:
-                        res = cs2_scout.grade(r["player"], r["line"], r["prop"], "standard", scope=r.get("scope") or "12", faceit_key=faceit_key(),
+                        res = cs2_scout.grade(r["player"], r["line"], r["prop"], "standard", scope=r.get("scope") or "12", team_hint=r.get("team"), faceit_key=faceit_key(),
                                               background=True, light=True)
                     if res.get("error"):
                         BOARD[r["id"]] = {"at": time.time(), "state": "NOT FOUND", "reason": res["error"]}

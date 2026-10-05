@@ -366,6 +366,36 @@ def recent_form(rows, window_kpr, line=None, stat="kills"):
     return out
 
 
+def _pick_namesake(b, exact, team_hint):
+    """Several players share the nickname: the one on the team the line lists (Underdog), else his
+    latest HLTV team (HLTV first - the official record), else the one whose team plays soon, else
+    None (first search hit)."""
+    teams = {}
+    for h in exact[:4]:
+        try:
+            teams[h["slug"]] = ((b.player(h["slug"]).get("team") or {}).get("name") or "")
+        except Exception:
+            teams[h["slug"]] = ""
+    if not team_hint:
+        try:
+            import hltv
+            team_hint = hltv.team_of(exact[0].get("nickname"))
+        except Exception:
+            team_hint = None
+    if team_hint:
+        for sl, t in teams.items():
+            if t and name_match(team_hint, t) >= 2 or (t and (norm(t) in norm(team_hint) or norm(team_hint) in norm(t))):
+                return sl
+    try:
+        playing = {norm(x) for m in _slate_raw(b, 72) for x in ((m.get("team1") or {}).get("name"), (m.get("team2") or {}).get("name")) if x}
+        for sl, t in teams.items():
+            if t and norm(t) in playing:
+                return sl
+    except Exception:
+        pass
+    return None
+
+
 def run_player(b, name, args):
     hits = b.search_players(name, 10).get("results") or []
     if not hits and re.sub(r"[\W_]+$|^[\W_]+", "", name) != name:   # Underdog's "m0NESY-"
@@ -385,6 +415,8 @@ def run_player(b, name, args):
     elif hits:
         exact = [h for h in hits if norm(h.get("nickname")) == norm(name)]
         slug = (exact or hits)[0]["slug"]
+        if len(exact) > 1:                         # two pros with this name (JBa): pick by team
+            slug = _pick_namesake(b, exact, getattr(args, "team_hint", None)) or slug
     else:
         raise LookupError(f"no pro player called '{name}' on BO3.gg - check the spelling")
     p = b.player(slug)
@@ -1229,7 +1261,7 @@ def main():
 
 
 def grade(name, line, prop="kills", line_type="standard", slug=None, faceit_key=None, ttl=12,
-          background=False, match=None, opponent=None, light=False, scope="12"):
+          background=False, match=None, opponent=None, light=False, scope="12", team_hint=None):
     """One-call entry point for the web interface: everything 'full' does, returned as a dict.
     background=True (pre-loading) gives way to member look-ups."""
     args = argparse.Namespace(
@@ -1237,12 +1269,12 @@ def grade(name, line, prop="kills", line_type="standard", slug=None, faceit_key=
         prop=prop, line_type=line_type, team_ml=None, opp_ml=None, faceit=None,
         faceit_key=faceit_key or os.environ.get("FACEIT_API_KEY"), n=20, refresh=False, ttl=ttl,
         match=match, member_opponent=(opponent or "").strip() or None, light=light,
-        scope=scope if scope in ("12", "123", "1") else "12")
+        scope=scope if scope in ("12", "123", "1") else "12", team_hint=team_hint)
     args.opponent = args.member_opponent
     # Shared context (stats, match, maps, odds, H2H series, FACEIT, CS API) is the same for every
     # line and prop of a player: built once, reused for CONTEXT_TTL seconds - a new line only
     # redoes finish_line(). Keeps hundreds of members on the same slate cheap.
-    ckey = ((name or "").strip().lower(), (slug or "").lower(), match, (args.member_opponent or "").lower(),
+    ckey = ((name or "").strip().lower(), (slug or "").lower(), match, (args.member_opponent or "").lower(), norm(team_hint or ""),
             bool(args.faceit_key))     # shared by member grades and the board (same data)
     hit = _CONTEXT.get(ckey)
     t0 = time.time()

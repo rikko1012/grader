@@ -511,14 +511,15 @@ function shareUrl(d) {
 function remember(d) {
   const g = d.grade || {}, v = d.verdict || {}, nick = d.player_block?.player?.nick;
   if (!nick || !("p_more" in g)) return;
-  const h = store.get("cs2s_hist", []).filter(x => !(x.p === nick && x.l === g.line && x.t === g.prop && x.lt === g.line_type));
-  h.unshift({p: nick, l: g.line, t: g.prop, lt: g.line_type, g: v.grade, s: v.side, u: v.units, pc: v.p, at: Date.now()});
+  const sc = g.scope || "12";
+  const h = store.get("cs2s_hist", []).filter(x => !(x.p === nick && x.l === g.line && x.t === g.prop && x.lt === g.line_type && (x.sc || "12") === sc));
+  h.unshift({p: nick, l: g.line, t: g.prop, lt: g.line_type, sc, g: v.grade, s: v.side, u: v.units, pc: v.p, at: Date.now()});
   store.set("cs2s_hist", h.slice(0, 20)); showRecent();
 }
 function showRecent() {
   const h = store.get("cs2s_hist", []);
   $("#recent").innerHTML = h.length ? `<span class="small muted" style="align-self:center">Recent:</span>` + h.map((x, i) =>
-    `<button type="button" class="chipbtn" data-hist="${i}">${esc(x.p)} ${x.l} ${propWord(x.t)}${x.lt && x.lt !== "standard" ? " " + x.lt : ""} · <b>${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : `${esc(x.g)} ${esc(x.s)}`}</b></button>`).join("")
+    `<button type="button" class="chipbtn" data-hist="${i}">${esc(x.p)} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${x.lt && x.lt !== "standard" ? " " + x.lt : ""} · <b>${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : `${esc(x.g)} ${esc(x.s)}`}</b></button>`).join("")
     + `<button type="button" class="chipbtn" data-act="clearhist" title="Clear recent">✕</button>` : "";
 }
 function gradeNow(p, l, t, lt, sc) {
@@ -528,7 +529,7 @@ function gradeNow(p, l, t, lt, sc) {
 let lastCard = null;
 document.addEventListener("click", e => {
   const hb = e.target.closest("[data-hist]");
-  if (hb) { const x = store.get("cs2s_hist", [])[+hb.dataset.hist]; if (x) gradeNow(x.p, x.l, x.t, x.lt); return; }
+  if (hb) { const x = store.get("cs2s_hist", [])[+hb.dataset.hist]; if (x) gradeNow(x.p, x.l, x.t, x.lt, x.sc); return; }
   const a = e.target.closest("[data-act]"); if (!a) return;
   const act = a.dataset.act;
   if (act === "clearhist") { store.set("cs2s_hist", []); try { history.replaceState(null, "", location.pathname); } catch {} return showRecent(); }
@@ -799,17 +800,17 @@ $("#brefresh").onclick = () => loadBoard(true);
 
 function chart(series, line, proj) {
   const s = [...series].reverse(), W = 640, H = 190, top = 22, bot = 26, n = s.length;
-  const max = Math.max(...s.map(x => x.total), line, proj || 0) * 1.12 || 1;
+  const max = Math.max(...s.map(x => x.total), line || 0, proj || 0) * 1.12 || 1;
   const y = v => top + (H - top - bot) * (1 - v / max), bw = Math.min(46, (W - 20) / n * 0.62), step = (W - 20) / n;
   let o = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Last ${n} matches against the line">`;
   s.forEach((x, i) => {
-    const cx = 10 + step * i + step / 2, yy = y(x.total), c = x.total > line ? "var(--good)" : "var(--bad)";
+    const cx = 10 + step * i + step / 2, yy = y(x.total), c = line == null ? "var(--accent)" : x.total > line ? "var(--good)" : "var(--bad)";
     o += `<rect x="${cx - bw / 2}" y="${yy}" width="${bw}" height="${Math.max(H - bot - yy, 2)}" rx="5" fill="${c}" opacity=".85"/>`
       + `<text class="val" x="${cx}" y="${yy - 6}" text-anchor="middle">${x.total}</text>`
       + `<text x="${cx}" y="${H - 8}" text-anchor="middle">${esc(String(x.opponent || "").slice(0, 7))}</text>`;
   });
   if (proj) o += `<line class="pj" x1="0" x2="${W}" y1="${y(proj)}" y2="${y(proj)}"/>`;
-  o += `<line class="ln" x1="0" x2="${W}" y1="${y(line)}" y2="${y(line)}"/><text class="lnl" x="${W - 4}" y="${y(line) - 5}" text-anchor="end">Line ${line}</text>`;
+  if (line != null) o += `<line class="ln" x1="0" x2="${W}" y1="${y(line)}" y2="${y(line)}"/><text class="lnl" x="${W - 4}" y="${y(line) - 5}" text-anchor="end">Line ${line}</text>`;
   return o + `</svg>`;
 }
 
@@ -818,7 +819,15 @@ function render(d) {
   const g = d.grade || {}, v = d.verdict || {}, pb = d.player_block || {}, o = pb.overall || {};
   const nm = d.next_match, od = d.odds, hh = d.h2h, fc = d.faceit, det = g.detail || {};
   const stat = g.prop === "hs" ? "headshots" : "kills";
-  const rf = pb.recent_form || {};
+  const sc = g.scope || "12", scLab = sc === "123" ? "Maps 1–3" : sc === "1" ? "Map 1" : "Maps 1–2";
+  const map1 = ser => (ser || []).filter(x => x.values?.[0] != null).map(x => ({...x, total: x.values[0], values: [x.values[0]], maps: (x.maps || []).slice(0, 1)}));
+  const rf = (() => { const r0 = pb.recent_form || {};
+    if (sc !== "1" || !r0.series) return r0;
+    const ser = map1(r0.series), tot = ser.map(x => x.total).sort((a, b) => a - b), n = ser.length;
+    const overs = ser.filter(x => x.total > g.line).length;
+    return {...r0, series: ser, overs, hit_rate: n ? overs / n : null, avg_total: n ? +(tot.reduce((a, b) => a + b, 0) / n).toFixed(1) : null,
+            median_total: n ? (tot[(n - 1) >> 1] + tot[n >> 1]) / 2 : null}; })();
+  const cmpLine = sc === "123" ? null : g.line;   // Maps 1-3: no Maps 1-3 record to compare
   // edge and the vig note follow the side we recommend (More when nothing is playable)
   const edgeSide = v.side || "More";
   const implied = g.market?.pp_implied_more;
@@ -867,11 +876,12 @@ function render(d) {
   }
   {
     const ser = rf.series || [], over = x => x.total > g.line;
+    const hhs = sc === "1" ? map1(hh?.series) : (hh?.series || []);
     const chip = (lab, k, n) => n ? `<div class="rate ${k / n >= .6 ? "hi" : k / n <= .4 ? "lo" : ""}"><b>${k}/${n}</b><span>${lab}</span></div>` : "";
-    const l5 = ser.slice(0, 5), hs2 = hh?.series || [];
+    const l5 = ser.slice(0, 5), hs2 = hhs;
     const r = chip("Last 5", l5.filter(over).length, l5.length) + chip("Last 10", ser.filter(over).length, ser.length)
       + chip("H2H", hs2.filter(over).length, hs2.length);
-    if (r && "p_more" in g) h += `<div class="rates">${r}</div>`;
+    if (r && "p_more" in g && cmpLine != null) h += `<div class="rates">${r}</div>`;
   }
   if ("p_more" in g) h += `<div class="actions"><button type="button" class="chipbtn" data-act="slip" style="border-color:var(--accent)">+ Add to slip</button><button type="button" class="chipbtn" data-act="copy">Copy pick</button>
     <button type="button" class="chipbtn" data-act="link">Copy link</button>
@@ -907,25 +917,26 @@ function render(d) {
   h += `</section>`;
 
   // ---- recent form: last 10 matches, Maps 1-2
-  h += `<section class="card"><h2>Last ${rf.matches ?? 10} matches · Maps 1–2${rf.hit_rate != null ? ` · over ${g.line} in ${rf.overs}/${rf.matches} (${pct(rf.hit_rate,0)})` : ""}</h2>`;
+  h += `<section class="card"><h2>Last ${rf.matches ?? 10} matches · ${sc === "123" ? "Maps 1–2" : scLab}${cmpLine != null && rf.hit_rate != null ? ` · over ${g.line} in ${rf.overs}/${rf.series?.length ?? rf.matches} (${pct(rf.hit_rate,0)})` : ""}</h2>`
+    + (sc === "123" ? `<div class="small muted" style="margin:-4px 0 8px">His Maps 1–2 totals, for form – this line also counts map 3 when the series goes 1–1.</div>` : "");
   if (rf.series?.length) {
-    h += chart(rf.series, g.line, g.lambda_final);
-    h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th>Maps 1–2</th><th class="num">${g.prop === "hs" ? "HS" : "Kills"}</th><th>Team result</th><th>Prop</th></tr></thead><tbody>`;
+    h += chart(rf.series, cmpLine, sc === "123" ? null : g.lambda_final);
+    h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th>${sc === "1" ? "Map 1" : "Maps 1–2"}</th><th class="num">${g.prop === "hs" ? "HS" : "Kills"}</th><th>Team result</th><th>Prop</th></tr></thead><tbody>`;
     for (const s of rf.series) h += `<tr><td class="num" style="text-align:left">${shortDate(s.date)}</td><td>${esc(s.opponent)}${s.source ? `<span class="src" title="Numbers from HLTV">H</span>` : ""}</td>
       <td class="small">${s.maps.map(mapName).join('<span class="dot"> · </span>')}</td><td class="num"><span class="parts">${s.values.join(" + ")} = </span><b>${s.total}</b></td>
-      <td>${esc(s.result)}</td><td class="${s.total > g.line ? "hit" : "miss"}">${s.total > g.line ? "Over" : "Under"}</td></tr>`;
-    h += `</tbody></table></div><div class="small muted" style="margin-top:8px">Average ${rf.avg_total} · median ${rf.median_total} ${stat} on Maps 1–2${rf.series.some(x => x.source) ? ` · <span class="src" style="vertical-align:baseline">H</span> = numbers from HLTV` : ""}</div>`;
+      <td>${esc(s.result)}</td>${cmpLine == null ? `<td class="muted">–</td>` : `<td class="${s.total > g.line ? "hit" : "miss"}">${s.total > g.line ? "Over" : "Under"}</td>`}</tr>`;
+    h += `</tbody></table></div><div class="small muted" style="margin-top:8px">Average ${rf.avg_total} · median ${rf.median_total} ${stat} on ${sc === "1" ? "Map 1" : "Maps 1–2"}${rf.series.some(x => x.source) ? ` · <span class="src" style="vertical-align:baseline">H</span> = numbers from HLTV` : ""}</div>`;
   } else h += `<div class="muted">No recent matches with two maps.</div>`;
   h += `</section>`;
 
   // ---- H2H
-  h += `<section class="card"><h2>Head-to-head vs ${esc(hh?.opponent_query || nm?.opponent || "opponent")}${hh?.hit_rate != null ? ` · ${pct(hh.hit_rate,0)} over ${hh.line}` : ""}</h2>`;
+  h += `<section class="card"><h2>Head-to-head vs ${esc(hh?.opponent_query || nm?.opponent || "opponent")}${hh?.hit_rate != null && sc === "12" ? ` · ${pct(hh.hit_rate,0)} over ${hh.line}` : sc !== "12" ? ` · Maps 1–2 totals` : ""}</h2>`;
   if (d.regional_note) h += `<div class="small muted" style="margin-bottom:8px">${esc(d.regional_note)}</div>`;
   if (hh?.series?.length) {
     h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th>Maps 1–2</th><th class="num">${g.prop === "hs" ? "HS" : "Kills"}</th><th>Team result</th><th>Prop</th></tr></thead><tbody>`;
     for (const s of hh.series) h += `<tr><td class="num" style="text-align:left">${shortDate(s.date)}</td><td>${esc(s.opponent)}${s.regional ? `<span class="src" title="Same-region team">R</span>` : ""}${s.same_roster === false ? ` <span class="pill" style="margin:0;padding:1px 7px" title="Opponent had a different roster then (${s.roster_overlap} of today's players) - not counted in the grade">old roster</span>` : ""}</td>
       <td class="small">${s.maps.map(mapName).join('<span class="dot"> · </span>')}</td><td class="num"><span class="parts">${s.values.join(" + ")} = </span><b>${s.total}</b></td>
-      <td>${esc(s.result)}</td><td class="${s.total > g.line ? "hit" : "miss"}">${s.total > g.line ? "Over" : "Under"}</td></tr>`;
+      <td>${esc(s.result)}</td>${sc !== "12" ? `<td class="muted">–</td>` : `<td class="${s.total > g.line ? "hit" : "miss"}">${s.total > g.line ? "Over" : "Under"}</td>`}</tr>`;
     h += `</tbody></table></div>`;
   } else h += `<div class="muted">No previous series found.</div>`;
   h += `</section>`;
