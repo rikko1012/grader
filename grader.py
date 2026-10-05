@@ -47,10 +47,9 @@ CONFIG = {
     # 0.5 -> 0.7 on 2026-10-02 with Oct 1-2 settled (235 props, 4 days, each day held out):
     # log-loss better on 3 of 4 days (0.6859 -> 0.6809), bets 57/96 -> 66/110. Rounds-by-closeness
     # and a wider spread were also tried and not chosen.
-    # 0.7 -> 0.3 on 2026-10-05: 833 real lines Oct 2-4, each day held out, chose 0-0.3 every day
-    # (last-10 average 2+ above the line: player finished 1.7 under the projection - the line
-    # already prices recent form). Kept at 0.3 so last 10 still counts (owner).
-    "last10_weight": 0.3,
+    # 0.3 was tried 2026-10-05 and reverted the same day: it cut playable board lines by more than
+    # half (HS bets 30 -> 13). Owner: more accurate grades, never fewer playable ones.
+    "last10_weight": 0.7,
     # H2H: same-roster meetings only (opponent kept 4+ of today's 5), weight 0.25, 1-year half-life.
     # HLTV year test (6,122 later results with earlier meetings): roster-matched H2H cut the miss
     # 6.1362 -> 6.1317 (twice the gain of counting every meeting); weight 0.25 / half-life 365 fitted.
