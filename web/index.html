@@ -943,14 +943,11 @@ function render(d) {
   h += `<section class="card"><h2>Head-to-head vs ${esc(hh?.opponent_query || nm?.opponent || "opponent")}${(() => { if (sc !== "12") return " · Maps 1–2 totals"; const cnt = (hh?.series || []).filter(x => x.same_roster !== false && !x.regional);
       if (!cnt.length) return ""; const o = cnt.filter(x => x.total > g.line).length;
       return ` · over ${g.line} in ${o}/${cnt.length}${(hh.series || []).some(x => x.same_roster === false) ? " vs this roster" : ""}`; })()}</h2>`;
-  const hx = (hh?.series || []).filter(x => !x.regional), hr = (hh?.series || []).filter(x => x.regional);
-  if (hr.length) {      // other teams from the opponent's region: context only (not in the grade), one line
-    const avg = hr.reduce((a, x) => a + x.total, 0) / hr.length;
-    h += `<div class="small muted" style="margin-bottom:8px">Vs other ${esc((d.regional_note || "").match(/other (.+?) teams/)?.[1] || "same-region")} teams (not in the grade): ${hr.length} series, avg ${avg.toFixed(1)}${sc === "12" ? ` · over ${g.line} in ${hr.filter(x => x.total > g.line).length}/${hr.length}` : ""}</div>`;
-  }
+  const hx = hh?.series || [];      // exact meetings and same-region teams (labelled "regional")
+  if (d.regional_note) h += `<div class="small muted" style="margin-bottom:8px">${esc(d.regional_note)}</div>`;
   if (hx.length) {
     h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th>Maps 1–2</th><th class="num">${g.prop === "hs" ? "HS" : "Kills"}</th><th>Team result</th><th>Prop</th></tr></thead><tbody>`;
-    for (const s of hx) h += `<tr><td class="num" style="text-align:left">${shortDate(s.date)}</td><td>${esc(s.opponent)}${s.same_roster === false ? ` <span class="pill" style="margin:0;padding:1px 7px" title="Opponent had a different roster then (${s.roster_overlap} of today's players) - not counted in the grade">old roster</span>` : ""}</td>
+    for (const s of hx) h += `<tr><td class="num" style="text-align:left">${shortDate(s.date)}</td><td>${esc(s.opponent)}${s.regional ? ` <span class="pill" style="margin:0;padding:1px 7px" title="Same-region team - shown for context, not counted in the grade">regional</span>` : ""}${s.same_roster === false && !s.regional ? ` <span class="pill" style="margin:0;padding:1px 7px" title="Opponent had a different roster then (${s.roster_overlap} of today's players) - not counted in the grade">old roster</span>` : ""}</td>
       <td class="small">${s.maps.map(mapName).join('<span class="dot"> · </span>')}</td><td class="num"><span class="parts">${s.values.join(" + ")} = </span><b>${s.total}</b></td>
       <td>${esc(s.result)}</td>${sc !== "12" ? `<td class="muted">–</td>` : `<td class="${s.total > g.line ? "hit" : "miss"}">${s.total > g.line ? "Over" : "Under"}</td>`}</tr>`;
     h += `</tbody></table></div>`;
