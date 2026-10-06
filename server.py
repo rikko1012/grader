@@ -264,7 +264,30 @@ def board_payload():
                                                      "nick", "state", "edge", "l10_over", "l10_n", "l10_avg",
                                                      "hs_pct", "p_win", "market", "team_name", "opp_name")}))
         rows[-1]["scope"] = r.get("scope") or "12"
+    _cap_same_result(rows)
     return {"updated": b["at"], "error": b["error"], "rows": rows, "total": len(b["rows"])}
+
+
+SAME_RESULT_CAP = 1.5   # units, all bets that need the same team to do well (Overs) / badly (Unders) in one match
+
+
+def _cap_same_result(rows):
+    """Bets on several players of one team, same side, in one match are one bet on that match's result
+    (an upset or an overtime sinks them all). Their units together are capped at SAME_RESULT_CAP.
+    Real lines Oct 2-6: total +15.75U on 236U staked -> +13.85U on 151U, worst day -6.8U -> -0.4U."""
+    groups = {}
+    for r in rows:
+        if (r.get("units") or 0) > 0:
+            groups.setdefault((r.get("matchup"), r.get("start"), r.get("team"), r.get("side")), []).append(r)
+    for lst in groups.values():
+        tot = sum(r["units"] for r in lst)
+        if tot <= SAME_RESULT_CAP:
+            continue
+        f = SAME_RESULT_CAP / tot
+        for r in lst:
+            r["units_full"] = r["units"]
+            r["units"] = round(max(0.05, round(r["units"] * f / 0.05) * 0.05), 2)
+            r["cap_n"] = len(lst)
 
 
 REQ_TIMES = collections.deque(maxlen=300)   # member grade requests, step by step (admin timings)

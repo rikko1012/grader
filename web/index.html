@@ -782,7 +782,7 @@ function drawBoard() {
           ${st("Proj", r.proj != null ? num(r.proj, 1) : "–")}
           ${st("Edge", r.edge == null ? "–" : (r.edge > 0 ? "+" : "") + r.edge, r.edge == null ? "" : r.edge > 0 ? "up" : "dn")}
           ${st("Last 10", r.l10_n ? `${r.l10_over}/${r.l10_n}` : "–", "", r.l10_avg != null ? "avg " + r.l10_avg : "").replace('class="s"', 'class="s keep"')}
-          ${st("Units", r.units != null ? r.units + "U" : "–", (r.units || 0) > 0 ? "up" : "")}
+          ${st("Units", r.units != null ? +(+r.units).toFixed(2) + "U" : "–", (r.units || 0) > 0 ? "up" : "", r.cap_n ? `capped · ${r.cap_n} picks same result` : "").replace('class="s"', r.cap_n ? `class="s keep" title="${r.cap_n} bets on this board need ${esc(r.team_name || r.team)} to ${r.side === "More" ? "do well" : "do badly"} in this match – one upset or overtime decides them all, so together they're capped at 1.5U (full size ${r.units_full}U)"` : 'class="s"')}
           ${st("HS%", r.hs_pct != null ? Math.round(r.hs_pct) + "%" : "–", "", "3 months")}
           ${st("Team win %", win, "", "betting odds")}
         </div>

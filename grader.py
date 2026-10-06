@@ -87,6 +87,8 @@ CONFIG = {
     # Spirit at 13%) it piled correlated Unders on underdog players. Real lines Oct 2-6: removing it
     # log-loss 0.7112 -> 0.7083, +9.5U -> +15.75U, Oct 6 -12.5U -> -6.8U, Over bets 71 -> 102 (all of Oct 6 settled).
     "dog_drop": 0.0,
+    "gap_trust_at": {"kills": 2.5, "hs": 1.5},
+    "gap_trust_keep": 0.5,
     "matchup_slope": 0.15,       # extra matchup shift (see grade_leg)
     "elite_k": 0.5,
     "rank_band_w": 0.5, "rank_band_k": 20,   # vs similar-rank teams (see grade_leg)              # extra vs a top-10 opponent (VRS rank from HLTV), same data          # heavy-underdog extra (see grade_leg), fitted on HLTV player-maps
@@ -502,6 +504,18 @@ def grade_leg(d, cfg=CONFIG):
             return ((1 - p3) * p_more(line, a, math.sqrt(max(a, 1)) * c * sd_mult)
                     + p3 * p_more(line, b, math.sqrt(max(b, 1)) * c * sd_mult))
         return p_more(line, lam_final + shift, sd)
+    # Big disagreements with the line: past gap_trust_at kills/HS only gap_trust_keep of the extra counts
+    # (2026-10-07: on 1,193 real lines Oct 2-6 the books were right more often than not when we
+    # disagreed by 2.5+ kills - A- printed 70% but hit 26/62. Chosen on every held-out day; with half:
+    # log-loss 0.7083 -> 0.7031, playable bets 489 -> 483, A- 20/29).
+    gt = cfg["gap_trust_at"]["hs" if prop == "hs" else "kills"] * min(scale, 1.2)
+    gap = lam_final - (line + 0.5)
+    if abs(gap) > gt:
+        shift = math.copysign(gt + (abs(gap) - gt) * cfg["gap_trust_keep"], gap) - gap
+        flags.append(f"Projection {lam_final:.1f} is {abs(gap):.1f} from the line - past {gt:.1f} only half counts "
+                     f"(books are usually closer on big disagreements): {lam_final + shift:.1f}")
+        lam_final += shift
+        lam12 += shift
     pm = pmore()
     if prop == "kills":                                   # fat tails: no side above the cap
         cap = cfg["p_cap_kills"]
