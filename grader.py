@@ -72,8 +72,10 @@ CONFIG = {
     # by team on 900 cases: kills miss 6.007 -> 5.976 (same sign in both halves); HS 3.695 -> 3.708
     # (no signal) -> weight 0 on headshots. Heavy traders score slightly fewer kills than KPR says.
     "trade_beta_kills": -0.129, "trade_mean": 0.1283,
-    "regional_weight": 0.0,      # 2026-09-28: tested on 847 cases (team-split): kills best weight 0 in both
-                                 # halves; HS held-out miss 3.695 -> 3.721 (worse). Always shown, weight 0.
+    # owner 2026-10-06: same-region series count (players play the same vs teams from one scene).
+    # Real lines Oct 2-5 (1,040 props, 604 with regional series): weight 0.1 log-loss 0.7036 -> 0.7031,
+    # playable bets 423 -> 424, every day positive; 0.25+ brought losing days back.
+    "regional_weight": 0.1,       # (2026-09-28 HLTV team-split test had chosen 0 - superseded)
     "h2h_half": 365,             # H2H series weight = exp(-days_old / 365)
     "h2h_full_maps": 8,          # size weight = min(maps / 8, 1)
     "h2h_cap": {"kills": 3.0, "hs": 2.0},
