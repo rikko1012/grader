@@ -546,6 +546,30 @@ def search_players(q, limit=8):
             for r in (starts + has)[:limit]]
 
 
+def team_country(name):
+    """(code, country name) of a team's flag on HLTV (hltv-scraper teams.country), or None.
+    The whole table is cached for an hour; None until the scraper has stored countries."""
+    key = ("countries",)
+    with _LOCK:
+        hit = _CACHE.get(key)
+    if not hit or time.time() - hit[0] > 3600:
+        out = {}
+        try:
+            con = _connect()
+            try:
+                with con.cursor() as cur:
+                    cur.execute("SELECT name, country, country_name FROM teams WHERE country IS NOT NULL OR country_name IS NOT NULL")
+                    out = {_norm(n): (c, cn) for n, c, cn in cur.fetchall()}
+            finally:
+                con.close()
+        except Exception:
+            out = {}
+        with _LOCK:
+            _CACHE[key] = (time.time(), out)
+        hit = (time.time(), out)
+    return hit[1].get(_norm(name)) if name else None
+
+
 def team_ranks():
     """{normalized team name: latest VRS rank} for every ranked team (cached 1 hour)."""
     key = ("ranks",)

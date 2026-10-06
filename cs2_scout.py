@@ -604,10 +604,25 @@ def _nationality(b, team_slug):
     from one region in regions.csv, = the team is from there. Mixed rosters get no tag (rule
     doesn't apply). Nothing is inferred - a player with no country on record doesn't count."""
     try:
-        roster = [p for p in (b.team(team_slug).get("players") or []) if not p.get("is_coach")]
+        td = b.team(team_slug)
+        roster = [p for p in (td.get("players") or []) if not p.get("is_coach")]
     except Exception:
         return None
     regions = load_regions()
+    try:                                       # HLTV first: the team's own flag (hltv-scraper teams.country)
+        import hltv
+        hc = hltv.team_country(td.get("name"))
+    except Exception:
+        hc = None
+    if hc and (hc[0] or hc[1]):
+        code, cname = (hc[0] or "").upper(), hc[1] or ""
+        if len(code) == 2 and code not in ("EU", "WW", "UN"):
+            key = regions.get(code, code)
+            return {"id": key, "label": key if code in regions else (cname or code), "source": "HLTV flag",
+                    "roster": [((p.get("country") or {}).get("code") or "?").upper() for p in roster]}
+        if cname and "cis" in cname.lower() and regions.get("RU"):
+            return {"id": regions["RU"], "label": regions["RU"], "source": "HLTV flag", "roster": []}
+        return {"id": None, "label": f"international team ({cname or code})", "source": "HLTV flag", "roster": []}
     counts, names, codes = {}, {}, []
     for p in roster:
         c = p.get("country") or {}
