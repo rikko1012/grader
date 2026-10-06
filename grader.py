@@ -49,7 +49,10 @@ CONFIG = {
     # and a wider spread were also tried and not chosen.
     # 0.3 was tried 2026-10-05 and reverted the same day: it cut playable board lines by more than
     # half (HS bets 30 -> 13). Owner: more accurate grades, never fewer playable ones.
-    "last10_weight": 0.7,
+    # 0.7 -> 0.3 on 2026-10-07 together with the star / rust / hot-form fixes: last 10 at 70%+ over
+    # the line went over only 47% (we said Over on 79%). With the fixes the board has MORE playable
+    # lines than before (483 -> 582 on Oct 2-6), so this no longer thins the board.
+    "last10_weight": 0.3,
     # H2H: same-roster meetings only (opponent kept 4+ of today's 5), weight 0.25, 1-year half-life.
     # HLTV year test (6,122 later results with earlier meetings): roster-matched H2H cut the miss
     # 6.1362 -> 6.1317 (twice the gain of counting every meeting); weight 0.25 / half-life 365 fitted.
@@ -66,7 +69,8 @@ CONFIG = {
     # needing +1 kill / +0.6 HS and Unders none: bets 367 -> 423, hit 49% -> 54%, +8.0U -> +25.5U,
     # every day positive (Oct 2-5: +0.5 / +2.25 / +10.75 / +12.0).
     "under_margin": {"kills": 0.0, "hs": 0.0},
-    "over_margin": {"kills": 1.0, "hs": 0.6},
+    "over_margin": {"kills": 0.5, "hs": 0.3},   # 1.0 / 0.6 until 2026-10-07 (projection fixes made it less needed)
+    "star_rating": 1.15, "star_k": 1.0, "star_cap": 0.12, "rust_drop": 0.08, "hot_k": 0.6,
     "last10_min": 5,             # need 5+ recent two-map matches to blend
     # 4c (2026-09-28, owner-approved for KILLS props only): trade kills per round. Cross-validated
     # by team on 900 cases: kills miss 6.007 -> 5.976 (same sign in both halves); HS 3.695 -> 3.708
@@ -488,6 +492,22 @@ def grade_leg(d, cfg=CONFIG):
     # units), "123" Maps 1-3 (map 3 is only played when Maps 1-2 split: expected total = Maps 1-2 +
     # P(1-1) x one more map, and the chance over the line mixes the 2-map and 3-map outcomes),
     # "1" Map 1 only (BO1 lines): one map = half the Maps 1-2 projection.
+    # What drove real props over / under (2026-10-07, 1,193 real lines Oct 2-6, each fix held out by
+    # day; together: log-loss 0.7031 -> 0.6938, playable bets 483 -> 582, +15.5U -> +32.2U, Oct 6
+    # -4.5U -> -0.5U): stars (rating 1.15+) finished 2.6 under projection, rusty players (15+ days
+    # off) 2.9 under (went over 31%), hot 3-month form 1.9 under - the line already prices a streak.
+    rt = d.get("rating")
+    if rt and rt > cfg["star_rating"]:
+        cut = min(cfg["star_cap"], cfg["star_k"] * (rt - cfg["star_rating"]))   # rating 1.25+ finished 13% under
+        lam_final *= 1 - cut
+        flags.append(f"Star (rating {rt:.2f}): projection {cut:.1%} lower - stars finished under projection on real lines")
+    if rust is not None and rust >= cfg["rust_flag_days"]:
+        lam_final *= 1 - cfg["rust_drop"]
+        flags.append(f"Rust ({rust} days since his last map): projection {cfg['rust_drop']:.0%} lower")
+    tr = d.get("form_trend")
+    if tr is not None and tr > 0:
+        lam_final *= 1 - cfg["hot_k"] * tr
+        flags.append(f"Hot form (+{tr:.0%} vs 12 months): only part of the streak counted")
     scope = d.get("scope") or "12"
     lam12, p3, lam3 = lam_final, None, lam_final / 2
     if scope == "1":

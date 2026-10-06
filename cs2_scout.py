@@ -995,6 +995,13 @@ def _hltv_context(pb, args):
         return {"found": False, "error": str(e)[:200]}
 
 
+def _form_trend(o):
+    """3-month vs 12-month kills per round (+0.08 = 8% hotter lately), None without both windows."""
+    fw = o.get("form_windows") or {}
+    k3, k12 = (fw.get("3m") or {}).get("kpr"), (fw.get("12m") or {}).get("kpr")
+    return round(k3 / k12 - 1, 3) if k3 and k12 else None
+
+
 def grader_inputs(pb, args, odds=None, hh=None):
     """Map everything into the keys grade_leg() documents."""
     o = pb["overall"]
@@ -1004,6 +1011,7 @@ def grader_inputs(pb, args, odds=None, hh=None):
         "maps_played": o.get("maps_played"), "kpr": o.get("kpr"), "hs_pct": o.get("hs_pct"),
         "sample_maps": max((w.get("maps") or 0 for w in (o.get("form_windows") or {}).values()), default=None),
         "kpr_last5": (pb.get("recent_form") or {}).get("kpr_recent"),  # last 10 matches, Maps 1-2
+        "form_trend": _form_trend(o),
         "round_swing": _hltv_swing(pb),  # HLTV via hltv.py when available, else None (no swing adjustment)
         "per_map": [{"map": m["map"], "kpr": m.get("kpr"), "hs_pct": m.get("hs_pct"), "maps_played": m.get("maps_played")}
                     for m in pb["per_map"]],
