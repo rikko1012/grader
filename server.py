@@ -268,7 +268,7 @@ def board_payload():
     return {"updated": b["at"], "error": b["error"], "rows": rows, "total": len(b["rows"])}
 
 
-SAME_RESULT_CAP = 1.5   # units, all bets that need the same team to do well (Overs) / badly (Unders) in one match
+SAME_RESULT_CAP = 3.0   # units (on the 0.5-3U scale), all bets that need the same team to do well / badly in one match
 
 
 def _cap_same_result(rows):
@@ -286,7 +286,7 @@ def _cap_same_result(rows):
         f = SAME_RESULT_CAP / tot
         for r in lst:
             r["units_full"] = r["units"]
-            r["units"] = round(max(0.05, round(r["units"] * f / 0.05) * 0.05), 2)
+            r["units"] = max(0.5, round(r["units"] * f / 0.25) * 0.25)        # quarter units, never below 0.5U
             r["cap_n"] = len(lst)
 
 
@@ -481,7 +481,7 @@ def verdict(g):
     elif g.get("form_fight"):
         why = f"FORM FIGHT - his last 10 matches disagree with the projection - no units"
     elif g.get("tape_fight"):
-        why = (f"TAPE FIGHT - model {side} {p:.0%}, but his recent record at this line disagrees - max 0.25U")
+        why = (f"TAPE FIGHT - model {side} {p:.0%}, but his recent record at this line disagrees - max 0.5U")
     elif units > 0:
         why = f"Projection {g['lambda_final']:.1f} vs {need:g} needed ({gap:+.1f} {stat})"
     else:

@@ -109,7 +109,7 @@ CONFIG = {
     # --- v7.4 (2026-09-28): market selection, not new multipliers ---
     "tape_more_max": 0.50,       # TAPE FIGHT: More lean but last-10 over-rate <= 50% -> 0 units
     "tape_less_min": 0.60,       #             Less lean but last-10 over-rate >= 60% -> 0 units
-    "tape_fight_cap": 0.25,      # 2026-09-28: TAPE FIGHT picks hit 59-66% when tested -> max 0.25U, not 0U
+    "tape_fight_cap": 0.5,       # 2026-09-28: TAPE FIGHT picks hit 59-66% when tested -> max 0.25U, not 0U
     "soft_market_cap": 1.0,      # no usable Polymarket price (SOFT/NONE) -> max 1U
     "veto_mass_min": 0.45,       # predicted maps: top-2 mass under 45% in a slot = veto uncertainty
     "rust_note_days": 8, "rust_flag_days": 15, "rust_cap_days": 29,   # days since last official map
@@ -178,8 +178,9 @@ def units_for_p(p, cap=None):
     C (<57%) is 0U: it loses in every walk-forward slice."""
     # B (57-63%) = 0.25U since 2026-09-28: after the measured win/loss fix, B hits 59.6% in the
     # walk-forward (kills and HS) vs PrizePicks' 57.7% 2-pick break-even - small edge, small stake.
-    u = (2.0 if p >= 0.80 else 1.5 if p >= 0.74 else 1.0 if p >= 0.68 else 0.5 if p >= 0.63
-         else 0.25 if p >= 0.57 else 0.1 if p >= 0.55 else 0.0)
+    # owner 2026-10-07: stakes members actually bet - whole and half units, nothing under 0.5U
+    u = (3.0 if p >= 0.80 else 2.0 if p >= 0.74 else 1.5 if p >= 0.68 else 1.0 if p >= 0.63
+         else 0.5 if p >= 0.55 else 0.0)
     return min(u, cap) if cap is not None else u
 
 
