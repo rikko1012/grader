@@ -1023,6 +1023,8 @@ function render(d) {
       const eco = hc.eco;
       if (eco) h += `<div class="kv"><span>Eco-adjusted K/D · ADR · KAST</span><span>${num(eco.ekd)} · ${num(eco.eadr, 1)} · ${num(eco.ekast, 1)}%</span></div>`;
       const rb = hc.rank_band;
+      const env = hc.environment;
+      if (env && (env.lan || env.online)) h += `<div class="kv"><span>LAN vs online <span class="muted small">· 12 months</span></span><span>${env.lan ? `LAN ${num(env.lan.kpr, 2)} KPR (${env.lan.maps} maps)` : "LAN –"} · ${env.online ? `online ${num(env.online.kpr, 2)} (${env.online.maps})` : "online –"}${env.tonight ? ` · tonight <b>${env.tonight === "lan" ? "LAN" : "online"}</b>` : ""}</span></div>`;
       if (rb && rb.maps) h += `<div class="kv"><span>Vs teams ranked #${Math.max(1, rb.opp_rank - rb.band)}–${rb.opp_rank + rb.band} <span class="muted small">(opponent #${rb.opp_rank})</span></span><span>${rb.maps} maps · ${num(rb.kpr * 22, 1)} kills/map · <span style="color:${rb.ratio >= 1 ? "var(--good)" : "var(--bad)"}">${rb.ratio >= 1 ? "+" : ""}${Math.round((rb.ratio - 1) * 100)}%</span> vs his usual${rb.teams?.length ? ` <span class="muted small">(${esc(rb.teams.slice(0, 4).join(", "))}${rb.teams.length > 4 ? "…" : ""})</span>` : ""}</span></div>`;
       const rk = hc.ranking;
       if (rk) h += `<div class="kv"><span>Team VRS rank</span><span>#${rk.rank}${rk.change ? ` (${rk.change > 0 ? "▲" : "▼"}${Math.abs(rk.change)} in 4 weeks)` : ""}</span></div>`;

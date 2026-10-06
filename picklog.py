@@ -81,6 +81,7 @@ def _factors(res):
     out["team_kill_share"] = pb.get("team_kill_share")
     out["opening"] = pb.get("opening")
     out["hltv"] = {k: (res.get("hltv") or {}).get(k) for k in ("rating", "round_swing", "adr", "kast", "maps")}
+    out["environment"] = (res.get("hltv_context") or {}).get("environment")   # LAN / online split (tested later)
     out["opponent_defense"] = res.get("opponent_defense")
     out["sim"] = (res.get("simulation") or {}).get("p_more")
     out["map_prediction"] = (res.get("player_block") or {}).get("map_prediction")

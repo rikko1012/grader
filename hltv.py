@@ -323,6 +323,7 @@ def context(nick, team=None, opponent=None, maps=(), bo3_last_date=None):
                 "opp_ranking": lambda: _ranking(cur, opp_id),
                 "rank_band": lambda: _rank_band(cur, ids, opp_id),
                 "next_match": lambda: _next_match(cur, team),
+                "environment": lambda: _environment(cur, ids, team),
                 "backup_source": lambda: _backup(cur, ids),
             }
             for name, fn in sections.items():
@@ -641,6 +642,38 @@ def _ranking(cur, team_id):
     then = next((r for r in rows if (now[0] - r[0]).days >= 28), None)
     return {"rank": now[1], "points": now[2], "as_of": now[0].isoformat(),
             "rank_4w_ago": then[1] if then else None, "change": (then[1] - now[1]) if then else None}
+
+
+def _environment(cur, ids, team):
+    """LAN vs online: his kills per round in each over the last 12 months (all maps) and whether
+    tonight's event is LAN (from matches already played at that event). Needs match_overview.lan
+    (hltv-scraper parser v6)."""
+    if not ids:
+        return None
+    cur.execute("""SELECT mo.lan, sum(ps.k), sum(own.score + opp.score), count(*)
+                   FROM player_stats ps JOIN match_overview mo USING (matchid)
+                   JOIN matches own ON own.matchid = ps.matchid AND own.teamid = ps.teamid AND own.mapid = ps.mapid AND own.sideid = 0
+                   JOIN matches opp ON opp.matchid = ps.matchid AND opp.teamid <> ps.teamid AND opp.mapid = ps.mapid AND opp.sideid = 0
+                   WHERE ps.playerid = ANY(%(ids)s) AND ps.sideid = 0 AND mo.date >= current_date - 365 AND mo.lan IS NOT NULL
+                   GROUP BY mo.lan""", {"ids": ids})
+    env = {}
+    for lan, k, r, n in cur.fetchall():
+        if r:
+            env["lan" if lan else "online"] = {"maps": n, "kpr": round(k / r, 3)}
+    nm = _next_match(cur, team)
+    tonight = None
+    if nm and nm.get("event"):
+        cur.execute("""SELECT lan FROM match_overview WHERE lan IS NOT NULL
+                       AND lower(regexp_replace(event, '[^a-zA-Z0-9]', '', 'g')) = %(e)s
+                       ORDER BY date DESC LIMIT 1""", {"e": _norm(nm["event"])})
+        row = cur.fetchone()
+        tonight = None if not row else ("lan" if row[0] else "online")
+    if not env and tonight is None:
+        return None
+    allk = sum(v["kpr"] * v["maps"] for v in env.values()) / max(1, sum(v["maps"] for v in env.values())) if env else None
+    side = env.get(tonight) if tonight else None
+    return {**env, "tonight": tonight, "event": (nm or {}).get("event"),
+            "ratio": round(side["kpr"] / allk, 3) if side and allk else None, "ratio_maps": side["maps"] if side else 0}
 
 
 def _next_match(cur, team):

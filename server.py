@@ -807,6 +807,23 @@ class Handler(BaseHTTPRequestHandler):
                 finally:
                     con.close()
                 return self.send(200, {"rows": rows})
+            if u.path == "/admin/hltv_env_rows" and self.authed(q.get("token")):
+                # private analysis: every player-map since `since` with LAN / online (match_overview.lan)
+                import hltv
+                con = hltv._connect()
+                try:
+                    with con.cursor() as cur:
+                        cur.execute("SET statement_timeout = 120000")
+                        cur.execute("""SELECT p.name, t.name, mo.date::text, mo.lan, mo.event, mo.matchid, ps.k, own.score + opp.score
+                                       FROM player_stats ps JOIN players p USING (playerid) JOIN teams t ON t.teamid = ps.teamid
+                                       JOIN match_overview mo ON mo.matchid = ps.matchid
+                                       JOIN matches own ON own.matchid = ps.matchid AND own.teamid = ps.teamid AND own.mapid = ps.mapid AND own.sideid = 0
+                                       JOIN matches opp ON opp.matchid = ps.matchid AND opp.teamid <> ps.teamid AND opp.mapid = ps.mapid AND opp.sideid = 0
+                                       WHERE ps.sideid = 0 AND mo.date >= %s""", (q.get("since", "2025-09-01"),))
+                        rows = cur.fetchall()
+                finally:
+                    con.close()
+                return self.send(200, {"rows": rows})
             if u.path == "/admin/hltv_team_maps" and self.authed(q.get("token")):
                 # private analysis: every map since `since` - date, event, number, map, both teams + scores
                 import hltv
