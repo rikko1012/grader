@@ -83,7 +83,10 @@ CONFIG = {
     "thin_maps": 20,             # under 20 Maps 1-2 = thin data: wider SD, 1U cap
     "map_blend_k": 12,
     "underdog_k": 1.15,
-    "dog_drop": 0.3,
+    # 0.3 (2026-10-05) -> 0 (2026-10-06): fitted on days the favourites won; with Oct 6 (1win swept
+    # Spirit at 13%) it piled correlated Unders on underdog players. Real lines Oct 2-6: removing it
+    # log-loss 0.7112 -> 0.7083, +9.5U -> +15.75U, Oct 6 -12.5U -> -6.8U, Over bets 71 -> 102 (all of Oct 6 settled).
+    "dog_drop": 0.0,
     "matchup_slope": 0.15,       # extra matchup shift (see grade_leg)
     "elite_k": 0.5,
     "rank_band_w": 0.5, "rank_band_k": 20,   # vs similar-rank teams (see grade_leg)              # extra vs a top-10 opponent (VRS rank from HLTV), same data          # heavy-underdog extra (see grade_leg), fitted on HLTV player-maps
