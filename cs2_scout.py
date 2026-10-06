@@ -812,9 +812,15 @@ def h2h_rows(b, player_block, opp_query, opp_id=None):
             if not opp_id and q and (q == norm(t.get("name")) or q == norm(t.get("slug"))):
                 return True
         return False
-    return map_rows(b, player_block["player"]["id"], player_block["_matches"], vs)
+    rows = map_rows(b, player_block["player"]["id"], player_block["_matches"], vs)
+    # the opponent must be the OTHER side: a series where he played FOR that team (ArtFr0st on
+    # Spirit in 2023) is not a meeting with it
+    rows = [r for r in rows if (r.get("opponent_id") == opp_id if opp_id else norm(r.get("opponent")) == q)]
+    cut = (date.today() - timedelta(days=H2H_DAYS)).isoformat()
+    return [r for r in rows if (r.get("date") or "") >= cut]
 
 
+H2H_DAYS = 365      # head-to-head: last 12 months only (owner 2026-10-06: older meetings are too far back)
 SAME_ROSTER = 4   # past meeting counts only if the opponent fielded 4+ of today's players (HLTV year test)
 
 
