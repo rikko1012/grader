@@ -231,6 +231,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
   .card{padding:14px} .card h2{font-size:13.5px}
   #board > div:first-child{gap:8px} #bsort{flex:1 1 150px} #brefresh{padding:7px 10px}
 }
+.ladder{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px}.ladder .chipbtn{padding:5px 9px;font-size:12.5px}.ladder .chipbtn.on{border-color:var(--accent)}.ladder b.up{color:var(--good)}.ladder b.dn{color:var(--bad)}
 .boardtab td,.boardtab th{white-space:nowrap;padding:8px 9px}
 .boardtab td.pl{white-space:normal;min-width:150px}
 .boardtab .mt{font-size:11.5px;color:var(--muted);margin-top:1px}
@@ -498,6 +499,8 @@ const lineWarn = (p, l) => p === "hs" && +l >= 24 ? `${l} headshots is a kills-s
 const sideWord = v => v.grade === "LEAN" ? `Lean ${v.side === "More" ? "Over" : "Under"}` : v.side || "–";
 const noteOf = (d, x) => { const v = d?.verdict || {}, g = d?.grade || {};
   return lineWarn(g.prop || x?.prop, g.line ?? x?.line) || ((v.units || 0) === 0 && /0 units: (.+)$/.exec(v.reason || "")?.[1]) || ""; };
+// display only: well-known main AWPers, shown when BO3.gg has no weapon data (the grade doesn't use this list)
+const KNOWN_AWP = new Set(["zywoo", "m0nesy", "sh1ro", "broky", "w0nderful", "torzsi", "woro2k", "hallzerk", "s1mple", "device", "jame", "molodoy", "910", "ultimate"]);
 const mapsWord = sc => sc === "123" ? " (Maps 1–3)" : sc === "1" ? " (Map 1)" : "";
 function pickLine(d) {
   const g = d.grade || {}, v = d.verdict || {}, nick = d.player_block?.player?.nick || "";
@@ -532,6 +535,8 @@ let lastCard = null;
 document.addEventListener("click", e => {
   const hb = e.target.closest("[data-hist]");
   if (hb) { const x = store.get("cs2s_hist", [])[+hb.dataset.hist]; if (x) gradeNow(x.p, x.l, x.t, x.lt, x.sc); return; }
+  const ld = e.target.closest("[data-ladder]");
+  if (ld && lastCard) { const gg = lastCard.grade || {}; return gradeNow(lastCard.player_block?.player?.nick || $("#player").value, ld.dataset.ladder, gg.prop, gg.line_type, gg.scope); }
   const a = e.target.closest("[data-act]"); if (!a) return;
   const act = a.dataset.act;
   if (act === "clearhist") { store.set("cs2s_hist", []); try { history.replaceState(null, "", location.pathname); } catch {} return showRecent(); }
@@ -604,6 +609,7 @@ $("#slatego").onclick = async () => {
   if (!items.length) return;
   slate = items.map(x => x.bad ? {bad: x.bad, error: "Couldn't read this line – use: player line K/HS"} : x);
   $("#slatego").disabled = true; drawSlate();
+  $("#out").innerHTML = ""; lastCard = null;               // the single-prop card doesn't belong to the slate
   let done = 0; const todo = slate.filter(x => !x.error);
   const one = async x => {
     const qs = new URLSearchParams({player: x.player, line: x.line, prop: x.prop, line_type: x.lt, maps: x.sc || "12"});
@@ -868,6 +874,8 @@ function render(d) {
       <div class="side ${v.side === "More" ? "pick" : ""}"><div class="k">More · ${g.grade === "C" ? "lean" : "grade " + esc(g.grade)} · ${g.units || 0}U${zTag(g.grade, g.units)}</div><div class="v">${pct(g.p_more)}</div><div class="bar"><i style="width:${g.p_more*100}%"></i></div></div>
       <div class="side ${v.side === "Less" ? "pick" : ""}"><div class="k">Less · ${g.grade_less === "C" ? "lean" : "grade " + esc(g.grade_less)} · ${g.units_less || 0}U${zTag(g.grade_less, g.units_less)}</div><div class="v">${pct(g.p_less)}</div><div class="bar"><i style="width:${g.p_less*100}%"></i></div></div>
     </div>
+    ${Array.isArray(d.ladder) && d.ladder.length > 1 ? `<div class="ladder"><span class="small muted">Nearby lines:</span>${d.ladder.map(x =>
+      `<button type="button" class="chipbtn ${x.line === g.line ? "on" : ""}" data-ladder="${x.line}" title="Grade this line">${x.line} <b class="${x.side === "More" ? "up" : "dn"}">${x.side === "More" ? "More" : "Less"} ${Math.round(x.p * 100)}%</b>${x.grade && x.grade !== "C" && !String(x.grade).startsWith("n/a") ? " · " + esc(x.grade) : ""}</button>`).join("")}</div>` : ""}
     <div class="stats" style="margin-top:10px">
       <div class="stat"><div class="k">Projection</div><div class="v">${num(g.lambda_final,1)}</div><div class="n">${stat}, ${g.scope === "123" ? "Maps 1–3" : g.scope === "1" ? "Map 1" : "Maps 1–2"}</div></div>
       <div class="stat"><div class="k">Line</div><div class="v">${g.line}</div><div class="n">needs ${g.line + 0.5} for More</div></div>
@@ -967,7 +975,7 @@ function render(d) {
     </div></section>
     <section class="card"><h2>Checks</h2>
       <div class="kv"><span>Roster</span><span>${pb.roster_confirmed ? "Confirmed" : "Not confirmed"}${pb.standin_for ? " · stand-in" : ""}</span></div>${pb.team_note ? `<div class="small muted" style="margin:-2px 0 6px">${esc(pb.team_note)}</div>` : ""}
-      <div class="kv"><span>AWP</span><span>${esc(pb.awp_note || "–")}</span></div>
+      <div class="kv"><span>AWP</span><span>${esc(KNOWN_AWP.has((pb.player?.nick || "").toLowerCase()) && /unknown|unclear/i.test(pb.awp_note || "") ? "AWPer (known) – BO3.gg has no weapon data yet" : (pb.awp_note || "–"))}</span></div>
       <div class="kv"><span>IGL</span><span>${pb.is_igl ? "Yes" : "No"}</span></div>
       ${pb.trade_pr != null ? `<div class="kv"><span>Trade kills</span><span>${num(pb.trade_pr,3)}/round</span></div>` : ""}
       ${pb.opening?.kills_per_round != null ? `<div class="kv"><span>Opening kills</span><span>${num(pb.opening.kills_per_round,3)}/round · ${pct(pb.opening.duel_win,0)} duels won</span></div>` : ""}

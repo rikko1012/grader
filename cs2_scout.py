@@ -1757,6 +1757,32 @@ def _hltv_only_overall(pb):
     pb["_rf_kpr"] = round(k / r, 3)
 
 
+def _ladder(res, pb, args):
+    """The same grade at nearby lines (exact: the full grader at each line, his record re-counted)."""
+    gi = res.get("grader_inputs") or {}
+    if "p_more" not in (res.get("grade") or {}):
+        return None
+    totals = [s["total"] for s in ((pb.get("recent_form") or {}).get("series") or []) if s.get("total") is not None]
+    out = []
+    for step in (-2, -1, 0, 1, 2):
+        ln = args.line + step
+        if ln <= 0:
+            continue
+        d = dict(gi, line=ln)
+        if d.get("recent") and totals:
+            d["recent"] = {"n": len(totals), "overs": sum(t > ln for t in totals)}
+        try:
+            g = res["grade"] if step == 0 else grade_leg(d)
+        except Exception:
+            continue
+        if "p_more" not in g:
+            continue
+        more = g["p_more"] >= g["p_less"]
+        out.append({"line": ln, "side": "More" if more else "Less", "p": g["p_more"] if more else g["p_less"],
+                    "grade": g["grade"] if more else g.get("grade_less"), "units": g["units"] if more else g.get("units_less")})
+    return out
+
+
 def finish_line(res, args):
     """The only part of a grade that depends on the line / prop: last-10 vs the line, H2H hit
     rates, grader inputs, the grade, the simulation. Everything else is shared context."""
@@ -1782,6 +1808,7 @@ def finish_line(res, args):
     _tick(res, "rank_band", t0)
     res["grader_inputs"] = grader_inputs(pb, args, res.get("odds"), res.get("h2h"))
     res["grade"] = grade_leg(res["grader_inputs"])
+    res["ladder"] = _ladder(res, pb, args)
     _tick(res, "grade", t0)
     try:   # 20,000-run match simulation - display only (weight 0, tested vs the curve)
         from sim import simulate
