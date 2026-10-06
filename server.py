@@ -237,6 +237,19 @@ def _board_load():
         pass
 
 
+def _board_l10(rf, r):
+    """Last-10 numbers in the line's own maps: Map 1 lines use his map-1 values, Maps 1-3 has no
+    comparable record (shown as -), Maps 1-2 as before."""
+    sc = r.get("scope") or "12"
+    if sc == "12":
+        return {"l10_over": rf.get("overs"), "l10_n": rf.get("matches"), "l10_avg": rf.get("avg_total")}
+    if sc == "1":
+        v = [s["values"][0] for s in (rf.get("series") or []) if s.get("values") and s["values"][0] is not None]
+        return {"l10_over": sum(x > r["line"] for x in v) if v else None, "l10_n": len(v) or None,
+                "l10_avg": round(sum(v) / len(v), 1) if v else None}
+    return {"l10_over": None, "l10_n": None, "l10_avg": None}
+
+
 def board_payload():
     b = underdog.board()
     now = datetime.now(timezone.utc).isoformat()
@@ -289,10 +302,10 @@ def board_forever():
                 try:
                     if MEMBER_GRADES[0] > 0:              # members still busy: one board grade at a time
                         with _BOARD_BUSY:
-                            res = cs2_scout.grade(r["player"], r["line"], r["prop"], "standard", scope=r.get("scope") or "12", team_hint=r.get("team"),
+                            res = cs2_scout.grade(r["player"], r["line"], r["prop"], "standard", scope=r.get("scope") or "12", team_hint=r.get("team"), opponent=r.get("opponent") or None,
                                                   faceit_key=faceit_key(), background=True, light=True)
                     else:
-                        res = cs2_scout.grade(r["player"], r["line"], r["prop"], "standard", scope=r.get("scope") or "12", team_hint=r.get("team"), faceit_key=faceit_key(),
+                        res = cs2_scout.grade(r["player"], r["line"], r["prop"], "standard", scope=r.get("scope") or "12", team_hint=r.get("team"), opponent=r.get("opponent") or None, faceit_key=faceit_key(),
                                               background=True, light=True)
                     if res.get("error"):
                         BOARD[r["id"]] = {"at": time.time(), "state": "NOT FOUND", "reason": res["error"]}
@@ -307,7 +320,7 @@ def board_forever():
                                       "units": v.get("units"), "proj": g.get("lambda_final"), "state": v.get("state"),
                                       "reason": v.get("reason"), "nick": (pb.get("player") or {}).get("nick"),
                                       "edge": round(g["lambda_final"] - r["line"] - 0.5, 1) if g.get("lambda_final") is not None else None,
-                                      "l10_over": rf.get("overs"), "l10_n": rf.get("matches"), "l10_avg": rf.get("avg_total"),
+                                      **_board_l10(rf, r),
                                       "hs_pct": fw.get("hs_pct"), "p_win": (g.get("detail") or {}).get("p_win"),
                                       "market": g.get("market_quality"),
                                       "team_name": pb.get("playing_for") or pb.get("current_team"),
