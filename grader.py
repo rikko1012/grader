@@ -70,7 +70,7 @@ CONFIG = {
     # every day positive (Oct 2-5: +0.5 / +2.25 / +10.75 / +12.0).
     "under_margin": {"kills": 0.0, "hs": 0.0},
     "over_margin": {"kills": 0.5, "hs": 0.3},   # 1.0 / 0.6 until 2026-10-07 (projection fixes made it less needed)
-    "star_rating": 1.15, "star_k": 1.0, "star_cap": 0.12, "rust_drop": 0.08, "hot_k": 0.6,
+    "star_rating": 1.15, "star_k": 1.0, "star_cap": 0.06, "rust_drop": 0.08, "hot_k": 0.6,
     "last10_min": 5,             # need 5+ recent two-map matches to blend
     # 4c (2026-09-28, owner-approved for KILLS props only): trade kills per round. Cross-validated
     # by team on 900 cases: kills miss 6.007 -> 5.976 (same sign in both halves); HS 3.695 -> 3.708
@@ -498,9 +498,11 @@ def grade_leg(d, cfg=CONFIG):
     # off) 2.9 under (went over 31%), hot 3-month form 1.9 under - the line already prices a streak.
     rt = d.get("rating")
     if rt and rt > cfg["star_rating"]:
-        cut = min(cfg["star_cap"], cfg["star_k"] * (rt - cfg["star_rating"]))   # rating 1.25+ finished 13% under
+        # capped at 6% (owner: don't underestimate stars - most of the 13% came from one day, Oct 5;
+        # the other days stars missed by 1-3 kills, mostly because their LINES are set high)
+        cut = min(cfg["star_cap"], cfg["star_k"] * (rt - cfg["star_rating"]))
         lam_final *= 1 - cut
-        flags.append(f"Star (rating {rt:.2f}): projection {cut:.1%} lower - stars finished under projection on real lines")
+        flags.append(f"Star (rating {rt:.2f}): projection {cut:.1%} lower - books set star lines high")
     if rust is not None and rust >= cfg["rust_flag_days"]:
         lam_final *= 1 - cfg["rust_drop"]
         flags.append(f"Rust ({rust} days since his last map): projection {cfg['rust_drop']:.0%} lower")
