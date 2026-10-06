@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
 """
-sim.py - 20,000-run Maps 1-2 simulation. DISPLAY ONLY (weight 0 in the grade).
+sim.py - 20,000-run match simulation built ON the grade (2026-10-06, owner: "make it make sense").
 
-Each run: map (actual, or drawn from the veto prediction) -> map winner (Polymarket map price, or
-derived from the series price) -> rounds from the empirical 13-x / overtime table -> kills
-~ Poisson(KPR x rounds x won/lost-map factor) -> headshots ~ Binomial(kills, HS%).
+The old version ran its own Poisson model and could disagree with the grade (63% More next to a B+
+Less). This one is anchored to the grader: same projection and the same spread, so on average it
+says what the grade says - what it adds is HOW the prop plays out: his team winning 2-0, a 1-1
+split (and the map 3 it brings on Maps 1-3 lines), losing 0-2, overtime.
 
-Tested 2026-09-28 on the 900-case walk-forward against the grader's curve + c: miss kills 6.015 vs
-6.007, HS 3.711 vs 3.695, and kills A+ overconfident (printed 81.7%, hit 75.2%) - pure Poisson is
-too thin-tailed (it has no "good day / bad day" swing). So the grade stays on the curve; this
-number is shown next to it.
+Each run: map winners (Polymarket map prices / series price -> per-map chance from the grade) ->
+rounds per map from the empirical 13-x / overtime table -> his kills (or headshots) on that map =
+his per-map projection x rounds/22 x won-map / lost-map factor (scaled so the average is the grade's
+projection) + the rest of the grade's spread as noise.
 """
 import numpy as np
-
-from grader import CONFIG, win_prob
 
 RUNS = 20000
 # rounds per map, 7,627 earlier player-maps (13-x and overtime as played)
@@ -25,47 +24,56 @@ _R = np.array(list(ROUNDS))
 _P = np.array(list(ROUNDS.values())) / sum(ROUNDS.values())
 
 
-def _blend(kpr, hs, ms):
-    n = (ms or {}).get("maps_played") or 0
-    if not n or not (ms or {}).get("kpr"):
-        return kpr, hs
-    w = n / (n + CONFIG["map_blend_k"])
-    return w * ms["kpr"] + (1 - w) * kpr, w * (ms.get("hs_pct") or hs) + (1 - w) * hs
+def simulate_grade(g, seed=7):
+    """g = the grade (grade_leg output). Returns the overall chance over the line, the spread of
+    outcomes and each match script's chance / average / chance over the line."""
+    if not g or g.get("lambda_final") is None or not g.get("sd"):
+        return None
+    det = g.get("detail") or {}
+    scope = g.get("scope") or "12"
+    line = float(g["line"])
+    lam12 = float(g.get("lambda_maps12") or g["lambda_final"])
+    sd12 = float(g["sd"]) * (lam12 / float(g["lambda_final"])) ** 0.5 if g["lambda_final"] else float(g["sd"])
+    q1, q2 = float(det.get("p_map1") or det.get("p_map") or 0.5), float(det.get("p_map2") or det.get("p_map") or 0.5)
+    rng = np.random.default_rng(seed)
+    n_maps = 1 if scope == "1" else 3 if scope == "123" else 2
+    qs = [q1, q2, (q1 + q2) / 2][:n_maps]
+    won = np.stack([rng.random(RUNS) < q for q in qs])                    # maps x runs
+    rounds = rng.choice(_R, (n_maps, RUNS), p=_P)
+    shape = rounds / 22.0 * np.where(won, F_WIN, F_LOSS)
+    played = np.ones((n_maps, RUNS), dtype=bool)
+    if n_maps == 3:                                                       # map 3 only after a 1-1
+        played[2] = won[0] != won[1]
+    m = lam12 / 2                                                         # his per-map projection
+    shape12 = shape[:2] if n_maps >= 2 else shape[:1]
+    scale = m / shape12.mean()                                            # average = the grade's projection
+    base = shape * scale
+    # the rest of the grade's spread (beyond what map results and rounds explain) as noise
+    var_map = max(sd12 ** 2 / 2 - base[: min(n_maps, 2)].var(axis=1).mean(), m * 0.5)
+    vals = np.maximum(base + rng.normal(0, var_map ** 0.5, (n_maps, RUNS)), 0) * played
+    total = vals.sum(axis=0)
+    over = total > line + 0.5          # same cut as the grade's curve: P(More) = 1 - PHI((line + 0.5 - lam) / sd)
+    # scenarios
+    w12 = won[:2].sum(axis=0) if n_maps >= 2 else won[0].astype(int)
+    ot = (np.where(played, rounds, 0) >= 28).any(axis=0)
+
+    def row(mask, label):
+        if not mask.any():
+            return None
+        return {"label": label, "chance": round(float(mask.mean()), 3), "avg": round(float(total[mask].mean()), 1),
+                "p_over": round(float(over[mask].mean()), 3)}
+    if n_maps == 1:
+        scen = [row(won[0], "win"), row(~won[0], "loss")]
+    else:
+        scen = [row(w12 == 2, "win 2-0"), row(w12 == 1, "split 1-1" + (" (map 3 played)" if n_maps == 3 else "")),
+                row(w12 == 0, "lose 0-2")]
+    scen.append(row(ot, "any overtime"))
+    lo, mid, hi = np.percentile(total, [10, 50, 90])
+    return {"p_more": round(float(over.mean()), 3), "mean": round(float(total.mean()), 1),
+            "p10": round(float(lo)), "p50": round(float(mid)), "p90": round(float(hi)),
+            "scenarios": [s for s in scen if s], "runs": RUNS, "anchored": True, "weight": 0}
 
 
 def simulate(d, seed=None):
-    """d = the grader inputs. Returns P(More), the simulated mean and the run count."""
-    rng = np.random.default_rng(seed)
-    kpr, hs, prop, line = d.get("kpr"), d.get("hs_pct") or 0, d.get("prop", "kills"), float(d["line"])
-    if not kpr:
-        return None
-    p_win, _ = win_prob(d.get("team_ml"), d.get("opp_ml"))
-    lo, hi = 0.0, 1.0
-    for _ in range(40):
-        q = (lo + hi) / 2
-        lo, hi = (q, hi) if q * q * (3 - 2 * q) < p_win else (lo, q)
-    mw = d.get("map_win_probs") or []
-    qs = [mw[i] if len(mw) > i and mw[i] is not None else q for i in (0, 1)]
-    known = (d.get("per_map") or [])[:2]
-    probs = d.get("map_probs") or []
-    stats = d.get("map_stats") or {}
-    total = np.zeros(RUNS)
-    for slot in (0, 1):
-        if slot < len(known):
-            k, h = _blend(kpr, hs, known[slot])
-            k_run, h_run = np.full(RUNS, k), np.full(RUNS, h)
-        elif slot < len(probs) and probs[slot]:
-            names = list(probs[slot])
-            p = np.array([probs[slot][n] for n in names], dtype=float)
-            pick = rng.choice(len(names), RUNS, p=p / p.sum())
-            table = [_blend(kpr, hs, stats.get(n)) for n in names]
-            k_run = np.array([t[0] for t in table])[pick]
-            h_run = np.array([t[1] for t in table])[pick]
-        else:
-            k_run, h_run = np.full(RUNS, kpr), np.full(RUNS, hs)
-        won = rng.random(RUNS) < qs[slot]
-        rounds = rng.choice(_R, RUNS, p=_P)
-        kills = rng.poisson(k_run * rounds * np.where(won, F_WIN, F_LOSS))
-        total += rng.binomial(kills, np.clip(h_run / 100, 0, 1)) if prop == "hs" else kills
-    return {"p_more": round(float((total > line).mean()), 3), "mean": round(float(total.mean()), 2),
-            "runs": RUNS, "weight": 0}
+    """Old entry point (kept for scripts): no grade to anchor to -> nothing."""
+    return None

@@ -231,6 +231,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
   .card{padding:14px} .card h2{font-size:13.5px}
   #board > div:first-child{gap:8px} #bsort{flex:1 1 150px} #brefresh{padding:7px 10px}
 }
+.simtab b.up{color:var(--good)}.simtab b.dn{color:var(--bad)}.kv b.up{color:var(--good)}.kv b.dn{color:var(--bad)}
 .ladder{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px}.ladder .chipbtn{padding:5px 9px;font-size:12.5px}.ladder .chipbtn.on{border-color:var(--accent)}.ladder b.up{color:var(--good)}.ladder b.dn{color:var(--bad)}
 .boardtab td,.boardtab th{white-space:nowrap;padding:8px 9px}
 .boardtab td.pl{white-space:normal;min-width:150px}
@@ -927,6 +928,23 @@ function render(d) {
   h += `</section>`;
 
   // ---- recent form: last 10 matches, Maps 1-2
+  // ---- match simulation: built on this grade (same projection and spread) - how the prop plays out
+  const sm = d.simulation;
+  if (sm && sm.anchored && Array.isArray(sm.scenarios)) {
+    const tm = esc(pb.playing_for || pb.current_team || "his team"), unit = g.prop === "hs" ? "HS" : "kills";
+    const lab = x => x.label === "any overtime" ? "Any map goes to overtime" : x.label === "win" ? `${tm} win the map` : x.label === "loss" ? `${tm} lose the map`
+      : x.label.startsWith("win") ? `${tm} win 2–0` : x.label.startsWith("lose") ? `${tm} lose 0–2` : `Maps 1–2 split 1–1${x.label.includes("map 3") ? " → map 3 played" : ""}`;
+    const pc = x => `<b class="${x >= .5 ? "up" : "dn"}">${Math.round(x * 100)}%</b>`;
+    h += `<section class="card"><h2>Match simulation · 20,000 runs</h2>
+      <div class="small muted" style="margin:-4px 0 10px">Built on this grade's projection and spread, so it agrees with the grade – it shows how the prop plays out in each match script.</div>
+      <div class="kv"><span>Over ${g.line} ${unit}</span><span>${pc(sm.p_more)} of runs · average ${sm.mean} · 8 in 10 land ${sm.p10}–${sm.p90}</span></div>
+      <div class="scroll"><table class="simtab"><thead><tr><th>If…</th><th class="num">Chance</th><th class="num">Avg</th><th class="num">Over ${g.line}</th></tr></thead><tbody>
+      ${sm.scenarios.map(x => `<tr><td>${lab(x)}</td><td class="num">${Math.round(x.chance * 100)}%</td><td class="num">${x.avg}</td><td class="num">${pc(x.p_over)}</td></tr>`).join("")}
+      </tbody></table></div>
+      ${v.side === "More" && sm.p_more - (g.p_more || 0) > 0.02 ? `<div class="small muted" style="margin-top:6px">The grade's ${pct(g.p_more)} is a bit lower than the simulation because Overs must clear an extra safety margin.</div>` : ""}
+    </section>`;
+  }
+
   h += `<section class="card"><h2>Last ${rf.matches ?? 10} matches · ${sc === "123" ? "Maps 1–2" : scLab}${cmpLine != null && rf.hit_rate != null ? ` · over ${g.line} in ${rf.overs}/${rf.series?.length ?? rf.matches} (${pct(rf.hit_rate,0)})` : ""}</h2>`
     + (sc === "123" ? `<div class="small muted" style="margin:-4px 0 8px">His Maps 1–2 totals, for form – this line also counts map 3 when the series goes 1–1.</div>` : "");
   if (rf.series?.length) {

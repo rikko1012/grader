@@ -545,7 +545,7 @@ def protect_recipe(res):
             g["reason"] = next((t for k, t in _REASONS if g["reason"].startswith(k)), "Not graded")
     sim = res.get("simulation")
     if isinstance(sim, dict):
-        res["simulation"] = {"p_more": sim.get("p_more"), "mean": sim.get("mean")}
+        res["simulation"] = {k: sim.get(k) for k in ("p_more", "mean", "p10", "p50", "p90", "scenarios", "anchored")}
     res.pop("simulation_error", None)
     o = (res.get("player_block") or {}).get("overall") or {}
     for k in ("kpr", "hs_pct", "form_blend", "kpr_single_window", "hs_single_window"):

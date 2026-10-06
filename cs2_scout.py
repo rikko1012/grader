@@ -1831,9 +1831,9 @@ def finish_line(res, args):
     res["grade"] = grade_leg(res["grader_inputs"])
     res["ladder"] = _ladder(res, pb, args)
     _tick(res, "grade", t0)
-    try:   # 20,000-run match simulation - display only (weight 0, tested vs the curve)
-        from sim import simulate
-        res["simulation"] = None if getattr(args, "light", False) else simulate(res["grader_inputs"])
+    try:   # 20,000-run match simulation built on the grade (same projection and spread) - how it plays out
+        from sim import simulate_grade
+        res["simulation"] = None if getattr(args, "light", False) else simulate_grade(res["grade"])
         _tick(res, "sim", t0)
     except Exception as e:
         res["simulation"] = None
