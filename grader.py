@@ -130,7 +130,7 @@ CONFIG = {
     "break_even": {"2-pick 3x": 0.577, "3-pick 6x": 0.550, "3-pick 5x": 0.585,
                    "4-pick 10x": 0.562, "5-pick 20x": 0.549, "6-pick 37.5x": 0.547},
 }
-GRADES = ["C", "B", "B+", "A-", "A", "A+"]
+GRADES = ["C", "B-", "B", "B+", "A-", "A", "A+"]
 
 
 # ---------------------------------------------------------------- math
@@ -163,6 +163,9 @@ def grade_from_p(p):
     if p >= 0.68: return "A-"
     if p >= 0.63: return "B+"
     if p >= 0.57: return "B"
+    # B- (55-57%) added 2026-10-07: on 1,193 real lines Oct 2-6 that band hit 55.9% - right at what it
+    # says - while 50-55% hit 49%. A real (small) pick, not a Lean.
+    if p >= 0.55: return "B-"
     return "C"
 
 
@@ -176,7 +179,7 @@ def units_for_p(p, cap=None):
     # B (57-63%) = 0.25U since 2026-09-28: after the measured win/loss fix, B hits 59.6% in the
     # walk-forward (kills and HS) vs PrizePicks' 57.7% 2-pick break-even - small edge, small stake.
     u = (2.0 if p >= 0.80 else 1.5 if p >= 0.74 else 1.0 if p >= 0.68 else 0.5 if p >= 0.63
-         else 0.25 if p >= 0.57 else 0.0)
+         else 0.25 if p >= 0.57 else 0.1 if p >= 0.55 else 0.0)
     return min(u, cap) if cap is not None else u
 
 

@@ -334,8 +334,8 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
       <p><b>Match context.</b> Betting markets tell us who is favoured – winning and losing teams put up different numbers. Heavy underdogs (especially against top-10 teams) are marked down, and a player's record against teams ranked close to tonight's opponent counts too. We also check the roster (stand-ins, new teams), how long since his last official match, and how big his sample is. Anything uncertain lowers the stake, not the honesty of the number.</p>
       <p><b>Projection → chance → grade.</b> The projection is compared with the number he actually needs (a 15.5 line needs 16), and turned into a win chance based on how much a player's totals normally swing from match to match. Unders need a slightly bigger edge than Overs – overtimes and big games make kill totals run over more often than under.</p>
       <p><b>Tested before it counts.</b> Every factor was tested on 900+ past matches, using only information available before each one. His last 10 matches carry a lot of weight (they proved the strongest signal on real lines), and head-to-head nudges the projection. Series against other teams from the opponent's region count lightly.</p>
-      <p><b>What the grades mean</b> (chance the pick wins): A+ 80%+ · A 74%+ · A− 68%+ · B+ 63%+ · B 57%+ · <i>Lean</i> under 57% (no units).<br>
-      <b>Units:</b> A+ 2U · A 1.5U · A− 1U · B+ 0.5U · B 0.25U · Lean 0U. Thin markets, small samples, stand-ins and rust cap the units.</p>
+      <p><b>What the grades mean</b> (chance the pick wins): A+ 80%+ · A 74%+ · A− 68%+ · B+ 63%+ · B 57%+ · B− 55%+ · <i>Lean</i> under 55% (a coin flip – no units).<br>
+      <b>Units:</b> A+ 2U · A 1.5U · A− 1U · B+ 0.5U · B 0.25U · B− 0.1U · Lean 0U. Thin markets, small samples, stand-ins and rust cap the units.</p>
       <p class="muted">Grades are probabilities, not guarantees – a 60% pick still loses 4 times in 10. Not financial advice.</p>
     </div>
   </details>
@@ -405,7 +405,7 @@ const shortDate = x => { const d = new Date(String(x) + "T12:00:00Z"); if (isNaN
   const old = (Date.now() - d) > 300 * 86400000;   // older than ~10 months: show the year
   return d.toLocaleDateString([], {month: "short", day: "numeric", year: old ? "numeric" : undefined, timeZone: "UTC"}); };
 const mapName = m => m ? m.replace(/^de_/, "").replace(/^./, c => c.toUpperCase()) : "–";
-const gClass = g => ["A+","A","A-"].includes(g) ? "g-good" : g === "B+" ? "g-bplus" : g === "B" ? "g-warn" : g === "LEAN" ? "g-scout" : "g-bad";
+const gClass = g => ["A+","A","A-"].includes(g) ? "g-good" : g === "B+" ? "g-bplus" : g === "B" || g === "B-" ? "g-warn" : g === "LEAN" ? "g-scout" : "g-bad";
 const until = d => { const m = Math.round((d - Date.now()) / 60000); if (m <= 0) return m > -150 ? "started" : ""; const h = Math.floor(m / 60);
   return "in " + (h >= 24 ? `${Math.floor(h / 24)}d ${h % 24}h` : h ? `${h}h ${m % 60}m` : `${m}m`); };
 const when = s => { if (!s) return "–"; const d = new Date(String(s).replace(" ", "T")); if (isNaN(d)) return esc(s);
@@ -728,7 +728,7 @@ function udPill(d) {
   return `<span class="pill ${better ? "good" : ""}">Underdog: ${u.line}${pay} – ${better ? `easier for ${v.side}` : `PrizePicks' ${g.line} is easier for ${v.side}`}</span>`;
 }
 let boardRows = [], bprop = "kills", bside = "both", bscope = "12", boardAt = 0;   // bside: the grader's pick - More (Overs), Less (Unders) or both
-const G_RANK = {"A+": 0, "A": 1, "A-": 2, "B+": 3, "B": 4, "LEAN": 5};
+const G_RANK = {"A+": 0, "A": 1, "A-": 2, "B+": 3, "B": 4, "B-": 4.5, "LEAN": 5};
 async function loadBoard(force) {
   if (boardRows.length && !force) return drawBoard();
   $("#bstatus").textContent = "loading…";
