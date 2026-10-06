@@ -70,6 +70,7 @@ CONFIG = {
     # every day positive (Oct 2-5: +0.5 / +2.25 / +10.75 / +12.0).
     "under_margin": {"kills": 0.0, "hs": 0.0},
     "over_margin": {"kills": 0.5, "hs": 0.3},   # 1.0 / 0.6 until 2026-10-07 (projection fixes made it less needed)
+    "env_k": 20,     # LAN / online: maps in that environment for half the difference to count
     "star_rating": 1.15, "star_k": 1.0, "star_cap": 0.06, "rust_drop": 0.08, "hot_k": 0.6,
     "last10_min": 5,             # need 5+ recent two-map matches to blend
     # 4c (2026-09-28, owner-approved for KILLS props only): trade kills per round. Cross-validated
@@ -496,6 +497,17 @@ def grade_leg(d, cfg=CONFIG):
     # day; together: log-loss 0.7031 -> 0.6938, playable bets 483 -> 582, +15.5U -> +32.2U, Oct 6
     # -4.5U -> -0.5U): stars (rating 1.15+) finished 2.6 under projection, rusty players (15+ days
     # off) 2.9 under (went over 31%), hot 3-month form 1.9 under - the line already prices a streak.
+    # LAN or online (owner 2026-10-07: grade a LAN match with his LAN numbers, an online match with
+    # his online numbers): his kills per round in tonight's environment vs overall (12 months, HLTV),
+    # counted by sample - n maps / (n + env_k): 20 maps in that environment = half the difference.
+    env = d.get("environment") or {}
+    if env.get("tonight") and env.get("ratio") and env.get("ratio_maps"):
+        n = env["ratio_maps"]
+        mult = 1 + (env["ratio"] - 1) * n / (n + cfg["env_k"])
+        lam_final *= mult
+        where = "LAN" if env["tonight"] == "lan" else "online"
+        flags.append(f"{where} match: his {where} kills per round are {env['ratio'] - 1:+.0%} vs his overall "
+                     f"({n} {where} maps) - projection {mult - 1:+.1%}")
     rt = d.get("rating")
     if rt and rt > cfg["star_rating"]:
         # capped at 6% (owner: don't underestimate stars - most of the 13% came from one day, Oct 5;

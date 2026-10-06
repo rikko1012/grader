@@ -1012,6 +1012,7 @@ def grader_inputs(pb, args, odds=None, hh=None):
         "sample_maps": max((w.get("maps") or 0 for w in (o.get("form_windows") or {}).values()), default=None),
         "kpr_last5": (pb.get("recent_form") or {}).get("kpr_recent"),  # last 10 matches, Maps 1-2
         "form_trend": _form_trend(o),
+        "environment": pb.get("_env"),
         "round_swing": _hltv_swing(pb),  # HLTV via hltv.py when available, else None (no swing adjustment)
         "per_map": [{"map": m["map"], "kpr": m.get("kpr"), "hs_pct": m.get("hs_pct"), "maps_played": m.get("maps_played")}
                     for m in pb["per_map"]],
@@ -1833,6 +1834,7 @@ def finish_line(res, args):
     res["hltv_context"] = _hltv_context(pb, args)
     _tick(res, "hltv_context", t0)
     pb["_opp_rank"] = ((res["hltv_context"] or {}).get("opp_ranking") or {}).get("rank")
+    pb["_env"] = (res["hltv_context"] or {}).get("environment")   # LAN / online split + tonight's environment
     pb["_rank_band"] = _best_rank_band(pb, (res["hltv_context"] or {}).get("rank_band"))
     _tick(res, "rank_band", t0)
     res["grader_inputs"] = grader_inputs(pb, args, res.get("odds"), res.get("h2h"))
