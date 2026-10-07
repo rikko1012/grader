@@ -1815,11 +1815,16 @@ def _ladder(res, pb, args):
     return out
 
 
+EVENT_TYPES = {}     # normalized BO3.gg tournament name -> "lan" / "online"
+
+
 def _event_type(b, slug):
     """BO3.gg's tournament type: "lan" / "online" / None (cached with the API answers)."""
     try:
         t = b._run(b.cs2._api._make_request("/tournaments/" + slug, {}))
         et = (t.get("event_type") or "").lower()
+        if et in ("lan", "online") and t.get("name"):
+            EVENT_TYPES[norm(t["name"])] = et       # learned: matches listed elsewhere ("... - Roman Imperium Cup Group B")
         return et if et in ("lan", "online") else None
     except Exception:
         return None
@@ -1829,7 +1834,13 @@ def _environment(res, pb):
     """Tonight LAN or online: HLTV first (matches already played at the event / event name), then
     BO3.gg's tournament type. With his LAN / online split, the ratio for tonight's environment."""
     env = dict((res.get("hltv_context") or {}).get("environment") or {})
-    et = (res.get("next_match") or {}).get("event_type")
+    nm = res.get("next_match") or {}
+    et = nm.get("event_type")
+    if not et and nm.get("event"):              # listed by HLTV / PandaScore: a known event inside the title
+        title = norm(nm["event"])
+        core = lambda k: re.sub(r"(season)?([0-9]+|[ivx]+)$", "", k)     # "romanimperiumcupix" -> "romanimperiumcup"
+        et = next((v for k, v in sorted(EVENT_TYPES.items(), key=lambda kv: -len(kv[0]))
+                   if len(core(k)) >= 8 and core(k) in title), None)
     if not env.get("tonight") and et:
         env["tonight"], env["source"] = et, "BO3.gg event type"
         side = env.get(et)

@@ -113,7 +113,7 @@ CONFIG = {
     "tape_more_max": 0.50,       # TAPE FIGHT: More lean but last-10 over-rate <= 50% -> 0 units
     "tape_less_min": 0.60,       #             Less lean but last-10 over-rate >= 60% -> 0 units
     "tape_fight_cap": 0.5,       # 2026-09-28: TAPE FIGHT picks hit 59-66% when tested -> max 0.25U, not 0U
-    "soft_market_cap": 1.0,      # no usable Polymarket price (SOFT/NONE) -> max 1U
+    "soft_market_cap": 1.5,      # no usable Polymarket price (SOFT/NONE) -> max 1.5U (1U on the old 0.25-2U scale)
     "veto_mass_min": 0.45,       # predicted maps: top-2 mass under 45% in a slot = veto uncertainty
     "rust_note_days": 8, "rust_flag_days": 15, "rust_cap_days": 29,   # days since last official map
     "recency_trend": 0.15,       # last-5 KPR off window by 15%+ = "trending hard"
@@ -238,13 +238,13 @@ def grade_leg(d, cfg=CONFIG):
         sd_reasons.append("sample <5 maps")
     small = maps < cfg["thin_maps"]
     if maps < 10:
-        flags.append(f"Gate D: only {maps} Maps 1-2 - variance flag, SD inflated, capped 1U")
+        flags.append(f"Gate D: only {maps} Maps 1-2 - variance flag, SD inflated, capped 1.5U")
         sd_reasons.append("sample <10 maps")
     elif small:
-        flags.append(f"Thin data: {maps} Maps 1-2 on BO3.gg (<{cfg['thin_maps']}) - SD inflated, capped 1U")
+        flags.append(f"Thin data: {maps} Maps 1-2 on BO3.gg (<{cfg['thin_maps']}) - SD inflated, capped 1.5U")
         sd_reasons.append(f"thin data <{cfg['thin_maps']} maps")
     if small:
-        unit_cap = 1.0
+        unit_cap = 1.5
 
     # Gate A - AWPer on HS
     snip = d.get("sniping")
@@ -276,17 +276,17 @@ def grade_leg(d, cfg=CONFIG):
     # Stand-in (v7.4.4): playing for another team than his own - graded, with a risk flag + 0.5U cap
     if d.get("standin_for"):
         sd_reasons.append("stand-in")
-        unit_cap = min(unit_cap or 0.5, 0.5)
+        unit_cap = min(unit_cap or 1.0, 1.0)
         flags.append(f"STAND-IN for {d['standin_for']}: different team and role than his usual - "
-                     f"SD inflated, max 0.5U")
+                     f"SD inflated, max 1U")
 
     # Rust (v7.4): time since his last official map
     rust = d.get("days_since_last_map")
     if rust is not None:
         if rust >= cfg["rust_cap_days"]:
             sd_reasons.append("rust >28d")
-            unit_cap = min(unit_cap or 0.5, 0.5)
-            flags.append(f"RUST: last official map {rust} days ago - SD inflated, max 0.5U")
+            unit_cap = min(unit_cap or 1.0, 1.0)
+            flags.append(f"RUST: last official map {rust} days ago - SD inflated, max 1U")
         elif rust >= cfg["rust_flag_days"]:
             sd_reasons.append("rust 15-28d")
             flags.append(f"RUST: last official map {rust} days ago - SD inflated")

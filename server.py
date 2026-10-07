@@ -492,8 +492,9 @@ def verdict(g):
         grade, units = "LEAN", 0.0
         why = (f"Leans {side} {p:.0%} (projection {g['lambda_final']:.1f} vs {need:g} needed) - 0 units: "
                f"{g['zero_reason']}")
-    if grade == "C":
-        # owner 2026-09-29: under 57% the card says "Lean Over" / "Lean Under" instead of a C
+    if grade == "C" or (not units and grade not in ("LEAN", "C")):
+        # owner 2026-09-29: under the bar the card says "Lean Over" / "Lean Under" instead of a C; a
+        # letter grade with 0 units (FORM FIGHT, gates) reads as a Lean too - never "B · 0U"
         grade = "LEAN"
     return {"side": side, "state": "GRADE", "grade": grade, "p": p, "units": units, "reason": why,
             "market": g.get("market_quality"),
