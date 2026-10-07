@@ -15,7 +15,7 @@ from pathlib import Path
 
 from bo3 import DATA_DIR
 
-BUILDER_VERSION = "slips-7"          # keep in step with BUILDER_V in web/index.html
+BUILDER_VERSION = "slips-8"          # keep in step with BUILDER_V in web/index.html
 GRADES = {"A+", "A", "A-", "B+", "B", "B-"}
 RECOMMENDED = Path(DATA_DIR) / "slips_recommended.jsonl"
 LOADED = Path(DATA_DIR) / "slips_loaded.jsonl"
@@ -50,7 +50,7 @@ def build_all(rows):
     return {n: build(rows, n, set()) for n in (2, 3, 4)}
 
 
-def build(rows, n, used=None):
+def build(rows, n, used=None, count=3):
     """Up to 3 n-pick slips ranked by estimated all-hit chance; one pick per match and per player;
     no match in `used` (updated with the matches taken)."""
     used = set() if used is None else used
@@ -68,16 +68,39 @@ def build(rows, n, used=None):
             for x in gs[i]:
                 rec(i + 1, cur + [x])
         rec(0, [])
+    # the strongest set with no match in common: bounded search (most slips, then highest total chance),
+    # the same as the page's buildSlips
     out.sort(key=lambda s: -s[0])
-    picked = []
+    best_per = {}                         # the strongest combination per set of matches
     for p, legs in out:
-        if len(picked) >= 3:
-            break
-        ms = {x["_m"] for x in legs}
-        if not ms & used:
-            picked.append((p, legs))
-            used |= ms
-    return picked
+        ms = frozenset(x["_m"] for x in legs)
+        if not ms & used and (ms not in best_per or p > best_per[ms][0]):
+            best_per[ms] = (p, legs, ms)
+    cand = sorted(best_per.values(), key=lambda c: -c[0])
+    free = len(set().union(*[c[2] for c in cand])) if cand else 0
+    best, state = [], {"sum": -1.0, "nodes": 0}
+
+    def dfs(i, cur, taken, total):
+        nonlocal best
+        if len(cur) > len(best) or (len(cur) == len(best) and total > state["sum"]):
+            best, state["sum"] = list(cur), total
+        state["nodes"] += 1
+        if len(cur) >= count or state["nodes"] > 40000:
+            return
+        room = min(count - len(cur), (free - len(taken)) // n)
+        for j in range(i, len(cand)):
+            p, legs, ms = cand[j]
+            if len(cur) + room < len(best) or (len(cur) + room == len(best) and total + room * p <= state["sum"]):
+                return
+            if ms & taken:
+                continue
+            cur.append(cand[j])
+            dfs(j + 1, cur, taken | ms, total + p)
+            cur.pop()
+    dfs(0, [], frozenset(), 0.0)
+    for _, _, ms in best:
+        used |= ms
+    return [(p, legs) for p, legs, _ in sorted(best, key=lambda c: -c[0])]
 
 
 def _append(path, rec):

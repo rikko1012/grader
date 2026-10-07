@@ -277,7 +277,7 @@ def board_payload():
         x = rows[-1]
         nick = x.get("nick") or x.get("player") or ""
         # roles (slip builder + display only; True / False / None = unknown, with the source)
-        x["awp"], x["awp_src"] = awp_role(nick, g, x.get("hs_pct"))
+        x["awp"], x["awp_src"] = awp_role(nick, g, x.get("hs_pct"), x.get("team_name") or x.get("team"))
         x["igl"], x["igl_src"] = roles.igl_role(nick, x.get("team_name") or x.get("team"))
     _cap_same_result(rows)
     return {"updated": b["at"], "error": b["error"], "rows": rows, "total": len(b["rows"]),
@@ -290,8 +290,12 @@ AWP_BOARD_HS = 35          # 3-month HS% under this = an AWPer for the slip buil
 RIFLE_BOARD_HS = 42        # and 42%+ with BO3.gg not calling him an AWPer = a rifler
 
 
-def awp_role(nick, g, hs_pct):
-    """(True / False / None, source). BO3.gg's body-shot kill rate first, then the known list, then HS%."""
+def awp_role(nick, g, hs_pct, team=None):
+    """(True / False / None, source). Liquipedia's role listing first, then BO3.gg's body-shot kill rate,
+    the known list, then HS%."""
+    lp, src = roles.awp_role(nick, team)
+    if lp is not None:
+        return lp, src
     snip = g.get("snip")
     if snip == 100:
         return True, "BO3.gg: " + (g.get("awp_note") or "AWPer")
@@ -402,7 +406,8 @@ def board_forever():
                 list(ex.map(one, todo))
             _board_save()
             try:                                      # IGLs for the board's teams (Liquipedia, cached a week)
-                roles.refresh([(BOARD.get(r["id"]) or {}).get("team_name") or r.get("team") for r in rows])
+                roles.refresh([((BOARD.get(r["id"]) or {}).get("nick") or r["player"],
+                                (BOARD.get(r["id"]) or {}).get("team_name") or r.get("team")) for r in rows])
             except Exception:
                 traceback.print_exc()
             try:                                      # the builder's own record: each new recommended slip, once
