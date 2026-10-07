@@ -38,10 +38,11 @@ _SCHEMA_OK = [False]
 
 
 def _model_version():
-    """Short hash of grader.py + sim.py: every pick says exactly which grading logic made it."""
+    """Short hash of everything that can move a grade (grader, simulation, the inputs pipeline):
+    every pick says exactly which version made it."""
     import hashlib
     h = hashlib.sha1()
-    for f in ("grader.py", "sim.py"):
+    for f in ("grader.py", "sim.py", "cs2_scout.py", "hltv.py"):
         try:
             h.update((Path(__file__).resolve().parent / f).read_bytes())
         except OSError:
