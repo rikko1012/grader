@@ -70,7 +70,8 @@ CONFIG = {
     # every day positive (Oct 2-5: +0.5 / +2.25 / +10.75 / +12.0).
     "under_margin": {"kills": 0.0, "hs": 0.0},
     "over_margin": {"kills": 0.5, "hs": 0.3},   # 1.0 / 0.6 until 2026-10-07 (projection fixes made it less needed)
-    "env_k": 20,     # LAN / online: maps in that environment for half the difference to count
+    "env_k": 20,
+    "online_shift": 0.06,     # LAN / online: maps in that environment for half the difference to count
     "star_rating": 1.15, "star_k": 1.0, "star_cap": 0.06, "rust_drop": 0.08, "hot_k": 0.6,
     "last10_min": 5,             # need 5+ recent two-map matches to blend
     # 4c (2026-09-28, owner-approved for KILLS props only): trade kills per round. Cross-validated
@@ -512,6 +513,12 @@ def grade_leg(d, cfg=CONFIG):
         where = "LAN" if env["tonight"] == "lan" else "online"
         flags.append(f"{where} match: his {where} kills per round are {env['ratio'] - 1:+.0%} vs his overall "
                      f"({n} {where} maps) - projection {mult - 1:+.1%}")
+    # Online matches overall (2026-10-07, 953 real lines matched to HLTV LAN/online): online props went
+    # over 55% and finished 1.75 above projection, LAN 41% / -1.0. +6% online was chosen on every
+    # held-out day (log-loss 0.6944 -> 0.6915); a LAN shift was not.
+    if env.get("tonight") == "online" and cfg["online_shift"]:
+        lam_final *= 1 + cfg["online_shift"]
+        flags.append(f"Online match: players beat their lines online on real lines - projection +{cfg['online_shift']:.0%}")
     rt = d.get("rating")
     if rt and rt > cfg["star_rating"]:
         # capped at 6% (owner: don't underestimate stars - most of the 13% came from one day, Oct 5;
