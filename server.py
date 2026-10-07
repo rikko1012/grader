@@ -277,8 +277,12 @@ def board_payload():
         x = rows[-1]
         nick = x.get("nick") or x.get("player") or ""
         # roles (slip builder + display only; True / False / None = unknown, with the source)
-        x["awp"], x["awp_src"] = awp_role(nick, g, x.get("hs_pct"))
+        x["awp"], x["awp_src"] = awp_role(nick, g, x.get("hs_pct"), x.get("team_name") or x.get("team"))
         x["igl"], x["igl_src"] = roles.igl_role(nick, x.get("team_name") or x.get("team"))
+        if x["igl"] is None:                          # team roster not read yet: the player's own page
+            igl, src = hltv.igl_from_liquipedia_player(nick, x.get("team_name") or x.get("team"))
+            if igl is not None:
+                x["igl"], x["igl_src"] = igl, src
     _cap_same_result(rows)
     return {"updated": b["at"], "error": b["error"], "rows": rows, "total": len(b["rows"]),
             "version": picklog.MODEL_VERSION}
@@ -290,8 +294,12 @@ AWP_BOARD_HS = 35          # 3-month HS% under this = an AWPer for the slip buil
 RIFLE_BOARD_HS = 42        # and 42%+ with BO3.gg not calling him an AWPer = a rifler
 
 
-def awp_role(nick, g, hs_pct):
-    """(True / False / None, source). BO3.gg's body-shot kill rate first, then the known list, then HS%."""
+def awp_role(nick, g, hs_pct, team=None):
+    """(True / False / None, source). HLTV's real AWP kill share first (weapon stats, last 90 days),
+    then BO3.gg's body-shot kill rate, the known list, then HS%."""
+    awp, src = hltv.awp_from_hltv(nick, team)
+    if awp is not None:
+        return awp, src
     snip = g.get("snip")
     if snip == 100:
         return True, "BO3.gg: " + (g.get("awp_note") or "AWPer")

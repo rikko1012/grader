@@ -503,6 +503,74 @@ def _load_index():
         _INDEX["busy"] = False
 
 
+# Roles from the scraper (hltv-scraper 2026-10-07): AWP kills / share from each player's HLTV weapon
+# page (last 90 days) and IGL / AWPer from Liquipedia player pages. Board + slip builder only.
+_ROLES = {"at": 0.0, "rows": {}, "busy": False}
+AWP_SHARE_AWPER = 0.25     # >= this share of kills with the AWP = an AWPer
+AWP_SHARE_RIFLER = 0.10    # < this = a rifler
+AWP_MIN_KILLS = 100        # fewer kills on the page = too few to tell
+
+
+def _load_roles():
+    try:
+        con = _connect()
+        try:
+            with con.cursor() as cur:
+                cur.execute("""SELECT p.name, r.hltv_team, w.kills, w.awp_kills, w.end_date,
+                                      r.is_igl, r.is_awper, r.team_match, r.wiki_title, r.updated_at::date
+                               FROM players p
+                               LEFT JOIN player_awp w USING (playerid)
+                               LEFT JOIN player_roles r USING (playerid)
+                               WHERE w.playerid IS NOT NULL OR r.playerid IS NOT NULL""")
+                rows = {}
+                for nick, team, kills, awp, end, igl, awper, match, title, checked in cur.fetchall():
+                    rows.setdefault(_norm(nick), []).append({
+                        "team": team, "kills": kills, "awp_kills": awp, "end": str(end) if end else None,
+                        "is_igl": igl, "is_awper": awper, "team_match": match, "wiki": title,
+                        "checked": str(checked) if checked else None})
+        finally:
+            con.close()
+        _ROLES.update(at=time.time(), rows=rows)
+    except Exception:
+        _ROLES["at"] = time.time() - TTL + 60      # tables not there yet / database down: retry in a minute
+    finally:
+        _ROLES["busy"] = False
+
+
+def _role_entry(nick, team):
+    if not dsn():
+        return None
+    if time.time() - _ROLES["at"] > TTL and not _ROLES["busy"]:
+        _ROLES["busy"] = True
+        threading.Thread(target=_load_roles, daemon=True, name="hltv-roles").start()
+    found = _ROLES["rows"].get(_norm(nick)) or []
+    if len(found) > 1:   # several HLTV players with this nickname: only the one on this team
+        found = [e for e in found if _norm(e["team"]) == _norm(team)]
+    return found[0] if len(found) == 1 else None
+
+
+def awp_from_hltv(nick, team=None):
+    """(True / False / None, source) from the player's HLTV AWP kill share, last 90 days."""
+    e = _role_entry(nick, team)
+    if not e or not e["kills"] or e["kills"] < AWP_MIN_KILLS:
+        return None, None
+    share = e["awp_kills"] / e["kills"]
+    src = f"HLTV: {e['awp_kills']} of {e['kills']} kills with the AWP ({share:.0%}, 90 days to {e['end']})"
+    if share >= AWP_SHARE_AWPER:
+        return True, src
+    if share < AWP_SHARE_RIFLER:
+        return False, src
+    return None, src + " - between rifler and AWPer"
+
+
+def igl_from_liquipedia_player(nick, team=None):
+    """(True / False / None, source) from the player's own Liquipedia page (via the scraper)."""
+    e = _role_entry(nick, team)
+    if not e or e["is_igl"] is None or not e["team_match"]:
+        return None, None
+    return bool(e["is_igl"]), f"Liquipedia {e['wiki']} player page, checked {e['checked']}"
+
+
 _LOOSE = str.maketrans("013457", "oieast")
 
 
