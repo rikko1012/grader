@@ -296,10 +296,13 @@ RIFLE_BOARD_HS = 42        # and 42%+ with BO3.gg not calling him an AWPer = a r
 
 def awp_role(nick, g, hs_pct, team=None):
     """(True / False / None, source). HLTV's real AWP kill share first (weapon stats, last 90 days),
-    then BO3.gg's body-shot kill rate, the known list, then HS%."""
+    then Liquipedia's role listing, BO3.gg's body-shot kill rate, the known list, then HS%."""
     awp, src = hltv.awp_from_hltv(nick, team)
     if awp is not None:
         return awp, src
+    lp, src = roles.awp_role(nick, team)
+    if lp is not None:
+        return lp, src
     snip = g.get("snip")
     if snip == 100:
         return True, "BO3.gg: " + (g.get("awp_note") or "AWPer")
@@ -410,7 +413,8 @@ def board_forever():
                 list(ex.map(one, todo))
             _board_save()
             try:                                      # IGLs for the board's teams (Liquipedia, cached a week)
-                roles.refresh([(BOARD.get(r["id"]) or {}).get("team_name") or r.get("team") for r in rows])
+                roles.refresh([((BOARD.get(r["id"]) or {}).get("nick") or r["player"],
+                                (BOARD.get(r["id"]) or {}).get("team_name") or r.get("team")) for r in rows])
             except Exception:
                 traceback.print_exc()
             try:                                      # the builder's own record: each new recommended slip, once

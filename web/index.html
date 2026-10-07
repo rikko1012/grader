@@ -215,7 +215,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 .bstat .s{font-size:10.5px;color:var(--faint);white-space:nowrap}
 .bslip{background:none;border:1px solid var(--accent);color:var(--accent-2);border-radius:99px;padding:6px 11px;font:600 12.5px Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap}
 .bslip:hover{background:rgba(255,122,26,.1)} .bslip.on{background:var(--accent);color:#170b00}
-.actl{display:flex;flex-wrap:wrap;gap:6px} .aseg button{padding:5px 9px;font-size:12.5px}
+.actl{display:flex;flex-wrap:wrap;gap:6px} .asub{margin:14px 0 6px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em} .aseg button{padding:5px 9px;font-size:12.5px}
 #slipsout{margin-bottom:14px;background:var(--panel);border:1px solid var(--line-2);border-radius:14px;padding:12px}
 .asz{margin-top:12px} .asz h5{margin:0 0 6px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 .aslip{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px}
@@ -859,7 +859,7 @@ $("#brefresh").onclick = () => loadBoard(true).then(() => { if (!$("#slipsout").
 // ---------- automatic slip builder: 2-4 picks from the graded board (no grading of its own)
 // Ranked by the model's chance that every pick hits. The return is only worked out from the payout the member
 // enters (Underdog's real multiplier for that entry) - never an assumed one.
-const BUILDER_V = "slips-7";      // keep in step with slips.BUILDER_VERSION (server copy + logs)
+const BUILDER_V = "slips-8";      // keep in step with slips.BUILDER_VERSION (server copy + logs)
 let boardVer = "";
 const udPay = () => store.get("cs2s_udpay", {});              // standard payout per slip size (member-entered)
 const udExact = () => store.get("cs2s_udexact", {});          // exact payout for one slip, by its picks (member-entered)
@@ -893,30 +893,55 @@ function slipPool() {          // eligible picks + why the rest were left out
   return {groups, why};
 }
 function buildSlips(groups, n, count, overlap) {   // one pick per match and per player inside a slip
-  const out = [];
-  const go = (i, cur) => {
+  const out = [], base = +udPay()[n] || 0, exact = udExact(), hasExact = Object.keys(exact).length > 0;
+  const go = (i, cur, mask) => {
     if (cur.length === n) {
-      const all = cur.reduce((a, x) => a * x.p, 1), mult = cur.reduce((a, x) => a * x.mult, 1);
-      const dist = hitDist(cur.map(x => x.p)), s = {legs: [...cur], all, mult, near: dist[n] + dist[n - 1]};
-      const pf = payFor(s, n); s.pay = pf.pay; s.src = pf.src; s.ev = pf.pay ? all * pf.pay : null;
-      out.push(s);
+      let all = 1, mult = 1; for (const x of cur) { all *= x.p; mult *= x.mult; }
+      const s = {legs: [...cur], all, mult, mask};
+      const ex = hasExact ? +exact[slipKey(s.legs)] : 0;
+      s.pay = ex || (base ? base * mult : null); s.src = ex ? "exact" : base ? "standard" : null; s.ev = s.pay ? all * s.pay : null;
+      if (s.ev == null || s.ev >= 1) out.push(s);
       return;
     }
     if (groups.length - i < n - cur.length) return;
-    for (const x of groups[i]) if (!cur.some(c => c.nick === x.nick)) { cur.push(x); go(i + 1, cur); cur.pop(); }
-    go(i + 1, cur);
+    for (const x of groups[i]) if (!cur.some(c => c.nick === x.nick)) { cur.push(x); go(i + 1, cur, mask | (1 << i)); cur.pop(); }
+    go(i + 1, cur, mask);
   };
-  go(0, []);
-  // "none": no match in two slips. "some": two slips share at most 1 match, a match is in at most 2 slips.
-  const ok = out.filter(s => s.ev == null || s.ev >= 1).sort((a, b) => b.all - a.all), picked = [], uses = {};
-  for (const s of ok) {
-    if (picked.length >= count) break;
-    const ms = s.legs.map(x => x.m);
-    if (overlap === "none" ? ms.some(m => uses[m]) : ms.some(m => (uses[m] || 0) >= 2)
-        || picked.some(q => q.legs.filter(x => ms.includes(x.m)).length > 1)) continue;
-    picked.push(s); ms.forEach(m => uses[m] = (uses[m] || 0) + 1);
-  }
-  picked.forEach(s => s.shared = s.legs.some(x => uses[x.m] > 1));
+  go(0, [], 0);
+  // 1) the strongest set of slips with no match in common: a bounded search (not first-come greedy), most slips
+  //    first, then the highest total chance. 2) "Some overlap": alternatives after that, each sharing at most one
+  //    match with any slip shown and no match in more than 2 slips.
+  // the same set of matches with other picks can't add a slip under either rule: keep the strongest per match set
+  const byMask = new Map(); for (const s of out) { const b = byMask.get(s.mask); if (!b || s.all > b.all) byMask.set(s.mask, s); }
+  const cand = [...byMask.values()].sort((a, b) => b.all - a.all);
+  const bits = m => { let c = 0; while (m) { m &= m - 1; c++; } return c; };
+  const freeAll = cand.reduce((a, s) => a | s.mask, 0), free = bits(freeAll);
+  let best = [], bestSum = -1, nodes = 0;
+  const dfs = (i, cur, used, sum) => {
+    if (cur.length > best.length || (cur.length === best.length && sum > bestSum)) { best = [...cur]; bestSum = sum; }
+    if (cur.length >= count || ++nodes > 20000) return;
+    const room = Math.min(count - cur.length, Math.floor((free - bits(used)) / n));
+    for (let j = i; j < cand.length; j++) {
+      const s = cand[j];
+      if (cur.length + room < best.length || (cur.length + room === best.length && sum + room * s.all <= bestSum)) return;
+      if (s.mask & used) continue;
+      cur.push(s); dfs(j + 1, cur, used | s.mask, sum + s.all); cur.pop();
+      if (nodes > 20000) return;
+    }
+  };
+  dfs(0, [], 0, 0);
+  const picked = [...best].sort((a, b) => b.all - a.all), uses = {};
+  const addUses = s => s.legs.forEach(x => uses[x.m] = (uses[x.m] || 0) + 1);
+  picked.forEach(addUses);
+  picked.base = picked.length;
+  if (overlap === "some")
+    for (const s of cand) {
+      if (picked.length >= count) break;
+      if (picked.includes(s) || s.legs.some(x => (uses[x.m] || 0) >= 2) || picked.some(q => bits(q.mask & s.mask) > 1)) continue;
+      s.alt = true; picked.push(s); addUses(s);
+    }
+  picked.forEach(s => { s.shared = s.legs.some(x => uses[x.m] > 1); const d = hitDist(s.legs.map(x => x.p)); s.near = d[n] + d[n - 1]; });
+  picked.matches = free;
   return picked;
 }
 function drawAutoSlips() {
@@ -936,14 +961,15 @@ function drawAutoSlips() {
       <input data-udpay="${n}" inputmode="decimal" placeholder="?" value="${pays[n] ? esc(String(pays[n])) : ""}" style="width:64px;padding:5px 8px">x</label>`
     + (!ss.length
       ? `<div class="small muted">No qualifying ${n}-pick slips${pays[n] ? ` – at ${pays[n]}x the model doesn't expect a profit from any combination` : ` – fewer than ${n} matches with eligible picks`}.</div>`
-      : (ss.length < c.count ? `<div class="small muted" style="margin-bottom:8px">${ss.length} of ${c.count} – not enough matches for more without ${c.overlap === "none" ? "sharing them" : "more overlap"}.</div>` : "")
-        + ss.map((s, i) => `<div class="aslip">` + s.legs.map(x => { const r = x.r, nick = r.nick || r.player;
+      : `<div class="small" style="margin-bottom:8px"><b>${pays[n] ? "Slips" : "Ranked combinations"}</b> <span class="muted">· ${{More: "Overs", Less: "Unders", mixed: "Mixed"}[c.side]} · ${n} picks · up to ${c.count} · ${c.overlap === "none" ? "no shared matches" : "some overlap"}${pays[n] ? "" : " · enter a payout to check value"}</span></div>`
+        + (ss.length < c.count ? `<div class="small muted" style="margin-bottom:8px">${ss.base} with no shared match${ss.base === 1 ? "" : "es"} is the most ${ss.matches} matches allow${c.overlap === "some" ? `, plus ${ss.length - ss.base} alternative${ss.length - ss.base === 1 ? "" : "s"} within the overlap limits` : ""}.</div>` : "")
+        + ss.map((s, i) => (s.alt && !ss[i - 1]?.alt ? `<h5 class="asub">Alternatives – each shares one match with a slip above</h5>` : "") + `<div class="aslip">` + s.legs.map(x => { const r = x.r, nick = r.nick || r.player;
           return `<div class="lg"><span><span class="gtag ${gClass(r.grade)}" style="font-size:11px;padding:1px 6px">${esc(r.grade)}</span> <b>${esc(nick)}</b> ${esc(sideWord({grade: r.grade, side: r.side}))} ${r.line} ${propWord(r.prop)} · ${(r.scope || "12") === "1" ? "Map 1" : (r.scope || "12") === "123" ? "Maps 1–3" : "Maps 1–2"}${x.mult !== 1 ? ` <span class="pill">${x.mult}x</span>` : ""}</span>
             <span class="m">${pctF(r.p)} · ${esc(r.team_name || r.team || "")} vs ${esc(r.opp_name || r.opponent || "")} · ${esc(shortWhen(r.start).split(" · ")[0])}</span></div>`; }).join("")
         + `<div class="nums"><span>Est. chance all ${n} hit <b>${pctF(s.all, 1)}</b></span>
              ${s.pay ? `<span>${s.src === "exact" ? "Your payout for this slip" : `Est. from your standard payout${s.mult !== 1 ? ` × boosts ${+s.mult.toFixed(2)}x` : ""}`}: <b>${+s.pay.toFixed(2)}x</b></span><span>Est. return <b style="color:${s.ev >= 1 ? "var(--good)" : "var(--bad)"}">${s.ev.toFixed(2)}U</b> per 1U</span>` : ""}
              ${n >= 3 ? `<span title="Not the chance of a Flex profit – that depends on Underdog's Flex payouts">${n - 1}+ correct <b>${pctF(s.near)}</b></span>` : ""}
-             ${s.shared ? `<span class="pill">Shares a match with another suggestion</span>` : ""}</div>
+             ${s.shared && !s.alt ? `<span class="pill">A match here is also in an alternative below</span>` : ""}</div>
            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button type="button" class="bslip" data-aslip="${n}|${i}">Load into slip</button>
              <label class="small muted" style="display:flex;gap:6px;align-items:center">This slip pays
              <input data-udexact="${esc(slipKey(s.legs))}" inputmode="decimal" placeholder="?" value="${udExact()[slipKey(s.legs)] ? esc(String(udExact()[slipKey(s.legs)])) : ""}" style="width:64px;padding:5px 8px">x</label></div></div>`).join(""))
