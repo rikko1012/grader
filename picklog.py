@@ -37,6 +37,21 @@ closing_line REAL, clv REAL, settled_at TEXT"""
 _SCHEMA_OK = [False]
 
 
+def _model_version():
+    """Short hash of grader.py + sim.py: every pick says exactly which grading logic made it."""
+    import hashlib
+    h = hashlib.sha1()
+    for f in ("grader.py", "sim.py"):
+        try:
+            h.update((Path(__file__).resolve().parent / f).read_bytes())
+        except OSError:
+            pass
+    return h.hexdigest()[:10]
+
+
+MODEL_VERSION = _model_version()
+
+
 def _db():
     con = sqlite3.connect(DB, timeout=30)
     con.row_factory = sqlite3.Row
@@ -50,6 +65,10 @@ def _db():
         con.execute("ALTER TABLE picks ADD COLUMN test INTEGER DEFAULT 0")
     except sqlite3.OperationalError:
         pass                               # column already there
+    try:                                   # added 2026-10-07: the exact grader that made the pick (frozen-version tests)
+        con.execute("ALTER TABLE picks ADD COLUMN model_version TEXT")
+    except sqlite3.OperationalError:
+        pass
     try:                                   # added 2026-10-06: which maps the line covers
         con.execute("ALTER TABLE picks ADD COLUMN scope TEXT DEFAULT '12'")
     except sqlite3.OperationalError:
@@ -160,6 +179,7 @@ def pick_row(res, verdict, test=False):
         "test": test if test == 2 else int(bool(test)),   # 1 = owner's tests, 2 = Underdog board (not a member pick)
         "factors": json.dumps(_factors(res), default=str),
         "scope": scope,
+        "model_version": MODEL_VERSION,
     }
     return row
 
