@@ -277,6 +277,9 @@ def board_payload():
             "version": picklog.MODEL_VERSION}
 
 
+SLIP_LOG = Path(DATA_DIR) / "slips.jsonl"       # auto slips members loaded (builder version, legs, chances)
+_SLIP_LOCK = threading.Lock()
+
 SAME_RESULT_CAP = 3.0   # units (on the 0.5-3U scale), all bets that need the same team to do well / badly in one match
 
 
@@ -742,6 +745,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, board_payload())
             if u.path == "/admin":
                 return self.admin(q)
+            if u.path == "/admin/slips.json" and self.authed(q.get("token")):
+                try:
+                    lines = SLIP_LOG.read_text(encoding="utf-8").splitlines()[-5000:]
+                except OSError:
+                    lines = []
+                return self.send(200, {"slips": [json.loads(x) for x in lines if x.strip()]})
             if u.path == "/admin/picks.json" and self.authed(q.get("token")):
                 return self.send(200, {"picks": picklog.export()})
             if u.path == "/admin/mark_tests" and self.authed(q.get("token")):
@@ -1109,6 +1118,19 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         u = urlparse(self.path)
         n = int(self.headers.get("Content-Length") or 0)
+        if u.path == "/api/slip_log":                  # a member loaded an auto slip: kept to score the builder later
+            body = self.rfile.read(min(n, 20000))
+            if not self.allowed():
+                return self.send(401, {"error": "members_only"})
+            try:
+                d = json.loads(body)
+                assert isinstance(d, dict) and isinstance(d.get("legs"), list) and len(d["legs"]) <= 6
+            except Exception:
+                return self.send(400, {"error": "bad slip"})
+            d["logged_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            with _SLIP_LOCK, open(SLIP_LOG, "a", encoding="utf-8") as f:
+                f.write(json.dumps(d) + "\n")
+            return self.send(200, {"ok": True})
         form = {k: v[0] for k, v in parse_qs(self.rfile.read(n).decode()).items()}
         if u.path != "/admin/closing" or not self.authed(form.get("token")):
             return self.send(403, {"error": "forbidden"})
