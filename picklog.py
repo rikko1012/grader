@@ -84,6 +84,11 @@ def _db():
         con.execute("ALTER TABLE picks ADD COLUMN model_version TEXT")
     except sqlite3.OperationalError:
         pass
+    for col in ("first_logged_at", "regrades"):   # added 2026-10-07: board rows keep the latest pre-match grade
+        try:
+            con.execute(f"ALTER TABLE picks ADD COLUMN {col} {'INTEGER DEFAULT 0' if col == 'regrades' else 'TEXT'}")
+        except sqlite3.OperationalError:
+            pass
     try:                                   # added 2026-10-06: which maps the line covers
         con.execute("ALTER TABLE picks ADD COLUMN scope TEXT DEFAULT '12'")
     except sqlite3.OperationalError:
@@ -217,6 +222,24 @@ def pick_row(res, verdict, test=False):
     return row
 
 
+REGRADE_COLS = ("logged_at", "team", "opponent", "match_slug", "match_start", "lambda", "fair_line", "edge", "p_more",
+                "p_less", "pick", "p_pick", "grade", "units", "p_win", "market", "pred_maps", "veto_known",
+                "sample_maps", "rec_avg", "rec_median", "rec_hit", "flags", "opp_def", "factors", "model_version")
+
+
+def _before_start(row, cur):
+    """The new grade was made before the match started (by the start the row has, and the one it brings)."""
+    now = row["logged_at"]
+    for st in (cur["match_start"], row.get("match_start")):
+        if st and now >= st.replace("Z", "+00:00")[:25]:
+            return False
+    return True
+
+
+def cur_logged(con, pid):
+    return con.execute("SELECT logged_at FROM picks WHERE id = ?", (pid,)).fetchone()["logged_at"]
+
+
 def write_row(row):
     if row is None:
         return None
@@ -224,7 +247,16 @@ def write_row(row):
     with _LOCK:
         con = _db()
         try:
-            cur = con.execute("SELECT id FROM picks WHERE key = ?", (key,)).fetchone()
+            cur = con.execute("SELECT id, test, status, match_start FROM picks WHERE key = ?", (key,)).fetchone()
+            if cur and test == 2 and cur["test"] == 2 and cur["status"] == "open" and _before_start(row, cur):
+                # Underdog board line re-graded before its match: keep the grade members see at match time
+                # (until 2026-10-07 the first grade was kept - up to days old and from older grader versions)
+                upd = {k: row[k] for k in REGRADE_COLS if k in row}
+                con.execute(f"UPDATE picks SET {', '.join(k + ' = ?' for k in upd)}, requests = requests + 1, "
+                            "regrades = COALESCE(regrades, 0) + 1, first_logged_at = COALESCE(first_logged_at, ?) "
+                            "WHERE id = ?", (*upd.values(), cur_logged(con, cur["id"]), cur["id"]))
+                con.commit()
+                return cur["id"]
             if cur:
                 # a real member asking for a line first seen in a test makes it a real pick
                 con.execute("UPDATE picks SET requests = requests + 1, test = CASE WHEN ? THEN test ELSE 0 END "
