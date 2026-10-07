@@ -81,7 +81,9 @@ CONFIG = {
     # owner 2026-10-06: same-region series count (players play the same vs teams from one scene).
     # Real lines Oct 2-5 (1,040 props, 604 with regional series): weight 0.1 log-loss 0.7036 -> 0.7031,
     # playable bets 423 -> 424, every day positive; 0.25+ brought losing days back.
-    "regional_weight": 0.1,       # (2026-09-28 HLTV team-split test had chosen 0 - superseded)
+    # 0.1 -> 0.4 on 2026-10-07: with the over/under fixes in, more weight kept helping (real lines Oct 2-6:
+    # log-loss 0.6887 -> 0.6877, Oct 6 -5.5U -> -3.0U); held-out days chose 0.25-0.6.
+    "regional_weight": 0.4,       # (2026-09-28 HLTV team-split test had chosen 0 - superseded)
     "h2h_half": 365,             # H2H series weight = exp(-days_old / 365)
     "h2h_full_maps": 8,          # size weight = min(maps / 8, 1)
     "h2h_cap": {"kills": 3.0, "hs": 2.0},
