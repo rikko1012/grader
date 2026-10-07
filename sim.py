@@ -52,7 +52,11 @@ def simulate_grade(g, seed=7):
     var_map = max(sd12 ** 2 / 2 - base[: min(n_maps, 2)].var(axis=1).mean(), m * 0.5)
     vals = np.maximum(base + rng.normal(0, var_map ** 0.5, (n_maps, RUNS)), 0) * played
     total = vals.sum(axis=0)
-    over = total > line + 0.5          # same cut as the grade's curve: P(More) = 1 - PHI((line + 0.5 - lam) / sd)
+    up = line if abs(line - round(line)) > 0.25 else line + 0.5     # same cuts as the grade (grader._cuts)
+    down = line if abs(line - round(line)) > 0.25 else line - 0.5
+    over, under = total > up, total < down
+    over = np.where(over | under, over, False)
+    decided = over | under
     # scenarios
     w12 = won[:2].sum(axis=0) if n_maps >= 2 else won[0].astype(int)
     ot = (np.where(played, rounds, 0) >= 28).any(axis=0)
@@ -61,7 +65,7 @@ def simulate_grade(g, seed=7):
         if not mask.any():
             return None
         return {"label": label, "chance": round(float(mask.mean()), 3), "avg": round(float(total[mask].mean()), 1),
-                "p_over": round(float(over[mask].mean()), 3)}
+                "p_over": round(float(over[mask].sum() / max(decided[mask].sum(), 1)), 3)}
     if n_maps == 1:
         scen = [row(won[0], "win"), row(~won[0], "loss")]
     else:
@@ -69,7 +73,7 @@ def simulate_grade(g, seed=7):
                 row(w12 == 0, "lose 0-2")]
     scen.append(row(ot, "any overtime"))
     lo, mid, hi = np.percentile(total, [10, 50, 90])
-    return {"p_more": round(float(over.mean()), 3), "mean": round(float(total.mean()), 1),
+    return {"p_more": round(float(over.sum() / max(decided.sum(), 1)), 3), "mean": round(float(total.mean()), 1),
             "p10": round(float(lo)), "p50": round(float(mid)), "p90": round(float(hi)),
             "scenarios": [s for s in scen if s], "runs": RUNS, "anchored": True, "weight": 0}
 

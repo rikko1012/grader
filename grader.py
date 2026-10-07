@@ -69,8 +69,11 @@ CONFIG = {
     # needing +1 kill / +0.6 HS and Unders none: bets 367 -> 423, hit 49% -> 54%, +8.0U -> +25.5U,
     # every day positive (Oct 2-5: +0.5 / +2.25 / +10.75 / +12.0).
     "under_margin": {"kills": 0.0, "hs": 0.0},
-    "over_margin": {"kills": 0.5, "hs": 0.3},   # 1.0 / 0.6 until 2026-10-07 (projection fixes made it less needed)
+    # 0.5/0.3 -> 1.0/0.6 on 2026-10-07 together with the continuity fix: forward-only (fit on earlier days,
+    # scored on the next) log-loss 0.6892 -> 0.6895 (same), Over bets 83 -> 110, Under bets 319 -> 228
+    "over_margin": {"kills": 1.0, "hs": 0.6},   # 1.0 / 0.6 until 2026-10-07 (projection fixes made it less needed)
     "env_k": 20,
+    "rest_days": (4, 14), "rest_bonus": 0.04,
     "online_shift": 0.06,     # LAN / online: maps in that environment for half the difference to count
     "star_rating": 1.15, "star_k": 1.0, "star_cap": 0.06, "rust_drop": 0.08, "hot_k": 0.6,
     "last10_min": 5,             # need 5+ recent two-map matches to blend
@@ -84,7 +87,7 @@ CONFIG = {
     # 0.1 -> 0.4 on 2026-10-07: with the over/under fixes in, more weight kept helping (real lines Oct 2-6:
     # log-loss 0.6887 -> 0.6877, Oct 6 -5.5U -> -3.0U); held-out days chose 0.25-0.6.
     "regional_weight": 0.4,       # (2026-09-28 HLTV team-split test had chosen 0 - superseded)
-    "h2h_half": 365,             # H2H series weight = exp(-days_old / 365)
+    "h2h_half": 365,             # H2H series weight = exp(-days_old / 365): an e-folding time (halves every ~253 days), as tested
     "h2h_full_maps": 8,          # size weight = min(maps / 8, 1)
     "h2h_cap": {"kills": 3.0, "hs": 2.0},
     "stomp_ml": -400,            # either side at -400 or heavier (P(win) >= 0.80) = stomp
@@ -172,8 +175,21 @@ def grade_from_p(p):
     return "C"
 
 
+def _cuts(line):
+    """Continuity cuts for a count: a 30.5 line is Over at 31+ (cut 30.5) and Under at 30 or less (cut
+    30.5); a whole line 26 is Over at 27+ (cut 26.5), Under at 25 or less (cut 25.5), 26 = push.
+    (Until 2026-10-07 every line used line + 0.5 for both sides - half a kill against Overs on x.5
+    lines and the push counted as an Under on whole lines; reviewed by outside AIs, fixed here.)"""
+    if abs(line - round(line)) > 0.25:
+        return line, line
+    return line + 0.5, line - 0.5
+
+
 def p_more(line, lam, sd):
-    return 1 - phi((line + 0.5 - lam) / sd)
+    """P(More), push removed (pushes settle as no action): P(Over) / (P(Over) + P(Under))."""
+    up, down = _cuts(line)
+    pm, pl = 1 - phi((up - lam) / sd), phi((down - lam) / sd)
+    return pm / (pm + pl) if pm + pl > 0 else 0.5
 
 
 def units_for_p(p, cap=None):
@@ -533,6 +549,11 @@ def grade_leg(d, cfg=CONFIG):
         cut = min(cfg["star_cap"], cfg["star_k"] * (rt - cfg["star_rating"]))
         lam_final *= 1 - cut
         flags.append(f"Star (rating {rt:.2f}): projection {cut:.1%} lower - books set star lines high")
+    if rust is not None and cfg["rest_days"][0] <= rust <= cfg["rest_days"][1]:
+        # 4-14 days off: players finished +2.1 above projection (went over 59%); forward-only test +4%:
+        # log-loss 0.6901 -> 0.6892 (2026-10-07, suggested by an outside review)
+        lam_final *= 1 + cfg["rest_bonus"]
+        flags.append(f"Rested ({rust} days since his last map): projection +{cfg['rest_bonus']:.0%}")
     if rust is not None and rust >= cfg["rust_flag_days"]:
         lam_final *= 1 - cfg["rust_drop"]
         flags.append(f"Rust ({rust} days since his last map): projection {cfg['rust_drop']:.0%} lower")
@@ -659,10 +680,10 @@ def grade_leg(d, cfg=CONFIG):
     # value lines: where each side becomes playable (B+ = 63%) for THIS projection and spread
     # P(More at line L) = 1 - PHI((L + 0.5 - lam)/sd): More reaches p at L <= lam - 0.5 - z*sd,
     # Less reaches p at L >= lam - 0.5 + z*sd. Lines are x.5, so round to the right x.5.
-    def more_line(z):   # highest x.5 line at or below the threshold
-        return math.floor(lam_final - 0.5 - z * sd - 0.5) + 0.5
-    def less_line(z):   # lowest x.5 line at or above the threshold (Unders need the extra margin)
-        return math.ceil(lam_final + m_u - 0.5 + z * sd - 0.5) + 0.5
+    def more_line(z):   # highest x.5 line at or below the threshold (Over at L+0.5+: cut L)
+        return math.floor(lam_final - m_o - z * sd - 0.5) + 0.5
+    def less_line(z):   # lowest x.5 line at or above the threshold
+        return math.ceil(lam_final + m_u + z * sd - 0.5) + 0.5
     more_at, more_a = more_line(0.3319), more_line(0.4677)
     less_at, less_a = less_line(0.3319), less_line(0.4677)
     if prop == "kills" and cfg["p_cap_kills"] < 0.68:
