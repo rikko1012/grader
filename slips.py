@@ -15,7 +15,7 @@ from pathlib import Path
 
 from bo3 import DATA_DIR
 
-BUILDER_VERSION = "slips-6"          # keep in step with BUILDER_V in web/index.html
+BUILDER_VERSION = "slips-7"          # keep in step with BUILDER_V in web/index.html
 GRADES = {"A+", "A", "A-", "B+", "B", "B-"}
 RECOMMENDED = Path(DATA_DIR) / "slips_recommended.jsonl"
 LOADED = Path(DATA_DIR) / "slips_loaded.jsonl"
@@ -113,7 +113,8 @@ def log_recommended(rows, grader_version):
     new = 0
     with _LOCK:
         seen = _seen("rec", RECOMMENDED, "key")
-        for n, built in build_all(rows).items():
+        for prop in ("kills", "hs"):       # the page builds from the board's filter: one prop, one map set
+          for n, built in build_all([r for r in rows if r.get("prop") == prop and (r.get("scope") or "12") == "12"]).items():
             for rank, (p, legs) in enumerate(built, 1):
                 ls = [_leg(x) for x in legs]
                 key = slip_key(ls)

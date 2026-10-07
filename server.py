@@ -379,7 +379,8 @@ def board_forever():
                                       "grade": v.get("grade"), "side": v.get("side"), "p": v.get("p"),
                                       "units": v.get("units"), "proj": g.get("lambda_final"), "state": v.get("state"),
                                       "reason": v.get("reason"), "nick": (pb.get("player") or {}).get("nick"),
-                                      "edge": round(g["lambda_final"] - r["line"] - 0.5, 1) if g.get("lambda_final") is not None else None,
+                                      # projection minus the line (the cut the grade uses since the 2026-10-07 continuity fix)
+                                      "edge": round(g["lambda_final"] - r["line"], 2) if g.get("lambda_final") is not None else None,
                                       **_board_l10(rf, r),
                                       "hs_pct": fw.get("hs_pct"), "p_win": (g.get("detail") or {}).get("p_win"),
                                       "snip": pb.get("sniping_equiv"), "awp_note": pb.get("awp_note"),
@@ -514,8 +515,8 @@ def verdict(g):
     if no_less_side:
         units = 0.0
     stat = "headshots" if g.get("prop") == "hs" else "kills"
-    need = g["line"] + 0.5                  # 15.5 line -> he needs 16 for More
-    gap = g["lambda_final"] - need          # > 0 always means More, < 0 always Less
+    need = g["line"]                        # the cut the grade uses: projection above the line leans More
+    gap = g["lambda_final"] - need          # > 0 More, < 0 Less (a 50/50 after the Over cushion stays a coin flip)
     if g.get("scout"):
         return {"side": side, "state": "SCOUT", "grade": "SCOUT", "p": p, "units": 0.0,
                 "confidence": "scout",
@@ -529,14 +530,14 @@ def verdict(g):
     elif g.get("tape_fight"):
         why = (f"TAPE FIGHT - model {side} {p:.0%}, but his recent record at this line disagrees - max 0.5U")
     elif units > 0:
-        why = f"Projection {g['lambda_final']:.1f} vs {need:g} needed ({gap:+.1f} {stat})"
+        why = f"Projection {g['lambda_final']:.1f} vs line {need:g} ({gap:+.2f} {stat})"
     else:
-        why = (f"Projection {g['lambda_final']:.1f} vs {need:g} needed ({gap:+.1f} {stat}) is small next "
+        why = (f"Projection {g['lambda_final']:.1f} vs line {need:g} ({gap:+.2f} {stat}) is small next "
                f"to how much his totals swing from match to match - leans {side} {p:.0%}, 0 units")
     if g.get("zero_reason") and not no_less_side:
         # a gate (AWPer on HS, stand-in, transfer, tiny sample): still a side, never "no play"
         grade, units = "LEAN", 0.0
-        why = (f"Leans {side} {p:.0%} (projection {g['lambda_final']:.1f} vs {need:g} needed) - 0 units: "
+        why = (f"Leans {side} {p:.0%} (projection {g['lambda_final']:.1f} vs line {need:g}) - 0 units: "
                f"{g['zero_reason']}")
     from grader import units_for_p
     if units and units < units_for_p(p) and "max" not in why:      # a cap cut the stake: say which one

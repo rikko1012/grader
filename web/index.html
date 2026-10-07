@@ -184,7 +184,12 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 .mini{display:none;gap:6px;align-items:center;flex:1;justify-content:flex-end}
 .mini.on{display:flex}
 .mini input{width:150px;padding:7px 10px;border-radius:9px;font-size:14px}
-.mini input.l{width:70px}
+.mini input.l{width:70px} .mini .msel{width:auto;padding:7px 8px;border-radius:9px;font-size:13px}
+.bhead{margin:14px 0 6px;font-weight:600;font-size:13.5px} .bflags{margin-top:4px;display:flex;flex-wrap:wrap;gap:4px} .bflags .pill{font-size:11.5px}
+.pill.warn{border-color:var(--bad);color:var(--bad)}
+#cardpop{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.6);display:flex;justify-content:center;align-items:flex-start;padding:24px 12px}
+#cardpop[hidden]{display:none} #popbody{background:var(--bg);border:1px solid var(--line-2);border-radius:16px;max-width:900px;width:100%;max-height:calc(100vh - 48px);overflow:auto;padding:16px;position:relative}
+#popclose{position:sticky;top:0;float:right;z-index:2}
 .mini .seg button{padding:6px 10px;font-size:13px}
 .mini .go{padding:8px 16px;font-size:13px;margin-left:0}
 .examples{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;align-items:center}
@@ -266,14 +271,14 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
   input,select,textarea,#slate textarea,.mini input{font-size:16px}
   .wrap{padding:0 16px 50px}
   td.hit::before,td.miss::before{margin-right:4px}
-  .mini input{min-width:0;padding:7px 8px;flex:1 1 90px} .mini input.l{width:56px;flex:0 0 56px} .mini .seg{display:none}
+  .mini input{min-width:0;padding:7px 8px;flex:1 1 90px} .mini input.l{width:56px;flex:0 0 56px} .mini .seg,.mini .msel{display:none}
   .mini .go{padding:8px 11px} header.mini-on h1,header.mini-on .grow{display:none} .mini.on{min-width:0}
 }
 </style>
 </head>
 <body class="locked">
 <div class="wrap">
-  <header><div class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#170b00" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg></div><h1>CS2 <em>Prop</em> Grader</h1><span class="grow"></span><form class="mini" id="mini" autocomplete="off"><input id="mp" placeholder="Player"><input id="ml" class="l" inputmode="decimal" placeholder="Line">
+  <header><div class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#170b00" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg></div><h1>CS2 <em>Prop</em> Grader</h1><span class="grow"></span><form class="mini" id="mini" autocomplete="off"><input id="mp" placeholder="Player"><input id="ml" class="l" inputmode="decimal" placeholder="Line"><select id="mlt" class="msel" title="Line type"><option value="standard">Standard</option><option value="goblin">Goblin</option><option value="demon">Demon</option></select><select id="msc" class="msel" title="Maps"><option value="12">Maps 1–2</option><option value="123">Maps 1–3</option><option value="1">Map 1</option></select>
     <div class="seg" id="mprop"><button type="button" data-v="kills">K</button><button type="button" data-v="hs">HS</button></div><button class="go">Grade</button></form>
     <span class="tag" id="tag">Maps 1–2 kills &amp; headshots</span></header>
 
@@ -292,8 +297,9 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
       <div class="seg" id="bprop"><button type="button" data-v="kills" class="on">Kills</button><button type="button" data-v="hs">Headshots</button></div>
       <div class="seg" id="bscope" title="Which maps the lines cover"><button type="button" data-v="12" class="on">Maps 1–2</button><button type="button" data-v="1">Map 1</button><button type="button" data-v="123">Maps 1–3</button></div>
       <div class="seg" id="bside" title="Show the grader's Overs, Unders, or both"><button type="button" data-v="More">Overs</button><button type="button" data-v="both" class="on">Both</button><button type="button" data-v="Less">Unders</button></div>
-      <select id="bsort" style="width:auto;padding:8px 10px"><option value="g">Best grade first</option><option value="p">Highest chance</option><option value="e">Biggest edge</option><option value="t">Starting soonest</option></select>
-      <label class="small" style="display:flex;gap:6px;align-items:center;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="bbets" style="width:auto"> Bets only</label>
+      <input id="bsearch" type="search" placeholder="Player or team" style="width:150px;padding:8px 10px">
+      <select id="bsort" style="width:auto;padding:8px 10px"><option value="g">Best grade first</option><option value="m">By match</option><option value="p">Highest chance</option><option value="e">Biggest edge</option><option value="t">Starting soonest</option></select>
+      <label class="small" style="display:flex;gap:6px;align-items:center;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="bbets" style="width:auto" checked> Bets only</label>
       <button type="button" class="chipbtn" id="brefresh" title="Refresh the board">↻ Refresh</button>
       <button type="button" class="bslip" id="bauto" title="Build 2-4 pick slips from the graded board">⚡ Build slips</button></div>
     <div id="bstatus" class="small muted" style="margin:-2px 0 10px"></div>
@@ -302,6 +308,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
     <div id="slipsout" hidden></div>
     <div id="boardout"></div>
   </section>
+  <div id="cardpop" hidden><div id="popbody"><button type="button" class="chipbtn" id="popclose" title="Close (Esc)">✕ Close</button></div></div>
   <form id="f" autocomplete="off">
     <div class="field">
       <label for="player">Player</label>
@@ -337,11 +344,11 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
   <details class="card how" style="margin-top:12px">
     <summary>How grades work</summary>
     <div class="small" style="margin-top:10px;line-height:1.55">
-      <p><b>Built from official pro matches, Maps 1 and 2 only</b> – the maps PrizePicks counts. Map 3 and FACEIT games never go into a projection.</p>
+      <p><b>Built from official pro matches.</b> Projections use Maps 1 and 2 – the maps most lines count. Maps 1–3 lines add a third map only as often as the series is expected to go the distance, and Map 1 lines use Map 1 alone. FACEIT games never count.</p>
       <p><b>Recent form counts most.</b> A player's last few months weigh more than older matches, so a player in form (or in a slump) shows up quickly without one hot series taking over.</p>
       <p><b>The maps matter.</b> If the veto is out we use how the player performs on those two maps; if not, his numbers across all maps.</p>
       <p><b>Match context.</b> Betting markets tell us who is favoured – winning and losing teams put up different numbers. Heavy underdogs (especially against top-10 teams) are marked down, and a player's record against teams ranked close to tonight's opponent counts too. We also check the roster (stand-ins, new teams), how long since his last official match, and how big his sample is. Anything uncertain lowers the stake, not the honesty of the number.</p>
-      <p><b>Projection → chance → grade.</b> The projection is compared with the number he actually needs (a 15.5 line needs 16), and turned into a win chance based on how much a player's totals normally swing from match to match. Unders need a slightly bigger edge than Overs – overtimes and big games make kill totals run over more often than under.</p>
+      <p><b>Projection → chance → grade.</b> The projection is compared with the line (a 15.5 line needs 16 for More, 15 or less for Less; on a whole line like 16 exactly 16 is a push), and turned into a win chance based on how much a player's totals normally swing from match to match. Overs need a small cushion (about 1 kill / 0.6 headshots) – a projection right on the line is a coin flip, not an Over.</p>
       <p><b>Tested before it counts.</b> Every factor was tested on 900+ past matches, using only information available before each one. His last 10 matches carry a lot of weight (they proved the strongest signal on real lines), and head-to-head nudges the projection. Series against other teams from the opponent's region count lightly.</p>
       <p><b>What the grades mean</b> (chance the pick wins): A+ 80%+ · A 74%+ · A− 68%+ · B+ 63%+ · B 57%+ · B− 55%+ · <i>Lean</i> under 55% (a coin flip – no units).<br>
       <b>Units:</b> A+ 3U · A 2U · A− 1.5U · B+ 1U · B 0.5U · B− 0.5U · Lean 0U. Thin markets, small samples, stand-ins and rust cap the units.</p>
@@ -349,6 +356,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
     </div>
   </details>
 
+  <span id="outhome" hidden></span>
   <div id="status" class="status" hidden></div>
   <div id="out"></div>
 </div>
@@ -538,10 +546,22 @@ function showRecent() {
     `<button type="button" class="chipbtn" data-hist="${i}">${esc(x.p)} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${x.lt && x.lt !== "standard" ? " " + x.lt : ""} · <b>${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : `${esc(x.g)} ${esc(x.s)}`}</b></button>`).join("")
     + `<button type="button" class="chipbtn" data-act="clearhist" title="Clear recent">✕</button>` : "";
 }
-function gradeNow(p, l, t, lt, sc) {
+function gradeNow(p, l, t, lt, sc, pop) {
   $("#player").value = p; $("#line").value = l; setProp(t || "kills"); $("#lt").value = lt || "standard"; $("#scope").value = sc || "12";
-  slug = null; match = null; setMode("one"); $("#f").requestSubmit();
+  slug = null; match = null;
+  if (pop) openPop(); else { closePop(); setMode("one"); }
+  $("#f").requestSubmit();
 }
+// board: the full card opens over the board, so the list keeps its place
+function openPop() {
+  const box = $("#popbody"); box.append($("#status"), $("#out")); $("#cardpop").hidden = false; document.body.style.overflow = "hidden"; box.scrollTop = 0;
+}
+function closePop() {
+  if ($("#cardpop").hidden) return;
+  $("#outhome").after($("#status"), $("#out")); $("#cardpop").hidden = true; document.body.style.overflow = "";
+}
+$("#cardpop").addEventListener("click", e => { if (e.target.id === "cardpop" || e.target.closest("#popclose")) closePop(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closePop(); });
 let lastCard = null;
 document.addEventListener("click", e => {
   const hb = e.target.closest("[data-hist]");
@@ -566,7 +586,7 @@ function setMode(m) {
   if (m === "board") loadBoard();
   try { showExamples(); } catch {}
 }
-$("#mode").onclick = e => { const b = e.target.closest("button"); if (b) setMode(b.dataset.v); };
+$("#mode").onclick = e => { const b = e.target.closest("button"); if (b) { closePop(); setMode(b.dataset.v); } };
 
 // slate: several props at once -> sortable table; a row opens its full card
 let slate = [], slateSort = {k: "p", dir: -1};
@@ -641,7 +661,7 @@ $("#slatego").onclick = async () => {
   const syncProp = () => [...$("#mprop").children].forEach(x => x.classList.toggle("on", x.dataset.v === prop));
   $("#mprop").onclick = e => { const b = e.target.closest("button"); if (b) { setProp(b.dataset.v); syncProp(); } };
   mini.onsubmit = e => { e.preventDefault(); const p = $("#mp").value.trim(), l = $("#ml").value.trim();
-    if (p && l) gradeNow(p, l, prop, $("#lt").value); };
+    if (p && l) gradeNow(p, l, prop, $("#mlt").value, $("#msc").value); };
   try {
     let shown = false;
     new IntersectionObserver(([en]) => {
@@ -649,7 +669,7 @@ $("#slatego").onclick = async () => {
       const show = form && (shown ? b < 90 : b < 50);        // hysteresis: no flicker at the edge
       if (show === shown) return; shown = show;
       mini.classList.toggle("on", show); tag.hidden = show; mini.parentElement.classList.toggle("mini-on", show);
-      if (show) { $("#mp").value = $("#player").value; $("#ml").value = $("#line").value; syncProp(); }
+      if (show) { $("#mp").value = $("#player").value; $("#ml").value = $("#line").value; $("#mlt").value = $("#lt").value; $("#msc").value = $("#scope").value; syncProp(); }
     }, {threshold: [0, 0.05, 0.1, 0.25, 0.5, 0.75, 1]}).observe($("#f"));
   } catch {}
 })();
@@ -761,7 +781,10 @@ function boardCard(r) {     // a board row in the shape addToSlip / pickLine exp
 function drawBoard() {
   const sortBy = $("#bsort").value;
   const rank = r => !r.side ? 9 : r.state === "SCOUT" ? 7 : (G_RANK[r.grade] ?? 6);
-  const key = r => sortBy === "g" ? [rank(r), -(r.p ?? 0)] : sortBy === "p" ? [-(r.p ?? -1)] : sortBy === "e" ? [-Math.abs(r.edge ?? 0)] : [r.start || "9"];
+  const key = r => sortBy === "g" ? [rank(r), -(r.p ?? 0)] : sortBy === "p" ? [-(r.p ?? -1)] : sortBy === "e" ? [-Math.abs(r.edge ?? 0)]
+    : sortBy === "m" ? [r.start || "9", r.matchup || "", rank(r), -(r.p ?? 0)] : [r.start || "9"];
+  const q = ($("#bsearch").value || "").trim().toLowerCase();
+  const hit = r => !q || [r.nick, r.player, r.team, r.team_name, r.opponent, r.opp_name].some(x => String(x || "").toLowerCase().includes(q));
   const cmp = (a, b) => { const A = key(a), B = key(b); for (let i = 0; i < A.length; i++) if (A[i] !== B[i]) return A[i] > B[i] ? 1 : -1; return 0; };
   const other = {};
   boardRows.forEach(r => { other[(r.nick || r.player).toLowerCase() + "|" + r.prop + "|" + (r.scope || "12") + "|" + (r.matchup || "")] = r; });
@@ -772,7 +795,20 @@ function drawBoard() {
   $("#bscope").hidden = scopes.size < 2;
   if (!scopes.has(bscope) && scopes.size) { bscope = scopes.has("12") ? "12" : [...scopes][0]; [...$("#bscope").children].forEach(x => x.classList.toggle("on", x.dataset.v === bscope)); }
   const rows = boardRows.filter(r => r.prop === bprop && (r.scope || "12") === bscope && (bside === "both" || r.side === bside)
-                                    && (!$("#bbets").checked || (r.units || 0) > 0)).sort(cmp);
+                                    && (!$("#bbets").checked || (r.units || 0) > 0) && hit(r)).sort(cmp);
+  let lastM = null;
+  const head = r => { if (sortBy !== "m" || r.matchup === lastM) return ""; lastM = r.matchup;
+    return `<div class="bhead">${esc((r.team_name || r.team || "") + " vs " + (r.opp_name || r.opponent || ""))} <span class="muted">· ${shortWhen(r.start)}</span></div>`; };
+  const leanWhy = r => { const t = r.reason || ""; if (r.grade !== "LEAN") return "";
+    if (/FORM FIGHT/.test(t)) return "Lean: his last 10 disagree with the projection";
+    const m = t.match(/0 units: (.+)$/); if (m) return "Lean: " + m[1].split(";")[0].slice(0, 80);
+    return ""; };
+  const flagsOf = r => { const out = [], w = leanWhy(r);
+    if (w) out.push(`<span class="pill">${esc(w)}</span>`);
+    if (r.p != null && r.p < 0.52) out.push(`<span class="pill" title="${r.side === "More" ? "After the Over cushion the chance is about even" : "About even"}">coin flip</span>`);
+    if (r.l10_n >= 5 && ((r.side === "More" && r.l10_over / r.l10_n <= 0.3) || (r.side === "Less" && r.l10_over / r.l10_n >= 0.7)))
+      out.push(`<span class="pill warn" title="The pick goes against what he did in his last ${r.l10_n} matches – double-check it">vs last ${r.l10_n} (${r.l10_over}/${r.l10_n} over)</span>`);
+    return out.join(" "); };
   const pct0 = x => x == null ? "–" : (x * 100).toFixed(1) + "%";
   const st = (k, v, cls = "", sub = "") => `<div class="bstat"><div class="k">${k}</div><div class="v ${cls}">${v}</div>${sub ? `<div class="s">${sub}</div>` : ""}</div>`;
   $("#boardout").innerHTML = rows.length ? `<div class="blist">` + rows.map(r => {
@@ -781,19 +817,19 @@ function drawBoard() {
       const o = other[nick.toLowerCase() + "|" + (r.prop === "hs" ? "kills" : "hs") + "|" + (r.scope || "12") + "|" + (r.matchup || "")];
       const team = r.team_name || r.team, opp = r.opp_name || r.opponent;
       const win = r.p_win != null && !["NO MARKET", "NONE"].includes(r.market) ? pct0(r.p_win) : "–";
-      return `<div class="brow" data-bl="${esc(nick)}|${r.line}|${r.prop}|${r.scope || "12"}">
+      return head(r) + `<div class="brow" data-bl="${esc(nick)}|${r.line}|${r.prop}|${r.scope || "12"}">
         <span class="gtag ${!r.side ? "g-scout" : r.state === "SCOUT" ? "g-scout" : gClass(r.grade)}">${esc(lab)}</span>
         <div class="who"><b>${esc(nick)}</b>${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}<div class="meta">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}</div><div class="meta">${shortWhen(r.start)}</div></div>
         <div class="pk"><div><div class="pick">${r.side ? esc(sideWord(v)) : "grading…"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)} ${r.p != null ? `<span class="pc">· ${pct0(r.p)} to hit</span>` : ""}</div>
-          <div class="other">${o ? `${propWord(o.prop)} line ${o.line}` : ""}${r.alt ? ` · alt ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}</div></div>
+          <div class="other">${o ? `${propWord(o.prop)} line ${o.line}` : ""}${r.alt ? ` · alt ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}</div>${flagsOf(r) ? `<div class="bflags">${flagsOf(r)}</div>` : ""}</div>
 </div>
         <div class="bstats">
           ${st("Proj", r.proj != null ? num(r.proj, 1) : "–")}
-          ${st("Edge", r.edge == null ? "–" : (r.edge > 0 ? "+" : "") + r.edge, r.edge == null ? "" : r.edge > 0 ? "up" : "dn")}
-          ${st("Last 10", r.l10_n ? `${r.l10_over}/${r.l10_n}` : "–", "", r.l10_avg != null ? "avg " + r.l10_avg : "").replace('class="s"', 'class="s keep"')}
-          ${st("Units", r.units != null ? +(+r.units).toFixed(2) + "U" : "–", (r.units || 0) > 0 ? "up" : "", r.cap_n ? `capped · ${r.cap_n} picks same result` : "").replace('class="s"', r.cap_n ? `class="s keep" title="${r.cap_n} bets on this board need ${esc(r.team_name || r.team)} to ${r.side === "More" ? "do well" : "do badly"} in this match – one upset or overtime decides them all, so together they're capped at 3U (full size ${r.units_full}U)"` : 'class="s"')}
+          ${st("Edge", r.edge == null ? "–" : (r.edge > 0 ? "+" : "") + (Math.abs(r.edge) < 0.1 ? r.edge.toFixed(2) : r.edge.toFixed(1)), r.edge == null ? "" : r.edge > 0 ? "up" : "dn", "vs line")}
+          ${st(`Last ${r.l10_n || 10}`, r.l10_n ? `${r.l10_over}/${r.l10_n}` : "–", "", r.l10_avg != null ? "avg " + r.l10_avg : "").replace('class="s"', 'class="s keep"')}
+          ${st("Units", r.units != null ? +(+r.units).toFixed(2) + "U" : "–", (r.units || 0) > 0 ? "up" : "", r.cap_n ? "capped" : "").replace('class="s"', r.cap_n ? `class="s keep" title="${r.cap_n} bets on this board need ${esc(r.team_name || r.team)} to ${r.side === "More" ? "do well" : "do badly"} in this match – one upset or overtime decides them all, so together they're capped at 3U (full size ${r.units_full}U)"` : 'class="s"')}
           ${st("HS%", r.hs_pct != null ? Math.round(r.hs_pct) + "%" : "–", "", "3 months")}
-          ${st("Team win %", win, "", "betting odds")}
+          ${st("Team win %", win, "", win === "–" ? "no market" : "betting odds")}
         </div>
         ${r.side ? `<button type="button" class="bslip ${onSlip.has(nick.toLowerCase()) ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}">${onSlip.has(nick.toLowerCase()) ? "On slip" : "+ Slip"}</button>` : "<span></span>"}
       </div>`; }).join("") + `</div><div class="small muted" style="margin-top:10px">Underdog's Maps 1–2 lines, graded. Tap a row for the full card. Underdog payouts differ from PrizePicks'.</div>`
@@ -805,7 +841,7 @@ $("#boardout").addEventListener("click", e => {
     const r = boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t);
     if (r) { addToSlip(boardCard(r)); drawBoard(); } return; }
   const r = e.target.closest("[data-bl]");
-  if (r) { const [p, l, t, sc] = r.dataset.bl.split("|"); gradeNow(p, l, t, "standard", sc); setTimeout(() => $("#out").scrollIntoView({behavior: "smooth"}), 50); }
+  if (r) { const [p, l, t, sc] = r.dataset.bl.split("|"); gradeNow(p, l, t, "standard", sc, true); }
 });
 $("#bprop").onclick = e => { const b = e.target.closest("button"); if (!b) return; bprop = b.dataset.v;
   [...$("#bprop").children].forEach(x => x.classList.toggle("on", x === b)); drawBoard(); };
@@ -814,13 +850,16 @@ $("#bscope").onclick = e => { const b = e.target.closest("button"); if (!b) retu
 $("#bside").onclick = e => { const b = e.target.closest("button"); if (!b) return; bside = b.dataset.v;
   [...$("#bside").children].forEach(x => x.classList.toggle("on", x === b)); drawBoard(); };
 $("#bbets").onchange = drawBoard;
+const _drawBoard0 = drawBoard;          // the slip builder follows the board's filters
+drawBoard = () => { _drawBoard0(); if (!$("#slipsout").hidden) drawAutoSlips(); };
+$("#bsearch").oninput = drawBoard;
 $("#bsort").onchange = drawBoard;
 $("#brefresh").onclick = () => loadBoard(true).then(() => { if (!$("#slipsout").hidden) drawAutoSlips(); });
 
 // ---------- automatic slip builder: 2-4 picks from the graded board (no grading of its own)
 // Ranked by the model's chance that every pick hits. The return is only worked out from the payout the member
 // enters (Underdog's real multiplier for that entry) - never an assumed one.
-const BUILDER_V = "slips-6";      // keep in step with slips.BUILDER_VERSION (server copy + logs)
+const BUILDER_V = "slips-7";      // keep in step with slips.BUILDER_VERSION (server copy + logs)
 let boardVer = "";
 const udPay = () => store.get("cs2s_udpay", {});              // standard payout per slip size (member-entered)
 const udExact = () => store.get("cs2s_udexact", {});          // exact payout for one slip, by its picks (member-entered)
@@ -835,13 +874,14 @@ const pctF = x => (x * 100).toFixed(1) + "%";      // display only; every calcul
 // member's builder settings: side (More / Less / mixed), size 2-4, how many slips, overlap (none / some)
 const autoCfg = () => Object.assign({side: "mixed", n: 3, count: 3, overlap: "none"}, store.get("cs2s_auto", {}));
 function slipPool() {          // eligible picks + why the rest were left out
-  const now = Date.now(), side = autoCfg().side, by = {}, why = {More: 0, Less: 0, gone: 0, grade: 0, role: 0, unknown: 0};
+  const now = Date.now(), side = autoCfg().side, by = {}, why = {More: 0, Less: 0, gone: 0, grade: 0, role: 0, unknown: 0}, out = [];
   for (const r of boardRows) {
+    if (r.prop !== bprop || (r.scope || "12") !== bscope) continue;       // the board's Kills / HS and Maps filters
     if (!r.side || r.p == null || r.state === "SCOUT" || (r.start && new Date(r.start).getTime() <= now)) { why.gone++; continue; }
-    if (r.grade === "LEAN" || (G_RANK[r.grade] ?? 9) > 4.5 || (r.units || 0) <= 0) { why.grade++; continue; }
+    if (r.grade === "LEAN" || (G_RANK[r.grade] ?? 9) > 4.5 || (r.units || 0) <= 0) { why.grade++; out.push([r, r.grade === "LEAN" ? "a Lean (0U)" : "no units"]); continue; }
     const role = r.prop === "hs" ? r.awp : r.igl;            // AWPers' HS and IGLs' kills are left out; unknown role too
-    if (role === true) { why.role++; continue; }
-    if (role !== false) { why.unknown++; continue; }
+    if (role === true) { why.role++; out.push([r, r.prop === "hs" ? "AWPer – HS lines left out" : "IGL – kill lines left out"]); continue; }
+    if (role !== false) { why.unknown++; out.push([r, r.prop === "hs" ? "AWP role not confirmed" : "IGL role not confirmed"]); continue; }
     why[r.side]++;
     if (side !== "mixed" && r.side !== side) continue;
     const m = (r.matchup || r.team + "|" + r.opponent) + "|" + (r.start || "");
@@ -849,6 +889,7 @@ function slipPool() {          // eligible picks + why the rest were left out
     (by[m] = by[m] || []).push({r, m, nick: (r.nick || r.player).toLowerCase(), p: r.p, mult});
   }
   const groups = Object.values(by).map(a => a.sort((x, y) => y.p - x.p).slice(0, 2)).sort((a, b) => b[0].p - a[0].p).slice(0, 16);
+  why.top = out.filter(([r]) => r.p >= 0.57).sort((a, b) => b[0].p - a[0].p).slice(0, 3);   // best picks it couldn't use
   return {groups, why};
 }
 function buildSlips(groups, n, count, overlap) {   // one pick per match and per player inside a slip
@@ -889,7 +930,8 @@ function drawAutoSlips() {
       ${seg("n", [[2, "2"], [3, "3"], [4, "4"]].map(([v, l]) => [v, l + " picks"]))}
       ${seg("count", [[3, "3"], [5, "5"], [10, "10"]].map(([v, l]) => [v, l + " slips"]))}
       ${seg("overlap", [["none", "No shared matches"], ["some", "Allow overlap"]])}</div>
-    <div class="small muted" style="margin:8px 0 2px">Eligible: ${why.More} Overs, ${why.Less} Unders${left ? ` · left out: ${left}` : ""}</div>
+    <div class="small muted" style="margin:8px 0 2px">${propWord(bprop)} · ${bscope === "1" ? "Map 1" : bscope === "123" ? "Maps 1–3" : "Maps 1–2"} (board filters) · eligible: ${why.More} Overs, ${why.Less} Unders${left ? ` · left out: ${left}` : ""}</div>
+    ${why.top.length ? `<div class="small muted">Not used: ${why.top.map(([r, w]) => `${esc(r.nick || r.player)} ${pctF(r.p)} (${w})`).join(" · ")}</div>` : ""}
     <label class="small muted" style="display:flex;gap:6px;align-items:center;margin:6px 0 10px" title="The standard ${n}-pick payout in Underdog, before any line boosts. You enter it – the grader doesn't know Underdog's payouts.">Your ${n}-pick payout
       <input data-udpay="${n}" inputmode="decimal" placeholder="?" value="${pays[n] ? esc(String(pays[n])) : ""}" style="width:64px;padding:5px 8px">x</label>`
     + (!ss.length
@@ -962,7 +1004,9 @@ $("#slipsout").addEventListener("click", async e => {
   } })();
 
 function chart(series, line, proj) {
-  const s = [...series].reverse(), W = 640, H = 190, top = 22, bot = 26, n = s.length;
+  const s = [...series], W = 640, H = 190, top = 22, bot = 26, n = s.length;      // newest on the left, like the table
+  const abbr = t => { t = String(t || ""); if (t.length <= 7) return t; const w = t.split(/\s+/).filter(Boolean);
+    return w.length > 1 ? w.map(x => /^[A-Z0-9]{2,5}$/.test(x) ? x : x[0]).join("").toUpperCase().slice(0, 6) : t.slice(0, 6) + "…"; };
   const max = Math.max(...s.map(x => x.total), line || 0, proj || 0) * 1.12 || 1;
   const y = v => top + (H - top - bot) * (1 - v / max), bw = Math.min(46, (W - 20) / n * 0.62), step = (W - 20) / n;
   let o = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Last ${n} matches against the line">`;
@@ -970,15 +1014,17 @@ function chart(series, line, proj) {
     const cx = 10 + step * i + step / 2, yy = y(x.total), c = line == null ? "var(--accent)" : x.total > line ? "var(--good)" : "var(--bad)";
     o += `<rect x="${cx - bw / 2}" y="${yy}" width="${bw}" height="${Math.max(H - bot - yy, 2)}" rx="5" fill="${c}" opacity=".85"/>`
       + `<text class="val" x="${cx}" y="${yy - 6}" text-anchor="middle">${x.total}</text>`
-      + `<text x="${cx}" y="${H - 8}" text-anchor="middle">${esc(String(x.opponent || "").slice(0, 7))}</text>`;
+      + `<text x="${cx}" y="${H - 8}" text-anchor="middle"><title>${esc(String(x.opponent || ""))}</title>${esc(abbr(x.opponent))}</text>`;
   });
   if (proj) o += `<line class="pj" x1="0" x2="${W}" y1="${y(proj)}" y2="${y(proj)}"/>`;
-  if (line != null) o += `<line class="ln" x1="0" x2="${W}" y1="${y(line)}" y2="${y(line)}"/><text class="lnl" x="${W - 4}" y="${y(line) - 5}" text-anchor="end">Line ${line}</text>`;
+  if (line != null) o += `<line class="ln" x1="0" x2="${W}" y1="${y(line)}" y2="${y(line)}"/><text class="lnl" x="4" y="12">- - Line ${line}</text>`;
+  o += `<text x="${W - 4}" y="12" text-anchor="end">newest first</text>`;
   return o + `</svg>`;
 }
 
 function render(d) {
   lastCard = d;
+  const how = document.querySelector("details.how"); if (how) how.open = false;
   const g = d.grade || {}, v = d.verdict || {}, pb = d.player_block || {}, o = pb.overall || {};
   const nm = d.next_match, od = d.odds, hh = d.h2h, fc = d.faceit, det = g.detail || {};
   const stat = g.prop === "hs" ? "headshots" : "kills";
@@ -1033,10 +1079,10 @@ function render(d) {
       `<button type="button" class="chipbtn ${x.line === g.line ? "on" : ""}" data-ladder="${x.line}" title="Grade this line">${x.line} <b class="${x.side === "More" ? "up" : "dn"}">${x.side === "More" ? "More" : "Less"} ${Math.round(x.p * 100)}%</b>${x.grade && x.grade !== "C" && !String(x.grade).startsWith("n/a") ? " · " + esc(x.grade) : ""}</button>`).join("")}</div>` : ""}
     <div class="stats" style="margin-top:10px">
       <div class="stat"><div class="k">Projection</div><div class="v">${num(g.lambda_final,1)}</div><div class="n">${stat}, ${g.scope === "123" ? "Maps 1–3" : g.scope === "1" ? "Map 1" : "Maps 1–2"}</div></div>
-      <div class="stat"><div class="k">Line</div><div class="v">${g.line}</div><div class="n">needs ${g.line + 0.5} for More</div></div>
+      <div class="stat"><div class="k">Line</div><div class="v">${g.line}</div><div class="n">needs ${Number.isInteger(g.line) ? g.line + 1 : g.line + 0.5} for More</div></div>
       <div class="stat"><div class="k">Team win %</div><div class="v">${det.p_win != null && !["NO MARKET", "NONE"].includes(g.market_quality) ? pct(det.p_win,0) : "–"}</div><div class="n">${["NO MARKET", "NONE"].includes(g.market_quality) ? "no market – graded as even" : "from betting markets"}</div></div>
-      <div class="stat ${g.lambda_final - g.line - 0.5 > 0 ? "up" : "down"}"><div class="k">Edge</div><div class="v">${(g.lambda_final - g.line - 0.5 > 0 ? "+" : "") + (g.lambda_final - g.line - 0.5).toFixed(1)}</div><div class="n">projection − ${g.line + 0.5} needed</div></div>
-      <div class="stat"><div class="k">Last 10</div><div class="v">${pb.recent_form?.avg_total ?? "–"}</div><div class="n">median ${pb.recent_form?.median_total ?? "–"} · ${pb.recent_form?.overs ?? "–"}/${pb.recent_form?.matches ?? "–"} over</div></div>
+      <div class="stat ${g.lambda_final - g.line > 0 ? "up" : "down"}"><div class="k">Edge</div><div class="v">${(g.lambda_final - g.line > 0 ? "+" : "") + (Math.abs(g.lambda_final - g.line) < 0.1 ? (g.lambda_final - g.line).toFixed(2) : (g.lambda_final - g.line).toFixed(1))}</div><div class="n">projection − line</div></div>
+      <div class="stat"><div class="k">Last ${pb.recent_form?.matches || 10}</div><div class="v">${pb.recent_form?.avg_total ?? "–"} <span class="small muted">avg</span></div><div class="n">${pb.recent_form?.overs ?? "–"}/${pb.recent_form?.matches ?? "–"} over · median ${pb.recent_form?.median_total ?? "–"}</div></div>
     </div>`;
   }
   {
@@ -1044,7 +1090,7 @@ function render(d) {
     const hhs = sc === "1" ? map1(hh?.series) : (hh?.series || []);
     const chip = (lab, k, n) => n ? `<div class="rate ${k / n >= .6 ? "hi" : k / n <= .4 ? "lo" : ""}"><b>${k}/${n}</b><span>${lab}</span></div>` : "";
     const l5 = ser.slice(0, 5), hs2 = hhs.filter(x => x.same_roster !== false && !x.regional);   // what the grade counts
-    const r = chip("Last 5", l5.filter(over).length, l5.length) + chip("Last 10", ser.filter(over).length, ser.length)
+    const r = chip("Last 5", l5.filter(over).length, l5.length)
       + chip(hhs.some(x => x.same_roster === false) ? "H2H same roster" : "H2H", hs2.filter(over).length, hs2.length);
     if (r && "p_more" in g && cmpLine != null) h += `<div class="rates">${r}</div>`;
   }
