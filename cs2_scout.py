@@ -1683,7 +1683,7 @@ def run(args, res, b, ttl):
         finish_line(res, args)
 
 
-def _form_rows(pb, stat="kills"):
+def _form_rows(pb, stat="kills", keep_n=RECENT_MATCHES, back_days=None):
     """His recent Maps 1-2 rows, newest first, RECENT_MATCHES series in total: BO3.gg's, with HLTV's
     numbers swapped in for every match HLTV also has (HLTV is the official record - BO3.gg's quick
     scoreboards and map order are sometimes off), plus series only HLTV has (events BO3.gg doesn't
@@ -1692,6 +1692,8 @@ def _form_rows(pb, stat="kills"):
     try:
         import hltv
         since = (min(r["date"] for r in rows) if rows else (date.today() - timedelta(days=120)).isoformat())
+        if back_days:                                   # reach further back on HLTV (last 10 in one environment)
+            since = min(since, (date.today() - timedelta(days=back_days)).isoformat())
         since = (date.fromisoformat(since) - timedelta(days=1)).isoformat()
         hl = hltv.recent_series((pb.get("player") or {}).get("nick"), pb.get("current_team"), since)
     except Exception:
@@ -1729,7 +1731,7 @@ def _form_rows(pb, stat="kills"):
     for r in merged:
         if r["match_id"] not in keep:
             keep.append(r["match_id"])
-    keep = set(keep[:RECENT_MATCHES])
+    keep = set(keep[:keep_n])
     return [r for r in merged if r["match_id"] in keep]
 
 
@@ -1908,6 +1910,16 @@ def _apply_env(pb):
     return tonight
 
 
+def _first_series(rows, n):
+    """The rows of the n newest series (rows newest first)."""
+    keep = []
+    for r in rows:
+        if r["match_id"] not in keep:
+            keep.append(r["match_id"])
+    keep = set(keep[:n])
+    return [r for r in rows if r["match_id"] in keep]
+
+
 def _env_rows(rows, pb, tonight):
     """His rows from tonight's environment (BO3.gg rows by tournament type, HLTV rows by its flag)."""
     me = pb.get("_match_env") or {}
@@ -1978,10 +1990,13 @@ def finish_line(res, args):
     tonight = _apply_env(pb)                 # LAN match -> LAN stats, online match -> online stats
     if pb.get("recent_maps") is not None:
         _hltv_only_overall(pb)
-        rows = _form_rows(pb, stat)
+        deep = _form_rows(pb, stat, keep_n=4 * RECENT_MATCHES, back_days=365)
+        rows = _first_series(deep, RECENT_MATCHES)
         if tonight:
-            er = _env_rows(rows, pb, tonight)
-            if len({r["match_id"] for r in er}) >= 5:          # his last 10 in this environment
+            # his last 10 in this environment: from deeper HLTV history, not only the env matches inside his
+            # last 10 overall (that left 5 - f1ku 2026-10-07)
+            er = _first_series(_env_rows(deep, pb, tonight), RECENT_MATCHES)
+            if len({r["match_id"] for r in er}) >= 5:
                 rows = er
                 pb["_env"]["form_from"] = tonight
         pb["recent_form"] = recent_form(rows, pb.get("_rf_kpr"), args.line, stat)   # Maps 1-2: feeds the grade
