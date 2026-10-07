@@ -273,7 +273,8 @@ def board_payload():
                                                      "hs_pct", "p_win", "market", "team_name", "opp_name")}))
         rows[-1]["scope"] = r.get("scope") or "12"
     _cap_same_result(rows)
-    return {"updated": b["at"], "error": b["error"], "rows": rows, "total": len(b["rows"])}
+    return {"updated": b["at"], "error": b["error"], "rows": rows, "total": len(b["rows"]),
+            "version": picklog.MODEL_VERSION}
 
 
 SAME_RESULT_CAP = 3.0   # units (on the 0.5-3U scale), all bets that need the same team to do well / badly in one match
