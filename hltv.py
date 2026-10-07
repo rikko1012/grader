@@ -1074,6 +1074,13 @@ def veto_backtest(days=30, limit=250):
         res["map2_top1"] += r2[:1] == [p2]; res["map2_top2"] += p2 in r2[:2]
         res["either_pick_in_top2"] += p1 in r1[:2] and p2 in r2[:2]
         res["ll"] += -math.log(max(pr["map1"].get(p1, 0), 0.01)) - math.log(max(pr["map2"].get(p2, 0), 0.01))
+        for mix in (0.2, 0.35, 0.5, 0.65, 0.8, 1.0):        # blended with a flat prior over the pool
+            n1, n2 = 7, 6
+            q1 = (1 - mix) * pr["map1"].get(p1, 0) + mix / n1
+            q2 = (1 - mix) * pr["map2"].get(p2, 0) + mix / n2
+            res.setdefault("ll_mix", {}).setdefault(mix, 0.0)
+            res["ll_mix"][mix] += -math.log(q1) - math.log(q2)
     if res["cases"]:
         res["ll"] = round(res["ll"] / (2 * res["cases"]), 3)
+        res["ll_mix"] = {str(k): round(v / (2 * res["cases"]), 4) for k, v in (res.get("ll_mix") or {}).items()}
     return res
