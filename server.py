@@ -826,7 +826,6 @@ class Handler(BaseHTTPRequestHandler):
                     con.close()
             if u.path == "/admin/disk" and self.authed(q.get("token")):
                 # private: what takes space on the volume (bytes vs blocks actually allocated)
-                from bo3 import DATA_DIR
                 rows = {}
                 for p in Path(DATA_DIR).rglob("*"):
                     try:
