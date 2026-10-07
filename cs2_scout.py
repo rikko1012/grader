@@ -1910,6 +1910,19 @@ def _apply_env(pb):
     return tonight
 
 
+def _usable_series(rows, stat, need):
+    """Rows of series that count for a record: `need` maps played and the stat recorded on them."""
+    by = {}
+    for r in rows:
+        by.setdefault(r["match_id"], []).append(r)
+    ok = set()
+    for mid, maps in by.items():
+        maps = sorted(maps, key=lambda m: m["number"] or 9)
+        if len(maps) >= need and all(m.get(stat) is not None for m in maps[:need]):
+            ok.add(mid)
+    return [r for r in rows if r["match_id"] in ok]
+
+
 def _first_series(rows, n):
     """The rows of the n newest series (rows newest first)."""
     keep = []
@@ -1991,17 +2004,24 @@ def finish_line(res, args):
     if pb.get("recent_maps") is not None:
         _hltv_only_overall(pb)
         deep = _form_rows(pb, stat, keep_n=4 * RECENT_MATCHES, back_days=365)
-        rows = _first_series(deep, RECENT_MATCHES)
-        if tonight:
-            # his last 10 in this environment: from deeper HLTV history, not only the env matches inside his
-            # last 10 overall (that left 5 - f1ku 2026-10-07)
-            er = _first_series(_env_rows(deep, pb, tonight), RECENT_MATCHES)
-            if len({r["match_id"] for r in er}) >= 5:
-                rows = er
-                pb["_env"]["form_from"] = tonight
+
+        def last10(need):
+            # his last 10 USABLE series (Maps 1-2 both played and the stat recorded; need=1: Map 1), in
+            # tonight's environment when he has 5+ there - from deeper HLTV history, not only what is inside his
+            # last 10 overall (that left 5 - f1ku 2026-10-07; BO1s / unread headshots left 9 - FL1T)
+            ok = _usable_series(deep, stat, need)
+            rows = _first_series(ok, RECENT_MATCHES)
+            if tonight:
+                er = _first_series(_env_rows(ok, pb, tonight), RECENT_MATCHES)
+                if len({r["match_id"] for r in er}) >= 5:
+                    return er, True
+            return rows, False
+        rows, env_form = last10(2)
+        if env_form:
+            pb["_env"]["form_from"] = tonight
         pb["recent_form"] = recent_form(rows, pb.get("_rf_kpr"), args.line, stat)   # Maps 1-2: feeds the grade
         if getattr(args, "scope", "12") == "1":          # display only: every match's Map 1, BO1s included
-            pb["recent_form_map1"] = recent_form(rows, pb.get("_rf_kpr"), args.line, stat, need=1)
+            pb["recent_form_map1"] = recent_form(last10(1)[0], pb.get("_rf_kpr"), args.line, stat, need=1)
     _tick(res, "form", t0)
     if res.get("_h2h_rows") is not None:
         hrows = list(res["_h2h_rows"])
