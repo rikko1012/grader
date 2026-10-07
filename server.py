@@ -412,7 +412,11 @@ def board_forever():
             with ThreadPoolExecutor(BOARD_WORKERS, thread_name_prefix="board") as ex:
                 list(ex.map(one, todo))
             _board_save()
-            try:                                      # IGLs for the board's teams (Liquipedia, cached a week)
+            try:                                      # roles: the HLTV scraper's tables (30 min), then Liquipedia
+                roles.refresh_hltv()
+            except Exception:
+                traceback.print_exc()
+            try:
                 roles.refresh([((BOARD.get(r["id"]) or {}).get("nick") or r["player"],
                                 (BOARD.get(r["id"]) or {}).get("team_name") or r.get("team")) for r in rows])
             except Exception:
@@ -793,7 +797,7 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/admin":
                 return self.admin(q)
             if u.path == "/admin/slips.json" and self.authed(q.get("token")):
-                return self.send(200, {"builder": slips.BUILDER_VERSION, "data_dir": str(DATA_DIR),
+                return self.send(200, {"builder": slips.BUILDER_VERSION, "data_dir": str(DATA_DIR), "hltv_roles": roles.hltv_status(),
                                        "recommended": slips.read(slips.RECOMMENDED), "loaded": slips.read(slips.LOADED)})
             if u.path == "/admin/picks.json" and self.authed(q.get("token")):
                 return self.send(200, {"picks": picklog.export()})

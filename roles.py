@@ -1,6 +1,9 @@
 """Player roles for the slip builder (display / slip filtering only - the frozen grader's igl.csv is untouched).
 
 Sources, in order:
+0. The HLTV scraper's database: AWP share of kills from each player's HLTV weapon page (player_awp, last 90
+   days) and its Liquipedia roles (player_roles, team_match only). Read in bulk every 30 minutes from the board
+   loop - never inside a member's request.
 1. Liquipedia player page infobox (`|roles=igl` / `awp,rifle` / `rifler`) - an explicit role listing. Used only
    when the page's team matches the board's team (namesakes), or the board team is an "ex-" roster.
 2. Liquipedia team page, active squad `igl=y` (IGL only). A squad with nobody marked tells us nothing.
@@ -145,6 +148,56 @@ def refresh(players):
         return 0
 
 
+# ---- the HLTV scraper's database (read from here, not hltv.py: hltv.py is part of the grader's version tag)
+HLTV_TTL = 30 * 60
+AWP_SHARE, RIFLE_SHARE, AWP_MIN_KILLS = 0.25, 0.10, 100   # share of kills with the AWP (90 days)
+_HLTV = {"at": 0.0, "rows": {}}
+
+
+def refresh_hltv():
+    """Bulk-load roles + AWP share from the scraper's database (30-minute cache). Never raises."""
+    if time.time() - _HLTV["at"] < HLTV_TTL:
+        return
+    _HLTV["at"] = time.time()
+    try:
+        import hltv
+        if not hltv.dsn():
+            return
+        con = hltv._connect()
+        try:
+            with con.cursor() as cur:
+                cur.execute("""SELECT p.name, r.hltv_team, r.wiki_title, r.roles, r.is_igl, r.is_awper, r.team_match,
+                                      r.updated_at, a.kills, a.awp_kills, a.awp_share, a.end_date
+                               FROM players p
+                               LEFT JOIN player_roles r USING (playerid)
+                               LEFT JOIN player_awp a USING (playerid)
+                               WHERE r.playerid IS NOT NULL OR a.playerid IS NOT NULL""")
+                rows = {}
+                for (name, team, wiki, roles_, igl, awper, tmatch, upd, kills, awpk, share, end) in cur.fetchall():
+                    rows.setdefault(_norm(name), []).append(dict(
+                        team=team, wiki=wiki, roles=[x.strip() for x in (roles_ or "").split(",") if x.strip()],
+                        igl=igl, awper=awper, team_match=tmatch, updated=str(upd)[:10] if upd else None,
+                        kills=kills, awp_kills=awpk, awp_share=float(share) if share is not None else None,
+                        end=str(end) if end else None))
+        finally:
+            con.close()
+        _HLTV["rows"] = rows
+    except Exception:
+        pass                                          # tables not there yet / database down: other sources
+
+
+def hltv_status():
+    return {"players": len(_HLTV["rows"]), "loaded_at": _HLTV["at"]}
+
+
+def _hltv(nick, team):
+    rows = _HLTV["rows"].get(_norm(nick)) or []
+    hit = [r for r in rows if r.get("team") and _team_ok(team, [r["team"]])]
+    if hit:
+        return hit[0]
+    return rows[0] if len(rows) == 1 and not (rows[0].get("team") and team) else None
+
+
 def _player(nick, team):
     p = _load()["players"].get(_norm(nick))
     if p and p.get("page") and p.get("roles") and _team_ok(team, p.get("teams") or []):
@@ -158,6 +211,9 @@ def _day(ts):
 
 def igl_role(nick, team_name):
     """(True / False / None, source)."""
+    h = _hltv(nick, team_name)
+    if h and h.get("team_match") and h.get("roles"):
+        return bool(h["igl"]), f"Liquipedia via HLTV scraper ({h['wiki'] or nick}: {', '.join(h['roles'])}), checked {h['updated']}"
     p = _player(nick, team_name)
     if p:
         return "igl" in p["roles"], f"Liquipedia {p['page']} (roles: {', '.join(p['roles'])}), checked {_day(p['at'])}"
@@ -169,7 +225,17 @@ def igl_role(nick, team_name):
 
 
 def awp_role(nick, team_name):
-    """(True / False / None, source) from the Liquipedia infobox roles."""
+    """(True / False / None, source): HLTV AWP share of kills first, then Liquipedia roles."""
+    h = _hltv(nick, team_name)
+    if h and h.get("awp_share") is not None and (h.get("kills") or 0) >= AWP_MIN_KILLS:
+        sh = h["awp_share"]
+        src = f"HLTV weapon stats: {sh:.0%} of {h['kills']} kills with the AWP (90 days to {h['end']})"
+        if sh >= AWP_SHARE:
+            return True, src
+        if sh <= RIFLE_SHARE:
+            return False, src
+    if h and h.get("team_match") and h.get("roles"):
+        return bool(h["awper"]), f"Liquipedia via HLTV scraper ({h['wiki'] or nick}: {', '.join(h['roles'])}), checked {h['updated']}"
     p = _player(nick, team_name)
     if p:
         return ("awp" in p["roles"] or "awper" in p["roles"],
