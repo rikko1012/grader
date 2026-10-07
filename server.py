@@ -840,6 +840,25 @@ class Handler(BaseHTTPRequestHandler):
                 finally:
                     con.close()
                 return self.send(200, {"rows": rows})
+            if u.path == "/admin/hltv_hs_rows" and self.authed(q.get("token")):
+                # private analysis: every player-map with kills, headshots, rounds and the map (played maps only)
+                import hltv
+                con = hltv._connect()
+                try:
+                    with con.cursor() as cur:
+                        cur.execute("SET statement_timeout = 120000")
+                        cur.execute("""SELECT mo.date::text, ps.playerid, mp.name, ps.k, h.hs, own.score + opp.score, mo.matchid
+                                       FROM player_stats ps JOIN match_overview mo ON mo.matchid = ps.matchid
+                                       JOIN match_maps mm ON mm.matchid = ps.matchid AND mm.mapid = ps.mapid
+                                       JOIN maps mp ON mp.mapid = ps.mapid
+                                       JOIN map_headshots h ON h.mapstatsid = mm.mapstatsid AND h.playerid = ps.playerid
+                                       JOIN matches own ON own.matchid = ps.matchid AND own.teamid = ps.teamid AND own.mapid = ps.mapid AND own.sideid = 0
+                                       JOIN matches opp ON opp.matchid = ps.matchid AND opp.teamid <> ps.teamid AND opp.mapid = ps.mapid AND opp.sideid = 0
+                                       WHERE ps.sideid = 0 AND h.hs IS NOT NULL AND mo.date >= %s""", (q.get("since", "2025-09-01"),))
+                        rows = cur.fetchall()
+                finally:
+                    con.close()
+                return self.send(200, {"rows": rows})
             if u.path == "/admin/hltv_team_maps" and self.authed(q.get("token")):
                 # private analysis: every map since `since` - date, event, number, map, both teams + scores
                 import hltv
