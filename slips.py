@@ -15,7 +15,7 @@ from pathlib import Path
 
 from bo3 import DATA_DIR
 
-BUILDER_VERSION = "slips-5"          # keep in step with BUILDER_V in web/index.html
+BUILDER_VERSION = "slips-6"          # keep in step with BUILDER_V in web/index.html
 GRADES = {"A+", "A", "A-", "B+", "B", "B-"}
 RECOMMENDED = Path(DATA_DIR) / "slips_recommended.jsonl"
 LOADED = Path(DATA_DIR) / "slips_loaded.jsonl"
@@ -40,17 +40,14 @@ def _legs(rows, now_iso):
         m = (r.get("matchup") or f"{r.get('team')}|{r.get('opponent')}") + "|" + (r.get("start") or "")
         by.setdefault(m, []).append(dict(r, _m=m, _nick=(r.get("nick") or r.get("player") or "").lower()))
     groups = [sorted(g, key=lambda x: -x["p"])[:2] for g in by.values()]
-    return sorted(groups, key=lambda g: -g[0]["p"])[:14]
+    return sorted(groups, key=lambda g: -g[0]["p"])[:16]
 
 
 def build_all(rows):
-    """2-, 3- and 4-pick slips (up to 3 each). A match is used in one slip only, across all sizes - one
-    match never sinks several slips; too few matches = fewer slips. AWPers' headshot lines and IGLs' kill
+    """The page's default view for each size, built independently: Mixed sides, up to 3 slips, no match
+    in two slips of that size (too few matches = fewer slips). AWPers' headshot lines and IGLs' kill
     lines (and unknown roles) are left out."""
-    used, res = set(), {}
-    for n in (2, 3, 4):
-        res[n] = build(rows, n, used)
-    return res
+    return {n: build(rows, n, set()) for n in (2, 3, 4)}
 
 
 def build(rows, n, used=None):

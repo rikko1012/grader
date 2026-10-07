@@ -18,7 +18,7 @@ API = "https://liquipedia.net/counterstrike/api.php"
 UA = "cs2-scout-roles/1.0 (+https://cs2-scout-production.up.railway.app)"
 CACHE = Path(DATA_DIR) / ".cache" / "liquipedia_roles.json"
 TEAM_TTL = 2 * 86400          # re-read rosters every 2 days (roster moves)
-MIN_GAP = 6 * 3600
+MIN_GAP = 15 * 60                # one request per 15 minutes at most (teams past the first 50 come next)
 _LOCK = threading.Lock()
 _STATE = {"teams": None, "last_fetch": 0.0}
 

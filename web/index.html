@@ -210,6 +210,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 .bstat .s{font-size:10.5px;color:var(--faint);white-space:nowrap}
 .bslip{background:none;border:1px solid var(--accent);color:var(--accent-2);border-radius:99px;padding:6px 11px;font:600 12.5px Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap}
 .bslip:hover{background:rgba(255,122,26,.1)} .bslip.on{background:var(--accent);color:#170b00}
+.actl{display:flex;flex-wrap:wrap;gap:6px} .aseg button{padding:5px 9px;font-size:12.5px}
 #slipsout{margin-bottom:14px;background:var(--panel);border:1px solid var(--line-2);border-radius:14px;padding:12px}
 .asz{margin-top:12px} .asz h5{margin:0 0 6px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 .aslip{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px}
@@ -819,7 +820,7 @@ $("#brefresh").onclick = () => loadBoard(true).then(() => { if (!$("#slipsout").
 // ---------- automatic slip builder: 2-4 picks from the graded board (no grading of its own)
 // Ranked by the model's chance that every pick hits. The return is only worked out from the payout the member
 // enters (Underdog's real multiplier for that entry) - never an assumed one.
-const BUILDER_V = "slips-5";      // keep in step with slips.BUILDER_VERSION (server copy + logs)
+const BUILDER_V = "slips-6";      // keep in step with slips.BUILDER_VERSION (server copy + logs)
 let boardVer = "";
 const udPay = () => store.get("cs2s_udpay", {});              // standard payout per slip size (member-entered)
 const udExact = () => store.get("cs2s_udexact", {});          // exact payout for one slip, by its picks (member-entered)
@@ -831,19 +832,27 @@ function payFor(s, n) {        // exact payout already includes any line boosts 
   return {pay: null, src: null};
 }
 const pctF = x => (x * 100).toFixed(1) + "%";      // display only; every calculation uses the full value
-function slipLegs() {          // bettable picks: B- or better with units, not started; best 2 per match
-  const now = Date.now(), by = {};
-  boardRows.filter(r => r.side && r.p != null && r.state !== "SCOUT" && r.grade !== "LEAN" && (G_RANK[r.grade] ?? 9) <= 4.5
-                     && (r.units || 0) > 0 && (!r.start || new Date(r.start).getTime() > now)
-                     && !(r.prop === "hs" && r.awp !== false) && !(r.prop === "kills" && r.igl !== false))   // needs a confirmed role: no AWPer HS, no IGL kills
-    .forEach(r => { const m = (r.matchup || r.team + "|" + r.opponent) + "|" + (r.start || "");
-      const mult = r.alt ? +(r.side === "More" ? r.higher : r.lower) || 1 : 1;
-      (by[m] = by[m] || []).push({r, m, nick: (r.nick || r.player).toLowerCase(), p: r.p, mult}); });
-  return Object.values(by).map(a => a.sort((x, y) => y.p - x.p).slice(0, 2))
-    .sort((a, b) => b[0].p - a[0].p).slice(0, 14);
+// member's builder settings: side (More / Less / mixed), size 2-4, how many slips, overlap (none / some)
+const autoCfg = () => Object.assign({side: "mixed", n: 3, count: 3, overlap: "none"}, store.get("cs2s_auto", {}));
+function slipPool() {          // eligible picks + why the rest were left out
+  const now = Date.now(), side = autoCfg().side, by = {}, why = {More: 0, Less: 0, gone: 0, grade: 0, role: 0, unknown: 0};
+  for (const r of boardRows) {
+    if (!r.side || r.p == null || r.state === "SCOUT" || (r.start && new Date(r.start).getTime() <= now)) { why.gone++; continue; }
+    if (r.grade === "LEAN" || (G_RANK[r.grade] ?? 9) > 4.5 || (r.units || 0) <= 0) { why.grade++; continue; }
+    const role = r.prop === "hs" ? r.awp : r.igl;            // AWPers' HS and IGLs' kills are left out; unknown role too
+    if (role === true) { why.role++; continue; }
+    if (role !== false) { why.unknown++; continue; }
+    why[r.side]++;
+    if (side !== "mixed" && r.side !== side) continue;
+    const m = (r.matchup || r.team + "|" + r.opponent) + "|" + (r.start || "");
+    const mult = r.alt ? +(r.side === "More" ? r.higher : r.lower) || 1 : 1;
+    (by[m] = by[m] || []).push({r, m, nick: (r.nick || r.player).toLowerCase(), p: r.p, mult});
+  }
+  const groups = Object.values(by).map(a => a.sort((x, y) => y.p - x.p).slice(0, 2)).sort((a, b) => b[0].p - a[0].p).slice(0, 16);
+  return {groups, why};
 }
-function buildSlips(n, usedM) {   // one pick per match and per player; a match in one slip only, across every size
-  const groups = slipLegs(), out = [];
+function buildSlips(groups, n, count, overlap) {   // one pick per match and per player inside a slip
+  const out = [];
   const go = (i, cur) => {
     if (cur.length === n) {
       const all = cur.reduce((a, x) => a * x.p, 1), mult = cur.reduce((a, x) => a * x.mult, 1);
@@ -857,43 +866,52 @@ function buildSlips(n, usedM) {   // one pick per match and per player; a match 
     go(i + 1, cur);
   };
   go(0, []);
-  const ok = out.filter(s => s.ev == null || s.ev >= 1).sort((a, b) => b.all - a.all), picked = [];
-  // across every slip on the panel a match is used once: one match never sinks several slips (too few = fewer slips)
+  // "none": no match in two slips. "some": two slips share at most 1 match, a match is in at most 2 slips.
+  const ok = out.filter(s => s.ev == null || s.ev >= 1).sort((a, b) => b.all - a.all), picked = [], uses = {};
   for (const s of ok) {
-    if (picked.length >= 3) break;
-    if (s.legs.some(x => usedM.has(x.m))) continue;
-    picked.push(s); s.legs.forEach(x => usedM.add(x.m));
+    if (picked.length >= count) break;
+    const ms = s.legs.map(x => x.m);
+    if (overlap === "none" ? ms.some(m => uses[m]) : ms.some(m => (uses[m] || 0) >= 2)
+        || picked.some(q => q.legs.filter(x => ms.includes(x.m)).length > 1)) continue;
+    picked.push(s); ms.forEach(m => uses[m] = (uses[m] || 0) + 1);
   }
+  picked.forEach(s => s.shared = s.legs.some(x => uses[x.m] > 1));
   return picked;
 }
 function drawAutoSlips() {
-  const box = $("#slipsout"), slips = {}, pays = udPay(), usedM = new Set();
-  const sizes = [2, 3, 4].map(n => {
-    const ss = slips[n] = buildSlips(n, usedM);
-    return `<div class="asz"><h5 style="display:flex;justify-content:space-between;align-items:center;gap:8px">${n}-pick
-        <label class="small" style="text-transform:none;letter-spacing:0;display:flex;gap:6px;align-items:center" title="The standard ${n}-pick payout in Underdog, before any line boosts. You enter it - the grader doesn't know Underdog's payouts.">Standard payout (you enter)
-        <input data-udpay="${n}" inputmode="decimal" placeholder="?" value="${pays[n] ? esc(String(pays[n])) : ""}" style="width:64px;padding:5px 8px">x</label></h5>`
-      + (!ss.length
-      ? `<div class="small muted">No qualifying ${n}-pick slips${pays[n] ? ` – at ${pays[n]}x the model doesn't expect a profit from the picks left` : " – not enough B- or better picks left in matches not already used above"}.</div>`
-      : ss.map((s, i) => `<div class="aslip">` + s.legs.map(x => { const r = x.r, nick = r.nick || r.player;
+  const box = $("#slipsout"), c = autoCfg(), n = c.n, pays = udPay(), {groups, why} = slipPool();
+  const ss = buildSlips(groups, n, c.count, c.overlap);
+  const seg = (k, opts) => `<div class="seg aseg" data-ak="${k}">` + opts.map(([v, lab]) =>
+    `<button type="button" data-v="${v}" class="${String(c[k]) === String(v) ? "on" : ""}">${lab}</button>`).join("") + `</div>`;
+  const left = [why.role && `${why.role} AWP HS / IGL kills`, why.unknown && `${why.unknown} role unknown`,
+                why.grade && `${why.grade} below B-`].filter(Boolean).join(" · ");
+  box.innerHTML = `<div class="actl">${seg("side", [["More", "Overs"], ["Less", "Unders"], ["mixed", "Mixed"]])}
+      ${seg("n", [[2, "2"], [3, "3"], [4, "4"]].map(([v, l]) => [v, l + " picks"]))}
+      ${seg("count", [[3, "3"], [5, "5"], [10, "10"]].map(([v, l]) => [v, l + " slips"]))}
+      ${seg("overlap", [["none", "No shared matches"], ["some", "Allow overlap"]])}</div>
+    <div class="small muted" style="margin:8px 0 2px">Eligible: ${why.More} Overs, ${why.Less} Unders${left ? ` · left out: ${left}` : ""}</div>
+    <label class="small muted" style="display:flex;gap:6px;align-items:center;margin:6px 0 10px" title="The standard ${n}-pick payout in Underdog, before any line boosts. You enter it – the grader doesn't know Underdog's payouts.">Your ${n}-pick payout
+      <input data-udpay="${n}" inputmode="decimal" placeholder="?" value="${pays[n] ? esc(String(pays[n])) : ""}" style="width:64px;padding:5px 8px">x</label>`
+    + (!ss.length
+      ? `<div class="small muted">No qualifying ${n}-pick slips${pays[n] ? ` – at ${pays[n]}x the model doesn't expect a profit from any combination` : ` – fewer than ${n} matches with eligible picks`}.</div>`
+      : (ss.length < c.count ? `<div class="small muted" style="margin-bottom:8px">${ss.length} of ${c.count} – not enough matches for more without ${c.overlap === "none" ? "sharing them" : "more overlap"}.</div>` : "")
+        + ss.map((s, i) => `<div class="aslip">` + s.legs.map(x => { const r = x.r, nick = r.nick || r.player;
           return `<div class="lg"><span><span class="gtag ${gClass(r.grade)}" style="font-size:11px;padding:1px 6px">${esc(r.grade)}</span> <b>${esc(nick)}</b> ${esc(sideWord({grade: r.grade, side: r.side}))} ${r.line} ${propWord(r.prop)} · ${(r.scope || "12") === "1" ? "Map 1" : (r.scope || "12") === "123" ? "Maps 1–3" : "Maps 1–2"}${x.mult !== 1 ? ` <span class="pill">${x.mult}x</span>` : ""}</span>
             <span class="m">${pctF(r.p)} · ${esc(r.team_name || r.team || "")} vs ${esc(r.opp_name || r.opponent || "")} · ${esc(shortWhen(r.start).split(" · ")[0])}</span></div>`; }).join("")
         + `<div class="nums"><span>Est. chance all ${n} hit <b>${pctF(s.all, 1)}</b></span>
-             ${s.pay ? `<span>${s.src === "exact" ? "Your payout for this slip" : `Estimated from your standard payout${s.mult !== 1 ? ` × line boosts ${+s.mult.toFixed(2)}x` : ""} – confirm in Underdog`}: <b>${+s.pay.toFixed(2)}x</b></span><span>Est. return <b style="color:${s.ev >= 1 ? "var(--good)" : "var(--bad)"}">${s.ev.toFixed(2)}U</b> per 1U (${s.ev >= 1 ? "+" : ""}${(s.ev - 1).toFixed(2)}U profit)</span>`
-                     : `<span class="muted">Check the payout in Underdog${s.mult !== 1 ? ` (line boosts ${+s.mult.toFixed(2)}x)` : ""}</span>`}
-             ${n >= 3 ? `<span title="Not the chance of a Flex profit – that depends on Underdog's Flex payouts">Est. chance ${n - 1}+ correct <b>${pctF(s.near)}</b></span>` : ""}</div>
+             ${s.pay ? `<span>${s.src === "exact" ? "Your payout for this slip" : `Est. from your standard payout${s.mult !== 1 ? ` × boosts ${+s.mult.toFixed(2)}x` : ""}`}: <b>${+s.pay.toFixed(2)}x</b></span><span>Est. return <b style="color:${s.ev >= 1 ? "var(--good)" : "var(--bad)"}">${s.ev.toFixed(2)}U</b> per 1U</span>` : ""}
+             ${n >= 3 ? `<span title="Not the chance of a Flex profit – that depends on Underdog's Flex payouts">${n - 1}+ correct <b>${pctF(s.near)}</b></span>` : ""}
+             ${s.shared ? `<span class="pill">Shares a match with another suggestion</span>` : ""}</div>
            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button type="button" class="bslip" data-aslip="${n}|${i}">Load into slip</button>
-             <label class="small muted" style="text-transform:none;letter-spacing:0;display:flex;gap:6px;align-items:center">Exact payout Underdog shows for this slip
-             <input data-udexact="${esc(slipKey(s.legs))}" inputmode="decimal" placeholder="?" value="${udExact()[slipKey(s.legs)] ? esc(String(udExact()[slipKey(s.legs)])) : ""}" style="width:64px;padding:5px 8px">x</label></div></div>`).join("")) + `</div>`;
-  });
-  box.innerHTML = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between">
-      <b>Auto slips</b><span class="small muted">Highest estimated hit chance first</span></div>`
-    + sizes.join("")
-    + `<div class="small muted" style="margin-top:8px">Each match is used in one slip only, so one match can't sink several slips (it doesn't make the others safe). AWPers' headshot lines and IGLs' kill lines are left out, and so are headshot / kill lines of players whose role isn't confirmed yet – a slip preference, not a verdict on those grades.
-       Chances are model estimates: each pick's grade % multiplied together, which assumes the picks are independent. One pick per match keeps them mostly apart, but it isn't a guarantee, and small errors in each % add up on longer slips.
-       Enter the payout Underdog shows for that size to see the estimated return; line multipliers are applied on top. A B- grade only gets a pick considered – slips still need to beat the payout.
-       Builder ${BUILDER_V} · grader ${esc(boardVer || "–")}${boardAt ? ` · board from ${new Date(boardAt * 1000).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})}` : ""}. Not financial advice.</div>`;
-  box._slips = slips;
+             <label class="small muted" style="display:flex;gap:6px;align-items:center">This slip pays
+             <input data-udexact="${esc(slipKey(s.legs))}" inputmode="decimal" placeholder="?" value="${udExact()[slipKey(s.legs)] ? esc(String(udExact()[slipKey(s.legs)])) : ""}" style="width:64px;padding:5px 8px">x</label></div></div>`).join(""))
+    + `<details class="small muted" style="margin-top:8px"><summary>How slips are built</summary>
+       Highest estimated chance first: each pick's grade % multiplied together, which assumes the picks are independent (one pick per match keeps them mostly apart, but it isn't a guarantee, and small errors add up on longer slips).
+       B- or better picks only. AWPers' headshot lines, IGLs' kill lines and players whose role isn't confirmed are left out – a slip preference, not a verdict on those grades.
+       "No shared matches" keeps every match in one slip; "Some overlap" lets two slips share one match (a match in two slips at most).
+       Returns use the payout you enter (an exact slip payout is used as is; a standard payout gets line boosts on top) – confirm in Underdog.
+       Builder ${BUILDER_V} · grader ${esc(boardVer || "–")}${boardAt ? ` · board from ${new Date(boardAt * 1000).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})}` : ""}. Not financial advice.</details>`;
+  box._slips = {[n]: ss};
 }
 $("#bauto").onclick = () => { const box = $("#slipsout"); box.hidden = !box.hidden; $("#bauto").classList.toggle("on", !box.hidden);
   if (!box.hidden) (boardRows.length ? Promise.resolve() : loadBoard()).then(drawAutoSlips); };
@@ -909,6 +927,9 @@ $("#slipsout").addEventListener("change", e => {
   store.set("cs2s_udpay", pays); drawAutoSlips();
 });
 $("#slipsout").addEventListener("click", async e => {
+  const o = e.target.closest(".aseg button");
+  if (o) { const k = o.parentElement.dataset.ak, cfg = store.get("cs2s_auto", {});
+    cfg[k] = ["n", "count"].includes(k) ? +o.dataset.v : o.dataset.v; store.set("cs2s_auto", cfg); return drawAutoSlips(); }
   const a = e.target.closest("[data-aslip]"); if (!a) return;
   const [n, i] = a.dataset.aslip.split("|").map(Number), s = $("#slipsout")._slips?.[n]?.[i]; if (!s) return;
   a.disabled = true; a.textContent = "Checking lines…";
@@ -923,7 +944,7 @@ $("#slipsout").addEventListener("click", async e => {
   toast(`${n}-pick slip loaded`); drawBoard(); drawAutoSlips();
   try {                                          // kept for tracking the builder's own results (no member details)
     const body = JSON.stringify({cid,
-      builder: BUILDER_V, grader: boardVer, board_at: boardAt, n, all: s.all, pay: pf.pay, pay_source: pf.src,
+      builder: BUILDER_V, grader: boardVer, board_at: boardAt, n, settings: autoCfg(), all: s.all, pay: pf.pay, pay_source: pf.src,
       legs: now.map((r, k) => ({id: r.id, nick: r.nick || r.player, prop: r.prop, scope: r.scope || "12", line: r.line, side: r.side,
                                 p: r.p, grade: r.grade, matchup: r.matchup, start: r.start, mult: s.legs[k].mult}))});
     const send = t => fetch("/api/slip_log", {method: "POST", headers: {"Content-Type": "application/json"}, body})
