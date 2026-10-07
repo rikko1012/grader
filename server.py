@@ -30,6 +30,7 @@ from datetime import datetime, timezone
 import cs2_scout
 import hltv
 import picklog
+import slips
 import underdog
 import whop_auth
 import bo3
@@ -277,9 +278,6 @@ def board_payload():
             "version": picklog.MODEL_VERSION}
 
 
-SLIP_LOG = Path(DATA_DIR) / "slips.jsonl"       # auto slips members loaded (builder version, legs, chances)
-_SLIP_LOCK = threading.Lock()
-
 SAME_RESULT_CAP = 3.0   # units (on the 0.5-3U scale), all bets that need the same team to do well / badly in one match
 
 
@@ -374,6 +372,10 @@ def board_forever():
             with ThreadPoolExecutor(BOARD_WORKERS, thread_name_prefix="board") as ex:
                 list(ex.map(one, todo))
             _board_save()
+            try:                                      # the builder's own record: each new recommended slip, once
+                slips.log_recommended(board_payload()["rows"], picklog.MODEL_VERSION)
+            except Exception:
+                traceback.print_exc()
             if len(BOARD) > 5000:
                 BOARD.clear()
         except Exception:
@@ -746,11 +748,8 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/admin":
                 return self.admin(q)
             if u.path == "/admin/slips.json" and self.authed(q.get("token")):
-                try:
-                    lines = SLIP_LOG.read_text(encoding="utf-8").splitlines()[-5000:]
-                except OSError:
-                    lines = []
-                return self.send(200, {"slips": [json.loads(x) for x in lines if x.strip()]})
+                return self.send(200, {"builder": slips.BUILDER_VERSION, "data_dir": str(DATA_DIR),
+                                       "recommended": slips.read(slips.RECOMMENDED), "loaded": slips.read(slips.LOADED)})
             if u.path == "/admin/picks.json" and self.authed(q.get("token")):
                 return self.send(200, {"picks": picklog.export()})
             if u.path == "/admin/mark_tests" and self.authed(q.get("token")):
@@ -1118,19 +1117,18 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         u = urlparse(self.path)
         n = int(self.headers.get("Content-Length") or 0)
-        if u.path == "/api/slip_log":                  # a member loaded an auto slip: kept to score the builder later
-            body = self.rfile.read(min(n, 20000))
+        if u.path == "/api/slip_log":                  # a member loaded an auto slip (slips.py keeps the log)
+            body = self.rfile.read(min(n, 1 << 20))
             if not self.allowed():
                 return self.send(401, {"error": "members_only"})
             try:
                 d = json.loads(body)
-                assert isinstance(d, dict) and isinstance(d.get("legs"), list) and len(d["legs"]) <= 6
+                assert isinstance(d, dict) and isinstance(d.get("legs"), list) and 2 <= len(d["legs"]) <= 6
+                assert all(isinstance(l, dict) for l in d["legs"]) and len(body) <= 20000
+                new = slips.log_loaded(d)
             except Exception:
                 return self.send(400, {"error": "bad slip"})
-            d["logged_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
-            with _SLIP_LOCK, open(SLIP_LOG, "a", encoding="utf-8") as f:
-                f.write(json.dumps(d) + "\n")
-            return self.send(200, {"ok": True})
+            return self.send(200, {"ok": True, "duplicate": not new})
         form = {k: v[0] for k, v in parse_qs(self.rfile.read(n).decode()).items()}
         if u.path != "/admin/closing" or not self.authed(form.get("token")):
             return self.send(403, {"error": "forbidden"})

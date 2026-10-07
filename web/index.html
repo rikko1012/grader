@@ -515,7 +515,7 @@ const mapsWord = sc => sc === "123" ? " (Maps 1–3)" : sc === "1" ? " (Map 1)" 
 function pickLine(d) {
   const g = d.grade || {}, v = d.verdict || {}, nick = d.player_block?.player?.nick || "";
   const side = v.grade === "LEAN" ? `Lean ${v.side === "More" ? "Over" : "Under"}` : (v.side === "More" ? "MORE" : "LESS");
-  return `${nick} ${side} ${g.line} ${propWord(g.prop)}${mapsWord(g.scope)} · ${v.grade === "LEAN" ? "Lean" : v.grade} · ${v.units}U · ${Math.floor((v.p || 0) * 100)}%`;
+  return `${nick} ${side} ${g.line} ${propWord(g.prop)}${mapsWord(g.scope)} · ${v.grade === "LEAN" ? "Lean" : v.grade} · ${v.units}U · ${((v.p || 0) * 100).toFixed(1)}%`;
 }
 function shareUrl(d) {
   const g = d.grade || {}, u = new URL(location.origin + location.pathname);
@@ -591,7 +591,7 @@ function slateRow(x, i) {
   const side = sideWord(v), note = noteOf(x.d, x);
   return `<tr data-row="${i}"><td><b>${esc(x.d.player_block?.player?.nick || x.player)}</b></td><td class="num" style="text-align:left">${g.line ?? esc(x.line)} ${propWord(g.prop || x.prop)}${mapsWord(g.scope || x.sc)}${ltTag(g.line_type || x.lt)}</td>
     <td>${esc(side)}</td><td><span class="gtag ${v.state === "SCOUT" ? "g-scout" : gClass(v.grade)}">${esc(lab)}</span></td>
-    <td class="num">${v.p != null ? Math.floor(v.p * 100) + "%" : "–"}</td><td class="num">${v.units ?? 0}U</td>
+    <td class="num">${v.p != null ? (v.p * 100).toFixed(1) + "%" : "–"}</td><td class="num">${v.units ?? 0}U</td>
     <td class="num">${g.lambda_final != null ? num(g.lambda_final, 1) : "–"}</td><td class="small">${esc(nm.opponent ? "vs " + nm.opponent : "")}</td>
     <td class="small" style="color:var(--warn)">${esc(note)}</td></tr>`;
 }
@@ -695,7 +695,7 @@ function drawSlip() {
   const leans = s.filter(x => x.g === "LEAN").length;
   $("#slip").innerHTML = `<h4>Bet slip · ${n}-pick</h4>` + s.map((x, i) =>
     `<div class="leg"><span><b>${esc(x.p)}</b> ${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : esc(x.s)} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${ltTag(x.lt)}
-      <span class="muted small">· ${x.g === "LEAN" ? "Lean" : esc(x.g)} · ${Math.floor((x.pc || 0) * 100)}%${x.vs ? " · vs " + esc(x.vs) : ""}</span></span>
+      <span class="muted small">· ${x.g === "LEAN" ? "Lean" : esc(x.g)} · ${((x.pc || 0) * 100).toFixed(1)}%${x.vs ? " · vs " + esc(x.vs) : ""}</span></span>
       <button type="button" class="x" data-rmleg="${i}" title="Remove">✕</button></div>`).join("")
     + (n < 2 ? `<div class="small muted" style="margin-top:10px">Add at least 2 picks (up to 6).</div>`
        : (() => { const dist = hitDist(s.map(x => x.pc || 0.5)), fx = FLEX[n];
@@ -772,7 +772,7 @@ function drawBoard() {
   if (!scopes.has(bscope) && scopes.size) { bscope = scopes.has("12") ? "12" : [...scopes][0]; [...$("#bscope").children].forEach(x => x.classList.toggle("on", x.dataset.v === bscope)); }
   const rows = boardRows.filter(r => r.prop === bprop && (r.scope || "12") === bscope && (bside === "both" || r.side === bside)
                                     && (!$("#bbets").checked || (r.units || 0) > 0)).sort(cmp);
-  const pct0 = x => x == null ? "–" : Math.floor(x * 100) + "%";
+  const pct0 = x => x == null ? "–" : (x * 100).toFixed(1) + "%";
   const st = (k, v, cls = "", sub = "") => `<div class="bstat"><div class="k">${k}</div><div class="v ${cls}">${v}</div>${sub ? `<div class="s">${sub}</div>` : ""}</div>`;
   $("#boardout").innerHTML = rows.length ? `<div class="blist">` + rows.map(r => {
       const nick = r.nick || r.player, v = {grade: r.grade, side: r.side};
@@ -819,10 +819,18 @@ $("#brefresh").onclick = () => loadBoard(true).then(() => { if (!$("#slipsout").
 // ---------- automatic slip builder: 2-4 picks from the graded board (no grading of its own)
 // Ranked by the model's chance that every pick hits. The return is only worked out from the payout the member
 // enters (Underdog's real multiplier for that entry) - never an assumed one.
-const BUILDER_V = "slips-2";
+const BUILDER_V = "slips-3";      // keep in step with slips.BUILDER_VERSION (server copy + logs)
 let autoBy = "hit", boardVer = "";
-const udPay = () => store.get("cs2s_udpay", {});
-const pctF = (x, d = 0) => (Math.floor(x * 100 * 10 ** d) / 10 ** d).toFixed(d) + "%";   // never rounds up past a grade cutoff
+const udPay = () => store.get("cs2s_udpay", {});              // standard payout per slip size (member-entered)
+const udExact = () => store.get("cs2s_udexact", {});          // exact payout for one slip, by its picks (member-entered)
+const slipKey = legs => legs.map(x => `${x.r.id}:${x.r.line}:${x.r.side}`).sort().join("|");
+function payFor(s, n) {        // exact payout already includes any line boosts - never multiplied again
+  const ex = +udExact()[slipKey(s.legs)], base = +udPay()[n];
+  if (ex) return {pay: ex, src: "exact"};
+  if (base) return {pay: base * s.mult, src: "standard"};
+  return {pay: null, src: null};
+}
+const pctF = x => (x * 100).toFixed(1) + "%";      // display only; every calculation uses the full value
 function slipLegs() {          // bettable picks: B- or better with units, not started; best 2 per match
   const now = Date.now(), by = {};
   boardRows.filter(r => r.side && r.p != null && r.state !== "SCOUT" && r.grade !== "LEAN" && (G_RANK[r.grade] ?? 9) <= 4.5
@@ -834,12 +842,13 @@ function slipLegs() {          // bettable picks: B- or better with units, not s
     .sort((a, b) => b[0].p - a[0].p).slice(0, 14);
 }
 function buildSlips(n) {       // one pick per match and per player
-  const groups = slipLegs(), out = [], base = +udPay()[n] || 0;
+  const groups = slipLegs(), out = [];
   const go = (i, cur) => {
     if (cur.length === n) {
       const all = cur.reduce((a, x) => a * x.p, 1), mult = cur.reduce((a, x) => a * x.mult, 1);
-      const dist = hitDist(cur.map(x => x.p)), pay = base ? base * mult : null;
-      out.push({legs: [...cur], all, mult, pay, ev: pay ? all * pay : null, near: dist[n] + dist[n - 1]});
+      const dist = hitDist(cur.map(x => x.p)), s = {legs: [...cur], all, mult, near: dist[n] + dist[n - 1]};
+      const pf = payFor(s, n); s.pay = pf.pay; s.src = pf.src; s.ev = pf.pay ? all * pf.pay : null;
+      out.push(s);
       return;
     }
     if (groups.length - i < n - cur.length) return;
@@ -863,7 +872,7 @@ function drawAutoSlips() {
   const sizes = [2, 3, 4].map(n => {
     const ss = slips[n] = buildSlips(n);
     return `<div class="asz"><h5 style="display:flex;justify-content:space-between;align-items:center;gap:8px">${n}-pick
-        <label class="small" style="text-transform:none;letter-spacing:0;display:flex;gap:6px;align-items:center">Underdog pays
+        <label class="small" style="text-transform:none;letter-spacing:0;display:flex;gap:6px;align-items:center" title="The standard ${n}-pick payout in Underdog, before any line boosts. You enter it - the grader doesn't know Underdog's payouts.">Standard payout (you enter)
         <input data-udpay="${n}" inputmode="decimal" placeholder="?" value="${pays[n] ? esc(String(pays[n])) : ""}" style="width:64px;padding:5px 8px">x</label></h5>`
       + (!ss.length
       ? `<div class="small muted">No qualifying ${n}-pick slips${pays[n] ? ` – at ${pays[n]}x the model doesn't expect a profit from any combination` : " – not enough B- or better picks in different matches"}.</div>`
@@ -871,22 +880,29 @@ function drawAutoSlips() {
           return `<div class="lg"><span><span class="gtag ${gClass(r.grade)}" style="font-size:11px;padding:1px 6px">${esc(r.grade)}</span> <b>${esc(nick)}</b> ${esc(sideWord({grade: r.grade, side: r.side}))} ${r.line} ${propWord(r.prop)} · ${(r.scope || "12") === "1" ? "Map 1" : (r.scope || "12") === "123" ? "Maps 1–3" : "Maps 1–2"}${x.mult !== 1 ? ` <span class="pill">${x.mult}x</span>` : ""}</span>
             <span class="m">${pctF(r.p)} · ${esc(r.team_name || r.team || "")} vs ${esc(r.opp_name || r.opponent || "")} · ${esc(shortWhen(r.start).split(" · ")[0])}</span></div>`; }).join("")
         + `<div class="nums"><span>Est. chance all ${n} hit <b>${pctF(s.all, 1)}</b></span>
-             ${s.pay ? `<span>Pays <b>${+s.pay.toFixed(2)}x</b></span><span>Est. return <b style="color:${s.ev >= 1 ? "var(--good)" : "var(--bad)"}">${s.ev.toFixed(2)}U</b> per 1U (${s.ev >= 1 ? "+" : ""}${(s.ev - 1).toFixed(2)}U profit)</span>`
-                     : `<span class="muted">Check the payout in Underdog${s.mult !== 1 ? ` (line multipliers ${+s.mult.toFixed(2)}x)` : ""}</span>`}
+             ${s.pay ? `<span>${s.src === "exact" ? "Your payout for this slip" : `Estimated from your standard payout${s.mult !== 1 ? ` × line boosts ${+s.mult.toFixed(2)}x` : ""} – confirm in Underdog`}: <b>${+s.pay.toFixed(2)}x</b></span><span>Est. return <b style="color:${s.ev >= 1 ? "var(--good)" : "var(--bad)"}">${s.ev.toFixed(2)}U</b> per 1U (${s.ev >= 1 ? "+" : ""}${(s.ev - 1).toFixed(2)}U profit)</span>`
+                     : `<span class="muted">Check the payout in Underdog${s.mult !== 1 ? ` (line boosts ${+s.mult.toFixed(2)}x)` : ""}</span>`}
              ${n >= 3 ? `<span title="Not the chance of a Flex profit – that depends on Underdog's Flex payouts">Est. chance ${n - 1}+ correct <b>${pctF(s.near)}</b></span>` : ""}</div>
-           <button type="button" class="bslip" data-aslip="${n}|${i}">Load into slip</button></div>`).join("")) + `</div>`;
+           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button type="button" class="bslip" data-aslip="${n}|${i}">Load into slip</button>
+             <label class="small muted" style="text-transform:none;letter-spacing:0;display:flex;gap:6px;align-items:center">Exact payout Underdog shows for this slip
+             <input data-udexact="${esc(slipKey(s.legs))}" inputmode="decimal" placeholder="?" value="${udExact()[slipKey(s.legs)] ? esc(String(udExact()[slipKey(s.legs)])) : ""}" style="width:64px;padding:5px 8px">x</label></div></div>`).join("")) + `</div>`;
   });
   box.innerHTML = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between">
       <b>Auto slips</b><div class="seg" id="autoby"><button type="button" data-v="hit" class="${autoBy === "hit" ? "on" : ""}">Highest hit chance</button><button type="button" data-v="variety" class="${autoBy === "variety" ? "on" : ""}">More variety</button></div></div>`
     + sizes.join("")
     + `<div class="small muted" style="margin-top:8px">Chances are model estimates: each pick's grade % multiplied together, which assumes the picks are independent. One pick per match keeps them mostly apart, but it isn't a guarantee, and small errors in each % add up on longer slips.
        Enter the payout Underdog shows for that size to see the estimated return; line multipliers are applied on top. A B- grade only gets a pick considered – slips still need to beat the payout.
-       Grader ${esc(boardVer || "–")}${boardAt ? ` · board from ${new Date(boardAt * 1000).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})}` : ""}. Not financial advice.</div>`;
+       Builder ${BUILDER_V} · grader ${esc(boardVer || "–")}${boardAt ? ` · board from ${new Date(boardAt * 1000).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})}` : ""}. Not financial advice.</div>`;
   box._slips = slips;
 }
 $("#bauto").onclick = () => { const box = $("#slipsout"); box.hidden = !box.hidden; $("#bauto").classList.toggle("on", !box.hidden);
   if (!box.hidden) (boardRows.length ? Promise.resolve() : loadBoard()).then(drawAutoSlips); };
 $("#slipsout").addEventListener("change", e => {
+  const x = e.target.closest("[data-udexact]");
+  if (x) { const v = parseFloat(x.value.replace(",", ".")), ex = udExact();
+    if (v > 1 && v < 1000) ex[x.dataset.udexact] = v; else delete ex[x.dataset.udexact];
+    const keys = Object.keys(ex); if (keys.length > 200) keys.slice(0, keys.length - 200).forEach(k => delete ex[k]);
+    store.set("cs2s_udexact", ex); return drawAutoSlips(); }
   const i = e.target.closest("[data-udpay]"); if (!i) return;
   const v = parseFloat(i.value.replace(",", ".")), pays = udPay();
   if (v > 1 && v < 1000) pays[i.dataset.udpay] = v; else delete pays[i.dataset.udpay];
@@ -903,13 +919,18 @@ $("#slipsout").addEventListener("click", async e => {
                          || (r.start && new Date(r.start).getTime() <= Date.now()))) {
     drawAutoSlips(); return toast("A line on that slip changed or locked – slips rebuilt");
   }
+  const pf = payFor(s, n), cid = (crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random().toString(36).slice(2));
   store.set("cs2s_slip", []); now.forEach(r => addToSlip(boardCard(r))); openSlip();
   toast(`${n}-pick slip loaded`); drawBoard(); drawAutoSlips();
   try {                                          // kept for tracking the builder's own results (no member details)
-    fetch("/api/slip_log", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({
-      builder: BUILDER_V, grader: boardVer, board_at: boardAt, mode: autoBy, n, all: s.all, base_pay: +udPay()[n] || null, pay: s.pay,
+    const body = JSON.stringify({cid,
+      builder: BUILDER_V, grader: boardVer, board_at: boardAt, mode: autoBy, n, all: s.all, pay: pf.pay, pay_source: pf.src,
       legs: now.map((r, k) => ({id: r.id, nick: r.nick || r.player, prop: r.prop, scope: r.scope || "12", line: r.line, side: r.side,
-                                p: r.p, grade: r.grade, matchup: r.matchup, start: r.start, mult: s.legs[k].mult}))})}).catch(() => {});
+                                p: r.p, grade: r.grade, matchup: r.matchup, start: r.start, mult: s.legs[k].mult}))});
+    const send = t => fetch("/api/slip_log", {method: "POST", headers: {"Content-Type": "application/json"}, body})
+      .then(r => { if (r.status >= 500 && t < 2) setTimeout(() => send(t + 1), 2000 * (t + 1)); })
+      .catch(() => { if (t < 2) setTimeout(() => send(t + 1), 2000 * (t + 1)); });   // same id: the server drops repeats
+    send(0);
   } catch {}
 });
 
