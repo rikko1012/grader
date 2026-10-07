@@ -128,7 +128,7 @@ def _seen(kind, path, field):
 
 def _leg(r):
     return {k: r.get(k) for k in ("id", "nick", "player", "prop", "scope", "line", "side", "p", "grade",
-                                  "matchup", "team", "opponent", "start")}
+                                  "matchup", "team", "opponent", "start", "match_slug")}
 
 
 def log_recommended(rows, grader_version):
@@ -159,7 +159,8 @@ def log_loaded(d):
     legs = d["legs"]
     rec = {"cid": cid, "key": slip_key(legs), "logged_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
            **{k: d.get(k) for k in ("builder", "grader", "board_at", "mode", "n", "all", "pay", "pay_source")},
-           "legs": [{k: l.get(k) for k in ("id", "nick", "prop", "scope", "line", "side", "p", "grade", "matchup", "start", "mult")}
+           "legs": [{k: l.get(k) for k in ("id", "nick", "prop", "scope", "line", "side", "p", "grade", "matchup", "start", "mult",
+                                           "match_slug")}
                     for l in legs]}
     with _LOCK:
         seen = _seen("load", LOADED, "cid")

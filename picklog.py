@@ -84,7 +84,14 @@ def _db():
         con.execute("ALTER TABLE picks ADD COLUMN model_version TEXT")
     except sqlite3.OperationalError:
         pass
-    for col in ("first_logged_at", "regrades"):   # added 2026-10-07: board rows keep the latest pre-match grade
+    # 2026-10-07: the forecast history - the picks row is the first published forecast (immutable), every
+    # changed forecast before the match is appended here (timestamp, line, side, chance, grade, version, shadows)
+    con.execute("""CREATE TABLE IF NOT EXISTS forecasts (id INTEGER PRIMARY KEY, pick_id INTEGER, kind TEXT, logged_at TEXT,
+                   match_start TEXT, line REAL, pick TEXT, p_pick REAL, p_more REAL, grade TEXT, units REAL, lambda REAL,
+                   p_win REAL, rec_hit TEXT, sample_maps INTEGER, model_version TEXT, shadow TEXT)""")
+    con.execute("CREATE INDEX IF NOT EXISTS forecasts_pick ON forecasts (pick_id, id)")
+    # first_logged_at set = a board row that was overwritten by a later grade (2026-10-07 ~21:00-22:00Z only)
+    for col in ("first_logged_at", "regrades"):
         try:
             con.execute(f"ALTER TABLE picks ADD COLUMN {col} {'INTEGER DEFAULT 0' if col == 'regrades' else 'TEXT'}")
         except sqlite3.OperationalError:
@@ -222,9 +229,25 @@ def pick_row(res, verdict, test=False):
     return row
 
 
-REGRADE_COLS = ("logged_at", "team", "opponent", "match_slug", "match_start", "lambda", "fair_line", "edge", "p_more",
-                "p_less", "pick", "p_pick", "grade", "units", "p_win", "market", "pred_maps", "veto_known",
-                "sample_maps", "rec_avg", "rec_median", "rec_hit", "flags", "opp_def", "factors", "model_version")
+def _shadow(row):
+    try:
+        return json.dumps((json.loads(row.get("factors") or "{}") or {}).get("shadow"))
+    except (ValueError, TypeError):
+        return None
+
+
+def _forecast(con, pid, row, kind):
+    """Append one forecast to the history - only when it differs from the last one stored for this pick.
+    The picks row itself stays the FIRST published forecast (never overwritten)."""
+    last = con.execute("SELECT line, pick, p_pick, grade, units, lambda, model_version FROM forecasts "
+                       "WHERE pick_id = ? ORDER BY id DESC LIMIT 1", (pid,)).fetchone()
+    if last and kind == "update" and last["line"] == row["line"] and last["pick"] == row["pick"]             and last["grade"] == row["grade"] and last["units"] == row["units"]             and last["model_version"] == row.get("model_version")             and abs((last["p_pick"] or 0) - (row["p_pick"] or 0)) < 0.01             and abs((last["lambda"] or 0) - (row.get("lambda") or 0)) < 0.2:
+        return
+    con.execute("INSERT INTO forecasts (pick_id, kind, logged_at, match_start, line, pick, p_pick, p_more, grade, units, "
+                "lambda, p_win, rec_hit, sample_maps, model_version, shadow) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (pid, kind, row["logged_at"], row.get("match_start"), row["line"], row["pick"], row["p_pick"],
+                 row.get("p_more"), row["grade"], row["units"], row.get("lambda"), row.get("p_win"), row.get("rec_hit"),
+                 row.get("sample_maps"), row.get("model_version"), _shadow(row)))
 
 
 def _before_start(row, cur):
@@ -236,10 +259,6 @@ def _before_start(row, cur):
     return True
 
 
-def cur_logged(con, pid):
-    return con.execute("SELECT logged_at FROM picks WHERE id = ?", (pid,)).fetchone()["logged_at"]
-
-
 def write_row(row):
     if row is None:
         return None
@@ -248,15 +267,9 @@ def write_row(row):
         con = _db()
         try:
             cur = con.execute("SELECT id, test, status, match_start FROM picks WHERE key = ?", (key,)).fetchone()
-            if cur and test == 2 and cur["test"] == 2 and cur["status"] == "open" and _before_start(row, cur):
-                # Underdog board line re-graded before its match: keep the grade members see at match time
-                # (until 2026-10-07 the first grade was kept - up to days old and from older grader versions)
-                upd = {k: row[k] for k in REGRADE_COLS if k in row}
-                con.execute(f"UPDATE picks SET {', '.join(k + ' = ?' for k in upd)}, requests = requests + 1, "
-                            "regrades = COALESCE(regrades, 0) + 1, first_logged_at = COALESCE(first_logged_at, ?) "
-                            "WHERE id = ?", (*upd.values(), cur_logged(con, cur["id"]), cur["id"]))
-                con.commit()
-                return cur["id"]
+            if cur and cur["status"] == "open" and _before_start(row, cur):
+                _forecast(con, cur["id"], row, "update")     # every changed pre-match forecast, timestamped
+                con.execute("UPDATE picks SET regrades = COALESCE(regrades, 0) + 1 WHERE id = ?", (cur["id"],))
             if cur:
                 # a real member asking for a line first seen in a test makes it a real pick
                 con.execute("UPDATE picks SET requests = requests + 1, test = CASE WHEN ? THEN test ELSE 0 END "
@@ -265,8 +278,10 @@ def write_row(row):
                 return cur["id"]
             cols = ", ".join(row)
             con.execute(f"INSERT INTO picks ({cols}) VALUES ({', '.join('?' * len(row))})", list(row.values()))
+            pid = con.execute("SELECT id FROM picks WHERE key = ?", (key,)).fetchone()["id"]
+            _forecast(con, pid, row, "first")
             con.commit()
-            return con.execute("SELECT id FROM picks WHERE key = ?", (key,)).fetchone()["id"]
+            return pid
         finally:
             con.close()
 
@@ -545,6 +560,14 @@ def export():
     with _LOCK:
         con = _db()
         rows = [dict(r) for r in con.execute("SELECT * FROM picks ORDER BY id")]
+        con.close()
+    return rows
+
+
+def export_forecasts():
+    with _LOCK:
+        con = _db()
+        rows = [dict(r) for r in con.execute("SELECT * FROM forecasts ORDER BY id")]
         con.close()
     return rows
 

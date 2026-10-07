@@ -272,7 +272,7 @@ def board_payload():
             continue                                  # not graded yet: never shown
         rows.append(dict(r, **{k: g.get(k) for k in ("grade", "side", "p", "units", "proj", "reason", "graded_at",
                                                      "nick", "state", "edge", "l10_over", "l10_n", "l10_avg",
-                                                     "hs_pct", "p_win", "market", "team_name", "opp_name")}))
+                                                     "hs_pct", "p_win", "market", "team_name", "opp_name", "match_slug")}))
         rows[-1]["scope"] = r.get("scope") or "12"
         x = rows[-1]
         nick = x.get("nick") or x.get("player") or ""
@@ -390,7 +390,8 @@ def board_forever():
                                       "snip": pb.get("sniping_equiv"), "awp_note": pb.get("awp_note"),
                                       "market": g.get("market_quality"),
                                       "team_name": pb.get("playing_for") or pb.get("current_team"),
-                                      "opp_name": (res.get("next_match") or {}).get("opponent")}
+                                      "opp_name": (res.get("next_match") or {}).get("opponent"),
+                                      "match_slug": (res.get("next_match") or {}).get("slug")}   # exact match id (settling slips)
                     res["verdict"] = v
                     try:
                         picklog.log_async(res, v, test=2)
@@ -792,6 +793,8 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/admin/slips.json" and self.authed(q.get("token")):
                 return self.send(200, {"builder": slips.BUILDER_VERSION, "data_dir": str(DATA_DIR), "hltv_roles": roles.hltv_status(),
                                        "recommended": slips.read(slips.RECOMMENDED), "loaded": slips.read(slips.LOADED)})
+            if u.path == "/admin/forecasts.json" and self.authed(q.get("token")):
+                return self.send(200, {"forecasts": picklog.export_forecasts()})
             if u.path == "/admin/picks.json" and self.authed(q.get("token")):
                 return self.send(200, {"picks": picklog.export()})
             if u.path == "/admin/mark_tests" and self.authed(q.get("token")):

@@ -1014,7 +1014,8 @@ $("#slipsout").addEventListener("click", async e => {
     const body = JSON.stringify({cid,
       builder: BUILDER_V, grader: boardVer, board_at: boardAt, n, settings: autoCfg(), all: s.all, pay: pf.pay, pay_source: pf.src,
       legs: now.map((r, k) => ({id: r.id, nick: r.nick || r.player, prop: r.prop, scope: r.scope || "12", line: r.line, side: r.side,
-                                p: r.p, grade: r.grade, matchup: r.matchup, start: r.start, mult: s.legs[k].mult}))});
+                                p: r.p, grade: r.grade, matchup: r.matchup, start: r.start, mult: s.legs[k].mult,
+                                match_slug: r.match_slug}))});
     const send = t => fetch("/api/slip_log", {method: "POST", headers: {"Content-Type": "application/json"}, body})
       .then(r => { if (r.status >= 500 && t < 2) setTimeout(() => send(t + 1), 2000 * (t + 1)); })
       .catch(() => { if (t < 2) setTimeout(() => send(t + 1), 2000 * (t + 1)); });   // same id: the server drops repeats
