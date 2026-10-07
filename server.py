@@ -818,6 +818,7 @@ class Handler(BaseHTTPRequestHandler):
                         cur.execute("""SELECT p.name, t.name, mo.date::text, mo.lan, mo.event, mo.matchid, ps.k, own.score + opp.score
                                        FROM player_stats ps JOIN players p USING (playerid) JOIN teams t ON t.teamid = ps.teamid
                                        JOIN match_overview mo ON mo.matchid = ps.matchid
+                                       JOIN match_maps mm ON mm.matchid = ps.matchid AND mm.mapid = ps.mapid
                                        JOIN matches own ON own.matchid = ps.matchid AND own.teamid = ps.teamid AND own.mapid = ps.mapid AND own.sideid = 0
                                        JOIN matches opp ON opp.matchid = ps.matchid AND opp.teamid <> ps.teamid AND opp.mapid = ps.mapid AND opp.sideid = 0
                                        WHERE ps.sideid = 0 AND mo.date >= %s""", (q.get("since", "2025-09-01"),))

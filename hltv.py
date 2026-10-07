@@ -652,6 +652,7 @@ def _environment(cur, ids, team):
         return None
     cur.execute("""SELECT mo.lan, sum(ps.k), sum(own.score + opp.score), count(*)
                    FROM player_stats ps JOIN match_overview mo USING (matchid)
+                   JOIN match_maps mm ON mm.matchid = ps.matchid AND mm.mapid = ps.mapid          -- played maps only (not the "All" row)
                    JOIN matches own ON own.matchid = ps.matchid AND own.teamid = ps.teamid AND own.mapid = ps.mapid AND own.sideid = 0
                    JOIN matches opp ON opp.matchid = ps.matchid AND opp.teamid <> ps.teamid AND opp.mapid = ps.mapid AND opp.sideid = 0
                    WHERE ps.playerid = ANY(%(ids)s) AND ps.sideid = 0 AND mo.date >= current_date - 365 AND mo.lan IS NOT NULL
@@ -663,9 +664,11 @@ def _environment(cur, ids, team):
     nm = _next_match(cur, team)
     tonight = None
     if nm and nm.get("event"):
-        cur.execute("""SELECT lan FROM match_overview WHERE lan IS NOT NULL
-                       AND lower(regexp_replace(event, '[^a-zA-Z0-9]', '', 'g')) = %(e)s
-                       ORDER BY date DESC LIMIT 1""", {"e": _norm(nm["event"])})
+        e = _norm(nm["event"])                         # same event, stage names may differ ("... Stage 1")
+        cur.execute("""SELECT lan FROM match_overview WHERE lan IS NOT NULL AND date >= current_date - 60
+                       AND (lower(regexp_replace(event, '[^a-zA-Z0-9]', '', 'g')) LIKE %(e)s || '%%'
+                            OR %(e)s LIKE lower(regexp_replace(event, '[^a-zA-Z0-9]', '', 'g')) || '%%')
+                       ORDER BY date DESC LIMIT 1""", {"e": e})
         row = cur.fetchone()
         tonight = None if not row else ("lan" if row[0] else "online")
     if not env and tonight is None:
