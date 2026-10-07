@@ -232,8 +232,13 @@ def _board_save_locked():
 def _board_load():
     try:
         saved = json.loads(BOARD_FILE.read_text(encoding="utf-8"))
-        if saved.get("version") == _grader_version():
-            BOARD.update(saved.get("rows") or {})
+        rows = saved.get("rows") or {}
+        if saved.get("version") != _grader_version():
+            # grading changed: keep showing the last grades (never an empty board) but regrade every
+            # line first thing - "at" 0 puts them at the front of the queue
+            for v in rows.values():
+                v["at"] = 0
+        BOARD.update(rows)
     except Exception:
         pass
 
