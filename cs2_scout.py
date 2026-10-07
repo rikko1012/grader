@@ -1815,7 +1815,17 @@ def _ladder(res, pb, args):
     return out
 
 
-EVENT_TYPES = {}     # normalized BO3.gg tournament name -> "lan" / "online"
+EVENT_TYPES_FILE = DATA_DIR / ".cache" / "event_types.json"
+
+
+def _load_event_types():
+    try:
+        return json.loads(EVENT_TYPES_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+EVENT_TYPES = _load_event_types()   # normalized BO3.gg tournament name -> "lan" / "online" (kept on the volume)
 
 
 def _event_type(b, slug):
@@ -1824,7 +1834,13 @@ def _event_type(b, slug):
         t = b._run(b.cs2._api._make_request("/tournaments/" + slug, {}))
         et = (t.get("event_type") or "").lower()
         if et in ("lan", "online") and t.get("name"):
-            EVENT_TYPES[norm(t["name"])] = et       # learned: matches listed elsewhere ("... - Roman Imperium Cup Group B")
+            if EVENT_TYPES.get(norm(t["name"])) != et:   # learned: matches listed elsewhere ("... - Roman Imperium Cup Group B")
+                EVENT_TYPES[norm(t["name"])] = et
+                try:
+                    EVENT_TYPES_FILE.parent.mkdir(parents=True, exist_ok=True)
+                    EVENT_TYPES_FILE.write_text(json.dumps(EVENT_TYPES), encoding="utf-8")
+                except Exception:
+                    pass
         return et if et in ("lan", "online") else None
     except Exception:
         return None

@@ -13,6 +13,7 @@ One grade runs at a time (keeps requests to BO3.gg polite). Standard library onl
 """
 import collections
 import json
+import re
 import shutil
 import os
 import sys
@@ -492,6 +493,11 @@ def verdict(g):
         grade, units = "LEAN", 0.0
         why = (f"Leans {side} {p:.0%} (projection {g['lambda_final']:.1f} vs {need:g} needed) - 0 units: "
                f"{g['zero_reason']}")
+    from grader import units_for_p
+    if units and units < units_for_p(p) and "max" not in why:      # a cap cut the stake: say which one
+        cap = next((f for f in g.get("flags", []) if re.search(r"max [0-9.]+U|capped [0-9.]+U|unit size limited", f)), None)
+        if cap:
+            why += f" · stake capped: {cap.split(' - ')[0].split(':')[0]}"
     if grade == "C" or (not units and grade not in ("LEAN", "C")):
         # owner 2026-09-29: under the bar the card says "Lean Over" / "Lean Under" instead of a C; a
         # letter grade with 0 units (FORM FIGHT, gates) reads as a Lean too - never "B · 0U"
