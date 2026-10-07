@@ -52,6 +52,20 @@ def _model_version():
 MODEL_VERSION = _model_version()
 
 
+def _save_config_snapshot():
+    """The full grading settings for this version, kept once per version (frozen-test record)."""
+    try:
+        from grader import CONFIG
+        p = DB.parent / "model_versions.json"
+        cur = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+        if MODEL_VERSION not in cur:
+            cur[MODEL_VERSION] = {"saved": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                                  "config": json.loads(json.dumps(CONFIG, default=str))}
+            p.write_text(json.dumps(cur, indent=1), encoding="utf-8")
+    except Exception:
+        pass
+
+
 def _db():
     con = sqlite3.connect(DB, timeout=30)
     con.row_factory = sqlite3.Row
@@ -101,6 +115,18 @@ def _factors(res):
     out["opening"] = pb.get("opening")
     out["hltv"] = {k: (res.get("hltv") or {}).get(k) for k in ("rating", "round_swing", "adr", "kast", "maps")}
     out["environment"] = (res.get("hltv_context") or {}).get("environment")   # LAN / online split (tested later)
+    # frozen-test comparisons (2026-10-07): the same inputs graded by the alternatives - never shown to members
+    try:
+        from grader import grade_leg, CONFIG
+        alts = {"old_spread": dict(CONFIG, c=1.55, c_hs=1.30),
+                "no_rest_bonus": dict(CONFIG, rest_bonus=0.0)}
+        out["shadow"] = {}
+        for name, cfg in alts.items():
+            gg = grade_leg(gi, cfg)
+            out["shadow"][name] = {"p_more": gg.get("p_more"), "lambda": gg.get("lambda_final"),
+                                   "grade": gg.get("grade"), "grade_less": gg.get("grade_less")}
+    except Exception:
+        pass
     out["opponent_defense"] = res.get("opponent_defense")
     out["sim"] = (res.get("simulation") or {}).get("p_more")
     out["map_prediction"] = (res.get("player_block") or {}).get("map_prediction")
@@ -117,9 +143,15 @@ _QUEUE = queue.Queue()
 _WRITER = [None]
 
 
+_save_config_snapshot_done = [False]
+
+
 def log_async(res, verdict, test=False):
     """log_grade() without making the member wait: the row is built now (small) and written by one
     background writer (a busy pick log used to add 2-15 s to every grade)."""
+    if not _save_config_snapshot_done[0]:
+        _save_config_snapshot_done[0] = True
+        _save_config_snapshot()
     try:
         row = pick_row(res, verdict, test)
     except Exception:
