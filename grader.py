@@ -508,7 +508,12 @@ def grade_leg(d, cfg=CONFIG):
     # his online numbers): his kills per round in tonight's environment vs overall (12 months, HLTV),
     # counted by sample - n maps / (n + env_k): 20 maps in that environment = half the difference.
     env = d.get("environment") or {}
-    if env.get("tonight") and env.get("ratio") and env.get("ratio_maps"):
+    if env.get("stats_from"):
+        where = "LAN" if env["stats_from"] == "lan" else "online"
+        flags.append(f"{where} match: graded on his {where} stats ({env.get('stats_maps')} {where} maps, "
+                     f"{'only' if (env.get('stats_weight') or 0) >= 1 else str(round(100 * env['stats_weight'])) + '% weight'})"
+                     + (f"; last 10 = his last {where} matches" if env.get("form_from") else ""))
+    elif env.get("tonight") and env.get("ratio") and env.get("ratio_maps"):
         n = env["ratio_maps"]
         mult = 1 + (env["ratio"] - 1) * n / (n + cfg["env_k"])
         lam_final *= mult

@@ -209,7 +209,7 @@ def player_rows(games, pid):
     for g, ps in games:
         me = next((r for r in ps if (r.get("steam_profile") or {}).get("player_id") == pid), None)
         if me:
-            rows.append({"number": g.get("number") or 9, "map": g.get("map_name"),
+            rows.append({"number": g.get("number") or 9, "map": g.get("map_name"), "game_id": g.get("id"),
                          "rounds": (g.get("winner_clan_score") or 0) + (g.get("loser_clan_score") or 0),
                          "kills": me.get("kills") or 0, "deaths": me.get("death") or 0,
                          "assists": me.get("assists") or 0, "damage": me.get("damage") or 0,
@@ -454,11 +454,18 @@ def run_player(b, name, args):
     overall, games = waterfall(b, matches, p["id"], joined)
     # v7.5 step 2: KPR and HS% = 0.50 x 3m + 0.30 x 6m + 0.20 x 12m (Maps 1-2), dropping any window
     # with <10 Maps 1-2. Walk-forward (900 cases): miss kills 6.07 -> 6.01, HS 3.76 -> 3.69.
-    windows = {}
+    windows, wrows_by = {}, {}
+    year = (date.today() - timedelta(days=365)).isoformat()
+    menv = match_envs(b, [m for m in matches if (m.get("start_date") or "")[:10] >= year])
+    game_env = {g["id"]: menv.get(m["id"]) for m in matches for g in (m.get("games") or []) if g.get("id")}
+    out["_match_env"] = menv
     for label, (wdays, _) in FORM_BLEND.items():
         wrows = player_rows(window_games(b, matches, wdays, BLEND_MAX_MAPS), p["id"])
+        for r in wrows:
+            r["env"] = game_env.get(r.get("game_id"))
+        wrows_by[label] = wrows
         if label == "12m":
-            out["_opp_rows"] = [(r["opponent"], r["kills"], r["rounds"]) for r in wrows if r["rounds"] and r["opponent"]]
+            out["_opp_rows"] = [(r["opponent"], r["kills"], r["rounds"], r["env"]) for r in wrows if r["rounds"] and r["opponent"]]
         a = agg([r for r in wrows if r["number"] <= 2])
         windows[label] = {"maps": a["maps_played"], "kpr": a["kpr"], "hs_pct": a["hs_pct"]}
     use = {k: v for k, v in windows.items() if v["maps"] >= MIN_MAPS and v["kpr"]}
@@ -473,6 +480,8 @@ def run_player(b, name, args):
                                       / sum(FORM_BLEND[k][1] for k in hs_use), 1)
         overall["form_blend"] = "+".join(k for k in FORM_BLEND if k in use)
     out["overall"] = overall
+    out["overall_env"] = {env: _blend_windows({lb: [r for r in rs if r["env"] == env] for lb, rs in wrows_by.items()})
+                          for env in ("lan", "online")}
     days = overall["days"]
     out["kast"] = overall["kast"]
     # 4a (tested 2026-09-28, weight 0): his share of his team's Maps 1-2 kills in the window
@@ -1728,6 +1737,11 @@ def _bo3_rank_band(pb, band=10):
     """His BO3.gg maps of the last 12 months vs teams ranked (HLTV VRS) within `band` of tonight's
     opponent - BO3.gg reaches back further than the HLTV database."""
     orank, rows = pb.get("_opp_rank"), pb.get("_opp_rows") or []
+    tonight = (pb.get("_env") or {}).get("stats_from")
+    if tonight:
+        er = [x for x in rows if len(x) > 3 and x[3] == tonight]
+        rows = er if len(er) >= 10 else rows
+    rows = [x[:3] for x in rows]
     if not orank or not rows:
         return None
     try:
@@ -1828,6 +1842,78 @@ def _load_event_types():
 EVENT_TYPES = _load_event_types()   # normalized BO3.gg tournament name -> "lan" / "online" (kept on the volume)
 
 
+def _blend_windows(rows_by):
+    """Same 3m / 6m / 12m blend as the overall numbers, from a subset of his maps (Maps 1-2)."""
+    wins = {}
+    for label, rs in rows_by.items():
+        a = agg([r for r in rs if r["number"] <= 2])
+        wins[label] = {"maps": a["maps_played"], "kpr": a["kpr"], "hs_pct": a["hs_pct"]}
+    use = {k: v for k, v in wins.items() if v["maps"] and v["kpr"]}
+    if not use:
+        return {"form_windows": wins, "kpr": None, "hs_pct": None, "maps": 0}
+    s_ = sum(FORM_BLEND[k][1] for k in use)
+    hs_use = {k: v for k, v in use.items() if v["hs_pct"] is not None}
+    return {"form_windows": wins, "maps": wins.get("12m", {}).get("maps") or 0,
+            "kpr": round(sum(FORM_BLEND[k][1] * v["kpr"] for k, v in use.items()) / s_, 3),
+            "hs_pct": round(sum(FORM_BLEND[k][1] * v["hs_pct"] for k, v in hs_use.items())
+                            / sum(FORM_BLEND[k][1] for k in hs_use), 1) if hs_use else None}
+
+
+ENV_FULL_MAPS = 30   # LAN / online stats used alone from this many Maps 1-2 in that environment (12 months)
+
+
+def match_envs(b, matches):
+    """{BO3.gg match id: "lan" / "online"} from each match's tournament type (looked up once per event)."""
+    out, new = {}, False
+    for mt in matches:
+        slug = (mt.get("tournament") or {}).get("slug")
+        if not slug:
+            continue
+        key = "slug:" + slug
+        if key not in EVENT_TYPES:
+            EVENT_TYPES[key] = _event_type(b, slug) or ""
+            new = True
+        if EVENT_TYPES[key]:
+            out[mt["id"]] = EVENT_TYPES[key]
+    if new:
+        try:
+            EVENT_TYPES_FILE.parent.mkdir(parents=True, exist_ok=True)
+            EVENT_TYPES_FILE.write_text(json.dumps(EVENT_TYPES), encoding="utf-8")
+        except Exception:
+            pass
+    return out
+
+
+def _apply_env(pb):
+    """Owner 2026-10-07: a LAN match is graded on his LAN stats, an online match on his online stats
+    (H2H excepted). Alone from ENV_FULL_MAPS maps there; with fewer, blended toward all his maps by
+    sample so 3 LAN maps can't swing a grade."""
+    env = pb.get("_env") or {}
+    tonight = env.get("tonight")
+    oe = (pb.get("overall_env") or {}).get(tonight) if tonight else None
+    o = pb.get("overall") or {}
+    if not oe or not oe.get("kpr") or not o.get("kpr"):
+        return None
+    w = min(1.0, (oe.get("maps") or 0) / ENV_FULL_MAPS)
+    if w <= 0:
+        return None
+    o["kpr_all_envs"], o["hs_all_envs"] = o["kpr"], o.get("hs_pct")
+    o["kpr"] = round(w * oe["kpr"] + (1 - w) * o["kpr"], 3)
+    if oe.get("hs_pct") is not None and o.get("hs_pct") is not None:
+        o["hs_pct"] = round(w * oe["hs_pct"] + (1 - w) * o["hs_pct"], 1)
+    if w >= 1:
+        o["form_windows"] = oe["form_windows"]
+    pb["_rf_kpr"] = o["kpr"]
+    env.update(stats_from=tonight, stats_maps=oe.get("maps"), stats_weight=round(w, 2), ratio=None)
+    return tonight
+
+
+def _env_rows(rows, pb, tonight):
+    """His rows from tonight's environment (BO3.gg rows by tournament type, HLTV rows by its flag)."""
+    me = pb.get("_match_env") or {}
+    return [r for r in rows if (r.get("env") or me.get(r.get("match_id"))) == tonight]
+
+
 def _event_type(b, slug):
     """BO3.gg's tournament type: "lan" / "online" / None (cached with the API answers)."""
     try:
@@ -1874,13 +1960,6 @@ def finish_line(res, args):
     pb = res.get("player_block") or {}
     stat = "headshots" if args.prop == "hs" else "kills"
     t0 = time.time()
-    if pb.get("recent_maps") is not None:
-        _hltv_only_overall(pb)
-        pb["recent_form"] = recent_form(_form_rows(pb, stat), pb.get("_rf_kpr"), args.line, stat)
-    _tick(res, "form", t0)
-    if res.get("_h2h_rows") is not None:
-        res["h2h"] = h2h(list(res["_h2h_rows"]), res.get("_h2h_opp"), args.line, stat, res.get("_opp_roster"))
-    _tick(res, "h2h", t0)
     _attach_hltv(pb)
     res["hltv"] = pb.get("hltv")
     _tick(res, "hltv_player", t0)
@@ -1890,6 +1969,23 @@ def finish_line(res, args):
     _tick(res, "hltv_context", t0)
     pb["_opp_rank"] = ((res["hltv_context"] or {}).get("opp_ranking") or {}).get("rank")
     pb["_env"] = _environment(res, pb)       # LAN / online split + tonight's environment
+    tonight = _apply_env(pb)                 # LAN match -> LAN stats, online match -> online stats
+    if pb.get("recent_maps") is not None:
+        _hltv_only_overall(pb)
+        rows = _form_rows(pb, stat)
+        if tonight:
+            er = _env_rows(rows, pb, tonight)
+            if len({r["match_id"] for r in er}) >= 5:          # his last 10 in this environment
+                rows = er
+                pb["_env"]["form_from"] = tonight
+        pb["recent_form"] = recent_form(rows, pb.get("_rf_kpr"), args.line, stat)
+    _tick(res, "form", t0)
+    if res.get("_h2h_rows") is not None:
+        hrows = list(res["_h2h_rows"])
+        if tonight:   # H2H keeps every meeting; the same-region series only count from tonight's environment
+            hrows = [r for r in hrows if not r.get("regional") or r in _env_rows([r], pb, tonight)]
+        res["h2h"] = h2h(hrows, res.get("_h2h_opp"), args.line, stat, res.get("_opp_roster"))
+    _tick(res, "h2h", t0)
     pb["_rank_band"] = _best_rank_band(pb, (res["hltv_context"] or {}).get("rank_band"))
     _tick(res, "rank_band", t0)
     res["grader_inputs"] = grader_inputs(pb, args, res.get("odds"), res.get("h2h"))

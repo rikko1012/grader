@@ -663,15 +663,26 @@ def _environment(cur, ids, team):
             env["lan" if lan else "online"] = {"maps": n, "kpr": round(k / r, 3)}
     nm = _next_match(cur, team)
     tonight = None
-    if nm and nm.get("event"):
+    if nm and nm.get("event"):                       # HLTV's own label first: hltv.org/events (scraper)
+        try:
+            cur.execute("""SELECT lan FROM events WHERE lan IS NOT NULL
+                           AND (lower(regexp_replace(name, '[^a-zA-Z0-9]', '', 'g')) = %(e)s
+                                OR %(e)s LIKE lower(regexp_replace(name, '[^a-zA-Z0-9]', '', 'g')) || '%%')
+                           ORDER BY length(name) DESC LIMIT 1""", {"e": _norm(nm["event"])})
+            row = cur.fetchone()
+            if row is not None:
+                tonight = "lan" if row[0] else "online"
+        except Exception:
+            cur.connection.rollback()                # events table not there yet
+    if tonight is None and nm and nm.get("event"):
         e = _norm(nm["event"])                         # same event, stage names may differ ("... Stage 1")
         cur.execute("""SELECT lan FROM match_overview WHERE lan IS NOT NULL AND date >= current_date - 60
                        AND (lower(regexp_replace(event, '[^a-zA-Z0-9]', '', 'g')) LIKE %(e)s || '%%'
                             OR %(e)s LIKE lower(regexp_replace(event, '[^a-zA-Z0-9]', '', 'g')) || '%%')
                        ORDER BY date DESC LIMIT 1""", {"e": e})
         row = cur.fetchone()
-        tonight = None if not row else ("lan" if row[0] else "online")
-        if tonight is None and re.search(r"qualifier|online|open|closed|cup #|weekly|ladder|esea|challenger league|cct (online|south|north|europe)",
+        tonight = tonight or (None if not row else ("lan" if row[0] else "online"))
+        if tonight is None and re.search(r"qualifier|online|\bopen\b|closed|cup #|weekly|ladder|esea|challenger league|cct (online|south|north|europe)",
                                          nm["event"], re.I):
             tonight = "online"                       # qualifiers and online leagues are played online
     if not env and tonight is None:
@@ -724,7 +735,7 @@ if __name__ == "__main__":
 # Needs the scraper's match_maps (map order) and map_headshots tables; on an older scraper database
 # these return [] / None and nothing changes.
 _SERIES_SQL = """
-SELECT mo.matchid, mo.date, mm.number, mp.name, ps.k, h.hs, own.score, opp.score, t2.name, t.name
+SELECT mo.matchid, mo.date, mm.number, mp.name, ps.k, h.hs, own.score, opp.score, t2.name, t.name, mo.lan
 FROM match_maps mm
 JOIN match_overview mo USING (matchid)
 JOIN maps mp ON mp.mapid = mm.mapid
@@ -742,11 +753,12 @@ ORDER BY mo.date DESC, mo.matchid DESC, mm.number
 def _series_rows(cur, ids, since, extra="", params=None, maxn=2, need=(1, 2)):
     cur.execute(_SERIES_SQL.format(extra=extra, maxn=int(maxn)), dict(params or {}, ids=ids, since=since))
     by_match = {}
-    for mid, d, num, mname, k, hs, own, opp, oname, tname in cur.fetchall():
+    for mid, d, num, mname, k, hs, own, opp, oname, tname, lan in cur.fetchall():
         by_match.setdefault(mid, []).append({
             "match_id": f"hltv-{mid}", "hltv_match": mid, "date": d.isoformat(), "number": num,
             "map": "de_" + _norm(mname), "kills": k, "headshots": hs, "rounds": (own or 0) + (opp or 0),
-            "won": (own or 0) > (opp or 0), "opponent": oname, "team": tname, "source": "hltv"})
+            "won": (own or 0) > (opp or 0), "opponent": oname, "team": tname, "source": "hltv",
+            "env": None if lan is None else ("lan" if lan else "online")})
     return [m for maps in by_match.values() if {x["number"] for x in maps} >= set(need) for m in maps]
 
 
