@@ -547,6 +547,39 @@ def search_players(q, limit=8):
             for r in (starts + has)[:limit]]
 
 
+def event_env_from_title(title):
+    """LAN / online for a match title that contains an HLTV event name (hltv.org/events, scraper):
+    "Rebels vs NAVI Junior (BO1) - Roman Imperium Cup Group B" -> Roman Imperium Cup IX -> "lan"."""
+    if not dsn() or not title:
+        return None
+    key = ("events_all",)
+    with _LOCK:
+        hit = _CACHE.get(key)
+    if not hit or time.time() - hit[0] > 3600:
+        rows = []
+        try:
+            con = _connect()
+            try:
+                with con.cursor() as cur:
+                    cur.execute("SELECT name, lan FROM events WHERE lan IS NOT NULL")
+                    rows = cur.fetchall()
+            finally:
+                con.close()
+        except Exception:
+            rows = []
+        hit = (time.time(), rows)
+        with _LOCK:
+            _CACHE[key] = hit
+    t = _norm(title)
+    core = lambda k: re.sub(r"(season)?([0-9]+|[ivx]+)$", "", k)
+    best = None
+    for name, lan in hit[1]:
+        k = core(_norm(name))
+        if len(k) >= 8 and k in t and (best is None or len(k) > best[0]):
+            best = (len(k), lan)
+    return None if best is None else ("lan" if best[1] else "online")
+
+
 def team_country(name):
     """(code, country name) of a team's flag on HLTV (hltv-scraper teams.country), or None.
     The whole table is cached for an hour; None until the scraper has stored countries."""
@@ -1030,9 +1063,15 @@ def _predict_maps(team_a, team_b, before, pool, runs, seed, random):
         b = choose(second, "pick", left)
         m1[a] = m1.get(a, 0) + 1
         m2[b] = m2.get(b, 0) + 1
-    return {"map1": {k: v / runs for k, v in sorted(m1.items(), key=lambda x: -x[1])},
-            "map2": {k: v / runs for k, v in sorted(m2.items(), key=lambda x: -x[1])},
-            "history": [ha["n"], hb["n"]]}
+    # blended 50/50 with a flat prior over the pool (2026-10-07: 288 HLTV BO3s, vetoes from before each
+    # match - raw log-loss 1.877, flat 1.869, blended 1.764; the raw shares were overconfident)
+    def calib(m, n):
+        return {k: round(0.5 * m.get(k, 0) / runs + 0.5 / n, 4) for k in pool if k in m or True}
+    c1 = calib(m1, len(pool))
+    c2 = calib(m2, len(pool) - 1)
+    return {"map1": dict(sorted(c1.items(), key=lambda x: -x[1])), "map2": dict(sorted(c2.items(), key=lambda x: -x[1])),
+            "raw": {"map1": {k: v / runs for k, v in m1.items()}, "map2": {k: v / runs for k, v in m2.items()}},
+            "history": [ha["n"], hb["n"]], "calibration": "50% veto model + 50% flat"}
 
 
 def veto_backtest(days=30, limit=250):
@@ -1068,6 +1107,7 @@ def veto_backtest(days=30, limit=250):
         pr = predict_maps(a, b, d)
         if not pr:
             continue
+        pr = dict(pr.get("raw") or pr)                     # score the raw veto model; blends below
         res["cases"] += 1
         r1, r2 = list(pr["map1"]), list(pr["map2"])
         res["map1_top1"] += r1[:1] == [p1]; res["map1_top2"] += p1 in r1[:2]

@@ -1938,6 +1938,12 @@ def _environment(res, pb):
     env = dict((res.get("hltv_context") or {}).get("environment") or {})
     nm = res.get("next_match") or {}
     et = nm.get("event_type")
+    if not et and nm.get("event"):              # HLTV's events list first (title contains the event name)
+        try:
+            import hltv
+            et = hltv.event_env_from_title(nm["event"])
+        except Exception:
+            et = None
     if not et and nm.get("event"):              # listed by HLTV / PandaScore: a known event inside the title
         title = norm(nm["event"])
         core = lambda k: re.sub(r"(season)?([0-9]+|[ivx]+)$", "", k)     # "romanimperiumcupix" -> "romanimperiumcup"
