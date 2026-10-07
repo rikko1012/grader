@@ -782,7 +782,7 @@ function drawBoard() {
       const win = r.p_win != null && !["NO MARKET", "NONE"].includes(r.market) ? pct0(r.p_win) : "–";
       return `<div class="brow" data-bl="${esc(nick)}|${r.line}|${r.prop}|${r.scope || "12"}">
         <span class="gtag ${!r.side ? "g-scout" : r.state === "SCOUT" ? "g-scout" : gClass(r.grade)}">${esc(lab)}</span>
-        <div class="who"><b>${esc(nick)}</b><div class="meta">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}</div><div class="meta">${shortWhen(r.start)}</div></div>
+        <div class="who"><b>${esc(nick)}</b>${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}<div class="meta">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}</div><div class="meta">${shortWhen(r.start)}</div></div>
         <div class="pk"><div><div class="pick">${r.side ? esc(sideWord(v)) : "grading…"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)} ${r.p != null ? `<span class="pc">· ${pct0(r.p)} to hit</span>` : ""}</div>
           <div class="other">${o ? `${propWord(o.prop)} line ${o.line}` : ""}${r.alt ? ` · alt ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}</div></div>
 </div>
@@ -819,8 +819,8 @@ $("#brefresh").onclick = () => loadBoard(true).then(() => { if (!$("#slipsout").
 // ---------- automatic slip builder: 2-4 picks from the graded board (no grading of its own)
 // Ranked by the model's chance that every pick hits. The return is only worked out from the payout the member
 // enters (Underdog's real multiplier for that entry) - never an assumed one.
-const BUILDER_V = "slips-3";      // keep in step with slips.BUILDER_VERSION (server copy + logs)
-let autoBy = "hit", boardVer = "";
+const BUILDER_V = "slips-5";      // keep in step with slips.BUILDER_VERSION (server copy + logs)
+let boardVer = "";
 const udPay = () => store.get("cs2s_udpay", {});              // standard payout per slip size (member-entered)
 const udExact = () => store.get("cs2s_udexact", {});          // exact payout for one slip, by its picks (member-entered)
 const slipKey = legs => legs.map(x => `${x.r.id}:${x.r.line}:${x.r.side}`).sort().join("|");
@@ -834,14 +834,15 @@ const pctF = x => (x * 100).toFixed(1) + "%";      // display only; every calcul
 function slipLegs() {          // bettable picks: B- or better with units, not started; best 2 per match
   const now = Date.now(), by = {};
   boardRows.filter(r => r.side && r.p != null && r.state !== "SCOUT" && r.grade !== "LEAN" && (G_RANK[r.grade] ?? 9) <= 4.5
-                     && (r.units || 0) > 0 && (!r.start || new Date(r.start).getTime() > now))
+                     && (r.units || 0) > 0 && (!r.start || new Date(r.start).getTime() > now)
+                     && !(r.prop === "hs" && r.awp !== false) && !(r.prop === "kills" && r.igl !== false))   // needs a confirmed role: no AWPer HS, no IGL kills
     .forEach(r => { const m = (r.matchup || r.team + "|" + r.opponent) + "|" + (r.start || "");
       const mult = r.alt ? +(r.side === "More" ? r.higher : r.lower) || 1 : 1;
       (by[m] = by[m] || []).push({r, m, nick: (r.nick || r.player).toLowerCase(), p: r.p, mult}); });
   return Object.values(by).map(a => a.sort((x, y) => y.p - x.p).slice(0, 2))
     .sort((a, b) => b[0].p - a[0].p).slice(0, 14);
 }
-function buildSlips(n) {       // one pick per match and per player
+function buildSlips(n, usedM) {   // one pick per match and per player; a match in one slip only, across every size
   const groups = slipLegs(), out = [];
   const go = (i, cur) => {
     if (cur.length === n) {
@@ -857,25 +858,23 @@ function buildSlips(n) {       // one pick per match and per player
   };
   go(0, []);
   const ok = out.filter(s => s.ev == null || s.ev >= 1).sort((a, b) => b.all - a.all), picked = [];
-  // "Highest hit chance": slips of one size share at most 0 (2-pick) / 1 (3-4 pick) picks.
-  // "More variety": no player and no match in common at all.
-  const fits = (s, q) => autoBy === "variety" ? !s.legs.some(x => q.legs.some(y => y.m === x.m))
-                                              : s.legs.filter(x => q.legs.includes(x)).length <= (n === 2 ? 0 : 1);
+  // across every slip on the panel a match is used once: one match never sinks several slips (too few = fewer slips)
   for (const s of ok) {
     if (picked.length >= 3) break;
-    if (picked.every(q => fits(s, q))) picked.push(s);
+    if (s.legs.some(x => usedM.has(x.m))) continue;
+    picked.push(s); s.legs.forEach(x => usedM.add(x.m));
   }
   return picked;
 }
 function drawAutoSlips() {
-  const box = $("#slipsout"), slips = {}, pays = udPay();
+  const box = $("#slipsout"), slips = {}, pays = udPay(), usedM = new Set();
   const sizes = [2, 3, 4].map(n => {
-    const ss = slips[n] = buildSlips(n);
+    const ss = slips[n] = buildSlips(n, usedM);
     return `<div class="asz"><h5 style="display:flex;justify-content:space-between;align-items:center;gap:8px">${n}-pick
         <label class="small" style="text-transform:none;letter-spacing:0;display:flex;gap:6px;align-items:center" title="The standard ${n}-pick payout in Underdog, before any line boosts. You enter it - the grader doesn't know Underdog's payouts.">Standard payout (you enter)
         <input data-udpay="${n}" inputmode="decimal" placeholder="?" value="${pays[n] ? esc(String(pays[n])) : ""}" style="width:64px;padding:5px 8px">x</label></h5>`
       + (!ss.length
-      ? `<div class="small muted">No qualifying ${n}-pick slips${pays[n] ? ` – at ${pays[n]}x the model doesn't expect a profit from any combination` : " – not enough B- or better picks in different matches"}.</div>`
+      ? `<div class="small muted">No qualifying ${n}-pick slips${pays[n] ? ` – at ${pays[n]}x the model doesn't expect a profit from the picks left` : " – not enough B- or better picks left in matches not already used above"}.</div>`
       : ss.map((s, i) => `<div class="aslip">` + s.legs.map(x => { const r = x.r, nick = r.nick || r.player;
           return `<div class="lg"><span><span class="gtag ${gClass(r.grade)}" style="font-size:11px;padding:1px 6px">${esc(r.grade)}</span> <b>${esc(nick)}</b> ${esc(sideWord({grade: r.grade, side: r.side}))} ${r.line} ${propWord(r.prop)} · ${(r.scope || "12") === "1" ? "Map 1" : (r.scope || "12") === "123" ? "Maps 1–3" : "Maps 1–2"}${x.mult !== 1 ? ` <span class="pill">${x.mult}x</span>` : ""}</span>
             <span class="m">${pctF(r.p)} · ${esc(r.team_name || r.team || "")} vs ${esc(r.opp_name || r.opponent || "")} · ${esc(shortWhen(r.start).split(" · ")[0])}</span></div>`; }).join("")
@@ -888,9 +887,10 @@ function drawAutoSlips() {
              <input data-udexact="${esc(slipKey(s.legs))}" inputmode="decimal" placeholder="?" value="${udExact()[slipKey(s.legs)] ? esc(String(udExact()[slipKey(s.legs)])) : ""}" style="width:64px;padding:5px 8px">x</label></div></div>`).join("")) + `</div>`;
   });
   box.innerHTML = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between">
-      <b>Auto slips</b><div class="seg" id="autoby"><button type="button" data-v="hit" class="${autoBy === "hit" ? "on" : ""}">Highest hit chance</button><button type="button" data-v="variety" class="${autoBy === "variety" ? "on" : ""}">More variety</button></div></div>`
+      <b>Auto slips</b><span class="small muted">Highest estimated hit chance first</span></div>`
     + sizes.join("")
-    + `<div class="small muted" style="margin-top:8px">Chances are model estimates: each pick's grade % multiplied together, which assumes the picks are independent. One pick per match keeps them mostly apart, but it isn't a guarantee, and small errors in each % add up on longer slips.
+    + `<div class="small muted" style="margin-top:8px">Each match is used in one slip only, so one match can't sink several slips (it doesn't make the others safe). AWPers' headshot lines and IGLs' kill lines are left out, and so are headshot / kill lines of players whose role isn't confirmed yet – a slip preference, not a verdict on those grades.
+       Chances are model estimates: each pick's grade % multiplied together, which assumes the picks are independent. One pick per match keeps them mostly apart, but it isn't a guarantee, and small errors in each % add up on longer slips.
        Enter the payout Underdog shows for that size to see the estimated return; line multipliers are applied on top. A B- grade only gets a pick considered – slips still need to beat the payout.
        Builder ${BUILDER_V} · grader ${esc(boardVer || "–")}${boardAt ? ` · board from ${new Date(boardAt * 1000).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})}` : ""}. Not financial advice.</div>`;
   box._slips = slips;
@@ -909,7 +909,6 @@ $("#slipsout").addEventListener("change", e => {
   store.set("cs2s_udpay", pays); drawAutoSlips();
 });
 $("#slipsout").addEventListener("click", async e => {
-  const b = e.target.closest("#autoby button"); if (b) { autoBy = b.dataset.v; return drawAutoSlips(); }
   const a = e.target.closest("[data-aslip]"); if (!a) return;
   const [n, i] = a.dataset.aslip.split("|").map(Number), s = $("#slipsout")._slips?.[n]?.[i]; if (!s) return;
   a.disabled = true; a.textContent = "Checking lines…";
@@ -924,7 +923,7 @@ $("#slipsout").addEventListener("click", async e => {
   toast(`${n}-pick slip loaded`); drawBoard(); drawAutoSlips();
   try {                                          // kept for tracking the builder's own results (no member details)
     const body = JSON.stringify({cid,
-      builder: BUILDER_V, grader: boardVer, board_at: boardAt, mode: autoBy, n, all: s.all, pay: pf.pay, pay_source: pf.src,
+      builder: BUILDER_V, grader: boardVer, board_at: boardAt, n, all: s.all, pay: pf.pay, pay_source: pf.src,
       legs: now.map((r, k) => ({id: r.id, nick: r.nick || r.player, prop: r.prop, scope: r.scope || "12", line: r.line, side: r.side,
                                 p: r.p, grade: r.grade, matchup: r.matchup, start: r.start, mult: s.legs[k].mult}))});
     const send = t => fetch("/api/slip_log", {method: "POST", headers: {"Content-Type": "application/json"}, body})

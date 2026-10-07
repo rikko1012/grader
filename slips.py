@@ -15,7 +15,7 @@ from pathlib import Path
 
 from bo3 import DATA_DIR
 
-BUILDER_VERSION = "slips-3"          # keep in step with BUILDER_V in web/index.html
+BUILDER_VERSION = "slips-5"          # keep in step with BUILDER_V in web/index.html
 GRADES = {"A+", "A", "A-", "B+", "B", "B-"}
 RECOMMENDED = Path(DATA_DIR) / "slips_recommended.jsonl"
 LOADED = Path(DATA_DIR) / "slips_loaded.jsonl"
@@ -33,7 +33,9 @@ def _legs(rows, now_iso):
     by = {}
     for r in rows:
         if (not r.get("side") or r.get("p") is None or r.get("state") == "SCOUT" or r.get("grade") not in GRADES
-                or (r.get("units") or 0) <= 0 or (r.get("start") and r["start"] <= now_iso)):
+                or (r.get("units") or 0) <= 0 or (r.get("start") and r["start"] <= now_iso)
+                # role-sensitive props need a confirmed role: HS only for confirmed non-AWPers, kills only for confirmed non-IGLs
+                or (r.get("prop") == "hs" and r.get("awp") is not False) or (r.get("prop") == "kills" and r.get("igl") is not False)):
             continue
         m = (r.get("matchup") or f"{r.get('team')}|{r.get('opponent')}") + "|" + (r.get("start") or "")
         by.setdefault(m, []).append(dict(r, _m=m, _nick=(r.get("nick") or r.get("player") or "").lower()))
@@ -41,9 +43,20 @@ def _legs(rows, now_iso):
     return sorted(groups, key=lambda g: -g[0]["p"])[:14]
 
 
-def build(rows, n):
+def build_all(rows):
+    """2-, 3- and 4-pick slips (up to 3 each). A match is used in one slip only, across all sizes - one
+    match never sinks several slips; too few matches = fewer slips. AWPers' headshot lines and IGLs' kill
+    lines (and unknown roles) are left out."""
+    used, res = set(), {}
+    for n in (2, 3, 4):
+        res[n] = build(rows, n, used)
+    return res
+
+
+def build(rows, n, used=None):
     """Up to 3 n-pick slips ranked by estimated all-hit chance; one pick per match and per player;
-    slips share no picks (2-pick) or at most one (3-4 pick)."""
+    no match in `used` (updated with the matches taken)."""
+    used = set() if used is None else used
     now_iso = datetime.now(timezone.utc).isoformat()
     groups, out = _legs(rows, now_iso), []
     for gs in combinations(groups, n):
@@ -59,13 +72,14 @@ def build(rows, n):
                 rec(i + 1, cur + [x])
         rec(0, [])
     out.sort(key=lambda s: -s[0])
-    share, picked = (0 if n == 2 else 1), []
+    picked = []
     for p, legs in out:
         if len(picked) >= 3:
             break
-        ids = {x["id"] for x in legs}
-        if all(len(ids & {x["id"] for x in q}) <= share for _, q in picked):
+        ms = {x["_m"] for x in legs}
+        if not ms & used:
             picked.append((p, legs))
+            used |= ms
     return picked
 
 
@@ -102,8 +116,8 @@ def log_recommended(rows, grader_version):
     new = 0
     with _LOCK:
         seen = _seen("rec", RECOMMENDED, "key")
-        for n in (2, 3, 4):
-            for rank, (p, legs) in enumerate(build(rows, n), 1):
+        for n, built in build_all(rows).items():
+            for rank, (p, legs) in enumerate(built, 1):
                 ls = [_leg(x) for x in legs]
                 key = slip_key(ls)
                 if key in seen:

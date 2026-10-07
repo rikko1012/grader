@@ -31,6 +31,7 @@ import cs2_scout
 import hltv
 import picklog
 import slips
+import roles
 import underdog
 import whop_auth
 import bo3
@@ -273,10 +274,36 @@ def board_payload():
                                                      "nick", "state", "edge", "l10_over", "l10_n", "l10_avg",
                                                      "hs_pct", "p_win", "market", "team_name", "opp_name")}))
         rows[-1]["scope"] = r.get("scope") or "12"
+        x = rows[-1]
+        nick = x.get("nick") or x.get("player") or ""
+        # roles (slip builder + display only; True / False / None = unknown, with the source)
+        x["awp"], x["awp_src"] = awp_role(nick, g, x.get("hs_pct"))
+        x["igl"], x["igl_src"] = roles.igl_role(nick, x.get("team_name") or x.get("team"))
     _cap_same_result(rows)
     return {"updated": b["at"], "error": b["error"], "rows": rows, "total": len(b["rows"]),
             "version": picklog.MODEL_VERSION}
 
+
+KNOWN_AWP = {"zywoo", "m0nesy", "sh1ro", "broky", "w0nderful", "torzsi", "woro2k", "hallzerk", "s1mple", "device", "jame",
+             "molodoy", "910", "ultimate"}
+AWP_BOARD_HS = 35          # 3-month HS% under this = an AWPer for the slip builder (riflers sit around 45-60%)
+RIFLE_BOARD_HS = 42        # and 42%+ with BO3.gg not calling him an AWPer = a rifler
+
+
+def awp_role(nick, g, hs_pct):
+    """(True / False / None, source). BO3.gg's body-shot kill rate first, then the known list, then HS%."""
+    snip = g.get("snip")
+    if snip == 100:
+        return True, "BO3.gg: " + (g.get("awp_note") or "AWPer")
+    if (nick or "").lower() in KNOWN_AWP:
+        return True, "known AWPer list"
+    if hs_pct is not None and hs_pct < AWP_BOARD_HS:
+        return True, f"HS% {hs_pct:.0f} (3 months) - AWPer range"
+    if snip == 0:
+        return False, "BO3.gg: " + (g.get("awp_note") or "rifler")
+    if hs_pct is not None and hs_pct >= RIFLE_BOARD_HS:
+        return False, f"HS% {hs_pct:.0f} (3 months) - rifler range"
+    return None, "unknown"
 
 SAME_RESULT_CAP = 3.0   # units (on the 0.5-3U scale), all bets that need the same team to do well / badly in one match
 
@@ -355,6 +382,7 @@ def board_forever():
                                       "edge": round(g["lambda_final"] - r["line"] - 0.5, 1) if g.get("lambda_final") is not None else None,
                                       **_board_l10(rf, r),
                                       "hs_pct": fw.get("hs_pct"), "p_win": (g.get("detail") or {}).get("p_win"),
+                                      "snip": pb.get("sniping_equiv"), "awp_note": pb.get("awp_note"),
                                       "market": g.get("market_quality"),
                                       "team_name": pb.get("playing_for") or pb.get("current_team"),
                                       "opp_name": (res.get("next_match") or {}).get("opponent")}
@@ -372,6 +400,10 @@ def board_forever():
             with ThreadPoolExecutor(BOARD_WORKERS, thread_name_prefix="board") as ex:
                 list(ex.map(one, todo))
             _board_save()
+            try:                                      # IGLs for the board's teams (Liquipedia, cached a week)
+                roles.refresh([(BOARD.get(r["id"]) or {}).get("team_name") or r.get("team") for r in rows])
+            except Exception:
+                traceback.print_exc()
             try:                                      # the builder's own record: each new recommended slip, once
                 slips.log_recommended(board_payload()["rows"], picklog.MODEL_VERSION)
             except Exception:
