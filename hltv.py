@@ -671,7 +671,7 @@ def _environment(cur, ids, team):
                        ORDER BY date DESC LIMIT 1""", {"e": e})
         row = cur.fetchone()
         tonight = None if not row else ("lan" if row[0] else "online")
-        if tonight is None and re.search(r"qualifier|online|open|closed|cup #|weekly|ladder|esea|cct (online|south|north|europe)",
+        if tonight is None and re.search(r"qualifier|online|open|closed|cup #|weekly|ladder|esea|challenger league|cct (online|south|north|europe)",
                                          nm["event"], re.I):
             tonight = "online"                       # qualifiers and online leagues are played online
     if not env and tonight is None:

@@ -808,7 +808,7 @@ def _match_info(m, team_id):
     return {"start": m.get("start_date"), "slug": m.get("slug"), "opponent": opp.get("name"), "bo": m.get("bo_type"),
             "team1_id": m.get("team1_id"), "team2_id": m.get("team2_id"),
             "opponent_id": opp.get("id"), "opponent_slug": opp.get("slug"), "team_slug": (mine or {}).get("slug"),
-            "event": (m.get("tournament") or {}).get("name"),
+            "event": (m.get("tournament") or {}).get("name"), "event_slug": (m.get("tournament") or {}).get("slug"),
             "maps": [g["map_name"] for g in sorted(m.get("games") or [], key=lambda g: g.get("number") or 0)
                      if g.get("map_name")]}
 
@@ -1586,6 +1586,8 @@ def run(args, res, b, ttl):
                 except Exception:
                     res["opponent_defense"] = None
             res["next_match"] = nxt
+            if nxt.get("event_slug") and not nxt.get("event_type"):
+                nxt["event_type"] = _event_type(b, nxt["event_slug"])     # "lan" / "online" (BO3.gg)
             args.opponent = nxt["opponent"]
             if not args.maps and nxt["maps"]:
                 args.maps = ",".join(nxt["maps"][:2])
@@ -1813,6 +1815,32 @@ def _ladder(res, pb, args):
     return out
 
 
+def _event_type(b, slug):
+    """BO3.gg's tournament type: "lan" / "online" / None (cached with the API answers)."""
+    try:
+        t = b._run(b.cs2._api._make_request("/tournaments/" + slug, {}))
+        et = (t.get("event_type") or "").lower()
+        return et if et in ("lan", "online") else None
+    except Exception:
+        return None
+
+
+def _environment(res, pb):
+    """Tonight LAN or online: HLTV first (matches already played at the event / event name), then
+    BO3.gg's tournament type. With his LAN / online split, the ratio for tonight's environment."""
+    env = dict((res.get("hltv_context") or {}).get("environment") or {})
+    et = (res.get("next_match") or {}).get("event_type")
+    if not env.get("tonight") and et:
+        env["tonight"], env["source"] = et, "BO3.gg event type"
+        side = env.get(et)
+        tot = [v for k, v in env.items() if k in ("lan", "online") and isinstance(v, dict)]
+        maps = sum(v["maps"] for v in tot)
+        if side and maps:
+            allk = sum(v["kpr"] * v["maps"] for v in tot) / maps
+            env["ratio"], env["ratio_maps"] = round(side["kpr"] / allk, 3), side["maps"]
+    return env or None
+
+
 def finish_line(res, args):
     """The only part of a grade that depends on the line / prop: last-10 vs the line, H2H hit
     rates, grader inputs, the grade, the simulation. Everything else is shared context."""
@@ -1834,7 +1862,7 @@ def finish_line(res, args):
     res["hltv_context"] = _hltv_context(pb, args)
     _tick(res, "hltv_context", t0)
     pb["_opp_rank"] = ((res["hltv_context"] or {}).get("opp_ranking") or {}).get("rank")
-    pb["_env"] = (res["hltv_context"] or {}).get("environment")   # LAN / online split + tonight's environment
+    pb["_env"] = _environment(res, pb)       # LAN / online split + tonight's environment
     pb["_rank_band"] = _best_rank_band(pb, (res["hltv_context"] or {}).get("rank_band"))
     _tick(res, "rank_band", t0)
     res["grader_inputs"] = grader_inputs(pb, args, res.get("odds"), res.get("h2h"))
