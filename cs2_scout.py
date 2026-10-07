@@ -328,27 +328,27 @@ def map_rows(b, player_id, matches, want_games):
     return rows
 
 
-def recent_form(rows, window_kpr, line=None, stat="kills"):
+def recent_form(rows, window_kpr, line=None, stat="kills", need=2):
     """Last 10 matches, Maps 1-2 only: KPR (for the recency blend) and each match's Maps 1-2
-    total vs the line."""
+    total vs the line. need=1: Map 1 lines - every match's Map 1, BO1s included."""
     series = {}
     for r in rows:
         series.setdefault(r["match_id"], []).append(r)
     out_series = []
     for mid, maps in series.items():
         maps.sort(key=lambda m: m["number"] or 9)
-        if len(maps) < 2:
+        if len(maps) < need:
             continue  # BO1s and forfeits have no Map 2
-        m12 = maps[:2]
+        m12 = maps[:need]
         if any(m[stat] is None for m in m12):
             continue  # HLTV series whose headshots the scraper hasn't read yet
         out_series.append({"date": m12[0]["date"], "opponent": m12[0]["opponent"],
                            "source": "HLTV" if m12[0].get("source") == "hltv" else None,
                            "maps": [m["map"] for m in m12], "values": [m[stat] for m in m12],
                            "total": sum(m[stat] for m in m12), "rounds": sum(m["rounds"] for m in m12),
-                           "result": {2: "W", 1: "split", 0: "L"}[sum(m["won"] for m in m12)]})
+                           "result": ({2: "W", 1: "split", 0: "L"} if need == 2 else {1: "W", 0: "L"})[sum(m["won"] for m in m12)]})
     out_series.sort(key=lambda s: s["date"], reverse=True)
-    kr = [r for r in rows if r["rounds"] and r["kills"] is not None and len(series[r["match_id"]]) >= 2]
+    kr = [r for r in rows if r["rounds"] and r["kills"] is not None and len(series[r["match_id"]]) >= need]
     if not kr or not window_kpr:
         return {"matches": len(out_series), "series": out_series}
     kpr = sum(r["kills"] for r in kr) / sum(r["rounds"] for r in kr)
@@ -1984,7 +1984,9 @@ def finish_line(res, args):
             if len({r["match_id"] for r in er}) >= 5:          # his last 10 in this environment
                 rows = er
                 pb["_env"]["form_from"] = tonight
-        pb["recent_form"] = recent_form(rows, pb.get("_rf_kpr"), args.line, stat)
+        pb["recent_form"] = recent_form(rows, pb.get("_rf_kpr"), args.line, stat)   # Maps 1-2: feeds the grade
+        if getattr(args, "scope", "12") == "1":          # display only: every match's Map 1, BO1s included
+            pb["recent_form_map1"] = recent_form(rows, pb.get("_rf_kpr"), args.line, stat, need=1)
     _tick(res, "form", t0)
     if res.get("_h2h_rows") is not None:
         hrows = list(res["_h2h_rows"])

@@ -247,9 +247,11 @@ def _board_l10(rf, r):
     """Last-10 numbers in the line's own maps: Map 1 lines use his map-1 values, Maps 1-3 has no
     comparable record (shown as -), Maps 1-2 as before."""
     sc = r.get("scope") or "12"
+    if (rf.get("matches") or 0) < 3:                 # 1-2 matches is not a record (one OT map read as "avg 39")
+        return {"l10_over": None, "l10_n": None, "l10_avg": None}
     if sc == "12":
         return {"l10_over": rf.get("overs"), "l10_n": rf.get("matches"), "l10_avg": rf.get("avg_total")}
-    if sc == "1":
+    if sc == "1":                                    # recent_form_map1: one value per match (BO1s included)
         v = [s["values"][0] for s in (rf.get("series") or []) if s.get("values") and s["values"][0] is not None]
         return {"l10_over": sum(x > r["line"] for x in v) if v else None, "l10_n": len(v) or None,
                 "l10_avg": round(sum(v) / len(v), 1) if v else None}
@@ -342,7 +344,7 @@ def board_forever():
                     v = verdict(res.get("grade"))
                     g = res.get("grade") or {}
                     pb = res.get("player_block") or {}
-                    rf = pb.get("recent_form") or {}
+                    rf = (pb.get("recent_form_map1") if (r.get("scope") or "12") == "1" else None) or pb.get("recent_form") or {}
                     fw = ((pb.get("overall") or {}).get("form_windows") or {}).get("3m") or {}
                     BOARD[r["id"]] = {"at": time.time(), "graded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                                       "grade": v.get("grade"), "side": v.get("side"), "p": v.get("p"),
