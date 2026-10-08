@@ -145,7 +145,9 @@ def _factors(res):
                 # 2026-10-08 perf-1 goes live on Maps 1-2: the old pipeline, on identical inputs
                 "legacy": dict(CONFIG, perf_scopes=()),
                 # candidate: the same model on BO3.gg maps for players HLTV has no history for
-                "perf_bo3": dict(CONFIG, perf_versions=("perf-1", "perf-1-bo3"))}
+                "perf_bo3": dict(CONFIG, perf_versions=("perf-1", "perf-1-bo3")),
+                # Map 1 candidate (frozen 2026-10-08): the performance model for ONE map (no halving of Maps 1-2)
+                "perf_map1": dict(CONFIG, perf_scopes=("12", "1"))}
         out["shadow"] = {"live_raw": g.get("probs_raw"),     # the live grade's own Over / Under / push chances
                          "live_online": g.get("online_adj")}   # online weight + the bonus actually applied
         for name, cfg in alts.items():
