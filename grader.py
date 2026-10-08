@@ -194,6 +194,21 @@ def p_three(line, lam, sd):
     return po, pu, max(0.0, 1.0 - po - pu)
 
 
+def mix_p_more_live(line, cases):
+    """LIVE (frozen) Maps 1-3 chance: average each case's push-removed P(More), weighted by the case chance.
+    cases = [(weight, lam, sd), ...]"""
+    return sum(w * p_more(line, lam, sd) for w, lam, sd in cases)
+
+
+def mix_three(line, cases):
+    """fix_v2: mix the raw (over, under, push) of each case first; condition on no push afterwards."""
+    tot = [0.0, 0.0, 0.0]
+    for w, lam, sd in cases:
+        for i, v in enumerate(p_three(line, lam, sd)):
+            tot[i] += w * v
+    return tuple(tot)
+
+
 def p_more(line, lam, sd):
     """P(More), push removed (pushes settle as no action): P(Over) / (P(Over) + P(Under))."""
     up, down = _cuts(line)
@@ -585,20 +600,19 @@ def grade_leg(d, cfg=CONFIG):
         """Unconditional (over, under, push) for this scope; Maps 1-3 mixes the raw outcomes of the 2-map and
         3-map cases BEFORE the push is removed."""
         if scope == "123":
-            a, b = lam12 + shift, lam12 + lam3 + shift
-            x = p_three(line, a, math.sqrt(max(a, 1)) * c * sd_mult)
-            y = p_three(line, b, math.sqrt(max(b, 1)) * c * sd_mult)
-            return tuple((1 - p3) * u + p3 * v for u, v in zip(x, y))
+            return mix_three(line, cases123(shift))
         return p_three(line, lam_final + shift, sd)
+
+    def cases123(shift=0.0):
+        a, b = lam12 + shift, lam12 + lam3 + shift
+        return [(1 - p3, a, math.sqrt(max(a, 1)) * c * sd_mult), (p3, b, math.sqrt(max(b, 1)) * c * sd_mult)]
 
     def pmore(shift=0.0):
         if fix_v2:                                   # corrected comparison (2026-10-08 review): condition after mixing
             o, u, _ = three(shift)
             return o / (o + u) if o + u > 0 else 0.5
         if scope == "123":
-            a, b = lam12 + shift, lam12 + lam3 + shift
-            return ((1 - p3) * p_more(line, a, math.sqrt(max(a, 1)) * c * sd_mult)
-                    + p3 * p_more(line, b, math.sqrt(max(b, 1)) * c * sd_mult))
+            return mix_p_more_live(line, cases123(shift))
         return p_more(line, lam_final + shift, sd)
     # Big disagreements with the line: past gap_trust_at kills/HS only gap_trust_keep of the extra counts
     # (2026-10-07: on 1,193 real lines Oct 2-6 the books were right more often than not when we
