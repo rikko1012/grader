@@ -806,7 +806,8 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/admin/slip_batches.json" and self.authed(q.get("token")):
                 return self.send(200, {"version": slip_batches.VERSION, "batches": slip_batches.read()})
             if u.path == "/admin/forecasts.json" and self.authed(q.get("token")):
-                return self.send(200, {"forecasts": picklog.export_forecasts()})
+                return self.send(200, {"forecasts": picklog.export_forecasts(inputs=bool(q.get("inputs")),
+                                                                           last=q.get("last") if (q.get("last") or "").isdigit() else None)})
             if u.path == "/admin/picks.json" and self.authed(q.get("token")):
                 return self.send(200, {"picks": picklog.export()})
             if u.path == "/admin/mark_tests" and self.authed(q.get("token")):
