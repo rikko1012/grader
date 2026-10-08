@@ -138,8 +138,12 @@ def _factors(res):
         # fix_v2 (2026-10-08 review): gap compression centred on the line, Maps 1-3 pushes removed after mixing
         alts = {"old_spread": dict(CONFIG, c=1.55, c_hs=1.30),
                 "no_rest_bonus": dict(CONFIG, rest_bonus=0.0),
-                "fix_v2": dict(CONFIG, fix_v2=True)}
-        out["shadow"] = {"live_raw": g.get("probs_raw")}   # the live grade's own Over / Under / push chances
+                "fix_v2": dict(CONFIG, fix_v2=True),
+                # 2026-10-08 environment revision: the old behaviour and the provisional taper, on identical inputs
+                "online_none": dict(CONFIG, online_guard="none"),
+                "online_taper": dict(CONFIG, online_guard="taper")}
+        out["shadow"] = {"live_raw": g.get("probs_raw"),     # the live grade's own Over / Under / push chances
+                         "live_online": g.get("online_adj")}   # online weight + the bonus actually applied
         for name, cfg in alts.items():
             gg = grade_leg(gi, cfg)
             out["shadow"][name] = {"p_more": gg.get("p_more"), "lambda": gg.get("lambda_final"),

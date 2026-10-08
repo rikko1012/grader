@@ -76,7 +76,8 @@ CONFIG = {
     "over_margin": {"kills": 1.0, "hs": 0.6},   # 1.0 / 0.6 until 2026-10-07 (projection fixes made it less needed)
     "env_k": 20,
     "rest_days": (4, 14), "rest_bonus": 0.04,
-    "online_shift": 0.06,     # LAN / online: maps in that environment for half the difference to count
+    "online_shift": 0.06,
+    "online_guard": "full",   # 2026-10-08: see grade_leg - no +6% on fully online stats (comparisons: "none", "taper")     # LAN / online: maps in that environment for half the difference to count
     "star_rating": 1.15, "star_k": 1.0, "star_cap": 0.06, "rust_drop": 0.08, "hot_k": 0.6,
     "last10_min": 5,             # need 5+ recent two-map matches to blend
     # 4c (2026-09-28, owner-approved for KILLS props only): trade kills per round. Cross-validated
@@ -564,9 +565,29 @@ def grade_leg(d, cfg=CONFIG):
     # Online matches overall (2026-10-07, 953 real lines matched to HLTV LAN/online): online props went
     # over 55% and finished 1.75 above projection, LAN 41% / -1.0. +6% online was chosen on every
     # held-out day (log-loss 0.6944 -> 0.6915); a LAN shift was not.
+    online_bonus = 0.0
     if env.get("tonight") == "online" and cfg["online_shift"]:
-        lam_final *= 1 + cfg["online_shift"]
-        flags.append(f"Online match: players beat their lines online on real lines - projection +{cfg['online_shift']:.0%}")
+        # Environment-adjustment revision UNDER EVALUATION (2026-10-08, owner-approved, versioned): the +6% was
+        # fitted on Oct 2-6 projections built from ALL-MAPS stats (added Oct 7 01:19Z); online-only stats came an
+        # hour later (02:28Z) and the +6% stayed on top. Modes (cfg online_guard), all logged on identical inputs:
+        #   "full"  (LIVE)  no +6% when the base rate is fully online (stats_weight 1); otherwise the full +6%
+        #   "taper" (comparison, PROVISIONAL assumption) +6% x (1 - online weight) for partial blends
+        #   "none"  (comparison) the old behaviour: +6% on every online match
+        # The online-vs-overall ratio adjustment never overlaps: it is off whenever online stats are blended in.
+        mode = cfg.get("online_guard", "full")
+        w_on = min(max(env.get("stats_weight") or 0.0, 0.0), 1.0) if env.get("stats_from") == "online" else 0.0
+        if mode == "none":
+            shift = cfg["online_shift"]
+        elif mode == "taper":
+            shift = cfg["online_shift"] * (1 - w_on)
+        else:
+            shift = 0.0 if w_on >= 1 else cfg["online_shift"]
+        w = w_on
+        online_bonus = shift
+        if shift > 0:
+            lam_final *= 1 + shift
+            flags.append(f"Online match: players beat their lines online on real lines - projection +{shift:.1%}"
+                         + (f" (all-maps share {1 - w:.0%} of the base rate)" if w > 0 else ""))
     rt = d.get("rating")
     if rt and rt > cfg["star_rating"]:
         # capped at 6% (owner: don't underestimate stars - most of the 13% came from one day, Oct 5;
@@ -739,6 +760,9 @@ def grade_leg(d, cfg=CONFIG):
     out.update(
         status=status, grade=grade, model_grade=model_grade, h2h=h2h_note, regional=reg_note,
         p_more=round(pm, 3), p_less=round(1 - pm, 3), p_more_model=round(pm_model, 3), probs_raw=probs_raw,
+        online_adj={"tonight": env.get("tonight"), "stats_from": env.get("stats_from"),
+                    "online_weight": env.get("stats_weight") if env.get("stats_from") == "online" else None,
+                    "mode": cfg.get("online_guard", "full"), "bonus_applied": round(online_bonus, 4)},
         grade_less=grade_from_p(1 - pm) if less_ok else "n/a (no Less on this line)",
         units=u_more, units_less=u_less, form_fight=fight, tape_fight=tape, scout=scout,
         market_quality=mq,
