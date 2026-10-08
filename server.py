@@ -1033,6 +1033,50 @@ class Handler(BaseHTTPRequestHandler):
                     except Exception as e:
                         out.append({"nick": n, "team": t, "day": dday, "error": str(e)[:200]})
                 return self.send(200, {"rows": out})
+            if u.path == "/admin/hltv_export" and self.authed(q.get("token")):
+                # performance-model dataset (2026-10-08 rebuild): one row per player per map, totals side, with the
+                # map's rounds / result, map order, LAN flag, event, both teams; date window <= 31 days per call
+                import hltv
+                from datetime import date as _d
+                d0, d1 = _d.fromisoformat(q.get("from")), _d.fromisoformat(q.get("to"))
+                if (d1 - d0).days > 31:
+                    return self.send(400, {"error": "max 31 days per call"})
+                con = hltv._connect()
+                try:
+                    with con.cursor() as cur:
+                        cur.execute("SET statement_timeout = 120000")
+                        cur.execute("""SELECT mo.matchid, mo.date, mo.event, mo.lan, mm.number, mp.name, ps.playerid, ps.teamid, opp.teamid,
+                                              ps.k, ps.d, ps.ek, ps.ed, ps.adr, ps.eadr, ps.kast, ps.ekast, ps.rating, ps.roundswing, h.hs,
+                                              own.score, opp.score
+                                       FROM match_maps mm
+                                       JOIN match_overview mo USING (matchid)
+                                       JOIN maps mp ON mp.mapid = mm.mapid
+                                       JOIN player_stats ps ON ps.matchid = mm.matchid AND ps.mapid = mm.mapid AND ps.sideid = 0
+                                       JOIN matches own ON own.matchid = mm.matchid AND own.teamid = ps.teamid AND own.mapid = mm.mapid AND own.sideid = 0
+                                       JOIN matches opp ON opp.matchid = mm.matchid AND opp.teamid <> ps.teamid AND opp.mapid = mm.mapid AND opp.sideid = 0
+                                       LEFT JOIN map_headshots h ON h.mapstatsid = mm.mapstatsid AND h.playerid = ps.playerid
+                                       WHERE mo.date >= %s AND mo.date <= %s
+                                       ORDER BY mo.date, mo.matchid, mm.number""", (d0, d1))
+                        cols = ["match", "date", "event", "lan", "map_no", "map", "player", "team", "opp", "k", "d", "ek", "ed",
+                                "adr", "eadr", "kast", "ekast", "rating", "swing", "hs", "own", "opp_score"]
+                        rows = [[str(v) if k == "date" else v for k, v in zip(cols, r)] for r in cur.fetchall()]
+                        cur.execute("SELECT playerid, name FROM players")
+                        names = dict(cur.fetchall())
+                        cur.execute("SELECT teamid, name, country FROM teams")
+                        teams = {t: [n, c] for t, n, c in cur.fetchall()}
+                        return self.send(200, {"cols": cols, "rows": rows, "players": names, "teams": teams})
+                finally:
+                    con.close()
+            if u.path == "/admin/hltv_ranks" and self.authed(q.get("token")):
+                import hltv
+                con = hltv._connect()
+                try:
+                    with con.cursor() as cur:
+                        cur.execute("SET statement_timeout = 60000")
+                        cur.execute("SELECT date, teamid, rank, points FROM team_rankings ORDER BY date")
+                        return self.send(200, {"rows": [[str(d), t, r, p] for d, t, r, p in cur.fetchall()]})
+                finally:
+                    con.close()
             if u.path == "/admin/hltv_history" and self.authed(q.get("token")):
                 import hltv
                 items = json.loads(q.get("items") or "[]")[:60]      # [[nick, cutoff, team], ...]
