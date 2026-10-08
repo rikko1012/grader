@@ -361,8 +361,12 @@ def recent_form(rows, window_kpr, line=None, stat="kills", need=2):
     if abs(trend) >= 15:
         out["note"] = "Trending hard vs window - 70/30 blend applies"
     if line is not None and out_series:
+        # a total exactly on a whole line is a PUSH (no action) - never an Under (fixed 2026-10-08)
         overs = sum(1 for s in out_series if s["total"] > line)
-        out.update(line=line, overs=overs, hit_rate=round(overs / len(out_series), 3))
+        pushes = sum(1 for s in out_series if s["total"] == line)
+        decided = len(out_series) - pushes
+        out.update(line=line, overs=overs, pushes=pushes, decided=decided,
+                   hit_rate=round(overs / decided, 3) if decided else None)
     return out
 
 
@@ -876,11 +880,12 @@ def h2h(rows, opponent, line=None, stat="kills", opp_roster=None):
            "single_map_series_skipped": skipped}
     if line is None or not series:
         return out
-    hits = [s["total"] > line for s in series]
-    rate = sum(hits) / len(hits)
-    in_w = [s["total"] > line for s in series if s["result"] == "W"]
-    in_l = [s["total"] > line for s in series if s["result"] == "L"]
-    out.update(line=line, hit_rate=round(rate, 3),
+    dec = [s for s in series if s["total"] != line]             # pushes (total == whole line) are no action
+    hits = [s["total"] > line for s in dec]
+    rate = sum(hits) / len(hits) if hits else None
+    in_w = [s["total"] > line for s in dec if s["result"] == "W"]
+    in_l = [s["total"] > line for s in dec if s["result"] == "L"]
+    out.update(line=line, hit_rate=round(rate, 3) if rate is not None else None, pushes=len(series) - len(dec),
                hits_in_wins=f"{sum(in_w)}/{len(in_w)}", hits_in_losses=f"{sum(in_l)}/{len(in_l)}",
                clears_in_wins=bool(in_w) and all(in_w), clears_in_losses=bool(in_l) and all(in_l))
     return out
@@ -1043,7 +1048,7 @@ def grader_inputs(pb, args, odds=None, hh=None):
         "opp_rank": pb.get("_opp_rank"),          # opponent's VRS rank (HLTV) - elite-opponent drop
         "rank_band": pb.get("_rank_band"),        # his HLTV rate vs teams ranked within 10 of the opponent
         "scout": bool(pb.get("scout")), "standin_for": pb.get("standin_for"),
-        "recent": ({"n": rf["matches"], "overs": rf["overs"]}
+        "recent": ({"n": rf.get("decided", rf["matches"]), "overs": rf["overs"]}       # pushes left out of n
                    if (rf := pb.get("recent_form") or {}).get("overs") is not None else None),
         "on_listed_team": pb.get("on_listed_team"), "is_standin": pb["is_standin"],
         "roster_confirmed": pb["roster_confirmed"],
@@ -1818,7 +1823,7 @@ def _ladder(res, pb, args):
             continue
         d = dict(gi, line=ln)
         if d.get("recent") and totals:
-            d["recent"] = {"n": len(totals), "overs": sum(t > ln for t in totals)}
+            d["recent"] = {"n": sum(t != ln for t in totals), "overs": sum(t > ln for t in totals)}   # pushes out
         try:
             g = res["grade"] if step == 0 else grade_leg(d)
         except Exception:

@@ -226,7 +226,7 @@ def pick_row(res, verdict, test=False):
         "pred_maps": json.dumps(pb.get("map_prediction")), "veto_known": int(bool(nm.get("maps"))),
         "sample_maps": (pb.get("overall") or {}).get("maps_played"), "rec_avg": rf.get("avg_total"),
         "rec_median": rf.get("median_total"),
-        "rec_hit": f"{rf.get('overs')}/{rf.get('matches')}" if rf.get("overs") is not None else None,
+        "rec_hit": f"{rf.get('overs')}/{rf.get('decided', rf.get('matches'))}" if rf.get("overs") is not None else None,   # pushes out
         "flags": json.dumps(g.get("flags")), "opp_def": json.dumps(res.get("opponent_defense")),
         "test": test if test == 2 else int(bool(test)),   # 1 = owner's tests, 2 = Underdog board (not a member pick)
         "factors": json.dumps(_factors(res), default=str),

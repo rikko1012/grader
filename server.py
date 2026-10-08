@@ -253,11 +253,12 @@ def _board_l10(rf, r):
     if (rf.get("matches") or 0) < 3:                 # 1-2 matches is not a record (one OT map read as "avg 39")
         return {"l10_over": None, "l10_n": None, "l10_avg": None}
     if sc == "12":
-        return {"l10_over": rf.get("overs"), "l10_n": rf.get("matches"), "l10_avg": rf.get("avg_total")}
+        return {"l10_over": rf.get("overs"), "l10_n": rf.get("decided", rf.get("matches")), "l10_push": rf.get("pushes") or 0,
+                "l10_avg": rf.get("avg_total")}
     if sc == "1":                                    # recent_form_map1: one value per match (BO1s included)
         v = [s["values"][0] for s in (rf.get("series") or []) if s.get("values") and s["values"][0] is not None]
-        return {"l10_over": sum(x > r["line"] for x in v) if v else None, "l10_n": len(v) or None,
-                "l10_avg": round(sum(v) / len(v), 1) if v else None}
+        return {"l10_over": sum(x > r["line"] for x in v) if v else None, "l10_n": sum(x != r["line"] for x in v) or None,
+                "l10_push": sum(x == r["line"] for x in v), "l10_avg": round(sum(v) / len(v), 1) if v else None}
     return {"l10_over": None, "l10_n": None, "l10_avg": None}
 
 
@@ -272,7 +273,7 @@ def board_payload():
         if not g.get("side"):
             continue                                  # not graded yet: never shown
         rows.append(dict(r, **{k: g.get(k) for k in ("grade", "side", "p", "units", "proj", "reason", "graded_at",
-                                                     "nick", "state", "edge", "l10_over", "l10_n", "l10_avg",
+                                                     "nick", "state", "edge", "l10_over", "l10_n", "l10_push", "l10_avg",
                                                      "hs_pct", "p_win", "market", "team_name", "opp_name", "match_slug")}))
         rows[-1]["scope"] = r.get("scope") or "12"
         x = rows[-1]
