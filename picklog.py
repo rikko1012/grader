@@ -464,7 +464,17 @@ def _col(r, k):
         return None
 
 
-def scope_result(r):
+def _forfeited(cur, mid):
+    """HLTV's forfeited-map count for a match (None = unknown)."""
+    try:
+        cur.execute("SELECT forfeited_maps FROM match_overview WHERE matchid = %s", (mid,))
+        row = cur.fetchone()
+        return row[0] if row else None
+    except Exception:
+        return None
+
+
+def scope_result(r, same_day_only=False):
     """The pick's series from HLTV and its total for the line's scope, via the shared scope rules (scope.py).
     Returns {"status": "ok", "total", "maps_used", "maps", "per_map", "rounds", "won", "hltv_match"} or
     {"status": "wait"|"none"|"error", "reason"}. Never substitutes another scope; two candidate matches = error."""
@@ -477,15 +487,20 @@ def scope_result(r):
             ids = hltv._player_ids(cur, r["player"], r["team"])
             rows = hltv._series_rows(cur, ids, "2000-01-01", "AND mo.date BETWEEN %(d)s::date - 1 AND %(d)s::date + 1",
                                      {"d": day}, maxn=3, need=(1,)) if ids else []
+            opp = hltv._norm(r["opponent"] or "")
+            on = [x for x in rows if not opp or opp in hltv._norm(x["opponent"]) or hltv._norm(x["opponent"]) in opp]
+            if same_day_only:
+                on = [x for x in on if x["date"] >= day]     # an earlier meeting is not this match
+            mids = {x["hltv_match"] for x in on}
+            forfeits = _forfeited(cur, next(iter(mids))) if len(mids) == 1 else None
     finally:
         con.close()
-    opp = hltv._norm(r["opponent"] or "")
-    on = [x for x in rows if not opp or opp in hltv._norm(x["opponent"]) or hltv._norm(x["opponent"]) in opp]
     if not on:
         return {"status": "none", "reason": "match not in HLTV yet"}
-    mids = {x["hltv_match"] for x in on}
     if len(mids) > 1:
         return {"status": "error", "reason": f"{len(mids)} HLTV matches vs this opponent around that day - ambiguous"}
+    if forfeits:
+        return {"status": "void", "reason": f"{forfeits} forfeited map(s)"}
     ms = sorted(on, key=lambda x: x["number"])
     maps = [{"number": x["number"], "kills": x["kills"], "headshots": x["headshots"], "won": x["won"]} for x in ms]
     sc = _col(r, "scope") or "12"
@@ -507,6 +522,8 @@ def _settle_scope(r, now, start):
         res = scope_result(r)
     except Exception:
         res = {"status": "none"}
+    if res["status"] == "void":
+        return ("void", None, None, None)
     if res["status"] != "ok":
         return ("void", None, None, None) if now > start + timedelta(days=VOID_AFTER_D) else None
     _save_result(r["id"], {"source": "hltv", "rounds": res["rounds"], "won": res["won"], "per_map": res["per_map"],
@@ -517,14 +534,15 @@ def _settle_scope(r, now, start):
 CORRECTIONS = DB.parent / "settlement_corrections.jsonl"
 
 
-def fix_scope_settlements(apply=False):
+def fix_scope_settlements(apply=False, scopes=("1", "123"), test=None):
     """2026-10-08 incident: recheck_with_hltv() re-settled Map 1 / Maps 1-3 picks with Maps 1-2 totals. Re-derive every
     settled non-Maps-1-2 pick from HLTV through scope_result(); with apply=True correct the mismatches and append the
     old and new values to settlement_corrections.jsonl (nothing is lost). Returns what differs / what was skipped."""
     from scope import outcome
     with _LOCK:
         con = _db()
-        rows = con.execute("SELECT * FROM picks WHERE status IN ('settled', 'push') AND COALESCE(scope, '12') != '12'").fetchall()
+        rows = [x for x in con.execute("SELECT * FROM picks WHERE status IN ('settled', 'push')").fetchall()
+                if (x["scope"] or "12") in scopes and (test is None or (x["test"] or 0) == test)]
         con.close()
     diffs, skipped = [], []
     for r in rows:
@@ -556,21 +574,22 @@ def fix_scope_settlements(apply=False):
 
 
 def _hltv_totals(r, same_day_only=False):
-    """HLTV's Maps 1-2 result for a pick: an update tuple, "wait" (match there, stat not yet), or None."""
+    """HLTV's result for a Maps 1-2 pick through the shared scope rules (scope_result): an update tuple, "wait" (match
+    there, stat not yet), or None. Since 2026-10-08 it refuses ambiguous matches (two candidates used to take the first)
+    and voids forfeits."""
     try:
-        import hltv
-        tot = hltv.settle_by_day(r["player"], r["team"], (r["match_start"] or "")[:10], r["opponent"])
+        res = scope_result(r, same_day_only=same_day_only)
     except Exception:
         return None
-    if not tot.get("found"):
+    if res["status"] == "void":
+        return ("void", None, None, None)
+    if res["status"] == "wait":
+        return "wait"
+    if res["status"] != "ok":
         return None
-    if same_day_only and (tot.get("date") or "") < (r["match_start"] or "")[:10]:
-        return None                                   # before the listed day: an earlier meeting, not this match
-    actual = tot.get("headshots" if r["prop"] == "hs" else "kills")
-    if actual is not None:
-        _save_result(r["id"], {"source": "hltv", "rounds": tot.get("rounds"), "won": tot.get("won"),
-                               "per_map": tot.get("per_map")})
-    return "wait" if actual is None else _outcome(r, actual, tot.get("maps"))
+    _save_result(r["id"], {"source": "hltv", "rounds": res["rounds"], "won": res["won"], "per_map": res["per_map"],
+                           "maps_used": res["maps_used"], "hltv_match": res["hltv_match"]})
+    return _outcome(r, res["total"], res["maps"])
 
 
 def recheck_with_hltv():
@@ -585,6 +604,8 @@ def recheck_with_hltv():
         if (_col(r, "scope") or "12") != "12":
             continue          # _hltv_totals is Maps 1-2 only - Map 1 / Maps 1-3 lines settle via scope_result() (incident 2026-10-08)
         hv = _hltv_totals(r)
+        if isinstance(hv, tuple) and hv[0] == "void":
+            continue          # never silently void a settled pick here (forfeits are reviewed by hand)
         if isinstance(hv, tuple) and (hv[2] != r["actual"] or hv[0] != r["status"]):
             with _LOCK:
                 con = _db()
@@ -605,6 +626,16 @@ def _settle_hltv(r, now, start):
     except Exception:
         tot = {"found": False}
     actual = tot.get("headshots" if r["prop"] == "hs" else "kills") if tot.get("found") else None
+    try:                                              # a forfeited map voids the pick (2026-10-08)
+        con = hltv._connect()
+        try:
+            with con.cursor() as cur:
+                if _forfeited(cur, int(r["match_slug"].split("-", 1)[1])):
+                    return ("void", None, None, None)
+        finally:
+            con.close()
+    except Exception:
+        pass
     if actual is None:
         return ("void", None, None, None) if now > start + timedelta(days=VOID_AFTER_D) else None
     maps = json.dumps(tot.get("maps"))

@@ -128,3 +128,43 @@ def test_settlement_hs_missing_waits(monkeypatch):
     import picklog
     _fake_hltv(monkeypatch, [_row(1, 11, None, False), _row(2, 9, 4, False)])
     assert picklog.scope_result(_pick("1", 5.5, "More", prop="hs"))["status"] == "wait"
+
+
+def _fake_hltv_ff(monkeypatch, series, forfeits):
+    import hltv
+
+    class Cur:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def execute(self, q, args=None): self.q = q
+        def fetchone(self): return (forfeits,)
+
+    class Con:
+        def cursor(self): return Cur()
+        def close(self): pass
+    monkeypatch.setattr(hltv, "_connect", lambda: Con())
+    monkeypatch.setattr(hltv, "_player_ids", lambda cur, n, t: [1])
+    monkeypatch.setattr(hltv, "_series_rows", lambda *a, **k: series)
+
+
+def test_forfeit_voids_every_scope(monkeypatch):
+    import picklog
+    _fake_hltv_ff(monkeypatch, [_row(1, 11, 6, True), _row(2, 0, 0, True)], forfeits=1)
+    for sc in ("1", "12", "123"):
+        assert picklog.scope_result(_pick(sc, 10.5, "More"))["status"] == "void"
+    assert picklog._hltv_totals(_pick("12", 19.5, "More"))[0] == "void"
+
+
+def test_maps12_ambiguous_match_is_not_settled(monkeypatch):
+    import picklog
+    _fake_hltv_ff(monkeypatch, [_row(1, 11, 6, True), _row(2, 9, 6, True), _row(1, 20, 9, True, mid=8), _row(2, 20, 9, True, mid=8)], forfeits=0)
+    assert picklog.scope_result(_pick("12", 19.5, "More"))["status"] == "error"
+    assert picklog._hltv_totals(_pick("12", 19.5, "More")) is None          # left open, never the first match
+
+
+def test_same_day_only_drops_earlier_meeting(monkeypatch):
+    import picklog
+    early = [dict(_row(1, 30, 9, True, mid=5), date="2026-10-05"), dict(_row(2, 30, 9, True, mid=5), date="2026-10-05")]
+    _fake_hltv_ff(monkeypatch, early + [_row(1, 11, 6, True), _row(2, 9, 6, True)], forfeits=0)
+    res = picklog.scope_result(_pick("12", 19.5, "More"), same_day_only=True)
+    assert res["status"] == "ok" and res["total"] == 20

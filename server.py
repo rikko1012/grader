@@ -1035,7 +1035,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, {"rows": out})
             if u.path == "/admin/fix_scope_settlements" and self.authed(q.get("token")):
                 # 2026-10-08 incident: dry run by default; apply=1 corrects and logs old + new values
-                return self.send(200, picklog.fix_scope_settlements(apply=q.get("apply") == "1"))
+                # scopes=12 (Maps 1-2) is DRY RUN ONLY: a read-only replay of the new shared settlement path
+                sc = tuple((q.get("scopes") or "1,123").split(","))
+                return self.send(200, picklog.fix_scope_settlements(apply=q.get("apply") == "1" and "12" not in sc, scopes=sc,
+                                                                    test=int(q["test"]) if (q.get("test") or "").isdigit() else None))
             if u.path == "/admin/hltv_export" and self.authed(q.get("token")):
                 # performance-model dataset (2026-10-08 rebuild): one row per player per map, totals side, with the
                 # map's rounds / result, map order, LAN flag, event, both teams; date window <= 31 days per call
