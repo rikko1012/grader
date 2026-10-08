@@ -151,9 +151,11 @@ tr:last-child td{border-bottom:0}
 td.hit::before,td.miss::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:currentColor;margin-right:6px;vertical-align:1px}
 .muted{color:var(--muted)} .small{font-size:12.5px}
 ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flags li{margin:4px 0} ul.flags li::marker{color:var(--accent)}
-.kv{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
-.kv:last-child{border-bottom:0} .kv span:first-child{color:var(--muted);flex:0 0 auto}
-.kv > span:last-child{text-align:right;min-width:0;overflow-wrap:anywhere}
+.kv{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 12px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+.kv:last-child{border-bottom:0} .kv > span:first-child{color:var(--muted);flex:0 1 auto;max-width:100%}
+/* the value always keeps at least 40% of the row and wraps between words - a long label (e.g. "Vs teams ranked
+   #127-147 (opponent #137)") used to squeeze it into a one-letter-wide column */
+.kv > span:last-child{flex:1 1 12em;max-width:100%;text-align:right;overflow-wrap:break-word}
 .card{min-width:0} .pill{max-width:100%;white-space:normal}
 .mates{display:flex;flex-direction:column;gap:8px}
 .mate{display:grid;grid-template-columns:90px 1fr 44px;gap:8px;align-items:center;font-size:13.5px}
@@ -189,7 +191,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 .pill.warn{border-color:var(--bad);color:var(--bad)}
 #cardpop{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.6);display:flex;justify-content:center;align-items:flex-start;padding:24px 12px}
 #cardpop[hidden]{display:none} #popbody{background:var(--bg);border:1px solid var(--line-2);border-radius:16px;max-width:900px;width:100%;max-height:calc(100vh - 48px);overflow:auto;padding:16px;position:relative}
-#popclose{position:sticky;top:0;float:right;z-index:2}
+.popbar{position:sticky;top:-16px;margin:-16px -16px 8px;padding:10px 12px;display:flex;justify-content:flex-end;background:var(--bg);border-bottom:1px solid var(--line);z-index:3}
 .mini .seg button{padding:6px 10px;font-size:13px}
 .mini .go{padding:8px 16px;font-size:13px;margin-left:0}
 .examples{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;align-items:center}
@@ -308,7 +310,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
     <div id="slipsout" hidden></div>
     <div id="boardout"></div>
   </section>
-  <div id="cardpop" hidden><div id="popbody"><button type="button" class="chipbtn" id="popclose" title="Close (Esc)">✕ Close</button></div></div>
+  <div id="cardpop" hidden><div id="popbody"><div class="popbar"><button type="button" class="chipbtn" id="popclose" title="Close (Esc)">✕ Close</button></div></div></div>
   <form id="f" autocomplete="off">
     <div class="field">
       <label for="player">Player</label>
