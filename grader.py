@@ -77,7 +77,10 @@ CONFIG = {
     "env_k": 20,
     "rest_days": (4, 14), "rest_bonus": 0.04,
     "online_shift": 0.06,
-    "online_guard": "full",   # 2026-10-08: see grade_leg - no +6% on fully online stats (comparisons: "none", "taper")     # LAN / online: maps in that environment for half the difference to count
+    "online_guard": "full",
+    # 2026-10-08 performance model perf-1 (perf.py): drives the projection + spread for these scopes when its input
+    # (d["perf"]) is present. Maps 1-2 only - on Map 1 it did not beat the old projection. () = the old pipeline.
+    "perf_scopes": ("12",),   # 2026-10-08: see grade_leg - no +6% on fully online stats (comparisons: "none", "taper")     # LAN / online: maps in that environment for half the difference to count
     "star_rating": 1.15, "star_k": 1.0, "star_cap": 0.06, "rust_drop": 0.08, "hot_k": 0.6,
     "last10_min": 5,             # need 5+ recent two-map matches to blend
     # 4c (2026-09-28, owner-approved for KILLS props only): trade kills per round. Cross-validated
@@ -616,6 +619,17 @@ def grade_leg(d, cfg=CONFIG):
         lam_final = lam12 + p3 * lam3
     scale = lam_final / lam12 if lam12 else 1.0
     sd = math.sqrt(lam_final) * c * sd_mult
+    pf = d.get("perf") if isinstance(d.get("perf"), dict) else None
+    perf_on = scope in cfg.get("perf_scopes", ()) and bool(pf) and pf.get("lambda") is not None and pf.get("sd")
+    if perf_on:
+        # performance model (perf.py): its projection and spread replace the old pipeline's; the old pipeline's
+        # corrections for its own biases (gap compression, Over margin, confidence halving) do not apply to it
+        flags.append(f"Projection {pf['lambda']:.1f} from the performance model ({pf.get('version')}: "
+                     f"{pf.get('rate', 0):.3f} kills/round x opponent {pf.get('opp_factor', 1):.2f} x "
+                     f"{pf.get('rounds_per_map', 0):.1f} rounds/map; data: {pf.get('data_quality')}) - old pipeline {lam_final:.1f}")
+        lam_final = lam12 = float(pf["lambda"])
+        sd = float(pf["sd"])
+        scale = 1.0
 
     def three(shift=0.0):
         """Unconditional (over, under, push) for this scope; Maps 1-3 mixes the raw outcomes of the 2-map and
@@ -643,7 +657,7 @@ def grade_leg(d, cfg=CONFIG):
     # live: the pre-2026-10-07 reference line + 0.5 (frozen); fix_v2 comparison: the line itself (the cut the
     # chance uses - symmetric for Overs and Unders on x.5 lines)
     gap = lam_final - (line if fix_v2 else line + 0.5)
-    if abs(gap) > gt:
+    if abs(gap) > gt and not perf_on:
         shift = math.copysign(gt + (abs(gap) - gt) * cfg["gap_trust_keep"], gap) - gap
         flags.append(f"Projection {lam_final:.1f} is {abs(gap):.1f} from the line - past {gt:.1f} only half counts "
                      f"(books are usually closer on big disagreements): {lam_final + shift:.1f}")
@@ -657,13 +671,13 @@ def grade_leg(d, cfg=CONFIG):
         cap = cfg["p_cap_kills"]
         pm = min(max(pm, 1 - cap), cap)
     m_o = cfg.get("over_margin", {}).get(prop, 0.0) * min(scale, 1.2)
-    if pm > 0.5 and m_o:          # an Over is scored as if he projected m_o lower (never flips side)
+    if pm > 0.5 and m_o and not perf_on:   # an Over is scored as if he projected m_o lower (never flips side)
         po = pmore(-m_o)
         if prop == "kills":
             po = min(max(po, 1 - cfg["p_cap_kills"]), cfg["p_cap_kills"])
         pm = max(po, 0.5)
     m_u = cfg.get("under_margin", {}).get(prop, 0.0) * min(scale, 1.2)
-    if pm < 0.5 and m_u:          # an Under is scored as if he projected m_u higher (never flips side)
+    if pm < 0.5 and m_u and not perf_on:   # an Under is scored as if he projected m_u higher (never flips side)
         pu = pmore(m_u)
         if prop == "kills":
             pu = min(max(pu, 1 - cfg["p_cap_kills"]), cfg["p_cap_kills"])
@@ -688,11 +702,14 @@ def grade_leg(d, cfg=CONFIG):
             fight = "More"
         elif (1 - pm) >= 0.57 and sm >= 0.5 + m:
             fight = "Less"
-        if fight:
+        if fight and not perf_on:
             # the record disagrees: keep the model's side but halve its confidence (never flip it)
             pm = 0.5 + (pm - 0.5) / 2
             flags.append(f"FORM FIGHT: model says {fight} but the last {rec['n']} matches went over "
                          f"{rec['overs']}/{rec['n']} - confidence halved, 0 units")
+        elif fight:          # performance model: the probability stays the model's; the 0-unit gate is unchanged
+            flags.append(f"FORM FIGHT: model says {fight} but the last {rec['n']} matches went over "
+                         f"{rec['overs']}/{rec['n']} - 0 units")
 
     # TAPE FIGHT (v7.4): softer disagreement than FORM FIGHT - keeps the side and %, 0 units
     tape = None
@@ -760,6 +777,7 @@ def grade_leg(d, cfg=CONFIG):
     out.update(
         status=status, grade=grade, model_grade=model_grade, h2h=h2h_note, regional=reg_note,
         p_more=round(pm, 3), p_less=round(1 - pm, 3), p_more_model=round(pm_model, 3), probs_raw=probs_raw,
+        projection_source=(pf.get("version") if perf_on else "legacy"),
         online_adj={"tonight": env.get("tonight"), "stats_from": env.get("stats_from"),
                     "online_weight": env.get("stats_weight") if env.get("stats_from") == "online" else None,
                     "mode": cfg.get("online_guard", "full"), "bonus_applied": round(online_bonus, 4)},

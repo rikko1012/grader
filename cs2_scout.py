@@ -1016,6 +1016,22 @@ def _form_trend(o):
     return round(k3 / k12 - 1, 3) if k3 and k12 else None
 
 
+def _perf_input(pb, args):
+    """perf.project() on live HLTV data for this player / opponent / tonight's environment (None when unavailable)."""
+    sc = getattr(args, "scope", "12") or "12"
+    if sc not in ("1", "12"):
+        return None
+    try:
+        import perf_live
+        tonight = (pb.get("_env") or {}).get("tonight")
+        out = perf_live.projection((pb.get("player") or {}).get("nick"), pb.get("playing_for") or pb.get("current_team"),
+                                   getattr(args, "opponent", None), None if tonight is None else tonight == "lan",
+                                   sc, "hs" if args.prop == "hs" else "kills")
+        return None if out.get("error") else out
+    except Exception:
+        return None
+
+
 def grader_inputs(pb, args, odds=None, hh=None):
     """Map everything into the keys grade_leg() documents."""
     o = pb["overall"]
@@ -1043,6 +1059,7 @@ def grader_inputs(pb, args, odds=None, hh=None):
                          if (odds or {}).get("found") else None,
         "recent_avg": (pb.get("recent_form") or {}).get("avg_total"),
         "recent_median": (pb.get("recent_form") or {}).get("median_total"),
+        "perf": _perf_input(pb, args),         # performance model (perf.py) on live HLTV data - Maps 1-2 / Map 1
         "recent_n": (pb.get("recent_form") or {}).get("matches"),
         "trade_pr": pb.get("trade_pr"),
         "opp_rank": pb.get("_opp_rank"),          # opponent's VRS rank (HLTV) - elite-opponent drop

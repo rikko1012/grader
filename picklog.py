@@ -141,7 +141,9 @@ def _factors(res):
                 "fix_v2": dict(CONFIG, fix_v2=True),
                 # 2026-10-08 environment revision: the old behaviour and the provisional taper, on identical inputs
                 "online_none": dict(CONFIG, online_guard="none"),
-                "online_taper": dict(CONFIG, online_guard="taper")}
+                "online_taper": dict(CONFIG, online_guard="taper"),
+                # 2026-10-08 perf-1 goes live on Maps 1-2: the old pipeline, on identical inputs
+                "legacy": dict(CONFIG, perf_scopes=())}
         out["shadow"] = {"live_raw": g.get("probs_raw"),     # the live grade's own Over / Under / push chances
                          "live_online": g.get("online_adj")}   # online weight + the bonus actually applied
         for name, cfg in alts.items():
