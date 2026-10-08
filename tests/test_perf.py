@@ -29,7 +29,9 @@ def test_old_path_identical_when_model_off():
     for _ in range(1500):
         d = _inputs(rnd, rnd.choice(["12", "1", "123"]))
         a = old.grade_leg(dict(d)); b = grader.grade_leg(dict(d), dict(grader.CONFIG, perf_scopes=()))
-        b.pop("projection_source")
+        b.pop("projection_source"); b.pop("p_more_model_raw")
+        fa = [f for f in a.pop("flags") if not f.startswith("CAP:")]; fb = [f for f in b.pop("flags") if not f.startswith(("CAP:", "OLD PROJECTION"))]
+        assert fa == fb
         assert json.dumps(a, sort_keys=True, default=str) == json.dumps(b, sort_keys=True, default=str)
 
 
@@ -69,3 +71,18 @@ def test_missing_history_is_the_average_and_flagged():
     a = perf.project([], [], None, 1000)
     assert abs(a["rate"] - perf.PARAMS["pop"]) < 1e-12 and a["data_quality"].startswith("no history")
     assert abs(a["lambda"] - perf.PARAMS["pop"] * perf.PARAMS["base_r"] * 2) < 1e-9
+
+
+def test_unavailable_model_is_labelled_not_silent():
+    d = _inputs(random.Random(5), "12"); d["perf"] = {"error": "player 'x' not found in HLTV"}
+    g = grader.grade_leg(dict(d))
+    assert g["projection_source"].startswith("legacy (performance model unavailable")
+    assert any(f.startswith("OLD PROJECTION") for f in g["flags"])
+
+
+def test_cap_is_labelled_and_raw_chance_kept():
+    d = _inputs(random.Random(6), "12"); d["prop"] = "kills"; d["line"] = 10.5
+    d["perf"] = dict(d["perf"], **{"lambda": 30.0, "sd": 1.4 * math.sqrt(30.0)})
+    g = grader.grade_leg(dict(d))
+    assert g["p_more"] == grader.CONFIG["p_cap_kills"] and g["p_more_model_raw"] > 0.99
+    assert any(f.startswith("CAP:") for f in g["flags"])

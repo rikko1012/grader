@@ -609,6 +609,8 @@ def public(res):
 # the server (the page AND the raw API response), so the grader can't be copied from it.
 KEEP_DETAIL = {"p_win", "p_map1", "p_map2", "maps_used", "role", "rank"}
 _FLAG_RULES = (   # (starts with, member-friendly text or None = not shown)
+    ("OLD PROJECTION", "Projection from the older model - the newer performance model has no HLTV data for this player or matchup"),
+    ("CAP:", "Chance capped at 78% on kills props (big kill totals swing more than the model's spread)"),
     ("Gate C: roster", "Roster not confirmed - extra caution"),
     ("Gate D: only", "Small sample of recent official maps - extra caution, unit size limited"),
     ("Thin data", "Small sample of recent official maps - extra caution, unit size limited"),

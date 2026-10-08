@@ -621,6 +621,10 @@ def grade_leg(d, cfg=CONFIG):
     sd = math.sqrt(lam_final) * c * sd_mult
     pf = d.get("perf") if isinstance(d.get("perf"), dict) else None
     perf_on = scope in cfg.get("perf_scopes", ()) and bool(pf) and pf.get("lambda") is not None and pf.get("sd")
+    perf_missing = None
+    if scope in cfg.get("perf_scopes", ()) and not perf_on:
+        perf_missing = (pf or {}).get("error") or "no performance-model input"
+        flags.append(f"OLD PROJECTION: the performance model is unavailable here ({perf_missing}) - graded on the old pipeline")
     if perf_on:
         # performance model (perf.py): its projection and spread replace the old pipeline's; the old pipeline's
         # corrections for its own biases (gap compression, Over margin, confidence halving) do not apply to it
@@ -669,6 +673,8 @@ def grade_leg(d, cfg=CONFIG):
                  "p_more_no_push": round(raw[0] / (raw[0] + raw[1]), 4) if raw[0] + raw[1] > 0 else 0.5}
     if prop == "kills":                                   # fat tails: no side above the cap
         cap = cfg["p_cap_kills"]
+        if pm > cap or pm < 1 - cap:
+            flags.append(f"CAP: model chance {max(pm, 1 - pm):.1%} shown as {cap:.0%} (kills cap - fat tails)")
         pm = min(max(pm, 1 - cap), cap)
     m_o = cfg.get("over_margin", {}).get(prop, 0.0) * min(scale, 1.2)
     if pm > 0.5 and m_o and not perf_on:   # an Over is scored as if he projected m_o lower (never flips side)
@@ -777,7 +783,8 @@ def grade_leg(d, cfg=CONFIG):
     out.update(
         status=status, grade=grade, model_grade=model_grade, h2h=h2h_note, regional=reg_note,
         p_more=round(pm, 3), p_less=round(1 - pm, 3), p_more_model=round(pm_model, 3), probs_raw=probs_raw,
-        projection_source=(pf.get("version") if perf_on else "legacy"),
+        projection_source=(pf.get("version") if perf_on else "legacy" + (f" (performance model unavailable: {perf_missing})" if perf_missing else "")),
+        p_more_model_raw=probs_raw["p_more_no_push"],      # the model's own chance (push removed), before the kills cap
         online_adj={"tonight": env.get("tonight"), "stats_from": env.get("stats_from"),
                     "online_weight": env.get("stats_weight") if env.get("stats_from") == "online" else None,
                     "mode": cfg.get("online_guard", "full"), "bonus_applied": round(online_bonus, 4)},

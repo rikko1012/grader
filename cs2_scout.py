@@ -1027,9 +1027,9 @@ def _perf_input(pb, args):
         out = perf_live.projection((pb.get("player") or {}).get("nick"), pb.get("playing_for") or pb.get("current_team"),
                                    getattr(args, "opponent", None), None if tonight is None else tonight == "lan",
                                    sc, "hs" if args.prop == "hs" else "kills")
-        return None if out.get("error") else out
-    except Exception:
-        return None
+        return out                         # {"error": ...} when unavailable - the grader says so instead of silently falling back
+    except Exception as e:
+        return {"error": f"performance model failed: {str(e)[:120]}"}
 
 
 def grader_inputs(pb, args, odds=None, hh=None):
