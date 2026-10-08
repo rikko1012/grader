@@ -620,10 +620,11 @@ def grade_leg(d, cfg=CONFIG):
     scale = lam_final / lam12 if lam12 else 1.0
     sd = math.sqrt(lam_final) * c * sd_mult
     pf = d.get("perf") if isinstance(d.get("perf"), dict) else None
-    perf_on = scope in cfg.get("perf_scopes", ()) and bool(pf) and pf.get("lambda") is not None and pf.get("sd")
+    perf_on = (scope in cfg.get("perf_scopes", ()) and bool(pf) and pf.get("lambda") is not None and pf.get("sd")
+               and pf.get("version") in cfg.get("perf_versions", ("perf-1",)))   # candidates (e.g. perf-1-bo3) stay comparison-only
     perf_missing = None
     if scope in cfg.get("perf_scopes", ()) and not perf_on:
-        perf_missing = (pf or {}).get("error") or "no performance-model input"
+        perf_missing = (pf or {}).get("error") or (f"{pf.get('version')} is a comparison-only candidate" if pf and pf.get("version") else "no performance-model input")
         flags.append(f"OLD PROJECTION: the performance model is unavailable here ({perf_missing}) - graded on the old pipeline")
     if perf_on:
         # performance model (perf.py): its projection and spread replace the old pipeline's; the old pipeline's

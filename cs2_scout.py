@@ -1027,6 +1027,23 @@ def _perf_input(pb, args):
         out = perf_live.projection((pb.get("player") or {}).get("nick"), pb.get("playing_for") or pb.get("current_team"),
                                    getattr(args, "opponent", None), None if tonight is None else tonight == "lan",
                                    sc, "hs" if args.prop == "hs" else "kills")
+        if out.get("error") and "not found in HLTV" in out["error"]:
+            # CANDIDATE perf-1-bo3 (comparison only): the same model on his BO3.gg maps when HLTV has no history
+            me = pb.get("_match_env") or {}
+            rows = [(date.fromisoformat(r["date"]).toordinal(), r["kills"], r["rounds"], r.get("headshots"),
+                     (r.get("env") or me.get(r.get("match_id"))) == "lan",
+                     not (r.get("headshots") == 0 and (r["kills"] or 0) >= 12))
+                    for r in pb.get("recent_maps") or [] if r.get("kills") is not None and r.get("rounds") and r.get("date")]
+            if rows:
+                import perf
+                since = (date.today() - timedelta(days=420)).isoformat()
+                opp = getattr(args, "opponent", None)
+                tid, om = perf_live.opp_maps(opp, since) if opp else (None, [])
+                bo3 = perf.project(rows, om, None if tonight is None else tonight == "lan", date.today().toordinal(), sc,
+                                   "hs" if args.prop == "hs" else "kills")
+                bo3.update(version="perf-1-bo3", source="BO3.gg maps (HLTV has no history)", player_maps=len(rows),
+                           hltv_opp_team=tid, hltv_error=out["error"])
+                return bo3
         return out                         # {"error": ...} when unavailable - the grader says so instead of silently falling back
     except Exception as e:
         return {"error": f"performance model failed: {str(e)[:120]}"}

@@ -66,3 +66,32 @@ def probs(lam, sd, line):
     up, dn = (line, line) if abs(line - round(line)) > 0.25 else (line + 0.5, line - 0.5)
     po, pu = 1 - _phi((up - lam) / sd), _phi((dn - lam) / sd)
     return po, pu, max(0.0, 1 - po - pu)
+
+
+# ---- perf-2 CANDIDATE (frozen 2026-10-08, comparison only until confirmed on matches from Oct 9 on):
+# headshots | kills ~ BetaBinomial(kills, mean = his shrunk HS/kill, concentration HS_KAPPA), kills ~ the perf-1 kills
+# distribution (discretised normal) - HS probabilities average over every possible kill total; HS <= kills by construction.
+# HS_KAPPA chosen on TRAIN only (mean log-likelihood of the actual HS total, 1,500 series): 100.
+HS_KAPPA = 100.0
+
+
+def hs_pmf(lam_kills, scope, hs_per_kill, kappa=HS_KAPPA):
+    from math import lgamma, exp
+    c = SPREAD[("kills", scope)]
+    sd = c * math.sqrt(max(lam_kills, 1.0)); a, b = hs_per_kill * kappa, (1 - hs_per_kill) * kappa
+    out = {}
+    for k in range(0, int(lam_kills + 5 * sd) + 1):
+        pk = _phi((k + 0.5 - lam_kills) / sd) - _phi((k - 0.5 - lam_kills) / sd)
+        if pk < 1e-7:
+            continue
+        base = lgamma(a + b) - lgamma(a) - lgamma(b) - lgamma(k + a + b)
+        for y in range(0, k + 1):
+            out[y] = out.get(y, 0.0) + pk * exp(lgamma(k + 1) - lgamma(y + 1) - lgamma(k - y + 1) + lgamma(y + a) + lgamma(k - y + b) + base)
+    return out
+
+
+def hs_probs(lam_kills, scope, hs_per_kill, line, kappa=HS_KAPPA):
+    """(over, under, push) for a headshot line under the perf-2 candidate distribution."""
+    pmf = hs_pmf(lam_kills, scope, hs_per_kill, kappa); tot = sum(pmf.values()) or 1.0
+    o = sum(v for y, v in pmf.items() if y > line) / tot; u = sum(v for y, v in pmf.items() if y < line) / tot
+    return o, u, sum(v for y, v in pmf.items() if y == line) / tot     # exactly 0 on x.5 lines

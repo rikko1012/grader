@@ -86,3 +86,35 @@ def test_cap_is_labelled_and_raw_chance_kept():
     g = grader.grade_leg(dict(d))
     assert g["p_more"] == grader.CONFIG["p_cap_kills"] and g["p_more_model_raw"] > 0.99
     assert any(f.startswith("CAP:") for f in g["flags"])
+
+
+def test_candidate_inputs_never_drive_live_grades():
+    d = _inputs(random.Random(7), "12"); d["perf"] = dict(d["perf"], version="perf-1-bo3")
+    live = grader.grade_leg(dict(d))
+    assert live["projection_source"].startswith("legacy") and "comparison-only" in live["projection_source"]
+    shadow = grader.grade_leg(dict(d), dict(grader.CONFIG, perf_versions=("perf-1", "perf-1-bo3")))
+    assert shadow["projection_source"] == "perf-1-bo3" and abs(shadow["lambda_final"] - d["perf"]["lambda"]) < 0.01
+
+
+def test_live_grades_unchanged_by_candidate_code():
+    pre = os.path.join(os.environ.get("TEMP", "/tmp"), "grader_pre_cand.py")
+    if not os.path.exists(pre):
+        return
+    sp = importlib.util.spec_from_file_location("gcand", pre); old = importlib.util.module_from_spec(sp); sp.loader.exec_module(old)
+    rnd = random.Random(8)
+    for _ in range(1000):
+        d = _inputs(rnd, rnd.choice(["12", "1", "123"]))
+        if rnd.random() < 0.2:
+            d["perf"] = {"error": "player 'x' not found in HLTV"}
+        a = old.grade_leg(dict(d)); b = grader.grade_leg(dict(d))
+        assert json.dumps(a, sort_keys=True, default=str) == json.dumps(b, sort_keys=True, default=str)
+
+
+def test_hs_candidate_distribution():
+    for lamk, phs, line in ((30.0, 0.5, 15.5), (20.0, 0.35, 7.5), (40.0, 0.6, 24.0), (8.0, 0.5, 3.5)):
+        pmf = perf.hs_pmf(lamk, "12", phs)
+        assert abs(sum(pmf.values()) - 1) < 0.03 and min(pmf) >= 0                       # HS >= 0 (tiny mass below 0 kills cut; hs_probs normalises)
+        mean = sum(y * v for y, v in pmf.items()) / sum(pmf.values())
+        assert abs(mean - lamk * phs) < 0.6                                                # mean ~ kills x HS/kill
+        o, u, pu = perf.hs_probs(lamk, "12", phs, line)
+        assert abs(o + u + pu - 1) < 1e-9 and (pu == 0 or line == int(line)) and (line == int(line) or pu == 0)              # pushes only on whole lines

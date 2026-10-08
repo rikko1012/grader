@@ -143,7 +143,9 @@ def _factors(res):
                 "online_none": dict(CONFIG, online_guard="none"),
                 "online_taper": dict(CONFIG, online_guard="taper"),
                 # 2026-10-08 perf-1 goes live on Maps 1-2: the old pipeline, on identical inputs
-                "legacy": dict(CONFIG, perf_scopes=())}
+                "legacy": dict(CONFIG, perf_scopes=()),
+                # candidate: the same model on BO3.gg maps for players HLTV has no history for
+                "perf_bo3": dict(CONFIG, perf_versions=("perf-1", "perf-1-bo3"))}
         out["shadow"] = {"live_raw": g.get("probs_raw"),     # the live grade's own Over / Under / push chances
                          "live_online": g.get("online_adj")}   # online weight + the bonus actually applied
         for name, cfg in alts.items():
@@ -151,6 +153,15 @@ def _factors(res):
             out["shadow"][name] = {"p_more": gg.get("p_more"), "lambda": gg.get("lambda_final"),
                                    "grade": gg.get("grade"), "grade_less": gg.get("grade_less"),
                                    "raw": gg.get("probs_raw")}
+    except Exception:
+        pass
+    try:   # perf-2 CANDIDATE (frozen 2026-10-08): headshot distribution averaged over kills (perf.hs_probs)
+        pf = gi.get("perf") or {}
+        if gi.get("prop") == "hs" and pf.get("lambda_kills") is not None and (gi.get("scope") or "12") in ("1", "12"):
+            import perf
+            o, u, pu = perf.hs_probs(pf["lambda_kills"], gi.get("scope") or "12", pf["hs_per_kill"], gi["line"])
+            out.setdefault("shadow", {})["perf2_hs"] = {"p_more": round(o / (o + u), 4) if o + u else 0.5, "version": pf.get("version"),
+                                                       "raw": {"over": round(o, 4), "under": round(u, 4), "push": round(pu, 4)}}
     except Exception:
         pass
     out["opponent_defense"] = res.get("opponent_defense")
