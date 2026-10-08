@@ -24,6 +24,7 @@ on the evidence listed. To replay a forecast:
 | `11edec8d68` | d4397e3 | 2026-10-08 00:59 | G3 | Refactor only: Maps 1-3 mixing as named functions (mix_p_more_live / mix_three) - live output identical to the frozen grader, fix_v2 identical to e4a0a0d278, on 6,000 cases each; hand-calculated Maps 1-3 example reproduced exactly |
 | `f80baad46e` | 5a3ced6 | 2026-10-08 01:02 | **G4** | BUG FIX (owner): a total exactly on a whole line is a push - the last-10 record's n leaves pushes out (form fight / tape fight). Changes grades on WHOLE lines only; x.5 lines identical to G3 |
 | `beb4b5ba0c` | ea74078 | 2026-10-08 01:12 (push time below) | **G5** | Environment revision UNDER EVALUATION: no online +6% when the base rate is fully online stats (the +6% was fitted on all-maps projections). Comparisons on identical inputs: online_none (old) and online_taper (provisional). Changes grades for fully-online players only; tonight's replayable board: Over bets 26 -> 10. Not claimed to improve accuracy |
+| `4a9d15b1fa` | b24c4ed | 2026-10-08 22:10 | **G6** | PROJECTION UPGRADE: performance model perf-1 (perf.py) drives Maps 1-2 kills + HS projections and spreads; Map 1 / Maps 1-3 stay on the old pipeline. Old pipeline logged beside every forecast as `legacy`. Evidence before deploy: held-out HLTV months (80% intervals 79-83%), 600 verified board lines (Maps 1-2 projection error 5.08 -> 4.83). Final confirmation: matches from 2026-10-09 on |
 | `c3505e489e` | none found | 2026-10-07 03:13-03:18 | unknown | 8 member grades; no commit on any branch reproduces this tag - not replayable, report separately |
 | `f0fdc11ece` | none found | 2026-10-07 03:09-03:12 | unknown | 4 member grades; same - not replayable |
 | untagged | before 2026-10-07 ~03:00 | - | pre-freeze | Old grader; the model_version column did not exist yet |
@@ -33,6 +34,7 @@ Comparison versions logged beside every forecast (`shadow`), from the same gradi
 - `no_rest_bonus`: rest bonus 0.
 - `fix_v2`: gap compression centred on the line; Maps 1-3 Over/Under/push mixed before the push is removed.
 - `online_none` / `online_taper` (from G5): old +6%-always behaviour / provisional taper 6% x (1 - online weight); `live_online` records each forecast's online weight and the bonus applied.
+- `legacy` (from G6): the old projection pipeline on identical inputs.
 - `live_raw`: the live model's own Over/Under/push chances before the kills cap and the Over margin.
 
 Still open (not fixed live or in fix_v2):
