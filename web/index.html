@@ -431,10 +431,11 @@ const when = s => { if (!s) return "–"; const d = new Date(String(s).replace("
   const u = until(d); return d.toLocaleString([], {weekday:"short", month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"}) + (u ? ` <span class="muted small">(${u})</span>` : ""); };
 
 let prop = "kills", slug = null, match = null;   // match: which upcoming match (2+ in a day)
+let ctx = null;                                  // board click: {team, opponent} the board graded this line with
 // picking another match on the card re-grades the same player + line for that match
 document.addEventListener("click", e => { const b = e.target.closest("[data-match]"); if (!b) return;
   match = b.dataset.match; $("#f").requestSubmit(); });
-["#player", "#line"].forEach(id => $(id).addEventListener("input", () => { match = null; }));
+["#player", "#line"].forEach(id => $(id).addEventListener("input", () => { match = null; ctx = null; }));
 
 
 // ---------- suggestions
@@ -475,6 +476,8 @@ $("#f").onsubmit = async e => {
   const qs = new URLSearchParams({player, line, prop, line_type: $("#lt").value, maps: $("#scope").value});
   if (slug) qs.set("slug", slug);
   if (match) qs.set("match", match);
+  if (ctx?.team) qs.set("team", ctx.team);
+  if (ctx?.opponent) qs.set("opponent", ctx.opponent);
   $("#go").disabled = true; $("#out").innerHTML = "";
   const st = $("#status"); st.hidden = false; st.className = "status";
   const t0 = Date.now();
@@ -548,9 +551,10 @@ function showRecent() {
     `<button type="button" class="chipbtn" data-hist="${i}">${esc(x.p)} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${x.lt && x.lt !== "standard" ? " " + x.lt : ""} · <b>${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : `${esc(x.g)} ${esc(x.s)}`}</b></button>`).join("")
     + `<button type="button" class="chipbtn" data-act="clearhist" title="Clear recent">✕</button>` : "";
 }
-function gradeNow(p, l, t, lt, sc, pop) {
+const cardCtx = d => ({team: d.player_block?.playing_for || d.player_block?.current_team || null, opponent: d.next_match?.opponent || null});
+function gradeNow(p, l, t, lt, sc, pop, c) {
   $("#player").value = p; $("#line").value = l; setProp(t || "kills"); $("#lt").value = lt || "standard"; $("#scope").value = sc || "12";
-  slug = null; match = null;
+  slug = null; match = null; ctx = c || null;
   if (pop) openPop(); else { closePop(); setMode("one"); }
   $("#f").requestSubmit();
 }
@@ -569,7 +573,7 @@ document.addEventListener("click", e => {
   const hb = e.target.closest("[data-hist]");
   if (hb) { const x = store.get("cs2s_hist", [])[+hb.dataset.hist]; if (x) gradeNow(x.p, x.l, x.t, x.lt, x.sc); return; }
   const ld = e.target.closest("[data-ladder]");
-  if (ld && lastCard) { const gg = lastCard.grade || {}; return gradeNow(lastCard.player_block?.player?.nick || $("#player").value, ld.dataset.ladder, gg.prop, gg.line_type, gg.scope); }
+  if (ld && lastCard) { const gg = lastCard.grade || {}; return gradeNow(lastCard.player_block?.player?.nick || $("#player").value, ld.dataset.ladder, gg.prop, gg.line_type, gg.scope, false, cardCtx(lastCard)); }
   const a = e.target.closest("[data-act]"); if (!a) return;
   const act = a.dataset.act;
   if (act === "clearhist") { store.set("cs2s_hist", []); try { history.replaceState(null, "", location.pathname); } catch {} return showRecent(); }
@@ -577,7 +581,7 @@ document.addEventListener("click", e => {
   if (act === "copy") copy(pickLine(lastCard));
   if (act === "slip") addToSlip(lastCard);
   if (act === "link") copy(shareUrl(lastCard));
-  if (act === "nudge") { const g = lastCard.grade; gradeNow(lastCard.player_block?.player?.nick, String(g.line + +a.dataset.d), g.prop, g.line_type); }
+  if (act === "nudge") { const g = lastCard.grade; gradeNow(lastCard.player_block?.player?.nick, String(g.line + +a.dataset.d), g.prop, g.line_type, g.scope, false, cardCtx(lastCard)); }
 });
 showRecent();
 
@@ -843,7 +847,9 @@ $("#boardout").addEventListener("click", e => {
     const r = boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t);
     if (r) { addToSlip(boardCard(r)); drawBoard(); } return; }
   const r = e.target.closest("[data-bl]");
-  if (r) { const [p, l, t, sc] = r.dataset.bl.split("|"); gradeNow(p, l, t, "standard", sc, true); }
+  if (r) { const [p, l, t, sc] = r.dataset.bl.split("|");
+    const row = boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && (x.scope || "12") === sc);
+    gradeNow(p, l, t, "standard", sc, true, row ? {team: row.team, opponent: row.opponent} : null); }
 });
 $("#bprop").onclick = e => { const b = e.target.closest("button"); if (!b) return; bprop = b.dataset.v;
   [...$("#bprop").children].forEach(x => x.classList.toggle("on", x === b)); drawBoard(); };

@@ -1207,8 +1207,9 @@ class Handler(BaseHTTPRequestHandler):
         scope = q.get("maps") if q.get("maps") in ("12", "123", "1") else "12"
         slug, match = q.get("slug") or None, q.get("match") or None
         opp = (q.get("opponent") or "")[:60].strip() or None
+        team = (q.get("team") or "")[:60].strip() or None     # board click: the team the board graded him for (namesakes)
         pkey = (slug or name).lower()
-        key = (pkey, line, prop, lt, match, (opp or "").lower(), scope)
+        key = (pkey, line, prop, lt, match, (opp or "").lower(), scope, (team or "").lower())
 
         t_in = time.time()
 
@@ -1223,7 +1224,7 @@ class Handler(BaseHTTPRequestHandler):
                     tm["slot"], tm["warm"] = round(time.time() - t0, 2), warm
                     t0 = time.time()
                     res = cs2_scout.grade(name, line, prop, lt, slug=slug, faceit_key=faceit_key(), scope=scope,
-                                          match=match, opponent=opp)
+                                          match=match, opponent=opp, team_hint=team)
                     tm["grade"] = round(time.time() - t0, 2)
             t0 = time.time()
             if res.get("error"):
