@@ -1033,6 +1033,9 @@ class Handler(BaseHTTPRequestHandler):
                     except Exception as e:
                         out.append({"nick": n, "team": t, "day": dday, "error": str(e)[:200]})
                 return self.send(200, {"rows": out})
+            if u.path == "/admin/fix_scope_settlements" and self.authed(q.get("token")):
+                # 2026-10-08 incident: dry run by default; apply=1 corrects and logs old + new values
+                return self.send(200, picklog.fix_scope_settlements(apply=q.get("apply") == "1"))
             if u.path == "/admin/hltv_export" and self.authed(q.get("token")):
                 # performance-model dataset (2026-10-08 rebuild): one row per player per map, totals side, with the
                 # map's rounds / result, map order, LAN flag, event, both teams; date window <= 31 days per call

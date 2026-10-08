@@ -1111,7 +1111,8 @@ function render(d) {
       <div class="stat"><div class="k">Line</div><div class="v">${g.line}</div><div class="n">needs ${Number.isInteger(g.line) ? g.line + 1 : g.line + 0.5} for More</div></div>
       <div class="stat"><div class="k">Team win %</div><div class="v">${det.p_win != null && !["NO MARKET", "NONE"].includes(g.market_quality) ? pct(det.p_win,0) : "–"}</div><div class="n">${["NO MARKET", "NONE"].includes(g.market_quality) ? "no market – graded as even" : "from betting markets"}</div></div>
       <div class="stat ${g.lambda_final - g.line > 0 ? "up" : "down"}"><div class="k">Edge</div><div class="v">${(g.lambda_final - g.line > 0 ? "+" : "") + (Math.abs(g.lambda_final - g.line) < 0.1 ? (g.lambda_final - g.line).toFixed(2) : (g.lambda_final - g.line).toFixed(1))}</div><div class="n">projection − line</div></div>
-      <div class="stat"><div class="k">Last ${pb.recent_form?.matches || 10}</div><div class="v">${pb.recent_form?.avg_total ?? "–"} <span class="small muted">avg</span></div><div class="n">${pb.recent_form?.overs ?? "–"}/${pb.recent_form?.decided ?? pb.recent_form?.matches ?? "–"} over${pb.recent_form?.pushes ? ` · ${pb.recent_form.pushes} push` : ""} · median ${pb.recent_form?.median_total ?? "–"}</div></div>
+      ${sc === "123" ? `<div class="stat"><div class="k">Last ${pb.recent_form?.matches || 10}</div><div class="v">${pb.recent_form?.avg_total ?? "–"} <span class="small muted">avg</span></div><div class="n">Maps 1–2 totals – no Maps 1–3 record</div></div>`
+        : `<div class="stat"><div class="k">Last ${rf.matches || 10}${sc === "1" ? " · Map 1" : ""}</div><div class="v">${rf.avg_total ?? "–"} <span class="small muted">avg</span></div><div class="n">${rf.overs ?? "–"}/${rf.decided ?? rf.matches ?? "–"} over${rf.pushes ? ` · ${rf.pushes} push` : ""} · median ${rf.median_total ?? "–"}</div></div>`}
     </div>`;
   }
   {

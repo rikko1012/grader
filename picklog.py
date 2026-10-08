@@ -213,7 +213,10 @@ def pick_row(res, verdict, test=False):
     if not verdict or verdict.get("state") != "GRADE" or "p_more" not in g or not slug:
         return None
     nm = dict(nm, slug=slug)   # matches only HLTV has are logged as hltv-<HLTV match id>
-    rf = pb.get("recent_form") or {}
+    # the record logged with the pick is in the LINE'S scope: Map 1 lines use the Map 1 record; Maps 1-3 has none
+    # (until 2026-10-08 the Maps 1-2 record was logged against Map 1 / Maps 1-3 lines)
+    _sc = (g.get("scope") or "12")
+    rf = (pb.get("recent_form_map1") or {}) if _sc == "1" else {} if _sc == "123" else (pb.get("recent_form") or {})
     scope = g.get("scope") or "12"
     key = "|".join(str(x) for x in (pb["player"]["slug"], g["prop"], g["line"], g["line_type"], nm["slug"]))
     if scope != "12":
@@ -461,19 +464,95 @@ def _col(r, k):
         return None
 
 
-def _settle_scope(r, now, start):
-    """A Maps 1-3 or Map 1 line, from HLTV. None = not yet; void after VOID_AFTER_D days without it."""
+def scope_result(r):
+    """The pick's series from HLTV and its total for the line's scope, via the shared scope rules (scope.py).
+    Returns {"status": "ok", "total", "maps_used", "maps", "per_map", "rounds", "won", "hltv_match"} or
+    {"status": "wait"|"none"|"error", "reason"}. Never substitutes another scope; two candidate matches = error."""
+    import hltv
+    from scope import scope_total
+    day = (r["match_start"] or "")[:10]
+    con = hltv._connect()
     try:
-        import hltv
-        tot = hltv.settle_scope(r["player"], r["team"], (r["match_start"] or "")[:10], r["opponent"], _col(r, "scope"))
+        with con.cursor() as cur:
+            ids = hltv._player_ids(cur, r["player"], r["team"])
+            rows = hltv._series_rows(cur, ids, "2000-01-01", "AND mo.date BETWEEN %(d)s::date - 1 AND %(d)s::date + 1",
+                                     {"d": day}, maxn=3, need=(1,)) if ids else []
+    finally:
+        con.close()
+    opp = hltv._norm(r["opponent"] or "")
+    on = [x for x in rows if not opp or opp in hltv._norm(x["opponent"]) or hltv._norm(x["opponent"]) in opp]
+    if not on:
+        return {"status": "none", "reason": "match not in HLTV yet"}
+    mids = {x["hltv_match"] for x in on}
+    if len(mids) > 1:
+        return {"status": "error", "reason": f"{len(mids)} HLTV matches vs this opponent around that day - ambiguous"}
+    ms = sorted(on, key=lambda x: x["number"])
+    maps = [{"number": x["number"], "kills": x["kills"], "headshots": x["headshots"], "won": x["won"]} for x in ms]
+    sc = _col(r, "scope") or "12"
+    total, used = scope_total(maps, sc, r["prop"])
+    if total is None:
+        if sc == "123" and len(ms) == 2 and ms[0]["won"] != ms[1]["won"]:
+            return {"status": "wait", "reason": "1-1 after two maps: map 3 not in yet"}
+        if any(x[("headshots" if r["prop"] == "hs" else "kills")] is None for x in ms):
+            return {"status": "wait", "reason": "stat not scraped yet"}
+        return {"status": "error", "reason": used}
+    return {"status": "ok", "total": total, "maps_used": used, "maps": [x["map"] for x in ms if x["number"] in used],
+            "per_map": [[x["kills"], x["headshots"]] for x in ms], "rounds": [x["rounds"] for x in ms],
+            "won": [x["won"] for x in ms], "hltv_match": ms[0]["hltv_match"]}
+
+
+def _settle_scope(r, now, start):
+    """A Maps 1-3 or Map 1 line, from HLTV via scope_result(). None = not yet; void after VOID_AFTER_D days."""
+    try:
+        res = scope_result(r)
     except Exception:
-        tot = {"found": False}
-    actual = tot.get("headshots" if r["prop"] == "hs" else "kills") if tot.get("found") and not tot.get("wait") else None
-    if actual is None:
+        res = {"status": "none"}
+    if res["status"] != "ok":
         return ("void", None, None, None) if now > start + timedelta(days=VOID_AFTER_D) else None
-    _save_result(r["id"], {"source": "hltv", "rounds": tot.get("rounds"), "won": tot.get("won"),
-                           "per_map": tot.get("per_map")})
-    return _outcome(r, actual, tot.get("maps"))
+    _save_result(r["id"], {"source": "hltv", "rounds": res["rounds"], "won": res["won"], "per_map": res["per_map"],
+                           "maps_used": res["maps_used"], "hltv_match": res["hltv_match"]})
+    return _outcome(r, res["total"], res["maps"])
+
+
+CORRECTIONS = DB.parent / "settlement_corrections.jsonl"
+
+
+def fix_scope_settlements(apply=False):
+    """2026-10-08 incident: recheck_with_hltv() re-settled Map 1 / Maps 1-3 picks with Maps 1-2 totals. Re-derive every
+    settled non-Maps-1-2 pick from HLTV through scope_result(); with apply=True correct the mismatches and append the
+    old and new values to settlement_corrections.jsonl (nothing is lost). Returns what differs / what was skipped."""
+    from scope import outcome
+    with _LOCK:
+        con = _db()
+        rows = con.execute("SELECT * FROM picks WHERE status IN ('settled', 'push') AND COALESCE(scope, '12') != '12'").fetchall()
+        con.close()
+    diffs, skipped = [], []
+    for r in rows:
+        try:
+            res = scope_result(r)
+        except Exception as e:
+            skipped.append({"id": r["id"], "reason": f"error {e}"}); continue
+        if res["status"] != "ok":
+            skipped.append({"id": r["id"], "reason": res.get("reason")}); continue
+        st, hit = outcome(res["total"], r["line"], r["pick"])
+        if res["total"] == r["actual"] and st == r["status"] and (hit == r["hit"] or (hit is None and r["hit"] is None)):
+            continue
+        d = {"id": r["id"], "player": r["player"], "prop": r["prop"], "scope": r["scope"], "line": r["line"], "pick": r["pick"],
+             "test": r["test"], "old": {"actual": r["actual"], "status": r["status"], "hit": r["hit"]},
+             "new": {"actual": res["total"], "status": st, "hit": hit}, "maps_used": res["maps_used"],
+             "hltv_match": res["hltv_match"]}
+        diffs.append(d)
+        if apply:
+            with _LOCK:
+                con = _db()
+                con.execute("UPDATE picks SET status=?, actual=?, hit=?, actual_maps=? WHERE id=?",
+                            (st, res["total"], hit, json.dumps(res["maps"]), r["id"]))
+                con.commit()
+                con.close()
+                with open(CORRECTIONS, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(dict(d, corrected_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                                            reason="recheck_with_hltv used Maps 1-2 totals for a non-Maps-1-2 line")) + "\n")
+    return {"checked": len(rows), "differs": diffs, "skipped": skipped, "applied": bool(apply)}
 
 
 def _hltv_totals(r, same_day_only=False):
@@ -503,6 +582,8 @@ def recheck_with_hltv():
         con.close()
     changed = []
     for r in rows:
+        if (_col(r, "scope") or "12") != "12":
+            continue          # _hltv_totals is Maps 1-2 only - Map 1 / Maps 1-3 lines settle via scope_result() (incident 2026-10-08)
         hv = _hltv_totals(r)
         if isinstance(hv, tuple) and (hv[2] != r["actual"] or hv[0] != r["status"]):
             with _LOCK:
