@@ -515,8 +515,7 @@ const ltTag = lt => lt === "goblin" ? ` <span class="pill" style="margin:0;paddi
   : lt === "demon" ? ` <span class="pill" style="margin:0;padding:1px 7px;color:#ff5566;border-color:#ff5566">demon</span>` : "";
 const lineWarn = (p, l) => p === "hs" && +l >= 24 ? `${l} headshots is a kills-sized line – did you mean kills?`
   : p !== "hs" && +l <= 12 ? `${l} kills is a headshot-sized line – did you mean HS?` : "";
-// a Lean is NOT a recommendation: "No bet · leans Over" (owner: every line still shows its side)
-const sideWord = v => v.grade === "LEAN" ? `No bet · leans ${v.side === "More" ? "Over" : "Under"}` : v.side || "–";
+const sideWord = v => v.grade === "LEAN" ? `Lean ${v.side === "More" ? "Over" : "Under"}` : v.side || "–";
 const noteOf = (d, x) => { const v = d?.verdict || {}, g = d?.grade || {};
   return lineWarn(g.prop || x?.prop, g.line ?? x?.line) || ((v.units || 0) === 0 && /0 units: (.+)$/.exec(v.reason || "")?.[1]) || ""; };
 // display only: well-known main AWPers, shown when BO3.gg has no weapon data (the grade doesn't use this list)
@@ -524,8 +523,8 @@ const KNOWN_AWP = new Set(["zywoo", "m0nesy", "sh1ro", "broky", "w0nderful", "to
 const mapsWord = sc => sc === "123" ? " (Maps 1–3)" : sc === "1" ? " (Map 1)" : "";
 function pickLine(d) {
   const g = d.grade || {}, v = d.verdict || {}, nick = d.player_block?.player?.nick || "";
-  const side = v.grade === "LEAN" ? `No bet (leans ${v.side === "More" ? "Over" : "Under"})` : (v.side === "More" ? "MORE" : "LESS");
-  return `${nick} ${side} ${g.line} ${propWord(g.prop)}${mapsWord(g.scope)} · ${v.grade === "LEAN" ? "No bet" : v.grade} · ${v.units}U · ${((v.p || 0) * 100).toFixed(1)}%`;
+  const side = v.grade === "LEAN" ? `Lean ${v.side === "More" ? "Over" : "Under"}` : (v.side === "More" ? "MORE" : "LESS");
+  return `${nick} ${side} ${g.line} ${propWord(g.prop)}${mapsWord(g.scope)} · ${v.grade === "LEAN" ? "Lean" : v.grade} · ${v.units}U · ${((v.p || 0) * 100).toFixed(1)}%`;
 }
 function shareUrl(d) {
   const g = d.grade || {}, u = new URL(location.origin + location.pathname);
@@ -717,7 +716,7 @@ function drawSlip() {
   const leans = s.filter(x => x.g === "LEAN").length;
   $("#slip").innerHTML = `<h4>Bet slip · ${n}-pick</h4>` + s.map((x, i) =>
     `<div class="leg"><span><b>${esc(x.p)}</b> ${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : esc(x.s)} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${ltTag(x.lt)}
-      <span class="muted small">· ${x.g === "LEAN" ? "No bet" : esc(x.g)} · ${((x.pc || 0) * 100).toFixed(1)}%${x.vs ? " · vs " + esc(x.vs) : ""}</span></span>
+      <span class="muted small">· ${x.g === "LEAN" ? "Lean" : esc(x.g)} · ${((x.pc || 0) * 100).toFixed(1)}%${x.vs ? " · vs " + esc(x.vs) : ""}</span></span>
       <button type="button" class="x" data-rmleg="${i}" title="Remove">✕</button></div>`).join("")
     + (n < 2 ? `<div class="small muted" style="margin-top:10px">Add at least 2 picks (up to 6).</div>`
        : (() => { const dist = hitDist(s.map(x => x.pc || 0.5)), fx = FLEX[n];
@@ -741,7 +740,7 @@ $("#slip").addEventListener("click", e => {
   if (e.target.closest("#slipclose")) { $("#slip").hidden = true; return; }
   if (e.target.closest("#slipcopy")) {
     const s = store.get("cs2s_slip", []);
-    copy(`${s.length}-pick slip\n` + s.map(x => `${x.p} ${x.g === "LEAN" ? `No bet (leans ${x.s === "More" ? "Over" : "Under"})` : x.s.toUpperCase()} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)} · ${x.g === "LEAN" ? "Lean" : x.g} · ${Math.floor((x.pc || 0) * 100)}%`).join("\n"));
+    copy(`${s.length}-pick slip\n` + s.map(x => `${x.p} ${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : x.s.toUpperCase()} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)} · ${x.g === "LEAN" ? "Lean" : x.g} · ${Math.floor((x.pc || 0) * 100)}%`).join("\n"));
   }
 });
 $("#slateedit") && ($("#slateedit").onclick = () => { $("#slatetxt").focus(); $("#slatetxt").scrollIntoView({behavior: "smooth", block: "center"}); });
@@ -766,8 +765,7 @@ async function loadBoard(force) {
     const r = await fetchRetry("/api/board"); const d = await r.json();
     if (r.status === 401 && d.error === "members_only") return showGate(d);
     boardRows = d.rows || []; boardAt = d.updated || 0; boardVer = d.version || "";
-    const nb = boardRows.filter(r => (r.units || 0) > 0).length;
-    $("#bstatus").textContent = `${nb} qualifying pick${nb === 1 ? "" : "s"} · ${boardRows.length - nb} lines with no bet · ${boardRows.length} graded Underdog lines`
+    $("#bstatus").textContent = `${boardRows.length} graded Underdog lines`
       + (d.updated ? ` · board from ${new Date(d.updated * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})}` : "");
   } catch (e) { $("#bstatus").textContent = e.message; }
   drawBoard();
@@ -1076,7 +1074,7 @@ function render(d) {
   const zTag = (gr, u) => !u && gr && gr !== "C" && zWhy ? ` — ${esc(zWhy)}` : "";
 
   // ---- headline
-  const head = v.state === "SCOUT" ? `SCOUT · leans ${v.side} ${g.line}`    : v.grade === "LEAN" && v.side ? `No bet at ${g.line} · leans ${v.side === "More" ? "Over" : "Under"}`
+  const head = v.state === "SCOUT" ? `SCOUT · leans ${v.side} ${g.line}`    : v.grade === "LEAN" && v.side ? `Lean ${v.side === "More" ? "Over" : "Under"} ${g.line}`
     : v.side ? `${v.side} ${g.line}` : "No grade";
   const gateStop = !("p_more" in g);   // stopped by a gate - the reason shows as a pill instead
   const why = v.reason && !/^Projection [\d.]+ vs [\d.]+ needed \([^)]*\)$/.test(v.reason) ? v.reason : "";
