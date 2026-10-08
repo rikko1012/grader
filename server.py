@@ -1039,6 +1039,18 @@ class Handler(BaseHTTPRequestHandler):
                 sc = tuple((q.get("scopes") or "1,123").split(","))
                 return self.send(200, picklog.fix_scope_settlements(apply=q.get("apply") == "1" and "12" not in sc, scopes=sc,
                                                                     test=int(q["test"]) if (q.get("test") or "").isdigit() else None))
+            if u.path == "/admin/perf_check" and self.authed(q.get("token")):
+                # performance model on LIVE data for given players (to prove it equals the training export)
+                import perf_live
+                from datetime import date as _d
+                items = json.loads(q.get("items") or "[]")[:40]   # [[nick, team, opponent, lan, scope, prop, day], ...]
+                out = []
+                for nick, team, opp, lan, sc, prop, day in items:
+                    try:
+                        out.append(perf_live.projection(nick, team, opp, lan, sc, prop, _d.fromisoformat(day).toordinal()))
+                    except Exception as e:
+                        out.append({"error": str(e)[:200]})
+                return self.send(200, {"rows": out})
             if u.path == "/admin/hltv_export" and self.authed(q.get("token")):
                 # performance-model dataset (2026-10-08 rebuild): one row per player per map, totals side, with the
                 # map's rounds / result, map order, LAN flag, event, both teams; date window <= 31 days per call
