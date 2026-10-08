@@ -279,6 +279,11 @@ def board_payload():
         nick = x.get("nick") or x.get("player") or ""
         # roles (slip builder + display only; True / False / None = unknown, with the source)
         x["awp"], x["awp_src"] = awp_role(nick, g, x.get("hs_pct"), x.get("team_name") or x.get("team"))
+        # confirmed = explicit role data (HLTV weapon stats, Liquipedia); measured = BO3.gg body-shot rate;
+        # inferred = known list / HS% - an inferred role is never treated as confirmed (slips)
+        src = (x["awp_src"] or "").lower()
+        x["awp_conf"] = (None if x["awp"] is None else "confirmed" if src.startswith(("hltv", "liquipedia"))
+                         else "measured" if src.startswith("bo3") else "inferred")
         x["igl"], x["igl_src"] = roles.igl_role(nick, x.get("team_name") or x.get("team"))
     _cap_same_result(rows)
     return {"updated": b["at"], "error": b["error"], "rows": rows, "total": len(b["rows"]),

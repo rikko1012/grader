@@ -131,13 +131,16 @@ def _factors(res):
     # frozen-test comparisons (2026-10-07): the same inputs graded by the alternatives - never shown to members
     try:
         from grader import grade_leg, CONFIG
+        # fix_v2 (2026-10-08 review): gap compression centred on the line, Maps 1-3 pushes removed after mixing
         alts = {"old_spread": dict(CONFIG, c=1.55, c_hs=1.30),
-                "no_rest_bonus": dict(CONFIG, rest_bonus=0.0)}
-        out["shadow"] = {}
+                "no_rest_bonus": dict(CONFIG, rest_bonus=0.0),
+                "fix_v2": dict(CONFIG, fix_v2=True)}
+        out["shadow"] = {"live_raw": g.get("probs_raw")}   # the live grade's own Over / Under / push chances
         for name, cfg in alts.items():
             gg = grade_leg(gi, cfg)
             out["shadow"][name] = {"p_more": gg.get("p_more"), "lambda": gg.get("lambda_final"),
-                                   "grade": gg.get("grade"), "grade_less": gg.get("grade_less")}
+                                   "grade": gg.get("grade"), "grade_less": gg.get("grade_less"),
+                                   "raw": gg.get("probs_raw")}
     except Exception:
         pass
     out["opponent_defense"] = res.get("opponent_defense")

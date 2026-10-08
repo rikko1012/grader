@@ -187,6 +187,13 @@ def _cuts(line):
     return line + 0.5, line - 0.5
 
 
+def p_three(line, lam, sd):
+    """Unconditional (P(Over), P(Under), P(push)) - the push only exists on whole lines."""
+    up, down = _cuts(line)
+    po, pu = 1 - phi((up - lam) / sd), phi((down - lam) / sd)
+    return po, pu, max(0.0, 1.0 - po - pu)
+
+
 def p_more(line, lam, sd):
     """P(More), push removed (pushes settle as no action): P(Over) / (P(Over) + P(Under))."""
     up, down = _cuts(line)
@@ -225,6 +232,7 @@ def grade_leg(d, cfg=CONFIG):
       h2h {maps, hit_rate, clears_in_wins, clears_in_losses}
       recent {n, overs}  (last-10 matches: Maps 1-2 totals over THIS line)
     """
+    fix_v2 = bool(cfg.get("fix_v2"))   # comparison only (2026-10-08 review); the live CONFIG never sets it
     prop = d.get("prop", "kills")
     line = float(d["line"])
     line_type = d.get("line_type", "standard")
@@ -573,7 +581,20 @@ def grade_leg(d, cfg=CONFIG):
     scale = lam_final / lam12 if lam12 else 1.0
     sd = math.sqrt(lam_final) * c * sd_mult
 
+    def three(shift=0.0):
+        """Unconditional (over, under, push) for this scope; Maps 1-3 mixes the raw outcomes of the 2-map and
+        3-map cases BEFORE the push is removed."""
+        if scope == "123":
+            a, b = lam12 + shift, lam12 + lam3 + shift
+            x = p_three(line, a, math.sqrt(max(a, 1)) * c * sd_mult)
+            y = p_three(line, b, math.sqrt(max(b, 1)) * c * sd_mult)
+            return tuple((1 - p3) * u + p3 * v for u, v in zip(x, y))
+        return p_three(line, lam_final + shift, sd)
+
     def pmore(shift=0.0):
+        if fix_v2:                                   # corrected comparison (2026-10-08 review): condition after mixing
+            o, u, _ = three(shift)
+            return o / (o + u) if o + u > 0 else 0.5
         if scope == "123":
             a, b = lam12 + shift, lam12 + lam3 + shift
             return ((1 - p3) * p_more(line, a, math.sqrt(max(a, 1)) * c * sd_mult)
@@ -584,7 +605,9 @@ def grade_leg(d, cfg=CONFIG):
     # disagreed by 2.5+ kills - A- printed 70% but hit 26/62. Chosen on every held-out day; with half:
     # log-loss 0.7083 -> 0.7031, playable bets 489 -> 483, A- 20/29).
     gt = cfg["gap_trust_at"]["hs" if prop == "hs" else "kills"] * min(scale, 1.2)
-    gap = lam_final - (line + 0.5)
+    # live: the pre-2026-10-07 reference line + 0.5 (frozen); fix_v2 comparison: the line itself (the cut the
+    # chance uses - symmetric for Overs and Unders on x.5 lines)
+    gap = lam_final - (line if fix_v2 else line + 0.5)
     if abs(gap) > gt:
         shift = math.copysign(gt + (abs(gap) - gt) * cfg["gap_trust_keep"], gap) - gap
         flags.append(f"Projection {lam_final:.1f} is {abs(gap):.1f} from the line - past {gt:.1f} only half counts "
@@ -592,6 +615,9 @@ def grade_leg(d, cfg=CONFIG):
         lam_final += shift
         lam12 += shift
     pm = pmore()
+    raw = three()                                         # logged: the model's own outcome chances, before caps / margins
+    probs_raw = {"over": round(raw[0], 4), "under": round(raw[1], 4), "push": round(raw[2], 4),
+                 "p_more_no_push": round(raw[0] / (raw[0] + raw[1]), 4) if raw[0] + raw[1] > 0 else 0.5}
     if prop == "kills":                                   # fat tails: no side above the cap
         cap = cfg["p_cap_kills"]
         pm = min(max(pm, 1 - cap), cap)
@@ -698,7 +724,7 @@ def grade_leg(d, cfg=CONFIG):
     out.update(value=value)
     out.update(
         status=status, grade=grade, model_grade=model_grade, h2h=h2h_note, regional=reg_note,
-        p_more=round(pm, 3), p_less=round(1 - pm, 3), p_more_model=round(pm_model, 3),
+        p_more=round(pm, 3), p_less=round(1 - pm, 3), p_more_model=round(pm_model, 3), probs_raw=probs_raw,
         grade_less=grade_from_p(1 - pm) if less_ok else "n/a (no Less on this line)",
         units=u_more, units_less=u_less, form_fight=fight, tape_fight=tape, scout=scout,
         market_quality=mq,

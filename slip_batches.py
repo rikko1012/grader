@@ -27,13 +27,13 @@ from pathlib import Path
 
 from bo3 import DATA_DIR
 
-VERSION = "batch-1"
+VERSION = "batch-2"           # batch-2 (2026-10-08): inferred AWP roles no longer count as confirmed
 LOG = Path(DATA_DIR) / "slip_batches.jsonl"
 GRADES = ("A+", "A", "A-", "B+", "B")          # B- left out (2/11 on the board, no evidence it belongs in slips)
 WINDOW_MIN, WINDOW_MAX = 30, 180               # minutes before the listed start
 FRESH_MIN = 120                                # grade made within this many minutes
 EVERY = 3600                                   # a batch at most hourly
-PAY = {2: 3.0, 3: 6.0, 4: 10.0}                # ASSUMED standard payouts (Underdog pick'em) - labelled as such
+PAY = {2: 3.0, 3: 6.0, 4: 10.0}                # HYPOTHETICAL standard payouts - a scenario, never profit or qualification
 PER_SIZE = 3
 _LOCK = threading.Lock()
 _STATE = {"last": 0.0, "batched": None}
@@ -93,6 +93,8 @@ def eligible(rows, now=None):
             out("AWPer HS / IGL kills"); continue
         if role is not False:
             out("role not confirmed"); continue
+        if r.get("prop") == "hs" and r.get("awp_conf") not in ("confirmed", "measured"):
+            out("AWP role only inferred (HS% / list)"); continue
         ok.append(r)
     return ok, why
 
@@ -161,7 +163,7 @@ def select(rows):
 
 def _leg(r):
     return {k: r.get(k) for k in ("id", "nick", "player", "team", "opponent", "match_slug", "start", "prop", "scope",
-                                  "line", "side", "p", "grade", "units", "graded_at", "awp", "igl")}
+                                  "line", "side", "p", "grade", "units", "graded_at", "awp", "awp_conf", "igl")}
 
 
 def maybe_batch(rows, grader_version):
@@ -177,7 +179,7 @@ def maybe_batch(rows, grader_version):
         _STATE["last"] = time.time()
         used = sorted({_match_key(x) for _, _, legs, _ in div for x in legs})
         rec = {"batch_id": now.strftime("%Y%m%dT%H%M"), "created_at": now.isoformat(timespec="seconds"), "version": VERSION,
-               "grader": grader_version, "window_min": [WINDOW_MIN, WINDOW_MAX], "payout_assumed": PAY,
+               "grader": grader_version, "window_min": [WINDOW_MIN, WINDOW_MAX], "payout_hypothetical": PAY,
                "eligible_lines": len(ok), "eligible_matches": len({_match_key(r) for r in ok}), "excluded": why,
                "matches": used,                       # these matches never go into another batch
                "slips": [{"kind": "diversified", "n": n, "all": p, "legs": [_leg(x) for x in legs]} for n, p, legs, _ in div]
