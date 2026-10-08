@@ -12,3 +12,4 @@ __pycache__/
 Start CS2 Grader.bat
 .env
 picks.db
+exports/

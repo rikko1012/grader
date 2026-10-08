@@ -1028,7 +1028,7 @@ def _perf_input(pb, args):
                                    getattr(args, "opponent", None), None if tonight is None else tonight == "lan",
                                    sc, "hs" if args.prop == "hs" else "kills")
         if out.get("error") and "not found in HLTV" in out["error"]:
-            # CANDIDATE perf-1-bo3 (comparison only): the same model on his BO3.gg maps when HLTV has no history
+            # perf-2-bo3 (live, provisional): the same model on his BO3.gg maps when HLTV has no history
             me = pb.get("_match_env") or {}
             rows = [(date.fromisoformat(r["date"]).toordinal(), r["kills"], r["rounds"], r.get("headshots"),
                      (r.get("env") or me.get(r.get("match_id"))) == "lan",
@@ -1039,10 +1039,13 @@ def _perf_input(pb, args):
                 since = (date.today() - timedelta(days=420)).isoformat()
                 opp = getattr(args, "opponent", None)
                 tid, om = perf_live.opp_maps(opp, since) if opp else (None, [])
-                bo3 = perf.project(rows, om, None if tonight is None else tonight == "lan", date.today().toordinal(), sc,
-                                   "hs" if args.prop == "hs" else "kills")
-                bo3.update(version="perf-1-bo3", source="BO3.gg maps (HLTV has no history)", player_maps=len(rows),
-                           hltv_opp_team=tid, hltv_error=out["error"])
+                lan_ = None if tonight is None else tonight == "lan"
+                pr_ = "hs" if args.prop == "hs" else "kills"
+                bo3 = perf.project(rows, om, lan_, date.today().toordinal(), sc, pr_, version=perf.VERSION + "-bo3")
+                bo3.update(source="BO3.gg maps (HLTV has no history)", player_maps=len(rows),
+                           hltv_opp_team=tid, hltv_error=out["error"],
+                           g7=perf_live.g7_fields(perf.project(rows, om, lan_, date.today().toordinal(), sc, pr_,
+                                                              perf.PARAMS_PERF1, perf.SPREAD_PERF1, "perf-1-bo3")))
                 return bo3
         return out                         # {"error": ...} when unavailable - the grader says so instead of silently falling back
     except Exception as e:

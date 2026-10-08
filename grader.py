@@ -84,10 +84,15 @@ CONFIG = {
     # 2026-10-08 release (PROVISIONAL - confirmation on matches from Oct 9 on):
     #  perf-1-bo3: the performance model on BO3.gg maps for players HLTV has no history for (proxy test: short-history
     #  model beat the old pipeline on 414 board lines, MAE 5.08 -> 4.91, log-loss -0.017, range crosses 0)
-    "perf_versions": ("perf-1", "perf-1-bo3"),
+    "perf_versions": ("perf-2", "perf-2-bo3", "perf-1", "perf-1-bo3"),   # perf-1 inputs: the logged G7 comparison
     #  perf2_hs: headshot probabilities from perf.hs_probs (HS | kills beta-binomial, kappa 100 on TRAIN; board HS
     #  log-loss 0.6666 -> 0.6592, 95% -0.0144 to -0.0000)
-    "perf_hs_dist": True,   # 2026-10-08: see grade_leg - no +6% on fully online stats (comparisons: "none", "taper")     # LAN / online: maps in that environment for half the difference to count
+    "perf_hs_dist": True,
+    #  2026-10-09 correctness fix (live; legacy paths only - Map 1, Maps 1-3, Maps 1-2 without perf): gap compression
+    #  centred on the line itself (was line + 0.5, which compressed Unders sooner than Overs) and Maps 1-3 Over/Under/push
+    #  mixed across the 2-map / 3-map cases BEFORE the push is removed (as the distribution, simulation and settlement do).
+    #  4,344 production forecasts: |change| <= 2.9 points. The old behaviour is logged as the comparison "pre_fix_v2".
+    "fix_v2": True,
     "star_rating": 1.15, "star_k": 1.0, "star_cap": 0.06, "rust_drop": 0.08, "hot_k": 0.6,
     "last10_min": 5,             # need 5+ recent two-map matches to blend
     # 4c (2026-09-28, owner-approved for KILLS props only): trade kills per round. Cross-validated
@@ -258,7 +263,7 @@ def grade_leg(d, cfg=CONFIG):
       h2h {maps, hit_rate, clears_in_wins, clears_in_losses}
       recent {n, overs}  (last-10 matches: Maps 1-2 totals over THIS line)
     """
-    fix_v2 = bool(cfg.get("fix_v2"))   # comparison only (2026-10-08 review); the live CONFIG never sets it
+    fix_v2 = bool(cfg.get("fix_v2"))   # live since 2026-10-09 (see CONFIG); False = the pre-fix comparison
     prop = d.get("prop", "kills")
     line = float(d["line"])
     line_type = d.get("line_type", "standard")
@@ -642,12 +647,12 @@ def grade_leg(d, cfg=CONFIG):
         lam_final = lam12 = float(pf["lambda"])
         sd = float(pf["sd"])
         scale = 1.0
-        if pf.get("version") == "perf-1-bo3":
+        if str(pf.get("version") or "").endswith("-bo3"):
             flags.append("PROVISIONAL: performance model on BO3.gg history (HLTV has no history for this player)")
     hs_dist = None
     if perf_on and prop == "hs" and cfg.get("perf_hs_dist") and pf.get("lambda_kills") is not None and pf.get("hs_per_kill"):
         import perf as _perf
-        _pmf = _perf.hs_pmf(float(pf["lambda_kills"]), scope, float(pf["hs_per_kill"]))
+        _pmf = _perf.hs_pmf(float(pf["lambda_kills"]), scope, float(pf["hs_per_kill"]), c=_perf.kills_c(pf, scope))
         _mean = sum(y * v for y, v in _pmf.items()); _var = sum((y - _mean) ** 2 * v for y, v in _pmf.items())
         hs_dist = (sum(v for y, v in _pmf.items() if y > line), sum(v for y, v in _pmf.items() if y < line),
                    sum(v for y, v in _pmf.items() if y == line))
@@ -666,7 +671,7 @@ def grade_leg(d, cfg=CONFIG):
         return [(1 - p3, a, math.sqrt(max(a, 1)) * c * sd_mult), (p3, b, math.sqrt(max(b, 1)) * c * sd_mult)]
 
     def pmore(shift=0.0):
-        if fix_v2:                                   # corrected comparison (2026-10-08 review): condition after mixing
+        if fix_v2:                                   # live since 2026-10-09: condition on no push after mixing
             o, u, _ = three(shift)
             return o / (o + u) if o + u > 0 else 0.5
         if scope == "123":
@@ -677,7 +682,7 @@ def grade_leg(d, cfg=CONFIG):
     # disagreed by 2.5+ kills - A- printed 70% but hit 26/62. Chosen on every held-out day; with half:
     # log-loss 0.7083 -> 0.7031, playable bets 489 -> 483, A- 20/29).
     gt = cfg["gap_trust_at"]["hs" if prop == "hs" else "kills"] * min(scale, 1.2)
-    # live: the pre-2026-10-07 reference line + 0.5 (frozen); fix_v2 comparison: the line itself (the cut the
+    # live (fix_v2, 2026-10-09): the line itself (the cut the
     # chance uses - symmetric for Overs and Unders on x.5 lines)
     gap = lam_final - (line if fix_v2 else line + 0.5)
     if abs(gap) > gt and not perf_on:
@@ -807,6 +812,12 @@ def grade_leg(d, cfg=CONFIG):
         p_more=round(pm, 3), p_less=round(1 - pm, 3), p_more_model=round(pm_model, 3), probs_raw=probs_raw,
         projection_source=(pf.get("version") if perf_on else "legacy" + (f" (performance model unavailable: {perf_missing})" if perf_missing else "")),
         p_more_model_raw=probs_raw["p_more_no_push"],      # the model's own chance (push removed), before the kills cap
+        # the exact distribution behind this grade (the simulation samples from it - one forecast per card)
+        dist=(({"kind": "hs_bb", "lam_kills": float(pf["lambda_kills"]), "hs_per_kill": float(pf["hs_per_kill"]), "scope": scope,
+                "c": _perf.kills_c(pf, scope)})
+              if hs_dist is not None else
+              ({"kind": "mix", "cases": [[round(w, 6), round(a_, 4), round(s_, 4)] for w, a_, s_ in cases123()]})
+              if scope == "123" else {"kind": "normal", "lam": round(lam_final, 4), "sd": round(sd, 4)}),
         online_adj={"tonight": env.get("tonight"), "stats_from": env.get("stats_from"),
                     "online_weight": env.get("stats_weight") if env.get("stats_from") == "online" else None,
                     "mode": cfg.get("online_guard", "full"), "bonus_applied": round(online_bonus, 4)},

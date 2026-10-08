@@ -212,7 +212,10 @@ def _grader_version():
     """Changes whenever the grading formula (grader.py) changes: saved board grades from an older
     formula are dropped on startup instead of being shown."""
     import hashlib
-    return hashlib.sha1(Path(__file__).with_name("grader.py").read_bytes()).hexdigest()[:12]
+    h = hashlib.sha1()
+    for f in ("grader.py", "perf.py"):              # perf.py added 2026-10-09: a model change regrades the board too
+        h.update(Path(__file__).with_name(f).read_bytes())
+    return h.hexdigest()[:12]
 
 
 _BOARD_SAVE = threading.Lock()
@@ -274,7 +277,8 @@ def board_payload():
             continue                                  # not graded yet: never shown
         rows.append(dict(r, **{k: g.get(k) for k in ("grade", "side", "p", "units", "proj", "reason", "graded_at",
                                                      "nick", "state", "edge", "l10_over", "l10_n", "l10_push", "l10_avg",
-                                                     "hs_pct", "p_win", "market", "team_name", "opp_name", "match_slug")}))
+                                                     "hs_pct", "p_win", "market", "team_name", "opp_name", "match_slug",
+                                                     "graded_line", "graded_model")}))
         rows[-1]["scope"] = r.get("scope") or "12"
         x = rows[-1]
         nick = x.get("nick") or x.get("player") or ""
@@ -354,6 +358,9 @@ def members_idle(max_wait=45):
         time.sleep(2)
 
 
+_SLIP_SETTLED = [0.0]
+
+
 def board_forever():
     """Grade every Underdog CS2 line in the background (gives way to members), so the Board tab is
     instant. Each graded line is also logged (test=2: not a member's pick) so it settles and the
@@ -387,6 +394,7 @@ def board_forever():
                     rf = (pb.get("recent_form_map1") if (r.get("scope") or "12") == "1" else None) or pb.get("recent_form") or {}
                     fw = ((pb.get("overall") or {}).get("form_windows") or {}).get("3m") or {}
                     BOARD[r["id"]] = {"at": time.time(), "graded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                                      "graded_line": r["line"], "graded_model": picklog.MODEL_VERSION,   # slips: exact line + model
                                       "grade": v.get("grade"), "side": v.get("side"), "p": v.get("p"),
                                       "units": v.get("units"), "proj": g.get("lambda_final"), "state": v.get("state"),
                                       "reason": v.get("reason"), "nick": (pb.get("player") or {}).get("nick"),
@@ -424,6 +432,12 @@ def board_forever():
                 traceback.print_exc()
             try:                                      # rebuilt builder, shadow only: fixed hourly batches (slip_batches.py)
                 slip_batches.maybe_batch(board_payload()["rows"], picklog.MODEL_VERSION)
+            except Exception:
+                traceback.print_exc()
+            try:                                      # shadow batches: settle finished ones (each once, durable) every 30 min
+                if time.time() - _SLIP_SETTLED[0] > 1800:
+                    _SLIP_SETTLED[0] = time.time()
+                    slip_batches.settle_all(slip_batches.leg_result_from_picks(picklog.export()))
             except Exception:
                 traceback.print_exc()
             try:                                      # the builder's own record: each new recommended slip, once
@@ -661,7 +675,7 @@ def protect_recipe(res):
             g["reason"] = next((t for k, t in _REASONS if g["reason"].startswith(k)), "Not graded")
     sim = res.get("simulation")
     if isinstance(sim, dict):
-        res["simulation"] = {k: sim.get(k) for k in ("p_more", "mean", "p10", "p50", "p90", "scenarios", "anchored")}
+        res["simulation"] = {k: sim.get(k) for k in ("p_more", "p_push", "mean", "p10", "p50", "p90", "scenarios", "scenarios_note", "anchored")}
     res.pop("simulation_error", None)
     o = (res.get("player_block") or {}).get("overall") or {}
     for k in ("kpr", "hs_pct", "form_blend", "kpr_single_window", "hs_single_window"):
@@ -809,6 +823,10 @@ class Handler(BaseHTTPRequestHandler):
                                        "recommended": slips.read(slips.RECOMMENDED), "loaded": slips.read(slips.LOADED)})
             if u.path == "/admin/slip_batches.json" and self.authed(q.get("token")):
                 return self.send(200, {"version": slip_batches.VERSION, "batches": slip_batches.read()})
+            if u.path == "/admin/slip_batch_results.json" and self.authed(q.get("token")):
+                new = slip_batches.settle_all(slip_batches.leg_result_from_picks(picklog.export()))
+                return self.send(200, {"version": slip_batches.VERSION, "new": len(new), "results": slip_batches.results(),
+                                       "payout_note": "standard 3x/6x/10x and x Underdog multipliers are ASSUMPTIONS, not real entries"})
             if u.path == "/admin/forecasts.json" and self.authed(q.get("token")):
                 return self.send(200, {"forecasts": picklog.export_forecasts(inputs=bool(q.get("inputs")),
                                                                            last=q.get("last") if (q.get("last") or "").isdigit() else None)})

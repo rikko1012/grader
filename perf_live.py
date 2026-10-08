@@ -78,6 +78,12 @@ def opp_maps(opponent, since):
     return _cached(("o", hltv._norm(opponent), since), load)
 
 
+def g7_fields(p):
+    """The perf-1 (G7) projection on the same inputs - logged as the comparison "perf1_g7", never shown."""
+    return {k: p[k] for k in ("version", "lambda", "lambda_kills", "hs_per_kill", "sd", "spread_c", "spread_c_kills", "rate",
+                              "opp_factor", "rounds_per_map", "data_quality")}
+
+
 def projection(nick, team, opponent, lan, scope="12", prop="kills", day=None):
     """perf.project() on live HLTV data. day: match-day ordinal (default today) - history strictly before it."""
     if not hltv.dsn():
@@ -89,6 +95,7 @@ def projection(nick, team, opponent, lan, scope="12", prop="kills", day=None):
         return {"error": f"player {nick!r} ({team}) not found in HLTV"}
     tid, om = opp_maps(opponent, since) if opponent else (None, [])
     out = perf.project(pm, om, lan, day, scope, prop)
+    out["g7"] = g7_fields(perf.project(pm, om, lan, day, scope, prop, perf.PARAMS_PERF1, perf.SPREAD_PERF1, "perf-1"))
     out.update(hltv_player_ids=ids, hltv_opp_team=tid, player_maps=len(pm), opp_maps=len(om),
                opp_known=bool(tid), lan_known=lan is not None)
     if not tid:

@@ -1162,16 +1162,16 @@ function render(d) {
   const sm = d.simulation;
   if (sm && sm.anchored && Array.isArray(sm.scenarios)) {
     const tm = esc(pb.playing_for || pb.current_team || "his team"), unit = g.prop === "hs" ? "HS" : "kills";
-    const lab = x => x.label === "any overtime" ? "Any map goes to overtime" : x.label === "win" ? `${tm} win the map` : x.label === "loss" ? `${tm} lose the map`
+    const lab = x => x.label.startsWith("any overtime") ? "Any map goes to overtime <span class=\"muted\">(overlaps the rows above)</span>" : x.label === "win" ? `${tm} win the map` : x.label === "loss" ? `${tm} lose the map`
       : x.label.startsWith("win") ? `${tm} win 2–0` : x.label.startsWith("lose") ? `${tm} lose 0–2` : `Maps 1–2 split 1–1${x.label.includes("map 3") ? " → map 3 played" : ""}`;
     const pc = x => `<b class="${x >= .5 ? "up" : "dn"}">${Math.round(x * 100)}%</b>`;
     h += `<section class="card"><h2>Match simulation · 20,000 runs</h2>
-      <div class="small muted" style="margin:-4px 0 10px">Built on this grade's projection and spread, so it agrees with the grade – it shows how the prop plays out in each match script.</div>
-      <div class="kv"><span>Over ${g.line} ${unit}</span><span>${pc(sm.p_more)} of runs · average ${sm.mean} · 8 in 10 land ${sm.p10}–${sm.p90}</span></div>
+      <div class="small muted" style="margin:-4px 0 10px">Every run is drawn from this grade's own distribution, so the overall numbers agree with the grade (within 1%). The match-script rows are an estimate of how that total splits by result.</div>
+      <div class="kv"><span>Over ${g.line} ${unit}</span><span>${pc(sm.p_more)} of decided runs${sm.p_push ? ` · push ${Math.round(sm.p_push * 100)}%` : ""} · average ${sm.mean} · 8 in 10 land ${sm.p10}–${sm.p90}</span></div>
       <div class="scroll"><table class="simtab"><thead><tr><th>If…</th><th class="num">Chance</th><th class="num">Avg</th><th class="num">Over ${g.line}</th></tr></thead><tbody>
       ${sm.scenarios.map(x => `<tr><td>${lab(x)}</td><td class="num">${Math.round(x.chance * 100)}%</td><td class="num">${x.avg}</td><td class="num">${pc(x.p_over)}</td></tr>`).join("")}
       </tbody></table></div>
-      ${v.side === "More" && sm.p_more - (g.p_more || 0) > 0.02 ? `<div class="small muted" style="margin-top:6px">The grade's ${pct(g.p_more)} is a bit lower than the simulation because Overs must clear an extra safety margin.</div>` : ""}
+      ${Math.abs(sm.p_more - (g.p_more ?? sm.p_more)) > 0.015 ? `<div class="small muted" style="margin-top:6px">The grade shows ${pct(g.p_more)} for Over: ${(g.flags || []).some(f => f.startsWith("CAP") || f.startsWith("Chance capped")) ? "high chances are capped on the grade (see notes)" : "the grade adds safety margins on top of the distribution"}. The simulation shows the distribution itself.</div>` : ""}
     </section>`;
   }
 

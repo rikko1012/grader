@@ -28,8 +28,8 @@ def test_old_path_identical_when_model_off():
     rnd = random.Random(1)
     for _ in range(1500):
         d = _inputs(rnd, rnd.choice(["12", "1", "123"]))
-        a = old.grade_leg(dict(d)); b = grader.grade_leg(dict(d), dict(grader.CONFIG, perf_scopes=()))
-        b.pop("projection_source"); b.pop("p_more_model_raw")
+        a = old.grade_leg(dict(d)); b = grader.grade_leg(dict(d), dict(grader.CONFIG, perf_scopes=(), fix_v2=False))
+        b.pop("projection_source"); b.pop("p_more_model_raw"); b.pop("dist")
         fa = [f for f in a.pop("flags") if not f.startswith("CAP:")]; fb = [f for f in b.pop("flags") if not f.startswith(("CAP:", "OLD PROJECTION"))]
         assert fa == fb
         assert json.dumps(a, sort_keys=True, default=str) == json.dumps(b, sort_keys=True, default=str)
@@ -67,10 +67,37 @@ def test_model_never_uses_match_day_or_later():
     assert a == b
 
 
-def test_missing_history_is_the_average_and_flagged():
+def test_missing_history_is_the_newcomer_prior_and_flagged():
     a = perf.project([], [], None, 1000)
-    assert abs(a["rate"] - perf.PARAMS["pop"]) < 1e-12 and a["data_quality"].startswith("no history")
-    assert abs(a["lambda"] - perf.PARAMS["pop"] * perf.PARAMS["base_r"] * 2) < 1e-9
+    prior = perf.PARAMS["pop"] * perf.PARAMS["prior_m"]                 # perf-2: newcomers start at 0.93 x the pro average
+    assert abs(a["rate"] - prior) < 1e-12 and a["data_quality"].startswith("no history") and a["version"] == "perf-2"
+    assert abs(a["lambda"] - prior * perf.PARAMS["base_r"] * 2) < 1e-9
+    g7 = perf.project([], [], None, 1000, params=perf.PARAMS_PERF1, spread=perf.SPREAD_PERF1, version="perf-1")
+    assert abs(g7["rate"] - perf.PARAMS_PERF1["pop"]) < 1e-12 and g7["spread_c"] == perf.SPREAD_PERF1[("kills", "12")]
+
+
+def test_perf2_live_and_g7_comparison_logged():
+    import picklog
+    rnd = random.Random(12)
+    for prop in ("kills", "hs"):
+        d = _inputs(rnd, "12"); d["prop"] = prop
+        hist = [(900 + i, 20, 24, 10, False, True) for i in range(30)]
+        p2 = perf.project(hist, [], False, 1000, "12", prop)
+        p1 = perf.project(hist, [], False, 1000, "12", prop, perf.PARAMS_PERF1, perf.SPREAD_PERF1, "perf-1")
+        d["perf"] = dict(p2, g7={k: p1[k] for k in ("version", "lambda", "lambda_kills", "hs_per_kill", "sd", "spread_c", "spread_c_kills",
+                                                      "rate", "opp_factor", "rounds_per_map", "data_quality")})
+        d["line"] = round(p2["lambda"]) + 0.5
+        g = grader.grade_leg(dict(d))
+        assert g["projection_source"] == "perf-2"
+        if prop == "hs":                                                 # HS distribution uses perf-2's own kills spread
+            o, u, pu = perf.hs_probs(p2["lambda_kills"], "12", p2["hs_per_kill"], d["line"], c=p2["spread_c_kills"])
+            assert abs(g["probs_raw"]["over"] - o) < 1e-3 and g["dist"]["c"] == p2["spread_c_kills"]
+        g7 = grader.grade_leg(dict(d, perf=d["perf"]["g7"]))
+        assert g7["projection_source"] == "perf-1" and abs(g7["lambda_final"] - (p1["lambda"] if prop == "kills" else g7["lambda_final"])) < 0.01
+        res = {"grade": g, "grader_inputs": dict(d), "player_block": {}}
+        f = picklog._factors(res) if hasattr(picklog, "_factors") else None
+        if f is not None:
+            assert f["shadow"]["perf1_g7"]["p_more"] == g7["p_more"]
 
 
 def test_unavailable_model_is_labelled_not_silent():
@@ -110,11 +137,11 @@ def test_hs_release_one_distribution_for_everything():
         pmf = perf.hs_pmf(lk, "12", phs); mean = sum(y * v for y, v in pmf.items())
         assert abs(g["lambda_final"] - mean) < 0.01
         sm = sim.simulate_grade(g)
-        assert sm["p_more"] == round(g["p_more"], 3)                      # card: one forecast
+        assert abs(sm["p_over_raw"] - g["probs_raw"]["over"]) < 4 * sm["mc_se"]   # card: the grade's own distribution
 
 
 def test_live_grades_unchanged_by_candidate_code():
-    pre = os.path.join(os.environ.get("TEMP", "/tmp"), "grader_pre_release.py")
+    pre = os.path.join(os.environ.get("TEMP", "/tmp"), "grader_pre_final.py")
     if not os.path.exists(pre):
         return
     sp = importlib.util.spec_from_file_location("gcand", pre); old = importlib.util.module_from_spec(sp); sp.loader.exec_module(old)
@@ -125,7 +152,7 @@ def test_live_grades_unchanged_by_candidate_code():
             d["perf"] = {"error": "player 'x' not found in HLTV"}
         if d["prop"] == "hs" or rnd.random() < 0.3:
             d["perf"] = dict(d["perf"], version="perf-1") if isinstance(d.get("perf"), dict) and "lambda" in d["perf"] else d["perf"]
-        a = old.grade_leg(dict(d)); b = grader.grade_leg(dict(d), dict(grader.CONFIG, perf_hs_dist=False))
+        a = old.grade_leg(dict(d)); b = grader.grade_leg(dict(d), dict(grader.CONFIG, perf_hs_dist=False, fix_v2=False)); b.pop("dist", None)
         assert json.dumps(a, sort_keys=True, default=str) == json.dumps(b, sort_keys=True, default=str)
 
 

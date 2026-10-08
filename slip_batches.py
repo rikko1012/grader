@@ -16,6 +16,17 @@ picks (frontales Over 30.5 in 19 of 24 losing member slips) carried most of the 
   Scoring (scratchpad script): a batch is scored only when every leg has settled; a pushed / void leg drops out
   and the slip pays at the smaller size; fewer than 2 legs left = refunded.
 Logged to DATA_DIR/slip_batches.jsonl (append, fsync), read at /admin/slip_batches.json.
+
+batch-3 (2026-10-09):
+- Exact line: a leg is used only if its grade was made on the line Underdog shows NOW and by the current model
+  (graded_line / graded_model on the board row) - otherwise excluded and counted.
+- Payout: each leg records Underdog's displayed multiplier for its side (higher / lower; 1.0 = standard). A side
+  Underdog does not offer (no multiplier) is excluded. Entry payout = standard payout x the legs' multipliers is an
+  ASSUMPTION until checked against real entries; the standard-only figure is kept beside it.
+- Controls (CONTROLS, recorded in every batch): sizes, slips per size, allowed sides, grades.
+- Settlement here (settle_batch): a batch settles only when every leg has a result; a pushed / void leg drops out and
+  the slip pays at the smaller size; fewer than 2 live legs = refunded. Results are appended once per batch to
+  DATA_DIR/slip_batch_results.jsonl (fsync), read at /admin/slip_batch_results.json.
 """
 import json
 import os
@@ -27,14 +38,17 @@ from pathlib import Path
 
 from bo3 import DATA_DIR
 
-VERSION = "batch-2"           # batch-2 (2026-10-08): inferred AWP roles no longer count as confirmed
+VERSION = "batch-3"           # batch-3 (2026-10-09): exact-line / current-model legs, payout multipliers, settlement
+#                               batch-2 (2026-10-08): inferred AWP roles no longer count as confirmed
 LOG = Path(DATA_DIR) / "slip_batches.jsonl"
+RESULTS = Path(DATA_DIR) / "slip_batch_results.jsonl"
 GRADES = ("A+", "A", "A-", "B+", "B")          # B- left out (2/11 on the board, no evidence it belongs in slips)
 WINDOW_MIN, WINDOW_MAX = 30, 180               # minutes before the listed start
 FRESH_MIN = 120                                # grade made within this many minutes
 EVERY = 3600                                   # a batch at most hourly
 PAY = {2: 3.0, 3: 6.0, 4: 10.0}                # HYPOTHETICAL standard payouts - a scenario, never profit or qualification
 PER_SIZE = 3
+CONTROLS = {"sizes": (2, 3, 4), "per_size": PER_SIZE, "sides": ("More", "Less"), "grades": GRADES}
 _LOCK = threading.Lock()
 _STATE = {"last": 0.0, "batched": None}
 
@@ -59,7 +73,16 @@ def _batched():
     return _STATE["batched"]
 
 
-def eligible(rows, now=None):
+def _mult(r):
+    """Underdog's displayed payout multiplier for the graded side (None = side not offered / unknown)."""
+    v = r.get("higher") if r.get("side") == "More" else r.get("lower")
+    try:
+        return float(v) if v is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def eligible(rows, now=None, model=None, controls=CONTROLS):
     """(eligible rows, exclusion counts) - the single eligibility rule."""
     now = now or datetime.now(timezone.utc)
     lo, hi = now + timedelta(minutes=WINDOW_MIN), now + timedelta(minutes=WINDOW_MAX)
@@ -80,8 +103,20 @@ def eligible(rows, now=None):
             out("match already in an earlier batch"); continue
         if not r.get("side") or r.get("p") is None or r.get("state") == "SCOUT":
             out("not graded / scout"); continue
-        if r.get("grade") not in GRADES or (r.get("units") or 0) <= 0:
+        if r.get("grade") not in controls["grades"] or (r.get("units") or 0) <= 0:
             out("below B / no units"); continue
+        if r.get("side") not in controls["sides"]:
+            out("side not selected"); continue
+        try:
+            same_line = float(r["graded_line"]) == float(r.get("line"))
+        except (KeyError, TypeError, ValueError):
+            same_line = False
+        if not same_line:
+            out("line changed since the grade"); continue
+        if model and r.get("graded_model") != model:
+            out("grade from an older model"); continue
+        if _mult(r) is None:
+            out("side not offered / payout unknown"); continue
         try:
             ga = datetime.fromisoformat((r.get("graded_at") or "").replace("Z", "+00:00"))
         except ValueError:
@@ -99,14 +134,14 @@ def eligible(rows, now=None):
     return ok, why
 
 
-def _candidates(rows):
+def _candidates(rows, sizes=CONTROLS["sizes"]):
     """Per size: the strongest combination for each set of matches (one pick per match and per player)."""
     by = {}
     for r in rows:
         by.setdefault(_match_key(r), []).append(r)
     groups = sorted(([*sorted(g, key=lambda x: -x["p"])[:2]] for g in by.values()), key=lambda g: -g[0]["p"])[:16]
     cand = []
-    for n in PAY:
+    for n in sizes:
         best = {}
         for gs in combinations(range(len(groups)), n):
             def rec(i, cur):
@@ -126,10 +161,11 @@ def _candidates(rows):
     return cand
 
 
-def select(rows):
-    """Joint selection: up to PER_SIZE slips per size, no match or player twice in the whole batch, maximising the
+def select(rows, controls=CONTROLS):
+    """Joint selection: up to per_size slips per size, no match or player twice in the whole batch, maximising the
     sum of p x assumed payout. Returns (diversified, concentrated)."""
-    cand = sorted(_candidates(rows), key=lambda c: -c[1] * PAY[c[0]])
+    per_size = controls["per_size"]
+    cand = sorted(_candidates(rows, controls["sizes"]), key=lambda c: -c[1] * PAY[c[0]])
     conc = {}
     for n, p, legs, ms in sorted(cand, key=lambda c: -c[1]):
         conc.setdefault(n, (n, p, legs, ms))
@@ -142,12 +178,12 @@ def select(rows):
         st["nodes"] += 1
         if st["nodes"] > 60000:
             return
-        slots = sum(PER_SIZE - c for c in count.values())
+        slots = sum(per_size - c for c in count.values())
         for j in range(i, len(cand)):
             n, p, legs, ms = cand[j]
             if score + slots * p * PAY[n] <= st["score"]:
                 return                                # sorted by value: nothing later can beat the best
-            if count[n] >= PER_SIZE or ms & taken:
+            if count[n] >= per_size or ms & taken:
                 continue
             pl = {(x.get("nick") or x.get("player") or "").lower() for x in legs}
             if pl & players:
@@ -157,13 +193,14 @@ def select(rows):
             cur.pop(); count[n] -= 1
             if st["nodes"] > 60000:
                 return
-    dfs(0, [], frozenset(), frozenset(), {2: 0, 3: 0, 4: 0}, 0.0)
+    dfs(0, [], frozenset(), frozenset(), {n: 0 for n in controls["sizes"]}, 0.0)
     return best, list(conc.values())
 
 
 def _leg(r):
     return {k: r.get(k) for k in ("id", "nick", "player", "team", "opponent", "match_slug", "start", "prop", "scope",
-                                  "line", "side", "p", "grade", "units", "graded_at", "awp", "awp_conf", "igl")}
+                                  "line", "side", "p", "grade", "units", "graded_at", "graded_line", "graded_model",
+                                  "awp", "awp_conf", "igl")} | {"mult": _mult(r)}
 
 
 def maybe_batch(rows, grader_version):
@@ -172,7 +209,7 @@ def maybe_batch(rows, grader_version):
         return None
     with _LOCK:
         now = datetime.now(timezone.utc)
-        ok, why = eligible(rows, now)
+        ok, why = eligible(rows, now, grader_version)
         if len({_match_key(r) for r in ok}) < 2:
             return None                               # not due: no slip possible yet (try again next pass)
         div, conc = select(ok)
@@ -180,6 +217,7 @@ def maybe_batch(rows, grader_version):
         used = sorted({_match_key(x) for _, _, legs, _ in div for x in legs})
         rec = {"batch_id": now.strftime("%Y%m%dT%H%M"), "created_at": now.isoformat(timespec="seconds"), "version": VERSION,
                "grader": grader_version, "window_min": [WINDOW_MIN, WINDOW_MAX], "payout_hypothetical": PAY,
+               "controls": {k: list(v) if isinstance(v, tuple) else v for k, v in CONTROLS.items()},
                "eligible_lines": len(ok), "eligible_matches": len({_match_key(r) for r in ok}), "excluded": why,
                "matches": used,                       # these matches never go into another batch
                "slips": [{"kind": "diversified", "n": n, "all": p, "legs": [_leg(x) for x in legs]} for n, p, legs, _ in div]
@@ -197,3 +235,96 @@ def read(last=2000):
             return [json.loads(x) for x in f.readlines()[-last:] if x.strip()]
     except OSError:
         return []
+
+
+def settle_slip(slip, results):
+    """results: "hit" / "miss" / "push" / "void" per leg (any None = not settled yet -> None).
+    Push / void legs drop out; the slip pays at the remaining size; fewer than 2 live legs = refunded."""
+    if any(x is None for x in results):
+        return None
+    live = [(l, x) for l, x in zip(slip["legs"], results) if x in ("hit", "miss")]
+    if len(live) < 2:
+        return {"status": "refunded", "legs_live": len(live), "expected": None, "return_std": 1.0, "return_mult": 1.0}
+    won = all(x == "hit" for _, x in live)
+    p, m = 1.0, 1.0
+    for l, _ in live:
+        p *= l["p"]
+        m = None if m is None or l.get("mult") is None else m * l["mult"]
+    std = PAY[len(live)]
+    return {"status": "won" if won else "lost", "legs_live": len(live), "expected": round(p, 4),
+            "return_std": std if won else 0.0,                                   # standard payout (assumption)
+            "return_mult": None if m is None else (round(std * m, 4) if won else 0.0)}   # x Underdog multipliers (assumption)
+
+
+def settle_batch(batch, leg_result):
+    """Every slip of a batch, once all legs have results (leg_result(leg) -> hit / miss / push / void / None)."""
+    out = []
+    for s in batch["slips"]:
+        r = settle_slip(s, [leg_result(l) for l in s["legs"]])
+        if r is None:
+            return None
+        out.append(dict(r, kind=s["kind"], n=s["n"]))
+    return {"batch_id": batch["batch_id"], "version": batch.get("version"), "slips": out}
+
+
+def _settled_ids():
+    ids = set()
+    try:
+        with open(RESULTS, encoding="utf-8") as f:
+            for x in f:
+                try:
+                    ids.add(json.loads(x)["batch_id"])
+                except (ValueError, KeyError):
+                    pass
+    except OSError:
+        pass
+    return ids
+
+
+def settle_all(leg_result):
+    """Append results for every newly settled batch (each batch once, durable). Returns the new results."""
+    with _LOCK:
+        done = _settled_ids()
+        new = []
+        for b in read():
+            if b["batch_id"] in done:
+                continue
+            r = settle_batch(b, leg_result)
+            if r is None:
+                continue
+            r["settled_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            new.append(r)
+        if new:
+            with open(RESULTS, "a", encoding="utf-8") as f:
+                for r in new:
+                    f.write(json.dumps(r) + "\n")
+                f.flush(); os.fsync(f.fileno())
+        return new
+
+
+def results(last=2000):
+    try:
+        with open(RESULTS, encoding="utf-8") as f:
+            return [json.loads(x) for x in f.readlines()[-last:] if x.strip()]
+    except OSError:
+        return []
+
+
+def leg_result_from_picks(picks):
+    """leg -> result from the pick log: same player, prop, scope and EXACT match slug; the leg's own line decides."""
+    idx = {}
+    for r in picks:
+        idx.setdefault(((r.get("player") or "").lower(), r.get("prop"), r.get("scope") or "12", r.get("match_slug")), []).append(r)
+
+    def f(l):
+        if not l.get("match_slug"):
+            return None                                   # never settle a leg without its exact match
+        rows = idx.get(((l.get("nick") or l.get("player") or "").lower(), l["prop"], l.get("scope") or "12", l["match_slug"]), [])
+        done = [r for r in rows if r.get("status") in ("settled", "push") and r.get("actual") is not None]
+        if done:
+            a = done[0]["actual"]
+            return "push" if a == l["line"] else ("hit" if (a > l["line"]) == (l["side"] == "More") else "miss")
+        if rows and all(r.get("status") == "void" for r in rows):
+            return "void"
+        return None
+    return f

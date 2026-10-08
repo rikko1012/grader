@@ -42,7 +42,8 @@ def _model_version():
     every pick says exactly which version made it."""
     import hashlib
     h = hashlib.sha1()
-    for f in ("grader.py", "sim.py", "cs2_scout.py", "hltv.py"):
+    # perf.py / perf_live.py / scope.py added 2026-10-09 (the performance model moves grades too)
+    for f in ("grader.py", "sim.py", "cs2_scout.py", "hltv.py", "perf.py", "perf_live.py", "scope.py"):
         try:
             h.update((Path(__file__).resolve().parent / f).read_bytes())
         except OSError:
@@ -135,34 +136,38 @@ def _factors(res):
     # frozen-test comparisons (2026-10-07): the same inputs graded by the alternatives - never shown to members
     try:
         from grader import grade_leg, CONFIG
-        # fix_v2 (2026-10-08 review): gap compression centred on the line, Maps 1-3 pushes removed after mixing
+        # pre_fix_v2: the behaviour before the 2026-10-09 fix (gap centred on line + 0.5; Maps 1-3 pushes removed per case)
         alts = {"old_spread": dict(CONFIG, c=1.55, c_hs=1.30),
                 "no_rest_bonus": dict(CONFIG, rest_bonus=0.0),
-                "fix_v2": dict(CONFIG, fix_v2=True),
+                "pre_fix_v2": dict(CONFIG, fix_v2=False),
                 # 2026-10-08 environment revision: the old behaviour and the provisional taper, on identical inputs
                 "online_none": dict(CONFIG, online_guard="none"),
                 "online_taper": dict(CONFIG, online_guard="taper"),
                 # 2026-10-08 perf-1 goes live on Maps 1-2: the old pipeline, on identical inputs
                 "legacy": dict(CONFIG, perf_scopes=()),
                 # 2026-10-08 release comparisons: without the BO3.gg fallback / with the perf-1 normal HS curve
-                "no_bo3": dict(CONFIG, perf_versions=("perf-1",)),
+                "no_bo3": dict(CONFIG, perf_versions=("perf-2", "perf-1")),
                 "perf1_normal_hs": dict(CONFIG, perf_hs_dist=False),
                 # Map 1 candidate (frozen 2026-10-08): the performance model for ONE map (no halving of Maps 1-2)
                 "perf_map1": dict(CONFIG, perf_scopes=("12", "1"))}
         out["shadow"] = {"live_raw": g.get("probs_raw"),     # the live grade's own Over / Under / push chances
                          "live_online": g.get("online_adj")}   # online weight + the bonus actually applied
+        pf_ = gi.get("perf") if isinstance(gi.get("perf"), dict) else {}
+        if pf_.get("g7"):                     # 2026-10-09 perf-2 live: the perf-1 (G7) projection on the same inputs
+            alts["perf1_g7"] = (dict(gi, perf=pf_["g7"]), CONFIG)
         for name, cfg in alts.items():
-            gg = grade_leg(gi, cfg)
+            gin, cfg = cfg if isinstance(cfg, tuple) else (gi, cfg)
+            gg = grade_leg(gin, cfg)
             out["shadow"][name] = {"p_more": gg.get("p_more"), "lambda": gg.get("lambda_final"),
                                    "grade": gg.get("grade"), "grade_less": gg.get("grade_less"),
                                    "raw": gg.get("probs_raw")}
     except Exception:
         pass
-    try:   # perf-2 CANDIDATE (frozen 2026-10-08): headshot distribution averaged over kills (perf.hs_probs)
+    try:   # perf2_hs (live on Maps 1-2 since G7; Map 1 still comparison): HS distribution averaged over kills
         pf = gi.get("perf") or {}
         if gi.get("prop") == "hs" and pf.get("lambda_kills") is not None and (gi.get("scope") or "12") in ("1", "12"):
             import perf
-            o, u, pu = perf.hs_probs(pf["lambda_kills"], gi.get("scope") or "12", pf["hs_per_kill"], gi["line"])
+            o, u, pu = perf.hs_probs(pf["lambda_kills"], gi.get("scope") or "12", pf["hs_per_kill"], gi["line"], c=perf.kills_c(pf, gi.get("scope") or "12"))
             out.setdefault("shadow", {})["perf2_hs"] = {"p_more": round(o / (o + u), 4) if o + u else 0.5, "version": pf.get("version"),
                                                        "raw": {"over": round(o, 4), "under": round(u, 4), "push": round(pu, 4)}}
     except Exception:
