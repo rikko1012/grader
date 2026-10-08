@@ -31,6 +31,7 @@ import cs2_scout
 import hltv
 import picklog
 import slips
+import slip_batches
 import roles
 import underdog
 import whop_auth
@@ -415,6 +416,10 @@ def board_forever():
                                 (BOARD.get(r["id"]) or {}).get("team_name") or r.get("team")) for r in rows])
             except Exception:
                 traceback.print_exc()
+            try:                                      # rebuilt builder, shadow only: fixed hourly batches (slip_batches.py)
+                slip_batches.maybe_batch(board_payload()["rows"], picklog.MODEL_VERSION)
+            except Exception:
+                traceback.print_exc()
             try:                                      # the builder's own record: each new recommended slip, once
                 slips.log_recommended(board_payload()["rows"], picklog.MODEL_VERSION)
             except Exception:
@@ -793,6 +798,8 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/admin/slips.json" and self.authed(q.get("token")):
                 return self.send(200, {"builder": slips.BUILDER_VERSION, "data_dir": str(DATA_DIR), "hltv_roles": roles.hltv_status(),
                                        "recommended": slips.read(slips.RECOMMENDED), "loaded": slips.read(slips.LOADED)})
+            if u.path == "/admin/slip_batches.json" and self.authed(q.get("token")):
+                return self.send(200, {"version": slip_batches.VERSION, "batches": slip_batches.read()})
             if u.path == "/admin/forecasts.json" and self.authed(q.get("token")):
                 return self.send(200, {"forecasts": picklog.export_forecasts()})
             if u.path == "/admin/picks.json" and self.authed(q.get("token")):
