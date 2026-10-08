@@ -342,11 +342,11 @@ def context(nick, team=None, opponent=None, maps=(), bo3_last_date=None):
 
 
 def _player_ids(cur, nick, team):
-    cur.execute("""SELECT ps.playerid, bool_or(lower(regexp_replace(t.name, '[^a-zA-Z0-9]', '', 'g')) = %(team)s),
+    cur.execute("""SELECT ps.playerid, bool_or(lower(regexp_replace(t.name, '[^a-zA-Z0-9]', '', 'g')) = ANY(%(teams)s)),
                           count(*)
                    FROM players p JOIN player_stats ps USING (playerid) JOIN teams t ON t.teamid = ps.teamid
                    WHERE lower(regexp_replace(p.name, '[^a-zA-Z0-9]', '', 'g')) = %(nick)s
-                   GROUP BY ps.playerid""", {"nick": _norm(nick), "team": _norm(team)})
+                   GROUP BY ps.playerid""", {"nick": _norm(nick), "teams": team_name_variants(team) or [""]})
     rows = cur.fetchall()
     if not rows:
         return []
@@ -354,11 +354,29 @@ def _player_ids(cur, nick, team):
     return [best[0]]
 
 
+_TEAM_AFFIX = re.compile(r"^(team)\s+|\s+(esports|e-sports|esport|gaming|club|team)$", re.I)
+
+
+def team_name_variants(name):
+    """Exact name first, then without a leading "Team" / trailing "Esports" / "Gaming" / "Club" (Underdog writes
+    "Team Vitality", "Chicken Coop Esports"; HLTV has "Vitality", "Chicken Coop"). Exact matches only - never fuzzy."""
+    out, cur = [], str(name or "").strip()
+    while cur and _norm(cur) not in out:
+        out.append(_norm(cur))
+        nxt = _TEAM_AFFIX.sub("", cur).strip()
+        if nxt == cur:
+            break
+        cur = nxt
+    return [v for v in out if len(v) >= 2]
+
+
 def _team_id(cur, name):
-    cur.execute("SELECT teamid FROM teams WHERE lower(regexp_replace(name, '[^a-zA-Z0-9]', '', 'g')) = %s",
-                (_norm(name),))
-    row = cur.fetchone()
-    return row[0] if row else None
+    for v in team_name_variants(name):                 # 2026-10-09: variants (11% of lines had no HLTV opponent)
+        cur.execute("SELECT teamid FROM teams WHERE lower(regexp_replace(name, '[^a-zA-Z0-9]', '', 'g')) = %s", (v,))
+        row = cur.fetchone()
+        if row:
+            return row[0]
+    return None
 
 
 def _prop_maps(cur, ids, maps):
