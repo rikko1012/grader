@@ -22,6 +22,7 @@ on the evidence listed. To replay a forecast:
 | `9abfe8cf5f` | 856f12b | 2026-10-07 05:14 | **G3** | BUG FIX completed: last 10 = usable series only - changes inputs |
 | `e4a0a0d278` | acc882a | 2026-10-08 00:44 | G3 | Logging only: raw Over/Under/push and fix_v2 comparison - live output identical to 9abfe8cf5f on 6,000 cases |
 | `11edec8d68` | d4397e3 | 2026-10-08 00:59 | G3 | Refactor only: Maps 1-3 mixing as named functions (mix_p_more_live / mix_three) - live output identical to the frozen grader, fix_v2 identical to e4a0a0d278, on 6,000 cases each; hand-calculated Maps 1-3 example reproduced exactly |
+| `f80baad46e` | 5a3ced6 | 2026-10-08 01:02 | **G4** | BUG FIX (owner): a total exactly on a whole line is a push - the last-10 record's n leaves pushes out (form fight / tape fight). Changes grades on WHOLE lines only; x.5 lines identical to G3 |
 | `c3505e489e` | none found | 2026-10-07 03:13-03:18 | unknown | 8 member grades; no commit on any branch reproduces this tag - not replayable, report separately |
 | `f0fdc11ece` | none found | 2026-10-07 03:09-03:12 | unknown | 4 member grades; same - not replayable |
 | untagged | before 2026-10-07 ~03:00 | - | pre-freeze | Old grader; the model_version column did not exist yet |
