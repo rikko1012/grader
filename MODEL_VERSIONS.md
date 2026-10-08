@@ -2,6 +2,7 @@
 
 Every logged pick and forecast carries `model_version` = the first 10 hex characters of SHA-1 over
 `grader.py`, `sim.py`, `cs2_scout.py`, `hltv.py`, in that order, as checked out on the server (LF line endings).
+From G8 (2026-10-09) the tag also covers `perf.py`, `perf_live.py`, `scope.py` (appended in that order).
 A Windows checkout computes different (CRLF) hashes, so always compute tags from `git show <commit>:<file>`.
 
 **Keep every exact tag when reporting.** Tags can be pooled only inside a "same grading behaviour" group, and only
@@ -28,6 +29,7 @@ on the evidence listed. To replay a forecast:
 | `2391c7f756` | (perf-1 transparency) | 2026-10-08 22:21 | G6 | Labels only: Maps 1-2 grades falling back to the old pipeline (no HLTV data) say so; the kills cap is labelled when it changes the shown chance; raw model chance kept. Grades identical to 4a9d15b1fa |
 | `25e9e825c6` | (candidates) | 2026-10-08 22:30 | G6 | Comparison-only candidates added (perf2_hs, perf-1-bo3, then perf_map1 at 22:42 - log only); grades identical to 2391c7f756 |
 | `457dc4bfab` | 09bcdd3 | **2026-10-08 22:51 (live)** | **G7** | RELEASE, PROVISIONAL: perf2_hs headshot distribution live on Maps 1-2 HS; perf-1-bo3 live for players HLTV lacks; one forecast per card (simulation's overall chance = the grade's). NOT promoted: Map 1 candidate (tied/worse). Rollback: redeploy commit 8441f0f (tag 25e9e825c6). 59/59 production forecasts replay identically |
+| `4527c7974b` | 9b8642a | **2026-10-09 (live)** | **G8** | RELEASE: perf-2 (newcomer prior 0.93, HS shrink 25 rounds; spreads re-measured on TRAIN) on Maps 1-2 kills + HS and the BO3.gg fallback (perf-2-bo3, provisional). Held-out HLTV VALID/TEST: kills MAE -0.035/-0.033, HS MAE -0.035/-0.036 (95% intervals below 0); board lines same direction within noise. fix_v2 live on the legacy paths (Map 1, Maps 1-3, Maps 1-2 without HLTV): gap centred on the line, Maps 1-3 push removed after mixing (4 of 177 G7 forecasts change, Map 1, <= 2.9 points). Simulation samples the grade's own distribution. Slip builder batch-3 (shadow). Replay: 177/177 G7 production forecasts identical with fix_v2 off and perf-1 inputs. Rollback: redeploy commit 4cbd3cb (G7 `457dc4bfab`) |
 | `c3505e489e` | none found | 2026-10-07 03:13-03:18 | unknown | 8 member grades; no commit on any branch reproduces this tag - not replayable, report separately |
 | `f0fdc11ece` | none found | 2026-10-07 03:09-03:12 | unknown | 4 member grades; same - not replayable |
 | untagged | before 2026-10-07 ~03:00 | - | pre-freeze | Old grader; the model_version column did not exist yet |
@@ -35,7 +37,9 @@ on the evidence listed. To replay a forecast:
 Comparison versions logged beside every forecast (`shadow`), from the same grading run:
 - `old_spread`: c 1.55 / 1.30.
 - `no_rest_bonus`: rest bonus 0.
-- `fix_v2`: gap compression centred on the line; Maps 1-3 Over/Under/push mixed before the push is removed.
+- `fix_v2`: gap compression centred on the line; Maps 1-3 Over/Under/push mixed before the push is removed. LIVE from G8;
+  from G8 the comparison is `pre_fix_v2` (the old behaviour).
+- `perf1_g7` (from G8): the perf-1 projection (G7 parameters and spreads) on the same HLTV inputs - the forward test of perf-2.
 - `online_none` / `online_taper` (from G5): old +6%-always behaviour / provisional taper 6% x (1 - online weight); `live_online` records each forecast's online weight and the bonus applied.
 - `no_bo3`, `perf1_normal_hs` (from G7): the release without the BO3.gg fallback / with the perf-1 normal HS curve.
 - `perf_map1` (from 22:42 Oct 8): the Map 1 candidate.
@@ -44,6 +48,6 @@ Comparison versions logged beside every forecast (`shadow`), from the same gradi
 
 Still open (not fixed live or in fix_v2):
 - The Map 1 / BO1 model (half of the Maps 1-2 projection).
-- The displayed chance mixes the model's chance with the Over margin.
+- The displayed chance mixes the model's chance with the Over margin (legacy paths only; the card explains the gap to the simulation).
 - Whole-line chances are conditional on no push. That is valid, but they must not be shown as unconditional or
   multiplied into slip all-hit chances without handling pushes.
