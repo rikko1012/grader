@@ -1306,6 +1306,7 @@ function render(d) {
   // ---- flags
   const flags = [...(g.flags || [])];
   if (v.side && v.p < 0.68) flags.push(`${v.side} is below A- (68%) - near the vig line, no real edge`);
+  if ((v.units || 0) > 0) flags.push("Units show the model's relative confidence (A+ 3U down to B- 0.5U) - not a payout-based edge or a proven profit; check the payout before betting");
   if (flags.length) h += `<section class="card full"><h2>Notes</h2><ul class="flags">${flags.map(f => `<li>${esc(f)}</li>`).join("")}</ul></section>`;
   h += `<div class="small muted foot">Data: BO3.gg · Polymarket · FACEIT${d.hltv?.found || d.hltv_context?.found ? " · HLTV" : ""}${d.csapi?.found ? " · CS API" : ""}${d.next_match?.source === "pandascore" ? " · PandaScore" : ""}${d.next_match?.source === "hltv" ? " · schedule from HLTV" : ""}${d.odds?.book ? " · " + esc(d.odds.book) + " via OddsPapi" : ""}${d.liquipedia ? ` · team from <a href="${esc(d.liquipedia.url)}" target="_blank" rel="noopener">Liquipedia</a> (CC-BY-SA 3.0)` : ""} · Not financial advice</div>`;
   const out = $("#out"); out.innerHTML = h;

@@ -73,7 +73,9 @@ def simulate_grade(g, seed=7):
                 row(w12 == 0, "lose 0-2")]
     scen.append(row(ot, "any overtime"))
     lo, mid, hi = np.percentile(total, [10, 50, 90])
-    return {"p_more": round(float(over.sum() / max(decided.sum(), 1)), 3), "mean": round(float(total.mean()), 1),
+    # 2026-10-08: the overall chance IS the grade's chance (one forecast per card); the runs add the match scripts
+    return {"p_more": round(float(g["p_more"]), 3) if g.get("p_more") is not None else round(float(over.sum() / max(decided.sum(), 1)), 3),
+            "p_more_runs": round(float(over.sum() / max(decided.sum(), 1)), 3), "mean": round(float(total.mean()), 1),
             "p10": round(float(lo)), "p50": round(float(mid)), "p90": round(float(hi)),
             "scenarios": [s for s in scen if s], "runs": RUNS, "anchored": True, "weight": 0}
 

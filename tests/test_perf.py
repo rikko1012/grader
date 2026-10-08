@@ -88,16 +88,33 @@ def test_cap_is_labelled_and_raw_chance_kept():
     assert any(f.startswith("CAP:") for f in g["flags"])
 
 
-def test_candidate_inputs_never_drive_live_grades():
+def test_bo3_fallback_is_live_and_labelled():
     d = _inputs(random.Random(7), "12"); d["perf"] = dict(d["perf"], version="perf-1-bo3")
     live = grader.grade_leg(dict(d))
-    assert live["projection_source"].startswith("legacy") and "comparison-only" in live["projection_source"]
-    shadow = grader.grade_leg(dict(d), dict(grader.CONFIG, perf_versions=("perf-1", "perf-1-bo3")))
-    assert shadow["projection_source"] == "perf-1-bo3" and abs(shadow["lambda_final"] - d["perf"]["lambda"]) < 0.01
+    assert live["projection_source"] == "perf-1-bo3" and any(f.startswith("PROVISIONAL") for f in live["flags"])
+    old = grader.grade_leg(dict(d), dict(grader.CONFIG, perf_versions=("perf-1",)))
+    assert old["projection_source"].startswith("legacy")
+
+
+def test_hs_release_one_distribution_for_everything():
+    import sim
+    rnd = random.Random(11)
+    for _ in range(60):
+        d = _inputs(rnd, "12"); d["prop"] = "hs"
+        lk = rnd.uniform(18, 40); phs = rnd.uniform(0.3, 0.65)
+        d["perf"] = dict(d["perf"], lambda_kills=lk, hs_per_kill=phs, **{"lambda": lk * phs}); d["line"] = round(lk * phs) + rnd.choice([0.5, 0, -0.5, 1.5])
+        g = grader.grade_leg(dict(d))
+        o, u, pu = perf.hs_probs(lk, "12", phs, d["line"])
+        assert abs(g["p_more"] - round(o / (o + u), 3)) <= 0.0011
+        assert abs(g["probs_raw"]["over"] - o) < 1e-3 and abs(g["probs_raw"]["push"] - pu) < 1e-3
+        pmf = perf.hs_pmf(lk, "12", phs); mean = sum(y * v for y, v in pmf.items())
+        assert abs(g["lambda_final"] - mean) < 0.01
+        sm = sim.simulate_grade(g)
+        assert sm["p_more"] == round(g["p_more"], 3)                      # card: one forecast
 
 
 def test_live_grades_unchanged_by_candidate_code():
-    pre = os.path.join(os.environ.get("TEMP", "/tmp"), "grader_pre_cand.py")
+    pre = os.path.join(os.environ.get("TEMP", "/tmp"), "grader_pre_release.py")
     if not os.path.exists(pre):
         return
     sp = importlib.util.spec_from_file_location("gcand", pre); old = importlib.util.module_from_spec(sp); sp.loader.exec_module(old)
@@ -106,15 +123,29 @@ def test_live_grades_unchanged_by_candidate_code():
         d = _inputs(rnd, rnd.choice(["12", "1", "123"]))
         if rnd.random() < 0.2:
             d["perf"] = {"error": "player 'x' not found in HLTV"}
-        a = old.grade_leg(dict(d)); b = grader.grade_leg(dict(d))
+        if d["prop"] == "hs" or rnd.random() < 0.3:
+            d["perf"] = dict(d["perf"], version="perf-1") if isinstance(d.get("perf"), dict) and "lambda" in d["perf"] else d["perf"]
+        a = old.grade_leg(dict(d)); b = grader.grade_leg(dict(d), dict(grader.CONFIG, perf_hs_dist=False))
         assert json.dumps(a, sort_keys=True, default=str) == json.dumps(b, sort_keys=True, default=str)
 
 
 def test_hs_candidate_distribution():
-    for lamk, phs, line in ((30.0, 0.5, 15.5), (20.0, 0.35, 7.5), (40.0, 0.6, 24.0), (8.0, 0.5, 3.5)):
+    for lamk, phs, line in ((30.0, 0.5, 15.5), (20.0, 0.35, 7.5), (40.0, 0.6, 24.0), (8.0, 0.5, 3.5), (3.0, 0.4, 1.0)):
+        kp = perf.kills_pmf(lamk, "12")
+        assert abs(sum(kp.values()) - 1) < 1e-12 and min(kp) == 0                          # conditioned on kills >= 0
         pmf = perf.hs_pmf(lamk, "12", phs)
-        assert abs(sum(pmf.values()) - 1) < 0.03 and min(pmf) >= 0                       # HS >= 0 (tiny mass below 0 kills cut; hs_probs normalises)
-        mean = sum(y * v for y, v in pmf.items()) / sum(pmf.values())
-        assert abs(mean - lamk * phs) < 0.6                                                # mean ~ kills x HS/kill
+        assert abs(sum(pmf.values()) - 1) < 1e-9 and min(pmf) >= 0 and max(pmf) <= max(kp)   # strict; HS <= kills
         o, u, pu = perf.hs_probs(lamk, "12", phs, line)
-        assert abs(o + u + pu - 1) < 1e-9 and (pu == 0 or line == int(line)) and (line == int(line) or pu == 0)              # pushes only on whole lines
+        assert abs(o + u + pu - 1) < 1e-9
+        if line != int(line):
+            assert pu == 0.0                                                                # half-point: exactly zero
+        else:
+            assert abs(pu - pmf.get(int(line), 0.0)) < 1e-12                               # whole line: P(HS == line)
+        mean_k = sum(k * v for k, v in kp.items()); mean_h = sum(y * v for y, v in pmf.items())
+        assert abs(mean_h - mean_k * phs) < 1e-6                                            # E[HS] = E[kills] x HS/kill
+
+
+def test_kills_truncation_is_conditioning_not_piling():
+    kp = perf.kills_pmf(3.0, "12")
+    raw0 = perf._phi((0.5 - 3.0) / (perf.SPREAD[("kills", "12")] * math.sqrt(3.0)))   # P(normal < 0.5) incl. negatives
+    assert kp[0] < raw0                                  # zero did NOT absorb the negative mass

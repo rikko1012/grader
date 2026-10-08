@@ -611,6 +611,7 @@ KEEP_DETAIL = {"p_win", "p_map1", "p_map2", "maps_used", "role", "rank"}
 _FLAG_RULES = (   # (starts with, member-friendly text or None = not shown)
     ("OLD PROJECTION", "Projection from the older model - the newer performance model has no HLTV data for this player or matchup"),
     ("CAP:", "Chance capped at 78% on kills props (big kill totals swing more than the model's spread)"),
+    ("PROVISIONAL:", "Provisional: projection from BO3.gg history - HLTV has no history for this player"),
     ("Gate C: roster", "Roster not confirmed - extra caution"),
     ("Gate D: only", "Small sample of recent official maps - extra caution, unit size limited"),
     ("Thin data", "Small sample of recent official maps - extra caution, unit size limited"),

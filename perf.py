@@ -75,23 +75,38 @@ def probs(lam, sd, line):
 HS_KAPPA = 100.0
 
 
-def hs_pmf(lam_kills, scope, hs_per_kill, kappa=HS_KAPPA):
-    from math import lgamma, exp
+def kills_pmf(lam_kills, scope):
+    """Kills as a whole number: the perf-1 normal (mean lam, sd C*sqrt(lam)) discretised to integers and CONDITIONED on
+    kills >= 0 (the mass below zero is removed by renormalising, not piled onto 0). Upper tail kept to lam + 8 sd
+    (beyond it < 1e-9 remains). Sums to exactly 1."""
     c = SPREAD[("kills", scope)]
-    sd = c * math.sqrt(max(lam_kills, 1.0)); a, b = hs_per_kill * kappa, (1 - hs_per_kill) * kappa
-    out = {}
-    for k in range(0, int(lam_kills + 5 * sd) + 1):
+    sd = c * math.sqrt(max(lam_kills, 1.0))
+    raw = {}
+    for k in range(0, int(lam_kills + 8 * sd) + 2):
         pk = _phi((k + 0.5 - lam_kills) / sd) - _phi((k - 0.5 - lam_kills) / sd)
-        if pk < 1e-7:
-            continue
+        if pk > 0:
+            raw[k] = pk
+    tot = sum(raw.values())
+    return {k: v / tot for k, v in raw.items()}
+
+
+def hs_pmf(lam_kills, scope, hs_per_kill, kappa=HS_KAPPA):
+    """Headshots: for each kill total k (kills_pmf), HS | k ~ BetaBinomial(k, a, b) with mean hs_per_kill and
+    concentration kappa - so HS <= kills always and every kill total is averaged over. Sums to exactly 1."""
+    from math import lgamma, exp
+    a, b = hs_per_kill * kappa, (1 - hs_per_kill) * kappa
+    out = {}
+    for k, pk in kills_pmf(lam_kills, scope).items():
         base = lgamma(a + b) - lgamma(a) - lgamma(b) - lgamma(k + a + b)
-        for y in range(0, k + 1):
-            out[y] = out.get(y, 0.0) + pk * exp(lgamma(k + 1) - lgamma(y + 1) - lgamma(k - y + 1) + lgamma(y + a) + lgamma(k - y + b) + base)
+        terms = [exp(lgamma(k + 1) - lgamma(y + 1) - lgamma(k - y + 1) + lgamma(y + a) + lgamma(k - y + b) + base) for y in range(k + 1)]
+        tk = sum(terms)                                  # 1 up to rounding - renormalised so each k contributes exactly pk
+        for y, t in enumerate(terms):
+            out[y] = out.get(y, 0.0) + pk * t / tk
     return out
 
 
 def hs_probs(lam_kills, scope, hs_per_kill, line, kappa=HS_KAPPA):
     """(over, under, push) for a headshot line under the perf-2 candidate distribution."""
-    pmf = hs_pmf(lam_kills, scope, hs_per_kill, kappa); tot = sum(pmf.values()) or 1.0
-    o = sum(v for y, v in pmf.items() if y > line) / tot; u = sum(v for y, v in pmf.items() if y < line) / tot
-    return o, u, sum(v for y, v in pmf.items() if y == line) / tot     # exactly 0 on x.5 lines
+    pmf = hs_pmf(lam_kills, scope, hs_per_kill, kappa)
+    o = sum(v for y, v in pmf.items() if y > line); u = sum(v for y, v in pmf.items() if y < line)
+    return o, u, sum(v for y, v in pmf.items() if y == line)            # exactly 0 on x.5 lines (no integer equals it)

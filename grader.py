@@ -80,7 +80,14 @@ CONFIG = {
     "online_guard": "full",
     # 2026-10-08 performance model perf-1 (perf.py): drives the projection + spread for these scopes when its input
     # (d["perf"]) is present. Maps 1-2 only - on Map 1 it did not beat the old projection. () = the old pipeline.
-    "perf_scopes": ("12",),   # 2026-10-08: see grade_leg - no +6% on fully online stats (comparisons: "none", "taper")     # LAN / online: maps in that environment for half the difference to count
+    "perf_scopes": ("12",),
+    # 2026-10-08 release (PROVISIONAL - confirmation on matches from Oct 9 on):
+    #  perf-1-bo3: the performance model on BO3.gg maps for players HLTV has no history for (proxy test: short-history
+    #  model beat the old pipeline on 414 board lines, MAE 5.08 -> 4.91, log-loss -0.017, range crosses 0)
+    "perf_versions": ("perf-1", "perf-1-bo3"),
+    #  perf2_hs: headshot probabilities from perf.hs_probs (HS | kills beta-binomial, kappa 100 on TRAIN; board HS
+    #  log-loss 0.6666 -> 0.6592, 95% -0.0144 to -0.0000)
+    "perf_hs_dist": True,   # 2026-10-08: see grade_leg - no +6% on fully online stats (comparisons: "none", "taper")     # LAN / online: maps in that environment for half the difference to count
     "star_rating": 1.15, "star_k": 1.0, "star_cap": 0.06, "rust_drop": 0.08, "hot_k": 0.6,
     "last10_min": 5,             # need 5+ recent two-map matches to blend
     # 4c (2026-09-28, owner-approved for KILLS props only): trade kills per round. Cross-validated
@@ -635,6 +642,17 @@ def grade_leg(d, cfg=CONFIG):
         lam_final = lam12 = float(pf["lambda"])
         sd = float(pf["sd"])
         scale = 1.0
+        if pf.get("version") == "perf-1-bo3":
+            flags.append("PROVISIONAL: performance model on BO3.gg history (HLTV has no history for this player)")
+    hs_dist = None
+    if perf_on and prop == "hs" and cfg.get("perf_hs_dist") and pf.get("lambda_kills") is not None and pf.get("hs_per_kill"):
+        import perf as _perf
+        _pmf = _perf.hs_pmf(float(pf["lambda_kills"]), scope, float(pf["hs_per_kill"]))
+        _mean = sum(y * v for y, v in _pmf.items()); _var = sum((y - _mean) ** 2 * v for y, v in _pmf.items())
+        hs_dist = (sum(v for y, v in _pmf.items() if y > line), sum(v for y, v in _pmf.items() if y < line),
+                   sum(v for y, v in _pmf.items() if y == line))
+        lam_final = lam12 = _mean                     # projection, spread and chances all from ONE distribution
+        sd = math.sqrt(_var)
 
     def three(shift=0.0):
         """Unconditional (over, under, push) for this scope; Maps 1-3 mixes the raw outcomes of the 2-map and
@@ -670,6 +688,9 @@ def grade_leg(d, cfg=CONFIG):
         lam12 += shift
     pm = pmore()
     raw = three()                                         # logged: the model's own outcome chances, before caps / margins
+    if hs_dist is not None:                               # perf2_hs: the headshot distribution's own chances
+        raw = hs_dist
+        pm = raw[0] / (raw[0] + raw[1]) if raw[0] + raw[1] > 0 else 0.5
     probs_raw = {"over": round(raw[0], 4), "under": round(raw[1], 4), "push": round(raw[2], 4),
                  "p_more_no_push": round(raw[0] / (raw[0] + raw[1]), 4) if raw[0] + raw[1] > 0 else 0.5}
     if prop == "kills":                                   # fat tails: no side above the cap
