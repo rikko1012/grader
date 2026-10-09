@@ -82,12 +82,21 @@ def parse(body):
         team = home if app.get("team_id") == game.get("home_team_id") else away if app.get("team_id") == game.get("away_team_id") else ""
         opp = away if team == home else home if team == away else ""
         pay = {o.get("choice"): o.get("payout_multiplier") for o in ln.get("options") or []}
+        dec = {}
+        for o in ln.get("options") or []:              # Underdog's displayed per-pick price (decimal), when shown
+            try:
+                dec[o.get("choice")] = float(o.get("decimal_price")) if o.get("decimal_price") not in (None, "") else None
+            except (TypeError, ValueError):
+                dec[o.get("choice")] = None
         hi, lo = pay.get("higher"), pay.get("lower")
         alt = not (str(hi) in ("1.0", "1", "None") and str(lo) in ("1.0", "1", "None"))
         rows.append({"id": ln.get("id"), "scope": scope, "player": name, "team": team, "opponent": opp, "matchup": title,
                      "start": game.get("scheduled_at"), "prop": prop, "line": value,
                      "higher": float(hi) if hi not in (None, "") else None,
-                     "lower": float(lo) if lo not in (None, "") else None, "alt": alt})
+                     "lower": float(lo) if lo not in (None, "") else None, "alt": alt,
+                     # comparison layer (2026-10-09): Underdog's own ids, per-side price and the line's update time
+                     "ud_player_id": app.get("player_id"), "ud_match_id": app.get("match_id"),
+                     "price_higher": dec.get("higher"), "price_lower": dec.get("lower"), "updated_at": ln.get("updated_at")})
     return rows
 
 

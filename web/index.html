@@ -804,7 +804,17 @@ function drawBoard() {
                                     && (!$("#bbets").checked || (r.units || 0) > 0) && hit(r)).sort(cmp);
   let lastM = null;
   const head = r => { if (sortBy !== "m" || r.matchup === lastM) return ""; lastM = r.matchup;
-    return `<div class="bhead">${esc((r.team_name || r.team || "") + " vs " + (r.opp_name || r.opponent || ""))} <span class="muted">· ${shortWhen(r.start)}</span></div>`; };
+    return `<div class="bhead">${esc((r.team_name || r.team || "") + " vs " + (r.opp_name || r.opponent || ""))} <span class="muted">· ${shortWhen(r.start)}</span></div>` + matchRank(r); };
+  // per-match rankings (comparison layer): every qualifying bet in this match, kills + headshots, all map sets,
+  // following the Over / Under / Both filter. Same match = shared exposure: these are alternatives, not a slip.
+  const matchRank = r => {
+    const q = boardRows.filter(x => x.matchup === r.matchup && x.side && x.state !== "SCOUT" && (x.units || 0) > 0
+                                    && (bside === "both" || x.side === bside)).sort((a, b) => (b.p ?? 0) - (a.p ?? 0));
+    if (!q.length) return `<div class="small muted" style="margin:-2px 0 8px">No qualifying bets in this match${bside !== "both" ? ` (${bside === "More" ? "Overs" : "Unders"} only)` : ""}.</div>`;
+    const it = x => `${esc(x.nick || x.player)} ${sideWord({grade: x.grade, side: x.side})} ${x.line} ${propWord(x.prop)}${mapsWord(x.scope)} <b>${(x.p * 100).toFixed(0)}%</b>`;
+    return `<div class="small" style="margin:-2px 0 8px;line-height:1.5"><b>Highest chance here:</b> ${q.slice(0, 3).map(it).join(" · ")}
+      <div class="muted">Independent projection agreement: none connected yet · Best value: not ranked (actual entry payouts aren't available) ·
+      ${q.length > 1 ? "Same match – these share one result, so treat them as alternatives, not a spread-out slip." : ""}</div></div>`; };
   const leanWhy = r => { const t = r.reason || ""; if (r.grade !== "LEAN") return "";
     if (/FORM FIGHT/.test(t)) return "Lean: his last 10 disagree with the projection";
     const m = t.match(/0 units: (.+)$/); if (m) return "Lean: " + m[1].split(";")[0].slice(0, 80);
@@ -1164,6 +1174,31 @@ function render(d) {
   h += `</section>`;
 
   // ---- recent form: last 10 matches, Maps 1-2
+  // ---- lines & comparisons (comparison.py): context only - never changes the grade
+  const cp = d.comparison;
+  if (cp && !cp.error && cp.ours) {
+    const unit = g.prop === "hs" ? "HS" : "kills", pc1 = x => x == null ? "–" : (x * 100).toFixed(0) + "%";
+    const mult = x => x == null ? "–" : (+x === 1 ? "std" : x + "x");
+    h += `<section class="card"><h2>Lines &amp; comparisons</h2>
+      <div class="kv"><span>Our projection</span><span><b>${cp.ours.projection}</b> ${unit} · 8 in 10 land ${cp.ours.range80[0]}–${cp.ours.range80[1]}</span></div>
+      <div class="small muted" style="margin:2px 0 8px">Book lines are betting thresholds, not projections. Each row is our own chance at that line.</div>`;
+    if (cp.offers.length) {
+      h += `<div class="scroll"><table><thead><tr><th>Underdog line</th><th class="num">Payout O / U</th><th class="num">Over</th><th class="num">Under</th><th class="num">Push</th></tr></thead><tbody>
+        ${cp.offers.map(o => `<tr${o.line === g.line ? ' style="font-weight:600"' : ""}><td>${o.line}${o.alt ? ' <span class="pill">alt</span>' : ""}${o.stale ? ' <span class="pill warn" title="Not refreshed in 15+ minutes">stale</span>' : ""}</td>
+          <td class="num">${mult(o.mult_over)} / ${mult(o.mult_under)}</td><td class="num">${pc1(o.over_if_decided)}</td><td class="num">${pc1(o.under_if_decided)}</td><td class="num">${o.p_push ? pc1(o.p_push) : "–"}</td></tr>`).join("")}
+        </tbody></table></div>
+        ${Math.abs(cp.grade_vs_table || 0) > 0.015 ? `<div class="small muted" style="margin-top:4px">The grade shows ${pct(cp.ours.chance)} at ${g.line}: it adds safety margins / a cap on top of these chances.</div>` : ""}
+        <div class="small muted" style="margin-top:4px">Over / Under = chance if there's no push. With equal payouts a lower line is better for an Over and a higher line for an Under; with different payouts the payout counts too.</div>`;
+      const bl = cp.best_line || {};
+      if (bl.over || bl.under) h += `<div class="kv"><span>Best line (chance × payout)</span><span>${bl.over ? `Over ${bl.over.line} (${pc1(bl.over.chance)}${bl.over.mult !== 1 ? ` at ${bl.over.mult}x` : ""})` : ""}${bl.over && bl.under ? " · " : ""}${bl.under ? `Under ${bl.under.line} (${pc1(bl.under.chance)}${bl.under.mult !== 1 ? ` at ${bl.under.mult}x` : ""})` : ""}</span></div>`;
+    } else h += `<div class="small muted">No matching Underdog line for this exact market right now.</div>`;
+    h += `<div class="kv"><span>Independent projections</span><span class="muted">${cp.independent.count ? cp.independent.count + " sources" : "None available yet"}</span></div>`;
+    for (const it of cp.internal || []) h += `<div class="kv"><span>${esc(it.label.split(" - ")[0])} <span class="muted small">(internal)</span></span><span>${it.projection} · Over ${pc1(it.p_over)}</span></div>`;
+    if ((cp.evidence_against || []).length) h += `<div style="margin-top:6px"><div class="small"><b>Against this side</b></div>${cp.evidence_against.map(x => `<div class="small muted">• ${esc(x)}</div>`).join("")}</div>`;
+    if ((cp.rejected || []).length) h += `<div class="small muted" style="margin-top:6px">${cp.rejected.length} other line${cp.rejected.length > 1 ? "s" : ""} not compared (different maps, team or match).</div>`;
+    h += `</section>`;
+  }
+
   // ---- match simulation: built on this grade (same projection and spread) - how the prop plays out
   const sm = d.simulation;
   if (sm && sm.anchored && Array.isArray(sm.scenarios)) {

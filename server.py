@@ -32,6 +32,7 @@ import hltv
 import picklog
 import slips
 import slip_batches
+import comparison
 import roles
 import underdog
 import whop_auth
@@ -408,6 +409,11 @@ def board_forever():
                                       "opp_name": (res.get("next_match") or {}).get("opponent"),
                                       "match_slug": (res.get("next_match") or {}).get("slug")}   # exact match id (settling slips)
                     res["verdict"] = v
+                    try:                                  # immutable comparison snapshot (changes only)
+                        ub = underdog.board()
+                        comparison.snapshot(res, comparison.panel(res, ub["rows"], board_at=ub.get("at")), picklog.MODEL_VERSION)
+                    except Exception:
+                        traceback.print_exc()
                     try:
                         picklog.log_async(res, v, test=2)
                     except Exception:
@@ -823,6 +829,15 @@ class Handler(BaseHTTPRequestHandler):
                                        "recommended": slips.read(slips.RECOMMENDED), "loaded": slips.read(slips.LOADED)})
             if u.path == "/admin/slip_batches.json" and self.authed(q.get("token")):
                 return self.send(200, {"version": slip_batches.VERSION, "batches": slip_batches.read()})
+            if u.path == "/admin/comparisons.json" and self.authed(q.get("token")):
+                try:
+                    with open(comparison.snapshot_path(), encoding="utf-8") as f:
+                        lines = f.readlines()
+                except OSError:
+                    lines = []
+                n = int(q.get("last") or 500)
+                return self.send(200, {"version": comparison.VERSION, "total": len(lines), "sources": comparison.SOURCES,
+                                       "snapshots": [json.loads(x) for x in lines[-n:] if x.strip()]})
             if u.path == "/admin/slip_batch_results.json" and self.authed(q.get("token")):
                 new = slip_batches.settle_all(slip_batches.leg_result_from_picks(picklog.export()))
                 return self.send(200, {"version": slip_batches.VERSION, "new": len(new), "results": slip_batches.results(),
@@ -1276,6 +1291,11 @@ class Handler(BaseHTTPRequestHandler):
                 res["underdog"] = underdog.line_for((pb_.get("player") or {}).get("nick") or name, prop)
             except Exception:
                 res["underdog"] = None
+            try:                                         # comparison panel: context only, never changes the grade
+                ub = underdog.board()
+                res["comparison"] = comparison.panel(res, ub["rows"], board_at=ub.get("at"))
+            except Exception:
+                res["comparison"] = {"error": "comparison unavailable"}
             tm["underdog"] = round(time.time() - t0, 2)
             t0 = time.time()
             try:
