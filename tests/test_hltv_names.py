@@ -32,7 +32,7 @@ def test_team_id_prefers_exact_then_variant():
 
 
 def test_active_map_pool_filters_retired_maps(monkeypatch):
-    """Maps that left the pool (Overpass in July 2026, Train earlier) are never predicted live."""
+    """The event's verified pool is preferred; otherwise an inferred pool (recent play) filters maps that left it."""
     import cs2_scout
     monkeypatch.setattr(hltv, "active_map_pool", lambda *a, **k: {"ancient", "anubis", "cache", "dust2", "inferno", "mirage", "nuke"})
     prof = lambda maps: {"n": 10, "picks": {m: 2 for m in maps}, "bans": {}, "pool": set(maps)}
@@ -40,4 +40,26 @@ def test_active_map_pool_filters_retired_maps(monkeypatch):
     monkeypatch.setattr(cs2_scout, "veto_profile", lambda b, t, before=None: prof(old))
     out = cs2_scout.predict_maps(None, 1, 2)
     assert out and not ({"de_overpass", "de_train"} & (set(out["map1"]) | set(out["map2"])))
+    assert out["pool_source"].startswith("inferred")                      # the fallback is labelled as inferred
+    ev = cs2_scout.predict_maps(None, 1, 2, pool_keys=["ancient", "anubis", "cache", "dust2", "inferno", "mirage", "overpass"])
+    assert ev["pool_source"] == "event veto" and "de_nuke" not in set(ev["map1"]) | set(ev["map2"])   # the event's own pool wins
     assert hltv.map_key("de_dust2") == hltv.map_key("Dust 2") == "dust2"
+
+
+def test_event_pool_uses_this_events_latest_full_veto():
+    import cs2_scout
+    seven = lambda maps: {"bo_type": 3, "match_maps": [{"map_name": m} for m in maps]}
+    new = ["de_ancient", "de_anubis", "de_cache", "de_dust2", "de_inferno", "de_mirage", "de_nuke"]
+    old = ["de_ancient", "de_anubis", "de_overpass", "de_dust2", "de_inferno", "de_mirage", "de_nuke"]
+    class B:
+        def team_recent(self, tid, limit=30):
+            return {"results": [
+                {"slug": "a", "status": "finished", "start_date": "2026-10-05", "tournament": {"slug": "ev"}},
+                {"slug": "b", "status": "finished", "start_date": "2026-10-08", "tournament": {"slug": "ev"}},
+                {"slug": "c", "status": "finished", "start_date": "2026-10-09", "tournament": {"slug": "other"}},
+                {"slug": "d", "status": "upcoming", "start_date": "2026-10-10", "tournament": {"slug": "ev"}}]}
+        def match_veto(self, slug):
+            return {"a": seven(old), "b": seven(new), "c": seven(old), "d": {"bo_type": 3, "match_maps": []}}[slug]
+    out = cs2_scout.event_pool(B(), {"event_slug": "ev", "team1_id": 1, "team2_id": 2})
+    assert out["from_match"] == "b" and "cache" in out["keys"] and "overpass" not in out["keys"]
+    assert cs2_scout.event_pool(B(), {"event_slug": "none-yet", "team1_id": 1}) is None

@@ -1322,7 +1322,8 @@ function render(d) {
   if (!nm?.maps?.length && pb.map_prediction) {
     const top = o => Object.entries(o).slice(0, 3).map(([m, p]) => `${mapName(m)} ${pct(p, 0)}`).join(" · ");
     h += `<div class="kv"><span>Likely Map 1 <span class="muted small">(context only)</span></span><span>${esc(top(pb.map_prediction.map1))}</span></div>
-      <div class="kv"><span>Likely Map 2 <span class="muted small">(context only)</span></span><span>${esc(top(pb.map_prediction.map2))}</span></div>`;
+      <div class="kv"><span>Likely Map 2 <span class="muted small">(context only)</span></span><span>${esc(top(pb.map_prediction.map2))}</span></div>
+      ${pb.map_prediction.pool_source ? `<div class="small muted">Map pool: ${pb.map_prediction.pool_source === "event veto" ? "this event's own veto" : esc(pb.map_prediction.pool_source)}</div>` : ""}`;
   }
   if (!nm) h += `<div class="muted">No upcoming match found for ${esc(pb.current_team || "this player's team")} yet.</div>`;
   if (d.match_note) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(d.match_note)}</div>`;

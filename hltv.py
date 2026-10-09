@@ -1072,24 +1072,24 @@ def _team_history(cur, team_name, before, n=25):
     return hist
 
 
-def predict_maps(team_a, team_b, before, pool=None, runs=4000, seed=7):
+def predict_maps(team_a, team_b, before, pool=None, runs=4000, seed=7, pool_keys=None):
     """P(Map 1 = m) and P(Map 2 = m) from both teams' HLTV veto history (BO3 order: A ban, B ban,
     A pick = Map 1, B pick = Map 2, A ban, B ban, decider). Who goes first is unknown: both orders."""
     import random
     if not dsn():
         return None
-    key = ("veto", _norm(team_a), _norm(team_b), before, runs)
+    key = ("veto", _norm(team_a), _norm(team_b), before, runs, tuple(sorted(pool_keys or ())))
     with _LOCK:
         hit = _CACHE.get(key)
         if hit and time.time() - hit[0] < TTL:
             return hit[1]
-    out = _predict_maps(team_a, team_b, before, pool, runs, seed, random)
+    out = _predict_maps(team_a, team_b, before, pool, runs, seed, random, pool_keys)
     with _LOCK:
         _CACHE[key] = (time.time(), out)
     return out
 
 
-def _predict_maps(team_a, team_b, before, pool, runs, seed, random):
+def _predict_maps(team_a, team_b, before, pool, runs, seed, random, pool_keys=None):
     con = _connect()
     try:
         with con.cursor() as cur:
@@ -1099,10 +1099,19 @@ def _predict_maps(team_a, team_b, before, pool, runs, seed, random):
     if ha["n"] < 3 or hb["n"] < 3:
         return None
     pool = pool or sorted({m for h in (ha, hb) for r in ("ban1", "pick", "ban2") for m in h[r]})
+    # the pool: this EVENT's verified pool (a finished BO3 veto at the same event lists all 7 maps) when given;
+    # otherwise, for live predictions, an INFERRED pool (maps played in pro matches in the last 30 days) - a fallback
+    # that can lag a pool change or differ from a particular event's pool, so it is labelled as inferred
     from datetime import date as _date
-    act = active_map_pool() if before is None or str(before) >= str(_date.today()) else None
-    if act:                                              # live predictions: only maps still in the pool
-        pool = [m for m in pool if map_key(m) in act]
+    pool_source = "veto history"
+    if pool_keys:
+        pool = [m for m in pool if map_key(m) in set(pool_keys)]
+        pool_source = "event veto"
+    elif before is None or str(before) >= str(_date.today()):
+        act = active_map_pool()
+        if act:
+            pool = [m for m in pool if map_key(m) in act]
+            pool_source = "inferred (maps played in the last 30 days)"
     if len(pool) < 7:
         return None
     rnd = random.Random(seed)
@@ -1130,7 +1139,7 @@ def _predict_maps(team_a, team_b, before, pool, runs, seed, random):
     c2 = calib(m2, len(pool) - 1)
     return {"map1": dict(sorted(c1.items(), key=lambda x: -x[1])), "map2": dict(sorted(c2.items(), key=lambda x: -x[1])),
             "raw": {"map1": {k: v / runs for k, v in m1.items()}, "map2": {k: v / runs for k, v in m2.items()}},
-            "history": [ha["n"], hb["n"]], "calibration": "50% veto model + 50% flat"}
+            "history": [ha["n"], hb["n"]], "calibration": "50% veto model + 50% flat", "pool_source": pool_source}
 
 
 def veto_backtest(days=30, limit=250):

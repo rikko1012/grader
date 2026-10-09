@@ -751,18 +751,55 @@ def _pick_probs(me, opp, pool, exclude=None):
     return {m: v / s for m, v in w.items()}
 
 
-def predict_maps(b, team1_id, team2_id, before=None):
+def event_pool(b, nxt):
+    """This event's map pool, VERIFIED: the 7 maps of the latest finished BO3 veto either team played at the same
+    event (BO3.gg). None when there is none yet (first BO3 of the event, BO1 events) - callers fall back, labelled."""
+    ev = (nxt or {}).get("event_slug")
+    if not ev:
+        return None
+    best = None
+    for tid in ((nxt or {}).get("team1_id"), (nxt or {}).get("team2_id")):
+        if not tid:
+            continue
+        try:
+            ms = b.team_recent(tid, limit=30).get("results") or []
+        except Exception:
+            continue
+        for m in ms:
+            if ((m.get("tournament") or {}).get("slug") != ev or m.get("status") != "finished"
+                    or (best and (m.get("start_date") or "") <= best[0])):
+                continue
+            try:
+                d = b.match_veto(m["slug"])
+            except Exception:
+                continue
+            vs = d.get("match_maps") or []
+            names = {v.get("map_name") or (v.get("maps") or {}).get("map_name") for v in vs} - {None}
+            if d.get("bo_type") == 3 and len(names) == 7:
+                best = (m.get("start_date") or "", names, m["slug"])
+    if not best:
+        return None
+    import hltv
+    return {"keys": sorted(hltv.map_key(x) for x in best[1]), "from_match": best[2]}
+
+
+def predict_maps(b, team1_id, team2_id, before=None, pool_keys=None):
     """Probability of each map being Map 1 and Map 2, from both teams' veto habits."""
     p1, p2 = veto_profile(b, team1_id, before), veto_profile(b, team2_id, before)
     pool = p1["pool"] | p2["pool"]
-    if not before:                                       # live: only maps still in the active pool (hltv.active_map_pool)
-        try:
-            import hltv
+    pool_source = "veto history"
+    try:
+        import hltv
+        if pool_keys:                                    # this event's verified pool
+            pool = {m for m in pool if hltv.map_key(m) in set(pool_keys)}
+            pool_source = "event veto"
+        elif not before:                                 # live fallback: INFERRED from recent play (labelled)
             act = hltv.active_map_pool()
             if act:
                 pool = {m for m in pool if hltv.map_key(m) in act}
-        except Exception:
-            pass
+                pool_source = "inferred (maps played in the last 30 days)"
+    except Exception:
+        pass
     if not pool or (p1["n"] + p2["n"]) < 3:
         return None
     slot1, slot2 = {}, {}
@@ -774,22 +811,22 @@ def predict_maps(b, team1_id, team2_id, before=None):
                 slot2[m2] = slot2.get(m2, 0) + ps * pm * pm2
     top = lambda d: dict(sorted(((m, round(p, 3)) for m, p in d.items() if p >= 0.005),
                                 key=lambda x: -x[1]))
-    return {"map1": top(slot1), "map2": top(slot2), "vetoes_used": {"team1": p1["n"], "team2": p2["n"]}}
+    return {"map1": top(slot1), "map2": top(slot2), "vetoes_used": {"team1": p1["n"], "team2": p2["n"]}, "pool_source": pool_source}
 
 
-def _hltv_map_prediction(team, opponent):
+def _hltv_map_prediction(team, opponent, pool_keys=None):
     """Likely Map 1 / Map 2 from both teams' HLTV vetoes (hltv.predict_maps); None if unknown."""
     if not team or not opponent:
         return None
     try:
         import hltv
-        pr = hltv.predict_maps(team, opponent, date.today().isoformat())
+        pr = hltv.predict_maps(team, opponent, date.today().isoformat(), pool_keys=pool_keys)
     except Exception:
         return None
     if not pr:
         return None
     fix = lambda d: {("de_" + k): round(v, 3) for k, v in d.items() if v >= 0.005}
-    return {"map1": fix(pr["map1"]), "map2": fix(pr["map2"]), "source": "HLTV vetoes",
+    return {"map1": fix(pr["map1"]), "map2": fix(pr["map2"]), "source": "HLTV vetoes", "pool_source": pr.get("pool_source"),
             "vetoes_used": {"team1": pr["history"][0], "team2": pr["history"][1]}}
 
 
@@ -1655,11 +1692,16 @@ def run(args, res, b, ttl):
             elif not args.maps:
                 # veto not done yet: likely Maps 1-2 - HLTV's real veto history first (Map 1 right
                 # 30% / top-2 50% on 191 past BO3s vs 16% for BO3.gg's), then BO3.gg's
+                try:
+                    ep = event_pool(b, nxt)
+                except Exception:
+                    ep = None
+                pk = ep["keys"] if ep else None
                 pb["map_prediction"] = _hltv_map_prediction(pb.get("playing_for") or pb.get("current_team"),
-                                                            nxt.get("opponent"))
+                                                            nxt.get("opponent"), pk)
                 if not pb["map_prediction"] and nxt.get("team1_id") and nxt.get("team2_id"):
                     try:
-                        pb["map_prediction"] = predict_maps(b, nxt["team1_id"], nxt["team2_id"])
+                        pb["map_prediction"] = predict_maps(b, nxt["team1_id"], nxt["team2_id"], pool_keys=pk)
                     except Exception:
                         pb["map_prediction"] = None
     if args.cmd == "h2h" or (args.cmd == "full" and args.opponent):
