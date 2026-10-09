@@ -917,7 +917,7 @@ function boardCard(r) {     // a board row in the shape addToSlip / pickLine exp
           next_match: {opponent: r.opp_name || r.opponent, start: r.start, slug: r.match_slug}, from: "board"};
 }
 const agoTxt = t => { if (!t) return ""; const m = Math.round((Date.now() - Date.parse(t)) / 60000); return m < 1 ? "just now" : m < 60 ? m + " min ago" : Math.round(m / 60) + " h ago"; };
-const DSTAT = {ok: ["ok", "Data complete"], limited: ["mid", "Limited history"], verify: ["warn", "Needs verification"]};
+const DSTAT = {ok: ["ok", "Data complete"], limited: ["mid", "Limited history"], verify: ["warn", "Line not confirmed"]};
 function drawBoard() {
   saveBFilters();
   const sortBy = $("#bsort").value;
@@ -1203,10 +1203,10 @@ function chart(series, line, proj) {
 function dataStatus(g, v) {
   // quality only - the source (HLTV / BO3.gg / older model) is shown separately and is not a warning by itself
   const fl = (g.flags || []).join(" | ");
-  if (v.state === "SCOUT" || /No upcoming match/i.test(fl)) return {k: "warn", t: "Needs verification", why: "no upcoming match found"};
-  if (/Roster not confirmed/i.test(fl)) return {k: "warn", t: "Needs verification", why: "roster not confirmed"};
-  if (/Stand-in/i.test(fl)) return {k: "warn", t: "Needs verification", why: "stand-in"};
-  if (/Last official map \d+ days ago - extra caution/i.test(fl)) return {k: "warn", t: "Needs verification", why: "long gap since the last official map"};
+  if (v.state === "SCOUT" || /No upcoming match/i.test(fl)) return {k: "warn", t: "Line not confirmed", why: "no upcoming match found"};
+  if (/Roster not confirmed/i.test(fl)) return {k: "warn", t: "Line not confirmed", why: "roster not confirmed"};
+  if (/Stand-in/i.test(fl)) return {k: "warn", t: "Line not confirmed", why: "stand-in"};
+  if (/Last official map \d+ days ago - extra caution/i.test(fl)) return {k: "warn", t: "Line not confirmed", why: "long gap since the last official map"};
   if (/Small sample|Thin|thin history/i.test(fl)) return {k: "mid", t: "Limited history", why: "small recent sample"};
   return {k: "ok", t: "Data complete", why: ""};
 }
