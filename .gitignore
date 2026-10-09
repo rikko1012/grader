@@ -13,3 +13,6 @@ Start CS2 Grader.bat
 .env
 picks.db
 exports/
+
+comparison_snapshots.jsonl
+model_versions.json
