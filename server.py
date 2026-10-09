@@ -360,7 +360,8 @@ def _cap_same_result(rows):
             r["cap_n"] = len(lst)
 
 
-REQ_TIMES = collections.deque(maxlen=300)   # member grade requests, step by step (admin timings)
+REQ_TIMES = collections.deque(maxlen=300)
+SEARCH_TIMES = collections.deque(maxlen=3000)   # server-side seconds from receiving a search request to handling it   # member grade requests, step by step (admin timings)
 MEMBER_GRADES = [0]     # member grades running right now (the board steps aside while any are)
 _MG_LOCK = threading.Lock()
 _BOARD_BUSY = threading.Lock()   # while members are grading, only one board grade runs at a time
@@ -1264,6 +1265,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, {"member_grades_now": MEMBER_GRADES[0], "board_size": len(BOARD),
                                        "threads": [t.name for t in threading.enumerate()],
                                        "requests": list(REQ_TIMES)[-int(q.get("n", 60)):],
+                                       "search_wait": list(SEARCH_TIMES)[-int(q.get("s", 0) or 0):] if q.get("s") else [],
                                        "recent": list(cs2_scout.TIMINGS)[-int(q.get("n", 60)):]})
             if u.path == "/admin/probe" and self.authed(q.get("token")):
                 # private: raw shape of the backup data sources (keys never included)
@@ -1278,6 +1280,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(500, {"error": f"Something went wrong: {e}"})
 
     def search(self, q):
+        SEARCH_TIMES.append(round(time.time() - getattr(self, "_t0", time.time()), 3))   # server-side: request received -> answered
         if len(q) < 2:
             return self.send(200, {"results": []})
         ql = q.lower()
