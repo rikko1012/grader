@@ -1574,10 +1574,9 @@ function drawMatchCompare() {
     if (c.line == null) return proj + `<td class="num muted">–</td><td class="muted small">No available line</td>`;
     if (!shown(c)) return proj + `<td class="num">${c.line}</td><td class="muted small">${c.side ? (c.side === "More" ? "Over" : "Under") + " (filtered)" : "grading…"}</td>`;
     const capped = c.units_full > c.units ? ` <span class="muted small">(capped from ${c.units_full}U)</span>` : "";
-    const both = shown(e.kills) && shown(e.hs) && props.length === 2;
     return proj + `<td class="num">${c.line}</td><td><button type="button" class="mcpick" data-mc="${esc(e.nick)}|${c.line}|${pr}" title="${esc(mcWhy(c))}
 Tap to open ${esc(e.nick)}'s ${pr === "hs" ? "headshots" : "kills"} card">
-      <b>${c.grade === "LEAN" ? "Lean " : ""}${c.side === "More" ? "Over" : "Under"}</b> ${((c.p || 0) * 100).toFixed(1)}% · ${esc(c.grade || "–")} · ${+(+c.units || 0).toFixed(2)}U${capped}</button>${both ? ` <span class="dstat warn" style="font-size:11px" title="Kills and headshots for the same player move together - treat them as one exposure, not two independent picks">same player</span>` : ""}</td>`;
+      <b>${c.grade === "LEAN" ? "Lean " : ""}${c.side === "More" ? "Over" : "Under"}</b> ${((c.p || 0) * 100).toFixed(1)}% · ${esc(c.grade || "–")} · ${+(+c.units || 0).toFixed(2)}U${capped}</button></td>`;
   };
   const dcell = e => {
     const cs = props.map(pr => e[pr]).filter(Boolean), lined = cs.filter(c => c.line != null);
