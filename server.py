@@ -361,7 +361,7 @@ def _cap_same_result(rows):
 
 
 REQ_TIMES = collections.deque(maxlen=300)
-SEARCH_TIMES = collections.deque(maxlen=3000)   # server-side seconds from receiving a search request to handling it   # member grade requests, step by step (admin timings)
+SEARCH_TIMES = collections.deque(maxlen=3000)   # server-side seconds per search: request received -> response sent
 MEMBER_GRADES = [0]     # member grades running right now (the board steps aside while any are)
 _MG_LOCK = threading.Lock()
 _BOARD_BUSY = threading.Lock()   # while members are grading, only one board grade runs at a time
@@ -756,6 +756,8 @@ class Handler(BaseHTTPRequestHandler):
         data = body if isinstance(body, bytes) else json.dumps(body, default=str).encode()
         STATS["requests"] += 1
         STATS["ms_total"] += (time.time() - getattr(self, "_t0", time.time())) * 1000
+        if self.path.startswith("/api/search"):        # server-side seconds: request received -> response sent
+            SEARCH_TIMES.append(round(time.time() - getattr(self, "_t0", time.time()), 3))
         if code >= 500:
             STATS["errors_5xx"] += 1
         self.send_response(code)
@@ -1280,7 +1282,6 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(500, {"error": f"Something went wrong: {e}"})
 
     def search(self, q):
-        SEARCH_TIMES.append(round(time.time() - getattr(self, "_t0", time.time()), 3))   # server-side: request received -> answered
         if len(q) < 2:
             return self.send(200, {"results": []})
         ql = q.lower()
