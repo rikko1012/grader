@@ -14,6 +14,7 @@ once per pass. Cached on the volume for 2 days - within Liquipedia's API terms (
 well under 1 request / 2 s).
 """
 import json
+import os
 import re
 import threading
 import time
@@ -182,8 +183,53 @@ def refresh_hltv():
         finally:
             con.close()
         _HLTV["rows"] = rows
+        _snapshot(rows)
     except Exception:
         pass                                          # tables not there yet / database down: other sources
+
+
+SNAP = Path(DATA_DIR) / "role_snapshots.jsonl"
+_SNAP_DAY = {"day": None}
+
+
+def _snapshot(rows):
+    """COLLECTION ONLY (2026-10-09, never read by grading): once a UTC day, the role / AWP-share rows as HLTV has them
+    that day, plus weapon kills when the scraper has that table - so a factor test can use only what was known BEFORE
+    each match (player_awp itself is overwritten). Appended to DATA_DIR/role_snapshots.jsonl."""
+    day = time.strftime("%Y-%m-%d", time.gmtime())
+    if _SNAP_DAY["day"] == day:
+        return
+    try:
+        if SNAP.exists():
+            with open(SNAP, encoding="utf-8") as f:
+                for line in f:
+                    pass
+                if line.strip() and json.loads(line).get("day") == day:
+                    _SNAP_DAY["day"] = day
+                    return
+    except (OSError, ValueError, UnboundLocalError):
+        pass
+    weapons = None
+    try:
+        import hltv
+        con = hltv._connect()
+        try:
+            with con.cursor() as cur:
+                cur.execute("SET statement_timeout = 60000")
+                cur.execute("SELECT * FROM player_weapon_kills LIMIT 50000")
+                cols = [c[0] for c in cur.description]
+                weapons = {"cols": cols, "rows": [[str(v) if not isinstance(v, (int, float, type(None))) else v for v in r] for r in cur.fetchall()]}
+        finally:
+            con.close()
+    except Exception:
+        weapons = None                                # table not there: roles + AWP share only
+    rec = {"day": day, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "players": rows, "weapon_kills": weapons}
+    try:
+        with open(SNAP, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, default=str) + "\n"); f.flush(); os.fsync(f.fileno())
+        _SNAP_DAY["day"] = day
+    except OSError:
+        pass
 
 
 def hltv_status():

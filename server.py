@@ -1106,6 +1106,43 @@ class Handler(BaseHTTPRequestHandler):
                         return self.send(200, {"cols": cols, "rows": rows, "players": names, "teams": teams})
                 finally:
                     con.close()
+            if u.path == "/admin/hltv_sides" and self.authed(q.get("token")):
+                # COLLECTION ONLY (2026-10-09): per-side player rows (sideid 1/2 as stored by the scraper) and every
+                # per-side score row, for the CT/T factor test; date window <= 31 days per call; never used in grading
+                import hltv
+                from datetime import date as _d
+                d0, d1 = _d.fromisoformat(q.get("from")), _d.fromisoformat(q.get("to"))
+                if (d1 - d0).days > 31:
+                    return self.send(400, {"error": "max 31 days per call"})
+                con = hltv._connect()
+                try:
+                    with con.cursor() as cur:
+                        cur.execute("SET statement_timeout = 120000")
+                        cur.execute("""SELECT mo.matchid, mo.date, mm.number, ps.playerid, ps.teamid, ps.sideid, ps.k, ps.d, ps.adr, ps.kast, ps.rating
+                                       FROM match_maps mm JOIN match_overview mo USING (matchid)
+                                       JOIN player_stats ps ON ps.matchid = mm.matchid AND ps.mapid = mm.mapid AND ps.sideid IN (1, 2)
+                                       WHERE mo.date >= %s AND mo.date <= %s ORDER BY mo.date, mo.matchid, mm.number""", (d0, d1))
+                        prow = [[str(v) if i == 1 else v for i, v in enumerate(r)] for r in cur.fetchall()]
+                        cur.execute("""SELECT m.matchid, mm.number, m.teamid, m.sideid, m.score
+                                       FROM matches m JOIN match_maps mm ON mm.matchid = m.matchid AND mm.mapid = m.mapid
+                                       JOIN match_overview mo ON mo.matchid = m.matchid
+                                       WHERE mo.date >= %s AND mo.date <= %s""", (d0, d1))
+                        srow = cur.fetchall()
+                    return self.send(200, {"player_cols": ["match", "date", "map_no", "player", "team", "sideid", "k", "d", "adr", "kast", "rating"],
+                                           "player_rows": prow, "score_cols": ["match", "map_no", "team", "sideid", "score"], "score_rows": srow})
+                finally:
+                    con.close()
+            if u.path == "/admin/role_snapshots" and self.authed(q.get("token")):
+                import roles as _roles
+                try:
+                    with open(_roles.SNAP, encoding="utf-8") as f:
+                        lines = f.readlines()
+                except OSError:
+                    lines = []
+                days = [json.loads(x)["day"] for x in lines if x.strip()]
+                if q.get("day"):
+                    return self.send(200, next((json.loads(x) for x in lines if x.strip() and json.loads(x)["day"] == q["day"]), {}))
+                return self.send(200, {"days": days})
             if u.path == "/admin/hltv_ranks" and self.authed(q.get("token")):
                 import hltv
                 con = hltv._connect()

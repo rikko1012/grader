@@ -103,6 +103,18 @@ def _log_moves(rows):
     try:
         db = Path(os.environ.get("CS2_DATA_DIR") or Path(__file__).resolve().parent) / ".cache" / "ud_moves.db"
         db.parent.mkdir(parents=True, exist_ok=True)
+        if not _LAST_SEEN.get("_seeded") and db.exists():   # after a restart: the last logged state of each line
+            con = sqlite3.connect(db, timeout=10)
+            try:
+                for pl, prop, start, line, hi, lo in con.execute(
+                        "SELECT player, prop, start, line, higher, lower FROM moves WHERE rowid IN "
+                        "(SELECT max(rowid) FROM moves GROUP BY player, prop, start)"):
+                    _LAST_SEEN.setdefault((norm(pl), prop, start), (line, hi, lo))
+            except sqlite3.Error:
+                pass
+            finally:
+                con.close()
+        _LAST_SEEN["_seeded"] = True
         new = []
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         for r in rows:

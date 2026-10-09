@@ -1172,7 +1172,7 @@ function render(d) {
       : x.label.startsWith("win") ? `${tm} win 2–0` : x.label.startsWith("lose") ? `${tm} lose 0–2` : `Maps 1–2 split 1–1${x.label.includes("map 3") ? " → map 3 played" : ""}`;
     const pc = x => `<b class="${x >= .5 ? "up" : "dn"}">${Math.round(x * 100)}%</b>`;
     h += `<section class="card"><h2>Match simulation · 20,000 runs</h2>
-      <div class="small muted" style="margin:-4px 0 10px">Every run is drawn from this grade's own distribution, so the overall numbers agree with the grade (within 1%). The match-script rows are an estimate of how that total splits by result.</div>
+      <div class="small muted" style="margin:-4px 0 10px">Every run is drawn from this grade's own distribution, so the overall numbers agree with the grade (within 1%). The match-script rows are an illustration, not a tested forecast: they show one way this total could split by result.</div>
       <div class="kv"><span>Over ${g.line} ${unit}</span><span>${pc(sm.p_more)} of decided runs${sm.p_push ? ` · push ${Math.round(sm.p_push * 100)}%` : ""} · average ${sm.mean} · 8 in 10 land ${sm.p10}–${sm.p90}</span></div>
       <div class="scroll"><table class="simtab"><thead><tr><th>If…</th><th class="num">Chance</th><th class="num">Avg</th><th class="num">Over ${g.line}</th></tr></thead><tbody>
       ${sm.scenarios.map(x => `<tr><td>${lab(x)}</td><td class="num">${Math.round(x.chance * 100)}%</td><td class="num">${x.avg}</td><td class="num">${pc(x.p_over)}</td></tr>`).join("")}
