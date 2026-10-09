@@ -24,7 +24,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-VERSION = "cmp-1"
+VERSION = "cmp-2"   # cmp-2 (2026-10-09): no value claim, same-side internal comparison, name aliases, supports / concern
 JOIN_START_MIN = 45            # same match: scheduled starts within 45 min
 STALE_MIN = 15                 # a book line older than this (board refresh is 5 min) is flagged stale
 
@@ -90,8 +90,10 @@ def probs_at(dist, line, _cache=None):
     return None
 
 
-def match_offers(res, rows, now=None, board_at=None):
-    """Book lines for EXACTLY this market. Returns (offers, rejected) - rejected = [(line, reason)]."""
+def match_offers(res, rows, now=None, board_at=None, aliases=()):
+    """Book lines for EXACTLY this market. Returns (offers, rejected) - rejected = [(line, reason)].
+    aliases: other exact names for this player (the Underdog name the line was requested under) - team, maps,
+    opponent and match time are still verified for every row."""
     g = res.get("grade") or {}
     pb = res.get("player_block") or {}
     nm = res.get("next_match") or {}
@@ -102,7 +104,8 @@ def match_offers(res, rows, now=None, board_at=None):
     now = now or datetime.now(timezone.utc)
     offers, rejected, seen = [], [], set()
     for r in rows or []:
-        if _norm(r.get("player")) != _norm(nick) or r.get("prop") != prop:
+        names = {_norm(nick)} | {_norm(a) for a in aliases if a}
+        if _norm(r.get("player")) not in names or r.get("prop") != prop:
             continue
         line = r.get("line")
         if (r.get("scope") or "12") != scope:
@@ -141,13 +144,14 @@ def _internal(res):
             import grader
             gg = grader.grade_leg(dict(gi, perf=pf["g7"]))
             out.append({"label": "Our previous model (G7) - internal comparison, not independent",
-                        "projection": round(gg.get("lambda_final"), 2), "p_over": gg.get("p_more")})
+                        "projection": round(gg.get("lambda_final"), 2), "p_over": gg.get("p_more"),
+                        "p_under": round(1 - gg["p_more"], 4) if gg.get("p_more") is not None else None})
         except Exception:
             pass
     return out
 
 
-def panel(res, rows, board_at=None, now=None):
+def panel(res, rows, board_at=None, now=None, aliases=()):
     """The comparison panel for one graded prop (None when there is no grade)."""
     g = res.get("grade") or {}
     dist = g.get("dist")
@@ -157,7 +161,7 @@ def panel(res, rows, board_at=None, now=None):
     sd = g.get("sd") or 0
     sim = res.get("simulation") or {}
     lo, hi = (sim.get("p10"), sim.get("p90")) if sim.get("p10") is not None else (g["lambda_final"] - 1.2816 * sd, g["lambda_final"] + 1.2816 * sd)
-    offers, rejected = match_offers(res, rows, now, board_at)
+    offers, rejected = match_offers(res, rows, now, board_at, aliases)
     cache = {}
     for o in offers:
         po, pu, pp = probs_at(dist, o["line"], cache)
@@ -167,15 +171,17 @@ def panel(res, rows, board_at=None, now=None):
         side = "Over" if po >= pu else "Under"
         o["model_side"], o["model_chance"] = side, o["over_if_decided"] if side == "Over" else o["under_if_decided"]
         o["vs_projection"] = round(g["lambda_final"] - o["line"], 2)
-        # payout-adjusted: chance x the side's multiplier (same entry, standard = 1.0) - only when Underdog shows it
-        for s, m in (("over", o["mult_over"]), ("under", o["mult_under"])):
-            o[f"payout_adj_{s}"] = round(o[f"{s}_if_decided"] * m, 4) if m and o[f"{s}_if_decided"] is not None else None
+    # NO value ranking: what an entry actually pays is not verified. Only at EQUAL payouts is one threshold plainly
+    # better (lower for an Over, higher for an Under); lines with different payouts are listed, never ranked.
     best = {}
     for s in ("over", "under"):
-        cand = [o for o in offers if o.get(f"payout_adj_{s}") is not None and not o["stale"]]
-        if len({o["line"] for o in cand}) >= 2:          # "best" only means something with 2+ lines to choose from
-            b = max(cand, key=lambda o: o[f"payout_adj_{s}"])
-            best[s] = {"line": b["line"], "chance": b[f"{s}_if_decided"], "mult": b[f"mult_{s}"], "payout_adj": b[f"payout_adj_{s}"]}
+        cand = [o for o in offers if not o["stale"] and o[f"mult_{s}"] is not None]
+        for m in {o[f"mult_{s}"] for o in cand}:
+            same = [o for o in cand if o[f"mult_{s}"] == m]
+            if len({o["line"] for o in same}) >= 2:
+                b = min(same, key=lambda o: o["line"]) if s == "over" else max(same, key=lambda o: o["line"])
+                best.setdefault(s, []).append({"line": b["line"], "chance": b[f"{s}_if_decided"], "mult": m})
+    payouts_differ = {s: len({o[f"mult_{s}"] for o in offers if o[f"mult_{s}"] is not None}) > 1 for s in ("over", "under")}
     v = res.get("verdict") or {}
     side = "Over" if v.get("side") == "More" else "Under" if v.get("side") == "Less" else None
     against = []
@@ -186,8 +192,9 @@ def panel(res, rows, board_at=None, now=None):
             against.append(f"Last {rf['decided']} decided matches: {side} at this line {hit}/{rf['decided']}")
     internal = _internal(res)
     for it in internal:
-        if side and it.get("p_over") is not None and (it["p_over"] >= 0.5) != (side == "Over"):
-            against.append(f"Our previous model leans the other way ({it['projection']}, Over {it['p_over']:.0%}) - internal")
+        it["p_side"] = (it.get("p_over") if side == "Over" else it.get("p_under")) if side else None
+        if side and it["p_side"] is not None and it["p_side"] < 0.5:
+            against.append(f"Our previous model has the {side} at {it['p_side']:.0%} (internal)")
     if side and abs(g["lambda_final"] - g["line"]) < 1.0:
         against.append(f"Projection {g['lambda_final']:.1f} is within 1 of the line")
     for f in g.get("flags") or []:
@@ -197,8 +204,31 @@ def panel(res, rows, board_at=None, now=None):
             against.append("Provisional projection from BO3.gg history (HLTV has none)")
         elif "thin history" in f:
             against.append("Thin history")
+    supports = []
+    if side:
+        gap = g["lambda_final"] - g["line"]
+        if (gap > 0) == (side == "Over") and abs(gap) >= 1.0:
+            supports.append(f"Projection {g['lambda_final']:.1f} is {abs(gap):.1f} {'above' if gap > 0 else 'below'} the line")
+        if rf.get("decided"):
+            hit = rf.get("overs", 0) if side == "Over" else rf["decided"] - rf.get("overs", 0)
+            if hit / rf["decided"] >= 0.6:
+                supports.append(f"Last {rf['decided']} decided matches: {side} at this line {hit}/{rf['decided']}")
+        for it in internal:
+            if it["p_side"] is not None and it["p_side"] >= 0.55:
+                supports.append(f"Our previous model also has the {side} ({it['p_side']:.0%}, internal)")
+    one = next((o for o in offers if o["line"] == g.get("line") and not o["alt"]), None)
+    sens = None
+    if side and one is not None:                          # how much a one-kill / one-HS move in the line matters
+        step = 1.0
+        nxt = probs_at(dist, g["line"] + (step if side == "Over" else -step), cache)
+        if nxt:
+            d_ = nxt[0] + nxt[1]
+            sens = {"line": g["line"] + (step if side == "Over" else -step),
+                    "chance": round((nxt[0] if side == "Over" else nxt[1]) / d_, 4) if d_ else None}
     return {
         "version": VERSION, "at": now.isoformat(timespec="seconds"),
+        "supports": supports, "concern": against[0] if against else None, "one_worse": sens,
+        "payouts_differ": payouts_differ,
         "ours": {"projection": round(g["lambda_final"], 2), "sd": round(sd, 2), "range80": [round(lo, 1), round(hi, 1)],
                  "line": g.get("line"), "side": side, "chance": v.get("p")},
         "independent": {"count": len(INDEPENDENT), "projections": [], "consensus": None,
@@ -250,3 +280,31 @@ def snapshot(res, pnl, model_version, key=None):
             return True
         except OSError:
             return False
+
+
+def line_check(board, player, prop, scope, line=None, team=None, start=None, now=None):
+    """Before a pick goes on a slip: what Underdog shows NOW for this player / stat / maps (same team and match time
+    when given). same_line = the exact standard line is still up; changed = it isn't (moved, pulled or re-priced)."""
+    now = now or datetime.now(timezone.utc)
+    at = (board or {}).get("at") or 0
+    st = _ts(start)
+    out = []
+    for r in (board or {}).get("rows") or []:
+        if _norm(r.get("player")) != _norm(player) or r.get("prop") != prop or (r.get("scope") or "12") != (scope or "12"):
+            continue
+        if team and _team_same(r.get("team"), team) is False:
+            continue
+        rs = _ts(r.get("start"))
+        if st and rs and abs((rs - st).total_seconds()) > JOIN_START_MIN * 60:
+            continue
+        out.append({k: r.get(k) for k in ("id", "line", "higher", "lower", "alt", "start", "team", "opponent")})
+    try:
+        want = float(line) if line not in (None, "") else None
+    except ValueError:
+        want = None
+    same = [o for o in out if want is not None and o["line"] == want and not o["alt"]]
+    return {"at": at, "stale": bool(at and now.timestamp() - at > STALE_MIN * 60), "error": (board or {}).get("error"),
+            "rows": sorted(out, key=lambda o: (o["line"], o["alt"])), "same_line": bool(same),
+            "changed": want is not None and not same,
+            "note": None if same else ("Underdog has no line for this player / stat / maps right now" if not out
+                                       else f"Underdog now shows {', '.join(str(o['line']) + (' (alt)' if o['alt'] else '') for o in out)}")}

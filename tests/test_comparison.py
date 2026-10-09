@@ -72,10 +72,13 @@ def test_panel_lines_payouts_stale_duplicates_and_honest_labels():
     for o in p["offers"]:
         assert abs(o["p_over"] + o["p_under"] + o["p_push"] - 1) < 1e-6
     lo, mid = p["offers"][0], p["offers"][1]
-    assert lo["over_if_decided"] > mid["over_if_decided"]                           # lower line: better Over at equal payout
-    assert abs(lo["payout_adj_over"] - lo["over_if_decided"] * 0.8) < 1e-3          # payout counted, not just the gap
+    assert lo["over_if_decided"] > mid["over_if_decided"]                           # lower line: higher Over chance
+    assert not any("payout_adj" in k for o in p["offers"] for k in o)               # no value claim (entry payouts unverified)
+    assert p["best_line"] == {} and p["payouts_differ"] == {"over": True, "under": True}   # different payouts: listed, not ranked
+    eq = cmp.panel(res, [_row(), _row(id="b1", line=29.5)], board_at=NOW.timestamp() - 60, now=NOW)
+    assert eq["best_line"]["over"][0]["line"] == 29.5 and eq["best_line"]["under"][0]["line"] == 30.5   # equal payouts
     old = cmp.panel(res, rows, board_at=NOW.timestamp() - 40 * 60, now=NOW)       # our board copy is 40 min old
-    assert all(o["stale"] for o in old["offers"]) and old["stale_board"] and old["best_line"] == {}   # stale never "best"
+    assert all(o["stale"] for o in old["offers"]) and old["stale_board"] and old["best_line"] == {}
     assert p["independent"]["count"] == 0 and p["independent"]["consensus"] is None and "No independent projection" in p["independent"]["note"]
     assert any("internal" in it["label"] for it in p["internal"]) or p["internal"] == []
     assert any("Last 10" in a for a in p["evidence_against"]) == (res["verdict"]["side"] == "More")
@@ -101,3 +104,30 @@ def test_snapshots_append_only_on_change(tmp_path, monkeypatch):
     assert cmp.snapshot(res, cmp.panel(res, [_row(id="u9", line=31.5)], now=NOW), "TAG") is True      # line moved: new record
     lines = [json.loads(x) for x in (tmp_path / "s.jsonl").read_text(encoding="utf-8").splitlines()]
     assert [r["offers"][0]["line"] for r in lines] == [30.5, 31.5] and all(r["model_version"] == "TAG" for r in lines)
+
+
+def test_underdog_name_alias_and_same_side_internal():
+    res = _res()
+    rows = [_row(player="cairne X")]                                                 # Underdog writes the name differently
+    assert cmp.match_offers(res, rows, NOW)[0] == []
+    offers, _ = cmp.match_offers(res, rows, NOW, aliases=("cairne X",))             # the name the line was requested under
+    assert len(offers) == 1
+    p = cmp.panel(res, rows, board_at=NOW.timestamp(), now=NOW, aliases=("cairne X",))
+    for it in p["internal"]:
+        side = p["ours"]["side"]
+        assert it["p_side"] == (it["p_over"] if side == "Over" else it["p_under"])   # same side as the pick
+    assert p["concern"] == (p["evidence_against"][0] if p["evidence_against"] else None)
+    assert p["one_worse"] is not None and p["one_worse"]["chance"] < p["offers"][0]["model_chance"]   # 1 worse line = lower chance
+
+
+def test_line_check_before_slip():
+    board = {"at": NOW.timestamp() - 60, "rows": [_row(), _row(id="z", line=31.5, higher=1.2, lower=0.8, alt=True), _row(id="m1", scope="1", line=15.5)]}
+    ok = cmp.line_check(board, "cairne", "kills", "12", "30.5", "fnatic", START, now=NOW)
+    assert ok["same_line"] and not ok["changed"] and [r["line"] for r in ok["rows"]] == [30.5, 31.5]
+    moved = cmp.line_check(board, "cairne", "kills", "12", "29.5", "fnatic", START, now=NOW)
+    assert moved["changed"] and "30.5" in moved["note"]
+    gone = cmp.line_check(board, "cairne", "hs", "12", "14.5", None, None, now=NOW)
+    assert gone["changed"] and gone["rows"] == [] and "no line" in gone["note"]
+    other = cmp.line_check(board, "cairne", "kills", "12", "30.5", "fnatic Academy", START, now=NOW)
+    assert other["changed"] and other["rows"] == []                                 # academy team is not this player
+    assert cmp.line_check(dict(board, at=NOW.timestamp() - 3600), "cairne", "kills", "12", "30.5", now=NOW)["stale"]

@@ -411,7 +411,7 @@ def board_forever():
                     res["verdict"] = v
                     try:                                  # immutable comparison snapshot (changes only)
                         ub = underdog.board()
-                        comparison.snapshot(res, comparison.panel(res, ub["rows"], board_at=ub.get("at")), picklog.MODEL_VERSION)
+                        comparison.snapshot(res, comparison.panel(res, ub["rows"], board_at=ub.get("at"), aliases=(r["player"],)), picklog.MODEL_VERSION)
                     except Exception:
                         traceback.print_exc()
                     try:
@@ -804,7 +804,7 @@ class Handler(BaseHTTPRequestHandler):
                                            f"{whop_auth.PKCE_COOKIE}=; Max-Age=0; Path=/"])
             if u.path == "/auth/logout":
                 return self.redirect("/", [f"{whop_auth.COOKIE}=; Max-Age=0; Path=/"])
-            if u.path in ("/api/search", "/api/grade", "/api/board") and not self.allowed():
+            if u.path in ("/api/search", "/api/grade", "/api/board", "/api/line_check") and not self.allowed():
                 sess = self.member()
                 return self.send(401, {"error": "members_only", "signed_in": bool(sess),
                                        "upgrade": whop_auth.upgrade_url()})
@@ -812,6 +812,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.search(q.get("q", "").strip())
             if u.path.startswith("/api/") and u.path != "/api/board":
                 LAST_MEMBER[0] = time.time()
+            if u.path == "/api/line_check":
+                # before a pick goes on a slip: the line Underdog shows NOW for this player / stat / maps
+                return self.send(200, comparison.line_check(underdog.board(), q.get("player", ""), q.get("prop", "kills"),
+                                                            q.get("maps", "12"), q.get("line"), q.get("team"), q.get("start")))
             if u.path == "/api/grade":
                 with _MG_LOCK:
                     MEMBER_GRADES[0] += 1
@@ -1292,8 +1296,10 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 res["underdog"] = None
             try:                                         # comparison panel: context only, never changes the grade
+                tc = time.time()
                 ub = underdog.board()
-                res["comparison"] = comparison.panel(res, ub["rows"], board_at=ub.get("at"))
+                res["comparison"] = comparison.panel(res, ub["rows"], board_at=ub.get("at"), aliases=(name,))
+                tm["comparison"] = round(time.time() - tc, 3)
             except Exception:
                 res["comparison"] = {"error": "comparison unavailable"}
             tm["underdog"] = round(time.time() - t0, 2)

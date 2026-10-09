@@ -276,6 +276,9 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
   .mini input{min-width:0;padding:7px 8px;flex:1 1 90px} .mini input.l{width:56px;flex:0 0 56px} .mini .seg,.mini .msel{display:none}
   .mini .go{padding:8px 11px} header.mini-on h1,header.mini-on .grow{display:none} .mini.on{min-width:0}
 }
+.glance{padding:12px 16px}.glrow{display:grid;grid-template-columns:92px 1fr;gap:10px;padding:4px 0;font-size:14px;align-items:baseline}
+.glrow .k{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}.glrow .k.up{color:var(--up,#3fb950)}.glrow .k.dn{color:var(--dn,#f85149)}
+.dstat{font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid currentColor}.dstat.ok{color:#3fb950}.dstat.mid{color:#d29922}.dstat.warn{color:#f85149}
 </style>
 </head>
 <body class="locked">
@@ -697,18 +700,41 @@ function hitDist(ps) {           // P(exactly k legs hit), legs treated as indep
 }
 const retLine = (lab, avg) => `<div class="kv"><span>${lab}</span><span style="color:${avg >= 1 ? "var(--good)" : "var(--bad)"}"><b>${avg.toFixed(2)}U</b> back per 1U (${avg >= 1 ? "+" : ""}${(avg - 1).toFixed(2)}U)</span></div>`;
 const legKey = l => String(l.p).toLowerCase();   // PrizePicks: one prop per player in an entry
-function addToSlip(d) {
+// the line Underdog shows NOW for a leg (null when the check itself fails - never blocks)
+async function lineCheck(x) {
+  try {
+    const qs = new URLSearchParams({player: x.p, prop: x.t, maps: x.sc || "12", line: x.l, team: x.tm || "", start: x.st || ""});
+    const r = await fetch("/api/line_check?" + qs); return r.ok ? await r.json() : null;
+  } catch { return null; }
+}
+async function addToSlip(d) {
   const g = d.grade || {}, v = d.verdict || {}, nick = d.player_block?.player?.nick;
   if (!nick || !v.side) return;
-  let s = store.get("cs2s_slip", []);
   const leg = {p: nick, l: g.line, t: g.prop, lt: g.line_type, sc: g.scope || "12", s: v.side, g: v.grade, pc: v.p, u: v.units,
                m: d.next_match?.slug || [d.player_block?.current_team || "", d.next_match?.opponent || ""].map(x => x.toLowerCase().replace(/[^a-z0-9]/g, "")).sort().join("|"),
-               vs: d.next_match?.opponent || "", tm: d.player_block?.current_team || ""};
+               vs: d.next_match?.opponent || "", tm: d.player_block?.playing_for || d.player_block?.current_team || "", st: d.next_match?.start || ""};
+  // re-check the live line before it goes on the slip: a changed / pulled Underdog line needs the member's OK
+  if ((g.line_type || "standard") === "standard") {
+    const c = await lineCheck(leg);
+    leg.ck = c ? (c.same_line ? "ok" : c.rows?.length ? "changed" : "not on Underdog") : "unchecked";
+    leg.ckat = Date.now();
+    if (c && c.changed && c.rows?.length &&
+        !confirm(`${nick} ${v.side === "More" ? "Over" : "Under"} ${g.line}: ${c.note}. This grade was made for ${g.line}. Add it anyway?`)) return;
+  }
+  let s = store.get("cs2s_slip", []);
   if (s.some(x => legKey(x) === legKey(leg))) { toast(`${nick} is already on the slip – PrizePicks allows one prop per player`); return openSlip(); }
   if (s.length >= 6) { toast("A slip holds 6 picks max"); return openSlip(); }
   s.push(leg); store.set("cs2s_slip", s); toast(`Added – ${s.length} on the slip`); drawSlip();
 }
-function openSlip() { $("#slip").hidden = false; drawSlip(); }
+function openSlip() { $("#slip").hidden = false; drawSlip(); recheckSlip(); }
+// opening the slip re-checks every leg's line (marks changes since it was picked; never removes anything)
+async function recheckSlip() {
+  const s = store.get("cs2s_slip", []); if (!s.length) return;
+  const res = await Promise.all(s.map(x => (x.lt || "standard") === "standard" ? lineCheck(x) : null));
+  const cur = store.get("cs2s_slip", []);
+  res.forEach((c, i) => { if (c && cur[i] && legKey(cur[i]) === legKey(s[i])) { cur[i].ck = c.same_line ? "ok" : c.rows?.length ? "changed" : "not on Underdog"; cur[i].cknote = c.same_line ? "" : c.note; cur[i].ckat = Date.now(); } });
+  store.set("cs2s_slip", cur); drawSlip();
+}
 const _drawSlip = () => { if (!$("#board").hidden && typeof boardRows !== "undefined" && boardRows.length) drawBoard(); };
 function drawSlip() {
   const s = store.get("cs2s_slip", []);
@@ -721,7 +747,7 @@ function drawSlip() {
   const same = Object.values(teams).some(c => c > 1);
   const leans = s.filter(x => x.g === "LEAN").length;
   $("#slip").innerHTML = `<h4>Bet slip · ${n}-pick</h4>` + s.map((x, i) =>
-    `<div class="leg"><span><b>${esc(x.p)}</b> ${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : esc(x.s)} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${ltTag(x.lt)}
+    `<div class="leg"><span><b>${esc(x.p)}</b> ${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : esc(x.s)} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${ltTag(x.lt)}${x.ck === "changed" ? ` <span class="pill warn" title="${esc(x.cknote || "")}">line changed</span>` : x.ck === "not on Underdog" ? ` <span class="muted small">not on Underdog</span>` : ""}
       <span class="muted small">· ${x.g === "LEAN" ? "Lean" : esc(x.g)} · ${((x.pc || 0) * 100).toFixed(1)}%${x.vs ? " · vs " + esc(x.vs) : ""}</span></span>
       <button type="button" class="x" data-rmleg="${i}" title="Remove">✕</button></div>`).join("")
     + (n < 2 ? `<div class="small muted" style="margin-top:10px">Add at least 2 picks (up to 6).</div>`
@@ -782,7 +808,7 @@ function boardCard(r) {     // a board row in the shape addToSlip / pickLine exp
   return {grade: {line: r.line, prop: r.prop, line_type: "standard", scope: r.scope || "12"},
           verdict: {side: r.side, grade: r.grade, p: r.p, units: r.units},
           player_block: {player: {nick: r.nick || r.player}, current_team: r.team_name || r.team},
-          next_match: {opponent: r.opp_name || r.opponent}};
+          next_match: {opponent: r.opp_name || r.opponent, start: r.start, slug: r.match_slug}};
 }
 function drawBoard() {
   const sortBy = $("#bsort").value;
@@ -813,7 +839,7 @@ function drawBoard() {
     if (!q.length) return `<div class="small muted" style="margin:-2px 0 8px">No qualifying bets in this match${bside !== "both" ? ` (${bside === "More" ? "Overs" : "Unders"} only)` : ""}.</div>`;
     const it = x => `${esc(x.nick || x.player)} ${sideWord({grade: x.grade, side: x.side})} ${x.line} ${propWord(x.prop)}${mapsWord(x.scope)} <b>${(x.p * 100).toFixed(0)}%</b>`;
     return `<div class="small" style="margin:-2px 0 8px;line-height:1.5"><b>Highest chance here:</b> ${q.slice(0, 3).map(it).join(" · ")}
-      <div class="muted">No outside projections yet · value not ranked (no entry payouts)${q.length > 1 ? " · same match: alternatives, not a spread-out slip" : ""}</div></div>`; };
+      <div class="muted">No outside projections yet · value not ranked (no entry payouts)${q.length > 1 ? " · these picks share match conditions and may win or lose together" : ""}</div></div>`; };
   const leanWhy = r => { const t = r.reason || ""; if (r.grade !== "LEAN") return "";
     if (/FORM FIGHT/.test(t)) return "Lean: his last 10 disagree with the projection";
     const m = t.match(/0 units: (.+)$/); if (m) return "Lean: " + m[1].split(";")[0].slice(0, 80);
@@ -1066,6 +1092,31 @@ function chart(series, line, proj) {
   return o + `</svg>`;
 }
 
+// data status: kept separate from the model's confidence - a high chance never hides a data problem
+function dataStatus(g, v) {
+  const fl = (g.flags || []).join(" | ");
+  if (v.state === "SCOUT" || /older model|Provisional|Roster not confirmed|Stand-in|No upcoming match/i.test(fl))
+    return {k: "warn", t: "Needs verification", why: /older model/i.test(fl) ? "no HLTV data – older model" : /Provisional/i.test(fl) ? "BO3.gg history only"
+      : /Roster not confirmed/i.test(fl) ? "roster not confirmed" : /Stand-in/i.test(fl) ? "stand-in" : "no match found"};
+  if (/Small sample|Thin|thin history/i.test(fl) || (g.flags || []).some(f => /last official map \d+ days/i.test(f)))
+    return {k: "mid", t: "Limited history", why: "small recent sample"};
+  return {k: "ok", t: "Data complete", why: ""};
+}
+function glance(d, g, v) {
+  if (!v.side || !("p_more" in g)) return "";
+  const cp = d.comparison && !d.comparison.error ? d.comparison : null, ds = dataStatus(g, v);
+  const side = v.side === "More" ? "Over" : "Under", unit = g.prop === "hs" ? "HS" : "kills";
+  const ago = s => { if (!s) return ""; const m = Math.round((Date.now() - (typeof s === "number" ? s * 1000 : Date.parse(s))) / 60000);
+    return m < 1 ? "just now" : m < 60 ? m + " min ago" : Math.round(m / 60) + " h ago"; };
+  return `<section class="card glance">
+    <div class="glrow"><span class="k">Projection</span><span><b>${num(g.lambda_final, 1)}</b> ${unit}${cp ? ` · 8 in 10 land ${cp.ours.range80[0]}–${cp.ours.range80[1]}` : ""}</span></div>
+    <div class="glrow"><span class="k">Line</span><span>${side} ${g.line}${mapsWord(g.scope) || " (Maps 1–2)"} · <b>${pct(v.p)}</b> · ${v.units || 0}U</span></div>
+    ${cp?.supports?.length ? `<div class="glrow"><span class="k up">Supports</span><span>${esc(cp.supports[0])}</span></div>` : ""}
+    ${cp?.concern ? `<div class="glrow"><span class="k dn">Concern</span><span>${esc(cp.concern)}</span></div>` : ""}
+    <div class="glrow"><span class="k">Data</span><span><span class="dstat ${ds.k}">${ds.t}</span>${ds.why ? ` <span class="muted small">${esc(ds.why)}</span>` : ""}${cp?.board_at ? ` <span class="muted small">· line checked ${ago(cp.board_at)}</span>` : ""}</span></div>
+  </section>`;
+}
+
 function render(d) {
   lastCard = d;
   const how = document.querySelector("details.how"); if (how) how.open = false;
@@ -1114,6 +1165,7 @@ function render(d) {
       ${g.scope === "123" && g.p_map3 != null ? `<span class="pill">Map 3 is only played if Maps 1–2 split: ${pct(g.p_map3, 0)} chance</span>` : ""}
       ${udPill(d)}
     </div></div>`;
+  h += glance(d, g, v);
   if ("p_more" in g) {
     h += `<div class="sides">
       <div class="side ${v.side === "More" ? "pick" : ""}"><div class="k">More · ${g.grade === "C" ? "lean" : "grade " + esc(g.grade)} · ${g.units || 0}U${zTag(g.grade, g.units)}</div><div class="v">${pct(g.p_more)}</div><div class="bar"><i style="width:${g.p_more*100}%"></i></div></div>
@@ -1175,27 +1227,25 @@ function render(d) {
   // ---- recent form: last 10 matches, Maps 1-2
   // ---- lines & comparisons (comparison.py): context only - never changes the grade
   const cp = d.comparison;
-  if (cp && !cp.error && cp.ours) {
-    const unit = g.prop === "hs" ? "HS" : "kills", pc1 = x => x == null ? "–" : (x * 100).toFixed(0) + "%";
-    const mult = x => x == null ? "–" : (+x === 1 ? "std" : x + "x");
-    h += `<section class="card"><h2>Lines &amp; comparisons</h2>
-      <div class="kv"><span>Our projection</span><span><b>${cp.ours.projection}</b> ${unit} · 8 in 10 land ${cp.ours.range80[0]}–${cp.ours.range80[1]}</span></div>
-      <div class="small muted" style="margin:2px 0 8px">Book lines are betting thresholds, not projections. Each row is our own chance at that line.</div>`;
+  if (cp && !cp.error && cp.ours && v.side) {
+    const side = v.side === "More" ? "over" : "under", Side = side === "over" ? "Over" : "Under", pc1 = x => x == null ? "–" : (x * 100).toFixed(0) + "%";
+    const pay = o => (o[`mult_${side}`] ?? 1) === 1 ? "" : ` <span class="pill">pays ${o[`mult_${side}`]}x</span>`;
+    h += `<section class="card"><h2>Lines</h2>`;
     if (cp.offers.length) {
-      h += `<div class="scroll"><table><thead><tr><th>Underdog line</th><th class="num">Payout O / U</th><th class="num">Over</th><th class="num">Under</th><th class="num">Push</th></tr></thead><tbody>
-        ${cp.offers.map(o => `<tr${o.line === g.line ? ' style="font-weight:600"' : ""}><td>${o.line}${o.alt ? ' <span class="pill">alt</span>' : ""}${o.stale ? ' <span class="pill warn" title="Not refreshed in 15+ minutes">stale</span>' : ""}</td>
-          <td class="num">${mult(o.mult_over)} / ${mult(o.mult_under)}</td><td class="num">${pc1(o.over_if_decided)}</td><td class="num">${pc1(o.under_if_decided)}</td><td class="num">${o.p_push ? pc1(o.p_push) : "–"}</td></tr>`).join("")}
-        </tbody></table></div>
-        ${Math.abs(cp.grade_vs_table || 0) > 0.015 ? `<div class="small muted" style="margin-top:4px">The grade shows ${pct(cp.ours.chance)} at ${g.line}: it adds safety margins / a cap on top of these chances.</div>` : ""}
-        <div class="small muted" style="margin-top:4px">Over / Under = chance if there's no push. With equal payouts a lower line is better for an Over and a higher line for an Under; with different payouts the payout counts too.</div>`;
-      const bl = cp.best_line || {};
-      if (bl.over || bl.under) h += `<div class="kv"><span>Best line (chance × payout)</span><span>${bl.over ? `Over ${bl.over.line} (${pc1(bl.over.chance)}${bl.over.mult !== 1 ? ` at ${bl.over.mult}x` : ""})` : ""}${bl.over && bl.under ? " · " : ""}${bl.under ? `Under ${bl.under.line} (${pc1(bl.under.chance)}${bl.under.mult !== 1 ? ` at ${bl.under.mult}x` : ""})` : ""}</span></div>`;
-    } else h += `<div class="small muted">No matching Underdog line for this exact market right now.</div>`;
-    h += `<div class="kv"><span>Independent projections</span><span class="muted">${cp.independent.count ? cp.independent.count + " sources" : "None available yet"}</span></div>`;
-    for (const it of cp.internal || []) h += `<div class="kv"><span>${esc(it.label.split(" - ")[0])} <span class="muted small">(internal)</span></span><span>${it.projection} · Over ${pc1(it.p_over)}</span></div>`;
-    if ((cp.evidence_against || []).length) h += `<div style="margin-top:6px"><div class="small"><b>Against this side</b></div>${cp.evidence_against.map(x => `<div class="small muted">• ${esc(x)}</div>`).join("")}</div>`;
-    if ((cp.rejected || []).length) h += `<div class="small muted" style="margin-top:6px">${cp.rejected.length} other line${cp.rejected.length > 1 ? "s" : ""} not compared (different maps, team or match).</div>`;
-    h += `</section>`;
+      h += cp.offers.map(o => `<div class="kv"><span>Underdog ${o.line}${o.alt ? ' <span class="pill">alt</span>' : ""}${o.stale ? ' <span class="pill warn">not refreshed</span>' : ""}</span>
+        <span>${Side} <b>${pc1(o[`${side}_if_decided`])}</b>${pay(o)}${o.p_push ? ` <span class="muted small">· push ${pc1(o.p_push)}</span>` : ""}</span></div>`).join("");
+      const bl = (cp.best_line || {})[side];
+      if (bl && bl.length) h += `<div class="small muted">Same payout: ${bl.map(x => x.line).join(", ")} is the easier ${Side.toLowerCase()} line.</div>`;
+      if (cp.payouts_differ?.[side]) h += `<div class="small muted">Payouts differ between these lines – compare what each pays in your app.</div>`;
+    } else h += `<div class="small muted">No Underdog line for this exact market right now.</div>`;
+    if (cp.one_worse?.chance != null) h += `<div class="kv"><span>If the line were ${cp.one_worse.line}</span><span>${Side} ${pc1(cp.one_worse.chance)}</span></div>`;
+    if (Math.abs(cp.grade_vs_table || 0) > 0.015) h += `<div class="small muted">The grade shows ${pct(cp.ours.chance)}: it adds safety margins / a cap on top of these chances.</div>`;
+    const it = (cp.internal || [])[0];
+    h += `<details class="small" style="margin-top:8px"><summary class="muted">More detail</summary>
+      ${it ? `<div class="kv"><span>Previous model <span class="muted">(ours, internal)</span></span><span>${it.projection} · ${Side} ${pc1(it.p_side)}</span></div>` : ""}
+      ${(cp.evidence_against || []).slice(1).map(x => `<div class="muted">• ${esc(x)}</div>`).join("")}
+      <div class="muted" style="margin-top:4px">Sources: Underdog lines connected · no independent projection source connected yet${(cp.rejected || []).length ? ` · ${cp.rejected.length} line(s) not compared (different maps, team or match)` : ""}</div>
+    </details></section>`;
   }
 
   // ---- match simulation: built on this grade (same projection and spread) - how the prop plays out
