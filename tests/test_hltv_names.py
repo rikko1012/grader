@@ -63,3 +63,13 @@ def test_event_pool_uses_this_events_latest_full_veto():
     out = cs2_scout.event_pool(B(), {"event_slug": "ev", "team1_id": 1, "team2_id": 2})
     assert out["from_match"] == "b" and "cache" in out["keys"] and "overpass" not in out["keys"]
     assert cs2_scout.event_pool(B(), {"event_slug": "none-yet", "team1_id": 1}) is None
+
+
+def test_search_order_and_typos(monkeypatch):
+    import time
+    rows = [{"nick": n, "team": "T", "recent": 0, "maps": 1, "key": hltv._norm(n), "loose": hltv._loose(hltv._norm(n))}
+            for n in ("ZywOo", "zylayw", "s1mple", "m0NESY", "xyzywo")]
+    monkeypatch.setattr(hltv, "dsn", lambda: "x"); monkeypatch.setattr(hltv, "_INDEX", {"at": time.time(), "rows": rows, "busy": False})
+    assert [r["nick"] for r in hltv.search_players("zy", 8)] == ["ZywOo", "zylayw", "xyzywo"]   # prefix matches first, then contains
+    assert [r["nick"] for r in hltv.search_players("simple", 8)] == ["s1mple"]                  # typo: 'simple' = 's1mple'
+    assert [r["nick"] for r in hltv.search_players("monesy", 8)] == ["m0NESY"]

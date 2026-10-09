@@ -511,7 +511,7 @@ def _load_index():
                         b.update(team=team, last=d, nick=nick)
         finally:
             con.close()
-        rows = [dict(v, key=k) for k, v in best.items() if k]
+        rows = [dict(v, key=k, loose=_loose(k)) for k, v in best.items() if k]   # loose key once per load, not per search
         rows.sort(key=lambda r: (-r["recent"], -r["maps"]))
         if rows:
             _INDEX.update(at=time.time(), rows=rows)
@@ -558,9 +558,13 @@ def search_players(q, limit=8):
     if not k:
         return []
     lk = _loose(q)
-    starts = [r for r in rows if r["key"].startswith(k) or _loose(r["key"]).startswith(lk)]
-    seen = {id(r) for r in starts}
-    has = [r for r in rows if id(r) not in seen and (k in r["key"] or lk in _loose(r["key"]))]
+    starts, has = [], []
+    for r in rows:                                        # one pass; loose keys precomputed at index load
+        key, lo = r["key"], r.get("loose") or _loose(r["key"])
+        if key.startswith(k) or lo.startswith(lk):
+            starts.append(r)
+        elif k in key or lk in lo:
+            has.append(r)
     return [{"slug": None, "nick": r["nick"], "name": r["team"], "country": "", "image": None}
             for r in (starts + has)[:limit]]
 
