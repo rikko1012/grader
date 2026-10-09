@@ -523,10 +523,8 @@ async function loadResults() {
       ${box("Predicted", pc(d.predicted), "average printed chance")}${box("Actual", pc(d.actual), `${d.hits}/${d.decided} hit`)}</div>
     ${(d.by_grade || []).length ? `<div class="scroll"><table class="rtab"><thead><tr><th>Grade</th><th class="num">Decided</th><th class="num">Predicted</th><th class="num">Actual</th></tr></thead><tbody>
       ${d.by_grade.map(g => `<tr><td>${esc(g.grade)}</td><td class="num">${g.n}</td><td class="num">${pc(g.predicted)}</td><td class="num">${pc(g.actual)} <span class="muted small">(${g.hits}/${g.n})</span></td></tr>`).join("")}</tbody></table></div>` : ""}
-    <div class="kv"><span>Entry returns</span><span class="muted">${esc(R.payout_note || "")}</span></div>
-    ${R.hypothetical_units != null ? `<div class="kv"><span>Hypothetical units <span class="muted small">(not an entry result)</span></span><span>${R.hypothetical_bets ? `${R.hypothetical_units > 0 ? "+" : ""}${R.hypothetical_units}U on ${R.hypothetical_staked}U (${R.hypothetical_bets} bets)` : "–"}</span></div>` : ""}
     ${d.cohort === "member" ? `<div class="kv"><span>Line types</span><span class="muted">${Object.entries(d.line_types || {}).map(([k, n]) => `${esc(k)} ${n}`).join(" · ")}</span></div>` : ""}
-    <div class="small muted">${esc(R.hypothetical_note || "")} Results settle from HLTV where it has the match (${(d.sources || {}).hltv || 0} decided), otherwise BO3.gg (${(d.sources || {}).bo3 || 0}).</div>`;
+`;
 }
 for (const id of ["#rcohort", "#rprop", "#rscope"]) $(id).onclick = e => { const b = e.target.closest("button"); if (!b) return;
   [...$(id).children].forEach(x => x.classList.toggle("on", x === b)); rf_[id === "#rcohort" ? "cohort" : id === "#rprop" ? "prop" : "maps"] = b.dataset.v; loadResults(); };
