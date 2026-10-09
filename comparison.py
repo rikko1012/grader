@@ -24,7 +24,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-VERSION = "cmp-2"   # cmp-2 (2026-10-09): no value claim, same-side internal comparison, name aliases, supports / concern
+VERSION = "cmp-3"   # cmp-3: stable Underdog->player ids (no requested-name alias), ambiguity, grounded evidence (basis)
 JOIN_START_MIN = 45            # same match: scheduled starts within 45 min
 STALE_MIN = 15                 # a book line older than this (board refresh is 5 min) is flagged stale
 
@@ -90,23 +90,36 @@ def probs_at(dist, line, _cache=None):
     return None
 
 
-def match_offers(res, rows, now=None, board_at=None, aliases=()):
+def match_offers(res, rows, now=None, board_at=None, id_map=None):
     """Book lines for EXACTLY this market. Returns (offers, rejected) - rejected = [(line, reason)].
-    aliases: other exact names for this player (the Underdog name the line was requested under) - team, maps,
-    opponent and match time are still verified for every row."""
+    Identity: Underdog's player id -> our BO3.gg player id (id_map, learnt from board grades) when known; otherwise
+    the exact normalised name. Team, opponent, maps and match time are verified for EVERY row either way. Two
+    different Underdog players fitting the same market = ambiguous -> nothing matched."""
     g = res.get("grade") or {}
     pb = res.get("player_block") or {}
     nm = res.get("next_match") or {}
     nick = (pb.get("player") or {}).get("nick")
+    our_id = (pb.get("player") or {}).get("id")
+    id_map = id_map or {}
     team = pb.get("playing_for") or pb.get("current_team")
     start = _ts(nm.get("start"))
     prop, scope = g.get("prop"), g.get("scope") or "12"
     now = now or datetime.now(timezone.utc)
     offers, rejected, seen = [], [], set()
     for r in rows or []:
-        names = {_norm(nick)} | {_norm(a) for a in aliases if a}
-        if _norm(r.get("player")) not in names or r.get("prop") != prop:
+        if r.get("prop") != prop:
             continue
+        mapped = id_map.get(r.get("ud_player_id")) if r.get("ud_player_id") is not None else None
+        if mapped is not None:
+            if our_id is None or mapped != our_id:
+                if _norm(r.get("player")) == _norm(nick):
+                    rejected.append((r.get("line"), "different player (Underdog id belongs to another player)"))
+                continue
+            ident = "id"
+        else:
+            if _norm(r.get("player")) != _norm(nick):
+                continue
+            ident = "name"
         line = r.get("line")
         if (r.get("scope") or "12") != scope:
             rejected.append((line, f"different maps ({r.get('scope')} vs {scope})")); continue
@@ -124,12 +137,16 @@ def match_offers(res, rows, now=None, board_at=None, aliases=()):
         if dup in seen:
             continue                                   # the same offer listed twice counts once
         seen.add(dup)
-        offers.append({"source": "underdog", "id": r.get("id"), "line": line, "alt": bool(r.get("alt")),
+        offers.append({"source": "underdog", "id": r.get("id"), "line": line, "alt": bool(r.get("alt")), "identity": ident,
+                       "ud_player_id": r.get("ud_player_id"),
                        "mult_over": r.get("higher"), "mult_under": r.get("lower"),
                        "price_over": r.get("price_higher"), "price_under": r.get("price_lower"),
                        "updated_at": r.get("updated_at"), "team_verified": same is True,   # updated_at = line last changed
                        # stale = OUR copy of the board is old (an unchanged line is still current)
                        "stale": bool(board_at and now.timestamp() - board_at > STALE_MIN * 60)})
+    if len({o["ud_player_id"] for o in offers if o["ud_player_id"] is not None}) > 1:
+        rejected += [(o["line"], "ambiguous: two different Underdog players fit this market") for o in offers]
+        offers = []
     offers.sort(key=lambda o: (o["line"], o["alt"]))
     return offers, rejected
 
@@ -151,7 +168,7 @@ def _internal(res):
     return out
 
 
-def panel(res, rows, board_at=None, now=None, aliases=()):
+def panel(res, rows, board_at=None, now=None, id_map=None):
     """The comparison panel for one graded prop (None when there is no grade)."""
     g = res.get("grade") or {}
     dist = g.get("dist")
@@ -161,7 +178,7 @@ def panel(res, rows, board_at=None, now=None, aliases=()):
     sd = g.get("sd") or 0
     sim = res.get("simulation") or {}
     lo, hi = (sim.get("p10"), sim.get("p90")) if sim.get("p10") is not None else (g["lambda_final"] - 1.2816 * sd, g["lambda_final"] + 1.2816 * sd)
-    offers, rejected = match_offers(res, rows, now, board_at, aliases)
+    offers, rejected = match_offers(res, rows, now, board_at, id_map)
     cache = {}
     for o in offers:
         po, pu, pp = probs_at(dist, o["line"], cache)
@@ -184,50 +201,55 @@ def panel(res, rows, board_at=None, now=None, aliases=()):
     payouts_differ = {s: len({o[f"mult_{s}"] for o in offers if o[f"mult_{s}"] is not None}) > 1 for s in ("over", "under")}
     v = res.get("verdict") or {}
     side = "Over" if v.get("side") == "More" else "Under" if v.get("side") == "Less" else None
-    against = []
+    # evidence, each with its basis: "model" = an input / output of the calculation that made the chance;
+    # "stake" = used only by a stake rule; "context" = shown for context, NOT in the projection; "data" = data status
+    perf_on = str(g.get("projection_source") or "").startswith("perf")
     rf = (res.get("player_block") or {}).get("recent_form") or {}
-    if side and rf.get("decided"):
-        hit = rf.get("overs", 0) if side == "Over" else rf["decided"] - rf.get("overs", 0)
-        if hit / rf["decided"] < 0.5:
-            against.append(f"Last {rf['decided']} decided matches: {side} at this line {hit}/{rf['decided']}")
-    internal = _internal(res)
-    for it in internal:
-        it["p_side"] = (it.get("p_over") if side == "Over" else it.get("p_under")) if side else None
-        if side and it["p_side"] is not None and it["p_side"] < 0.5:
-            against.append(f"Our previous model has the {side} at {it['p_side']:.0%} (internal)")
-    if side and abs(g["lambda_final"] - g["line"]) < 1.0:
-        against.append(f"Projection {g['lambda_final']:.1f} is within 1 of the line")
-    for f in g.get("flags") or []:
-        if f.startswith("OLD PROJECTION"):
-            against.append("Projection from the older model (no HLTV data for this player or matchup)")
-        elif f.startswith("PROVISIONAL"):
-            against.append("Provisional projection from BO3.gg history (HLTV has none)")
-        elif "thin history" in f:
-            against.append("Thin history")
-    supports = []
+    supports, against = [], []
+    def add(lst, text, basis):
+        lst.append({"text": text, "basis": basis})
     if side:
         gap = g["lambda_final"] - g["line"]
         if (gap > 0) == (side == "Over") and abs(gap) >= 1.0:
-            supports.append(f"Projection {g['lambda_final']:.1f} is {abs(gap):.1f} {'above' if gap > 0 else 'below'} the line")
+            add(supports, f"Projection {g['lambda_final']:.1f} is {abs(gap):.1f} {'above' if gap > 0 else 'below'} the line", "model")
+        if abs(gap) < 1.0:
+            add(against, f"Projection {g['lambda_final']:.1f} is within 1 of the line", "model")
         if rf.get("decided"):
             hit = rf.get("overs", 0) if side == "Over" else rf["decided"] - rf.get("overs", 0)
+            # perf model: last-10 is not in the projection (context, or a stake rule when a FORM / TAPE FIGHT fired);
+            # the older pipeline blends recent form into its projection (model)
+            basis = "model" if not perf_on else "stake" if (g.get("form_fight") or g.get("tape_fight")) else "context"
+            txt = f"Last {rf['decided']} decided matches: {side} at this line {hit}/{rf['decided']}"
             if hit / rf["decided"] >= 0.6:
-                supports.append(f"Last {rf['decided']} decided matches: {side} at this line {hit}/{rf['decided']}")
-        for it in internal:
-            if it["p_side"] is not None and it["p_side"] >= 0.55:
-                supports.append(f"Our previous model also has the {side} ({it['p_side']:.0%}, internal)")
-    one = next((o for o in offers if o["line"] == g.get("line") and not o["alt"]), None)
+                add(supports, txt, basis)
+            elif hit / rf["decided"] < 0.5:
+                add(against, txt, basis)
+    internal = _internal(res)
+    for it in internal:
+        it["p_side"] = (it.get("p_over") if side == "Over" else it.get("p_under")) if side else None
+        if side and it["p_side"] is not None:
+            if it["p_side"] < 0.5:
+                add(against, f"Our previous model has the {side} at {it['p_side']:.0%}", "context")
+            elif it["p_side"] >= 0.55:
+                add(supports, f"Our previous model also has the {side} ({it['p_side']:.0%})", "context")
+    for f in g.get("flags") or []:
+        if f.startswith("OLD PROJECTION"):
+            add(against, "Projection from the older model (no HLTV data for this player or matchup)", "data")
+        elif f.startswith("PROVISIONAL"):
+            add(against, "Provisional projection from BO3.gg history (HLTV has none)", "data")
+        elif "thin history" in f:
+            add(against, "Thin history", "data")
     sens = None
-    if side and one is not None:                          # how much a one-kill / one-HS move in the line matters
-        step = 1.0
-        nxt = probs_at(dist, g["line"] + (step if side == "Over" else -step), cache)
-        if nxt:
-            d_ = nxt[0] + nxt[1]
-            sens = {"line": g["line"] + (step if side == "Over" else -step),
-                    "chance": round((nxt[0] if side == "Over" else nxt[1]) / d_, 4) if d_ else None}
+    if side and any(o["line"] == g.get("line") and not o["alt"] for o in offers):   # a one-kill / one-HS worse line
+        nl = g["line"] + (1.0 if side == "Over" else -1.0)
+        nxt = probs_at(dist, nl, cache)
+        if nxt and nxt[0] + nxt[1]:
+            sens = {"line": nl, "chance": round((nxt[0] if side == "Over" else nxt[1]) / (nxt[0] + nxt[1]), 4)}
     return {
         "version": VERSION, "at": now.isoformat(timespec="seconds"),
-        "supports": supports, "concern": against[0] if against else None, "one_worse": sens,
+        # the one-line concern prefers what the calculation itself says over context
+        "supports": supports, "concern": next((x for x in against if x["basis"] in ("model", "data")), against[0] if against else None),
+        "one_worse": sens, "projection_in_model": perf_on,
         "payouts_differ": payouts_differ,
         "ours": {"projection": round(g["lambda_final"], 2), "sd": round(sd, 2), "range80": [round(lo, 1), round(hi, 1)],
                  "line": g.get("line"), "side": side, "chance": v.get("p")},
@@ -282,29 +304,45 @@ def snapshot(res, pnl, model_version, key=None):
             return False
 
 
-def line_check(board, player, prop, scope, line=None, team=None, start=None, now=None):
-    """Before a pick goes on a slip: what Underdog shows NOW for this player / stat / maps (same team and match time
-    when given). same_line = the exact standard line is still up; changed = it isn't (moved, pulled or re-priced)."""
+def line_check(board, player, prop, scope, line=None, team=None, start=None, now=None, pid=None, id_map=None, failed=False):
+    """Before a pick goes on a slip / is copied: what Underdog shows NOW for this player / stat / maps.
+    status: "verified" (the exact standard line is up) / "changed" (other line(s) for the same player + market) /
+    "unavailable" (Underdog shows nothing for it) / "ambiguous" (two Underdog players fit) / "failed" (feed error).
+    Identity as match_offers: Underdog id -> our player id when known (pid), else the exact name; team + match time."""
     now = now or datetime.now(timezone.utc)
     at = (board or {}).get("at") or 0
+    if failed or (board or {}).get("error") and not (board or {}).get("rows"):
+        return {"status": "failed", "at": at, "rows": [], "note": "Couldn't reach Underdog to check this line"}
+    id_map = id_map or {}
     st = _ts(start)
     out = []
     for r in (board or {}).get("rows") or []:
-        if _norm(r.get("player")) != _norm(player) or r.get("prop") != prop or (r.get("scope") or "12") != (scope or "12"):
+        if r.get("prop") != prop or (r.get("scope") or "12") != (scope or "12"):
+            continue
+        mapped = id_map.get(r.get("ud_player_id")) if r.get("ud_player_id") is not None else None
+        if mapped is not None and pid:
+            if str(mapped) != str(pid):
+                continue
+        elif _norm(r.get("player")) != _norm(player):
             continue
         if team and _team_same(r.get("team"), team) is False:
             continue
         rs = _ts(r.get("start"))
         if st and rs and abs((rs - st).total_seconds()) > JOIN_START_MIN * 60:
             continue
-        out.append({k: r.get(k) for k in ("id", "line", "higher", "lower", "alt", "start", "team", "opponent")})
+        out.append({k: r.get(k) for k in ("id", "line", "higher", "lower", "alt", "start", "team", "opponent", "ud_player_id")})
     try:
         want = float(line) if line not in (None, "") else None
     except ValueError:
         want = None
+    base = {"at": at, "stale": bool(at and now.timestamp() - at > STALE_MIN * 60), "rows": sorted(out, key=lambda o: (o["line"], o["alt"]))}
+    if len({o["ud_player_id"] for o in out if o["ud_player_id"] is not None}) > 1:
+        return dict(base, status="ambiguous", rows=[], note="Two different Underdog players fit - not matched")
     same = [o for o in out if want is not None and o["line"] == want and not o["alt"]]
-    return {"at": at, "stale": bool(at and now.timestamp() - at > STALE_MIN * 60), "error": (board or {}).get("error"),
-            "rows": sorted(out, key=lambda o: (o["line"], o["alt"])), "same_line": bool(same),
-            "changed": want is not None and not same,
-            "note": None if same else ("Underdog has no line for this player / stat / maps right now" if not out
-                                       else f"Underdog now shows {', '.join(str(o['line']) + (' (alt)' if o['alt'] else '') for o in out)}")}
+    if same:
+        return dict(base, status="verified", note=None)
+    if out:
+        std = [o for o in out if not o["alt"]]
+        return dict(base, status="changed", new_line=(std or out)[0]["line"],
+                    note="Underdog now shows " + ", ".join(str(o["line"]) + (" (alt)" if o["alt"] else "") for o in base["rows"]))
+    return dict(base, status="unavailable", note="Underdog has no line for this player / stat / maps right now")

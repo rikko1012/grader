@@ -266,6 +266,21 @@ def _board_l10(rf, r):
     return {"l10_over": None, "l10_n": None, "l10_avg": None}
 
 
+def ud_id_map(rows=None):
+    """Underdog player id -> our BO3.gg player id, learnt from board grades (the board grade resolved that exact
+    Underdog line to one player). A Underdog id seen with two different players is dropped (ambiguous)."""
+    out, bad = {}, set()
+    for r in rows if rows is not None else underdog.board()["rows"]:
+        g = BOARD.get(r.get("id")) or {}
+        u, p = r.get("ud_player_id"), g.get("player_id")
+        if u is None or p is None or u in bad:
+            continue
+        if out.get(u, p) != p:
+            bad.add(u); out.pop(u, None); continue
+        out[u] = p
+    return out
+
+
 def board_payload():
     b = underdog.board()
     now = datetime.now(timezone.utc).isoformat()
@@ -279,7 +294,7 @@ def board_payload():
         rows.append(dict(r, **{k: g.get(k) for k in ("grade", "side", "p", "units", "proj", "reason", "graded_at",
                                                      "nick", "state", "edge", "l10_over", "l10_n", "l10_push", "l10_avg",
                                                      "hs_pct", "p_win", "market", "team_name", "opp_name", "match_slug",
-                                                     "graded_line", "graded_model")}))
+                                                     "graded_line", "graded_model", "player_id")}))
         rows[-1]["scope"] = r.get("scope") or "12"
         x = rows[-1]
         nick = x.get("nick") or x.get("player") or ""
@@ -395,6 +410,7 @@ def board_forever():
                     rf = (pb.get("recent_form_map1") if (r.get("scope") or "12") == "1" else None) or pb.get("recent_form") or {}
                     fw = ((pb.get("overall") or {}).get("form_windows") or {}).get("3m") or {}
                     BOARD[r["id"]] = {"at": time.time(), "graded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                                      "player_id": (pb.get("player") or {}).get("id"),     # BO3.gg id: Underdog -> player map
                                       "graded_line": r["line"], "graded_model": picklog.MODEL_VERSION,   # slips: exact line + model
                                       "grade": v.get("grade"), "side": v.get("side"), "p": v.get("p"),
                                       "units": v.get("units"), "proj": g.get("lambda_final"), "state": v.get("state"),
@@ -411,7 +427,7 @@ def board_forever():
                     res["verdict"] = v
                     try:                                  # immutable comparison snapshot (changes only)
                         ub = underdog.board()
-                        comparison.snapshot(res, comparison.panel(res, ub["rows"], board_at=ub.get("at"), aliases=(r["player"],)), picklog.MODEL_VERSION)
+                        comparison.snapshot(res, comparison.panel(res, ub["rows"], board_at=ub.get("at"), id_map=ud_id_map(ub["rows"])), picklog.MODEL_VERSION)
                     except Exception:
                         traceback.print_exc()
                     try:
@@ -814,8 +830,13 @@ class Handler(BaseHTTPRequestHandler):
                 LAST_MEMBER[0] = time.time()
             if u.path == "/api/line_check":
                 # before a pick goes on a slip: the line Underdog shows NOW for this player / stat / maps
-                return self.send(200, comparison.line_check(underdog.board(), q.get("player", ""), q.get("prop", "kills"),
-                                                            q.get("maps", "12"), q.get("line"), q.get("team"), q.get("start")))
+                try:
+                    ub = underdog.board()
+                    return self.send(200, comparison.line_check(ub, q.get("player", ""), q.get("prop", "kills"), q.get("maps", "12"),
+                                                                q.get("line"), q.get("team"), q.get("start"), pid=q.get("pid") or None,
+                                                                id_map=ud_id_map(ub["rows"])))
+                except Exception:
+                    return self.send(200, comparison.line_check(None, "", "", "", failed=True))
             if u.path == "/api/grade":
                 with _MG_LOCK:
                     MEMBER_GRADES[0] += 1
@@ -1298,7 +1319,7 @@ class Handler(BaseHTTPRequestHandler):
             try:                                         # comparison panel: context only, never changes the grade
                 tc = time.time()
                 ub = underdog.board()
-                res["comparison"] = comparison.panel(res, ub["rows"], board_at=ub.get("at"), aliases=(name,))
+                res["comparison"] = comparison.panel(res, ub["rows"], board_at=ub.get("at"), id_map=ud_id_map(ub["rows"]))
                 tm["comparison"] = round(time.time() - tc, 3)
             except Exception:
                 res["comparison"] = {"error": "comparison unavailable"}

@@ -106,28 +106,51 @@ def test_snapshots_append_only_on_change(tmp_path, monkeypatch):
     assert [r["offers"][0]["line"] for r in lines] == [30.5, 31.5] and all(r["model_version"] == "TAG" for r in lines)
 
 
-def test_underdog_name_alias_and_same_side_internal():
+def test_identity_ids_strict_and_ambiguity():
+    res = _res(); res["player_block"]["player"]["id"] = 77
+    rows = [_row(player="cairne X", ud_player_id="u-cairne")]                       # Underdog writes the name differently
+    assert cmp.match_offers(res, rows, NOW)[0] == []                                 # no id map: exact name only
+    offers, _ = cmp.match_offers(res, rows, NOW, id_map={"u-cairne": 77})          # stable id learnt from board grades
+    assert len(offers) == 1 and offers[0]["identity"] == "id"
+    offers, rej = cmp.match_offers(res, [_row(ud_player_id="u-other")], NOW, id_map={"u-other": 99})   # same name, other player's id
+    assert offers == [] and "different player" in rej[0][1]
+    offers, _ = cmp.match_offers(res, [_row(player="cairne X", ud_player_id="u-cairne", team="fnatic Academy")], NOW, id_map={"u-cairne": 77})
+    assert offers == []                                                             # id never bypasses the team check
+    two = [_row(ud_player_id="a"), _row(id="u2", ud_player_id="b", line=31.5)]     # two Underdog players fit by name
+    offers, rej = cmp.match_offers(res, two, NOW)
+    assert offers == [] and all("ambiguous" in r for _, r in rej)
+
+
+def test_evidence_is_grounded_and_same_side_internal():
     res = _res()
-    rows = [_row(player="cairne X")]                                                 # Underdog writes the name differently
-    assert cmp.match_offers(res, rows, NOW)[0] == []
-    offers, _ = cmp.match_offers(res, rows, NOW, aliases=("cairne X",))             # the name the line was requested under
-    assert len(offers) == 1
-    p = cmp.panel(res, rows, board_at=NOW.timestamp(), now=NOW, aliases=("cairne X",))
+    p = cmp.panel(res, [_row()], board_at=NOW.timestamp(), now=NOW)
     for it in p["internal"]:
         side = p["ours"]["side"]
-        assert it["p_side"] == (it["p_over"] if side == "Over" else it["p_under"])   # same side as the pick
-    assert p["concern"] == (p["evidence_against"][0] if p["evidence_against"] else None)
-    assert p["one_worse"] is not None and p["one_worse"]["chance"] < p["offers"][0]["model_chance"]   # 1 worse line = lower chance
+        assert it["p_side"] == (it["p_over"] if side == "Over" else it["p_under"])
+    for x in p["supports"] + p["evidence_against"]:
+        assert x["basis"] in ("model", "stake", "context", "data") and x["text"]
+    perf_on = str(res["grade"].get("projection_source", "")).startswith("perf")
+    l10 = [x for x in p["supports"] + p["evidence_against"] if x["text"].startswith("Last ")]
+    assert all(x["basis"] == ("context" if perf_on else "model") or x["basis"] == "stake" for x in l10)   # not in a perf projection
+    assert all(x["basis"] == "context" for x in p["supports"] + p["evidence_against"] if "previous model" in x["text"])
+    if p["concern"] and any(x["basis"] in ("model", "data") for x in p["evidence_against"]):
+        assert p["concern"]["basis"] in ("model", "data")                            # the headline concern is from the calculation
+    assert p["one_worse"] is not None and p["one_worse"]["chance"] < p["offers"][0]["model_chance"]
 
 
-def test_line_check_before_slip():
-    board = {"at": NOW.timestamp() - 60, "rows": [_row(), _row(id="z", line=31.5, higher=1.2, lower=0.8, alt=True), _row(id="m1", scope="1", line=15.5)]}
-    ok = cmp.line_check(board, "cairne", "kills", "12", "30.5", "fnatic", START, now=NOW)
-    assert ok["same_line"] and not ok["changed"] and [r["line"] for r in ok["rows"]] == [30.5, 31.5]
+def test_line_check_states():
+    board = {"at": NOW.timestamp() - 60, "rows": [_row(ud_player_id="u1"), _row(id="z", line=31.5, higher=1.2, lower=0.8, alt=True, ud_player_id="u1"),
+                                                  _row(id="m1", scope="1", line=15.5, ud_player_id="u1")]}
+    assert cmp.line_check(board, "cairne", "kills", "12", "30.5", "fnatic", START, now=NOW)["status"] == "verified"
     moved = cmp.line_check(board, "cairne", "kills", "12", "29.5", "fnatic", START, now=NOW)
-    assert moved["changed"] and "30.5" in moved["note"]
-    gone = cmp.line_check(board, "cairne", "hs", "12", "14.5", None, None, now=NOW)
-    assert gone["changed"] and gone["rows"] == [] and "no line" in gone["note"]
-    other = cmp.line_check(board, "cairne", "kills", "12", "30.5", "fnatic Academy", START, now=NOW)
-    assert other["changed"] and other["rows"] == []                                 # academy team is not this player
+    assert moved["status"] == "changed" and moved["new_line"] == 30.5 and "30.5" in moved["note"]
+    assert cmp.line_check(board, "cairne", "hs", "12", "14.5", now=NOW)["status"] == "unavailable"
+    assert cmp.line_check(board, "cairne", "kills", "12", "30.5", "fnatic Academy", START, now=NOW)["status"] == "unavailable"
+    assert cmp.line_check(None, "", "", "", failed=True)["status"] == "failed"
+    assert cmp.line_check({"at": 0, "rows": [], "error": "HTTP 503"}, "cairne", "kills", "12", "30.5", now=NOW)["status"] == "failed"
+    # stable id: the Underdog row belongs to player 77 -> a namesake with id 12 doesn't get it
+    assert cmp.line_check(board, "cairne", "kills", "12", "30.5", "fnatic", START, now=NOW, pid="12", id_map={"u1": 77})["status"] == "unavailable"
+    assert cmp.line_check(board, "cairne", "kills", "12", "30.5", "fnatic", START, now=NOW, pid="77", id_map={"u1": 77})["status"] == "verified"
+    amb = {"at": NOW.timestamp(), "rows": [_row(ud_player_id="a"), _row(id="q", ud_player_id="b")]}
+    assert cmp.line_check(amb, "cairne", "kills", "12", "30.5", now=NOW)["status"] == "ambiguous"
     assert cmp.line_check(dict(board, at=NOW.timestamp() - 3600), "cairne", "kills", "12", "30.5", now=NOW)["stale"]
