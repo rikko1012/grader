@@ -83,6 +83,20 @@ def _ts(s):
         return None
 
 
+def data_status(g, v):
+    """Data quality, kept apart from the model's confidence: ("ok" | "limited" | "verify", short reason)."""
+    fl = " | ".join(g.get("flags") or [])
+    if (v or {}).get("state") == "SCOUT" or "0 units: SCOUT" in fl:
+        return ["verify", "no match found"]
+    for key, why in (("OLD PROJECTION", "no HLTV data - older model"), ("PROVISIONAL", "BO3.gg history only"),
+                     ("Gate C: roster", "roster not confirmed"), ("STAND-IN", "stand-in")):
+        if key in fl:
+            return ["verify", why]
+    if "thin history" in fl or "Gate D" in fl or "Thin data" in fl:
+        return ["limited", "small recent sample"]
+    return ["ok", ""]
+
+
 def probs_at(dist, line, _cache=None):
     """(over, under, push) of the grade's OWN distribution at another line (same cut rule as the grader)."""
     k = (dist or {}).get("kind")

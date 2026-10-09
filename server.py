@@ -294,7 +294,8 @@ def board_payload():
         rows.append(dict(r, **{k: g.get(k) for k in ("grade", "side", "p", "units", "proj", "reason", "graded_at",
                                                      "nick", "state", "edge", "l10_over", "l10_n", "l10_push", "l10_avg",
                                                      "hs_pct", "p_win", "market", "team_name", "opp_name", "match_slug",
-                                                     "graded_line", "graded_model", "player_id")}))
+                                                     "graded_line", "graded_model", "player_id", "event", "bo", "maps_known",
+                                                     "dstat", "support", "concern")}))
         rows[-1]["scope"] = r.get("scope") or "12"
         x = rows[-1]
         nick = x.get("nick") or x.get("player") or ""
@@ -412,6 +413,10 @@ def board_forever():
                     BOARD[r["id"]] = {"at": time.time(), "graded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                                       "player_id": (pb.get("player") or {}).get("id"),     # BO3.gg id: Underdog -> player map
                                       "match_start": (res.get("next_match") or {}).get("start"),   # comparison audit
+                                      # match headers + compact rows (UI 2026-10-09)
+                                      "event": (res.get("next_match") or {}).get("event"), "bo": (res.get("next_match") or {}).get("bo"),
+                                      "maps_known": ((res.get("next_match") or {}).get("maps") or [])[:3],
+                                      "dstat": comparison.data_status(res.get("grade") or {}, v),
                                       "graded_line": r["line"], "graded_model": picklog.MODEL_VERSION,   # slips: exact line + model
                                       "grade": v.get("grade"), "side": v.get("side"), "p": v.get("p"),
                                       "units": v.get("units"), "proj": g.get("lambda_final"), "state": v.get("state"),
@@ -426,9 +431,12 @@ def board_forever():
                                       "opp_name": (res.get("next_match") or {}).get("opponent"),
                                       "match_slug": (res.get("next_match") or {}).get("slug")}   # exact match id (settling slips)
                     res["verdict"] = v
-                    try:                                  # immutable comparison snapshot (changes only)
+                    try:                                  # immutable comparison snapshot (changes only) + the row's evidence
                         ub = underdog.board()
-                        comparison.snapshot(res, comparison.panel(res, ub["rows"], board_at=ub.get("at"), id_map=ud_id_map(ub["rows"])), picklog.MODEL_VERSION)
+                        pnl = comparison.panel(res, ub["rows"], board_at=ub.get("at"), id_map=ud_id_map(ub["rows"]))
+                        comparison.snapshot(res, pnl, picklog.MODEL_VERSION)
+                        if pnl:
+                            BOARD[r["id"]].update(support=(pnl["supports"] or [None])[0], concern=pnl["concern"])
                     except Exception:
                         traceback.print_exc()
                     try:
@@ -821,7 +829,7 @@ class Handler(BaseHTTPRequestHandler):
                                            f"{whop_auth.PKCE_COOKIE}=; Max-Age=0; Path=/"])
             if u.path == "/auth/logout":
                 return self.redirect("/", [f"{whop_auth.COOKIE}=; Max-Age=0; Path=/"])
-            if u.path in ("/api/search", "/api/grade", "/api/board", "/api/line_check") and not self.allowed():
+            if u.path in ("/api/search", "/api/grade", "/api/board", "/api/line_check", "/api/results") and not self.allowed():
                 sess = self.member()
                 return self.send(401, {"error": "members_only", "signed_in": bool(sess),
                                        "upgrade": whop_auth.upgrade_url()})
@@ -829,6 +837,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.search(q.get("q", "").strip())
             if u.path.startswith("/api/") and u.path != "/api/board":
                 LAST_MEMBER[0] = time.time()
+            if u.path == "/api/results":
+                import results
+                gr = [x for x in (q.get("grades") or "").split(",") if x]
+                return self.send(200, results.summary("member" if q.get("cohort") == "member" else "board", q.get("version") or None,
+                                                      q.get("from") or None, q.get("to") or None, q.get("prop") or None,
+                                                      q.get("maps") or None, gr or None))
             if u.path == "/api/line_check":
                 # before a pick goes on a slip: the line Underdog shows NOW for this player / stat / maps
                 try:

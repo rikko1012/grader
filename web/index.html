@@ -278,6 +278,23 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 }
 .glance{padding:12px 16px}.glrow{display:grid;grid-template-columns:92px 1fr;gap:10px;padding:4px 0;font-size:14px;align-items:baseline}
 .glrow .k{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}.glrow .k.up{color:var(--up,#3fb950)}.glrow .k.dn{color:var(--dn,#f85149)}
+.bbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;position:sticky;top:0;z-index:20;background:var(--panel,#0f141c);padding:8px 0}
+.mgroup{border:1px solid var(--line);border-radius:12px;margin-bottom:10px;background:var(--panel-2)}
+.mgroup>summary{cursor:pointer;list-style:none;padding:10px 12px;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:baseline}
+.mgroup>summary::-webkit-details-marker{display:none}.mgroup>summary b{font-size:15px}
+.mgroup>summary:before{content:"▸";color:var(--muted)}.mgroup[open]>summary:before{content:"▾"}
+.mgroup .mbody{padding:0 10px 10px}
+.brow2{display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:start;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;cursor:pointer}
+.brow2:hover{border-color:rgba(255,122,26,.5)}.brow2 .gtag{min-width:40px;font-size:14px;padding:6px 0;text-align:center}
+.b2top{font-size:14px}.b2top .muted{font-size:12px}.b2pick{font:600 14.5px var(--display);margin-top:2px}.b2pick b{color:var(--accent-2)}
+.b2meta{font-size:12px;color:var(--muted);margin-top:3px}.b2ev{font-size:12.5px;margin-top:3px}.b2ev.up{color:#3fb950}.b2ev.dn{color:#f0883e}
+.rtab td,.rtab th{padding:4px 8px}.rsum{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:8px 0}
+.rsum div{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:8px}.rsum .k{font-size:11px;color:var(--muted);text-transform:uppercase}.rsum .v{font:700 18px var(--display)}
+@media (min-width:1180px){body.hasslip main,body.hasslip .wrap{margin-right:440px}
+  body.hasslip #slip{display:block !important;top:84px;bottom:18px;right:18px;max-height:none}
+  body.hasslip #slipbtn{display:none !important}}
+@media (max-width:1179px){#slipbtn{left:16px;right:16px;bottom:12px;border-radius:14px;text-align:center}
+  #slip{left:0;right:0;bottom:0;width:auto;max-height:75vh;border-radius:16px 16px 0 0}}
 .askwrap{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:60;padding:16px}
 .ask{background:var(--card,#161b22);border:1px solid var(--line,#30363d);border-radius:12px;padding:16px;max-width:440px;width:100%}
 .ask h4{margin:0 0 8px}.ask table{width:100%;font-size:13px}.ask .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
@@ -293,7 +310,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 
   <div id="gate" class="card" hidden style="text-align:center;padding:28px 18px"></div>
   <div id="who" class="small muted" hidden style="text-align:right;margin:-6px 0 8px"></div>
-  <div class="modes" id="modes"><div class="seg" id="mode"><button type="button" data-v="one" class="on">Single prop</button><button type="button" data-v="slate">Slate</button><button type="button" data-v="board">Underdog board</button></div>
+  <div class="modes" id="modes"><div class="seg" id="mode"><button type="button" data-v="one" class="on">Single prop</button><button type="button" data-v="slate">Slate</button><button type="button" data-v="board">Underdog board</button><button type="button" data-v="results">Results</button></div>
     <span class="small muted">Shortcuts: <b>K</b> kills &middot; <b>H</b> headshots</span></div>
   <section class="card" id="slate" hidden>
     <textarea id="slatetxt" spellcheck="false" placeholder="ZywOo 27.5 K&#10;ropz 22.5 HS&#10;donk 30.5&#10;m0NESY 14.5 hs goblin"></textarea>
@@ -302,20 +319,34 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
     <div id="slateout" style="margin-top:14px"></div>
   </section>
   <section class="card" id="board" hidden>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-      <div class="seg" id="bprop"><button type="button" data-v="kills" class="on">Kills</button><button type="button" data-v="hs">Headshots</button></div>
+    <div class="bbar" id="bbar">
+      <div class="seg" id="bview" title="Group by match or list every prop"><button type="button" data-v="matches" class="on">Matches</button><button type="button" data-v="all">All props</button></div>
+      <div class="seg" id="bprop"><button type="button" data-v="kills" class="on">Kills</button><button type="button" data-v="hs">Headshots</button><button type="button" data-v="both">Both</button></div>
       <div class="seg" id="bscope" title="Which maps the lines cover"><button type="button" data-v="12" class="on">Maps 1–2</button><button type="button" data-v="1">Map 1</button><button type="button" data-v="123">Maps 1–3</button></div>
       <div class="seg" id="bside" title="Show the grader's Overs, Unders, or both"><button type="button" data-v="More">Overs</button><button type="button" data-v="both" class="on">Both</button><button type="button" data-v="Less">Unders</button></div>
       <input id="bsearch" type="search" placeholder="Player or team" style="width:150px;padding:8px 10px">
-      <select id="bsort" style="width:auto;padding:8px 10px"><option value="g">Best grade first</option><option value="m">By match</option><option value="p">Highest chance</option><option value="e">Biggest edge</option><option value="t">Starting soonest</option></select>
+      <select id="bsort" style="width:auto;padding:8px 10px"><option value="g">Best grade first</option><option value="p">Highest chance</option><option value="t">Starting soonest</option><option value="e">Biggest edge</option></select>
       <label class="small" style="display:flex;gap:6px;align-items:center;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="bbets" style="width:auto" checked> Bets only</label>
+      <button type="button" class="chipbtn" id="breset" title="Reset every filter">Reset</button>
       <button type="button" class="chipbtn" id="brefresh" title="Refresh the board">↻ Refresh</button>
+      <span class="small muted" id="bcount"></span>
       <button type="button" class="bslip" id="bauto" title="Build 2-4 pick slips from the graded board" hidden>⚡ Build slips</button></div>
     <div id="bstatus" class="small muted" style="margin:-2px 0 10px"></div>
     <div>
     </div>
     <div id="slipsout" hidden></div>
     <div id="boardout"></div>
+  </section>
+  <section class="card" id="results" hidden>
+    <div class="bbar">
+      <div class="seg" id="rcohort" title="Real Underdog offers the board graded, or lines members typed in"><button type="button" data-v="board" class="on">Board offers</button><button type="button" data-v="member">Member research lines</button></div>
+      <select id="rversion" style="width:auto;padding:8px 10px"><option value="">All versions</option></select>
+      <div class="seg" id="rprop"><button type="button" data-v="" class="on">Both</button><button type="button" data-v="kills">Kills</button><button type="button" data-v="hs">Headshots</button></div>
+      <div class="seg" id="rscope"><button type="button" data-v="" class="on">All maps</button><button type="button" data-v="12">Maps 1–2</button><button type="button" data-v="1">Map 1</button><button type="button" data-v="123">Maps 1–3</button></div>
+      <select id="rgrade" style="width:auto;padding:8px 10px"><option value="">All grades</option><option value="A+,A,A-">A grades</option><option value="B+,B,B-">B grades</option><option value="A+,A,A-,B+,B,B-">Bets (B- or better)</option><option value="LEAN">Leans</option></select>
+      <label class="small">From <input type="date" id="rfrom" style="width:auto;padding:6px"></label><label class="small">To <input type="date" id="rto" style="width:auto;padding:6px"></label>
+    </div>
+    <div id="resultsout"></div>
   </section>
   <div id="cardpop" hidden><div id="popbody"><div class="popbar"><button type="button" class="chipbtn" id="popclose" title="Close (Esc)">✕ Close</button></div></div></div>
   <form id="f" autocomplete="off">
@@ -475,6 +506,31 @@ $("#player").addEventListener("blur", () => setTimeout(hideSug, 120));
 function pick(i) { $("#player").value = items[i].nick; slug = items[i].slug; hideSug(); $("#line").focus(); }
 function hideSug() { $("#sug").style.display = "none"; }
 
+// ---------- results: board offers and member research lines kept apart; versions, pending and returns separated
+const rf_ = {cohort: "board", prop: "", maps: ""};
+async function loadResults() {
+  const qs = new URLSearchParams({cohort: rf_.cohort, version: $("#rversion").value, prop: rf_.prop, maps: rf_.maps, grades: $("#rgrade").value, from: $("#rfrom").value, to: $("#rto").value});
+  $("#resultsout").innerHTML = `<div class="muted small">Loading…</div>`;
+  let d; try { const r = await fetchRetry("/api/results?" + qs); d = await r.json(); if (r.status === 401 && d.error === "members_only") return showGate(d); } catch (e) { $("#resultsout").innerHTML = `<div class="muted">${esc(e.message)}</div>`; return; }
+  const sel = $("#rversion"), cur = sel.value;
+  sel.innerHTML = `<option value="">All versions</option>` + (d.versions || []).map(([v, n]) => `<option value="${esc(v)}">${esc(v)} (${n})</option>`).join(""); sel.value = cur;
+  const pc = x => x == null ? "–" : (x * 100).toFixed(1) + "%", box = (k, v, s) => `<div><div class="k">${k}</div><div class="v">${v}</div>${s ? `<div class="small muted">${s}</div>` : ""}</div>`;
+  const R = d.returns || {};
+  $("#resultsout").innerHTML = `
+    <div class="small muted">${d.cohort === "board" ? "Real Underdog offers the board graded – each counted once, as first published." : "Lines members typed in (research lines) – not necessarily offered anywhere."}
+      ${$("#rversion").value ? "" : " Several model versions are mixed here – pick one above to judge a single version."}</div>
+    <div class="rsum">${box("Settled", d.settled, `${d.decided} decided · ${d.matches_decided} matches`)}${box("Pending", d.pending)}${box("Push / void", `${d.push} / ${d.void}`)}
+      ${box("Predicted", pc(d.predicted), "average printed chance")}${box("Actual", pc(d.actual), `${d.hits}/${d.decided} hit`)}</div>
+    ${(d.by_grade || []).length ? `<div class="scroll"><table class="rtab"><thead><tr><th>Grade</th><th class="num">Decided</th><th class="num">Predicted</th><th class="num">Actual</th></tr></thead><tbody>
+      ${d.by_grade.map(g => `<tr><td>${esc(g.grade)}</td><td class="num">${g.n}</td><td class="num">${pc(g.predicted)}</td><td class="num">${pc(g.actual)} <span class="muted small">(${g.hits}/${g.n})</span></td></tr>`).join("")}</tbody></table></div>` : ""}
+    <div class="kv"><span>Entry returns</span><span class="muted">${esc(R.payout_note || "")}</span></div>
+    <div class="kv"><span>Hypothetical units <span class="muted small">(not an entry result)</span></span><span>${R.hypothetical_bets ? `${R.hypothetical_units > 0 ? "+" : ""}${R.hypothetical_units}U on ${R.hypothetical_staked}U (${R.hypothetical_bets} bets)` : "–"}</span></div>
+    <div class="small muted">${esc(R.hypothetical_note || "")} Results settle from HLTV where it has the match (${(d.sources || {}).hltv || 0} decided), otherwise BO3.gg (${(d.sources || {}).bo3 || 0}).</div>`;
+}
+for (const id of ["#rcohort", "#rprop", "#rscope"]) $(id).onclick = e => { const b = e.target.closest("button"); if (!b) return;
+  [...$(id).children].forEach(x => x.classList.toggle("on", x === b)); rf_[id === "#rcohort" ? "cohort" : id === "#rprop" ? "prop" : "maps"] = b.dataset.v; loadResults(); };
+for (const id of ["#rversion", "#rgrade", "#rfrom", "#rto"]) $(id).onchange = loadResults;
+
 // ---------- grade
 $("#f").onsubmit = async e => {
   e.preventDefault(); hideSug();
@@ -595,8 +651,9 @@ showRecent();
 // modes: one prop / slate
 function setMode(m) {
   [...$("#mode").children].forEach(x => x.classList.toggle("on", x.dataset.v === m));
-  $("#slate").hidden = m !== "slate"; $("#board").hidden = m !== "board"; $("#f").style.display = m === "one" ? "" : "none";
+  $("#slate").hidden = m !== "slate"; $("#board").hidden = m !== "board"; $("#results").hidden = m !== "results"; $("#f").style.display = m === "one" ? "" : "none";
   if (m === "board") loadBoard();
+  if (m === "results") loadResults();
   try { showExamples(); } catch {}
 }
 $("#mode").onclick = e => { const b = e.target.closest("button"); if (b) { closePop(); setMode(b.dataset.v); } };
@@ -792,7 +849,9 @@ const legState = x => {
 const _drawSlip = () => { if (!$("#board").hidden && typeof boardRows !== "undefined" && boardRows.length) drawBoard(); };
 function drawSlip() {
   const s = store.get("cs2s_slip", []);
-  $("#slipbtn").hidden = !s.length; $("#slipbtn").textContent = `Slip (${s.length})`;
+  $("#slipbtn").hidden = !s.length; $("#slipbtn").textContent = innerWidth < 1180 ? `${s.length} pick${s.length === 1 ? "" : "s"} selected · open slip` : `Slip (${s.length})`;
+  document.body.classList.toggle("hasslip", s.length > 0);
+  if (s.length && innerWidth >= 1180) $("#slip").hidden = false;          // desktop: the slip stays open beside the board
   try { _drawSlip(); } catch {}
   if ($("#slip").hidden) return;
   if (!s.length) { $("#slip").hidden = true; return; }
@@ -851,7 +910,16 @@ function udPill(d) {
   const better = v.side === "More" ? u.line < g.line : u.line > g.line;
   return `<span class="pill ${better ? "good" : ""}">Underdog: ${u.line}${pay} – ${better ? `easier for ${v.side}` : `PrizePicks' ${g.line} is easier for ${v.side}`}</span>`;
 }
-let boardRows = [], bprop = "kills", bside = "both", bscope = "12", boardAt = 0;   // bside: the grader's pick - More (Overs), Less (Unders) or both
+let boardRows = [], bprop = "kills", bside = "both", bscope = "12", boardAt = 0, bview = "matches";
+// filters survive reloads and the board <-> card round trip
+function saveBFilters() { store.set("cs2s_bf", {bprop, bside, bscope, bview, sort: $("#bsort").value, bets: $("#bbets").checked, q: $("#bsearch").value}); }
+function restoreBFilters() {
+  const f = store.get("cs2s_bf", null); if (!f) return;
+  bprop = f.bprop || bprop; bside = f.bside || bside; bscope = f.bscope || bscope; bview = f.bview || bview;
+  if (f.sort && [...$("#bsort").options].some(o => o.value === f.sort)) $("#bsort").value = f.sort;
+  $("#bbets").checked = f.bets !== false; $("#bsearch").value = f.q || "";
+  for (const [id, v] of [["#bprop", bprop], ["#bside", bside], ["#bscope", bscope], ["#bview", bview]]) [...$(id).children].forEach(x => x.classList.toggle("on", x.dataset.v === v));
+}   // bside: the grader's pick - More (Overs), Less (Unders) or both
 const G_RANK = {"A+": 0, "A": 1, "A-": 2, "B+": 3, "B": 4, "B-": 4.5, "LEAN": 5};
 async function loadBoard(force) {
   if (boardRows.length && !force) return drawBoard();
@@ -873,73 +941,65 @@ function boardCard(r) {     // a board row in the shape addToSlip / pickLine exp
           player_block: {player: {nick: r.nick || r.player, id: r.player_id}, current_team: r.team_name || r.team},
           next_match: {opponent: r.opp_name || r.opponent, start: r.start, slug: r.match_slug}, from: "board"};
 }
+const agoTxt = t => { if (!t) return ""; const m = Math.round((Date.now() - Date.parse(t)) / 60000); return m < 1 ? "just now" : m < 60 ? m + " min ago" : Math.round(m / 60) + " h ago"; };
+const DSTAT = {ok: ["ok", "Data complete"], limited: ["mid", "Limited history"], verify: ["warn", "Needs verification"]};
 function drawBoard() {
+  saveBFilters();
   const sortBy = $("#bsort").value;
   const rank = r => !r.side ? 9 : r.state === "SCOUT" ? 7 : (G_RANK[r.grade] ?? 6);
-  const key = r => sortBy === "g" ? [rank(r), -(r.p ?? 0)] : sortBy === "p" ? [-(r.p ?? -1)] : sortBy === "e" ? [-Math.abs(r.edge ?? 0)]
-    : sortBy === "m" ? [r.start || "9", r.matchup || "", rank(r), -(r.p ?? 0)] : [r.start || "9"];
+  const key = r => sortBy === "g" ? [rank(r), -(r.p ?? 0)] : sortBy === "p" ? [-(r.p ?? -1)] : sortBy === "e" ? [-Math.abs(r.edge ?? 0)] : [r.start || "9", rank(r)];
   const q = ($("#bsearch").value || "").trim().toLowerCase();
   const hit = r => !q || [r.nick, r.player, r.team, r.team_name, r.opponent, r.opp_name].some(x => String(x || "").toLowerCase().includes(q));
   const cmp = (a, b) => { const A = key(a), B = key(b); for (let i = 0; i < A.length; i++) if (A[i] !== B[i]) return A[i] > B[i] ? 1 : -1; return 0; };
-  const other = {};
-  boardRows.forEach(r => { other[(r.nick || r.player).toLowerCase() + "|" + r.prop + "|" + (r.scope || "12") + "|" + (r.matchup || "")] = r; });
   const onSlip = new Set(store.get("cs2s_slip", []).map(x => String(x.p).toLowerCase()));
-  // Maps filter: only show the map sets Underdog has lines for
   const scopes = new Set(boardRows.map(r => r.scope || "12"));
   [...$("#bscope").children].forEach(b => { b.hidden = !scopes.has(b.dataset.v); });
   $("#bscope").hidden = scopes.size < 2;
   if (!scopes.has(bscope) && scopes.size) { bscope = scopes.has("12") ? "12" : [...scopes][0]; [...$("#bscope").children].forEach(x => x.classList.toggle("on", x.dataset.v === bscope)); }
-  const rows = boardRows.filter(r => r.prop === bprop && (r.scope || "12") === bscope && (bside === "both" || r.side === bside)
+  const rows = boardRows.filter(r => (bprop === "both" || r.prop === bprop) && (r.scope || "12") === bscope && (bside === "both" || r.side === bside)
                                     && (!$("#bbets").checked || (r.units || 0) > 0) && hit(r)).sort(cmp);
-  let lastM = null;
-  const head = r => { if (sortBy !== "m" || r.matchup === lastM) return ""; lastM = r.matchup;
-    return `<div class="bhead">${esc((r.team_name || r.team || "") + " vs " + (r.opp_name || r.opponent || ""))} <span class="muted">· ${shortWhen(r.start)}</span></div>` + matchRank(r); };
-  // per-match rankings (comparison layer): every qualifying bet in this match, kills + headshots, all map sets,
-  // following the Over / Under / Both filter. Same match = shared exposure: these are alternatives, not a slip.
-  const matchRank = r => {
-    const q = boardRows.filter(x => x.matchup === r.matchup && x.side && x.state !== "SCOUT" && (x.units || 0) > 0
-                                    && (bside === "both" || x.side === bside)).sort((a, b) => (b.p ?? 0) - (a.p ?? 0));
-    if (!q.length) return `<div class="small muted" style="margin:-2px 0 8px">No qualifying bets in this match${bside !== "both" ? ` (${bside === "More" ? "Overs" : "Unders"} only)` : ""}.</div>`;
-    const it = x => `${esc(x.nick || x.player)} ${sideWord({grade: x.grade, side: x.side})} ${x.line} ${propWord(x.prop)}${mapsWord(x.scope)} <b>${(x.p * 100).toFixed(0)}%</b>`;
-    return `<div class="small" style="margin:-2px 0 8px;line-height:1.5"><b>Highest chance here:</b> ${q.slice(0, 3).map(it).join(" · ")}
-      <div class="muted">No outside projections yet · value not ranked (no entry payouts)${q.length > 1 ? " · these picks share match conditions and may win or lose together" : ""}</div></div>`; };
-  const leanWhy = r => { const t = r.reason || ""; if (r.grade !== "LEAN") return "";
-    if (/FORM FIGHT/.test(t)) return "Lean: his last 10 disagree with the projection";
-    const m = t.match(/0 units: (.+)$/); if (m) return "Lean: " + m[1].split(";")[0].slice(0, 80);
-    return ""; };
-  const flagsOf = r => { const out = [], w = leanWhy(r);
-    if (w) out.push(`<span class="pill">${esc(w)}</span>`);
-    if (r.p != null && r.p < 0.52) out.push(`<span class="pill" title="${r.side === "More" ? "After the Over cushion the chance is about even" : "About even"}">coin flip</span>`);
-    if (r.l10_n >= 5 && ((r.side === "More" && r.l10_over / r.l10_n <= 0.3) || (r.side === "Less" && r.l10_over / r.l10_n >= 0.7)))
-      out.push(`<span class="pill warn" title="The pick goes against what he did in his last ${r.l10_n} matches – double-check it">vs last ${r.l10_n} (${r.l10_over}/${r.l10_n} over)</span>`);
-    return out.join(" "); };
+  $("#bcount").textContent = boardRows.length ? `${rows.length} of ${boardRows.length} lines` : "";
   const pct0 = x => x == null ? "–" : (x * 100).toFixed(1) + "%";
-  const st = (k, v, cls = "", sub = "") => `<div class="bstat"><div class="k">${k}</div><div class="v ${cls}">${v}</div>${sub ? `<div class="s">${sub}</div>` : ""}</div>`;
-  $("#boardout").innerHTML = rows.length ? `<div class="blist">` + rows.map(r => {
-      const nick = r.nick || r.player, v = {grade: r.grade, side: r.side};
-      const lab = !r.side ? "…" : r.state === "SCOUT" ? "S" : r.grade === "LEAN" ? "L" : r.grade;
-      const o = other[nick.toLowerCase() + "|" + (r.prop === "hs" ? "kills" : "hs") + "|" + (r.scope || "12") + "|" + (r.matchup || "")];
-      const team = r.team_name || r.team, opp = r.opp_name || r.opponent;
-      const win = r.p_win != null && !["NO MARKET", "NONE"].includes(r.market) ? pct0(r.p_win) : "–";
-      return head(r) + `<div class="brow" data-bl="${esc(nick)}|${r.line}|${r.prop}|${r.scope || "12"}">
-        <span class="gtag ${!r.side ? "g-scout" : r.state === "SCOUT" ? "g-scout" : gClass(r.grade)}">${esc(lab)}</span>
-        <div class="who"><b>${esc(nick)}</b>${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}<div class="meta">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}</div><div class="meta">${shortWhen(r.start)}</div></div>
-        <div class="pk"><div><div class="pick">${r.side ? esc(sideWord(v)) : "grading…"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)} ${r.p != null ? `<span class="pc">· ${pct0(r.p)} to hit</span>` : ""}</div>
-          <div class="other">${o ? `${propWord(o.prop)} line ${o.line}` : ""}${r.alt ? ` · alt ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}</div>${flagsOf(r) ? `<div class="bflags">${flagsOf(r)}</div>` : ""}</div>
-</div>
-        <div class="bstats">
-          ${st("Proj", r.proj != null ? num(r.proj, 1) : "–")}
-          ${st("Edge", r.edge == null ? "–" : (r.edge > 0 ? "+" : "") + (Math.abs(r.edge) < 0.1 ? r.edge.toFixed(2) : r.edge.toFixed(1)), r.edge == null ? "" : r.edge > 0 ? "up" : "dn", "vs line")}
-          ${st(`Last ${(r.l10_n || 0) + (r.l10_push || 0) || 10}`, r.l10_n ? `${r.l10_over}/${r.l10_n}` : "–", "", (r.l10_avg != null ? "avg " + r.l10_avg : "") + (r.l10_push ? ` · ${r.l10_push} push` : "")).replace('class="s"', 'class="s keep"')}
-          ${st("Units", r.units != null ? +(+r.units).toFixed(2) + "U" : "–", (r.units || 0) > 0 ? "up" : "", r.cap_n ? "capped" : "").replace('class="s"', r.cap_n ? `class="s keep" title="${r.cap_n} bets on this board need ${esc(r.team_name || r.team)} to ${r.side === "More" ? "do well" : "do badly"} in this match – one upset or overtime decides them all, so together they're capped at 3U (full size ${r.units_full}U)"` : 'class="s"')}
-          ${st("HS%", r.hs_pct != null ? Math.round(r.hs_pct) + "%" : "–", "", "3 months")}
-          ${st("Team win %", win, "", win === "–" ? "no market" : "betting odds")}
-        </div>
-        ${r.side ? `<button type="button" class="bslip ${onSlip.has(nick.toLowerCase()) ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}">${onSlip.has(nick.toLowerCase()) ? "On slip" : "+ Slip"}</button>` : "<span></span>"}
-      </div>`; }).join("") + `</div><div class="small muted" style="margin-top:10px">Underdog's Maps 1–2 lines, graded. Tap a row for the full card. Underdog payouts differ from PrizePicks'.</div>`
-    : `<div class="muted">${boardRows.length ? "No lines match this filter." : `No Underdog CS2 lines right now.${boardAt ? ` Checked ${new Date(boardAt * 1000).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})} · checks again every 5 minutes – new lines are graded automatically.` : ""}`}</div>`;
+  const ev = (x, cls, sign) => x && x.text ? `<div class="b2ev ${cls}">${sign} ${esc(x.text)} ${basisTag(x.basis)}</div>` : "";
+  const rowHtml = (r, showMatch) => {
+    const nick = r.nick || r.player, lab = !r.side ? "…" : r.state === "SCOUT" ? "S" : r.grade === "LEAN" ? "L" : r.grade;
+    const ds = DSTAT[(r.dstat || [])[0]], team = r.team_name || r.team, opp = r.opp_name || r.opponent;
+    return `<div class="brow2" data-bl="${esc(nick)}|${r.line}|${r.prop}|${r.scope || "12"}">
+      <span class="gtag ${!r.side || r.state === "SCOUT" ? "g-scout" : gClass(r.grade)}">${esc(lab)}</span>
+      <div><div class="b2top"><b>${esc(nick)}</b>${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}
+          <span class="muted">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}${showMatch ? " · " + shortWhen(r.start) : ""}</span></div>
+        <div class="b2pick">${r.side ? esc(sideWord({grade: r.grade, side: r.side})) : "grading…"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}${r.p != null ? ` · <b>${pct0(r.p)}</b>` : ""} · ${esc(r.grade || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U</div>
+        <div class="b2meta">Proj ${r.proj != null ? num(r.proj, 1) : "–"}${ds ? ` · <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}">${ds[1]}</span>` : ""}${r.graded_at ? ` · graded ${agoTxt(r.graded_at)}` : ""}${r.alt ? ` · alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}</div>
+        ${ev(r.support, "up", "+")}${ev(r.concern, "dn", "–")}</div>
+      ${r.side ? `<button type="button" class="bslip ${onSlip.has(nick.toLowerCase()) ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}">${onSlip.has(nick.toLowerCase()) ? "On slip" : "+ Slip"}</button>` : "<span></span>"}
+    </div>`; };
+  // every qualifying bet in a match, kills + headshots, following Overs / Unders / Both - alternatives, not a slip
+  const matchRank = mrows => {
+    const q2 = boardRows.filter(x => x.matchup === mrows[0].matchup && x.start === mrows[0].start && x.side && x.state !== "SCOUT" && (x.units || 0) > 0
+                                     && (x.scope || "12") === bscope && (bside === "both" || x.side === bside)).sort((a, b) => (b.p ?? 0) - (a.p ?? 0));
+    if (!q2.length) return `<div class="small muted" style="margin:0 2px 8px">No qualifying bets in this match${bside !== "both" ? ` (${bside === "More" ? "Overs" : "Unders"} only)` : ""}.</div>`;
+    const it = x => `${esc(x.nick || x.player)} ${sideWord({grade: x.grade, side: x.side})} ${x.line} ${propWord(x.prop)} <b>${(x.p * 100).toFixed(0)}%</b>`;
+    return `<div class="small" style="margin:0 2px 8px;line-height:1.5"><b>Highest chance here:</b> ${q2.slice(0, 3).map(it).join(" · ")}
+      <div class="muted">No outside projections yet · value not ranked (no entry payouts)${q2.length > 1 ? " · these picks share match conditions and may win or lose together" : ""}</div></div>`; };
+  let html;
+  if (!rows.length) html = `<div class="muted">${boardRows.length ? `No lines match these filters. <button type="button" class="chipbtn" data-reset="1">Reset filters</button>` : `No Underdog CS2 lines right now.${boardAt ? ` Checked ${new Date(boardAt * 1000).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})} · checks again every 5 minutes – new lines are graded automatically.` : ""}`}</div>`;
+  else if (bview === "all") html = `<div class="blist">${rows.map(r => rowHtml(r, true)).join("")}</div>`;
+  else {
+    const groups = new Map();
+    for (const r of rows) { const k = (r.matchup || "") + "|" + (r.start || ""); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
+    const opened = store.get("cs2s_mopen", {});
+    html = [...groups.entries()].sort((a, b) => String(a[1][0].start || "9").localeCompare(String(b[1][0].start || "9"))).map(([k, g], i) => {
+      const r = g[0], open = k in opened ? opened[k] : i < 3, bets = g.filter(x => (x.units || 0) > 0).length;
+      const maps = (r.maps_known || []).filter(Boolean);
+      return `<details class="mgroup" data-mk="${esc(k)}" ${open ? "open" : ""}><summary><b>${esc((r.team_name || r.team || "") + " vs " + (r.opp_name || r.opponent || ""))}</b>
+        <span class="muted small">${shortWhen(r.start)}${r.event ? " · " + esc(r.event) : ""}${r.bo ? " · BO" + esc(r.bo) : ""} · ${maps.length ? "maps: " + maps.map(mapName).join(", ") : "maps not announced"} · ${g.length} line${g.length > 1 ? "s" : ""}${bets ? `, ${bets} bet${bets > 1 ? "s" : ""}` : ""}</span></summary>
+        <div class="mbody">${matchRank(g)}<div class="blist">${g.map(x => rowHtml(x, false)).join("")}</div></div></details>`; }).join("");
+  }
+  $("#boardout").innerHTML = html + (rows.length ? `<div class="small muted" style="margin-top:10px">Underdog lines, graded. Tap a pick for the full analysis.</div>` : "");
+  $("#boardout").querySelectorAll("details.mgroup").forEach(d => d.addEventListener("toggle", () => { const o = store.get("cs2s_mopen", {}); o[d.dataset.mk] = d.open; store.set("cs2s_mopen", o); }));
 }
 $("#boardout").addEventListener("click", e => {
+  if (e.target.closest("[data-reset]")) return resetBFilters();
   const b = e.target.closest("[data-bslip]");
   if (b) { e.stopPropagation(); const [p, l, t] = b.dataset.bslip.split("|");
     const r = boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t);
@@ -956,6 +1016,15 @@ $("#bscope").onclick = e => { const b = e.target.closest("button"); if (!b) retu
 $("#bside").onclick = e => { const b = e.target.closest("button"); if (!b) return; bside = b.dataset.v;
   [...$("#bside").children].forEach(x => x.classList.toggle("on", x === b)); drawBoard(); };
 $("#bbets").onchange = drawBoard;
+$("#bview").onclick = e => { const b = e.target.closest("button"); if (!b) return; bview = b.dataset.v;
+  [...$("#bview").children].forEach(x => x.classList.toggle("on", x === b)); drawBoard(); };
+function resetBFilters() {
+  bprop = "kills"; bside = "both"; bscope = "12"; bview = "matches"; $("#bsort").value = "g"; $("#bbets").checked = true; $("#bsearch").value = "";
+  for (const [id, v] of [["#bprop", bprop], ["#bside", bside], ["#bscope", bscope], ["#bview", bview]]) [...$(id).children].forEach(x => x.classList.toggle("on", x.dataset.v === v));
+  drawBoard();
+}
+$("#breset").onclick = resetBFilters;
+restoreBFilters();
 const _drawBoard0 = drawBoard;          // the slip builder follows the board's filters
 drawBoard = () => { _drawBoard0(); if (!$("#slipsout").hidden) drawAutoSlips(); };
 $("#bsearch").oninput = drawBoard;
