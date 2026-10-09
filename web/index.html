@@ -1574,7 +1574,9 @@ function drawMatchCompare() {
   const body = j.teams.map(t => {
     const ps = [...t.players].sort((a, b) => MC.sort === "chance" ? best(b) - best(a) : a.nick.localeCompare(b.nick));
     const sm = t.summary, tot = props.map(pr => `${pr === "hs" ? "HS" : "kills"} ${num(sm[pr], 1)}`).join(" · ");
-    return `<tr class="mteam"><td colspan="${1 + props.length * 3 + 1}"><b>${esc(t.team)}</b> <span class="muted small">· projected team ${tot}${sm.complete ? "" : ` – incomplete: ${sm.covered} of ${sm.roster} players have projections`}</span></td></tr>`
+    const note = sm.complete ? `projected team ${tot} <span title="${esc((sm.lineup || []).join(", "))}">(${esc(sm.basis)})</span>`
+      : !sm.basis ? `no team total – lineup unclear (${sm.roster} players listed)` : `no team total – ${sm.covered} of 5 players have projections`;
+    return `<tr class="mteam"><td colspan="${1 + props.length * 3 + 1}"><b>${esc(t.team)}</b> <span class="muted small">· ${note}</span></td></tr>`
       + ps.map(e => `<tr class="${e.nick.toLowerCase() === MC.focus ? "mfocus" : ""}"><td><b>${esc(e.nick)}</b></td>${props.map(pr => cell(e, pr)).join("")}${dcell(e)}</tr>`).join("");
   }).join("");
   const seg = (id, opts, cur) => `<div class="seg" data-mcseg="${id}">${opts.map(([v, l]) => `<button type="button" data-v="${v}" class="${v === cur ? "on" : ""}">${l}</button>`).join("")}</div>`;

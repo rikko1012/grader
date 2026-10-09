@@ -332,10 +332,16 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12"):
     out = []
     for tname in (team, opponent):
         ps = [e for (t, _), e in players.items() if t == tname]
-        full = len(ps) >= 5 and all(e[p] and e[p].get("proj") is not None for e in ps for p in ("kills", "hs"))
-        summ = {prop: round(sum((e[prop] or {}).get("proj") or 0 for e in ps), 1) for prop in ("kills", "hs")}
-        covered = sum(1 for e in ps if all((e[p] or {}).get("proj") is not None for p in ("kills", "hs")))
-        out.append({"team": tname, "players": ps, "summary": dict(summ, complete=full, covered=covered, roster=len(ps))})
+        # team totals need the 5 who actually play: Underdog's lineup when it lists exactly 5, else a roster page of
+        # exactly 5; otherwise no total (a 6-man roster page would inflate it)
+        lined = [e for e in ps if any((e[p] or {}).get("line") is not None for p in ("kills", "hs"))]
+        five = lined if len(lined) == 5 else ps if len(ps) == 5 else None
+        basis = "Underdog lineup" if five is lined and len(lined) == 5 else "roster page" if five else None
+        covered = sum(1 for e in (five or ps) if all((e[p] or {}).get("proj") is not None for p in ("kills", "hs")))
+        full = bool(five) and covered == 5
+        summ = {prop: (round(sum((e[prop] or {}).get("proj") or 0 for e in five), 1) if full else None) for prop in ("kills", "hs")}
+        out.append({"team": tname, "players": ps, "summary": dict(summ, complete=full, covered=covered, roster=len(ps), basis=basis,
+                                                                  lineup=[e["nick"] for e in five] if five else None)})
     return {"match": {"team": team, "opponent": opponent, "start": start, "scope": scope}, "teams": out,
             "at": _dt.now(timezone.utc).isoformat(timespec="seconds")}
 

@@ -40,5 +40,21 @@ def test_match_compare(monkeypatch):
     assert au["MAJ3R"]["kills"]["proj"] is None and au["MAJ3R"]["kills"]["no_line"]
     assert vi["ZywOo"]["kills"]["line"] == 34.5 and vi["ZywOo"]["hs"]["line"] is None                 # Map 1 line kept out
     assert "donk" not in au and "donk" not in vi and "ropz" not in vi and "XTQZZZ" not in vi          # other match / coach
-    assert teams["Aurora"]["summary"]["complete"] is False and teams["Aurora"]["summary"]["covered"] == 4   # MAJ3R missing
-    assert teams["Vitality"]["summary"]["roster"] == 4 and teams["Vitality"]["summary"]["complete"] is False  # 4-man roster page
+    assert teams["Aurora"]["summary"]["complete"] is False and teams["Aurora"]["summary"]["kills"] is None   # MAJ3R has no projection
+    assert teams["Vitality"]["summary"]["roster"] == 4 and teams["Vitality"]["summary"]["basis"] is None       # 4 listed: lineup unclear
+
+
+def test_team_total_uses_the_five_who_play(monkeypatch):
+    lineup = ["a1", "a2", "a3", "a4", "a5"]
+    rows = [_row(n, "Aurora", "kills", 20.5) for n in lineup]
+    monkeypatch.setattr(server, "board_payload", lambda: {"rows": rows})
+    class B:
+        def team(self, slug):
+            return {"players": [{"nickname": n} for n in lineup + ["sub6"]]} if slug == "aurora" else {"players": []}
+        def close(self): pass
+    monkeypatch.setattr(server, "BO3", B)
+    import perf_live
+    monkeypatch.setattr(perf_live, "projection", lambda *a: {"lambda": 10.0, "data_quality": "ok"})
+    t = next(x for x in server.match_compare("aurora", "vit", "Aurora", "Vitality", START, "12")["teams"] if x["team"] == "Aurora")
+    assert t["summary"]["basis"] == "Underdog lineup" and t["summary"]["lineup"] == lineup and t["summary"]["complete"]
+    assert t["summary"]["kills"] == 5 * 21.5                                         # the 6-man roster page's sub is not added
