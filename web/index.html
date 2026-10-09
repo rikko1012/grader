@@ -288,8 +288,6 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 .brow2:hover{border-color:rgba(255,122,26,.5)}.brow2 .gtag{min-width:40px;font-size:14px;padding:6px 0;text-align:center}
 .b2top{font-size:14px}.b2top .muted{font-size:12px}.b2pick{font:600 14.5px var(--display);margin-top:2px}.b2pick b{color:var(--accent-2)}
 .b2meta{font-size:12px;color:var(--muted);margin-top:3px}.b2ev{font-size:12.5px;margin-top:3px}.b2ev.up{color:#3fb950}.b2ev.dn{color:#f0883e}
-.rtab td,.rtab th{padding:4px 8px}.rsum{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:8px 0}
-.rsum div{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:8px}.rsum .k{font-size:11px;color:var(--muted);text-transform:uppercase}.rsum .v{font:700 18px var(--display)}
 @media (min-width:1180px){body.hasslip main,body.hasslip .wrap{margin-right:440px}
   body.hasslip #slip{display:block !important;top:84px;bottom:18px;right:18px;max-height:none}
   body.hasslip #slipbtn{display:none !important}}
@@ -310,7 +308,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 
   <div id="gate" class="card" hidden style="text-align:center;padding:28px 18px"></div>
   <div id="who" class="small muted" hidden style="text-align:right;margin:-6px 0 8px"></div>
-  <div class="modes" id="modes"><div class="seg" id="mode"><button type="button" data-v="one" class="on">Single prop</button><button type="button" data-v="slate">Slate</button><button type="button" data-v="board">Underdog board</button><button type="button" data-v="results">Results</button></div>
+  <div class="modes" id="modes"><div class="seg" id="mode"><button type="button" data-v="one" class="on">Single prop</button><button type="button" data-v="slate">Slate</button><button type="button" data-v="board">Underdog board</button></div>
     <span class="small muted">Shortcuts: <b>K</b> kills &middot; <b>H</b> headshots</span></div>
   <section class="card" id="slate" hidden>
     <textarea id="slatetxt" spellcheck="false" placeholder="ZywOo 27.5 K&#10;ropz 22.5 HS&#10;donk 30.5&#10;m0NESY 14.5 hs goblin"></textarea>
@@ -336,17 +334,6 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
     </div>
     <div id="slipsout" hidden></div>
     <div id="boardout"></div>
-  </section>
-  <section class="card" id="results" hidden>
-    <div class="bbar">
-      <div class="seg" id="rcohort" title="Real Underdog offers the board graded, or lines members typed in"><button type="button" data-v="board" class="on">Board offers</button><button type="button" data-v="member">Member research lines</button></div>
-      <select id="rversion" style="width:auto;padding:8px 10px"><option value="">All versions</option></select>
-      <div class="seg" id="rprop"><button type="button" data-v="" class="on">Both</button><button type="button" data-v="kills">Kills</button><button type="button" data-v="hs">Headshots</button></div>
-      <div class="seg" id="rscope"><button type="button" data-v="" class="on">All maps</button><button type="button" data-v="12">Maps 1–2</button><button type="button" data-v="1">Map 1</button><button type="button" data-v="123">Maps 1–3</button></div>
-      <select id="rgrade" style="width:auto;padding:8px 10px"><option value="">All grades</option><option value="A+,A,A-">A grades</option><option value="B+,B,B-">B grades</option><option value="A+,A,A-,B+,B,B-">Bets (B- or better)</option><option value="LEAN">Leans</option></select>
-      <label class="small">From <input type="date" id="rfrom" style="width:auto;padding:6px"></label><label class="small">To <input type="date" id="rto" style="width:auto;padding:6px"></label>
-    </div>
-    <div id="resultsout"></div>
   </section>
   <div id="cardpop" hidden><div id="popbody"><div class="popbar"><button type="button" class="chipbtn" id="popclose" title="Close (Esc)">✕ Close</button></div></div></div>
   <form id="f" autocomplete="off">
@@ -506,30 +493,6 @@ $("#player").addEventListener("blur", () => setTimeout(hideSug, 120));
 function pick(i) { $("#player").value = items[i].nick; slug = items[i].slug; hideSug(); $("#line").focus(); }
 function hideSug() { $("#sug").style.display = "none"; }
 
-// ---------- results: board offers and member research lines kept apart; versions, pending and returns separated
-const rf_ = {cohort: "board", prop: "", maps: ""};
-async function loadResults() {
-  const qs = new URLSearchParams({cohort: rf_.cohort, version: $("#rversion").value, prop: rf_.prop, maps: rf_.maps, grades: $("#rgrade").value, from: $("#rfrom").value, to: $("#rto").value});
-  $("#resultsout").innerHTML = `<div class="muted small">Loading…</div>`;
-  let d; try { const r = await fetchRetry("/api/results?" + qs); d = await r.json(); if (r.status === 401 && d.error === "members_only") return showGate(d); } catch (e) { $("#resultsout").innerHTML = `<div class="muted">${esc(e.message)}</div>`; return; }
-  const sel = $("#rversion"), cur = sel.value;
-  sel.innerHTML = `<option value="">All versions</option>` + (d.versions || []).map(([v, n]) => `<option value="${esc(v)}">${esc(v)} (${n})</option>`).join(""); sel.value = cur;
-  const pc = x => x == null ? "–" : (x * 100).toFixed(1) + "%", box = (k, v, s) => `<div><div class="k">${k}</div><div class="v">${v}</div>${s ? `<div class="small muted">${s}</div>` : ""}</div>`;
-  const R = d.returns || {};
-  $("#resultsout").innerHTML = `
-    <div class="small muted">${d.cohort === "board" ? "Real Underdog offers the board graded – each counted once, as first published." : "Lines members typed in (research lines) – not necessarily offered anywhere."}
-      ${$("#rversion").value ? "" : " Several model versions are mixed here – pick one above to judge a single version."}</div>
-    <div class="rsum">${box("Settled", d.settled, `${d.decided} decided · ${d.matches_decided} matches`)}${box("Pending", d.pending)}${box("Push / void", `${d.push} / ${d.void}`)}
-      ${box("Predicted", pc(d.predicted), "average printed chance")}${box("Actual", pc(d.actual), `${d.hits}/${d.decided} hit`)}</div>
-    ${(d.by_grade || []).length ? `<div class="scroll"><table class="rtab"><thead><tr><th>Grade</th><th class="num">Decided</th><th class="num">Predicted</th><th class="num">Actual</th></tr></thead><tbody>
-      ${d.by_grade.map(g => `<tr><td>${esc(g.grade)}</td><td class="num">${g.n}</td><td class="num">${pc(g.predicted)}</td><td class="num">${pc(g.actual)} <span class="muted small">(${g.hits}/${g.n})</span></td></tr>`).join("")}</tbody></table></div>` : ""}
-    ${d.cohort === "member" ? `<div class="kv"><span>Line types</span><span class="muted">${Object.entries(d.line_types || {}).map(([k, n]) => `${esc(k)} ${n}`).join(" · ")}</span></div>` : ""}
-`;
-}
-for (const id of ["#rcohort", "#rprop", "#rscope"]) $(id).onclick = e => { const b = e.target.closest("button"); if (!b) return;
-  [...$(id).children].forEach(x => x.classList.toggle("on", x === b)); rf_[id === "#rcohort" ? "cohort" : id === "#rprop" ? "prop" : "maps"] = b.dataset.v; loadResults(); };
-for (const id of ["#rversion", "#rgrade", "#rfrom", "#rto"]) $(id).onchange = loadResults;
-
 // ---------- grade
 $("#f").onsubmit = async e => {
   e.preventDefault(); hideSug();
@@ -650,9 +613,8 @@ showRecent();
 // modes: one prop / slate
 function setMode(m) {
   [...$("#mode").children].forEach(x => x.classList.toggle("on", x.dataset.v === m));
-  $("#slate").hidden = m !== "slate"; $("#board").hidden = m !== "board"; $("#results").hidden = m !== "results"; $("#f").style.display = m === "one" ? "" : "none";
+  $("#slate").hidden = m !== "slate"; $("#board").hidden = m !== "board"; $("#f").style.display = m === "one" ? "" : "none";
   if (m === "board") loadBoard();
-  if (m === "results") loadResults();
   try { showExamples(); } catch {}
 }
 $("#mode").onclick = e => { const b = e.target.closest("button"); if (b) { closePop(); setMode(b.dataset.v); } };
