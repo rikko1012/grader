@@ -1552,9 +1552,12 @@ function matchCompareSlot(d) {
 // why a pick reads the way it does: the chance is the model's full-precision figure; the grade comes from that chance
 // (B- from 55%, B from 57% ...); "Lean" means 0 units - under 55%, or a gate held the stake at 0 even above it
 function mcWhy(c) {
-  const p = (c.p || 0) * 100, side = c.side === "More" ? "Over" : "Under";
-  let t = `${side} chance ${p.toFixed(2)}% (shown rounded to 1 decimal).`;
-  if (c.grade === "LEAN") t += p < 55 ? " Lean: under the 55% needed for a graded pick, so 0 units." : ` Lean: 0 units despite ${p.toFixed(1)}% - ${c.reason ? c.reason.replace(/^.*0 units:\s*/, "") : "a gate held the stake at 0"}.`;
+  // the grade and stake are decided on the grader's full-precision chance; the board publishes it to 0.1%, so a shown
+  // 55.0% can be a 54.96% Lean - the explanation comes from the grader's own reason, never from the rounded figure
+  const p = (c.p || 0) * 100, side = c.side === "More" ? "Over" : "Under", gate = /0 units:\s*(.+)$/.exec(c.reason || "");
+  let t = `${side} chance ${p.toFixed(1)}% (graded on the unrounded chance).`;
+  if (c.grade === "LEAN") t += gate ? ` Lean: 0 units - ${gate[1]}.` : p >= 55.05 ? ` Lean: 0 units - ${c.reason || "a gate held the stake at 0"}.`
+    : " Lean: below the 55% needed for a graded pick, so 0 units.";
   else t += ` Grade ${c.grade} from the chance: B- 55%+, B 57%+, B+ 63%+, A- 68%+, A 74%+, A+ 80%+.`;
   if (c.units_full > c.units) t += ` Stake cut from ${c.units_full}U by the same-match cap.`;
   return t;
@@ -1606,7 +1609,7 @@ Tap to open ${esc(e.nick)}'s ${pr === "hs" ? "headshots" : "kills"} card">
       ${seg("side", [["More", "Overs"], ["both", "Both"], ["Less", "Unders"]], MC.side)}${seg("sort", [["chance", "Highest chance"], ["name", "A–Z"]], MC.sort)}</div>
     ${expo.length ? `<div class="small" style="margin-bottom:6px"><b>Shared exposure in this match</b> – these picks can win or lose together:<br>${expo.join("<br>")}</div>` : ""}
     <div class="scroll"><table class="mctab"><thead>${head}</thead><tbody>${body}</tbody></table></div>
-    <div class="small muted" style="margin-top:6px">Our projections for every player in this match; picks only where Underdog has a line. Chances to 1 decimal; hover or long-press a pick for the exact figure and why it is graded or a Lean. Tap a pick to open that player's card.
+    <div class="small muted" style="margin-top:6px">Our projections for every player in this match; picks only where Underdog has a line. Chances to 1 decimal; hover or long-press a pick for why it is graded or a Lean. Tap a pick to open that player's card.
       Picks in one match share its conditions and may win or lose together – team totals are projections added up, not a combined chance.</div>`;
 }
 document.addEventListener("click", e => {
