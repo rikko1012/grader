@@ -1549,6 +1549,16 @@ function matchCompareSlot(d) {
   fetchRetry("/api/match_compare?" + qs).then(r => r.json()).then(j => { if (MC.key !== key) return; MC.data = j; drawMatchCompare(); })
     .catch(() => { const el = $("#mcmp"); if (el && MC.key === key) el.innerHTML = `<h2>Match players</h2><div class="small muted">Couldn't load the other players right now – the grade above is unaffected.</div>`; });
 }
+// why a pick reads the way it does: the chance is the model's full-precision figure; the grade comes from that chance
+// (B- from 55%, B from 57% ...); "Lean" means 0 units - under 55%, or a gate held the stake at 0 even above it
+function mcWhy(c) {
+  const p = (c.p || 0) * 100, side = c.side === "More" ? "Over" : "Under";
+  let t = `${side} chance ${p.toFixed(2)}% (shown rounded to 1 decimal).`;
+  if (c.grade === "LEAN") t += p < 55 ? " Lean: under the 55% needed for a graded pick, so 0 units." : ` Lean: 0 units despite ${p.toFixed(1)}% - ${c.reason ? c.reason.replace(/^.*0 units:\s*/, "") : "a gate held the stake at 0"}.`;
+  else t += ` Grade ${c.grade} from the chance: B- 55%+, B 57%+, B+ 63%+, A- 68%+, A 74%+, A+ 80%+.`;
+  if (c.units_full > c.units) t += ` Stake cut from ${c.units_full}U by the same-match cap.`;
+  return t;
+}
 function drawMatchCompare() {
   const el = $("#mcmp"), j = MC.data; if (!el || !j) return;
   const props = MC.prop === "both" ? ["kills", "hs"] : [MC.prop];
@@ -1561,8 +1571,10 @@ function drawMatchCompare() {
     if (c.line == null) return proj + `<td class="num muted">–</td><td class="muted small">No available line</td>`;
     if (!shown(c)) return proj + `<td class="num">${c.line}</td><td class="muted small">${c.side ? (c.side === "More" ? "Over" : "Under") + " (filtered)" : "grading…"}</td>`;
     const capped = c.units_full > c.units ? ` <span class="muted small">(capped from ${c.units_full}U)</span>` : "";
-    return proj + `<td class="num">${c.line}</td><td><button type="button" class="mcpick" data-mc="${esc(e.nick)}|${c.line}|${pr}" title="Open ${esc(e.nick)}'s ${pr === "hs" ? "headshots" : "kills"} card">
-      <b>${c.grade === "LEAN" ? "Lean " : ""}${c.side === "More" ? "Over" : "Under"}</b> ${Math.round((c.p || 0) * 100)}% · ${esc(c.grade || "–")} · ${+(+c.units || 0).toFixed(2)}U${capped}</button></td>`;
+    const both = shown(e.kills) && shown(e.hs) && props.length === 2;
+    return proj + `<td class="num">${c.line}</td><td><button type="button" class="mcpick" data-mc="${esc(e.nick)}|${c.line}|${pr}" title="${esc(mcWhy(c))}
+Tap to open ${esc(e.nick)}'s ${pr === "hs" ? "headshots" : "kills"} card">
+      <b>${c.grade === "LEAN" ? "Lean " : ""}${c.side === "More" ? "Over" : "Under"}</b> ${((c.p || 0) * 100).toFixed(1)}% · ${esc(c.grade || "–")} · ${+(+c.units || 0).toFixed(2)}U${capped}</button>${both ? ` <span class="dstat warn" style="font-size:11px" title="Kills and headshots for the same player move together - treat them as one exposure, not two independent picks">same player</span>` : ""}</td>`;
   };
   const dcell = e => {
     const cs = props.map(pr => e[pr]).filter(Boolean), lined = cs.filter(c => c.line != null);
@@ -1580,12 +1592,21 @@ function drawMatchCompare() {
     return `<tr class="mteam"><td colspan="${1 + props.length * 3 + 1}"><b>${esc(t.team)}</b> <span class="muted small">· ${note}</span></td></tr>`
       + ps.map(e => `<tr class="${e.nick.toLowerCase() === MC.focus ? "mfocus" : ""}"><td><b>${esc(e.nick)}</b></td>${props.map(pr => cell(e, pr)).join("")}${dcell(e)}</tr>`).join("");
   }).join("");
+  // shared exposure: picks in one match are not independent - same player (kills + HS) and same team / direction
+  const expo = j.teams.map(t => {
+    const ps = t.players.flatMap(e => props.filter(pr => shown(e[pr])).map(pr => ({nick: e.nick, pr, side: e[pr].side, u: +e[pr].units || 0})));
+    if (!ps.length) return "";
+    const dbl = t.players.filter(e => props.length === 2 && shown(e.kills) && shown(e.hs)).map(e => `${esc(e.nick)} (kills ${e.kills.side === "More" ? "Over" : "Under"} + HS ${e.hs.side === "More" ? "Over" : "Under"})`);
+    const un = ps.filter(x => x.side === "Less").length, ov = ps.length - un, u = ps.reduce((a, x) => a + x.u, 0);
+    return `<b>${esc(t.team)}</b>: ${ps.length} pick${ps.length > 1 ? "s" : ""} (${ov} Over · ${un} Under, ${+u.toFixed(2)}U staked)${dbl.length ? ` – same player both props: ${dbl.join(", ")}` : ""}`;
+  }).filter(Boolean);
   const seg = (id, opts, cur) => `<div class="seg" data-mcseg="${id}">${opts.map(([v, l]) => `<button type="button" data-v="${v}" class="${v === cur ? "on" : ""}">${l}</button>`).join("")}</div>`;
   el.innerHTML = `<h2>Match players · ${esc(j.match.team)} vs ${esc(j.match.opponent)} · ${j.match.scope === "1" ? "Map 1" : j.match.scope === "123" ? "Maps 1–3" : "Maps 1–2"}</h2>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">${seg("prop", [["kills", "Kills"], ["hs", "Headshots"], ["both", "Both"]], MC.prop)}
       ${seg("side", [["More", "Overs"], ["both", "Both"], ["Less", "Unders"]], MC.side)}${seg("sort", [["chance", "Highest chance"], ["name", "A–Z"]], MC.sort)}</div>
+    ${expo.length ? `<div class="small" style="margin-bottom:6px"><b>Shared exposure in this match</b> – these picks can win or lose together:<br>${expo.join("<br>")}</div>` : ""}
     <div class="scroll"><table class="mctab"><thead>${head}</thead><tbody>${body}</tbody></table></div>
-    <div class="small muted" style="margin-top:6px">Our projections for every player in this match; picks only where Underdog has a line. Tap a pick to open that player's card.
+    <div class="small muted" style="margin-top:6px">Our projections for every player in this match; picks only where Underdog has a line. Chances to 1 decimal; hover or long-press a pick for the exact figure and why it is graded or a Lean. Tap a pick to open that player's card.
       Picks in one match share its conditions and may win or lose together – team totals are projections added up, not a combined chance.</div>`;
 }
 document.addEventListener("click", e => {

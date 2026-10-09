@@ -10,7 +10,7 @@ START = "2026-10-10T13:45:00.000+00:00"
 def _row(nick, team, prop, line, side="More", p=0.6, scope="12", start="2026-10-10T13:45:00Z"):
     return {"nick": nick, "player": nick, "team": team, "team_name": team, "opponent": "x", "prop": prop, "scope": scope, "line": line,
             "side": side, "p": p, "grade": "B", "units": 0.5, "proj": line + 1, "start": start, "graded_at": "2026-10-09T19:00:00+00:00",
-            "dstat": ["ok", ""], "source": "HLTV", "state": "GRADE"}
+            "dstat": ["ok", ""], "source": "HLTV", "state": "GRADE", "reason": "why " + nick}
 
 
 def test_match_compare(monkeypatch):
@@ -34,7 +34,7 @@ def test_match_compare(monkeypatch):
     teams = {t["team"]: t for t in out["teams"]}
     assert set(teams) == {"Aurora", "Vitality"}
     au = {p["nick"]: p for p in teams["Aurora"]["players"]}; vi = {p["nick"]: p for p in teams["Vitality"]["players"]}
-    assert au["Wicadia"]["hs"]["line"] == 15.5 and au["Wicadia"]["kills"]["side"] == "Less"            # offered lines with picks
+    assert au["Wicadia"]["hs"]["reason"] == "why Wicadia" and au["Wicadia"]["hs"]["line"] == 15.5 and au["Wicadia"]["kills"]["side"] == "Less"            # offered lines with picks
     assert au["XANTARES"]["kills"] == {"proj": 20.0, "line": None, "no_line": True, "source": "HLTV", "dq": "ok"}   # projection, no pick
     assert "side" not in au["XANTARES"]["hs"]                                                          # no invented pick
     assert au["MAJ3R"]["kills"]["proj"] is None and au["MAJ3R"]["kills"]["no_line"]

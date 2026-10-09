@@ -320,7 +320,8 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12"):
         e = players.setdefault((side_of(r), nk.lower()), {"nick": nk, "team": side_of(r), "kills": None, "hs": None, "not_on_roster_page": True})
         e[r["prop"]] = {"proj": r.get("proj"), "line": r["line"], "side": r.get("side"), "p": r.get("p"), "grade": r.get("grade"),
                         "units": r.get("units"), "units_full": r.get("units_full"), "graded_at": r.get("graded_at"), "dstat": r.get("dstat"),
-                        "source": r.get("source"), "state": r.get("state"), "ud_team": r.get("team"), "ud_opponent": r.get("opponent")}
+                        "source": r.get("source"), "state": r.get("state"), "ud_team": r.get("team"), "ud_opponent": r.get("opponent"),
+                        "reason": r.get("reason")}
     for (tname, _), e in players.items():          # projections for props without an offered line
         for prop in ("kills", "hs"):
             if e[prop] is None:

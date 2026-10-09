@@ -114,6 +114,28 @@ def _db():
     return con
 
 
+PRIOR_SMOOTH = {"m0": 0.93, "T": 800.0}     # chosen on TRAIN only (kills MAE grid), 2026-10-09 - shadow, never shown
+
+
+def smooth_prior_pf(pf, m0=PRIOR_SMOOTH["m0"], T=PRIOR_SMOOTH["T"]):
+    """The live perf-2 projection re-run with the challenger prior target m(r) = 1 - (1 - m0) * T / (T + r) instead of
+    the flat prior_m, r = the player's time-weighted rounds. Exact: the prior enters rate_all linearly and reaches the
+    final rate through the environment blend with weight ke / (env rounds + ke). None when pf is not a perf-2 projection."""
+    import perf
+    if not pf or not str(pf.get("version") or "").startswith("perf-2") or pf.get("rate") is None or pf.get("history_rounds_weighted") is None:
+        return None
+    p, r = perf.PARAMS, float(pf["history_rounds_weighted"])
+    m_new = 1 - (1 - m0) * T / (T + r)
+    d_all = p["k0"] * p["pop"] * (m_new - p["prior_m"]) / (r + p["k0"])
+    rate = float(pf["rate"]) + d_all * p["ke"] / (float(pf.get("env_rounds_weighted") or 0.0) + p["ke"])
+    s = rate / float(pf["rate"]) if pf["rate"] else 1.0
+    out = dict(pf, rate=rate, lambda_kills=pf["lambda_kills"] * s, **{"lambda": pf["lambda"] * s}, prior_target=round(m_new, 4),
+               version=str(pf["version"]) + "-prior-smooth")
+    out["sd"] = float(pf["spread_c"]) * (max(out["lambda"], 1.0) ** 0.5)
+    out.pop("g7", None)
+    return out
+
+
 def _factors(res):
     """Every input and every adjustment behind this grade (for measuring each factor later)."""
     gi, g, pb = res.get("grader_inputs") or {}, res.get("grade") or {}, res.get("player_block") or {}
@@ -155,6 +177,8 @@ def _factors(res):
         pf_ = gi.get("perf") if isinstance(gi.get("perf"), dict) else {}
         if pf_.get("g7"):                     # 2026-10-09 perf-2 live: the perf-1 (G7) projection on the same inputs
             alts["perf1_g7"] = (dict(gi, perf=pf_["g7"]), CONFIG)
+        if smooth_prior_pf(pf_):              # 2026-10-09 challenger: prior that relaxes toward the population as history grows
+            alts["prior_smooth"] = (dict(gi, perf=smooth_prior_pf(pf_)), CONFIG)
         for name, cfg in alts.items():
             gin, cfg = cfg if isinstance(cfg, tuple) else (gi, cfg)
             gg = grade_leg(gin, cfg)

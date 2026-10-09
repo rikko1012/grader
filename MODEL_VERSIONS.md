@@ -57,3 +57,13 @@ Still open (not fixed live or in fix_v2):
 - The displayed chance mixes the model's chance with the Over margin (legacy paths only; the card explains the gap to the simulation).
 - Whole-line chances are conditional on no push. That is valid, but they must not be shown as unconditional or
   multiplied into slip all-hit chances without handling pushes.
+
+## 2026-10-09 newcomer-prior review (grading unchanged, version aedb7b7446)
+- Implementation check: the live path uses perf.PARAMS (prior_m 0.93). Overall rate, environment blend and prior all use the
+  same time weights (half-life 120 d, strictly earlier days); k0 300 / ke 800 are in weighted rounds. The prior reaches
+  everyone through the shrinkage weight k0/(r+k0) by design. There is no newcomer-only rule applied too broadly, so there is no implementation error to fix.
+- Challenger `prior_smooth` (shadow, picklog only): target m(r) = 1 - 0.07 * 800/(800 + r). (m0, T) was chosen on TRAIN kills MAE.
+  On development data (VALID/TEST) it ties the current model and is not better: MAE +0.003 to +0.009, log-likelihood about +0.000 to +0.003.
+  On verified board lines, log-loss is +0.0005 (kills) and +0.0014 (HS) vs current.
+  The previous prior 1.0 is worse for thin-history players (test MAE +0.157, 95% +0.070 to +0.236).
+  Decision: keep prior_m 0.93 live and log prior_smooth beside it on every forecast. Not promoted.
