@@ -29,3 +29,20 @@ def test_groups_never_mixed():
     d = diagnostics.build(P, [], [])
     keys = {(s["source"], s["prop"], s["version"]) for s in d["cohorts"]["first"]["summary"]}
     assert keys == {("board", "kills", "V1"), ("board", "kills", "V2"), ("board", "hs", "V1"), ("member", "kills", "V1")}
+
+
+def test_forward_hs_bands():
+    import json
+    st = "2026-10-11T12:00:00.000+00:00"
+    P = [dict(_p(i, prop="hs", actual=a, line=14.5), match_start=st, logged_at="2026-10-11T09:00:00+00:00") for i, a in ((1, 16.0), (2, 12.0), (3, 13.0))]
+    P.append(dict(_p(4, prop="hs", actual=16.0, line=14.5), match_start="2026-10-09T12:00:00.000+00:00"))     # before FORWARD_FROM
+    F = [dict(_f(i, "2026-10-11T10:00:00+00:00", line=14.5, pick="Less"), p_pick=0.6, p_more=0.4,
+              shadow=json.dumps({"perf1_g7": {"p_more": 0.5}, "prior_smooth": {"p_more": 0.42}})) for i in (1, 2, 3)]
+    F.append(dict(_f(4, "2026-10-09T10:00:00+00:00", line=14.5), p_more=0.6))
+    fw = diagnostics.build(P, F, [])["forward_hs"]
+    assert fw["lines"] == 3 and fw["matches"] == 3                              # the pre-registration forecast is out
+    cur, prev, sm = fw["models"]
+    assert cur["model"] == "current" and [b["n"] for b in cur["bands"]] == [0, 3, 0, 0, 0]
+    assert cur["bands"][1]["predicted"] == 0.4 and abs(cur["bands"][1]["actual"] - 1 / 3) < 1e-3
+    assert [b["n"] for b in prev["bands"]] == [0, 0, 3, 0, 0] and abs(prev["gap"] - (1 / 3 - 0.5)) < 1e-3
+    assert sm["bands"][1]["predicted"] == 0.42

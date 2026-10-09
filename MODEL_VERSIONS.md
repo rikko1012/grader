@@ -76,4 +76,9 @@ Still open (not fixed live or in fix_v2):
 - HLTV held-out (2,965 player-series, Aug 13+): HS projection -0.25 (slightly LOW, 95% -0.45 to -0.05).
   Randomised PIT: middle 50% holds 52.2%, middle 80% holds 81.5% (kills: 51.0% / 82.2%).
   At synthetic lines around the projection, predicted vs actual Over rates are within 0-4 pts.
-- Conclusion: there is no evidence that the HS distribution is miscalibrated. Keep watching board HS lines by band as they settle.
+- Status: possible Over-probability overstatement on development board data; not confirmed. Broader historical checks are
+  encouraging. Forward validation remains pending. The reasons board offers behave differently from the wider HLTV sample are
+  unresolved, and the highest band (5 lines) can't be judged yet. No rebuild.
+- Forward test (predefined): board HS Maps 1-2 evaluation snapshots logged from 2026-10-09T23:40Z, same bands
+  (<0.35, 0.35-0.45, 0.45-0.55, 0.55-0.65, 0.65+ chance of Over). Current model vs previous model (perf1_g7) and prior_smooth,
+  with match-grouped 95% intervals. Shown on the admin diagnostics page under "Forward check".

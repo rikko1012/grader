@@ -23,6 +23,13 @@ from datetime import datetime, timedelta
 EVAL_LEAD_MIN = 30
 PLAUSIBLE_MAX = {"kills": {"1": 50, "12": 90, "123": 130}, "hs": {"1": 35, "12": 60, "123": 90}}   # same as server.PLAUSIBLE_MAX
 BINS = ((0.0, 0.55), (0.55, 0.6), (0.6, 0.65), (0.65, 0.7), (0.7, 0.8), (0.8, 1.01))
+# Forward HS check (predefined 2026-10-09, before any of these forecasts existed): board headshot lines, Maps 1-2,
+# evaluation snapshot logged after FORWARD_FROM. Bands on the chance of OVER; current model vs the previous model
+# (perf1_g7 shadow) and the smooth-prior challenger. Development data showed a possible Over-probability overstatement
+# (-8.7 pts, 95% -17.9 to +1.0, 169 lines) - not confirmed; this is the forward test.
+FORWARD_FROM = "2026-10-09T23:40:00+00:00"
+HS_BANDS = ((0.0, 0.35), (0.35, 0.45), (0.45, 0.55), (0.55, 0.65), (0.65, 1.01))
+FORWARD_MODELS = (("current", None), ("previous (perf-1 / G7)", "perf1_g7"), ("smooth-prior challenger", "prior_smooth"))
 
 
 def _ts(s):
@@ -82,6 +89,7 @@ def build(picks, forecasts, batches=(), now=None):
         by_pick[f["pick_id"]].append(f)
     excl = collections.Counter()
     rows = {"first": [], "eval": []}
+    fwd = []
     for p in picks:
         t = p.get("test") or 0
         if t == 1:
@@ -124,6 +132,15 @@ def build(picks, forecasts, batches=(), now=None):
         hit = int((p["actual"] > f["line"]) == (side == "More"))
         rows["eval"].append(dict(base, version=f.get("model_version") or "untagged", side=side, p=f.get("p_pick"), lam=f.get("lambda"),
                                  grade=f.get("grade"), units=f.get("units"), hit=hit, line=f["line"], inputs=f.get("inputs")))
+        if cohort_src == "board" and p["prop"] == "hs" and base["scope"] == "12" and _ts(f["logged_at"]) >= _ts(FORWARD_FROM):
+            try:
+                sh = json.loads(f.get("shadow") or "null") or {}
+            except ValueError:
+                sh = {}
+            pm = {"current": f.get("p_more") if f.get("p_more") is not None else (f.get("p_pick") if side == "More" else 1 - f["p_pick"]) if f.get("p_pick") is not None else None}
+            for name, key in FORWARD_MODELS[1:]:
+                pm[name] = (sh.get(key) or {}).get("p_more")
+            fwd.append({"match": base["match"], "over": int(p["actual"] > f["line"]), "p": pm})
     out = {"generated": now.isoformat(timespec="seconds"), "eval_lead_min": EVAL_LEAD_MIN, "exclusions": dict(excl), "cohorts": {}}
     for cname, rs in rows.items():
         for r in rs:                                            # per-row diagnostics (+ flags, never causes)
@@ -203,6 +220,7 @@ def build(picks, forecasts, batches=(), now=None):
                                                                              "actual", "p", "hit", "rounds_pred", "rounds_act", "rate_pred",
                                                                              "rate_act", "hsk_pred", "hsk_act", "flags")}
                                                       for r in rs if r["flags"]][-60:]}
+    out["forward_hs"] = forward_hs(fwd)
     # slip selections (shadow batches): exposure across batches + leg performance where settled
     leg_by = {(str(p.get("player") or "").lower(), p.get("prop"), p.get("scope") or "12", p.get("match_slug")): p for p in picks if p.get("test") == 2}
     expo_m, expo_p, legs = collections.Counter(), collections.Counter(), []
@@ -221,3 +239,28 @@ def build(picks, forecasts, batches=(), now=None):
         "leg_predicted": round(sum(x["p"] for x in legs if x["p"]) / len(legs), 4) if legs else None,
     }
     return out
+
+
+def forward_hs(fwd):
+    """Predicted vs actual Over rate per predefined band, per model, with match-grouped 95% intervals."""
+    res = {"since": FORWARD_FROM, "lines": len(fwd), "matches": len({r["match"] for r in fwd}), "models": []}
+    for name, _ in FORWARD_MODELS:
+        rs = [r for r in fwd if r["p"].get(name) is not None]
+        bands = []
+        for lo, hi in HS_BANDS:
+            b = [r for r in rs if lo <= r["p"][name] < hi]
+            g = collections.defaultdict(list)
+            for r in b:
+                g[r["match"]].append(r)
+            bands.append({"band": f"{lo:.2f}-{min(hi, 1):.2f}", "n": len(b), "matches": len(g),
+                          "predicted": round(sum(r["p"][name] for r in b) / len(b), 4) if b else None,
+                          "actual": round(sum(r["over"] for r in b) / len(b), 4) if b else None,
+                          "actual_ci": _boot(g, lambda xs: sum(r["over"] for r in xs) / len(xs)) if b else None})
+        g = collections.defaultdict(list)
+        for r in rs:
+            g[r["match"]].append(r)
+        res["models"].append({"model": name, "n": len(rs), "bands": bands,
+                              "gap": round(sum(r["over"] - r["p"][name] for r in rs) / len(rs), 4) if rs else None,
+                              "gap_ci": _boot(g, lambda xs: sum(r["over"] - r["p"][name] for r in xs) / len(xs)) if rs else None,
+                              "log_loss": round(sum(-math.log(max(r["p"][name] if r["over"] else 1 - r["p"][name], 1e-6)) for r in rs) / len(rs), 4) if rs else None})
+    return res
