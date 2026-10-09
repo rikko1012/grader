@@ -282,6 +282,64 @@ def ud_id_map(rows=None):
     return out
 
 
+def match_compare(team_slug, opp_slug, team, opponent, start, scope="12"):
+    """Match player projection comparison (2026-10-09): every player of both teams in this match - OUR projection for
+    kills and headshots, the graded Underdog line for the same match and maps when one exists (side, chance, grade,
+    stake, freshness, data status), otherwise the projection alone and 'no available line' (no pick invented).
+    Team totals only when the whole roster has a projection; never any probability arithmetic across players."""
+    from datetime import datetime as _dt
+    import perf_live
+    st = comparison._ts(start)
+    rows = board_payload()["rows"]
+    same = [r for r in rows if (r.get("scope") or "12") == scope and st and comparison._ts(r.get("start"))
+            and abs((comparison._ts(r["start"]) - st).total_seconds()) <= comparison.JOIN_START_MIN * 60
+            and ({comparison._team_same(r.get("team_name") or r.get("team"), team), comparison._team_same(r.get("team_name") or r.get("team"), opponent)} & {True})]
+    b = BO3()
+    try:
+        rosters = {}
+        for slug, name in ((team_slug, team), (opp_slug, opponent)):
+            try:
+                td = b.team(slug) if slug else {}
+                rosters[name] = [x.get("nickname") for x in (td.get("players") or []) if not x.get("is_coach") and x.get("nickname")]
+            except Exception:
+                rosters[name] = []
+    finally:
+        b.close()
+    def side_of(r):
+        if comparison._team_same(r.get("team_name") or r.get("team"), team):
+            return team
+        return opponent
+    players = {}                                    # (team, nick lower) -> entry
+    for name, nicks in rosters.items():
+        for n in nicks:
+            players[(name, n.lower())] = {"nick": n, "team": name, "kills": None, "hs": None}
+    for r in same:
+        nk = (r.get("nick") or r["player"])
+        e = players.setdefault((side_of(r), nk.lower()), {"nick": nk, "team": side_of(r), "kills": None, "hs": None, "not_on_roster_page": True})
+        e[r["prop"]] = {"proj": r.get("proj"), "line": r["line"], "side": r.get("side"), "p": r.get("p"), "grade": r.get("grade"),
+                        "units": r.get("units"), "units_full": r.get("units_full"), "graded_at": r.get("graded_at"), "dstat": r.get("dstat"),
+                        "source": r.get("source"), "state": r.get("state"), "ud_team": r.get("team"), "ud_opponent": r.get("opponent")}
+    for (tname, _), e in players.items():          # projections for props without an offered line
+        for prop in ("kills", "hs"):
+            if e[prop] is None:
+                try:
+                    pr = perf_live.projection(e["nick"], tname, opponent if tname == team else team, None, scope, prop)
+                except Exception:
+                    pr = {"error": "failed"}
+                e[prop] = ({"proj": round(pr["lambda"], 2), "line": None, "no_line": True, "source": "HLTV", "dq": pr.get("data_quality")}
+                           if pr and not pr.get("error") and pr.get("lambda") is not None else {"proj": None, "line": None, "no_line": True,
+                                                                                               "note": "no projection (no HLTV history)"})
+    out = []
+    for tname in (team, opponent):
+        ps = [e for (t, _), e in players.items() if t == tname]
+        full = len(ps) >= 5 and all(e[p] and e[p].get("proj") is not None for e in ps for p in ("kills", "hs"))
+        summ = {prop: round(sum((e[prop] or {}).get("proj") or 0 for e in ps), 1) for prop in ("kills", "hs")}
+        covered = sum(1 for e in ps if all((e[p] or {}).get("proj") is not None for p in ("kills", "hs")))
+        out.append({"team": tname, "players": ps, "summary": dict(summ, complete=full, covered=covered, roster=len(ps))})
+    return {"match": {"team": team, "opponent": opponent, "start": start, "scope": scope}, "teams": out,
+            "at": _dt.now(timezone.utc).isoformat(timespec="seconds")}
+
+
 def board_payload():
     b = underdog.board()
     now = datetime.now(timezone.utc).isoformat()
@@ -835,7 +893,7 @@ class Handler(BaseHTTPRequestHandler):
                                            f"{whop_auth.PKCE_COOKIE}=; Max-Age=0; Path=/"])
             if u.path == "/auth/logout":
                 return self.redirect("/", [f"{whop_auth.COOKIE}=; Max-Age=0; Path=/"])
-            if u.path in ("/api/search", "/api/grade", "/api/board", "/api/line_check") and not self.allowed():
+            if u.path in ("/api/search", "/api/grade", "/api/board", "/api/line_check", "/api/match_compare") and not self.allowed():
                 sess = self.member()
                 return self.send(401, {"error": "members_only", "signed_in": bool(sess),
                                        "upgrade": whop_auth.upgrade_url()})
@@ -843,6 +901,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self.search(q.get("q", "").strip())
             if u.path.startswith("/api/") and u.path != "/api/board":
                 LAST_MEMBER[0] = time.time()
+            if u.path == "/api/match_compare":
+                k_ = ("mcmp", q.get("team_slug"), q.get("opp_slug"), q.get("start"), q.get("maps") or "12")
+
+                def _mc():
+                    return 200, json.dumps(match_compare(q.get("team_slug"), q.get("opp_slug"), q.get("team", ""), q.get("opponent", ""),
+                                                         q.get("start"), q.get("maps") or "12"), default=str).encode()
+                st_, body_ = shared(k_, _mc, ttl=120)
+                return self.send(st_, body_)
             if u.path == "/api/line_check":
                 # before a pick goes on a slip: the line Underdog shows NOW for this player / stat / maps
                 try:

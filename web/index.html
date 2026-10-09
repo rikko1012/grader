@@ -296,6 +296,10 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
   body.hasslip #slipbtn{display:none !important}}
 @media (max-width:1179px){#slipbtn{left:16px;right:16px;bottom:12px;border-radius:14px;text-align:center}
   #slip{left:0;right:0;bottom:0;width:auto;max-height:75vh;border-radius:16px 16px 0 0}}
+.mctab td,.mctab th{padding:6px 8px;white-space:nowrap}.mctab tr.mteam td{background:var(--panel-2);padding-top:10px}
+.mctab tr.mfocus td{background:rgba(255,122,26,.12)}.mctab tr.mfocus td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+.mcpick{background:none;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:3px 8px;cursor:pointer;font:inherit;font-size:13px}
+.mcpick:hover{border-color:var(--accent)}
 .askwrap{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:60;padding:16px}
 .ask{background:var(--card,#161b22);border:1px solid var(--line,#30363d);border-radius:12px;padding:16px;max-width:440px;width:100%}
 .ask h4{margin:0 0 8px}.ask table{width:100%;font-size:13px}.ask .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
@@ -1525,7 +1529,72 @@ function render(d) {
   cols.className = "cols"; cols.append(main, side);
   kids.slice(1).forEach(k => { if (!k.classList.contains("full") && !k.classList.contains("foot")) (k.classList.contains("sc") ? side : main).appendChild(k); });
   out.insertBefore(cols, kids[0].nextSibling);
+  matchCompareSlot(d);
 }
+
+// ---------- match player projection comparison (owner 2026-10-09): OUR projections for every player in this match,
+// both teams side by side, with the graded Underdog line where one exists - always visible right under the headline
+const MC = {data: null, focus: "", prop: "both", side: "both", sort: "chance", scope: "12", key: ""};
+function matchCompareSlot(d) {
+  const nm = d.next_match || {}, pb = d.player_block || {}, g = d.grade || {};
+  if (!nm.opponent || !nm.start || d.verdict?.state === "SCOUT") return;
+  const team = pb.playing_for || pb.current_team || "";
+  const sec = document.createElement("section"); sec.className = "card full"; sec.id = "mcmp";
+  sec.innerHTML = `<h2>Match players · ${esc(team)} vs ${esc(nm.opponent)}</h2><div class="small muted">Loading both teams' projections…</div>`;
+  const out = $("#out"); out.insertBefore(sec, out.children[1] || null);
+  MC.focus = (pb.player?.nick || "").toLowerCase(); MC.scope = g.scope || "12";
+  const qs = new URLSearchParams({team_slug: nm.team_slug || "", opp_slug: nm.opponent_slug || "", team, opponent: nm.opponent, start: nm.start, maps: MC.scope});
+  const key = qs.toString(); MC.key = key;
+  fetchRetry("/api/match_compare?" + qs).then(r => r.json()).then(j => { if (MC.key !== key) return; MC.data = j; drawMatchCompare(); })
+    .catch(() => { const el = $("#mcmp"); if (el && MC.key === key) el.innerHTML = `<h2>Match players</h2><div class="small muted">Couldn't load the other players right now – the grade above is unaffected.</div>`; });
+}
+function drawMatchCompare() {
+  const el = $("#mcmp"), j = MC.data; if (!el || !j) return;
+  const props = MC.prop === "both" ? ["kills", "hs"] : [MC.prop];
+  const ago = t => { if (!t) return ""; const m = Math.round((Date.now() - Date.parse(t)) / 60000); return m < 60 ? m + "m ago" : Math.round(m / 60) + "h ago"; };
+  const shown = c => c && c.line != null && c.side && (MC.side === "both" || c.side === MC.side);
+  const best = e => Math.max(-1, ...props.map(pr => shown(e[pr]) ? (e[pr].p ?? -1) : -1));
+  const cell = (e, pr) => {
+    const c = e[pr] || {};
+    const proj = `<td class="num">${c.proj != null ? num(c.proj, 1) : "–"}</td>`;
+    if (c.line == null) return proj + `<td class="num muted">–</td><td class="muted small">No available line</td>`;
+    if (!shown(c)) return proj + `<td class="num">${c.line}</td><td class="muted small">${c.side ? (c.side === "More" ? "Over" : "Under") + " (filtered)" : "grading…"}</td>`;
+    const capped = c.units_full > c.units ? ` <span class="muted small">(capped from ${c.units_full}U)</span>` : "";
+    return proj + `<td class="num">${c.line}</td><td><button type="button" class="mcpick" data-mc="${esc(e.nick)}|${c.line}|${pr}" title="Open ${esc(e.nick)}'s ${pr === "hs" ? "headshots" : "kills"} card">
+      <b>${c.grade === "LEAN" ? "Lean " : ""}${c.side === "More" ? "Over" : "Under"}</b> ${Math.round((c.p || 0) * 100)}% · ${esc(c.grade || "–")} · ${+(+c.units || 0).toFixed(2)}U${capped}</button></td>`;
+  };
+  const dcell = e => {
+    const cs = props.map(pr => e[pr]).filter(Boolean), lined = cs.filter(c => c.line != null);
+    const t = lined.map(c => c.graded_at).filter(Boolean).sort().pop();
+    const issue = lined.map(c => (c.dstat || [])[0] === "verify" ? (c.dstat[1] || "line not confirmed") : (c.dstat || [])[0] === "limited" ? "limited history" : "").find(Boolean)
+      || cs.map(c => c.note || (c.dq && c.dq !== "ok" ? c.dq : "")).find(Boolean) || "";
+    return `<td class="small muted">${t ? "graded " + ago(t) : lined.length ? "" : "projection only"}${issue ? ` · <span class="dstat warn" style="font-size:11px">${esc(issue)}</span>` : ""}${e.not_on_roster_page ? " · not on roster page" : ""}</td>`;
+  };
+  const head = `<tr><th>Player</th>${props.map(pr => `<th class="num">${pr === "hs" ? "HS" : "Kills"} proj</th><th class="num">Line</th><th>Pick</th>`).join("")}<th>Data</th></tr>`;
+  const body = j.teams.map(t => {
+    const ps = [...t.players].sort((a, b) => MC.sort === "chance" ? best(b) - best(a) : a.nick.localeCompare(b.nick));
+    const sm = t.summary, tot = props.map(pr => `${pr === "hs" ? "HS" : "kills"} ${num(sm[pr], 1)}`).join(" · ");
+    return `<tr class="mteam"><td colspan="${1 + props.length * 3 + 1}"><b>${esc(t.team)}</b> <span class="muted small">· projected team ${tot}${sm.complete ? "" : ` – incomplete: ${sm.covered} of ${sm.roster} players have projections`}</span></td></tr>`
+      + ps.map(e => `<tr class="${e.nick.toLowerCase() === MC.focus ? "mfocus" : ""}"><td><b>${esc(e.nick)}</b></td>${props.map(pr => cell(e, pr)).join("")}${dcell(e)}</tr>`).join("");
+  }).join("");
+  const seg = (id, opts, cur) => `<div class="seg" data-mcseg="${id}">${opts.map(([v, l]) => `<button type="button" data-v="${v}" class="${v === cur ? "on" : ""}">${l}</button>`).join("")}</div>`;
+  el.innerHTML = `<h2>Match players · ${esc(j.match.team)} vs ${esc(j.match.opponent)} · ${j.match.scope === "1" ? "Map 1" : j.match.scope === "123" ? "Maps 1–3" : "Maps 1–2"}</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">${seg("prop", [["kills", "Kills"], ["hs", "Headshots"], ["both", "Both"]], MC.prop)}
+      ${seg("side", [["More", "Overs"], ["both", "Both"], ["Less", "Unders"]], MC.side)}${seg("sort", [["chance", "Highest chance"], ["name", "A–Z"]], MC.sort)}</div>
+    <div class="scroll"><table class="mctab"><thead>${head}</thead><tbody>${body}</tbody></table></div>
+    <div class="small muted" style="margin-top:6px">Our projections for every player in this match; picks only where Underdog has a line. Tap a pick to open that player's card.
+      Picks in one match share its conditions and may win or lose together – team totals are projections added up, not a combined chance.</div>`;
+}
+document.addEventListener("click", e => {
+  const sg = e.target.closest("[data-mcseg] button");
+  if (sg) { const k = sg.parentElement.dataset.mcseg; MC[k] = sg.dataset.v; return drawMatchCompare(); }
+  const pk = e.target.closest("[data-mc]");
+  if (pk && MC.data) {
+    const [nick, line, prop] = pk.dataset.mc.split("|");
+    const t = MC.data.teams.find(t => t.players.some(p => p.nick === nick)), c = t?.players.find(p => p.nick === nick)?.[prop] || {};
+    gradeNow(nick, line, prop, "standard", MC.scope, !$("#cardpop").hidden, {team: c.ud_team || t?.team, opponent: c.ud_opponent || null});
+  }
+});
 </script>
 </body>
 </html>
