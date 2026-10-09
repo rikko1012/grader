@@ -278,7 +278,10 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 }
 .glance{padding:12px 16px}.glrow{display:grid;grid-template-columns:92px 1fr;gap:10px;padding:4px 0;font-size:14px;align-items:baseline}
 .glrow .k{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}.glrow .k.up{color:var(--up,#3fb950)}.glrow .k.dn{color:var(--dn,#f85149)}
-.bbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;position:sticky;top:0;z-index:20;background:var(--panel,#0f141c);padding:8px 0}
+.bbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;position:sticky;top:64px;z-index:15;background:var(--panel);
+  margin:-18px -18px 12px;padding:12px 18px;border-bottom:1px solid var(--line);border-radius:var(--radius) var(--radius) 0 0}
+@media (max-width:760px){.bbar{margin:-14px -14px 12px;padding:10px 14px}}
+@media (max-width:640px){.bbar{position:static;margin:-15px -15px 12px;padding:10px 15px}}   /* phones: the stacked filters would cover ~40% of the screen if sticky */
 .mgroup{border:1px solid var(--line);border-radius:12px;margin-bottom:10px;background:var(--panel-2)}
 .mgroup>summary{cursor:pointer;list-style:none;padding:10px 12px;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:baseline}
 .mgroup>summary::-webkit-details-marker{display:none}.mgroup>summary b{font-size:15px}
