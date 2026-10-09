@@ -813,8 +813,7 @@ function drawBoard() {
     if (!q.length) return `<div class="small muted" style="margin:-2px 0 8px">No qualifying bets in this match${bside !== "both" ? ` (${bside === "More" ? "Overs" : "Unders"} only)` : ""}.</div>`;
     const it = x => `${esc(x.nick || x.player)} ${sideWord({grade: x.grade, side: x.side})} ${x.line} ${propWord(x.prop)}${mapsWord(x.scope)} <b>${(x.p * 100).toFixed(0)}%</b>`;
     return `<div class="small" style="margin:-2px 0 8px;line-height:1.5"><b>Highest chance here:</b> ${q.slice(0, 3).map(it).join(" · ")}
-      <div class="muted">Independent projection agreement: none connected yet · Best value: not ranked (actual entry payouts aren't available) ·
-      ${q.length > 1 ? "Same match – these share one result, so treat them as alternatives, not a spread-out slip." : ""}</div></div>`; };
+      <div class="muted">No outside projections yet · value not ranked (no entry payouts)${q.length > 1 ? " · same match: alternatives, not a spread-out slip" : ""}</div></div>`; };
   const leanWhy = r => { const t = r.reason || ""; if (r.grade !== "LEAN") return "";
     if (/FORM FIGHT/.test(t)) return "Lean: his last 10 disagree with the projection";
     const m = t.match(/0 units: (.+)$/); if (m) return "Lean: " + m[1].split(";")[0].slice(0, 80);

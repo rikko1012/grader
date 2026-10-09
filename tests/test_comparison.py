@@ -81,6 +81,11 @@ def test_panel_lines_payouts_stale_duplicates_and_honest_labels():
     assert any("Last 10" in a for a in p["evidence_against"]) == (res["verdict"]["side"] == "More")
 
 
+def test_best_line_needs_a_choice():
+    p = cmp.panel(_res(), [_row()], board_at=NOW.timestamp(), now=NOW)
+    assert p["best_line"] == {} and len(p["offers"]) == 1
+
+
 def test_no_grade_no_panel_and_board_failure_is_harmless():
     assert cmp.panel({"grade": {}}, []) is None
     p = cmp.panel(_res(), None, now=NOW)                                           # book feed down: panel still renders

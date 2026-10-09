@@ -173,7 +173,7 @@ def panel(res, rows, board_at=None, now=None):
     best = {}
     for s in ("over", "under"):
         cand = [o for o in offers if o.get(f"payout_adj_{s}") is not None and not o["stale"]]
-        if cand:
+        if len({o["line"] for o in cand}) >= 2:          # "best" only means something with 2+ lines to choose from
             b = max(cand, key=lambda o: o[f"payout_adj_{s}"])
             best[s] = {"line": b["line"], "chance": b[f"{s}_if_decided"], "mult": b[f"mult_{s}"], "payout_adj": b[f"payout_adj_{s}"]}
     v = res.get("verdict") or {}
