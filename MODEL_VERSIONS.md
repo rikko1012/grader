@@ -67,3 +67,13 @@ Still open (not fixed live or in fix_v2):
   On verified board lines, log-loss is +0.0005 (kills) and +0.0014 (HS) vs current.
   The previous prior 1.0 is worse for thin-history players (test MAE +0.157, 95% +0.070 to +0.236).
   Decision: keep prior_m 0.93 live and log prior_smooth beside it on every forecast. Not promoted.
+
+## 2026-10-09 headshot calibration check (grading unchanged)
+- Board HS lines, Maps 1-2 (169 lines, 51 matches, Oct 3-8 only): Overs came in 8.7 pts below predicted (95% -17.9 to +1.0).
+  Not significant. Every probability band's 95% interval contains the prediction.
+- Inputs check out: the Underdog HS settlement equals the HLTV count on 169/169 lines.
+  Predicted HS/kill 0.523 vs actual 0.518. The +0.45 HS over-projection on those lines is mostly the kills projection (+0.67 kills, contributing +0.32 HS) plus +0.14 HS from the per-kill ratio. Neither is significant.
+- HLTV held-out (2,965 player-series, Aug 13+): HS projection -0.25 (slightly LOW, 95% -0.45 to -0.05).
+  Randomised PIT: middle 50% holds 52.2%, middle 80% holds 81.5% (kills: 51.0% / 82.2%).
+  At synthetic lines around the projection, predicted vs actual Over rates are within 0-4 pts.
+- Conclusion: there is no evidence that the HS distribution is miscalibrated. Keep watching board HS lines by band as they settle.
