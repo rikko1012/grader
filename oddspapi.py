@@ -141,6 +141,41 @@ def match_odds(team, opponent=None):
         return {"found": False, "note": f"OddsPapi unavailable: {str(e)[:160]}"}
 
 
+def markets_inventory(n=3):
+    """Admin-only, read-only (2026-10-09 source inventory): which markets each book carries for upcoming CS2 fixtures -
+    market ids, names (from /markets when available), outcome counts and whether outcomes are per-player (props)."""
+    out = {"key_set": bool(key())}
+    try:
+        names = {}
+        try:
+            mk = _get("/markets", sportId=CS2_SPORT)
+            for m in (mk if isinstance(mk, list) else (mk.get("data") or mk.get("markets") or [])):
+                names[str(m.get("marketId") or m.get("id"))] = {k: m.get(k) for k in ("marketName", "marketType", "period", "handicap", "playerProp")
+                                                              if m.get(k) is not None}
+        except Exception as e:
+            out["markets_error"] = str(e)[:200]
+        out["market_defs"] = len(names)
+        up = [f for f in fixtures() if not _started(f) and f.get("hasOdds")][:n]
+        out["fixtures"] = []
+        for fx in up:
+            hit = _ODDS.get(fx["fixtureId"])
+            odds = hit[1] if hit and time.time() - hit[0] < FIX_TTL else _get("/odds", fixtureId=fx["fixtureId"])
+            _ODDS[fx["fixtureId"]] = (time.time(), odds)
+            books = {}
+            for book, bd in (odds.get("bookmakerOdds") or {}).items():
+                ms = {}
+                for mid, m in (bd.get("markets") or {}).items():
+                    outs = m.get("outcomes") or {}
+                    players = sum(len((o or {}).get("players") or {}) for o in outs.values())
+                    ms[mid] = {"name": names.get(str(mid)), "outcomes": len(outs), "player_entries": players}
+                books[book] = ms
+            out["fixtures"].append({"match": f"{fx.get('participant1Name')} vs {fx.get('participant2Name')}", "start": fx.get("startTime"),
+                                    "books": books})
+    except Exception as e:
+        out["error"] = str(e)[:300]
+    return out
+
+
 def probe():
     """Admin-only: shape of the live responses (no key in the output)."""
     out = {"key_set": bool(key())}

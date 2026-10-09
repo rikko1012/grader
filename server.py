@@ -1177,6 +1177,9 @@ class Handler(BaseHTTPRequestHandler):
                 # private: raw shape of the backup data sources (keys never included)
                 import oddspapi
                 return self.send(200, {"oddspapi": oddspapi.probe()})
+            if u.path == "/admin/oddspapi_markets" and self.authed(q.get("token")):
+                import oddspapi                           # read-only source inventory (2026-10-09)
+                return self.send(200, oddspapi.markets_inventory(int(q.get("n") or 3)))
             return self.send(404, {"error": "not found"})
         except Exception as e:
             traceback.print_exc()
