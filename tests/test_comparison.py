@@ -154,3 +154,12 @@ def test_line_check_states():
     amb = {"at": NOW.timestamp(), "rows": [_row(ud_player_id="a"), _row(id="q", ud_player_id="b")]}
     assert cmp.line_check(amb, "cairne", "kills", "12", "30.5", now=NOW)["status"] == "ambiguous"
     assert cmp.line_check(dict(board, at=NOW.timestamp() - 3600), "cairne", "kills", "12", "30.5", now=NOW)["stale"]
+
+
+def test_verified_team_aliases_are_exact_pairs():
+    assert cmp._team_same("Ground Zero.AU", "Ground Zero") is True
+    assert cmp._team_same("Desi Boyz", "Desi Boyz v6") is True
+    assert cmp._team_same("Ground Zero.EU", "Ground Zero") is False                  # no global suffix stripping
+    assert cmp._team_same("Desi Boyz v5", "Desi Boyz v6") is False
+    assert cmp._team_same("KZG", "Abyssal") is False and cmp._team_same("Team Abyssal", "KZG") is False
+    assert all(len(e) == 3 and e[2] for e in cmp.VERIFIED_TEAM_ALIASES)              # every alias carries its evidence

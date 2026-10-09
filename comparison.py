@@ -50,10 +50,24 @@ def _norm(s):
     return re.sub(r"[^a-z0-9]", "", "".join(c for c in s if not unicodedata.combining(c)).lower())
 
 
+# Explicit, source-backed team aliases (Underdog name, our BO3.gg name). Exact pairs only - region or roster-version
+# suffixes are NEVER stripped globally (".AU" or "v6" can mark a different team / lineup). Each entry records its proof.
+VERIFIED_TEAM_ALIASES = (
+    ("Ground Zero.AU", "Ground Zero", "2026-10-09: all 5 Underdog players (Omichella, Sliimey, apocdud, hazr, vision) resolved by "
+                                      "their own board grades to BO3.gg 'Ground Zero' in ground-zero-vs-killzone-09-10-2026; opponent KZG on both"),
+    ("Desi Boyz", "Desi Boyz v6", "2026-10-09: all 4 listed Underdog players (MoMo, Shooter, jsfeltner, mason) resolved to BO3.gg "
+                                  "'Desi Boyz v6' in desi-boyz-v6-vs-empire-10-10-2026; opponent EMPIRE on both"),
+)
+
+
 def _team_same(a, b):
-    """Exact name variants only (hltv.team_name_variants) - an academy never matches its main team."""
+    """Exact name variants only (hltv.team_name_variants) plus VERIFIED_TEAM_ALIASES - an academy never matches its
+    main team."""
     if not a or not b:
         return None
+    pair = {_norm(a), _norm(b)}
+    if any(pair == {_norm(u), _norm(o)} for u, o, _ in VERIFIED_TEAM_ALIASES):
+        return True
     try:
         import hltv
         va, vb = set(hltv.team_name_variants(a)), set(hltv.team_name_variants(b))

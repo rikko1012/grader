@@ -411,6 +411,7 @@ def board_forever():
                     fw = ((pb.get("overall") or {}).get("form_windows") or {}).get("3m") or {}
                     BOARD[r["id"]] = {"at": time.time(), "graded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                                       "player_id": (pb.get("player") or {}).get("id"),     # BO3.gg id: Underdog -> player map
+                                      "match_start": (res.get("next_match") or {}).get("start"),   # comparison audit
                                       "graded_line": r["line"], "graded_model": picklog.MODEL_VERSION,   # slips: exact line + model
                                       "grade": v.get("grade"), "side": v.get("side"), "p": v.get("p"),
                                       "units": v.get("units"), "proj": g.get("lambda_final"), "state": v.get("state"),
@@ -854,6 +855,38 @@ class Handler(BaseHTTPRequestHandler):
                                        "recommended": slips.read(slips.RECOMMENDED), "loaded": slips.read(slips.LOADED)})
             if u.path == "/admin/slip_batches.json" and self.authed(q.get("token")):
                 return self.send(200, {"version": slip_batches.VERSION, "batches": slip_batches.read()})
+            if u.path == "/admin/comparison_audit" and self.authed(q.get("token")):
+                # ONE cohort at ONE timestamp: every Underdog offer now, and for every graded board line whether the
+                # comparison finds its own offer (by id / name) or why not
+                ub = underdog.board(); rows = ub["rows"]; idm = ud_id_map(rows)
+                out = {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "board_fetched": ub.get("at"),
+                       "underdog_offers": len(rows), "standard": sum(not r["alt"] for r in rows), "alternate": sum(bool(r["alt"]) for r in rows),
+                       "graded_lines": 0, "missing_player_id": 0, "missing_match": 0, "matched_by_id": 0, "matched_by_name": 0,
+                       "not_matched": 0, "rejected_reasons": {}, "examples": []}
+                for r in rows:
+                    gb = BOARD.get(r["id"]) or {}
+                    if r["alt"] or not gb.get("side"):
+                        continue
+                    out["graded_lines"] += 1
+                    if not gb.get("player_id"):
+                        out["missing_player_id"] += 1
+                    if not gb.get("match_start"):
+                        out["missing_match"] += 1
+                    res_ = {"grade": {"prop": r["prop"], "scope": r.get("scope") or "12"},
+                            "player_block": {"player": {"nick": gb.get("nick") or r["player"], "id": gb.get("player_id")}, "playing_for": gb.get("team_name")},
+                            "next_match": {"start": gb.get("match_start"), "opponent": gb.get("opp_name")}}
+                    offers, rej = comparison.match_offers(res_, rows, id_map=idm)
+                    own = next((o for o in offers if o["id"] == r["id"]), None)
+                    if own:
+                        out["matched_by_" + own["identity"]] += 1
+                    else:
+                        out["not_matched"] += 1
+                        why = [x[1] for x in rej if x[0] == r["line"]] or ["no offer found (name / id)"]
+                        k = why[0].split(" (")[0]
+                        out["rejected_reasons"][k] = out["rejected_reasons"].get(k, 0) + 1
+                        if len(out["examples"]) < 15:
+                            out["examples"].append({"player": r["player"], "line": r["line"], "prop": r["prop"], "why": why[0]})
+                return self.send(200, out)
             if u.path == "/admin/comparisons.json" and self.authed(q.get("token")):
                 try:
                     with open(comparison.snapshot_path(), encoding="utf-8") as f:
