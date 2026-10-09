@@ -82,10 +82,15 @@ def summary(cohort="board", version=None, frm=None, to=None, prop=None, scope=No
         "by_grade": [{"grade": g, "n": by[g]["n"], "hits": by[g]["hits"], "predicted": round(by[g]["pred"] / by[g]["n"], 4),
                       "actual": round(by[g]["hits"] / by[g]["n"], 4)} for g in GRADES if by[g]["n"]],
         "sources": dict(Counter(_src(r) or "unknown" for r in dec)),
+        "line_types": dict(Counter(r.get("line_type") or "standard" for r in sel)),
         "returns": {"payout_based": None,
                     "payout_note": "Not available: actual Underdog entry payouts aren't recorded.",
-                    "hypothetical_units": round(hypo, 2), "hypothetical_staked": round(staked, 2), "hypothetical_bets": len(bets),
-                    "hypothetical_note": "Hypothetical: each B- or better pick as a single at Underdog's displayed -112 (1.90), "
-                                         "staked at its printed units. Not an entry result."},
+                    # member research lines can be goblin / demon or not offered anywhere: pricing them at -112 is fiction
+                    "hypothetical_units": round(hypo, 2) if cohort == "board" else None,
+                    "hypothetical_staked": round(staked, 2) if cohort == "board" else None, "hypothetical_bets": len(bets) if cohort == "board" else None,
+                    "hypothetical_note": ("Hypothetical: each B- or better pick as a single at Underdog's displayed -112 (1.90), "
+                                          "staked at its printed units. Not an entry result.") if cohort == "board" else
+                                         "Not shown for member research lines: they include goblin / demon lines and lines not offered "
+                                         "at any price, so no single price applies."},
         "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }

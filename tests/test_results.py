@@ -28,3 +28,9 @@ def test_returns_are_labelled_and_payout_based_absent():
     assert s["returns"]["payout_based"] is None and "Not available" in s["returns"]["payout_note"]
     assert abs(s["returns"]["hypothetical_units"] - (0.5 * 0.9 - 2.0)) < 1e-9 and "Hypothetical" in s["returns"]["hypothetical_note"]
     assert s["sources"] == {"hltv": 2, "bo3": 1}
+
+
+def test_member_lines_get_no_hypothetical_price():
+    m = results.summary("member", rows=ROWS)
+    assert m["returns"]["hypothetical_units"] is None and "goblin" in m["returns"]["hypothetical_note"]
+    assert m["line_types"] == {"standard": 1}
