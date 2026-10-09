@@ -300,7 +300,9 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12"):
         for slug, name in ((team_slug, team), (opp_slug, opponent)):
             try:
                 td = b.team(slug) if slug else {}
-                rosters[name] = [x.get("nickname") for x in (td.get("players") or []) if not x.get("is_coach") and x.get("nickname")]
+                # active players only: BO3.gg status 2 = benched (not in the lineup)
+                rosters[name] = [x.get("nickname") for x in (td.get("players") or [])
+                                 if not x.get("is_coach") and x.get("nickname") and x.get("status") != 2]
             except Exception:
                 rosters[name] = []
     finally:

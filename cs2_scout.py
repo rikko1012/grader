@@ -442,6 +442,8 @@ def run_player(b, name, args):
                 continue
         roster = [x for x in td.get("players") or [] if not x.get("is_coach")]
     out["roster"] = [x.get("nickname") for x in roster]
+    # BO3.gg marks benched players with status 2 (2026-10-09: Aurora's page lists MAJ3R benched) - display only
+    out["benched"] = [x.get("nickname") for x in roster if x.get("status") == 2]
     in_roster = any(x.get("id") == p["id"] for x in roster)
     listed = args.team
     if listed:

@@ -1418,7 +1418,8 @@ function render(d) {
   h += `</section>`;
 
   // ---- stats + role
-  const mates = Object.entries(pb.teammate_ratings || {}).map(([n, r]) => ({n, r}));
+  const benched = new Set((pb.benched || []).map(x => String(x).toLowerCase()));      // benched players aren't in the lineup
+  const mates = Object.entries(pb.teammate_ratings || {}).filter(([n]) => !benched.has(n.toLowerCase())).map(([n, r]) => ({n, r}));
   mates.push({n: pb.player?.nick, r: o.rating, me: true});
   mates.sort((a, b) => (b.r || 0) - (a.r || 0));
   const maxR = Math.max(...mates.map(m => m.r || 0), 1.2);

@@ -58,3 +58,21 @@ def test_team_total_uses_the_five_who_play(monkeypatch):
     t = next(x for x in server.match_compare("aurora", "vit", "Aurora", "Vitality", START, "12")["teams"] if x["team"] == "Aurora")
     assert t["summary"]["basis"] == "Underdog lineup" and t["summary"]["lineup"] == lineup and t["summary"]["complete"]
     assert t["summary"]["kills"] == 5 * 21.5                                         # the 6-man roster page's sub is not added
+
+
+
+def test_benched_players_are_left_out(monkeypatch):
+    monkeypatch.setattr(server, "board_payload", lambda: {"rows": []})
+    class B:
+        def team(self, slug):
+            if slug != "aurora-gaming":
+                return {"players": []}
+            return {"players": [{"nickname": n, "status": 1} for n in ("XANTARES", "woxic", "Jimpphat", "kyxsan", "Wicadia")]
+                    + [{"nickname": "MAJ3R", "status": 2}, {"nickname": "ashhh", "status": 1, "is_coach": True}]}
+        def close(self): pass
+    monkeypatch.setattr(server, "BO3", B)
+    import perf_live
+    monkeypatch.setattr(perf_live, "projection", lambda *a: {"lambda": 10.0, "data_quality": "ok"})
+    t = next(x for x in server.match_compare("aurora-gaming", "vitality", "Aurora", "Vitality", START, "12")["teams"] if x["team"] == "Aurora")
+    assert sorted(p["nick"] for p in t["players"]) == ["Jimpphat", "Wicadia", "XANTARES", "kyxsan", "woxic"]   # MAJ3R (benched) and the coach out
+    assert t["summary"]["basis"] == "roster page" and t["summary"]["complete"]                               # 5 active -> a team total
