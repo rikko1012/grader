@@ -176,3 +176,13 @@ def test_kills_truncation_is_conditioning_not_piling():
     kp = perf.kills_pmf(3.0, "12")
     raw0 = perf._phi((0.5 - 3.0) / (perf.SPREAD[("kills", "12")] * math.sqrt(3.0)))   # P(normal < 0.5) incl. negatives
     assert kp[0] < raw0                                  # zero did NOT absorb the negative mass
+
+
+def test_odd_decimal_lines_have_no_push_and_count_correctly():
+    import sim
+    for line, up in ((30.2, 30.5), (30.5, 30.5), (30.8, 30.5), (14.1, 14.5)):
+        assert grader._cuts(line) == (up, up) and sim.cuts(line) == (up, up)
+        o, u, pu = perf.probs(30.0, 7.0, line)
+        assert pu == 0.0 and abs(o + u - 1) < 1e-12
+    assert grader._cuts(30.0) == (30.5, 29.5)                                       # whole line: push band unchanged
+    assert abs(perf.probs(30.0, 7.0, 30.2)[1] - perf.probs(30.0, 7.0, 30.5)[1]) < 1e-12   # 30 is an Under of 30.2, as of 30.5

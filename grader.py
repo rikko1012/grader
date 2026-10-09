@@ -198,8 +198,12 @@ def _cuts(line):
     30.5); a whole line 26 is Over at 27+ (cut 26.5), Under at 25 or less (cut 25.5), 26 = push.
     (Until 2026-10-07 every line used line + 0.5 for both sides - half a kill against Overs on x.5
     lines and the push counted as an Under on whole lines; reviewed by outside AIs, fixed here.)"""
-    if abs(line - round(line)) > 0.25:
-        return line, line
+    if line != int(line):
+        # any non-whole line (x.5, or a typed 30.2): no push; totals are whole numbers, so Over = floor + 1 or more,
+        # Under = floor or less - continuity cut at floor + 0.5 (2026-10-09 fix: a 30.2 line used to get a push band
+        # 29.7-30.7 and count a 30 as a push instead of an Under; x.5 lines unchanged)
+        c = math.floor(line) + 0.5
+        return c, c
     return line + 0.5, line - 0.5
 
 

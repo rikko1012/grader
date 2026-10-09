@@ -856,6 +856,13 @@ $("#slip").addEventListener("click", e => {
     const mark = x => x.now?.status === "verified" ? "" : x.now?.status === "changed" ? ` [LINE CHANGED: now ${x.now.new_line ?? "?"}]`
       : x.now?.status === "unavailable" ? " [NOT OFFERED NOW]" : x.now?.status === "failed" ? " [NOT CHECKED]" : " [RESEARCH LINE]";
     copy(`${s.length}-pick slip\n` + s.map(x => `${x.p} ${x.g === "LEAN" ? `Lean ${sideTxt(x.s)}` : x.s.toUpperCase()} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)} · ${x.g === "LEAN" ? "Lean" : x.g} · ${Math.floor((x.pc || 0) * 100)}%${mark(x)}`).join("\n"));
+    // immutable load log (no member identity): what was copied and each leg's live-line state at that moment
+    if (s.length >= 2) try {
+      const body = JSON.stringify({cid: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()), mode: "member-copy", n: s.length,
+        grader: boardVer || "", legs: s.map(x => ({nick: x.p, prop: x.t, scope: x.sc, line: x.l, side: x.s, p: x.pc, grade: x.g, match_slug: x.m,
+          check: x.now?.status || "unchecked", orig_line: x.orig?.line ?? x.l, check_note: x.now?.note || ""}))});
+      fetch("/api/slip_log", {method: "POST", headers: {"Content-Type": "application/json"}, body}).catch(() => {});
+    } catch {}
   })();
 });
 $("#slateedit") && ($("#slateedit").onclick = () => { $("#slatetxt").focus(); $("#slatetxt").scrollIntoView({behavior: "smooth", block: "center"}); });
@@ -884,14 +891,18 @@ function restoreBFilters() {
 const G_RANK = {"A+": 0, "A": 1, "A-": 2, "B+": 3, "B": 4, "B-": 4.5, "LEAN": 5};
 async function loadBoard(force) {
   if (boardRows.length && !force) return drawBoard();
-  $("#bstatus").textContent = "loading…";
+  const hhmm = t => new Date(t * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+  $("#bstatus").textContent = boardRows.length ? "Refreshing… (showing the current lines)" : "Loading the board…";
   try {
     const r = await fetchRetry("/api/board"); const d = await r.json();
     if (r.status === 401 && d.error === "members_only") return showGate(d);
-    boardRows = d.rows || []; boardAt = d.updated || 0; boardVer = d.version || "";
-    $("#bstatus").textContent = `${boardRows.length} graded Underdog lines`
-      + (d.updated ? ` · board from ${new Date(d.updated * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})}` : "");
-  } catch (e) { $("#bstatus").textContent = e.message; }
+    // lines that moved since the member last saw them (same player / stat / maps / match, new line)
+    const k = x => [x.nick || x.player, x.prop, x.scope || "12", x.start].join("|"), prev = new Map(boardRows.map(x => [k(x), x.line]));
+    boardRows = (d.rows || []).map(x => prev.has(k(x)) && prev.get(k(x)) !== x.line ? Object.assign(x, {moved_from: prev.get(k(x))}) : x);
+    boardAt = d.updated || 0; boardVer = d.version || "";
+    $("#bstatus").textContent = d.error ? `Underdog's feed is unavailable right now – showing the last board${boardAt ? " from " + hhmm(boardAt) : ""}`
+      : `${boardRows.length} graded Underdog lines` + (d.updated ? ` · board from ${hhmm(d.updated)}` : "");
+  } catch (e) { $("#bstatus").textContent = `Couldn't refresh (${e.message})` + (boardRows.length ? ` – showing the board${boardAt ? " from " + hhmm(boardAt) : ""}` : ""); }
   drawBoard();
 }
 const shortWhen = s => { if (!s) return ""; const d = new Date(s); if (isNaN(d)) return "";
@@ -930,7 +941,7 @@ function drawBoard() {
       <div><div class="b2top"><b>${esc(nick)}</b>${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}
           <span class="muted">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}${showMatch ? " · " + shortWhen(r.start) : ""}</span></div>
         <div class="b2pick">${r.side ? esc(sideWord({grade: r.grade, side: r.side})) : "grading…"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}${r.p != null ? ` · <b>${pct0(r.p)}</b>` : ""} · ${esc(r.grade || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U</div>
-        <div class="b2meta">Proj ${r.proj != null ? num(r.proj, 1) : "–"}${ds ? ` · <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}">${ds[1]}</span>` : ""}${r.graded_at ? ` · graded ${agoTxt(r.graded_at)}` : ""}${r.alt ? ` · alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}</div>
+        <div class="b2meta">Proj ${r.proj != null ? num(r.proj, 1) : "–"}${ds ? ` · <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}">${ds[1]}</span>` : ""}${r.source ? ` · source ${esc(r.source)}` : ""}${r.graded_at ? ` · graded ${agoTxt(r.graded_at)}` : ""}${r.alt ? ` · alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}${r.moved_from != null ? ` · <span class="pill warn">line moved from ${r.moved_from}</span>` : ""}</div>
         ${ev(r.support, "up", "+")}${ev(r.concern, "dn", "–")}</div>
       ${r.side ? `<button type="button" class="bslip ${onSlip.has(nick.toLowerCase()) ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}">${onSlip.has(nick.toLowerCase()) ? "On slip" : "+ Slip"}</button>` : "<span></span>"}
     </div>`; };
@@ -1187,15 +1198,16 @@ function chart(series, line, proj) {
 
 // data status: kept separate from the model's confidence - a high chance never hides a data problem
 function dataStatus(g, v) {
+  // quality only - the source (HLTV / BO3.gg / older model) is shown separately and is not a warning by itself
   const fl = (g.flags || []).join(" | ");
-  if (v.state === "SCOUT" || /older model|Provisional|Roster not confirmed|Stand-in|No upcoming match/i.test(fl))
-    return {k: "warn", t: "Needs verification", why: /older model/i.test(fl) ? "no HLTV data – older model" : /Provisional/i.test(fl) ? "BO3.gg history only"
-      : /Roster not confirmed/i.test(fl) ? "roster not confirmed" : /Stand-in/i.test(fl) ? "stand-in" : "no match found"};
-  if (/Small sample|Thin|thin history/i.test(fl) || (g.flags || []).some(f => /last official map \d+ days/i.test(f)))
-    return {k: "mid", t: "Limited history", why: "small recent sample"};
+  if (v.state === "SCOUT" || /No upcoming match/i.test(fl)) return {k: "warn", t: "Needs verification", why: "no upcoming match found"};
+  if (/Roster not confirmed/i.test(fl)) return {k: "warn", t: "Needs verification", why: "roster not confirmed"};
+  if (/Stand-in/i.test(fl)) return {k: "warn", t: "Needs verification", why: "stand-in"};
+  if (/Last official map \d+ days ago - extra caution/i.test(fl)) return {k: "warn", t: "Needs verification", why: "long gap since the last official map"};
+  if (/Small sample|Thin|thin history/i.test(fl)) return {k: "mid", t: "Limited history", why: "small recent sample"};
   return {k: "ok", t: "Data complete", why: ""};
 }
-// what an explanation is based on - so a statistic is never implied to have caused a grade it didn't enter
+const srcLabel = g => { const ps = String(g.projection_source || ""); return ps.startsWith("perf") && !ps.endsWith("-bo3") ? "HLTV" : ps.endsWith("-bo3") ? "BO3.gg" : "older model (BO3.gg)"; };
 const basisTag = b => `<span class="muted small">(${b === "model" ? "in the model" : b === "stake" ? "stake rule" : b === "data" ? "data" : "context – not in the projection"})</span>`;
 function glance(d, g, v) {
   if (!v.side || !("p_more" in g)) return "";
@@ -1208,7 +1220,7 @@ function glance(d, g, v) {
     <div class="glrow"><span class="k">Line</span><span>${side} ${g.line}${mapsWord(g.scope) || " (Maps 1–2)"} · <b>${pct(v.p)}</b> · ${v.units || 0}U</span></div>
     ${cp?.supports?.length ? `<div class="glrow"><span class="k up">Supports</span><span>${esc(cp.supports[0].text)} ${basisTag(cp.supports[0].basis)}</span></div>` : ""}
     ${cp?.concern ? `<div class="glrow"><span class="k dn">Concern</span><span>${esc(cp.concern.text)} ${basisTag(cp.concern.basis)}</span></div>` : ""}
-    <div class="glrow"><span class="k">Data</span><span><span class="dstat ${ds.k}">${ds.t}</span>${ds.why ? ` <span class="muted small">${esc(ds.why)}</span>` : ""}${cp?.board_at ? ` <span class="muted small">· line checked ${ago(cp.board_at)}</span>` : ""}</span></div>
+    <div class="glrow"><span class="k">Data</span><span><span class="dstat ${ds.k}">${ds.t}</span>${ds.why ? ` <span class="muted small">${esc(ds.why)}</span>` : ""} <span class="muted small">· source ${esc(srcLabel(g))}</span>${cp?.board_at ? ` <span class="muted small">· line checked ${ago(cp.board_at)}</span>` : ""}</span></div>
   </section>`;
 }
 
@@ -1270,7 +1282,7 @@ function render(d) {
       `<button type="button" class="chipbtn ${x.line === g.line ? "on" : ""}" data-ladder="${x.line}" title="Grade this line">${x.line} <b class="${x.side === "More" ? "up" : "dn"}">${x.side === "More" ? "More" : "Less"} ${Math.round(x.p * 100)}%</b>${x.grade && x.grade !== "C" && !String(x.grade).startsWith("n/a") ? " · " + esc(x.grade) : ""}</button>`).join("")}</div>` : ""}
     <div class="stats" style="margin-top:10px">
       <div class="stat"><div class="k">Projection</div><div class="v">${num(g.lambda_final,1)}</div><div class="n">${stat}, ${g.scope === "123" ? "Maps 1–3" : g.scope === "1" ? "Map 1" : "Maps 1–2"}</div></div>
-      <div class="stat"><div class="k">Line</div><div class="v">${g.line}</div><div class="n">needs ${Number.isInteger(g.line) ? g.line + 1 : g.line + 0.5} for More</div></div>
+      <div class="stat"><div class="k">Line</div><div class="v">${g.line}</div><div class="n">needs ${Math.floor(g.line) + 1} for More</div></div>
       <div class="stat"><div class="k">Team win %</div><div class="v">${det.p_win != null && !["NO MARKET", "NONE"].includes(g.market_quality) ? pct(det.p_win,0) : "–"}</div><div class="n">${["NO MARKET", "NONE"].includes(g.market_quality) ? "no market – graded as even" : "from betting markets"}</div></div>
       <div class="stat ${g.lambda_final - g.line > 0 ? "up" : "down"}"><div class="k">Edge</div><div class="v">${(g.lambda_final - g.line > 0 ? "+" : "") + (Math.abs(g.lambda_final - g.line) < 0.1 ? (g.lambda_final - g.line).toFixed(2) : (g.lambda_final - g.line).toFixed(1))}</div><div class="n">projection − line</div></div>
       ${sc === "123" ? `<div class="stat"><div class="k">Last ${pb.recent_form?.matches || 10}</div><div class="v">${pb.recent_form?.avg_total ?? "–"} <span class="small muted">avg</span></div><div class="n">Maps 1–2 totals – no Maps 1–3 record</div></div>`
@@ -1322,6 +1334,7 @@ function render(d) {
   // ---- recent form: last 10 matches, Maps 1-2
   // ---- lines & comparisons (comparison.py): context only - never changes the grade
   const cp = d.comparison;
+  if (cp && cp.error && v.side) h += `<section class="card"><h2>Lines</h2><div class="small muted">Line comparison unavailable right now – the grade above is unaffected.</div></section>`;
   if (cp && !cp.error && cp.ours && v.side) {
     const side = v.side === "More" ? "over" : "under", Side = side === "over" ? "Over" : "Under", pc1 = x => x == null ? "–" : (x * 100).toFixed(0) + "%";
     const pay = o => (o[`mult_${side}`] ?? 1) === 1 ? "" : ` <span class="pill">pays ${o[`mult_${side}`]}x</span>`;

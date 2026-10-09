@@ -755,6 +755,14 @@ def predict_maps(b, team1_id, team2_id, before=None):
     """Probability of each map being Map 1 and Map 2, from both teams' veto habits."""
     p1, p2 = veto_profile(b, team1_id, before), veto_profile(b, team2_id, before)
     pool = p1["pool"] | p2["pool"]
+    if not before:                                       # live: only maps still in the active pool (hltv.active_map_pool)
+        try:
+            import hltv
+            act = hltv.active_map_pool()
+            if act:
+                pool = {m for m in pool if hltv.map_key(m) in act}
+        except Exception:
+            pass
     if not pool or (p1["n"] + p2["n"]) < 3:
         return None
     slot1, slot2 = {}, {}

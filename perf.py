@@ -72,7 +72,7 @@ def _phi(x):
 
 def probs(lam, sd, line):
     """Unconditional (over, under, push) with the line's real cut (x.5: at the line; whole: line +-0.5, push between)."""
-    up, dn = (line, line) if abs(line - round(line)) > 0.25 else (line + 0.5, line - 0.5)
+    up, dn = (math.floor(line) + 0.5,) * 2 if line != int(line) else (line + 0.5, line - 0.5)   # see grader._cuts
     po, pu = 1 - _phi((up - lam) / sd), _phi((dn - lam) / sd)
     return po, pu, max(0.0, 1 - po - pu)
 

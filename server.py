@@ -194,6 +194,7 @@ def shared(key, compute, ttl=RESULT_TTL):
         ev.set()
 
 
+PLAUSIBLE_MAX = {"kills": {"1": 50, "12": 90, "123": 130}, "hs": {"1": 35, "12": 60, "123": 90}}   # line sanity (see /api/grade)
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN")   # set on Railway; no token = admin page disabled
 
 PRELOAD_STATUS = {"enabled": PRELOAD, "players_ready": 0, "last_pass": None, "current": None, "errors": 0}
@@ -295,7 +296,7 @@ def board_payload():
                                                      "nick", "state", "edge", "l10_over", "l10_n", "l10_push", "l10_avg",
                                                      "hs_pct", "p_win", "market", "team_name", "opp_name", "match_slug",
                                                      "graded_line", "graded_model", "player_id", "event", "bo", "maps_known",
-                                                     "dstat", "support", "concern")}))
+                                                     "dstat", "source", "support", "concern")}))
         rows[-1]["scope"] = r.get("scope") or "12"
         x = rows[-1]
         nick = x.get("nick") or x.get("player") or ""
@@ -376,6 +377,7 @@ def members_idle(max_wait=45):
 
 
 _SLIP_SETTLED = [0.0]
+_DIAG = {}
 
 
 def board_forever():
@@ -417,6 +419,7 @@ def board_forever():
                                       "event": (res.get("next_match") or {}).get("event"), "bo": (res.get("next_match") or {}).get("bo"),
                                       "maps_known": ((res.get("next_match") or {}).get("maps") or [])[:3],
                                       "dstat": comparison.data_status(res.get("grade") or {}, v),
+                                      "source": comparison.source_label(res.get("grade") or {}),
                                       "graded_line": r["line"], "graded_model": picklog.MODEL_VERSION,   # slips: exact line + model
                                       "grade": v.get("grade"), "side": v.get("side"), "p": v.get("p"),
                                       "units": v.get("units"), "proj": g.get("lambda_final"), "state": v.get("state"),
@@ -863,6 +866,14 @@ class Handler(BaseHTTPRequestHandler):
                                        "recommended": slips.read(slips.RECOMMENDED), "loaded": slips.read(slips.LOADED)})
             if u.path == "/admin/slip_batches.json" and self.authed(q.get("token")):
                 return self.send(200, {"version": slip_batches.VERSION, "batches": slip_batches.read()})
+            if u.path == "/admin/diagnostics.json" and self.authed(q.get("token")):
+                import diagnostics                        # admin-only diagnostic dashboard (flags, never causes)
+                if not _DIAG.get("at") or time.time() - _DIAG["at"] > 600 or q.get("fresh"):
+                    _DIAG.update(at=time.time(), data=diagnostics.build(picklog.export(), picklog.export_forecasts(inputs=True),
+                                                                        slip_batches.read()))
+                return self.send(200, _DIAG["data"])
+            if u.path == "/admin/diagnostics" and self.authed(q.get("token")):
+                return self.send(200, (WEB / "diagnostics.html").read_bytes(), "text/html; charset=utf-8")
             if u.path == "/admin/comparison_audit" and self.authed(q.get("token")):
                 # ONE cohort at ONE timestamp: every Underdog offer now, and for every graded board line whether the
                 # comparison finds its own offer (by id / name) or why not
@@ -1271,12 +1282,19 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, {"results": []})
         ql = q.lower()
         # typing: a longer query can be answered from a shorter one's complete list (<8 hits)
-        try:                                             # HLTV first (instant, in memory); BO3.gg only if it's down
-            hl = hltv.search_players(q, 8)
+        # HLTV first (in memory); BO3.gg only if it's down. 2026-10-09: one scan per distinct query per index load -
+        # identical queries arriving together share it (a 700-member burst used to scan the whole index ~2,100 times)
+        try:
+            k_ = ("hlsearch", hltv._INDEX.get("at"), hltv._norm(q))
+
+            def _hl():
+                r_ = hltv.search_players(q, 8)
+                return (200, json.dumps({"results": r_}).encode()) if r_ is not None else (503, b"")
+            st_, body_ = shared(k_, _hl, ttl=3600)
+            if st_ == 200:
+                return self.send(200, body_)
         except Exception:
-            hl = None
-        if hl is not None:
-            return self.send(200, {"results": hl})
+            pass
         hit = _SEARCH.get(ql)
         if hit and time.time() - hit[0] < 3600:
             return self.send(200, hit[1])
@@ -1326,6 +1344,12 @@ class Handler(BaseHTTPRequestHandler):
         prop = q.get("prop", "kills") if q.get("prop") in ("kills", "hs") else "kills"
         lt = q.get("line_type", "standard") if q.get("line_type") in ("standard", "goblin", "demon") else "standard"
         scope = q.get("maps") if q.get("maps") in ("12", "123", "1") else "12"
+        # 2026-10-09 audit: 79 member lines were impossible (e.g. a 1675 headshot line); the old pipeline then pulled its
+        # projection toward the line (846 HS). Generous plausible ranges - anything outside is a typo, not a prop.
+        hi_ = PLAUSIBLE_MAX[prop][scope]
+        if not (0 < line <= hi_):
+            return self.send(400, {"error": f"{line} doesn't look like a real {'headshots' if prop == 'hs' else 'kills'} line for "
+                                            f"{ {'1': 'Map 1', '12': 'Maps 1-2', '123': 'Maps 1-3'}[scope]} (expected between 0 and {hi_}). Check the number."})
         slug, match = q.get("slug") or None, q.get("match") or None
         opp = (q.get("opponent") or "")[:60].strip() or None
         team = (q.get("team") or "")[:60].strip() or None     # board click: the team the board graded him for (namesakes)

@@ -163,3 +163,16 @@ def test_verified_team_aliases_are_exact_pairs():
     assert cmp._team_same("Desi Boyz v5", "Desi Boyz v6") is False
     assert cmp._team_same("KZG", "Abyssal") is False and cmp._team_same("Team Abyssal", "KZG") is False
     assert all(len(e) == 3 and e[2] for e in cmp.VERIFIED_TEAM_ALIASES)              # every alias carries its evidence
+
+
+def test_source_is_not_quality():
+    g = {"projection_source": "perf-2-bo3", "flags": ["PROVISIONAL: performance model on BO3.gg history"]}
+    assert cmp.source_label(g) == "BO3.gg" and cmp.data_status(g, {})[0] == "ok"          # BO3.gg alone is not a warning
+    assert cmp.source_label({"projection_source": "perf-2"}) == "HLTV"
+    assert cmp.source_label({"projection_source": "legacy (performance model unavailable: x)"}).startswith("older model")
+    assert cmp.data_status({"flags": ["OLD PROJECTION: ..."]}, {})[0] == "ok"
+    assert cmp.data_status({"flags": ["Gate C: roster not confirmed"]}, {}) == ["verify", "roster not confirmed"]
+    assert cmp.data_status({"flags": ["RUST: last official map 40 days ago - SD inflated"]}, {})[0] == "verify"
+    assert cmp.data_status({"flags": ["Note: last official map 12 days ago"]}, {})[0] == "ok"
+    assert cmp.data_status({"flags": []}, {"state": "SCOUT"})[0] == "verify"
+    assert cmp.data_status({"flags": ["Projection ... data: thin history)"]}, {})[0] == "limited"

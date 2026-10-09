@@ -28,7 +28,7 @@ _P = np.array(list(ROUNDS.values())) / sum(ROUNDS.values())
 
 def cuts(line):
     """(up, down): Over if total > up, Under if total < down (same as grader._cuts / perf.probs)."""
-    return (line, line) if abs(line - round(line)) > 0.25 else (line + 0.5, line - 0.5)
+    return (math.floor(line) + 0.5,) * 2 if line != int(line) else (line + 0.5, line - 0.5)   # see grader._cuts
 
 
 def sample_dist(dist, n, rng):

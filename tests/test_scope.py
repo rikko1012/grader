@@ -168,3 +168,25 @@ def test_same_day_only_drops_earlier_meeting(monkeypatch):
     _fake_hltv_ff(monkeypatch, early + [_row(1, 11, 6, True), _row(2, 9, 6, True)], forfeits=0)
     res = picklog.scope_result(_pick("12", 19.5, "More"), same_day_only=True)
     assert res["status"] == "ok" and res["total"] == 20
+
+
+def test_stale_settlement_detail_is_refreshed_and_logged(monkeypatch, tmp_path):
+    """2026-10-09 audit: the 2026-10-08 correction fixed totals but left Maps 1-2 detail on Maps 1-3 picks."""
+    import json, sqlite3, picklog
+    monkeypatch.setattr(picklog, "DB", tmp_path / "p.db"); monkeypatch.setattr(picklog, "CORRECTIONS", tmp_path / "c.jsonl")
+    monkeypatch.setattr(picklog, "_SCHEMA_OK", [False])
+    con = picklog._db()
+    stale = {"source": "hltv", "rounds": [20, 20], "won": [True, False], "per_map": [[11, 6], [9, 6]]}     # maps 1-2 only
+    con.execute("INSERT INTO picks (id, player, team, opponent, match_start, prop, scope, line, pick, status, actual, hit, result, test) "
+                "VALUES (1, 'tN1R', 'Spirit', '1win', '2026-10-06T12:00:00Z', 'kills', '123', 30.5, 'More', 'settled', 34, 1, ?, 0)",
+                (json.dumps(stale),))
+    con.commit(); con.close()
+    _fake_hltv(monkeypatch, [_row(1, 11, 6, True), _row(2, 9, 6, False), _row(3, 14, 5, True)])
+    dry = picklog.fix_scope_settlements(apply=False, scopes=("123",))
+    assert dry["differs"] == [] and len(dry["stale_details"]) == 1 and not (tmp_path / "c.jsonl").exists()   # dry run changes nothing
+    picklog.fix_scope_settlements(apply=True, scopes=("123",))
+    r = sqlite3.connect(tmp_path / "p.db").execute("SELECT actual, status, hit, result FROM picks WHERE id=1").fetchone()
+    assert r[:3] == (34, "settled", 1) and json.loads(r[3])["per_map"] == [[11, 6], [9, 6], [14, 5]]      # result untouched, detail fixed
+    log = [json.loads(x) for x in (tmp_path / "c.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert log[0]["old_detail"] == stale and "stale settlement detail" in log[0]["reason"]                  # old kept
+    assert picklog.fix_scope_settlements(apply=False, scopes=("123",))["stale_details"] == []

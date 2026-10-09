@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Grader diagnostics</title>
+<style>
+:root{--bg:#0b0f15;--panel:#121925;--line:#243041;--text:#e6edf3;--muted:#8b98a9;--up:#3fb950;--dn:#f0883e}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,sans-serif}
+.wrap{max-width:1200px;margin:0 auto;padding:16px}
+h1{font-size:18px;margin:0 0 4px}h2{font-size:15px;margin:18px 0 8px}
+.muted{color:var(--muted)}.small{font-size:12px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
+select,button{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+button.on{border-color:#ff7a1a;color:#ff7a1a}
+.scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}
+th{color:var(--muted);font-weight:600}.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+.flag{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:1px 8px;margin:2px;font-size:12px}
+</style></head><body><div class="wrap">
+<h1>Grader diagnostics</h1>
+<div class="muted small">Diagnostic flags, not causes: a correctly estimated 60% pick loses 40% of the time. Cohorts, stats, map sets and model versions are never mixed.</div>
+<div class="bar" id="cohort"><button data-v="eval" class="on">Evaluation snapshot (latest forecast 30+ min before start)</button><button data-v="first">First published forecast</button><button data-v="slips">Slip selections</button></div>
+<div class="bar"><select id="fsrc"><option value="">Board + member</option><option value="board">Board offers</option><option value="member">Member research lines</option></select>
+<select id="fprop"><option value="">Kills + HS</option><option value="kills">Kills</option><option value="hs">Headshots</option></select>
+<select id="fscope"><option value="">All maps</option><option value="12">Maps 1–2</option><option value="1">Map 1</option><option value="123">Maps 1–3</option></select>
+<select id="fver"><option value="">All versions</option></select><span class="muted small" id="gen"></span></div>
+<div id="out" class="muted">Loading…</div>
+</div>
+<script>
+const tok = new URLSearchParams(location.search).get("token");
+const $ = s => document.querySelector(s), esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const pc = x => x == null ? "–" : (x * 100).toFixed(1) + "%", n2 = x => x == null ? "–" : (+x).toFixed(2);
+let D = null, cohort = "eval";
+async function load() {
+  try { const r = await fetch("/admin/diagnostics.json?token=" + encodeURIComponent(tok)); D = await r.json(); }
+  catch (e) { $("#out").textContent = "Couldn't load diagnostics: " + e.message; return; }
+  const vers = new Set(); for (const c of ["first", "eval"]) (D.cohorts[c]?.summary || []).forEach(s => vers.add(s.version));
+  $("#fver").innerHTML = `<option value="">All versions</option>` + [...vers].map(v => `<option>${esc(v)}</option>`).join("");
+  $("#gen").textContent = "generated " + D.generated; draw();
+}
+function draw() {
+  if (!D) return;
+  if (cohort === "slips") { const s = D.cohorts.slips;
+    $("#out").innerHTML = `<div class="card">Shadow slip batches: ${s.batches} · most legs on one match ${s.leg_exposure_max_per_match} · on one player ${s.leg_exposure_max_per_player}<br>
+      Settled legs ${s.legs_settled}: hit ${pc(s.leg_hit_rate)} vs predicted ${pc(s.leg_predicted)} <span class="muted">(too few to judge below ~150 matches)</span></div>`; return; }
+  const f = s => (!$("#fsrc").value || s.source === $("#fsrc").value) && (!$("#fprop").value || s.prop === $("#fprop").value)
+              && (!$("#fscope").value || s.scope === $("#fscope").value) && (!$("#fver").value || s.version === $("#fver").value);
+  const rows = (D.cohorts[cohort].summary || []).filter(f);
+  const ex = Object.entries(D.exclusions || {}).map(([k, v]) => `${esc(k)}: ${v}`).join(" · ");
+  $("#out").innerHTML = `<div class="small muted">Excluded: ${ex}</div>
+    <h2>Summary</h2><div class="scroll"><table><thead><tr><th>Cohort / stat / maps / version</th><th>Lines</th><th>Matches</th><th>Hit</th><th>95% (by match)</th><th>Predicted</th><th>Log loss</th>
+      <th>Proj. MAE</th><th>Bias</th><th>Bias 95%</th><th>In own 80%</th><th>Rounds bias</th><th>Top grades hit / pred.</th></tr></thead><tbody>
+    ${rows.map(s => `<tr><td>${esc(s.source)} · ${esc(s.prop)} · ${esc(s.scope)} · ${esc(s.version)}</td><td>${s.n}</td><td>${s.matches}</td><td>${pc(s.hit_rate)}</td>
+      <td>${s.hit_ci ? `${pc(s.hit_ci[0])}–${pc(s.hit_ci[1])}` : "–"}</td><td>${pc(s.predicted)}</td><td>${n2(s.log_loss)}</td><td>${n2(s.proj_mae)}</td><td>${n2(s.proj_bias)}</td>
+      <td>${s.bias_ci ? `${n2(s.bias_ci[0])}–${n2(s.bias_ci[1])}` : "–"}</td><td>${s.in80 == null ? "–" : pc(s.in80) + ` (${s.in80_n})`}</td><td>${n2(s.rounds_bias)}</td>
+      <td>${s.top_selections.n ? `${pc(s.top_selections.hit_rate)} / ${pc(s.top_selections.predicted)} (${s.top_selections.n})` : "–"}</td></tr>`).join("")}</tbody></table></div>
+    <h2>Calibration</h2>${rows.map(s => `<div class="card"><b>${esc(s.source)} · ${esc(s.prop)} · ${esc(s.scope)} · ${esc(s.version)}</b>
+      <div class="scroll"><table><thead><tr><th>Printed chance</th><th>Lines</th><th>Predicted</th><th>Actual</th></tr></thead><tbody>
+      ${s.calibration.map(b => `<tr><td>${b.bin}</td><td>${b.n}</td><td>${pc(b.predicted)}</td><td>${pc(b.actual)}</td></tr>`).join("")}</tbody></table></div>
+      <div class="small muted">Flags: ${Object.entries(s.flags).map(([k, v]) => `<span class="flag">${esc(k)} ${v}</span>`).join("") || "none"} · settled from ${esc(JSON.stringify(s.settled_from))}</div></div>`).join("")}
+    <h2>Flagged lines (latest)</h2><div class="scroll"><table><thead><tr><th>Line</th><th>Side</th><th>Proj</th><th>Actual</th><th>Chance</th><th>Hit</th><th>Rounds pred / act</th><th>Rate pred / act</th><th>HS/kill pred / act</th><th>Flags</th></tr></thead><tbody>
+    ${(D.cohorts[cohort].flagged_examples || []).filter(f).reverse().map(r => `<tr><td>#${r.pick_id} ${esc(r.prop)} ${r.line} (${esc(r.source)})</td><td>${esc(r.side)}</td><td>${n2(r.lam)}</td><td>${r.actual}</td><td>${pc(r.p)}</td><td>${r.hit ? "hit" : "miss"}</td>
+      <td>${r.rounds_pred ?? "–"} / ${r.rounds_act ?? "–"}</td><td>${r.rate_pred ?? "–"} / ${r.rate_act ?? "–"}</td><td>${r.hsk_pred ?? "–"} / ${r.hsk_act ?? "–"}</td><td style="text-align:left">${r.flags.map(x => `<span class="flag">${esc(x)}</span>`).join("")}</td></tr>`).join("")}</tbody></table></div>`;
+}
+$("#cohort").onclick = e => { const b = e.target.closest("button"); if (!b) return; cohort = b.dataset.v; [...$("#cohort").children].forEach(x => x.classList.toggle("on", x === b)); draw(); };
+for (const id of ["#fsrc", "#fprop", "#fscope", "#fver"]) $(id).onchange = draw;
+load();
+</script></body></html>

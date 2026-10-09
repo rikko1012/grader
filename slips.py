@@ -160,7 +160,7 @@ def log_loaded(d):
     rec = {"cid": cid, "key": slip_key(legs), "logged_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
            **{k: d.get(k) for k in ("builder", "grader", "board_at", "mode", "n", "all", "pay", "pay_source")},
            "legs": [{k: l.get(k) for k in ("id", "nick", "prop", "scope", "line", "side", "p", "grade", "matchup", "start", "mult",
-                                           "match_slug")}
+                                           "match_slug", "check", "orig_line", "check_note")}
                     for l in legs]}
     with _LOCK:
         seen = _seen("load", LOADED, "cid")

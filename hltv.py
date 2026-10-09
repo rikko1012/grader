@@ -1014,6 +1014,43 @@ def _vetoes(cur, match_id):
     return out
 
 
+_POOL = {"at": 0.0, "maps": None}
+
+
+def map_key(m):
+    """'de_dust2' / 'Dust 2' -> 'dust2' (BO3.gg and HLTV map names compared on one key)."""
+    k = _norm(m)
+    return k[2:] if k.startswith("de") and len(k) > 4 else k
+
+
+def active_map_pool(days=30, min_share=0.03):
+    """The CURRENT competitive pool = maps played in pro matches in the last `days` days (>= min_share of maps), as
+    map_key()s; cached 6 h; None when HLTV isn't available. 2026-10-09: veto windows reach back 150 days, so a map
+    that left the pool (Overpass in July, Train earlier) could still be predicted - the pool now follows play."""
+    if not dsn():
+        return None
+    if _POOL["maps"] is not None and time.time() - _POOL["at"] < 6 * 3600:
+        return _POOL["maps"]
+    try:
+        con = _connect()
+        try:
+            with con.cursor() as cur:
+                cur.execute("SET statement_timeout = 30000")
+                cur.execute("""SELECT mp.name, count(*) FROM match_maps mm JOIN match_overview mo USING (matchid)
+                               JOIN maps mp ON mp.mapid = mm.mapid
+                               WHERE mo.date >= current_date - make_interval(days => %s) GROUP BY mp.name""", (days,))
+                rows = cur.fetchall()
+        finally:
+            con.close()
+        tot = sum(n for _, n in rows) or 1
+        maps = {map_key(m) for m, n in rows if n / tot >= min_share}
+        if len(maps) >= 5:
+            _POOL.update(at=time.time(), maps=maps)
+    except Exception:
+        pass
+    return _POOL["maps"]
+
+
 def _team_history(cur, team_name, before, n=25):
     """His team's last `n` BO3 vetoes before `before`: ban / pick counts by step role."""
     cur.execute("""SELECT DISTINCT mo.matchid, mo.date FROM match_overview mo JOIN matches m USING (matchid)
@@ -1062,6 +1099,10 @@ def _predict_maps(team_a, team_b, before, pool, runs, seed, random):
     if ha["n"] < 3 or hb["n"] < 3:
         return None
     pool = pool or sorted({m for h in (ha, hb) for r in ("ban1", "pick", "ban2") for m in h[r]})
+    from datetime import date as _date
+    act = active_map_pool() if before is None or str(before) >= str(_date.today()) else None
+    if act:                                              # live predictions: only maps still in the pool
+        pool = [m for m in pool if map_key(m) in act]
     if len(pool) < 7:
         return None
     rnd = random.Random(seed)

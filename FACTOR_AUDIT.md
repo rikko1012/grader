@@ -55,3 +55,39 @@ makes them add up, but their conditional chances have not been validated.
 
 Next: re-test G2 on HS on top of perf-2; teammate kill share; CT/T and AWP once dated data is collected; line movement at
 150+ matches; confirm perf-2 on matches from 2026-10-09 on against the logged perf-1 (G7) comparison.
+
+## Frozen test definitions - round 2 (written 2026-10-09 BEFORE running; not tuned afterwards)
+All on HLTV history through perf.py (perf-2 = G8.1 live), splits TRAIN < 2026-07-01, VALID < 2026-08-13, TEST after;
+pass = TEST improves with the match-grouped 95% interval below 0 AND the TRAIN/VALID direction agrees.
+- R2-maps (map rounds distribution): per actual map pair, the spread of perf-2 Maps 1-2 kills residuals (z = (y - lam)/(C sqrt lam))
+  estimated on TRAIN; candidate = per-map-pair spread multiplier (shrunk 50 maps to 1). Metric: TEST log-score of the kills
+  distribution. ORACLE (actual maps) -> an upper bound; a veto model could only do worse.
+- R2-ctt (CT/T): per-player |CT kpr - T kpr| on history (HLTV side rows) -> the size of the effect knowing the starting side
+  would have: 1.13 x gap per map. Value needs the starting side before the match (not collected) -> decision is a data
+  dependency unless the measured gap is negligible.
+- R2-igl (roles): mean perf-2 residual for IGLs vs others (current Liquipedia role, applied to history = proxy) on TEST.
+- R2-g2hs (eco/rating group on HS): the G2 ridge from round 1, refit on TRAIN on top of perf-2 (not perf-1), HS target.
+- R2-moves (line movement, more data): share of settled verified moved lines whose result went the move's way, Oct 4 onward.
+
+## Round-2 results (run 2026-10-09 after freezing the definitions above)
+| Test | Result | Decision |
+|---|---|---|
+| R2-maps: map-specific spread (ORACLE maps) | TRAIN multipliers 0.99-1.05; TEST log-score -0.0002 (95% -0.0009 to +0.0006); VALID +0.0007 (-0.0005 to +0.0020) | **Rejected in this formulation** (map rounds variance). Map identity / vetoes remain untested as map x opponent interactions |
+| R2-ctt: CT/T | 92,982 side rows (Jul 10 - Oct 8): median |CT-T| gap 0.110 kills/round but early vs late gap correlation r = 0.16 (365 players) -> the stable part is worth ~0.04 kills on Maps 1-2 (90th pct 0.08) | **Rejected (measured bound negligible)** - not a data block: even with the starting side known it could not move a projection meaningfully |
+| R2-igl: IGL role | perf-2 residual IGL vs others: TRAIN +0.16 vs +0.51, VALID +0.20 vs +0.45, TEST -0.15 (95% -0.48 to +0.22) vs +0.24 -> IGLs ~0.3 kills lower, same direction in all three periods | **Shadow candidate** (proxy: today's roles applied to history). Promotion needs dated role history (collected daily since 2026-10-09) and a forward test |
+| R2-g2hs: eco/rating on HS (on perf-2) | TEST HS MAE +0.0013 (95% -0.0017 to +0.0042) | **Rejected** - round-1 signal was the HS shrink, now in perf-2 |
+| R2-moves: line movement | 65/144 HLTV-settled moved lines (31 matches) followed the move: 45% (about +-8%) | **Rejected in this formulation**; collection continues |
+
+## Final status by group (2026-10-09)
+| Group | Status |
+|---|---|
+| Player rate, rounds exposure, environment, opponent conceded, HS/kill, newcomer prior | **Used** (perf-2) |
+| Map / veto | Rejected as tested (map means, oracle; map spread, oracle). Untested: map x opponent interactions - blocked on dated veto/side-choice collection |
+| CT/T | Rejected (measured bound ~0.04 kills) |
+| Roster / roles (IGL) | Shadow candidate; dated roles collected daily from 2026-10-09 |
+| AWP usage / weapon mix | Proxy rejected; **blocked by data** until dated daily snapshots (started 2026-10-09) cover enough history |
+| Eco-adjusted / rating stats | Rejected (kills: round 1; HS: round 2) |
+| Opponent / team strength | Rejected (Elo twice; matchup rounds); market win price - **blocked by data** (stored with forecasts only since 2026-10-08; too few settled) |
+| Schedule load | Rejected |
+| Timestamped markets (line movement) | Rejected as tested; collecting |
+| Independent projections / second book | **Blocked by access**: none accessible (PrizePicks CAPTCHA; OddsPapi free quota exhausted - player-prop coverage unknown) |

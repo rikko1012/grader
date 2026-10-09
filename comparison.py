@@ -83,13 +83,20 @@ def _ts(s):
         return None
 
 
+def source_label(g):
+    """WHERE the projection came from - a source label, not a quality judgement."""
+    ps = str(g.get("projection_source") or "")
+    return "HLTV" if ps.startswith("perf") and not ps.endswith("-bo3") else "BO3.gg" if ps.endswith("-bo3") else "older model (BO3.gg)"
+
+
 def data_status(g, v):
-    """Data quality, kept apart from the model's confidence: ("ok" | "limited" | "verify", short reason)."""
+    """Data QUALITY, kept apart from the source and from the model's confidence: ["ok" | "limited" | "verify", reason].
+    "verify" only for a concrete unresolved issue: no match found (identity), roster not confirmed, stand-in, or stale
+    inputs (long gap since the last official map). A BO3.gg-only source is NOT by itself a reason to verify."""
     fl = " | ".join(g.get("flags") or [])
     if (v or {}).get("state") == "SCOUT" or "0 units: SCOUT" in fl:
-        return ["verify", "no match found"]
-    for key, why in (("OLD PROJECTION", "no HLTV data - older model"), ("PROVISIONAL", "BO3.gg history only"),
-                     ("Gate C: roster", "roster not confirmed"), ("STAND-IN", "stand-in")):
+        return ["verify", "no upcoming match found"]
+    for key, why in (("Gate C: roster", "roster not confirmed"), ("STAND-IN", "stand-in"), ("RUST:", "stale: long gap since the last official map")):
         if key in fl:
             return ["verify", why]
     if "thin history" in fl or "Gate D" in fl or "Thin data" in fl:

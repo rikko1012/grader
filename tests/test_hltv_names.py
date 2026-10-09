@@ -29,3 +29,15 @@ def test_team_id_prefers_exact_then_variant():
     assert hltv._team_id(cur, "Team Vitality") == 1                                # exact name wins
     assert hltv._team_id(_Cur({"vitality": 9565}), "Team Vitality") == 9565
     assert hltv._team_id(_Cur({"vitality": 9565}), "Vitality Academy") is None     # no fuzzy matching
+
+
+def test_active_map_pool_filters_retired_maps(monkeypatch):
+    """Maps that left the pool (Overpass in July 2026, Train earlier) are never predicted live."""
+    import cs2_scout
+    monkeypatch.setattr(hltv, "active_map_pool", lambda *a, **k: {"ancient", "anubis", "cache", "dust2", "inferno", "mirage", "nuke"})
+    prof = lambda maps: {"n": 10, "picks": {m: 2 for m in maps}, "bans": {}, "pool": set(maps)}
+    old = ["de_ancient", "de_anubis", "de_dust2", "de_inferno", "de_mirage", "de_nuke", "de_overpass", "de_cache", "de_train"]
+    monkeypatch.setattr(cs2_scout, "veto_profile", lambda b, t, before=None: prof(old))
+    out = cs2_scout.predict_maps(None, 1, 2)
+    assert out and not ({"de_overpass", "de_train"} & (set(out["map1"]) | set(out["map2"])))
+    assert hltv.map_key("de_dust2") == hltv.map_key("Dust 2") == "dust2"

@@ -163,6 +163,15 @@ def _factors(res):
                                    "raw": gg.get("probs_raw")}
     except Exception:
         pass
+    try:   # shared-match challenger M1 (shadow, 2026-10-09): one simulated match per forecast - logged, never shown
+        import match_model
+        pf = gi.get("perf") if isinstance(gi.get("perf"), dict) else {}
+        if (gi.get("scope") or "12") in ("1", "12") and pf.get("lambda_kills") is not None:
+            m1 = match_model.shadow(pf, g.get("detail") or {}, gi.get("scope") or "12", gi.get("prop"), float(gi["line"]))
+            if m1:
+                out.setdefault("shadow", {})["match_m1"] = m1
+    except Exception:
+        pass
     try:   # perf2_hs (live on Maps 1-2 since G7; Map 1 still comparison): HS distribution averaged over kills
         pf = gi.get("perf") or {}
         if gi.get("prop") == "hs" and pf.get("lambda_kills") is not None and (gi.get("scope") or "12") in ("1", "12"):
@@ -565,7 +574,7 @@ def fix_scope_settlements(apply=False, scopes=("1", "123"), test=None):
         rows = [x for x in con.execute("SELECT * FROM picks WHERE status IN ('settled', 'push')").fetchall()
                 if (x["scope"] or "12") in scopes and (test is None or (x["test"] or 0) == test)]
         con.close()
-    diffs, skipped = [], []
+    diffs, skipped, details = [], [], []
     for r in rows:
         try:
             res = scope_result(r)
@@ -574,7 +583,32 @@ def fix_scope_settlements(apply=False, scopes=("1", "123"), test=None):
         if res["status"] != "ok":
             skipped.append({"id": r["id"], "reason": res.get("reason")}); continue
         st, hit = outcome(res["total"], r["line"], r["pick"])
+        new_detail = {"source": "hltv", "rounds": res["rounds"], "won": res["won"], "per_map": res["per_map"],
+                      "maps_used": res["maps_used"], "hltv_match": res["hltv_match"]}
         if res["total"] == r["actual"] and st == r["status"] and (hit == r["hit"] or (hit is None and r["hit"] is None)):
+            # 2026-10-09: the result is right but the stored detail may be stale (the 2026-10-08 correction updated the
+            # total only): if the stored maps don't reproduce the settled total under this scope's rules, refresh it
+            try:
+                old = json.loads(r["result"] or "{}")
+            except ValueError:
+                old = {}
+            won = old.get("won") or []
+            om = [{"number": i + 1, "kills": k, "headshots": h, **({"won": won[i]} if i < len(won) else {})}
+                  for i, (k, h) in enumerate(old.get("per_map") or [])]
+            from scope import scope_total
+            t_old, _ = scope_total(om, r["scope"] or "12", "hs" if r["prop"] == "hs" else "kills") if om else (None, None)
+            if t_old != r["actual"]:
+                dd = {"id": r["id"], "player": r["player"], "scope": r["scope"], "actual": r["actual"], "old_detail": old, "new_detail": new_detail}
+                details.append(dd)
+                if apply:
+                    with _LOCK:
+                        con = _db()
+                        con.execute("UPDATE picks SET result=? WHERE id=?", (json.dumps(new_detail, default=str), r["id"]))
+                        con.commit()
+                        con.close()
+                        with open(CORRECTIONS, "a", encoding="utf-8") as f:
+                            f.write(json.dumps(dict(dd, corrected_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                                                    reason="stale settlement detail (total already correct)"), default=str) + "\n")
             continue
         d = {"id": r["id"], "player": r["player"], "prop": r["prop"], "scope": r["scope"], "line": r["line"], "pick": r["pick"],
              "test": r["test"], "old": {"actual": r["actual"], "status": r["status"], "hit": r["hit"]},
@@ -584,14 +618,14 @@ def fix_scope_settlements(apply=False, scopes=("1", "123"), test=None):
         if apply:
             with _LOCK:
                 con = _db()
-                con.execute("UPDATE picks SET status=?, actual=?, hit=?, actual_maps=? WHERE id=?",
-                            (st, res["total"], hit, json.dumps(res["maps"]), r["id"]))
+                con.execute("UPDATE picks SET status=?, actual=?, hit=?, actual_maps=?, result=? WHERE id=?",
+                            (st, res["total"], hit, json.dumps(res["maps"]), json.dumps(new_detail, default=str), r["id"]))
                 con.commit()
                 con.close()
                 with open(CORRECTIONS, "a", encoding="utf-8") as f:
                     f.write(json.dumps(dict(d, corrected_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
                                             reason="recheck_with_hltv used Maps 1-2 totals for a non-Maps-1-2 line")) + "\n")
-    return {"checked": len(rows), "differs": diffs, "skipped": skipped, "applied": bool(apply)}
+    return {"checked": len(rows), "differs": diffs, "stale_details": details, "skipped": skipped, "applied": bool(apply)}
 
 
 def _hltv_totals(r, same_day_only=False):
