@@ -442,6 +442,7 @@ def stake_caps():
 
 
 _BS_CACHE = [0.0, []]
+_BS_LOCK = threading.Lock()
 
 
 def board_stake(res, prop, scope, line):
@@ -454,7 +455,14 @@ def board_stake(res, prop, scope, line):
     nick = ((res.get("player_block") or {}).get("player") or {}).get("nick") or ""
     st = comparison._ts((res.get("next_match") or {}).get("start"))
     if time.time() - _BS_CACHE[0] > 5:            # board rows at most 5 s old (no board rebuild per member grade)
-        _BS_CACHE[:] = [time.time(), board_payload()["rows"]]
+        # single-flight: one request rebuilds, the rest keep the previous rows (a 700-member rush must not rebuild the
+        # board 700 times at once); only the very first build makes others wait
+        if _BS_LOCK.acquire(blocking=not _BS_CACHE[0]):
+            try:
+                if time.time() - _BS_CACHE[0] > 5:
+                    _BS_CACHE[:] = [time.time(), board_payload()["rows"]]
+            finally:
+                _BS_LOCK.release()
     for r in _BS_CACHE[1]:
         if (str(r.get("nick") or r.get("player") or "").lower() == nick.lower() and r.get("prop") == prop
                 and (r.get("scope") or "12") == scope and float(r.get("line") or -1) == float(line) and r.get("side") == v["side"]
