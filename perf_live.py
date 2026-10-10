@@ -97,7 +97,8 @@ def projection(nick, team, opponent, lan, scope="12", prop="kills", day=None):
     out = perf.project(pm, om, lan, day, scope, prop)
     out["g7"] = g7_fields(perf.project(pm, om, lan, day, scope, prop, perf.PARAMS_PERF1, perf.SPREAD_PERF1, "perf-1"))
     out.update(hltv_player_ids=ids, hltv_opp_team=tid, player_maps=len(pm), opp_maps=len(om),
-               opp_known=bool(tid), lan_known=lan is not None)
+               opp_known=bool(tid), lan_known=lan is not None,
+               newest_map_day=max((r[0] for r in pm if r[0] < day), default=None))   # his last HLTV map before the match day
     if not tid:
         out["data_quality"] = (out["data_quality"] + "; " if out["data_quality"] != "ok" else "") + "opponent not in HLTV - average opponent"
     return out

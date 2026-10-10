@@ -79,8 +79,10 @@ CONFIG = {
     "online_shift": 0.06,
     "online_guard": "full",
     # 2026-10-08 performance model perf-1 (perf.py): drives the projection + spread for these scopes when its input
-    # (d["perf"]) is present. Maps 1-2 only - on Map 1 it did not beat the old projection. () = the old pipeline.
-    "perf_scopes": ("12",),
+    # (d["perf"]) is present. () = the old pipeline. Map 1 added 2026-10-10 (owner: HLTV is the source, BO3.gg the
+    # backup): on 186 real Map 1 lines (16 matches) it tied the BO3.gg-based projection - MAE 3.135 vs 3.137, log-loss
+    # 0.6873 vs 0.6915 (95% -0.040 to +0.036). Maps 1-3 stays on the old pipeline until tested.
+    "perf_scopes": ("12", "1"),
     # 2026-10-08 release (PROVISIONAL - confirmation on matches from Oct 9 on):
     #  perf-1-bo3: the performance model on BO3.gg maps for players HLTV has no history for (proxy test: short-history
     #  model beat the old pipeline on 414 board lines, MAE 5.08 -> 4.91, log-loss -0.017, range crosses 0)

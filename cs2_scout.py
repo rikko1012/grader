@@ -1117,6 +1117,50 @@ def _perf_input(pb, args):
         return {"error": f"performance model failed: {str(e)[:120]}"}
 
 
+WINDOW_DAYS = {"last_3m": 90, "last_6m": 180, "last_12m": 365}
+
+
+def hltv_first_gates(pb, d):
+    """The stake checks read HLTV first; BO3.gg is the backup (owner 2026-10-10: "bo3 should be a backup plan").
+    - AWPer on a headshot line: HLTV weapon stats (AWP share of kills, 90 days), then Liquipedia roles - the same answer
+      the board shows - and BO3.gg's body-shot rate only when neither knows him.
+    - Days since his last official map: the most recent of HLTV and BO3.gg (either can lag the other).
+    - Sample size: his Maps 1-2 count in the same window, the larger of HLTV and BO3.gg (BO3.gg misses events HLTV has).
+    Each source used is recorded in d["gate_sources"]."""
+    nick, team = (pb.get("player") or {}).get("nick"), pb.get("playing_for") or pb.get("current_team")
+    src = d.setdefault("gate_sources", {})
+    try:
+        import roles
+        roles.refresh_hltv()                        # 30-minute cache; never raises
+        awp, why = roles.awp_role(nick, team)
+        if awp is not None:
+            d["sniping"] = 100 if awp else 0
+            pb["awp_note"] = ("AWPer" if awp else "Rifler") + f" ({why})"
+            src["awp"] = why
+    except Exception:
+        pass
+    src.setdefault("awp", "BO3.gg body-shot rate" if d.get("sniping") is not None else "unknown")
+    pf = d.get("perf") if isinstance(d.get("perf"), dict) else {}
+    if pf.get("newest_map_day"):
+        days = datetime.now(timezone.utc).date().toordinal() - int(pf["newest_map_day"])
+        b3 = d.get("days_since_last_map")
+        d["days_since_last_map"] = days if b3 is None else min(days, b3)
+        pb["days_since_last_map"] = d["days_since_last_map"]
+        src["rest"] = "HLTV" if b3 is None or days <= b3 else "BO3.gg (more recent than HLTV's data)"
+    try:
+        import hltv
+        win = WINDOW_DAYS.get((pb.get("overall") or {}).get("window"), 365)
+        since = (datetime.now(timezone.utc).date() - timedelta(days=win)).isoformat()
+        n = len(hltv.recent_series(nick, team, since)) if nick else 0      # Maps 1-2 rows (both maps known)
+        if n and n > (d.get("maps_played") or 0):
+            d["maps_played"] = n
+            src["sample"] = f"HLTV ({n} Maps 1-2 in the window)"
+    except Exception:
+        pass
+    src.setdefault("sample", "BO3.gg")
+    return d
+
+
 def grader_inputs(pb, args, odds=None, hh=None):
     """Map everything into the keys grade_leg() documents."""
     o = pb["overall"]
@@ -1155,6 +1199,7 @@ def grader_inputs(pb, args, odds=None, hh=None):
         "on_listed_team": pb.get("on_listed_team"), "is_standin": pb["is_standin"],
         "roster_confirmed": pb["roster_confirmed"],
     }
+    hltv_first_gates(pb, d)
     if odds and odds.get("found") and odds.get("team_ml") is not None:
         d["team_ml"], d["opp_ml"] = odds["team_ml"], odds["opp_ml"]
     if args.team_ml is not None:

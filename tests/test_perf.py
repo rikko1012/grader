@@ -51,7 +51,7 @@ def test_model_drives_maps12_with_one_probability():
 def test_other_scopes_untouched_and_gates_kept():
     rnd = random.Random(3)
     for _ in range(400):
-        d = _inputs(rnd, rnd.choice(["1", "123"]))
+        d = _inputs(rnd, "123")                                           # Map 1 is on the performance model since 2026-10-10
         a = grader.grade_leg(dict(d)); b = grader.grade_leg(dict(d), dict(grader.CONFIG, perf_scopes=()))
         assert a["projection_source"] == "legacy" and a["p_more"] == b["p_more"] and a["lambda_final"] == b["lambda_final"]
     d = _inputs(random.Random(4), "12"); d.update(is_standin=True, roster_confirmed=True)
@@ -152,7 +152,7 @@ def test_live_grades_unchanged_by_candidate_code():
             d["perf"] = {"error": "player 'x' not found in HLTV"}
         if d["prop"] == "hs" or rnd.random() < 0.3:
             d["perf"] = dict(d["perf"], version="perf-1") if isinstance(d.get("perf"), dict) and "lambda" in d["perf"] else d["perf"]
-        a = old.grade_leg(dict(d)); b = grader.grade_leg(dict(d), dict(grader.CONFIG, perf_hs_dist=False, fix_v2=False)); b.pop("dist", None)
+        a = old.grade_leg(dict(d)); b = grader.grade_leg(dict(d), dict(grader.CONFIG, perf_hs_dist=False, fix_v2=False, perf_scopes=("12",))); b.pop("dist", None)
         assert json.dumps(a, sort_keys=True, default=str) == json.dumps(b, sort_keys=True, default=str)
 
 

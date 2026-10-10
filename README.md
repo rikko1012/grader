@@ -41,17 +41,19 @@ Polymarket), `--bo3-slug` (if the name search picks the wrong player), `--refres
 Results print to the screen and save to `output/<player>_<command>_<date>.json`.
 
 ## Which projection is live (2026-10-10)
-- **Maps 1-2 lines** (most of the Underdog board): the performance model `perf.py` on HLTV map history
+- **Maps 1-2 and Map 1 lines** (the whole Underdog board): the performance model `perf.py` on HLTV map history
   (`perf_live.py`), version tag in `MODEL_VERSIONS.md`. It uses his kills per round (half-life 120 days, measured up to
   the match day), tonight's LAN / online split, a thin-history prior, the opponent's kills conceded and, for headshots,
   his headshots per kill. Players HLTV doesn't have use the same model on their BO3.gg maps (provisional).
-- **Map 1 and Maps 1-3 lines** still use the older pipeline described below (rates, form, H2H, Round Swing, win chance,
+- **Maps 1-3 lines** (rare; none on the board) still use the older pipeline described below (rates, form, H2H, Round Swing, win chance,
   Over margin).
 - Gates and caps (stand-in, transfer, sample, rust, AWPer on HS, FORM / TAPE FIGHT, thin market, same-match cap) set
-  the stake on every line and never change the chance.
+  the stake on every line and never change the chance. Their inputs read HLTV first (`hltv_first_gates`): AWP share,
+  last map date, Maps 1-2 count; BO3.gg is the backup. BO3.gg stays primary only for what HLTV's database lacks:
+  upcoming schedule pages (maps / veto), team pages with benched / stand-in status, and players HLTV doesn't cover.
 - Every other factor is display only until it passes a chronological test - see `FACTOR_AUDIT.md`.
 
-## What it does automatically (older pipeline: Map 1 / Maps 1-3 projections, and the card's context)
+## What it does automatically (older pipeline: Maps 1-3 projections, and the card's context)
 - **Roster (Gate C):** current team + 5-man roster from BO3.gg; stand-in if he's not on the roster;
   roster confirmed when his last map's lineup matches it.
 - **Waterfall:** last 3m -> 6m -> 12m -> all-time on current team (+/-8% flag) until 10+ maps,
@@ -80,7 +82,7 @@ so a grade never waits on HLTV.
 
 - Set `HLTV_DB_DSN` to the scraper's database (Railway: `${{Postgres.DATABASE_URL}}`).
 - Each grade then shows an **HLTV** card: Rating 3.0 (CT/T), Round Swing, ADR/KAST/K-D, data date.
-- **Round Swing feeds the older pipeline's grade** (Map 1 / Maps 1-3 only; grade_leg's swing multiplier) when the player has
+- **Round Swing feeds the older pipeline's grade** (Maps 1-3 only; grade_leg's swing multiplier) when the player has
   10+ HLTV maps in the window (3m -> 6m -> 12m) *and* those maps are for the same team. Otherwise it
   stays 0 exactly as before. `HLTV_SWING=0` turns it off.
 - The card also shows (display only, never used in the grade): his HLTV stats on the prop maps
