@@ -1092,6 +1092,12 @@ class Handler(BaseHTTPRequestHandler):
                                  "product": m.get("product_id"),
                                  "grader_allows": whop_auth.has_access(uid, force=True) if uid else None})
                 return self.send(200, {"plan": q.get("plan"), "memberships": rows})
+            if u.path == "/admin/pp_history" and self.authed(q.get("token")):
+                # every PrizePicks line Scout observed: openings, moves, provider-id changes, removals (prizepicks.py)
+                ev = prizepicks.history(q.get("market") or None, int(q.get("limit") or 500))
+                b = prizepicks.board()
+                return self.send(200, {"feed": {k: b.get(k) for k in ("state", "at", "checked_at", "lines", "error")},
+                                       "events": ev, "counts": dict(collections.Counter(e.get("event") for e in ev))})
             if u.path == "/admin/prop_feed" and self.authed(q.get("token")):
                 # read-only look at the scraper's props tables (PrizePicks receiver): status, volume, freshness, samples
                 import hltv
