@@ -325,6 +325,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
   </section>
   <section class="card" id="board" hidden>
     <div class="bbar" id="bbar">
+      <div class="seg" id="bbook" title="Which platform's lines"><button type="button" data-v="underdog" class="on">Underdog</button><button type="button" data-v="prizepicks">PrizePicks</button><button type="button" data-v="compare">Compare</button></div>
       <div class="seg" id="bview" title="Group by match or list every prop"><button type="button" data-v="matches" class="on">Matches</button><button type="button" data-v="all">All props</button></div>
       <div class="seg" id="bprop"><button type="button" data-v="kills" class="on">Kills</button><button type="button" data-v="hs">Headshots</button><button type="button" data-v="both">Both</button></div>
       <div class="seg" id="bscope" title="Which maps the lines cover"><button type="button" data-v="12" class="on">Maps 1–2</button><button type="button" data-v="1">Map 1</button><button type="button" data-v="123">Maps 1–3</button></div>
@@ -519,7 +520,7 @@ $("#f").onsubmit = async e => {
     const d = await r.json();
     if (r.status === 401 && d.error === "members_only") { st.hidden = true; return showGate(d); }   // session ended
     if (!r.ok) throw new Error(d.error || "Something went wrong");
-    st.hidden = true; render(d); remember(d);
+    st.hidden = true; if (ctx?.book) d.book = ctx.book; render(d); remember(d);
   } catch (err) {
     st.className = "status err"; st.textContent = err.message;
   } finally { clearInterval(iv); $("#go").disabled = false; }
@@ -741,9 +742,10 @@ const legKey = l => [String(l.p).toLowerCase(), l.t, l.sc || "12"].join(":");   
 // check of the live Underdog offer (now). Checks run on add, on opening the slip and before Copy; nothing is ever
 // replaced silently. States: verified / changed / unavailable (Underdog no longer shows it) / failed (couldn't check) /
 // research (a manual line - goblin/demon, typed, or kept after a change - never shown as verified).
-async function lineCheck(x) {
+async function lineCheck(x, book) {
   try {
-    const qs = new URLSearchParams({player: x.p, prop: x.t, maps: x.sc || "12", line: x.l, team: x.tm || "", start: x.st || "", pid: x.pid || ""});
+    const qs = new URLSearchParams({player: x.p, prop: x.t, maps: x.sc || "12", line: x.l, team: x.tm || "", start: x.st || "", pid: x.pid || "",
+                                    book: book || x.bk || "underdog", lt: x.lt || "standard"});
     const r = await fetch("/api/line_check?" + qs);
     return r.ok ? await r.json() : {status: "failed", note: "Couldn't reach the server to check this line"};
   } catch { return {status: "failed", note: "Couldn't reach the server to check this line"}; }
@@ -765,15 +767,17 @@ const pushOf = g => g && g.line != null && +g.line % 1 === 0 && g.probs_raw && g
 const sideGrade = (gr, u, v, sd) => {
   const capped = v.side === sd && v.cap_n && v.units_full > v.units, units = capped ? v.units : (u || 0);
   return `${gr === "C" || gr === "LEAN" || !units ? "lean" : "grade " + esc(gr)} · ${units}U${capped ? " (capped)" : ""}`; };
+const slipBook = s => (s.find(x => x.bk) || {}).bk || null;       // a slip belongs to one platform
 function legFrom(d, extra) {
   const g = d.grade || {}, v = d.verdict || {}, pb = d.player_block || {};
-  return Object.assign({p: pb.player?.nick, pid: pb.player?.id || "", l: g.line, t: g.prop, lt: g.line_type, sc: g.scope || "12", s: v.side, g: v.grade, pc: v.p, u: v.units,
+  return Object.assign({bk: d.book || null, p: pb.player?.nick, pid: pb.player?.id || "", l: g.line, t: g.prop, lt: g.line_type, sc: g.scope || "12", s: v.side, g: v.grade, pc: v.p, u: v.units,
     m: d.next_match?.slug || [pb.current_team || "", d.next_match?.opponent || ""].map(x => x.toLowerCase().replace(/[^a-z0-9]/g, "")).sort().join("|"),
     vs: d.next_match?.opponent || "", tm: pb.playing_for || pb.current_team || "", st: d.next_match?.start || "",
     orig: {line: g.line, side: v.side, p: v.p, grade: v.grade, units: v.units, at: Date.now()}}, extra || {});
 }
 function pushLeg(leg) {
-  const s = store.get("cs2s_slip", []);
+  const s = store.get("cs2s_slip", []), plat = slipBook(s);
+  if (leg.bk && plat && leg.bk !== plat) { toast(`This slip is for ${bookName(plat)} – one platform per slip. Clear it first to start a ${bookName(leg.bk)} slip.`); return openSlip(); }
   if (s.some(x => legKey(x) === legKey(leg))) { toast(`${leg.p} ${propWord(leg.t)}${mapsWord(leg.sc)} is already on the slip`); return openSlip(); }
   if (s.some(x => String(x.p).toLowerCase() === String(leg.p).toLowerCase())) toast(`${leg.p} now has two picks – they move together; check your app allows both`);
   if (s.length >= 6) { toast("A slip holds 6 picks max"); return openSlip(); }
@@ -782,32 +786,36 @@ function pushLeg(leg) {
 async function addToSlip(d) {
   const g = d.grade || {}, v = d.verdict || {}, nick = d.player_block?.player?.nick;
   if (!nick || !v.side) return;
-  const leg = legFrom(d);
-  if ((g.line_type || "standard") !== "standard") { leg.now = {status: "research", note: "Goblin / demon line – not an Underdog line", at: Date.now()}; return pushLeg(leg); }
-  const c = await lineCheck(leg);
+  const leg = legFrom(d), plat = slipBook(store.get("cs2s_slip", []));
+  if (leg.bk && plat && leg.bk !== plat) return pushLeg(leg);                  // refused: one platform per slip
+  // check the leg's own platform; a typed line: the slip's platform, else every platform that offers that market type
+  const lt0 = g.line_type || "standard", books = leg.bk ? [leg.bk] : plat ? [plat] : lt0 !== "standard" ? ["prizepicks"] : ["underdog", "prizepicks"];
+  let c = null, used = books[0];
+  for (const b of books) { const r = await lineCheck(leg, b); if (r.status === "verified") { c = r; used = b; break; } if (!c || (c.status !== "changed" && r.status === "changed")) { c = r; used = b; } }
+  if (c.status === "verified") leg.bk = used;
   leg.now = {status: c.status === "ambiguous" ? "research" : c.status, note: c.note || "", at: Date.now(), new_line: c.new_line};
   if (c.status === "changed" && c.new_line != null) {
     // regrade the NEW line before asking - an old chance is never attached to a new line
     let n = null;
     try {
-      const qs = new URLSearchParams({player: nick, line: c.new_line, prop: g.prop, maps: g.scope || "12", team: leg.tm, opponent: leg.vs});
+      const qs = new URLSearchParams({player: nick, line: c.new_line, prop: g.prop, maps: g.scope || "12", team: leg.tm, opponent: leg.vs, line_type: c.new_odds_type && c.new_odds_type !== "alt" ? c.new_odds_type : "standard"});
       const r = await fetch("/api/grade?" + qs); n = r.ok ? await r.json() : null;
     } catch {}
     const nv = n?.verdict || {}, row = (l, s_, p_, gr, u) => `<tr><td>${l}</td><td>${s_ ? sideTxt(s_) : "–"}</td><td class="num">${p_ != null ? pct(p_) : "–"}</td><td>${esc(gr || "–")}</td><td class="num">${u ?? 0}U</td></tr>`;
-    const k = await ask(d.from === "board" ? "Underdog moved this line" : "Your line differs from Underdog's current line", `${esc(nick)} ${propWord(g.prop)}${mapsWord(g.scope)}: ${d.from === "board" ? esc(c.note) : `you entered ${g.line}; Underdog currently shows ${c.new_line}`}.
+    const k = await ask(d.from === "board" ? `${bookName(used)} moved this line` : `Your line differs from ${bookName(used)}'s current line`, `${esc(nick)} ${propWord(g.prop)}${mapsWord(g.scope)}: ${d.from === "board" ? esc(c.note) : `you entered ${g.line}; ${bookName(used)} currently shows ${c.new_line}`}.
       <table style="margin-top:8px"><thead><tr><th>Line</th><th>Side</th><th class="num">Chance</th><th>Grade</th><th class="num">Stake</th></tr></thead><tbody>
       ${row(g.line + " (yours)", v.side, v.p, v.grade, v.units)}${n && nv.side ? row(c.new_line + " (now)", nv.side, nv.p, nv.grade, nv.units) : `<tr><td>${c.new_line} (now)</td><td colspan="4" class="muted">couldn't regrade – try again</td></tr>`}</tbody></table>`,
       [...(n && nv.side ? [{k: "new", label: `Use ${sideTxt(nv.side)} ${c.new_line}`, primary: true}] : []), {k: "keep", label: `Keep ${g.line} as a research line`}, {k: "cancel", label: "Cancel"}]);
-    if (k === "new") { const nl = legFrom(n); nl.now = {status: "verified", note: "", at: Date.now()}; nl.replaced = {line: g.line, side: v.side, p: v.p, grade: v.grade, units: v.units}; return pushLeg(nl); }
+    if (k === "new") { const nl = legFrom(n); nl.bk = used; nl.now = {status: "verified", note: "", at: Date.now()}; nl.replaced = {line: g.line, side: v.side, p: v.p, grade: v.grade, units: v.units}; return pushLeg(nl); }
     if (k !== "keep") return;
-    leg.now = {status: "research", note: `Kept at ${g.line}; Underdog shows ${c.new_line}`, at: Date.now()};
+    leg.bk = null; leg.now = {status: "research", note: `Kept at ${g.line}; ${bookName(used)} shows ${c.new_line}`, at: Date.now()};
   } else if (c.status === "unavailable" && d.from === "board") {
-    const k = await ask("Line no longer offered", `Underdog no longer shows ${esc(nick)} ${sideTxt(v.side)} ${g.line} ${propWord(g.prop)}${mapsWord(g.scope)}.`,
+    const k = await ask("Line no longer offered", `${bookName(used)} no longer shows ${esc(nick)} ${sideTxt(v.side)} ${g.line} ${propWord(g.prop)}${mapsWord(g.scope)}.`,
       [{k: "keep", label: "Add as a research line"}, {k: "cancel", label: "Cancel", primary: true}]);
     if (k !== "keep") return;
-    leg.now = {status: "research", note: "No longer offered on Underdog", at: Date.now()};
+    leg.bk = null; leg.now = {status: "research", note: `No longer offered on ${bookName(used)}`, at: Date.now()};
   } else if (c.status === "unavailable") {
-    leg.now = {status: "research", note: "Your own line – not on Underdog right now", at: Date.now()};
+    leg.bk = null; leg.now = {status: "research", note: `Your entered line – not on ${books.map(bookName).join(" or ")} right now`, at: Date.now()};
   }
   pushLeg(leg);
 }
@@ -815,7 +823,8 @@ function openSlip() { $("#slip").hidden = false; drawSlip(); recheckSlip(); }
 // re-check every leg's live offer; records it in leg.now (the original selection in leg.orig is never touched)
 async function recheckSlip() {
   const s = store.get("cs2s_slip", []); if (!s.length) return s;
-  const res = await Promise.all(s.map(x => (x.lt || "standard") === "standard" && !(x.now?.status === "research") ? lineCheck(x) : null));
+  const plat = slipBook(s);
+  const res = await Promise.all(s.map(x => !(x.now?.status === "research") && (x.bk || plat) ? lineCheck(x, x.bk || plat) : null));
   const cur = store.get("cs2s_slip", []);
   res.forEach((c, i) => { if (c && cur[i] && legKey(cur[i]) === legKey(s[i]))
     cur[i].now = {status: c.status === "ambiguous" ? "unavailable" : c.status, note: c.note || "", at: Date.now(), new_line: c.new_line}; });
@@ -823,7 +832,7 @@ async function recheckSlip() {
 }
 const legState = x => {
   const st = x.now?.status;
-  return st === "verified" ? ` <span class="pill ok" title="Checked against Underdog ${x.now.at ? new Date(x.now.at).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"}) : ""}">✓ Underdog</span>`
+  return st === "verified" ? ` <span class="pill ok" title="Checked against ${bookName(x.bk) || "the platform"} ${x.now.at ? new Date(x.now.at).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"}) : ""}">✓ ${bookName(x.bk) || "verified"}</span>`
     : st === "changed" ? ` <span class="pill warn" title="${esc(x.now.note || "")}">line changed${x.now.new_line != null ? " → " + x.now.new_line : ""}</span>`
     : st === "unavailable" ? ` <span class="pill warn" title="${esc(x.now.note || "")}">offer unavailable</span>`
     : st === "failed" ? ` <span class="pill" title="${esc(x.now.note || "")}">couldn't check</span>`
@@ -839,13 +848,15 @@ function drawSlip() {
   if ($("#slip").hidden) return;
   if (!s.length) { $("#slip").hidden = true; return; }
   const n = s.length, all = s.reduce((a, x) => a * (x.pc || 0.5), 1);
-  const exact = +manualPay()[manualKey(s)] || null, std = +udPay()[n] || null, pay = exact || std;
+  const plat = slipBook(s), pn = bookName(plat) || "your app";
+  // a saved standard payout is Underdog's (the slip builder's) - never used for another platform
+  const exact = +manualPay()[manualKey(s)] || null, std = plat === "underdog" ? (+udPay()[n] || null) : null, pay = exact || std;
   const dupPlayer = new Set(s.map(x => String(x.p).toLowerCase())).size < n;
   const teams = {}; s.forEach(x => { const k = x.m || x.tm; teams[k] = (teams[k] || 0) + 1; });
   const same = Object.values(teams).some(c => c > 1);
   const leans = s.filter(x => x.g === "LEAN").length;
   const unver = s.filter(x => x.now?.status !== "verified").length;
-  $("#slip").innerHTML = `<h4>Bet slip · ${n}-pick</h4>` + (unver ? `<div class="warn" style="margin-bottom:6px">${unver === n ? "Research slip" : `${unver} of ${n} picks`}: not verified on Underdog right now – see each pick.</div>` : "") + s.map((x, i) =>
+  $("#slip").innerHTML = `<h4>Bet slip · ${plat ? bookName(plat) : "research"} · ${n}-pick</h4>` + (unver ? `<div class="warn" style="margin-bottom:6px">${unver === n ? "Research slip" : `${unver} of ${n} picks`}: not verified on ${plat ? bookName(plat) : "a platform"} right now – see each pick.</div>` : "") + s.map((x, i) =>
     `<div class="leg"><span><b>${esc(x.p)}</b> ${x.g === "LEAN" ? `Lean ${sideTxt(x.s)}` : sideTxt(x.s)} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${ltTag(x.lt)}${legState(x)}
       <span class="muted small">· ${x.g === "LEAN" ? "Lean" : esc(x.g)} · ${((x.pc || 0) * 100).toFixed(1)}%${x.vs ? " · vs " + esc(x.vs) : ""}</span></span>
       <button type="button" class="x" data-rmleg="${i}" title="Remove">✕</button></div>`).join("")
@@ -853,18 +864,18 @@ function drawSlip() {
        : (() => { const dist = hitDist(s.map(x => x.pc || 0.5));
           return `<div class="kv"><span>All ${n} hit (grader's %)</span><span><b>${(all * 100).toFixed(1)}%</b></span></div>`
             + (n >= 3 ? `<div class="kv"><span>${n - 1} of ${n} hit</span><span>${((dist[n - 1] || 0) * 100).toFixed(1)}%</span></div>` : "")
-            + `<label class="small muted" style="display:flex;gap:6px;align-items:center;margin:6px 0">Payout Underdog shows for this entry
+            + `<label class="small muted" style="display:flex;gap:6px;align-items:center;margin:6px 0">Payout ${esc(pn)} shows for this entry
                 <input id="slippay" type="number" min="1" step="0.01" inputmode="decimal" placeholder="e.g. 3" value="${exact ?? ""}" style="width:80px"> x</label>`
             + (pay ? retLine(`&nbsp;&nbsp;average return at ${+pay.toFixed(2)}x${exact ? "" : ` (your saved standard ${n}-pick payout – line boosts not included)`}`, all * pay)
                    + `<div class="small muted" style="margin-top:4px">Average return = what 1U gives back on average if every pick must hit, stake included; above 1.00U the grader expects a profit. Flex / partial payouts aren't counted.</div>`
-                   : `<div class="small muted">Enter the payout Underdog shows for this entry to see the expected return – the grader doesn't know Underdog's payouts.</div>`); })())
+                   : `<div class="small muted">Enter the payout ${esc(pn)} shows for this entry (boosts included, as shown) to see the expected return – the grader doesn't know ${esc(pn)}'s payouts.</div>`); })())
     + (same ? `<div class="warn">Two or more picks from the same match – they share match conditions and may win or lose together, so the real odds differ from the %.</div>` : "")
     + (dupPlayer ? `<div class="warn">The same player appears twice – his picks move together, so the real chance differs from the %. Check your app allows it.</div>` : "")
-    + (s.some(x => x.lt && x.lt !== "standard") ? `<div class="warn">Goblin / demon lines aren't Underdog lines – their payout isn't known here.</div>` : "")
+    + (s.some(x => x.lt && x.lt !== "standard") ? `<div class="warn">Goblin / demon picks change the entry's payout – use the payout PrizePicks shows for this exact entry.</div>` : "")
     + (leans ? `<div class="warn">${leans} pick${leans > 1 ? "s are" : " is a"} Lean${leans > 1 ? "s" : ""} (0 units) – the weakest legs on the slip.</div>` : "")
     + `<div class="actions"><button type="button" class="chipbtn" id="slipcopy">Copy slip</button><button type="button" class="chipbtn" id="slipclear">Clear</button>
        <button type="button" class="chipbtn" id="slipclose">Close</button></div>
-       <div class="small muted" style="margin-top:8px">Returns use only the payout you enter – confirm it in Underdog. Not financial advice.</div>`;
+       <div class="small muted" style="margin-top:8px">Returns use only the payout you enter – confirm it in ${esc(pn)}. Same-match chances are multiplied as if independent – not a tested joint hit rate. Not financial advice.</div>`;
   const pi = $("#slippay");
   if (pi) pi.onchange = () => { const m = manualPay(), k = manualKey(store.get("cs2s_slip", [])), v = +pi.value;
     if (v > 1) m[k] = v; else delete m[k]; store.set("cs2s_manualpay", m); drawSlip(); };
@@ -885,11 +896,11 @@ $("#slip").addEventListener("click", e => {
     }
     const mark = x => x.now?.status === "verified" ? "" : x.now?.status === "changed" ? ` [LINE CHANGED: now ${x.now.new_line ?? "?"}]`
       : x.now?.status === "unavailable" ? " [NOT OFFERED NOW]" : x.now?.status === "failed" ? " [NOT CHECKED]" : " [RESEARCH LINE]";
-    copy(`${s.length}-pick slip\n` + s.map(x => `${x.p} ${x.g === "LEAN" ? `Lean ${sideTxt(x.s)}` : x.s.toUpperCase()} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)} · ${x.g === "LEAN" ? "Lean" : x.g} · ${Math.floor((x.pc || 0) * 100)}%${mark(x)}`).join("\n"));
+    copy(`${s.length}-pick ${bookName(slipBook(s)) || "research"} slip\n` + s.map(x => `${x.p} ${x.g === "LEAN" ? `Lean ${sideTxt(x.s)}` : sideTxt(x.s).toUpperCase()} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${x.lt && x.lt !== "standard" ? " " + x.lt : ""} · ${x.g === "LEAN" ? "Lean" : x.g} · ${((x.pc || 0) * 100).toFixed(1)}%${mark(x)}`).join("\n"));
     // immutable load log (no member identity): what was copied and each leg's live-line state at that moment
     if (s.length >= 2) try {
-      const body = JSON.stringify({cid: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()), mode: "member-copy", n: s.length,
-        grader: boardVer || "", legs: s.map(x => ({nick: x.p, prop: x.t, scope: x.sc, line: x.l, side: x.s, p: x.pc, grade: x.g, match_slug: x.m,
+      const body = JSON.stringify({cid: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()), mode: "member-copy", n: s.length, book: slipBook(s) || "research",
+        grader: boardVer || "", legs: s.map(x => ({nick: x.p, prop: x.t, scope: x.sc, line: x.l, side: x.s, book: x.bk || null, line_type: x.lt || "standard", p: x.pc, grade: x.g, match_slug: x.m,
           check: x.now?.status || "unchecked", orig_line: x.orig?.line ?? x.l, check_note: x.now?.note || ""}))});
       fetch("/api/slip_log", {method: "POST", headers: {"Content-Type": "application/json"}, body}).catch(() => {});
     } catch {}
@@ -908,37 +919,58 @@ function udPill(d) {
   const better = v.side === "More" ? u.line < g.line : u.line > g.line, sd = v.side === "More" ? "Over" : "Under";
   return `<span class="pill ${better ? "good" : ""}">Underdog: ${u.line}${pay} – ${better ? `easier for the ${sd}` : `your ${g.line} is easier for the ${sd}`}</span>`;
 }
-let boardRows = [], bprop = "kills", bside = "both", bscope = "12", boardAt = 0, bview = "matches";
+let boardRows = [], bprop = "kills", bside = "both", bscope = "12", boardAt = 0, bview = "matches", bbook = "underdog";
+// one cache per platform (2026-10-10): Underdog | PrizePicks | Compare. Lines are graded with the same pipeline; only
+// the line (and PrizePicks' market type) differs between books
+const BK = {underdog: {rows: [], at: 0, ver: "", err: null, feed: null, loaded: false}, prizepicks: {rows: [], at: 0, ver: "", err: null, feed: null, loaded: false}};
+const bookName = b => b === "prizepicks" ? "PrizePicks" : b === "underdog" ? "Underdog" : "";
+const mktType = r => r.line_type || r.odds_type || "standard";
+const mktTag = r => mktType(r) === "standard" ? "" : ` <span class="pill" style="margin:0;padding:1px 7px;color:${mktType(r) === "goblin" ? "#22d27a" : "#ff5566"};border-color:currentColor" title="PrizePicks ${esc(mktType(r))} market – its own line and payout; never compared with a standard line">${esc(mktType(r)[0].toUpperCase() + mktType(r).slice(1))}</span>`;
 // filters survive reloads and the board <-> card round trip
-function saveBFilters() { store.set("cs2s_bf", {bprop, bside, bscope, bview, sort: $("#bsort").value, bets: $("#bbets").checked, q: $("#bsearch").value}); }
+function saveBFilters() { store.set("cs2s_bf", {bbook, bprop, bside, bscope, bview, sort: $("#bsort").value, bets: $("#bbets").checked, q: $("#bsearch").value}); }
 function restoreBFilters() {
   const f = store.get("cs2s_bf", null); if (!f) return;
-  bprop = f.bprop || bprop; bside = f.bside || bside; bscope = f.bscope || bscope; bview = f.bview || bview;
+  bprop = f.bprop || bprop; bside = f.bside || bside; bscope = f.bscope || bscope; bview = f.bview || bview; bbook = f.bbook || bbook;
   if (f.sort && [...$("#bsort").options].some(o => o.value === f.sort)) $("#bsort").value = f.sort;
   $("#bbets").checked = f.bets !== false; $("#bsearch").value = f.q || "";
-  for (const [id, v] of [["#bprop", bprop], ["#bside", bside], ["#bscope", bscope], ["#bview", bview]]) [...$(id).children].forEach(x => x.classList.toggle("on", x.dataset.v === v));
+  for (const [id, v] of [["#bbook", bbook], ["#bprop", bprop], ["#bside", bside], ["#bscope", bscope], ["#bview", bview]]) [...$(id).children].forEach(x => x.classList.toggle("on", x.dataset.v === v));
 }   // bside: the grader's pick - More (Overs), Less (Unders) or both
 const G_RANK = {"A+": 0, "A": 1, "A-": 2, "B+": 3, "B": 4, "B-": 4.5, "LEAN": 5};
+const hhmm = t => new Date(t * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+async function fetchBook(b) {
+  const r = await fetchRetry("/api/board" + (b === "prizepicks" ? "?book=prizepicks" : "")); const d = await r.json();
+  if (r.status === 401 && d.error === "members_only") { showGate(d); throw new Error("members only"); }
+  // lines that moved since the member last saw them (same player / stat / maps / market type / match, new line)
+  const k = x => [x.nick || x.player, x.prop, x.scope || "12", mktType(x), x.start].join("|"), prev = new Map(BK[b].rows.map(x => [k(x), x.line]));
+  BK[b] = {rows: (d.rows || []).map(x => prev.has(k(x)) && prev.get(k(x)) !== x.line ? Object.assign(x, {moved_from: prev.get(k(x))}) : x),
+           at: d.updated || 0, ver: d.version || "", err: d.error || null, feed: d.feed || null, total: d.total, loaded: true};
+}
+function bookStatus(b) {
+  const B = BK[b];
+  if (b === "prizepicks") {
+    const f = B.feed || {}, when = f.at ? `PrizePicks read ${hhmm(f.at)} (${agoTxt(new Date(f.at * 1000).toISOString())})` : "";
+    return f.state === "ok" ? `${B.rows.length} graded PrizePicks lines${B.total > B.rows.length ? ` (${B.total - B.rows.length} still grading)` : ""} · ${when}`
+      : f.state === "empty" ? `No PrizePicks CS2 lines right now · ${when || "feed connected"} – this is an empty board, not an error`
+      : f.state === "stale" ? `⚠ PrizePicks feed is stale – last good read ${f.at ? hhmm(f.at) : "unknown"}. These lines can't be confirmed as playable.`
+      : f.state === "failed" ? `⚠ PrizePicks feed failed${f.error ? ` (${f.error})` : ""} – ${B.rows.length ? "showing the last read, not confirmed" : "no lines to show"}`
+      : f.state === "loading" ? "PrizePicks feed loading…" : "PrizePicks feed isn't connected";
+  }
+  return B.err ? `Underdog's feed is unavailable right now – showing the last board${B.at ? " from " + hhmm(B.at) : ""}`
+    : `${B.rows.length} graded Underdog lines` + (B.at ? ` · board from ${hhmm(B.at)}` : "");
+}
 async function loadBoard(force) {
-  if (boardRows.length && !force) return drawBoard();
-  const hhmm = t => new Date(t * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
-  $("#bstatus").textContent = boardRows.length ? "Refreshing… (showing the current lines)" : "Loading the board…";
-  try {
-    const r = await fetchRetry("/api/board"); const d = await r.json();
-    if (r.status === 401 && d.error === "members_only") return showGate(d);
-    // lines that moved since the member last saw them (same player / stat / maps / match, new line)
-    const k = x => [x.nick || x.player, x.prop, x.scope || "12", x.start].join("|"), prev = new Map(boardRows.map(x => [k(x), x.line]));
-    boardRows = (d.rows || []).map(x => prev.has(k(x)) && prev.get(k(x)) !== x.line ? Object.assign(x, {moved_from: prev.get(k(x))}) : x);
-    boardAt = d.updated || 0; boardVer = d.version || "";
-    $("#bstatus").textContent = d.error ? `Underdog's feed is unavailable right now – showing the last board${boardAt ? " from " + hhmm(boardAt) : ""}`
-      : `${boardRows.length} graded Underdog lines` + (d.updated ? ` · board from ${hhmm(d.updated)}` : "");
-  } catch (e) { $("#bstatus").textContent = `Couldn't refresh (${e.message})` + (boardRows.length ? ` – showing the board${boardAt ? " from " + hhmm(boardAt) : ""}` : ""); }
+  const need = bbook === "compare" ? ["underdog", "prizepicks"] : [bbook];
+  if (!force && need.every(b => BK[b].loaded)) { boardRows = BK[bbook === "compare" ? "underdog" : bbook].rows; return drawBoard(); }
+  $("#bstatus").textContent = need.some(b => BK[b].loaded) ? "Refreshing… (showing the current lines)" : "Loading the board…";
+  try { await Promise.all(need.map(fetchBook)); } catch (e) { $("#bstatus").textContent = `Couldn't refresh (${e.message})`; }
+  boardRows = BK[bbook === "compare" ? "underdog" : bbook].rows; boardAt = BK.underdog.at; boardVer = BK.underdog.ver || BK.prizepicks.ver || "";
+  $("#bstatus").textContent = need.map(bookStatus).join(" · ");
   drawBoard();
 }
 const shortWhen = s => { if (!s) return ""; const d = new Date(s); if (isNaN(d)) return "";
   const u = until(d); return d.toLocaleString([], {weekday: "short", hour: "numeric", minute: "2-digit"}) + (u ? " · " + u : ""); };
 function boardCard(r) {     // a board row in the shape addToSlip / pickLine expect
-  return {grade: {line: r.line, prop: r.prop, line_type: "standard", scope: r.scope || "12"},
+  return {book: r.book || "underdog", grade: {line: r.line, prop: r.prop, line_type: mktType(r), scope: r.scope || "12"},
           verdict: {side: r.side, grade: r.grade, p: r.p, units: r.units},
           player_block: {player: {nick: r.nick || r.player, id: r.player_id}, current_team: r.team_name || r.team},
           next_match: {opponent: r.opp_name || r.opponent, start: r.start, slug: r.match_slug}, from: "board"};
@@ -951,6 +983,7 @@ const issueLabel = why => /roster/i.test(why || "") ? "Roster not confirmed" : /
   : /gap|stale|break/i.test(why || "") ? "Long break" : "Line not confirmed";
 function drawBoard() {
   saveBFilters();
+  if (bbook === "compare") return drawCompare();
   const sortBy = $("#bsort").value;
   const rank = r => !r.side ? 9 : r.state === "SCOUT" ? 7 : (G_RANK[r.grade] ?? 6);
   const key = r => sortBy === "g" ? [rank(r), -(r.p ?? 0)] : sortBy === "p" ? [-(r.p ?? -1)] : sortBy === "e" ? [-Math.abs(r.edge ?? 0)] : [r.start || "9", rank(r)];
@@ -970,14 +1003,14 @@ function drawBoard() {
   const rowHtml = (r, showMatch) => {
     const nick = r.nick || r.player, lab = !r.side ? "…" : r.state === "SCOUT" ? "S" : r.grade === "LEAN" ? "L" : r.grade;
     const ds = (r.dstat || [])[0] === "verify" ? ["warn", issueLabel(r.dstat[1])] : DSTAT[(r.dstat || [])[0]], team = r.team_name || r.team, opp = r.opp_name || r.opponent;
-    return `<div class="brow2" data-bl="${esc(nick)}|${r.line}|${r.prop}|${r.scope || "12"}">
+    return `<div class="brow2" data-bl="${esc(nick)}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}">
       <span class="gtag ${!r.side || r.state === "SCOUT" ? "g-scout" : gClass(r.grade)}">${esc(lab)}</span>
       <div><div class="b2top"><b>${esc(nick)}</b>${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}
           <span class="muted">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}${showMatch ? " · " + shortWhen(r.start) : ""}</span></div>
-        <div class="b2pick">${r.side ? esc(sideWord({grade: r.grade, side: r.side})) : "grading…"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}${r.p != null ? ` · <b>${pct0(r.p)}</b>` : ""}${r.grade === "LEAN" ? "" : " · " + esc(r.grade || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${r.cap_n && r.units_full > r.units ? ` <span class="pill" title="${r.cap_n} bets on this board need ${esc(r.team_name || r.team || "this team")} to ${r.side === "More" ? "do well" : "do badly"} in this match – one upset or overtime decides them all, so together they're capped at 3U. On its own this pick is ${r.units_full}U.">capped from ${r.units_full}U</span>` : ""}</div>
-        <div class="b2meta">Proj ${r.proj != null ? num(r.proj, 1) : "–"}${ds ? ` · <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}">${ds[1]}</span>` : ""}${r.source ? ` · source ${esc(r.source)}` : ""}${r.graded_at ? ` · graded ${agoTxt(r.graded_at)}` : ""}${r.alt ? ` · alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}${r.moved_from != null ? ` · <span class="pill warn">line moved from ${r.moved_from}</span>` : ""}</div>
+        <div class="b2pick">${r.side ? esc(sideWord({grade: r.grade, side: r.side})) : "grading…"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}${mktTag(r)}${r.stale ? ` <span class="pill warn" title="The PrizePicks feed is not fresh – this line can't be confirmed as playable">not confirmed</span>` : ""}${r.p != null ? ` · <b>${pct0(r.p)}</b>` : ""}${r.grade === "LEAN" ? "" : " · " + esc(r.grade || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${r.cap_n && r.units_full > r.units ? ` <span class="pill" title="${r.cap_n} bets on this board need ${esc(r.team_name || r.team || "this team")} to ${r.side === "More" ? "do well" : "do badly"} in this match – one upset or overtime decides them all, so together they're capped at 3U. On its own this pick is ${r.units_full}U.">capped from ${r.units_full}U</span>` : ""}</div>
+        <div class="b2meta">Proj ${r.proj != null ? num(r.proj, 1) : "–"}${ds ? ` · <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}">${ds[1]}</span>` : ""}${r.source ? ` · source ${esc(r.source)}` : ""}${r.graded_at ? ` · graded ${agoTxt(r.graded_at)}` : ""}${r.alt && r.book !== "prizepicks" ? ` · alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}${r.book === "prizepicks" && r.open_line != null && +r.open_line !== +r.line ? ` · opened ${r.open_line}` : ""}${r.moved_from != null ? ` · <span class="pill warn">line moved from ${r.moved_from}</span>` : ""}</div>
         ${ev(r.support, "up", "+")}${ev(r.concern, "dn", "–")}</div>
-      ${r.side ? `<button type="button" class="bslip ${onSlip.has(nick.toLowerCase()) ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}">${onSlip.has(nick.toLowerCase()) ? "On slip" : "+ Slip"}</button>` : "<span></span>"}
+      ${r.side ? `<button type="button" class="bslip ${onSlip.has(nick.toLowerCase()) ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}|${mktType(r)}">${onSlip.has(nick.toLowerCase()) ? "On slip" : "+ Slip"}</button>` : "<span></span>"}
     </div>`; };
   // every qualifying bet in a match, kills + headshots, following Overs / Unders / Both - alternatives, not a slip
   const matchRank = mrows => {
@@ -988,7 +1021,7 @@ function drawBoard() {
     return `<div class="small" style="margin:0 2px 8px;line-height:1.5"><b>Highest chance here:</b> ${q2.slice(0, 3).map(it).join(" · ")}
       <div class="muted">No outside projections yet · value not ranked (no entry payouts)${q2.length > 1 ? " · these picks share match conditions and may win or lose together" : ""}</div></div>`; };
   let html;
-  if (!rows.length) html = `<div class="muted">${boardRows.length ? `No lines match these filters. <button type="button" class="chipbtn" data-reset="1">Reset filters</button>` : `No Underdog CS2 lines right now.${boardAt ? ` Checked ${new Date(boardAt * 1000).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})} · checks again every 5 minutes – new lines are graded automatically.` : ""}`}</div>`;
+  if (!rows.length) html = `<div class="muted">${boardRows.length ? `No lines match these filters. <button type="button" class="chipbtn" data-reset="1">Reset filters</button>` : `No ${bookName(bbook)} CS2 lines right now.${boardAt && bbook === "underdog" ? ` Checked ${new Date(boardAt * 1000).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})} · checks again every 5 minutes – new lines are graded automatically.` : ""}`}</div>`;
   else if (bview === "all") html = `<div class="blist">${rows.map(r => rowHtml(r, true)).join("")}</div>`;
   else {
     const groups = new Map();
@@ -1001,20 +1034,70 @@ function drawBoard() {
         <span class="muted small">${shortWhen(r.start)}${r.event ? " · " + esc(r.event) : ""}${r.bo ? " · BO" + esc(r.bo) : ""} · ${maps.length ? "maps: " + maps.map(mapName).join(", ") : "maps not announced"} · ${g.length} line${g.length > 1 ? "s" : ""}${bets ? `, ${bets} bet${bets > 1 ? "s" : ""}` : ""}</span></summary>
         <div class="mbody">${matchRank(g)}<div class="blist">${g.map(x => rowHtml(x, false)).join("")}</div></div></details>`; }).join("");
   }
-  $("#boardout").innerHTML = html + (rows.length ? `<div class="small muted" style="margin-top:10px">Underdog lines, graded. Tap a pick for the full analysis.</div>` : "");
+  $("#boardout").innerHTML = html + (rows.length ? `<div class="small muted" style="margin-top:10px">${bookName(bbook)} lines, graded – each at its own line${bbook === "prizepicks" ? " and market type (standard, goblin, demon)" : ""}. Tap a pick for the full analysis.</div>` : "");
   $("#boardout").querySelectorAll("details.mgroup").forEach(d => d.addEventListener("toggle", () => { const o = store.get("cs2s_mopen", {}); o[d.dataset.mk] = d.open; store.set("cs2s_mopen", o); }));
 }
 $("#boardout").addEventListener("click", e => {
   if (e.target.closest("[data-reset]")) return resetBFilters();
+  const cb = e.target.closest("[data-cmp]");
+  if (cb) { const [bk, p, l, t, sc, lt] = cb.dataset.cmp.split("|");
+    const row = BK[bk].rows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && (x.scope || "12") === sc && mktType(x) === lt);
+    return gradeNow(p, l, t, lt, sc, true, row ? {team: row.team, opponent: row.opponent, book: bk} : {book: bk}); }
   const b = e.target.closest("[data-bslip]");
-  if (b) { e.stopPropagation(); const [p, l, t] = b.dataset.bslip.split("|");
-    const r = boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t);
+  if (b) { e.stopPropagation(); const [p, l, t, lt] = b.dataset.bslip.split("|");
+    const r = boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && mktType(x) === (lt || "standard"));
     if (r) { addToSlip(boardCard(r)); drawBoard(); } return; }
   const r = e.target.closest("[data-bl]");
-  if (r) { const [p, l, t, sc] = r.dataset.bl.split("|");
-    const row = boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && (x.scope || "12") === sc);
-    gradeNow(p, l, t, "standard", sc, true, row ? {team: row.team, opponent: row.opponent} : null); }
+  if (r) { const [p, l, t, sc, lt] = r.dataset.bl.split("|");
+    const row = boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && (x.scope || "12") === sc && mktType(x) === (lt || "standard"));
+    gradeNow(p, l, t, lt || "standard", sc, true, row ? {team: row.team, opponent: row.opponent, book: row.book || "underdog"} : null); }
 });
+$("#bbook").onclick = e => { const b = e.target.closest("button"); if (!b) return; bbook = b.dataset.v;
+  [...$("#bbook").children].forEach(x => x.classList.toggle("on", x === b)); loadBoard(false); };
+// Compare: the same player / match / stat / maps on both platforms (joined by OUR player and match ids from grading),
+// each line with the chance at THAT line. The easier line = the lower one for an Over, the higher one for an Under;
+// not automatically better value (payouts differ), and goblin / demon markets are never compared with standard lines
+function drawCompare() {
+  const q = ($("#bsearch").value || "").trim().toLowerCase();
+  const hit = r => !q || [r.nick, r.player, r.team, r.team_name, r.opponent, r.opp_name].some(x => String(x || "").toLowerCase().includes(q));
+  const keyOf = r => [r.player_id || String(r.nick || r.player).toLowerCase(), r.match_slug || r.start, r.prop, r.scope || "12"].join("|");
+  const pairs = new Map();
+  for (const [bk, rows] of [["underdog", BK.underdog.rows], ["prizepicks", BK.prizepicks.rows]])
+    for (const r of rows) {
+      if ((bprop !== "both" && r.prop !== bprop) || (r.scope || "12") !== bscope || !hit(r) || !r.side) continue;
+      const k = keyOf(r); if (!pairs.has(k)) pairs.set(k, {u: [], p: [], any: r}); pairs.get(k)[bk === "underdog" ? "u" : "p"].push(r);
+    }
+  const list = [...pairs.values()].filter(x => bside === "both" || [...x.u, ...x.p].some(r => r.side === bside));
+  $("#bcount").textContent = `${list.length} player markets · ${list.filter(x => x.u.length && x.p.length).length} on both platforms`;
+  const pOver = r => r.side === "More" ? r.p : 1 - r.p;
+  const cell = (bk, r) => !r ? `<td class="muted small">not offered</td>` : `<td><button type="button" class="mcpick" data-cmp="${bk}|${esc(r.nick || r.player)}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}" title="Open the card at this ${bookName(bk)} line">
+      <b>${r.line}</b>${mktTag(r)}${r.stale ? ` <span class="pill warn">not confirmed</span>` : ""}<div class="small">Over ${(pOver(r) * 100).toFixed(1)}% · Under ${((1 - pOver(r)) * 100).toFixed(1)}%</div>
+      <div class="small muted">${esc(sideWord({grade: r.grade, side: r.side}))}${r.grade === "LEAN" ? "" : " · " + esc(r.grade)} · ${+(+r.units || 0).toFixed(2)}U</div></button></td>`;
+  const easier = x => {
+    const u = x.u.find(r => mktType(r) === "standard"), p = x.p.find(r => mktType(r) === "standard");
+    if (!u || !p) return `<td class="muted small">${x.u.length && x.p.length ? "different market types – not compared" : "one platform only"}</td>`;
+    if (u.line === p.line) return `<td class="small">Same line on both</td>`;
+    const lo = u.line < p.line ? ["underdog", u] : ["prizepicks", p], hi = u.line > p.line ? ["underdog", u] : ["prizepicks", p];
+    return `<td class="small">Over: <b>${bookName(lo[0])} ${lo[1].line}</b><br>Under: <b>${bookName(hi[0])} ${hi[1].line}</b></td>`;
+  };
+  const groups = new Map();
+  for (const x of list) { const r = x.any, k = (r.match_slug || "") + "|" + (r.start || ""); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(x); }
+  const html = !list.length ? `<div class="muted">${BK.prizepicks.loaded && BK.underdog.loaded ? "No player markets match these filters on either platform." : "Loading both platforms…"}</div>`
+    : [...groups.values()].sort((a, b) => String(a[0].any.start || "9").localeCompare(String(b[0].any.start || "9"))).map(g => {
+      const r = g[0].any;
+      return `<details class="mgroup" open><summary><b>${esc((r.team_name || r.team || "") + " vs " + (r.opp_name || r.opponent || ""))}</b> <span class="muted small">${shortWhen(r.start)}${r.event ? " · " + esc(r.event) : ""}</span></summary>
+        <div class="scroll"><table class="mctab"><thead><tr><th>Player</th><th class="num">Our projection</th><th>Underdog line</th><th>PrizePicks line</th><th>Easier line</th></tr></thead><tbody>
+        ${g.sort((a, b) => String(a.any.nick || a.any.player).localeCompare(String(b.any.nick || b.any.player))).map(x => {
+          const all = [...x.u, ...x.p], pr = all.map(y => y.proj).filter(v => v != null), spread = pr.length > 1 ? Math.max(...pr) - Math.min(...pr) : 0;
+          const extra = Math.max(x.u.length, x.p.length, 1);
+          return [...Array(extra).keys()].map(i => `<tr>${i === 0 ? `<td rowspan="${extra}"><b>${esc(x.any.nick || x.any.player)}</b> <span class="muted small">${propWord(x.any.prop)}${mapsWord(x.any.scope)}</span></td>
+            <td class="num" rowspan="${extra}">${pr.length ? num(pr[0], 1) : "–"}${spread > 0.05 ? ` <span class="pill warn" title="Graded at different times – the newer grade has newer data">grades differ by ${num(spread, 1)}</span>` : ""}</td>` : ""}
+            ${cell("underdog", x.u[i])}${cell("prizepicks", x.p[i])}${i === 0 ? easier(x) : "<td></td>"}</tr>`).join("");
+        }).join("")}</tbody></table></div></details>`; }).join("");
+  $("#boardout").innerHTML = html + `<div class="small muted" style="margin-top:10px">Book lines are betting thresholds, not projections; each chance is our model at that platform's line (pushes excluded on whole lines).
+    The easier line is the lower one for an Over and the higher one for an Under – easier, not automatically better value: payouts differ by platform and market type, and a return needs your entry's exact payout.
+    ${BK.prizepicks.feed && BK.prizepicks.feed.state !== "ok" ? `<b>PrizePicks feed: ${esc(BK.prizepicks.feed.state)}</b> – its lines aren't confirmed.` : ""}</div>`;
+}
 $("#bprop").onclick = e => { const b = e.target.closest("button"); if (!b) return; bprop = b.dataset.v;
   [...$("#bprop").children].forEach(x => x.classList.toggle("on", x === b)); drawBoard(); };
 $("#bscope").onclick = e => { const b = e.target.closest("button"); if (!b) return; bscope = b.dataset.v;
@@ -1025,7 +1108,7 @@ $("#bbets").onchange = drawBoard;
 $("#bview").onclick = e => { const b = e.target.closest("button"); if (!b) return; bview = b.dataset.v;
   [...$("#bview").children].forEach(x => x.classList.toggle("on", x === b)); drawBoard(); };
 function resetBFilters() {
-  bprop = "kills"; bside = "both"; bscope = "12"; bview = "matches"; $("#bsort").value = "g"; $("#bbets").checked = true; $("#bsearch").value = "";
+  bprop = "kills"; bside = "both"; bscope = "12"; bview = "matches";   // the platform choice is kept $("#bsort").value = "g"; $("#bbets").checked = true; $("#bsearch").value = "";
   for (const [id, v] of [["#bprop", bprop], ["#bside", bside], ["#bscope", bscope], ["#bview", bview]]) [...$(id).children].forEach(x => x.classList.toggle("on", x.dataset.v === v));
   drawBoard();
 }
@@ -1282,6 +1365,16 @@ function usesBlock(d, g) {
     ${ctx ? `<div class="muted">${ctx}</div>` : ""}</div></details>`;
 }
 
+// what the card's line is: a platform's betting line (exact line, maps and market type on Underdog / PrizePicks), or
+// the number the member typed - never given a sportsbook it doesn't come from
+function lineSource(d) {
+  const g = d.grade || {}, offers = (d.comparison && !d.comparison.error ? d.comparison.offers : null) || [];
+  const lt = g.line_type || "standard";
+  const at = offers.filter(o => +o.line === +g.line && (lt === "standard" ? !o.alt : (o.odds_type || "") === lt)).map(o => o.source || "underdog");
+  if (d.book && (at.includes(d.book) || d.from === "board")) return `${bookName(d.book)} line (a betting line)`;
+  const u = [...new Set(at)];
+  return u.length ? `${u.map(bookName).join(" and ")} line (a betting line)` : "Your entered line";
+}
 function render(d) {
   lastCard = d;
   const how = document.querySelector("details.how"); if (how) how.open = false;
@@ -1320,7 +1413,7 @@ function render(d) {
   h += `<section class="card herocard ${hc}"><div class="hero">
     <div class="badge ${hc}">${esc(!v.side ? "–" : v.state === "SCOUT" ? "S" : v.grade === "LEAN" ? "L" : (v.grade || "L").slice(0, 2))}</div>
     <div><h3>${esc(head)}</h3>
-      <div class="sub">${esc(pb.player?.nick || "")} · ${pb.standin_for ? `${esc(pb.current_team || "")} → <b>stand-in for ${esc(pb.standin_for)}</b>` : esc(pb.current_team || "")}${nm?.opponent ? ` vs ${esc(nm.opponent)}${nm.start ? ` · ${shortWhen(nm.start)}` : ""}` : ""} · ${g.line} ${stat}${mapsWord(g.scope) || " (Maps 1–2)"} · ${esc(g.line_type || "")}</div>
+      <div class="sub">${esc(pb.player?.nick || "")} · ${pb.standin_for ? `${esc(pb.current_team || "")} → <b>stand-in for ${esc(pb.standin_for)}</b>` : esc(pb.current_team || "")}${nm?.opponent ? ` vs ${esc(nm.opponent)}${nm.start ? ` · ${shortWhen(nm.start)}` : ""}` : ""} · ${g.line} ${stat}${mapsWord(g.scope) || " (Maps 1–2)"} · ${esc(g.line_type || "")} · <span class="muted">${esc(lineSource(d))}</span></div>
       <div class="sub">${sub}</div>
       ${gateStop ? `<span class="pill bad">${esc(g.reason || g.status)}</span>` : ""}
       ${g.form_fight ? `<span class="pill warn">FORM FIGHT – his last 10 at this line disagree · 0 units${perfGrade(g) ? "" : " (older model: chance halved)"}</span>` : ""}
@@ -1417,8 +1510,16 @@ function render(d) {
       const book = o => o.source === "prizepicks" ? "PrizePicks" : "Underdog",
         kind = o => !o.alt ? "" : ` <span class="pill">${o.source === "prizepicks" ? esc(o.odds_type || "alt") : "alt"}</span>`,
         moved = o => o.source === "prizepicks" && o.moves && o.open_line != null && +o.open_line !== +o.line ? ` <span class="muted small">opened ${o.open_line}</span>` : "";
-      h += cp.offers.map(o => `<div class="kv"><span>${book(o)} ${o.line}${kind(o)}${moved(o)}${o.stale ? ' <span class="pill warn">not refreshed</span>' : ""}</span>
-        <span>${Side} <b>${pc1(o[`${side}_if_decided`])}</b>${pay(o)}${o.p_push ? ` <span class="muted small">· push ${pc1(o.p_push)}</span>` : ""}</span></div>`).join("");
+      // both chances at every platform's line (pushes excluded); among STANDARD lines the lower one is the easier Over and
+      // the higher one the easier Under - easier, not automatically better value
+      const std = cp.offers.filter(o => !o.alt), lines = [...new Set(std.map(o => +o.line))];
+      const loL = lines.length > 1 ? Math.min(...lines) : null, hiL = lines.length > 1 ? Math.max(...lines) : null;
+      const tag = o => o.alt ? "" : (+o.line === loL ? ' <span class="pill good" title="Lowest standard line: the easier Over – not automatically better value">easier Over line</span>' : "")
+        + (+o.line === hiL ? ' <span class="pill good" title="Highest standard line: the easier Under – not automatically better value">easier Under line</span>' : "");
+      if (lineSource(d) === "Your entered line") h += `<div class="kv"><span>Your entered line ${g.line}</span><span>Over ${pc1(g.p_more)} · Under ${pc1(g.p_less)}</span></div>`;
+      h += cp.offers.map(o => `<div class="kv"><span>${book(o)} ${o.line}${kind(o)}${moved(o)}${o.stale ? ' <span class="pill warn">not confirmed</span>' : ""}${tag(o)} <span class="muted small">betting line</span></span>
+        <span>${side === "over" ? "<b>" : ""}Over ${pc1(o.over_if_decided)}${side === "over" ? "</b>" : ""} · ${side === "under" ? "<b>" : ""}Under ${pc1(o.under_if_decided)}${side === "under" ? "</b>" : ""}${pay(o)}${o.p_push ? ` <span class="muted small">· push ${pc1(o.p_push)}</span>` : ""}</span></div>`).join("");
+      if (loL != null) h += `<div class="small muted">Easier line = the lower one for an Over, the higher one for an Under – not automatically better value: payouts differ by platform and market type.</div>`;
       const bl = (cp.best_line || {})[side];
       if (bl && bl.length) h += `<div class="small muted">Same payout: ${bl.map(x => x.line).join(", ")} is the easier ${Side.toLowerCase()} line.</div>`;
       if (cp.payouts_differ?.[side]) h += `<div class="small muted">Payouts differ between these lines – compare what each pays in your app.</div>`;

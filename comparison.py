@@ -24,7 +24,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-VERSION = "cmp-4"   # cmp-4: PrizePicks lines (via the HLTV scraper database) next to Underdog's; cmp-3: cmp-3: stable Underdog->player ids (no requested-name alias), ambiguity, grounded evidence (basis)
+VERSION = "cmp-5"   # cmp-5: book-aware line checks (PrizePicks market types, feed state); cmp-4: PrizePicks lines (via the HLTV scraper database) next to Underdog's; cmp-3: cmp-3: stable Underdog->player ids (no requested-name alias), ambiguity, grounded evidence (basis)
 JOIN_START_MIN = 45            # same match: scheduled starts within 45 min
 STALE_MIN = 15                 # a book line older than this (board refresh is 5 min) is flagged stale
 
@@ -351,15 +351,22 @@ def snapshot(res, pnl, model_version, key=None):
             return False
 
 
-def line_check(board, player, prop, scope, line=None, team=None, start=None, now=None, pid=None, id_map=None, failed=False):
-    """Before a pick goes on a slip / is copied: what Underdog shows NOW for this player / stat / maps.
-    status: "verified" (the exact standard line is up) / "changed" (other line(s) for the same player + market) /
-    "unavailable" (Underdog shows nothing for it) / "ambiguous" (two Underdog players fit) / "failed" (feed error).
-    Identity as match_offers: Underdog id -> our player id when known (pid), else the exact name; team + match time."""
+def line_check(board, player, prop, scope, line=None, team=None, start=None, now=None, pid=None, id_map=None, failed=False,
+               book="underdog", odds_type="standard"):
+    """Before a pick goes on a slip / is copied: what the platform shows NOW for this player / stat / maps.
+    status: "verified" (the exact line of the same market type is up and the feed is fresh) / "changed" (other line(s)
+    for the same player + market) / "unavailable" (nothing for it) / "ambiguous" (two players fit) / "failed" (feed error
+    or, for PrizePicks, a stale feed - a stale line is never reported as verified).
+    Identity as match_offers: provider id -> our player id when known (pid), else the exact name; team + match time.
+    odds_type: standard / goblin / demon - a goblin pick is only verified against a goblin line (PrizePicks)."""
+    name = "PrizePicks" if book == "prizepicks" else "Underdog"
     now = now or datetime.now(timezone.utc)
     at = (board or {}).get("at") or 0
     if failed or (board or {}).get("error") and not (board or {}).get("rows"):
-        return {"status": "failed", "at": at, "rows": [], "note": "Couldn't reach Underdog to check this line"}
+        return {"status": "failed", "book": book, "at": at, "rows": [], "note": f"Couldn't reach {name} to check this line"}
+    if book == "prizepicks" and (board or {}).get("state") not in ("ok", "empty"):
+        return {"status": "failed", "book": book, "at": at, "rows": [],
+                "note": f"PrizePicks feed is {(board or {}).get('state') or 'unavailable'} - this line can't be confirmed right now"}
     id_map = id_map or {}
     st = _ts(start)
     out = []
@@ -377,19 +384,24 @@ def line_check(board, player, prop, scope, line=None, team=None, start=None, now
         rs = _ts(r.get("start"))
         if st and rs and abs((rs - st).total_seconds()) > JOIN_START_MIN * 60:
             continue
-        out.append({k: r.get(k) for k in ("id", "line", "higher", "lower", "alt", "start", "team", "opponent", "ud_player_id")})
+        out.append(dict({k: r.get(k) for k in ("id", "line", "higher", "lower", "alt", "start", "team", "opponent", "ud_player_id")},
+                        odds_type=r.get("odds_type") or ("alt" if r.get("alt") else "standard")))
     try:
         want = float(line) if line not in (None, "") else None
     except ValueError:
         want = None
-    base = {"at": at, "stale": bool(at and now.timestamp() - at > STALE_MIN * 60), "rows": sorted(out, key=lambda o: (o["line"], o["alt"]))}
+    base = {"book": book, "at": at, "stale": bool(at and now.timestamp() - at > STALE_MIN * 60) if book == "underdog" else False,
+            "rows": sorted(out, key=lambda o: (o["line"], o["alt"]))}
     if len({o["ud_player_id"] for o in out if o["ud_player_id"] is not None}) > 1:
-        return dict(base, status="ambiguous", rows=[], note="Two different Underdog players fit - not matched")
-    same = [o for o in out if want is not None and o["line"] == want and not o["alt"]]
+        return dict(base, status="ambiguous", rows=[], note=f"Two different {name} players fit - not matched")
+    kind = odds_type or "standard"
+    match_kind = (lambda o: not o["alt"]) if kind == "standard" else (lambda o: o["odds_type"] == kind)
+    same = [o for o in out if want is not None and o["line"] == want and match_kind(o)]
     if same:
         return dict(base, status="verified", note=None)
     if out:
-        std = [o for o in out if not o["alt"]]
-        return dict(base, status="changed", new_line=(std or out)[0]["line"],
-                    note="Underdog now shows " + ", ".join(str(o["line"]) + (" (alt)" if o["alt"] else "") for o in base["rows"]))
-    return dict(base, status="unavailable", note="Underdog has no line for this player / stat / maps right now")
+        pref = [o for o in out if match_kind(o)] or [o for o in out if not o["alt"]] or out
+        lab = lambda o: str(o["line"]) + ("" if not o["alt"] else f" ({o['odds_type'] if book == 'prizepicks' else 'alt'})")
+        return dict(base, status="changed", new_line=pref[0]["line"], new_odds_type=pref[0]["odds_type"],
+                    note=f"{name} now shows " + ", ".join(lab(o) for o in base["rows"]))
+    return dict(base, status="unavailable", note=f"{name} has no line for this player / stat / maps right now")

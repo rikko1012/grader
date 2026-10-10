@@ -94,7 +94,8 @@ def build(picks, forecasts, batches=(), now=None):
         t = p.get("test") or 0
         if t == 1:
             continue                                            # owner tests: never in diagnostics
-        cohort_src = "board" if t == 2 else "member"
+        # platforms never mixed: "board" = Underdog board lines (unchanged), "board_pp" = PrizePicks board lines
+        cohort_src = ("board_pp" if p.get("book") == "prizepicks" else "board") if t == 2 else "member"
         if p["status"] in ("open",):
             excl["pending"] += 1; continue
         if p["status"] == "void":

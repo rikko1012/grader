@@ -33,6 +33,7 @@ import picklog
 import slips
 import slip_batches
 import comparison
+import prizepicks
 import roles
 import underdog
 import whop_auth
@@ -354,8 +355,10 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12"):
             "at": _dt.now(timezone.utc).isoformat(timespec="seconds")}
 
 
-def board_payload():
-    b = underdog.board()
+def board_payload(book="underdog"):
+    """The graded board for one platform. book="prizepicks": PrizePicks' lines (prizepicks.py), each graded at its own
+    line and market type; its feed state (ok / stale / failed / empty) travels with it. Default Underdog, unchanged."""
+    b = prizepicks.board() if book == "prizepicks" else underdog.board()
     now = datetime.now(timezone.utc).isoformat()
     rows = []
     for r in b["rows"]:
@@ -380,9 +383,14 @@ def board_payload():
         x["awp_conf"] = (None if x["awp"] is None else "confirmed" if src.startswith(("hltv", "liquipedia"))
                          else "measured" if src.startswith("bo3") else "inferred")
         x["igl"], x["igl_src"] = roles.igl_role(nick, x.get("team_name") or x.get("team"))
-    _cap_same_result(rows)
-    return {"updated": b["at"], "error": b["error"], "rows": rows, "total": len(b["rows"]),
-            "version": picklog.MODEL_VERSION}
+    for x in rows:
+        x["book"] = x.get("book") or "underdog"
+    _cap_same_result(rows)                       # within this platform: a slip is one platform's entry
+    out = {"book": book, "updated": b["at"], "error": b["error"], "rows": rows, "total": len(b["rows"]),
+           "version": picklog.MODEL_VERSION}
+    if book == "prizepicks":
+        out["feed"] = {k: b.get(k) for k in ("state", "at", "checked_at", "lines", "error")}
+    return out
 
 
 KNOWN_AWP = {"zywoo", "m0nesy", "sh1ro", "broky", "w0nderful", "torzsi", "woro2k", "hallzerk", "s1mple", "device", "jame",
@@ -501,9 +509,12 @@ def board_forever():
     time.sleep(20)
     while True:
         try:
-            rows = underdog.board(wait=True)["rows"]
+            # both platforms' lines, each graded at its own line and market type with the same pipeline (same
+            # projection for the same player / match / stat / maps and model version; only the line differs)
+            rows = underdog.board(wait=True)["rows"] + prizepicks.board(wait=True)["rows"]
             now = datetime.now(timezone.utc).isoformat()
-            todo = [r for r in rows if not r["alt"] and (not r.get("start") or r["start"] > now)
+            # Underdog alternates stay ungraded (as before); PrizePicks goblin / demon are their own markets and are graded
+            todo = [r for r in rows if (not r["alt"] or r.get("book") == "prizepicks") and (not r.get("start") or r["start"] > now)
                     and time.time() - (BOARD.get(r["id"]) or {}).get("at", 0) > BOARD_EVERY]
             # lines from an older model version first, then soonest matches; one match's lines and each player's kills /
             # headshots back to back (the second grade of a player is served from his warm data)
@@ -513,13 +524,14 @@ def board_forever():
 
             def one(r):
                 members_idle()                            # members first, but the board never stalls
+                lt = (r.get("odds_type") or "standard") if r.get("book") == "prizepicks" else "standard"   # goblin / demon
                 try:
                     if MEMBER_GRADES[0] > 0:              # members still busy: one board grade at a time
                         with _BOARD_BUSY:
-                            res = cs2_scout.grade(r["player"], r["line"], r["prop"], "standard", scope=r.get("scope") or "12", team_hint=r.get("team"), opponent=r.get("opponent") or None,
+                            res = cs2_scout.grade(r["player"], r["line"], r["prop"], lt, scope=r.get("scope") or "12", team_hint=r.get("team"), opponent=r.get("opponent") or None,
                                                   faceit_key=faceit_key(), background=True, light=True)
                     else:
-                        res = cs2_scout.grade(r["player"], r["line"], r["prop"], "standard", scope=r.get("scope") or "12", team_hint=r.get("team"), opponent=r.get("opponent") or None, faceit_key=faceit_key(),
+                        res = cs2_scout.grade(r["player"], r["line"], r["prop"], lt, scope=r.get("scope") or "12", team_hint=r.get("team"), opponent=r.get("opponent") or None, faceit_key=faceit_key(),
                                               background=True, light=True)
                     if res.get("error"):
                         BOARD[r["id"]] = {"at": time.time(), "state": "NOT FOUND", "reason": res["error"]}
@@ -550,16 +562,20 @@ def board_forever():
                                       "team_name": pb.get("playing_for") or pb.get("current_team"),
                                       "opp_name": (res.get("next_match") or {}).get("opponent"),
                                       "match_slug": (res.get("next_match") or {}).get("slug"),   # exact match id (settling slips)
-                                      "tonight": (pb.get("_env") or {}).get("tonight")}   # LAN / online (match table projections)
+                                      "tonight": (pb.get("_env") or {}).get("tonight"),   # LAN / online (match table projections)
+                                      "book": r.get("book") or "underdog", "line_type": lt}
                     res["verdict"] = v
                     try:                                  # immutable comparison snapshot (changes only) + the row's evidence
                         ub = underdog.board()
-                        pnl = comparison.panel(res, ub["rows"] + hltv.prizepicks_board()["rows"], board_at=ub.get("at"), id_map=ud_id_map(ub["rows"]))
+                        pnl = comparison.panel(res, ub["rows"] + prizepicks.board()["rows"], board_at=ub.get("at"), id_map=ud_id_map(ub["rows"]))
                         comparison.snapshot(res, pnl, picklog.MODEL_VERSION)
                         if pnl:
                             BOARD[r["id"]].update(support=(pnl["supports"] or [None])[0], concern=pnl["concern"])
                     except Exception:
                         traceback.print_exc()
+                    # the platform and the provider's market id travel with the logged forecast (one row per platform)
+                    res["book"] = {"book": r.get("book") or "underdog", "market_id": r.get("market_id") or r.get("id"),
+                                   "market": r.get("market"), "odds_type": lt}
                     try:
                         picklog.log_async(res, v, test=2)
                     except Exception:
@@ -973,13 +989,15 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(st_, body_)
             if u.path == "/api/line_check":
                 # before a pick goes on a slip: the line Underdog shows NOW for this player / stat / maps
+                book = "prizepicks" if q.get("book") == "prizepicks" else "underdog"
                 try:
-                    ub = underdog.board()
+                    ub = prizepicks.board() if book == "prizepicks" else underdog.board()
                     return self.send(200, comparison.line_check(ub, q.get("player", ""), q.get("prop", "kills"), q.get("maps", "12"),
                                                                 q.get("line"), q.get("team"), q.get("start"), pid=q.get("pid") or None,
-                                                                id_map=ud_id_map(ub["rows"])))
+                                                                id_map=ud_id_map(ub["rows"]) if book == "underdog" else {},
+                                                                book=book, odds_type=q.get("lt") or "standard"))
                 except Exception:
-                    return self.send(200, comparison.line_check(None, "", "", "", failed=True))
+                    return self.send(200, comparison.line_check(None, "", "", "", failed=True, book=book))
             if u.path == "/api/grade":
                 with _MG_LOCK:
                     MEMBER_GRADES[0] += 1
@@ -989,7 +1007,7 @@ class Handler(BaseHTTPRequestHandler):
                     with _MG_LOCK:
                         MEMBER_GRADES[0] -= 1
             if u.path == "/api/board":
-                return self.send(200, board_payload())
+                return self.send(200, board_payload("prizepicks" if q.get("book") == "prizepicks" else "underdog"))
             if u.path == "/admin":
                 return self.admin(q)
             if u.path == "/admin/slips.json" and self.authed(q.get("token")):
@@ -1542,7 +1560,7 @@ class Handler(BaseHTTPRequestHandler):
             try:                                         # comparison panel: context only, never changes the grade
                 tc = time.time()
                 ub = underdog.board()
-                res["comparison"] = comparison.panel(res, ub["rows"] + hltv.prizepicks_board()["rows"], board_at=ub.get("at"), id_map=ud_id_map(ub["rows"]))
+                res["comparison"] = comparison.panel(res, ub["rows"] + prizepicks.board()["rows"], board_at=ub.get("at"), id_map=ud_id_map(ub["rows"]))
                 tm["comparison"] = round(time.time() - tc, 3)
             except Exception:
                 res["comparison"] = {"error": "comparison unavailable"}

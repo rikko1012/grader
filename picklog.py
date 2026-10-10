@@ -105,6 +105,11 @@ def _db():
         con.execute("ALTER TABLE picks ADD COLUMN scope TEXT DEFAULT '12'")
     except sqlite3.OperationalError:
         pass
+    for col in ("book", "market_id", "market_key"):   # added 2026-10-10: platform + provider market id (+ PrizePicks market)
+        try:
+            con.execute(f"ALTER TABLE picks ADD COLUMN {col} TEXT")
+        except sqlite3.OperationalError:
+            pass
     for col in ("factors", "result"):      # added 2026-10-02: every factor's value at grade time and
         try:                               # what happened (rounds, OT, map wins) - each measurable
             con.execute(f"ALTER TABLE picks ADD COLUMN {col} TEXT")
@@ -275,6 +280,9 @@ def pick_row(res, verdict, test=False):
     key = "|".join(str(x) for x in (pb["player"]["slug"], g["prop"], g["line"], g["line_type"], nm["slug"]))
     if scope != "12":
         key += "|maps" + scope                         # Maps 1-2 keys unchanged
+    bk = res.get("book") or {}                         # board grades: the platform + the provider's market id
+    if bk.get("book") == "prizepicks":
+        key += "|pp"                                   # one row per platform: the same number on both books never merges
     row = {
         "key": key, "logged_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "player": pb["player"]["nick"], "slug": pb["player"]["slug"], "player_id": pb["player"]["id"],
@@ -293,6 +301,8 @@ def pick_row(res, verdict, test=False):
         "factors": json.dumps(_factors(res), default=str),
         "scope": scope,
         "model_version": MODEL_VERSION,
+        # 2026-10-10: the platform the line came from (board grades) and its market id; member research lines: None
+        "book": bk.get("book"), "market_id": bk.get("market_id"), "market_key": bk.get("market"),
     }
     try:
         import zlib

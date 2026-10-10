@@ -18,7 +18,7 @@ th{color:var(--muted);font-weight:600}.card{background:var(--panel);border:1px s
 <h1>Grader diagnostics</h1>
 <div class="muted small">Diagnostic flags, not causes: a correctly estimated 60% pick loses 40% of the time. Cohorts, stats, map sets and model versions are never mixed.</div>
 <div class="bar" id="cohort"><button data-v="eval" class="on">Evaluation snapshot (latest forecast 30+ min before start)</button><button data-v="first">First published forecast</button><button data-v="slips">Slip selections</button></div>
-<div class="bar"><select id="fsrc"><option value="">Board + member</option><option value="board">Board offers</option><option value="member">Member research lines</option></select>
+<div class="bar"><select id="fsrc"><option value="">Board + member</option><option value="board">Underdog board</option><option value="board_pp">PrizePicks board</option><option value="member">Member research lines</option></select>
 <select id="fprop"><option value="">Kills + HS</option><option value="kills">Kills</option><option value="hs">Headshots</option></select>
 <select id="fscope"><option value="">All maps</option><option value="12">Maps 1–2</option><option value="1">Map 1</option><option value="123">Maps 1–3</option></select>
 <select id="fver"><option value="">All versions</option></select><span class="muted small" id="gen"></span></div>
