@@ -120,3 +120,19 @@ Untestable here (data not in the HLTV DB, or no dated history yet):
 - opponent AWPer;
 - veto pick / ban and starting side;
 - region style clash (team countries not in the export).
+
+## Round-3 results (run 2026-10-10 after freezing the definitions above; 42,587 series-players, TEST 13,255 / 1,343 matches)
+Baseline TEST kills MAE 6.085. Effects per standard deviation are fitted on TRAIN, as a share of the projection; dMAE is TEST.
+| Test | TRAIN / VALID coefficient | TEST dMAE (95%) | Decision |
+|---|---|---|---|
+| R3-share (team kill share) | +0.0003 / +0.0027 | -0.0000 (-0.0002 to +0.0001) | **Rejected**: the player's rate already carries his share |
+| R3-form (last 10 series) | -0.0001 / +0.0002 | +0.0001 (+0.0000 to +0.0001) | **Rejected**: the 120-day weighting already carries recent form |
+| R3-h2h (vs this org) | +0.0017 / +0.0041 | -0.0001 (-0.0011 to +0.0008) | **Rejected**: no measurable effect (38% of rows have a meeting) |
+| R3-oppagg (opponent kill pace) | -0.0011 / +0.0003 | +0.0001 (-0.0006 to +0.0009) | **Rejected** |
+| R3-sameday | +0.0021 / -0.0025 | +0.0006 (-0.0012 to +0.0024) | **Rejected** (sign flips) |
+| R3-opproster | +0.0016 / +0.0020 | +0.0008 (-0.0002 to +0.0019) | **Rejected** (worse on TEST) |
+| R3-blowout (Elo + Elo x share) | +0.0002, +0.0006 / -0.0028, -0.0013 | -0.0002 (-0.0005 to +0.0002) | **Rejected** (sign flips) |
+| R3-stage | -0.0014, -0.0040 / +0.0025, +0.0031 | -0.0005 (-0.0021 to +0.0011) | **Rejected**. Raw residual: qualifier / cup / open / league rows run 0.15 (TRAIN) to 0.46 (TEST) kills lower, but VALID points the other way. Re-test with more data |
+| R3 group (all ten, ridge) | - | +0.0008 (-0.0018 to +0.0036) | **Rejected** |
+Sanity check (`r3_quint.py`): mean residual by factor quintile moves by a few tenths of a kill with no consistent order between
+TRAIN and TEST, so the null result is not a computation artefact. Nothing promoted; the live projection is unchanged.
