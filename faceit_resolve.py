@@ -69,15 +69,20 @@ def name_score(hltv, other):
 
 
 # ---------------------------------------------------------------- saved matches
-def load_ids():
+def _read_ids():
+    """The saved rows; raises when the file exists but can't be read (locked, damaged encoding)."""
     if not IDS_CSV.exists():
         return []
     # utf-8-sig: Excel/Notepad on Windows add a BOM when the file is edited by hand
+    with IDS_CSV.open(encoding="utf-8-sig", newline="") as f:
+        # keep only known columns - a damaged line (e.g. from a full disk) must not break saving
+        return [{k: (r.get(k) or "") for k in IDS_FIELDS} for r in csv.DictReader(f)
+                if r.get("hltv_nick") and None not in r]
+
+
+def load_ids():
     try:
-        with IDS_CSV.open(encoding="utf-8-sig", newline="") as f:
-            # keep only known columns - a damaged line (e.g. from a full disk) must not break saving
-            return [{k: (r.get(k) or "") for k in IDS_FIELDS} for r in csv.DictReader(f)
-                    if r.get("hltv_nick") and None not in r]
+        return _read_ids()
     except (OSError, csv.Error, UnicodeDecodeError):
         return []
 
@@ -95,10 +100,22 @@ def _saved(hltv_nick, team):
     return None
 
 
+_SAVE_LOCK = threading.Lock()
+
+
 def save_id(hltv_nick, team, res):
-    rows = [r for r in load_ids() if not (r["hltv_nick"].lower() == hltv_nick.lower()
-                                          and r["team"].lower() == (team or "").lower()
-                                          and r["confidence"] != "manual")]
+    with _SAVE_LOCK:                 # one read-modify-write at a time: two look-ups can't drop each other's rows
+        _save_id(hltv_nick, team, res)
+
+
+def _save_id(hltv_nick, team, res):
+    try:
+        saved = _read_ids()
+    except (OSError, csv.Error, UnicodeDecodeError):
+        return   # 2026-10-10: an unreadable file (locked mid-write) used to read as EMPTY and the save then wiped every row
+    rows = [r for r in saved if not (r["hltv_nick"].lower() == hltv_nick.lower()
+                                     and r["team"].lower() == (team or "").lower()
+                                     and r["confidence"] != "manual")]
     if any(r["hltv_nick"].lower() == hltv_nick.lower() and r["confidence"] == "manual" for r in rows):
         return  # never overwrite a hand-set row
     rows.append({"hltv_nick": hltv_nick, "team": team or "", "faceit_nickname": res.get("nickname") or "",
@@ -112,7 +129,12 @@ def save_id(hltv_nick, team, res):
             w.writerows(rows)
         os.replace(tmp, IDS_CSV)   # atomic - pre-loading and look-ups can both save
     except OSError:
-        pass   # disk full/read-only: the match is still returned, just not remembered
+        # disk full / read-only / file locked (Windows): the match is still returned, just not remembered - and the
+        # half-written temp file is removed (they used to pile up next to the code)
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
 
 
 # ---------------------------------------------------------------- resolver

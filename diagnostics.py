@@ -140,7 +140,7 @@ def build(picks, forecasts, batches=(), now=None):
             pm = {"current": f.get("p_more") if f.get("p_more") is not None else (f.get("p_pick") if side == "More" else 1 - f["p_pick"]) if f.get("p_pick") is not None else None}
             for name, key in FORWARD_MODELS[1:]:
                 pm[name] = (sh.get(key) or {}).get("p_more")
-            fwd.append({"match": base["match"], "over": int(p["actual"] > f["line"]), "p": pm})
+            fwd.append({"match": base["match"], "over": int(p["actual"] > f["line"]), "p": pm, "version": f.get("model_version") or "untagged"})
     out = {"generated": now.isoformat(timespec="seconds"), "eval_lead_min": EVAL_LEAD_MIN, "exclusions": dict(excl), "cohorts": {}}
     for cname, rs in rows.items():
         for r in rs:                                            # per-row diagnostics (+ flags, never causes)
@@ -215,7 +215,25 @@ def build(picks, forecasts, batches=(), now=None):
                 "flags": dict(collections.Counter(f for r in g_ for f in r["flags"])),
                 "settled_from": dict(collections.Counter(r["settled_from"] for r in g_)),
             })
-        out["cohorts"][cname] = {"summary": summ,
+        # projection source (2026-10-10): HLTV performance model vs the provisional BO3.gg-history fallback vs the older
+        # pipeline - the fallback's thin-history prior looked high on tier-3 players (e.g. 28 projected vs a 16 average)
+        src_of = lambda r: ("BO3.gg-history (provisional)" if "BO3.gg-history projection" in r["flags"]
+                            else "older model" if "older-model projection" in r["flags"] else "HLTV performance model")
+        by_src = collections.defaultdict(list)
+        for r in rs:
+            if r["source"] == "board" and r["err"] is not None and "replay failed" not in r["flags"] and "in80" in r:
+                by_src[(src_of(r), r["prop"], r["scope"])].append(r)
+        src_summ = []
+        for (src, prop, sc), g_ in sorted(by_src.items()):
+            bym = collections.defaultdict(list)
+            for r in g_:
+                bym[r["match"]].append(r)
+            src_summ.append({"projection": src, "prop": prop, "scope": sc, "n": len(g_), "matches": len(bym),
+                             "proj_bias": round(sum(r["err"] for r in g_) / len(g_), 3),
+                             "bias_ci": _boot(bym, lambda xs: sum(r["err"] for r in xs) / len(xs)),
+                             "hit_rate": round(sum(r["hit"] for r in g_) / len(g_), 4),
+                             "predicted": round(sum(r["p"] for r in g_ if r["p"] is not None) / max(sum(r["p"] is not None for r in g_), 1), 4)})
+        out["cohorts"][cname] = {"summary": summ, "by_projection_source": src_summ,
                                  "flagged_examples": [{k: r.get(k) for k in ("pick_id", "source", "prop", "scope", "version", "side", "line", "lam",
                                                                              "actual", "p", "hit", "rounds_pred", "rounds_act", "rate_pred",
                                                                              "rate_act", "hsk_pred", "hsk_act", "flags")}
@@ -243,7 +261,8 @@ def build(picks, forecasts, batches=(), now=None):
 
 def forward_hs(fwd):
     """Predicted vs actual Over rate per predefined band, per model, with match-grouped 95% intervals."""
-    res = {"since": FORWARD_FROM, "lines": len(fwd), "matches": len({r["match"] for r in fwd}), "models": []}
+    res = {"since": FORWARD_FROM, "lines": len(fwd), "matches": len({r["match"] for r in fwd}), "models": [],
+           "versions": dict(collections.Counter(r.get("version") or "untagged" for r in fwd))}   # live version(s) behind "current"
     for name, _ in FORWARD_MODELS:
         rs = [r for r in fwd if r["p"].get(name) is not None]
         bands = []

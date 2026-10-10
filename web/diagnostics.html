@@ -53,6 +53,9 @@ function draw() {
       <td>${s.bias_ci ? `${n2(s.bias_ci[0])}–${n2(s.bias_ci[1])}` : "–"}</td><td>${s.in80 == null ? "–" : pc(s.in80) + ` (${s.in80_n})`}</td><td>${n2(s.rounds_bias)}</td>
       <td>${s.top_selections.n ? `${pc(s.top_selections.hit_rate)} / ${pc(s.top_selections.predicted)} (${s.top_selections.n})` : "–"}</td></tr>`).join("")}</tbody></table></div>
     ${fwdHs()}
+    ${(D.cohorts[cohort].by_projection_source || []).length ? `<h2>Board lines by projection source</h2><div class="small muted">Bias = projection minus actual (+ = projected too high), match-grouped 95% interval. Lines replayed from saved inputs only.</div>
+      <div class="scroll"><table><thead><tr><th>Projection</th><th>Lines</th><th>Matches</th><th>Bias</th><th>Bias 95%</th><th>Hit</th><th>Predicted</th></tr></thead><tbody>
+      ${D.cohorts[cohort].by_projection_source.filter(x => (!$("#fprop").value || x.prop === $("#fprop").value) && (!$("#fscope").value || x.scope === $("#fscope").value)).map(x => `<tr><td>${esc(x.projection)} · ${esc(x.prop)} · ${esc(x.scope)}</td><td>${x.n}</td><td>${x.matches}</td><td>${n2(x.proj_bias)}</td><td>${x.bias_ci ? `${n2(x.bias_ci[0])}–${n2(x.bias_ci[1])}` : "–"}</td><td>${pc(x.hit_rate)}</td><td>${pc(x.predicted)}</td></tr>`).join("")}</tbody></table></div>` : ""}
     <h2>Calibration</h2>${rows.map(s => `<div class="card"><b>${esc(s.source)} · ${esc(s.prop)} · ${esc(s.scope)} · ${esc(s.version)}</b>
       <div class="scroll"><table><thead><tr><th>Printed chance</th><th>Lines</th><th>Predicted</th><th>Actual</th></tr></thead><tbody>
       ${s.calibration.map(b => `<tr><td>${b.bin}</td><td>${b.n}</td><td>${pc(b.predicted)}</td><td>${pc(b.actual)}</td></tr>`).join("")}</tbody></table></div>
@@ -64,7 +67,7 @@ function draw() {
 function fwdHs() {
   const F = D.forward_hs; if (!F) return "";
   return `<h2>Forward check · board headshots, Maps 1–2</h2><div class="small muted">Status: possible Over-probability overstatement on development board data; not confirmed. Broader historical checks are encouraging. Forward validation pending.
-    Evaluation snapshots logged since ${esc(F.since)} · ${F.lines} lines · ${F.matches} matches. Bands fixed in advance; actual = Over rate with a match-grouped 95% interval.</div>
+    Evaluation snapshots logged since ${esc(F.since)} · ${F.lines} lines · ${F.matches} matches${F.versions && Object.keys(F.versions).length ? ` · current = ${Object.entries(F.versions).map(([v, n]) => `${esc(v)} (${n})`).join(", ")}` : ""}. Bands fixed in advance; actual = Over rate with a match-grouped 95% interval.</div>
     ${F.models.map(m => `<div class="card"><b>${esc(m.model)}</b> <span class="muted small">· ${m.n} lines · Over rate minus predicted ${m.gap == null ? "–" : (m.gap * 100).toFixed(1) + " pts"}${m.gap_ci ? ` (95% ${(m.gap_ci[0] * 100).toFixed(1)} to ${(m.gap_ci[1] * 100).toFixed(1)})` : ""} · log loss ${n2(m.log_loss)}</span>
       <div class="scroll"><table><thead><tr><th>Chance of Over</th><th>Lines</th><th>Matches</th><th>Predicted</th><th>Actual</th><th>Actual 95%</th></tr></thead><tbody>
       ${m.bands.map(b => `<tr><td>${b.band}</td><td>${b.n}</td><td>${b.matches}</td><td>${pc(b.predicted)}</td><td>${pc(b.actual)}</td><td>${b.actual_ci ? `${pc(b.actual_ci[0])}–${pc(b.actual_ci[1])}` : "–"}</td></tr>`).join("")}</tbody></table></div></div>`).join("")}`;

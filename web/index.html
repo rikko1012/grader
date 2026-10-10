@@ -928,6 +928,10 @@ function boardCard(r) {     // a board row in the shape addToSlip / pickLine exp
 }
 const agoTxt = t => { if (!t) return ""; const m = Math.round((Date.now() - Date.parse(t)) / 60000); return m < 1 ? "just now" : m < 60 ? m + " min ago" : Math.round(m / 60) + " h ago"; };
 const DSTAT = {ok: ["ok", "Data complete"], limited: ["mid", "Limited history"], verify: ["warn", "Line not confirmed"]};
+// the warning badge names the actual open issue (2026-10-10 audit: "Line not confirmed" showed for an unconfirmed roster next
+// to "Underdog: same line"); "Line not confirmed" stays for its own case - no upcoming match to tie the line to
+const issueLabel = why => /roster/i.test(why || "") ? "Roster not confirmed" : /stand-in/i.test(why || "") ? "Stand-in"
+  : /gap|stale|break/i.test(why || "") ? "Long break" : "Line not confirmed";
 function drawBoard() {
   saveBFilters();
   const sortBy = $("#bsort").value;
@@ -948,7 +952,7 @@ function drawBoard() {
   const ev = (x, cls, sign) => x && x.text ? `<div class="b2ev ${cls}">${sign} ${esc(x.text)} ${basisTag(x.basis)}</div>` : "";
   const rowHtml = (r, showMatch) => {
     const nick = r.nick || r.player, lab = !r.side ? "…" : r.state === "SCOUT" ? "S" : r.grade === "LEAN" ? "L" : r.grade;
-    const ds = DSTAT[(r.dstat || [])[0]], team = r.team_name || r.team, opp = r.opp_name || r.opponent;
+    const ds = (r.dstat || [])[0] === "verify" ? ["warn", issueLabel(r.dstat[1])] : DSTAT[(r.dstat || [])[0]], team = r.team_name || r.team, opp = r.opp_name || r.opponent;
     return `<div class="brow2" data-bl="${esc(nick)}|${r.line}|${r.prop}|${r.scope || "12"}">
       <span class="gtag ${!r.side || r.state === "SCOUT" ? "g-scout" : gClass(r.grade)}">${esc(lab)}</span>
       <div><div class="b2top"><b>${esc(nick)}</b>${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}
@@ -1214,9 +1218,9 @@ function dataStatus(g, v) {
   // quality only - the source (HLTV / BO3.gg / older model) is shown separately and is not a warning by itself
   const fl = (g.flags || []).join(" | ");
   if (v.state === "SCOUT" || /No upcoming match/i.test(fl)) return {k: "warn", t: "Line not confirmed", why: "no upcoming match found"};
-  if (/Roster not confirmed/i.test(fl)) return {k: "warn", t: "Line not confirmed", why: "roster not confirmed"};
-  if (/Stand-in/i.test(fl)) return {k: "warn", t: "Line not confirmed", why: "stand-in"};
-  if (/Last official map \d+ days ago - extra caution/i.test(fl)) return {k: "warn", t: "Line not confirmed", why: "long gap since the last official map"};
+  if (/Roster not confirmed/i.test(fl)) return {k: "warn", t: "Roster not confirmed", why: "the team page doesn't list his lineup yet – the stake is not changed by this"};
+  if (/Stand-in/i.test(fl)) return {k: "warn", t: "Stand-in", why: "playing for another team"};
+  if (/Last official map \d+ days ago - extra caution/i.test(fl)) return {k: "warn", t: "Long break", why: "long gap since the last official map"};
   if (/Small sample|Thin|thin history/i.test(fl)) return {k: "mid", t: "Limited history", why: "small recent sample"};
   return {k: "ok", t: "Data complete", why: ""};
 }
@@ -1455,13 +1459,15 @@ function render(d) {
   mates.push({n: pb.player?.nick, r: o.rating, me: true});
   mates.sort((a, b) => (b.r || 0) - (a.r || 0));
   const maxR = Math.max(...mates.map(m => m.r || 0), 1.2);
-  h += `<section class="card"><h2>Stats · Maps 1–2 only · ${esc((o.window || "").replace("last_", "last ").replace(/_/g, " "))} · ${o.maps_played ?? "–"} maps</h2>
+  // each number names its own sample (2026-10-10 audit: one header count, 43, sat over windows of 39 / 79 / 124 maps)
+  const winLab = esc((o.window || "").replace("last_", "last ").replace(/_/g, " "));
+  h += `<section class="card"><h2>Stats · Maps 1–2 only · BO3.gg <span class="muted small">· ${!perfGrade(g) ? "these feed the older model's projection" : String(g.projection_source || "").endsWith("-bo3") ? "context – the projection uses his BO3.gg maps round by round" : "context – the projection uses HLTV"}</span></h2>
     <div class="stats">
       ${o.form_windows ? ["3m", "6m", "12m"].map(k => o.form_windows[k] ? `<div class="stat"><div class="k">${k} KPR · HS%</div><div class="v">${num(o.form_windows[k].kpr,3)}</div><div class="n">${o.form_windows[k].hs_pct ?? "–"}% HS · ${o.form_windows[k].maps} maps</div></div>` : "").join("") : ""}
-      <div class="stat"><div class="k">Rating</div><div class="v">${num(o.rating)}</div><div class="n">all maps</div></div>
-      <div class="stat"><div class="k">KAST</div><div class="v">${pb.kast ?? "–"}%</div></div>
-      <div class="stat"><div class="k">Deaths / round</div><div class="v">${num(o.dpr,3)}</div></div>
-      <div class="stat"><div class="k">ADR</div><div class="v">${o.adr ?? "–"}</div></div>
+      <div class="stat"><div class="k">Rating</div><div class="v">${num(o.rating)}</div><div class="n">${winLab} · ${o.maps_played ?? "–"} maps</div></div>
+      <div class="stat"><div class="k">KAST</div><div class="v">${pb.kast ?? "–"}%</div><div class="n">${winLab}</div></div>
+      <div class="stat"><div class="k">Deaths / round</div><div class="v">${num(o.dpr,3)}</div><div class="n">${winLab}</div></div>
+      <div class="stat"><div class="k">ADR</div><div class="v">${o.adr ?? "–"}</div><div class="n">${winLab}</div></div>
       ${rf.kpr_recent != null ? `<div class="stat"><div class="k">Recent KPR</div><div class="v">${num(rf.kpr_recent,3)}</div><div class="n">${rf.trend_pct_vs_window > 0 ? "+" : ""}${rf.trend_pct_vs_window}% vs window</div></div>` : ""}
     </div>`;
   if ((pb.per_map || []).length) h += `<div class="stats" style="margin-top:8px">${pb.per_map.map(m => `<div class="stat"><div class="k">${mapName(m.map)} KPR</div><div class="v">${num(m.kpr,3)}</div><div class="n">${m.maps_played ?? 0} maps</div></div>`).join("")}</div>`;
