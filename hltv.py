@@ -521,6 +521,73 @@ def _load_index():
         _INDEX["busy"] = False
 
 
+# PrizePicks CS2 lines from the scraper's props workflow (tables prop_lines / prop_status, about hourly).
+# PrizePicks shows this server a CAPTCHA (not bypassed), so its board comes through the shared database.
+# Context only: the line comparison on a card (comparison.py) - never a grade input.
+PP_REFRESH = 5 * 60
+PP_STALE_MIN = 90                 # the props workflow reads PrizePicks about hourly
+_PP_SCOPE = {"1-2": "12", "1": "1", "1-3": "123"}   # the maps this app grades (Map 2 lines are not compared)
+_PP = {"at": 0.0, "tried": 0.0, "rows": [], "last_ok": None, "error": None, "busy": False}
+_PP_SQL = """SELECT line_id, player, team, opponent, start_time, market, maps, line, odds_type,
+                    open_line, moves, moved_at, first_seen, other_line
+             FROM prop_lines WHERE book = 'prizepicks' AND start_time > now() - interval '6 hours'"""
+
+
+def _pp_num(v):
+    return float(v) if v is not None else None
+
+
+def prizepicks_rows(records):
+    """prop_lines records -> comparison rows, the shape of underdog.board() rows plus book="prizepicks",
+    odds_type, open_line, moves and other_line (Underdog's standard line for the same prop)."""
+    out = []
+    for lid, player, team, opp, start, market, maps, line, ot, open_line, moves, moved_at, first_seen, other in records:
+        scope = _PP_SCOPE.get(str(maps))
+        prop = "hs" if market == "headshots" else "kills" if market == "kills" else None
+        if not scope or not prop or line is None or start is None:
+            continue
+        changed = moved_at or first_seen
+        out.append({"id": f"pp:{lid}", "book": "prizepicks", "player": player, "team": team, "opponent": opp,
+                    "start": start.isoformat(), "prop": prop, "scope": scope, "line": float(line),
+                    "alt": (ot or "standard") != "standard", "odds_type": ot or "standard",
+                    "higher": None, "lower": None, "price_higher": None, "price_lower": None,
+                    "updated_at": changed.isoformat() if changed else None,
+                    "open_line": _pp_num(open_line), "moves": moves, "other_line": _pp_num(other)})
+    return out
+
+
+def _load_prizepicks():
+    try:
+        con = _connect()
+        try:
+            with con.cursor() as cur:
+                cur.execute(_PP_SQL)
+                records = cur.fetchall()
+                cur.execute("SELECT last_ok FROM prop_status WHERE book = 'prizepicks'")
+                st = cur.fetchone()
+        finally:
+            con.close()
+        _PP.update(at=time.time(), rows=prizepicks_rows(records), error=None,
+                   last_ok=st[0].timestamp() if st and st[0] else None)
+    except Exception as e:                               # tables not there yet / database down: keep the last rows
+        _PP.update(tried=time.time(), error=f"{type(e).__name__}: {str(e)[:160]}")
+    finally:
+        _PP["busy"] = False
+
+
+def prizepicks_board(now=None):
+    """{"at": last good PrizePicks read (epoch s) or None, "rows": [...], "error"}; each row's "stale" is set when
+    that read is older than PP_STALE_MIN. Never blocks: refreshed in the background, last rows kept on errors."""
+    if not dsn():
+        return {"at": None, "rows": [], "error": "HLTV database not configured (HLTV_DB_DSN)"}
+    now = now or time.time()
+    if now - max(_PP["at"], _PP["tried"]) > PP_REFRESH and not _PP["busy"]:
+        _PP["busy"] = True
+        threading.Thread(target=_load_prizepicks, daemon=True, name="hltv-prizepicks").start()
+    stale = not _PP["last_ok"] or now - _PP["last_ok"] > PP_STALE_MIN * 60
+    return {"at": _PP["last_ok"], "rows": [dict(r, stale=stale) for r in _PP["rows"]], "error": _PP["error"]}
+
+
 _LOOSE = str.maketrans("013457", "oieast")
 
 

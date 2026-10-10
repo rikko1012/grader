@@ -1403,27 +1403,32 @@ function render(d) {
     h += `<section class="card"><h2>Projection comparison</h2>`;
     // forecasts vs betting thresholds, side by side - always visible (owner 2026-10-09)
     {
-      const it0 = (cp.internal || [])[0], ud = cp.offers.find(o => !o.alt) || cp.offers[0];
-      const ourP = ud ? ud[`${side}_if_decided`] : cp.ours.chance;
+      const it0 = (cp.internal || [])[0], udOff = cp.offers.filter(o => (o.source || "underdog") === "underdog"),
+        ud = udOff.find(o => !o.alt) || udOff[0], pp = cp.offers.find(o => o.source === "prizepicks" && !o.alt);
+      const ourP = ud ? ud[`${side}_if_decided`] : pp ? pp[`${side}_if_decided`] : cp.ours.chance;
       h += `<div class="scroll"><table><thead><tr><th>Source</th><th class="num">Projection</th><th class="num">${Side} chance</th></tr></thead><tbody>
         <tr><td><b>Our model</b></td><td class="num"><b>${cp.ours.projection}</b></td><td class="num"><b>${pc1(ourP)}</b></td></tr>
         ${it0 ? `<tr><td>Previous model <span class="muted small">(ours, internal)</span></td><td class="num">${it0.projection}</td><td class="num">${pc1(it0.p_side)}</td></tr>` : ""}
         <tr><td>Underdog <span class="muted small">(betting line, not a projection)</span></td><td class="num">${ud ? `line ${ud.line}` : "–"}</td><td class="num muted">–</td></tr>
+        <tr><td>PrizePicks <span class="muted small">(betting line, not a projection)</span></td><td class="num">${pp ? `line ${pp.line}` : "–"}</td><td class="num muted">–</td></tr>
         <tr><td>Independent projections</td><td class="num muted" colspan="2">not available yet</td></tr></tbody></table></div>`;
     }
     if (cp.offers.length) {
-      h += cp.offers.map(o => `<div class="kv"><span>Underdog ${o.line}${o.alt ? ' <span class="pill">alt</span>' : ""}${o.stale ? ' <span class="pill warn">not refreshed</span>' : ""}</span>
+      const book = o => o.source === "prizepicks" ? "PrizePicks" : "Underdog",
+        kind = o => !o.alt ? "" : ` <span class="pill">${o.source === "prizepicks" ? esc(o.odds_type || "alt") : "alt"}</span>`,
+        moved = o => o.source === "prizepicks" && o.moves && o.open_line != null && +o.open_line !== +o.line ? ` <span class="muted small">opened ${o.open_line}</span>` : "";
+      h += cp.offers.map(o => `<div class="kv"><span>${book(o)} ${o.line}${kind(o)}${moved(o)}${o.stale ? ' <span class="pill warn">not refreshed</span>' : ""}</span>
         <span>${Side} <b>${pc1(o[`${side}_if_decided`])}</b>${pay(o)}${o.p_push ? ` <span class="muted small">· push ${pc1(o.p_push)}</span>` : ""}</span></div>`).join("");
       const bl = (cp.best_line || {})[side];
       if (bl && bl.length) h += `<div class="small muted">Same payout: ${bl.map(x => x.line).join(", ")} is the easier ${Side.toLowerCase()} line.</div>`;
       if (cp.payouts_differ?.[side]) h += `<div class="small muted">Payouts differ between these lines – compare what each pays in your app.</div>`;
-    } else h += `<div class="small muted">No Underdog line for this exact market right now.</div>`;
+    } else h += `<div class="small muted">No Underdog or PrizePicks line for this exact market right now.</div>`;
     if (cp.one_worse?.chance != null) h += `<div class="kv"><span>If the line were ${cp.one_worse.line}</span><span>${Side} ${pc1(cp.one_worse.chance)}</span></div>`;
     if (Math.abs(cp.grade_vs_table || 0) > 0.015) h += `<div class="small muted">The grade shows ${pct(cp.ours.chance)}: ${perfGrade(g) ? `kills chances are capped at ${Math.round(capOf(d, "kills_chance", 0.78) * 100)}% on the grade` : "the older model adds safety margins / a cap on top of these chances"}.</div>`;
     h += `<details class="small" style="margin-top:8px"><summary class="muted">More detail</summary>
       ${(cp.supports || []).slice(1).map(x => `<div class="muted">+ ${esc(x.text)} ${basisTag(x.basis)}</div>`).join("")}
       ${(cp.evidence_against || []).filter(x => x !== cp.concern && x.text !== cp.concern?.text).map(x => `<div class="muted">• ${esc(x.text)} ${basisTag(x.basis)}</div>`).join("")}
-      <div class="muted" style="margin-top:4px">Sources: Underdog lines connected · no independent projection source connected yet${(cp.rejected || []).length ? ` · ${cp.rejected.length} line(s) not compared (different maps, team or match)` : ""}</div>
+      <div class="muted" style="margin-top:4px">Sources: Underdog and PrizePicks lines connected (PrizePicks through the HLTV scraper, about hourly) · no independent projection source connected yet${(cp.rejected || []).length ? ` · ${cp.rejected.length} line(s) not compared (different maps, team or match)` : ""}</div>
     </details></section>`;
   }
 

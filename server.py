@@ -554,7 +554,7 @@ def board_forever():
                     res["verdict"] = v
                     try:                                  # immutable comparison snapshot (changes only) + the row's evidence
                         ub = underdog.board()
-                        pnl = comparison.panel(res, ub["rows"], board_at=ub.get("at"), id_map=ud_id_map(ub["rows"]))
+                        pnl = comparison.panel(res, ub["rows"] + hltv.prizepicks_board()["rows"], board_at=ub.get("at"), id_map=ud_id_map(ub["rows"]))
                         comparison.snapshot(res, pnl, picklog.MODEL_VERSION)
                         if pnl:
                             BOARD[r["id"]].update(support=(pnl["supports"] or [None])[0], concern=pnl["concern"])
@@ -1517,7 +1517,7 @@ class Handler(BaseHTTPRequestHandler):
             try:                                         # comparison panel: context only, never changes the grade
                 tc = time.time()
                 ub = underdog.board()
-                res["comparison"] = comparison.panel(res, ub["rows"], board_at=ub.get("at"), id_map=ud_id_map(ub["rows"]))
+                res["comparison"] = comparison.panel(res, ub["rows"] + hltv.prizepicks_board()["rows"], board_at=ub.get("at"), id_map=ud_id_map(ub["rows"]))
                 tm["comparison"] = round(time.time() - tc, 3)
             except Exception:
                 res["comparison"] = {"error": "comparison unavailable"}
