@@ -378,14 +378,13 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
   <details class="card how" style="margin-top:12px">
     <summary>How grades work</summary>
     <div class="small" style="margin-top:10px;line-height:1.55">
-      <p><b>Built from official pro matches.</b> Projections use Maps 1 and 2 – the maps most lines count. Maps 1–3 lines add a third map only as often as the series is expected to go the distance, and Map 1 lines use Map 1 alone. FACEIT games never count.</p>
-      <p><b>Recent form counts most.</b> A player's last few months weigh more than older matches, so a player in form (or in a slump) shows up quickly without one hot series taking over.</p>
-      <p><b>The maps matter.</b> If the veto is out we use how the player performs on those two maps; if not, his numbers across all maps.</p>
-      <p><b>Match context.</b> Betting markets tell us who is favoured – winning and losing teams put up different numbers. Heavy underdogs (especially against top-10 teams) are marked down, and a player's record against teams ranked close to tonight's opponent counts too. We also check the roster (stand-ins, new teams), how long since his last official match, and how big his sample is. Anything uncertain lowers the stake, not the honesty of the number.</p>
-      <p><b>Projection → chance → grade.</b> The projection is compared with the line (a 15.5 line needs 16 for More, 15 or less for Less; on a whole line like 16 exactly 16 is a push), and turned into a win chance based on how much a player's totals normally swing from match to match. Overs need a small cushion (about 1 kill / 0.6 headshots) – a projection right on the line is a coin flip, not an Over.</p>
-      <p><b>Tested before it counts.</b> Every factor was tested on 900+ past matches, using only information available before each one. His last 10 matches carry a lot of weight (they proved the strongest signal on real lines), and head-to-head nudges the projection. Series against other teams from the opponent's region count lightly.</p>
-      <p><b>What the grades mean</b> (chance the pick wins): A+ 80%+ · A 74%+ · A− 68%+ · B+ 63%+ · B 57%+ · B− 55%+ · <i>Lean</i> under 55% (a coin flip – no units).<br>
-      <b>Units:</b> A+ 3U · A 2U · A− 1.5U · B+ 1U · B 0.5U · B− 0.5U · Lean 0U. Thin markets, small samples, stand-ins and rust cap the units.</p>
+      <p><b>Built from official pro matches.</b> Maps 1–2 lines (most of the board) use our performance model on every official map a player has played on HLTV: his kills per round, with recent months counting most (a map from four months ago counts half), weighted toward his numbers in tonight's setting (LAN or online), against how many kills the opponent gives up. Headshot lines add his headshots per kill. A player with a short history is pulled toward the pro average until his own maps take over. FACEIT games never count.</p>
+      <p><b>Map 1 and Maps 1–3 lines</b> still use the older model (his BO3.gg rates and form, the maps when known, win chance, opponent rank, head-to-head, Round Swing, and a small cushion an Over must clear): Map 1 is half of its Maps 1–2 projection, and Maps 1–3 adds a third map only as often as the series is expected to go 1–1.</p>
+      <p><b>Projection → chance → grade.</b> The projection is compared with the line (a 15.5 line needs 16 for an Over, 15 or less for an Under; on a whole line like 16, exactly 16 is a push) and turned into a chance from how much a player's totals normally swing from match to match. Kills chances are capped at 78% because big kill totals swing more than any model expects.</p>
+      <p><b>Stake rules change the units, never the chance.</b> If his last 10 matches clearly disagree at this line, the stake drops to 0 (FORM FIGHT) or 0.5U (TAPE FIGHT). Stand-ins, transfers, unconfirmed rosters, small samples, long breaks and thin betting markets cap the stake; an AWPer on a headshot line gets 0 units. Several bets that need the same team to do well (or badly) in one match share a 3U cap.</p>
+      <p><b>Tested before it counts.</b> A factor moves the projection only after it beats the current model on matches it never saw, in date order. Maps, head-to-head, Round Swing, ratings, opening and trade kills, win chance and FACEIT are on every card as context; they move the grade only if they pass that test.</p>
+      <p><b>What the grades mean</b> (chance the pick wins): A+ 80%+ · A 74%+ · A− 68%+ · B+ 63%+ · B 57%+ · B− 55%+ · <i>Lean</i> = 0 units: under 55%, or a stake rule above held it at 0.<br>
+      <b>Units:</b> A+ 3U · A 2U · A− 1.5U · B+ 1U · B 0.5U · B− 0.5U · Lean 0U. The chance is graded unrounded and shown to 0.1%.</p>
       <p class="muted">Grades are probabilities, not guarantees – a 60% pick still loses 4 times in 10. Not financial advice.</p>
     </div>
   </details>
@@ -552,7 +551,11 @@ const ltTag = lt => lt === "goblin" ? ` <span class="pill" style="margin:0;paddi
   : lt === "demon" ? ` <span class="pill" style="margin:0;padding:1px 7px;color:#ff5566;border-color:#ff5566">demon</span>` : "";
 const lineWarn = (p, l) => p === "hs" && +l >= 24 ? `${l} headshots is a kills-sized line – did you mean kills?`
   : p !== "hs" && +l <= 12 ? `${l} kills is a headshot-sized line – did you mean HS?` : "";
-const sideWord = v => v.grade === "LEAN" ? `Lean ${v.side === "More" ? "Over" : "Under"}` : v.side || "–";
+// member wording (2026-10-10 audit): Over / Under everywhere - More / Less are internal values only
+const sideWord = v => !v.side ? "–" : v.grade === "LEAN" ? `Lean ${v.side === "More" ? "Over" : "Under"}` : v.side === "More" ? "Over" : "Under";
+// which projection the grade used: the performance model on Maps 1-2, else the older pipeline (Map 1 / Maps 1-3)
+const perfGrade = g => String(g.projection_source || "").startsWith("perf") && (g.scope || "12") === "12";
+const capOf = (d, k, dflt) => (d && d.caps && d.caps[k] != null ? d.caps[k] : dflt);
 const noteOf = (d, x) => { const v = d?.verdict || {}, g = d?.grade || {};
   return lineWarn(g.prop || x?.prop, g.line ?? x?.line) || ((v.units || 0) === 0 && /0 units: (.+)$/.exec(v.reason || "")?.[1]) || ""; };
 // display only: well-known main AWPers, shown when BO3.gg has no weapon data (the grade doesn't use this list)
@@ -560,7 +563,7 @@ const KNOWN_AWP = new Set(["zywoo", "m0nesy", "sh1ro", "broky", "w0nderful", "to
 const mapsWord = sc => sc === "123" ? " (Maps 1–3)" : sc === "1" ? " (Map 1)" : "";
 function pickLine(d) {
   const g = d.grade || {}, v = d.verdict || {}, nick = d.player_block?.player?.nick || "";
-  const side = v.grade === "LEAN" ? `Lean ${v.side === "More" ? "Over" : "Under"}` : (v.side === "More" ? "MORE" : "LESS");
+  const side = v.grade === "LEAN" ? `Lean ${v.side === "More" ? "Over" : "Under"}` : (v.side === "More" ? "OVER" : "UNDER");
   return `${nick} ${side} ${g.line} ${propWord(g.prop)}${mapsWord(g.scope)} · ${v.grade === "LEAN" ? "Lean" : v.grade} · ${v.units}U · ${((v.p || 0) * 100).toFixed(1)}%`;
 }
 function shareUrl(d) {
@@ -580,7 +583,7 @@ function remember(d) {
 function showRecent() {
   const h = store.get("cs2s_hist", []);
   $("#recent").innerHTML = h.length ? `<span class="small muted" style="align-self:center">Recent:</span>` + h.map((x, i) =>
-    `<button type="button" class="chipbtn" data-hist="${i}">${esc(x.p)} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${x.lt && x.lt !== "standard" ? " " + x.lt : ""} · <b>${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : `${esc(x.g)} ${esc(x.s)}`}</b></button>`).join("")
+    `<button type="button" class="chipbtn" data-hist="${i}">${esc(x.p)} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${x.lt && x.lt !== "standard" ? " " + x.lt : ""} · <b>${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : `${esc(x.g)} ${x.s === "More" ? "Over" : "Under"}`}</b></button>`).join("")
     + `<button type="button" class="chipbtn" data-act="clearhist" title="Clear recent">✕</button>` : "";
 }
 const cardCtx = d => ({team: d.player_block?.playing_for || d.player_block?.current_team || null, opponent: d.next_match?.opponent || null});
@@ -751,6 +754,9 @@ function ask(title, body, buttons) {
   });
 }
 const sideTxt = s => s === "More" ? "Over" : "Under";
+const sideGrade = (gr, u, v, sd) => {
+  const capped = v.side === sd && v.cap_n && v.units_full > v.units, units = capped ? v.units : (u || 0);
+  return `${gr === "C" || gr === "LEAN" || !units ? "lean" : "grade " + esc(gr)} · ${units}U${capped ? " (capped)" : ""}`; };
 function legFrom(d, extra) {
   const g = d.grade || {}, v = d.verdict || {}, pb = d.player_block || {};
   return Object.assign({p: pb.player?.nick, pid: pb.player?.id || "", l: g.line, t: g.prop, lt: g.line_type, sc: g.scope || "12", s: v.side, g: v.grade, pc: v.p, u: v.units,
@@ -882,8 +888,8 @@ function udPill(d) {
   if (!u || u.line == null || (g.scope && g.scope !== "12")) return "";   // Underdog's line is Maps 1-2
   const pay = u.alt ? ` (higher ${u.higher ?? "–"}x / lower ${u.lower ?? "–"}x)` : "";
   if (u.line === g.line || !v.side) return `<span class="pill">Underdog: same line ${u.line}${pay}</span>`;
-  const better = v.side === "More" ? u.line < g.line : u.line > g.line;
-  return `<span class="pill ${better ? "good" : ""}">Underdog: ${u.line}${pay} – ${better ? `easier for ${v.side}` : `PrizePicks' ${g.line} is easier for ${v.side}`}</span>`;
+  const better = v.side === "More" ? u.line < g.line : u.line > g.line, sd = v.side === "More" ? "Over" : "Under";
+  return `<span class="pill ${better ? "good" : ""}">Underdog: ${u.line}${pay} – ${better ? `easier for the ${sd}` : `your ${g.line} is easier for the ${sd}`}</span>`;
 }
 let boardRows = [], bprop = "kills", bside = "both", bscope = "12", boardAt = 0, bview = "matches";
 // filters survive reloads and the board <-> card round trip
@@ -947,7 +953,7 @@ function drawBoard() {
       <span class="gtag ${!r.side || r.state === "SCOUT" ? "g-scout" : gClass(r.grade)}">${esc(lab)}</span>
       <div><div class="b2top"><b>${esc(nick)}</b>${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}
           <span class="muted">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}${showMatch ? " · " + shortWhen(r.start) : ""}</span></div>
-        <div class="b2pick">${r.side ? esc(sideWord({grade: r.grade, side: r.side})) : "grading…"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}${r.p != null ? ` · <b>${pct0(r.p)}</b>` : ""} · ${esc(r.grade || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${r.cap_n && r.units_full > r.units ? ` <span class="pill" title="${r.cap_n} bets on this board need ${esc(r.team_name || r.team || "this team")} to ${r.side === "More" ? "do well" : "do badly"} in this match – one upset or overtime decides them all, so together they're capped at 3U. On its own this pick is ${r.units_full}U.">capped from ${r.units_full}U</span>` : ""}</div>
+        <div class="b2pick">${r.side ? esc(sideWord({grade: r.grade, side: r.side})) : "grading…"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}${r.p != null ? ` · <b>${pct0(r.p)}</b>` : ""}${r.grade === "LEAN" ? "" : " · " + esc(r.grade || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${r.cap_n && r.units_full > r.units ? ` <span class="pill" title="${r.cap_n} bets on this board need ${esc(r.team_name || r.team || "this team")} to ${r.side === "More" ? "do well" : "do badly"} in this match – one upset or overtime decides them all, so together they're capped at 3U. On its own this pick is ${r.units_full}U.">capped from ${r.units_full}U</span>` : ""}</div>
         <div class="b2meta">Proj ${r.proj != null ? num(r.proj, 1) : "–"}${ds ? ` · <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}">${ds[1]}</span>` : ""}${r.source ? ` · source ${esc(r.source)}` : ""}${r.graded_at ? ` · graded ${agoTxt(r.graded_at)}` : ""}${r.alt ? ` · alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}${r.moved_from != null ? ` · <span class="pill warn">line moved from ${r.moved_from}</span>` : ""}</div>
         ${ev(r.support, "up", "+")}${ev(r.concern, "dn", "–")}</div>
       ${r.side ? `<button type="button" class="bslip ${onSlip.has(nick.toLowerCase()) ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}">${onSlip.has(nick.toLowerCase()) ? "On slip" : "+ Slip"}</button>` : "<span></span>"}
@@ -1228,7 +1234,31 @@ function glance(d, g, v) {
     ${cp?.supports?.length ? `<div class="glrow"><span class="k up">Supports</span><span>${esc(cp.supports[0].text)} ${basisTag(cp.supports[0].basis)}</span></div>` : ""}
     ${cp?.concern ? `<div class="glrow"><span class="k dn">Concern</span><span>${esc(cp.concern.text)} ${basisTag(cp.concern.basis)}</span></div>` : ""}
     <div class="glrow"><span class="k">Data</span><span><span class="dstat ${ds.k}">${ds.t}</span>${ds.why ? ` <span class="muted small">${esc(ds.why)}</span>` : ""} <span class="muted small">· source ${esc(srcLabel(g))}</span>${cp?.board_at ? ` <span class="muted small">· line checked ${ago(cp.board_at)}</span>` : ""}</span></div>
+    ${usesBlock(d, g)}
   </section>`;
+}
+// what actually moves THIS grade (2026-10-10 audit: the card claimed Round Swing, H2H and similar-ranked teams fed every
+// grade; on Maps 1-2 the performance model replaces them). Factors move a projection only after a chronological test.
+function usesBlock(d, g) {
+  const hs = g.prop === "hs", bo3 = String(g.projection_source || "").endsWith("-bo3");
+  const li = xs => xs.map(x => `<li>${x}</li>`).join("");
+  const proj = perfGrade(g) ? [
+      `His kills per round on official maps from ${bo3 ? "BO3.gg (HLTV has no history for him – provisional)" : "HLTV"}: recent months count most (a map 4 months old counts half), measured up to the match day`,
+      "Weighted toward his numbers in tonight's setting (LAN or online)",
+      "Thin history is pulled toward the pro average until he has enough maps",
+      "The opponent: how many kills players get per round against them",
+      ...(hs ? ["His headshots per kill (recent maps count most), with the night-to-night swing in headshot share"] : []),
+      "Expected rounds for two maps, and how much his totals swing from match to match → the chance"]
+    : ["Older model (Map 1 / Maps 1–3 lines): his BO3.gg Maps 1–2 rates and recent form, the maps when known, win chance, opponent rank, head-to-head and Round Swing, with a small cushion an Over must clear (1 kill / 0.6 HS); Map 1 = half of Maps 1–2, Maps 1–3 adds map 3 by the chance of a 1–1"];
+  const stake = [`Last 10 matches at this line: a clear disagreement holds the stake at 0 (FORM FIGHT) or ${capOf(d, "tape", 0.5)}U (TAPE FIGHT)`,
+    "Roster: stand-in, transfer, unconfirmed roster", ...(hs ? ["AWPer on a headshot line: 0 units"] : []),
+    `Sample size and rust (time since his last official map)`, `Betting-market depth (thin or no market: max ${capOf(d, "market", 1.5)}U)`,
+    `Several bets on one team in one match: capped together at ${capOf(d, "same_result", 3)}U`];
+  const ctx = perfGrade(g) ? "Maps / veto, head-to-head, Round Swing, rating, opening and trade kills, FACEIT and win chance are shown for context – each was tested and either didn't improve the projection or hasn't been tested yet, so it doesn't move it." : "";
+  return `<details class="small" style="margin-top:6px"><summary class="muted">What this grade uses</summary>
+    <div style="margin-top:6px"><b>Projection</b><ul style="margin:4px 0 6px 18px;padding:0">${li(proj)}</ul>
+    <b>Stake rules</b> <span class="muted">(change the units, never the chance)</span><ul style="margin:4px 0 6px 18px;padding:0">${li(stake)}</ul>
+    ${ctx ? `<div class="muted">${ctx}</div>` : ""}</div></details>`;
 }
 
 function render(d) {
@@ -1256,11 +1286,13 @@ function render(d) {
   const zTag = (gr, u) => !u && gr && gr !== "C" && zWhy ? ` — ${esc(zWhy)}` : "";
 
   // ---- headline
-  const head = v.state === "SCOUT" ? `SCOUT · leans ${v.side} ${g.line}`    : v.grade === "LEAN" && v.side ? `Lean ${v.side === "More" ? "Over" : "Under"} ${g.line}`
-    : v.side ? `${v.side} ${g.line}` : "No grade";
+  const head = v.state === "SCOUT" ? `SCOUT · leans ${sideTxt(v.side)} ${g.line}`    : v.grade === "LEAN" && v.side ? `Lean ${sideTxt(v.side)} ${g.line}`
+    : v.side ? `${sideTxt(v.side)} ${g.line}` : "No grade";
+  // the board's same-match cap applies to this exact pick: one stake for this line everywhere on the site
+  const capPill = v.cap_n && v.units_full > v.units ? ` <span class="pill" title="${v.cap_n} bets on the board need ${esc(v.cap_team || "this team")} to ${v.side === "More" ? "do well" : "do badly"} in this match – one upset or overtime decides them all, so together they're capped at ${capOf(d, "same_result", 3)}U. On its own this pick is ${v.units_full}U.">capped from ${v.units_full}U</span>` : "";
   const gateStop = !("p_more" in g);   // stopped by a gate - the reason shows as a pill instead
   const why = v.reason && !/^Projection [\d.]+ vs [\d.]+ needed \([^)]*\)$/.test(v.reason) ? v.reason : "";
-  const sub = v.side ? `${pct(v.p)} chance · ${v.units}U · ${esc(v.confidence)} confidence${why ? `<div class="small muted" style="margin-top:4px">${esc(why)}</div>` : ""}`
+  const sub = v.side ? `${pct(v.p)} chance · ${v.units}U${capPill} · ${esc(v.confidence)} confidence${why ? `<div class="small muted" style="margin-top:4px">${esc(why)}</div>` : ""}`
     : gateStop ? "" : esc(v.reason || "");
   const hc = g.status === "NO GRADE" || v.state === "SCOUT" ? "g-scout" : gClass(v.grade);
   h += `<section class="card herocard ${hc}"><div class="hero">
@@ -1269,10 +1301,10 @@ function render(d) {
       <div class="sub">${esc(pb.player?.nick || "")} · ${pb.standin_for ? `${esc(pb.current_team || "")} → <b>stand-in for ${esc(pb.standin_for)}</b>` : esc(pb.current_team || "")}${nm?.opponent ? ` vs ${esc(nm.opponent)}${nm.start ? ` · ${shortWhen(nm.start)}` : ""}` : ""} · ${g.line} ${stat}${mapsWord(g.scope) || " (Maps 1–2)"} · ${esc(g.line_type || "")}</div>
       <div class="sub">${sub}</div>
       ${gateStop ? `<span class="pill bad">${esc(g.reason || g.status)}</span>` : ""}
-      ${g.form_fight ? `<span class="pill warn">FORM FIGHT - last 10 matches disagree, confidence halved</span>` : ""}
-      ${pb.standin_for ? `<span class="pill warn">STAND-IN for ${esc(pb.standin_for)} · max 0.5U</span>` : ""}
-      ${g.tape_fight ? `<span class="pill warn">TAPE FIGHT - recent record at this line disagrees · max 0.5U</span>` : ""}
-      ${g.market_quality && g.market_quality !== "HARD" && v.state !== "SCOUT" ? `<span class="pill">${g.market_quality === "SOFT" ? "SOFT BOOK" : "NO MARKET"} · max 1U</span>` : ""}
+      ${g.form_fight ? `<span class="pill warn">FORM FIGHT – his last 10 at this line disagree · 0 units${perfGrade(g) ? "" : " (older model: chance halved)"}</span>` : ""}
+      ${pb.standin_for ? `<span class="pill warn">STAND-IN for ${esc(pb.standin_for)} · max ${capOf(d, "standin", 1)}U</span>` : ""}
+      ${g.tape_fight ? `<span class="pill warn">TAPE FIGHT – recent record at this line disagrees · max ${capOf(d, "tape", 0.5)}U</span>` : ""}
+      ${g.market_quality && g.market_quality !== "HARD" && v.state !== "SCOUT" ? `<span class="pill">${g.market_quality === "SOFT" ? "SOFT BOOK" : "NO MARKET"} · max ${capOf(d, "market", 1.5)}U</span>` : ""}
       ${g.market?.note_line ? `<span class="pill warn">${esc(g.market.note_line)}</span>` : ""}
       ${lineWarn(g.prop, g.line) ? `<span class="pill warn">${esc(lineWarn(g.prop, g.line))}</span>` : ""}
       ${nm?.bo === 1 && g.scope !== "1" ? `<span class="pill warn">BO1 match – grade it as Map 1 (BO1)</span>` : ""}
@@ -1282,15 +1314,15 @@ function render(d) {
   h += glance(d, g, v);
   if ("p_more" in g) {
     h += `<div class="sides">
-      <div class="side ${v.side === "More" ? "pick" : ""}"><div class="k">More · ${g.grade === "C" ? "lean" : "grade " + esc(g.grade)} · ${g.units || 0}U${zTag(g.grade, g.units)}</div><div class="v">${pct(g.p_more)}</div><div class="bar"><i style="width:${g.p_more*100}%"></i></div></div>
-      <div class="side ${v.side === "Less" ? "pick" : ""}"><div class="k">Less · ${g.grade_less === "C" ? "lean" : "grade " + esc(g.grade_less)} · ${g.units_less || 0}U${zTag(g.grade_less, g.units_less)}</div><div class="v">${pct(g.p_less)}</div><div class="bar"><i style="width:${g.p_less*100}%"></i></div></div>
+      <div class="side ${v.side === "More" ? "pick" : ""}"><div class="k">Over · ${sideGrade(g.grade, g.units, v, "More")}${zTag(g.grade, g.units)}</div><div class="v">${pct(g.p_more)}</div><div class="bar"><i style="width:${g.p_more*100}%"></i></div></div>
+      <div class="side ${v.side === "Less" ? "pick" : ""}"><div class="k">Under · ${sideGrade(g.grade_less, g.units_less, v, "Less")}${zTag(g.grade_less, g.units_less)}</div><div class="v">${pct(g.p_less)}</div><div class="bar"><i style="width:${g.p_less*100}%"></i></div></div>
     </div>
     ${Array.isArray(d.ladder) && d.ladder.length > 1 ? `<div class="ladder"><span class="small muted">Nearby lines:</span>${d.ladder.map(x =>
-      `<button type="button" class="chipbtn ${x.line === g.line ? "on" : ""}" data-ladder="${x.line}" title="Grade this line">${x.line} <b class="${x.side === "More" ? "up" : "dn"}">${x.side === "More" ? "More" : "Less"} ${Math.round(x.p * 100)}%</b>${x.grade && x.grade !== "C" && !String(x.grade).startsWith("n/a") ? " · " + esc(x.grade) : ""}</button>`).join("")}</div>` : ""}
+      `<button type="button" class="chipbtn ${x.line === g.line ? "on" : ""}" data-ladder="${x.line}" title="Grade this line">${x.line} <b class="${x.side === "More" ? "up" : "dn"}">${x.side === "More" ? "Over" : "Under"} ${pct(x.p)}</b>${x.grade && x.grade !== "C" && !String(x.grade).startsWith("n/a") ? " · " + esc(x.grade) : ""}</button>`).join("")}</div>` : ""}
     <div class="stats" style="margin-top:10px">
       <div class="stat"><div class="k">Projection</div><div class="v">${num(g.lambda_final,1)}</div><div class="n">${stat}, ${g.scope === "123" ? "Maps 1–3" : g.scope === "1" ? "Map 1" : "Maps 1–2"}</div></div>
-      <div class="stat"><div class="k">Line</div><div class="v">${g.line}</div><div class="n">needs ${Math.floor(g.line) + 1} for More</div></div>
-      <div class="stat"><div class="k">Team win %</div><div class="v">${det.p_win != null && !["NO MARKET", "NONE"].includes(g.market_quality) ? pct(det.p_win,0) : "–"}</div><div class="n">${["NO MARKET", "NONE"].includes(g.market_quality) ? "no market – graded as even" : "from betting markets"}</div></div>
+      <div class="stat"><div class="k">Line</div><div class="v">${g.line}</div><div class="n">${g.line % 1 ? `Over needs ${Math.floor(g.line) + 1}+` : `exactly ${g.line} is a push`}</div></div>
+      <div class="stat"><div class="k">Team win %</div><div class="v">${det.p_win != null && !["NO MARKET", "NONE"].includes(g.market_quality) ? pct(det.p_win,0) : "–"}</div><div class="n">${["NO MARKET", "NONE"].includes(g.market_quality) ? (perfGrade(g) ? "no market – stake capped" : "no market – graded as even") : perfGrade(g) ? "betting markets · context, not in the projection" : "from betting markets"}</div></div>
       <div class="stat ${g.lambda_final - g.line > 0 ? "up" : "down"}"><div class="k">Edge</div><div class="v">${(g.lambda_final - g.line > 0 ? "+" : "") + (Math.abs(g.lambda_final - g.line) < 0.1 ? (g.lambda_final - g.line).toFixed(2) : (g.lambda_final - g.line).toFixed(1))}</div><div class="n">projection − line</div></div>
       ${sc === "123" ? `<div class="stat"><div class="k">Last ${pb.recent_form?.matches || 10}</div><div class="v">${pb.recent_form?.avg_total ?? "–"} <span class="small muted">avg</span></div><div class="n">Maps 1–2 totals – no Maps 1–3 record</div></div>`
         : `<div class="stat"><div class="k">Last ${rf.matches || 10}${sc === "1" ? " · Map 1" : ""}</div><div class="v">${rf.avg_total ?? "–"} <span class="small muted">avg</span></div><div class="n">${rf.overs ?? "–"}/${rf.decided ?? rf.matches ?? "–"} over${rf.pushes ? ` · ${rf.pushes} push` : ""} · median ${rf.median_total ?? "–"}</div></div>`}
@@ -1344,7 +1376,7 @@ function render(d) {
   const cp = d.comparison;
   if (cp && cp.error && v.side) h += `<section class="card"><h2>Lines</h2><div class="small muted">Line comparison unavailable right now – the grade above is unaffected.</div></section>`;
   if (cp && !cp.error && cp.ours && v.side) {
-    const side = v.side === "More" ? "over" : "under", Side = side === "over" ? "Over" : "Under", pc1 = x => x == null ? "–" : (x * 100).toFixed(0) + "%";
+    const side = v.side === "More" ? "over" : "under", Side = side === "over" ? "Over" : "Under", pc1 = x => x == null ? "–" : (x * 100).toFixed(1) + "%";
     const pay = o => (o[`mult_${side}`] ?? 1) === 1 ? "" : ` <span class="pill">pays ${o[`mult_${side}`]}x</span>`;
     h += `<section class="card"><h2>Projection comparison</h2>`;
     // forecasts vs betting thresholds, side by side - always visible (owner 2026-10-09)
@@ -1365,7 +1397,7 @@ function render(d) {
       if (cp.payouts_differ?.[side]) h += `<div class="small muted">Payouts differ between these lines – compare what each pays in your app.</div>`;
     } else h += `<div class="small muted">No Underdog line for this exact market right now.</div>`;
     if (cp.one_worse?.chance != null) h += `<div class="kv"><span>If the line were ${cp.one_worse.line}</span><span>${Side} ${pc1(cp.one_worse.chance)}</span></div>`;
-    if (Math.abs(cp.grade_vs_table || 0) > 0.015) h += `<div class="small muted">The grade shows ${pct(cp.ours.chance)}: it adds safety margins / a cap on top of these chances.</div>`;
+    if (Math.abs(cp.grade_vs_table || 0) > 0.015) h += `<div class="small muted">The grade shows ${pct(cp.ours.chance)}: ${perfGrade(g) ? `kills chances are capped at ${Math.round(capOf(d, "kills_chance", 0.78) * 100)}% on the grade` : "the older model adds safety margins / a cap on top of these chances"}.</div>`;
     h += `<details class="small" style="margin-top:8px"><summary class="muted">More detail</summary>
       ${(cp.supports || []).slice(1).map(x => `<div class="muted">+ ${esc(x.text)} ${basisTag(x.basis)}</div>`).join("")}
       ${(cp.evidence_against || []).filter(x => x !== cp.concern && x.text !== cp.concern?.text).map(x => `<div class="muted">• ${esc(x.text)} ${basisTag(x.basis)}</div>`).join("")}
@@ -1379,14 +1411,14 @@ function render(d) {
     const tm = esc(pb.playing_for || pb.current_team || "his team"), unit = g.prop === "hs" ? "HS" : "kills";
     const lab = x => x.label.startsWith("any overtime") ? "Any map goes to overtime <span class=\"muted\">(overlaps the rows above)</span>" : x.label === "win" ? `${tm} win the map` : x.label === "loss" ? `${tm} lose the map`
       : x.label.startsWith("win") ? `${tm} win 2–0` : x.label.startsWith("lose") ? `${tm} lose 0–2` : `Maps 1–2 split 1–1${x.label.includes("map 3") ? " → map 3 played" : ""}`;
-    const pc = x => `<b class="${x >= .5 ? "up" : "dn"}">${Math.round(x * 100)}%</b>`;
+    const pc = x => `<b class="${x >= .5 ? "up" : "dn"}">${(x * 100).toFixed(1)}%</b>`;
     h += `<section class="card"><h2>Match simulation · 20,000 runs</h2>
       <div class="small muted" style="margin:-4px 0 10px">Every run is drawn from this grade's own distribution, so the overall numbers agree with the grade (within 1%). The match-script rows are an illustration, not a tested forecast: they show one way this total could split by result.</div>
       <div class="kv"><span>Over ${g.line} ${unit}</span><span>${pc(sm.p_more)} of decided runs${sm.p_push ? ` · push ${Math.round(sm.p_push * 100)}%` : ""} · average ${sm.mean} · 8 in 10 land ${sm.p10}–${sm.p90}</span></div>
       <div class="scroll"><table class="simtab"><thead><tr><th>If…</th><th class="num">Chance</th><th class="num">Avg</th><th class="num">Over ${g.line}</th></tr></thead><tbody>
       ${sm.scenarios.map(x => `<tr><td>${lab(x)}</td><td class="num">${Math.round(x.chance * 100)}%</td><td class="num">${x.avg}</td><td class="num">${pc(x.p_over)}</td></tr>`).join("")}
       </tbody></table></div>
-      ${Math.abs(sm.p_more - (g.p_more ?? sm.p_more)) > 0.015 ? `<div class="small muted" style="margin-top:6px">The grade shows ${pct(g.p_more)} for Over: ${(g.flags || []).some(f => f.startsWith("CAP") || f.startsWith("Chance capped")) ? "high chances are capped on the grade (see notes)" : "the grade adds safety margins on top of the distribution"}. The simulation shows the distribution itself.</div>` : ""}
+      ${Math.abs(sm.p_more - (g.p_more ?? sm.p_more)) > 0.015 ? `<div class="small muted" style="margin-top:6px">The grade shows ${pct(g.p_more)} for Over: ${(g.flags || []).some(f => f.startsWith("CAP") || f.startsWith("Chance capped")) ? "high chances are capped on the grade (see notes)" : perfGrade(g) ? "both come from the same distribution – the gap is run-to-run noise" : "the older model adds safety margins on top of the distribution"}. The simulation shows the distribution itself.</div>` : ""}
     </section>`;
   }
 
@@ -1410,7 +1442,7 @@ function render(d) {
   if (d.regional_note) h += `<div class="small muted" style="margin-bottom:8px">${esc(d.regional_note)}</div>`;
   if (hx.length) {
     h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th>Maps 1–2</th><th class="num">${g.prop === "hs" ? "HS" : "Kills"}</th><th>Team result</th><th>Prop</th></tr></thead><tbody>`;
-    for (const s of hx) h += `<tr><td class="num" style="text-align:left">${shortDate(s.date)}</td><td>${esc(s.opponent)}${s.regional ? ` <span class="pill" style="margin:0;padding:1px 7px" title="Same-region team - counts lightly in the grade (less than meetings with this team)">regional</span>` : ""}${s.same_roster === false && !s.regional ? ` <span class="pill" style="margin:0;padding:1px 7px" title="Opponent had a different roster then (${s.roster_overlap} of today's players) - not counted in the grade">old roster</span>` : ""}</td>
+    for (const s of hx) h += `<tr><td class="num" style="text-align:left">${shortDate(s.date)}</td><td>${esc(s.opponent)}${s.regional ? ` <span class="pill" style="margin:0;padding:1px 7px" title="${perfGrade(g) ? "Same-region team - context, not in the projection" : "Same-region team - counts lightly in the grade (less than meetings with this team)"}">regional</span>` : ""}${s.same_roster === false && !s.regional ? ` <span class="pill" style="margin:0;padding:1px 7px" title="Opponent had a different roster then (${s.roster_overlap} of today's players) - not counted">old roster</span>` : ""}</td>
       <td class="small">${s.maps.map(mapName).join('<span class="dot"> · </span>')}</td><td class="num"><span class="parts">${s.values.join(" + ")} = </span><b>${s.total}</b></td>
       <td>${esc(s.result)}</td>${sc !== "12" ? `<td class="muted">–</td>` : `<td class="${s.total > g.line ? "hit" : s.total === g.line ? "muted" : "miss"}">${s.total > g.line ? "Over" : s.total === g.line ? "Push" : "Under"}</td>`}</tr>`;
     h += `</tbody></table></div>`;
@@ -1455,7 +1487,7 @@ function render(d) {
       h += `<section class="card sc"><h2>HLTV${hl?.found ? ` <span class="muted small">· last ${esc(hl.window)} · ${hl.maps} maps</span>` : ""}</h2>`;
       if (hl?.found) {
         h += `<div class="kv"><span>Rating 3.0</span><span>${num(hl.rating)}${hl.ct_rating != null ? ` · CT ${num(hl.ct_rating)} · T ${num(hl.t_rating)}` : ""}</span></div>
-          <div class="kv"><span>Round Swing</span><span>${hl.round_swing != null ? (hl.round_swing > 0 ? "+" : "") + num(hl.round_swing) + "%" : "–"}${hl.use_swing && !hl.team_mismatch ? " · used in grade" : " · context only"}</span></div>
+          <div class="kv"><span>Round Swing</span><span>${hl.round_swing != null ? (hl.round_swing > 0 ? "+" : "") + num(hl.round_swing) + "%" : "–"}${hl.use_swing && !hl.team_mismatch && !perfGrade(g) ? " · used in grade" : " · context only"}</span></div>
           <div class="kv"><span>ADR · KAST · K/D</span><span>${num(hl.adr, 1)} · ${num(hl.kast, 1)}% · ${num(hl.kd)}</span></div>`;
       }
       const eco = hc.eco;
@@ -1493,7 +1525,7 @@ function render(d) {
       const bk = hc.backup_source;
       if (bk || hl?.backup_maps) h += `<div class="small" style="margin-top:6px;color:var(--warn)">* ${bk ? bk.backup_maps : hl.backup_maps} map(s) came from the backup data source (less complete than HLTV; replaced automatically when HLTV data arrives)</div>`;
       if (hl?.team_mismatch) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(hl.team_mismatch)}</div>`;
-      h += `<div class="small muted" style="margin-top:6px">Round Swing and his record vs similar-ranked teams feed the grade; the rest is context.</div></section>`;
+      h += `<div class="small muted" style="margin-top:6px">${perfGrade(g) ? "Context only – this grade's projection comes from his kills-per-round history, the opponent and LAN / online (see “What this grade uses”)." : "Round Swing and his record vs similar-ranked teams feed the older model's grade; the rest is context."}</div></section>`;
     }
   } catch (e) { console.warn("HLTV card skipped:", e); }
 
@@ -1507,7 +1539,7 @@ function render(d) {
       <div class="kv"><span>Round Swing</span><span>${ca.swing != null ? (ca.swing > 0 ? "+" : "") + num(ca.swing) + "%" : "–"}</span></div>
       <div class="kv"><span>ADR · KAST</span><span>${num(ca.adr, 1)} · ${num(ca.kast, 1)}%</span></div>
       <div class="kv"><span>CT · T kills/map</span><span>${num(ca.ct?.k, 1)} · ${num(ca.t?.k, 1)}</span></div>
-      <div class="kv"><span>Data up to</span><span>${esc(ca.newest_match || "–")}</span></div>`;
+      <div class="kv"><span>Data up to</span><span>${esc(ca.newest_match || "–")}${ca.newest_match && (Date.now() - Date.parse(ca.newest_match)) / 864e5 > 14 ? ` <span class="pill warn">${Math.round((Date.now() - Date.parse(ca.newest_match)) / 864e5)} days old</span>` : ""}</span></div>`;
     if (ca.team_mismatch) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(ca.team_mismatch)}</div>`;
     h += `</section>`;
   }
@@ -1521,7 +1553,6 @@ function render(d) {
 
   // ---- flags
   const flags = [...(g.flags || [])];
-  if (v.side && v.p < 0.68) flags.push(`${v.side} is below A- (68%) - near the vig line, no real edge`);
   if ((v.units || 0) > 0) flags.push("Units show the model's relative confidence (A+ 3U down to B- 0.5U) - not a payout-based edge or a proven profit; check the payout before betting");
   if (flags.length) h += `<section class="card full"><h2>Notes</h2><ul class="flags">${flags.map(f => `<li>${esc(f)}</li>`).join("")}</ul></section>`;
   h += `<div class="small muted foot">Data: BO3.gg · Polymarket · FACEIT${d.hltv?.found || d.hltv_context?.found ? " · HLTV" : ""}${d.csapi?.found ? " · CS API" : ""}${d.next_match?.source === "pandascore" ? " · PandaScore" : ""}${d.next_match?.source === "hltv" ? " · schedule from HLTV" : ""}${d.odds?.book ? " · " + esc(d.odds.book) + " via OddsPapi" : ""}${d.liquipedia ? ` · team from <a href="${esc(d.liquipedia.url)}" target="_blank" rel="noopener">Liquipedia</a> (CC-BY-SA 3.0)` : ""} · Not financial advice</div>`;
@@ -1576,7 +1607,7 @@ function drawMatchCompare() {
     const capped = c.units_full > c.units ? ` <span class="muted small">(capped from ${c.units_full}U)</span>` : "";
     return proj + `<td class="num">${c.line}</td><td><button type="button" class="mcpick" data-mc="${esc(e.nick)}|${c.line}|${pr}" title="${esc(mcWhy(c))}
 Tap to open ${esc(e.nick)}'s ${pr === "hs" ? "headshots" : "kills"} card">
-      <b>${c.grade === "LEAN" ? "Lean " : ""}${c.side === "More" ? "Over" : "Under"}</b> ${((c.p || 0) * 100).toFixed(1)}% · ${esc(c.grade || "–")} · ${+(+c.units || 0).toFixed(2)}U${capped}</button></td>`;
+      <b>${c.grade === "LEAN" ? "Lean " : ""}${c.side === "More" ? "Over" : "Under"}</b> ${((c.p || 0) * 100).toFixed(1)}%${c.grade === "LEAN" ? "" : " · " + esc(c.grade || "–")} · ${+(+c.units || 0).toFixed(2)}U${capped}</button></td>`;
   };
   const dcell = e => {
     const cs = props.map(pr => e[pr]).filter(Boolean), lined = cs.filter(c => c.line != null);

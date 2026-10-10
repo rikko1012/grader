@@ -322,11 +322,17 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12"):
                         "units": r.get("units"), "units_full": r.get("units_full"), "graded_at": r.get("graded_at"), "dstat": r.get("dstat"),
                         "source": r.get("source"), "state": r.get("state"), "ud_team": r.get("team"), "ud_opponent": r.get("opponent"),
                         "reason": r.get("reason")}
+    # same day and LAN / online setting as the graded rows (2026-10-10 audit: these used today's date and no LAN /
+    # online blend, so a no-line projection was not comparable with the graded ones next to it)
+    import cs2_scout
+    day = cs2_scout.match_day(start)
+    tn = next((r.get("tonight") for r in same if r.get("tonight")), None)
+    lan = None if tn is None else tn == "lan"
     for (tname, _), e in players.items():          # projections for props without an offered line
         for prop in ("kills", "hs"):
             if e[prop] is None:
                 try:
-                    pr = perf_live.projection(e["nick"], tname, opponent if tname == team else team, None, scope, prop)
+                    pr = perf_live.projection(e["nick"], tname, opponent if tname == team else team, lan, scope, prop, day)
                 except Exception:
                     pr = {"error": "failed"}
                 e[prop] = ({"proj": round(pr["lambda"], 2), "line": None, "no_line": True, "source": "HLTV", "dq": pr.get("data_quality")}
@@ -363,7 +369,7 @@ def board_payload():
                                                      "nick", "state", "edge", "l10_over", "l10_n", "l10_push", "l10_avg",
                                                      "hs_pct", "p_win", "market", "team_name", "opp_name", "match_slug",
                                                      "graded_line", "graded_model", "player_id", "event", "bo", "maps_known",
-                                                     "dstat", "source", "support", "concern")}))
+                                                     "dstat", "source", "support", "concern", "tonight")}))
         rows[-1]["scope"] = r.get("scope") or "12"
         x = rows[-1]
         nick = x.get("nick") or x.get("player") or ""
@@ -425,6 +431,38 @@ def _cap_same_result(rows):
             r["units_full"] = r["units"]
             r["units"] = max(0.5, round(r["units"] * f / 0.25) * 0.25)        # quarter units, never below 0.5U
             r["cap_n"] = len(lst)
+
+
+def stake_caps():
+    """The stake limits the card's pills quote, read from the grader itself (2026-10-10 audit: the card said max 0.5U
+    for a stand-in and max 1U for a thin market while the grader allowed 1U and 1.5U)."""
+    from grader import CONFIG
+    return {"standin": 1.0, "market": CONFIG["soft_market_cap"], "tape": CONFIG["tape_fight_cap"], "thin": 1.5,
+            "same_result": SAME_RESULT_CAP, "kills_chance": CONFIG["p_cap_kills"]}
+
+
+_BS_CACHE = [0.0, []]
+
+
+def board_stake(res, prop, scope, line):
+    """The same line on the board with its stake cut by the same-match cap: the card shows that stake too (one stake
+    per line on the whole site). Only when the board row is this exact pick (side, line, maps, match) and was cut from
+    exactly this card's stake - otherwise the card's own stake stands. Returns the verdict (a new dict when capped)."""
+    v = res.get("verdict") or {}
+    if not v.get("side") or not v.get("units"):
+        return v
+    nick = ((res.get("player_block") or {}).get("player") or {}).get("nick") or ""
+    st = comparison._ts((res.get("next_match") or {}).get("start"))
+    if time.time() - _BS_CACHE[0] > 5:            # board rows at most 5 s old (no board rebuild per member grade)
+        _BS_CACHE[:] = [time.time(), board_payload()["rows"]]
+    for r in _BS_CACHE[1]:
+        if (str(r.get("nick") or r.get("player") or "").lower() == nick.lower() and r.get("prop") == prop
+                and (r.get("scope") or "12") == scope and float(r.get("line") or -1) == float(line) and r.get("side") == v["side"]
+                and r.get("cap_n") and r.get("units_full") == v["units"] and r["units"] < r["units_full"] and st and comparison._ts(r.get("start"))
+                and abs((comparison._ts(r["start"]) - st).total_seconds()) <= comparison.JOIN_START_MIN * 60):
+            return dict(v, units=r["units"], units_full=r["units_full"], cap_n=r["cap_n"],
+                        cap_team=r.get("team_name") or r.get("team"))
+    return v
 
 
 REQ_TIMES = collections.deque(maxlen=300)
@@ -500,7 +538,8 @@ def board_forever():
                                       "market": g.get("market_quality"),
                                       "team_name": pb.get("playing_for") or pb.get("current_team"),
                                       "opp_name": (res.get("next_match") or {}).get("opponent"),
-                                      "match_slug": (res.get("next_match") or {}).get("slug")}   # exact match id (settling slips)
+                                      "match_slug": (res.get("next_match") or {}).get("slug"),   # exact match id (settling slips)
+                                      "tonight": (pb.get("_env") or {}).get("tonight")}   # LAN / online (match table projections)
                     res["verdict"] = v
                     try:                                  # immutable comparison snapshot (changes only) + the row's evidence
                         ub = underdog.board()
@@ -653,28 +692,31 @@ def verdict(g):
         units = 0.0
     stat = "headshots" if g.get("prop") == "hs" else "kills"
     need = g["line"]                        # the cut the grade uses: projection above the line leans More
-    gap = g["lambda_final"] - need          # > 0 More, < 0 Less (a 50/50 after the Over cushion stays a coin flip)
+    gap = g["lambda_final"] - need          # > 0 More, < 0 Less
+    # member wording (2026-10-10 audit): Over / Under everywhere (never More / Less), chances to 0.1% like every other
+    # chance on the site, projection and gap to 0.1 like the card's Edge
+    ou = "Over" if side == "More" else "Under"
     if g.get("scout"):
         return {"side": side, "state": "SCOUT", "grade": "SCOUT", "p": p, "units": 0.0,
                 "confidence": "scout",
-                "reason": f"No upcoming match found for his team - scouting view only. Leans {side} "
-                          f"({p:.0%}): projection {g['lambda_final']:.1f} vs line {g['line']}"}
+                "reason": f"No upcoming match found for his team - scouting view only. Leans {ou} "
+                          f"({p:.1%}): projection {g['lambda_final']:.1f} vs line {g['line']}"}
     if no_less_side:
-        why = (f"{g['line_type'].title()} line - PrizePicks only offers More here, but the model expects "
-               f"UNDER ({p:.0%}); More is only {g['p_more']:.0%}. Skip it.")
+        why = (f"{g['line_type'].title()} line - only Over is offered here, but the model expects "
+               f"Under ({p:.1%}); Over is only {g['p_more']:.1%}. Skip it.")
     elif g.get("form_fight"):
-        why = f"FORM FIGHT - his last 10 matches disagree with the projection - no units"
+        why = f"FORM FIGHT - his last 10 matches at this line disagree with the projection - 0 units"
     elif g.get("tape_fight"):
-        why = (f"TAPE FIGHT - model {side} {p:.0%}, but his recent record at this line disagrees - max 0.5U")
+        why = (f"TAPE FIGHT - model {ou} {p:.1%}, but his recent record at this line disagrees - max 0.5U")
     elif units > 0:
-        why = f"Projection {g['lambda_final']:.1f} vs line {need:g} ({gap:+.2f} {stat})"
+        why = f"Projection {g['lambda_final']:.1f} vs line {need:g} ({gap:+.1f} {stat})"
     else:
-        why = (f"Projection {g['lambda_final']:.1f} vs line {need:g} ({gap:+.2f} {stat}) is small next "
-               f"to how much his totals swing from match to match - leans {side} {p:.0%}, 0 units")
+        why = (f"Projection {g['lambda_final']:.1f} vs line {need:g} ({gap:+.1f} {stat}) is small next "
+               f"to how much his totals swing from match to match - leans {ou} {p:.1%}, 0 units")
     if g.get("zero_reason") and not no_less_side:
         # a gate (AWPer on HS, stand-in, transfer, tiny sample): still a side, never "no play"
         grade, units = "LEAN", 0.0
-        why = (f"Leans {side} {p:.0%} (projection {g['lambda_final']:.1f} vs line {need:g}) - 0 units: "
+        why = (f"Leans {ou} {p:.1%} (projection {g['lambda_final']:.1f} vs line {need:g}) - 0 units: "
                f"{g['zero_reason']}")
     from grader import units_for_p
     if units and units < units_for_p(p) and "max" not in why:      # a cap cut the stake: say which one
@@ -1456,6 +1498,7 @@ class Handler(BaseHTTPRequestHandler):
             pb_ = res.get("player_block") or {}
             mark_warm(pkey, name, (pb_.get("player") or {}).get("slug"), (pb_.get("player") or {}).get("nick"))
             res["verdict"] = verdict(res.get("grade"))
+            res["caps"] = stake_caps()
             try:
                 res["underdog"] = underdog.line_for((pb_.get("player") or {}).get("nick") or name, prop)
             except Exception:
@@ -1474,6 +1517,10 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 traceback.print_exc()
             tm["log"] = round(time.time() - t0, 2)
+            try:                                         # after logging: the log keeps the grader's own stake
+                res["verdict"] = board_stake(res, prop, scope, line)
+            except Exception:
+                traceback.print_exc()
             t0 = time.time()
             body = json.dumps(public(res), default=str).encode()
             tm["json"] = round(time.time() - t0, 2)

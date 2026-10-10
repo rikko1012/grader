@@ -28,7 +28,7 @@ def test_match_compare(monkeypatch):
         def close(self): pass
     monkeypatch.setattr(server, "BO3", B)
     import perf_live
-    monkeypatch.setattr(perf_live, "projection", lambda nick, team, opp, lan, scope, prop: {"lambda": 20.0 if prop == "kills" else 10.0, "data_quality": "ok"}
+    monkeypatch.setattr(perf_live, "projection", lambda nick, team, opp, lan, scope, prop, day=None: {"lambda": 20.0 if prop == "kills" else 10.0, "data_quality": "ok"}
                         if nick != "MAJ3R" else {"error": "player not found in HLTV"})
     out = server.match_compare("aurora", "vitality", "Aurora", "Vitality", START, "12")
     teams = {t["team"]: t for t in out["teams"]}

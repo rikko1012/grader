@@ -1063,6 +1063,23 @@ def _form_trend(o):
     return round(k3 / k12 - 1, 3) if k3 and k12 else None
 
 
+def _a_an(w):
+    return ("an " if str(w)[:1].lower() in "aeiou" else "a ") + str(w)
+
+
+def match_day(start):
+    """The match's UTC date as a day ordinal - the 'day' the performance model was tested with (history strictly
+    before the match day, weights relative to it). Today when the start is unknown or already past.
+    2026-10-10 fix: live used today's date, so maps played earlier today were left out until midnight UTC and every
+    projection shifted at 00:00 UTC with no new information."""
+    today = datetime.now(timezone.utc).date().toordinal()
+    try:
+        d = datetime.fromisoformat(str(start).replace("Z", "+00:00")).astimezone(timezone.utc).date().toordinal()
+    except (TypeError, ValueError):
+        return today
+    return max(d, today)
+
+
 def _perf_input(pb, args):
     """perf.project() on live HLTV data for this player / opponent / tonight's environment (None when unavailable)."""
     sc = getattr(args, "scope", "12") or "12"
@@ -1071,9 +1088,10 @@ def _perf_input(pb, args):
     try:
         import perf_live
         tonight = (pb.get("_env") or {}).get("tonight")
+        day = match_day(getattr(args, "match_start", None))
         out = perf_live.projection((pb.get("player") or {}).get("nick"), pb.get("playing_for") or pb.get("current_team"),
                                    getattr(args, "opponent", None), None if tonight is None else tonight == "lan",
-                                   sc, "hs" if args.prop == "hs" else "kills")
+                                   sc, "hs" if args.prop == "hs" else "kills", day)
         if out.get("error") and "not found in HLTV" in out["error"]:
             # perf-2-bo3 (live, provisional): the same model on his BO3.gg maps when HLTV has no history
             me = pb.get("_match_env") or {}
@@ -1088,10 +1106,10 @@ def _perf_input(pb, args):
                 tid, om = perf_live.opp_maps(opp, since) if opp else (None, [])
                 lan_ = None if tonight is None else tonight == "lan"
                 pr_ = "hs" if args.prop == "hs" else "kills"
-                bo3 = perf.project(rows, om, lan_, date.today().toordinal(), sc, pr_, version=perf.VERSION + "-bo3")
+                bo3 = perf.project(rows, om, lan_, day, sc, pr_, version=perf.VERSION + "-bo3")
                 bo3.update(source="BO3.gg maps (HLTV has no history)", player_maps=len(rows),
                            hltv_opp_team=tid, hltv_error=out["error"],
-                           g7=perf_live.g7_fields(perf.project(rows, om, lan_, date.today().toordinal(), sc, pr_,
+                           g7=perf_live.g7_fields(perf.project(rows, om, lan_, day, sc, pr_,
                                                               perf.PARAMS_PERF1, perf.SPREAD_PERF1, "perf-1-bo3")))
                 return bo3
         return out                         # {"error": ...} when unavailable - the grader says so instead of silently falling back
@@ -1684,6 +1702,7 @@ def run(args, res, b, ttl):
                 except Exception:
                     res["opponent_defense"] = None
             res["next_match"] = nxt
+            args.match_start = nxt.get("start")          # the performance model's day = the match day
             if nxt.get("event_slug") and not nxt.get("event_type"):
                 nxt["event_type"] = _event_type(b, nxt["event_slug"])     # "lan" / "online" (BO3.gg)
             args.opponent = nxt["opponent"]
@@ -1735,8 +1754,8 @@ def run(args, res, b, ttl):
             if not pb["roster_confirmed"]:
                 res["regional_note"] = "Regional extension disabled - roster not confirmed"
             elif not tag or tag["id"] is None:
-                res["regional_note"] = (f"Regional extension doesn't apply - opponent is a "
-                                        f"{(tag or {}).get('label', 'roster with no country data')}")
+                res["regional_note"] = (f"Regional extension doesn't apply - opponent is "
+                                        f"{_a_an((tag or {}).get('label', 'roster with no country data'))}")
             else:
                 reg = regional_rows(b, pb, opp_id, tag)
                 rows += reg
