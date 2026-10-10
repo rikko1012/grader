@@ -299,6 +299,20 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 .mctab td,.mctab th{padding:6px 8px;white-space:nowrap}.mctab tr.mteam td{background:var(--panel-2);padding-top:10px}
 .mctab tr.mfocus td{background:rgba(255,122,26,.12)}.mctab tr.mfocus td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 .mcpick{background:none;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:3px 8px;cursor:pointer;font:inherit;font-size:13px}
+/* platform switch (2026-10-10): four equal buttons that always fit the screen */
+#bbook{display:flex;flex:1 1 100%;max-width:560px}#bbook button{flex:1 1 0;white-space:nowrap;padding:9px 6px;min-width:0}
+@media (max-width:640px){#bbook button{font-size:13px;padding:8px 4px}}
+/* Compare: one row per player market - columns line up across every match on desktop, a stacked card on phones */
+.cmphead,.cmprow{display:grid;grid-template-columns:minmax(130px,1.1fr) minmax(0,1fr) minmax(0,1fr) minmax(120px,.8fr);gap:8px;align-items:start}
+.cmphead{font-size:12px;color:var(--muted);padding:0 2px 6px;border-bottom:1px solid var(--line)}
+.cmprow{padding:8px 2px;border-bottom:1px solid var(--line)}.cmprow:last-child{border-bottom:0}
+.cmprow .who b{font-size:15px}.cmprow .who .small{display:block}
+.cmpcell{display:block;width:100%;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:7px 9px;color:var(--text);font:inherit;font-size:13px;cursor:pointer;margin-bottom:4px}
+.cmpcell:hover{border-color:var(--accent)}.cmpcell .ln{font-size:16px;font-weight:700}
+.cmpnone{border:1px dashed var(--line);border-radius:10px;padding:7px 9px;color:var(--muted);font-size:13px}
+.cmpbook{display:none;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}
+.cmpeasy{font-size:13px;line-height:1.5}
+@media (max-width:700px){.cmphead{display:none}.cmprow{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.cmprow .who,.cmprow .cmpeasy{grid-column:1/-1}.cmpbook{display:block}}
 .mcpick:hover{border-color:var(--accent)}
 .askwrap{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:60;padding:16px}
 .ask{background:var(--card,#161b22);border:1px solid var(--line,#30363d);border-radius:12px;padding:16px;max-width:440px;width:100%}
@@ -548,6 +562,12 @@ document.addEventListener("keydown", e => {
   if (e.key === "h" || e.key === "H") setProp("hs");
 });
 const propWord = p => p === "hs" ? "HS" : "kills";
+// platform helpers - defined before anything that runs at page load (the slip is drawn on load; 2026-10-10 fix: it
+// used these before they existed and stopped the page script for members with a saved slip)
+const bookName = b => b === "prizepicks" ? "PrizePicks" : b === "underdog" ? "Underdog" : b === "all" ? "Underdog and PrizePicks" : "";
+const mktType = r => r.line_type || r.odds_type || "standard";
+const mktTag = r => mktType(r) === "standard" ? "" : ` <span class="pill" style="margin:0;padding:1px 7px;color:${mktType(r) === "goblin" ? "#22d27a" : "#ff5566"};border-color:currentColor" title="PrizePicks ${esc(mktType(r))} market – its own line and payout; never compared with a standard line">${esc(mktType(r)[0].toUpperCase() + mktType(r).slice(1))}</span>`;
+
 const ltTag = lt => lt === "goblin" ? ` <span class="pill" style="margin:0;padding:1px 7px;color:#22d27a;border-color:#22d27a">goblin</span>`
   : lt === "demon" ? ` <span class="pill" style="margin:0;padding:1px 7px;color:#ff5566;border-color:#ff5566">demon</span>` : "";
 // a typo guard - never shown when Underdog offers that exact market (donk's real 25.5 HS line, 2026-10-10 walkthrough)
@@ -731,6 +751,8 @@ showExamples(); const _sr = showRecent; showRecent = () => { _sr(); showExamples
 // for THIS entry (what Underdog shows), else their saved standard payout for this size (labelled as such), else none
 const manualKey = s => s.map(x => [String(x.p).toLowerCase(), x.t, x.sc || "12", x.l, x.s].join(":")).sort().join("|");
 const manualPay = () => store.get("cs2s_manualpay", {});
+const udExact = () => store.get("cs2s_udexact", {});          // exact payout for one slip, by its picks (member-entered)
+const udPay = () => store.get("cs2s_udpay", {});              // standard payout per slip size (member-entered)
 function hitDist(ps) {           // P(exactly k legs hit), legs treated as independent
   let d = [1];
   for (const p of ps) { const n = new Array(d.length + 1).fill(0); d.forEach((v, k) => { n[k] += v * (1 - p); n[k + 1] += v * p; }); d = n; }
@@ -941,13 +963,10 @@ let boardRows = [], bprop = "kills", bside = "both", bscope = "12", boardAt = 0,
 // one cache per platform (2026-10-10): Underdog | PrizePicks | Compare. Lines are graded with the same pipeline; only
 // the line (and PrizePicks' market type) differs between books
 const BK = {underdog: {rows: [], at: 0, ver: "", err: null, feed: null, loaded: false}, prizepicks: {rows: [], at: 0, ver: "", err: null, feed: null, loaded: false}};
-const bookName = b => b === "prizepicks" ? "PrizePicks" : b === "underdog" ? "Underdog" : b === "all" ? "Underdog and PrizePicks" : "";
 // rows shown for a view: one platform, or both (All Books - every row keeps its own platform label and line)
 const viewRows = b => b === "all" ? [...BK.underdog.rows, ...BK.prizepicks.rows] : BK[b === "compare" ? "underdog" : b].rows;
 // one match, whichever platform listed it: our match id from grading, else teams + start
 const matchKey = r => r.match_slug || [(r.team_name || r.team || "").toLowerCase(), (r.opp_name || r.opponent || "").toLowerCase(), String(r.start || "").slice(0, 16)].join("|");
-const mktType = r => r.line_type || r.odds_type || "standard";
-const mktTag = r => mktType(r) === "standard" ? "" : ` <span class="pill" style="margin:0;padding:1px 7px;color:${mktType(r) === "goblin" ? "#22d27a" : "#ff5566"};border-color:currentColor" title="PrizePicks ${esc(mktType(r))} market – its own line and payout; never compared with a standard line">${esc(mktType(r)[0].toUpperCase() + mktType(r).slice(1))}</span>`;
 // filters survive reloads and the board <-> card round trip
 function saveBFilters() { store.set("cs2s_bf", {bbook, bprop, bside, bscope, bview, sort: $("#bsort").value, bets: $("#bbets").checked, q: $("#bsearch").value}); }
 function restoreBFilters() {
@@ -1005,6 +1024,8 @@ const issueLabel = why => /roster/i.test(why || "") ? "Roster not confirmed" : /
   : /gap|stale|break/i.test(why || "") ? "Long break" : "Line not confirmed";
 function drawBoard() {
   saveBFilters();
+  for (const id of ["#bview", "#bsort"]) $(id).hidden = bbook === "compare";       // grouping / sort don't apply to Compare
+  $("#bbets").closest("label").hidden = bbook === "compare";
   if (bbook === "compare") return drawCompare();
   const sortBy = $("#bsort").value;
   const rank = r => !r.side ? 9 : r.state === "SCOUT" ? 7 : (G_RANK[r.grade] ?? 6);
@@ -1092,30 +1113,32 @@ function drawCompare() {
   const list = [...pairs.values()].filter(x => bside === "both" || [...x.u, ...x.p].some(r => r.side === bside));
   $("#bcount").textContent = `${list.length} player markets · ${list.filter(x => x.u.length && x.p.length).length} on both platforms`;
   const pOver = r => r.side === "More" ? r.p : 1 - r.p;
-  const cell = (bk, r) => !r ? `<td class="muted small">not offered</td>` : `<td><button type="button" class="mcpick" data-cmp="${bk}|${esc(r.nick || r.player)}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}" title="Open the card at this ${bookName(bk)} line">
-      <b>${r.line}</b>${mktTag(r)}${r.stale ? ` <span class="pill warn">not confirmed</span>` : ""}<div class="small">Over ${(pOver(r) * 100).toFixed(1)}% · Under ${((1 - pOver(r)) * 100).toFixed(1)}%</div>
-      <div class="small muted">${esc(sideWord({grade: r.grade, side: r.side}))}${r.grade === "LEAN" ? "" : " · " + esc(r.grade)} · ${+(+r.units || 0).toFixed(2)}U</div></button></td>`;
+  const one = (bk, r) => `<button type="button" class="cmpcell" data-cmp="${bk}|${esc(r.nick || r.player)}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}" title="Open the card at this ${bookName(bk)} line">
+      <span class="ln">${r.line}</span>${mktTag(r)}${r.stale ? ` <span class="pill warn">not confirmed</span>` : ""}
+      <div style="display:flex;flex-wrap:wrap;gap:0 10px"><span style="white-space:nowrap">Over ${(pOver(r) * 100).toFixed(1)}%</span><span style="white-space:nowrap">Under ${((1 - pOver(r)) * 100).toFixed(1)}%</span></div>
+      <div class="muted">${esc(sideWord({grade: r.grade, side: r.side}))}${r.grade === "LEAN" ? "" : " · " + esc(r.grade)} · ${+(+r.units || 0).toFixed(2)}U</div></button>`;
+  const col = (bk, rows) => `<div><div class="cmpbook">${bookName(bk)}</div>${rows.length ? rows.map(r => one(bk, r)).join("") : `<div class="cmpnone">${bookName(bk)}: not offered</div>`}</div>`;
   const easier = x => {
     const u = x.u.find(r => mktType(r) === "standard"), p = x.p.find(r => mktType(r) === "standard");
-    if (!u || !p) return `<td class="muted small">${x.u.length && x.p.length ? "different market types – not compared" : "one platform only"}</td>`;
-    if (u.line === p.line) return `<td class="small">Same line on both</td>`;
+    if (!u || !p) return `<div class="cmpeasy muted">${x.u.length && x.p.length ? "Different market types – not compared" : "One platform only"}</div>`;
+    if (u.line === p.line) return `<div class="cmpeasy">Same line on both</div>`;
     const lo = u.line < p.line ? ["underdog", u] : ["prizepicks", p], hi = u.line > p.line ? ["underdog", u] : ["prizepicks", p];
-    return `<td class="small">Over: <b>${bookName(lo[0])} ${lo[1].line}</b><br>Under: <b>${bookName(hi[0])} ${hi[1].line}</b></td>`;
+    return `<div class="cmpeasy">Easier Over: <b>${bookName(lo[0])} ${lo[1].line}</b><br>Easier Under: <b>${bookName(hi[0])} ${hi[1].line}</b></div>`;
   };
   const groups = new Map();
-  for (const x of list) { const r = x.any, k = (r.match_slug || "") + "|" + (r.start || ""); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(x); }
+  for (const x of list) { const k = matchKey(x.any); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(x); }
   const html = !list.length ? `<div class="muted">${BK.prizepicks.loaded && BK.underdog.loaded ? "No player markets match these filters on either platform." : "Loading both platforms…"}</div>`
     : [...groups.values()].sort((a, b) => String(a[0].any.start || "9").localeCompare(String(b[0].any.start || "9"))).map(g => {
-      const r = g[0].any;
-      return `<details class="mgroup" open><summary><b>${esc((r.team_name || r.team || "") + " vs " + (r.opp_name || r.opponent || ""))}</b> <span class="muted small">${shortWhen(r.start)}${r.event ? " · " + esc(r.event) : ""}</span></summary>
-        <div class="scroll"><table class="mctab"><thead><tr><th>Player</th><th class="num">Our projection</th><th>Underdog line</th><th>PrizePicks line</th><th>Easier line</th></tr></thead><tbody>
-        ${g.sort((a, b) => String(a.any.nick || a.any.player).localeCompare(String(b.any.nick || b.any.player))).map(x => {
+      const r = g[0].any, both = g.filter(x => x.u.length && x.p.length).length;
+      return `<details class="mgroup" open><summary><b>${esc((r.team_name || r.team || "") + " vs " + (r.opp_name || r.opponent || ""))}</b>
+        <span class="muted small">${shortWhen(r.start)}${r.event ? " · " + esc(r.event) : ""} · ${g.length} market${g.length > 1 ? "s" : ""}${both ? `, ${both} on both` : ""}</span></summary>
+        <div class="mbody"><div class="cmphead"><div>Player · our projection</div><div>Underdog line</div><div>PrizePicks line</div><div>Easier line</div></div>
+        ${g.sort((a, b) => (b.u.length && b.p.length) - (a.u.length && a.p.length) || String(a.any.nick || a.any.player).localeCompare(String(b.any.nick || b.any.player))).map(x => {
           const all = [...x.u, ...x.p], pr = all.map(y => y.proj).filter(v => v != null), spread = pr.length > 1 ? Math.max(...pr) - Math.min(...pr) : 0;
-          const extra = Math.max(x.u.length, x.p.length, 1);
-          return [...Array(extra).keys()].map(i => `<tr>${i === 0 ? `<td rowspan="${extra}"><b>${esc(x.any.nick || x.any.player)}</b> <span class="muted small">${propWord(x.any.prop)}${mapsWord(x.any.scope)}</span></td>
-            <td class="num" rowspan="${extra}">${pr.length ? num(pr[0], 1) : "–"}${spread > 0.05 ? ` <span class="pill warn" title="Graded at different times – the newer grade has newer data">grades differ by ${num(spread, 1)}</span>` : ""}</td>` : ""}
-            ${cell("underdog", x.u[i])}${cell("prizepicks", x.p[i])}${i === 0 ? easier(x) : "<td></td>"}</tr>`).join("");
-        }).join("")}</tbody></table></div></details>`; }).join("");
+          return `<div class="cmprow"><div class="who"><b>${esc(x.any.nick || x.any.player)}</b> <span class="muted small">${propWord(x.any.prop)}${mapsWord(x.any.scope)}</span>
+              <span class="small">Projection <b>${pr.length ? num(pr[0], 1) : "–"}</b>${spread > 0.05 ? ` <span class="pill warn" title="Graded at different times – the newer grade has newer data">grades differ by ${num(spread, 1)}</span>` : ""}</span></div>
+            ${col("underdog", x.u)}${col("prizepicks", x.p)}${easier(x)}</div>`;
+        }).join("")}</div></details>`; }).join("");
   $("#boardout").innerHTML = html + `<div class="small muted" style="margin-top:10px">Book lines are betting thresholds, not projections; each chance is our model at that platform's line (pushes excluded on whole lines).
     The easier line is the lower one for an Over and the higher one for an Under – easier, not automatically better value: payouts differ by platform and market type, and a return needs your entry's exact payout.
     ${BK.prizepicks.feed && BK.prizepicks.feed.state !== "ok" ? `<b>PrizePicks feed: ${esc(BK.prizepicks.feed.state)}</b> – its lines aren't confirmed.` : ""}</div>`;
@@ -1147,8 +1170,6 @@ $("#brefresh").onclick = () => loadBoard(true).then(() => { if (!$("#slipsout").
 // enters (Underdog's real multiplier for that entry) - never an assumed one.
 const BUILDER_V = "slips-8";      // keep in step with slips.BUILDER_VERSION (server copy + logs)
 let boardVer = "";
-const udPay = () => store.get("cs2s_udpay", {});              // standard payout per slip size (member-entered)
-const udExact = () => store.get("cs2s_udexact", {});          // exact payout for one slip, by its picks (member-entered)
 const slipKey = legs => legs.map(x => `${x.r.id}:${x.r.line}:${x.r.side}`).sort().join("|");
 function payFor(s, n) {        // exact payout already includes any line boosts - never multiplied again
   const ex = +udExact()[slipKey(s.legs)], base = +udPay()[n];
