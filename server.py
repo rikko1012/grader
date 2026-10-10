@@ -282,7 +282,7 @@ def ud_id_map(rows=None):
     return out
 
 
-def match_compare(team_slug, opp_slug, team, opponent, start, scope="12"):
+def match_compare(team_slug, opp_slug, team, opponent, start, scope="12", book="underdog"):
     """Match player projection comparison (2026-10-09): every player of both teams in this match - OUR projection for
     kills and headshots, the graded Underdog line for the same match and maps when one exists (side, chance, grade,
     stake, freshness, data status), otherwise the projection alone and 'no available line' (no pick invented).
@@ -290,7 +290,9 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12"):
     from datetime import datetime as _dt
     import perf_live
     st = comparison._ts(start)
-    rows = board_payload()["rows"]
+    # one platform's graded lines (2026-10-10: PrizePicks like Underdog); the table shows each player's STANDARD line -
+    # PrizePicks goblin / demon markets stay on the board, never mixed into this table
+    rows = [r for r in board_payload(book)["rows"] if (r.get("line_type") or r.get("odds_type") or "standard") == "standard"]
     same = [r for r in rows if (r.get("scope") or "12") == scope and st and comparison._ts(r.get("start"))
             and abs((comparison._ts(r["start"]) - st).total_seconds()) <= comparison.JOIN_START_MIN * 60
             and ({comparison._team_same(r.get("team_name") or r.get("team"), team), comparison._team_same(r.get("team_name") or r.get("team"), opponent)} & {True})]
@@ -980,11 +982,12 @@ class Handler(BaseHTTPRequestHandler):
             if u.path.startswith("/api/") and u.path != "/api/board":
                 LAST_MEMBER[0] = time.time()
             if u.path == "/api/match_compare":
-                k_ = ("mcmp", q.get("team_slug"), q.get("opp_slug"), q.get("start"), q.get("maps") or "12")
+                bk_ = "prizepicks" if q.get("book") == "prizepicks" else "underdog"
+                k_ = ("mcmp", q.get("team_slug"), q.get("opp_slug"), q.get("start"), q.get("maps") or "12", bk_)
 
                 def _mc():
-                    return 200, json.dumps(match_compare(q.get("team_slug"), q.get("opp_slug"), q.get("team", ""), q.get("opponent", ""),
-                                                         q.get("start"), q.get("maps") or "12"), default=str).encode()
+                    return 200, json.dumps(dict(match_compare(q.get("team_slug"), q.get("opp_slug"), q.get("team", ""), q.get("opponent", ""),
+                                                              q.get("start"), q.get("maps") or "12", bk_), book=bk_), default=str).encode()
                 st_, body_ = shared(k_, _mc, ttl=120)
                 return self.send(st_, body_)
             if u.path == "/api/line_check":

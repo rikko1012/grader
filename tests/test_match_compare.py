@@ -19,7 +19,7 @@ def test_match_compare(monkeypatch):
             _row("ZywOo", "Vitality", "hs", 14.5, scope="1"),                       # other maps: never mixed in
             _row("donk", "Spirit", "kills", 30.5),                                   # other match
             _row("ropz", "Vitality", "kills", 25.5, start="2026-10-12T13:45:00Z")]   # other date
-    monkeypatch.setattr(server, "board_payload", lambda: {"rows": rows})
+    monkeypatch.setattr(server, "board_payload", lambda *a, **k: {"rows": rows})
 
     class B:
         def team(self, slug):
@@ -47,7 +47,7 @@ def test_match_compare(monkeypatch):
 def test_team_total_uses_the_five_who_play(monkeypatch):
     lineup = ["a1", "a2", "a3", "a4", "a5"]
     rows = [_row(n, "Aurora", "kills", 20.5) for n in lineup]
-    monkeypatch.setattr(server, "board_payload", lambda: {"rows": rows})
+    monkeypatch.setattr(server, "board_payload", lambda *a, **k: {"rows": rows})
     class B:
         def team(self, slug):
             return {"players": [{"nickname": n} for n in lineup + ["sub6"]]} if slug == "aurora" else {"players": []}
@@ -62,7 +62,7 @@ def test_team_total_uses_the_five_who_play(monkeypatch):
 
 
 def test_benched_players_are_left_out(monkeypatch):
-    monkeypatch.setattr(server, "board_payload", lambda: {"rows": []})
+    monkeypatch.setattr(server, "board_payload", lambda *a, **k: {"rows": []})
     class B:
         def team(self, slug):
             if slug != "aurora-gaming":
@@ -76,3 +76,21 @@ def test_benched_players_are_left_out(monkeypatch):
     t = next(x for x in server.match_compare("aurora-gaming", "vitality", "Aurora", "Vitality", START, "12")["teams"] if x["team"] == "Aurora")
     assert sorted(p["nick"] for p in t["players"]) == ["Jimpphat", "Wicadia", "XANTARES", "kyxsan", "woxic"]   # MAJ3R (benched) and the coach out
     assert t["summary"]["basis"] == "roster page" and t["summary"]["complete"]                               # 5 active -> a team total
+
+
+def test_prizepicks_table_uses_its_standard_lines(monkeypatch):
+    ud = [_row("Wicadia", "Aurora", "kills", 29.5)]
+    pp = [dict(_row("Wicadia", "Aurora", "kills", 28.5), book="prizepicks", odds_type="standard"),
+          dict(_row("Wicadia", "Aurora", "hs", 12.5), book="prizepicks", odds_type="goblin", line_type="goblin")]
+    seen = []
+    monkeypatch.setattr(server, "board_payload", lambda book="underdog": seen.append(book) or {"rows": pp if book == "prizepicks" else ud})
+    class B:
+        def team(self, slug): return {"players": [{"nickname": "Wicadia"}]} if slug == "aurora" else {"players": []}
+        def close(self): pass
+    monkeypatch.setattr(server, "BO3", B)
+    import perf_live
+    monkeypatch.setattr(perf_live, "projection", lambda *a, **k: {"lambda": 10.0, "data_quality": "ok"})
+    t = next(x for x in server.match_compare("aurora", "vit", "Aurora", "Vitality", START, "12", "prizepicks")["teams"] if x["team"] == "Aurora")
+    w = next(p for p in t["players"] if p["nick"] == "Wicadia")
+    assert seen == ["prizepicks"] and w["kills"]["line"] == 28.5            # PrizePicks' line, not Underdog's 29.5
+    assert w["hs"]["line"] is None and w["hs"]["no_line"]                     # the goblin market stays on the board

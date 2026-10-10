@@ -47,7 +47,7 @@ def test_board_stake_on_card(monkeypatch):
     start = "2026-10-11T12:00:00Z"
     rows = [{"nick": "donk", "player": "donk", "prop": "kills", "scope": "12", "line": 38.5, "side": "Less", "units": 0.75,
              "units_full": 1.5, "cap_n": 5, "team_name": "Spirit", "start": start}]
-    monkeypatch.setattr(server, "board_payload", lambda: {"rows": rows})
+    monkeypatch.setattr(server, "board_payload", lambda *a, **k: {"rows": rows})
     server._BS_CACHE[:] = [0.0, []]
     res = {"verdict": {"side": "Less", "units": 1.5, "grade": "A-", "p": 0.7}, "player_block": {"player": {"nick": "donk"}},
            "next_match": {"start": "2026-10-11T12:00:00.000+00:00"}}
@@ -59,7 +59,7 @@ def test_board_stake_on_card(monkeypatch):
         monkeypatch.setattr(server, "board_payload", lambda o=other: {"rows": [dict(rows[0], **o)]})
         assert server.board_stake(res, "kills", "12", 38.5)["units"] == 1.5
     server._BS_CACHE[:] = [0.0, []]
-    monkeypatch.setattr(server, "board_payload", lambda: {"rows": [dict(rows[0], start="2026-10-12T12:00:00Z")]})
+    monkeypatch.setattr(server, "board_payload", lambda *a, **k: {"rows": [dict(rows[0], start="2026-10-12T12:00:00Z")]})
     assert server.board_stake(res, "kills", "12", 38.5)["units"] == 1.5      # another match
 
 

@@ -315,7 +315,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 
   <div id="gate" class="card" hidden style="text-align:center;padding:28px 18px"></div>
   <div id="who" class="small muted" hidden style="text-align:right;margin:-6px 0 8px"></div>
-  <div class="modes" id="modes"><div class="seg" id="mode"><button type="button" data-v="one" class="on">Single prop</button><button type="button" data-v="slate">Slate</button><button type="button" data-v="board">Underdog board</button></div>
+  <div class="modes" id="modes"><div class="seg" id="mode"><button type="button" data-v="one" class="on">Single Prop</button><button type="button" data-v="slate">Slate</button><button type="button" data-v="board">Prop Board</button></div>
     <span class="small muted">Shortcuts: <b>K</b> kills &middot; <b>H</b> headshots</span></div>
   <section class="card" id="slate" hidden>
     <textarea id="slatetxt" spellcheck="false" placeholder="ZywOo 27.5 K&#10;ropz 22.5 HS&#10;donk 30.5&#10;m0NESY 14.5 hs goblin"></textarea>
@@ -325,7 +325,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
   </section>
   <section class="card" id="board" hidden>
     <div class="bbar" id="bbar">
-      <div class="seg" id="bbook" title="Which platform's lines"><button type="button" data-v="underdog" class="on">Underdog</button><button type="button" data-v="prizepicks">PrizePicks</button><button type="button" data-v="compare">Compare</button></div>
+      <div class="seg" id="bbook" title="Which platform's lines"><button type="button" data-v="all" class="on">All Books</button><button type="button" data-v="underdog">Underdog</button><button type="button" data-v="prizepicks">PrizePicks</button><button type="button" data-v="compare">Compare</button></div>
       <div class="seg" id="bview" title="Group by match or list every prop"><button type="button" data-v="matches" class="on">Matches</button><button type="button" data-v="all">All props</button></div>
       <div class="seg" id="bprop"><button type="button" data-v="kills" class="on">Kills</button><button type="button" data-v="hs">Headshots</button><button type="button" data-v="both">Both</button></div>
       <div class="seg" id="bscope" title="Which maps the lines cover"><button type="button" data-v="12" class="on">Maps 1–2</button><button type="button" data-v="1">Map 1</button><button type="button" data-v="123">Maps 1–3</button></div>
@@ -415,7 +415,7 @@ function showGate(state) {
   const perks = `<div class="perks">
        <div class="perk"><b>Single prop</b><span>Grade any CS2 player's Maps 1–2 kills or headshots line: A–F grade, More or Less, hit chance, projection and units.</span></div>
        <div class="perk"><b>Slate</b><span>Paste up to 15 props and grade them all at once, then build a 2–6 pick slip with the payout your entry shows.</span></div>
-       <div class="perk"><b>Underdog board</b><span>Every Underdog CS2 line graded ahead of time, best first, with last-10 hit rate, edge, projection and team win %.</span></div></div>
+       <div class="perk"><b>Prop Board</b><span>Every Underdog and PrizePicks CS2 line graded ahead of time, best first – or compare both platforms' lines side by side.</span></div></div>
      <div class="small muted" style="margin-top:8px">Built on HLTV, BO3.gg and Polymarket data: recent form, same-roster head-to-head, map picks and opponent strength.</div>`;
   $("#f").style.display = "none"; $("#out").innerHTML = ""; g.hidden = false;
   const err = new URLSearchParams(location.search).get("signin_error");
@@ -911,6 +911,24 @@ drawSlip();
 
 
 // ---------- Underdog: line on each card + the graded board
+// one pill per platform that offers this exact market (player, team, match, maps - the card's strict joins): the same
+// line, or which side the other number is easier for. Goblin / demon lines are named, never called easier or harder.
+function linePills(d) {
+  const g = d.grade || {}, v = d.verdict || {}, cp = d.comparison && !d.comparison.error ? d.comparison : null;
+  if (!cp) return udPill(d);
+  const sd = v.side === "More" ? "Over" : "Under", out = [];
+  for (const bk of ["underdog", "prizepicks"]) {
+    const offs = (cp.offers || []).filter(o => (o.source || "underdog") === bk);
+    const std = offs.find(o => !o.alt), nc = o => o.stale ? ' <span class="muted">· not confirmed</span>' : "";
+    if (std) {
+      if (+std.line === +g.line || !v.side) out.push(`<span class="pill">${bookName(bk)}: same line ${std.line}${nc(std)}</span>`);
+      else { const better = v.side === "More" ? std.line < g.line : std.line > g.line;
+        out.push(`<span class="pill ${better ? "good" : ""}">${bookName(bk)}: ${std.line} – ${better ? `easier for the ${sd}` : `your ${g.line} is easier for the ${sd}`}${nc(std)}</span>`); }
+    }
+    for (const o of offs.filter(o => o.alt && bk === "prizepicks")) out.push(`<span class="pill">PrizePicks ${esc(o.odds_type || "alt")}: ${o.line}${nc(o)}</span>`);
+  }
+  return out.join("");
+}
 function udPill(d) {
   const u = d.underdog, g = d.grade || {}, v = d.verdict || {};
   if (!u || u.line == null || (g.scope && g.scope !== "12")) return "";   // Underdog's line is Maps 1-2
@@ -919,11 +937,15 @@ function udPill(d) {
   const better = v.side === "More" ? u.line < g.line : u.line > g.line, sd = v.side === "More" ? "Over" : "Under";
   return `<span class="pill ${better ? "good" : ""}">Underdog: ${u.line}${pay} – ${better ? `easier for the ${sd}` : `your ${g.line} is easier for the ${sd}`}</span>`;
 }
-let boardRows = [], bprop = "kills", bside = "both", bscope = "12", boardAt = 0, bview = "matches", bbook = "underdog";
+let boardRows = [], bprop = "kills", bside = "both", bscope = "12", boardAt = 0, bview = "matches", bbook = "all";
 // one cache per platform (2026-10-10): Underdog | PrizePicks | Compare. Lines are graded with the same pipeline; only
 // the line (and PrizePicks' market type) differs between books
 const BK = {underdog: {rows: [], at: 0, ver: "", err: null, feed: null, loaded: false}, prizepicks: {rows: [], at: 0, ver: "", err: null, feed: null, loaded: false}};
-const bookName = b => b === "prizepicks" ? "PrizePicks" : b === "underdog" ? "Underdog" : "";
+const bookName = b => b === "prizepicks" ? "PrizePicks" : b === "underdog" ? "Underdog" : b === "all" ? "Underdog and PrizePicks" : "";
+// rows shown for a view: one platform, or both (All Books - every row keeps its own platform label and line)
+const viewRows = b => b === "all" ? [...BK.underdog.rows, ...BK.prizepicks.rows] : BK[b === "compare" ? "underdog" : b].rows;
+// one match, whichever platform listed it: our match id from grading, else teams + start
+const matchKey = r => r.match_slug || [(r.team_name || r.team || "").toLowerCase(), (r.opp_name || r.opponent || "").toLowerCase(), String(r.start || "").slice(0, 16)].join("|");
 const mktType = r => r.line_type || r.odds_type || "standard";
 const mktTag = r => mktType(r) === "standard" ? "" : ` <span class="pill" style="margin:0;padding:1px 7px;color:${mktType(r) === "goblin" ? "#22d27a" : "#ff5566"};border-color:currentColor" title="PrizePicks ${esc(mktType(r))} market – its own line and payout; never compared with a standard line">${esc(mktType(r)[0].toUpperCase() + mktType(r).slice(1))}</span>`;
 // filters survive reloads and the board <-> card round trip
@@ -959,11 +981,11 @@ function bookStatus(b) {
     : `${B.rows.length} graded Underdog lines` + (B.at ? ` · board from ${hhmm(B.at)}` : "");
 }
 async function loadBoard(force) {
-  const need = bbook === "compare" ? ["underdog", "prizepicks"] : [bbook];
-  if (!force && need.every(b => BK[b].loaded)) { boardRows = BK[bbook === "compare" ? "underdog" : bbook].rows; return drawBoard(); }
+  const need = bbook === "compare" || bbook === "all" ? ["underdog", "prizepicks"] : [bbook];
+  if (!force && need.every(b => BK[b].loaded)) { boardRows = viewRows(bbook); return drawBoard(); }
   $("#bstatus").textContent = need.some(b => BK[b].loaded) ? "Refreshing… (showing the current lines)" : "Loading the board…";
   try { await Promise.all(need.map(fetchBook)); } catch (e) { $("#bstatus").textContent = `Couldn't refresh (${e.message})`; }
-  boardRows = BK[bbook === "compare" ? "underdog" : bbook].rows; boardAt = BK.underdog.at; boardVer = BK.underdog.ver || BK.prizepicks.ver || "";
+  boardRows = viewRows(bbook); boardAt = BK.underdog.at; boardVer = BK.underdog.ver || BK.prizepicks.ver || "";
   $("#bstatus").textContent = need.map(bookStatus).join(" · ");
   drawBoard();
 }
@@ -1003,21 +1025,21 @@ function drawBoard() {
   const rowHtml = (r, showMatch) => {
     const nick = r.nick || r.player, lab = !r.side ? "…" : r.state === "SCOUT" ? "S" : r.grade === "LEAN" ? "L" : r.grade;
     const ds = (r.dstat || [])[0] === "verify" ? ["warn", issueLabel(r.dstat[1])] : DSTAT[(r.dstat || [])[0]], team = r.team_name || r.team, opp = r.opp_name || r.opponent;
-    return `<div class="brow2" data-bl="${esc(nick)}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}">
+    return `<div class="brow2" data-bl="${esc(nick)}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}|${r.book || "underdog"}">
       <span class="gtag ${!r.side || r.state === "SCOUT" ? "g-scout" : gClass(r.grade)}">${esc(lab)}</span>
-      <div><div class="b2top"><b>${esc(nick)}</b>${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}
+      <div><div class="b2top">${bbook === "all" ? `<span class="pill" style="margin:0 4px 0 0;padding:1px 7px">${bookName(r.book || "underdog")}</span>` : ""}<b>${esc(nick)}</b>${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}
           <span class="muted">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}${showMatch ? " · " + shortWhen(r.start) : ""}</span></div>
         <div class="b2pick">${r.side ? esc(sideWord({grade: r.grade, side: r.side})) : "grading…"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}${mktTag(r)}${r.stale ? ` <span class="pill warn" title="The PrizePicks feed is not fresh – this line can't be confirmed as playable">not confirmed</span>` : ""}${r.p != null ? ` · <b>${pct0(r.p)}</b>` : ""}${r.grade === "LEAN" ? "" : " · " + esc(r.grade || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${r.cap_n && r.units_full > r.units ? ` <span class="pill" title="${r.cap_n} bets on this board need ${esc(r.team_name || r.team || "this team")} to ${r.side === "More" ? "do well" : "do badly"} in this match – one upset or overtime decides them all, so together they're capped at 3U. On its own this pick is ${r.units_full}U.">capped from ${r.units_full}U</span>` : ""}</div>
         <div class="b2meta">Proj ${r.proj != null ? num(r.proj, 1) : "–"}${ds ? ` · <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}">${ds[1]}</span>` : ""}${r.source ? ` · source ${esc(r.source)}` : ""}${r.graded_at ? ` · graded ${agoTxt(r.graded_at)}` : ""}${r.alt && r.book !== "prizepicks" ? ` · alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}${r.book === "prizepicks" && r.open_line != null && +r.open_line !== +r.line ? ` · opened ${r.open_line}` : ""}${r.moved_from != null ? ` · <span class="pill warn">line moved from ${r.moved_from}</span>` : ""}</div>
         ${ev(r.support, "up", "+")}${ev(r.concern, "dn", "–")}</div>
-      ${r.side ? `<button type="button" class="bslip ${onSlip.has(nick.toLowerCase()) ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}|${mktType(r)}">${onSlip.has(nick.toLowerCase()) ? "On slip" : "+ Slip"}</button>` : "<span></span>"}
+      ${r.side ? `<button type="button" class="bslip ${onSlip.has(nick.toLowerCase()) ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}|${mktType(r)}|${r.book || "underdog"}">${onSlip.has(nick.toLowerCase()) ? "On slip" : "+ Slip"}</button>` : "<span></span>"}
     </div>`; };
   // every qualifying bet in a match, kills + headshots, following Overs / Unders / Both - alternatives, not a slip
   const matchRank = mrows => {
-    const q2 = boardRows.filter(x => x.matchup === mrows[0].matchup && x.start === mrows[0].start && x.side && x.state !== "SCOUT" && (x.units || 0) > 0
+    const q2 = boardRows.filter(x => matchKey(x) === matchKey(mrows[0]) && x.side && x.state !== "SCOUT" && (x.units || 0) > 0
                                      && (x.scope || "12") === bscope && (bside === "both" || x.side === bside)).sort((a, b) => (b.p ?? 0) - (a.p ?? 0));
     if (!q2.length) return `<div class="small muted" style="margin:0 2px 8px">No qualifying bets in this match${bside !== "both" ? ` (${bside === "More" ? "Overs" : "Unders"} only)` : ""}.</div>`;
-    const it = x => `${esc(x.nick || x.player)} ${sideWord({grade: x.grade, side: x.side})} ${x.line} ${propWord(x.prop)} <b>${(x.p * 100).toFixed(0)}%</b>`;
+    const it = x => `${esc(x.nick || x.player)} ${sideWord({grade: x.grade, side: x.side})} ${x.line} ${propWord(x.prop)}${bbook === "all" ? ` (${bookName(x.book || "underdog")})` : ""} <b>${(x.p * 100).toFixed(1)}%</b>`;
     return `<div class="small" style="margin:0 2px 8px;line-height:1.5"><b>Highest chance here:</b> ${q2.slice(0, 3).map(it).join(" · ")}
       <div class="muted">No outside projections yet · value not ranked (no entry payouts)${q2.length > 1 ? " · these picks share match conditions and may win or lose together" : ""}</div></div>`; };
   let html;
@@ -1025,7 +1047,7 @@ function drawBoard() {
   else if (bview === "all") html = `<div class="blist">${rows.map(r => rowHtml(r, true)).join("")}</div>`;
   else {
     const groups = new Map();
-    for (const r of rows) { const k = (r.matchup || "") + "|" + (r.start || ""); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
+    for (const r of rows) { const k = matchKey(r); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
     const opened = store.get("cs2s_mopen", {});
     html = [...groups.entries()].sort((a, b) => String(a[1][0].start || "9").localeCompare(String(b[1][0].start || "9"))).map(([k, g], i) => {
       const r = g[0], open = k in opened ? opened[k] : i < 3, bets = g.filter(x => (x.units || 0) > 0).length;
@@ -1044,12 +1066,12 @@ $("#boardout").addEventListener("click", e => {
     const row = BK[bk].rows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && (x.scope || "12") === sc && mktType(x) === lt);
     return gradeNow(p, l, t, lt, sc, true, row ? {team: row.team, opponent: row.opponent, book: bk} : {book: bk}); }
   const b = e.target.closest("[data-bslip]");
-  if (b) { e.stopPropagation(); const [p, l, t, lt] = b.dataset.bslip.split("|");
-    const r = boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && mktType(x) === (lt || "standard"));
+  if (b) { e.stopPropagation(); const [p, l, t, lt, bk] = b.dataset.bslip.split("|");
+    const r = boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && mktType(x) === (lt || "standard") && (x.book || "underdog") === (bk || "underdog"));
     if (r) { addToSlip(boardCard(r)); drawBoard(); } return; }
   const r = e.target.closest("[data-bl]");
-  if (r) { const [p, l, t, sc, lt] = r.dataset.bl.split("|");
-    const row = boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && (x.scope || "12") === sc && mktType(x) === (lt || "standard"));
+  if (r) { const [p, l, t, sc, lt, bk] = r.dataset.bl.split("|");
+    const row = boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && (x.scope || "12") === sc && mktType(x) === (lt || "standard") && (x.book || "underdog") === (bk || "underdog"));
     gradeNow(p, l, t, lt || "standard", sc, true, row ? {team: row.team, opponent: row.opponent, book: row.book || "underdog"} : null); }
 });
 $("#bbook").onclick = e => { const b = e.target.closest("button"); if (!b) return; bbook = b.dataset.v;
@@ -1424,7 +1446,7 @@ function render(d) {
       ${lineWarn(g.prop, g.line, marketOk(d)) ? `<span class="pill warn">${esc(lineWarn(g.prop, g.line, marketOk(d)))}</span>` : ""}
       ${nm?.bo === 1 && g.scope !== "1" ? `<span class="pill warn">BO1 match – grade it as Map 1 (BO1)</span>` : ""}
       ${g.scope === "123" && g.p_map3 != null ? `<span class="pill">Map 3 is only played if Maps 1–2 split: ${pct(g.p_map3, 0)} chance</span>` : ""}
-      ${udPill(d)}
+      ${linePills(d)}
     </div></div>`;
   h += glance(d, g, v);
   if ("p_more" in g) {
@@ -1696,8 +1718,9 @@ function render(d) {
 
 // ---------- match player projection comparison (owner 2026-10-09): OUR projections for every player in this match,
 // both teams side by side, with the graded Underdog line where one exists - always visible right under the headline
-const MC = {data: null, focus: "", prop: "both", side: "both", sort: "chance", scope: "12", key: ""};
+const MC = {data: null, focus: "", prop: "both", side: "both", sort: "chance", scope: "12", key: "", book: "underdog", d: null};
 function matchCompareSlot(d) {
+  MC.d = d; if (d.book) MC.book = d.book;          // opened from a platform's line: that platform's table first
   const nm = d.next_match || {}, pb = d.player_block || {}, g = d.grade || {};
   if (!nm.opponent || !nm.start || d.verdict?.state === "SCOUT") return;
   const team = pb.playing_for || pb.current_team || "";
@@ -1705,7 +1728,11 @@ function matchCompareSlot(d) {
   sec.innerHTML = `<h2>Match players · ${esc(team)} vs ${esc(nm.opponent)}</h2><div class="small muted">Loading both teams' projections…</div>`;
   const out = $("#out"); out.insertBefore(sec, out.children[1] || null);
   MC.focus = (pb.player?.nick || "").toLowerCase(); MC.scope = g.scope || "12";
-  const qs = new URLSearchParams({team_slug: nm.team_slug || "", opp_slug: nm.opponent_slug || "", team, opponent: nm.opponent, start: nm.start, maps: MC.scope});
+  mcFetch();
+}
+function mcFetch() {
+  const d = MC.d || {}, nm = d.next_match || {}, pb = d.player_block || {}, team = pb.playing_for || pb.current_team || "";
+  const qs = new URLSearchParams({team_slug: nm.team_slug || "", opp_slug: nm.opponent_slug || "", team, opponent: nm.opponent, start: nm.start, maps: MC.scope, book: MC.book});
   const key = qs.toString(); MC.key = key;
   fetchRetry("/api/match_compare?" + qs).then(r => r.json()).then(j => { if (MC.key !== key) return; MC.data = j; drawMatchCompare(); })
     .catch(() => { const el = $("#mcmp"); if (el && MC.key === key) el.innerHTML = `<h2>Match players</h2><div class="small muted">Couldn't load the other players right now – the grade above is unaffected.</div>`; });
@@ -1765,22 +1792,22 @@ Tap to open ${esc(e.nick)}'s ${pr === "hs" ? "headshots" : "kills"} card">
     return `<b>${esc(t.team)}</b>: ${gr.length ? `${gr.length} graded pick${gr.length > 1 ? "s" : ""} (${gr.length - un} Over · ${un} Under) · total suggested units ${+u.toFixed(2)}U` : "no graded picks"}${ln ? ` · ${ln} Lean${ln > 1 ? "s" : ""} (0U)` : ""}${dbl.length ? ` – same player both props: ${dbl.join(", ")}` : ""}`;
   }).filter(Boolean);
   const seg = (id, opts, cur) => `<div class="seg" data-mcseg="${id}">${opts.map(([v, l]) => `<button type="button" data-v="${v}" class="${v === cur ? "on" : ""}">${l}</button>`).join("")}</div>`;
-  el.innerHTML = `<h2>Match players · ${esc(j.match.team)} vs ${esc(j.match.opponent)} · ${j.match.scope === "1" ? "Map 1" : j.match.scope === "123" ? "Maps 1–3" : "Maps 1–2"}</h2>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">${seg("prop", [["kills", "Kills"], ["hs", "Headshots"], ["both", "Both"]], MC.prop)}
+  el.innerHTML = `<h2>Match players · ${esc(j.match.team)} vs ${esc(j.match.opponent)} · ${j.match.scope === "1" ? "Map 1" : j.match.scope === "123" ? "Maps 1–3" : "Maps 1–2"} · ${bookName(j.book || MC.book)} lines</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">${seg("book", [["underdog", "Underdog"], ["prizepicks", "PrizePicks"]], MC.book)}${seg("prop", [["kills", "Kills"], ["hs", "Headshots"], ["both", "Both"]], MC.prop)}
       ${seg("side", [["More", "Overs"], ["both", "Both"], ["Less", "Unders"]], MC.side)}${seg("sort", [["chance", "Highest chance"], ["name", "A–Z"]], MC.sort)}</div>
     ${expo.length ? `<div class="small" style="margin-bottom:6px"><b>Shared exposure in this match</b> – these picks can win or lose together:<br>${expo.join("<br>")}</div>` : ""}
     <div class="scroll"><table class="mctab"><thead>${head}</thead><tbody>${body}</tbody></table></div>
-    <div class="small muted" style="margin-top:6px">Our projections for every player in this match; picks only where Underdog has a line. Chances to 1 decimal; hover or long-press a pick for why it is graded or a Lean. Tap a pick to open that player's card.
+    <div class="small muted" style="margin-top:6px">Our projections for every player in this match; picks only where ${bookName(j.book || MC.book)} has a standard line (PrizePicks goblin / demon lines are on the board). Chances to 1 decimal; hover or long-press a pick for why it is graded or a Lean. Tap a pick to open that player's card.
       Picks in one match share its conditions and may win or lose together – team totals are projections added up, not a combined chance.</div>`;
 }
 document.addEventListener("click", e => {
   const sg = e.target.closest("[data-mcseg] button");
-  if (sg) { const k = sg.parentElement.dataset.mcseg; MC[k] = sg.dataset.v; return drawMatchCompare(); }
+  if (sg) { const k = sg.parentElement.dataset.mcseg; MC[k] = sg.dataset.v; return k === "book" ? mcFetch() : drawMatchCompare(); }
   const pk = e.target.closest("[data-mc]");
   if (pk && MC.data) {
     const [nick, line, prop] = pk.dataset.mc.split("|");
     const t = MC.data.teams.find(t => t.players.some(p => p.nick === nick)), c = t?.players.find(p => p.nick === nick)?.[prop] || {};
-    gradeNow(nick, line, prop, "standard", MC.scope, !$("#cardpop").hidden, {team: c.ud_team || t?.team, opponent: c.ud_opponent || null});
+    gradeNow(nick, line, prop, "standard", MC.scope, !$("#cardpop").hidden, {team: c.ud_team || t?.team, opponent: c.ud_opponent || null, book: MC.book});
   }
 });
 </script>
