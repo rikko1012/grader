@@ -91,3 +91,32 @@ pass = TEST improves with the match-grouped 95% interval below 0 AND the TRAIN/V
 | Schedule load | Rejected |
 | Timestamped markets (line movement) | Rejected as tested; collecting |
 | Independent projections / second book | **Blocked by access**: none accessible (PrizePicks CAPTCHA; OddsPapi free quota exhausted - player-prop coverage unknown) |
+
+## Frozen test definitions - round 3 (written 2026-10-10 BEFORE running; owner asked for every factor possible)
+Baseline: perf-2 live (G8.3, `12f83a9da0`) through perf.py, day = the match day, history strictly before it.
+Target: relative kills residual (y - lam) / lam on Maps 1-2 (HS target for R3-share only, as a second check).
+Every feature uses only data from days before the match. Each feature is standardised on TRAIN.
+Fit: one coefficient per feature (single-feature tests) and one ridge over all of them (group test) on TRAIN.
+The ridge strength is chosen on VALID from {0, 1, 10, 100, 1000} x n.
+Scoring: TEST kills MAE and normal log-score, both vs the baseline, with match-grouped 95% intervals.
+Pass = TEST improves with the interval below 0 AND the coefficient has the same sign fitted on TRAIN and on VALID.
+A pass becomes a shadow challenger first; promotion needs the owner's go-ahead (stated with the evidence).
+- R3-share: his time-weighted share of his team's kills (same half-life as the rate) - star vs 4th / 5th rifle.
+- R3-form: last 10 series kills per round vs his time-weighted rate, shrunk 300 rounds: (k10 + 300 rate) / (r10 + 300) / rate - 1.
+- R3-h2h: his kills per round in earlier meetings with this opponent team (any lineup, 365 days, half-life 120 d) vs his
+  rate, shrunk 300 rounds.
+- R3-oppagg: the opponent team's own kills per round (time-weighted) vs the average - more fights, more kills.
+- R3-blowout: (Elo win chance - 0.5) x (share - 0.2), with the Elo main effect in the same model (blowout compression:
+  the losing side gets fewer kill chances; the high-share player on the winning side is not compressed).
+- R3-stage: event class from its name - qualifier / cup / open / league (tier 3 online) vs major / playoffs / final.
+  Two indicators.
+- R3-opproster: share of tonight's opposing five who did NOT play the opponent's previous series (roster change).
+- R3-sameday: he already played a series earlier that same day (lower match id, same date).
+Untestable here (data not in the HLTV DB, or no dated history yet):
+- opening, trade, multi-kill, exit and eco kills;
+- economy, pistol and force rounds;
+- ping and server;
+- AWP and rifle HS splits;
+- opponent AWPer;
+- veto pick / ban and starting side;
+- region style clash (team countries not in the export).
