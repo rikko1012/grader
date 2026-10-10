@@ -214,10 +214,9 @@ def _grader_version():
     """Changes whenever the grading formula (grader.py) changes: saved board grades from an older
     formula are dropped on startup instead of being shown."""
     import hashlib
-    h = hashlib.sha1()
-    for f in ("grader.py", "perf.py"):              # perf.py added 2026-10-09: a model change regrades the board too
-        h.update(Path(__file__).with_name(f).read_bytes())
-    return h.hexdigest()[:12]
+    # 2026-10-10: the full model version (every file that moves a grade, picklog.MODEL_VERSION) - the old hash covered
+    # grader.py + perf.py only, so a cs2_scout.py / perf_live.py fix kept the old grades until each line was 15 min old
+    return picklog.MODEL_VERSION
 
 
 _BOARD_SAVE = threading.Lock()
@@ -241,10 +240,10 @@ def _board_load():
     try:
         saved = json.loads(BOARD_FILE.read_text(encoding="utf-8"))
         rows = saved.get("rows") or {}
-        if saved.get("version") != _grader_version():
-            # grading changed: keep showing the last grades (never an empty board) but regrade every
-            # line first thing - "at" 0 puts them at the front of the queue
-            for v in rows.values():
+        for v in rows.values():
+            # grading changed: keep showing the last grades (never an empty board) but regrade every line made by
+            # another model version first thing - "at" 0 puts them at the front of the queue
+            if saved.get("version") != _grader_version() or v.get("graded_model") != picklog.MODEL_VERSION:
                 v["at"] = 0
         BOARD.update(rows)
     except Exception:
@@ -506,7 +505,11 @@ def board_forever():
             now = datetime.now(timezone.utc).isoformat()
             todo = [r for r in rows if not r["alt"] and (not r.get("start") or r["start"] > now)
                     and time.time() - (BOARD.get(r["id"]) or {}).get("at", 0) > BOARD_EVERY]
-            todo.sort(key=lambda r: r.get("start") or "9")   # soonest matches first
+            # lines from an older model version first, then soonest matches; one match's lines and each player's kills /
+            # headshots back to back (the second grade of a player is served from his warm data)
+            stale = lambda r: (BOARD.get(r["id"]) or {}).get("graded_model") != picklog.MODEL_VERSION
+            todo.sort(key=lambda r: (not stale(r), r.get("start") or "9", str(r.get("matchup") or ""),
+                                     str(r.get("player") or "").lower(), r.get("prop") or ""))
 
             def one(r):
                 members_idle()                            # members first, but the board never stalls
