@@ -1543,7 +1543,11 @@ class Handler(BaseHTTPRequestHandler):
 
     # ------------------------------------------------------------ Phase 10 admin (private)
     def authed(self, token):
-        return bool(ADMIN_TOKEN) and token == ADMIN_TOKEN
+        # the admin link's ?token= still works; scripts send the X-Admin-Token header instead, so the token stays out
+        # of URLs and logs (2026-10-10). Constant-time compare.
+        import hmac
+        tok = token or self.headers.get("X-Admin-Token") or ""
+        return bool(ADMIN_TOKEN) and hmac.compare_digest(str(tok), ADMIN_TOKEN)
 
     def do_POST(self):
         u = urlparse(self.path)
