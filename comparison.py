@@ -83,6 +83,13 @@ def _ts(s):
         return None
 
 
+def record_for_scope(pb, scope):
+    """His last-10 record that matches the line's maps: Map 1 lines -> his Map 1 totals, Maps 1-2 -> Maps 1-2 totals,
+    Maps 1-3 -> none (no Maps 1-3 record exists). Never a Maps 1-2 record for another scope."""
+    sc = scope or "12"
+    return (pb.get("recent_form_map1") or {}) if sc == "1" else {} if sc == "123" else (pb.get("recent_form") or {})
+
+
 def source_label(g):
     """WHERE the projection came from - a source label, not a quality judgement."""
     ps = str(g.get("projection_source") or "")
@@ -239,7 +246,9 @@ def panel(res, rows, board_at=None, now=None, id_map=None):
     # evidence, each with its basis: "model" = an input / output of the calculation that made the chance;
     # "stake" = used only by a stake rule; "context" = shown for context, NOT in the projection; "data" = data status
     perf_on = str(g.get("projection_source") or "").startswith("perf")
-    rf = (res.get("player_block") or {}).get("recent_form") or {}
+    # the record that matches the line's maps (2026-10-10: a Map 1 line was compared with Maps 1-2 totals - "10/10
+    # Overs" next to a Map 1 history of 6/10); Maps 1-3 has no record of its own, so no line comparison at all
+    rf = record_for_scope(res.get("player_block") or {}, g.get("scope"))
     supports, against = [], []
     def add(lst, text, basis):
         lst.append({"text": text, "basis": basis})

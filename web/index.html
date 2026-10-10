@@ -413,7 +413,7 @@ function showGate(state) {
   const g = $("#gate"), up = state.upgrade;
   const perks = `<div class="perks">
        <div class="perk"><b>Single prop</b><span>Grade any CS2 player's Maps 1–2 kills or headshots line: A–F grade, More or Less, hit chance, projection and units.</span></div>
-       <div class="perk"><b>Slate</b><span>Paste up to 15 props and grade them all at once, then build a 2–6 pick slip with Power and Flex payouts.</span></div>
+       <div class="perk"><b>Slate</b><span>Paste up to 15 props and grade them all at once, then build a 2–6 pick slip with the payout your entry shows.</span></div>
        <div class="perk"><b>Underdog board</b><span>Every Underdog CS2 line graded ahead of time, best first, with last-10 hit rate, edge, projection and team win %.</span></div></div>
      <div class="small muted" style="margin-top:8px">Built on HLTV, BO3.gg and Polymarket data: recent form, same-roster head-to-head, map picks and opponent strength.</div>`;
   $("#f").style.display = "none"; $("#out").innerHTML = ""; g.hidden = false;
@@ -549,7 +549,10 @@ document.addEventListener("keydown", e => {
 const propWord = p => p === "hs" ? "HS" : "kills";
 const ltTag = lt => lt === "goblin" ? ` <span class="pill" style="margin:0;padding:1px 7px;color:#22d27a;border-color:#22d27a">goblin</span>`
   : lt === "demon" ? ` <span class="pill" style="margin:0;padding:1px 7px;color:#ff5566;border-color:#ff5566">demon</span>` : "";
-const lineWarn = (p, l) => p === "hs" && +l >= 24 ? `${l} headshots is a kills-sized line – did you mean kills?`
+// a typo guard - never shown when Underdog offers that exact market (donk's real 25.5 HS line, 2026-10-10 walkthrough)
+const marketOk = d => { const g = d?.grade || {}, u = d?.underdog;
+  return d?.from === "board" || (u && (g.scope || "12") === "12" && +u.line === +g.line) || (d?.comparison?.offers || []).some(o => +o.line === +g.line); };
+const lineWarn = (p, l, ok) => ok ? "" : p === "hs" && +l >= 24 ? `${l} headshots is a kills-sized line – did you mean kills?`
   : p !== "hs" && +l <= 12 ? `${l} kills is a headshot-sized line – did you mean HS?` : "";
 // member wording (2026-10-10 audit): Over / Under everywhere - More / Less are internal values only
 const sideWord = v => !v.side ? "–" : v.grade === "LEAN" ? `Lean ${v.side === "More" ? "Over" : "Under"}` : v.side === "More" ? "Over" : "Under";
@@ -558,7 +561,7 @@ const sideWord = v => !v.side ? "–" : v.grade === "LEAN" ? `Lean ${v.side === 
 const perfGrade = g => String(g.projection_source || "").startsWith("perf") && ["12", "1"].includes(g.scope || "12");
 const capOf = (d, k, dflt) => (d && d.caps && d.caps[k] != null ? d.caps[k] : dflt);
 const noteOf = (d, x) => { const v = d?.verdict || {}, g = d?.grade || {};
-  return lineWarn(g.prop || x?.prop, g.line ?? x?.line) || ((v.units || 0) === 0 && /0 units: (.+)$/.exec(v.reason || "")?.[1]) || ""; };
+  return lineWarn(g.prop || x?.prop, g.line ?? x?.line, marketOk(d)) || ((v.units || 0) === 0 && /0 units: (.+)$/.exec(v.reason || "")?.[1]) || ""; };
 // display only: well-known main AWPers, shown when BO3.gg has no weapon data (the grade doesn't use this list)
 const KNOWN_AWP = new Set(["zywoo", "m0nesy", "sh1ro", "broky", "w0nderful", "torzsi", "woro2k", "hallzerk", "s1mple", "device", "jame", "molodoy", "910", "ultimate"]);
 const mapsWord = sc => sc === "123" ? " (Maps 1–3)" : sc === "1" ? " (Map 1)" : "";
@@ -723,16 +726,17 @@ const showExamples = () => { $("#examples").hidden = store.get("cs2s_hist", []).
 ["#player", "#line"].forEach(id => $(id).addEventListener("input", showExamples));
 showExamples(); const _sr = showRecent; showRecent = () => { _sr(); showExamples(); };
 // bet slip: add single props, build a 2-6 pick entry (saved in this browser)
-const PAYOUT = {2: 3, 3: 5, 4: 10, 5: 20, 6: 37.5};   // PrizePicks Power Play (check the app for current payouts)
-// PrizePicks standard Flex: payout by number of hits (check the app - they change)
-const FLEX = {3: {3: 3, 2: 1}, 4: {4: 6, 3: 1.5}, 5: {5: 10, 4: 2, 3: 0.4}, 6: {6: 25, 5: 2, 4: 0.4}};
+// manual slip payouts (2026-10-10 walkthrough): no platform tables - the return uses only the payout the member enters
+// for THIS entry (what Underdog shows), else their saved standard payout for this size (labelled as such), else none
+const manualKey = s => s.map(x => [String(x.p).toLowerCase(), x.t, x.sc || "12", x.l, x.s].join(":")).sort().join("|");
+const manualPay = () => store.get("cs2s_manualpay", {});
 function hitDist(ps) {           // P(exactly k legs hit), legs treated as independent
   let d = [1];
   for (const p of ps) { const n = new Array(d.length + 1).fill(0); d.forEach((v, k) => { n[k] += v * (1 - p); n[k + 1] += v * p; }); d = n; }
   return d;
 }
 const retLine = (lab, avg) => `<div class="kv"><span>${lab}</span><span style="color:${avg >= 1 ? "var(--good)" : "var(--bad)"}"><b>${avg.toFixed(2)}U</b> back per 1U (${avg >= 1 ? "+" : ""}${(avg - 1).toFixed(2)}U)</span></div>`;
-const legKey = l => String(l.p).toLowerCase();   // PrizePicks: one prop per player in an entry
+const legKey = l => [String(l.p).toLowerCase(), l.t, l.sc || "12"].join(":");   // the same prop twice = a duplicate
 // ---- slip line checks (2026-10-09): every leg keeps its ORIGINAL selection (orig) and, separately, the latest
 // check of the live Underdog offer (now). Checks run on add, on opening the slip and before Copy; nothing is ever
 // replaced silently. States: verified / changed / unavailable (Underdog no longer shows it) / failed (couldn't check) /
@@ -755,6 +759,9 @@ function ask(title, body, buttons) {
   });
 }
 const sideTxt = s => s === "More" ? "Over" : "Under";
+// whole-number lines: exactly the line is a push (no action); the chances shown exclude it - its own chance, from the
+// grade's distribution, is shown next to them
+const pushOf = g => g && g.line != null && +g.line % 1 === 0 && g.probs_raw && g.probs_raw.push != null ? g.probs_raw.push : null;
 const sideGrade = (gr, u, v, sd) => {
   const capped = v.side === sd && v.cap_n && v.units_full > v.units, units = capped ? v.units : (u || 0);
   return `${gr === "C" || gr === "LEAN" || !units ? "lean" : "grade " + esc(gr)} · ${units}U${capped ? " (capped)" : ""}`; };
@@ -767,7 +774,8 @@ function legFrom(d, extra) {
 }
 function pushLeg(leg) {
   const s = store.get("cs2s_slip", []);
-  if (s.some(x => legKey(x) === legKey(leg))) { toast(`${leg.p} is already on the slip – PrizePicks allows one prop per player`); return openSlip(); }
+  if (s.some(x => legKey(x) === legKey(leg))) { toast(`${leg.p} ${propWord(leg.t)}${mapsWord(leg.sc)} is already on the slip`); return openSlip(); }
+  if (s.some(x => String(x.p).toLowerCase() === String(leg.p).toLowerCase())) toast(`${leg.p} now has two picks – they move together; check your app allows both`);
   if (s.length >= 6) { toast("A slip holds 6 picks max"); return openSlip(); }
   s.push(leg); store.set("cs2s_slip", s); toast(`Added – ${s.length} on the slip`); drawSlip();
 }
@@ -786,7 +794,7 @@ async function addToSlip(d) {
       const r = await fetch("/api/grade?" + qs); n = r.ok ? await r.json() : null;
     } catch {}
     const nv = n?.verdict || {}, row = (l, s_, p_, gr, u) => `<tr><td>${l}</td><td>${s_ ? sideTxt(s_) : "–"}</td><td class="num">${p_ != null ? pct(p_) : "–"}</td><td>${esc(gr || "–")}</td><td class="num">${u ?? 0}U</td></tr>`;
-    const k = await ask("Underdog moved this line", `${esc(nick)} ${propWord(g.prop)}${mapsWord(g.scope)}: ${esc(c.note)}.
+    const k = await ask(d.from === "board" ? "Underdog moved this line" : "Your line differs from Underdog's current line", `${esc(nick)} ${propWord(g.prop)}${mapsWord(g.scope)}: ${d.from === "board" ? esc(c.note) : `you entered ${g.line}; Underdog currently shows ${c.new_line}`}.
       <table style="margin-top:8px"><thead><tr><th>Line</th><th>Side</th><th class="num">Chance</th><th>Grade</th><th class="num">Stake</th></tr></thead><tbody>
       ${row(g.line + " (yours)", v.side, v.p, v.grade, v.units)}${n && nv.side ? row(c.new_line + " (now)", nv.side, nv.p, nv.grade, nv.units) : `<tr><td>${c.new_line} (now)</td><td colspan="4" class="muted">couldn't regrade – try again</td></tr>`}</tbody></table>`,
       [...(n && nv.side ? [{k: "new", label: `Use ${sideTxt(nv.side)} ${c.new_line}`, primary: true}] : []), {k: "keep", label: `Keep ${g.line} as a research line`}, {k: "cancel", label: "Cancel"}]);
@@ -830,28 +838,36 @@ function drawSlip() {
   try { _drawSlip(); } catch {}
   if ($("#slip").hidden) return;
   if (!s.length) { $("#slip").hidden = true; return; }
-  const n = s.length, all = s.reduce((a, x) => a * (x.pc || 0.5), 1), pay = PAYOUT[n];
+  const n = s.length, all = s.reduce((a, x) => a * (x.pc || 0.5), 1);
+  const exact = +manualPay()[manualKey(s)] || null, std = +udPay()[n] || null, pay = exact || std;
+  const dupPlayer = new Set(s.map(x => String(x.p).toLowerCase())).size < n;
   const teams = {}; s.forEach(x => { const k = x.m || x.tm; teams[k] = (teams[k] || 0) + 1; });
   const same = Object.values(teams).some(c => c > 1);
   const leans = s.filter(x => x.g === "LEAN").length;
   const unver = s.filter(x => x.now?.status !== "verified").length;
   $("#slip").innerHTML = `<h4>Bet slip · ${n}-pick</h4>` + (unver ? `<div class="warn" style="margin-bottom:6px">${unver === n ? "Research slip" : `${unver} of ${n} picks`}: not verified on Underdog right now – see each pick.</div>` : "") + s.map((x, i) =>
-    `<div class="leg"><span><b>${esc(x.p)}</b> ${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : esc(x.s)} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${ltTag(x.lt)}${legState(x)}
+    `<div class="leg"><span><b>${esc(x.p)}</b> ${x.g === "LEAN" ? `Lean ${sideTxt(x.s)}` : sideTxt(x.s)} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${ltTag(x.lt)}${legState(x)}
       <span class="muted small">· ${x.g === "LEAN" ? "Lean" : esc(x.g)} · ${((x.pc || 0) * 100).toFixed(1)}%${x.vs ? " · vs " + esc(x.vs) : ""}</span></span>
       <button type="button" class="x" data-rmleg="${i}" title="Remove">✕</button></div>`).join("")
     + (n < 2 ? `<div class="small muted" style="margin-top:10px">Add at least 2 picks (up to 6).</div>`
-       : (() => { const dist = hitDist(s.map(x => x.pc || 0.5)), fx = FLEX[n];
-          const flexAvg = fx ? Object.entries(fx).reduce((a, [k, m]) => a + (dist[+k] || 0) * m, 0) : null;
+       : (() => { const dist = hitDist(s.map(x => x.pc || 0.5));
           return `<div class="kv"><span>All ${n} hit (grader's %)</span><span><b>${(all * 100).toFixed(1)}%</b></span></div>`
-            + `<div class="kv"><span>Power Play (${pay}x if all hit)</span><span></span></div>` + retLine("&nbsp;&nbsp;average payout", all * pay)
-            + (fx ? `<div class="kv"><span>Flex (${Object.entries(fx).sort((a, b) => b[0] - a[0]).map(([k, m]) => `${k}/${n} pays ${m}x`).join(", ")})</span><span></span></div>` + retLine("&nbsp;&nbsp;average payout", flexAvg) : "")
-            + `<div class="small muted" style="margin-top:4px">Average payout = what 1U returns on average, stake included. Above 1.00U means the grader expects a profit.</div>`; })())
+            + (n >= 3 ? `<div class="kv"><span>${n - 1} of ${n} hit</span><span>${((dist[n - 1] || 0) * 100).toFixed(1)}%</span></div>` : "")
+            + `<label class="small muted" style="display:flex;gap:6px;align-items:center;margin:6px 0">Payout Underdog shows for this entry
+                <input id="slippay" type="number" min="1" step="0.01" inputmode="decimal" placeholder="e.g. 3" value="${exact ?? ""}" style="width:80px"> x</label>`
+            + (pay ? retLine(`&nbsp;&nbsp;average return at ${+pay.toFixed(2)}x${exact ? "" : ` (your saved standard ${n}-pick payout – line boosts not included)`}`, all * pay)
+                   + `<div class="small muted" style="margin-top:4px">Average return = what 1U gives back on average if every pick must hit, stake included; above 1.00U the grader expects a profit. Flex / partial payouts aren't counted.</div>`
+                   : `<div class="small muted">Enter the payout Underdog shows for this entry to see the expected return – the grader doesn't know Underdog's payouts.</div>`); })())
     + (same ? `<div class="warn">Two or more picks from the same match – they share match conditions and may win or lose together, so the real odds differ from the %.</div>` : "")
-    + (s.some(x => x.lt && x.lt !== "standard") ? `<div class="warn">Goblin / demon legs change the payout (goblins pay less, demons more) – check PrizePicks for this entry's real multipliers.</div>` : "")
-    + (leans ? `<div class="warn">${leans} pick${leans > 1 ? "s are" : " is a"} Lean${leans > 1 ? "s" : ""} (under 57%) – the weakest legs on the slip.</div>` : "")
+    + (dupPlayer ? `<div class="warn">The same player appears twice – his picks move together, so the real chance differs from the %. Check your app allows it.</div>` : "")
+    + (s.some(x => x.lt && x.lt !== "standard") ? `<div class="warn">Goblin / demon lines aren't Underdog lines – their payout isn't known here.</div>` : "")
+    + (leans ? `<div class="warn">${leans} pick${leans > 1 ? "s are" : " is a"} Lean${leans > 1 ? "s" : ""} (0 units) – the weakest legs on the slip.</div>` : "")
     + `<div class="actions"><button type="button" class="chipbtn" id="slipcopy">Copy slip</button><button type="button" class="chipbtn" id="slipclear">Clear</button>
        <button type="button" class="chipbtn" id="slipclose">Close</button></div>
-       <div class="small muted" style="margin-top:8px">Payouts are PrizePicks' standard Power Play / Flex – check the app for the current ones. Not financial advice.</div>`;
+       <div class="small muted" style="margin-top:8px">Returns use only the payout you enter – confirm it in Underdog. Not financial advice.</div>`;
+  const pi = $("#slippay");
+  if (pi) pi.onchange = () => { const m = manualPay(), k = manualKey(store.get("cs2s_slip", [])), v = +pi.value;
+    if (v > 1) m[k] = v; else delete m[k]; store.set("cs2s_manualpay", m); drawSlip(); };
 }
 $("#slipbtn").onclick = () => { $("#slip").hidden ? openSlip() : ($("#slip").hidden = true); };
 $("#slip").addEventListener("click", e => {
@@ -1235,7 +1251,7 @@ function glance(d, g, v) {
     return m < 1 ? "just now" : m < 60 ? m + " min ago" : Math.round(m / 60) + " h ago"; };
   return `<section class="card glance">
     <div class="glrow"><span class="k">Projection</span><span><b>${num(g.lambda_final, 1)}</b> ${unit}${cp ? ` · 8 in 10 land ${cp.ours.range80[0]}–${cp.ours.range80[1]}` : ""}</span></div>
-    <div class="glrow"><span class="k">Line</span><span>${side} ${g.line}${mapsWord(g.scope) || " (Maps 1–2)"} · <b>${pct(v.p)}</b> · ${v.units || 0}U</span></div>
+    <div class="glrow"><span class="k">Line</span><span>${side} ${g.line}${mapsWord(g.scope) || " (Maps 1–2)"} · <b>${pct(v.p)}</b>${pushOf(g) != null ? ` excluding pushes · push ${pct(pushOf(g))}` : ""} · ${v.units || 0}U</span></div>
     ${cp?.supports?.length ? `<div class="glrow"><span class="k up">Supports</span><span>${esc(cp.supports[0].text)} ${basisTag(cp.supports[0].basis)}</span></div>` : ""}
     ${cp?.concern ? `<div class="glrow"><span class="k dn">Concern</span><span>${esc(cp.concern.text)} ${basisTag(cp.concern.basis)}</span></div>` : ""}
     <div class="glrow"><span class="k">Data</span><span><span class="dstat ${ds.k}">${ds.t}</span>${ds.why ? ` <span class="muted small">${esc(ds.why)}</span>` : ""} <span class="muted small">· source ${esc(srcLabel(g))}</span>${cp?.board_at ? ` <span class="muted small">· line checked ${ago(cp.board_at)}</span>` : ""}</span></div>
@@ -1297,7 +1313,8 @@ function render(d) {
   const capPill = v.cap_n && v.units_full > v.units ? ` <span class="pill" title="${v.cap_n} bets on the board need ${esc(v.cap_team || "this team")} to ${v.side === "More" ? "do well" : "do badly"} in this match – one upset or overtime decides them all, so together they're capped at ${capOf(d, "same_result", 3)}U. On its own this pick is ${v.units_full}U.">capped from ${v.units_full}U</span>` : "";
   const gateStop = !("p_more" in g);   // stopped by a gate - the reason shows as a pill instead
   const why = v.reason && !/^Projection [\d.]+ vs [\d.]+ needed \([^)]*\)$/.test(v.reason) ? v.reason : "";
-  const sub = v.side ? `${pct(v.p)} chance · ${v.units}U${capPill} · ${esc(v.confidence)} confidence${why ? `<div class="small muted" style="margin-top:4px">${esc(why)}</div>` : ""}`
+  const pu = pushOf(g);
+  const sub = v.side ? `${pct(v.p)} ${pu != null ? `win chance excluding pushes · push ${pct(pu)}` : "chance"} · ${v.units}U${capPill} · ${esc(v.confidence)} confidence${why ? `<div class="small muted" style="margin-top:4px">${esc(why)}</div>` : ""}`
     : gateStop ? "" : esc(v.reason || "");
   const hc = g.status === "NO GRADE" || v.state === "SCOUT" ? "g-scout" : gClass(v.grade);
   h += `<section class="card herocard ${hc}"><div class="hero">
@@ -1311,7 +1328,7 @@ function render(d) {
       ${g.tape_fight ? `<span class="pill warn">TAPE FIGHT – recent record at this line disagrees · max ${capOf(d, "tape", 0.5)}U</span>` : ""}
       ${g.market_quality && g.market_quality !== "HARD" && v.state !== "SCOUT" ? `<span class="pill">${g.market_quality === "SOFT" ? "SOFT BOOK" : "NO MARKET"} · max ${capOf(d, "market", 1.5)}U</span>` : ""}
       ${g.market?.note_line ? `<span class="pill warn">${esc(g.market.note_line)}</span>` : ""}
-      ${lineWarn(g.prop, g.line) ? `<span class="pill warn">${esc(lineWarn(g.prop, g.line))}</span>` : ""}
+      ${lineWarn(g.prop, g.line, marketOk(d)) ? `<span class="pill warn">${esc(lineWarn(g.prop, g.line, marketOk(d)))}</span>` : ""}
       ${nm?.bo === 1 && g.scope !== "1" ? `<span class="pill warn">BO1 match – grade it as Map 1 (BO1)</span>` : ""}
       ${g.scope === "123" && g.p_map3 != null ? `<span class="pill">Map 3 is only played if Maps 1–2 split: ${pct(g.p_map3, 0)} chance</span>` : ""}
       ${udPill(d)}
@@ -1319,8 +1336,8 @@ function render(d) {
   h += glance(d, g, v);
   if ("p_more" in g) {
     h += `<div class="sides">
-      <div class="side ${v.side === "More" ? "pick" : ""}"><div class="k">Over · ${sideGrade(g.grade, g.units, v, "More")}${zTag(g.grade, g.units)}</div><div class="v">${pct(g.p_more)}</div><div class="bar"><i style="width:${g.p_more*100}%"></i></div></div>
-      <div class="side ${v.side === "Less" ? "pick" : ""}"><div class="k">Under · ${sideGrade(g.grade_less, g.units_less, v, "Less")}${zTag(g.grade_less, g.units_less)}</div><div class="v">${pct(g.p_less)}</div><div class="bar"><i style="width:${g.p_less*100}%"></i></div></div>
+      <div class="side ${v.side === "More" ? "pick" : ""}"><div class="k">Over · ${sideGrade(g.grade, g.units, v, "More")}${zTag(g.grade, g.units)}</div><div class="v">${pct(g.p_more)}${pushOf(g) != null ? ` <span class="muted small">excl. pushes</span>` : ""}</div><div class="bar"><i style="width:${g.p_more*100}%"></i></div></div>
+      <div class="side ${v.side === "Less" ? "pick" : ""}"><div class="k">Under · ${sideGrade(g.grade_less, g.units_less, v, "Less")}${zTag(g.grade_less, g.units_less)}</div><div class="v">${pct(g.p_less)}${pushOf(g) != null ? ` <span class="muted small">excl. pushes · push ${pct(pushOf(g))}</span>` : ""}</div><div class="bar"><i style="width:${g.p_less*100}%"></i></div></div>
     </div>
     ${Array.isArray(d.ladder) && d.ladder.length > 1 ? `<div class="ladder"><span class="small muted">Nearby lines:</span>${d.ladder.map(x =>
       `<button type="button" class="chipbtn ${x.line === g.line ? "on" : ""}" data-ladder="${x.line}" title="Grade this line">${x.line} <b class="${x.side === "More" ? "up" : "dn"}">${x.side === "More" ? "Over" : "Under"} ${pct(x.p)}</b>${x.grade && x.grade !== "C" && !String(x.grade).startsWith("n/a") ? " · " + esc(x.grade) : ""}</button>`).join("")}</div>` : ""}
@@ -1637,8 +1654,9 @@ Tap to open ${esc(e.nick)}'s ${pr === "hs" ? "headshots" : "kills"} card">
     const ps = t.players.flatMap(e => props.filter(pr => shown(e[pr])).map(pr => ({nick: e.nick, pr, side: e[pr].side, u: +e[pr].units || 0})));
     if (!ps.length) return "";
     const dbl = t.players.filter(e => props.length === 2 && shown(e.kills) && shown(e.hs)).map(e => `${esc(e.nick)} (kills ${e.kills.side === "More" ? "Over" : "Under"} + HS ${e.hs.side === "More" ? "Over" : "Under"})`);
-    const un = ps.filter(x => x.side === "Less").length, ov = ps.length - un, u = ps.reduce((a, x) => a + x.u, 0);
-    return `<b>${esc(t.team)}</b>: ${ps.length} pick${ps.length > 1 ? "s" : ""} (${ov} Over · ${un} Under, ${+u.toFixed(2)}U staked)${dbl.length ? ` – same player both props: ${dbl.join(", ")}` : ""}`;
+    // suggested units, not wagers (2026-10-10 walkthrough); graded picks and 0-unit Leans counted apart
+    const gr = ps.filter(x => x.u > 0), ln = ps.length - gr.length, un = gr.filter(x => x.side === "Less").length, u = gr.reduce((a, x) => a + x.u, 0);
+    return `<b>${esc(t.team)}</b>: ${gr.length ? `${gr.length} graded pick${gr.length > 1 ? "s" : ""} (${gr.length - un} Over · ${un} Under) · total suggested units ${+u.toFixed(2)}U` : "no graded picks"}${ln ? ` · ${ln} Lean${ln > 1 ? "s" : ""} (0U)` : ""}${dbl.length ? ` – same player both props: ${dbl.join(", ")}` : ""}`;
   }).filter(Boolean);
   const seg = (id, opts, cur) => `<div class="seg" data-mcseg="${id}">${opts.map(([v, l]) => `<button type="button" data-v="${v}" class="${v === cur ? "on" : ""}">${l}</button>`).join("")}</div>`;
   el.innerHTML = `<h2>Match players · ${esc(j.match.team)} vs ${esc(j.match.opponent)} · ${j.match.scope === "1" ? "Map 1" : j.match.scope === "123" ? "Maps 1–3" : "Maps 1–2"}</h2>

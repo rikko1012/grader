@@ -176,3 +176,12 @@ def test_source_is_not_quality():
     assert cmp.data_status({"flags": ["Note: last official map 12 days ago"]}, {})[0] == "ok"
     assert cmp.data_status({"flags": []}, {"state": "SCOUT"})[0] == "verify"
     assert cmp.data_status({"flags": ["Projection ... data: thin history)"]}, {})[0] == "limited"
+
+
+def test_record_matches_the_lines_maps():
+    """Wicadia Map 1 15.5 (2026-10-10): the explanation said 10/10 Overs from Maps 1-2 totals; Map 1 history was 6/10."""
+    pb = {"recent_form": {"decided": 10, "overs": 10}, "recent_form_map1": {"decided": 10, "overs": 6}}
+    assert cmp.record_for_scope(pb, "1")["overs"] == 6
+    assert cmp.record_for_scope(pb, "12")["overs"] == 10 and cmp.record_for_scope(pb, None)["overs"] == 10
+    assert cmp.record_for_scope(pb, "123") == {}
+    assert cmp.record_for_scope({"recent_form": {"decided": 10, "overs": 10}}, "1") == {}   # never falls back to Maps 1-2

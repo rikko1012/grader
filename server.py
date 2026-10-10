@@ -527,7 +527,7 @@ def board_forever():
                     v = verdict(res.get("grade"))
                     g = res.get("grade") or {}
                     pb = res.get("player_block") or {}
-                    rf = (pb.get("recent_form_map1") if (r.get("scope") or "12") == "1" else None) or pb.get("recent_form") or {}
+                    rf = comparison.record_for_scope(pb, r.get("scope"))   # the line's own maps - never Maps 1-2 for Map 1
                     fw = ((pb.get("overall") or {}).get("form_windows") or {}).get("3m") or {}
                     BOARD[r["id"]] = {"at": time.time(), "graded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                                       "player_id": (pb.get("player") or {}).get("id"),     # BO3.gg id: Underdog -> player map
@@ -1615,7 +1615,7 @@ th{{color:#8b95a8}}input{{background:#1a2130;color:#e8ecf3;border:1px solid #252
  · <span class=k>units net (flat ±1, not payout-adjusted)</span> {r['units_net_flat']}</p>
 <h3>Printed % vs actual (settled)</h3>{table(pct(r['by_printed_pct']), ['bucket', 'n', 'printed', 'actual'])}
 <h3>By units</h3>{table(pct(r['by_units']), ['bucket', 'n', 'printed', 'actual'])}
-<h3>Picks (newest first) - enter PrizePicks' closing line for CLV</h3><div class=scroll><table>
+<h3>Picks (newest first) - enter Underdog's closing line for CLV</h3><div class=scroll><table>
 <tr><th>#</th><th>logged</th><th>player</th><th>vs</th><th>line</th><th>pick</th><th>λ</th><th>market</th><th>last10</th>
 <th>status</th><th>actual</th><th>result</th><th>closing</th><th>CLV</th><th>asks</th></tr>{''.join(picks)}</table></div>"""
         return self.send(200, page.encode(), "text/html; charset=utf-8")
