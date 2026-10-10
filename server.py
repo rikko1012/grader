@@ -1074,6 +1074,31 @@ class Handler(BaseHTTPRequestHandler):
                                  "product": m.get("product_id"),
                                  "grader_allows": whop_auth.has_access(uid, force=True) if uid else None})
                 return self.send(200, {"plan": q.get("plan"), "memberships": rows})
+            if u.path == "/admin/prop_feed" and self.authed(q.get("token")):
+                # read-only look at the scraper's props tables (PrizePicks receiver): status, volume, freshness, samples
+                import hltv
+                con = hltv._connect()
+                try:
+                    with con.cursor() as cur:
+                        def rows(sql, args=None):
+                            cur.execute(sql, args)
+                            cols = [c[0] for c in cur.description]
+                            return [dict(zip(cols, [str(v) if v is not None else None for v in r])) for r in cur.fetchall()]
+                        out = {"status": rows("SELECT * FROM prop_status ORDER BY book"),
+                               "counts": rows("""SELECT book, maps, market, odds_type, count(*) n, min(start_time) first_start, max(start_time) last_start,
+                                                 min(updated_at) oldest_update, max(updated_at) newest_update, sum((moves > 0)::int) moved,
+                                                 sum((higher IS NOT NULL)::int) with_higher
+                                          FROM prop_lines GROUP BY 1, 2, 3, 4 ORDER BY 1, 2, 3, 4"""),
+                               "upcoming": rows("""SELECT book, count(*) n, sum((updated_at >= now() - interval '90 minutes')::int) seen_90min
+                                            FROM prop_lines WHERE start_time > now() GROUP BY 1"""),
+                               "sample": rows("""SELECT * FROM prop_lines WHERE book = %s AND start_time > now() ORDER BY start_time, player LIMIT %s""",
+                                              (q.get("book") or "prizepicks", int(q.get("n") or 12))),
+                               "grades_columns": rows("""SELECT column_name, data_type FROM information_schema.columns
+                                                  WHERE table_name = 'prop_grades' ORDER BY ordinal_position"""),
+                               "grades_sample": rows("SELECT * FROM prop_grades ORDER BY 1 DESC LIMIT 3")}
+                        return self.send(200, out)
+                finally:
+                    con.close()
             if u.path == "/admin/hltv_schema" and self.authed(q.get("token")):
                 import hltv
                 con = hltv._connect()
