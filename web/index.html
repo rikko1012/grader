@@ -799,7 +799,7 @@ function legFrom(d, extra) {
 }
 function pushLeg(leg) {
   const s = store.get("cs2s_slip", []), plat = slipBook(s);
-  if (leg.bk && plat && leg.bk !== plat) { toast(`This slip is for ${bookName(plat)} – one platform per slip. Clear it first to start a ${bookName(leg.bk)} slip.`); return openSlip(); }
+  if (leg.bk && plat && leg.bk !== plat) { toast(`This slip is for ${bookName(plat)} – one platform per slip. Clear it first to start ${leg.bk === "underdog" ? "an" : "a"} ${bookName(leg.bk)} slip.`); return openSlip(); }
   if (s.some(x => legKey(x) === legKey(leg))) { toast(`${leg.p} ${propWord(leg.t)}${mapsWord(leg.sc)} is already on the slip`); return openSlip(); }
   if (s.some(x => String(x.p).toLowerCase() === String(leg.p).toLowerCase())) toast(`${leg.p} now has two picks – they move together; check your app allows both`);
   if (s.length >= 6) { toast("A slip holds 6 picks max"); return openSlip(); }
