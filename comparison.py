@@ -24,7 +24,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-VERSION = "cmp-3"   # cmp-3: stable Underdog->player ids (no requested-name alias), ambiguity, grounded evidence (basis)
+VERSION = "cmp-4"   # cmp-4: PrizePicks lines (via the HLTV scraper database) next to Underdog's; cmp-3: cmp-3: stable Underdog->player ids (no requested-name alias), ambiguity, grounded evidence (basis)
 JOIN_START_MIN = 45            # same match: scheduled starts within 45 min
 STALE_MIN = 15                 # a book line older than this (board refresh is 5 min) is flagged stale
 
@@ -33,8 +33,9 @@ STALE_MIN = 15                 # a book line older than this (board refresh is 5
 SOURCES = (
     {"id": "underdog", "kind": "book_line", "status": "connected",
      "note": "Maps 1-2 / Map 1 kills and headshots thresholds, payout multiplier and displayed price per side, alternate lines"},
-    {"id": "prizepicks", "kind": "book_line", "status": "unavailable",
-     "note": "public API answers with a CAPTCHA (bot protection) - not bypassed"},
+    {"id": "prizepicks", "kind": "book_line", "status": "connected",
+     "note": "via the HLTV scraper's database (its props workflow reads PrizePicks about hourly; PrizePicks shows this "
+             "server a CAPTCHA, not bypassed): Map 1 / Maps 1-2 / Maps 1-3 kills and headshots, standard and goblin / demon"},
     {"id": "oddspapi", "kind": "book_line", "status": "unchecked",
      "note": "free quota exhausted during the 2026-10-09 inventory - player-prop coverage not yet known"},
     {"id": "polymarket", "kind": "market", "status": "no player props",
@@ -179,13 +180,15 @@ def match_offers(res, rows, now=None, board_at=None, id_map=None):
         if dup in seen:
             continue                                   # the same offer listed twice counts once
         seen.add(dup)
-        offers.append({"source": "underdog", "id": r.get("id"), "line": line, "alt": bool(r.get("alt")), "identity": ident,
+        offers.append({"source": r.get("book") or "underdog", "id": r.get("id"), "line": line, "alt": bool(r.get("alt")), "identity": ident,
+                       "odds_type": r.get("odds_type"), "open_line": r.get("open_line"), "moves": r.get("moves"),
                        "ud_player_id": r.get("ud_player_id"),
                        "mult_over": r.get("higher"), "mult_under": r.get("lower"),
                        "price_over": r.get("price_higher"), "price_under": r.get("price_lower"),
                        "updated_at": r.get("updated_at"), "team_verified": same is True,   # updated_at = line last changed
                        # stale = OUR copy of the board is old (an unchanged line is still current)
-                       "stale": bool(board_at and now.timestamp() - board_at > STALE_MIN * 60)})
+                       "stale": bool(r["stale"]) if "stale" in r     # PrizePicks: the age of its own feed (hltv.py)
+                       else bool(board_at and now.timestamp() - board_at > STALE_MIN * 60)})
     if len({o["ud_player_id"] for o in offers if o["ud_player_id"] is not None}) > 1:
         rejected += [(o["line"], "ambiguous: two different Underdog players fit this market") for o in offers]
         offers = []
