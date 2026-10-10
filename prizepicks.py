@@ -25,6 +25,7 @@ STALE_MIN = 90                   # the props workflow reads PrizePicks about hou
 SCOPE = {"1-2": "12", "1": "1", "1-3": "123"}   # the maps this app grades (Map 2-only lines are not graded)
 HISTORY = Path(DATA_DIR) / ".cache" / "pp_lines.jsonl"     # every observed opening / move / id change / removal
 SNAPSHOT = Path(DATA_DIR) / ".cache" / "pp_last.json"     # the last observed board, by market (survives restarts)
+INGEST = Path(DATA_DIR) / ".cache" / "pp_ingest.jsonl"     # each new upstream read Scout took in: both timestamps
 _S = {"at": 0.0, "tried": 0.0, "rows": [], "status": {}, "error": None, "busy": False}
 _HLOCK = threading.Lock()
 _SQL = """SELECT line_id, player, team, opponent, start_time, market, maps, line, odds_type, open_line, prev_line, move,
@@ -118,6 +119,34 @@ def _history(rows, now):
         return events
 
 
+def _utc(t):
+    return datetime.fromtimestamp(t, timezone.utc).isoformat(timespec="seconds") if t else None
+
+
+def _count(events):
+    out = {}
+    for e in events or []:
+        out[e["event"]] = out.get(e["event"], 0) + 1
+    return out
+
+
+def _ingest_log(rec):
+    try:
+        INGEST.parent.mkdir(parents=True, exist_ok=True)
+        with INGEST.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(rec) + "\n")
+    except OSError:
+        pass
+
+
+def ingests(limit=50):
+    """Scout's record of each new upstream PrizePicks read it took in (newest last)."""
+    try:
+        return [json.loads(x) for x in INGEST.read_text(encoding="utf-8").splitlines() if x.strip()][-limit:]
+    except (OSError, ValueError):
+        return []
+
+
 def _load():
     try:
         con = hltv._connect()
@@ -134,9 +163,14 @@ def _load():
                                    "checked_at": s[4].timestamp() if s[4] else None, "last_ok": s[5].timestamp() if s[5] else None}
         rows = rows_from(records)
         now = time.time()
+        prev_ok = (_S["status"] or {}).get("last_ok")
         _S.update(at=now, rows=rows, status=status, error=None)
         if status.get("ok"):
-            _history(rows, now)
+            ev = _history(rows, now)
+            if status.get("last_ok") != prev_ok:            # a new upstream read: when it happened and when Scout took it in
+                _ingest_log({"ingested_at": _utc(now), "upstream_checked_at": _utc(status.get("checked_at")),
+                             "upstream_last_ok": _utc(status.get("last_ok")), "upstream_lines": status.get("lines"),
+                             "rows": len(rows), "events": dict(_count(ev))})
     except Exception as e:                       # database down / tables missing: keep the last rows, say so
         _S.update(tried=time.time(), error=f"{type(e).__name__}: {str(e)[:160]}")
     finally:
@@ -178,6 +212,7 @@ def board(now=None, wait=False):
     state = feed_state(now)
     st = _S["status"] or {}
     return {"state": state, "at": st.get("last_ok"), "checked_at": st.get("checked_at"), "lines": st.get("lines"),
+            "ingested_at": _S["at"] or None,              # when Scout last read the shared table
             "error": _S["error"] or (st.get("error") if state in ("failed", "stale") else None),
             "rows": [dict(r, stale=state != "ok") for r in _S["rows"]]}
 

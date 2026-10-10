@@ -185,3 +185,22 @@ def test_record_matches_the_lines_maps():
     assert cmp.record_for_scope(pb, "12")["overs"] == 10 and cmp.record_for_scope(pb, None)["overs"] == 10
     assert cmp.record_for_scope(pb, "123") == {}
     assert cmp.record_for_scope({"recent_form": {"decided": 10, "overs": 10}}, "1") == {}   # never falls back to Maps 1-2
+
+
+def test_maps123_record():
+    """Maps 1-3 record (records.py, display only): every map played up to map 3; HLTV first, BO3.gg only for series HLTV lacks."""
+    import records
+    def m(mid, n, k, won, d="2026-10-05", opp="MOUZ", src="hltv"):
+        return {"match_id": mid, "number": n, "kills": k, "headshots": k // 2, "won": won, "date": d, "opponent": opp, "map": "de_x", "source": src}
+    hl = [m("h1", 1, 20, True), m("h1", 2, 18, True),                                   # 2-0: two maps
+          m("h2", 1, 15, False, "2026-10-03", "FaZe"), m("h2", 2, 22, True, "2026-10-03", "FaZe"), m("h2", 3, 17, True, "2026-10-03", "FaZe"),
+          m("h3", 1, 9, False, "2026-10-01", "G2")]                                    # map 2 missing: not usable
+    pb = {"player": {"nick": "x"}, "current_team": "T",
+          "recent_maps": [dict(m("b1", 1, 30, True, "2026-10-05", "MOUZ", None)), dict(m("b1", 2, 30, True, "2026-10-05", "MOUZ", None)),   # HLTV has this one
+                          dict(m("b2", 1, 10, False, "2026-09-20", "NaVi", None)), dict(m("b2", 2, 11, False, "2026-09-20", "NaVi", None))]}
+    r = records.maps123_record(pb, 37.5, "kills", hltv_rows=hl)
+    assert [s["total"] for s in r["series"]] == [38, 54, 21] and r["series"][1]["result"] == "W 2-1"
+    assert (r["overs"], r["pushes"], r["decided"]) == (2, 0, 3) and r["series"][0]["source"] == "HLTV" and r["series"][2]["source"] is None
+    assert records.maps123_record(pb, 38.0, "kills", hltv_rows=hl)["pushes"] == 1                      # whole line: a push
+    pb2 = {"recent_form": {"overs": 9}, "recent_form_123": r}
+    assert cmp.record_for_scope(pb2, "123") is r

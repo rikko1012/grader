@@ -34,6 +34,7 @@ import slips
 import slip_batches
 import comparison
 import prizepicks
+import records
 import roles
 import underdog
 import whop_auth
@@ -391,7 +392,7 @@ def board_payload(book="underdog"):
     out = {"book": book, "updated": b["at"], "error": b["error"], "rows": rows, "total": len(b["rows"]),
            "version": picklog.MODEL_VERSION}
     if book == "prizepicks":
-        out["feed"] = {k: b.get(k) for k in ("state", "at", "checked_at", "lines", "error")}
+        out["feed"] = {k: b.get(k) for k in ("state", "at", "checked_at", "lines", "error", "ingested_at")}
     return out
 
 
@@ -541,6 +542,11 @@ def board_forever():
                     v = verdict(res.get("grade"))
                     g = res.get("grade") or {}
                     pb = res.get("player_block") or {}
+                    if (r.get("scope") or "12") == "123":   # display only: his Maps 1-3 record (never a grade input)
+                        try:
+                            pb["recent_form_123"] = records.maps123_record(pb, r["line"], "headshots" if r["prop"] == "hs" else "kills")
+                        except Exception:
+                            traceback.print_exc()
                     rf = comparison.record_for_scope(pb, r.get("scope"))   # the line's own maps - never Maps 1-2 for Map 1
                     fw = ((pb.get("overall") or {}).get("form_windows") or {}).get("3m") or {}
                     BOARD[r["id"]] = {"at": time.time(), "graded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -1099,8 +1105,9 @@ class Handler(BaseHTTPRequestHandler):
                 # every PrizePicks line Scout observed: openings, moves, provider-id changes, removals (prizepicks.py)
                 ev = prizepicks.history(q.get("market") or None, int(q.get("limit") or 500))
                 b = prizepicks.board()
-                return self.send(200, {"feed": {k: b.get(k) for k in ("state", "at", "checked_at", "lines", "error")},
-                                       "events": ev, "counts": dict(collections.Counter(e.get("event") for e in ev))})
+                return self.send(200, {"feed": {k: b.get(k) for k in ("state", "at", "checked_at", "lines", "error", "ingested_at")},
+                                       "ingests": prizepicks.ingests(), "events": ev,
+                                       "counts": dict(collections.Counter(e.get("event") for e in ev))})
             if u.path == "/admin/prop_feed" and self.authed(q.get("token")):
                 # read-only look at the scraper's props tables (PrizePicks receiver): status, volume, freshness, samples
                 import hltv
@@ -1560,6 +1567,11 @@ class Handler(BaseHTTPRequestHandler):
                 return 404, json.dumps({"error": res["error"][0].upper() + res["error"][1:]}).encode()
             pb_ = res.get("player_block") or {}
             mark_warm(pkey, name, (pb_.get("player") or {}).get("slug"), (pb_.get("player") or {}).get("nick"))
+            if scope == "123":                           # display only: his Maps 1-3 record (never a grade input)
+                try:
+                    pb_["recent_form_123"] = records.maps123_record(pb_, line, "headshots" if prop == "hs" else "kills")
+                except Exception:
+                    traceback.print_exc()
             res["verdict"] = verdict(res.get("grade"))
             res["caps"] = stake_caps()
             try:

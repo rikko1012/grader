@@ -275,7 +275,7 @@ def pick_row(res, verdict, test=False):
     # the record logged with the pick is in the LINE'S scope: Map 1 lines use the Map 1 record; Maps 1-3 has none
     # (until 2026-10-08 the Maps 1-2 record was logged against Map 1 / Maps 1-3 lines)
     _sc = (g.get("scope") or "12")
-    rf = (pb.get("recent_form_map1") or {}) if _sc == "1" else {} if _sc == "123" else (pb.get("recent_form") or {})
+    rf = (pb.get("recent_form_map1") or {}) if _sc == "1" else (pb.get("recent_form_123") or {}) if _sc == "123" else (pb.get("recent_form") or {})
     scope = g.get("scope") or "12"
     key = "|".join(str(x) for x in (pb["player"]["slug"], g["prop"], g["line"], g["line_type"], nm["slug"]))
     if scope != "12":

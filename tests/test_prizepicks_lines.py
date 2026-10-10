@@ -148,3 +148,31 @@ def test_market_type_never_moves_the_projection():
         a = grader.grade_leg(dict(d, line_type="standard")); b = grader.grade_leg(dict(d, line_type="goblin"))
         c = grader.grade_leg(dict(d, line_type="demon"))
         assert a["lambda_final"] == b["lambda_final"] == c["lambda_final"] and a["p_more"] == b["p_more"] == c["p_more"]
+
+
+def test_ingestion_log_one_entry_per_new_upstream_read(tmp_path, monkeypatch):
+    import hltv
+    monkeypatch.setattr(pp, "HISTORY", tmp_path / "h.jsonl"); monkeypatch.setattr(pp, "SNAPSHOT", tmp_path / "s.json")
+    monkeypatch.setattr(pp, "INGEST", tmp_path / "i.jsonl")
+    later = datetime.now(timezone.utc) + timedelta(days=1)
+    reads = {"last_ok": T0}
+    class Cur:
+        def __init__(self): self.q = None
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def execute(self, sql, *a): self.q = sql
+        @property
+        def description(self): return [(k,) for k in _rec()]
+        def fetchall(self): return [tuple(_rec(start=later).values())]
+        def fetchone(self): return (True, 1, "partner-api", None, reads["last_ok"], reads["last_ok"])
+    class Con:
+        def cursor(self): return Cur()
+        def close(self): pass
+    monkeypatch.setattr(hltv, "_connect", lambda: Con())
+    pp._S.update(at=0.0, tried=0.0, rows=[], status={}, error=None, busy=False)
+    pp._load(); pp._load()                                        # same upstream read twice: one ingestion entry
+    reads["last_ok"] = T0 + timedelta(hours=1); pp._load()        # a new upstream read
+    ing = pp.ingests()
+    assert len(ing) == 2 and ing[0]["upstream_last_ok"] != ing[1]["upstream_last_ok"] and ing[0]["ingested_at"] and ing[1]["rows"] == 1
+    assert ing[0]["events"] == {"open": 1} and ing[1]["events"] == {}
+    pp._S.update(at=0.0, tried=0.0, rows=[], status={}, error=None, busy=False)

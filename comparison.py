@@ -86,9 +86,9 @@ def _ts(s):
 
 def record_for_scope(pb, scope):
     """His last-10 record that matches the line's maps: Map 1 lines -> his Map 1 totals, Maps 1-2 -> Maps 1-2 totals,
-    Maps 1-3 -> none (no Maps 1-3 record exists). Never a Maps 1-2 record for another scope."""
+    Maps 1-3 -> his Maps 1-3 totals (records.py, every map played up to map 3). Never a Maps 1-2 record for another scope."""
     sc = scope or "12"
-    return (pb.get("recent_form_map1") or {}) if sc == "1" else {} if sc == "123" else (pb.get("recent_form") or {})
+    return (pb.get("recent_form_map1") or {}) if sc == "1" else (pb.get("recent_form_123") or {}) if sc == "123" else (pb.get("recent_form") or {})
 
 
 def source_label(g):
