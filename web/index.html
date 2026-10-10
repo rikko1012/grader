@@ -427,10 +427,10 @@ function showGate(state) {
   }, 20000);
   const g = $("#gate"), up = state.upgrade;
   const perks = `<div class="perks">
-       <div class="perk"><b>Single prop</b><span>Grade any CS2 player's Maps 1–2 kills or headshots line: A–F grade, More or Less, hit chance, projection and units.</span></div>
+       <div class="perk"><b>Single Prop</b><span>Grade any CS2 player's kills or headshots line (Maps 1–2, Map 1 or Maps 1–3): Over or Under, the chance, a grade from A+ to B– (or Lean) and suggested units.</span></div>
        <div class="perk"><b>Slate</b><span>Paste up to 15 props and grade them all at once, then build a 2–6 pick slip with the payout your entry shows.</span></div>
        <div class="perk"><b>Prop Board</b><span>Every Underdog and PrizePicks CS2 line graded ahead of time, best first – or compare both platforms' lines side by side.</span></div></div>
-     <div class="small muted" style="margin-top:8px">Built on HLTV, BO3.gg and Polymarket data: recent form, same-roster head-to-head, map picks and opponent strength.</div>`;
+     <div class="small muted" style="margin-top:8px">Projections from HLTV match data (BO3.gg as backup) – recent form, LAN or online, the opponent; lines from Underdog and PrizePicks. Not financial advice.</div>`;
   $("#f").style.display = "none"; $("#out").innerHTML = ""; g.hidden = false;
   const err = new URLSearchParams(location.search).get("signin_error");
   g.innerHTML = state.signed_in

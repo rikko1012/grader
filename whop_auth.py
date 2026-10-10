@@ -184,8 +184,11 @@ def paid_plans():
 
 def plan_access(user_id):
     """True if the user has a live membership on any paid plan (the owner's rule, plan by plan)."""
-    r = requests.get(MEMBERSHIPS, params={"user_id": user_id, "first": 50}, timeout=15,
-                     headers={"Authorization": f"Bearer {_env('WHOP_API_KEY')}"})
+    for attempt in (1, 2):              # Whop's API answers an occasional 500 - one retry before giving up
+        r = requests.get(MEMBERSHIPS, params={"user_id": user_id, "first": 50}, timeout=15,
+                         headers={"Authorization": f"Bearer {_env('WHOP_API_KEY')}"})
+        if r.status_code < 500:
+            break
     if r.status_code != 200:
         _log_fail("memberships", r)
         raise RuntimeError(f"memberships HTTP {r.status_code}")
