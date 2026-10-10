@@ -189,9 +189,17 @@ def plan_access(user_id):
     if r.status_code != 200:
         _log_fail("memberships", r)
         raise RuntimeError(f"memberships HTTP {r.status_code}")
-    return any(m.get("plan_id") in paid_plans() and (m.get("status") in LIVE_STATUSES or
+    # only THIS member's rows count (2026-10-10): if Whop ever ignored the user_id filter, another member's live
+    # membership must never let someone in
+    return any(_row_user(m) == user_id and m.get("plan_id") in paid_plans() and (m.get("status") in LIVE_STATUSES or
                (m.get("plan_id") == LIFETIME_PLAN and m.get("status") == "completed"))   # one-time payment
                for m in r.json().get("data") or [])
+
+
+def _row_user(m):
+    """The member a membership row belongs to (Whop gives user_id; some shapes nest it under user)."""
+    u = m.get("user_id") or m.get("user")
+    return u.get("id") if isinstance(u, dict) else u
 
 
 def has_access(user_id, force=False, last_known=None):

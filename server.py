@@ -1086,6 +1086,53 @@ class Handler(BaseHTTPRequestHandler):
                 ids = [int(x) for x in (q.get("ids") or "").split(",") if x.strip().isdigit()]
                 picklog.mark_tests(ids)
                 return self.send(200, {"marked": len(ids), "pushes_fixed": picklog.resettle_pushes()})
+            if u.path == "/admin/whop_check" and self.authed(q.get("token")):
+                # read-only health of the member gate for NEW and existing members (no names, emails or tokens returned)
+                import requests as _rq
+                H_ = {"Authorization": f"Bearer {os.environ.get('WHOP_API_KEY', '')}"}
+                out = {"enabled": whop_auth.enabled(), "client_id_set": bool(os.environ.get("WHOP_CLIENT_ID")),
+                       "api_key_set": bool(os.environ.get("WHOP_API_KEY")), "secret_set": bool(os.environ.get("WHOP_CLIENT_SECRET")),
+                       "session_secret_set": bool(os.environ.get("SESSION_SECRET")), "products": whop_auth.products(),
+                       "paid_plans": sorted(whop_auth.paid_plans()), "callback": whop_auth.public_url() + "/auth/callback",
+                       "join_url": whop_auth.upgrade_url(), "recent_errors": whop_auth.LAST_ERRORS[-5:], "plans": {}}
+                try:                                    # the user_id filter must really filter
+                    r = _rq.get(whop_auth.MEMBERSHIPS, params={"user_id": "user_doesnotexist0000", "first": 5}, headers=H_, timeout=20)
+                    out["fake_user_rows"] = len(r.json().get("data") or []) if r.status_code == 200 else f"HTTP {r.status_code}"
+                except Exception as e:
+                    out["fake_user_rows"] = type(e).__name__
+                try:
+                    j = _rq.get(whop_auth.JOIN_URL, timeout=20, allow_redirects=True)
+                    out["join_url_status"] = j.status_code
+                except Exception as e:
+                    out["join_url_status"] = type(e).__name__
+                sample_user = None
+                for plan in sorted(whop_auth.paid_plans()):
+                    st = {}
+                    try:
+                        r = _rq.get(whop_auth.MEMBERSHIPS, params={"plan_id": plan, "first": int(q.get("n", 10))}, headers=H_, timeout=20)
+                        if r.status_code != 200:
+                            out["plans"][plan] = f"HTTP {r.status_code}: {whop_auth._why(r)}"; continue
+                        for m in r.json().get("data") or []:
+                            uid = whop_auth._row_user(m)
+                            sample_user = sample_user or uid
+                            live = m.get("status") in whop_auth.LIVE_STATUSES or (plan == whop_auth.LIFETIME_PLAN and m.get("status") == "completed")
+                            allowed = whop_auth.has_access(uid, force=True) if uid else None
+                            k = f"{m.get('status')}: {'allowed' if allowed else 'denied'}"
+                            st[k] = st.get(k, 0) + 1
+                            if live and not allowed:
+                                st["LIVE BUT DENIED"] = st.get("LIVE BUT DENIED", 0) + 1
+                    except Exception as e:
+                        st = {"error": type(e).__name__}
+                    out["plans"][plan] = st
+                if sample_user:                         # a real member's lookup returns only that member's rows
+                    try:
+                        r = _rq.get(whop_auth.MEMBERSHIPS, params={"user_id": sample_user, "first": 50}, headers=H_, timeout=20)
+                        rows = r.json().get("data") or []
+                        out["one_user_rows"] = len(rows)
+                        out["one_user_other_rows"] = sum(1 for m in rows if whop_auth._row_user(m) != sample_user)
+                    except Exception as e:
+                        out["one_user_rows"] = type(e).__name__
+                return self.send(200, out)
             if u.path == "/admin/whop_plan" and self.authed(q.get("token")) and whop_auth.enabled():
                 # private: members on one plan and whether the grader lets each in (Whop read-only)
                 import requests as _rq
