@@ -14,14 +14,25 @@ button.on{border-color:#ff7a1a;color:#ff7a1a}
 th,td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}
 th{color:var(--muted);font-weight:600}.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
 .flag{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:1px 8px;margin:2px;font-size:12px}
+
+/* Scout diagnostics workspace */
+:root{--bg:#090d14;--panel:#111b29;--line:#293950;--text:#eef4fc;--muted:#a4b4ca}
+*{box-sizing:border-box}body{background:radial-gradient(ellipse at 95% 0,#1c314d66,transparent 45%),var(--bg);font-family:Inter,system-ui,sans-serif;line-height:1.65}.wrap{max-width:1440px;padding:32px}
+.diag-nav{display:flex;justify-content:space-between;gap:16px;padding:0 0 24px;border-bottom:1px solid var(--line);margin-bottom:30px;color:#ffb477;font-size:11px;font-weight:700;letter-spacing:.15em}.diag-nav a{color:var(--muted);text-decoration:none;letter-spacing:0;font-size:13px}
+.diag-eyebrow{font:11px ui-monospace,monospace;letter-spacing:.15em;color:#ffb477;text-transform:uppercase}h1{font-size:42px;line-height:1.15;letter-spacing:-1.5px;margin:12px 0 16px}h2{font-size:20px;margin:32px 0 14px;color:var(--text);letter-spacing:-.3px}
+.diag-lead{font-size:14px;max-width:830px;margin-bottom:28px}.bar{gap:10px;margin:14px 0;padding:16px;background:#111b29;border:1px solid var(--line);border-radius:14px}
+select,button{font:inherit;font-size:12px;padding:11px 14px;border-radius:9px;background:#0c1420;min-height:42px}button{cursor:pointer}button.on{background:#ff8c4215;border-color:#ff8c42;color:#ffb477}button:hover,select:hover{border-color:#647792}button:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid #ffb477;outline-offset:3px}
+#gen{margin-left:auto;font:11px ui-monospace,monospace}#out{padding-top:16px}.scroll{border:1px solid var(--line);border-radius:12px;background:#0e1723;margin:14px 0;scrollbar-color:#455772 #101722}th{background:#19263a;font-size:10px;text-transform:uppercase;letter-spacing:.07em;padding:13px}td{padding:12px 13px;font-variant-numeric:tabular-nums}tbody tr:hover{background:#1c2a3f66}.card{border-radius:16px;padding:22px;margin:16px 0;background:linear-gradient(120deg,#142033,#101925)}.card>b{font-size:14px}.flag{background:#ff8c420b;border-color:#8e653d66;color:#ffc68f;padding:3px 9px}.small{font-size:12px}#out>.small:first-child{padding:12px 16px;border-left:2px solid #ff8c42;background:#ff8c4208}
+@media(max-width:640px){.wrap{padding:18px 14px}h1{font-size:32px}.diag-nav{margin-bottom:22px}.diag-lead{font-size:12px}.bar{padding:12px;gap:8px}.bar select{flex:1 1 45%;min-width:0}#cohort button{width:100%;text-align:left}#gen{margin:4px 0}.card{padding:15px}h2{font-size:18px}}
+
 </style></head><body><div class="wrap">
-<h1>Grader diagnostics</h1>
-<div class="muted small">Diagnostic flags, not causes: a correctly estimated 60% pick loses 40% of the time. Cohorts, stats, map sets and model versions are never mixed.</div>
+<nav class="diag-nav" aria-label="Diagnostics navigation"><span>CS2 SCOUT / DIAGNOSTICS</span><a href="/">Back to grader ↗</a></nav><div class="diag-eyebrow">Model observability</div><h1>The numbers behind the grades.</h1>
+<div class="muted diag-lead">Diagnostic flags, not causes: a correctly estimated 60% pick loses 40% of the time. Cohorts, stats, map sets and model versions are never mixed.</div>
 <div class="bar" id="cohort"><button data-v="eval" class="on">Evaluation snapshot (latest forecast 30+ min before start)</button><button data-v="first">First published forecast</button><button data-v="slips">Slip selections</button></div>
-<div class="bar"><select id="fsrc"><option value="">Board + member</option><option value="board">Underdog board</option><option value="board_pp">PrizePicks board</option><option value="member">Member research lines</option></select>
-<select id="fprop"><option value="">Kills + HS</option><option value="kills">Kills</option><option value="hs">Headshots</option></select>
-<select id="fscope"><option value="">All maps</option><option value="12">Maps 1–2</option><option value="1">Map 1</option><option value="123">Maps 1–3</option></select>
-<select id="fver"><option value="">All versions</option></select><span class="muted small" id="gen"></span></div>
+<div class="bar"><select aria-label="Forecast source" id="fsrc"><option value="">Board + member</option><option value="board">Underdog board</option><option value="board_pp">PrizePicks board</option><option value="member">Member research lines</option></select>
+<select aria-label="Statistic" id="fprop"><option value="">Kills + HS</option><option value="kills">Kills</option><option value="hs">Headshots</option></select>
+<select aria-label="Map scope" id="fscope"><option value="">All maps</option><option value="12">Maps 1–2</option><option value="1">Map 1</option><option value="123">Maps 1–3</option></select>
+<select aria-label="Model version" id="fver"><option value="">All versions</option></select><span class="muted small" id="gen"></span></div>
 <div id="out" class="muted">Loading…</div>
 </div>
 <script>
