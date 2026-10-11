@@ -520,7 +520,7 @@ def _both_boards():
     return rows
 
 
-def board_stake(res, prop, scope, line, line_type="standard"):
+def board_stake(res, prop, scope, line, line_type="standard", book=None):
     """The same line on the board with its stake cut by the same-match cap: the card shows that stake too (one stake
     per line on the whole site). Only when the board row is this exact pick (side, line, maps, match) and was cut from
     exactly this card's stake - otherwise the card's own stake stands. Returns the verdict (a new dict when capped)."""
@@ -538,7 +538,7 @@ def board_stake(res, prop, scope, line, line_type="standard"):
                     _BS_CACHE[:] = [time.time(), _both_boards()]
             finally:
                 _BS_LOCK.release()
-    book = "prizepicks" if line_type in ("goblin", "demon") else "underdog"   # the card's own platform (a goblin / demon line is PrizePicks)
+    book = book or ("prizepicks" if line_type in ("goblin", "demon") else "underdog")   # the card's own platform
     for r in _BS_CACHE[1]:
         if (r.get("book") or "underdog") != book:
             continue
@@ -1729,7 +1729,9 @@ class Handler(BaseHTTPRequestHandler):
         opp = (q.get("opponent") or "")[:60].strip() or None
         team = (q.get("team") or "")[:60].strip() or None     # board click: the team the board graded him for (namesakes)
         pkey = (slug or name).lower()
-        key = (pkey, line, prop, lt, match, (opp or "").lower(), scope, (team or "").lower())
+        # the card's platform (board / match-players clicks send it; typed cards = Underdog): its stake cap is its own board's
+        book = "prizepicks" if q.get("book") == "prizepicks" or lt in ("goblin", "demon") else "underdog"
+        key = (pkey, line, prop, lt, match, (opp or "").lower(), scope, (team or "").lower(), book)
 
         t_in = time.time()
 
@@ -1778,7 +1780,7 @@ class Handler(BaseHTTPRequestHandler):
                 traceback.print_exc()
             tm["log"] = round(time.time() - t0, 2)
             try:                                         # after logging: the log keeps the grader's own stake
-                res["verdict"] = board_stake(res, prop, scope, line, lt)
+                res["verdict"] = board_stake(res, prop, scope, line, lt, book)
                 if outage:                               # outage: tell the member what the board still shows
                     res["hltv_outage"] = board_last_hltv(res, prop, scope)
             except Exception:

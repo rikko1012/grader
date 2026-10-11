@@ -550,6 +550,7 @@ $("#f").onsubmit = async e => {
   if (match) qs.set("match", match);
   if (ctx?.team) qs.set("team", ctx.team);
   if (ctx?.opponent) qs.set("opponent", ctx.opponent);
+  if (ctx?.book === "prizepicks") qs.set("book", "prizepicks");   // stake cap from the card's own board
   $("#go").disabled = true; $("#out").innerHTML = "";
   const st = $("#status"); st.hidden = false; st.className = "status";
   const t0 = Date.now();

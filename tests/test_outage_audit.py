@@ -391,3 +391,4 @@ def test_card_stake_cap_stays_on_its_own_platform(monkeypatch):
     res = {"verdict": {"side": "More", "units": 1.0}, "player_block": {"player": {"nick": "x"}}, "next_match": {"start": "2026-10-12T12:00:00Z"}}
     assert server.board_stake(res, "kills", "12", 20.5)["units"] == 1.0                       # an Underdog card ignores a PrizePicks cap
     assert server.board_stake(res, "kills", "12", 20.5, "goblin")["units"] == 0.5             # a goblin card is a PrizePicks card
+    assert server.board_stake(res, "kills", "12", 20.5, "standard", "prizepicks")["units"] == 0.5   # a PrizePicks board click
