@@ -1156,6 +1156,36 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, {"feed": {k: b.get(k) for k in ("state", "at", "checked_at", "lines", "error", "ingested_at")},
                                        "ingests": prizepicks.ingests(), "events": ev,
                                        "counts": dict(collections.Counter(e.get("event") for e in ev))})
+            if u.path == "/admin/namesakes" and self.authed(q.get("token")):
+                # read-only: every board player with 2+ HLTV players of the same name - which one the projection uses and why
+                import hltv
+                rows_ = board_payload()["rows"] + board_payload("prizepicks")["rows"]
+                seen_, out = set(), []
+                con = hltv._connect()
+                try:
+                    with con.cursor() as cur:
+                        for r in rows_:
+                            nick, team = r.get("nick") or r.get("player"), r.get("team_name") or r.get("team")
+                            k = (hltv._norm(nick), hltv._norm(team))
+                            if k in seen_:
+                                continue
+                            seen_.add(k)
+                            cur.execute("""SELECT ps.playerid, string_agg(DISTINCT t.name, ', '), count(*), max(mo.date)
+                                           FROM players p JOIN player_stats ps USING (playerid) JOIN teams t ON t.teamid = ps.teamid
+                                           JOIN match_overview mo ON mo.matchid = ps.matchid
+                                           WHERE lower(regexp_replace(p.name, '[^a-zA-Z0-9]', '', 'g')) = %s GROUP BY ps.playerid""",
+                                        (hltv._norm(nick),))
+                            cands = cur.fetchall()
+                            if len(cands) < 2:
+                                continue
+                            chosen = hltv._player_ids(cur, nick, team)
+                            variants = hltv.team_name_variants(team)
+                            out.append({"player": nick, "team": team, "chosen": chosen[0] if chosen else None,
+                                        "team_matched": any(hltv._norm(x) in variants for c in cands for x in str(c[1]).split(", ") if c[0] == (chosen[0] if chosen else None)),
+                                        "candidates": [{"id": c[0], "teams": c[1], "rows": c[2], "last": str(c[3])} for c in cands]})
+                finally:
+                    con.close()
+                return self.send(200, {"board_players_with_namesakes": len(out), "guessed_without_team_match": sum(1 for o in out if not o["team_matched"]), "rows": out})
             if u.path == "/admin/prop_feed" and self.authed(q.get("token")):
                 # read-only look at the scraper's props tables (PrizePicks receiver): status, volume, freshness, samples
                 import hltv
