@@ -228,3 +228,13 @@ def test_direct_first_scraper_copy_for_history_and_as_backup(tmp_path, monkeypat
 
 def test_refreshes_every_two_minutes():
     assert pp.REFRESH <= 2 * 60
+
+
+def test_promo_lines_grade_as_standard():
+    """A PrizePicks promo is a standard Over / Under line with a boosted payout: not an alt market (both sides graded,
+    compared with other standard lines), tagged promo for display."""
+    rows = pp.rows_from([dict(_rec("s", line=31.5), odds_type="promo"), _rec("g", ot="goblin", line=27.5)])
+    assert rows[0]["odds_type"] == "promo" and rows[0]["alt"] is False and rows[1]["alt"] is True
+    st = T0.isoformat()
+    ok = cmp.line_check(_ppboard(rows), "cairne", "kills", "12", 31.5, "Fnatic", st, book="prizepicks")
+    assert ok["status"] == "verified"                                       # a standard pick verifies against the promo line

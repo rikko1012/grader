@@ -35,3 +35,14 @@ def test_maps123_is_three_full_maps():
         d = _inputs(rnd, "123"); d.pop("perf")
         g = grader.grade_leg(dict(d), dict(grader.CONFIG, gap_trust_at={"kills": 1e9, "hs": 1e9}))
         assert g["dist"]["kind"] == "normal" and abs(g["lambda_final"] - 1.5 * g["lambda_maps12"]) < 0.02   # both rounded to 0.01
+
+
+def test_maps123_simulation_plays_three_maps():
+    """BO5 regression: the Maps 1-3 simulation scripts are by maps won of three (3-0 / 2-1 / 1-2 / 0-3) - no "map 3 played"
+    conditional, and the scripts still partition the runs and reconcile with the grade's own distribution."""
+    rnd = random.Random(5)
+    d = _inputs(rnd, "123"); d.pop("perf")
+    g = grader.grade_leg(dict(d))
+    s = _check(g)
+    labels = [x["label"] for x in s["scenarios"] if x["exclusive"]]
+    assert labels == ["win 3-0", "win 2-1", "lose 1-2", "lose 0-3"] and not any("map 3" in x["label"] for x in s["scenarios"])

@@ -565,8 +565,11 @@ const propWord = p => p === "hs" ? "HS" : "kills";
 // platform helpers - defined before anything that runs at page load (the slip is drawn on load; 2026-10-10 fix: it
 // used these before they existed and stopped the page script for members with a saved slip)
 const bookName = b => b === "prizepicks" ? "PrizePicks" : b === "underdog" ? "Underdog" : b === "all" ? "Underdog and PrizePicks" : "";
-const mktType = r => r.line_type || r.odds_type || "standard";
-const mktTag = r => mktType(r) === "standard" ? "" : ` <span class="pill" style="margin:0;padding:1px 7px;color:${mktType(r) === "goblin" ? "#22d27a" : "#ff5566"};border-color:currentColor" title="PrizePicks ${esc(mktType(r))} market – its own line and payout; never compared with a standard line">${esc(mktType(r)[0].toUpperCase() + mktType(r).slice(1))}</span>`;
+const mktType = r => r.odds_type === "promo" ? "promo" : (r.line_type || r.odds_type || "standard");
+const gradeType = r => { const t = mktType(r); return t === "goblin" || t === "demon" ? t : "standard"; };   // what the grader uses
+const mktTag = r => { const t = mktType(r); if (t === "standard") return "";
+  const promo = t === "promo";
+  return ` <span class="pill" style="margin:0;padding:1px 7px;${promo ? "" : `color:${t === "goblin" ? "#22d27a" : "#ff5566"};border-color:currentColor`}" title="${promo ? "PrizePicks promo – a standard Over / Under line with a boosted payout; check the payout in the app" : `PrizePicks ${esc(t)} market – its own line and payout; never compared with a standard line`}">${esc(t[0].toUpperCase() + t.slice(1))}</span>`; };
 
 const ltTag = lt => lt === "goblin" ? ` <span class="pill" style="margin:0;padding:1px 7px;color:#22d27a;border-color:#22d27a">goblin</span>`
   : lt === "demon" ? ` <span class="pill" style="margin:0;padding:1px 7px;color:#ff5566;border-color:#ff5566">demon</span>` : "";
@@ -1011,7 +1014,7 @@ async function loadBoard(force) {
 const shortWhen = s => { if (!s) return ""; const d = new Date(s); if (isNaN(d)) return "";
   const u = until(d); return d.toLocaleString([], {weekday: "short", hour: "numeric", minute: "2-digit"}) + (u ? " · " + u : ""); };
 function boardCard(r) {     // a board row in the shape addToSlip / pickLine expect
-  return {book: r.book || "underdog", grade: {line: r.line, prop: r.prop, line_type: mktType(r), scope: r.scope || "12"},
+  return {book: r.book || "underdog", grade: {line: r.line, prop: r.prop, line_type: gradeType(r), scope: r.scope || "12"},
           verdict: {side: r.side, grade: r.grade, p: r.p, units: r.units},
           player_block: {player: {nick: r.nick || r.player, id: r.player_id}, current_team: r.team_name || r.team},
           next_match: {opponent: r.opp_name || r.opponent, start: r.start, slug: r.match_slug}, from: "board"};
@@ -1063,6 +1066,18 @@ function drawBoard() {
     const it = x => `${esc(x.nick || x.player)} ${sideWord({grade: x.grade, side: x.side})} ${x.line} ${propWord(x.prop)}${bbook === "all" ? ` (${bookName(x.book || "underdog")})` : ""} <b>${(x.p * 100).toFixed(1)}%</b>`;
     return `<div class="small" style="margin:0 2px 8px;line-height:1.5"><b>Highest chance here:</b> ${q2.slice(0, 3).map(it).join(" · ")}
       <div class="muted">No outside projections yet · value not ranked (no entry payouts)${q2.length > 1 ? " · these picks share match conditions and may win or lose together" : ""}</div></div>`; };
+  // Best plays (2026-10-11): the strongest graded picks on the board right now - one per player, best grade first,
+  // then highest chance; stakes as the board shows them (same-match cap included). Follows the Kills / HS / maps filters.
+  const bestPlays = () => {
+    if (bview !== "matches" || !$("#bbets").checked) return "";
+    const seen = new Set(), top = rows.filter(r => r.side && (r.units || 0) > 0 && r.state !== "SCOUT" && !r.stale)
+      .sort((a, b) => (G_RANK[a.grade] ?? 9) - (G_RANK[b.grade] ?? 9) || (b.p ?? 0) - (a.p ?? 0))
+      .filter(r => { const k = String(r.nick || r.player).toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 6);
+    if (top.length < 2) return "";
+    return `<div class="card" style="margin-bottom:12px;padding:12px"><div class="small muted" style="margin-bottom:6px"><b style="color:var(--text)">Best plays right now</b> · strongest graded picks${bbook === "all" ? " on either platform" : ""} · one per player</div>
+      <div class="blist">${top.map(r => rowHtml(r, true)).join("")}</div>
+      <div class="small muted" style="margin-top:6px">Ranked by grade, then chance. Picks from one match share its conditions – see the match groups below.</div></div>`;
+  };
   let html;
   if (!rows.length) html = `<div class="muted">${boardRows.length ? `No lines match these filters. <button type="button" class="chipbtn" data-reset="1">Reset filters</button>` : `No ${bookName(bbook)} CS2 lines right now.${boardAt && bbook === "underdog" ? ` Checked ${new Date(boardAt * 1000).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})} · checks again every 5 minutes – new lines are graded automatically.` : ""}`}</div>`;
   else if (bview === "all") html = `<div class="blist">${rows.map(r => rowHtml(r, true)).join("")}</div>`;
@@ -1077,7 +1092,7 @@ function drawBoard() {
         <span class="muted small">${shortWhen(r.start)}${r.event ? " · " + esc(r.event) : ""}${r.bo ? " · BO" + esc(r.bo) : ""} · ${maps.length ? "maps: " + maps.map(mapName).join(", ") : "maps not announced"} · ${g.length} line${g.length > 1 ? "s" : ""}${bets ? `, ${bets} bet${bets > 1 ? "s" : ""}` : ""}</span></summary>
         <div class="mbody">${matchRank(g)}<div class="blist">${g.map(x => rowHtml(x, false)).join("")}</div></div></details>`; }).join("");
   }
-  $("#boardout").innerHTML = html + (rows.length ? `<div class="small muted" style="margin-top:10px">${bookName(bbook)} lines, graded – each at its own line${bbook === "prizepicks" ? " and market type (standard, goblin, demon)" : ""}. Tap a pick for the full analysis.</div>` : "");
+  $("#boardout").innerHTML = (rows.length ? bestPlays() : "") + html + (rows.length ? `<div class="small muted" style="margin-top:10px">${bookName(bbook)} lines, graded – each at its own line${bbook === "prizepicks" ? " and market type (standard, goblin, demon)" : ""}. Tap a pick for the full analysis.</div>` : "");
   $("#boardout").querySelectorAll("details.mgroup").forEach(d => d.addEventListener("toggle", () => { const o = store.get("cs2s_mopen", {}); o[d.dataset.mk] = d.open; store.set("cs2s_mopen", o); }));
 }
 $("#boardout").addEventListener("click", e => {
@@ -1085,7 +1100,7 @@ $("#boardout").addEventListener("click", e => {
   const cb = e.target.closest("[data-cmp]");
   if (cb) { const [bk, p, l, t, sc, lt] = cb.dataset.cmp.split("|");
     const row = BK[bk].rows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && (x.scope || "12") === sc && mktType(x) === lt);
-    return gradeNow(p, l, t, lt, sc, true, row ? {team: row.team, opponent: row.opponent, book: bk} : {book: bk}); }
+    return gradeNow(p, l, t, row ? gradeType(row) : lt, sc, true, row ? {team: row.team, opponent: row.opponent, book: bk} : {book: bk}); }
   const b = e.target.closest("[data-bslip]");
   if (b) { e.stopPropagation(); const [p, l, t, lt, bk] = b.dataset.bslip.split("|");
     const r = boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && mktType(x) === (lt || "standard") && (x.book || "underdog") === (bk || "underdog"));
@@ -1093,7 +1108,7 @@ $("#boardout").addEventListener("click", e => {
   const r = e.target.closest("[data-bl]");
   if (r) { const [p, l, t, sc, lt, bk] = r.dataset.bl.split("|");
     const row = boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && (x.scope || "12") === sc && mktType(x) === (lt || "standard") && (x.book || "underdog") === (bk || "underdog"));
-    gradeNow(p, l, t, lt || "standard", sc, true, row ? {team: row.team, opponent: row.opponent, book: row.book || "underdog"} : null); }
+    gradeNow(p, l, t, row ? gradeType(row) : (lt || "standard"), sc, true, row ? {team: row.team, opponent: row.opponent, book: row.book || "underdog"} : null); }
 });
 $("#bbook").onclick = e => { const b = e.target.closest("button"); if (!b) return; bbook = b.dataset.v;
   [...$("#bbook").children].forEach(x => x.classList.toggle("on", x === b)); loadBoard(false); };
@@ -1584,6 +1599,7 @@ function render(d) {
   if (sm && sm.anchored && Array.isArray(sm.scenarios)) {
     const tm = esc(pb.playing_for || pb.current_team || "his team"), unit = g.prop === "hs" ? "HS" : "kills";
     const lab = x => x.label.startsWith("any overtime") ? "Any map goes to overtime <span class=\"muted\">(overlaps the rows above)</span>" : x.label === "win" ? `${tm} win the map` : x.label === "loss" ? `${tm} lose the map`
+      : x.label === "win 3-0" ? `${tm} win 3–0` : x.label === "win 2-1" ? `${tm} win 2–1` : x.label === "lose 1-2" ? `${tm} lose 1–2` : x.label === "lose 0-3" ? `${tm} lose 0–3`
       : x.label.startsWith("win") ? `${tm} win 2–0` : x.label.startsWith("lose") ? `${tm} lose 0–2` : `Maps 1–2 split 1–1${x.label.includes("map 3") ? " → map 3 played" : ""}`;
     const pc = x => `<b class="${x >= .5 ? "up" : "dn"}">${(x * 100).toFixed(1)}%</b>`;
     h += `<section class="card"><h2>Match simulation · 20,000 runs</h2>

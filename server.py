@@ -527,7 +527,8 @@ def board_forever():
 
             def one(r):
                 members_idle()                            # members first, but the board never stalls
-                lt = (r.get("odds_type") or "standard") if r.get("book") == "prizepicks" else "standard"   # goblin / demon
+                # PrizePicks goblin / demon are their own markets (More only); promo and standard grade as standard
+                lt = r.get("odds_type") if r.get("book") == "prizepicks" and r.get("odds_type") in ("goblin", "demon") else "standard"
                 try:
                     if MEMBER_GRADES[0] > 0:              # members still busy: one board grade at a time
                         with _BOARD_BUSY:

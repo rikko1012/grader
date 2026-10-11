@@ -77,7 +77,8 @@ def rows_from(records):
         r = {"id": f"pp:{rec.get('line_id')}", "book": "prizepicks", "market_id": str(rec.get("line_id")),
              "player": rec.get("player"), "team": rec.get("team"), "opponent": rec.get("opponent"),
              "start": _iso(rec.get("start_time")), "prop": prop, "scope": scope, "line": float(rec["line"]),
-             "alt": ot != "standard", "odds_type": ot,
+             # promo = a standard Over / Under line with a boosted payout: graded and compared as standard, tagged
+             "alt": ot not in ("standard", "promo"), "odds_type": ot,
              # PrizePicks' payout modifiers as reported (1.0 on standard lines) - display only. NOT entry payouts: a goblin /
              # demon changes the whole entry's payout, so they never feed the "same payout, easier line" ranking
              "higher": None, "lower": None, "mod_higher": _num(rec.get("higher")), "mod_lower": _num(rec.get("lower")),

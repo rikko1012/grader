@@ -4,7 +4,8 @@ sim.py - 20,000-run match simulation of the GRADE'S OWN DISTRIBUTION (rebuilt 20
 
 Every run's total is a draw from exactly the distribution the grade used (g["dist"]):
   normal  - the grade's projection and spread, with the line's real cuts (x.5: at the line; whole: +-0.5, push between)
-  mix     - Maps 1-3: the 2-map and 3-map cases with their weights (map 3 only after a 1-1)
+  mix     - (old grades only) Maps 1-3 as a 2-map / 3-map mixture - since 2026-10-11 Maps 1-3 is one normal over three
+            full maps (maps 1, 2 and 3 are the prop's scope; a BO5 always plays them)
   hs_bb   - headshots out of kills: kills from the conditioned kills distribution, HS | kills beta-binomial (perf.py)
 so the simulated Over / Under / push frequencies match the grade's calculated chances within Monte Carlo error.
 
@@ -65,9 +66,9 @@ def simulate_grade(g, seed=7):
     qs = [q1, q2, (q1 + q2) / 2][:n_maps]
     won = np.stack([rng.random(RUNS) < q for q in qs])
     rounds = rng.choice(_R, (n_maps, RUNS), p=_P)
+    # every map of the prop's scope is played (Maps 1-3 = maps 1, 2 and 3 in full - 2026-10-11; before, map 3 was
+    # "played" only after a 1-1, a BO3 assumption that mislabelled BO5 scripts)
     played = np.ones((n_maps, RUNS), dtype=bool)
-    if n_maps == 3:
-        played[2] = won[0] != won[1]
     script = (rounds / 22.0 * np.where(won, F_WIN, F_LOSS) * played).sum(axis=0) + rng.normal(0, 0.15, RUNS)
     total = np.empty(RUNS)
     total[np.argsort(script, kind="stable")] = sample_dist(g["dist"], RUNS, rng)
@@ -75,7 +76,7 @@ def simulate_grade(g, seed=7):
     over, under = total > up, total < down
     push = ~(over | under)
     decided = over | under
-    w12 = won[:2].sum(axis=0) if n_maps >= 2 else won[0].astype(int)
+    w12 = won.sum(axis=0) if n_maps >= 2 else won[0].astype(int)       # maps won out of those in the scope
     ot = (np.where(played, rounds, 0) >= 28).any(axis=0)
 
     def row(mask, label, exclusive=True):
@@ -85,9 +86,10 @@ def simulate_grade(g, seed=7):
                 "p_over": round(float(over[mask].sum() / max(decided[mask].sum(), 1)), 3), "exclusive": exclusive}
     if n_maps == 1:
         scen = [row(won[0], "win"), row(~won[0], "loss")]
+    elif n_maps == 3:
+        scen = [row(w12 == 3, "win 3-0"), row(w12 == 2, "win 2-1"), row(w12 == 1, "lose 1-2"), row(w12 == 0, "lose 0-3")]
     else:
-        scen = [row(w12 == 2, "win 2-0"), row(w12 == 1, "split 1-1" + (" (map 3 played)" if n_maps == 3 else "")),
-                row(w12 == 0, "lose 0-2")]
+        scen = [row(w12 == 2, "win 2-0"), row(w12 == 1, "split 1-1"), row(w12 == 0, "lose 0-2")]
     scen.append(row(ot, "any overtime (overlaps the scripts above)", exclusive=False))
     lo, mid, hi = np.percentile(total, [10, 50, 90])
     return {"p_more": round(float(over.sum() / max(decided.sum(), 1)), 3), "p_over_raw": round(float(over.mean()), 4),
