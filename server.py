@@ -733,6 +733,11 @@ def cleanup():
     """Keep the volume from filling: slim/compress old files, drop stale ones."""
     try:
         freed = prune() + cs2_scout.prune_misc()
+        try:
+            import hltv_store
+            hltv_store.prune()                   # stored HLTV answers older than 14 days
+        except Exception:
+            pass
         STORAGE["freed_mb"] = round(STORAGE["freed_mb"] + freed / 1e6, 1)
         STORAGE["last_cleanup"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     except Exception:

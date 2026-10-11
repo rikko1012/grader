@@ -9,6 +9,7 @@ import time
 from datetime import date, timedelta
 
 import hltv
+import hltv_store
 
 N_SERIES = 10
 TTL = 15 * 60
@@ -40,10 +41,15 @@ def _hltv_rows(nick, team, since):
             _CACHE.clear()
         if not ok:                                     # a failed read keeps the last good rows and is retried in 30 s
             prev = _CACHE.get(key)
-            out = prev[1] if prev else []
+            out = prev[1] if prev else None
+            if out is None:                            # nothing in memory: the last good rows from the data disk
+                stored = hltv_store.load(("records",) + key)
+                out = stored[1] if stored else []
             _CACHE[key] = (time.time() - TTL + 30, out)
         else:
             _CACHE[key] = (time.time(), out)
+    if ok:
+        hltv_store.save(("records",) + key, out)
     return out
 
 

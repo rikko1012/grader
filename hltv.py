@@ -30,6 +30,8 @@ import sys
 import threading
 import time
 
+import hltv_store
+
 WINDOWS = (3, 6, 12)      # months, like the BO3.gg waterfall: first window with enough maps wins
 MIN_MAPS = 10             # maps needed before a window is used
 MIN_SWING_MAPS = 10       # maps with a round swing value before it feeds the grade
@@ -91,17 +93,26 @@ def _remember(key, value, ok=True, ttl=None):
     lookup is tried again after FAIL_TTL seconds - with no previous value the failure itself is kept only FAIL_TTL.
     Returns what is now cached. (2026-10-11 audit: one blip used to be remembered as 'no data' for 15-60 minutes.)"""
     ttl = TTL if ttl is None else ttl
+    if ok:
+        with _LOCK:
+            if len(_CACHE) > 5000:
+                _CACHE.clear()
+            _CACHE[key] = (time.time(), value, True)
+        hltv_store.save(key, value)            # kept on the data disk: an outage (or a restart during one) uses it
+        return value
+    with _LOCK:
+        prev = _CACHE.get(key)
+    good = prev if prev and (len(prev) < 3 or prev[2]) else None
+    if good is None:                           # nothing in memory (restart, first look-up): the last good answer on disk
+        stored = hltv_store.load(key)
+        if stored is not None:
+            good = (stored[0], stored[1], True)
+    keep = good[1] if good else value
     with _LOCK:
         if len(_CACHE) > 5000:
             _CACHE.clear()
-        if ok:
-            _CACHE[key] = (time.time(), value, True)
-            return value
-        prev = _CACHE.get(key)
-        good = prev if prev and (len(prev) < 3 or prev[2]) else None
-        keep = good[1] if good else value
         _CACHE[key] = (time.time() - ttl + FAIL_TTL, keep, bool(good))
-        return keep
+    return keep
 
 
 _LAST_FORCED = [0.0]
@@ -358,7 +369,8 @@ def status():
             "last_error": _STATE["last_error"], "last_error_s_ago": round(time.time() - _STATE["last_error_at"]) if _STATE["last_error_at"] else None,
             "pool": _CONNS.stats(), "plain_connect": _STATE["plain_connect"], "cache_entries": len(_CACHE),
             "statement_timeouts": _STATE.get("timeouts", 0), "last_timeout_s_ago": round(time.time() - _STATE["last_timeout_at"]) if _STATE.get("last_timeout_at") else None,
-            "last_timeout_query": _STATE.get("last_timeout_query"), "slowest_query_ms": _STATE.get("slowest_ms", 0)}
+            "last_timeout_query": _STATE.get("last_timeout_query"), "slowest_query_ms": _STATE.get("slowest_ms", 0),
+            "stored_copy": hltv_store.report()}
 
 
 # One query per player: every candidate id with that nickname, each map (all sides) in the last
@@ -566,8 +578,9 @@ def _schedule_rows():
             con.close()
     except Exception:
         ok = False
-    _STATE["schedule_failed"] = not ok        # a player context built now may have missed an HLTV-only match (cs2_scout)
-    return _remember("schedule", rows, ok, ttl=SCHEDULE_TTL)
+    out = _remember("schedule", rows, ok, ttl=SCHEDULE_TTL)
+    _STATE["schedule_failed"] = lookup_failed("schedule")   # a context built now may have missed an HLTV-only match (cs2_scout)
+    return out
 
 
 # ---------------------------------------------------------------- display-only context
@@ -807,8 +820,12 @@ def _load_index():
         rows.sort(key=lambda r: (-r["recent"], -r["maps"]))
         if rows:
             _INDEX.update(at=time.time(), rows=rows)
+            hltv_store.save(("index",), rows)
     except Exception:
-        pass
+        if not _INDEX["rows"]:                     # restart during an outage: the last good index from disk
+            stored = hltv_store.load(("index",))
+            if stored:
+                _INDEX.update(at=time.time() - 3600 + FAIL_TTL, rows=stored[1])
     finally:
         _INDEX["busy"] = False
 
@@ -921,7 +938,7 @@ def team_ranks():
         hit = _CACHE.get(key)
         if hit and time.time() - hit[0] < 3600:
             return hit[1]
-    out = {}
+    out, ok = {}, True
     try:
         con = _connect()
         try:
@@ -932,10 +949,8 @@ def team_ranks():
         finally:
             con.close()
     except Exception:
-        return {}
-    with _LOCK:
-        _CACHE[key] = (time.time(), out)
-    return out
+        ok = False
+    return _remember(key, out, ok, ttl=3600)
 
 
 def _rank_band(cur, ids, opp_id, band=10, months=12):
@@ -1342,8 +1357,12 @@ def active_map_pool(days=30, min_share=0.03):
         maps = {map_key(m) for m, n in rows if n / tot >= min_share}
         if len(maps) >= 5:
             _POOL.update(at=time.time(), maps=maps)
+            hltv_store.save(("map_pool", days, min_share), maps)
     except Exception:
-        pass
+        if _POOL["maps"] is None:                  # restart during an outage: the last good pool from disk
+            stored = hltv_store.load(("map_pool", days, min_share))
+            if stored:
+                _POOL.update(at=time.time() - 6 * 3600 + FAIL_TTL, maps=stored[1])
     return _POOL["maps"]
 
 
@@ -1379,10 +1398,13 @@ def predict_maps(team_a, team_b, before, pool=None, runs=4000, seed=7, pool_keys
         hit = _CACHE.get(key)
         if hit and time.time() - hit[0] < TTL:
             return hit[1]
-    out = _predict_maps(team_a, team_b, before, pool, runs, seed, random, pool_keys)
-    with _LOCK:
-        _CACHE[key] = (time.time(), out)
-    return out
+    try:
+        out = _predict_maps(team_a, team_b, before, pool, runs, seed, random, pool_keys)
+    except Exception as e:
+        if not is_transient(e):
+            raise
+        return _remember(key, None, ok=False)      # the last good prediction (memory, then disk) during an outage
+    return _remember(key, out)
 
 
 def _predict_maps(team_a, team_b, before, pool, runs, seed, random, pool_keys=None):

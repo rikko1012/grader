@@ -48,8 +48,10 @@ def test_player_numbers_error_is_not_cached_for_15_minutes(monkeypatch):
     hltv._CACHE.pop(key, None)                        # expire
     monkeypatch.setattr(hltv, "_player_numbers", lambda n, t, d: (_ for _ in ()).throw(hltv.Unavailable("down")))
     out = hltv.player_numbers("saadzin", "Imperial")
-    assert out["found"] is False and "Unavailable" in out["error"]
+    assert out is not good and out == good                 # expired in memory + outage: the stored copy on disk is served
     assert time.time() - hltv._CACHE[key][0] > hltv.TTL - hltv.FAIL_TTL - 1   # retried in FAIL_TTL s
+    out2 = hltv.player_numbers("nobody", "Imperial")      # never seen: an honest failure, retried in FAIL_TTL s
+    assert out2["found"] is False and "unreachable" in out2["error"]
 
 
 def test_connection_pool_reuses_and_drops_broken(monkeypatch):

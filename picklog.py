@@ -43,7 +43,7 @@ def _model_version():
     import hashlib
     h = hashlib.sha1()
     # perf.py / perf_live.py / scope.py added 2026-10-09 (the performance model moves grades too)
-    for f in ("grader.py", "sim.py", "cs2_scout.py", "hltv.py", "perf.py", "perf_live.py", "scope.py"):
+    for f in ("grader.py", "sim.py", "cs2_scout.py", "hltv.py", "perf.py", "perf_live.py", "scope.py", "hltv_store.py"):
         try:
             h.update((Path(__file__).resolve().parent / f).read_bytes())
         except OSError:

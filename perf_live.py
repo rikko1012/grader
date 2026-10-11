@@ -4,7 +4,7 @@ flagging 0-HS-on-12+-kills rows; opponent maps with the kills its opponents scor
 team, like the rest of the grader). Cached 15 minutes per player / team."""
 import threading, time
 from datetime import date, timedelta
-import hltv, perf
+import hltv, hltv_store, perf
 
 TTL = 15 * 60
 _LOCK = threading.Lock()
@@ -37,13 +37,31 @@ GROUP BY mo.date, t.matchid, t.mapid
 
 
 def _cached(key, fn):
+    """15-minute memory cache; every good answer is also kept on the data disk (hltv_store). When the HLTV database is
+    unreachable the last good answer is used - memory first, then disk - so an outage or a restart during one never
+    changes a projection (owner 2026-10-11). Raises only when there is no good answer anywhere."""
     with _LOCK:
         hit = _CACHE.get(key)
         if hit and time.time() - hit[0] < TTL:
             return hit[1]
-    val = fn()
+    try:
+        val = fn()
+    except Exception as e:
+        if not hltv.is_transient(e):
+            raise
+        if hit:                                # the last good answer in memory, retried again in FAIL_TTL s
+            with _LOCK:
+                _CACHE[key] = (time.time() - TTL + hltv.FAIL_TTL, hit[1])
+            return hit[1]
+        stored = hltv_store.load(("perf",) + key)
+        if stored is None:
+            raise
+        with _LOCK:
+            _CACHE[key] = (time.time() - TTL + hltv.FAIL_TTL, stored[1])
+        return stored[1]
     with _LOCK:
         _CACHE[key] = (time.time(), val)
+    hltv_store.save(("perf",) + key, val)
     return val
 
 

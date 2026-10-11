@@ -14,3 +14,12 @@ def no_live_prizepicks(monkeypatch):
     def offline():
         raise ConnectionError("network disabled in tests")
     monkeypatch.setattr(prizepicks, "_direct", offline)
+
+
+@pytest.fixture(autouse=True)
+def private_hltv_store(monkeypatch, tmp_path):
+    """Each test gets its own empty stored copy of HLTV answers (never the real one on disk)."""
+    import hltv_store
+    monkeypatch.setattr(hltv_store, "DB_PATH", tmp_path / "hltv_store.db")
+    monkeypatch.setattr(hltv_store, "_local", __import__("threading").local())
+    monkeypatch.setattr(hltv_store, "_LAST", {})
