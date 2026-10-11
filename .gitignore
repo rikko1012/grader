@@ -22,3 +22,5 @@ node_modules/
 .env.hltv-seed
 
 .env.hltv-seed
+
+.env.render-db
