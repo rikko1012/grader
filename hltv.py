@@ -35,9 +35,20 @@ MIN_MAPS = 10             # maps needed before a window is used
 MIN_SWING_MAPS = 10       # maps with a round swing value before it feeds the grade
 STALE_DAYS = 10           # newest HLTV map this much older than BO3.gg's = warning
 TTL = 15 * 60
-BREAKER_SECONDS = 5 * 60  # after a connection failure, skip the database this long
+BREAKER_SECONDS = 5 * 60  # after a connection failure, skip the database this long ...
+PROBE_SECONDS = 20        # ... except one probe connection this often (half-open): a blip after a restart used to cost
+                          # five minutes of every grade on the old pipeline (2026-10-11 saadzin: Under on one board, Over on the other)
 _CACHE, _LOCK = {}, threading.Lock()
 _DOWN_UNTIL = [0.0]
+_LAST_PROBE = [0.0]
+FAIL_TTL = 30             # a lookup that FAILED (database unreachable / timed out) is retried after this long; the previous good
+                          # value is served meanwhile - never 15-60 min of 'no data' from one blip (2026-10-11 audit)
+POOL_MAX = 10             # pooled connections (Render Postgres allows ~100; warm start + board + members share these)
+POOL_WAIT = 8             # seconds a lookup waits for a free pooled connection before giving up as 'busy'
+IDLE_MAX = 600            # an idle pooled connection older than this is reopened
+CONNECT_TIMEOUT = 8       # seconds (the public Render URL handshakes in 1-3 s; 4 s tripped the breaker on a slow one)
+_STATE = {"host": None, "last_error": None, "last_error_at": 0.0, "plain_connect": False}
+_TAINTED = set()          # id(real connection) whose statement_timeout was changed - reset when handed back
 
 
 class Unavailable(RuntimeError):
@@ -59,30 +70,235 @@ def _norm(s):
     return re.sub(r"[^a-z0-9]+", "", str(s or "").lower())
 
 
-def _connect():
-    if time.time() < _DOWN_UNTIL[0]:
-        raise Unavailable("HLTV database unreachable a moment ago - skipped (retries in a few minutes)")
+def is_transient(e):
+    """True when the database was unreachable, timed out or busy (connection refused / dropped, statement timeout, pool
+    busy, the breaker) - as opposed to 'player not found'. Matched on the class hierarchy, so psycopg2 subclasses
+    (AdminShutdown, QueryCanceled, ...) count. A transient failure must never become a different projection."""
+    names = {c.__name__ for c in type(e).__mro__}
+    if names & {"Unavailable", "OperationalError", "InterfaceError", "QueryCanceled", "TimeoutError", "ConnectionError"}:
+        return True
+    msg = str(e).lower()
+    return "timeout" in msg or "timed out" in msg or "connection" in msg
+
+
+def err_text(e):
+    """Error text safe for members: a transient failure is just 'HLTV database unreachable' (no host, port or driver chatter)."""
+    return f"{type(e).__name__}: HLTV database unreachable" if is_transient(e) else f"{type(e).__name__}: {str(e)[:120]}"
+
+
+def _remember(key, value, ok=True, ttl=None):
+    """Cache a lookup result. ok=False (the lookup FAILED): the previous good value stays and is served meanwhile, and the
+    lookup is tried again after FAIL_TTL seconds - with no previous value the failure itself is kept only FAIL_TTL.
+    Returns what is now cached. (2026-10-11 audit: one blip used to be remembered as 'no data' for 15-60 minutes.)"""
+    ttl = TTL if ttl is None else ttl
+    with _LOCK:
+        if len(_CACHE) > 5000:
+            _CACHE.clear()
+        if ok:
+            _CACHE[key] = (time.time(), value, True)
+            return value
+        prev = _CACHE.get(key)
+        good = prev if prev and (len(prev) < 3 or prev[2]) else None
+        keep = good[1] if good else value
+        _CACHE[key] = (time.time() - ttl + FAIL_TTL, keep, bool(good))
+        return keep
+
+
+_LAST_FORCED = [0.0]
+
+
+def allow_probe():
+    """A retry after a blip may try the database even while the breaker is on - at most one forced probe per 2 s, so 700
+    members retrying at once still make one connection attempt, not 700."""
+    with _LOCK:
+        if time.time() - _LAST_FORCED[0] >= 2:
+            _LAST_FORCED[0] = time.time()
+            _LAST_PROBE[0] = 0.0
+
+
+def _host():
+    m = re.search(r"@([^/:?]+)", dsn())
+    return m.group(1) if m else None
+
+
+def _cursor_factory():
+    """Cursors that notice a session-level SET statement_timeout, so the pool can reset it before reuse."""
+    try:
+        import psycopg2.extensions
+    except Exception:
+        return None
+
+    class _Cursor(psycopg2.extensions.cursor):
+        def execute(self, query, vars=None):
+            q = query if isinstance(query, str) else str(query)
+            if q.lstrip()[:21].lower().startswith("set statement_timeout"):
+                _TAINTED.add(id(self.connection))
+            return super().execute(query, vars)
+    return _Cursor
+
+
+def _raw_connect():
+    """One real connection (breaker + half-open probe). _connect() pools these."""
+    now = time.time()
+    if now < _DOWN_UNTIL[0]:
+        with _LOCK:
+            probe = now - _LAST_PROBE[0] >= PROBE_SECONDS
+            if probe:
+                _LAST_PROBE[0] = now      # this caller probes the database; everyone else keeps skipping
+        if not probe:
+            raise Unavailable("HLTV database unreachable a moment ago - skipped (retries in a few seconds)")
     import psycopg2   # only needed when the HLTV database is configured
 
-    kwargs = {"connect_timeout": 4, "options": "-c statement_timeout=5000"}
+    kw = {"connect_timeout": CONNECT_TIMEOUT, "application_name": "cs2-scout", "keepalives": 1, "keepalives_idle": 30,
+          "keepalives_interval": 10, "keepalives_count": 3}
+    cf = _cursor_factory()
+    if cf is not None:
+        kw["cursor_factory"] = cf
+    _STATE["host"] = _host()
     try:
-        try:
-            con = psycopg2.connect(dsn(), **kwargs)
-        except psycopg2.OperationalError as e:
-            # a pooled endpoint (Neon's PgBouncer, 2026-10-11) refuses startup options: connect plainly and set the
-            # statement timeout per session instead
-            if "unsupported startup parameter" not in str(e):
-                raise
-            con = psycopg2.connect(dsn(), connect_timeout=4)
-            con.set_session(readonly=True, autocommit=True)
+        plain = _STATE["plain_connect"]
+        if plain:
+            con = psycopg2.connect(dsn(), **kw)
+        else:
+            try:
+                con = psycopg2.connect(dsn(), options="-c statement_timeout=5000", **kw)
+            except psycopg2.OperationalError as e:
+                # a pooled endpoint (Neon's PgBouncer, 2026-10-11) refuses startup options: connect plainly and set the
+                # statement timeout per session instead - remembered, not re-detected on every connection
+                if "unsupported startup parameter" not in str(e):
+                    raise
+                _STATE["plain_connect"] = plain = True
+                con = psycopg2.connect(dsn(), **kw)
+        con.set_session(readonly=True, autocommit=True)
+        if plain:
             with con.cursor() as cur:
                 cur.execute("SET statement_timeout = 5000")
-            return con
-    except Exception:
+            _TAINTED.discard(id(con))
+    except Exception as e:
         _DOWN_UNTIL[0] = time.time() + BREAKER_SECONDS
+        _LAST_PROBE[0] = time.time()          # the failed attempt is the last probe
+        _STATE.update(last_error=f"{type(e).__name__}: {str(e)[:200]}", last_error_at=time.time())   # admin-only (status())
         raise
-    con.set_session(readonly=True, autocommit=True)
+    _DOWN_UNTIL[0] = 0.0                  # reachable again: the breaker is off
     return con
+
+
+class _Pooled:
+    """A pooled connection as the call sites use it: `con = hltv._connect() ... con.close()`. close() hands the real
+    connection back to the pool (or drops it when it broke)."""
+    __slots__ = ("raw",)
+
+    def __init__(self, raw):
+        self.raw = raw
+
+    def cursor(self, *a, **k):
+        return self.raw.cursor(*a, **k)
+
+    def set_session(self, **k):
+        pass                                   # set once per real connection (_raw_connect)
+
+    def close(self):
+        raw, self.raw = self.raw, None
+        if raw is None:
+            return
+        try:
+            bad = bool(raw.closed) or raw.get_transaction_status() != 0   # 0 = idle; anything else = broken mid-query
+        except Exception:
+            bad = True
+        _CONNS.put(raw, bad=bad)
+
+    def __getattr__(self, k):
+        return getattr(self.raw, k)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        self.close()
+
+
+class _Pool:
+    """At most POOL_MAX real connections, reused (LIFO). One TLS handshake per pooled connection instead of one per
+    lookup (2026-10-11 audit: hundreds of fresh connections at start-up tripped the breaker on the public Render URL)."""
+
+    def __init__(self):
+        self.idle, self.n, self.cv = [], 0, threading.Condition()
+
+    def get(self):
+        deadline = time.time() + POOL_WAIT
+        with self.cv:
+            while not self.idle and self.n >= POOL_MAX:
+                left = deadline - time.time()
+                if left <= 0:
+                    raise Unavailable(f"HLTV database busy - all {POOL_MAX} pooled connections in use")
+                self.cv.wait(left)
+            while self.idle:
+                raw, since = self.idle.pop()
+                if time.time() - since < IDLE_MAX and not getattr(raw, "closed", False):
+                    return raw
+                self.n -= 1                    # too old / closed by the server: reopen
+                try:
+                    raw.close()
+                except Exception:
+                    pass
+            self.n += 1
+        try:
+            return _raw_connect()
+        except Exception:
+            with self.cv:
+                self.n -= 1
+                self.cv.notify()
+            raise
+
+    def put(self, raw, bad=False):
+        if not bad and id(raw) in _TAINTED:    # a long admin query changed the session timeout: back to 5 s
+            _TAINTED.discard(id(raw))
+            try:
+                with raw.cursor() as cur:
+                    cur.execute("SET statement_timeout = 5000")
+            except Exception:
+                bad = True
+        if bad:
+            _TAINTED.discard(id(raw))
+            try:
+                raw.close()
+            except Exception:
+                pass
+        with self.cv:
+            if bad:
+                self.n -= 1
+            else:
+                self.idle.append((raw, time.time()))
+            self.cv.notify()
+
+    def stats(self):
+        with self.cv:
+            return {"open": self.n, "idle": len(self.idle), "max": POOL_MAX}
+
+
+_CONNS = _Pool()
+
+
+def _connect():
+    """A pooled read-only autocommit connection with a 5 s statement timeout. Raises Unavailable (breaker on / pool busy)
+    or the driver's own error; both count as transient (is_transient)."""
+    return _Pooled(_CONNS.get())
+
+
+def public_status():
+    """For /health (unauthenticated): only whether the database answers and how busy the pool is."""
+    return {"configured": bool(dsn()), "breaker_on": time.time() < _DOWN_UNTIL[0], "pool": _CONNS.stats()}
+
+
+def status():
+    """Admin status: where the HLTV database is (host name only - never the credentials), the breaker, the last error, the pool."""
+    host = _STATE["host"] or _host() or ""
+    return {"configured": bool(dsn()), "host": host, "breaker_on": time.time() < _DOWN_UNTIL[0],
+            # Render: the Internal Database URL (host without a domain, private network) is the Railway-like setup; the public
+            # ".render.com" URL goes through TLS + a proxy and is where the 2026-10-11 connection failures happened
+            "public_url": host.endswith(".render.com") or host.endswith(".neon.tech"),
+            "last_error": _STATE["last_error"], "last_error_s_ago": round(time.time() - _STATE["last_error_at"]) if _STATE["last_error_at"] else None,
+            "pool": _CONNS.stats(), "plain_connect": _STATE["plain_connect"], "cache_entries": len(_CACHE)}
 
 
 # One query per player: every candidate id with that nickname, each map (all sides) in the last
@@ -114,12 +330,8 @@ def player_numbers(nick, team=None, bo3_last_date=None):
     try:
         result = _player_numbers(nick, team, bo3_last_date)
     except Exception as e:  # database down, schema not there yet, ... - never block a grade
-        result = {"found": False, "error": f"{type(e).__name__}: {str(e)[:160]}"}
-    with _LOCK:
-        if len(_CACHE) > 5000:
-            _CACHE.clear()
-        _CACHE[key] = (time.time(), result)
-    return result
+        result = {"found": False, "error": err_text(e), "transient": is_transient(e)}
+    return _remember(key, result, ok=not result.get("error"))
 
 
 def _player_numbers(nick, team, bo3_last_date):
@@ -279,7 +491,7 @@ def _schedule_rows():
         hit = _CACHE.get("schedule")
         if hit and time.time() - hit[0] < SCHEDULE_TTL:
             return hit[1]
-    rows = []
+    rows, ok = [], True
     try:
         con = _connect()
         try:
@@ -293,10 +505,8 @@ def _schedule_rows():
         finally:
             con.close()
     except Exception:
-        rows = []
-    with _LOCK:
-        _CACHE["schedule"] = (time.time(), rows)
-    return rows
+        ok = False
+    return _remember("schedule", rows, ok, ttl=SCHEDULE_TTL)
 
 
 # ---------------------------------------------------------------- display-only context
@@ -318,7 +528,7 @@ def context(nick, team=None, opponent=None, maps=(), bo3_last_date=None):
     try:
         con = _connect()
     except Exception as e:
-        return {"found": False, "error": f"{type(e).__name__}: {str(e)[:160]}"}
+        return {"found": False, "error": err_text(e), "transient": is_transient(e)}
     out, errors = {"found": True}, {}
     try:
         with con.cursor() as cur:
@@ -342,14 +552,14 @@ def context(nick, team=None, opponent=None, maps=(), bo3_last_date=None):
                     out[name] = fn()
                 except Exception as e:   # one section failing never affects the others
                     out[name] = None
-                    errors[name] = f"{type(e).__name__}: {str(e)[:120]}"
+                    errors[name] = err_text(e)
+                    if is_transient(e):
+                        out["transient"] = True   # unreachable / timed out: retried in FAIL_TTL s, not remembered for TTL
     finally:
         con.close()
     if errors:
         out["errors"] = errors
-    with _LOCK:
-        _CACHE[key] = (time.time(), out)
-    return out
+    return _remember(key, out, ok=not out.get("transient"))
 
 
 def _player_ids(cur, nick, team):
@@ -589,7 +799,7 @@ def event_env_from_title(title):
     with _LOCK:
         hit = _CACHE.get(key)
     if not hit or time.time() - hit[0] > 3600:
-        rows = []
+        rows, ok = [], True
         try:
             con = _connect()
             try:
@@ -599,10 +809,8 @@ def event_env_from_title(title):
             finally:
                 con.close()
         except Exception:
-            rows = []
-        hit = (time.time(), rows)
-        with _LOCK:
-            _CACHE[key] = hit
+            ok = False
+        hit = (time.time(), _remember(key, rows, ok, ttl=3600))
     t = _norm(title)
     core = lambda k: re.sub(r"(season)?([0-9]+|[ivx]+)$", "", k)
     best = None
@@ -620,7 +828,7 @@ def team_country(name):
     with _LOCK:
         hit = _CACHE.get(key)
     if not hit or time.time() - hit[0] > 3600:
-        out = {}
+        out, ok = {}, True
         try:
             con = _connect()
             try:
@@ -630,10 +838,8 @@ def team_country(name):
             finally:
                 con.close()
         except Exception:
-            out = {}
-        with _LOCK:
-            _CACHE[key] = (time.time(), out)
-        hit = (time.time(), out)
+            ok = False
+        hit = (time.time(), _remember(key, out, ok, ttl=3600))
     return hit[1].get(_norm(name)) if name else None
 
 
@@ -839,21 +1045,18 @@ def recent_series(nick, team=None, since=None):
         hit = _CACHE.get(key)
         if hit and time.time() - hit[0] < TTL:
             return hit[1]
+    out, ok = [], True
     try:
         con = _connect()
+        try:
+            with con.cursor() as cur:
+                ids = _player_ids(cur, nick, team)
+                out = _series_rows(cur, ids, since) if ids else []
+        finally:
+            con.close()
     except Exception:
-        return []
-    try:
-        with con.cursor() as cur:
-            ids = _player_ids(cur, nick, team)
-            out = _series_rows(cur, ids, since) if ids else []
-    except Exception:
-        out = []
-    finally:
-        con.close()
-    with _LOCK:
-        _CACHE[key] = (time.time(), out)
-    return out
+        ok = False                         # unreachable / timed out: the last good rows stay, retried in FAIL_TTL s
+    return _remember(key, out, ok)
 
 
 def settle_totals(nick, team, hltv_match):
@@ -863,18 +1066,19 @@ def settle_totals(nick, team, hltv_match):
         return {"found": False}
     try:
         con = _connect()
-    except Exception:
-        return {"found": False}
+    except Exception as e:
+        return {"found": False, "transient": is_transient(e)}
+    bad = False
     try:
         with con.cursor() as cur:
             ids = _player_ids(cur, nick, team)
             rows = _series_rows(cur, ids, "2000-01-01", "AND mo.matchid = %(mid)s", {"mid": int(hltv_match)}) if ids else []
-    except Exception:
-        rows = []
+    except Exception as e:
+        rows, bad = [], is_transient(e)
     finally:
         con.close()
     if not rows:
-        return {"found": False}
+        return {"found": False, "transient": bad}     # unreachable: the pick log never voids on that (2026-10-11 audit)
     m12 = sorted(rows, key=lambda r: r["number"])[:2]
     hs = [r["headshots"] for r in m12]
     return {"found": True, "kills": sum(r["kills"] for r in m12),
@@ -939,17 +1143,20 @@ def settle_by_day(nick, team, day, opponent):
         return {"found": False}
     try:
         con = _connect()
-    except Exception:
-        return {"found": False}
+    except Exception as e:
+        return {"found": False, "transient": is_transient(e)}
+    bad = False
     try:
         with con.cursor() as cur:
             ids = _player_ids(cur, nick, team)
             rows = _series_rows(cur, ids, "2000-01-01", "AND mo.date BETWEEN %(d)s::date - 1 AND %(d)s::date + 1",
                                 {"d": day}) if ids else []
-    except Exception:
-        rows = []
+    except Exception as e:
+        rows, bad = [], is_transient(e)
     finally:
         con.close()
+    if not rows and bad:
+        return {"found": False, "transient": True}
     on = [r for r in rows if not opponent or _norm(opponent) in _norm(r["opponent"]) or _norm(r["opponent"]) in _norm(opponent)]
     if not on:
         return {"found": False}
@@ -970,17 +1177,20 @@ def settle_scope(nick, team, day, opponent, scope):
         return {"found": False}
     try:
         con = _connect()
-    except Exception:
-        return {"found": False}
+    except Exception as e:
+        return {"found": False, "transient": is_transient(e)}
+    bad = False
     try:
         with con.cursor() as cur:
             ids = _player_ids(cur, nick, team)
             rows = _series_rows(cur, ids, "2000-01-01", "AND mo.date BETWEEN %(d)s::date - 1 AND %(d)s::date + 1",
                                 {"d": day}, maxn=3, need=(1,)) if ids else []
-    except Exception:
-        rows = []
+    except Exception as e:
+        rows, bad = [], is_transient(e)
     finally:
         con.close()
+    if not rows and bad:
+        return {"found": False, "transient": True}
     on = [r for r in rows if not opponent or _norm(opponent) in _norm(r["opponent"]) or _norm(r["opponent"]) in _norm(opponent)]
     if not on:
         return {"found": False}

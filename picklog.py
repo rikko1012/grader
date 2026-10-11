@@ -584,9 +584,12 @@ def scope_result(r, same_day_only=False):
 
 def _settle_scope(r, now, start):
     """A Maps 1-3 or Map 1 line, from HLTV via scope_result(). None = not yet; void after VOID_AFTER_D days."""
-    try:
-        res = scope_result(r)
-    except Exception:
+    try:                                              # the match's own day first; the +-1 day window (time zones) only once the
+        res = scope_result(r, same_day_only=now < start + timedelta(hours=36))   # right match had time to be scraped
+    except Exception as e:
+        import hltv
+        if hltv.is_transient(e):
+            return None                               # HLTV unreachable: never a void on that (2026-10-11 audit)
         res = {"status": "none"}
     if res["status"] == "void":
         return ("void", None, None, None)
@@ -729,9 +732,12 @@ def _settle_hltv(r, now, start):
     try:
         import hltv
         tot = hltv.settle_totals(r["player"], r["team"], int(r["match_slug"].split("-", 1)[1]))
-    except Exception:
-        tot = {"found": False}
+    except Exception as e:
+        import hltv
+        tot = {"found": False, "transient": hltv.is_transient(e)}
     actual = tot.get("headshots" if r["prop"] == "hs" else "kills") if tot.get("found") else None
+    if actual is None and tot.get("transient"):
+        return None                                   # HLTV unreachable: never a void on that (2026-10-11 audit)
     try:                                              # a forfeited map voids the pick (2026-10-08)
         con = hltv._connect()
         try:

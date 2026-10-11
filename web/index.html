@@ -1080,7 +1080,7 @@ function drawBoard() {
       <div><div class="b2top">${bbook === "all" ? `<span class="pill" style="margin:0 4px 0 0;padding:1px 7px">${bookName(r.book || "underdog")}</span>` : ""}<b>${esc(nick)}</b>${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}
           <span class="muted">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}${showMatch ? " · " + shortWhen(r.start) : ""}</span></div>
         <div class="b2pick">${r.side ? esc(sideWord({grade: r.grade, side: r.side})) : "grading…"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}${mktTag(r)}${r.stale ? ` <span class="pill warn" title="The PrizePicks feed is not fresh – this line can't be confirmed as playable">not confirmed</span>` : ""}${r.p != null ? ` · <b>${pct0(r.p)}</b>` : ""}${r.grade === "LEAN" ? "" : " · " + esc(r.grade || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${r.cap_n && r.units_full > r.units ? ` <span class="pill" title="${r.cap_n} bets on this board need ${esc(r.team_name || r.team || "this team")} to ${r.side === "More" ? "do well" : "do badly"} in this match – one upset or overtime decides them all, so together they're capped at 3U. On its own this pick is ${r.units_full}U.">capped from ${r.units_full}U</span>` : ""}</div>
-        <div class="b2meta">Proj ${r.proj != null ? num(r.proj, 1) : "–"}${ds ? ` · <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}">${ds[1]}</span>` : ""}${r.source ? ` · source ${esc(r.source)}` : ""}${r.graded_at ? ` · graded ${agoTxt(r.graded_at)}` : ""}${r.alt && r.book !== "prizepicks" ? ` · alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}${r.book === "prizepicks" && r.open_line != null && +r.open_line !== +r.line ? ` · opened ${r.open_line}` : ""}${r.moved_from != null ? ` · <span class="pill warn">line moved from ${r.moved_from}</span>` : ""}</div>
+        <div class="b2meta">Proj ${r.proj != null ? num(r.proj, 1) : "–"}${ds ? ` · <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}">${ds[1]}</span>` : ""}${r.source ? ` · source ${esc(r.source)}` : ""}${r.hltv_retry ? ` · <span class="pill warn" title="The HLTV database was unreachable at the last regrade – this is the last HLTV grade of this line; it is regraded as soon as the database answers">kept HLTV grade</span>` : ""}${r.graded_at ? ` · graded ${agoTxt(r.graded_at)}` : ""}${r.alt && r.book !== "prizepicks" ? ` · alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}${r.book === "prizepicks" && r.open_line != null && +r.open_line !== +r.line ? ` · opened ${r.open_line}` : ""}${r.moved_from != null ? ` · <span class="pill warn">line moved from ${r.moved_from}</span>` : ""}</div>
         ${ev(r.support, "up", "+")}${ev(r.concern, "dn", "–")}</div>
       ${r.side ? `<button type="button" class="bslip ${onSlip.has(nick.toLowerCase()) ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}|${mktType(r)}|${r.book || "underdog"}">${onSlip.has(nick.toLowerCase()) ? "On slip" : "+ Slip"}</button>` : "<span></span>"}
     </div>`; };
@@ -1141,6 +1141,7 @@ $("#bbook").onclick = e => { const b = e.target.closest("button"); if (!b) retur
 // Compare: the same player / match / stat / maps on both platforms (joined by OUR player and match ids from grading),
 // each line with the chance at THAT line. The easier line = the lower one for an Over, the higher one for an Under;
 // not automatically better value (payouts differ), and goblin / demon markets are never compared with standard lines
+const outageNote = d => d.hltv_outage ? `<div class="small" style="margin-top:8px;color:var(--warn)">⚠ HLTV database unreachable right now – this is a temporary projection from the older model.${(d.hltv_outage.rows || []).length ? ` The Prop Board still shows the last HLTV grade: ${d.hltv_outage.rows.map(o => `${bookName(o.book)} ${o.line} ${esc(sideWord({grade: o.grade, side: o.side}))}${o.grade === "LEAN" ? "" : " · " + esc(o.grade)} (${(o.p * 100).toFixed(1)}%)`).join(", ")}.` : ""}</div>` : "";
 function drawCompare() {
   const q = ($("#bsearch").value || "").trim().toLowerCase();
   const hit = r => !q || [r.nick, r.player, r.team, r.team_name, r.opponent, r.opp_name].some(x => String(x || "").toLowerCase().includes(q));
@@ -1160,6 +1161,8 @@ function drawCompare() {
       <div class="muted">${esc(sideWord({grade: r.grade, side: r.side}))}${r.grade === "LEAN" ? "" : " · " + esc(r.grade)} · ${+(+r.units || 0).toFixed(2)}U</div></button>`;
   const col = (bk, rows) => `<div><div class="cmpbook">${bookName(bk)}</div>${rows.length ? rows.map(r => one(bk, r)).join("") : `<div class="cmpnone">${bookName(bk)}: not offered</div>`}</div>`;
   const easier = x => {
+    const pr = [...x.u, ...x.p].map(y => y.proj).filter(v => v != null);
+    if (pr.length > 1 && Math.max(...pr) - Math.min(...pr) > 0.05) return `<div class="cmpeasy muted">Projections differ between the boards – one board is mid-refresh; compare after the next regrade</div>`;
     const u = x.u.find(r => mktType(r) === "standard"), p = x.p.find(r => mktType(r) === "standard");
     if (!u || !p) return `<div class="cmpeasy muted">${x.u.length && x.p.length ? "Different market types – not compared" : "One platform only"}</div>`;
     if (u.line === p.line) return `<div class="cmpeasy">Same line on both</div>`;
@@ -1177,7 +1180,7 @@ function drawCompare() {
         ${g.sort((a, b) => (b.u.length && b.p.length) - (a.u.length && a.p.length) || String(a.any.nick || a.any.player).localeCompare(String(b.any.nick || b.any.player))).map(x => {
           const all = [...x.u, ...x.p], pr = all.map(y => y.proj).filter(v => v != null), spread = pr.length > 1 ? Math.max(...pr) - Math.min(...pr) : 0;
           return `<div class="cmprow"><div class="who"><b>${esc(x.any.nick || x.any.player)}</b> <span class="muted small">${propWord(x.any.prop)}${mapsWord(x.any.scope)}</span>
-              <span class="small">Projection <b>${pr.length ? num(pr[0], 1) : "–"}</b>${spread > 0.05 ? ` <span class="pill warn" title="Graded at different times – the newer grade has newer data">grades differ by ${num(spread, 1)}</span>` : ""}</span></div>
+              <span class="small">Projection <b>${pr.length ? num(pr[0], 1) : "–"}</b>${spread > 0.05 ? ` <span class="pill warn" title="Same model, graded at different moments – the next regrade aligns them; the newer grade has the newer data">projections differ by ${num(spread, 1)}</span>` : ""}</span></div>
             ${col("underdog", x.u)}${col("prizepicks", x.p)}${easier(x)}</div>`;
         }).join("")}</div></details>`; }).join("");
   $("#boardout").innerHTML = html + `<div class="small muted" style="margin-top:10px">Book lines are betting thresholds, not projections; each chance is our model at that platform's line (pushes excluded on whole lines).
@@ -1500,7 +1503,7 @@ function render(d) {
   h += `<section class="card herocard ${hc}"><div class="hero">
     <div class="badge ${hc}">${esc(!v.side ? "–" : v.state === "SCOUT" ? "S" : v.grade === "LEAN" ? "L" : (v.grade || "L").slice(0, 2))}</div>
     <div><h3>${esc(head)}</h3>
-      <div class="sub">${esc(pb.player?.nick || "")} · ${pb.standin_for ? `${esc(pb.current_team || "")} → <b>stand-in for ${esc(pb.standin_for)}</b>` : esc(pb.current_team || "")}${nm?.opponent ? ` vs ${esc(nm.opponent)}${nm.start ? ` · ${shortWhen(nm.start)}` : ""}` : ""} · ${g.line} ${stat}${mapsWord(g.scope) || " (Maps 1–2)"} · ${esc(g.line_type || "")} · <span class="muted">${esc(lineSource(d))}</span></div>
+      <div class="sub">${esc(pb.player?.nick || "")} · ${pb.standin_for ? `${esc(pb.current_team || "")} → <b>stand-in for ${esc(pb.standin_for)}</b>` : esc(pb.current_team || "")}${nm?.opponent ? ` vs ${esc(nm.opponent)}${nm.start ? ` · ${shortWhen(nm.start)}` : ""}` : ""} · ${g.line} ${stat}${mapsWord(g.scope) || " (Maps 1–2)"} · ${esc(g.line_type || "")} · <span class="muted">${esc(lineSource(d))}</span></div>${outageNote(d)}
       <div class="sub">${sub}</div>
       ${gateStop ? `<span class="pill bad">${esc(g.reason || g.status)}</span>` : ""}
       ${g.form_fight ? `<span class="pill warn">FORM FIGHT – his last 10 at this line disagree · 0 units${perfGrade(g) ? "" : " (older model: chance halved)"}</span>` : ""}

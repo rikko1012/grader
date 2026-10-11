@@ -94,7 +94,11 @@ def record_for_scope(pb, scope):
 def source_label(g):
     """WHERE the projection came from - a source label, not a quality judgement."""
     ps = str(g.get("projection_source") or "")
-    return "HLTV" if ps.startswith("perf") and not ps.endswith("-bo3") else "BO3.gg" if ps.endswith("-bo3") else "older model (BO3.gg)"
+    if ps.startswith("perf") and not ps.endswith("-bo3"):
+        return "HLTV"
+    if ps.endswith("-bo3"):
+        return "BO3.gg"
+    return "older model (HLTV unreachable)" if "unreachable" in ps else "older model (BO3.gg)"
 
 
 def data_status(g, v):

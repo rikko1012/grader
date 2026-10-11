@@ -181,14 +181,16 @@ def shared(key, compute, ttl=RESULT_TTL):
             return hit[1], hit[2]
         return shared(key, compute, ttl)                # the leader failed - try once ourselves
     try:
-        status, body = compute()
+        out = compute()
+        status, body = out[0], out[1]
+        keep = out[2] if len(out) > 2 and out[2] else ttl    # a result may ask to be reused for less time (outage grades)
         if status in (200, 404):
             with _RG:
                 if len(_RESULTS) > 20000:
                     cut = time.time() - ttl
                     for k in [k for k, v in _RESULTS.items() if v[0] < cut]:
                         del _RESULTS[k]
-                _RESULTS[key] = (time.time(), status, body)
+                _RESULTS[key] = (time.time() - max(0, ttl - keep), status, body)
         return status, body
     finally:
         with _RG:
@@ -209,6 +211,50 @@ STORAGE = {"last_cleanup": None, "freed_mb": 0.0}
 BOARD = {}              # Underdog line id -> board row + its grade summary
 BOARD_WORKERS = 3       # lines graded side by side (one at a time left most of the board ungraded for hours)
 BOARD_EVERY = 15 * 60   # re-grade a line at most this often (members' grades are cached anyway)
+HLTV_RETRY = 90         # a line graded while the HLTV database was unreachable is tried again this soon
+
+
+def _hltv_status(public=False):
+    try:
+        import hltv
+        return hltv.public_status() if public else hltv.status()
+    except Exception as e:
+        return {"error": str(e)[:80]}
+
+
+def perf_transient(g):
+    """True when this grade fell back to the old pipeline only because the HLTV database was unreachable (cs2_scout._perf_input
+    marks that in the grade's projection_source; grader output itself is unchanged)."""
+    return "HLTV database unreachable" in str((g or {}).get("projection_source") or "")
+
+
+HLTV_MAX_RETRIES = 20   # a line kept this often (~30 min) while its model stays 'unreachable' is graded afresh: that is a slow query, not an outage
+
+
+def outage_placeholder(old, r, now=None):
+    """A line whose grade could not use the HLTV database and that has no earlier grade of this line to keep: not shown (no
+    side), tried again in HLTV_RETRY s; after HLTV_MAX_RETRIES the regular cycle applies (a slow query, not an outage)."""
+    old = old or {}
+    n = (old.get("hltv_retries") or 0) + 1
+    now = now or time.time()
+    return {"at": now - BOARD_EVERY + HLTV_RETRY if n <= HLTV_MAX_RETRIES else now, "state": "RETRY", "reason": "HLTV database unreachable - graded again shortly",
+            "graded_line": r.get("line"), "hltv_retries": n, "hltv_retry": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+
+
+def keep_last_hltv_grade(old, g, r=None, now=None):
+    """The HLTV database was unreachable for this grade (g['perf_transient']): the board keeps the last HLTV grade of the
+    line instead of showing an old-pipeline grade next to HLTV grades of the same player (2026-10-11 saadzin: Under 30.5 on
+    the Underdog board, Over 29.5 on PrizePicks and in Match players, ten minutes apart). Returns the row to keep (due again
+    in HLTV_RETRY seconds) or None when the new grade should be stored."""
+    if not perf_transient(g) or not old or not old.get("grade"):
+        return None
+    if r is not None and old.get("graded_line") is not None and float(old["graded_line"]) != float(r.get("line") or -1):
+        return None                                   # the line moved: the old grade is for another line
+    if (old.get("hltv_retries") or 0) >= HLTV_MAX_RETRIES:
+        return None
+    now = now or time.time()
+    return dict(old, at=now - BOARD_EVERY + HLTV_RETRY, hltv_retry=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                hltv_retries=(old.get("hltv_retries") or 0) + 1)
 BOARD_FILE = DATA_DIR / ".cache" / "board.json"
 
 
@@ -336,11 +382,11 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12", book="
             if e[prop] is None:
                 try:
                     pr = perf_live.projection(e["nick"], tname, opponent if tname == team else team, lan, scope, prop, day)
-                except Exception:
-                    pr = {"error": "failed"}
+                except Exception as ex:
+                    pr = {"error": "HLTV database unreachable right now" if cs2_scout._transient_hltv_error(ex) else "failed"}
                 e[prop] = ({"proj": round(pr["lambda"], 2), "line": None, "no_line": True, "source": "HLTV", "dq": pr.get("data_quality")}
                            if pr and not pr.get("error") and pr.get("lambda") is not None else {"proj": None, "line": None, "no_line": True,
-                                                                                               "note": "no projection (no HLTV history)"})
+                                                                                               "note": "no projection (HLTV database unreachable right now)" if "unreachable" in str(pr.get("error")) else "no projection (no HLTV history)"})
     out = []
     for tname in (team, opponent):
         ps = [e for (t, _), e in players.items() if t == tname]
@@ -370,11 +416,13 @@ def board_payload(book="underdog"):
         g = BOARD.get(r["id"]) or {}
         if not g.get("side"):
             continue                                  # not graded yet: never shown
+        if g.get("graded_line") is not None and float(g["graded_line"]) != float(r.get("line") or -1):
+            continue                                  # the line moved: graded afresh within seconds, never shown with the old grade
         rows.append(dict(r, **{k: g.get(k) for k in ("grade", "side", "p", "units", "proj", "reason", "graded_at",
                                                      "nick", "state", "edge", "l10_over", "l10_n", "l10_push", "l10_avg",
                                                      "hs_pct", "p_win", "market", "team_name", "opp_name", "match_slug",
                                                      "graded_line", "graded_model", "player_id", "event", "bo", "maps_known",
-                                                     "dstat", "source", "support", "concern", "tonight")}))
+                                                     "dstat", "source", "support", "concern", "tonight", "hltv_retry")}))
         rows[-1]["scope"] = r.get("scope") or "12"
         x = rows[-1]
         nick = x.get("nick") or x.get("player") or ""
@@ -455,6 +503,16 @@ _BS_CACHE = [0.0, []]
 _BS_LOCK = threading.Lock()
 
 
+def _both_boards():
+    """Both platforms' graded rows (a PrizePicks card gets the same-match cap its board applied - 2026-10-11 audit)."""
+    rows = list(board_payload()["rows"])
+    try:
+        rows += board_payload("prizepicks")["rows"]
+    except Exception:
+        pass
+    return rows
+
+
 def board_stake(res, prop, scope, line):
     """The same line on the board with its stake cut by the same-match cap: the card shows that stake too (one stake
     per line on the whole site). Only when the board row is this exact pick (side, line, maps, match) and was cut from
@@ -470,7 +528,7 @@ def board_stake(res, prop, scope, line):
         if _BS_LOCK.acquire(blocking=not _BS_CACHE[0]):
             try:
                 if time.time() - _BS_CACHE[0] > 5:
-                    _BS_CACHE[:] = [time.time(), board_payload()["rows"]]
+                    _BS_CACHE[:] = [time.time(), _both_boards()]
             finally:
                 _BS_LOCK.release()
     for r in _BS_CACHE[1]:
@@ -481,6 +539,15 @@ def board_stake(res, prop, scope, line):
             return dict(v, units=r["units"], units_full=r["units_full"], cap_n=r["cap_n"],
                         cap_team=r.get("team_name") or r.get("team"))
     return v
+
+
+def board_last_hltv(res, prop, scope):
+    """During an HLTV outage the card grades on the old pipeline; this is what the Prop Board still shows for the same player /
+    stat / maps (its last performance-model grades), so the member is told instead of seeing two different numbers."""
+    nick = (((res.get("player_block") or {}).get("player") or {}).get("nick") or "").lower()
+    rows = [r for r in _BS_CACHE[1] if str(r.get("nick") or r.get("player") or "").lower() == nick and r.get("prop") == prop
+            and (r.get("scope") or "12") == scope and r.get("source") in ("HLTV", "BO3.gg")]
+    return {"rows": [{k: r.get(k) for k in ("book", "line", "side", "grade", "p", "units", "proj", "graded_at", "hltv_retry")} for r in rows[:4]]}
 
 
 REQ_TIMES = collections.deque(maxlen=300)
@@ -517,12 +584,14 @@ def board_forever():
             rows = underdog.board(wait=True)["rows"] + prizepicks.board(wait=True)["rows"]
             now = datetime.now(timezone.utc).isoformat()
             # Underdog alternates stay ungraded (as before); PrizePicks goblin / demon are their own markets and are graded
+            # a line that moved since its grade is regraded at once (its grade was for another line - 2026-10-11 audit)
+            moved = lambda r: (BOARD.get(r["id"]) or {}).get("graded_line") is not None and float(BOARD[r["id"]]["graded_line"]) != float(r.get("line") or -1)
             todo = [r for r in rows if (not r["alt"] or r.get("book") == "prizepicks") and (not r.get("start") or r["start"] > now)
-                    and time.time() - (BOARD.get(r["id"]) or {}).get("at", 0) > BOARD_EVERY]
+                    and (time.time() - (BOARD.get(r["id"]) or {}).get("at", 0) > BOARD_EVERY or moved(r))]
             # lines from an older model version first, then soonest matches; one match's lines and each player's kills /
             # headshots back to back (the second grade of a player is served from his warm data)
             stale = lambda r: (BOARD.get(r["id"]) or {}).get("graded_model") != picklog.MODEL_VERSION
-            todo.sort(key=lambda r: (not stale(r), r.get("start") or "9", str(r.get("matchup") or ""),
+            todo.sort(key=lambda r: (not moved(r), not stale(r), r.get("start") or "9", str(r.get("matchup") or ""),
                                      str(r.get("player") or "").lower(), r.get("prop") or ""))
 
             def one(r):
@@ -538,10 +607,21 @@ def board_forever():
                         res = cs2_scout.grade(r["player"], r["line"], r["prop"], lt, scope=r.get("scope") or "12", team_hint=r.get("team"), opponent=r.get("opponent") or None, faceit_key=faceit_key(),
                                               background=True, light=True)
                     if res.get("error"):
+                        old = BOARD.get(r["id"]) or {}
+                        if old.get("side") and (old.get("nf_retries") or 0) < 3:   # a graded line is not dropped on one failed
+                            BOARD[r["id"]] = dict(old, at=time.time() - BOARD_EVERY + HLTV_RETRY, nf_retries=(old.get("nf_retries") or 0) + 1)
+                            return                                                 # context build (BO3.gg blip): tried again soon
                         BOARD[r["id"]] = {"at": time.time(), "state": "NOT FOUND", "reason": res["error"]}
                         return
                     v = verdict(res.get("grade"))
                     g = res.get("grade") or {}
+                    kept = keep_last_hltv_grade(BOARD.get(r["id"]), g, r)
+                    if kept:
+                        BOARD[r["id"]] = kept
+                        return
+                    if perf_transient(g):                 # nothing to keep: the line waits (hidden) and is tried again soon -
+                        BOARD[r["id"]] = outage_placeholder(BOARD.get(r["id"]), r)   # never an old-pipeline grade for a transient reason
+                        return
                     pb = res.get("player_block") or {}
                     if (r.get("scope") or "12") == "123":   # display only: his Maps 1-3 record (never a grade input)
                         try:
@@ -577,7 +657,8 @@ def board_forever():
                     try:                                  # immutable comparison snapshot (changes only) + the row's evidence
                         ub = underdog.board()
                         pnl = comparison.panel(res, ub["rows"] + prizepicks.board()["rows"], board_at=ub.get("at"), id_map=ud_id_map(ub["rows"]))
-                        comparison.snapshot(res, pnl, picklog.MODEL_VERSION)
+                        if not perf_transient(g):             # an outage grade is no evidence of a changed forecast
+                            comparison.snapshot(res, pnl, picklog.MODEL_VERSION)
                         if pnl:
                             BOARD[r["id"]].update(support=(pnl["supports"] or [None])[0], concern=pnl["concern"])
                     except Exception:
@@ -585,10 +666,11 @@ def board_forever():
                     # the platform and the provider's market id travel with the logged forecast (one row per platform)
                     res["book"] = {"book": r.get("book") or "underdog", "market_id": r.get("market_id") or r.get("id"),
                                    "market": r.get("market"), "odds_type": lt}
-                    try:
-                        picklog.log_async(res, v, test=2)
-                    except Exception:
-                        traceback.print_exc()
+                    if not perf_transient(g):                 # never logged as a forecast of the live model (calibration cohorts)
+                        try:
+                            picklog.log_async(res, v, test=2)
+                        except Exception:
+                            traceback.print_exc()
                 except Exception:
                     traceback.print_exc()
                 if len(BOARD) % 10 == 0:
@@ -625,7 +707,8 @@ def board_forever():
                 BOARD.clear()
         except Exception:
             traceback.print_exc()
-        time.sleep(60)
+        # lines waiting on the HLTV database (kept grades / placeholders) are tried again within seconds, not after a full pass
+        time.sleep(10 if any(v.get("hltv_retry") for v in list(BOARD.values())) else 60)
 
 
 def cleanup():
@@ -803,6 +886,8 @@ def public(res):
 # the server (the page AND the raw API response), so the grader can't be copied from it.
 KEEP_DETAIL = {"p_win", "p_map1", "p_map2", "maps_used", "role", "rank"}
 _FLAG_RULES = (   # (starts with, member-friendly text or None = not shown)
+    ("OLD PROJECTION: the performance model is unavailable here (HLTV database unreachable",
+     "HLTV database unreachable right now - temporary projection from the older model; the Prop Board keeps its last HLTV grade until the database answers again"),
     ("OLD PROJECTION", "Projection from the older model - the newer performance model has no HLTV data for this player or matchup"),
     ("CAP:", "Chance capped at 78% on kills props (big kill totals swing more than the model's spread)"),
     ("PROVISIONAL:", "Provisional: projection from BO3.gg history - HLTV has no history for this player"),
@@ -953,6 +1038,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, {"ok": True, "faceit_key": bool(faceit_key()), "preload": PRELOAD_STATUS, "warm_start": WARM_START,
                                        "whop_signin": {"on": whop_auth.enabled(), "recent_errors": whop_auth.LAST_ERRORS[-3:]},
                                        "memory_mb": memory_mb(), "threads": threading.active_count(),
+                                       "hltv": _hltv_status(public=True),
                                        "caches": {"results": len(_RESULTS), "contexts": len(cs2_scout._CONTEXT),
                                                   "scoreboards": len(bo3._MEM), "expiring": len(bo3._TMEM)},
                                        "traffic": {"requests": STATS["requests"], "errors_5xx": STATS["errors_5xx"],
@@ -1186,6 +1272,8 @@ class Handler(BaseHTTPRequestHandler):
                 finally:
                     con.close()
                 return self.send(200, {"board_players_with_namesakes": len(out), "guessed_without_team_match": sum(1 for o in out if not o["team_matched"]), "rows": out})
+            if u.path == "/admin/hltv_status" and self.authed(q.get("token")):
+                return self.send(200, _hltv_status())      # database host (name only), breaker, last error, pool
             if u.path == "/admin/prop_feed" and self.authed(q.get("token")):
                 # read-only look at the scraper's props tables (PrizePicks receiver): status, volume, freshness, samples
                 import hltv
@@ -1652,6 +1740,7 @@ class Handler(BaseHTTPRequestHandler):
                     traceback.print_exc()
             res["verdict"] = verdict(res.get("grade"))
             res["caps"] = stake_caps()
+            outage = perf_transient(res.get("grade") or {})
             try:
                 res["underdog"] = underdog.line_for((pb_.get("player") or {}).get("nick") or name, prop)
             except Exception:
@@ -1672,13 +1761,15 @@ class Handler(BaseHTTPRequestHandler):
             tm["log"] = round(time.time() - t0, 2)
             try:                                         # after logging: the log keeps the grader's own stake
                 res["verdict"] = board_stake(res, prop, scope, line)
+                if outage:                               # outage: tell the member what the board still shows
+                    res["hltv_outage"] = board_last_hltv(res, prop, scope)
             except Exception:
                 traceback.print_exc()
             t0 = time.time()
             body = json.dumps(public(res), default=str).encode()
             tm["json"] = round(time.time() - t0, 2)
             REQ_TIMES.append(dict(tm, player=name, at=round(time.time()), total=round(time.time() - t_in, 2)))
-            return 200, body
+            return 200, body, (5 if outage else None)    # an outage grade is reused for 5 s, not 60
 
         status, body = shared(key, compute)
         return self.send(status, body)

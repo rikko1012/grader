@@ -24,6 +24,7 @@ def _hltv_rows(nick, team, since):
         hit = _CACHE.get(key)
         if hit and time.time() - hit[0] < TTL:
             return hit[1]
+    out, ok = [], True
     try:
         con = hltv._connect()
         try:
@@ -33,11 +34,16 @@ def _hltv_rows(nick, team, since):
         finally:
             con.close()
     except Exception:
-        out = []
+        ok = False
     with _LOCK:
         if len(_CACHE) > 3000:
             _CACHE.clear()
-        _CACHE[key] = (time.time(), out)
+        if not ok:                                     # a failed read keeps the last good rows and is retried in 30 s
+            prev = _CACHE.get(key)
+            out = prev[1] if prev else []
+            _CACHE[key] = (time.time() - TTL + 30, out)
+        else:
+            _CACHE[key] = (time.time(), out)
     return out
 
 

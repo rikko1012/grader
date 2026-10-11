@@ -175,7 +175,9 @@ def build(picks, forecasts, batches=(), now=None):
                                 if abs(r["hsk_act"] - r["hsk_pred"]) > 0.12:
                                     r["flags"].append("headshots per kill 0.12+ off the forecast")
                     src = str(g.get("projection_source") or "")
-                    if src.startswith("legacy"):
+                    if "unreachable" in src:
+                        r["flags"].append("HLTV-outage projection")
+                    elif src.startswith("legacy"):
                         r["flags"].append("older-model projection")
                     elif src.endswith("-bo3"):
                         r["flags"].append("BO3.gg-history projection")
@@ -219,6 +221,7 @@ def build(picks, forecasts, batches=(), now=None):
         # projection source (2026-10-10): HLTV performance model vs the provisional BO3.gg-history fallback vs the older
         # pipeline - the fallback's thin-history prior looked high on tier-3 players (e.g. 28 projected vs a 16 average)
         src_of = lambda r: ("BO3.gg-history (provisional)" if "BO3.gg-history projection" in r["flags"]
+                            else "older model (HLTV outage)" if "HLTV-outage projection" in r["flags"]
                             else "older model" if "older-model projection" in r["flags"] else "HLTV performance model")
         by_src = collections.defaultdict(list)
         for r in rs:

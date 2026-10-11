@@ -89,7 +89,7 @@ def _team_ok(board_team, page_teams):
         return True                                   # no current team on one side (ex- roster / free agent on a mix)
     for t in page_teams:
         p = _norm(t)
-        if p and (p in b or b in p or (len(b) >= 4 and p[:4] == b[:4])):
+        if p and (p in b or b in p):                  # exact name variants only - no 4-letter prefix guesses (2026-10-11 audit)
             return True
     return False
 
@@ -159,11 +159,13 @@ def refresh_hltv():
     """Bulk-load roles + AWP share from the scraper's database (30-minute cache). Never raises."""
     if time.time() - _HLTV["at"] < HLTV_TTL:
         return
-    _HLTV["at"] = time.time()
-    try:
+    _HLTV["at"] = time.time() - HLTV_TTL + 30     # a failed load is tried again in 30 s (it used to mark 30 minutes done first:
+    try:                                           # one blip after a restart = no AWP roles for half an hour, 2026-10-11 audit)
         import hltv
         if not hltv.dsn():
             return
+        if not _HLTV["rows"]:
+            _HLTV["rows"] = _last_snapshot()         # restart: the last saved snapshot until the database answers
         con = hltv._connect()
         try:
             with con.cursor() as cur:
@@ -182,10 +184,23 @@ def refresh_hltv():
                         end=str(end) if end else None))
         finally:
             con.close()
-        _HLTV["rows"] = rows
+        _HLTV.update(rows=rows, at=time.time())
         _snapshot(rows)
     except Exception:
         pass                                          # tables not there yet / database down: other sources
+
+
+def _last_snapshot():
+    """The newest saved role snapshot (role_snapshots.jsonl) - yesterday's roles beat none at all."""
+    try:
+        last = None
+        with open(SNAP, encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    last = line
+        return (json.loads(last).get("players") or {}) if last else {}
+    except (OSError, ValueError):
+        return {}
 
 
 SNAP = Path(DATA_DIR) / "role_snapshots.jsonl"
