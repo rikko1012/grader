@@ -543,7 +543,7 @@ def scope_result(r, same_day_only=False):
     Returns {"status": "ok", "total", "maps_used", "maps", "per_map", "rounds", "won", "hltv_match"} or
     {"status": "wait"|"none"|"error", "reason"}. Never substitutes another scope; two candidate matches = error."""
     import hltv
-    from scope import scope_total
+    from scope import scope_total, MAP3_NOT_PLAYED
     day = (r["match_start"] or "")[:10]
     con = hltv._connect()
     try:
@@ -569,6 +569,8 @@ def scope_result(r, same_day_only=False):
     maps = [{"number": x["number"], "kills": x["kills"], "headshots": x["headshots"], "won": x["won"]} for x in ms]
     sc = _col(r, "scope") or "12"
     total, used = scope_total(maps, sc, r["prop"])
+    if total is None and used == MAP3_NOT_PLAYED:
+        return {"status": "void", "reason": used}      # Underdog voids Maps 1-3 when map 3 isn't played
     if total is None:
         if sc == "123" and len(ms) == 2 and ms[0]["won"] != ms[1]["won"]:
             return {"status": "wait", "reason": "1-1 after two maps: map 3 not in yet"}

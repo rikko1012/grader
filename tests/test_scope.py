@@ -24,12 +24,45 @@ def test_later_maps_never_change_map1_or_maps12():
     assert scope_total(a, "12", "hs")[0] == scope_total(c, "12", "hs")[0] == 16
 
 
-def test_maps123_follows_series_result():
-    assert scope_total([m(1, 10, 5, True), m(2, 11, 5, True)], "123", "kills") == (21, [1, 2])          # 2-0
+def test_maps123_is_maps_1_2_and_3():
+    """Maps 1-3 = maps 1, 2 and 3 only (2026-10-11). The prop's map scope, not the match format."""
+    from scope import MAP3_NOT_PLAYED
+    # BO3 that went 1-1: maps 1-3
     assert scope_total([m(1, 10, 5, True), m(2, 11, 5, False), m(3, 30, 9, True)], "123", "kills") == (51, [1, 2, 3])
-    assert scope_total([m(1, 10, 5, True), m(2, 11, 5, False)], "123", "kills")[0] is None              # 1-1, map 3 missing
-    assert scope_total([m(1, 10, 5, True), m(2, 11, 5, True), m(3, 9, 2, True)], "123", "kills")[0] is None  # bad data
+    # BO3 that ended 2-0: no map 3 - the pick voids (Underdog: a player must play each map of the selection)
+    assert scope_total([m(1, 10, 5, True), m(2, 11, 5, True)], "123", "kills") == (None, MAP3_NOT_PLAYED)
+    # 1-1 but map 3 not in yet: wait, never a 2-map total
+    assert scope_total([m(1, 10, 5, True), m(2, 11, 5, False)], "123", "kills")[0] is None
 
+
+def test_bo5_maps123_counts_all_three_maps_and_never_maps_4_5():
+    """BO5 regression (2026-10-11): maps 1-3 are always played. A 2-0 after two maps still has map 3, and it counts in
+    full; maps 4 and 5 never count."""
+    bo5_3_0 = [m(1, 20, 9, True), m(2, 18, 8, True), m(3, 22, 10, True)]
+    assert scope_total(bo5_3_0, "123", "kills") == (60, [1, 2, 3]) and scope_total(bo5_3_0, "123", "hs") == (27, [1, 2, 3])
+    bo5_3_2 = [m(1, 20, 9, True), m(2, 18, 8, True), m(3, 22, 10, False), m(4, 25, 11, False), m(5, 30, 12, True)]
+    assert scope_total(bo5_3_2, "123", "kills") == (60, [1, 2, 3])          # maps 4-5 excluded
+    assert scope_total(bo5_3_2, "12", "kills") == (38, [1, 2]) and scope_total(bo5_3_2, "1", "kills") == (20, [1])
+
+
+def test_bo5_maps123_projection_is_not_discounted():
+    """BO5 regression: the Maps 1-3 projection is three full maps - no BO3 chance of reaching map 3 (~47%) applied, with
+    the performance model or the fallback, whatever the win chances."""
+    import grader, perf
+    for ml in (-400, -150, 110, 250):
+        for bo in (5, 3):
+            d = dict(prop="kills", line=42.5, line_type="standard", scope="123", bo=bo, maps_played=40, kpr=0.7, hs_pct=45,
+                     team_ml=ml, opp_ml=-ml, rating=1.0)
+            g = grader.grade_leg(dict(d), dict(grader.CONFIG, gap_trust_at={"kills": 1e9, "hs": 1e9}))   # fallback, no gap compression
+            assert abs(g["lambda_final"] - 1.5 * g["lambda_maps12"]) < 0.02   # both rounded to 0.01
+            assert (g["p_map3"] is None) == (bo == 5)                               # BO5: no "chance of map 3" at all
+    hist = [(1000 - i, 20, 24, 10, True, True) for i in range(1, 40)]
+    p12 = perf.project(hist, [], True, 1000, "12", "kills"); p123 = perf.project(hist, [], True, 1000, "123", "kills")
+    assert abs(p123["lambda"] - 1.5 * p12["lambda"]) < 1e-9 and p123["spread_c"] == perf.SPREAD[("kills", "123")]
+    pf = dict(p123, version="perf-2")
+    g = grader.grade_leg(dict(prop="kills", line=42.5, line_type="standard", scope="123", bo=5, maps_played=40, kpr=0.7, hs_pct=45,
+                              team_ml=-150, opp_ml=150, perf=pf))
+    assert g["projection_source"].startswith("perf") and abs(g["lambda_final"] - p123["lambda"]) < 0.01
 
 def test_headshots_scope():
     maps = [m(1, 12, 7, True), m(2, 24, 9, True)]

@@ -21,12 +21,19 @@ VERSION = "perf-2"
 # intervals below 0); 80% intervals hold 79.6% / 81.5%. Verified board lines (dev): same direction, within noise.
 PARAMS = {"hl": 120.0, "k0": 300.0, "ko": 300.0, "ke": 800.0, "base_r": 21.74132969862184, "k_hs": 25.0,
           "pop": 0.66442, "pop_hs": 0.5106, "prior_m": 0.93}
-SPREAD = {("kills", "12"): 1.457, ("kills", "1"): 1.442, ("hs", "12"): 1.264, ("hs", "1"): 1.241}   # TRAIN residuals via this module
+SPREAD = {("kills", "12"): 1.457, ("kills", "1"): 1.442, ("hs", "12"): 1.264, ("hs", "1"): 1.241,   # TRAIN residuals via this module
+          # Maps 1-3 (2026-10-11): three full maps; the Maps 1-2 spread per sqrt(lambda). Held out on 7,958 player-series
+          # that went to three maps (809 matches, Jul-Oct 2026): kills bias -0.59 (avg 43.6), 80% range 81.9%;
+          # headshots bias -0.44 (avg 22.9), 82.7%; Over rates within 0-4 pts at lines near the projection
+          ("kills", "123"): 1.457, ("hs", "123"): 1.264}
 # perf-1 (G6/G7, live 2026-10-08 22:10Z - 2026-10-09): kept for the logged comparison "perf1_g7" and for rollback
 PARAMS_PERF1 = {"hl": 120.0, "k0": 300.0, "ko": 300.0, "ke": 800.0, "base_r": 21.74132969862184, "k_hs": 150.0,
                 "pop": 0.66442, "pop_hs": 0.5106}
-SPREAD_PERF1 = {("kills", "12"): 1.446, ("kills", "1"): 1.43, ("hs", "12"): 1.262, ("hs", "1"): 1.235}
-MAPS = {"1": 1, "12": 2}
+SPREAD_PERF1 = {("kills", "12"): 1.446, ("kills", "1"): 1.43, ("hs", "12"): 1.262, ("hs", "1"): 1.235,
+                ("kills", "123"): 1.446, ("hs", "123"): 1.262}
+# the prop's map scope, never the match format: Maps 1-3 = maps 1, 2 and 3 (all three counted in full - guaranteed in a
+# BO5, and a BO3 Maps 1-3 pick only grades if map 3 is played: Underdog voids it otherwise). Maps 4-5 never count.
+MAPS = {"1": 1, "12": 2, "123": 3}
 
 
 def _wsum(rows, day, hl, f):

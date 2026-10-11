@@ -41,11 +41,11 @@ Polymarket), `--bo3-slug` (if the name search picks the wrong player), `--refres
 Results print to the screen and save to `output/<player>_<command>_<date>.json`.
 
 ## Which projection is live (2026-10-10)
-- **Maps 1-2 and Map 1 lines** (the whole Underdog board): the performance model `perf.py` on HLTV map history
+- **Map 1, Maps 1-2 and Maps 1-3 lines**: the performance model `perf.py` on HLTV map history
   (`perf_live.py`), version tag in `MODEL_VERSIONS.md`. It uses his kills per round (half-life 120 days, measured up to
   the match day), tonight's LAN / online split, a thin-history prior, the opponent's kills conceded and, for headshots,
   his headshots per kill. Players HLTV doesn't have use the same model on their BO3.gg maps (provisional).
-- **Maps 1-3 lines** (rare; none on the board) still use the older pipeline described below (rates, form, H2H, Round Swing, win chance,
+- **Maps 1-3** = maps 1, 2 and 3 in full, never maps 4-5 (BO5: always played; BO3 2-0: Underdog voids). The older pipeline described below is the fallback only (rates, form, H2H, Round Swing, win chance,
   Over margin).
 - Gates and caps (stand-in, transfer, sample, rust, AWPer on HS, FORM / TAPE FIGHT, thin market, same-match cap) set
   the stake on every line and never change the chance. Their inputs read HLTV first (`hltv_first_gates`): AWP share,

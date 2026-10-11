@@ -1083,7 +1083,7 @@ def match_day(start):
 def _perf_input(pb, args):
     """perf.project() on live HLTV data for this player / opponent / tonight's environment (None when unavailable)."""
     sc = getattr(args, "scope", "12") or "12"
-    if sc not in ("1", "12"):
+    if sc not in ("1", "12", "123"):
         return None
     try:
         import perf_live
@@ -1166,7 +1166,7 @@ def grader_inputs(pb, args, odds=None, hh=None):
     o = pb["overall"]
     d = {
         "prop": args.prop, "line": args.line, "line_type": args.line_type,
-        "scope": getattr(args, "scope", "12") or "12",
+        "scope": getattr(args, "scope", "12") or "12", "bo": getattr(args, "match_bo", None),
         "maps_played": o.get("maps_played"), "kpr": o.get("kpr"), "hs_pct": o.get("hs_pct"),
         "sample_maps": max((w.get("maps") or 0 for w in (o.get("form_windows") or {}).values()), default=None),
         "kpr_last5": (pb.get("recent_form") or {}).get("kpr_recent"),  # last 10 matches, Maps 1-2
@@ -1748,6 +1748,7 @@ def run(args, res, b, ttl):
                     res["opponent_defense"] = None
             res["next_match"] = nxt
             args.match_start = nxt.get("start")          # the performance model's day = the match day
+            args.match_bo = nxt.get("bo")                 # match format (BO3 / BO5) - display of the map-3 note only
             if nxt.get("event_slug") and not nxt.get("event_type"):
                 nxt["event_type"] = _event_type(b, nxt["event_slug"])     # "lan" / "online" (BO3.gg)
             args.opponent = nxt["opponent"]

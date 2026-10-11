@@ -37,4 +37,4 @@ def test_bo3_is_the_backup(monkeypatch):
 
 
 def test_map1_uses_performance_model():
-    assert "1" in grader.CONFIG["perf_scopes"] and "12" in grader.CONFIG["perf_scopes"] and "123" not in grader.CONFIG["perf_scopes"]
+    assert {"1", "12", "123"} <= set(grader.CONFIG["perf_scopes"])

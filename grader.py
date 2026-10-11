@@ -82,7 +82,7 @@ CONFIG = {
     # (d["perf"]) is present. () = the old pipeline. Map 1 added 2026-10-10 (owner: HLTV is the source, BO3.gg the
     # backup): on 186 real Map 1 lines (16 matches) it tied the BO3.gg-based projection - MAE 3.135 vs 3.137, log-loss
     # 0.6873 vs 0.6915 (95% -0.040 to +0.036). Maps 1-3 stays on the old pipeline until tested.
-    "perf_scopes": ("12", "1"),
+    "perf_scopes": ("12", "1", "123"),     # Maps 1-3 added 2026-10-11: three full maps (see perf.SPREAD)
     # 2026-10-08 release (PROVISIONAL - confirmation on matches from Oct 9 on):
     #  perf-1-bo3: the performance model on BO3.gg maps for players HLTV has no history for (proxy test: short-history
     #  model beat the old pipeline on 414 board lines, MAE 5.08 -> 4.91, log-loss -0.017, range crosses 0)
@@ -633,8 +633,11 @@ def grade_leg(d, cfg=CONFIG):
     if scope == "1":
         lam_final = lam12 / 2
     elif scope == "123":
-        p3 = q1 * (1 - q2) + (1 - q1) * q2
-        lam_final = lam12 + p3 * lam3
+        # Maps 1-3 = maps 1, 2 AND 3, each counted in full (2026-10-11 fix: map 3 was discounted by a BO3's chance of a
+        # 1-1, ~47%). A BO5 always plays maps 1-3; a BO3 Maps 1-3 pick only grades when map 3 is played (Underdog voids
+        # it otherwise). p3 is kept for display on BO3s only - it never scales the projection.
+        p3 = None if d.get("bo") == 5 else q1 * (1 - q2) + (1 - q1) * q2
+        lam_final = lam12 + lam3
     scale = lam_final / lam12 if lam12 else 1.0
     sd = math.sqrt(lam_final) * c * sd_mult
     pf = d.get("perf") if isinstance(d.get("perf"), dict) else None
@@ -666,22 +669,13 @@ def grade_leg(d, cfg=CONFIG):
         sd = math.sqrt(_var)
 
     def three(shift=0.0):
-        """Unconditional (over, under, push) for this scope; Maps 1-3 mixes the raw outcomes of the 2-map and
-        3-map cases BEFORE the push is removed."""
-        if scope == "123":
-            return mix_three(line, cases123(shift))
-        return p_three(line, lam_final + shift, sd)
-
-    def cases123(shift=0.0):
-        a, b = lam12 + shift, lam12 + lam3 + shift
-        return [(1 - p3, a, math.sqrt(max(a, 1)) * c * sd_mult), (p3, b, math.sqrt(max(b, 1)) * c * sd_mult)]
+        """(over, under, push) for this scope's total - Maps 1-3 is three full maps (2026-10-11)."""
+        return p_three(line, lam_final + shift, sd)            # Maps 1-3: three full maps, one distribution
 
     def pmore(shift=0.0):
         if fix_v2:                                   # live since 2026-10-09: condition on no push after mixing
             o, u, _ = three(shift)
             return o / (o + u) if o + u > 0 else 0.5
-        if scope == "123":
-            return mix_p_more_live(line, cases123(shift))
         return p_more(line, lam_final + shift, sd)
     # Big disagreements with the line: past gap_trust_at kills/HS only gap_trust_keep of the extra counts
     # (2026-10-07: on 1,193 real lines Oct 2-6 the books were right more often than not when we
@@ -822,8 +816,7 @@ def grade_leg(d, cfg=CONFIG):
         dist=(({"kind": "hs_bb", "lam_kills": float(pf["lambda_kills"]), "hs_per_kill": float(pf["hs_per_kill"]), "scope": scope,
                 "c": _perf.kills_c(pf, scope)})
               if hs_dist is not None else
-              ({"kind": "mix", "cases": [[round(w, 6), round(a_, 4), round(s_, 4)] for w, a_, s_ in cases123()]})
-              if scope == "123" else {"kind": "normal", "lam": round(lam_final, 4), "sd": round(sd, 4)}),
+              {"kind": "normal", "lam": round(lam_final, 4), "sd": round(sd, 4)}),
         online_adj={"tonight": env.get("tonight"), "stats_from": env.get("stats_from"),
                     "online_weight": env.get("stats_weight") if env.get("stats_from") == "online" else None,
                     "mode": cfg.get("online_guard", "full"), "bonus_applied": round(online_bonus, 4)},

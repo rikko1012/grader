@@ -25,23 +25,13 @@ def test_sim_matches_each_distribution_kind():
             d["prop"] = "hs"; lk = rnd.uniform(18, 40); ph = rnd.uniform(0.3, 0.6)
             d["perf"] = dict(d["perf"], lambda_kills=lk, hs_per_kill=ph, **{"lambda": lk * ph}); d["line"] = round(lk * ph) + rnd.choice([0.5, 0])
         g = grader.grade_leg(dict(d)); kinds.add(g["dist"]["kind"]); _check(g)
-    assert kinds == {"normal", "mix", "hs_bb"}
+    assert kinds == {"normal", "hs_bb"}                 # Maps 1-3: three full maps, no 2-map / 3-map mix (2026-10-11)
 
 
-def test_maps123_chance_mixes_before_removing_push():
-    """Maps 1-3 (live fix 2026-10-09): Over/Under/push are mixed over the 2-map / 3-map cases first, the push is removed
-    after - the same distribution the simulation samples and settlement voids on."""
-    rnd = random.Random(31); whole = 0
-    for _ in range(300):
-        d = _inputs(rnd, "123")
-        if rnd.random() < 0.5:
-            d["line"] = float(round(d["line"])); whole += 1
-        g = grader.grade_leg(dict(d))
-        cases = [tuple(c) for c in g["dist"]["cases"]]
-        o, u, pu = grader.mix_three(g["line"], cases)
-        r = g["probs_raw"]
-        assert abs(r["over"] - o) < 2e-3 and abs(r["under"] - u) < 2e-3 and abs(r["push"] - pu) < 2e-3
-        assert abs(g["p_more_model_raw"] - o / (o + u)) < 2e-3
-        if g["line"] != int(g["line"]):
-            assert pu < 1e-9
-    assert whole > 50
+def test_maps123_is_three_full_maps():
+    """Maps 1-3 (2026-10-11): one distribution over three full maps - the chance is never mixed with a 2-map case."""
+    rnd = random.Random(31)
+    for _ in range(200):
+        d = _inputs(rnd, "123"); d.pop("perf")
+        g = grader.grade_leg(dict(d), dict(grader.CONFIG, gap_trust_at={"kills": 1e9, "hs": 1e9}))
+        assert g["dist"]["kind"] == "normal" and abs(g["lambda_final"] - 1.5 * g["lambda_maps12"]) < 0.02   # both rounded to 0.01

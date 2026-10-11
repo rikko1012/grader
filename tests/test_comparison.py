@@ -198,9 +198,11 @@ def test_maps123_record():
     pb = {"player": {"nick": "x"}, "current_team": "T",
           "recent_maps": [dict(m("b1", 1, 30, True, "2026-10-05", "MOUZ", None)), dict(m("b1", 2, 30, True, "2026-10-05", "MOUZ", None)),   # HLTV has this one
                           dict(m("b2", 1, 10, False, "2026-09-20", "NaVi", None)), dict(m("b2", 2, 11, False, "2026-09-20", "NaVi", None))]}
+    pb["recent_maps"] += [dict(m("b3", n, 15, n != 2, "2026-09-10", "Liquid", None)) for n in (1, 2, 3)]       # BO3.gg-only 3-map series
     r = records.maps123_record(pb, 37.5, "kills", hltv_rows=hl)
-    assert [s["total"] for s in r["series"]] == [38, 54, 21] and r["series"][1]["result"] == "W 2-1"
-    assert (r["overs"], r["pushes"], r["decided"]) == (2, 0, 3) and r["series"][0]["source"] == "HLTV" and r["series"][2]["source"] is None
-    assert records.maps123_record(pb, 38.0, "kills", hltv_rows=hl)["pushes"] == 1                      # whole line: a push
+    # only series where map 3 was played (the 2-0s - HLTV h1, BO3.gg b2 - are voids, not 2-map totals)
+    assert [s["total"] for s in r["series"]] == [54, 45] and r["series"][0]["result"] == "W 2-1"
+    assert (r["overs"], r["pushes"], r["decided"]) == (2, 0, 2) and r["series"][0]["source"] == "HLTV" and r["series"][1]["source"] is None
+    assert records.maps123_record(pb, 45.0, "kills", hltv_rows=hl)["pushes"] == 1                      # whole line: a push
     pb2 = {"recent_form": {"overs": 9}, "recent_form_123": r}
     assert cmp.record_for_scope(pb2, "123") is r

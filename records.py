@@ -1,7 +1,7 @@
 """Display-only records that the grader does not use (2026-10-10).
 
-Maps 1-3 lines: his last 10 series' totals over every map played up to map 3 (a 2-0 counts its two maps, a 2-1 all
-three) - the record a Maps 1-3 line is settled against. HLTV first (maps 1-3 of each series), BO3.gg as the backup for
+Maps 1-3 lines: his last 10 series' totals over maps 1, 2 and 3 - only series where map 3 was played (every BO5; a BO3
+that went 1-1), never maps 4-5. A BO3 that ended 2-0 is not in it: Underdog voids Maps 1-3 picks then. HLTV first (maps 1-3 of each series), BO3.gg as the backup for
 players / series HLTV lacks; tonight's environment (LAN / online) when he has 5+ such series there, like the Maps 1-2
 record. Never a grade input: the grader reads the last-10 record on Maps 1-2 lines only. Not in the model hash."""
 import threading
@@ -49,8 +49,8 @@ def _series(rows, stat):
     out = []
     for mid, maps in by.items():
         maps.sort(key=lambda m: m["number"])
-        if [m["number"] for m in maps[:2]] != [1, 2] or any(m.get(stat) is None for m in maps):
-            continue                                   # maps 1 and 2 must be there; every played map's stat recorded
+        if [m["number"] for m in maps] != [1, 2, 3] or any(m.get(stat) is None for m in maps):
+            continue                                   # Maps 1-3 = maps 1, 2 and 3 all played (a 2-0 BO3 is a void)
         won = sum(1 for m in maps if m.get("won"))
         out.append({"match_id": mid, "date": maps[0]["date"], "opponent": maps[0].get("opponent"),
                     "source": "HLTV" if maps[0].get("source") == "hltv" else None, "env": maps[0].get("env"),

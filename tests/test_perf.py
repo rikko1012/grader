@@ -27,7 +27,7 @@ def test_old_path_identical_when_model_off():
     sp = importlib.util.spec_from_file_location("gpre", PRE); old = importlib.util.module_from_spec(sp); sp.loader.exec_module(old)
     rnd = random.Random(1)
     for _ in range(1500):
-        d = _inputs(rnd, rnd.choice(["12", "1", "123"]))
+        d = _inputs(rnd, rnd.choice(["12", "1"]))           # Maps 1-3 changed on purpose 2026-10-11 (three full maps)
         a = old.grade_leg(dict(d)); b = grader.grade_leg(dict(d), dict(grader.CONFIG, perf_scopes=(), fix_v2=False))
         b.pop("projection_source"); b.pop("p_more_model_raw"); b.pop("dist")
         fa = [f for f in a.pop("flags") if not f.startswith("CAP:")]; fb = [f for f in b.pop("flags") if not f.startswith(("CAP:", "OLD PROJECTION"))]
@@ -51,9 +51,9 @@ def test_model_drives_maps12_with_one_probability():
 def test_other_scopes_untouched_and_gates_kept():
     rnd = random.Random(3)
     for _ in range(400):
-        d = _inputs(rnd, "123")                                           # Map 1 is on the performance model since 2026-10-10
+        d = _inputs(rnd, "123"); d.pop("perf")                            # no performance-model input: the fallback
         a = grader.grade_leg(dict(d)); b = grader.grade_leg(dict(d), dict(grader.CONFIG, perf_scopes=()))
-        assert a["projection_source"] == "legacy" and a["p_more"] == b["p_more"] and a["lambda_final"] == b["lambda_final"]
+        assert a["p_more"] == b["p_more"] and a["lambda_final"] == b["lambda_final"]
     d = _inputs(random.Random(4), "12"); d.update(is_standin=True, roster_confirmed=True)
     g = grader.grade_leg(dict(d))
     assert g["units"] == 0 and g["units_less"] == 0                      # stand-in gate still 0 units
@@ -147,7 +147,7 @@ def test_live_grades_unchanged_by_candidate_code():
     sp = importlib.util.spec_from_file_location("gcand", pre); old = importlib.util.module_from_spec(sp); sp.loader.exec_module(old)
     rnd = random.Random(8)
     for _ in range(1000):
-        d = _inputs(rnd, rnd.choice(["12", "1", "123"]))
+        d = _inputs(rnd, rnd.choice(["12", "1"]))
         if rnd.random() < 0.2:
             d["perf"] = {"error": "player 'x' not found in HLTV"}
         if d["prop"] == "hs" or rnd.random() < 0.3:
