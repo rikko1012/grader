@@ -16,3 +16,6 @@ exports/
 
 comparison_snapshots.jsonl
 model_versions.json
+.neon
+.env.local
+node_modules/
