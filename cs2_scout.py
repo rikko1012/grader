@@ -1040,7 +1040,7 @@ def _hltv_check_bo3(chosen, options, h):
     return chosen, None
 
 
-def _hltv_context(pb, args):
+def _hltv_context(pb, args, fresh=False):
     """Everything else the HLTV scraper has for this grade (hltv.context). Display only: nothing
     here reaches grade_leg(), and any failure just leaves the section out."""
     try:
@@ -1052,7 +1052,7 @@ def _hltv_context(pb, args):
             maps = [m for i, m in enumerate(maps) if m and m not in maps[:i]]
         last = (pb.get("recent_maps") or [{}])[0].get("date")
         return hltv.context((pb.get("player") or {}).get("nick"), pb.get("current_team"),
-                            getattr(args, "opponent", None), maps, last)
+                            getattr(args, "opponent", None), maps, last, fresh=fresh)
     except Exception as e:
         import hltv
         return {"found": False, "error": hltv.err_text(e), "transient": _transient_hltv_error(e)}
@@ -1087,7 +1087,7 @@ def _ckey_name(s):
     share ONE player context, so both boards and the card grade from the same data snapshot (2026-10-11 audit: three contexts
     refreshed minutes apart could differ). Only org suffixes go; academy / female / NXT squads stay distinct."""
     k = norm(s or "")
-    k2 = re.sub(r"^team", "", k)
+    k2 = re.sub(r"^team", "", k) if re.match(r"(?i)team\s", str(s or "").strip()) else k   # 'Team Spirit' yes, 'TeamOne' no
     k2 = re.sub(r"(esports?|gaming|clan|club|team)$", "", k2)
     return k2 or k
 
@@ -1118,9 +1118,9 @@ def _perf_input(pb, args):
                 return {"error": f"performance model failed: {str(e)[:120]}"}
             if attempt == 1:
                 import hltv
-                hltv.allow_probe()                 # the retry may try the database even while the breaker is on
-                time.sleep(PERF_RETRY_WAIT)
-                continue
+                if hltv.allow_probe():             # this caller may probe (one at a time); the others report at once, no sleep
+                    time.sleep(PERF_RETRY_WAIT)
+                    continue
             return {"error": f"HLTV database unreachable right now (retried once): {type(e).__name__}", "transient": True}
 
 
@@ -1193,8 +1193,12 @@ def hltv_first_gates(pb, d):
         if n and n > (d.get("maps_played") or 0):
             d["maps_played"] = n
             src["sample"] = f"HLTV ({n} Maps 1-2 in the window)"
+        if nick and hltv.lookup_failed(("series", hltv._norm(nick), hltv._norm(team), since)):
+            d["hltv_transient"] = "his HLTV series could not be read"
     except Exception:
         pass
+    if (pb.get("hltv") or {}).get("transient"):
+        d["hltv_transient"] = "his HLTV numbers could not be read"
     src.setdefault("sample", "BO3.gg")
     return d
 
@@ -1238,6 +1242,10 @@ def grader_inputs(pb, args, odds=None, hh=None):
         "roster_confirmed": pb["roster_confirmed"],
     }
     hltv_first_gates(pb, d)
+    if d.get("hltv_transient") and isinstance(d.get("perf"), dict) and not d["perf"].get("error"):
+        # the projection came through but a stake input did not (2026-10-11 audit): one transient grade, never a quietly
+        # different unit size next to the board's
+        d["perf"] = {"error": f"HLTV database unreachable right now ({d['hltv_transient']})", "transient": True}
     if odds and odds.get("found") and odds.get("team_ml") is not None:
         d["team_ml"], d["opp_ml"] = odds["team_ml"], odds["opp_ml"]
     if args.team_ml is not None:
@@ -1546,9 +1554,24 @@ def grade(name, line, prop="kills", line_type="standard", slug=None, faceit_key=
         res["player_block"].pop("_matches", None)
     if len(_CONTEXT) > 3000:
         _CONTEXT.clear()
-    _CONTEXT[ckey] = (time.time(), copy.deepcopy(res))
+    _store_context(ckey, res)
     _timing_done(res, name, "miss", background, t0)
     return res
+
+
+def _context_tainted(res):
+    """Built while the HLTV database blipped (context transient, or the HLTV schedule unreadable so an HLTV-only match may
+    have been missed): such a context is rebuilt within a minute instead of serving every grade for 30 minutes."""
+    try:
+        import hltv
+        return bool((res.get("hltv_context") or {}).get("transient") or hltv._STATE.get("schedule_failed"))
+    except Exception:
+        return False
+
+
+def _store_context(ckey, res):
+    ts = time.time() - (CONTEXT_STALE - 60) if _context_tainted(res) else time.time()
+    _CONTEXT[ckey] = (ts, copy.deepcopy(res))
 
 
 TIMINGS = collections.deque(maxlen=300)   # recent grades' step times (admin /health) - finding slow steps
@@ -1596,7 +1619,7 @@ def _refresh_context(ckey, args, ttl):
                 if res.get("player_block"):
                     res["player_block"].pop("_matches", None)
                 if not res.get("error"):
-                    _CONTEXT[ckey] = (time.time(), copy.deepcopy(res))
+                    _store_context(ckey, res)
         except Exception:
             pass                                # keep the saved context; the next grade tries again
         finally:
@@ -2206,15 +2229,18 @@ def finish_line(res, args):
     if nm_.get("opponent"):                            # the match's own opponent name on every path: a cache hit used to keep
         args.opponent = nm_["opponent"]                # the book's string, so the HLTV opponent lookup could differ (2026-10-11 audit)
     res["hltv_context"] = _hltv_context(pb, args)
-    if (res["hltv_context"] or {}).get("transient"):   # HLTV blip while reading the context: one retry
-        time.sleep(PERF_RETRY_WAIT)
-        res["hltv_context"] = _hltv_context(pb, args)
+    if (res["hltv_context"] or {}).get("transient"):   # HLTV blip while reading the context: one retry (if this caller may probe)
+        import hltv
+        if hltv.allow_probe():
+            time.sleep(PERF_RETRY_WAIT)
+            res["hltv_context"] = _hltv_context(pb, args, fresh=True)
     _tick(res, "hltv_context", t0)
     pb["_opp_rank"] = ((res["hltv_context"] or {}).get("opp_ranking") or {}).get("rank")
     pb["_env"] = _environment(res, pb)       # LAN / online split + tonight's environment
     # tonight's LAN / online flag feeds the projection: unknown because the database was unreachable (not because no one
     # labels the event) makes the grade transient - never a silently different perf-2 number (2026-10-11 audit)
-    pb["_env_transient"] = bool((res["hltv_context"] or {}).get("transient") and not (pb.get("_env") or {}).get("tonight"))
+    ctx_ = res["hltv_context"] or {}
+    pb["_env_transient"] = bool(ctx_.get("transient") and not ctx_.get("environment"))   # HLTV's own label missing because of the blip
     tonight = _apply_env(pb)                 # LAN match -> LAN stats, online match -> online stats
     if pb.get("recent_maps") is not None:
         _hltv_only_overall(pb)

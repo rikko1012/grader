@@ -140,7 +140,7 @@ def test_context_key_shares_book_name_variants():
     assert f("Imperial Esports") == f("Imperial") == f("imperial")
     assert f("NRG Esports") == f("NRG") and f("Team Spirit") == f("Spirit") and f("G2 Esports") == f("G2")
     assert f("Imperial Academy") != f("Imperial") and f("MOUZ NXT") != f("MOUZ") and f("Imperial Female") != f("Imperial")
-    assert f("Team") == "team" and f("") == ""
+    assert f("Team") == "team" and f("") == "" and f("TeamOne") == "teamone"      # only a separate word "Team" goes
 
 
 def test_roles_refresh_failure_retries_in_30s(monkeypatch):
@@ -265,5 +265,129 @@ def test_member_visible_error_text_is_clean():
     e = OperationalError('connection to server at "dpg-secret-a.ohio-postgres.render.com" (18.1.2.3), port 5432 failed: SSL error')
     assert hltv.err_text(e) == "OperationalError: HLTV database unreachable"
     assert "render.com" not in hltv.err_text(e) and "18.1.2.3" not in hltv.err_text(e)
-    assert hltv.err_text(KeyError("x")).startswith("KeyError")
+    assert hltv.err_text(KeyError("secret table name")) == "KeyError: lookup failed"   # non-transient: class only
     assert set(hltv.public_status()) == {"configured", "breaker_on", "pool"}                   # /health: no host, no error text
+
+
+def test_board_load_hides_old_pipeline_rows_from_another_version(monkeypatch, tmp_path):
+    import picklog
+    f = tmp_path / "board.json"
+    f.write_text(json.dumps({"version": "other", "rows": {
+        "A": {"side": "Less", "grade": "B", "source": "older model (BO3.gg)", "graded_model": "old"},
+        "B": {"side": "More", "grade": "B", "source": "HLTV", "graded_model": "old"}}}), encoding="utf-8")
+    monkeypatch.setattr(server, "BOARD_FILE", f)
+    monkeypatch.setattr(server, "BOARD", {})
+    server._board_load()
+    assert not server.BOARD["A"].get("side") and server.BOARD["A"]["state"] == "RETRY" and server.BOARD["A"]["at"] == 0
+    assert server.BOARD["B"]["side"] == "More" and server.BOARD["B"]["at"] == 0           # an HLTV grade stays visible until regraded
+
+
+def test_allow_probe_one_at_a_time(monkeypatch):
+    hltv._DOWN_UNTIL[0] = 0.0
+    assert hltv.allow_probe() is True                       # breaker off: anyone may retry
+    hltv._DOWN_UNTIL[0] = time.time() + 300; hltv._LAST_FORCED[0] = 0.0; hltv._STATE["probing"] = False
+    assert hltv.allow_probe() is True                       # first forced probe
+    assert hltv.allow_probe() is False                      # within 2 s: everyone else reports at once (no sleep, no wait)
+    hltv._LAST_FORCED[0] = 0.0; hltv._STATE["probing"] = True
+    assert hltv.allow_probe() is False                      # a probe is already connecting
+    hltv._STATE["probing"] = False; hltv._DOWN_UNTIL[0] = 0.0
+
+
+def test_context_stops_after_a_transient_section(monkeypatch):
+    monkeypatch.setattr(hltv, "dsn", lambda: "postgres://x")
+    hltv._CACHE.pop(("ctx", "x", "y", "", ()), None)
+    calls = []
+    class Cur:
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def execute(self, *a, **k): pass
+        def fetchall(self): return []
+        def fetchone(self): return None
+        connection = None
+    class Con:
+        def cursor(self): return Cur()
+        def close(self): pass
+    monkeypatch.setattr(hltv, "_connect", lambda: Con())
+    monkeypatch.setattr(hltv, "_player_ids", lambda cur, n, t: [1])
+    monkeypatch.setattr(hltv, "_team_id", lambda cur, t: 1)
+    def boom(*a, **k):
+        calls.append("x"); raise hltv.Unavailable("statement timeout")
+    for name in ("_prop_maps", "_eco", "_last5", "_h2h", "_ranking", "_rank_band", "_next_match", "_environment", "_backup"):
+        monkeypatch.setattr(hltv, name, boom)
+    out = hltv.context("x", "y", None, [], None)
+    assert out["transient"] and len(calls) == 1              # the first timeout ends the section loop
+    assert time.time() - hltv._CACHE[("ctx", "x", "y", "", ())][0] > hltv.TTL - hltv.FAIL_TTL - 1   # retried in FAIL_TTL s
+
+
+def test_host_parse_never_shows_password(monkeypatch):
+    monkeypatch.setattr(hltv, "dsn", lambda: "postgresql://user:p%40ss@db.internal:5432/x")
+    assert hltv._host() == "db.internal"
+    monkeypatch.setattr(hltv, "dsn", lambda: "")
+    assert hltv._host() is None
+
+
+def test_load_test_header_is_constant_time_and_token_bound(monkeypatch):
+    monkeypatch.setattr(server, "ADMIN_TOKEN", "tok")
+    class H:
+        def __init__(self, v): self.headers = {"X-Load-Test": v} if v is not None else {}
+    assert server.Handler.load_test(H("tok")) and not server.Handler.load_test(H("wrong")) and not server.Handler.load_test(H(None))
+    monkeypatch.setattr(server, "ADMIN_TOKEN", None)
+    assert not server.Handler.load_test(H("tok"))
+
+
+def test_stake_inputs_lost_to_a_blip_make_the_grade_transient(monkeypatch):
+    import hltv as h, roles
+    monkeypatch.setattr(roles, "refresh_hltv", lambda: None)
+    monkeypatch.setattr(roles, "awp_role", lambda n, t: (None, None))
+    monkeypatch.setattr(h, "recent_series", lambda n, t, since: [])
+    key = ("series", h._norm("saadzin"), h._norm("Imperial"), None)
+    pb = {"player": {"nick": "saadzin"}, "current_team": "Imperial", "overall": {"window": "x"}, "hltv": {"found": False, "transient": True}}
+    d = {"maps_played": 5}
+    cs2_scout.hltv_first_gates(pb, d)
+    assert d["hltv_transient"]                                           # player numbers unreadable -> flagged
+    pb["hltv"] = {"found": True}
+    h._CACHE[("series", h._norm("saadzin"), h._norm("Imperial"), "2025-10-12")] = (time.time(), [], False)   # a served failure
+    monkeypatch.setattr(cs2_scout, "WINDOW_DAYS", {"x": 365})
+    from datetime import datetime, timezone, timedelta
+    since = (datetime.now(timezone.utc).date() - timedelta(days=365)).isoformat()
+    h._CACHE[("series", h._norm("saadzin"), h._norm("Imperial"), since)] = (time.time(), [], False)
+    d = {"maps_played": 5}
+    cs2_scout.hltv_first_gates(pb, d)
+    assert "series" in d["hltv_transient"]
+    assert not h.lookup_failed(("series", "nobody", "", since))
+
+
+def test_context_retry_bypasses_the_cached_failure(monkeypatch):
+    monkeypatch.setattr(hltv, "dsn", lambda: "postgres://x")
+    key = ("ctx", "a", "b", "", ())
+    hltv._CACHE[key] = (time.time(), {"found": False, "transient": True}, False)
+    n = []
+    def connect():
+        n.append(1); raise hltv.Unavailable("still down")
+    monkeypatch.setattr(hltv, "_connect", connect)
+    assert hltv.context("a", "b", None, [], None)["transient"] and not n          # cached failure served
+    assert hltv.context("a", "b", None, [], None, fresh=True)["transient"] and len(n) == 1   # the retry really tries
+
+
+def test_tainted_context_is_rebuilt_soon(monkeypatch):
+    import hltv as h
+    monkeypatch.setattr(cs2_scout, "_CONTEXT", {})
+    h._STATE["schedule_failed"] = False
+    cs2_scout._store_context("k1", {"hltv_context": {"found": True}})
+    cs2_scout._store_context("k2", {"hltv_context": {"found": False, "transient": True}})
+    assert time.time() - cs2_scout._CONTEXT["k1"][0] < 2
+    assert time.time() - cs2_scout._CONTEXT["k2"][0] > cs2_scout.CONTEXT_STALE - 61    # stale within a minute
+    h._STATE["schedule_failed"] = True
+    cs2_scout._store_context("k3", {"hltv_context": {"found": True}})
+    assert time.time() - cs2_scout._CONTEXT["k3"][0] > cs2_scout.CONTEXT_STALE - 61
+    h._STATE["schedule_failed"] = False
+
+
+def test_card_stake_cap_stays_on_its_own_platform(monkeypatch):
+    rows = [{"nick": "x", "prop": "kills", "scope": "12", "line": 20.5, "side": "More", "cap_n": 3, "units_full": 1.0, "units": 0.5,
+             "start": "2026-10-12T12:00:00Z", "book": "prizepicks", "team_name": "T"}]
+    monkeypatch.setattr(server, "_both_boards", lambda: rows)
+    server._BS_CACHE[:] = [0.0, []]
+    res = {"verdict": {"side": "More", "units": 1.0}, "player_block": {"player": {"nick": "x"}}, "next_match": {"start": "2026-10-12T12:00:00Z"}}
+    assert server.board_stake(res, "kills", "12", 20.5)["units"] == 1.0                       # an Underdog card ignores a PrizePicks cap
+    assert server.board_stake(res, "kills", "12", 20.5, "goblin")["units"] == 0.5             # a goblin card is a PrizePicks card

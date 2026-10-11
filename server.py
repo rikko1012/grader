@@ -228,12 +228,14 @@ def perf_transient(g):
     return "HLTV database unreachable" in str((g or {}).get("projection_source") or "")
 
 
-HLTV_MAX_RETRIES = 20   # a line kept this often (~30 min) while its model stays 'unreachable' is graded afresh: that is a slow query, not an outage
+HLTV_MAX_RETRIES = 20   # a line kept this often (~30 min) while its model stays 'unreachable' drops to a hidden placeholder on the
+                        # regular cycle (a slow query, not an outage) - an old-pipeline grade still never goes on the board for it
 
 
 def outage_placeholder(old, r, now=None):
     """A line whose grade could not use the HLTV database and that has no earlier grade of this line to keep: not shown (no
-    side), tried again in HLTV_RETRY s; after HLTV_MAX_RETRIES the regular cycle applies (a slow query, not an outage)."""
+    side), tried again in HLTV_RETRY s; after HLTV_MAX_RETRIES it stays hidden but on the regular BOARD_EVERY cycle (a slow
+    query, not an outage - still never an old-pipeline grade on the board)."""
     old = old or {}
     n = (old.get("hltv_retries") or 0) + 1
     now = now or time.time()
@@ -293,6 +295,11 @@ def _board_load():
             # another model version first thing - "at" 0 puts them at the front of the queue
             if saved.get("version") != _grader_version() or v.get("graded_model") != picklog.MODEL_VERSION:
                 v["at"] = 0
+                if str(v.get("source") or "").startswith("older model"):
+                    # an old-pipeline grade from another version (an outage artefact before 2026-10-11) is not shown again:
+                    # it waits hidden and is regraded first
+                    v.pop("side", None)
+                    v["state"] = "RETRY"
         BOARD.update(rows)
     except Exception:
         pass
@@ -513,7 +520,7 @@ def _both_boards():
     return rows
 
 
-def board_stake(res, prop, scope, line):
+def board_stake(res, prop, scope, line, line_type="standard"):
     """The same line on the board with its stake cut by the same-match cap: the card shows that stake too (one stake
     per line on the whole site). Only when the board row is this exact pick (side, line, maps, match) and was cut from
     exactly this card's stake - otherwise the card's own stake stands. Returns the verdict (a new dict when capped)."""
@@ -531,7 +538,10 @@ def board_stake(res, prop, scope, line):
                     _BS_CACHE[:] = [time.time(), _both_boards()]
             finally:
                 _BS_LOCK.release()
+    book = "prizepicks" if line_type in ("goblin", "demon") else "underdog"   # the card's own platform (a goblin / demon line is PrizePicks)
     for r in _BS_CACHE[1]:
+        if (r.get("book") or "underdog") != book:
+            continue
         if (str(r.get("nick") or r.get("player") or "").lower() == nick.lower() and r.get("prop") == prop
                 and (r.get("scope") or "12") == scope and float(r.get("line") or -1) == float(line) and r.get("side") == v["side"]
                 and r.get("cap_n") and r.get("units_full") == v["units"] and r["units"] < r["units_full"] and st and comparison._ts(r.get("start"))
@@ -545,8 +555,12 @@ def board_last_hltv(res, prop, scope):
     """During an HLTV outage the card grades on the old pipeline; this is what the Prop Board still shows for the same player /
     stat / maps (its last performance-model grades), so the member is told instead of seeing two different numbers."""
     nick = (((res.get("player_block") or {}).get("player") or {}).get("nick") or "").lower()
-    rows = [r for r in _BS_CACHE[1] if str(r.get("nick") or r.get("player") or "").lower() == nick and r.get("prop") == prop
-            and (r.get("scope") or "12") == scope and r.get("source") in ("HLTV", "BO3.gg")]
+    try:
+        rows_ = _both_boards()
+    except Exception:
+        rows_ = _BS_CACHE[1]
+    rows = [r for r in rows_ if str(r.get("nick") or r.get("player") or "").lower() == nick and r.get("prop") == prop and r.get("side")
+            and (r.get("scope") or "12") == scope and (r.get("line_type") or r.get("odds_type") or "standard") in ("standard", "promo")]
     return {"rows": [{k: r.get(k) for k in ("book", "line", "side", "grade", "p", "units", "proj", "graded_at", "hltv_retry")} for r in rows[:4]]}
 
 
@@ -679,6 +693,10 @@ def board_forever():
             from concurrent.futures import ThreadPoolExecutor
             with ThreadPoolExecutor(BOARD_WORKERS, thread_name_prefix="board") as ex:
                 list(ex.map(one, todo))
+            now_ = datetime.now(timezone.utc).isoformat()
+            live_ids = {r["id"] for r in rows if not r.get("start") or r["start"] > now_}
+            for k in [k for k, v in list(BOARD.items()) if v.get("hltv_retry") and k not in live_ids]:
+                BOARD.pop(k, None)                    # a line that left the feed / whose match started is not retried (no endless 10 s pause)
             _board_save()
             try:                                      # roles: the HLTV scraper's tables (30 min), then Liquipedia
                 roles.refresh_hltv()
@@ -887,7 +905,7 @@ def public(res):
 KEEP_DETAIL = {"p_win", "p_map1", "p_map2", "maps_used", "role", "rank"}
 _FLAG_RULES = (   # (starts with, member-friendly text or None = not shown)
     ("OLD PROJECTION: the performance model is unavailable here (HLTV database unreachable",
-     "HLTV database unreachable right now - temporary projection from the older model; the Prop Board keeps its last HLTV grade until the database answers again"),
+     "HLTV database unreachable right now - temporary projection from the older model; the Prop Board keeps each line's last grade until the database answers again"),
     ("OLD PROJECTION", "Projection from the older model - the newer performance model has no HLTV data for this player or matchup"),
     ("CAP:", "Chance capped at 78% on kills props (big kill totals swing more than the model's spread)"),
     ("PROVISIONAL:", "Provisional: projection from BO3.gg history - HLTV has no history for this player"),
@@ -1014,7 +1032,7 @@ class Handler(BaseHTTPRequestHandler):
         if not whop_auth.enabled():
             return not (os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("RAILWAY_ENVIRONMENT_NAME")
                         or os.environ.get("REQUIRE_WHOP"))
-        if ADMIN_TOKEN and self.headers.get("X-Load-Test") == ADMIN_TOKEN:
+        if self.load_test():
             return True
         sess = self.member()
         return bool(sess and sess["ok"])
@@ -1687,7 +1705,7 @@ class Handler(BaseHTTPRequestHandler):
         return fwd.split(",")[0].strip() or self.client_address[0]
 
     def grade(self, q):
-        load_test = bool(ADMIN_TOKEN) and self.headers.get("X-Load-Test") == ADMIN_TOKEN   # owner's own tests
+        load_test = self.load_test()                     # owner's own tests
         if not load_test and not rate_ok(self.client_ip()):
             return self.send(429, {"error": f"Too many grades - limit is {RATE_LIMIT} a minute. "
                                             f"Wait a moment and try again."})
@@ -1760,7 +1778,7 @@ class Handler(BaseHTTPRequestHandler):
                 traceback.print_exc()
             tm["log"] = round(time.time() - t0, 2)
             try:                                         # after logging: the log keeps the grader's own stake
-                res["verdict"] = board_stake(res, prop, scope, line)
+                res["verdict"] = board_stake(res, prop, scope, line, lt)
                 if outage:                               # outage: tell the member what the board still shows
                     res["hltv_outage"] = board_last_hltv(res, prop, scope)
             except Exception:
@@ -1775,6 +1793,11 @@ class Handler(BaseHTTPRequestHandler):
         return self.send(status, body)
 
     # ------------------------------------------------------------ Phase 10 admin (private)
+    def load_test(self):
+        """The owner's load-test / audit header - constant-time compare like the admin token."""
+        import hmac
+        return bool(ADMIN_TOKEN) and hmac.compare_digest(str(self.headers.get("X-Load-Test") or ""), ADMIN_TOKEN)
+
     def authed(self, token):
         # the admin link's ?token= still works; scripts send the X-Admin-Token header instead, so the token stays out
         # of URLs and logs (2026-10-10). Constant-time compare.
