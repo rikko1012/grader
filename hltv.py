@@ -66,7 +66,18 @@ def _connect():
 
     kwargs = {"connect_timeout": 4, "options": "-c statement_timeout=5000"}
     try:
-        con = psycopg2.connect(dsn(), **kwargs)
+        try:
+            con = psycopg2.connect(dsn(), **kwargs)
+        except psycopg2.OperationalError as e:
+            # a pooled endpoint (Neon's PgBouncer, 2026-10-11) refuses startup options: connect plainly and set the
+            # statement timeout per session instead
+            if "unsupported startup parameter" not in str(e):
+                raise
+            con = psycopg2.connect(dsn(), connect_timeout=4)
+            con.set_session(readonly=True, autocommit=True)
+            with con.cursor() as cur:
+                cur.execute("SET statement_timeout = 5000")
+            return con
     except Exception:
         _DOWN_UNTIL[0] = time.time() + BREAKER_SECONDS
         raise
