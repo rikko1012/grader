@@ -995,8 +995,24 @@ let boardRows = [], bprop = "kills", bside = "both", bscope = "12", boardAt = 0,
 const BK = {underdog: {rows: [], at: 0, ver: "", err: null, feed: null, loaded: false}, prizepicks: {rows: [], at: 0, ver: "", err: null, feed: null, loaded: false}};
 // rows shown for a view: one platform, or both (All Books - every row keeps its own platform label and line)
 const viewRows = b => b === "all" ? [...BK.underdog.rows, ...BK.prizepicks.rows] : BK[b === "compare" ? "underdog" : b].rows;
-// one match, whichever platform listed it: our match id from grading, else teams + start
-const matchKey = r => r.match_slug || [(r.team_name || r.team || "").toLowerCase(), (r.opp_name || r.opponent || "").toLowerCase(), String(r.start || "").slice(0, 16)].join("|");
+// one match, whichever platform listed it (2026-10-12 fix): the same two teams with starts within 45 min. It used to prefer
+// our match id, which one platform's row can lack, and compared start-time TEXT ("...Z" vs "...+00:00") - so the same
+// match / player showed up twice on the Prop Board and in Compare.
+const teamNorm = s => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "").replace(/(esports?|gaming|clan|club)$/, "");
+// A team plays one match at a time, so sharing EITHER team is enough (platforms spell opponents differently: "XI" vs "Xl").
+function assignMatchKeys(rows) {
+  const seen = [];
+  for (const r of rows) {
+    const teams = new Set([r.team_name, r.team, r.opp_name, r.opponent].map(teamNorm).filter(Boolean)), t0 = Date.parse(r.start), t = isNaN(t0) ? null : t0;
+    let hit = seen.find(x => [...teams].some(n => x.teams.has(n)) && (x.t === null && t === null || x.t !== null && t !== null && Math.abs(x.t - t) <= 45 * 60000));
+    if (!hit) { hit = {teams: new Set(), t, key: [...teams].sort().join("|") + "|" + (t === null ? "" : new Date(t).toISOString().slice(0, 16))}; seen.push(hit); }
+    teams.forEach(n => hit.teams.add(n));
+    r._mk = hit.key;
+  }
+}
+const headRow = g => g.find(x => x.opp_name && x.team_name) || g[0];   // our graded team names over a platform's spelling
+const matchKey = r => r._mk || [teamNorm(r.team_name || r.team), teamNorm(r.opp_name || r.opponent)].sort().join("|") + "|" + String(r.start || "").slice(0, 16);
+const propOrder = p => p === "kills" ? 0 : 1;
 // filters survive reloads and the board <-> card round trip
 function saveBFilters() { store.set("cs2s_bf", {bbook, bprop, bside, bscope, bview, sort: $("#bsort").value, bets: $("#bbets").checked, q: $("#bsearch").value}); }
 function restoreBFilters() {
@@ -1034,6 +1050,7 @@ async function loadBoard(force) {
   if (!force && need.every(b => BK[b].loaded)) { boardRows = viewRows(bbook); return drawBoard(); }
   $("#bstatus").textContent = need.some(b => BK[b].loaded) ? "Refreshing… (showing the current lines)" : "Loading the board…";
   try { await Promise.all(need.map(fetchBook)); } catch (e) { $("#bstatus").textContent = `Couldn't refresh (${e.message})`; }
+  assignMatchKeys([...BK.underdog.rows, ...BK.prizepicks.rows]);
   boardRows = viewRows(bbook); boardAt = BK.underdog.at; boardVer = BK.underdog.ver || BK.prizepicks.ver || "";
   $("#bstatus").textContent = need.map(bookStatus).join(" · ");
   drawBoard();
@@ -1113,7 +1130,7 @@ function drawBoard() {
     for (const r of rows) { const k = matchKey(r); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
     const opened = store.get("cs2s_mopen", {});
     html = [...groups.entries()].sort((a, b) => String(a[1][0].start || "9").localeCompare(String(b[1][0].start || "9"))).map(([k, g], i) => {
-      const r = g[0], open = k in opened ? opened[k] : i < 3, bets = g.filter(x => (x.units || 0) > 0).length;
+      const r = headRow(g), open = k in opened ? opened[k] : i < 3, bets = g.filter(x => (x.units || 0) > 0).length;
       const maps = (r.maps_known || []).filter(Boolean);
       return `<details class="mgroup" data-mk="${esc(k)}" ${open ? "open" : ""}><summary><b>${esc((r.team_name || r.team || "") + " vs " + (r.opp_name || r.opponent || ""))}</b>
         <span class="muted small">${shortWhen(r.start)}${r.event ? " · " + esc(r.event) : ""}${r.bo ? " · BO" + esc(r.bo) : ""} · ${maps.length ? "maps: " + maps.map(mapName).join(", ") : "maps not announced"} · ${g.length} line${g.length > 1 ? "s" : ""}${bets ? `, ${bets} bet${bets > 1 ? "s" : ""}` : ""}</span></summary>
@@ -1146,7 +1163,7 @@ const outageNote = d => d.hltv_outage ? `<div class="small" style="margin-top:8p
 function drawCompare() {
   const q = ($("#bsearch").value || "").trim().toLowerCase();
   const hit = r => !q || [r.nick, r.player, r.team, r.team_name, r.opponent, r.opp_name].some(x => String(x || "").toLowerCase().includes(q));
-  const keyOf = r => [r.player_id || String(r.nick || r.player).toLowerCase(), r.match_slug || r.start, r.prop, r.scope || "12"].join("|");
+  const keyOf = r => [String(r.nick || r.player).toLowerCase(), matchKey(r), r.prop, r.scope || "12"].join("|");
   const pairs = new Map();
   for (const [bk, rows] of [["underdog", BK.underdog.rows], ["prizepicks", BK.prizepicks.rows]])
     for (const r of rows) {
@@ -1174,11 +1191,13 @@ function drawCompare() {
   for (const x of list) { const k = matchKey(x.any); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(x); }
   const html = !list.length ? `<div class="muted">${BK.prizepicks.loaded && BK.underdog.loaded ? "No player markets match these filters on either platform." : "Loading both platforms…"}</div>`
     : [...groups.values()].sort((a, b) => String(a[0].any.start || "9").localeCompare(String(b[0].any.start || "9"))).map(g => {
-      const r = g[0].any, both = g.filter(x => x.u.length && x.p.length).length;
+      const r = headRow(g.map(x => x.any)), both = g.filter(x => x.u.length && x.p.length).length;
       return `<details class="mgroup" open><summary><b>${esc((r.team_name || r.team || "") + " vs " + (r.opp_name || r.opponent || ""))}</b>
         <span class="muted small">${shortWhen(r.start)}${r.event ? " · " + esc(r.event) : ""} · ${g.length} market${g.length > 1 ? "s" : ""}${both ? `, ${both} on both` : ""}</span></summary>
         <div class="mbody"><div class="cmphead"><div>Player · our projection</div><div>Underdog line</div><div>PrizePicks line</div><div>Easier line</div></div>
-        ${g.sort((a, b) => (b.u.length && b.p.length) - (a.u.length && a.p.length) || String(a.any.nick || a.any.player).localeCompare(String(b.any.nick || b.any.player))).map(x => {
+        ${g.sort((a, b) => teamNorm(a.any.team_name || a.any.team).localeCompare(teamNorm(b.any.team_name || b.any.team))
+            || String(a.any.nick || a.any.player).toLowerCase().localeCompare(String(b.any.nick || b.any.player).toLowerCase())
+            || propOrder(a.any.prop) - propOrder(b.any.prop)).map(x => {
           const all = [...x.u, ...x.p], pr = all.map(y => y.proj).filter(v => v != null), spread = pr.length > 1 ? Math.max(...pr) - Math.min(...pr) : 0;
           return `<div class="cmprow"><div class="who"><b>${esc(x.any.nick || x.any.player)}</b> <span class="muted small">${propWord(x.any.prop)}${mapsWord(x.any.scope)}</span>
               <span class="small">Projection <b>${pr.length ? num(pr[0], 1) : "–"}</b>${spread > 0.05 ? ` <span class="pill warn" title="Same model, graded at different moments – the next regrade aligns them; the newer grade has the newer data">projections differ by ${num(spread, 1)}</span>` : ""}</span></div>
