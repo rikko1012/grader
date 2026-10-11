@@ -616,6 +616,21 @@ def fix_scope_settlements(apply=False, scopes=("1", "123"), test=None):
             res = scope_result(r)
         except Exception as e:
             skipped.append({"id": r["id"], "reason": f"error {e}"}); continue
+        if res["status"] == "void":
+            # 2026-10-11: a Maps 1-3 pick whose BO3 ended 2-0 (no map 3) is a void, not a 2-map total
+            d = {"id": r["id"], "player": r["player"], "prop": r["prop"], "scope": r["scope"], "line": r["line"], "pick": r["pick"],
+                 "test": r["test"], "old": {"actual": r["actual"], "status": r["status"], "hit": r["hit"]},
+                 "new": {"actual": None, "status": "void", "hit": None}, "reason": res.get("reason")}
+            diffs.append(d)
+            if apply:
+                with _LOCK:
+                    con = _db()
+                    con.execute("UPDATE picks SET status='void', hit=NULL WHERE id=?", (r["id"],))
+                    con.commit()
+                    con.close()
+                    with open(CORRECTIONS, "a", encoding="utf-8") as f:
+                        f.write(json.dumps(dict(d, corrected_at=datetime.now(timezone.utc).isoformat(timespec="seconds")), default=str) + "\n")
+            continue
         if res["status"] != "ok":
             skipped.append({"id": r["id"], "reason": res.get("reason")}); continue
         st, hit = outcome(res["total"], r["line"], r["pick"])
