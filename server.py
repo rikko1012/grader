@@ -253,12 +253,12 @@ def _board_load():
 
 
 def _board_l10(rf, r):
-    """Last-10 numbers in the line's own maps: Map 1 lines use his map-1 values, Maps 1-3 has no
-    comparable record (shown as -), Maps 1-2 as before."""
+    """Last-10 numbers in the line's own maps: Map 1 lines use his map-1 values, Maps 1-3 his maps 1-3 totals of series
+    where map 3 was played (records.py), Maps 1-2 as before."""
     sc = r.get("scope") or "12"
     if (rf.get("matches") or 0) < 3:                 # 1-2 matches is not a record (one OT map read as "avg 39")
         return {"l10_over": None, "l10_n": None, "l10_avg": None}
-    if sc == "12":
+    if sc in ("12", "123"):
         return {"l10_over": rf.get("overs"), "l10_n": rf.get("decided", rf.get("matches")), "l10_push": rf.get("pushes") or 0,
                 "l10_avg": rf.get("avg_total")}
     if sc == "1":                                    # recent_form_map1: one value per match (BO1s included)

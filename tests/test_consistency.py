@@ -67,3 +67,21 @@ def test_stake_caps_match_grader():
     from grader import CONFIG
     c = server.stake_caps()
     assert c["market"] == CONFIG["soft_market_cap"] and c["tape"] == CONFIG["tape_fight_cap"] and c["kills_chance"] == CONFIG["p_cap_kills"]
+
+
+def test_cached_context_keeps_match_day_and_format(monkeypatch):
+    """A reused (cached) context must grade with the cached match's day and format, like a fresh one."""
+    import cs2_scout
+    seen = {}
+    def fake_perf(pb, args):
+        seen["start"], seen["bo"] = getattr(args, "match_start", None), getattr(args, "match_bo", None)
+        return None
+    monkeypatch.setattr(cs2_scout, "_perf_input", fake_perf)
+    start = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    args = SimpleNamespace(prop="kills", line=42.5, line_type="standard", scope="123", opponent="Vitality")
+    res = {"next_match": {"start": start, "bo": 5, "opponent": "Vitality"}, "player_block": {}}
+    try:
+        cs2_scout.finish_line(res, args)
+    except Exception:
+        pass                                           # the rest of finish_line needs a full context; only the args matter here
+    assert args.match_start == start and args.match_bo == 5

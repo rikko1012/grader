@@ -2155,6 +2155,13 @@ def finish_line(res, args):
     _tick(res, "hltv_player", t0)
     if not getattr(args, "opponent", None):            # reused context: the opponent comes from the match
         args.opponent = (res.get("next_match") or {}).get("opponent")
+    # reused context (2026-10-11 fix): the match day and format come from the cached match too - a cache hit used to
+    # grade with today's date (not the match day the model is tested with) and no match format
+    nm_ = res.get("next_match") or {}
+    if not getattr(args, "match_start", None) and nm_.get("start"):
+        args.match_start = nm_["start"]
+    if not getattr(args, "match_bo", None) and nm_.get("bo"):
+        args.match_bo = nm_["bo"]
     res["hltv_context"] = _hltv_context(pb, args)
     _tick(res, "hltv_context", t0)
     pb["_opp_rank"] = ((res["hltv_context"] or {}).get("opp_ranking") or {}).get("rank")
