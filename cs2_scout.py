@@ -578,7 +578,7 @@ def run_player(b, name, args):
 
 
 _REGIONS = {"mtime": None, "data": {}}
-GROUPED_REGIONS = {"CIS", "Oceania", "South America"}
+GROUPED_REGIONS = {"CIS", "Oceania", "South America", "North America"}   # owner 2026-10-11: NRG (US/CA players) is an NA team
 _NAT = {}                   # team slug -> (time, tag): rosters change rarely, 30-min memory
 _NAT_TTL = 1800
 
@@ -615,29 +615,16 @@ def nationality(b, team_slug):
 
 
 def _nationality(b, team_slug):
-    """Gate C nationality tag, from the CURRENT roster only: 3+ players from one country, or
-    from one region in regions.csv, = the team is from there. Mixed rosters get no tag (rule
-    doesn't apply). Nothing is inferred - a player with no country on record doesn't count."""
+    """Gate C nationality tag. Owner rule 2026-10-11: the ROSTER decides - 3+ current players from one country, or from one
+    grouped region (regions.csv: CIS, Oceania, South America, North America), = the team's tag. HLTV's team flag (one flag per
+    org, e.g. NRG = Canada) is used only when the roster can't decide (no 3 players share a country / region), and is mapped
+    through the same regions. Nothing is inferred - a player with no country on record doesn't count."""
     try:
         td = b.team(team_slug)
-        roster = [p for p in (td.get("players") or []) if not p.get("is_coach")]
+        roster = [p for p in (td.get("players") or []) if not p.get("is_coach") and p.get("status") != 2]   # benched don't count
     except Exception:
         return None
     regions = load_regions()
-    try:                                       # HLTV first: the team's own flag (hltv-scraper teams.country)
-        import hltv
-        hc = hltv.team_country(td.get("name"))
-    except Exception:
-        hc = None
-    if hc and (hc[0] or hc[1]):
-        code, cname = (hc[0] or "").upper(), hc[1] or ""
-        if len(code) == 2 and code not in ("EU", "WW", "UN"):
-            key = regions.get(code, code)
-            return {"id": key, "label": key if code in regions else (cname or code), "source": "HLTV flag",
-                    "roster": [((p.get("country") or {}).get("code") or "?").upper() for p in roster]}
-        if cname and "cis" in cname.lower() and regions.get("RU"):
-            return {"id": regions["RU"], "label": regions["RU"], "source": "HLTV flag", "roster": []}
-        return {"id": None, "label": f"international team ({cname or code})", "source": "HLTV flag", "roster": []}
     counts, names, codes = {}, {}, []
     for p in roster:
         c = p.get("country") or {}
@@ -649,7 +636,20 @@ def _nationality(b, team_slug):
             names[key] = key if code in regions else c.get("name")
     top = max(counts.items(), key=lambda kv: kv[1]) if counts else (None, 0)
     if top[1] >= NATIONALITY_MIN:
-        return {"id": top[0], "label": names[top[0]], "players": top[1], "of": len(roster), "roster": codes}
+        return {"id": top[0], "label": names[top[0]], "players": top[1], "of": len(roster), "roster": codes, "source": "roster"}
+    try:                                       # roster can't decide: HLTV's team flag (hltv-scraper teams.country)
+        import hltv
+        hc = hltv.team_country(td.get("name"))
+    except Exception:
+        hc = None
+    if hc and (hc[0] or hc[1]):
+        code, cname = (hc[0] or "").upper(), hc[1] or ""
+        if len(code) == 2 and code not in ("EU", "WW", "UN"):
+            key = regions.get(code, code)
+            return {"id": key, "label": key if code in regions else (cname or code), "source": "HLTV flag", "roster": codes}
+        if cname and "cis" in cname.lower() and regions.get("RU"):
+            return {"id": regions["RU"], "label": regions["RU"], "source": "HLTV flag", "roster": codes}
+        return {"id": None, "label": f"international team ({cname or code})", "source": "HLTV flag", "roster": codes}
     return {"id": None, "label": f"mixed roster ({'/'.join(codes)})", "roster": codes}
 
 

@@ -394,3 +394,22 @@ def test_card_stake_cap_stays_on_its_own_platform(monkeypatch):
     assert server.board_stake(res, "kills", "12", 20.5)["units"] == 1.0                       # an Underdog card ignores a PrizePicks cap
     assert server.board_stake(res, "kills", "12", 20.5, "goblin")["units"] == 0.5             # a goblin card is a PrizePicks card
     assert server.board_stake(res, "kills", "12", 20.5, "standard", "prizepicks")["units"] == 0.5   # a PrizePicks board click
+
+
+def test_team_region_comes_from_the_roster(monkeypatch):
+    """Owner 2026-10-11: 3 players from the same region = the team's region; NRG (3 US players, HLTV flag Canada) is North America."""
+    import hltv as h
+    monkeypatch.setattr(h, "team_country", lambda name: ("CA", "Canada"))
+    def team(players):
+        class B:
+            def team(self, slug): return {"name": "NRG", "players": [{"country": {"code": c, "name": c}} for c in players]}
+        return B()
+    t = cs2_scout._nationality(team(["US", "US", "ZA", "NO", "US"]), "nrg")
+    assert t["label"] == "North America" and t["source"] == "roster" and t["players"] == 3
+    assert cs2_scout._nationality(team(["US", "CA", "MX", "SE", "DK"]), "x")["id"] == "North America"   # grouped region
+    t2 = cs2_scout._nationality(team(["US", "SE", "DK", "ZA", "?"]), "x")
+    assert t2["source"] == "HLTV flag" and t2["id"] == "North America"     # roster can't decide: the flag, mapped to its region
+    class Benched:
+        def team(self, slug): return {"name": "x", "players": [{"country": {"code": "US"}}] * 2 + [{"country": {"code": "US"}, "status": 2}] + [{"country": {"code": "SE"}}] * 2}
+    monkeypatch.setattr(h, "team_country", lambda name: None)
+    assert cs2_scout._nationality(Benched(), "x")["id"] is None            # a benched player doesn't count
