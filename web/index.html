@@ -992,7 +992,7 @@ async function fetchBook(b) {
 function bookStatus(b) {
   const B = BK[b];
   if (b === "prizepicks") {
-    const f = B.feed || {}, when = f.at ? `PrizePicks read ${hhmm(f.at)} (${agoTxt(new Date(f.at * 1000).toISOString())})` : "";
+    const f = B.feed || {}, when = f.at ? `PrizePicks read ${hhmm(f.at)} (${agoTxt(new Date(f.at * 1000).toISOString())})${f.source && !/direct/.test(f.source) ? " via the scraper's copy" : ""}` : "";
     return f.state === "ok" ? `${B.rows.length} graded PrizePicks lines${B.total > B.rows.length ? ` (${B.total - B.rows.length} still grading)` : ""} · ${when}`
       : f.state === "empty" ? `No PrizePicks CS2 lines right now · ${when || "feed connected"} – this is an empty board, not an error`
       : f.state === "stale" ? `⚠ PrizePicks feed is stale – last good read ${f.at ? hhmm(f.at) : "unknown"}. These lines can't be confirmed as playable.`

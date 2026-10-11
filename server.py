@@ -392,7 +392,7 @@ def board_payload(book="underdog"):
     out = {"book": book, "updated": b["at"], "error": b["error"], "rows": rows, "total": len(b["rows"]),
            "version": picklog.MODEL_VERSION}
     if book == "prizepicks":
-        out["feed"] = {k: b.get(k) for k in ("state", "at", "checked_at", "lines", "error", "ingested_at")}
+        out["feed"] = {k: b.get(k) for k in ("state", "at", "checked_at", "lines", "error", "ingested_at", "source")}
     return out
 
 
@@ -1153,7 +1153,7 @@ class Handler(BaseHTTPRequestHandler):
                 # every PrizePicks line Scout observed: openings, moves, provider-id changes, removals (prizepicks.py)
                 ev = prizepicks.history(q.get("market") or None, int(q.get("limit") or 500))
                 b = prizepicks.board()
-                return self.send(200, {"feed": {k: b.get(k) for k in ("state", "at", "checked_at", "lines", "error", "ingested_at")},
+                return self.send(200, {"feed": {k: b.get(k) for k in ("state", "at", "checked_at", "lines", "error", "ingested_at", "source")},
                                        "ingests": prizepicks.ingests(), "events": ev,
                                        "counts": dict(collections.Counter(e.get("event") for e in ev))})
             if u.path == "/admin/namesakes" and self.authed(q.get("token")):
