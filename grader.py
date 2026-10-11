@@ -653,7 +653,10 @@ def grade_leg(d, cfg=CONFIG):
         flags.append(f"Projection {pf['lambda']:.1f} from the performance model ({pf.get('version')}: "
                      f"{pf.get('rate', 0):.3f} kills/round x opponent {pf.get('opp_factor', 1):.2f} x "
                      f"{pf.get('rounds_per_map', 0):.1f} rounds/map; data: {pf.get('data_quality')}) - old pipeline {lam_final:.1f}")
-        lam_final = lam12 = float(pf["lambda"])
+        lam_final = float(pf["lambda"])
+        # lambda_maps12 reports the model's Maps 1-2 equivalent whatever the scope (2026-10-11: on Map 1 / Maps 1-3
+        # it used to repeat the scope's own total); Map 1 = half of Maps 1-2, Maps 1-3 = 1.5 x Maps 1-2
+        lam12 = lam_final * {"1": 2.0, "12": 1.0, "123": 2.0 / 3.0}.get(scope, 1.0)
         sd = float(pf["sd"])
         scale = 1.0
         if str(pf.get("version") or "").endswith("-bo3"):
@@ -665,7 +668,8 @@ def grade_leg(d, cfg=CONFIG):
         _mean = sum(y * v for y, v in _pmf.items()); _var = sum((y - _mean) ** 2 * v for y, v in _pmf.items())
         hs_dist = (sum(v for y, v in _pmf.items() if y > line), sum(v for y, v in _pmf.items() if y < line),
                    sum(v for y, v in _pmf.items() if y == line))
-        lam_final = lam12 = _mean                     # projection, spread and chances all from ONE distribution
+        lam_final = _mean                             # projection, spread and chances all from ONE distribution
+        lam12 = _mean * {"1": 2.0, "12": 1.0, "123": 2.0 / 3.0}.get(scope, 1.0)
         sd = math.sqrt(_var)
 
     def three(shift=0.0):

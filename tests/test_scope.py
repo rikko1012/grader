@@ -63,6 +63,7 @@ def test_bo5_maps123_projection_is_not_discounted():
     g = grader.grade_leg(dict(prop="kills", line=42.5, line_type="standard", scope="123", bo=5, maps_played=40, kpr=0.7, hs_pct=45,
                               team_ml=-150, opp_ml=150, perf=pf))
     assert g["projection_source"].startswith("perf") and abs(g["lambda_final"] - p123["lambda"]) < 0.01
+    assert abs(g["lambda_maps12"] - p12["lambda"]) < 0.02                      # the Maps 1-2 equivalent, not the 3-map total
 
 def test_headshots_scope():
     maps = [m(1, 12, 7, True), m(2, 24, 9, True)]
