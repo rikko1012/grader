@@ -61,8 +61,10 @@ def test_prizepicks_staleness_is_its_own_feed_age():
 def test_board_without_database_is_harmless(monkeypatch):
     import hltv
     monkeypatch.setattr(hltv, "dsn", lambda: "")
+    pp._S.update(at=0.0, tried=0.0, rows=[], status={}, error=None, busy=False)
+    pp._load()                                            # PrizePicks unreachable (tests) and no scraper copy either
     b = pp.board()
-    assert b["rows"] == [] and b["state"] == "unconfigured" and "not configured" in b["error"]
+    assert b["rows"] == [] and b["state"] == "failed" and "direct read failed" in b["error"]
     assert next(s for s in cmp.SOURCES if s["id"] == "prizepicks")["status"] == "connected"
 
 
@@ -152,6 +154,7 @@ def test_market_type_never_moves_the_projection():
 
 def test_ingestion_log_one_entry_per_new_upstream_read(tmp_path, monkeypatch):
     import hltv
+    monkeypatch.setattr(hltv, "dsn", lambda: "postgres://x")     # PrizePicks itself unreachable: the scraper's copy
     monkeypatch.setattr(pp, "HISTORY", tmp_path / "h.jsonl"); monkeypatch.setattr(pp, "SNAPSHOT", tmp_path / "s.json")
     monkeypatch.setattr(pp, "INGEST", tmp_path / "i.jsonl")
     later = datetime.now(timezone.utc) + timedelta(days=1)
@@ -176,3 +179,52 @@ def test_ingestion_log_one_entry_per_new_upstream_read(tmp_path, monkeypatch):
     assert len(ing) == 2 and ing[0]["upstream_last_ok"] != ing[1]["upstream_last_ok"] and ing[0]["ingested_at"] and ing[1]["rows"] == 1
     assert ing[0]["events"] == {"open": 1} and ing[1]["events"] == {}
     pp._S.update(at=0.0, tried=0.0, rows=[], status={}, error=None, busy=False)
+
+
+# ---------------------------------------------------------------- direct reads (like Underdog)
+import json
+from pathlib import Path
+
+_BODY = json.loads((Path(__file__).parent / "fixtures" / "prizepicks_cs2.json").read_text())   # partner API, 2026-10-11
+
+
+def test_direct_read_of_the_real_board():
+    recs = pp.parse_direct(_BODY, T0)
+    assert len(recs) == len(_BODY["data"]) == 59                # every line on that board: pre-game, one player each
+    r = recs[0]
+    assert set(r) >= {"line_id", "player", "team", "opponent", "start_time", "market", "maps", "line", "odds_type"}
+    assert all(x["market"] in ("kills", "headshots") and x["maps"] in ("1", "1-2", "1-3", "2") for x in recs)
+    assert all(not x["opponent"].lower().endswith(("maps 1-2", "map 1")) for x in recs)   # opponent without its map scope
+    rows = pp.rows_from(recs)
+    assert rows and all(x["book"] == "prizepicks" and x["start"] and x["scope"] in ("1", "12", "123") for x in rows)
+
+
+def test_direct_first_scraper_copy_for_history_and_as_backup(tmp_path, monkeypatch):
+    import hltv
+    monkeypatch.setattr(pp, "HISTORY", tmp_path / "h.jsonl"); monkeypatch.setattr(pp, "SNAPSHOT", tmp_path / "s.json")
+    monkeypatch.setattr(pp, "INGEST", tmp_path / "i.jsonl")
+    monkeypatch.setattr(hltv, "dsn", lambda: "postgres://x")
+    first = next(r for r in pp.parse_direct(_BODY, T0) if r["maps"] in pp.SCOPE and r["market"] in ("kills", "headshots"))
+    copy_rec = dict(_rec(lid=first["line_id"], line=first["line"]), open_line=first["line"] - 1, other_line=99.5)
+    monkeypatch.setattr(pp, "_read_db", lambda: ([copy_rec], {"ok": True, "lines": 1, "source": "partner-api.prizepicks.com",
+                                                               "error": None, "checked_at": 1.0, "last_ok": 1.0}))
+    # 1. PrizePicks answers: its board, minutes old, with the scraper's history for the same line id
+    monkeypatch.setattr(pp, "_direct", lambda: _BODY)
+    pp._S.update(at=0.0, tried=0.0, rows=[], status={}, error=None, busy=False)
+    pp._load()
+    b = pp.board()
+    assert b["state"] in ("ok", "empty") and b["source"] == pp.DIRECT_SOURCE and len(b["rows"]) == len(pp.rows_from(pp.parse_direct(_BODY, T0)))
+    row = next(r for r in b["rows"] if r["market_id"] == first["line_id"])
+    assert row["open_line"] == first["line"] - 1 and row["other_line"] == 99.5
+    # 2. PrizePicks does not answer: the scraper's copy is the whole board, and says so
+    def down():
+        raise ConnectionError("timeout")
+    monkeypatch.setattr(pp, "_direct", down)
+    pp._S.update(tried=0.0, at=0.0, busy=False)
+    pp._load()
+    assert "via the HLTV scraper" in pp._S["status"]["source"] and "timeout" in pp._S["status"]["source"]
+    assert [r["market_id"] for r in pp._S["rows"]] == [first["line_id"]]
+
+
+def test_refreshes_every_two_minutes():
+    assert pp.REFRESH <= 2 * 60
