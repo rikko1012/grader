@@ -1,0 +1,39 @@
+# Render Blueprint for the CS2 Scout grader (Python, Docker). In Render: New -> Blueprint -> this repo.
+# Secrets (sync: false) are entered in the Render dashboard, never in this file.
+services:
+  - type: web
+    name: cs2-scout
+    runtime: docker
+    plan: standard            # the board loop + 700 concurrent members need steady CPU and RAM
+    region: ohio              # closest to the Neon project (aws-us-east-2) and the HLTV database
+    healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: cs2-scout-data
+      mountPath: /data
+      sizeGB: 5
+    envVars:
+      - key: CS2_DATA_DIR
+        value: /data
+      - key: PORT
+        value: "8000"
+      - key: PRELOAD
+        value: "1"
+      - key: REQUIRE_WHOP
+        value: "1"
+      - key: PUBLIC_URL
+        sync: false           # https://<service>.onrender.com (or the custom domain) - also set as the Whop app's redirect
+      - key: ADMIN_TOKEN
+        sync: false
+      - key: WHOP_CLIENT_ID
+        sync: false
+      - key: WHOP_CLIENT_SECRET
+        sync: false
+      - key: WHOP_API_KEY
+        sync: false
+      - key: SESSION_SECRET
+        sync: false           # long random value: keeps member sessions valid when the Whop secret rotates
+      - key: HLTV_DB_DSN
+        sync: false           # the hltv-scraper Postgres (projections, settlement, PrizePicks backup copy)
+      - key: FACEIT_API_KEY
+        sync: false

@@ -1,0 +1,18 @@
+# never in the image: secrets, local data, caches, node tooling
+.env
+.env.local
+.neon
+.cache/
+.claude/
+.git/
+.pytest_cache/
+__pycache__/
+node_modules/
+exports/
+output/
+picks.db
+faceit_ids.csv
+comparison_snapshots.jsonl
+model_versions.json
+*.tmp
+tests/
