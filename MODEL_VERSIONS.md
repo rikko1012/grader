@@ -2,7 +2,7 @@
 
 Every logged pick and forecast carries `model_version` = the first 10 hex characters of SHA-1 over
 `grader.py`, `sim.py`, `cs2_scout.py`, `hltv.py`, in that order, as checked out on the server (LF line endings).
-From G8 (2026-10-09) the tag also covers `perf.py`, `perf_live.py`, `scope.py` (appended in that order).
+From G8 (2026-10-09) the tag also covers `perf.py`, `perf_live.py`, `scope.py` (appended in that order); from 2026-10-11 also `hltv_store.py`.
 A Windows checkout computes different (CRLF) hashes, so always compute tags from `git show <commit>:<file>`.
 
 **Keep every exact tag when reporting.** Tags can be pooled only inside a "same grading behaviour" group, and only
@@ -32,6 +32,7 @@ on the evidence listed. To replay a forecast:
 | `a64083e3c2` | 0c25277 | **2026-10-11 (live, Render)** | G8.5e (same grading) | lambda_maps12 = Maps 1-2 equivalent on every scope (reporting field). Grades identical to fa0ff604d2 - pool. Host moved from Railway to Render (cs2-scout.onrender.com); HLTV database rebuilt on Render Postgres from the Oct 8 export |
 | `af09e740c8` | 413ff92 | **2026-10-11 (live, Render)** | G8.5e (same grading) | Transient-failure hardening (hltv.py / cs2_scout.py in the hash): pooled connections, half-open breaker, failed lookups never cached, HLTV blip = flagged transient grade and the board keeps its last grade or hides the line. grade_leg output on identical inputs unchanged (identity tests). Grades identical to a64083e3c2 - pool |
 | `fe063dc2e9` | 1c539e2 | **2026-10-11 (live, Render)** | G8.5e (same grading) | Outage hardening follow-up (review): HLTV's own LAN/online label or transient; lost stake inputs = transient; tainted context rebuilt soon; pool 16 + probes one at a time. grade_leg output on identical inputs unchanged. Grades identical to a64083e3c2 - pool |
+| `694348fd49` | f883259 | **2026-10-11 (live, Render)** | G8.5e (same grading) | Stored copy of every HLTV answer on the data disk: an HLTV outage (also across a restart) grades from the last good answer - identical output. Tag now also hashes hltv_store.py. Grades identical to a64083e3c2 - pool |
 | `fa0ff604d2` | b587208 | 2026-10-11 | G8.5d (same grading) | hltv.py: pooled-endpoint connection (Neon). Grades identical to 70a8247c14 - pool |
 | `70a8247c14` | ded1a9b | 2026-10-11 | G8.5c (same grading) | sim.py: Maps 1-3 scripts over three played maps (labels only; chances come from the grade's distribution). Grades identical to 6f26c18ce4 - pool |
 | `6f26c18ce4` | d309c5a | 2026-10-11 | G8.5b (implementation fix) | Cached player context now carries the match day and BO format into finish_line: the G8.3 match-day rule applied on fresh grades only - cached ones used today's date |
