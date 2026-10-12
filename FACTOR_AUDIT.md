@@ -136,3 +136,61 @@ Baseline TEST kills MAE 6.085. Effects per standard deviation are fitted on TRAI
 | R3 group (all ten, ridge) | - | +0.0008 (-0.0018 to +0.0036) | **Rejected** |
 Sanity check (`r3_quint.py`): mean residual by factor quintile moves by a few tenths of a kill with no consistent order between
 TRAIN and TEST, so the null result is not a computation artefact. Nothing promoted; the live projection is unchanged.
+
+## Frozen test definitions - round 4: how the kill rate is estimated (written 2026-10-12 BEFORE running; owner-approved "option 1")
+Why: the 10-day board diagnosis (Oct 3-12; Maps 1-2 kills: 360 units, 94 matches) found that our distance from the book line
+carries ~no information on the Over side (projection +2.35 above the line -> result -0.22 vs the line; Under side -2.35 ->
+-1.50); slope of (actual - line) on (projection - line) 0.38 (95% -0.24 to 0.83); expected rounds are not the cause.
+Note before running: 259 of those kills units were projected by the older pipeline, not perf-2, so the board check
+RECOMPUTES perf-2 (and every candidate) for every unit from the HLTV database.
+Baseline: perf-2 live (perf.PARAMS) through the same formula as perf.project, HLTV export (series-players from 2025-09-01,
+TRAIN < 2026-07-01, VALID < 2026-08-13, TEST after), target Maps 1-2 kills. Spread C for every candidate is re-measured on
+TRAIN residuals by the rule that reproduces perf.SPREAD for the baseline (checked first).
+Candidates (one family each; the grid value is picked on TRAIN kills MAE only, never on VALID or TEST):
+- R4-k0: prior strength k0 in {150, 450, 600} rounds (live 300).
+- R4-hl: half-life hl in {60, 90, 180, 240} days (live 120; the one hl drives player, environment and opponent sums).
+- R4-hot: asymmetric shrink of rates ABOVE the population target T = pop x prior_m: if the final rate > T,
+  rate = T + a (rate - T), a in {0.9, 0.8, 0.7}; rates below T unchanged (hot-streak / high-rate regression).
+- R4-ko: opponent-factor shrink ko in {150, 600, 1200, infinite = opponent factor 1} (live 300).
+- R4-thin: spread multiplier m in {1.05, 1.1, 1.2, 1.3} for players with time-weighted history < 600 rounds. Projection
+  unchanged, so the board gap cannot move by construction; scored on log-score (MAE unchanged).
+- R4-team: team consistency: each player's rate x (S_team / sum of the five players' rates)^w, S_team = his team's own
+  kills per round (time-weighted, shrunk 1,500 rounds toward 5 x pop), w in {0.5, 1}; the five = the lineup that played.
+HLTV metrics: TEST Maps 1-2 kills MAE and discretised-normal log-score vs the baseline, match-grouped 95% bootstrap
+intervals (1,000 resamples). Diagnostic only (not a test): calibration slope of actual on projection on TEST, by decile of
+rate / pop.
+Board metrics (kills Maps 1-2 units with an HLTV result and HLTV history; perf-2 recomputed with the live SQL, history
+strictly before the match day, LAN from the HLTV match): B1 slope of (actual - line) on (projection - line), all units;
+B2 Over-side gap = mean(projection - actual) on units with projection - line > 1 (each model's own Over set) and the paired
+difference candidate - baseline with a match-grouped 95% interval; B3 Under-side gap and overall bias (a pure downward
+shift would shrink B2 while hurting the Under side - reported to expose that).
+Pass = (1) TEST improvement with the 95% interval excluding 0 (MAE; log-score for R4-thin) AND (2) the same direction on
+TRAIN and VALID AND (3) the board Over-side gap (B2) shrinks. The board set is small (~94 matches) - its interval is
+reported, not required to exclude 0. A pass becomes a frozen SHADOW challenger config (perf PARAMS json); members' grades
+are not changed by this round.
+
+## Round-4 results (run 2026-10-12 after freezing the definitions above; scripts `round4/r4_hltv.py`, `r4_board_pull.py`, `r4_board_eval.py`)
+HLTV: 42,587 series-players (TRAIN 24,479 / VALID 4,853 / TEST 13,255, 1,343 TEST matches). The candidate code reproduces
+perf.project exactly (max difference 7e-14) and the spread rule reproduces perf.SPREAD (1.457). Baseline TEST kills MAE 6.085.
+Board: 360 kills Maps 1-2 units, 80 HLTV matches (94 board match slugs); recomputed perf-2 matches the logged perf-2
+lambda on the 102 units that were live perf-2 (mean |diff| 0.09). Board intervals are wide - 80 matches.
+| Test | Picked on TRAIN | dMAE TRAIN / VALID | TEST dMAE (95%) | TEST log-score (95%) | Board Over gap vs perf-2 (95%) | Decision |
+|---|---|---|---|---|---|---|
+| R4-k0 | 450 | +0.0023 / +0.0008 | -0.0012 (-0.0045 to +0.0023) | -0.0004 (-0.0009 to +0.0001) | +0.03 (-0.26 to +0.28) | **Rejected** |
+| R4-hl | 180 d | -0.0003 / +0.0046 | +0.0015 (-0.0025 to +0.0054) | +0.0004 (-0.0002 to +0.0009) | +0.16 (-0.34 to +0.61) | **Rejected** |
+| R4-hot | a 0.9 | -0.0005 / -0.0034 | -0.0057 (-0.0119 to +0.0008) | -0.0008 (-0.0018 to +0.0000) | +0.02 (-0.36 to +0.38) | **Rejected** (interval crosses 0; gap not smaller) |
+| R4-ko | 150 | -0.0011 / -0.0005 | +0.0026 (-0.0008 to +0.0063) | +0.0004 (-0.0003 to +0.0011) | -0.03 (-0.34 to +0.28) | **Rejected** |
+| R4-thin | m 1.05 | log +0.0005 / +0.0025 | - | +0.0008 (-0.0004 to +0.0022) | 0 by construction | **Rejected** |
+| R4-team | w 0.5 | +0.0016 / +0.0012 | +0.0116 (+0.0029 to +0.0210) | +0.0005 (-0.0013 to +0.0023) | +0.32 (-0.14 to +0.91) | **Rejected** (worse) |
+Board (kills Maps 1-2): live logged lambdas (mixed: 258 older-pipeline + 102 perf-2) slope 0.38 (-0.26 to 0.81), Over side
+proj-line +2.35 -> actual-line -0.22 (gap 2.56). perf-2 recomputed for all 360 units: slope 0.57 (-0.26 to 0.93), Over side
++1.96 -> +0.02 (gap 1.93), Under side gap -1.17, bias +0.42, MAE 5.46 vs the line's 5.55. No grid value of any family shrinks the
+Over gap by more than 0.30 (R4-hot a 0.7, which TRAIN rejects: MAE +0.020) and none changes the slope by more than 0.1.
+Diagnostic: HLTV calibration slope of actual on projection 0.97 / 0.95 / 0.99 (TRAIN / VALID / TEST); top rate decile
+TEST -0.21 kills (-0.65 to +0.25) - high-rate players are NOT over-projected in history.
+EXPLORATORY (after the tests, not a test): on the board the Over-side failure of perf-2 sits mostly in thin-history players
+(weighted history < 600 rounds: 42 units, 24 matches, bias +4.2 kills, Over gap +4.4 on 26 Over units; the book was also
+too high on them, line - actual +3.1). Units with >= 600 rounds: slope 0.75, Over side +1.83 -> +0.73. In HLTV history
+thin-history players are slightly UNDER-projected (-0.1 to -0.7 in every period), so this is a board-specific hypothesis
+(stand-ins / returning or re-tagged players / tier-3 board selection) for a frozen round-5 test, not evidence.
+Nothing promoted; the live projection is unchanged.
