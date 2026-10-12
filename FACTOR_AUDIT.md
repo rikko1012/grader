@@ -194,3 +194,93 @@ too high on them, line - actual +3.1). Units with >= 600 rounds: slope 0.75, Ove
 thin-history players are slightly UNDER-projected (-0.1 to -0.7 in every period), so this is a board-specific hypothesis
 (stand-ins / returning or re-tagged players / tier-3 board selection) for a frozen round-5 test, not evidence.
 Nothing promoted; the live projection is unchanged.
+
+## Frozen test definitions - round 5: thin / returning / low-coverage history (written 2026-10-12 BEFORE running)
+Why: round-4 exploratory finding + audit5 (41 thin units / 20 matches: 22 missing ingestion, 9 return from inactivity,
+7 genuinely limited, 3 borderline). The inspected 41 units and the whole Oct 3-12 board are DEVELOPMENT data, never a test.
+Unchanged throughout: the live model (perf-2) and the frozen challenger lb-001 (probit pull toward 50%, kills w 0.0, HS w 0.5).
+Only data dated before the match day defines a cohort. Scripts: research folder `round5/` (r5_*.py).
+**Cohorts** (D = match day; his rows = the HLTV maps perf-2 uses: his one HLTV id, all environments, 10-player maps):
+- r_w = sum exp(-(D - day)/120) x rounds over his rows with day in [D-420, D) (= perf.project history_rounds_weighted, logged live).
+- Thin: r_w < 600. Graded alternative (reported, not separate tests): bands < 300, 300-600, 600-1200, >= 1200.
+- Returning: gap = D - his last HLTV map day >= 60 days. No HLTV map at all before D: not "returning" (it is thin, r_w 0);
+  for C2 its gap counts as 365.
+- Low coverage (board only): cov = his HLTV maps in [D-420, D) / his BO3.gg finished maps (>= 13 rounds) in the same window
+  < 0.75; no BO3.gg maps -> not low coverage. Production has this pre-match (BO3.gg match list, HLTV DB). Historically: the
+  BO3.gg lists pulled 2026-10-12 (audit5 cache) and HLTV rows as of 2026-10-12, both filtered to days before D. No result
+  of the graded match enters; the caveat is "as-of": a map ingested/added after D counts here but did not live.
+- Established = none of the three (r_w >= 600, gap < 60, cov >= 0.75 or unknown).
+**Candidates** (each on its own; nothing stacked):
+- C0 DATA FIX (recorded separately; not a model change): for low-coverage units, his BO3.gg-only maps (games in his BO3.gg
+  list in [D-420, D) whose match is not an HLTV match he has rows in - audit5 cross-match rules; >= 13 rounds) are added to
+  his kill and round sums with the same weight exp(-(D-day)/120); kills from the BO3.gg scoreboard by his BO3.gg player id
+  (a scoreboard without him is skipped). Environment unknown -> all-environment rate only, not the LAN/online sums.
+  Opponent factor and spread (1.457) unchanged. Board only: the 42k HLTV set has no HLTV-to-BO3.gg identity map
+  (exact-name rule, no fuzzy matching) and would need ~10^5 scoreboard downloads - infeasible, so no held-out test.
+- C1 shrinkage by effective sample: k0_eff = 300 x (1 + a x max(0, 1 - r_w/600)), a in {0.5, 1, 2} (prior target
+  0.93 x pop unchanged). Rows with r_w >= 600 are unchanged by construction. Spread C re-measured by the round-4 rule.
+- C2 inactivity uncertainty: sd x (1 + b x min(gap, 365)/365), b in {0.1, 0.2, 0.4}; projection unchanged. C re-measured by
+  the round-4 rule on z / multiplier, so total TRAIN dispersion is unchanged and uncertainty moves toward long gaps.
+- C3 targeted line blend (kills, board only - needs lines): p' = Phi(w x Phi^-1(p)), w = r_w / (r_w + m), p = perf-2
+  replay chance (78% cap, as live). m = 300 is fixed a priori (the line acts as a prior worth k0 = 300 rounds, the model's
+  own prior strength); m = 150 and 600 are sensitivity only, never selectable. Gradual in r_w; no switch at 600.
+**HLTV test (C1, C2)**: round-4 harness (perf-2 replica, Maps 1-2 kills, rows with HLTV history > 0). Periods: the export
+starts 2025-10-02, so r_w is truncated early on (a continuously active player misses exp(-t/120) of his weight t days after
+the start); parameter selection therefore uses TRAIN = 2026-04-01..06-30 only; VALID 07-01..08-12; TEST 08-13..10-08
+(held out for these parameters). C1: a picked on TRAIN thin-cohort MAE. C2: b picked on TRAIN whole-set log-score.
+Primary metric: C1 = TEST thin-cohort kills MAE change; C2 = TEST returning-cohort log-score change (discretised normal).
+Also reported: bias, MAE, log-score, 80%-interval coverage, z-dispersion, by cohort / r_w band / established / whole set,
+TRAIN, VALID, TEST, match-grouped 95% bootstrap (1,000), distinct matches. Brier / line calibration need lines (board only).
+**Board dev set (all candidates)**: the 328 eligible deduplicated kills Maps 1-2 units / 80 HLTV matches (audit5), identical
+rows for: live published, perf-2 replay, market (p = 0.5, which for kills IS lb-001: w 0.0), C0, C1 and C2 at their HLTV-picked
+value (other grid values shown), C3 (m 300; 150 / 600 sensitivity). Metrics: bias and MAE (projection candidates; the
+line's own bias / MAE shown), log-loss, Brier, logistic calibration slope, calibration bins; paired differences vs perf-2
+replay with match-grouped 95% intervals (2,000); n units, distinct matches; all / each cohort / r_w bands / established.
+Data hash = sha256 of the sorted (player, match slug, line, actual) list, first 16 hex.
+**Promotion criteria** (to a SHADOW challenger only; members' grades unchanged; owner decides any promotion):
+- C1 / C2 (HLTV-testable): (1) primary TEST change in favour with its 95% interval excluding 0; (2) same direction on
+  TRAIN and VALID; (3) established not hurt: C1 established rows identical (checked), C2 established TEST log-score change
+  >= -0.001 and whole-set TEST log-score change >= 0 (point estimates); (4) board dev targeted cohort not significantly worse
+  (reported; a 95% interval entirely on the worse side blocks).
+- C0 / C3 (board-only, development evidence): may be frozen only if (1) targeted-cohort board log-loss vs perf-2 replay
+  improves with the 95% interval excluding 0; (2) whole board set not worse (point); (3) established units unchanged or not
+  worse (point); C3 additionally (4) beats lb-001 global (p = 0.5) on the thin cohort (point) - otherwise lb-001, already
+  frozen, carries the gain and C3 adds nothing.
+- At most ONE is frozen. If several qualify: HLTV-tested before board-only; then the larger primary effect / CI half-width.
+  If none qualifies, nothing is frozen. The frozen config is fixed before any new-match evaluation and reviewed on forward
+  matches only (learning.REVIEW_RULE windows 300 / 600 / 1000 distinct matches).
+
+## Round-5 results (run 2026-10-12 after freezing the definitions above at 17:00Z; scripts `round5/r5_cov.py`, `r5_games.py`, `r5_hltv.py`, `r5_board.py`; tables `r5_hltv_tables.txt`, `r5_board_tables.txt`)
+Checks: harness r_w equals the 420-day definition (max diff 5e-13; the export starts 2025-10-02); baseline C 1.4572 = perf.SPREAD;
+board perf-2 recomputed = audit5 replay (max diff 0). Board dev set: 328 units / 80 HLTV matches, data hash `bafe9e4b078aa906`.
+**HLTV (held-out TEST 13,255 rows / 1,343 matches).** Baseline perf-2 by cohort, bias (projection - actual): thin TEST -0.17
+(-0.64 to +0.29; 3,392 rows / 887 matches), TRAIN(Apr-Jun) -0.21, VALID -0.47 - thin players are NOT over-projected in HLTV
+history (every r_w band within +-0.7 kills, all intervals cross 0). Returning (gap >= 60): only 98 / 121 / 127 rows; TEST
+bias +1.17 (-0.25 to +2.46, 83 matches) but z-dispersion 0.92 (LESS spread than assumed, not more).
+| Test | Picked on TRAIN(Apr-Jun) | Primary TEST (95%) | TRAIN / VALID same metric | Established | Decision |
+|---|---|---|---|---|---|
+| C1 shrink by r_w | a 0.5 (TRAIN thin dMAE +0.0001; a 1: +0.0009, a 2: +0.0028) | thin dMAE +0.0016 (-0.0033 to +0.0068) | +0.0001 / +0.0048 | identical (max dlambda 0) | **Rejected** (no gain; worse on returning rows: TEST dMAE +0.017, +0.0005 to +0.031) |
+| C2 inactivity spread | b 0.2 (TRAIN whole-set dlog +0.00004) | returning dlog -0.0082 (-0.0213 to +0.0086) | -0.0085 / -0.0123 | TEST dlog +0.0001; whole +0.00002 | **Rejected** (returning rows get worse every period; 80% coverage 0.80 -> 0.85, over-wide) |
+**Board (DEVELOPMENT, 80 matches).** All eligible: replay log-loss 0.692, market 0.5 (= lb-001 kills) 0.693, published 0.710.
+Cohorts: thin 39 units / 20 matches (25 also low coverage), low coverage 156 / 58, established 158 / 58, RETURNING 0 - by the frozen
+rule (days since the last HLTV map) no board unit qualifies (max gap 27 d): the 9 audit5 "return from inactivity" units had
+already played 1+ maps after the break, so the rule only catches the first match back. C2 is therefore untestable on the board.
+| Candidate vs perf-2 replay | thin (39 / 20) | low coverage (156 / 58) | established (158 / 58) | all (328 / 80) |
+|---|---|---|---|---|
+| C0 data fix: dMAE | +0.207 (+0.043 to +0.354) | +0.065 (+0.002 to +0.123) | 0 (not applied) | +0.031 (+0.002 to +0.062) |
+| C0 data fix: dlog-loss | +0.021 (-0.002 to +0.041) | +0.009 (+0.001 to +0.016) | 0 | +0.004 (+0.000 to +0.008) |
+| C1 a 0.5: dlog-loss | -0.002 (-0.009 to +0.007) | -0.001 (-0.003 to +0.001) | 0 | -0.000 (-0.001 to +0.001) |
+| C2 b 0.2: dlog-loss | +0.000 | +0.000 | -0.000 | +0.000 |
+| C3 m 300: dlog-loss | -0.054 (-0.094 to -0.003) | -0.017 (-0.031 to -0.002) | +0.003 (-0.002 to +0.008) | -0.007 (-0.016 to +0.001) |
+| lb-001 global (p 0.5): dlog-loss | -0.062 (-0.128 to +0.021) | -0.029 (-0.062 to +0.005) | +0.030 (-0.000 to +0.059) | +0.001 (-0.023 to +0.025) |
+| C3 m 300 minus lb-001: log-loss | +0.007 (-0.030 to +0.039) | +0.012 (-0.009 to +0.033) | -0.027 (-0.052 to -0.002) | -0.008 (-0.025 to +0.009) |
+C0: BO3.gg-only maps (14,563 with his scoreboard of 17,818 listed) RAISE the low-coverage projections (+0.21 kills; thin +0.49) -
+those tier-3 maps are high-kill maps, and the thin units were already over-projected (replay bias +4.23, line bias +3.14) - so
+the data fix makes every board metric worse. The thin-cohort miss is not missing data in the rate; it is board-specific
+(the book line was also +3.1 too high on the same units). C3 m 150 / 600 (sensitivity): thin -0.046 / -0.060, established
++0.001 / +0.006. C3 helps thin units about as much as lb-001 does and does not beat it there (frozen criterion 4), and its
+established point estimate is +0.003 (criterion 3). By r_w band, C3 vs lb-001: < 300 +0.029 (+0.003 to +0.046) worse,
+300-600 -0.013, 600-1200 -0.003, >= 1200 -0.018.
+**Decision: nothing frozen.** C1, C2 fail the HLTV test; C0 makes the board worse; C3 fails criteria 3 and 4 (lb-001, already
+frozen, carries the thin-history gain). Live model and lb-001 unchanged. Open item (NOT tested, would need a new frozen round on
+new matches): a "returning" definition that survives the first match back (e.g. a >= 60-day break within the last 30 days).
