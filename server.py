@@ -1289,6 +1289,7 @@ def public(res):
     res.pop("grader_inputs", None)
     res.pop("_h2h_rows", None)
     res.pop("_h2h_opp", None)
+    res.pop("_regional_meta", None)
     (res.get("player_block") or {}).pop("_rf_kpr", None)
     (res.get("player_block") or {}).pop("_hltv_overall_tried", None)
     res.pop("_opp_roster", None)

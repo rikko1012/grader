@@ -413,3 +413,59 @@ def test_team_region_comes_from_the_roster(monkeypatch):
         def team(self, slug): return {"name": "x", "players": [{"country": {"code": "US"}}] * 2 + [{"country": {"code": "US"}, "status": 2}] + [{"country": {"code": "SE"}}] * 2}
     monkeypatch.setattr(h, "team_country", lambda name: None)
     assert cs2_scout._nationality(Benched(), "x")["id"] is None            # a benched player doesn't count
+
+
+def test_mixed_roster_gets_its_region(monkeypatch):
+    """Owner 2026-10-12: 3 players from the same region = that team's region (PL/RO/ES/FI/TR used to be 'international')."""
+    import hltv as h
+    monkeypatch.setattr(h, "team_country", lambda name: ("EU", "Europe"))
+    class B:
+        def team(self, slug): return {"name": "Inner Circle", "players": [{"country": {"code": c, "name": c}} for c in ["PL", "RO", "ES", "FI", "TR"]]}
+    t = cs2_scout._nationality(B(), "ic")
+    assert t["kind"] == "region" and t["region"] == "Europe" and t["id"] == "region:Europe" and t["players"] == 5
+    class P:
+        def team(self, slug): return {"name": "Betclic", "players": [{"country": {"code": "PL", "name": "Poland"}}] * 5}
+    t2 = cs2_scout._nationality(P(), "b")
+    assert t2["kind"] == "country" and t2["id"] == "PL" and t2["region"] == "Europe"
+
+
+def test_regional_search_reaches_old_opponents_and_falls_back_to_region(monkeypatch):
+    """H4SAN4TOR: Swedish opponent Metizport was the 49th distinct team - beyond the old 40-team cap."""
+    from datetime import date, timedelta
+    d = lambda k: (date.today() - timedelta(days=k)).isoformat()
+    teams = {f"t{i}": {"id": f"t{i}", "kind": "country", "region": "Europe"} for i in range(80)}   # 80 other European countries' teams
+    teams["metizport"] = {"id": "SE", "kind": "country", "region": "Europe"}
+    matches = [{"id": i, "status": "finished", "start_date": d(i + 1), "team1": {"slug": "me"}, "team2": {"slug": f"t{i}"},
+                "team1_id": "me", "team2_id": f"t{i}"} for i in range(60)]
+    matches.insert(55, {"id": 999, "status": "finished", "start_date": d(57), "team1": {"slug": "me"}, "team2": {"slug": "metizport"},
+                        "team1_id": "me", "team2_id": "metizport"})
+    monkeypatch.setattr(cs2_scout, "nationality", lambda b, slug: teams.get(slug, {"id": "XX", "kind": "country", "region": "Asia"}))
+    monkeypatch.setattr(cs2_scout, "map_rows", lambda b, pid, ms, f: [{"match_id": ms[0]["id"], "opponent_id": ms[0]["team2_id"], "number": n} for n in (1, 2)])
+    pb = {"player": {"id": 1}, "_matches": matches}
+    rows = cs2_scout.regional_rows(None, pb, "opp", {"id": "SE", "kind": "country", "region": "Europe", "label": "Sweden"})
+    sw = {r["match_id"] for r in rows if r["regional"] is True}
+    assert sw == {999}                                          # found despite being the 56th team
+    reg = {r["match_id"] for r in rows if r["regional"] == "region"}
+    assert len(reg) == cs2_scout.REGIONAL_MAX_SERIES - 1        # filled with same-region series, marked as context
+    # older than 12 months: not used
+    pb2 = {"player": {"id": 1}, "_matches": [dict(matches[0], start_date=d(400), team2={"slug": "metizport"}, team2_id="metizport", id=5)]}
+    assert cs2_scout.regional_rows(None, pb2, "opp", {"id": "SE", "kind": "country", "region": "Europe", "label": "Sweden"}) == []
+
+
+def test_region_fill_ins_never_reach_the_grade():
+    import argparse
+    hh = {"series": [{"date": "2026-10-01", "total": 30, "regional": True, "regional_level": "tag"},
+                     {"date": "2026-10-02", "total": 31, "regional": True, "regional_level": "region"},
+                     {"date": "2026-10-03", "total": 32, "regional": False, "regional_level": None, "same_roster": True}]}
+    rs = [x for x in hh["series"] if x.get("regional") and x.get("regional_level") != "region"]
+    assert len(rs) == 1 and rs[0]["total"] == 30
+    import inspect
+    assert 'x.get("regional_level") != "region"' in inspect.getsource(cs2_scout.grader_inputs)
+
+
+def test_regional_note_counts_what_the_card_lists():
+    meta = {"label": "Poland", "region": "Europe", "kind": "country"}
+    ser = [{"regional": True, "regional_level": "region"}] * 7 + [{"regional": False}]
+    assert cs2_scout.regional_note_text(meta, ser).startswith("Regional extension: 0 series vs other Poland teams + 7 vs other Europe")
+    assert "1 series vs other Poland" in cs2_scout.regional_note_text(meta, [{"regional": True, "regional_level": "tag"}])
+    assert "no series vs other Europe" in cs2_scout.regional_note_text({"label": "Europe", "region": "Europe", "kind": "region"}, [])

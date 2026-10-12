@@ -66,7 +66,10 @@ AWP_MIN_HITS = 150          # need this many chest+stomach hits to judge
 AWP_HS_MAX, AWP_HS_KPR = 40.0, 0.70   # or: HS% under 40 with KPR 0.70+ = AWPer
 NATIONALITY_MIN = 3         # 3+ players of one country = the team is from that country
 REGIONAL_MAX_SERIES = 8    # regional series: at most this many vs same-nationality teams (was 4)
-REGIONAL_MAX_LOOKUPS = 40   # team pages checked while looking for them (polite to BO3.gg)
+REGIONAL_MAX_LOOKUPS = 200  # distinct past opponents checked (team pages are cached on disk 12 h). Was 40: a tier-3
+                            # player meets 100+ teams a year, so H4SAN4TOR's Swedish opponent Metizport (49th) was never checked
+REGIONAL_DAYS = 365         # regional series: the last 12 months, like the exact head-to-head (owner 2026-10-06)
+REGIONAL_MIN_COUNTRY = 3    # a country tag (e.g. Poland) with fewer series than this is filled with same-REGION series
 
 
 # ---------------------------------------------------------------- helpers
@@ -601,6 +604,23 @@ def load_regions():
     return _REGIONS["data"]
 
 
+_ALL_REGIONS = {"mtime": None, "data": {}}
+
+
+def country_regions():
+    """regions.csv: every country_code -> its region (Europe, Asia, Africa, North America, South America, Oceania, CIS, ...)."""
+    try:
+        mt = REGIONS_CSV.stat().st_mtime
+    except OSError:
+        return {}
+    if _ALL_REGIONS["mtime"] != mt:
+        with REGIONS_CSV.open(encoding="utf-8-sig", newline="") as f:
+            _ALL_REGIONS["data"] = {r["country_code"].strip().upper(): r["region"].strip() for r in csv.DictReader(f)
+                                    if r.get("country_code") and (r.get("region") or "").strip() not in ("", "Other")}
+        _ALL_REGIONS["mtime"] = mt
+    return _ALL_REGIONS["data"]
+
+
 def nationality(b, team_slug):
     """Gate C nationality tag (memory-cached 30 min per team)."""
     hit = _NAT.get(team_slug)
@@ -615,28 +635,38 @@ def nationality(b, team_slug):
 
 
 def _nationality(b, team_slug):
-    """Gate C nationality tag. Owner rule 2026-10-11: the ROSTER decides - 3+ current players from one country, or from one
-    grouped region (regions.csv: CIS, Oceania, South America, North America), = the team's tag. HLTV's team flag (one flag per
-    org, e.g. NRG = Canada) is used only when the roster can't decide (no 3 players share a country / region), and is mapped
-    through the same regions. Nothing is inferred - a player with no country on record doesn't count."""
+    """Gate C nationality tag from the CURRENT roster (benched players don't count). Owner rules: 3+ players from one
+    country = that country (2026-09-29: "a Polish core -> only Polish teams"), countries in a grouped region (CIS, Oceania,
+    South America, North America) share the region; 2026-10-12: "3 players from the same region = that team's region" -
+    a mixed roster with 3+ players from one region (e.g. PL / RO / ES / FI / TR) is that region (Europe), where it used to
+    get no tag at all. HLTV's single team flag only when the roster can't decide. Every tag carries its region, so
+    regional_rows can fall back from a country to its region. Nothing is inferred from a player with no country."""
     try:
         td = b.team(team_slug)
-        roster = [p for p in (td.get("players") or []) if not p.get("is_coach") and p.get("status") != 2]   # benched don't count
+        roster = [p for p in (td.get("players") or []) if not p.get("is_coach") and p.get("status") != 2]
     except Exception:
         return None
-    regions = load_regions()
-    counts, names, codes = {}, {}, []
+    grouped, regmap = load_regions(), country_regions()
+    counts, names, codes, rcounts = {}, {}, [], {}
     for p in roster:
         c = p.get("country") or {}
         code = (c.get("code") or "").upper()
         codes.append(code or "?")
         if code:
-            key = regions.get(code, code)          # grouped countries share one key
+            key = grouped.get(code, code)          # grouped countries share one key
             counts[key] = counts.get(key, 0) + 1
-            names[key] = key if code in regions else c.get("name")
+            names[key] = key if code in grouped else c.get("name")
+            if regmap.get(code):
+                rcounts[regmap[code]] = rcounts.get(regmap[code], 0) + 1
     top = max(counts.items(), key=lambda kv: kv[1]) if counts else (None, 0)
     if top[1] >= NATIONALITY_MIN:
-        return {"id": top[0], "label": names[top[0]], "players": top[1], "of": len(roster), "roster": codes, "source": "roster"}
+        region = top[0] if top[0] in GROUPED_REGIONS else regmap.get(top[0])
+        return {"id": top[0], "label": names[top[0]], "players": top[1], "of": len(roster), "roster": codes, "source": "roster",
+                "kind": "group" if top[0] in GROUPED_REGIONS else "country", "region": region}
+    rtop = max(rcounts.items(), key=lambda kv: kv[1]) if rcounts else (None, 0)
+    if rtop[1] >= NATIONALITY_MIN:
+        return {"id": "region:" + rtop[0], "label": rtop[0], "players": rtop[1], "of": len(roster), "roster": codes,
+                "source": "roster (region)", "kind": "region", "region": rtop[0]}
     try:                                       # roster can't decide: HLTV's team flag (hltv-scraper teams.country)
         import hltv
         hc = hltv.team_country(td.get("name"))
@@ -645,40 +675,80 @@ def _nationality(b, team_slug):
     if hc and (hc[0] or hc[1]):
         code, cname = (hc[0] or "").upper(), hc[1] or ""
         if len(code) == 2 and code not in ("EU", "WW", "UN"):
-            key = regions.get(code, code)
-            return {"id": key, "label": key if code in regions else (cname or code), "source": "HLTV flag", "roster": codes}
-        if cname and "cis" in cname.lower() and regions.get("RU"):
-            return {"id": regions["RU"], "label": regions["RU"], "source": "HLTV flag", "roster": codes}
+            key = grouped.get(code, code)
+            region = key if key in GROUPED_REGIONS else regmap.get(code)
+            return {"id": key, "label": key if code in grouped else (cname or code), "source": "HLTV flag", "roster": codes,
+                    "kind": "group" if key in GROUPED_REGIONS else "country", "region": region}
+        if cname and "cis" in cname.lower() and grouped.get("RU"):
+            return {"id": grouped["RU"], "label": grouped["RU"], "source": "HLTV flag", "roster": codes, "kind": "group", "region": grouped["RU"]}
+        if code == "EU" or cname.lower() == "europe":
+            return {"id": "region:Europe", "label": "Europe", "source": "HLTV flag", "roster": codes, "kind": "region", "region": "Europe"}
         return {"id": None, "label": f"international team ({cname or code})", "source": "HLTV flag", "roster": codes}
     return {"id": None, "label": f"mixed roster ({'/'.join(codes)})", "roster": codes}
 
 
-def same_tag(b, team_slug, tag, lookups):
-    if not team_slug or lookups["n"] >= REGIONAL_MAX_LOOKUPS:
-        return False
+def team_tag(b, team_slug, lookups):
+    """A past opponent's tag, looked up once per regional search (REGIONAL_MAX_LOOKUPS distinct teams)."""
+    if not team_slug:
+        return None
     if team_slug not in lookups["seen"]:
+        if lookups["n"] >= REGIONAL_MAX_LOOKUPS:
+            lookups["capped"] = True
+            return None
         lookups["n"] += 1
         lookups["seen"][team_slug] = nationality(b, team_slug)
-    t = lookups["seen"][team_slug]
-    return bool(t) and t["id"] is not None and t["id"] == tag["id"]
+    return lookups["seen"][team_slug]
+
+
+def same_tag(b, team_slug, tag, lookups, level="tag"):
+    """level "tag": the same country / grouped region / region as tonight's opponent; level "region": the same region."""
+    t = team_tag(b, team_slug, lookups)
+    if not t:
+        return False
+    if level == "region" or tag.get("kind") == "region":
+        return bool(t.get("region")) and t.get("region") == tag.get("region")
+    return t.get("id") is not None and t["id"] == tag["id"]
 
 
 def regional_rows(b, pb, opp_id, tag):
-    """Maps 1-2 of the player's latest series vs OTHER teams sharing the opponent's tag."""
-    lookups, rows, series = {"n": 0, "seen": {}}, [], 0
-    for mt in pb["_matches"]:
-        if series >= REGIONAL_MAX_SERIES:
-            break
-        if mt.get("status") != "finished" or opp_id in (mt.get("team1_id"), mt.get("team2_id")):
-            continue
-        if not any(same_tag(b, (mt.get(s) or {}).get("slug"), tag, lookups) for s in ("team1", "team2")):
-            continue
-        got = [r for r in map_rows(b, pb["player"]["id"], [mt], lambda m, g: (g.get("number") or 9) <= 2)
-               if same_tag(b, next(((mt.get(s) or {}).get("slug") for s in ("team1", "team2")
-                                    if mt.get(s + "_id") == r["opponent_id"]), None), tag, lookups)]
-        if len(got) >= 2:
-            rows += [dict(r, regional=True) for r in got]
-            series += 1
+    """Maps 1-2 of the player's latest series (last REGIONAL_DAYS) vs OTHER teams sharing the opponent's tag.
+    A country tag (e.g. Poland) with fewer than REGIONAL_MIN_COUNTRY such series is filled with same-REGION series (Europe),
+    marked regional="region": shown as context, never a grade input (grader_inputs keeps only regional=True rows).
+    A region tag (mixed roster) gives region rows only. Returns rows; the search stats are left in pb["_regional_stats"]."""
+    lookups, cut = {"n": 0, "seen": {}, "capped": False}, (date.today() - timedelta(days=REGIONAL_DAYS)).isoformat()
+    fin = [mt for mt in pb["_matches"] if mt.get("status") == "finished" and (mt.get("start_date") or "")[:10] >= cut
+           and opp_id not in (mt.get("team1_id"), mt.get("team2_id"))]
+
+    def collect(level, mark, limit, skip):
+        rows, series = [], 0
+        for mt in fin:
+            if series >= limit:
+                break
+            if mt.get("id") in skip:
+                continue
+            if not any(same_tag(b, (mt.get(s_) or {}).get("slug"), tag, lookups, level) for s_ in ("team1", "team2")):
+                continue
+            got = [r for r in map_rows(b, pb["player"]["id"], [mt], lambda m, g: (g.get("number") or 9) <= 2)
+                   if same_tag(b, next(((mt.get(s_) or {}).get("slug") for s_ in ("team1", "team2")
+                                        if mt.get(s_ + "_id") == r["opponent_id"]), None), tag, lookups, level)]
+            if len(got) >= 2:
+                rows += [dict(r, regional=mark) for r in got]
+                skip.add(mt.get("id"))
+                series += 1
+        return rows, series
+
+    skip = set()
+    if tag.get("kind") == "region":
+        rows, n_region = collect("region", "region", REGIONAL_MAX_SERIES, skip)
+        n_tag = 0
+    else:
+        rows, n_tag = collect("tag", True, REGIONAL_MAX_SERIES, skip)
+        n_region = 0
+        if n_tag < REGIONAL_MIN_COUNTRY and tag.get("kind") == "country" and tag.get("region"):
+            more, n_region = collect("region", "region", REGIONAL_MAX_SERIES - n_tag, skip)
+            rows += more
+    pb["_regional_stats"] = {"tag_series": n_tag, "region_series": n_region, "teams_checked": lookups["n"],
+                             "capped": lookups["capped"], "matches_in_window": len(fin)}
     return rows
 
 
@@ -916,6 +986,7 @@ def h2h(rows, opponent, line=None, stat="kills", opp_roster=None):
                        "total": sum(m[stat] for m in m12),
                        "result": {2: "W", 1: "split", 0: "L"}[sum(wins)],
                        "regional": bool(m12[0].get("regional")),
+                       "regional_level": ("region" if m12[0].get("regional") == "region" else "tag") if m12[0].get("regional") else None,
                        "same_roster": (None if not opp_roster or not m12[0].get("opp_lineup") else
                                        len(set(m12[0]["opp_lineup"]) & set(opp_roster)) >= SAME_ROSTER),
                        "roster_overlap": (len(set(m12[0].get("opp_lineup") or []) & set(opp_roster))
@@ -1258,8 +1329,9 @@ def grader_inputs(pb, args, odds=None, hh=None):
         d["h2h_series"] = [{"age_days": (today - date.fromisoformat(x["date"])).days, "total": x["total"]}
                            for x in hh["series"] if not x.get("regional") and x.get("date")
                            and x.get("same_roster") is not False]
+        # region-level fill-ins (2026-10-12) are context only: the tested regional definition is country / grouped region
         d["regional_series"] = [{"age_days": (today - date.fromisoformat(x["date"])).days, "total": x["total"]}
-                                for x in hh["series"] if x.get("regional") and x.get("date")]
+                                for x in hh["series"] if x.get("regional") and x.get("regional_level") != "region" and x.get("date")]
     return d
 
 
@@ -1866,9 +1938,23 @@ def run(args, res, b, ttl):
             else:
                 reg = regional_rows(b, pb, opp_id, tag)
                 rows += reg
-                n = len({r["match_id"] for r in reg})
-                res["regional_note"] = (f"Regional extension: {n} series vs other {tag['label']} teams" if n else
-                                        f"Regional extension: no recent series vs other {tag['label']} teams found")
+                st = pb.pop("_regional_stats", {}) or {}
+                res["_regional_meta"] = {"label": tag["label"], "region": tag.get("region") or tag["label"], "kind": tag.get("kind"),
+                                         "capped": st.get("capped"), "checked": st.get("teams_checked")}
+                n_t, n_r = st.get("tag_series", 0), st.get("region_series", 0)
+                region = tag.get("region") or tag["label"]
+                ctx = " (context - not in the projection)"
+                if tag.get("kind") == "region":
+                    res["regional_note"] = (f"Regional extension: {n_r} series vs other {region} teams{ctx}" if n_r else
+                                            f"Regional extension: no series vs other {region} teams in the last 12 months")
+                elif n_r:
+                    res["regional_note"] = (f"Regional extension: {n_t} series vs other {tag['label']} teams"
+                                            f" + {n_r} vs other {region} teams{ctx}")
+                else:
+                    res["regional_note"] = (f"Regional extension: {n_t} series vs other {tag['label']} teams" if n_t else
+                                            f"Regional extension: no series vs other {tag['label']} teams in the last 12 months")
+                if st.get("capped"):
+                    res["regional_note"] += f" - searched the latest {st.get('teams_checked')} opponents"
         res["h2h"] = h2h(rows, args.opponent, args.line, stat, res.get("_opp_roster"))
         res["_h2h_rows"], res["_h2h_opp"] = rows, args.opponent
     if args.cmd == "odds" or (args.cmd == "full" and (args.team or pb)):
@@ -2208,6 +2294,30 @@ def _environment(res, pb):
     return env or None
 
 
+def regional_note_text(meta, series):
+    """The card's regional note, counted from the series the card actually lists (after the LAN / online filter)."""
+    n_t = sum(1 for x in series if x.get("regional") and x.get("regional_level") != "region")
+    n_r = sum(1 for x in series if x.get("regional_level") == "region")
+    ctx = " (context - not in the projection)"
+    if meta.get("kind") == "region":
+        note = (f"Regional extension: {n_r} series vs other {meta['region']} teams{ctx}" if n_r else
+                f"Regional extension: no series vs other {meta['region']} teams in the last 12 months")
+    elif n_r:
+        note = f"Regional extension: {n_t} series vs other {meta['label']} teams + {n_r} vs other {meta['region']} teams{ctx}"
+    else:
+        note = (f"Regional extension: {n_t} series vs other {meta['label']} teams" if n_t else
+                f"Regional extension: no series vs other {meta['label']} teams in the last 12 months")
+    if meta.get("capped"):
+        note += f" - searched the latest {meta.get('checked')} opponents"
+    return note
+
+
+def _regional_note(res):
+    meta = res.get("_regional_meta")
+    if meta and isinstance(res.get("h2h"), dict):
+        res["regional_note"] = regional_note_text(meta, res["h2h"].get("series") or [])
+
+
 def finish_line(res, args):
     """The only part of a grade that depends on the line / prop: last-10 vs the line, H2H hit
     rates, grader inputs, the grade, the simulation. Everything else is shared context."""
@@ -2269,6 +2379,7 @@ def finish_line(res, args):
         if tonight:   # H2H keeps every meeting; the same-region series only count from tonight's environment
             hrows = [r for r in hrows if not r.get("regional") or r in _env_rows([r], pb, tonight)]
         res["h2h"] = h2h(hrows, res.get("_h2h_opp"), args.line, stat, res.get("_opp_roster"))
+        _regional_note(res)
     _tick(res, "h2h", t0)
     pb["_rank_band"] = _best_rank_band(pb, (res["hltv_context"] or {}).get("rank_band"))
     _tick(res, "rank_band", t0)
