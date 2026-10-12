@@ -616,11 +616,22 @@ def fix_scope_settlements(apply=False, scopes=("1", "123"), test=None):
                 if (x["scope"] or "12") in scopes and (test is None or (x["test"] or 0) == test)]
         con.close()
     diffs, skipped, details = [], [], []
+    import time as _time
+    import hltv as _hltv
     for r in rows:
-        try:
-            res = scope_result(r)
-        except Exception as e:
-            skipped.append({"id": r["id"], "reason": f"error {e}"}); continue
+        res, err = None, None
+        for attempt in range(4):              # an audit waits out a database blip instead of skipping the rest (2026-10-12)
+            try:
+                res = scope_result(r)
+                break
+            except Exception as e:
+                err = e
+                if not _hltv.is_transient(e):
+                    break
+                _time.sleep(2 * (attempt + 1))
+                _hltv.allow_probe()
+        if res is None:
+            skipped.append({"id": r["id"], "reason": f"error {err}"}); continue
         if res["status"] == "void":
             # 2026-10-11: a Maps 1-3 pick whose BO3 ended 2-0 (no map 3) is a void, not a 2-map total
             d = {"id": r["id"], "player": r["player"], "prop": r["prop"], "scope": r["scope"], "line": r["line"], "pick": r["pick"],
