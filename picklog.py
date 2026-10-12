@@ -382,6 +382,8 @@ def _quick_rows(b, player_id, mt):
             row = None
         if not row or row.get("kills_sum") is None:
             return []
+        if 0 < (g.get("winner_clan_score") or 0) + (g.get("loser_clan_score") or 0) < 13:
+            return []                                  # a map can't end under 13 rounds: forfeit / technical win
         out.append({"map": g.get("map_name"), "kills": row["kills_sum"], "headshots": row.get("headshots_sum") or 0})
     return out if len(out) == 2 else []
 
@@ -551,8 +553,8 @@ def scope_result(r, same_day_only=False):
             ids = hltv._player_ids(cur, r["player"], r["team"])
             rows = hltv._series_rows(cur, ids, "2000-01-01", "AND mo.date BETWEEN %(d)s::date - 1 AND %(d)s::date + 1",
                                      {"d": day}, maxn=3, need=(1,)) if ids else []
-            opp = hltv._norm(r["opponent"] or "")
-            on = [x for x in rows if not opp or opp in hltv._norm(x["opponent"]) or hltv._norm(x["opponent"]) in opp]
+            opp = (r["opponent"] or "").strip()
+            on = [x for x in rows if not opp or hltv.same_team(opp, x["opponent"])]     # exact variants, never an academy
             if same_day_only:
                 on = [x for x in on if x["date"] >= day]     # an earlier meeting is not this match
             mids = {x["hltv_match"] for x in on}
@@ -714,7 +716,12 @@ def recheck_with_hltv():
             continue          # _hltv_totals is Maps 1-2 only - Map 1 / Maps 1-3 lines settle via scope_result() (incident 2026-10-08)
         hv = _hltv_totals(r)
         if isinstance(hv, tuple) and hv[0] == "void":
-            continue          # never silently void a settled pick here (forfeits are reviewed by hand)
+            # never silently void a settled pick here - listed for review by hand instead (2026-10-11 audit: a BO3.gg
+            # settlement on a forfeited map used to stay settled with no sign of it)
+            changed.append({"id": r["id"], "player": r["player"], "prop": r["prop"], "line": r["line"], "pick": r["pick"],
+                            "bo3": r["actual"], "hltv": None, "was_hit": r["hit"], "now_hit": None,
+                            "review": "HLTV voids this match (forfeit / map not played) - settled from BO3.gg; review by hand"})
+            continue
         if isinstance(hv, tuple) and (hv[2] != r["actual"] or hv[0] != r["status"]):
             with _LOCK:
                 con = _db()

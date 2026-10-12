@@ -9,7 +9,8 @@ build(rows, settings, batch=None, key=None, model=None, now=None)
     settings  {"book": "underdog"|"prizepicks", "side": "More"|"Less"|"either", "sizes": [2, 3, 4],
                "count": 3 | "counts": {4: 3, 3: 3, 2: 3}, "overlap": "none"|"limited",
                "max_uses": {"player": 2, "match": 2} (limited only), "stat": "kills"|"hs"|"both",
-               "scope": "12"|"1"|"123"|"all", "market": "standard"|"goblin"|"demon"|"moneyline"}
+               "scope": "12"|"1"|"123"|"all", "market": "standard"|"goblin"|"demon"|"moneyline",
+               "fill": "large" (default: the largest size planned first) | "small" (the smallest first)}
     batch     a batch_id from current_batch() / new_batch() (exposure is stored), or None (nothing stored)
     key       idempotency key (the client's request id): the same key in the same batch returns the stored result
     model     the current grader tag (board_payload()["version"]); default picklog.MODEL_VERSION
@@ -111,6 +112,11 @@ def normalize_settings(s):
         raise ValueError("sizes must be a subset of 2, 3, 4")
     if not sizes or any(n not in SIZES for n in sizes):
         raise ValueError("sizes must be a subset of 2, 3, 4")
+    fill = str(s.get("fill") or "large").lower()
+    if fill not in ("large", "small"):
+        raise ValueError("fill must be large or small")
+    if fill == "small":                                  # smaller slips planned (and filled) first
+        sizes = sorted(sizes)
     raw = s.get("counts") or {}
     counts = {}
     for n in sizes:
@@ -132,7 +138,7 @@ def normalize_settings(s):
         except (TypeError, ValueError, AttributeError, OverflowError):
             raise ValueError("max_uses must be whole numbers")
     return {"book": book, "side": side, "stat": stat, "scope": scope, "market": market, "sizes": sizes,
-            "counts": counts, "overlap": overlap, "max_uses": caps}
+            "counts": counts, "overlap": overlap, "max_uses": caps, "fill": fill}
 
 
 # ---------------------------------------------------------------- row identity
@@ -408,11 +414,12 @@ def _capacity(pool, usage, caps):
 
 
 def _plan(st, capacity):
-    """Slips per size, largest size first, from the leg budget (none mode); limited mode = as requested."""
+    """Slips per size from the leg budget (none mode), in st["sizes"] order: largest first (fill "large", default) or
+    smallest first (fill "small"); limited mode = as requested."""
     if st["overlap"] != "none":
         return dict(st["counts"])
     plan, left = {}, capacity
-    for n in st["sizes"]:                                # 4, then 3, then 2
+    for n in st["sizes"]:                                # 4, then 3, then 2 (fill "small": 2, then 3, then 4)
         plan[n] = min(st["counts"][n], left // n)
         left -= plan[n] * n
     return plan
@@ -438,7 +445,7 @@ def _select(pool, st, usage, had_prior=False):
             matches = len({min(l.mk) for l in left if l.mk})
             if st["overlap"] == "none":
                 why = (f"{len(out[n])} of {want} {n}-pick slips: {matches} unused eligible match{'es' if matches != 1 else ''} "
-                       f"left in this batch{' after the larger slips' if n != st['sizes'][0] else ''} ({n} distinct matches and players per slip)")
+                       f"left in this batch{(' after the smaller slips' if st.get('fill') == 'small' else ' after the larger slips') if n != st['sizes'][0] else ''} ({n} distinct matches and players per slip)")
             else:
                 why = (f"{len(out[n])} of {want} {n}-pick slips: {matches} eligible match{'es' if matches != 1 else ''} left "
                        f"under the overlap caps (a player in at most {caps['player']}, a match in at most {caps['match']} "
@@ -806,6 +813,7 @@ def _compute(rows, st, model, now, batch_id, build_id, prior):
                            + (" - most left out: " + "; ".join(f"{e['reason']} ({e['count']})" for e in
                                                                 sorted(excluded.values(), key=lambda e: -e["count"])[:3]) if excluded else "") + ".")
     rules = _rules(st["overlap"], st["max_uses"])
+    full_cap = _capacity(pool, _Usage(), {"player": 1, "match": 1})
     slips, k = {n: [] for n in SIZES}, 0
     for n in SIZES:
         for legs in chosen[n]:
@@ -830,8 +838,34 @@ def _compute(rows, st, model, now, batch_id, build_id, prior):
     return {"batch_id": batch_id, "build_id": build_id, "builder_version": VERSION, "generated_at": gen, "model": model,
             "settings": st, "slips": slips, "plan": plan, "shortage": shortage, "exposure": exp,
             "excluded": sorted(excluded.values(), key=lambda e: -e["count"]),
-            "eligible": {"lines": eligible_n, "matches": eligible_matches, "unused_capacity": capacity},
+            "eligible": {"lines": eligible_n, "matches": eligible_matches, "unused_capacity": capacity,
+                         # the most slips of each size the eligible picks support with no repeats (all of them / what this
+                         # batch has left) - one pick per match and player, so 9 matches = 2 four-picks, 3 three-picks or 4 two-picks
+                         "max_slips": max_slips(full_cap), "max_slips_left": max_slips(capacity)},
             "search": search}
+
+
+def max_slips(legs):
+    """{size: most slips of that size} from a no-repeat leg budget (each size on its own, not together)."""
+    return {n: legs // n for n in sorted(SIZES)}
+
+
+def capacity(rows, settings, model=None, now=None):
+    """What the eligible picks can support for these settings, nothing stored and no batch: eligible lines and matches,
+    the no-repeat leg budget (one pick per match and per player) and the most slips of each size it allows."""
+    st = normalize_settings(settings)
+    now = now or datetime.now(timezone.utc)
+    pool, seen = [], set()
+    for r in rows or []:
+        if why_excluded(r, st, model, now):
+            continue
+        leg = _Leg(r)
+        if leg.uid not in seen:
+            seen.add(leg.uid)
+            pool.append(leg)
+    legs = _capacity(pool, _Usage(), {"player": 1, "match": 1})
+    return {"builder_version": VERSION, "settings": {k: st[k] for k in ("book", "side", "stat", "scope", "market")},
+            "lines": len(pool), "matches": len({min(l.mk) for l in pool if l.mk}), "legs": legs, "max_slips": max_slips(legs)}
 
 
 _DEAD_LABEL = {"void": "replaced", "verify_changed": "changed", "dismiss": "dismissed"}

@@ -562,3 +562,40 @@ def test_moneylines_payload_carries_freshness_started_and_bo2_fields(env):
     assert {"started", "tie_possible"} <= set(m)
     blk = next(b for b in m["platforms"].values() if b)
     assert {"fresh", "market_open", "price_only"} <= set(blk)
+
+
+# ------------------------------------------------------------------ studio capacity + fill order (2026-10-11)
+def test_studio_capacity_endpoint_auth_shared_and_counts(env):
+    st, d = call(env, "GET", "/api/slip_studio/capacity?book=underdog")
+    assert st == 401 and d["error"] == "members_only"                     # same gate as the batch
+    n0 = env["boards"].calls
+    st, d = call(env, "GET", "/api/slip_studio/capacity?book=underdog&side=either&stat=both&scope=12", member="alice")
+    assert st == 200, d
+    assert d["lines"] == 24 and d["matches"] == 12 and d["legs"] == 12
+    assert {int(k): v for k, v in d["max_slips"].items()} == {2: 6, 3: 4, 4: 3}
+    st2, d2 = call(env, "GET", "/api/slip_studio/capacity?book=underdog&side=either&stat=both&scope=12", member="bob")
+    assert st2 == 200 and d2 == d and env["boards"].calls - n0 <= 1         # one shared answer, no rebuild per member
+    assert call(env, "GET", "/api/slip_studio/capacity?book=nope", member="alice")[0] == 400
+    assert call(env, "GET", "/api/slip_studio/capacity?market=moneyline", member="alice")[0] == 400
+
+
+def test_studio_build_fill_small_and_capacity_in_response(env):
+    st, d = build(env, "carol", "fill-small-1", {"book": "underdog", "sizes": [2, 3, 4], "counts": {"2": 2, "3": 2, "4": 2},
+                                                 "fill": "small"})
+    assert st == 200, d
+    plan = {int(k): v for k, v in d["plan"].items()}
+    assert plan == {2: 2, 3: 2, 4: 0}                                       # 12 legs: 2+2 + 3+3 = 10, two left - no 4-pick
+    assert {int(k): v for k, v in d["eligible"]["max_slips"].items()} == {2: 6, 3: 4, 4: 3}
+    assert d["settings"]["fill"] == "small"
+    st, d = build(env, "dave", "fill-large-1", {"book": "underdog", "sizes": [2, 3, 4], "counts": {"2": 2, "3": 2, "4": 2}})
+    assert st == 200 and {int(k): v for k, v in d["plan"].items()} == {4: 2, 3: 1, 2: 0} and d["settings"]["fill"] == "large"
+    assert build(env, "erin", "fill-bad-1", {"book": "underdog", "fill": "medium"})[0] == 400
+
+
+def test_grade_not_found_carries_did_you_mean(env, monkeypatch):
+    import cs2_scout
+    import hltv
+    monkeypatch.setattr(cs2_scout, "grade", lambda name, *a, **k: {"error": f"no pro player called '{name}' on BO3.gg - check the spelling"})
+    monkeypatch.setattr(hltv, "suggest_nicks", lambda q, limit=5: ["m0NESY", "monk"][:limit])
+    st, d = call(env, "GET", "/api/grade?player=monesyy&line=30.5", load_test=True)
+    assert st == 404 and d["error"].startswith("No pro player") and d["suggestions"] == ["m0NESY", "monk"]

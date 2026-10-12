@@ -28,6 +28,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 import cs2_scout
+from pick_verdict import verdict, stake_cap_reasons, _CAP_WORDS, _CAP_RE   # one verdict for the card, board and ladder
 import hltv
 import picklog
 import slips
@@ -378,22 +379,60 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12", book="
                         "units": r.get("units"), "units_full": r.get("units_full"), "graded_at": r.get("graded_at"), "dstat": r.get("dstat"),
                         "source": r.get("source"), "state": r.get("state"), "ud_team": r.get("team"), "ud_opponent": r.get("opponent"),
                         "reason": r.get("reason")}
+    # offered but not graded yet (2026-10-11 audit: damyo's 31.5 showed 'No available line' while it was grading)
+    try:                                            # the feed as already read (never a blocking first read here)
+        feed = (prizepicks.board()["rows"] if book == "prizepicks" else
+                underdog.board()["rows"] if (underdog._BOARD.get("at") or underdog._BOARD.get("tried")) else [])
+    except Exception:
+        feed = []
+    for r in feed:
+        if (r.get("line_type") or r.get("odds_type") or "standard") not in ("standard", "promo") or (r.get("scope") or "12") != scope:
+            continue
+        if not (st and comparison._ts(r.get("start")) and abs((comparison._ts(r["start"]) - st).total_seconds()) <= comparison.JOIN_START_MIN * 60):
+            continue
+        if not ({comparison._team_same(r.get("team"), team), comparison._team_same(r.get("team"), opponent)} & {True}):
+            continue
+        tm_ = team if comparison._team_same(r.get("team"), team) else opponent
+        e = players.get((tm_, str(r.get("player") or "").lower()))
+        if e is not None and e.get(r.get("prop")) is None:
+            e[r["prop"]] = {"proj": None, "line": r.get("line"), "pending": True}
+    # graded on the other platform (a BO3.gg-history projection the board made): its projection, not 'no projection'
+    others = {}
+    try:                                            # both platforms' graded rows (this answer is shared per match for 120 s)
+        both = _both_boards()
+    except Exception:
+        both = _BS_CACHE[1] or []
+    for r in both:
+        if (r.get("scope") or "12") == scope and r.get("proj") is not None and st and comparison._ts(r.get("start")) and (
+                abs((comparison._ts(r["start"]) - st).total_seconds()) <= comparison.JOIN_START_MIN * 60):
+            others.setdefault((str(r.get("nick") or r.get("player") or "").lower(), r.get("prop")), r)
     # same day and LAN / online setting as the graded rows (2026-10-10 audit: these used today's date and no LAN /
     # online blend, so a no-line projection was not comparable with the graded ones next to it)
     import cs2_scout
     day = cs2_scout.match_day(start)
     tn = next((r.get("tonight") for r in same if r.get("tonight")), None)
     lan = None if tn is None else tn == "lan"
-    for (tname, _), e in players.items():          # projections for props without an offered line
+    for (tname, _), e in players.items():          # projections for props without a graded line
         for prop in ("kills", "hs"):
-            if e[prop] is None:
-                try:
-                    pr = perf_live.projection(e["nick"], tname, opponent if tname == team else team, lan, scope, prop, day)
-                except Exception as ex:
-                    pr = {"error": "HLTV database unreachable right now" if cs2_scout._transient_hltv_error(ex) else "failed"}
-                e[prop] = ({"proj": round(pr["lambda"], 2), "line": None, "no_line": True, "source": "HLTV", "dq": pr.get("data_quality")}
-                           if pr and not pr.get("error") and pr.get("lambda") is not None else {"proj": None, "line": None, "no_line": True,
-                                                                                               "note": "no projection (HLTV database unreachable right now)" if "unreachable" in str(pr.get("error")) else "no projection (no HLTV history)"})
+            if e[prop] is None or e[prop].get("pending"):
+                pend = (e[prop] or {}).get("line") if e[prop] else None
+                o = others.get((e["nick"].lower(), prop))
+                if o is not None and o.get("source") and o.get("source") != "HLTV":
+                    pr = {"lambda": o["proj"], "source": o["source"]}            # the board's own (BO3.gg) projection
+                else:
+                    try:
+                        pr = perf_live.projection(e["nick"], tname, opponent if tname == team else team, lan, scope, prop, day)
+                    except Exception as ex:
+                        pr = {"error": "HLTV database unreachable right now" if cs2_scout._transient_hltv_error(ex) else "failed"}
+                    if pr and not pr.get("error") and pr.get("player_maps") == 0:
+                        pr = {"error": "no HLTV maps in the last 420 days"}       # a pro-average number is no projection
+                if pr and not pr.get("error") and pr.get("lambda") is not None:
+                    e[prop] = {"proj": round(pr["lambda"], 2), "line": pend, "no_line": pend is None, "pending": pend is not None,
+                               "source": pr.get("source") or "HLTV", "dq": pr.get("data_quality")}
+                else:
+                    e[prop] = {"proj": None, "line": pend, "no_line": pend is None, "pending": pend is not None,
+                               "note": "HLTV database unreachable right now" if "unreachable" in str((pr or {}).get("error"))
+                               else "no HLTV history"}
     out = []
     for tname in (team, opponent):
         ps = [e for (t, _), e in players.items() if t == tname]
@@ -406,9 +445,32 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12", book="
         full = bool(five) and covered == 5
         summ = {prop: (round(sum((e[prop] or {}).get("proj") or 0 for e in five), 1) if full else None) for prop in ("kills", "hs")}
         out.append({"team": tname, "players": ps, "summary": dict(summ, complete=full, covered=covered, roster=len(ps), basis=basis,
-                                                                  lineup=[e["nick"] for e in five] if five else None)})
+                                                                  lineup=[e["nick"] for e in five] if five else None),
+                    "exposure": team_exposure(ps)})
     return {"match": {"team": team, "opponent": opponent, "start": start, "scope": scope}, "teams": out,
             "at": _dt.now(timezone.utc).isoformat(timespec="seconds")}
+
+
+def team_exposure(players):
+    """Shared exposure of one team's graded lines in a match (both props, every side): only picks with a stake count -
+    a 0-unit Lean is not exposure (2026-10-11: 'same player both props' listed Leans). Leans are counted apart."""
+    picks, leans, both = [], 0, []
+    for e in players:
+        staked = {}
+        for prop in ("kills", "hs"):
+            c = e.get(prop) or {}
+            if c.get("line") is None or not c.get("side"):
+                continue
+            if (c.get("units") or 0) > 0:
+                picks.append(c)
+                staked[prop] = "Over" if c["side"] == "More" else "Under"
+            else:
+                leans += 1
+        if len(staked) == 2:
+            both.append({"nick": e.get("nick"), "kills": staked["kills"], "hs": staked["hs"]})
+    over = sum(1 for c in picks if c["side"] == "More")
+    return {"picks": len(picks), "over": over, "under": len(picks) - over,
+            "units": round(sum(c.get("units") or 0 for c in picks), 2), "leans": leans, "both_props": both}
 
 
 def _row_match_id(row):
@@ -439,7 +501,8 @@ def board_payload(book="underdog"):
                                                      "nick", "state", "edge", "l10_over", "l10_n", "l10_push", "l10_avg",
                                                      "hs_pct", "p_win", "market", "team_name", "opp_name", "match_slug",
                                                      "graded_line", "graded_model", "player_id", "event", "bo", "maps_known",
-                                                     "dstat", "source", "support", "concern", "tonight", "hltv_retry")}))
+                                                     "dstat", "source", "support", "concern", "tonight", "hltv_retry",
+                                                     "cap_grade", "warn")}))
         rows[-1]["scope"] = r.get("scope") or "12"
         x = rows[-1]
         nick = x.get("nick") or x.get("player") or ""
@@ -455,6 +518,12 @@ def board_payload(book="underdog"):
         x["book"] = x.get("book") or "underdog"
         x["match_id"] = _row_match_id(x)         # canonical match id (matchid.py): the same on every platform; None = unlinked
     _cap_same_result(rows)                    # within this platform: a slip is one platform's entry
+    for x in rows:                            # why a stake is capped + warning marker (display only, sorting clean picks first)
+        cg = x.pop("cap_grade", None)
+        cg = _legacy_cap_words(x.get("reason")) if cg is None else cg
+        cut = x.get("cap_n") if (x.get("units_full") or 0) > (x.get("units") or 0) else None   # the cap cut THIS row (0.5U floor)
+        x["cap_reason"] = cap_reason_text(cg if (x.get("units") or 0) > 0 else [], cut)
+        x["flagged"] = bool((x.get("dstat") or ["ok"])[0] in ("verify", "limited") or x.pop("warn", False))
     out = {"book": book, "updated": b["at"], "error": b["error"], "rows": rows, "total": len(b["rows"]),
            "version": picklog.MODEL_VERSION}
     if book == "prizepicks":
@@ -493,20 +562,72 @@ SAME_RESULT_CAP = 3.0   # units (on the 0.5-3U scale), all bets that need the sa
 def _cap_same_result(rows):
     """Bets on several players of one team, same side, in one match are one bet on that match's result
     (an upset or an overtime sinks them all). Their units together are capped at SAME_RESULT_CAP.
-    Real lines Oct 2-6: total +15.75U on 236U staked -> +13.85U on 151U, worst day -6.8U -> -0.4U."""
+    Real lines Oct 2-6: total +15.75U on 236U staked -> +13.85U on 151U, worst day -6.8U -> -0.4U.
+    The cap really holds (2026-10-11 fix: rounding to the nearest quarter and the 0.5U floor pushed groups to 3.25-4.5U):
+    stakes scale to the cap in quarter units, then the largest stakes give back 0.25U at a time (lowest chance first)
+    until the group fits; stakes never go under 0.5U, so when even 0.5U each is too much only the highest-chance
+    picks keep 0.5U and the rest become 0-unit Leans ('same-match cap')."""
     groups = {}
     for r in rows:
         if (r.get("units") or 0) > 0:
             groups.setdefault((r.get("matchup"), r.get("start"), r.get("team"), r.get("side")), []).append(r)
+    q = 0.25
     for lst in groups.values():
         tot = sum(r["units"] for r in lst)
-        if tot <= SAME_RESULT_CAP:
+        if tot <= SAME_RESULT_CAP + 1e-9:
             continue
         f = SAME_RESULT_CAP / tot
         for r in lst:
             r["units_full"] = r["units"]
-            r["units"] = max(0.5, round(r["units"] * f / 0.25) * 0.25)        # quarter units, never below 0.5U
+            r["units"] = max(0.5, round(r["units"] * f / q) * q)        # quarter units, never below 0.5U
             r["cap_n"] = len(lst)
+        # highest chance first; ties by name so the same board always gives the same stakes
+        order = sorted(lst, key=lambda r: (-(r.get("p") or 0), str(r.get("nick") or r.get("player") or "")))
+        keep = int(SAME_RESULT_CAP // 0.5)
+        for r in order[keep:]:                 # even 0.5U each is over the cap: the lowest-chance picks drop to 0U
+            r["units"] = 0.0
+            r["grade"] = "LEAN"
+            r["reason"] = f"0 units: same-match cap ({len(lst)} bets on this team) - {r.get('reason') or ''}".rstrip(" -")
+        while sum(x["units"] for x in lst) > SAME_RESULT_CAP + 1e-9:
+            big = [x for x in order[::-1] if x["units"] > 0.5]       # lowest chance first among the largest stakes
+            if not big:
+                break
+            top = max(x["units"] for x in big)
+            next(x for x in big if x["units"] == top)["units"] -= q
+
+
+def cap_reason_text(reasons, cap_n=None):
+    """'stand-in; same-match cap (4 bets on this team)' - None when nothing capped the stake."""
+    parts = list(reasons or [])
+    if cap_n:
+        parts.append(f"same-match cap ({cap_n} bets on this team)")
+    return "; ".join(parts) or None
+
+
+_WARN_START = ("HLTV database unreachable", "Projection from the older model", "Provisional", "FORM FIGHT", "TAPE FIGHT",
+               "No upcoming match")
+
+
+def has_warning(g):
+    """Any member-visible warning flag on this grade (not the kills-cap note, the last-10 display note, a per-map note or
+    a plain 'last official map N days ago')."""
+    for f in (g or {}).get("flags") or []:
+        t = _public_flag(f)
+        if t and ("caution" in t or "unit size limited" in t or t.startswith(_WARN_START)):
+            return True
+    return False
+
+
+def _legacy_cap_words(reason):
+    """A board row graded before cap_grade existed: the cap named in its verdict reason ('stake capped: RUST')."""
+    m = re.search(r"stake capped: (.+)$", str(reason or ""))
+    if not m:
+        return []
+    w = next((w for k, w in _CAP_WORDS if m.group(1).startswith(k)), None)
+    if w:
+        return [w]                                   # old wording: the internal flag name
+    words = {w for _, w in _CAP_WORDS}
+    return [x for x in m.group(1).split("; ") if x in words]
 
 
 def stake_caps():
@@ -557,8 +678,11 @@ def board_stake(res, prop, scope, line, line_type="standard", book=None):
                 and (r.get("scope") or "12") == scope and float(r.get("line") or -1) == float(line) and r.get("side") == v["side"]
                 and r.get("cap_n") and r.get("units_full") == v["units"] and r["units"] < r["units_full"] and st and comparison._ts(r.get("start"))
                 and abs((comparison._ts(r["start"]) - st).total_seconds()) <= comparison.JOIN_START_MIN * 60):
-            return dict(v, units=r["units"], units_full=r["units_full"], cap_n=r["cap_n"],
-                        cap_team=r.get("team_name") or r.get("team"))
+            out = dict(v, units=r["units"], units_full=r["units_full"], cap_n=r["cap_n"],
+                       cap_team=r.get("team_name") or r.get("team"))
+            if not r["units"]:                  # the cap left no room for this pick: a 0-unit Lean, as on the board
+                out.update(grade="LEAN", reason=r.get("reason") or v.get("reason"))
+            return out
     return v
 
 
@@ -593,6 +717,7 @@ SLIP_STUDIO = studio_flag()       # on by default (owner 2026-10-12); SLIP_STUDI
 STUDIO_BUILDS_PER_MIN = 20        # Build presses per member per minute (a retry with the same idem key is free)
 STUDIO_EVENTS_PER_MIN = 40        # verify + event calls per member per minute (its own bucket - never eats build quota)
 STUDIO_BODY_MAX = 16 * 1024
+STUDIO_CAP_TTL = 5                # /api/slip_studio/capacity: one answer per settings shared by every member for 5 s
 SHADOW_LABEL = "Shadow - not a staking recommendation"
 MODEL_NOT_VALIDATED = "Model: not validated yet - market baseline shown, no recommendation"
 _ML_BLOCK_KEYS = ("available", "prob_a", "bid", "ask", "spread", "bid_size", "ask_size", "depth", "best_depth", "status",
@@ -614,6 +739,12 @@ def start_research():
     try:
         import moneyline
         RESEARCH["moneyline_started"] = moneyline.start()
+        try:                                   # 0U side + HLTV reasoning per moneyline (ml_sides): one bulk read per minute
+            import ml_sides
+            ml_sides.start(moneyline.board)
+            RESEARCH["sides_started"] = True
+        except Exception as e:
+            RESEARCH.setdefault("errors", []).append(f"ml_sides: {type(e).__name__}: {str(e)[:120]}")
     except Exception as e:
         RESEARCH["errors"].append(f"moneyline: {type(e).__name__}: {str(e)[:160]}")
 
@@ -655,12 +786,23 @@ def ml_model_state():
     return dict(_MODEL_STATE)
 
 
+def ml_sides_for(board):
+    """The picked side per board match (memory only - the side picker refreshes in the background)."""
+    import ml_sides
+    return ml_sides.sides_for_board(board, detail=False)
+
+
 def moneylines_payload():
     """The member view of moneyline.board(): slimmed (no raw platform payloads / rules text), team A first."""
     import moneyline
     st = moneyline.status()
+    board = moneyline.board()
+    try:
+        sides = ml_sides_for(board)
+    except Exception:
+        sides = [None] * len(board)
     out = []
-    for e in moneyline.board():
+    for e, side in zip(board, sides):
         pl = {}
         for p, b in (e.get("platforms") or {}).items():
             if not b:
@@ -677,7 +819,8 @@ def moneylines_payload():
                     "tie_possible": bool(e.get("tie_possible")), "bo": e.get("bo"), "scope": "series",
                     "platforms": pl,
                     "baseline": {k: base.get(k) for k in ("prob_a", "platform", "label", "reason", "model_version")},
-                    "disagreement": bool(e.get("disagreement")), "disagreement_gap": e.get("disagreement_gap")})
+                    "disagreement": bool(e.get("disagreement")), "disagreement_gap": e.get("disagreement_gap"),
+                    "side": side})
     out = _merge_unlinked(out)
     return {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "matches": out,
             "sources": {k: {x: v.get(x) for x in ("ok", "stale", "age_s", "last_success", "note", "listings")} for k, v in st.items()},
@@ -826,14 +969,14 @@ def _no_json_constant(c):
 _IDEM_RE = re.compile(r"^[A-Za-z0-9_.:-]{8,64}$")
 _BATCH_RE = re.compile(r"^[0-9a-f]{12}-\d{1,9}$")
 _SLIP_RE = re.compile(r"^[0-9a-f]{12}-\d{1,9}/b\d{1,9}/s\d{1,4}$")
-_SETTING_KEYS = {"book", "side", "stat", "scope", "market", "sizes", "count", "counts", "overlap", "max_uses"}
+_SETTING_KEYS = {"book", "side", "stat", "scope", "market", "sizes", "count", "counts", "overlap", "max_uses", "fill"}
 
 
 def studio_settings(s):
     """Member settings -> slip_builder settings, bounded. ValueError (-> 400) on anything outside the studio's choices."""
     if not isinstance(s, dict) or set(s) - _SETTING_KEYS:
         raise ValueError("settings must be an object with: " + ", ".join(sorted(_SETTING_KEYS)))
-    for k in ("book", "side", "stat", "scope", "market", "overlap"):
+    for k in ("book", "side", "stat", "scope", "market", "overlap", "fill"):
         if k in s and not isinstance(s[k], str):
             raise ValueError(f"{k} must be text")
     if str(s.get("market") or "standard").lower() == "moneyline":
@@ -1023,10 +1166,10 @@ def board_forever():
                     if MEMBER_GRADES[0] > 0:              # members still busy: one board grade at a time
                         with _BOARD_BUSY:
                             res = cs2_scout.grade(r["player"], r["line"], r["prop"], lt, scope=r.get("scope") or "12", team_hint=r.get("team"), opponent=r.get("opponent") or None,
-                                                  faceit_key=faceit_key(), background=True, light=True)
+                                                  match_start=r.get("start"), faceit_key=faceit_key(), background=True, light=True)
                     else:
                         res = cs2_scout.grade(r["player"], r["line"], r["prop"], lt, scope=r.get("scope") or "12", team_hint=r.get("team"), opponent=r.get("opponent") or None, faceit_key=faceit_key(),
-                                              background=True, light=True)
+                                              match_start=r.get("start"), background=True, light=True)
                     if res.get("error"):
                         old = BOARD.get(r["id"]) or {}
                         if old.get("side") and (old.get("nf_retries") or 0) < 3:   # a graded line is not dropped on one failed
@@ -1059,6 +1202,8 @@ def board_forever():
                                       "maps_known": ((res.get("next_match") or {}).get("maps") or [])[:3],
                                       "dstat": comparison.data_status(res.get("grade") or {}, v),
                                       "source": comparison.source_label(res.get("grade") or {}),
+                                      # why the stake is below what its chance earns + any member warning (display only)
+                                      "cap_grade": stake_cap_reasons(g, v), "warn": has_warning(g),
                                       "graded_line": r["line"], "graded_model": picklog.MODEL_VERSION,   # slips: exact line + model
                                       "grade": v.get("grade"), "side": v.get("side"), "p": v.get("p"),
                                       "units": v.get("units"), "proj": g.get("lambda_final"), "state": v.get("state"),
@@ -1220,67 +1365,6 @@ def faceit_key():
         return None
 
 
-def verdict(g):
-    """Always a side: the one the numbers favour, with its grade. Units follow P: B = 0.25U
-    (small edge), C = 0U (loses in testing) but is still a pick."""
-    if not g or "p_more" not in g:
-        return {"side": None, "grade": (g or {}).get("grade", "NO GRADE"), "units": 0.0,
-                "reason": (g or {}).get("reason")}
-    if g["p_more"] != g["p_less"]:
-        side = "More" if g["p_more"] > g["p_less"] else "Less"
-    else:
-        side = "More" if g["lambda_final"] > g["line"] else "Less"
-    # goblin/demon lines have no Less on PrizePicks. If the model expects UNDER, say so (Lean
-    # Under, 0 units - skip it) instead of headlining a More it thinks loses (azukay 17.5 demon:
-    # printed "More 42%", he went under).
-    no_less_side = side == "Less" and g["line_type"] != "standard"
-    p = g["p_more"] if side == "More" else g["p_less"]
-    grade = g["grade"] if side == "More" else (g["grade_less"] if not no_less_side else "C")
-    units = g.get("units", 0) if side == "More" else g.get("units_less", 0)
-    if no_less_side:
-        units = 0.0
-    stat = "headshots" if g.get("prop") == "hs" else "kills"
-    need = g["line"]                        # the cut the grade uses: projection above the line leans More
-    gap = g["lambda_final"] - need          # > 0 More, < 0 Less
-    # member wording (2026-10-10 audit): Over / Under everywhere (never More / Less), chances to 0.1% like every other
-    # chance on the site, projection and gap to 0.1 like the card's Edge
-    ou = "Over" if side == "More" else "Under"
-    if g.get("scout"):
-        return {"side": side, "state": "SCOUT", "grade": "SCOUT", "p": p, "units": 0.0,
-                "confidence": "scout",
-                "reason": f"No upcoming match found for his team - scouting view only. Leans {ou} "
-                          f"({p:.1%}): projection {g['lambda_final']:.1f} vs line {g['line']}"}
-    if no_less_side:
-        why = (f"{g['line_type'].title()} line - only Over is offered here, but the model expects "
-               f"Under ({p:.1%}); Over is only {g['p_more']:.1%}. Skip it.")
-    elif g.get("form_fight"):
-        why = f"FORM FIGHT - his last 10 matches at this line disagree with the projection - 0 units"
-    elif g.get("tape_fight"):
-        why = (f"TAPE FIGHT - model {ou} {p:.1%}, but his recent record at this line disagrees - max 0.5U")
-    elif units > 0:
-        why = f"Projection {g['lambda_final']:.1f} vs line {need:g} ({gap:+.1f} {stat})"
-    else:
-        why = (f"Projection {g['lambda_final']:.1f} vs line {need:g} ({gap:+.1f} {stat}) is small next "
-               f"to how much his totals swing from match to match - leans {ou} {p:.1%}, 0 units")
-    if g.get("zero_reason") and not no_less_side:
-        # a gate (AWPer on HS, stand-in, transfer, tiny sample): still a side, never "no play"
-        grade, units = "LEAN", 0.0
-        why = (f"Leans {ou} {p:.1%} (projection {g['lambda_final']:.1f} vs line {need:g}) - 0 units: "
-               f"{g['zero_reason']}")
-    from grader import units_for_p
-    if units and units < units_for_p(p) and "max" not in why:      # a cap cut the stake: say which one
-        cap = next((f for f in g.get("flags", []) if re.search(r"max [0-9.]+U|capped [0-9.]+U|unit size limited", f)), None)
-        if cap:
-            why += f" · stake capped: {cap.split(' - ')[0].split(':')[0]}"
-    if grade == "C" or (not units and grade not in ("LEAN", "C")):
-        # owner 2026-09-29: under the bar the card says "Lean Over" / "Lean Under" instead of a C; a
-        # letter grade with 0 units (FORM FIGHT, gates) reads as a Lean too - never "B · 0U"
-        grade = "LEAN"
-    return {"side": side, "state": "GRADE", "grade": grade, "p": p, "units": units, "reason": why,
-            "market": g.get("market_quality"),
-            "confidence": "high" if p >= 0.68 else "medium" if p >= 0.63 else "small" if p >= 0.57 else "low"}
-
-
 def public(res):
     """What members see: drop admin-only details."""
     fi = res.pop("faceit_identity", None) or {}
@@ -1291,6 +1375,7 @@ def public(res):
     res.pop("_h2h_opp", None)
     res.pop("_regional_meta", None)
     (res.get("player_block") or {}).pop("_rf_kpr", None)
+    (res.get("player_block") or {}).pop("_older_maps", None)
     (res.get("player_block") or {}).pop("_hltv_overall_tried", None)
     res.pop("_opp_roster", None)
     (res.get("player_block") or {}).pop("_env", None)
@@ -1347,6 +1432,8 @@ def _public_flag(f):
         return (f"Last official map {days} days ago" + (" - extra caution" if f.startswith("RUST") else "")) if days else None
     if f.startswith("TAPE:"):
         return "Projection differs from his last-10 average"
+    if f.startswith("HLTV STALE: "):                # its text is written for members (cs2_scout._hltv_staleness)
+        return f[len("HLTV STALE: "):]
     if ": no Maps 1-2 on this map" in f:
         return f.split(" - ")[0]
     for start, text in _FLAG_RULES:
@@ -1498,18 +1585,21 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/auth/logout":
                 return self.redirect("/", [f"{whop_auth.COOKIE}=; Max-Age=0; Path=/"])
             if u.path in ("/api/search", "/api/grade", "/api/board", "/api/line_check", "/api/match_compare", "/api/moneylines",
-                          "/api/slip_studio/batch") and not self.allowed():
+                          "/api/slip_studio/batch", "/api/slip_studio/capacity") and not self.allowed():
                 sess = self.member()
                 return self.send(401, {"error": "members_only", "signed_in": bool(sess),
                                        "upgrade": whop_auth.upgrade_url()})
             if u.path == "/api/search":
                 return self.search(q.get("q", "").strip())
-            if u.path.startswith("/api/") and u.path not in ("/api/board", "/api/moneylines", "/api/slip_studio/batch"):
+            if u.path.startswith("/api/") and u.path not in ("/api/board", "/api/moneylines", "/api/slip_studio/batch",
+                                                             "/api/slip_studio/capacity"):
                 LAST_MEMBER[0] = time.time()      # research reads are cheap: they don't make the board worker step aside
             if u.path == "/api/moneylines":
                 return self.moneylines()
             if u.path == "/api/slip_studio/batch":
                 return self.studio_batch(q)
+            if u.path == "/api/slip_studio/capacity":
+                return self.studio_capacity(q)
             if u.path == "/api/match_compare":
                 bk_ = "prizepicks" if q.get("book") == "prizepicks" else "underdog"
                 k_ = ("mcmp", q.get("team_slug"), q.get("opp_slug"), q.get("start"), q.get("maps") or "12", bk_)
@@ -1543,6 +1633,11 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/admin":
                 return self.admin(q)
             if u.path == "/admin/moneylines_status" and self.authed(q.get("token")):
+                try:
+                    import ml_sides
+                    q["_sides"] = ml_sides.status()
+                except Exception as e:
+                    q["_sides"] = {"error": str(e)[:80]}
                 return self.send(200, moneylines_status())
             if u.path == "/admin/ml_eval" and self.authed(q.get("token")):
                 return self.send(200, ml_eval_admin(q.get("refresh") == "1"))
@@ -1788,7 +1883,8 @@ class Handler(BaseHTTPRequestHandler):
                     con.close()
             if u.path == "/admin/recheck_hltv" and self.authed(q.get("token")):
                 changed = picklog.recheck_with_hltv()
-                return self.send(200, {"changed": len(changed), "rows": changed})
+                return self.send(200, {"changed": sum(1 for x in changed if not x.get("review")),
+                                       "review": sum(1 for x in changed if x.get("review")), "rows": changed})
             if u.path == "/admin/ud_moves" and self.authed(q.get("token")):
                 import sqlite3
                 db = BOARD_FILE.parent / "ud_moves.db"
@@ -2170,6 +2266,30 @@ class Handler(BaseHTTPRequestHandler):
         return self.send(200, dict(b, current=(b["batch_id"] == cur), settled_batches=settled_batches(),
                                    track_record=studio_track_record(), builder_version=slip_builder.VERSION))
 
+    def studio_capacity(self, q):
+        """GET /api/slip_studio/capacity?book=&side=&stat=&scope=[&market=]: eligible lines / matches and the most slips of each
+        size they support with no repeats. Members only (like the batch); built from the shared graded-board snapshot and
+        shared for STUDIO_CAP_TTL s per settings - no upstream call and no board rebuild per request."""
+        if not SLIP_STUDIO:
+            return self.send(404, {"error": "slip_studio_off"})
+        if not self.studio_member():
+            return self.send(401, {"error": "members_only"})
+        raw = {k: q[k] for k in ("book", "side", "stat", "scope", "market") if q.get(k)}
+        try:
+            st = studio_settings(raw)
+        except ValueError as e:
+            return self.send(400, {"error": str(e)})
+        import slip_builder
+        key = ("studio_cap",) + tuple(st[k] for k in ("book", "side", "stat", "scope", "market"))
+
+        def compute():
+            gb = graded_board(st["book"])
+            out = slip_builder.capacity(gb.get("rows") or [], st, model=gb.get("version"))
+            out["board"] = {"book": st["book"], "updated": gb.get("updated"), "graded_rows": len(gb.get("rows") or [])}
+            return 200, json.dumps(out, default=str).encode()
+        st_, body_ = shared(key, compute, ttl=STUDIO_CAP_TTL)
+        return self.send(st_, body_)
+
     def studio_post(self, path, n):
         """POST /api/slip_studio/build | verify | event (JSON bodies, members only, every field bounded)."""
         if n > STUDIO_BODY_MAX:
@@ -2331,10 +2451,13 @@ class Handler(BaseHTTPRequestHandler):
         slug, match = q.get("slug") or None, q.get("match") or None
         opp = (q.get("opponent") or "")[:60].strip() or None
         team = (q.get("team") or "")[:60].strip() or None     # board click: the team the board graded him for (namesakes)
+        mstart = (q.get("start") or "")[:32].strip() or None   # board click: the line's start (a misspelled book opponent)
+        if mstart and not re.fullmatch(r"[0-9T:.+\-Z ]{10,32}", mstart):
+            mstart = None
         pkey = (slug or name).lower()
         # the card's platform (board / match-players clicks send it; typed cards = Underdog): its stake cap is its own board's
         book = "prizepicks" if q.get("book") == "prizepicks" or lt in ("goblin", "demon") else "underdog"
-        key = (pkey, line, prop, lt, match, (opp or "").lower(), scope, (team or "").lower(), book)
+        key = (pkey, line, prop, lt, match, (opp or "").lower(), scope, (team or "").lower(), book, (mstart or "")[:16] if opp else "")
 
         t_in = time.time()
 
@@ -2349,11 +2472,18 @@ class Handler(BaseHTTPRequestHandler):
                     tm["slot"], tm["warm"] = round(time.time() - t0, 2), warm
                     t0 = time.time()
                     res = cs2_scout.grade(name, line, prop, lt, slug=slug, faceit_key=faceit_key(), scope=scope,
-                                          match=match, opponent=opp, team_hint=team)
+                                          match=match, opponent=opp, team_hint=team, match_start=mstart)
                     tm["grade"] = round(time.time() - t0, 2)
             t0 = time.time()
             if res.get("error"):
-                return 404, json.dumps({"error": res["error"][0].upper() + res["error"][1:]}).encode()
+                body_ = {"error": res["error"][0].upper() + res["error"][1:]}
+                if "check the spelling" in res["error"]:    # "Did you mean ...?" - real nicks from the HLTV index (in memory)
+                    try:
+                        import hltv
+                        body_["suggestions"] = hltv.suggest_nicks(name, 5)
+                    except Exception:
+                        body_["suggestions"] = []
+                return 404, json.dumps(body_).encode()
             pb_ = res.get("player_block") or {}
             mark_warm(pkey, name, (pb_.get("player") or {}).get("slug"), (pb_.get("player") or {}).get("nick"))
             if scope == "123":                           # display only: his Maps 1-3 record (never a grade input)
@@ -2384,6 +2514,18 @@ class Handler(BaseHTTPRequestHandler):
             tm["log"] = round(time.time() - t0, 2)
             try:                                         # after logging: the log keeps the grader's own stake
                 res["verdict"] = board_stake(res, prop, scope, line, lt, book)
+                vv = res["verdict"]
+                if isinstance(vv, dict) and vv.get("side"):          # the board row's cap words, on the card too (new dict:
+                    g_ = res.get("grade") or {}                      # the logged verdict is being written in the background)
+                    own = dict(vv, units=vv.get("units_full") or vv.get("units"))
+                    res["verdict"] = dict(vv, cap_reason=cap_reason_text(stake_cap_reasons(g_, own) if (vv.get("units") or 0) > 0 else [],
+                                                                         vv.get("cap_n")),
+                                          flagged=bool(comparison.data_status(g_, vv)[0] in ("verify", "limited") or has_warning(g_)))
+                vv = res["verdict"]
+                for x in res.get("ladder") or []:        # the ladder's own line = the card's verdict (same-match cap included)
+                    if isinstance(vv, dict) and vv.get("side") and float(x.get("line") or -1) == float(line):
+                        x.update(side=vv["side"], p=vv.get("p"), grade=vv.get("grade"), units=vv.get("units") or 0.0,
+                                 state=vv.get("state"))
                 if outage:                               # outage: tell the member what the board still shows
                     res["hltv_outage"] = board_last_hltv(res, prop, scope)
             except Exception:

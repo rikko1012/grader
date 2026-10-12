@@ -791,6 +791,10 @@ def grade_leg(d, cfg=CONFIG):
         1 - pm, min(unit_cap if unit_cap is not None else 9, tcap) if tape == "Less" else unit_cap)
     for z in zero_units:
         flags.append(f"0 units: {z}")
+    # what each side's chance alone earns (unrounded chance, no caps) - display only: lets the card name the cap that
+    # really cut a stake (server.stake_cap_reasons); p_more is rounded to 3 decimals and can sit across a units boundary
+    out["units_free"] = units_for_p(pm)
+    out["units_free_less"] = units_for_p(1 - pm) if less_ok else 0.0
     out["zero_reason"] = "; ".join(z for z in zero_units if not z.startswith("SCOUT")) or None
     status = "SCOUT" if scout else "PLAY" if u_more > 0 else "NO PLAY"
 

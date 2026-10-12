@@ -44,6 +44,7 @@ from bo3 import BO3
 import kvstore
 from faceit_resolve import Resolver
 from grader import CONFIG as GRADER_CONFIG, grade_leg
+import pick_verdict
 from polymarket import match_odds, name_match
 
 BASE = Path(__file__).resolve().parent
@@ -314,6 +315,11 @@ def map_rows(b, player_id, matches, want_games):
             continue
         my_team = (me.get("team_clan") or {}).get("team_id")
         opp_id = next((t for t in teams if t != my_team), None)
+        played = (g.get("winner_clan_score") or 0) + (g.get("loser_clan_score") or 0)
+        if 0 < played < 13:
+            # a map can't end under 13 rounds (MR12): a forfeit / technical win (BO3.gg 'done' 1-0, 2026-10-11 audit:
+            # foggers' de_anubis vs Ground Zero, 1 round) - not a played map, kept out of every total and KPR
+            continue
         rows.append({
             "game_id": g["id"], "match_id": mt["id"], "match": mt.get("slug"),
             "date": (g.get("begin_at") or mt.get("start_date") or "")[:10],
@@ -426,7 +432,7 @@ def run_player(b, name, args):
         if len(exact) > 1:                         # two pros with this name (JBa): pick by team
             slug = _pick_namesake(b, exact, getattr(args, "team_hint", None)) or slug
     else:
-        raise LookupError(f"no pro player called '{name}' on BO3.gg - check the spelling")
+        raise LookupError(f"no pro player called '{name}' - check the spelling")
     p = b.player(slug)
     team = p.get("team") or {}
     joined = datetime.fromisoformat(p["joined_team_at"][:10]).date() if p.get("joined_team_at") else None
@@ -562,6 +568,18 @@ def run_player(b, name, args):
         return (g.get("number") or 9) <= 2
     recent_rows = map_rows(b, p["id"], matches, recent)
     out["recent_maps"] = recent_rows
+    # his last 10 matches include BO1s / forfeits: the last-10 reaches back into older BO3.gg matches (12 months) for the
+    # series those leave out - read here, where the BO3.gg client is, only when the last 10 fall short (2026-10-11 audit)
+    n_ok = sum(1 for mid in {r["match_id"] for r in recent_rows} if sum(1 for r in recent_rows if r["match_id"] == mid) >= 2)
+    out["_older_maps"] = []
+    if n_ok < RECENT_MATCHES:
+        cut = (date.today() - timedelta(days=365)).isoformat()
+        more = [mt for mt in matches if mt.get("id") not in seen and mt.get("status") == "finished"
+                and (mt.get("start_date") or "")[:10] >= cut][:2 * (RECENT_MATCHES - n_ok) + 2]
+        try:
+            out["_older_maps"] = map_rows(b, p["id"], more, lambda mt, g: (g.get("number") or 9) <= 2) if more else []
+        except Exception:
+            out["_older_maps"] = []
     out["_rf_kpr"] = overall.get("kpr")          # kept so a new line only redoes the cheap part
     out["recent_form"] = recent_form(recent_rows, overall.get("kpr"), args.line,
                                      "headshots" if getattr(args, "prop", "kills") == "hs" else "kills")
@@ -966,6 +984,12 @@ def h2h_rows(b, player_block, opp_query, opp_id=None):
     return [r for r in rows if (r.get("date") or "") >= cut]
 
 
+def active_roster(players):
+    """Tonight's opponent lineup for the same-roster test: players only, benched (BO3.gg status 2) left out - the owner rule
+    'benched players are ignored' (2026-10-11 audit: Johnny Speeds' benched trio made a 0-overlap meeting 'same roster')."""
+    return [x.get("slug") for x in (players or []) if not x.get("is_coach") and x.get("status") != 2]
+
+
 H2H_DAYS = 365      # head-to-head: last 12 months only (owner 2026-10-06: older meetings are too far back)
 SAME_ROSTER = 4   # past meeting counts only if the opponent fielded 4+ of today's players (HLTV year test)
 
@@ -1069,6 +1093,44 @@ def _attach_hltv(pb):
     except Exception as e:   # HLTV data is optional: it can never break a grade
         import hltv
         pb["hltv"] = {"found": False, "error": hltv.err_text(e), "transient": hltv.is_transient(e)}
+
+
+from comparison import JOIN_START_MIN    # same match: scheduled starts within 45 min (one rule site-wide)
+
+
+def _same_team(a, b):
+    """Exact team-name variants only (hltv.team_name_variants: 'Nordic Partners Gaming' = 'Nordic Partners'); never fuzzy -
+    an academy is another team."""
+    try:
+        import hltv
+        va, vb = set(hltv.team_name_variants(a or "")), set(hltv.team_name_variants(b or ""))
+        if va and vb:
+            return bool(va & vb)
+    except Exception:
+        pass
+    return bool(a and b) and norm(a) == norm(b)
+
+
+def _by_start(items, start, start_of):
+    """The items (upcoming matches) whose start is within JOIN_START_MIN of the book's start time - a book line names its
+    match by opponent AND start, so a misspelled opponent still finds the one match at that time. [] without a start, or
+    when several different matches fit (never guess between them)."""
+    st = _iso(start)
+    if not st:
+        return []
+    if st.tzinfo is None:
+        st = st.replace(tzinfo=timezone.utc)
+    out = []
+    for it in items:
+        s0 = start_of(it)
+        s0 = s0 if isinstance(s0, datetime) else _iso(s0)
+        if s0 is None:
+            continue
+        if s0.tzinfo is None:
+            s0 = s0.replace(tzinfo=timezone.utc)
+        if abs((s0 - st).total_seconds()) <= JOIN_START_MIN * 60:
+            out.append(it)
+    return out if len(out) == 1 else []
 
 
 def _hltv_schedule(team_names, member_opp=None):
@@ -1204,7 +1266,14 @@ def _perf_input_once(pb, args, sc):
         out = perf_live.projection((pb.get("player") or {}).get("nick"), pb.get("playing_for") or pb.get("current_team"),
                                    getattr(args, "opponent", None), None if tonight is None else tonight == "lan",
                                    sc, "hs" if args.prop == "hs" else "kills", day)
-        if out.get("error") and "not found in HLTV" in out["error"]:
+        no_hltv = bool(out.get("error") and "not found in HLTV" in out["error"])
+        if not out.get("error") and (out.get("player_maps") == 0 or ("newest_map_day" in out and out["newest_map_day"] is None)):
+            # HLTV knows the player but has no usable map before the match day (all older than 420 days, or only
+            # substitution maps): that is no HLTV history too - not a pro-average projection (2026-10-11 audit)
+            no_hltv = True
+            out = {"error": f"player {(pb.get('player') or {}).get('nick')!r} has no HLTV maps in the last 420 days",
+                   "hltv_player_ids": out.get("hltv_player_ids")}
+        if no_hltv:
             # perf-2-bo3 (live, provisional): the same model on his BO3.gg maps when HLTV has no history
             me = pb.get("_match_env") or {}
             rows = [(date.fromisoformat(r["date"]).toordinal(), r["kills"], r["rounds"], r.get("headshots"),
@@ -1220,9 +1289,13 @@ def _perf_input_once(pb, args, sc):
                 pr_ = "hs" if args.prop == "hs" else "kills"
                 bo3 = perf.project(rows, om, lan_, day, sc, pr_, version=perf.VERSION + "-bo3")
                 bo3.update(source="BO3.gg maps (HLTV has no history)", player_maps=len(rows),
-                           hltv_opp_team=tid, hltv_error=out["error"],
+                           hltv_opp_team=tid, hltv_error=out["error"], hltv_player_ids=out.get("hltv_player_ids"),
+                           opp_maps=len(om), opp_known=bool(om),
                            g7=perf_live.g7_fields(perf.project(rows, om, lan_, day, sc, pr_,
                                                               perf.PARAMS_PERF1, perf.SPREAD_PERF1, "perf-1-bo3")))
+                if not om:
+                    dq = bo3.get("data_quality")
+                    bo3["data_quality"] = ((dq + "; ") if dq not in (None, "ok") else "") + ("opponent not in HLTV" if not tid else "opponent has no HLTV maps") + " - average opponent"
                 return bo3
         return out                         # {"error": ...} when unavailable - the grader says so instead of silently falling back
 
@@ -1571,7 +1644,7 @@ def main():
 
 
 def grade(name, line, prop="kills", line_type="standard", slug=None, faceit_key=None, ttl=12,
-          background=False, match=None, opponent=None, light=False, scope="12", team_hint=None):
+          background=False, match=None, opponent=None, light=False, scope="12", team_hint=None, match_start=None):
     """One-call entry point for the web interface: everything 'full' does, returned as a dict.
     background=True (pre-loading) gives way to member look-ups."""
     args = argparse.Namespace(
@@ -1579,13 +1652,14 @@ def grade(name, line, prop="kills", line_type="standard", slug=None, faceit_key=
         prop=prop, line_type=line_type, team_ml=None, opp_ml=None, faceit=None,
         faceit_key=faceit_key or os.environ.get("FACEIT_API_KEY"), n=20, refresh=False, ttl=ttl,
         match=match, member_opponent=(opponent or "").strip() or None, light=light,
-        scope=scope if scope in ("12", "123", "1") else "12", team_hint=team_hint)
+        scope=scope if scope in ("12", "123", "1") else "12", team_hint=team_hint,
+        member_start=(str(match_start).strip() or None) if match_start and opponent else None)
     args.opponent = args.member_opponent
     # Shared context (stats, match, maps, odds, H2H series, FACEIT, CS API) is the same for every
     # line and prop of a player: built once, reused for CONTEXT_TTL seconds - a new line only
     # redoes finish_line(). Keeps hundreds of members on the same slate cheap.
     ckey = ((name or "").strip().lower(), (slug or "").lower(), match, _ckey_name(args.member_opponent), _ckey_name(team_hint),
-            bool(args.faceit_key))     # shared by member grades and both boards (same data snapshot)
+            bool(args.faceit_key), (args.member_start or "")[:16])     # shared by member grades and both boards (same data snapshot)
     hit = _CONTEXT.get(ckey)
     t0 = time.time()
     age = time.time() - hit[0] if hit else None
@@ -1779,6 +1853,25 @@ def run(args, res, b, ttl):
                      if not isinstance(tid, int) or tid == newest or lists_him(tid)
                      or (tid == pb.get("team_id") and pb.get("on_profile_roster"))
                      or played_their_last(tid)}
+        def team_change(tid, tname):
+            """He plays tonight's match for tname, not his BO3.gg profile team: is it his team now, a stand-in or a move?
+            tid None = a team BO3.gg has no id for (match found on HLTV / Polymarket / PandaScore)."""
+            if tid is not None and lists_him(tid):
+                # that team's roster lists him: it IS his team - BO3.gg's profile is behind
+                pb["team_note"] = f"BO3.gg profile still shows {pb.get('current_team')}; {tname}'s roster lists him"
+                pb["current_team"], pb["team_id"] = tname, tid
+                pb["roster_confirmed"] = newest == tid        # listed + his last map was for them
+            elif pb.get("on_profile_roster"):
+                pb["standin_for"] = tname                     # real stand-in: his own team still lists him
+            else:
+                # left his profile team, not on the new roster page yet: a move, not a stand-in
+                pb["team_note"] = (f"Now playing for {tname} (not on its BO3.gg roster page yet); "
+                                   f"profile still shows {pb.get('current_team')}")
+                pb["current_team"] = tname
+                if tid is not None:
+                    pb["team_id"] = tid
+                pb["roster_confirmed"] = False                # his profile team's roster says nothing about this one
+
         options = []
         for tid, tname in teams.items():
             if not isinstance(tid, int):
@@ -1787,7 +1880,10 @@ def run(args, res, b, ttl):
                 options.append((nm_["start"] or "9999", tid, tname, nm_))
         options.sort(key=lambda o: o[0])
         if member_opp:   # the member named the opponent: only matches against them
-            options = [o for o in options if name_match(member_opp, o[3]["opponent"])]
+            named = [o for o in options if name_match(member_opp, o[3]["opponent"])]
+            # the book's opponent can be misspelled (PrizePicks 'Xl' for XI, 2026-10-11): with the book's start time, his
+            # team's match starting within JOIN_START_MIN of it is that match (the opponent string only breaks ties)
+            options = named or _by_start(options, getattr(args, "member_start", None), lambda o: o[3].get("start"))
         # two+ matches in a day: grade the one the member picked, else the earliest; list the rest
         res["match_options"] = [{"slug": o[3]["slug"], "opponent": o[3]["opponent"], "start": o[3]["start"],
                                  "team": o[2], "event": o[3]["event"]} for o in options[:6]]
@@ -1797,6 +1893,8 @@ def run(args, res, b, ttl):
         # HLTV's schedule (hltv-scraper database) is the most complete: it fills in matches BO3.gg
         # doesn't have, and corrects BO3.gg when it's missing his team's real next match.
         hl = _hltv_schedule([n for n in teams.values() if n], member_opp)
+        if member_opp and not hl and getattr(args, "member_start", None):     # misspelled book opponent (see above)
+            hl = _by_start(_hltv_schedule([n for n in teams.values() if n]), args.member_start, lambda m: m.get("start"))
         if chosen and hl and not want and not member_opp:
             chosen, note = _hltv_check_bo3(chosen, options, hl[0])
             if note:
@@ -1845,13 +1943,20 @@ def run(args, res, b, ttl):
                 except Exception:
                     pass
             if pm:
+                pm = dict(pm, team=str(pm.get("team") or "").strip(), opponent=str(pm.get("opponent") or "").strip())
                 nxt = {"start": pm.get("start"), "slug": None, "opponent": pm["opponent"],
                        "event": pm.get("title"), "maps": [], "source": src.lower(),
                        "opponent_id": None, "opponent_slug": None,
                        "hltv_match": pm.get("hltv_match")}   # logged + settled from HLTV (picklog)
                 pb["playing_for"] = pm["team"]
-                if no_team or norm(pm["team"]) != norm(pb.get("current_team") or ""):
+                if no_team:
                     pb["current_team"] = pm["team"]
+                elif not _same_team(pm["team"], pb.get("current_team")):
+                    # a match for another team than his BO3.gg profile team: the same stand-in / roster rules as a BO3.gg
+                    # match (2026-10-11 audit: Fajr was graded for Nordic Partners with LPH's roster, 'Roster: Confirmed'
+                    # and no stand-in cap, because these rules ran only for BO3.gg matches)
+                    tid_ = next((t for t, n in teams.items() if isinstance(t, int) and n and _same_team(n, pm["team"])), None)
+                    team_change(tid_, pm["team"])
                 res["match_note"] = res.get("schedule_correction") or (
                     f"Match not on BO3.gg - found on {src}. Maps unknown until the veto: all-maps numbers used.")
         if chosen:
@@ -1861,18 +1966,7 @@ def run(args, res, b, ttl):
                 pb["current_team"], pb["team_id"] = tname, tid     # the team playing the named match
             elif tid != pb["team_id"]:
                 slugs.setdefault(tid, nxt.get("team_slug"))
-                if lists_him(tid):
-                    # that team's roster lists him: it IS his team - BO3.gg's profile is behind
-                    pb["team_note"] = f"BO3.gg profile still shows {pb.get('current_team')}; {tname}'s roster lists him"
-                    pb["current_team"], pb["team_id"] = tname, tid
-                    pb["roster_confirmed"] = newest == tid        # listed + his last map was for them
-                elif pb.get("on_profile_roster"):
-                    pb["standin_for"] = tname                     # real stand-in: his own team still lists him
-                else:
-                    # left his profile team, not on the new roster page yet: a move, not a stand-in
-                    pb["team_note"] = (f"Now playing for {tname} (not on its BO3.gg roster page yet); "
-                                       f"profile still shows {pb.get('current_team')}")
-                    pb["current_team"], pb["team_id"] = tname, tid
+                team_change(tid, tname)
         pb["scout"] = nxt is None          # no upcoming match -> SCOUT card, no grade/units
         if nxt:
             if b.background:   # shadow feature: computed by the pre-loader, never on a member's clock
@@ -1921,8 +2015,7 @@ def run(args, res, b, ttl):
         stat = "headshots" if args.prop == "hs" else "kills"
         rows = h2h_rows(b, pb, args.opponent, opp_id)
         try:                                   # tonight's opponent roster, to keep only same-roster meetings
-            res["_opp_roster"] = [x.get("slug") for x in (b.team(opp_slug).get("players") or [])
-                                  if not x.get("is_coach")] if opp_slug else None
+            res["_opp_roster"] = active_roster(b.team(opp_slug).get("players")) if opp_slug else None
         except Exception:
             res["_opp_roster"] = None
         # Gate C nationality tag + Phase 7 regional extension
@@ -1990,34 +2083,99 @@ def run(args, res, b, ttl):
         finish_line(res, args)
 
 
+def _hltv_since(pb, back_days=None):
+    """The start date of his HLTV series read (the last-10 and H2H share one cached read)."""
+    rows = pb.get("recent_maps") or []
+    since = (min(r["date"] for r in rows) if rows else (date.today() - timedelta(days=120)).isoformat())
+    if back_days:                                   # reach further back on HLTV (last 10 in one environment)
+        since = min(since, (date.today() - timedelta(days=back_days)).isoformat())
+    return (date.fromisoformat(since) - timedelta(days=1)).isoformat()
+
+
+def _hltv_series(pb, back_days=None):
+    try:
+        import hltv
+        return hltv.recent_series((pb.get("player") or {}).get("nick"), pb.get("current_team"), _hltv_since(pb, back_days))
+    except Exception:
+        return []
+
+
+def _older_bo3(pb, rows, back_days):
+    """rows + his BO3.gg Maps 1-2 rows from matches older than his last 10 (pb['_older_maps'], read with the player block)
+    inside back_days."""
+    have = {r["match_id"] for r in rows}
+    cut = (date.today() - timedelta(days=back_days)).isoformat()
+    return rows + [r for r in pb.get("_older_maps") or [] if r["match_id"] not in have and (r.get("date") or "") >= cut]
+
+
+def _same_series(h, x):
+    """An HLTV map row and a BO3.gg map row from the same series: within a day, same opponent (exact name variants)."""
+    try:
+        near = abs((date.fromisoformat(h["date"]) - date.fromisoformat(x["date"])).days) <= 1
+    except (TypeError, ValueError):
+        return False
+    return near and (name_match(h["opponent"], x["opponent"] or "") >= 2 or name_match(x["opponent"] or "", h["opponent"]) >= 2)
+
+
+def _hltv_h2h(pb, rows, opponent):
+    """Head-to-head / regional rows with HLTV's numbers wherever HLTV has the series (the last-10 does the same - one
+    series, one total on the card), plus meetings with tonight's opponent only HLTV has (exact name variants, last
+    H2H_DAYS). BO3.gg's lineup / regional fields stay (the same-roster test reads them). 2026-10-11 audit."""
+    hl = _hltv_series(pb, 365)
+    if not hl:
+        return rows
+    by_match = {}
+    for r in hl:
+        by_match.setdefault(r["match_id"], []).append(r)
+    out, used = [], set()
+    groups = {}
+    for r in rows:
+        groups.setdefault(r["match_id"], []).append(r)
+    for mid, maps in groups.items():
+        twin = next((m for m, hr in by_match.items() if _same_series(hr[0], maps[0])), None)
+        if twin is None:
+            out += maps
+            continue
+        used.add(twin)
+        hnum = {h["number"]: h for h in by_match[twin]}
+        for r in maps:
+            h = hnum.get(r.get("number"))
+            if h is None:
+                out.append(r)
+                continue
+            out.append(dict(r, map=h["map"], won=h["won"], rounds=h["rounds"], source="hltv", hltv_match=h.get("hltv_match"),
+                            kills=h["kills"] if h["kills"] is not None else r.get("kills"),
+                            headshots=h["headshots"] if h["headshots"] is not None else r.get("headshots")))
+    if opponent:
+        import hltv
+        cut = (date.today() - timedelta(days=H2H_DAYS)).isoformat()
+        for m, hr in by_match.items():
+            if m in used or hr[0]["date"] < cut or not hltv.same_team(opponent, hr[0]["opponent"]):
+                continue
+            if any(x["match_id"] == m for x in out):
+                continue
+            out += [dict(h, regional=False) for h in hr]                     # a meeting only HLTV has
+    return out
+
+
 def _form_rows(pb, stat="kills", keep_n=RECENT_MATCHES, back_days=None):
     """His recent Maps 1-2 rows, newest first, RECENT_MATCHES series in total: BO3.gg's, with HLTV's
     numbers swapped in for every match HLTV also has (HLTV is the official record - BO3.gg's quick
     scoreboards and map order are sometimes off), plus series only HLTV has (events BO3.gg doesn't
     cover, e.g. CIS LANs). Kept out of pb["recent_maps"]: team / stand-in checks use BO3.gg's ids."""
     rows = list(pb.get("recent_maps") or [])
-    try:
-        import hltv
-        since = (min(r["date"] for r in rows) if rows else (date.today() - timedelta(days=120)).isoformat())
-        if back_days:                                   # reach further back on HLTV (last 10 in one environment)
-            since = min(since, (date.today() - timedelta(days=back_days)).isoformat())
-        since = (date.fromisoformat(since) - timedelta(days=1)).isoformat()
-        hl = hltv.recent_series((pb.get("player") or {}).get("nick"), pb.get("current_team"), since)
-    except Exception:
-        hl = []
+    hl = _hltv_series(pb, back_days)
+    if back_days and len({r["match_id"] for r in _usable_series(rows, stat, 2)}) < keep_n:
+        # BO3.gg's last 10 matches include BO1s and other-setting series: reach back into his older BO3.gg matches
+        # (already loaded for H2H) for the same window as HLTV (2026-10-11 audit: xureba showed 7 of 10)
+        rows = _older_bo3(pb, rows, back_days)
     if not hl:
         return rows
     by_match = {}
     for r in hl:
         by_match.setdefault(r["match_id"], []).append(r)
 
-    def same(h, x):
-        try:
-            near = abs((date.fromisoformat(h["date"]) - date.fromisoformat(x["date"])).days) <= 1
-        except ValueError:
-            return False
-        return near and (name_match(h["opponent"], x["opponent"] or "") >= 2 or name_match(x["opponent"] or "", h["opponent"]) >= 2)
-
+    same = _same_series
     extra = []
     for mid, hrows in by_match.items():
         usable = all(r[stat] is not None for r in hrows)
@@ -2112,6 +2270,32 @@ def _hltv_only_overall(pb):
     pb["_rf_kpr"] = round(k / r, 3)
 
 
+def _hltv_staleness(g, pf, pb):
+    """HLTV projection whose history ends well before his BO3.gg matches (2026-10-11 audit: damyo / foggers got A- Unders
+    from HLTV maps for their old teams that end months / weeks before 10 recent BO3.gg series, and nothing said so).
+    Context only - the projection and the stake are unchanged (switching the source is the owner's call and needs a
+    chronological test); the grade gets a member-visible flag, the board a 'verify' data status and the source label
+    the date HLTV's history ends."""
+    if not isinstance(pf, dict) or pf.get("error") or str(pf.get("version") or "").endswith("-bo3"):
+        return
+    nd = pf.get("newest_map_day")
+    if not nd or not str(g.get("projection_source") or "").startswith("perf"):
+        return
+    import hltv
+    ends = date.fromordinal(int(nd))
+    newer = sorted({r.get("match_id") or r.get("date") for r in pb.get("recent_maps") or []
+                    if r.get("date") and r["date"][:10] > ends.isoformat()})
+    last = max((r["date"][:10] for r in pb.get("recent_maps") or [] if r.get("date")), default=None)
+    if not last or len(newer) < 2 or (date.fromisoformat(last) - ends).days <= hltv.STALE_DAYS:
+        return
+    team = (pb.get("hltv") or {}).get("team")
+    tail = f" (for {team})" if team and not _same_team(team, pb.get("playing_for") or pb.get("current_team")) else ""
+    g["hltv_ends"] = ends.isoformat()
+    g.setdefault("flags", []).append(
+        f"HLTV STALE: HLTV history ends {ends.isoformat()}{tail} - BO3.gg has {len(newer)} newer matches (to {last}) "
+        f"that the projection doesn't include - extra caution")
+
+
 def _ladder(res, pb, args):
     """The same grade at nearby lines (exact: the full grader at each line, his record re-counted)."""
     gi = res.get("grader_inputs") or {}
@@ -2132,9 +2316,11 @@ def _ladder(res, pb, args):
             continue
         if "p_more" not in g:
             continue
-        more = g["p_more"] >= g["p_less"]
-        out.append({"line": ln, "side": "More" if more else "Less", "p": g["p_more"] if more else g["p_less"],
-                    "grade": g["grade"] if more else g.get("grade_less"), "units": g["units"] if more else g.get("units_less")})
+        # each line through the member verdict (2026-10-11 audit: the chips printed the raw letter - 'Over 70.7% · A-' on a
+        # 0-unit AWPer headshot pick the card calls Lean Over): gates, Lean, goblin/demon Under and the tie-break all match
+        v = pick_verdict.verdict(g)
+        out.append({"line": ln, "side": v["side"], "p": v.get("p"), "grade": v.get("grade"), "units": v.get("units") or 0.0,
+                    "state": v.get("state")})
     return out
 
 
@@ -2215,6 +2401,7 @@ def _apply_env(pb):
         o["hs_pct"] = round(w * oe["hs_pct"] + (1 - w) * o["hs_pct"], 1)
     if w >= 1:
         o["form_windows"] = oe["form_windows"]
+        o["form_windows_env"] = tonight            # the stats panel says so ('LAN maps only') - display only
     pb["_rf_kpr"] = o["kpr"]
     env.update(stats_from=tonight, stats_maps=oe.get("maps"), stats_weight=round(w, 2), ratio=None)
     return tonight
@@ -2247,6 +2434,64 @@ def _env_rows(rows, pb, tonight):
     """His rows from tonight's environment (BO3.gg rows by tournament type, HLTV rows by its flag)."""
     me = pb.get("_match_env") or {}
     return [r for r in rows if (r.get("env") or me.get(r.get("match_id"))) == tonight]
+
+
+def _label_env(rf, deep, listed, pb, env, stat, need):
+    """Display only (never changes which series are used): which environment the last-10 list is from (env = tonight's
+    LAN / online when it was filtered to it, else None) and the newest series of the OTHER environment it left out -
+    those newer than the oldest listed series ("env_skipped", up to 3, newest first, Maps 1-2 totals of the same stat;
+    "env_skipped_n" = how many in all)."""
+    rf["env"], rf["env_skipped"], rf["env_skipped_n"] = env, [], 0
+    if not env or not listed:
+        return rf
+    ok = _usable_series(deep, stat, need)
+    keep = {r["match_id"] for r in _env_rows(ok, pb, env)}
+    oldest = min(r["date"] for r in listed)
+    other = [r for r in ok if r["match_id"] not in keep and r["date"] > oldest]
+    me = pb.get("_match_env") or {}
+    by = {}
+    for r in other:
+        by.setdefault(r["match_id"], []).append(r)
+    skipped = []
+    for mid, maps in by.items():
+        maps = sorted(maps, key=lambda m: m["number"] or 9)[:need]
+        skipped.append({"date": maps[0]["date"], "opponent": maps[0]["opponent"], "total": sum(m[stat] for m in maps),
+                        "env": maps[0].get("env") or me.get(mid)})
+    skipped.sort(key=lambda x: x["date"], reverse=True)
+    rf["env_skipped"], rf["env_skipped_n"] = skipped[:3], len(skipped)
+    return rf
+
+
+def months12_avg(pb, stat="kills", today=None):
+    """His Maps 1-2 average (same stat) over every official series of the last 12 months with both maps and the stat
+    recorded: (average, series). Plain average - display only."""
+    rows = _form_rows(pb, stat, keep_n=10 ** 6, back_days=365)   # the same HLTV read as the last-10 (cached)
+    since = ((today or date.today()) - timedelta(days=365)).isoformat()
+    rows = _usable_series([r for r in rows if (r.get("date") or "") >= since], stat, 2)
+    by = {}
+    for r in rows:
+        by.setdefault(r["match_id"], []).append(r)
+    tots = [sum(m[stat] for m in sorted(ms, key=lambda m: m["number"] or 9)[:2]) for ms in by.values()]
+    return (round(sum(tots) / len(tots), 1) if tots else None), len(tots)
+
+
+def _form_gap(res, pb, args, stat):
+    """Plain numbers behind "Projection differs from his last-10 average" (Maps 1-2 lines): his last-10 average and the
+    environment it is from, the projection, his 12-month Maps 1-2 average, his rate vs teams ranked like tonight's
+    opponent (context, as shown in the HLTV panel) and the opponent. Inputs and outputs only - no weights."""
+    g = res.get("grade") or {}
+    if (getattr(args, "scope", "12") or "12") != "12" or g.get("lambda_final") is None:
+        return None
+    rf = pb.get("recent_form") or {}
+    m12, n12 = months12_avg(pb, stat) if pb.get("recent_maps") is not None else (None, 0)
+    rb = pb.get("_rank_band") or {}
+    return {"last10_avg": rf.get("avg_total"), "last10_n": rf.get("matches"), "last10_env": rf.get("env"),
+            "projection": round(g["lambda_final"], 1),
+            "gap": round(g["lambda_final"] - rf["avg_total"], 1) if rf.get("avg_total") is not None else None,
+            "months12_avg": m12, "months12_n": n12, "stat": stat,
+            "rank_band": ({"opp_rank": rb.get("opp_rank"), "kpr_ratio": rb.get("ratio"), "maps": rb.get("maps")}
+                          if rb.get("opp_rank") is not None else None),
+            "opponent": (res.get("next_match") or {}).get("opponent") or getattr(args, "opponent", None)}
 
 
 def _event_type(b, slug):
@@ -2372,13 +2617,20 @@ def finish_line(res, args):
         if env_form:
             pb["_env"]["form_from"] = tonight
         pb["recent_form"] = recent_form(rows, pb.get("_rf_kpr"), args.line, stat)   # Maps 1-2: feeds the grade
+        _label_env(pb["recent_form"], deep, rows, pb, tonight if env_form else None, stat, 2)
         if getattr(args, "scope", "12") == "1":          # display only: every match's Map 1, BO1s included
-            pb["recent_form_map1"] = recent_form(last10(1)[0], pb.get("_rf_kpr"), args.line, stat, need=1)
+            rows1, env1 = last10(1)
+            pb["recent_form_map1"] = recent_form(rows1, pb.get("_rf_kpr"), args.line, stat, need=1)
+            _label_env(pb["recent_form_map1"], deep, rows1, pb, tonight if env1 else None, stat, 1)
     _tick(res, "form", t0)
     if res.get("_h2h_rows") is not None:
         hrows = list(res["_h2h_rows"])
         if tonight:   # H2H keeps every meeting; the same-region series only count from tonight's environment
             hrows = [r for r in hrows if not r.get("regional") or r in _env_rows([r], pb, tonight)]
+        try:
+            hrows = _hltv_h2h(pb, hrows, res.get("_h2h_opp"))
+        except Exception:
+            pass
         res["h2h"] = h2h(hrows, res.get("_h2h_opp"), args.line, stat, res.get("_opp_roster"))
         _regional_note(res)
     _tick(res, "h2h", t0)
@@ -2386,6 +2638,14 @@ def finish_line(res, args):
     _tick(res, "rank_band", t0)
     res["grader_inputs"] = grader_inputs(pb, args, res.get("odds"), res.get("h2h"))
     res["grade"] = grade_leg(res["grader_inputs"])
+    try:                                     # display only (weight 0): HLTV history that stops well before BO3.gg's
+        _hltv_staleness(res["grade"], res["grader_inputs"].get("perf"), pb)
+    except Exception:
+        pass
+    try:                                     # display only: why the projection can sit far from his last-10 average
+        res["form_gap"] = _form_gap(res, pb, args, stat)
+    except Exception:
+        res["form_gap"] = None
     res["ladder"] = _ladder(res, pb, args)
     _tick(res, "grade", t0)
     try:   # 20,000-run match simulation built on the grade (same projection and spread) - how it plays out

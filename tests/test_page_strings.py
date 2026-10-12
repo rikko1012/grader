@@ -1,0 +1,97 @@
+"""Page wording the owner rules depend on (web/index.html is one static page - these are string checks)."""
+import re
+from pathlib import Path
+
+HTML = (Path(__file__).resolve().parents[1] / "web" / "index.html").read_text(encoding="utf-8")
+
+
+def test_capped_kills_chance_is_labelled_not_changed():
+    assert "(capped)</span>" in HTML and "const KCAP = 0.78" in HTML
+
+
+def test_scout_rows_say_no_match_and_cannot_be_added():
+    assert "No match scheduled" in HTML
+    assert 'disabled>+ Add to slip</button>' in HTML
+
+
+def test_views_have_addresses_and_no_external_arrow_on_the_rail():
+    for h in ('href="#one"', 'href="#board"', 'href="#slate"'):
+        assert h in HTML
+    assert '<span class="route-arrow">↗</span>' not in HTML
+
+
+def test_new_filters_and_studio_controls_exist():
+    for s in ('id="bflag"', 'id="cdiff"', 'id="csort"', 'id="mlusable"', '"Fill first"', "/api/slip_studio/capacity", 'id="bstudio" hidden'):
+        assert s in HTML
+
+
+def test_member_wording_rules():
+    assert not re.search(r"No bet", HTML)           # sub-threshold picks stay "Lean Over / Under"
+    assert ">More<" not in HTML and ">Less<" not in HTML
+
+
+# ---------------------------------------------------------------- 2026-10-11 confirmed-findings batch (UI)
+def test_scout_reads_lean_everywhere():
+    # the internal SCOUT state never shows as a label next to Over / Under: sideWord / pickLine / chips map it to Lean
+    assert 'const isLeanV = v => !!v && (v.grade === "LEAN" || v.grade === "SCOUT" || v.state === "SCOUT");' in HTML
+    assert "sideWord = v => !v.side ? \"–\" : isLeanV(v)" in HTML
+    assert 'isLeanV({grade: x.g})' in HTML                                    # Recent chips + slip legs
+    assert not re.search(r"SCOUT (Over|Under)|· SCOUT ·", HTML)
+    assert 'r.state === "SCOUT" ? `<button type="button" class="bslip" disabled' in HTML   # no '+ Slip' for a no-match row
+
+
+def test_ladder_chips_say_lean_for_zero_units():
+    assert 'isLeanV(x) || !(x.units > 0) ? "LEAN" : x.grade' in HTML
+
+
+def test_share_link_keeps_maps_platform_and_match():
+    for k in ('searchParams.set("sc"', 'searchParams.set("bk"', 'searchParams.set("tm"', 'searchParams.set("vs"', 'searchParams.set("st"',
+              'q.get("sc")', 'q.get("bk")', 'qs.set("start", ctx.start)'):
+        assert k in HTML
+
+
+def test_card_popup_is_a_history_step_and_board_hash_is_named():
+    assert 'history.pushState({card: 1}, "", location.href)' in HTML and "function hidePop()" in HTML
+    assert "'#board' alone: this entry gets its platform" in HTML
+
+
+def test_on_slip_is_the_exact_line():
+    assert "new Set(store.get(\"cs2s_slip\", []).map(slipKeyLeg))" in HTML and "onSlip.has(slipKeyRow(r))" in HTML
+    assert "onSlip.has(nick.toLowerCase())" not in HTML
+
+
+def test_underdog_counts_lines_still_grading():
+    assert "graded Underdog lines${B.total > B.rows.length ? ` (${B.total - B.rows.length} still grading)`" in HTML
+    assert "the first grades appear within a few minutes" in HTML
+
+
+def test_studio_capacity_reads_max_slips_and_is_labelled():
+    assert "d.max_slips" in HTML and "mx = d.max ||" not in HTML
+    assert "cs2s_studio_open" not in HTML                                     # never reopened on its own
+    assert HTML.count("Research – not validated") >= 2                        # studio bar + every built slip
+    assert "Smaller slips are planned first" in HTML                          # explainer follows Fill first
+
+
+def test_spread_and_recipe_stay_private_on_the_page():
+    assert "it0.sd" not in HTML and "cp.ours.sd" not in HTML and "Previous model <span" not in HTML
+
+
+def test_help_text_recency_is_correct():
+    assert "four months ago counts half" not in HTML and "4 months old counts half" not in HTML
+    assert "about three months ago counts half" in HTML
+
+
+def test_phone_layout_hooks():
+    for k in ('class="slatelist"', "slateItem(", 'class="mclist"', "function foldCard()", ".folded>:not(h2){display:none!important}",
+              'id="scout-filters"', "Filters${n ? ` (${n} active)` : \"\"}", "add m13 for Maps 1–3 or bo1 for Map 1"):
+        assert k in HTML
+    assert 'id="scout-expand"' not in HTML and 'id="scout-collapse"' not in HTML
+    # one nav order everywhere: Single Prop, Prop Board, Slate
+    m = re.search(r'<div class="seg" id="mode">(.*?)</div>', HTML)
+    assert m and m.group(1).index('data-v="board"') < m.group(1).index('data-v="slate"')
+
+
+def test_data_status_names_an_outage_and_a_stale_hltv_history():
+    assert 't: "HLTV unreachable", why: "temporary projection from the older model"' in HTML
+    assert 't: "HLTV out of date"' in HTML and '"HLTV out of date"' in HTML.split("const issueLabel")[1][:400]
+    assert "HLTV is missing his recent matches" in HTML                       # the card's HLTV panel shows hl.stale

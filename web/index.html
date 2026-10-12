@@ -191,7 +191,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 .pill.warn{border-color:var(--bad);color:var(--bad)}
 #cardpop{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.6);display:flex;justify-content:center;align-items:flex-start;padding:24px 12px}
 #cardpop[hidden]{display:none} #popbody{background:var(--bg);border:1px solid var(--line-2);border-radius:16px;max-width:900px;width:100%;max-height:calc(100vh - 48px);overflow:auto;padding:16px;position:relative}
-.popbar{position:sticky;top:-16px;margin:-16px -16px 8px;padding:10px 12px;display:flex;justify-content:flex-end;background:var(--bg);border-bottom:1px solid var(--line);z-index:3}
+.popbar{position:sticky;top:-16px;margin:-16px -16px 8px;padding:10px 12px;display:flex;gap:8px;align-items:center;justify-content:flex-end;background:var(--bg);border-bottom:1px solid var(--line);z-index:3}
 .mini .seg button{padding:6px 10px;font-size:13px}
 .mini .go{padding:8px 16px;font-size:13px;margin-left:0}
 .examples{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;align-items:center}
@@ -358,6 +358,7 @@ body.locked #slip,body.locked.hasslip #slip{display:none!important}body.locked.h
 .studio-step .seg{display:flex;width:100%}.studio-step .seg button{flex:1 1 0;padding:8px 4px;font-size:12.5px;min-width:0;white-space:nowrap}
 .studio-sum{background:#f7a45b0d;border:1px solid #f7a45b33;border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.55;margin:4px 0 12px}
 .studio-sum b{color:var(--accent-2)}
+.mlside{margin:8px 0 6px;padding:10px 12px;background:#0d121b;border:1px solid var(--line);border-radius:10px}.mlsidehead{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;font-size:14px}.mlreasons{margin:6px 0 2px;padding-left:18px;font-size:12.5px;line-height:1.55;color:var(--muted)}.mlreasons li{margin:1px 0}
 .studio-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:12px 0}
 .studio-fields .sf{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:500;color:var(--muted);min-width:0}
 .studio-fields select{padding:9px 10px}
@@ -388,47 +389,118 @@ body.locked #slip,body.locked.hasslip #slip{display:none!important}body.locked.h
   .studio-steps{grid-template-columns:1fr;gap:8px}.studio-step{padding:10px 11px}.studio-step .hint{min-height:0;margin-bottom:7px}
   .studio-step .seg button{padding:9px 2px;font-size:12px}}
 @media (max-width:380px){.studio-fields{grid-template-columns:1fr}}
+
+/* outside review fixes (2026-10-12) */
+.bchk{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--muted);text-transform:none;letter-spacing:0;white-space:nowrap}.bchk input{width:auto}
+.capd{white-space:nowrap;text-decoration:underline dotted;text-underline-offset:3px;cursor:help}
+.rail-link{text-decoration:none}.rail-link .route-arrow{font-size:18px;line-height:1}
+.envskip{font-size:12.5px;color:var(--muted);margin:-4px 0 10px;line-height:1.55}
+.l5tab td,.l5tab th{white-space:nowrap}.l5tab .opp{max-width:150px;overflow:hidden;text-overflow:ellipsis}
+.l5tab .mn{color:var(--faint);font-size:11px;margin-left:4px}
+@media (max-width:640px){.l5tab{font-size:12px}.l5tab td,.l5tab th{padding:8px 5px!important}.l5tab .opp{max-width:72px}.l5tab .rt{display:none}}
+.cmpnote{font-size:12px;color:var(--muted);margin-top:6px}
+.dym{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px;color:var(--text)}
+.glegend{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.6}
+.glegend .gtag{min-width:0;font-size:10.5px;padding:1px 5px;margin-right:2px}
+.capchip{cursor:help}
+/* Slip studio: a one-line bar until it is opened */
+.studiobox{margin:0 0 14px;background:linear-gradient(135deg,#151b25,#0e1219);border:1px solid var(--line-2);border-radius:14px}
+.studio-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;font-size:13.5px}
+.studio-bar .muted{font-size:13px}
+#studio{margin:0;padding:0 16px 16px;background:none;border:0;border-radius:0;container-type:inline-size}
+.studio-steps{grid-template-columns:repeat(2,minmax(0,1fr))}
+.studio-step.wide{grid-column:span 2}
+@container (min-width:1100px){.studio-steps{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@container (max-width:520px){.studio-steps{grid-template-columns:1fr}.studio-step.wide{grid-column:auto}}
+.studio-cap{font-size:13px;margin:2px 0 10px;color:var(--text)}.studio-cap:empty{display:none}
+@media (max-width:640px){.studio-bar{padding:11px 12px;align-items:flex-start}#studio{padding:0 12px 12px}}
+/* moneylines: one muted line when nothing is usable */
+.mlnone{font-size:12.5px;color:var(--muted);margin:4px 0 0}
+.mlcard.nouse{padding:10px 12px}.mlcard.nouse .mlhead b{font-size:14px;color:var(--muted)}
+.mlcard details summary{cursor:pointer;font-size:12px;color:var(--faint);margin-top:4px}
+/* compact view also drops the big workspace headline and the 3-step strip */
+body.scout-compact .workspace-intro{padding:12px 0;justify-content:flex-end}body.scout-compact .workspace-intro>div:first-child{display:none}
+body.scout-compact .research-strip{display:none}
+body.scout-compact .workspace-tools{flex-direction:row}
+.cmpwhen{font-size:11.5px;color:var(--faint);display:block}
+/* Slate and Prop Board show only their own content: the Single Prop card, recent chips and the guide stay on Single Prop
+   (cards from the board / slate open in the popup) */
+body.mode-board .wrap>#out,body.mode-board .wrap>#status,body.mode-board .wrap>#scout-jumps,body.mode-board .wrap>#recent,body.mode-board .wrap>#examples,body.mode-board .wrap>details.how,
+body.mode-slate .wrap>#out,body.mode-slate .wrap>#status,body.mode-slate .wrap>#scout-jumps,body.mode-slate .wrap>#recent,body.mode-slate .wrap>#examples,body.mode-slate .wrap>details.how{display:none!important}
+form.mini{padding:0;border:0;background:none;border-radius:0}
+/* 2026-10-11 audit: the first pick on the first screen - no hero headline or 3-step strip above the Board / Slate, the strip
+   off on phones, one Filters button on phones, short board rows, stacked Slate rows and a folding card on phones */
+body.mode-board .research-strip,body.mode-slate .research-strip{display:none}
+body.mode-board .workspace-intro,body.mode-slate .workspace-intro{padding:10px 0 12px;justify-content:flex-end;align-items:center}
+body.mode-board .workspace-intro>div:first-child,body.mode-slate .workspace-intro>div:first-child{display:none}
+body.mode-board .workspace-tools,body.mode-slate .workspace-tools{flex-direction:row}
+.studio-main{display:grid;gap:8px;margin:12px 0 8px}
+.studio-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}.studio-row>.t{font-size:13px;font-weight:600;color:var(--text);min-width:110px}
+.studio-row>.seg{flex:1 1 240px;display:flex}.studio-row>.seg button{flex:1 1 0;padding:8px 4px;font-size:12.5px;min-width:0;white-space:nowrap}
+.studio-more>summary{cursor:pointer;font-size:13px;color:var(--muted);margin:2px 0 4px}
+.nv{margin:0 4px;font-size:11px;padding:1px 8px;white-space:nowrap}
+.slatelist{display:none;gap:8px}
+.sitem{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;line-height:1.6;min-width:0;overflow-wrap:anywhere}
+.sitem .gtag{min-width:0;font-size:11px;padding:1px 6px}
+.mclist{display:none}
+.mcteam{margin:12px 0 2px;font-size:13px}
+.mcp{display:grid;grid-template-columns:minmax(70px,96px) minmax(0,1fr);gap:8px;padding:8px 4px;border-top:1px solid var(--line);font-size:13px;line-height:1.7;min-width:0;overflow-wrap:anywhere}
+.mcp.mfocus{background:#f7a45b12}
+.mcp .mcpick{text-align:left;white-space:normal}
+.fold>h2{cursor:pointer;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.fold>h2:after{content:"▾";color:var(--faint);flex:0 0 auto}
+.folded>h2{margin-bottom:0}.folded>h2:after{content:"▸"}
+.folded>:not(h2){display:none!important}
+@media(max-width:760px){.research-strip{display:none}body.mode-board .workspace-intro,body.mode-slate .workspace-intro{display:none}}
+@media(max-width:640px){#bbook{flex-wrap:nowrap!important;overflow-x:auto;scrollbar-width:none}#bbook::-webkit-scrollbar{display:none}#bbook button{flex:0 0 auto!important;padding:8px 12px}
+  .b2ev{display:none}.brow2{align-items:center}.bslip{padding:6px 9px;font-size:11px}
+  .slatewide{display:none}.slatelist{display:grid}.mcwide{display:none}.mclist{display:block}.mapcol{display:none}.parts{display:none}
+  .studio-bar .sbsub{display:none}.b2meta .mx{display:none}}
+@media(max-width:760px){#popbody .popbar{margin:-12px -12px 8px;top:-12px}}   /* the popup's own 12px padding on phones (no sideways scroll) */   /* the one-line grade bar: no box of its own (header and card popup) */
 </style>
 </head>
 <body class="locked">
-<aside class="scout-rail" aria-label="Workspace navigation"><div class="rail-brand"><span class="rail-mark">⌖</span><span class="rail-word">SCOUT</span></div><div class="rail-edition">COUNTER-STRIKE INTELLIGENCE</div><div class="rail-label">WORKSPACE</div><button type="button" class="rail-link on" data-scout-route="one" title="Single Prop" aria-label="Single Prop"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5M7 10h6M10 7v6"/></svg><span class="route-label">Single Prop</span><span class="route-arrow">↗</span></button><button type="button" class="rail-link " data-scout-route="board" title="Prop Board" aria-label="Prop Board"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="route-label">Prop Board</span><span class="route-arrow">↗</span></button><button type="button" class="rail-link " data-scout-route="slate" title="Slate" aria-label="Slate"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h13M8 12h13M8 19h13M3 5h1M3 12h1M3 19h1"/></svg><span class="route-label">Slate</span><span class="route-arrow">↗</span></button><div class="rail-bottom"><b>Built for your research.</b><p>Player history. Match context.<br>One place to compare.</p><p><span class="rail-key">K</span> Kills &nbsp; <span class="rail-key">H</span> Headshots</p></div></aside>
+<aside class="scout-rail" aria-label="Workspace navigation"><div class="rail-brand"><span class="rail-mark">⌖</span><span class="rail-word">SCOUT</span></div><div class="rail-edition">COUNTER-STRIKE INTELLIGENCE</div><div class="rail-label">WORKSPACE</div><a href="#one" class="rail-link on" data-scout-route="one" title="Single Prop" aria-label="Single Prop"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5M7 10h6M10 7v6"/></svg><span class="route-label">Single Prop</span><span class="route-arrow" aria-hidden="true">›</span></a><a href="#board" class="rail-link" data-scout-route="board" title="Prop Board" aria-label="Prop Board"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="route-label">Prop Board</span><span class="route-arrow" aria-hidden="true">›</span></a><a href="#slate" class="rail-link" data-scout-route="slate" title="Slate" aria-label="Slate"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h13M8 12h13M8 19h13M3 5h1M3 12h1M3 19h1"/></svg><span class="route-label">Slate</span><span class="route-arrow" aria-hidden="true">›</span></a><div class="rail-bottom"><b>Built for your research.</b><p>Player history. Match context.<br>One place to compare.</p><p><span class="rail-key">K</span> Kills &nbsp; <span class="rail-key">H</span> Headshots</p></div></aside>
 <div class="wrap">
-  <header><div class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#170b00" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg></div><h1>CS2 <em>Prop</em> Grader</h1><span class="grow"></span><form class="mini" id="mini" autocomplete="off"><input id="mp" placeholder="Player"><input id="ml" class="l" inputmode="decimal" placeholder="Line"><select id="mlt" class="msel" title="Line type"><option value="standard">Standard</option><option value="goblin">Goblin</option><option value="demon">Demon</option></select><select id="msc" class="msel" title="Maps"><option value="12">Maps 1–2</option><option value="123">Maps 1–3</option><option value="1">Map 1</option></select>
-    <div class="seg" id="mprop"><button type="button" data-v="kills">K</button><button type="button" data-v="hs">HS</button></div><button class="go">Grade</button></form>
-    <span class="tag" id="tag">Maps 1–2 kills &amp; headshots</span></header>
+  <header><div class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#170b00" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg></div><h1>CS2 <em>Prop</em> Grader</h1><span class="grow"></span><form class="mini" id="mini" autocomplete="off"><input id="mp" placeholder="Player" aria-label="Player"><input id="ml" class="l" inputmode="decimal" placeholder="Line" aria-label="Line"><select id="mlt" class="msel" title="Line type" aria-label="Line type"><option value="standard">Standard</option><option value="goblin">Goblin</option><option value="demon">Demon</option></select><select id="msc" class="msel" title="Maps" aria-label="Maps"><option value="12">Maps 1–2</option><option value="123">Maps 1–3</option><option value="1">Map 1</option></select>
+    <div class="seg" id="mprop" role="group" aria-label="Prop"><button type="button" data-v="kills">K</button><button type="button" data-v="hs">HS</button></div><button class="go" aria-label="Grade this line">Grade</button></form>
+    <span class="tag" id="tag">CS2 kills &amp; headshots</span></header>
 
   <div id="gate" class="card" hidden style="text-align:center;padding:28px 18px"></div>
   <div id="who" class="small muted" hidden style="text-align:right;margin:-6px 0 8px"></div>
-<section class="workspace-intro" aria-label="Research workspace"><div><div class="eyebrow">CS2 / Research terminal</div><h2 id="workspace-title">Every angle. One player.</h2><p id="workspace-desc">Explore the projection, compare the lines, and see what supports the grade.</p></div><div class="workspace-tools"><button type="button" id="scout-density" aria-pressed="false" title="Switch board and table spacing">↕ Compact view</button><button type="button" id="scout-guide">How it works ↗</button></div></section><div class="research-strip"><div><span class="step">01</span><div><b>Player intelligence</b><small>History meets projection</small></div></div><div><span class="step">02</span><div><b>Compare the market</b><small>Underdog + PrizePicks</small></div></div><div><span class="step">03</span><div><b>Review your entry</b><small>Line checks &amp; exposure</small></div></div></div>
-  <div class="modes" id="modes"><div class="seg" id="mode"><button type="button" data-v="one" class="on">Single Prop</button><button type="button" data-v="slate">Slate</button><button type="button" data-v="board">Prop Board</button></div>
+<section class="workspace-intro" aria-label="Research workspace"><div><div class="eyebrow">CS2 / Research terminal</div><h2 id="workspace-title">Every angle. One player.</h2><p id="workspace-desc">Explore the projection, compare the lines, and see what supports the grade.</p></div><div class="workspace-tools"><button type="button" id="scout-density" aria-pressed="false" title="Switch board and table spacing">↕ Compact view</button><button type="button" id="scout-guide">How it works</button></div></section><div class="research-strip"><div><span class="step">01</span><div><b>Player intelligence</b><small>History meets projection</small></div></div><div><span class="step">02</span><div><b>Compare the market</b><small>Underdog + PrizePicks</small></div></div><div><span class="step">03</span><div><b>Review your entry</b><small>Line checks &amp; exposure</small></div></div></div>
+  <div class="modes" id="modes"><div class="seg" id="mode"><button type="button" data-v="one" class="on">Single Prop</button><button type="button" data-v="board">Prop Board</button><button type="button" data-v="slate">Slate</button></div>
     <span class="small muted">Shortcuts: <b>K</b> kills &middot; <b>H</b> headshots</span></div>
   <section class="card" id="slate" hidden><div class="workspace-section-title"><h2>Grade your slate</h2><p>Research up to 15 lines together.</p></div>
-    <textarea id="slatetxt" spellcheck="false" placeholder="ZywOo 27.5 K&#10;ropz 22.5 HS&#10;donk 30.5&#10;m0NESY 14.5 hs goblin"></textarea>
-    <div class="help">One prop per line: player, line, then K or HS (no K/HS = kills), optionally goblin / demon. Up to 15 lines.</div>
+    <textarea id="slatetxt" spellcheck="false" aria-label="Your props, one per line" placeholder="ZywOo 27.5 K&#10;ropz 22.5 HS&#10;donk 30.5&#10;m0NESY 14.5 hs goblin"></textarea>
+    <div class="help">One prop per line: player, line, then K or HS (no K/HS = kills), optionally goblin / demon; add m13 for Maps 1–3 or bo1 for Map 1. Up to 15 lines.</div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="go" id="slatego" type="button" style="margin-left:0">Grade slate</button><span id="slatestatus" class="small muted"></span><button type="button" class="chipbtn" id="slateedit" hidden>Edit lines</button></div>
     <div id="slateout" style="margin-top:14px"></div>
   </section>
-  <section class="card" id="board" hidden><div class="board-command"><span>Market explorer</span><div><button type="button" id="scout-expand">Expand matches</button><button type="button" id="scout-collapse">Collapse</button><button type="button" id="scout-filters" aria-expanded="true" aria-controls="bbar">Hide filters</button></div></div>
+  <section class="card" id="board" hidden><div class="board-command"><span>Prop board</span><div><button type="button" id="scout-filters" aria-expanded="true" aria-controls="bbar">Hide filters</button></div></div>
     <div class="bbar" id="bbar">
       <div class="seg" id="bbook" title="Which platform's lines"><button type="button" data-v="all" class="on">All Books</button><button type="button" data-v="underdog">Underdog</button><button type="button" data-v="prizepicks">PrizePicks</button><button type="button" data-v="compare">Compare</button><button type="button" data-v="moneylines" title="Series-winner prices from Polymarket and Kalshi">Moneylines</button></div>
       <div class="seg" id="bview" title="Group by match or list every prop"><button type="button" data-v="matches" class="on">Matches</button><button type="button" data-v="all">All props</button></div>
       <div class="seg" id="bprop"><button type="button" data-v="kills" class="on">Kills</button><button type="button" data-v="hs">Headshots</button><button type="button" data-v="both">Both</button></div>
       <div class="seg" id="bscope" title="Which maps the lines cover"><button type="button" data-v="12" class="on">Maps 1–2</button><button type="button" data-v="1">Map 1</button><button type="button" data-v="123">Maps 1–3</button></div>
       <div class="seg" id="bside" title="Show the grader's Overs, Unders, or both"><button type="button" data-v="More">Overs</button><button type="button" data-v="both" class="on">Both</button><button type="button" data-v="Less">Unders</button></div>
-      <input id="bsearch" type="search" placeholder="Player or team" style="width:150px;padding:8px 10px">
-      <select id="bsort" style="width:auto;padding:8px 10px"><option value="g">Best grade first</option><option value="p">Highest chance</option><option value="t">Starting soonest</option><option value="e">Biggest edge</option></select>
-      <label class="small" style="display:flex;gap:6px;align-items:center;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="bbets" style="width:auto" checked> Bets only</label>
+      <input id="bsearch" type="search" placeholder="Player or team" aria-label="Search a player or team" style="width:150px;padding:8px 10px">
+      <select id="bsort" aria-label="Sort the board" style="width:auto;padding:8px 10px"><option value="g">Best grade first</option><option value="p">Highest chance</option><option value="t">Starting soonest</option><option value="e">Biggest edge</option></select>
+      <select id="csort" aria-label="Sort Compare" style="width:auto;padding:8px 10px" hidden><option value="t">Match time</option><option value="gap">Biggest line gap</option></select>
+      <label class="bchk"><input type="checkbox" id="bbets" checked> Bets only</label>
+      <label class="bchk" title="Hide picks with an open data issue (roster not confirmed, stand-in, long break, limited history)"><input type="checkbox" id="bflag"> Hide flagged</label>
+      <label class="bchk" hidden><input type="checkbox" id="cdiff"> Only where lines differ</label>
+      <label class="bchk" hidden title="A price is usable when the market is open, current and has a tight enough bid/ask spread"><input type="checkbox" id="mlusable" checked> Usable price only</label>
       <button type="button" class="chipbtn" id="breset" title="Reset every filter">Reset</button>
       <button type="button" class="chipbtn" id="brefresh" title="Refresh the board">↻ Refresh</button>
-      <span class="small muted" id="bcount"></span>
-      <button type="button" class="bslip" id="bstudio" hidden aria-expanded="false" aria-controls="studio" title="Research slips from the graded board, one diversified batch at a time">Slip studio</button></div>
+      <span class="small muted" id="bcount"></span></div>
     <div id="bstatus" class="small muted" style="margin:-2px 0 10px"></div>
-    <div>
-    </div>
-    <div id="studio" hidden aria-label="Slip studio"></div>
+    <section id="studiobox" class="studiobox" hidden aria-label="Slip studio"><div class="studio-bar"><div><b>Slip studio</b> <span class="pill warn nv">Research – not validated</span> <span class="muted sbsub">2–4-pick slip suggestions</span></div>
+      <button type="button" class="chipbtn" id="bstudio" hidden aria-expanded="false" aria-controls="studio">Open</button></div>
+      <div id="studio" hidden></div></section>
     <div id="boardout"></div>
   </section>
-  <div id="cardpop" hidden><div id="popbody"><div class="popbar"><button type="button" class="chipbtn" id="popclose" title="Close (Esc)">✕ Close</button></div></div></div>
+  <div id="cardpop" hidden><div id="popbody" role="dialog" aria-modal="true" aria-label="Player card"><div class="popbar" id="popbar"><button type="button" class="chipbtn" id="popclose" title="Close (Esc)">✕ Close</button></div></div></div>
   <form id="f" autocomplete="off"><div class="workspace-section-title"><h2>Explore a player</h2><p>Choose a market. See the full picture.</p></div>
     <div class="field">
       <label for="player">Player</label>
@@ -464,7 +536,7 @@ body.locked #slip,body.locked.hasslip #slip{display:none!important}body.locked.h
   <details class="card how" style="margin-top:12px">
     <summary>How grades work</summary>
     <div class="small" style="margin-top:10px;line-height:1.55">
-      <p><b>Built from official pro matches.</b> Map 1, Maps 1–2 and Maps 1–3 lines use our performance model on every official map a player has played on HLTV: his kills per round, with recent months counting most (a map from four months ago counts half), weighted toward his numbers in tonight's setting (LAN or online), against how many kills the opponent gives up. Headshot lines add his headshots per kill. A player with a short history is pulled toward the pro average until his own maps take over. FACEIT games never count.</p>
+      <p><b>Built from official pro matches.</b> Map 1, Maps 1–2 and Maps 1–3 lines use our performance model on every official map a player has played on HLTV: his kills per round, with recent months counting most (a map from about three months ago counts half), weighted toward his numbers in tonight's setting (LAN or online), against how many kills the opponent gives up. Headshot lines add his headshots per kill. A player with a short history is pulled toward the pro average until his own maps take over. FACEIT games never count.</p>
       <p><b>Maps 1–3 lines</b> count maps 1, 2 and 3 in full – never maps 4–5. In a best-of-5 all three are always played; in a best-of-3 that ends 2–0 there is no map 3 and Underdog voids the pick. When the performance model has no data for a player, the older model fills in (also on three full maps).</p>
       <p><b>Projection → chance → grade.</b> The projection is compared with the line (a 15.5 line needs 16 for an Over, 15 or less for an Under; on a whole line like 16, exactly 16 is a push) and turned into a chance from how much a player's totals normally swing from match to match. Kills chances are capped at 78% because big kill totals swing more than any model expects.</p>
       <p><b>Stake rules change the units, never the chance.</b> If his last 10 matches clearly disagree at this line, the stake drops to 0 (FORM FIGHT) or 0.5U (TAPE FIGHT). Stand-ins (max 1U), small samples (max 1.5U; under 5 recent maps 0), a month or more without an official map (max 1U) and thin betting markets (max 1.5U) cap the stake; a player not on the listed team and an AWPer on a headshot line get 0 units. An unconfirmed roster is flagged on the card but does not change the stake. Several bets that need the same team to do well (or badly) in one match share a 3U cap.</p>
@@ -488,6 +560,11 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const pct = (x, d = 1) => x == null ? "–" : (x * 100).toFixed(d) + "%";
 const num = (x, d = 2) => x == null ? "–" : Number(x).toFixed(d);
+// kills chances are capped at 78% (caps.kills_chance): a capped chance says so wherever it shows - same number, labelled
+const KCAP = 0.78;
+const isCapped = (p, prop, cap) => prop !== "hs" && p != null && Math.abs(+p - (cap ?? KCAP)) < 0.0005;   // exactly at the cap
+const capTip = cap => `Kills chances are capped at ${((cap ?? KCAP) * 100).toFixed(1)}% – big kill totals swing more than any model expects, so the grade never uses a higher kills chance.`;
+const chance = (p, prop, cap) => p == null ? "–" : isCapped(p, prop, cap) ? `<span class="capd" title="${esc(capTip(cap))}">${pct(p)} (capped)</span>` : pct(p);
 // Busy moments (hundreds of members at once): a refused connection or a "busy" answer from the
 // host is retried automatically (1 s, 2 s, 4 s) - members never see it.
 // ---------- members only (Sign in with Whop - paid product). Off until the server enables it.
@@ -519,7 +596,7 @@ function showGate(state) {
 (async () => {
   try {
     const s = await fetch("/auth/me").then(r => r.json());
-    try { STUDIO.off = !s.slip_studio; $("#bstudio").hidden = bbook === "moneylines" || STUDIO.off; } catch {}   // owner switch (default off)
+    try { STUDIO.off = !s.slip_studio; studioShow(); } catch {}   // owner switch (default off)
     if (!s.required) return document.body.classList.remove("locked");
     if (!s.member) return showGate(s);
     document.body.classList.remove("locked");
@@ -597,6 +674,7 @@ $("#f").onsubmit = async e => {
   if (ctx?.team) qs.set("team", ctx.team);
   if (ctx?.opponent) qs.set("opponent", ctx.opponent);
   if (ctx?.book === "prizepicks") qs.set("book", "prizepicks");   // stake cap from the card's own board
+  if (ctx?.opponent && ctx?.start) qs.set("start", ctx.start);      // the line's match start (a misspelled book opponent)
   $("#go").disabled = true; $("#out").innerHTML = "";
   const st = $("#status"); st.hidden = false; st.className = "status";
   const t0 = Date.now();
@@ -606,12 +684,20 @@ $("#f").onsubmit = async e => {
     const r = await fetchRetry("/api/grade?" + qs);
     const d = await r.json();
     if (r.status === 401 && d.error === "members_only") { st.hidden = true; return showGate(d); }   // session ended
-    if (!r.ok) throw new Error(d.error || "Something went wrong");
+    if (!r.ok) { const er = new Error(d.error || "Something went wrong"); er.sugg = d.suggestions; throw er; }
     st.hidden = true; if (ctx?.book) d.book = ctx.book; render(d); remember(d);
   } catch (err) {
     st.className = "status err"; st.textContent = err.message;
+    st.insertAdjacentHTML("beforeend", dymHtml(err.sugg));
   } finally { clearInterval(iv); $("#go").disabled = false; }
 };
+// a misspelled name: the server's closest players as one-tap chips (each regrades the same line)
+const dymHtml = sg => { sg = (Array.isArray(sg) ? sg : []).map(x => typeof x === "string" ? x : x && x.nick).filter(Boolean).slice(0, 5);
+  return sg.length ? `<div class="dym"><span>Did you mean</span>${sg.map(n => `<button type="button" class="chipbtn" data-dym="${esc(n)}">${esc(n)}</button>`).join("")}<span>?</span></div>` : ""; };
+document.addEventListener("click", e => { const b = e.target.closest("[data-dym]"); if (!b) return;
+  const row = b.closest("[data-slaterow]"), x = row ? slate[+row.dataset.slaterow] : null;
+  if (x) return gradeNow(b.dataset.dym, x.line, x.prop, x.lt, x.sc, true);
+  gradeNow(b.dataset.dym, $("#line").value.trim(), prop, $("#lt").value, $("#scope").value, !$("#cardpop").hidden, ctx); });
 
 // ---------- quality of life: saved settings, shortcuts, recent grades, copy/share, slate
 const store = {get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -652,64 +738,95 @@ const marketOk = d => { const g = d?.grade || {}, u = d?.underdog;
 const lineWarn = (p, l, ok) => ok ? "" : p === "hs" && +l >= 24 ? `${l} headshots is a kills-sized line – did you mean kills?`
   : p !== "hs" && +l <= 12 ? `${l} kills is a headshot-sized line – did you mean HS?` : "";
 // member wording (2026-10-10 audit): Over / Under everywhere - More / Less are internal values only
-const sideWord = v => !v.side ? "–" : v.grade === "LEAN" ? `Lean ${v.side === "More" ? "Over" : "Under"}` : v.side === "More" ? "Over" : "Under";
+// a 0-unit pick (Lean) or a line with no match scheduled (internal state SCOUT) always reads "Lean Over / Lean Under" -
+// never the internal SCOUT label or a bare Over / Under (owner's Lean rule, 2026-10-11 audit)
+const isLeanV = v => !!v && (v.grade === "LEAN" || v.grade === "SCOUT" || v.state === "SCOUT");
+const sideWord = v => !v.side ? "–" : isLeanV(v) ? `Lean ${v.side === "More" ? "Over" : "Under"}` : v.side === "More" ? "Over" : "Under";
+const gradeWord = v => v.state === "SCOUT" || v.grade === "SCOUT" ? "No match scheduled" : v.grade === "LEAN" ? "Lean" : (v.grade || "–");
 // which projection the grade used: the performance model (Maps 1-2 and, since 2026-10-10, Map 1), else the older
 // pipeline (Maps 1-3)
 const perfGrade = g => String(g.projection_source || "").startsWith("perf") && ["12", "1", "123"].includes(g.scope || "12");
 const capOf = (d, k, dflt) => (d && d.caps && d.caps[k] != null ? d.caps[k] : dflt);
 const noteOf = (d, x) => { const v = d?.verdict || {}, g = d?.grade || {};
-  return lineWarn(g.prop || x?.prop, g.line ?? x?.line, marketOk(d)) || ((v.units || 0) === 0 && /0 units: (.+)$/.exec(v.reason || "")?.[1]) || ""; };
+  return lineWarn(g.prop || x?.prop, g.line ?? x?.line, marketOk(d)) || ((v.units || 0) === 0 && /0 units: (.+)$/.exec(v.reason || "")?.[1])
+    || ((v.units || 0) > 0 && v.cap_reason ? `max ${v.units}U: ${v.cap_reason}` : "") || ""; };
 // display only: well-known main AWPers, shown when BO3.gg has no weapon data (the grade doesn't use this list)
 const KNOWN_AWP = new Set(["zywoo", "m0nesy", "sh1ro", "broky", "w0nderful", "torzsi", "woro2k", "hallzerk", "s1mple", "device", "jame", "molodoy", "910", "ultimate"]);
 const mapsWord = sc => sc === "123" ? " (Maps 1–3)" : sc === "1" ? " (Map 1)" : "";
 function pickLine(d) {
   const g = d.grade || {}, v = d.verdict || {}, nick = d.player_block?.player?.nick || "";
-  const side = v.grade === "LEAN" ? `Lean ${v.side === "More" ? "Over" : "Under"}` : (v.side === "More" ? "OVER" : "UNDER");
-  return `${nick} ${side} ${g.line} ${propWord(g.prop)}${mapsWord(g.scope)} · ${v.grade === "LEAN" ? "Lean" : v.grade} · ${v.units}U · ${((v.p || 0) * 100).toFixed(1)}%`;
+  const side = isLeanV(v) ? sideWord(v) : (v.side === "More" ? "OVER" : "UNDER");
+  return `${nick} ${side} ${g.line} ${propWord(g.prop)}${mapsWord(g.scope)} · ${gradeWord(v)} · ${v.units}U · ${((v.p || 0) * 100).toFixed(1)}%`;
 }
 function shareUrl(d) {
   const g = d.grade || {}, u = new URL(location.origin + location.pathname);
   u.searchParams.set("p", d.player_block?.player?.nick || ""); u.searchParams.set("l", g.line); u.searchParams.set("t", g.prop);
   if (g.line_type && g.line_type !== "standard") u.searchParams.set("lt", g.line_type);
+  // the same card for whoever opens it (2026-10-11 audit): maps, platform and the team / opponent / start it was graded with
+  if (g.scope && g.scope !== "12") u.searchParams.set("sc", g.scope);
+  if (d.book) u.searchParams.set("bk", d.book);
+  const c = cardCtx(d);
+  if (c.team) u.searchParams.set("tm", c.team);
+  if (c.opponent) u.searchParams.set("vs", c.opponent);
+  if (c.start) u.searchParams.set("st", c.start);
   return u.toString();
 }
 function remember(d) {
   const g = d.grade || {}, v = d.verdict || {}, nick = d.player_block?.player?.nick;
   if (!nick || !("p_more" in g)) return;
   const sc = g.scope || "12";
-  const h = store.get("cs2s_hist", []).filter(x => !(x.p === nick && x.l === g.line && x.t === g.prop && x.lt === g.line_type && (x.sc || "12") === sc));
-  h.unshift({p: nick, l: g.line, t: g.prop, lt: g.line_type, sc, g: v.grade, s: v.side, u: v.units, pc: v.p, at: Date.now()});
-  store.set("cs2s_hist", h.slice(0, 20)); showRecent();
+  // one chip per player + prop: the newest line replaces older ones
+  const h = recentList().filter(x => recentKey(x) !== recentKey({p: nick, t: g.prop}));
+  h.unshift({p: nick, l: g.line, t: g.prop, lt: g.line_type, sc, g: v.state === "SCOUT" ? "SCOUT" : v.grade, s: v.side, u: v.units, pc: v.p, at: Date.now()});
+  store.set("cs2s_hist", h.slice(0, 8)); showRecent();
 }
+const recentKey = x => String(x.p || "").toLowerCase() + "|" + (x.t === "hs" ? "hs" : "kills");
+// older saved lists can hold several lines per player: keep the newest one each, at most 8
+const recentList = () => { const seen = new Set(), raw = store.get("cs2s_hist", []);
+  return (Array.isArray(raw) ? raw : []).filter(x => { const k = recentKey(x); if (!x.p || seen.has(k)) return false; seen.add(k); return true; }).slice(0, 8); };
 function showRecent() {
-  const h = store.get("cs2s_hist", []);
+  const h = recentList();
   $("#recent").innerHTML = h.length ? `<span class="small muted" style="align-self:center">Recent:</span>` + h.map((x, i) =>
-    `<button type="button" class="chipbtn" data-hist="${i}">${esc(x.p)} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${x.lt && x.lt !== "standard" ? " " + x.lt : ""} · <b>${x.g === "LEAN" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : `${esc(x.g)} ${x.s === "More" ? "Over" : "Under"}`}</b></button>`).join("")
+    `<button type="button" class="chipbtn" data-hist="${i}">${esc(x.p)} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${x.lt && x.lt !== "standard" ? " " + x.lt : ""} · <b>${isLeanV({grade: x.g}) || x.g === "SCOUT" ? `Lean ${x.s === "More" ? "Over" : "Under"}` : `${esc(x.g)} ${x.s === "More" ? "Over" : "Under"}`}</b></button>`).join("")
     + `<button type="button" class="chipbtn" data-act="clearhist" title="Clear recent">✕</button>` : "";
 }
-const cardCtx = d => ({team: d.player_block?.playing_for || d.player_block?.current_team || null, opponent: d.next_match?.opponent || null});
+const cardCtx = d => ({team: d.player_block?.playing_for || d.player_block?.current_team || null, opponent: d.next_match?.opponent || null,
+                       start: d.next_match?.start || null, book: d.book || null});
 function gradeNow(p, l, t, lt, sc, pop, c) {
   $("#player").value = p; $("#line").value = l; setProp(t || "kills"); $("#lt").value = lt || "standard"; $("#scope").value = sc || "12";
   slug = null; match = null; ctx = c || null;
-  if (pop) openPop(); else { closePop(); setMode("one"); }
+  if (pop) openPop(); else { hidePop(); setMode("one"); }
   $("#f").requestSubmit();
 }
 // board: the full card opens over the board, so the list keeps its place
+// the popup is its own history step (2026-10-11 audit): the phone's Back button closes the card and stays on this tab
 function openPop() {
-  const box = $("#popbody"); box.append($("#status"), $("#out")); $("#cardpop").hidden = false; document.body.style.overflow = "hidden"; box.scrollTop = 0;
+  const box = $("#popbody"), was = !$("#cardpop").hidden;
+  box.append($("#status"), $("#out")); $("#cardpop").hidden = false; document.body.style.overflow = "hidden"; box.scrollTop = 0;
+  if (!was && !(history.state && history.state.card)) try { history.pushState({card: 1}, "", location.href); } catch {}
+  try { miniPlace(); } catch {}
 }
-function closePop() {
+function hidePop() {
   if ($("#cardpop").hidden) return;
   $("#outhome").after($("#status"), $("#out")); $("#cardpop").hidden = true; document.body.style.overflow = "";
+  try { miniPlace(); } catch {}
+}
+// closed by the member (✕, Esc, backdrop): step back over the card's own history entry
+function closePop() {
+  if ($("#cardpop").hidden) return;
+  hidePop();
+  if (history.state && history.state.card) try { history.back(); } catch {}
 }
 $("#cardpop").addEventListener("click", e => { if (e.target.id === "cardpop" || e.target.closest("#popclose")) closePop(); });
-document.addEventListener("keydown", e => { if (e.key === "Escape") closePop(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !document.querySelector(".askwrap")) closePop(); });
 let lastCard = null;
 document.addEventListener("click", e => {
   const hb = e.target.closest("[data-hist]");
-  if (hb) { const x = store.get("cs2s_hist", [])[+hb.dataset.hist]; if (x) gradeNow(x.p, x.l, x.t, x.lt, x.sc); return; }
+  if (hb) { const x = recentList()[+hb.dataset.hist]; if (x) gradeNow(x.p, x.l, x.t, x.lt, x.sc); return; }
+  // nearby lines / Line -1 / +1 regrade where the card is: inside the popup when it is open, else on Single Prop
+  const inPop = !$("#cardpop").hidden;
   const ld = e.target.closest("[data-ladder]");
-  if (ld && lastCard) { const gg = lastCard.grade || {}; return gradeNow(lastCard.player_block?.player?.nick || $("#player").value, ld.dataset.ladder, gg.prop, gg.line_type, gg.scope, false, cardCtx(lastCard)); }
+  if (ld && lastCard) { const gg = lastCard.grade || {}; return gradeNow(lastCard.player_block?.player?.nick || $("#player").value, ld.dataset.ladder, gg.prop, gg.line_type, gg.scope, inPop, cardCtx(lastCard)); }
   const a = e.target.closest("[data-act]"); if (!a) return;
   const act = a.dataset.act;
   if (act === "clearhist") { store.set("cs2s_hist", []); try { history.replaceState(null, "", location.pathname); } catch {} return showRecent(); }
@@ -717,18 +834,44 @@ document.addEventListener("click", e => {
   if (act === "copy") copy(pickLine(lastCard));
   if (act === "slip") addToSlip(lastCard);
   if (act === "link") copy(shareUrl(lastCard));
-  if (act === "nudge") { const g = lastCard.grade; gradeNow(lastCard.player_block?.player?.nick, String(g.line + +a.dataset.d), g.prop, g.line_type, g.scope, false, cardCtx(lastCard)); }
+  if (act === "nudge") { const g = lastCard.grade; gradeNow(lastCard.player_block?.player?.nick, String(g.line + +a.dataset.d), g.prop, g.line_type, g.scope, inPop, cardCtx(lastCard)); }
 });
 showRecent();
 
 // modes: one prop / slate
-function setMode(m) {
+// every view has its own address (#one, #board, #board/<platform>, #slate): links and the Back button work
+const VIEWS = ["one", "board", "slate"], BOOKS = ["all", "underdog", "prizepicks", "compare", "moneylines"];
+const viewHash = () => { const m = ($("#mode button.on") || {}).dataset?.v || "one"; return "#" + m + (m === "board" ? "/" + bbook : ""); };
+function pushView(replace) {
+  const h = viewHash(), card = !!(history.state && history.state.card);   // a closed card's entry is reused, not stacked
+  if (location.hash === h && !card) return;
+  try { history[replace || card ? "replaceState" : "pushState"](null, "", location.pathname + location.search + h); } catch {}
+}
+function setMode(m, fromHash) {
+  if (!VIEWS.includes(m)) m = "one";
   [...$("#mode").children].forEach(x => x.classList.toggle("on", x.dataset.v === m));
   $("#slate").hidden = m !== "slate"; $("#board").hidden = m !== "board"; $("#f").style.display = m === "one" ? "" : "none";
   if (m === "board") loadBoard();
+  if (!fromHash) pushView();
   try { showExamples(); } catch {}
+  try { miniPlace(); } catch {}
 }
-$("#mode").onclick = e => { const b = e.target.closest("button"); if (b) { closePop(); setMode(b.dataset.v); } };
+function applyHash() {
+  let [m, bk] = location.hash.replace(/^#/, "").split("/");
+  if (!m) m = "one";
+  if (!VIEWS.includes(m)) return false;                 // an in-page anchor, not a view
+  hidePop();
+  const cur = ($("#mode button.on") || {}).dataset?.v;
+  if (m === "board" && !BOOKS.includes(bk)) {           // '#board' alone: this entry gets its platform (Back stays in step)
+    if (cur !== m) setMode(m, true);
+    pushView(true); return true;
+  }
+  if (m === "board" && bk !== bbook) setBook(bk, true);
+  else if (cur === m) return true;
+  setMode(m, true); return true;
+}
+window.addEventListener("popstate", applyHash); window.addEventListener("hashchange", applyHash);
+$("#mode").onclick = e => { const b = e.target.closest("button"); if (b) { hidePop(); setMode(b.dataset.v); } };
 
 // slate: several props at once -> sortable table; a row opens its full card
 let slate = [], slateSort = {k: "p", dir: -1};
@@ -746,26 +889,45 @@ function parseSlate(txt) {
   }
   return out.slice(0, 15);
 }
+const isScout = v => v && v.state === "SCOUT";
 function slateRow(x, i) {
-  if (x.error) return `<tr><td>${esc(x.player || x.bad)}</td><td colspan="8" class="muted">${esc(x.error)}</td></tr>`;
+  if (x.error) return `<tr data-slaterow="${i}"><td>${esc(x.player || x.bad)}</td><td colspan="8" class="muted">${esc(x.error)}${dymHtml(x.sugg)}</td></tr>`;
   if (!x.d) return `<tr><td>${esc(x.player)}</td><td>${esc(x.line)} ${propWord(x.prop)}${mapsWord(x.sc)}</td><td colspan="7" class="muted"><span class="spin"></span>grading…</td></tr>`;
   const g = x.d.grade || {}, v = x.d.verdict || {}, nm = x.d.next_match || {};
-  const lab = !v.side ? "–" : v.state === "SCOUT" ? "S" : v.grade === "LEAN" ? "L" : v.grade || "–";
+  const lab = !v.side ? "–" : v.grade === "LEAN" ? "L" : v.grade || "–";
   const side = sideWord(v), note = noteOf(x.d, x);
+  // no upcoming match: research only - it says so instead of an unexplained letter
+  const gcell = isScout(v) ? `<span class="muted small" title="No upcoming match found for his team – shown for research, nothing to bet yet">No match scheduled</span>`
+    : `<span class="gtag ${gClass(v.grade)}">${esc(lab)}</span>`;
   return `<tr data-row="${i}"><td><b>${esc(x.d.player_block?.player?.nick || x.player)}</b></td><td class="num" style="text-align:left">${g.line ?? esc(x.line)} ${propWord(g.prop || x.prop)}${mapsWord(g.scope || x.sc)}${ltTag(g.line_type || x.lt)}</td>
-    <td>${esc(side)}</td><td><span class="gtag ${v.state === "SCOUT" ? "g-scout" : gClass(v.grade)}">${esc(lab)}</span></td>
-    <td class="num">${v.p != null ? (v.p * 100).toFixed(1) + "%" : "–"}</td><td class="num">${v.units ?? 0}U</td>
+    <td>${esc(side)}</td><td>${gcell}</td>
+    <td class="num">${chance(v.p, g.prop, capOf(x.d, "kills_chance", KCAP))}</td><td class="num">${v.units ?? 0}U</td>
     <td class="num">${g.lambda_final != null ? num(g.lambda_final, 1) : "–"}</td><td class="small">${esc(nm.opponent ? "vs " + nm.opponent : "")}</td>
     <td class="small" style="color:var(--warn)">${esc(note)}</td></tr>`;
 }
+// phones: one stacked row per line (player and pick, then grade · chance · units · opponent, then any note)
+function slateItem(x, i) {
+  if (x.error) return `<div class="sitem" data-slaterow="${i}"><b>${esc(x.player || x.bad)}</b><div class="small muted">${esc(x.error)}${dymHtml(x.sugg)}</div></div>`;
+  if (!x.d) return `<div class="sitem"><b>${esc(x.player)}</b> <span class="muted">${esc(x.line)} ${propWord(x.prop)}${mapsWord(x.sc)}</span><div class="small muted"><span class="spin"></span>grading…</div></div>`;
+  const g = x.d.grade || {}, v = x.d.verdict || {}, nm = x.d.next_match || {}, note = noteOf(x.d, x);
+  const lab = !v.side ? "–" : v.grade === "LEAN" ? "L" : v.grade || "–";
+  const tag = isScout(v) ? `<span class="muted">No match scheduled</span>` : `<span class="gtag ${gClass(v.grade)}">${esc(lab)}</span>`;
+  return `<div class="sitem" data-row="${i}"><div><b>${esc(x.d.player_block?.player?.nick || x.player)}</b> · ${esc(sideWord(v))} ${g.line ?? esc(x.line)} ${propWord(g.prop || x.prop)}${mapsWord(g.scope || x.sc)}${ltTag(g.line_type || x.lt)}</div>
+    <div class="small">${tag} <b>${chance(v.p, g.prop, capOf(x.d, "kills_chance", KCAP))}</b> · ${v.units ?? 0}U${nm.opponent ? " · vs " + esc(nm.opponent) : ""}</div>${note ? `<div class="small" style="color:var(--warn)">${esc(note)}</div>` : ""}</div>`;
+}
+// what the letters mean - one short line under every list that shows them
+const gradeLegend = () => `<div class="glegend">Grades from the chance the pick wins: A+ 80%+ · A 74%+ · A− 68%+ · B+ 63%+ · B 57%+ · B− 55%+ · <span class="gtag g-scout">L</span> = Lean, 0 units (under 55%, or a stake rule held it at 0).</div>`;
 function drawSlate() {
   const key = r => { const v = r.d?.verdict || {}, g = r.d?.grade || {};
     return {p: v.p ?? -1, u: v.units ?? -1, pl: (r.player || "").toLowerCase(), pr: g.lambda_final ?? -1}[slateSort.k]; };
-  const rows = slate.map((x, i) => [x, i]).sort((a, b) => { const A = key(a[0]), B = key(b[0]); return (A > B ? 1 : A < B ? -1 : 0) * slateSort.dir; });
+  // rows without an upcoming match (and failed lines) always sort last, whatever the column
+  const last = r => r.error ? 2 : isScout(r.d?.verdict) ? 1 : 0;
+  const rows = slate.map((x, i) => [x, i]).sort((a, b) => { const L = last(a[0]) - last(b[0]); if (L) return L;
+    const A = key(a[0]), B = key(b[0]); return (A > B ? 1 : A < B ? -1 : 0) * slateSort.dir; });
   const th = (k, l) => `<th data-sort="${k}">${l}${slateSort.k === k ? (slateSort.dir < 0 ? " ▾" : " ▴") : ""}</th>`;
   const bets = slate.filter(x => (x.d?.verdict?.units || 0) > 0);
-  $("#slateout").innerHTML = slate.length ? `<div class="scroll"><table class="slatetab"><thead><tr>${th("pl", "Player")}<th>Line</th><th>Pick</th><th>Grade</th>${th("p", "Chance")}${th("u", "Units")}${th("pr", "Proj")}<th>Match</th><th>Note</th></tr></thead>
-    <tbody>${rows.map(([x, i]) => slateRow(x, i)).join("")}</tbody></table></div>
+  $("#slateout").innerHTML = slate.length ? `<div class="slatelist">${rows.map(([x, i]) => slateItem(x, i)).join("")}</div><div class="scroll slatewide"><table class="slatetab"><thead><tr>${th("pl", "Player")}<th>Line</th><th>Pick</th><th>Grade</th>${th("p", "Chance")}${th("u", "Units")}${th("pr", "Proj")}<th>Match</th><th>Note</th></tr></thead>
+    <tbody>${rows.map(([x, i]) => slateRow(x, i)).join("")}</tbody></table></div>${gradeLegend()}
     <div class="actions"><button type="button" class="chipbtn" id="slipall" ${bets.length ? "" : "disabled"} style="border-color:var(--accent)">+ Add ${bets.length} bet${bets.length === 1 ? "" : "s"} to slip</button><button type="button" class="chipbtn" id="copyslip" ${bets.length ? "" : "disabled"}>Copy ${bets.length} bet${bets.length === 1 ? "" : "s"}</button>
     <span class="small muted" style="align-self:center">Tap a row for its full card.</span></div>` : "";
 }
@@ -775,7 +937,8 @@ $("#slateout").addEventListener("click", e => {
   if (e.target.closest("#slipall")) return (async () => { for (const x of slate.filter(x => (x.d?.verdict?.units || 0) > 0)) await addToSlip(x.d); })();
   if (e.target.closest("#copyslip")) return copy(slate.filter(x => (x.d?.verdict?.units || 0) > 0).map(x => pickLine(x.d)).join("\n"));
   const r = e.target.closest("[data-row]");
-  if (r) { const d = slate[+r.dataset.row]?.d; if (d) { render(d); $("#out").scrollIntoView({behavior: "smooth"}); } }
+  // the card opens over the slate (like the board), so the list keeps its place and Line -1 / +1 stays in the popup
+  if (r) { const d = slate[+r.dataset.row]?.d; if (d) { $("#status").hidden = true; openPop(); render(d); } }
 });
 $("#slatego").onclick = async () => {
   const items = parseSlate($("#slatetxt").value);
@@ -789,7 +952,7 @@ $("#slatego").onclick = async () => {
     try {
       const r = await fetchRetry("/api/grade?" + qs); const d = await r.json();
       if (r.status === 401 && d.error === "members_only") return showGate(d);
-      if (!r.ok) x.error = d.error || "Something went wrong"; else { x.d = d; remember(d); }
+      if (!r.ok) { x.error = d.error || "Something went wrong"; x.sugg = d.suggestions; } else { x.d = d; remember(d); }
     } catch (e) { x.error = e.message; }
     done++; $("#slatestatus").textContent = `${done}/${todo.length} graded`; $("#slateedit").hidden = false; drawSlate();
   };
@@ -797,21 +960,36 @@ $("#slatego").onclick = async () => {
   await Promise.all([0, 1].map(async () => { while (queue.length) await one(queue.shift()); }));   // 2 at a time
   $("#slatego").disabled = false;
 };
-// sticky one-line grade bar: appears once the main form scrolls away
+// sticky one-line grade bar: follows the card on screen (player, line, prop, line type, maps). On Single Prop it
+// shows once the main form scrolls away; over a card popup (board, slate, match players) it sits in the popup's top bar
+// and regrades in that popup.
+const MINI = {away: false, prop: "kills"};
+function miniSync(d) {
+  const g = d?.grade || {}, nick = d?.player_block?.player?.nick;
+  $("#mp").value = nick || $("#player").value; $("#ml").value = g.line ?? $("#line").value;
+  $("#mlt").value = ["standard", "goblin", "demon"].includes(g.line_type) ? g.line_type : $("#lt").value;
+  $("#msc").value = ["12", "123", "1"].includes(g.scope) ? g.scope : $("#scope").value;
+  MINI.prop = g.prop === "hs" ? "hs" : g.prop === "kills" ? "kills" : prop;
+  [...$("#mprop").children].forEach(x => x.classList.toggle("on", x.dataset.v === MINI.prop));
+}
+function miniPlace() {
+  const mini = $("#mini"), pop = !$("#cardpop").hidden, bar = $("#popbar");
+  if (pop) { if (mini.parentElement !== bar) bar.prepend(mini); }
+  else if (mini.parentElement !== $("header")) $("#tag").before(mini);
+  const one = $("#f").style.display !== "none" && $("#gate").hidden;
+  const show = pop ? !!lastCard : one && MINI.away;
+  mini.classList.toggle("on", show);
+  $("#tag").hidden = show && !pop; $("header").classList.toggle("mini-on", show && !pop);
+  if (show && !lastCard) miniSync(null);       // no card yet: mirror the form
+}
 (() => {
-  const mini = $("#mini"), tag = $("#tag");
-  const syncProp = () => [...$("#mprop").children].forEach(x => x.classList.toggle("on", x.dataset.v === prop));
-  $("#mprop").onclick = e => { const b = e.target.closest("button"); if (b) { setProp(b.dataset.v); syncProp(); } };
-  mini.onsubmit = e => { e.preventDefault(); const p = $("#mp").value.trim(), l = $("#ml").value.trim();
-    if (p && l) gradeNow(p, l, prop, $("#mlt").value, $("#msc").value); };
+  $("#mprop").onclick = e => { const b = e.target.closest("button"); if (b) { MINI.prop = b.dataset.v; [...$("#mprop").children].forEach(x => x.classList.toggle("on", x === b)); } };
+  $("#mini").onsubmit = e => { e.preventDefault(); const p = $("#mp").value.trim(), l = $("#ml").value.trim().replace(",", ".");
+    if (p && l) gradeNow(p, l, MINI.prop, $("#mlt").value, $("#msc").value, !$("#cardpop").hidden); };
   try {
-    let shown = false;
     new IntersectionObserver(([en]) => {
-      const b = en.boundingClientRect.bottom, form = $("#f").style.display !== "none" && $("#gate").hidden;
-      const show = form && (shown ? b < 90 : b < 50);        // hysteresis: no flicker at the edge
-      if (show === shown) return; shown = show;
-      mini.classList.toggle("on", show); tag.hidden = show; mini.parentElement.classList.toggle("mini-on", show);
-      if (show) { $("#mp").value = $("#player").value; $("#ml").value = $("#line").value; $("#mlt").value = $("#lt").value; $("#msc").value = $("#scope").value; syncProp(); }
+      const b = en.boundingClientRect.bottom, away = MINI.away ? b < 90 : b < 50;        // hysteresis: no flicker at the edge
+      if (away === MINI.away) return; MINI.away = away; miniPlace();
     }, {threshold: [0, 0.05, 0.1, 0.25, 0.5, 0.75, 1]}).observe($("#f"));
   } catch {}
 })();
@@ -836,6 +1014,10 @@ function hitDist(ps) {           // P(exactly k legs hit), legs treated as indep
 }
 const retLine = (lab, avg) => `<div class="kv"><span>${lab}</span><span style="color:${avg >= 1 ? "var(--good)" : "var(--bad)"}"><b>${avg.toFixed(2)}U</b> back per 1U (${avg >= 1 ? "+" : ""}${(avg - 1).toFixed(2)}U)</span></div>`;
 const legKey = l => [String(l.p).toLowerCase(), l.t, l.sc || "12"].join(":");   // the same prop twice = a duplicate
+// 'On slip' marks only the exact line on the slip: player, line, stat, maps, market type and platform (2026-10-11 audit:
+// one leg marked every line of that player on both platforms)
+const slipKeyLeg = x => [String(x.p).toLowerCase(), +x.l, x.t, x.sc || "12", x.lt || "standard", x.bk || "underdog"].join("|");
+const slipKeyRow = r => [String(r.nick || r.player).toLowerCase(), +r.line, r.prop, r.scope || "12", gradeType(r), r.book || "underdog"].join("|");
 // ---- slip line checks (2026-10-09): every leg keeps its ORIGINAL selection (orig) and, separately, the latest
 // check of the live Underdog offer (now). Checks run on add, on opening the slip and before Copy; nothing is ever
 // replaced silently. States: verified / changed / unavailable (Underdog no longer shows it) / failed (couldn't check) /
@@ -899,7 +1081,7 @@ async function addToSlip(d) {
       const qs = new URLSearchParams({player: nick, line: c.new_line, prop: g.prop, maps: g.scope || "12", team: leg.tm, opponent: leg.vs, line_type: c.new_odds_type && c.new_odds_type !== "alt" ? c.new_odds_type : "standard"});
       const r = await fetch("/api/grade?" + qs); n = r.ok ? await r.json() : null;
     } catch {}
-    const nv = n?.verdict || {}, row = (l, s_, p_, gr, u) => `<tr><td>${l}</td><td>${s_ ? sideTxt(s_) : "–"}</td><td class="num">${p_ != null ? pct(p_) : "–"}</td><td>${esc(gr || "–")}</td><td class="num">${u ?? 0}U</td></tr>`;
+    const nv = n?.verdict || {}, row = (l, s_, p_, gr, u) => `<tr><td>${l}</td><td>${s_ ? sideTxt(s_) : "–"}</td><td class="num">${p_ != null ? pct(p_) : "–"}</td><td>${esc(gr ? gradeWord({grade: gr}) : "–")}</td><td class="num">${u ?? 0}U</td></tr>`;
     const k = await ask(d.from === "board" ? `${bookName(used)} moved this line` : `Your line differs from ${bookName(used)}'s current line`, `${esc(nick)} ${propWord(g.prop)}${mapsWord(g.scope)}: ${d.from === "board" ? esc(c.note) : `you entered ${g.line}; ${bookName(used)} currently shows ${c.new_line}`}.
       <table style="margin-top:8px"><thead><tr><th>Line</th><th>Side</th><th class="num">Chance</th><th>Grade</th><th class="num">Stake</th></tr></thead><tbody>
       ${row(g.line + " (yours)", v.side, v.p, v.grade, v.units)}${n && nv.side ? row(c.new_line + " (now)", nv.side, nv.p, nv.grade, nv.units) : `<tr><td>${c.new_line} (now)</td><td colspan="4" class="muted">couldn't regrade – try again</td></tr>`}</tbody></table>`,
@@ -952,11 +1134,11 @@ function drawSlip() {
   const dupPlayer = new Set(s.map(x => String(x.p).toLowerCase())).size < n;
   const teams = {}; s.forEach(x => { const k = x.m || x.tm; teams[k] = (teams[k] || 0) + 1; });
   const same = Object.values(teams).some(c => c > 1);
-  const leans = s.filter(x => x.g === "LEAN").length;
+  const leans = s.filter(x => isLeanV({grade: x.g})).length;
   const unver = s.filter(x => x.now?.status !== "verified").length;
   $("#slip").innerHTML = `<h4>Bet slip · ${plat ? bookName(plat) : "research"} · ${n}-pick</h4>` + (unver ? `<div class="warn" style="margin-bottom:6px">${unver === n ? "Research slip" : `${unver} of ${n} picks`}: not verified on ${plat ? bookName(plat) : "a platform"} right now – see each pick.</div>` : "") + s.map((x, i) =>
-    `<div class="leg"><span><b>${esc(x.p)}</b> ${x.g === "LEAN" ? `Lean ${sideTxt(x.s)}` : sideTxt(x.s)} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${ltTag(x.lt)}${legState(x)}
-      <span class="muted small">· ${x.g === "LEAN" ? "Lean" : esc(x.g)} · ${((x.pc || 0) * 100).toFixed(1)}%${x.vs ? " · vs " + esc(x.vs) : ""}</span></span>
+    `<div class="leg"><span><b>${esc(x.p)}</b> ${isLeanV({grade: x.g}) ? `Lean ${sideTxt(x.s)}` : sideTxt(x.s)} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${ltTag(x.lt)}${legState(x)}
+      <span class="muted small">· ${isLeanV({grade: x.g}) ? "Lean" : esc(x.g)} · ${chance(x.pc || 0, x.t)}${x.vs ? " · vs " + esc(x.vs) : ""}</span></span>
       <button type="button" class="x" data-rmleg="${i}" title="Remove">✕</button></div>`).join("")
     + (n < 2 ? `<div class="small muted" style="margin-top:10px">Add at least 2 picks (up to 6).</div>`
        : (() => { const dist = hitDist(s.map(x => x.pc || 0.5));
@@ -994,7 +1176,7 @@ $("#slip").addEventListener("click", e => {
     }
     const mark = x => x.now?.status === "verified" ? "" : x.now?.status === "changed" ? ` [LINE CHANGED: now ${x.now.new_line ?? "?"}]`
       : x.now?.status === "unavailable" ? " [NOT OFFERED NOW]" : x.now?.status === "failed" ? " [NOT CHECKED]" : " [RESEARCH LINE]";
-    copy(`${s.length}-pick ${bookName(slipBook(s)) || "research"} slip\n` + s.map(x => `${x.p} ${x.g === "LEAN" ? `Lean ${sideTxt(x.s)}` : sideTxt(x.s).toUpperCase()} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${x.lt && x.lt !== "standard" ? " " + x.lt : ""} · ${x.g === "LEAN" ? "Lean" : x.g} · ${((x.pc || 0) * 100).toFixed(1)}%${mark(x)}`).join("\n"));
+    copy(`${s.length}-pick ${bookName(slipBook(s)) || "research"} slip\n` + s.map(x => `${x.p} ${isLeanV({grade: x.g}) ? `Lean ${sideTxt(x.s)}` : sideTxt(x.s).toUpperCase()} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${x.lt && x.lt !== "standard" ? " " + x.lt : ""} · ${isLeanV({grade: x.g}) ? "Lean" : x.g} · ${((x.pc || 0) * 100).toFixed(1)}%${mark(x)}`).join("\n"));
     // immutable load log (no member identity): what was copied and each leg's live-line state at that moment
     if (s.length >= 2) try {
       const body = JSON.stringify({cid: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()), mode: "member-copy", n: s.length, book: slipBook(s) || "research",
@@ -1063,12 +1245,15 @@ const headRow = g => g.find(x => x.opp_name && x.team_name) || g[0];   // our gr
 const matchKey = r => r._mk || [teamNorm(r.team_name || r.team), teamNorm(r.opp_name || r.opponent)].sort().join("|") + "|" + String(r.start || "").slice(0, 16);
 const propOrder = p => p === "kills" ? 0 : 1;
 // filters survive reloads and the board <-> card round trip
-function saveBFilters() { store.set("cs2s_bf", {bbook, bprop, bside, bscope, bview, sort: $("#bsort").value, bets: $("#bbets").checked, q: $("#bsearch").value}); }
+function saveBFilters() { store.set("cs2s_bf", {bbook, bprop, bside, bscope, bview, sort: $("#bsort").value, bets: $("#bbets").checked, q: $("#bsearch").value,
+  flag: $("#bflag").checked, csort: $("#csort").value, cdiff: $("#cdiff").checked, mlu: $("#mlusable").checked}); }
 function restoreBFilters() {
   const f = store.get("cs2s_bf", null); if (!f) return;
-  bprop = f.bprop || bprop; bside = f.bside || bside; bscope = f.bscope || bscope; bview = f.bview || bview; bbook = f.bbook || bbook;
+  bprop = f.bprop || bprop; bside = f.bside || bside; bscope = f.bscope || bscope; bview = f.bview || bview; bbook = BOOKS.includes(f.bbook) ? f.bbook : bbook;
   if (f.sort && [...$("#bsort").options].some(o => o.value === f.sort)) $("#bsort").value = f.sort;
+  if (f.csort && [...$("#csort").options].some(o => o.value === f.csort)) $("#csort").value = f.csort;
   $("#bbets").checked = f.bets !== false; $("#bsearch").value = f.q || "";
+  $("#bflag").checked = !!f.flag; $("#cdiff").checked = !!f.cdiff; $("#mlusable").checked = f.mlu !== false;
   for (const [id, v] of [["#bbook", bbook], ["#bprop", bprop], ["#bside", bside], ["#bscope", bscope], ["#bview", bview]]) [...$(id).children].forEach(x => x.classList.toggle("on", x.dataset.v === v));
 }   // bside: the grader's pick - More (Overs), Less (Unders) or both
 const G_RANK = {"A+": 0, "A": 1, "A-": 2, "B+": 3, "B": 4, "B-": 4.5, "LEAN": 5};
@@ -1092,12 +1277,12 @@ function bookStatus(b) {
       : f.state === "loading" ? "PrizePicks feed loading…" : "PrizePicks feed isn't connected";
   }
   return B.err ? `Underdog's feed is unavailable right now – showing the last board${B.at ? " from " + hhmm(B.at) : ""}`
-    : `${B.rows.length} graded Underdog lines` + (B.at ? ` · board from ${hhmm(B.at)}` : "");
+    : `${B.rows.length} graded Underdog lines${B.total > B.rows.length ? ` (${B.total - B.rows.length} still grading)` : ""}` + (B.at ? ` · board from ${hhmm(B.at)}` : "");
 }
 async function loadBoard(force) {
   if (bbook === "moneylines") return loadMoneylines(force);
   const need = bbook === "compare" || bbook === "all" ? ["underdog", "prizepicks"] : [bbook];
-  if (!force && need.every(b => BK[b].loaded)) { boardRows = viewRows(bbook); return drawBoard(); }
+  if (!force && need.every(b => BK[b].loaded)) { boardRows = viewRows(bbook); $("#bstatus").textContent = need.map(bookStatus).join(" · "); return drawBoard(); }
   $("#bstatus").textContent = need.some(b => BK[b].loaded) ? "Refreshing… (showing the current lines)" : "Loading the board…";
   try { await Promise.all(need.map(fetchBook)); } catch (e) { $("#bstatus").textContent = `Couldn't refresh (${e.message})`; }
   assignMatchKeys([...BK.underdog.rows, ...BK.prizepicks.rows]);
@@ -1118,50 +1303,79 @@ const DSTAT = {ok: ["ok", "Data complete"], limited: ["mid", "Limited history"],
 // the warning badge names the actual open issue (2026-10-10 audit: "Line not confirmed" showed for an unconfirmed roster next
 // to "Underdog: same line"); "Line not confirmed" stays for its own case - no upcoming match to tie the line to
 const issueLabel = why => /roster/i.test(why || "") ? "Roster not confirmed" : /stand-in/i.test(why || "") ? "Stand-in"
+  : /HLTV history ends/i.test(why || "") ? "HLTV out of date"
   : /gap|stale|break/i.test(why || "") ? "Long break" : "Line not confirmed";
+// flagged = an open data issue on the line (the server's own flag when it sends one)
+const isFlagged = r => r.flagged != null ? !!r.flagged : !!(((r.dstat || [])[0] && r.dstat[0] !== "ok") || r.stale);
+// a stake cap names its reason in a few words (cap_reason from the server, e.g. "long break; same-match cap (4 bets on this
+// team)"); the full rule is in the tooltip. One stake per line: the board and the card show the same chip.
+const CAP_FULL = {"small sample": "Small sample of recent official maps – stake limited", "thin market": "Thin betting market – stake limited",
+  "no betting market": "No betting market for this match – stake limited", "stand-in": "Stand-in for this team – stake limited",
+  "long break": "A month or more since his last official map – stake limited", "recent record disagrees": "His recent record at this line disagrees – small stake only"};
+const capParts = t => String(t || "").split(/;\s*/).map(x => x.trim()).filter(Boolean);
+const capShort = t => capParts(t).map(x => /same[- ]match|together|one team|same team/i.test(x) ? "same match" : x.toLowerCase()).join(" + ") || "same match";
+function capChip(x, team, sameCap) {
+  if (!x) return "";
+  const same = x.cap_n && x.units_full > x.units, reason = x.cap_reason || (same ? "same match" : "");
+  if (!reason) return "";
+  const sameTxt = `${x.cap_n || "Several"} bets need ${team || "this team"} to ${x.side === "More" ? "do well" : "do badly"} in this match – one upset or overtime decides them all, so together they're capped at ${sameCap ?? 3}U`;
+  const full = capParts(reason).map(p => /same[- ]match/i.test(p) ? sameTxt : CAP_FULL[p.toLowerCase()] || p).join(". ") + "."
+    + (same ? ` Without the same-match cap: ${+x.units_full}U.` : "");
+  return ` <span class="pill capchip" style="margin:0" title="${esc(full)}">capped: ${esc(capShort(reason))}</span>`;
+}
 function drawBoard() {
-  saveBFilters();
-  const ml = bbook === "moneylines";                 // Moneylines: series winners - the prop filters don't apply
-  for (const id of ["#bview", "#bsort"]) $(id).hidden = bbook === "compare" || ml;       // grouping / sort don't apply to Compare
+  saveBFilters(); try { filtersLabel(); } catch {}
+  try {                                       // phones: the platform tabs scroll sideways - keep the chosen one in view
+    const bb = $("#bbook"), on = bb.querySelector("button.on");
+    if (on && bb.scrollWidth > bb.clientWidth) { const a = bb.getBoundingClientRect(), o = on.getBoundingClientRect();
+      if (o.left < a.left || o.right > a.right) bb.scrollLeft += o.left - a.left - (a.width - o.width) / 2; }
+  } catch {}
+  const ml = bbook === "moneylines", cmpv = bbook === "compare";   // Moneylines: series winners - the prop filters don't apply
+  for (const id of ["#bview", "#bsort"]) $(id).hidden = cmpv || ml;       // grouping / sort don't apply to Compare
   for (const id of ["#bprop", "#bside", "#bscope"]) $(id).hidden = ml;
-  $("#bbets").closest("label").hidden = bbook === "compare" || ml;
-  $("#bstudio").hidden = ml || STUDIO.off; $("#studio").hidden = ml || !STUDIO.open || STUDIO.off;
+  $("#bbets").closest("label").hidden = $("#bflag").closest("label").hidden = cmpv || ml;
+  $("#csort").hidden = $("#cdiff").closest("label").hidden = !cmpv;
+  $("#mlusable").closest("label").hidden = !ml;
+  studioShow();
   if (ml) return drawMoneylines();
-  if (bbook === "compare") return drawCompare();
+  if (cmpv) return drawCompare();
   const sortBy = $("#bsort").value;
   const rank = r => !r.side ? 9 : r.state === "SCOUT" ? 7 : (G_RANK[r.grade] ?? 6);
-  const key = r => sortBy === "g" ? [rank(r), -(r.p ?? 0)] : sortBy === "p" ? [-(r.p ?? -1)] : sortBy === "e" ? [-Math.abs(r.edge ?? 0)] : [r.start || "9", rank(r)];
+  // within one grade, clean picks come before flagged ones (an open data issue: roster, stand-in, long break, thin history)
+  const key = r => sortBy === "g" ? [rank(r), isFlagged(r) ? 1 : 0, -(r.p ?? 0)] : sortBy === "p" ? [-(r.p ?? -1)] : sortBy === "e" ? [-Math.abs(r.edge ?? 0)] : [r.start || "9", rank(r)];
   const q = ($("#bsearch").value || "").trim().toLowerCase();
   const hit = r => !q || [r.nick, r.player, r.team, r.team_name, r.opponent, r.opp_name].some(x => String(x || "").toLowerCase().includes(q));
   const cmp = (a, b) => { const A = key(a), B = key(b); for (let i = 0; i < A.length; i++) if (A[i] !== B[i]) return A[i] > B[i] ? 1 : -1; return 0; };
-  const onSlip = new Set(store.get("cs2s_slip", []).map(x => String(x.p).toLowerCase()));
+  const onSlip = new Set(store.get("cs2s_slip", []).map(slipKeyLeg));
   const scopes = new Set(boardRows.map(r => r.scope || "12"));
   [...$("#bscope").children].forEach(b => { b.hidden = !scopes.has(b.dataset.v); });
   $("#bscope").hidden = scopes.size < 2;
   if (!scopes.has(bscope) && scopes.size) { bscope = scopes.has("12") ? "12" : [...scopes][0]; [...$("#bscope").children].forEach(x => x.classList.toggle("on", x.dataset.v === bscope)); }
   const rows = boardRows.filter(r => (bprop === "both" || r.prop === bprop) && (r.scope || "12") === bscope && (bside === "both" || r.side === bside)
-                                    && (!$("#bbets").checked || (r.units || 0) > 0) && hit(r)).sort(cmp);
+                                    && (!$("#bbets").checked || (r.units || 0) > 0) && (!$("#bflag").checked || !isFlagged(r)) && hit(r)).sort(cmp);
   $("#bcount").textContent = boardRows.length ? `${rows.length} of ${boardRows.length} lines` : "";
   const pct0 = x => x == null ? "–" : (x * 100).toFixed(1) + "%";
   const ev = (x, cls, sign) => x && x.text ? `<div class="b2ev ${cls}">${sign} ${esc(x.text)} ${basisTag(x.basis)}</div>` : "";
   const rowHtml = (r, showMatch) => {
-    const nick = r.nick || r.player, lab = !r.side ? "…" : r.state === "SCOUT" ? "S" : r.grade === "LEAN" ? "L" : r.grade;
+    const nick = r.nick || r.player, lab = !r.side ? "…" : r.state === "SCOUT" ? "–" : r.grade === "LEAN" ? "L" : r.grade;
+    const ltl = !r.side ? "Still grading" : r.state === "SCOUT" ? "No match scheduled" : r.grade === "LEAN" ? "Lean – 0 units" : `Grade ${r.grade}`;
     const ds = (r.dstat || [])[0] === "verify" ? ["warn", issueLabel(r.dstat[1])] : DSTAT[(r.dstat || [])[0]], team = r.team_name || r.team, opp = r.opp_name || r.opponent;
     return `<div class="brow2" data-bl="${esc(nick)}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}|${r.book || "underdog"}">
-      <span class="gtag ${!r.side || r.state === "SCOUT" ? "g-scout" : gClass(r.grade)}">${esc(lab)}</span>
+      <span class="gtag ${!r.side || r.state === "SCOUT" ? "g-scout" : gClass(r.grade)}" title="${esc(ltl)}">${esc(lab)}</span>
       <div><div class="b2top">${bbook === "all" ? `<span class="pill" style="margin:0 4px 0 0;padding:1px 7px">${bookName(r.book || "underdog")}</span>` : ""}<b>${esc(nick)}</b>${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}
           <span class="muted">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}${showMatch ? " · " + shortWhen(r.start) : ""}</span></div>
-        <div class="b2pick">${r.side ? esc(sideWord({grade: r.grade, side: r.side})) : "grading…"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}${mktTag(r)}${r.stale ? ` <span class="pill warn" title="The PrizePicks feed is not fresh – this line can't be confirmed as playable">not confirmed</span>` : ""}${r.p != null ? ` · <b>${pct0(r.p)}</b>` : ""}${r.grade === "LEAN" ? "" : " · " + esc(r.grade || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${r.cap_n && r.units_full > r.units ? ` <span class="pill" title="${r.cap_n} bets on this board need ${esc(r.team_name || r.team || "this team")} to ${r.side === "More" ? "do well" : "do badly"} in this match – one upset or overtime decides them all, so together they're capped at 3U. On its own this pick is ${r.units_full}U.">capped from ${r.units_full}U</span>` : ""}</div>
-        <div class="b2meta">Proj ${r.proj != null ? num(r.proj, 1) : "–"}${ds ? ` · <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}">${ds[1]}</span>` : ""}${r.source ? ` · source ${esc(r.source)}` : ""}${r.hltv_retry ? ` · <span class="pill warn" title="The HLTV database was unreachable at the last regrade – this is this line's last grade (source as shown); it is regraded as soon as the database answers">kept grade · HLTV unreachable</span>` : ""}${r.graded_at ? ` · graded ${agoTxt(r.graded_at)}` : ""}${r.alt && r.book !== "prizepicks" ? ` · alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}${r.book === "prizepicks" && r.open_line != null && +r.open_line !== +r.line ? ` · opened ${r.open_line}` : ""}${r.moved_from != null ? ` · <span class="pill warn">line moved from ${r.moved_from}</span>` : ""}</div>
+        <div class="b2pick">${r.side ? esc(sideWord(r)) : "grading…"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}${mktTag(r)}${r.stale ? ` <span class="pill warn" title="The PrizePicks feed is not fresh – this line can't be confirmed as playable">not confirmed</span>` : ""}${r.p != null ? ` · <b>${chance(r.p, r.prop)}</b>` : ""}${isLeanV(r) ? (r.state === "SCOUT" ? " · No match scheduled" : "") : " · " + esc(r.grade || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${capChip(r, r.team_name || r.team)}</div>
+        <div class="b2meta">Proj ${r.proj != null ? num(r.proj, 1) : "–"}${ds ? ` · <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}">${ds[1]}</span>` : ""}${r.source ? `<span class="mx"> · source ${esc(r.source)}</span>` : ""}${r.hltv_retry ? ` · <span class="pill warn" title="The HLTV database was unreachable at the last regrade – this is this line's last grade (source as shown); it is regraded as soon as the database answers">kept grade · HLTV unreachable</span>` : ""}${r.graded_at ? `<span class="mx"> · graded ${agoTxt(r.graded_at)}</span>` : ""}${r.alt && r.book !== "prizepicks" ? ` · alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}${r.book === "prizepicks" && r.open_line != null && +r.open_line !== +r.line ? ` · opened ${r.open_line}` : ""}${r.moved_from != null ? ` · <span class="pill warn">line moved from ${r.moved_from}</span>` : ""}</div>
         ${ev(r.support, "up", "+")}${ev(r.concern, "dn", "–")}</div>
-      ${r.side ? `<button type="button" class="bslip ${onSlip.has(nick.toLowerCase()) ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}|${mktType(r)}|${r.book || "underdog"}">${onSlip.has(nick.toLowerCase()) ? "On slip" : "+ Slip"}</button>` : "<span></span>"}
+      ${!r.side ? "<span></span>" : r.state === "SCOUT" ? `<button type="button" class="bslip" disabled title="No upcoming match found for his team – there is nothing to enter on a slip yet">+ Slip</button>`
+        : `<button type="button" class="bslip ${onSlip.has(slipKeyRow(r)) ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}|${mktType(r)}|${r.book || "underdog"}">${onSlip.has(slipKeyRow(r)) ? "On slip" : "+ Slip"}</button>`}
     </div>`; };
   // every qualifying bet in a match, kills + headshots, following Overs / Unders / Both - alternatives, not a slip
   const matchRank = mrows => {
     const q2 = boardRows.filter(x => matchKey(x) === matchKey(mrows[0]) && x.side && x.state !== "SCOUT" && (x.units || 0) > 0
                                      && (x.scope || "12") === bscope && (bside === "both" || x.side === bside)).sort((a, b) => (b.p ?? 0) - (a.p ?? 0));
     if (!q2.length) return `<div class="small muted" style="margin:0 2px 8px">No qualifying bets in this match${bside !== "both" ? ` (${bside === "More" ? "Overs" : "Unders"} only)` : ""}.</div>`;
-    const it = x => `${esc(x.nick || x.player)} ${sideWord({grade: x.grade, side: x.side})} ${x.line} ${propWord(x.prop)}${bbook === "all" ? ` (${bookName(x.book || "underdog")})` : ""} <b>${(x.p * 100).toFixed(1)}%</b>`;
+    const it = x => `${esc(x.nick || x.player)} ${sideWord({grade: x.grade, side: x.side})} ${x.line} ${propWord(x.prop)}${bbook === "all" ? ` (${bookName(x.book || "underdog")})` : ""} <b>${chance(x.p, x.prop)}</b>`;
     return `<div class="small" style="margin:0 2px 8px;line-height:1.5"><b>Highest chance here:</b> ${q2.slice(0, 3).map(it).join(" · ")}
       <div class="muted">No outside projections yet · value not ranked (no entry payouts)${q2.length > 1 ? " · these picks share match conditions and may win or lose together" : ""}</div></div>`; };
   // Best plays (2026-10-11): the strongest graded picks on the board right now - one per player, best grade first,
@@ -1169,7 +1383,7 @@ function drawBoard() {
   const bestPlays = () => {
     if (bview !== "matches" || !$("#bbets").checked) return "";
     const seen = new Set(), top = rows.filter(r => r.side && (r.units || 0) > 0 && r.state !== "SCOUT" && !r.stale)
-      .sort((a, b) => (G_RANK[a.grade] ?? 9) - (G_RANK[b.grade] ?? 9) || (b.p ?? 0) - (a.p ?? 0))
+      .sort((a, b) => (G_RANK[a.grade] ?? 9) - (G_RANK[b.grade] ?? 9) || isFlagged(a) - isFlagged(b) || (b.p ?? 0) - (a.p ?? 0))
       .filter(r => { const k = String(r.nick || r.player).toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 6);
     if (top.length < 2) return "";
     return `<div class="card" style="margin-bottom:12px;padding:12px"><div class="small muted" style="margin-bottom:6px"><b style="color:var(--text)">Best plays right now</b> · strongest graded picks${bbook === "all" ? " on either platform" : ""} · one per player</div>
@@ -1177,7 +1391,11 @@ function drawBoard() {
       <div class="small muted" style="margin-top:6px">Ranked by grade, then chance. Picks from one match share its conditions – see the match groups below.</div></div>`;
   };
   let html;
-  if (!rows.length) html = `<div class="muted">${boardRows.length ? `No lines match these filters. <button type="button" class="chipbtn" data-reset="1">Reset filters</button>` : `No ${bookName(bbook)} CS2 lines right now.${boardAt && bbook === "underdog" ? ` Checked ${new Date(boardAt * 1000).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})} · checks again every 5 minutes – new lines are graded automatically.` : ""}`}</div>`;
+  const grading = (bbook === "all" ? ["underdog", "prizepicks"] : [bbook]).reduce((a, b) => a + Math.max(0, ((BK[b] || {}).total || 0) - ((BK[b] || {}).rows || []).length), 0);
+  if (!rows.length && !boardRows.length && grading) {         // after a restart the lines are graded one by one: say so
+    html = `<div class="muted"><span class="spin"></span>Grading ${grading} ${bookName(bbook)} line${grading === 1 ? "" : "s"} – the first grades appear within a few minutes; this list refreshes on its own.</div>`;
+    clearTimeout(drawBoard.t); drawBoard.t = setTimeout(() => { if (!$("#board").hidden && !boardRows.length) loadBoard(true); }, 60000);
+  } else if (!rows.length) html = `<div class="muted">${boardRows.length ? `No lines match these filters. <button type="button" class="chipbtn" data-reset="1">Reset filters</button>` : `No ${bookName(bbook)} CS2 lines right now.${boardAt && bbook === "underdog" ? ` Checked ${new Date(boardAt * 1000).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})} · checks again every 5 minutes – new lines are graded automatically.` : ""}`}</div>`;
   else if (bview === "all") html = `<div class="blist">${rows.map(r => rowHtml(r, true)).join("")}</div>`;
   else {
     const groups = new Map();
@@ -1190,15 +1408,16 @@ function drawBoard() {
         <span class="muted small">${shortWhen(r.start)}${r.event ? " · " + esc(r.event) : ""}${r.bo ? " · BO" + esc(r.bo) : ""} · ${maps.length ? "maps: " + maps.map(mapName).join(", ") : "maps not announced"} · ${g.length} line${g.length > 1 ? "s" : ""}${bets ? `, ${bets} bet${bets > 1 ? "s" : ""}` : ""}</span></summary>
         <div class="mbody">${matchRank(g)}<div class="blist">${g.map(x => rowHtml(x, false)).join("")}</div></div></details>`; }).join("");
   }
-  $("#boardout").innerHTML = (rows.length ? bestPlays() : "") + html + (rows.length ? `<div class="small muted" style="margin-top:10px">${bookName(bbook)} lines, graded – each at its own line${bbook === "prizepicks" ? " and market type (standard, goblin, demon)" : ""}. Tap a pick for the full analysis.</div>` : "");
+  $("#boardout").innerHTML = (rows.length ? bestPlays() : "") + html + (rows.length ? `<div class="small muted" style="margin-top:10px">${bookName(bbook)} lines, graded – each at its own line${bbook === "prizepicks" ? " and market type (standard, goblin, demon)" : ""}. Tap a pick for the full analysis.</div>${gradeLegend()}` : "");
   $("#boardout").querySelectorAll("details.mgroup").forEach(d => d.addEventListener("toggle", () => { const o = store.get("cs2s_mopen", {}); o[d.dataset.mk] = d.open; store.set("cs2s_mopen", o); }));
 }
 $("#boardout").addEventListener("click", e => {
   if (e.target.closest("[data-reset]")) return resetBFilters();
+  if (e.target.closest("[data-mlall]")) { $("#mlusable").checked = false; return drawBoard(); }
   const cb = e.target.closest("[data-cmp]");
   if (cb) { const [bk, p, l, t, sc, lt] = cb.dataset.cmp.split("|");
     const row = BK[bk].rows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && (x.scope || "12") === sc && mktType(x) === lt);
-    return gradeNow(p, l, t, row ? gradeType(row) : lt, sc, true, row ? {team: row.team, opponent: row.opponent, book: bk} : {book: bk}); }
+    return gradeNow(p, l, t, row ? gradeType(row) : lt, sc, true, row ? {team: row.team, opponent: row.opponent, book: bk, start: row.start} : {book: bk}); }
   const b = e.target.closest("[data-bslip]");
   if (b) { e.stopPropagation(); const [p, l, t, lt, bk] = b.dataset.bslip.split("|");
     const r = boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && mktType(x) === (lt || "standard") && (x.book || "underdog") === (bk || "underdog"));
@@ -1206,14 +1425,18 @@ $("#boardout").addEventListener("click", e => {
   const r = e.target.closest("[data-bl]");
   if (r) { const [p, l, t, sc, lt, bk] = r.dataset.bl.split("|");
     const row = boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && (x.scope || "12") === sc && mktType(x) === (lt || "standard") && (x.book || "underdog") === (bk || "underdog"));
-    gradeNow(p, l, t, row ? gradeType(row) : (lt || "standard"), sc, true, row ? {team: row.team, opponent: row.opponent, book: row.book || "underdog"} : null); }
+    gradeNow(p, l, t, row ? gradeType(row) : (lt || "standard"), sc, true, row ? {team: row.team, opponent: row.opponent, book: row.book || "underdog", start: row.start} : null); }
 });
-$("#bbook").onclick = e => { const b = e.target.closest("button"); if (!b) return; bbook = b.dataset.v;
-  [...$("#bbook").children].forEach(x => x.classList.toggle("on", x === b)); loadBoard(false); };
+function setBook(v, quiet) {
+  if (!BOOKS.includes(v)) return; bbook = v;
+  [...$("#bbook").children].forEach(x => x.classList.toggle("on", x.dataset.v === v));
+  if (!quiet) { pushView(); loadBoard(false); }
+}
+$("#bbook").onclick = e => { const b = e.target.closest("button"); if (b) setBook(b.dataset.v); };
 // Compare: the same player / match / stat / maps on both platforms (joined by OUR player and match ids from grading),
 // each line with the chance at THAT line. The easier line = the lower one for an Over, the higher one for an Under;
 // not automatically better value (payouts differ), and goblin / demon markets are never compared with standard lines
-const outageNote = d => d.hltv_outage ? `<div class="small" style="margin-top:8px;color:var(--warn)">⚠ HLTV database unreachable right now – this is a temporary projection from the older model.${(d.hltv_outage.rows || []).length ? ` The Prop Board still shows this line's last grade: ${d.hltv_outage.rows.map(o => `${bookName(o.book)} ${o.line} ${esc(sideWord({grade: o.grade, side: o.side}))}${o.grade === "LEAN" ? "" : " · " + esc(o.grade)} (${(o.p * 100).toFixed(1)}%)`).join(", ")}.` : ""}</div>` : "";
+const outageNote = d => d.hltv_outage ? `<div class="small" style="margin-top:8px;color:var(--warn)">⚠ HLTV database unreachable right now – this is a temporary projection from the older model.${(d.hltv_outage.rows || []).length ? ` The Prop Board still shows this line's last grade: ${d.hltv_outage.rows.map(o => `${bookName(o.book)} ${o.line} ${esc(sideWord(o))}${isLeanV(o) ? "" : " · " + esc(o.grade)} (${(o.p * 100).toFixed(1)}%)`).join(", ")}.` : ""}</div>` : "";
 function drawCompare() {
   const q = ($("#bsearch").value || "").trim().toLowerCase();
   const hit = r => !q || [r.nick, r.player, r.team, r.team_name, r.opponent, r.opp_name].some(x => String(x || "").toLowerCase().includes(q));
@@ -1224,13 +1447,17 @@ function drawCompare() {
       if ((bprop !== "both" && r.prop !== bprop) || (r.scope || "12") !== bscope || !hit(r) || !r.side) continue;
       const k = keyOf(r); if (!pairs.has(k)) pairs.set(k, {u: [], p: [], any: r}); pairs.get(k)[bk === "underdog" ? "u" : "p"].push(r);
     }
-  const list = [...pairs.values()].filter(x => bside === "both" || [...x.u, ...x.p].some(r => r.side === bside));
-  $("#bcount").textContent = `${list.length} player markets · ${list.filter(x => x.u.length && x.p.length).length} on both platforms`;
-  const pOver = r => r.side === "More" ? r.p : 1 - r.p;
+  // the gap between the two platforms' standard lines (null when one platform has no standard line)
+  const stdOf = rows => rows.find(r => mktType(r) === "standard");
+  const gapOf = x => { const u = stdOf(x.u), p = stdOf(x.p); return u && p ? Math.abs(u.line - p.line) : null; };
+  const all0 = [...pairs.values()].filter(x => bside === "both" || [...x.u, ...x.p].some(r => r.side === bside));
+  const list = all0.filter(x => !$("#cdiff").checked || gapOf(x) > 0);
+  $("#bcount").textContent = `${list.length} player markets · ${list.filter(x => x.u.length && x.p.length).length} on both platforms${$("#cdiff").checked ? ` · ${all0.length - list.length} hidden (same line, or on one platform only)` : ""}`;
+  const sides = r => r.side === "More" ? [chance(r.p, r.prop), pct(1 - r.p)] : [pct(1 - r.p), chance(r.p, r.prop)];
   const one = (bk, r) => `<button type="button" class="cmpcell" data-cmp="${bk}|${esc(r.nick || r.player)}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}" title="Open the card at this ${bookName(bk)} line">
       <span class="ln">${r.line}</span>${mktTag(r)}${r.stale ? ` <span class="pill warn">not confirmed</span>` : ""}
-      <div style="display:flex;flex-wrap:wrap;gap:0 10px"><span style="white-space:nowrap">Over ${(pOver(r) * 100).toFixed(1)}%</span><span style="white-space:nowrap">Under ${((1 - pOver(r)) * 100).toFixed(1)}%</span></div>
-      <div class="muted">${esc(sideWord({grade: r.grade, side: r.side}))}${r.grade === "LEAN" ? "" : " · " + esc(r.grade)} · ${+(+r.units || 0).toFixed(2)}U</div></button>`;
+      <div style="display:flex;flex-wrap:wrap;gap:0 10px"><span style="white-space:nowrap">Over ${sides(r)[0]}</span><span style="white-space:nowrap">Under ${sides(r)[1]}</span></div>
+      <div class="muted">${esc(sideWord(r))}${isLeanV(r) ? "" : " · " + esc(r.grade)} · ${+(+r.units || 0).toFixed(2)}U</div></button>`;
   const col = (bk, rows) => `<div><div class="cmpbook">${bookName(bk)}</div>${rows.length ? rows.map(r => one(bk, r)).join("") : `<div class="cmpnone">${bookName(bk)}: not offered</div>`}</div>`;
   const easier = x => {
     const pr = [...x.u, ...x.p].map(y => y.proj).filter(v => v != null);
@@ -1241,22 +1468,29 @@ function drawCompare() {
     const lo = u.line < p.line ? ["underdog", u] : ["prizepicks", p], hi = u.line > p.line ? ["underdog", u] : ["prizepicks", p];
     return `<div class="cmpeasy">Easier Over: <b>${bookName(lo[0])} ${lo[1].line}</b><br>Easier Under: <b>${bookName(hi[0])} ${hi[1].line}</b></div>`;
   };
+  const cmpRow = (x, withMatch) => {
+    const all = [...x.u, ...x.p], pr = all.map(y => y.proj).filter(v => v != null), spread = pr.length > 1 ? Math.max(...pr) - Math.min(...pr) : 0;
+    const r = x.any, gp = gapOf(x);
+    return `<div class="cmprow"><div class="who"><b>${esc(r.nick || r.player)}</b> <span class="muted small">${propWord(r.prop)}${mapsWord(r.scope)}</span>
+        ${withMatch ? `<span class="cmpwhen">${esc((r.team_name || r.team || "") + " vs " + (r.opp_name || r.opponent || ""))} · ${shortWhen(r.start)}</span>` : ""}
+        <span class="small">Projection <b>${pr.length ? num(pr[0], 1) : "–"}</b>${withMatch && gp ? ` · lines ${num(gp, 1)} apart` : ""}${spread > 0.05 ? ` <span class="pill warn" title="Same model, graded at different moments – the next regrade aligns them; the newer grade has the newer data">projections differ by ${num(spread, 1)}</span>` : ""}</span></div>
+      ${col("underdog", x.u)}${col("prizepicks", x.p)}${easier(x)}</div>`;
+  };
+  const head = `<div class="cmphead"><div>Player · our projection</div><div>Underdog line</div><div>PrizePicks line</div><div>Easier line</div></div>`;
   const groups = new Map();
   for (const x of list) { const k = matchKey(x.any); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(x); }
-  const html = !list.length ? `<div class="muted">${BK.prizepicks.loaded && BK.underdog.loaded ? "No player markets match these filters on either platform." : "Loading both platforms…"}</div>`
+  const html = !list.length ? `<div class="muted">${BK.prizepicks.loaded && BK.underdog.loaded ? `No player markets match these filters on either platform.${$("#cdiff").checked ? " Every line is the same on both platforms right now." : ""}` : "Loading both platforms…"}</div>`
+    // biggest line gap: one list across every match, the largest difference between the platforms first
+    : $("#csort").value === "gap" ? `<div class="mgroup"><div class="mbody" style="padding-top:12px">${head}${[...list].sort((a, b) => (gapOf(b) ?? -1) - (gapOf(a) ?? -1)
+        || String(a.any.start || "9").localeCompare(String(b.any.start || "9"))).map(x => cmpRow(x, true)).join("")}</div></div>`
     : [...groups.values()].sort((a, b) => String(a[0].any.start || "9").localeCompare(String(b[0].any.start || "9"))).map(g => {
       const r = headRow(g.map(x => x.any)), both = g.filter(x => x.u.length && x.p.length).length;
       return `<details class="mgroup" open><summary><b>${esc((r.team_name || r.team || "") + " vs " + (r.opp_name || r.opponent || ""))}</b>
         <span class="muted small">${shortWhen(r.start)}${r.event ? " · " + esc(r.event) : ""} · ${g.length} market${g.length > 1 ? "s" : ""}${both ? `, ${both} on both` : ""}</span></summary>
-        <div class="mbody"><div class="cmphead"><div>Player · our projection</div><div>Underdog line</div><div>PrizePicks line</div><div>Easier line</div></div>
+        <div class="mbody">${head}
         ${g.sort((a, b) => teamNorm(a.any.team_name || a.any.team).localeCompare(teamNorm(b.any.team_name || b.any.team))
             || String(a.any.nick || a.any.player).toLowerCase().localeCompare(String(b.any.nick || b.any.player).toLowerCase())
-            || propOrder(a.any.prop) - propOrder(b.any.prop)).map(x => {
-          const all = [...x.u, ...x.p], pr = all.map(y => y.proj).filter(v => v != null), spread = pr.length > 1 ? Math.max(...pr) - Math.min(...pr) : 0;
-          return `<div class="cmprow"><div class="who"><b>${esc(x.any.nick || x.any.player)}</b> <span class="muted small">${propWord(x.any.prop)}${mapsWord(x.any.scope)}</span>
-              <span class="small">Projection <b>${pr.length ? num(pr[0], 1) : "–"}</b>${spread > 0.05 ? ` <span class="pill warn" title="Same model, graded at different moments – the next regrade aligns them; the newer grade has the newer data">projections differ by ${num(spread, 1)}</span>` : ""}</span></div>
-            ${col("underdog", x.u)}${col("prizepicks", x.p)}${easier(x)}</div>`;
-        }).join("")}</div></details>`; }).join("");
+            || propOrder(a.any.prop) - propOrder(b.any.prop)).map(x => cmpRow(x, false)).join("")}</div></details>`; }).join("");
   $("#boardout").innerHTML = html + `<div class="small muted" style="margin-top:10px">Book lines are betting thresholds, not projections; each chance is our model at that platform's line (pushes excluded on whole lines).
     The easier line is the lower one for an Over and the higher one for an Under – easier, not automatically better value: payouts differ by platform and market type, and a return needs your entry's exact payout.
     ${BK.prizepicks.feed && BK.prizepicks.feed.state !== "ok" ? `<b>PrizePicks feed: ${esc(BK.prizepicks.feed.state)}</b> – its lines aren't confirmed.` : ""}</div>`;
@@ -1267,17 +1501,29 @@ $("#bscope").onclick = e => { const b = e.target.closest("button"); if (!b) retu
   [...$("#bscope").children].forEach(x => x.classList.toggle("on", x === b)); drawBoard(); };
 $("#bside").onclick = e => { const b = e.target.closest("button"); if (!b) return; bside = b.dataset.v;
   [...$("#bside").children].forEach(x => x.classList.toggle("on", x === b)); drawBoard(); };
-$("#bbets").onchange = drawBoard;
+$("#bbets").onchange = drawBoard; $("#bflag").onchange = drawBoard; $("#cdiff").onchange = drawBoard; $("#csort").onchange = drawBoard; $("#mlusable").onchange = drawBoard;
 $("#bview").onclick = e => { const b = e.target.closest("button"); if (!b) return; bview = b.dataset.v;
   [...$("#bview").children].forEach(x => x.classList.toggle("on", x === b)); drawBoard(); };
 function resetBFilters() {
   bprop = "kills"; bside = "both"; bscope = "12"; bview = "matches";   // the platform choice is kept
-  $("#bsort").value = "g"; $("#bbets").checked = true; $("#bsearch").value = "";
+  $("#bsort").value = "g"; $("#bbets").checked = true; $("#bsearch").value = ""; $("#bflag").checked = false;
+  $("#csort").value = "t"; $("#cdiff").checked = false; $("#mlusable").checked = true;
   for (const [id, v] of [["#bprop", bprop], ["#bside", bside], ["#bscope", bscope], ["#bview", bview]]) [...$(id).children].forEach(x => x.classList.toggle("on", x.dataset.v === v));
   drawBoard();
 }
 $("#breset").onclick = resetBFilters;
 restoreBFilters();
+// filters: one "Filters (n active)" button - closed by default on phones (2026-10-11 audit: the filter wall pushed the first
+// pick a full screen down), open on wider screens
+const activeFilters = () => [bview !== "matches", bprop !== "kills", bside !== "both", bscope !== "12", $("#bsort").value !== "g", !$("#bbets").checked, $("#bflag").checked].filter(Boolean).length;
+function filtersLabel() {
+  const b = $("#scout-filters"); if (!b) return;
+  const closed = $("#board").classList.contains("filters-collapsed"), n = activeFilters();
+  b.textContent = closed ? `Filters${n ? ` (${n} active)` : ""}` : "Hide filters"; b.setAttribute("aria-expanded", String(!closed));
+}
+$("#scout-filters").onclick = () => { $("#board").classList.toggle("filters-collapsed"); filtersLabel(); };
+try { if (matchMedia("(max-width:760px)").matches) $("#board").classList.add("filters-collapsed"); } catch {}
+filtersLabel();
 $("#bsearch").oninput = drawBoard;
 $("#bsort").onchange = drawBoard;
 $("#brefresh").onclick = () => loadBoard(true);
@@ -1326,21 +1572,55 @@ function mlPlatform(p, blk, A, B, names) {
       return `<div>${blk.usable ? `<b>${head}</b>` : `<span class="muted">${head}</span>`} <span class="small muted">${why}</span></div>`
         + (p === "kalshi" && other != null ? `<div class="small">${esc(B)}'s own YES contract ${pct(other)} <span class="muted">– a separate contract, never averaged in</span></div>` : "");
     })()}
-    <div class="small">Bid ${cents(blk.bid)} · Ask ${cents(blk.ask)} · Spread ${cents(blk.spread)}${blk.team_a_name ? ` <span class="muted">(${esc(blk.team_a_name)}${p === "kalshi" ? " YES" : ""})</span>` : ""}</div>
+    <div class="small">${blk.team_a_name ? `${esc(blk.team_a_name)}${p === "kalshi" ? " YES contract" : ""}: ` : ""}bid ${cents(blk.bid)} · ask ${cents(blk.ask)} · spread ${cents(blk.spread)}</div>
     <div class="small">Depth at best ${qty(blk.bid_size)} / ${qty(blk.ask_size)}${dep.bid_5c != null ? ` · within 5¢ ${qty(dep.bid_5c)} / ${qty(dep.ask_5c)}` : ""}</div>
     <div class="small muted">Quote read ${esc(ago(blk.received_ts) || "–")}${lt && lt.price != null ? ` · last trade ${cents(lt.price)} (not a quote)` : ""}</div>
     <div>${blk.usable ? `<span class="pill good">Usable quote</span>` : `<span class="pill warn">Not usable</span>`}${blk.fresh === false ? ` <span class="pill warn">Not current</span>` : blk.market_open === false ? ` <span class="pill warn">Market closed</span>` : ""}</div>
     ${!blk.usable && blk.reason ? `<div class="small muted">${esc(blk.reason)}</div>` : ""}</div>`;
 }
+const mlUsable = m => !!(m.platforms && ((m.platforms.polymarket || {}).usable || (m.platforms.kalshi || {}).usable));
+// why a platform has no usable price, in a few words
+const mlWhy = blk => !blk ? "no market" : !blk.available ? String(blk.reason || "can't be read").replace(/\.$/, "") : blk.fresh === false ? "price not current"
+  : blk.market_open === false ? "market closed" : blk.spread != null ? `spread ${Math.round(blk.spread * 100)}¢` : String(blk.reason || "not usable").replace(/\.$/, "");
+const mlSide = sd => {
+  if (!sd || !sd.label) return "";
+  const v = sd.hltv_view, c = sd.hltv_counts || {};
+  const badge = v === "agrees" ? `<span class="pill good">HLTV agrees${c.available ? ` (${c.for} of ${c.available})` : ""}</span>`
+    : v === "disagrees" ? `<span class="pill bad">HLTV disagrees${c.available ? ` (${c.against} of ${c.available} favour the other side)` : ""}</span>`
+    : v === "mixed" ? `<span class="pill warn">HLTV mixed</span>` : `<span class="pill">No HLTV comparison</span>`;
+  const rs = (sd.reasons || []).slice(0, 6);
+  return `<div class="mlside"><div class="mlsidehead"><b>${esc(sd.label)}</b> <span class="pill">0U · shadow</span> ${badge}</div>
+    ${rs.length ? `<ul class="mlreasons">${rs.map(r => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
+    ${sd.basis ? `<div class="small muted">${esc(sd.basis)}</div>` : ""}</div>`;
+};
 function mlCard(m, model, rec) {
   const A = m.teams.a || "Team A", B = m.teams.b || "Team B", b = m.baseline || {}, P = m.platforms || {};
   const pu = P.polymarket && P.polymarket.usable, ku = P.kalshi && P.kalshi.usable, gap = m.disagreement_gap;
-  const base = b.prob_a != null
-    ? `<div class="mlbase"><span class="mlprob">${esc(A)} ${pct(b.prob_a)} · ${esc(B)} ${pct(1 - b.prob_a)}</span>
-        <span class="small muted">Market baseline: ${esc(PLAT[b.platform] || b.platform)} midpoint – ${esc(b.reason || "")}</span></div>`
-    : `<div class="mlbase"><span class="mlprob muted">Market probability unavailable</span><span class="small muted">${esc(b.reason || m.link_reason || "")}</span></div>`;
+  const headL = `<div class="mlhead"><b>${esc(A)} vs ${esc(B)}</b>
+      <span class="small muted">${m.start ? when(m.start) : "start unknown"}${m.event ? " · " + esc(m.event) : ""}${m.bo ? " · BO" + esc(m.bo) : ""} · Series winner</span></div>`;
+  // nothing usable: one muted line instead of a wall of tags; the raw quotes stay one tap away
+  if (!pu && !ku) {
+    const anyQ = ["polymarket", "kalshi"].some(p => P[p] && P[p].available);
+    return `<article class="mlcard nouse">${headL}<div class="mlnone">No usable price – Kalshi: ${esc(mlWhy(P.kalshi))}; Polymarket: ${esc(mlWhy(P.polymarket))}</div>
+      ${anyQ ? `<details><summary>Quote details</summary><div class="mlplats">${mlPlatform("polymarket", P.polymarket, A, B, m.teams.names_by_platform)}${mlPlatform("kalshi", P.kalshi, A, B, m.teams.names_by_platform)}</div></details>` : ""}</article>`;
+  }
+  // one headline (2026-10-11 audit: "Market probability unavailable" sat above two usable prices): the market baseline when
+  // there is one, else the first usable platform's own price for the first team - labelled a price, not a baseline
+  const nrm = x => String(x || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const priceA = p => { const k = P[p]; if (!k || !k.usable) return null;
+    const rev = k.team_a_name && nrm(k.team_a_name) === nrm(B) && nrm(k.team_a_name) !== nrm(A);
+    return rev ? (p === "kalshi" ? k.prob_b_yes : (k.prob_a == null ? null : 1 - k.prob_a)) : k.prob_a; };
+  const src = b.prob_a != null ? {pa: b.prob_a, from: PLAT[b.platform] || b.platform, base: true}
+    : ["polymarket", "kalshi"].map(p => ({pa: priceA(p), from: PLAT[p]})).find(x => x.pa != null) || null;
+  const status = !m.match_id ? `<span class="pill" title="${esc(m.link_reason || "")}">Prices only – not tied to one HLTV match</span>`
+    : m.tie_possible ? `<span class="pill warn">Best-of-2 – a draw is possible</span>`
+    : m.disagreement && gap != null ? `<span class="pill bad">Platforms disagree by ${(gap * 100).toFixed(1)} pts</span>`
+    : pu && ku ? `<span class="pill good">Both platforms</span>` : `<span class="pill">${pu ? "Polymarket" : "Kalshi"} only</span>`;
+  const base = src ? `<div class="mlbase"><span class="mlprob">${esc(A)} ${pct(src.pa)} · ${esc(B)} ${pct(1 - src.pa)}</span>
+        <span class="small muted">${esc(src.from)} price, the middle of its bid and ask${src.base ? "" : " – a price, not a win probability"} ${status}</span></div>`
+    : `<div class="mlbase"><span class="mlprob muted">No price to show</span> ${status}</div>`;
   // three separate badge rows: data quality / freshness, agreement between platforms, model + recommendation status
-  const quality = [m.match_id ? "" : `<span class="pill warn" title="${esc(m.link_reason || "")}">Not linked to one HLTV match – never a baseline</span>`,
+  const quality = [m.match_id ? "" : `<span class="pill warn" title="${esc(m.link_reason || "")}">Not tied to one HLTV match – shown as prices only</span>`,
     ...["polymarket", "kalshi"].filter(p => P[p] && P[p].available).map(p => P[p].usable ? `<span class="pill good">${PLAT[p]} usable</span>`
       : P[p].fresh === false ? `<span class="pill warn">${PLAT[p]} stale</span>`
       : P[p].market_open === false ? `<span class="pill warn">${PLAT[p]} market closed / not accepting orders</span>`
@@ -1353,13 +1633,14 @@ function mlCard(m, model, rec) {
                                                            : `<span class="pill">Platforms agree within 5 pts (${(gap * 100).toFixed(1)})${unl}</span>`)
                                          : (m.match_id ? "" : `<span class="pill">Not linked – prices not compared</span>`)) : "",
     P.kalshi && P.kalshi.coherence_flag ? `<span class="pill warn">Kalshi's two YES prices don't add up (gap ${(P.kalshi.coherence_gap * 100).toFixed(1)} pts)</span>` : ""].filter(Boolean).join(" ");
-  return `<article class="mlcard"><div class="mlhead"><b>${esc(A)} vs ${esc(B)}</b>
-      <span class="small muted">${m.start ? when(m.start) : "start unknown"}${m.event ? " · " + esc(m.event) : ""}${m.bo ? " · BO" + esc(m.bo) : ""} · Series winner</span></div>
+  // the model / recommendation status is the same for every match: it is said once, above the list
+  return `<article class="mlcard">${headL}
     ${base}
+    ${mlSide(m.side)}
+    <details><summary>Quote details</summary>
     <div class="mlbadges"><span>Data</span> ${quality || `<span class="pill">No quotes</span>`}</div>
     ${agree ? `<div class="mlbadges"><span>Agreement</span> ${agree}</div>` : ""}
-    <div class="mlbadges"><span>Model</span> <span class="pill">${esc(model.label || "Model: not validated yet - market baseline shown, no recommendation")}</span> <span class="pill">${esc(rec)}</span></div>
-    <div class="mlplats">${mlPlatform("polymarket", P.polymarket, A, B, m.teams.names_by_platform)}${mlPlatform("kalshi", P.kalshi, A, B, m.teams.names_by_platform)}</div></article>`;
+    <div class="mlplats">${mlPlatform("polymarket", P.polymarket, A, B, m.teams.names_by_platform)}${mlPlatform("kalshi", P.kalshi, A, B, m.teams.names_by_platform)}</div></details></article>`;
 }
 function drawMoneylines() {
   const box = $("#boardout"), d = ML.data;
@@ -1370,23 +1651,72 @@ function drawMoneylines() {
   const q = ($("#bsearch").value || "").trim().toLowerCase(), now = Date.now();
   const list = d.matches.filter(m => !q || [m.teams.a, m.teams.b, m.event].some(x => String(x || "").toLowerCase().includes(q)));
   // one decision per match (server): any platform live, or the earliest stated start passed
-  const started = m => m.started || (m.start && Date.parse(m.start) <= now), up = list.filter(m => !started(m)), done = list.filter(started);
-  $("#bcount").textContent = `${up.length} upcoming match${up.length === 1 ? "" : "es"} · ${up.filter(m => m.baseline && m.baseline.prob_a != null).length} with a market baseline`;
+  const started = m => m.started || (m.start && Date.parse(m.start) <= now), up0 = list.filter(m => !started(m)), done = list.filter(started);
+  const onlyU = $("#mlusable").checked, nUse = up0.filter(mlUsable).length, up = onlyU ? up0.filter(mlUsable) : up0;
+  $("#bcount").textContent = `${nUse} of ${up0.length} match${up0.length === 1 ? "" : "es"} ${nUse === 1 ? "has" : "have"} a usable price`;
   const model = d.model || {}, rec = d.recommendation || "Shadow - not a staking recommendation";
   box.innerHTML = `<div class="mlintro"><b style="color:var(--text)">Series winner prices</b><span>Polymarket + Kalshi, read by the server about every minute</span>
-      <span class="pill">${esc(model.label || "")}</span><span class="pill">${esc(rec)}</span></div>`
-    + (up.length ? up.map(m => mlCard(m, model, rec)).join("") : `<div class="muted">${list.length ? "No upcoming matches match this search." : "No CS2 series-winner markets on Polymarket or Kalshi right now."}</div>`)
+      <span class="pill">${esc(model.label || "Model: not validated yet - market baseline shown, no recommendation")}</span><span class="pill">${esc(rec)}</span></div>`
+    + (up.length ? up.map(m => mlCard(m, model, rec)).join("")
+       : `<div class="muted">${up0.length && onlyU ? `None of the ${up0.length} upcoming match${up0.length === 1 ? " has" : "es have"} a usable price right now. <button type="button" class="chipbtn" data-mlall="1">Show all matches</button>`
+         : list.length ? "No upcoming matches match this search." : "No CS2 series-winner markets on Polymarket or Kalshi right now."}</div>`)
+    + (onlyU && up0.length > up.length && up.length ? `<div class="small muted" style="margin:4px 0 10px">${up0.length - up.length} match${up0.length - up.length === 1 ? "" : "es"} without a usable price hidden · <button type="button" class="chipbtn" data-mlall="1">Show all</button></div>` : "")
     + (done.length ? `<details class="mgroup"><summary><b>Started</b> <span class="muted small">${done.length} – in-play prices, never a baseline</span></summary>
         <div class="mbody">${done.map(m => mlCard(m, model, rec)).join("")}</div></details>` : "")
-    + `<details class="small muted" style="margin-top:10px"><summary>How the market baseline is chosen</summary><p>${esc(d.rule || "")}</p>
+    + `<details class="small muted" style="margin-top:10px"><summary>Which price is shown</summary><p>${esc(d.rule || "")}</p>
         <p>Probabilities are each platform's bid/ask midpoint for the first team, shown to 0.1%. A last trade is never used as a price. The model column stays empty until a moneyline model passes its walk-forward test – until then this tab shows the market only, with no stake or recommendation. Not financial advice.</p></details>`;
 }
 
 // ---------- Slip studio: the server's diversified builder (slip_builder studio-1). One batch at a time: no player,
 // prop or match repeats across the batch's slips (limited overlap = visible caps); every slip is re-checked against the
 // platform and the current grades right before it is copied. Research suggestions - no payouts, no returns.
-const studioCfg = () => Object.assign({book: "underdog", side: "either", sizes: [4, 3, 2], count: 2, stat: "both", scope: "12", overlap: false, cap: 2},
+const studioCfg = () => Object.assign({book: "underdog", side: "either", sizes: [4, 3, 2], count: 2, stat: "both", scope: "12", overlap: false, cap: 2, fill: "large"},
                                       store.get("cs2s_studio", {}));
+// the studio is one line ("Slip studio - ... Open") until a member opens it; open / closed is remembered
+function studioShow() {
+  const off = STUDIO.off || bbook === "moneylines";
+  $("#studiobox").hidden = $("#bstudio").hidden = off;
+}
+// opened only when the member asks (2026-10-11 audit: a remembered open studio pushed the picks ~1,900 px down on phones)
+function studioToggle(open) {
+  STUDIO.open = open;
+  const box = $("#studio"), b = $("#bstudio"); box.hidden = !open;
+  b.textContent = open ? "Close" : "Open"; b.setAttribute("aria-expanded", String(open)); b.classList.toggle("primary", !open);
+  if (open && !box.dataset.ready) {
+    box.dataset.ready = "1";
+    if (["underdog", "prizepicks"].includes(bbook) && !store.get("cs2s_studio", null)) studioSave(Object.assign(studioCfg(), {book: bbook}));
+    studioForm(); studioLoad();
+  } else if (open) studioCapacity();
+}
+// "Right now: 23 eligible picks in 9 matches - enough for up to ..." (GET /api/slip_studio/capacity), refreshed when a
+// setting changes (debounced) and after every build; nothing shows when the server doesn't answer
+let capT = null, capSeq = 0;
+function studioCapacity() { clearTimeout(capT); capT = setTimeout(studioCapNow, 350); }
+async function studioCapNow() {
+  const el = $("#st-capnow"); if (!el || STUDIO.off || !STUDIO.open) return;
+  const c = studioCfg(), st = studioSettings(c), seq = ++capSeq;
+  // the server counts the whole board with no repeats (overlap and this batch's slips are not in that number - said in words)
+  const qs = new URLSearchParams({book: st.book, side: st.side, stat: st.stat, scope: st.scope, market: st.market});
+  try {
+    const r = await fetch("/api/slip_studio/capacity?" + qs); if (seq !== capSeq) return;
+    const d = r.ok ? await r.json() : null; if (seq !== capSeq) return;
+    el.innerHTML = capText(d, c);
+  } catch { if (seq === capSeq) el.innerHTML = ""; }
+}
+function capText(d, c) {
+  if (!d || d.lines == null) return "";
+  const where = `on ${bookName(c.book)}`;
+  if (!d.lines) return `<b>Right now:</b> no eligible picks ${where} with these settings.`;
+  // the server sends max_slips (2026-10-11 audit: the page read d.max, so this sentence never showed its numbers)
+  const words = {2: "two", 3: "three", 4: "four"}, mx = d.max_slips || {};
+  const fmt = m => { const parts = [4, 3, 2].filter(n => c.sizes.includes(n) && m && m[n] != null).map(n => `${m[n]} ${words[n]}-pick${+m[n] === 1 ? "" : "s"}`);
+    return parts.length > 1 ? parts.slice(0, -1).join(", ") + " or " + parts[parts.length - 1] : parts[0]; };
+  const list = fmt(mx), last = STUDIO.last && STUDIO.batch && STUDIO.last.batch_id === STUDIO.batch.batch_id ? STUDIO.last : null;
+  const left = last && last.eligible ? fmt(last.eligible.max_slips_left) : null;
+  return `<b>Right now:</b> ${d.lines} eligible pick${d.lines === 1 ? "" : "s"} in ${d.matches} match${d.matches === 1 ? "" : "es"} ${where}`
+    + (list ? ` – enough for up to ${list} with no player or match repeated` : "") + "."
+    + (left ? ` <span class="muted">Still free for your current batch: up to ${left}.</span>` : "");
+}
 const studioSave = c => store.set("cs2s_studio", c);
 const rid = () => (crypto.randomUUID ? crypto.randomUUID() : "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 12));
 async function studioCall(method, url, body) {        // a retry repeats the same body (same idem) - the server answers it once
@@ -1403,25 +1733,28 @@ async function studioCall(method, url, body) {        // a retry repeats the sam
   }
 }
 const studioSettings = c => Object.assign({book: c.book, side: c.side, stat: c.stat, scope: c.scope, market: "standard", sizes: c.sizes, count: +c.count,
-  overlap: c.overlap ? "limited" : "none"}, c.overlap ? {max_uses: {player: +c.cap, match: +c.cap}} : {});
+  fill: c.fill === "small" ? "small" : "large", overlap: c.overlap ? "limited" : "none"}, c.overlap ? {max_uses: {player: +c.cap, match: +c.cap}} : {});
 function studioForm() {
   const c = studioCfg(), seg = (k, opts) => `<div class="seg" data-sk="${k}" role="group">` + opts.map(([v, l]) =>
     `<button type="button" data-v="${v}" class="${String(c[k]) === String(v) ? "on" : ""}" aria-pressed="${String(c[k]) === String(v)}">${l}</button>`).join("") + `</div>`;
   const sizes = `<div class="seg" data-sk="sizes" role="group">` + [2, 3, 4].map(n => `<button type="button" data-v="${n}" class="${c.sizes.includes(n) ? "on" : ""}" aria-pressed="${c.sizes.includes(n)}">${n}-pick</button>`).join("") + `</div>`;
-  const step = (n, title, hint, ctl) => `<div class="studio-step"><div class="sh"><span class="num">${n}</span><span class="t">${title}</span></div><p class="hint">${hint}</p>${ctl}</div>`;
-  $("#studio").innerHTML = `<div class="eyebrow-s">Research tools</div><h3>Slip studio</h3>
-    <div class="small muted" style="margin-top:2px">Builds ready-to-check slips from today's graded props. Pick your settings, press Build, then use <b>Verify &amp; copy</b> on the slip you like.</div>
-    <div class="studio-steps">
-      ${step(1, "Platform", "Where you'll enter the slip. Each slip uses one platform.", seg("book", [["underdog", "Underdog"], ["prizepicks", "PrizePicks"]]))}
-      ${step(2, "Overs or Unders", "Which picks can go in. “Both” allows either side; a slip won't always mix them.", seg("side", [["More", "Overs only"], ["Less", "Unders only"], ["either", "Both"]]))}
-      ${step(3, "Slip sizes", "How many props in one entry (a 3-pick needs all 3 to hit). Choose one or more.", sizes)}
-      ${step(4, "How many of each size", "How many slips to build for each size you chose.", seg("count", [[1, "1"], [2, "2"], [3, "3"], [5, "5"]]))}
-      ${step(5, "Stat", "Kills, headshots, or both.", seg("stat", [["kills", "Kills"], ["hs", "Headshots"], ["both", "Both"]]))}
-      ${step(6, "Maps", "Which maps the line covers.", seg("scope", [["12", "Maps 1–2"], ["1", "Map 1"], ["123", "Maps 1–3"], ["all", "Any"]]))}
+  // three choices up front, the rest one tap away (2026-10-11 audit: 7 numbered steps were 1,500 px tall on a phone)
+  const row = (title, ctl) => `<div class="studio-row"><span class="t">${title}</span>${ctl}</div>`;
+  $("#studio").innerHTML = `<div class="small muted">Slips built from today's graded picks. Choose, press Build, then <b>Verify &amp; copy</b> the slip you like.</div>
+    <div class="studio-main">
+      ${row("Platform", seg("book", [["underdog", "Underdog"], ["prizepicks", "PrizePicks"]]))}
+      ${row("Slip sizes", sizes)}
+      ${row("Picks", seg("side", [["More", "Overs"], ["Less", "Unders"], ["either", "Both"]]))}
     </div>
+    <details class="studio-more"><summary>More options</summary><div class="studio-main">
+      ${row("Slips per size", seg("count", [[1, "1"], [2, "2"], [3, "3"], [5, "5"]]))}
+      ${row("Stat", seg("stat", [["kills", "Kills"], ["hs", "Headshots"], ["both", "Both"]]))}
+      ${row("Maps", seg("scope", [["12", "Maps 1–2"], ["1", "Map 1"], ["123", "Maps 1–3"], ["all", "Any"]]))}
+      ${row("Fill first", seg("fill", [["large", "Bigger slips"], ["small", "Smaller slips"]]))}
+      <div class="studio-overlap"><label><input type="checkbox" id="st-overlap"${c.overlap ? " checked" : ""}> Let a player or match appear in more than one slip</label>
+        <span id="st-capline" class="muted"></span></div></div></details>
     <div class="studio-sum" id="st-sum" aria-live="polite"></div>
-    <div class="studio-overlap"><label><input type="checkbox" id="st-overlap"${c.overlap ? " checked" : ""}> Let a player or match appear in more than one slip</label>
-      <span id="st-capline" class="muted"></span></div>
+    <div class="studio-cap" id="st-capnow" aria-live="polite"></div>
     <div class="studio-actions"><button type="button" class="go" id="st-build">Build</button>
       <button type="button" class="chipbtn" id="st-new" title="Starts over: picks used so far may be suggested again">Start new batch</button>
       <span id="st-status" class="small muted" role="status" aria-live="polite"></span></div>
@@ -1430,16 +1763,18 @@ function studioForm() {
     <div id="st-out"></div>`;
   studioCapLine();
   studioSummary();
+  studioCapacity();
 }
 function studioSummary() {
   const c = studioCfg(), el = $("#st-sum"); if (!el) return;
-  if (!c.sizes.length) { el.innerHTML = "Choose at least one slip size in step 3."; return; }
+  if (!c.sizes.length) { el.innerHTML = "Choose at least one slip size."; return; }
   const sizes = [...c.sizes].sort((a, b) => a - b), n = +c.count;
   const side = c.side === "More" ? "Overs only" : c.side === "Less" ? "Unders only" : "Overs and Unders";
   const stat = c.stat === "kills" ? "kills" : c.stat === "hs" ? "headshots" : "kills and headshots";
   const maps = {"12": "Maps 1–2", "1": "Map 1", "123": "Maps 1–3", all: "any maps"}[c.scope] || "Maps 1–2";
   el.innerHTML = `You'll get up to <b>${sizes.map(k => `${n} × ${k}-pick`).join(", ")}</b> slip${sizes.length * n === 1 ? "" : "s"} on <b>${bookName(c.book)}</b> – ${side}, ${stat}, ${maps}. `
-    + (c.overlap ? `A player or match can appear in up to <b>${c.cap}</b> slips.` : `<b>No player, prop or match is used twice</b> across your slips until you start a new batch.`);
+    + (c.overlap ? `A player or match can appear in up to <b>${c.cap}</b> slips.` : `<b>No player, prop or match is used twice</b> across your slips until you start a new batch.`)
+    + (sizes.length > 1 ? ` If picks run short, ${c.fill === "small" ? "smaller" : "bigger"} slips are filled first.` : "");
 }
 function studioCapLine() {
   const c = studioCfg();
@@ -1452,14 +1787,14 @@ function studioLeg(l) {
   const mt = l.market_type && l.market_type !== "standard" ? ` <span class="pill" style="margin:0;padding:1px 7px">${esc(l.market_type)}</span>` : "";
   return `<div class="lg"><span><span class="gtag ${gClass(l.grade)}" style="font-size:11px;padding:1px 6px">${esc(l.grade)}</span> <b>${esc(l.nick || l.player)}</b>
       ${l.side === "More" ? "Over" : "Under"} ${esc(l.line)} ${propWord(l.prop)}${mapsWord(l.scope)}${mt}</span>
-    <span class="m">${pct(l.p)} · ${esc(l.team || "")} vs ${esc(l.opponent || "")} · ${esc(shortWhen(l.start).split(" · ")[0])}</span></div>`;
+    <span class="m">${chance(l.p, l.prop)} · ${esc(l.team_name || l.team || "")} vs ${esc(l.opp_name || l.opponent || "")} · ${esc(shortWhen(l.start).split(" · ")[0])}</span></div>`;
 }
 function studioSlip(s) {
   if (s.status && s.status !== "live") return `<div class="aslip changed"><div class="small muted"><b style="color:var(--warn)">${s.status === "replaced" ? "Replaced" : s.status === "changed" ? "Changed – not for copying" : "Dismissed"}</b>
     – slip ${esc(s.slip_id.split("/").slice(1).join("/"))}${s.replaced_by ? ` → see build ${esc(s.replaced_by.split("/").slice(1).join("/"))}` : ""}; it no longer counts toward this batch's repeats.</div>${s.legs.map(studioLeg).join("")}</div>`;
   const note = STUDIO.notes[s.slip_id], cp = STUDIO.copied[s.slip_id], started = s.legs.some(l => Date.parse(l.start) <= Date.now());
   return `<div class="aslip${note ? " changed" : ""}">${s.legs.map(studioLeg).join("")}
-    <div class="nums"><span>Est. chance all ${s.n} hit <b>${pct(s.all_hit)}</b></span><span class="muted small">model chances multiplied (picks treated as independent)</span>
+    <div class="nums"><span>Est. chance all ${s.n} hit <b>${pct(s.all_hit)}</b></span> <span class="pill warn nv">Research – not validated</span><span class="muted small">model chances multiplied (picks treated as independent)</span>
       ${(s.repeats || []).length ? `<span class="pill">${esc(s.repeats.join("; "))}</span>` : ""}</div>
     <div class="studio-actions"><button type="button" class="bslip" data-verify="${esc(s.slip_id)}"${started || note ? " disabled" : ""}>${note ? "Changed – not for copying" : started ? "Started – locked" : "Verify & copy"}</button>
       <span class="small muted">${bookName(s.book)} · ${sizeWord(s.n)} entry · slip ${esc(s.slip_id.split("/").slice(1).join("/"))}</span></div>
@@ -1492,7 +1827,7 @@ function studioRender() {
   const msg = short || elig || excl ? `<div class="studio-exp" style="border-color:#f5c54240"><b>${slips.length ? "Couldn't fill every size" : "No slips from this build"}</b>${short}${elig}${excl}</div>` : "";
   $("#st-out").innerHTML = msg + exp + (slips.length ? bySize : msg ? "" : `<div class="small muted">No slips yet – choose your settings and press Build.</div>`)
     + `<details class="small muted" style="margin-top:8px"><summary>How the studio works</summary>
-      Slip sizes are planned largest first, so 2-pick suggestions can't use up the picks a 4-pick needs. Each slip takes the strongest eligible picks the batch rules allow:
+      ${(b.settings || studioCfg()).fill === "small" ? "Smaller slips are planned first (your Fill first choice), so 4-picks only get the picks that are left." : "Slip sizes are planned largest first, so 2-pick suggestions can't use up the picks a 4-pick needs."} Each slip takes the strongest eligible picks the batch rules allow:
       one pick per match, player and team in a slip, and – across the whole batch, every Build until you start a new batch – no repeated player, prop or match (or at most the cap you set).
       When the rules can't fill a size you get the reason instead of a weaker slip. "Verify & copy" re-checks every line on the platform and against the current grade first; any change means a rebuild, never an old chance on a new line.
       The all-hit chance multiplies the model's chances, which assumes the picks are independent. No payouts or returns are assumed. Builder ${esc(b.builder_version || "")}. Not financial advice.</details>`;
@@ -1500,9 +1835,9 @@ function studioRender() {
 async function studioLoad() {
   try {
     const {status, d} = await studioCall("GET", "/api/slip_studio/batch");
-    if (status === 404 && d.error === "slip_studio_off") { STUDIO.off = true; $("#bstudio").hidden = true; $("#studio").hidden = true; return; }
+    if (status === 404 && d.error === "slip_studio_off") { STUDIO.off = true; studioShow(); return; }
     if (status !== 200) throw new Error(d.error || "HTTP " + status);
-    STUDIO.batch = d; studioRender();
+    STUDIO.batch = d; studioRender(); studioCapacity();
   } catch (e) { $("#st-status").textContent = `Couldn't load your batch (${e.message})`; }
 }
 async function studioBuild(newBatch, why, replace) {
@@ -1517,7 +1852,7 @@ async function studioBuild(newBatch, why, replace) {
   try {
     let {status, d} = await studioCall("POST", "/api/slip_studio/build", body);
     if (!replace && (status === 409 || status === 404)) { delete body.batch_id; ({status, d} = await studioCall("POST", "/api/slip_studio/build", body)); }   // batch closed in another tab
-    if (status === 404 && d.error === "not found") { STUDIO.off = true; $("#bstudio").hidden = $("#studio").hidden = true; return; }
+    if (status === 404 && d.error === "not found") { STUDIO.off = true; studioShow(); return; }
     if (status !== 200) throw new Error(d.error || "HTTP " + status);
     if (newBatch) { STUDIO.notes = {}; STUDIO.copied = {}; }
     STUDIO.last = d;
@@ -1545,22 +1880,14 @@ async function studioVerify(id, btn) {
     return studioBuild(false, "A line changed – replacing this slip from the current board…", id);
   } catch (e) { btn.disabled = false; btn.textContent = "Verify & copy"; toast(`Couldn't verify (${e.message})`); }
 }
-$("#bstudio").onclick = () => {
-  STUDIO.open = !STUDIO.open; const box = $("#studio");
-  box.hidden = !STUDIO.open; $("#bstudio").classList.toggle("on", STUDIO.open); $("#bstudio").setAttribute("aria-expanded", String(STUDIO.open));
-  if (STUDIO.open && !box.dataset.ready) {
-    box.dataset.ready = "1";
-    if (["underdog", "prizepicks"].includes(bbook) && !store.get("cs2s_studio", null)) studioSave(Object.assign(studioCfg(), {book: bbook}));
-    studioForm(); studioLoad();
-  }
-};
+$("#bstudio").onclick = () => studioToggle(!STUDIO.open);
 $("#studio").addEventListener("click", e => {
   const sb = e.target.closest("[data-sk] button");
   if (sb) {
     const k = sb.parentElement.dataset.sk, c = studioCfg();
     if (k === "sizes") { const n = +sb.dataset.v; c.sizes = c.sizes.includes(n) ? c.sizes.filter(x => x !== n) : [...c.sizes, n].sort((a, b) => b - a); }
     else c[k] = k === "count" ? +sb.dataset.v : sb.dataset.v;
-    studioSave(c); studioSummary();
+    studioSave(c); studioSummary(); studioCapacity();
     [...sb.parentElement.children].forEach(x => { const on = k === "sizes" ? c.sizes.includes(+x.dataset.v) : x.dataset.v === String(c[k]);
       x.classList.toggle("on", on); x.setAttribute("aria-pressed", String(on)); });
     return;
@@ -1573,15 +1900,18 @@ $("#studio").addEventListener("change", e => {
   const c = studioCfg(), t = e.target;
   if (t.id === "st-book") c.book = t.value; else if (t.id === "st-count") c.count = +t.value; else if (t.id === "st-stat") c.stat = t.value;
   else if (t.id === "st-scope") c.scope = t.value; else if (t.id === "st-overlap") c.overlap = t.checked; else if (t.id === "st-cap") c.cap = +t.value; else return;
-  studioSave(c); if (t.id === "st-overlap") studioCapLine(); studioSummary();
+  studioSave(c); if (t.id === "st-overlap") studioCapLine(); studioSummary(); studioCapacity();
 });
 
 // a shared link (?p=ZywOo&l=27.5&t=kills) grades on open
 (() => { const q = new URLSearchParams(location.search);
   if (q.get("p") && q.get("l")) {
     try { history.replaceState(null, "", location.pathname); } catch {}   // a refresh later = the start page
-    setTimeout(() => gradeNow(q.get("p"), q.get("l"), q.get("t") === "hs" ? "hs" : "kills", q.get("lt") || "standard"), 0);
-  } })();
+    const sc = ["12", "123", "1"].includes(q.get("sc")) ? q.get("sc") : "12", bk = ["underdog", "prizepicks"].includes(q.get("bk")) ? q.get("bk") : null;
+    const c = q.get("tm") || q.get("vs") || bk ? {team: q.get("tm") || null, opponent: q.get("vs") || null, start: q.get("st") || null, book: bk} : null;
+    setTimeout(() => gradeNow(q.get("p"), q.get("l"), q.get("t") === "hs" ? "hs" : "kills", q.get("lt") || "standard", sc, false, c), 0);
+  } else if (location.hash) applyHash();      // the address picks the view (#board, #board/prizepicks, #slate ...)
+})();
 
 function chart(series, line, proj) {
   const s = [...series], W = 640, H = 190, top = 22, bot = 26, n = s.length;      // newest on the left, like the table
@@ -1592,9 +1922,11 @@ function chart(series, line, proj) {
   let o = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Last ${n} matches against the line">`;
   s.forEach((x, i) => {
     const cx = 10 + step * i + step / 2, yy = y(x.total), c = line == null ? "var(--accent)" : x.total > line ? "var(--good)" : x.total === line ? "var(--faint)" : "var(--bad)";
-    o += `<rect x="${cx - bw / 2}" y="${yy}" width="${bw}" height="${Math.max(H - bot - yy, 2)}" rx="5" fill="${c}" opacity=".85"/>`
+    // the whole column (bar, number and the shortened name) carries the full opponent name as a tooltip
+    o += `<g><title>${esc(String(x.opponent || ""))}${x.date ? " · " + shortDate(x.date) : ""} · ${x.total}</title><rect x="${cx - step / 2 + 1}" y="${top - 16}" width="${step - 2}" height="${H - top + 16}" fill="transparent"/>`
+      + `<rect x="${cx - bw / 2}" y="${yy}" width="${bw}" height="${Math.max(H - bot - yy, 2)}" rx="5" fill="${c}" opacity=".85"/>`
       + `<text class="val" x="${cx}" y="${yy - 6}" text-anchor="middle">${x.total}</text>`
-      + `<text x="${cx}" y="${H - 8}" text-anchor="middle"><title>${esc(String(x.opponent || ""))}</title>${esc(abbr(x.opponent))}</text>`;
+      + `<text x="${cx}" y="${H - 8}" text-anchor="middle">${esc(abbr(x.opponent))}</text></g>`;
   });
   if (proj) o += `<line class="pj" x1="0" x2="${W}" y1="${y(proj)}" y2="${y(proj)}"/>`;
   if (line != null) o += `<line class="ln" x1="0" x2="${W}" y1="${y(line)}" y2="${y(line)}"/><text class="lnl" x="4" y="12">- - Line ${line}</text>`;
@@ -1607,13 +1939,16 @@ function dataStatus(g, v) {
   // quality only - the source (HLTV / BO3.gg / older model) is shown separately and is not a warning by itself
   const fl = (g.flags || []).join(" | ");
   if (v.state === "SCOUT" || /No upcoming match/i.test(fl)) return {k: "warn", t: "Line not confirmed", why: "no upcoming match found"};
+  if (/unreachable/i.test(String(g.projection_source || "")) || /HLTV database unreachable/i.test(fl))
+    return {k: "warn", t: "HLTV unreachable", why: "temporary projection from the older model"};
   if (/Roster not confirmed/i.test(fl)) return {k: "warn", t: "Roster not confirmed", why: "the team page doesn't list his lineup yet – the stake is not changed by this"};
   if (/Stand-in/i.test(fl)) return {k: "warn", t: "Stand-in", why: "playing for another team"};
   if (/Last official map \d+ days ago - extra caution/i.test(fl)) return {k: "warn", t: "Long break", why: "long gap since the last official map"};
+  if (/^HLTV history ends/im.test((g.flags || []).join("\n"))) return {k: "warn", t: "HLTV out of date", why: `his HLTV history ends ${g.hltv_ends || "early"} – newer matches are only on BO3.gg`};
   if (/Small sample|Thin|thin history/i.test(fl)) return {k: "mid", t: "Limited history", why: "small recent sample"};
   return {k: "ok", t: "Data complete", why: ""};
 }
-const srcLabel = g => { const ps = String(g.projection_source || ""); return ps.startsWith("perf") && !ps.endsWith("-bo3") ? "HLTV" : ps.endsWith("-bo3") ? "BO3.gg" : /unreachable/.test(ps) ? "older model (HLTV unreachable)" : "older model (BO3.gg)"; };
+const srcLabel = g => { const ps = String(g.projection_source || ""); return ps.startsWith("perf") && !ps.endsWith("-bo3") ? (g.hltv_ends ? `HLTV (ends ${g.hltv_ends})` : "HLTV") : ps.endsWith("-bo3") ? "BO3.gg" : /unreachable/.test(ps) ? "older model (HLTV unreachable)" : "older model (BO3.gg)"; };
 const basisTag = b => `<span class="muted small">(${b === "model" ? "in the model" : b === "stake" ? "stake rule" : b === "data" ? "data" : "context – not in the projection"})</span>`;
 function glance(d, g, v) {
   if (!v.side || !("p_more" in g)) return "";
@@ -1623,7 +1958,7 @@ function glance(d, g, v) {
     return m < 1 ? "just now" : m < 60 ? m + " min ago" : Math.round(m / 60) + " h ago"; };
   return `<section class="card glance">
     <div class="glrow"><span class="k">Projection</span><span><b>${num(g.lambda_final, 1)}</b> ${unit}${cp ? ` · 8 in 10 land ${cp.ours.range80[0]}–${cp.ours.range80[1]}` : ""}</span></div>
-    <div class="glrow"><span class="k">Line</span><span>${side} ${g.line}${mapsWord(g.scope) || " (Maps 1–2)"} · <b>${pct(v.p)}</b>${pushOf(g) != null ? ` excluding pushes · push ${pct(pushOf(g))}` : ""} · ${v.units || 0}U</span></div>
+    <div class="glrow"><span class="k">Line</span><span>${side} ${g.line}${mapsWord(g.scope) || " (Maps 1–2)"} · <b>${chance(v.p, g.prop, capOf(d, "kills_chance", KCAP))}</b>${pushOf(g) != null ? ` excluding pushes · push ${pct(pushOf(g))}` : ""} · ${v.units || 0}U</span></div>
     ${cp?.supports?.length ? `<div class="glrow"><span class="k up">Supports</span><span>${esc(cp.supports[0].text)} ${basisTag(cp.supports[0].basis)}</span></div>` : ""}
     ${cp?.concern ? `<div class="glrow"><span class="k dn">Concern</span><span>${esc(cp.concern.text)} ${basisTag(cp.concern.basis)}</span></div>` : ""}
     <div class="glrow"><span class="k">Data</span><span><span class="dstat ${ds.k}">${ds.t}</span>${ds.why ? ` <span class="muted small">${esc(ds.why)}</span>` : ""} <span class="muted small">· source ${esc(srcLabel(g))}</span>${cp?.board_at ? ` <span class="muted small">· line checked ${ago(cp.board_at)}</span>` : ""}</span></div>
@@ -1636,7 +1971,7 @@ function usesBlock(d, g) {
   const hs = g.prop === "hs", bo3 = String(g.projection_source || "").endsWith("-bo3");
   const li = xs => xs.map(x => `<li>${x}</li>`).join("");
   const proj = perfGrade(g) ? [
-      `His kills per round on official maps from ${bo3 ? "BO3.gg (HLTV has no history for him – provisional)" : "HLTV"}: recent months count most (a map 4 months old counts half), measured up to the match day`,
+      `His kills per round on official maps from ${bo3 ? "BO3.gg (HLTV has no history for him – provisional)" : "HLTV"}: recent months count most (a map about 3 months old counts half), measured up to the match day`,
       "Weighted toward his numbers in tonight's setting (LAN or online)",
       "Thin history is pulled toward the pro average until he has enough maps",
       "The opponent: how many kills players get per round against them",
@@ -1666,6 +2001,7 @@ function lineSource(d) {
 }
 function render(d) {
   lastCard = d;
+  try { miniSync(d); miniPlace(); } catch {}
   const how = document.querySelector("details.how"); if (how) how.open = false;
   const g = d.grade || {}, v = d.verdict || {}, pb = d.player_block || {}, o = pb.overall || {};
   const nm = d.next_match, od = d.odds, hh = d.h2h, fc = d.faceit, det = g.detail || {};
@@ -1682,6 +2018,8 @@ function render(d) {
     return {...r0, series: ser, overs, pushes, decided: n - pushes, hit_rate: n - pushes ? overs / (n - pushes) : null, avg_total: n ? +(tot.reduce((a, b) => a + b, 0) / n).toFixed(1) : null,
             median_total: n ? (tot[(n - 1) >> 1] + tot[n >> 1]) / 2 : null}; })();
   const cmpLine = sc === "123" && !has123 ? null : g.line;   // Maps 1-3 without its own record: nothing to compare
+  // last 10 in tonight's setting only (LAN or online): the heading says which, and what was left out
+  const envW = rf.env === "lan" ? "LAN" : rf.env === "online" ? "online" : "";
   // edge and the vig note follow the side we recommend (More when nothing is playable)
   const edgeSide = v.side || "More";
   const implied = g.market?.pp_implied_more;
@@ -1690,20 +2028,24 @@ function render(d) {
   // a strong grade with 0 units: say why right next to it (no match scheduled, stand-in, AWPer on HS...)
   const zWhy = v.state === "SCOUT" ? "no match scheduled" : (g.zero_reason || "");
   const zTag = (gr, u) => !u && gr && gr !== "C" && zWhy ? ` — ${esc(zWhy)}` : "";
+  const kcap = capOf(d, "kills_chance", KCAP), ch = p => chance(p, g.prop, kcap);
 
   // ---- headline
-  const head = v.state === "SCOUT" ? `SCOUT · leans ${sideTxt(v.side)} ${g.line}`    : v.grade === "LEAN" && v.side ? `Lean ${sideTxt(v.side)} ${g.line}`
+  const head = v.state === "SCOUT" ? `No match scheduled · Lean ${sideTxt(v.side)} ${g.line}`    : v.grade === "LEAN" && v.side ? `Lean ${sideTxt(v.side)} ${g.line}`
     : v.side ? `${sideTxt(v.side)} ${g.line}` : "No grade";
   // the board's same-match cap applies to this exact pick: one stake for this line everywhere on the site
-  const capPill = v.cap_n && v.units_full > v.units ? ` <span class="pill" title="${v.cap_n} bets on the board need ${esc(v.cap_team || "this team")} to ${v.side === "More" ? "do well" : "do badly"} in this match – one upset or overtime decides them all, so together they're capped at ${capOf(d, "same_result", 3)}U. On its own this pick is ${v.units_full}U.">capped from ${v.units_full}U</span>` : "";
+  const capPill = g.tape_fight && /^recent record disagrees$/.test(v.cap_reason || "") && !(v.cap_n && v.units_full > v.units) ? ""
+    : capChip(v, v.cap_team, capOf(d, "same_result", 3));                // the TAPE FIGHT pill below already says it
   const gateStop = !("p_more" in g);   // stopped by a gate - the reason shows as a pill instead
-  const why = v.reason && !/^Projection [\d.]+ vs [\d.]+ needed \([^)]*\)$/.test(v.reason) ? v.reason : "";
+  // the reason once, in plain words: a stake chip or a FORM / TAPE FIGHT pill already says the cap, so it isn't repeated
+  const why = !v.reason || /^Projection [\d.]+ vs [\d.]+ needed \([^)]*\)$/.test(v.reason) || g.tape_fight || g.form_fight ? ""
+    : v.reason.replace(/ · stake capped: .*$/, "");
   const pu = pushOf(g);
-  const sub = v.side ? `${pct(v.p)} ${pu != null ? `win chance excluding pushes · push ${pct(pu)}` : "chance"} · ${v.units}U${capPill} · ${esc(v.confidence)} confidence${why ? `<div class="small muted" style="margin-top:4px">${esc(why)}</div>` : ""}`
+  const sub = v.side ? `${ch(v.p)} ${pu != null ? `win chance excluding pushes · push ${pct(pu)}` : "chance"} · ${v.units}U${capPill}${why ? `<div class="small muted" style="margin-top:4px">${esc(why)}</div>` : ""}`
     : gateStop ? "" : esc(v.reason || "");
   const hc = g.status === "NO GRADE" || v.state === "SCOUT" ? "g-scout" : gClass(v.grade);
   h += `<section class="card herocard ${hc}"><div class="hero">
-    <div class="badge ${hc}">${esc(!v.side ? "–" : v.state === "SCOUT" ? "S" : v.grade === "LEAN" ? "L" : (v.grade || "L").slice(0, 2))}</div>
+    <div class="badge ${hc}" title="${esc(!v.side ? "No grade" : v.state === "SCOUT" ? "No match scheduled – research only" : v.grade === "LEAN" ? "Lean – 0 units" : "Grade " + v.grade)}">${esc(!v.side || v.state === "SCOUT" ? "–" : v.grade === "LEAN" ? "L" : (v.grade || "L").slice(0, 2))}</div>
     <div><h3>${esc(head)}</h3>
       <div class="sub">${esc(pb.player?.nick || "")} · ${pb.standin_for ? `${esc(pb.current_team || "")} → <b>stand-in for ${esc(pb.standin_for)}</b>` : esc(pb.current_team || "")}${nm?.opponent ? ` vs ${esc(nm.opponent)}${nm.start ? ` · ${shortWhen(nm.start)}` : ""}` : ""} · ${g.line} ${stat}${mapsWord(g.scope) || " (Maps 1–2)"} · ${esc(g.line_type || "")} · <span class="muted">${esc(lineSource(d))}</span></div>${outageNote(d)}
       <div class="sub">${sub}</div>
@@ -1711,28 +2053,29 @@ function render(d) {
       ${g.form_fight ? `<span class="pill warn">FORM FIGHT – his last 10 at this line disagree · 0 units${perfGrade(g) ? "" : " (older model: chance halved)"}</span>` : ""}
       ${pb.standin_for ? `<span class="pill warn">STAND-IN for ${esc(pb.standin_for)} · max ${capOf(d, "standin", 1)}U</span>` : ""}
       ${g.tape_fight ? `<span class="pill warn">TAPE FIGHT – recent record at this line disagrees · max ${capOf(d, "tape", 0.5)}U</span>` : ""}
-      ${g.market_quality && g.market_quality !== "HARD" && v.state !== "SCOUT" ? `<span class="pill">${g.market_quality === "SOFT" ? "SOFT BOOK" : "NO MARKET"} · max ${capOf(d, "market", 1.5)}U</span>` : ""}
+      ${g.market_quality && g.market_quality !== "HARD" && v.state !== "SCOUT" ? `<span class="pill">${g.market_quality === "SOFT" ? "Thin betting market" : "No betting market"} · max ${capOf(d, "market", 1.5)}U</span>` : ""}
       ${g.market?.note_line ? `<span class="pill warn">${esc(g.market.note_line)}</span>` : ""}
+      ${g.line_type && g.line_type !== "standard" && v.side === "Less" ? `<span class="pill">${esc(g.line_type[0].toUpperCase() + g.line_type.slice(1))} lines are Over only – PrizePicks offers no Under, so this is a Lean</span>` : ""}
       ${lineWarn(g.prop, g.line, marketOk(d)) ? `<span class="pill warn">${esc(lineWarn(g.prop, g.line, marketOk(d)))}</span>` : ""}
       ${nm?.bo === 1 && g.scope !== "1" ? `<span class="pill warn">BO1 match – grade it as Map 1 (BO1)</span>` : ""}
-      ${g.scope === "123" ? `<span class="pill" title="Maps 1–3 = maps 1, 2 and 3 only, each counted in full; maps 4–5 never count">${d.next_match?.bo === 5 ? "BO5: maps 1–3 are all played" : `Maps 1–3 counts map 3 in full – if the series ends 2–0 there is no map 3 and Underdog voids the pick${g.p_map3 != null ? ` (map 3 played: ${pct(g.p_map3, 0)} chance)` : ""}`}</span>` : ""}
+      ${g.scope === "123" ? `<span class="pill" title="Maps 1–3 = maps 1, 2 and 3 only, each counted in full; maps 4–5 never count">${d.next_match?.bo === 5 ? "BO5: maps 1–3 are all played" : `Maps 1–3 counts map 3 in full – if the series ends 2–0 there is no map 3 and Underdog voids the pick${g.p_map3 != null ? ` (map 3 played: ${pct(g.p_map3)} chance)` : ""}`}</span>` : ""}
       ${linePills(d)}
     </div></div>`;
   h += glance(d, g, v);
   if ("p_more" in g) {
     h += `<div class="sides">
-      <div class="side ${v.side === "More" ? "pick" : ""}"><div class="k">Over · ${sideGrade(g.grade, g.units, v, "More")}${zTag(g.grade, g.units)}</div><div class="v">${pct(g.p_more)}${pushOf(g) != null ? ` <span class="muted small">excl. pushes</span>` : ""}</div><div class="bar"><i style="width:${g.p_more*100}%"></i></div></div>
-      <div class="side ${v.side === "Less" ? "pick" : ""}"><div class="k">Under · ${sideGrade(g.grade_less, g.units_less, v, "Less")}${zTag(g.grade_less, g.units_less)}</div><div class="v">${pct(g.p_less)}${pushOf(g) != null ? ` <span class="muted small">excl. pushes · push ${pct(pushOf(g))}</span>` : ""}</div><div class="bar"><i style="width:${g.p_less*100}%"></i></div></div>
+      <div class="side ${v.side === "More" ? "pick" : ""}"><div class="k">Over · ${sideGrade(g.grade, g.units, v, "More")}${zTag(g.grade, g.units)}</div><div class="v">${ch(g.p_more)}${pushOf(g) != null ? ` <span class="muted small">excl. pushes</span>` : ""}</div><div class="bar"><i style="width:${g.p_more*100}%"></i></div></div>
+      <div class="side ${v.side === "Less" ? "pick" : ""}"><div class="k">Under · ${sideGrade(g.grade_less, g.units_less, v, "Less")}${zTag(g.grade_less, g.units_less)}</div><div class="v">${ch(g.p_less)}${pushOf(g) != null ? ` <span class="muted small">excl. pushes · push ${pct(pushOf(g))}</span>` : ""}</div><div class="bar"><i style="width:${g.p_less*100}%"></i></div></div>
     </div>
     ${Array.isArray(d.ladder) && d.ladder.length > 1 ? `<div class="ladder"><span class="small muted">Nearby lines:</span>${d.ladder.map(x =>
-      `<button type="button" class="chipbtn ${x.line === g.line ? "on" : ""}" data-ladder="${x.line}" title="Grade this line">${x.line} <b class="${x.side === "More" ? "up" : "dn"}">${x.side === "More" ? "Over" : "Under"} ${pct(x.p)}</b>${x.grade && x.grade !== "C" && !String(x.grade).startsWith("n/a") ? " · " + esc(x.grade) : ""}</button>`).join("")}</div>` : ""}
+      `<button type="button" class="chipbtn ${x.line === g.line ? "on" : ""}" data-ladder="${x.line}" title="Grade this line">${x.line} <b class="${x.side === "More" ? "up" : "dn"}">${esc(sideWord({side: x.side, grade: isLeanV(x) || !(x.units > 0) ? "LEAN" : x.grade}))} ${ch(x.p)}</b>${isLeanV(x) || !(x.units > 0) || !x.grade || String(x.grade).startsWith("n/a") ? "" : " · " + esc(x.grade)}</button>`).join("")}</div>` : ""}
     <div class="stats" style="margin-top:10px">
       <div class="stat"><div class="k">Projection</div><div class="v">${num(g.lambda_final,1)}</div><div class="n">${stat}, ${g.scope === "123" ? "Maps 1–3" : g.scope === "1" ? "Map 1" : "Maps 1–2"}</div></div>
       <div class="stat"><div class="k">Line</div><div class="v">${g.line}</div><div class="n">${g.line % 1 ? `Over needs ${Math.floor(g.line) + 1}+` : `exactly ${g.line} is a push`}</div></div>
-      <div class="stat"><div class="k">Team win %</div><div class="v">${det.p_win != null && !["NO MARKET", "NONE"].includes(g.market_quality) ? pct(det.p_win,0) : "–"}</div><div class="n">${["NO MARKET", "NONE"].includes(g.market_quality) ? (perfGrade(g) ? "no market – stake capped" : "no market – graded as even") : perfGrade(g) ? "betting markets · context, not in the projection" : "from betting markets"}</div></div>
+      <div class="stat"><div class="k">Team win %</div><div class="v">${det.p_win != null && !["NO MARKET", "NONE"].includes(g.market_quality) ? pct(det.p_win) : "–"}</div><div class="n">${["NO MARKET", "NONE"].includes(g.market_quality) ? (perfGrade(g) ? "no market – stake capped" : "no market – graded as even") : perfGrade(g) ? "betting markets · context, not in the projection" : "from betting markets"}</div></div>
       <div class="stat ${g.lambda_final - g.line > 0 ? "up" : "down"}"><div class="k">Edge</div><div class="v">${(g.lambda_final - g.line > 0 ? "+" : "") + (Math.abs(g.lambda_final - g.line) < 0.1 ? (g.lambda_final - g.line).toFixed(2) : (g.lambda_final - g.line).toFixed(1))}</div><div class="n">projection − line</div></div>
       ${sc === "123" && !has123 ? `<div class="stat"><div class="k">Last ${pb.recent_form?.matches || 10}</div><div class="v">${pb.recent_form?.avg_total ?? "–"} <span class="small muted">avg</span></div><div class="n">Maps 1–2 totals – no Maps 1–3 record</div></div>`
-        : `<div class="stat"><div class="k">Last ${rf.matches || 10}${sc === "1" ? " · Map 1" : sc === "123" ? " · Maps 1–3" : ""}</div><div class="v">${rf.avg_total ?? "–"} <span class="small muted">avg</span></div><div class="n">${rf.overs ?? "–"}/${rf.decided ?? rf.matches ?? "–"} over${rf.pushes ? ` · ${rf.pushes} push` : ""} · median ${rf.median_total ?? "–"}</div></div>`}
+        : `<div class="stat"><div class="k">Last ${rf.matches || 10}${envW ? " " + envW : ""}${sc === "1" ? " · Map 1" : sc === "123" ? " · Maps 1–3" : ""}</div><div class="v">${rf.avg_total ?? "–"} <span class="small muted">avg</span></div><div class="n">${rf.overs ?? "–"}/${rf.decided ?? rf.matches ?? "–"} over${rf.pushes ? ` · ${rf.pushes} push` : ""} · median ${rf.median_total ?? "–"}</div></div>`}
     </div>`;
   }
   {
@@ -1744,7 +2087,7 @@ function render(d) {
       + chip(hhs.some(x => x.same_roster === false) ? "H2H same roster" : "H2H", hs2.filter(over).length, hs2.filter(dec).length);
     if (r && "p_more" in g && cmpLine != null) h += `<div class="rates">${r}</div>`;
   }
-  if ("p_more" in g) h += `<div class="actions"><button type="button" class="chipbtn" data-act="slip" style="border-color:var(--accent)">+ Add to slip</button><button type="button" class="chipbtn" data-act="copy">Copy pick</button>
+  if ("p_more" in g) h += `<div class="actions">${v.state === "SCOUT" ? `<span title="No upcoming match found for his team – there is nothing to enter on a slip yet"><button type="button" class="chipbtn" disabled>+ Add to slip</button></span>` : `<button type="button" class="chipbtn" data-act="slip" style="border-color:var(--accent)">+ Add to slip</button>`}<button type="button" class="chipbtn" data-act="copy">Copy pick</button>
     <button type="button" class="chipbtn" data-act="link">Copy link</button>
     <button type="button" class="chipbtn" data-act="nudge" data-d="-1">Line &minus;1</button>
     <button type="button" class="chipbtn" data-act="nudge" data-d="1">Line +1</button></div>`;
@@ -1763,7 +2106,7 @@ function render(d) {
     <div class="kv"><span>Maps 1–2</span><span>${nm.maps?.length ? nm.maps.slice(0,2).map(mapName).join(" · ")
       : "Not announced yet – using his all-maps stats"}</span></div>`;
   if (!nm?.maps?.length && pb.map_prediction) {
-    const top = o => Object.entries(o).slice(0, 3).map(([m, p]) => `${mapName(m)} ${pct(p, 0)}`).join(" · ");
+    const top = o => Object.entries(o).slice(0, 3).map(([m, p]) => `${mapName(m)} ${pct(p)}`).join(" · ");
     h += `<div class="kv"><span>Likely Map 1 <span class="muted small">(context only)</span></span><span>${esc(top(pb.map_prediction.map1))}</span></div>
       <div class="kv"><span>Likely Map 2 <span class="muted small">(context only)</span></span><span>${esc(top(pb.map_prediction.map2))}</span></div>
       ${pb.map_prediction.pool_source ? `<div class="small muted">Map pool: ${pb.map_prediction.pool_source === "event veto" ? "this event's own veto" : esc(pb.map_prediction.pool_source)}</div>` : ""}`;
@@ -1773,7 +2116,7 @@ function render(d) {
   if (d.schedule_heads_up) h += `<div class="small" style="margin-top:6px;color:var(--warn)">HLTV heads-up: ${esc(d.schedule_heads_up)}</div>`;
   if (od?.found) {
     h += `<div class="kv"><span>Win chance (Polymarket)</span><span>${esc(od.team)} ${pct(od.team_prob)} · ${esc(od.opponent)} ${pct(od.opp_prob)}</span></div>`;
-    if (od.maps?.map1 || od.maps?.map2) h += `<div class="kv"><span>Map winners</span><span>${["map1","map2"].filter(k=>od.maps[k]).map(k=>`${k.replace("map","Map ")}: ${pct(od.maps[k].team_prob,0)}`).join(" · ")}</span></div>`;
+    if (od.maps?.map1 || od.maps?.map2) h += `<div class="kv"><span>Map winners</span><span>${["map1","map2"].filter(k=>od.maps[k]).map(k=>`${k.replace("map","Map ")}: ${pct(od.maps[k].team_prob)}`).join(" · ")}</span></div>`;
     for (const f of od.flags || []) h += `<div class="small muted" style="margin-top:6px">⚠ ${esc(f)}</div>`;
   } else if (od) h += `<div class="kv"><span>Win chance</span><span class="muted">${esc(od.note)}</span></div>`;
   h += `</section>`;
@@ -1790,13 +2133,23 @@ function render(d) {
     {
       const it0 = (cp.internal || [])[0], udOff = cp.offers.filter(o => (o.source || "underdog") === "underdog"),
         ud = udOff.find(o => !o.alt) || udOff[0], pp = cp.offers.find(o => o.source === "prizepicks" && !o.alt);
-      const ourP = ud ? ud[`${side}_if_decided`] : pp ? pp[`${side}_if_decided`] : cp.ours.chance;
-      h += `<div class="scroll"><table><thead><tr><th>Source</th><th class="num">Projection</th><th class="num">${Side} chance</th></tr></thead><tbody>
-        <tr><td><b>Our model</b></td><td class="num"><b>${cp.ours.projection}</b></td><td class="num"><b>${pc1(ourP)}</b></td></tr>
-        ${it0 ? `<tr><td>Previous model <span class="muted small">(ours, internal)</span></td><td class="num">${it0.projection}</td><td class="num">${pc1(it0.p_side)}</td></tr>` : ""}
+      // both models at the GRADED line (2026-10-12 review: our row used to show the chance at Underdog's line while the
+      // previous model's was at the graded line, so the two numbers weren't comparable)
+      const atLine = cp.ours.line ?? g.line, ourP = cp.ours.chance_at_line ?? v.p;
+      const prevP = it0 ? ((side === "over" ? it0.p_over : it0.p_under) ?? it0.p_side) : null;
+      const pcO = x => x == null ? "–" : isCapped(x, g.prop, kcap) ? ch(x) : pc1(x);
+      h += `<div class="scroll"><table><thead><tr><th>Source</th><th class="num">Projection</th><th class="num">${Side} chance at ${esc(atLine)}</th></tr></thead><tbody>
+        <tr><td><b>Our model</b></td><td class="num"><b>${cp.ours.projection}</b></td><td class="num"><b>${pcO(ourP)}</b></td></tr>
         <tr><td>Underdog <span class="muted small">(betting line, not a projection)</span></td><td class="num">${ud ? `line ${ud.line}` : "–"}</td><td class="num muted">–</td></tr>
         <tr><td>PrizePicks <span class="muted small">(betting line, not a projection)</span></td><td class="num">${pp ? `line ${pp.line}` : "–"}</td><td class="num muted">–</td></tr>
         <tr><td>Independent projections</td><td class="num muted" colspan="2">not available yet</td></tr></tbody></table></div>`;
+      // projection and chance point different ways only because of the spread: say so in one line (only when the
+      // spreads show it)
+      if (false && it0 && prevP != null && ourP != null && it0.spread_differs) {      // internal comparison: kept off members' cards
+        const dP = it0.projection - cp.ours.projection, dC = prevP - ourP;
+        const pDir = Math.abs(dP) >= 0.05 ? Math.sign(dP) * (side === "over" ? 1 : -1) : 0, cDir = Math.abs(dC) >= 0.0005 ? Math.sign(dC) : 0;
+        if (pDir && cDir && pDir !== cDir) h += `<div class="cmpnote">The previous model has a wider spread, so a ${side === "over" ? "higher" : "lower"} projection can still mean a lower chance.</div>`;
+      }
     }
     if (cp.offers.length) {
       const book = o => o.source === "prizepicks" ? "PrizePicks" : "Underdog",
@@ -1835,21 +2188,26 @@ function render(d) {
     const pc = x => `<b class="${x >= .5 ? "up" : "dn"}">${(x * 100).toFixed(1)}%</b>`;
     h += `<section class="card"><h2>Match simulation · 20,000 runs</h2>
       <div class="small muted" style="margin:-4px 0 10px">Every run is drawn from this grade's own distribution, so the overall numbers agree with the grade (within 1%). The match-script rows are an illustration, not a tested forecast: they show one way this total could split by result.</div>
-      <div class="kv"><span>Over ${g.line} ${unit}</span><span>${pc(sm.p_more)} of decided runs${sm.p_push ? ` · push ${Math.round(sm.p_push * 100)}%` : ""} · average ${sm.mean} · 8 in 10 land ${sm.p10}–${sm.p90}</span></div>
+      <div class="kv"><span>Over ${g.line} ${unit}</span><span>${pc(sm.p_more)} of decided runs${sm.p_push ? ` · push ${pct(sm.p_push)}` : ""} · average ${sm.mean} · 8 in 10 land ${sm.p10}–${sm.p90}</span></div>
       <div class="scroll"><table class="simtab"><thead><tr><th>If…</th><th class="num">Chance</th><th class="num">Avg</th><th class="num">Over ${g.line}</th></tr></thead><tbody>
-      ${sm.scenarios.map(x => `<tr><td>${lab(x)}</td><td class="num">${Math.round(x.chance * 100)}%</td><td class="num">${x.avg}</td><td class="num">${pc(x.p_over)}</td></tr>`).join("")}
+      ${sm.scenarios.map(x => `<tr><td>${lab(x)}</td><td class="num">${pct(x.chance)}</td><td class="num">${x.avg}</td><td class="num">${pc(x.p_over)}</td></tr>`).join("")}
       </tbody></table></div>
       ${Math.abs(sm.p_more - (g.p_more ?? sm.p_more)) > 0.015 ? `<div class="small muted" style="margin-top:6px">The grade shows ${pct(g.p_more)} for Over: ${(g.flags || []).some(f => f.startsWith("CAP") || f.startsWith("Chance capped")) ? "high chances are capped on the grade (see notes)" : perfGrade(g) ? "both come from the same distribution – the gap is run-to-run noise" : "the older model adds safety margins on top of the distribution"}. The simulation shows the distribution itself.</div>` : ""}
     </section>`;
   }
 
-  h += `<section class="card"><h2>Last ${rf.matches ?? 10} matches · ${sc === "123" && !has123 ? "Maps 1–2" : scLab}${cmpLine != null && rf.hit_rate != null ? ` · over ${g.line} in ${rf.overs}/${rf.decided ?? rf.series?.length ?? rf.matches} (${pct(rf.hit_rate,0)})${rf.pushes ? ` · ${rf.pushes} push` : ""}` : ""}</h2>`
+  h += `<section class="card"><h2>Last ${rf.matches ?? 10} ${envW ? envW + " series" : "matches"} · ${sc === "123" && !has123 ? "Maps 1–2" : scLab}${cmpLine != null && rf.hit_rate != null ? ` · over ${g.line} in ${rf.overs}/${rf.decided ?? rf.series?.length ?? rf.matches} (${pct(rf.hit_rate,0)})${rf.pushes ? ` · ${rf.pushes} push` : ""}` : ""}</h2>`
     + (sc === "123" ? `<div class="small muted" style="margin:-4px 0 8px">${has123 ? `Maps 1, 2 and 3 of series where map 3 was played (every BO5; a BO3 that went 1–1) – how a Maps 1–3 line settles; maps 4–5 never count${rf.form_from ? ` · his ${rf.form_from === "lan" ? "LAN" : "online"} series` : ""}. Shown for context; the grade doesn't use it.` : "His Maps 1–2 totals, for form – this line also counts map 3 when the series goes 1–1."}</div>` : "");
+  {
+    const sk = Array.isArray(rf.env_skipped) ? rf.env_skipped.slice(0, 6) : [], skN = Math.max(+rf.env_skipped_n || 0, sk.length);
+    const one = x => typeof x === "string" ? esc(x) : `${x.date ? shortDate(x.date) + " " : ""}vs ${esc(x.opponent || x.opp || "?")}${x.total != null ? " " + esc(x.total) : ""}`;
+    if (envW && skN) h += `<div class="envskip">Tonight is ${envW}, so his ${envW === "LAN" ? "online" : "LAN"} series aren't counted here${sk.length ? ": " + sk.map(one).join(" · ") : ""}${skN > sk.length ? ` · +${skN - sk.length} more` : ""}.</div>`;
+  }
   if (rf.series?.length) {
     h += chart(rf.series, cmpLine, sc === "123" && !has123 ? null : g.lambda_final);
-    h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th>${sc === "1" ? "Map 1" : has123 ? "Maps played" : "Maps 1–2"}</th><th class="num">${g.prop === "hs" ? "HS" : "Kills"}</th><th>Team result</th><th>Prop</th></tr></thead><tbody>`;
+    h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th class="mapcol">${sc === "1" ? "Map 1" : has123 ? "Maps played" : "Maps 1–2"}</th><th class="num">${g.prop === "hs" ? "HS" : "Kills"}</th><th>Team result</th><th>Prop</th></tr></thead><tbody>`;
     for (const s of rf.series) h += `<tr><td class="num" style="text-align:left">${shortDate(s.date)}</td><td>${esc(s.opponent)}${s.source ? `<span class="src" title="Numbers from HLTV">H</span>` : ""}</td>
-      <td class="small">${s.maps.map(mapName).join('<span class="dot"> · </span>')}</td><td class="num"><span class="parts">${s.values.join(" + ")} = </span><b>${s.total}</b></td>
+      <td class="small mapcol">${s.maps.map(mapName).join('<span class="dot"> · </span>')}</td><td class="num"><span class="parts">${s.values.join(" + ")} = </span><b>${s.total}</b></td>
       <td>${esc(s.result)}</td>${cmpLine == null ? `<td class="muted">–</td>` : `<td class="${s.total > g.line ? "hit" : s.total === g.line ? "muted" : "miss"}">${s.total > g.line ? "Over" : s.total === g.line ? "Push" : "Under"}</td>`}</tr>`;
     h += `</tbody></table></div><div class="small muted" style="margin-top:8px">Average ${rf.avg_total} · median ${rf.median_total} ${stat} on ${sc === "1" ? "Map 1" : has123 ? "Maps 1–3" : "Maps 1–2"}${rf.series.some(x => x.source) ? ` · <span class="src" style="vertical-align:baseline">H</span> = numbers from HLTV` : ""}</div>`;
   } else h += `<div class="muted">No recent matches with two maps.</div>`;
@@ -1860,11 +2218,11 @@ function render(d) {
       if (!cnt.length) return ""; const o = cnt.filter(x => x.total > g.line).length, pu = cnt.filter(x => x.total === g.line).length;
       return ` · over ${g.line} in ${o}/${cnt.length - pu}${pu ? ` (${pu} push)` : ""}${(hh.series || []).some(x => x.same_roster === false) ? " vs this roster" : ""}`; })()}</h2>`;
   const hx = hh?.series || [];      // exact meetings and same-region teams (labelled "regional")
-  if (d.regional_note) h += `<div class="small muted" style="margin-bottom:8px">${esc(d.regional_note)}</div>`;
+  if (d.regional_note) h += `<div class="small muted" style="margin-bottom:8px">${esc(regionWords(d.regional_note))}</div>`;
   if (hx.length) {
-    h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th>Maps 1–2</th><th class="num">${g.prop === "hs" ? "HS" : "Kills"}</th><th>Team result</th><th>Prop</th></tr></thead><tbody>`;
+    h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th class="mapcol">Maps 1–2</th><th class="num">${g.prop === "hs" ? "HS" : "Kills"}</th><th>Team result</th><th>Prop</th></tr></thead><tbody>`;
     for (const s of hx) h += `<tr><td class="num" style="text-align:left">${shortDate(s.date)}</td><td>${esc(s.opponent)}${s.regional ? ` <span class="pill" style="margin:0;padding:1px 7px" title="${s.regional_level === "region" || perfGrade(g) ? "Same-region team - context, not in the projection" : "Same-country / same-region team - counts lightly in the grade (less than meetings with this team)"}">${s.regional_level === "region" ? "region" : "regional"}</span>` : ""}${s.same_roster === false && !s.regional ? ` <span class="pill" style="margin:0;padding:1px 7px" title="Opponent had a different roster then (${s.roster_overlap} of today's players) - not counted">old roster</span>` : ""}</td>
-      <td class="small">${s.maps.map(mapName).join('<span class="dot"> · </span>')}</td><td class="num"><span class="parts">${s.values.join(" + ")} = </span><b>${s.total}</b></td>
+      <td class="small mapcol">${s.maps.map(mapName).join('<span class="dot"> · </span>')}</td><td class="num"><span class="parts">${s.values.join(" + ")} = </span><b>${s.total}</b></td>
       <td>${esc(s.result)}</td>${sc !== "12" ? `<td class="muted">–</td>` : `<td class="${s.total > g.line ? "hit" : s.total === g.line ? "muted" : "miss"}">${s.total > g.line ? "Over" : s.total === g.line ? "Push" : "Under"}</td>`}</tr>`;
     h += `</tbody></table></div>`;
   } else h += `<div class="muted">No meetings with this team in the last 12 months.</div>`;
@@ -1878,7 +2236,7 @@ function render(d) {
   const maxR = Math.max(...mates.map(m => m.r || 0), 1.2);
   // each number names its own sample (2026-10-10 audit: one header count, 43, sat over windows of 39 / 79 / 124 maps)
   const winLab = esc((o.window || "").replace("last_", "last ").replace(/_/g, " "));
-  h += `<section class="card"><h2>Stats · Maps 1–2 only · BO3.gg <span class="muted small">· ${!perfGrade(g) ? "these feed the older model's projection" : String(g.projection_source || "").endsWith("-bo3") ? "context – the projection uses his BO3.gg maps round by round" : "context – the projection uses HLTV"}</span></h2>
+  h += `<section class="card"><h2>Stats · Maps 1–2 only${o.form_windows_env ? ` · ${o.form_windows_env === "lan" ? "LAN" : "online"} maps only` : ""} · BO3.gg <span class="muted small">· ${!perfGrade(g) ? "these feed the older model's projection" : String(g.projection_source || "").endsWith("-bo3") ? "context – the projection uses his BO3.gg maps round by round" : "context – the projection uses HLTV"}</span></h2>
     <div class="stats">
       ${o.form_windows ? ["3m", "6m", "12m"].map(k => o.form_windows[k] ? `<div class="stat"><div class="k">${k} KPR · HS%</div><div class="v">${num(o.form_windows[k].kpr,3)}</div><div class="n">${o.form_windows[k].hs_pct ?? "–"}% HS · ${o.form_windows[k].maps} maps</div></div>` : "").join("") : ""}
       <div class="stat"><div class="k">Rating</div><div class="v">${num(o.rating)}</div><div class="n">${winLab} · ${o.maps_played ?? "–"} maps</div></div>
@@ -1941,13 +2299,18 @@ function render(d) {
         }
       }
       if (Array.isArray(hc.last5) && hc.last5.length) {
-        h += `<div class="small muted" style="margin-top:10px">Last ${hc.last5.length} HLTV maps</div><div class="scroll"><table><thead><tr><th>Date</th><th>Map</th><th>vs</th><th>Score</th><th>K-D</th><th>Rating</th></tr></thead><tbody>`;
-        for (const m of hc.last5) h += `<tr><td style="white-space:nowrap">${shortDate(m.date)}</td><td>${esc(m.map)}${m.backup ? "*" : ""}</td><td>${esc(m.opponent)}</td><td>${esc(m.score)}</td><td style="white-space:nowrap">${esc(m.kd)}</td><td>${num(m.rating)}</td></tr>`;
+        // in the order the server sends them (newest match first, then map number); scores on one line; on phones the
+        // rating column drops and long team names are shortened (full name on hover / long-press)
+        const dash = t => esc(String(t ?? "–")).replace(/-/g, "–");
+        const mt = m => typeof m.match === "string" && isNaN(+m.match) ? " · " + m.match : "";
+        h += `<div class="small muted" style="margin-top:10px">Last ${hc.last5.length} HLTV maps</div><div class="scroll"><table class="l5tab"><thead><tr><th>Date</th><th>Map</th><th>vs</th><th>Score</th><th>K–D</th><th class="rt">Rating</th></tr></thead><tbody>`;
+        for (const m of hc.last5) h += `<tr><td>${shortDate(m.date)}</td><td>${esc(m.map)}${m.number ? `<span class="mn" title="Map ${esc(m.number)} of the series">M${esc(m.number)}</span>` : ""}${m.backup ? "*" : ""}</td><td class="opp" title="${esc(String(m.opponent || "") + mt(m))}">${esc(m.opponent)}</td><td>${dash(m.score)}</td><td>${dash(m.kd)}</td><td class="rt">${num(m.rating)}</td></tr>`;
         h += `</tbody></table></div>`;
       }
       const bk = hc.backup_source;
       if (bk || hl?.backup_maps) h += `<div class="small" style="margin-top:6px;color:var(--warn)">* ${bk ? bk.backup_maps : hl.backup_maps} map(s) came from the backup data source (less complete than HLTV; replaced automatically when HLTV data arrives)</div>`;
       if (hl?.team_mismatch) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(hl.team_mismatch)}</div>`;
+      if (hl?.stale) h += `<div class="small" style="margin-top:6px;color:var(--warn)">HLTV is missing his recent matches: ${esc(hl.stale)}</div>`;
       h += `<div class="small muted" style="margin-top:6px">${perfGrade(g) ? "Context only – this grade's projection comes from his kills-per-round history, the opponent and LAN / online (see “What this grade uses”)." : "Round Swing and his record vs similar-ranked teams feed the older model's grade; the rest is context."}</div></section>`;
     }
   } catch (e) { console.warn("HLTV card skipped:", e); }
@@ -1975,7 +2338,9 @@ function render(d) {
   h += `</section>`;
 
   // ---- flags
-  const flags = [...(g.flags || [])];
+  // "Projection differs from his last-10 average" says what the difference is, in one plain sentence (form_gap)
+  const fgt = formGapText(d.form_gap || g.form_gap, scLab);
+  const flags = (g.flags || []).map(f => fgt && /^Projection differs from his last-10 average/.test(f) ? fgt : f);
   if ((v.units || 0) > 0) flags.push("Units show the model's relative confidence (A+ 3U down to B- 0.5U) - not a payout-based edge or a proven profit; check the payout before betting");
   if (flags.length) h += `<section class="card full"><h2>Notes</h2><ul class="flags">${flags.map(f => `<li>${esc(f)}</li>`).join("")}</ul></section>`;
   h += `<div class="small muted foot">Data: BO3.gg · Polymarket · FACEIT${d.hltv?.found || d.hltv_context?.found ? " · HLTV" : ""}${d.csapi?.found ? " · CS API" : ""}${d.next_match?.source === "pandascore" ? " · PandaScore" : ""}${d.next_match?.source === "hltv" ? " · schedule from HLTV" : ""}${d.odds?.book ? " · " + esc(d.odds.book) + " via OddsPapi" : ""}${d.liquipedia ? ` · team from <a href="${esc(d.liquipedia.url)}" target="_blank" rel="noopener">Liquipedia</a> (CC-BY-SA 3.0)` : ""} · Not financial advice</div>`;
@@ -1985,8 +2350,39 @@ function render(d) {
   kids.slice(1).forEach(k => { if (!k.classList.contains("full") && !k.classList.contains("foot")) (k.classList.contains("sc") ? side : main).appendChild(k); });
   out.insertBefore(cols, kids[0].nextSibling);
   matchCompareSlot(d);
+  foldCard();
 }
+// phones (2026-10-11 audit: a card was 11 screens tall): every section below the headline and "At a glance" folds to its
+// heading - tap to open. Desktop is unchanged.
+const PHONE = () => matchMedia("(max-width:640px)").matches;
+function foldCard() {
+  if (!PHONE()) return;
+  for (const sct of document.querySelectorAll("#out section.card:not(.herocard):not(.glance)")) {
+    const h2 = sct.querySelector(":scope > h2"); if (!h2) continue;
+    if (!sct.dataset.fold) { sct.dataset.fold = "1"; sct.classList.add("fold", "folded"); }
+    h2.setAttribute("role", "button"); h2.tabIndex = 0; h2.setAttribute("aria-expanded", String(!sct.classList.contains("folded")));
+  }
+}
+const foldToggle = h2 => { const sct = h2.parentElement, open = sct.classList.toggle("folded") === false; h2.setAttribute("aria-expanded", String(open)); };
+document.addEventListener("click", e => { const h2 = e.target.closest(".fold > h2"); if (h2 && !e.target.closest("button, a, select, input")) foldToggle(h2); });
+document.addEventListener("keydown", e => { const h2 = e.target.closest && e.target.closest(".fold > h2"); if (h2 && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); foldToggle(h2); } });
 
+// the H2H panel's regional note in plain words (2026-10-11 audit: "Regional extension disabled" was internal jargon)
+const regionWords = t => String(t || "")
+  .replace(/^Regional extension disabled - roster not confirmed$/, "Series vs other teams from the opponent's region aren't shown – his roster isn't confirmed")
+  .replace(/^Regional extension doesn't apply - opponent is (.+)$/, "No same-region series shown – the opponent is $1")
+  .replace(/^Regional extension: /, "Also shown: ").replace(/\(context - not in the projection\)/, "(context only – not in the projection)")
+  .replace(/^Also shown: no series/, "No series").replace(/ - searched the latest (\d+) opponents/, " (searched his latest $1 opponents)");
+function formGapText(fg, scLab) {
+  if (!fg || fg.last10_avg == null) return "";
+  const env = fg.last10_env === "lan" ? " LAN" : fg.last10_env === "online" ? " online" : "", more = [];
+  if (fg.months12_avg != null) more.push(`over 12 months his ${scLab || "Maps 1–2"} average is ${num(fg.months12_avg, 1)}`);
+  const rb = fg.rank_band;
+  if (rb && rb.kpr_ratio != null && rb.opp_rank != null) { const dd = Math.round((rb.kpr_ratio - 1) * 100);
+    more.push(`against teams ranked like tonight's opponent (#${esc(rb.opp_rank)}) he scores ${dd ? `${Math.abs(dd)}% ${dd < 0 ? "fewer" : "more"}` : "his usual"} kills per round`); }
+  return `His last 10${env} series averaged ${num(fg.last10_avg, 1)}${fg.projection != null ? ` (projection ${num(fg.projection, 1)})` : ""}`
+    + (more.length ? "; " + (more.length > 1 ? more.slice(0, -1).join(", ") + ", and " + more[more.length - 1] : more[0]) : "") + " – context.";
+}
 // ---------- match player projection comparison (owner 2026-10-09): OUR projections for every player in this match,
 // both teams side by side, with the graded Underdog line where one exists - always visible right under the headline
 const MC = {data: null, focus: "", prop: "both", side: "both", sort: "chance", scope: "12", key: "", book: "underdog", d: null};
@@ -2015,7 +2411,7 @@ function mcWhy(c) {
   // 55.0% can be a 54.96% Lean - the explanation comes from the grader's own reason, never from the rounded figure
   const p = (c.p || 0) * 100, side = c.side === "More" ? "Over" : "Under", gate = /0 units:\s*(.+)$/.exec(c.reason || "");
   let t = `${side} chance ${p.toFixed(1)}% (graded on the unrounded chance).`;
-  if (c.grade === "LEAN") t += gate ? ` Lean: 0 units - ${gate[1]}.` : p >= 55.05 ? ` Lean: 0 units - ${c.reason || "a gate held the stake at 0"}.`
+  if (isLeanV(c)) t += c.state === "SCOUT" ? " Lean: 0 units - no match scheduled for his team." : gate ? ` Lean: 0 units - ${gate[1]}.` : p >= 55.05 ? ` Lean: 0 units - ${c.reason || "a gate held the stake at 0"}.`
     : " Lean: below the 55% needed for a graded pick, so 0 units.";
   else t += ` Grade ${c.grade} from the chance: B- 55%+, B 57%+, B+ 63%+, A- 68%+, A 74%+, A+ 80%+.`;
   if (c.units_full > c.units) t += ` Stake cut from ${c.units_full}U by the same-match cap.`;
@@ -2030,19 +2426,20 @@ function drawMatchCompare() {
   const cell = (e, pr) => {
     const c = e[pr] || {};
     const proj = `<td class="num">${c.proj != null ? num(c.proj, 1) : "–"}</td>`;
-    if (c.line == null) return proj + `<td class="num muted">–</td><td class="muted small">No available line</td>`;
+    if (c.line == null) return proj + `<td class="num muted">–</td><td class="muted small">No line offered</td>`;
+    if (c.pending) return proj + `<td class="num">${c.line}</td><td class="muted small">grading…</td>`;
     if (!shown(c)) return proj + `<td class="num">${c.line}</td><td class="muted small">${c.side ? (c.side === "More" ? "Over" : "Under") + " (filtered)" : "grading…"}</td>`;
     const capped = c.units_full > c.units ? ` <span class="muted small">(capped from ${c.units_full}U)</span>` : "";
     return proj + `<td class="num">${c.line}</td><td><button type="button" class="mcpick" data-mc="${esc(e.nick)}|${c.line}|${pr}" title="${esc(mcWhy(c))}
 Tap to open ${esc(e.nick)}'s ${pr === "hs" ? "headshots" : "kills"} card">
-      <b>${c.grade === "LEAN" ? "Lean " : ""}${c.side === "More" ? "Over" : "Under"}</b> ${((c.p || 0) * 100).toFixed(1)}%${c.grade === "LEAN" ? "" : " · " + esc(c.grade || "–")} · ${+(+c.units || 0).toFixed(2)}U${capped}</button></td>`;
+      <b>${esc(sideWord(c))}</b> ${chance(c.p || 0, pr)}${isLeanV(c) ? (c.state === "SCOUT" ? " · No match scheduled" : "") : " · " + esc(c.grade || "–")} · ${+(+c.units || 0).toFixed(2)}U${capped}</button></td>`;
   };
   const dcell = e => {
     const cs = props.map(pr => e[pr]).filter(Boolean), lined = cs.filter(c => c.line != null);
     const t = lined.map(c => c.graded_at).filter(Boolean).sort().pop();
     const issue = lined.map(c => (c.dstat || [])[0] === "verify" ? (c.dstat[1] || "line not confirmed") : (c.dstat || [])[0] === "limited" ? "limited history" : "").find(Boolean)
       || cs.map(c => c.note || (c.dq && c.dq !== "ok" ? c.dq : "")).find(Boolean) || "";
-    return `<td class="small muted">${t ? "graded " + ago(t) : lined.length ? "" : "projection only"}${issue ? ` · <span class="dstat warn" style="font-size:11px">${esc(issue)}</span>` : ""}${e.not_on_roster_page ? " · not on roster page" : ""}</td>`;
+    return `<td class="small muted">${t ? "graded " + ago(t) : lined.length ? "" : cs.some(c => c.proj != null) ? "projection only" : ""}${issue ? ` · <span class="dstat warn" style="font-size:11px">${esc(issue)}</span>` : ""}${e.not_on_roster_page ? " · not on roster page" : ""}</td>`;
   };
   const head = `<tr><th>Player</th>${props.map(pr => `<th class="num">${pr === "hs" ? "HS" : "Kills"} proj</th><th class="num">Line</th><th>Pick</th>`).join("")}<th>Data</th></tr>`;
   const body = j.teams.map(t => {
@@ -2054,22 +2451,34 @@ Tap to open ${esc(e.nick)}'s ${pr === "hs" ? "headshots" : "kills"} card">
       + ps.map(e => `<tr class="${e.nick.toLowerCase() === MC.focus ? "mfocus" : ""}"><td><b>${esc(e.nick)}</b></td>${props.map(pr => cell(e, pr)).join("")}${dcell(e)}</tr>`).join("");
   }).join("");
   // shared exposure: picks in one match are not independent - same player (kills + HS) and same team / direction
+  // shared exposure counts only real picks (units > 0) - a 0-unit Lean risks nothing (2026-10-12 review)
+  const bet = c => shown(c) && (+c.units || 0) > 0;
   const expo = j.teams.map(t => {
-    const ps = t.players.flatMap(e => props.filter(pr => shown(e[pr])).map(pr => ({nick: e.nick, pr, side: e[pr].side, u: +e[pr].units || 0})));
-    if (!ps.length) return "";
-    const dbl = t.players.filter(e => props.length === 2 && shown(e.kills) && shown(e.hs)).map(e => `${esc(e.nick)} (kills ${e.kills.side === "More" ? "Over" : "Under"} + HS ${e.hs.side === "More" ? "Over" : "Under"})`);
-    // suggested units, not wagers (2026-10-10 walkthrough); graded picks and 0-unit Leans counted apart
-    const gr = ps.filter(x => x.u > 0), ln = ps.length - gr.length, un = gr.filter(x => x.side === "Less").length, u = gr.reduce((a, x) => a + x.u, 0);
-    return `<b>${esc(t.team)}</b>: ${gr.length ? `${gr.length} graded pick${gr.length > 1 ? "s" : ""} (${gr.length - un} Over · ${un} Under) · total suggested units ${+u.toFixed(2)}U` : "no graded picks"}${ln ? ` · ${ln} Lean${ln > 1 ? "s" : ""} (0U)` : ""}${dbl.length ? ` – same player both props: ${dbl.join(", ")}` : ""}`;
+    const gr = t.players.flatMap(e => props.filter(pr => bet(e[pr])).map(pr => ({side: e[pr].side, u: +e[pr].units || 0})));
+    if (!gr.length) return "";
+    const dbl = t.players.filter(e => props.length === 2 && bet(e.kills) && bet(e.hs)).map(e => `${esc(e.nick)} (kills ${e.kills.side === "More" ? "Over" : "Under"} + HS ${e.hs.side === "More" ? "Over" : "Under"})`);
+    const un = gr.filter(x => x.side === "Less").length, u = gr.reduce((a, x) => a + x.u, 0);
+    return `<b>${esc(t.team)}</b>: ${gr.length} pick${gr.length > 1 ? "s" : ""} (${gr.length - un} Over · ${un} Under) · ${+u.toFixed(2)}U suggested in total${dbl.length ? ` – same player both props: ${dbl.join(", ")}` : ""}`;
   }).filter(Boolean);
-  const seg = (id, opts, cur) => `<div class="seg" data-mcseg="${id}">${opts.map(([v, l]) => `<button type="button" data-v="${v}" class="${v === cur ? "on" : ""}">${l}</button>`).join("")}</div>`;
+  // phones: one short block per player instead of an 8-column table; no player with any number = one sentence
+  const allEmpty = j.teams.every(t => t.players.every(e => ["kills", "hs"].every(pr => (e[pr] || {}).line == null && (e[pr] || {}).proj == null)));
+  const emptyNote = j.teams.flatMap(t => t.players.flatMap(e => ["kills", "hs"].map(pr => (e[pr] || {}).note))).find(Boolean) || "";
+  const pickTxt = (e, pr) => { const c = e[pr] || {}, lab = pr === "hs" ? "HS" : "Kills";
+    if (shown(c) && !c.pending) return `<button type="button" class="mcpick" data-mc="${esc(e.nick)}|${c.line}|${pr}" title="${esc(mcWhy(c))}">${lab} ${c.line}: <b>${esc(sideWord(c))}</b> ${chance(c.p || 0, pr)}${isLeanV(c) ? "" : " · " + esc(c.grade || "–")} · ${+(+c.units || 0).toFixed(2)}U</button>`;
+    if (c.line != null) return `<span class="muted">${lab} ${c.line}: ${c.side && !c.pending ? "filtered" : "grading…"}</span>`;
+    return `<span class="muted">${lab} ${c.proj != null ? `projection ${num(c.proj, 1)} · no line` : "– no projection"}</span>`; };
+  const phoneList = j.teams.map(t => `<div class="mcteam"><b>${esc(t.team)}</b></div>` + [...t.players].sort((a, b) => MC.sort === "chance" ? best(b) - best(a) : a.nick.localeCompare(b.nick))
+    .map(e => `<div class="mcp${e.nick.toLowerCase() === MC.focus ? " mfocus" : ""}"><b>${esc(e.nick)}</b><div>${props.map(pr => pickTxt(e, pr)).join("<br>")}</div></div>`).join("")).join("");
+  const seg = (id, opts, cur, lab) => `<div class="seg" data-mcseg="${id}" role="group" aria-label="${lab || id}">${opts.map(([v, l]) => `<button type="button" data-v="${v}" class="${v === cur ? "on" : ""}">${l}</button>`).join("")}</div>`;
   el.innerHTML = `<h2>Match players · ${esc(j.match.team)} vs ${esc(j.match.opponent)} · ${j.match.scope === "1" ? "Map 1" : j.match.scope === "123" ? "Maps 1–3" : "Maps 1–2"} · ${bookName(j.book || MC.book)} lines</h2>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">${seg("book", [["underdog", "Underdog"], ["prizepicks", "PrizePicks"]], MC.book)}${seg("prop", [["kills", "Kills"], ["hs", "Headshots"], ["both", "Both"]], MC.prop)}
-      ${seg("side", [["More", "Overs"], ["both", "Both"], ["Less", "Unders"]], MC.side)}${seg("sort", [["chance", "Highest chance"], ["name", "A–Z"]], MC.sort)}</div>
-    ${expo.length ? `<div class="small" style="margin-bottom:6px"><b>Shared exposure in this match</b> – these picks can win or lose together:<br>${expo.join("<br>")}</div>` : ""}
-    <div class="scroll"><table class="mctab"><thead>${head}</thead><tbody>${body}</tbody></table></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">${seg("book", [["underdog", "Underdog"], ["prizepicks", "PrizePicks"]], MC.book, "Platform")}${seg("prop", [["kills", "Kills"], ["hs", "Headshots"], ["both", "Both"]], MC.prop, "Prop")}
+      ${seg("side", [["More", "Overs"], ["both", "Both"], ["Less", "Unders"]], MC.side, "Side")}${seg("sort", [["chance", "Highest chance"], ["name", "A–Z"]], MC.sort, "Sort")}</div>
+    ${expo.length ? `<div class="small" style="margin-bottom:6px"><b>Shared exposure in this match</b> – these picks (units above 0) can win or lose together:<br>${expo.join("<br>")}</div>` : ""}
+    ${allEmpty ? `<div class="small muted">No projections or lines for this match's players right now${emptyNote ? ` (${esc(emptyNote)})` : ""}.</div>`
+      : `<div class="scroll mcwide"><table class="mctab"><thead>${head}</thead><tbody>${body}</tbody></table></div><div class="mclist">${phoneList}</div>`}
     <div class="small muted" style="margin-top:6px">Our projections for every player in this match; picks only where ${bookName(j.book || MC.book)} has a standard line (PrizePicks goblin / demon lines are on the board). Chances to 1 decimal; hover or long-press a pick for why it is graded or a Lean. Tap a pick to open that player's card.
       Picks in one match share its conditions and may win or lose together – team totals are projections added up, not a combined chance.</div>`;
+  foldCard();
 }
 document.addEventListener("click", e => {
   const sg = e.target.closest("[data-mcseg] button");
@@ -2078,7 +2487,7 @@ document.addEventListener("click", e => {
   if (pk && MC.data) {
     const [nick, line, prop] = pk.dataset.mc.split("|");
     const t = MC.data.teams.find(t => t.players.some(p => p.nick === nick)), c = t?.players.find(p => p.nick === nick)?.[prop] || {};
-    gradeNow(nick, line, prop, "standard", MC.scope, !$("#cardpop").hidden, {team: c.ud_team || t?.team, opponent: c.ud_opponent || null, book: MC.book});
+    gradeNow(nick, line, prop, "standard", MC.scope, !$("#cardpop").hidden, {team: c.ud_team || t?.team, opponent: c.ud_opponent || null, book: MC.book, start: MC.data.match?.start || null});
   }
 });
 </script>
@@ -2097,18 +2506,15 @@ document.addEventListener("click", e => {
   document.querySelectorAll('[data-scout-route]').forEach(b=>{b.classList.toggle('on',b.dataset.scoutRoute===m);if(b.dataset.scoutRoute===m)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
   document.querySelectorAll('#mode button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===m)));
  }
- document.querySelectorAll('[data-scout-route]').forEach(b=>b.addEventListener('click',()=>q('#mode button[data-v="'+b.dataset.scoutRoute+'"]').click()));
+ document.querySelectorAll('[data-scout-route]').forEach(b=>b.addEventListener('click',e=>{if(e.ctrlKey||e.metaKey||e.shiftKey||e.button)return;e.preventDefault();q('#mode button[data-v="'+b.dataset.scoutRoute+'"]').click();}));
  new MutationObserver(syncMode).observe(q('#mode'),{subtree:true,attributes:true,attributeFilter:['class']});syncMode();
  function density(compact){document.body.classList.toggle('scout-compact',compact);q('#scout-density').setAttribute('aria-pressed',String(compact));q('#scout-density').textContent=compact?'↕ Comfortable view':'↕ Compact view';}
  try{density(localStorage.getItem('scout-ui-density')==='compact');}catch{}
  q('#scout-density').addEventListener('click',()=>{const v=!document.body.classList.contains('scout-compact');density(v);try{localStorage.setItem('scout-ui-density',v?'compact':'comfortable');}catch{}});
- q('#scout-guide').addEventListener('click',()=>{const guide=q('details.how');guide.open=true;scrollToEl(guide);});
- q('#scout-filters').addEventListener('click',()=>{const v=q('#board').classList.toggle('filters-collapsed');q('#scout-filters').setAttribute('aria-expanded',String(!v));q('#scout-filters').textContent=v?'Show filters':'Hide filters';});
- q('#scout-expand').addEventListener('click',()=>document.querySelectorAll('#boardout .mgroup').forEach(g=>g.open=true));
- q('#scout-collapse').addEventListener('click',()=>document.querySelectorAll('#boardout .mgroup').forEach(g=>g.open=false));
+ q('#scout-guide').addEventListener('click',()=>{if(!document.body.classList.contains('mode-one'))q('#mode button[data-v="one"]').click();const guide=q('details.how');guide.open=true;setTimeout(()=>scrollToEl(guide),0);});
  let pending=false;
  const jumpNames=[['Match players','Matchup'],['Projection comparison','Compare'],['Match simulation','Scenarios'],['Last ','Recent form'],['Head-to-head','Head-to-head'],['Checks','Data checks']];
- function jumps(){pending=false;const bar=q('#scout-jumps');bar.replaceChildren();const headings=[...document.querySelectorAll('#out h2')];jumpNames.forEach(([match,label],i)=>{const h=headings.find(h=>h.textContent.startsWith(match));if(!h)return;h.id='scout-section-'+i;const a=document.createElement('a');a.href='#'+h.id;a.textContent=label;a.addEventListener('click',e=>{e.preventDefault();scrollToEl(h);});bar.appendChild(a);});}
+ function jumps(){pending=false;const bar=q('#scout-jumps');bar.replaceChildren();const headings=[...document.querySelectorAll('#out h2')];jumpNames.forEach(([match,label],i)=>{const h=headings.find(h=>h.textContent.startsWith(match));if(!h)return;h.id='scout-section-'+i;const a=document.createElement('a');a.href='#'+h.id;a.textContent=label;a.addEventListener('click',e=>{e.preventDefault();h.parentElement?.classList.remove('folded');scrollToEl(h);});bar.appendChild(a);});}
  new MutationObserver(()=>{if(!pending){pending=true;requestAnimationFrame(jumps);}}).observe(q('#out'),{childList:true,subtree:true});jumps();
  const top=q('#scout-top');window.addEventListener('scroll',()=>{top.hidden=window.scrollY<600;},{passive:true});top.addEventListener('click',()=>window.scrollTo({top:0,behavior:reduced()?'instant':'smooth'}));
 })();

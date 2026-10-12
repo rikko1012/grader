@@ -29,7 +29,7 @@ def test_old_path_identical_when_model_off():
     for _ in range(1500):
         d = _inputs(rnd, rnd.choice(["12", "1"]))           # Maps 1-3 changed on purpose 2026-10-11 (three full maps)
         a = old.grade_leg(dict(d)); b = grader.grade_leg(dict(d), dict(grader.CONFIG, perf_scopes=(), fix_v2=False))
-        b.pop("projection_source"); b.pop("p_more_model_raw"); b.pop("dist")
+        b.pop("projection_source"); b.pop("p_more_model_raw"); b.pop("dist"); b.pop("units_free", None); b.pop("units_free_less", None)
         fa = [f for f in a.pop("flags") if not f.startswith("CAP:")]; fb = [f for f in b.pop("flags") if not f.startswith(("CAP:", "OLD PROJECTION"))]
         assert fa == fb
         assert json.dumps(a, sort_keys=True, default=str) == json.dumps(b, sort_keys=True, default=str)
@@ -152,7 +152,7 @@ def test_live_grades_unchanged_by_candidate_code():
             d["perf"] = {"error": "player 'x' not found in HLTV"}
         if d["prop"] == "hs" or rnd.random() < 0.3:
             d["perf"] = dict(d["perf"], version="perf-1") if isinstance(d.get("perf"), dict) and "lambda" in d["perf"] else d["perf"]
-        a = old.grade_leg(dict(d)); b = grader.grade_leg(dict(d), dict(grader.CONFIG, perf_hs_dist=False, fix_v2=False, perf_scopes=("12",))); b.pop("dist", None)
+        a = old.grade_leg(dict(d)); b = grader.grade_leg(dict(d), dict(grader.CONFIG, perf_hs_dist=False, fix_v2=False, perf_scopes=("12",))); b.pop("dist", None); b.pop("units_free", None); b.pop("units_free_less", None)
         assert json.dumps(a, sort_keys=True, default=str) == json.dumps(b, sort_keys=True, default=str)
 
 

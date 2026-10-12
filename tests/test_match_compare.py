@@ -35,7 +35,7 @@ def test_match_compare(monkeypatch):
     assert set(teams) == {"Aurora", "Vitality"}
     au = {p["nick"]: p for p in teams["Aurora"]["players"]}; vi = {p["nick"]: p for p in teams["Vitality"]["players"]}
     assert au["Wicadia"]["hs"]["reason"] == "why Wicadia" and au["Wicadia"]["hs"]["line"] == 15.5 and au["Wicadia"]["kills"]["side"] == "Less"            # offered lines with picks
-    assert au["XANTARES"]["kills"] == {"proj": 20.0, "line": None, "no_line": True, "source": "HLTV", "dq": "ok"}   # projection, no pick
+    assert au["XANTARES"]["kills"] == {"proj": 20.0, "line": None, "no_line": True, "pending": False, "source": "HLTV", "dq": "ok"}   # projection, no pick
     assert "side" not in au["XANTARES"]["hs"]                                                          # no invented pick
     assert au["MAJ3R"]["kills"]["proj"] is None and au["MAJ3R"]["kills"]["no_line"]
     assert vi["ZywOo"]["kills"]["line"] == 34.5 and vi["ZywOo"]["hs"]["line"] is None                 # Map 1 line kept out
@@ -92,5 +92,6 @@ def test_prizepicks_table_uses_its_standard_lines(monkeypatch):
     monkeypatch.setattr(perf_live, "projection", lambda *a, **k: {"lambda": 10.0, "data_quality": "ok"})
     t = next(x for x in server.match_compare("aurora", "vit", "Aurora", "Vitality", START, "12", "prizepicks")["teams"] if x["team"] == "Aurora")
     w = next(p for p in t["players"] if p["nick"] == "Wicadia")
-    assert seen == ["prizepicks"] and w["kills"]["line"] == 28.5            # PrizePicks' line, not Underdog's 29.5
+    # the table's lines come from its own platform's board (both boards are read afterwards only for BO3.gg projections)
+    assert seen[0] == "prizepicks" and w["kills"]["line"] == 28.5            # PrizePicks' line, not Underdog's 29.5
     assert w["hs"]["line"] is None and w["hs"]["no_line"]                     # the goblin market stays on the board

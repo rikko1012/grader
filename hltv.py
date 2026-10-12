@@ -429,9 +429,11 @@ def _player_numbers(nick, team, bo3_last_date):
     by_player = {}
     for r in rows:
         by_player.setdefault(r[0], []).append(r)
+    tv = set(team_name_variants(team)) if team else set()     # exact variants: 'Chicken Coop Esports' = 'Chicken Coop'
+
     def score(pid):
         teams = {_norm(r[2]) for r in by_player[pid]}
-        return (bool(team) and _norm(team) in teams, len(by_player[pid]))
+        return (bool(tv & teams), len(by_player[pid]))
     pid = max(by_player, key=score)
     rows = by_player[pid]
     today = date.today()
@@ -473,7 +475,7 @@ def _player_numbers(nick, team, bo3_last_date):
         "backup_maps": sum(1 for r in total if r[12] != "hltv"),   # filled from the scraper's failsafe API
         "use_swing": swing_enabled() and len(swings) >= MIN_SWING_MAPS,
     }
-    if team and _norm(team) not in {_norm(r[2]) for r in total}:
+    if team and not (tv & {_norm(r[2]) for r in total}):
         out["team_mismatch"] = f"HLTV maps in this window are for {out['team']}, not {team}"
     if bo3_last_date:
         try:
@@ -507,7 +509,8 @@ def history(nick, cutoff, team=None):
     by = {}
     for r in rows:
         by.setdefault(r[0], []).append(r)
-    pid = max(by, key=lambda k: (bool(team) and _norm(team) in {_norm(r[2]) for r in by[k]}, len(by[k])))
+    tv = set(team_name_variants(team)) if team else set()
+    pid = max(by, key=lambda k: (bool(tv & {_norm(r[2]) for r in by[k]}), len(by[k])))
     rows = by[pid]
     for months in WINDOWS:
         total = [r for r in rows if r[5] == "total" and r[3] >= cut - timedelta(days=int(months * 30.4))]
@@ -662,6 +665,22 @@ def _player_ids(cur, nick, team):
 _TEAM_AFFIX = re.compile(r"^(team)\s+|\s+(esports|e-sports|esport|gaming|club|team)$", re.I)
 
 
+def same_team(a, b):
+    """Two team names are the same team: they share an exact name variant (team_name_variants). Never a substring -
+    'Inner Circle' is not 'Inner Circle Academy', 'NAVI' is not 'NAVI Junior' (settlement, 2026-10-11 audit)."""
+    va, vb = set(team_name_variants(a)), set(team_name_variants(b))
+    if va and vb and va & vb:
+        return True
+    try:                                  # the maintained alias table ('NIP' = 'Ninjas in Pyjamas'), exact names only
+        import matchid
+        if matchid.ready():
+            ka, kb = matchid.team_key(a), matchid.team_key(b)
+            return bool(ka and ka == kb and str(ka).startswith("team:"))
+    except Exception:
+        pass
+    return False
+
+
 def team_name_variants(name):
     """Exact name first, then without a leading "Team" / trailing "Esports" / "Gaming" / "Club" (Underdog writes
     "Team Vitality", "Chicken Coop Esports"; HLTV has "Vitality", "Chicken Coop"). Exact matches only - never fuzzy."""
@@ -737,10 +756,7 @@ def _execute(cur, sql, params):
         cur.execute(sql.replace("mo.source <> 'hltv'", "false").replace("mo.source", "'hltv'"), params)
 
 
-def _last5(cur, ids):
-    if not ids:
-        return None
-    _execute(cur, """SELECT mo.date, mp.name, t2.name, own.score, opp.score, ps.k, ps.d, ps.rating, mo.source
+_LAST5_SQL = """SELECT mo.date, mp.name, t2.name, own.score, opp.score, ps.k, ps.d, ps.rating, mo.source, ps.matchid, mm.number
                    FROM player_stats ps
                    JOIN maps mp USING (mapid)
                    JOIN match_overview mo USING (matchid)
@@ -749,10 +765,28 @@ def _last5(cur, ids):
                    JOIN matches opp ON opp.matchid = ps.matchid AND opp.teamid <> ps.teamid
                                    AND opp.mapid = ps.mapid AND opp.sideid = 0
                    JOIN teams t2 ON t2.teamid = opp.teamid
+                   LEFT JOIN match_maps mm ON mm.matchid = ps.matchid AND mm.mapid = ps.mapid
                    WHERE ps.playerid = ANY(%s) AND ps.mapid <> 0 AND ps.sideid = 0
-                   ORDER BY mo.date DESC, ps.matchid DESC LIMIT 5""", (ids,))
+                   ORDER BY mo.date DESC, ps.matchid DESC, mm.number ASC NULLS LAST, mp.name LIMIT 5"""
+
+
+def _last5(cur, ids):
+    """His last 5 HLTV maps: newest series first, each series' maps in the order they were played (HLTV's map number -
+    2026-10-11: one series' maps were listed out of order, e.g. Ancient, Nuke, Cache for Nuke 1, Ancient 2, Cache 3)."""
+    if not ids:
+        return None
+    try:
+        _execute(cur, _LAST5_SQL, (ids,))
+    except Exception as e:
+        if "match_maps" not in str(e) and "number" not in str(e):
+            raise
+        # an older scraper database without map numbers: same rows, played order unknown (number None)
+        _execute(cur, "\n".join(l for l in _LAST5_SQL.split("\n") if "match_maps" not in l)
+                 .replace("ps.matchid, mm.number", "ps.matchid, NULL").replace("mm.number ASC NULLS LAST, ", ""), (ids,))
+    rows = cur.fetchall()
+    rows.sort(key=lambda r: (-r[0].toordinal(), -(r[9] or 0), r[10] if r[10] is not None else 99))   # same order, in Python too
     return [{"date": r[0].isoformat(), "map": r[1], "opponent": r[2], "score": f"{r[3]}-{r[4]}",
-             "kd": f"{r[5]}-{r[6]}", "rating": r[7], "backup": r[8] != "hltv"} for r in cur.fetchall()]
+             "kd": f"{r[5]}-{r[6]}", "rating": r[7], "backup": r[8] != "hltv", "match": r[9], "number": r[10]} for r in rows]
 
 
 def _winrates(cur, team_id, months=6):
@@ -852,6 +886,39 @@ def canonical_nick(q):
     return hit["nick"] if hit else None
 
 
+_CLOSE = {"rows": None, "keys": {}}
+
+
+def suggest_nicks(q, limit=5):
+    """'Did you mean ...?' for a name no player has: up to `limit` real HLTV nicks (the in-memory index - no database call
+    here): the loose match ('monesy' -> m0NESY), names starting with / containing it, then the closest spellings (most
+    active player first). Never the typed name itself. [] when the index isn't loaded."""
+    import difflib
+    k, lk = _norm(q), _loose(q)
+    hits = search_players(q, limit * 2) or []           # also starts the index load if it is due
+    rows = _INDEX["rows"]
+    if not k or not rows:
+        return []
+    out = []
+
+    def add(n):
+        if n and _norm(n) != k and n not in out:
+            out.append(n)
+    add(canonical_nick(q))
+    for h in hits:
+        add(h.get("nick"))
+    if len(out) < limit:
+        if _CLOSE["rows"] is not rows:                  # loose key -> most active nick, once per index load
+            keys = {}
+            for r in rows:
+                keys.setdefault(r.get("loose") or _loose(r["key"]), r["nick"])
+            _CLOSE.update(rows=rows, keys=keys)
+        keys = _CLOSE["keys"]
+        for m in difflib.get_close_matches(lk, list(keys), n=limit * 2, cutoff=0.6):
+            add(keys[m])
+    return out[:limit]
+
+
 def search_players(q, limit=8):
     """Player search from the HLTV database (in memory, reloaded hourly in the background).
     None when the index isn't available (HLTV database down) - the caller falls back to BO3.gg."""
@@ -903,10 +970,23 @@ def event_env_from_title(title):
     core = lambda k: re.sub(r"(season)?([0-9]+|[ivx]+)$", "", k)
     best = None
     for name, lan in hit[1]:
-        k = core(_norm(name))
-        if len(k) >= 8 and k in t and (best is None or len(k) > best[0]):
-            best = (len(k), lan)
-    return None if best is None else ("lan" if best[1] else "online")
+        n = _norm(name)
+        # the title often drops the year ("PGL Bucharest Open Qualifier #1" for "PGL Bucharest 2027 Open Qualifier 1"):
+        # try the name without its year too, so the qualifier's own row (longer) wins over the main event's
+        for k in {core(n), core(re.sub(r"(19|20)[0-9]{2}", "", n))}:
+            if len(k) >= 8 and k in t and (best is None or len(k) > best[0]):
+                best = (len(k), lan, str(name))
+    if best is None:
+        return None
+    # a qualifier / online-stage title matched only by its main event's name: the main event's LAN flag is not this match's
+    # (2026-10-11 audit: 'PGL Bucharest Open Qualifier #1' was read as LAN from 'PGL Bucharest 2027') - qualifiers are online
+    if _QUAL_WORDS.search(title) and not _QUAL_WORDS.search(best[2]):
+        return "online"
+    return "lan" if best[1] else "online"
+
+
+# words that mark a qualifier / online stage of an event (the same words the HLTV environment fallback reads as online)
+_QUAL_WORDS = re.compile(r"qualifier|qualification|\bopen\b|closed|\bonline\b|cup #|weekly|ladder", re.I)
 
 
 def team_country(name):
@@ -1055,15 +1135,16 @@ def _next_match(cur, team):
     """His team's next (or live) match on HLTV's schedule - a second opinion on BO3.gg's slate."""
     if not team:
         return None
+    vs = team_name_variants(team) or [_norm(team)]      # 'Nordic Partners Gaming' = HLTV's 'Nordic Partners' (exact variants)
     cur.execute("""SELECT time, live, team1, team2, event, format, url FROM upcoming_matches
-                   WHERE (lower(regexp_replace(team1, '[^a-zA-Z0-9]', '', 'g')) = %(t)s
-                       OR lower(regexp_replace(team2, '[^a-zA-Z0-9]', '', 'g')) = %(t)s)
+                   WHERE (lower(regexp_replace(team1, '[^a-zA-Z0-9]', '', 'g')) = ANY(%(t)s)
+                       OR lower(regexp_replace(team2, '[^a-zA-Z0-9]', '', 'g')) = ANY(%(t)s))
                      AND (live OR time >= now() - interval '3 hours')
-                   ORDER BY live DESC, time LIMIT 1""", {"t": _norm(team)})
+                   ORDER BY live DESC, time LIMIT 1""", {"t": vs})
     r = cur.fetchone()
     if not r:
         return None
-    opponent = r[3] if _norm(r[2]) == _norm(team) else r[2]
+    opponent = r[3] if _norm(r[2]) in vs else r[2]
     return {"time": r[0].isoformat() if r[0] else None, "live": r[1], "opponent": opponent,
             "event": r[4], "format": r[5], "url": r[6]}
 
@@ -1243,7 +1324,7 @@ def settle_by_day(nick, team, day, opponent):
         con.close()
     if not rows and bad:
         return {"found": False, "transient": True}
-    on = [r for r in rows if not opponent or _norm(opponent) in _norm(r["opponent"]) or _norm(r["opponent"]) in _norm(opponent)]
+    on = [r for r in rows if not opponent or same_team(opponent, r["opponent"])]
     if not on:
         return {"found": False}
     mid = on[0]["hltv_match"]
@@ -1277,7 +1358,7 @@ def settle_scope(nick, team, day, opponent, scope):
         con.close()
     if not rows and bad:
         return {"found": False, "transient": True}
-    on = [r for r in rows if not opponent or _norm(opponent) in _norm(r["opponent"]) or _norm(r["opponent"]) in _norm(opponent)]
+    on = [r for r in rows if not opponent or same_team(opponent, r["opponent"])]
     if not on:
         return {"found": False}
     mid = on[0]["hltv_match"]

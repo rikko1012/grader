@@ -95,7 +95,7 @@ def source_label(g):
     """WHERE the projection came from - a source label, not a quality judgement."""
     ps = str(g.get("projection_source") or "")
     if ps.startswith("perf") and not ps.endswith("-bo3"):
-        return "HLTV"
+        return f"HLTV (ends {g['hltv_ends']})" if g.get("hltv_ends") else "HLTV"
     if ps.endswith("-bo3"):
         return "BO3.gg"
     return "older model (HLTV unreachable)" if "unreachable" in ps else "older model (BO3.gg)"
@@ -111,6 +111,8 @@ def data_status(g, v):
     for key, why in (("Gate C: roster", "roster not confirmed"), ("STAND-IN", "stand-in"), ("RUST:", "stale: long gap since the last official map")):
         if key in fl:
             return ["verify", why]
+    if "HLTV STALE" in fl:
+        return ["verify", f"HLTV history ends {g.get('hltv_ends') or 'early'} - newer matches only on BO3.gg"]
     if "thin history" in fl or "Gate D" in fl or "Thin data" in fl:
         return ["limited", "small recent sample"]
     return ["ok", ""]
@@ -211,7 +213,10 @@ def _internal(res):
             gg = grader.grade_leg(dict(gi, perf=pf["g7"]))
             out.append({"label": "Our previous model (G7) - internal comparison, not independent",
                         "projection": round(gg.get("lambda_final"), 2), "p_over": gg.get("p_more"),
-                        "p_under": round(1 - gg["p_more"], 4) if gg.get("p_more") is not None else None})
+                        "p_under": round(1 - gg["p_more"], 4) if gg.get("p_more") is not None else None,
+                        # chances at the GRADED line (the same line as ours.chance_at_line); no spread - the model's spread is
+                        # part of the private recipe (protect_recipe strips grade.sd; spread_differs says it in words)
+                        "line": (res.get("grade") or {}).get("line")})
         except Exception:
             pass
     return out
@@ -276,16 +281,27 @@ def panel(res, rows, board_at=None, now=None, id_map=None):
             elif hit / rf["decided"] < 0.5:
                 add(against, txt, basis)
     internal = _internal(res)
+    # our chance at the GRADED line, side as graded, pushes left out exactly like the card (2026-10-11: the page took
+    # "Our model" at Underdog's line next to the previous model at the graded line - two different lines in one row)
+    p_line = (g.get("p_more") if side == "Over" else g.get("p_less")) if side else None
     for it in internal:
         it["p_side"] = (it.get("p_over") if side == "Over" else it.get("p_under")) if side else None
+        # a higher projection with a LOWER Over chance (or the reverse) comes from a different spread, not an error
+        dp = (it.get("projection") or 0) - g["lambda_final"]
+        do = (it.get("p_over") if it.get("p_over") is not None else 0.5) - (g.get("p_more") if g.get("p_more") is not None else 0.5)
+        it["spread_differs"] = bool(abs(dp) >= 0.05 and abs(do) >= 0.001 and (dp > 0) != (do > 0))
         if side and it["p_side"] is not None:
             if it["p_side"] < 0.5:
                 add(against, f"Our previous model has the {side} at {it['p_side']:.0%}", "context")
             elif it["p_side"] >= 0.55:
                 add(supports, f"Our previous model also has the {side} ({it['p_side']:.0%})", "context")
     for f in g.get("flags") or []:
-        if f.startswith("OLD PROJECTION"):
+        if f.startswith("OLD PROJECTION") and "HLTV database unreachable" in f:
+            add(against, "HLTV database unreachable right now - temporary projection from the older model", "data")
+        elif f.startswith("OLD PROJECTION"):
             add(against, "Projection from the older model (no HLTV data for this player or matchup)", "data")
+        elif f.startswith("HLTV STALE"):
+            add(against, f"HLTV history ends {g.get('hltv_ends') or 'early'} - his newer matches are only on BO3.gg", "data")
         elif f.startswith("PROVISIONAL"):
             add(against, "Provisional projection from BO3.gg history (HLTV has none)", "data")
         elif "thin history" in f:
@@ -302,8 +318,9 @@ def panel(res, rows, board_at=None, now=None, id_map=None):
         "supports": supports, "concern": next((x for x in against if x["basis"] in ("model", "data")), against[0] if against else None),
         "one_worse": sens, "projection_in_model": perf_on,
         "payouts_differ": payouts_differ,
-        "ours": {"projection": round(g["lambda_final"], 2), "sd": round(sd, 2), "range80": [round(lo, 1), round(hi, 1)],
-                 "line": g.get("line"), "side": side, "chance": v.get("p")},
+        "ours": {"projection": round(g["lambda_final"], 2), "range80": [round(lo, 1), round(hi, 1)],
+                 "line": g.get("line"), "side": side, "chance": v.get("p"), "chance_at_line": p_line,
+                 "p_over_at_line": g.get("p_more")},
         "independent": {"count": len(INDEPENDENT), "projections": [], "consensus": None,
                         "note": "No independent projection source is connected - checked: "
                                 + "; ".join(f"{s['id']}: {s['status']}" for s in SOURCES if s["kind"] != "book_line" or s["status"] != "connected")},
