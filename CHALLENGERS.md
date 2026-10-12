@@ -68,3 +68,17 @@ data hash 49e7ac29547b86a9). Walk-forward with w refitted on earlier days only: 
 [0.0039, 0.0264] (536 units / 87 matches), kills Maps 1-2 +0.0301 [0.0077, 0.0528], HS Maps 1-2 +0.0048 [-0.0062,
 +0.0159]. Final w fitted on all 10 days (grid 0-1.2 step 0.05, minimum log-loss): kills 0.0, HS 0.5. Most of those
 10 days were graded by the older pipeline (only 212 units / 29 matches were perf-2), so the forward test is what counts.
+
+### lb-001 provenance notes (added 2026-10-12 after the evidence audit; the frozen config is unchanged)
+
+- **Data hash recipe.** `49e7ac29547b86a9` = first 16 hex of SHA-256 of `json.dumps(sorted((player.lower(), match_slug, prop)))`
+  over the board units of `diag/units.pkl` (one per player x match slug x stat x scope, latest board forecast logged
+  before the start; Railway export <= Oct 10 Central + Render export fetched 2026-10-12 15:31:44 UTC) with status
+  settled, a projection, actual != line, scope Maps 1-2: 800 units. Reproduced from the saved file.
+- **Training cutoff label.** The config's `training_cutoff` "2026-10-12T15:00:00Z" is approximate: the latest match
+  start in the development data is 13:00 UTC, but 29 units (2 matches) settled 15:11-15:28 UTC, after 15:00 and before
+  the freeze (15:49:04). Effective data cutoff = the export at 15:31:44 UTC. No development match can enter the forward
+  cohort: forward requires forecast logged after 15:49:04 AND match start after 15:49:04; every development match
+  started by 13:00 UTC.
+- **Development units still count units of the old slug identity** (a match logged under a BO3.gg slug and hltv-<id> was
+  two units then); the forward evaluation uses the canonical match identity (identity.assign).
