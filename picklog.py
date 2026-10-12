@@ -105,6 +105,14 @@ def _db():
         con.execute("ALTER TABLE picks ADD COLUMN scope TEXT DEFAULT '12'")
     except sqlite3.OperationalError:
         pass
+    # 2026-10-12 recap audit: a member opening a board line rewrote the row's test 2 -> 0, so board grades drifted into
+    # the member cohort. on_board keeps the board provenance for good: 1 = written by the board (recorded), 2 = inferred
+    # for rows from before this column (test 0 with a platform recorded = a board line a member opened), 0 = never.
+    try:
+        con.execute("ALTER TABLE picks ADD COLUMN on_board INTEGER DEFAULT 0")
+        con.execute("UPDATE picks SET on_board = CASE WHEN test = 2 THEN 1 WHEN test = 0 AND book IS NOT NULL THEN 2 ELSE 0 END")
+    except sqlite3.OperationalError:
+        pass
     for col in ("book", "market_id", "market_key"):   # added 2026-10-10: platform + provider market id (+ PrizePicks market)
         try:
             con.execute(f"ALTER TABLE picks ADD COLUMN {col} TEXT")
@@ -357,10 +365,12 @@ def write_row(row):
                 con.execute("UPDATE picks SET regrades = COALESCE(regrades, 0) + 1 WHERE id = ?", (cur["id"],))
             if cur:
                 # a real member asking for a line first seen in a test makes it a real pick
-                con.execute("UPDATE picks SET requests = requests + 1, test = CASE WHEN ? THEN test ELSE 0 END "
-                            "WHERE id = ?", (int(bool(test)), cur["id"]))
+                con.execute("UPDATE picks SET requests = requests + 1, test = CASE WHEN ? THEN test ELSE 0 END, "
+                            "on_board = CASE WHEN ? = 2 THEN 1 ELSE COALESCE(on_board, 0) END WHERE id = ?",
+                            (int(bool(test)), int(test or 0), cur["id"]))
                 con.commit()
                 return cur["id"]
+            row["on_board"] = 1 if int(test or 0) == 2 else 0
             cols = ", ".join(row)
             con.execute(f"INSERT INTO picks ({cols}) VALUES ({', '.join('?' * len(row))})", list(row.values()))
             pid = con.execute("SELECT id FROM picks WHERE key = ?", (key,)).fetchone()["id"]
