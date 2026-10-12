@@ -52,6 +52,8 @@ History (CS2_DATA_DIR/.cache/ml_snapshots.db, rows immutable)
                 SNAPSHOT_MAX_MB the store stops growing (snapshot_error on admin) instead of filling the data disk.
   ml_forecasts  shadow log of the baseline per linked match, model_version "ml-baseline-1", written
                 when the baseline (platform / probability / availability) changes or every 30 min.
+                Next to every baseline row the frozen SHADOW candidate (ml_model.py, model_version
+                "ml-candidate-1", NOT validated, never a stake) is logged with the same logged_ts.
 
 Public:
   start()  idempotent - one background refresher per source
@@ -937,10 +939,11 @@ _FC_LOCK = threading.Lock()
 
 
 def log_forecasts(sources=None, now=None):
-    """Record the baseline per linked match: when it changes, or every 30 min.  Returns rows written."""
+    """Record the baseline per linked match: when it changes, or every 30 min (+ the shadow candidate's row next to each
+    one).  Returns the number of baseline rows written."""
     srcs = SOURCES if sources is None else sources
     now = now or _utcnow()
-    rows = []
+    rows, extra = [], []
     with _FC_LOCK:
         for m in _assemble(srcs, now):
             mid = m["match_id"]
@@ -955,17 +958,30 @@ def log_forecasts(sources=None, now=None):
                          m["teams"]["b"]["name"], m["start"], int(b["prob_a"] is not None), int(m["disagreement"]),
                          b["reason"], b["rule"]))
             _FC_LAST[mid] = (now.timestamp(),) + sig
+            cand = _candidate_row(m, _iso(now))
+            if cand:
+                extra.append(cand)
         if rows:
             with _DB_LOCK:
                 con = _connect()
                 try:
                     con.executemany("INSERT OR IGNORE INTO ml_forecasts (match_id, model_version, logged_ts, platform,"
                                     " prob_a, team_a, team_b, start, available, disagreement, reason, rule)"
-                                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+                                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", rows + extra)
                     con.commit()
                 finally:
                     con.close()
     return len(rows)
+
+
+def _candidate_row(m, logged_iso):
+    """The shadow model's row (ml_model.py, "ml-candidate-1", NOT validated) logged next to the baseline's, with the same
+    logged_ts.  A missing / broken model never stops the baseline log."""
+    try:
+        import ml_model
+        return ml_model.forecast_row(m, logged_iso)
+    except Exception:
+        return None
 
 
 if __name__ == "__main__":

@@ -25,7 +25,9 @@ Research tool only: nothing here is imported by the server, the prop grader or p
   4. Forward     ml_snapshots.db (written by the live moneyline collector, when it exists): per match and
                  cohort, the latest snapshot at or before start - 30 min (earliest start any source states),
                  scored when it was available then and is no older than 6 h before that cutoff (otherwise a
-                 counted exclusion); best-of-2 excluded explicitly.
+                 counted exclusion); best-of-2 excluded explicitly. forward_compare() pairs the frozen shadow
+                 candidate (ml_model.py, "ml-candidate-1") with the baseline on the same matches and applies the
+                 pre-registered PROMOTION_RULE.
 
 Prices are Polymarket's recorded price history (mid/last-trade series), not executable quotes we captured.
 
@@ -85,6 +87,41 @@ FORM_K = 5                           # last-10 series win rate shrunk toward 0.5
 H2H_DAYS = 365
 H2H_KEEP = 3                         # both teams kept >= 3 of today's 5 players
 H2H_K = 3
+
+# PRE-REGISTERED PROMOTION RULE (2026-10-12, before any forward forecast of the candidate existed). The frozen shadow model
+# (ml_model.py, ml_model_frozen.json) becomes a member-visible model probability WITH stakes only when ALL hold on the
+# forward cohort (matches after the freeze, its forecast = the last one logged >= 30 min before start, paired with the
+# ml-baseline-1 forecast of the same match): n >= 300 matches, log-loss gain vs the baseline > 0 with the match-grouped
+# 95% bootstrap CI (2000 resamples) excluding 0, calibration slope in [0.8, 1.2]. Until then the probability may be shown
+# only labelled "candidate - not validated", never with a stake. Changing this constant needs a new model version.
+PROMOTION_RULE = {
+    "model_version": "ml-candidate-1",
+    "baseline_version": "ml-baseline-1",
+    "registered": "2026-10-12",
+    "min_forward_matches": 300,
+    "gain": "mean(log-loss baseline - log-loss model) > 0 with the 95% CI lower bound > 0",
+    "ci": "match-grouped percentile bootstrap, 2000 resamples, seed 7",
+    "calibration_slope_range": [0.8, 1.2],
+    "calibration_slope": "logistic regression of the result on logit(model probability), point estimate",
+    "until_promoted": "model probability may be shown only labelled 'candidate - not validated'; never a stake",
+}
+
+# ACTIVATION POLICY (owner review 2026-10-12): PROMOTION_RULE above is a CHECKPOINT that triggers a review, never an automatic
+# switch. Nothing in code ever turns on a moneyline stake (server.ml_model_state: available False, probability None;
+# ml_model.predict: stake None, validated False). Stakes need ALL of: the checkpoint met on the frozen forward cohort; a
+# positive return at the prices that were actually available (the recorded ASK of the side bet, plus fees) with the
+# match-grouped 95% CI above 0 over the same cohort; calibration within range in every probability band with >= 30
+# matches; the owner's explicit approval; and a new model version (re-frozen). An unsuccessful or inconclusive candidate
+# stays in shadow.
+ACTIVATION_POLICY = {
+    "automatic": False,
+    "checkpoint": "PROMOTION_RULE (n >= 300 forward matches, log-loss gain CI > 0, calibration slope 0.8-1.2) starts a review only",
+    "requires": ["checkpoint met on the frozen forward cohort",
+                 "return at the recorded ask (+ fees) of the side bet > 0 with the match-grouped 95% CI lower bound > 0",
+                 "calibration in range in every probability band with >= 30 matches",
+                 "explicit owner approval", "a new, re-frozen model version"],
+    "otherwise": "shadow - model probability labelled 'candidate - not validated', never a stake",
+}
 
 # Polymarket outcome names that differ from the HLTV team name beyond the "Team"/"Esports" affixes.
 # Exact, hand-checked aliases only (never fuzzy - academies and "Junior" sides are different teams).
@@ -1354,7 +1391,8 @@ def forward_rows(db_path, excluded=None):
                 cutoff = st - CUTOFF_MIN * 60
                 if at > cutoff:
                     continue
-                cohort = f"baseline {mv}" if mv else str(src or t)
+                cohort = ((f"baseline {mv}" if str(mv).startswith("ml-baseline") else f"model {mv}") if mv
+                          else str(src or t))
                 key = (cohort, mid or (_norm(ta), _norm(tb), int(st)))
                 if key not in best or at > best[key]["at"]:
                     try:
@@ -1445,7 +1483,100 @@ def forward_eval(db_path, hl):
         rs = [r for r in out_rows if r["source"] == src]
         res["by_source"][src] = {"overall": metrics(rs), "calibration": calibration(rs)}
     res["n"] = len(out_rows)
+    res["candidate"] = forward_compare(out_rows, since_ts=candidate_frozen_ts())
     return res
+
+
+def candidate_frozen_ts(path=None):
+    """When the candidate was frozen (ml_model_frozen.json payload.frozen_at), or None."""
+    p = path or os.path.join(os.path.dirname(os.path.abspath(__file__)), "ml_model_frozen.json")
+    try:
+        with open(p, encoding="utf-8") as fh:
+            return parse_ts(json.load(fh)["payload"]["frozen_at"])
+    except Exception:
+        return None
+
+
+def calib_slope(rows, pkey="p"):
+    """(intercept, slope) of the logistic regression of y on logit(p) - pure Python Newton steps."""
+    xs = [logit(min(max(r[pkey], 1e-6), 1 - 1e-6)) for r in rows]
+    ys = [r["y"] for r in rows]
+    a, b = 0.0, 1.0
+    for _ in range(50):
+        g0 = g1 = h00 = h01 = h11 = 0.0
+        for x, y in zip(xs, ys):
+            q = sigmoid(a + b * x)
+            w = q * (1 - q)
+            g0 += q - y
+            g1 += (q - y) * x
+            h00 += w
+            h01 += w * x
+            h11 += w * x * x
+        h00 += 1e-9
+        h11 += 1e-9
+        det = h00 * h11 - h01 * h01
+        if det <= 0:
+            return None, None
+        da = (h11 * g0 - h01 * g1) / det
+        db = (h00 * g1 - h01 * g0) / det
+        a, b = a - da, b - db
+        if max(abs(da), abs(db)) < 1e-10:
+            break
+    return round(a, 4), round(b, 4)
+
+
+def forward_compare(out_rows, rule=None, since_ts=None, boot=BOOT):
+    """The frozen candidate vs the frozen baseline on the SAME forward matches (each side's forecast = its last row at or
+    before start - 30 min, from forward_rows), and the pre-registered promotion decision. Matches starting before the
+    freeze (since_ts) are not counted. Unpaired matches are counted, never scored."""
+    rule = rule or PROMOTION_RULE
+    cand, base = f"model {rule['model_version']}", f"baseline {rule['baseline_version']}"
+    by = defaultdict(dict)
+    for r in out_rows:
+        if r["source"] in (cand, base) and (since_ts is None or r["start"] >= since_ts):
+            by[r["hltv_match"]][r["source"]] = r
+    pairs, only = [], Counter()
+    for mid, d in by.items():
+        if cand in d and base in d:
+            pairs.append({"hltv_match": mid, "y": d[base]["y"], "p": d[cand]["p"], "pb": d[base]["p"],
+                          "start": d[base]["start"]})
+        else:
+            only[f"only {next(iter(d))}"] += 1
+    out = {"rule": rule, "model": cand, "baseline": base, "n": len(pairs), "unpaired": dict(only),
+           "since": datetime.fromtimestamp(since_ts, timezone.utc).isoformat(timespec="seconds") if since_ts else None}
+    if not pairs:
+        out.update(promote=False, decision=f"not measurable yet: 0 of {rule['min_forward_matches']} forward matches")
+        return out
+
+    def ll(rs, k):
+        return sum(logloss1(r[k], r["y"]) for r in rs) / len(rs)
+
+    def gain(rs):
+        return ll(rs, "pb") - ll(rs, "p")
+
+    g = _groups(pairs)
+    out.update(ll_model=round(ll(pairs, "p"), 5), ll_baseline=round(ll(pairs, "pb"), 5), gain=round(gain(pairs), 5),
+               gain_ci=list(group_bootstrap(g, gain, B=boot)),
+               brier_model=round(sum((r["p"] - r["y"]) ** 2 for r in pairs) / len(pairs), 5),
+               brier_baseline=round(sum((r["pb"] - r["y"]) ** 2 for r in pairs) / len(pairs), 5))
+    out["calibration_intercept"], out["calibration_slope"] = calib_slope(pairs)
+    out["calibration_slope_baseline"] = calib_slope(pairs, "pb")[1]
+    months = defaultdict(list)
+    for r in pairs:
+        months[datetime.fromtimestamp(r["start"], timezone.utc).strftime("%Y-%m")].append(r)
+    out["by_month"] = {m: {"n": len(rs), "gain": round(gain(rs), 5)} for m, rs in sorted(months.items())}
+    lo = out["gain_ci"][0]
+    slope = out["calibration_slope"]
+    lo_s, hi_s = rule["calibration_slope_range"]
+    checks = {"n_ge_min": len(pairs) >= rule["min_forward_matches"],
+              "gain_positive_ci_excludes_0": out["gain"] > 0 and lo is not None and lo > 0,
+              "calibration_slope_in_range": slope is not None and lo_s <= slope <= hi_s}
+    out["checks"] = checks
+    out["promote"] = all(checks.values())
+    out["decision"] = ("PROMOTE: all pre-registered checks pass" if out["promote"] else
+                       "keep in shadow (" + ", ".join(k for k, v in checks.items() if not v) + " not met) - "
+                       "probability only as 'candidate - not validated', no stake")
+    return out
 
 
 # ---------------------------------------------------------------------------------------------------- report
@@ -1691,6 +1822,14 @@ def render_report(res):
             o = b["overall"]
             w(f"- {src}: n = {o['n']}, log-loss {o['logloss']:.4f} {_fmt_ci(o.get('logloss_ci'))}, Brier "
               f"{o['brier']:.4f}, gain vs 50% {o['logloss_gain_vs_50']:+.4f} {_fmt_ci(o.get('logloss_gain_vs_50_ci'))}.")
+        c = fw.get("candidate") or {}
+        if c:
+            if c.get("n"):
+                w(f"- Candidate {c['model']} vs {c['baseline']} on the same {c['n']} forward matches: log-loss "
+                  f"{c['ll_model']:.4f} vs {c['ll_baseline']:.4f}, gain {c['gain']:+.5f} {_fmt_ci(c.get('gain_ci'))}, "
+                  f"calibration slope {c['calibration_slope']}. Decision: {c['decision']}.")
+            else:
+                w(f"- Candidate: {c.get('decision')}.")
     w("")
     for note in res.get("notes", []):
         w(f"- {note}")

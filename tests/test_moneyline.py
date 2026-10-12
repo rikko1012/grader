@@ -4,6 +4,7 @@ All data comes from recorded fixtures (tests/fixtures/ml_polymarket.json, ml_kal
 responses recorded 2026-10-12).  No network: fetchers are replaced with fakes."""
 import copy
 import json
+import math
 import sqlite3
 import time
 from datetime import datetime, timezone
@@ -482,7 +483,7 @@ def test_polymarket_live_makes_kalshi_block_of_same_match_unusable(data_dir):
     assert moneyline.log_forecasts(srcs, now=NOW) >= 1
     con = sqlite3.connect(data_dir / ".cache" / "ml_snapshots.db")
     rows = con.execute("select platform, usable, prob_a, unusable_reason from ml_quotes where team_a='BBL'").fetchall()
-    fc = con.execute("select available, prob_a from ml_forecasts where team_a='BBL'").fetchall()
+    fc = con.execute("select available, prob_a from ml_forecasts where team_a='BBL' and model_version='ml-baseline-1'").fetchall()
     con.close()
     assert {r[0] for r in rows} == {"polymarket", "kalshi"}
     for plat, usable, prob_a, why in rows:
@@ -532,7 +533,8 @@ def test_best_of_two_is_a_price_not_a_win_probability(data_dir):
     con = sqlite3.connect(data_dir / ".cache" / "ml_snapshots.db")
     assert con.execute("select count(*) from ml_forecasts where team_a='BBL'").fetchone()[0] == 0
     assert con.execute("select count(*) from ml_quotes where team_a='BBL' and prob_a is not null").fetchone()[0] == 0
-    assert con.execute("select count(*) from ml_forecasts where team_a='STATE'").fetchone()[0] == 1
+    assert con.execute("select count(*) from ml_forecasts where team_a='STATE' and model_version='ml-baseline-1'").fetchone()[0] == 1
+    assert con.execute("select count(*) from ml_forecasts where team_a='STATE' and model_version='ml-candidate-1'").fetchone()[0] == 1
     con.close()
 
 
@@ -585,9 +587,51 @@ def test_shadow_forecast_log_on_change_or_every_30_min(data_dir):
         s.refresh_once()
     assert moneyline.log_forecasts(srcs, now=t0.replace(minute=35)) == 1          # BBL/Liquid lost its baseline
     con = sqlite3.connect(data_dir / ".cache" / "ml_snapshots.db")
-    rows = con.execute("select model_version, available, prob_a from ml_forecasts where team_a='BBL' order by logged_ts").fetchall()
+    rows = con.execute("select model_version, available, prob_a from ml_forecasts where team_a='BBL' and "
+                       "model_version='ml-baseline-1' order by logged_ts").fetchall()
+    cand = con.execute("select model_version, available, prob_a from ml_forecasts where team_a='BBL' and "
+                       "model_version='ml-candidate-1' order by logged_ts").fetchall()
     con.close()
     assert [r[0] for r in rows] == ["ml-baseline-1"] * 3 and rows[-1][1:] == (0, None)
+    assert len(cand) == 3 and cand[-1][1:] == (0, None)            # the shadow candidate follows the baseline
+
+
+def test_shadow_candidate_logged_next_to_every_baseline_row(data_dir):
+    import ml_model
+    srcs = refreshed()
+    t0 = datetime(2026, 10, 11, 23, 0, tzinfo=timezone.utc)
+    n = moneyline.log_forecasts(srcs, now=t0)
+    con = sqlite3.connect(data_dir / ".cache" / "ml_snapshots.db")
+    base = {r[0]: r[1:] for r in con.execute("select match_id, logged_ts, prob_a, available from ml_forecasts "
+                                              "where model_version='ml-baseline-1'")}
+    cand = {r[0]: r[1:] for r in con.execute("select match_id, logged_ts, prob_a, available, reason, rule from ml_forecasts "
+                                              "where model_version='ml-candidate-1'")}
+    con.close()
+    assert n == len(base) == len(cand) == 5 and set(base) == set(cand)
+    w = ml_model.load_frozen()["w_L"]
+    for mid, (at, q, ok) in base.items():
+        cat, p, cok, reason, rule = cand[mid]
+        assert cat == at and cok == ok                              # same logged_ts: frozen at the same moment
+        if q is None:
+            assert p is None
+        else:
+            z = math.log(q / (1 - q)) * w
+            assert p == pytest.approx(1 / (1 + math.exp(-z)), abs=1e-12)
+        assert "not validated" in reason and "never a stake" in rule
+
+
+def test_broken_candidate_never_stops_the_baseline_log(data_dir, monkeypatch):
+    import ml_model
+
+    def boom(*a, **k):
+        raise RuntimeError("model broke")
+    monkeypatch.setattr(ml_model, "forecast_row", boom)
+    srcs = refreshed()
+    assert moneyline.log_forecasts(srcs, now=datetime(2026, 10, 11, 23, 0, tzinfo=timezone.utc)) == 5
+    con = sqlite3.connect(data_dir / ".cache" / "ml_snapshots.db")
+    got = dict(con.execute("select model_version, count(*) from ml_forecasts group by model_version").fetchall())
+    con.close()
+    assert got == {"ml-baseline-1": 5}
 
 
 def test_start_is_idempotent_one_thread_per_source():

@@ -554,7 +554,7 @@ def scope_result(r, same_day_only=False):
             rows = hltv._series_rows(cur, ids, "2000-01-01", "AND mo.date BETWEEN %(d)s::date - 1 AND %(d)s::date + 1",
                                      {"d": day}, maxn=3, need=(1,)) if ids else []
             opp = (r["opponent"] or "").strip()
-            on = [x for x in rows if not opp or hltv.same_team(opp, x["opponent"])]     # exact variants, never an academy
+            on, how = hltv.opponent_rows(cur, rows, opp)     # opponent's HLTV team id first, exact names as fallback
             if same_day_only:
                 on = [x for x in on if x["date"] >= day]     # an earlier meeting is not this match
             mids = {x["hltv_match"] for x in on}

@@ -1,0 +1,146 @@
+{
+ "payload": {
+  "development_evidence": {
+   "kalshi_pooled_train": {
+    "blocks_positive": 4,
+    "blocks_total": 6,
+    "brier_gain": 0.00047,
+    "brier_gain_ci": [
+     -1e-05,
+     0.00098
+    ],
+    "calibration_slope": 1.0839,
+    "calibration_slope_ci": [
+     0.952,
+     1.2362
+    ],
+    "gain": 0.00102,
+    "gain_ci": [
+     -0.00041,
+     0.00248
+    ],
+    "ll_market": 0.6019,
+    "ll_model": 0.6008,
+    "n": 1676
+   },
+   "note": "rolling-origin out-of-sample results of the same config on the development blocks 2026-06..2026-10; best of 208 variants scored on those blocks, so selected post hoc: NOT a validation",
+   "polymarket": {
+    "blocks_positive": 5,
+    "blocks_total": 5,
+    "brier_gain": 0.00038,
+    "brier_gain_ci": [
+     5e-05,
+     0.00071
+    ],
+    "calibration_slope": 1.1451,
+    "calibration_slope_ci": [
+     0.9928,
+     1.3132
+    ],
+    "gain": 0.00089,
+    "gain_ci": [
+     -6e-05,
+     0.00184
+    ],
+    "ll_market": 0.6033,
+    "ll_model": 0.6024,
+    "n": 1719
+   },
+   "primary": {
+    "blocks_positive": 4,
+    "blocks_total": 6,
+    "brier_gain": 0.00029,
+    "brier_gain_ci": [
+     2e-05,
+     0.00059
+    ],
+    "calibration_slope": 1.1182,
+    "calibration_slope_ci": [
+     0.9666,
+     1.2741
+    ],
+    "gain": 0.00064,
+    "gain_ci": [
+     -0.0001,
+     0.00147
+    ],
+    "ll_market": 0.6055,
+    "ll_model": 0.6048,
+    "n": 1790
+   }
+  },
+  "family": "market calibration, research config c01_slope (ml_models/calibration.py)",
+  "formula": "p = sigmoid(w_L * logit(clip(q, 1e-6, 1 - 1e-6))); q = ml-baseline-1 probability of team A, defined for 0.01 < q < 0.99",
+  "frozen_at": "2026-10-12T05:14:25+00:00",
+  "inner_cv": {
+   "ll_by_lambda": {
+    "0.3": 0.604086,
+    "1.0": 0.604087,
+    "10.0": 0.604105,
+    "100.0": 0.604239,
+    "1000.0": 0.60461,
+    "10000.0": 0.604779,
+    "3.0": 0.604091,
+    "30.0": 0.60414,
+    "300.0": 0.604408,
+    "3000.0": 0.604725
+   },
+   "ll_market": 0.604805,
+   "ll_model": 0.604086,
+   "n_rows": 1772
+  },
+  "lam": 0.3,
+  "lam_grid": [
+   10000.0,
+   3000.0,
+   1000.0,
+   300.0,
+   100.0,
+   30.0,
+   10.0,
+   3.0,
+   1.0,
+   0.3
+  ],
+  "lambda_selection": "4-chunk expanding-window inner CV over the last 50% of the training rows by cutoff (each inner fit only on rows with cutoff < chunk start - 1 day); lowest inner log-loss",
+  "model_version": "ml-candidate-1",
+  "prior": "L2 penalty lam * (w_L - 1)^2 / 2 toward the market (w_L = 1)",
+  "promotion_rule": {
+   "baseline_version": "ml-baseline-1",
+   "calibration_slope": "logistic regression of the result on logit(model probability), point estimate",
+   "calibration_slope_range": [
+    0.8,
+    1.2
+   ],
+   "ci": "match-grouped percentile bootstrap, 2000 resamples, seed 7",
+   "gain": "mean(log-loss baseline - log-loss model) > 0 with the 95% CI lower bound > 0",
+   "min_forward_matches": 300,
+   "model_version": "ml-candidate-1",
+   "registered": "2026-10-12",
+   "until_promoted": "model probability may be shown only labelled 'candidate - not validated'; never a stake"
+  },
+  "research_code_sha256": "c7da70512c65280a39f87b2fffcbc0a223ce84de2d1de4bb25fc7f1deea6dda7",
+  "status": "candidate - not validated",
+  "terms": [
+   "L"
+  ],
+  "training": {
+   "cutoff_first": "2025-10-15T08:30:00+00:00",
+   "cutoff_last": "2026-10-11T20:30:00+00:00",
+   "dataset": "dataset.pkl",
+   "dataset_sha256": "fa6a1852f59d99d286573e56fdf34149bf2e93c8b00e97bf5fe10f5f66f7aec2",
+   "matches": 3543,
+   "platforms": {
+    "kalshi": 75,
+    "polymarket": 3468
+   },
+   "rows": 3543,
+   "view": "primary: one row per match, the platform with the smaller spread at the cutoff (Polymarket spread not recorded -> one tick, so Polymarket when listed, else Kalshi)"
+  },
+  "validated": false,
+  "w": [
+   1.0939327978179396
+  ]
+ },
+ "sha256": "7ee00c95b3dbf315f4f209cea499c84f1b39fdd2791a02783b489fec6608b91a"
+}

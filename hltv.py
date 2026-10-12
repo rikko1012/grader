@@ -681,6 +681,54 @@ def same_team(a, b):
     return False
 
 
+def _opp_rows(nick, team, rows, opponent):
+    """opponent_rows with its own short-lived connection (settle helpers have closed theirs)."""
+    if not opponent or not rows:
+        return list(rows)
+    try:
+        con = _connect()
+        try:
+            with con.cursor() as cur:
+                return opponent_rows(cur, rows, opponent)[0]
+        finally:
+            con.close()
+    except Exception:
+        return [r for r in rows if same_team(opponent, r["opponent"])]
+
+
+def resolve_team_id(cur, name):
+    """The HLTV team id for a book / pick team name: exact name variants first, then the maintained alias table
+    (matchid / team_aliases.json, e.g. 'NIP' -> Ninjas in Pyjamas). None when it can't be resolved exactly."""
+    if not name:
+        return None
+    try:
+        tid = _team_id(cur, name)
+    except Exception:              # a failed lookup is no identity: the caller falls back to exact names
+        tid = None
+    if tid:
+        return tid
+    try:
+        import matchid
+        k = matchid.team_key(name) if matchid.ready() else None
+        if k and str(k).startswith("team:"):
+            return int(str(k).split(":", 1)[1])
+    except Exception:
+        pass
+    return None
+
+
+def opponent_rows(cur, rows, opponent):
+    """Series rows against `opponent`, by canonical identity (2026-10-12 owner review): the opponent's HLTV team id when it
+    resolves - a renamed team keeps its id, an alias spelling resolves to the same id, an academy is a different id - and
+    the exact-name rule only when it doesn't. Never a substring."""
+    if not opponent:
+        return list(rows), "no opponent"
+    oid = resolve_team_id(cur, opponent)
+    if oid is not None and any(r.get("opponent_id") is not None for r in rows):
+        return [r for r in rows if r.get("opponent_id") == oid], "team id"
+    return [r for r in rows if same_team(opponent, r["opponent"])], "name variants"
+
+
 def team_name_variants(name):
     """Exact name first, then without a leading "Team" / trailing "Esports" / "Gaming" / "Club" (Underdog writes
     "Team Vitality", "Chicken Coop Esports"; HLTV has "Vitality", "Chicken Coop"). Exact matches only - never fuzzy."""
@@ -1174,7 +1222,7 @@ if __name__ == "__main__":
 # Needs the scraper's match_maps (map order) and map_headshots tables; on an older scraper database
 # these return [] / None and nothing changes.
 _SERIES_SQL = """
-SELECT mo.matchid, mo.date, mm.number, mp.name, ps.k, h.hs, own.score, opp.score, t2.name, t.name, mo.lan
+SELECT mo.matchid, mo.date, mm.number, mp.name, ps.k, h.hs, own.score, opp.score, t2.name, t.name, mo.lan, t2.teamid
 FROM match_maps mm
 JOIN match_overview mo USING (matchid)
 JOIN maps mp ON mp.mapid = mm.mapid
@@ -1192,8 +1240,10 @@ ORDER BY mo.date DESC, mo.matchid DESC, mm.number
 def _series_rows(cur, ids, since, extra="", params=None, maxn=2, need=(1, 2)):
     cur.execute(_SERIES_SQL.format(extra=extra, maxn=int(maxn)), dict(params or {}, ids=ids, since=since))
     by_match = {}
-    for mid, d, num, mname, k, hs, own, opp, oname, tname, lan in cur.fetchall():
-        by_match.setdefault(mid, []).append({
+    for row in cur.fetchall():
+        mid, d, num, mname, k, hs, own, opp, oname, tname, lan = row[:11]
+        oid = row[11] if len(row) > 11 else None
+        by_match.setdefault(mid, []).append({"opponent_id": oid,
             "match_id": f"hltv-{mid}", "hltv_match": mid, "date": d.isoformat(), "number": num,
             "map": "de_" + _norm(mname), "kills": k, "headshots": hs, "rounds": (own or 0) + (opp or 0),
             "won": (own or 0) > (opp or 0), "opponent": oname, "team": tname, "source": "hltv",
@@ -1324,9 +1374,11 @@ def settle_by_day(nick, team, day, opponent):
         con.close()
     if not rows and bad:
         return {"found": False, "transient": True}
-    on = [r for r in rows if not opponent or same_team(opponent, r["opponent"])]
+    on = _opp_rows(nick, team, rows, opponent)
     if not on:
         return {"found": False}
+    if len({r["hltv_match"] for r in on}) > 1:      # a rematch inside the +-1 day window: never guess which one
+        return {"found": False, "ambiguous": True}
     mid = on[0]["hltv_match"]
     m12 = sorted((r for r in on if r["hltv_match"] == mid), key=lambda r: r["number"])[:2]
     hs = [r["headshots"] for r in m12]
@@ -1358,7 +1410,7 @@ def settle_scope(nick, team, day, opponent, scope):
         con.close()
     if not rows and bad:
         return {"found": False, "transient": True}
-    on = [r for r in rows if not opponent or same_team(opponent, r["opponent"])]
+    on = _opp_rows(nick, team, rows, opponent)
     if not on:
         return {"found": False}
     mid = on[0]["hltv_match"]

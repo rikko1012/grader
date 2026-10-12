@@ -2044,6 +2044,11 @@ class Handler(BaseHTTPRequestHandler):
                 sc = tuple((q.get("scopes") or "1,123").split(","))
                 return self.send(200, picklog.fix_scope_settlements(apply=q.get("apply") == "1" and "12" not in sc, scopes=sc,
                                                                     test=int(q["test"]) if (q.get("test") or "").isdigit() else None))
+            if u.path == "/admin/settlement_audit" and self.authed(q.get("token")):
+                # 2026-10-12 identity fix: re-derive EVERY settled pick (Maps 1-2, Map 1, Maps 1-3) through the canonical-id
+                # settlement path. Dry run unless apply=1; corrections append old + new values to settlement_corrections.jsonl
+                return self.send(200, picklog.fix_scope_settlements(apply=q.get("apply") == "1", scopes=("12", "1", "123"),
+                                                                    test=int(q["test"]) if (q.get("test") or "").isdigit() else None))
             if u.path == "/admin/perf_check" and self.authed(q.get("token")):
                 # performance model on LIVE data for given players (to prove it equals the training export)
                 import perf_live
