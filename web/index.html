@@ -349,6 +349,15 @@ body.locked #slip,body.locked.hasslip #slip{display:none!important}body.locked.h
 #studio{margin:0 0 14px;padding:16px;background:linear-gradient(135deg,#151b25,#0e1219);border:1px solid var(--line-2);border-radius:14px}
 #studio h3{margin:4px 0 6px;font:700 20px var(--display);letter-spacing:.3px}
 #studio .eyebrow-s{font:10px var(--mono);letter-spacing:2px;color:var(--accent-2);text-transform:uppercase}
+.studio-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0 10px}
+.studio-step{background:#0d121b;border:1px solid var(--line);border-radius:12px;padding:12px 12px 13px;min-width:0}
+.studio-step .sh{display:flex;align-items:baseline;gap:8px;margin-bottom:3px}
+.studio-step .num{font:600 11px var(--mono);color:#18120e;background:var(--accent-2);border-radius:6px;padding:1px 6px}
+.studio-step .t{font-weight:600;font-size:13.5px;color:var(--text)}
+.studio-step .hint{font-size:11.5px;color:var(--faint);margin:0 0 9px;line-height:1.45;min-height:2.9em}
+.studio-step .seg{display:flex;width:100%}.studio-step .seg button{flex:1 1 0;padding:8px 4px;font-size:12.5px;min-width:0;white-space:nowrap}
+.studio-sum{background:#f7a45b0d;border:1px solid #f7a45b33;border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.55;margin:4px 0 12px}
+.studio-sum b{color:var(--accent-2)}
 .studio-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:12px 0}
 .studio-fields .sf{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:500;color:var(--muted);min-width:0}
 .studio-fields select{padding:9px 10px}
@@ -374,7 +383,10 @@ body.locked #slip,body.locked.hasslip #slip{display:none!important}body.locked.h
 .mlplat .mlpname{font-weight:600;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
 .mlplat .mlpname a{color:var(--accent-2);text-transform:none;letter-spacing:0;font-weight:500}
 .mlplat .pill{margin:4px 4px 0 0;font-size:11.5px;padding:2px 8px}
-@media (max-width:640px){.mlplats{grid-template-columns:1fr}#studio{padding:12px}.studio-fields{grid-template-columns:1fr 1fr}}
+@media (max-width:980px){.studio-steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.mlplats{grid-template-columns:1fr}#studio{padding:12px}.studio-fields{grid-template-columns:1fr 1fr}
+  .studio-steps{grid-template-columns:1fr;gap:8px}.studio-step{padding:10px 11px}.studio-step .hint{min-height:0;margin-bottom:7px}
+  .studio-step .seg button{padding:9px 2px;font-size:12px}}
 @media (max-width:380px){.studio-fields{grid-template-columns:1fr}}
 </style>
 </head>
@@ -1393,32 +1405,47 @@ async function studioCall(method, url, body) {        // a retry repeats the sam
 const studioSettings = c => Object.assign({book: c.book, side: c.side, stat: c.stat, scope: c.scope, market: "standard", sizes: c.sizes, count: +c.count,
   overlap: c.overlap ? "limited" : "none"}, c.overlap ? {max_uses: {player: +c.cap, match: +c.cap}} : {});
 function studioForm() {
-  const c = studioCfg(), seg = (k, opts) => `<div class="seg" data-sk="${k}">` + opts.map(([v, l]) =>
+  const c = studioCfg(), seg = (k, opts) => `<div class="seg" data-sk="${k}" role="group">` + opts.map(([v, l]) =>
     `<button type="button" data-v="${v}" class="${String(c[k]) === String(v) ? "on" : ""}" aria-pressed="${String(c[k]) === String(v)}">${l}</button>`).join("") + `</div>`;
-  const sizes = `<div class="seg" data-sk="sizes">` + [2, 3, 4].map(n => `<button type="button" data-v="${n}" class="${c.sizes.includes(n) ? "on" : ""}" aria-pressed="${c.sizes.includes(n)}">${n} picks</button>`).join("") + `</div>`;
-  const opt = (v, l, cur) => `<option value="${v}"${String(cur) === String(v) ? " selected" : ""}>${l}</option>`;
+  const sizes = `<div class="seg" data-sk="sizes" role="group">` + [2, 3, 4].map(n => `<button type="button" data-v="${n}" class="${c.sizes.includes(n) ? "on" : ""}" aria-pressed="${c.sizes.includes(n)}">${n}-pick</button>`).join("") + `</div>`;
+  const step = (n, title, hint, ctl) => `<div class="studio-step"><div class="sh"><span class="num">${n}</span><span class="t">${title}</span></div><p class="hint">${hint}</p>${ctl}</div>`;
   $("#studio").innerHTML = `<div class="eyebrow-s">Research tools</div><h3>Slip studio</h3>
-    <div class="studio-note">Research suggestions from graded props – <span id="st-settled">this builder is not validated yet (no settled batches of its own)</span>. Nothing here changes a grade or a stake.</div>
-    <div class="studio-fields">
-      <div class="sf"><span>Platform</span><select id="st-book" aria-label="Platform">${opt("underdog", "Underdog", c.book)}${opt("prizepicks", "PrizePicks", c.book)}</select></div>
-      <div class="sf"><span>Side</span>${seg("side", [["More", "Overs"], ["Less", "Unders"], ["either", "Either"]])}</div>
-      <div class="sf"><span>Picks per slip (choose any)</span>${sizes}</div>
-      <div class="sf"><span>Suggestions per size</span><select id="st-count" aria-label="Suggestions per size">${[1, 2, 3, 5].map(n => opt(n, n, c.count)).join("")}</select></div>
-      <div class="sf"><span>Stat</span><select id="st-stat" aria-label="Stat">${opt("both", "Kills + headshots", c.stat)}${opt("kills", "Kills", c.stat)}${opt("hs", "Headshots", c.stat)}</select></div>
-      <div class="sf"><span>Maps</span><select id="st-scope" aria-label="Maps">${opt("12", "Maps 1–2", c.scope)}${opt("1", "Map 1", c.scope)}${opt("123", "Maps 1–3", c.scope)}${opt("all", "All", c.scope)}</select></div></div>
-    <div class="studio-overlap"><label><input type="checkbox" id="st-overlap"${c.overlap ? " checked" : ""}> Allow limited overlap</label>
+    <div class="small muted" style="margin-top:2px">Builds ready-to-check slips from today's graded props. Pick your settings, press Build, then use <b>Verify &amp; copy</b> on the slip you like.</div>
+    <div class="studio-steps">
+      ${step(1, "Platform", "Where you'll enter the slip. Each slip uses one platform.", seg("book", [["underdog", "Underdog"], ["prizepicks", "PrizePicks"]]))}
+      ${step(2, "Overs or Unders", "Which picks can go in. “Both” allows either side; a slip won't always mix them.", seg("side", [["More", "Overs only"], ["Less", "Unders only"], ["either", "Both"]]))}
+      ${step(3, "Slip sizes", "How many props in one entry (a 3-pick needs all 3 to hit). Choose one or more.", sizes)}
+      ${step(4, "How many of each size", "How many slips to build for each size you chose.", seg("count", [[1, "1"], [2, "2"], [3, "3"], [5, "5"]]))}
+      ${step(5, "Stat", "Kills, headshots, or both.", seg("stat", [["kills", "Kills"], ["hs", "Headshots"], ["both", "Both"]]))}
+      ${step(6, "Maps", "Which maps the line covers.", seg("scope", [["12", "Maps 1–2"], ["1", "Map 1"], ["123", "Maps 1–3"], ["all", "Any"]]))}
+    </div>
+    <div class="studio-sum" id="st-sum" aria-live="polite"></div>
+    <div class="studio-overlap"><label><input type="checkbox" id="st-overlap"${c.overlap ? " checked" : ""}> Let a player or match appear in more than one slip</label>
       <span id="st-capline" class="muted"></span></div>
     <div class="studio-actions"><button type="button" class="go" id="st-build">Build</button>
-      <button type="button" class="chipbtn" id="st-new" title="Closes this batch (its picks stop counting) and builds a fresh one">Start new batch</button>
+      <button type="button" class="chipbtn" id="st-new" title="Starts over: picks used so far may be suggested again">Start new batch</button>
       <span id="st-status" class="small muted" role="status" aria-live="polite"></span></div>
+    <details class="small muted" style="margin-top:10px"><summary>Is this validated?</summary>
+      <div class="studio-note" style="margin-top:6px">Research suggestions, not tested bets – <span id="st-settled">this builder has no settled batches of its own yet</span>. Nothing here changes a grade or a stake. Not financial advice.</div></details>
     <div id="st-out"></div>`;
   studioCapLine();
+  studioSummary();
+}
+function studioSummary() {
+  const c = studioCfg(), el = $("#st-sum"); if (!el) return;
+  if (!c.sizes.length) { el.innerHTML = "Choose at least one slip size in step 3."; return; }
+  const sizes = [...c.sizes].sort((a, b) => a - b), n = +c.count;
+  const side = c.side === "More" ? "Overs only" : c.side === "Less" ? "Unders only" : "Overs and Unders";
+  const stat = c.stat === "kills" ? "kills" : c.stat === "hs" ? "headshots" : "kills and headshots";
+  const maps = {"12": "Maps 1–2", "1": "Map 1", "123": "Maps 1–3", all: "any maps"}[c.scope] || "Maps 1–2";
+  el.innerHTML = `You'll get up to <b>${sizes.map(k => `${n} × ${k}-pick`).join(", ")}</b> slip${sizes.length * n === 1 ? "" : "s"} on <b>${bookName(c.book)}</b> – ${side}, ${stat}, ${maps}. `
+    + (c.overlap ? `A player or match can appear in up to <b>${c.cap}</b> slips.` : `<b>No player, prop or match is used twice</b> across your slips until you start a new batch.`);
 }
 function studioCapLine() {
   const c = studioCfg();
   $("#st-capline").innerHTML = c.overlap
-    ? `A player or a match in at most <select id="st-cap" aria-label="Overlap cap">${[2, 3].map(n => `<option${+c.cap === n ? " selected" : ""}>${n}</option>`).join("")}</select> slips of this batch – never twice in one slip, never both sides of a line`
-    : "No repeats: each player, prop and match appears in one slip of this batch";
+    ? `Up to <select id="st-cap" aria-label="Most slips one player or match can be in">${[2, 3].map(n => `<option${+c.cap === n ? " selected" : ""}>${n}</option>`).join("")}</select> slips each – still never twice in one slip or both sides of a line`
+    : "Off: every player, prop and match is used once (safest)";
 }
 const sizeWord = n => `${n}-pick`;
 function studioLeg(l) {
@@ -1455,13 +1482,15 @@ function studioRender() {
   const excl = last && (last.excluded || []).length ? `<details class="small muted"><summary>Left out of this build (${last.excluded.reduce((a, x) => a + x.count, 0)} lines)</summary>
       ${last.excluded.map(x => `<div>${esc(x.reason)}: ${x.count}${x.examples && x.examples.length ? ` – e.g. ${esc(x.examples.join(", "))}` : ""}</div>`).join("")}</details>` : "";
   const elig = last ? `<div class="small muted">Eligible right now: ${last.eligible.lines} line${last.eligible.lines === 1 ? "" : "s"} in ${last.eligible.matches} match${last.eligible.matches === 1 ? "" : "es"} on ${bookName(last.settings.book)} (B or better, exact current line, confirmed role, not started)</div>` : "";
-  const exp = `<div class="studio-exp"><b>This batch</b> · started ${esc(shortWhen(b.created_at).split(" · ")[0])} · ${b.builds} build${b.builds === 1 ? "" : "s"} · ${e.slips || 0} slip${e.slips === 1 ? "" : "s"} · ${e.legs || 0} picks ·
-      ${e.distinct_players || 0} players · ${e.distinct_matches || 0} matches<br>Most uses of one player ${mu.player || 0}, one match ${mu.match || 0}, one prop ${mu.prop || 0}
-      ${e.overlap === "limited" ? ` · caps: player ${e.caps.player}, match ${e.caps.match}` : ""}${(mu.player || 0) <= 1 && (mu.match || 0) <= 1 && (mu.prop || 0) <= 1 ? " · no repeats" : ""}${e.mixed ? " · mixed overlap settings across builds" : ""}${b.superseded ? ` · ${b.superseded} replaced / changed slip${b.superseded === 1 ? "" : "s"} no longer counted` : ""}
+  const norep = (mu.player || 0) <= 1 && (mu.match || 0) <= 1 && (mu.prop || 0) <= 1;
+  const exp = `<div class="studio-exp"><b>Your batch so far:</b> ${e.slips || 0} slip${e.slips === 1 ? "" : "s"} · ${e.distinct_players || 0} player${e.distinct_players === 1 ? "" : "s"} · ${e.distinct_matches || 0} match${e.distinct_matches === 1 ? "" : "es"}
+      · ${norep ? `<span style="color:var(--good)">no repeats</span>` : `most uses: player ${mu.player || 0}, match ${mu.match || 0}`}${e.overlap === "limited" ? ` (cap ${e.caps.player})` : ""}
+      <details class="small muted" style="margin-top:4px"><summary>Details</summary>started ${esc(shortWhen(b.created_at).split(" · ")[0])} · ${b.builds} build${b.builds === 1 ? "" : "s"} · ${e.legs || 0} picks${e.mixed ? " · mixed overlap settings across builds" : ""}${b.superseded ? ` · ${b.superseded} replaced / changed slip${b.superseded === 1 ? "" : "s"} no longer counted` : ""}
       ${rep("Repeated players", e.repeated_players)}${rep("Repeated matches", e.repeated_matches)}
-      ${(e.rules || []).length ? `<details class="small muted"><summary>Batch rules</summary><ul>${e.rules.map(x => `<li>${esc(x)}</li>`).join("")}</ul></details>` : ""}</div>`;
+      ${(e.rules || []).length ? `<ul>${e.rules.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</details></div>`;
   const bySize = [4, 3, 2].map(n => ((b.slips || {})[n] || []).length ? `<div class="studio-sz">${sizeWord(n)} slips</div>` + b.slips[n].map(studioSlip).join("") : "").join("");
-  $("#st-out").innerHTML = short + elig + excl + exp + (slips.length ? bySize : `<div class="small muted">No slips in this batch yet – choose settings and press Build.</div>`)
+  const msg = short || elig || excl ? `<div class="studio-exp" style="border-color:#f5c54240"><b>${slips.length ? "Couldn't fill every size" : "No slips from this build"}</b>${short}${elig}${excl}</div>` : "";
+  $("#st-out").innerHTML = msg + exp + (slips.length ? bySize : msg ? "" : `<div class="small muted">No slips yet – choose your settings and press Build.</div>`)
     + `<details class="small muted" style="margin-top:8px"><summary>How the studio works</summary>
       Slip sizes are planned largest first, so 2-pick suggestions can't use up the picks a 4-pick needs. Each slip takes the strongest eligible picks the batch rules allow:
       one pick per match, player and team in a slip, and – across the whole batch, every Build until you start a new batch – no repeated player, prop or match (or at most the cap you set).
@@ -1530,9 +1559,9 @@ $("#studio").addEventListener("click", e => {
   if (sb) {
     const k = sb.parentElement.dataset.sk, c = studioCfg();
     if (k === "sizes") { const n = +sb.dataset.v; c.sizes = c.sizes.includes(n) ? c.sizes.filter(x => x !== n) : [...c.sizes, n].sort((a, b) => b - a); }
-    else c[k] = sb.dataset.v;
-    studioSave(c);
-    [...sb.parentElement.children].forEach(x => { const on = k === "sizes" ? c.sizes.includes(+x.dataset.v) : x.dataset.v === c[k];
+    else c[k] = k === "count" ? +sb.dataset.v : sb.dataset.v;
+    studioSave(c); studioSummary();
+    [...sb.parentElement.children].forEach(x => { const on = k === "sizes" ? c.sizes.includes(+x.dataset.v) : x.dataset.v === String(c[k]);
       x.classList.toggle("on", on); x.setAttribute("aria-pressed", String(on)); });
     return;
   }
@@ -1544,7 +1573,7 @@ $("#studio").addEventListener("change", e => {
   const c = studioCfg(), t = e.target;
   if (t.id === "st-book") c.book = t.value; else if (t.id === "st-count") c.count = +t.value; else if (t.id === "st-stat") c.stat = t.value;
   else if (t.id === "st-scope") c.scope = t.value; else if (t.id === "st-overlap") c.overlap = t.checked; else if (t.id === "st-cap") c.cap = +t.value; else return;
-  studioSave(c); if (t.id === "st-overlap") studioCapLine();
+  studioSave(c); if (t.id === "st-overlap") studioCapLine(); studioSummary();
 });
 
 // a shared link (?p=ZywOo&l=27.5&t=kills) grades on open
