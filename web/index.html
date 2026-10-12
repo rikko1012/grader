@@ -218,7 +218,6 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 .bslip{background:none;border:1px solid var(--accent);color:var(--accent-2);border-radius:99px;padding:6px 11px;font:600 12.5px Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap}
 .bslip:hover{background:rgba(255,122,26,.1)} .bslip.on{background:var(--accent);color:#170b00}
 .actl{display:flex;flex-wrap:wrap;gap:6px} .asub{margin:14px 0 6px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em} .aseg button{padding:5px 9px;font-size:12.5px}
-#slipsout{margin-bottom:14px;background:var(--panel);border:1px solid var(--line-2);border-radius:14px;padding:12px}
 .asz{margin-top:12px} .asz h5{margin:0 0 6px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 .aslip{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px}
 .aslip .lg{display:flex;justify-content:space-between;flex-wrap:wrap;gap:2px 8px;font-size:13.5px;padding:4px 0;border-bottom:1px dashed var(--line)}
@@ -343,6 +342,40 @@ body.locked #slip,body.locked.hasslip #slip{display:none!important}body.locked.h
 @media(max-width:760px){.scout-rail{display:none}.wrap{margin:0;padding:0 15px 120px}header{height:58px;padding:0 15px;margin:0 -15px;background:#090b10f5}header h1{font-size:16px}header .tag{display:none}.logo{width:28px;height:28px}.modes{display:flex;position:fixed;bottom:0;left:0;right:0;margin:0;padding:9px 12px calc(9px + env(safe-area-inset-bottom));background:#10151ef5;border-top:1px solid var(--line);z-index:39;backdrop-filter:blur(16px)}.modes>.small{display:none}#mode{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;border:0;background:transparent;padding:0;width:100%;border-radius:0}#mode button{padding:11px 5px;border-radius:9px;font-size:12px;min-height:44px}#mode button.on{color:var(--accent-2);background:#f7a45b12;border:1px solid #f7a45b35}#mode button.on:after{display:none}.workspace-intro{padding:20px 0 18px;gap:12px;align-items:flex-start}.workspace-intro h2{font-size:30px;letter-spacing:-.8px;margin:10px 0}.workspace-intro p{font-size:12px;line-height:1.6}.eyebrow{font-size:9px}.workspace-tools{flex-direction:column;gap:6px}.workspace-tools button{font-size:10px;padding:9px;white-space:nowrap}.research-strip{margin-bottom:18px}.research-strip>div{padding:12px 9px;display:block}.research-strip .step{border:0;padding:0;display:block;margin-bottom:7px;font-size:9px}.research-strip b{font-size:10px}.research-strip small{font-size:9px;line-height:1.4}.workspace-section-title{display:block;padding-bottom:12px}.workspace-section-title p{margin-top:5px;font-size:10px}#f{padding:17px;gap:14px;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr)}#f input{font-size:17px;padding:13px 11px}.row2{gap:12px}.row2 .field{flex:1 1 110px}.row2 .go{flex:1 1 100%;margin:0;min-height:46px}.card{padding:16px}.herocard{padding:18px!important}.hero{gap:13px}.hero h3{font-size:23px}.side{padding:12px}.side .v{font-size:27px}.herocard .stat .v{font-size:19px}.herocard .stats{gap:6px}.bbar{padding:11px;gap:8px;margin:0 0 12px}#bbook{gap:3px;padding:0 0 10px}#bbook button{flex:1 1 0;padding:10px 4px;font-size:11px;min-height:40px}.bbar .seg button{padding:9px 8px;font-size:11px}.bbar #bsearch{font-size:14px}.board-command{margin-bottom:10px}.board-command>span{font-size:9px}.board-command button{font-size:10px;padding:8px}.mgroup>summary{padding:14px}.mgroup>summary b{font-size:17px}.mgroup>summary .small{font-size:10px;line-height:1.7}.mgroup .mbody{padding:10px}.brow2{padding:12px;gap:9px;grid-template-columns:34px minmax(0,1fr) auto}.b2top{font-size:14px}.b2pick{font-size:14px}.bslip{font-size:10px;padding:8px}.b2meta{font-size:10px}.b2ev{font-size:10px}.cmprow{gap:8px}.cmpcell{padding:10px}.cmpcell .ln{font-size:20px}.slipbtn{bottom:82px!important;left:auto!important;right:14px!important;padding:11px 18px!important;border-radius:10px!important;width:auto}.slip{bottom:75px!important;max-height:70vh!important;margin:0 8px;border-radius:14px!important;padding:17px}.scout-top{bottom:85px;right:15px;padding:9px}.toast{bottom:calc(140px + env(safe-area-inset-bottom))}.mini.on{display:none!important}header:has(.mini.on) h1{display:block}#popbody{border-radius:12px;padding:12px}.analysis-jumps{margin-top:16px}#who{font-size:10px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 
+
+/* research tools (2026-10-12): Moneylines tab + Slip studio - layout ideas from the outside "Research tools" draft */
+#bbook button[data-v=moneylines].on{background:#7fd8be;color:#08130f}
+@media (max-width:420px){#bbook{flex-wrap:wrap}#bbook button{flex:1 1 30%}}
+#studio{margin:0 0 14px;padding:16px;background:linear-gradient(135deg,#151b25,#0e1219);border:1px solid var(--line-2);border-radius:14px}
+#studio h3{margin:4px 0 6px;font:700 20px var(--display);letter-spacing:.3px}
+#studio .eyebrow-s{font:10px var(--mono);letter-spacing:2px;color:var(--accent-2);text-transform:uppercase}
+.studio-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:12px 0}
+.studio-fields .sf{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:500;color:var(--muted);min-width:0}
+.studio-fields select{padding:9px 10px}
+.studio-fields .seg{display:flex;width:100%}.studio-fields .seg button{flex:1 1 0;padding:8px 4px;font-size:12.5px;min-width:0}
+.studio-overlap{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin:4px 0 12px;font-size:13px}
+.studio-overlap label{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--text)}.studio-overlap input{width:auto}
+.studio-overlap select{width:auto;padding:5px 8px}
+.studio-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}.studio-actions .go{margin-left:0}
+.studio-note{border-left:3px solid var(--accent-2);background:#0b1017;padding:8px 12px;border-radius:0 8px 8px 0;margin:10px 0 0;font-size:13px;color:var(--muted)}
+.studio-exp{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:12px 0;font-size:13px}
+.studio-short{color:var(--warn);font-size:13px;margin:6px 0}
+.studio-sz{margin:14px 0 6px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.studio-copy{width:100%;min-height:96px;margin-top:8px;font:12px var(--mono);background:#080c12;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px}
+.studio-fb ul{margin:4px 0;padding-left:18px}.aslip.changed{border-color:var(--warn)}
+.mlintro{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;margin-bottom:12px;font-size:13px;color:var(--muted)}
+.mlcard{border:1px solid var(--line);border-radius:12px;background:var(--panel-2);padding:12px;margin-bottom:10px;min-width:0}
+.mlhead{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}.mlhead b{font-size:15px}
+.mlbase{display:flex;flex-direction:column;gap:2px;margin:8px 0}.mlprob{font:600 16px var(--display);letter-spacing:.2px}
+.mlbadges{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;font-size:12px;color:var(--faint);margin:2px 0}
+.mlbadges .pill{margin:0;font-size:11.5px;padding:2px 8px}
+.mlplats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
+.mlplat{border:1px solid var(--line);border-radius:10px;padding:9px 10px;background:var(--panel);min-width:0;font-size:13px;overflow-wrap:anywhere}
+.mlplat .mlpname{font-weight:600;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
+.mlplat .mlpname a{color:var(--accent-2);text-transform:none;letter-spacing:0;font-weight:500}
+.mlplat .pill{margin:4px 4px 0 0;font-size:11.5px;padding:2px 8px}
+@media (max-width:640px){.mlplats{grid-template-columns:1fr}#studio{padding:12px}.studio-fields{grid-template-columns:1fr 1fr}}
+@media (max-width:380px){.studio-fields{grid-template-columns:1fr}}
 </style>
 </head>
 <body class="locked">
@@ -365,7 +398,7 @@ body.locked #slip,body.locked.hasslip #slip{display:none!important}body.locked.h
   </section>
   <section class="card" id="board" hidden><div class="board-command"><span>Market explorer</span><div><button type="button" id="scout-expand">Expand matches</button><button type="button" id="scout-collapse">Collapse</button><button type="button" id="scout-filters" aria-expanded="true" aria-controls="bbar">Hide filters</button></div></div>
     <div class="bbar" id="bbar">
-      <div class="seg" id="bbook" title="Which platform's lines"><button type="button" data-v="all" class="on">All Books</button><button type="button" data-v="underdog">Underdog</button><button type="button" data-v="prizepicks">PrizePicks</button><button type="button" data-v="compare">Compare</button></div>
+      <div class="seg" id="bbook" title="Which platform's lines"><button type="button" data-v="all" class="on">All Books</button><button type="button" data-v="underdog">Underdog</button><button type="button" data-v="prizepicks">PrizePicks</button><button type="button" data-v="compare">Compare</button><button type="button" data-v="moneylines" title="Series-winner prices from Polymarket and Kalshi">Moneylines</button></div>
       <div class="seg" id="bview" title="Group by match or list every prop"><button type="button" data-v="matches" class="on">Matches</button><button type="button" data-v="all">All props</button></div>
       <div class="seg" id="bprop"><button type="button" data-v="kills" class="on">Kills</button><button type="button" data-v="hs">Headshots</button><button type="button" data-v="both">Both</button></div>
       <div class="seg" id="bscope" title="Which maps the lines cover"><button type="button" data-v="12" class="on">Maps 1–2</button><button type="button" data-v="1">Map 1</button><button type="button" data-v="123">Maps 1–3</button></div>
@@ -376,11 +409,11 @@ body.locked #slip,body.locked.hasslip #slip{display:none!important}body.locked.h
       <button type="button" class="chipbtn" id="breset" title="Reset every filter">Reset</button>
       <button type="button" class="chipbtn" id="brefresh" title="Refresh the board">↻ Refresh</button>
       <span class="small muted" id="bcount"></span>
-      <button type="button" class="bslip" id="bauto" title="Build 2-4 pick slips from the graded board" hidden>⚡ Build slips</button></div>
+      <button type="button" class="bslip" id="bstudio" hidden aria-expanded="false" aria-controls="studio" title="Research slips from the graded board, one diversified batch at a time">Slip studio</button></div>
     <div id="bstatus" class="small muted" style="margin:-2px 0 10px"></div>
     <div>
     </div>
-    <div id="slipsout" hidden></div>
+    <div id="studio" hidden aria-label="Slip studio"></div>
     <div id="boardout"></div>
   </section>
   <div id="cardpop" hidden><div id="popbody"><div class="popbar"><button type="button" class="chipbtn" id="popclose" title="Close (Esc)">✕ Close</button></div></div></div>
@@ -474,6 +507,7 @@ function showGate(state) {
 (async () => {
   try {
     const s = await fetch("/auth/me").then(r => r.json());
+    try { STUDIO.off = !s.slip_studio; $("#bstudio").hidden = bbook === "moneylines" || STUDIO.off; } catch {}   // owner switch (default off)
     if (!s.required) return document.body.classList.remove("locked");
     if (!s.member) return showGate(s);
     document.body.classList.remove("locked");
@@ -994,6 +1028,9 @@ let boardRows = [], bprop = "kills", bside = "both", bscope = "12", boardAt = 0,
 // the line (and PrizePicks' market type) differs between books
 const BK = {underdog: {rows: [], at: 0, ver: "", err: null, feed: null, loaded: false}, prizepicks: {rows: [], at: 0, ver: "", err: null, feed: null, loaded: false}};
 // rows shown for a view: one platform, or both (All Books - every row keeps its own platform label and line)
+// research tools state (declared up here: drawBoard reads it)
+let ML = {data: null, at: 0, err: null};                                     // Moneylines tab
+const STUDIO = {open: false, off: true, batch: null, last: null, busy: false, notes: {}, copied: {}};   // Slip studio
 const viewRows = b => b === "all" ? [...BK.underdog.rows, ...BK.prizepicks.rows] : BK[b === "compare" ? "underdog" : b].rows;
 // one match, whichever platform listed it (2026-10-12 fix): the same two teams with starts within 45 min. It used to prefer
 // our match id, which one platform's row can lack, and compared start-time TEXT ("...Z" vs "...+00:00") - so the same
@@ -1046,6 +1083,7 @@ function bookStatus(b) {
     : `${B.rows.length} graded Underdog lines` + (B.at ? ` · board from ${hhmm(B.at)}` : "");
 }
 async function loadBoard(force) {
+  if (bbook === "moneylines") return loadMoneylines(force);
   const need = bbook === "compare" || bbook === "all" ? ["underdog", "prizepicks"] : [bbook];
   if (!force && need.every(b => BK[b].loaded)) { boardRows = viewRows(bbook); return drawBoard(); }
   $("#bstatus").textContent = need.some(b => BK[b].loaded) ? "Refreshing… (showing the current lines)" : "Loading the board…";
@@ -1071,8 +1109,12 @@ const issueLabel = why => /roster/i.test(why || "") ? "Roster not confirmed" : /
   : /gap|stale|break/i.test(why || "") ? "Long break" : "Line not confirmed";
 function drawBoard() {
   saveBFilters();
-  for (const id of ["#bview", "#bsort"]) $(id).hidden = bbook === "compare";       // grouping / sort don't apply to Compare
-  $("#bbets").closest("label").hidden = bbook === "compare";
+  const ml = bbook === "moneylines";                 // Moneylines: series winners - the prop filters don't apply
+  for (const id of ["#bview", "#bsort"]) $(id).hidden = bbook === "compare" || ml;       // grouping / sort don't apply to Compare
+  for (const id of ["#bprop", "#bside", "#bscope"]) $(id).hidden = ml;
+  $("#bbets").closest("label").hidden = bbook === "compare" || ml;
+  $("#bstudio").hidden = ml || STUDIO.off; $("#studio").hidden = ml || !STUDIO.open || STUDIO.off;
+  if (ml) return drawMoneylines();
   if (bbook === "compare") return drawCompare();
   const sortBy = $("#bsort").value;
   const rank = r => !r.side ? 9 : r.state === "SCOUT" ? 7 : (G_RANK[r.grade] ?? 6);
@@ -1217,181 +1259,292 @@ $("#bbets").onchange = drawBoard;
 $("#bview").onclick = e => { const b = e.target.closest("button"); if (!b) return; bview = b.dataset.v;
   [...$("#bview").children].forEach(x => x.classList.toggle("on", x === b)); drawBoard(); };
 function resetBFilters() {
-  bprop = "kills"; bside = "both"; bscope = "12"; bview = "matches";   // the platform choice is kept $("#bsort").value = "g"; $("#bbets").checked = true; $("#bsearch").value = "";
+  bprop = "kills"; bside = "both"; bscope = "12"; bview = "matches";   // the platform choice is kept
+  $("#bsort").value = "g"; $("#bbets").checked = true; $("#bsearch").value = "";
   for (const [id, v] of [["#bprop", bprop], ["#bside", bside], ["#bscope", bscope], ["#bview", bview]]) [...$(id).children].forEach(x => x.classList.toggle("on", x.dataset.v === v));
   drawBoard();
 }
 $("#breset").onclick = resetBFilters;
 restoreBFilters();
-const _drawBoard0 = drawBoard;          // the slip builder follows the board's filters
-drawBoard = () => { _drawBoard0(); if (!$("#slipsout").hidden) drawAutoSlips(); };
 $("#bsearch").oninput = drawBoard;
 $("#bsort").onchange = drawBoard;
-$("#brefresh").onclick = () => loadBoard(true).then(() => { if (!$("#slipsout").hidden) drawAutoSlips(); });
-
-// ---------- automatic slip builder: 2-4 picks from the graded board (no grading of its own)
-// Ranked by the model's chance that every pick hits. The return is only worked out from the payout the member
-// enters (Underdog's real multiplier for that entry) - never an assumed one.
-const BUILDER_V = "slips-8";      // keep in step with slips.BUILDER_VERSION (server copy + logs)
+$("#brefresh").onclick = () => loadBoard(true);
 let boardVer = "";
-const slipKey = legs => legs.map(x => `${x.r.id}:${x.r.line}:${x.r.side}`).sort().join("|");
-function payFor(s, n) {        // exact payout already includes any line boosts - never multiplied again
-  const ex = +udExact()[slipKey(s.legs)], base = +udPay()[n];
-  if (ex) return {pay: ex, src: "exact"};
-  if (base) return {pay: base * s.mult, src: "standard"};
-  return {pay: null, src: null};
+
+// ---------- Moneylines: series-winner prices from Polymarket and Kalshi (GET /api/moneylines, one shared copy per 30 s).
+// A market view only: no model probability until a model passes its walk-forward test, no stakes, no recommendation.
+async function fetchMoneylines() {
+  const r = await fetchRetry("/api/moneylines"); let d = null;
+  try { d = await r.json(); } catch {}
+  if (r.status === 401 && d && d.error === "members_only") { showGate(d); throw new Error("members only"); }
+  if (!r.ok || !d || !Array.isArray(d.matches)) { ML.err = (d && (d.label || d.error)) || "Market probability unavailable"; return; }
+  ML = {data: d, at: Date.now(), err: null};
 }
-const pctF = x => (x * 100).toFixed(1) + "%";      // display only; every calculation uses the full value
-// member's builder settings: side (More / Less / mixed), size 2-4, how many slips, overlap (none / some)
-const autoCfg = () => Object.assign({side: "mixed", n: 3, count: 3, overlap: "none"}, store.get("cs2s_auto", {}));
-function slipPool() {          // eligible picks + why the rest were left out
-  const now = Date.now(), side = autoCfg().side, by = {}, why = {More: 0, Less: 0, gone: 0, grade: 0, role: 0, unknown: 0}, out = [];
-  for (const r of boardRows) {
-    if (r.prop !== bprop || (r.scope || "12") !== bscope) continue;       // the board's Kills / HS and Maps filters
-    if (!r.side || r.p == null || r.state === "SCOUT" || (r.start && new Date(r.start).getTime() <= now)) { why.gone++; continue; }
-    if (r.grade === "LEAN" || (G_RANK[r.grade] ?? 9) > 4.5 || (r.units || 0) <= 0) { why.grade++; out.push([r, r.grade === "LEAN" ? "a Lean (0U)" : "no units"]); continue; }
-    const role = r.prop === "hs" ? r.awp : r.igl;            // AWPers' HS and IGLs' kills are left out; unknown role too
-    if (role === true) { why.role++; out.push([r, r.prop === "hs" ? "AWPer – HS lines left out" : "IGL – kill lines left out"]); continue; }
-    if (role !== false) { why.unknown++; out.push([r, r.prop === "hs" ? "AWP role not confirmed" : "IGL role not confirmed"]); continue; }
-    why[r.side]++;
-    if (side !== "mixed" && r.side !== side) continue;
-    const m = (r.matchup || r.team + "|" + r.opponent) + "|" + (r.start || "");
-    const mult = r.alt ? +(r.side === "More" ? r.higher : r.lower) || 1 : 1;
-    (by[m] = by[m] || []).push({r, m, nick: (r.nick || r.player).toLowerCase(), p: r.p, mult});
+async function loadMoneylines(force) {
+  if (!force && ML.data && Date.now() - ML.at < 30000) return drawBoard();
+  $("#bstatus").textContent = ML.data ? "Refreshing… (showing the current prices)" : "Loading moneylines…";
+  try { await fetchMoneylines(); } catch (e) { ML.err = `Couldn't refresh (${e.message})`; }
+  drawBoard();
+}
+setInterval(() => { if (bbook === "moneylines" && !$("#board").hidden && document.visibilityState === "visible") loadMoneylines(true); }, 60000);
+const ago = t => { const v = Date.parse(t); if (isNaN(v)) return ""; const s = Math.max(0, Math.round((Date.now() - v) / 1000));
+  return s < 90 ? `${s} s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`; };
+const cents = x => x == null ? "–" : (x * 100).toFixed(1) + "¢";
+const qty = x => x == null ? "–" : Math.round(x).toLocaleString();
+const PLAT = {polymarket: "Polymarket", kalshi: "Kalshi"};
+function mlPlatform(p, blk, A, B, names) {
+  const nm = PLAT[p];
+  if (!blk) return `<div class="mlplat"><div class="mlpname">${nm}</div><div class="small muted">No ${nm} series-winner market for this match</div></div>`;
+  if (!blk.available) return `<div class="mlplat"><div class="mlpname">${nm}</div><div class="small muted">${esc(blk.reason || "Market can't be read")}</div></div>`;
+  const dep = blk.depth || {}, lt = blk.last_trade, n = names && names[p];
+  // each block names its own team A: an unlinked match shown once for both exchanges may list the teams the other way round
+  const listed = n && (n.a !== A || n.b !== B) && (n.a !== B || n.b !== A) ? `<div class="small muted">Listed as ${esc(n.a)} vs ${esc(n.b)}</div>` : "";
+  return `<div class="mlplat"><div class="mlpname">${nm}${blk.url ? ` · <a href="${esc(blk.url)}" target="_blank" rel="noopener noreferrer">market ↗</a>` : ""}</div>${listed}
+    ${(() => {
+      // every block speaks for the CARD's first team (2026-10-12 fix: a match merged by name could list the teams the other way
+      // round on one platform, so one box said "Bread Eaters 56.0%" and the other "Passion Academy 43.5%")
+      const nrm = s => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const rev = blk.team_a_name && nrm(blk.team_a_name) === nrm(B) && nrm(blk.team_a_name) !== nrm(A);
+      let pa = blk.prob_a, other = p === "kalshi" ? blk.prob_b_yes : null;
+      if (rev) { if (p === "kalshi") { pa = blk.prob_b_yes; other = blk.prob_a; } else pa = blk.prob_a == null ? null : 1 - blk.prob_a; }
+      const why = pa == null ? "no bid/ask pair" : !blk.usable ? "midpoint of an unusable quote – reference only, not a probability"
+        : blk.price_only ? "bid/ask midpoint – a price, not a win probability (best-of-2: a draw is possible)"
+        : rev && p !== "kalshi" ? "bid/ask midpoint (the complement of the listed outcome)" : p === "kalshi" ? "bid/ask midpoint of its own YES contract" : "bid/ask midpoint";
+      const head = `${esc(A)} ${pa == null ? "–" : pct(pa)}`;
+      return `<div>${blk.usable ? `<b>${head}</b>` : `<span class="muted">${head}</span>`} <span class="small muted">${why}</span></div>`
+        + (p === "kalshi" && other != null ? `<div class="small">${esc(B)}'s own YES contract ${pct(other)} <span class="muted">– a separate contract, never averaged in</span></div>` : "");
+    })()}
+    <div class="small">Bid ${cents(blk.bid)} · Ask ${cents(blk.ask)} · Spread ${cents(blk.spread)}${blk.team_a_name ? ` <span class="muted">(${esc(blk.team_a_name)}${p === "kalshi" ? " YES" : ""})</span>` : ""}</div>
+    <div class="small">Depth at best ${qty(blk.bid_size)} / ${qty(blk.ask_size)}${dep.bid_5c != null ? ` · within 5¢ ${qty(dep.bid_5c)} / ${qty(dep.ask_5c)}` : ""}</div>
+    <div class="small muted">Quote read ${esc(ago(blk.received_ts) || "–")}${lt && lt.price != null ? ` · last trade ${cents(lt.price)} (not a quote)` : ""}</div>
+    <div>${blk.usable ? `<span class="pill good">Usable quote</span>` : `<span class="pill warn">Not usable</span>`}${blk.fresh === false ? ` <span class="pill warn">Not current</span>` : blk.market_open === false ? ` <span class="pill warn">Market closed</span>` : ""}</div>
+    ${!blk.usable && blk.reason ? `<div class="small muted">${esc(blk.reason)}</div>` : ""}</div>`;
+}
+function mlCard(m, model, rec) {
+  const A = m.teams.a || "Team A", B = m.teams.b || "Team B", b = m.baseline || {}, P = m.platforms || {};
+  const pu = P.polymarket && P.polymarket.usable, ku = P.kalshi && P.kalshi.usable, gap = m.disagreement_gap;
+  const base = b.prob_a != null
+    ? `<div class="mlbase"><span class="mlprob">${esc(A)} ${pct(b.prob_a)} · ${esc(B)} ${pct(1 - b.prob_a)}</span>
+        <span class="small muted">Market baseline: ${esc(PLAT[b.platform] || b.platform)} midpoint – ${esc(b.reason || "")}</span></div>`
+    : `<div class="mlbase"><span class="mlprob muted">Market probability unavailable</span><span class="small muted">${esc(b.reason || m.link_reason || "")}</span></div>`;
+  // three separate badge rows: data quality / freshness, agreement between platforms, model + recommendation status
+  const quality = [m.match_id ? "" : `<span class="pill warn" title="${esc(m.link_reason || "")}">Not linked to one HLTV match – never a baseline</span>`,
+    ...["polymarket", "kalshi"].filter(p => P[p] && P[p].available).map(p => P[p].usable ? `<span class="pill good">${PLAT[p]} usable</span>`
+      : P[p].fresh === false ? `<span class="pill warn">${PLAT[p]} stale</span>`
+      : P[p].market_open === false ? `<span class="pill warn">${PLAT[p]} market closed / not accepting orders</span>`
+      : `<span class="pill warn">${PLAT[p]} not usable</span>`),
+    m.tie_possible ? `<span class="pill warn">Best-of-2 – a draw is possible: prices, not win probabilities</span>` : ""].filter(Boolean).join(" ");
+  // a comparison needs a real gap: a merged unlinked card is compared only after orienting both prices to one team
+  // (server), otherwise it has no gap and says so - never "agree within 5 pts (0.0)"
+  const unl = m.match_id ? "" : " (unlinked – teams matched by name)";
+  const agree = [pu && ku ? (gap != null ? (m.disagreement ? `<span class="pill bad">Platforms disagree by ${(gap * 100).toFixed(1)} pts${unl}</span>`
+                                                           : `<span class="pill">Platforms agree within 5 pts (${(gap * 100).toFixed(1)})${unl}</span>`)
+                                         : (m.match_id ? "" : `<span class="pill">Not linked – prices not compared</span>`)) : "",
+    P.kalshi && P.kalshi.coherence_flag ? `<span class="pill warn">Kalshi's two YES prices don't add up (gap ${(P.kalshi.coherence_gap * 100).toFixed(1)} pts)</span>` : ""].filter(Boolean).join(" ");
+  return `<article class="mlcard"><div class="mlhead"><b>${esc(A)} vs ${esc(B)}</b>
+      <span class="small muted">${m.start ? when(m.start) : "start unknown"}${m.event ? " · " + esc(m.event) : ""}${m.bo ? " · BO" + esc(m.bo) : ""} · Series winner</span></div>
+    ${base}
+    <div class="mlbadges"><span>Data</span> ${quality || `<span class="pill">No quotes</span>`}</div>
+    ${agree ? `<div class="mlbadges"><span>Agreement</span> ${agree}</div>` : ""}
+    <div class="mlbadges"><span>Model</span> <span class="pill">${esc(model.label || "Model: not validated yet - market baseline shown, no recommendation")}</span> <span class="pill">${esc(rec)}</span></div>
+    <div class="mlplats">${mlPlatform("polymarket", P.polymarket, A, B, m.teams.names_by_platform)}${mlPlatform("kalshi", P.kalshi, A, B, m.teams.names_by_platform)}</div></article>`;
+}
+function drawMoneylines() {
+  const box = $("#boardout"), d = ML.data;
+  if (!d) { $("#bcount").textContent = ""; $("#bstatus").textContent = ""; box.innerHTML = `<div class="muted">${esc(ML.err || "Loading moneylines…")}</div>`; return; }
+  const src = Object.entries(d.sources || {}).map(([k, v]) => `${PLAT[k] || k}: ${v.ok ? `prices from ${v.age_s != null ? Math.round(v.age_s) + " s" : "–"} ago`
+    : esc(v.note || "not loaded yet")}`).join(" · ");
+  $("#bstatus").textContent = (ML.err ? ML.err + " · " : "") + src;
+  const q = ($("#bsearch").value || "").trim().toLowerCase(), now = Date.now();
+  const list = d.matches.filter(m => !q || [m.teams.a, m.teams.b, m.event].some(x => String(x || "").toLowerCase().includes(q)));
+  // one decision per match (server): any platform live, or the earliest stated start passed
+  const started = m => m.started || (m.start && Date.parse(m.start) <= now), up = list.filter(m => !started(m)), done = list.filter(started);
+  $("#bcount").textContent = `${up.length} upcoming match${up.length === 1 ? "" : "es"} · ${up.filter(m => m.baseline && m.baseline.prob_a != null).length} with a market baseline`;
+  const model = d.model || {}, rec = d.recommendation || "Shadow - not a staking recommendation";
+  box.innerHTML = `<div class="mlintro"><b style="color:var(--text)">Series winner prices</b><span>Polymarket + Kalshi, read by the server about every minute</span>
+      <span class="pill">${esc(model.label || "")}</span><span class="pill">${esc(rec)}</span></div>`
+    + (up.length ? up.map(m => mlCard(m, model, rec)).join("") : `<div class="muted">${list.length ? "No upcoming matches match this search." : "No CS2 series-winner markets on Polymarket or Kalshi right now."}</div>`)
+    + (done.length ? `<details class="mgroup"><summary><b>Started</b> <span class="muted small">${done.length} – in-play prices, never a baseline</span></summary>
+        <div class="mbody">${done.map(m => mlCard(m, model, rec)).join("")}</div></details>` : "")
+    + `<details class="small muted" style="margin-top:10px"><summary>How the market baseline is chosen</summary><p>${esc(d.rule || "")}</p>
+        <p>Probabilities are each platform's bid/ask midpoint for the first team, shown to 0.1%. A last trade is never used as a price. The model column stays empty until a moneyline model passes its walk-forward test – until then this tab shows the market only, with no stake or recommendation. Not financial advice.</p></details>`;
+}
+
+// ---------- Slip studio: the server's diversified builder (slip_builder studio-1). One batch at a time: no player,
+// prop or match repeats across the batch's slips (limited overlap = visible caps); every slip is re-checked against the
+// platform and the current grades right before it is copied. Research suggestions - no payouts, no returns.
+const studioCfg = () => Object.assign({book: "underdog", side: "either", sizes: [4, 3, 2], count: 2, stat: "both", scope: "12", overlap: false, cap: 2},
+                                      store.get("cs2s_studio", {}));
+const studioSave = c => store.set("cs2s_studio", c);
+const rid = () => (crypto.randomUUID ? crypto.randomUUID() : "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 12));
+async function studioCall(method, url, body) {        // a retry repeats the same body (same idem) - the server answers it once
+  for (let i = 0; ; i++) {
+    let r = null;
+    try { r = await fetch(url, method === "GET" ? {} : {method, headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}); }
+    catch (e) { if (i >= 2) throw new Error("Connection problem - please try again"); }
+    if (r) {
+      let d = {}; try { d = await r.json(); } catch {}
+      if (r.status === 401 && d.error === "members_only") { showGate(d); throw new Error("members only"); }
+      if (![502, 503, 504].includes(r.status) || i >= 2) return {status: r.status, d};
+    }
+    await new Promise(res => setTimeout(res, 1000 * 2 ** i));
   }
-  const groups = Object.values(by).map(a => a.sort((x, y) => y.p - x.p).slice(0, 2)).sort((a, b) => b[0].p - a[0].p).slice(0, 16);
-  why.top = out.filter(([r]) => r.p >= 0.57).sort((a, b) => b[0].p - a[0].p).slice(0, 3);   // best picks it couldn't use
-  return {groups, why};
 }
-function buildSlips(groups, n, count, overlap) {   // one pick per match and per player inside a slip
-  const out = [], base = +udPay()[n] || 0, exact = udExact(), hasExact = Object.keys(exact).length > 0;
-  const go = (i, cur, mask) => {
-    if (cur.length === n) {
-      let all = 1, mult = 1; for (const x of cur) { all *= x.p; mult *= x.mult; }
-      const s = {legs: [...cur], all, mult, mask};
-      const ex = hasExact ? +exact[slipKey(s.legs)] : 0;
-      s.pay = ex || (base ? base * mult : null); s.src = ex ? "exact" : base ? "standard" : null; s.ev = s.pay ? all * s.pay : null;
-      if (s.ev == null || s.ev >= 1) out.push(s);
-      return;
-    }
-    if (groups.length - i < n - cur.length) return;
-    for (const x of groups[i]) if (!cur.some(c => c.nick === x.nick)) { cur.push(x); go(i + 1, cur, mask | (1 << i)); cur.pop(); }
-    go(i + 1, cur, mask);
-  };
-  go(0, [], 0);
-  // 1) the strongest set of slips with no match in common: a bounded search (not first-come greedy), most slips
-  //    first, then the highest total chance. 2) "Some overlap": alternatives after that, each sharing at most one
-  //    match with any slip shown and no match in more than 2 slips.
-  // the same set of matches with other picks can't add a slip under either rule: keep the strongest per match set
-  const byMask = new Map(); for (const s of out) { const b = byMask.get(s.mask); if (!b || s.all > b.all) byMask.set(s.mask, s); }
-  const cand = [...byMask.values()].sort((a, b) => b.all - a.all);
-  const bits = m => { let c = 0; while (m) { m &= m - 1; c++; } return c; };
-  const freeAll = cand.reduce((a, s) => a | s.mask, 0), free = bits(freeAll);
-  let best = [], bestSum = -1, nodes = 0;
-  const dfs = (i, cur, used, sum) => {
-    if (cur.length > best.length || (cur.length === best.length && sum > bestSum)) { best = [...cur]; bestSum = sum; }
-    if (cur.length >= count || ++nodes > 20000) return;
-    const room = Math.min(count - cur.length, Math.floor((free - bits(used)) / n));
-    for (let j = i; j < cand.length; j++) {
-      const s = cand[j];
-      if (cur.length + room < best.length || (cur.length + room === best.length && sum + room * s.all <= bestSum)) return;
-      if (s.mask & used) continue;
-      cur.push(s); dfs(j + 1, cur, used | s.mask, sum + s.all); cur.pop();
-      if (nodes > 20000) return;
-    }
-  };
-  dfs(0, [], 0, 0);
-  const picked = [...best].sort((a, b) => b.all - a.all), uses = {};
-  const addUses = s => s.legs.forEach(x => uses[x.m] = (uses[x.m] || 0) + 1);
-  picked.forEach(addUses);
-  picked.base = picked.length;
-  if (overlap === "some")
-    for (const s of cand) {
-      if (picked.length >= count) break;
-      if (picked.includes(s) || s.legs.some(x => (uses[x.m] || 0) >= 2) || picked.some(q => bits(q.mask & s.mask) > 1)) continue;
-      s.alt = true; picked.push(s); addUses(s);
-    }
-  picked.forEach(s => { s.shared = s.legs.some(x => uses[x.m] > 1); const d = hitDist(s.legs.map(x => x.p)); s.near = d[n] + d[n - 1]; });
-  picked.matches = free;
-  return picked;
+const studioSettings = c => Object.assign({book: c.book, side: c.side, stat: c.stat, scope: c.scope, market: "standard", sizes: c.sizes, count: +c.count,
+  overlap: c.overlap ? "limited" : "none"}, c.overlap ? {max_uses: {player: +c.cap, match: +c.cap}} : {});
+function studioForm() {
+  const c = studioCfg(), seg = (k, opts) => `<div class="seg" data-sk="${k}">` + opts.map(([v, l]) =>
+    `<button type="button" data-v="${v}" class="${String(c[k]) === String(v) ? "on" : ""}" aria-pressed="${String(c[k]) === String(v)}">${l}</button>`).join("") + `</div>`;
+  const sizes = `<div class="seg" data-sk="sizes">` + [2, 3, 4].map(n => `<button type="button" data-v="${n}" class="${c.sizes.includes(n) ? "on" : ""}" aria-pressed="${c.sizes.includes(n)}">${n} picks</button>`).join("") + `</div>`;
+  const opt = (v, l, cur) => `<option value="${v}"${String(cur) === String(v) ? " selected" : ""}>${l}</option>`;
+  $("#studio").innerHTML = `<div class="eyebrow-s">Research tools</div><h3>Slip studio</h3>
+    <div class="studio-note">Research suggestions from graded props – <span id="st-settled">this builder is not validated yet (no settled batches of its own)</span>. Nothing here changes a grade or a stake.</div>
+    <div class="studio-fields">
+      <div class="sf"><span>Platform</span><select id="st-book" aria-label="Platform">${opt("underdog", "Underdog", c.book)}${opt("prizepicks", "PrizePicks", c.book)}</select></div>
+      <div class="sf"><span>Side</span>${seg("side", [["More", "Overs"], ["Less", "Unders"], ["either", "Either"]])}</div>
+      <div class="sf"><span>Picks per slip (choose any)</span>${sizes}</div>
+      <div class="sf"><span>Suggestions per size</span><select id="st-count" aria-label="Suggestions per size">${[1, 2, 3, 5].map(n => opt(n, n, c.count)).join("")}</select></div>
+      <div class="sf"><span>Stat</span><select id="st-stat" aria-label="Stat">${opt("both", "Kills + headshots", c.stat)}${opt("kills", "Kills", c.stat)}${opt("hs", "Headshots", c.stat)}</select></div>
+      <div class="sf"><span>Maps</span><select id="st-scope" aria-label="Maps">${opt("12", "Maps 1–2", c.scope)}${opt("1", "Map 1", c.scope)}${opt("123", "Maps 1–3", c.scope)}${opt("all", "All", c.scope)}</select></div></div>
+    <div class="studio-overlap"><label><input type="checkbox" id="st-overlap"${c.overlap ? " checked" : ""}> Allow limited overlap</label>
+      <span id="st-capline" class="muted"></span></div>
+    <div class="studio-actions"><button type="button" class="go" id="st-build">Build</button>
+      <button type="button" class="chipbtn" id="st-new" title="Closes this batch (its picks stop counting) and builds a fresh one">Start new batch</button>
+      <span id="st-status" class="small muted" role="status" aria-live="polite"></span></div>
+    <div id="st-out"></div>`;
+  studioCapLine();
 }
-function drawAutoSlips() {
-  const box = $("#slipsout"), c = autoCfg(), n = c.n, pays = udPay(), {groups, why} = slipPool();
-  const ss = buildSlips(groups, n, c.count, c.overlap);
-  const seg = (k, opts) => `<div class="seg aseg" data-ak="${k}">` + opts.map(([v, lab]) =>
-    `<button type="button" data-v="${v}" class="${String(c[k]) === String(v) ? "on" : ""}">${lab}</button>`).join("") + `</div>`;
-  const left = [why.role && `${why.role} AWP HS / IGL kills`, why.unknown && `${why.unknown} role unknown`,
-                why.grade && `${why.grade} below B-`].filter(Boolean).join(" · ");
-  box.innerHTML = `<div class="actl">${seg("side", [["More", "Overs"], ["Less", "Unders"], ["mixed", "Mixed"]])}
-      ${seg("n", [[2, "2"], [3, "3"], [4, "4"]].map(([v, l]) => [v, l + " picks"]))}
-      ${seg("count", [[3, "3"], [5, "5"], [10, "10"]].map(([v, l]) => [v, l + " slips"]))}
-      ${seg("overlap", [["none", "No shared matches"], ["some", "Allow overlap"]])}</div>
-    <div class="small muted" style="margin:8px 0 2px">${propWord(bprop)} · ${bscope === "1" ? "Map 1" : bscope === "123" ? "Maps 1–3" : "Maps 1–2"} (board filters) · eligible: ${why.More} Overs, ${why.Less} Unders${left ? ` · left out: ${left}` : ""}</div>
-    ${why.top.length ? `<div class="small muted">Not used: ${why.top.map(([r, w]) => `${esc(r.nick || r.player)} ${pctF(r.p)} (${w})`).join(" · ")}</div>` : ""}
-    <label class="small muted" style="display:flex;gap:6px;align-items:center;margin:6px 0 10px" title="The standard ${n}-pick payout in Underdog, before any line boosts. You enter it – the grader doesn't know Underdog's payouts.">Your ${n}-pick payout
-      <input data-udpay="${n}" inputmode="decimal" placeholder="?" value="${pays[n] ? esc(String(pays[n])) : ""}" style="width:64px;padding:5px 8px">x</label>`
-    + (!ss.length
-      ? `<div class="small muted">No qualifying ${n}-pick slips${pays[n] ? ` – at ${pays[n]}x the model doesn't expect a profit from any combination` : ` – fewer than ${n} matches with eligible picks`}.</div>`
-      : `<div class="small" style="margin-bottom:8px"><b>${pays[n] ? "Slips" : "Ranked combinations"}</b> <span class="muted">· ${{More: "Overs", Less: "Unders", mixed: "Mixed"}[c.side]} · ${n} picks · up to ${c.count} · ${c.overlap === "none" ? "no shared matches" : "some overlap"}${pays[n] ? "" : " · enter a payout to check value"}</span></div>`
-        + (ss.length < c.count ? `<div class="small muted" style="margin-bottom:8px">${ss.base} with no shared match${ss.base === 1 ? "" : "es"} is the most ${ss.matches} matches allow${c.overlap === "some" ? `, plus ${ss.length - ss.base} alternative${ss.length - ss.base === 1 ? "" : "s"} within the overlap limits` : ""}.</div>` : "")
-        + ss.map((s, i) => (s.alt && !ss[i - 1]?.alt ? `<h5 class="asub">Alternatives – each shares one match with a slip above</h5>` : "") + `<div class="aslip">` + s.legs.map(x => { const r = x.r, nick = r.nick || r.player;
-          return `<div class="lg"><span><span class="gtag ${gClass(r.grade)}" style="font-size:11px;padding:1px 6px">${esc(r.grade)}</span> <b>${esc(nick)}</b> ${esc(sideWord({grade: r.grade, side: r.side}))} ${r.line} ${propWord(r.prop)} · ${(r.scope || "12") === "1" ? "Map 1" : (r.scope || "12") === "123" ? "Maps 1–3" : "Maps 1–2"}${x.mult !== 1 ? ` <span class="pill">${x.mult}x</span>` : ""}</span>
-            <span class="m">${pctF(r.p)} · ${esc(r.team_name || r.team || "")} vs ${esc(r.opp_name || r.opponent || "")} · ${esc(shortWhen(r.start).split(" · ")[0])}</span></div>`; }).join("")
-        + `<div class="nums"><span>Est. chance all ${n} hit <b>${pctF(s.all, 1)}</b></span>
-             ${s.pay ? `<span>${s.src === "exact" ? "Your payout for this slip" : `Est. from your standard payout${s.mult !== 1 ? ` × boosts ${+s.mult.toFixed(2)}x` : ""}`}: <b>${+s.pay.toFixed(2)}x</b></span><span>Est. return <b style="color:${s.ev >= 1 ? "var(--good)" : "var(--bad)"}">${s.ev.toFixed(2)}U</b> per 1U</span>` : ""}
-             ${n >= 3 ? `<span title="Not the chance of a Flex profit – that depends on Underdog's Flex payouts">${n - 1}+ correct <b>${pctF(s.near)}</b></span>` : ""}
-             ${s.shared && !s.alt ? `<span class="pill">A match here is also in an alternative below</span>` : ""}</div>
-           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button type="button" class="bslip" data-aslip="${n}|${i}">Load into slip</button>
-             <label class="small muted" style="display:flex;gap:6px;align-items:center">This slip pays
-             <input data-udexact="${esc(slipKey(s.legs))}" inputmode="decimal" placeholder="?" value="${udExact()[slipKey(s.legs)] ? esc(String(udExact()[slipKey(s.legs)])) : ""}" style="width:64px;padding:5px 8px">x</label></div></div>`).join(""))
-    + `<details class="small muted" style="margin-top:8px"><summary>How slips are built</summary>
-       Highest estimated chance first: each pick's grade % multiplied together, which assumes the picks are independent (one pick per match keeps them mostly apart, but it isn't a guarantee, and small errors add up on longer slips).
-       B- or better picks only. AWPers' headshot lines, IGLs' kill lines and players whose role isn't confirmed are left out – a slip preference, not a verdict on those grades.
-       "No shared matches" keeps every match in one slip; "Some overlap" lets two slips share one match (a match in two slips at most).
-       Returns use the payout you enter (an exact slip payout is used as is; a standard payout gets line boosts on top) – confirm in Underdog.
-       Builder ${BUILDER_V} · grader ${esc(boardVer || "–")}${boardAt ? ` · board from ${new Date(boardAt * 1000).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})}` : ""}. Not financial advice.</details>`;
-  box._slips = {[n]: ss};
+function studioCapLine() {
+  const c = studioCfg();
+  $("#st-capline").innerHTML = c.overlap
+    ? `A player or a match in at most <select id="st-cap" aria-label="Overlap cap">${[2, 3].map(n => `<option${+c.cap === n ? " selected" : ""}>${n}</option>`).join("")}</select> slips of this batch – never twice in one slip, never both sides of a line`
+    : "No repeats: each player, prop and match appears in one slip of this batch";
 }
-$("#bauto").onclick = () => { const box = $("#slipsout"); box.hidden = !box.hidden; $("#bauto").classList.toggle("on", !box.hidden);
-  if (!box.hidden) (boardRows.length ? Promise.resolve() : loadBoard()).then(drawAutoSlips); };
-$("#slipsout").addEventListener("change", e => {
-  const x = e.target.closest("[data-udexact]");
-  if (x) { const v = parseFloat(x.value.replace(",", ".")), ex = udExact();
-    if (v > 1 && v < 1000) ex[x.dataset.udexact] = v; else delete ex[x.dataset.udexact];
-    const keys = Object.keys(ex); if (keys.length > 200) keys.slice(0, keys.length - 200).forEach(k => delete ex[k]);
-    store.set("cs2s_udexact", ex); return drawAutoSlips(); }
-  const i = e.target.closest("[data-udpay]"); if (!i) return;
-  const v = parseFloat(i.value.replace(",", ".")), pays = udPay();
-  if (v > 1 && v < 1000) pays[i.dataset.udpay] = v; else delete pays[i.dataset.udpay];
-  store.set("cs2s_udpay", pays); drawAutoSlips();
+const sizeWord = n => `${n}-pick`;
+function studioLeg(l) {
+  const mt = l.market_type && l.market_type !== "standard" ? ` <span class="pill" style="margin:0;padding:1px 7px">${esc(l.market_type)}</span>` : "";
+  return `<div class="lg"><span><span class="gtag ${gClass(l.grade)}" style="font-size:11px;padding:1px 6px">${esc(l.grade)}</span> <b>${esc(l.nick || l.player)}</b>
+      ${l.side === "More" ? "Over" : "Under"} ${esc(l.line)} ${propWord(l.prop)}${mapsWord(l.scope)}${mt}</span>
+    <span class="m">${pct(l.p)} · ${esc(l.team || "")} vs ${esc(l.opponent || "")} · ${esc(shortWhen(l.start).split(" · ")[0])}</span></div>`;
+}
+function studioSlip(s) {
+  if (s.status && s.status !== "live") return `<div class="aslip changed"><div class="small muted"><b style="color:var(--warn)">${s.status === "replaced" ? "Replaced" : s.status === "changed" ? "Changed – not for copying" : "Dismissed"}</b>
+    – slip ${esc(s.slip_id.split("/").slice(1).join("/"))}${s.replaced_by ? ` → see build ${esc(s.replaced_by.split("/").slice(1).join("/"))}` : ""}; it no longer counts toward this batch's repeats.</div>${s.legs.map(studioLeg).join("")}</div>`;
+  const note = STUDIO.notes[s.slip_id], cp = STUDIO.copied[s.slip_id], started = s.legs.some(l => Date.parse(l.start) <= Date.now());
+  return `<div class="aslip${note ? " changed" : ""}">${s.legs.map(studioLeg).join("")}
+    <div class="nums"><span>Est. chance all ${s.n} hit <b>${pct(s.all_hit)}</b></span><span class="muted small">model chances multiplied (picks treated as independent)</span>
+      ${(s.repeats || []).length ? `<span class="pill">${esc(s.repeats.join("; "))}</span>` : ""}</div>
+    <div class="studio-actions"><button type="button" class="bslip" data-verify="${esc(s.slip_id)}"${started || note ? " disabled" : ""}>${note ? "Changed – not for copying" : started ? "Started – locked" : "Verify & copy"}</button>
+      <span class="small muted">${bookName(s.book)} · ${sizeWord(s.n)} entry · slip ${esc(s.slip_id.split("/").slice(1).join("/"))}</span></div>
+    <div class="small studio-fb">${note ? `<b style="color:var(--warn)">Changed since it was built – not copied:</b><ul>${note.map(c => `<li>${esc(c)}</li>`).join("")}</ul>` : ""}
+      ${cp ? `<span style="color:var(--good)">✓ Every line checked on ${bookName(s.book)} ${esc(cp.at)} – copied. Enter it in the app yourself; if anything looks different there, verify again.</span>
+        <textarea class="studio-copy" readonly aria-label="Slip text">${esc(cp.text)}</textarea>` : ""}</div></div>`;
+}
+function studioRender() {
+  const b = STUDIO.batch, last = STUDIO.last && b && STUDIO.last.batch_id === b.batch_id ? STUDIO.last : null;
+  if ($("#st-settled") && b) {      // the studio's OWN settled batches - another builder's record is named as such, never borrowed
+    const tr = b.track_record || {}, own = b.settled_batches ?? 0;
+    $("#st-settled").textContent = `${tr.builder || b.builder_version || "studio"} has ${own} settled batch${own === 1 ? "" : "es"} so far${own ? "" : " – not validated yet"}`
+      + (tr.shadow_builder ? ` (the separate shadow builder ${tr.shadow_builder} has ${tr.shadow_settled ?? 0}; that record is not this builder's)` : "");
+  }
+  if (!b) return;
+  const e = b.exposure || {}, mu = e.max_uses || {}, slips = [4, 3, 2].flatMap(n => (b.slips || {})[n] || []).filter(s => (s.status || "live") === "live");
+  const rep = (lab, xs) => xs && xs.length ? `<div class="small">${lab}: ${xs.map(x => `${esc(x.label)} ×${x.uses}`).join(" · ")}</div>` : "";
+  const sh = (last && last.shortage) || {}, shl = sh.all ? [["all", sh.all]] : [4, 3, 2].filter(n => sh[n]).map(n => [n, sh[n]]);   // nothing eligible: one reason, not one per size
+  const short = shl.map(([k, v]) => `<div class="studio-short">${k === "all" ? "" : esc(sizeWord(k)) + ": "}${esc(v)}</div>`).join("");
+  const excl = last && (last.excluded || []).length ? `<details class="small muted"><summary>Left out of this build (${last.excluded.reduce((a, x) => a + x.count, 0)} lines)</summary>
+      ${last.excluded.map(x => `<div>${esc(x.reason)}: ${x.count}${x.examples && x.examples.length ? ` – e.g. ${esc(x.examples.join(", "))}` : ""}</div>`).join("")}</details>` : "";
+  const elig = last ? `<div class="small muted">Eligible right now: ${last.eligible.lines} line${last.eligible.lines === 1 ? "" : "s"} in ${last.eligible.matches} match${last.eligible.matches === 1 ? "" : "es"} on ${bookName(last.settings.book)} (B or better, exact current line, confirmed role, not started)</div>` : "";
+  const exp = `<div class="studio-exp"><b>This batch</b> · started ${esc(shortWhen(b.created_at).split(" · ")[0])} · ${b.builds} build${b.builds === 1 ? "" : "s"} · ${e.slips || 0} slip${e.slips === 1 ? "" : "s"} · ${e.legs || 0} picks ·
+      ${e.distinct_players || 0} players · ${e.distinct_matches || 0} matches<br>Most uses of one player ${mu.player || 0}, one match ${mu.match || 0}, one prop ${mu.prop || 0}
+      ${e.overlap === "limited" ? ` · caps: player ${e.caps.player}, match ${e.caps.match}` : ""}${(mu.player || 0) <= 1 && (mu.match || 0) <= 1 && (mu.prop || 0) <= 1 ? " · no repeats" : ""}${e.mixed ? " · mixed overlap settings across builds" : ""}${b.superseded ? ` · ${b.superseded} replaced / changed slip${b.superseded === 1 ? "" : "s"} no longer counted` : ""}
+      ${rep("Repeated players", e.repeated_players)}${rep("Repeated matches", e.repeated_matches)}
+      ${(e.rules || []).length ? `<details class="small muted"><summary>Batch rules</summary><ul>${e.rules.map(x => `<li>${esc(x)}</li>`).join("")}</ul></details>` : ""}</div>`;
+  const bySize = [4, 3, 2].map(n => ((b.slips || {})[n] || []).length ? `<div class="studio-sz">${sizeWord(n)} slips</div>` + b.slips[n].map(studioSlip).join("") : "").join("");
+  $("#st-out").innerHTML = short + elig + excl + exp + (slips.length ? bySize : `<div class="small muted">No slips in this batch yet – choose settings and press Build.</div>`)
+    + `<details class="small muted" style="margin-top:8px"><summary>How the studio works</summary>
+      Slip sizes are planned largest first, so 2-pick suggestions can't use up the picks a 4-pick needs. Each slip takes the strongest eligible picks the batch rules allow:
+      one pick per match, player and team in a slip, and – across the whole batch, every Build until you start a new batch – no repeated player, prop or match (or at most the cap you set).
+      When the rules can't fill a size you get the reason instead of a weaker slip. "Verify & copy" re-checks every line on the platform and against the current grade first; any change means a rebuild, never an old chance on a new line.
+      The all-hit chance multiplies the model's chances, which assumes the picks are independent. No payouts or returns are assumed. Builder ${esc(b.builder_version || "")}. Not financial advice.</details>`;
+}
+async function studioLoad() {
+  try {
+    const {status, d} = await studioCall("GET", "/api/slip_studio/batch");
+    if (status === 404 && d.error === "slip_studio_off") { STUDIO.off = true; $("#bstudio").hidden = true; $("#studio").hidden = true; return; }
+    if (status !== 200) throw new Error(d.error || "HTTP " + status);
+    STUDIO.batch = d; studioRender();
+  } catch (e) { $("#st-status").textContent = `Couldn't load your batch (${e.message})`; }
+}
+async function studioBuild(newBatch, why, replace) {
+  if (STUDIO.busy) return;
+  const c = studioCfg();
+  if (!c.sizes.length) { $("#st-status").textContent = "Choose at least one slip size."; return; }
+  STUDIO.busy = true; $("#st-build").disabled = $("#st-new").disabled = true;
+  $("#st-status").textContent = why || (newBatch ? "Starting a new batch…" : `Building from the current graded ${bookName(c.book)} board…`);
+  const body = {settings: studioSettings(c), idem: rid()};
+  // replace: the server voids that slip (its unchanged picks become eligible again) and builds ONE slip of its size
+  if (replace) body.replace = replace; else if (newBatch) body.new_batch = true; else if (STUDIO.batch && STUDIO.batch.current) body.batch_id = STUDIO.batch.batch_id;
+  try {
+    let {status, d} = await studioCall("POST", "/api/slip_studio/build", body);
+    if (!replace && (status === 409 || status === 404)) { delete body.batch_id; ({status, d} = await studioCall("POST", "/api/slip_studio/build", body)); }   // batch closed in another tab
+    if (status === 404 && d.error === "not found") { STUDIO.off = true; $("#bstudio").hidden = $("#studio").hidden = true; return; }
+    if (status !== 200) throw new Error(d.error || "HTTP " + status);
+    if (newBatch) { STUDIO.notes = {}; STUDIO.copied = {}; }
+    STUDIO.last = d;
+    const made = [4, 3, 2].map(n => [n, (d.slips[n] || []).length]).filter(x => x[1]);
+    await studioLoad();
+    $("#st-status").textContent = (made.length ? `Built ${made.map(([n, k]) => `${k} × ${sizeWord(n)}`).join(", ")}` : "No new slips")
+      + (d.replaced ? " to replace the changed slip" : "")
+      + ` from ${d.board.graded_rows} graded ${bookName(d.settings.book)} lines · ${new Date().toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})}`;
+  } catch (e) { $("#st-status").textContent = `Couldn't build (${e.message})`; }
+  finally { STUDIO.busy = false; $("#st-build").disabled = $("#st-new").disabled = false; }
+}
+async function studioVerify(id, btn) {
+  btn.disabled = true; btn.textContent = "Checking every line…";
+  try {
+    const {status, d} = await studioCall("POST", "/api/slip_studio/verify", {slip: id, idem: rid()});
+    if (status !== 200) throw new Error(d.error || "HTTP " + status);
+    if (d.ok) {
+      STUDIO.copied[id] = {text: d.copy_text, at: new Date().toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})};
+      await copy(d.copy_text);
+      studioCall("POST", "/api/slip_studio/event", {batch_id: d.batch_id, slip_id: id, kind: "copy", idem: rid()}).catch(() => {});
+      return studioRender();
+    }
+    STUDIO.notes[id] = d.changes && d.changes.length ? d.changes : ["something on this slip changed"];
+    studioRender();
+    return studioBuild(false, "A line changed – replacing this slip from the current board…", id);
+  } catch (e) { btn.disabled = false; btn.textContent = "Verify & copy"; toast(`Couldn't verify (${e.message})`); }
+}
+$("#bstudio").onclick = () => {
+  STUDIO.open = !STUDIO.open; const box = $("#studio");
+  box.hidden = !STUDIO.open; $("#bstudio").classList.toggle("on", STUDIO.open); $("#bstudio").setAttribute("aria-expanded", String(STUDIO.open));
+  if (STUDIO.open && !box.dataset.ready) {
+    box.dataset.ready = "1";
+    if (["underdog", "prizepicks"].includes(bbook) && !store.get("cs2s_studio", null)) studioSave(Object.assign(studioCfg(), {book: bbook}));
+    studioForm(); studioLoad();
+  }
+};
+$("#studio").addEventListener("click", e => {
+  const sb = e.target.closest("[data-sk] button");
+  if (sb) {
+    const k = sb.parentElement.dataset.sk, c = studioCfg();
+    if (k === "sizes") { const n = +sb.dataset.v; c.sizes = c.sizes.includes(n) ? c.sizes.filter(x => x !== n) : [...c.sizes, n].sort((a, b) => b - a); }
+    else c[k] = sb.dataset.v;
+    studioSave(c);
+    [...sb.parentElement.children].forEach(x => { const on = k === "sizes" ? c.sizes.includes(+x.dataset.v) : x.dataset.v === c[k];
+      x.classList.toggle("on", on); x.setAttribute("aria-pressed", String(on)); });
+    return;
+  }
+  if (e.target.closest("#st-build")) return studioBuild(false);
+  if (e.target.closest("#st-new")) return studioBuild(true);
+  const v = e.target.closest("[data-verify]"); if (v) return studioVerify(v.dataset.verify, v);
 });
-$("#slipsout").addEventListener("click", async e => {
-  const o = e.target.closest(".aseg button");
-  if (o) { const k = o.parentElement.dataset.ak, cfg = store.get("cs2s_auto", {});
-    cfg[k] = ["n", "count"].includes(k) ? +o.dataset.v : o.dataset.v; store.set("cs2s_auto", cfg); return drawAutoSlips(); }
-  const a = e.target.closest("[data-aslip]"); if (!a) return;
-  const [n, i] = a.dataset.aslip.split("|").map(Number), s = $("#slipsout")._slips?.[n]?.[i]; if (!s) return;
-  a.disabled = true; a.textContent = "Checking lines…";
-  await loadBoard(true);                        // the lines may have moved since the slips were built
-  const now = s.legs.map(x => boardRows.find(r => r.id === x.r.id));
-  if (now.some((r, k) => !r || r.line !== s.legs[k].r.line || r.side !== s.legs[k].r.side || (r.units || 0) <= 0
-                         || (r.start && new Date(r.start).getTime() <= Date.now()))) {
-    drawAutoSlips(); return toast("A line on that slip changed or locked – slips rebuilt");
-  }
-  const pf = payFor(s, n), cid = (crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random().toString(36).slice(2));
-  store.set("cs2s_slip", []); now.forEach(r => addToSlip(boardCard(r))); openSlip();
-  toast(`${n}-pick slip loaded`); drawBoard(); drawAutoSlips();
-  try {                                          // kept for tracking the builder's own results (no member details)
-    const body = JSON.stringify({cid,
-      builder: BUILDER_V, grader: boardVer, board_at: boardAt, n, settings: autoCfg(), all: s.all, pay: pf.pay, pay_source: pf.src,
-      legs: now.map((r, k) => ({id: r.id, nick: r.nick || r.player, prop: r.prop, scope: r.scope || "12", line: r.line, side: r.side,
-                                p: r.p, grade: r.grade, matchup: r.matchup, start: r.start, mult: s.legs[k].mult,
-                                match_slug: r.match_slug}))});
-    const send = t => fetch("/api/slip_log", {method: "POST", headers: {"Content-Type": "application/json"}, body})
-      .then(r => { if (r.status >= 500 && t < 2) setTimeout(() => send(t + 1), 2000 * (t + 1)); })
-      .catch(() => { if (t < 2) setTimeout(() => send(t + 1), 2000 * (t + 1)); });   // same id: the server drops repeats
-    send(0);
-  } catch {}
+$("#studio").addEventListener("change", e => {
+  const c = studioCfg(), t = e.target;
+  if (t.id === "st-book") c.book = t.value; else if (t.id === "st-count") c.count = +t.value; else if (t.id === "st-stat") c.stat = t.value;
+  else if (t.id === "st-scope") c.scope = t.value; else if (t.id === "st-overlap") c.overlap = t.checked; else if (t.id === "st-cap") c.cap = +t.value; else return;
+  studioSave(c); if (t.id === "st-overlap") studioCapLine();
 });
 
 // a shared link (?p=ZywOo&l=27.5&t=kills) grades on open

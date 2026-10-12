@@ -1,0 +1,2288 @@
+{
+ "events": [
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXCS2GAME-26OCT120400TUSTA",
+   "exchange_index": 0,
+   "last_updated_ts": "2026-10-11T15:27:05.392638Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-10-14T08:00:00Z",
+     "created_time": "2026-10-11T15:25:29.492859Z",
+     "custom_strike": {
+      "esports_competitor": "4fb68b85-cea4-413c-8388-e403b8e38918"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXCS2GAME-26OCT120400TUSTA",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-10-12T12:00:00Z",
+     "expiration_time": "2026-10-14T08:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.8700",
+     "latest_expiration_time": "2026-10-14T08:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.1300",
+     "no_bid_dollars": "0.1200",
+     "no_sub_title": "THE UNIT",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-10-12T12:00:00Z",
+     "open_interest_fp": "641.35",
+     "open_time": "2026-10-11T15:30:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.0000",
+     "previous_yes_bid_dollars": "0.0000",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If THE UNIT wins the United21 2026: THE UNIT vs. STATE CS2 match originally scheduled for Oct 12, 2026 at 4:00 AM EDT, then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the full match in the United21 2026: THE UNIT vs. STATE CS2 match originally scheduled for Oct 12, 2026 at 4:00 AM EDT\nIf the relevant match is postponed and not started within 48 hours of its originally scheduled start time, the market will resolve to the fair market price.\nIf the relevant match is cancelled before play begins, the market will resolve to the fair market price.\nIf the relevant match is forfeited before any play occurs, the market will resolve to the fair market price.\nIf the relevant match begins and is subsequently forfeited, the market will resolve according to the official result published by the governing body or tournament organizer.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 116,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXCS2GAME-26OCT120400TUSTA-TU",
+     "title": "THE UNIT wins",
+     "updated_time": "2026-10-11T15:30:00.466028Z",
+     "volume_24h_fp": "641.35",
+     "volume_fp": "641.35",
+     "yes_ask_dollars": "0.8800",
+     "yes_ask_size_fp": "664.00",
+     "yes_bid_dollars": "0.8700",
+     "yes_bid_size_fp": "65.07",
+     "yes_sub_title": "THE UNIT"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-10-14T08:00:00Z",
+     "created_time": "2026-10-11T15:25:29.492859Z",
+     "custom_strike": {
+      "esports_competitor": "04e56497-f5c9-4818-a386-78f1f528d6f8"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXCS2GAME-26OCT120400TUSTA",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-10-12T12:00:00Z",
+     "expiration_time": "2026-10-14T08:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.1600",
+     "latest_expiration_time": "2026-10-14T08:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.8800",
+     "no_bid_dollars": "0.8400",
+     "no_sub_title": "STATE",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-10-12T12:00:00Z",
+     "open_interest_fp": "562.51",
+     "open_time": "2026-10-11T15:30:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.0000",
+     "previous_yes_bid_dollars": "0.0000",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If STATE wins the United21 2026: THE UNIT vs. STATE CS2 match originally scheduled for Oct 12, 2026 at 4:00 AM EDT, then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the full match in the United21 2026: THE UNIT vs. STATE CS2 match originally scheduled for Oct 12, 2026 at 4:00 AM EDT\nIf the relevant match is postponed and not started within 48 hours of its originally scheduled start time, the market will resolve to the fair market price.\nIf the relevant match is cancelled before play begins, the market will resolve to the fair market price.\nIf the relevant match is forfeited before any play occurs, the market will resolve to the fair market price.\nIf the relevant match begins and is subsequently forfeited, the market will resolve according to the official result published by the governing body or tournament organizer.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 116,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXCS2GAME-26OCT120400TUSTA-STA",
+     "title": "STATE wins",
+     "updated_time": "2026-10-11T15:30:00.466028Z",
+     "volume_24h_fp": "562.51",
+     "volume_fp": "562.51",
+     "yes_ask_dollars": "0.1600",
+     "yes_ask_size_fp": "90.07",
+     "yes_bid_dollars": "0.1200",
+     "yes_bid_size_fp": "614.58",
+     "yes_sub_title": "STATE"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "CS2",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXCS2GAME",
+   "settlement_sources": [
+    {
+     "name": "B03",
+     "url": "https://bo3.gg/matches/finished"
+    },
+    {
+     "name": "HLTV",
+     "url": "https://www.hltv.org/results"
+    },
+    {
+     "name": "Gamers World",
+     "url": "https://egamersworld.com/"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "THE UNIT vs. STATE (Oct 12)",
+   "title": "THE UNIT vs. STATE"
+  },
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXCS2GAME-26OCT120900JSLVG",
+   "exchange_index": 0,
+   "last_updated_ts": "2026-10-10T16:51:54.524255Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-10-14T13:00:00Z",
+     "created_time": "2026-10-10T16:50:51.733557Z",
+     "custom_strike": {
+      "esports_competitor": "8da2f380-20d1-48df-b0ab-3e1b91e0ab3f"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXCS2GAME-26OCT120900JSLVG",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-10-12T17:00:00Z",
+     "expiration_time": "2026-10-14T13:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.1600",
+     "latest_expiration_time": "2026-10-14T13:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.8500",
+     "no_bid_dollars": "0.8100",
+     "no_sub_title": "Just Swing",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-10-12T17:00:00Z",
+     "open_interest_fp": "35.69",
+     "open_time": "2026-10-10T16:55:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.1900",
+     "previous_yes_bid_dollars": "0.0600",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Just Swing wins the ESL Challenger League Asia-Pacific Cup #3 2026: Just Swing vs. Lynn Vision CS2 match originally scheduled for Oct 12, 2026 at 9:00 AM EDT, then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the full match in the ESL Challenger League Asia-Pacific Cup #3 2026: Just Swing vs. Lynn Vision CS2 match originally scheduled for Oct 12, 2026 at 9:00 AM EDT\nIf the relevant match is postponed and not started within 48 hours of its originally scheduled start time, the market will resolve to the fair market price.\nIf the relevant match is cancelled before play begins, the market will resolve to the fair market price.\nIf the relevant match is forfeited before any play occurs, the market will resolve to the fair market price.\nIf the relevant match begins and is subsequently forfeited, the market will resolve according to the official result published by the governing body or tournament organizer.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 116,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXCS2GAME-26OCT120900JSLVG-JS",
+     "title": "Just Swing wins",
+     "updated_time": "2026-10-10T16:55:00.527589Z",
+     "volume_24h_fp": "35.69",
+     "volume_fp": "35.69",
+     "yes_ask_dollars": "0.1900",
+     "yes_ask_size_fp": "330.00",
+     "yes_bid_dollars": "0.1500",
+     "yes_bid_size_fp": "193.00",
+     "yes_sub_title": "Just Swing"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-10-14T13:00:00Z",
+     "created_time": "2026-10-10T16:50:51.733557Z",
+     "custom_strike": {
+      "esports_competitor": "84c3e40a-29b3-4300-9e5f-0c9bf420ee02"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXCS2GAME-26OCT120900JSLVG",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-10-12T17:00:00Z",
+     "expiration_time": "2026-10-14T13:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.8600",
+     "latest_expiration_time": "2026-10-14T13:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.2000",
+     "no_bid_dollars": "0.1600",
+     "no_sub_title": "Lynn Vision",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-10-12T17:00:00Z",
+     "open_interest_fp": "15.60",
+     "open_time": "2026-10-10T16:55:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.9400",
+     "previous_yes_bid_dollars": "0.8100",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Lynn Vision wins the ESL Challenger League Asia-Pacific Cup #3 2026: Just Swing vs. Lynn Vision CS2 match originally scheduled for Oct 12, 2026 at 9:00 AM EDT, then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the full match in the ESL Challenger League Asia-Pacific Cup #3 2026: Just Swing vs. Lynn Vision CS2 match originally scheduled for Oct 12, 2026 at 9:00 AM EDT\nIf the relevant match is postponed and not started within 48 hours of its originally scheduled start time, the market will resolve to the fair market price.\nIf the relevant match is cancelled before play begins, the market will resolve to the fair market price.\nIf the relevant match is forfeited before any play occurs, the market will resolve to the fair market price.\nIf the relevant match begins and is subsequently forfeited, the market will resolve according to the official result published by the governing body or tournament organizer.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 116,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXCS2GAME-26OCT120900JSLVG-LVG",
+     "title": "Lynn Vision wins",
+     "updated_time": "2026-10-10T16:55:00.527589Z",
+     "volume_24h_fp": "15.60",
+     "volume_fp": "15.60",
+     "yes_ask_dollars": "0.8400",
+     "yes_ask_size_fp": "62.41",
+     "yes_bid_dollars": "0.8000",
+     "yes_bid_size_fp": "501.00",
+     "yes_sub_title": "Lynn Vision"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "CS2",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXCS2GAME",
+   "settlement_sources": [
+    {
+     "name": "B03",
+     "url": "https://bo3.gg/matches/finished"
+    },
+    {
+     "name": "HLTV",
+     "url": "https://www.hltv.org/results"
+    },
+    {
+     "name": "Gamers World",
+     "url": "https://egamersworld.com/"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "Just Swing vs. Lynn Vision (Oct 12)",
+   "title": "Just Swing vs. Lynn Vision"
+  },
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXCS2GAME-26OCT121000ACIG1",
+   "exchange_index": 0,
+   "last_updated_ts": "2026-10-11T23:01:54.075092Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-10-14T14:00:00Z",
+     "created_time": "2026-10-11T23:00:32.822283Z",
+     "custom_strike": {
+      "esports_competitor": "5f51e4c5-1644-4217-9820-4fd90ed4b2d9"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXCS2GAME-26OCT121000ACIG1",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-10-12T18:00:00Z",
+     "expiration_time": "2026-10-14T14:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.0000",
+     "latest_expiration_time": "2026-10-14T14:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.9400",
+     "no_bid_dollars": "0.3300",
+     "no_sub_title": "ACIDHOUZE",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-10-12T18:00:00Z",
+     "open_interest_fp": "0.00",
+     "open_time": "2026-10-11T23:05:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.0000",
+     "previous_yes_bid_dollars": "0.0000",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If ACIDHOUZE wins the PGL Bucharest Open Qualifier #1 2027: ACIDHOUZE vs. GenOne CS2 match originally scheduled for Oct 12, 2026 at 10:00 AM EDT, then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the full match in the PGL Bucharest Open Qualifier #1 2027: ACIDHOUZE vs. GenOne CS2 match originally scheduled for Oct 12, 2026 at 10:00 AM EDT\nIf the relevant match is postponed and not started within 48 hours of its originally scheduled start time, the market will resolve to the fair market price.\nIf the relevant match is cancelled before play begins, the market will resolve to the fair market price.\nIf the relevant match is forfeited before any play occurs, the market will resolve to the fair market price.\nIf the relevant match begins and is subsequently forfeited, the market will resolve according to the official result published by the governing body or tournament organizer.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 116,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXCS2GAME-26OCT121000ACIG1-ACI",
+     "title": "ACIDHOUZE wins",
+     "updated_time": "2026-10-11T23:05:00.45959Z",
+     "volume_24h_fp": "0.00",
+     "volume_fp": "0.00",
+     "yes_ask_dollars": "0.6700",
+     "yes_ask_size_fp": "79.00",
+     "yes_bid_dollars": "0.0600",
+     "yes_bid_size_fp": "179.00",
+     "yes_sub_title": "ACIDHOUZE"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-10-14T14:00:00Z",
+     "created_time": "2026-10-11T23:00:32.822283Z",
+     "custom_strike": {
+      "esports_competitor": "ccba786a-f498-41e2-97c3-a920cf5142da"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXCS2GAME-26OCT121000ACIG1",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-10-12T18:00:00Z",
+     "expiration_time": "2026-10-14T14:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.0000",
+     "latest_expiration_time": "2026-10-14T14:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.6700",
+     "no_bid_dollars": "0.0600",
+     "no_sub_title": "GenOne",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-10-12T18:00:00Z",
+     "open_interest_fp": "0.00",
+     "open_time": "2026-10-11T23:05:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.0000",
+     "previous_yes_bid_dollars": "0.0000",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If GenOne wins the PGL Bucharest Open Qualifier #1 2027: ACIDHOUZE vs. GenOne CS2 match originally scheduled for Oct 12, 2026 at 10:00 AM EDT, then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the full match in the PGL Bucharest Open Qualifier #1 2027: ACIDHOUZE vs. GenOne CS2 match originally scheduled for Oct 12, 2026 at 10:00 AM EDT\nIf the relevant match is postponed and not started within 48 hours of its originally scheduled start time, the market will resolve to the fair market price.\nIf the relevant match is cancelled before play begins, the market will resolve to the fair market price.\nIf the relevant match is forfeited before any play occurs, the market will resolve to the fair market price.\nIf the relevant match begins and is subsequently forfeited, the market will resolve according to the official result published by the governing body or tournament organizer.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 116,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXCS2GAME-26OCT121000ACIG1-G1",
+     "title": "GenOne wins",
+     "updated_time": "2026-10-11T23:05:00.45959Z",
+     "volume_24h_fp": "0.00",
+     "volume_fp": "0.00",
+     "yes_ask_dollars": "0.9400",
+     "yes_ask_size_fp": "79.00",
+     "yes_bid_dollars": "0.3300",
+     "yes_bid_size_fp": "104.00",
+     "yes_sub_title": "GenOne"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "CS2",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXCS2GAME",
+   "settlement_sources": [
+    {
+     "name": "B03",
+     "url": "https://bo3.gg/matches/finished"
+    },
+    {
+     "name": "HLTV",
+     "url": "https://www.hltv.org/results"
+    },
+    {
+     "name": "Gamers World",
+     "url": "https://egamersworld.com/"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "ACIDHOUZE vs. GenOne (Oct 12)",
+   "title": "ACIDHOUZE vs. GenOne"
+  },
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXCS2GAME-26OCT122100ZOMBCHI",
+   "exchange_index": 0,
+   "last_updated_ts": "2026-10-11T04:46:58.786997Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-10-15T01:00:00Z",
+     "created_time": "2026-10-11T04:45:40.350849Z",
+     "custom_strike": {
+      "esports_competitor": "c7951a35-9039-45d9-a26e-c597fb3f5797"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXCS2GAME-26OCT122100ZOMBCHI",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-10-13T05:00:00Z",
+     "expiration_time": "2026-10-15T01:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.0000",
+     "latest_expiration_time": "2026-10-15T01:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.7000",
+     "no_bid_dollars": "0.6100",
+     "no_sub_title": "Zomblers",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-10-13T05:00:00Z",
+     "open_interest_fp": "0.00",
+     "open_time": "2026-10-11T04:50:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.0000",
+     "previous_yes_bid_dollars": "0.0000",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Zomblers wins the ESL Challenger League North America Cup #3 2026: Zomblers vs. Chicken Coop Esports CS2 match originally scheduled for Oct 12, 2026 at 9:00 PM EDT, then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the full match in the ESL Challenger League North America Cup #3 2026: Zomblers vs. Chicken Coop Esports CS2 match originally scheduled for Oct 12, 2026 at 9:00 PM EDT\nIf the relevant match is postponed and not started within 48 hours of its originally scheduled start time, the market will resolve to the fair market price.\nIf the relevant match is cancelled before play begins, the market will resolve to the fair market price.\nIf the relevant match is forfeited before any play occurs, the market will resolve to the fair market price.\nIf the relevant match begins and is subsequently forfeited, the market will resolve according to the official result published by the governing body or tournament organizer.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 116,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXCS2GAME-26OCT122100ZOMBCHI-ZOMB",
+     "title": "Zomblers wins",
+     "updated_time": "2026-10-11T04:50:00.382801Z",
+     "volume_24h_fp": "0.00",
+     "volume_fp": "0.00",
+     "yes_ask_dollars": "0.3900",
+     "yes_ask_size_fp": "1.00",
+     "yes_bid_dollars": "0.3000",
+     "yes_bid_size_fp": "80.00",
+     "yes_sub_title": "Zomblers"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-10-15T01:00:00Z",
+     "created_time": "2026-10-11T04:45:40.350849Z",
+     "custom_strike": {
+      "esports_competitor": "8866f9d2-57f4-421b-be00-c0ddf994deaf"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXCS2GAME-26OCT122100ZOMBCHI",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-10-13T05:00:00Z",
+     "expiration_time": "2026-10-15T01:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.0000",
+     "latest_expiration_time": "2026-10-15T01:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.3800",
+     "no_bid_dollars": "0.3000",
+     "no_sub_title": "Chicken Coop Esports",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-10-13T05:00:00Z",
+     "open_interest_fp": "0.00",
+     "open_time": "2026-10-11T04:50:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.0000",
+     "previous_yes_bid_dollars": "0.0000",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Chicken Coop Esports wins the ESL Challenger League North America Cup #3 2026: Zomblers vs. Chicken Coop Esports CS2 match originally scheduled for Oct 12, 2026 at 9:00 PM EDT, then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the full match in the ESL Challenger League North America Cup #3 2026: Zomblers vs. Chicken Coop Esports CS2 match originally scheduled for Oct 12, 2026 at 9:00 PM EDT\nIf the relevant match is postponed and not started within 48 hours of its originally scheduled start time, the market will resolve to the fair market price.\nIf the relevant match is cancelled before play begins, the market will resolve to the fair market price.\nIf the relevant match is forfeited before any play occurs, the market will resolve to the fair market price.\nIf the relevant match begins and is subsequently forfeited, the market will resolve according to the official result published by the governing body or tournament organizer.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 116,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXCS2GAME-26OCT122100ZOMBCHI-CHI",
+     "title": "Chicken Coop Esports wins",
+     "updated_time": "2026-10-11T04:50:00.382801Z",
+     "volume_24h_fp": "0.00",
+     "volume_fp": "0.00",
+     "yes_ask_dollars": "0.7000",
+     "yes_ask_size_fp": "130.00",
+     "yes_bid_dollars": "0.6200",
+     "yes_bid_size_fp": "129.00",
+     "yes_sub_title": "Chicken Coop Esports"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "CS2",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXCS2GAME",
+   "settlement_sources": [
+    {
+     "name": "B03",
+     "url": "https://bo3.gg/matches/finished"
+    },
+    {
+     "name": "HLTV",
+     "url": "https://www.hltv.org/results"
+    },
+    {
+     "name": "Gamers World",
+     "url": "https://egamersworld.com/"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "Zomblers vs. Chicken Coop Esports (Oct 12)",
+   "title": "Zomblers vs. Chicken Coop Esports"
+  },
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXCS2GAME-26OCT130600BBLTL",
+   "exchange_index": 0,
+   "last_updated_ts": "2026-10-11T00:02:46.872Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-10-15T10:00:00Z",
+     "created_time": "2026-10-11T00:01:07.915917Z",
+     "custom_strike": {
+      "esports_competitor": "cd117897-7098-4dee-854f-21e0dc7e7dd2"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXCS2GAME-26OCT130600BBLTL",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-10-13T14:00:00Z",
+     "expiration_time": "2026-10-15T10:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.2800",
+     "latest_expiration_time": "2026-10-15T10:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.7500",
+     "no_bid_dollars": "0.7100",
+     "no_sub_title": "BBL",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-10-13T14:00:00Z",
+     "open_interest_fp": "36.00",
+     "open_time": "2026-10-11T00:05:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.0000",
+     "previous_yes_bid_dollars": "0.0000",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If BBL wins the Stake Pulse Beat III 2026: BBL vs. Liquid CS2 match originally scheduled for Oct 13, 2026 at 6:00 AM EDT, then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the full match in the Stake Pulse Beat III 2026: BBL vs. Liquid CS2 match originally scheduled for Oct 13, 2026 at 6:00 AM EDT\nIf the relevant match is postponed and not started within 48 hours of its originally scheduled start time, the market will resolve to the fair market price.\nIf the relevant match is cancelled before play begins, the market will resolve to the fair market price.\nIf the relevant match is forfeited before any play occurs, the market will resolve to the fair market price.\nIf the relevant match begins and is subsequently forfeited, the market will resolve according to the official result published by the governing body or tournament organizer.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 116,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXCS2GAME-26OCT130600BBLTL-BBL",
+     "title": "BBL wins",
+     "updated_time": "2026-10-11T00:05:00.497406Z",
+     "volume_24h_fp": "36.00",
+     "volume_fp": "36.00",
+     "yes_ask_dollars": "0.2900",
+     "yes_ask_size_fp": "411.00",
+     "yes_bid_dollars": "0.2500",
+     "yes_bid_size_fp": "389.00",
+     "yes_sub_title": "BBL"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-10-15T10:00:00Z",
+     "created_time": "2026-10-11T00:01:07.915917Z",
+     "custom_strike": {
+      "esports_competitor": "d78e2e45-83ec-4692-92a0-f69b7cdf88b2"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXCS2GAME-26OCT130600BBLTL",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-10-13T14:00:00Z",
+     "expiration_time": "2026-10-15T10:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.7400",
+     "latest_expiration_time": "2026-10-15T10:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.2900",
+     "no_bid_dollars": "0.2500",
+     "no_sub_title": "Liquid",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-10-13T14:00:00Z",
+     "open_interest_fp": "310.70",
+     "open_time": "2026-10-11T00:05:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.0000",
+     "previous_yes_bid_dollars": "0.0000",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Liquid wins the Stake Pulse Beat III 2026: BBL vs. Liquid CS2 match originally scheduled for Oct 13, 2026 at 6:00 AM EDT, then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the full match in the Stake Pulse Beat III 2026: BBL vs. Liquid CS2 match originally scheduled for Oct 13, 2026 at 6:00 AM EDT\nIf the relevant match is postponed and not started within 48 hours of its originally scheduled start time, the market will resolve to the fair market price.\nIf the relevant match is cancelled before play begins, the market will resolve to the fair market price.\nIf the relevant match is forfeited before any play occurs, the market will resolve to the fair market price.\nIf the relevant match begins and is subsequently forfeited, the market will resolve according to the official result published by the governing body or tournament organizer.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 116,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXCS2GAME-26OCT130600BBLTL-TL",
+     "title": "Liquid wins",
+     "updated_time": "2026-10-11T00:05:00.497406Z",
+     "volume_24h_fp": "313.35",
+     "volume_fp": "313.35",
+     "yes_ask_dollars": "0.7500",
+     "yes_ask_size_fp": "479.54",
+     "yes_bid_dollars": "0.7100",
+     "yes_bid_size_fp": "216.00",
+     "yes_sub_title": "Liquid"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "CS2",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXCS2GAME",
+   "settlement_sources": [
+    {
+     "name": "B03",
+     "url": "https://bo3.gg/matches/finished"
+    },
+    {
+     "name": "HLTV",
+     "url": "https://www.hltv.org/results"
+    },
+    {
+     "name": "Gamers World",
+     "url": "https://egamersworld.com/"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "BBL vs. Liquid (Oct 13)",
+   "title": "BBL vs. Liquid"
+  }
+ ],
+ "map_events": [
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXCS2MAP-26OCT110400EKVITA-1",
+   "exchange_index": 0,
+   "last_updated_ts": "2026-10-11T11:00:47.107709Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-10-13T08:00:00Z",
+     "created_time": "2026-10-10T00:10:52.029306Z",
+     "custom_strike": {
+      "esports_competitor": "6a3b7128-6d53-4ad1-980b-9dafde3c2247"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXCS2MAP-26OCT110400EKVITA-1",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-10-11T11:00:00Z",
+     "expiration_time": "2026-10-13T08:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.0000",
+     "latest_expiration_time": "2026-10-13T08:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.9800",
+     "no_bid_dollars": "0.1200",
+     "no_sub_title": "Elite Klan",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-10-11T11:00:00Z",
+     "open_interest_fp": "0.00",
+     "open_time": "2026-10-10T00:25:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.9500",
+     "previous_yes_bid_dollars": "0.0500",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Elite Klan wins map 1 in the European Pro League Regular 2026: Elite Klan vs. Vitality Academy CS2 match originally scheduled for Oct 11, 2026 at 4:00 AM EDT, then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to map 1 in the European Pro League Regular 2026: Elite Klan vs. Vitality Academy CS2 match originally scheduled for Oct 11, 2026 at 4:00 AM EDT\nIf the relevant match or map is postponed and not started within 48 hours of its originally scheduled start time, the market will resolve to the fair market price.\nIf the relevant match is cancelled before play begins, the market will resolve to the fair market price.\nIf the relevant map is cancelled before play begins, the market will resolve to the fair market price.\nIf a match is forfeited before any play occurs, the market will resolve to the fair market price.\nIf a map is forfeited before any play occurs in the map, the market will resolve to the fair market price.\nIf a map begins and is subsequently forfeited, the market will resolve according to the official result published by the governing body or tournament organizer.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 119,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXCS2MAP-26OCT110400EKVITA-1-EK",
+     "title": "Elite Klan wins map 1",
+     "updated_time": "2026-10-11T11:00:47.114029Z",
+     "volume_24h_fp": "0.00",
+     "volume_fp": "0.00",
+     "yes_ask_dollars": "0.8800",
+     "yes_ask_size_fp": "154.00",
+     "yes_bid_dollars": "0.0200",
+     "yes_bid_size_fp": "0.10",
+     "yes_sub_title": "Elite Klan"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-10-13T08:00:00Z",
+     "created_time": "2026-10-10T00:10:52.029306Z",
+     "custom_strike": {
+      "esports_competitor": "1aae9260-19bc-43de-b441-4fc3ae119bad"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXCS2MAP-26OCT110400EKVITA-1",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-10-11T11:00:00Z",
+     "expiration_time": "2026-10-13T08:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.0000",
+     "latest_expiration_time": "2026-10-13T08:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.9600",
+     "no_bid_dollars": "0.0500",
+     "no_sub_title": "Vitality Academy",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-10-11T11:00:00Z",
+     "open_interest_fp": "0.00",
+     "open_time": "2026-10-10T00:25:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.9400",
+     "previous_yes_bid_dollars": "0.0300",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Vitality Academy wins map 1 in the European Pro League Regular 2026: Elite Klan vs. Vitality Academy CS2 match originally scheduled for Oct 11, 2026 at 4:00 AM EDT, then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to map 1 in the European Pro League Regular 2026: Elite Klan vs. Vitality Academy CS2 match originally scheduled for Oct 11, 2026 at 4:00 AM EDT\nIf the relevant match or map is postponed and not started within 48 hours of its originally scheduled start time, the market will resolve to the fair market price.\nIf the relevant match is cancelled before play begins, the market will resolve to the fair market price.\nIf the relevant map is cancelled before play begins, the market will resolve to the fair market price.\nIf a match is forfeited before any play occurs, the market will resolve to the fair market price.\nIf a map is forfeited before any play occurs in the map, the market will resolve to the fair market price.\nIf a map begins and is subsequently forfeited, the market will resolve according to the official result published by the governing body or tournament organizer.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 119,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXCS2MAP-26OCT110400EKVITA-1-VITA",
+     "title": "Vitality Academy wins map 1",
+     "updated_time": "2026-10-11T11:00:47.114029Z",
+     "volume_24h_fp": "0.00",
+     "volume_fp": "0.00",
+     "yes_ask_dollars": "0.9500",
+     "yes_ask_size_fp": "1.00",
+     "yes_bid_dollars": "0.0400",
+     "yes_bid_size_fp": "1.00",
+     "yes_sub_title": "Vitality Academy"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "CS2",
+    "competition_scope": "Map 1 Winner"
+   },
+   "series_ticker": "KXCS2MAP",
+   "settlement_sources": [
+    {
+     "name": "B03",
+     "url": "https://bo3.gg/matches/finished"
+    },
+    {
+     "name": "HLTV",
+     "url": "https://www.hltv.org/results"
+    },
+    {
+     "name": "Gamers World",
+     "url": "https://egamersworld.com/"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "Map 1: EK vs. VITA (Oct 11)",
+   "title": "Elite Klan vs. Vitality Academy: Map 1"
+  }
+ ],
+ "orderbooks": {
+  "KXCS2GAME-26OCT120400TUSTA-TU": {
+   "orderbook_fp": {
+    "no_dollars": [
+     [
+      "0.0100",
+      "1337.00"
+     ],
+     [
+      "0.0200",
+      "550.00"
+     ],
+     [
+      "0.0300",
+      "492.00"
+     ],
+     [
+      "0.0400",
+      "135.00"
+     ],
+     [
+      "0.0500",
+      "2107.00"
+     ],
+     [
+      "0.0600",
+      "166.00"
+     ],
+     [
+      "0.0800",
+      "355.00"
+     ],
+     [
+      "0.0900",
+      "176.00"
+     ],
+     [
+      "0.1000",
+      "160.00"
+     ],
+     [
+      "0.1100",
+      "259.00"
+     ],
+     [
+      "0.1200",
+      "664.00"
+     ]
+    ],
+    "yes_dollars": [
+     [
+      "0.0100",
+      "3466.00"
+     ],
+     [
+      "0.0200",
+      "2765.00"
+     ],
+     [
+      "0.0300",
+      "2007.00"
+     ],
+     [
+      "0.0400",
+      "279.00"
+     ],
+     [
+      "0.0500",
+      "158.00"
+     ],
+     [
+      "0.0600",
+      "421.00"
+     ],
+     [
+      "0.0700",
+      "410.00"
+     ],
+     [
+      "0.0800",
+      "60.00"
+     ],
+     [
+      "0.1100",
+      "1.00"
+     ],
+     [
+      "0.1200",
+      "3.00"
+     ],
+     [
+      "0.2700",
+      "22.00"
+     ],
+     [
+      "0.3800",
+      "1.00"
+     ],
+     [
+      "0.4000",
+      "10.00"
+     ],
+     [
+      "0.4200",
+      "10.00"
+     ],
+     [
+      "0.4300",
+      "10.00"
+     ],
+     [
+      "0.4400",
+      "10.00"
+     ],
+     [
+      "0.4800",
+      "1.00"
+     ],
+     [
+      "0.4900",
+      "10.00"
+     ],
+     [
+      "0.5400",
+      "10.00"
+     ],
+     [
+      "0.6300",
+      "18.31"
+     ],
+     [
+      "0.7200",
+      "250.00"
+     ],
+     [
+      "0.7700",
+      "1000.00"
+     ],
+     [
+      "0.7800",
+      "222.00"
+     ],
+     [
+      "0.7900",
+      "221.00"
+     ],
+     [
+      "0.8000",
+      "188.00"
+     ],
+     [
+      "0.8100",
+      "1.00"
+     ],
+     [
+      "0.8300",
+      "38.00"
+     ],
+     [
+      "0.8700",
+      "65.07"
+     ]
+    ]
+   }
+  },
+  "KXCS2GAME-26OCT120400TUSTA-STA": {
+   "orderbook_fp": {
+    "no_dollars": [
+     [
+      "0.0100",
+      "1339.00"
+     ],
+     [
+      "0.0200",
+      "550.00"
+     ],
+     [
+      "0.0300",
+      "292.00"
+     ],
+     [
+      "0.0400",
+      "157.00"
+     ],
+     [
+      "0.0500",
+      "112.00"
+     ],
+     [
+      "0.0600",
+      "471.00"
+     ],
+     [
+      "0.0700",
+      "141.00"
+     ],
+     [
+      "0.0800",
+      "40.00"
+     ],
+     [
+      "0.1200",
+      "17.00"
+     ],
+     [
+      "0.1300",
+      "62.00"
+     ],
+     [
+      "0.1400",
+      "59.00"
+     ],
+     [
+      "0.2600",
+      "23.00"
+     ],
+     [
+      "0.3900",
+      "10.00"
+     ],
+     [
+      "0.4200",
+      "10.00"
+     ],
+     [
+      "0.4300",
+      "10.00"
+     ],
+     [
+      "0.4400",
+      "10.00"
+     ],
+     [
+      "0.4900",
+      "10.00"
+     ],
+     [
+      "0.5200",
+      "10.00"
+     ],
+     [
+      "0.7000",
+      "250.00"
+     ],
+     [
+      "0.7700",
+      "1000.03"
+     ],
+     [
+      "0.7800",
+      "222.00"
+     ],
+     [
+      "0.7900",
+      "222.00"
+     ],
+     [
+      "0.8000",
+      "182.00"
+     ],
+     [
+      "0.8300",
+      "32.00"
+     ],
+     [
+      "0.8400",
+      "90.07"
+     ]
+    ],
+    "yes_dollars": [
+     [
+      "0.0100",
+      "2437.00"
+     ],
+     [
+      "0.0200",
+      "1161.00"
+     ],
+     [
+      "0.0300",
+      "558.00"
+     ],
+     [
+      "0.0400",
+      "378.00"
+     ],
+     [
+      "0.0500",
+      "2180.00"
+     ],
+     [
+      "0.0600",
+      "176.00"
+     ],
+     [
+      "0.0700",
+      "51.00"
+     ],
+     [
+      "0.0800",
+      "8.00"
+     ],
+     [
+      "0.0900",
+      "10.00"
+     ],
+     [
+      "0.1000",
+      "110.00"
+     ],
+     [
+      "0.1100",
+      "259.00"
+     ],
+     [
+      "0.1200",
+      "614.58"
+     ]
+    ]
+   }
+  },
+  "KXCS2GAME-26OCT120900JSLVG-JS": {
+   "orderbook_fp": {
+    "no_dollars": [
+     [
+      "0.0100",
+      "1341.00"
+     ],
+     [
+      "0.0200",
+      "550.00"
+     ],
+     [
+      "0.0300",
+      "292.00"
+     ],
+     [
+      "0.0400",
+      "135.00"
+     ],
+     [
+      "0.0500",
+      "88.00"
+     ],
+     [
+      "0.0800",
+      "39.00"
+     ],
+     [
+      "0.1000",
+      "1002.00"
+     ],
+     [
+      "0.1100",
+      "500.00"
+     ],
+     [
+      "0.1200",
+      "399.00"
+     ],
+     [
+      "0.1900",
+      "61.00"
+     ],
+     [
+      "0.2000",
+      "30.00"
+     ],
+     [
+      "0.2100",
+      "29.00"
+     ],
+     [
+      "0.3100",
+      "13.00"
+     ],
+     [
+      "0.4300",
+      "10.00"
+     ],
+     [
+      "0.5900",
+      "250.00"
+     ],
+     [
+      "0.7200",
+      "10.00"
+     ],
+     [
+      "0.7300",
+      "260.00"
+     ],
+     [
+      "0.7400",
+      "10.00"
+     ],
+     [
+      "0.7500",
+      "42.00"
+     ],
+     [
+      "0.7600",
+      "50.00"
+     ],
+     [
+      "0.7700",
+      "611.00"
+     ],
+     [
+      "0.7900",
+      "50.00"
+     ],
+     [
+      "0.8000",
+      "217.00"
+     ],
+     [
+      "0.8100",
+      "330.00"
+     ]
+    ],
+    "yes_dollars": [
+     [
+      "0.0100",
+      "2847.00"
+     ],
+     [
+      "0.0200",
+      "1590.10"
+     ],
+     [
+      "0.0300",
+      "1038.00"
+     ],
+     [
+      "0.0400",
+      "650.00"
+     ],
+     [
+      "0.0500",
+      "178.00"
+     ],
+     [
+      "0.0600",
+      "22.00"
+     ],
+     [
+      "0.0700",
+      "10.00"
+     ],
+     [
+      "0.0800",
+      "85.00"
+     ],
+     [
+      "0.0900",
+      "10.00"
+     ],
+     [
+      "0.1000",
+      "10.00"
+     ],
+     [
+      "0.1200",
+      "11.00"
+     ],
+     [
+      "0.1300",
+      "218.00"
+     ],
+     [
+      "0.1400",
+      "327.00"
+     ],
+     [
+      "0.1500",
+      "193.00"
+     ]
+    ]
+   }
+  },
+  "KXCS2GAME-26OCT120900JSLVG-LVG": {
+   "orderbook_fp": {
+    "no_dollars": [
+     [
+      "0.0100",
+      "2684.00"
+     ],
+     [
+      "0.0200",
+      "550.00"
+     ],
+     [
+      "0.0300",
+      "292.00"
+     ],
+     [
+      "0.0400",
+      "135.00"
+     ],
+     [
+      "0.0500",
+      "74.00"
+     ],
+     [
+      "0.0600",
+      "100.00"
+     ],
+     [
+      "0.0700",
+      "10.00"
+     ],
+     [
+      "0.0800",
+      "60.00"
+     ],
+     [
+      "0.0900",
+      "10.00"
+     ],
+     [
+      "0.1000",
+      "10.00"
+     ],
+     [
+      "0.1100",
+      "32.00"
+     ],
+     [
+      "0.1300",
+      "250.00"
+     ],
+     [
+      "0.1400",
+      "218.00"
+     ],
+     [
+      "0.1500",
+      "409.00"
+     ],
+     [
+      "0.1600",
+      "62.41"
+     ]
+    ],
+    "yes_dollars": [
+     [
+      "0.0100",
+      "2435.00"
+     ],
+     [
+      "0.0200",
+      "1117.10"
+     ],
+     [
+      "0.0300",
+      "558.00"
+     ],
+     [
+      "0.0400",
+      "278.00"
+     ],
+     [
+      "0.0500",
+      "178.00"
+     ],
+     [
+      "0.1200",
+      "4.00"
+     ],
+     [
+      "0.1900",
+      "1.00"
+     ],
+     [
+      "0.2400",
+      "35.00"
+     ],
+     [
+      "0.2600",
+      "10.00"
+     ],
+     [
+      "0.2700",
+      "694.00"
+     ],
+     [
+      "0.2800",
+      "638.00"
+     ],
+     [
+      "0.2900",
+      "64.00"
+     ],
+     [
+      "0.4200",
+      "10.00"
+     ],
+     [
+      "0.6600",
+      "250.00"
+     ],
+     [
+      "0.7200",
+      "10.00"
+     ],
+     [
+      "0.7300",
+      "10.00"
+     ],
+     [
+      "0.7400",
+      "10.00"
+     ],
+     [
+      "0.7500",
+      "12.66"
+     ],
+     [
+      "0.7600",
+      "1.00"
+     ],
+     [
+      "0.7800",
+      "27.00"
+     ],
+     [
+      "0.7900",
+      "265.00"
+     ],
+     [
+      "0.8000",
+      "501.00"
+     ]
+    ]
+   }
+  },
+  "KXCS2GAME-26OCT121000ACIG1-ACI": {
+   "orderbook_fp": {
+    "no_dollars": [
+     [
+      "0.0100",
+      "1914.00"
+     ],
+     [
+      "0.0200",
+      "550.00"
+     ],
+     [
+      "0.0300",
+      "307.00"
+     ],
+     [
+      "0.0400",
+      "135.00"
+     ],
+     [
+      "0.0500",
+      "96.00"
+     ],
+     [
+      "0.1300",
+      "250.00"
+     ],
+     [
+      "0.1500",
+      "40.00"
+     ],
+     [
+      "0.1900",
+      "10.00"
+     ],
+     [
+      "0.2300",
+      "27.00"
+     ],
+     [
+      "0.2500",
+      "10.00"
+     ],
+     [
+      "0.2600",
+      "910.00"
+     ],
+     [
+      "0.3200",
+      "40.00"
+     ],
+     [
+      "0.3300",
+      "79.00"
+     ]
+    ],
+    "yes_dollars": [
+     [
+      "0.0100",
+      "3012.00"
+     ],
+     [
+      "0.0200",
+      "1117.00"
+     ],
+     [
+      "0.0300",
+      "580.00"
+     ],
+     [
+      "0.0400",
+      "278.00"
+     ],
+     [
+      "0.0500",
+      "318.00"
+     ],
+     [
+      "0.0600",
+      "179.00"
+     ]
+    ]
+   }
+  },
+  "KXCS2GAME-26OCT121000ACIG1-G1": {
+   "orderbook_fp": {
+    "no_dollars": [
+     [
+      "0.0100",
+      "1912.00"
+     ],
+     [
+      "0.0200",
+      "592.00"
+     ],
+     [
+      "0.0300",
+      "285.00"
+     ],
+     [
+      "0.0400",
+      "135.00"
+     ],
+     [
+      "0.0500",
+      "232.00"
+     ],
+     [
+      "0.0600",
+      "79.00"
+     ]
+    ],
+    "yes_dollars": [
+     [
+      "0.0100",
+      "3010.00"
+     ],
+     [
+      "0.0200",
+      "1117.00"
+     ],
+     [
+      "0.0300",
+      "558.00"
+     ],
+     [
+      "0.0400",
+      "278.00"
+     ],
+     [
+      "0.0500",
+      "138.00"
+     ],
+     [
+      "0.1500",
+      "40.00"
+     ],
+     [
+      "0.1900",
+      "10.00"
+     ],
+     [
+      "0.2300",
+      "10.00"
+     ],
+     [
+      "0.2500",
+      "10.00"
+     ],
+     [
+      "0.2600",
+      "510.00"
+     ],
+     [
+      "0.2700",
+      "375.00"
+     ],
+     [
+      "0.3300",
+      "104.00"
+     ]
+    ]
+   }
+  },
+  "KXCS2GAME-26OCT122100ZOMBCHI-ZOMB": {
+   "orderbook_fp": {
+    "no_dollars": [
+     [
+      "0.0100",
+      "1337.00"
+     ],
+     [
+      "0.0200",
+      "594.00"
+     ],
+     [
+      "0.0300",
+      "285.00"
+     ],
+     [
+      "0.0400",
+      "135.00"
+     ],
+     [
+      "0.0500",
+      "932.00"
+     ],
+     [
+      "0.0600",
+      "1011.00"
+     ],
+     [
+      "0.1800",
+      "33.00"
+     ],
+     [
+      "0.2700",
+      "15.00"
+     ],
+     [
+      "0.3600",
+      "260.00"
+     ],
+     [
+      "0.5200",
+      "10.00"
+     ],
+     [
+      "0.5300",
+      "10.00"
+     ],
+     [
+      "0.5400",
+      "10.00"
+     ],
+     [
+      "0.5500",
+      "139.00"
+     ],
+     [
+      "0.5600",
+      "550.00"
+     ],
+     [
+      "0.5800",
+      "50.00"
+     ],
+     [
+      "0.5900",
+      "500.00"
+     ]
+    ],
+    "yes_dollars": [
+     [
+      "0.0100",
+      "2435.00"
+     ],
+     [
+      "0.0200",
+      "1117.00"
+     ],
+     [
+      "0.0300",
+      "758.00"
+     ],
+     [
+      "0.0400",
+      "728.00"
+     ],
+     [
+      "0.0500",
+      "138.00"
+     ],
+     [
+      "0.0900",
+      "67.00"
+     ],
+     [
+      "0.1400",
+      "29.00"
+     ],
+     [
+      "0.1800",
+      "11.00"
+     ],
+     [
+      "0.2000",
+      "10.00"
+     ],
+     [
+      "0.2100",
+      "10.00"
+     ],
+     [
+      "0.2300",
+      "10.00"
+     ],
+     [
+      "0.2400",
+      "10.00"
+     ],
+     [
+      "0.2500",
+      "418.00"
+     ],
+     [
+      "0.2600",
+      "500.00"
+     ]
+    ]
+   }
+  },
+  "KXCS2GAME-26OCT122100ZOMBCHI-CHI": {
+   "orderbook_fp": {
+    "no_dollars": [
+     [
+      "0.0100",
+      "1839.00"
+     ],
+     [
+      "0.0200",
+      "1094.00"
+     ],
+     [
+      "0.0300",
+      "781.00"
+     ],
+     [
+      "0.0400",
+      "438.00"
+     ],
+     [
+      "0.0500",
+      "74.00"
+     ],
+     [
+      "0.0700",
+      "22.00"
+     ],
+     [
+      "0.1100",
+      "55.00"
+     ],
+     [
+      "0.1500",
+      "250.00"
+     ],
+     [
+      "0.1600",
+      "47.00"
+     ],
+     [
+      "0.2000",
+      "10.00"
+     ],
+     [
+      "0.2100",
+      "20.00"
+     ],
+     [
+      "0.2300",
+      "10.00"
+     ],
+     [
+      "0.2400",
+      "10.00"
+     ],
+     [
+      "0.2500",
+      "280.00"
+     ],
+     [
+      "0.2700",
+      "500.00"
+     ],
+     [
+      "0.3000",
+      "130.00"
+     ]
+    ],
+    "yes_dollars": [
+     [
+      "0.0100",
+      "2437.00"
+     ],
+     [
+      "0.0200",
+      "1117.00"
+     ],
+     [
+      "0.0300",
+      "558.00"
+     ],
+     [
+      "0.0400",
+      "278.00"
+     ],
+     [
+      "0.0500",
+      "138.00"
+     ],
+     [
+      "0.0600",
+      "167.00"
+     ],
+     [
+      "0.0700",
+      "514.00"
+     ],
+     [
+      "0.0800",
+      "183.00"
+     ],
+     [
+      "0.0900",
+      "22.00"
+     ],
+     [
+      "0.1800",
+      "1.00"
+     ],
+     [
+      "0.1900",
+      "32.00"
+     ],
+     [
+      "0.2300",
+      "27.00"
+     ],
+     [
+      "0.3000",
+      "10.00"
+     ],
+     [
+      "0.3100",
+      "10.00"
+     ],
+     [
+      "0.4200",
+      "250.00"
+     ],
+     [
+      "0.5000",
+      "250.00"
+     ],
+     [
+      "0.5200",
+      "10.00"
+     ],
+     [
+      "0.5300",
+      "10.00"
+     ],
+     [
+      "0.5400",
+      "10.00"
+     ],
+     [
+      "0.5500",
+      "210.00"
+     ],
+     [
+      "0.5600",
+      "300.00"
+     ],
+     [
+      "0.5800",
+      "500.00"
+     ],
+     [
+      "0.5900",
+      "500.00"
+     ],
+     [
+      "0.6200",
+      "129.00"
+     ]
+    ]
+   }
+  },
+  "KXCS2GAME-26OCT130600BBLTL-BBL": {
+   "orderbook_fp": {
+    "no_dollars": [
+     [
+      "0.0100",
+      "1596.00"
+     ],
+     [
+      "0.0200",
+      "550.00"
+     ],
+     [
+      "0.0300",
+      "792.00"
+     ],
+     [
+      "0.0400",
+      "657.00"
+     ],
+     [
+      "0.0500",
+      "86.00"
+     ],
+     [
+      "0.0600",
+      "507.00"
+     ],
+     [
+      "0.0700",
+      "355.00"
+     ],
+     [
+      "0.0800",
+      "39.00"
+     ],
+     [
+      "0.1200",
+      "18.00"
+     ],
+     [
+      "0.2100",
+      "19.00"
+     ],
+     [
+      "0.2800",
+      "14.00"
+     ],
+     [
+      "0.3400",
+      "75.00"
+     ],
+     [
+      "0.4400",
+      "75.00"
+     ],
+     [
+      "0.4700",
+      "10.00"
+     ],
+     [
+      "0.5400",
+      "75.00"
+     ],
+     [
+      "0.5600",
+      "250.00"
+     ],
+     [
+      "0.5700",
+      "87.00"
+     ],
+     [
+      "0.6000",
+      "10.00"
+     ],
+     [
+      "0.6100",
+      "10.00"
+     ],
+     [
+      "0.6300",
+      "10.00"
+     ],
+     [
+      "0.6400",
+      "226.00"
+     ],
+     [
+      "0.6600",
+      "254.00"
+     ],
+     [
+      "0.6700",
+      "49.00"
+     ],
+     [
+      "0.6800",
+      "24.00"
+     ],
+     [
+      "0.6900",
+      "172.00"
+     ],
+     [
+      "0.7000",
+      "163.00"
+     ],
+     [
+      "0.7100",
+      "411.00"
+     ]
+    ],
+    "yes_dollars": [
+     [
+      "0.0100",
+      "2439.00"
+     ],
+     [
+      "0.0200",
+      "2283.00"
+     ],
+     [
+      "0.0300",
+      "558.00"
+     ],
+     [
+      "0.0400",
+      "278.00"
+     ],
+     [
+      "0.0500",
+      "723.00"
+     ],
+     [
+      "0.0600",
+      "394.00"
+     ],
+     [
+      "0.0700",
+      "86.00"
+     ],
+     [
+      "0.1000",
+      "491.00"
+     ],
+     [
+      "0.1100",
+      "200.00"
+     ],
+     [
+      "0.1200",
+      "27.00"
+     ],
+     [
+      "0.1700",
+      "22.00"
+     ],
+     [
+      "0.1800",
+      "477.00"
+     ],
+     [
+      "0.1900",
+      "77.00"
+     ],
+     [
+      "0.2000",
+      "42.00"
+     ],
+     [
+      "0.2300",
+      "173.00"
+     ],
+     [
+      "0.2400",
+      "267.00"
+     ],
+     [
+      "0.2500",
+      "389.00"
+     ]
+    ]
+   }
+  },
+  "KXCS2GAME-26OCT130600BBLTL-TL": {
+   "orderbook_fp": {
+    "no_dollars": [
+     [
+      "0.0100",
+      "1337.00"
+     ],
+     [
+      "0.0200",
+      "1717.00"
+     ],
+     [
+      "0.0300",
+      "358.00"
+     ],
+     [
+      "0.0400",
+      "624.00"
+     ],
+     [
+      "0.0500",
+      "475.00"
+     ],
+     [
+      "0.0700",
+      "86.00"
+     ],
+     [
+      "0.0800",
+      "18.00"
+     ],
+     [
+      "0.1100",
+      "250.00"
+     ],
+     [
+      "0.1200",
+      "608.00"
+     ],
+     [
+      "0.1300",
+      "500.00"
+     ],
+     [
+      "0.1600",
+      "13.00"
+     ],
+     [
+      "0.1700",
+      "10.00"
+     ],
+     [
+      "0.1800",
+      "10.00"
+     ],
+     [
+      "0.1900",
+      "10.00"
+     ],
+     [
+      "0.2000",
+      "42.00"
+     ],
+     [
+      "0.2200",
+      "839.00"
+     ],
+     [
+      "0.2300",
+      "546.00"
+     ],
+     [
+      "0.2400",
+      "386.00"
+     ],
+     [
+      "0.2500",
+      "479.54"
+     ]
+    ],
+    "yes_dollars": [
+     [
+      "0.0100",
+      "2435.00"
+     ],
+     [
+      "0.0200",
+      "1117.00"
+     ],
+     [
+      "0.0300",
+      "558.00"
+     ],
+     [
+      "0.0400",
+      "278.00"
+     ],
+     [
+      "0.0500",
+      "138.00"
+     ],
+     [
+      "0.0700",
+      "1.00"
+     ],
+     [
+      "0.1200",
+      "4.00"
+     ],
+     [
+      "0.2000",
+      "30.00"
+     ],
+     [
+      "0.2300",
+      "207.00"
+     ],
+     [
+      "0.2400",
+      "317.00"
+     ],
+     [
+      "0.2500",
+      "720.00"
+     ],
+     [
+      "0.2600",
+      "200.00"
+     ],
+     [
+      "0.3300",
+      "207.00"
+     ],
+     [
+      "0.4300",
+      "218.00"
+     ],
+     [
+      "0.5600",
+      "250.00"
+     ],
+     [
+      "0.6000",
+      "10.00"
+     ],
+     [
+      "0.6100",
+      "10.00"
+     ],
+     [
+      "0.6300",
+      "10.00"
+     ],
+     [
+      "0.6400",
+      "10.00"
+     ],
+     [
+      "0.6600",
+      "32.00"
+     ],
+     [
+      "0.6700",
+      "420.00"
+     ],
+     [
+      "0.6800",
+      "63.00"
+     ],
+     [
+      "0.6900",
+      "175.00"
+     ],
+     [
+      "0.7000",
+      "174.00"
+     ],
+     [
+      "0.7100",
+      "216.00"
+     ]
+    ]
+   }
+  }
+ }
+}

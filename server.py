@@ -25,7 +25,7 @@ import html as htmllib
 from urllib.parse import parse_qs, quote, urlparse
 
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import cs2_scout
 import hltv
@@ -411,6 +411,16 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12", book="
             "at": _dt.now(timezone.utc).isoformat(timespec="seconds")}
 
 
+def _row_match_id(row):
+    """matchid.match_id_for_row, or None while matchid's tables are still loading (a member request never waits for the
+    first HLTV read - the boot thread does it) or if linking fails. Identity only: no grade reads it."""
+    try:
+        import matchid
+        return matchid.match_id_for_row(row) if matchid.ready() else None
+    except Exception:
+        return None
+
+
 def board_payload(book="underdog"):
     """The graded board for one platform. book="prizepicks": PrizePicks' lines (prizepicks.py), each graded at its own
     line and market type; its feed state (ok / stale / failed / empty) travels with it. Default Underdog, unchanged."""
@@ -443,7 +453,8 @@ def board_payload(book="underdog"):
         x["igl"], x["igl_src"] = roles.igl_role(nick, x.get("team_name") or x.get("team"))
     for x in rows:
         x["book"] = x.get("book") or "underdog"
-    _cap_same_result(rows)                       # within this platform: a slip is one platform's entry
+        x["match_id"] = _row_match_id(x)         # canonical match id (matchid.py): the same on every platform; None = unlinked
+    _cap_same_result(rows)                    # within this platform: a slip is one platform's entry
     out = {"book": book, "updated": b["at"], "error": b["error"], "rows": rows, "total": len(b["rows"]),
            "version": picklog.MODEL_VERSION}
     if book == "prizepicks":
@@ -562,6 +573,402 @@ def board_last_hltv(res, prop, scope):
     rows = [r for r in rows_ if str(r.get("nick") or r.get("player") or "").lower() == nick and r.get("prop") == prop and r.get("side")
             and (r.get("scope") or "12") == scope and (r.get("line_type") or r.get("odds_type") or "standard") in ("standard", "promo")]
     return {"rows": [{k: r.get(k) for k in ("book", "line", "side", "grade", "p", "units", "proj", "graded_at", "hltv_retry")} for r in rows[:4]]}
+
+
+# ---------------------------------------------------------------- research tools: moneylines + slip studio (no grading)
+# Nothing here feeds or changes a grade. Every member request reads shared in-memory state: moneyline.py keeps one
+# background refresher per exchange, the slip studio builds from a graded-board snapshot rebuilt at most every few
+# seconds by one thread, and no member request calls an upstream API.
+ML_TTL = 30                       # /api/moneylines: one response shared by every member for 30 s
+
+
+def studio_flag(env=None):
+    """The member slip studio is ON (owner 2026-10-12: "rebuild slip selection around portfolio diversity" ... "get it ready",
+    after being told the old builder was off pending settled batches). SLIP_STUDIO=0 is the kill switch. The panel itself says
+    the diversified builder is still being validated on settled batches."""
+    return (os.environ if env is None else env).get("SLIP_STUDIO", "1") != "0"
+
+
+SLIP_STUDIO = studio_flag()       # on by default (owner 2026-10-12); SLIP_STUDIO=0 turns the endpoints + panel off
+STUDIO_BUILDS_PER_MIN = 20        # Build presses per member per minute (a retry with the same idem key is free)
+STUDIO_EVENTS_PER_MIN = 40        # verify + event calls per member per minute (its own bucket - never eats build quota)
+STUDIO_BODY_MAX = 16 * 1024
+SHADOW_LABEL = "Shadow - not a staking recommendation"
+MODEL_NOT_VALIDATED = "Model: not validated yet - market baseline shown, no recommendation"
+_ML_BLOCK_KEYS = ("available", "prob_a", "bid", "ask", "spread", "bid_size", "ask_size", "depth", "best_depth", "status",
+                  "current", "fresh", "market_open", "price_only", "usable", "reason", "source_ts", "received_ts",
+                  "team_a_name", "team_b_name", "last_trade", "prob_b_yes", "prob_b_usable", "coherence_gap", "coherence_flag")
+RESEARCH = {"matchid_ready": False, "moneyline_started": [], "errors": []}
+
+
+def start_research():
+    """Boot (its own thread, after the grading threads): load matchid's tables, then start the moneyline refreshers.
+    Each step in its own try - a failure here never touches grading, /health or the other step."""
+    try:
+        import matchid
+        RESEARCH["matchid_ready"] = matchid.warm()
+    except Exception as e:
+        RESEARCH["errors"].append(f"matchid: {type(e).__name__}: {str(e)[:160]}")
+    if os.environ.get("MONEYLINES", "1") != "1":       # MONEYLINES=0: refreshers off (the tab then shows "unavailable")
+        return
+    try:
+        import moneyline
+        RESEARCH["moneyline_started"] = moneyline.start()
+    except Exception as e:
+        RESEARCH["errors"].append(f"moneyline: {type(e).__name__}: {str(e)[:160]}")
+
+
+_MODEL_STATE = {}
+
+
+def validated_features(d):
+    """Features that passed BOTH stages: promoted on development / validation (freeze.promoted) AND a frozen test-set
+    result whose gain-vs-market CI lower bound is above zero. A validation-only promotion (no --final run yet, or a test
+    CI touching zero) is not 'validated'."""
+    st = (d or {}).get("staged") or {}
+    test = st.get("test") or {}
+    out = []
+    for k in ((st.get("freeze") or {}).get("promoted") or []):
+        ci = (test.get(k) or {}).get("gain_vs_market_ci") if isinstance(test.get(k), dict) else None
+        if ci and ci[0] is not None and ci[0] > 0:
+            out.append(k)
+    return out
+
+
+def ml_model_state():
+    """Is there a walk-forward validated moneyline feature? Read from ml_eval_results.json once. No live model
+    exists yet, so members get the market baseline and no model probability either way."""
+    if not _MODEL_STATE:
+        validated, val_promoted, at = [], [], None
+        try:
+            with open(BASE / "ml_eval_results.json", encoding="utf-8") as f:
+                d = json.load(f)
+            val_promoted = list((((d.get("staged") or {}).get("freeze") or {}).get("promoted")) or [])
+            validated = validated_features(d)
+            at = d.get("generated_at")
+        except Exception:
+            pass
+        _MODEL_STATE.update(promoted=validated, val_promoted=val_promoted, evaluated_at=at, available=False,
+                            probability=None,
+                            label=MODEL_NOT_VALIDATED if not validated else
+                            "Model: validated features exist but no live model is deployed - market baseline shown, no recommendation")
+    return dict(_MODEL_STATE)
+
+
+def moneylines_payload():
+    """The member view of moneyline.board(): slimmed (no raw platform payloads / rules text), team A first."""
+    import moneyline
+    st = moneyline.status()
+    out = []
+    for e in moneyline.board():
+        pl = {}
+        for p, b in (e.get("platforms") or {}).items():
+            if not b:
+                pl[p] = None
+                continue
+            blk = {k: b.get(k) for k in _ML_BLOCK_KEYS}
+            blk["url"] = b.get("url") if p == "polymarket" else None      # Kalshi's page URL form is unverified - not linked
+            pl[p] = blk
+        base = e.get("baseline") or {}
+        out.append({"match_id": e.get("match_id"), "link_status": e.get("link_status"), "link_reason": e.get("link_reason"),
+                    "teams": {"a": (e.get("teams") or {}).get("a", {}).get("name"), "b": (e.get("teams") or {}).get("b", {}).get("name"),
+                              "names_by_platform": dict((e.get("teams") or {}).get("names_by_platform") or {})},
+                    "event": e.get("event"), "start": e.get("start"), "started": bool(e.get("started")),
+                    "tie_possible": bool(e.get("tie_possible")), "bo": e.get("bo"), "scope": "series",
+                    "platforms": pl,
+                    "baseline": {k: base.get(k) for k in ("prob_a", "platform", "label", "reason", "model_version")},
+                    "disagreement": bool(e.get("disagreement")), "disagreement_gap": e.get("disagreement_gap")})
+    out = _merge_unlinked(out)
+    return {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "matches": out,
+            "sources": {k: {x: v.get(x) for x in ("ok", "stale", "age_s", "last_success", "note", "listings")} for k, v in st.items()},
+            "rule": moneyline.BASELINE_RULE, "model_version": moneyline.MODEL_VERSION,
+            "model": {k: v for k, v in ml_model_state().items() if k != "val_promoted"},
+            "recommendation": SHADOW_LABEL, "scope": "series"}
+
+
+def _norm_team():
+    try:
+        from matchid import norm
+        return norm
+    except Exception:
+        return lambda x: re.sub(r"[^a-z0-9]+", "", str(x or "").lower())
+
+
+def _oriented_prob(blk, name_a, name_b, norm):
+    """A block's probability for the card's team A, read by the block's OWN team_a_name (an unlinked match may list
+    the teams the other way round on the other exchange). None when the block's team can't be placed exactly."""
+    if not blk or blk.get("prob_a") is None:
+        return None
+    own = norm(blk.get("team_a_name"))
+    if own and own == norm(name_a):
+        return blk["prob_a"]
+    if own and own == norm(name_b):
+        return round(1 - blk["prob_a"], 4)
+    return None
+
+
+def _merge_unlinked(rows):
+    """Display only: an unlinked match listed on BOTH exchanges arrives as two one-platform entries (moneyline.py never
+    joins what it can't link). Show it once when the two entries name exactly the same two teams (normalised: case,
+    accents, punctuation - never fuzzy) and start within 3 h. It stays unlinked: no match id, never a baseline. Each
+    platform block keeps its own team_a_name, so a reversed team order is still read correctly.
+    The merged card (merged_unlinked) compares the two prices only after orienting both to the card's team A by each
+    block's own team_a_name, and only when both quotes are usable; otherwise disagreement_gap stays None (the page then
+    says the prices were not compared - never 'agree')."""
+    norm = _norm_team()
+    keyed, out = {}, []
+    for m in rows:
+        plats = [p for p, b in m["platforms"].items() if b]
+        if m["match_id"] or len(plats) != 1:
+            out.append(m)
+            continue
+        names = frozenset((norm(m["teams"]["a"]), norm(m["teams"]["b"])))
+        st = comparison._ts(m.get("start"))
+        twin = next((x for x in keyed.get(names, []) if not x["platforms"].get(plats[0]) and st and comparison._ts(x.get("start"))
+                     and abs((comparison._ts(x["start"]) - st).total_seconds()) <= 3 * 3600), None)
+        if twin is None or len(names) != 2:
+            keyed.setdefault(names, []).append(m)
+            out.append(m)
+            continue
+        twin["platforms"][plats[0]] = m["platforms"][plats[0]]
+        twin["teams"]["names_by_platform"].update(m["teams"]["names_by_platform"])
+        # the agreement fields were computed when the twin had ONE platform: never carry them over
+        twin.update(merged_unlinked=True, disagreement=False, disagreement_gap=None)
+        blks = [b for b in twin["platforms"].values() if b]
+        if len(blks) == 2 and all(b.get("usable") for b in blks):
+            ps = [_oriented_prob(b, twin["teams"]["a"], twin["teams"]["b"], norm) for b in blks]
+            if None not in ps:
+                gap = round(abs(ps[0] - ps[1]), 4)
+                twin.update(disagreement_gap=gap, disagreement=gap >= moneyline_disagree() - 1e-9)
+    return out
+
+
+def moneyline_disagree():
+    try:
+        import moneyline
+        return moneyline.DISAGREE
+    except Exception:
+        return 0.05
+
+
+_GB = {}                                                      # book -> (built_at, board_payload)
+_GB_LOCKS = {"underdog": threading.Lock(), "prizepicks": threading.Lock()}
+
+
+def graded_board(book, max_age=5.0):
+    """board_payload(book), rebuilt by ONE thread at most every `max_age` seconds; everyone else gets that copy (700
+    Build presses = one board rebuild, not 700)."""
+    hit = _GB.get(book)
+    if hit and time.time() - hit[0] <= max_age:
+        return hit[1]
+    with _GB_LOCKS[book]:
+        hit = _GB.get(book)
+        if not hit or time.time() - hit[0] > max_age:
+            hit = _GB[book] = (time.time(), board_payload(book))
+    return hit[1]
+
+
+_SETTLED = [0.0, None]
+
+
+def studio_track_record():
+    """The studio's honest note, each count under its OWN builder tag (cached 5 min):
+    studio_settled = settled batches of the studio builder (slip_builder.VERSION) - 0 until a studio settler exists
+    (slip_batches only ever settles its own shadow builder); shadow_settled = slip_batches' shadow builder
+    (slip_batches.VERSION, a different algorithm) - never presented as the studio's record."""
+    if _SETTLED[1] is None or time.time() - _SETTLED[0] > 300:
+        import slip_builder
+        rec = {"builder": slip_builder.VERSION, "studio_settled": 0,
+               "shadow_builder": getattr(slip_batches, "VERSION", None), "shadow_settled": 0}
+        try:
+            res = slip_batches.results()
+            rec["shadow_settled"] = len(res)
+            rec["studio_settled"] = sum(1 for r in res if isinstance(r, dict) and r.get("version") == slip_builder.VERSION)
+        except Exception:
+            pass
+        _SETTLED[:] = [time.time(), rec]
+    return dict(_SETTLED[1])
+
+
+def settled_batches():
+    """Settled batches of the STUDIO builder (studio-1) only - see studio_track_record."""
+    return studio_track_record()["studio_settled"]
+
+
+_STUDIO_HITS, _STUDIO_EV_HITS, _STUDIO_GUARD = {}, {}, threading.Lock()
+
+
+def studio_rate_ok(member, idem=None, bucket=None, limit=None):
+    """Per-member sliding 60 s window. A request repeating an idem key already counted in the window is free (a retry of
+    the same press - studioCall re-sends 502/503/504 and the 409/404 path re-sends once); a new key is counted only when
+    it passes. bucket / limit: the verify + event bucket (_STUDIO_EV_HITS, STUDIO_EVENTS_PER_MIN) is separate."""
+    d = _STUDIO_HITS if bucket is None else bucket
+    limit = STUDIO_BUILDS_PER_MIN if limit is None else limit
+    now = time.time()
+    with _STUDIO_GUARD:
+        if len(d) > 50000:
+            d.clear()
+        hits = [(t, k) for t, k in d.get(member, []) if now - t < 60]
+        if idem is not None and any(k == idem for _, k in hits):
+            d[member] = hits
+            return True
+        ok = len(hits) < limit
+        if ok:
+            hits.append((now, idem))
+        d[member] = hits
+        return ok
+
+
+def _no_json_constant(c):
+    raise ValueError(f"{c} is not allowed")
+
+
+_IDEM_RE = re.compile(r"^[A-Za-z0-9_.:-]{8,64}$")
+_BATCH_RE = re.compile(r"^[0-9a-f]{12}-\d{1,9}$")
+_SLIP_RE = re.compile(r"^[0-9a-f]{12}-\d{1,9}/b\d{1,9}/s\d{1,4}$")
+_SETTING_KEYS = {"book", "side", "stat", "scope", "market", "sizes", "count", "counts", "overlap", "max_uses"}
+
+
+def studio_settings(s):
+    """Member settings -> slip_builder settings, bounded. ValueError (-> 400) on anything outside the studio's choices."""
+    if not isinstance(s, dict) or set(s) - _SETTING_KEYS:
+        raise ValueError("settings must be an object with: " + ", ".join(sorted(_SETTING_KEYS)))
+    for k in ("book", "side", "stat", "scope", "market", "overlap"):
+        if k in s and not isinstance(s[k], str):
+            raise ValueError(f"{k} must be text")
+    if str(s.get("market") or "standard").lower() == "moneyline":
+        raise ValueError("moneylines are not built into slips (shadow only)")
+    sizes = s.get("sizes", [2, 3, 4])
+    if not isinstance(sizes, list) or not 1 <= len(sizes) <= 3:
+        raise ValueError("sizes must be a list of 2, 3 and/or 4")
+    if not all(isinstance(n, int) and not isinstance(n, bool) and n in (2, 3, 4) for n in sizes):
+        raise ValueError("sizes must be a list of 2, 3 and/or 4")          # floats, Infinity, NaN, bools: 400, never 500
+    for k in ("count",):
+        if k in s and not (isinstance(s[k], int) and not isinstance(s[k], bool) and 1 <= s[k] <= 10):
+            raise ValueError("count must be 1-10")
+    if "counts" in s:
+        c = s["counts"]
+        if not isinstance(c, dict) or len(c) > 3 or not all(str(k) in ("2", "3", "4") and isinstance(v, int)
+                                                            and not isinstance(v, bool) and 1 <= v <= 10 for k, v in c.items()):
+            raise ValueError("counts must map 2/3/4 to 1-10")
+    if "max_uses" in s:
+        m = s["max_uses"]
+        if not isinstance(m, dict) or set(m) - {"player", "match"} or not all(
+                isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 3 for v in m.values()):
+            raise ValueError("max_uses must be {player, match} with values 1-3")
+    import slip_builder
+    return slip_builder.normalize_settings(s)
+
+
+_SNAPC = {"at": 0.0, "data": None}
+
+
+def _snapshot_counts():
+    """ml_snapshots.db counts (read-only connection, cached 10 min). Never a full scan of ml_quotes: the total is its
+    largest rowid (rows are never deleted, so it equals COUNT(*)), per-platform figures cover the last 24 h through the
+    received_ts index; ml_forecasts is small (one row per match per change / 30 min)."""
+    if _SNAPC["data"] is not None and time.time() - _SNAPC["at"] < 600:
+        return _SNAPC["data"]
+    import sqlite3
+    import moneyline
+    p = moneyline.db_path()
+    if not p.exists():
+        out = {"exists": False}
+    else:
+        con = sqlite3.connect(f"file:{p}?mode=ro", uri=True, timeout=5)
+        try:
+            since = (datetime.now(timezone.utc) - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
+            total = con.execute("SELECT MAX(rowid) FROM ml_quotes").fetchone()[0] or 0
+            quotes = {pl: {"rows_24h": n, "usable_24h": int(u or 0), "linked_matches_24h": m, "last_received": last}
+                      for pl, n, u, m, last in con.execute(
+                          "SELECT platform, COUNT(*), SUM(usable), COUNT(DISTINCT match_id), MAX(received_ts) FROM ml_quotes "
+                          "WHERE received_ts >= ? GROUP BY platform", (since,))}
+            n, mids, avail, last = con.execute("SELECT COUNT(*), COUNT(DISTINCT match_id), SUM(available), MAX(logged_ts) "
+                                               "FROM ml_forecasts").fetchone()
+            out = {"exists": True, "size_mb": round(moneyline._store_mb(), 2), "cap_mb": moneyline.SNAPSHOT_MAX_MB,
+                   "quote_rows_total": total, "quotes": quotes,
+                   "forecasts": {"rows": n, "matches": mids, "available": int(avail or 0), "last_logged": last}}
+        finally:
+            con.close()
+    _SNAPC.update(at=time.time(), data=out)
+    return out
+
+
+def moneylines_status():
+    """Admin: each source's health, the snapshot store, and how well markets link to canonical matches."""
+    out = {"research": RESEARCH, "model": ml_model_state()}
+    try:
+        import moneyline
+        out["sources"] = moneyline.status()
+        b = moneyline.board()
+        both = [m for m in b if m["platforms"].get("polymarket") and m["platforms"].get("kalshi")]
+        out["links"] = {
+            "matches": len(b), "linked": sum(1 for m in b if m["match_id"]),
+            "unlinked": sum(1 for m in b if not m["match_id"]),
+            "by_id_source": dict(collections.Counter(str(m["match_id"]).split(":")[0] for m in b if m["match_id"])),
+            "on_both_platforms": len(both),
+            "usable": {p: sum(1 for m in b if (m["platforms"].get(p) or {}).get("usable")) for p in moneyline.PLATFORMS},
+            "usable_on_both": sum(1 for m in both if m["platforms"]["polymarket"].get("usable") and m["platforms"]["kalshi"].get("usable")),
+            "baselines": dict(collections.Counter((m["baseline"] or {}).get("platform") or "unavailable" for m in b)),
+            "disagreements": sum(1 for m in b if m["disagreement"]),
+            "coherence_flags": sum(1 for m in b if (m["platforms"].get("kalshi") or {}).get("coherence_flag")),
+            "unlinked_examples": [f"{m['teams']['a']['name']} vs {m['teams']['b']['name']}: {m.get('link_reason')}"
+                                  for m in b if not m["match_id"]][:15]}
+    except Exception as e:
+        out["error"] = f"moneyline: {type(e).__name__}: {str(e)[:200]}"
+    try:
+        out["snapshots"] = _snapshot_counts()
+    except Exception as e:
+        out["snapshots"] = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
+    try:
+        import matchid
+        out["matchid"] = {"ready": matchid.ready(), "sources": matchid.status(), "store": matchid.link_stats()}
+    except Exception as e:
+        out["matchid"] = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
+    return out
+
+
+_MLE = {"at": 0.0, "forward": None, "error": None, "busy": False, "took_s": None}
+_MLE_LOCK = threading.Lock()
+_MLE_SUMMARY = {}
+
+
+def _ml_eval_forward():
+    t0 = time.time()
+    try:
+        import ml_eval
+        import moneyline
+        path = str(moneyline.db_path())
+        # light copy (teams + results, no player rows) covering EVERY snapshot match: from the oldest snapshot start
+        # (- 2 days) plus each linked hltv:<id>, so the cumulative cohort never shrinks to a rolling 60-day window
+        oldest, ids = ml_eval.forward_span(path)
+        since = (datetime.fromtimestamp(oldest, timezone.utc).date() - timedelta(days=2)) if oldest else None
+        hl = ml_eval.load_hltv_recent(60, since=since, matchids=ids)
+        _MLE.update(forward=ml_eval.forward_eval(path, hl), error=None)
+    except Exception as e:
+        _MLE["error"] = f"{type(e).__name__}: {str(e)[:200]}"
+    finally:
+        _MLE.update(at=time.time(), busy=False, took_s=round(time.time() - t0, 1))
+
+
+def ml_eval_admin(refresh=False):
+    """Admin: the frozen historical evaluation (ml_eval_results.json without its per-match rows) plus the forward cohort
+    from the live snapshots, recomputed in a background thread at most every 30 min (or on ?refresh=1)."""
+    if not _MLE_SUMMARY:
+        try:
+            with open(BASE / "ml_eval_results.json", encoding="utf-8") as f:
+                d = json.load(f)
+            _MLE_SUMMARY.update({k: v for k, v in d.items() if k != "polymarket_rows"},
+                                polymarket_rows_n=len(d.get("polymarket_rows") or []))
+        except Exception as e:
+            _MLE_SUMMARY["error"] = f"{type(e).__name__}: {str(e)[:200]}"
+    with _MLE_LOCK:
+        if not _MLE["busy"] and (refresh or time.time() - _MLE["at"] > 1800):
+            _MLE["busy"] = True
+            threading.Thread(target=_ml_eval_forward, daemon=True, name="ml-eval-forward").start()
+    return {"results": _MLE_SUMMARY, "model": ml_model_state(),
+            "forward": {"computing": _MLE["busy"], "computed_at": datetime.fromtimestamp(_MLE["at"], timezone.utc).isoformat(timespec="seconds")
+                        if _MLE["at"] else None, "took_s": _MLE["took_s"], "error": _MLE["error"], "result": _MLE["forward"]}}
 
 
 REQ_TIMES = collections.deque(maxlen=300)
@@ -1075,7 +1482,7 @@ class Handler(BaseHTTPRequestHandler):
                 sess = self.member()
                 return self.send(200, {"required": whop_auth.enabled(), "signed_in": bool(sess),
                                        "member": bool(sess and sess["ok"]), "name": (sess or {}).get("name"),
-                                       "upgrade": whop_auth.upgrade_url()})
+                                       "upgrade": whop_auth.upgrade_url(), "slip_studio": SLIP_STUDIO})
             if u.path == "/auth/login" and whop_auth.enabled():
                 url, pkce = whop_auth.start_login()
                 return self.redirect(url, [f"{whop_auth.PKCE_COOKIE}={pkce}; Max-Age=900; Path=/; HttpOnly; Secure; SameSite=Lax"])
@@ -1089,14 +1496,19 @@ class Handler(BaseHTTPRequestHandler):
                                            f"{whop_auth.PKCE_COOKIE}=; Max-Age=0; Path=/"])
             if u.path == "/auth/logout":
                 return self.redirect("/", [f"{whop_auth.COOKIE}=; Max-Age=0; Path=/"])
-            if u.path in ("/api/search", "/api/grade", "/api/board", "/api/line_check", "/api/match_compare") and not self.allowed():
+            if u.path in ("/api/search", "/api/grade", "/api/board", "/api/line_check", "/api/match_compare", "/api/moneylines",
+                          "/api/slip_studio/batch") and not self.allowed():
                 sess = self.member()
                 return self.send(401, {"error": "members_only", "signed_in": bool(sess),
                                        "upgrade": whop_auth.upgrade_url()})
             if u.path == "/api/search":
                 return self.search(q.get("q", "").strip())
-            if u.path.startswith("/api/") and u.path != "/api/board":
-                LAST_MEMBER[0] = time.time()
+            if u.path.startswith("/api/") and u.path not in ("/api/board", "/api/moneylines", "/api/slip_studio/batch"):
+                LAST_MEMBER[0] = time.time()      # research reads are cheap: they don't make the board worker step aside
+            if u.path == "/api/moneylines":
+                return self.moneylines()
+            if u.path == "/api/slip_studio/batch":
+                return self.studio_batch(q)
             if u.path == "/api/match_compare":
                 bk_ = "prizepicks" if q.get("book") == "prizepicks" else "underdog"
                 k_ = ("mcmp", q.get("team_slug"), q.get("opp_slug"), q.get("start"), q.get("maps") or "12", bk_)
@@ -1129,6 +1541,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, board_payload("prizepicks" if q.get("book") == "prizepicks" else "underdog"))
             if u.path == "/admin":
                 return self.admin(q)
+            if u.path == "/admin/moneylines_status" and self.authed(q.get("token")):
+                return self.send(200, moneylines_status())
+            if u.path == "/admin/ml_eval" and self.authed(q.get("token")):
+                return self.send(200, ml_eval_admin(q.get("refresh") == "1"))
             if u.path == "/admin/slips.json" and self.authed(q.get("token")):
                 return self.send(200, {"builder": slips.BUILDER_VERSION, "data_dir": str(DATA_DIR), "hltv_roles": roles.hltv_status(),
                                        "recommended": slips.read(slips.RECOMMENDED), "loaded": slips.read(slips.LOADED)})
@@ -1709,6 +2125,187 @@ class Handler(BaseHTTPRequestHandler):
         fwd = self.headers.get("X-Forwarded-For") or ""          # Railway's proxy puts the member first
         return fwd.split(",")[0].strip() or self.client_address[0]
 
+    # ------------------------------------------------------------ research tools (moneylines + slip studio)
+    def moneylines(self):
+        """GET /api/moneylines: one shared response for everyone, rebuilt at most every ML_TTL seconds (single flight)."""
+        def compute():
+            return 200, json.dumps(moneylines_payload(), default=str).encode()
+        try:
+            st_, body_ = shared(("moneylines",), compute, ttl=ML_TTL)
+        except Exception as e:
+            sys.stderr.write(f"  moneylines: {type(e).__name__}: {str(e)[:200]}\n")
+            return self.send(503, {"error": "moneylines_unavailable", "label": "Market probability unavailable"})
+        return self.send(st_, body_)
+
+    def studio_member(self):
+        """Whose slip batches these are: the signed-in Whop member (user id), a load test (fixed id, optional X-Test-Member
+        suffix so a load test can act as many members), or - only where Whop sign-in is off and access is open (local) -
+        the client address. None = nobody."""
+        if self.load_test():
+            sfx = re.sub(r"[^A-Za-z0-9_-]", "", str(self.headers.get("X-Test-Member") or ""))[:32]
+            return "load-test" + (":" + sfx if sfx else "")
+        if whop_auth.enabled():
+            sess = self.member()
+            return f"whop:{sess['user']}" if sess and sess.get("ok") and sess.get("user") else None
+        return ("anon:" + self.client_ip()) if self.allowed() else None
+
+    def studio_batch(self, q):
+        """GET /api/slip_studio/batch[?id=]: the member's batch (default: the open one) with all its slips and exposure."""
+        if not SLIP_STUDIO:
+            return self.send(404, {"error": "slip_studio_off"})
+        sid = self.studio_member()
+        if not sid:
+            return self.send(401, {"error": "members_only"})
+        import slip_builder
+        bid = q.get("id") or ""
+        if bid and not _BATCH_RE.match(bid):
+            return self.send(400, {"error": "bad batch id"})
+        cur = slip_builder.current_batch(sid)
+        if bid and bid != cur and not slip_builder.owns(sid, bid):
+            return self.send(404, {"error": "unknown batch"})
+        b = slip_builder.get_batch(bid or cur)
+        if b is None:
+            return self.send(404, {"error": "unknown batch"})
+        return self.send(200, dict(b, current=(b["batch_id"] == cur), settled_batches=settled_batches(),
+                                   track_record=studio_track_record(), builder_version=slip_builder.VERSION))
+
+    def studio_post(self, path, n):
+        """POST /api/slip_studio/build | verify | event (JSON bodies, members only, every field bounded)."""
+        if n > STUDIO_BODY_MAX:
+            self.close_connection = True              # the unread body would corrupt a kept-alive connection
+            return self.send(413, {"error": f"body over {STUDIO_BODY_MAX} bytes"})
+        body = self.rfile.read(n) if n > 0 else b""
+        if not SLIP_STUDIO or path not in ("/api/slip_studio/build", "/api/slip_studio/verify", "/api/slip_studio/event"):
+            return self.send(404, {"error": "not found"})
+        if not self.allowed():
+            return self.send(401, {"error": "members_only", "signed_in": bool(self.member()), "upgrade": whop_auth.upgrade_url()})
+        sid = self.studio_member()
+        if not sid:
+            return self.send(401, {"error": "members_only"})
+        try:
+            d = json.loads(body or b"{}", parse_constant=_no_json_constant)      # NaN / Infinity: 400, never 500
+            if not isinstance(d, dict):
+                raise ValueError
+        except ValueError:
+            return self.send(400, {"error": "body must be a JSON object"})
+        idem = d.get("idem")
+        if idem is not None and (not isinstance(idem, str) or not _IDEM_RE.match(idem)):
+            return self.send(400, {"error": "idem must be 8-64 characters of A-Z a-z 0-9 _ . : -"})
+        import slip_builder
+        try:
+            if path == "/api/slip_studio/build":
+                return self.studio_build(slip_builder, sid, d, idem)
+            if path == "/api/slip_studio/verify":
+                return self.studio_verify(slip_builder, sid, d, idem)
+            return self.studio_event(slip_builder, sid, d, idem)
+        except Exception as e:
+            traceback.print_exc()
+            return self.send(500, {"error": f"slip studio failed ({type(e).__name__}) - try again"})
+
+    def studio_build(self, sb, sid, d, idem):
+        extra = set(d) - {"settings", "batch_id", "new_batch", "idem", "replace"}
+        if extra:
+            return self.send(400, {"error": "unknown field(s): " + ", ".join(sorted(extra))})
+        if not idem:
+            return self.send(400, {"error": "idem (the request id) is required"})
+        try:
+            st = studio_settings(d.get("settings") if d.get("settings") is not None else {})
+        except ValueError as e:
+            return self.send(400, {"error": str(e)})
+        nb, bid, rep = d.get("new_batch", False), d.get("batch_id"), d.get("replace")
+        if not isinstance(nb, bool):
+            return self.send(400, {"error": "new_batch must be true or false"})
+        if bid is not None and (not isinstance(bid, str) or not _BATCH_RE.match(bid)):
+            return self.send(400, {"error": "bad batch id"})
+        if rep is not None and (not isinstance(rep, str) or not _SLIP_RE.match(rep) or nb):
+            return self.send(400, {"error": "replace must be a stored slip id of this batch (not with new_batch)"})
+        if not self.load_test() and not studio_rate_ok(sid, idem):
+            return self.send(429, {"error": f"Too many builds - limit is {STUDIO_BUILDS_PER_MIN} a minute. Wait a moment."})
+        if rep:
+            old = sb.get_slip(rep)
+            if not old or not old.get("batch_id") or not sb.owns(sid, old["batch_id"]) or (bid and bid != old["batch_id"]):
+                return self.send(404, {"error": "unknown slip"})
+            batch = old["batch_id"]
+            st = dict(st, book=(old.get("settings") or {}).get("book") or old.get("book") or st["book"])
+        elif nb:
+            batch = sb.new_batch(sid, key="nb:" + idem)
+        elif bid:
+            if not sb.owns(sid, bid):
+                return self.send(404, {"error": "unknown batch"})
+            batch = bid
+        else:
+            batch = sb.current_batch(sid)
+        gb = graded_board(st["book"])
+        try:
+            res = sb.build(gb["rows"], st, batch=batch, key=idem, model=gb.get("version"), replace=rep)
+        except ValueError as e:
+            if "closed" in str(e):
+                return self.send(409, {"error": str(e), "current_batch": sb.current_batch(sid)})
+            return self.send(400, {"error": str(e)})
+        return self.send(200, dict(res, settled_batches=settled_batches(), track_record=studio_track_record(),
+                                   board={"book": st["book"], "updated": gb.get("updated"), "graded_rows": len(gb.get("rows") or []),
+                                          "feed_state": (gb.get("feed") or {}).get("state"), "error": gb.get("error")}))
+
+    def _studio_slip(self, sb, sid, d):
+        sl = d.get("slip")
+        slip_id = sl.get("slip_id") if isinstance(sl, dict) else sl if sl is not None else d.get("slip_id")
+        if not isinstance(slip_id, str) or not _SLIP_RE.match(slip_id):
+            return None, self.send(400, {"error": "slip must be a stored slip id (preview slips can't be verified)"})
+        rec = sb.get_slip(slip_id)
+        if not rec or not rec.get("batch_id") or not sb.owns(sid, rec["batch_id"]):
+            return None, self.send(404, {"error": "unknown slip"})
+        return rec, None
+
+    def _studio_events_ok(self, sid, idem):
+        """verify + event: their own per-member bucket (a loop on them can't grow slip_studio.db or eat build quota)."""
+        return self.load_test() or studio_rate_ok(sid, idem, bucket=_STUDIO_EV_HITS, limit=STUDIO_EVENTS_PER_MIN)
+
+    def studio_verify(self, sb, sid, d, idem):
+        """Before copying: the platform's board is refreshed (graded snapshot <= 2 s old, the shared feed), then every leg is
+        checked. Any change -> action 'rebuild' with what changed; the old chance is never carried to a new line."""
+        if set(d) - {"slip", "slip_id", "idem"}:
+            return self.send(400, {"error": "unknown field(s)"})
+        if not self._studio_events_ok(sid, idem):
+            return self.send(429, {"error": f"Too many checks - limit is {STUDIO_EVENTS_PER_MIN} a minute. Wait a moment."})
+        rec, err = self._studio_slip(sb, sid, d)
+        if rec is None:
+            return err
+        book = rec.get("book") or "underdog"
+        feed = prizepicks.board() if book == "prizepicks" else underdog.board()
+        graded = graded_board(book, max_age=2)
+        v = sb.verify_before_copy(rec, {book: {"feed": feed, "graded": graded}}, model=graded.get("version"))
+        # one stored row per request id - or per slip per 30 s without one (the answer is still computed every time)
+        key = "v:" + (idem or f"{rec['slip_id']}:{int(time.time() // 30)}")
+        try:
+            sb.record_event(rec["batch_id"], rec["slip_id"], "verify_ok" if v["ok"] else "verify_changed",
+                            key=key, detail={"changes": v["changes"][:10]})
+        except ValueError:
+            pass
+        return self.send(200, dict(v, slip_id=rec["slip_id"], batch_id=rec["batch_id"], book=book,
+                                   copy_text=sb.copy_text(rec) if v["ok"] else None))
+
+    def studio_event(self, sb, sid, d, idem):
+        if set(d) - {"batch_id", "slip_id", "kind", "idem"}:
+            return self.send(400, {"error": "unknown field(s)"})
+        kind, bid = d.get("kind"), d.get("batch_id")
+        if kind not in sb.EVENT_KINDS:
+            return self.send(400, {"error": "kind must be one of " + ", ".join(sb.EVENT_KINDS)})
+        if not isinstance(bid, str) or not _BATCH_RE.match(bid):
+            return self.send(400, {"error": "bad batch id"})
+        if not isinstance(d.get("slip_id"), str) or not _SLIP_RE.match(d["slip_id"]):
+            return self.send(400, {"error": "bad slip id"})
+        if not self._studio_events_ok(sid, idem):
+            return self.send(429, {"error": f"Too many requests - limit is {STUDIO_EVENTS_PER_MIN} a minute. Wait a moment."})
+        if not sb.owns(sid, bid):
+            return self.send(404, {"error": "unknown batch"})
+        key = idem or f"e:{d['slip_id']}:{kind}:{int(time.time() // 30)}"       # no request id: one row per 30 s
+        try:
+            new = sb.record_event(bid, d["slip_id"], kind, key=key)
+        except ValueError as e:
+            return self.send(400, {"error": str(e)})
+        return self.send(200, {"ok": True, "duplicate": not new})
+
+
     def grade(self, q):
         load_test = self.load_test()                     # owner's own tests
         if not load_test and not rate_ok(self.client_ip()):
@@ -1814,7 +2411,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         u = urlparse(self.path)
-        n = int(self.headers.get("Content-Length") or 0)
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            n = -1
+        if n < 0:
+            self.close_connection = True
+            return self.send(400, {"error": "bad Content-Length"})
+        if u.path.startswith("/api/slip_studio/"):
+            return self.studio_post(u.path, n)
         if u.path == "/api/slip_log":                  # a member loaded an auto slip (slips.py keeps the log)
             body = self.rfile.read(min(n, 1 << 20))
             if not self.allowed():
@@ -1899,6 +2504,8 @@ if __name__ == "__main__":
         threading.Thread(target=preload_forever, daemon=True, name="preload").start()   # cleans up first
     else:
         threading.Thread(target=cleanup, daemon=True, name="cleanup").start()
+    # research tools last (matchid tables, then the moneyline refreshers): their own thread, failures isolated
+    threading.Thread(target=start_research, daemon=True, name="research").start()
     try:
         hltv.search_players("a")                      # loads the HLTV player-search index in the background
     except Exception:

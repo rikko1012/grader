@@ -1,0 +1,2135 @@
+{
+ "events": [
+  {
+   "id": "1140032",
+   "ticker": "cs2-tl1-bbl1-2026-10-13",
+   "slug": "cs2-tl1-bbl1-2026-10-13",
+   "title": "Counter-Strike: Liquid vs BBL (BO3) - Stake Pulse Beat III Group B",
+   "startTime": "2026-10-13T10:00:00Z",
+   "endDate": "2026-10-13T16:00:00Z",
+   "live": null,
+   "ended": null,
+   "closed": false,
+   "active": true,
+   "markets": [
+    {
+     "id": "5347712",
+     "question": "Counter-Strike: Liquid vs BBL - Map 1 Winner",
+     "conditionId": "0x73dc8fd47a662d623a242805c0c68ae18753bb10805071ebf9e01bfdad7604a4",
+     "slug": "cs2-tl1-bbl1-2026-10-13-game1",
+     "sportsMarketType": "child_moneyline",
+     "outcomes": "[\"Liquid\", \"BBL\"]",
+     "outcomePrices": "[\"0.605\", \"0.395\"]",
+     "clobTokenIds": "[\"114266739993993796143516782288095645820009837012670766938130610608910763153517\", \"32591200447900137842359362959233055635896954655888104865680388716504796736594\"]",
+     "bestBid": 0.58,
+     "bestAsk": 0.63,
+     "lastTradePrice": null,
+     "spread": 0.05,
+     "liquidityNum": 4237.5365,
+     "volumeNum": null,
+     "acceptingOrders": true,
+     "active": true,
+     "closed": false,
+     "gameStartTime": "2026-10-13 10:00:00+00",
+     "endDate": "2026-10-13T14:00:00Z",
+     "updatedAt": "2026-10-12T00:03:31.917267Z",
+     "resolutionSource": "https://hltv.org",
+     "umaResolutionStatus": null,
+     "description": "This market refers to the Counter-Strike Opening match between Liquid and BBL in the Stake Pulse Beat III Group B, initially scheduled for October 13, 2026 at 6:00 AM ET.\n\nThis market will resolve to \"Liquid\" if Liquid win Map 1 against BBL.\n\nThis market will resolve to \"BBL\" if BBL win Map 1 against Liquid.\n\nIf the match begins but is not completed, and Map 1 is concluded with a winner determined"
+    },
+    {
+     "id": "5347713",
+     "question": "Counter-Strike: Liquid vs BBL - Map 2 Winner",
+     "conditionId": "0x0e47edaed79ab2c5018793acb76afcc87fb981304adad41dd7983f6fea8805c4",
+     "slug": "cs2-tl1-bbl1-2026-10-13-game2",
+     "sportsMarketType": "child_moneyline",
+     "outcomes": "[\"Liquid\", \"BBL\"]",
+     "outcomePrices": "[\"0.675\", \"0.325\"]",
+     "clobTokenIds": "[\"51427848305776394370379657560887193804502305100928324953537131216565271104350\", \"93463382972674362734944992583073687283927699389082997289462796537166049892569\"]",
+     "bestBid": 0.62,
+     "bestAsk": 0.73,
+     "lastTradePrice": null,
+     "spread": 0.11,
+     "liquidityNum": 3725.5102,
+     "volumeNum": null,
+     "acceptingOrders": true,
+     "active": true,
+     "closed": false,
+     "gameStartTime": "2026-10-13 10:00:00+00",
+     "endDate": "2026-10-13T14:00:00Z",
+     "updatedAt": "2026-10-12T00:03:31.917267Z",
+     "resolutionSource": "https://hltv.org",
+     "umaResolutionStatus": null,
+     "description": "This market refers to the Counter-Strike Opening match between Liquid and BBL in the Stake Pulse Beat III Group B, initially scheduled for October 13, 2026 at 6:00 AM ET.\n\nThis market will resolve to \"Liquid\" if Liquid win Map 2 against BBL.\n\nThis market will resolve to \"BBL\" if BBL win Map 2 against Liquid.\n\nIf the match begins but is not completed, and Map 2 is concluded with a winner determined"
+    },
+    {
+     "id": "5347714",
+     "question": "Counter-Strike: Liquid vs BBL (BO3) - Stake Pulse Beat III Group B",
+     "conditionId": "0x4158811fe9116ac90eba63e9d88d48d8fa1e66ba972ff21132398771eb212dfc",
+     "slug": "cs2-tl1-bbl1-2026-10-13",
+     "sportsMarketType": "moneyline",
+     "outcomes": "[\"Liquid\", \"BBL\"]",
+     "outcomePrices": "[\"0.72\", \"0.28\"]",
+     "clobTokenIds": "[\"45410742729987851514231343926209899696686966891407498782744465851949925510934\", \"63973359577140608417833065042978439882948941276577948863045021290369399417362\"]",
+     "bestBid": 0.7,
+     "bestAsk": 0.74,
+     "lastTradePrice": 0.7,
+     "spread": 0.04,
+     "liquidityNum": 8291.4506,
+     "volumeNum": 329.53372,
+     "acceptingOrders": true,
+     "active": true,
+     "closed": false,
+     "gameStartTime": "2026-10-13 10:00:00+00",
+     "endDate": "2026-10-13T16:00:00Z",
+     "updatedAt": "2026-10-12T00:03:31.917267Z",
+     "resolutionSource": "https://hltv.org",
+     "umaResolutionStatus": null,
+     "description": "This market refers to the Counter-Strike Opening match between Liquid and BBL in the Stake Pulse Beat III Group B, initially scheduled for October 13, 2026 at 6:00 AM ET.\n\nThis market will resolve to \"Liquid\" if Liquid win the match against BBL.\n\nThis market will resolve to \"BBL\" if BBL win the match against Liquid.\n\nIf the match is canceled (not played at all) or ends in a tie, this market will r"
+    }
+   ]
+  },
+  {
+   "id": "1168672",
+   "ticker": "cs2-cce-zomb-2026-10-12",
+   "slug": "cs2-cce-zomb-2026-10-12",
+   "title": "Counter-Strike: Chicken Coop Esports vs Zomblers (BO3) - ESL Challenger League North America Cup #3 Playoffs",
+   "startTime": "2026-10-13T01:00:00Z",
+   "endDate": "2026-10-13T07:00:00Z",
+   "live": null,
+   "ended": null,
+   "closed": false,
+   "active": true,
+   "markets": [
+    {
+     "id": "5535421",
+     "question": "Counter-Strike: Chicken Coop Esports vs Zomblers - Map 1 Winner",
+     "conditionId": "0xe7ffe34c7b3e350bd9ab11ba467599e661f3ab04960e24b609ed3e4338f43961",
+     "slug": "cs2-cce-zomb-2026-10-12-game1",
+     "sportsMarketType": "child_moneyline",
+     "outcomes": "[\"Chicken Coop Esports\", \"Zomblers\"]",
+     "outcomePrices": "[\"0.51\", \"0.49\"]",
+     "clobTokenIds": "[\"110708287782325652845453288754658366196348426729596253832414707788258137452450\", \"78113964689132184407856802701745899871953925275540052061554363783722271810373\"]",
+     "bestBid": 0.07,
+     "bestAsk": 0.95,
+     "lastTradePrice": null,
+     "spread": 0.88,
+     "liquidityNum": 96.5151,
+     "volumeNum": null,
+     "acceptingOrders": true,
+     "active": true,
+     "closed": false,
+     "gameStartTime": "2026-10-13 01:00:00+00",
+     "endDate": "2026-10-13T05:00:00Z",
+     "updatedAt": "2026-10-12T00:03:31.917267Z",
+     "resolutionSource": "https://hltv.org",
+     "umaResolutionStatus": null,
+     "description": "This market refers to the Counter-Strike Upper Bracket Final match between Chicken Coop Esports and Zomblers in the ESL Challenger League North America Cup #3 Playoffs, initially scheduled for October 12, 2026 at 9:00 PM ET.\n\nThis market will resolve to \"Chicken Coop Esports\" if Chicken Coop Esports win Map 1 against Zomblers.\n\nThis market will resolve to \"Zomblers\" if Zomblers win Map 1 against C"
+    },
+    {
+     "id": "5535422",
+     "question": "Counter-Strike: Chicken Coop Esports vs Zomblers - Map 2 Winner",
+     "conditionId": "0x0342cbc2c6ecab6044e62051cacadde488f4ec0c9283cdedc31cef4424ebcd57",
+     "slug": "cs2-cce-zomb-2026-10-12-game2",
+     "sportsMarketType": "child_moneyline",
+     "outcomes": "[\"Chicken Coop Esports\", \"Zomblers\"]",
+     "outcomePrices": "[\"0.495\", \"0.505\"]",
+     "clobTokenIds": "[\"50721283415120797404254467179823093927414804922261040458717867826080082417127\", \"68493346339388065061782508023056911487189945143229685819897374715263571117523\"]",
+     "bestBid": 0.06,
+     "bestAsk": 0.93,
+     "lastTradePrice": null,
+     "spread": 0.87,
+     "liquidityNum": 122.7671,
+     "volumeNum": null,
+     "acceptingOrders": true,
+     "active": true,
+     "closed": false,
+     "gameStartTime": "2026-10-13 01:00:00+00",
+     "endDate": "2026-10-13T05:00:00Z",
+     "updatedAt": "2026-10-12T00:03:31.917267Z",
+     "resolutionSource": "https://hltv.org",
+     "umaResolutionStatus": null,
+     "description": "This market refers to the Counter-Strike Upper Bracket Final match between Chicken Coop Esports and Zomblers in the ESL Challenger League North America Cup #3 Playoffs, initially scheduled for October 12, 2026 at 9:00 PM ET.\n\nThis market will resolve to \"Chicken Coop Esports\" if Chicken Coop Esports win Map 2 against Zomblers.\n\nThis market will resolve to \"Zomblers\" if Zomblers win Map 2 against C"
+    },
+    {
+     "id": "5535423",
+     "question": "Counter-Strike: Chicken Coop Esports vs Zomblers (BO3) - ESL Challenger League North America Cup #3 Playoffs",
+     "conditionId": "0x036eaa15e1c73e47b3c2e0ebe7f29781f5a97ba2c6bc4c836dc68c2045016a26",
+     "slug": "cs2-cce-zomb-2026-10-12",
+     "sportsMarketType": "moneyline",
+     "outcomes": "[\"Chicken Coop Esports\", \"Zomblers\"]",
+     "outcomePrices": "[\"0.66\", \"0.34\"]",
+     "clobTokenIds": "[\"89951077910848887482219313847975493831580952751470860643434195850213089920237\", \"32543323334704762456010437542350928020706675280145221638716986033614693765346\"]",
+     "bestBid": 0.62,
+     "bestAsk": 0.7,
+     "lastTradePrice": null,
+     "spread": 0.08,
+     "liquidityNum": 6433.4412,
+     "volumeNum": null,
+     "acceptingOrders": true,
+     "active": true,
+     "closed": false,
+     "gameStartTime": "2026-10-13 01:00:00+00",
+     "endDate": "2026-10-13T07:00:00Z",
+     "updatedAt": "2026-10-12T00:03:31.917267Z",
+     "resolutionSource": "https://hltv.org",
+     "umaResolutionStatus": null,
+     "description": "This market refers to the Counter-Strike Upper Bracket Final match between Chicken Coop Esports and Zomblers in the ESL Challenger League North America Cup #3 Playoffs, initially scheduled for October 12, 2026 at 9:00 PM ET.\n\nThis market will resolve to \"Chicken Coop Esports\" if Chicken Coop Esports win the match against Zomblers.\n\nThis market will resolve to \"Zomblers\" if Zomblers win the match a"
+    }
+   ]
+  },
+  {
+   "id": "1171366",
+   "ticker": "cs2-lvg-js-2026-10-12",
+   "slug": "cs2-lvg-js-2026-10-12",
+   "title": "Counter-Strike: Lynn Vision vs Just Swing (BO3) - ESL Challenger League Asia-Pacific Cup #3 Playoffs",
+   "startTime": "2026-10-12T13:00:00Z",
+   "endDate": "2026-10-12T19:00:00Z",
+   "live": false,
+   "ended": false,
+   "closed": false,
+   "active": true,
+   "markets": [
+    {
+     "id": "5564222",
+     "question": "Counter-Strike: Lynn Vision vs Just Swing - Map 1 Winner",
+     "conditionId": "0xcc6069d560d284633614eb94d6f25ea446bafa3dacc3f7df9c58fe453e65f39a",
+     "slug": "cs2-lvg-js-2026-10-12-game1",
+     "sportsMarketType": "child_moneyline",
+     "outcomes": "[\"Lynn Vision\", \"Just Swing\"]",
+     "outcomePrices": "[\"0.54\", \"0.46\"]",
+     "clobTokenIds": "[\"111296624187177539308793945272008029074236088897568711684428873026845104284676\", \"36487562635981886450610766999076239645734357424374121710604023474851291681119\"]",
+     "bestBid": 0.14,
+     "bestAsk": 0.94,
+     "lastTradePrice": null,
+     "spread": 0.8,
+     "liquidityNum": 117.2652,
+     "volumeNum": null,
+     "acceptingOrders": true,
+     "active": true,
+     "closed": false,
+     "gameStartTime": "2026-10-12 13:00:00+00",
+     "endDate": "2026-10-12T17:00:00Z",
+     "updatedAt": "2026-10-12T00:03:31.917267Z",
+     "resolutionSource": "https://hltv.org",
+     "umaResolutionStatus": null,
+     "description": "This market refers to the Counter-Strike Upper Bracket Final match between Lynn Vision and Just Swing in the ESL Challenger League Asia-Pacific Cup #3 Playoffs, initially scheduled for October 12, 2026 at 9:00 AM ET.\n\nThis market will resolve to \"Lynn Vision\" if Lynn Vision win Map 1 against Just Swing.\n\nThis market will resolve to \"Just Swing\" if Just Swing win Map 1 against Lynn Vision.\n\nIf the "
+    },
+    {
+     "id": "5564223",
+     "question": "Counter-Strike: Lynn Vision vs Just Swing - Map 2 Winner",
+     "conditionId": "0x135f046f4cd653cd4b4352f52eb2349ee47f1814a61d5d40a0f3c274faf76fb0",
+     "slug": "cs2-lvg-js-2026-10-12-game2",
+     "sportsMarketType": "child_moneyline",
+     "outcomes": "[\"Lynn Vision\", \"Just Swing\"]",
+     "outcomePrices": "[\"0.49\", \"0.51\"]",
+     "clobTokenIds": "[\"54434043726238951700114389260581196764221694219508119268337046767932383129252\", \"28717215749664031637889618410459848220100287772476503683316910801117770879818\"]",
+     "bestBid": 0.05,
+     "bestAsk": 0.93,
+     "lastTradePrice": null,
+     "spread": 0.88,
+     "liquidityNum": 115.5175,
+     "volumeNum": null,
+     "acceptingOrders": true,
+     "active": true,
+     "closed": false,
+     "gameStartTime": "2026-10-12 13:00:00+00",
+     "endDate": "2026-10-12T17:00:00Z",
+     "updatedAt": "2026-10-12T00:03:31.917267Z",
+     "resolutionSource": "https://hltv.org",
+     "umaResolutionStatus": null,
+     "description": "This market refers to the Counter-Strike Upper Bracket Final match between Lynn Vision and Just Swing in the ESL Challenger League Asia-Pacific Cup #3 Playoffs, initially scheduled for October 12, 2026 at 9:00 AM ET.\n\nThis market will resolve to \"Lynn Vision\" if Lynn Vision win Map 2 against Just Swing.\n\nThis market will resolve to \"Just Swing\" if Just Swing win Map 2 against Lynn Vision.\n\nIf the "
+    },
+    {
+     "id": "5564224",
+     "question": "Counter-Strike: Lynn Vision vs Just Swing (BO3) - ESL Challenger League Asia-Pacific Cup #3 Playoffs",
+     "conditionId": "0x51a4efa11db784898cd92acf82f69221d017ca1cd9b006dd6ba57f96f98da72e",
+     "slug": "cs2-lvg-js-2026-10-12",
+     "sportsMarketType": "moneyline",
+     "outcomes": "[\"Lynn Vision\", \"Just Swing\"]",
+     "outcomePrices": "[\"0.835\", \"0.165\"]",
+     "clobTokenIds": "[\"47499396907017548101816377524131815871491519940770374037098353922402668866011\", \"65094882064947110031293183830314800201136126211143880503321681164945440474294\"]",
+     "bestBid": 0.82,
+     "bestAsk": 0.85,
+     "lastTradePrice": 0.92,
+     "spread": 0.03,
+     "liquidityNum": 2788.8648,
+     "volumeNum": 495.835225,
+     "acceptingOrders": true,
+     "active": true,
+     "closed": false,
+     "gameStartTime": "2026-10-12 13:00:00+00",
+     "endDate": "2026-10-12T19:00:00Z",
+     "updatedAt": "2026-10-12T00:03:31.917267Z",
+     "resolutionSource": "https://hltv.org",
+     "umaResolutionStatus": null,
+     "description": "This market refers to the Counter-Strike Upper Bracket Final match between Lynn Vision and Just Swing in the ESL Challenger League Asia-Pacific Cup #3 Playoffs, initially scheduled for October 12, 2026 at 9:00 AM ET.\n\nThis market will resolve to \"Lynn Vision\" if Lynn Vision win the match against Just Swing.\n\nThis market will resolve to \"Just Swing\" if Just Swing win the match against Lynn Vision.\n"
+    }
+   ]
+  },
+  {
+   "id": "1172961",
+   "ticker": "cs2-g1-acidho-2026-10-12",
+   "slug": "cs2-g1-acidho-2026-10-12",
+   "title": "Counter-Strike: GenOne vs ACIDHOUZE (BO3) - PGL Bucharest Open Qualifier #1 Playoffs",
+   "startTime": "2026-10-12T14:00:00Z",
+   "endDate": "2026-10-12T20:00:00Z",
+   "live": false,
+   "ended": false,
+   "closed": false,
+   "active": true,
+   "markets": [
+    {
+     "id": "5581947",
+     "question": "Counter-Strike: GenOne vs ACIDHOUZE - Map 1 Winner",
+     "conditionId": "0x5889332e8bab55f43b735a74485c66fe590fc4e7d17ad89d0e8550cbdbd1f5cc",
+     "slug": "cs2-g1-acidho-2026-10-12-game1",
+     "sportsMarketType": "child_moneyline",
+     "outcomes": "[\"GenOne\", \"ACIDHOUZE\"]",
+     "outcomePrices": "[\"0.5\", \"0.5\"]",
+     "clobTokenIds": "[\"113277483521488544894070636260163264171187377645594282269186716641099050053243\", \"69571484965749035393516573512064883497566770567562417691105558375962052515040\"]",
+     "bestBid": 0.05,
+     "bestAsk": 0.95,
+     "lastTradePrice": null,
+     "spread": 0.9,
+     "liquidityNum": 92.9988,
+     "volumeNum": null,
+     "acceptingOrders": true,
+     "active": true,
+     "closed": false,
+     "gameStartTime": "2026-10-12 14:00:00+00",
+     "endDate": "2026-10-12T18:00:00Z",
+     "updatedAt": "2026-10-11T21:54:25.52108Z",
+     "resolutionSource": "https://hltv.org",
+     "umaResolutionStatus": null,
+     "description": "This market refers to the Counter-Strike Quarterfinal 4 match between GenOne and ACIDHOUZE in the PGL Bucharest Open Qualifier #1 Playoffs, initially scheduled for October 12, 2026 at 10:00 AM ET.\n\nThis market will resolve to \"GenOne\" if GenOne win Map 1 against ACIDHOUZE.\n\nThis market will resolve to \"ACIDHOUZE\" if ACIDHOUZE win Map 1 against GenOne.\n\nIf the match begins but is not completed, and"
+    },
+    {
+     "id": "5581948",
+     "question": "Counter-Strike: GenOne vs ACIDHOUZE - Map 2 Winner",
+     "conditionId": "0xc0ccedc9474fe37a38b1e6859a2d80bd15ada8b34d83e14676c110443cd0ec8c",
+     "slug": "cs2-g1-acidho-2026-10-12-game2",
+     "sportsMarketType": "child_moneyline",
+     "outcomes": "[\"GenOne\", \"ACIDHOUZE\"]",
+     "outcomePrices": "[\"0.5\", \"0.5\"]",
+     "clobTokenIds": "[\"29822143775413622019242300958051457884586711496984898259684769927554480958699\", \"13099797528506861196973035578708872145457770640861963412957731442597254652235\"]",
+     "bestBid": 0.05,
+     "bestAsk": 0.95,
+     "lastTradePrice": null,
+     "spread": 0.9,
+     "liquidityNum": 92.9988,
+     "volumeNum": null,
+     "acceptingOrders": true,
+     "active": true,
+     "closed": false,
+     "gameStartTime": "2026-10-12 14:00:00+00",
+     "endDate": "2026-10-12T18:00:00Z",
+     "updatedAt": "2026-10-11T23:19:29.222391Z",
+     "resolutionSource": "https://hltv.org",
+     "umaResolutionStatus": null,
+     "description": "This market refers to the Counter-Strike Quarterfinal 4 match between GenOne and ACIDHOUZE in the PGL Bucharest Open Qualifier #1 Playoffs, initially scheduled for October 12, 2026 at 10:00 AM ET.\n\nThis market will resolve to \"GenOne\" if GenOne win Map 2 against ACIDHOUZE.\n\nThis market will resolve to \"ACIDHOUZE\" if ACIDHOUZE win Map 2 against GenOne.\n\nIf the match begins but is not completed, and"
+    },
+    {
+     "id": "5581949",
+     "question": "Counter-Strike: GenOne vs ACIDHOUZE (BO3) - PGL Bucharest Open Qualifier #1 Playoffs",
+     "conditionId": "0x1e61dfe8368433240bef1bed4d70b17e7a86f5d52388ba6ce8b5bb5da247d510",
+     "slug": "cs2-g1-acidho-2026-10-12",
+     "sportsMarketType": "moneyline",
+     "outcomes": "[\"GenOne\", \"ACIDHOUZE\"]",
+     "outcomePrices": "[\"0.635\", \"0.365\"]",
+     "clobTokenIds": "[\"77172632797831289366934709721588844601436319213871065905791249352206944031459\", \"11601865635736076660129887952651290433521932528013221880999243992418295402626\"]",
+     "bestBid": 0.33,
+     "bestAsk": 0.94,
+     "lastTradePrice": 0.94,
+     "spread": 0.61,
+     "liquidityNum": 138.8805,
+     "volumeNum": null,
+     "acceptingOrders": true,
+     "active": true,
+     "closed": false,
+     "gameStartTime": "2026-10-12 14:00:00+00",
+     "endDate": "2026-10-12T20:00:00Z",
+     "updatedAt": "2026-10-12T00:03:31.917267Z",
+     "resolutionSource": "https://hltv.org",
+     "umaResolutionStatus": null,
+     "description": "This market refers to the Counter-Strike Quarterfinal 4 match between GenOne and ACIDHOUZE in the PGL Bucharest Open Qualifier #1 Playoffs, initially scheduled for October 12, 2026 at 10:00 AM ET.\n\nThis market will resolve to \"GenOne\" if GenOne win the match against ACIDHOUZE.\n\nThis market will resolve to \"ACIDHOUZE\" if ACIDHOUZE win the match against GenOne.\n\nIf the match is canceled (not played "
+    }
+   ]
+  },
+  {
+   "id": "1174034",
+   "ticker": "cs2-sta6-tu-2026-10-12",
+   "slug": "cs2-sta6-tu-2026-10-12",
+   "title": "Counter-Strike: STATE vs THE UNIT (BO3) - United21 Playoffs",
+   "startTime": "2026-10-12T08:00:00Z",
+   "endDate": "2026-10-12T14:00:00Z",
+   "live": false,
+   "ended": false,
+   "closed": false,
+   "active": true,
+   "markets": [
+    {
+     "id": "5590531",
+     "question": "Counter-Strike: STATE vs THE UNIT - Map 1 Winner",
+     "conditionId": "0xf51f6f5efc24d7c3906e61369afdbb8c97c8e62353aeeaeaf46ba3c7895e3077",
+     "slug": "cs2-sta6-tu-2026-10-12-game1",
+     "sportsMarketType": "child_moneyline",
+     "outcomes": "[\"STATE\", \"THE UNIT\"]",
+     "outcomePrices": "[\"0.505\", \"0.495\"]",
+     "clobTokenIds": "[\"21958888344894087336321627104353710984531615631539352572167510350357742149826\", \"79701163892536896072648953402218703674763137730680957912372577794600341080751\"]",
+     "bestBid": 0.27,
+     "bestAsk": 0.74,
+     "lastTradePrice": null,
+     "spread": 0.47,
+     "liquidityNum": 1335.9545,
+     "volumeNum": null,
+     "acceptingOrders": true,
+     "active": true,
+     "closed": false,
+     "gameStartTime": "2026-10-12 08:00:00+00",
+     "endDate": "2026-10-12T12:00:00Z",
+     "updatedAt": "2026-10-12T00:03:31.917267Z",
+     "resolutionSource": "https://hltv.org",
+     "umaResolutionStatus": null,
+     "description": "This market refers to the Counter-Strike Lower Bracket Final match between STATE and THE UNIT in the United21 Playoffs, initially scheduled for October 12, 2026 at 4:00 AM ET.\n\nThis market will resolve to \"STATE\" if STATE win Map 1 against THE UNIT.\n\nThis market will resolve to \"THE UNIT\" if THE UNIT win Map 1 against STATE.\n\nIf the match begins but is not completed, and Map 1 is concluded with a "
+    },
+    {
+     "id": "5590532",
+     "question": "Counter-Strike: STATE vs THE UNIT - Map 2 Winner",
+     "conditionId": "0x127019831887f27660676e921b00dff9ee57e5f02dec054f53495c16bc658207",
+     "slug": "cs2-sta6-tu-2026-10-12-game2",
+     "sportsMarketType": "child_moneyline",
+     "outcomes": "[\"STATE\", \"THE UNIT\"]",
+     "outcomePrices": "[\"0.52\", \"0.48\"]",
+     "clobTokenIds": "[\"5211826175531344228272708410519195081970673770526103564266454679956292641707\", \"74597896505735293531819411468466268377041414486417476594662944150223677143040\"]",
+     "bestBid": 0.29,
+     "bestAsk": 0.75,
+     "lastTradePrice": null,
+     "spread": 0.46,
+     "liquidityNum": 1495.7269,
+     "volumeNum": null,
+     "acceptingOrders": true,
+     "active": true,
+     "closed": false,
+     "gameStartTime": "2026-10-12 08:00:00+00",
+     "endDate": "2026-10-12T12:00:00Z",
+     "updatedAt": "2026-10-12T00:03:31.917267Z",
+     "resolutionSource": "https://hltv.org",
+     "umaResolutionStatus": null,
+     "description": "This market refers to the Counter-Strike Lower Bracket Final match between STATE and THE UNIT in the United21 Playoffs, initially scheduled for October 12, 2026 at 4:00 AM ET.\n\nThis market will resolve to \"STATE\" if STATE win Map 2 against THE UNIT.\n\nThis market will resolve to \"THE UNIT\" if THE UNIT win Map 2 against STATE.\n\nIf the match begins but is not completed, and Map 2 is concluded with a "
+    },
+    {
+     "id": "5590533",
+     "question": "Counter-Strike: STATE vs THE UNIT (BO3) - United21 Playoffs",
+     "conditionId": "0xf6f344275c588d6e5a7c2e46e906ee89815aaf5eb3104e9d24b40a850bb4abf0",
+     "slug": "cs2-sta6-tu-2026-10-12",
+     "sportsMarketType": "moneyline",
+     "outcomes": "[\"STATE\", \"THE UNIT\"]",
+     "outcomePrices": "[\"0.455\", \"0.545\"]",
+     "clobTokenIds": "[\"63834414249934772621889713870596643181948714510633242458990766084171024540643\", \"12481640709289100802713073478376479216381450159241118721336314069586252587860\"]",
+     "bestBid": 0.45,
+     "bestAsk": 0.46,
+     "lastTradePrice": 0.21,
+     "spread": 0.01,
+     "liquidityNum": 5881.4348,
+     "volumeNum": 1083.6833319999998,
+     "acceptingOrders": true,
+     "active": true,
+     "closed": false,
+     "gameStartTime": "2026-10-12 08:00:00+00",
+     "endDate": "2026-10-12T14:00:00Z",
+     "updatedAt": "2026-10-12T00:01:31.730539Z",
+     "resolutionSource": "https://hltv.org",
+     "umaResolutionStatus": null,
+     "description": "This market refers to the Counter-Strike Lower Bracket Final match between STATE and THE UNIT in the United21 Playoffs, initially scheduled for October 12, 2026 at 4:00 AM ET.\n\nThis market will resolve to \"STATE\" if STATE win the match against THE UNIT.\n\nThis market will resolve to \"THE UNIT\" if THE UNIT win the match against STATE.\n\nIf the match is canceled (not played at all) or ends in a tie, t"
+    }
+   ]
+  }
+ ],
+ "books": [
+  {
+   "market": "0xf6f344275c588d6e5a7c2e46e906ee89815aaf5eb3104e9d24b40a850bb4abf0",
+   "asset_id": "63834414249934772621889713870596643181948714510633242458990766084171024540643",
+   "timestamp": "1791763205675",
+   "hash": "b47b10102156665968e866dac6dbee595f2a607c",
+   "bids": [
+    {
+     "price": "0.01",
+     "size": "25"
+    },
+    {
+     "price": "0.02",
+     "size": "2000"
+    },
+    {
+     "price": "0.03",
+     "size": "27"
+    },
+    {
+     "price": "0.11",
+     "size": "20"
+    },
+    {
+     "price": "0.12",
+     "size": "16.67"
+    },
+    {
+     "price": "0.16",
+     "size": "20"
+    },
+    {
+     "price": "0.19",
+     "size": "20"
+    },
+    {
+     "price": "0.21",
+     "size": "993.42"
+    },
+    {
+     "price": "0.22",
+     "size": "36.81"
+    },
+    {
+     "price": "0.23",
+     "size": "1010"
+    },
+    {
+     "price": "0.26",
+     "size": "20"
+    },
+    {
+     "price": "0.27",
+     "size": "18.51"
+    },
+    {
+     "price": "0.3",
+     "size": "5000"
+    },
+    {
+     "price": "0.32",
+     "size": "1000"
+    },
+    {
+     "price": "0.34",
+     "size": "1008.81"
+    },
+    {
+     "price": "0.36",
+     "size": "13.89"
+    },
+    {
+     "price": "0.37",
+     "size": "1000"
+    },
+    {
+     "price": "0.38",
+     "size": "1000"
+    },
+    {
+     "price": "0.4",
+     "size": "1000"
+    },
+    {
+     "price": "0.42",
+     "size": "11.9"
+    },
+    {
+     "price": "0.43",
+     "size": "11.63"
+    },
+    {
+     "price": "0.44",
+     "size": "1011.36"
+    },
+    {
+     "price": "0.45",
+     "size": "2104.03"
+    }
+   ],
+   "asks": [
+    {
+     "price": "0.99",
+     "size": "17.85"
+    },
+    {
+     "price": "0.98",
+     "size": "2000"
+    },
+    {
+     "price": "0.97",
+     "size": "46.57"
+    },
+    {
+     "price": "0.96",
+     "size": "10"
+    },
+    {
+     "price": "0.93",
+     "size": "32.68"
+    },
+    {
+     "price": "0.92",
+     "size": "8.55"
+    },
+    {
+     "price": "0.88",
+     "size": "100"
+    },
+    {
+     "price": "0.86",
+     "size": "10"
+    },
+    {
+     "price": "0.85",
+     "size": "67.31"
+    },
+    {
+     "price": "0.83",
+     "size": "20"
+    },
+    {
+     "price": "0.79",
+     "size": "20"
+    },
+    {
+     "price": "0.78",
+     "size": "30"
+    },
+    {
+     "price": "0.73",
+     "size": "20"
+    },
+    {
+     "price": "0.68",
+     "size": "40"
+    },
+    {
+     "price": "0.65",
+     "size": "10"
+    },
+    {
+     "price": "0.51",
+     "size": "982"
+    },
+    {
+     "price": "0.5",
+     "size": "107.66"
+    },
+    {
+     "price": "0.46",
+     "size": "20"
+    }
+   ],
+   "min_order_size": "5",
+   "tick_size": "0.01",
+   "neg_risk": false,
+   "last_trade_price": "0.410"
+  },
+  {
+   "market": "0x4158811fe9116ac90eba63e9d88d48d8fa1e66ba972ff21132398771eb212dfc",
+   "asset_id": "45410742729987851514231343926209899696686966891407498782744465851949925510934",
+   "timestamp": "1791763470844",
+   "hash": "d316efe9d61d9cc79ba19cd33bcd21ce6011b614",
+   "bids": [
+    {
+     "price": "0.01",
+     "size": "29.63"
+    },
+    {
+     "price": "0.02",
+     "size": "2005.34"
+    },
+    {
+     "price": "0.03",
+     "size": "300"
+    },
+    {
+     "price": "0.04",
+     "size": "19.91"
+    },
+    {
+     "price": "0.23",
+     "size": "1133.04"
+    },
+    {
+     "price": "0.3",
+     "size": "1925.69"
+    },
+    {
+     "price": "0.31",
+     "size": "1008.77"
+    },
+    {
+     "price": "0.37",
+     "size": "642.42"
+    },
+    {
+     "price": "0.38",
+     "size": "1198.82"
+    },
+    {
+     "price": "0.39",
+     "size": "2358"
+    },
+    {
+     "price": "0.49",
+     "size": "125"
+    },
+    {
+     "price": "0.5",
+     "size": "3221.48"
+    },
+    {
+     "price": "0.57",
+     "size": "1264.21"
+    },
+    {
+     "price": "0.63",
+     "size": "25"
+    },
+    {
+     "price": "0.66",
+     "size": "73.04"
+    },
+    {
+     "price": "0.67",
+     "size": "122"
+    },
+    {
+     "price": "0.68",
+     "size": "250"
+    },
+    {
+     "price": "0.69",
+     "size": "50"
+    },
+    {
+     "price": "0.7",
+     "size": "5"
+    }
+   ],
+   "asks": [
+    {
+     "price": "0.99",
+     "size": "37.96"
+    },
+    {
+     "price": "0.98",
+     "size": "2000"
+    },
+    {
+     "price": "0.97",
+     "size": "6.67"
+    },
+    {
+     "price": "0.96",
+     "size": "75"
+    },
+    {
+     "price": "0.95",
+     "size": "2420"
+    },
+    {
+     "price": "0.94",
+     "size": "10.33"
+    },
+    {
+     "price": "0.91",
+     "size": "5690.91"
+    },
+    {
+     "price": "0.88",
+     "size": "5385.23"
+    },
+    {
+     "price": "0.87",
+     "size": "1823.72"
+    },
+    {
+     "price": "0.86",
+     "size": "125"
+    },
+    {
+     "price": "0.85",
+     "size": "46.66"
+    },
+    {
+     "price": "0.84",
+     "size": "1485.63"
+    },
+    {
+     "price": "0.82",
+     "size": "52.77"
+    },
+    {
+     "price": "0.8",
+     "size": "498.79"
+    },
+    {
+     "price": "0.79",
+     "size": "244"
+    },
+    {
+     "price": "0.78",
+     "size": "789.33"
+    },
+    {
+     "price": "0.77",
+     "size": "200"
+    },
+    {
+     "price": "0.76",
+     "size": "100"
+    },
+    {
+     "price": "0.75",
+     "size": "2019.99"
+    },
+    {
+     "price": "0.74",
+     "size": "10.15"
+    }
+   ],
+   "min_order_size": "5",
+   "tick_size": "0.01",
+   "neg_risk": false,
+   "last_trade_price": "0.300"
+  },
+  {
+   "market": "0x4158811fe9116ac90eba63e9d88d48d8fa1e66ba972ff21132398771eb212dfc",
+   "asset_id": "63973359577140608417833065042978439882948941276577948863045021290369399417362",
+   "timestamp": "1791763470844",
+   "hash": "2fc327d2265d6a193d8444acbe49f9f48bd424c6",
+   "bids": [
+    {
+     "price": "0.01",
+     "size": "37.96"
+    },
+    {
+     "price": "0.02",
+     "size": "2000"
+    },
+    {
+     "price": "0.03",
+     "size": "6.67"
+    },
+    {
+     "price": "0.04",
+     "size": "75"
+    },
+    {
+     "price": "0.05",
+     "size": "2420"
+    },
+    {
+     "price": "0.06",
+     "size": "10.33"
+    },
+    {
+     "price": "0.09",
+     "size": "5690.91"
+    },
+    {
+     "price": "0.12",
+     "size": "5385.23"
+    },
+    {
+     "price": "0.13",
+     "size": "1823.72"
+    },
+    {
+     "price": "0.14",
+     "size": "125"
+    },
+    {
+     "price": "0.15",
+     "size": "46.66"
+    },
+    {
+     "price": "0.16",
+     "size": "1485.63"
+    },
+    {
+     "price": "0.18",
+     "size": "52.77"
+    },
+    {
+     "price": "0.2",
+     "size": "498.79"
+    },
+    {
+     "price": "0.21",
+     "size": "244"
+    },
+    {
+     "price": "0.22",
+     "size": "789.33"
+    },
+    {
+     "price": "0.23",
+     "size": "200"
+    },
+    {
+     "price": "0.24",
+     "size": "100"
+    },
+    {
+     "price": "0.25",
+     "size": "2019.99"
+    },
+    {
+     "price": "0.26",
+     "size": "10.15"
+    }
+   ],
+   "asks": [
+    {
+     "price": "0.99",
+     "size": "29.63"
+    },
+    {
+     "price": "0.98",
+     "size": "2005.34"
+    },
+    {
+     "price": "0.97",
+     "size": "300"
+    },
+    {
+     "price": "0.96",
+     "size": "19.91"
+    },
+    {
+     "price": "0.77",
+     "size": "1133.04"
+    },
+    {
+     "price": "0.7",
+     "size": "1925.69"
+    },
+    {
+     "price": "0.69",
+     "size": "1008.77"
+    },
+    {
+     "price": "0.63",
+     "size": "642.42"
+    },
+    {
+     "price": "0.62",
+     "size": "1198.82"
+    },
+    {
+     "price": "0.61",
+     "size": "2358"
+    },
+    {
+     "price": "0.51",
+     "size": "125"
+    },
+    {
+     "price": "0.5",
+     "size": "3221.48"
+    },
+    {
+     "price": "0.43",
+     "size": "1264.21"
+    },
+    {
+     "price": "0.37",
+     "size": "25"
+    },
+    {
+     "price": "0.34",
+     "size": "73.04"
+    },
+    {
+     "price": "0.33",
+     "size": "122"
+    },
+    {
+     "price": "0.32",
+     "size": "250"
+    },
+    {
+     "price": "0.31",
+     "size": "50"
+    },
+    {
+     "price": "0.3",
+     "size": "5"
+    }
+   ],
+   "min_order_size": "5",
+   "tick_size": "0.01",
+   "neg_risk": false,
+   "last_trade_price": "0.300"
+  },
+  {
+   "market": "0x51a4efa11db784898cd92acf82f69221d017ca1cd9b006dd6ba57f96f98da72e",
+   "asset_id": "47499396907017548101816377524131815871491519940770374037098353922402668866011",
+   "timestamp": "1791763470915",
+   "hash": "14035107d2615b6964ddc8ab987a481eb83194eb",
+   "bids": [
+    {
+     "price": "0.01",
+     "size": "1045.66"
+    },
+    {
+     "price": "0.02",
+     "size": "2006.16"
+    },
+    {
+     "price": "0.03",
+     "size": "300"
+    },
+    {
+     "price": "0.04",
+     "size": "5.75"
+    },
+    {
+     "price": "0.05",
+     "size": "20"
+    },
+    {
+     "price": "0.06",
+     "size": "116.66"
+    },
+    {
+     "price": "0.1",
+     "size": "20"
+    },
+    {
+     "price": "0.11",
+     "size": "5"
+    },
+    {
+     "price": "0.12",
+     "size": "58.33"
+    },
+    {
+     "price": "0.15",
+     "size": "12"
+    },
+    {
+     "price": "0.16",
+     "size": "43.75"
+    },
+    {
+     "price": "0.23",
+     "size": "236.4"
+    },
+    {
+     "price": "0.24",
+     "size": "627.95"
+    },
+    {
+     "price": "0.25",
+     "size": "16"
+    },
+    {
+     "price": "0.26",
+     "size": "20"
+    },
+    {
+     "price": "0.27",
+     "size": "210.55"
+    },
+    {
+     "price": "0.28",
+     "size": "645.9"
+    },
+    {
+     "price": "0.29",
+     "size": "24.13"
+    },
+    {
+     "price": "0.33",
+     "size": "41.21"
+    },
+    {
+     "price": "0.39",
+     "size": "20"
+    },
+    {
+     "price": "0.4",
+     "size": "17.5"
+    },
+    {
+     "price": "0.43",
+     "size": "20"
+    },
+    {
+     "price": "0.51",
+     "size": "18"
+    },
+    {
+     "price": "0.52",
+     "size": "30"
+    },
+    {
+     "price": "0.55",
+     "size": "1198"
+    },
+    {
+     "price": "0.56",
+     "size": "20"
+    },
+    {
+     "price": "0.6",
+     "size": "280"
+    },
+    {
+     "price": "0.78",
+     "size": "445"
+    },
+    {
+     "price": "0.79",
+     "size": "105"
+    },
+    {
+     "price": "0.8",
+     "size": "481.68"
+    },
+    {
+     "price": "0.82",
+     "size": "9.08"
+    }
+   ],
+   "asks": [
+    {
+     "price": "0.99",
+     "size": "349.1"
+    },
+    {
+     "price": "0.98",
+     "size": "2005.24"
+    },
+    {
+     "price": "0.97",
+     "size": "2002"
+    },
+    {
+     "price": "0.96",
+     "size": "394.83"
+    },
+    {
+     "price": "0.95",
+     "size": "100"
+    },
+    {
+     "price": "0.94",
+     "size": "3135.72"
+    },
+    {
+     "price": "0.93",
+     "size": "158.83"
+    },
+    {
+     "price": "0.92",
+     "size": "31.55"
+    },
+    {
+     "price": "0.91",
+     "size": "390.98"
+    },
+    {
+     "price": "0.9",
+     "size": "30"
+    },
+    {
+     "price": "0.89",
+     "size": "23.64"
+    },
+    {
+     "price": "0.88",
+     "size": "22"
+    },
+    {
+     "price": "0.87",
+     "size": "752.66"
+    },
+    {
+     "price": "0.86",
+     "size": "200"
+    },
+    {
+     "price": "0.85",
+     "size": "170"
+    }
+   ],
+   "min_order_size": "5",
+   "tick_size": "0.01",
+   "neg_risk": false,
+   "last_trade_price": "0.820"
+  },
+  {
+   "market": "0x51a4efa11db784898cd92acf82f69221d017ca1cd9b006dd6ba57f96f98da72e",
+   "asset_id": "65094882064947110031293183830314800201136126211143880503321681164945440474294",
+   "timestamp": "1791763470915",
+   "hash": "5756b33fa44baab9c3b01fdbacf3190080067cd2",
+   "bids": [
+    {
+     "price": "0.01",
+     "size": "349.1"
+    },
+    {
+     "price": "0.02",
+     "size": "2005.24"
+    },
+    {
+     "price": "0.03",
+     "size": "2002"
+    },
+    {
+     "price": "0.04",
+     "size": "394.83"
+    },
+    {
+     "price": "0.05",
+     "size": "100"
+    },
+    {
+     "price": "0.06",
+     "size": "3135.72"
+    },
+    {
+     "price": "0.07",
+     "size": "158.83"
+    },
+    {
+     "price": "0.08",
+     "size": "31.55"
+    },
+    {
+     "price": "0.09",
+     "size": "390.98"
+    },
+    {
+     "price": "0.1",
+     "size": "30"
+    },
+    {
+     "price": "0.11",
+     "size": "23.64"
+    },
+    {
+     "price": "0.12",
+     "size": "22"
+    },
+    {
+     "price": "0.13",
+     "size": "752.66"
+    },
+    {
+     "price": "0.14",
+     "size": "200"
+    },
+    {
+     "price": "0.15",
+     "size": "170"
+    }
+   ],
+   "asks": [
+    {
+     "price": "0.99",
+     "size": "1045.66"
+    },
+    {
+     "price": "0.98",
+     "size": "2006.16"
+    },
+    {
+     "price": "0.97",
+     "size": "300"
+    },
+    {
+     "price": "0.96",
+     "size": "5.75"
+    },
+    {
+     "price": "0.95",
+     "size": "20"
+    },
+    {
+     "price": "0.94",
+     "size": "116.66"
+    },
+    {
+     "price": "0.9",
+     "size": "20"
+    },
+    {
+     "price": "0.89",
+     "size": "5"
+    },
+    {
+     "price": "0.88",
+     "size": "58.33"
+    },
+    {
+     "price": "0.85",
+     "size": "12"
+    },
+    {
+     "price": "0.84",
+     "size": "43.75"
+    },
+    {
+     "price": "0.77",
+     "size": "236.4"
+    },
+    {
+     "price": "0.76",
+     "size": "627.95"
+    },
+    {
+     "price": "0.75",
+     "size": "16"
+    },
+    {
+     "price": "0.74",
+     "size": "20"
+    },
+    {
+     "price": "0.73",
+     "size": "210.55"
+    },
+    {
+     "price": "0.72",
+     "size": "645.9"
+    },
+    {
+     "price": "0.71",
+     "size": "24.13"
+    },
+    {
+     "price": "0.67",
+     "size": "41.21"
+    },
+    {
+     "price": "0.61",
+     "size": "20"
+    },
+    {
+     "price": "0.6",
+     "size": "17.5"
+    },
+    {
+     "price": "0.57",
+     "size": "20"
+    },
+    {
+     "price": "0.49",
+     "size": "18"
+    },
+    {
+     "price": "0.48",
+     "size": "30"
+    },
+    {
+     "price": "0.45",
+     "size": "1198"
+    },
+    {
+     "price": "0.44",
+     "size": "20"
+    },
+    {
+     "price": "0.4",
+     "size": "280"
+    },
+    {
+     "price": "0.22",
+     "size": "445"
+    },
+    {
+     "price": "0.21",
+     "size": "105"
+    },
+    {
+     "price": "0.2",
+     "size": "481.68"
+    },
+    {
+     "price": "0.18",
+     "size": "9.08"
+    }
+   ],
+   "min_order_size": "5",
+   "tick_size": "0.01",
+   "neg_risk": false,
+   "last_trade_price": "0.820"
+  },
+  {
+   "market": "0x1e61dfe8368433240bef1bed4d70b17e7a86f5d52388ba6ce8b5bb5da247d510",
+   "asset_id": "11601865635736076660129887952651290433521932528013221880999243992418295402626",
+   "timestamp": "1791763478710",
+   "hash": "5dd35c27ee50b1cefc7f31b8c0e9acf8b63a4f6c",
+   "bids": [
+    {
+     "price": "0.01",
+     "size": "256.35"
+    },
+    {
+     "price": "0.02",
+     "size": "2111.02"
+    },
+    {
+     "price": "0.03",
+     "size": "355.4"
+    },
+    {
+     "price": "0.04",
+     "size": "20"
+    },
+    {
+     "price": "0.05",
+     "size": "50"
+    },
+    {
+     "price": "0.06",
+     "size": "6.88"
+    }
+   ],
+   "asks": [
+    {
+     "price": "0.99",
+     "size": "32.7"
+    },
+    {
+     "price": "0.98",
+     "size": "2010.06"
+    },
+    {
+     "price": "0.97",
+     "size": "9.43"
+    },
+    {
+     "price": "0.96",
+     "size": "81.02"
+    },
+    {
+     "price": "0.95",
+     "size": "20"
+    },
+    {
+     "price": "0.94",
+     "size": "12"
+    },
+    {
+     "price": "0.9",
+     "size": "20"
+    },
+    {
+     "price": "0.89",
+     "size": "5"
+    },
+    {
+     "price": "0.88",
+     "size": "50"
+    },
+    {
+     "price": "0.86",
+     "size": "16.43"
+    },
+    {
+     "price": "0.85",
+     "size": "12"
+    },
+    {
+     "price": "0.82",
+     "size": "31.11"
+    },
+    {
+     "price": "0.81",
+     "size": "20"
+    },
+    {
+     "price": "0.77",
+     "size": "10"
+    },
+    {
+     "price": "0.76",
+     "size": "25"
+    },
+    {
+     "price": "0.72",
+     "size": "20"
+    },
+    {
+     "price": "0.69",
+     "size": "50"
+    },
+    {
+     "price": "0.67",
+     "size": "5"
+    }
+   ],
+   "min_order_size": "5",
+   "tick_size": "0.01",
+   "neg_risk": false,
+   "last_trade_price": "0.060"
+  },
+  {
+   "market": "0xf6f344275c588d6e5a7c2e46e906ee89815aaf5eb3104e9d24b40a850bb4abf0",
+   "asset_id": "12481640709289100802713073478376479216381450159241118721336314069586252587860",
+   "timestamp": "1791763205675",
+   "hash": "ccd9a47030c0212c281a64d84c3fce619123e99e",
+   "bids": [
+    {
+     "price": "0.01",
+     "size": "17.85"
+    },
+    {
+     "price": "0.02",
+     "size": "2000"
+    },
+    {
+     "price": "0.03",
+     "size": "46.57"
+    },
+    {
+     "price": "0.04",
+     "size": "10"
+    },
+    {
+     "price": "0.07",
+     "size": "32.68"
+    },
+    {
+     "price": "0.08",
+     "size": "8.55"
+    },
+    {
+     "price": "0.12",
+     "size": "100"
+    },
+    {
+     "price": "0.14",
+     "size": "10"
+    },
+    {
+     "price": "0.15",
+     "size": "67.31"
+    },
+    {
+     "price": "0.17",
+     "size": "20"
+    },
+    {
+     "price": "0.21",
+     "size": "20"
+    },
+    {
+     "price": "0.22",
+     "size": "30"
+    },
+    {
+     "price": "0.27",
+     "size": "20"
+    },
+    {
+     "price": "0.32",
+     "size": "40"
+    },
+    {
+     "price": "0.35",
+     "size": "10"
+    },
+    {
+     "price": "0.49",
+     "size": "982"
+    },
+    {
+     "price": "0.5",
+     "size": "107.66"
+    },
+    {
+     "price": "0.54",
+     "size": "20"
+    }
+   ],
+   "asks": [
+    {
+     "price": "0.99",
+     "size": "25"
+    },
+    {
+     "price": "0.98",
+     "size": "2000"
+    },
+    {
+     "price": "0.97",
+     "size": "27"
+    },
+    {
+     "price": "0.89",
+     "size": "20"
+    },
+    {
+     "price": "0.88",
+     "size": "16.67"
+    },
+    {
+     "price": "0.84",
+     "size": "20"
+    },
+    {
+     "price": "0.81",
+     "size": "20"
+    },
+    {
+     "price": "0.79",
+     "size": "993.42"
+    },
+    {
+     "price": "0.78",
+     "size": "36.81"
+    },
+    {
+     "price": "0.77",
+     "size": "1010"
+    },
+    {
+     "price": "0.74",
+     "size": "20"
+    },
+    {
+     "price": "0.73",
+     "size": "18.51"
+    },
+    {
+     "price": "0.7",
+     "size": "5000"
+    },
+    {
+     "price": "0.68",
+     "size": "1000"
+    },
+    {
+     "price": "0.66",
+     "size": "1008.81"
+    },
+    {
+     "price": "0.64",
+     "size": "13.89"
+    },
+    {
+     "price": "0.63",
+     "size": "1000"
+    },
+    {
+     "price": "0.62",
+     "size": "1000"
+    },
+    {
+     "price": "0.6",
+     "size": "1000"
+    },
+    {
+     "price": "0.58",
+     "size": "11.9"
+    },
+    {
+     "price": "0.57",
+     "size": "11.63"
+    },
+    {
+     "price": "0.56",
+     "size": "1011.36"
+    },
+    {
+     "price": "0.55",
+     "size": "2104.03"
+    }
+   ],
+   "min_order_size": "5",
+   "tick_size": "0.01",
+   "neg_risk": false,
+   "last_trade_price": "0.410"
+  },
+  {
+   "market": "0x036eaa15e1c73e47b3c2e0ebe7f29781f5a97ba2c6bc4c836dc68c2045016a26",
+   "asset_id": "89951077910848887482219313847975493831580952751470860643434195850213089920237",
+   "timestamp": "1791763483702",
+   "hash": "b299e853a926dd7e309710c2f6739537f02f2655",
+   "bids": [
+    {
+     "price": "0.01",
+     "size": "289.03"
+    },
+    {
+     "price": "0.02",
+     "size": "2005"
+    },
+    {
+     "price": "0.03",
+     "size": "27.32"
+    },
+    {
+     "price": "0.2",
+     "size": "1303"
+    },
+    {
+     "price": "0.21",
+     "size": "1807.75"
+    },
+    {
+     "price": "0.22",
+     "size": "900.38"
+    },
+    {
+     "price": "0.25",
+     "size": "1250.88"
+    },
+    {
+     "price": "0.27",
+     "size": "1687.23"
+    },
+    {
+     "price": "0.28",
+     "size": "848.93"
+    },
+    {
+     "price": "0.3",
+     "size": "300"
+    },
+    {
+     "price": "0.31",
+     "size": "1631"
+    },
+    {
+     "price": "0.39",
+     "size": "75"
+    },
+    {
+     "price": "0.45",
+     "size": "50"
+    },
+    {
+     "price": "0.49",
+     "size": "125"
+    },
+    {
+     "price": "0.5",
+     "size": "130.6"
+    },
+    {
+     "price": "0.51",
+     "size": "9.8"
+    },
+    {
+     "price": "0.54",
+     "size": "25"
+    },
+    {
+     "price": "0.55",
+     "size": "272"
+    },
+    {
+     "price": "0.58",
+     "size": "302"
+    },
+    {
+     "price": "0.59",
+     "size": "100"
+    },
+    {
+     "price": "0.6",
+     "size": "1175"
+    },
+    {
+     "price": "0.61",
+     "size": "5"
+    },
+    {
+     "price": "0.62",
+     "size": "5"
+    }
+   ],
+   "asks": [
+    {
+     "price": "0.99",
+     "size": "363.17"
+    },
+    {
+     "price": "0.98",
+     "size": "2005"
+    },
+    {
+     "price": "0.97",
+     "size": "7.27"
+    },
+    {
+     "price": "0.96",
+     "size": "3032"
+    },
+    {
+     "price": "0.93",
+     "size": "75"
+    },
+    {
+     "price": "0.92",
+     "size": "7.62"
+    },
+    {
+     "price": "0.89",
+     "size": "2369.09"
+    },
+    {
+     "price": "0.88",
+     "size": "4814.27"
+    },
+    {
+     "price": "0.86",
+     "size": "2233.71"
+    },
+    {
+     "price": "0.85",
+     "size": "4671.7"
+    },
+    {
+     "price": "0.84",
+     "size": "331.25"
+    },
+    {
+     "price": "0.81",
+     "size": "15.78"
+    },
+    {
+     "price": "0.79",
+     "size": "39.28"
+    },
+    {
+     "price": "0.76",
+     "size": "1271.17"
+    },
+    {
+     "price": "0.75",
+     "size": "128.96"
+    },
+    {
+     "price": "0.74",
+     "size": "347"
+    },
+    {
+     "price": "0.73",
+     "size": "246.76"
+    },
+    {
+     "price": "0.72",
+     "size": "107.85"
+    },
+    {
+     "price": "0.71",
+     "size": "50"
+    },
+    {
+     "price": "0.7",
+     "size": "5"
+    }
+   ],
+   "min_order_size": "5",
+   "tick_size": "0.01",
+   "neg_risk": false,
+   "last_trade_price": ""
+  },
+  {
+   "market": "0x036eaa15e1c73e47b3c2e0ebe7f29781f5a97ba2c6bc4c836dc68c2045016a26",
+   "asset_id": "32543323334704762456010437542350928020706675280145221638716986033614693765346",
+   "timestamp": "1791763483702",
+   "hash": "f2eb0d7221cff1bdac9e62216484424bd20f372a",
+   "bids": [
+    {
+     "price": "0.01",
+     "size": "363.17"
+    },
+    {
+     "price": "0.02",
+     "size": "2005"
+    },
+    {
+     "price": "0.03",
+     "size": "7.27"
+    },
+    {
+     "price": "0.04",
+     "size": "3032"
+    },
+    {
+     "price": "0.07",
+     "size": "75"
+    },
+    {
+     "price": "0.08",
+     "size": "7.62"
+    },
+    {
+     "price": "0.11",
+     "size": "2369.09"
+    },
+    {
+     "price": "0.12",
+     "size": "4814.27"
+    },
+    {
+     "price": "0.14",
+     "size": "2233.71"
+    },
+    {
+     "price": "0.15",
+     "size": "4671.7"
+    },
+    {
+     "price": "0.16",
+     "size": "331.25"
+    },
+    {
+     "price": "0.19",
+     "size": "15.78"
+    },
+    {
+     "price": "0.21",
+     "size": "39.28"
+    },
+    {
+     "price": "0.24",
+     "size": "1271.17"
+    },
+    {
+     "price": "0.25",
+     "size": "128.96"
+    },
+    {
+     "price": "0.26",
+     "size": "347"
+    },
+    {
+     "price": "0.27",
+     "size": "246.76"
+    },
+    {
+     "price": "0.28",
+     "size": "107.85"
+    },
+    {
+     "price": "0.29",
+     "size": "50"
+    },
+    {
+     "price": "0.3",
+     "size": "5"
+    }
+   ],
+   "asks": [
+    {
+     "price": "0.99",
+     "size": "289.03"
+    },
+    {
+     "price": "0.98",
+     "size": "2005"
+    },
+    {
+     "price": "0.97",
+     "size": "27.32"
+    },
+    {
+     "price": "0.8",
+     "size": "1303"
+    },
+    {
+     "price": "0.79",
+     "size": "1807.75"
+    },
+    {
+     "price": "0.78",
+     "size": "900.38"
+    },
+    {
+     "price": "0.75",
+     "size": "1250.88"
+    },
+    {
+     "price": "0.73",
+     "size": "1687.23"
+    },
+    {
+     "price": "0.72",
+     "size": "848.93"
+    },
+    {
+     "price": "0.7",
+     "size": "300"
+    },
+    {
+     "price": "0.69",
+     "size": "1631"
+    },
+    {
+     "price": "0.61",
+     "size": "75"
+    },
+    {
+     "price": "0.55",
+     "size": "50"
+    },
+    {
+     "price": "0.51",
+     "size": "125"
+    },
+    {
+     "price": "0.5",
+     "size": "130.6"
+    },
+    {
+     "price": "0.49",
+     "size": "9.8"
+    },
+    {
+     "price": "0.46",
+     "size": "25"
+    },
+    {
+     "price": "0.45",
+     "size": "272"
+    },
+    {
+     "price": "0.42",
+     "size": "302"
+    },
+    {
+     "price": "0.41",
+     "size": "100"
+    },
+    {
+     "price": "0.4",
+     "size": "1175"
+    },
+    {
+     "price": "0.39",
+     "size": "5"
+    },
+    {
+     "price": "0.38",
+     "size": "5"
+    }
+   ],
+   "min_order_size": "5",
+   "tick_size": "0.01",
+   "neg_risk": false,
+   "last_trade_price": ""
+  },
+  {
+   "market": "0x1e61dfe8368433240bef1bed4d70b17e7a86f5d52388ba6ce8b5bb5da247d510",
+   "asset_id": "77172632797831289366934709721588844601436319213871065905791249352206944031459",
+   "timestamp": "1791763478710",
+   "hash": "7ff24a60b6776bcefc6bdcb7200d8c0715d584d3",
+   "bids": [
+    {
+     "price": "0.01",
+     "size": "32.7"
+    },
+    {
+     "price": "0.02",
+     "size": "2010.06"
+    },
+    {
+     "price": "0.03",
+     "size": "9.43"
+    },
+    {
+     "price": "0.04",
+     "size": "81.02"
+    },
+    {
+     "price": "0.05",
+     "size": "20"
+    },
+    {
+     "price": "0.06",
+     "size": "12"
+    },
+    {
+     "price": "0.1",
+     "size": "20"
+    },
+    {
+     "price": "0.11",
+     "size": "5"
+    },
+    {
+     "price": "0.12",
+     "size": "50"
+    },
+    {
+     "price": "0.14",
+     "size": "16.43"
+    },
+    {
+     "price": "0.15",
+     "size": "12"
+    },
+    {
+     "price": "0.18",
+     "size": "31.11"
+    },
+    {
+     "price": "0.19",
+     "size": "20"
+    },
+    {
+     "price": "0.23",
+     "size": "10"
+    },
+    {
+     "price": "0.24",
+     "size": "25"
+    },
+    {
+     "price": "0.28",
+     "size": "20"
+    },
+    {
+     "price": "0.31",
+     "size": "50"
+    },
+    {
+     "price": "0.33",
+     "size": "5"
+    }
+   ],
+   "asks": [
+    {
+     "price": "0.99",
+     "size": "256.35"
+    },
+    {
+     "price": "0.98",
+     "size": "2111.02"
+    },
+    {
+     "price": "0.97",
+     "size": "355.4"
+    },
+    {
+     "price": "0.96",
+     "size": "20"
+    },
+    {
+     "price": "0.95",
+     "size": "50"
+    },
+    {
+     "price": "0.94",
+     "size": "6.88"
+    }
+   ],
+   "min_order_size": "5",
+   "tick_size": "0.01",
+   "neg_risk": false,
+   "last_trade_price": "0.060"
+  }
+ ]
+}

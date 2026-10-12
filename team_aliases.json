@@ -1,0 +1,23 @@
+{
+  "_doc": "Maintained team-name aliases for matchid.team_key. Exact names only (matched after the same normalisation as HLTV names: case, accents, punctuation). Each entry maps a platform's spelling to ONE HLTV team id and records its proof (same fixture: same opponent, same start, same event). Never add an alias for a generic name ('Orgless') or an academy / junior / female / NXT squad onto its main team.",
+  "aliases": [
+    {"name": "NIP", "team_id": 4411, "hltv_name": "Ninjas in Pyjamas",
+     "proof": "2026-10-12: Polymarket 'NIP vs Betclic Apogee Esports' 10:00 UTC Stake Pulse Beat III = HLTV 2399131 'Ninjas in Pyjamas vs Betclic' 10:00 UTC; Polymarket 'Team Falcons vs NIP' 2026-10-14 11:00 = HLTV 2399385 'Falcons vs Ninjas in Pyjamas'"},
+    {"name": "Betclic Apogee Esports", "team_id": 12916, "hltv_name": "Betclic",
+     "proof": "2026-10-12: Polymarket 'NIP vs Betclic Apogee Esports' 10:00 UTC Stake Pulse Beat III = HLTV 2399131 'Ninjas in Pyjamas vs Betclic'"},
+    {"name": "Apogee Esports", "team_id": 12916, "hltv_name": "Betclic",
+     "proof": "2026-10-12: Kalshi KXCS2GAME-26OCT120600APOGEENIP 'Apogee Esports' vs NIP, 6:00 AM EDT = 10:00 UTC = HLTV 2399131 'Ninjas in Pyjamas vs Betclic'"},
+    {"name": "Overtake", "team_id": 13855, "hltv_name": "Overtake Sector",
+     "proof": "2026-10-12: Polymarket 'Overtake vs regain' 01:00 UTC ESL Challenger League NA Cup #3 and Kalshi KXCS2GAME-26OCT112100REGAINOT = HLTV 2399228 'Overtake Sector vs regain' 01:00 UTC"},
+    {"name": "largadosypelados", "team_id": 13304, "hltv_name": "LP",
+     "proof": "2026-10-12: Polymarket 'ex-Keyd Stars vs largadosypelados' 21:00 UTC ESL Challenger League SA Cup #3 = HLTV 2399202 'ex-Keyd Stars vs LP' 21:00 UTC (LP = Largados y Pelados)"},
+    {"name": "ex-Keyd Stats", "team_id": 13423, "hltv_name": "ex-Keyd Stars",
+     "proof": "2026-10-12: Kalshi typo - KXCS2GAME-26OCT121700LARGAEXK 'ex-Keyd Stats' vs largadosypelados 5:00 PM EDT = 21:00 UTC = HLTV 2399202 'ex-Keyd Stars vs LP'"},
+    {"name": "DENDELE CS", "team_id": 13926, "hltv_name": "DENDELE",
+     "proof": "2026-10-11: Polymarket 'DENDELE CS vs Imperial' 20:35 UTC FRAG University Playoffs = HLTV 2399406 'Imperial vs DENDELE' FRAG University 2026, dated 2026-10-11"},
+    {"name": "Esport Academy Copenhagen", "team_id": 13838, "hltv_name": "EAC",
+     "proof": "2026-10-15: Polymarket 'WBT vs Esport Academy Copenhagen' 08:00, 'Esport Academy Copenhagen vs BOJONG' 14:00, '... vs ENCE' 18:00 UTC Elisa BreakOut Series #2 = HLTV 2399418 / 2399421 / 2399423 'EAC' at the same three times"},
+    {"name": "RoundsGG", "team_id": 12457, "hltv_name": "ROUNDS",
+     "proof": "2026-10-16: Polymarket 'HAVU vs RoundsGG' 10:00, 'Phantom vs RoundsGG' 14:00, 'Voca vs RoundsGG' 16:00 UTC Elisa BreakOut Series #2 = HLTV 2399425 / 2399427 / 2399428 'ROUNDS' at the same three times"}
+  ]
+}

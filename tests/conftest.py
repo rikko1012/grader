@@ -23,3 +23,24 @@ def private_hltv_store(monkeypatch, tmp_path):
     monkeypatch.setattr(hltv_store, "DB_PATH", tmp_path / "hltv_store.db")
     monkeypatch.setattr(hltv_store, "_local", __import__("threading").local())
     monkeypatch.setattr(hltv_store, "_LAST", {})
+
+
+def pin_clock(monkeypatch, at, modules):
+    """Run a test as if the wall clock read `at` (it keeps ticking from there). For tests built on market data recorded at a
+    fixed moment: without this they fail once the recorded matches have started (2026-10-12 review)."""
+    import time as _time, datetime as _dt
+    real = _time.time
+    offset = at.timestamp() - real()
+    monkeypatch.setattr(_time, "time", lambda: real() + offset)
+
+    class Clock(_dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return _dt.datetime.fromtimestamp(real() + offset, tz)
+
+        @classmethod
+        def utcnow(cls):
+            return _dt.datetime.utcfromtimestamp(real() + offset)
+    for m in modules:
+        if getattr(m, "datetime", None) is _dt.datetime:
+            monkeypatch.setattr(m, "datetime", Clock)
