@@ -69,7 +69,8 @@ REGIONAL_MAX_SERIES = 8    # regional series: at most this many vs same-national
 REGIONAL_MAX_LOOKUPS = 200  # distinct past opponents checked (team pages are cached on disk 12 h). Was 40: a tier-3
                             # player meets 100+ teams a year, so H4SAN4TOR's Swedish opponent Metizport (49th) was never checked
 REGIONAL_DAYS = 365         # regional series: the last 12 months, like the exact head-to-head (owner 2026-10-06)
-REGIONAL_MIN_COUNTRY = 3    # a country tag (e.g. Poland) with fewer series than this is filled with same-REGION series
+REGIONAL_MIN_COUNTRY = 3    # a non-European country tag with fewer series than this is filled with same-REGION series
+COUNTRY_ONLY_REGIONS = {"Europe"}   # owner 2026-10-12: "keep europe to country flags" - never a Europe region tag or fill-in
 
 
 # ---------------------------------------------------------------- helpers
@@ -639,7 +640,8 @@ def _nationality(b, team_slug):
     country = that country (2026-09-29: "a Polish core -> only Polish teams"), countries in a grouped region (CIS, Oceania,
     South America, North America) share the region; 2026-10-12: "3 players from the same region = that team's region" -
     a mixed roster with 3+ players from one region (e.g. PL / RO / ES / FI / TR) is that region (Europe), where it used to
-    get no tag at all. HLTV's single team flag only when the roster can't decide. Every tag carries its region, so
+    get no tag at all - except Europe, which stays on country flags (owner 2026-10-12: a mixed European roster takes
+    HLTV's country flag, never a "Europe" tag). HLTV's single team flag only when the roster can't decide. Every tag carries its region, so
     regional_rows can fall back from a country to its region. Nothing is inferred from a player with no country."""
     try:
         td = b.team(team_slug)
@@ -663,7 +665,7 @@ def _nationality(b, team_slug):
         region = top[0] if top[0] in GROUPED_REGIONS else regmap.get(top[0])
         return {"id": top[0], "label": names[top[0]], "players": top[1], "of": len(roster), "roster": codes, "source": "roster",
                 "kind": "group" if top[0] in GROUPED_REGIONS else "country", "region": region}
-    rtop = max(rcounts.items(), key=lambda kv: kv[1]) if rcounts else (None, 0)
+    rtop = max(((k, v) for k, v in rcounts.items() if k not in COUNTRY_ONLY_REGIONS), key=lambda kv: kv[1], default=(None, 0))
     if rtop[1] >= NATIONALITY_MIN:
         return {"id": "region:" + rtop[0], "label": rtop[0], "players": rtop[1], "of": len(roster), "roster": codes,
                 "source": "roster (region)", "kind": "region", "region": rtop[0]}
@@ -681,8 +683,6 @@ def _nationality(b, team_slug):
                     "kind": "group" if key in GROUPED_REGIONS else "country", "region": region}
         if cname and "cis" in cname.lower() and grouped.get("RU"):
             return {"id": grouped["RU"], "label": grouped["RU"], "source": "HLTV flag", "roster": codes, "kind": "group", "region": grouped["RU"]}
-        if code == "EU" or cname.lower() == "europe":
-            return {"id": "region:Europe", "label": "Europe", "source": "HLTV flag", "roster": codes, "kind": "region", "region": "Europe"}
         return {"id": None, "label": f"international team ({cname or code})", "source": "HLTV flag", "roster": codes}
     return {"id": None, "label": f"mixed roster ({'/'.join(codes)})", "roster": codes}
 
@@ -744,7 +744,8 @@ def regional_rows(b, pb, opp_id, tag):
     else:
         rows, n_tag = collect("tag", True, REGIONAL_MAX_SERIES, skip)
         n_region = 0
-        if n_tag < REGIONAL_MIN_COUNTRY and tag.get("kind") == "country" and tag.get("region"):
+        if (n_tag < REGIONAL_MIN_COUNTRY and tag.get("kind") == "country" and tag.get("region")
+                and tag["region"] not in COUNTRY_ONLY_REGIONS):
             more, n_region = collect("region", "region", REGIONAL_MAX_SERIES - n_tag, skip)
             rows += more
     pb["_regional_stats"] = {"tag_series": n_tag, "region_series": n_region, "teams_checked": lookups["n"],

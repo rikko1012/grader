@@ -416,17 +416,24 @@ def test_team_region_comes_from_the_roster(monkeypatch):
 
 
 def test_mixed_roster_gets_its_region(monkeypatch):
-    """Owner 2026-10-12: 3 players from the same region = that team's region (PL/RO/ES/FI/TR used to be 'international')."""
+    """Owner 2026-10-12: 3 players from the same region = that team's region - but Europe stays on country flags."""
     import hltv as h
     monkeypatch.setattr(h, "team_country", lambda name: ("EU", "Europe"))
     class B:
         def team(self, slug): return {"name": "Inner Circle", "players": [{"country": {"code": c, "name": c}} for c in ["PL", "RO", "ES", "FI", "TR"]]}
     t = cs2_scout._nationality(B(), "ic")
-    assert t["kind"] == "region" and t["region"] == "Europe" and t["id"] == "region:Europe" and t["players"] == 5
+    assert t["id"] is None and "international" in t["label"]          # no Europe region tag
+    monkeypatch.setattr(h, "team_country", lambda name: ("PL", "Poland"))
+    assert cs2_scout._nationality(B(), "ic")["id"] == "PL"            # mixed European roster: the HLTV country flag decides
     class P:
         def team(self, slug): return {"name": "Betclic", "players": [{"country": {"code": "PL", "name": "Poland"}}] * 5}
     t2 = cs2_scout._nationality(P(), "b")
-    assert t2["kind"] == "country" and t2["id"] == "PL" and t2["region"] == "Europe"
+    assert t2["kind"] == "country" and t2["id"] == "PL"
+    class A:
+        def team(self, slug): return {"name": "x", "players": [{"country": {"code": c, "name": c}} for c in ["CN", "MN", "KR", "SE", "DK"]]}
+    monkeypatch.setattr(h, "team_country", lambda name: None)
+    t3 = cs2_scout._nationality(A(), "x")
+    assert t3["kind"] == "region" and t3["region"] == "Asia"           # other regions still group
 
 
 def test_regional_search_reaches_old_opponents_and_falls_back_to_region(monkeypatch):
@@ -445,8 +452,13 @@ def test_regional_search_reaches_old_opponents_and_falls_back_to_region(monkeypa
     rows = cs2_scout.regional_rows(None, pb, "opp", {"id": "SE", "kind": "country", "region": "Europe", "label": "Sweden"})
     sw = {r["match_id"] for r in rows if r["regional"] is True}
     assert sw == {999}                                          # found despite being the 56th team
-    reg = {r["match_id"] for r in rows if r["regional"] == "region"}
-    assert len(reg) == cs2_scout.REGIONAL_MAX_SERIES - 1        # filled with same-region series, marked as context
+    assert not any(r["regional"] == "region" for r in rows)       # Europe: country only, never filled with region series
+    asia = {f"b{i}": {"id": "CN", "kind": "country", "region": "Asia"} for i in range(20)}
+    ms2 = [{"id": 2000 + i, "status": "finished", "start_date": d(i + 1), "team1": {"slug": "me"}, "team2": {"slug": f"b{i}"},
+            "team1_id": "me", "team2_id": f"b{i}"} for i in range(20)]
+    monkeypatch.setattr(cs2_scout, "nationality", lambda b, slug: asia.get(slug))
+    rows2 = cs2_scout.regional_rows(None, {"player": {"id": 1}, "_matches": ms2}, "opp", {"id": "MN", "kind": "country", "region": "Asia", "label": "Mongolia"})
+    assert len({r["match_id"] for r in rows2 if r["regional"] == "region"}) == cs2_scout.REGIONAL_MAX_SERIES   # outside Europe: filled
     # older than 12 months: not used
     pb2 = {"player": {"id": 1}, "_matches": [dict(matches[0], start_date=d(400), team2={"slug": "metizport"}, team2_id="metizport", id=5)]}
     assert cs2_scout.regional_rows(None, pb2, "opp", {"id": "SE", "kind": "country", "region": "Europe", "label": "Sweden"}) == []
