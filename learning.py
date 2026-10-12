@@ -106,6 +106,44 @@ FAULTS = {
     "outage_share": 0.25,           # forecasts in the window whose performance model failed on an HLTV outage
     "audit_max": 0,                 # unacknowledged settlement-audit differences tolerated (0 = any one pauses)
 }
+# Owner option 3 (2026-10-12): the 10-day board diagnosis (Oct 3-12, 991 units / 132 matches; units in the research folder,
+# data hash below) found that on Maps 1-2 the market line carried almost all the information for kills: pulling the
+# projection toward the line, w fitted on EARLIER days only, improved next-day log-loss by +0.0149 [0.0039, 0.0264]
+# (kills +0.0301 [0.0077, 0.0528]). Frozen here as a SHADOW challenger with the weights fitted on all 10 days - it never
+# changes a grade; the fixed 300 / 600 / 1000-match reviews decide whether it is even eligible for the owner's review.
+#   p_challenger = Phi(w x Phi^-1(p_live))   (= projection' = line + w x (projection - line), same spread)
+# kills w = 0.0 (the line itself, 50/50) and HS w = 0.5; other map scopes unchanged.
+LINE_BLEND = {"family": "line-blend-1", "w": {"kills": 0.0, "hs": 0.5}, "scopes": ["12"],
+              "fit": "w per stat on board units Oct 3-12 (Maps 1-2), grid 0.00-1.20 step 0.05, minimum log-loss of the Over outcome",
+              "data_hash": "49e7ac29547b86a9", "training_cutoff": "2026-10-12T15:00:00+00:00",
+              "evidence": {"walk_forward_gain_all": [0.0149, 0.0039, 0.0264], "walk_forward_gain_kills12": [0.0301, 0.0077, 0.0528],
+                           "walk_forward_gain_hs12": [0.0048, -0.0062, 0.0159], "test_units": 536, "test_matches": 87}}
+
+
+def line_blend_p(p_live, prop, scope, cfg=LINE_BLEND):
+    """The line-blend challenger's chance of Over from the live chance (same spread, projection pulled toward the line)."""
+    if p_live is None or (scope or "12") not in cfg["scopes"] or prop not in cfg["w"]:
+        return p_live
+    q = min(max(float(p_live), 1e-6), 1 - 1e-6)
+    from statistics import NormalDist
+    nd = NormalDist()
+    return nd.cdf(cfg["w"][prop] * nd.inv_cdf(q))
+
+
+def _ensure_line_blend(con, now):
+    """Freeze the line-blend challenger once (its forward test = forecasts logged after this moment)."""
+    if con.execute("SELECT 1 FROM challengers WHERE family = ?", (LINE_BLEND["family"],)).fetchone():
+        return
+    h = _sha(LINE_BLEND)
+    cid = f"lb-001-{h[:8]}"
+    con.execute("INSERT INTO challengers (id, family, created_at, frozen_at, snapshot_id, data_hash, training_cutoff, config, "
+                "config_hash, base_config, status, status_at, status_reason, revises, development) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (cid, LINE_BLEND["family"], _iso(now), _iso(now), None, LINE_BLEND["data_hash"], LINE_BLEND["training_cutoff"],
+                 json.dumps(LINE_BLEND, sort_keys=True), h, json.dumps({"live": "logged chance"}), "shadow", _iso(now),
+                 "frozen (owner option 3, 2026-10-12); forward test = forecasts logged after the freeze", None, "[]"))
+    con.execute("INSERT INTO events (at, kind, detail) VALUES (?,?,?)", (_iso(now), "challenger", json.dumps({"id": cid, "status": "shadow"})))
+
+
 BUCKETS = ("scored", "void", "push", "incomplete", "unresolved_identity", "market_mismatch", "settlement_conflict")
 
 # perf.py parameters each logged projection version was made with (copied from perf.py 2026-10-12). Every row is checked
@@ -1119,7 +1157,7 @@ def _distinct_new_matches(con, since):
 
 def training_step(con, now, force=False):
     """Train when the schedule says so (TRAIN_RULE). Returns what happened (or why not)."""
-    if con.execute("SELECT 1 FROM challengers WHERE status = 'shadow'").fetchone() and not force:
+    if con.execute("SELECT 1 FROM challengers WHERE status = 'shadow' AND family = ?", (TRAIN_RULE["family"],)).fetchone() and not force:
         return {"ran": False, "why": "a challenger is in its forward test"}
     last = con.execute("SELECT * FROM trainings ORDER BY id DESC LIMIT 1").fetchone()
     since = last["cutoff"] if last else None
@@ -1150,7 +1188,7 @@ def training_step(con, now, force=False):
         ch_hash = _sha(res["config"])
         cid = f"ch-{n:03d}-{ch_hash[:8]}"
         prev = con.execute("SELECT id FROM challengers ORDER BY created_at DESC, rowid DESC LIMIT 1").fetchone()
-        for old in con.execute("SELECT id FROM challengers WHERE status = 'shadow'").fetchall():   # only when forced
+        for old in con.execute("SELECT id FROM challengers WHERE status = 'shadow' AND family = ?", (TRAIN_RULE["family"],)).fetchall():   # only when forced
             _challenger_status(con, old["id"], "superseded", f"superseded by {cid}; its forward results so far are development data for {cid}", now)
         # FROZEN here (config + params + data hash), before any forward forecast exists: forward = logged after frozen_at
         con.execute("INSERT INTO challengers (id, family, created_at, frozen_at, snapshot_id, data_hash, training_cutoff, config, "
@@ -1169,12 +1207,22 @@ def shadow_step(con, now, limit=4000):
     n = 0
     for ch in con.execute("SELECT * FROM challengers WHERE status IN ('shadow', 'eligible_for_review')").fetchall():
         cfg, base = json.loads(ch["config"]), json.loads(ch["base_config"])
+        blend = ch["family"] == LINE_BLEND["family"]
         todo = con.execute("SELECT f.* FROM forecast_copy f WHERE f.logged_at > ? AND NOT EXISTS (SELECT 1 FROM shadow s "
                            "WHERE s.challenger_id = ? AND s.forecast_id = f.forecast_id) ORDER BY f.forecast_id LIMIT ?",
                            (ch["frozen_at"], ch["id"], limit)).fetchall()
         for i, f in enumerate(todo):
             feat = json.loads(f["features"] or "{}")
             pl = p_over_of(dict(f))
+            if blend:                                     # the live chance itself is the baseline (no replay needed)
+                pc = line_blend_p(pl, f["prop"], f["scope"], cfg)
+                vals = (pc, pl, pl, None, f["lambda"], int(pc is not None and pl is not None and abs(pc - pl) > 1e-9),
+                        None if pc is not None else "no live chance")
+                con.execute("INSERT OR IGNORE INTO shadow (challenger_id, forecast_id, p_over_ch, p_over_base, p_over_logged, lam_ch, lam_base, "
+                            "changed, computed_at, note) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                            (ch["id"], f["forecast_id"], vals[0], vals[1], vals[2], vals[3], vals[4], vals[5], _iso(now), vals[6]))
+                n += 1
+                continue
             rec = recover(feat) if projection_source(feat, f["lambda"]).startswith("perf") else None
             if rec is None or f["line"] is None:
                 vals = (pl, pl, pl, f["lambda"], f["lambda"], 0, "unchanged: not a refittable performance-model forecast")
@@ -1444,6 +1492,7 @@ def run_cycle(now=None, picks=None, forecasts=None, batches=None, corrections=No
         con = connect(db)
         try:
             _ensure_baseline(con, now)
+            _ensure_line_blend(con, now)
             log = {"at": _iso(now)}
             # 1. copy new forecasts (immutable), in pages
             if picks is None:

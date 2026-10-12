@@ -347,7 +347,7 @@ def test_training_freezes_a_reproducible_challenger(db, small_rules):
     tr = log["training"]
     assert tr["ran"] and tr["outcome"] == "challenger frozen", tr
     con = learning.connect(db)
-    ch = dict(con.execute("SELECT * FROM challengers").fetchone())
+    ch = dict(con.execute("SELECT * FROM challengers WHERE family = 'perf-refit-1'").fetchone())
     snap = dict(con.execute("SELECT * FROM snapshots WHERE id = ?", (ch["snapshot_id"],)).fetchone())
     con.close()
     cfg = json.loads(ch["config"])
@@ -370,7 +370,7 @@ def test_promotion_is_never_automatic_and_rollback_works(db, small_rules):
     rnd = random.Random(12)
     w, frozen, _ = trained_world(db, rnd)
     con = learning.connect(db)
-    cid = con.execute("SELECT id FROM challengers").fetchone()["id"]
+    cid = con.execute("SELECT id FROM challengers WHERE family = 'perf-refit-1'").fetchone()["id"]
     con.close()
     with pytest.raises(PermissionError):                                            # in forward test: not promotable
         learning.promote(cid, "looks good", db=db, confirm=True)
@@ -564,3 +564,21 @@ def test_cycle_runs_in_a_child_process(tmp_path, monkeypatch):
     d = learning.dashboard()
     assert d["scorecard"]["overall"]["units"] == 3 and d["matches"]["forecasts_copied"] == 3
     assert d["status"]["last_cycle"]["ingest"]["added"] == 3
+
+
+def test_line_blend_challenger_is_frozen_shadow_and_never_a_grade(db):
+    """Owner option 3 (2026-10-12): the line-blend challenger is frozen once, shadow only, scored like any challenger."""
+    import math
+    assert learning.line_blend_p(0.7, "kills", "12") == 0.5                     # kills w = 0: the line itself
+    p = learning.line_blend_p(0.7, "hs", "12")
+    assert 0.5 < p < 0.7 and abs(p - learning.line_blend_p(0.3, "hs", "12") - (2 * p - 1)) < 1e-9   # symmetric, pulled to 50%
+    assert learning.line_blend_p(0.7, "kills", "123") == 0.7                    # other map scopes unchanged
+    con = learning.connect(db)
+    now = datetime(2026, 10, 12, 16, 0, tzinfo=timezone.utc)
+    learning._ensure_line_blend(con, now); learning._ensure_line_blend(con, now)  # idempotent
+    rows = con.execute("SELECT * FROM challengers WHERE family = 'line-blend-1'").fetchall()
+    assert len(rows) == 1 and rows[0]["status"] == "shadow" and rows[0]["frozen_at"] == "2026-10-12T16:00:00+00:00"
+    assert json.loads(rows[0]["config"])["w"] == {"kills": 0.0, "hs": 0.5}
+    # nothing in grading reads learning
+    import grader, picklog
+    assert "learning" not in open(grader.__file__, encoding="utf-8").read() and "import learning" not in open(picklog.__file__, encoding="utf-8").read()
