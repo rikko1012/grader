@@ -111,8 +111,12 @@ FAULTS = {
 # projection toward the line, w fitted on EARLIER days only, improved next-day log-loss by +0.0149 [0.0039, 0.0264]
 # (kills +0.0301 [0.0077, 0.0528]). Frozen here as a SHADOW challenger with the weights fitted on all 10 days - it never
 # changes a grade; the fixed 300 / 600 / 1000-match reviews decide whether it is even eligible for the owner's review.
-#   p_challenger = Phi(w x Phi^-1(p_live))   (= projection' = line + w x (projection - line), same spread)
-# kills w = 0.0 (the line itself, 50/50) and HS w = 0.5; other map scopes unchanged.
+# EXACT METHOD (CHALLENGERS.md): a transform of the live PROBABILITY, not of the projection or the kill rate:
+#   p_challenger = Phi(w x Phi^-1(p_live)),  p_live = the logged forecast's p_more = P(Over | no push), 3 decimals,
+#   after every live adjustment (kills cap, safety margins, HS beta-binomial). w = 0 -> exactly 0.5; w = 1 -> p_live.
+# It coincides with "projection' = line + w x (projection - line), same normal spread" ONLY for a normal predictive
+# distribution with no cap - not in general. Push probability is not modelled (both are conditional on no push).
+# kills w = 0.0 and HS w = 0.5 on Maps 1-2; other map scopes unchanged. FROZEN: any change = a new family/version.
 LINE_BLEND = {"family": "line-blend-1", "w": {"kills": 0.0, "hs": 0.5}, "scopes": ["12"],
               "fit": "w per stat on board units Oct 3-12 (Maps 1-2), grid 0.00-1.20 step 0.05, minimum log-loss of the Over outcome",
               "data_hash": "49e7ac29547b86a9", "training_cutoff": "2026-10-12T15:00:00+00:00",

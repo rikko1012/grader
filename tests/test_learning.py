@@ -582,3 +582,26 @@ def test_line_blend_challenger_is_frozen_shadow_and_never_a_grade(db):
     # nothing in grading reads learning
     import grader, picklog
     assert "learning" not in open(grader.__file__, encoding="utf-8").read() and "import learning" not in open(picklog.__file__, encoding="utf-8").read()
+
+
+def test_line_blend_properties_documented_in_challengers_md():
+    """CHALLENGERS.md lb-001: bounded, sums to one with the live push chance, half-point lines push-free, monotone in
+    the line for a fixed distribution, deterministic replay from the saved forecast, same snapshot as the live value."""
+    import grader
+    for prop in ("kills", "hs"):
+        prev = None
+        for line in [x / 2 for x in range(30, 80)]:                       # 15.0 .. 39.5, whole and half lines
+            pl = grader.p_more(line, 27.3, 5.1)                          # fixed predictive distribution
+            pc = learning.line_blend_p(pl, prop, "12")
+            assert 0 < pc < 1
+            o, u, q = grader.p_three(line, 27.3, 5.1)
+            assert abs(o + u + q - 1) < 1e-9
+            if line % 1:                                                  # half-point line: no push
+                assert q < 1e-12
+            P = (pc * (1 - q), (1 - pc) * (1 - q), q)
+            assert abs(sum(P) - 1) < 1e-12 and min(P) >= 0
+            if prev is not None:
+                assert pc <= prev + 1e-12                                 # a higher line never raises P(Over)
+            prev = pc
+    f = {"p_more": 0.641, "prop": "hs", "scope": "12"}
+    assert learning.line_blend_p(learning.p_over_of(f), "hs", "12") == learning.line_blend_p(0.641, "hs", "12")   # replay = saved p only
