@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Continuous learning</title>
+<style>
+:root{--bg:#090d14;--panel:#111b29;--line:#293950;--text:#eef4fc;--muted:#a4b4ca;--up:#3fb950;--dn:#f0883e;--warn:#ffb477}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at 95% 0,#1c314d66,transparent 45%),var(--bg);color:var(--text);font:14px/1.6 Inter,system-ui,sans-serif}
+.wrap{max-width:1440px;margin:0 auto;padding:32px}
+.nav{display:flex;justify-content:space-between;gap:16px;padding:0 0 24px;border-bottom:1px solid var(--line);margin-bottom:30px;color:var(--warn);font-size:11px;font-weight:700;letter-spacing:.15em}
+.nav a{color:var(--muted);text-decoration:none;letter-spacing:0;font-size:13px;margin-left:14px}
+.eyebrow{font:11px ui-monospace,monospace;letter-spacing:.15em;color:var(--warn);text-transform:uppercase}
+h1{font-size:40px;line-height:1.15;letter-spacing:-1.5px;margin:12px 0 16px}h2{font-size:20px;margin:32px 0 12px;letter-spacing:-.3px}h3{font-size:15px;margin:18px 0 8px}
+.muted{color:var(--muted)}.small{font-size:12px}.lead{font-size:14px;max-width:860px;margin-bottom:24px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.card{background:linear-gradient(120deg,#142033,#101925);border:1px solid var(--line);border-radius:16px;padding:18px;margin:12px 0}
+.card .k{font:11px ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}.card .v{font-size:20px;font-weight:650;margin-top:4px;word-break:break-word}
+.bad{border-color:#f0883e;background:#f0883e14}.good{border-color:#3fb95066}
+.pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:12px;margin:2px}
+.pill.on{border-color:var(--up);color:var(--up)}.pill.off{border-color:var(--dn);color:var(--dn)}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:#0e1723;margin:10px 0}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:9px 11px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+th:first-child,td:first-child{text-align:left}th{background:#19263a;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.07em}
+select,button{font:inherit;font-size:12px;padding:9px 13px;border-radius:9px;background:#0c1420;color:var(--text);border:1px solid var(--line);min-height:40px;cursor:pointer}
+button.act{border-color:#ff8c42;color:#ffb477}button:focus-visible,select:focus-visible{outline:2px solid #ffb477;outline-offset:3px}
+details{margin:10px 0}summary{cursor:pointer;color:var(--muted)}pre{white-space:pre-wrap;word-break:break-word;font-size:12px;color:var(--muted)}
+.bars{display:flex;align-items:flex-end;gap:4px;height:80px;margin:8px 0}.bars div{flex:1;background:#ff8c4266;border-top:2px solid #ff8c42;min-height:2px}
+@media(max-width:640px){.wrap{padding:18px 16px}h1{font-size:30px}.card{padding:14px}.nav{flex-direction:column;gap:6px}.nav a{margin:0 12px 0 0}}
+</style></head><body><div class="wrap">
+<nav class="nav" aria-label="Admin navigation"><span>CS2 SCOUT / CONTINUOUS LEARNING</span><span><a id="lnkdiag" href="#">Diagnostics</a><a href="/">Back to grader ↗</a></span></nav>
+<div class="eyebrow">Measured continuously · changed only on evidence</div>
+<h1>Every settled match is measured. Grades change only on proof.</h1>
+<div class="muted lead" id="principle">Loading…</div>
+<div id="out" class="muted">Loading…</div>
+</div>
+<script>
+const tok = new URLSearchParams(location.search).get("token") || "";
+document.getElementById("lnkdiag").href = "/admin/diagnostics?token=" + encodeURIComponent(tok);
+const $ = s => document.querySelector(s), esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const pc = x => x == null ? "–" : (x * 100).toFixed(1) + "%", n2 = x => x == null ? "–" : (+x).toFixed(2), n3 = x => x == null ? "–" : (+x).toFixed(3), n4 = x => x == null ? "–" : (+x).toFixed(4);
+const ci = (c, f = n2) => c ? `${f(c[0])} to ${f(c[1])}` : "–";
+const when = s => s ? esc(String(s).replace("T", " ").replace("+00:00", " UTC")) : "–";
+let D = null, dim = "stat";
+async function load(fresh) {
+  try { const r = await fetch("/admin/learning.json?token=" + encodeURIComponent(tok) + (fresh ? "&fresh=1" : "")); D = await r.json(); }
+  catch (e) { $("#out").textContent = "Couldn't load: " + e.message; return; }
+  if (D.error) { $("#out").textContent = D.error; return; }
+  $("#principle").textContent = D.principle; draw();
+}
+async function act(path, params, label) {
+  const q = new URLSearchParams(Object.assign({token: tok}, params));
+  const dry = await (await fetch(`/admin/learning/${path}?` + q)).json();
+  if (dry.error) { alert(dry.error); return; }
+  if (!confirm(`${label}\n\nThis will be recorded:\n${JSON.stringify(dry.would_record || dry, null, 1).slice(0, 1500)}\n\nProceed?`)) return;
+  q.set("confirm", "1");
+  const res = await (await fetch(`/admin/learning/${path}?` + q)).json();
+  alert(res.error ? "Not done: " + res.error : "Recorded. " + (res.note || ""));
+  load();
+}
+function promote(id) { const reason = prompt(`Promote ${id}? Write the reason (required):`); if (reason) act("promote", {challenger: id, reason}, `Promote ${id}`); }
+function rollback() { const reason = prompt("Roll back to the previous registry version? Write the reason (required):"); if (reason) act("rollback", {reason}, "Rollback"); }
+function ack(item) { const reason = prompt(`Acknowledge ${item}? It stays out of scoring and stops pausing learning. Reason (required):`); if (reason) act("ack", {item, reason}, `Acknowledge ${item}`); }
+function card(k, v, cls = "") { return `<div class="card ${cls}"><div class="k">${esc(k)}</div><div class="v">${v}</div></div>`; }
+function table(head, rows) { return `<div class="scroll"><table><thead><tr>${head.map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${rows.join("") || `<tr><td colspan="${head.length}" class="muted">Nothing yet</td></tr>`}</tbody></table></div>`; }
+function metricRow(name, m) {
+  return `<tr><td>${esc(name)}</td><td>${m.units ?? 0}</td><td>${m.matches ?? 0}</td><td>${n2(m.mae)}</td><td>${n2(m.bias)}</td><td>${ci(m.bias_ci)}</td>
+    <td>${pc(m.pred_over)}</td><td>${pc(m.actual_over)}</td><td>${ci(m.over_gap_ci, pc)}</td><td>${n4(m.log_loss)}</td><td>${ci(m.log_loss_ci, n4)}</td><td>${n4(m.brier)}</td></tr>`;
+}
+const MH = ["Group", "Units", "Matches", "Proj. MAE", "Bias", "Bias 95% (by match)", "Predicted Over", "Actual Over", "Actual − predicted 95%", "Log loss", "Log loss 95%", "Brier"];
+function draw() {
+  const S = D.status || {}, SC = D.scorecard || {}, M = D.matches || {}, L = D.latest_settlement;
+  let h = `<div class="grid">
+    ${card("Live model version (deployed code)", esc(D.live_model_version))}
+    ${card("Learning", S.paused ? `Paused since ${when(S.since)}` : (D.disabled ? "Turned off (LEARNING=0)" : "Running"), S.paused ? "bad" : "good")}
+    ${card("Latest processed settlement", L ? `${when(L.processed_at)}<div class="small muted">${esc(L.match)} · ${esc(L.bucket)}${L.version > 1 ? ` · version ${L.version} (${esc(L.change)})` : ""}</div>` : "none yet")}
+    ${card("Distinct settled matches scored", `${M.scored_distinct ?? 0} <span class="small muted">(${M.scored_units ?? 0} evaluation units)</span>`)}
+    ${card("New matches since last training", `${M.new_since_training ?? 0}<div class="small muted">Next training ${esc(D.training?.next || "")}</div>`)}
+  </div>`;
+  if (S.paused) h += `<div class="card bad"><b>Why learning is paused</b> <span class="small muted">(ledger updates, training and reviews wait; shadow forecasts continue)</span>
+    ${(S.faults || []).map(f => `<p><b>${esc(f.code)}</b>: ${esc(f.message)}</p>${(f.items || []).length ? table(["Pick", "Unit", "Issue", ""], f.items.slice(0, 20).map(i =>
+      `<tr><td>#${esc(i.pick_id)}</td><td>${esc(i.unit_key)}</td><td style="text-align:left">${esc(i.issue)}</td><td>${f.code === "settlement_audit" ? `<button onclick="ack('pick:${esc(i.pick_id)}')">Acknowledge</button>` : ""}</td></tr>`)) : ""}`).join("")}</div>`;
+  if (S.last_error) h += `<div class="card bad">Last cycle error: ${esc(S.last_error)}</div>`;
+  h += `<div class="small muted">Generated ${when(D.generated)} · scorecard ${when(D.scorecard_at)} · <button onclick="load(true)">Run a cycle now</button></div>`;
+
+  // challengers
+  h += `<h2>Challengers (shadow - members never see these numbers)</h2>`;
+  if (!(D.challengers || []).length) h += `<div class="card muted">No challenger yet. Training runs ${esc(D.training?.next || "")}.</div>`;
+  for (const c of D.challengers || []) {
+    const f = c.forward_interim || {};
+    h += `<div class="card ${c.status === "eligible_for_review" ? "good" : ""}"><b>${esc(c.id)}</b> <span class="pill ${c.status === "eligible_for_review" ? "on" : c.status === "retired" ? "off" : ""}">${esc(c.status.replace(/_/g, " "))}</span>
+      <div class="small muted">${esc(c.status_reason || "")}</div>
+      <div class="small">Frozen ${when(c.frozen_at)} · training cutoff ${when(c.training_cutoff)} · snapshot ${esc(c.snapshot)} · data hash ${esc((c.data_hash || "").slice(0, 16))}… · ${c.shadow_forecasts} shadow forecasts${c.revises ? ` · revises ${esc(c.revises)}` : ""}</div>
+      ${c.next_review ? `<div class="small">Next review ${esc(c.next_review)}. Decisions are made only at ${esc((D.review_rule?.windows || []).join(" / "))} matches.</div>` : ""}
+      ${table(["Parameter", "Live", "Challenger"], Object.keys(c.config).map(k => `<tr><td>${esc(k)}</td><td>${esc(c.base_config[k] ?? "each row's own")}</td><td>${esc(c.config[k])}</td></tr>`))}
+      <h3>Paired forward results <span class="small muted">(${esc(f.label || "interim")})</span></h3>
+      ${table(["Units", "Matches", "Changed units", "Log loss live (logged)", "Live replay", "Challenger", "Gain vs live replay", "Gain 95%", "Replay gap"],
+        [`<tr><td>${f.units ?? 0}</td><td>${f.matches ?? 0}</td><td>${f.changed_units ?? "–"}</td><td>${n4(f.log_loss_logged)}</td><td>${n4(f.log_loss_live_replay)}</td><td>${n4(f.log_loss_challenger)}</td><td>${n4(f.gain)}</td><td>${ci(f.gain_ci, n4)}</td><td>${n4(f.replay_gap)}</td></tr>`])}
+      ${(c.reviews || []).map(r => `<div class="small"><b>Review at ${r.win} matches (${when(r.decided_at)}): ${r.passed ? "PASSED - eligible for review" : "did not pass"}</b> · gain ${n4(r.result.gain)} (${ci(r.result.gain_ci, n4)}, ${pc(r.result.ci_level)} interval) · slope ${n2(r.result.slope)} (${ci(r.result.slope_ci)})
+        <br>${Object.entries(r.result.checks || {}).map(([k, v]) => `<span class="pill ${v ? "on" : "off"}">${v ? "✓" : "✗"} ${esc(k)}</span>`).join("")}</div>`).join("")}
+      ${(c.development || []).length ? `<div class="small muted">Development data: ${c.development.map(d => `${esc(d.challenger)} forward results (${d.units} units, ${d.matches} matches)`).join("; ")}</div>` : ""}
+      ${c.status === "eligible_for_review" ? `<p><button class="act" onclick="promote('${esc(c.id)}')">Promote (records the decision - live grading changes only with a code release)</button></p>` : ""}
+    </div>`;
+  }
+  // registry
+  h += `<h2>Version registry</h2><div class="small muted">${esc(D.registry_note)}</div>
+    ${table(["#", "When", "Action", "Version", "Training cutoff", "Evaluated", "Reason", "By"], (D.registry || []).map(r =>
+      `<tr><td>${r.id}</td><td>${when(r.at)}</td><td>${esc(r.action)}</td><td>${esc(r.version_label)}</td><td>${when(r.training_cutoff)}</td><td>${r.eval_matches ? `${r.eval_matches} matches ${when(r.eval_from)} – ${when(r.eval_to)}` : "–"}</td><td style="text-align:left">${esc(r.reason)}</td><td>${esc(r.actor)}</td></tr>`))}
+    ${(D.registry || []).length && D.registry[0].previous_id != null ? `<button class="act" onclick="rollback()">Roll back to the previous version</button>` : ""}`;
+
+  // scorecard
+  const o = SC.overall || {};
+  h += `<h2>Scorecard · all scored evaluation units</h2>
+    <div class="small muted">One unit per player × match × stat × map scope (latest forecast 30+ min before the start). Intervals resample whole matches. Bias = projection − actual (+ = projected too high).</div>
+    ${table(MH, [metricRow("All", o)])}
+    <div class="small">Calibration slope ${n2(o.calibration_slope)} (95% ${ci(o.calibration_slope_ci)}) - 1.00 = chances spread exactly right; below 1 = too confident.</div>
+    <h3>Buckets (never scored except "scored")</h3>
+    ${table(["Bucket", "Units", "Matches"], Object.entries(SC.buckets || {}).map(([k, v]) => `<tr><td>${esc(k.replace(/_/g, " "))}</td><td>${v}</td><td>${(SC.bucket_matches || {})[k] ?? 0}</td></tr>`))}
+    <div class="small muted">${(SC.bucket_reasons || []).map(r => `${esc(r.bucket)}: ${esc(r.reason)} (${r.units})`).join(" · ")} · ledger rows ${SC.ledger_rows ?? 0}, superseded by corrections ${SC.superseded ?? 0}</div>
+    <h3>Breakdown</h3><div><select id="dim" aria-label="Breakdown">${Object.keys(SC.by || {}).map(k => `<option ${k === dim ? "selected" : ""}>${esc(k)}</option>`).join("")}</select></div>
+    ${table(MH, ((SC.by || {})[dim] || []).map(m => metricRow(m.group, m)))}
+    <h3>Over and Under calls</h3>
+    ${table(["Side the model favoured", "Units", "Matches", "Predicted", "Happened", "Happened − predicted 95%"], (SC.directional || []).map(d =>
+      `<tr><td>${esc(d.side)}</td><td>${d.units}</td><td>${d.matches}</td><td>${pc(d.predicted)}</td><td>${pc(d.actual)}</td><td>${ci(d.gap_ci, pc)}</td></tr>`))}
+    <h3>Calibration (chance of Over)</h3>
+    ${table(["Chance band", "Units", "Matches", "Predicted", "Actual Over", "Actual 95%"], (SC.calibration || []).map(b =>
+      `<tr><td>${esc(b.bin)}</td><td>${b.units}</td><td>${b.matches}</td><td>${pc(b.predicted)}</td><td>${pc(b.actual)}</td><td>${ci(b.actual_ci, pc)}</td></tr>`))}`;
+
+  // diagnosis
+  const G = SC.diagnosis || {};
+  h += `<h2>Error diagnosis</h2><div class="small muted">${esc(G.note || "")} Never turned into a bonus or penalty.</div>
+    <h3>Where the projection miss comes from (performance-model units, mean per unit)</h3>
+    ${table(["Stat", "Units", "Matches", "Total bias", "Expected rounds", "Kill rate", "Headshot rate", "Other adjustments"], (G.components || []).map(c =>
+      `<tr><td>${esc(c.stat)}</td><td>${c.units}</td><td>${c.matches}</td><td>${n2(c.total_bias)}</td><td>${n2(c.rounds)} <span class="muted small">(${ci(c.rounds_ci)})</span></td><td>${n2(c.kill_rate)} <span class="muted small">(${ci(c.kill_rate_ci)})</span></td><td>${c.hs_rate == null ? "–" : `${n2(c.hs_rate)} <span class="muted small">(${ci(c.hs_rate_ci)})</span>`}</td><td>${n2(c.other)}</td></tr>`))}
+    ${table(["Measure", "Units", "Matches", "Predicted", "Actual", "Bias", "Bias 95%"], (G.rates || []).map(r =>
+      `<tr><td>${esc(r.measure)}</td><td>${r.units}</td><td>${r.matches}</td><td>${n4(r.predicted)}</td><td>${n4(r.actual)}</td><td>${n4(r.bias)}</td><td>${ci(r.bias_ci, n4)}</td></tr>`))}
+    <h3>Roster, identity and data flags</h3>
+    ${table(["Flag", "Units", "Matches", "Proj. MAE", "Bias", "Log loss"], (G.flags || []).map(f =>
+      `<tr><td>${esc(f.flag)}</td><td>${f.units}</td><td>${f.matches}</td><td>${n2(f.mae)}</td><td>${n2(f.bias)}</td><td>${n4(f.log_loss)}</td></tr>`))}
+    <div class="small muted">Market matching: ${G.market ? `lines differing by 1+ across books ${G.market.units_lines_differ_1plus} · board lines without a market id ${G.market.units_board_line_without_market_id} · settled from ${esc(JSON.stringify(G.market.settled_from))}` : "–"}</div>
+    <h3>Spread of the forecast distribution</h3>
+    ${G.spread && G.spread.units ? `<div class="bars" aria-label="PIT histogram">${G.spread.pit_hist.map(v => `<div title="${v}" style="height:${(100 * v / Math.max(...G.spread.pit_hist, 1)).toFixed(0)}%"></div>`).join("")}</div>
+      <div class="small">PIT histogram (flat = well spread) · ${G.spread.units} units / ${G.spread.matches} matches · inside own 50% range ${pc(G.spread.in50)} (${ci(G.spread.in50_ci, pc)}) · inside own 80% range ${pc(G.spread.in80)} (${ci(G.spread.in80_ci, pc)}) · PIT mean ${n3(G.spread.pit_mean)}, variance ${n4(G.spread.pit_var)} (ideal ${n4(G.spread.pit_var_ideal)})<br><span class="muted">${esc(G.spread.reading)}</span></div>` : `<div class="muted small">No performance-model units yet.</div>`}`;
+
+  // slips
+  const P = D.slips || {};
+  h += `<h2>Slip-builder batches (evaluated separately)</h2>
+    ${table(["Kind", "Legs settled", "Matches", "Leg predicted", "Leg hit", "Leg hit 95%", "Leg log loss", "Slips settled", "All legs hit", "Expected all-hit"], (P.kinds || []).map(k =>
+      `<tr><td>${esc(k.kind)}</td><td>${k.legs_settled}</td><td>${k.matches}</td><td>${pc(k.leg_predicted)}</td><td>${pc(k.leg_hit_rate)}</td><td>${ci(k.leg_hit_ci, pc)}</td><td>${n4(k.leg_log_loss)}</td><td>${k.slips_settled}</td><td>${k.slips_all_hit}</td><td>${n2(k.slips_expected_all_hit)}</td></tr>`))}
+    <div class="small muted">${P.batches ?? 0} saved batches.</div>`;
+
+  // rules + log
+  h += `<h2>Rules (fixed in advance)</h2>
+    <details><summary>Training rule</summary><pre>${esc(JSON.stringify(D.training?.rule, null, 1))}</pre></details>
+    <details><summary>Review rule</summary><pre>${esc(JSON.stringify(D.review_rule, null, 1))}</pre></details>
+    <details><summary>Pause rules</summary><pre>${esc(JSON.stringify(D.faults_rule, null, 1))}</pre></details>
+    <details><summary>Training runs</summary>${table(["When", "Outcome", "Challenger", "Rows", "Matches", "Snapshot"], (D.training?.runs || []).map(r =>
+      `<tr><td>${when(r.at)}</td><td>${esc(r.outcome)}</td><td>${esc(r.challenger_id || "–")}</td><td>${r.detail.rows ?? "–"}</td><td>${r.detail.matches ?? "–"}</td><td>${esc(r.snapshot_id)}</td></tr>`))}</details>
+    <details><summary>Last cycle and events</summary><pre>${esc(JSON.stringify({last_cycle: S.last_cycle, events: D.events}, null, 1))}</pre></details>`;
+  $("#out").classList.remove("muted"); $("#out").innerHTML = h;
+  const sel = $("#dim"); if (sel) sel.onchange = () => { dim = sel.value; draw(); };
+}
+load();
+</script></body></html>

@@ -87,6 +87,7 @@ def test_records_rows_from_disk_after_restart(monkeypatch):
         def close(self): pass
     monkeypatch.setattr(hltv, "_connect", lambda: Con())
     monkeypatch.setattr(hltv, "_player_ids", lambda cur, n, t: [1])
+    monkeypatch.setattr(__import__("picklog"), "_team_confirmed", lambda cur, ids, team: True)
     monkeypatch.setattr(hltv, "_series_rows", lambda *a, **k: [{"number": 1}, {"number": 2}, {"number": 3}])
     assert len(records._hltv_rows("x", "y", "2026-01-01")) == 3
     _restart()

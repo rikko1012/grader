@@ -220,3 +220,92 @@ Not measurable yet: C:\Users\tikic\cs2_scout\.cache\ml_snapshots.db not found (t
 - **Forward cohort.** `moneyline.py` writes `CS2_DATA_DIR/.cache/ml_snapshots.db` (tables `ml_forecasts` = frozen baseline `ml-baseline-1`, `ml_quotes` = per-platform quotes with `prob_a`). The file did not exist when this ran, so the forward cohort has 0 rows. `python ml_eval.py --forward-only` scores it: per match, the latest row at or before start - 30 min (the earliest start any source states), scored only if it was available then and no older than 6 h before that cutoff (otherwise a counted exclusion), linked to HLTV through the `hltv:<id>` match id when present.
 
 - **Re-rendered 2026-10-12 after the review fixes (nothing recomputed).** Display corrections only: the 50% log-loss prints 0.6931 (it was double-rounded to 0.6932), an ROI 'interval' from fewer than 20 bets prints n/a, the favourite count notes that this run counted p = 0.5 as a team-A favourite (4 Polymarket matches), the method text describes this run as it was made (L2 strength chosen on validation; features dated before the HLTV date), and the test line no longer says 'touched once' (see the discipline note above). The per-match rows of the 234 test matches were moved out of `ml_eval_results.json` into the ml_eval cache dir. The code now chooses the L2 strength inside development, keys features to the earlier of the HLTV and UTC start dates, excludes best-of-2 markets, pins the split in the freeze and refuses a second `--final` without `--rescore-test` - these apply from the next run, which needs a fresh non-final run (new freeze); because this test split has already been scored, the next `--final` is a rescore and the cache dir's scored-test record makes the code say so.
+
+## Beat-the-market attempt (2026-10-12) - provenance, what was fixed in advance, and how to read the result
+
+*Added by hand 2026-10-12 (owner review). Numbers from the research dataset `dataset.pkl` (DATA_CARD.md in the research
+folder) and the four research families in `ml_models/`. Nothing here changes a member output; moneylines stay 0U.*
+
+### Where every price came from
+
+| | Matches | Polymarket only | Kalshi only | Both platforms |
+|---|---:|---:|---:|---:|
+| Historical dataset (every eligible match) | **3,543** | 1,485 | 75 | 1,983 |
+| Scored out-of-sample (rolling-origin blocks 2026-06 to 2026-10) | **1,790** | 114 | 71 | 1,605 |
+
+- **One observation per match.** The dataset has 5,526 platform rows (Polymarket 3,468, Kalshi 2,058; no match has two
+  rows from the same platform) but every score is computed on ONE row per match: the frozen baseline rule picks the
+  platform with the smaller spread at the cutoff, ties to Polymarket. The research data records no Polymarket book
+  (its history is a mid / last-trade series), so its spread is taken at the 1-cent tick and every two-platform match
+  ties to Polymarket. The 1,790 scored rows are therefore 1,719 Polymarket prices (1,605 of them on matches Kalshi
+  also listed) and 71 Kalshi prices; 1,790 rows = 1,790 distinct `hltv:<id>` match ids. Every bootstrap resamples
+  matches. A match listed on both platforms never became two independent observations in any score.
+- **Training-only pooling.** Two variants (calibration `kalshi_pooled_train`, GLM pool "both") used both platforms'
+  rows of a match as TRAINING rows; that changes training weights only - their evaluation rows are still one per match.
+- **Start time.** Each row's cutoff = the EARLIEST scheduled start any platform states for that HLTV match, minus 30
+  minutes (Polymarket: earlier of `gameStartTime` and the description's "initially scheduled for"; Kalshi: the rules'
+  "originally scheduled for", else the ticker's ET time). In the scored matches 432 of 3,395 platform rows took the
+  other platform's earlier start. Reason: with each platform's own start, 111 Kalshi rows whose stated start was more
+  than an hour late scored log-loss 0.303 against Polymarket's 0.610 on the same matches - in-play quotes.
+- **Quote timestamps.** The price is the last recorded point at or before the cutoff and no older than 6 h before it;
+  history is requested only up to the cutoff. Polymarket: 10-minute `/prices-history` points (median age at the cutoff
+  9.8 min, maximum 308 min across the 1,790 scored rows). Kalshi: 1-minute candlesticks, mid of the last candle at or
+  before the cutoff, two-sided with spread <= 10 cents.
+- **Missing-price exclusions** (counted, never filled): no price history - Polymarket 336, Kalshi 80; no two-sided
+  quote (spread <= 10c) at the cutoff - Kalshi 123; no price before the cutoff - Kalshi 3; price already resolved
+  before the cutoff (wrong start time) - Polymarket 1; a point <= 0.01 or >= 0.99 is excluded as resolved.
+- **Frozen source-selection rule** (`ml-baseline-1`, moneyline.py): smaller spread -> more depth -> Polymarket. It was
+  fixed before any model was scored and is what the forward cohort uses.
+
+### What was fixed before the variants were scored, and what was not
+
+Fixed in advance (written into each family's protocol before its first evaluation-block score): the dataset and its
+exclusions; one row per match by the frozen rule above; the rolling-origin protocol (calendar-month blocks, two-week
+halves in busy months; a block's model trained only on rows with cutoff < block start - 1 day; first block once
+>= 1,500 training matches existed: blocks 2026-06, 07, 08, 09a, 09b, 10); every choice of penalty / configuration made
+inside the training window by time-ordered inner validation; and the pass rule - pooled out-of-sample log-loss gain
+vs the market price with a match-grouped 95% bootstrap interval entirely above 0 (the calibration family also
+required >= 60% of blocks positive and a calibration slope of 0.8-1.2). The pre-registered primary result of each family:
+
+| Family (pre-registered primary) | Gain vs market [95% CI] | Blocks positive |
+|---|---|---:|
+| Regularised GLM, round 1, selector "min" | -0.00107 [-0.00284, +0.00056] | 2 of 6 |
+| Market calibration, R1 (min over the first pool) | -0.00106 [-0.00325, +0.00100] | 1 of 6 |
+| Ratings stack, selector "min" | -0.00278 [-0.00610, +0.00037] | 2 of 6 |
+| Gradient boosting on the market residual, round 1 | -0.00358 [-0.00690, -0.00045] | 1 of 6 |
+
+Not fixed in advance: every later round (GLM round 2, calibration rounds with the second pool / time decay / wider
+grids, ratings rounds 2-3, boosting rounds 2-6) was designed AFTER the first rounds' evaluation-block results had been
+seen. Across all rounds 208 variants were scored on the same blocks. None passed.
+
+**How to say it:** none of the tested candidates demonstrated an improvement over the market price. That is a statement
+about these 208 variants on these 1,790 matches - not a claim that no model can ever beat the market.
+
+### The frozen candidate and selection bias
+
+`ml-candidate-1` (market log-odds x one fitted slope, ml_model.py) is the best of the 208 on the development blocks:
++0.00064 log-loss [-0.00010, +0.00147], 4 of 6 blocks positive. Because it was picked as the best of many variants on
+the SAME blocks, that interval is optimistic: choosing the maximum of 208 noisy estimates inflates the winner's
+number (winner's curse), and a 95% interval for a pre-chosen model does not cover a model chosen after looking. The
+development number is a reason to watch it, not evidence. It was frozen at 2026-10-12T05:14:25Z (coefficient, sha256)
+and the ONLY result that counts is its forward cohort - matches that start after the freeze - scored under REVIEW_PLAN.
+If it is revised, the forward results used to revise it become development data and the revised version starts a new
+forward count.
+
+### Review plan (statistically workable activation) - `ml_eval.REVIEW_PLAN`, registered 2026-10-12
+
+- **300 is a checkpoint, not a promotion.** Scheduled looks at 300, 600 and 1,000 paired forward matches, each run
+  once on exactly the first N matches by start and stored (`ml_reviews.json`); nothing between looks is a decision.
+- **Error spending.** O'Brien-Fleming boundaries for three looks: 99.95% / 98.6% / 95.5% match-grouped bootstrap
+  intervals at looks 1 / 2 / 3 (overall false-promotion risk ~5%, instead of ~11% for three plain 95% looks).
+- **Minimum evidence.** Matches from >= 4 calendar weeks, no week > 40% of them.
+- **Calibration tolerances.** Slope point estimate 0.8-1.2 and its 95% interval inside [0.6, 1.4]; calibration-in-the-
+  large interval inside [-0.06, +0.06]; each favourite band (0.50-0.60, 0.60-0.70, 0.70-0.80, 0.80-1.00) with >= 50
+  matches must not show a gap above 5 points beyond its sampling error (|gap| - 1.96 SE <= 0.05), with at least two
+  bands testable.
+- **Return at real prices.** Side bought when model probability exceeds that side's recorded ASK at the cutoff by
+  >= 3 points, paid at ask + fees (Kalshi 0.07 p(1-p) per contract, Polymarket 0); >= 100 bets and the look's ROI
+  interval above 0. No recorded ask = no bet (counted).
+- **Futility.** At look 2 a gain <= 0 ends the candidate (stays shadow).
+- **After a pass.** "Eligible for owner review" only; a stake also needs the owner's approval and a new, re-frozen
+  version (ACTIVATION_POLICY). Nothing in code switches a stake on.

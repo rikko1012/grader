@@ -742,6 +742,8 @@ const lineWarn = (p, l, ok) => ok ? "" : p === "hs" && +l >= 24 ? `${l} headshot
 // a 0-unit pick (Lean) or a line with no match scheduled (internal state SCOUT) always reads "Lean Over / Lean Under" -
 // never the internal SCOUT label or a bare Over / Under (owner's Lean rule, 2026-10-11 audit)
 const isLeanV = v => !!v && (v.grade === "LEAN" || v.grade === "SCOUT" || v.state === "SCOUT");
+// owner review 2026-10-12: a chance within 1 point of 50% is shown as what it is - essentially a coin flip
+const coinFlip = p => p != null && Math.abs(p - 0.5) < 0.01 ? ` <span class="pill" title="The model sees this line as essentially 50/50 – the side shown is barely ahead">coin flip</span>` : "";
 const sideWord = v => !v.side ? "–" : isLeanV(v) ? `Lean ${v.side === "More" ? "Over" : "Under"}` : v.side === "More" ? "Over" : "Under";
 const gradeWord = v => v.state === "SCOUT" || v.grade === "SCOUT" ? "No match scheduled" : v.grade === "LEAN" ? "Lean" : (v.grade || "–");
 // which projection the grade used: the performance model (Maps 1-2 and, since 2026-10-10, Map 1), else the older
@@ -1365,7 +1367,7 @@ function drawBoard() {
       <span class="gtag ${!r.side || r.state === "SCOUT" ? "g-scout" : gClass(r.grade)}" title="${esc(ltl)}">${esc(lab)}</span>
       <div><div class="b2top">${bbook === "all" ? `<span class="pill" style="margin:0 4px 0 0;padding:1px 7px">${bookName(r.book || "underdog")}</span>` : ""}<b>${esc(nick)}</b>${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}
           <span class="muted">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}${showMatch ? " · " + shortWhen(r.start) : ""}</span></div>
-        <div class="b2pick">${r.side ? esc(sideWord(r)) : "grading…"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}${mktTag(r)}${r.stale ? ` <span class="pill warn" title="The PrizePicks feed is not fresh – this line can't be confirmed as playable">not confirmed</span>` : ""}${r.p != null ? ` · <b>${chance(r.p, r.prop)}</b>` : ""}${isLeanV(r) ? (r.state === "SCOUT" ? " · No match scheduled" : "") : " · " + esc(r.grade || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${capChip(r, r.team_name || r.team)}</div>
+        <div class="b2pick">${r.side ? esc(sideWord(r)) : "grading…"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}${mktTag(r)}${r.stale ? ` <span class="pill warn" title="The PrizePicks feed is not fresh – this line can't be confirmed as playable">not confirmed</span>` : ""}${r.p != null ? ` · <b>${chance(r.p, r.prop)}</b>${coinFlip(r.p)}` : ""}${isLeanV(r) ? (r.state === "SCOUT" ? " · No match scheduled" : "") : " · " + esc(r.grade || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${capChip(r, r.team_name || r.team)}</div>
         <div class="b2meta">Proj ${r.proj != null ? num(r.proj, 1) : "–"}${ds ? ` · <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}">${ds[1]}</span>` : ""}${r.source ? `<span class="mx"> · source ${esc(r.source)}</span>` : ""}${r.hltv_retry ? ` · <span class="pill warn" title="The HLTV database was unreachable at the last regrade – this is this line's last grade (source as shown); it is regraded as soon as the database answers">kept grade · HLTV unreachable</span>` : ""}${r.graded_at ? `<span class="mx"> · graded ${agoTxt(r.graded_at)}</span>` : ""}${r.alt && r.book !== "prizepicks" ? ` · alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}${r.book === "prizepicks" && r.open_line != null && +r.open_line !== +r.line ? ` · opened ${r.open_line}` : ""}${r.moved_from != null ? ` · <span class="pill warn">line moved from ${r.moved_from}</span>` : ""}</div>
         ${ev(r.support, "up", "+")}${ev(r.concern, "dn", "–")}</div>
       ${!r.side ? "<span></span>" : r.state === "SCOUT" ? `<button type="button" class="bslip" disabled title="No upcoming match found for his team – there is nothing to enter on a slip yet">+ Slip</button>`
@@ -2041,7 +2043,7 @@ function render(d) {
   const why = !v.reason || /^Projection [\d.]+ vs [\d.]+ needed \([^)]*\)$/.test(v.reason) || g.tape_fight || g.form_fight ? ""
     : v.reason.replace(/ · stake capped: .*$/, "");
   const pu = pushOf(g);
-  const sub = v.side ? `${ch(v.p)} ${pu != null ? `win chance excluding pushes · push ${pct(pu)}` : "chance"} · ${v.units}U${capPill}${why ? `<div class="small muted" style="margin-top:4px">${esc(why)}</div>` : ""}`
+  const sub = v.side ? `${ch(v.p)} ${pu != null ? `win chance excluding pushes · push ${pct(pu)}` : "chance"}${coinFlip(v.p)} · ${v.units}U${capPill}${why ? `<div class="small muted" style="margin-top:4px">${esc(why)}</div>` : ""}`
     : gateStop ? "" : esc(v.reason || "");
   const hc = g.status === "NO GRADE" || v.state === "SCOUT" ? "g-scout" : gClass(v.grade);
   h += `<section class="card herocard ${hc}"><div class="hero">

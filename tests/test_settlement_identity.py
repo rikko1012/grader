@@ -63,6 +63,7 @@ def test_rematch_in_the_window_is_not_settled(monkeypatch):
         def close(self): pass
     monkeypatch.setattr(hltv, "_connect", lambda: Con())
     monkeypatch.setattr(hltv, "_player_ids", lambda cur, n, t: [1])
+    monkeypatch.setattr(__import__("picklog"), "_team_confirmed", lambda cur, ids, team: True)
     monkeypatch.setattr(hltv, "_series_rows", lambda *a, **k: r)
     out = hltv.settle_by_day("x", "Team", "2026-10-10", "Vitality")
     assert out == {"found": False, "ambiguous": True}
@@ -71,3 +72,38 @@ def test_rematch_in_the_window_is_not_settled(monkeypatch):
 def test_picklog_scope_result_uses_identity(monkeypatch):
     import inspect, picklog
     assert "hltv.opponent_rows(cur, rows, opp)" in inspect.getsource(picklog.scope_result)
+
+
+def test_nick_only_player_never_settles(monkeypatch):
+    """2026-10-12 audit: HLTV's 'foggers' never played for Rooster - a nick-only identity is not this player."""
+    import hltv, picklog
+
+    class Cur:
+        def __enter__(s): return s
+        def __exit__(s, *a): return False
+        def execute(s, q, a=None): s.q = q
+        def fetchall(s): return [(9001, "Some Other Team")]
+
+    class Con:
+        def cursor(s): return Cur()
+        def close(s): pass
+    monkeypatch.setattr(hltv, "_connect", lambda: Con())
+    monkeypatch.setattr(hltv, "_player_ids", lambda cur, n, t: [7])
+    monkeypatch.setattr(hltv, "resolve_team_id", lambda cur, name: None)
+    called = []
+    monkeypatch.setattr(hltv, "_series_rows", lambda *a, **k: called.append(1) or [])
+    res = picklog.scope_result({"id": 1, "player": "foggers", "team": "Rooster", "opponent": "Fruju", "prop": "kills",
+                                "scope": "12", "line": 30.5, "pick": "More", "match_start": "2026-10-10T09:00:00Z"})
+    assert res["status"] == "none" and "identity" in res["reason"] and called == []
+
+
+def test_team_confirmed_by_alias_id(monkeypatch):
+    import hltv, picklog
+
+    class Cur:
+        def execute(s, q, a=None): pass
+        def fetchall(s): return [(4608, "Ninjas in Pyjamas")]
+    monkeypatch.setattr(hltv, "resolve_team_id", lambda cur, name: 4608)
+    assert picklog._team_confirmed(Cur(), [1], "NIP") is True
+    monkeypatch.setattr(hltv, "resolve_team_id", lambda cur, name: None)
+    assert picklog._team_confirmed(Cur(), [1], "NIP Academy") is False

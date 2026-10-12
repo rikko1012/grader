@@ -502,3 +502,29 @@ def test_reads_do_not_wait_for_a_write_transaction():
     finally:
         release.set()
         th.join(5)
+
+
+def test_match_diversity_holds_across_build_presses_and_limited_reports_exposure():
+    """Owner review 2026-10-12: in no-overlap mode a DIFFERENT player from an already-used match never comes back, even
+    on a later Build press of the same batch; with limited overlap the batch reports player AND match exposure; an
+    explicit new batch resets usage."""
+    rows = board(12, per_match=3, seed=8)                    # 3 different players per match
+    b = sb.new_batch("owner-check")
+    r1 = sb.build(rows, {"sizes": [4], "count": 2}, batch=b, key="press-0001", model=M, now=NOW)
+    r2 = sb.build(rows, {"sizes": [2], "count": 3}, batch=b, key="press-0002", model=M, now=NOW)
+    used = [l["match_slug"] for r in (r1, r2) for s in all_slips(r) for l in s["legs"]]
+    assert len(used) == len(set(used)) == 12 and [len(r1["slips"][4]), len(r2["slips"][2])] == [2, 2]
+    assert "not relaxed" in r2["shortage"][2]                # 3 asked, 2 possible: said, never filled by reuse
+    lim = sb.new_batch("owner-check-2")
+    r3 = sb.build(rows, {"sizes": [3], "count": 6, "overlap": "limited", "max_uses": {"player": 1, "match": 2}},
+                  batch=lim, key="press-0003", model=M, now=NOW)
+    e = r3["exposure"]
+    per_match = {}
+    for s in all_slips(r3):
+        assert len({l["match_slug"] for l in s["legs"]}) == len(s["legs"])     # one pick per match inside a slip
+        for l in s["legs"]:
+            per_match[l["match_slug"]] = per_match.get(l["match_slug"], 0) + 1
+    assert max(per_match.values()) == 2 and e["max_uses"]["match"] == 2 and e["max_uses"]["player"] == 1
+    assert e["repeated_matches"] and e["distinct_players"] == e["legs"]
+    fresh = sb.new_batch("owner-check", key="reset-0001")
+    assert fresh != b and len(all_slips(sb.build(rows, {"sizes": [4], "count": 1}, batch=fresh, key="press-0004", model=M, now=NOW))) == 1

@@ -1654,6 +1654,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, _DIAG["data"])
             if u.path == "/admin/diagnostics" and self.authed(q.get("token")):
                 return self.send(200, (WEB / "diagnostics.html").read_bytes(), "text/html; charset=utf-8")
+            if (u.path in ("/admin/learning", "/admin/learning.json") or u.path.startswith("/admin/learning/")) and self.authed(q.get("token")):
+                import learning                           # continuous measurement dashboard (shadow; never changes a grade)
+                return self.send(*learning.http(u.path, q, WEB))
             if u.path == "/admin/comparison_audit" and self.authed(q.get("token")):
                 # ONE cohort at ONE timestamp: every Underdog offer now, and for every graded board line whether the
                 # comparison finds its own offer (by id / name) or why not
@@ -2047,8 +2050,17 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/admin/settlement_audit" and self.authed(q.get("token")):
                 # 2026-10-12 identity fix: re-derive EVERY settled pick (Maps 1-2, Map 1, Maps 1-3) through the canonical-id
                 # settlement path. Dry run unless apply=1; corrections append old + new values to settlement_corrections.jsonl
-                return self.send(200, picklog.fix_scope_settlements(apply=q.get("apply") == "1", scopes=("12", "1", "123"),
-                                                                    test=int(q["test"]) if (q.get("test") or "").isdigit() else None))
+                # 2026-10-12 owner review: until=<settled_at ISO> / ids=1,2,3 freeze the cohort; picks HLTV can't verify
+                # are checked against BO3.gg's full scoreboard; summary.line = "N wrong among V verified; U unresolved"
+                sb = BO3(background=True)
+                try:
+                    return self.send(200, picklog.fix_scope_settlements(
+                        apply=q.get("apply") == "1", scopes=("12", "1", "123"),
+                        test=int(q["test"]) if (q.get("test") or "").isdigit() else None, until=q.get("until") or None,
+                        ids=[i for i in (q.get("ids") or "").split(",") if i.strip().isdigit()] or None,
+                        bo3=sb, map_rows=cs2_scout.map_rows))
+                finally:
+                    sb.close()
             if u.path == "/admin/perf_check" and self.authed(q.get("token")):
                 # performance model on LIVE data for given players (to prove it equals the training export)
                 import perf_live
@@ -2654,6 +2666,8 @@ if __name__ == "__main__":
         threading.Thread(target=cleanup, daemon=True, name="cleanup").start()
     # research tools last (matchid tables, then the moneyline refreshers): their own thread, failures isolated
     threading.Thread(target=start_research, daemon=True, name="research").start()
+    # continuous learning (learning.py): measures settled matches every 15 min - shadow only, never touches grading
+    threading.Thread(target=lambda: __import__("learning").forever(), daemon=True, name="learning").start()
     try:
         hltv.search_players("a")                      # loads the HLTV player-search index in the background
     except Exception:

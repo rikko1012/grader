@@ -3,7 +3,7 @@
 ml_sides.py - a SIDE for every CS2 moneyline (series winner), with the HLTV figures shown next to it.
 
 Owner 2026-10-12: "correct the moneylines grading - pick a side for each moneyline with reasoning and HLTV data to back
-that side".  Shadow only: every pick carries stake_units 0 until a model beats the market on a chronological test.
+that side".  Shadow only: every pick carries stake_units 0 unless a candidate demonstrates an improvement on a chronological test.
 
 What decides the side (FROZEN rule, MODEL_VERSION "ml-sides-1")
   1. Usable market baseline (moneyline.board() match with a linked match_id and baseline.prob_a not None):
@@ -23,7 +23,7 @@ What decides the side (FROZEN rule, MODEL_VERSION "ml-sides-1")
        "No HLTV data and no market price - no side" (the only case without a side; the reasons say why).
   Every pick: stake_units 0.  hltv_view = how the four HLTV signals line up with the side: "agrees" (a majority of the
   available signals back it), "disagrees" (a majority favour the other team), "mixed" otherwise, "no data" (none).
-  The signals have weight 0 for the market side: none of them beat the market in ml_eval's chronological test
+  The signals have weight 0 for the market side: none of them demonstrated an improvement over the market in ml_eval's chronological test
   (ML_EVAL.md section 3: nothing promoted).  LAN / online record and the current VRS rank are shown, never counted.
 
 HLTV evidence (evidence(); one per team pair and cutoff day)
@@ -89,11 +89,12 @@ SCALE = {"rating": 0.05016, "map_pool": 0.10247, "form": 0.14117, "h2h": 0.17449
 SIGNALS = ("rating", "map_pool", "form", "h2h")
 ML_EVAL_FEATURE = {"rating": "a_rating", "map_pool": "b_mappool", "form": "c_form", "h2h": "e_h2h"}
 
-BASIS_MARKET = ("Side = market favourite (validated baseline). HLTV figures are context - none beat the market in "
-                "testing (ML_EVAL.md).")
+BASIS_MARKET = ("Side = market favourite (validated baseline). HLTV figures are context - none of the tested candidates "
+                "demonstrated an improvement over the market price (ML_EVAL.md).")
 BASIS_HLTV = ("Side = sign of the frozen HLTV composite (ml_eval features a rating, b map pool, c form, e head-to-head, "
               "each divided by its development SD; ties -> higher shrunk lineup rating). Untested as a side-picker - "
-              "none of these features beat the market in testing (ML_EVAL.md). No market price, no stake.")
+              "none of the tested candidates demonstrated an improvement over the market price (ML_EVAL.md). "
+              "No market price, no stake.")
 BASIS_NONE = "No usable market price and no comparable HLTV data for these two teams - no side."
 NO_SIDE_LABEL = "No HLTV data and no market price - no side"
 PENDING_LABEL = "HLTV evidence loading - no market price; the side appears once it is read"

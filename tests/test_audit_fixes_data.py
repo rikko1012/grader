@@ -170,6 +170,7 @@ def test_settlement_never_matches_an_academy(monkeypatch):
             pass
     monkeypatch.setattr(hltv, "_connect", lambda: Con())
     monkeypatch.setattr(hltv, "_player_ids", lambda cur, n, t: [1])
+    monkeypatch.setattr(__import__("picklog"), "_team_confirmed", lambda cur, ids, team: True)
     monkeypatch.setattr(hltv, "_series_rows", lambda *a, **k: list(rows))
     assert hltv.settle_by_day("Joey", "Sangal", "2026-09-30", "Inner Circle") == {"found": False}
     assert hltv.settle_by_day("Joey", "Sangal", "2026-09-30", "Inner Circle Academy")["found"]

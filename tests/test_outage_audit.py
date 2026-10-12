@@ -174,6 +174,7 @@ def test_records_failure_keeps_last_rows(monkeypatch):
         def close(self): pass
     monkeypatch.setattr(h, "_connect", lambda: Con())
     monkeypatch.setattr(h, "_player_ids", lambda cur, n, t: [1])
+    monkeypatch.setattr(__import__("picklog"), "_team_confirmed", lambda cur, ids, team: True)
     monkeypatch.setattr(h, "_series_rows", lambda *a, **k: [{"number": 1}])
     assert records._hltv_rows("x", "y", "2026-01-01") == [{"number": 1}]
     records._CACHE.clear()
@@ -311,6 +312,7 @@ def test_context_stops_after_a_transient_section(monkeypatch):
         def close(self): pass
     monkeypatch.setattr(hltv, "_connect", lambda: Con())
     monkeypatch.setattr(hltv, "_player_ids", lambda cur, n, t: [1])
+    monkeypatch.setattr(__import__("picklog"), "_team_confirmed", lambda cur, ids, team: True)
     monkeypatch.setattr(hltv, "_team_id", lambda cur, t: 1)
     def boom(*a, **k):
         calls.append("x"); raise hltv.Unavailable("statement timeout")

@@ -125,6 +125,7 @@ def _fake_hltv(monkeypatch, series):
         def close(self): pass
     monkeypatch.setattr(hltv, "_connect", lambda: Con())
     monkeypatch.setattr(hltv, "_player_ids", lambda cur, n, t: [1])
+    monkeypatch.setattr(__import__("picklog"), "_team_confirmed", lambda cur, ids, team: True)
     monkeypatch.setattr(hltv, "_series_rows", lambda *a, **k: series)
 
 
@@ -178,6 +179,7 @@ def _fake_hltv_ff(monkeypatch, series, forfeits):
         def close(self): pass
     monkeypatch.setattr(hltv, "_connect", lambda: Con())
     monkeypatch.setattr(hltv, "_player_ids", lambda cur, n, t: [1])
+    monkeypatch.setattr(__import__("picklog"), "_team_confirmed", lambda cur, ids, team: True)
     monkeypatch.setattr(hltv, "_series_rows", lambda *a, **k: series)
 
 

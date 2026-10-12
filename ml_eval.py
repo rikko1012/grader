@@ -121,6 +121,50 @@ ACTIVATION_POLICY = {
                  "calibration in range in every probability band with >= 30 matches",
                  "explicit owner approval", "a new, re-frozen model version"],
     "otherwise": "shadow - model probability labelled 'candidate - not validated', never a stake",
+    "review_plan": "REVIEW_PLAN (fixed looks, tolerances, minimum evidence) - the only way a candidate reaches owner review",
+}
+
+# REVIEW PLAN (owner review 2026-10-12: "make activation criteria statistically workable"). Fixed BEFORE any forward
+# result exists; changing it makes a new plan version and restarts the count. Three scheduled looks - nothing in
+# between is a decision, and a look's result is recorded once (ml_reviews.json) and never recomputed with more data.
+#   * Looks at 300 / 600 / 1000 paired forward matches (candidate and baseline both scorable, one row per HLTV match,
+#     matches starting after the freeze). A look runs the first time forward_eval sees the count at or past it.
+#   * Error spending (O'Brien-Fleming, 3 looks, overall two-sided alpha 0.05): the gain and return intervals use
+#     99.95% / 98.6% / 95.5% match-grouped bootstrap intervals at looks 1 / 2 / 3, so three looks together keep the
+#     false-promotion risk at about 5% instead of the ~11% that three plain 95% looks would give.
+#   * Minimum evidence at a look: forward matches from >= 4 distinct calendar weeks, no single week holding > 40% of
+#     them (one hot week of one tournament is not enough).
+#   * Calibration tolerances (all must hold): slope point estimate in [0.8, 1.2] (the frozen rule) AND its 95%
+#     interval inside [0.6, 1.4]; calibration-in-the-large: 95% interval of mean(result) - mean(probability) inside
+#     [-0.06, +0.06]; per favourite band (0.50-0.60, 0.60-0.70, 0.70-0.80, 0.80-1.00) with >= 50 matches: the gap
+#     |observed - predicted| minus 1.96 x its standard error must be <= 0.05 (a band is "miscalibrated" only when the
+#     data show a gap of more than 5 points); at least 2 bands must have >= 50 matches.
+#   * Return at prices that were really available: side bought when model probability - recorded ASK of that side
+#     >= 0.03, price + fees (Kalshi 0.07 x p x (1 - p) per contract, Polymarket 0), 1 unit per bet; needs >= 100 bets
+#     and the look's interval for ROI above 0. No recorded ask at the cutoff = no bet (counted).
+#   * Futility: at look 2, a gain point estimate <= 0 ends the candidate (stays shadow, a new candidate needs a new
+#     freeze and a new plan count).
+#   * Passing a look = "eligible for owner review" only (ACTIVATION_POLICY): owner approval and a re-frozen version
+#     are still required; nothing in code turns on a stake.
+REVIEW_PLAN = {
+    "version": "review-plan-1",
+    "registered": "2026-10-12",
+    "looks": [300, 600, 1000],
+    "ci_levels": [0.9995, 0.986, 0.955],
+    "error_spending": "O'Brien-Fleming, 3 looks, overall two-sided alpha 0.05",
+    "min_weeks": 4,
+    "max_week_share": 0.40,
+    "slope_point": [0.8, 1.2],
+    "slope_ci": [0.6, 1.4],
+    "citl_ci": [-0.06, 0.06],
+    "bands": [[0.5, 0.6], [0.6, 0.7], [0.7, 0.8], [0.8, 1.0001]],
+    "band_min_n": 50,
+    "band_tolerance": 0.05,
+    "min_testable_bands": 2,
+    "edge_vs_ask": 0.03,
+    "fees": {"kalshi": "0.07 * p * (1 - p) per contract", "polymarket": "0"},
+    "min_bets": 100,
+    "futility_look": 2,
 }
 
 # Polymarket outcome names that differ from the HLTV team name beyond the "Team"/"Esports" affixes.
@@ -873,9 +917,9 @@ def _rng(seed=SEED):
     return random.Random(seed)
 
 
-def group_bootstrap(groups, stat, B=BOOT, seed=SEED):
+def group_bootstrap(groups, stat, B=BOOT, seed=SEED, level=0.95):
     """Match-grouped bootstrap: resample groups (matches) with replacement. groups: list of row-lists.
-    stat(rows) -> float. Returns (lo, hi) 95% percentile interval."""
+    stat(rows) -> float. Returns (lo, hi) percentile interval at `level` (95% by default)."""
     if not groups:
         return (None, None)
     r = _rng(seed)
@@ -891,7 +935,8 @@ def group_bootstrap(groups, stat, B=BOOT, seed=SEED):
     if not vals:
         return (None, None)
     vals.sort()
-    return (round(vals[int(0.025 * (len(vals) - 1))], 5), round(vals[int(0.975 * (len(vals) - 1))], 5))
+    a = (1 - level) / 2
+    return (round(vals[int(a * (len(vals) - 1))], 5), round(vals[int((1 - a) * (len(vals) - 1))], 5))
 
 
 def _groups(rows, key="hltv_match"):
@@ -1483,8 +1528,51 @@ def forward_eval(db_path, hl):
         rs = [r for r in out_rows if r["source"] == src]
         res["by_source"][src] = {"overall": metrics(rs), "calibration": calibration(rs)}
     res["n"] = len(out_rows)
-    res["candidate"] = forward_compare(out_rows, since_ts=candidate_frozen_ts())
+    res["candidate"] = forward_compare(out_rows, since_ts=candidate_frozen_ts(),
+                                       reviews_path=os.path.join(os.path.dirname(os.path.abspath(db_path)), "ml_reviews.json"),
+                                       asks=asks_at_cutoff(db_path))
     return res
+
+
+def asks_at_cutoff(db_path):
+    """{match_id: {ask_a, ask_a_platform, ask_b, ask_b_platform}}: per side the lowest recorded ASK across platforms in
+    the last usable quote at or before the cutoff (earliest stated start - CUTOFF_MIN), no older than MAX_AGE_H before
+    it. The prices a member could actually have paid - REVIEW_PLAN's return check uses only these."""
+    out = {}
+    try:
+        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=10)
+    except sqlite3.Error:
+        return out
+    try:
+        if not con.execute("SELECT 1 FROM sqlite_master WHERE name='ml_quotes'").fetchone():
+            return out
+        rows = con.execute("SELECT match_id, platform, outcome_id, team_side, ask, received_ts, start, usable FROM ml_quotes "
+                           "WHERE match_id IS NOT NULL AND team_side IN ('a', 'b')").fetchall()
+    finally:
+        con.close()
+    earliest = {}
+    for mid, _p, _o, _s, _a, _r, st, _u in rows:
+        st = _ts(st)
+        if st is not None:
+            earliest[mid] = min(earliest.get(mid, st), st)
+    last = {}
+    for mid, plat, oid, side, ask, rec, _st, ok in rows:
+        rec = _ts(rec)
+        if mid not in earliest or rec is None:
+            continue
+        cutoff = earliest[mid] - CUTOFF_MIN * 60
+        if rec > cutoff or rec < cutoff - MAX_AGE_H * 3600:
+            continue
+        k = (mid, plat, side)
+        if k not in last or rec > last[k][0]:
+            last[k] = (rec, ask if ok and ask is not None and 0 < ask < 1 else None)
+    for (mid, plat, side), (_rec, ask) in last.items():
+        if ask is None:
+            continue
+        d = out.setdefault(mid, {})
+        if d.get(f"ask_{side}") is None or ask < d[f"ask_{side}"]:
+            d[f"ask_{side}"], d[f"ask_{side}_platform"] = ask, plat
+    return out
 
 
 def candidate_frozen_ts(path=None):
@@ -1525,7 +1613,7 @@ def calib_slope(rows, pkey="p"):
     return round(a, 4), round(b, 4)
 
 
-def forward_compare(out_rows, rule=None, since_ts=None, boot=BOOT):
+def forward_compare(out_rows, rule=None, since_ts=None, boot=BOOT, reviews_path=None, asks=None):
     """The frozen candidate vs the frozen baseline on the SAME forward matches (each side's forecast = its last row at or
     before start - 30 min, from forward_rows), and the pre-registered promotion decision. Matches starting before the
     freeze (since_ts) are not counted. Unpaired matches are counted, never scored."""
@@ -1538,14 +1626,15 @@ def forward_compare(out_rows, rule=None, since_ts=None, boot=BOOT):
     pairs, only = [], Counter()
     for mid, d in by.items():
         if cand in d and base in d:
-            pairs.append({"hltv_match": mid, "y": d[base]["y"], "p": d[cand]["p"], "pb": d[base]["p"],
-                          "start": d[base]["start"]})
+            pairs.append(dict({"hltv_match": mid, "y": d[base]["y"], "p": d[cand]["p"], "pb": d[base]["p"],
+                               "start": d[base]["start"]}, **((asks or {}).get(d[base].get("match_id")) or {})))
         else:
             only[f"only {next(iter(d))}"] += 1
     out = {"rule": rule, "model": cand, "baseline": base, "n": len(pairs), "unpaired": dict(only),
            "since": datetime.fromtimestamp(since_ts, timezone.utc).isoformat(timespec="seconds") if since_ts else None}
     if not pairs:
-        out.update(promote=False, decision=f"not measurable yet: 0 of {rule['min_forward_matches']} forward matches")
+        out.update(promote=False, decision=f"not measurable yet: 0 of {rule['min_forward_matches']} forward matches",
+                   review=review_progress([], reviews_path))
         return out
 
     def ll(rs, k):
@@ -1576,7 +1665,125 @@ def forward_compare(out_rows, rule=None, since_ts=None, boot=BOOT):
     out["decision"] = ("PROMOTE: all pre-registered checks pass" if out["promote"] else
                        "keep in shadow (" + ", ".join(k for k, v in checks.items() if not v) + " not met) - "
                        "probability only as 'candidate - not validated', no stake")
+    if out["promote"]:
+        out["decision"] = "checkpoint met - a scheduled REVIEW_PLAN look decides; never an automatic stake"
+    out["review"] = review_progress(pairs, reviews_path, boot=boot)
     return out
+
+
+def _kalshi_fee(p):
+    return 0.07 * p * (1 - p)
+
+
+def ask_returns(pairs, edge=None, level=0.95, boot=BOOT):
+    """REVIEW_PLAN return check: 1 unit on the side whose model probability beats that side's recorded ASK at the cutoff
+    by >= edge, paid at ask + fee (Kalshi 0.07 p (1-p) per contract, Polymarket 0). Pairs carry ask_a / ask_b and
+    ask_a_platform / ask_b_platform (None = no ask at the cutoff -> no bet, counted)."""
+    edge = REVIEW_PLAN["edge_vs_ask"] if edge is None else edge
+    bets, no_ask = [], 0
+    for r in pairs:
+        aa, ab = r.get("ask_a"), r.get("ask_b")
+        if aa is None and ab is None:
+            no_ask += 1
+            continue
+        pick = None
+        if aa is not None and 0 < aa < 1 and r["p"] - aa >= edge:
+            pick = (aa, r.get("ask_a_platform"), r["y"] == 1)
+        elif ab is not None and 0 < ab < 1 and (1 - r["p"]) - ab >= edge:
+            pick = (ab, r.get("ask_b_platform"), r["y"] == 0)
+        if pick is None:
+            continue
+        price, plat, won = pick
+        cost = price + (_kalshi_fee(price) if plat == "kalshi" else 0.0)
+        bets.append({"hltv_match": r["hltv_match"], "net": (1 - cost) / cost if won else -1.0, "won": won})
+    out = {"bets": len(bets), "no_ask": no_ask, "won": sum(1 for b in bets if b["won"])}
+    if bets:
+        roi = lambda rs: sum(b["net"] for b in rs) / len(rs)
+        out.update(net_units=round(sum(b["net"] for b in bets), 3), roi=round(roi(bets), 4),
+                   roi_ci=list(group_bootstrap(_groups(bets), roi, B=boot, level=level)), level=level)
+    return out
+
+
+def scheduled_review(pairs, look, plan=None, boot=BOOT):
+    """One REVIEW_PLAN look on `pairs` (the first looks[look-1] paired forward matches by start). Returns every check,
+    'eligible_for_owner_review' (never a stake by itself) and 'futility' (look 2, gain <= 0 ends the candidate)."""
+    plan = plan or REVIEW_PLAN
+    level = plan["ci_levels"][look - 1]
+    g = _groups(pairs)
+    ll = lambda rs, k: sum(logloss1(r[k], r["y"]) for r in rs) / len(rs)
+    gain = lambda rs: ll(rs, "pb") - ll(rs, "p")
+    gp = round(gain(pairs), 5)
+    gci = list(group_bootstrap(g, gain, B=boot, level=level))
+    slope = calib_slope(pairs)[1]
+    # the slope interval refits a logistic regression per resample: 400 resamples keep a 1,000-match look under a minute
+    s_ci = list(group_bootstrap(g, lambda rs: calib_slope(rs)[1], B=min(boot, 400)))
+    citl = lambda rs: sum(r["y"] for r in rs) / len(rs) - sum(r["p"] for r in rs) / len(rs)
+    c_ci = list(group_bootstrap(g, citl, B=boot))
+    bands, testable, bands_ok = [], 0, True
+    for lo, hi in plan["bands"]:
+        rs = [r for r in pairs if lo <= max(r["p"], 1 - r["p"]) < hi]
+        b = {"band": f"{lo:.2f}-{min(hi, 1):.2f}", "n": len(rs)}
+        if rs:
+            pred = sum(max(r["p"], 1 - r["p"]) for r in rs) / len(rs)
+            obs = sum(1 for r in rs if (r["p"] >= 0.5) == (r["y"] == 1)) / len(rs)
+            se = math.sqrt(max(obs * (1 - obs), 1e-9) / len(rs))
+            b.update(predicted=round(pred, 4), observed=round(obs, 4), gap=round(obs - pred, 4))
+            if len(rs) >= plan["band_min_n"]:
+                testable += 1
+                b["ok"] = abs(obs - pred) - 1.96 * se <= plan["band_tolerance"]
+                bands_ok = bands_ok and b["ok"]
+        bands.append(b)
+    weeks = Counter(datetime.fromtimestamp(r["start"], timezone.utc).strftime("%G-W%V") for r in pairs)
+    ret = ask_returns(pairs, level=level, boot=boot)
+    checks = {
+        "gain_ci_above_0": gci[0] is not None and gci[0] > 0,
+        "slope_point_in_range": slope is not None and plan["slope_point"][0] <= slope <= plan["slope_point"][1],
+        "slope_ci_inside_tolerance": None not in s_ci and plan["slope_ci"][0] <= s_ci[0] and s_ci[1] <= plan["slope_ci"][1],
+        "calibration_in_the_large": None not in c_ci and plan["citl_ci"][0] <= c_ci[0] and c_ci[1] <= plan["citl_ci"][1],
+        "bands_within_tolerance": bands_ok and testable >= plan["min_testable_bands"],
+        "min_weeks": len(weeks) >= plan["min_weeks"],
+        "no_dominant_week": bool(weeks) and max(weeks.values()) / len(pairs) <= plan["max_week_share"],
+        "return_at_ask_ci_above_0": ret["bets"] >= plan["min_bets"] and (ret.get("roi_ci") or [None])[0] is not None
+                                    and ret["roi_ci"][0] > 0,
+    }
+    return {"plan": plan["version"], "look": look, "n": len(pairs), "ci_level": level, "gain": gp, "gain_ci": gci,
+            "calibration_slope": slope, "calibration_slope_ci": s_ci, "calibration_in_the_large_ci": c_ci,
+            "bands": bands, "weeks": len(weeks), "returns": ret, "checks": checks,
+            "eligible_for_owner_review": all(checks.values()),
+            "futility": look == plan["futility_look"] and gp <= 0,
+            "reviewed_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+
+
+def review_progress(pairs, reviews_path=None, plan=None, boot=BOOT):
+    """Run each REVIEW_PLAN look ONCE, the first time the paired count reaches it, on exactly the first looks[i] matches
+    by start; the result is stored in reviews_path and never recomputed (no repeated peeking with more data)."""
+    plan = plan or REVIEW_PLAN
+    done = {}
+    if reviews_path and os.path.exists(reviews_path):
+        try:
+            with open(reviews_path, encoding="utf-8") as fh:
+                done = {k: v for k, v in json.load(fh).items() if v.get("plan") == plan["version"]}
+        except (OSError, ValueError):
+            done = {}
+    ordered = sorted(pairs, key=lambda r: (r["start"], str(r["hltv_match"])))
+    ended = any(v.get("futility") for v in done.values())
+    changed = False
+    for i, n_look in enumerate(plan["looks"], 1):
+        if ended or str(i) in done or len(ordered) < n_look:
+            continue
+        done[str(i)] = scheduled_review(ordered[:n_look], i, plan, boot=boot)
+        changed = True
+        ended = ended or done[str(i)]["futility"]
+    if changed and reviews_path:
+        tmp = reviews_path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(done, fh, indent=1, default=str)
+        os.replace(tmp, reviews_path)
+    nxt = next((n for i, n in enumerate(plan["looks"], 1) if str(i) not in done), None)
+    return {"plan": plan["version"], "paired": len(pairs), "looks_done": done, "ended_by_futility": ended,
+            "next_look_at": None if ended else nxt,
+            "eligible_for_owner_review": any(v.get("eligible_for_owner_review") for v in done.values()) and not ended,
+            "note": "between looks only counts are shown; a look's result is final for that look"}
 
 
 # ---------------------------------------------------------------------------------------------------- report

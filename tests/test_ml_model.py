@@ -239,7 +239,9 @@ def test_promotion_needs_300_matches():
 def test_promotion_when_every_preregistered_check_passes():
     res = M.forward_compare(_pairs(1500, lambda b, t: t), boot=300)
     assert res["gain"] > 0 and res["gain_ci"][0] > 0 and 0.8 <= res["calibration_slope"] <= 1.2
-    assert res["promote"] is True and res["decision"].startswith("PROMOTE")
+    # the frozen checkpoint is met - which only starts the REVIEW_PLAN looks (owner review 2026-10-12), never a stake
+    assert res["promote"] is True and res["decision"].startswith("checkpoint met")
+    assert set(res["review"]["looks_done"]) == {"1", "2", "3"} and res["review"]["next_look_at"] is None
 
 
 def test_no_promotion_without_a_gain_or_with_a_bad_slope():
