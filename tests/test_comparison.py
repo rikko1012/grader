@@ -206,3 +206,14 @@ def test_maps123_record():
     assert records.maps123_record(pb, 45.0, "kills", hltv_rows=hl)["pushes"] == 1                      # whole line: a push
     pb2 = {"recent_form": {"overs": 9}, "recent_form_123": r}
     assert cmp.record_for_scope(pb2, "123") is r
+
+
+def test_other_maps_line_is_named_not_compared():
+    """2026-10-12: Spinx's 26 HS was a Maps 1-3 line (BO5) - a Maps 1-2 card must name it, never compare it."""
+    res = _res(line=26.0)
+    rows = [_row(id="m3", line=26.0, scope="123", book="prizepicks"), _row(id="m3b", line=26.0, scope="123", book="prizepicks"),
+            _row(id="ns", line=26.0, scope="123", team="Someone Else")]                  # a namesake on other maps: not named
+    p = cmp.panel(res, rows, board_at=NOW.timestamp() - 60, now=NOW)
+    assert p["offers"] == []
+    assert p["other_scope"] == [{"source": "prizepicks", "line": 26.0, "scope": "123", "alt": False, "odds_type": None}]
+    assert any("different maps" in r["reason"] for r in p["rejected"]) and any("namesake" in r["reason"] for r in p["rejected"])

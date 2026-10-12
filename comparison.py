@@ -139,11 +139,13 @@ def probs_at(dist, line, _cache=None):
     return None
 
 
-def match_offers(res, rows, now=None, board_at=None, id_map=None):
+def match_offers(res, rows, now=None, board_at=None, id_map=None, other_scope=None):
     """Book lines for EXACTLY this market. Returns (offers, rejected) - rejected = [(line, reason)].
     Identity: Underdog's player id -> our BO3.gg player id (id_map, learnt from board grades) when known; otherwise
     the exact normalised name. Team, opponent, maps and match time are verified for EVERY row either way. Two
-    different Underdog players fitting the same market = ambiguous -> nothing matched."""
+    different Underdog players fitting the same market = ambiguous -> nothing matched.
+    other_scope (a list, optional): filled with the SAME player / team / match's lines on OTHER maps ({source, line,
+    scope, alt, odds_type}) - 2026-10-12: Spinx's 26 HS was a Maps 1-3 line (BO5) graded by a member on Maps 1-2."""
     g = res.get("grade") or {}
     pb = res.get("player_block") or {}
     nm = res.get("next_match") or {}
@@ -170,8 +172,6 @@ def match_offers(res, rows, now=None, board_at=None, id_map=None):
                 continue
             ident = "name"
         line = r.get("line")
-        if (r.get("scope") or "12") != scope:
-            rejected.append((line, f"different maps ({r.get('scope')} vs {scope})")); continue
         same = _team_same(r.get("team"), team)
         if same is False:
             rejected.append((line, f"different team ({r.get('team')} vs {team}) - namesake")); continue
@@ -182,6 +182,12 @@ def match_offers(res, rows, now=None, board_at=None, id_map=None):
             rejected.append((line, f"different match time ({r.get('start')} vs {nm.get('start')})")); continue
         if nm.get("opponent") and r.get("opponent") and _team_same(r.get("opponent"), nm.get("opponent")) is False:
             rejected.append((line, f"different opponent ({r.get('opponent')} vs {nm.get('opponent')})")); continue
+        if (r.get("scope") or "12") != scope:          # same player, team and match - other maps: never compared, named
+            rejected.append((line, f"different maps ({r.get('scope')} vs {scope})"))
+            if other_scope is not None and (r.get("book"), line, r.get("scope")) not in {(o["source"], o["line"], o["scope"]) for o in other_scope}:
+                other_scope.append({"source": r.get("book") or "underdog", "line": line, "scope": r.get("scope") or "12",
+                                    "alt": bool(r.get("alt")), "odds_type": r.get("odds_type")})
+            continue
         dup = (r.get("id"), line, r.get("higher"), r.get("lower"))
         if dup in seen:
             continue                                   # the same offer listed twice counts once
@@ -232,7 +238,8 @@ def panel(res, rows, board_at=None, now=None, id_map=None):
     sd = g.get("sd") or 0
     sim = res.get("simulation") or {}
     lo, hi = (sim.get("p10"), sim.get("p90")) if sim.get("p10") is not None else (g["lambda_final"] - 1.2816 * sd, g["lambda_final"] + 1.2816 * sd)
-    offers, rejected = match_offers(res, rows, now, board_at, id_map)
+    other = []
+    offers, rejected = match_offers(res, rows, now, board_at, id_map, other_scope=other)
     cache = {}
     for o in offers:
         po, pu, pp = probs_at(dist, o["line"], cache)
@@ -326,6 +333,7 @@ def panel(res, rows, board_at=None, now=None, id_map=None):
                                 + "; ".join(f"{s['id']}: {s['status']}" for s in SOURCES if s["kind"] != "book_line" or s["status"] != "connected")},
         "internal": internal,
         "offers": offers, "rejected": [{"line": l, "reason": r} for l, r in rejected],
+        "other_scope": sorted(other, key=lambda o: (o["scope"], o["source"], o["line"])),
         "best_line": best, "evidence_against": against,
         "board_at": board_at, "stale_board": bool(board_at and now.timestamp() - board_at > STALE_MIN * 60),
         # the grade's own chance can sit below the distribution's at its line (old-pipeline safety margins / kills cap)
