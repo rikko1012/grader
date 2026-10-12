@@ -87,9 +87,11 @@ function draw() {
   if (!(D.challengers || []).length) h += `<div class="card muted">No challenger yet. Training runs ${esc(D.training?.next || "")}.</div>`;
   for (const c of D.challengers || []) {
     const f = c.forward_interim || {};
-    h += `<div class="card ${c.status === "eligible_for_review" ? "good" : ""}"><b>${esc(c.id)}</b> <span class="pill ${c.status === "eligible_for_review" ? "on" : c.status === "retired" ? "off" : ""}">${esc(c.status.replace(/_/g, " "))}</span>
+    const fc = c.freeze_check || {};
+    h += `<div class="card ${c.status === "eligible_for_review" ? "good" : ""}"><b>${esc(c.id)}</b> ${c.name ? `· ${esc(c.name)}` : ""} <span class="pill ${c.status === "eligible_for_review" ? "on" : c.status === "retired" ? "off" : ""}">${esc(c.status.replace(/_/g, " "))}</span>
       <div class="small muted">${esc(c.status_reason || "")}</div>
       <div class="small">Frozen ${when(c.frozen_at)} · training cutoff ${when(c.training_cutoff)} · snapshot ${esc(c.snapshot)} · data hash ${esc((c.data_hash || "").slice(0, 16))}… · ${c.shadow_forecasts} shadow forecasts${c.revises ? ` · revises ${esc(c.revises)}` : ""}</div>
+      <div class="small">Freeze check: ${fc.forward_units ?? 0} forward units, ${fc.units_started_or_logged_before_freeze ?? 0} started or logged before the freeze${fc.earliest_forward_start ? ` · earliest forward match ${when(fc.earliest_forward_start)}` : ""} <span class="muted">(${esc(fc.rule || "")})</span></div>
       ${c.next_review ? `<div class="small">Next review ${esc(c.next_review)}. Decisions are made only at ${esc((D.review_rule?.windows || []).join(" / "))} matches.</div>` : ""}
       ${table(["Parameter", "Live", "Challenger"], Object.keys(c.config).map(k => `<tr><td>${esc(k)}</td><td>${esc(c.base_config[k] ?? "each row's own")}</td><td>${esc(c.config[k])}</td></tr>`))}
       <h3>Paired forward results <span class="small muted">(${esc(f.label || "interim")})</span></h3>
@@ -113,6 +115,13 @@ function draw() {
     <div class="small muted">One unit per player × match × stat × map scope (latest forecast 30+ min before the start). Intervals resample whole matches. Bias = projection − actual (+ = projected too high).</div>
     ${table(MH, [metricRow("All", o)])}
     <div class="small">Calibration slope ${n2(o.calibration_slope)} (95% ${ci(o.calibration_slope_ci)}) - 1.00 = chances spread exactly right; below 1 = too confident.</div>
+    <h3>Two separate questions (never merged)</h3>
+    ${table(["Slice", "Q1: our chances vs a constant 50% (log-loss gain)", "95% (by match)", "Units / matches", "Q2: our projection vs the offered line (abs-error gain)", "95% (by match)", "Units / matches"],
+      Object.entries(SC.questions || {}).map(([k, q]) => `<tr><td>${esc(k)}</td><td>${n4(q.q1_vs_50?.log_loss_gain_vs_50)}</td><td>${ci(q.q1_vs_50?.ci, n4)}</td><td>${q.q1_vs_50?.units ?? 0} / ${q.q1_vs_50?.matches ?? 0}</td><td>${n2(q.q2_projection_vs_line?.abs_error_gain_vs_line)}</td><td>${ci(q.q2_projection_vs_line?.ci, n2)}</td><td>${q.q2_projection_vs_line?.units ?? 0} / ${q.q2_projection_vs_line?.matches ?? 0}</td></tr>`))}
+    <div class="small muted">Positive = better than the baseline. Q1 uses the published chance (after caps and margins), conditional on no push. A review checkpoint does not guarantee either question is resolved.</div>
+    <h3>Every distinct line (weighted)</h3>
+    <div class="small">${(SC.all_lines || {}).lines ?? 0} line forecasts in ${(SC.all_lines || {}).units ?? 0} units / ${(SC.all_lines || {}).matches ?? 0} matches · weighted log-loss ${n4((SC.all_lines || {}).weighted_log_loss)} (${ci((SC.all_lines || {}).weighted_log_loss_ci, n4)}) · weighted Brier ${n4((SC.all_lines || {}).weighted_brier)}
+      <div class="muted">${esc((SC.all_lines || {}).policy || "")}</div></div>
     <h3>Buckets (never scored except "scored")</h3>
     ${table(["Bucket", "Units", "Matches"], Object.entries(SC.buckets || {}).map(([k, v]) => `<tr><td>${esc(k.replace(/_/g, " "))}</td><td>${v}</td><td>${(SC.bucket_matches || {})[k] ?? 0}</td></tr>`))}
     <div class="small muted">${(SC.bucket_reasons || []).map(r => `${esc(r.bucket)}: ${esc(r.reason)} (${r.units})`).join(" · ")} · ledger rows ${SC.ledger_rows ?? 0}, superseded by corrections ${SC.superseded ?? 0}</div>

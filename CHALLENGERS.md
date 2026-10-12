@@ -5,7 +5,21 @@ same forecasts and decided only at the fixed review windows (learning.REVIEW_RUL
 matches). Passing = "eligible for review"; promotion is an explicit admin action with a recorded reason, versioned, with
 rollback. A correction or method change is a NEW family/version with its own evaluation period.
 
-## lb-001 - `line-blend-1` (frozen 2026-10-12 15:49:04 UTC on production)
+## lb-001 - probability-shrinkage challenger (family id `line-blend-1`, frozen 2026-10-12 15:49:04 UTC on production)
+
+**Name.** It is a *probability-shrinkage* challenger: it pulls our own published chance toward 50%. It does **not** use
+the book's price, and it does **not** test whether our projected totals beat the offered line (the family id
+`line-blend-1` stays as frozen; the earlier "trust the line" wording was inaccurate). With kills w = 0 it is a constant
+50% conditional Over baseline for kills. Two separate questions are therefore reported, never merged (learning
+scorecard `questions`, dashboard "Two separate questions"):
+
+- **Q1 - do our probabilities beat a 50% baseline?** Log-loss of the published P(Over | no push) vs 0.5, paired per
+  unit, intervals by canonical match. lb-001's kills arm answers exactly this on forward matches.
+- **Q2 - do our projected totals predict outcomes better than the offered lines?** |line - actual| - |projection - actual|
+  per unit (positive = our projection was closer), intervals by canonical match. lb-001 does not test this.
+
+A 300 / 600 / 1000-match checkpoint does not guarantee that either question is resolved: the review records the
+interval; an interval that still contains 0 is "not demonstrated", not "no difference".
 
 **What it transforms.** The live forecast's PROBABILITY - not the projected total and not the kill rate:
 
@@ -29,10 +43,19 @@ rollback. A correction or method change is a NEW family/version with its own eva
   logged >= 30 min before the start). No later line movement enters: the transform reads only that forecast's p_more.
 - **Spread / distribution.** Not re-estimated: it is whatever produced `p_live`. Changing the line changes `p_live` the
   way the live model does, and `p_ch` follows monotonically (see properties).
-- **Over / Under / push.** lb-001 outputs P(Over | no push) and P(Under | no push) = 1 - p_ch. It does not model the push
-  probability; unconditional values, when needed, use the live distribution's push chance q:
-  P(Over) = p_ch (1 - q), P(Under) = (1 - p_ch)(1 - q), P(push) = q. Half-point lines have q = 0. Evaluation scores
-  the decided outcome only (pushes are their own bucket in the ledger, never scored).
+- **Over / Under / push (exact).** lb-001 outputs the conditional pair
+      P_ch(Over | no push) = p_ch,  P_ch(Under | no push) = 1 - p_ch.
+  Unconditional values, when needed, combine it with q = P(push) of the live model's OWN predictive distribution:
+      P_ch(Over) = p_ch * (1 - q),  P_ch(Under) = (1 - p_ch) * (1 - q),  P_ch(push) = q   (sum = 1).
+  q comes from `forecasts.probs_raw["push"]` (saved with every forecast since 2026-10-12, together with the raw
+  over / under chances before caps and margins); for earlier forecasts q is recomputed by replaying `grader.grade_leg` on
+  the saved grader inputs (`forecasts.inputs`). Half-point lines have q = 0. Evaluation scores the decided outcome only
+  (pushes are their own ledger bucket, never scored).
+- **Published decision probabilities vs the raw predictive distribution.** p_live is the PUBLISHED decision chance -
+  after the kills cap (22-78%), the old pipeline's Over margin, and rounding to 3 decimals - not necessarily the raw
+  model distribution (`probs_raw`). Applying the transform to p_live therefore evaluates the published decision
+  probabilities. In the unconditional formula above the push chance q is taken from the raw distribution while p_ch
+  comes from the published one; reports label which is used.
 - **Caps / margins.** Inherited through p_live; nothing is added or removed afterwards.
 
 **Verified (tests/test_learning.py):** bounded in (0, 1); P(Over)+P(Under)+P(push) = 1 with the live push chance;

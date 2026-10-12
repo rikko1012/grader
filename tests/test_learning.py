@@ -182,7 +182,7 @@ def test_corrected_result_supersedes_without_double_counting(db):
                    "corrected_at": iso(T0 + timedelta(hours=5))})
     log = cycle(w, db, T0 + timedelta(hours=6))
     lat, allr = latest(db)
-    assert log["ingest"] == {"added": 1, "superseded": 1}
+    assert log["ingest"] == {"added": 1, "superseded": 1, "lines_backfilled": 0}
     assert len(allr) == 4 and len(lat) == 3                         # append-only; evaluation reads the latest only
     v2 = next(r for r in lat if r["unit_key"].startswith("p0|"))
     assert v2["settlement_version"] == 2 and v2["actual"] == 30 and v2["supersedes"] == allr[0]["rid"]
@@ -635,3 +635,58 @@ def test_unit_identity_migration_keeps_the_old_ledger(db):
     assert con.execute("SELECT COUNT(*) FROM ledger").fetchone()[0] == 0
     ev = con.execute("SELECT detail FROM events WHERE kind = 'unit_identity'").fetchone()
     assert json.loads(ev[0])["old_rows"] == 1
+
+
+def test_every_distinct_line_is_kept_and_weighted(db):
+    """Owner review 2026-10-12: one unit can settle several lines - each distinct line keeps its own forecast and outcome
+    (nothing discarded), weighted 1/k so a unit with many lines cannot dominate; the two questions are reported apart."""
+    rnd, w = random.Random(9), World()
+    pf = mk_pf(rnd, "kills", T0)
+    base = math.floor(pf["lambda"]) + 0.5
+    w.line("a", "m1", T0, pf, line=base, times=(-300, -100))
+    w.line("a", "m1", T0, pf, line=base + 1, book="prizepicks", times=(-60,))
+    w.line("a", "m1", T0, pf, line=base - 2, test=0, times=(-400,))
+    w.line("b", "m2", T0, mk_pf(rnd, "kills", T0))
+    for p in w.picks:
+        w.settle(p["id"], 24)
+    cycle(w, db, T0 + timedelta(hours=4))
+    lat, _ = latest(db)
+    a = next(r for r in lat if r["unit_key"].startswith("a|"))
+    ls = json.loads(a["lines"])
+    assert sorted(x["line"] for x in ls) == [base - 2, base, base + 1]                 # three distinct lines, all kept
+    assert {x["outcome"] for x in ls} <= {"over", "under", "push"}
+    sc = json.loads(learning.connect(db).execute("SELECT v FROM meta WHERE k = 'scorecard'").fetchone()[0])
+    al = sc["all_lines"]
+    assert al["lines"] == 4 and al["units"] == 2 and al["matches"] == 2              # 3 lines weigh as one unit
+    q = sc["questions"]["all"]
+    assert q["q1_vs_50"]["units"] == 2 and q["q2_projection_vs_line"]["units"] == 2
+    assert "50%" in q["q1_vs_50"]["note"] and "line" in q["q2_projection_vs_line"]["note"]
+
+
+def test_lines_column_is_backfilled_in_place_not_a_new_version(db):
+    rnd, w = random.Random(4), World()
+    pid = w.line("a", "m1", T0, mk_pf(rnd, "kills", T0))
+    w.settle(pid, 25)
+    cycle(w, db, T0 + timedelta(hours=4))
+    con = learning.connect(db)
+    con.execute("UPDATE ledger SET lines = NULL")                     # a row from before the column existed
+    row = con.execute("SELECT * FROM ledger").fetchone()
+    pk = w.picks[0]
+    res = json.loads(pk.get("result") or "{}")
+    learning_fp_pre = learning._sha([row["bucket"], row["reason"], row["forecast_id"], pk["actual"], pk["line"] if row["line"] == pk["line"] else row["line"],
+                                     res.get("per_map"), res.get("rounds"), res.get("maps_used")])
+    con.execute("UPDATE ledger SET fingerprint = ?", (learning_fp_pre,))
+    con.commit(); con.close()
+    log = cycle(w, db, T0 + timedelta(hours=5))
+    _, allr = latest(db)
+    assert len(allr) == 1 and allr[0]["settlement_version"] == 1 and json.loads(allr[0]["lines"])
+    assert log["ingest"]["lines_backfilled"] == 1 and log["ingest"]["added"] == 0
+
+
+def test_dashboard_freeze_check_and_challenger_name(db):
+    con = learning.connect(db)
+    now = datetime(2026, 10, 12, 16, 0, tzinfo=timezone.utc)
+    learning._ensure_line_blend(con, now)
+    d = learning.build_dashboard(con, now)
+    ch = next(c for c in d["challengers"] if c["family"] == "line-blend-1")
+    assert "probability-shrinkage" in ch["name"] and ch["freeze_check"]["units_started_or_logged_before_freeze"] == 0

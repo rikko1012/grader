@@ -124,6 +124,11 @@ LINE_BLEND = {"family": "line-blend-1", "w": {"kills": 0.0, "hs": 0.5}, "scopes"
                            "walk_forward_gain_hs12": [0.0048, -0.0062, 0.0159], "test_units": 536, "test_matches": 87}}
 
 
+# Display names (owner review 2026-10-12): lb-001 shrinks our own probability toward 50%; it does not use the book
+# price and does not test projection accuracy against the line. The frozen family id stays as it is.
+CHALLENGER_NAMES = {"line-blend-1": "probability-shrinkage challenger (toward 50%)", "perf-refit-1": "performance-model refit"}
+
+
 def line_blend_p(p_live, prop, scope, cfg=LINE_BLEND):
     """The line-blend challenger's chance of Over from the live chance (same spread, projection pulled toward the line)."""
     if p_live is None or (scope or "12") not in cfg["scopes"] or prop not in cfg["w"]:
@@ -241,6 +246,11 @@ def connect(db=None):
     CREATE TABLE IF NOT EXISTS acks (item TEXT PRIMARY KEY, at TEXT, reason TEXT);
     CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT, kind TEXT, detail TEXT);
     """)
+    for tbl, col in (("ledger", "lines"), ("forecast_copy", "probs_raw"), ("forecast_copy", "data_rev")):
+        try:                              # 2026-10-12 owner review: every distinct line kept; raw chances + dataset revision
+            con.execute(f"ALTER TABLE {tbl} ADD COLUMN {col} TEXT")
+        except sqlite3.OperationalError:
+            pass
     return con
 
 
@@ -277,9 +287,11 @@ def read_picklog(picks_path=None, after_forecast_id=0, limit=3000):
     try:
         con.execute("PRAGMA query_only=ON")
         con.execute("BEGIN")
+        fcols = {r[1] for r in con.execute("PRAGMA table_info(forecasts)")}
+        opt = "".join(f", {c}" for c in ("probs_raw", "data_rev") if c in fcols)
         fr = [dict(r) for r in con.execute(
             "SELECT id, pick_id, kind, logged_at, match_start, line, pick, p_pick, p_more, grade, units, lambda, "
-            "model_version, inputs FROM forecasts WHERE id > ? ORDER BY id LIMIT ?", (after_forecast_id, limit))]
+            f"model_version, inputs{opt} FROM forecasts WHERE id > ? ORDER BY id LIMIT ?", (after_forecast_id, limit))]
         cols = {r[1] for r in con.execute("PRAGMA table_info(picks)")}
         picks = [dict(r) for r in con.execute(f"SELECT {', '.join(c for c in PICK_COLS if c in cols)} FROM picks")]
         con.execute("COMMIT")
@@ -376,7 +388,7 @@ def _migrate_unit_identity(con, picks, now):
     con.execute("""CREATE TABLE ledger (rid INTEGER PRIMARY KEY AUTOINCREMENT, unit_key TEXT NOT NULL, forecast_id INTEGER,
         settlement_version INTEGER NOT NULL, fingerprint TEXT, bucket TEXT, reason TEXT, match_slug TEXT, match_start TEXT,
         forecast_logged_at TEXT, prop TEXT, scope TEXT, line REAL, actual REAL, over_hit INTEGER, p_over REAL, lam REAL,
-        dims TEXT, diag TEXT, pick_ids TEXT, settled_at TEXT, processed_at TEXT, supersedes INTEGER, change TEXT,
+        dims TEXT, diag TEXT, pick_ids TEXT, settled_at TEXT, processed_at TEXT, supersedes INTEGER, change TEXT, lines TEXT,
         UNIQUE (unit_key, settlement_version))""")
     con.execute("CREATE INDEX IF NOT EXISTS ledger_fc ON ledger (forecast_id, settlement_version)")
     _set_meta(con, "unit_identity", UNIT_IDENTITY)
@@ -867,12 +879,14 @@ def _copy_forecasts(con, picks, forecasts, now):
         feat = features(f.get("inputs"))
         con.execute("INSERT OR IGNORE INTO forecast_copy (forecast_id, pick_id, kind, logged_at, match_start, line, side, p_pick, "
                     "p_more, grade, units, lambda, model_version, unit_key, match_slug, player, prop, scope, source, book, "
-                    "line_type, test, inputs_sha1, features, copied_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "line_type, test, inputs_sha1, features, copied_at, probs_raw, data_rev) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (f["id"], f["pick_id"], f.get("kind"), _niso(f.get("logged_at")), _niso(f.get("match_start") or p.get("match_start")),
                      f.get("line"), f.get("pick"), f.get("p_pick"), f.get("p_more"), f.get("grade"), f.get("units"), f.get("lambda"),
                      f.get("model_version"), unit_key(p) if p else None, match_of(p) if p else None, p.get("player"), p.get("prop"),
                      p.get("scope") or "12", source_of(p) if p else None, p.get("book"), p.get("line_type"), p.get("test"),
-                     f.get("inputs_sha1"), json.dumps(feat, separators=(",", ":"), default=str), _iso(now)))
+                     f.get("inputs_sha1"), json.dumps(feat, separators=(",", ":"), default=str), _iso(now),
+                     f.get("probs_raw"), f.get("data_rev")))
         last = max(last, f["id"])
         n += 1
     _set_meta(con, "last_forecast_id", last)
@@ -957,13 +971,14 @@ def _ingest(con, picks, now, bad_units, corr_ids):
         if (p.get("test") or 0) in (0, 2) and p.get("match_slug"):
             units[unit_key(p)].append(p)
     fc = collections.defaultdict(list)
-    for r in con.execute("SELECT forecast_id, pick_id, unit_key, logged_at, line_type, source FROM forecast_copy WHERE unit_key IS NOT NULL"):
+    for r in con.execute("SELECT forecast_id, pick_id, unit_key, logged_at, line_type, source, line, p_more, p_pick, side, book, "
+                         "probs_raw FROM forecast_copy WHERE unit_key IS NOT NULL"):
         fc[r["unit_key"]].append(r)
     latest = {r["unit_key"]: r for r in con.execute(
         "SELECT l.unit_key, l.settlement_version, l.fingerprint, l.rid, l.processed_at FROM ledger l JOIN "
         "(SELECT unit_key, MAX(settlement_version) v FROM ledger GROUP BY unit_key) m ON m.unit_key = l.unit_key AND m.v = l.settlement_version")}
     src_rank = {"board": 2, "board_pp": 1, "member": 0}
-    added = superseded = 0
+    added = superseded = backfilled = 0
     for uk, rows in units.items():
         st = {r["status"] for r in rows}
         if not st & {"settled", "push", "void"}:
@@ -1013,10 +1028,36 @@ def _ingest(con, picks, now, bad_units, corr_ids):
         elif p_over is None:
             bucket, reason = "incomplete", "forecast has no probability"
         lam = f.get("lambda") if f else None
-        fp = _sha([bucket, reason, f["forecast_id"] if f else None, actual, line, res.get("per_map"), res.get("rounds"), res.get("maps_used")])
+        # UNIT OF OBSERVATION (owner review 2026-10-12): the unit (player x canonical match x stat x scope) is ONE row of the
+        # primary scorecard (the evaluation forecast above). Every distinct line forecast in it is kept here with its own
+        # outcome - nothing is discarded - and weighted 1/k (k = distinct lines of the unit) in the all-lines view, so a
+        # unit with many lines cannot dominate; uncertainty is grouped by canonical match.
+        lines = []
+        if start and actual is not None:
+            cut = _iso(start - timedelta(minutes=EVAL_LEAD_MIN))
+            per = {}
+            for fr_ in fc.get(uk, []):
+                if fr_["pick_id"] in pids and fr_["logged_at"] and fr_["logged_at"] <= cut and fr_["line"] is not None:
+                    k = (float(fr_["line"]), fr_["line_type"] or "standard")
+                    if k not in per or fr_["logged_at"] > per[k]["logged_at"]:
+                        per[k] = fr_
+            for (ln, lt), fr_ in sorted(per.items()):
+                po = p_over_of(dict(fr_))
+                lines.append({"forecast_id": fr_["forecast_id"], "line": ln, "line_type": lt, "book": fr_["book"],
+                              "p_over": po, "outcome": "push" if actual == ln else ("over" if actual > ln else "under"),
+                              "logged_at": fr_["logged_at"]})
+        fp = _sha([bucket, reason, f["forecast_id"] if f else None, actual, line, res.get("per_map"), res.get("rounds"), res.get("maps_used"),
+                   [(x["forecast_id"], x["line"]) for x in lines]])
         prev = latest.get(uk)
         if prev and prev["fingerprint"] == fp:
             continue                                   # already processed: nothing changed (idempotent)
+        fp_pre = _sha([bucket, reason, f["forecast_id"] if f else None, actual, line, res.get("per_map"), res.get("rounds"), res.get("maps_used")])
+        if prev and prev["fingerprint"] == fp_pre:
+            # the same settlement, recorded before the lines column existed (2026-10-12): fill the new column in place -
+            # not a new settlement version, nothing else changes
+            con.execute("UPDATE ledger SET lines = ?, fingerprint = ? WHERE rid = ?", (json.dumps(lines), fp, prev["rid"]))
+            backfilled += 1
+            continue
         over = int(actual > line) if bucket == "scored" else None
         diag = _diag(feat, res, prop, scope, lam, actual, line, rows) if bucket == "scored" else {}
         dims = {"stat": prop, "scope": scope, "env": feat.get("env") or "unknown", "history": history_band(feat),
@@ -1030,12 +1071,12 @@ def _ingest(con, picks, now, bad_units, corr_ids):
         settled_at = max((r.get("settled_at") or "" for r in rows), default="") or None
         con.execute("INSERT INTO ledger (unit_key, forecast_id, settlement_version, fingerprint, bucket, reason, match_slug, match_start, "
                     "forecast_logged_at, prop, scope, line, actual, over_hit, p_over, lam, dims, diag, pick_ids, settled_at, processed_at, "
-                    "supersedes, change) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "supersedes, change, lines) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (uk, f["forecast_id"] if f else None, ver, fp, bucket, reason, match_of(p0), _iso(start),
                      f["logged_at"] if f else None, prop, scope, line, actual, over, p_over, lam, json.dumps(dims), json.dumps(diag),
-                     json.dumps(sorted(pids)), _niso(settled_at), _iso(now), prev["rid"] if prev else None, change))
+                     json.dumps(sorted(pids)), _niso(settled_at), _iso(now), prev["rid"] if prev else None, change, json.dumps(lines)))
         added += 1
-    return {"added": added, "superseded": superseded}
+    return {"added": added, "superseded": superseded, "lines_backfilled": backfilled}
 
 
 LATEST_SQL = ("SELECT l.* FROM ledger l JOIN (SELECT unit_key, MAX(settlement_version) v FROM ledger GROUP BY unit_key) m "
@@ -1050,7 +1091,7 @@ def _unit(r):
     return {"match": r["match_slug"], "p": r["p_over"], "over": r["over_hit"], "lam": r["lam"], "actual": r["actual"],
             "dims": json.loads(r["dims"] or "{}"), "diag": json.loads(r["diag"] or "{}"), "start": r["match_start"],
             "forecast_id": r["forecast_id"], "logged": r["forecast_logged_at"], "prop": r["prop"], "scope": r["scope"],
-            "rid": r["rid"], "unit": r["unit_key"]}
+            "rid": r["rid"], "unit": r["unit_key"], "line": r["line"]}
 
 
 def scorecard(con):
@@ -1075,7 +1116,54 @@ def scorecard(con):
         g[(u["prop"], u["scope"])].append(u)
     out["by"]["stat x scope"] = [dict(metrics(us), group=f"{k[0]} · {k[1]}") for k, us in sorted(g.items(), key=lambda kv: -len(kv[1]))]
     out["diagnosis"] = diagnosis(sc)
+    out["questions"] = two_questions(sc)
+    out["all_lines"] = all_lines_view([r for r in rows if r["bucket"] == "scored"])
     return out
+
+
+def two_questions(sc):
+    """Owner review 2026-10-12 - two separate questions, never merged:
+    Q1 do our probabilities beat a constant 50% (log-loss vs 0.5, conditional on no push)?
+    Q2 do our projected totals predict the outcome better than the offered line (|projection - actual| vs |line - actual|)?
+    Paired per unit, intervals resample canonical matches. A checkpoint does not guarantee either is resolved."""
+    out = {}
+    for name, us in (("all", sc), ("kills", [u for u in sc if u["prop"] == "kills"]), ("hs", [u for u in sc if u["prop"] == "hs"])):
+        q1 = [u for u in us if u["p"] is not None and u["over"] in (0, 1)]
+        g1 = lambda u: _ll(0.5, u["over"]) - _ll(u["p"], u["over"])
+        q2 = [u for u in us if u["lam"] is not None and u["actual"] is not None and u.get("line") is not None]
+        g2 = lambda u: abs(u["line"] - u["actual"]) - abs(u["lam"] - u["actual"])
+        out[name] = {
+            "q1_vs_50": {"units": len(q1), "matches": len({u["match"] for u in q1}),
+                         "log_loss_gain_vs_50": _r(sum(g1(u) for u in q1) / len(q1), 5) if q1 else None,
+                         "ci": _ci_ratio(_groups(q1, g1)) if q1 else None,
+                         "note": "positive = our probabilities beat a constant 50%"},
+            "q2_projection_vs_line": {"units": len(q2), "matches": len({u["match"] for u in q2}),
+                                      "abs_error_gain_vs_line": _r(sum(g2(u) for u in q2) / len(q2), 3) if q2 else None,
+                                      "ci": _ci_ratio(_groups(q2, g2)) if q2 else None,
+                                      "note": "positive = our projection was closer to the actual total than the line"}}
+    return out
+
+
+def all_lines_view(rows):
+    """Every distinct line forecast with its own outcome, each weighted 1/k within its unit (k = distinct lines), pushes
+    out (conditional chances). Uncertainty grouped by canonical match."""
+    items = []
+    for r in rows:
+        ls = [x for x in json.loads(r.get("lines") or "[]") if x.get("p_over") is not None and x["outcome"] != "push"]
+        for x in ls:
+            items.append({"match": r["match_slug"], "w": 1.0 / len(ls), "p": x["p_over"], "y": int(x["outcome"] == "over")})
+    if not items:
+        return {"lines": 0, "units": 0, "matches": 0}
+    by = collections.defaultdict(lambda: [0.0, 0.0])
+    for i in items:
+        by[i["match"]][0] += i["w"] * _ll(i["p"], i["y"])
+        by[i["match"]][1] += i["w"]
+    W = sum(i["w"] for i in items)
+    return {"lines": len(items), "units": round(W), "matches": len(by),
+            "weighted_log_loss": _r(sum(i["w"] * _ll(i["p"], i["y"]) for i in items) / W),
+            "weighted_log_loss_ci": _ci_ratio(list(by.values())),
+            "weighted_brier": _r(sum(i["w"] * (i["p"] - i["y"]) ** 2 for i in items) / W),
+            "policy": "primary scorecard = one evaluation forecast per unit; this view keeps every distinct line, weight 1/k per unit"}
 
 
 def diagnosis(sc):
@@ -1626,14 +1714,19 @@ def build_dashboard(con, now=None):
     rows = latest_rows(con)
     scored = [r for r in rows if r["bucket"] == "scored"]
     new = {r["match_slug"] for r in scored if since is None or (r["processed_at"] or "") > since}
-    active = con.execute("SELECT id FROM challengers WHERE status = 'shadow'").fetchone()
+    active = con.execute("SELECT id FROM challengers WHERE status = 'shadow' AND family = ?", (TRAIN_RULE["family"],)).fetchone()
     chs = []
     for ch in con.execute("SELECT * FROM challengers ORDER BY created_at DESC LIMIT 20").fetchall():
         fu = forward_units(con, ch) if ch["status"] in ("shadow", "eligible_for_review") else []
         done = [dict(r, result=json.loads(r["result"])) for r in con.execute("SELECT * FROM reviews WHERE challenger_id = ? ORDER BY win", (ch["id"],))]
         nxt = next((w for w in REVIEW_RULE["windows"] if w not in {d["win"] for d in done}), None)
         nm = len({u["match"] for u in fu})
-        chs.append({"id": ch["id"], "family": ch["family"], "status": ch["status"], "status_reason": ch["status_reason"],
+        early = [u for u in fu if (u["start"] or "") <= ch["frozen_at"] or (u["logged"] or "") <= ch["frozen_at"]]
+        chs.append({"id": ch["id"], "family": ch["family"], "name": CHALLENGER_NAMES.get(ch["family"], ch["family"]),
+                    "freeze_check": {"forward_units": len(fu), "units_started_or_logged_before_freeze": len(early),
+                                     "earliest_forward_start": min((u["start"] for u in fu), default=None),
+                                     "rule": "forward = forecast logged after the freeze AND match start after the freeze"},
+                    "status": ch["status"], "status_reason": ch["status_reason"],
                     "frozen_at": ch["frozen_at"], "training_cutoff": ch["training_cutoff"], "snapshot": ch["snapshot_id"],
                     "data_hash": ch["data_hash"], "config": json.loads(ch["config"]), "base_config": json.loads(ch["base_config"]),
                     "revises": ch["revises"], "development": json.loads(ch["development"] or "[]"),

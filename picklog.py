@@ -95,6 +95,13 @@ def _db():
         con.execute("ALTER TABLE forecasts ADD COLUMN inputs BLOB")
     except sqlite3.OperationalError:
         pass
+    # 2026-10-12 (owner review): the model's own outcome chances before caps / margins (over, under, PUSH, p_more_no_push)
+    # and the HLTV dataset revision the forecast was graded on - a later backfill changes inputs without a code change
+    for col in ("probs_raw", "data_rev"):
+        try:
+            con.execute(f"ALTER TABLE forecasts ADD COLUMN {col} TEXT")
+        except sqlite3.OperationalError:
+            pass
     # first_logged_at set = a board row that was overwritten by a later grade (2026-10-07 ~21:00-22:00Z only)
     for col in ("first_logged_at", "regrades"):
         try:
@@ -317,7 +324,34 @@ def pick_row(res, verdict, test=False):
         row["_gi"] = zlib.compress(json.dumps(res.get("grader_inputs"), default=str).encode(), 6)
     except Exception:
         pass
+    row["_probs"] = json.dumps(g.get("probs_raw")) if g.get("probs_raw") else None
     return row
+
+
+_REV = {"at": 0.0, "rev": None}
+REV_TTL = 600
+
+
+def data_revision():
+    """The HLTV dataset revision: 'matches=<n>;max_id=<id>;max_date=<day>' from match_overview, cached 10 minutes. None
+    when the database can't be read (never blocks logging). Called from the pick-log writer thread only."""
+    now = time.time()
+    if now - _REV["at"] < REV_TTL:
+        return _REV["rev"]
+    _REV["at"] = now
+    try:
+        import hltv
+        con = hltv._connect()
+        try:
+            with con.cursor() as cur:
+                cur.execute("SELECT count(*), max(matchid), max(date) FROM match_overview")
+                n, mx, md = cur.fetchone()
+        finally:
+            con.close()
+        _REV["rev"] = f"matches={n};max_id={mx};max_date={md}"
+    except Exception:
+        _REV["rev"] = None
+    return _REV["rev"]
 
 
 def _shadow(row):
@@ -327,18 +361,20 @@ def _shadow(row):
         return None
 
 
-def _forecast(con, pid, row, kind, gi=None):
+def _forecast(con, pid, row, kind, gi=None, extra=None):
     """Append one forecast to the history - only when it differs from the last one stored for this pick.
     The picks row itself stays the FIRST published forecast (never overwritten)."""
     last = con.execute("SELECT line, pick, p_pick, grade, units, lambda, model_version FROM forecasts "
                        "WHERE pick_id = ? ORDER BY id DESC LIMIT 1", (pid,)).fetchone()
     if last and kind == "update" and last["line"] == row["line"] and last["pick"] == row["pick"]             and last["grade"] == row["grade"] and last["units"] == row["units"]             and last["model_version"] == row.get("model_version")             and abs((last["p_pick"] or 0) - (row["p_pick"] or 0)) < 0.01             and abs((last["lambda"] or 0) - (row.get("lambda") or 0)) < 0.2:
         return
+    extra = extra or {}
     con.execute("INSERT INTO forecasts (pick_id, kind, logged_at, match_start, line, pick, p_pick, p_more, grade, units, "
-                "lambda, p_win, rec_hit, sample_maps, model_version, shadow, inputs) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "lambda, p_win, rec_hit, sample_maps, model_version, shadow, inputs, probs_raw, data_rev) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (pid, kind, row["logged_at"], row.get("match_start"), row["line"], row["pick"], row["p_pick"],
                  row.get("p_more"), row["grade"], row["units"], row.get("lambda"), row.get("p_win"), row.get("rec_hit"),
-                 row.get("sample_maps"), row.get("model_version"), _shadow(row), gi))
+                 row.get("sample_maps"), row.get("model_version"), _shadow(row), gi, extra.get("probs_raw"), extra.get("data_rev")))
 
 
 def _before_start(row, cur):
@@ -355,13 +391,14 @@ def write_row(row):
         return None
     row = dict(row)
     gi = row.pop("_gi", None)                       # the exact grader inputs - forecasts table only
+    extra = {"probs_raw": row.pop("_probs", None), "data_rev": data_revision()}
     key, test = row["key"], row["test"]
     with _LOCK:
         con = _db()
         try:
             cur = con.execute("SELECT id, test, status, match_start FROM picks WHERE key = ?", (key,)).fetchone()
             if cur and cur["status"] == "open" and _before_start(row, cur):
-                _forecast(con, cur["id"], row, "update", gi)  # every changed pre-match forecast, timestamped
+                _forecast(con, cur["id"], row, "update", gi, extra)  # every changed pre-match forecast, timestamped
                 con.execute("UPDATE picks SET regrades = COALESCE(regrades, 0) + 1 WHERE id = ?", (cur["id"],))
             if cur:
                 # a real member asking for a line first seen in a test makes it a real pick
@@ -374,7 +411,7 @@ def write_row(row):
             cols = ", ".join(row)
             con.execute(f"INSERT INTO picks ({cols}) VALUES ({', '.join('?' * len(row))})", list(row.values()))
             pid = con.execute("SELECT id FROM picks WHERE key = ?", (key,)).fetchone()["id"]
-            _forecast(con, pid, row, "first", gi)
+            _forecast(con, pid, row, "first", gi, extra)
             con.commit()
             return pid
         finally:

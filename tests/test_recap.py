@@ -187,3 +187,20 @@ def test_one_match_under_two_slugs_counts_once():
     rc = R.recap([a, b])
     assert rc["cohorts"]["board"]["records"]["totals"]["n"] == 2
     assert rc["cohorts"]["board"]["deduplicated"]["totals"]["n"] == 1
+
+
+def test_forecast_keeps_raw_chances_and_dataset_revision(monkeypatch, tmp_path):
+    """Owner review 2026-10-12: a backfill changes inputs without a code change - every forecast records the HLTV dataset
+    revision it was graded on, and the model's own over / under / push chances before caps."""
+    import sqlite3, json as _j, picklog
+    monkeypatch.setattr(picklog, "DB", tmp_path / "p.db"); monkeypatch.setattr(picklog, "_SCHEMA_OK", [False])
+    monkeypatch.setattr(picklog, "data_revision", lambda: "matches=8578;max_id=2399300;max_date=2026-10-11")
+    row = {"key": "k1", "logged_at": "2026-10-12T10:00:00+00:00", "player": "p", "prop": "kills", "line": 30.0,
+           "pick": "More", "status": "open", "match_start": "2099-01-01T00:00:00Z", "p_pick": 0.6, "p_more": 0.6,
+           "grade": "B", "units": 0.5, "lambda": 31.0, "test": 2,
+           "_probs": _j.dumps({"over": 0.55, "under": 0.38, "push": 0.07, "p_more_no_push": 0.5914})}
+    picklog.write_row(row)
+    f = sqlite3.connect(tmp_path / "p.db").execute("SELECT probs_raw, data_rev FROM forecasts").fetchone()
+    assert _j.loads(f[0])["push"] == 0.07 and f[1].startswith("matches=8578")
+    cols = [r[1] for r in sqlite3.connect(tmp_path / "p.db").execute("PRAGMA table_info(picks)")]
+    assert "_probs" not in cols and "probs_raw" not in cols
