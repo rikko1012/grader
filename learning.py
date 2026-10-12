@@ -337,7 +337,54 @@ def source_of(p):
 
 def unit_key(p):
     who = str(p.get("slug") or p.get("player") or "").lower()
-    return f"{who}|{p.get('match_slug')}|{p.get('prop')}|{p.get('scope') or '12'}"
+    return f"{who}|{match_of(p)}|{p.get('prop')}|{p.get('scope') or '12'}"
+
+
+def match_of(p):
+    """The canonical match identity (identity.assign, tagged on each pick as _mid by tag_matches) - one match logged under a
+    BO3.gg slug and under hltv-<id> is one match (2026-10-12 audit, D1). Falls back to the slug."""
+    return p.get("_mid") or p.get("match_slug")
+
+
+UNIT_IDENTITY = 2                   # 1 = slug units (until 2026-10-12), 2 = identity.assign canonical matches
+
+
+def tag_matches(picks):
+    import identity
+    m = identity.assign([p for p in picks if p.get("id") is not None])
+    for p in picks:
+        if p.get("id") in m:
+            p["_mid"] = m[p["id"]]
+    return picks
+
+
+def _migrate_unit_identity(con, picks, now):
+    """Once per identity version: re-key the forecast copies and rebuild the ledger from the original forecasts. The old
+    ledger is kept as ledger_v<n> (never deleted); the rebuild is recorded as an event."""
+    have = _meta(con, "unit_identity", 1)
+    if have == UNIT_IDENTITY:
+        return False
+    by = {p["id"]: p for p in picks}
+    for fid, pid in con.execute("SELECT forecast_id, pick_id FROM forecast_copy").fetchall():
+        p = by.get(pid)
+        if p:
+            con.execute("UPDATE forecast_copy SET unit_key = ?, match_slug = ? WHERE forecast_id = ?", (unit_key(p), match_of(p), fid))
+    n = con.execute("SELECT COUNT(*) FROM ledger").fetchone()[0]
+    old = f"ledger_v{have}_{now.strftime('%Y%m%d%H%M%S')}"
+    con.execute(f"ALTER TABLE ledger RENAME TO {old}")
+    con.execute("DROP INDEX IF EXISTS ledger_fc")
+    con.execute("""CREATE TABLE ledger (rid INTEGER PRIMARY KEY AUTOINCREMENT, unit_key TEXT NOT NULL, forecast_id INTEGER,
+        settlement_version INTEGER NOT NULL, fingerprint TEXT, bucket TEXT, reason TEXT, match_slug TEXT, match_start TEXT,
+        forecast_logged_at TEXT, prop TEXT, scope TEXT, line REAL, actual REAL, over_hit INTEGER, p_over REAL, lam REAL,
+        dims TEXT, diag TEXT, pick_ids TEXT, settled_at TEXT, processed_at TEXT, supersedes INTEGER, change TEXT,
+        UNIQUE (unit_key, settlement_version))""")
+    con.execute("CREATE INDEX IF NOT EXISTS ledger_fc ON ledger (forecast_id, settlement_version)")
+    _set_meta(con, "unit_identity", UNIT_IDENTITY)
+    con.execute("INSERT INTO events (at, kind, detail) VALUES (?,?,?)", (_iso(now), "unit_identity", json.dumps(
+        {"from": have, "to": UNIT_IDENTITY, "old_ledger": old, "old_rows": n,
+         "why": "one match logged under a BO3.gg slug and hltv-<id> counted twice (audit D1); originals untouched"})))
+    con.commit()
+    return True
 
 
 _PERF_KEEP = ("version", "lambda", "lambda_kills", "rate", "rate_all_envs", "opp_factor", "hs_per_kill", "rounds_per_map",
@@ -823,7 +870,7 @@ def _copy_forecasts(con, picks, forecasts, now):
                     "line_type, test, inputs_sha1, features, copied_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (f["id"], f["pick_id"], f.get("kind"), _niso(f.get("logged_at")), _niso(f.get("match_start") or p.get("match_start")),
                      f.get("line"), f.get("pick"), f.get("p_pick"), f.get("p_more"), f.get("grade"), f.get("units"), f.get("lambda"),
-                     f.get("model_version"), unit_key(p) if p else None, p.get("match_slug"), p.get("player"), p.get("prop"),
+                     f.get("model_version"), unit_key(p) if p else None, match_of(p) if p else None, p.get("player"), p.get("prop"),
                      p.get("scope") or "12", source_of(p) if p else None, p.get("book"), p.get("line_type"), p.get("test"),
                      f.get("inputs_sha1"), json.dumps(feat, separators=(",", ":"), default=str), _iso(now)))
         last = max(last, f["id"])
@@ -984,7 +1031,7 @@ def _ingest(con, picks, now, bad_units, corr_ids):
         con.execute("INSERT INTO ledger (unit_key, forecast_id, settlement_version, fingerprint, bucket, reason, match_slug, match_start, "
                     "forecast_logged_at, prop, scope, line, actual, over_hit, p_over, lam, dims, diag, pick_ids, settled_at, processed_at, "
                     "supersedes, change) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                    (uk, f["forecast_id"] if f else None, ver, fp, bucket, reason, p0.get("match_slug"), _iso(start),
+                    (uk, f["forecast_id"] if f else None, ver, fp, bucket, reason, match_of(p0), _iso(start),
                      f["logged_at"] if f else None, prop, scope, line, actual, over, p_over, lam, json.dumps(dims), json.dumps(diag),
                      json.dumps(sorted(pids)), _niso(settled_at), _iso(now), prev["rid"] if prev else None, change))
         added += 1
@@ -1503,6 +1550,7 @@ def run_cycle(now=None, picks=None, forecasts=None, batches=None, corrections=No
                 total = 0
                 while True:
                     picks_, fr = read_picklog(picks_path, _meta(con, "last_forecast_id", 0))
+                    tag_matches(picks_)
                     n, stalled = _copy_forecasts(con, picks_, fr, now)
                     total += n
                     con.commit()
@@ -1511,8 +1559,11 @@ def run_cycle(now=None, picks=None, forecasts=None, batches=None, corrections=No
                 picks = picks_
                 log["forecasts_copied"] = total
             else:
+                tag_matches(picks)
                 last = _meta(con, "last_forecast_id", 0)
                 log["forecasts_copied"] = _copy_forecasts(con, picks, sorted((f for f in forecasts or [] if f["id"] > last), key=lambda f: f["id"]), now)[0]
+            if _migrate_unit_identity(con, picks, now):
+                log["unit_identity_migrated"] = UNIT_IDENTITY
             corrections = read_corrections(corrections_path) if corrections is None else corrections
             batches = read_batches(batches_path) if batches is None else batches
             # 2. shadow forecasts (measurement only - continues while paused)

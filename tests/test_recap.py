@@ -176,3 +176,14 @@ def test_picklog_keeps_board_provenance(monkeypatch, tmp_path):
     con = sqlite3.connect(tmp_path / "p.db")
     got = dict(con.execute("SELECT key, on_board FROM picks").fetchall())
     assert got == {"k1": 1, "k2": 1}
+
+
+def test_one_match_under_two_slugs_counts_once():
+    """Audit D1: the board logged one match under a BO3.gg slug and hltv-<id>; accuracy counts it once."""
+    a = _p(test=2, slug="xureba", match="lp-vs-ex-keyd-stars-12-10-2026", start="2026-10-12T21:00:00+00:00")
+    b = _p(test=2, slug="xureba", match="hltv-2399300", start="2026-10-12T21:30:00+00:00")
+    for r in (a, b):
+        r.update(team="ex-Keyd Stars", opponent="LP", player="xureba")
+    rc = R.recap([a, b])
+    assert rc["cohorts"]["board"]["records"]["totals"]["n"] == 2
+    assert rc["cohorts"]["board"]["deduplicated"]["totals"]["n"] == 1

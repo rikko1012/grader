@@ -99,3 +99,29 @@ def test_audit_summary_frozen_cohort_and_bo3_fallback(monkeypatch, tmp_path):
     # without the BO3.gg source the same pick stays unresolved - never counted as verified
     s2 = picklog.fix_scope_settlements(apply=False, scopes=("12",), until="2026-10-12T23:59:59+00:00")["summary"]
     assert (s2["verified"], s2["unresolved"], s2["line"]) == (0, 1, "0 wrong among 0 verified; 1 unresolved")
+
+
+def test_bo3_settlement_is_rechecked_against_hltv(monkeypatch, tmp_path):
+    """Audit D4: a BO3.gg settlement HLTV disagrees with (chelo 15 vs 16) is corrected and logged; an equal one is marked."""
+    full = {"source": "bo3", "rounds": [18, 19], "won": [False, True], "per_map": [[15, 8], [14, 4]]}
+    db(monkeypatch, tmp_path, [(1, 29.5, 29, 1, full), (2, 28.5, 29, 0, full)])
+    hl = {"status": "ok", "total": 30, "maps_used": [1, 2], "maps": ["de_inferno", "de_mirage"], "per_map": [[15, 8], [15, 4]],
+          "rounds": [18, 19], "won": [False, True], "hltv_match": 2399999}
+    monkeypatch.setattr(picklog, "scope_result", lambda r, same_day_only=False: dict(hl, total=30 if r["id"] == 1 else 29))
+    out = picklog.recheck_bo3_with_hltv(now=NOW)
+    assert out["checked"] == 2 and out["confirmed"] == 1 and [c["id"] for c in out["corrected"]] == [1]
+    assert read(tmp_path, 1)[:3] == (30, "settled", 0) and json.loads(read(tmp_path, 1)[3])["source"] == "hltv"
+    assert json.loads(read(tmp_path, 2)[3])["hltv_checked"] is True
+    log = [json.loads(x) for x in (tmp_path / "c.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert len(log) == 1 and log[0]["old"]["actual"] == 29 and log[0]["new"]["actual"] == 30
+    assert picklog.recheck_bo3_with_hltv(now=NOW)["checked"] == 0          # each pick once
+
+
+def test_hltv_recheck_leaves_picks_alone_when_hltv_is_down(monkeypatch, tmp_path):
+    full = {"source": "bo3", "rounds": [18, 19], "won": [False, True], "per_map": [[15, 8], [14, 4]]}
+    db(monkeypatch, tmp_path, [(1, 29.5, 29, 1, full)])
+    def boom(r, same_day_only=False):
+        raise ConnectionError("down")
+    monkeypatch.setattr(picklog, "scope_result", boom)
+    out = picklog.recheck_bo3_with_hltv(now=NOW)
+    assert out["waiting"] == 1 and read(tmp_path, 1)[:3] == (29, "settled", 1)

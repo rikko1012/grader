@@ -145,7 +145,9 @@ def entry(r, cohort, tz_offset_h=-5):
 
 def dedup_key(r):
     """Same proposition = same player, match, stat, scope, line, side and settlement rule (line type)."""
-    return (str(r.get("slug") or r.get("player") or "").lower(), r.get("match_slug"), r.get("prop"),
+    # the match: identity.assign's canonical id (_mid, set in recap()) - one match logged under a BO3.gg slug and
+    # hltv-<id> is one match (2026-10-12 audit D1); the slug when unlinked
+    return (str(r.get("slug") or r.get("player") or "").lower(), r.get("_mid") or r.get("match_slug"), r.get("prop"),
             str(r.get("scope") or "12"), float(r["line"]), r.get("pick"), r.get("line_type") or "standard")
 
 
@@ -292,6 +294,13 @@ def recap(picks, tz_offset_h=-5, date_from=None, date_to=None, cutoff=None, meta
     first_last = {c: [None, None] for c in COHORTS}
     overwritten = Counter()
     implausible = Counter()
+    import identity
+    picks = [dict(r) for r in picks]
+    for src in {r.get("_source") for r in picks}:                 # ids are unique within one source (pick log) only
+        grp = [r for r in picks if r.get("_source") == src and r.get("id") is not None]
+        m = identity.assign(grp)
+        for r in grp:
+            r["_mid"] = m.get(r["id"])
     for r in picks:
         rows_in += 1
         cs = cohorts_of(r)

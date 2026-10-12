@@ -516,7 +516,68 @@ def settle(b, map_rows):
         recheck_bo3_quick(b, map_rows, now=now)
     except Exception:
         pass                                           # never blocks settling; the next pass tries again
+    try:
+        recheck_bo3_with_hltv(now=now)
+    except Exception:
+        pass
     return done
+
+
+HLTV_RECHECK_MAX = 60        # picks per settle pass
+
+
+def recheck_bo3_with_hltv(now=None, apply=True, days=7, limit=HLTV_RECHECK_MAX):
+    """2026-10-12 audit D4: picks settled from BO3.gg (cool4st 23 vs HLTV 24, chelo 15 vs 16) are re-derived from HLTV
+    once HLTV has the match, through scope_result() (strict identity: the player's own team, the opponent's HLTV id,
+    exactly one match). A different total is corrected with old and new values in settlement_corrections.jsonl; an
+    equal one is marked hltv_checked. HLTV unreachable / not there yet = untouched (next pass)."""
+    from scope import outcome as _oc
+    now = now or datetime.now(timezone.utc)
+    since = (now - timedelta(days=days)).isoformat(timespec="seconds")
+    with _LOCK:
+        con = _db()
+        rows = con.execute("SELECT * FROM picks WHERE status IN ('settled', 'push') AND settled_at >= ? "
+                           "AND (scope IS NULL OR scope = '12') AND result LIKE '%\"source\": \"bo3\"%' "
+                           "AND result NOT LIKE '%hltv_checked%'", (since,)).fetchall()
+        con.close()
+    out = {"checked": 0, "confirmed": 0, "corrected": [], "waiting": 0}
+    for r in rows[:limit]:
+        try:
+            res = scope_result(r)
+        except Exception:
+            out["waiting"] += 1
+            continue
+        if res.get("status") != "ok":
+            out["waiting"] += 1
+            continue
+        out["checked"] += 1
+        try:
+            old = json.loads(r["result"] or "{}")
+        except ValueError:
+            old = {}
+        st, hit = _oc(res["total"], r["line"], r["pick"])
+        if res["total"] == r["actual"] and st == r["status"] and (hit == r["hit"] or (hit is None and r["hit"] is None)):
+            out["confirmed"] += 1
+            if apply:
+                _save_result(r["id"], dict(old, hltv_checked=True, hltv_match=res["hltv_match"]))
+            continue
+        detail = {"source": "hltv", "rounds": res["rounds"], "won": res["won"], "per_map": res["per_map"],
+                  "maps_used": res["maps_used"], "hltv_match": res["hltv_match"], "hltv_checked": True, "bo3_detail": old}
+        d = {"id": r["id"], "player": r["player"], "prop": r["prop"], "scope": "12", "line": r["line"], "pick": r["pick"],
+             "test": r["test"], "old": {"actual": r["actual"], "status": r["status"], "hit": r["hit"]},
+             "new": {"actual": res["total"], "status": st, "hit": hit}, "hltv_match": res["hltv_match"],
+             "reason": "HLTV result differs from the BO3.gg settlement"}
+        out["corrected"].append(d)
+        if apply:
+            with _LOCK:
+                con = _db()
+                con.execute("UPDATE picks SET status=?, actual=?, hit=?, actual_maps=?, result=? WHERE id=?",
+                            (st, res["total"], hit, json.dumps(res["maps"]), json.dumps(detail, default=str), r["id"]))
+                con.commit()
+                con.close()
+                with open(CORRECTIONS, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(dict(d, corrected_at=now.isoformat(timespec="seconds")), default=str) + "\n")
+    return out
 
 
 QUICK_RECHECK_D = 7          # quick-scoreboard settlements are re-derived from the full scoreboard for this long

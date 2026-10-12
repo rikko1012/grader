@@ -605,3 +605,33 @@ def test_line_blend_properties_documented_in_challengers_md():
             prev = pc
     f = {"p_more": 0.641, "prop": "hs", "scope": "12"}
     assert learning.line_blend_p(learning.p_over_of(f), "hs", "12") == learning.line_blend_p(0.641, "hs", "12")   # replay = saved p only
+
+
+def test_one_match_under_two_slugs_is_one_unit():
+    """Audit D1 (2026-10-12): the same match logged under a BO3.gg slug and hltv-<id> is one evaluation unit; two
+    different BO3.gg matches of the same teams on the same day stay two."""
+    import identity
+    base = {"player": "xureba", "prop": "kills", "scope": "12", "team": "ex-Keyd Stars", "opponent": "LP"}
+    rows = [dict(base, id=1, match_slug="lp-vs-ex-keyd-stars-12-10-2026", match_start="2026-10-12T21:00:00Z"),
+            dict(base, id=2, match_slug="hltv-2399300", match_start="2026-10-12T21:30:00Z"),
+            dict(base, id=3, match_slug="ex-keyd-stars-vs-lp-12-10-2026", match_start="2026-10-13T01:30:00Z"),   # rematch
+            dict(base, id=4, match_slug="martyrdom-vs-markandlarry-12-10-2026", match_start="2026-10-12T21:00:00Z")]  # slug names other teams
+    m = identity.assign(rows)
+    assert m[1] == m[2] == "hltv:2399300" and m[3] != m[1] and m[4] == "martyrdom-vs-markandlarry-12-10-2026"
+    for r in rows:
+        r["_mid"] = m[r["id"]]
+    assert learning.unit_key(rows[0]) == learning.unit_key(rows[1]) != learning.unit_key(rows[2])
+
+
+def test_unit_identity_migration_keeps_the_old_ledger(db):
+    con = learning.connect(db)
+    now = datetime(2026, 10, 12, 18, 0, tzinfo=timezone.utc)
+    con.execute("INSERT INTO ledger (unit_key, settlement_version, bucket) VALUES ('x|slug:a|kills|12', 1, 'scored')")
+    con.commit()
+    assert learning._migrate_unit_identity(con, [], now) is True and learning._migrate_unit_identity(con, [], now) is False
+    tabs = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    old = [t for t in tabs if t.startswith("ledger_v1_")]
+    assert old and con.execute(f"SELECT COUNT(*) FROM {old[0]}").fetchone()[0] == 1
+    assert con.execute("SELECT COUNT(*) FROM ledger").fetchone()[0] == 0
+    ev = con.execute("SELECT detail FROM events WHERE kind = 'unit_identity'").fetchone()
+    assert json.loads(ev[0])["old_rows"] == 1
