@@ -1677,7 +1677,8 @@ def run_cycle(now=None, picks=None, forecasts=None, batches=None, corrections=No
                 corr_ids = {c.get("id") for c in corrections if c.get("id") is not None}
                 log["ingest"] = _ingest(con, picks, now, bad, corr_ids)
                 con.commit()
-                if log["ingest"]["added"] or _meta(con, "scorecard") is None:
+                _sc = _meta(con, "scorecard")
+                if log["ingest"]["added"] or log["ingest"].get("lines_backfilled") or _sc is None or "questions" not in _sc:
                     _set_meta(con, "scorecard", scorecard(con))
                     _set_meta(con, "scorecard_at", _iso(now))
                     con.commit()
