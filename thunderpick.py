@@ -254,7 +254,10 @@ def normalize(events, retrieved_at):
                        "invalid_selections": sum(1 for v in sel.values() if odds(v) is None)})
         out.append({
             "index": i, "source": SOURCE, "retrieved_at": retrieved_at,
-            "source_event_id": url_id(ev.get("matchUrl")), "url": url,
+            # the feed's own fixtureId when present (undocumented, seen 2026-10-13 on 37 of 61 events); else the number in
+            # the match URL - a SOURCE identifier only, never canonical identity
+            "source_event_id": (f"fx:{ev['fixtureId']}" if ev.get("fixtureId") not in (None, "") else url_id(ev.get("matchUrl"))),
+            "url_id": url_id(ev.get("matchUrl")), "tournament": ev.get("tournament"), "game": ev.get("game"), "url": url,
             "main_market": str(ev.get("name") or ""), "team1": t1, "team2": t2,
             "team1_odds": d1, "team2_odds": d2, "draw_odds": dd, "draw_present": draw_present,
             "start_raw": ev.get("startTime"), "start_naive": start.isoformat() if start else None, "start_tz": "unconfirmed",

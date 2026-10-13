@@ -376,3 +376,9 @@ def test_moneylines_payload_state_only():
     import server
     st = server._thunderpick_state()
     assert st["source"] == "thunderpick" and "label" in st and "odds_a" not in st
+
+
+def test_fixture_id_is_the_source_event_id_when_present():
+    out = T.normalize([ev(fixtureId=12345, tournament="Fixture Cup", game="CS2"), ev()], "t")
+    assert out[0]["source_event_id"] == "fx:12345" and out[0]["url_id"] == "2399001" and out[0]["tournament"] == "Fixture Cup"
+    assert out[1]["source_event_id"] == "2399001"

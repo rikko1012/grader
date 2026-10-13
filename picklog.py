@@ -99,7 +99,7 @@ def _db():
         pass
     # 2026-10-12 (owner review): the model's own outcome chances before caps / margins (over, under, PUSH, p_more_no_push)
     # and the HLTV dataset revision the forecast was graded on - a later backfill changes inputs without a code change
-    for col in ("probs_raw", "data_rev"):
+    for col in ("probs_raw", "data_rev", "odds_source"):
         try:
             con.execute(f"ALTER TABLE forecasts ADD COLUMN {col} TEXT")
         except sqlite3.OperationalError:
@@ -327,6 +327,8 @@ def pick_row(res, verdict, test=False):
     except Exception:
         pass
     row["_probs"] = json.dumps(g.get("probs_raw")) if g.get("probs_raw") else None
+    # which market supplied this grade's win probability (market_odds.select) - a change of source is a new forecast
+    row["_odds_src"] = ((res.get("odds") or {}).get("provenance") or {}).get("selected")
     return row
 
 
@@ -366,17 +368,18 @@ def _shadow(row):
 def _forecast(con, pid, row, kind, gi=None, extra=None):
     """Append one forecast to the history - only when it differs from the last one stored for this pick.
     The picks row itself stays the FIRST published forecast (never overwritten)."""
-    last = con.execute("SELECT line, pick, p_pick, grade, units, lambda, model_version FROM forecasts "
-                       "WHERE pick_id = ? ORDER BY id DESC LIMIT 1", (pid,)).fetchone()
-    if last and kind == "update" and last["line"] == row["line"] and last["pick"] == row["pick"]             and last["grade"] == row["grade"] and last["units"] == row["units"]             and last["model_version"] == row.get("model_version")             and abs((last["p_pick"] or 0) - (row["p_pick"] or 0)) < 0.01             and abs((last["lambda"] or 0) - (row.get("lambda") or 0)) < 0.2:
-        return
     extra = extra or {}
+    last = con.execute("SELECT line, pick, p_pick, grade, units, lambda, model_version, odds_source FROM forecasts "
+                       "WHERE pick_id = ? ORDER BY id DESC LIMIT 1", (pid,)).fetchone()
+    if last and kind == "update" and last["line"] == row["line"] and last["pick"] == row["pick"]             and last["grade"] == row["grade"] and last["units"] == row["units"]             and last["model_version"] == row.get("model_version")             and abs((last["p_pick"] or 0) - (row["p_pick"] or 0)) < 0.01             and abs((last["lambda"] or 0) - (row.get("lambda") or 0)) < 0.2             and last["odds_source"] == extra.get("odds_source"):
+        return
     con.execute("INSERT INTO forecasts (pick_id, kind, logged_at, match_start, line, pick, p_pick, p_more, grade, units, "
-                "lambda, p_win, rec_hit, sample_maps, model_version, shadow, inputs, probs_raw, data_rev) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "lambda, p_win, rec_hit, sample_maps, model_version, shadow, inputs, probs_raw, data_rev, odds_source) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (pid, kind, row["logged_at"], row.get("match_start"), row["line"], row["pick"], row["p_pick"],
                  row.get("p_more"), row["grade"], row["units"], row.get("lambda"), row.get("p_win"), row.get("rec_hit"),
-                 row.get("sample_maps"), row.get("model_version"), _shadow(row), gi, extra.get("probs_raw"), extra.get("data_rev")))
+                 row.get("sample_maps"), row.get("model_version"), _shadow(row), gi, extra.get("probs_raw"), extra.get("data_rev"),
+                 extra.get("odds_source")))
 
 
 def _before_start(row, cur):
@@ -393,7 +396,7 @@ def write_row(row):
         return None
     row = dict(row)
     gi = row.pop("_gi", None)                       # the exact grader inputs - forecasts table only
-    extra = {"probs_raw": row.pop("_probs", None), "data_rev": data_revision()}
+    extra = {"probs_raw": row.pop("_probs", None), "data_rev": data_revision(), "odds_source": row.pop("_odds_src", None)}
     key, test = row["key"], row["test"]
     with _LOCK:
         con = _db()

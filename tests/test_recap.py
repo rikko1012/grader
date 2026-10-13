@@ -204,3 +204,19 @@ def test_forecast_keeps_raw_chances_and_dataset_revision(monkeypatch, tmp_path):
     assert _j.loads(f[0])["push"] == 0.07 and f[1].startswith("matches=8578")
     cols = [r[1] for r in sqlite3.connect(tmp_path / "p.db").execute("PRAGMA table_info(picks)")]
     assert "_probs" not in cols and "probs_raw" not in cols
+
+
+def test_a_change_of_odds_source_is_a_new_forecast(monkeypatch, tmp_path):
+    """2026-10-13: the same numbers from another odds source (Polymarket -> Thunderpick) must be saved as a forecast with
+    its own provenance - the saved forecast always matches the snapshot the grade used."""
+    import sqlite3, picklog
+    monkeypatch.setattr(picklog, "DB", tmp_path / "p.db"); monkeypatch.setattr(picklog, "_SCHEMA_OK", [False])
+    monkeypatch.setattr(picklog, "data_revision", lambda: None)
+    base = {"key": "k1", "logged_at": "2026-10-13T10:00:00+00:00", "player": "p", "prop": "kills", "line": 30.5,
+            "pick": "More", "status": "open", "match_start": "2099-01-01T00:00:00Z", "p_pick": 0.6, "p_more": 0.6,
+            "grade": "B", "units": 0.5, "lambda": 31.0, "test": 2}
+    picklog.write_row(dict(base, _odds_src="polymarket"))
+    picklog.write_row(dict(base, _odds_src="polymarket"))                 # unchanged: not logged again
+    picklog.write_row(dict(base, _odds_src="thunderpick"))                # same numbers, new source: logged
+    rows = sqlite3.connect(tmp_path / "p.db").execute("SELECT odds_source FROM forecasts ORDER BY id").fetchall()
+    assert [r[0] for r in rows] == ["polymarket", "thunderpick"]
