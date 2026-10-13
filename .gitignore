@@ -28,3 +28,6 @@ CS2_Scout_UI.pdf
 role_snapshots.jsonl
 slip_batches.jsonl
 slips_recommended.jsonl
+
+# any local secrets file (2026-10-13: .env.thunderpick holds the Thunderpick partner key)
+.env.*

@@ -16,3 +16,4 @@ comparison_snapshots.jsonl
 model_versions.json
 *.tmp
 tests/
+.env.*
