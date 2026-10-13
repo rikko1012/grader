@@ -1,58 +1,89 @@
 # Thunderpick partner odds - integration status and provider questions (2026-10-13)
 
 ## Status
-- **Connected, no usable markets.** The single Render instance (`srv-db5hbj2jnfac73agcj6g`, one instance because the
-  service has a persistent disk) reaches `https://aggr.mightykiwi.xyz` over HTTPS with certificate verification; the key
-  is accepted. The documented CS2 identifier returns **HTTP 200 with an empty array** - connectivity proven, CS2 market
-  coverage NOT established.
-- Nothing from Thunderpick reaches members or grading. The Moneylines tab states Thunderpick's condition in words
-  (empty feed / rate-limited / unavailable / setting up) next to the attributed Polymarket and Kalshi comparisons; prop
-  grading keeps its existing market input. No grade changed.
-- Diagnosis controls (deployed `eaa172f`): every request goes through one gateway - a cooldown persisted on the disk
-  (Retry-After honoured, else growing backoff with jitter), ONE budget for all Thunderpick paths and callers
-  (4 requests / 60 s, atomic SQLite reservation on the persistent disk), automatic polling OFF, and an append-only audit
-  row per request actually sent (UTC time, path, caller, instance, pid, commit, status, duration, sanitized headers incl.
-  request ids, key-redacted error snippet). Status endpoints never contact the provider (verified: 0 audit rows over 16
-  former polling intervals while status was read repeatedly; covered by tests).
+- **Live and feeding projections.** Policy `tp-first-1` activated itself at **13:33 UTC** once the evidence below was
+  met. Full grades take the market win probability from `market_odds.select`: Thunderpick's proportional
+  margin-adjusted series price when the match links exactly and the quote is current, else the existing Polymarket
+  rule with the reason saved (`inputs.odds_provenance.fallback_reason`). Never 50%.
+- **First real forecasts using it:** forecasts 5867-5873 (13:40:18 UTC, version `4f00a300a1`): Legacy vs PARIVISION,
+  2026-10-14 13:30 UTC (`hltv:2399386`, Thunderpick fixture `fx:3297270`). Example below.
+- Moneylines: a Thunderpick block comes first on each matched card (original decimal odds, raw implied, margin,
+  margin-adjusted probability, our retrieval time, status, link); Polymarket and Kalshi stay as labelled comparisons.
+- Single Render instance (persistent disk); HTTPS with certificate verification; the key is only in the Render
+  environment (`THUNDER_PICK_API`) and never appears in logs, diagnostics, pages or the repository.
 
-## Evidence (UTC; credentials never included)
+## What the feed contains (measured, not assumed)
+| item | finding |
+|---|---|
+| endpoint | **`/esport/csgo` carries the CS2 matches** (59-61 events, `competition` "Counter-Strike"); `/esport/cs2` answers 200 `[]` on every request so far |
+| main market | `name` = **"Match Winner"** on all events; no `drawOdds` on any event |
+| fields beyond the guide | `game`, `tournament`, `fixtureId` (36-37 of ~60 events) - `fixtureId` is our source event id when present, else the number in `matchUrl` |
+| startTime | **UTC**: 25 matched events, 100% at offset 0 against HLTV start times |
+| series meaning | "Match Winner" vs exchange prices of the same matches: 15 matches, MAE 0.024, corr 0.98 -> series winner |
+| matchUrl hosts | `thunderpick.io` only |
+| other markets | round handicaps and totals (match and per map), map winners, "1X2 - Map N", pistol rounds, correct score, maps played; at least 21 per-map player kill / death Over/Under markets (Map 1 / Map 2, a few events) |
+| quote time / status | none published - we show our retrieval time and never call it the quote time |
 
-| time | path | caller | result | notes |
-|---|---|---|---|---|
-| 12:49-12:55 | `/esport/cs2` | poller (15 s) | 200, `[]` (2 of 2) | first contact from Render |
-| 12:56:06 | `/esport/csgo` | admin coverage check | **429** | the first csgo request ever sent from this service; cs2 was being polled at <= 4 / min |
-| 12:56-13:02 | `/esport/cs2` | poller | 6 x 200 `[]`, **2 x 429**, 1 timeout | 9 attempts in about 6 minutes (<= 4 / min) |
-| 12:57:33 | `/esport/csgo` | admin coverage check | **429** | |
-| 13:02-13:13 | - | - | no requests | diagnosis controls deployed; autopolling off |
-| 13:13:59 | `/esport/cs2` | admin probe | **200, `[]`**, 387 ms | `cf-ray a49e9ad4582cf3c9-CMH`, `server: cloudflare`, `cf-cache-status: DYNAMIC`; no Retry-After / X-RateLimit headers |
+Only "Match Winner" is used (series scope, established). Map markets, "1X2 - Map N" and the player markets are kept
+out of projections: per-map chances are derived from the series price, never mixed from another source. Using the
+player markets would be a new grading input that needs its own chronological test - not part of this release.
 
-Before 13:02 the code kept only the latest error's evidence, so the exact second and headers of the earlier 429s were not
-retained (fixed: every request is now an append-only audit row). Upper bound of our traffic at the time: 4 requests per
-minute on cs2 plus 2 single csgo requests - below the documented 10 per minute per IP per path. During a deploy the old
-instance is stopped before the new one starts (persistent disk), so overlapping pollers are unlikely; Render's outbound
-IPs are shared with other Render services in the region, which may matter if the limit counts per source IP.
+## Real forecast (forecast 5873, pick 1350, version `4f00a300a1`)
+zweih (PARIVISION) kills, Maps 1-2, line 27.5 vs Legacy, 2026-10-14 13:30 UTC.
 
-## Questions for the provider (send without any key)
-1. **Which identifier carries current CS2 matches: `esport/cs2` or `esport/csgo`?** `cs2` answered 200 with `[]` at
-   12:49-13:14 UTC on 2026-10-13 while CS2 matches were scheduled. Is our partner account enabled for CS2?
-2. **Rate limit scope:** per source IP, per key, per endpoint path or per account? Do `cs2` and `csgo` share one budget?
-   We received 429 at no more than 4 requests per minute (times above); no Retry-After or X-RateLimit headers were
-   returned - can they be? Our requests come from Render (shared outbound IPs): should we register an IP?
-3. **Main market:** for CS2, does the event `name` ("1X2" in the guide) mean the SERIES winner? How are draws handled
-   (best-of-2 series), and when is `drawOdds` present?
-4. **`startTime` timezone** (UTC?) and whether it changes when a match is rescheduled.
-5. **Quote timestamps / status:** is there a source update time per event or market, and a live / suspended / closed
-   flag? Are live (in-play) events included in the feed?
-6. **Identity:** are there stable event and market ids (beyond the number in `matchUrl`)? A tournament id beyond the
-   `competition` label?
-7. **Markets:** which `markets[]` names exist for CS2 (map winner, handicaps, totals, player kills / headshots)?
-8. **Links:** which `matchUrl` hosts can appear (we render only `https://thunderpick.io` / `www.thunderpick.io`)?
+| | Polymarket source (forecast 5719) | Thunderpick source (forecast 5873) |
+|---|---|---|
+| market input | PARIVISION +141 / Legacy -141 (41.5%), map prices 0.475 / 0.41, quality HARD | PARIVISION 2.15 / Legacy 1.62 decimal; raw implied 46.5% / 61.7%, margin 8.24%; margin-adjusted **43.0%**; maps derived; quality SOFT |
+| projection | 25.15 kills | 25.15 kills |
+| Less chance | 62.6% | 62.6% |
+| grade / stake | B, 0.5U Less | B, 0.5U Less |
 
-## Next, once usable markets arrive (already authorized)
-Market inventory and scope (series vs map, draws) -> canonical matching (reversed order, aliases, academies,
-rematches, start-time changes; ambiguous = unmatched) -> Thunderpick-first comparison display (original odds, raw implied
-and proportional margin-adjusted probabilities, margin, retrieval time, status, match link; no liquidity or execution
-claims) -> one shared projection-odds source selection (Thunderpick series price for series uses, map prices only for
-map uses, explicit fallback to the existing qualified source with the reason recorded, never 50%, counted once, one
-snapshot per forecast, provenance saved) released as a new model version and compared with the old source on identical
-inputs before activation.
+Provenance saved with the forecast: `source thunderpick`, `policy tp-first-1`, `market Match Winner`,
+`scope series winner`, `match_id hltv:2399386`, `source_event_id fx:3297270`, `api_path /api/partners-odds/esport/csgo`,
+`retrieved_at 2026-10-13T13:40:08Z`, `snapshot_sha256 41bdb078…`, `source_updated_at null` (the feed has none),
+`fallback_reason null`; forecast `odds_source thunderpick`, `data_rev matches=28191;max_id=2399456`.
+All 7 forecasts reproduce exactly from their saved inputs, and re-grading them with the Polymarket fields swapped back
+gives the earlier forecasts - only `team_ml`, `opp_ml`, `map_win_probs`, `market_quality` differ.
+
+**Why the projection did not move:** Maps 1-2 lines use the performance model, which does not read the win
+probability (`grader.py` replaces the projection with the performance lambda). The switch changes the market-quality
+category (bookmaker prices are SOFT under the existing rule -> stakes capped at 1.5U) and the shown win chance. Map 1
+and Maps 1-3 lines (older pipeline) do move with the win probability. Activation comparison on identical saved inputs:
+204 forecasts, 0 grade / stake / side changes.
+
+## Polling and protection
+- Both endpoints polled automatically from the server: 60 s each, slowing to 120 / 180 / 300 s after repeated empty
+  answers (cs2 is at 120 s now), >= 20 s between any two requests, one shared budget of 4 requests / 60 s for every
+  caller (poller and admin probe), all persisted on the disk (schedule, cooldown, budget survive restarts).
+- 429 -> Retry-After when given, else 60 s x 2^(n-1) +-20% jitter; 5xx / timeout / network -> 30 s x 2^(n-1); three
+  authentication failures stop all requests and raise one alert until the key changes.
+- Every request sent is an append-only audit row (time, path, caller, instance, commit, status, duration, sanitized
+  headers incl. `cf-ray`). Admin status: `/admin/thunderpick.json` (last attempt, last success, next attempt, blocker).
+- Freshness (`822a6b4505`): a quote is used only while its own snapshot is <= 180 s old. A cooldown does not void a fresh
+  quote; one empty answer between full ones does not wipe it; a feed that stays empty clears its matches.
+  Provenance is always the quote's own snapshot.
+
+## Observed rate limiting
+| time (UTC) | path | result | context |
+|---|---|---|---|
+| 12:56:06, 12:57:33 | csgo | 429 | cs2 polled at <= 4 / min |
+| 12:56-13:02 | cs2 | 2 x 429 of 9 | <= 4 / min |
+| 13:38:06 | csgo | 429 | previous csgo 61 s earlier, one cs2 request between (about 2 requests / min in total) |
+| 13:39:07 | csgo | **200 `[]`** | the next request after that 429 (61 s later); the request after it returned 59 events |
+
+No `Retry-After` or `X-RateLimit-*` headers have been returned. 429s occur well below the documented 10 / minute.
+
+## Remaining questions for the provider (ready to send - contains no key)
+> Hi - a few questions about the CS2 partner odds feed (aggr.mightykiwi.xyz):
+> 1. CS2 matches arrive on `esport/csgo`; `esport/cs2` always returns `[]`. Is `csgo` the intended identifier for CS2,
+>    or should `cs2` be populated for our account?
+> 2. We get occasional HTTP 429 at about 2 requests per minute (e.g. 2026-10-13 13:38:06 UTC on `esport/csgo`), below
+>    the documented 10 per minute. Is the limit per IP, per key, per path or per account? We call from Render (shared
+>    outbound IPs). Could you send `Retry-After` / `X-RateLimit-*` headers?
+> 3. Right after a 429, one request returned 200 with `[]` (13:39:07 UTC) and the next returned 59 events. Is an empty
+>    200 ever used as a throttling response?
+> 4. Is `fixtureId` stable for the life of a match, and why is it missing on some events (36 of 59)? Does `matchUrl`'s
+>    number ever change?
+> 5. Is there a quote update time or a live / suspended / closed flag we can read? Are in-play events in this feed?
+> 6. "1X2 - Map N": what does the X (draw) outcome mean for a single CS2 map?
+> 7. Can `matchUrl` use any host other than `thunderpick.io`?
