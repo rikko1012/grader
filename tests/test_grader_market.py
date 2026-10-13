@@ -65,3 +65,19 @@ def test_legacy_lines_keep_their_market_flags():
     assert any(f.startswith("Heavy underdog (") for f in g["flags"])
     p = grader.grade_leg(_d(team_ml=-120, opp_ml=120, market_quality="SOFT", odds_provenance={"selected": "polymarket"}))
     assert any("thin/wide Polymarket book" in f for f in p["flags"])
+
+
+def test_fallback_paths_use_the_format_and_say_what_they_assumed():
+    """Old pipeline (performance-model input missing): the map chance - and so the projection - now follows the series
+    format; an unknown format keeps the BO3 relation and records that it was assumed."""
+    base = _d(perf={"error": "player 'x' not found in HLTV (TEST FIXTURE)"}, team_ml=-250, opp_ml=250)
+    g = {bo: grader.grade_leg(dict(base, bo=bo)) for bo in (1, 3, 5, None)}
+    for bo, r in g.items():
+        assert r["projection_source"].startswith("legacy") and r["detail"]["market_in_projection"] is True
+    assert g[3]["lambda_final"] == g[None]["lambda_final"]                      # unknown -> BO3 relation, as before
+    assert g[None]["detail"]["map_prob_basis"]["format"] == "unknown - BO3 assumed"
+    assert g[1]["detail"]["p_map"] > g[3]["detail"]["p_map"] > g[5]["detail"]["p_map"] > 0.5
+    assert g[1]["lambda_final"] != g[3]["lambda_final"]                         # the BO1 change is real on this path
+    assert g[1]["detail"]["map_prob_basis"]["kind"] == "model-derived from the series price"
+    src = grader.grade_leg(dict(base, bo=3, map_win_probs=[0.61, None]))
+    assert src["detail"]["map_prob_basis"]["kind"].startswith("map 1 or map 2 from the source")

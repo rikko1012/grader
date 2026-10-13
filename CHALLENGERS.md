@@ -82,3 +82,27 @@ data hash 49e7ac29547b86a9). Walk-forward with w refitted on earlier days only: 
   started by 13:00 UTC.
 - **Development units still count units of the old slug identity** (a match logged under a BO3.gg slug and hltv-<id> was
   two units then); the forward evaluation uses the canonical match identity (identity.assign).
+
+## rr-1 - market-informed projection (variant `rr-ks`, frozen 2026-10-13 17:51 UTC; logged from this release)
+
+**What it changes (in shadow only).** The projected kills / headshots: the market's series price p for the player's
+team (the forecast's own selected qualified market input - Thunderpick when eligible, else Polymarket) -> a
+model-derived per-map chance q by the series format -> a calibrated MR12 round race (rounds won W(q) / lost L(q)) ->
+kill-weighted rounds a W + b L, divided by the history the performance model already contains (both teams' historical
+round-win shares) so strength is not counted twice. Headshots stay conditional on the candidate kills. Exact definition,
+constants, data, splits and pass rules: FACTOR_AUDIT.md round 6; code `perf_market.py` (+ `perf_market_tables.json`).
+
+**Logged as** `shadow.market_rounds` on every perf-2 forecast: version, variant, p_series, market source and retrieval
+time, format, q, both round shares, expected (kill-weighted) rounds, H, lambda_kills, lambda, sd, P(Over) / raw
+Over-Under-push, side, grade and stake from the SAME grader and stake rules, and the perf-2 lambda. No price, BO2 /
+unknown format, BO1 beyond Map 1, a BO3.gg-provisional projection or an unreadable round share: no candidate number
+(status says why) - never a stand-in.
+
+**Evidence so far (development only).** On 947 settled production lines (19 matches; latest forecast >= 30 min before
+start; Polymarket prices) vs the live formula: projection MAE -0.097 (95% -0.174..-0.022), log-loss -0.010
+(-0.020..-0.0005), Brier -0.0048 (-0.0097..-0.0003); Maps 1-2 kills alone crosses 0. 19 matches is far below the review
+windows. No settled Thunderpick-priced line yet. Historical frozen test (once, after freezing): PASS - TEST Maps 1-2 kills MAE -0.0535 (-0.0774..-0.0337), 996 matches; the gain comes from the market (vs no-market control -0.0848); see FACTOR_AUDIT.md round-6 results.
+
+**Decision rule.** Unchanged from the registry: reviewed only at the 300 / 600 / 1000 forward-match windows, plus the
+round-6 historical result; promotion is an explicit admin action with a recorded reason and a new model version.
+lb-001 and the other frozen challengers are unchanged.

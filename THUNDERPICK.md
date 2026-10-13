@@ -1,23 +1,29 @@
 # Thunderpick partner odds - integration status and provider questions (2026-10-13)
 
 ## Status
-- **Feeding projections under policy `tp-first-2`** (this release; replaces `tp-first-1`, which activated itself at
-  13:33 UTC on price agreement alone). `tp-first-2` is active only when: an **enabled market type** exists (the
-  event-level "Match Winner" market, by the label rule below), the startTime timezone is **inferred** from matched
-  fixtures, and the **sanity gate** passes (price agreement with Polymarket / Kalshi prices of the same matches, BO2
-  excluded: >= 15 matches, MAE <= 0.06, correlation >= 0.85; a series format whose own evidence fails is excluded).
-  Every activation / deactivation is appended to `policy_log` with the full evidence snapshot (market-type entry,
-  timezone evidence, sanity numbers, code commit).
-- Full grades take the market win probability from `market_odds.select`: Thunderpick's proportional margin-adjusted
-  series probability when `projection_odds` finds an **eligible** quote (see Eligibility), else the existing Polymarket
-  rule with the reason saved (`inputs.odds_provenance.fallback_reason`). Never 50%.
-- **First real forecasts using it (`tp-first-1`):** forecasts 5867-5873 (13:40:18 UTC, version `4f00a300a1`): Legacy vs
-  PARIVISION, 2026-10-14 13:30 UTC (`hltv:2399386`, Thunderpick fixture `fx:3297270`). Example below. By 14:05 UTC:
-  273 Thunderpick-sourced forecasts (142 lines, 7 matches), every one with its snapshot hash and no map prices from
-  another source.
-- Moneylines: a Thunderpick block on each matched card (original decimal odds, raw implied, margin, margin-adjusted
-  probability, our retrieval time, availability in plain words, link); Polymarket and Kalshi stay as labelled
-  comparisons.
+- **Policy `tp-first-2`** (this release; replaces `tp-first-1`, which activated itself at 13:33 UTC on price agreement
+  alone). Active only when ALL hold: the event-level "Match Winner" market is enabled by the label rule (two outcomes,
+  no draw price ever seen); its **meaning is tested, not assumed**: on BO3 matches Thunderpick's price must fit the
+  exchange SERIES price better than a map-1 reading (per-map chance q, p = q^2(3-2q)) by >= 0.01 mean absolute error on
+  >= 15 BO3 matches; the startTime timezone is **inferred** from matched fixtures; the sanity gate (price agreement,
+  >= 15 matches, MAE <= 0.06, corr >= 0.85, BO2 excluded) passes. Nothing here is provider-confirmed. Live check at
+  release: 13 BO3 matches, series reading MAE 0.024 vs map-1 reading 0.036 - favours "series", below the 15-match
+  minimum, so Thunderpick is held out of projections (fallback to Polymarket, reason saved) until the evidence suffices.
+  Every activation / deactivation / change of enabled formats is appended to `policy_log` with the evidence snapshot.
+- **What Thunderpick changes, per scope.** The live projection (performance model perf-2) takes NO market input in any
+  scope (Map 1, Maps 1-2, Maps 1-3): the selected price changes only the market-quality stake cap (a bookmaker price is
+  SOFT -> max 1.5U; a liquid Polymarket book is HARD), the shown win chance and the model-derived per-map chances
+  (match-simulation scenarios). The market-informed projection rr-1 / RR-KS (FACTOR_AUDIT round 6) runs in SHADOW on
+  every forecast (shadow.market_rounds) - logged, not shown, not graded.
+- Full grades take the market input from `market_odds.select` (odds-source-2), re-checked at every regrade: Thunderpick
+  when `projection_odds` finds an **eligible** quote (see Eligibility), else Polymarket, else OddsPapi (live for member
+  contexts, cache-only for board contexts), else no market - the reason saved (`inputs.odds_provenance.fallback_reason`,
+  with the availability state). Never 50%.
+- **First real forecasts using it (`tp-first-1`):** forecasts 5867-5873 (13:40:11 UTC, version `4f00a300a1`): Legacy vs
+  PARIVISION, 2026-10-14 13:30 UTC (`hltv:2399386`, Thunderpick fixture `fx:3297270`). Example below.
+- Moneylines: a Thunderpick block on each matched card (decimal odds, raw implied, margin, margin-adjusted probability,
+  our retrieval time, availability in plain words, link); Thunderpick-only matches (no exchange) get their own card;
+  Polymarket and Kalshi stay as labelled comparisons.
 - Single Render instance (persistent disk); HTTPS with certificate verification; the key is only in the Render
   environment (`THUNDER_PICK_API`) and never appears in logs, diagnostics, pages, the history file or the repository.
 
@@ -117,7 +123,10 @@ American odds are for display.
 **Why the projection did not move:** Maps 1-2 lines use the performance model, which does not read the win
 probability (`grader.py` replaces the projection with the performance lambda). The switch changes the market-quality
 category (bookmaker prices are SOFT under the existing rule -> stakes capped at 1.5U) and the shown win chance. Map 1
-and Maps 1-3 lines (older pipeline) do move with the win probability. Activation comparison on identical saved inputs:
+and Maps 1-3 lines do NOT move either: the performance model drives every scope (Map 1, Maps 1-2, Maps 1-3) and takes
+no market input; only lines graded on the old pipeline (performance input missing - none since 2026-10-11) use the win
+probability in the projection (corrected 2026-10-13; an earlier version of this note was wrong). Activation comparison
+on identical saved inputs:
 204 forecasts, 0 grade / stake / side changes.
 
 ## Polling and protection
@@ -147,13 +156,17 @@ and Maps 1-3 lines (older pipeline) do move with the win probability. Activation
   event history. Verified for `tp-first-1` on the 14:04 UTC deploy (the new instance served the 14:03:56 snapshot until
   its own first poll at 14:04:57).
 
-## Storage (CS2_DATA_DIR/.cache/thunderpick.db)
-- `raw_snapshots`: a status row for every attempt; the gzip body of a **changed** answer at most once per 10 min per
-  path (plus the first after start). `events`: normalized event rows (teams, odds, draw, start, ids, tournament, game,
-  path) of every changed answer, indexed by source event id. Per-market rows are **no longer stored** (they grew the
-  store ~38 MB/h; the `markets` table keeps its old rows).
-- `raw_snapshots`, `events`, `request_log`, `market_evidence`, `policy_log` are append-only (triggers).
-- Cap 2000 MB (`THUNDERPICK_SNAPSHOT_MAX_MB`): above it only status rows; the admin status warns above 80%.
+## Storage
+- **Polling history** (`raw_snapshots`, `events`): bounded segment files `CS2_DATA_DIR/.cache/thunderpick_history/
+  history-<time>.db`, a new one at 200 MB (`THUNDERPICK_SEGMENT_MAX_MB`); whole oldest segments are deleted when all
+  segments pass 2000 MB (`THUNDERPICK_SNAPSHOT_MAX_MB`). Inside a segment rows are append-only (triggers). A status row
+  per attempt; event rows for every changed answer; the gzip body of a changed answer at most once per 10 min per path.
+  Restore finds the latest answer's body by hash across segments and keeps its original retrieval time and hash.
+- **Never rotated or pruned** (`thunderpick.db`): gateway state (budget, lease, cooldown, 429 memory), the append-only
+  `request_log`, `market_evidence`, `policy_log`, and the pre-segment history.
+- **Replay never depends on the polling history:** every forecast saves the selected quote itself (odds, teams, start,
+  source ids, retrieval time, snapshot sha256, availability) in its grader inputs; pruning removes supporting detail only
+  (tested: restore after pruning + restart, and replay with the history deleted).
 
 ## Observed rate limiting and empty answers
 | time (UTC) | path | result | context |

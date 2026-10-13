@@ -338,3 +338,19 @@ projection's own half-line, by match-grouped intervals. **Single primary arm: rr
 **On pass:** a logged SHADOW challenger only (no grade, chance or stake changes); promotion needs the established process
 (forward windows, written owner decision, new model version). **On fail:** it stays logged in shadow as a measured
 negative result, never promoted. The existing frozen challengers (M1 etc.) are unchanged.
+
+## Round-6 results (run once with --frozen-run, 2026-10-13 ~18:00-18:30 UTC, after the definition above was committed in 3acff48)
+| arm | TEST Maps 1-2 kills MAE vs perf-2 (95%, by match) | VALID | TRAIN | vs no-market control | worse secondaries | verdict |
+|---|---|---|---|---|---|---|
+| **rr-ks** | **-0.0535 (-0.0774 to -0.0337)**, 996 matches | -0.0588 | -0.0590 | -0.0848 (-0.1118 to -0.0580) | none | **PASS** |
+| rr (rounds only) | -0.0097 (-0.0219 to +0.0031) | -0.0084 | -0.0033 | (descriptive) | kills Maps 1-3 | FAIL |
+
+Secondaries for rr-ks on TEST: HS Maps 1-2 MAE -0.0256 (-0.0358 to -0.0145), HS log-score better (+0.0055, +0.0032 to
++0.0076); HS Maps 1-3 -0.0119 (-0.0239 to -0.0002). Descriptive: worse when the market underdog won the series
+(+0.085 kills, 324 matches), better otherwise (-0.121, 672 matches) - the expected cost of leaning on the market; an
+Elo-fed version (rr-ks-elo) shows no gain (+0.0006), so the gain is the market's. Development check on 947 settled
+production lines (19 matches): MAE -0.097 (-0.174..-0.022), log-loss -0.010 (-0.020..-0.0005), Brier -0.0048
+(-0.0097..-0.0003). No settled Thunderpick-priced line exists yet, so no Thunderpick-specific result.
+**Outcome per the frozen rule:** rr-ks becomes a logged SHADOW challenger (CHALLENGERS.md rr-1); it changes no grade,
+chance or stake. Promotion only through the forward review windows and a written owner decision. Full log: scratchpad
+design/round-race/rr_test_FROZEN_RUN.log.
