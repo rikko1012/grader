@@ -36,6 +36,15 @@ GROUP BY mo.date, t.matchid, t.mapid
 """
 
 
+_ROUNDS_SQL = """
+SELECT mo.date, t.score, o.score
+FROM matches t
+JOIN matches o ON o.matchid = t.matchid AND o.mapid = t.mapid AND o.sideid = 0 AND o.teamid <> t.teamid
+JOIN match_overview mo ON mo.matchid = t.matchid
+WHERE t.teamid = %(tid)s AND t.sideid = 0 AND mo.date >= %(since)s
+"""
+
+
 def _cached(key, fn):
     """15-minute memory cache; every good answer is also kept on the data disk (hltv_store). When the HLTV database is
     unreachable the last good answer is used - memory first, then disk - so an outage or a restart during one never
@@ -96,6 +105,39 @@ def opp_maps(opponent, since):
     return _cached(("o", hltv._norm(opponent), since), load)
 
 
+def team_rounds(team, since):
+    """A team's HLTV maps as (day_ordinal, rounds won, rounds lost) - SHADOW input of the rr-1 market candidate
+    (perf_market.py, 2026-10-13): never read by the live projection. Same cache / last-good fallback as the rest."""
+    def load():
+        con = hltv._connect()
+        try:
+            with con.cursor() as cur:
+                tid = hltv._team_id(cur, team)
+                if not tid:
+                    return None, []
+                cur.execute(_ROUNDS_SQL, {"tid": tid, "since": since})
+                return tid, [(d.toordinal(), int(a), int(b)) for d, a, b in cur.fetchall() if a is not None and b is not None]
+        finally:
+            con.close()
+    return _cached(("r", hltv._norm(team), since), load)
+
+
+def round_shares(team, opponent, day, since):
+    """{team, opp: time-weighted round-win share before `day` (perf_market.round_share), maps counts} - or {"error"}
+    (never a 0.5 stand-in for a failed read: the shadow candidate is then not computed)."""
+    import perf_market
+    try:
+        out = {}
+        for k, nm in (("team", team), ("opp", opponent)):
+            tid, rows = team_rounds(nm, since) if nm else (None, [])
+            out[k] = perf_market.round_share(rows, day)
+            out[k + "_maps"] = sum(1 for r in rows if r[0] < day)
+            out[k + "_id"] = tid
+        return out
+    except Exception as e:          # noqa: BLE001 - shadow only: the live projection never depends on it
+        return {"error": f"{type(e).__name__}: {str(e)[:120]}"}
+
+
 def g7_fields(p):
     """The perf-1 (G7) projection on the same inputs - logged as the comparison "perf1_g7", never shown."""
     return {k: p[k] for k in ("version", "lambda", "lambda_kills", "hs_per_kill", "sd", "spread_c", "spread_c_kills", "rate",
@@ -113,6 +155,7 @@ def projection(nick, team, opponent, lan, scope="12", prop="kills", day=None):
         return {"error": f"player {nick!r} ({team}) not found in HLTV"}
     tid, om = opp_maps(opponent, since) if opponent else (None, [])
     out = perf.project(pm, om, lan, day, scope, prop)
+    out["round_share"] = round_shares(team, opponent, day, since)     # shadow candidate input only (rr-1)
     out["g7"] = g7_fields(perf.project(pm, om, lan, day, scope, prop, perf.PARAMS_PERF1, perf.SPREAD_PERF1, "perf-1"))
     out.update(hltv_player_ids=ids, hltv_opp_team=tid, player_maps=len(pm), opp_maps=len(om),
                opp_known=bool(om), lan_known=lan is not None,      # known = HLTV has his maps (a team id alone is no data)
