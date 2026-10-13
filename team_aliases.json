@@ -18,6 +18,12 @@
     {"name": "Esport Academy Copenhagen", "team_id": 13838, "hltv_name": "EAC",
      "proof": "2026-10-15: Polymarket 'WBT vs Esport Academy Copenhagen' 08:00, 'Esport Academy Copenhagen vs BOJONG' 14:00, '... vs ENCE' 18:00 UTC Elisa BreakOut Series #2 = HLTV 2399418 / 2399421 / 2399423 'EAC' at the same three times"},
     {"name": "RoundsGG", "team_id": 12457, "hltv_name": "ROUNDS",
-     "proof": "2026-10-16: Polymarket 'HAVU vs RoundsGG' 10:00, 'Phantom vs RoundsGG' 14:00, 'Voca vs RoundsGG' 16:00 UTC Elisa BreakOut Series #2 = HLTV 2399425 / 2399427 / 2399428 'ROUNDS' at the same three times"}
+     "proof": "2026-10-16: Polymarket 'HAVU vs RoundsGG' 10:00, 'Phantom vs RoundsGG' 14:00, 'Voca vs RoundsGG' 16:00 UTC Elisa BreakOut Series #2 = HLTV 2399425 / 2399427 / 2399428 'ROUNDS' at the same three times"},
+    {"name": "BB Team", "hltv_name": "BETBOOM",
+     "proof": "2026-10-13: Thunderpick 'Furia vs BB Team' 2026-10-14 16:00 UTC Thunderpick World Championship 2026 = HLTV 2399387 'BETBOOM vs FURIA' 16:00 UTC Thunderpick World Championship Group B (Polymarket / Kalshi 'BetBoom Team vs FURIA', same match)"},
+    {"name": "MongolZ", "hltv_name": "The MongolZ",
+     "proof": "2026-10-13: Thunderpick 'MongolZ vs Alliance' 2026-10-19 12:00 UTC Private Club #2 = HLTV 2398990 'Alliance vs The MongolZ' 12:00 UTC 1win Private Club #2 Playoffs (Polymarket 'Alliance vs TheMongolz', same match)"},
+    {"name": "EA Copenhagen", "team_id": 13838, "hltv_name": "EAC",
+     "proof": "2026-10-13: Thunderpick 'WBT vs EA Copenhagen' 08:00, 'EA Copenhagen vs BOJONG' 14:00, 'EA Copenhagen vs ENCE' 18:00 UTC 2026-10-15 Elisa BreakOut Series #2 = HLTV 2399418 / 2399421 / 2399423 'EAC' at the same three times (not 'EAC Rising', a different squad)"}
   ]
 }
