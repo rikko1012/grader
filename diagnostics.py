@@ -30,6 +30,19 @@ BINS = ((0.0, 0.55), (0.55, 0.6), (0.6, 0.65), (0.65, 0.7), (0.7, 0.8), (0.8, 1.
 FORWARD_FROM = "2026-10-09T23:40:00+00:00"
 HS_BANDS = ((0.0, 0.35), (0.35, 0.45), (0.45, 0.55), (0.55, 0.65), (0.65, 1.01))
 FORWARD_MODELS = (("current", None), ("previous (perf-1 / G7)", "perf1_g7"), ("smooth-prior challenger", "prior_smooth"))
+# A shadow row counts only when the projection that graded it is the challenger's own (shadow.<key>.source, logged from
+# the 2026-10-13 fix on). prior_smooth rows logged before it were graded by the OLD pipeline (its version was not in
+# perf_versions: lambda = shadow.legacy on 316 of 316 Oct 11 forecasts) - INVALID, excluded and counted (CHALLENGERS.md).
+SHADOW_SOURCE_SUFFIX = {"prior_smooth": "-prior-smooth"}
+
+
+def shadow_p_more(sh, key):
+    """(p_more, excluded) of shadow `key` in a forecast's shadow dict; excluded = a logged row its own model did not grade."""
+    e = sh.get(key) or {}
+    suf = SHADOW_SOURCE_SUFFIX.get(key)
+    if e.get("p_more") is not None and suf and not str(e.get("source") or "").endswith(suf):
+        return None, True
+    return e.get("p_more"), False
 
 
 def _ts(s):
@@ -139,9 +152,13 @@ def build(picks, forecasts, batches=(), now=None):
             except ValueError:
                 sh = {}
             pm = {"current": f.get("p_more") if f.get("p_more") is not None else (f.get("p_pick") if side == "More" else 1 - f["p_pick"]) if f.get("p_pick") is not None else None}
+            bad = []
             for name, key in FORWARD_MODELS[1:]:
-                pm[name] = (sh.get(key) or {}).get("p_more")
-            fwd.append({"match": base["match"], "over": int(p["actual"] > f["line"]), "p": pm, "version": f.get("model_version") or "untagged"})
+                pm[name], x = shadow_p_more(sh, key)
+                if x:
+                    bad.append(name)
+            fwd.append({"match": base["match"], "over": int(p["actual"] > f["line"]), "p": pm, "version": f.get("model_version") or "untagged",
+                        "excluded": bad})
     out = {"generated": now.isoformat(timespec="seconds"), "eval_lead_min": EVAL_LEAD_MIN, "exclusions": dict(excl), "cohorts": {}}
     for cname, rs in rows.items():
         for r in rs:                                            # per-row diagnostics (+ flags, never causes)
@@ -283,6 +300,9 @@ def forward_hs(fwd):
         for r in rs:
             g[r["match"]].append(r)
         res["models"].append({"model": name, "n": len(rs), "bands": bands,
+                              # exact live tag of each counted row (report per tag, MODEL_VERSIONS.md) + invalid rows left out
+                              "versions": dict(collections.Counter(r.get("version") or "untagged" for r in rs)),
+                              "excluded_invalid": sum(name in (r.get("excluded") or ()) for r in fwd),
                               "gap": round(sum(r["over"] - r["p"][name] for r in rs) / len(rs), 4) if rs else None,
                               "gap_ci": _boot(g, lambda xs: sum(r["over"] - r["p"][name] for r in xs) / len(xs)) if rs else None,
                               "log_loss": round(sum(-math.log(max(r["p"][name] if r["over"] else 1 - r["p"][name], 1e-6)) for r in rs) / len(rs), 4) if rs else None})

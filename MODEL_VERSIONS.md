@@ -81,6 +81,9 @@ Comparison versions logged beside every forecast (`shadow`), from the same gradi
 - `fix_v2`: gap compression centred on the line; Maps 1-3 Over/Under/push mixed before the push is removed. LIVE from G8;
   from G8 the comparison is `pre_fix_v2` (the old behaviour).
 - `perf1_g7` (from G8): the perf-1 projection (G7 parameters and spreads) on the same HLTV inputs - the forward test of perf-2.
+- `prior_smooth` (from 2026-10-09): the smooth newcomer prior (see below). INVALID until the 2026-10-13 fix: graded by the old
+  pipeline (its version was not in perf_versions, so it equals `legacy`). Valid rows carry `shadow.prior_smooth.source` ending
+  `-prior-smooth`; exclude every other row and report per exact tag (CHALLENGERS.md). Same tags - picklog.py is not hashed.
 - `match_m1` (from G8.2): the shared-match challenger (match_model.py, constants fitted on TRAIN) - shadow only.
 - `online_none` / `online_taper` (from G5): old +6%-always behaviour / provisional taper 6% x (1 - online weight); `live_online` records each forecast's online weight and the bonus applied.
 - `no_bo3`, `perf1_normal_hs` (from G7): the release without the BO3.gg fallback / with the perf-1 normal HS curve.
@@ -103,6 +106,8 @@ Still open (not fixed live or in fix_v2):
   On verified board lines, log-loss is +0.0005 (kills) and +0.0014 (HS) vs current.
   The previous prior 1.0 is worse for thin-history players (test MAE +0.157, 95% +0.070 to +0.236).
   Decision: keep prior_m 0.93 live and log prior_smooth beside it on every forecast. Not promoted.
+  2026-10-13: the LOGGED prior_smooth shadow was the old pipeline until the fix (316/316 Oct 8-11 forecasts = shadow.legacy);
+  only rows with a `-prior-smooth` source are evidence about this challenger (CHALLENGERS.md).
 
 ## 2026-10-09 headshot calibration check (grading unchanged)
 - Board HS lines, Maps 1-2 (169 lines, 51 matches, Oct 3-8 only): Overs came in 8.7 pts below predicted (95% -17.9 to +1.0).
@@ -118,3 +123,5 @@ Still open (not fixed live or in fix_v2):
 - Forward test (predefined): board HS Maps 1-2 evaluation snapshots logged from 2026-10-09T23:40Z, same bands
   (<0.35, 0.35-0.45, 0.45-0.55, 0.55-0.65, 0.65+ chance of Over). Current model vs previous model (perf1_g7) and prior_smooth,
   with match-grouped 95% intervals. Shown on the admin diagnostics page under "Forward check".
+  The prior_smooth line there counts only rows graded by the challenger itself (shadow source ending `-prior-smooth`).
+  Rows logged before the 2026-10-13 fix are excluded and shown as invalid.
