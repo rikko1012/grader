@@ -6,8 +6,8 @@
   margin-adjusted series price when the match links exactly and the quote is current, else the existing Polymarket
   rule with the reason saved (`inputs.odds_provenance.fallback_reason`). Never 50%.
 - **First real forecasts using it:** forecasts 5867-5873 (13:40:18 UTC, version `4f00a300a1`): Legacy vs PARIVISION,
-  2026-10-14 13:30 UTC (`hltv:2399386`, Thunderpick fixture `fx:3297270`). Example below. By 14:02 UTC: well over 150
-  Thunderpick-sourced forecasts on 8 matches, every one with its snapshot hash and no map prices from another source;
+  2026-10-14 13:30 UTC (`hltv:2399386`, Thunderpick fixture `fx:3297270`). Example below. By 14:05 UTC: 273
+  Thunderpick-sourced forecasts (142 lines, 7 matches), every one with its snapshot hash and no map prices from another source;
   no line switched back to Polymarket while its quote was current. Current version `17e5e85837`.
 - Moneylines: a Thunderpick block comes first on each matched card (original decimal odds, raw implied, margin,
   margin-adjusted probability, our retrieval time, status, link); Polymarket and Kalshi stay as labelled comparisons.
