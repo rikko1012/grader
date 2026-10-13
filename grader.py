@@ -325,19 +325,25 @@ def grade_leg(d, cfg=CONFIG):
         flags.append("Gate C: roster not confirmed - regional H2H extension disabled")
         sd_reasons.append("unconfirmed roster/role")
 
+    # 2026-10-13 audit: the spread widening below is the old pipeline's - the performance model's spread replaces it, so
+    # its flags only say 'SD inflated' where that is applied (the stake caps hold on both)
+    sdi = "" if perf_will_project else " SD inflated,"
+
     # Gate D - sample size (Maps 1-2)
     maps = d.get("maps_played")
     if not maps:
-        return stop("NO GRADE", "Gate D: no Maps 1-2 in the window")
+        if not perf_will_project:
+            return stop("NO GRADE", "Gate D: no Maps 1-2 in the window")
+        maps = 0   # 2026-10-13 audit: the performance model projects without it - a side, and the sample gate's 0 units
     if maps < 5:
-        zero_units.append(f"only {maps} recent Maps 1-2")
+        zero_units.append(f"only {maps} recent Maps 1-2" if maps else "no Maps 1-2 in the window")
         sd_reasons.append("sample <5 maps")
     small = maps < cfg["thin_maps"]
     if maps < 10:
-        flags.append(f"Gate D: only {maps} Maps 1-2 - variance flag, SD inflated, capped 1.5U")
+        flags.append(f"Gate D: only {maps} Maps 1-2 - variance flag,{sdi} capped 1.5U")
         sd_reasons.append("sample <10 maps")
     elif small:
-        flags.append(f"Thin data: {maps} Maps 1-2 on BO3.gg (<{cfg['thin_maps']}) - SD inflated, capped 1.5U")
+        flags.append(f"Thin data: {maps} Maps 1-2 on BO3.gg (<{cfg['thin_maps']}) -{sdi} capped 1.5U")
         sd_reasons.append(f"thin data <{cfg['thin_maps']} maps")
     if small:
         unit_cap = 1.5
@@ -389,8 +395,8 @@ def grade_leg(d, cfg=CONFIG):
     if d.get("standin_for"):
         sd_reasons.append("stand-in")
         unit_cap = min(unit_cap or 1.0, 1.0)
-        flags.append(f"STAND-IN for {d['standin_for']}: different team and role than his usual - "
-                     f"SD inflated, max 1U")
+        flags.append(f"STAND-IN for {d['standin_for']}: different team and role than his usual -"
+                     f"{sdi} max 1U")
 
     # Rust (v7.4): time since his last official map
     rust = d.get("days_since_last_map")
@@ -398,22 +404,27 @@ def grade_leg(d, cfg=CONFIG):
         if rust >= cfg["rust_cap_days"]:
             sd_reasons.append("rust >28d")
             unit_cap = min(unit_cap or 1.0, 1.0)
-            flags.append(f"RUST: last official map {rust} days ago - SD inflated, max 1U")
+            flags.append(f"RUST: last official map {rust} days ago -{sdi} max 1U")
         elif rust >= cfg["rust_flag_days"]:
             sd_reasons.append("rust 15-28d")
-            flags.append(f"RUST: last official map {rust} days ago - SD inflated")
+            flags.append(f"RUST: last official map {rust} days ago" + ("" if perf_will_project else " - SD inflated"))
         elif rust >= cfg["rust_note_days"]:
             flags.append(f"Note: last official map {rust} days ago")
 
     # KPR + recency blend
     kpr = d.get("kpr")
+    legacy_na = None   # 2026-10-13 audit: an old-pipeline input the performance model doesn't use is missing
     if not kpr:
-        return stop("NO GRADE", "Missing KPR - fetch trigger")
+        if not perf_will_project:
+            return stop("NO GRADE", "Missing KPR - fetch trigger")
+        kpr, legacy_na = cfg["pop_kpr"], "no KPR"   # placeholder: only the (unused) old-pipeline number reads it
     ratio = 1.0   # (the old 15%-trigger KPR blend is replaced by the always-on last-10 blend below)
 
     hs_pct = d.get("hs_pct")
     if prop == "hs" and hs_pct is None:
-        return stop("NO GRADE", "Missing HS% - fetch trigger")
+        if not perf_will_project:
+            return stop("NO GRADE", "Missing HS% - fetch trigger")
+        hs_pct, legacy_na = cfg["pop_hs"], legacy_na or "no HS%"   # HLTV-only player without headshot rows
 
     # Thin samples are pulled toward the pro average by n/(n+k), n = Maps 1-2 in his widest window.
     # Walk-forward 2026-09-30 (2,300 cases, top + lower tier, fitted on half the teams, scored on
@@ -534,7 +545,9 @@ def grade_leg(d, cfg=CONFIG):
     # real vs -3.3% modelled at q~0.32; ranked 31-60 -14% vs -7% at q~0.24): 0.5 x (0.40 - q) more
     if (d.get("opp_rank") or 999) <= 10:
         dog *= 1 - cfg["elite_k"] * max(0.0, 0.40 - qm)
-    if dog < 1 and not perf_will_project:    # under the performance model nothing is lowered (its projection replaces this)
+    # under the performance model nothing is lowered (its projection replaces this); 2026-10-13 audit: no flag when the
+    # lowering shows as 0.0% (a ~50% map chance printed 'Heavy underdog (map win chance 50%) - projection lowered 0.0%')
+    if dog < 1 and not perf_will_project and f"{1 - dog:.1%}" != "0.0%":
         flags.append(f"Heavy underdog (map win chance {qm:.0%}) - projection lowered {1 - dog:.1%}")
     lam_adj = lam * stack
     lam_final = lam_adj * outcome * dog
@@ -581,7 +594,7 @@ def grade_leg(d, cfg=CONFIG):
         lam_final += h2h_edge * cfg["h2h_weight"]
         h2h_note = (f"H2H avg {h2h_avg:.1f} over {len(series)} series ({2 * len(series)} maps) - "
                     f"age weight {age_w:.2f}, size weight {size_w:.2f} -> would add {h2h_edge:+.2f} "
-                    f"(applied x{cfg['h2h_weight']:g})")
+                    + ("(not applied - performance model)" if perf_will_project else f"(applied x{cfg['h2h_weight']:g})"))
 
     # Regional (always, next to exact H2H): his series vs OTHER teams from the opponent's
     # country/region, same age x size formula, its own tested weight
@@ -596,8 +609,9 @@ def grade_leg(d, cfg=CONFIG):
         reg_edge = clamp((reg_avg - lam_final) * age_w * size_w, -cap, cap)
         lam_final += reg_edge * cfg["regional_weight"]
         reg_note = (f"Regional avg {reg_avg:.1f} over {len(rseries)} series vs same-region teams - age "
-                    f"weight {age_w:.2f}, size weight {size_w:.2f} -> would add {reg_edge:+.2f} (applied "
-                    f"x{cfg['regional_weight']:g}: tested on 847 cases, made projections less accurate)")
+                    f"weight {age_w:.2f}, size weight {size_w:.2f} -> would add {reg_edge:+.2f} "
+                    + ("(not applied - performance model)" if perf_will_project else
+                       f"(applied x{cfg['regional_weight']:g}: tested on 847 cases, made projections less accurate)"))
 
     # Confidence -> SD
     dpr, kast, adr = d.get("dpr"), d.get("kast"), d.get("adr")
@@ -622,19 +636,22 @@ def grade_leg(d, cfg=CONFIG):
     # LAN or online (owner 2026-10-07: grade a LAN match with his LAN numbers, an online match with
     # his online numbers): his kills per round in tonight's environment vs overall (12 months, HLTV),
     # counted by sample - n maps / (n + env_k): 20 maps in that environment = half the difference.
+    # 2026-10-13 audit: these old-pipeline projection steps are computed but replaced under the performance model - their
+    # flags only where they are applied ('Hot form' / 'Rested +4%' / 'Star ... lower' on 316 perf-2 grades)
+    lflags = [] if perf_will_project else flags
     env = d.get("environment") or {}
     if env.get("stats_from"):
         where = "LAN" if env["stats_from"] == "lan" else "online"
-        flags.append(f"{where} match: graded on his {where} stats ({env.get('stats_maps')} {where} maps, "
-                     f"{'only' if (env.get('stats_weight') or 0) >= 1 else str(round(100 * env['stats_weight'])) + '% weight'})"
-                     + (f"; last 10 = his last {where} matches" if env.get("form_from") else ""))
+        lflags.append(f"{where} match: graded on his {where} stats ({env.get('stats_maps')} {where} maps, "
+                      f"{'only' if (env.get('stats_weight') or 0) >= 1 else str(round(100 * env['stats_weight'])) + '% weight'})"
+                      + (f"; last 10 = his last {where} matches" if env.get("form_from") else ""))
     elif env.get("tonight") and env.get("ratio") and env.get("ratio_maps"):
         n = env["ratio_maps"]
         mult = 1 + (env["ratio"] - 1) * n / (n + cfg["env_k"])
         lam_final *= mult
         where = "LAN" if env["tonight"] == "lan" else "online"
-        flags.append(f"{where} match: his {where} kills per round are {env['ratio'] - 1:+.0%} vs his overall "
-                     f"({n} {where} maps) - projection {mult - 1:+.1%}")
+        lflags.append(f"{where} match: his {where} kills per round are {env['ratio'] - 1:+.0%} vs his overall "
+                      f"({n} {where} maps) - projection {mult - 1:+.1%}")
     # Online matches overall (2026-10-07, 953 real lines matched to HLTV LAN/online): online props went
     # over 55% and finished 1.75 above projection, LAN 41% / -1.0. +6% online was chosen on every
     # held-out day (log-loss 0.6944 -> 0.6915); a LAN shift was not.
@@ -659,27 +676,27 @@ def grade_leg(d, cfg=CONFIG):
         online_bonus = shift
         if shift > 0:
             lam_final *= 1 + shift
-            flags.append(f"Online match: players beat their lines online on real lines - projection +{shift:.1%}"
-                         + (f" (all-maps share {1 - w:.0%} of the base rate)" if w > 0 else ""))
+            lflags.append(f"Online match: players beat their lines online on real lines - projection +{shift:.1%}"
+                          + (f" (all-maps share {1 - w:.0%} of the base rate)" if w > 0 else ""))
     rt = d.get("rating")
     if rt and rt > cfg["star_rating"]:
         # capped at 6% (owner: don't underestimate stars - most of the 13% came from one day, Oct 5;
         # the other days stars missed by 1-3 kills, mostly because their LINES are set high)
         cut = min(cfg["star_cap"], cfg["star_k"] * (rt - cfg["star_rating"]))
         lam_final *= 1 - cut
-        flags.append(f"Star (rating {rt:.2f}): projection {cut:.1%} lower - books set star lines high")
+        lflags.append(f"Star (rating {rt:.2f}): projection {cut:.1%} lower - books set star lines high")
     if rust is not None and cfg["rest_days"][0] <= rust <= cfg["rest_days"][1]:
         # 4-14 days off: players finished +2.1 above projection (went over 59%); forward-only test +4%:
         # log-loss 0.6901 -> 0.6892 (2026-10-07, suggested by an outside review)
         lam_final *= 1 + cfg["rest_bonus"]
-        flags.append(f"Rested ({rust} days since his last map): projection +{cfg['rest_bonus']:.0%}")
+        lflags.append(f"Rested ({rust} days since his last map): projection +{cfg['rest_bonus']:.0%}")
     if rust is not None and rust >= cfg["rust_flag_days"]:
         lam_final *= 1 - cfg["rust_drop"]
-        flags.append(f"Rust ({rust} days since his last map): projection {cfg['rust_drop']:.0%} lower")
+        lflags.append(f"Rust ({rust} days since his last map): projection {cfg['rust_drop']:.0%} lower")
     tr = d.get("form_trend")
     if tr is not None and tr > 0:
         lam_final *= 1 - cfg["hot_k"] * tr
-        flags.append(f"Hot form (+{tr:.0%} vs 12 months): only part of the streak counted")
+        lflags.append(f"Hot form (+{tr:.0%} vs 12 months): only part of the streak counted")
     scope = d.get("scope") or "12"
     lam12, p3, lam3 = lam_final, None, lam_final / 2
     if scope == "1":
@@ -704,7 +721,8 @@ def grade_leg(d, cfg=CONFIG):
         # corrections for its own biases (gap compression, Over margin, confidence halving) do not apply to it
         flags.append(f"Projection {pf['lambda']:.1f} from the performance model ({pf.get('version')}: "
                      f"{pf.get('rate', 0):.3f} kills/round x opponent {pf.get('opp_factor', 1):.2f} x "
-                     f"{pf.get('rounds_per_map', 0):.1f} rounds/map; data: {pf.get('data_quality')}) - old pipeline {lam_final:.1f}")
+                     f"{pf.get('rounds_per_map', 0):.1f} rounds/map; data: {pf.get('data_quality')}) - old pipeline "
+                     + (f"n/a ({legacy_na})" if legacy_na else f"{lam_final:.1f}"))
         lam_final = float(pf["lambda"])
         # lambda_maps12 reports the model's Maps 1-2 equivalent whatever the scope (2026-10-11: on Map 1 / Maps 1-3
         # it used to repeat the scope's own total); Map 1 = half of Maps 1-2, Maps 1-3 = 1.5 x Maps 1-2
@@ -879,7 +897,8 @@ def grade_leg(d, cfg=CONFIG):
               {"kind": "normal", "lam": round(lam_final, 4), "sd": round(sd, 4)}),
         online_adj={"tonight": env.get("tonight"), "stats_from": env.get("stats_from"),
                     "online_weight": env.get("stats_weight") if env.get("stats_from") == "online" else None,
-                    "mode": cfg.get("online_guard", "full"), "bonus_applied": round(online_bonus, 4)},
+                    # the performance model's projection replaces the +6% (2026-10-13 audit: logged 0.06 'applied' there)
+                    "mode": cfg.get("online_guard", "full"), "bonus_applied": 0.0 if perf_on else round(online_bonus, 4)},
         grade_less=grade_from_p(1 - pm) if less_ok else "n/a (no Less on this line)",
         units=u_more, units_less=u_less, form_fight=fight, tape_fight=tape, scout=scout,
         market_quality=mq,
