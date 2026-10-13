@@ -1,0 +1,210 @@
+HLTV SCRAPER COVERAGE REPAIR - HANDOFF (2026-10-12)
+
+Patch:  scratchpad/scraper_repair/0001-Coverage-repair-every-listed-match-resumable-listing.patch
+        (one commit, 262343a, on local branch repair/coverage-staged in scratchpad/coverage/scraper;
+        base = origin/claude/hltv-scraper-recreation-t4oiso @ a1a377b, still the newest commit after git fetch.
+        Applies cleanly with `git am`.) Nothing was pushed, no workflow was run, no database was touched.
+Tests:  offline suite 137 passed, 44 skipped. The skipped tests need PostgreSQL (HLTV_TEST_DSN), and
+        there is no PostgreSQL on this machine. They include the new tests/test_revisions.py, so the
+        new SQL (triggers, seed, seal, promote) has NOT run yet. tests.yml runs them on push, and
+        they must pass before anything else is run.
+
+== (a) WHAT IS AFFECTED ==
+Repository: github.com/rikko1012/hltv-scraper, default branch claude/hltv-scraper-recreation-t4oiso.
+Filtering code at a1a377b:
+  - hltv_scraper/pipeline.py:88-93 relevant(): queues a result only if BOTH lowercased team names are
+    in the tracked set.
+  - That set is today's VRS top-N: update() 596-598; watch() 745 (fallback _stored_top_names 618-624
+    via 750-751; results skipped entirely when there is no list, 771-773); live matches that just
+    finished, both teams, 777-782; Failsafe.listings 487 and 498.
+  - collect_results 103-139: a failed older page breaks out with only a WARNING (121-127). It also
+    stops on the first page that has no "new relevant" match (137-138). Under the filter, a page
+    full of non-top-200 matches counts as caught up.
+  - CLI defaults: update --top 200 (cli.py:735), watch --top 200 (cli.py:766), results --top
+    (both-teams rule, cli.py:676).
+  - Linked issues: raw_pages upsert rewrites fetched_at (db.py:316-321). mark_waiting (db.py:879-889)
+    gives up silently: after 2 days each look counts as an attempt, so the match stays 'waiting' and
+    is never read again.
+Deployment (GitHub Actions in that repository; database secret HLTV_DB_DSN = the Render Postgres,
+schema public, which CS2 Scout reads):
+  - watch.yml: cron "7 */2 * * *" plus dispatch. Runs `watch --once --browser auto --workers 2
+    --stats-wait 30` with no --top flag, so the default top 200 applies. A dispatch with
+    backfill_pages=N also runs `update --max-pages N --no-stop` (top 200). Without the secret it uses
+    a local DB from the `data` branch.
+  - backfill.yml: dispatch only. Inputs top=200 (default), months=3, start/end, machines=4, workers=3.
+    The list job runs `update --top <top> --start-date --end-date --max-pages 0 --no-stop --no-scrape`,
+    then a matrix of `scrape --shard i/n`. It writes public directly (concurrency group "watch").
+    This is how the Oct 11 rebuild applied the Oct 11 ranking to all of history.
+  - Other jobs with no top filter that write the same DB: props.yml (cron "41 * * * *": props-db,
+    grade), headshots-backfill.yml (dispatch: mapstats of stored matches), cli.yml (dispatch: any
+    command), restore.yml (dispatch), backup.yml (cron "41 5 * * *": pg_dump of the whole DB),
+    status.yml (cron "37 1-23/2 * * *": starts overdue scans), fix-ready.yml (push to
+    claude/dreamy-lovelace**: heartbeat starts watch/props).
+  - docker-compose `watcher` service: `watch --interval 5`, default top 200. It matters only if
+    someone runs compose; the always-on worker in the code is the props worker.
+
+== WHAT THE PATCH CHANGES ==
+(b) Both-teams rule removed. relevant() queues every non-forfeit listed result. --top is optional
+    (default 0 for update, watch, results and backfill). With --top N, a match qualifies when EITHER
+    team is tracked (TrackedTeams), compared by HLTV team id. A listing row's names map to ids
+    through an exact, case-insensitive match against the rankings snapshot and the teams table,
+    never fuzzy. All callers are switched over: update, watch (including just-finished live matches),
+    the Failsafe listings, the stored-ranking fallback (_stored_tracked) and cmd_results.
+    watch.yml passes --top 0 explicitly (scan and backfill_pages step), and so does
+    docker-compose. A test fails if any workflow passes --top other than 0 or the top input.
+(e) A listing never stops silently. A failed page (or the catch-up cap) raises ListingIncomplete,
+    which carries the matches found so far, and saves scraper_state
+    'listing_cursor:<source>:<start>:<end>' (next_page, error, since). A range walk resumes one page
+    before that point. The scan's catch-up must read past the saved page, and it gets 10 more pages
+    each cycle. Catch-up now stops only on a page with nothing unseen: every non-forfeit row is
+    stored, queued or already in the manifest. Health check listing_incomplete is an ERROR once the
+    scan's listing has been incomplete for more than 6 h. `update` exits 3 when its listing stopped
+    early. A dated `update` against the live tables is refused unless --live-history is passed.
+(c) Staged revisions (hltv_scraper/revisions.py, CLI `revision create|list|status|accept|seal|
+    promote|discard`):
+    - create: registers the revision in hltv_meta.dataset_revisions and builds schema hltv_rev_<n>
+      with the scraper's own schema.sql. It then copies public into it: foreign keys are dropped for
+      the copy and put back NOT VALID, key clashes are counted, and raw_pages/HTML are copied only
+      with --seed-archives. Copied rows keep created_revision_id NULL. It also stores a per-match
+      fingerprint of every public match older than 3 days (hltv_meta.base_match_fingerprints).
+      Writes go only to hltv_meta and the new schema.
+    - --revision N (or HLTV_REVISION=N): SET search_path TO hltv_rev_N, with no public fallback. A
+      table missing there is an error, never a write to public. Unregistered, discarded or unseeded
+      revisions are refused, and the failsafe API is never used.
+    - seal: refused while any planned listing is incomplete or any listed match is pending. Stores a
+      per-table fingerprint and adds a statement trigger zz_sealed (rejects
+      INSERT/UPDATE/DELETE/TRUNCATE) to every table. The registry row is frozen by a trigger, except
+      for recording a promotion.
+    - promote N --confirm hltv_rev_N --approved-by NAME: sealed revisions only, and only once. It
+      runs init_schema on public, locks public.match_overview, and copies in one transaction the
+      revision's matches that public lacks (all match-keyed tables). It also copies scrape_queue rows
+      public lacks, plus teams, players, maps, events and rankings with ON CONFLICT DO NOTHING.
+      Nothing already in public changes. The promoted rows keep created_revision_id = N.
+(d) Board scope: `backfill` plans the global listing for the window plus the own listing of each
+    board team and opponent (prop_lines.team/opponent, upcoming_matches.team1/team2), each board
+    player (prop_lines.player, results?player=ID), and each former team (every team those players
+    played for in the window). Matching is by exact name; ambiguous nicknames prefer players whose
+    recent team is on the board. Unresolved names are logged; add them with --team-ids / --player-ids
+    (workflow input extra_ids). Run it again after the first scrape: former teams found in the new
+    matches are added, and the plan only grows. --past-opponents is optional. The default window is
+    450 days ending yesterday. A rerun reuses the revision's window, so the cursors stay valid. A
+    team or player listing that passes 15 pages is reported incomplete, because that means HLTV
+    ignored the filter.
+(f) result_manifest (in every schema; append-only, a trigger rejects UPDATE/DELETE/TRUNCATE) logs:
+    discovered (once per match and source: teams, team ids when shown, event, played_at from the
+    row's timestamp, source URL and page), present, skipped (forfeit, or filtered by --top), stored,
+    waiting, unavailable and failed (attempt number and error). The view result_manifest_state gives
+    one state per match; discovered = stored + skipped + unavailable + failed + pending. A match
+    still without statistics 7 days after it was played, on two looks, becomes 'unavailable' (final,
+    counted apart from failures). scrape_queue gets played_at and waits.
+(g) raw_pages and mapstats_pages get first_fetched_at: default now() for new rows, NULL (unknown)
+    for older rows rather than an invented time, and trigger keep_first_fetched_at rejects any change.
+    fetched_at stays the latest fetch; raw_pages also gets refetched_at.
+(h) dataset_revisions has revision_id, schema, job, base_schema, started_at, seeded_at, finished_at,
+    git_commit, args, counts (seed, base_fingerprint, sealed), complete, promoted_at/by,
+    discarded_at and notes. These stat tables get created_revision_id (column default
+    current_revision_id(): the constant N in a revision schema, the optional setting
+    hltv.revision_id elsewhere) and updated_revision_id (BEFORE UPDATE trigger): match_overview,
+    matches, match_maps, player_stats, map_player_stats, map_headshots, map_vetoes, map_rounds,
+    map_round_economy, raw_pages and mapstats_pages. A sealed schema cannot change, so each revision
+    can be replayed.
+backfill.yml is rewritten for staged revisions. Jobs: prepare (create the revision or continue one),
+list, scrape (matrix), expand (round 2), scrape2 (matrix), mapstats (matrix), and report (revision
+status plus `revision accept`; the job fails until both pass). It never seals or promotes and runs in
+its own concurrency group, so the live scan keeps running.
+Files: pipeline.py, db.py, cli.py, schema.sql, models.py, parsers/results.py, sources/cito.py,
+validate.py, new revisions.py and acceptance.py, backfill.yml, watch.yml, docker-compose.yml,
+README.md, tests/test_pipeline.py, new tests/test_coverage.py and tests/test_revisions.py, new
+scripts/acceptance_staged.sql.
+
+IMPORTANT ORDER: do NOT merge the branch into the default branch before promotion. Merging puts
+--top 0 and the new schema on the live scan, which changes public, the data the grader reads, before
+CS2 Scout's comparison. Run everything from the branch with --ref repair/coverage-staged.
+
+== RUNBOOK (owner's session) ==
+0. git am the patch onto the default branch in a branch named repair/coverage-staged (or fetch it
+   from the clone), then push that branch. tests.yml must be green; this is the first run of the
+   PostgreSQL tests.
+1. Read-only pre-flight on the Render DB (the copy roughly doubles the size of public, minus the
+   archives):
+     SELECT pg_size_pretty(pg_database_size(current_database()));
+     SELECT c.relname, pg_size_pretty(pg_total_relation_size(c.oid)) FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r'
+       ORDER BY pg_total_relation_size(c.oid) DESC LIMIT 15;
+   Note: backup.yml dumps every schema, so dumps grow while hltv_rev_* exists.
+2. Check the HLTV filters without touching the DB (fetch-pages.yml only saves pages):
+     gh workflow run fetch-pages.yml --repo rikko1012/hltv-scraper --ref repair/coverage-staged \
+       -f urls="https://www.hltv.org/results?team=4608&startDate=2025-07-14&endDate=2026-10-11 https://www.hltv.org/results?player=7998&startDate=2025-07-14&endDate=2026-10-11"
+   The artifact pages must list only that team's / player's matches. If the player filter is
+   ignored, use board=teams below.
+3. Fill the staged revision (window = 420 d + 30 d margin, as in R1):
+     gh workflow run backfill.yml --repo rikko1012/hltv-scraper --ref repair/coverage-staged \
+       -f revision=new -f window=2025-07-14..2026-10-11 -f top=0 -f board=true \
+       -f extra_ids="" -f machines=8 -f workers=3 -f mapstats_minutes=150
+   The prepare job prints the revision id N, the schema hltv_rev_N. Read the list job log for
+   "board scope: ... unresolved teams/players" and give their HLTV ids via
+   -f extra_ids="team:ID player:ID". Then rerun until the report job passes. Listings, queue and
+   map-stats carry on where they stopped:
+     gh workflow run backfill.yml --repo rikko1012/hltv-scraper --ref repair/coverage-staged \
+       -f revision=N -f top=0 -f board=true -f machines=8 -f workers=3 -f mapstats_minutes=150
+   (Expect about 10k new matches and about 50k page reads, so probably 2-3 runs. Failed matches past
+   5 attempts: gh workflow run cli.yml --ref repair/coverage-staged -f args="queue --revision N --reset-failed".)
+   Same steps by CLI (HLTV_DB_DSN set): hltv-scraper revision create -> N;
+   hltv-scraper backfill --revision N --start-date 2025-07-14 --end-date 2026-10-11 --browser auto;
+   hltv-scraper scrape --revision N --shard i/8 --no-failsafe (on each machine);
+   hltv-scraper backfill --revision N (round 2); scrape again;
+   hltv-scraper mapstats --revision N --kind all --oldest-first --shard i/8;
+   hltv-scraper revision status N; hltv-scraper revision accept N.
+4. Acceptance (read-only apart from one rolled-back probe):
+     gh workflow run cli.yml --ref repair/coverage-staged -f args="revision accept N"
+     or: psql "$HLTV_DB_DSN" -v rev=N -v base=public -f scripts/acceptance_staged.sql
+5. Seal, so the compared data cannot change:
+     gh workflow run cli.yml --ref repair/coverage-staged -f args="revision seal N"
+6. CS2 Scout before/after comparison against the sealed revision. Read the HLTV tables with
+   search_path=hltv_rev_N (e.g. options='-c search_path=hltv_rev_N', read-only) and record
+   data_rev=hltv_rev_N. Nothing is promoted without the owner's approval.
+7. Promotion (owner-approved):
+   - pause the scan: gh workflow disable watch.yml (let a running scan finish)
+   - gh workflow run cli.yml --ref repair/coverage-staged -f args="revision promote N --confirm hltv_rev_N --approved-by <owner>"
+   - merge repair/coverage-staged into the default branch (the scan now uses --top 0, the manifest
+     and the cursors), then gh workflow enable watch.yml. The first scans catch up on all-tier
+     matches after the window end, with pages added each cycle.
+   - Rollback if needed (public):
+       BEGIN; CREATE TEMP TABLE rb AS SELECT matchid FROM public.match_overview WHERE created_revision_id = N;
+       DELETE FROM public.<t> WHERE matchid IN (SELECT matchid FROM rb)  -- for t in map_round_economy,
+         map_rounds, map_player_stats, map_headshots, mapstats_pages, map_vetoes, match_maps, player_stats,
+         matches, data_issues, raw_pages, scrape_queue; then match_overview;  COMMIT;
+
+== ACCEPTANCE TESTS ==
+`hltv-scraper revision accept N` checks A1-A8. scripts/acceptance_staged.sql has the same checks for
+psql, except that A6 there is only the leak check.
+  A1 listing completeness: every planned listing (global, team:*, player:*) has a complete cursor,
+     and no incomplete cursor remains.
+  A2 manifest accounting: discovered = stored + skipped + unavailable + failed + pending, and
+     pending = 0.
+  A3 coverage against the eligible HLTV listing. Eligible = listed, not a forfeit, played more than
+     48 h ago, statistics published (unavailable excluded). Targets: stored/eligible >= 0.99; played
+     maps with player stats >= 0.99; with headshots >= 0.98; unavailable <= 2% of listed
+     non-forfeit matches. A month table is printed too.
+  A4 per board team: the team's own HLTV listing is the denominator. Target stored/eligible >= 0.98,
+     or at most 1 missing. Every team is listed.
+  A5 timestamps: both triggers present; revision rows have first_fetched_at; first <= latest; a
+     change to first_fetched_at is rejected (rolled-back probe).
+  A6 public untouched: every public match older than the seed cut-off still has its seed
+     fingerprint. Changes the live scan made itself (public.scrape_queue.updated_at >= seeded_at)
+     are listed apart. No revision-created match is in public without a live queue row or with
+     created_revision_id = N.
+  A7 revision ids: stat rows are NULL (copied) or N, nothing else, and every match the revision
+     stored carries N.
+  A8 (sealed): every table still matches its seal fingerprint, and every table has zz_sealed.
+  The BO3.gg cross-checks (R7 c-f) remain CS2 Scout's side.
+
+== CAVEATS ==
+- The PostgreSQL tests have not been run (no Postgres here). Treat a red tests.yml as blocking.
+- results?team= / results?player= are assumed to be HLTV's listing filters (step 2 checks them). The
+  15-page cap keeps an ignored filter from crawling the whole listing once per player.
+- Prop team/player names that do not exactly match HLTV names stay unresolved. CS2 Scout's exact
+  team-name variants should supply the HLTV ids (extra_ids). Nothing is matched fuzzily.
+- The board scope comes from the prop_lines/upcoming_matches copied when the revision was created.
+- public rows stored before this patch keep first_fetched_at NULL (unknown), not a reconstructed
+  time.

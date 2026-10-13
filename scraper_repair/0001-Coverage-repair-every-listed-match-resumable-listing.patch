@@ -1,0 +1,3266 @@
+From 262343aeb2011823c01b9bf928ba8570c1a7ad9d Mon Sep 17 00:00:00 2001
+From: cs2_scout owner <tpoofh@gmail.com>
+Date: Mon, 12 Oct 2026 19:52:25 -0500
+Subject: [PATCH] Coverage repair: every listed match, resumable listings,
+ staged dataset revisions
+
+- Crawl scope: drop "both teams in today's top N" (pipeline.relevant). Every non-forfeit listed
+  result is queued; --top is optional and means EITHER team tracked, matched by HLTV team id
+  (exact names resolved to ids, never fuzzy). Defaults 0 for update/watch/results/backfill;
+  watch.yml, docker-compose and the failsafe listings follow.
+- Listings never stop silently: a failed page (or a catch-up cap) raises ListingIncomplete with
+  what was found, saves listing_cursor:<source>:<start>:<end> in scraper_state, and the next run
+  resumes there. Catch-up stops only on a page with nothing unseen. Health check
+  listing_incomplete (error after 6 h).
+- result_manifest (append-only): discovered / present / skipped / stored / waiting /
+  unavailable / failed per listed match; result_manifest_state view for accounting. Matches still
+  without statistics 7 days after they were played (two looks) become 'unavailable', final.
+- raw_pages / mapstats_pages: first_fetched_at written once (trigger rejects changes),
+  fetched_at = latest, refetched_at; older rows stay NULL instead of an invented time.
+- created_revision_id / updated_revision_id on the stat tables.
+- Staged dataset revisions (hltv_scraper/revisions.py): `revision create` registers
+  hltv_meta.dataset_revisions and builds schema hltv_rev_<n> as a copy of public (fingerprints of
+  live matches kept); --revision N / HLTV_REVISION puts only that schema on the search path;
+  `backfill` lists the window (global + board teams, opponents, players, former teams);
+  `revision status|accept|seal|promote|discard`. Promotion is a separate owner-approved step that
+  only adds the revision's matches to public. Dated `update` against live is refused.
+- backfill.yml rewritten for staged revisions (list, scrape, expand, scrape2, mapstats, report).
+- Tests: tests/test_coverage.py (offline), tests/test_revisions.py (PostgreSQL);
+  scripts/acceptance_staged.sql for psql.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .github/workflows/backfill.yml  | 286 +++++++++++++++-----
+ .github/workflows/watch.yml     |   7 +-
+ README.md                       |  38 ++-
+ docker-compose.yml              |   2 +-
+ hltv_scraper/acceptance.py      | 224 ++++++++++++++++
+ hltv_scraper/cli.py             | 186 ++++++++++++-
+ hltv_scraper/db.py              | 221 ++++++++++++++--
+ hltv_scraper/models.py          |   5 +
+ hltv_scraper/parsers/results.py |  23 +-
+ hltv_scraper/pipeline.py        | 388 +++++++++++++++++++++++----
+ hltv_scraper/revisions.py       | 446 ++++++++++++++++++++++++++++++++
+ hltv_scraper/schema.sql         | 140 ++++++++++
+ hltv_scraper/sources/cito.py    |   2 +
+ hltv_scraper/validate.py        |   8 +
+ scripts/acceptance_staged.sql   | 137 ++++++++++
+ tests/test_coverage.py          | 191 ++++++++++++++
+ tests/test_pipeline.py          |  51 +++-
+ tests/test_revisions.py         | 211 +++++++++++++++
+ 18 files changed, 2391 insertions(+), 175 deletions(-)
+ create mode 100644 hltv_scraper/acceptance.py
+ create mode 100644 hltv_scraper/revisions.py
+ create mode 100644 scripts/acceptance_staged.sql
+ create mode 100644 tests/test_coverage.py
+ create mode 100644 tests/test_revisions.py
+
+diff --git a/.github/workflows/backfill.yml b/.github/workflows/backfill.yml
+index a714c97..d6c6390 100644
+--- a/.github/workflows/backfill.yml
++++ b/.github/workflows/backfill.yml
+@@ -1,64 +1,71 @@
+-# One-off history backfill, spread over several machines.
+-#   1. list:   one job reads every results page in the date range and queues the top-N
+-#              matches that aren't stored yet (fast: listing pages only)
+-#   2. scrape: N machines scrape the queue in parallel; each takes its own share (a hash of
+-#              the match id and N, so what a dead machine left behind spreads over every
+-#              machine of the next run) and has its own FlareSolverr + IP, so Cloudflare load
+-#              is spread
+-#   3. check:  health check + alerts, like the scheduled scan
+-# Writes straight to the HLTV_DB_DSN database. Runs in the same concurrency group as the
+-# scheduled scan, which waits until the backfill is done.
++# History backfill into a STAGED dataset revision, spread over several machines.
++#
++# Never writes the live tables CS2 Scout reads: everything goes into the schema hltv_rev_<n> of the
++# HLTV_DB_DSN database (a copy of the live tables made when the revision is created, plus what this
++# backfill adds). The live tables change only by `hltv-scraper revision promote`, a separate step
++# the owner approves after CS2 Scout's before/after comparison.
++#
++#   1. prepare: create the revision (revision=new) or continue an unsealed one (its id)
++#   2. list:    the global results listing for the window (every tier; no "top N" rule) plus each
++#               board team's, opponent's, board player's and former team's own listing; every
++#               listed row goes to the revision's manifest; each listing resumes from its cursor
++#   3. scrape:  N machines read the queued match pages (a hash of the match id and N per machine)
++#   4. expand:  the board scope again (former teams found in the newly stored matches), then
++#   5. scrape2: the matches those listings added
++#   6. mapstats: map-stats pages (headshots, rounds, economy) of the new matches
++#   7. report:  revision status + acceptance checks (read-only). Nothing is sealed or promoted here.
++# Rerun with revision=<n> until the report passes: listings and the queue carry on where they were.
+ name: backfill
+ 
+ on:
+   workflow_dispatch:
+     inputs:
+-      months:
+-        description: "How many months back (ignored when start is given)"
+-        default: "3"
+-      start:
+-        description: "First day to list, YYYY-MM-DD (e.g. 2024-01-01 for the whole of 2024 onwards)"
++      revision:
++        description: "Dataset revision: 'new' (copy the live tables into a new revision) or the id of an unsealed revision to continue"
++        default: "new"
++      days:
++        description: "Window in days ending yesterday (450 = 420 days + 30 days margin); ignored when window is given or when continuing a revision"
++        default: "450"
++      window:
++        description: "Optional fixed window FIRST..LAST, e.g. 2025-07-18..2026-10-11 (default: the last DAYS days up to yesterday, UTC)"
+         default: ""
+-      end:
+-        description: "Last day to list, YYYY-MM-DD (default: today)"
++      top:
++        description: "0 = every listed match. N = only matches where EITHER team is in the top N or on the board (by HLTV team id)"
++        default: "0"
++      board:
++        description: "Board listings: true (teams, opponents, former teams and players), teams (no player listings) or false"
++        default: "true"
++      extra_ids:
++        description: "Extra listings by HLTV id, e.g. 'team:4608 team:5973 player:7998' (board names that did not resolve)"
+         default: ""
+       machines:
+         description: "Parallel machines (1-8)"
+-        default: "4"
++        default: "8"
+       workers:
+         description: "Browsers per machine"
+         default: "3"
+-      top:
+-        description: "Matches between the top N ranked teams"
+-        default: "200"
+-      requeue_missing:
+-        description: "Also read again every stored match whose page is not archived (after a partial restore)"
+-        default: "false"
++      mapstats_minutes:
++        description: "Minutes of map-stats reading per machine"
++        default: "150"
+ 
+ concurrency:
+-  group: watch
++  group: backfill-staged     # the live scan keeps running: this run never touches its tables
+   cancel-in-progress: false
+ 
+ permissions:
+   contents: read
+-  issues: write
+ 
+ env:
+   HLTV_DB_DSN: ${{ secrets.HLTV_DB_DSN }}
+-  CITO_API_KEY: ${{ secrets.CITO_API_KEY }}
+   FLARESOLVERR_URL: http://localhost:8191/v1
+-  GH_TOKEN: ${{ github.token }}
+ 
+ jobs:
+-  list:
++  prepare:
+     runs-on: ubuntu-latest
+-    timeout-minutes: 60  # a 12-month listing reads ~130 result pages in about 6 minutes
++    timeout-minutes: 120   # copying the live tables into the new revision
+     outputs:
++      revision: ${{ steps.rev.outputs.revision }}
+       shards: ${{ steps.shards.outputs.shards }}
+-    services:
+-      flaresolverr:
+-        image: ghcr.io/flaresolverr/flaresolverr:latest
+-        ports: ["8191:8191"]
+     steps:
+       - name: Check configuration
+         run: |
+@@ -68,56 +75,193 @@ jobs:
+         with:
+           python-version: "3.12"
+       - run: pip install .
+-      - name: Wait for FlareSolverr
+-        run: for i in $(seq 1 30); do curl -sf http://localhost:8191/ && exit 0; sleep 2; done; exit 1
+-      - name: Queue stored matches whose page is missing
+-        if: inputs.requeue_missing == 'true'
+-        run: hltv-scraper queue --requeue-missing
+-      - name: Queue every top-N match in the range
++      - name: Revision
++        id: rev
+         run: |
+-          START="${{ inputs.start }}"
+-          [ -n "$START" ] || START=$(date -u -d "${{ inputs.months }} months ago" +%F)
+-          END="${{ inputs.end }}"
+-          [ -n "$END" ] || END=$(date -u +%F)
+-          echo "Backfilling $START .. $END"
+-          hltv-scraper update --browser auto --top "${{ inputs.top }}" --start-date "$START" --end-date "$END" \
+-            --max-pages 0 --no-stop --no-scrape --delay 0.3 0.8
++          # (to copy the archived match pages too, create the revision with the cli workflow:
++          #  `revision create --seed-archives`, then run this workflow with its id)
++          if [ "${{ inputs.revision }}" = "new" ]; then
++            hltv-scraper revision create --job backfill --note "backfill run ${{ github.run_id }}" \
++              --github-output "$GITHUB_OUTPUT"
++          else
++            echo "revision=${{ inputs.revision }}" >> "$GITHUB_OUTPUT"
++          fi
+       - name: Shards
+         id: shards
+         run: |
+           N=${{ inputs.machines }}
+           echo "shards=$(python -c "import json; print(json.dumps([f'{i}/$N' for i in range($N)]))")" >> "$GITHUB_OUTPUT"
+ 
++  list:
++    needs: prepare
++    runs-on: ubuntu-latest
++    timeout-minutes: 300   # ~150 global pages + a few pages per board team / player
++    services:
++      flaresolverr:
++        image: ghcr.io/flaresolverr/flaresolverr:latest
++        ports: ["8191:8191"]
++    env:
++      HLTV_REVISION: ${{ needs.prepare.outputs.revision }}
++    steps:
++      - uses: actions/checkout@v4
++      - uses: actions/setup-python@v5
++        with:
++          python-version: "3.12"
++      - run: pip install .
++      - name: Second browser backend
++        continue-on-error: true
++        run: pip install -q "scrapling[fetchers]" && scrapling install
++      - name: Wait for FlareSolverr
++        run: for i in $(seq 1 30); do curl -sf http://localhost:8191/ && exit 0; sleep 2; done; exit 1
++      - name: List the window into revision ${{ needs.prepare.outputs.revision }}
++        run: |
++          set +e
++          ARGS=""
++          WINDOW="${{ inputs.window }}"
++          [ -n "$WINDOW" ] && ARGS="$ARGS --start-date ${WINDOW%%..*} --end-date ${WINDOW##*..}"
++          [ "${{ inputs.board }}" = "false" ] && ARGS="$ARGS --no-board"
++          [ "${{ inputs.board }}" = "teams" ] && ARGS="$ARGS --no-player-listings"
++          T=""; P=""
++          for tok in ${{ inputs.extra_ids }}; do
++            case "$tok" in team:*) T="$T ${tok#team:}";; player:*) P="$P ${tok#player:}";; esac
++          done
++          [ -n "$T" ] && ARGS="$ARGS --team-ids $T"
++          [ -n "$P" ] && ARGS="$ARGS --player-ids $P"
++          hltv-scraper backfill --revision "$HLTV_REVISION" --browser auto --top "${{ inputs.top }}" \
++            --days "${{ inputs.days }}" $ARGS --delay 0.3 0.8
++          code=$?
++          # 3 = a listing stopped early: what was found is queued, the cursor resumes it on the next
++          # run and the report job fails until every listing is complete - never silent
++          if [ $code -eq 3 ]; then echo "::warning::Some listings stopped early; rerun with revision=$HLTV_REVISION"; exit 0; fi
++          exit $code
++
+   scrape:
+-    needs: list
++    needs: [prepare, list]
+     runs-on: ubuntu-latest
+-    timeout-minutes: 150
++    timeout-minutes: 330
+     strategy:
+       fail-fast: false
+       matrix:
+-        shard: ${{ fromJSON(needs.list.outputs.shards) }}
++        shard: ${{ fromJSON(needs.prepare.outputs.shards) }}
+     services:
+       flaresolverr:
+         image: ghcr.io/flaresolverr/flaresolverr:latest
+         ports: ["8191:8191"]
++    env:
++      HLTV_REVISION: ${{ needs.prepare.outputs.revision }}
+     steps:
+       - uses: actions/checkout@v4
+       - uses: actions/setup-python@v5
+         with:
+           python-version: "3.12"
+       - run: pip install .
++      - name: Second browser backend
++        continue-on-error: true
++        run: pip install -q "scrapling[fetchers]" && scrapling install
+       - name: Wait for FlareSolverr
+         run: for i in $(seq 1 30); do curl -sf http://localhost:8191/ && exit 0; sleep 2; done; exit 1
+       - name: Scrape shard ${{ matrix.shard }}
+         run: |
+-          hltv-scraper scrape --browser auto --shard "${{ matrix.shard }}" \
+-            --workers "${{ inputs.workers }}" --delay 0.5 1.2 --timeout 90
++          hltv-scraper scrape --revision "$HLTV_REVISION" --browser auto --shard "${{ matrix.shard }}" \
++            --workers "${{ inputs.workers }}" --no-failsafe --delay 0.5 1.2 --timeout 90
++
++  expand:
++    needs: [prepare, scrape]
++    if: always() && needs.prepare.result == 'success' && inputs.board != 'false'
++    runs-on: ubuntu-latest
++    timeout-minutes: 240
++    services:
++      flaresolverr:
++        image: ghcr.io/flaresolverr/flaresolverr:latest
++        ports: ["8191:8191"]
++    env:
++      HLTV_REVISION: ${{ needs.prepare.outputs.revision }}
++    steps:
++      - uses: actions/checkout@v4
++      - uses: actions/setup-python@v5
++        with:
++          python-version: "3.12"
++      - run: pip install .
++      - name: Wait for FlareSolverr
++        run: for i in $(seq 1 30); do curl -sf http://localhost:8191/ && exit 0; sleep 2; done; exit 1
++      - name: Former teams found in the new matches
++        run: |
++          set +e
++          NP=""; [ "${{ inputs.board }}" = "teams" ] && NP="--no-player-listings"
++          hltv-scraper backfill --revision "$HLTV_REVISION" --browser auto --top "${{ inputs.top }}" $NP --delay 0.3 0.8
++          code=$?
++          if [ $code -eq 3 ]; then echo "::warning::Some listings stopped early; rerun with revision=$HLTV_REVISION"; exit 0; fi
++          exit $code
++
++  scrape2:
++    needs: [prepare, expand]
++    if: always() && needs.prepare.result == 'success'
++    runs-on: ubuntu-latest
++    timeout-minutes: 330
++    strategy:
++      fail-fast: false
++      matrix:
++        shard: ${{ fromJSON(needs.prepare.outputs.shards) }}
++    services:
++      flaresolverr:
++        image: ghcr.io/flaresolverr/flaresolverr:latest
++        ports: ["8191:8191"]
++    env:
++      HLTV_REVISION: ${{ needs.prepare.outputs.revision }}
++    steps:
++      - uses: actions/checkout@v4
++      - uses: actions/setup-python@v5
++        with:
++          python-version: "3.12"
++      - run: pip install .
++      - name: Second browser backend
++        continue-on-error: true
++        run: pip install -q "scrapling[fetchers]" && scrapling install
++      - name: Wait for FlareSolverr
++        run: for i in $(seq 1 30); do curl -sf http://localhost:8191/ && exit 0; sleep 2; done; exit 1
++      - name: Scrape shard ${{ matrix.shard }} (round 2 and retries)
++        run: |
++          hltv-scraper scrape --revision "$HLTV_REVISION" --browser auto --shard "${{ matrix.shard }}" \
++            --workers "${{ inputs.workers }}" --no-failsafe --delay 0.5 1.2 --timeout 90
++
++  mapstats:
++    needs: [prepare, scrape2]
++    if: always() && needs.prepare.result == 'success'
++    runs-on: ubuntu-latest
++    timeout-minutes: 330
++    strategy:
++      fail-fast: false
++      matrix:
++        shard: ${{ fromJSON(needs.prepare.outputs.shards) }}
++    services:
++      flaresolverr:
++        image: ghcr.io/flaresolverr/flaresolverr:latest
++        ports: ["8191:8191"]
++    env:
++      HLTV_REVISION: ${{ needs.prepare.outputs.revision }}
++    steps:
++      - uses: actions/checkout@v4
++      - uses: actions/setup-python@v5
++        with:
++          python-version: "3.12"
++      - run: pip install .
++      - name: Second browser backend
++        continue-on-error: true
++        run: pip install -q "scrapling[fetchers]" && scrapling install
++      - name: Wait for FlareSolverr
++        run: for i in $(seq 1 30); do curl -sf http://localhost:8191/ && exit 0; sleep 2; done; exit 1
++      - name: Map-stats pages, shard ${{ matrix.shard }}
++        run: |
++          hltv-scraper mapstats --revision "$HLTV_REVISION" --kind all --browser auto --timeout 90 --oldest-first \
++            --shard "${{ matrix.shard }}" --minutes "${{ inputs.mapstats_minutes }}"
+ 
+-  check:
+-    needs: [list, scrape]
+-    if: always() && needs.list.result == 'success'
++  report:
++    needs: [prepare, mapstats]
++    if: always() && needs.prepare.result == 'success'
+     runs-on: ubuntu-latest
+-    timeout-minutes: 15
++    timeout-minutes: 60
++    env:
++      HLTV_REVISION: ${{ needs.prepare.outputs.revision }}
+     steps:
+       - uses: actions/checkout@v4
+       - uses: actions/setup-python@v5
+@@ -125,17 +269,21 @@ jobs:
+           python-version: "3.12"
+       - run: pip install .
+       - name: Queue
+-        run: hltv-scraper queue --show-failed
+-      - name: Health check
+-        id: check
+-        run: hltv-scraper check --markdown health.md
+-      - name: Get the alert script (the run stopped before checkout)
+-        if: failure() && hashFiles('scripts/alert.sh') == ''
+-        uses: actions/checkout@v4
+-      - name: Alert on data problems
+-        if: failure() && steps.check.outcome == 'failure'
++        run: hltv-scraper queue --revision "$HLTV_REVISION" --show-failed
++      - name: Revision status
++        id: status
++        continue-on-error: true
++        run: hltv-scraper revision status "$HLTV_REVISION" --markdown status.md
++      - name: Acceptance checks (read-only)
++        id: accept
++        continue-on-error: true
++        run: hltv-scraper revision accept "$HLTV_REVISION" --markdown acceptance.md
++      - name: Summary
++        if: always()
+         run: |
+-          scripts/alert.sh open health "HLTV scraper: data health check failed" health.md
+-      - name: Close alert when healthy
+-        if: success()
+-        run: scripts/alert.sh close health
++          cat status.md acceptance.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
++          if [ "${{ steps.status.outcome }}" != "success" ] || [ "${{ steps.accept.outcome }}" != "success" ]; then
++            echo "::error::Revision $HLTV_REVISION is not complete yet - rerun this workflow with revision=$HLTV_REVISION"
++            exit 1
++          fi
++          echo "Revision $HLTV_REVISION passes: ready for CS2 Scout's comparison, then seal and (owner-approved) promote."
+diff --git a/.github/workflows/watch.yml b/.github/workflows/watch.yml
+index cf2fcd5..38eb0cd 100644
+--- a/.github/workflows/watch.yml
++++ b/.github/workflows/watch.yml
+@@ -81,7 +81,7 @@ jobs:
+ 
+       - name: Backfill
+         if: inputs.backfill_pages != '' && inputs.backfill_pages != '0'
+-        run: hltv-scraper update --browser auto --max-pages "${{ inputs.backfill_pages }}" --no-stop
++        run: hltv-scraper update --browser auto --top 0 --max-pages "${{ inputs.backfill_pages }}" --no-stop
+ 
+       - name: Second browser backend
+         # When Cloudflare blocks FlareSolverr on a page, `auto` switches to Scrapling
+@@ -92,12 +92,13 @@ jobs:
+       - name: Scan HLTV
+         id: scan
+         run: |
+-          hltv-scraper watch --once --browser auto --workers 2 --stats-wait 30 && exit 0
++          # every listed match, all tiers (never "both teams in today's top 200")
++          hltv-scraper watch --once --browser auto --top 0 --workers 2 --stats-wait 30 && exit 0
+           # a database restart drops the first attempt mid-run (2026-10-11 18:50 UTC); give it
+           # a minute to come back before the second one, which then waits out a connect failure too
+           echo "::warning::First scan attempt failed - trying once more in a minute"
+           sleep 60
+-          hltv-scraper watch --once --browser auto --workers 2 --stats-wait 30
++          hltv-scraper watch --once --browser auto --top 0 --workers 2 --stats-wait 30
+ 
+       - name: Health check
+         id: check
+diff --git a/README.md b/README.md
+index 975c16a..5c2b505 100644
+--- a/README.md
++++ b/README.md
+@@ -21,8 +21,10 @@ and tested against a real 2026 match page.
+ - **Pages scraped**: `valve-ranking/teams`, `results` (paginated), `matches` (live + upcoming), `matches/<id>/…`
+ - **Match data**: series score, per-map round score split by CT/T side, and for every
+   player on every map and side: K-D, eco-adjusted K-D, round swing, ADR, eADR, KAST, eKAST and Rating 3.0
+-- **Incremental updates**: only matches not in the database yet, between top-N teams,
+-  forfeits skipped, stops paging once it catches up
++- **Incremental updates**: every listed match not in the database yet (all tiers; an optional
++  `--top N` keeps matches where EITHER team is in the top N, by HLTV team id), forfeits skipped,
++  stops paging once a page holds nothing unseen; a page that fails is logged as an error and the
++  next scan resumes from it (`listing_cursor:*` in scraper_state)
+ - **Parallel**: one browser per worker thread; failed pages are reported, not fatal
+ - **Idempotent writes**: each match is one transaction; re-running never duplicates rows;
+   new maps in the pool are registered automatically
+@@ -179,7 +181,7 @@ Schema (`hltv_scraper/schema.sql`):
+ # Current Valve rankings (print, write CSV, and/or store)
+ hltv-scraper rankings -d data/team_rankings --save
+ 
+-# Latest results between the top 30 teams, 3 pages deep
++# Latest results involving a top-30 team, 3 pages deep
+ hltv-scraper results --top 30 --max-pages 3 -o data/results.csv
+ 
+ # Follow HLTV continuously (Ctrl+C to stop); or once, e.g. from cron
+@@ -197,11 +199,15 @@ hltv-scraper match https://www.hltv.org/matches/2394892/tyloo-vs-9z-iem-cologne-
+ 
+ # Full incremental update: rankings -> new results -> match stats -> database.
+ # Run this on a schedule (cron / GitHub Actions / compose).
+-hltv-scraper update --top 200 --max-pages 1 --workers 2
++hltv-scraper update --max-pages 1 --workers 2
+ 
+-# Backfill: every match of every team (not just the top 200) in a date range,
+-# 500 match pages per run - re-run until `hltv-scraper queue` shows nothing pending
+-hltv-scraper update --top 0 --start-date 2025-01-01 --end-date 2025-12-31 --max-pages 0 --limit 500
++# History backfill: into a STAGED dataset revision (schema hltv_rev_<n>, a copy of the live tables),
++# never the live tables; promoted only after review (see "Dataset revisions" below)
++hltv-scraper revision create                   # prints the new revision id, e.g. 3
++hltv-scraper backfill --revision 3             # last 450 days: global listing + board teams/players
++hltv-scraper scrape --revision 3 --shard 0/4   # ... on 4 machines, then `mapstats --revision 3`
++hltv-scraper revision status 3                 # listings complete? manifest adds up?
++hltv-scraper revision accept 3                 # acceptance checks (read-only)
+ 
+ # Re-extract everything from the archived pages (no network), e.g. after a parser fix
+ hltv-scraper reparse
+@@ -334,8 +340,7 @@ database: kills and headshot kills from the map-stats pages for Map 1, Map 2 and
+ - `graded`: `result` is higher, lower or push; `actual` is the total, `map_values` the per-map split
+ - `void`: the match had fewer maps than the line covers, or the player sat a map out
+ - `pending`: not played yet, or its stats are not scraped yet
+-- `no_match`: no HLTV match for the player within a day of the start, 2+ days later (most often
+-  neither team is in the tracked top 200)
++- `no_match`: no HLTV match for the player within a day of the start, 2+ days later
+ 
+ The `props` workflow runs hourly and after every HLTV scan: it reads both books, grades, and saves
+ `scout.csv`, `latest.csv`, `history.csv`, `graded.csv` and `status.json` to the `props-data` branch.
+@@ -359,6 +364,21 @@ minute-by-minute lines run the receiver above.
+ - `live-check.yml`: daily live scrape of rankings, results, a match page and the schedule with the
+   `flaresolverr`, `camoufox` and `scrapling` backends, so layout or Cloudflare changes are caught early.
+ - `tests.yml`: the test suite (offline fixtures + PostgreSQL) on every push.
++- `backfill.yml`: history backfill into a staged dataset revision (never the live tables), spread
++  over up to 8 machines; rerun with the revision id until its report passes.
++
++## Dataset revisions
++
++A backfill writes into its own schema `hltv_rev_<n>` (registered in `hltv_meta.dataset_revisions`
++with its job, git commit, arguments, counts and completeness), created as a copy of the live tables
++so the revision is "live + backfill". `--revision n` (or `HLTV_REVISION=n`) puts only that schema
++on the search path. Every stat row carries `created_revision_id` / `updated_revision_id` (NULL for
++rows copied from live), every listed result is logged in the append-only `result_manifest`
++(discovered, present, skipped, stored, waiting, unavailable, failed), and archived pages keep their
++first fetch time (`first_fetched_at`, never rewritten - a trigger rejects changes).
++`revision seal n` makes a complete revision read-only; `revision promote n --confirm hltv_rev_n
++--approved-by NAME` (owner-approved, after review) copies the matches it added into the live tables
++without changing anything already there.
+ 
+ ## Development
+ 
+diff --git a/docker-compose.yml b/docker-compose.yml
+index 226f276..be2759f 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -34,7 +34,7 @@ services:
+   watcher:
+     build: .
+     restart: unless-stopped
+-    command: ["watch", "--browser", "flaresolverr", "--interval", "5", "--workers", "2"]
++    command: ["watch", "--browser", "flaresolverr", "--interval", "5", "--workers", "2", "--top", "0"]
+     depends_on:
+       db:
+         condition: service_healthy
+diff --git a/hltv_scraper/acceptance.py b/hltv_scraper/acceptance.py
+new file mode 100644
+index 0000000..8080613
+--- /dev/null
++++ b/hltv_scraper/acceptance.py
+@@ -0,0 +1,224 @@
++"""Acceptance checks for a staged dataset revision (``hltv-scraper revision accept N``).
++
++Read-only, except for one write probe that is always rolled back (A5: changing first_fetched_at
++must be rejected). Every check prints what it measured and its target; the run fails when any
++check fails. The same queries are in scripts/acceptance_staged.sql for psql.
++
++  A1 listing completeness   every planned listing (global + team + player) read to its end
++  A2 manifest accounting    discovered = stored + skipped + unavailable + failed + pending, pending 0
++  A3 coverage               stored / eligible >= 99 %  (eligible = listed by HLTV, not a forfeit, played
++                            more than 48 h ago, statistics published: 'unavailable' excluded);
++                            played maps with player stats >= 99 %, with headshots >= 98 %;
++                            unavailable <= 2 % of the listed, non-forfeit matches
++  A4 per board team         each team listing: stored / eligible >= 98 % (or at most 1 missing)
++  A5 ingestion timestamps   triggers in place, rows written by the revision have first_fetched_at,
++                            first_fetched_at <= fetched_at, and a change is rejected
++  A6 live tables untouched  every live match older than the seed cut-off still has the fingerprint it
++                            had when the revision was seeded (changes explained by the live scan's own
++                            re-reads are listed apart); no match stored by the revision appears in the
++                            live tables unless the live scan queued it itself
++  A7 revision ids           stat rows carry NULL (copied from live) or this revision's id, nothing else;
++                            every match the revision stored carries its id
++  A8 sealed = unchanged     (sealed revisions) every table matches its fingerprint taken at seal time
++"""
++
++from __future__ import annotations
++
++import json
++from dataclasses import dataclass
++
++from . import revisions
++from .db import Database, _ident, revision_schema
++
++STAT_TABLES = ("match_overview", "matches", "match_maps", "player_stats", "map_player_stats", "map_headshots",
++               "map_vetoes", "map_rounds", "map_round_economy", "raw_pages", "mapstats_pages")
++
++
++@dataclass
++class Check:
++    code: str
++    name: str
++    ok: bool
++    measured: str
++    target: str
++
++
++ELIGIBLE = """
++    SELECT s.* FROM result_manifest_state s
++    WHERE s.state <> 'skipped' AND s.state <> 'unavailable'
++      AND coalesce(s.played_at, s.first_listed_at) < now() - interval '48 hours'"""
++
++COVERAGE_SQL = f"""
++    SELECT count(*) AS eligible, count(*) FILTER (WHERE state = 'stored') AS stored,
++           count(*) FILTER (WHERE state = 'failed') AS failed, count(*) FILTER (WHERE state = 'pending') AS pending
++    FROM ({ELIGIBLE}) e"""
++
++MAPS_SQL = f"""
++    WITH m AS (
++        SELECT mm.matchid, mm.mapid, mm.mapstatsid FROM match_maps mm
++        WHERE mm.matchid IN (SELECT matchid FROM ({ELIGIBLE}) e WHERE state = 'stored'))
++    SELECT count(*) AS maps,
++           count(*) FILTER (WHERE EXISTS (SELECT 1 FROM player_stats ps WHERE ps.matchid = m.matchid
++                                          AND ps.mapid = m.mapid AND ps.sideid = 0)) AS with_stats,
++           count(*) FILTER (WHERE EXISTS (SELECT 1 FROM map_headshots h WHERE h.mapstatsid = m.mapstatsid)) AS with_hs
++    FROM m"""
++
++UNAVAILABLE_SQL = """
++    SELECT count(*) FILTER (WHERE state = 'unavailable'), count(*) FILTER (WHERE state <> 'skipped')
++    FROM result_manifest_state"""
++
++TEAM_SQL = f"""
++    WITH listed AS (
++        SELECT DISTINCT split_part(source, ':', 2)::int AS teamid, matchid
++        FROM result_manifest WHERE kind = 'discovered' AND source LIKE 'team:%%')
++    SELECT l.teamid, t.name, count(*) AS eligible, count(*) FILTER (WHERE e.state = 'stored') AS stored
++    FROM listed l JOIN ({ELIGIBLE}) e USING (matchid) LEFT JOIN teams t ON t.teamid = l.teamid
++    GROUP BY l.teamid, t.name ORDER BY stored::float / greatest(count(*), 1), l.teamid"""
++
++
++def _one(cur, sql, params=None):
++    cur.execute(sql, params)
++    return cur.fetchone()
++
++
++def run(config: dict, rid: int) -> list[Check]:
++    checks: list[Check] = []
++    schema = revision_schema(rid)
++    with Database(config, revision=rid) as db:
++        cur = db.con.cursor()
++        # A1
++        listing = revisions.listing_status(db)
++        ok = listing["planned"] > 0 and not listing["not_started"] and not listing["incomplete"] \
++            and not listing["cursors_incomplete"]
++        checks.append(Check("A1", "listing completeness", ok,
++                            f"{listing['complete']}/{listing['planned']} planned listings complete; not started "
++                            f"{listing['not_started'][:5]}, incomplete {listing['incomplete'][:5]}",
++                            "every planned listing read to its end"))
++        # A2
++        acc = db.manifest_accounting()
++        total = sum(acc[k] for k in ("stored", "skipped", "unavailable", "failed", "pending"))
++        checks.append(Check("A2", "manifest accounting", total == acc["discovered"] and acc["pending"] == 0,
++                            json.dumps(acc), "discovered = stored + skipped + unavailable + failed + pending; pending 0"))
++        # A3
++        eligible, stored, failed, pending = _one(cur, COVERAGE_SQL)
++        ratio = stored / eligible if eligible else 0.0
++        checks.append(Check("A3a", "stored / eligible HLTV listing", eligible > 0 and ratio >= 0.99,
++                            f"{stored}/{eligible} = {ratio:.4f} (failed {failed}, pending {pending})", ">= 0.99"))
++        maps, with_stats, with_hs = _one(cur, MAPS_SQL)
++        checks.append(Check("A3b", "played maps with player stats", maps > 0 and with_stats / maps >= 0.99,
++                            f"{with_stats}/{maps}", ">= 0.99"))
++        checks.append(Check("A3c", "played maps with headshots", maps > 0 and with_hs / maps >= 0.98,
++                            f"{with_hs}/{maps}", ">= 0.98"))
++        unavailable, listed = _one(cur, UNAVAILABLE_SQL)
++        checks.append(Check("A3d", "unavailable on HLTV (no stats)", not listed or unavailable / listed <= 0.02,
++                            f"{unavailable}/{listed}", "<= 0.02 (reported apart from failures)"))
++        # A4
++        cur.execute(TEAM_SQL)
++        teams = cur.fetchall()
++        bad = [(tid, name, s, e) for tid, name, e, s in teams if e and s / e < 0.98 and e - s > 1]
++        checks.append(Check("A4", "per board team coverage", bool(teams) and not bad,
++                            f"{len(teams)} team listings; below target: " + "; ".join(
++                                f"{name or tid} {s}/{e}" for tid, name, s, e in bad[:15]),
++                            ">= 0.98 per team (or at most 1 missing)"))
++        # A5
++        cur.execute("SELECT c.relname FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid "
++                    "JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = %s "
++                    "AND t.tgname IN ('raw_pages_first_fetched_at', 'mapstats_pages_first_fetched_at')", (schema,))
++        triggers = {r[0] for r in cur.fetchall()}
++        missing_first = _one(cur, "SELECT (SELECT count(*) FROM raw_pages WHERE created_revision_id = %s "
++                                  "AND first_fetched_at IS NULL) + (SELECT count(*) FROM mapstats_pages "
++                                  "WHERE created_revision_id = %s AND first_fetched_at IS NULL)", (rid, rid))[0]
++        inverted = _one(cur, "SELECT (SELECT count(*) FROM raw_pages WHERE first_fetched_at > fetched_at) "
++                             "+ (SELECT count(*) FROM mapstats_pages WHERE first_fetched_at > fetched_at)")[0]
++        probe = "no row to probe"
++        rejected = True
++        row = _one(cur, "SELECT matchid FROM raw_pages WHERE first_fetched_at IS NOT NULL LIMIT 1")
++        db.con.commit()
++        if row:
++            try:
++                cur.execute("UPDATE raw_pages SET first_fetched_at = first_fetched_at - interval '1 day' "
++                            "WHERE matchid = %s", row)
++                rejected, probe = False, "a change to first_fetched_at was ACCEPTED"
++            except Exception as e:   # the trigger (or the seal) refused it
++                probe = f"change rejected ({str(e).strip().splitlines()[0][:80]})"
++            finally:
++                db.con.rollback()    # never keep the probe
++        checks.append(Check("A5", "ingestion timestamps never rewritten",
++                            triggers == {"raw_pages", "mapstats_pages"} and not missing_first and not inverted
++                            and rejected,
++                            f"triggers on {sorted(triggers)}; revision rows without first_fetched_at {missing_first}; "
++                            f"first > latest {inverted}; probe: {probe}",
++                            "triggers on both tables, 0, 0, change rejected"))
++        # A6
++        checks.append(_live_untouched(cur, rid, schema))
++        db.con.commit()
++        # A7
++        foreign = 0
++        for t in STAT_TABLES:
++            foreign += _one(cur, f"SELECT count(*) FROM {_ident(t)} WHERE created_revision_id IS DISTINCT FROM %s "
++                                 "AND created_revision_id IS NOT NULL", (rid,))[0]
++        unstamped = _one(cur, "SELECT count(DISTINCT m.matchid) FROM result_manifest m "
++                              "JOIN match_overview mo USING (matchid) WHERE m.kind = 'stored' "
++                              "AND mo.created_revision_id IS DISTINCT FROM %s", (rid,))[0]
++        checks.append(Check("A7", "revision ids on stat rows", not foreign and not unstamped,
++                            f"rows with another revision id {foreign}; matches stored by the revision without its id "
++                            f"{unstamped}", "0 and 0"))
++        db.con.commit()
++        # A8
++        if db.sealed:
++            cur.execute("SELECT table_name, row_count, md5 FROM hltv_meta.revision_fingerprints WHERE revision_id = %s",
++                        (rid,))
++            stored_prints = {t: (n, h) for t, n, h in cur.fetchall()}
++            changed = [t for t, (n, h) in stored_prints.items()
++                       if revisions.table_fingerprint(cur, schema, t)[:2] != (n, h)]
++            cur.execute("SELECT count(*) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid "
++                        "JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = %s AND t.tgname = 'zz_sealed'",
++                        (schema,))
++            guarded = cur.fetchone()[0]
++            checks.append(Check("A8", "sealed revision unchanged", not changed and guarded == len(stored_prints),
++                                f"tables changed since sealing: {changed}; tables guarded {guarded}/{len(stored_prints)}",
++                                "none changed, every table guarded"))
++        db.con.commit()
++    return checks
++
++
++def _live_untouched(cur, rid: int, schema: str) -> Check:
++    cur.execute("SELECT base_schema, seeded_at, counts -> 'base_fingerprint' FROM hltv_meta.dataset_revisions "
++                "WHERE revision_id = %s", (rid,))
++    base, seeded_at, meta = cur.fetchone()
++    if not seeded_at or not meta:
++        return Check("A6", "live tables untouched", False, "revision was never fully seeded", "seeded revision")
++    then = dict(_rows(cur, "SELECT matchid, md5 FROM hltv_meta.base_match_fingerprints WHERE revision_id = %s", (rid,)))
++    now, _ = revisions.match_fingerprints(cur, base, meta["cutoff"], meta["columns"])
++    changed = sorted(m for m, h in then.items() if now.get(m) != h)
++    explained = set()
++    if changed:   # the live scan re-reads a match when HLTV corrects it: that is the live scan, not staging
++        explained = {r[0] for r in _rows(cur, f"SELECT matchid FROM {_ident(base)}.scrape_queue "
++                                              "WHERE matchid = ANY(%s) AND updated_at >= %s", (changed, seeded_at))}
++    unexplained = [m for m in changed if m not in explained]
++    # the live scan always queues a match before it stores it: a revision match in live without a
++    # live queue row (or carrying this revision's id there) could only have come from staging
++    leaked = [r[0] for r in _rows(
++        cur, f"SELECT mo.matchid FROM {_ident(schema)}.match_overview mo "
++             f"JOIN {_ident(base)}.match_overview lv USING (matchid) "
++             f"LEFT JOIN {_ident(base)}.scrape_queue q ON q.matchid = mo.matchid "
++             "WHERE mo.created_revision_id = %s AND q.matchid IS NULL", (rid,))]
++    if "created_revision_id" in revisions.columns(cur, base, "match_overview"):
++        leaked += [r[0] for r in _rows(cur, f"SELECT matchid FROM {_ident(base)}.match_overview "
++                                            "WHERE created_revision_id = %s", (rid,))]
++    return Check("A6", "live tables untouched by staging", not unexplained and not leaked,
++                 f"{len(then)} live matches fingerprinted at seed; changed {len(changed)} "
++                 f"(explained by the live scan's own re-reads {len(explained)}, unexplained {unexplained[:10]}); "
++                 f"revision matches in live without the live scan queueing them: {leaked[:10]}",
++                 "0 unexplained, 0 leaked")
++
++
++def _rows(cur, sql, params=None):
++    cur.execute(sql, params)
++    return cur.fetchall()
++
++
++def markdown(rid: int, checks: list[Check]) -> str:
++    lines = [f"## Acceptance: dataset revision {rid}", "", "| | Check | Measured | Target |", "|---|---|---|---|"]
++    lines += [f"| {'PASS' if c.ok else 'FAIL'} | {c.code} {c.name} | {c.measured} | {c.target} |" for c in checks]
++    return "\n".join(lines) + "\n"
+diff --git a/hltv_scraper/cli.py b/hltv_scraper/cli.py
+index 90f7752..e346a18 100644
+--- a/hltv_scraper/cli.py
++++ b/hltv_scraper/cli.py
+@@ -37,6 +37,16 @@ def _browser_args(p: argparse.ArgumentParser) -> None:
+ def _db_args(p: argparse.ArgumentParser) -> None:
+     p.add_argument("--config", "-c", metavar="INI",
+                    help="database.ini with a [postgresql] section (default: DB_* / HLTV_DB_DSN env vars)")
++    p.add_argument("--revision", type=int, default=_env_int("HLTV_REVISION"), metavar="N",
++                   help="work on staged dataset revision N (schema hltv_rev_N) instead of the live tables "
++                        "(default: $HLTV_REVISION)")
++
++
++def _env_int(name: str) -> int | None:
++    import os
++
++    value = os.environ.get(name, "").strip()
++    return int(value) if value else None
+ 
+ 
+ def _fetcher_factory(args):
+@@ -77,7 +87,7 @@ def _failsafe(args, db):
+ def _db(args):
+     from .db import Database
+ 
+-    return Database.from_config(args.config)
++    return Database.from_config(args.config, revision=getattr(args, "revision", None))
+ 
+ 
+ def _write(df: pd.DataFrame, output: str | None) -> None:
+@@ -114,12 +124,11 @@ def cmd_rankings(args) -> int:
+ 
+ 
+ def cmd_results(args) -> int:
+-    team_names = None
++    tracked = None
+     with _fetcher_factory(args)() as fetcher:
+         if args.top:
+-            ranked = pipeline.scrape_rankings(fetcher)
+-            team_names = {t.name.lower() for t in ranked if t.rank <= args.top}
+-        results = pipeline.collect_results(fetcher, team_names, set(), args.max_pages, stop_when_caught_up=False)
++            tracked = pipeline.tracked_teams(pipeline.scrape_rankings(fetcher), args.top)
++        results = pipeline.collect_results(fetcher, tracked, set(), args.max_pages, stop_when_caught_up=False)
+     _write(pd.DataFrame([asdict(r) for r in results]), args.output)
+     return 0
+ 
+@@ -245,6 +254,10 @@ def cmd_match(args) -> int:
+ 
+ 
+ def cmd_update(args) -> int:
++    if (args.start_date or args.end_date) and args.revision is None and not args.live_history:
++        log.error("a dated history backfill goes into a staged dataset revision, not the live tables: use "
++                  "`hltv-scraper backfill --revision N` (or pass --live-history to write the live tables anyway)")
++        return 2
+     with _db(args) as db:
+         db.init_schema()
+         report = pipeline.update(
+@@ -257,9 +270,115 @@ def cmd_update(args) -> int:
+         _write(db.queue_summary(), None)
+     for match_id, error in report.failed.items():
+         log.error("match %s failed: %s", match_id, error)
++    if report.listing_incomplete:
++        log.error("the results listing stopped early (%s); run again to resume it", "; ".join(report.listing_incomplete))
++        return LISTING_INCOMPLETE
+     return 1 if report.failed and not report.scraped else 0
+ 
+ 
++LISTING_INCOMPLETE = 3   # exit status: a results listing stopped early (resumable; never silent)
++
++
++def _ids(values) -> list[int]:
++    """--team-ids 1,2 3 / --player-ids ... -> [1, 2, 3]"""
++    out = []
++    for v in values or []:
++        out += [int(x) for x in str(v).replace(",", " ").split()]
++    return out
++
++
++def cmd_backfill(args) -> int:
++    """List the window into a STAGED dataset revision (never the live tables)."""
++    from datetime import timedelta
++
++    if args.revision is None:
++        log.error("backfill writes into a staged dataset revision only: pass --revision N "
++                  "(create one with `hltv-scraper revision create`)")
++        return 2
++    with _db(args) as db:
++        if db.sealed or not db.seeded:
++            log.error("revision %s is %s", args.revision, "sealed (read-only)" if db.sealed else
++                      "not ready (its copy of the live tables did not finish, or it was discarded)")
++            return 2
++        db.init_schema()
++        plan = pipeline.load_cursor(db, "backfill_plan") or {}
++        if not (args.start_date or args.end_date) and plan.get("start"):
++            # continuing this revision: keep its window, so every listing cursor still applies
++            start, end = date.fromisoformat(plan["start"]), date.fromisoformat(plan["end"])
++        else:
++            end = args.end_date or date.today() - timedelta(days=1)   # a closed range: offsets stay put
++            start = args.start_date or end - timedelta(days=args.days)
++        log.info("backfill window %s .. %s into revision %s", start, end, args.revision)
++        report = pipeline.backfill(
++            db, _fetcher_factory(args), start, end, top=args.top or None, global_listing=not args.no_global,
++            board=not args.no_board, team_ids=_ids(args.team_ids), player_ids=_ids(args.player_ids),
++            days=(end - start).days, past_opponents=args.past_opponents,
++            player_listings=not args.no_player_listings,
++        )
++        if report.scope:
++            log.info("board scope: %s", {k: (len(v) if isinstance(v, list) else v) for k, v in report.scope.items()})
++        _write(db.queue_summary(), None)
++    return LISTING_INCOMPLETE if report.incomplete else 0
++
++
++def cmd_revision(args) -> int:
++    import json
++
++    from . import revisions
++    from .db import Database, load_db_config
++
++    config = load_db_config(args.config)
++    if args.action == "create":
++        rid = revisions.create_revision(config, job=args.job, seed_archives=args.seed_archives, notes=args.note,
++                                        args={"note": args.note} if args.note else {})
++        print(rid)
++        if args.github_output:
++            with open(args.github_output, "a") as f:
++                f.write(f"revision={rid}\n")
++        return 0
++    if args.action == "list":
++        with Database(config) as db:
++            _write(db.frame("SELECT revision_id, schema, job, started_at, seeded_at, finished_at, complete, "
++                            "promoted_at, promoted_by, discarded_at, git_commit FROM hltv_meta.dataset_revisions "
++                            "ORDER BY revision_id"), None)
++        return 0
++    if args.id is None:
++        log.error("revision %s: give the revision id", args.action)
++        return 2
++    if args.action == "status":
++        with Database(config, revision=args.id) as db:
++            status = revisions.revision_status(db)
++        print(json.dumps(status, indent=1, default=str))
++        if args.markdown:
++            lines = [f"# Dataset revision {args.id}", "", "Manifest: " + ", ".join(
++                f"{k} {v}" for k, v in status["manifest"].items()),
++                f"Listings: {status['listing']['complete']} of {status['listing']['planned']} complete", ""]
++            lines += [f"- {p}" for p in status["problems"]] or ["No open problems: ready to seal."]
++            Path(args.markdown).write_text("\n".join(lines) + "\n")
++        return 1 if status["problems"] else 0
++    if args.action == "accept":
++        from . import acceptance
++
++        checks = acceptance.run(config, args.id)
++        for c in checks:
++            (log.info if c.ok else log.error)("%s %-4s %-36s %s (target %s)", "PASS" if c.ok else "FAIL", c.code,
++                                              c.name, c.measured, c.target)
++        if args.markdown:
++            Path(args.markdown).write_text(acceptance.markdown(args.id, checks))
++        return 0 if all(c.ok for c in checks) else 1
++    if args.action == "seal":
++        revisions.seal_revision(config, args.id)
++        return 0
++    if args.action == "promote":
++        result = revisions.promote_revision(config, args.id, confirm=args.confirm or "", approved_by=args.approved_by or "")
++        print(json.dumps(result, indent=1))
++        return 0
++    if args.action == "discard":
++        revisions.discard_revision(config, args.id, confirm=args.confirm or "")
++        return 0
++    return 2
++
++
+ def cmd_watch(args) -> int:
+     import signal
+     import threading
+@@ -357,7 +476,8 @@ def cmd_scrape(args) -> int:
+         report = pipeline.scrape_queue(
+             db, _fetcher_factory(args), workers=args.workers, retries=args.retries,
+             max_attempts=args.max_attempts, limit=args.limit, shard=_shard(args.shard),
+-            failsafe=_failsafe(args, db),
++            failsafe=None if db.revision is not None else _failsafe(args, db),  # a revision holds HLTV data only
++            unavailable_days=args.unavailable_days,
+         )
+     log.info("done: %d scraped, %d waiting for stats, %d failed",
+              len(report.scraped), len(report.waiting), len(report.failed))
+@@ -673,7 +793,7 @@ def build_parser() -> argparse.ArgumentParser:
+     p.set_defaults(func=cmd_rankings)
+ 
+     p = sub.add_parser("results", help="list recent results")
+-    p.add_argument("--top", type=int, default=0, help="only matches between the top N ranked teams (0 = all)")
++    p.add_argument("--top", type=int, default=0, help="only matches where EITHER team is in the top N (0 = all)")
+     p.add_argument("--max-pages", type=int, default=1, help="result pages to read, 100 matches each")
+     p.add_argument("--output", "-o")
+     _browser_args(p)
+@@ -732,7 +852,9 @@ def build_parser() -> argparse.ArgumentParser:
+     p.set_defaults(func=cmd_match)
+ 
+     p = sub.add_parser("update", help="rankings + new results + match stats -> database (run on a schedule)")
+-    p.add_argument("--top", type=int, default=200, help="track matches between the top N teams (0 = all)")
++    p.add_argument("--top", type=int, default=0,
++                   help="0 (default) = every listed match; N = only matches where EITHER team is in the top N "
++                        "(matched by HLTV team id)")
+     p.add_argument("--max-pages", "-max", type=int, default=1,
+                    help="result pages to read, 100 matches each (0 = until the results run out)")
+     p.add_argument("--no-stop", action="store_true", help="read all pages even when caught up")
+@@ -743,6 +865,9 @@ def build_parser() -> argparse.ArgumentParser:
+     p.add_argument("--max-attempts", type=int, default=5, help="runs a failing match is retried in before giving up")
+     p.add_argument("--limit", type=int, help="scrape at most this many queued matches this run")
+     p.add_argument("--no-scrape", action="store_true", help="only list and queue matches; scrape later (`scrape`)")
++    p.add_argument("--live-history", action="store_true",
++                   help="allow --start-date/--end-date against the live tables (normally refused: history goes "
++                        "into a staged revision, see `backfill`)")
+     _browser_args(p)
+     _failsafe_args(p)
+     _db_args(p)
+@@ -754,16 +879,59 @@ def build_parser() -> argparse.ArgumentParser:
+     p.add_argument("--retries", type=int, default=3)
+     p.add_argument("--max-attempts", type=int, default=5)
+     p.add_argument("--limit", type=int)
++    p.add_argument("--unavailable-days", type=float, default=pipeline.UNAVAILABLE_DAYS,
++                   help="a match still without statistics this many days after it was played (two looks) is "
++                        "recorded as unavailable on HLTV (default 7)")
+     _browser_args(p)
+     _failsafe_args(p)
+     _db_args(p)
+     p.set_defaults(func=cmd_scrape)
+ 
++    p = sub.add_parser("backfill", help="list a date window into a STAGED dataset revision (global listing + the "
++                                        "board's teams, players and former teams); then `scrape --revision N`")
++    p.add_argument("--start-date", type=date.fromisoformat, help="first day (default: END - DAYS)")
++    p.add_argument("--end-date", type=date.fromisoformat, help="last day (default: yesterday, UTC)")
++    p.add_argument("--days", type=int, default=450, help="window length when --start-date is not given "
++                                                         "(default 450 = 420 days + 30 days margin)")
++    p.add_argument("--top", type=int, default=0,
++                   help="0 (default) = every listed match; N = only matches where EITHER team is in the top N or "
++                        "on the board (by HLTV team id)")
++    p.add_argument("--no-global", action="store_true", help="skip the global results listing (board listings only)")
++    p.add_argument("--no-board", action="store_true", help="skip the board teams' / players' own listings")
++    p.add_argument("--team-ids", nargs="*", metavar="ID", help="extra HLTV team ids to list (e.g. board names that "
++                                                              "did not resolve)")
++    p.add_argument("--player-ids", nargs="*", metavar="ID", help="extra HLTV player ids to list")
++    p.add_argument("--past-opponents", action="store_true",
++                   help="also list every team a board team played in the window")
++    p.add_argument("--no-player-listings", action="store_true",
++                   help="leave out the board players' own listings (results?player=ID), and drop planned ones")
++    _browser_args(p)
++    _db_args(p)
++    p.set_defaults(func=cmd_backfill)
++
++    p = sub.add_parser("revision", help="staged dataset revisions: create | list | status | accept | seal | promote | "
++                                        "discard")
++    p.add_argument("action", choices=["create", "list", "status", "accept", "seal", "promote", "discard"])
++    p.add_argument("id", type=int, nargs="?", help="revision id (status, accept, seal, promote, discard)")
++    p.add_argument("--job", default="backfill", help="create: what the revision is for (default backfill)")
++    p.add_argument("--seed-archives", action="store_true",
++                   help="create: also copy the archived match pages (raw_pages, large) and map-stats HTML")
++    p.add_argument("--note", help="create: a note stored with the revision")
++    p.add_argument("--github-output", metavar="FILE", help="create: append revision=<id> to this file")
++    p.add_argument("--markdown", metavar="FILE", help="status / accept: also write a Markdown report")
++    p.add_argument("--confirm", metavar="SCHEMA", help="promote / discard: the revision's schema name, hltv_rev_<id>")
++    p.add_argument("--approved-by", help="promote: who approved the promotion (recorded)")
++    p.add_argument("--config", "-c", metavar="INI",
++                   help="database.ini with a [postgresql] section (default: DB_* / HLTV_DB_DSN env vars)")
++    p.set_defaults(func=cmd_revision)
++
+     p = sub.add_parser("watch", help="follow HLTV continuously: live/upcoming, finished matches, stats as soon as published")
+     p.add_argument("--interval", type=float, default=5, help="minutes between scans (default 5)")
+     p.add_argument("--once", action="store_true", help="run a single scan cycle and exit (for cron / CI)")
+     p.add_argument("--duration", type=float, help="stop after this many minutes")
+-    p.add_argument("--top", type=int, default=200, help="scrape stats for matches between the top N teams (0 = all)")
++    p.add_argument("--top", type=int, default=0,
++                   help="0 (default) = every listed match; N = only matches where EITHER team is in the top N "
++                        "(matched by HLTV team id)")
+     p.add_argument("--workers", "-n", type=int, default=1)
+     p.add_argument("--rankings-every", type=float, default=6, help="hours between rankings refreshes")
+     p.add_argument("--stats-wait", type=float, default=5,
+diff --git a/hltv_scraper/db.py b/hltv_scraper/db.py
+index f4b9e10..4e58db4 100644
+--- a/hltv_scraper/db.py
++++ b/hltv_scraper/db.py
+@@ -41,8 +41,16 @@ TABLES = (
+     "players", "teams", "maps", "sides", "team_rankings", "match_overview",
+     "matches", "player_stats", "fantasy_overview", "fantasies", "scrape_queue",
+     "data_issues", "upcoming_matches", "player_roles", "player_weapon_kills", "map_vetoes", "map_player_stats", "map_rounds", "map_round_economy",
++    "result_manifest",
+ )
+ 
++# Dataset revisions (see hltv_scraper/revisions.py): a staged revision lives in its own schema.
++REVISION_SCHEMA = re.compile(r"^hltv_rev_(\d+)$")
++
++
++def revision_schema(revision_id: int) -> str:
++    return f"hltv_rev_{int(revision_id)}"
++
+ 
+ def load_db_config(path: str | None = None, section: str = "postgresql") -> dict:
+     """Connection settings from an INI file, or else from environment variables.
+@@ -83,11 +91,52 @@ def _query(name: str) -> str:
+ class Database:
+     CONNECT_WAITS = (15, 30, 60, 120)   # seconds between connection attempts: a database restart takes a minute or two
+ 
+-    def __init__(self, config: dict, waits: tuple[float, ...] = CONNECT_WAITS):
++    def __init__(self, config: dict, waits: tuple[float, ...] = CONNECT_WAITS, revision: int | None = None):
+         if "database" in config and "dbname" not in config:  # old database.ini files
+             config = {**config, "dbname": config.pop("database")}
+         self.con = self._connect(config, waits)
+         self._map_ids: dict[str, int] | None = None
++        self.revision: int | None = None
++        self.sealed = False
++        self.seeded = False
++        if revision is not None:
++            try:
++                self.use_revision(revision)
++            except Exception:
++                self.con.close()
++                raise
++
++    def use_revision(self, revision_id: int) -> None:
++        """Work on staged dataset revision ``revision_id``: its schema hltv_rev_<n> becomes the only
++        schema on the search path (no fallback to public - a table missing there is an error, never
++        a write to the live tables). Refuses a revision that is not registered or whose schema is
++        missing."""
++        schema = revision_schema(revision_id)
++        with self.con.cursor() as cur:
++            cur.execute("SELECT to_regclass('hltv_meta.dataset_revisions') IS NOT NULL")
++            if not cur.fetchone()[0]:
++                raise RuntimeError("no dataset revisions in this database (run `hltv-scraper revision create`)")
++            cur.execute("SELECT schema, complete, seeded_at IS NOT NULL AND discarded_at IS NULL "
++                        "FROM hltv_meta.dataset_revisions WHERE revision_id = %s", (revision_id,))
++            row = cur.fetchone()
++            if row is None or row[0] != schema:
++                raise RuntimeError(f"dataset revision {revision_id} is not registered")
++            cur.execute(f"SET search_path TO {_ident(schema)}")
++            cur.execute("SELECT current_schema()")
++            current = cur.fetchone()[0]
++        self.con.commit()
++        if current != schema:
++            raise RuntimeError(f"schema {schema} of dataset revision {revision_id} does not exist")
++        self.revision, self.sealed, self.seeded = int(revision_id), bool(row[1]), bool(row[2])
++        log.info("working on dataset revision %d (schema %s%s)", revision_id, schema,
++                 ", sealed: read-only" if row[1] else "")
++
++    def current_schema(self) -> str:
++        with self.con.cursor() as cur:
++            cur.execute("SELECT current_schema()")
++            name = cur.fetchone()[0]
++        self.con.commit()
++        return name
+ 
+     @staticmethod
+     def _connect(config: dict, waits: tuple[float, ...]):
+@@ -105,8 +154,8 @@ class Database:
+                 time.sleep(wait)
+ 
+     @classmethod
+-    def from_config(cls, path: str | None = None) -> Database:
+-        return cls(load_db_config(path))
++    def from_config(cls, path: str | None = None, revision: int | None = None) -> Database:
++        return cls(load_db_config(path), revision=revision)
+ 
+     def close(self) -> None:
+         self.con.close()
+@@ -206,8 +255,8 @@ class Database:
+ 
+         done: list[str] = []
+         for (table, column), (_, typ, default, notnull) in sorted(wanted.items(), key=lambda kv: (kv[0][0], kv[1][0])):
+-            if default and "nextval(" in default:
+-                continue  # a sequence of the scratch schema: not portable
++            if default and ("nextval(" in default or ref in default):
++                continue  # a sequence / function of the scratch schema: not portable
+             ident = f"{table}.{column}"
+             t, c = _ident(table), _ident(column)
+             current = have.get((table, column))
+@@ -314,11 +363,16 @@ class Database:
+         with self.con, self.con.cursor() as cur:
+             if html is not None:
+                 cur.execute(
++                    # fetched_at = the latest fetch; first_fetched_at is written once (a trigger
++                    # rejects any change) and refetched_at marks a page read again
+                     "INSERT INTO raw_pages (matchid, url, html_gz) VALUES (%s, %s, %s) "
+                     "ON CONFLICT (matchid) DO UPDATE SET url = EXCLUDED.url, html_gz = EXCLUDED.html_gz, "
+-                    "fetched_at = now()",
++                    "fetched_at = now(), refetched_at = now()",
+                     (match.match_id, url, psycopg2.Binary(gzip.compress(compact_html(html).encode("utf-8")))),
+                 )
++            if html is not None or source != "hltv":   # a page read (not a reparse): log it
++                cur.execute("INSERT INTO result_manifest (matchid, kind, source, detail) VALUES (%s, 'stored', %s, %s)",
++                            (match.match_id, "queue", source))
+             if source == "hltv":
+                 cur.execute(
+                     "UPDATE scrape_queue SET status = 'done', last_error = NULL, updated_at = now() WHERE matchid = %s",
+@@ -811,14 +865,131 @@ class Database:
+         with self.con, self.con.cursor() as cur:
+             inserted = execute_values(
+                 cur,
+-                "INSERT INTO scrape_queue (matchid, url, team1, score1, team2, score2, event, format, status, attempts) "
+-                "VALUES %s ON CONFLICT (matchid) DO NOTHING RETURNING matchid",
+-                [(r.match_id, r.url, r.team1, r.score1, r.team2, r.score2, r.event, r.format, "pending", 0)
+-                 for r in results],
++                "INSERT INTO scrape_queue (matchid, url, team1, score1, team2, score2, event, format, status, attempts, "
++                "played_at) VALUES %s ON CONFLICT (matchid) DO NOTHING RETURNING matchid",
++                [(r.match_id, r.url, r.team1, r.score1, r.team2, r.score2, r.event, r.format, "pending", 0,
++                  getattr(r, "played_at", None)) for r in results],
+                 fetch=True,  # rowcount only covers the last page of a multi-page insert
+             )
+             return len(inserted)
+ 
++    # -- listing manifest (append-only) -------------------------------------------------
++
++    def record_listing(self, results: list[Result], source: str, url: str, page: int, tracked=None) -> None:
++        """Log every row of a results page in result_manifest: 'discovered' once per match and
++        source, 'present' when the match was already stored, 'skipped' for forfeits (and, with a
++        --top limit, matches with no tracked team). Append-only; nothing is ever updated."""
++        if not results:
++            return
++        rows = [(r.match_id, "discovered", source, url, page, r.team1, r.team2, r.team1_id, r.team2_id,
++                 r.event, r.format, r.played_at, None) for r in results]
++        skipped = [(r.match_id, "skipped", source, url, page, r.team1, r.team2, r.team1_id, r.team2_id, r.event,
++                    r.format, r.played_at, "forfeit" if r.is_forfeit else "filtered: no tracked team (--top)")
++                   for r in results if r.is_forfeit or (tracked is not None and not tracked.qualifies(r))]
++        cols = ("matchid, kind, source, source_url, page, team1, team2, team1_id, team2_id, event_name, format, "
++                "played_at, detail")
++        with self.con, self.con.cursor() as cur:
++            execute_values(cur, f"INSERT INTO result_manifest ({cols}) VALUES %s "
++                                "ON CONFLICT (matchid, source) WHERE kind = 'discovered' DO NOTHING", rows)
++            if skipped:
++                execute_values(cur, f"INSERT INTO result_manifest ({cols}) VALUES %s "
++                                    "ON CONFLICT (matchid) WHERE kind = 'skipped' DO NOTHING", skipped)
++            cur.execute(
++                "INSERT INTO result_manifest (matchid, kind, source, source_url, page, detail) "
++                "SELECT x, 'present', %s, %s, %s, 'stored before it was listed' FROM unnest(%s::int[]) x "
++                "WHERE EXISTS (SELECT 1 FROM match_overview mo WHERE mo.matchid = x) "
++                "AND NOT EXISTS (SELECT 1 FROM result_manifest m WHERE m.matchid = x AND m.kind = 'stored') "
++                "ON CONFLICT (matchid) WHERE kind = 'present' DO NOTHING",
++                (source, url, page, [r.match_id for r in results]),
++            )
++
++    def listed_match_ids(self) -> set[int]:
++        with self.con.cursor() as cur:
++            cur.execute("SELECT DISTINCT matchid FROM result_manifest WHERE kind = 'discovered'")
++            ids = {r[0] for r in cur.fetchall()}
++        self.con.commit()
++        return ids
++
++    def manifest_accounting(self) -> dict:
++        """discovered = stored + skipped + unavailable + failed + pending (see result_manifest_state)."""
++        with self.con.cursor() as cur:
++            cur.execute("SELECT state, count(*) FROM result_manifest_state GROUP BY state")
++            counts = dict(cur.fetchall())
++            cur.execute("SELECT count(*) FROM result_manifest_state")
++            discovered = cur.fetchone()[0]
++        self.con.commit()
++        out = {"discovered": int(discovered)}
++        out.update({k: int(counts.get(k, 0)) for k in ("stored", "skipped", "unavailable", "failed", "pending")})
++        return out
++
++    # -- the board's scope (CS2 Scout): teams, opponents, players and their former teams ----
++
++    def board_scope(self, days: int = 450, past_opponents: bool = False) -> dict:
++        """HLTV team and player ids behind the current board: every team and opponent in
++        prop_lines and upcoming_matches (exact name, case-insensitive - never fuzzy), every board
++        player (prop_lines.player, exact name; a nickname shared by several players keeps the ones
++        whose recent team is on the board, else the ones seen recently, else all of them), and
++        every team those players played for in the last ``days`` (former teams).
++        ``past_opponents``: also every team a board team played in that window. Names that match
++        nothing are returned so they can be resolved by hand (--team-ids / --player-ids)."""
++        with self.con.cursor() as cur:
++            cur.execute(
++                """WITH names AS (
++                       SELECT lower(btrim(team)) AS n FROM prop_lines WHERE team <> ''
++                       UNION SELECT lower(btrim(opponent)) FROM prop_lines WHERE opponent <> ''
++                       UNION SELECT lower(btrim(team1)) FROM upcoming_matches WHERE team1 <> ''
++                       UNION SELECT lower(btrim(team2)) FROM upcoming_matches WHERE team2 <> '')
++                   SELECT n.n, array_remove(array_agg(t.teamid ORDER BY t.teamid), NULL)
++                   FROM names n LEFT JOIN teams t ON lower(btrim(t.name)) = n.n GROUP BY n.n ORDER BY n.n""")
++            team_rows = cur.fetchall()
++            team_ids = sorted({i for _, ids in team_rows for i in ids})
++            cur.execute(
++                """WITH names AS (SELECT DISTINCT lower(btrim(player)) AS n FROM prop_lines WHERE player <> ''),
++                   recent AS (
++                       SELECT DISTINCT ON (ps.playerid) ps.playerid, ps.teamid
++                       FROM player_stats ps JOIN match_overview mo USING (matchid)
++                       WHERE mo.date >= current_date - %s
++                       ORDER BY ps.playerid, mo.date DESC, ps.matchid DESC)
++                   SELECT n.n, p.playerid, r.teamid IS NOT NULL, coalesce(r.teamid = ANY(%s::int[]), false)
++                   FROM names n LEFT JOIN players p ON lower(btrim(p.name)) = n.n
++                   LEFT JOIN recent r ON r.playerid = p.playerid ORDER BY n.n, p.playerid""",
++                (days, team_ids))
++            by_name: dict[str, list[tuple]] = {}
++            for n, pid, seen, on_board in cur.fetchall():
++                by_name.setdefault(n, [])
++                if pid is not None:
++                    by_name[n].append((pid, seen, on_board))
++            player_ids, ambiguous = set(), []
++            for n, cands in by_name.items():
++                pick = [c for c in cands if c[2]] or [c for c in cands if c[1]] or cands
++                if len(pick) > 1:
++                    ambiguous.append(n)
++                player_ids |= {c[0] for c in pick}
++            cur.execute(
++                """SELECT DISTINCT ps.teamid FROM player_stats ps JOIN match_overview mo USING (matchid)
++                   WHERE ps.playerid = ANY(%s::int[]) AND mo.date >= current_date - %s""",
++                (sorted(player_ids), days))
++            former = sorted({r[0] for r in cur.fetchall()} - set(team_ids))
++            opponents: list[int] = []
++            if past_opponents:
++                cur.execute(
++                    """SELECT DISTINCT o.teamid FROM matches m JOIN match_overview mo USING (matchid)
++                       JOIN matches o ON o.matchid = m.matchid AND o.mapid = 0 AND o.sideid = 0
++                                     AND o.teamid <> m.teamid
++                       WHERE m.teamid = ANY(%s::int[]) AND m.mapid = 0 AND m.sideid = 0
++                         AND mo.date >= current_date - %s""",
++                    (team_ids, days))
++                opponents = sorted({r[0] for r in cur.fetchall()} - set(team_ids) - set(former))
++        self.con.commit()
++        return {
++            "team_ids": team_ids, "former_team_ids": former, "past_opponent_ids": opponents,
++            "player_ids": sorted(player_ids),
++            "unresolved_teams": [n for n, ids in team_rows if not ids],
++            "ambiguous_teams": [n for n, ids in team_rows if len(ids) > 1],
++            "unresolved_players": sorted(n for n, c in by_name.items() if not c),
++            "ambiguous_players": sorted(ambiguous),
++        }
++
+     def requeue_missing_pages(self) -> int:
+         """Queue every stored match whose page is not archived (a database restored from a partial
+         export, or rows stored from the failsafe API): the scan reads them again from HLTV, which
+@@ -862,7 +1033,8 @@ class Database:
+         with self.con.cursor() as cur:
+             cur.execute(
+                 "SELECT matchid, team1, score1, team2, score2, event, url, format FROM scrape_queue "
+-                "WHERE status <> 'done' AND attempts < %s AND (not_before IS NULL OR not_before <= now()) "
++                "WHERE status NOT IN ('done', 'unavailable') AND attempts < %s "
++                "AND (not_before IS NULL OR not_before <= now()) "
+                 f"AND {SHARD_SQL.format(id='matchid')} ORDER BY matchid DESC LIMIT %s",
+                 (max_attempts, count, count, index, limit),
+             )
+@@ -872,21 +1044,32 @@ class Database:
+         with self.con, self.con.cursor() as cur:
+             cur.execute(
+                 "UPDATE scrape_queue SET status = 'failed', attempts = attempts + 1, last_error = %s, "
+-                "updated_at = now() WHERE matchid = %s",
++                "updated_at = now() WHERE matchid = %s RETURNING attempts",
+                 (error[:2000], match_id),
+             )
+-
+-    def mark_waiting(self, match_id: int, reason: str, minutes: float = 10) -> None:
+-        """Data not published yet: check again after ``minutes`` without using an attempt.
+-        Gives up (counts attempts) once the match has been waiting for two days."""
++            row = cur.fetchone()
++            cur.execute("INSERT INTO result_manifest (matchid, kind, source, attempt, detail) "
++                        "VALUES (%s, 'failed', 'queue', %s, %s)", (match_id, row[0] if row else None, error[:2000]))
++
++    def mark_waiting(self, match_id: int, reason: str, minutes: float = 10, unavailable_days: float = 7) -> None:
++        """Data not published yet: check again after ``minutes`` without using an attempt (after
++        two days of waiting each look counts as one). A match played more than ``unavailable_days``
++        ago whose page has shown no statistics on two looks is 'unavailable' on HLTV: a final state,
++        logged in the manifest and counted apart from failures (not retried)."""
+         with self.con, self.con.cursor() as cur:
+             cur.execute(
+-                "UPDATE scrape_queue SET status = 'waiting', last_error = %s, updated_at = now(), "
++                "UPDATE scrape_queue SET waits = waits + 1, last_error = %s, updated_at = now(), "
++                "status = CASE WHEN coalesce(played_at, found_at) < now() - make_interval(secs => %s) "
++                "              AND waits + 1 >= 2 THEN 'unavailable' ELSE 'waiting' END, "
+                 "not_before = now() + make_interval(secs => %s), "
+                 "attempts = attempts + CASE WHEN found_at < now() - interval '2 days' THEN 1 ELSE 0 END "
+-                "WHERE matchid = %s",
+-                (reason[:2000], minutes * 60, match_id),
++                "WHERE matchid = %s RETURNING status, waits",
++                (reason[:2000], unavailable_days * 86400, minutes * 60, match_id),
+             )
++            row = cur.fetchone()
++            if row:
++                cur.execute("INSERT INTO result_manifest (matchid, kind, source, attempt, detail) "
++                            "VALUES (%s, %s, 'queue', %s, %s)", (match_id, row[0], row[1], reason[:2000]))
+ 
+     def mark_fallback(self, match_id: int, reason: str) -> None:
+         """HLTV still unreachable for a match already stored from the failsafe: try again later,
+diff --git a/hltv_scraper/models.py b/hltv_scraper/models.py
+index ff48406..9b0886d 100644
+--- a/hltv_scraper/models.py
++++ b/hltv_scraper/models.py
+@@ -26,6 +26,11 @@ class Result:
+     event: str
+     url: str
+     format: str = ""  # "bo3", "bo5", a map short name for bo1, or "def" for forfeits
++    # HLTV team ids when the listing carries them (team-filtered listings, the failsafe API);
++    # None otherwise - the results page itself links only the match, not the teams
++    team1_id: int | None = None
++    team2_id: int | None = None
++    played_at: datetime | None = None  # UTC, from the listing's timestamp (None when not shown)
+ 
+     @property
+     def is_forfeit(self) -> bool:
+diff --git a/hltv_scraper/parsers/results.py b/hltv_scraper/parsers/results.py
+index b4f1c0f..f956be0 100644
+--- a/hltv_scraper/parsers/results.py
++++ b/hltv_scraper/parsers/results.py
+@@ -2,8 +2,10 @@
+ 
+ from __future__ import annotations
+ 
++from datetime import datetime, timezone
++
+ from ..models import Result
+-from .common import absolute_url, make_soup, match_id_from_url, parse_int, text
++from .common import absolute_url, make_soup, match_id_from_url, parse_int, team_id_from_href, text
+ 
+ 
+ def parse_results(html: str) -> list[Result]:
+@@ -44,11 +46,30 @@ def parse_results(html: str) -> list[Result]:
+                 event=event,
+                 url=url,
+                 format=text(entry.select_one(".map-text")),
++                team1_id=_team_id(entry, ".team1"),
++                team2_id=_team_id(entry, ".team2"),
++                played_at=_played_at(entry),
+             )
+         )
+     return results
+ 
+ 
++def _team_id(entry, selector: str) -> int | None:
++    """The team's HLTV id when the row links the team (not on the plain results page)."""
++    holder = entry.select_one(selector)
++    link = holder.select_one('a[href*="/team/"]') if holder is not None else None
++    return team_id_from_href(link.get("href")) if link is not None else None
++
++
++def _played_at(entry) -> datetime | None:
++    """The row's start time: HLTV puts it on the row as unix milliseconds."""
++    value = entry.get("data-zonedgrouping-entry-unix")
++    try:
++        return datetime.fromtimestamp(int(value) / 1000, tz=timezone.utc) if value else None
++    except (TypeError, ValueError, OverflowError):
++        return None
++
++
+ def _team_name(entry, selector: str) -> str:
+     holder = entry.select_one(selector)
+     if holder is None:
+diff --git a/hltv_scraper/pipeline.py b/hltv_scraper/pipeline.py
+index 3dc42a0..21bf94f 100644
+--- a/hltv_scraper/pipeline.py
++++ b/hltv_scraper/pipeline.py
+@@ -2,6 +2,7 @@
+ 
+ from __future__ import annotations
+ 
++import json
+ import logging
+ import threading
+ import time
+@@ -28,8 +29,9 @@ MATCHES_URL = "https://www.hltv.org/matches"
+ EVENTS_URL = "https://www.hltv.org/events"
+ 
+ 
+-def results_url(page: int, start: date | None = None, end: date | None = None) -> str:
+-    params = []
++def results_url(page: int, start: date | None = None, end: date | None = None, **filters) -> str:
++    """hltv.org/results, optionally filtered: ``team=<HLTV team id>``, ``player=<HLTV player id>``."""
++    params = [f"{k}={v}" for k, v in sorted(filters.items()) if v is not None]
+     if start:
+         params.append(f"startDate={start:%Y-%m-%d}")
+     if end:
+@@ -64,8 +66,9 @@ def scrape_upcoming(fetcher: Fetcher, save_html: str | None = None) -> list[Upco
+     return matches
+ 
+ 
+-def scrape_results_page(fetcher: Fetcher, page: int, start: date | None = None, end: date | None = None) -> list[Result]:
+-    return parse_results(fetcher.get(results_url(page, start, end), wait_for=".result-con"))
++def scrape_results_page(fetcher: Fetcher, page: int, start: date | None = None, end: date | None = None,
++                        **filters) -> list[Result]:
++    return parse_results(fetcher.get(results_url(page, start, end, **filters), wait_for=".result-con"))
+ 
+ 
+ def scrape_match(fetcher: Fetcher, result: Result) -> Match:
+@@ -85,57 +88,185 @@ def build_match(html: str, result: Result) -> Match:
+     return match
+ 
+ 
+-def relevant(result: Result, team_names: set[str] | None, known_ids: set[int]) -> bool:
++@dataclass(frozen=True)
++class TrackedTeams:
++    """The optional ``--top`` limit. A listed match qualifies when EITHER team is tracked, compared
++    by HLTV team id - never "both teams in today's top N" (that rule, applied to history, dropped
++    every match against a team ranked lower, unranked, renamed or disbanded: a selected sample).
++
++    Listing rows that carry no team ids (the plain results page links only the match) are resolved
++    by their exact team name, case-insensitive, against known name -> id pairs (the rankings
++    snapshot and the teams table) - never fuzzy. A ranked team that HLTV shows without a link and
++    that is not known yet gets a stand-in id (minus its rank), so it still qualifies by its name."""
++
++    ids: frozenset
++    names: dict = field(default_factory=dict)  # lowercase name -> team id
++
++    def team_id(self, name: str, team_id: int | None) -> int | None:
++        return team_id if team_id is not None else self.names.get((name or "").strip().lower())
++
++    def qualifies(self, r: Result) -> bool:
++        return any(i is not None and i in self.ids
++                   for i in (self.team_id(r.team1, r.team1_id), self.team_id(r.team2, r.team2_id)))
++
++
++def tracked_teams(rankings: Iterable[RankedTeam], top: int | None, known_names: dict | None = None,
++                  extra_ids: Iterable[int] = ()) -> TrackedTeams | None:
++    """The top-``top`` ranked teams (plus ``extra_ids``) as a ``TrackedTeams`` filter; None (every
++    match) when ``top`` is 0 / None."""
++    if not top:
++        return None
++    rankings = list(rankings)
++    names = {str(k).strip().lower(): v for k, v in (known_names or {}).items()}
++    names.update({t.name.strip().lower(): t.team_id for t in rankings if t.team_id is not None})
++    ids = set(extra_ids)
++    for t in rankings:
++        if t.rank > top:
++            continue
++        tid = t.team_id if t.team_id is not None else names.get(t.name.strip().lower())
++        if tid is None:
++            tid = names[t.name.strip().lower()] = -t.rank
++        ids.add(tid)
++    return TrackedTeams(frozenset(ids), names)
++
++
++def relevant(result: Result, tracked: TrackedTeams | None, known_ids: set[int]) -> bool:
++    """A listed result to queue: not stored or queued yet, not a forfeit and - only with a
++    ``--top`` limit - at least one of its teams tracked (see ``TrackedTeams``)."""
+     if result.match_id in known_ids or result.is_forfeit:
+         return False
+-    if team_names is None:
+-        return True
+-    return result.team1.lower() in team_names and result.team2.lower() in team_names
++    return tracked is None or tracked.qualifies(result)
+ 
+ 
+ # Results pages a scan may read (100 matches each, every tier): it goes on to older pages only
+-# while a page still has matches we have not stored, so a normal scan reads one or two pages and
++# while a page still has matches we have not seen, so a normal scan reads one or two pages and
+ # a scan after an outage (database down, GitHub skipping schedules) catches up on up to about a
+ # week of matches instead of losing whatever had dropped off the first page.
+ CATCH_UP_PAGES = 10
+ 
+ 
++class ListingIncomplete(RuntimeError):
++    """A results listing stopped before its end: a page failed, or the page cap was reached while
++    the last page still held matches never seen. Carries the matches found so far; with a database
++    the resume point is saved in scraper_state (``listing_cursor:...``) so the next run carries on
++    from there - the gap never goes unnoticed."""
++
++    def __init__(self, message: str, results: list[Result], page: int):
++        super().__init__(message)
++        self.results = results
++        self.page = page
++
++
++def cursor_key(source: str, start: date | None = None, end: date | None = None) -> str:
++    key = f"listing_cursor:{source}:{start or ''}:{end or ''}"
++    if len(key) > 64:   # scraper_state.key is VARCHAR(64)
++        raise ValueError(f"listing cursor key too long: {key}")
++    return key
++
++
++def load_cursor(db, key: str) -> dict | None:
++    getter = getattr(db, "get_state", None)
++    raw = getter(key) if getter else None
++    try:
++        return json.loads(raw) if raw else None
++    except ValueError:
++        return None
++
++
++def save_cursor(db, key: str, **state) -> None:
++    if db is not None and hasattr(db, "set_state"):
++        db.set_state(key, json.dumps({**state, "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}))
++
++
+ def collect_results(
+     fetcher: Fetcher,
+-    team_names: set[str] | None,
++    tracked: TrackedTeams | None,
+     known_ids: set[int],
+     max_pages: int = 1,
+     stop_when_caught_up: bool = True,
+     start: date | None = None,
+     end: date | None = None,
++    *,
++    db=None,
++    source: str | None = None,
++    filters: dict | None = None,
++    resume: bool = False,
++    catch_up: bool = False,
+ ) -> list[Result]:
+-    """Walk the results pages and return new matches between tracked teams.
+-
+-    ``max_pages=0`` reads until the results run out (full history / date range).
+-    """
++    """Walk the results pages and return the new matches to queue (see ``relevant``).
++
++    ``max_pages=0`` reads until the results run out (full history / date range). ``filters`` are
++    HLTV listing filters (``team``, ``player``). With ``db`` and ``source`` every listed row is
++    recorded in the manifest (``db.record_listing``) and the walk keeps a cursor in scraper_state:
++
++    * a page that fails, or - on a ``catch_up`` walk (the scan) - reaching ``max_pages`` while the
++      last page still had matches never seen, saves the resume point and raises
++      ``ListingIncomplete`` (carrying the matches found so far): a listing never ends silently;
++    * ``resume=True`` on a fixed date range starts again one page before the saved point (the
++      overlap covers rows that shifted); a walk that stops when caught up instead reads at least
++      the saved page before it may stop (a catch-up walk gets ``max_pages`` more pages for it).
++
++    Without a database a failing first page raises as before and a later one raises
++    ``ListingIncomplete``. Caught up = every non-forfeit row on a page was stored, queued or
++    listed before."""
++    filters = filters or {}
++    key = cursor_key(source, start, end) if (db is not None and source) else None
++    cursor = load_cursor(db, key) if key else None
++    open_cursor = cursor if cursor and not cursor.get("complete") else None
++    page = must_reach = 0
++    if open_cursor and resume and not stop_when_caught_up:
++        page = max(0, int(open_cursor.get("next_page", 0)) - 1)
++        log.info("%s: resuming the listing at page %d", source, page)
++    elif open_cursor and stop_when_caught_up:
++        must_reach = int(open_cursor.get("next_page", 0)) + 1   # read that page itself
++        if catch_up and max_pages:
++            max_pages = max(max_pages, must_reach + max_pages)
++    first = page
++    seen = set(known_ids)
++    if key and hasattr(db, "listed_match_ids"):
++        seen |= db.listed_match_ids()
+     todo: dict[int, Result] = {}
+-    page = 0
++    unseen: list[Result] = []
++
++    def incomplete(reason: str, at: int) -> ListingIncomplete:
++        if key:   # 'since': when this listing first stopped short (kept until it completes)
++            since = (open_cursor or {}).get("since") or datetime.now(timezone.utc).isoformat(timespec="seconds")
++            save_cursor(db, key, complete=False, next_page=at, failed_page=at, error=reason[:300],
++                        pages_read=at - first, since=since)
++        log.error("results listing %s incomplete at page %d (%s): %d matches found so far%s",
++                  source or "", at, reason, len(todo), "; resume point saved" if key else "")
++        return ListingIncomplete(f"results listing {source or ''} incomplete at page {at}: {reason}",
++                                 list(todo.values()), at)
++
+     while not max_pages or page < max_pages:
+         try:
+-            results = scrape_results_page(fetcher, page, start, end)
++            results = scrape_results_page(fetcher, page, start, end, **filters)
+         except Exception as e:
+-            if page == 0:
++            if page == 0 and not key:
+                 raise
+-            # an older page failing (Cloudflare) must not throw away the newer ones already read;
+-            # the next scan carries on from there
+-            log.warning("results page %d failed (%s); keeping the %d matches found so far", page, _short(e), len(todo))
+-            break
++            raise incomplete(_short(e), page) from e
++        if key and results and hasattr(db, "record_listing"):
++            db.record_listing(results, source, results_url(page, start, end, **filters), page, tracked=tracked)
+         page += 1
+-        if not results:
+-            break
+-        new = [r for r in results if relevant(r, team_names, known_ids) and r.match_id not in todo]
++        if not results:   # past the last page: the listing was read to its end
++            if key:
++                save_cursor(db, key, complete=True, next_page=page, pages_read=page - first)
++            return list(todo.values())
++        new = [r for r in results if relevant(r, tracked, known_ids) and r.match_id not in todo]
+         for r in new:
+             todo[r.match_id] = r
+-        already_stored = sum(r.match_id in known_ids for r in results)
+-        log.info("results page %d: %d results, %d new relevant, %d already known",
+-                 page - 1, len(results), len(new), already_stored)
+-        if stop_when_caught_up and already_stored and not new:
+-            break
++        unseen = [r for r in results if not r.is_forfeit and r.match_id not in seen]
++        seen |= {r.match_id for r in results}
++        log.info("results page %d: %d results, %d new to queue, %d never seen before",
++                 page - 1, len(results), len(new), len(unseen))
++        if stop_when_caught_up and not unseen and page >= must_reach:
++            if open_cursor:
++                save_cursor(db, key, complete=True, next_page=page, pages_read=page - first)
++            return list(todo.values())
++    if catch_up:   # the page cap came before catching up: older pages still hold unseen matches
++        raise incomplete(f"page cap {max_pages} reached before catching up", page)
++    if key and not stop_when_caught_up:   # an explicit page cap on a range walk: resumable, not complete
++        save_cursor(db, key, complete=False, next_page=page, pages_read=page - first, capped=True)
+     return list(todo.values())
+ 
+ 
+@@ -149,6 +280,7 @@ class ScrapeReport:
+     failed: dict[int, str] = field(default_factory=dict)
+     waiting: dict[int, str] = field(default_factory=dict)
+     issues: dict[int, list] = field(default_factory=dict)
++    listing_incomplete: list[str] = field(default_factory=list)   # listings that stopped early (resumable)
+ 
+ 
+ def scrape_matches(
+@@ -480,22 +612,24 @@ class Failsafe:
+             log.warning("HLTV unreachable; failsafe listings not due yet (paced to save quota)")
+             return False
+         # each part on its own, so one failing endpoint does not lose the others
+-        names, ok = None, False
++        tracked, ok = None, False
+         try:
+             rankings = self.client.rankings(limit=max(top or 0, 100))
+             self.db.save_rankings(rankings)
+-            names = {t.name.lower() for t in rankings if t.rank <= top} if top else None
++            tracked = tracked_teams(rankings, top, _known_names(self.db))
+             ok = True
+         except (CitoError, KeyError, TypeError) as e:
+             log.error("failsafe rankings failed: %s", e)
++        if top and tracked is None:
++            tracked = _stored_tracked(self.db, top)
+         try:
+             self.db.save_upcoming(self.client.upcoming())
+             ok = True
+         except (CitoError, KeyError, TypeError) as e:
+             log.error("failsafe schedule failed: %s", e)
+-        if names is not None or not top:
++        if tracked is not None or not top:
+             try:
+-                found = [r for r in self.client.results() if relevant(r, names, known)]
++                found = [r for r in self.client.results() if relevant(r, tracked, known)]
+                 log.warning("HLTV unreachable - used the failsafe API: %d new results queued "
+                             "(%s requests left this month)", self.db.enqueue(found), self.client.monthly_remaining)
+                 ok = True
+@@ -542,23 +676,35 @@ def _store(db):
+     return on_match
+ 
+ 
++# A match whose page still shows no statistics this many days after it was played (and on at least
++# two looks) is recorded as unavailable on HLTV - a final state, counted apart from failures.
++UNAVAILABLE_DAYS = 7
++
++
+ def scrape_queue(db, fetcher_factory, workers=2, retries=3, backoff=10.0, max_attempts=5, limit=None,
+                  wait_minutes: float = 10, failsafe: Failsafe | None = None,
+-                 shard: tuple[int, int] | None = None) -> ScrapeReport:
++                 shard: tuple[int, int] | None = None, unavailable_days: float = UNAVAILABLE_DAYS) -> ScrapeReport:
+     """Scrape everything due in the queue: new matches, retries and matches waiting for stats."""
+     todo = db.pending(max_attempts=max_attempts, limit=limit, **({"shard": shard} if shard else {}))
+     if todo:
+         log.info("%d matches to scrape (new, retries and waiting for stats)", len(todo))
++
++    def on_waiting(match_id, why):
++        if unavailable_days == UNAVAILABLE_DAYS:
++            db.mark_waiting(match_id, why, wait_minutes)
++        else:
++            db.mark_waiting(match_id, why, wait_minutes, unavailable_days=unavailable_days)
++
+     return scrape_matches(
+         todo, fetcher_factory, _store(db), workers, retries=retries, backoff=backoff,
+-        on_failure=_on_failure(db, failsafe), on_waiting=lambda mid, why: db.mark_waiting(mid, why, wait_minutes),
++        on_failure=_on_failure(db, failsafe), on_waiting=on_waiting,
+     )
+ 
+ 
+ def update(
+     db,
+     fetcher_factory: Callable[[], Fetcher],
+-    top: int | None = 100,
++    top: int | None = 0,
+     max_pages: int = 1,
+     workers: int = 2,
+     stop_when_caught_up: bool = True,
+@@ -581,6 +727,7 @@ def update(
+     """
+     reparse_outdated(db)
+     revalidate(db)
++    incomplete: list[str] = []
+     try:
+         with fetcher_factory() as fetcher:
+             rankings = scrape_rankings(fetcher)
+@@ -593,9 +740,15 @@ def update(
+                 except Exception as e:      # the event list never blocks a run
+                     log.warning("events (hltv.org/events) failed: %s", _short(e))
+ 
+-            team_names = {t.name.lower() for t in rankings if t.rank <= top} if top else None
++            tracked = tracked_teams(rankings, top, _known_names(db))
+             known = db.known_match_ids() | db.queued_match_ids()
+-            found = collect_results(fetcher, team_names, known, max_pages, stop_when_caught_up, start, end)
++            try:
++                found = collect_results(fetcher, tracked, known, max_pages, stop_when_caught_up, start, end,
++                                        db=db, source="results" if (start or end) else "results:scan",
++                                        resume=not stop_when_caught_up)
++            except ListingIncomplete as e:   # queue what was found; the cursor resumes the rest next run
++                found = e.results
++                incomplete.append(str(e))
+             log.info("queued %d new matches", db.enqueue(found))
+     except Exception:
+         if failsafe is None or not failsafe.listings(top, db.known_match_ids() | db.queued_match_ids()):
+@@ -603,25 +756,145 @@ def update(
+         log.exception("HLTV listings failed; continued with the failsafe API")
+ 
+     if not scrape:  # listing only (e.g. before sharded parallel scraping)
+-        return ScrapeReport()
++        return ScrapeReport(listing_incomplete=incomplete)
+     report = scrape_queue(db, fetcher_factory, workers, retries, backoff, max_attempts, limit, failsafe=failsafe)
++    report.listing_incomplete = incomplete
+     log.info("done: %d scraped, %d waiting for stats, %d failed",
+              len(report.scraped), len(report.waiting), len(report.failed))
+     scrape_extras(db, fetcher_factory)
+     return report
+ 
+ 
++def _source_order(source: str) -> tuple:
++    """The global listing first, then team listings, then player listings, by id."""
++    kind, _, ident = source.partition(":")
++    return ({"results": 0, "team": 1, "player": 2}.get(kind, 3), int(ident) if ident.isdigit() else 0, source)
++
++
++@dataclass
++class BackfillReport:
++    sources: dict = field(default_factory=dict)   # source -> complete | complete earlier | incomplete at page N
++    queued: int = 0
++    scope: dict = field(default_factory=dict)
++
++    @property
++    def incomplete(self) -> list[str]:
++        return [s for s, state in self.sources.items() if not state.startswith("complete")]
++
++
++# A team's or player's own listing holds a few hundred matches over the window at most; a filtered
++# listing still going after this many pages means HLTV ignored the filter - stop and report it.
++FILTERED_MAX_PAGES = 15
++
++
++def backfill(db, fetcher_factory: Callable[[], Fetcher], start: date, end: date, top: int | None = 0,
++             global_listing: bool = True, board: bool = True, team_ids: Iterable[int] = (),
++             player_ids: Iterable[int] = (), days: int = 450, past_opponents: bool = False,
++             player_listings: bool = True, give_up_after: int = 5) -> BackfillReport:
++    """Queue every result HLTV lists between ``start`` and ``end`` (nothing is scraped here; run
++    ``scrape_queue`` / ``hltv-scraper scrape`` after it, split over machines):
++
++    * the global results listing for the range - every tier; ``top`` keeps the optional limit
++      "EITHER team in the top N (by HLTV team id) or on the board";
++    * with ``board``: each board team's and opponent's own listing (``results?team=<id>``), each
++      board player's (``results?player=<id>``) and each of those players' former teams' - all
++      matched by HLTV id, the denominators for per-team coverage. Run it again after the first
++      scrape: former teams found in the newly stored matches are added (the plan only grows).
++
++    Every listing keeps a cursor: a rerun resumes where a listing stopped and skips the ones
++    already read to the end. Every listed row goes to the manifest. The plan (all sources for the
++    range) is kept in scraper_state 'backfill_plan', so a revision is sealed only when every
++    planned listing is complete. ``player_listings=False`` leaves the players' own listings out
++    (and drops any already planned - for when HLTV ignores the player filter); board players
++    still bring in their former teams."""
++    report = BackfillReport()
++    teams, players = set(team_ids), set(player_ids)
++    if board:
++        scope = db.board_scope(days=days, past_opponents=past_opponents)
++        report.scope = scope
++        teams |= set(scope["team_ids"]) | set(scope["former_team_ids"]) | set(scope["past_opponent_ids"])
++        players |= set(scope["player_ids"])
++        for what in ("unresolved_teams", "ambiguous_teams", "unresolved_players", "ambiguous_players"):
++            if scope.get(what):
++                log.warning("board scope: %d %s: %s", len(scope[what]), what.replace("_", " "),
++                            ", ".join(scope[what][:40]))
++    sources = (["results"] if global_listing else []) + [f"team:{t}" for t in sorted(teams)] \
++        + ([f"player:{p}" for p in sorted(players)] if player_listings else [])
++    plan = load_cursor(db, "backfill_plan") or {}
++    if plan.get("start") != str(start) or plan.get("end") != str(end):
++        plan = {"start": str(start), "end": str(end), "sources": []}
++    plan["sources"] = sorted(set(plan["sources"]) | set(sources), key=_source_order)
++    if not player_listings:
++        dropped = [s for s in plan["sources"] if s.startswith("player:")]
++        if dropped:
++            log.warning("backfill: %d player listings dropped from the plan (--no-player-listings)", len(dropped))
++        plan["sources"] = [s for s in plan["sources"] if not s.startswith("player:")]
++    plan["top"] = top or 0
++    save_cursor(db, "backfill_plan", **plan)
++    log.info("backfill %s..%s: %d listings planned (%d teams, %d players%s)", start, end, len(plan["sources"]),
++             len(teams), len(players), ", global listing" if global_listing else "")
++
++    streak = 0
++    with fetcher_factory() as fetcher:
++        rankings = []
++        if top:
++            rankings = scrape_rankings(fetcher)
++            db.save_rankings(rankings)
++        tracked = tracked_teams(rankings, top, _known_names(db), extra_ids=teams)
++        for source in plan["sources"]:
++            cursor = load_cursor(db, cursor_key(source, start, end))
++            if cursor and cursor.get("complete"):
++                report.sources[source] = "complete earlier"
++                continue
++            if streak >= give_up_after:
++                report.sources[source] = "not started (HLTV blocked the listings)"
++                continue
++            kind, _, ident = source.partition(":")
++            filters = {kind: int(ident)} if kind in ("team", "player") else {}
++            known = db.known_match_ids() | db.queued_match_ids()
++            try:
++                found = collect_results(fetcher, tracked if not filters else None, known,
++                                        max_pages=FILTERED_MAX_PAGES if filters else 0, stop_when_caught_up=False,
++                                        start=start, end=end, db=db, source=source, filters=filters, resume=True)
++                state = load_cursor(db, cursor_key(source, start, end)) or {}
++                report.sources[source] = ("complete" if state.get("complete") else
++                                          f"incomplete: {FILTERED_MAX_PAGES} pages read - is the '{kind}' filter ignored?")
++                streak = 0
++            except ListingIncomplete as e:
++                found = e.results
++                report.sources[source] = f"incomplete at page {e.page}"
++                streak = streak + 1 if e.page == 0 else 0
++            report.queued += db.enqueue(found)
++    done = sum(s.startswith("complete") for s in report.sources.values())
++    log.info("backfill listings: %d of %d complete, %d new matches queued", done, len(report.sources), report.queued)
++    for source in report.incomplete:
++        log.error("listing %s: %s - rerun the backfill to resume it", source, report.sources[source])
++    return report
++
++
+ def _short(e: Exception) -> str:
+     return f"{type(e).__name__}: {e}"[:300]
+ 
+ 
+-def _stored_top_names(db, top: int) -> set[str] | None:
+-    """Top-N team names from the last stored rankings (when HLTV rankings fail)."""
++def _known_names(db) -> dict:
++    """Exact team name (lowercase) -> HLTV team id, from the teams table ({} when unavailable)."""
+     try:
+-        names = {str(n).lower() for n in db.latest_ranking(top)["name"]}
++        return dict(db.team_ids_by_name())
+     except Exception:
++        return {}
++
++
++def _stored_tracked(db, top: int) -> TrackedTeams | None:
++    """The top-N teams of the last stored rankings, by team id (when HLTV rankings fail)."""
++    try:
++        ranking = db.latest_ranking(top)
++        ids = [int(i) for i in ranking["teamid"]]
++        names = {str(n).strip().lower(): int(i) for n, i in zip(ranking["name"], ranking["teamid"])}
++    except Exception:
++        return None
++    if not ids:
+         return None
+-    return names or None
++    return TrackedTeams(frozenset(ids), {**_known_names(db), **names})
+ 
+ 
+ def refresh_events(db, fetcher: Fetcher) -> int:
+@@ -698,7 +971,7 @@ def watch(
+     interval: float = 300,
+     cycles: int | None = None,
+     duration: float | None = None,
+-    top: int | None = 100,
++    top: int | None = 0,
+     workers: int = 1,
+     rankings_every: float = 6 * 3600,
+     wait_minutes: float = 5,
+@@ -722,7 +995,7 @@ def watch(
+     started = time.monotonic()
+     last_rankings = float("-inf")
+     last_events = float("-inf")
+-    team_names: set[str] | None = None
++    tracked: TrackedTeams | None = None
+     live_before: dict[int, UpcomingMatch] = {}
+     done = failed = 0
+ 
+@@ -742,13 +1015,13 @@ def watch(
+                         try:
+                             rankings = scrape_rankings(fetcher)
+                             db.save_rankings(rankings)
+-                            team_names = {t.name.lower() for t in rankings if t.rank <= top} if top else None
++                            tracked = tracked_teams(rankings, top, _known_names(db))
+                             last_rankings = cycle_start
+                         except Exception as e:
+                             broken.append("rankings")
+                             log.warning("rankings failed this cycle: %s", _short(e))
+-                            if top and team_names is None:
+-                                team_names = _stored_top_names(db, top)
++                            if top and tracked is None:
++                                tracked = _stored_tracked(db, top)
+ 
+                     if cycle_start - last_events >= 3600:   # the event list: hourly is plenty
+                         try:
+@@ -768,7 +1041,7 @@ def watch(
+                         broken.append("schedule")
+                         log.warning("schedule (hltv.org/matches) failed this cycle: %s", _short(e))
+ 
+-                    if top and team_names is None:
++                    if top and tracked is None:
+                         broken.append("results")
+                         log.warning("no top-%d team list yet; skipping results this cycle", top)
+                     else:
+@@ -778,13 +1051,22 @@ def watch(
+                                 Result(m.match_id, m.team1, 0, m.team2, 0, m.event, m.url, m.format)
+                                 for m in finished
+                                 if m.match_id not in known
+-                                and (team_names is None or {m.team1.lower(), m.team2.lower()} <= team_names)
++                                and (tracked is None or tracked.qualifies(
++                                    Result(m.match_id, m.team1, 0, m.team2, 0, m.event, m.url, m.format)))
+                             ]
+                             if just_finished:
+                                 log.info("%d live matches just finished", db.enqueue(just_finished))
+-                            found = collect_results(fetcher, team_names,
+-                                                    known | {r.match_id for r in just_finished},
+-                                                    max_pages=CATCH_UP_PAGES)
++                            try:
++                                found = collect_results(fetcher, tracked,
++                                                        known | {r.match_id for r in just_finished},
++                                                        max_pages=CATCH_UP_PAGES, db=db, source="results:scan",
++                                                        catch_up=True)
++                            except ListingIncomplete as e:
++                                # an older page failed or the catch-up cap was hit: keep what was found;
++                                # the cursor makes the next cycle read on past that page (logged as an error)
++                                if e.page == 0:
++                                    raise
++                                found = e.results
+                             if found:
+                                 log.info("queued %d new results", db.enqueue(found))
+                         except Exception as e:
+diff --git a/hltv_scraper/revisions.py b/hltv_scraper/revisions.py
+new file mode 100644
+index 0000000..d73e1de
+--- /dev/null
++++ b/hltv_scraper/revisions.py
+@@ -0,0 +1,446 @@
++"""Staged dataset revisions: a backfill writes into its own schema first, never into the live tables.
++
++A revision is a Postgres schema ``hltv_rev_<n>`` in the same database, registered in
++``hltv_meta.dataset_revisions``:
++
++1. ``create``: the schema gets the scraper's own tables (schema.sql) and a copy of the live tables
++   (``public``), so the revision starts as "live" and the backfill adds to it. Rows copied from
++   live keep ``created_revision_id`` NULL; every row the revision writes carries ``n``. A
++   fingerprint of every live match older than a few days is kept (``base_match_fingerprints``) so
++   it can be shown later that staging changed nothing in ``public``.
++2. backfill / scrape / mapstats run with ``--revision n``: the search path is that schema alone
++   (no fallback to ``public``), so a write can only land in the revision.
++3. ``seal``: only when every planned listing was read to its end and no listed match is still
++   pending. The revision is then immutable: a statement trigger on every table rejects writes, and
++   a fingerprint of each table is stored so immutability can be checked.
++4. ``promote`` (separate, owner-approved, after CS2 Scout's before/after comparison): the matches the
++   revision added are copied into ``public`` in one transaction; nothing already in ``public`` is
++   changed. Those rows keep ``created_revision_id = n`` (``DELETE ... WHERE created_revision_id = n``
++   undoes it).
++"""
++
++from __future__ import annotations
++
++import hashlib
++import json
++import logging
++import os
++import subprocess
++
++from psycopg2.extras import Json, execute_values
++
++from .db import Database, _ident, revision_schema
++
++log = logging.getLogger(__name__)
++
++META = "hltv_meta"
++
++META_DDL = """
++CREATE SCHEMA IF NOT EXISTS hltv_meta;
++CREATE TABLE IF NOT EXISTS hltv_meta.dataset_revisions (
++    revision_id  SERIAL PRIMARY KEY,
++    schema       TEXT UNIQUE,
++    job          TEXT NOT NULL,                 -- backfill | team_backfill | reparse | correction ...
++    base_schema  TEXT NOT NULL DEFAULT 'public',
++    started_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
++    seeded_at    TIMESTAMPTZ,                   -- the live copy finished (the revision's base time)
++    finished_at  TIMESTAMPTZ,                   -- sealed
++    git_commit   TEXT,
++    args         JSONB NOT NULL DEFAULT '{}',
++    counts       JSONB NOT NULL DEFAULT '{}',
++    complete     BOOLEAN NOT NULL DEFAULT false,
++    promoted_at  TIMESTAMPTZ,
++    promoted_by  TEXT,
++    discarded_at TIMESTAMPTZ,
++    notes        TEXT
++);
++-- per live match (older than the cut-off) at seed time: shows staging never touched public
++CREATE TABLE IF NOT EXISTS hltv_meta.base_match_fingerprints (
++    revision_id INT NOT NULL REFERENCES hltv_meta.dataset_revisions (revision_id),
++    matchid     INT NOT NULL,
++    md5         TEXT NOT NULL,
++    PRIMARY KEY (revision_id, matchid)
++);
++-- per table of a sealed revision: shows the revision never changed after it was sealed
++CREATE TABLE IF NOT EXISTS hltv_meta.revision_fingerprints (
++    revision_id INT NOT NULL REFERENCES hltv_meta.dataset_revisions (revision_id),
++    table_name  TEXT NOT NULL,
++    row_count   BIGINT NOT NULL,
++    md5         TEXT NOT NULL,
++    column_list TEXT NOT NULL,
++    taken_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
++    PRIMARY KEY (revision_id, table_name)
++);
++
++CREATE OR REPLACE FUNCTION hltv_meta.reject_sealed() RETURNS trigger LANGUAGE plpgsql AS $$
++BEGIN
++    RAISE EXCEPTION 'dataset revision schema % is sealed: % on % rejected', TG_TABLE_SCHEMA, TG_OP, TG_TABLE_NAME;
++END $$;
++
++CREATE OR REPLACE FUNCTION hltv_meta.reject_change() RETURNS trigger LANGUAGE plpgsql AS $$
++BEGIN
++    RAISE EXCEPTION '%.% is append-only: % rejected', TG_TABLE_SCHEMA, TG_TABLE_NAME, TG_OP;
++END $$;
++
++-- a sealed revision's row is frozen, except for recording its promotion; it is never deleted
++CREATE OR REPLACE FUNCTION hltv_meta.guard_revision_row() RETURNS trigger LANGUAGE plpgsql AS $$
++BEGIN
++    IF TG_OP = 'DELETE' THEN
++        RAISE EXCEPTION 'dataset revision % cannot be deleted', OLD.revision_id;
++    END IF;
++    IF OLD.complete AND (NEW.schema, NEW.job, NEW.base_schema, NEW.started_at, NEW.seeded_at, NEW.finished_at,
++                         NEW.git_commit, NEW.args, NEW.counts, NEW.complete)
++                        IS DISTINCT FROM
++                        (OLD.schema, OLD.job, OLD.base_schema, OLD.started_at, OLD.seeded_at, OLD.finished_at,
++                         OLD.git_commit, OLD.args, OLD.counts, OLD.complete) THEN
++        RAISE EXCEPTION 'dataset revision % is sealed: only its promotion can be recorded', OLD.revision_id;
++    END IF;
++    IF OLD.promoted_at IS NOT NULL AND (NEW.promoted_at, NEW.promoted_by) IS DISTINCT FROM (OLD.promoted_at, OLD.promoted_by) THEN
++        RAISE EXCEPTION 'dataset revision % was promoted already', OLD.revision_id;
++    END IF;
++    RETURN NEW;
++END $$;
++DROP TRIGGER IF EXISTS dataset_revisions_guard ON hltv_meta.dataset_revisions;
++CREATE TRIGGER dataset_revisions_guard BEFORE UPDATE OR DELETE ON hltv_meta.dataset_revisions
++    FOR EACH ROW EXECUTE FUNCTION hltv_meta.guard_revision_row();
++DROP TRIGGER IF EXISTS base_match_fingerprints_append_only ON hltv_meta.base_match_fingerprints;
++CREATE TRIGGER base_match_fingerprints_append_only BEFORE UPDATE OR DELETE ON hltv_meta.base_match_fingerprints
++    FOR EACH ROW EXECUTE FUNCTION hltv_meta.reject_change();
++DROP TRIGGER IF EXISTS revision_fingerprints_append_only ON hltv_meta.revision_fingerprints;
++CREATE TRIGGER revision_fingerprints_append_only BEFORE UPDATE OR DELETE ON hltv_meta.revision_fingerprints
++    FOR EACH ROW EXECUTE FUNCTION hltv_meta.reject_change();
++"""
++
++# Tables that start empty in a revision: scheduler state and the listing manifest belong to the
++# revision's own runs. raw_pages (the match page archive, large) is copied only with
++# seed_archives; without it map-stats pages are copied without their archived HTML.
++SEED_SKIP = {"scraper_state", "result_manifest"}
++ARCHIVES = {"raw_pages"}
++
++# Match-keyed tables whose live rows are fingerprinted at seed time (data_issues and the page
++# archive are rewritten by routine re-validation / re-fetches, so they are left out).
++FINGERPRINT_TABLES = ("match_overview", "matches", "player_stats", "match_maps", "map_vetoes", "map_headshots",
++                      "map_player_stats", "map_rounds", "map_round_economy")
++# Columns that are bookkeeping, not data: never part of a fingerprint.
++NOT_DATA = {"html_gz", "created_revision_id", "updated_revision_id", "first_fetched_at", "refetched_at"}
++BASE_CUTOFF_DAYS = 3   # live matches newer than this may legitimately change (stats corrections)
++
++# Not merged into the live schema on promotion: live is newer for these (or they are run state).
++PROMOTE_SKIP = {"prop_lines", "prop_grades", "prop_status", "upcoming_matches", "scraper_state", "result_manifest",
++                "mapstats_page_status", "mapstats_status", "weapons_status", "player_weapon_kills", "player_roles",
++                "fantasy_overview", "fantasies"}
++# Copied whole on promotion (rows the live table lacks), not only for the added matches: the live
++# scan then knows the matches the revision found unavailable or failed instead of listing them anew.
++PROMOTE_ALL_ROWS = {"scrape_queue"}
++
++
++def git_commit() -> str:
++    if os.environ.get("GITHUB_SHA"):
++        return os.environ["GITHUB_SHA"]
++    try:
++        return subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=10,
++                              cwd=os.path.dirname(__file__)).stdout.strip() or "unknown"
++    except Exception:
++        return "unknown"
++
++
++# -- catalogue helpers -------------------------------------------------------------------------
++
++def tables(cur, schema: str) -> list[str]:
++    cur.execute("SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
++                "WHERE n.nspname = %s AND c.relkind = 'r' ORDER BY c.relname", (schema,))
++    return [r[0] for r in cur.fetchall()]
++
++
++def columns(cur, schema: str, table: str) -> dict[str, bool]:
++    """Column name -> nullable, in table order ({} when the table does not exist)."""
++    cur.execute("SELECT a.attname, NOT a.attnotnull FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid "
++                "JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = %s AND c.relname = %s "
++                "AND c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped ORDER BY a.attnum", (schema, table))
++    return dict(cur.fetchall())
++
++
++def fk_order(cur, schema: str) -> list[str]:
++    """The schema's tables, every referenced table before the tables that reference it."""
++    names = tables(cur, schema)
++    cur.execute("SELECT r.relname, f.relname FROM pg_constraint c JOIN pg_class r ON r.oid = c.conrelid "
++                "JOIN pg_class f ON f.oid = c.confrelid JOIN pg_namespace n ON n.oid = r.relnamespace "
++                "WHERE c.contype = 'f' AND n.nspname = %s", (schema,))
++    deps: dict[str, set[str]] = {t: set() for t in names}
++    for child, parent in cur.fetchall():
++        if child != parent:
++            deps.setdefault(child, set()).add(parent)
++    order, done = [], set()
++
++    def visit(t, path=()):
++        if t in done:
++            return
++        if t in path:
++            raise RuntimeError(f"foreign key cycle at {t}")
++        for p in sorted(deps.get(t, ())):
++            visit(p, path + (t,))
++        done.add(t)
++        order.append(t)
++
++    for t in names:
++        visit(t)
++    return [t for t in order if t in names]
++
++
++def _q(schema: str, table: str) -> str:
++    return f"{_ident(schema)}.{_ident(table)}"
++
++
++# -- fingerprints --------------------------------------------------------------------------------
++
++def match_fingerprints(cur, schema: str, cutoff, cols_by_table: dict[str, list[str]] | None = None):
++    """md5 per match (matches played before ``cutoff``) over FINGERPRINT_TABLES, and the columns
++    used (so a later check uses exactly the same ones)."""
++    per_match: dict[int, list[str]] = {}
++    used: dict[str, list[str]] = {}
++    for t in FINGERPRINT_TABLES:
++        cols = (cols_by_table or {}).get(t) or [c for c in columns(cur, schema, t) if c not in NOT_DATA]
++        if not cols:
++            continue
++        used[t] = cols
++        row = "ROW(" + ", ".join(f"x.{_ident(c)}" for c in cols) + ")::text"
++        cur.execute(
++            f"SELECT x.matchid, md5(string_agg(md5({row}), '' ORDER BY md5({row}))) FROM {_q(schema, t)} x "
++            f"WHERE x.matchid IN (SELECT matchid FROM {_q(schema, 'match_overview')} WHERE date < %s) "
++            "GROUP BY x.matchid", (cutoff,))
++        for matchid, h in cur.fetchall():
++            per_match.setdefault(matchid, []).append(f"{t}:{h}")
++    return {m: hashlib.md5("|".join(sorted(parts)).encode()).hexdigest() for m, parts in per_match.items()}, used
++
++
++def table_fingerprint(cur, schema: str, table: str) -> tuple[int, str, list[str]]:
++    cols = [c for c in columns(cur, schema, table) if c != "html_gz"]
++    row = "ROW(" + ", ".join(f"x.{_ident(c)}" for c in cols) + ")::text"
++    cur.execute(f"SELECT count(*), coalesce(md5(string_agg(md5({row}), '' ORDER BY md5({row}))), md5('')) "
++                f"FROM {_q(schema, table)} x")
++    n, h = cur.fetchone()
++    return int(n), h, cols
++
++
++# -- create / seed -------------------------------------------------------------------------------
++
++def create_revision(config: dict, job: str = "backfill", args: dict | None = None, seed_archives: bool = False,
++                    notes: str | None = None, base_schema: str = "public") -> int:
++    """Register a new revision, build its schema and fill it with a copy of the live tables.
++    Writes go to hltv_meta and the new schema only; ``base_schema`` is read."""
++    with Database(config) as live:
++        with live.con, live.con.cursor() as cur:
++            cur.execute(META_DDL)
++            cur.execute("INSERT INTO hltv_meta.dataset_revisions (job, base_schema, git_commit, args, notes) "
++                        "VALUES (%s, %s, %s, %s, %s) RETURNING revision_id",
++                        (job, base_schema, git_commit(), Json({**(args or {}), "seed_archives": seed_archives}), notes))
++            rid = cur.fetchone()[0]
++            schema = revision_schema(rid)
++            cur.execute("UPDATE hltv_meta.dataset_revisions SET schema = %s WHERE revision_id = %s", (schema, rid))
++            cur.execute(f"CREATE SCHEMA {_ident(schema)}")
++    log.info("dataset revision %d: schema %s created; copying %s", rid, schema, base_schema)
++    with Database(config, revision=rid) as staged:
++        staged.init_schema(force=True)
++        seed = seed_revision(staged, base_schema, seed_archives)
++        with staged.con, staged.con.cursor() as cur:
++            # from now on every row this schema writes carries the revision id
++            cur.execute(f"CREATE OR REPLACE FUNCTION {_ident(schema)}.current_revision_id() RETURNS INT "
++                        f"LANGUAGE sql IMMUTABLE AS 'SELECT {int(rid)}'")
++            cur.execute("SELECT current_date - %s", (BASE_CUTOFF_DAYS,))
++            cutoff = cur.fetchone()[0]
++            prints, used = match_fingerprints(cur, base_schema, cutoff)
++            execute_values(cur, "INSERT INTO hltv_meta.base_match_fingerprints (revision_id, matchid, md5) VALUES %s",
++                           [(rid, m, h) for m, h in sorted(prints.items())])
++            cur.execute("UPDATE hltv_meta.dataset_revisions SET seeded_at = now(), counts = counts || %s "
++                        "WHERE revision_id = %s",
++                        (Json({"seed": seed, "base_fingerprint": {"cutoff": str(cutoff), "matches": len(prints),
++                                                                  "columns": used}}), rid))
++    log.info("dataset revision %d ready: %s", rid, ", ".join(f"{t} {n['copied']}" for t, n in seed["tables"].items()))
++    return rid
++
++
++def seed_revision(staged: Database, base_schema: str, seed_archives: bool) -> dict:
++    """Copy the base (live) tables into the revision schema in one transaction. Foreign keys are
++    dropped for the copy and put back NOT VALID (live, seeded from a plain export, may hold rows a
++    key would refuse; they are copied as they are and counted), then validated where the rows allow.
++    A column the base lacks is left NULL when it may be (never an invented time); rows that clash
++    with a key are skipped and counted. Returns per-table counts."""
++    schema = staged.current_schema()
++    report: dict = {"base_schema": base_schema, "seed_archives": seed_archives, "tables": {}, "fk_not_valid": []}
++    with staged.con, staged.con.cursor() as cur:
++        cur.execute("SELECT c.conname, r.relname, pg_get_constraintdef(c.oid) FROM pg_constraint c "
++                    "JOIN pg_class r ON r.oid = c.conrelid JOIN pg_namespace n ON n.oid = r.relnamespace "
++                    "WHERE c.contype = 'f' AND n.nspname = %s", (schema,))
++        fks = cur.fetchall()
++        for name, table, _ in fks:
++            cur.execute(f"ALTER TABLE {_q(schema, table)} DROP CONSTRAINT {_ident(name)}")
++        for t in fk_order(cur, schema):
++            if t in SEED_SKIP or (t in ARCHIVES and not seed_archives):
++                continue
++            src = columns(cur, base_schema, t)
++            if not src:
++                continue
++            dst = columns(cur, schema, t)
++            target, values = [], []
++            for c, nullable in dst.items():
++                if c in src:
++                    target.append(c)
++                    values.append("NULL" if (c == "html_gz" and not seed_archives) else f"s.{_ident(c)}")
++                elif nullable:          # e.g. first_fetched_at: unknown for copied rows, never now()
++                    target.append(c)
++                    values.append("NULL")
++            cur.execute(f"SELECT count(*) FROM {_q(base_schema, t)}")
++            base_rows = cur.fetchone()[0]
++            cur.execute(f"INSERT INTO {_q(schema, t)} ({', '.join(map(_ident, target))}) "
++                        f"SELECT {', '.join(values)} FROM {_q(base_schema, t)} s ON CONFLICT DO NOTHING")
++            report["tables"][t] = {"base": int(base_rows), "copied": cur.rowcount}
++        for name, table, definition in fks:
++            cur.execute(f"ALTER TABLE {_q(schema, table)} ADD CONSTRAINT {_ident(name)} {definition} NOT VALID")
++            cur.execute("SAVEPOINT fk")
++            try:
++                cur.execute(f"ALTER TABLE {_q(schema, table)} VALIDATE CONSTRAINT {_ident(name)}")
++                cur.execute("RELEASE SAVEPOINT fk")
++            except Exception as e:  # rows copied from live that the key refuses: kept, enforced for new rows only
++                cur.execute("ROLLBACK TO SAVEPOINT fk")
++                report["fk_not_valid"].append(f"{table}.{name}: {str(e).strip().splitlines()[0][:200]}")
++    for t, n in report["tables"].items():
++        if n["base"] != n["copied"]:
++            log.warning("seed: %s copied %d of %d rows (key clashes in the base)", t, n["copied"], n["base"])
++    return report
++
++
++# -- status / checks / seal ----------------------------------------------------------------------
++
++def listing_status(db: Database) -> dict:
++    """The backfill plan (sources per date range) and each listing's cursor."""
++    with db.con.cursor() as cur:
++        cur.execute("SELECT key, value FROM scraper_state WHERE key LIKE 'listing_cursor:%%' OR key = 'backfill_plan'")
++        rows = dict(cur.fetchall())
++    db.con.commit()
++    plan = json.loads(rows.pop("backfill_plan", "null") or "null") or {}
++    cursors = {k: json.loads(v) for k, v in rows.items()}
++    planned = plan.get("sources", [])
++    start, end = plan.get("start", ""), plan.get("end", "")
++    missing, incomplete = [], []
++    for source in planned:
++        state = cursors.get(f"listing_cursor:{source}:{start}:{end}")
++        if state is None:
++            missing.append(source)
++        elif not state.get("complete"):
++            incomplete.append(source)
++    return {"plan": plan, "planned": len(planned), "not_started": missing, "incomplete": incomplete,
++            "complete": len(planned) - len(missing) - len(incomplete),
++            "cursors_incomplete": sorted(k for k, v in cursors.items() if not v.get("complete"))}
++
++
++def revision_status(db: Database) -> dict:
++    listing = listing_status(db)
++    accounting = db.manifest_accounting()
++    queue = db.queue_summary().to_dict("records")
++    problems = []
++    if not listing["planned"]:
++        problems.append("no backfill plan recorded (run `hltv-scraper backfill --revision N` first)")
++    if listing["not_started"] or listing["incomplete"]:
++        problems.append(f"listings not read to the end: {len(listing['not_started'])} not started, "
++                        f"{len(listing['incomplete'])} incomplete (rerun the backfill: it resumes)")
++    total = sum(accounting[k] for k in ("stored", "skipped", "unavailable", "failed", "pending"))
++    if total != accounting["discovered"]:
++        problems.append(f"manifest does not add up: {total} accounted, {accounting['discovered']} discovered")
++    if accounting["pending"]:
++        problems.append(f"{accounting['pending']} listed matches still pending (rerun scrape)")
++    return {"revision": db.revision, "listing": listing, "manifest": accounting, "queue": queue, "problems": problems}
++
++
++def seal_revision(config: dict, rid: int) -> dict:
++    """Mark revision ``rid`` complete and make its schema read-only. Refuses while a planned
++    listing is incomplete or a listed match is pending."""
++    with Database(config, revision=rid) as db:
++        if db.sealed:
++            raise RuntimeError(f"revision {rid} is sealed already")
++        status = revision_status(db)
++        if status["problems"]:
++            raise RuntimeError(f"revision {rid} cannot be sealed: " + "; ".join(status["problems"]))
++        schema = revision_schema(rid)
++        with db.con, db.con.cursor() as cur:
++            names = tables(cur, schema)
++            prints = {t: table_fingerprint(cur, schema, t) for t in names}
++            execute_values(cur, "INSERT INTO hltv_meta.revision_fingerprints (revision_id, table_name, row_count, md5, column_list) "
++                                "VALUES %s", [(rid, t, n, h, ",".join(c)) for t, (n, h, c) in sorted(prints.items())])
++            for t in names:
++                cur.execute(f"CREATE TRIGGER zz_sealed BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON {_q(schema, t)} "
++                            "FOR EACH STATEMENT EXECUTE FUNCTION hltv_meta.reject_sealed()")
++            counts = {"manifest": status["manifest"], "listing": {k: status["listing"][k] for k in
++                                                                  ("planned", "complete")},
++                      "rows": {t: n for t, (n, _, _) in prints.items()}}
++            cur.execute("UPDATE hltv_meta.dataset_revisions SET complete = true, finished_at = now(), "
++                        "counts = counts || %s WHERE revision_id = %s", (Json({"sealed": counts}), rid))
++    log.info("dataset revision %d sealed (read-only): %s", rid, status["manifest"])
++    return status
++
++
++def discard_revision(config: dict, rid: int, confirm: str) -> None:
++    """Drop the schema of an unsealed, unpromoted revision (a failed or abandoned staging run). The
++    registry row stays, marked discarded."""
++    if confirm != revision_schema(rid):
++        raise RuntimeError(f"pass --confirm {revision_schema(rid)} to discard revision {rid}")
++    with Database(config) as live, live.con, live.con.cursor() as cur:
++        cur.execute("SELECT complete, promoted_at FROM hltv_meta.dataset_revisions WHERE revision_id = %s", (rid,))
++        row = cur.fetchone()
++        if row is None or row[0] or row[1]:
++            raise RuntimeError(f"revision {rid} is missing, sealed or promoted: it is never discarded")
++        cur.execute(f"DROP SCHEMA IF EXISTS {_ident(revision_schema(rid))} CASCADE")
++        cur.execute("UPDATE hltv_meta.dataset_revisions SET discarded_at = now() WHERE revision_id = %s", (rid,))
++
++
++# -- promote -------------------------------------------------------------------------------------
++
++def promote_revision(config: dict, rid: int, confirm: str, approved_by: str) -> dict:
++    """Copy the matches revision ``rid`` added into its base (live) schema, in one transaction,
++    without changing anything already there. Only for a sealed revision, after CS2 Scout's
++    before/after comparison and with the owner's approval (``approved_by`` is recorded)."""
++    schema = revision_schema(rid)
++    if confirm != schema:
++        raise RuntimeError(f"pass --confirm {schema} to promote revision {rid}")
++    if not approved_by.strip():
++        raise RuntimeError("--approved-by is required (who approved the promotion)")
++    with Database(config) as live:
++        with live.con.cursor() as cur:
++            cur.execute("SELECT complete, promoted_at, base_schema, discarded_at FROM hltv_meta.dataset_revisions "
++                        "WHERE revision_id = %s", (rid,))
++            row = cur.fetchone()
++        live.con.commit()
++        if row is None or not row[0] or row[1] or row[3]:
++            raise RuntimeError(f"revision {rid} must exist, be sealed and not promoted or discarded")
++        base = row[2]
++        if live.current_schema() != base:
++            raise RuntimeError(f"connect to the base schema {base} to promote")
++        live.init_schema()   # the base gets this code's tables and columns first (part of the approved step)
++        counts: dict[str, int] = {}
++        with live.con, live.con.cursor() as cur:
++            cur.execute(f"LOCK TABLE {_q(base, 'match_overview')} IN SHARE ROW EXCLUSIVE MODE")
++            cur.execute(f"SELECT matchid FROM {_q(schema, 'match_overview')} EXCEPT "
++                        f"SELECT matchid FROM {_q(base, 'match_overview')}")
++            new_ids = sorted(r[0] for r in cur.fetchall())
++            cur.execute(f"SELECT s.mapid, s.name, b.mapid, b.name FROM {_q(schema, 'maps')} s "
++                        f"JOIN {_q(base, 'maps')} b ON (b.mapid = s.mapid) <> (b.name = s.name)")
++            clash = cur.fetchall()
++            if clash:
++                raise RuntimeError(f"map ids differ between {schema} and {base}: {clash} - resolve before promoting")
++            for t in fk_order(cur, schema):
++                if t in PROMOTE_SKIP:
++                    continue
++                base_cols = columns(cur, base, t)
++                if not base_cols:
++                    continue
++                cols = [c for c in columns(cur, schema, t) if c in base_cols]
++                where = "WHERE s.matchid = ANY(%s)" if "matchid" in cols and t not in PROMOTE_ALL_ROWS else ""
++                cur.execute(f"INSERT INTO {_q(base, t)} ({', '.join(map(_ident, cols))}) "
++                            f"SELECT {', '.join('s.' + _ident(c) for c in cols)} FROM {_q(schema, t)} s {where} "
++                            "ON CONFLICT DO NOTHING", (new_ids,) if where else None)
++                counts[t] = cur.rowcount
++            cur.execute("UPDATE hltv_meta.dataset_revisions SET promoted_at = now(), promoted_by = %s, "
++                        "notes = coalesce(notes || E'\\n', '') || %s WHERE revision_id = %s",
++                        (approved_by, f"promoted: {len(new_ids)} matches, rows {json.dumps(counts)}", rid))
++    log.info("revision %d promoted into %s: %d matches (%s)", rid, base, len(new_ids),
++             ", ".join(f"{t} {n}" for t, n in counts.items() if n))
++    return {"matches": len(new_ids), "rows": counts}
+diff --git a/hltv_scraper/schema.sql b/hltv_scraper/schema.sql
+index d3fe321..884afec 100644
+--- a/hltv_scraper/schema.sql
++++ b/hltv_scraper/schema.sql
+@@ -523,3 +523,143 @@ CREATE TABLE IF NOT EXISTS mapstats_page_status (
+ );
+ CREATE INDEX IF NOT EXISTS map_player_stats_player ON map_player_stats (playerid);
+ CREATE INDEX IF NOT EXISTS map_round_economy_team ON map_round_economy (teamid);
++
++-- ---------------------------------------------------------------------------------------------
++-- Coverage repair (2026-10-12): a listing manifest, ingestion times that are never rewritten, and
++-- the dataset revision that created / last changed each stat row (see hltv_scraper/revisions.py).
++
++-- When the match was played (from the results listing) and how often its page showed no
++-- statistics yet: a match still without statistics days after it was played is 'unavailable'.
++ALTER TABLE scrape_queue ADD COLUMN IF NOT EXISTS played_at TIMESTAMPTZ;
++ALTER TABLE scrape_queue ADD COLUMN IF NOT EXISTS waits INT NOT NULL DEFAULT 0;
++
++-- Archived pages: fetched_at stays the latest fetch; first_fetched_at is written once and never
++-- changed (trigger below). The column is added without a default so rows stored before it stay
++-- NULL (unknown) instead of getting an invented time; new rows get now().
++ALTER TABLE raw_pages ADD COLUMN IF NOT EXISTS first_fetched_at TIMESTAMPTZ;
++ALTER TABLE raw_pages ALTER COLUMN first_fetched_at SET DEFAULT now();
++ALTER TABLE raw_pages ADD COLUMN IF NOT EXISTS refetched_at TIMESTAMPTZ;
++ALTER TABLE mapstats_pages ADD COLUMN IF NOT EXISTS first_fetched_at TIMESTAMPTZ;
++ALTER TABLE mapstats_pages ALTER COLUMN first_fetched_at SET DEFAULT now();
++
++CREATE OR REPLACE FUNCTION keep_first_fetched_at() RETURNS trigger LANGUAGE plpgsql AS $$
++BEGIN
++    IF OLD.first_fetched_at IS NOT NULL AND NEW.first_fetched_at IS DISTINCT FROM OLD.first_fetched_at THEN
++        RAISE EXCEPTION '%.first_fetched_at is written once: % -> % rejected',
++            TG_TABLE_NAME, OLD.first_fetched_at, NEW.first_fetched_at;
++    END IF;
++    RETURN NEW;
++END $$;
++DROP TRIGGER IF EXISTS raw_pages_first_fetched_at ON raw_pages;
++CREATE TRIGGER raw_pages_first_fetched_at BEFORE UPDATE ON raw_pages
++    FOR EACH ROW EXECUTE FUNCTION keep_first_fetched_at();
++DROP TRIGGER IF EXISTS mapstats_pages_first_fetched_at ON mapstats_pages;
++CREATE TRIGGER mapstats_pages_first_fetched_at BEFORE UPDATE ON mapstats_pages
++    FOR EACH ROW EXECUTE FUNCTION keep_first_fetched_at();
++
++-- The dataset revision this schema writes: a staged revision schema (hltv_rev_<n>) replaces this
++-- function with one returning n; elsewhere it reads the optional setting hltv.revision_id (NULL
++-- when unset). Created only when missing, so a re-run never resets a staged schema's revision.
++DO $$
++BEGIN
++    IF NOT EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
++                   WHERE n.nspname = current_schema() AND p.proname = 'current_revision_id') THEN
++        EXECUTE 'CREATE FUNCTION current_revision_id() RETURNS INT LANGUAGE sql STABLE AS '
++                '$f$ SELECT nullif(current_setting(''hltv.revision_id'', true), '''')::INT $f$';
++    END IF;
++END $$;
++
++-- created_revision_id: set once when the row is written; updated_revision_id: the revision of the
++-- last change. Rows copied into a staged revision from the live tables keep NULL (the revision
++-- row records which base they came from).
++CREATE OR REPLACE FUNCTION stamp_updated_revision() RETURNS trigger LANGUAGE plpgsql AS $$
++BEGIN
++    NEW.created_revision_id := OLD.created_revision_id;
++    NEW.updated_revision_id := coalesce(current_revision_id(), NEW.updated_revision_id);
++    RETURN NEW;
++END $$;
++
++DO $$
++DECLARE t TEXT;
++BEGIN
++    FOREACH t IN ARRAY ARRAY['match_overview', 'matches', 'match_maps', 'player_stats', 'map_player_stats',
++                             'map_headshots', 'map_vetoes', 'map_rounds', 'map_round_economy', 'raw_pages',
++                             'mapstats_pages'] LOOP
++        EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS created_revision_id INT', t);
++        EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS updated_revision_id INT', t);
++        EXECUTE format('ALTER TABLE %I ALTER COLUMN created_revision_id SET DEFAULT current_revision_id()', t);
++        EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', t || '_revision', t);
++        EXECUTE format('CREATE TRIGGER %I BEFORE UPDATE ON %I FOR EACH ROW EXECUTE FUNCTION stamp_updated_revision()',
++                       t || '_revision', t);
++    END LOOP;
++END $$;
++
++-- Every result a listing showed and what became of it. Append-only (a trigger rejects UPDATE,
++-- DELETE and TRUNCATE). kind: discovered (once per match and source) | present (already stored
++-- when listed) | skipped (forfeit, or no tracked team under a --top limit) | stored | waiting
++-- (page without statistics yet) | unavailable (still none days after the match: not on HLTV) |
++-- failed (error, attempt number). source: results | results:scan | team:<id> | player:<id> | queue.
++CREATE TABLE IF NOT EXISTS result_manifest (
++    id          BIGSERIAL PRIMARY KEY,
++    revision_id INT DEFAULT current_revision_id(),
++    matchid     INT NOT NULL,
++    kind        VARCHAR(16) NOT NULL,
++    source      VARCHAR(48),
++    source_url  TEXT,
++    page        INT,
++    team1       VARCHAR(255),
++    team2       VARCHAR(255),
++    team1_id    INT,
++    team2_id    INT,
++    event_name  VARCHAR(255),
++    format      VARCHAR(32),
++    played_at   TIMESTAMPTZ,
++    attempt     INT,
++    detail      TEXT,
++    at          TIMESTAMPTZ NOT NULL DEFAULT now()
++);
++CREATE UNIQUE INDEX IF NOT EXISTS result_manifest_discovered_once ON result_manifest (matchid, source)
++    WHERE kind = 'discovered';
++CREATE UNIQUE INDEX IF NOT EXISTS result_manifest_present_once ON result_manifest (matchid) WHERE kind = 'present';
++CREATE UNIQUE INDEX IF NOT EXISTS result_manifest_skipped_once ON result_manifest (matchid) WHERE kind = 'skipped';
++CREATE INDEX IF NOT EXISTS result_manifest_match ON result_manifest (matchid, id);
++
++CREATE OR REPLACE FUNCTION reject_change() RETURNS trigger LANGUAGE plpgsql AS $$
++BEGIN
++    RAISE EXCEPTION '% is append-only: % rejected', TG_TABLE_NAME, TG_OP;
++END $$;
++DROP TRIGGER IF EXISTS result_manifest_append_only ON result_manifest;
++CREATE TRIGGER result_manifest_append_only BEFORE UPDATE OR DELETE ON result_manifest
++    FOR EACH ROW EXECUTE FUNCTION reject_change();
++DROP TRIGGER IF EXISTS result_manifest_no_truncate ON result_manifest;
++CREATE TRIGGER result_manifest_no_truncate BEFORE TRUNCATE ON result_manifest
++    FOR EACH STATEMENT EXECUTE FUNCTION reject_change();
++
++-- One row per listed match with its state. A match is 'stored' when it is in match_overview;
++-- otherwise its last outcome decides: skipped | unavailable | failed | pending (not attempted yet,
++-- or waiting for statistics). discovered = stored + skipped + unavailable + failed + pending.
++CREATE OR REPLACE VIEW result_manifest_state AS
++WITH d AS (
++    SELECT matchid, min(at) AS first_listed_at, string_agg(DISTINCT source, ' ') AS sources,
++           (array_agg(team1 ORDER BY id))[1] AS team1, (array_agg(team2 ORDER BY id))[1] AS team2,
++           (array_agg(team1_id ORDER BY id) FILTER (WHERE team1_id IS NOT NULL))[1] AS team1_id,
++           (array_agg(team2_id ORDER BY id) FILTER (WHERE team2_id IS NOT NULL))[1] AS team2_id,
++           (array_agg(event_name ORDER BY id))[1] AS event_name, min(played_at) AS played_at,
++           (array_agg(source_url ORDER BY id))[1] AS first_source_url
++    FROM result_manifest WHERE kind = 'discovered' GROUP BY matchid
++), last AS (
++    SELECT DISTINCT ON (matchid) matchid, kind, detail, at
++    FROM result_manifest WHERE kind IN ('skipped', 'stored', 'waiting', 'unavailable', 'failed')
++    ORDER BY matchid, id DESC
++), tries AS (
++    SELECT matchid, count(*) AS attempts FROM result_manifest
++    WHERE kind IN ('stored', 'waiting', 'unavailable', 'failed') GROUP BY matchid
++)
++SELECT d.*,
++       CASE WHEN EXISTS (SELECT 1 FROM match_overview mo WHERE mo.matchid = d.matchid) THEN 'stored'
++            -- skipped by one listing (a --top limit) but queued from another: still to be read
++            WHEN l.kind = 'skipped' AND EXISTS (SELECT 1 FROM scrape_queue q WHERE q.matchid = d.matchid) THEN 'pending'
++            WHEN l.kind IN ('skipped', 'unavailable', 'failed') THEN l.kind
++            ELSE 'pending' END AS state,
++       l.kind AS last_event, l.detail AS last_detail, l.at AS last_event_at, coalesce(t.attempts, 0) AS attempts
++FROM d LEFT JOIN last l USING (matchid) LEFT JOIN tries t USING (matchid);
+diff --git a/hltv_scraper/sources/cito.py b/hltv_scraper/sources/cito.py
+index 51fb491..9571361 100644
+--- a/hltv_scraper/sources/cito.py
++++ b/hltv_scraper/sources/cito.py
+@@ -165,6 +165,8 @@ def to_result(x: dict) -> Result | None:
+         event=x.get("eventName") or "",
+         url=f"https://www.hltv.org/matches/{match_id}/{_slug(team1)}-vs-{_slug(team2)}",
+         format="def" if forfeit else f"bo{x.get('bestOf') or ''}",
++        team1_id=hltv_id(x.get("team1Id")),
++        team2_id=hltv_id(x.get("team2Id")),
+     )
+ 
+ 
+diff --git a/hltv_scraper/validate.py b/hltv_scraper/validate.py
+index cbd2de2..32ab2d1 100644
+--- a/hltv_scraper/validate.py
++++ b/hltv_scraper/validate.py
+@@ -158,6 +158,14 @@ HEALTH_CHECKS = [
+      "SELECT count(*) FROM match_overview WHERE source = 'hltv' AND parser_version < %(parser_version)s"),
+     (WARN, "fallback_data", "matches stored from the failsafe API, waiting to be replaced by HLTV data",
+      "SELECT count(*) FROM match_overview WHERE source <> 'hltv'"),
++    (ERROR, "listing_incomplete",
++     "the scan's results listing stopped early (a page failed or the catch-up cap was hit) more than 6 hours "
++     "ago and has not caught up since - matches may be missing",
++     # OFFSET 0 keeps the JSON cast to the cursor rows (other scraper_state values are not JSON)
++     "SELECT count(*) FROM (SELECT value::json AS v, updated_at FROM scraper_state "
++     "WHERE key LIKE 'listing_cursor:results:scan%%' OFFSET 0) c "
++     "WHERE NOT coalesce((v ->> 'complete')::boolean, false) "
++     "AND coalesce((v ->> 'since')::timestamptz, updated_at) < now() - interval '6 hours'"),
+     (WARN, "stale_upcoming", "upcoming schedule is more than a day old",
+      "SELECT CASE WHEN max(scraped_at) < now() - interval '1 day' THEN 1 ELSE 0 END FROM upcoming_matches"),
+ ]
+diff --git a/scripts/acceptance_staged.sql b/scripts/acceptance_staged.sql
+new file mode 100644
+index 0000000..4396ae0
+--- /dev/null
++++ b/scripts/acceptance_staged.sql
+@@ -0,0 +1,137 @@
++-- Acceptance checks for a staged dataset revision, for psql (the same checks as
++-- `hltv-scraper revision accept N`, which also runs A6 / A8 - the fingerprint comparisons).
++--
++--   psql "$HLTV_DB_DSN" -v rev=3 -v base=public -f scripts/acceptance_staged.sql
++--
++-- Read-only except the A5 probe at the end, which tries to change first_fetched_at inside a
++-- DO block and is always rolled back. Each query prints its measurement and a pass column.
++
++\set ON_ERROR_STOP on
++SELECT set_config('search_path', 'hltv_rev_' || :rev, false) AS search_path;
++SELECT revision_id, schema, job, started_at, seeded_at, finished_at, complete, promoted_at, git_commit
++FROM hltv_meta.dataset_revisions WHERE revision_id = :rev;
++
++-- A1 listing completeness: every planned listing (global + team + player) read to its end
++WITH plan AS (SELECT value::json AS p FROM scraper_state WHERE key = 'backfill_plan'),
++     src AS (SELECT json_array_elements_text(p -> 'sources') AS source, p ->> 'start' AS s, p ->> 'end' AS e
++             FROM plan),
++     cur AS (SELECT key, value::json AS v FROM scraper_state WHERE key LIKE 'listing_cursor:%' OFFSET 0)
++SELECT 'A1' AS check, count(*) AS planned,
++       count(*) FILTER (WHERE coalesce((c.v ->> 'complete')::boolean, false)) AS complete,
++       count(*) FILTER (WHERE c.key IS NULL) AS not_started,
++       count(*) FILTER (WHERE c.key IS NOT NULL AND NOT coalesce((c.v ->> 'complete')::boolean, false)) AS incomplete,
++       count(*) > 0 AND count(*) = count(*) FILTER (WHERE coalesce((c.v ->> 'complete')::boolean, false)) AS pass
++FROM src LEFT JOIN cur c ON c.key = 'listing_cursor:' || src.source || ':' || src.s || ':' || src.e;
++
++-- A1 detail: listings that are not complete (resume point and error)
++SELECT key, value FROM scraper_state
++WHERE key LIKE 'listing_cursor:%' AND value NOT LIKE '%"complete": true%' ORDER BY key LIMIT 50;
++
++-- A2 manifest accounting: discovered = stored + skipped + unavailable + failed + pending, pending = 0
++SELECT 'A2' AS check, count(*) AS discovered,
++       count(*) FILTER (WHERE state = 'stored') AS stored,
++       count(*) FILTER (WHERE state = 'skipped') AS skipped,
++       count(*) FILTER (WHERE state = 'unavailable') AS unavailable,
++       count(*) FILTER (WHERE state = 'failed') AS failed,
++       count(*) FILTER (WHERE state = 'pending') AS pending,
++       count(*) = count(*) FILTER (WHERE state IN ('stored', 'skipped', 'unavailable', 'failed', 'pending'))
++         AND count(*) FILTER (WHERE state = 'pending') = 0 AS pass
++FROM result_manifest_state;
++
++-- A3a coverage vs the eligible HLTV listing: listed, not a forfeit, played > 48 h ago, statistics
++-- published (unavailable excluded) -> stored >= 99 %
++WITH e AS (SELECT * FROM result_manifest_state
++           WHERE state NOT IN ('skipped', 'unavailable')
++             AND coalesce(played_at, first_listed_at) < now() - interval '48 hours')
++SELECT 'A3a' AS check, count(*) AS eligible, count(*) FILTER (WHERE state = 'stored') AS stored,
++       count(*) FILTER (WHERE state = 'failed') AS failed, count(*) FILTER (WHERE state = 'pending') AS pending,
++       round(count(*) FILTER (WHERE state = 'stored')::numeric / nullif(count(*), 0), 4) AS ratio,
++       count(*) > 0 AND count(*) FILTER (WHERE state = 'stored') >= 0.99 * count(*) AS pass
++FROM e;
++
++-- A3b/c played maps of those matches with player stats (>= 99 %) and headshots (>= 98 %)
++WITH e AS (SELECT matchid FROM result_manifest_state
++           WHERE state = 'stored' AND coalesce(played_at, first_listed_at) < now() - interval '48 hours'),
++     m AS (SELECT mm.matchid, mm.mapid, mm.mapstatsid FROM match_maps mm JOIN e USING (matchid))
++SELECT 'A3bc' AS check, count(*) AS maps,
++       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM player_stats ps WHERE ps.matchid = m.matchid
++                                      AND ps.mapid = m.mapid AND ps.sideid = 0)) AS with_stats,
++       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM map_headshots h WHERE h.mapstatsid = m.mapstatsid)) AS with_hs,
++       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM player_stats ps WHERE ps.matchid = m.matchid
++                                      AND ps.mapid = m.mapid AND ps.sideid = 0)) >= 0.99 * count(*)
++         AND count(*) FILTER (WHERE EXISTS (SELECT 1 FROM map_headshots h WHERE h.mapstatsid = m.mapstatsid))
++             >= 0.98 * count(*) AS pass
++FROM m;
++
++-- A3d unavailable on HLTV (listed, no statistics days after the match), reported apart: <= 2 %
++SELECT 'A3d' AS check, count(*) FILTER (WHERE state = 'unavailable') AS unavailable,
++       count(*) FILTER (WHERE state <> 'skipped') AS listed,
++       count(*) FILTER (WHERE state = 'unavailable') <= 0.02 * count(*) FILTER (WHERE state <> 'skipped') AS pass
++FROM result_manifest_state;
++
++-- A3 by month (for the report)
++SELECT to_char(coalesce(played_at, first_listed_at), 'YYYY-MM') AS month, count(*) AS listed,
++       count(*) FILTER (WHERE state = 'stored') AS stored, count(*) FILTER (WHERE state = 'unavailable') AS unavailable,
++       count(*) FILTER (WHERE state = 'failed') AS failed, count(*) FILTER (WHERE state = 'skipped') AS skipped
++FROM result_manifest_state GROUP BY 1 ORDER BY 1;
++
++-- A4 per board team (each team's own HLTV listing is the denominator): >= 98 % or at most 1 missing
++WITH listed AS (SELECT DISTINCT split_part(source, ':', 2)::int AS teamid, matchid
++                FROM result_manifest WHERE kind = 'discovered' AND source LIKE 'team:%'),
++     e AS (SELECT * FROM result_manifest_state
++           WHERE state NOT IN ('skipped', 'unavailable')
++             AND coalesce(played_at, first_listed_at) < now() - interval '48 hours')
++SELECT 'A4' AS check, l.teamid, t.name, count(*) AS eligible, count(*) FILTER (WHERE e.state = 'stored') AS stored,
++       round(count(*) FILTER (WHERE e.state = 'stored')::numeric / count(*), 4) AS ratio,
++       count(*) FILTER (WHERE e.state = 'stored') >= 0.98 * count(*)
++         OR count(*) - count(*) FILTER (WHERE e.state = 'stored') <= 1 AS pass
++FROM listed l JOIN e USING (matchid) LEFT JOIN teams t ON t.teamid = l.teamid
++GROUP BY l.teamid, t.name ORDER BY ratio, l.teamid;
++
++-- A5 ingestion timestamps: triggers present, revision rows have first_fetched_at, first <= latest
++SELECT 'A5' AS check,
++       (SELECT count(*) FROM pg_trigger tg JOIN pg_class c ON c.oid = tg.tgrelid
++        JOIN pg_namespace n ON n.oid = c.relnamespace
++        WHERE n.nspname = 'hltv_rev_' || :rev
++          AND tg.tgname IN ('raw_pages_first_fetched_at', 'mapstats_pages_first_fetched_at')) AS triggers,
++       (SELECT count(*) FROM raw_pages WHERE created_revision_id = :rev AND first_fetched_at IS NULL)
++     + (SELECT count(*) FROM mapstats_pages WHERE created_revision_id = :rev AND first_fetched_at IS NULL) AS missing_first,
++       (SELECT count(*) FROM raw_pages WHERE first_fetched_at > fetched_at)
++     + (SELECT count(*) FROM mapstats_pages WHERE first_fetched_at > fetched_at) AS first_after_latest;
++-- pass: triggers = 2, missing_first = 0, first_after_latest = 0
++
++-- A6 (partial; the full fingerprint comparison is `hltv-scraper revision accept`): no match the
++-- revision stored is in the live tables unless the live scan queued it itself
++SELECT 'A6' AS check, count(*) AS leaked, count(*) = 0 AS pass
++FROM match_overview mo
++JOIN :"base".match_overview lv USING (matchid)
++LEFT JOIN :"base".scrape_queue q ON q.matchid = mo.matchid
++WHERE mo.created_revision_id = :rev AND q.matchid IS NULL;
++
++-- A7 revision ids: stat rows carry NULL (copied from live) or this revision, nothing else
++SELECT 'A7' AS check, sum(n) AS foreign_rows, sum(n) = 0 AS pass FROM (
++    SELECT count(*) AS n FROM match_overview WHERE created_revision_id <> :rev
++    UNION ALL SELECT count(*) FROM matches WHERE created_revision_id <> :rev
++    UNION ALL SELECT count(*) FROM match_maps WHERE created_revision_id <> :rev
++    UNION ALL SELECT count(*) FROM player_stats WHERE created_revision_id <> :rev
++    UNION ALL SELECT count(*) FROM map_player_stats WHERE created_revision_id <> :rev
++    UNION ALL SELECT count(*) FROM map_headshots WHERE created_revision_id <> :rev
++    UNION ALL SELECT count(*) FROM raw_pages WHERE created_revision_id <> :rev
++    UNION ALL SELECT count(*) FROM mapstats_pages WHERE created_revision_id <> :rev) x;
++
++-- A5 probe (rolled back): changing first_fetched_at must be rejected
++DO $$
++DECLARE msg TEXT;
++BEGIN
++    BEGIN
++        UPDATE raw_pages SET first_fetched_at = first_fetched_at - interval '1 day'
++        WHERE matchid = (SELECT matchid FROM raw_pages WHERE first_fetched_at IS NOT NULL LIMIT 1);
++        msg := CASE WHEN FOUND THEN 'FAIL: a change to first_fetched_at was accepted' ELSE 'SKIP: no row to probe' END;
++    EXCEPTION WHEN OTHERS THEN
++        msg := 'PASS: change rejected (' || SQLERRM || ')';
++    END;
++    RAISE NOTICE 'A5 probe: %', msg;
++    IF msg LIKE 'FAIL%' THEN
++        RAISE EXCEPTION '%', msg;   -- also undoes the change
++    END IF;
++END $$;
+diff --git a/tests/test_coverage.py b/tests/test_coverage.py
+new file mode 100644
+index 0000000..385acc3
+--- /dev/null
++++ b/tests/test_coverage.py
+@@ -0,0 +1,191 @@
++"""Coverage repair (2026-10-12), no database needed: the either-team rule, listings that resume
++instead of stopping silently, the staged backfill's plan and the deployment defaults."""
++
++import json
++import re
++from datetime import date, datetime, timezone
++from pathlib import Path
++
++import pytest
++
++from conftest import FakeFetcher, load
++from hltv_scraper import cli, pipeline
++from hltv_scraper.parsers import parse_results
++from test_pipeline import FakeDb, newer_results, pages
++
++START, END = date(2025, 7, 18), date(2026, 10, 11)
++EMPTY = "<html><body><div class='results'></div></body></html>"
++ROOT = Path(__file__).resolve().parent.parent
++
++
++class ListingDb(FakeDb):
++    """FakeDb plus what the staged backfill uses: the manifest and the board scope."""
++
++    def __init__(self, scope=None, **kw):
++        super().__init__(**kw)
++        self.listed = []          # (match_id, source, page)
++        self.scope = scope or {"team_ids": [], "former_team_ids": [], "past_opponent_ids": [], "player_ids": []}
++
++    def record_listing(self, results, source, url, page, tracked=None):
++        self.listed += [(r.match_id, source, page) for r in results]
++
++    def listed_match_ids(self):
++        return {m for m, _, _ in self.listed}
++
++    def board_scope(self, days=450, past_opponents=False):
++        return self.scope
++
++    def team_ids_by_name(self):
++        return {}
++
++
++def test_results_url_filters():
++    assert pipeline.results_url(1, START, END, team=4863) == (
++        "https://www.hltv.org/results?team=4863&startDate=2025-07-18&endDate=2026-10-11&offset=100")
++    assert pipeline.results_url(0, player=7998) == "https://www.hltv.org/results?player=7998"
++
++
++def test_results_rows_carry_their_time_and_team_ids_when_linked():
++    rows = parse_results(load("results.html"))
++    assert rows[0].played_at == datetime(2026, 6, 8, 15, 0, tzinfo=timezone.utc)
++    assert rows[0].team1_id is None                       # the plain results page links no teams
++    linked = load("results.html").replace('<div class="team">TYLOO</div>',
++                                          '<a href="/team/4863/tyloo"><div class="team">TYLOO</div></a>')
++    assert parse_results(linked)[0].team1_id == 4863
++
++
++def test_a_failed_page_saves_a_cursor_and_the_next_run_resumes_there():
++    db = ListingDb()
++    two_pages = {pipeline.results_url(0, START, END): newer_results()}      # page 1 blocked
++    with pytest.raises(pipeline.ListingIncomplete) as e:
++        pipeline.collect_results(FakeFetcher(two_pages), None, set(), max_pages=0, stop_when_caught_up=False,
++                                 start=START, end=END, db=db, source="results", resume=True)
++    assert e.value.page == 1 and {r.match_id for r in e.value.results} == {2399992, 2399990}
++    cursor = json.loads(db.state[pipeline.cursor_key("results", START, END)])
++    assert cursor["complete"] is False and cursor["next_page"] == 1 and "KeyError" in cursor["error"]
++
++    fixed = FakeFetcher({pipeline.results_url(0, START, END): newer_results(),
++                         pipeline.results_url(1, START, END): load("results.html"),
++                         pipeline.results_url(2, START, END): EMPTY})
++    found = pipeline.collect_results(fixed, None, {2399992, 2399990}, max_pages=0, stop_when_caught_up=False,
++                                     start=START, end=END, db=db, source="results", resume=True)
++    assert {r.match_id for r in found} == {2394892, 2394890}
++    assert fixed.requested[0] == pipeline.results_url(0, START, END)   # one page of overlap before page 1
++    assert json.loads(db.state[pipeline.cursor_key("results", START, END)])["complete"] is True
++
++
++def test_catch_up_reads_on_past_a_page_that_failed_last_time():
++    db = ListingDb(known={2394892, 2394890})
++    db.state[pipeline.cursor_key("results:scan")] = json.dumps({"complete": False, "next_page": 1})
++    fetcher = FakeFetcher({pipeline.results_url(0): load("results.html"), pipeline.results_url(1): load("results.html"),
++                           pipeline.results_url(2): EMPTY})
++    pipeline.collect_results(fetcher, None, db.known, max_pages=pipeline.CATCH_UP_PAGES, db=db,
++                             source="results:scan", catch_up=True)
++    # page 0 is caught up, but page 1 failed last time: it is read before the walk may stop
++    assert fetcher.requested == [pipeline.results_url(0), pipeline.results_url(1)]
++    assert json.loads(db.state[pipeline.cursor_key("results:scan")])["complete"] is True
++
++
++def test_catch_up_cap_is_reported_not_silent():
++    fetcher = FakeFetcher({pipeline.results_url(i): newer_results().replace("/matches/2399", f"/matches/{i}2399")
++                           for i in range(3)})
++    db = ListingDb()
++    with pytest.raises(pipeline.ListingIncomplete, match="page cap"):
++        pipeline.collect_results(fetcher, None, set(), max_pages=2, db=db, source="results:scan", catch_up=True)
++    assert json.loads(db.state[pipeline.cursor_key("results:scan")])["next_page"] == 2
++
++
++def test_every_listed_row_is_recorded_including_forfeits_and_known_matches():
++    db = ListingDb(known={2394892})
++    pipeline.collect_results(FakeFetcher(pages()), None, db.known, max_pages=1, db=db, source="results:scan")
++    assert {m for m, _, _ in db.listed} == {2394892, 2394890, 2394880}
++
++
++def board_pages():
++    return {
++        pipeline.results_url(0, START, END): load("results.html"),
++        pipeline.results_url(1, START, END): EMPTY,
++        pipeline.results_url(0, START, END, team=4863): load("results.html"),
++        pipeline.results_url(1, START, END, team=4863): EMPTY,
++        pipeline.results_url(0, START, END, player=7998): newer_results(),
++        pipeline.results_url(1, START, END, player=7998): EMPTY,
++    }
++
++
++def test_backfill_lists_global_board_team_and_player_listings_and_resumes():
++    scope = {"team_ids": [4863], "former_team_ids": [], "past_opponent_ids": [], "player_ids": [7998]}
++    db = ListingDb(scope=scope)
++    report = pipeline.backfill(db, lambda: FakeFetcher(board_pages()), START, END)
++    assert report.sources == {"results": "complete", "team:4863": "complete", "player:7998": "complete"}
++    assert set(db.queue) == {2394892, 2394890, 2399992, 2399990}        # no forfeit, every tier
++    plan = json.loads(db.state["backfill_plan"])
++    assert plan["sources"] == ["results", "team:4863", "player:7998"] and plan["start"] == str(START)
++
++    # round 2 after the first scrape: a former team appears; finished listings are not read again
++    db.scope = {**scope, "former_team_ids": [9996]}
++    more = board_pages()
++    more.update({pipeline.results_url(0, START, END, team=9996): EMPTY})
++    fetcher = FakeFetcher(more)
++    report = pipeline.backfill(db, lambda: fetcher, START, END)
++    assert report.sources["results"] == "complete earlier" and report.sources["team:9996"] == "complete"
++    assert fetcher.requested == [pipeline.results_url(0, START, END, team=9996)]
++    assert json.loads(db.state["backfill_plan"])["sources"] == ["results", "team:4863", "team:9996", "player:7998"]
++
++
++def test_backfill_flags_a_filter_hltv_ignores():
++    """If HLTV ignored ?player=, the 'player listing' would be the whole results listing: stop at a
++    page cap and report it instead of crawling everything once per player."""
++    scope = {"team_ids": [], "former_team_ids": [], "past_opponent_ids": [], "player_ids": [7998]}
++    endless = {pipeline.results_url(i, START, END, player=7998): load("results.html")
++               for i in range(pipeline.FILTERED_MAX_PAGES + 1)}
++    report = pipeline.backfill(ListingDb(scope=scope), lambda: FakeFetcher(endless), START, END, global_listing=False)
++    assert report.incomplete == ["player:7998"] and "filter ignored" in report.sources["player:7998"]
++
++
++def test_player_listings_can_be_left_out_of_the_plan():
++    scope = {"team_ids": [4863], "former_team_ids": [], "past_opponent_ids": [], "player_ids": [7998]}
++    db = ListingDb(scope=scope)
++    pipeline.backfill(db, lambda: FakeFetcher(board_pages()), START, END)
++    report = pipeline.backfill(db, lambda: FakeFetcher(board_pages()), START, END, player_listings=False)
++    assert "player:7998" not in report.sources
++    assert json.loads(db.state["backfill_plan"])["sources"] == ["results", "team:4863"]
++
++
++def test_backfill_keeps_going_when_one_listing_fails():
++    scope = {"team_ids": [4863, 9996], "former_team_ids": [], "past_opponent_ids": [], "player_ids": []}
++    p = board_pages()
++    p.update({pipeline.results_url(0, START, END, team=9996): load("results.html")})   # its page 1 fails
++    report = pipeline.backfill(ListingDb(scope=scope), lambda: FakeFetcher(p), START, END)
++    assert report.sources["team:9996"] == "incomplete at page 1" and report.sources["team:4863"] == "complete"
++    assert report.incomplete == ["team:9996"]
++
++
++def test_backfill_needs_a_staged_revision(monkeypatch):
++    monkeypatch.delenv("HLTV_REVISION", raising=False)
++    assert cli.main(["backfill"]) == 2    # never the live tables
++
++
++def test_dated_update_against_live_tables_is_refused(monkeypatch):
++    monkeypatch.delenv("HLTV_REVISION", raising=False)
++    assert cli.main(["update", "--start-date", "2025-07-18", "--end-date", "2026-10-11"]) == 2
++
++
++def test_defaults_track_every_match():
++    parser = cli.build_parser()
++    for command in (["update"], ["watch"], ["backfill"], ["results"]):
++        assert parser.parse_args(command).top == 0, command
++    import inspect
++    assert inspect.signature(pipeline.update).parameters["top"].default == 0
++    assert inspect.signature(pipeline.watch).parameters["top"].default == 0
++
++
++def test_no_workflow_restricts_to_top_teams():
++    """The deployment must not bring the both-teams-in-today's-top-200 rule back."""
++    for path in (ROOT / ".github" / "workflows").glob("*.yml"):
++        text = path.read_text(encoding="utf-8")
++        for m in re.finditer(r'--top\s+("[^"]*"|\S+)', text):
++            value = m.group(1).strip('"')
++            assert value in ("0", "${{ inputs.top }}"), f"{path.name}: --top {value}"
++        if "top:" in text:
++            block = text[text.index("top:"):text.index("top:") + 300]
++            assert 'default: "0"' in block, path.name
+diff --git a/tests/test_pipeline.py b/tests/test_pipeline.py
+index 621d31e..97c324e 100644
+--- a/tests/test_pipeline.py
++++ b/tests/test_pipeline.py
+@@ -27,17 +27,43 @@ def test_results_url():
+         "https://www.hltv.org/results?startDate=2025-01-01&endDate=2025-12-31&offset=100")
+ 
+ 
+-def test_collect_results_filters_teams_known_and_forfeits():
++NAMES = {"tyloo": 4863, "9z": 9996, "vitality": 9565, "spirit": 7020, "furia": 8297, "nobodies": 1}
++
++
++def test_collect_results_filters_known_and_forfeits():
+     fetcher = FakeFetcher(pages())
+-    teams = {"tyloo", "9z", "vitality", "spirit", "furia", "nobodies"}
+-    todo = pipeline.collect_results(fetcher, teams, known_ids=set(), max_pages=1)
++    every = pipeline.TrackedTeams(frozenset(NAMES.values()), NAMES)
++    todo = pipeline.collect_results(fetcher, every, known_ids=set(), max_pages=1)
+     assert [r.match_id for r in todo] == [2394892, 2394890]  # forfeit dropped
+-    todo = pipeline.collect_results(fetcher, {"tyloo", "9z"}, known_ids=set())
+-    assert [r.match_id for r in todo] == [2394892]
+     todo = pipeline.collect_results(fetcher, None, known_ids={2394892})
+     assert [r.match_id for r in todo] == [2394890]
+ 
+ 
++def test_top_limit_needs_either_team_by_id_not_both():
++    """The old rule queued a match only when BOTH teams were in today's top N, so every match against
++    a lower-ranked, unranked or renamed team was dropped. One tracked team (by HLTV id) is enough."""
++    fetcher = FakeFetcher(pages())
++    only_9z = pipeline.TrackedTeams(frozenset({9996}), NAMES)   # TYLOO is not tracked
++    assert [r.match_id for r in pipeline.collect_results(fetcher, only_9z, set())] == [2394892]
++    # a row that carries team ids is matched by id, whatever the names say
++    row = pipeline.Result(1, "Renamed", 2, "Nobody", 0, "", "u", "bo3", team1_id=9996)
++    assert pipeline.relevant(row, only_9z, set())
++    assert not pipeline.relevant(pipeline.Result(2, "9z academy", 2, "x", 0, "", "u", "bo3"), only_9z, set())  # never fuzzy
++
++
++def test_tracked_teams_from_rankings():
++    from hltv_scraper.parsers import parse_rankings
++
++    ranked = parse_rankings(load("rankings.html"))   # TYLOO (rank 4) has no team link
++    assert pipeline.tracked_teams(ranked, 0) is None
++    top2 = pipeline.tracked_teams(ranked, 2)
++    assert top2.ids == {9565, 7020}
++    top4 = pipeline.tracked_teams(ranked, 4, known_names={"TYLOO": 4863}, extra_ids=[42])
++    assert top4.ids == {9565, 7020, 9996, 4863, 42}
++    unknown = pipeline.tracked_teams(ranked, 4)                     # TYLOO still qualifies by its exact name
++    assert unknown.qualifies(pipeline.Result(5, "tyloo", 1, "Somebody", 2, "", "u", "bo3"))
++
++
+ def test_collect_results_stops_when_caught_up():
+     fetcher = FakeFetcher(pages())
+     todo = pipeline.collect_results(fetcher, None, known_ids={2394892, 2394890}, max_pages=5)
+@@ -66,10 +92,13 @@ def test_scan_catches_up_on_matches_missed_during_an_outage(monkeypatch):
+     assert fetcher.requested == [pipeline.results_url(0), pipeline.results_url(1)]
+ 
+ 
+-def test_an_older_results_page_failing_keeps_the_newer_ones():
++def test_an_older_results_page_failing_keeps_the_newer_ones_and_says_so():
++    import pytest
++
+     fetcher = FakeFetcher(pages(**{pipeline.results_url(0): newer_results()}))   # page 1: blocked
+-    todo = pipeline.collect_results(fetcher, None, known_ids=set(), max_pages=pipeline.CATCH_UP_PAGES)
+-    assert {r.match_id for r in todo} == {2399992, 2399990}
++    with pytest.raises(pipeline.ListingIncomplete) as e:   # never a silent stop
++        pipeline.collect_results(fetcher, None, known_ids=set(), max_pages=pipeline.CATCH_UP_PAGES, catch_up=True)
++    assert {r.match_id for r in e.value.results} == {2399992, 2399990} and e.value.page == 1
+ 
+ 
+ class FakeDb:
+@@ -107,7 +136,7 @@ class FakeDb:
+     def mark_failed(self, match_id, error):
+         self.failures[match_id] = self.failures.get(match_id, 0) + 1
+ 
+-    def mark_waiting(self, match_id, reason, minutes=10):
++    def mark_waiting(self, match_id, reason, minutes=10, unavailable_days=7):
+         self.waiting[match_id] = reason
+ 
+     def save_match(self, match, html=None, url="", issues=(), source="hltv"):
+@@ -270,14 +299,14 @@ def test_watch_fails_the_cycle_when_schedule_and_results_are_both_down():
+ def test_watch_without_rankings_uses_stored_top_teams():
+     class DbWithRanking(FakeDb):
+         def latest_ranking(self, top=None):
+-            return pd.DataFrame({"name": ["TYLOO", "9z"]})
++            return pd.DataFrame({"teamid": [4863, 9996], "name": ["TYLOO", "9z"]})
+ 
+     no_rankings = pages()
+     del no_rankings[pipeline.RANKINGS_URL]
+     db = DbWithRanking()
+     ran, failed = pipeline.watch(db, lambda: FakeFetcher(no_rankings), cycles=1, top=4, sleep=lambda s: None)
+     assert (ran, failed) == (1, 0)
+-    assert set(db.queue) == {2394892}  # only stored top teams, never "every team"
++    assert set(db.queue) == {2394892}  # only matches of stored top teams, never "every team"
+ 
+ 
+ def test_watch_reports_failed_cycles():
+diff --git a/tests/test_revisions.py b/tests/test_revisions.py
+new file mode 100644
+index 0000000..c3a7f9f
+--- /dev/null
++++ b/tests/test_revisions.py
+@@ -0,0 +1,211 @@
++"""Coverage repair against a real PostgreSQL (set HLTV_TEST_DSN): the manifest, timestamps that are
++never rewritten, revision ids on stat rows, and a staged revision from creation to promotion."""
++
++import os
++from datetime import date, datetime, timedelta, timezone
++
++import psycopg2
++import pytest
++from conftest import FakeFetcher, load
++from hltv_scraper import acceptance, pipeline, revisions
++from hltv_scraper.db import Database
++from hltv_scraper.models import Result
++from hltv_scraper.parsers import parse_match, parse_rankings, parse_results
++
++MATCH_URL = "https://www.hltv.org/matches/2394892/tyloo-vs-9z-iem-cologne-major-2026-stage-2"
++BO1_URL = "https://www.hltv.org/matches/2394890/vitality-vs-spirit-iem-cologne-major-2026-stage-2"
++START, END = date(2026, 5, 1), date(2026, 6, 30)
++EMPTY = "<html><body></body></html>"
++
++
++def seeded(db, html=None):
++    db.save_rankings(parse_rankings(load("rankings.html")), on=date(2026, 6, 10))
++    match = parse_match(load("match_tyloo_9z.html"), 2394892)
++    db.save_match(match, html, MATCH_URL if html else "")
++    return match
++
++
++def one(db, sql, params=None):
++    with db.con.cursor() as cur:
++        cur.execute(sql, params)
++        row = cur.fetchone()
++    db.con.commit()
++    return row
++
++
++def test_manifest_accounts_for_every_listed_match(db):
++    rows = parse_results(load("results.html"))          # TYLOO-9z, Vitality-Spirit, a forfeit
++    db.record_listing(rows, "results", "u", 0)
++    db.record_listing(rows, "results", "u", 0)          # listed again: still one 'discovered' each
++    db.enqueue([r for r in rows if not r.is_forfeit])
++    seeded(db, load("match_tyloo_9z.html"))
++    db.mark_failed(2394890, "TimeoutError: page did not load")
++    assert db.manifest_accounting() == {"discovered": 3, "stored": 1, "skipped": 1, "unavailable": 0,
++                                        "failed": 1, "pending": 0}
++    assert db.listed_match_ids() == {2394892, 2394890, 2394880}
++    assert one(db, "SELECT attempt, detail FROM result_manifest WHERE kind = 'failed'") == (
++        1, "TimeoutError: page did not load")
++
++
++def test_manifest_is_append_only(db):
++    db.record_listing(parse_results(load("results.html")), "results", "u", 0)
++    for sql in ("UPDATE result_manifest SET detail = 'x'", "DELETE FROM result_manifest", "TRUNCATE result_manifest"):
++        with pytest.raises(psycopg2.Error, match="append-only"):
++            with db.con, db.con.cursor() as cur:
++                cur.execute(sql)
++    assert one(db, "SELECT count(*) FROM result_manifest")[0] == 4   # 3 discovered + 1 skipped (forfeit)
++
++
++def test_old_match_without_stats_becomes_unavailable_not_failed(db):
++    old = Result(1, "A", 2, "B", 0, "", "https://www.hltv.org/matches/1/a-vs-b", "bo3",
++                 played_at=datetime.now(timezone.utc) - timedelta(days=30))
++    new = Result(2, "C", 2, "D", 0, "", "https://www.hltv.org/matches/2/c-vs-d", "bo3",
++                 played_at=datetime.now(timezone.utc))
++    db.record_listing([old, new], "results", "u", 0)
++    db.enqueue([old, new])
++    for _ in range(2):
++        db.mark_waiting(1, "no player statistics", minutes=0)
++        db.mark_waiting(2, "no player statistics", minutes=0)
++    assert dict(db.frame("SELECT matchid, status FROM scrape_queue").values.tolist()) == {1: "unavailable",
++                                                                                          2: "waiting"}
++    assert [r.match_id for r in db.pending()] == [2]          # an unavailable match is final
++    acc = db.manifest_accounting()
++    assert (acc["unavailable"], acc["pending"], acc["failed"]) == (1, 1, 0)
++
++
++def test_first_fetch_time_is_written_once(db):
++    html = load("match_tyloo_9z.html")
++    seeded(db, html)
++    first, latest = one(db, "SELECT first_fetched_at, fetched_at FROM raw_pages WHERE matchid = 2394892")
++    assert first is not None and first == latest
++    seeded(db, html)                                          # read again: latest moves, first stays
++    again = one(db, "SELECT first_fetched_at, fetched_at, refetched_at FROM raw_pages WHERE matchid = 2394892")
++    assert again[0] == first and again[1] >= latest and again[2] is not None
++    with pytest.raises(psycopg2.Error, match="written once"):
++        with db.con, db.con.cursor() as cur:
++            cur.execute("UPDATE raw_pages SET first_fetched_at = now() - interval '1 day'")
++    with db.con, db.con.cursor() as cur:
++        Database._mark_mapstats_page(cur, 77, "overview", 2394892, 1, "<html>a</html>")
++    page_first = one(db, "SELECT first_fetched_at FROM mapstats_pages WHERE mapstatsid = 77")[0]
++    with db.con, db.con.cursor() as cur:
++        Database._mark_mapstats_page(cur, 77, "overview", 2394892, 2, "<html>b</html>")
++    assert one(db, "SELECT first_fetched_at FROM mapstats_pages WHERE mapstatsid = 77")[0] == page_first
++    with pytest.raises(psycopg2.Error, match="written once"):
++        with db.con, db.con.cursor() as cur:
++            cur.execute("UPDATE mapstats_pages SET first_fetched_at = NULL")
++
++
++def test_rows_carry_the_revision_that_wrote_them(db):
++    with db.con, db.con.cursor() as cur:
++        cur.execute("SET hltv.revision_id = '5'")
++    seeded(db)
++    assert one(db, "SELECT created_revision_id, updated_revision_id FROM match_overview")== (5, None)
++    with db.con, db.con.cursor() as cur:
++        cur.execute("SET hltv.revision_id = '6'")
++    seeded(db)                                                # re-saved: an update of match_overview
++    assert one(db, "SELECT created_revision_id, updated_revision_id FROM match_overview") == (5, 6)
++    assert one(db, "SELECT min(created_revision_id), max(created_revision_id) FROM player_stats") == (6, 6)
++
++
++def test_board_scope_by_exact_names(db):
++    match = seeded(db)
++    player_id, nick = sorted(match.players.items())[0]
++    with db.con, db.con.cursor() as cur:
++        cur.execute("INSERT INTO prop_lines (book, line_id, player, team, opponent, market, maps, line) VALUES "
++                    "('prizepicks', '1', %s, 'TYLOO', '9z', 'kills', '1-2', 30), "
++                    "('prizepicks', '2', 'Nobody', 'Tyloo Academy', '9z', 'kills', '1-2', 30)", (nick.upper(),))
++    scope = db.board_scope(days=36500)
++    assert scope["team_ids"] == [4863, 9996]                  # case-insensitive, exact
++    assert scope["player_ids"] == [player_id]
++    assert scope["unresolved_teams"] == ["tyloo academy"]     # never matched fuzzily to TYLOO
++    assert scope["unresolved_players"] == ["nobody"]
++
++
++@pytest.fixture
++def live(db):
++    """The db fixture's schema plays the live tables (public in production)."""
++    schema = db.current_schema()
++    config = {"dsn": os.environ["HLTV_TEST_DSN"], "options": f"-c search_path={schema}"}
++    created = []
++    yield config, schema, created
++    with db.con, db.con.cursor() as cur:
++        for rid in created:
++            cur.execute(f"DROP SCHEMA IF EXISTS hltv_rev_{rid} CASCADE")
++
++
++def test_staged_revision_from_creation_to_promotion(db, live):
++    config, schema, created = live
++    seeded(db)                                                # the live table holds TYLOO vs 9z
++    with db.con.cursor() as cur:
++        before, _ = revisions.match_fingerprints(cur, schema, date.today())
++    db.con.commit()
++
++    rid = revisions.create_revision(config, args={"test": True}, base_schema=schema)
++    created.append(rid)
++    with Database(config, revision=rid) as staged:
++        assert staged.current_schema() == f"hltv_rev_{rid}"
++        assert staged.known_match_ids() == {2394892}          # a copy of live ...
++        assert one(staged, "SELECT created_revision_id FROM match_overview") == (None,)   # ... marked as such
++
++        pages = {pipeline.results_url(0, START, END): load("results.html"), pipeline.results_url(1, START, END): EMPTY}
++        report = pipeline.backfill(staged, lambda: FakeFetcher(pages), START, END, board=False)
++        assert report.sources == {"results": "complete"} and report.queued == 1
++        pipeline.scrape_queue(staged, lambda: FakeFetcher({BO1_URL: load("match_tyloo_9z.html")}), retries=0)
++        assert one(staged, "SELECT created_revision_id FROM match_overview WHERE matchid = 2394890") == (rid,)
++        assert staged.manifest_accounting() == {"discovered": 3, "stored": 2, "skipped": 1, "unavailable": 0,
++                                                "failed": 0, "pending": 0}
++        assert revisions.revision_status(staged)["problems"] == []
++
++    # the live tables never saw any of it
++    with db.con.cursor() as cur:
++        assert revisions.match_fingerprints(cur, schema, date.today())[0] == before
++    db.con.commit()
++    assert db.known_match_ids() == {2394892}
++
++    checks = {c.code: c for c in acceptance.run(config, rid)}
++    for code in ("A1", "A2", "A3a", "A3b", "A5", "A6", "A7"):
++        assert checks[code].ok, (code, checks[code].measured)
++
++    with pytest.raises(RuntimeError, match="--confirm"):
++        revisions.promote_revision(config, rid, confirm="hltv_rev_x", approved_by="owner")
++    with pytest.raises(RuntimeError, match="sealed"):          # not sealed yet: no promotion
++        revisions.promote_revision(config, rid, confirm=f"hltv_rev_{rid}", approved_by="owner")
++
++    revisions.seal_revision(config, rid)
++    with Database(config, revision=rid) as staged:
++        assert staged.sealed
++        with pytest.raises(psycopg2.Error, match="sealed"):
++            with staged.con, staged.con.cursor() as cur:
++                cur.execute("DELETE FROM player_stats")
++    assert {c.code: c.ok for c in acceptance.run(config, rid)}["A8"]
++
++    result = revisions.promote_revision(config, rid, confirm=f"hltv_rev_{rid}", approved_by="owner")
++    assert result["matches"] == 1
++    assert db.known_match_ids() == {2394892, 2394890}
++    assert one(db, "SELECT created_revision_id FROM match_overview WHERE matchid = 2394890") == (rid,)
++    assert one(db, "SELECT count(*) FROM player_stats WHERE matchid = 2394890")[0] > 0
++    assert one(db, "SELECT promoted_by FROM hltv_meta.dataset_revisions WHERE revision_id = %s", (rid,)) == ("owner",)
++    with pytest.raises(RuntimeError):
++        revisions.promote_revision(config, rid, confirm=f"hltv_rev_{rid}", approved_by="owner")
++    with pytest.raises(psycopg2.Error, match="sealed"):        # the registry row is frozen too
++        with db.con, db.con.cursor() as cur:
++            cur.execute("UPDATE hltv_meta.dataset_revisions SET counts = '{}' WHERE revision_id = %s", (rid,))
++
++
++def test_an_unregistered_revision_is_refused(db, live):
++    config, _, _ = live
++    with Database(config) as live_db, live_db.con, live_db.con.cursor() as cur:
++        cur.execute(revisions.META_DDL)
++    with pytest.raises(RuntimeError, match="not registered"):
++        Database(config, revision=999999)
++
++
++def test_health_check_flags_a_scan_listing_that_stays_incomplete(db):
++    from hltv_scraper.validate import health_check
++
++    db.set_state("schema_note", "not json")                    # other state values are left alone
++    db.set_state(pipeline.cursor_key("results:scan"), '{"complete": false, "next_page": 3, '
++                                                      '"since": "2020-01-01T00:00:00+00:00"}')
++    assert {r["check"]: r["count"] for r in health_check(db)}["listing_incomplete"] == 1
++    db.set_state(pipeline.cursor_key("results:scan"), '{"complete": true, "next_page": 4}')
++    assert {r["check"]: r["count"] for r in health_check(db)}["listing_incomplete"] == 0
+-- 
+2.55.0.windows.3
+

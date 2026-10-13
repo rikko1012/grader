@@ -200,6 +200,67 @@ events ended in the last 14 d, full 420-d reconciliation weekly. Coverage job da
 BO3.gg cross-check weekly (CS2 Scout).
 ```
 
+## Corrected coverage figures (2026-10-12 second pass, scratchpad/coverage2 - supersedes the 82.5% / ~91% / 85-97% above)
+
+Universe: BO3.gg finished / forfeit-win maps with 13+ rounds of 244 board players, 420 days before each player's last board
+day (2025-08-09 .. 2026-10-10).
+
+- **48.2% = 9,170 / 19,018** = distinct maps (deduplicated across players) stored in our HLTV DB / all such maps.
+- **59.0% = 33,475 / 56,776** = (board player, map) pairs whose map AND that player's player_stats row are stored / all
+  pairs (2.99 board players per map). Higher only by weighting: coverage is 31.4% on maps with one board player, 83.6%
+  with six or more.
+- Missing: 5,396 matches / 9,848 maps, three mutually exclusive groups:
+
+| group | matches | maps | share of missing maps |
+|---|---:|---:|---:|
+| (i) demonstrably listed by HLTV (its own "past matches" boxes on 8,743 stored pages: 20,654 listed ids, 11,939 not stored) | 3,166 | 6,867 | 69.7% |
+| (ii) found only via BO3.gg, HLTV event known to us, match not seen listed | 1,937 | 2,632 | 26.7% |
+| (iii) HLTV availability unknown (event never seen) | 291 | 346 | 3.5% |
+
+  Counter-evidence: 1,003 of (ii) and 132 of (iii) fall inside a stored team's listed span that does not list them
+  (control: 3,946 / 3,946 stored matches in such spans are listed) - mostly ESEA Advanced / Elite regular season, Exort,
+  United21, EPL, Gamers Club, Dust2.dk.
+- Bounds on "HLTV lists it, we lack it": lower 69.7% (direct evidence only); evidence-adjusted 85.1%; upper 96.5% (all but
+  never-seen events). "Listed" is not "publishes stats". Our coverage of what HLTV lists: 49.1-57.2% of maps.
+- The earlier figures treated "event present in our DB" as confirmation (checked: F1 6,270 / 7,849 listed; B1 3 / 219;
+  U 277 / 586). The 23-match schedule sample proves availability for those 23 only.
+- **Target denominator** = the eligible HLTV set: matches HLTV lists for the window, not forfeits, played > 48 h ago,
+  with published map stats - available only from the scraper's own full listing (result_manifest in the repair below).
+
+## Executable repair (scraper_repair/ in this repo)
+
+`scraper_repair/0001-Coverage-repair-every-listed-match-resumable-listing.patch` (one commit on base a1a377b of
+github.com/rikko1012/hltv-scraper, default branch claude/hltv-scraper-recreation-t4oiso) and `scraper_repair/HANDOFF.txt`
+(affected code with line numbers, deployment, runbook, acceptance tests A1-A8). The patch removes the both-teams-in-today's-
+top-200 rule (pipeline.relevant; optional --top now means EITHER team, by HLTV team id), makes listings resumable and never
+silently partial, adds the append-only result_manifest, write-once first_fetched_at, dataset_revisions with per-row
+revision ids, and staged revisions in their own schema (hltv_rev_N: seeded from public, filled by the backfill, sealed
+immutable, promoted only by an explicit owner-approved command). Its PostgreSQL tests have not run yet (no PostgreSQL in
+this session): a green tests.yml on the pushed branch is the first gate. **Do not merge it into the default branch before
+promotion** - run everything with `--ref repair/coverage-staged`; merging first puts --top 0 on the live scan and changes
+the tables the grader reads before the comparison.
+
+## Staged before / after comparison (before any member grade uses repaired history)
+
+Revisions (both sealed, immutable, replayable): **N0** = `revision create` + `seal` with no backfill (the baseline: the
+seed copy of public at that moment); **N** = seed + the backfill, accepted (A1-A8) and sealed. Comparisons read them
+read-only through `options=-c search_path=hltv_rev_<n>` and record data_rev = the schema.
+
+Same code version (live 1088faf157), same eligible forecasts: every board unit's primary forecast (EVALUATION.md section 1)
+with match start in the fixed comparison window, plus every forward unit after the seal; identical rows in every arm,
+exclusions listed with counts.
+
+- **A** current model on N0 (current history).
+- **B** current model on N (repaired history) - isolates the effect of coverage.
+- **C** N plus a separately frozen and separately tested opponent-strength candidate - only after A vs B is reported;
+  never bundled into B and never credited to it.
+
+Report per stat (kills / headshots separately, in their own units), per coverage band (history share added by N), per
+board team and for established vs thin players: projection bias and MAE; log-loss, Brier and calibration of the published
+P(Over | no push); match-grouped 95% intervals; distinct matches; the number of lines whose side, grade or stake would
+change. Activation (promote N, then a versioned release naming the revision) needs the owner's approval on that evidence;
+the frozen evaluation populations (lb-001, ledger, recaps) keep their recorded inputs.
+
 ## Activation of repaired history in CS2 Scout (grade-changing; not done)
 
 1. The scraper writes the backfill as a new dataset revision (R5); CS2 Scout already records the revision seen by every forecast (forecasts.data_rev, since 2026-10-12).
