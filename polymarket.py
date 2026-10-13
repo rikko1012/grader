@@ -121,10 +121,19 @@ def _started(ml):
     return start is not None and start <= datetime.now(timezone.utc)
 
 
-def match_odds(team, opponent=None, events=None):
+def cached_events():
+    """(event list, retrieval time) already in memory - (None, None) before the first download. Never a request
+    (market_odds.revalidate re-checks a grade's market input on this list)."""
+    return _EVENTS["data"], (_EVENTS["at"] or None)
+
+
+def match_odds(team, opponent=None, events=None, events_at=None):
     """Next Polymarket match for `team` (optionally vs `opponent`) that has NOT started yet.
-    Live and finished matches are skipped - their price isn't a pre-match win chance."""
-    events = upcoming_events() if events is None else events
+    Live and finished matches are skipped - their price isn't a pre-match win chance.
+    events_at: when a caller-supplied list was retrieved (epoch s) - recorded as retrieved_at."""
+    if events is None:
+        events = upcoming_events()
+        events_at = _EVENTS["at"] or None
     best = None
     for ev in events:
         ml = next((m for m in ev.get("markets", []) if m.get("sportsMarketType") == "moneyline"), None)
@@ -182,6 +191,13 @@ def match_odds(team, opponent=None, events=None):
         "start": start, "url": f"https://polymarket.com/event/{ev.get('slug')}",
         "liquidity": round(liq), "volume": round(float(ml.get("volumeNum") or 0)),
         "flags": flags, "maps": maps,
+        # forecast record (2026-10-13): the market's own ids and raw prices as listed (outcome order = "outcomes"; the
+        # bid / ask quote outcome 0) and OUR retrieval time of the event list - None when not listed, never invented
+        "event_slug": ev.get("slug"), "market_id": ml.get("id"), "condition_id": ml.get("conditionId"),
+        "outcomes": outcomes, "outcome_prices": json.loads(ml.get("outcomePrices") or "[]"),
+        "best_bid": ml.get("bestBid"), "best_ask": ml.get("bestAsk"),
+        "retrieved_at": (datetime.fromtimestamp(events_at, timezone.utc).isoformat(timespec="seconds")
+                         if events_at else None),
     }
     if side:
         out.update(side,

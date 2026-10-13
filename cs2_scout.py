@@ -438,6 +438,9 @@ def run_player(b, name, args):
     joined = datetime.fromisoformat(p["joined_team_at"][:10]).date() if p.get("joined_team_at") else None
     out = {"player": {"id": p["id"], "slug": slug, "nick": p.get("nickname")},
            "current_team": team.get("name"), "team_slug": team.get("slug"), "team_id": team.get("id"),
+           # the BO3.gg PROFILE team as read (2026-10-13): current_team can be rewritten in run() (a move / his new team's
+           # roster lists him); the pick log stores this as profile_team next to the team he plays tonight's match for
+           "profile_team": team.get("name"),
            "joined_team": joined.isoformat() if joined else None}
 
     # Gate C - roster
@@ -1143,6 +1146,13 @@ def _hltv_schedule(team_names, member_opp=None):
         return []
 
 
+def _bo_of(fmt):
+    """A schedule source's match format as BO3.gg's bo_type (int): 'bo3' / 'BO5' / 3 -> 3 / 5; None when unknown."""
+    m = re.search(r"(\d+)", str(fmt or ""))
+    n = int(m.group(1)) if m else None
+    return n if n in (1, 2, 3, 5, 7) else None
+
+
 def _iso(s):
     try:
         return datetime.fromisoformat(str(s).replace("Z", "+00:00"))
@@ -1348,9 +1358,50 @@ def hltv_first_gates(pb, d):
     return d
 
 
+def _cli_odds(args, odds):
+    """CLI only (--team-ml / --opp-ml, the owner's local tool): the typed prices REPLACE the market input as a whole - one
+    object for the moneylines, the exact probability, quality (the existing bookmaker rule: a typed price is SOFT), map
+    prices (none) and provenance. Before 2026-10-13 the typed moneylines sat on top of the selected source's provenance,
+    quality and map prices. Web grades (args.web) never use it. Idempotent: an object it made passes through (finish_line
+    stores it as res["odds"] so the summary prints the input the grade used; grader_inputs calls it again)."""
+    tm, om = getattr(args, "team_ml", None), getattr(args, "opp_ml", None)
+    if getattr(args, "web", False) or (tm is None and om is None):
+        return odds
+    if ((odds or {}).get("provenance") or {}).get("selected") == "manual":
+        return odds
+    from grader import american_to_prob
+    from polymarket import prob_to_american
+    if tm is not None and om is not None:
+        a, b = american_to_prob(tm), american_to_prob(om)
+        p = a / (a + b)
+    else:
+        p = american_to_prob(tm) if tm is not None else 1 - american_to_prob(om)
+    tm = tm if tm is not None else prob_to_american(p)
+    om = om if om is not None else prob_to_american(1 - p)
+    q = ((odds or {}).get("provenance") or {}).get("query") or {}
+    return {"found": True, "team_ml": tm, "opp_ml": om, "team_prob": round(p, 6), "opp_prob": round(1 - p, 6),
+            "team": (odds or {}).get("team") or q.get("team"), "opponent": (odds or {}).get("opponent") or q.get("opponent"),
+            "title": "moneylines typed on the command line", "start": (odds or {}).get("start") or q.get("start"),
+            "book": "manual", "maps": {}, "flags": ["Win chance from moneylines typed on the command line"],
+            "provenance": {"selected": "manual", "source": "manual (CLI --team-ml / --opp-ml)", "p_team": round(p, 6),
+                           "odds_policy": "cli-override", "mapping_rev": None,
+                           "replaced": copy.deepcopy((odds or {}).get("provenance"))}}
+
+
+def _p_team_market(odds):
+    """The exact market probability the odds selection produced for his team (None when there is no market)."""
+    try:
+        import market_odds
+        return market_odds.p_team(odds)
+    except Exception:
+        return None
+
+
 def grader_inputs(pb, args, odds=None, hh=None):
     """Map everything into the keys grade_leg() documents."""
     o = pb["overall"]
+    odds = _cli_odds(args, odds)
+    pv_ = (odds or {}).get("provenance") or {}
     d = {
         "prop": args.prop, "line": args.line, "line_type": args.line_type,
         "scope": getattr(args, "scope", "12") or "12", "bo": getattr(args, "match_bo", None),
@@ -1370,8 +1421,13 @@ def grader_inputs(pb, args, odds=None, hh=None):
         "firepower": None, "trading": None, "opening": None,
         "dpr": o.get("dpr"), "kast": pb.get("kast"), "adr": o.get("adr"),
         "market_quality": market_quality(odds), "days_since_last_map": pb.get("days_since_last_map"),
-        # which source supplied the win probability (saved with the forecast; the grader itself never reads it)
-        "odds_provenance": (odds or {}).get("provenance"),
+        # which source supplied the win probability (saved with the forecast; the grader itself never reads it) - a COPY:
+        # the odds object the grade used stays exactly as selected
+        "odds_provenance": copy.deepcopy(pv_) if pv_ else None,
+        # 2026-10-13: the exact selected probability (no American-odds round trip; None = no market, never 50%), the odds
+        # policy that selected it and the alias / matching revision it was linked under (recorded with every forecast)
+        "p_team_market": _p_team_market(odds),
+        "odds_policy": pv_.get("odds_policy"), "mapping_rev": pv_.get("mapping_rev") or _mapping_rev(),
         "map_win_probs": [((odds or {}).get("maps") or {}).get(k, {}).get("team_prob")
                           if ((odds or {}).get("maps") or {}).get(k) else None for k in ("map1", "map2")]
                          if (odds or {}).get("found") else None,
@@ -1395,10 +1451,6 @@ def grader_inputs(pb, args, odds=None, hh=None):
         d["perf"] = {"error": f"HLTV database unreachable right now ({d['hltv_transient']})", "transient": True}
     if odds and odds.get("found") and odds.get("team_ml") is not None:
         d["team_ml"], d["opp_ml"] = odds["team_ml"], odds["opp_ml"]
-    if args.team_ml is not None:
-        d["team_ml"] = args.team_ml
-    if args.opp_ml is not None:
-        d["opp_ml"] = args.opp_ml
     if hh and hh.get("series"):
         # exact-opponent series only (regional stand-ins are shown with weight 0)
         today = date.today()
@@ -1555,18 +1607,29 @@ def print_summary(res):
             print(f"Line {hh['line']}: hit {hh['hit_rate']:.0%}  wins {hh['hits_in_wins']}  losses {hh['hits_in_losses']}")
     od = res.get("odds")
     if od:
-        if od["found"]:
-            print(f"\n== Polymarket: {od['title']} ({od['start']}) ==")
-            print(f"{od['team']} {od.get('team_prob', 0):.1%} ({od.get('team_ml')})  vs  "
-                  f"{od['opponent']} {od.get('opp_prob', 0):.1%} ({od.get('opp_ml')})  "
-                  f"| liquidity ${od['liquidity']:,}")
-            for k, v in od["maps"].items():
+        # the source that was actually selected (2026-10-13: always said 'Polymarket' and read od['liquidity'], which a
+        # Thunderpick / OddsPapi price has not - KeyError)
+        pv = od.get("provenance") or {}
+        try:
+            import market_odds
+            src = market_odds.source_label(od) or "Odds"
+        except Exception:
+            src = "Odds"
+        if od.get("found"):
+            print(f"\n== {src}: {od.get('title')} ({od.get('start')}) ==")
+            liq = od.get("liquidity")
+            print(f"{od.get('team')} {od.get('team_prob') or 0:.1%} ({od.get('team_ml')})  vs  "
+                  f"{od.get('opponent')} {od.get('opp_prob') or 0:.1%} ({od.get('opp_ml')})"
+                  + (f"  | liquidity ${liq:,}" if isinstance(liq, (int, float)) else ""))
+            for k, v in (od.get("maps") or {}).items():
                 if v:
-                    print(f"  {k}: {od['team']} {v['team_prob']:.1%}")
-            for fl in od["flags"]:
+                    print(f"  {k}: {od.get('team')} {v['team_prob']:.1%}")
+            for fl in od.get("flags") or []:
                 print(f"  ! {fl}")
         else:
-            print(f"\n== Polymarket: {od['note']} ==")
+            print(f"\n== No market: {od.get('note') or pv.get('fallback_reason') or 'not found'} ==")
+            if pv.get("fallback_reason"):
+                print(f"  Thunderpick: {pv['fallback_reason']}")
     fi = res.get("faceit_identity")
     if fi:
         print(f"\n== FACEIT account: {fi.get('nickname') or 'NOT FOUND'}  [{fi['confidence'].upper()}] ==")
@@ -1655,13 +1718,13 @@ def grade(name, line, prop="kills", line_type="standard", slug=None, faceit_key=
         faceit_key=faceit_key or os.environ.get("FACEIT_API_KEY"), n=20, refresh=False, ttl=ttl,
         match=match, member_opponent=(opponent or "").strip() or None, light=light,
         scope=scope if scope in ("12", "123", "1") else "12", team_hint=team_hint,
-        member_start=(str(match_start).strip() or None) if match_start and opponent else None)
+        member_start=(str(match_start).strip() or None) if match_start and opponent else None,
+        web=True)                                  # web grade: the CLI --team-ml / --opp-ml override never applies
     args.opponent = args.member_opponent
     # Shared context (stats, match, maps, odds, H2H series, FACEIT, CS API) is the same for every
     # line and prop of a player: built once, reused for CONTEXT_TTL seconds - a new line only
     # redoes finish_line(). Keeps hundreds of members on the same slate cheap.
-    ckey = ((name or "").strip().lower(), (slug or "").lower(), match, _ckey_name(args.member_opponent), _ckey_name(team_hint),
-            bool(args.faceit_key), (args.member_start or "")[:16])     # shared by member grades and both boards (same data snapshot)
+    ckey = _context_key(name, slug, match, args.member_opponent, team_hint, args.faceit_key, args.member_start)
     hit = _CONTEXT.get(ckey)
     t0 = time.time()
     age = time.time() - hit[0] if hit else None
@@ -1687,11 +1750,12 @@ def grade(name, line, prop="kills", line_type="standard", slug=None, faceit_key=
                                                         (pb_.get("recent_maps") or [{}])[0].get("date"))
             except Exception:
                 pass
+        res["team_hint"] = team_hint                     # the platform's team label for THIS line (pick log fallback)
         if not res.get("error"):
             finish_line(res, args)
         _timing_done(res, name, "hit", background, t0)
         return res
-    res = {"generated": datetime.now(timezone.utc).isoformat(timespec="seconds"), "command": "grade"}
+    res = {"generated": datetime.now(timezone.utc).isoformat(timespec="seconds"), "command": "grade", "team_hint": team_hint}
     b = BO3(ttl_hours=ttl, background=background)
     try:
         run(args, res, b, ttl)
@@ -1706,6 +1770,24 @@ def grade(name, line, prop="kills", line_type="standard", slug=None, faceit_key=
     _store_context(ckey, res)
     _timing_done(res, name, "miss", background, t0)
     return res
+
+
+def _mapping_rev():
+    """The alias / matching revision (mapping.revision(): team_aliases.json + comparison.VERIFIED_TEAM_ALIASES +
+    matchid.MATCHING_RULES_VERSION). None when unreadable (never blocks a grade)."""
+    try:
+        import mapping
+        return mapping.revision()
+    except Exception:
+        return None
+
+
+def _context_key(name, slug, match, member_opp, team_hint, faceit_key, member_start):
+    """The shared-context key: shared by member grades and both boards (same data snapshot). The mapping revision is part
+    of it (2026-10-13): a context whose odds were linked under an older alias / matching state is never reused - the
+    next grade re-evaluates the line under the new mapping."""
+    return ((name or "").strip().lower(), (slug or "").lower(), match, _ckey_name(member_opp), _ckey_name(team_hint),
+            bool(faceit_key), (member_start or "")[:16], _mapping_rev())
 
 
 def _context_tainted(res):
@@ -1911,6 +1993,7 @@ def run(args, res, b, ttl):
                            "start": m["start"].strftime("%Y-%m-%dT%H:%M:%SZ"),
                            "title": f"{mine} vs {m['opponent']}{' (' + m['format'].upper() + ')' if m['format'] else ''}"
                                     f"{' - ' + m['event'] if m['event'] else ''}",
+                           "bo": _bo_of(m.get("format")),     # HLTV's format ('bo3') -> 3: the odds selection's format
                            "hltv_match": (re.search(r"/matches/(\d+)", m.get("url") or "") or [None, None])[1]}, "HLTV"
             # BO3.gg doesn't have the match (smaller events, e.g. CIS LAN): use Polymarket's
             # pre-match listing - by his team's exact name, or by the opponent the member typed
@@ -1940,7 +2023,7 @@ def run(args, res, b, ttl):
                                 for m in pandascore.upcoming(member_opp)]
                     if cand:
                         m = min(cand, key=lambda m: m["start"] or "9999")
-                        pm, src = {"team": m["team"], "opponent": m["opponent"], "start": m["start"],
+                        pm, src = {"team": m["team"], "opponent": m["opponent"], "start": m["start"], "bo": _bo_of(m.get("bo")),
                                    "title": f"{m['team']} vs {m['opponent']} (BO{m.get('bo') or '?'}) - {m['event']}"}, "PandaScore"
                 except Exception:
                     pass
@@ -1948,7 +2031,7 @@ def run(args, res, b, ttl):
                 pm = dict(pm, team=str(pm.get("team") or "").strip(), opponent=str(pm.get("opponent") or "").strip())
                 nxt = {"start": pm.get("start"), "slug": None, "opponent": pm["opponent"],
                        "event": pm.get("title"), "maps": [], "source": src.lower(),
-                       "opponent_id": None, "opponent_slug": None,
+                       "opponent_id": None, "opponent_slug": None, "bo": pm.get("bo"),   # None when the source has no format
                        "hltv_match": pm.get("hltv_match")}   # logged + settled from HLTV (picklog)
                 pb["playing_for"] = pm["team"]
                 if no_team:
@@ -1978,7 +2061,9 @@ def run(args, res, b, ttl):
                     res["opponent_defense"] = None
             res["next_match"] = nxt
             args.match_start = nxt.get("start")          # the performance model's day = the match day
-            args.match_bo = nxt.get("bo")                 # match format (BO3 / BO5) - display of the map-3 note only
+            # match format (BO3 / BO5; HLTV / PandaScore matches too since 2026-10-13): the map-3 note, and the odds
+            # selection's format (market_odds.select bo= - Thunderpick's series market is eligible per format)
+            args.match_bo = nxt.get("bo")
             if nxt.get("event_slug") and not nxt.get("event_type"):
                 nxt["event_type"] = _event_type(b, nxt["event_slug"])     # "lan" / "online" (BO3.gg)
             args.opponent = nxt["opponent"]
@@ -2056,25 +2141,16 @@ def run(args, res, b, ttl):
     if args.cmd == "odds" or (args.cmd == "full" and (args.team or pb)):
         team = args.name if args.cmd == "odds" else (args.team or pb.get("playing_for") or pb.get("current_team"))
         if args.cmd == "full":
-            # ONE odds source per grade (market_odds.select, 2026-10-13): Thunderpick first when its policy is active and
-            # the match links exactly; else the existing Polymarket rule - the reason is kept in provenance. The same
-            # snapshot feeds the projection, chance, grade, stake, card and the saved forecast.
+            # ONE odds policy per grade (market_odds.select, odds-source-2, 2026-10-13): Thunderpick first when its quote
+            # is eligible, else the existing Polymarket rule, else OddsPapi (a live request only on a member's own context
+            # build - network=False on the board / background: cache-only), else no market - the reasons are kept in
+            # provenance. The match format goes with it (bo). The returned object is never mutated (finish_line re-checks
+            # it at every regrade and swaps in a NEW object when the selection changed).
             import market_odds
-            res["odds"] = market_odds.select(team, args.opponent, (res.get("next_match") or {}).get("start"))
+            res["odds"] = market_odds.select(team, args.opponent, (res.get("next_match") or {}).get("start"),
+                                             bo=getattr(args, "match_bo", None), network=not b.background)
         else:
             res["odds"] = match_odds(team, args.opponent)  # always live, no cache
-        if args.cmd == "full" and args.opponent and not res["odds"].get("found") and not b.background:
-            # no Polymarket market: bookmaker price (Pinnacle first) from OddsPapi
-            try:
-                import oddspapi
-                alt = oddspapi.match_odds(team, args.opponent)
-                if alt.get("found"):
-                    alt["polymarket_note"] = res["odds"].get("note")
-                    alt["provenance"] = dict(res["odds"].get("provenance") or {}, selected="oddspapi", source="oddspapi",
-                                             book=alt.get("book"), p_team=alt.get("team_prob"))
-                    res["odds"] = alt
-            except Exception:
-                pass
     if args.cmd == "full" and pb and not b.background:
         # CS API (top teams): second-opinion roster, VRS rank, rating/swing context, staleness
         try:
@@ -2575,6 +2651,24 @@ def _regional_note(res):
         res["regional_note"] = regional_note_text(meta, res["h2h"].get("series") or [])
 
 
+def _revalidated_odds(od):
+    """The context's odds re-checked NOW (market_odds.recheck, 2026-10-13) -> (odds, check): a shared context is reused up
+    to 30 minutes but a Thunderpick quote is eligible for 180 s, so the freshness / empty-answer / started checks run at
+    every regrade, not only when the context was built. No network here (board, background and members alike: Polymarket
+    on the list in memory, OddsPapi cache-only). Unchanged -> the same object; changed -> a NEW object (the cached one is
+    never mutated); a failure while re-checking keeps the context's odds. check: when the re-check ran, what it found and
+    the selected quote's latest age (a re-confirmed quote keeps its own retrieval time - this records the confirmation);
+    None when the odds were not made by the selector."""
+    if not od or not isinstance((od.get("provenance") or {}).get("query"), dict):
+        return od, None                              # not made by market_odds.select (CLI 'odds' command / old context)
+    try:
+        import market_odds
+        return market_odds.recheck(od, network=False, quality=market_quality)
+    except Exception as e:
+        return od, {"checked_at": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+                    "result": f"failed ({type(e).__name__}): the context's odds kept"}
+
+
 def finish_line(res, args):
     """The only part of a grade that depends on the line / prop: last-10 vs the line, H2H hit
     rates, grader inputs, the grade, the simulation. Everything else is shared context."""
@@ -2647,7 +2741,15 @@ def finish_line(res, args):
     _tick(res, "h2h", t0)
     pb["_rank_band"] = _best_rank_band(pb, (res["hltv_context"] or {}).get("rank_band"))
     _tick(res, "rank_band", t0)
+    res["odds"], res["odds_check"] = _revalidated_odds(res.get("odds"))
+    # CLI --team-ml / --opp-ml (never web grades): the typed prices ARE the market input, so the summary prints what the
+    # grade used (2026-10-13 review: it printed the selected source's price next to a grade made from the typed ones)
+    res["odds"] = _cli_odds(args, res["odds"])
+    _tick(res, "odds_check", t0)
     res["grader_inputs"] = grader_inputs(pb, args, res.get("odds"), res.get("h2h"))
+    # the re-check itself, saved with the forecast (the inputs blob) - when the market input was last confirmed and what
+    # the re-check found; the grader never reads it
+    res["grader_inputs"]["odds_check"] = copy.deepcopy(res["odds_check"])
     res["grade"] = grade_leg(res["grader_inputs"])
     try:                                     # display only (weight 0): HLTV history that stops well before BO3.gg's
         _hltv_staleness(res["grade"], res["grader_inputs"].get("perf"), pb)
