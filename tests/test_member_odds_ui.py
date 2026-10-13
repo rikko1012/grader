@@ -111,17 +111,25 @@ def test_tp_block_older_thunderpick_shape_and_bad_links(fake_tp, monkeypatch):
         return {"market": "Match Winner", "scope_confirmed": True, "p_a": 0.4, "p_b": 0.6, "current": True, "usable": True,
                 "retrieved_at": iso(NOW), "url": "https://evil.example/match/1"}
     monkeypatch.setattr(thunderpick, "board_block", old_block)
-    b = moneyline.tp_block({"match_id": TP_MID, "start": iso(NOW + timedelta(hours=2))}, NOW)
+    monkeypatch.setattr(thunderpick, "policy", lambda *a, **k: {"active": True, "reasons": []})
+    b = moneyline.tp_block({"match_id": TP_MID, "start": iso(NOW + timedelta(hours=2)), "bo": 3}, NOW)
     assert b["availability"] == "current" and b["eligible"] is True and b["url"] is None      # another host: no link
+    # conservative without the release contract: unknown format / BO2 / inactive policy are never eligible
+    assert moneyline.tp_block({"match_id": TP_MID, "start": iso(NOW + timedelta(hours=2))}, NOW)["availability"] == "format_excluded"
+    assert moneyline.tp_block({"match_id": TP_MID, "bo": 2, "tie_possible": True}, NOW)["eligible"] is False
+    monkeypatch.setattr(thunderpick, "policy", lambda *a, **k: {"active": False, "reasons": ["off"]})
+    assert moneyline.tp_block({"match_id": TP_MID, "bo": 3}, NOW)["availability"] == "policy_inactive"
+    monkeypatch.setattr(thunderpick, "policy", lambda *a, **k: {"active": True, "reasons": []})
     monkeypatch.setattr(thunderpick, "board_block", lambda match_id, now=None, poller=None: dict(old_block(match_id), current=False, usable=False))
-    assert moneyline.tp_block({"match_id": TP_MID}, NOW)["availability"] == "stale"
+    assert moneyline.tp_block({"match_id": TP_MID, "bo": 3}, NOW)["availability"] == "stale"
     for u, ok in (("https://www.thunderpick.io/match/123456", True), ("https://thunderpick.io/en/esports/match/1?ref=a", False),
                   ("http://thunderpick.io/match/123456", False), ("https://thunderpick.io/match/123456/", True),
                   ("https://thunderpick.io/betslip/add?m=1", False), ("javascript:alert(1)", False), (None, False)):
         assert (moneyline.tp_url(u) is not None) is ok, u
     assert moneyline.tp_block({"match_id": None}, NOW) is None                                 # unlinked: never looked up
     monkeypatch.setattr(thunderpick, "board_block", lambda *a, **k: 1 / 0)
-    assert moneyline.tp_block({"match_id": TP_MID}, NOW) is None                               # a broken module: no block
+    rb = moneyline.tp_block({"match_id": TP_MID}, NOW)                                        # a broken reader is NOT "no event"
+    assert rb["availability"] == moneyline.TP_READ_ERROR and rb["eligible"] is False and "read" in rb["availability_label"].lower()
 
 
 # ------------------------------------------------------------------ /api/moneylines payload

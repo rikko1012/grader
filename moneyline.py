@@ -59,7 +59,8 @@ History (CS2_DATA_DIR/.cache/ml_snapshots.db, rows immutable)
                 written since carries baseline_source + odds_policy so the evaluation separates the policies.
 
 Thunderpick (primary bookmaker source, 2026-10-13) - tp_block(): its block per linked match for the tab and the side,
-  read from thunderpick.POLLER memory; never part of ml-baseline-1 (which stays exactly as frozen).
+  read from thunderpick.POLLER memory; never part of ml-baseline-1 (which stays exactly as frozen).  None = no event;
+  a reader failure is the never-eligible "read_error" block (no ml-sides-2 row is written on that pass).
 
 Public:
   start()  idempotent - one background refresher per source
@@ -969,7 +970,9 @@ TP_STATE_LABEL = {
     "policy_inactive": "Thunderpick-first policy not active",
     "unlinked": "Not linked to one match",
     "ambiguous": "Two Thunderpick events link to this match - not used",
+    "read_error": "Could not be read just now - not used",          # this module's own: the reader failed (not "no event")
 }
+TP_READ_ERROR = "read_error"
 TP_NOTE = ("Listed bookmaker odds. The feed gives no stake limits or execution confirmation - a listed price is not a "
            "guarantee for any stake.")
 TP_SCOPE_LABEL = "Match Winner = series winner (from the market label; not provider-confirmed)"
@@ -994,10 +997,39 @@ def tp_policy():
         return None
 
 
-def _tp_legacy_state(b):
-    """availability for a board_block without one (older thunderpick.py): from current / scope / odds."""
+_TP_POL = {"fn": None, "at": 0.0, "active": False}
+_TP_POL_LOCK = threading.Lock()
+
+
+def _tp_policy_active(T):
+    """thunderpick.policy()['active'] for the older module (its board_block marks a quote usable without the policy
+    gate, so THUNDERPICK_POLICY=0 did not stop it - 2026-10-13 review).  Cached 5 s (one store read per board build, not
+    one per card); unreadable = inactive."""
+    fn = getattr(T, "policy", None)
+    if fn is None:
+        return False
+    t = time.time()
+    with _TP_POL_LOCK:
+        if _TP_POL["fn"] is fn and t - _TP_POL["at"] < 5:
+            return _TP_POL["active"]
+    try:
+        active = bool((fn(getattr(getattr(T, "POLLER", None), "db", None)) or {}).get("active"))
+    except Exception:          # noqa: BLE001
+        active = False
+    with _TP_POL_LOCK:
+        _TP_POL.update(fn=fn, at=t, active=active)
+    return active
+
+
+def _tp_legacy_state(b, T=None, bo=None):
+    """availability for a board_block without one (older thunderpick.py): from the policy gate, the format, current /
+    scope / odds - conservative (an unknown format is excluded: a draw may be possible)."""
     if b.get("started"):
         return "started"
+    if T is not None and not _tp_policy_active(T):
+        return "policy_inactive"
+    if bo not in (1, 3, 5):
+        return "format_excluded"
     if b.get("current") is False:
         return "stale"
     if b.get("draw_odds") is not None:
@@ -1009,30 +1041,64 @@ def _tp_legacy_state(b):
     return "current" if b.get("usable") else "stale"
 
 
+def _tp_takes_start(fn):
+    """Does this board_block accept the release contract's start_iso / bo?  Decided from its signature - never by
+    catching a TypeError, which would also swallow one raised INSIDE a new board_block."""
+    import inspect
+    try:
+        ps = inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return True
+    return ("start_iso" in ps and "bo" in ps) or any(p.kind == p.VAR_KEYWORD for p in ps.values())
+
+
+def _tp_read_error(m, now, T=None):
+    """The block for a Thunderpick READ failure: never eligible, said so - not None, which means "no event" downstream
+    (2026-10-13 review: a locked store or a reader bug told members "no event linked" and wrote an immutable ml-sides-2
+    row with that false reason; ml_sides.forecast_row writes no row for this marker)."""
+    st = _parse((m or {}).get("start"))
+    return {"source": "thunderpick", "availability": TP_READ_ERROR, "availability_label": TP_STATE_LABEL[TP_READ_ERROR],
+            "eligible": False, "usable": False, "freshly_confirmed": False, "current": False,
+            "started": bool((m or {}).get("started")) or bool(st and st <= now), "p_a": None, "p_b": None,
+            "odds_a": None, "odds_b": None, "retrieved_at": None, "url": None, "note": TP_NOTE, "quote_time": None,
+            "source_updated_at": None, "policy": getattr(T, "POLICY_VERSION", None) if T else None,
+            "max_age_s": getattr(T, "QUOTE_MAX_AGE_S", 180) if T else 180}
+
+
 def tp_block(m, now=None):
-    """Thunderpick's block for one board match (team A = the board's canonical team A), or None (unlinked, no
-    Thunderpick event, module unavailable).  Adds: availability / availability_label (thunderpick's own when it gives
-    them), eligible (== usable), started, policy, max_age_s, the member note / scope label, a checked match URL and
-    quote_time None (the feed publishes none).  Never raises."""
+    """Thunderpick's block for one board match (team A = the board's canonical team A), or None (unlinked, or
+    Thunderpick has no event for it).  A reader failure (module import, store, a board_block bug) is NOT None: it is the
+    never-eligible read_error block.  Adds: availability / availability_label (thunderpick's own when it gives them),
+    eligible (== usable), started, policy, max_age_s, the member note / scope label, a checked match URL and quote_time
+    None (the feed publishes none).  Independently conservative: a started match or a best-of-2 board match (a draw is
+    possible) is never eligible whatever thunderpick says; an older thunderpick.py also needs its policy gate active
+    and a known best-of-1 / 3 / 5 format.  Never raises."""
     mid = (m or {}).get("match_id")
     if not mid:
         return None
+    now = now or _utcnow()
+    T = None
     try:
         import thunderpick as T
-        try:
-            b = T.board_block(mid, start_iso=m.get("start"), bo=m.get("bo"))
-        except TypeError:                              # an older board_block(match_id, now, poller)
-            b = T.board_block(mid)
+        fn = T.board_block
+        b = fn(mid, start_iso=m.get("start"), bo=m.get("bo")) if _tp_takes_start(fn) else fn(mid)
     except Exception:                                  # noqa: BLE001 - Thunderpick never breaks the tab
-        return None
+        return _tp_read_error(m, now, T)
     if not b:
         return None
+    if not isinstance(b, dict):
+        return _tp_read_error(m, now, T)
     b = dict(b)
-    now = now or _utcnow()
     st = _parse((m or {}).get("start"))
     started = bool(b.get("started")) or bool((m or {}).get("started")) or bool(st and st <= now)
     given = b.get("availability")
-    avail = "started" if started else (given or _tp_legacy_state(b))
+    try:
+        bo = int((m or {}).get("bo")) if (m or {}).get("bo") is not None else None
+    except (TypeError, ValueError):
+        bo = None
+    draw_fmt = bool((m or {}).get("tie_possible")) or bo == 2
+    avail = ("started" if started else "format_excluded" if draw_fmt
+             else (given or _tp_legacy_state(b, T, bo)))
     label = b.get("availability_label") if given and avail == given and b.get("availability_label") else \
         TP_STATE_LABEL.get(avail, str(avail).replace("_", " "))
     try:
@@ -1081,8 +1147,8 @@ def log_forecasts(sources=None, now=None):
                              b["reason"], b["rule"], b["platform"], EXCHANGE_POLICY))
                 _FC_LAST[mid] = (now.timestamp(),) + sig
                 cand = _candidate_row(m, _iso(now))
-                if cand:
-                    extra.append(cand)
+                if cand:                # ml-candidate-1 reads this same baseline price: its source + policy recorded
+                    extra.append(tuple(cand[:12]) + (cand[3], EXCHANGE_POLICY))
             r = _sides_tp_row(m, _iso(now), pol, now)
             if r:
                 sig2 = (r[12], None if r[4] is None else round(r[4], 4), bool(r[8]))
@@ -1094,13 +1160,11 @@ def log_forecasts(sources=None, now=None):
             with _DB_LOCK:
                 con = _connect()
                 try:
+                    # every new row (baseline, candidate, ml-sides-2) carries baseline_source + odds_policy
                     con.executemany("INSERT OR IGNORE INTO ml_forecasts (match_id, model_version, logged_ts, platform,"
                                     " prob_a, team_a, team_b, start, available, disagreement, reason, rule,"
-                                    " baseline_source, odds_policy) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows + tp_rows)
-                    if extra:
-                        con.executemany("INSERT OR IGNORE INTO ml_forecasts (match_id, model_version, logged_ts, platform,"
-                                        " prob_a, team_a, team_b, start, available, disagreement, reason, rule)"
-                                        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", extra)
+                                    " baseline_source, odds_policy) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                                    rows + extra + tp_rows)
                     con.commit()
                 finally:
                     con.close()
@@ -1109,7 +1173,9 @@ def log_forecasts(sources=None, now=None):
 
 def _sides_tp_row(m, logged_iso, policy=None, now=None):
     """The ml-sides-2 row (ml_sides.forecast_row: _SCHEMA column order + baseline_source, odds_policy) for one linked
-    board match, or None.  A missing / broken Thunderpick or ml_sides module never stops the baseline log."""
+    board match, or None.  A missing / broken Thunderpick or ml_sides module never stops the baseline log, and a
+    Thunderpick read error writes no ml-sides-2 row this pass (tp_block's read_error marker; the row's last state and
+    its 30-min clock are kept, so the next readable pass decides)."""
     try:
         import ml_sides
         return ml_sides.forecast_row(m, tp_block(m, now), logged_iso, tp_policy=policy)

@@ -1563,8 +1563,16 @@ async function fetchMoneylines() {
   try { d = await r.json(); } catch {}
   if (r.status === 401 && d && d.error === "members_only") { showGate(d); throw new Error("members only"); }
   if (!r.ok || !d || !Array.isArray(d.matches)) { ML.err = (d && (d.label || d.error)) || "Market probability unavailable"; return; }
-  ML = {data: d, at: Date.now(), err: null};
+  // the server's clock as this copy was SERVED (the body is one shared copy, up to 30 s old): X-Served-At, else the
+  // HTTP Date header - Thunderpick quote ages are measured from it, never from the cached build time
+  let served = NaN;
+  try { served = Date.parse(r.headers.get("X-Served-At") || r.headers.get("Date") || ""); } catch {}
+  ML = {data: d, at: Date.now(), served: isNaN(served) ? null : served, err: null};
 }
+// a Thunderpick price on screen that reaches its quote limit (or its match start) re-draws the tab, so a page left open
+// never keeps showing it as the primary price until the next minute's refresh
+setInterval(() => { if (bbook === "moneylines" && !$("#board").hidden && document.visibilityState === "visible"
+  && [...document.querySelectorAll("#boardout [data-tpexp]")].some(e => +e.dataset.tpexp <= Date.now())) drawBoard(); }, 5000);
 async function loadMoneylines(force) {
   if (!force && ML.data && Date.now() - ML.at < 30000) return drawBoard();
   $("#bstatus").textContent = ML.data ? "Refreshing… (showing the current prices)" : "Loading moneylines…";
@@ -1607,9 +1615,14 @@ function mlPlatform(p, blk, A, B, names) {
     ${!blk.usable && blk.reason ? `<div class="small muted">${esc(blk.reason)}</div>` : ""}</div>`;
 }
 const mlExUsable = m => !!(m.platforms && ((m.platforms.polymarket || {}).usable || (m.platforms.kalshi || {}).usable));
-// "now" on the server's clock (the payload's own build time + how long the page has held it): a phone whose clock is a few
-// minutes off must not expire every Thunderpick quote, and a re-render of an old payload must not keep one alive
-const mlNow = () => (ML.data && ML.data.at && !isNaN(Date.parse(ML.data.at)) && ML.at ? Date.parse(ML.data.at) + (Date.now() - ML.at) : Date.now());
+// "now" on the server's clock: the time this copy was SERVED (ML.served - X-Served-At / Date header) + how long the page
+// has held it. A phone whose clock is a few minutes off must not expire every Thunderpick quote, and a re-render of an old
+// payload must not keep one alive. The payload's own "at" is its BUILD time - one shared copy for up to 30 s - so it is
+// only a floor when no serve time came with the response (2026-10-13 review: anchored on the build time, a 179 s quote
+// built 29 s before the fetch was 208 s old yet read as usable)
+const mlNow = () => { if (!ML.at) return Date.now();
+  const b = ML.data && ML.data.at ? Date.parse(ML.data.at) : NaN, anchor = Math.max(ML.served || -Infinity, isNaN(b) ? -Infinity : b);
+  return isFinite(anchor) ? anchor + (Date.now() - ML.at) : Date.now(); };
 // seconds since this Thunderpick price was last seen in a successful answer (our retrieval time - the feed has none)
 const tpAge = t => { const v = Math.max(Date.parse(t && t.retrieved_at) || 0, Date.parse(t && t.event_last_observed) || 0);
   return v ? Math.max(0, (mlNow() - v) / 1000) : null; };
@@ -1625,15 +1638,19 @@ const clockTime = s => { const d = new Date(s); return isNaN(d) ? "–" : d.toLo
 // why a platform has no usable price, in a few words
 const mlWhy = blk => !blk ? "no market" : !blk.available ? String(blk.reason || "can't be read").replace(/\.$/, "") : blk.fresh === false ? "price not current"
   : blk.market_open === false ? "market closed" : blk.spread != null ? `spread ${Math.round(blk.spread * 100)}¢` : String(blk.reason || "not usable").replace(/\.$/, "");
-const mlSide = sd => {
+// tpNow = is the card's Thunderpick price usable on this page now: the server set a Thunderpick-based side from a price
+// that may have reached its limit since (the shared copy is up to 30 s old) - said so, never shown as if still current
+const mlSide = (sd, tpNow) => {
   if (!sd || !sd.label) return "";
+  const lapsed = sd.baseline_source === "thunderpick" && tpNow === false
+    ? `<div class="small muted">Set from Thunderpick's price when the server built this page – that price is no longer current here; refresh to check</div>` : "";
   const v = sd.hltv_view, c = sd.hltv_counts || {};
   const badge = v === "agrees" ? `<span class="pill good">HLTV agrees${c.available ? ` (${c.for} of ${c.available})` : ""}</span>`
     : v === "disagrees" ? `<span class="pill bad">HLTV disagrees${c.available ? ` (${c.against} of ${c.available} favour the other side)` : ""}</span>`
     : v === "mixed" ? `<span class="pill warn">HLTV mixed</span>` : `<span class="pill">No HLTV comparison</span>`;
   const rs = (sd.reasons || []).slice(0, 6);
   return `<div class="mlside"><div class="mlsidehead"><b>${esc(sd.label)}</b> <span class="pill">0U · shadow</span> ${badge}</div>
-    ${rs.length ? `<ul class="mlreasons">${rs.map(r => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
+    ${lapsed}${rs.length ? `<ul class="mlreasons">${rs.map(r => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
     ${sd.basis ? `<div class="small muted">${esc(sd.basis)}</div>` : ""}</div>`;
 };
 // Thunderpick first (2026-10-13): bookmaker odds, raw implied chances incl. the margin and the proportional
@@ -1656,7 +1673,9 @@ function mlThunder(t, m, A, B) {
       <div class="small">${esc(state)}</div>
       ${t.odds_a != null && t.odds_b != null ? `<div class="small muted">Last seen – display only, not a current price: ${dec}</div>` : ""}
       <div class="small muted">${seen} – the feed publishes no quote time</div>${link}</div>`;
-  return `<div class="mltp"><div class="mltphead"><b>Thunderpick</b> <span class="pill good">Primary source · bookmaker odds</span></div>
+  // when it stops being usable on this page (quote limit or match start), on the page's own clock: the tab re-draws then
+  const st = m && m.start ? Date.parse(m.start) : NaN, left = Math.min((lim - age) * 1000 + 1000, isNaN(st) ? Infinity : st - mlNow());
+  return `<div class="mltp" data-tpexp="${Math.round(Date.now() + Math.max(0, left))}"><div class="mltphead"><b>Thunderpick</b> <span class="pill good">Primary source · bookmaker odds</span></div>
     <div class="mlprob">${esc(A)} ${pct(t.p_a)} · ${esc(B)} ${pct(t.p_b)}</div>
     <div class="small muted">Market-implied probability (margin removed, proportional)</div>
     <div class="small">${dec}</div>
@@ -1677,7 +1696,7 @@ function mlCard(m, model, rec) {
   // of tags; the raw quotes stay one tap away
   if (!pu && !ku) {
     if (tu) return `<article class="mlcard">${headL}${tpb}<div class="small muted">Exchanges: Kalshi ${esc(mlWhy(P.kalshi))}; Polymarket ${esc(mlWhy(P.polymarket))}</div>
-      ${mlSide(m.side)}${quotes}</article>`;
+      ${mlSide(m.side, tu)}${quotes}</article>`;
     return `<article class="mlcard nouse">${headL}${tpb}<div class="mlnone">No usable price – Kalshi: ${esc(mlWhy(P.kalshi))}; Polymarket: ${esc(mlWhy(P.polymarket))}</div>
       ${quotes}</article>`;
   }
@@ -1718,7 +1737,7 @@ function mlCard(m, model, rec) {
   // the model / recommendation status is the same for every match: it is said once, above the list
   return `<article class="mlcard">${headL}
     ${base}
-    ${mlSide(m.side)}
+    ${mlSide(m.side, tu)}
     <details><summary>Quote details</summary>
     <div class="mlbadges"><span>Data</span> ${quality || `<span class="pill">No quotes</span>`}</div>
     ${agree ? `<div class="mlbadges"><span>Agreement</span> ${agree}</div>` : ""}
@@ -2079,6 +2098,13 @@ const stakePill = (d, g) => { const oi = oddsInfo(d);
     : `<span class="pill">${g.market_quality === "SOFT" ? "Thin betting market" : "No betting market"} · max ${capOf(d, "market", 1.5)}U</span>`; };
 const oddsFooter = d => { const oi = oddsInfo(d); if (oi) return oi.footer ? " · " + esc(oi.footer) : "";
   return d && d.odds && d.odds.found ? " · " + esc(oddsSrc(d) || "Polymarket") : ""; };
+// the match itself can come from a Polymarket listing (next_match.source "polymarket") while the odds come from
+// Thunderpick / OddsPapi or no market: Polymarket is still credited for the schedule (2026-10-13 review)
+const schedFooter = d => { const s = d && d.next_match && d.next_match.source;
+  if (s !== "polymarket") return "";
+  const oi = oddsInfo(d), pv = (d.odds && d.odds.provenance) || {};
+  const used = oi ? oi.source : d.odds && d.odds.found ? (pv.selected || (d.odds.book ? "oddspapi" : "polymarket")) : null;
+  return used === "polymarket" ? "" : " · schedule from Polymarket"; };
 /* ODDS_CARD_END */
 function dataStatus(g, v) {
   // quality only - the source (HLTV / BO3.gg / older model) is shown separately and is not a warning by itself
@@ -2484,7 +2510,7 @@ function render(d) {
   const flags = (g.flags || []).map(f => fgt && /^Projection differs from his last-10 average/.test(f) ? fgt : f);
   if ((v.units || 0) > 0) flags.push("Units show the model's relative confidence (A+ 3U down to B- 0.5U) - not a payout-based edge or a proven profit; check the payout before betting");
   if (flags.length) h += `<section class="card full"><h2>Notes</h2><ul class="flags">${flags.map(f => `<li>${esc(f)}</li>`).join("")}</ul></section>`;
-  h += `<div class="small muted foot">Data: BO3.gg${oddsFooter(d)} · FACEIT${d.hltv?.found || d.hltv_context?.found ? " · HLTV" : ""}${d.csapi?.found ? " · CS API" : ""}${d.next_match?.source === "pandascore" ? " · PandaScore" : ""}${d.next_match?.source === "hltv" ? " · schedule from HLTV" : ""}${d.liquipedia ? ` · team from <a href="${esc(d.liquipedia.url)}" target="_blank" rel="noopener">Liquipedia</a> (CC-BY-SA 3.0)` : ""} · Not financial advice</div>`;
+  h += `<div class="small muted foot">Data: BO3.gg${oddsFooter(d)} · FACEIT${d.hltv?.found || d.hltv_context?.found ? " · HLTV" : ""}${d.csapi?.found ? " · CS API" : ""}${d.next_match?.source === "pandascore" ? " · PandaScore" : ""}${d.next_match?.source === "hltv" ? " · schedule from HLTV" : ""}${schedFooter(d)}${d.liquipedia ? ` · team from <a href="${esc(d.liquipedia.url)}" target="_blank" rel="noopener">Liquipedia</a> (CC-BY-SA 3.0)` : ""} · Not financial advice</div>`;
   const out = $("#out"); out.innerHTML = h;
   const kids = [...out.children], cols = document.createElement("div"), main = document.createElement("div"), side = document.createElement("div");
   cols.className = "cols"; cols.append(main, side);

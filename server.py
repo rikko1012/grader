@@ -882,9 +882,14 @@ def moneylines_payload():
                     "side": side})
     out = _merge_unlinked(out)
     for m in out:                           # Thunderpick first (2026-10-13): its block per linked match, team A view
-        m["thunderpick"] = tp_by_mid.get(m["match_id"]) if m.get("match_id") else None
+        tb = tp_by_mid.get(m["match_id"]) if m.get("match_id") else None
+        # a reader error is not "no event" (2026-10-13 review): the card says it could not be read; the side already fell
+        # back with that same reason (the block is never eligible) and the forecast log skips that pass
+        err = bool(tb and tb.get("availability") == moneyline.TP_READ_ERROR)
+        m["thunderpick"] = None if err else tb
         # members can tell "no Thunderpick event" from "not looked up" (an unlinked card is never matched to Thunderpick)
         m["thunderpick_note"] = (None if m["thunderpick"] else
+                                 f"Thunderpick: {moneyline.TP_STATE_LABEL[moneyline.TP_READ_ERROR].lower()}" if err else
                                  "Thunderpick: no event linked to this match" if m.get("match_id") else
                                  "Thunderpick: not checked - this card is not tied to one HLTV match")
     tps = _thunderpick_state()
@@ -1673,24 +1678,57 @@ def _is_perf(g):
     return str((g or {}).get("projection_source") or "").startswith("perf") and ((g or {}).get("scope") or "12") in ("12", "1", "123")
 
 
+_MAP_FORMULA = {3: "series chance p = q^2 (3 - 2q) for a per-map chance q",
+                5: "series chance p = q^3 (10 - 15q + 6q^2) for a per-map chance q"}
+
+
 def _map_basis_words(basis, bo=None):
-    """How the grade's per-map chances came from the series price, in words (detail.map_prob_basis when the grader
-    records it; older grades: the best-of-3 inversion it always used)."""
+    """How the grade's per-map chances came from the series price, in words. basis = detail.map_prob_basis: the grader's
+    dict (grader.map_win_chance: series_win_chance, format 'bo1' / 'bo3' / 'bo5' / 'unknown - BO3 assumed', formula,
+    assumption, kind) - read by its FORMAT field (2026-10-13 review: reading the dict as text matched its 'assumption'
+    key and told every best-of-3 card 'format not known'); a plain string from an older record; None = a grade from
+    before the grader recorded it (the best-of-3 inversion it always used, whatever the match format)."""
     if isinstance(basis, dict):
-        basis = basis.get("label") or basis.get("basis") or basis.get("method") or json.dumps(basis, sort_keys=True)
+        fmt = str(basis.get("format") or "").strip().lower()
+        formula = re.sub(r"^BO\d:\s*", "", str(basis.get("formula") or "")).strip()
+        if fmt == "bo1":
+            return "best-of-1: the map chance is the series chance"
+        if fmt in ("bo3", "bo5"):
+            return f"best-of-{fmt[2]} formula: " + (_MAP_FORMULA[int(fmt[2])] if not formula else
+                                                    f"series chance {formula} for a per-map chance q")
+        if fmt.startswith("unknown") or not fmt:
+            return "format not known - best-of-3 formula assumed: " + _MAP_FORMULA[3]
+        return f"{fmt} - " + (formula or "model-derived")[:120]
     b = str(basis or "").lower()
-    if b:
+    if b:                                           # a plain-text basis: the format it names ('unknown' before 'bo3')
+        if "unknown" in b:
+            return "format not known - best-of-3 formula assumed: " + _MAP_FORMULA[3]
         if "bo1" in b or "best-of-1" in b:
             return "best-of-1: the map chance is the series chance"
         if "bo5" in b or "best-of-5" in b:
-            return "best-of-5 formula"
-        if "assum" in b or "unknown" in b:
-            return "best-of-3 formula assumed (format not known)"
+            return "best-of-5 formula: " + _MAP_FORMULA[5]
         if "bo3" in b or "best-of-3" in b:
-            return "best-of-3 formula"
+            return "best-of-3 formula: " + _MAP_FORMULA[3]
         return str(basis)[:120]
     return ("best-of-3 formula applied to a best-of-1 match (an approximation)" if bo == 1 else
-            "best-of-5 match read with the best-of-3 formula (an approximation)" if bo == 5 else "best-of-3 formula")
+            "best-of-5 match read with the best-of-3 formula (an approximation)" if bo == 5 else
+            "best-of-3 formula: " + _MAP_FORMULA[3])
+
+
+def _map_basis_kind(basis, maps=None):
+    """Where THIS grade's two map chances came from: 'derived' (both model-derived from the series price), 'source' (both
+    from the selected source's own map markets) or 'partial' (one from its map market, the other derived). The grader's
+    record decides when it has one (map_prob_basis.kind); else the odds' own map prices."""
+    k = str((basis or {}).get("kind") or "").lower() if isinstance(basis, dict) else ""
+    if k:
+        if k.startswith("map winner prices"):
+            return "source"
+        if "the other model-derived" in k:
+            return "partial"
+        return "derived"
+    maps = maps or {}
+    n = sum(1 for x in ("map1", "map2") if maps.get(x))
+    return "source" if n == 2 else "partial" if n == 1 else "derived"
 
 
 def card_odds_info(res):
@@ -1766,15 +1804,23 @@ def card_odds_info(res):
                             f"{' + stake cap' if mq not in (None, 'HARD') else ''}; not in the projection"
                             if perf else f"{label} · in the projection")
     maps = od.get("maps") or {}
-    if src and not (maps.get("map1") or maps.get("map2")):
-        basis = _map_basis_words((g.get("detail") or {}).get("map_prob_basis"), nm.get("bo"))
+    mpb = (g.get("detail") or {}).get("map_prob_basis")
+    kind = _map_basis_kind(mpb, maps)
+    feeds = (" They feed the match simulation's map scenarios"
+             + (" and the Maps 1–3 'map 3 played' chance - not the projection" if perf
+                else " and the older model's projection") + ".")
+    if src and kind != "source":
+        basis = _map_basis_words(mpb, nm.get("bo"))
         how = basis if basis.startswith("best-of-1:") else f"{basis}; maps assumed equal and independent"
-        out["maps_note"] = (f"Map win chances are model-derived from the {label} series price ({how}) - {label} supplies "
-                            "no map prices. They feed the match simulation's map scenarios"
-                            + (" and the Maps 1–3 'map 3 played' chance - not the projection" if perf
-                               else " and the older model's projection") + ".")
+        if kind == "partial":                       # one map from the source's own market, the other derived
+            have = "Map 1" if maps.get("map1") else "Map 2" if maps.get("map2") else "One map"
+            out["maps_note"] = (f"{have} win chance from {label}'s own map market; the other map's chance is model-derived "
+                                f"from the {label} series price ({how}).{feeds}")
+        else:
+            out["maps_note"] = (f"Map win chances are model-derived from the {label} series price ({how}) - {label} "
+                                f"supplies no map prices.{feeds}")
     elif src:
-        out["maps_note"] = f"Map win chances from {label}'s own map markets."
+        out["maps_note"] = f"Map win chances from {label}'s own map markets.{feeds}"
     else:
         out["maps_note"] = None
     return out
@@ -1859,7 +1905,7 @@ class Handler(BaseHTTPRequestHandler):
     def log_error(self, fmt, *a):
         sys.stderr.write("  " + fmt % a + "\n")
 
-    def send(self, code, body, ctype="application/json"):
+    def send(self, code, body, ctype="application/json", headers=None):
         data = body if isinstance(body, bytes) else json.dumps(body, default=str).encode()
         STATS["requests"] += 1
         STATS["ms_total"] += (time.time() - getattr(self, "_t0", time.time())) * 1000
@@ -1871,6 +1917,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
         self.end_headers()
         self.wfile.write(data)
 
@@ -1997,9 +2045,9 @@ class Handler(BaseHTTPRequestHandler):
                 # the key
                 if q.get("compare") == "1":     # old source vs Thunderpick on identical saved inputs (no upstream call)
                     import market_odds
-                    return self.send(200, market_odds.compare(_tp_compare_rows()))
+                    return self.send(200, _tp_redact(market_odds.compare(_tp_compare_rows())))
                 if q.get("unmatched") == "1":   # coverage: current events that feed nothing, and why (no upstream call)
-                    return self.send(200, _tp_unmatched())
+                    return self.send(200, _tp_redact(_tp_unmatched()))
                 return self.send(200, _tp_redact(tp_admin_view(min(int(q["samples"]), 20) if (q.get("samples") or "").isdigit() else 3)))
             if u.path == "/admin/thunderpick_probe" and self.authed(q.get("token")):
                 # the explicit admin action: ONE controlled request through thunderpick's gateway (its persisted cooldown,
@@ -2624,7 +2672,10 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             sys.stderr.write(f"  moneylines: {type(e).__name__}: {str(e)[:200]}\n")
             return self.send(503, {"error": "moneylines_unavailable", "label": "Market probability unavailable"})
-        return self.send(st_, body_)
+        # the shared body is up to ML_TTL old: X-Served-At = the server's clock as THIS copy leaves, so the page measures a
+        # Thunderpick quote's age from serve time, not from the cached build time (2026-10-13 review: a 179 s quote built
+        # 29 s before the fetch still read as usable at a true 208 s). Per response, the body bytes stay shared.
+        return self.send(st_, body_, headers={"X-Served-At": datetime.now(timezone.utc).isoformat(timespec="milliseconds")})
 
     def studio_member(self):
         """Whose slip batches these are: the signed-in Whop member (user id), a load test (fixed id, optional X-Test-Member

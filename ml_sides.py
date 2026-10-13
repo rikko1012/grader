@@ -30,7 +30,7 @@ Thunderpick-first market input (MODEL_VERSION_TP "ml-sides-2", 2026-10-13 - owne
 source; the Moneylines tab showed Thunderpick's price as primary while the side still said "no market price")
   Used when the caller passes Thunderpick's block (pick(..., tp=block or None), sides_for_board(..., tp_blocks=[...])).
   Rule 1's "usable market baseline" becomes: Thunderpick's ELIGIBLE price first (moneyline.tp_block: in Thunderpick's
-  latest answer, availability "current", pre-match, linked match, valid two-way odds) -> side = Thunderpick's favourite
+  latest answer, availability "current", pre-match, linked match, not best-of-2, valid two-way odds) -> side = Thunderpick's favourite
   by its proportional margin-adjusted probability; otherwise the ml-baseline-1 exchange baseline exactly as in rule 1;
   otherwise rules 2 / 3 unchanged (the "no usable market price" reason then names Thunderpick's state too).  The HLTV
   composite, ties, the level-50% case and every stake (0U) are the frozen rules above.  Without a tp argument the
@@ -127,11 +127,21 @@ RULE_TP = ("ml-sides-2 market input: Thunderpick's eligible series price (in its
 _RULE1 = object()                      # pick(tp=...) default: no Thunderpick input -> exactly ml-sides-1
 
 
+TP_READ_ERROR = "read_error"           # moneyline.tp_block's marker when Thunderpick could not be read (not "no event")
+TP_FORMAT_WHY = "best-of-2 - a draw is possible, so a two-way price is not a series-winner probability"
+
+
+def _draw_format(match):
+    """A best-of-2 board match (a draw is possible): never a Thunderpick side input, whatever the block says - the same
+    exclusion ml-sides-1 gets from its baseline (2026-10-13 review: checked here too, not only by thunderpick.py)."""
+    return bool((match or {}).get("tie_possible")) or (match or {}).get("bo") == 2
+
+
 def tp_eligible(tp, match):
     """Is `tp` (moneyline.tp_block of this match) an eligible pre-match Thunderpick series price for the side?"""
     if not isinstance(tp, dict) or not tp or not (match or {}).get("match_id"):
         return False
-    if (match or {}).get("started") or tp.get("started"):
+    if (match or {}).get("started") or tp.get("started") or _draw_format(match):
         return False
     if tp.get("availability") not in (None, "current") or not tp.get("eligible", tp.get("usable")):
         return False
@@ -152,6 +162,8 @@ def tp_why(tp, match):
         return None
     if (match or {}).get("started") or tp.get("started"):
         return "match started - no pre-match price"
+    if _draw_format(match):
+        return TP_FORMAT_WHY
     return str(tp.get("availability_label") or tp.get("availability") or "price not usable")[:160]
 
 
@@ -1051,9 +1063,13 @@ def sides_for_board(board_matches, now=None, block=False, max_matches=MAX_MATCHE
 
 def forecast_row(m, tp, logged_iso, tp_policy=None):
     """The ml_forecasts row of the ml-sides-2 market input for one linked board match (moneyline._SCHEMA column order
-    + baseline_source, odds_policy), or None for an unlinked / best-of-2 match.  prob_a = Thunderpick's eligible
-    probability for team A, else the ml-baseline-1 baseline, else None (available 0 - never 50%).  Pure."""
-    if not (m or {}).get("match_id") or (m or {}).get("tie_possible"):
+    + baseline_source, odds_policy), or None for an unlinked / best-of-2 match, or when Thunderpick could not be READ
+    this pass (a reader error is not "no event": an immutable row would record a false reason and flip the source -
+    the next pass that reads it decides).  prob_a = Thunderpick's eligible probability for team A, else the
+    ml-baseline-1 baseline, else None (available 0 - never 50%).  Pure."""
+    if not (m or {}).get("match_id") or _draw_format(m):
+        return None
+    if isinstance(tp, dict) and tp.get("availability") == TP_READ_ERROR:
         return None
     mi = market_input(m, tp, tp_policy)
     t = (m.get("teams") or {})
