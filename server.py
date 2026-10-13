@@ -856,6 +856,40 @@ def _tp_compare_rows(last=400):
     return rows
 
 
+def _tp_unmatched():
+    """Admin coverage view: (1) current Thunderpick events that link to no canonical match, with the reason; (2) the
+    open board matches whose projections fall back from Thunderpick, with the reason. Read-only, no upstream call."""
+    import thunderpick as T
+    p = T.POLLER
+    tz = T.tz_state(p.db)
+    off = tz.get("offset_h") if tz.get("resolved") else None
+    with p.lock:
+        matched = set(p.matched)
+    evs, events_out = p.events(), []
+    for e in evs:
+        row = {"teams": [e.get("team1"), e.get("team2")], "start": e.get("start_raw"), "tournament": e.get("tournament"),
+               "source_event_id": e.get("source_event_id")}
+        if e.get("problem"):
+            events_out.append(dict(row, why=f"invalid event: {e['problem']}"))
+            continue
+        m = T.match_event(e, off, p.canonical_fn)
+        if m.get("match_id") in matched:
+            continue
+        events_out.append(dict(row, match_id=m.get("match_id"),
+                               why=m.get("reason") or "ambiguous: two Thunderpick events link to this match"))
+    board, seen = [], set()
+    for k in picklog.export():
+        key = (k.get("team"), k.get("opponent"), k.get("match_start"))
+        if k.get("status") != "open" or key in seen or not k.get("team"):
+            continue
+        seen.add(key)
+        r = T.projection_odds(k["team"], k.get("opponent"), k.get("match_start"))
+        if not r.get("found"):
+            board.append({"team": k["team"], "opponent": k.get("opponent"), "start": k.get("match_start"), "why": r.get("reason")})
+    return {"events": len(evs), "matched": len(matched), "unmatched_events": events_out,
+            "open_matches": len(seen), "open_matches_without_thunderpick": board}
+
+
 def _thunderpick_state():
     """Thunderpick's honest state for the Moneylines tab (rate-limited / unavailable / setting up / empty / current) -
     its prices are not shown until the CS2 market is confirmed, and Polymarket / Kalshi are never relabelled as it."""
@@ -1677,6 +1711,8 @@ class Handler(BaseHTTPRequestHandler):
                 if q.get("compare") == "1":     # old source vs Thunderpick on identical saved inputs (no upstream call)
                     import market_odds
                     return self.send(200, market_odds.compare(_tp_compare_rows()))
+                if q.get("unmatched") == "1":   # coverage: current events that feed nothing, and why (no upstream call)
+                    return self.send(200, _tp_unmatched())
                 return self.send(200, thunderpick.admin_view(min(int(q["samples"]), 20) if (q.get("samples") or "").isdigit() else 3,
                                                              probe=pr))
             if u.path == "/admin/moneylines_status" and self.authed(q.get("token")):

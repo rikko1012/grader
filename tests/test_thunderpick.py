@@ -422,6 +422,25 @@ def test_moneylines_payload_state_only():
     assert st["source"] == "thunderpick" and "label" in st and "odds_a" not in st
 
 
+def test_admin_coverage_view_lists_unmatched_events_and_board_fallbacks(monkeypatch):
+    import server
+    p, c = active_poller()
+    dup = dict(p.data["cs2"]["events"][3], source_event_id="fx:dup")            # a second event for the same match
+    p.data["cs2"]["events"].append(dup)
+    p.refresh_matches()
+    monkeypatch.setattr(T, "POLLER", p)
+    picks = [{"status": "open", "team": "Alpha1", "opponent": "Bravo1", "match_start": SCHED[1]["start"].isoformat()},
+             {"status": "open", "team": "Zulu", "opponent": "Yankee", "match_start": SCHED[1]["start"].isoformat()},
+             {"status": "settled", "team": "Old", "opponent": "Team", "match_start": "2026-10-01T10:00:00Z"}]
+    monkeypatch.setattr(server.picklog, "export", lambda: picks)
+    v = server._tp_unmatched()
+    assert v["open_matches"] == 2 and [b["team"] for b in v["open_matches_without_thunderpick"]] == ["Zulu"]
+    assert v["open_matches_without_thunderpick"][0]["why"] == "no Thunderpick event for this match"
+    amb = [u for u in v["unmatched_events"] if "ambiguous" in u["why"]]
+    assert len(amb) == 2 and v["matched"] == len(SCHED) - 1
+    assert KEY not in json.dumps(v)
+
+
 def test_fixture_id_is_the_source_event_id_when_present():
     out = T.normalize([ev(fixtureId=12345, tournament="Fixture Cup", game="CS2"), ev()], "t")
     assert out[0]["source_event_id"] == "fx:12345" and out[0]["url_id"] == "2399001" and out[0]["tournament"] == "Fixture Cup"
