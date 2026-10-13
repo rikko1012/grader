@@ -44,25 +44,42 @@ def read(tmp_path, pid):
     return sqlite3.connect(tmp_path / "p.db").execute("SELECT actual, status, hit, result FROM picks WHERE id=?", (pid,)).fetchone()
 
 
-def test_quick_settlement_is_corrected_from_the_full_scoreboard(monkeypatch, tmp_path):
+def test_quick_total_stands_and_disagreement_is_held_for_review(monkeypatch, tmp_path):
+    """Discrepancy audit 2026-10-12: from 2026-03 the QUICK scoreboard matches HLTV (~99.2%) better than the FULL one (96.1%,
+    team-kills subtracted). The quick total stands; the disagreement is recorded; a line between the two is held."""
     db(monkeypatch, tmp_path, [(536, 29.5, 29, 1, QUICK), (560, 27.5, 29, 0, QUICK)])
-    out = picklog.recheck_bo3_quick(FakeB(), full_rows(), now=NOW)
-    assert out["checked"] == 2 and len(out["corrected"]) == 2 and out["confirmed"] == 0
+    out = picklog.recheck_bo3_quick(FakeB(), full_rows(), now=NOW)                 # full says 30
+    assert out["checked"] == 2 and len(out["disagree"]) == 2 and out["held"] == 1
     a, st, hit, res = read(tmp_path, 536)
-    assert (a, st, hit) == (30, "settled", 0)                 # 30 vs Less 29.5: the outcome flips
-    assert json.loads(res)["full_checked"] is True and json.loads(res)["per_map"] == [[15, 8], [15, 4]]
-    assert read(tmp_path, 560)[:3] == (30, "settled", 0)      # total corrected, outcome unchanged
+    assert (a, st, hit) == (29, "settled", 1)                                        # never replaced
+    r = json.loads(res)
+    assert r["discrepancy"] == {"quick_total": 29, "full_total": 30} and r["review"] is True and r["provisional"] is True
+    assert json.loads(read(tmp_path, 560)[3])["review"] is False                      # 27.5 is not between 29 and 30
+    assert not (tmp_path / "c.jsonl").exists()                                        # no correction written
+    assert picklog.recheck_bo3_quick(FakeB(), full_rows(), now=NOW)["checked"] == 0   # each pick once
+
+
+def test_full_scoreboard_corrections_are_reverted_once(monkeypatch, tmp_path):
+    full_detail = {"source": "bo3", "rounds": [18, 19], "won": [False, True], "per_map": [[15, 8], [15, 4]], "full_checked": True}
+    db(monkeypatch, tmp_path, [(536, 29.5, 30, 0, full_detail)])
+    (tmp_path / "c.jsonl").write_text(json.dumps({"id": 536, "old": {"actual": 29, "status": "settled", "hit": 1, "per_map": [[15, 8], [14, 4]]},
+                                                  "new": {"actual": 30, "status": "settled", "hit": 0},
+                                                  "reason": "BO3.gg full scoreboard replaced the quick scoreboard"}) + "\n", encoding="utf-8")
+    done = picklog.revert_full_scoreboard_corrections(now=NOW)
+    assert [d["id"] for d in done] == [536] and done[0]["held_for_review"] is True
+    a, st, hit, res = read(tmp_path, 536)
+    assert (a, st, hit) == (29, "settled", 1)
+    r = json.loads(res)
+    assert r["reverted_full"] and r["review"] and r["discrepancy"] == {"quick_total": 29, "full_total": 30} and r["per_map"] == [[15, 8], [14, 4]]
     log = [json.loads(x) for x in (tmp_path / "c.jsonl").read_text(encoding="utf-8").splitlines()]
-    assert {x["id"] for x in log} == {536, 560} and log[0]["old"]["per_map"] == [[15, 8], [14, 4]]
-    # processed once: nothing left to re-check, no duplicate correction rows
-    again = picklog.recheck_bo3_quick(FakeB(), full_rows(), now=NOW)
-    assert again["checked"] == 0 and len((tmp_path / "c.jsonl").read_text(encoding="utf-8").splitlines()) == 2
+    assert len(log) == 2 and log[1]["reason"].startswith("reverted")
+    assert picklog.revert_full_scoreboard_corrections(now=NOW) == []                 # idempotent
 
 
 def test_equal_full_scoreboard_confirms_without_a_correction(monkeypatch, tmp_path):
     db(monkeypatch, tmp_path, [(1, 29.5, 29, 1, QUICK)])
     out = picklog.recheck_bo3_quick(FakeB(), full_rows(kills=(15, 14)), now=NOW)
-    assert out["confirmed"] == 1 and out["corrected"] == [] and not (tmp_path / "c.jsonl").exists()
+    assert out["confirmed"] == 1 and out["disagree"] == [] and not (tmp_path / "c.jsonl").exists()
     assert read(tmp_path, 1)[:3] == (29, "settled", 1) and json.loads(read(tmp_path, 1)[3])["full_checked"] is True
 
 

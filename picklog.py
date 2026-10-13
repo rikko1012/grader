@@ -550,6 +550,10 @@ def settle(b, map_rows):
                 con.close()
             done += 1
     try:
+        revert_full_scoreboard_corrections(now=now)
+    except Exception:
+        pass
+    try:
         recheck_bo3_quick(b, map_rows, now=now)
     except Exception:
         pass                                           # never blocks settling; the next pass tries again
@@ -617,23 +621,33 @@ def recheck_bo3_with_hltv(now=None, apply=True, days=7, limit=HLTV_RECHECK_MAX):
     return out
 
 
-QUICK_RECHECK_D = 7          # quick-scoreboard settlements are re-derived from the full scoreboard for this long
+QUICK_RECHECK_D = 7          # BO3.gg settlements are compared with the full scoreboard for this long
 QUICK_RECHECK_MAX = 40       # matches per settle pass (each = one player list + two scoreboards, cached)
+REVIEWS = DB.parent / "settlement_reviews.jsonl"
+SOURCE_RULE = ("HLTV authoritative; BO3.gg provisional until HLTV re-derives it; BO3.gg quick scoreboard preferred over the "
+               "full one (2026-10-12 audit: from 2026-03 quick = HLTV on ~99.2% of player-maps, full on 96.1% - the full "
+               "scoreboard subtracts team-kills); quick != full with the line between them -> held for review, not scored")
 
 
 def _is_quick(res):
-    """A BO3.gg settlement from the quick scoreboard: marked quick, or (before the mark, 2026-10-12) no round counts -
-    the full scoreboard always carries them."""
+    """A BO3.gg settlement not yet compared with the full scoreboard: marked quick, or (before the mark, 2026-10-12) no
+    round counts."""
     return res.get("source") == "bo3" and not res.get("full_checked") and (
         res.get("quick") or all(x is None for x in (res.get("rounds") or [None])))
 
 
+def _between(line, a, b):
+    """The line separates the two totals (the outcome depends on which source is right)."""
+    lo, hi = min(a, b), max(a, b)
+    return lo != hi and lo <= line <= hi
+
+
 def recheck_bo3_quick(b, map_rows, now=None, apply=True, days=QUICK_RECHECK_D, limit=QUICK_RECHECK_MAX):
-    """2026-10-12 settlement audit: BO3.gg's quick scoreboard (used to settle right after a match) had map 2 one kill
-    short for two players (Fruju vs MARKandLARRY; 7 picks, one outcome flipped). Once the FULL scoreboard is out,
-    re-derive every pick settled from the quick one (same BO3.gg player id, the same match slug, maps 1-2 by number):
-    a different total is corrected with old and new values in settlement_corrections.jsonl; an equal one is marked
-    full_checked so it is never read again. Returns {"checked", "confirmed", "corrected": [...], "waiting"}."""
+    """Compare every BO3.gg quick-scoreboard settlement with BO3.gg's full scoreboard once it is out (same player id,
+    match slug, maps 1-2 by number). The quick total STANDS (SOURCE_RULE). Equal -> marked full_checked. Different ->
+    the result records both totals ("discrepancy") and stays provisional; when the line sits between them the pick is
+    held for review ("review": True - the learning ledger does not score it) and logged in settlement_reviews.jsonl.
+    Status / total / hit are never changed here. Returns {"checked", "confirmed", "disagree", "held", "waiting"}."""
     now = now or datetime.now(timezone.utc)
     since = (now - timedelta(days=days)).isoformat(timespec="seconds")
     with _LOCK:
@@ -649,7 +663,7 @@ def recheck_bo3_quick(b, map_rows, now=None, apply=True, days=QUICK_RECHECK_D, l
             continue
         if _is_quick(res) and r["player_id"] and r["match_slug"]:
             groups.setdefault((r["player_id"], r["match_slug"]), []).append((r, res))
-    out = {"checked": 0, "confirmed": 0, "corrected": [], "waiting": 0}
+    out = {"checked": 0, "confirmed": 0, "disagree": [], "held": 0, "waiting": 0}
     for (pid, slug), picks in list(groups.items())[:limit]:
         ms = b.player_matches(pid, pages=1, ttl=1).get("results") or []
         mt = next((m for m in ms if m.get("slug") == slug), None)
@@ -660,37 +674,87 @@ def recheck_bo3_quick(b, map_rows, now=None, apply=True, days=QUICK_RECHECK_D, l
         if [x.get("number") for x in maps] != [1, 2] or any(x.get("rounds") in (None, 0) for x in maps):
             out["waiting"] += len(picks)                # full scoreboard not published yet
             continue
-        detail = {"source": "bo3", "rounds": [x["rounds"] for x in maps], "won": [x.get("won") for x in maps],
-                  "per_map": [[x.get("kills"), x.get("headshots")] for x in maps], "full_checked": True}
         for r, old in picks:
             out["checked"] += 1
             stat = "headshots" if r["prop"] == "hs" else "kills"
-            if any(x.get(stat) is None for x in maps):
+            if any(x.get(stat) is None for x in maps) or r["actual"] is None:
                 out["waiting"] += 1
                 continue
-            total = sum(x[stat] for x in maps)
-            upd = _outcome(r, total, [x["map"] for x in maps])
-            same = total == r["actual"] and upd[0] == r["status"] and upd[3] == r["hit"]
-            if same:
+            full = sum(x[stat] for x in maps)
+            new = dict(old, rounds=[x["rounds"] for x in maps], won=[x.get("won") for x in maps], full_checked=True,
+                       quick=True, full_per_map=[[x.get("kills"), x.get("headshots")] for x in maps], rule=SOURCE_RULE)
+            if full == r["actual"]:
                 out["confirmed"] += 1
                 if apply:
-                    _save_result(r["id"], dict(old, rounds=detail["rounds"], won=detail["won"], full_checked=True))
+                    _save_result(r["id"], new)
                 continue
-            d = {"id": r["id"], "player": r["player"], "prop": r["prop"], "scope": "12", "line": r["line"], "pick": r["pick"],
-                 "test": r["test"], "old": {"actual": r["actual"], "status": r["status"], "hit": r["hit"], "per_map": old.get("per_map")},
-                 "new": {"actual": total, "status": upd[0], "hit": upd[3], "per_map": detail["per_map"]},
-                 "match": slug, "reason": "BO3.gg full scoreboard replaced the quick scoreboard"}
-            out["corrected"].append(d)
+            held = _between(r["line"], r["actual"], full)
+            new.update(provisional=True, discrepancy={"quick_total": r["actual"], "full_total": full}, review=held)
+            d = {"id": r["id"], "player": r["player"], "prop": r["prop"], "line": r["line"], "pick": r["pick"],
+                 "quick_total": r["actual"], "full_total": full, "held_for_review": held, "match": slug}
+            out["disagree"].append(d)
+            out["held"] += int(held)
             if apply:
-                with _LOCK:
-                    con = _db()
-                    con.execute("UPDATE picks SET status=?, actual_maps=?, actual=?, hit=?, result=? WHERE id=?",
-                                (upd[0], upd[1], upd[2], upd[3], json.dumps(detail, default=str), r["id"]))
-                    con.commit()
-                    con.close()
-                    with open(CORRECTIONS, "a", encoding="utf-8") as f:
-                        f.write(json.dumps(dict(d, corrected_at=now.isoformat(timespec="seconds")), default=str) + "\n")
+                _save_result(r["id"], new)
+                with open(REVIEWS, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(dict(d, at=now.isoformat(timespec="seconds"), rule=SOURCE_RULE), default=str) + "\n")
     return out
+
+
+FULL_REASONS = ("BO3.gg full scoreboard replaced the quick scoreboard", "settlement audit: BO3.gg full scoreboard differs")
+
+
+def revert_full_scoreboard_corrections(now=None, apply=True):
+    """Undo the 2026-10-12 corrections that replaced a BO3.gg quick-scoreboard settlement with the full scoreboard
+    (SOURCE_RULE): restore the logged old status / total / hit, record both totals, hold for review when the line sits
+    between them, and append the reversal to settlement_corrections.jsonl. Idempotent (marker reverted_full); never
+    touches a pick HLTV has since settled (source hltv)."""
+    now = now or datetime.now(timezone.utc)
+    try:
+        lines = [json.loads(x) for x in CORRECTIONS.read_text(encoding="utf-8").splitlines() if x.strip()]
+    except (OSError, ValueError):
+        return []
+    first = {}
+    for e in lines:
+        if e.get("reason") in FULL_REASONS and e.get("id") is not None and e["id"] not in first:
+            first[e["id"]] = e                          # the first full-scoreboard correction holds the quick values
+    done = []
+    for pid, e in first.items():
+        with _LOCK:
+            con = _db()
+            r = con.execute("SELECT * FROM picks WHERE id = ?", (pid,)).fetchone()
+            con.close()
+        if r is None:
+            continue
+        try:
+            res = json.loads(r["result"] or "{}")
+        except ValueError:
+            res = {}
+        if res.get("reverted_full") or res.get("source") == "hltv":
+            continue
+        old = e.get("old") or {}
+        if old.get("actual") is None:
+            continue
+        full = r["actual"]
+        held = full is not None and _between(r["line"], old["actual"], full)
+        new = dict(res, source="bo3", quick=True, full_checked=True, reverted_full=True, provisional=True, rule=SOURCE_RULE,
+                   discrepancy={"quick_total": old["actual"], "full_total": full}, review=held,
+                   per_map=old.get("per_map") or res.get("per_map"), full_per_map=res.get("per_map"))
+        d = {"id": pid, "player": r["player"], "prop": r["prop"], "scope": r["scope"], "line": r["line"], "pick": r["pick"],
+             "test": r["test"], "old": {"actual": r["actual"], "status": r["status"], "hit": r["hit"]},
+             "new": {"actual": old["actual"], "status": old.get("status"), "hit": old.get("hit")}, "held_for_review": held,
+             "reason": "reverted: the BO3.gg quick scoreboard matches HLTV's definition better than the full one (SOURCE_RULE)"}
+        done.append(d)
+        if apply:
+            with _LOCK:
+                con = _db()
+                con.execute("UPDATE picks SET status=?, actual=?, hit=?, result=? WHERE id=?",
+                            (old.get("status") or r["status"], old["actual"], old.get("hit"), json.dumps(new, default=str), pid))
+                con.commit()
+                con.close()
+                with open(CORRECTIONS, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(dict(d, corrected_at=now.isoformat(timespec="seconds")), default=str) + "\n")
+    return done
 
 
 def _save_result(pick_id, result):
@@ -910,7 +974,7 @@ def fix_scope_settlements(apply=False, scopes=("1", "123"), test=None, until=Non
                 with open(CORRECTIONS, "a", encoding="utf-8") as f:
                     f.write(json.dumps(dict(d, corrected_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
                                             reason="recheck_with_hltv used Maps 1-2 totals for a non-Maps-1-2 line")) + "\n")
-    by_bo3, unresolved = 0, []
+    by_bo3, unresolved, disagree = 0, [], []
     byid = {r["id"]: r for r in rows}
     for sk in skipped:
         r = byid[sk["id"]]
@@ -918,59 +982,59 @@ def fix_scope_settlements(apply=False, scopes=("1", "123"), test=None, until=Non
                 or r["match_slug"].startswith("hltv-"):
             unresolved.append(sk); continue
         try:
-            got = _bo3_full_total(bo3, map_rows, r)
+            got = _bo3_totals(bo3, map_rows, r)
         except Exception as e:
             got = f"BO3.gg error {type(e).__name__}"
         if isinstance(got, str):
             unresolved.append(dict(sk, bo3=got)); continue
         by_bo3 += 1
-        total, maps, detail = got
-        upd = _outcome(r, total, maps)
-        if total == r["actual"] and upd[0] == r["status"] and upd[3] == r["hit"]:
+        q, f = got["quick"], got["full"]
+        if q is not None and f is not None and q != f:
+            disagree.append({"id": r["id"], "player": r["player"], "line": r["line"], "stored": r["actual"], "quick": q, "full": f,
+                             "line_between": _between(r["line"], q, f)})
+        ref = q if q is not None else f                 # SOURCE_RULE: quick first
+        upd = _outcome(r, ref, got["maps"])
+        if ref == r["actual"] and upd[0] == r["status"] and upd[3] == r["hit"]:
             continue
-        d = {"id": r["id"], "player": r["player"], "prop": r["prop"], "scope": "12", "line": r["line"], "pick": r["pick"],
-             "test": r["test"], "old": {"actual": r["actual"], "status": r["status"], "hit": r["hit"]},
-             "new": {"actual": total, "status": upd[0], "hit": upd[3]}, "source": "bo3 full scoreboard"}
-        diffs.append(d)
-        if apply:
-            with _LOCK:
-                con = _db()
-                con.execute("UPDATE picks SET status=?, actual_maps=?, actual=?, hit=?, result=? WHERE id=?",
-                            (upd[0], upd[1], upd[2], upd[3], json.dumps(detail, default=str), r["id"]))
-                con.commit()
-                con.close()
-                with open(CORRECTIONS, "a", encoding="utf-8") as f:
-                    f.write(json.dumps(dict(d, corrected_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                                            reason="settlement audit: BO3.gg full scoreboard differs"), default=str) + "\n")
+        diffs.append({"id": r["id"], "player": r["player"], "prop": r["prop"], "scope": "12", "line": r["line"], "pick": r["pick"],
+                      "test": r["test"], "old": {"actual": r["actual"], "status": r["status"], "hit": r["hit"]},
+                      "new": {"actual": ref, "status": upd[0], "hit": upd[3]},
+                      "source": "bo3 quick scoreboard" if q is not None else "bo3 full scoreboard (no quick)"})
     verified = len(rows) - len(skipped) + by_bo3
     summary = {"cohort": len(rows), "settled_until": until or max((r["settled_at"] or "" for r in rows), default=None),
                "verified": verified, "verified_hltv": len(rows) - len(skipped), "verified_bo3": by_bo3,
                "wrong": len(diffs), "unresolved": len(unresolved),
                "line": f"{len(diffs)} wrong among {verified} verified; {len(unresolved)} unresolved"}
+    summary["bo3_quick_full_disagree"] = len(disagree)
+    summary["rule"] = SOURCE_RULE
     return {"summary": summary, "checked": len(rows), "differs": diffs, "stale_details": details, "skipped": unresolved,
-            "applied": bool(apply)}
+            "bo3_disagreements": disagree, "applied": bool(apply) and False,
+            "note": "BO3.gg-based differences are reported, never applied by the audit (provisional source)"}
 
 
-def _bo3_full_total(b, map_rows, r):
-    """(total, maps, detail) of a Maps 1-2 pick from BO3.gg's FULL scoreboard - the pick's BO3.gg player id, its exact
-    match slug, maps 1 and 2 by number, the team on the scoreboard = the pick's team - or a reason string."""
+def _bo3_totals(b, map_rows, r):
+    """{"quick", "full", "maps"} totals of a Maps 1-2 pick from BO3.gg (the pick's BO3.gg player id, its exact match slug,
+    maps 1 and 2 by number, the pick's team on the scoreboard) - or a reason string. Either total may be None."""
     import hltv
     ms = b.player_matches(r["player_id"], pages=3, ttl=1).get("results") or []
     mt = next((m for m in ms if m.get("slug") == r["match_slug"]), None)
     if not mt:
         return "BO3.gg match not in the player's list"
-    maps = sorted(map_rows(b, r["player_id"], [mt], lambda m, g: (g.get("number") or 9) <= 2), key=lambda x: x.get("number") or 9)
-    if [x.get("number") for x in maps] != [1, 2] or any(x.get("rounds") in (None, 0) for x in maps):
-        return "BO3.gg full scoreboard for maps 1-2 not available"
-    if r["team"] and not (hltv.same_team(r["team"], maps[0].get("team") or "")
-                          or (maps[0].get("team_slug") or "#") in (r["match_slug"] or "")):
-        return f"BO3.gg team {maps[0].get('team')!r} is not the pick's team"
     stat = "headshots" if r["prop"] == "hs" else "kills"
-    if any(x.get(stat) is None for x in maps):
-        return "BO3.gg stat missing"
-    detail = {"source": "bo3", "rounds": [x["rounds"] for x in maps], "won": [x.get("won") for x in maps],
-              "per_map": [[x.get("kills"), x.get("headshots")] for x in maps], "full_checked": True}
-    return sum(x[stat] for x in maps), [x["map"] for x in maps], detail
+    maps = sorted(map_rows(b, r["player_id"], [mt], lambda m, g: (g.get("number") or 9) <= 2), key=lambda x: x.get("number") or 9)
+    full = None
+    if [x.get("number") for x in maps] == [1, 2] and all(x.get("rounds") for x in maps):
+        if r["team"] and not (hltv.same_team(r["team"], maps[0].get("team") or "")
+                              or (maps[0].get("team_slug") or "#") in (r["match_slug"] or "")):
+            return f"BO3.gg team {maps[0].get('team')!r} is not the pick's team"
+        if all(x.get(stat) is not None for x in maps):
+            full = sum(x[stat] for x in maps)
+    qr = _quick_rows(b, r["player_id"], mt)
+    quick = sum(x["headshots" if stat == "headshots" else "kills"] for x in qr) if len(qr) == 2 else None
+    if quick is None and full is None:
+        return "BO3.gg scoreboards for maps 1-2 not available"
+    names = [x.get("map") for x in maps] if len(maps) == 2 else [x.get("map") for x in qr]
+    return {"quick": quick, "full": full, "maps": names}
 
 
 def _hltv_totals(r, same_day_only=False):

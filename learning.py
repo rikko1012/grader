@@ -1011,6 +1011,8 @@ def _ingest(con, picks, now, bad_units, corr_ids):
         bucket, reason = "scored", None
         if uk in bad_units:
             bucket, reason = "settlement_conflict", bad_units[uk]
+        elif any('"review": true' in str(r.get("result") or "") for r in rows):
+            bucket, reason = "settlement_conflict", "BO3.gg quick and full scoreboards disagree around the line - held until HLTV / review"
         elif len(acts) > 1:
             bucket, reason = "settlement_conflict", f"lines in this unit settled with different totals {sorted(acts)}"
         elif not acts and st <= {"void"}:

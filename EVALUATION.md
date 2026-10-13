@@ -87,3 +87,27 @@ Round 5 (FACTOR_AUDIT.md) is development research. Its preregistration timing (d
 is supported only by file timestamps: definitions and results were committed together at 17:14. Its acceptance rule is
 not changed after the result. C3's thin-history improvement (-0.054, -0.094 to -0.003) is a lead for future validation
 on new matches, not a basis for promotion.
+
+## 7. Settlement sources (2026-10-12 discrepancy audit, scratchpad/coverage2)
+
+80,125 player-maps in both sources: kills differ on 3,384 (4.22%) across 2,052 maps.
+
+| class (first match wins) | n | share | mean BO3 - HLTV |
+|---|---:|---:|---:|
+| team-kill definition (full scoreboard subtracts team-kills; 1,930 exactly -1) | 1,976 | 58.4% | -1.06 |
+| kills and deaths both differ (311 rows = 36 whole-map mismatches) | 466 | 13.8% | +1.06 |
+| round counts differ (BO3.gg partial / odd score) | 446 | 13.2% | -1.30 |
+| full scoreboard differs, quick = HLTV (maps from 2026-03) | 384 | 11.3% | +3.93 |
+| substitution (not 5 rows per team) | 40 | 1.2% | |
+| forfeit / technical map | 34 | 1.0% | |
+| wrong player paired | 25 | 0.7% | |
+| kill credited to another teammate | 13 | 0.4% | |
+| HLTV correction / other | 0 | | |
+
+Maps 1-2 totals differ on 7.49% of 30,875 player-series; with lines placed like the 962 graded live props about 0.92% of
+settlements would flip. From 2026-03 BO3.gg's QUICK scoreboard equals HLTV on ~99.2% of player-maps, the FULL one on
+96.07%. Rule (picklog.SOURCE_RULE): HLTV authoritative; BO3.gg results provisional until HLTV re-derives them; the quick
+total stands over the full one; when they differ with the line between them the pick is held for review (recap: pending;
+learning: settlement_conflict, never scored) and logged in settlement_reviews.jsonl. The earlier 2026-10-12 corrections
+that replaced quick totals with full ones (7 Fruju vs MARKandLARRY picks) are reverted with a logged entry each. The
+settlement audit reports BO3.gg-based differences and never applies them.

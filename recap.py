@@ -70,8 +70,18 @@ class MixedCohortError(RecapError):
 
 # ---------------------------------------------------------------- record normalisation
 
+def _held(r):
+    """Held for review (picklog SOURCE_RULE): BO3.gg quick and full scoreboards disagree and the line sits between them."""
+    try:
+        return bool(json.loads(r.get("result") or "{}").get("review"))
+    except (TypeError, ValueError):
+        return False
+
+
 def outcome(r):
     st = r.get("status")
+    if st in ("settled", "push") and _held(r):
+        return "pending"                           # unresolved until HLTV / review settles it - never a win or loss
     if st == "settled":
         if r.get("hit") in (1, True, "1"):
             return "win"
