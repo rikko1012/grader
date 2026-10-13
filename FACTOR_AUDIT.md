@@ -284,3 +284,9 @@ established point estimate is +0.003 (criterion 3). By r_w band, C3 vs lb-001: <
 **Decision: nothing frozen.** C1, C2 fail the HLTV test; C0 makes the board worse; C3 fails criteria 3 and 4 (lb-001, already
 frozen, carries the thin-history gain). Live model and lb-001 unchanged. Open item (NOT tested, would need a new frozen round on
 new matches): a "returning" definition that survives the first match back (e.g. a >= 60-day break within the last 30 days).
+
+## Round 5 - record note (added 2026-10-12, owner review)
+Development research. The preregistration timing (definitions written 17:00 UTC, before the runs) is supported only by
+file timestamps - definitions and results were committed together (c23f763, 17:14 UTC). The acceptance rule is not changed
+after the result. C3's thin-history result is a lead for validation on new matches, not a basis for promotion. No
+adjustment experiment runs until the HLTV coverage repair and the staged before/after comparison are done (HLTV_COVERAGE.md).

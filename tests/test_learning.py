@@ -659,7 +659,8 @@ def test_every_distinct_line_is_kept_and_weighted(db):
     al = sc["all_lines"]
     assert al["lines"] == 4 and al["units"] == 2 and al["matches"] == 2              # 3 lines weigh as one unit
     q = sc["questions"]["all"]
-    assert q["q1_vs_50"]["units"] == 2 and q["q2_projection_vs_line"]["units"] == 2
+    assert q["q1_vs_50"]["units"] == 2 and q["q2_projection_vs_line"]["units"] == 2 and q["q2_projection_vs_line"]["unit"] == "share of the line"
+    assert sc["questions"]["kills"]["q2_projection_vs_line"]["unit"] == "kills" and "positive = ours better" in sc["questions"]["sign"]
     assert "50%" in q["q1_vs_50"]["note"] and "line" in q["q2_projection_vs_line"]["note"]
 
 

@@ -1126,21 +1126,30 @@ def two_questions(sc):
     Q1 do our probabilities beat a constant 50% (log-loss vs 0.5, conditional on no push)?
     Q2 do our projected totals predict the outcome better than the offered line (|projection - actual| vs |line - actual|)?
     Paired per unit, intervals resample canonical matches. A checkpoint does not guarantee either is resolved."""
-    out = {}
-    for name, us in (("all", sc), ("kills", [u for u in sc if u["prop"] == "kills"]), ("hs", [u for u in sc if u["prop"] == "hs"])):
+    # Labels (owner review 2026-10-12): every gain = BASELINE minus OURS, so positive = ours better. Q2 is reported in the
+    # stat's own units for kills and for headshots separately; the pooled row is a RELATIVE error (|error| / line) so kills
+    # and headshots are not added as if they were one unit. Interim numbers - decisions are made only at review windows.
+    out = {"sign": "gain = baseline - ours (positive = ours better)",
+           "warning": "interim measurement; small samples (see matches); repeated checks are not decisions"}
+    for name, us in (("kills", [u for u in sc if u["prop"] == "kills"]), ("hs", [u for u in sc if u["prop"] == "hs"]), ("all", sc)):
         q1 = [u for u in us if u["p"] is not None and u["over"] in (0, 1)]
         g1 = lambda u: _ll(0.5, u["over"]) - _ll(u["p"], u["over"])
-        q2 = [u for u in us if u["lam"] is not None and u["actual"] is not None and u.get("line") is not None]
-        g2 = lambda u: abs(u["line"] - u["actual"]) - abs(u["lam"] - u["actual"])
+        q2 = [u for u in us if u["lam"] is not None and u["actual"] is not None and u.get("line")]
+        if name == "all":
+            g2 = lambda u: (abs(u["line"] - u["actual"]) - abs(u["lam"] - u["actual"])) / u["line"]
+            unit, label = "share of the line", "relative abs-error gain vs the line ((|line-actual| - |projection-actual|) / line), pooled"
+        else:
+            g2 = lambda u: abs(u["line"] - u["actual"]) - abs(u["lam"] - u["actual"])
+            unit = "kills" if name == "kills" else "headshots"
+            label = f"abs-error gain vs the line, in {unit} (|line-actual| - |projection-actual|)"
         out[name] = {
             "q1_vs_50": {"units": len(q1), "matches": len({u["match"] for u in q1}),
                          "log_loss_gain_vs_50": _r(sum(g1(u) for u in q1) / len(q1), 5) if q1 else None,
                          "ci": _ci_ratio(_groups(q1, g1)) if q1 else None,
-                         "note": "positive = our probabilities beat a constant 50%"},
+                         "note": "log-loss(0.5) - log-loss(ours); positive = our probabilities beat a constant 50%"},
             "q2_projection_vs_line": {"units": len(q2), "matches": len({u["match"] for u in q2}),
-                                      "abs_error_gain_vs_line": _r(sum(g2(u) for u in q2) / len(q2), 3) if q2 else None,
-                                      "ci": _ci_ratio(_groups(q2, g2)) if q2 else None,
-                                      "note": "positive = our projection was closer to the actual total than the line"}}
+                                      "gain": _r(sum(g2(u) for u in q2) / len(q2), 4) if q2 else None,
+                                      "ci": _ci_ratio(_groups(q2, g2)) if q2 else None, "unit": unit, "note": label}}
     return out
 
 
@@ -1678,7 +1687,7 @@ def run_cycle(now=None, picks=None, forecasts=None, batches=None, corrections=No
                 log["ingest"] = _ingest(con, picks, now, bad, corr_ids)
                 con.commit()
                 _sc = _meta(con, "scorecard")
-                if log["ingest"]["added"] or log["ingest"].get("lines_backfilled") or _sc is None or "questions" not in _sc:
+                if log["ingest"]["added"] or log["ingest"].get("lines_backfilled") or _sc is None or "sign" not in (_sc.get("questions") or {}):
                     _set_meta(con, "scorecard", scorecard(con))
                     _set_meta(con, "scorecard_at", _iso(now))
                     con.commit()
