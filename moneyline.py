@@ -967,7 +967,7 @@ TP_STATE_LABEL = {
     "draw_listed": "A draw price is listed - not a two-way series market",
     "format_excluded": "Format excluded (best-of-2 or unknown - a draw is possible)",
     "invalid_odds": "Odds missing or invalid",
-    "policy_inactive": "Thunderpick-first policy not active",
+    "policy_inactive": "Not used yet - the Thunderpick-first policy is waiting for its evidence (what the market settles on is tested on BO3 prices)",
     "unlinked": "Not linked to one match",
     "ambiguous": "Two Thunderpick events link to this match - not used",
     "read_error": "Could not be read just now - not used",          # this module's own: the reader failed (not "no event")
@@ -975,7 +975,8 @@ TP_STATE_LABEL = {
 TP_READ_ERROR = "read_error"
 TP_NOTE = ("Listed bookmaker odds. The feed gives no stake limits or execution confirmation - a listed price is not a "
            "guarantee for any stake.")
-TP_SCOPE_LABEL = "Match Winner = series winner (from the market label; not provider-confirmed)"
+TP_SCOPE_LABEL = ("Match Winner - read as the series winner because, on BO3 matches, its prices fit the exchange series "
+                  "prices better than a map-1 reading (price test; not provider-confirmed)")
 TP_SCOPE_UNCONFIRMED = "main market - series scope not established"
 _TP_URL = re.compile(r"^https://(?:www\.)?thunderpick\.io/match/\d+$")
 

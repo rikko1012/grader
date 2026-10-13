@@ -1054,6 +1054,8 @@ def _thunderpick_state():
         out = {k: ps.get(k) for k in _TP_STATE_KEYS if k in ps}
         out.setdefault("source", "thunderpick")
         out["max_age_s"] = getattr(thunderpick, "QUOTE_MAX_AGE_S", 180)
+        if ps.get("state") == "ok" and ps.get("policy_active") is False:   # feed fine, prices not used yet - say so
+            out["label"] = "Thunderpick odds retrieved - not used yet (its market's meaning is still being tested on BO3 prices)"
         return out
     except Exception as e:
         return {"source": "thunderpick", "state": "unavailable", "label": f"Thunderpick unavailable ({type(e).__name__})"}
@@ -1788,7 +1790,8 @@ def card_odds_info(res):
     if src == "thunderpick":
         label, market = "Thunderpick", pv.get("market") or "Match Winner"
         scope = pv.get("scope") or "series winner"
-        out["scope_note"] = (f"{market} = {scope} (from the market label; "
+        out["scope_note"] = (f"{market} - read as the {scope} because, on BO3 matches, its prices fit the exchange series "
+                             f"prices better than a map-1 reading (price test; "
                              f"{'provider-confirmed' if pv.get('scope_provider_confirmed') else 'not provider-confirmed'})")
         out["price_note"] = "Bookmaker odds, margin removed proportionally"
         out["retrieved_at"] = pv.get("retrieved_at")

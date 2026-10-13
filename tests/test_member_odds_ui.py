@@ -77,7 +77,7 @@ def test_tp_block_eligible_current_with_member_labels(fake_tp):
     assert b["url"] == "https://thunderpick.io/match/2813630"                                # query + fragment dropped
     assert b["note"] == ("Listed bookmaker odds. The feed gives no stake limits or execution confirmation - a listed "
                          "price is not a guarantee for any stake.")
-    assert b["scope_label"] == "Match Winner = series winner (from the market label; not provider-confirmed)"
+    assert b["scope_label"] == moneyline.TP_SCOPE_LABEL and "price test" in b["scope_label"]
     assert b["quote_time"] is None and b["source_updated_at"] is None and b["policy"] == "tp-first-2"
     assert b["max_age_s"] == thunderpick.QUOTE_MAX_AGE_S
     assert "slip" not in json.dumps(b).lower()
@@ -374,7 +374,7 @@ def test_card_odds_info_thunderpick_perf_grade():
     assert oi["match_label"] == "Win chance (Thunderpick, margin removed)" and oi["footer"] == "Thunderpick"
     assert oi["tile_note"] == "Thunderpick (margin removed) · context + stake cap; not in the projection"
     assert server.card_odds_info(_card(PM_ODDS, mq="HARD"))["tile_note"] == "Polymarket · context; not in the projection"
-    assert oi["scope_note"] == "Match Winner = series winner (from the market label; not provider-confirmed)"
+    assert oi["scope_note"].startswith("Match Winner - read as the series winner") and "not provider-confirmed" in oi["scope_note"]
     assert oi["retrieved_at"] == "2026-10-13T13:59:49Z" and "no quote time" in oi["time_note"]
     assert "model-derived" in oi["maps_note"] and "best-of-3 formula" in oi["maps_note"] and "match simulation" in oi["maps_note"]
     assert "not the projection" in oi["maps_note"] and "updated" not in json.dumps(oi)
@@ -517,7 +517,7 @@ def test_rendered_thunderpick_card_labels_link_and_comparison(tmp_path):
         assert "Primary source · bookmaker odds" in h and "Decimal odds: Alpha 2.80 · Bravo 1.38" in h
         assert "Market-implied probability (margin removed, proportional)" in h
         assert "Raw implied (incl. margin): Alpha 35.7% · Bravo 72.5% · Bookmaker margin 8.2%" in h
-        assert "Scope: Match Winner = series winner (from the market label; not provider-confirmed)" in h
+        assert "Scope: Match Winner - read as the series winner" in h and "price test" in h
         assert "Retrieved by us" in h and "the feed publishes no quote time" in h
         assert 'href="https://thunderpick.io/match/2813630"' in h and "Open match on Thunderpick" in h
         assert "a listed price is not a guarantee for any stake" in h
