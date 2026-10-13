@@ -1,5 +1,6 @@
 """
-matchid.py - one canonical identity per CS2 match, shared by props, moneylines, slips and settlement.
+matchid.py - one canonical identity per CS2 match, shared by props, moneylines, slips and the projection's odds
+link (Thunderpick). Settlement does NOT use the match ids - only team_key's aliases (see the last paragraph).
 
 Every platform spells teams and start times its own way (Underdog "Team Vitality", Polymarket "Overtake", Kalshi "6666",
 BO3.gg "Vitality", HLTV "Overtake Sector"). This module turns (team A, team B, start) into ONE id that is the same on
@@ -38,7 +39,14 @@ Platform links: link(platform, event_id, market_id, match_id, outcome_team_map) 
 (SQLite, WAL, one transaction per write, idempotent upsert on (platform, market_id)). When a market first linked by
 hash is later linked to its HLTV match, the old id is recorded as an alias (current_id() follows it).
 
-Read-only with respect to grading: nothing here feeds or changes a grade.
+What it decides for grading (corrected 2026-10-13 - this used to say "nothing here feeds or changes a grade"): since the
+Thunderpick-first odds policy, canonical_match() decides whether a Thunderpick quote is linked to the match a line is
+graded for (thunderpick.projection_odds via market_odds.select), so an alias or a rule here can change which market
+feeds a grade. That state is versioned: mapping.revision() hashes team_aliases.json, comparison.VERIFIED_TEAM_ALIASES
+and MATCHING_RULES_VERSION below; the revision is part of the shared-context key (cs2_scout) and is recorded with
+every forecast (picklog mapping_rev, full content in picks.db mapping_revisions). Settlement never uses the match
+ids: it keys on the HLTV player id + the opponent's HLTV team id + a date window, or the BO3.gg player id + match slug
+(team_key's maintained aliases do help it resolve a team name to its HLTV id - hltv.resolve_team_id).
 """
 import hashlib
 import json
@@ -59,6 +67,10 @@ DATA_DIR = Path(os.environ.get("CS2_DATA_DIR") or Path(__file__).resolve().paren
 DB_PATH = DATA_DIR / ".cache" / "match_links.db"
 ALIASES_PATH = Path(__file__).resolve().parent / "team_aliases.json"
 
+# The matching rules' own version (2026-10-13): bump it whenever a rule here changes how a name or a match resolves
+# (normalisation, affixes, WINDOW_H, candidate tie-breaks, alias loading) - it is hashed into mapping.revision(), so every
+# forecast records which rules linked its odds. Alias FILE edits need no bump (the file itself is hashed).
+MATCHING_RULES_VERSION = "match-rules-1"
 WINDOW_H = 3                  # an HLTV match of the same two teams starting within this many hours is the same match
 TEAMS_TTL = 3600
 SCHEDULE_TTL = 5 * 60

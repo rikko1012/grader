@@ -98,14 +98,24 @@ def prob_to_american(p):
     return round(-100 * p / (1 - p)) if p >= 0.5 else round(100 * (1 - p) / p)
 
 
-def match_odds(team, opponent=None):
+def match_odds(team, opponent=None, cache_only=False, max_age=None):
     """Same shape as polymarket.match_odds: {'found', 'team', 'opponent', 'team_prob', 'team_ml', ...}.
-    team may be None when only the opponent is known. Pre-match only. Never raises."""
+    team may be None when only the opponent is known. Pre-match only. Never raises.
+    cache_only=True (market_odds.select for the board / background grades and every re-check, 2026-10-13): never a
+    request - only the fixture list and prices a member's grade already fetched, at most max_age s old (default FIX_TTL).
+    The answer carries fixture_id and retrieved_at (our fetch time of the prices)."""
     if not key():
         return {"found": False, "note": "No OddsPapi key"}
+    age_max = FIX_TTL if max_age is None else max_age
     try:
         best = None
-        for fx in fixtures():
+        if cache_only:
+            if _FIX["data"] is None or time.time() - _FIX["at"] > age_max:
+                return {"found": False, "note": "OddsPapi: no recent fixture list in memory (cache-only)"}
+            fx_list = _FIX["data"]
+        else:
+            fx_list = fixtures()
+        for fx in fx_list:
             if _started(fx):
                 continue
             p1, p2 = fx.get("participant1Name"), fx.get("participant2Name")
@@ -119,11 +129,14 @@ def match_odds(team, opponent=None):
             return {"found": False, "note": "No OddsPapi fixture for this match"}
         fx, ti, mine, theirs = best
         hit = _ODDS.get(fx["fixtureId"])                 # limited free quota: 10-minute cache
-        if hit and time.time() - hit[0] < FIX_TTL:
-            odds = hit[1]
+        if hit and time.time() - hit[0] < (age_max if cache_only else FIX_TTL):
+            odds, got_at = hit[1], hit[0]
+        elif cache_only:
+            return {"found": False, "note": f"OddsPapi: no recent prices in memory for {mine} vs {theirs} (cache-only)"}
         else:
             odds = _get("/odds", fixtureId=fx["fixtureId"])
-            _ODDS[fx["fixtureId"]] = (time.time(), odds)
+            got_at = time.time()
+            _ODDS[fx["fixtureId"]] = (got_at, odds)
         for book in BOOKS:
             d1, d2 = _price(odds, book, "171"), _price(odds, book, "172")
             if d1 and d2 and d1 > 1 and d2 > 1:
@@ -135,7 +148,9 @@ def match_odds(team, opponent=None):
                         "team_ml": prob_to_american(tp), "opp_ml": prob_to_american(1 - tp),
                         "start": fx.get("startTime"), "title": f"{mine} vs {theirs} - {fx.get('tournamentName')}",
                         "source": f"{book} (OddsPapi, de-vigged)", "flags": [], "maps": {},
-                        "decimal": [d1, d2] if ti == 0 else [d2, d1]}
+                        "decimal": [d1, d2] if ti == 0 else [d2, d1], "fixture_id": fx.get("fixtureId"),
+                        "retrieved_at": datetime.fromtimestamp(got_at, timezone.utc).isoformat(timespec="seconds"),
+                        "cache_only": bool(cache_only)}
         return {"found": False, "note": f"OddsPapi fixture found but no match-winner price ({mine} vs {theirs})"}
     except Exception as e:
         return {"found": False, "note": f"OddsPapi unavailable: {str(e)[:160]}"}

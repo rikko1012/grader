@@ -246,8 +246,13 @@ def connect(db=None):
     CREATE TABLE IF NOT EXISTS acks (item TEXT PRIMARY KEY, at TEXT, reason TEXT);
     CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT, kind TEXT, detail TEXT);
     """)
-    for tbl, col in (("ledger", "lines"), ("forecast_copy", "probs_raw"), ("forecast_copy", "data_rev")):
-        try:                              # 2026-10-12 owner review: every distinct line kept; raw chances + dataset revision
+    # 2026-10-12 owner review: every distinct line kept; raw chances + dataset revision. 2026-10-13: the forecast's odds
+    # record - which source supplied the market input (odds_source / the provenance's `selected`), under which odds policy
+    # and alias / matching revision - so results can be split by them without joining back to picks.db
+    for tbl, col in (("ledger", "lines"), ("forecast_copy", "probs_raw"), ("forecast_copy", "data_rev"),
+                     ("forecast_copy", "odds_source"), ("forecast_copy", "odds_policy"), ("forecast_copy", "mapping_rev"),
+                     ("forecast_copy", "odds_selected")):
+        try:
             con.execute(f"ALTER TABLE {tbl} ADD COLUMN {col} TEXT")
         except sqlite3.OperationalError:
             pass
@@ -288,7 +293,7 @@ def read_picklog(picks_path=None, after_forecast_id=0, limit=3000):
         con.execute("PRAGMA query_only=ON")
         con.execute("BEGIN")
         fcols = {r[1] for r in con.execute("PRAGMA table_info(forecasts)")}
-        opt = "".join(f", {c}" for c in ("probs_raw", "data_rev") if c in fcols)
+        opt = "".join(f", {c}" for c in ("probs_raw", "data_rev", "odds_source", "odds_policy", "mapping_rev") if c in fcols)
         fr = [dict(r) for r in con.execute(
             "SELECT id, pick_id, kind, logged_at, match_start, line, pick, p_pick, p_more, grade, units, lambda, "
             f"model_version, inputs{opt} FROM forecasts WHERE id > ? ORDER BY id LIMIT ?", (after_forecast_id, limit))]
@@ -877,16 +882,20 @@ def _copy_forecasts(con, picks, forecasts, now):
             return n, True                             # its pick row is not visible yet: next cycle
         p = p or {}
         feat = features(f.get("inputs"))
+        gi_ = f.get("inputs") if isinstance(f.get("inputs"), dict) else {}
+        pv = gi_.get("odds_provenance") if isinstance(gi_.get("odds_provenance"), dict) else {}
+        o_pol, o_map = f.get("odds_policy") or pv.get("odds_policy"), f.get("mapping_rev") or gi_.get("mapping_rev") or pv.get("mapping_rev")
         con.execute("INSERT OR IGNORE INTO forecast_copy (forecast_id, pick_id, kind, logged_at, match_start, line, side, p_pick, "
                     "p_more, grade, units, lambda, model_version, unit_key, match_slug, player, prop, scope, source, book, "
-                    "line_type, test, inputs_sha1, features, copied_at, probs_raw, data_rev) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "line_type, test, inputs_sha1, features, copied_at, probs_raw, data_rev, odds_source, odds_policy, "
+                    "mapping_rev, odds_selected) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (f["id"], f["pick_id"], f.get("kind"), _niso(f.get("logged_at")), _niso(f.get("match_start") or p.get("match_start")),
                      f.get("line"), f.get("pick"), f.get("p_pick"), f.get("p_more"), f.get("grade"), f.get("units"), f.get("lambda"),
                      f.get("model_version"), unit_key(p) if p else None, match_of(p) if p else None, p.get("player"), p.get("prop"),
                      p.get("scope") or "12", source_of(p) if p else None, p.get("book"), p.get("line_type"), p.get("test"),
                      f.get("inputs_sha1"), json.dumps(feat, separators=(",", ":"), default=str), _iso(now),
-                     f.get("probs_raw"), f.get("data_rev")))
+                     f.get("probs_raw"), f.get("data_rev"), f.get("odds_source"), o_pol, o_map, pv.get("selected")))
         last = max(last, f["id"])
         n += 1
     _set_meta(con, "last_forecast_id", last)

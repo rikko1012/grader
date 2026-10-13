@@ -44,8 +44,10 @@ def _model_version():
     h = hashlib.sha1()
     # perf.py / perf_live.py / scope.py added 2026-10-09 (the performance model moves grades too)
     # market_odds.py / thunderpick.py added 2026-10-13 (the projection's market input can come from Thunderpick)
+    # pick_verdict.py added 2026-10-13 (it sets the logged side, Lean / grade and stake). The alias / matching state is
+    # NOT hashed here: it is mapping.revision(), recorded on every forecast (mapping_rev)
     for f in ("grader.py", "sim.py", "cs2_scout.py", "hltv.py", "perf.py", "perf_live.py", "scope.py", "hltv_store.py",
-              "market_odds.py", "thunderpick.py"):
+              "market_odds.py", "thunderpick.py", "pick_verdict.py"):
         try:
             h.update((Path(__file__).resolve().parent / f).read_bytes())
         except OSError:
@@ -99,7 +101,10 @@ def _db():
         pass
     # 2026-10-12 (owner review): the model's own outcome chances before caps / margins (over, under, PUSH, p_more_no_push)
     # and the HLTV dataset revision the forecast was graded on - a later backfill changes inputs without a code change
-    for col in ("probs_raw", "data_rev", "odds_source"):
+    # 2026-10-13 (forecast record): the odds policy that selected the market input, its signature (what the input IS -
+    # a moved price or another source is a new forecast, an unchanged quote re-polled is not), the alias / matching
+    # revision the odds were linked under (content in mapping_revisions) and the deployed commit (RENDER_GIT_COMMIT)
+    for col in ("probs_raw", "data_rev", "odds_source", "odds_policy", "mapping_rev", "odds_sig", "git_commit"):
         try:
             con.execute(f"ALTER TABLE forecasts ADD COLUMN {col} TEXT")
         except sqlite3.OperationalError:
@@ -122,7 +127,9 @@ def _db():
         con.execute("UPDATE picks SET on_board = CASE WHEN test = 2 THEN 1 WHEN test = 0 AND book IS NOT NULL THEN 2 ELSE 0 END")
     except sqlite3.OperationalError:
         pass
-    for col in ("book", "market_id", "market_key"):   # added 2026-10-10: platform + provider market id (+ PrizePicks market)
+    # added 2026-10-10: platform + provider market id (+ PrizePicks market); 2026-10-13: profile_team = the player's BO3.gg
+    # PROFILE team (picks.team is now the team he plays THIS match for - ALLE: team 'ex-Keyd Stars', profile 'UNO MILLE')
+    for col in ("book", "market_id", "market_key", "profile_team"):
         try:
             con.execute(f"ALTER TABLE picks ADD COLUMN {col} TEXT")
         except sqlite3.OperationalError:
@@ -132,6 +139,12 @@ def _db():
             con.execute(f"ALTER TABLE picks ADD COLUMN {col} TEXT")
         except sqlite3.OperationalError:
             pass
+    try:                                   # 2026-10-13: every alias / matching revision a forecast used (append-only)
+        import mapping
+        mapping.ensure_schema(con)
+        con.commit()
+    except Exception:
+        pass
     _SCHEMA_OK[0] = True
     return con
 
@@ -164,7 +177,7 @@ def _factors(res):
     keep = ("kpr", "hs_pct", "maps_played", "sample_maps", "recent_avg", "recent_median", "recent_n", "kpr_last5",
             "round_swing", "rating", "teammate_ratings", "is_igl", "sniping", "dpr", "kast", "adr",
             "market_quality", "days_since_last_map", "map_win_probs", "trade_pr", "standin_for", "is_standin",
-            "roster_confirmed", "on_listed_team", "recent", "per_map")
+            "roster_confirmed", "on_listed_team", "recent", "per_map", "p_team_market", "odds_policy", "mapping_rev")
     out = {k: gi.get(k) for k in keep if k in gi}
     out["h2h_series"] = len(gi.get("h2h_series") or [])
     out["regional_series"] = len(gi.get("regional_series") or [])
@@ -225,6 +238,18 @@ def _factors(res):
             o, u, pu = perf.hs_probs(pf["lambda_kills"], gi.get("scope") or "12", pf["hs_per_kill"], gi["line"], c=perf.kills_c(pf, gi.get("scope") or "12"))
             out.setdefault("shadow", {})["perf2_hs"] = {"p_more": round(o / (o + u), 4) if o + u else 0.5, "version": pf.get("version"),
                                                        "raw": {"over": round(o, 4), "under": round(u, 4), "push": round(pu, 4)}}
+    except Exception:
+        pass
+    try:   # Maps 1-2 market-rounds candidate (perf_market, shadow only, 2026-10-13): logged, never shown. The module is
+        # optional - absent (or failing) = nothing logged, the grade and the row are unaffected
+        try:
+            import perf_market
+        except ImportError:
+            perf_market = None
+        if perf_market is not None and hasattr(perf_market, "shadow_entry"):
+            se = perf_market.shadow_entry(gi, g)
+            if se is not None:
+                out.setdefault("shadow", {})["market_rounds"] = se
     except Exception:
         pass
     out["opponent_defense"] = res.get("opponent_defense")
@@ -303,7 +328,12 @@ def pick_row(res, verdict, test=False):
     row = {
         "key": key, "logged_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "player": pb["player"]["nick"], "slug": pb["player"]["slug"], "player_id": pb["player"]["id"],
-        "team": pb.get("current_team"), "opponent": nm.get("opponent"), "match_slug": nm["slug"],
+        # 2026-10-13 (UNO MILLE audit): team = the team he plays THIS match for (the one the projection, the odds and the
+        # match use), else the platform's label, else his team now; the BO3.gg profile team is kept as profile_team.
+        # Before: always the BO3.gg profile team (ALLE 'UNO MILLE' while playing ex-Keyd Stars vs Galorys)
+        "team": pb.get("playing_for") or res.get("team_hint") or pb.get("current_team"),
+        "profile_team": pb.get("profile_team", pb.get("current_team")),
+        "opponent": nm.get("opponent"), "match_slug": nm["slug"],
         "match_start": nm.get("start"), "prop": g["prop"], "line": g["line"], "line_type": g["line_type"],
         "lambda": g.get("lambda_final"), "fair_line": (g.get("value") or {}).get("fair_line"),
         "edge": round(g["lambda_final"] - g["line"], 2), "p_more": g["p_more"], "p_less": g["p_less"],
@@ -327,8 +357,21 @@ def pick_row(res, verdict, test=False):
     except Exception:
         pass
     row["_probs"] = json.dumps(g.get("probs_raw")) if g.get("probs_raw") else None
-    # which market supplied this grade's win probability (market_odds.select) - a change of source is a new forecast
-    row["_odds_src"] = ((res.get("odds") or {}).get("provenance") or {}).get("selected")
+    # which market supplied this grade's win probability (market_odds.select) - a change of source is a new forecast;
+    # 2026-10-13: so is a changed market input of the same source (odds_sig) or another odds policy; the alias / matching
+    # revision is recorded on every row (a mapping change that alters a line's selection shows up in odds_sig / source)
+    gi = res.get("grader_inputs") or {}
+    pv = (res.get("odds") or {}).get("provenance") or {}
+    row["_odds_src"] = pv.get("selected")
+    row["_odds_sig"] = pv.get("sig")
+    if row["_odds_sig"] is None and res.get("odds") is not None:
+        try:
+            import market_odds
+            row["_odds_sig"] = market_odds.odds_signature(res.get("odds"))
+        except Exception:
+            pass
+    row["_odds_policy"] = pv.get("odds_policy") or gi.get("odds_policy")
+    row["_mapping_rev"] = gi.get("mapping_rev") or pv.get("mapping_rev")
     return row
 
 
@@ -365,21 +408,52 @@ def _shadow(row):
         return None
 
 
+def _unchanged(last, row, extra):
+    """The new grade repeats the last stored forecast: same line, side, grade, stake, model version, odds source, odds
+    policy and market input (odds_sig), chance within 0.01 and projection within 0.2. mapping_rev is recorded, not
+    compared: a mapping change that alters a line's selection already changes odds_sig / odds_source; one that does not
+    leaves the forecast as it was (unchanged polling never writes a row)."""
+    return (last["line"] == row["line"] and last["pick"] == row["pick"] and last["grade"] == row["grade"]
+            and last["units"] == row["units"] and last["model_version"] == row.get("model_version")
+            and abs((last["p_pick"] or 0) - (row["p_pick"] or 0)) < 0.01
+            and abs((last["lambda"] or 0) - (row.get("lambda") or 0)) < 0.2
+            and last["odds_source"] == extra.get("odds_source") and last["odds_sig"] == extra.get("odds_sig")
+            and last["odds_policy"] == extra.get("odds_policy"))
+
+
+def _record_mapping(con, rev):
+    """The first forecast made under a mapping revision stores that revision's full content (mapping_revisions,
+    append-only, same transaction as the forecast - a rolled-back write leaves no orphan) - any old alias / matching
+    state can be replayed (mapping.content(rev))."""
+    if not rev:
+        return
+    try:
+        import mapping
+        if con.execute("SELECT 1 FROM mapping_revisions WHERE rev = ?", (rev,)).fetchone() or mapping.revision() != rev:
+            return
+        mapping.record(con)
+    except Exception:
+        pass
+
+
 def _forecast(con, pid, row, kind, gi=None, extra=None):
     """Append one forecast to the history - only when it differs from the last one stored for this pick.
     The picks row itself stays the FIRST published forecast (never overwritten)."""
     extra = extra or {}
-    last = con.execute("SELECT line, pick, p_pick, grade, units, lambda, model_version, odds_source FROM forecasts "
-                       "WHERE pick_id = ? ORDER BY id DESC LIMIT 1", (pid,)).fetchone()
-    if last and kind == "update" and last["line"] == row["line"] and last["pick"] == row["pick"]             and last["grade"] == row["grade"] and last["units"] == row["units"]             and last["model_version"] == row.get("model_version")             and abs((last["p_pick"] or 0) - (row["p_pick"] or 0)) < 0.01             and abs((last["lambda"] or 0) - (row.get("lambda") or 0)) < 0.2             and last["odds_source"] == extra.get("odds_source"):
+    last = con.execute("SELECT line, pick, p_pick, grade, units, lambda, model_version, odds_source, odds_sig, odds_policy "
+                       "FROM forecasts WHERE pick_id = ? ORDER BY id DESC LIMIT 1", (pid,)).fetchone()
+    if last and kind == "update" and _unchanged(last, row, extra):
         return
     con.execute("INSERT INTO forecasts (pick_id, kind, logged_at, match_start, line, pick, p_pick, p_more, grade, units, "
-                "lambda, p_win, rec_hit, sample_maps, model_version, shadow, inputs, probs_raw, data_rev, odds_source) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "lambda, p_win, rec_hit, sample_maps, model_version, shadow, inputs, probs_raw, data_rev, odds_source, "
+                "odds_policy, mapping_rev, odds_sig, git_commit) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (pid, kind, row["logged_at"], row.get("match_start"), row["line"], row["pick"], row["p_pick"],
                  row.get("p_more"), row["grade"], row["units"], row.get("lambda"), row.get("p_win"), row.get("rec_hit"),
                  row.get("sample_maps"), row.get("model_version"), _shadow(row), gi, extra.get("probs_raw"), extra.get("data_rev"),
-                 extra.get("odds_source")))
+                 extra.get("odds_source"), extra.get("odds_policy"), extra.get("mapping_rev"), extra.get("odds_sig"),
+                 extra.get("git_commit")))
+    _record_mapping(con, extra.get("mapping_rev"))
 
 
 def _before_start(row, cur):
@@ -396,7 +470,10 @@ def write_row(row):
         return None
     row = dict(row)
     gi = row.pop("_gi", None)                       # the exact grader inputs - forecasts table only
-    extra = {"probs_raw": row.pop("_probs", None), "data_rev": data_revision(), "odds_source": row.pop("_odds_src", None)}
+    extra = {"probs_raw": row.pop("_probs", None), "data_rev": data_revision(), "odds_source": row.pop("_odds_src", None),
+             "odds_sig": row.pop("_odds_sig", None), "odds_policy": row.pop("_odds_policy", None),
+             "mapping_rev": row.pop("_mapping_rev", None),
+             "git_commit": os.environ.get("RENDER_GIT_COMMIT") or None}    # the deployed commit (Render sets it)
     key, test = row["key"], row["test"]
     with _LOCK:
         con = _db()
@@ -817,6 +894,34 @@ def _team_confirmed(cur, ids, team):
     return tid is not None and any(t == tid for t, _n in got)
 
 
+def _settle_teams(r):
+    """The team names settlement may identify the player by, in order: picks.team (since 2026-10-13 the team he plays
+    THIS match for - the projection's and the odds' team), then picks.profile_team (his BO3.gg profile team - what
+    picks.team held before; NULL on older rows). The settlement keys themselves are unchanged: HLTV player id + the
+    opponent's HLTV team id + the date window, or the BO3.gg player id + match slug."""
+    out = []
+    for t in (_col(r, "team"), _col(r, "profile_team")):
+        if t and str(t).strip().lower() not in [x.strip().lower() for x in out]:
+            out.append(str(t))
+    return out or [None]
+
+
+def _player_identity(cur, r):
+    """(HLTV player ids, refused): the first of _settle_teams whose HLTV player is confirmed on that team. A stand-in's
+    match team usually confirms (that match is in his HLTV rows once played); his profile team is the fallback, so a
+    pick never settles less than before. refused = candidates found but none confirmed."""
+    import hltv
+    found = False
+    for t in _settle_teams(r):
+        ids = hltv._player_ids(cur, r["player"], t)
+        if not ids:
+            continue
+        found = True
+        if _team_confirmed(cur, ids, t):
+            return ids, False
+    return [], found
+
+
 def scope_result(r, same_day_only=False):
     """The pick's series from HLTV and its total for the line's scope, via the shared scope rules (scope.py).
     Returns {"status": "ok", "total", "maps_used", "maps", "per_map", "rounds", "won", "hltv_match"} or
@@ -827,8 +932,8 @@ def scope_result(r, same_day_only=False):
     con = hltv._connect()
     try:
         with con.cursor() as cur:
-            ids = hltv._player_ids(cur, r["player"], r["team"])
-            if ids and not _team_confirmed(cur, ids, r["team"]):
+            ids, refused = _player_identity(cur, r)
+            if refused:
                 # 2026-10-12 audit: a nick-only match (foggers of Rooster -> an HLTV 'foggers' who never played for
                 # Rooster) is not this player - never settle on it (Maps 1-2 falls back to BO3.gg's player id)
                 return {"status": "none", "reason": "player/team identity not confirmed in HLTV"}
@@ -1094,12 +1199,18 @@ def recheck_with_hltv():
 def _settle_hltv(r, now, start):
     """A match only HLTV has: Maps 1-2 kills / headshots from the hltv-scraper database.
     None = not yet (stats or headshots not scraped); void after VOID_AFTER_D days without them."""
-    try:
-        import hltv
-        tot = hltv.settle_totals(r["player"], r["team"], int(r["match_slug"].split("-", 1)[1]))
-    except Exception as e:
-        import hltv
-        tot = {"found": False, "transient": hltv.is_transient(e)}
+    import hltv
+    tot, transient = {"found": False}, False
+    for team in _settle_teams(r):                     # the match's team first, then the BO3.gg profile team (2026-10-13)
+        try:
+            tot = hltv.settle_totals(r["player"], team, int(r["match_slug"].split("-", 1)[1]))
+        except Exception as e:
+            tot = {"found": False, "transient": hltv.is_transient(e)}
+        transient = transient or bool(tot.get("transient"))
+        if tot.get("found"):
+            break
+    if not tot.get("found") and transient:
+        tot = dict(tot, transient=True)
     actual = tot.get("headshots" if r["prop"] == "hs" else "kills") if tot.get("found") else None
     if actual is None and tot.get("transient"):
         return None                                   # HLTV unreachable: never a void on that (2026-10-11 audit)
