@@ -28,6 +28,16 @@ Only "Match Winner" is used (series scope, established). Map markets, "1X2 - Map
 out of projections: per-map chances are derived from the series price, never mixed from another source. Using the
 player markets would be a new grading input that needs its own chronological test - not part of this release.
 
+## Coverage (`/admin/thunderpick.json?unmatched=1`, read-only)
+At 13:52 UTC: 60 events, 36 linked to a canonical match. The 24 others fail only on team names that are not HLTV
+names (exact names and maintained aliases only - never fuzzy). Most are tier-3 / qualifier teams that are not on
+our board. Three were spellings of HLTV teams and are now maintained aliases with same-fixture proof
+(`team_aliases.json`, `dd75d0a`): **BB Team = BETBOOM** (Furia vs BB Team, 2026-10-14 16:00 = HLTV 2399387 - its board lines
+were falling back to Polymarket), **MongolZ = The MongolZ**, **EA Copenhagen = EAC**. Left unmatched on purpose:
+academies onto main teams (e.g. Vitality Academy), and "Proycon vs Hacha eSports" (CCT South America, 2026-10-13 16:00),
+which has the same start and opponent as our "9z vs Hacha" but a different team name - possibly the same match, not
+provable from the data. Open board matches without a Thunderpick price fall back to Polymarket with the reason saved.
+
 ## Real forecast (forecast 5873, pick 1350, version `4f00a300a1`)
 zweih (PARIVISION) kills, Maps 1-2, line 27.5 vs Legacy, 2026-10-14 13:30 UTC.
 
