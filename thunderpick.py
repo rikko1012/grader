@@ -128,9 +128,31 @@ class RequestBudget:
 
 
 class FetchError(Exception):
-    def __init__(self, kind, status=None, msg=""):
+    def __init__(self, kind, status=None, msg="", evidence=None):
         super().__init__(f"{kind}{f' HTTP {status}' if status else ''}{f': {msg}' if msg else ''}")
-        self.kind, self.status = kind, status
+        self.kind, self.status, self.evidence = kind, status, evidence
+
+
+_EVIDENCE_HEADERS = ("retry-after", "x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset", "ratelimit",
+                     "ratelimit-policy", "ratelimit-limit", "ratelimit-remaining", "ratelimit-reset", "server", "cf-ray",
+                     "content-type", "date")
+
+
+def _evidence(r, key):
+    """Rate-limit / server headers and a short body snippet of a non-200 answer, with the key redacted."""
+    hdr = {}
+    try:
+        hdr = {k.lower(): str(v)[:120] for k, v in (r.headers or {}).items() if k.lower() in _EVIDENCE_HEADERS}
+    except Exception:          # noqa: BLE001
+        pass
+    try:
+        body = (r.content or b"")[:300].decode("utf-8", "replace")
+    except Exception:          # noqa: BLE001
+        body = ""
+    if key:
+        body = body.replace(key, "[redacted]")
+        hdr = {k: v.replace(key, "[redacted]") for k, v in hdr.items()}
+    return {"headers": hdr, "body": body}
 
 
 def fetch(session=None, key=None, path=PATH):
@@ -149,16 +171,18 @@ def fetch(session=None, key=None, path=PATH):
     except requests.RequestException as e:
         raise FetchError("network", msg=type(e).__name__) from None
     st = r.status_code
-    if st == 429:
-        raise FetchError("rate_limited", st)
-    if st in (401, 403):
-        raise FetchError("auth", st)
-    if st == 404:
-        raise FetchError("path", st)
-    if st >= 500:
-        raise FetchError("upstream", st)
     if st != 200:
-        raise FetchError("http", st)
+        ev = _evidence(r, key)
+    if st == 429:
+        raise FetchError("rate_limited", st, evidence=ev)
+    if st in (401, 403):
+        raise FetchError("auth", st, evidence=ev)
+    if st == 404:
+        raise FetchError("path", st, evidence=ev)
+    if st >= 500:
+        raise FetchError("upstream", st, evidence=ev)
+    if st != 200:
+        raise FetchError("http", st, evidence=ev)
     body = r.content
     try:
         data = json.loads(body.decode("utf-8"))
@@ -386,6 +410,7 @@ class Poller:
         self.attempts = self.successes = self.rate_limited = 0
         self.last_sha, self.last_body_at = None, 0.0
         self.store_error = None
+        self.last_evidence = None
         self._stop = threading.Event()
         self._thread = None
 
@@ -412,6 +437,7 @@ class Poller:
                 self.last_ok, self.failures = False, self.failures + 1
                 self.last_error, self.last_kind = str(e), e.kind
                 self.rate_limited += e.kind == "rate_limited"
+                self.last_evidence = {"at": retrieved, "kind": e.kind, **(e.evidence or {})}
                 self.next_delay = self._delay_after(e.kind)
             self._record(False, retrieved, e.status, e.kind)
             return False
@@ -465,7 +491,8 @@ class Poller:
                     "last_attempt": _iso(self.last_attempt), "age_s": None if self.last_success is None else round(now - self.last_success, 1),
                     "last_error": self.last_error, "error_kind": self.last_kind, "consecutive_failures": self.failures,
                     "next_poll_s": round(self.next_delay, 1), "attempts": self.attempts, "successes": self.successes,
-                    "rate_limited": self.rate_limited, "events": len(self.events), "empty_feed": self.empty,
+                    "rate_limited": self.rate_limited, "last_error_evidence": self.last_evidence,
+                    "events": len(self.events), "empty_feed": self.empty,
                     "budget": f"{self.budget.limit} requests / {self.budget.window}s (documented limit 10 / min / IP / path)",
                     "store_error": self.store_error, "main_market_confirmed": sorted(MAIN_MARKET_CONFIRMED)}
 
@@ -516,7 +543,7 @@ def coverage_probe(name, fetch_fn=None, clock=time.time):
             record(False, retrieved, e.status, e.kind, api_path=PATHS[name])
         except Exception:      # noqa: BLE001
             pass
-        out = {"path": PATHS[name], "retrieved_at": retrieved, "result": "failed", "error": str(e)}
+        out = {"path": PATHS[name], "retrieved_at": retrieved, "result": "failed", "error": str(e), "evidence": e.evidence}
         COVERAGE[name] = out
         return out
     norm = normalize(data, retrieved)

@@ -208,3 +208,19 @@ def test_only_allow_listed_paths_and_coverage_probe_budget(tmp_path):
     assert T.coverage_probe("csgo", fetch_fn=lambda: (data, 200, b"[]"), clock=c)["result"].startswith("skipped")
     con = sqlite3.connect(tmp_path / ".cache" / "thunderpick.db")
     assert con.execute("SELECT COUNT(*) FROM raw_snapshots WHERE api_path LIKE '%/csgo'").fetchone()[0] == 8
+
+
+def test_429_evidence_is_kept_and_the_key_redacted():
+    class R:
+        status_code = 429
+        headers = {"Retry-After": "41", "X-RateLimit-Remaining": "0", "Set-Cookie": "x=1"}
+        content = ("Too many requests for key " + KEY).encode()
+
+    class S:
+        def get(self, *a, **k):
+            return R()
+    with pytest.raises(T.FetchError) as e:
+        T.fetch(S())
+    ev = e.value.evidence
+    assert ev["headers"]["retry-after"] == "41" and "set-cookie" not in ev["headers"]
+    assert KEY not in json.dumps(ev) and "[redacted]" in ev["body"]
