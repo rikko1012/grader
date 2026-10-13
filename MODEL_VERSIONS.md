@@ -2,7 +2,9 @@
 
 Every logged pick and forecast carries `model_version` = the first 10 hex characters of SHA-1 over
 `grader.py`, `sim.py`, `cs2_scout.py`, `hltv.py`, in that order, as checked out on the server (LF line endings).
-From G8 (2026-10-09) the tag also covers `perf.py`, `perf_live.py`, `scope.py` (appended in that order); from 2026-10-11 also `hltv_store.py`.
+From G8 (2026-10-09) the tag also covers `perf.py`, `perf_live.py`, `scope.py` (appended in that order); from 2026-10-11 also `hltv_store.py`;
+from 2026-10-13 also `market_odds.py`, `thunderpick.py` (the market input can come from Thunderpick). Which source actually
+supplied a forecast's win probability, and under which odds policy, is saved per forecast in `inputs.odds_provenance`.
 A Windows checkout computes different (CRLF) hashes, so always compute tags from `git show <commit>:<file>`.
 
 **Keep every exact tag when reporting.** Tags can be pooled only inside a "same grading behaviour" group, and only

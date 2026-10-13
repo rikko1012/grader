@@ -1370,6 +1370,8 @@ def grader_inputs(pb, args, odds=None, hh=None):
         "firepower": None, "trading": None, "opening": None,
         "dpr": o.get("dpr"), "kast": pb.get("kast"), "adr": o.get("adr"),
         "market_quality": market_quality(odds), "days_since_last_map": pb.get("days_since_last_map"),
+        # which source supplied the win probability (saved with the forecast; the grader itself never reads it)
+        "odds_provenance": (odds or {}).get("provenance"),
         "map_win_probs": [((odds or {}).get("maps") or {}).get(k, {}).get("team_prob")
                           if ((odds or {}).get("maps") or {}).get(k) else None for k in ("map1", "map2")]
                          if (odds or {}).get("found") else None,
@@ -2053,7 +2055,14 @@ def run(args, res, b, ttl):
         res["_h2h_rows"], res["_h2h_opp"] = rows, args.opponent
     if args.cmd == "odds" or (args.cmd == "full" and (args.team or pb)):
         team = args.name if args.cmd == "odds" else (args.team or pb.get("playing_for") or pb.get("current_team"))
-        res["odds"] = match_odds(team, args.opponent)  # always live, no cache
+        if args.cmd == "full":
+            # ONE odds source per grade (market_odds.select, 2026-10-13): Thunderpick first when its policy is active and
+            # the match links exactly; else the existing Polymarket rule - the reason is kept in provenance. The same
+            # snapshot feeds the projection, chance, grade, stake, card and the saved forecast.
+            import market_odds
+            res["odds"] = market_odds.select(team, args.opponent, (res.get("next_match") or {}).get("start"))
+        else:
+            res["odds"] = match_odds(team, args.opponent)  # always live, no cache
         if args.cmd == "full" and args.opponent and not res["odds"].get("found") and not b.background:
             # no Polymarket market: bookmaker price (Pinnacle first) from OddsPapi
             try:
@@ -2061,6 +2070,8 @@ def run(args, res, b, ttl):
                 alt = oddspapi.match_odds(team, args.opponent)
                 if alt.get("found"):
                     alt["polymarket_note"] = res["odds"].get("note")
+                    alt["provenance"] = dict(res["odds"].get("provenance") or {}, selected="oddspapi", source="oddspapi",
+                                             book=alt.get("book"), p_team=alt.get("team_prob"))
                     res["odds"] = alt
             except Exception:
                 pass

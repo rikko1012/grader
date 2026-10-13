@@ -735,7 +735,9 @@ def start_research():
     except Exception as e:
         RESEARCH["errors"].append(f"matchid: {type(e).__name__}: {str(e)[:160]}")
     try:                                   # Thunderpick partner odds: one poller, shared request budget (admin-only until
-        import thunderpick                 # the real CS2 markets are mapped - phase 1, 2026-10-13)
+        import thunderpick                 # adaptive poller, matching, evidence-gated Thunderpick-first policy
+        import market_odds
+        thunderpick.ON_ACTIVATE = lambda: market_odds.compare(_tp_compare_rows())
         RESEARCH["thunderpick_started"] = thunderpick.start()
     except Exception as e:
         RESEARCH["errors"].append(f"thunderpick: {type(e).__name__}: {str(e)[:160]}")
@@ -827,11 +829,31 @@ def moneylines_payload():
                     "disagreement": bool(e.get("disagreement")), "disagreement_gap": e.get("disagreement_gap"),
                     "side": side})
     out = _merge_unlinked(out)
+    try:                                    # Thunderpick first (2026-10-13): its block per linked match, team A view
+        import thunderpick
+        for m in out:
+            m["thunderpick"] = thunderpick.board_block(m["match_id"]) if m.get("match_id") else None
+    except Exception:
+        pass
     return {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "matches": out,
             "sources": {k: {x: v.get(x) for x in ("ok", "stale", "age_s", "last_success", "note", "listings")} for k, v in st.items()},
             "rule": moneyline.BASELINE_RULE, "model_version": moneyline.MODEL_VERSION,
             "model": {k: v for k, v in ml_model_state().items() if k != "val_promoted"},
             "recommendation": SHADOW_LABEL, "scope": "series", "thunderpick": _thunderpick_state()}
+
+
+def _tp_compare_rows(last=400):
+    """Recent forecasts with their saved grader inputs + the pick's team / opponent / start (for market_odds.compare)."""
+    fc = picklog.export_forecasts(inputs=True, last=last)
+    picks = {p["id"]: p for p in picklog.export()}
+    rows = []
+    for f in fc:
+        p = picks.get(f.get("pick_id"))
+        if not p or not f.get("inputs"):
+            continue
+        rows.append({"forecast_id": f["id"], "inputs": f["inputs"], "team": p.get("team"), "opponent": p.get("opponent"),
+                     "start": p.get("match_start"), "player": p.get("player")})
+    return rows
 
 
 def _thunderpick_state():
@@ -1652,6 +1674,9 @@ class Handler(BaseHTTPRequestHandler):
                 # request through the gateway (persisted cooldown + one shared budget for all Thunderpick traffic)
                 import thunderpick
                 pr = q.get("probe") if q.get("probe") in ("cs2", "csgo") else None
+                if q.get("compare") == "1":     # old source vs Thunderpick on identical saved inputs (no upstream call)
+                    import market_odds
+                    return self.send(200, market_odds.compare(_tp_compare_rows()))
                 return self.send(200, thunderpick.admin_view(min(int(q["samples"]), 20) if (q.get("samples") or "").isdigit() else 3,
                                                              probe=pr))
             if u.path == "/admin/moneylines_status" and self.authed(q.get("token")):

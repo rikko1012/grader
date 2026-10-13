@@ -1,0 +1,217 @@
+{
+ "_label": "TEST FIXTURE: grader inputs saved with one production forecast (2026-10-12 snapshot), used only to check that swapping the market input is reproducible - not evidence of Thunderpick behaviour",
+ "forecast_id": 160,
+ "inputs": {
+  "prop": "kills",
+  "line": 29.0,
+  "line_type": "standard",
+  "scope": "12",
+  "bo": 3,
+  "maps_played": 70,
+  "kpr": 0.679,
+  "hs_pct": 34.6,
+  "sample_maps": 169,
+  "kpr_last5": 0.681,
+  "form_trend": -0.055,
+  "environment": {
+   "online": {
+    "maps": 34,
+    "kpr": 0.664
+   },
+   "lan": {
+    "maps": 15,
+    "kpr": 0.65
+   },
+   "tonight": "online",
+   "event": null,
+   "ratio": null,
+   "ratio_maps": 34,
+   "source": "BO3.gg event type",
+   "stats_from": "online",
+   "stats_maps": 169,
+   "stats_weight": 1.0,
+   "form_from": "online"
+  },
+  "round_swing": 1.22,
+  "per_map": [],
+  "map_probs": [
+   {
+    "de_ancient": 0.6,
+    "de_anubis": 0.168,
+    "de_cache": 0.124,
+    "de_dust2": 0.071,
+    "de_inferno": 0.024,
+    "de_nuke": 0.013
+   },
+   {
+    "de_dust2": 0.445,
+    "de_anubis": 0.324,
+    "de_cache": 0.097,
+    "de_ancient": 0.084,
+    "de_inferno": 0.032,
+    "de_nuke": 0.017
+   }
+  ],
+  "map_stats": {
+   "de_ancient": {
+    "maps_played": 27,
+    "kpr": 0.556,
+    "hs_pct": 36.6
+   },
+   "de_nuke": {
+    "maps_played": 5,
+    "kpr": 0.703,
+    "hs_pct": 30.8
+   },
+   "de_inferno": {
+    "maps_played": 7,
+    "kpr": 0.755,
+    "hs_pct": 37.7
+   },
+   "de_anubis": {
+    "maps_played": 9,
+    "kpr": 0.642,
+    "hs_pct": 41.8
+   },
+   "de_dust2": {
+    "maps_played": 15,
+    "kpr": 0.76,
+    "hs_pct": 29.8
+   },
+   "de_cache": {
+    "maps_played": 7,
+    "kpr": 0.81,
+    "hs_pct": 33.1
+   }
+  },
+  "rating": 1.064,
+  "teammate_ratings": [
+   0.951,
+   1.092,
+   null,
+   1.138,
+   1.201,
+   null
+  ],
+  "is_igl": false,
+  "sniping": null,
+  "firepower": null,
+  "trading": null,
+  "opening": null,
+  "dpr": 0.555,
+  "kast": 78.3,
+  "adr": 67.5,
+  "market_quality": "HARD",
+  "days_since_last_map": 1,
+  "map_win_probs": [
+   0.64,
+   0.7
+  ],
+  "recent_avg": 31.1,
+  "recent_median": 31.0,
+  "perf": {
+   "version": "perf-2",
+   "lambda": 29.423804090954732,
+   "lambda_kills": 29.423804090954732,
+   "rate": 0.6577177507655727,
+   "rate_all_envs": 0.6502903850350444,
+   "opp_factor": 1.028828910730191,
+   "hs_per_kill": 0.3567773916110207,
+   "rounds_per_map": 21.74132969862184,
+   "maps": 2,
+   "sd": 7.9033089962799234,
+   "spread_c": 1.457,
+   "spread_c_kills": 1.457,
+   "history_rounds_weighted": 804.9601902129489,
+   "env_rounds_weighted": 528.0208703469546,
+   "opp_rounds_weighted": 810.3698546759939,
+   "data_quality": "ok",
+   "g7": {
+    "version": "perf-1",
+    "lambda": 29.76410233202526,
+    "lambda_kills": 29.76410233202526,
+    "hs_per_kill": 0.38492232651078384,
+    "sd": 7.888867966423885,
+    "spread_c": 1.446,
+    "spread_c_kills": 1.446,
+    "rate": 0.6653245236021004,
+    "opp_factor": 1.028828910730191,
+    "rounds_per_map": 21.74132969862184,
+    "data_quality": "ok"
+   },
+   "hltv_player_ids": [
+    18610
+   ],
+   "hltv_opp_team": 11933,
+   "player_maps": 49,
+   "opp_maps": 95,
+   "opp_known": true,
+   "lan_known": true,
+   "newest_map_day": 739893
+  },
+  "recent_n": 10,
+  "trade_pr": 0.1233,
+  "opp_rank": null,
+  "rank_band": null,
+  "scout": false,
+  "standin_for": null,
+  "recent": {
+   "n": 10,
+   "overs": 6
+  },
+  "on_listed_team": null,
+  "is_standin": false,
+  "roster_confirmed": true,
+  "gate_sources": {
+   "awp": "unknown",
+   "rest": "BO3.gg (more recent than HLTV's data)",
+   "sample": "BO3.gg"
+  },
+  "team_ml": -308,
+  "opp_ml": 308,
+  "h2h_series": [
+   {
+    "age_days": 18,
+    "total": 24
+   },
+   {
+    "age_days": 156,
+    "total": 31
+   }
+  ],
+  "regional_series": [
+   {
+    "age_days": 2,
+    "total": 32
+   },
+   {
+    "age_days": 4,
+    "total": 47
+   },
+   {
+    "age_days": 7,
+    "total": 22
+   },
+   {
+    "age_days": 7,
+    "total": 33
+   },
+   {
+    "age_days": 8,
+    "total": 32
+   },
+   {
+    "age_days": 9,
+    "total": 40
+   },
+   {
+    "age_days": 13,
+    "total": 27
+   },
+   {
+    "age_days": 14,
+    "total": 26
+   }
+  ]
+ }
+}

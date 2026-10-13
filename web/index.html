@@ -359,6 +359,7 @@ body.locked #slip,body.locked.hasslip #slip{display:none!important}body.locked.h
 .studio-step .seg{display:flex;width:100%}.studio-step .seg button{flex:1 1 0;padding:8px 4px;font-size:12.5px;min-width:0;white-space:nowrap}
 .studio-sum{background:#f7a45b0d;border:1px solid #f7a45b33;border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.55;margin:4px 0 12px}
 .studio-sum b{color:var(--accent-2)}
+.mltp{margin:8px 0;padding:10px 12px;border:1px solid var(--line-2);border-radius:10px;background:var(--panel-2)}.mltphead{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
 .scopewarn{margin:8px 0 4px;padding:10px 12px;border:1px solid var(--warn);border-radius:10px;background:var(--warn-bg);font-size:13.5px;line-height:1.5}.scopewarn .chipbtn{margin:6px 0 0;display:inline-block}
 .mlside{margin:8px 0 6px;padding:10px 12px;background:#0d121b;border:1px solid var(--line);border-radius:10px}.mlsidehead{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;font-size:14px}.mlreasons{margin:6px 0 2px;padding-left:18px;font-size:12.5px;line-height:1.55;color:var(--muted)}.mlreasons li{margin:1px 0}
 .studio-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:12px 0}
@@ -1613,15 +1614,30 @@ const mlSide = sd => {
     ${rs.length ? `<ul class="mlreasons">${rs.map(r => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
     ${sd.basis ? `<div class="small muted">${esc(sd.basis)}</div>` : ""}</div>`;
 };
+// Thunderpick first (2026-10-13): bookmaker odds, raw implied chances and the proportional margin-adjusted estimate,
+// kept apart from the exchanges' prices; shown as primary only when current and the series scope is confirmed
+function mlThunder(t, A, B) {
+  if (!t) return "";
+  if (!t.usable) return `<div class="small muted mltp">Thunderpick: ${esc(!t.current ? "odds not current" : t.scope)}</div>`;
+  const o = x => x == null ? "–" : (+x).toFixed(2);
+  const link = t.url ? ` · <a href="${esc(t.url)}" target="_blank" rel="noopener noreferrer">Open in Thunderpick</a>` : "";
+  return `<div class="mltp"><div class="mltphead"><b>Thunderpick</b> <span class="pill good">primary · ${esc(t.scope)}</span></div>
+    <div class="mlprob">${esc(A)} ${o(t.odds_a)} · ${esc(B)} ${o(t.odds_b)}</div>
+    <div class="small">Raw implied ${pct(t.implied_a_raw)} / ${pct(t.implied_b_raw)} (margin ${pct(t.margin)}) · margin-adjusted <b>${esc(A)} ${pct(t.p_a)} · ${esc(B)} ${pct(t.p_b)}</b></div>
+    <div class="small muted">Retrieved ${t.retrieved_at ? ago(t.retrieved_at) : "–"} (the feed has no quote time) · ${esc(t.status)}${t.timezone === "unconfirmed" ? " · start time zone unconfirmed" : ""}${link}</div>
+    <div class="small muted">${esc(t.note)}</div></div>`;
+}
 function mlCard(m, model, rec) {
   const A = m.teams.a || "Team A", B = m.teams.b || "Team B", b = m.baseline || {}, P = m.platforms || {};
+  const tpb = mlThunder(m.thunderpick, A, B);
   const pu = P.polymarket && P.polymarket.usable, ku = P.kalshi && P.kalshi.usable, gap = m.disagreement_gap;
   const headL = `<div class="mlhead"><b>${esc(A)} vs ${esc(B)}</b>
       <span class="small muted">${m.start ? when(m.start) : "start unknown"}${m.event ? " · " + esc(m.event) : ""}${m.bo ? " · BO" + esc(m.bo) : ""} · Series winner</span></div>`;
   // nothing usable: one muted line instead of a wall of tags; the raw quotes stay one tap away
   if (!pu && !ku) {
     const anyQ = ["polymarket", "kalshi"].some(p => P[p] && P[p].available);
-    return `<article class="mlcard nouse">${headL}<div class="mlnone">No usable price – Kalshi: ${esc(mlWhy(P.kalshi))}; Polymarket: ${esc(mlWhy(P.polymarket))}</div>
+    if (m.thunderpick && m.thunderpick.usable) return `<article class="mlcard">${headL}${tpb}<div class="small muted">Exchanges: Kalshi ${esc(mlWhy(P.kalshi))}; Polymarket ${esc(mlWhy(P.polymarket))}</div></article>`;
+    return `<article class="mlcard nouse">${headL}${tpb}<div class="mlnone">No usable price – Kalshi: ${esc(mlWhy(P.kalshi))}; Polymarket: ${esc(mlWhy(P.polymarket))}</div>
       ${anyQ ? `<details><summary>Quote details</summary><div class="mlplats">${mlPlatform("polymarket", P.polymarket, A, B, m.teams.names_by_platform)}${mlPlatform("kalshi", P.kalshi, A, B, m.teams.names_by_platform)}</div></details>` : ""}</article>`;
   }
   // one headline (2026-10-11 audit: "Market probability unavailable" sat above two usable prices): the market baseline when
@@ -1636,9 +1652,9 @@ function mlCard(m, model, rec) {
     : m.tie_possible ? `<span class="pill warn">Best-of-2 – a draw is possible</span>`
     : m.disagreement && gap != null ? `<span class="pill bad">Platforms disagree by ${(gap * 100).toFixed(1)} pts</span>`
     : pu && ku ? `<span class="pill good">Both platforms</span>` : `<span class="pill">${pu ? "Polymarket" : "Kalshi"} only</span>`;
-  const base = src ? `<div class="mlbase"><span class="mlprob">${esc(A)} ${pct(src.pa)} · ${esc(B)} ${pct(1 - src.pa)}</span>
+  const base = tpb + (src ? `<div class="mlbase"><span class="mlprob">${esc(A)} ${pct(src.pa)} · ${esc(B)} ${pct(1 - src.pa)}</span>
         <span class="small muted">${esc(src.from)} price, the middle of its bid and ask${src.base ? "" : " – a price, not a win probability"} ${status}</span></div>`
-    : `<div class="mlbase"><span class="mlprob muted">No price to show</span> ${status}</div>`;
+    : `<div class="mlbase"><span class="mlprob muted">No price to show</span> ${status}</div>`);
   // three separate badge rows: data quality / freshness, agreement between platforms, model + recommendation status
   const quality = [m.match_id ? "" : `<span class="pill warn" title="${esc(m.link_reason || "")}">Not tied to one HLTV match – shown as prices only</span>`,
     ...["polymarket", "kalshi"].filter(p => P[p] && P[p].available).map(p => P[p].usable ? `<span class="pill good">${PLAT[p]} usable</span>`
@@ -1956,6 +1972,12 @@ function chart(series, line, proj) {
 }
 
 // data status: kept separate from the model's confidence - a high chance never hides a data problem
+// which market supplied the win probability for THIS grade (market_odds.select provenance) - Thunderpick only when it did
+function oddsSrc(d) {
+  const o = d && d.odds, pv = o && o.provenance;
+  if (!o || !o.found || !pv) return null;
+  return pv.selected === "thunderpick" ? "Thunderpick" : pv.selected === "oddspapi" ? `OddsPapi${o.book ? " (" + o.book + ")" : ""}` : "Polymarket";
+}
 function dataStatus(g, v) {
   // quality only - the source (HLTV / BO3.gg / older model) is shown separately and is not a warning by itself
   const fl = (g.flags || []).join(" | ");
@@ -1982,7 +2004,7 @@ function glance(d, g, v) {
     <div class="glrow"><span class="k">Line</span><span>${side} ${g.line}${mapsWord(g.scope) || " (Maps 1–2)"} · <b>${chance(v.p, g.prop, capOf(d, "kills_chance", KCAP))}</b>${pushOf(g) != null ? ` excluding pushes · push ${pct(pushOf(g))}` : ""} · ${v.units || 0}U</span></div>
     ${cp?.supports?.length ? `<div class="glrow"><span class="k up">Supports</span><span>${esc(cp.supports[0].text)} ${basisTag(cp.supports[0].basis)}</span></div>` : ""}
     ${cp?.concern ? `<div class="glrow"><span class="k dn">Concern</span><span>${esc(cp.concern.text)} ${basisTag(cp.concern.basis)}</span></div>` : ""}
-    <div class="glrow"><span class="k">Data</span><span><span class="dstat ${ds.k}">${ds.t}</span>${ds.why ? ` <span class="muted small">${esc(ds.why)}</span>` : ""} <span class="muted small">· source ${esc(srcLabel(g))}</span>${cp?.board_at ? ` <span class="muted small">· line checked ${ago(cp.board_at)}</span>` : ""}</span></div>
+    <div class="glrow"><span class="k">Data</span><span><span class="dstat ${ds.k}">${ds.t}</span>${ds.why ? ` <span class="muted small">${esc(ds.why)}</span>` : ""} <span class="muted small">· source ${esc(srcLabel(g))}</span>${oddsSrc(d) ? ` <span class="muted small">· projection odds source: ${esc(oddsSrc(d))}</span>` : ""}${cp?.board_at ? ` <span class="muted small">· line checked ${ago(cp.board_at)}</span>` : ""}</span></div>
     ${usesBlock(d, g)}
   </section>`;
 }
