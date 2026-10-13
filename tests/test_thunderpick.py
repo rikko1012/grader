@@ -193,3 +193,18 @@ def test_render_key_name_is_accepted(monkeypatch):
     monkeypatch.delenv("THUNDERPICK_API_KEY")
     monkeypatch.setenv("THUNDER_PICK_API", KEY)
     assert T.enabled() and T._key() == KEY
+
+
+def test_only_allow_listed_paths_and_coverage_probe_budget(tmp_path):
+    with pytest.raises(T.FetchError):
+        T.fetch(path="/api/partners-odds/sport/football")
+    c = Clock()
+    data = [ev()]
+    out = T.coverage_probe("csgo", fetch_fn=lambda: (data, 200, json.dumps(data).encode()), clock=c)
+    assert out["result"] == "ok" and out["events"] == 1 and out["path"].endswith("/csgo") and KEY not in json.dumps(out)
+    assert T.coverage_probe("football")["result"] == "not allow-listed"
+    for _ in range(7):
+        T.coverage_probe("csgo", fetch_fn=lambda: (data, 200, b"[]"), clock=c)
+    assert T.coverage_probe("csgo", fetch_fn=lambda: (data, 200, b"[]"), clock=c)["result"].startswith("skipped")
+    con = sqlite3.connect(tmp_path / ".cache" / "thunderpick.db")
+    assert con.execute("SELECT COUNT(*) FROM raw_snapshots WHERE api_path LIKE '%/csgo'").fetchone()[0] == 8

@@ -47,6 +47,9 @@ import requests
 
 BASE = "https://aggr.mightykiwi.xyz"
 PATH = "/api/partners-odds/esport/cs2"          # the CS2 feed (the guide's csgo example is a different identifier)
+# The only paths this module ever calls (fixed, approved). "csgo" is read only by the admin coverage check - 2026-10-13 the
+# cs2 path answered 200 with an empty list while CS2 matches were scheduled; the guide's example uses csgo.
+PATHS = {"cs2": PATH, "csgo": "/api/partners-odds/esport/csgo"}
 SOURCE = "thunderpick"
 POLL_S = 15
 BUDGET_PER_MIN = 8                              # documented limit 10 / min / IP / path - keep 2 in reserve
@@ -130,14 +133,16 @@ class FetchError(Exception):
         self.kind, self.status = kind, status
 
 
-def fetch(session=None, key=None):
-    """One request. Returns (events list, http status, body bytes). Never logs or returns the key."""
+def fetch(session=None, key=None, path=PATH):
+    """One request to an allow-listed path. Returns (events list, http status, body bytes). Never logs or returns the key."""
+    if path not in PATHS.values():
+        raise FetchError("config", msg="path not allow-listed")
     key = key or _key()
     if not key:
         raise FetchError("config", msg="THUNDERPICK_API_KEY not set")
     get = (session or requests).get
     try:
-        r = get(BASE + PATH, headers={"api-key": key, "Accept": "application/json", "User-Agent": "cs2-scout/1.0"},
+        r = get(BASE + path, headers={"api-key": key, "Accept": "application/json", "User-Agent": "cs2-scout/1.0"},
                 timeout=TIMEOUT)
     except requests.Timeout:
         raise FetchError("timeout") from None
@@ -321,6 +326,10 @@ def _connect(path=None):
     con = sqlite3.connect(str(p), timeout=10)
     con.execute("PRAGMA journal_mode=WAL")
     con.executescript(_SCHEMA)
+    try:
+        con.execute("ALTER TABLE raw_snapshots ADD COLUMN api_path TEXT")
+    except sqlite3.OperationalError:
+        pass
     return con
 
 
@@ -330,7 +339,7 @@ def _store_mb(path=None):
 
 
 def record(ok, retrieved_at, status=None, error_kind=None, body=None, normalized=None, last_sha=None, last_body_at=0.0,
-           now_ts=None, path=None):
+           now_ts=None, path=None, api_path=PATH):
     """Append one attempt. The body (gzip) + normalized rows are stored when the body changed or HEARTBEAT_S passed.
     Returns (sha, stored_body). Above SNAPSHOT_MAX_MB only the status row is written."""
     now_ts = time.time() if now_ts is None else now_ts
@@ -341,9 +350,9 @@ def record(ok, retrieved_at, status=None, error_kind=None, body=None, normalized
         con = _connect(path)
         try:
             cur = con.execute("INSERT INTO raw_snapshots (retrieved_at, ok, http_status, error_kind, body_sha256, body_gz, "
-                              "n_events, changed) VALUES (?,?,?,?,?,?,?,?)",
+                              "n_events, changed, api_path) VALUES (?,?,?,?,?,?,?,?,?)",
                               (retrieved_at, int(ok), status, error_kind, sha, gzip.compress(body) if keep else None,
-                               len(normalized) if normalized is not None else None, int(changed)))
+                               len(normalized) if normalized is not None else None, int(changed), api_path))
             sid = cur.lastrowid
             if keep and normalized:
                 for e in normalized:
@@ -487,10 +496,44 @@ def start():
     return POLLER.start()
 
 
+_COVERAGE_BUDGETS = {k: RequestBudget() for k in PATHS if k != "cs2"}     # per path, like the provider's limit
+COVERAGE = {}
+
+
+def coverage_probe(name, fetch_fn=None, clock=time.time):
+    """Admin: ONE request to another allow-listed path (e.g. csgo) inside that path's own budget; the raw body is
+    recorded with its path. Returns a small summary + inventory (never the key)."""
+    if name not in _COVERAGE_BUDGETS:
+        return {"path": name, "result": "not allow-listed"}
+    now = clock()
+    if not _COVERAGE_BUDGETS[name].take(now):
+        return {"path": PATHS[name], "result": "skipped: request budget in use"}
+    retrieved = _iso(now)
+    try:
+        data, status, body = (fetch_fn or (lambda: fetch(path=PATHS[name])))()
+    except FetchError as e:
+        try:
+            record(False, retrieved, e.status, e.kind, api_path=PATHS[name])
+        except Exception:      # noqa: BLE001
+            pass
+        out = {"path": PATHS[name], "retrieved_at": retrieved, "result": "failed", "error": str(e)}
+        COVERAGE[name] = out
+        return out
+    norm = normalize(data, retrieved)
+    try:
+        record(True, retrieved, status, None, body, norm, api_path=PATHS[name])
+    except Exception:          # noqa: BLE001
+        pass
+    out = {"path": PATHS[name], "retrieved_at": retrieved, "result": "ok", "http_status": status, "events": len(data),
+           "inventory": inventory(data), "sample_events": data[:3]}
+    COVERAGE[name] = out
+    return out
+
+
 def admin_view(samples=3):
     """Admin only: status + the inventory of the latest real response + a few raw events (no key, ever)."""
     with POLLER.lock:
         raw = list(POLLER.raw)
     return {"status": POLLER.status(), "inventory": inventory(raw), "sample_events": raw[:samples],
             "normalized_problems": Counter(e.get("problem") for e in POLLER.events if e.get("problem")).most_common(10),
-            "store": {"path": str(db_path()), "mb": round(_store_mb(), 2)}}
+            "store": {"path": str(db_path()), "mb": round(_store_mb(), 2)}, "coverage_checks": COVERAGE}

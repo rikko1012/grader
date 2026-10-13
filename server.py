@@ -1645,8 +1645,9 @@ class Handler(BaseHTTPRequestHandler):
                 if q.get("probe") == "1" and thunderpick.enabled():
                     probe = thunderpick.POLLER.poll_once()
                     probe = {True: "ok", False: "failed", None: "skipped: request budget in use - try again shortly"}[probe]
+                cov = thunderpick.coverage_probe(q["coverage"]) if q.get("coverage") and thunderpick.enabled() else None
                 return self.send(200, dict(thunderpick.admin_view(min(int(q["samples"]), 20) if (q.get("samples") or "").isdigit() else 3),
-                                           probe=probe))
+                                           probe=probe, coverage=cov))
             if u.path == "/admin/moneylines_status" and self.authed(q.get("token")):
                 try:
                     import ml_sides
