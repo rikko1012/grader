@@ -371,7 +371,9 @@ def test_polling_interval_widens_while_429s_persist_and_relaxes_after_a_clean_pe
     assert steps == [120, 240, 300]
     p.fetch_fns["csgo"] = ok_fetch()
     assert p.poll_once("csgo") is True
-    assert T._sched("csgo")["interval_s"] == 300                    # one success does not relax it
+    # one success does not relax the 429 step - but an endpoint returning events is never polled slower than its quotes
+    # live (review 2026-10-13): capped at CARRY_MAX_INTERVAL_S < QUOTE_MAX_AGE_S
+    assert T._sched("csgo")["interval_s"] == T.CARRY_MAX_INTERVAL_S < T.QUOTE_MAX_AGE_S
     c.t += T.R429_WINDOW_S + 1                                      # 30 min without a 429
     assert p.poll_once("csgo") is True and T._sched("csgo")["interval_s"] == 60
 
@@ -651,7 +653,7 @@ def test_invalid_odds_link_but_never_price():
 
 
 def test_series_format_bo2_and_unknown_are_excluded_unless_the_caller_knows_it():
-    p, c = active_poller(bos={4: 2, 5: None})
+    p, c = active_poller(n=19, bos={4: 2, 5: None})              # >= 15 BO3 matches for the series-meaning test
     assert T.projection_odds("Alpha4", "Bravo4", start_of(4), poller=p)["availability"] == "format_excluded"
     assert T.board_block("hltv:9004", poller=p)["availability"] == "format_excluded"
     assert T.projection_odds("Alpha5", "Bravo5", start_of(5), poller=p)["availability"] == "format_excluded"
@@ -1102,3 +1104,17 @@ def test_history_segments_rotate_and_prune_without_touching_gateway_state_or_rep
     assert verdict(g1) == verdict(g2) and g1["lambda_final"] == g2["lambda_final"] and g1["p_more"] == g2["p_more"]
     for k in ("odds_team", "odds_opp", "p_team", "retrieved_at", "snapshot_sha256", "source_event_id", "match_id"):
         assert gi["odds_provenance"][k] is not None
+
+
+
+def test_the_label_meaning_is_tested_on_bo3_prices_not_assumed():
+    """'Match Winner' counts as a SERIES price only when, on BO3 matches, it fits the exchange series price clearly better
+    than a map-1 reading (per-map chance q, p = q^2(3-2q)) - inferred, never provider-confirmed (2026-10-13 owner)."""
+    series = {f"m{i}": {"market": "Match Winner", "tp": p_, "ex": p_, "bo": "bo3", "at": "t"}
+              for i, p_ in enumerate([0.2 + 0.035 * k for k in range(18)])}
+    m = T._series_stats(series)["Match Winner"]["meaning"]
+    assert m["supported"] == "series" and m["series_mae"] < m["map1_mae"] and "not provider-confirmed" in m["basis"]
+    map1 = {k: dict(v, tp=T._bo3_map_chance(v["ex"])) for k, v in series.items()}   # a feed quoting map 1 (TEST FIXTURE)
+    assert T._series_stats(map1)["Match Winner"]["meaning"]["supported"] == "map 1"
+    few = dict(list(series.items())[:10])
+    assert T._series_stats(few)["Match Winner"]["meaning"]["supported"] is None        # too few BO3 matches: undecided

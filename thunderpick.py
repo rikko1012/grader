@@ -317,9 +317,8 @@ def normalize(events, retrieved_at):
         start = parse_start(ev.get("startTime"))
         if start is None:
             probs.append("missing or unparseable startTime")
-        url = safe_url(ev.get("matchUrl"))
-        if ev.get("matchUrl") and url is None:
-            probs.append("matchUrl not an approved https://thunderpick.io/match/<id> link")
+        url = safe_url(ev.get("matchUrl"))      # not an approved /match/<id> link: no link shown (the event still links -
+                                                  # a provider URL change must not silently drop coverage)
         mk = []
         for m in ev.get("markets") or []:
             if not isinstance(m, dict):
@@ -698,12 +697,13 @@ def record(ok, retrieved_at, status=None, error_kind=None, body=None, normalized
     changed = sha is not None and sha != last_sha
     room = changed and _store_mb(path) < SNAPSHOT_MAX_MB
     keep = room and (not last_body_at or now_ts - last_body_at >= BODY_EVERY_S)
+    gz = gzip.compress(body) if keep else None           # compressed before taking the process-wide lock
     with _DB_LOCK:
         con = _connect(target)
         try:
             cur = con.execute("INSERT INTO raw_snapshots (retrieved_at, ok, http_status, error_kind, body_sha256, body_gz, "
                               "n_events, changed, api_path) VALUES (?,?,?,?,?,?,?,?,?)",
-                              (retrieved_at, int(ok), status, error_kind, sha, gzip.compress(body) if keep else None,
+                              (retrieved_at, int(ok), status, error_kind, sha, gz,
                                len(normalized) if normalized is not None else None, int(changed), api_path))
             sid = cur.lastrowid
             if room and normalized:
@@ -979,7 +979,8 @@ def request_log(limit=60, db=None):
 # alert until the key changes. These are conservative starting settings, not the provider's confirmed limits.
 BASE_INTERVAL_S = 60
 EMPTY_STEPS = ((5, 60), (10, 120), (15, 180))       # empty streak below N -> interval; beyond the last -> MAX_INTERVAL_S
-RL_STEPS = (60, 120, 240, 300)                      # 429s in the last R429_WINDOW_S: 0, 1, 2, 3+ -> interval
+RL_STEPS = (60, 120, 240, 300)
+CARRY_MAX_INTERVAL_S = 150                           # an endpoint returning events: never slower (quotes live 180 s)                      # 429s in the last R429_WINDOW_S: 0, 1, 2, 3+ -> interval
 MAX_INTERVAL_S = 300
 MIN_GAP_S = 20
 QUOTE_MAX_AGE_S = int(2.5 * BASE_INTERVAL_S + 30)   # 180 s: a quote older than this is never current
@@ -1162,6 +1163,8 @@ class Poller:
             sch["empty_streak"] = 0
             sch["last_nonempty_at"] = _iso(now)
         sch["interval_s"] = interval_for(sch["empty_streak"], r.get("n429", 0))
+        if not empty:   # the endpoint carrying quotes is polled before they expire (review 2026-10-13: 240 / 300 s under
+            sch["interval_s"] = min(sch["interval_s"], CARRY_MAX_INTERVAL_S)   # 429s left them stale every cycle)
         sch["next_at"] = now + sch["interval_s"]
         _put(f"sched:{name}", sch, self.db)
         self._sched_mem[name] = dict(sch)
@@ -2027,8 +2030,37 @@ def _series_stats(ev):
                 fm[f] = dict(_stats([(v["tp"], v["ex"]) for v in sel]), first=min(ats) if ats else None,
                              last=max(ats) if ats else None)
         out[name] = {"matches": pooled["n"], "mae": pooled["mae"], "corr": pooled["corr"], "established": _passes(pooled),
-                     "by_format": fm}
+                     "by_format": fm, "meaning": _meaning_test(vs)}
     return out
+
+
+MEANING_MIN_BO3, MEANING_MARGIN = 15, 0.01
+
+
+def _bo3_map_chance(p):
+    lo, hi = 0.0, 1.0
+    for _ in range(60):
+        q = (lo + hi) / 2
+        lo, hi = (q, hi) if q * q * (3 - 2 * q) < p else (lo, q)
+    return (lo + hi) / 2
+
+
+def _meaning_test(vs):
+    """What the label means, tested instead of assumed (2026-10-13 owner: a market name is not proof): on BO3 matches a
+    SERIES-winner price should match the exchange series price, while a MAP-1-winner price would sit at the per-map chance
+    q (p = q^2(3-2q)), i.e. nearer 50%. Mean absolute error of Thunderpick's price under each reading; 'series' is
+    supported when it fits better by MEANING_MARGIN on >= MEANING_MIN_BO3 BO3 matches. BO1 cannot tell them apart (the
+    series is map 1). Inferred from prices - not a provider statement."""
+    bo3 = [(v["tp"], v["ex"]) for v in vs if v.get("bo") == "bo3" and v.get("tp") is not None and v.get("ex") is not None]
+    n = len(bo3)
+    if not n:
+        return {"bo3_matches": 0, "series_mae": None, "map1_mae": None, "supported": None,
+                "note": "no BO3 match priced on both - the series vs map-1 reading cannot be told apart yet"}
+    s = sum(abs(a - b) for a, b in bo3) / n
+    m = sum(abs(a - _bo3_map_chance(b)) for a, b in bo3) / n
+    sup = "series" if n >= MEANING_MIN_BO3 and s + MEANING_MARGIN <= m else ("map 1" if n >= MEANING_MIN_BO3 and m + MEANING_MARGIN <= s else None)
+    return {"bo3_matches": n, "series_mae": round(s, 4), "map1_mae": round(m, 4), "supported": sup,
+            "basis": "inferred from prices on BO3 matches (series vs map-1 reading); not provider-confirmed"}
 
 
 def series_established(db=None):
@@ -2057,7 +2089,8 @@ def policy(db=None, record_events=False):
     main = st["market_main"] or {}
     est = _series_stats(st["series_evidence"] or {})
     enabled_m = sorted(lab for lab, m in main.items() if _main_enabled(lab, m))
-    passed = [lab for lab in enabled_m if (est.get(lab) or {}).get("established")]
+    passed = [lab for lab in enabled_m if (est.get(lab) or {}).get("established")
+              and ((est.get(lab) or {}).get("meaning") or {}).get("supported") == "series"]
     failed_fmt = sorted({f for lab in enabled_m for f, s in ((est.get(lab) or {}).get("by_format") or {}).items()
                          if f in ENABLED_FORMATS and s["n"] >= SERIES_MIN_MATCHES and not _passes(s)})
     formats = [f for f in ENABLED_FORMATS if f not in failed_fmt]
@@ -2068,6 +2101,11 @@ def policy(db=None, record_events=False):
         reasons.append("startTime timezone not yet inferred from matched fixtures")
     if not enabled_m:
         reasons.append("no enabled market type observed (event-level 'Match Winner' with two outcomes and no draw price)")
+    elif not passed and any((est.get(k) or {}).get("established") for k in enabled_m):
+        reasons.append("series meaning not established from prices: " + ", ".join(
+            f"{k}: BO3 n {((est.get(k) or {}).get('meaning') or {}).get('bo3_matches')}, series MAE "
+            f"{((est.get(k) or {}).get('meaning') or {}).get('series_mae')} vs map-1 MAE "
+            f"{((est.get(k) or {}).get('meaning') or {}).get('map1_mae')}" for k in enabled_m))
     elif not passed:
         reasons.append("sanity gate not passed - price agreement with exchange prices: " +
                        ", ".join(f"{k}: {(est.get(k) or {}).get('matches', 0)} matches, MAE {(est.get(k) or {}).get('mae')}, "
@@ -2088,7 +2126,8 @@ def policy(db=None, record_events=False):
 
 def _record_policy(out, main, est, tzs, db=None):
     prev = _get("policy_state", {"active": False}, db) or {"active": False}
-    if prev.get("active") == out["active"] and prev.get("version") == POLICY_VERSION:
+    sig = [out.get("formats"), out.get("enabled_markets"), out.get("series_markets")]
+    if prev.get("active") == out["active"] and prev.get("version") == POLICY_VERSION and prev.get("sig", sig) == sig:
         return
     now = time.time()
     snap = {"market_registry": {lab: _main_entry(lab, m, est) for lab, m in main.items()},
@@ -2101,7 +2140,7 @@ def _record_policy(out, main, est, tzs, db=None):
             con.execute("INSERT INTO policy_log (at, version, active, reasons, evidence, git_commit) VALUES (?,?,?,?,?,?)",
                         (_iso(now), POLICY_VERSION, int(out["active"]), json.dumps(out["reasons"]),
                          json.dumps(snap, sort_keys=True, default=str), _commit()))
-            _set_state(con, "policy_state", {"active": out["active"], "version": POLICY_VERSION, "since": _iso(now)})
+            _set_state(con, "policy_state", {"active": out["active"], "version": POLICY_VERSION, "since": _iso(now), "sig": sig})
             con.commit()
         finally:
             con.close()
@@ -2263,7 +2302,7 @@ def board_block(match_id, now=None, poller=None, start_iso=None, bo=None):
     tw = o["two_way"]
     cur = v["availability"] == "current"
     sch = p.sch(v["endpoint"])
-    blk = {"source": SOURCE, "market": e.get("main_market"), "scope_confirmed": v["enabled_market"],
+    blk = {"source": SOURCE, "market": e.get("main_market"), "scope_confirmed": v["enabled_market"], "scope_basis": "label rule + price tests (not provider-confirmed)",
            "scope": "series winner" if v["enabled_market"] else "main market - not enabled as the series winner",
            "scope_basis": MATCH_WINNER_BASIS if v["enabled_market"] else None, "scope_provider_confirmed": False,
            "series_format": v["series_format"],
