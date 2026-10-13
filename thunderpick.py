@@ -63,8 +63,15 @@ APPROVED_HOSTS = {"thunderpick.io", "www.thunderpick.io"}
 MAIN_MARKET_CONFIRMED = frozenset()
 
 
+KEY_NAMES = ("THUNDERPICK_API_KEY", "THUNDER_PICK_API")     # the second is the name used on Render (2026-10-13)
+
+
 def _key():
-    return (os.environ.get("THUNDERPICK_API_KEY") or "").strip() or None
+    for n in KEY_NAMES:
+        v = (os.environ.get(n) or "").strip()
+        if v:
+            return v
+    return None
 
 
 def enabled():
@@ -74,7 +81,7 @@ def enabled():
 def key_diagnostic():
     """Which related environment variable NAMES exist (never values) - to find a key stored under another name."""
     names = sorted(k for k in os.environ if any(w in k.upper() for w in ("THUNDER", "PARTNER", "KIWI", "TP_")))
-    return {"expected": "THUNDERPICK_API_KEY", "present": _key() is not None, "related_names": names,
+    return {"expected": " or ".join(KEY_NAMES), "present": _key() is not None, "related_names": names,
             "disabled_by_flag": os.environ.get("THUNDERPICK") == "0"}
 
 

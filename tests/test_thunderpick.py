@@ -187,3 +187,9 @@ def test_key_diagnostic_lists_names_only(monkeypatch):
     assert "THUNDERPICK_KEY" in d["related_names"] and "secret-value-123" not in json.dumps(d) and d["present"] is True
     monkeypatch.delenv("THUNDERPICK_API_KEY")
     assert T.key_diagnostic()["present"] is False and not T.enabled()
+
+
+def test_render_key_name_is_accepted(monkeypatch):
+    monkeypatch.delenv("THUNDERPICK_API_KEY")
+    monkeypatch.setenv("THUNDER_PICK_API", KEY)
+    assert T.enabled() and T._key() == KEY
