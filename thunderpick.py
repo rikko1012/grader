@@ -339,6 +339,21 @@ def _connect(path=None):
     return con
 
 
+def last_full_snapshot(api_path, path=None):
+    """The latest successful NON-EMPTY answer of one endpoint in the history: (retrieved_at, sha256, body bytes), the
+    body found by its hash when that answer itself stored only the status row (body unchanged). None when absent."""
+    with _DB_LOCK:
+        con = _connect(path)
+        try:
+            r = con.execute("SELECT retrieved_at, body_sha256 FROM raw_snapshots WHERE api_path = ? AND ok = 1 AND n_events > 0 "
+                            "AND body_sha256 IS NOT NULL ORDER BY id DESC LIMIT 1", (api_path,)).fetchone()
+            b = r and con.execute("SELECT body_gz FROM raw_snapshots WHERE body_sha256 = ? AND body_gz IS NOT NULL "
+                                  "ORDER BY id DESC LIMIT 1", (r[1],)).fetchone()
+        finally:
+            con.close()
+    return (r[0], r[1], gzip.decompress(b[0])) if r and b else None
+
+
 def _store_mb(path=None):
     p = Path(path or db_path())
     return sum(f.stat().st_size for f in (p, Path(str(p) + "-wal")) if f.exists()) / 1e6
@@ -650,6 +665,7 @@ class Poller:
         self.store_error = None
         self.last_refused = None
         self.alert = None
+        self._relink = False                         # restored quotes waiting for the canonical matcher
         self._stop = threading.Event()
         self._thread = None
 
@@ -747,9 +763,58 @@ class Poller:
         name = self.due()
         return self.poll_once(name) if name else None
 
+    def restore(self, now=None):
+        """After a restart: each endpoint's last full snapshot from the history, with its own retrieval time and hash,
+        so a deploy does not drop quotes that are still current (production 2026-10-13 13:39 UTC: the board regraded
+        before the first poll and 91 lines fell back to Polymarket for a minute). Only quotes within QUOTE_MAX_AGE_S;
+        they expire by age as always. Returns the restored endpoint names."""
+        now = self.clock() if now is None else now
+        got = []
+        for name, api_path in PATHS.items():
+            if name in self.data:
+                continue
+            try:
+                s = last_full_snapshot(api_path)
+                if not s:
+                    continue
+                retrieved, sha, body = s
+                at = datetime.fromisoformat(retrieved.replace("Z", "+00:00")).timestamp()
+                data = json.loads(body)
+            except Exception as e:      # noqa: BLE001 - a damaged history never stops the feed
+                self.store_error = f"restore: {type(e).__name__}: {str(e)[:120]}"
+                continue
+            if not data or now - at > QUOTE_MAX_AGE_S:
+                continue
+            norm = normalize(data, retrieved)
+            for e in norm:
+                e["api_path"] = api_path
+                e["snapshot_sha256"] = sha
+            with self.lock:
+                self.data[name] = {"events": norm, "raw": data, "at": at, "empty": False, "restored": True}
+            self.last_sha[name] = sha
+            got.append(name)
+        if got:
+            self._relink = True
+            self._try_relink(now)
+        return got
+
+    def _try_relink(self, now=None):
+        try:
+            self.refresh_matches(now)
+        except Exception as e:          # noqa: BLE001
+            self.store_error = f"matching: {type(e).__name__}: {str(e)[:120]}"
+        if self.matched or not self.events(now):    # linked, or nothing current left to link
+            self._relink = False
+
     def _loop(self):
+        try:
+            self.restore()
+        except Exception as e:          # noqa: BLE001
+            self.store_error = f"restore: {type(e).__name__}: {str(e)[:120]}"
         while not self._stop.is_set():
             try:
+                if self._relink:
+                    self._try_relink()
                 self.tick()
             except Exception as e:      # noqa: BLE001 - the background service never dies
                 self.store_error = f"tick: {type(e).__name__}: {str(e)[:120]}"
@@ -829,6 +894,7 @@ class Poller:
             d = self.data.get(n) or {}
             s["serving_snapshot_at"] = _iso(d["at"]) if d.get("at") else None
             s["held_through_empty_at"] = _iso(d["empty_seen_at"]) if d.get("empty_seen_at") else None
+            s["restored_after_restart"] = bool(d.get("restored"))
         out = {"source": SOURCE, "enabled": enabled(), "key": key_diagnostic(), "autopoll": autopoll(),
                "running": bool(self._thread and self._thread.is_alive()), "endpoints": sch,
                "cooldown": cooldown(now, self.db), "auth": auth_block(self.db), "alert": self.alert,

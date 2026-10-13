@@ -350,6 +350,39 @@ def test_quotes_survive_a_429_and_one_empty_answer_then_expire_by_their_own_age(
     assert T.projection_odds("Alpha1", "Bravo1", start, poller=p)["reason"] == "no Thunderpick event for this match"
 
 
+def test_a_restart_restores_current_quotes_with_their_own_provenance_never_stale_ones():
+    p, c = active_poller()
+    start = SCHED[1]["start"].isoformat()
+    before = T.projection_odds("Alpha1", "Bravo1", start, poller=p)
+    c.t += 61
+    p.fetch_fns["cs2"] = ok_fetch(p.data["cs2"]["raw"])          # same body again: only a status row is stored
+    p.poll_once("cs2")
+    q = T.Poller(fetch_fns={}, clock=c, canonical_fn=canon_stub)   # the restarted process: nothing in memory
+    assert T.projection_odds("Alpha1", "Bravo1", start, poller=q)["reason"] == "no Thunderpick event for this match"
+    c.t += 40
+    assert q.restore() == ["cs2"] and q.status()["endpoints"]["cs2"]["restored_after_restart"]
+    a = T.projection_odds("Alpha1", "Bravo1", start, poller=q)
+    assert a["found"] and a["team_prob"] == before["team_prob"]
+    assert a["provenance"]["retrieved_at"] == T._iso(c.t - 40)     # the latest answer's own time (body found by hash)
+    assert a["provenance"]["snapshot_sha256"] == before["provenance"]["snapshot_sha256"]
+    c.t += T.QUOTE_MAX_AGE_S                                         # too old: a later restart restores nothing
+    r = T.Poller(fetch_fns={}, clock=c, canonical_fn=canon_stub)
+    assert r.restore() == [] and r.matched == {}
+
+
+def test_restored_quotes_relink_once_the_matcher_is_ready():
+    p, c = active_poller()
+    calls = {"ready": False}
+
+    def canon(a, b, s):
+        return canon_stub(a, b, s) if calls["ready"] else {"status": "unavailable", "match_id": None}
+    q = T.Poller(fetch_fns={}, clock=c, canonical_fn=canon)
+    assert q.restore() == ["cs2"] and q.matched == {} and q._relink
+    calls["ready"] = True
+    q._try_relink()
+    assert q.matched and not q._relink
+
+
 def test_a_full_answer_replaces_the_quote_and_its_provenance():
     p, c = active_poller()
     start = SCHED[1]["start"].isoformat()
