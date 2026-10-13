@@ -9,15 +9,29 @@ _CAP_WORDS = (("Gate D", "small sample"), ("Thin data", "small sample"), ("SOFT 
               ("NO MARKET", "no betting market"), ("STAND-IN", "stand-in"), ("RUST", "long break"),
               ("TAPE FIGHT", "recent record disagrees"))
 _CAP_RE = re.compile(r"(?:max|capped) ([0-9.]+)U")
+# the market-quality cap on a bookmaker price (Thunderpick / an OddsPapi book other than Pinnacle or Betfair Exchange)
+# is not a thin market (2026-10-13 audit: every Thunderpick card said "thin market"): named by the odds source the
+# grade used when the caller knows it, else by the flag's own text (the grader names the source in it)
+CAP_WORD_BOOKMAKER = "bookmaker price"
+_BOOKMAKER_RE = re.compile(r"thunderpick|bookmaker|oddspapi", re.I)
 
 
-def stake_cap_reasons(g, v):
+def _cap_word(f, source=None):
+    if f.startswith("SOFT BOOK"):
+        if source in ("thunderpick", "oddspapi") or (source is None and _BOOKMAKER_RE.search(f)):
+            return CAP_WORD_BOOKMAKER
+        return "thin market"
+    return next((w for k, w in _CAP_WORDS if f.startswith(k)), None)
+
+
+def stake_cap_reasons(g, v, source=None):
     """The grade-flag cap that actually cut this stake, in plain words (display only - the stake is the grader's).
     A cap counts only when the stake is below what the chance alone earns: the grader's own uncapped stake
     (units_free, from the unrounded chance - the 3-decimal chance can sit across a units boundary), else
     grader.units_for_p(p) for grades made before it existed. Only the smallest cap binds (the stake equals it), so only
     that one is named - a looser cap that also applied did not cut anything. 'Roster not confirmed' is a warning, not a
-    cap; a 0-unit Lean has no cap; the recent-record cap only counts on the side it applies to."""
+    cap; a 0-unit Lean has no cap; the recent-record cap only counts on the side it applies to.
+    source: the odds source the grade used ('thunderpick' / 'polymarket' / 'oddspapi'), when the caller knows it."""
     from grader import units_for_p
     v, g = v or {}, g or {}
     u, p, side = v.get("units") or 0, v.get("p"), v.get("side")
@@ -34,7 +48,7 @@ def stake_cap_reasons(g, v):
             continue
         if f.startswith("TAPE FIGHT") and side and g.get("tape_fight") not in (None, side):
             continue
-        w = next((w for k, w in _CAP_WORDS if f.startswith(k)), None)
+        w = _cap_word(f, source)
         if w:
             found.append((float(m.group(1)), w))
     if not found:

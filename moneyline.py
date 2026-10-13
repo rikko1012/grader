@@ -54,6 +54,12 @@ History (CS2_DATA_DIR/.cache/ml_snapshots.db, rows immutable)
                 when the baseline (platform / probability / availability) changes or every 30 min.
                 Next to every baseline row the frozen SHADOW candidate (ml_model.py, model_version
                 "ml-candidate-1", NOT validated, never a stake) is logged with the same logged_ts.
+                2026-10-13: the 0U side's Thunderpick-first market input (ml_sides "ml-sides-2": Thunderpick's
+                eligible price, else this baseline) is logged too, on its own change / 30-min rule; every row
+                written since carries baseline_source + odds_policy so the evaluation separates the policies.
+
+Thunderpick (primary bookmaker source, 2026-10-13) - tp_block(): its block per linked match for the tab and the side,
+  read from thunderpick.POLLER memory; never part of ml-baseline-1 (which stays exactly as frozen).
 
 Public:
   start()  idempotent - one background refresher per source
@@ -370,6 +376,10 @@ CREATE TRIGGER IF NOT EXISTS ml_forecasts_no_update BEFORE UPDATE ON ml_forecast
 CREATE TRIGGER IF NOT EXISTS ml_forecasts_no_delete BEFORE DELETE ON ml_forecasts
   BEGIN SELECT RAISE(ABORT, 'ml_forecasts rows are immutable'); END;
 """
+# 2026-10-13: which market input a forecast row used and under which odds policy, so the evaluation separates the
+# exchange-only baseline (ml-baseline-1) from the Thunderpick-first side input (ml_sides "ml-sides-2"). Added columns
+# only (rows stay immutable; older rows read NULL).
+_FC_EXTRA_COLS = (("baseline_source", "TEXT"), ("odds_policy", "TEXT"))
 
 
 def _connect():
@@ -382,6 +392,13 @@ def _connect():
     except sqlite3.DatabaseError:
         pass
     con.executescript(_SCHEMA)
+    have = {r[1] for r in con.execute("PRAGMA table_info(ml_forecasts)")}
+    for col, typ in _FC_EXTRA_COLS:
+        if col not in have:
+            try:
+                con.execute(f"ALTER TABLE ml_forecasts ADD COLUMN {col} {typ}")
+            except sqlite3.OperationalError:          # another connection added it a moment ago
+                pass
     return con
 
 
@@ -932,19 +949,125 @@ def match(team_a, team_b, start_iso, bo=None, event=None, sources=None, now=None
     return dict(hit, query_team_is_a=not c.get("flipped"))
 
 
+# ---------------------------------------------------------------- Thunderpick on the Moneylines tab (2026-10-13)
+# Thunderpick is the primary bookmaker source (owner 2026-10-13); Polymarket and Kalshi stay attributed comparisons and
+# ml-baseline-1 above stays exactly as frozen.  tp_block() is the one reader the tab, its counts and the 0U side
+# (ml_sides "ml-sides-2") share, so the card, the filter and the side can never disagree about a price.  Memory only
+# (thunderpick.POLLER) - never an upstream call.  Conservative: eligible only when thunderpick itself says so
+# (availability "current") AND neither Thunderpick nor this board match marks the match started (the feed has no live
+# flag, so a started match's odds may be in-play).
+TP_STATE_LABEL = {
+    "current": "Current - listed in Thunderpick's latest answer",
+    "endpoint_empty": "Thunderpick's latest answer listed no CS2 markets - not confirmed now",
+    "not_in_latest_answer": "Not in Thunderpick's latest answer - not confirmed now",
+    "stale": "Not current - no Thunderpick answer within the 180 s limit",
+    "started": "Match started - the feed has no live flag, so these odds may be in-play; not used",
+    "scope_unconfirmed": "Series scope of this market not established - not used",
+    "draw_listed": "A draw price is listed - not a two-way series market",
+    "format_excluded": "Format excluded (best-of-2 or unknown - a draw is possible)",
+    "invalid_odds": "Odds missing or invalid",
+    "policy_inactive": "Thunderpick-first policy not active",
+    "unlinked": "Not linked to one match",
+    "ambiguous": "Two Thunderpick events link to this match - not used",
+}
+TP_NOTE = ("Listed bookmaker odds. The feed gives no stake limits or execution confirmation - a listed price is not a "
+           "guarantee for any stake.")
+TP_SCOPE_LABEL = "Match Winner = series winner (from the market label; not provider-confirmed)"
+TP_SCOPE_UNCONFIRMED = "main market - series scope not established"
+_TP_URL = re.compile(r"^https://(?:www\.)?thunderpick\.io/match/\d+$")
+
+
+def tp_url(url):
+    """The match page link, only https://(www.)thunderpick.io/match/<digits>, query and fragment dropped - else None."""
+    if not url or not isinstance(url, str):
+        return None
+    u = url.split("#", 1)[0].split("?", 1)[0].rstrip("/")
+    return u if _TP_URL.match(u) else None
+
+
+def tp_policy():
+    """Thunderpick's policy version (thunderpick.POLICY_VERSION), None when the module is unavailable."""
+    try:
+        import thunderpick
+        return getattr(thunderpick, "POLICY_VERSION", None)
+    except Exception:          # noqa: BLE001
+        return None
+
+
+def _tp_legacy_state(b):
+    """availability for a board_block without one (older thunderpick.py): from current / scope / odds."""
+    if b.get("started"):
+        return "started"
+    if b.get("current") is False:
+        return "stale"
+    if b.get("draw_odds") is not None:
+        return "draw_listed"
+    if b.get("scope_confirmed") is False:
+        return "scope_unconfirmed"
+    if b.get("p_a") is None:
+        return "invalid_odds"
+    return "current" if b.get("usable") else "stale"
+
+
+def tp_block(m, now=None):
+    """Thunderpick's block for one board match (team A = the board's canonical team A), or None (unlinked, no
+    Thunderpick event, module unavailable).  Adds: availability / availability_label (thunderpick's own when it gives
+    them), eligible (== usable), started, policy, max_age_s, the member note / scope label, a checked match URL and
+    quote_time None (the feed publishes none).  Never raises."""
+    mid = (m or {}).get("match_id")
+    if not mid:
+        return None
+    try:
+        import thunderpick as T
+        try:
+            b = T.board_block(mid, start_iso=m.get("start"), bo=m.get("bo"))
+        except TypeError:                              # an older board_block(match_id, now, poller)
+            b = T.board_block(mid)
+    except Exception:                                  # noqa: BLE001 - Thunderpick never breaks the tab
+        return None
+    if not b:
+        return None
+    b = dict(b)
+    now = now or _utcnow()
+    st = _parse((m or {}).get("start"))
+    started = bool(b.get("started")) or bool((m or {}).get("started")) or bool(st and st <= now)
+    given = b.get("availability")
+    avail = "started" if started else (given or _tp_legacy_state(b))
+    label = b.get("availability_label") if given and avail == given and b.get("availability_label") else \
+        TP_STATE_LABEL.get(avail, str(avail).replace("_", " "))
+    try:
+        pa = float(b.get("p_a")) if b.get("p_a") is not None else None
+    except (TypeError, ValueError):
+        pa = None
+    elig = bool(b.get("eligible", b.get("usable"))) and avail == "current" and pa is not None and 0 < pa < 1
+    scope_ok = b.get("scope_confirmed", True) is not False
+    b.update(availability=avail, availability_label=label, eligible=elig, usable=elig, freshly_confirmed=elig,
+             started=started, policy=b.get("policy") or getattr(T, "POLICY_VERSION", None),
+             max_age_s=b.get("max_age_s") or getattr(T, "QUOTE_MAX_AGE_S", 180), url=tp_url(b.get("url")),
+             note=TP_NOTE, quote_time=None, source_updated_at=None,
+             scope_label=(TP_SCOPE_LABEL.replace("Match Winner", str(b.get("market") or "Match Winner"))
+                          if scope_ok else TP_SCOPE_UNCONFIRMED))
+    return b
+
+
 # ---------------------------------------------------------------- shadow forecast log
 
 _FC_LAST = {}           # match_id -> (logged_epoch, platform, prob, available)
+_FC_LAST_TP = {}        # match_id -> (logged_epoch, baseline_source, prob, available) of its ml-sides-2 row
 _FC_LOCK = threading.Lock()
+EXCHANGE_POLICY = "exchange-only|" + MODEL_VERSION     # odds_policy recorded on the ml-baseline-1 rows
 
 
 def log_forecasts(sources=None, now=None):
     """Record the baseline per linked match: when it changes, or every 30 min (+ the shadow candidate's row next to each
-    one).  Returns the number of baseline rows written."""
+    one).  Next to them, on its own change / 30-min rule, the Thunderpick-first market input of the 0U side
+    (ml_sides "ml-sides-2": Thunderpick's eligible price, else this baseline) with baseline_source + odds_policy, so the
+    evaluation keeps the two policies apart.  Returns the number of baseline rows written."""
     srcs = SOURCES if sources is None else sources
     now = now or _utcnow()
-    rows, extra = [], []
+    rows, extra, tp_rows = [], [], []
     with _FC_LOCK:
+        pol = tp_policy()
         for m in _assemble(srcs, now):
             mid = m["match_id"]
             if not mid or m.get("tie_possible"):
@@ -952,26 +1075,46 @@ def log_forecasts(sources=None, now=None):
             b = m["baseline"]
             sig = (b["platform"], None if b["prob_a"] is None else round(b["prob_a"], 4), b["prob_a"] is not None)
             last = _FC_LAST.get(mid)
-            if last and last[1:] == sig and now.timestamp() - last[0] < FORECAST_EVERY:
-                continue
-            rows.append((mid, MODEL_VERSION, _iso(now), b["platform"], b["prob_a"], m["teams"]["a"]["name"],
-                         m["teams"]["b"]["name"], m["start"], int(b["prob_a"] is not None), int(m["disagreement"]),
-                         b["reason"], b["rule"]))
-            _FC_LAST[mid] = (now.timestamp(),) + sig
-            cand = _candidate_row(m, _iso(now))
-            if cand:
-                extra.append(cand)
-        if rows:
+            if not (last and last[1:] == sig and now.timestamp() - last[0] < FORECAST_EVERY):
+                rows.append((mid, MODEL_VERSION, _iso(now), b["platform"], b["prob_a"], m["teams"]["a"]["name"],
+                             m["teams"]["b"]["name"], m["start"], int(b["prob_a"] is not None), int(m["disagreement"]),
+                             b["reason"], b["rule"], b["platform"], EXCHANGE_POLICY))
+                _FC_LAST[mid] = (now.timestamp(),) + sig
+                cand = _candidate_row(m, _iso(now))
+                if cand:
+                    extra.append(cand)
+            r = _sides_tp_row(m, _iso(now), pol, now)
+            if r:
+                sig2 = (r[12], None if r[4] is None else round(r[4], 4), bool(r[8]))
+                last2 = _FC_LAST_TP.get(mid)
+                if not (last2 and last2[1:] == sig2 and now.timestamp() - last2[0] < FORECAST_EVERY):
+                    tp_rows.append(r)
+                    _FC_LAST_TP[mid] = (now.timestamp(),) + sig2
+        if rows or tp_rows:
             with _DB_LOCK:
                 con = _connect()
                 try:
                     con.executemany("INSERT OR IGNORE INTO ml_forecasts (match_id, model_version, logged_ts, platform,"
-                                    " prob_a, team_a, team_b, start, available, disagreement, reason, rule)"
-                                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", rows + extra)
+                                    " prob_a, team_a, team_b, start, available, disagreement, reason, rule,"
+                                    " baseline_source, odds_policy) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows + tp_rows)
+                    if extra:
+                        con.executemany("INSERT OR IGNORE INTO ml_forecasts (match_id, model_version, logged_ts, platform,"
+                                        " prob_a, team_a, team_b, start, available, disagreement, reason, rule)"
+                                        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", extra)
                     con.commit()
                 finally:
                     con.close()
     return len(rows)
+
+
+def _sides_tp_row(m, logged_iso, policy=None, now=None):
+    """The ml-sides-2 row (ml_sides.forecast_row: _SCHEMA column order + baseline_source, odds_policy) for one linked
+    board match, or None.  A missing / broken Thunderpick or ml_sides module never stops the baseline log."""
+    try:
+        import ml_sides
+        return ml_sides.forecast_row(m, tp_block(m, now), logged_iso, tp_policy=policy)
+    except Exception:          # noqa: BLE001
+        return None
 
 
 def _candidate_row(m, logged_iso):

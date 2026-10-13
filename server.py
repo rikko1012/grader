@@ -28,7 +28,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 import cs2_scout
-from pick_verdict import verdict, stake_cap_reasons, _CAP_WORDS, _CAP_RE   # one verdict for the card, board and ladder
+from pick_verdict import verdict, stake_cap_reasons, _CAP_WORDS, _CAP_RE, CAP_WORD_BOOKMAKER   # one verdict for the card, board and ladder
 import hltv
 import picklog
 import slips
@@ -612,6 +612,8 @@ def has_warning(g):
     """Any member-visible warning flag on this grade (not the kills-cap note, the last-10 display note, a per-map note or
     a plain 'last official map N days ago')."""
     for f in (g or {}).get("flags") or []:
+        if f.startswith(("SOFT BOOK", "NO MARKET")):  # the market-quality cap keeps counting whatever its member wording
+            return True                              # (2026-10-13: a bookmaker price no longer reads "unit size limited")
         t = _public_flag(f)
         if t and ("caution" in t or "unit size limited" in t or t.startswith(_WARN_START)):
             return True
@@ -626,7 +628,7 @@ def _legacy_cap_words(reason):
     w = next((w for k, w in _CAP_WORDS if m.group(1).startswith(k)), None)
     if w:
         return [w]                                   # old wording: the internal flag name
-    words = {w for _, w in _CAP_WORDS}
+    words = {w for _, w in _CAP_WORDS} | {CAP_WORD_BOOKMAKER}
     return [x for x in m.group(1).split("; ") if x in words]
 
 
@@ -793,21 +795,71 @@ def ml_model_state():
     return dict(_MODEL_STATE)
 
 
-def ml_sides_for(board):
-    """The picked side per board match (memory only - the side picker refreshes in the background)."""
+def ml_sides_for(board, tp_blocks=None):
+    """The picked side per board match (memory only - the side picker refreshes in the background). tp_blocks:
+    Thunderpick's block per match (moneyline.tp_block) -> the side's Thunderpick-first input (ml_sides "ml-sides-2")."""
     import ml_sides
-    return ml_sides.sides_for_board(board, detail=False)
+    import moneyline
+    if tp_blocks is None:
+        return ml_sides.sides_for_board(board, detail=False)
+    return ml_sides.sides_for_board(board, detail=False, tp_blocks=tp_blocks, tp_policy=moneyline.tp_policy())
+
+
+# what the Moneylines tab says about Thunderpick's rule (members; the exchanges' own frozen rule is moneyline.BASELINE_RULE)
+TP_RULE = ("Thunderpick (primary bookmaker source): a price is used only when the match is in Thunderpick's latest "
+           "successful answer, that answer is at most {age} s old (our retrieval time - the feed publishes no quote "
+           "time), the market is the event-level 'Match Winner' (read as the series winner from its label - two "
+           "outcomes, no draw price; not provider-confirmed), the format is best-of-1, 3 or 5, and the match has not "
+           "started (the feed has no live flag). Decimal odds d -> raw implied chance 1/d (the two add up to more than "
+           "100% by the bookmaker margin) -> market-implied probability = each raw implied chance divided by their sum "
+           "(proportional margin removal). Listed odds only: the feed gives no stake limits or execution confirmation.")
+_TP_STATE_KEYS = ("source", "state", "label", "quotes_confirmed_at", "last_success_at", "last_nonempty_at", "time_basis",
+                  "policy_active")
+
+
+def member_source_note(note):
+    """A Polymarket / Kalshi status note for members: no exception text, upstream messages or URLs - just what it means
+    (2026-10-13 audit: members saw 'HTTPError: 429 Client Error: Too Many Requests for url: https://api...')."""
+    if not note:
+        return note
+    s = str(note)
+
+    def words(err):
+        e = str(err or "")
+        code = re.search(r"\b([45]\d\d)\b", e)
+        if (code and code.group(1) == "429") or "Too Many Requests" in e:
+            return "rate-limited by the provider"
+        if code and code.group(1).startswith("5"):
+            return "the provider returned an error"
+        if re.search(r"timed? ?out|Timeout", e, re.I):
+            return "the request timed out"
+        if re.search(r"Connection|resolve|unreachable", e, re.I):
+            return "connection problem"
+        return f"HTTP {code.group(1)}" if code else "refresh failed"
+    m = re.match(r"^(stale: \S+ refresh failing \()(.*)(\); last good data \d+s old)$", s, re.S)
+    if m:
+        return m.group(1) + words(m.group(2)) + m.group(3)
+    m = re.match(r"^(\S+ has not loaded yet \()(.*)(\))$", s, re.S)
+    if m:
+        return m.group(1) + words(m.group(2)) + m.group(3)
+    if re.search(r"https?://|Error|Exception|Traceback", s):
+        return words(s)
+    return s[:200]
 
 
 def moneylines_payload():
-    """The member view of moneyline.board(): slimmed (no raw platform payloads / rules text), team A first."""
+    """The member view of moneyline.board(): slimmed (no raw platform payloads / rules text), team A first.
+    Thunderpick first (2026-10-13): one block per linked match (moneyline.tp_block - memory only), the SAME blocks feed
+    the 0U side (ml-sides-2), the card, the usable-price filter and its count."""
     import moneyline
     st = moneyline.status()
     board = moneyline.board()
+    tp_blocks = [moneyline.tp_block(e) if e.get("match_id") else None for e in board]
     try:
-        sides = ml_sides_for(board)
+        sides = ml_sides_for(board, tp_blocks)
     except Exception:
         sides = [None] * len(board)
+    tp_by_mid = {e["match_id"]: b for e, b in zip(board, tp_blocks) if e.get("match_id")}
     out = []
     for e, side in zip(board, sides):
         pl = {}
@@ -829,17 +881,20 @@ def moneylines_payload():
                     "disagreement": bool(e.get("disagreement")), "disagreement_gap": e.get("disagreement_gap"),
                     "side": side})
     out = _merge_unlinked(out)
-    try:                                    # Thunderpick first (2026-10-13): its block per linked match, team A view
-        import thunderpick
-        for m in out:
-            m["thunderpick"] = thunderpick.board_block(m["match_id"]) if m.get("match_id") else None
-    except Exception:
-        pass
+    for m in out:                           # Thunderpick first (2026-10-13): its block per linked match, team A view
+        m["thunderpick"] = tp_by_mid.get(m["match_id"]) if m.get("match_id") else None
+        # members can tell "no Thunderpick event" from "not looked up" (an unlinked card is never matched to Thunderpick)
+        m["thunderpick_note"] = (None if m["thunderpick"] else
+                                 "Thunderpick: no event linked to this match" if m.get("match_id") else
+                                 "Thunderpick: not checked - this card is not tied to one HLTV match")
+    tps = _thunderpick_state()
     return {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "matches": out,
-            "sources": {k: {x: v.get(x) for x in ("ok", "stale", "age_s", "last_success", "note", "listings")} for k, v in st.items()},
+            "sources": {k: {x: (member_source_note(v.get(x)) if x == "note" else v.get(x))
+                            for x in ("ok", "stale", "age_s", "last_success", "note", "listings")} for k, v in st.items()},
             "rule": moneyline.BASELINE_RULE, "model_version": moneyline.MODEL_VERSION,
+            "thunderpick_rule": TP_RULE.format(age=tps.get("max_age_s") or 180),
             "model": {k: v for k, v in ml_model_state().items() if k != "val_promoted"},
-            "recommendation": SHADOW_LABEL, "scope": "series", "thunderpick": _thunderpick_state()}
+            "recommendation": SHADOW_LABEL, "scope": "series", "thunderpick": tps}
 
 
 def _tp_compare_rows(last=400):
@@ -877,8 +932,11 @@ def _tp_unmatched():
             continue
         events_out.append(dict(row, match_id=m.get("match_id"),
                                why=m.get("reason") or "ambiguous: two Thunderpick events link to this match"))
-    # the board side comes from what the grader actually used (each open pick's latest saved provenance) - the pick's
-    # label can differ from the player's HLTV team the grader links (e.g. PrizePicks 'UNO MILLE' = HLTV 'ex-Keyd Stars')
+    # the board side comes from what the grader actually used (each open pick's latest saved provenance), not from the
+    # pick's team label: picks.team was written from the player's BO3.gg PROFILE team (pb.current_team), which can differ
+    # from the team he plays for in this match. ALLE (2026-10-13): BO3.gg profile 'UNO MILLE' (a separate HLTV team,
+    # 11555 - his former team), while PrizePicks / Underdog list him under 'ex-Keyd Stars' and the grader graded him for
+    # ex-Keyd Stars vs Galorys (playing_for) - so the label said 'UNO MILLE' for a match priced as ex-Keyd Stars.
     latest = {}
     for f in picklog.export_forecasts(inputs=True, last=4000):          # newest first
         latest.setdefault(f.get("pick_id"), f)
@@ -899,12 +957,62 @@ def _tp_unmatched():
             "basis": "board side = each open pick's latest saved forecast provenance (what the grader used)"}
 
 
-def _thunderpick_state():
-    """Thunderpick's honest state for the Moneylines tab (rate-limited / unavailable / setting up / empty / current) -
-    its prices are not shown until the CS2 market is confirmed, and Polymarket / Kalshi are never relabelled as it."""
+_TP_ENDPOINT_KEYS = ("last_request_at", "last_request_outcome", "last_success_at", "last_nonempty_at", "latest_answer_empty",
+                     "serving_snapshot_at", "held_through_empty_at", "restored_after_restart", "next_attempt", "current")
+
+
+def tp_admin_view(samples=3):
+    """Admin, read-only (never an upstream request): thunderpick.admin_view (status, request audit, policy, inventories)
+    + a per-endpoint summary of the freshness fields (last request / outcome / success / nonempty answer / serving
+    snapshot), the market-type registry (thunderpick.market_types) and exactly what members are told."""
+    import thunderpick as T
+    v = dict(T.admin_view(samples) or {})
+    eps = ((v.get("status") or {}).get("endpoints") or {})
+    v["endpoint_summary"] = {n: {k: e.get(k) for k in _TP_ENDPOINT_KEYS if k in e} for n, e in eps.items() if isinstance(e, dict)}
+    if "market_types" not in v and hasattr(T, "market_types"):
+        try:
+            v["market_types"] = T.market_types()
+        except Exception as e:      # noqa: BLE001 - the view still answers
+            v["market_types"] = {"error": f"{type(e).__name__}: {str(e)[:120]}"}
+    v["member_public_state"] = _thunderpick_state()
+    v["probe_route"] = "/admin/thunderpick_probe?path=cs2|csgo - one request through the gateway (this view never sends one)"
+    return v
+
+
+def tp_probe(name):
+    """The explicit admin probe: thunderpick.probe(name) (gateway budget, cooldown and in-flight lease shared with the
+    poller); an older thunderpick.py without probe() -> the same single gateway request through admin_view's probe."""
+    import thunderpick as T
+    fn = getattr(T, "probe", None)
+    out = fn(name) if fn is not None else (T.admin_view(0, probe=name) or {}).get("probe")
+    return {"path": name, "result": out, "public_state": _thunderpick_state()}
+
+
+def _tp_redact(obj):
+    """Belt and braces for the Thunderpick admin views: the API key never leaves the server, whatever a view returns."""
+    s = json.dumps(obj, default=str)
     try:
         import thunderpick
-        return thunderpick.public_state()
+        k = thunderpick._key()
+    except Exception:
+        k = None
+    if k and len(k) >= 6 and k in s:
+        s = s.replace(k, "[redacted]")
+    return s.encode()
+
+
+def _thunderpick_state():
+    """Thunderpick's honest state for the Moneylines tab (rate-limited / unavailable / setting up / empty / current) -
+    its prices are not shown until the CS2 market is confirmed, and Polymarket / Kalshi are never relabelled as it.
+    Only the member keys: quotes_confirmed_at = the retrieval time of the snapshot serving current quotes (never a max
+    over an endpoint that answered empty - that overstated freshness), plus max_age_s (the quote limit)."""
+    try:
+        import thunderpick
+        ps = thunderpick.public_state() or {}
+        out = {k: ps.get(k) for k in _TP_STATE_KEYS if k in ps}
+        out.setdefault("source", "thunderpick")
+        out["max_age_s"] = getattr(thunderpick, "QUOTE_MAX_AGE_S", 180)
+        return out
     except Exception as e:
         return {"source": "thunderpick", "state": "unavailable", "label": f"Thunderpick unavailable ({type(e).__name__})"}
 
@@ -1283,7 +1391,7 @@ def board_forever():
                                       "dstat": comparison.data_status(res.get("grade") or {}, v),
                                       "source": comparison.source_label(res.get("grade") or {}),
                                       # why the stake is below what its chance earns + any member warning (display only)
-                                      "cap_grade": stake_cap_reasons(g, v), "warn": has_warning(g),
+                                      "cap_grade": stake_cap_reasons(g, v, source=odds_selected(res.get("odds"))), "warn": has_warning(g),
                                       "graded_line": r["line"], "graded_model": picklog.MODEL_VERSION,   # slips: exact line + model
                                       "grade": v.get("grade"), "side": v.get("side"), "p": v.get("p"),
                                       "units": v.get("units"), "proj": g.get("lambda_final"), "state": v.get("state"),
@@ -1472,6 +1580,16 @@ def public(res):
         r.pop("steam_id", None)
         r.pop("lineup", None)
     pb.pop("steam_id", None)
+    try:                                   # the card's odds lines, from the full grade (before the recipe is stripped)
+        res["odds_info"] = card_odds_info(res)
+    except Exception:
+        traceback.print_exc()
+        res["odds_info"] = None
+    if isinstance(res.get("odds"), dict):  # a member copy: the selection's audit fields (feed path, snapshot hash,
+        od = dict(res["odds"])             # signature, query, ids) stay in the admin forecast log
+        if isinstance(od.get("provenance"), dict):
+            od["provenance"] = {k: od["provenance"][k] for k in _PROV_KEEP if k in od["provenance"]}
+        res["odds"] = od
     protect_recipe(res)
     return res
 
@@ -1506,7 +1624,165 @@ _REASONS = (("Gate A", "AWPer on a headshot prop"), ("Gate D", "No recent offici
             ("Gate C", "Not on this team's roster"), ("Missing", "Not enough data to grade"))
 
 
-def _public_flag(f):
+# ---------------------------------------------------------------- the odds a card's grade used (2026-10-13)
+# market_odds.select picks ONE source per grade (Thunderpick first, else Polymarket, else the OddsPapi fallback) and
+# records it in odds.provenance. Members are told which one, what market / scope it is, why Thunderpick was not used,
+# and how the odds act on THIS grade: on the performance model only the stake rule (market-quality cap) and the context
+# win chance; on the older model the projection itself.
+SOFT_TEXT_BOOKMAKER = "Bookmaker price - stake capped at {cap}U under the market-quality rule"
+SOFT_TEXT_THIN = "Thin betting market - unit size limited"
+_PROV_KEEP = ("selected", "source", "selection", "policy", "odds_policy", "market", "scope", "scope_basis",
+              "scope_provider_confirmed", "series_format", "draws_possible", "team_is_a", "odds_team", "odds_opp",
+              "implied_team_raw", "implied_opp_raw", "margin", "p_team", "p_opp", "method", "retrieved_at", "quote_age_s",
+              "availability", "source_updated_at", "source_updated_note", "timezone_basis", "timezone_provider_confirmed",
+              "match_url", "fallback_reason", "book")
+
+
+def odds_selected(odds):
+    """'thunderpick' / 'polymarket' / 'oddspapi' / None: the source that supplied THIS grade's win chance."""
+    if not isinstance(odds, dict) or not odds.get("found"):
+        return None
+    sel = (odds.get("provenance") or {}).get("selected")
+    if sel in ("thunderpick", "polymarket", "oddspapi"):
+        return sel
+    if odds.get("book") == "thunderpick":
+        return "thunderpick"
+    return "oddspapi" if odds.get("book") else "polymarket"
+
+
+def _soft_text(f, src=None, book=None, cap=None):
+    """The member text of a SOFT BOOK flag: a bookmaker price (Thunderpick / an OddsPapi book) is not a thin market."""
+    cap = cap if cap is not None else _soft_cap()
+    if src == "thunderpick" or (src is None and re.search(r"thunderpick", f, re.I)):
+        return SOFT_TEXT_BOOKMAKER.format(cap=f"{cap:g}")
+    if src == "oddspapi" or (src is None and re.search(r"bookmaker|oddspapi", f, re.I)):
+        return (f"Bookmaker price ({book}) - stake capped at {cap:g}U under the market-quality rule" if book else
+                SOFT_TEXT_BOOKMAKER.format(cap=f"{cap:g}"))
+    return SOFT_TEXT_THIN
+
+
+def _soft_cap():
+    try:
+        from grader import CONFIG
+        return float(CONFIG["soft_market_cap"])
+    except Exception:
+        return 1.5
+
+
+def _is_perf(g):
+    return str((g or {}).get("projection_source") or "").startswith("perf") and ((g or {}).get("scope") or "12") in ("12", "1", "123")
+
+
+def _map_basis_words(basis, bo=None):
+    """How the grade's per-map chances came from the series price, in words (detail.map_prob_basis when the grader
+    records it; older grades: the best-of-3 inversion it always used)."""
+    if isinstance(basis, dict):
+        basis = basis.get("label") or basis.get("basis") or basis.get("method") or json.dumps(basis, sort_keys=True)
+    b = str(basis or "").lower()
+    if b:
+        if "bo1" in b or "best-of-1" in b:
+            return "best-of-1: the map chance is the series chance"
+        if "bo5" in b or "best-of-5" in b:
+            return "best-of-5 formula"
+        if "assum" in b or "unknown" in b:
+            return "best-of-3 formula assumed (format not known)"
+        if "bo3" in b or "best-of-3" in b:
+            return "best-of-3 formula"
+        return str(basis)[:120]
+    return ("best-of-3 formula applied to a best-of-1 match (an approximation)" if bo == 1 else
+            "best-of-5 match read with the best-of-3 formula (an approximation)" if bo == 5 else "best-of-3 formula")
+
+
+def card_odds_info(res):
+    """The card's odds lines (built from the full grade, before the recipe is stripped): source used, market + scope,
+    why Thunderpick was not used, how odds act on this grade, the market-quality stake rule in this source's words,
+    the retrieval time, the derived-maps note and the labels for the Match section / win-chance tile / footer."""
+    od = res.get("odds") if isinstance(res.get("odds"), dict) else None
+    g = res.get("grade") or {}
+    if od is None or "p_more" not in g:
+        return None
+    pv = od.get("provenance") or {}
+    src = odds_selected(od)
+    perf = _is_perf(g)
+    mq = g.get("market_quality")
+    cap = _soft_cap()
+    nm = res.get("next_match") or {}
+    fb = str(pv.get("fallback_reason") or "").strip()
+    fb = re.sub(r"https?://\S+", "", fb)[:160] or None
+    out = {"source": src, "perf": perf, "market_quality": mq}
+    if src == "thunderpick":
+        label, market = "Thunderpick", pv.get("market") or "Match Winner"
+        scope = pv.get("scope") or "series winner"
+        out["scope_note"] = (f"{market} = {scope} (from the market label; "
+                             f"{'provider-confirmed' if pv.get('scope_provider_confirmed') else 'not provider-confirmed'})")
+        out["price_note"] = "Bookmaker odds, margin removed proportionally"
+        out["retrieved_at"] = pv.get("retrieved_at")
+        out["time_note"] = "retrieved by us - the feed publishes no quote time"
+        out["prices"] = {k: pv.get(k) for k in ("odds_team", "odds_opp", "implied_team_raw", "implied_opp_raw", "margin",
+                                                  "p_team", "p_opp")}
+    elif src == "oddspapi":
+        book = od.get("book") or pv.get("book")
+        label, market, scope = f"OddsPapi ({book})" if book else "OddsPapi", "match winner", "series winner"
+        out["price_note"] = f"Bookmaker odds ({book})" if book else "Bookmaker odds"
+    elif src == "polymarket":
+        label, market, scope = "Polymarket", "moneyline market", "series winner"
+        out["price_note"] = "Exchange price (bid/ask midpoint, or last trade when the spread is wide)"
+    else:
+        label = market = scope = None
+    out["label"] = label
+    if src:
+        out["line"] = f"Odds source used: {label} ({market}, {scope})"
+        out["fallback"] = f"Thunderpick not used: {fb}" if src != "thunderpick" and fb else None
+        out["match_label"] = f"Win chance ({label}{', margin removed' if src == 'thunderpick' else ''})"
+        out["footer"] = f"{od.get('book')} via OddsPapi" if src == "oddspapi" and od.get("book") else label
+    else:
+        out["line"] = "Odds source used: none - no betting market found for this match"
+        out["fallback"] = f"Thunderpick not used: {fb}" if fb else None
+        out["match_label"] = "Win chance"
+        out["footer"] = None
+    if perf:
+        out["use"] = ("How odds are used here: stake rule only (market-quality cap) and context win chance - the "
+                      "projection does not use odds")
+    else:
+        out["use"] = ("How odds are used here: the projection uses the win chance"
+                      + ("" if src else " (no market: the older model grades the match as even)")
+                      + "; the market-quality stake rule also applies")
+    if mq == "SOFT":
+        out["stake_rule"] = _soft_text("", src, od.get("book"), cap) if src in ("thunderpick", "oddspapi") else SOFT_TEXT_THIN
+        out["stake_pill"] = (f"Bookmaker price · max {cap:g}U" if src in ("thunderpick", "oddspapi")
+                             else f"Thin betting market · max {cap:g}U")
+    elif mq in ("NONE", "NO MARKET"):
+        out["stake_rule"] = "No betting market for this match - unit size limited"
+        out["stake_pill"] = f"No betting market · max {cap:g}U"
+    else:
+        out["stake_rule"] = out["stake_pill"] = None
+    if not src:
+        out["match_note"] = ("No betting market found for this match - stake capped at "
+                             f"{cap:g}U; {'the projection does not use odds' if perf else 'the older model grades the match as even'}")
+        out["tile_note"] = "no market – stake capped" if perf else "no market – graded as even"
+    else:
+        out["match_note"] = None
+        out["tile_note"] = (f"{label}{' (margin removed)' if src == 'thunderpick' else ''} · context"
+                            f"{' + stake cap' if mq not in (None, 'HARD') else ''}; not in the projection"
+                            if perf else f"{label} · in the projection")
+    maps = od.get("maps") or {}
+    if src and not (maps.get("map1") or maps.get("map2")):
+        basis = _map_basis_words((g.get("detail") or {}).get("map_prob_basis"), nm.get("bo"))
+        how = basis if basis.startswith("best-of-1:") else f"{basis}; maps assumed equal and independent"
+        out["maps_note"] = (f"Map win chances are model-derived from the {label} series price ({how}) - {label} supplies "
+                            "no map prices. They feed the match simulation's map scenarios"
+                            + (" and the Maps 1–3 'map 3 played' chance - not the projection" if perf
+                               else " and the older model's projection") + ".")
+    elif src:
+        out["maps_note"] = f"Map win chances from {label}'s own map markets."
+    else:
+        out["maps_note"] = None
+    return out
+
+
+def _public_flag(f, src=None, book=None):
+    if f.startswith("SOFT BOOK"):                   # the market-quality cap, in the selected source's own words
+        return _soft_text(f, src, book)
     if f.startswith("RUST") or f.startswith("Note: last official map"):
         days = next((w for w in f.split() if w.isdigit()), None)
         return (f"Last official map {days} days ago" + (" - extra caution" if f.startswith("RUST") else "")) if days else None
@@ -1526,8 +1802,11 @@ def protect_recipe(res):
     g = res.get("grade")
     if isinstance(g, dict):
         flags = []
+        src, book = odds_selected(res.get("odds")), (res.get("odds") or {}).get("book")
         for f in g.get("flags") or []:
-            t = _public_flag(f)
+            if ": no Maps 1-2 on this map" in f and _is_perf(g):
+                continue                            # the performance model takes no map input: a stale note there
+            t = _public_flag(f, src, book)
             if t and t not in flags:
                 flags.append(t)
         g["flags"] = flags
@@ -1713,17 +1992,21 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/admin":
                 return self.admin(q)
             if u.path == "/admin/thunderpick.json" and self.authed(q.get("token")):
-                # admin only: status, request audit, inventory (never the key). probe=cs2|csgo sends ONE controlled
-                # request through the gateway (persisted cooldown + one shared budget for all Thunderpick traffic)
-                import thunderpick
-                pr = q.get("probe") if q.get("probe") in ("cs2", "csgo") else None
+                # admin only, READ-ONLY (2026-10-13: a GET of this view never sends an upstream request - the old
+                # ?probe= moved to /admin/thunderpick_probe): status, request audit, market registry, inventory, never
+                # the key
                 if q.get("compare") == "1":     # old source vs Thunderpick on identical saved inputs (no upstream call)
                     import market_odds
                     return self.send(200, market_odds.compare(_tp_compare_rows()))
                 if q.get("unmatched") == "1":   # coverage: current events that feed nothing, and why (no upstream call)
                     return self.send(200, _tp_unmatched())
-                return self.send(200, thunderpick.admin_view(min(int(q["samples"]), 20) if (q.get("samples") or "").isdigit() else 3,
-                                                             probe=pr))
+                return self.send(200, _tp_redact(tp_admin_view(min(int(q["samples"]), 20) if (q.get("samples") or "").isdigit() else 3)))
+            if u.path == "/admin/thunderpick_probe" and self.authed(q.get("token")):
+                # the explicit admin action: ONE controlled request through thunderpick's gateway (its persisted cooldown,
+                # single in-flight lease and the one shared budget for all Thunderpick traffic decide whether it is sent)
+                if q.get("path") not in ("cs2", "csgo"):
+                    return self.send(400, {"error": "path must be cs2 or csgo"})
+                return self.send(200, _tp_redact(tp_probe(q["path"])))
             if u.path == "/admin/moneylines_status" and self.authed(q.get("token")):
                 try:
                     import ml_sides
@@ -2627,7 +2910,7 @@ class Handler(BaseHTTPRequestHandler):
                 if isinstance(vv, dict) and vv.get("side"):          # the board row's cap words, on the card too (new dict:
                     g_ = res.get("grade") or {}                      # the logged verdict is being written in the background)
                     own = dict(vv, units=vv.get("units_full") or vv.get("units"))
-                    res["verdict"] = dict(vv, cap_reason=cap_reason_text(stake_cap_reasons(g_, own) if (vv.get("units") or 0) > 0 else [],
+                    res["verdict"] = dict(vv, cap_reason=cap_reason_text(stake_cap_reasons(g_, own, source=odds_selected(res.get("odds"))) if (vv.get("units") or 0) > 0 else [],
                                                                          vv.get("cap_n")),
                                           flagged=bool(comparison.data_status(g_, vv)[0] in ("verify", "limited") or has_warning(g_)))
                 vv = res["verdict"]
