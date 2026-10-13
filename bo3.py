@@ -199,6 +199,17 @@ def _tmem_put(key, data, at):
         _TMEM.clear()                                   # simple bound - refills from disk
     _TMEM[key] = (at, data)
 FOREVER = 10 ** 6      # hours - finished map stats never change
+PARTIAL_GAME_TTL = 0.5  # hours - a map scoreboard with fewer than 10 players is asked again after this, never kept for good
+
+
+def _partial(endpoint, data):
+    """A map scoreboard read before BO3.gg published it (empty / fewer than 10 players). 2026-10-13 audit: kept 400 days, so
+    that map was missing from his BO3.gg rows (last-10, perf-2-bo3, roster checks) for good."""
+    return bool(GAME_ENDPOINT.match(endpoint)) and (not isinstance(data, list) or len(data) < 10)
+
+
+def _good_for(endpoint, data, ttl):
+    return min(ttl, PARTIAL_GAME_TTL) if _partial(endpoint, data) else ttl
 
 # One request schedule for the whole process (member look-ups + background pre-loading), so
 # running both never doubles the rate. Members come first: low-priority clients wait while any
@@ -239,17 +250,18 @@ class BO3:
         name = hashlib.sha1(key.encode()).hexdigest()
         ttl = self._ttl_now
         forever = ttl >= FOREVER
-        if forever and key in _MEM:
+        if forever and key in _MEM:                     # (never a partial scoreboard)
             return _MEM[key]
         hit = _TMEM.get(key) if ttl > 0 else None       # changing data (schedules, rosters): memory
-        if hit and time.time() - hit[0] < ttl * 3600:   # copy until it expires - no disk read
+        if hit and time.time() - hit[0] < _good_for(endpoint, hit[1], ttl) * 3600:   # copy until it expires - no disk read
             return hit[1]
         got = kvstore.get(bucket, name) if ttl > 0 else None
-        if got and time.time() - got[0] < ttl * 3600:
+        if got and time.time() - got[0] < _good_for(endpoint, got[1], ttl) * 3600:
             at, data = got
-            if forever and len(_MEM) < _MEM_MAX:
-                _MEM[key] = data
-            elif not forever:
+            if forever and not _partial(endpoint, data):
+                if len(_MEM) < _MEM_MAX:
+                    _MEM[key] = data
+            else:
                 _tmem_put(key, data, at)
             return data
         while self.background and _members_active[0] > 0:
@@ -270,10 +282,11 @@ class BO3:
                 await asyncio.sleep(10 * (attempt + 1))
         self.requests += 1
         data = slim(endpoint, data)
-        kvstore.put(bucket, name, data)
-        if forever and len(_MEM) < _MEM_MAX:
-            _MEM[key] = data
-        elif not forever:
+        kvstore.put(bucket, name, data)                 # a partial scoreboard too: asked again after PARTIAL_GAME_TTL, not per read
+        if forever and not _partial(endpoint, data):
+            if len(_MEM) < _MEM_MAX:
+                _MEM[key] = data
+        else:
             _tmem_put(key, data, time.time())
         return data
 

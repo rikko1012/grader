@@ -212,6 +212,8 @@ def player_rows(games, pid):
     """One row per map this player played in the given games."""
     rows = []
     for g, ps in games:
+        if 0 < (g.get("winner_clan_score") or 0) + (g.get("loser_clan_score") or 0) < 13:
+            continue          # a forfeit / technical win, not a played map (as map_rows; 2026-10-13 audit: window stats kept it)
         me = next((r for r in ps if (r.get("steam_profile") or {}).get("player_id") == pid), None)
         if me:
             rows.append({"number": g.get("number") or 9, "map": g.get("map_name"), "game_id": g.get("id"),
@@ -398,7 +400,9 @@ def _pick_namesake(b, exact, team_hint):
             team_hint = None
     if team_hint:
         for sl, t in teams.items():
-            if t and name_match(team_hint, t) >= 2 or (t and (norm(t) in norm(team_hint) or norm(team_hint) in norm(t))):
+            # exact name variants / aliases only (2026-10-13 audit: a team CONTAINING the hint was taken - 'Spirit' picked the
+            # Spirit Academy player, 'OG' the Dogs Gaming one)
+            if t and _same_team_alias(team_hint, t):
                 return sl
     try:
         playing = {norm(x) for m in _slate_raw(b, 72) for x in ((m.get("team1") or {}).get("name"), (m.get("team2") or {}).get("name")) if x}
@@ -552,7 +556,8 @@ def run_player(b, name, args):
 
     # rating (role rank): ALL maps in the window, like HLTV - him and every teammate, same maps
     overall["rating"], overall["rating_maps"] = rating_of(player_rows(games, p["id"]))
-    mates = [x for x in roster if x.get("id") != p["id"]]
+    # active teammates only: benched players (status 2) never rank his role (2026-10-13 audit: 5-6 'teammates')
+    mates = [x for x in roster if x.get("id") != p["id"] and x.get("status") != 2]
     out["teammate_ratings"], out["teammate_rating_maps"] = {}, {}
     for x in mates:
         out["teammate_ratings"][x["nickname"]], out["teammate_rating_maps"][x["nickname"]] = \
@@ -1114,6 +1119,19 @@ def _same_team(a, b):
     return bool(a and b) and norm(a) == norm(b)
 
 
+def _same_team_alias(a, b):
+    """_same_team plus the maintained alias table (hltv.same_team: team_aliases.json, exact names only) - never fuzzy."""
+    if not a or not b:
+        return False
+    try:
+        import hltv
+        if hltv.same_team(a, b):
+            return True
+    except Exception:
+        pass
+    return _same_team(a, b)
+
+
 def _by_start(items, start, start_of):
     """The items (upcoming matches) whose start is within JOIN_START_MIN of the book's start time - a book line names its
     match by opponent AND start, so a misspelled opponent still finds the one match at that time. [] without a start, or
@@ -1195,8 +1213,11 @@ def _hltv_context(pb, args, fresh=False):
             maps = [next(iter(mp.get(k) or {}), None) for k in ("map1", "map2")]
             maps = [m for i, m in enumerate(maps) if m and m not in maps[:i]]
         last = (pb.get("recent_maps") or [{}])[0].get("date")
+        # tonight's LAN / online label from THIS match on HLTV's schedule (its opponent and start) and the team he plays it
+        # for (2026-10-13 audit: it came from his own team's next / live match - another match for a stand-in)
         return hltv.context((pb.get("player") or {}).get("nick"), pb.get("current_team"),
-                            getattr(args, "opponent", None), maps, last, fresh=fresh)
+                            getattr(args, "opponent", None), maps, last, fresh=fresh,
+                            start=getattr(args, "match_start", None), playing_for=pb.get("playing_for"))
     except Exception as e:
         import hltv
         return {"found": False, "error": hltv.err_text(e), "transient": _transient_hltv_error(e)}
@@ -2029,9 +2050,12 @@ def run(args, res, b, ttl):
                     pass
             if pm:
                 pm = dict(pm, team=str(pm.get("team") or "").strip(), opponent=str(pm.get("opponent") or "").strip())
+                # match format: None when the source has none; a Polymarket market names it in its question ('A vs B (BO5) -
+                # ...') - 2026-10-13 audit: a Polymarket-found BO5 was graded as a BO3
+                bo_ = pm.get("bo") or _bo_of((re.search(r"\(BO(\d)\)", str(pm.get("title") or ""), re.I) or [None, None])[1])
                 nxt = {"start": pm.get("start"), "slug": None, "opponent": pm["opponent"],
                        "event": pm.get("title"), "maps": [], "source": src.lower(),
-                       "opponent_id": None, "opponent_slug": None, "bo": pm.get("bo"),   # None when the source has no format
+                       "opponent_id": None, "opponent_slug": None, "bo": bo_,
                        "hltv_match": pm.get("hltv_match")}   # logged + settled from HLTV (picklog)
                 pb["playing_for"] = pm["team"]
                 if no_team:
@@ -2187,6 +2211,17 @@ def _hltv_series(pb, back_days=None):
         return []
 
 
+def _hltv_series_failed(pb, back_days=None):
+    """The _hltv_series read failed (database unreachable, no earlier good answer) - its [] is not 'no HLTV series'."""
+    try:
+        import hltv
+        nick = (pb.get("player") or {}).get("nick")
+        return bool(nick) and hltv.lookup_failed(("series", hltv._norm(nick), hltv._norm(pb.get("current_team")),
+                                                  _hltv_since(pb, back_days)))
+    except Exception:
+        return False
+
+
 def _older_bo3(pb, rows, back_days):
     """rows + his BO3.gg Maps 1-2 rows from matches older than his last 10 (pb['_older_maps'], read with the player block)
     inside back_days."""
@@ -2195,13 +2230,59 @@ def _older_bo3(pb, rows, back_days):
     return rows + [r for r in pb.get("_older_maps") or [] if r["match_id"] not in have and (r.get("date") or "") >= cut]
 
 
+def _series_sig(maps):
+    """A series' Maps 1-2 as sorted (map, rounds, won) - the same on HLTV and BO3.gg whatever either calls the teams
+    (sorted: BO3.gg's map order is sometimes off). None unless both maps are known."""
+    m12 = {m.get("number"): m for m in maps if m.get("number") in (1, 2)}
+    if len(m12) < 2 or any(not m.get("map") or not m.get("rounds") for m in m12.values()):
+        return None
+    return sorted((norm(str(m["map"]).removeprefix("de_")), m["rounds"], bool(m.get("won"))) for m in m12.values())
+
+
 def _same_series(h, x):
-    """An HLTV map row and a BO3.gg map row from the same series: within a day, same opponent (exact name variants)."""
+    """How surely an HLTV series and a BO3.gg series (their map rows) are the same series: 3 = within a day with the same
+    Maps 1-2 (map, rounds, result), whatever the opponent is called ('FaZe' / 'FaZe Clan', renamed orgs); 2 = the same day,
+    the same opponent (exact name variants / aliases - BO3.gg's map data is sometimes off); 1 = a day apart, the same
+    opponent, neither side's maps saying otherwise; 0 = not the same series (a rematch, an academy). 2026-10-13 audit: a
+    loose name match counted 'FaZe' / 'FaZe Clan' twice and merged a team's two meetings with one opponent in a day."""
     try:
-        near = abs((date.fromisoformat(h["date"]) - date.fromisoformat(x["date"])).days) <= 1
-    except (TypeError, ValueError):
-        return False
-    return near and (name_match(h["opponent"], x["opponent"] or "") >= 2 or name_match(x["opponent"] or "", h["opponent"]) >= 2)
+        dd = abs((date.fromisoformat(h[0]["date"][:10]) - date.fromisoformat(x[0]["date"][:10])).days)
+    except (TypeError, ValueError, KeyError, IndexError):
+        return 0
+    if dd > 1:
+        return 0
+    sh, sx = _series_sig(h), _series_sig(x)
+    if sh and sh == sx:
+        return 3
+    if not _same_team_alias(h[0].get("opponent"), x[0].get("opponent")):
+        return 0
+    return 2 if dd == 0 else (0 if sh and sx else 1)
+
+
+def _twins(hl_by, rows_by):
+    """{BO3.gg match id: HLTV match id} for the series both sources have ({match id: map rows} each): every series is
+    paired at most once, surest pair first (a team can meet the same opponent twice in a day)."""
+    def day(rs):
+        try:
+            return date.fromisoformat(rs[0]["date"][:10]).toordinal()
+        except (TypeError, ValueError, KeyError, IndexError):
+            return None
+    xd = {xm: day(xr) for xm, xr in rows_by.items()}
+    cands = []
+    for hm, hr in hl_by.items():
+        hd = day(hr)
+        for xm, xr in rows_by.items():
+            if hd is None or xd[xm] is None or abs(hd - xd[xm]) > 1:
+                continue                                 # a year of HLTV series x his BO3.gg series: only the same days compared
+            s = _same_series(hr, xr)
+            if s:
+                cands.append((s, hm, xm))
+    out, used = {}, set()
+    for s, hm, xm in sorted(cands, key=lambda c: -c[0]):
+        if hm not in used and xm not in out:
+            out[xm] = hm
+            used.add(hm)
+    return out
 
 
 def _hltv_h2h(pb, rows, opponent):
@@ -2218,8 +2299,9 @@ def _hltv_h2h(pb, rows, opponent):
     groups = {}
     for r in rows:
         groups.setdefault(r["match_id"], []).append(r)
+    pair = _twins(by_match, groups)
     for mid, maps in groups.items():
-        twin = next((m for m, hr in by_match.items() if _same_series(hr[0], maps[0])), None)
+        twin = pair.get(mid)
         if twin is None:
             out += maps
             continue
@@ -2258,18 +2340,18 @@ def _form_rows(pb, stat="kills", keep_n=RECENT_MATCHES, back_days=None):
         rows = _older_bo3(pb, rows, back_days)
     if not hl:
         return rows
-    by_match = {}
+    by_match, rows_by = {}, {}
     for r in hl:
         by_match.setdefault(r["match_id"], []).append(r)
-
-    same = _same_series
+    for r in rows:
+        rows_by.setdefault(r["match_id"], []).append(r)
+    twin_of = {h: x for x, h in _twins(by_match, rows_by).items()}   # one BO3.gg series per HLTV series
     extra = []
     for mid, hrows in by_match.items():
         usable = all(r[stat] is not None for r in hrows)
-        twin = {x["match_id"] for x in rows if same(hrows[0], x)}
-        if twin:
+        if mid in twin_of:
             if usable:                                   # HLTV's numbers replace BO3.gg's for this match
-                rows = [x for x in rows if x["match_id"] not in twin]
+                rows = [x for x in rows if x["match_id"] != twin_of[mid]]
                 extra += hrows
         elif usable or stat == "kills":
             extra += hrows                               # a match only HLTV has
@@ -2309,8 +2391,9 @@ def _bo3_rank_band(pb, band=10):
 
     def rank_of(name):
         if name not in cache:
-            n = norm(name)
-            cache[name] = ranks.get(n) or next((rk for t, rk in ranks.items() if len(n) > 3 and (n in t or t in n)), None)
+            # exact name variants only (2026-10-13 audit: by substring Spirit Academy / MOUZ NXT / 'Dogs Esports' took the
+            # main team's or OG's rank)
+            cache[name] = next((ranks[v] for v in hltv.team_name_variants(name) if v in ranks), None)
         return cache[name]
     k_all = sum(k for _, k, r in rows)
     r_all = sum(r for _, k, r in rows)
@@ -2335,8 +2418,10 @@ def _hltv_only_overall(pb):
     o = pb.get("overall") or {}
     if o.get("maps_played") or pb.get("_hltv_overall_tried"):
         return
-    pb["_hltv_overall_tried"] = True
     rows = _form_rows(pb, "kills")
+    # tried = read: a failed HLTV read (a blip, no good copy) is tried again on the next grade of the cached context
+    # (2026-10-13 audit: marked tried before the read, one timeout left the line with no KPR for 10-30 minutes)
+    pb["_hltv_overall_tried"] = not _hltv_series_failed(pb)
     by = {}
     for r in rows:
         by.setdefault(r["match_id"], []).append(r)
@@ -2477,6 +2562,14 @@ def _apply_env(pb):
     tonight = env.get("tonight")
     oe = (pb.get("overall_env") or {}).get(tonight) if tonight else None
     o = pb.get("overall") or {}
+    if "kpr_all_envs" in o:
+        # a reused context holds the blended numbers already: blend again from his all-environment ones (2026-10-13 audit:
+        # every cached grade re-blended the blend - KPR 0.80 -> 0.85 - and kpr_all_envs became the blended value)
+        o["kpr"], o["hs_pct"] = o.pop("kpr_all_envs"), o.pop("hs_all_envs", o.get("hs_pct"))
+        if "form_windows_all_envs" in o:
+            o["form_windows"] = o.pop("form_windows_all_envs")
+            o.pop("form_windows_env", None)
+        pb["_rf_kpr"] = o["kpr"]
     if not oe or not oe.get("kpr") or not o.get("kpr"):
         return None
     w = min(1.0, (oe.get("maps") or 0) / ENV_FULL_MAPS)
@@ -2487,6 +2580,7 @@ def _apply_env(pb):
     if oe.get("hs_pct") is not None and o.get("hs_pct") is not None:
         o["hs_pct"] = round(w * oe["hs_pct"] + (1 - w) * o["hs_pct"], 1)
     if w >= 1:
+        o["form_windows_all_envs"] = o.get("form_windows")
         o["form_windows"] = oe["form_windows"]
         o["form_windows_env"] = tonight            # the stats panel says so ('LAN maps only') - display only
     pb["_rf_kpr"] = o["kpr"]
@@ -2702,10 +2796,15 @@ def finish_line(res, args):
     # labels the event) makes the grade transient - never a silently different perf-2 number (2026-10-11 audit)
     ctx_ = res["hltv_context"] or {}
     pb["_env_transient"] = bool(ctx_.get("transient") and not ctx_.get("environment"))   # HLTV's own label missing because of the blip
-    tonight = _apply_env(pb)                 # LAN match -> LAN stats, online match -> online stats
+    _apply_env(pb)                           # LAN match -> LAN stats, online match -> online stats
+    # the last 10 and the regional series follow tonight's environment whenever it is known - also when his BO3.gg maps have
+    # no LAN / online split to blend (2026-10-13 audit: an HLTV-only player's last 10 was never from tonight's environment)
+    tonight = (pb.get("_env") or {}).get("tonight")
     if pb.get("recent_maps") is not None:
         _hltv_only_overall(pb)
-        deep = _form_rows(pb, stat, keep_n=4 * RECENT_MATCHES, back_days=365)
+        # every series of the last 12 months (the same cached reads): tonight's environment is picked from all of them, then
+        # cut to 10 (2026-10-13 audit: only the newest 40 were kept - 45 online series hid his 6 LAN series 5-8 months back)
+        deep = _form_rows(pb, stat, keep_n=10 ** 6, back_days=365)
 
         def last10(need):
             # his last 10 USABLE series (Maps 1-2 both played and the stat recorded; need=1: Map 1), in
@@ -2751,6 +2850,12 @@ def finish_line(res, args):
     # the re-check found; the grader never reads it
     res["grader_inputs"]["odds_check"] = copy.deepcopy(res["odds_check"])
     res["grade"] = grade_leg(res["grader_inputs"])
+    od_ = res.get("odds") or {}
+    if od_.get("transient") is True or (od_.get("provenance") or {}).get("blip") is True:
+        # Thunderpick has the match but no current quote (owner 2026-10-13: an odds blip is treated like an HLTV blip) - the
+        # board keeps its last grade, the card says so; never set on any other grade
+        res["grade"]["odds_transient"] = True
+        res["grade"]["odds_transient_reason"] = (od_.get("provenance") or {}).get("fallback_reason")
     try:                                     # display only (weight 0): HLTV history that stops well before BO3.gg's
         _hltv_staleness(res["grade"], res["grader_inputs"].get("perf"), pb)
     except Exception:

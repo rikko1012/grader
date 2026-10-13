@@ -95,7 +95,9 @@ def opp_maps(opponent, since):
         con = hltv._connect()
         try:
             with con.cursor() as cur:
-                tid = hltv._team_id(cur, opponent)
+                # exact name variants, then the maintained alias table (2026-10-13 audit: an aliased opponent - 'NIP' - got the
+                # average opponent); a failed read still raises (never 'opponent not in HLTV')
+                tid = hltv._team_id(cur, opponent) or hltv.alias_team_id(opponent)
                 if not tid:
                     return None, []
                 cur.execute(_OPP_SQL, {"tid": tid, "since": since})
@@ -112,7 +114,7 @@ def team_rounds(team, since):
         con = hltv._connect()
         try:
             with con.cursor() as cur:
-                tid = hltv._team_id(cur, team)
+                tid = hltv._team_id(cur, team) or hltv.alias_team_id(team)      # the same identity as opp_maps
                 if not tid:
                     return None, []
                 cur.execute(_ROUNDS_SQL, {"tid": tid, "since": since})

@@ -598,13 +598,20 @@ def lookup_failed(key):
     return bool(hit) and len(hit) > 2 and not hit[2]
 
 
-def context(nick, team=None, opponent=None, maps=(), bo3_last_date=None, fresh=False):
+def context(nick, team=None, opponent=None, maps=(), bo3_last_date=None, fresh=False, start=None, playing_for=None):
     """Everything else the scraper has for this grade, for display. Never raises; each section is
-    None when it can't be computed. Cached 15 minutes."""
+    None when it can't be computed. Cached 15 minutes. start / playing_for: the graded match's start and the team he plays
+    it for - the schedule sections (next match, tonight's LAN / online) read that team's schedule, and tonight's label is
+    the graded match's own (its opponent and start), never the team's next match against someone else."""
     if not dsn():
         return {"found": False, "note": "HLTV database not configured (HLTV_DB_DSN)"}
     maps = [m for m in (maps or []) if m]
+    sched = playing_for or team
     key = ("ctx", _norm(nick), _norm(team), _norm(opponent), tuple(_map_key(m) for m in maps))
+    if start:
+        key += (str(start)[:16],)
+    if _norm(sched) != _norm(team):
+        key += ("for", _norm(sched))
     with _LOCK:
         hit = _CACHE.get(key)
         if hit and time.time() - hit[0] < TTL and not fresh:   # fresh: a retry must not read the cached failure back
@@ -627,8 +634,8 @@ def context(nick, team=None, opponent=None, maps=(), bo3_last_date=None, fresh=F
                 "ranking": lambda: _ranking(cur, team_id),
                 "opp_ranking": lambda: _ranking(cur, opp_id),
                 "rank_band": lambda: _rank_band(cur, ids, opp_id),
-                "next_match": lambda: _next_match(cur, team),
-                "environment": lambda: _environment(cur, ids, team),
+                "next_match": lambda: _next_match(cur, sched),
+                "environment": lambda: _environment(cur, ids, sched, opponent, start),
                 "backup_source": lambda: _backup(cur, ids),
             }
             for name, fn in sections.items():
@@ -707,9 +714,15 @@ def resolve_team_id(cur, name):
         tid = None
     if tid:
         return tid
+    return alias_team_id(name)
+
+
+def alias_team_id(name):
+    """The HLTV team id the maintained alias table (matchid / team_aliases.json) gives this exact name, else None. Memory
+    only (no database read)."""
     try:
         import matchid
-        k = matchid.team_key(name) if matchid.ready() else None
+        k = matchid.team_key(name) if name and matchid.ready() else None
         if k and str(k).startswith("team:"):
             return int(str(k).split(":", 1)[1])
     except Exception:
@@ -1130,10 +1143,10 @@ def _ranking(cur, team_id):
             "rank_4w_ago": then[1] if then else None, "change": (then[1] - now[1]) if then else None}
 
 
-def _environment(cur, ids, team):
+def _environment(cur, ids, team, opponent=None, start=None):
     """LAN vs online: his kills per round in each over the last 12 months (all maps) and whether
     tonight's event is LAN (from matches already played at that event). Needs match_overview.lan
-    (hltv-scraper parser v6)."""
+    (hltv-scraper parser v6). With the graded match's opponent (and start): tonight is that match's event only."""
     if not ids:
         return None
     cur.execute("""SELECT mo.lan, sum(ps.k), sum(own.score + opp.score), count(*)
@@ -1147,7 +1160,7 @@ def _environment(cur, ids, team):
     for lan, k, r, n in cur.fetchall():
         if r:
             env["lan" if lan else "online"] = {"maps": n, "kpr": round(k / r, 3)}
-    nm = _next_match(cur, team)
+    nm = _next_match(cur, team, opponent, start) if opponent else _next_match(cur, team)
     tonight = None
     if nm and nm.get("event"):                       # HLTV's own label first: hltv.org/events (scraper)
         try:
@@ -1179,22 +1192,52 @@ def _environment(cur, ids, team):
             "ratio": round(side["kpr"] / allk, 3) if side and allk else None, "ratio_maps": side["maps"] if side else 0}
 
 
-def _next_match(cur, team):
-    """His team's next (or live) match on HLTV's schedule - a second opinion on BO3.gg's slate."""
+def _next_match(cur, team, opponent=None, start=None):
+    """His team's next (or live) match on HLTV's schedule - a second opinion on BO3.gg's slate. With `opponent`: the match
+    against that team (exact name variants / aliases) starting within comparison.JOIN_START_MIN of `start` (when given) -
+    the graded match itself, or None (2026-10-13 audit: tonight's LAN / online label was taken from the team's next / live
+    match against anyone)."""
     if not team:
         return None
     vs = team_name_variants(team) or [_norm(team)]      # 'Nordic Partners Gaming' = HLTV's 'Nordic Partners' (exact variants)
-    cur.execute("""SELECT time, live, team1, team2, event, format, url FROM upcoming_matches
-                   WHERE (lower(regexp_replace(team1, '[^a-zA-Z0-9]', '', 'g')) = ANY(%(t)s)
-                       OR lower(regexp_replace(team2, '[^a-zA-Z0-9]', '', 'g')) = ANY(%(t)s))
-                     AND (live OR time >= now() - interval '3 hours')
-                   ORDER BY live DESC, time LIMIT 1""", {"t": vs})
-    r = cur.fetchone()
-    if not r:
+    sql = """SELECT time, live, team1, team2, event, format, url FROM upcoming_matches
+             WHERE (lower(regexp_replace(team1, '[^a-zA-Z0-9]', '', 'g')) = ANY(%(t)s)
+                 OR lower(regexp_replace(team2, '[^a-zA-Z0-9]', '', 'g')) = ANY(%(t)s))
+               AND (live OR time >= now() - interval '3 hours')
+             ORDER BY live DESC, time"""
+    if opponent:
+        cur.execute(sql, {"t": vs})
+        rows = cur.fetchall()
+    else:
+        cur.execute(sql + " LIMIT 1", {"t": vs})
+        r = cur.fetchone()
+        rows = [r] if r else []
+    out = [{"time": r[0].isoformat() if r[0] else None, "live": r[1], "opponent": r[3] if _norm(r[2]) in vs else r[2],
+            "event": r[4], "format": r[5], "url": r[6], "_at": r[0]} for r in rows]
+    if opponent:
+        out = [m for m in out if same_team(opponent, m["opponent"])]
+        st = _utc_dt(start)
+        if st is not None:
+            from comparison import JOIN_START_MIN
+            out = sorted((m for m in out if m["_at"] is not None and abs((_utc_dt(m["_at"]) - st).total_seconds()) <= JOIN_START_MIN * 60),
+                         key=lambda m: abs((_utc_dt(m["_at"]) - st).total_seconds()))
+    if not out:
         return None
-    opponent = r[3] if _norm(r[2]) in vs else r[2]
-    return {"time": r[0].isoformat() if r[0] else None, "live": r[1], "opponent": opponent,
-            "event": r[4], "format": r[5], "url": r[6]}
+    out[0].pop("_at")
+    return out[0]
+
+
+def _utc_dt(t):
+    """A datetime / ISO string as an aware UTC datetime (naive = UTC); None when unreadable."""
+    from datetime import datetime, timezone
+    if t is None:
+        return None
+    if not isinstance(t, datetime):
+        try:
+            t = datetime.fromisoformat(str(t).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
 
 
 def _backup(cur, ids):
