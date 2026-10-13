@@ -257,3 +257,82 @@ def test_admin_route_requires_the_admin_token():
     import server
     src = open(server.__file__, encoding="utf-8").read()
     assert 'u.path == "/admin/thunderpick.json" and self.authed(q.get("token"))' in src
+
+
+def test_concurrent_callers_never_exceed_the_shared_budget():
+    """Many threads (poller, admin probes, both paths) racing: reservations are atomic, at most SHARED_PER_MIN go out."""
+    import threading
+    c = Clock()
+    sent, lock = [], threading.Lock()
+
+    def f():
+        with lock:
+            sent.append(1)
+        return [], 200, b"[]", {"headers": {}, "body": ""}
+    out = []
+    ths = [threading.Thread(target=lambda i=i: out.append(T.request("cs2" if i % 2 else "csgo", "poller" if i % 3 else "admin_probe", f, c)))
+           for i in range(24)]
+    for t in ths:
+        t.start()
+    for t in ths:
+        t.join()
+    assert len(sent) == T.SHARED_PER_MIN == sum(1 for r in out if r.get("ok"))
+    assert sum(1 for r in out if (r.get("refused") or "").startswith("shared budget full")) == 24 - T.SHARED_PER_MIN
+
+
+def test_retry_after_http_date_is_honoured():
+    from email.utils import format_datetime
+    from datetime import datetime, timezone
+    import time as _t
+    when = datetime.fromtimestamp(_t.time() + 90, timezone.utc)
+    r = T.request("cs2", "poller", err_fetch("rate_limited", 429, {"retry-after": format_datetime(when, usegmt=True)}))
+    assert 80 <= r["cooldown"]["until"] - _t.time() <= 95 and "Retry-After" in r["cooldown"]["reason"]
+
+
+def test_failure_after_reserving_a_slot_is_logged_and_keeps_the_slot():
+    c = Clock()
+
+    def boom():
+        raise RuntimeError("socket closed mid-request")
+    r = T.request("cs2", "poller", boom, c)
+    assert r["kind"] == "error" and r["cooldown"]["until"] > c.t
+    log = T.request_log()
+    assert len(log) == 1 and log[0]["outcome"].startswith("error") and log[0]["path"].endswith("/cs2")
+    import sqlite3 as _s
+    con = _s.connect(T.db_path())
+    assert con.execute("SELECT COUNT(*) FROM budget_slots").fetchone()[0] == 1          # the slot stays spent
+
+
+def test_timeouts_are_attempts_and_never_overwrite_earlier_429_evidence():
+    c = Clock()
+    T.request("cs2", "poller", err_fetch("rate_limited", 429, {"retry-after": "5", "x-ratelimit-remaining": "0"}), c)
+    c.t += 6
+    T.request("cs2", "poller", err_fetch("timeout", None), c)
+    log = T.request_log()
+    assert [r["outcome"] for r in log] == ["timeout", "rate_limited"]                 # both kept, newest first
+    assert log[1]["headers"]["x-ratelimit-remaining"] == "0" and log[0]["duration_ms"] is not None
+
+
+def test_cooldown_and_reservations_survive_a_restart():
+    c = Clock()
+    T.request("cs2", "poller", err_fetch("rate_limited", 429, {"retry-after": "300"}), c)
+    import importlib
+    fresh = importlib.reload(T)                                                     # a restarted process
+    try:
+        assert fresh.cooldown(c.t + 10)["active"]
+        assert fresh.request("cs2", "admin_probe", ok_fetch(), Clock(c.t + 10))["refused"].startswith("cooldown until")
+        assert len(fresh.request_log()) == 1
+    finally:
+        importlib.reload(fresh)
+
+
+def test_status_reads_never_contact_the_provider(monkeypatch):
+    called = []
+    monkeypatch.setattr(T, "fetch", lambda *a, **k: called.append(1))
+    p = T.Poller(clock=Clock())
+    monkeypatch.setattr(T, "POLLER", p)
+    T.admin_view()
+    T.public_state()
+    p.status()
+    p.snapshot()
+    assert called == [] and T.request_log() == []
