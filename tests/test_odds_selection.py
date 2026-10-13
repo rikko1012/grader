@@ -95,7 +95,7 @@ def test_fallback_records_thunderpicks_reason_and_availability_and_polymarket_id
     o = M.select("ex-Keyd Stars", "Galorys", START, tp=TP(TP_EMPTY), pm=lambda *a: dict(PM))
     pv = o["provenance"]
     assert pv["selected"] == "polymarket" and o["team_prob"] == 0.325 and o["maps"] == PM["maps"]
-    assert pv["fallback_reason"] == TP_EMPTY["reason"] and pv["tp_availability"] == "endpoint_empty"
+    assert pv["fallback_reason"] == TP_EMPTY["reason"] + " [availability: endpoint_empty]" and pv["tp_availability"] == "endpoint_empty"
     assert pv["event_slug"] == "cs2-keydst-gls1-2026-10-13" and pv["price_source"] == "midpoint" and pv["liquidity"] == 5000
     # what match_odds did not return is None - never invented
     assert pv["market_id"] is None and pv["condition_id"] is None and pv["retrieved_at"] is None
@@ -171,7 +171,8 @@ def test_no_market_is_never_a_50_percent_stand_in():
                  network=False)
     pv = o["provenance"]
     assert o["found"] is False and "team_prob" not in o and "team_ml" not in o and M.p_team(o) is None
-    assert pv["selected"] is None and pv["fallback_reason"] == TP_EMPTY["reason"] and pv["tp_availability"] == "endpoint_empty"
+    assert pv["selected"] is None and pv["fallback_reason"] == TP_EMPTY["reason"] + " [availability: endpoint_empty]"
+    assert pv["tp_availability"] == "endpoint_empty"
     assert pv["polymarket_note"] == NOT_PM["note"] and "cache-only" in pv["oddspapi_note"]
     # no opponent: OddsPapi is not consulted at all (as before)
     o2 = M.select("ex-Keyd Stars", None, START, tp=TP(TP_EMPTY), pm=lambda *a: dict(NOT_PM),
@@ -304,7 +305,7 @@ def test_cached_events_recheck_makes_no_request(monkeypatch):
 def test_finish_line_rechecks_the_odds_before_the_grader_inputs():
     import inspect, cs2_scout
     src = inspect.getsource(cs2_scout.finish_line)
-    assert src.index('res["odds"] = _revalidated_odds(res.get("odds"))') < src.index('res["grader_inputs"] = grader_inputs(')
+    assert src.index('res["odds"], res["odds_check"] = _revalidated_odds(res.get("odds"))') < src.index('res["grader_inputs"] = grader_inputs(')
     run_src = inspect.getsource(cs2_scout.run)
     assert 'bo=getattr(args, "match_bo", None), network=not b.background' in run_src
     # the odds team is the team he plays THIS match for (playing_for), then his team now
@@ -313,12 +314,13 @@ def test_finish_line_rechecks_the_odds_before_the_grader_inputs():
 
 def test_revalidated_odds_passes_through_objects_it_cannot_recheck(monkeypatch):
     import cs2_scout
-    assert cs2_scout._revalidated_odds(None) is None
+    assert cs2_scout._revalidated_odds(None) == (None, None)
     legacy = {"found": True, "team_prob": 0.6, "provenance": {"selected": "polymarket"}}       # no query: old context
-    assert cs2_scout._revalidated_odds(legacy) is legacy
+    assert cs2_scout._revalidated_odds(legacy)[0] is legacy
     cached = M.select("ex-Keyd Stars", "Galorys", START, tp=TP(tp_found()), pm=lambda *a: dict(PM))
-    monkeypatch.setattr(M, "revalidate", lambda od, network=False: (_ for _ in ()).throw(RuntimeError("x")))
-    assert cs2_scout._revalidated_odds(cached) is cached              # a failing re-check keeps the context's odds
+    monkeypatch.setattr(M, "recheck", lambda od, **k: (_ for _ in ()).throw(RuntimeError("x")))
+    od, chk = cs2_scout._revalidated_odds(cached)
+    assert od is cached and chk["result"].startswith("failed")      # a failing re-check keeps the context's odds
 
 
 def test_cli_override_replaces_the_market_input_and_never_applies_to_web_grades():
@@ -386,3 +388,47 @@ def test_context_key_follows_the_mapping_revision(monkeypatch, tmp_path):
     assert r2 != r1 and k2 != k1 and k1[-1] == r1 and k2[-1] == r2
     cs2_scout.grade("ALLE", 24.5, background=True, opponent="Galorys", team_hint="ex-Keyd Stars")
     assert calls == [r1, r2]                                          # rebuilt under the new mapping
+
+
+def test_reader_error_keeps_a_cached_thunderpick_quote_only_inside_its_own_window():
+    """A Thunderpick READER failure (e.g. sqlite locked) is not a feed state: the cached quote is kept while it is inside
+    retrieval + QUOTE_MAX_AGE_S, never past it (eligibility: Thunderpick ONLY when current)."""
+    import thunderpick
+
+    def boom(*a, **k):
+        raise RuntimeError("database is locked (TEST FIXTURE)")
+    fresh = M.select("ex-Keyd Stars", "Galorys", START, tp=TP(tp_found()), pm=lambda *a: dict(PM))
+    out, chk = M.recheck(fresh, tp=boom, pm=lambda *a: dict(PM))
+    assert out is fresh and chk["result"].startswith("kept: Thunderpick reader error")
+    old = M.select("ex-Keyd Stars", "Galorys", START, pm=lambda *a: dict(PM),
+                   tp=TP(tp_found(retrieved_at=iso(NOW - timedelta(seconds=thunderpick.QUOTE_MAX_AGE_S + 5)))))
+    out2, chk2 = M.recheck(old, tp=boom, pm=lambda *a: dict(PM))
+    assert out2["provenance"]["selected"] == "polymarket" and chk2["result"] == "changed"
+
+
+def test_polymarket_failure_on_a_recheck_never_keeps_a_non_current_thunderpick_quote():
+    def down(*a):
+        raise ConnectionError("Polymarket down (TEST FIXTURE)")
+    nf = lambda *a, **k: {"found": False, "note": "no cached OddsPapi price (TEST FIXTURE)"}
+    cached = M.select("ex-Keyd Stars", "Galorys", START, tp=TP(tp_found()), pm=lambda *a: dict(PM))
+    out, chk = M.recheck(cached, tp=TP(TP_EMPTY), pm=down, op=nf)
+    assert out is not cached and out["found"] is False and out["provenance"]["pm_error"]
+    assert out["provenance"]["tp_availability"] == "endpoint_empty"     # explicit no-market, never a 50% stand-in
+    with pytest.raises(ConnectionError):                                # a context build still fails as before
+        M.select("ex-Keyd Stars", "Galorys", START, tp=TP(TP_EMPTY), pm=down, op=nf)
+
+
+def test_a_stake_cap_class_change_with_the_same_price_is_a_new_input():
+    cached = M.select("ex-Keyd Stars", "Galorys", START, tp=TP(TP_STALE), pm=lambda *a: dict(PM))
+    thin = dict(PM, liquidity=200)                                       # same price, book now thin (TEST FIXTURE)
+    q = lambda o: "HARD" if (o.get("liquidity") or 0) >= 1000 else "SOFT"
+    out = M.revalidate(cached, tp=TP(TP_STALE), pm=lambda *a: dict(thin), quality=q)
+    assert out is not cached and out["provenance"]["sig"] == cached["provenance"]["sig"] and out["liquidity"] == 200
+
+
+def test_recheck_record_never_refreshes_the_quotes_own_time():
+    cached = M.select("ex-Keyd Stars", "Galorys", START, tp=TP(tp_found()), pm=lambda *a: dict(PM))
+    later = tp_found(quote_age_s=95)
+    out, chk = M.recheck(cached, tp=TP(later), pm=lambda *a: dict(PM))
+    assert out is cached and chk["result"] == "confirmed" and chk["quote_age_s"] == 95
+    assert out["provenance"]["retrieved_at"] == cached["provenance"]["retrieved_at"]

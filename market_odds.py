@@ -15,7 +15,10 @@ the board, background refreshes and members alike, returning an odds dict in the
      only prices already fetched - provenance.network / oddspapi_mode say which, so a board selection and a member
      selection of the same line can be told apart and compared.
   4. Otherwise "found": False - the grader's own NO MARKET handling. Never a 50% stand-in.
-Thunderpick's reason for not being used (and its availability state, provenance.tp_availability) is always recorded.
+Thunderpick's reason for not being used is always recorded: provenance.fallback_reason is the reason in words WITH its
+availability state ("<reason> [availability: stale]"), provenance.tp_availability the state alone (machine-readable).
+A source that FAILED (raised) rather than answered is recorded too - provenance.tp_error / pm_error - because a failure is
+not a feed state: a re-check treats it as "unknown", never as "not current" (see revalidate).
 
 The returned object is a DEEP COPY that nobody mutates afterwards (cs2_scout keeps res["odds"] as returned; grader inputs
 take copies). Its provenance always has: selection (policy text), odds_policy ("odds-source-2|<Thunderpick policy
@@ -28,10 +31,21 @@ unchanged quote seen by a newer poll is the same input (no new forecast); a move
 
 revalidate(cached, now=None, network=False): the same selection re-run for the cached query (cs2_scout.finish_line, at
 EVERY regrade - a shared context lives up to 30 min, a Thunderpick quote is current for 180 s). Returns the cached object
-itself when its sig and Thunderpick availability are unchanged, else the new selection. Re-checks never wait on a
-network request: Polymarket by its rule on the event list already in memory, OddsPapi cache-only; a failure while
-re-checking keeps the cached input (a transient failure never changes a grade). Identical re-checks within REVAL_TTL_S
-share one evaluation (700 members at once), never past the selected quote's own expiry or the match start.
+itself when its sig, Thunderpick availability and market-quality class (the stake-cap input: HARD / SOFT / NONE) are
+unchanged, else the new selection. recheck() is the same with a record of the check itself ({checked_at, result, what the
+re-check found, Thunderpick's latest quote age ...}) - kept NEXT TO the odds (grader_inputs.odds_check, saved with the
+forecast), never written into them: a re-confirmed quote keeps its own retrieval time (never refreshed).
+Re-checks never wait on a network request: Polymarket by its rule on the event list already in memory (none in memory:
+Polymarket is "not readable", never downloaded on a member's clock), OddsPapi cache-only. Failures (2026-10-13 review):
+  - a Thunderpick READER failure (an exception - e.g. sqlite 'database is locked' - not a feed state) keeps a cached
+    Thunderpick input while that quote is still inside its own window (retrieval + QUOTE_MAX_AGE_S, before the start);
+    past it the selection falls to the next source (never a non-current quote);
+  - Polymarket not readable keeps a cached Polymarket / OddsPapi / no-market input (its answer is unknown), but never a
+    cached Thunderpick quote that is no longer current (eligibility: Thunderpick ONLY when current) - that one falls to
+    OddsPapi's cache or no market;
+  - any other failure while re-checking keeps the cached input.
+Identical re-checks within REVAL_TTL_S share one evaluation (700 members at once) - a failed evaluation too (waiters never
+re-run it one after another) - never past the selected quote's own expiry or the match start.
 
 Scope: the series price feeds only the series uses (p_win, stomp, market quality); per-map chances come from the SAME
 source's map prices when it supplies them, otherwise they are derived from the series price - Polymarket map prices are
@@ -197,10 +211,10 @@ def _op_provenance(a, mode, pm_note):
             "source_updated_note": "the feed's price update time is not read", "polymarket_note": pm_note}
 
 
-def _finish(o, pv, selected, fallback_reason, tp_av, q, network, op_mode, mrev, now):
+def _finish(o, pv, selected, fallback_reason, tp_av, q, network, op_mode, mrev, now, tp_err=None, pm_err=None):
     pv = dict(pv, selection=POLICY, odds_policy=odds_policy(), selected=selected, fallback_reason=fallback_reason,
               tp_availability=tp_av, mapping_rev=mrev, query=dict(q), network=bool(network), oddspapi_mode=op_mode,
-              selected_at=_iso(now))
+              selected_at=_iso(now), tp_error=tp_err, pm_error=pm_err)
     if selected:
         pv["source"] = pv.get("source") or selected
     o["provenance"] = pv
@@ -208,25 +222,54 @@ def _finish(o, pv, selected, fallback_reason, tp_av, q, network, op_mode, mrev, 
     return copy.deepcopy(o)
 
 
-def select(team, opponent, start_iso=None, now=None, tp=None, pm=None, bo=None, network=True, op=None):
-    """The projection's market input + provenance (module doc). tp / pm / op: injectable sources (tests)."""
+def _fallback_text(reason, state):
+    """Why Thunderpick was not used, in words WITH its availability state (spec: fallback_reason includes the state) -
+    e.g. "event not in Thunderpick's latest answer [availability: not_in_latest_answer]". No state (reader error, older
+    reader): the reason alone."""
+    reason = reason or "not found"
+    if state and str(state) not in reason:
+        return f"{reason} [availability: {state}]"
+    return reason
+
+
+class PolymarketNotInMemory(Exception):
+    """A re-check found no Polymarket event list in memory: it never downloads one (a request that can hang 20 s would sit
+    on a member's grade, 700 at once) - Polymarket's answer is unknown on this re-check (provenance.pm_error)."""
+
+
+def select(team, opponent, start_iso=None, now=None, tp=None, pm=None, bo=None, network=True, op=None, recheck=False):
+    """The projection's market input + provenance (module doc). tp / pm / op: injectable sources (tests).
+    recheck=False (a context build): a Polymarket failure propagates exactly as before 2026-10-13 - no grade is built on a
+    transient failure. recheck=True (revalidate): the failure is recorded (provenance.pm_error) and the selection goes on
+    to OddsPapi's cache / no market, so revalidate can decide from what the failure means for the CACHED input (it never
+    keeps a Thunderpick quote that is no longer current). A Thunderpick reader failure falls through in both modes, with
+    the reason and provenance.tp_error (revalidate treats it as unknown, not as a feed state)."""
     q = {"team": team, "opponent": opponent, "start": start_iso, "bo": bo}
     mrev = _mapping_rev()
     tp_fn = tp or _tp_default()
+    tp_err = pm_err = None
     try:
         t = _tp_call(tp_fn, team, opponent, start_iso, now, bo) or {}
     except Exception as e:          # noqa: BLE001 - a Thunderpick failure falls through to the next source, with the reason
-        t = {"found": False, "reason": f"Thunderpick error ({type(e).__name__})", "availability": None}
+        tp_err = type(e).__name__
+        t = {"found": False, "reason": f"Thunderpick error ({tp_err})", "availability": None}
     if t.get("found"):
         out = copy.deepcopy(dict(t))
         pv = dict(out.get("provenance") or {})
         if pv.get("p_team") is None:
             pv["p_team"] = out.get("team_prob")
         return _finish(out, pv, "thunderpick", None, pv.get("availability") or "current", q, network, None, mrev, now)
-    tp_reason, tp_av = t.get("reason") or "not found", t.get("availability")
-    o = copy.deepcopy(dict((pm or polymarket.match_odds)(team, opponent)))
+    tp_av = t.get("availability")
+    tp_reason = _fallback_text(t.get("reason"), tp_av)
+    try:
+        o = copy.deepcopy(dict((pm or polymarket.match_odds)(team, opponent)))
+    except Exception as e:          # noqa: BLE001
+        if not recheck:
+            raise                   # a context build: as before (no grade from a transient failure)
+        pm_err = str(e) if isinstance(e, PolymarketNotInMemory) else f"Polymarket error ({type(e).__name__})"
+        o = {"found": False, "note": pm_err}
     if o.get("found"):
-        return _finish(o, _pm_provenance(o), "polymarket", tp_reason, tp_av, q, network, None, mrev, now)
+        return _finish(o, _pm_provenance(o), "polymarket", tp_reason, tp_av, q, network, None, mrev, now, tp_err)
     pm_note, op_mode, op_note = o.get("note"), None, None
     if opponent:                    # bookmaker price (Pinnacle first) - as before, only with a known opponent
         op_mode = "live" if network else "cache-only"
@@ -239,20 +282,22 @@ def select(team, opponent, start_iso=None, now=None, tp=None, pm=None, bo=None, 
         if a.get("found"):
             a["polymarket_note"] = pm_note
             return _finish(a, _op_provenance(a, op_mode, pm_note), "oddspapi", tp_reason, tp_av, q, network, op_mode,
-                           mrev, now)
+                           mrev, now, tp_err, pm_err)
         op_note = a.get("note")
     pv = {"source": None, "market": None, "p_team": None, "match_url": None, "polymarket_note": pm_note,
           "oddspapi_note": op_note}
-    return _finish(o, pv, None, tp_reason, tp_av, q, network, op_mode, mrev, now)
+    return _finish(o, pv, None, tp_reason, tp_av, q, network, op_mode, mrev, now, tp_err, pm_err)
 
 
 def _pm_in_memory(team, opponent):
-    """Polymarket by its rule on the event list already in memory - no request on a re-check (the list is refreshed by
-    every context build; the live path keeps the same list through a Polymarket outage). Nothing in memory yet: the
-    normal call (one shared download, at most once per process)."""
+    """Polymarket by its rule on the event list already in memory - never a request on a re-check (the list is refreshed
+    by every context build and the board loop; the live path keeps the last list through a Polymarket outage). Nothing in
+    memory (no download has succeeded in this process): PolymarketNotInMemory - Polymarket is unknown on this re-check
+    (2026-10-13 review: a download here held every waiting member's grade, one 20 s attempt after another)."""
     data, at = polymarket.cached_events()
     if data is None:
-        return polymarket.match_odds(team, opponent)
+        raise PolymarketNotInMemory("Polymarket not readable on the re-check (no event list in memory yet; a re-check "
+                                    "never downloads one)")
     return polymarket.match_odds(team, opponent, events=data, events_at=at)
 
 
@@ -266,39 +311,109 @@ def _key_lock(key):
         return lk
 
 
+def _tp_max_age():
+    try:
+        import thunderpick
+        return float(getattr(thunderpick, "QUOTE_MAX_AGE_S", 180))
+    except Exception:              # noqa: BLE001
+        return 180.0
+
+
 def _memo_until(new):
     """A shared re-check result is reused for REVAL_TTL_S, never past the selected quote's own eligibility (Thunderpick:
     retrieval + QUOTE_MAX_AGE_S) or the match start."""
     until = time.time() + REVAL_TTL_S
     pv = new.get("provenance") or {}
     if pv.get("selected") == "thunderpick":
-        try:
-            import thunderpick
-            max_age = float(getattr(thunderpick, "QUOTE_MAX_AGE_S", 180))
-        except Exception:          # noqa: BLE001
-            max_age = 180.0
         ra = _ts(pv.get("retrieved_at"))
         if ra is not None:
-            until = min(until, ra + max_age)
+            until = min(until, ra + _tp_max_age())
     st = _ts(pv.get("canonical_start") or new.get("start"))
     if st is not None:
         until = min(until, st)
     return until
 
 
-def revalidate(cached, now=None, network=False, tp=None, pm=None, op=None):
-    """The cached selection re-checked now (module doc): the cached object when nothing it depends on changed (same sig,
-    same Thunderpick availability), else the new selection. Objects not made by select() (no query) are returned as is."""
+def _tp_quote_in_window(o, now_ts):
+    """The cached Thunderpick quote is still inside its OWN eligibility window: its retrieval time + QUOTE_MAX_AGE_S (the
+    same clock WS1's 'current' uses - never extended) and before the match start. Unreadable times: not in window."""
+    pv = o.get("provenance") or {}
+    ra = _ts(pv.get("retrieved_at"))
+    if ra is None or now_ts >= ra + _tp_max_age():
+        return False
+    st = _ts(pv.get("canonical_start") or o.get("start"))
+    return st is None or now_ts < st
+
+
+def _quality_fn(fn):
+    """The grader's stake-cap class of an odds object (cs2_scout.market_quality: HARD / SOFT / NONE) - a liquidity or
+    price-source change of the same price moves the 1.5U cap, so the re-check compares it too."""
+    if fn is not None:
+        return fn
+    try:
+        from cs2_scout import market_quality
+        return market_quality
+    except Exception:              # noqa: BLE001
+        return None
+
+
+def _qclass(fn, o):
+    try:
+        return fn(o) if fn else None
+    except Exception:              # noqa: BLE001
+        return None
+
+
+def _decide(cached, new, now_ts, quality):
+    """(odds to grade with, result words) for one re-check - the module doc's rules, in order."""
+    pv, npv = cached.get("provenance") or {}, new.get("provenance") or {}
+    same_input = npv.get("sig") == pv.get("sig") and _qclass(quality, new) == _qclass(quality, cached)
+    if same_input and npv.get("tp_availability") == pv.get("tp_availability"):
+        return cached, "confirmed"
+    if npv.get("tp_error"):         # the reader failed: Thunderpick's state is unknown, not "not current"
+        if pv.get("selected") == "thunderpick":
+            if _tp_quote_in_window(cached, now_ts):
+                return cached, (f"kept: Thunderpick reader error ({npv['tp_error']}); the cached quote is still inside "
+                                f"its own {int(_tp_max_age())} s window")
+            # past its window: falls to the next source below - never a quote that is no longer current
+        elif same_input:
+            return cached, f"kept: Thunderpick reader error ({npv['tp_error']}); same market input"
+    if npv.get("pm_error") and npv.get("selected") != "thunderpick" and pv.get("selected") != "thunderpick":
+        return cached, f"kept: {npv['pm_error']}"
+    return copy.deepcopy(new), "changed"
+
+
+def _check_record(new, result, shared, used):
+    """What the re-check itself found and when (its sources' own times - nothing refreshed)."""
+    npv = (new or {}).get("provenance") or {}
+    return {"checked_at": npv.get("selected_at") or _iso(None), "result": result, "shared_evaluation": bool(shared),
+            "found_selected": npv.get("selected"), "found_sig": npv.get("sig"),
+            "tp_availability": npv.get("tp_availability"), "fallback_reason": npv.get("fallback_reason"),
+            "tp_error": npv.get("tp_error"), "pm_error": npv.get("pm_error"),
+            # the selected source's latest answer as the re-check read it (Thunderpick: the quote's age at checked_at)
+            "retrieved_at": npv.get("retrieved_at"), "quote_age_s": npv.get("quote_age_s"),
+            "event_last_observed": npv.get("event_last_observed"),
+            "endpoint_last_success_at": npv.get("endpoint_last_success_at"),
+            "used_selected": ((used or {}).get("provenance") or {}).get("selected"),
+            "used_sig": ((used or {}).get("provenance") or {}).get("sig")}
+
+
+def recheck(cached, now=None, network=False, tp=None, pm=None, op=None, quality=None):
+    """The cached selection re-checked now (module doc) -> (odds, check). odds: the cached object when nothing it depends
+    on changed (or a failure is to be ignored), else the new selection (a new object; the cached one is never mutated).
+    check: the record of this re-check (None for objects not made by select() - returned as is). quality: the stake-cap
+    class function (default cs2_scout.market_quality)."""
     pv = (cached or {}).get("provenance") or {}
     q = pv.get("query")
     if not cached or not isinstance(q, dict):
-        return cached
+        return cached, None
     shared = tp is None and pm is None and op is None and now is None
     key = (q.get("team"), q.get("opponent"), q.get("start"), str(q.get("bo")), bool(network), _mapping_rev())
 
     def run():
         return select(q.get("team"), q.get("opponent"), q.get("start"), now=now, tp=tp, pm=pm or _pm_in_memory,
-                      bo=q.get("bo"), network=network, op=op)
+                      bo=q.get("bo"), network=network, op=op, recheck=True)
+    hit_used = False
     try:
         if not shared:
             new = run()
@@ -309,20 +424,33 @@ def revalidate(cached, now=None, network=False, tp=None, pm=None, op=None):
                 # a shared result counts only while fresh AND evaluated after the cached selection was made (a check
                 # from before a member's context build fetched a price must not undo that selection)
                 if hit and time.time() < hit[0] and hit[1] >= made:
-                    new = hit[2]
+                    new, hit_used = hit[2], True
+                    if new is None:               # the shared evaluation FAILED: every waiter keeps its cached input
+                        raise RuntimeError(hit[3])
                 else:
                     at = time.time()
-                    new = run()
+                    try:
+                        new = run()
+                    except Exception as e:        # noqa: BLE001 - remembered too (REVAL_TTL_S): waiters never re-run a
+                        with _REVAL_LOCK:         # failing evaluation one after another
+                            _REVAL[key] = (time.time() + REVAL_TTL_S, at, None, type(e).__name__)
+                        raise
                     with _REVAL_LOCK:
                         if len(_REVAL) > 5000:
                             _REVAL.clear()
-                        _REVAL[key] = (_memo_until(new), at, new)
-    except Exception:              # noqa: BLE001 - a failure while re-checking never changes the grade's market input
-        return cached
-    npv = new.get("provenance") or {}
-    if npv.get("sig") == pv.get("sig") and npv.get("tp_availability") == pv.get("tp_availability"):
-        return cached
-    return copy.deepcopy(new)
+                        _REVAL[key] = (_memo_until(new), at, new, None)
+    except Exception as e:         # noqa: BLE001 - a failure while re-checking never changes the grade's market input
+        why = str(e) if hit_used else type(e).__name__
+        return cached, {"checked_at": _iso(None), "result": f"failed ({why}): the context's odds kept",
+                        "shared_evaluation": hit_used, "used_selected": pv.get("selected"), "used_sig": pv.get("sig")}
+    now_ts = now if now is not None else time.time()
+    out, result = _decide(cached, new, now_ts, _quality_fn(quality))
+    return out, _check_record(new, result, hit_used, out)
+
+
+def revalidate(cached, now=None, network=False, tp=None, pm=None, op=None, quality=None):
+    """recheck() without the record: the odds to grade with (module doc)."""
+    return recheck(cached, now=now, network=network, tp=tp, pm=pm, op=op, quality=quality)[0]
 
 
 def source_label(odds):

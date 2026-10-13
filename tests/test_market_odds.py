@@ -63,4 +63,4 @@ def test_cs2_scout_routes_full_grades_through_the_selector():
     src = (Path(__file__).parent.parent / "cs2_scout.py").read_text(encoding="utf-8")
     assert "market_odds.select(team, args.opponent" in src and '"odds_provenance": copy.deepcopy(pv_)' in src
     # 2026-10-13: one policy (OddsPapi inside select, by the network flag) and a re-check at every regrade
-    assert "oddspapi.match_odds(team, args.opponent)" not in src and "market_odds.revalidate(od, network=False)" in src
+    assert "oddspapi.match_odds(team, args.opponent)" not in src and "market_odds.recheck(od, network=False, quality=market_quality)" in src

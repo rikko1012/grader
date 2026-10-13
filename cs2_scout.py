@@ -1362,9 +1362,12 @@ def _cli_odds(args, odds):
     """CLI only (--team-ml / --opp-ml, the owner's local tool): the typed prices REPLACE the market input as a whole - one
     object for the moneylines, the exact probability, quality (the existing bookmaker rule: a typed price is SOFT), map
     prices (none) and provenance. Before 2026-10-13 the typed moneylines sat on top of the selected source's provenance,
-    quality and map prices. Web grades (args.web) never use it."""
+    quality and map prices. Web grades (args.web) never use it. Idempotent: an object it made passes through (finish_line
+    stores it as res["odds"] so the summary prints the input the grade used; grader_inputs calls it again)."""
     tm, om = getattr(args, "team_ml", None), getattr(args, "opp_ml", None)
     if getattr(args, "web", False) or (tm is None and om is None):
+        return odds
+    if ((odds or {}).get("provenance") or {}).get("selected") == "manual":
         return odds
     from grader import american_to_prob
     from polymarket import prob_to_american
@@ -1375,10 +1378,14 @@ def _cli_odds(args, odds):
         p = american_to_prob(tm) if tm is not None else 1 - american_to_prob(om)
     tm = tm if tm is not None else prob_to_american(p)
     om = om if om is not None else prob_to_american(1 - p)
+    q = ((odds or {}).get("provenance") or {}).get("query") or {}
     return {"found": True, "team_ml": tm, "opp_ml": om, "team_prob": round(p, 6), "opp_prob": round(1 - p, 6),
+            "team": (odds or {}).get("team") or q.get("team"), "opponent": (odds or {}).get("opponent") or q.get("opponent"),
+            "title": "moneylines typed on the command line", "start": (odds or {}).get("start") or q.get("start"),
             "book": "manual", "maps": {}, "flags": ["Win chance from moneylines typed on the command line"],
             "provenance": {"selected": "manual", "source": "manual (CLI --team-ml / --opp-ml)", "p_team": round(p, 6),
-                           "odds_policy": "cli-override", "mapping_rev": None, "replaced": (odds or {}).get("provenance")}}
+                           "odds_policy": "cli-override", "mapping_rev": None,
+                           "replaced": copy.deepcopy((odds or {}).get("provenance"))}}
 
 
 def _p_team_market(odds):
@@ -2645,18 +2652,21 @@ def _regional_note(res):
 
 
 def _revalidated_odds(od):
-    """The context's odds re-checked NOW (market_odds.revalidate, 2026-10-13): a shared context is reused up to 30 minutes
-    but a Thunderpick quote is eligible for 180 s, so the freshness / empty-answer / started checks run at every regrade,
-    not only when the context was built. No network here (board, background and members alike: Polymarket on the list in
-    memory, OddsPapi cache-only). Unchanged -> the same object; changed -> a NEW object (the cached one is never mutated);
-    a failure while re-checking keeps the context's odds."""
+    """The context's odds re-checked NOW (market_odds.recheck, 2026-10-13) -> (odds, check): a shared context is reused up
+    to 30 minutes but a Thunderpick quote is eligible for 180 s, so the freshness / empty-answer / started checks run at
+    every regrade, not only when the context was built. No network here (board, background and members alike: Polymarket
+    on the list in memory, OddsPapi cache-only). Unchanged -> the same object; changed -> a NEW object (the cached one is
+    never mutated); a failure while re-checking keeps the context's odds. check: when the re-check ran, what it found and
+    the selected quote's latest age (a re-confirmed quote keeps its own retrieval time - this records the confirmation);
+    None when the odds were not made by the selector."""
     if not od or not isinstance((od.get("provenance") or {}).get("query"), dict):
-        return od                                    # not made by market_odds.select (CLI 'odds' command / old context)
+        return od, None                              # not made by market_odds.select (CLI 'odds' command / old context)
     try:
         import market_odds
-        return market_odds.revalidate(od, network=False)
-    except Exception:
-        return od
+        return market_odds.recheck(od, network=False, quality=market_quality)
+    except Exception as e:
+        return od, {"checked_at": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+                    "result": f"failed ({type(e).__name__}): the context's odds kept"}
 
 
 def finish_line(res, args):
@@ -2731,9 +2741,15 @@ def finish_line(res, args):
     _tick(res, "h2h", t0)
     pb["_rank_band"] = _best_rank_band(pb, (res["hltv_context"] or {}).get("rank_band"))
     _tick(res, "rank_band", t0)
-    res["odds"] = _revalidated_odds(res.get("odds"))
+    res["odds"], res["odds_check"] = _revalidated_odds(res.get("odds"))
+    # CLI --team-ml / --opp-ml (never web grades): the typed prices ARE the market input, so the summary prints what the
+    # grade used (2026-10-13 review: it printed the selected source's price next to a grade made from the typed ones)
+    res["odds"] = _cli_odds(args, res["odds"])
     _tick(res, "odds_check", t0)
     res["grader_inputs"] = grader_inputs(pb, args, res.get("odds"), res.get("h2h"))
+    # the re-check itself, saved with the forecast (the inputs blob) - when the market input was last confirmed and what
+    # the re-check found; the grader never reads it
+    res["grader_inputs"]["odds_check"] = copy.deepcopy(res["odds_check"])
     res["grade"] = grade_leg(res["grader_inputs"])
     try:                                     # display only (weight 0): HLTV history that stops well before BO3.gg's
         _hltv_staleness(res["grade"], res["grader_inputs"].get("perf"), pb)
