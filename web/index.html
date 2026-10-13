@@ -359,7 +359,11 @@ body.locked #slip,body.locked.hasslip #slip{display:none!important}body.locked.h
 .studio-step .seg{display:flex;width:100%}.studio-step .seg button{flex:1 1 0;padding:8px 4px;font-size:12.5px;min-width:0;white-space:nowrap}
 .studio-sum{background:#f7a45b0d;border:1px solid #f7a45b33;border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.55;margin:4px 0 12px}
 .studio-sum b{color:var(--accent-2)}
-.mltp{margin:8px 0;padding:10px 12px;border:1px solid var(--line-2);border-radius:10px;background:var(--panel-2)}.mltphead{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
+.mltp{margin:8px 0;padding:10px 12px;border:1px solid var(--line-2);border-radius:10px;background:var(--panel-2);min-width:0;overflow-wrap:anywhere}.mltphead{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
+.mltp.off{border-style:dashed}.mltp-none{border:0;background:none;padding:0;margin:6px 0}
+.mltp a,.tplink{color:var(--accent-2)}.tplinkrow{margin-top:6px}.tplink{font-weight:500;text-underline-offset:3px}
+.mlcmp{display:flex;flex-direction:column;gap:2px;margin:6px 0 8px;font-size:13px}.mlcmp b{color:var(--text)}
+@media (max-width:640px){.tplink{display:inline-flex;align-items:center;min-height:40px;padding:6px 14px;border:1px solid var(--line-2);border-radius:999px;text-decoration:none}}
 .scopewarn{margin:8px 0 4px;padding:10px 12px;border:1px solid var(--warn);border-radius:10px;background:var(--warn-bg);font-size:13.5px;line-height:1.5}.scopewarn .chipbtn{margin:6px 0 0;display:inline-block}
 .mlside{margin:8px 0 6px;padding:10px 12px;background:#0d121b;border:1px solid var(--line);border-radius:10px}.mlsidehead{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;font-size:14px}.mlreasons{margin:6px 0 2px;padding-left:18px;font-size:12.5px;line-height:1.55;color:var(--muted)}.mlreasons li{margin:1px 0}
 .studio-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:12px 0}
@@ -482,7 +486,7 @@ body.mode-board .workspace-tools,body.mode-slate .workspace-tools{flex-direction
   </section>
   <section class="card" id="board" hidden><div class="board-command"><span>Prop board</span><div><button type="button" id="scout-filters" aria-expanded="true" aria-controls="bbar">Hide filters</button></div></div>
     <div class="bbar" id="bbar">
-      <div class="seg" id="bbook" title="Which platform's lines"><button type="button" data-v="all" class="on">All Books</button><button type="button" data-v="underdog">Underdog</button><button type="button" data-v="prizepicks">PrizePicks</button><button type="button" data-v="compare">Compare</button><button type="button" data-v="moneylines" title="Series-winner prices from Polymarket and Kalshi">Moneylines</button></div>
+      <div class="seg" id="bbook" title="Which platform's lines"><button type="button" data-v="all" class="on">All Books</button><button type="button" data-v="underdog">Underdog</button><button type="button" data-v="prizepicks">PrizePicks</button><button type="button" data-v="compare">Compare</button><button type="button" data-v="moneylines" title="Series-winner prices: Thunderpick bookmaker odds first; Polymarket and Kalshi exchange midpoints for comparison">Moneylines</button></div>
       <div class="seg" id="bview" title="Group by match or list every prop"><button type="button" data-v="matches" class="on">Matches</button><button type="button" data-v="all">All props</button></div>
       <div class="seg" id="bprop"><button type="button" data-v="kills" class="on">Kills</button><button type="button" data-v="hs">Headshots</button><button type="button" data-v="both">Both</button></div>
       <div class="seg" id="bscope" title="Which maps the lines cover"><button type="button" data-v="12" class="on">Maps 1–2</button><button type="button" data-v="1">Map 1</button><button type="button" data-v="123">Maps 1–3</button></div>
@@ -493,7 +497,7 @@ body.mode-board .workspace-tools,body.mode-slate .workspace-tools{flex-direction
       <label class="bchk"><input type="checkbox" id="bbets" checked> Bets only</label>
       <label class="bchk" title="Hide picks with an open data issue (roster not confirmed, stand-in, long break, limited history)"><input type="checkbox" id="bflag"> Hide flagged</label>
       <label class="bchk" hidden><input type="checkbox" id="cdiff"> Only where lines differ</label>
-      <label class="bchk" hidden title="A price is usable when the market is open, current and has a tight enough bid/ask spread"><input type="checkbox" id="mlusable" checked> Usable price only</label>
+      <label class="bchk" hidden title="A price is usable when it is current and pre-match: Thunderpick odds in its latest answer (Match Winner market, within 180 s), or an exchange quote that is open, current and has a tight enough bid/ask spread"><input type="checkbox" id="mlusable" checked> Usable price only</label>
       <button type="button" class="chipbtn" id="breset" title="Reset every filter">Reset</button>
       <button type="button" class="chipbtn" id="brefresh" title="Refresh the board">↻ Refresh</button>
       <span class="small muted" id="bcount"></span></div>
@@ -542,7 +546,7 @@ body.mode-board .workspace-tools,body.mode-slate .workspace-tools{flex-direction
       <p><b>Built from official pro matches.</b> Map 1, Maps 1–2 and Maps 1–3 lines use our performance model on every official map a player has played on HLTV: his kills per round, with recent months counting most (a map from about three months ago counts half), weighted toward his numbers in tonight's setting (LAN or online), against how many kills the opponent gives up. Headshot lines add his headshots per kill. A player with a short history is pulled toward the pro average until his own maps take over. FACEIT games never count.</p>
       <p><b>Maps 1–3 lines</b> count maps 1, 2 and 3 in full – never maps 4–5. In a best-of-5 all three are always played; in a best-of-3 that ends 2–0 there is no map 3 and Underdog voids the pick. When the performance model has no data for a player, the older model fills in (also on three full maps).</p>
       <p><b>Projection → chance → grade.</b> The projection is compared with the line (a 15.5 line needs 16 for an Over, 15 or less for an Under; on a whole line like 16, exactly 16 is a push) and turned into a chance from how much a player's totals normally swing from match to match. Kills chances are capped at 78% because big kill totals swing more than any model expects.</p>
-      <p><b>Stake rules change the units, never the chance.</b> If his last 10 matches clearly disagree at this line, the stake drops to 0 (FORM FIGHT) or 0.5U (TAPE FIGHT). Stand-ins (max 1U), small samples (max 1.5U; under 5 recent maps 0), a month or more without an official map (max 1U) and thin betting markets (max 1.5U) cap the stake; a player not on the listed team and an AWPer on a headshot line get 0 units. An unconfirmed roster is flagged on the card but does not change the stake. Several bets that need the same team to do well (or badly) in one match share a 3U cap.</p>
+      <p><b>Stake rules change the units, never the chance.</b> If his last 10 matches clearly disagree at this line, the stake drops to 0 (FORM FIGHT) or 0.5U (TAPE FIGHT). Stand-ins (max 1U), small samples (max 1.5U; under 5 recent maps 0), a month or more without an official map (max 1U) and the market-quality rule (a bookmaker price such as Thunderpick's, a thin exchange book or no betting market: max 1.5U) cap the stake; a player not on the listed team and an AWPer on a headshot line get 0 units. An unconfirmed roster is flagged on the card but does not change the stake. Several bets that need the same team to do well (or badly) in one match share a 3U cap.</p>
       <p><b>Tested before it counts.</b> A factor moves the projection only after it beats the current model on matches it never saw, in date order. Maps, head-to-head, Round Swing, ratings, opening and trade kills, win chance and FACEIT are on every card as context; they move the grade only if they pass that test.</p>
       <p><b>What the grades mean</b> (chance the pick wins): A+ 80%+ · A 74%+ · A− 68%+ · B+ 63%+ · B 57%+ · B− 55%+ · <i>Lean</i> = 0 units: under 55%, or a stake rule above held it at 0.<br>
       <b>Units:</b> A+ 3U · A 2U · A− 1.5U · B+ 1U · B 0.5U · B− 0.5U · Lean 0U. The chance is graded unrounded and shown to 0.1%.</p>
@@ -1331,6 +1335,7 @@ const isFlagged = r => r.flagged != null ? !!r.flagged : !!(((r.dstat || [])[0] 
 // a stake cap names its reason in a few words (cap_reason from the server, e.g. "long break; same-match cap (4 bets on this
 // team)"); the full rule is in the tooltip. One stake per line: the board and the card show the same chip.
 const CAP_FULL = {"small sample": "Small sample of recent official maps – stake limited", "thin market": "Thin betting market – stake limited",
+  "bookmaker price": "Bookmaker price – stake capped under the market-quality rule",
   "no betting market": "No betting market for this match – stake limited", "stand-in": "Stand-in for this team – stake limited",
   "long break": "A month or more since his last official map – stake limited", "recent record disagrees": "His recent record at this line disagrees – small stake only"};
 const capParts = t => String(t || "").split(/;\s*/).map(x => x.trim()).filter(Boolean);
@@ -1550,15 +1555,24 @@ $("#bsort").onchange = drawBoard;
 $("#brefresh").onclick = () => loadBoard(true);
 let boardVer = "";
 
-// ---------- Moneylines: series-winner prices from Polymarket and Kalshi (GET /api/moneylines, one shared copy per 30 s).
+// ---------- Moneylines: series-winner prices - Thunderpick bookmaker odds first (primary source, owner 2026-10-13), Polymarket
+// and Kalshi exchange midpoints as attributed comparisons (GET /api/moneylines, one shared copy per 30 s).
 // A market view only: no model probability until a model passes its walk-forward test, no stakes, no recommendation.
 async function fetchMoneylines() {
   const r = await fetchRetry("/api/moneylines"); let d = null;
   try { d = await r.json(); } catch {}
   if (r.status === 401 && d && d.error === "members_only") { showGate(d); throw new Error("members only"); }
   if (!r.ok || !d || !Array.isArray(d.matches)) { ML.err = (d && (d.label || d.error)) || "Market probability unavailable"; return; }
-  ML = {data: d, at: Date.now(), err: null};
+  // the server's clock as this copy was SERVED (the body is one shared copy, up to 30 s old): X-Served-At, else the
+  // HTTP Date header - Thunderpick quote ages are measured from it, never from the cached build time
+  let served = NaN;
+  try { served = Date.parse(r.headers.get("X-Served-At") || r.headers.get("Date") || ""); } catch {}
+  ML = {data: d, at: Date.now(), served: isNaN(served) ? null : served, err: null};
 }
+// a Thunderpick price on screen that reaches its quote limit (or its match start) re-draws the tab, so a page left open
+// never keeps showing it as the primary price until the next minute's refresh
+setInterval(() => { if (bbook === "moneylines" && !$("#board").hidden && document.visibilityState === "visible"
+  && [...document.querySelectorAll("#boardout [data-tpexp]")].some(e => +e.dataset.tpexp <= Date.now())) drawBoard(); }, 5000);
 async function loadMoneylines(force) {
   if (!force && ML.data && Date.now() - ML.at < 30000) return drawBoard();
   $("#bstatus").textContent = ML.data ? "Refreshing… (showing the current prices)" : "Loading moneylines…";
@@ -1566,6 +1580,7 @@ async function loadMoneylines(force) {
   drawBoard();
 }
 setInterval(() => { if (bbook === "moneylines" && !$("#board").hidden && document.visibilityState === "visible") loadMoneylines(true); }, 60000);
+/* ML_RENDER_BEGIN - the Moneylines card renderers (pure: read ML and the payload, return HTML; tests run this block) */
 const ago = t => { const v = Date.parse(t); if (isNaN(v)) return ""; const s = Math.max(0, Math.round((Date.now() - v) / 1000));
   return s < 90 ? `${s} s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`; };
 const cents = x => x == null ? "–" : (x * 100).toFixed(1) + "¢";
@@ -1599,46 +1614,91 @@ function mlPlatform(p, blk, A, B, names) {
     <div>${blk.usable ? `<span class="pill good">Usable quote</span>` : `<span class="pill warn">Not usable</span>`}${blk.fresh === false ? ` <span class="pill warn">Not current</span>` : blk.market_open === false ? ` <span class="pill warn">Market closed</span>` : ""}</div>
     ${!blk.usable && blk.reason ? `<div class="small muted">${esc(blk.reason)}</div>` : ""}</div>`;
 }
-const mlUsable = m => !!(m.platforms && ((m.platforms.polymarket || {}).usable || (m.platforms.kalshi || {}).usable));
+const mlExUsable = m => !!(m.platforms && ((m.platforms.polymarket || {}).usable || (m.platforms.kalshi || {}).usable));
+// "now" on the server's clock: the time this copy was SERVED (ML.served - X-Served-At / Date header) + how long the page
+// has held it. A phone whose clock is a few minutes off must not expire every Thunderpick quote, and a re-render of an old
+// payload must not keep one alive. The payload's own "at" is its BUILD time - one shared copy for up to 30 s - so it is
+// only a floor when no serve time came with the response (2026-10-13 review: anchored on the build time, a 179 s quote
+// built 29 s before the fetch was 208 s old yet read as usable)
+const mlNow = () => { if (!ML.at) return Date.now();
+  const b = ML.data && ML.data.at ? Date.parse(ML.data.at) : NaN, anchor = Math.max(ML.served || -Infinity, isNaN(b) ? -Infinity : b);
+  return isFinite(anchor) ? anchor + (Date.now() - ML.at) : Date.now(); };
+// seconds since this Thunderpick price was last seen in a successful answer (our retrieval time - the feed has none)
+const tpAge = t => { const v = Math.max(Date.parse(t && t.retrieved_at) || 0, Date.parse(t && t.event_last_observed) || 0);
+  return v ? Math.max(0, (mlNow() - v) / 1000) : null; };
+const mlStarted = m => !!(m && (m.started || (m.start && Date.parse(m.start) <= mlNow())));
+// usable = the server called it eligible (in Thunderpick's latest answer, Match Winner, pre-match) AND it is still within
+// its quote limit now AND the match has not started - a started match's odds may be in-play (the feed has no live flag)
+const tpLive = (t, m) => { if (!t || !(t.eligible ?? t.usable) || t.started || mlStarted(m)) return false;
+  const a = tpAge(t); return a != null && a <= (t.max_age_s || 180); };
+// the "Usable price only" filter and its count: Thunderpick's usable price OR an exchange's usable quote
+const mlUsable = m => mlExUsable(m) || tpLive(m.thunderpick, m);
+const agoSec = s => s == null ? "–" : s < 90 ? `${Math.round(s)} s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`;
+const clockTime = s => { const d = new Date(s); return isNaN(d) ? "–" : d.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit", second: "2-digit"}); };
 // why a platform has no usable price, in a few words
 const mlWhy = blk => !blk ? "no market" : !blk.available ? String(blk.reason || "can't be read").replace(/\.$/, "") : blk.fresh === false ? "price not current"
   : blk.market_open === false ? "market closed" : blk.spread != null ? `spread ${Math.round(blk.spread * 100)}¢` : String(blk.reason || "not usable").replace(/\.$/, "");
-const mlSide = sd => {
+// tpNow = is the card's Thunderpick price usable on this page now: the server set a Thunderpick-based side from a price
+// that may have reached its limit since (the shared copy is up to 30 s old) - said so, never shown as if still current
+const mlSide = (sd, tpNow) => {
   if (!sd || !sd.label) return "";
+  const lapsed = sd.baseline_source === "thunderpick" && tpNow === false
+    ? `<div class="small muted">Set from Thunderpick's price when the server built this page – that price is no longer current here; refresh to check</div>` : "";
   const v = sd.hltv_view, c = sd.hltv_counts || {};
   const badge = v === "agrees" ? `<span class="pill good">HLTV agrees${c.available ? ` (${c.for} of ${c.available})` : ""}</span>`
     : v === "disagrees" ? `<span class="pill bad">HLTV disagrees${c.available ? ` (${c.against} of ${c.available} favour the other side)` : ""}</span>`
     : v === "mixed" ? `<span class="pill warn">HLTV mixed</span>` : `<span class="pill">No HLTV comparison</span>`;
   const rs = (sd.reasons || []).slice(0, 6);
   return `<div class="mlside"><div class="mlsidehead"><b>${esc(sd.label)}</b> <span class="pill">0U · shadow</span> ${badge}</div>
-    ${rs.length ? `<ul class="mlreasons">${rs.map(r => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
+    ${lapsed}${rs.length ? `<ul class="mlreasons">${rs.map(r => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
     ${sd.basis ? `<div class="small muted">${esc(sd.basis)}</div>` : ""}</div>`;
 };
-// Thunderpick first (2026-10-13): bookmaker odds, raw implied chances and the proportional margin-adjusted estimate,
-// kept apart from the exchanges' prices; shown as primary only when current and the series scope is confirmed
-function mlThunder(t, A, B) {
-  if (!t) return "";
-  if (!t.usable) return `<div class="small muted mltp">Thunderpick: ${esc(!t.current ? "odds not current" : t.scope)}</div>`;
-  const o = x => x == null ? "–" : (+x).toFixed(2);
-  const link = t.url ? ` · <a href="${esc(t.url)}" target="_blank" rel="noopener noreferrer">Open in Thunderpick</a>` : "";
-  return `<div class="mltp"><div class="mltphead"><b>Thunderpick</b> <span class="pill good">primary · ${esc(t.scope)}</span></div>
-    <div class="mlprob">${esc(A)} ${o(t.odds_a)} · ${esc(B)} ${o(t.odds_b)}</div>
-    <div class="small">Raw implied ${pct(t.implied_a_raw)} / ${pct(t.implied_b_raw)} (margin ${pct(t.margin)}) · margin-adjusted <b>${esc(A)} ${pct(t.p_a)} · ${esc(B)} ${pct(t.p_b)}</b></div>
-    <div class="small muted">Retrieved ${t.retrieved_at ? ago(t.retrieved_at) : "–"} (the feed has no quote time) · ${esc(t.status)}${t.timezone === "unconfirmed" ? " · start time zone unconfirmed" : ""}${link}</div>
-    <div class="small muted">${esc(t.note)}</div></div>`;
+// Thunderpick first (2026-10-13): bookmaker odds, raw implied chances incl. the margin and the proportional
+// margin-removed market-implied probability, kept apart from the exchanges' prices. Usable (the primary price) only while
+// tpLive; otherwise its state in plain words and the last seen odds as display only. "Retrieved" = our fetch time, never
+// "updated" (the feed publishes no quote time); the link opens the match page - never a slip, never a stake.
+function mlThunder(t, m, A, B) {
+  if (!t) return m && m.thunderpick_note ? `<div class="small muted mltp mltp-none">${esc(m.thunderpick_note)}</div>` : "";
+  const o = x => x == null ? "–" : (+x).toFixed(2), lim = t.max_age_s || 180, age = tpAge(t), live = tpLive(t, m);
+  const expired = !live && !!(t.eligible ?? t.usable) && !t.started && !mlStarted(m) && age != null && age > lim;
+  const state = live ? (t.availability_label || "Current") : mlStarted(m) && !t.started
+    ? "Match started – the feed has no live flag, so these odds may be in-play; not used"
+    : expired ? `No longer current on this page – last seen ${agoSec(age)}, over the ${lim} s limit; refresh to check`
+    : (t.availability_label || "Not usable now");
+  const seen = t.retrieved_at ? `Retrieved by us ${clockTime(t.retrieved_at)} (${agoSec(age)})` : "Retrieval time unknown";
+  // no link once the match has started (its odds may be in-play - nothing on this tab points at an in-play price)
+  const link = t.url && !t.started && !mlStarted(m) ? `<div class="tplinkrow"><a class="tplink" href="${esc(t.url)}" target="_blank" rel="noopener noreferrer">Open match on Thunderpick ↗</a></div>` : "";
+  const dec = `Decimal odds: ${esc(A)} ${o(t.odds_a)} · ${esc(B)} ${o(t.odds_b)}`;
+  if (!live) return `<div class="mltp off"><div class="mltphead"><b>Thunderpick</b> <span class="pill warn">Not usable now</span></div>
+      <div class="small">${esc(state)}</div>
+      ${t.odds_a != null && t.odds_b != null ? `<div class="small muted">Last seen – display only, not a current price: ${dec}</div>` : ""}
+      <div class="small muted">${seen} – the feed publishes no quote time</div>${link}</div>`;
+  // when it stops being usable on this page (quote limit or match start), on the page's own clock: the tab re-draws then
+  const st = m && m.start ? Date.parse(m.start) : NaN, left = Math.min((lim - age) * 1000 + 1000, isNaN(st) ? Infinity : st - mlNow());
+  return `<div class="mltp" data-tpexp="${Math.round(Date.now() + Math.max(0, left))}"><div class="mltphead"><b>Thunderpick</b> <span class="pill good">Primary source · bookmaker odds</span></div>
+    <div class="mlprob">${esc(A)} ${pct(t.p_a)} · ${esc(B)} ${pct(t.p_b)}</div>
+    <div class="small muted">Market-implied probability (margin removed, proportional)</div>
+    <div class="small">${dec}</div>
+    <div class="small">Raw implied (incl. margin): ${esc(A)} ${pct(t.implied_a_raw)} · ${esc(B)} ${pct(t.implied_b_raw)} · Bookmaker margin ${pct(t.margin)}</div>
+    <div class="small muted">Scope: ${esc(t.scope_label || "series winner")}</div>
+    <div class="small muted">${esc(state)} · ${seen} – the feed publishes no quote time${t.timezone === "unconfirmed" ? " · start time zone unconfirmed" : ""}</div>
+    <div class="small muted">${esc(t.note || "")}</div>${link}</div>`;
 }
 function mlCard(m, model, rec) {
   const A = m.teams.a || "Team A", B = m.teams.b || "Team B", b = m.baseline || {}, P = m.platforms || {};
-  const tpb = mlThunder(m.thunderpick, A, B);
+  const tpb = mlThunder(m.thunderpick, m, A, B), tu = tpLive(m.thunderpick, m);
   const pu = P.polymarket && P.polymarket.usable, ku = P.kalshi && P.kalshi.usable, gap = m.disagreement_gap;
   const headL = `<div class="mlhead"><b>${esc(A)} vs ${esc(B)}</b>
       <span class="small muted">${m.start ? when(m.start) : "start unknown"}${m.event ? " · " + esc(m.event) : ""}${m.bo ? " · BO" + esc(m.bo) : ""} · Series winner</span></div>`;
-  // nothing usable: one muted line instead of a wall of tags; the raw quotes stay one tap away
+  const quotes = ["polymarket", "kalshi"].some(p => P[p] && P[p].available)
+    ? `<details><summary>Exchange quote details</summary><div class="mlplats">${mlPlatform("polymarket", P.polymarket, A, B, m.teams.names_by_platform)}${mlPlatform("kalshi", P.kalshi, A, B, m.teams.names_by_platform)}</div></details>` : "";
+  // no usable exchange quote: Thunderpick's usable price is the card (with the side); else one muted line instead of a wall
+  // of tags; the raw quotes stay one tap away
   if (!pu && !ku) {
-    const anyQ = ["polymarket", "kalshi"].some(p => P[p] && P[p].available);
-    if (m.thunderpick && m.thunderpick.usable) return `<article class="mlcard">${headL}${tpb}<div class="small muted">Exchanges: Kalshi ${esc(mlWhy(P.kalshi))}; Polymarket ${esc(mlWhy(P.polymarket))}</div></article>`;
+    if (tu) return `<article class="mlcard">${headL}${tpb}<div class="small muted">Exchanges: Kalshi ${esc(mlWhy(P.kalshi))}; Polymarket ${esc(mlWhy(P.polymarket))}</div>
+      ${mlSide(m.side, tu)}${quotes}</article>`;
     return `<article class="mlcard nouse">${headL}${tpb}<div class="mlnone">No usable price – Kalshi: ${esc(mlWhy(P.kalshi))}; Polymarket: ${esc(mlWhy(P.polymarket))}</div>
-      ${anyQ ? `<details><summary>Quote details</summary><div class="mlplats">${mlPlatform("polymarket", P.polymarket, A, B, m.teams.names_by_platform)}${mlPlatform("kalshi", P.kalshi, A, B, m.teams.names_by_platform)}</div></details>` : ""}</article>`;
+      ${quotes}</article>`;
   }
   // one headline (2026-10-11 audit: "Market probability unavailable" sat above two usable prices): the market baseline when
   // there is one, else the first usable platform's own price for the first team - labelled a price, not a baseline
@@ -1650,9 +1710,14 @@ function mlCard(m, model, rec) {
     : ["polymarket", "kalshi"].map(p => ({pa: priceA(p), from: PLAT[p]})).find(x => x.pa != null) || null;
   const status = !m.match_id ? `<span class="pill" title="${esc(m.link_reason || "")}">Prices only – not tied to one HLTV match</span>`
     : m.tie_possible ? `<span class="pill warn">Best-of-2 – a draw is possible</span>`
-    : m.disagreement && gap != null ? `<span class="pill bad">Platforms disagree by ${(gap * 100).toFixed(1)} pts</span>`
-    : pu && ku ? `<span class="pill good">Both platforms</span>` : `<span class="pill">${pu ? "Polymarket" : "Kalshi"} only</span>`;
-  const base = tpb + (src ? `<div class="mlbase"><span class="mlprob">${esc(A)} ${pct(src.pa)} · ${esc(B)} ${pct(1 - src.pa)}</span>
+    : m.disagreement && gap != null ? `<span class="pill bad">Exchanges disagree by ${(gap * 100).toFixed(1)} pts</span>`
+    : pu && ku ? `<span class="pill good">Exchanges: both</span>` : `<span class="pill">Exchanges: ${pu ? "Polymarket" : "Kalshi"} only</span>`;
+  // with a usable Thunderpick price the exchange midpoint is an attributed comparison (smaller, with the gap to
+  // Thunderpick's market-implied probability) - never a second headline that reads as the only source
+  const tA = tu ? +m.thunderpick.p_a : null;
+  const base = tpb + (src && tu ? `<div class="mlcmp"><span>Exchange comparison – ${esc(src.from)} midpoint: <b>${esc(A)} ${pct(src.pa)} · ${esc(B)} ${pct(1 - src.pa)}</b></span>
+        <span class="small muted">${tA != null && !isNaN(tA) ? `${esc(A)} ${src.pa - tA >= 0 ? "+" : "−"}${(Math.abs(src.pa - tA) * 100).toFixed(1)} pts vs Thunderpick · ` : ""}the middle of its bid and ask${src.base ? "" : " – a price, not a win probability"} ${status}</span></div>`
+    : src ? `<div class="mlbase"><span class="mlprob">${esc(A)} ${pct(src.pa)} · ${esc(B)} ${pct(1 - src.pa)}</span>
         <span class="small muted">${esc(src.from)} price, the middle of its bid and ask${src.base ? "" : " – a price, not a win probability"} ${status}</span></div>`
     : `<div class="mlbase"><span class="mlprob muted">No price to show</span> ${status}</div>`);
   // three separate badge rows: data quality / freshness, agreement between platforms, model + recommendation status
@@ -1665,44 +1730,58 @@ function mlCard(m, model, rec) {
   // a comparison needs a real gap: a merged unlinked card is compared only after orienting both prices to one team
   // (server), otherwise it has no gap and says so - never "agree within 5 pts (0.0)"
   const unl = m.match_id ? "" : " (unlinked – teams matched by name)";
-  const agree = [pu && ku ? (gap != null ? (m.disagreement ? `<span class="pill bad">Platforms disagree by ${(gap * 100).toFixed(1)} pts${unl}</span>`
-                                                           : `<span class="pill">Platforms agree within 5 pts (${(gap * 100).toFixed(1)})${unl}</span>`)
+  const agree = [pu && ku ? (gap != null ? (m.disagreement ? `<span class="pill bad">Exchanges disagree by ${(gap * 100).toFixed(1)} pts${unl}</span>`
+                                                           : `<span class="pill">Exchanges agree within 5 pts (${(gap * 100).toFixed(1)})${unl}</span>`)
                                          : (m.match_id ? "" : `<span class="pill">Not linked – prices not compared</span>`)) : "",
     P.kalshi && P.kalshi.coherence_flag ? `<span class="pill warn">Kalshi's two YES prices don't add up (gap ${(P.kalshi.coherence_gap * 100).toFixed(1)} pts)</span>` : ""].filter(Boolean).join(" ");
   // the model / recommendation status is the same for every match: it is said once, above the list
   return `<article class="mlcard">${headL}
     ${base}
-    ${mlSide(m.side)}
+    ${mlSide(m.side, tu)}
     <details><summary>Quote details</summary>
     <div class="mlbadges"><span>Data</span> ${quality || `<span class="pill">No quotes</span>`}</div>
     ${agree ? `<div class="mlbadges"><span>Agreement</span> ${agree}</div>` : ""}
     <div class="mlplats">${mlPlatform("polymarket", P.polymarket, A, B, m.teams.names_by_platform)}${mlPlatform("kalshi", P.kalshi, A, B, m.teams.names_by_platform)}</div></details></article>`;
 }
+// the count above the list - one rule with the "Usable price only" filter: Thunderpick's usable price OR an exchange's
+function mlCountText(up0) {
+  const n = up0.filter(mlUsable).length, ntp = up0.filter(m => tpLive(m.thunderpick, m)).length, nex = up0.filter(mlExUsable).length;
+  return `${n} of ${up0.length} match${up0.length === 1 ? "" : "es"} ${n === 1 ? "has" : "have"} a usable price (Thunderpick ${ntp} · exchanges ${nex})`;
+}
+// the status line: Thunderpick's own state and the retrieval time of the snapshot serving its current quotes, then the
+// exchanges (their notes arrive cleaned by the server - no upstream error text or URLs)
+function mlStatusText(d) {
+  const t = d.thunderpick || {}, qc = t.quotes_confirmed_at;
+  const tp = t.label ? t.label + (qc ? ` (quotes retrieved ${clockTime(qc)}, ${agoSec(Math.max(0, (mlNow() - Date.parse(qc)) / 1000))})` : "") + " · " : "";
+  const src = Object.entries(d.sources || {}).map(([k, v]) => `${PLAT[k] || k}: ${v.ok ? `prices from ${v.age_s != null ? Math.round(v.age_s) + " s" : "–"} ago`
+    : (v.note || "not loaded yet")}`).join(" · ");
+  return tp + src;
+}
+/* ML_RENDER_END */
 function drawMoneylines() {
   const box = $("#boardout"), d = ML.data;
   if (!d) { $("#bcount").textContent = ""; $("#bstatus").textContent = ""; box.innerHTML = `<div class="muted">${esc(ML.err || "Loading moneylines…")}</div>`; return; }
-  const src = Object.entries(d.sources || {}).map(([k, v]) => `${PLAT[k] || k}: ${v.ok ? `prices from ${v.age_s != null ? Math.round(v.age_s) + " s" : "–"} ago`
-    : esc(v.note || "not loaded yet")}`).join(" · ");
-  // Thunderpick first (owner 2026-10-13) - its own honest state; its prices appear only once the CS2 market is confirmed
-  const tp = d.thunderpick && d.thunderpick.label ? d.thunderpick.label + " · " : "";
-  $("#bstatus").textContent = (ML.err ? ML.err + " · " : "") + tp + src;
-  const q = ($("#bsearch").value || "").trim().toLowerCase(), now = Date.now();
+  // Thunderpick first (owner 2026-10-13) - its own honest state, then the exchanges
+  $("#bstatus").textContent = (ML.err ? ML.err + " · " : "") + mlStatusText(d);
+  const q = ($("#bsearch").value || "").trim().toLowerCase();
   const list = d.matches.filter(m => !q || [m.teams.a, m.teams.b, m.event].some(x => String(x || "").toLowerCase().includes(q)));
   // one decision per match (server): any platform live, or the earliest stated start passed
-  const started = m => m.started || (m.start && Date.parse(m.start) <= now), up0 = list.filter(m => !started(m)), done = list.filter(started);
-  const onlyU = $("#mlusable").checked, nUse = up0.filter(mlUsable).length, up = onlyU ? up0.filter(mlUsable) : up0;
-  $("#bcount").textContent = `${nUse} of ${up0.length} match${up0.length === 1 ? "" : "es"} ${nUse === 1 ? "has" : "have"} a usable price`;
+  const up0 = list.filter(m => !mlStarted(m)), done = list.filter(mlStarted);
+  const onlyU = $("#mlusable").checked, up = onlyU ? up0.filter(mlUsable) : up0;
+  $("#bcount").textContent = mlCountText(up0);
   const model = d.model || {}, rec = d.recommendation || "Shadow - not a staking recommendation";
-  box.innerHTML = `<div class="mlintro"><b style="color:var(--text)">Series winner prices</b><span>Polymarket + Kalshi, read by the server about every minute</span>
+  box.innerHTML = `<div class="mlintro"><b style="color:var(--text)">Series winner prices</b><span>Thunderpick bookmaker odds first (primary source) · Polymarket and Kalshi exchange midpoints as attributed comparisons · read by the server about every minute</span>
       <span class="pill">${esc(model.label || "Model: not validated yet - market baseline shown, no recommendation")}</span><span class="pill">${esc(rec)}</span></div>`
     + (up.length ? up.map(m => mlCard(m, model, rec)).join("")
        : `<div class="muted">${up0.length && onlyU ? `None of the ${up0.length} upcoming match${up0.length === 1 ? " has" : "es have"} a usable price right now. <button type="button" class="chipbtn" data-mlall="1">Show all matches</button>`
-         : list.length ? "No upcoming matches match this search." : "No CS2 series-winner markets on Polymarket or Kalshi right now."}</div>`)
+         : list.length ? "No upcoming matches match this search." : "No CS2 series-winner prices from Thunderpick, Polymarket or Kalshi right now."}</div>`)
     + (onlyU && up0.length > up.length && up.length ? `<div class="small muted" style="margin:4px 0 10px">${up0.length - up.length} match${up0.length - up.length === 1 ? "" : "es"} without a usable price hidden · <button type="button" class="chipbtn" data-mlall="1">Show all</button></div>` : "")
-    + (done.length ? `<details class="mgroup"><summary><b>Started</b> <span class="muted small">${done.length} – in-play prices, never a baseline</span></summary>
+    + (done.length ? `<details class="mgroup"><summary><b>Started</b> <span class="muted small">${done.length} – in-play prices, never used</span></summary>
         <div class="mbody">${done.map(m => mlCard(m, model, rec)).join("")}</div></details>` : "")
-    + `<details class="small muted" style="margin-top:10px"><summary>Which price is shown</summary><p>${esc(d.rule || "")}</p>
-        <p>Probabilities are each platform's bid/ask midpoint for the first team, shown to 0.1%. A last trade is never used as a price. The model column stays empty until a moneyline model passes its walk-forward test – until then this tab shows the market only, with no stake or recommendation. Not financial advice.</p></details>`;
+    + `<details class="small muted" style="margin-top:10px"><summary>Which price is shown</summary>
+        <p><b>Thunderpick first.</b> ${esc(d.thunderpick_rule || "")}</p>
+        <p><b>Exchanges (comparison).</b> ${esc(d.rule || "")}</p>
+        <p>Exchange probabilities are each platform's bid/ask midpoint for the first team, shown to 0.1%. A last trade is never used as a price. The 0U side follows Thunderpick's usable price first, then the exchange baseline (shadow, not evaluated as a baseline yet). The model column stays empty until a moneyline model passes its walk-forward test – until then this tab shows the market only, with no stake or recommendation. Not financial advice.</p></details>`;
 }
 
 // ---------- Slip studio: the server's diversified builder (slip_builder studio-1). One batch at a time: no player,
@@ -1972,12 +2051,61 @@ function chart(series, line, proj) {
 }
 
 // data status: kept separate from the model's confidence - a high chance never hides a data problem
-// which market supplied the win probability for THIS grade (market_odds.select provenance) - Thunderpick only when it did
+/* ODDS_CARD_BEGIN - the card's odds lines (pure: read the card payload, return HTML/text; tests run this block) */
+// which market supplied the win probability for THIS grade (market_odds.select provenance) - Thunderpick only when it did.
+// The server's odds_info (card_odds_info) carries the source, market / scope, why Thunderpick was not used, how odds act on
+// this grade (performance model: stake rule + context only; older model: the projection) and the source's own words
+const oddsInfo = d => (d && d.odds_info) || null;
 function oddsSrc(d) {
+  const oi = oddsInfo(d); if (oi) return oi.label || null;
   const o = d && d.odds, pv = o && o.provenance;
   if (!o || !o.found || !pv) return null;
   return pv.selected === "thunderpick" ? "Thunderpick" : pv.selected === "oddspapi" ? `OddsPapi${o.book ? " (" + o.book + ")" : ""}` : "Polymarket";
 }
+// the Data row's odds part: "Odds source used: Thunderpick (Match Winner, series winner)", the fallback reason when it
+// is not Thunderpick, and how odds are used on this grade
+function oddsData(d) {
+  const oi = oddsInfo(d);
+  if (!oi) { const s = oddsSrc(d); return s ? ` <span class="muted small">· Odds source used: ${esc(s)}</span>` : ""; }
+  return ` <span class="muted small">· ${esc(oi.line)}</span>${oi.fallback ? ` <span class="muted small">· ${esc(oi.fallback)}</span>` : ""}`
+    + `<span class="muted small" style="display:block;margin-top:2px">${esc(oi.use)}</span>`;
+}
+// the Match section's win-chance rows, labelled with the source actually used (never "Polymarket" for another source)
+function oddsMatch(d) {
+  const od = d && d.odds, oi = oddsInfo(d) || {};
+  if (!od) return "";
+  let h = "";
+  if (od.found) {
+    h += `<div class="kv"><span>${esc(oi.match_label || `Win chance (${oddsSrc(d) || "betting market"})`)}</span><span>${esc(od.team)} ${pct(od.team_prob)} · ${esc(od.opponent)} ${pct(od.opp_prob)}</span></div>`;
+    const pr = oi.prices || null, o2 = x => x == null ? "–" : (+x).toFixed(2);
+    if (oi.source === "thunderpick" && pr) {
+      h += `<div class="kv"><span>Decimal odds</span><span>${esc(od.team)} ${o2(pr.odds_team)} · ${esc(od.opponent)} ${o2(pr.odds_opp)}</span></div>`
+        + `<div class="kv"><span>Raw implied (incl. margin)</span><span>${esc(od.team)} ${pct(pr.implied_team_raw)}${pr.implied_opp_raw != null ? ` · ${esc(od.opponent)} ${pct(pr.implied_opp_raw)}` : ""} · Bookmaker margin ${pct(pr.margin)}</span></div>`;
+    }
+    if (oi.scope_note) h += `<div class="small muted">Scope: ${esc(oi.scope_note)}</div>`;
+    if (oi.retrieved_at) h += `<div class="small muted">Retrieved ${clockTime(oi.retrieved_at)} – ${esc(oi.time_note || "our retrieval time")}</div>`;
+    if (od.maps?.map1 || od.maps?.map2) h += `<div class="kv"><span>Map winners</span><span>${["map1","map2"].filter(k=>od.maps[k]).map(k=>`${k.replace("map","Map ")}: ${pct(od.maps[k].team_prob)}`).join(" · ")}</span></div>`;
+    if (oi.maps_note) h += `<div class="small muted" style="margin-top:6px">${esc(oi.maps_note)}</div>`;
+    // Thunderpick's own note is information, not a warning; an exchange's thin-book / wide-spread note stays a warning
+    for (const f of od.flags || []) h += `<div class="small muted" style="margin-top:6px">${oi.source === "thunderpick" ? "" : "⚠ "}${esc(f)}</div>`;
+  } else h += `<div class="kv"><span>Win chance</span><span class="muted">${esc(oi.match_note || od.note || "No betting market found")}</span></div>`;
+  if (oi.fallback) h += `<div class="small muted" style="margin-top:6px">${esc(oi.fallback)}</div>`;
+  return h;
+}
+// the market-quality stake pill in the source's own words (a bookmaker price is not a thin market)
+const stakePill = (d, g) => { const oi = oddsInfo(d);
+  return oi && oi.stake_pill ? `<span class="pill" title="${esc(oi.stake_rule || "")}">${esc(oi.stake_pill)}</span>`
+    : `<span class="pill">${g.market_quality === "SOFT" ? "Thin betting market" : "No betting market"} · max ${capOf(d, "market", 1.5)}U</span>`; };
+const oddsFooter = d => { const oi = oddsInfo(d); if (oi) return oi.footer ? " · " + esc(oi.footer) : "";
+  return d && d.odds && d.odds.found ? " · " + esc(oddsSrc(d) || "Polymarket") : ""; };
+// the match itself can come from a Polymarket listing (next_match.source "polymarket") while the odds come from
+// Thunderpick / OddsPapi or no market: Polymarket is still credited for the schedule (2026-10-13 review)
+const schedFooter = d => { const s = d && d.next_match && d.next_match.source;
+  if (s !== "polymarket") return "";
+  const oi = oddsInfo(d), pv = (d.odds && d.odds.provenance) || {};
+  const used = oi ? oi.source : d.odds && d.odds.found ? (pv.selected || (d.odds.book ? "oddspapi" : "polymarket")) : null;
+  return used === "polymarket" ? "" : " · schedule from Polymarket"; };
+/* ODDS_CARD_END */
 function dataStatus(g, v) {
   // quality only - the source (HLTV / BO3.gg / older model) is shown separately and is not a warning by itself
   const fl = (g.flags || []).join(" | ");
@@ -1988,7 +2116,7 @@ function dataStatus(g, v) {
   if (/Stand-in/i.test(fl)) return {k: "warn", t: "Stand-in", why: "playing for another team"};
   if (/Last official map \d+ days ago - extra caution/i.test(fl)) return {k: "warn", t: "Long break", why: "long gap since the last official map"};
   if (/^HLTV history ends/im.test((g.flags || []).join("\n"))) return {k: "warn", t: "HLTV out of date", why: `his HLTV history ends ${g.hltv_ends || "early"} – newer matches are only on BO3.gg`};
-  if (/Small sample|Thin|thin history/i.test(fl)) return {k: "mid", t: "Limited history", why: "small recent sample"};
+  if (/Small sample|thin history/i.test(fl)) return {k: "mid", t: "Limited history", why: "small recent sample"};   // a thin betting market is not a small sample
   return {k: "ok", t: "Data complete", why: ""};
 }
 const srcLabel = g => { const ps = String(g.projection_source || ""); return ps.startsWith("perf") && !ps.endsWith("-bo3") ? (g.hltv_ends ? `HLTV (ends ${g.hltv_ends})` : "HLTV") : ps.endsWith("-bo3") ? "BO3.gg" : /unreachable/.test(ps) ? "older model (HLTV unreachable)" : "older model (BO3.gg)"; };
@@ -2004,7 +2132,7 @@ function glance(d, g, v) {
     <div class="glrow"><span class="k">Line</span><span>${side} ${g.line}${mapsWord(g.scope) || " (Maps 1–2)"} · <b>${chance(v.p, g.prop, capOf(d, "kills_chance", KCAP))}</b>${pushOf(g) != null ? ` excluding pushes · push ${pct(pushOf(g))}` : ""} · ${v.units || 0}U</span></div>
     ${cp?.supports?.length ? `<div class="glrow"><span class="k up">Supports</span><span>${esc(cp.supports[0].text)} ${basisTag(cp.supports[0].basis)}</span></div>` : ""}
     ${cp?.concern ? `<div class="glrow"><span class="k dn">Concern</span><span>${esc(cp.concern.text)} ${basisTag(cp.concern.basis)}</span></div>` : ""}
-    <div class="glrow"><span class="k">Data</span><span><span class="dstat ${ds.k}">${ds.t}</span>${ds.why ? ` <span class="muted small">${esc(ds.why)}</span>` : ""} <span class="muted small">· source ${esc(srcLabel(g))}</span>${oddsSrc(d) ? ` <span class="muted small">· projection odds source: ${esc(oddsSrc(d))}</span>` : ""}${cp?.board_at ? ` <span class="muted small">· line checked ${ago(cp.board_at)}</span>` : ""}</span></div>
+    <div class="glrow"><span class="k">Data</span><span><span class="dstat ${ds.k}">${ds.t}</span>${ds.why ? ` <span class="muted small">${esc(ds.why)}</span>` : ""} <span class="muted small">· source ${esc(srcLabel(g))}</span>${cp?.board_at ? ` <span class="muted small">· line checked ${ago(cp.board_at)}</span>` : ""}${oddsData(d)}</span></div>
     ${usesBlock(d, g)}
   </section>`;
 }
@@ -2023,7 +2151,7 @@ function usesBlock(d, g) {
     : ["Older model (when the performance model has no data for him): his BO3.gg Maps 1–2 rates and recent form, the maps when known, win chance, opponent rank, head-to-head and Round Swing, with a small cushion an Over must clear (1 kill / 0.6 HS); Map 1 = half of Maps 1–2, Maps 1–3 = three full maps"];
   const stake = [`Last 10 matches at this line: a clear disagreement holds the stake at 0 (FORM FIGHT) or ${capOf(d, "tape", 0.5)}U (TAPE FIGHT)`,
     `Roster: a stand-in is capped at ${capOf(d, "standin", 1)}U, a player not on the listed team gets 0 units`, ...(hs ? ["AWPer on a headshot line: 0 units"] : []),
-    `Sample: under 5 recent maps 0 units, under 20 max ${capOf(d, "thin", 1.5)}U · a month or more since his last official map: max 1U`, `Betting-market depth (thin or no market: max ${capOf(d, "market", 1.5)}U)`,
+    `Sample: under 5 recent maps 0 units, under 20 max ${capOf(d, "thin", 1.5)}U · a month or more since his last official map: max 1U`, `Market quality: a bookmaker price (Thunderpick, or a bookmaker other than Pinnacle / Betfair Exchange), a thin exchange book or no betting market: max ${capOf(d, "market", 1.5)}U`,
     `Several bets on one team in one match: capped together at ${capOf(d, "same_result", 3)}U`];
   const ctx = perfGrade(g) ? "Maps / veto, head-to-head, Round Swing, rating, opening and trade kills, FACEIT and win chance are shown for context – each was tested and either didn't improve the projection or hasn't been tested yet, so it doesn't move it." : "";
   return `<details class="small" style="margin-top:6px"><summary class="muted">What this grade uses</summary>
@@ -2096,7 +2224,7 @@ function render(d) {
       ${g.form_fight ? `<span class="pill warn">FORM FIGHT – his last 10 at this line disagree · 0 units${perfGrade(g) ? "" : " (older model: chance halved)"}</span>` : ""}
       ${pb.standin_for ? `<span class="pill warn">STAND-IN for ${esc(pb.standin_for)} · max ${capOf(d, "standin", 1)}U</span>` : ""}
       ${g.tape_fight ? `<span class="pill warn">TAPE FIGHT – recent record at this line disagrees · max ${capOf(d, "tape", 0.5)}U</span>` : ""}
-      ${g.market_quality && g.market_quality !== "HARD" && v.state !== "SCOUT" ? `<span class="pill">${g.market_quality === "SOFT" ? "Thin betting market" : "No betting market"} · max ${capOf(d, "market", 1.5)}U</span>` : ""}
+      ${g.market_quality && g.market_quality !== "HARD" && v.state !== "SCOUT" ? stakePill(d, g) : ""}
       ${g.market?.note_line ? `<span class="pill warn">${esc(g.market.note_line)}</span>` : ""}
       ${g.line_type && g.line_type !== "standard" && v.side === "Less" ? `<span class="pill">${esc(g.line_type[0].toUpperCase() + g.line_type.slice(1))} lines are Over only – PrizePicks offers no Under, so this is a Lean</span>` : ""}
       ${lineWarn(g.prop, g.line, marketOk(d)) ? `<span class="pill warn">${esc(lineWarn(g.prop, g.line, marketOk(d)))}</span>` : ""}
@@ -2115,7 +2243,7 @@ function render(d) {
     <div class="stats" style="margin-top:10px">
       <div class="stat"><div class="k">Projection</div><div class="v">${num(g.lambda_final,1)}</div><div class="n">${stat}, ${g.scope === "123" ? "Maps 1–3" : g.scope === "1" ? "Map 1" : "Maps 1–2"}</div></div>
       <div class="stat"><div class="k">Line</div><div class="v">${g.line}</div><div class="n">${g.line % 1 ? `Over needs ${Math.floor(g.line) + 1}+` : `exactly ${g.line} is a push`}</div></div>
-      <div class="stat"><div class="k">Team win %</div><div class="v">${det.p_win != null && !["NO MARKET", "NONE"].includes(g.market_quality) ? pct(det.p_win) : "–"}</div><div class="n">${["NO MARKET", "NONE"].includes(g.market_quality) ? (perfGrade(g) ? "no market – stake capped" : "no market – graded as even") : perfGrade(g) ? "betting markets · context, not in the projection" : "from betting markets"}</div></div>
+      <div class="stat"><div class="k">Team win %</div><div class="v">${det.p_win != null && !["NO MARKET", "NONE"].includes(g.market_quality) ? pct(det.p_win) : "–"}</div><div class="n">${esc(oddsInfo(d)?.tile_note || (["NO MARKET", "NONE"].includes(g.market_quality) ? (perfGrade(g) ? "no market – stake capped" : "no market – graded as even") : perfGrade(g) ? "betting markets · context, not in the projection" : "from betting markets"))}</div></div>
       <div class="stat ${g.lambda_final - g.line > 0 ? "up" : "down"}"><div class="k">Edge</div><div class="v">${(g.lambda_final - g.line > 0 ? "+" : "") + (Math.abs(g.lambda_final - g.line) < 0.1 ? (g.lambda_final - g.line).toFixed(2) : (g.lambda_final - g.line).toFixed(1))}</div><div class="n">projection − line</div></div>
       ${sc === "123" && !has123 ? `<div class="stat"><div class="k">Last ${pb.recent_form?.matches || 10}</div><div class="v">${pb.recent_form?.avg_total ?? "–"} <span class="small muted">avg</span></div><div class="n">Maps 1–2 totals – no Maps 1–3 record</div></div>`
         : `<div class="stat"><div class="k">Last ${rf.matches || 10}${envW ? " " + envW : ""}${sc === "1" ? " · Map 1" : sc === "123" ? " · Maps 1–3" : ""}</div><div class="v">${rf.avg_total ?? "–"} <span class="small muted">avg</span></div><div class="n">${rf.overs ?? "–"}/${rf.decided ?? rf.matches ?? "–"} over${rf.pushes ? ` · ${rf.pushes} push` : ""} · median ${rf.median_total ?? "–"}</div></div>`}
@@ -2157,11 +2285,7 @@ function render(d) {
   if (!nm) h += `<div class="muted">No upcoming match found for ${esc(pb.current_team || "this player's team")} yet.</div>`;
   if (d.match_note) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(d.match_note)}</div>`;
   if (d.schedule_heads_up) h += `<div class="small" style="margin-top:6px;color:var(--warn)">HLTV heads-up: ${esc(d.schedule_heads_up)}</div>`;
-  if (od?.found) {
-    h += `<div class="kv"><span>Win chance (Polymarket)</span><span>${esc(od.team)} ${pct(od.team_prob)} · ${esc(od.opponent)} ${pct(od.opp_prob)}</span></div>`;
-    if (od.maps?.map1 || od.maps?.map2) h += `<div class="kv"><span>Map winners</span><span>${["map1","map2"].filter(k=>od.maps[k]).map(k=>`${k.replace("map","Map ")}: ${pct(od.maps[k].team_prob)}`).join(" · ")}</span></div>`;
-    for (const f of od.flags || []) h += `<div class="small muted" style="margin-top:6px">⚠ ${esc(f)}</div>`;
-  } else if (od) h += `<div class="kv"><span>Win chance</span><span class="muted">${esc(od.note)}</span></div>`;
+  h += oddsMatch(d);         // labelled with the source actually used (2026-10-13: was hard-coded "Polymarket")
   h += `</section>`;
 
   // ---- recent form: last 10 matches, Maps 1-2
@@ -2230,7 +2354,7 @@ function render(d) {
       : x.label.startsWith("win") ? `${tm} win 2–0` : x.label.startsWith("lose") ? `${tm} lose 0–2` : `Maps 1–2 split 1–1${x.label.includes("map 3") ? " → map 3 played" : ""}`;
     const pc = x => `<b class="${x >= .5 ? "up" : "dn"}">${(x * 100).toFixed(1)}%</b>`;
     h += `<section class="card"><h2>Match simulation · 20,000 runs</h2>
-      <div class="small muted" style="margin:-4px 0 10px">Every run is drawn from this grade's own distribution, so the overall numbers agree with the grade (within 1%). The match-script rows are an illustration, not a tested forecast: they show one way this total could split by result.</div>
+      <div class="small muted" style="margin:-4px 0 10px">Every run is drawn from this grade's own distribution, so the overall numbers agree with the grade (within 1%). The match-script rows are an illustration, not a tested forecast: they show one way this total could split by result.${oddsInfo(d)?.maps_note ? " " + esc(oddsInfo(d).maps_note) : ""}</div>
       <div class="kv"><span>Over ${g.line} ${unit}</span><span>${pc(sm.p_more)} of decided runs${sm.p_push ? ` · push ${pct(sm.p_push)}` : ""} · average ${sm.mean} · 8 in 10 land ${sm.p10}–${sm.p90}</span></div>
       <div class="scroll"><table class="simtab"><thead><tr><th>If…</th><th class="num">Chance</th><th class="num">Avg</th><th class="num">Over ${g.line}</th></tr></thead><tbody>
       ${sm.scenarios.map(x => `<tr><td>${lab(x)}</td><td class="num">${pct(x.chance)}</td><td class="num">${x.avg}</td><td class="num">${pc(x.p_over)}</td></tr>`).join("")}
@@ -2386,7 +2510,7 @@ function render(d) {
   const flags = (g.flags || []).map(f => fgt && /^Projection differs from his last-10 average/.test(f) ? fgt : f);
   if ((v.units || 0) > 0) flags.push("Units show the model's relative confidence (A+ 3U down to B- 0.5U) - not a payout-based edge or a proven profit; check the payout before betting");
   if (flags.length) h += `<section class="card full"><h2>Notes</h2><ul class="flags">${flags.map(f => `<li>${esc(f)}</li>`).join("")}</ul></section>`;
-  h += `<div class="small muted foot">Data: BO3.gg · Polymarket · FACEIT${d.hltv?.found || d.hltv_context?.found ? " · HLTV" : ""}${d.csapi?.found ? " · CS API" : ""}${d.next_match?.source === "pandascore" ? " · PandaScore" : ""}${d.next_match?.source === "hltv" ? " · schedule from HLTV" : ""}${d.odds?.book ? " · " + esc(d.odds.book) + " via OddsPapi" : ""}${d.liquipedia ? ` · team from <a href="${esc(d.liquipedia.url)}" target="_blank" rel="noopener">Liquipedia</a> (CC-BY-SA 3.0)` : ""} · Not financial advice</div>`;
+  h += `<div class="small muted foot">Data: BO3.gg${oddsFooter(d)} · FACEIT${d.hltv?.found || d.hltv_context?.found ? " · HLTV" : ""}${d.csapi?.found ? " · CS API" : ""}${d.next_match?.source === "pandascore" ? " · PandaScore" : ""}${d.next_match?.source === "hltv" ? " · schedule from HLTV" : ""}${schedFooter(d)}${d.liquipedia ? ` · team from <a href="${esc(d.liquipedia.url)}" target="_blank" rel="noopener">Liquipedia</a> (CC-BY-SA 3.0)` : ""} · Not financial advice</div>`;
   const out = $("#out"); out.innerHTML = h;
   const kids = [...out.children], cols = document.createElement("div"), main = document.createElement("div"), side = document.createElement("div");
   cols.className = "cols"; cols.append(main, side);

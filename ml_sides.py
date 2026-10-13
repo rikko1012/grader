@@ -26,6 +26,19 @@ What decides the side (FROZEN rule, MODEL_VERSION "ml-sides-1")
   The signals have weight 0 for the market side: none of them demonstrated an improvement over the market in ml_eval's chronological test
   (ML_EVAL.md section 3: nothing promoted).  LAN / online record and the current VRS rank are shown, never counted.
 
+Thunderpick-first market input (MODEL_VERSION_TP "ml-sides-2", 2026-10-13 - owner: Thunderpick is the primary odds
+source; the Moneylines tab showed Thunderpick's price as primary while the side still said "no market price")
+  Used when the caller passes Thunderpick's block (pick(..., tp=block or None), sides_for_board(..., tp_blocks=[...])).
+  Rule 1's "usable market baseline" becomes: Thunderpick's ELIGIBLE price first (moneyline.tp_block: in Thunderpick's
+  latest answer, availability "current", pre-match, linked match, not best-of-2, valid two-way odds) -> side = Thunderpick's favourite
+  by its proportional margin-adjusted probability; otherwise the ml-baseline-1 exchange baseline exactly as in rule 1;
+  otherwise rules 2 / 3 unchanged (the "no usable market price" reason then names Thunderpick's state too).  The HLTV
+  composite, ties, the level-50% case and every stake (0U) are the frozen rules above.  Without a tp argument the
+  side, label, reasons and basis are exactly ml-sides-1.  Every pick says baseline_source + odds_policy (metadata
+  only); moneyline.log_forecasts logs the
+  ml-sides-2 market input (ml_forecasts, model_version "ml-sides-2") so the evaluation separates the two policies.
+  Thunderpick has not been evaluated as a moneyline baseline yet - the basis says so; it is never called validated.
+
 HLTV evidence (evidence(); one per team pair and cutoff day)
   cutoff day = the earlier of today (UTC) and the match's UTC start date; every window uses rows dated STRICTLY BEFORE
   it (HLTV dates matches by calendar day only - the same rule ml_eval uses, so nothing after "now" or the start leaks in).
@@ -49,10 +62,12 @@ Load / failure behaviour
 
 Public
   evidence(team_a_key, team_b_key, start_iso, lan=None)   evidence dict oriented to (a, b) - does a DB read on a miss
-  pick(match, evidence)                                     the side for one moneyline.board() match (pure function)
-  sides_for_board(board_matches, block=False)               list aligned with board_matches (memory only by default)
+  pick(match, evidence, tp=...)                             the side for one moneyline.board() match (pure function)
+  sides_for_board(board_matches, block=False, tp_blocks=None)  list aligned with board_matches (memory only by default)
+  market_input(match, tp) / forecast_row(match, tp, at)     the ml-sides-2 market input and its ml_forecasts row
   refresh(board_matches) / start(board_fn) / status()
 """
+import json
 import math
 import threading
 import time
@@ -98,6 +113,79 @@ BASIS_HLTV = ("Side = sign of the frozen HLTV composite (ml_eval features a rati
 BASIS_NONE = "No usable market price and no comparable HLTV data for these two teams - no side."
 NO_SIDE_LABEL = "No HLTV data and no market price - no side"
 PENDING_LABEL = "HLTV evidence loading - no market price; the side appears once it is read"
+
+MODEL_VERSION_TP = "ml-sides-2"        # Thunderpick-first market input (see the module docstring)
+ODDS_POLICY_EXCHANGE = "exchange-only"
+ODDS_POLICY_TP = "thunderpick-first"
+BASIS_MARKET_TP = ("Side = Thunderpick's favourite (bookmaker odds, margin removed proportionally) - the primary odds "
+                   "source since 2026-10-13. Not yet evaluated as a moneyline baseline: its forecasts are logged "
+                   "(ml-sides-2) so it can be. HLTV figures are context.")
+TP_PRICE = "Thunderpick odds, margin removed proportionally"
+RULE_TP = ("ml-sides-2 market input: Thunderpick's eligible series price (in its latest answer, <= 180 s, Match Winner = "
+           "series winner, two-way, no draw, pre-match, linked match) -> its proportional margin-adjusted probability "
+           "for team A; else the ml-baseline-1 exchange baseline; else none (never 50%). Shadow - 0 units.")
+_RULE1 = object()                      # pick(tp=...) default: no Thunderpick input -> exactly ml-sides-1
+
+
+TP_READ_ERROR = "read_error"           # moneyline.tp_block's marker when Thunderpick could not be read (not "no event")
+TP_FORMAT_WHY = "best-of-2 - a draw is possible, so a two-way price is not a series-winner probability"
+
+
+def _draw_format(match):
+    """A best-of-2 board match (a draw is possible): never a Thunderpick side input, whatever the block says - the same
+    exclusion ml-sides-1 gets from its baseline (2026-10-13 review: checked here too, not only by thunderpick.py)."""
+    return bool((match or {}).get("tie_possible")) or (match or {}).get("bo") == 2
+
+
+def tp_eligible(tp, match):
+    """Is `tp` (moneyline.tp_block of this match) an eligible pre-match Thunderpick series price for the side?"""
+    if not isinstance(tp, dict) or not tp or not (match or {}).get("match_id"):
+        return False
+    if (match or {}).get("started") or tp.get("started") or _draw_format(match):
+        return False
+    if tp.get("availability") not in (None, "current") or not tp.get("eligible", tp.get("usable")):
+        return False
+    try:
+        pa = float(tp.get("p_a"))
+    except (TypeError, ValueError):
+        return False
+    return 0 < pa < 1
+
+
+def tp_why(tp, match):
+    """Why Thunderpick gives no side input for this match, in a few words (None when it does)."""
+    if not (match or {}).get("match_id"):
+        return "not tied to one HLTV match"
+    if not tp:
+        return "no Thunderpick event linked to this match"
+    if tp_eligible(tp, match):
+        return None
+    if (match or {}).get("started") or tp.get("started"):
+        return "match started - no pre-match price"
+    if _draw_format(match):
+        return TP_FORMAT_WHY
+    return str(tp.get("availability_label") or tp.get("availability") or "price not usable")[:160]
+
+
+def market_input(match, tp=_RULE1, tp_policy=None):
+    """The market input of the side for one board match: {"model_version", "odds_policy", "prob_a" (team A, or None),
+    "source" ("thunderpick" / "polymarket" / "kalshi" / None), "exchange": {"platform", "prob_a"}, "tp_why"}.
+    tp=_RULE1 (default): ml-sides-1 - the exchange baseline only.  tp=block or None: ml-sides-2 - Thunderpick's eligible
+    price first.  Pure."""
+    base = (match or {}).get("baseline") or {}
+    linked = bool((match or {}).get("match_id"))
+    ex_pa = base.get("prob_a") if linked else None
+    ex = {"platform": base.get("platform") if ex_pa is not None else None, "prob_a": ex_pa}
+    ex_ver = base.get("model_version") or "ml-baseline-1"
+    if tp is _RULE1:
+        return {"model_version": MODEL_VERSION, "odds_policy": f"{ODDS_POLICY_EXCHANGE}|{ex_ver}", "prob_a": ex_pa,
+                "source": ex["platform"], "exchange": ex, "tp_why": None}
+    pol = f"{ODDS_POLICY_TP}|{(tp or {}).get('policy') or tp_policy or 'thunderpick'}|{ex_ver}"
+    if tp_eligible(tp, match):
+        return {"model_version": MODEL_VERSION_TP, "odds_policy": pol, "prob_a": float(tp["p_a"]),
+                "source": "thunderpick", "exchange": ex, "tp_why": None}
+    return {"model_version": MODEL_VERSION_TP, "odds_policy": pol, "prob_a": ex_pa, "source": ex["platform"],
+            "exchange": ex, "tp_why": tp_why(tp, match)}
 
 _LOCK = threading.Lock()        # guards _EV / _STATE
 _LOAD = threading.Lock()        # at most one database read at a time (one pooled connection)
@@ -725,9 +813,11 @@ def _names(match):
     return {"a": a.get("name") or "Team A", "b": b.get("name") or "Team B"}, a.get("key"), b.get("key")
 
 
-def pick(match, evidence, note=None, pending=True):
+def pick(match, evidence, note=None, pending=True, tp=_RULE1, tp_policy=None):
     """The side for one moneyline.board() match.  evidence: evidence() output (any team order - it is re-oriented by
-    team key), or None when not loaded.  Pure: no I/O.  stake_units is always 0."""
+    team key), or None when not loaded.  tp: Thunderpick's block for the match (moneyline.tp_block; None = no
+    Thunderpick event) -> the ml-sides-2 market input; left out -> exactly ml-sides-1.  Pure: no I/O.
+    stake_units is always 0."""
     names, ka, kb = _names(match)
     ev = evidence
     if ev is not None:
@@ -737,13 +827,16 @@ def pick(match, evidence, note=None, pending=True):
         ev = orient(ev, ka, kb)
     sig = (ev or {}).get("signals") or {}
     base = (match or {}).get("baseline") or {}
-    pa = base.get("prob_a")
+    mi = market_input(match, tp, tp_policy)
+    pa = mi["prob_a"]
+    from_tp = mi["source"] == "thunderpick"
     market = pa is not None and bool((match or {}).get("match_id"))
-    out = {"model_version": MODEL_VERSION, "match_id": (match or {}).get("match_id"), "stake_units": 0,
+    out = {"model_version": mi["model_version"], "match_id": (match or {}).get("match_id"), "stake_units": 0,
            "started": bool((match or {}).get("started")),
            "side": None, "side_key": None, "side_name": None, "kind": None, "prob": None, "label": None,
            "reasons": [], "hltv_view": "no data", "hltv_counts": None, "basis": None, "composite": None,
-           "market": None, "evidence_source": (ev or {}).get("source"), "cutoff_day": (ev or {}).get("cutoff_day")}
+           "market": None, "evidence_source": (ev or {}).get("source"), "cutoff_day": (ev or {}).get("cutoff_day"),
+           "baseline_source": mi["source"] if market else None, "odds_policy": mi["odds_policy"]}
     hside, z, how = composite(sig, ev)
     out["composite"] = {"side": hside, "z": None if z is None else round(z, 4), "how": how,
                         "signals": {s: (None if sig.get(s) is None else round(sig[s]["z"], 4)) for s in SIGNALS},
@@ -751,26 +844,34 @@ def pick(match, evidence, note=None, pending=True):
     if market:
         pa = float(pa)
         plat = str(base.get("platform") or "market").capitalize()
+        price = TP_PRICE if from_tp else f"{plat} midpoint"
         if abs(pa - 0.5) < 1e-9:
             side = hside or "a"
             prob = 0.5
             if hside:
                 out["label"] = f"Lean {names[side]} (market level at 50.0% - side from HLTV evidence)"
-                first = (f"Market level: {names['a']} 50.0% / {names['b']} 50.0% ({plat} midpoint) - side from HLTV "
+                first = (f"Market level: {names['a']} 50.0% / {names['b']} 50.0% ({price}) - side from HLTV "
                          f"evidence ({how})")
             else:
                 out["label"] = f"Lean {names[side]} (market level at 50.0%, HLTV level or unavailable - team A shown)"
-                first = (f"Market level: {names['a']} 50.0% / {names['b']} 50.0% ({plat} midpoint) - HLTV evidence "
+                first = (f"Market level: {names['a']} 50.0% / {names['b']} 50.0% ({price}) - HLTV evidence "
                          f"level or unavailable ({how}), so canonical team A is shown; neither team is favoured")
         else:
             side = "a" if pa > 0.5 else "b"
             prob = pa if side == "a" else 1 - pa
             out["label"] = f"Lean {names[side]}"
-            first = f"Market favourite: {names[side]} {prob * 100:.1f}% ({plat} midpoint)"
-        out.update(kind="market", side=side, prob=round(prob, 4), basis=BASIS_MARKET,
-                   market={"platform": base.get("platform"), "prob_a": pa, "side_prob": round(prob, 4),
-                           "reason": base.get("reason")})
-        out["reasons"] = [first] + _lines(ev, side, names)
+            first = f"Market favourite: {names[side]} {prob * 100:.1f}% ({price})"
+        out.update(kind="market", side=side, prob=round(prob, 4), basis=BASIS_MARKET_TP if from_tp else BASIS_MARKET,
+                   market={"platform": "thunderpick" if from_tp else base.get("platform"), "prob_a": pa,
+                           "side_prob": round(prob, 4),
+                           "reason": (tp or {}).get("availability_label") if from_tp else base.get("reason")})
+        lead = [first]
+        ex = mi["exchange"]
+        if from_tp and ex["prob_a"] is not None:       # the exchange price next to it, attributed (context, not the side)
+            xs = ex["prob_a"] if side == "a" else 1 - ex["prob_a"]
+            lead.append(f"Exchange comparison: {names[side]} {xs * 100:.1f}% "
+                        f"({str(ex['platform'] or 'exchange').capitalize()} midpoint) - context")
+        out["reasons"] = lead + _lines(ev, side, names)
         if ev is None:
             out["reasons"][-1] = "HLTV evidence not loaded yet - " + (note or "it is read in the background")
     else:
@@ -779,6 +880,8 @@ def pick(match, evidence, note=None, pending=True):
             why = "match not linked to one canonical match id" + (f" ({match.get('link_reason')})"
                                                                     if (match or {}).get("link_reason") else "")
         nomkt = f"No usable market price ({why[:200]})"
+        if mi["tp_why"] and (match or {}).get("match_id"):      # ml-sides-2: Thunderpick was looked at first
+            nomkt = f"No usable market price (Thunderpick: {mi['tp_why']}; exchanges: {why[:200]})"
         if (match or {}).get("started"):
             nomkt = ("Match started - in-play prices are never used; the pre-match market favourite is in the shadow "
                      "log (ml_forecasts). " + nomkt)
@@ -904,11 +1007,13 @@ def _kick(board_matches, now=None):
     return True
 
 
-def sides_for_board(board_matches, now=None, block=False, max_matches=MAX_MATCHES, detail=True):
+def sides_for_board(board_matches, now=None, block=False, max_matches=MAX_MATCHES, detail=True, tp_blocks=None,
+                    tp_policy=None):
     """One pick per board match, aligned with board_matches (moneyline.board() rows: teams.a/b.key + name, baseline,
     match_id).  block=False (member paths): memory only - missing or expired evidence wakes the single background
     refresh and the pick uses the previous / stored copy meanwhile.  block=True: one bulk read first (scripts, start()).
-    detail=True attaches the oriented evidence to each pick under "evidence".  Never raises."""
+    detail=True attaches the oriented evidence to each pick under "evidence".  tp_blocks: Thunderpick's block per match
+    (aligned; None = no event) -> every pick uses the ml-sides-2 market input; left out -> ml-sides-1.  Never raises."""
     rows = list(board_matches or [])
     if block:
         refresh(rows, now, max_matches)
@@ -919,8 +1024,11 @@ def sides_for_board(board_matches, now=None, block=False, max_matches=MAX_MATCHE
         try:
             names, _, _ = _names(m)
             ka, kb = _keys_for(m)
+            tpk = {} if tp_blocks is None else {"tp": tp_blocks[i] if i < len(tp_blocks) else None,
+                                                "tp_policy": tp_policy}
             if i not in sel:
-                p = pick(m, None, note=f"HLTV evidence is read for the first {max_matches} matches only", pending=False)
+                p = pick(m, None, note=f"HLTV evidence is read for the first {max_matches} matches only", pending=False,
+                         **tpk)
                 p["evidence"] = None
                 out.append(p)
                 continue
@@ -937,7 +1045,7 @@ def sides_for_board(board_matches, now=None, block=False, max_matches=MAX_MATCHE
             mm = m
             if not ((m.get("teams") or {}).get("a") or {}).get("key") and (ka or kb):
                 mm = dict(m, teams={"a": {"key": ka, "name": names["a"]}, "b": {"key": kb, "name": names["b"]}})
-            p = pick(mm, ev)
+            p = pick(mm, ev, **tpk)
             p["evidence"] = ev if detail else None
             out.append(p)
         except Exception as e:  # noqa: BLE001 - one bad row never breaks the board
@@ -951,6 +1059,30 @@ def sides_for_board(board_matches, now=None, block=False, max_matches=MAX_MATCHE
         except Exception:       # noqa: BLE001
             pass
     return out
+
+
+def forecast_row(m, tp, logged_iso, tp_policy=None):
+    """The ml_forecasts row of the ml-sides-2 market input for one linked board match (moneyline._SCHEMA column order
+    + baseline_source, odds_policy), or None for an unlinked / best-of-2 match, or when Thunderpick could not be READ
+    this pass (a reader error is not "no event": an immutable row would record a false reason and flip the source -
+    the next pass that reads it decides).  prob_a = Thunderpick's eligible probability for team A, else the
+    ml-baseline-1 baseline, else None (available 0 - never 50%).  Pure."""
+    if not (m or {}).get("match_id") or _draw_format(m):
+        return None
+    if isinstance(tp, dict) and tp.get("availability") == TP_READ_ERROR:
+        return None
+    mi = market_input(m, tp, tp_policy)
+    t = (m.get("teams") or {})
+    name = lambda s: (t.get(s) or {}).get("name") if isinstance(t.get(s), dict) else t.get(s)
+    tpd = None
+    if tp:
+        tpd = {k: tp.get(k) for k in ("availability", "eligible", "p_a", "odds_a", "odds_b", "margin", "retrieved_at",
+                                      "event_last_observed", "market", "policy")}
+    why = {"baseline_source": mi["source"], "odds_policy": mi["odds_policy"], "thunderpick": tpd,
+           "thunderpick_not_used": mi["tp_why"], "exchange": mi["exchange"]}
+    return (m["match_id"], MODEL_VERSION_TP, logged_iso, mi["source"], mi["prob_a"], name("a"), name("b"), m.get("start"),
+            int(mi["prob_a"] is not None), int(bool(m.get("disagreement"))), json.dumps(why, sort_keys=True, default=str),
+            RULE_TP, mi["source"], mi["odds_policy"])
 
 
 def start(board_fn, interval=REFRESH_EVERY):
@@ -982,6 +1114,7 @@ def status():
         fresh = sum(1 for e in _EV.values() if _fresh(e, time.time()))
         st = {k: v for k, v in _STATE.items() if k not in ("thread", "loop")}
     st.update(cached_pairs=n, cached_ok=ok, cached_fresh=fresh, model_version=MODEL_VERSION,
+              model_version_tp=MODEL_VERSION_TP,
               loop_running=bool(_STATE.get("loop") and _STATE["loop"].is_alive()))
     return st
 
