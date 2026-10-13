@@ -183,6 +183,33 @@ def win_prob(team_ml=None, opp_ml=None):
     return 0.5, "No moneyline - P(win) set to 50%, blowout/win-loss neutral"
 
 
+_SERIES_FORMULA = {1: "BO1: the series is map 1 - q = p",
+                   3: "BO3: p = q^2 (3 - 2q)",
+                   5: "BO5: p = q^3 (10 - 15q + 6q^2)"}
+
+
+def map_win_chance(p, bo=None):
+    """Per-map win chance q implied by a SERIES win chance p - MODEL-DERIVED, never a map quote (2026-10-13 owner: keep
+    derived map probabilities explicit). Assumes maps are independent with one equal chance q; the formula depends on
+    the series format: BO1 q = p, BO3 p = q^2(3-2q), BO5 p = q^3(10-15q+6q^2). Other / unknown formats use the BO3
+    relation and say so. Returns (q, basis) - basis is saved with the grade."""
+    bo = bo if bo in (1, 3, 5) else None
+    f = {1: lambda q: q, 3: lambda q: q * q * (3 - 2 * q), 5: lambda q: q ** 3 * (10 - 15 * q + 6 * q * q)}[bo or 3]
+    if bo == 1:
+        q = p                                         # the series IS map 1
+    elif abs(p - 0.5) < 1e-12:
+        q = 0.5                                       # exact: the 40-step search left 0.4999999999991 (a false 'underdog')
+    else:
+        lo, hi = 0.0, 1.0
+        for _ in range(60):
+            q = (lo + hi) / 2
+            lo, hi = (q, hi) if f(q) < p else (lo, q)
+        q = (lo + hi) / 2
+    return q, {"series_win_chance": round(p, 6), "format": f"bo{bo}" if bo else "unknown - BO3 assumed",
+               "formula": _SERIES_FORMULA[bo or 3], "assumption": "maps independent with one equal win chance",
+               "kind": "model-derived from the series price"}
+
+
 def grade_from_p(p):
     if p >= 0.80: return "A+"
     if p >= 0.74: return "A"
@@ -270,6 +297,12 @@ def grade_leg(d, cfg=CONFIG):
       recent {n, overs}  (last-10 matches: Maps 1-2 totals over THIS line)
     """
     fix_v2 = bool(cfg.get("fix_v2"))   # live since 2026-10-09 (see CONFIG); False = the pre-fix comparison
+    _pf0 = d.get("perf") if isinstance(d.get("perf"), dict) else None
+    # the performance model will replace the projection below (same test as perf_on): market-driven legacy steps are
+    # then computed but NOT applied - their flags must not say they were (2026-10-13 audit: 'Heavy underdog ...
+    # projection lowered' on 178 of 293 perf lines)
+    perf_will_project = bool((d.get("scope") or "12") in cfg.get("perf_scopes", ()) and _pf0 and _pf0.get("lambda") is not None
+                             and _pf0.get("sd") and _pf0.get("version") in cfg.get("perf_versions", ("perf-1",)))
     prop = d.get("prop", "kills")
     line = float(d["line"])
     line_type = d.get("line_type", "standard")
@@ -318,7 +351,14 @@ def grade_leg(d, cfg=CONFIG):
             zero_units.append("AWPer on a headshot prop")
 
     # Win probability + stomp (either side at -400 or heavier = P(win) >= 0.80 or <= 0.20)
-    p_win, note = win_prob(d.get("team_ml"), d.get("opp_ml"))
+    if d.get("p_team_market") is not None:
+        # the selected market's exact probability (market_odds.select; 2026-10-13) - not the American-odds round trip,
+        # which moved it by up to ~0.002 (forecast 6176 saved 0.44, the grader used 0.441)
+        p_win, note = min(max(float(d["p_team_market"]), 0.0), 1.0), None
+    else:
+        p_win, note = win_prob(d.get("team_ml"), d.get("opp_ml"))
+    if note and perf_will_project and d.get("team_ml") is None:
+        note = "No market price - win chance unknown (context only: the performance model's projection does not use it)"
     if note:
         flags.append(note)
     mls = [float(x) for x in (d.get("team_ml"), d.get("opp_ml")) if x is not None]
@@ -332,9 +372,18 @@ def grade_leg(d, cfg=CONFIG):
     mq = d.get("market_quality") or ("HARD" if d.get("team_ml") is not None else "NONE")
     if mq != "HARD":
         unit_cap = min(unit_cap or cfg["soft_market_cap"], cfg["soft_market_cap"])
-        flags.append(f"{'SOFT BOOK' if mq == 'SOFT' else 'NO MARKET'}: win chance "
-                     f"{'from a thin/wide Polymarket book' if mq == 'SOFT' else 'set to 50/50'} - max "
-                     f"{cfg['soft_market_cap']:g}U")
+        # the text names the source the market input really came from (2026-10-13: Thunderpick lines said
+        # 'thin/wide Polymarket book'); the rule itself is unchanged - a bookmaker quote is SOFT (v7.4 market quality)
+        src = (d.get("odds_provenance") or {}).get("selected")
+        if mq == "SOFT" and src == "thunderpick":
+            why = "bookmaker price (Thunderpick) - not a liquid exchange book under the market-quality rule"
+        elif mq == "SOFT" and src == "oddspapi":
+            why = f"bookmaker price ({(d.get('odds_provenance') or {}).get('book') or 'OddsPapi'}) - not a liquid exchange book"
+        elif mq == "SOFT":
+            why = "win chance from a thin/wide Polymarket book"
+        else:
+            why = "no qualified market price" + ("" if perf_will_project else " - win chance set to 50/50")
+        flags.append(f"{'SOFT BOOK' if mq == 'SOFT' else 'NO MARKET'}: {why} - max {cfg['soft_market_cap']:g}U")
 
     # Stand-in (v7.4.4): playing for another team than his own - graded, with a risk flag + 0.5U cap
     if d.get("standin_for"):
@@ -455,13 +504,15 @@ def grade_leg(d, cfg=CONFIG):
 
     # 3d Win/loss: expected factor over Maps 1-2 outcomes (won both / split / lost both), from the
     # series win chance -> per-map win chance q (BO3: P(series) = q^2 (3 - 2q))
-    lo, hi = 0.0, 1.0
-    for _ in range(40):
-        q = (lo + hi) / 2
-        lo, hi = (q, hi) if q * q * (3 - 2 * q) < p_win else (lo, q)
-    mw = d.get("map_win_probs") or []           # Polymarket Map 1 / Map 2 winner prices when listed
+    # per-map chance from the series price by the match format (2026-10-13: was the BO3 relation for every format -
+    # wrong for BO1, where the series IS the map); model-derived, recorded in detail.map_prob_basis
+    q, map_basis = map_win_chance(p_win, d.get("bo"))
+    mw = d.get("map_win_probs") or []           # the SAME source's Map 1 / Map 2 winner prices when it lists them
     q1 = mw[0] if len(mw) > 0 and mw[0] is not None else q
     q2 = mw[1] if len(mw) > 1 and mw[1] is not None else q
+    if any(x is not None for x in mw[:2]):
+        map_basis = dict(map_basis, kind="map winner prices from the selected source" if all(x is not None for x in mw[:2])
+                         else "map 1 or map 2 from the source's map prices, the other model-derived")
     w_both, w_split, w_lost = cfg["map_outcome"]["hs" if prop == "hs" else "kills"]
     p20, p02 = q1 * q2, (1 - q1) * (1 - q2)
     outcome = clamp(p20 * w_both + (1 - p20 - p02) * w_split + p02 * w_lost, *cfg["outcome_clamp"])
@@ -483,7 +534,7 @@ def grade_leg(d, cfg=CONFIG):
     # real vs -3.3% modelled at q~0.32; ranked 31-60 -14% vs -7% at q~0.24): 0.5 x (0.40 - q) more
     if (d.get("opp_rank") or 999) <= 10:
         dog *= 1 - cfg["elite_k"] * max(0.0, 0.40 - qm)
-    if dog < 1:
+    if dog < 1 and not perf_will_project:    # under the performance model nothing is lowered (its projection replaces this)
         flags.append(f"Heavy underdog (map win chance {qm:.0%}) - projection lowered {1 - dog:.1%}")
     lam_adj = lam * stack
     lam_final = lam_adj * outcome * dog
@@ -555,7 +606,8 @@ def grade_leg(d, cfg=CONFIG):
         sd_reasons.append("poor DPR + KAST/ADR")
     if prop == "hs" and p_win < 0.5 and (hs_pct or 0) < cfg["underdog_hs_min"]:
         # no SD widening: measured 2026-09-28, HS spread when his team lost both maps is x1.14 vs
-        # x1.19 on split maps - not wider. Kept as a note (the -outcome factor already lowers lambda).
+        # x1.19 on split maps - not wider. Kept as a note (old pipeline: the outcome factor lowers lambda; the
+        # performance model takes no market input).
         flags.append("Underdog HS prop: note only - measured, spread is not wider")
     sd_mult = min(cfg["sd_widen"] ** len(sd_reasons), cfg["sd_widen_max"])
     c = d.get("c") or (cfg["c_hs"] if prop == "hs" else cfg["c"])
@@ -833,7 +885,8 @@ def grade_leg(d, cfg=CONFIG):
         market_quality=mq,
         lambda_base=round(lam, 2), lambda_final=round(lam_final, 2), sd=round(sd, 2),
         scope=scope, lambda_maps12=round(lam12, 2), p_map3=None if p3 is None else round(p3, 3),
-        detail={"rounds": rpm * 2, "stomp": stomp, "p_win": round(p_win, 3), "p_map": round(q, 3),
+        detail={"rounds": rpm * 2, "stomp": stomp, "p_win": round(p_win, 3), "p_map": round(q, 3), "map_prob_basis": map_basis,
+                "market_in_projection": not perf_on,   # perf-2 takes no market input (only the market-quality cap)
                 "outcome_mult": round(outcome, 3), "underdog_mult": round(dog, 3), "rank_band_mult": round(band_mult, 3), "p_map1": round(q1, 3), "p_map2": round(q2, 3),
                 "tape_gap": tape_gap, "lambda_model": round(lam_model, 2), "trade_mult": round(trade_mult, 3), "last10_mult": round(last10_mult, 3),
                 "h2h_edge": round(h2h_edge, 2), "regional_edge": round(reg_edge, 2),
