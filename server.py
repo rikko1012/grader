@@ -734,6 +734,11 @@ def start_research():
         RESEARCH["matchid_ready"] = matchid.warm()
     except Exception as e:
         RESEARCH["errors"].append(f"matchid: {type(e).__name__}: {str(e)[:160]}")
+    try:                                   # Thunderpick partner odds: one poller, shared request budget (admin-only until
+        import thunderpick                 # the real CS2 markets are mapped - phase 1, 2026-10-13)
+        RESEARCH["thunderpick_started"] = thunderpick.start()
+    except Exception as e:
+        RESEARCH["errors"].append(f"thunderpick: {type(e).__name__}: {str(e)[:160]}")
     if os.environ.get("MONEYLINES", "1") != "1":       # MONEYLINES=0: refreshers off (the tab then shows "unavailable")
         return
     try:
@@ -1632,6 +1637,16 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, board_payload("prizepicks" if q.get("book") == "prizepicks" else "underdog"))
             if u.path == "/admin":
                 return self.admin(q)
+            if u.path == "/admin/thunderpick.json" and self.authed(q.get("token")):
+                # admin only: poller status + inventory of the latest real response + a few raw events (never the key).
+                # probe=1 runs ONE poll now on the fixed endpoint inside the poller's shared request budget
+                import thunderpick
+                probe = None
+                if q.get("probe") == "1" and thunderpick.enabled():
+                    probe = thunderpick.POLLER.poll_once()
+                    probe = {True: "ok", False: "failed", None: "skipped: request budget in use - try again shortly"}[probe]
+                return self.send(200, dict(thunderpick.admin_view(min(int(q["samples"]), 20) if (q.get("samples") or "").isdigit() else 3),
+                                           probe=probe))
             if u.path == "/admin/moneylines_status" and self.authed(q.get("token")):
                 try:
                     import ml_sides
