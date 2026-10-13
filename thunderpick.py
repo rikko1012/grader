@@ -71,6 +71,13 @@ def enabled():
     return _key() is not None and os.environ.get("THUNDERPICK", "1") != "0"
 
 
+def key_diagnostic():
+    """Which related environment variable NAMES exist (never values) - to find a key stored under another name."""
+    names = sorted(k for k in os.environ if any(w in k.upper() for w in ("THUNDER", "PARTNER", "KIWI", "TP_")))
+    return {"expected": "THUNDERPICK_API_KEY", "present": _key() is not None, "related_names": names,
+            "disabled_by_flag": os.environ.get("THUNDERPICK") == "0"}
+
+
 def _iso(ts):
     return datetime.fromtimestamp(ts, timezone.utc).isoformat(timespec="seconds") if ts else None
 
@@ -437,7 +444,7 @@ class Poller:
     def status(self):
         now = self.clock()
         with self.lock:
-            return {"source": SOURCE, "enabled": enabled(), "running": bool(self._thread and self._thread.is_alive()),
+            return {"source": SOURCE, "enabled": enabled(), "key": key_diagnostic(), "running": bool(self._thread and self._thread.is_alive()),
                     "current": self.is_current(now), "last_success": _iso(self.last_success),
                     "last_attempt": _iso(self.last_attempt), "age_s": None if self.last_success is None else round(now - self.last_success, 1),
                     "last_error": self.last_error, "error_kind": self.last_kind, "consecutive_failures": self.failures,

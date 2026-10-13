@@ -179,3 +179,11 @@ def test_admin_route_requires_the_admin_token():
     import server
     src = open(server.__file__, encoding="utf-8").read()
     assert 'u.path == "/admin/thunderpick.json" and self.authed(q.get("token"))' in src
+
+
+def test_key_diagnostic_lists_names_only(monkeypatch):
+    monkeypatch.setenv("THUNDERPICK_KEY", "secret-value-123")
+    d = T.key_diagnostic()
+    assert "THUNDERPICK_KEY" in d["related_names"] and "secret-value-123" not in json.dumps(d) and d["present"] is True
+    monkeypatch.delenv("THUNDERPICK_API_KEY")
+    assert T.key_diagnostic()["present"] is False and not T.enabled()
