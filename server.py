@@ -877,17 +877,26 @@ def _tp_unmatched():
             continue
         events_out.append(dict(row, match_id=m.get("match_id"),
                                why=m.get("reason") or "ambiguous: two Thunderpick events link to this match"))
-    board, seen = [], set()
+    # the board side comes from what the grader actually used (each open pick's latest saved provenance) - the pick's
+    # label can differ from the player's HLTV team the grader links (e.g. PrizePicks 'UNO MILLE' = HLTV 'ex-Keyd Stars')
+    latest = {}
+    for f in picklog.export_forecasts(inputs=True, last=4000):          # newest first
+        latest.setdefault(f.get("pick_id"), f)
+    by = {}
     for k in picklog.export():
-        key = (k.get("team"), k.get("opponent"), k.get("match_start"))
-        if k.get("status") != "open" or key in seen or not k.get("team"):
+        if k.get("status") != "open" or not k.get("team"):
             continue
-        seen.add(key)
-        r = T.projection_odds(k["team"], k.get("opponent"), k.get("match_start"))
-        if not r.get("found"):
-            board.append({"team": k["team"], "opponent": k.get("opponent"), "start": k.get("match_start"), "why": r.get("reason")})
+        pv = ((latest.get(k["id"]) or {}).get("inputs") or {}).get("odds_provenance") or {}
+        m = by.setdefault((k["team"], k.get("opponent"), k.get("match_start")), {"sources": {}, "why": {}})
+        src = pv.get("selected") or ("no market" if pv else "no saved provenance")
+        m["sources"][src] = m["sources"].get(src, 0) + 1
+        if pv.get("fallback_reason"):
+            m["why"][pv["fallback_reason"]] = m["why"].get(pv["fallback_reason"], 0) + 1
+    board = [{"team": t, "opponent": o, "start": s, "latest_sources": v["sources"], "fallback_reasons": v["why"]}
+             for (t, o, s), v in by.items() if "thunderpick" not in v["sources"]]
     return {"events": len(evs), "matched": len(matched), "unmatched_events": events_out,
-            "open_matches": len(seen), "open_matches_without_thunderpick": board}
+            "open_matches": len(by), "open_matches_without_thunderpick": board,
+            "basis": "board side = each open pick's latest saved forecast provenance (what the grader used)"}
 
 
 def _thunderpick_state():

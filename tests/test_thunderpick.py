@@ -462,13 +462,18 @@ def test_admin_coverage_view_lists_unmatched_events_and_board_fallbacks(monkeypa
     p.data["cs2"]["events"].append(dup)
     p.refresh_matches()
     monkeypatch.setattr(T, "POLLER", p)
-    picks = [{"status": "open", "team": "Alpha1", "opponent": "Bravo1", "match_start": SCHED[1]["start"].isoformat()},
-             {"status": "open", "team": "Zulu", "opponent": "Yankee", "match_start": SCHED[1]["start"].isoformat()},
-             {"status": "settled", "team": "Old", "opponent": "Team", "match_start": "2026-10-01T10:00:00Z"}]
+    picks = [{"id": 1, "status": "open", "team": "UNO MILLE", "opponent": "Galorys", "match_start": "2026-10-13T21:00:00Z"},
+             {"id": 2, "status": "open", "team": "Zulu", "opponent": "Yankee", "match_start": SCHED[1]["start"].isoformat()},
+             {"id": 3, "status": "settled", "team": "Old", "opponent": "Team", "match_start": "2026-10-01T10:00:00Z"}]
+    fcs = [{"pick_id": 1, "inputs": {"odds_provenance": {"selected": "thunderpick", "fallback_reason": None}}},   # newest first
+           {"pick_id": 1, "inputs": {"odds_provenance": {"selected": "polymarket", "fallback_reason": "older"}}},
+           {"pick_id": 2, "inputs": {"odds_provenance": {"selected": "polymarket", "fallback_reason": "no Thunderpick event for this match"}}}]
     monkeypatch.setattr(server.picklog, "export", lambda: picks)
+    monkeypatch.setattr(server.picklog, "export_forecasts", lambda inputs=False, last=None: fcs)
     v = server._tp_unmatched()
+    # the label 'UNO MILLE' is not what the grader links: the latest saved provenance says Thunderpick was used
     assert v["open_matches"] == 2 and [b["team"] for b in v["open_matches_without_thunderpick"]] == ["Zulu"]
-    assert v["open_matches_without_thunderpick"][0]["why"] == "no Thunderpick event for this match"
+    assert v["open_matches_without_thunderpick"][0]["fallback_reasons"] == {"no Thunderpick event for this match": 1}
     amb = [u for u in v["unmatched_events"] if "ambiguous" in u["why"]]
     assert len(amb) == 2 and v["matched"] == len(SCHED) - 1
     assert KEY not in json.dumps(v)
