@@ -266,3 +266,46 @@ the frozen evaluation populations (lb-001, ledger, recaps) keep their recorded i
 1. The scraper writes the backfill as a new dataset revision (R5); CS2 Scout already records the revision seen by every forecast (forecasts.data_rev, since 2026-10-12).
 2. Before any member grade uses the repaired history: replay the live model on a fixed set of recent board lines with the old and the new revision, report per-line changes (projection, chance, grade, stake) and the forward-scored difference; the frozen evaluation populations (lb-001, learning ledger, recaps) keep their recorded inputs and are never silently re-scored.
 3. Because the missing matches are not random (online, weaker opponents, higher kills per round), complete history without an opponent-strength adjustment raises projections (round 5 C0). The repaired history and the opponent handling are tested together as a frozen candidate before activation; activation is a versioned release (MODEL_VERSIONS.md) with the dataset revision named.
+
+## Staged before/after replay - results (2026-10-13, read-only)
+**The staging did not happen.** The backfill was written straight into the live `public` tables (no `hltv_rev_*`
+schemas, no `dataset_revisions` / `match_ingest` / `result_manifest`): 19,590 matches first fetched 2026-10-12
+21:27-21:35 and 2026-10-13 00:23-04:24 UTC. Live grades used the repaired history from 04:26:15 UTC (first forecast with
+data_rev matches >= 28,000); 367 forecasts between 00:49 and 04:26 were graded on PARTIAL history while it loaded
+(data_rev 9,658 ... 27,964). Coverage: 19,574 -> 61,671 maps (42,097 added), 4,489 players with history only from the
+backfill; open failures: 28 matches waiting in scrape_queue, 11 map pages with errors (6 economy, 5 overview), 285
+player-count warnings. Old matches gained no pages in the backfill, so the old revision N0 = live tables minus those
+19,590 matches (exact up to stat corrections, which the database does not record).
+
+**Method.** Same code (current grader + perf-2), same forecasts: every settled line's latest forecast >= 30 min before
+start (EVALUATION.md section 1; 1,163 lines, 23 matches, Oct 11-13); same player / opponent HLTV ids as saved; history as
+of the forecast time (grading day, matches fetched by then; the 2026-10-11 database seed counts as old history). Only the
+history differs. Check: N0 reproduces 382 of 383 saved projections of the same grading versions (|d| <= 0.01).
+Scripts: scratchpad replay_hist.py / replay_report.py.
+
+| (95% by match) | kills: A old N0 | kills: B repaired N | B-A | HS: A | HS: B | B-A |
+|---|---|---|---|---|---|---|
+| lines / matches | 616 / 23 | | | 531 / 23 | | |
+| bias (proj - actual) | +0.93 | +1.33 | | +0.58 | +0.85 | |
+| MAE | 5.579 | 5.576 | -0.003 (-0.164..+0.174) | 3.994 | 3.975 | -0.019 (-0.107..+0.077) |
+| log-loss of P(Over) | | | +0.0013 (-0.0133..+0.0154) | | | -0.0015 (-0.0179..+0.0146) |
+| Brier | | | +0.0010 (-0.0062..+0.0078) | | | -0.0010 (-0.0089..+0.0066) |
+| side / grade / stake changed | | | 307 lines (stake 205) | | | 216 (stake 126) |
+
+By band (kills): 20-50% of history added -> log-loss +0.020 (+0.002..+0.037), Brier +0.010 (+0.001..+0.018), MAE
++0.17 (worse); >= 50% added -> MAE -0.47 (-1.27..+0.26), not significant; established -> +0.016 (-0.135..+0.170); thin
+-> -0.53 (-1.74..+0.30); returning 12 lines / 3 matches (no conclusion). Only 16 lines had no old history at all.
+Mechanism: projected kills rise 1.4% on average (3.3% where >= 50% of history was added) - the added maps are mostly
+against weaker / online opposition and the rate has no opponent-strength adjustment (round 5 C0, as predicted above).
+Calibration: B moves more lines into the 0.6-0.7 Over bin (107 vs 73), which hit 41%.
+
+Market candidate rr-1 evaluated SEPARATELY (same lines, Polymarket prices): on N vs B - kills MAE -0.061 (-0.211..+0.065),
+HS MAE -0.122 (-0.205..-0.041), HS log-loss -0.013 (-0.026..-0.001); on N0 vs A - kills -0.116 (-0.262..+0.014), HS -0.115
+(-0.266..+0.015). The formula effect is about the same on either history; it is not part of the A/B difference.
+
+**Recommendation.** The repaired history is a coverage gain, not a demonstrated accuracy gain: 23 matches, no MAE /
+log-loss / Brier improvement, a larger Over bias, a significantly worse kills probability where 20-50% of history was
+added, and half of all lines change side / grade / stake. Do not treat its live use as an approved activation. Revert
+live projections to the N0 view (exclude the backfill matches from the perf-2 queries, data revision named) until
+arm C - repaired history WITH an opponent-strength adjustment, frozen and tested on the large historical set - passes,
+plus forward scoring of both views. Keep the repaired data for coverage, settlement and the shadow logs.
