@@ -831,7 +831,17 @@ def moneylines_payload():
             "sources": {k: {x: v.get(x) for x in ("ok", "stale", "age_s", "last_success", "note", "listings")} for k, v in st.items()},
             "rule": moneyline.BASELINE_RULE, "model_version": moneyline.MODEL_VERSION,
             "model": {k: v for k, v in ml_model_state().items() if k != "val_promoted"},
-            "recommendation": SHADOW_LABEL, "scope": "series"}
+            "recommendation": SHADOW_LABEL, "scope": "series", "thunderpick": _thunderpick_state()}
+
+
+def _thunderpick_state():
+    """Thunderpick's honest state for the Moneylines tab (rate-limited / unavailable / setting up / empty / current) -
+    its prices are not shown until the CS2 market is confirmed, and Polymarket / Kalshi are never relabelled as it."""
+    try:
+        import thunderpick
+        return thunderpick.public_state()
+    except Exception as e:
+        return {"source": "thunderpick", "state": "unavailable", "label": f"Thunderpick unavailable ({type(e).__name__})"}
 
 
 def _norm_team():
@@ -1638,16 +1648,12 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/admin":
                 return self.admin(q)
             if u.path == "/admin/thunderpick.json" and self.authed(q.get("token")):
-                # admin only: poller status + inventory of the latest real response + a few raw events (never the key).
-                # probe=1 runs ONE poll now on the fixed endpoint inside the poller's shared request budget
+                # admin only: status, request audit, inventory (never the key). probe=cs2|csgo sends ONE controlled
+                # request through the gateway (persisted cooldown + one shared budget for all Thunderpick traffic)
                 import thunderpick
-                probe = None
-                if q.get("probe") == "1" and thunderpick.enabled():
-                    probe = thunderpick.POLLER.poll_once()
-                    probe = {True: "ok", False: "failed", None: "skipped: request budget in use - try again shortly"}[probe]
-                cov = thunderpick.coverage_probe(q["coverage"]) if q.get("coverage") and thunderpick.enabled() else None
-                return self.send(200, dict(thunderpick.admin_view(min(int(q["samples"]), 20) if (q.get("samples") or "").isdigit() else 3),
-                                           probe=probe, coverage=cov))
+                pr = q.get("probe") if q.get("probe") in ("cs2", "csgo") else None
+                return self.send(200, thunderpick.admin_view(min(int(q["samples"]), 20) if (q.get("samples") or "").isdigit() else 3,
+                                                             probe=pr))
             if u.path == "/admin/moneylines_status" and self.authed(q.get("token")):
                 try:
                     import ml_sides

@@ -1667,7 +1667,9 @@ function drawMoneylines() {
   if (!d) { $("#bcount").textContent = ""; $("#bstatus").textContent = ""; box.innerHTML = `<div class="muted">${esc(ML.err || "Loading moneylines…")}</div>`; return; }
   const src = Object.entries(d.sources || {}).map(([k, v]) => `${PLAT[k] || k}: ${v.ok ? `prices from ${v.age_s != null ? Math.round(v.age_s) + " s" : "–"} ago`
     : esc(v.note || "not loaded yet")}`).join(" · ");
-  $("#bstatus").textContent = (ML.err ? ML.err + " · " : "") + src;
+  // Thunderpick first (owner 2026-10-13) - its own honest state; its prices appear only once the CS2 market is confirmed
+  const tp = d.thunderpick && d.thunderpick.label ? d.thunderpick.label + " · " : "";
+  $("#bstatus").textContent = (ML.err ? ML.err + " · " : "") + tp + src;
   const q = ($("#bsearch").value || "").trim().toLowerCase(), now = Date.now();
   const list = d.matches.filter(m => !q || [m.teams.a, m.teams.b, m.event].some(x => String(x || "").toLowerCase().includes(q)));
   // one decision per match (server): any platform live, or the earliest stated start passed

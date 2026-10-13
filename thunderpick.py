@@ -12,10 +12,15 @@ API (partner integration guide, 2026-10-13)
   Market: name, selections {label: decimal odds}, baseLine (str | null), isMainLine (bool | null)
   The guide documents no quote-update time, no live / suspended flag, no stable event or market id and no tournament id.
 
-Ingestion (one coordinated poller per server process - members never call upstream)
-  - every POLL_S (15 s); a shared RequestBudget allows at most BUDGET_PER_MIN (8) requests in any 60 s, retries included
-  - bounded timeouts (5 s connect, 10 s read); 429 -> wait for the fixed window to reset (60 s) then back off; 5xx /
-    timeouts / connection errors -> 30 s, 60 s, ... capped at 300 s; 401/403/404 -> 10 min (configuration problem)
+Ingestion (members never call upstream) - every request goes through request() (the gateway):
+  - one budget for ALL Thunderpick traffic (poller, admin probes, cs2 and csgo): SHARED_PER_MIN requests in any 60 s,
+    kept in SQLite on the persistent disk, so threads, processes and overlapping deployments share it
+  - a persisted cooldown: 429 -> Retry-After when supplied, else 60 s x 2^(n-1) with +-20% jitter (cap 30 min); 5xx /
+    timeouts / network -> 30 s x 2^(n-1) with jitter; 401/403/404 -> 30 min; no automatic retries inside a request
+  - automatic polling is OFF while the feed is diagnosed (THUNDERPICK_AUTOPOLL=1 turns on a POLL_S poll)
+  - every request actually sent is an append-only request_log row (time, path, caller, instance, pid, commit, status,
+    sanitized headers incl. request ids, a key-redacted body snippet of errors) - never the key
+  - bounded timeouts (5 s connect, 10 s read)
   - an empty 200 is an empty feed (replaces the data, current); a failure keeps the last good data, marked STALE, and
     stale data is never used as a current comparison
   - retrieved_at is OUR fetch time - it is never presented as the source's quote time (the API has none)
@@ -100,33 +105,6 @@ def db_path():
     return data_dir() / ".cache" / "thunderpick.db"
 
 
-# ---------------------------------------------------------------- request budget (shared by every call to PATH)
-class RequestBudget:
-    """At most `limit` requests in any rolling `window` seconds - first tries and retries alike."""
-
-    def __init__(self, limit=BUDGET_PER_MIN, window=RATE_WINDOW_S):
-        self.limit, self.window = limit, window
-        self.sent = deque()
-        self.lock = threading.Lock()
-
-    def take(self, now=None):
-        now = time.time() if now is None else now
-        with self.lock:
-            while self.sent and now - self.sent[0] >= self.window:
-                self.sent.popleft()
-            if len(self.sent) >= self.limit:
-                return False
-            self.sent.append(now)
-            return True
-
-    def wait_s(self, now=None):
-        now = time.time() if now is None else now
-        with self.lock:
-            if len(self.sent) < self.limit:
-                return 0.0
-            return max(0.0, self.window - (now - self.sent[0]))
-
-
 class FetchError(Exception):
     def __init__(self, kind, status=None, msg="", evidence=None):
         super().__init__(f"{kind}{f' HTTP {status}' if status else ''}{f': {msg}' if msg else ''}")
@@ -135,7 +113,8 @@ class FetchError(Exception):
 
 _EVIDENCE_HEADERS = ("retry-after", "x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset", "ratelimit",
                      "ratelimit-policy", "ratelimit-limit", "ratelimit-remaining", "ratelimit-reset", "server", "cf-ray",
-                     "content-type", "date")
+                     "content-type", "date", "x-request-id", "request-id", "x-correlation-id", "x-amzn-requestid",
+                     "x-trace-id", "cf-cache-status", "age")
 
 
 def _evidence(r, key):
@@ -171,8 +150,9 @@ def fetch(session=None, key=None, path=PATH):
     except requests.RequestException as e:
         raise FetchError("network", msg=type(e).__name__) from None
     st = r.status_code
-    if st != 200:
-        ev = _evidence(r, key)
+    ev = _evidence(r, key)
+    if st == 200:
+        ev["body"] = ""                                 # a 200 body is stored as the snapshot, not in the audit
     if st == 429:
         raise FetchError("rate_limited", st, evidence=ev)
     if st in (401, 403):
@@ -190,7 +170,7 @@ def fetch(session=None, key=None, path=PATH):
         raise FetchError("bad_json", st) from None
     if not isinstance(data, list):
         raise FetchError("bad_shape", st, "body is not a JSON array")
-    return data, st, body
+    return data, st, body, ev
 
 
 # ---------------------------------------------------------------- validation / normalization
@@ -395,17 +375,200 @@ def record(ok, retrieved_at, status=None, error_kind=None, body=None, normalized
     return sha, keep
 
 
-# ---------------------------------------------------------------- the poller
+# ---------------------------------------------------------------- the gateway (EVERY Thunderpick request goes through it)
+# Owner, 2026-10-13 (429s at ~4 requests/min): one request budget for ALL Thunderpick traffic - poller, admin probes,
+# retries, cs2 and csgo - shared across threads, processes and overlapping deployments (SQLite on the persistent disk);
+# a cooldown that survives restarts (Retry-After when supplied, else growing backoff with jitter); automatic polling OFF
+# during diagnosis (THUNDERPICK_AUTOPOLL=1 turns it on); and an audit row for every request actually sent.
+SHARED_PER_MIN = int(os.environ.get("THUNDERPICK_SHARED_PER_MIN") or 4)     # all paths together, until the limit is known
+COOLDOWN_BASE_S, COOLDOWN_MAX_S = 60, 1800
+FAIL_COOLDOWN_S = 30
+_GW_SCHEMA = """
+CREATE TABLE IF NOT EXISTS budget_slots (ts REAL NOT NULL, path TEXT, caller TEXT, instance TEXT, pid INTEGER);
+CREATE INDEX IF NOT EXISTS budget_ts ON budget_slots (ts);
+CREATE TABLE IF NOT EXISTS gw_state (k TEXT PRIMARY KEY, v TEXT);
+CREATE TABLE IF NOT EXISTS request_log (id INTEGER PRIMARY KEY AUTOINCREMENT, sent_at TEXT NOT NULL, path TEXT,
+  caller TEXT, instance TEXT, pid INTEGER, git_commit TEXT, http_status INTEGER, outcome TEXT, duration_ms INTEGER,
+  events INTEGER, headers TEXT, body_snippet TEXT, cooldown_until TEXT);
+CREATE TRIGGER IF NOT EXISTS reqlog_no_update BEFORE UPDATE ON request_log BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+CREATE TRIGGER IF NOT EXISTS reqlog_no_delete BEFORE DELETE ON request_log BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+"""
+
+
+def instance_id():
+    import socket
+    return os.environ.get("RENDER_INSTANCE_ID") or socket.gethostname()
+
+
+def _gw(path=None):
+    con = _connect(path)
+    con.executescript(_GW_SCHEMA)
+    return con
+
+
+def _state(con, k, default=None):
+    r = con.execute("SELECT v FROM gw_state WHERE k = ?", (k,)).fetchone()
+    return json.loads(r[0]) if r else default
+
+
+def _set_state(con, k, v):
+    con.execute("INSERT OR REPLACE INTO gw_state (k, v) VALUES (?, ?)", (k, json.dumps(v)))
+
+
+def cooldown(now=None, path=None):
+    """The persisted cooldown {"until", "reason", "n429", "nfail"} (until = 0 when none)."""
+    now = time.time() if now is None else now
+    with _DB_LOCK:
+        con = _gw(path)
+        try:
+            c = _state(con, "cooldown", {"until": 0, "reason": None, "n429": 0, "nfail": 0})
+        finally:
+            con.close()
+    c["active"] = c.get("until", 0) > now
+    c["remaining_s"] = round(max(0.0, c.get("until", 0) - now), 1)
+    return c
+
+
+def _reserve(api_path, caller, now, db=None):
+    """Atomically: refuse during a cooldown, else take one slot of the shared budget (all paths together)."""
+    with _DB_LOCK:
+        con = _gw(db)
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            c = _state(con, "cooldown", {"until": 0})
+            if c.get("until", 0) > now:
+                con.execute("ROLLBACK")
+                return f"cooldown until {_iso(c['until'])} ({c.get('reason')})"
+            con.execute("DELETE FROM budget_slots WHERE ts < ?", (now - RATE_WINDOW_S * 10,))
+            n = con.execute("SELECT COUNT(*) FROM budget_slots WHERE ts > ?", (now - RATE_WINDOW_S,)).fetchone()[0]
+            if n >= SHARED_PER_MIN:
+                con.execute("ROLLBACK")
+                return f"shared budget full ({n} of {SHARED_PER_MIN} in the last {RATE_WINDOW_S}s)"
+            con.execute("INSERT INTO budget_slots VALUES (?,?,?,?,?)", (now, api_path, caller, instance_id(), os.getpid()))
+            con.execute("COMMIT")
+            return None
+        finally:
+            con.close()
+
+
+def _retry_after_s(headers):
+    v = (headers or {}).get("retry-after")
+    try:
+        return max(0.0, float(v))
+    except (TypeError, ValueError):
+        pass
+    try:
+        from email.utils import parsedate_to_datetime
+        return max(0.0, parsedate_to_datetime(v).timestamp() - time.time())
+    except Exception:          # noqa: BLE001
+        return None
+
+
+def _after(kind, headers, now, db=None, rnd=None):
+    """Persist the cooldown after an answer: 429 -> Retry-After, else 60 s x 2^(n-1) +-20% jitter (cap 30 min);
+    5xx / timeout / network -> 30 s x 2^(n-1) +-20%; auth / path -> 30 min; success -> clear."""
+    import random
+    rnd = rnd or random.random
+    with _DB_LOCK:
+        con = _gw(db)
+        try:
+            c = _state(con, "cooldown", {"until": 0, "reason": None, "n429": 0, "nfail": 0})
+            if kind is None:
+                c = {"until": 0, "reason": None, "n429": 0, "nfail": 0}
+            elif kind == "rate_limited":
+                c["n429"] = c.get("n429", 0) + 1
+                ra = _retry_after_s(headers)
+                wait = ra if ra is not None else min(COOLDOWN_BASE_S * 2 ** (c["n429"] - 1), COOLDOWN_MAX_S) * (0.8 + 0.4 * rnd())
+                c.update(until=now + wait, reason=f"HTTP 429 ({'Retry-After' if ra is not None else 'backoff'} {wait:.0f}s)")
+            elif kind in ("auth", "path", "config"):
+                c.update(until=now + COOLDOWN_MAX_S, reason=f"{kind} - configuration problem")
+            else:
+                c["nfail"] = c.get("nfail", 0) + 1
+                wait = min(FAIL_COOLDOWN_S * 2 ** (c["nfail"] - 1), COOLDOWN_MAX_S) * (0.8 + 0.4 * rnd())
+                c.update(until=now + wait, reason=f"{kind} (backoff {wait:.0f}s)")
+            _set_state(con, "cooldown", c)
+            con.commit()
+            return c
+        finally:
+            con.close()
+
+
+def _log(sent_at, api_path, caller, status, outcome, ms, events, headers, body, until, db=None):
+    with _DB_LOCK:
+        con = _gw(db)
+        try:
+            con.execute("INSERT INTO request_log (sent_at, path, caller, instance, pid, git_commit, http_status, outcome, "
+                        "duration_ms, events, headers, body_snippet, cooldown_until) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (sent_at, api_path, caller, instance_id(), os.getpid(), (os.environ.get("RENDER_GIT_COMMIT") or "")[:12],
+                         status, outcome, ms, events, json.dumps(headers or {}), (body or "")[:300], _iso(until) if until else None))
+            con.commit()
+        finally:
+            con.close()
+
+
+def request(name="cs2", caller="poller", fetch_fn=None, clock=time.time, db=None):
+    """THE way to call Thunderpick: cooldown -> shared budget -> one request -> audit row -> cooldown update.
+    Returns {"ok", "refused"?, "events"?, "status"?, "error"?, "data"?, "body"?}. Never raises, never retries."""
+    if name not in PATHS:
+        return {"ok": False, "refused": "path not allow-listed"}
+    api_path = PATHS[name]
+    if not enabled():
+        return {"ok": False, "refused": "no key configured"}
+    now = clock()
+    why = _reserve(api_path, caller, now, db)
+    if why:
+        return {"ok": False, "refused": why}
+    t0 = time.time()
+    try:
+        got = (fetch_fn or (lambda: fetch(path=api_path)))()
+        data, status, body = got[:3]
+        hdr = (got[3] if len(got) > 3 else {}) or {}
+        c = _after(None, None, clock(), db)
+        _log(_iso(now), api_path, caller, status, "ok", int((time.time() - t0) * 1000), len(data), hdr.get("headers"), "", None, db)
+        return {"ok": True, "data": data, "status": status, "body": body, "events": len(data), "headers": hdr.get("headers")}
+    except FetchError as e:
+        ev = e.evidence or {}
+        c = _after(e.kind, ev.get("headers"), clock(), db)
+        _log(_iso(now), api_path, caller, e.status, e.kind, int((time.time() - t0) * 1000), None, ev.get("headers"),
+             ev.get("body"), c.get("until"), db)
+        return {"ok": False, "error": str(e), "kind": e.kind, "status": e.status, "evidence": ev, "cooldown": c}
+    except Exception as e:      # noqa: BLE001
+        c = _after("error", None, clock(), db)
+        _log(_iso(now), api_path, caller, None, f"error {type(e).__name__}", int((time.time() - t0) * 1000), None, None, "",
+             c.get("until"), db)
+        return {"ok": False, "error": type(e).__name__, "kind": "error", "cooldown": c}
+
+
+def request_log(limit=60, db=None):
+    with _DB_LOCK:
+        con = _gw(db)
+        try:
+            con.row_factory = sqlite3.Row
+            rows = [dict(r) for r in con.execute("SELECT * FROM request_log ORDER BY id DESC LIMIT ?", (limit,))]
+        finally:
+            con.close()
+    for r in rows:
+        try:
+            r["headers"] = json.loads(r["headers"] or "{}")
+        except ValueError:
+            pass
+    return rows
+
+
+# ---------------------------------------------------------------- the poller (reads through the gateway)
+def autopoll():
+    return os.environ.get("THUNDERPICK_AUTOPOLL", "0") == "1"
+
+
 class Poller:
-    def __init__(self, fetch_fn=None, budget=None, poll_s=POLL_S, store=True, clock=time.time, sleep=None):
-        self.fetch_fn = fetch_fn or fetch
-        self.budget = budget or RequestBudget()
+    def __init__(self, fetch_fn=None, poll_s=POLL_S, store=True, clock=time.time, db=None):
+        self.fetch_fn, self.db = fetch_fn, db
         self.poll_s, self.store, self.clock = poll_s, store, clock
         self.lock = threading.Lock()
         self.events, self.raw = [], []
         self.last_success = self.last_attempt = None
         self.last_ok, self.last_error, self.last_kind, self.failures = False, None, None, 0
-        self.next_delay = poll_s
+        self.last_refused = None
         self.empty = False
         self.attempts = self.successes = self.rate_limited = 0
         self.last_sha, self.last_body_at = None, 0.0
@@ -414,58 +577,48 @@ class Poller:
         self._stop = threading.Event()
         self._thread = None
 
-    def _delay_after(self, kind):
-        if kind == "rate_limited":
-            return min(RATE_WINDOW_S * (2 ** max(0, self.failures - 1)), BACKOFF_MAX)
-        if kind in ("auth", "path", "config"):
-            return CONFIG_RETRY_S
-        return min(30 * (2 ** max(0, self.failures - 1)), BACKOFF_MAX)
-
-    def poll_once(self):
-        """One attempt inside the shared budget. Success replaces the data (an empty list is a valid empty feed);
-        failure keeps the last good data (stale) and backs off."""
+    def poll_once(self, caller="poller", name="cs2"):
+        """One request through the gateway. Success replaces the data (an empty list is a valid empty feed); a failure
+        keeps the last data, marked stale. Refused (cooldown / budget) = no request sent, nothing changes."""
         now = self.clock()
-        if not self.budget.take(now):
-            self.next_delay = max(self.poll_s, self.budget.wait_s(now))
-            return None
-        self.last_attempt, self.attempts = now, self.attempts + 1
+        r = request(name, caller, self.fetch_fn, self.clock, self.db)
         retrieved = _iso(now)
-        try:
-            data, status, body = self.fetch_fn()
-        except FetchError as e:
+        if r.get("refused"):
             with self.lock:
-                self.last_ok, self.failures = False, self.failures + 1
-                self.last_error, self.last_kind = str(e), e.kind
-                self.rate_limited += e.kind == "rate_limited"
-                self.last_evidence = {"at": retrieved, "kind": e.kind, **(e.evidence or {})}
-                self.next_delay = self._delay_after(e.kind)
-            self._record(False, retrieved, e.status, e.kind)
-            return False
-        except Exception as e:      # noqa: BLE001 - never kill the poller
-            with self.lock:
-                self.last_ok, self.failures = False, self.failures + 1
-                self.last_error, self.last_kind = f"{type(e).__name__}", "error"
-                self.next_delay = self._delay_after("error")
-            self._record(False, retrieved, None, "error")
-            return False
-        norm = normalize(data, retrieved)
+                self.last_refused = r["refused"]
+            return None
         with self.lock:
-            self.events, self.raw = norm, data
-            self.empty = len(data) == 0
-            self.last_success, self.last_ok, self.last_error, self.last_kind = now, True, None, None
-            self.failures, self.successes, self.next_delay = 0, self.successes + 1, self.poll_s
-        self._record(True, retrieved, status, None, body, norm)
-        return True
+            self.last_attempt, self.attempts, self.last_refused = now, self.attempts + 1, None
+        if not r["ok"]:
+            with self.lock:
+                self.last_ok, self.failures = False, self.failures + 1
+                self.last_error, self.last_kind = r.get("error"), r.get("kind")
+                self.rate_limited += r.get("kind") == "rate_limited"
+                self.last_evidence = {"at": retrieved, "kind": r.get("kind"), **(r.get("evidence") or {})}
+            self._record(False, retrieved, r.get("status"), r.get("kind"), api_path=PATHS[name])
+            return False
+        data = r["data"]
+        norm = normalize(data, retrieved)
+        if name == "cs2":
+            with self.lock:
+                self.events, self.raw = norm, data
+                self.empty = len(data) == 0
+                self.last_success, self.last_ok, self.last_error, self.last_kind = now, True, None, None
+                self.failures, self.successes = 0, self.successes + 1
+        self._record(True, retrieved, r["status"], None, r["body"], norm, api_path=PATHS[name])
+        return {"ok": True, "events": len(data), "inventory": inventory(data), "sample_events": data[:3]} if name != "cs2" else True
 
-    def _record(self, ok, retrieved, status, kind, body=None, norm=None):
+    def _record(self, ok, retrieved, status, kind, body=None, norm=None, api_path=PATH):
         if not self.store:
             return
         try:
-            sha, kept = record(ok, retrieved, status, kind, body, norm, self.last_sha, self.last_body_at, self.clock())
-            if sha:
-                self.last_sha = sha
-            if kept:
-                self.last_body_at = self.clock()
+            sha, kept = record(ok, retrieved, status, kind, body, norm, self.last_sha if api_path == PATH else None,
+                               self.last_body_at if api_path == PATH else 0.0, self.clock(), path=None, api_path=api_path)
+            if api_path == PATH:
+                if sha:
+                    self.last_sha = sha
+                if kept:
+                    self.last_body_at = self.clock()
             self.store_error = None
         except Exception as e:      # noqa: BLE001 - a disk problem never stops the odds
             self.store_error = f"{type(e).__name__}: {str(e)[:120]}"
@@ -474,32 +627,54 @@ class Poller:
         now = self.clock() if now is None else now
         return bool(self.last_ok and self.last_success and now - self.last_success <= STALE_AFTER)
 
+    def state(self, now=None):
+        """One honest word for readers: ok | empty | rate_limited | unavailable | paused | not_configured."""
+        now = self.clock() if now is None else now
+        if not enabled():
+            return "not_configured"
+        c = cooldown(now, self.db)
+        if c["active"] and (c.get("reason") or "").startswith("HTTP 429"):
+            return "rate_limited"
+        if self.is_current(now):
+            return "empty" if self.empty else "ok"
+        if self.last_ok is False and self.last_kind:
+            return "unavailable"
+        return "paused" if not autopoll() else "unavailable"
+
     def snapshot(self):
-        """(events, freshness) for readers - members never trigger an upstream call."""
+        """(events, freshness) for readers - members never trigger an upstream call. Stale data is never current."""
         now = self.clock()
         with self.lock:
             age = None if self.last_success is None else round(now - self.last_success, 1)
-            return list(self.events), {"source": SOURCE, "current": self.is_current(now), "stale": not self.is_current(now),
-                                       "retrieved_at": _iso(self.last_success), "age_s": age, "empty_feed": self.empty,
-                                       "time_basis": "our retrieval time (the API publishes no quote timestamp)"}
+            cur = self.is_current(now)
+            return (list(self.events) if cur else []), {
+                "source": SOURCE, "state": self.state(now), "current": cur, "stale": not cur,
+                "retrieved_at": _iso(self.last_success), "age_s": age, "empty_feed": self.empty and cur,
+                "time_basis": "our retrieval time (the API publishes no quote timestamp)"}
 
     def status(self):
         now = self.clock()
         with self.lock:
-            return {"source": SOURCE, "enabled": enabled(), "key": key_diagnostic(), "running": bool(self._thread and self._thread.is_alive()),
-                    "current": self.is_current(now), "last_success": _iso(self.last_success),
-                    "last_attempt": _iso(self.last_attempt), "age_s": None if self.last_success is None else round(now - self.last_success, 1),
-                    "last_error": self.last_error, "error_kind": self.last_kind, "consecutive_failures": self.failures,
-                    "next_poll_s": round(self.next_delay, 1), "attempts": self.attempts, "successes": self.successes,
-                    "rate_limited": self.rate_limited, "last_error_evidence": self.last_evidence,
-                    "events": len(self.events), "empty_feed": self.empty,
-                    "budget": f"{self.budget.limit} requests / {self.budget.window}s (documented limit 10 / min / IP / path)",
-                    "store_error": self.store_error, "main_market_confirmed": sorted(MAIN_MARKET_CONFIRMED)}
+            out = {"source": SOURCE, "enabled": enabled(), "key": key_diagnostic(), "autopoll": autopoll(),
+                   "running": bool(self._thread and self._thread.is_alive()), "current": self.is_current(now),
+                   "last_success": _iso(self.last_success), "last_attempt": _iso(self.last_attempt),
+                   "age_s": None if self.last_success is None else round(now - self.last_success, 1),
+                   "last_error": self.last_error, "error_kind": self.last_kind, "consecutive_failures": self.failures,
+                   "last_refused": self.last_refused, "attempts": self.attempts, "successes": self.successes,
+                   "rate_limited": self.rate_limited, "last_error_evidence": self.last_evidence,
+                   "events": len(self.events), "empty_feed": self.empty,
+                   "budget": f"{SHARED_PER_MIN} requests / {RATE_WINDOW_S}s for ALL Thunderpick paths and callers together",
+                   "store_error": self.store_error, "main_market_confirmed": sorted(MAIN_MARKET_CONFIRMED)}
+        out["state"] = self.state(now)
+        out["cooldown"] = cooldown(now, self.db)
+        out["instance"], out["pid"] = instance_id(), os.getpid()
+        return out
 
     def _loop(self):
         while not self._stop.is_set():
-            self.poll_once()
-            self._stop.wait(self.next_delay)
+            if autopoll():
+                self.poll_once()
+            self._stop.wait(self.poll_s)
 
     def start(self):
         if not enabled():
@@ -523,44 +698,32 @@ def start():
     return POLLER.start()
 
 
-_COVERAGE_BUDGETS = {k: RequestBudget() for k in PATHS if k != "cs2"}     # per path, like the provider's limit
-COVERAGE = {}
+PUBLIC_LABEL = {"ok": "Thunderpick odds current", "empty": "Thunderpick: no CS2 markets in the feed right now",
+                "rate_limited": "Thunderpick unavailable: rate-limited by the provider",
+                "unavailable": "Thunderpick unavailable: the feed is not answering",
+                "paused": "Thunderpick: connection being set up - not shown yet",
+                "not_configured": "Thunderpick not connected"}
 
 
-def coverage_probe(name, fetch_fn=None, clock=time.time):
-    """Admin: ONE request to another allow-listed path (e.g. csgo) inside that path's own budget; the raw body is
-    recorded with its path. Returns a small summary + inventory (never the key)."""
-    if name not in _COVERAGE_BUDGETS:
-        return {"path": name, "result": "not allow-listed"}
-    now = clock()
-    if not _COVERAGE_BUDGETS[name].take(now):
-        return {"path": PATHS[name], "result": "skipped: request budget in use"}
-    retrieved = _iso(now)
-    try:
-        data, status, body = (fetch_fn or (lambda: fetch(path=PATHS[name])))()
-    except FetchError as e:
-        try:
-            record(False, retrieved, e.status, e.kind, api_path=PATHS[name])
-        except Exception:      # noqa: BLE001
-            pass
-        out = {"path": PATHS[name], "retrieved_at": retrieved, "result": "failed", "error": str(e), "evidence": e.evidence}
-        COVERAGE[name] = out
-        return out
-    norm = normalize(data, retrieved)
-    try:
-        record(True, retrieved, status, None, body, norm, api_path=PATHS[name])
-    except Exception:          # noqa: BLE001
-        pass
-    out = {"path": PATHS[name], "retrieved_at": retrieved, "result": "ok", "http_status": status, "events": len(data),
-           "inventory": inventory(data), "sample_events": data[:3]}
-    COVERAGE[name] = out
-    return out
+def public_state():
+    """What members may see about Thunderpick right now (never its prices until the market is confirmed)."""
+    st = POLLER.state()
+    return {"source": SOURCE, "state": st, "label": PUBLIC_LABEL.get(st, st), "retrieved_at": _iso(POLLER.last_success),
+            "time_basis": "our retrieval time"}
 
 
-def admin_view(samples=3):
-    """Admin only: status + the inventory of the latest real response + a few raw events (no key, ever)."""
+def admin_view(samples=3, probe=None):
+    """Admin only: status, the request audit, the inventory of the latest cs2 response and a few raw events (no key).
+    probe = "cs2" | "csgo": ONE controlled request through the gateway (cooldown + shared budget apply)."""
+    probe_out = None
+    if probe:
+        r = POLLER.poll_once(caller="admin_probe", name=probe) if probe in PATHS else {"refused": "path not allow-listed"}
+        probe_out = {"path": PATHS.get(probe), "result": ("ok" if r else "refused or failed") if not isinstance(r, dict) else "ok",
+                     **(r if isinstance(r, dict) else {}), "refused": POLLER.last_refused,
+                     "error": None if r else POLLER.last_error}
     with POLLER.lock:
         raw = list(POLLER.raw)
-    return {"status": POLLER.status(), "inventory": inventory(raw), "sample_events": raw[:samples],
+    return {"status": POLLER.status(), "probe": probe_out, "request_log": request_log(60),
+            "inventory_cs2": inventory(raw), "sample_events_cs2": raw[:samples],
             "normalized_problems": Counter(e.get("problem") for e in POLLER.events if e.get("problem")).most_common(10),
-            "store": {"path": str(db_path()), "mb": round(_store_mb(), 2)}, "coverage_checks": COVERAGE}
+            "store": {"path": str(db_path()), "mb": round(_store_mb(), 2)}, "public_state": public_state()}

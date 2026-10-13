@@ -1,5 +1,6 @@
-"""Thunderpick partner odds - phase 1 groundwork (2026-10-13): shared request budget, backoff, empty / stale feeds,
-validation, the proportional margin-adjusted estimate, append-only history, and the key never leaking."""
+"""Thunderpick partner odds - groundwork + diagnosis controls (2026-10-13): one gateway for every request (persisted
+cooldown, one shared budget for all paths / callers / processes, append-only request audit), no automatic polling while
+diagnosing, honest states, validation, the proportional margin-adjusted estimate, and the key never leaking."""
 import json
 import sqlite3
 
@@ -32,8 +33,21 @@ class Clock:
 def private(monkeypatch, tmp_path):
     monkeypatch.setenv("CS2_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("THUNDERPICK_API_KEY", KEY)
+    monkeypatch.delenv("THUNDERPICK_AUTOPOLL", raising=False)
 
 
+def ok_fetch(data=None):
+    data = [ev()] if data is None else data
+    return lambda: (data, 200, json.dumps(data).encode(), {"headers": {"cf-ray": "abc-LHR"}, "body": ""})
+
+
+def err_fetch(kind, status, headers=None):
+    def f():
+        raise T.FetchError(kind, status, evidence={"headers": headers or {}, "body": "slow down"})
+    return f
+
+
+# ---------------------------------------------------------------- maths / validation
 def test_two_way_is_the_proportional_margin_adjusted_estimate():
     r = T.two_way(1.62, 2.30)
     qa, qb = 1 / 1.62, 1 / 2.30
@@ -53,10 +67,10 @@ def test_normalize_flags_problems_and_never_normalizes_a_draw():
     assert out[0]["problem"] is None and out[0]["two_way"]["p_a"] > 0.5 and out[0]["source_event_id"] == "2399001"
     assert out[0]["start_tz"] == "unconfirmed"
     assert "invalid" in out[1]["problem"] and out[1]["two_way"] is None
-    assert out[2]["draw_present"] and out[2]["two_way"] is None                    # three-way: never a two-team probability
+    assert out[2]["draw_present"] and out[2]["two_way"] is None
     assert "missing team" in out[3]["problem"] and "startTime" in out[4]["problem"]
     assert out[5]["url"] is None and "approved" in out[5]["problem"]
-    assert out[6]["url"] is None                                                    # plain http is never rendered
+    assert out[6]["url"] is None
     assert out[7]["problem"] == "event is not an object"
 
 
@@ -67,71 +81,103 @@ def test_inventory_reports_fields_markets_and_duplicates():
     assert inv["match_url_hosts"] == {"thunderpick.io": 3} and inv["events_with_draw_odds"] == 0
 
 
-def test_budget_caps_requests_in_any_minute():
-    b = T.RequestBudget(limit=8, window=60)
-    assert all(b.take(100 + i) for i in range(8)) and not b.take(110)
-    assert 0 < b.wait_s(110) <= 60 and b.take(161)
-
-
-def poller(fetch_fn, clock):
-    return T.Poller(fetch_fn=fetch_fn, budget=T.RequestBudget(8, 60), poll_s=15, clock=clock)
-
-
-def test_empty_feed_is_current_and_failure_keeps_stale_data(tmp_path):
+# ---------------------------------------------------------------- gateway
+def test_one_shared_budget_for_all_paths_and_callers():
     c = Clock()
-    calls = {"n": 0}
+    got = [T.request(n, who, ok_fetch(), c)["ok"] for n, who in (("cs2", "poller"), ("csgo", "admin_probe"),
+                                                                    ("cs2", "admin_probe"), ("csgo", "poller"))]
+    assert got == [True] * 4 and T.SHARED_PER_MIN == 4
+    r = T.request("csgo", "admin_probe", ok_fetch(), c)
+    assert r["refused"].startswith("shared budget full")                       # cs2 and csgo share ONE budget
+    c.t += 61
+    assert T.request("cs2", "poller", ok_fetch(), c)["ok"]
 
-    def f():
-        calls["n"] += 1
-        if calls["n"] == 1:
-            return [ev()], 200, json.dumps([ev()]).encode()
-        if calls["n"] == 2:
-            return [], 200, b"[]"
-        raise T.FetchError("upstream", 503)
-    p = poller(f, c)
-    assert p.poll_once() and p.snapshot()[1]["current"] and len(p.snapshot()[0]) == 1
-    c.t += 15
-    assert p.poll_once() and p.snapshot()[1]["empty_feed"] and p.snapshot()[0] == []      # empty = empty, not stale
-    c.t += 15
-    assert p.poll_once() is False and p.next_delay == 30                                  # 5xx: back off 30 s
-    c.t += 100
-    events, fresh = p.snapshot()
-    assert fresh["stale"] and not fresh["current"] and "retrieval" in fresh["time_basis"]
+
+def test_budget_is_shared_across_processes_through_the_disk(tmp_path):
+    c = Clock()
+    for _ in range(4):
+        T.request("cs2", "poller", ok_fetch(), c)
+    con = sqlite3.connect(tmp_path / ".cache" / "thunderpick.db")             # another process sees the same slots
+    assert con.execute("SELECT COUNT(*) FROM budget_slots").fetchone()[0] == 4
+
+
+def test_429_retry_after_is_honoured_and_the_cooldown_persists():
+    c = Clock()
+    r = T.request("cs2", "poller", err_fetch("rate_limited", 429, {"retry-after": "41"}), c)
+    assert r["kind"] == "rate_limited" and abs(r["cooldown"]["until"] - (c.t + 41)) < 1
+    c.t += 10
+    assert T.request("csgo", "admin_probe", ok_fetch(), c)["refused"].startswith("cooldown until")   # every caller waits
+    assert T.cooldown(c.t)["active"] and T.cooldown(c.t)["n429"] == 1                 # read back from the disk
+    c.t += 35
+    assert T.request("cs2", "poller", ok_fetch(), c)["ok"] and not T.cooldown(c.t)["active"]
+
+
+def test_429_without_retry_after_backs_off_with_jitter_and_grows():
+    c = Clock()
+    a = T.request("cs2", "poller", err_fetch("rate_limited", 429), c)["cooldown"]
+    assert 48 <= a["until"] - c.t <= 72
+    c.t = a["until"] + 1
+    b = T.request("cs2", "poller", err_fetch("rate_limited", 429), c)["cooldown"]
+    assert 96 <= b["until"] - c.t <= 144 and b["n429"] == 2
+
+
+def test_failures_back_off_and_auth_waits_long():
+    c = Clock()
+    f = T.request("cs2", "poller", err_fetch("upstream", 503), c)["cooldown"]
+    assert 24 <= f["until"] - c.t <= 36
+    c.t = f["until"] + 1
+    a = T.request("cs2", "poller", err_fetch("auth", 401), c)["cooldown"]
+    assert a["until"] - c.t == T.COOLDOWN_MAX_S
+
+
+def test_every_sent_request_is_audited_and_refusals_are_not(tmp_path):
+    c = Clock()
+    T.request("cs2", "poller", ok_fetch(), c)
+    T.request("csgo", "admin_probe", err_fetch("rate_limited", 429, {"retry-after": "30", "x-ratelimit-remaining": "0"}), c)
+    T.request("cs2", "poller", ok_fetch(), c)                                   # refused: cooldown - not sent, not logged
+    log = T.request_log()
+    assert len(log) == 2 and {r["caller"] for r in log} == {"poller", "admin_probe"}
+    rl = next(r for r in log if r["outcome"] == "rate_limited")
+    assert rl["http_status"] == 429 and rl["headers"]["retry-after"] == "30" and rl["path"].endswith("/csgo")
+    assert rl["instance"] and rl["pid"] and rl["cooldown_until"]
     con = sqlite3.connect(tmp_path / ".cache" / "thunderpick.db")
-    assert con.execute("SELECT COUNT(*) FROM raw_snapshots").fetchone()[0] == 3
     with pytest.raises(sqlite3.DatabaseError):
-        con.execute("DELETE FROM raw_snapshots")                                            # append-only
+        con.execute("DELETE FROM request_log")
 
 
-def test_rate_limit_waits_for_the_window_and_budget_skips():
+def test_no_automatic_polling_while_diagnosing():
+    assert T.autopoll() is False
+    p = T.Poller(fetch_fn=ok_fetch(), clock=Clock())
+    assert p.state() == "paused"
+
+
+def test_states_are_honest():
     c = Clock()
-
-    def f():
-        raise T.FetchError("rate_limited", 429)
-    p = poller(f, c)
-    assert p.poll_once() is False and p.next_delay == 60 and p.rate_limited == 1
-    c.t += 60
+    p = T.Poller(fetch_fn=ok_fetch([]), clock=c)
     p.poll_once()
-    assert p.next_delay == 120                                                              # exponential after a window
-    full = T.Poller(fetch_fn=f, budget=T.RequestBudget(1, 60), clock=c)
-    full.poll_once()
-    assert full.poll_once() is None and full.attempts == 1                                  # retries share the budget
+    assert p.state() == "empty" and p.snapshot()[1]["empty_feed"]               # a successful [] is an empty feed
+    c.t += 200
+    p.fetch_fn = err_fetch("rate_limited", 429, {"retry-after": "120"})
+    p.poll_once()
+    events, fresh = p.snapshot()
+    assert p.state() == "rate_limited" and fresh["stale"] and events == []      # stale data never current
+    assert "rate-limited" in T.PUBLIC_LABEL["rate_limited"]
 
 
-def test_auth_and_path_errors_retry_slowly():
+def test_append_only_snapshots_carry_their_path(tmp_path):
     c = Clock()
-
-    def f():
-        raise T.FetchError("auth", 401)
-    p = poller(f, c)
-    p.poll_once()
-    assert p.next_delay == T.CONFIG_RETRY_S and p.status()["error_kind"] == "auth"
+    p = T.Poller(fetch_fn=ok_fetch(), clock=c)
+    p.poll_once(caller="admin_probe", name="csgo")
+    con = sqlite3.connect(tmp_path / ".cache" / "thunderpick.db")
+    assert con.execute("SELECT api_path FROM raw_snapshots").fetchone()[0].endswith("/csgo")
+    with pytest.raises(sqlite3.DatabaseError):
+        con.execute("DELETE FROM raw_snapshots")
 
 
 def test_fetch_maps_statuses_and_never_returns_the_key():
     class R:
         def __init__(self, st, body=b"[]"):
-            self.status_code, self.content = st, body
+            self.status_code, self.content, self.headers = st, body, {"CF-RAY": "x1"}
 
     class S:
         def __init__(self, r):
@@ -141,15 +187,15 @@ def test_fetch_maps_statuses_and_never_returns_the_key():
             self.seen = (url, headers, timeout)
             return self.r
     s = S(R(200, b"[]"))
-    assert T.fetch(s)[0] == [] and s.seen[0] == T.BASE + T.PATH and s.seen[1]["api-key"] == KEY
+    data, st, body, evd = T.fetch(s)
+    assert data == [] and s.seen[0] == T.BASE + T.PATH and s.seen[1]["api-key"] == KEY and evd["headers"]["cf-ray"] == "x1"
     assert s.seen[0].startswith("https://") and s.seen[2] == T.TIMEOUT
-    for st, kind in ((429, "rate_limited"), (401, "auth"), (403, "auth"), (404, "path"), (502, "upstream")):
+    for code, kind in ((429, "rate_limited"), (401, "auth"), (403, "auth"), (404, "path"), (502, "upstream")):
         with pytest.raises(T.FetchError) as e:
-            T.fetch(S(R(st)))
+            T.fetch(S(R(code)))
         assert e.value.kind == kind and KEY not in str(e.value)
-    with pytest.raises(T.FetchError) as e:
-        T.fetch(S(R(200, b'{"a":1}')))
-    assert e.value.kind == "bad_shape"
+    with pytest.raises(T.FetchError):
+        T.fetch(path="/api/partners-odds/sport/football")
 
     class Boom:
         def get(self, *a, **k):
@@ -159,61 +205,10 @@ def test_fetch_maps_statuses_and_never_returns_the_key():
     assert KEY not in str(e.value) and e.value.kind == "network"
 
 
-def test_admin_view_and_status_never_contain_the_key():
-    c = Clock()
-    p = T.Poller(fetch_fn=lambda: ([ev()], 200, json.dumps([ev()]).encode()), clock=c)
-    p.poll_once()
-    T.POLLER, old = p, T.POLLER
-    try:
-        out = json.dumps(T.admin_view(), default=str)
-    finally:
-        T.POLLER = old
-    assert KEY not in out and "inventory" in out and "main_market_confirmed" in out
-
-
-def test_no_probability_reaches_members_until_the_main_market_is_confirmed():
-    assert T.MAIN_MARKET_CONFIRMED == frozenset()
-
-
-def test_admin_route_requires_the_admin_token():
-    import server
-    src = open(server.__file__, encoding="utf-8").read()
-    assert 'u.path == "/admin/thunderpick.json" and self.authed(q.get("token"))' in src
-
-
-def test_key_diagnostic_lists_names_only(monkeypatch):
-    monkeypatch.setenv("THUNDERPICK_KEY", "secret-value-123")
-    d = T.key_diagnostic()
-    assert "THUNDERPICK_KEY" in d["related_names"] and "secret-value-123" not in json.dumps(d) and d["present"] is True
-    monkeypatch.delenv("THUNDERPICK_API_KEY")
-    assert T.key_diagnostic()["present"] is False and not T.enabled()
-
-
-def test_render_key_name_is_accepted(monkeypatch):
-    monkeypatch.delenv("THUNDERPICK_API_KEY")
-    monkeypatch.setenv("THUNDER_PICK_API", KEY)
-    assert T.enabled() and T._key() == KEY
-
-
-def test_only_allow_listed_paths_and_coverage_probe_budget(tmp_path):
-    with pytest.raises(T.FetchError):
-        T.fetch(path="/api/partners-odds/sport/football")
-    c = Clock()
-    data = [ev()]
-    out = T.coverage_probe("csgo", fetch_fn=lambda: (data, 200, json.dumps(data).encode()), clock=c)
-    assert out["result"] == "ok" and out["events"] == 1 and out["path"].endswith("/csgo") and KEY not in json.dumps(out)
-    assert T.coverage_probe("football")["result"] == "not allow-listed"
-    for _ in range(7):
-        T.coverage_probe("csgo", fetch_fn=lambda: (data, 200, b"[]"), clock=c)
-    assert T.coverage_probe("csgo", fetch_fn=lambda: (data, 200, b"[]"), clock=c)["result"].startswith("skipped")
-    con = sqlite3.connect(tmp_path / ".cache" / "thunderpick.db")
-    assert con.execute("SELECT COUNT(*) FROM raw_snapshots WHERE api_path LIKE '%/csgo'").fetchone()[0] == 8
-
-
 def test_429_evidence_is_kept_and_the_key_redacted():
     class R:
         status_code = 429
-        headers = {"Retry-After": "41", "X-RateLimit-Remaining": "0", "Set-Cookie": "x=1"}
+        headers = {"Retry-After": "41", "X-RateLimit-Remaining": "0", "Set-Cookie": "x=1", "X-Request-Id": "rq-1"}
         content = ("Too many requests for key " + KEY).encode()
 
     class S:
@@ -221,6 +216,44 @@ def test_429_evidence_is_kept_and_the_key_redacted():
             return R()
     with pytest.raises(T.FetchError) as e:
         T.fetch(S())
-    ev = e.value.evidence
-    assert ev["headers"]["retry-after"] == "41" and "set-cookie" not in ev["headers"]
-    assert KEY not in json.dumps(ev) and "[redacted]" in ev["body"]
+    evd = e.value.evidence
+    assert evd["headers"]["retry-after"] == "41" and evd["headers"]["x-request-id"] == "rq-1" and "set-cookie" not in evd["headers"]
+    assert KEY not in json.dumps(evd) and "[redacted]" in evd["body"]
+
+
+def test_admin_view_never_contains_the_key_and_probe_uses_the_gateway(monkeypatch):
+    c = Clock()
+    p = T.Poller(fetch_fn=ok_fetch(), clock=c)
+    monkeypatch.setattr(T, "POLLER", p)
+    out = T.admin_view(probe="csgo")
+    assert out["probe"]["path"].endswith("/csgo") and out["request_log"][0]["caller"] == "admin_probe"
+    blob = json.dumps(out, default=str)
+    assert KEY not in blob and "public_state" in out
+
+
+def test_key_names_and_diagnostic(monkeypatch):
+    monkeypatch.setenv("THUNDERPICK_KEY", "secret-value-123")
+    d = T.key_diagnostic()
+    assert "THUNDERPICK_KEY" in d["related_names"] and "secret-value-123" not in json.dumps(d) and d["present"] is True
+    monkeypatch.delenv("THUNDERPICK_API_KEY")
+    monkeypatch.setenv("THUNDER_PICK_API", KEY)
+    assert T.enabled() and T._key() == KEY
+    monkeypatch.delenv("THUNDER_PICK_API")
+    assert T.key_diagnostic()["present"] is False and not T.enabled()
+    assert T.request("cs2", "poller", ok_fetch())["refused"] == "no key configured"
+
+
+def test_no_probability_reaches_members_until_the_main_market_is_confirmed():
+    assert T.MAIN_MARKET_CONFIRMED == frozenset()
+
+
+def test_moneylines_payload_shows_thunderpick_state_only():
+    import server
+    st = server._thunderpick_state()
+    assert st["source"] == "thunderpick" and "label" in st and not ({"odds", "p_a", "events"} & set(st))
+
+
+def test_admin_route_requires_the_admin_token():
+    import server
+    src = open(server.__file__, encoding="utf-8").read()
+    assert 'u.path == "/admin/thunderpick.json" and self.authed(q.get("token"))' in src
