@@ -1694,6 +1694,8 @@ function mlCard(m, model, rec) {
     ? `<details><summary>Exchange quote details</summary><div class="mlplats">${mlPlatform("polymarket", P.polymarket, A, B, m.teams.names_by_platform)}${mlPlatform("kalshi", P.kalshi, A, B, m.teams.names_by_platform)}</div></details>` : "";
   // no usable exchange quote: Thunderpick's usable price is the card (with the side); else one muted line instead of a wall
   // of tags; the raw quotes stay one tap away
+  if (m.thunderpick_only)    // listed by Thunderpick only (no exchange market): its block alone, no exchange side
+    return `<article class="mlcard${tu ? "" : " nouse"}">${headL}${tpb}<div class="small muted">Thunderpick only - no exchange lists this match, so there is no exchange comparison and no 0U side.</div></article>`;
   if (!pu && !ku) {
     if (tu) return `<article class="mlcard">${headL}${tpb}<div class="small muted">Exchanges: Kalshi ${esc(mlWhy(P.kalshi))}; Polymarket ${esc(mlWhy(P.polymarket))}</div>
       ${mlSide(m.side, tu)}${quotes}</article>`;

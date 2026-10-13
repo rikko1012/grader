@@ -302,7 +302,7 @@ def test_admin_view_is_read_only_and_the_probe_is_its_own_route(env, monkeypatch
     monkeypatch.setattr(thunderpick.POLLER, "poll_once", lambda *a, **k: sent.append(("poll_once", a, k)) or True)
     monkeypatch.setattr(thunderpick, "probe", lambda name: sent.append(("probe", name)) or {"result": "ok", "path": name},
                         raising=False)
-    monkeypatch.setattr(thunderpick, "market_types", lambda: [{"label": "Match Winner", "enabled": True,
+    monkeypatch.setattr(thunderpick, "market_types", lambda db=None: [{"label": "Match Winner", "enabled": True,
                                                                "provider_confirmed": False}], raising=False)
     st, d = call(env, "GET", "/admin/thunderpick.json?probe=cs2&samples=2", admin=True)
     assert st == 200 and sent == []                                  # a view never sends an upstream request
@@ -617,3 +617,44 @@ def test_card_odds_lines_render_with_the_source_used(tmp_path):
     assert "50/50" not in out["none"]["match"] and "stake capped at 1.5U" in out["none"]["match"]
     assert "Thunderpick not used: no Thunderpick event for this match" in out["none"]["match"]
     assert "Win chance (Polymarket)" in out["old"]["match"] and "⚠ Thin market" in out["old"]["match"]
+
+
+def test_map_basis_words_read_the_graders_structured_record():
+    """2026-10-13 review (major): the card read map_prob_basis as text and told every best-of-3 card 'format not known'."""
+    import grader, server
+    w = {bo: server._map_basis_words(grader.map_win_chance(0.62, bo)[1], bo) for bo in (1, 3, 5, None)}
+    assert w[1].startswith("best-of-1") and w[3].startswith("best-of-3") and w[5].startswith("best-of-5")
+    assert "not known" not in w[1] + w[3] + w[5] and w[None].startswith("format not known")
+    assert server._map_basis_kind(grader.map_win_chance(0.62, 3)[1]) == "derived"
+
+
+def test_bookmaker_stake_cap_is_not_a_data_quality_warning():
+    import grader, server
+    base = dict(prop="kills", line=30.5, scope="12", maps_played=40, kpr=0.72, hs_pct=48, rating=1.05, roster_confirmed=True,
+                perf={"version": "perf-2", "lambda": 31.0, "lambda_kills": 31.0, "sd": 8.0, "hs_per_kill": 0.5,
+                      "spread_c_kills": 1.457, "data_quality": "ok"})
+    tp = grader.grade_leg(dict(base, team_ml=-150, opp_ml=150, market_quality="SOFT", odds_provenance={"selected": "thunderpick"}))
+    thin = grader.grade_leg(dict(base, team_ml=-150, opp_ml=150, market_quality="SOFT", odds_provenance={"selected": "polymarket"}))
+    none = grader.grade_leg(dict(base))
+    assert not server.has_warning(tp) and server.has_warning(thin) and server.has_warning(none)
+    assert tp["units"] <= 1.5 or tp["units"] == 0                    # the cap itself still applies
+
+
+def test_thunderpick_only_matches_join_the_moneylines_payload(monkeypatch):
+    """A correctly matched Thunderpick event no exchange lists gets its own card (canonical team A view); unlinked /
+    hashed ids, matches already on the board and started matches do not."""
+    import server, moneyline
+    recs = {"hltv:7001": {"event": {"team1": "Bravo", "team2": "Alpha", "tournament": "Fixture Cup"}, "flipped": True,
+                          "hltv_start": iso(NOW + timedelta(hours=3)), "hltv_bo": 3},
+            "hltv:7002": {"event": {"team1": "C", "team2": "D"}, "flipped": False, "hltv_start": iso(NOW + timedelta(hours=3)), "hltv_bo": 3},
+            "cs2:hash-x": {"event": {"team1": "E", "team2": "F"}, "flipped": False}}
+    monkeypatch.setattr(thunderpick.POLLER, "matched", recs)
+    monkeypatch.setattr(moneyline, "tp_block", lambda m, now=None: {"availability": "current", "eligible": True, "usable": True,
+                                                                    "started": False, "p_a": 0.6, "label": "TEST FIXTURE"})
+    out = server._tp_only_matches({"hltv:7002"})
+    assert [m["match_id"] for m in out] == ["hltv:7001"]
+    m = out[0]
+    assert m["teams"]["a"] == "Alpha" and m["teams"]["b"] == "Bravo" and m["thunderpick_only"] and m["side"] is None
+    assert m["platforms"] == {"polymarket": None, "kalshi": None} and m["bo"] == 3
+    monkeypatch.setattr(moneyline, "tp_block", lambda m, now=None: {"availability": "started", "started": True})
+    assert server._tp_only_matches(set()) == []

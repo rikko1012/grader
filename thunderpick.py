@@ -89,7 +89,8 @@ BACKOFF_MAX = 300
 CONFIG_RETRY_S = 600
 RATE_WINDOW_S = 60
 BODY_EVERY_S = 600                              # a changed body is stored (gzip) at most every 10 min per path
-SNAPSHOT_MAX_MB = float(os.environ.get("THUNDERPICK_SNAPSHOT_MAX_MB") or 2000)
+SNAPSHOT_MAX_MB = float(os.environ.get("THUNDERPICK_SNAPSHOT_MAX_MB") or 2000)   # polling-history budget (all segments)
+SEGMENT_MAX_MB = float(os.environ.get("THUNDERPICK_SEGMENT_MAX_MB") or 200)       # one history segment file
 STORE_WARN_SHARE = 0.8
 APPROVED_HOSTS = {"thunderpick.io", "www.thunderpick.io"}
 
@@ -494,38 +495,144 @@ def _rebuild(rows, retrieved_at):
     return norm
 
 
-def last_full_snapshot(api_path, path=None):
-    """The latest successful NON-EMPTY answer of one endpoint in the history, for a restart:
-    {"retrieved_at", "sha", "body" (bytes, found by hash) | None, "events" (rebuilt from its normalized rows when no body
-    was stored) | None, "later_empty_at" (a LATER successful empty answer of this path, or None), "latest_sha"}.
-    None when absent or when neither its body nor its rows were stored."""
-    with _DB_LOCK:
-        con = _connect(path)
+# ---------------------------------------------------------------- polling history: bounded segments (2026-10-13)
+# The polling history (raw_snapshots / events) is written to SEGMENT files under .cache/thunderpick_history/, a new one
+# whenever the current reaches SEGMENT_MAX_MB; whole OLDEST segments are deleted when all segments together pass
+# SNAPSHOT_MAX_MB. Inside a segment rows stay append-only (triggers). Gateway state, the request audit, the market
+# evidence and the policy log stay in thunderpick.db and are never rotated or pruned (the request budget and cooldowns
+# survive). Pruning never removes replay evidence: every forecast saves the selected quote itself (odds, teams, start,
+# source ids, retrieval time, snapshot sha256) in its grader inputs (odds_provenance) - the raw polling history is
+# supporting detail. Readers search the segments newest first, then the pre-segment history in thunderpick.db.
+
+
+def history_dir():
+    return data_dir() / ".cache" / "thunderpick_history"
+
+
+def _file_mb(f):
+    f = Path(f)
+    return sum(x.stat().st_size for x in (f, Path(str(f) + "-wal")) if x.exists()) / 1e6
+
+
+def _segment_files():
+    d = history_dir()
+    return sorted(d.glob("history-*.db")) if d.exists() else []          # oldest first (names sort by time)
+
+
+def _history_sources(path=None):
+    """Files to read the polling history from, newest first: an explicit path alone (tests / tools), else the segments
+    then the pre-segment history in thunderpick.db."""
+    if path is not None:
+        return [Path(path)]
+    legacy = db_path()
+    return list(reversed(_segment_files())) + ([legacy] if legacy.exists() else [])
+
+
+def _prune_segments(keep):
+    """Delete whole oldest segments (never `keep`, the one being written) while all segments pass SNAPSHOT_MAX_MB."""
+    segs = _segment_files()
+    total = sum(_file_mb(s) for s in segs)
+    deleted = []
+    for s in segs:
+        if total <= SNAPSHOT_MAX_MB or s == keep:
+            break
+        mb = _file_mb(s)
         try:
-            r = con.execute("SELECT id, retrieved_at, body_sha256 FROM raw_snapshots WHERE api_path = ? AND ok = 1 "
-                            "AND n_events > 0 AND body_sha256 IS NOT NULL ORDER BY id DESC LIMIT 1", (api_path,)).fetchone()
-            if not r:
-                return None
-            last = con.execute("SELECT id, retrieved_at, n_events, body_sha256 FROM raw_snapshots WHERE api_path = ? AND ok = 1 "
+            for x in (s, Path(str(s) + "-wal"), Path(str(s) + "-shm")):
+                if x.exists():
+                    x.unlink()
+            _READY.discard(str(s))
+            total -= mb
+            deleted.append(s.name)
+        except OSError:
+            break                                            # in use: tried again on the next rotation
+    return deleted
+
+
+def _current_segment(now_ts=None):
+    """The segment to append to: the newest while it is under SEGMENT_MAX_MB, else a new one (then old ones pruned)."""
+    segs = _segment_files()
+    if segs and _file_mb(segs[-1]) < SEGMENT_MAX_MB:
+        return segs[-1]
+    now_ts = time.time() if now_ts is None else now_ts
+    d = history_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime(now_ts)) + f"{int((now_ts % 1) * 1e6):06d}"
+    seg = d / f"history-{stamp}.db"
+    _prune_segments(keep=seg)
+    return seg
+
+
+def _seg_latest(api_path, f):
+    """One history file: (latest successful answer, latest NONEMPTY answer) as (retrieved_at, n_events, sha) or None."""
+    with _DB_LOCK:
+        con = _connect(f)
+        try:
+            last = con.execute("SELECT retrieved_at, n_events, body_sha256 FROM raw_snapshots WHERE api_path = ? AND ok = 1 "
                                "ORDER BY id DESC LIMIT 1", (api_path,)).fetchone()
+            full = con.execute("SELECT retrieved_at, n_events, body_sha256 FROM raw_snapshots WHERE api_path = ? AND ok = 1 "
+                               "AND n_events > 0 AND body_sha256 IS NOT NULL ORDER BY id DESC LIMIT 1", (api_path,)).fetchone()
+        finally:
+            con.close()
+    return (tuple(last) if last else None), (tuple(full) if full else None)
+
+
+def _seg_content(sha, retrieved_at, f):
+    """The answer with this sha256 in one history file: its gzip body, else its normalized event rows - or None."""
+    with _DB_LOCK:
+        con = _connect(f)
+        try:
             b = con.execute("SELECT body_gz FROM raw_snapshots WHERE body_sha256 = ? AND body_gz IS NOT NULL "
-                            "ORDER BY id DESC LIMIT 1", (r[2],)).fetchone()
+                            "ORDER BY id DESC LIMIT 1", (sha,)).fetchone()
             rows = None
             if not b:
                 sid = con.execute("SELECT MAX(s.id) FROM raw_snapshots s WHERE s.body_sha256 = ? AND EXISTS "
-                                  "(SELECT 1 FROM events x WHERE x.snapshot_id = s.id)", (r[2],)).fetchone()[0]
+                                  "(SELECT 1 FROM events x WHERE x.snapshot_id = s.id)", (sha,)).fetchone()[0]
                 if sid is not None:
-                    rows = con.execute("SELECT source_event_id, team1, team2, main_market, team1_odds, team2_odds, draw_odds, "
-                                       "start_raw, competition, url, problem, tournament, game, fixture_id, url_id, draw_present "
-                                       "FROM events WHERE snapshot_id = ? ORDER BY idx", (sid,)).fetchall()
+                    rows = con.execute("SELECT source_event_id, team1, team2, main_market, team1_odds, team2_odds, "
+                                       "draw_odds, start_raw, competition, url, problem, tournament, game, fixture_id, "
+                                       "url_id, draw_present FROM events WHERE snapshot_id = ? ORDER BY idx",
+                                       (sid,)).fetchall()
         finally:
             con.close()
-    if not b and not rows:
+    if b:
+        return {"body": gzip.decompress(b[0]), "events": None}
+    if rows:
+        return {"body": None, "events": _rebuild(rows, retrieved_at)}
+    return None
+
+
+def last_full_snapshot(api_path, path=None):
+    """The latest successful NON-EMPTY answer of one endpoint in the history (all segments, newest first), for a restart:
+    {"retrieved_at", "sha", "body" (bytes, found by hash in ANY segment) | None, "events" (rebuilt from its normalized
+    rows when no body was stored) | None, "later_empty_at" (a LATER successful empty answer of this path, or None),
+    "latest_sha"}. retrieved_at is that answer's own retrieval time (an unchanged body seen again counts as seen again -
+    the time it was really retrieved). None when absent or when neither its body nor its rows were stored anywhere."""
+    srcs = _history_sources(path)
+    last = full = None
+    for f in srcs:
+        l_, f_ = _seg_latest(api_path, f)
+        last = last or l_
+        full = full or f_
+        if last and full:
+            break
+    if not full:
         return None
-    later_empty = last[1] if last and last[0] > r[0] and not (last[2] or 0) else None
-    return {"retrieved_at": r[1], "sha": r[2], "body": gzip.decompress(b[0]) if b else None,
-            "events": _rebuild(rows, r[1]) if not b else None, "later_empty_at": later_empty,
-            "latest_sha": last[3] if last else r[2]}
+    content = None
+    for f in srcs:                                       # the body / rows of that answer, wherever they were stored
+        content = _seg_content(full[2], full[0], f)
+        if content:
+            break
+    if not content:
+        return None
+    later_empty = None
+    if last and not (last[1] or 0):
+        lt, ft = _ts(last[0]), _ts(full[0])
+        if lt is not None and ft is not None and lt > ft:
+            later_empty = last[0]
+    return {"retrieved_at": full[0], "sha": full[2], "body": content["body"],
+            "events": content["events"],
+            "later_empty_at": later_empty, "latest_sha": last[2] if last else full[2]}
 
 
 def first_seen_history(sids, path=None):
@@ -539,49 +646,60 @@ def first_seen_history(sids, path=None):
         return {}
     out = {}
     keys = list(want)
-    with _DB_LOCK:
-        con = _connect(path)
-        try:
-            for i in range(0, len(keys), 400):
-                part = keys[i:i + 400]
-                for sid, first in con.execute(f"SELECT source_event_id, MIN(retrieved_at) FROM events WHERE source_event_id IN "
-                                              f"({','.join('?' * len(part))}) GROUP BY source_event_id", part):
-                    k = want[sid]
-                    t = _ts(first)
-                    if t is not None and (k not in out or t < out[k]):
-                        out[k] = t
-        finally:
-            con.close()
+    for f in _history_sources(path):
+        with _DB_LOCK:
+            con = _connect(f)
+            try:
+                for i in range(0, len(keys), 400):
+                    part = keys[i:i + 400]
+                    for sid, first in con.execute(f"SELECT source_event_id, MIN(retrieved_at) FROM events WHERE "
+                                                  f"source_event_id IN ({','.join('?' * len(part))}) GROUP BY source_event_id",
+                                                  part):
+                        k = want[sid]
+                        t = _ts(first)
+                        if t is not None and (k not in out or t < out[k]):
+                            out[k] = t
+            finally:
+                con.close()
     return out
 
 
 def _store_mb(path=None):
-    p = Path(path or db_path())
-    return sum(f.stat().st_size for f in (p, Path(str(p) + "-wal")) if f.exists()) / 1e6
+    """Size of the polling history: an explicit file, else all segments (thunderpick.db - gateway state and the
+    pre-segment history - is reported separately and never pruned)."""
+    if path is not None:
+        return _file_mb(path)
+    return sum(_file_mb(s) for s in _segment_files())
 
 
 def store_info(path=None):
     mb = _store_mb(path)
     share = mb / SNAPSHOT_MAX_MB if SNAPSHOT_MAX_MB else 1.0
-    return {"path": str(Path(path or db_path())), "mb": round(mb, 2), "max_mb": SNAPSHOT_MAX_MB, "used_share": round(share, 3),
-            "warning": (f"history store at {share:.0%} of {SNAPSHOT_MAX_MB:.0f} MB - above the cap only status rows are kept "
-                        "(no bodies / event rows: restarts and audits lose detail)") if share > STORE_WARN_SHARE else None,
+    segs = _segment_files() if path is None else []
+    return {"path": str(Path(path) if path is not None else history_dir()), "mb": round(mb, 2), "max_mb": SNAPSHOT_MAX_MB,
+            "segments": len(segs), "segment_max_mb": SEGMENT_MAX_MB, "used_share": round(share, 3),
+            "oldest_segment": segs[0].name if segs else None,
+            "gateway_file_mb": round(_file_mb(db_path()), 2) if path is None and db_path().exists() else None,
+            "warning": (f"polling history at {share:.0%} of {SNAPSHOT_MAX_MB:.0f} MB - the oldest segments are being pruned "
+                        "(forecasts keep their own quotes)") if share > STORE_WARN_SHARE else None,
             "policy": f"a status row per attempt; event rows for every changed answer; the gzip body of a changed answer at "
-                      f"most every {BODY_EVERY_S}s per path (and the first after start); no per-market rows"}
+                      f"most every {BODY_EVERY_S}s per path (and the first after start); no per-market rows; segments of "
+                      f"{SEGMENT_MAX_MB:.0f} MB, oldest pruned past {SNAPSHOT_MAX_MB:.0f} MB in total"}
 
 
 def record(ok, retrieved_at, status=None, error_kind=None, body=None, normalized=None, last_sha=None, last_body_at=0.0,
            now_ts=None, path=None, api_path=PATH):
-    """Append one attempt: a status row always; for a CHANGED body its normalized event rows and - at most once per
-    BODY_EVERY_S per path, and the first after start (last_body_at 0) - the gzip body. Above SNAPSHOT_MAX_MB only the
-    status row. Returns (sha, body_stored)."""
+    """Append one attempt to the current history segment (or `path`): a status row always; for a CHANGED body its
+    normalized event rows and - at most once per BODY_EVERY_S per path, and the first after start (last_body_at 0) - the
+    gzip body. If pruning cannot keep the history under SNAPSHOT_MAX_MB, only the status row. Returns (sha, body_stored)."""
     now_ts = time.time() if now_ts is None else now_ts
+    target = Path(path) if path is not None else _current_segment(now_ts)
     sha = hashlib.sha256(body).hexdigest() if body is not None else None
     changed = sha is not None and sha != last_sha
     room = changed and _store_mb(path) < SNAPSHOT_MAX_MB
     keep = room and (not last_body_at or now_ts - last_body_at >= BODY_EVERY_S)
     with _DB_LOCK:
-        con = _connect(path)
+        con = _connect(target)
         try:
             cur = con.execute("INSERT INTO raw_snapshots (retrieved_at, ok, http_status, error_kind, body_sha256, body_gz, "
                               "n_events, changed, api_path) VALUES (?,?,?,?,?,?,?,?,?)",

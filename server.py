@@ -612,8 +612,11 @@ def has_warning(g):
     """Any member-visible warning flag on this grade (not the kills-cap note, the last-10 display note, a per-map note or
     a plain 'last official map N days ago')."""
     for f in (g or {}).get("flags") or []:
-        if f.startswith(("SOFT BOOK", "NO MARKET")):  # the market-quality cap keeps counting whatever its member wording
-            return True                              # (2026-10-13: a bookmaker price no longer reads "unit size limited")
+        if f.startswith("SOFT BOOK") and "bookmaker price" in f:
+            continue    # a bookmaker quote (Thunderpick / OddsPapi book) is a STAKE RULE (1.5U cap, named by cap_grade), not a
+                        # data-quality problem - it no longer marks the line "flagged / open data issue" (2026-10-13)
+        if f.startswith(("SOFT BOOK", "NO MARKET")):  # a thin exchange book / no qualified market: still a warning
+            return True
         t = _public_flag(f)
         if t and ("caution" in t or "unit size limited" in t or t.startswith(_WARN_START)):
             return True
@@ -892,6 +895,7 @@ def moneylines_payload():
                                  f"Thunderpick: {moneyline.TP_STATE_LABEL[moneyline.TP_READ_ERROR].lower()}" if err else
                                  "Thunderpick: no event linked to this match" if m.get("match_id") else
                                  "Thunderpick: not checked - this card is not tied to one HLTV match")
+    out.extend(_tp_only_matches({m.get("match_id") for m in out if m.get("match_id")}))
     tps = _thunderpick_state()
     return {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "matches": out,
             "sources": {k: {x: (member_source_note(v.get(x)) if x == "note" else v.get(x))
@@ -900,6 +904,39 @@ def moneylines_payload():
             "thunderpick_rule": TP_RULE.format(age=tps.get("max_age_s") or 180),
             "model": {k: v for k, v in ml_model_state().items() if k != "val_promoted"},
             "recommendation": SHADOW_LABEL, "scope": "series", "thunderpick": tps}
+
+
+def _tp_only_matches(seen_ids, now=None):
+    """Matches Thunderpick lists that no exchange lists (2026-10-13 owner: Thunderpick is the primary bookmaker source on
+    Moneylines): one card per CORRECTLY MATCHED Thunderpick event (canonical HLTV id, never ambiguous) that is not already
+    on the board - team A = the canonical team A, its block from the same reader as every other card. No exchange
+    platforms, no baseline and no 0U side (the side rules are defined on exchange prices); started matches left out."""
+    try:
+        import thunderpick, moneyline
+        with thunderpick.POLLER.lock:
+            recs = dict(thunderpick.POLLER.matched)
+    except Exception:
+        return []
+    out = []
+    for mid, rec in recs.items():
+        if not mid or mid in seen_ids or not str(mid).startswith("hltv:") or rec.get("ambiguous"):
+            continue
+        e = rec.get("event") or {}
+        start = rec.get("hltv_start") or rec.get("start_utc")
+        bo = rec.get("hltv_bo")
+        blk = moneyline.tp_block({"match_id": mid, "start": start, "bo": bo}, now)
+        if not blk or blk.get("availability") in (moneyline.TP_READ_ERROR, "started") or blk.get("started"):
+            continue
+        a, b = (e.get("team2"), e.get("team1")) if rec.get("flipped") else (e.get("team1"), e.get("team2"))
+        out.append({"match_id": mid, "link_status": "linked", "link_reason": "Thunderpick event matched to the HLTV match",
+                    "teams": {"a": a, "b": b, "names_by_platform": {"thunderpick": {"a": a, "b": b}}},
+                    "event": e.get("tournament") or e.get("competition"), "start": start, "started": False,
+                    "tie_possible": bo == 2, "bo": bo, "scope": "series", "platforms": {"polymarket": None, "kalshi": None},
+                    "baseline": {"prob_a": None, "platform": None, "label": None,
+                                 "reason": "no exchange lists this match - Thunderpick only", "model_version": None},
+                    "disagreement": False, "disagreement_gap": None, "side": None, "thunderpick_only": True,
+                    "thunderpick": blk, "thunderpick_note": None})
+    return out
 
 
 def _tp_compare_rows(last=400):

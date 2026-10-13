@@ -7,6 +7,7 @@ startup restoration without renewed timestamps, the storage policy, canonical ma
 order, ambiguity), the market-type registry and the tp-first-2 policy gate, projection odds / the Moneylines block, and
 the key never leaking."""
 import json
+import pathlib
 import sqlite3
 import threading
 import time
@@ -70,11 +71,21 @@ def dump(path):
         con.close()
 
 
+def hist_file(tmp_path):
+    """The newest polling-history segment (2026-10-13: snapshots live in bounded segments, gateway state in thunderpick.db)."""
+    segs = sorted((tmp_path / ".cache" / "thunderpick_history").glob("history-*.db"))
+    return segs[-1]
+
+
+_HISTORY_TABLES = ("raw_snapshots", "events", "markets")
+
+
 def append_only(tmp_path, table):
     """UPDATE and DELETE abort (triggers). The connection is closed after each attempt: an aborted statement leaves
     its transaction open, which would otherwise hold the write lock against the poller."""
+    f = hist_file(tmp_path) if table in _HISTORY_TABLES else db_file(tmp_path)
     for sql in (f"DELETE FROM {table}", f"UPDATE {table} SET rowid = rowid"):
-        con = sqlite3.connect(db_file(tmp_path))
+        con = sqlite3.connect(f)
         try:
             with pytest.raises(sqlite3.DatabaseError):
                 con.execute(sql)
@@ -857,7 +868,7 @@ def test_restore_rebuilds_from_event_rows_when_the_body_was_not_stored(tmp_path)
     p.fetch_fns["cs2"] = ok_fetch(raw2)
     c.t += 61
     p.poll_once("cs2")                                              # changed within BODY_EVERY_S: event rows, no body
-    con = sqlite3.connect(db_file(tmp_path))
+    con = sqlite3.connect(hist_file(tmp_path))
     last = con.execute("SELECT id, body_gz IS NULL, changed FROM raw_snapshots ORDER BY id DESC LIMIT 1").fetchone()
     assert last[1:] == (1, 1) and con.execute("SELECT COUNT(*) FROM events WHERE snapshot_id = ?", (last[0],)).fetchone()[0] == 16
     q = T.Poller(fetch_fns={}, clock=c, canonical_fn=canon_stub)
@@ -882,7 +893,7 @@ def test_storage_rows_for_changes_bodies_throttled_no_market_rows(tmp_path, monk
     p.fetch_fns["csgo"] = ok_fetch([ev(team1Odds=1.8)])
     c.t += T.BODY_EVERY_S
     p.poll_once("csgo")                                             # changed, >= BODY_EVERY_S: the body again
-    con = sqlite3.connect(db_file(tmp_path))
+    con = sqlite3.connect(hist_file(tmp_path))
     assert con.execute("SELECT body_gz IS NOT NULL, changed FROM raw_snapshots ORDER BY id").fetchall() == [(1, 1), (0, 0), (0, 1), (1, 1)]
     assert con.execute("SELECT COUNT(*) FROM markets").fetchone()[0] == 0
     rows = con.execute("SELECT snapshot_id, source_event_id, tournament, game, url_id, draw_present, api_path FROM events "
@@ -892,7 +903,7 @@ def test_storage_rows_for_changes_bodies_throttled_no_market_rows(tmp_path, monk
     assert con.execute("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'events_sid'").fetchone()
     append_only(tmp_path, "events")
     monkeypatch.setattr(T, "SNAPSHOT_MAX_MB", 0.0001)               # above the cap: status rows only, and a warning
-    assert "history store at" in T.store_info()["warning"] and p.status()["store"]["warning"]
+    assert "polling history at" in T.store_info()["warning"] and p.status()["store"]["warning"]
     p.fetch_fns["csgo"] = ok_fetch([ev(team1Odds=1.9)])
     c.t += T.BODY_EVERY_S
     p.poll_once("csgo")
@@ -1044,3 +1055,50 @@ def test_admin_coverage_view_lists_unmatched_events_and_board_fallbacks(monkeypa
     amb = [u for u in v["unmatched_events"] if "ambiguous" in u["why"]]
     assert len(amb) == 2 and v["matched"] == len(SCHED) - 1
     assert KEY not in json.dumps(v)
+
+
+
+def test_history_segments_rotate_and_prune_without_touching_gateway_state_or_replay(tmp_path, monkeypatch):
+    """Snapshot retention (2026-10-13 owner): polling history is bounded by whole-segment pruning; the gateway state
+    (budget, cooldown, audit, policy log) is never rotated; a restart after pruning still restores the latest answer
+    with its ORIGINAL time and hash; a saved forecast replays from its own inputs whatever was pruned."""
+    import grader
+    from pick_verdict import verdict
+    p, c = active_poller()
+    gw_before = dump(db_file(tmp_path))["request_log"] if "request_log" in dump(db_file(tmp_path)) else None
+    monkeypatch.setattr(T, "SEGMENT_MAX_MB", 0.00001)            # every write rotates (TEST FIXTURE sizes)
+    raws = p.data["cs2"]["raw"]
+    for i in range(6):
+        p.fetch_fns["cs2"] = ok_fetch([dict(e, team1Odds=round(e["team1Odds"] + 0.01 * (i + 1), 2)) for e in raws])
+        c.t += 61
+        p.poll_once("cs2")
+    segs = sorted((tmp_path / ".cache" / "thunderpick_history").glob("history-*.db"))
+    assert len(segs) >= 6
+    monkeypatch.setattr(T, "SNAPSHOT_MAX_MB", T._file_mb(segs[-1]) * 2.5)   # budget for ~2 segments
+    c.t += 61
+    p.poll_once("cs2")
+    left = sorted((tmp_path / ".cache" / "thunderpick_history").glob("history-*.db"))
+    assert len(left) < len(segs) + 1 and left[-1] not in segs[:1]           # the oldest whole segments went
+    assert db_file(tmp_path).exists()                                       # the gateway file is never pruned
+    if gw_before is not None:
+        assert dump(db_file(tmp_path))["request_log"][:len(gw_before)] == gw_before   # audit intact, append-only
+    latest = p.data["cs2"]["at"]
+    q = T.Poller(fetch_fns={}, clock=c, canonical_fn=canon_stub)            # restart after pruning
+    c.t += 20
+    assert q.restore() == ["cs2"]
+    a = T.projection_odds("Alpha1", "Bravo1", start_of(1), poller=q)
+    assert a["found"] and a["provenance"]["retrieved_at"] == T._iso(latest)   # original time, never refreshed
+    # replay: a forecast's grader inputs carry the selected quote itself - grading them again needs no history
+    gi = {"prop": "kills", "line": 30.5, "scope": "12", "maps_played": 40, "kpr": 0.72, "hs_pct": 48,
+          "team_ml": a["team_ml"], "opp_ml": a["opp_ml"], "p_team_market": a["team_prob"], "market_quality": "SOFT",
+          "odds_provenance": a["provenance"], "label": "TEST FIXTURE"}
+    g1 = grader.grade_leg(dict(gi))
+    for s in left:
+        for x in (s, pathlib.Path(str(s) + "-wal"), pathlib.Path(str(s) + "-shm")):
+            if x.exists():
+                x.unlink()
+    T._READY.clear()
+    g2 = grader.grade_leg(dict(gi))
+    assert verdict(g1) == verdict(g2) and g1["lambda_final"] == g2["lambda_final"] and g1["p_more"] == g2["p_more"]
+    for k in ("odds_team", "odds_opp", "p_team", "retrieved_at", "snapshot_sha256", "source_event_id", "match_id"):
+        assert gi["odds_provenance"][k] is not None
