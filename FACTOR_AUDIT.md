@@ -290,3 +290,51 @@ Development research. The preregistration timing (definitions written 17:00 UTC,
 file timestamps - definitions and results were committed together (c23f763, 17:14 UTC). The acceptance rule is not changed
 after the result. C3's thin-history result is a lead for validation on new matches, not a basis for promotion. No
 adjustment experiment runs until the HLTV coverage repair and the staged before/after comparison are done (HLTV_COVERAGE.md).
+
+## Frozen test definition - round 6: market information in the projection (rr-1 / RR-KS) - frozen 2026-10-13 17:51 UTC
+**Owner authorization (2026-10-13):** build and test the missing Maps 1-2 market integration; this one experiment is
+run although the coverage gate above was still open (the HLTV backfill finished 2026-10-13 ~17:30 UTC; the staged
+before/after replay is still to be run and is not part of this test).
+
+**What was already inspected (honest record).** The definition below was chosen AFTER exploration: three designers
+(empirical-closeness, round-race, scenario-dedup) and three judges fitted and compared candidates on TRAIN rows only
+(HLTV date < 2026-07-01) between ~14:40 and ~17:00 UTC today; by their reports no VALID or TEST outcome was computed for
+any candidate. The three kill-share designs proved to be one signal on TRAIN (projection correlation 0.91-0.995,
+Maps 1-2 kills MAE vs perf-2 -0.059 / -0.060 / -0.061, differences within +-0.003); RR-KS was chosen on engineering
+grounds (frozen live functions, exact perf-2 result without a price, no lineup data, no change to the perf-2 queries),
+not on any held-out number. The TEST period (>= 2026-08-13) is NOT fresh data in general: rounds 1-5 and challenger M1
+used its outcomes for other factors. **Untouched by anyone:** HLTV matches after 2026-10-08 (not in the export) and the
+lower-tier matches added by the 2026-10-13 backfill - reserved for the forward shadow evaluation.
+
+**Formula (rr-1, variant rr-ks).** p = pre-match series win chance of the player's team from the selected qualified
+market (Thunderpick proportional margin-adjusted when eligible, else Polymarket midpoint); bo in {1,3,5} (else no market
+term). Per-map chance q MODEL-DERIVED from p: BO1 q = p, BO3 p = q^2(3-2q), BO5 p = q^3(10-15q+6q^2) (maps independent,
+equal q). A calibrated round race (MR12, overtime blocks, per-map round-win chance ~ Beta with kappa 22, match-point
+effect eta 0.03, normalised so the TRAIN mean is 21.74 rounds) gives, per map, the expected rounds the team wins W(q) and
+loses L(q) (and given a map win / loss). Kill-weighted rounds K(q) = a W(q) + b L(q), a = 1.4323, b = 0.5924 (kills per
+round won / lost relative to the perf-2 per-round rate, TRAIN least squares on 44,302 player-maps; ratio stable
+2.40-2.44 across TRAIN thirds). **De-duplication:** the perf-2 rate already contains the strength of his own team and the
+opponent factor that of the opponent, so K is divided by H = M(rho_team) M(1 - rho_opp) / M(0.5), M(x) = a x + b(1-x),
+rho = each team's time-weighted (half-life 120 d) round-win share in its HLTV maps strictly before the match day, shrunk
+400 rounds to 0.5 - the market enters only through the difference between today's expected round share and the history
+already in the rate and the opponent factor. lambda_kills = ro x n x K(q) / H with ro = perf-2 kills per round
+(lambda_kills / (21.74 x maps)); Maps 1-3 of a BO3 uses the 1-1 scenario. Headshots = lambda_kills x HS/kill, HS
+probabilities from the beta-binomial HS | kills on the candidate kills (conditional). Spread C = perf.SPREAD unchanged.
+No price / BO2 / unknown format / BO1 with a scope other than Map 1 / a non-HLTV projection -> exactly perf-2.
+Frozen constants: scratchpad design/round-race/rr_tables.json, copied into the repo as perf_market_tables.json.
+
+**Prices and cutoffs.** Historical: ml_research/dataset.pkl - the last Polymarket (else Kalshi) series price at or before
+the earliest scheduled start minus 30 min, <= 6 h old (exchange prices, NOT Thunderpick: historical tests cannot show a
+Thunderpick-specific gain). Live: the forecast's own selected price (saved provenance).
+
+**Data / splits / metrics / pass rules.** As in scratchpad design/round-race/rr_test_frozen.py (run once with
+--frozen-run): series-players of the HLTV export joined to those prices; TRAIN < 2026-07-01 (fitting), VALID
+2026-07-01..08-12 (direction), TEST >= 2026-08-13. Primary: TEST Maps 1-2 kills MAE candidate minus perf-2, paired,
+match-grouped bootstrap (1,000, seed 20261013). Pass: (1) primary 95% upper bound < 0; (2) VALID and TRAIN point
+estimates < 0; (3) no TEST secondary significantly worse (kills Map 1 / Maps 1-3, HS Map 1 / 1-2 / 1-3 MAE; kills Maps
+1-2 log-score; HS Maps 1-2 log-score); (4) rr-ks minus rr-ks-noq (q = 0.5, no market) 95% upper bound < 0 - the gain
+must come from the market. Also reported (descriptive, not gating): Brier and calibration of Over/Under at the
+projection's own half-line, by match-grouped intervals. **Single primary arm: rr-ks.** rr (rounds only) is descriptive.
+**On pass:** a logged SHADOW challenger only (no grade, chance or stake changes); promotion needs the established process
+(forward windows, written owner decision, new model version). **On fail:** it stays logged in shadow as a measured
+negative result, never promoted. The existing frozen challengers (M1 etc.) are unchanged.
