@@ -318,6 +318,50 @@ def test_projection_odds_orientation_freshness_start_and_draw():
     assert "draw" in T.projection_odds("Alpha2", "Bravo2", SCHED[2]["start"].isoformat(), poller=p)["reason"]
 
 
+def test_quotes_survive_a_429_and_one_empty_answer_then_expire_by_their_own_age():
+    """The production sequence of 2026-10-13 13:37-13:40 UTC (60 events, 429, an empty 200, 59 events), replayed on
+    fixtures: a fresh quote keeps serving through the cooldown and the single empty answer, with ITS snapshot's
+    retrieval time and hash; it expires by age, and a feed that stays empty clears its matches."""
+    p, c = active_poller()
+    start = SCHED[1]["start"].isoformat()
+    first = T.projection_odds("Alpha1", "Bravo1", start, poller=p)["provenance"]
+    t0, sha0 = first["retrieved_at"], first["snapshot_sha256"]
+    assert sha0 and len(sha0) == 64
+    p.fetch_fns["cs2"] = err_fetch("rate_limited", 429)
+    c.t += 25
+    assert p.poll_once("cs2") is False and T.cooldown(c.t)["active"]
+    a = T.projection_odds("Alpha1", "Bravo1", start, poller=p)
+    assert a["found"] and a["provenance"]["retrieved_at"] == t0      # the cooldown does not void a fresh quote
+    assert p.state() == "ok"
+    p.fetch_fns["cs2"] = ok_fetch([])
+    c.t += 80                                                          # past the 429 cooldown (60 s +-20%)
+    assert p.poll_once("cs2") is True and T._sched("cs2")["last_outcome"] == "empty"
+    b = T.projection_odds("Alpha1", "Bravo1", start, poller=p)
+    assert b["found"] and b["provenance"]["retrieved_at"] == t0 and b["provenance"]["snapshot_sha256"] == sha0
+    assert T.board_block("hltv:9001", poller=p)["retrieved_at"] == t0
+    assert p.status()["endpoints"]["cs2"]["held_through_empty_at"]
+    c.t += T.QUOTE_MAX_AGE_S - 105 + 1                                 # the held snapshot is now older than the limit
+    s = T.projection_odds("Alpha1", "Bravo1", start, poller=p)
+    assert not s["found"] and "stale" in s["reason"]
+    assert T.board_block("hltv:9001", poller=p)["usable"] is False
+    c.t += T.MIN_GAP_S
+    assert p.poll_once("cs2") is True                                  # still empty: the old snapshot is replaced
+    assert p.matched == {} and T.board_block("hltv:9001", poller=p) is None
+    assert T.projection_odds("Alpha1", "Bravo1", start, poller=p)["reason"] == "no Thunderpick event for this match"
+
+
+def test_a_full_answer_replaces_the_quote_and_its_provenance():
+    p, c = active_poller()
+    start = SCHED[1]["start"].isoformat()
+    sha0 = T.projection_odds("Alpha1", "Bravo1", start, poller=p)["provenance"]["snapshot_sha256"]
+    evs = [dict(e, team1Odds=round(e["team1Odds"] + 0.05, 2)) for e in p.data["cs2"]["raw"]]
+    p.fetch_fns["cs2"] = ok_fetch(evs)
+    c.t += 61
+    p.poll_once("cs2")
+    pv = T.projection_odds("Alpha1", "Bravo1", start, poller=p)["provenance"]
+    assert pv["snapshot_sha256"] != sha0 and pv["retrieved_at"] == T._iso(c.t)
+
+
 def test_board_block_is_primary_only_when_usable():
     p, c = active_poller()
     blk = T.board_block("hltv:9003", poller=p)

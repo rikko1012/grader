@@ -22,8 +22,12 @@ Ingestion (members never call upstream) - every request goes through request() (
   - every request actually sent is an append-only request_log row (time, path, caller, instance, pid, commit, status,
     sanitized headers incl. request ids, a key-redacted body snippet of errors) - never the key
   - bounded timeouts (5 s connect, 10 s read)
-  - an empty 200 is an empty feed (replaces the data, current); a failure keeps the last good data, marked STALE, and
-    stale data is never used as a current comparison
+  - a quote is current while ITS OWN snapshot is at most QUOTE_MAX_AGE_S old - a cooldown or a failed request does
+    not void a fresh quote, and an old quote is never used (it expires by age, whatever the feed does next)
+  - an empty 200 replaces the data, except ONE kind: an empty answer while the endpoint's last full snapshot is still
+    current (seen in production 2026-10-13 13:39 UTC: 60 events, 429, an empty 200, 59 events). That snapshot keeps
+    serving, with its own retrieval time and hash, until it expires by age; a feed that stays empty clears it.
+  - provenance (retrieval time, snapshot sha256) is that of the snapshot the quote came from
   - retrieved_at is OUR fetch time - it is never presented as the source's quote time (the API has none)
 
 History (CS2_DATA_DIR/.cache/thunderpick.db, append-only)
@@ -44,7 +48,7 @@ import re
 import sqlite3
 import threading
 import time
-from collections import Counter, deque
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
@@ -563,6 +567,7 @@ BASE_INTERVAL_S = 60
 EMPTY_STEPS = ((5, 60), (10, 120), (15, 180))       # empty streak below N -> interval; beyond the last -> MAX_INTERVAL_S
 MAX_INTERVAL_S = 300
 MIN_GAP_S = 20
+QUOTE_MAX_AGE_S = int(2.5 * BASE_INTERVAL_S + 30)   # 180 s: a quote older than this is never current
 TICK_S = 5
 AUTH_BLOCK_AFTER = 3
 
@@ -681,8 +686,10 @@ class Poller:
         _put("auth", {"blocked": False, "failures": 0, "since": None, "key_fp": None}, self.db)
         data = r["data"]
         norm = normalize(data, _iso(now))
+        sha = hashlib.sha256(r["body"]).hexdigest() if r.get("body") is not None else None
         for e in norm:
             e["api_path"] = PATHS[name]
+            e["snapshot_sha256"] = sha
         empty = len(data) == 0
         sch.update(ok=sch["ok"] + 1, last_success=_iso(now), last_outcome="empty" if empty else "events", events_last=len(data))
         if empty:
@@ -696,9 +703,15 @@ class Poller:
         sch["next_at"] = now + sch["interval_s"]
         _put(f"sched:{name}", sch, self.db)
         with self.lock:
-            self.data[name] = {"events": norm, "raw": data, "at": now, "empty": empty}
+            prev = self.data.get(name)
+            had = bool(prev and prev["events"])
+            hold = empty and had and now - prev["at"] <= QUOTE_MAX_AGE_S
+            if hold:                    # one empty answer between full ones: the full snapshot serves until it expires
+                prev["empty_seen_at"] = now
+            else:
+                self.data[name] = {"events": norm, "raw": data, "at": now, "empty": empty}
         self._record(True, _iso(now), r["status"], None, r["body"], norm, api_path=PATHS[name], name=name)
-        if not empty:
+        if not hold and (not empty or had):     # the event set may have changed (a feed that went empty clears its matches)
             try:
                 self.refresh_matches()
             except Exception as e:      # noqa: BLE001 - matching never stops the feed
@@ -762,9 +775,10 @@ class Poller:
         d = self.data.get(name)
         if not d:
             return False
-        sch = _sched(name, self.db)
-        limit = 2.5 * max(sch.get("interval_s", BASE_INTERVAL_S), BASE_INTERVAL_S) + 30
-        return now - d["at"] <= limit and not cooldown(now, self.db)["active"]
+        if d["events"]:                 # quotes: by their age only (a cooldown does not void a fresh quote)
+            return now - d["at"] <= QUOTE_MAX_AGE_S
+        sch = _sched(name, self.db)     # an empty feed: current until its (slowed) next poll is overdue
+        return now - d["at"] <= 2.5 * max(sch.get("interval_s", BASE_INTERVAL_S), BASE_INTERVAL_S) + 30
 
     def events(self, now=None):
         """Current, valid events of every endpoint (deduplicated by the source event id; cs2 first)."""
@@ -812,6 +826,9 @@ class Poller:
         for n, s in sch.items():
             s["next_attempt"] = _iso(s["next_at"]) if s.get("next_at") else "now"
             s["current"] = self.current(n, now)
+            d = self.data.get(n) or {}
+            s["serving_snapshot_at"] = _iso(d["at"]) if d.get("at") else None
+            s["held_through_empty_at"] = _iso(d["empty_seen_at"]) if d.get("empty_seen_at") else None
         out = {"source": SOURCE, "enabled": enabled(), "key": key_diagnostic(), "autopoll": autopoll(),
                "running": bool(self._thread and self._thread.is_alive()), "endpoints": sch,
                "cooldown": cooldown(now, self.db), "auth": auth_block(self.db), "alert": self.alert,
@@ -829,11 +846,13 @@ class Poller:
             return "not_configured"
         if auth_block(self.db).get("blocked"):
             return "auth_failed"
+        if self.events(now):            # current quotes are served even while a cooldown runs
+            return "ok"
         c = cooldown(now, self.db)
         if c["active"] and (c.get("reason") or "").startswith("HTTP 429"):
             return "rate_limited"
         if any(self.current(n, now) for n in PATHS):
-            return "ok" if self.events(now) else "empty"
+            return "empty"
         if c["active"]:
             return "unavailable"
         return "starting" if autopoll() else "paused"
@@ -1017,6 +1036,19 @@ def policy(db=None, record_events=False):
 
 
 # ---------------------------------------------------------------- readers: projections, the Moneylines tab
+def quote_age(e, now_ts):
+    """Seconds since the snapshot this event came from was retrieved (None when unreadable)."""
+    try:
+        return now_ts - datetime.fromisoformat(str(e.get("retrieved_at")).replace("Z", "+00:00")).timestamp()
+    except (TypeError, ValueError):
+        return None
+
+
+def _quote_current(e, now_ts):
+    a = quote_age(e, now_ts)
+    return a is not None and a <= QUOTE_MAX_AGE_S
+
+
 def projection_odds(team, opponent, start_iso, now=None, poller=None, canonical_fn=None):
     """Thunderpick's series-winner odds for `team` vs `opponent` in the polymarket.match_odds shape, or
     {"found": False, "reason": ...}. Only when the policy is active, the match links exactly (canonical id + orientation),
@@ -1036,8 +1068,7 @@ def projection_odds(team, opponent, start_iso, now=None, poller=None, canonical_
     if not rec:
         return {"found": False, "reason": "no Thunderpick event for this match"}
     e = rec["event"]
-    name = next((n for n in PATHS if PATHS[n] == e.get("api_path")), "cs2")
-    if not p.current(name, now_ts):
+    if not _quote_current(e, now_ts):
         return {"found": False, "reason": "Thunderpick quote stale"}
     if e.get("main_market") not in pol["series_markets"]:
         return {"found": False, "reason": f"market '{e.get('main_market')}' not established as the series winner"}
@@ -1056,14 +1087,13 @@ def projection_odds(team, opponent, start_iso, now=None, poller=None, canonical_
     pa = o["two_way"]["p_a"]
     p_team = pa if team_is_a else 1 - pa
     from polymarket import prob_to_american
-    retrieved = p.data[name]["at"]
     prov = {"source": SOURCE, "policy": POLICY_VERSION, "market": e.get("main_market"), "scope": "series winner",
             "match_id": c["match_id"], "source_event_id": e.get("source_event_id"), "api_path": e.get("api_path"),
             "odds_team": o["odds_a"] if team_is_a else o["odds_b"], "odds_opp": o["odds_b"] if team_is_a else o["odds_a"],
             "implied_team_raw": round(1 / (o["odds_a"] if team_is_a else o["odds_b"]), 6), "margin": o["two_way"]["margin"],
-            "p_team": round(p_team, 6), "method": o["two_way"]["method"], "retrieved_at": _iso(retrieved),
+            "p_team": round(p_team, 6), "method": o["two_way"]["method"], "retrieved_at": e.get("retrieved_at"),
             "source_updated_at": None, "source_updated_note": "the feed publishes no quote update time",
-            "snapshot_sha256": p.last_sha.get(name), "match_url": e.get("url"), "timezone": pol["timezone"].get("meaning")}
+            "snapshot_sha256": e.get("snapshot_sha256"), "match_url": e.get("url"), "timezone": pol["timezone"].get("meaning")}
     return {"found": True, "team": team, "opponent": opponent, "start": st, "url": e.get("url"),
             "title": f"{e.get('team1')} vs {e.get('team2')}", "book": SOURCE, "team_prob": round(p_team, 4),
             "opp_prob": round(1 - p_team, 4), "team_ml": prob_to_american(p_team), "opp_ml": prob_to_american(1 - p_team),
@@ -1081,10 +1111,9 @@ def board_block(match_id, now=None, poller=None):
     if not rec:
         return None
     e = rec["event"]
-    name = next((n for n in PATHS if PATHS[n] == e.get("api_path")), "cs2")
     pol = policy(p.db)
     o = oriented(rec)
-    cur = p.current(name, now_ts)
+    cur = _quote_current(e, now_ts)
     scope_ok = e.get("main_market") in pol["series_markets"] and not e.get("draw_present")
     tw = o["two_way"]
     blk = {"source": SOURCE, "market": e.get("main_market"), "scope_confirmed": scope_ok,
@@ -1093,7 +1122,7 @@ def board_block(match_id, now=None, poller=None):
            "implied_a_raw": round(1 / o["odds_a"], 4) if o["odds_a"] else None,
            "implied_b_raw": round(1 / o["odds_b"], 4) if o["odds_b"] else None,
            "p_a": tw["p_a"] if tw else None, "p_b": tw["p_b"] if tw else None, "margin": tw["margin"] if tw else None,
-           "method": "proportional margin-adjusted market estimate", "retrieved_at": _iso(p.data[name]["at"]),
+           "method": "proportional margin-adjusted market estimate", "retrieved_at": e.get("retrieved_at"),
            "source_updated_at": None, "current": cur, "status": "current" if cur else "stale",
            "usable": bool(cur and scope_ok and tw), "url": e.get("url"), "match_method": rec.get("method"),
            "timezone": "confirmed" if rec.get("tz") == "resolved" else "unconfirmed",
