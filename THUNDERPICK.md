@@ -6,7 +6,9 @@
   margin-adjusted series price when the match links exactly and the quote is current, else the existing Polymarket
   rule with the reason saved (`inputs.odds_provenance.fallback_reason`). Never 50%.
 - **First real forecasts using it:** forecasts 5867-5873 (13:40:18 UTC, version `4f00a300a1`): Legacy vs PARIVISION,
-  2026-10-14 13:30 UTC (`hltv:2399386`, Thunderpick fixture `fx:3297270`). Example below.
+  2026-10-14 13:30 UTC (`hltv:2399386`, Thunderpick fixture `fx:3297270`). Example below. By 14:02 UTC: well over 150
+  Thunderpick-sourced forecasts on 8 matches, every one with its snapshot hash and no map prices from another source;
+  no line switched back to Polymarket while its quote was current. Current version `17e5e85837`.
 - Moneylines: a Thunderpick block comes first on each matched card (original decimal odds, raw implied, margin,
   margin-adjusted probability, our retrieval time, status, link); Polymarket and Kalshi stay as labelled comparisons.
 - Single Render instance (persistent disk); HTTPS with certificate verification; the key is only in the Render
@@ -37,6 +39,10 @@ were falling back to Polymarket), **MongolZ = The MongolZ**, **EA Copenhagen = E
 academies onto main teams (e.g. Vitality Academy), and "Proycon vs Hacha eSports" (CCT South America, 2026-10-13 16:00),
 which has the same start and opponent as our "9z vs Hacha" but a different team name - possibly the same match, not
 provable from the data. Open board matches without a Thunderpick price fall back to Polymarket with the reason saved.
+After the aliases: 41 of 60 events linked; BetBoom vs FURIA priced from Thunderpick (`fx:3297271`, 17 forecasts by
+14:02). The view's board side reads each open pick's latest saved provenance - a PrizePicks label can differ from the
+HLTV team the grader links (PrizePicks 'UNO MILLE' = HLTV 'ex-Keyd Stars' vs Galorys, 21:00 UTC: the same match
+Polymarket priced as `cs2-keydst-gls1`; Thunderpick ex-Keyd 2.47 -> 37.5% vs Polymarket 32.5%).
 
 ## Real forecast (forecast 5873, pick 1350, version `4f00a300a1`)
 zweih (PARIVISION) kills, Maps 1-2, line 27.5 vs Legacy, 2026-10-14 13:30 UTC.
@@ -72,6 +78,10 @@ and Maps 1-3 lines (older pipeline) do move with the win probability. Activation
 - Freshness (`822a6b4505`): a quote is used only while its own snapshot is <= 180 s old. A cooldown does not void a fresh
   quote; one empty answer between full ones does not wipe it; a feed that stays empty clears its matches.
   Provenance is always the quote's own snapshot.
+- Restart (`17e5e85837`): each endpoint's last full snapshot is restored from the history (own retrieval time and hash,
+  only within 180 s). Verified on the 14:04 UTC deploy: the new instance served the old instance's 14:03:56 snapshot
+  (41 matches, restored) until its own first poll at 14:04:57; no forecast changed source. Before (13:39 deploy) 91
+  lines fell back to Polymarket for about a minute.
 
 ## Observed rate limiting
 | time (UTC) | path | result | context |
