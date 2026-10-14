@@ -310,7 +310,7 @@ live projections to the N0 view (exclude the backfill matches from the perf-2 qu
 arm C - repaired history WITH an opponent-strength adjustment, frozen and tested on the large historical set - passes,
 plus forward scoring of both views. Keep the repaired data for coverage, settlement and the shadow logs.
 
-## Controlled rollback of the performance-model input (2026-10-14, release `d88cc8dd8e`)
+## Controlled rollback of the performance-model input (2026-10-14, release `23bea2fe37`)
 
 **Owner rule.** A dataset that reached live grading before its planned validation and activation gate is pinned back to the
 last approved model-input revision as a controlled rollback. That restores the agreed release state; it is NOT a finding that
@@ -325,34 +325,49 @@ live grades used partial repaired history from 00:49 UTC (367 forecasts) and the
 report: "New matches from every tier are picked up by each scan"; the scraper repository itself was not inspected from here).
 That is an **unintended activation**, so the rollback applies.
 
-**What is pinned (perf_live `INPUT_REV = "N0"`, rule `n0-r2`, 2026-10-14).** It restores the APPROVED INPUT POLICY after
+**What is pinned (perf_live `INPUT_REV = "N0"`, rule `n0-r3`, 2026-10-14).** It restores the APPROVED INPUT POLICY after
 the unintended activation - it is not a finding that the old coverage predicts better (the comparison above is
-inconclusive). Only the performance model's three queries (player maps, opponent maps, the rr-1 shadow's team rounds),
-through an INCLUSION list that fails closed:
-- IN: matches first fetched (min `raw_pages.fetched_at`) before the backfill began (2026-10-12 21:27 UTC) or with no raw page
-  (the 2026-10-11 seed); and matches first fetched later, outside the two backfill windows, whose both teams are in the VRS
-  top 200 of the dated `team_rankings` snapshot on or before their first-fetch day (UTC), by HLTV team id - the pre-repair
-  scan rule on STORED historical rankings (daily snapshots exist from 2026-10-11; a later snapshot or today's list is never
-  used for an older match);
-- OUT: the backfill, later all-tier arrivals, a later arrival with no snapshot or no parsed teams, and ANY match not
-  evaluated yet (a match fetched after the last evaluation waits for the next one, every 10 minutes);
+inconclusive). It is a **RECONSTRUCTED pre-repair input policy, not an exact historical restoration**: the pre-repair
+scanner logged no per-match eligibility, so the later part of the set is rebuilt from stored rankings. Only the
+performance model's three queries (player maps, opponent maps, the rr-1 shadow's team rounds), through an INCLUSION list
+that fails closed:
+- IN: (a) the KNOWN ORIGINAL SET, kept exactly: every match first fetched (min `raw_pages.fetched_at`) before the backfill
+  began (2026-10-12 21:27 UTC) or with no raw page (the 2026-10-11 seed); (b) a match first fetched later and DATED on or
+  after 2026-10-12 (a fresh result the regular scan lists) whose both teams are in the VRS top 200 of the dated
+  `team_rankings` snapshot on or before its first-fetch day (UTC), by HLTV team id;
+- OUT: older-dated history first fetched after the start (the backfill and every later all-tier history, whichever window
+  or job fetched it), lower-tier new matches, a later arrival with NO snapshot on or before its day (a missing snapshot
+  means out - never a later snapshot or today's list), no parsed teams / no overview, and ANY match not evaluated yet (a
+  match fetched after the last evaluation waits for the next one, every 10 minutes);
 - a player / opponent known only from outside N0 is "not in HLTV" again (BO3.gg fallback / average opponent, as before).
-No approximate set exists: a failed evaluation serves the last VERIFIED evaluation of the same rule (memory, then the stored
-copy), marked STALE in the revision and in the projection's data note (newer matches stay out), and with none anywhere the
-projection is temporarily unavailable (transient) - never the full tables. One evaluation for everyone (single-flight). The
-queries were validated on real Postgres (a Neon test branch of the scraper schema: every class, the UTC day boundary, and
-an independent cross-check 324 in / 146 out). The r1 query (same windows and rule, exclusion form) ran read-only on
-production on 2026-10-14 (by the other session, its own check): 0.3 s, 19,590 backfill matches, 10 later all-tier
-arrivals; team_rankings holds daily snapshots 2026-10-11 .. 10-14 (350-351 rows each).
+No approximate set exists and no other dataset is substituted: a failed evaluation serves the last VERIFIED evaluation of
+the same rule (memory, then the stored copy), marked STALE in the revision and in the projection's data note (newer matches
+stay out), and with none anywhere the projection is temporarily unavailable (transient) - never the full tables. One
+evaluation for everyone (single-flight).
+**Ranking source.** The pre-repair scan (`pipeline.relevant()`) kept a match when both lowercased team names were in the VRS
+top 200 it fetched live at scan time, falling back to its own stored rankings (`team_rankings`) when that fetch failed;
+the 2026-10-11 rebuild applied that day's ranking to all history. `team_rankings` is therefore the scraper's own stored copy
+of the list its scan used (one snapshot per UTC day: 2026-10-11 350 rows, 10-12 351, 10-13 351, 10-14 352) - that it equals
+the live list at every individual scan cannot be verified. Within-day ranking changes are invisible (one snapshot per day);
+the old scan matched names, this matches HLTV team ids (a team whose VRS and HLTV names differ was missed by the old scan,
+not here).
+**Production validation (read-only, 2026-10-14, the final r3 queries through the app's own connection and 5 s statement
+timeout).** Query 0.50 s, loader 0.60-0.85 s (the first set-based form took 6.7-9.9 s: the snapshot lookup ran per row).
+pre 8,597 - every one discovered in `scrape_queue` before the backfill (found_at), i.e. the known original set; later
+arrivals 19,644: in 45, outside_top 19, history 19,580, no_snapshot 0, no_teams 0; N0 = 8,642 of 28,241 matches; sha
+b1742d355a12. From the stored metadata none of the 19,644 later arrivals was judged on a snapshot recorded after its first
+fetch. An independent cross-check of the IN set agreed (45 = 45). r2 (the backfill fetch windows instead of dates) misjudged
+5 matches on production - 4 fresh top-200 results the regular scan fetched inside a backfill window (out) and 1
+backfill-listed old match fetched after the windows (in) - so r3 decides by the match's own date. Earlier, on a Neon test
+branch of the scraper schema, every class, the UTC day boundary and an independent cross-check (324 in / 146 out) passed.
 **Not pinned - MIXED REVISIONS:** storage (nothing is deleted), settlement, display, the last-10 / H2H records and the
 stake-check reads (maps played, last map date, AWP share) keep reading the full tables (repaired history). Each grade
 carries `input_revisions` per component; each forecast's `data_rev` = full-table count + `;records_input=full;perf_input=
-N0/n0-r2:...`; `/admin/hltv_status` -> `perf_input` shows counts, snapshots, staleness and the last error. The original
-forecasts keep their logged inputs.
-**Limitations.** Daily snapshots only (the pre-repair scan compared against the ranking at scan time; intra-day changes are
-invisible); that `team_rankings` is the exact VRS list the pre-repair scraper used is not verified; matches ingested
-before 2026-10-12 21:27 UTC are taken as approved without re-checking the rule; the final r2 queries still need their
-read-only production run before the deploy.
+N0/n0-r3:...`; `/admin/hltv_status` -> `perf_input` shows the policy label, counts, snapshots, staleness and the last error.
+The original forecasts keep their logged inputs.
+**Limitations.** Reconstructed, not exact (above): daily snapshots only, the stored copy rather than the live list at each
+scan, team ids rather than names; matches ingested before 2026-10-12 21:27 UTC are taken as approved without re-checking
+the rule (they are the known original set).
 
 **Reconciliation of the comparison above** (recomputed from the saved per-line results, replay_units.json; same 616 kills /
 531 HS lines, 23 matches):
