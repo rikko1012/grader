@@ -310,7 +310,7 @@ live projections to the N0 view (exclude the backfill matches from the perf-2 qu
 arm C - repaired history WITH an opponent-strength adjustment, frozen and tested on the large historical set - passes,
 plus forward scoring of both views. Keep the repaired data for coverage, settlement and the shadow logs.
 
-## Controlled rollback of the performance-model input (2026-10-14, release `a0ce320c2c`)
+## Controlled rollback of the performance-model input (2026-10-14, release `8f091e14cc`)
 
 **Owner rule.** A dataset that reached live grading before its planned validation and activation gate is pinned back to the
 last approved model-input revision as a controlled rollback. That restores the agreed release state; it is NOT a finding that
@@ -325,19 +325,34 @@ live grades used partial repaired history from 00:49 UTC (367 forecasts) and the
 report: "New matches from every tier are picked up by each scan"; the scraper repository itself was not inspected from here).
 That is an **unintended activation**, so the rollback applies.
 
-**What is pinned (perf_live `INPUT_REV = "N0"`).** Only the performance model's three queries (player maps, opponent maps, the
-rr-1 shadow's team rounds):
-- matches whose first fetch (min `raw_pages.fetched_at`) falls in the two backfill windows are left out;
-- a match first fetched after the backfill began (>= 2026-10-12 21:27 UTC) is kept only under the pre-repair scan rule: both
-  teams in the VRS top 200 of the latest `team_rankings` snapshot on or before its first fetch, by HLTV team id - otherwise
-  the every-tier scan would drift N0 toward N with every 2-hour scan;
-- a player / opponent known only from those matches is "not in HLTV" again (BO3.gg fallback / average opponent, as before).
-If the old-rule query itself fails (schema), the backfill alone is excluded and the revision string says so; with no
-exclusion set anywhere (memory, stored copy) the projection is transient - never graded on the full tables. The set is loaded
-once for everyone and refreshed every 30 minutes. Each forecast's `data_rev` carries `perf_input=N0:backfill=<n>;late_out=<n>;
-rule=...;sha=...`; `/admin/hltv_status` -> `perf_input` shows the counts and the last load error.
-**Not pinned:** storage (nothing is deleted), settlement, display, the last-10 / H2H records and the stake-check reads
-(sample counts, last map date) - they keep reading the full tables. The original forecasts keep their logged inputs.
+**What is pinned (perf_live `INPUT_REV = "N0"`, rule `n0-r2`, 2026-10-14).** It restores the APPROVED INPUT POLICY after
+the unintended activation - it is not a finding that the old coverage predicts better (the comparison above is
+inconclusive). Only the performance model's three queries (player maps, opponent maps, the rr-1 shadow's team rounds),
+through an INCLUSION list that fails closed:
+- IN: matches first fetched (min `raw_pages.fetched_at`) before the backfill began (2026-10-12 21:27 UTC) or with no raw page
+  (the 2026-10-11 seed); and matches first fetched later, outside the two backfill windows, whose both teams are in the VRS
+  top 200 of the dated `team_rankings` snapshot on or before their first-fetch day (UTC), by HLTV team id - the pre-repair
+  scan rule on STORED historical rankings (daily snapshots exist from 2026-10-11; a later snapshot or today's list is never
+  used for an older match);
+- OUT: the backfill, later all-tier arrivals, a later arrival with no snapshot or no parsed teams, and ANY match not
+  evaluated yet (a match fetched after the last evaluation waits for the next one, every 10 minutes);
+- a player / opponent known only from outside N0 is "not in HLTV" again (BO3.gg fallback / average opponent, as before).
+No approximate set exists: a failed evaluation serves the last VERIFIED evaluation of the same rule (memory, then the stored
+copy), marked STALE in the revision and in the projection's data note (newer matches stay out), and with none anywhere the
+projection is temporarily unavailable (transient) - never the full tables. One evaluation for everyone (single-flight). The
+queries were validated on real Postgres (a Neon test branch of the scraper schema: every class, the UTC day boundary, and
+an independent cross-check 324 in / 146 out). The r1 query (same windows and rule, exclusion form) ran read-only on
+production on 2026-10-14 (by the other session, its own check): 0.3 s, 19,590 backfill matches, 10 later all-tier
+arrivals; team_rankings holds daily snapshots 2026-10-11 .. 10-14 (350-351 rows each).
+**Not pinned - MIXED REVISIONS:** storage (nothing is deleted), settlement, display, the last-10 / H2H records and the
+stake-check reads (maps played, last map date, AWP share) keep reading the full tables (repaired history). Each grade
+carries `input_revisions` per component; each forecast's `data_rev` = full-table count + `;records_input=full;perf_input=
+N0/n0-r2:...`; `/admin/hltv_status` -> `perf_input` shows counts, snapshots, staleness and the last error. The original
+forecasts keep their logged inputs.
+**Limitations.** Daily snapshots only (the pre-repair scan compared against the ranking at scan time; intra-day changes are
+invisible); that `team_rankings` is the exact VRS list the pre-repair scraper used is not verified; matches ingested
+before 2026-10-12 21:27 UTC are taken as approved without re-checking the rule; the final r2 queries still need their
+read-only production run before the deploy.
 
 **Reconciliation of the comparison above** (recomputed from the saved per-line results, replay_units.json; same 616 kills /
 531 HS lines, 23 matches):
