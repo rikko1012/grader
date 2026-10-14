@@ -29,6 +29,7 @@ def full_rows(rounds=(18, 19), kills=(15, 15)):
 def db(monkeypatch, tmp_path, picks):
     monkeypatch.setattr(picklog, "DB", tmp_path / "p.db")
     monkeypatch.setattr(picklog, "CORRECTIONS", tmp_path / "c.jsonl")
+    monkeypatch.setattr(picklog, "REVIEWS", tmp_path / "reviews.jsonl")      # never the repo's settlement_reviews.jsonl
     monkeypatch.setattr(picklog, "_SCHEMA_OK", [False])
     con = picklog._db()
     for pid, line, actual, hit, res in picks:
@@ -56,6 +57,7 @@ def test_quick_total_stands_and_disagreement_is_held_for_review(monkeypatch, tmp
     assert r["discrepancy"] == {"quick_total": 29, "full_total": 30} and r["review"] is True and r["provisional"] is True
     assert json.loads(read(tmp_path, 560)[3])["review"] is False                      # 27.5 is not between 29 and 30
     assert not (tmp_path / "c.jsonl").exists()                                        # no correction written
+    assert len((tmp_path / "reviews.jsonl").read_text(encoding="utf-8").splitlines()) == 2   # logged in the test's own dir
     assert picklog.recheck_bo3_quick(FakeB(), full_rows(), now=NOW)["checked"] == 0   # each pick once
 
 

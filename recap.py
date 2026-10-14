@@ -109,15 +109,25 @@ def match_day(r, tz_offset_h=-5):
     return (t + timedelta(hours=tz_offset_h)).date().isoformat() if t else "unknown"
 
 
+def board_line(r):
+    """A board grade (an Underdog / PrizePicks line the server graded) - THE cohort rule, shared by recap, diagnostics and
+    learning (2026-10-13 audit D2: those two read `test` alone, so a board line a member opened counted as a member
+    line). test 2, or test 0 with board provenance: on_board (picklog, 2026-10-12) 1 = recorded, 2 = inferred for older
+    rows from the platform column; a snapshot from before the column: the same inference (test 0 with a platform).
+    Owner load tests (test 1) never."""
+    t = int(r.get("test") or 0)
+    ob = r.get("on_board")
+    if ob is None:
+        ob = 2 if t == 0 and r.get("book") else 0
+    return t == 2 or (t == 0 and int(ob or 0) in (1, 2))
+
+
 def cohorts_of(r):
     """The cohorts this record belongs to (board records with a stake are in board AND staked)."""
     t = int(r.get("test") or 0)
     # on_board (picklog, 2026-10-12): a board line a member opened used to be rewritten to test 0 - it is still a board
-    # grade (1 = recorded, 2 = inferred for older rows from the platform column), never a member-entered line
-    ob = r.get("on_board")
-    if ob is None:                                    # a snapshot from before the column: the same inference as picklog
-        ob = 2 if t == 0 and r.get("book") else 0
-    if t == 2 or (t == 0 and int(ob) in (1, 2)):
+    # grade, never a member-entered line (board_line)
+    if board_line(r):
         return ("board", "staked") if float(r.get("units") or 0) > 0 else ("board",)
     if t == 0:
         return ("member",)

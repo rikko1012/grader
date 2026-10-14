@@ -310,8 +310,18 @@ def results(last=2000):
         return []
 
 
+def _held(r):
+    """Held for review (picklog SOURCE_RULE) - unresolved: recap counts it pending, learning never scores it."""
+    try:
+        return bool(json.loads(r.get("result") or "{}").get("review"))
+    except (TypeError, ValueError, AttributeError):
+        return False
+
+
 def leg_result_from_picks(picks):
-    """leg -> result from the pick log: same player, prop, scope and EXACT match slug; the leg's own line decides."""
+    """leg -> result from the pick log: same player, prop, scope and EXACT match slug; the leg's own line decides.
+    2026-10-13 audit: a pick held for review is not a result yet (the leg waits), and an HLTV settlement (authoritative)
+    decides over a BO3.gg one."""
     idx = {}
     for r in picks:
         idx.setdefault(((r.get("player") or "").lower(), r.get("prop"), r.get("scope") or "12", r.get("match_slug")), []).append(r)
@@ -320,7 +330,8 @@ def leg_result_from_picks(picks):
         if not l.get("match_slug"):
             return None                                   # never settle a leg without its exact match
         rows = idx.get(((l.get("nick") or l.get("player") or "").lower(), l["prop"], l.get("scope") or "12", l["match_slug"]), [])
-        done = [r for r in rows if r.get("status") in ("settled", "push") and r.get("actual") is not None]
+        done = sorted((r for r in rows if r.get("status") in ("settled", "push") and r.get("actual") is not None and not _held(r)),
+                      key=lambda r: '"source": "hltv"' not in str(r.get("result") or ""))
         if done:
             a = done[0]["actual"]
             return "push" if a == l["line"] else ("hit" if (a > l["line"]) == (l["side"] == "More") else "miss")

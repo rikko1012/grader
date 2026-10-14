@@ -124,7 +124,6 @@ def _db():
     # for rows from before this column (test 0 with a platform recorded = a board line a member opened), 0 = never.
     try:
         con.execute("ALTER TABLE picks ADD COLUMN on_board INTEGER DEFAULT 0")
-        con.execute("UPDATE picks SET on_board = CASE WHEN test = 2 THEN 1 WHEN test = 0 AND book IS NOT NULL THEN 2 ELSE 0 END")
     except sqlite3.OperationalError:
         pass
     # added 2026-10-10: platform + provider market id (+ PrizePicks market); 2026-10-13: profile_team = the player's BO3.gg
@@ -134,6 +133,17 @@ def _db():
             con.execute(f"ALTER TABLE picks ADD COLUMN {col} TEXT")
         except sqlite3.OperationalError:
             pass
+    # 2026-10-13 audit D6: the on_board backfill ran only right after its ALTER - lost for good when that connection never
+    # committed (a reader first) or when `book` did not exist yet. It now runs once every column exists, until its marker
+    # is stored (same transaction), and only fills 0s it is sure of: test 2 = the board wrote it; test 0 with a platform =
+    # a board line a member opened (only board grades carry a platform). A recorded value is never changed.
+    con.execute("CREATE TABLE IF NOT EXISTS schema_marks (name TEXT PRIMARY KEY, at TEXT)")
+    if not con.execute("SELECT 1 FROM schema_marks WHERE name = 'on_board_backfill'").fetchone():
+        con.execute("UPDATE picks SET on_board = CASE WHEN test = 2 THEN 1 ELSE 2 END "
+                    "WHERE COALESCE(on_board, 0) = 0 AND (test = 2 OR (test = 0 AND book IS NOT NULL))")
+        con.execute("INSERT OR IGNORE INTO schema_marks (name, at) VALUES ('on_board_backfill', ?)",
+                    (datetime.now(timezone.utc).isoformat(timespec="seconds"),))
+    con.commit()                           # the migrations are kept whoever opens the database first
     for col in ("factors", "result"):      # added 2026-10-02: every factor's value at grade time and
         try:                               # what happened (rounds, OT, map wins) - each measurable
             con.execute(f"ALTER TABLE picks ADD COLUMN {col} TEXT")
@@ -475,11 +485,24 @@ def _forecast(con, pid, row, kind, gi=None, extra=None):
     _record_mapping(con, extra.get("mapping_rev"))
 
 
+def _utc_time(s):
+    """An ISO time as an aware UTC datetime (no offset = UTC, as recap / learning read it); None when unreadable."""
+    try:
+        t = datetime.fromisoformat(str(s).strip().replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    return t.replace(tzinfo=timezone.utc) if t.tzinfo is None else t.astimezone(timezone.utc)
+
+
 def _before_start(row, cur):
-    """The new grade was made before the match started (by the start the row has, and the one it brings)."""
+    """The new grade was made before the match started (by the start the row has, and the one it brings). Compared as
+    times (2026-10-13 audit: as strings a start with another UTC offset, or written without the 'T', compared wrong)."""
     now = row["logged_at"]
     for st in (cur["match_start"], row.get("match_start")):
-        if st and now >= st.replace("Z", "+00:00")[:25]:
+        if not st:
+            continue
+        a, b = _utc_time(now), _utc_time(st)
+        if (a >= b) if a is not None and b is not None else now >= st.replace("Z", "+00:00")[:25]:
             return False
     return True
 
@@ -502,10 +525,19 @@ def write_row(row):
                 _forecast(con, cur["id"], row, "update", gi, extra)  # every changed pre-match forecast, timestamped
                 con.execute("UPDATE picks SET regrades = COALESCE(regrades, 0) + 1 WHERE id = ?", (cur["id"],))
             if cur:
-                # a real member asking for a line first seen in a test makes it a real pick
-                con.execute("UPDATE picks SET requests = requests + 1, test = CASE WHEN ? THEN test ELSE 0 END, "
-                            "on_board = CASE WHEN ? = 2 THEN 1 ELSE COALESCE(on_board, 0) END WHERE id = ?",
-                            (int(bool(test)), int(test or 0), cur["id"]))
+                # a real member asking for a line first seen in a test makes it a real pick. 2026-10-13 audit D3: so does the
+                # board grading a line an owner load test reached first (it stayed test 1 - out of every cohort - with no
+                # platform); the board's write fills the platform + market id the row lacks. A board row the owner marked
+                # as a test by hand (mark_tests) has its platform and stays a test.
+                bw = int(int(test or 0) == 2)
+                con.execute("UPDATE picks SET requests = requests + 1, "
+                            "test = CASE WHEN ? AND test = 1 AND book IS NULL THEN 2 WHEN ? THEN test ELSE 0 END, "
+                            "on_board = CASE WHEN ? THEN 1 ELSE COALESCE(on_board, 0) END, "
+                            "book = CASE WHEN ? THEN COALESCE(book, ?) ELSE book END, "
+                            "market_id = CASE WHEN ? THEN COALESCE(market_id, ?) ELSE market_id END, "
+                            "market_key = CASE WHEN ? THEN COALESCE(market_key, ?) ELSE market_key END WHERE id = ?",
+                            (bw, int(bool(test)), bw, bw, row.get("book"), bw, row.get("market_id"), bw, row.get("market_key"),
+                             cur["id"]))
                 con.commit()
                 return cur["id"]
             row["on_board"] = 1 if int(test or 0) == 2 else 0
@@ -532,7 +564,9 @@ def _quick_rows(b, player_id, mt):
             return []
         if 0 < (g.get("winner_clan_score") or 0) + (g.get("loser_clan_score") or 0) < 13:
             return []                                  # a map can't end under 13 rounds: forfeit / technical win
-        out.append({"map": g.get("map_name"), "kills": row["kills_sum"], "headshots": row.get("headshots_sum") or 0})
+        # 2026-10-13 audit D13: a quick scoreboard without headshots has not published them yet - never 0 (an HS pick
+        # used to settle as a big Under); the caller waits for them (or HLTV)
+        out.append({"map": g.get("map_name"), "kills": row["kills_sum"], "headshots": row.get("headshots_sum")})
     return out if len(out) == 2 else []
 
 
@@ -545,111 +579,11 @@ def settle(b, map_rows):
         con.close()
     done = 0
     for r in rows:
-        try:
-            start = datetime.fromisoformat((r["match_start"] or "").replace("Z", "+00:00"))
-        except ValueError:
-            continue
-        # the data decides, not the clock: HLTV's result settles a pick as soon as the scraper has it
-        # (listed start times are often off); BO3.gg's only after SETTLE_MIN minutes
-        early = now < start + timedelta(minutes=SETTLE_MIN)
-        if now < start - timedelta(hours=12):
-            continue                                  # far in the future: nothing to look for yet
-        if (_col(r, "scope") or "12") != "12":         # Maps 1-3 / Map 1 lines: HLTV only (has map 3 and BO1)
-            upd = _settle_scope(r, now, start)
-            if upd is not None:
-                with _LOCK:
-                    con = _db()
-                    con.execute("UPDATE picks SET status=?, actual_maps=?, actual=?, hit=?, settled_at=? WHERE id=?",
-                                (*upd, now.isoformat(timespec="seconds"), r["id"]))
-                    con.commit()
-                    con.close()
-                done += 1
-            continue
-        if early and not (r["match_slug"] or "").startswith("hltv-"):
-            hv = _hltv_totals(r, same_day_only=True)
-            if isinstance(hv, tuple):
-                with _LOCK:
-                    con = _db()
-                    con.execute("UPDATE picks SET status=?, actual_maps=?, actual=?, hit=?, settled_at=? WHERE id=?",
-                                (*hv, now.isoformat(timespec="seconds"), r["id"]))
-                    con.commit()
-                    con.close()
-                done += 1
-            continue
-        if (r["match_slug"] or "").startswith("hltv-"):
-            upd = _settle_hltv(r, now, start)
-            if upd is None:
-                continue
-            with _LOCK:
-                con = _db()
-                con.execute("UPDATE picks SET status=?, actual_maps=?, actual=?, hit=?, settled_at=? WHERE id=?",
-                            (*upd, now.isoformat(timespec="seconds"), r["id"]))
-                con.commit()
-                con.close()
-            done += 1
-            continue
-        # HLTV first - the official record (BO3.gg's quick scoreboards and map order are sometimes off)
-        hv = _hltv_totals(r)
-        if hv == "wait" and now < start + timedelta(hours=HLTV_WAIT_H):
-            continue          # HLTV has the match but not this stat yet (scraped every ~2 h)
-        if isinstance(hv, tuple):
-            upd = hv
-            with _LOCK:
-                con = _db()
-                con.execute("UPDATE picks SET status=?, actual_maps=?, actual=?, hit=?, settled_at=? WHERE id=?",
-                            (*upd, now.isoformat(timespec="seconds"), r["id"]))
-                con.commit()
-                con.close()
-            done += 1
-            continue
-        # fresh list (15 min): a 12-hour-old copy still shows finished matches as upcoming
-        ms = b.player_matches(r["player_id"], pages=1, ttl=0.25).get("results") or []
-        mt = next((m for m in ms if m.get("slug") == r["match_slug"]), None)
-        upd = None
-        if mt and mt.get("status") == "finished":
-            maps = map_rows(b, r["player_id"], [mt], lambda m, g: (g.get("number") or 9) <= 2)
-            done12 = [g for g in mt.get("games") or [] if (g.get("number") or 9) <= 2 and g.get("state") == "done"]
-            if len(maps) < 2 and len(done12) >= 2:
-                for g in done12:                          # maps done but a scoreboard read empty:
-                    try:                                  # fetch it fresh once and look again
-                        b.game_players_fresh(g["id"])
-                    except Exception:
-                        pass
-                maps = map_rows(b, r["player_id"], [mt], lambda m, g: (g.get("number") or 9) <= 2)
-            quick = False
-            if len(maps) < 2:
-                qr = _quick_rows(b, r["player_id"], mt)       # full stats not out yet
-                maps, quick = (qr, True) if qr else (maps, False)
-            if len(maps) == 2:
-                # quick=True: settled from BO3.gg's quick scoreboard - recheck_bo3_quick() re-derives it from the full
-                # scoreboard once that is out (2026-10-12 audit: the quick one can be a kill short)
-                _save_result(r["id"], {"source": "bo3", "rounds": [x.get("rounds") for x in maps],
-                                       "won": [x.get("won") for x in maps], **({"quick": True} if quick else {}),
-                                       "per_map": [[x.get("kills"), x.get("headshots")] for x in maps]})
-                stat = "headshots" if r["prop"] == "hs" else "kills"
-                actual = sum(x[stat] for x in maps)
-                if actual == r["line"]:                   # whole-number line landed exactly: push
-                    upd = ("push", json.dumps([x["map"] for x in maps]), actual, None)
-                else:
-                    hit = actual > r["line"] if r["pick"] == "More" else actual < r["line"]
-                    upd = ("settled", json.dumps([x["map"] for x in maps]), actual, int(hit))
-            elif (len([g for g in mt.get("games") or [] if (g.get("number") or 9) <= 2]) >= 2
-                  and now < start + timedelta(days=VOID_AFTER_D)):
-                continue      # Maps 1-2 were played but BO3.gg hasn't published the stats yet: wait
-            else:
-                upd = ("void", json.dumps([x["map"] for x in maps]), None, None)   # forfeit / BO1 / sat out
-        elif mt and mt.get("status") == "defwin":            # forfeit: no maps played
-            upd = ("void", None, None, None)
-        elif now > start + timedelta(days=VOID_AFTER_D):
-            upd = ("void", None, None, None)
-        if upd:
-            with _LOCK:
-                con = _db()
-                con.execute("UPDATE picks SET status=?, actual_maps=?, actual=?, hit=?, settled_at=? WHERE id=?",
-                            (*upd, now.isoformat(timespec="seconds"), r["id"]))
-                con.commit()
-                con.close()
-            done += 1
+        try:                                          # 2026-10-13 audit B4: one failing pick (a BO3.gg error, a missing
+            done += _settle_one(b, map_rows, r, now)  # stat) used to stop the whole pass - every pass, every later pick
+        except Exception:
+            import traceback
+            traceback.print_exc()
     try:
         revert_full_scoreboard_corrections(now=now)
     except Exception:
@@ -665,25 +599,139 @@ def settle(b, map_rows):
     return done
 
 
+def _settle_one(b, map_rows, r, now):
+    """One open pick: 1 when it was settled / pushed / voided, else 0."""
+    try:
+        start = datetime.fromisoformat((r["match_start"] or "").replace("Z", "+00:00"))
+    except ValueError:
+        return 0
+    if start.tzinfo is None:                      # 2026-10-13 audit B4: a start without an offset is UTC (it used to raise
+        start = start.replace(tzinfo=timezone.utc)  # on the first comparison and stop the pass)
+    # the data decides, not the clock: HLTV's result settles a pick as soon as the scraper has it
+    # (listed start times are often off); BO3.gg's only after SETTLE_MIN minutes
+    early = now < start + timedelta(minutes=SETTLE_MIN)
+    if now < start:
+        return 0          # 2026-10-13 audit D1: never before the listed start (was 12 h before: an earlier meeting of the
+        #                   same teams that day could settle it)
+    if (_col(r, "scope") or "12") != "12":         # Maps 1-3 / Map 1 lines: HLTV only (has map 3 and BO1)
+        return _set_result(r, _settle_scope(r, now, start), now)
+    if early and not (r["match_slug"] or "").startswith("hltv-"):
+        hv = _hltv_totals(r, same_day_only=True)
+        return _set_result(r, hv if isinstance(hv, tuple) else None, now)
+    if (r["match_slug"] or "").startswith("hltv-"):
+        return _set_result(r, _settle_hltv(r, now, start), now)
+    # HLTV first - the official record (BO3.gg's quick scoreboards and map order are sometimes off)
+    hv = _hltv_totals(r)
+    if hv == "transient":
+        return 0          # 2026-10-13 audit D5: HLTV unreachable - never BO3.gg's result or a void as if HLTV had no match
+    if hv == "wait" and now < start + timedelta(hours=HLTV_WAIT_H):
+        return 0          # HLTV has the match but not this stat yet (scraped every ~2 h)
+    if isinstance(hv, tuple):
+        return _set_result(r, hv, now)
+    # fresh list (15 min): a 12-hour-old copy still shows finished matches as upcoming
+    ms = b.player_matches(r["player_id"], pages=1, ttl=0.25).get("results") or []
+    mt = next((m for m in ms if m.get("slug") == r["match_slug"]), None)
+    upd = None
+    stat = "headshots" if r["prop"] == "hs" else "kills"
+    if mt and mt.get("status") == "finished":
+        maps = map_rows(b, r["player_id"], [mt], lambda m, g: (g.get("number") or 9) <= 2)
+        done12 = [g for g in mt.get("games") or [] if (g.get("number") or 9) <= 2 and g.get("state") == "done"]
+        if len(maps) < 2 and len(done12) >= 2:
+            for g in done12:                          # maps done but a scoreboard read empty:
+                try:                                  # fetch it fresh once and look again
+                    b.game_players_fresh(g["id"])
+                except Exception:
+                    pass
+            maps = map_rows(b, r["player_id"], [mt], lambda m, g: (g.get("number") or 9) <= 2)
+        quick = False
+        if len(maps) < 2 or any(x.get(stat) is None for x in maps):
+            qr = _quick_rows(b, r["player_id"], mt)       # full stats not out yet
+            maps, quick = (qr, True) if qr else (maps, False)
+        if len(maps) == 2 and all(x.get(stat) is not None for x in maps):   # D13: a missing stat is never a 0
+            # quick=True: settled from BO3.gg's quick scoreboard - recheck_bo3_quick() re-derives it from the full
+            # scoreboard once that is out (2026-10-12 audit: the quick one can be a kill short)
+            _save_result(r["id"], {"source": "bo3", "rounds": [x.get("rounds") for x in maps],
+                                   "won": [x.get("won") for x in maps], **({"quick": True} if quick else {}),
+                                   "per_map": [[x.get("kills"), x.get("headshots")] for x in maps]})
+            actual = sum(x[stat] for x in maps)
+            if actual == r["line"]:                   # whole-number line landed exactly: push
+                upd = ("push", json.dumps([x["map"] for x in maps]), actual, None)
+            else:
+                hit = actual > r["line"] if r["pick"] == "More" else actual < r["line"]
+                upd = ("settled", json.dumps([x["map"] for x in maps]), actual, int(hit))
+        elif (len([g for g in mt.get("games") or [] if (g.get("number") or 9) <= 2]) >= 2
+              and now < start + timedelta(days=VOID_AFTER_D)):
+            return 0      # Maps 1-2 were played but BO3.gg hasn't published the stats yet: wait
+        else:
+            upd = ("void", json.dumps([x["map"] for x in maps]), None, None)   # forfeit / BO1 / sat out
+    elif mt and mt.get("status") == "defwin":            # forfeit: no maps played
+        upd = ("void", None, None, None)
+    elif now > start + timedelta(days=VOID_AFTER_D):
+        upd = ("void", None, None, None)
+    return _set_result(r, upd, now)
+
+
+def _set_result(r, upd, now):
+    """Store a settlement (status, actual_maps, actual, hit) for one pick: 1, or 0 when there is none yet."""
+    if not upd:
+        return 0
+    with _LOCK:
+        con = _db()
+        con.execute("UPDATE picks SET status=?, actual_maps=?, actual=?, hit=?, settled_at=? WHERE id=?",
+                    (*upd, now.isoformat(timespec="seconds"), r["id"]))
+        con.commit()
+        con.close()
+    return 1
+
+
 HLTV_RECHECK_MAX = 60        # picks per settle pass
+_RECHECK = {}                # recheck rotation: pass name -> the last key it checked (this process)
+
+
+def _rotate(items, key, name, limit):
+    """Up to `limit` items, starting after the last one the previous pass checked and wrapping around. 2026-10-13 audit
+    D7: the first `limit` rows in row order were taken every pass, so rows HLTV never has (outside the scraper's coverage)
+    held every newer row back until they left the window."""
+    items = sorted(items, key=key)
+    last = _RECHECK.get(name)
+    if last is not None:
+        items = [x for x in items if key(x) > last] + [x for x in items if key(x) <= last]
+    out = items[:limit]
+    if out:
+        _RECHECK[name] = key(out[-1])
+    return out
+
+
+def _hltv_due(r):
+    """A BO3.gg settlement (the row's own source - a corrected row keeps the BO3.gg detail nested) HLTV has not checked,
+    or checked while it was held for review."""
+    try:
+        res = json.loads(r["result"] or "{}")
+    except ValueError:
+        return False
+    return res.get("source") == "bo3" and (not res.get("hltv_checked") or bool(res.get("review")))
 
 
 def recheck_bo3_with_hltv(now=None, apply=True, days=7, limit=HLTV_RECHECK_MAX):
     """2026-10-12 audit D4: picks settled from BO3.gg (cool4st 23 vs HLTV 24, chelo 15 vs 16) are re-derived from HLTV
     once HLTV has the match, through scope_result() (strict identity: the player's own team, the opponent's HLTV id,
     exactly one match). A different total is corrected with old and new values in settlement_corrections.jsonl; an
-    equal one is marked hltv_checked. HLTV unreachable / not there yet = untouched (next pass)."""
+    equal one is marked hltv_checked (and a hold for review released). HLTV unreachable / not there yet = untouched (next
+    pass); `limit` rows per pass, in rotation."""
     from scope import outcome as _oc
     now = now or datetime.now(timezone.utc)
-    since = (now - timedelta(days=days)).isoformat(timespec="seconds")
+    since = (now.astimezone(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
     with _LOCK:
         con = _db()
+        # a pick HLTV confirmed while it was held for review (before 2026-10-13 the hold was kept) is re-derived once more:
+        # confirmed again -> released, different -> corrected to HLTV's total
         rows = con.execute("SELECT * FROM picks WHERE status IN ('settled', 'push') AND settled_at >= ? "
                            "AND (scope IS NULL OR scope = '12') AND result LIKE '%\"source\": \"bo3\"%' "
-                           "AND result NOT LIKE '%hltv_checked%'", (since,)).fetchall()
+                           "AND (result NOT LIKE '%hltv_checked%' OR result LIKE '%\"review\": true%')", (since,)).fetchall()
         con.close()
+    rows = [r for r in rows if _hltv_due(r)]
     out = {"checked": 0, "confirmed": 0, "corrected": [], "waiting": 0}
-    for r in rows[:limit]:
+    for r in _rotate(rows, lambda x: x["id"], "hltv", limit):
         try:
             res = scope_result(r)
         except Exception:
@@ -701,10 +749,13 @@ def recheck_bo3_with_hltv(now=None, apply=True, days=7, limit=HLTV_RECHECK_MAX):
         if res["total"] == r["actual"] and st == r["status"] and (hit == r["hit"] or (hit is None and r["hit"] is None)):
             out["confirmed"] += 1
             if apply:
-                _save_result(r["id"], dict(old, hltv_checked=True, hltv_match=res["hltv_match"]))
+                # 2026-10-13 audit D4: HLTV (authoritative) confirms the total - a hold for review / provisional mark is
+                # released (it used to be copied forward, and the row was never looked at again: unscored for good)
+                rel = {k: False for k in ("review", "provisional") if k in old}
+                _save_result(r["id"], dict(old, hltv_checked=True, hltv_match=res["hltv_match"], hltv_total=res["total"], **rel, **_ident(res)))
             continue
         detail = {"source": "hltv", "rounds": res["rounds"], "won": res["won"], "per_map": res["per_map"],
-                  "maps_used": res["maps_used"], "hltv_match": res["hltv_match"], "hltv_checked": True, "bo3_detail": old}
+                  "maps_used": res["maps_used"], "hltv_match": res["hltv_match"], "hltv_checked": True, "bo3_detail": old, **_ident(res)}
         d = {"id": r["id"], "player": r["player"], "prop": r["prop"], "scope": "12", "line": r["line"], "pick": r["pick"],
              "test": r["test"], "old": {"actual": r["actual"], "status": r["status"], "hit": r["hit"]},
              "new": {"actual": res["total"], "status": st, "hit": hit}, "hltv_match": res["hltv_match"],
@@ -750,7 +801,7 @@ def recheck_bo3_quick(b, map_rows, now=None, apply=True, days=QUICK_RECHECK_D, l
     held for review ("review": True - the learning ledger does not score it) and logged in settlement_reviews.jsonl.
     Status / total / hit are never changed here. Returns {"checked", "confirmed", "disagree", "held", "waiting"}."""
     now = now or datetime.now(timezone.utc)
-    since = (now - timedelta(days=days)).isoformat(timespec="seconds")
+    since = (now.astimezone(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
     with _LOCK:
         con = _db()
         rows = con.execute("SELECT * FROM picks WHERE status IN ('settled', 'push') AND settled_at >= ? "
@@ -762,16 +813,21 @@ def recheck_bo3_quick(b, map_rows, now=None, apply=True, days=QUICK_RECHECK_D, l
             res = json.loads(r["result"] or "{}")
         except ValueError:
             continue
-        if _is_quick(res) and r["player_id"] and r["match_slug"]:
+        # 2026-10-13 audit D4: a total HLTV (authoritative) has confirmed is never held again by BO3.gg's full scoreboard
+        if _is_quick(res) and not res.get("hltv_checked") and r["player_id"] and r["match_slug"]:
             groups.setdefault((r["player_id"], r["match_slug"]), []).append((r, res))
     out = {"checked": 0, "confirmed": 0, "disagree": [], "held": 0, "waiting": 0}
-    for (pid, slug), picks in list(groups.items())[:limit]:
-        ms = b.player_matches(pid, pages=1, ttl=1).get("results") or []
-        mt = next((m for m in ms if m.get("slug") == slug), None)
-        if not mt or mt.get("status") != "finished":
+    for (pid, slug), picks in _rotate(list(groups.items()), lambda kv: min(x["id"] for x, _ in kv[1]), "quick", limit):
+        try:                                            # one BO3.gg error never stops the other matches (audit B4)
+            ms = b.player_matches(pid, pages=1, ttl=1).get("results") or []
+            mt = next((m for m in ms if m.get("slug") == slug), None)
+            if not mt or mt.get("status") != "finished":
+                out["waiting"] += len(picks)
+                continue
+            maps = sorted(map_rows(b, pid, [mt], lambda m, g: (g.get("number") or 9) <= 2), key=lambda x: x.get("number") or 9)
+        except Exception:
             out["waiting"] += len(picks)
             continue
-        maps = sorted(map_rows(b, pid, [mt], lambda m, g: (g.get("number") or 9) <= 2), key=lambda x: x.get("number") or 9)
         if [x.get("number") for x in maps] != [1, 2] or any(x.get("rounds") in (None, 0) for x in maps):
             out["waiting"] += len(picks)                # full scoreboard not published yet
             continue
@@ -831,8 +887,8 @@ def revert_full_scoreboard_corrections(now=None, apply=True):
             res = json.loads(r["result"] or "{}")
         except ValueError:
             res = {}
-        if res.get("reverted_full") or res.get("source") == "hltv":
-            continue
+        if res.get("reverted_full") or res.get("source") == "hltv" or res.get("hltv_checked"):
+            continue                                    # HLTV settled / confirmed it: never changed back (2026-10-13 audit)
         old = e.get("old") or {}
         if old.get("actual") is None:
             continue
@@ -888,12 +944,16 @@ def _col(r, k):
 
 
 def _forfeited(cur, mid):
-    """HLTV's forfeited-map count for a match (None = unknown)."""
+    """HLTV's forfeited-map count for a match (None = unknown). HLTV unreachable raises (2026-10-13 audit: read as
+    'unknown', a forfeited match settled on its 0-kill map instead of waiting)."""
     try:
         cur.execute("SELECT forfeited_maps FROM match_overview WHERE matchid = %s", (mid,))
         row = cur.fetchone()
         return row[0] if row else None
-    except Exception:
+    except Exception as e:
+        import hltv
+        if hltv.is_transient(e):
+            raise
         return None
 
 
@@ -917,7 +977,8 @@ def _settle_teams(r):
     """The team names settlement may identify the player by, in order: picks.team (since 2026-10-13 the team he plays
     THIS match for - the projection's and the odds' team), then picks.profile_team (his BO3.gg profile team - what
     picks.team held before; NULL on older rows). The settlement keys themselves are unchanged: HLTV player id + the
-    opponent's HLTV team id + the date window, or the BO3.gg player id + match slug."""
+    opponent's HLTV team id + the listed match (the hltv-<id>, or the candidate matchid verifies - 2026-10-13), or the
+    BO3.gg player id + match slug."""
     out = []
     for t in (_col(r, "team"), _col(r, "profile_team")):
         if t and str(t).strip().lower() not in [x.strip().lower() for x in out]:
@@ -941,13 +1002,47 @@ def _player_identity(cur, r):
     return [], found
 
 
+def _canonical_hltv(r):
+    """2026-10-13 audit D1 (owner: settlement on the SAME canonical identity as grading): the pick's HLTV match =
+    matchid.canonical_match(team, opponent, listed start) - the call the projection's odds link makes
+    (thunderpick.projection_odds): canonical team ids + the maintained aliases, an HLTV schedule time within
+    matchid.WINDOW_H of the start, or a finished match dated that UTC day. picks.team first, then the BO3.gg profile team
+    (_settle_teams). Returns (HLTV match id, opponent's HLTV team id or None, None), (None, None, why) when the canonical
+    match names no HLTV match (hashed / ambiguous / unresolved), or (None, None, None) when matchid has no HLTV team
+    table loaded (tests; a first boot without the database) - the previous rule (date window) applies."""
+    import matchid
+    try:
+        if not ((matchid.status().get("teams") or {}).get("rows")):
+            return None, None, None
+    except Exception:
+        return None, None, "match identity unavailable"
+    why = []
+    for t in _settle_teams(r):
+        cm = matchid.canonical_match(t, _col(r, "opponent"), _col(r, "match_start"))
+        if cm.get("hltv_match") is not None:
+            k = str(matchid.team_key(_col(r, "opponent")) or "")
+            return int(cm["hltv_match"]), (int(k[5:]) if k.startswith("team:") else None), None
+        why.append(f"{t} vs {_col(r, 'opponent')}: {cm.get('reason') or cm.get('status')}")
+        if cm.get("status") == "ambiguous":
+            break
+    return None, None, "; ".join(why) or "no canonical match"
+
+
 def scope_result(r, same_day_only=False):
     """The pick's series from HLTV and its total for the line's scope, via the shared scope rules (scope.py).
     Returns {"status": "ok", "total", "maps_used", "maps", "per_map", "rounds", "won", "hltv_match"} or
-    {"status": "wait"|"none"|"error", "reason"}. Never substitutes another scope; two candidate matches = error."""
+    {"status": "wait"|"none"|"error", "reason"}. Never substitutes another scope; two candidate matches = error.
+    2026-10-13 audit D1: only the pick's own match, read by its HLTV match id - an hltv-<id> pick's own id (every scope),
+    a BO3.gg-slug pick's canonical match (_canonical_hltv, the identity grading uses). Never a date window: an earlier
+    meeting of the same teams (yesterday's upper-bracket final, this morning's opener) used to settle the pick."""
     import hltv
     from scope import scope_total, MAP3_NOT_PLAYED
     day = (r["match_start"] or "")[:10]
+    slug = str(_col(r, "match_slug") or "")
+    own = int(slug[5:]) if slug.startswith("hltv-") and slug[5:].isdigit() else None
+    link, oid, why = (own, None, None) if own is not None else _canonical_hltv(r)
+    if link is None and why:
+        return {"status": "none", "reason": f"no canonical HLTV match for this pick ({why}) - not settled from HLTV"}
     con = hltv._connect()
     try:
         with con.cursor() as cur:
@@ -956,16 +1051,24 @@ def scope_result(r, same_day_only=False):
                 # 2026-10-12 audit: a nick-only match (foggers of Rooster -> an HLTV 'foggers' who never played for
                 # Rooster) is not this player - never settle on it (Maps 1-2 falls back to BO3.gg's player id)
                 return {"status": "none", "reason": "player/team identity not confirmed in HLTV"}
-            rows = hltv._series_rows(cur, ids, "2000-01-01", "AND mo.date BETWEEN %(d)s::date - 1 AND %(d)s::date + 1",
-                                     {"d": day}, maxn=3, need=(1,)) if ids else []
+            if link is not None:
+                rows = hltv._series_rows(cur, ids, "2000-01-01", "AND mo.matchid = %(mid)s", {"mid": link}, maxn=3, need=(1,)) if ids else []
+            else:                                            # matchid not loaded: the previous rule
+                rows = hltv._series_rows(cur, ids, "2000-01-01", "AND mo.date BETWEEN %(d)s::date - 1 AND %(d)s::date + 1",
+                                         {"d": day}, maxn=3, need=(1,)) if ids else []
             opp = (r["opponent"] or "").strip()
-            on, how = hltv.opponent_rows(cur, rows, opp)     # opponent's HLTV team id first, exact names as fallback
-            if same_day_only:
-                on = [x for x in on if x["date"] >= day]     # an earlier meeting is not this match
+            if oid is not None:                              # the canonical opponent (matchid team id + aliases)
+                on = [x for x in rows if x.get("opponent_id") in (None, oid)]
+            else:
+                on, how = hltv.opponent_rows(cur, rows, opp)     # opponent's HLTV team id first, exact names as fallback
+            if same_day_only and link is None:
+                on = [x for x in on if x["date"] >= day]     # an earlier meeting is not this match (previous rule)
             mids = {x["hltv_match"] for x in on}
             forfeits = _forfeited(cur, next(iter(mids))) if len(mids) == 1 else None
     finally:
         con.close()
+    if not on and rows and link is not None:
+        return {"status": "none", "reason": f"HLTV match {link}: the player's rows are not against {opp!r} - not settled"}
     if not on:
         return {"status": "none", "reason": "match not in HLTV yet"}
     if len(mids) > 1:
@@ -986,7 +1089,14 @@ def scope_result(r, same_day_only=False):
         return {"status": "error", "reason": used}
     return {"status": "ok", "total": total, "maps_used": used, "maps": [x["map"] for x in ms if x["number"] in used],
             "per_map": [[x["kills"], x["headshots"]] for x in ms], "rounds": [x["rounds"] for x in ms],
-            "won": [x["won"] for x in ms], "hltv_match": ms[0]["hltv_match"]}
+            "won": [x["won"] for x in ms], "hltv_match": ms[0]["hltv_match"],
+            # which identity the match was read under (stored with the settlement - evaluation keys on verified ones)
+            "identity": "hltv id" if own is not None else "canonical match" if link is not None else "date window (matchid not loaded)"}
+
+
+def _ident(res):
+    """The settlement's identity label, for the stored result (absent when the lookup did not say)."""
+    return {"identity": res["identity"]} if res.get("identity") else {}
 
 
 def _settle_scope(r, now, start):
@@ -1003,7 +1113,7 @@ def _settle_scope(r, now, start):
     if res["status"] != "ok":
         return ("void", None, None, None) if now > start + timedelta(days=VOID_AFTER_D) else None
     _save_result(r["id"], {"source": "hltv", "rounds": res["rounds"], "won": res["won"], "per_map": res["per_map"],
-                           "maps_used": res["maps_used"], "hltv_match": res["hltv_match"]})
+                           "maps_used": res["maps_used"], "hltv_match": res["hltv_match"], **_ident(res)})
     return _outcome(r, res["total"], res["maps"])
 
 
@@ -1062,7 +1172,7 @@ def fix_scope_settlements(apply=False, scopes=("1", "123"), test=None, until=Non
             skipped.append({"id": r["id"], "reason": res.get("reason")}); continue
         st, hit = outcome(res["total"], r["line"], r["pick"])
         new_detail = {"source": "hltv", "rounds": res["rounds"], "won": res["won"], "per_map": res["per_map"],
-                      "maps_used": res["maps_used"], "hltv_match": res["hltv_match"]}
+                      "maps_used": res["maps_used"], "hltv_match": res["hltv_match"], **_ident(res)}
         if res["total"] == r["actual"] and st == r["status"] and (hit == r["hit"] or (hit is None and r["hit"] is None)):
             # 2026-10-09: the result is right but the stored detail may be stale (the 2026-10-08 correction updated the
             # total only): if the stored maps don't reproduce the settled total under this scope's rules, refresh it
@@ -1159,7 +1269,7 @@ def _bo3_totals(b, map_rows, r):
         if all(x.get(stat) is not None for x in maps):
             full = sum(x[stat] for x in maps)
     qr = _quick_rows(b, r["player_id"], mt)
-    quick = sum(x["headshots" if stat == "headshots" else "kills"] for x in qr) if len(qr) == 2 else None
+    quick = sum(x[stat] for x in qr) if len(qr) == 2 and all(x[stat] is not None for x in qr) else None   # D13: missing != 0
     if quick is None and full is None:
         return "BO3.gg scoreboards for maps 1-2 not available"
     names = [x.get("map") for x in maps] if len(maps) == 2 else [x.get("map") for x in qr]
@@ -1168,12 +1278,14 @@ def _bo3_totals(b, map_rows, r):
 
 def _hltv_totals(r, same_day_only=False):
     """HLTV's result for a Maps 1-2 pick through the shared scope rules (scope_result): an update tuple, "wait" (match
-    there, stat not yet), or None. Since 2026-10-08 it refuses ambiguous matches (two candidates used to take the first)
-    and voids forfeits."""
+    there, stat not yet), "transient" (HLTV unreachable) or None. Since 2026-10-08 it refuses ambiguous matches (two
+    candidates used to take the first) and voids forfeits. 2026-10-13 audit D5: an outage was read as 'not in HLTV', so
+    the BO3.gg fallback could settle or void the pick while HLTV was down."""
     try:
         res = scope_result(r, same_day_only=same_day_only)
-    except Exception:
-        return None
+    except Exception as e:
+        import hltv
+        return "transient" if hltv.is_transient(e) else None
     if res["status"] == "void":
         return ("void", None, None, None)
     if res["status"] == "wait":
@@ -1181,7 +1293,7 @@ def _hltv_totals(r, same_day_only=False):
     if res["status"] != "ok":
         return None
     _save_result(r["id"], {"source": "hltv", "rounds": res["rounds"], "won": res["won"], "per_map": res["per_map"],
-                           "maps_used": res["maps_used"], "hltv_match": res["hltv_match"]})
+                           "maps_used": res["maps_used"], "hltv_match": res["hltv_match"], **_ident(res)})
     return _outcome(r, res["total"], res["maps"])
 
 
@@ -1241,8 +1353,9 @@ def _settle_hltv(r, now, start):
                     return ("void", None, None, None)
         finally:
             con.close()
-    except Exception:
-        pass
+    except Exception as e:
+        if hltv.is_transient(e):
+            return None                               # forfeit unknown while HLTV is unreachable: next pass (2026-10-13 audit)
     if actual is None:
         return ("void", None, None, None) if now > start + timedelta(days=VOID_AFTER_D) else None
     maps = json.dumps(tot.get("maps"))

@@ -18,7 +18,7 @@ import collections
 import json
 import math
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 EVAL_LEAD_MIN = 30
 PLAUSIBLE_MAX = {"kills": {"1": 50, "12": 90, "123": 130}, "hs": {"1": 35, "12": 60, "123": 90}}   # same as server.PLAUSIBLE_MAX
@@ -47,9 +47,10 @@ def shadow_p_more(sh, key):
 
 def _ts(s):
     try:
-        return datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+        d = datetime.fromisoformat(str(s).replace("Z", "+00:00"))
     except (TypeError, ValueError):
         return None
+    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)   # no offset = UTC (2026-10-13 audit: naive vs aware raised)
 
 
 def _boot(groups, stat, n=1000, seed=3):
@@ -96,6 +97,7 @@ def _quantiles(dist, qs=(0.1, 0.9)):
 
 def build(picks, forecasts, batches=(), now=None):
     import grader
+    import recap
     now = now or datetime.now().astimezone()
     by_pick = collections.defaultdict(list)
     for f in forecasts:
@@ -103,12 +105,15 @@ def build(picks, forecasts, batches=(), now=None):
     excl = collections.Counter()
     rows = {"first": [], "eval": []}
     fwd = []
+    import identity                                             # the evaluation match identity recap / learning use
+    mid_of = identity.assign([p for p in picks if p.get("id") is not None])   # (one match under two slugs = one match)
     for p in picks:
         t = p.get("test") or 0
         if t == 1:
             continue                                            # owner tests: never in diagnostics
-        # platforms never mixed: "board" = Underdog board lines (unchanged), "board_pp" = PrizePicks board lines
-        cohort_src = ("board_pp" if p.get("book") == "prizepicks" else "board") if t == 2 else "member"
+        # platforms never mixed: "board" = Underdog board lines (unchanged), "board_pp" = PrizePicks board lines.
+        # 2026-10-13 audit D2: the board / member rule is recap.board_line (a board line a member opened stays board)
+        cohort_src = ("board_pp" if p.get("book") == "prizepicks" else "board") if recap.board_line(p) else "member"
         if p["status"] in ("open",):
             excl["pending"] += 1; continue
         if p["status"] == "void":
@@ -119,15 +124,18 @@ def build(picks, forecasts, batches=(), now=None):
             excl["no result"] += 1; continue
         if not (0 < p["line"] <= PLAUSIBLE_MAX.get(p["prop"], {}).get(p.get("scope") or "12", 1e9)):
             excl["implausible line (typo)"] += 1; continue
+        if recap._held(p):                                      # SOURCE_RULE: unresolved - recap pending, learning never scores it
+            excl["held for review (BO3.gg quick vs full around the line)"] += 1; continue
         start = _ts(p.get("match_start"))
         try:
             res = json.loads(p.get("result") or "{}")
         except ValueError:
             res = {}
         base = {"pick_id": p["id"], "source": cohort_src, "prop": p["prop"], "scope": p.get("scope") or "12",
-                "match": p.get("match_slug") or f"{p.get('player')}|{p.get('match_start')}", "actual": p["actual"], "line": p["line"],
+                "match": mid_of.get(p["id"]) or p.get("match_slug") or f"{p.get('player')}|{p.get('match_start')}",
+                "actual": p["actual"], "line": p["line"],
                 "settled_from": res.get("source") or "unknown", "per_map": res.get("per_map"), "rounds": res.get("rounds"),
-                "maps_used": res.get("maps_used")}
+                "maps_used": res.get("maps_used"), "hltv_checked": bool(res.get("hltv_checked"))}
         # FIRST published forecast = the picks row itself
         if start and _ts(p.get("logged_at")) and _ts(p["logged_at"]) >= start:
             excl["first forecast after the start"] += 1
@@ -200,7 +208,7 @@ def build(picks, forecasts, batches=(), now=None):
                         r["flags"].append("BO3.gg-history projection")
                 except Exception:
                     r["flags"].append("replay failed")
-            if r["settled_from"] == "bo3":
+            if r["settled_from"] == "bo3" and not r.get("hltv_checked"):        # HLTV confirmed the total: verified
                 r["flags"].append("settled from BO3.gg (not HLTV-verified)")
         groups = collections.defaultdict(list)
         for r in rs:
@@ -250,6 +258,7 @@ def build(picks, forecasts, batches=(), now=None):
             for r in g_:
                 bym[r["match"]].append(r)
             src_summ.append({"projection": src, "prop": prop, "scope": sc, "n": len(g_), "matches": len(bym),
+                             "versions": dict(collections.Counter(r["version"] for r in g_)),   # pooled tags, named (D8)
                              "proj_bias": round(sum(r["err"] for r in g_) / len(g_), 3),
                              "bias_ci": _boot(bym, lambda xs: sum(r["err"] for r in xs) / len(xs)),
                              "hit_rate": round(sum(r["hit"] for r in g_) / len(g_), 4),
@@ -261,7 +270,8 @@ def build(picks, forecasts, batches=(), now=None):
                                                       for r in rs if r["flags"]][-60:]}
     out["forward_hs"] = forward_hs(fwd)
     # slip selections (shadow batches): exposure across batches + leg performance where settled
-    leg_by = {(str(p.get("player") or "").lower(), p.get("prop"), p.get("scope") or "12", p.get("match_slug")): p for p in picks if p.get("test") == 2}
+    leg_by = {(str(p.get("player") or "").lower(), p.get("prop"), p.get("scope") or "12", p.get("match_slug")): p for p in picks
+              if recap.board_line(p) and not recap._held(p)}       # D2: board lines a member opened too; held = unresolved
     expo_m, expo_p, legs = collections.Counter(), collections.Counter(), []
     for b in batches:
         for s in b.get("slips") or []:
@@ -280,10 +290,17 @@ def build(picks, forecasts, batches=(), now=None):
     return out
 
 
+POOLING_NOTE = ("MODEL_VERSIONS.md: exact model_version tags may be pooled only inside one 'same grading' group, and no "
+                "machine-readable group map exists - so every tag is reported on its own (by_version) and a pooled figure "
+                "that spans more than one tag is flagged. The pre-registered rule itself is unchanged (2026-10-13 audit D8).")
+
+
 def forward_hs(fwd):
     """Predicted vs actual Over rate per predefined band, per model, with match-grouped 95% intervals."""
     res = {"since": FORWARD_FROM, "lines": len(fwd), "matches": len({r["match"] for r in fwd}), "models": [],
            "versions": dict(collections.Counter(r.get("version") or "untagged" for r in fwd))}   # live version(s) behind "current"
+    res["pooled_across_versions"] = len(res["versions"]) > 1
+    res["pooling_note"] = POOLING_NOTE
     for name, _ in FORWARD_MODELS:
         rs = [r for r in fwd if r["p"].get(name) is not None]
         bands = []
@@ -299,7 +316,16 @@ def forward_hs(fwd):
         g = collections.defaultdict(list)
         for r in rs:
             g[r["match"]].append(r)
-        res["models"].append({"model": name, "n": len(rs), "bands": bands,
+        per = collections.defaultdict(list)                     # each exact tag on its own (D8)
+        for r in rs:
+            per[r.get("version") or "untagged"].append(r)
+        by_version = [{"version": v, "n": len(xs), "matches": len({r["match"] for r in xs}),
+                       "predicted": round(sum(r["p"][name] for r in xs) / len(xs), 4),
+                       "actual": round(sum(r["over"] for r in xs) / len(xs), 4),
+                       "gap": round(sum(r["over"] - r["p"][name] for r in xs) / len(xs), 4),
+                       "log_loss": round(sum(-math.log(max(r["p"][name] if r["over"] else 1 - r["p"][name], 1e-6)) for r in xs) / len(xs), 4)}
+                      for v, xs in sorted(per.items())]
+        res["models"].append({"model": name, "n": len(rs), "bands": bands, "by_version": by_version,
                               # exact live tag of each counted row (report per tag, MODEL_VERSIONS.md) + invalid rows left out
                               "versions": dict(collections.Counter(r.get("version") or "untagged" for r in rs)),
                               "excluded_invalid": sum(name in (r.get("excluded") or ()) for r in fwd),
