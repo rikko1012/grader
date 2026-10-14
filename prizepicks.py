@@ -89,6 +89,7 @@ def rows_from(records):
              "higher": None, "lower": None, "mod_higher": _num(rec.get("higher")), "mod_lower": _num(rec.get("lower")),
              # sides the feed offered (the copy keeps the direct read's higher / lower: None = not offered / not confirmed)
              "over_available": rec.get("higher") is not None, "under_available": rec.get("lower") is not None,
+             "direction_basis": rec.get("direction_basis") or "sides as stored with the line (feed basis not recorded)",
              "price_higher": None, "price_lower": None,
              "updated_at": _iso(changed), "seen_at": _iso(rec.get("updated_at")), "first_seen": _iso(rec.get("first_seen")),
              "open_line": _num(rec.get("open_line")), "prev_line": _num(rec.get("prev_line")), "moves": rec.get("moves"),

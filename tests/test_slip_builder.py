@@ -187,7 +187,15 @@ def test_one_platform_and_entry_type_per_slip():
     legs = [l for s in all_slips(pp) for l in s["legs"]]
     assert legs and {l["market_type"] for l in legs} == {"goblin"} and {l["side"] for l in legs} == {"More"}
     why = {e["reason"] for e in pp["excluded"]}
-    assert "goblin / demon lines offer More only" in why and "PrizePicks promo line (payout differs)" in why
+    # 2026-10-14 owner: the sides the FEED offers - a goblin Less leg with no feed confirmation is excluded as such
+    assert any(w.startswith("Less not offered or not confirmed by the PrizePicks feed") for w in why)
+    assert "PrizePicks promo line (payout differs)" in why
+    confirmed = row(301, 31, book="prizepicks", odds_type="goblin", side="Less", p=0.8)
+    confirmed.update(under_available=True, direction_basis="feed allowed_wager_types: over, under")      # SYNTHETIC
+    assert sb.why_excluded(confirmed, sb.normalize_settings({"book": "prizepicks", "market": "goblin"}), M, NOW) is None
+    over_only = row(302, 32, book="prizepicks", side="Less", p=0.8)
+    over_only.update(under_available=False, direction_basis="feed allowed_wager_types: over")              # live case
+    assert "allowed_wager_types: over" in sb.why_excluded(over_only, sb.normalize_settings({"book": "prizepicks"}), M, NOW)
     with pytest.raises(ValueError):
         sb.build(rows, {"book": "underdog", "market": "goblin"})
     with pytest.raises(ValueError):

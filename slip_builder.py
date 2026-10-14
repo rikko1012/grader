@@ -21,7 +21,7 @@ Eligibility (one rule, the same exclusions as the current builders): graded B or
 out), graded on the EXACT line now shown by the CURRENT model, not started, role confirmed (HS only for confirmed /
 measured non-AWPers, kills only for confirmed non-IGLs; inferred roles are not confirmation), no Underdog alternate
 lines, Underdog side must be offered, PrizePicks feed not stale, PrizePicks promo lines left out (their payout
-differs), goblin / demon are their own entry type (More only), moneylines are their own entry type (never with props).
+differs), goblin / demon are their own entry type (a side only when the feed offers it: prizepicks.directions), moneylines are their own entry type (never with props).
 One platform and one entry type per slip, by construction.
 
 Default rules across the WHOLE batch (every size, every Build press until new_batch()): no repeated prop, no repeated
@@ -256,8 +256,16 @@ def why_excluded(r, st, model, now):
         return "PrizePicks promo line (payout differs)"
     if mt != st["market"]:
         return f"other entry type ({mt})"
-    if mt in ("goblin", "demon") and r.get("side") != "More":
-        return "goblin / demon lines offer More only"
+    if st["book"] == "prizepicks" and not ml:
+        # the sides PrizePicks' FEED offers for this line (2026-10-14 owner: never a blanket goblin / demon 'More only'):
+        # under_available / over_available from prizepicks.directions(); a row without them keeps the conservative
+        # reading - Less not confirmed on goblin / demon lines, both sides on standard ones
+        ok = r.get("under_available") if r.get("side") == "Less" else r.get("over_available")
+        if ok is None:
+            ok = not (r.get("side") == "Less" and mt in ("goblin", "demon"))
+        if not ok:
+            return (f"{'Less' if r.get('side') == 'Less' else 'More'} not offered or not confirmed by the PrizePicks feed "
+                    f"for this line" + (f" ({r['direction_basis']})" if r.get("direction_basis") else ""))
     if st["book"] == "underdog" and not ml and _mult(r) is None:
         return "side not offered by Underdog"
     if st["book"] == "prizepicks" and r.get("stale"):
