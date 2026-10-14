@@ -271,7 +271,7 @@ def _set_meta(con, k, v):
 # ------------------------------------------------------------------------------------------------ reading the pick log
 PICK_COLS = ("id", "test", "status", "actual", "hit", "line", "pick", "prop", "scope", "match_slug", "match_start",
              "logged_at", "player", "slug", "team", "opponent", "book", "line_type", "market_id", "result", "settled_at",
-             "model_version", "p_more", "p_pick", "lambda")
+             "model_version", "p_more", "p_pick", "lambda", "on_board")    # on_board: board provenance (audit D2)
 
 
 def _picklog_path(picks_path=None):
@@ -347,9 +347,41 @@ def read_batches(path=None):
 
 
 # ------------------------------------------------------------------------------------------------ units + features
+SOURCE_RULE = 2                     # 1 = board / member from `test` alone (until 2026-10-13), 2 = recap.board_line
+
+
 def source_of(p):
+    """board / board_pp / member / owner test. 2026-10-13 audit D2: the board rule is recap.board_line (from `test` alone
+    a board line a member opened - test rewritten 2 -> 0, on_board kept - was labelled member)."""
+    import recap
     t = p.get("test") or 0
-    return ("board_pp" if p.get("book") == "prizepicks" else "board") if t == 2 else "member" if t == 0 else "owner test"
+    if t != 1 and recap.board_line(p):
+        return "board_pp" if p.get("book") == "prizepicks" else "board"
+    return "member" if t == 0 else "owner test"
+
+
+def _relabel_sources(con, picks, now):
+    """Once per SOURCE_RULE: the board / member label of the forecast copies already made, from the current rule. Only
+    the label (pick provenance) changes - the copied forecast never does; recorded as an event. The scorecard reads the
+    label from forecast_copy, so units already in the (append-only) ledger are split by the same rule."""
+    if _meta(con, "source_rule", 1) == SOURCE_RULE:
+        return False
+    by = {p["id"]: p for p in picks}
+    n = 0
+    for fid, pid, src in con.execute("SELECT forecast_id, pick_id, source FROM forecast_copy").fetchall():
+        p = by.get(pid)
+        if p is not None and source_of(p) != src:
+            con.execute("UPDATE forecast_copy SET source = ? WHERE forecast_id = ?", (source_of(p), fid))
+            n += 1
+    _set_meta(con, "source_rule", SOURCE_RULE)
+    con.execute("INSERT INTO events (at, kind, detail) VALUES (?,?,?)", (_iso(now), "source_rule", json.dumps(
+        {"from": 1, "to": SOURCE_RULE, "relabelled": n,
+         "why": "board lines a member opened were labelled member (audit D2); forecasts untouched"})))
+    if _meta(con, "scorecard") is not None:            # the stored scorecard, re-split by the corrected labels
+        _set_meta(con, "scorecard", scorecard(con))
+        _set_meta(con, "scorecard_at", _iso(now))
+    con.commit()
+    return True
 
 
 def unit_key(p):
@@ -363,7 +395,17 @@ def match_of(p):
     return p.get("_mid") or p.get("match_slug")
 
 
-UNIT_IDENTITY = 2                   # 1 = slug units (until 2026-10-12), 2 = identity.assign canonical matches
+def _identity_rule():
+    """identity.RULE_VERSION when identity.py states one (2026-10-13: a change of the evaluation match identity then
+    re-keys the forecast copies and rebuilds the ledger - _migrate_unit_identity - instead of splitting units), else 2."""
+    try:
+        import identity
+        return max(2, int(getattr(identity, "RULE_VERSION", 2)))
+    except Exception:
+        return 2
+
+
+UNIT_IDENTITY = _identity_rule()    # 1 = slug units (until 2026-10-12), 2 = identity.assign canonical matches
 
 
 def tag_matches(picks):
@@ -399,7 +441,8 @@ def _migrate_unit_identity(con, picks, now):
     _set_meta(con, "unit_identity", UNIT_IDENTITY)
     con.execute("INSERT INTO events (at, kind, detail) VALUES (?,?,?)", (_iso(now), "unit_identity", json.dumps(
         {"from": have, "to": UNIT_IDENTITY, "old_ledger": old, "old_rows": n,
-         "why": "one match logged under a BO3.gg slug and hltv-<id> counted twice (audit D1); originals untouched"})))
+         "why": ("one match logged under a BO3.gg slug and hltv-<id> counted twice (audit D1); originals untouched"
+                 if UNIT_IDENTITY == 2 else "evaluation match identity rule changed (identity.RULE_VERSION); originals untouched")})))
     con.commit()
     return True
 
@@ -920,7 +963,7 @@ def _diag(feat, p_res, prop, scope, lam, actual, line, unit_rows):
     lines = sorted({r.get("line") for r in unit_rows if r.get("line") is not None})
     if len(lines) > 1 and lines[-1] - lines[0] >= 1:
         d["market"] = f"lines differ by {lines[-1] - lines[0]:g} across books / requests"
-    if any((r.get("test") == 2 and r.get("book") and not r.get("market_id")) for r in unit_rows):
+    if any((source_of(r).startswith("board") and r.get("book") and not r.get("market_id")) for r in unit_rows):
         d["market_no_id"] = True
     d["settled_from"] = (p_res or {}).get("source") or "unknown"
     res = p_res or {}
@@ -973,6 +1016,15 @@ def _diag(feat, p_res, prop, scope, lam, actual, line, unit_rows):
     return d
 
 
+def _held(p):
+    """Held for review (picklog SOURCE_RULE) - the row's own result, as recap reads it. 2026-10-13 audit: a substring test
+    also caught the BO3.gg detail kept inside an HLTV correction (bo3_detail), so a pick HLTV had settled stayed unscored."""
+    try:
+        return bool((json.loads(p.get("result") or "{}") or {}).get("review"))
+    except (TypeError, ValueError, AttributeError):
+        return False
+
+
 def _ingest(con, picks, now, bad_units, corr_ids):
     """Append ledger rows for every unit whose evaluation changed (idempotent). Returns counts."""
     units = collections.defaultdict(list)
@@ -1020,7 +1072,7 @@ def _ingest(con, picks, now, bad_units, corr_ids):
         bucket, reason = "scored", None
         if uk in bad_units:
             bucket, reason = "settlement_conflict", bad_units[uk]
-        elif any('"review": true' in str(r.get("result") or "") for r in rows):
+        elif any(_held(r) for r in rows):
             bucket, reason = "settlement_conflict", "BO3.gg quick and full scoreboards disagree around the line - held until HLTV / review"
         elif len(acts) > 1:
             bucket, reason = "settlement_conflict", f"lines in this unit settled with different totals {sorted(acts)}"
@@ -1108,6 +1160,10 @@ def _unit(r):
 def scorecard(con):
     rows = latest_rows(con)
     sc = [_unit(r) for r in rows if r["bucket"] == "scored"]
+    lab = {r[0]: r[1] for r in con.execute("SELECT forecast_id, source FROM forecast_copy WHERE source IS NOT NULL")}
+    for u in sc:                                       # the line source by the current board rule (SOURCE_RULE, audit D2)
+        if lab.get(u["forecast_id"]):
+            u["dims"]["source"] = lab[u["forecast_id"]]
     buckets = collections.Counter(r["bucket"] for r in rows)
     reasons = collections.Counter((r["bucket"], r["reason"]) for r in rows if r["bucket"] != "scored")
     out = {"overall": metrics(sc, slope=True), "calibration": calibration(sc), "directional": directional(sc), "by": {},
@@ -1126,6 +1182,8 @@ def scorecard(con):
     for u in sc:
         g[(u["prop"], u["scope"])].append(u)
     out["by"]["stat x scope"] = [dict(metrics(us), group=f"{k[0]} · {k[1]}") for k, us in sorted(g.items(), key=lambda kv: -len(kv[1]))]
+    out["pooled_across_versions"] = len({_version_of(u) for u in sc}) > 1      # per tag: out["by"]["version"] (D8)
+    out["pooling_note"] = POOLING_NOTE
     out["diagnosis"] = diagnosis(sc)
     out["questions"] = two_questions(sc)
     out["all_lines"] = all_lines_view([r for r in rows if r["bucket"] == "scored"])
@@ -1435,7 +1493,28 @@ def paired_stats(units, level=0.95, B=BOOT_B, slope=True):
         sl[(u["prop"], u["scope"])].append(u)
     out["slices"] = [{"slice": f"{k[0]} · {k[1]}", "units": len(us), "matches": len({u['match'] for u in us}),
                       "gain": _r(sum(gl(u) for u in us) / len(us), 5)} for k, us in sorted(sl.items())]
+    # 2026-10-13 audit D8: each exact model_version tag on its own, beside the pooled figure the pre-registered decision
+    # uses (REVIEW_RULE unchanged); a cohort spanning more than one tag is flagged
+    per = collections.defaultdict(list)
+    for u in units:
+        per[_version_of(u)].append(u)
+    out["by_version"] = [{"version": v, "units": len(us), "matches": len({u['match'] for u in us}),
+                          "gain": _r(sum(gl(u) for u in us) / len(us), 5),
+                          "log_loss_challenger": _r(sum(_ll(u["p_ch"], u["over"]) for u in us) / len(us)),
+                          "log_loss_live_replay": _r(sum(_ll(u["p_base"], u["over"]) for u in us) / len(us))}
+                         for v, us in sorted(per.items())]
+    out["pooled_across_versions"] = len(per) > 1
+    out["pooling_note"] = POOLING_NOTE
     return out
+
+
+POOLING_NOTE = ("MODEL_VERSIONS.md: exact model_version tags may be pooled only inside one 'same grading' group, and no "
+                "machine-readable group map exists - so every tag is reported on its own (by_version) and a pooled figure "
+                "that spans more than one tag is flagged. The pre-registered decision rule is unchanged (2026-10-13 audit D8).")
+
+
+def _version_of(u):
+    return (u.get("dims") or {}).get("version") or "untagged"
 
 
 def review_checks(st):
@@ -1672,6 +1751,8 @@ def run_cycle(now=None, picks=None, forecasts=None, batches=None, corrections=No
                 log["forecasts_copied"] = _copy_forecasts(con, picks, sorted((f for f in forecasts or [] if f["id"] > last), key=lambda f: f["id"]), now)[0]
             if _migrate_unit_identity(con, picks, now):
                 log["unit_identity_migrated"] = UNIT_IDENTITY
+            if _relabel_sources(con, picks, now):
+                log["source_rule_relabelled"] = SOURCE_RULE
             corrections = read_corrections(corrections_path) if corrections is None else corrections
             batches = read_batches(batches_path) if batches is None else batches
             # 2. shadow forecasts (measurement only - continues while paused)

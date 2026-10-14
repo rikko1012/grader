@@ -111,3 +111,42 @@ total stands over the full one; when they differ with the line between them the 
 learning: settlement_conflict, never scored) and logged in settlement_reviews.jsonl. The earlier 2026-10-12 corrections
 that replaced quick totals with full ones (7 Fruju vs MARKandLARRY picks) are reverted with a logged entry each. The
 settlement audit reports BO3.gg-based differences and never applies them.
+
+## 8. Settlement identity, cohorts and version pooling (2026-10-13 audit, picklog / recap / diagnostics / learning)
+
+No member grade, side or stake changes (picklog.py is not in the model-version hash; the tag is unchanged).
+
+- **Match identity = grading's.** A pick settles from HLTV only on its own HLTV match id: an `hltv-<id>` pick on that
+  id, on every scope; a BO3.gg-slug pick on the HLTV match `matchid.canonical_match(team, opponent, listed start)` names -
+  the same call the projection's odds link makes (canonical team ids + the maintained aliases; an HLTV schedule time
+  within 3 h of the start, or a finished match dated that UTC day), picks.team first, then the BO3.gg profile team. The
+  opponent is checked by matchid's canonical team id. No date window: yesterday's upper-bracket final or this morning's
+  opener between the same teams is never the match (it used to settle the pick, stored as source hltv). Nothing settles
+  before the listed start (was 12 h before). A pick whose canonical match names no HLTV match (hashed id, ambiguous,
+  team not resolved) is not settled from HLTV: Maps 1-2 falls back to BO3.gg's own match slug (provisional), Map 1 /
+  Maps 1-3 wait and void after 3 days like a match never found. Each HLTV settlement stores the identity it was read
+  under (`result.identity`: "hltv id" / "canonical match"; "date window (matchid not loaded)" only where matchid has no
+  HLTV team table - the unit tests, a first boot without the database). Evaluation groups matches with
+  `identity.assign` (recap, learning, diagnostics); keying settled rows on the canonical HLTV id needs identity.py
+  (RULE_VERSION 3) - learning re-keys its ledger automatically when that version changes.
+- **Outages.** HLTV unreachable never becomes "not in HLTV": a Maps 1-2 BO3.gg-slug pick waits (no BO3.gg settlement,
+  no void); a forfeit check that cannot be read waits too.
+- **Missing stats.** A BO3.gg quick scoreboard without headshots is "not published yet" (was 0: an HS pick settled as a
+  big Under).
+- **Held for review.** When HLTV (authoritative) confirms the total, the hold and the provisional mark are released and
+  the HLTV total recorded; an HLTV-confirmed pick is never held again by BO3.gg's full scoreboard. Held picks are
+  excluded from diagnostics (counted) and slip-batch legs wait on them; an HLTV settlement decides a leg over a BO3.gg one.
+- **Rechecks rotate.** The HLTV recheck (60 picks per pass) and the quick-scoreboard recheck (40 matches) start after the
+  last one checked and wrap around, so rows HLTV never has no longer hold newer rows back.
+- **Cohorts: one rule** (`recap.board_line`): board = test 2, or test 0 with board provenance (on_board 1 recorded /
+  2 inferred; no column: a platform recorded). Used by recap, diagnostics (summaries, the pre-registered forward HS
+  check, slip-leg lookup) and learning (`source_of`; forecast copies relabelled once - event `source_rule` - and the
+  scorecard's line-source split read from them). Before, diagnostics and learning counted a board line a member opened
+  as a member line. A board write lifts a row an owner load test reached first (test 1, no platform) to the board and
+  fills its platform + market id; a board row the owner marked as a test by hand keeps test 1. The on_board backfill
+  runs until its marker (`schema_marks.on_board_backfill`) is stored and only fills values it is sure of.
+- **Pooling across versions.** MODEL_VERSIONS.md pools tags only inside one "same grading" group; no machine-readable
+  group map exists, so every challenger review / interim forward result (`by_version`), the forward HS check
+  (`by_version` per model) and the scorecard (`by.version`) report each exact tag, and `pooled_across_versions` flags a
+  pooled figure spanning more than one tag. The pre-registered decision rules (REVIEW_RULE, the forward HS bands) are
+  unchanged: a pooled decision that spans tags must be read against the group column of MODEL_VERSIONS.md.
