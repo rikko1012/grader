@@ -82,3 +82,15 @@ def test_results_written_once(tmp_path, monkeypatch):
     assert len(sb.settle_all(lambda l: "hit")) == 1
     assert sb.settle_all(lambda l: "hit") == []                           # never twice
     assert [r["batch_id"] for r in sb.results()] == ["x1"]
+
+
+def test_a_grade_kept_during_an_outage_is_never_batched_or_recommended(monkeypatch):
+    """2026-10-14 owner: a saved grade the board keeps while live data is unavailable is stale - no shadow batch and no
+    recommended slip is built on it."""
+    import slips
+    monkeypatch.setattr(sb, "_batched", lambda: set())
+    rows = [_row(1, "m1"), _row(2, "m2", hltv_retry="2026-10-09T11:55:00+00:00", retry_cause="hltv")]
+    ok, why = sb.eligible(rows, NOW, "M")
+    assert [r["id"] for r in ok] == ["l1"] and why == {"saved grade kept during an outage (stale)": 1}
+    legs = slips._legs([dict(r, start=(NOW + timedelta(hours=2)).isoformat(), matchup=r["match_slug"]) for r in rows], NOW.isoformat())
+    assert [x["id"] for g in legs for x in g] == ["l1"]

@@ -92,6 +92,6 @@ def test_phone_layout_hooks():
 
 
 def test_data_status_names_an_outage_and_a_stale_hltv_history():
-    assert 't: "HLTV unreachable", why: "temporary projection from the older model"' in HTML
+    assert 't: "HLTV unreachable", why: "no current grade until the database answers"' in HTML
     assert 't: "HLTV out of date"' in HTML and '"HLTV out of date"' in HTML.split("const issueLabel")[1][:400]
     assert "HLTV is missing his recent matches" in HTML                       # the card's HLTV panel shows hl.stale

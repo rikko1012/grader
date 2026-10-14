@@ -239,6 +239,8 @@ def why_excluded(r, st, model, now):
         return "started / locked"
     if not r.get("side") or r.get("p") is None or r.get("state") == "SCOUT":
         return "not graded / scout"
+    if r.get("hltv_retry"):
+        return "saved grade kept while live data is unavailable (stale - not a current forecast)"
     if r.get("grade") not in GRADES or (r.get("units") or 0) <= 0:
         return "below B / no units (Lean, B-)"
     try:
@@ -997,6 +999,9 @@ def verify_before_copy(slip, boards, now=None, model=None, settings=None):
                 break
         if cur is None:
             ch.append(f"{lab}: no current grade for this line")
+        elif cur.get("hltv_retry"):
+            # the board kept its last grade while live data is unavailable: stale, not a current forecast of this line
+            ch.append(f"{lab}: the grade is a saved one kept while live data is unavailable - can't be confirmed right now")
         else:
             if float(cur.get("line") or -1) != float(l.get("line") or -2):
                 ch.append(f"{lab}: line moved {l.get('line')} -> {cur.get('line')}")

@@ -57,7 +57,8 @@ ctx.window = ctx;
 vm.createContext(ctx);
 vm.runInContext(main, ctx, {filename: "index.html"});
 ctx.INPUT = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
-console.log(JSON.stringify(vm.runInContext(fs.readFileSync(process.argv[4], "utf8"), ctx)));
+// an async body (the slip flow) is awaited; a plain value prints at once
+Promise.resolve(vm.runInContext(fs.readFileSync(process.argv[4], "utf8"), ctx)).then(v => console.log(JSON.stringify(v)));
 """
 
 
@@ -85,7 +86,7 @@ def test_card_badge_comes_from_the_servers_data_status(tmp_path):
               old: dataStatus({flags: ["Small sample of recent official maps - extra caution, unit size limited"]}, {side: "More"}),
               outage: dataStatus({flags: [], projection_source: "legacy (performance model unavailable: HLTV database unreachable right now)"},
                                  {side: "More", dstat: ["ok", ""]}),
-              noconf: dataStatus({flags: ["HLTV database not connected right now - temporary projection from the older model"]}, {side: "More", dstat: ["ok", ""]}),
+              noconf: dataStatus({flags: ["HLTV database not connected right now - no current grade"]}, {side: "More", dstat: ["ok", ""]}),
               board: DSTAT["limited"][1]};
     })()""")
     assert out["limited"]["t"] == out["board"] == "Limited history"            # the board's badge for thin HLTV history
@@ -119,7 +120,8 @@ def test_map_names_are_escaped(tmp_path):
 
 @needs_node
 def test_outage_notice_names_its_cause(tmp_path):
-    rows = [{"book": "underdog", "line": 27.5, "side": "More", "grade": "B+", "p": 0.64, "units": 1.0}]
+    rows = [{"book": "underdog", "line": 27.5, "side": "More", "grade": "B+", "p": 0.64, "units": 1.0,
+             "graded_at": "2026-10-14T16:40:00+00:00", "stale": True}]
     note = ("Thunderpick lists this match but has no current quote (quote 240 s old) - this card's odds come from Polymarket "
             "(the fallback source), not from Thunderpick.")
     out = run_page(tmp_path, """(() => ({
@@ -131,8 +133,10 @@ def test_outage_notice_names_its_cause(tmp_path):
       older: outageNote({hltv_outage: {rows: []}}),
       none: outageNote({})}))()""", {"rows": rows, "note": note})
     assert note.replace("'", "&#39;") in out["odds"] and "HLTV" not in out["odds"]
-    assert "Underdog 27.5 Over · B+ (64.0%)" in out["odds"]
-    assert "holds this line back until Thunderpick quotes it again" in out["oddsHidden"]
+    assert "saved grade of this exact pick on Underdog, graded " in out["odds"] and "<b>stale</b>, not a new forecast" in out["odds"]
+    assert "no saved grade of this exact pick" in out["oddsHidden"] and "no grade, chance or stake" in out["oddsHidden"]
+    for k in ("odds", "oddsHidden", "oddsOld", "hltv", "both", "older"):
+        assert "temporary projection" not in out[k]
     assert "no current quote" in out["oddsOld"] and "not current Thunderpick odds" in out["oddsOld"]
     for k in ("odds", "oddsHidden", "oddsOld"):
         assert "fallback odds." not in out[k] and "Thunderpick odds temporarily" not in out[k]
@@ -153,7 +157,7 @@ def test_board_pill_names_the_kept_grades_cause(tmp_path):
       BK.underdog = {rows: INPUT.rows, at: 1, ver: "", err: null, feed: null, total: INPUT.rows.length, loaded: true}; BK.prizepicks.loaded = true;
       assignMatchKeys([...BK.underdog.rows]); bbook = "underdog"; boardRows = viewRows(bbook); bprop = "both"; bside = "both"; bscope = "12";
       bview = "all"; $("#bbets").checked = false; drawBoard(); return $("#boardout").innerHTML; })()""", {"rows": rows})
-    assert "kept grade · Thunderpick odds unavailable" in out and "kept grade · HLTV unreachable" in out
+    assert "stale grade kept · Thunderpick odds unavailable" in out and "stale grade kept · HLTV unreachable" in out
     txt = re.sub(r"<[^>]+>", " ", out)
     assert not re.search(r"\bundefined\b|\bNaN\b", txt)
 
@@ -202,3 +206,82 @@ def test_moneylines_search_that_matches_nothing_says_so(tmp_path):
     assert "No CS2 series-winner prices from Thunderpick, Polymarket or Kalshi right now." in out["none:"]["html"]   # really none
     assert "every listed match has started" in out["started:"]["html"] and "No CS2 series-winner prices" not in out["started:"]["html"]
     assert "No upcoming match for “alpha”" in out["started:alpha"]["html"]
+
+
+# ------------------------------------------------------------------ outages (2026-10-14 owner): no temporary prediction
+def _outage_card(verdict, hltv_outage):
+    return {"book": "underdog", "grade": {"line": 30.5, "prop": "kills", "scope": "12", "line_type": "standard", "flags": [],
+                                          "projection_source": "legacy (performance model unavailable: HLTV database unreachable right now)",
+                                          "status": "DATA UNAVAILABLE", "withheld": True},
+            "verdict": verdict, "hltv_outage": hltv_outage, "ladder": [], "simulation": None,
+            "comparison": {"error": "no line comparison while live data is unavailable"},
+            "player_block": {"player": {"nick": "ZywOo", "id": 1}, "current_team": "Vitality", "overall": {}, "recent_form": {}},
+            "next_match": {"opponent": "MOUZ", "start": "2026-10-14T18:00:00Z", "slug": "vitality-vs-mouz"}}
+
+
+UNAV = {"side": None, "p": None, "grade": None, "units": 0.0, "state": "UNAVAILABLE", "unavailable": True,
+        "kept_from_board": False, "stale": False, "reason": "HLTV database unreachable right now - no grade for this line"}
+KEPT = {"side": "Less", "p": 0.58, "grade": "B", "units": 0.5, "state": "GRADE", "kept_from_board": True, "stale": True,
+        "graded_at": "2026-10-14T16:40:00+00:00", "kept_book": "underdog", "reason": "saved grade (stale)"}
+
+
+@needs_node
+def test_outage_card_shows_no_temporary_prediction(tmp_path):
+    data = {"un": _outage_card(UNAV, {"rows": [], "causes": ["hltv"], "unavailable": True}),
+            "kept": _outage_card(KEPT, {"rows": [{"book": "underdog", "line": 30.5, "side": "Less", "grade": "B", "p": 0.58,
+                                                  "units": 0.5, "graded_at": KEPT["graded_at"], "stale": True}], "causes": ["hltv"]})}
+    out = run_page(tmp_path, """(() => { const r = {};
+      // the stub DOM has no children: render's column layout step after the HTML is written fails here, not on a page
+      for (const k of ["un", "kept"]) { try { render(INPUT[k]); } catch (e) { if (!/nextSibling/.test(e.message)) throw e; }
+        r[k] = $("#out").innerHTML; r[k + "_copy"] = pickLine(INPUT[k]); }
+      return r; })()""", data)
+    un = re.sub(r"<[^>]+>", " ", out["un"])
+    assert "No grade – live data unavailable" in un and "no saved grade of this exact pick" in un
+    assert "%" not in un.split("Match")[0] and "Add to slip" not in un and "Projection" not in un.split("Match")[0]
+    assert "no grade – live data unavailable" in out["un_copy"]
+    kept = re.sub(r"<[^>]+>", " ", out["kept"])
+    assert "Under 30.5" in kept and "58.0%" in kept and "saved grade · graded" in kept and "stale" in kept
+    assert "Add to slip" in kept and "Nearby lines" not in kept and "Edge" not in kept.split("Match")[0]
+    assert "saved grade from" in out["kept_copy"] and "(stale)" in out["kept_copy"]
+    for k in ("un", "kept"):
+        assert not re.search(r"\bundefined\b|\bNaN\b", re.sub(r"<[^>]+>", " ", out[k]))
+
+
+@needs_node
+def test_a_saved_grade_goes_on_the_slip_as_stale_never_verified(tmp_path):
+    data = {"kept": _outage_card(KEPT, {"rows": [], "causes": ["hltv"]}),
+            "fresh": dict(_outage_card({"side": "More", "p": 0.6, "grade": "B+", "units": 1.0, "state": "GRADE"}, None),
+                          grade={"line": 25.5, "prop": "kills", "scope": "12", "line_type": "standard", "p_more": 0.6, "p_less": 0.4},
+                          player_block={"player": {"nick": "s1mple", "id": 2}, "current_team": "FaZe"}),
+            "board": {"book": "underdog", "nick": "ropz", "player": "ropz", "line": 20.5, "prop": "kills", "scope": "12", "side": "More",
+                      "grade": "B", "p": 0.57, "units": 0.5, "hltv_retry": "2026-10-14T17:00:00+00:00", "graded_at": "2026-10-14T16:00:00+00:00",
+                      "start": "2026-10-14T18:00:00Z", "match_slug": "m2"}}
+    out = run_page(tmp_path, """(async () => {
+      globalThis.fetch = async u => ({ok: true, json: async () => (String(u).includes("/api/line_check") ? {status: "verified", note: ""} : {})});
+      store.set("cs2s_slip", []);
+      await addToSlip(INPUT.kept); await addToSlip(INPUT.fresh); await addToSlip(boardCard(INPUT.board));
+      const a = store.get("cs2s_slip", []).map(x => x.now.status);
+      await recheckSlip();
+      const s = store.get("cs2s_slip", []);
+      return {added: a, after: s.map(x => x.now.status), note: s[0].now.note, pill: legState(s[0])}; })()""", data)
+    assert out["added"] == ["stale", "verified", "stale"] and out["after"] == ["stale", "verified", "stale"]
+    assert "not a current forecast" in out["note"] and "saved grade – not current" in out["pill"]
+
+
+def test_copying_a_slip_flags_a_saved_grade():
+    assert '["changed", "unavailable", "failed", "stale"].includes(x.now?.status)' in HTML
+    assert '" [SAVED GRADE – NOT CURRENT]"' in HTML
+    # a moved line regraded during an outage: a saved / unavailable answer is never offered as the new line's grade
+    assert "nv = nv0.kept_from_board || nv0.unavailable || nv0.stale || n?.hltv_outage ? {} : nv0" in HTML
+
+
+@needs_node
+def test_match_players_marks_a_kept_grade_stale(tmp_path):
+    line = {"proj": 31.0, "line": 30.5, "side": "More", "p": 0.58, "grade": "B", "units": 0.5, "state": "GRADE", "dstat": ["ok", ""],
+            "graded_at": "2026-10-14T16:40:00+00:00", "kept": True, "retry_cause": "hltv"}
+    data = {"match": {"team": "Vitality", "opponent": "MOUZ", "start": "2026-10-14T17:00:00Z", "scope": "12"},
+            "teams": [{"team": "Vitality", "players": [{"nick": "ZywOo", "team": "Vitality", "kills": line, "hs": None}],
+                       "summary": {"kills": None, "hs": None, "complete": False, "covered": 0, "roster": 5, "basis": "roster page",
+                                   "lineup": ["ZywOo"]}, "exposure": {}}]}
+    out = run_page(tmp_path, """(() => { MC.data = INPUT; MC.scope = "12"; drawMatchCompare(); return $("#mcmp").innerHTML; })()""", data)
+    assert "stale grade kept" in out and "HLTV database was unreachable" in out

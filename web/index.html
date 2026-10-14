@@ -757,6 +757,7 @@ const gradeWord = v => v.state === "SCOUT" || v.grade === "SCOUT" ? "No match sc
 const perfGrade = g => String(g.projection_source || "").startsWith("perf") && ["12", "1", "123"].includes(g.scope || "12");
 const capOf = (d, k, dflt) => (d && d.caps && d.caps[k] != null ? d.caps[k] : dflt);
 const noteOf = (d, x) => { const v = d?.verdict || {}, g = d?.grade || {};
+  if (g.withheld) return v.side ? `saved grade from ${clockTxt(v.graded_at) || "earlier"} (stale) – live data unavailable` : "no grade – live data unavailable";
   return lineWarn(g.prop || x?.prop, g.line ?? x?.line, marketOk(d)) || ((v.units || 0) === 0 && /0 units: (.+)$/.exec(v.reason || "")?.[1])
     || ((v.units || 0) > 0 && v.cap_reason ? `max ${v.units}U: ${v.cap_reason}` : "") || ""; };
 // display only: well-known main AWPers, shown when BO3.gg has no weapon data (the grade doesn't use this list)
@@ -765,7 +766,9 @@ const mapsWord = sc => sc === "123" ? " (Maps 1–3)" : sc === "1" ? " (Map 1)" 
 function pickLine(d) {
   const g = d.grade || {}, v = d.verdict || {}, nick = d.player_block?.player?.nick || "";
   const side = isLeanV(v) ? sideWord(v) : (v.side === "More" ? "OVER" : "UNDER");
-  return `${nick} ${side} ${g.line} ${propWord(g.prop)}${mapsWord(g.scope)} · ${gradeWord(v)} · ${v.units}U · ${((v.p || 0) * 100).toFixed(1)}%`;
+  if (!v.side) return `${nick} ${g.line} ${propWord(g.prop)}${mapsWord(g.scope)} · no grade – live data unavailable`;
+  return `${nick} ${side} ${g.line} ${propWord(g.prop)}${mapsWord(g.scope)} · ${gradeWord(v)} · ${v.units}U · ${((v.p || 0) * 100).toFixed(1)}%`
+    + (v.kept_from_board || v.stale ? ` · saved grade from ${clockTxt(v.graded_at) || "earlier"} (stale)` : "");
 }
 function shareUrl(d) {
   const g = d.grade || {}, u = new URL(location.origin + location.pathname);
@@ -1061,6 +1064,7 @@ function legFrom(d, extra) {
   return Object.assign({bk: d.book || null, p: pb.player?.nick, pid: pb.player?.id || "", l: g.line, t: g.prop, lt: g.line_type, sc: g.scope || "12", s: v.side, g: v.grade, pc: v.p, u: v.units,
     m: d.next_match?.slug || [pb.current_team || "", d.next_match?.opponent || ""].map(x => x.toLowerCase().replace(/[^a-z0-9]/g, "")).sort().join("|"),
     vs: d.next_match?.opponent || "", tm: pb.playing_for || pb.current_team || "", st: d.next_match?.start || "",
+    kg: v.kept_from_board || v.stale ? (v.graded_at || "saved") : "",     // a saved grade kept during an outage: never verified
     orig: {line: g.line, side: v.side, p: v.p, grade: v.grade, units: v.units, at: Date.now()}}, extra || {});
 }
 function pushLeg(leg) {
@@ -1091,10 +1095,10 @@ async function addToSlip(d) {
       if (leg.vs && leg.st) qs.set("start", leg.st);
       const r = await fetch("/api/grade?" + qs); n = r.ok ? await r.json() : null;
     } catch {}
-    const nv = n?.verdict || {}, row = (l, s_, p_, gr, u) => `<tr><td>${l}</td><td>${s_ ? sideTxt(s_) : "–"}</td><td class="num">${p_ != null ? pct(p_) : "–"}</td><td>${esc(gr ? gradeWord({grade: gr}) : "–")}</td><td class="num">${u ?? 0}U</td></tr>`;
+    const nv0 = n?.verdict || {}, nv = nv0.kept_from_board || nv0.unavailable || nv0.stale || n?.hltv_outage ? {} : nv0, row = (l, s_, p_, gr, u) => `<tr><td>${l}</td><td>${s_ ? sideTxt(s_) : "–"}</td><td class="num">${p_ != null ? pct(p_) : "–"}</td><td>${esc(gr ? gradeWord({grade: gr}) : "–")}</td><td class="num">${u ?? 0}U</td></tr>`;
     const k = await ask(d.from === "board" ? `${bookName(used)} moved this line` : `Your line differs from ${bookName(used)}'s current line`, `${esc(nick)} ${propWord(g.prop)}${mapsWord(g.scope)}: ${d.from === "board" ? esc(c.note) : `you entered ${g.line}; ${bookName(used)} currently shows ${c.new_line}`}.
       <table style="margin-top:8px"><thead><tr><th>Line</th><th>Side</th><th class="num">Chance</th><th>Grade</th><th class="num">Stake</th></tr></thead><tbody>
-      ${row(g.line + " (yours)", v.side, v.p, v.grade, v.units)}${n && nv.side ? row(c.new_line + " (now)", nv.side, nv.p, nv.grade, nv.units) : `<tr><td>${c.new_line} (now)</td><td colspan="4" class="muted">couldn't regrade – try again</td></tr>`}</tbody></table>`,
+      ${row(g.line + " (yours)", v.side, v.p, v.grade, v.units)}${n && nv.side ? row(c.new_line + " (now)", nv.side, nv.p, nv.grade, nv.units) : `<tr><td>${c.new_line} (now)</td><td colspan="4" class="muted">${n?.hltv_outage ? "live data unavailable – no current grade for the new line" : "couldn't regrade – try again"}</td></tr>`}</tbody></table>`,
       [...(n && nv.side ? [{k: "new", label: `Use ${sideTxt(nv.side)} ${c.new_line}`, primary: true}] : []), {k: "keep", label: `Keep ${g.line} as a research line`}, {k: "cancel", label: "Cancel"}]);
     if (k === "new") { const nl = legFrom(n); nl.bk = used; nl.now = {status: "verified", note: "", at: Date.now()}; nl.replaced = {line: g.line, side: v.side, p: v.p, grade: v.grade, units: v.units}; return pushLeg(nl); }
     if (k !== "keep") return;
@@ -1107,8 +1111,10 @@ async function addToSlip(d) {
   } else if (c.status === "unavailable") {
     leg.bk = null; leg.now = {status: "research", note: `Your entered line – not on ${books.map(bookName).join(" or ")} right now`, at: Date.now()};
   }
+  if (leg.kg && leg.now.status === "verified") leg.now = staleNow(leg);
   pushLeg(leg);
 }
+function staleNow(x) { return {status: "stale", at: Date.now(), note: `Saved grade from ${clockTxt(x.kg) || "earlier"} kept while live data is unavailable – not a current forecast. Remove it and add it again once grades are back.`}; }
 function openSlip() { $("#slip").hidden = false; drawSlip(); recheckSlip(); }
 // re-check every leg's live offer; records it in leg.now (the original selection in leg.orig is never touched)
 async function recheckSlip() {
@@ -1116,8 +1122,9 @@ async function recheckSlip() {
   const plat = slipBook(s);
   const res = await Promise.all(s.map(x => !(x.now?.status === "research") && (x.bk || plat) ? lineCheck(x, x.bk || plat) : null));
   const cur = store.get("cs2s_slip", []);
-  res.forEach((c, i) => { if (c && cur[i] && legKey(cur[i]) === legKey(s[i]))
-    cur[i].now = {status: c.status === "ambiguous" ? "unavailable" : c.status, note: c.note || "", at: Date.now(), new_line: c.new_line}; });
+  res.forEach((c, i) => { if (c && cur[i] && legKey(cur[i]) === legKey(s[i])) {
+    cur[i].now = {status: c.status === "ambiguous" ? "unavailable" : c.status, note: c.note || "", at: Date.now(), new_line: c.new_line};
+    if (cur[i].kg && cur[i].now.status === "verified") cur[i].now = staleNow(cur[i]); } });     // the line is up; the grade is not current
   store.set("cs2s_slip", cur); drawSlip(); return cur;
 }
 const legState = x => {
@@ -1126,6 +1133,7 @@ const legState = x => {
     : st === "changed" ? ` <span class="pill warn" title="${esc(x.now.note || "")}">line changed${x.now.new_line != null ? " → " + x.now.new_line : ""}</span>`
     : st === "unavailable" ? ` <span class="pill warn" title="${esc(x.now.note || "")}">offer unavailable</span>`
     : st === "failed" ? ` <span class="pill" title="${esc(x.now.note || "")}">couldn't check</span>`
+    : st === "stale" ? ` <span class="pill warn" title="${esc(x.now.note || "")}">saved grade – not current</span>`
     : st === "research" ? ` <span class="pill" title="${esc(x.now.note || "")}">research line – not verified</span>` : "";
 };
 const _drawSlip = () => { if (!$("#board").hidden && typeof boardRows !== "undefined" && boardRows.length) drawBoard(); };
@@ -1178,14 +1186,15 @@ $("#slip").addEventListener("click", e => {
   if (e.target.closest("#slipclose")) { $("#slip").hidden = true; return; }
   if (e.target.closest("#slipcopy")) (async () => {
     const s = await recheckSlip();
-    const bad = s.filter(x => ["changed", "unavailable", "failed"].includes(x.now?.status));
+    const bad = s.filter(x => ["changed", "unavailable", "failed", "stale"].includes(x.now?.status));
     if (bad.length) {
       const k = await ask("Check these picks first", bad.map(x => `<div>• <b>${esc(x.p)}</b> ${sideTxt(x.s)} ${x.l}: ${esc(x.now.note || x.now.status)}</div>`).join(""),
         [{k: "review", label: "Review slip", primary: true}, {k: "copy", label: "Copy anyway (marked)"}]);
       if (k !== "copy") return;
     }
     const mark = x => x.now?.status === "verified" ? "" : x.now?.status === "changed" ? ` [LINE CHANGED: now ${x.now.new_line ?? "?"}]`
-      : x.now?.status === "unavailable" ? " [NOT OFFERED NOW]" : x.now?.status === "failed" ? " [NOT CHECKED]" : " [RESEARCH LINE]";
+      : x.now?.status === "unavailable" ? " [NOT OFFERED NOW]" : x.now?.status === "failed" ? " [NOT CHECKED]"
+      : x.now?.status === "stale" ? " [SAVED GRADE – NOT CURRENT]" : " [RESEARCH LINE]";
     copy(`${s.length}-pick ${bookName(slipBook(s)) || "research"} slip\n` + s.map(x => `${x.p} ${isLeanV({grade: x.g}) ? `Lean ${sideTxt(x.s)}` : sideTxt(x.s).toUpperCase()} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${x.lt && x.lt !== "standard" ? " " + x.lt : ""} · ${isLeanV({grade: x.g}) ? "Lean" : x.g} · ${((x.pc || 0) * 100).toFixed(1)}%${mark(x)}`).join("\n"));
     // immutable load log (no member identity): what was copied and each leg's live-line state at that moment
     if (s.length >= 2) try {
@@ -1322,7 +1331,7 @@ const shortWhen = s => { if (!s) return ""; const d = new Date(s); if (isNaN(d))
   const u = until(d); return d.toLocaleString([], {weekday: "short", hour: "numeric", minute: "2-digit"}) + (u ? " · " + u : ""); };
 function boardCard(r) {     // a board row in the shape addToSlip / pickLine expect
   return {book: r.book || "underdog", grade: {line: r.line, prop: r.prop, line_type: gradeType(r), scope: r.scope || "12"},
-          verdict: {side: r.side, grade: r.grade, p: r.p, units: r.units},
+          verdict: {side: r.side, grade: r.grade, p: r.p, units: r.units, kept_from_board: !!r.hltv_retry, stale: !!r.hltv_retry, graded_at: r.graded_at},
           player_block: {player: {nick: r.nick || r.player, id: r.player_id}, current_team: r.team_name || r.team},
           next_match: {opponent: r.opp_name || r.opponent, start: r.start, slug: r.match_slug}, from: "board"};
 }
@@ -1394,7 +1403,7 @@ function drawBoard() {
       <div><div class="b2top">${bbook === "all" ? `<span class="pill" style="margin:0 4px 0 0;padding:1px 7px">${bookName(r.book || "underdog")}</span>` : ""}<b>${esc(nick)}</b>${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}
           <span class="muted">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}${showMatch ? " · " + shortWhen(r.start) : ""}</span></div>
         <div class="b2pick">${r.side ? esc(sideWord(r)) : "grading…"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}${mktTag(r)}${r.stale ? ` <span class="pill warn" title="The PrizePicks feed is not fresh – this line can't be confirmed as playable">not confirmed</span>` : ""}${r.p != null ? ` · <b>${chance(r.p, r.prop)}</b>${coinFlip(r.p)}` : ""}${isLeanV(r) ? (r.state === "SCOUT" ? " · No match scheduled" : "") : " · " + esc(r.grade || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${capChip(r, r.team_name || r.team)}</div>
-        <div class="b2meta">Proj ${r.proj != null ? num(r.proj, 1) : "–"}${ds ? ` · <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}">${ds[1]}</span>` : ""}${r.source ? `<span class="mx"> · source ${esc(r.source)}</span>` : ""}${r.hltv_retry ? (r.retry_cause === "odds" ? ` · <span class="pill warn" title="Thunderpick had no current quote for this match at the last regrade – this is this line's last grade (source as shown); it is regraded as soon as Thunderpick quotes it again">kept grade · Thunderpick odds unavailable</span>` : ` · <span class="pill warn" title="The HLTV database was unreachable at the last regrade – this is this line's last grade (source as shown); it is regraded as soon as the database answers">kept grade · HLTV unreachable</span>`) : ""}${r.graded_at ? `<span class="mx"> · graded ${agoTxt(r.graded_at)}</span>` : ""}${r.alt && r.book !== "prizepicks" ? ` · alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}${r.book === "prizepicks" && r.open_line != null && +r.open_line !== +r.line ? ` · opened ${r.open_line}` : ""}${r.moved_from != null ? ` · <span class="pill warn">line moved from ${r.moved_from}</span>` : ""}</div>
+        <div class="b2meta">Proj ${r.proj != null ? num(r.proj, 1) : "–"}${ds ? ` · <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}">${ds[1]}</span>` : ""}${r.source ? `<span class="mx"> · source ${esc(r.source)}</span>` : ""}${r.hltv_retry ? (r.retry_cause === "odds" ? ` · <span class="pill warn" title="Thunderpick had no current quote for this match at the last regrade – this is this line's last grade from ${esc(clockTxt(r.graded_at) || "earlier")} (source as shown), stale until it is regraded as soon as Thunderpick quotes it again">stale grade kept · Thunderpick odds unavailable</span>` : ` · <span class="pill warn" title="The HLTV database was unreachable at the last regrade – this is this line's last grade from ${esc(clockTxt(r.graded_at) || "earlier")} (source as shown), stale until it is regraded as soon as the database answers">stale grade kept · HLTV unreachable</span>`) : ""}${r.graded_at ? `<span class="mx"> · graded ${agoTxt(r.graded_at)}</span>` : ""}${r.alt && r.book !== "prizepicks" ? ` · alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}${r.book === "prizepicks" && r.open_line != null && +r.open_line !== +r.line ? ` · opened ${r.open_line}` : ""}${r.moved_from != null ? ` · <span class="pill warn">line moved from ${r.moved_from}</span>` : ""}</div>
         ${ev(r.support, "up", "+")}${ev(r.concern, "dn", "–")}</div>
       ${!r.side ? "<span></span>" : r.state === "SCOUT" ? `<button type="button" class="bslip" disabled title="No upcoming match found for his team – there is nothing to enter on a slip yet">+ Slip</button>`
         : `<button type="button" class="bslip ${onSlip.has(slipKeyRow(r)) ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}|${mktType(r)}|${r.book || "underdog"}">${onSlip.has(slipKeyRow(r)) ? "On slip" : "+ Slip"}</button>`}
@@ -1467,13 +1476,17 @@ $("#bbook").onclick = e => { const b = e.target.closest("button"); if (b) setBoo
 // each line with the chance at THAT line. The easier line = the lower one for an Over, the higher one for an Under;
 // not automatically better value (payouts differ), and goblin / demon markets are never compared with standard lines
 // the outage's own cause (owner 2026-10-13: a Thunderpick odds blip is handled like an HLTV blip - the board keeps its last grade)
+// 2026-10-14 owner: an outage card has no grade of its own - never a temporary projection or a made-up chance shown as a new
+// prediction. It shows the board's saved grade of exactly this pick (with when it was graded, marked stale) or nothing.
+function clockTxt(t) { const d = new Date(t); return !t || isNaN(d) ? "" : d.toLocaleString([], {weekday: "short", hour: "numeric", minute: "2-digit"}); }
 const outageNote = d => { const o_ = d.hltv_outage; if (!o_) return "";
   const cs = Array.isArray(o_.causes) && o_.causes.length ? o_.causes : ["hltv"];
-  const why = [cs.includes("hltv") ? "HLTV database unreachable right now – this is a temporary projection from the older model." : "",
+  const why = [cs.includes("hltv") ? "HLTV database unreachable right now – no new grade until it answers again." : "",
                // the server's own words: the real condition and where this card's odds come from - never shown as current Thunderpick odds
                cs.includes("odds") ? esc(o_.odds_note || "Thunderpick lists this match but has no current quote – this card's odds are not current Thunderpick odds.") : ""].filter(Boolean).join(" ");
-  return `<div class="small" style="margin-top:8px;color:var(--warn)">⚠ ${why}${(o_.rows || []).length ? ` The Prop Board still shows this line's last grade: ${o_.rows.map(o => `${bookName(o.book)} ${o.line} ${esc(sideWord(o))}${isLeanV(o) ? "" : " · " + esc(o.grade)} (${(o.p * 100).toFixed(1)}%)`).join(", ")}.`
-    : cs.includes("odds") ? " The Prop Board holds this line back until Thunderpick quotes it again." : ""}</div>`; };
+  const o = (o_.rows || [])[0];
+  return `<div class="small" style="margin-top:8px;color:var(--warn)">⚠ ${why}${o ? ` Shown: the Prop Board's saved grade of this exact pick${o.book ? " on " + bookName(o.book) : ""}, graded ${esc(clockTxt(o.graded_at) || "earlier")}${o.graded_at ? ` (${agoTxt(o.graded_at)})` : ""} – <b>stale</b>, not a new forecast.`
+    : " The Prop Board has no saved grade of this exact pick (player, match, platform, stat, maps, line and market type), so this line has no grade, chance or stake until live data is back."}</div>`; };
 function drawCompare() {
   const q = ($("#bsearch").value || "").trim().toLowerCase();
   const hit = r => !q || [r.nick, r.player, r.team, r.team_name, r.opponent, r.opp_name].some(x => String(x || "").toLowerCase().includes(q));
@@ -2142,7 +2155,7 @@ function dataStatus(g, v) {
   const fl = (g.flags || []).join(" | ");
   if (v.state === "SCOUT" || /No upcoming match/i.test(fl)) return {k: "warn", t: "Line not confirmed", why: "no upcoming match found"};
   if (/unreachable/i.test(String(g.projection_source || "")) || /HLTV database (unreachable|not connected)/i.test(fl))
-    return {k: "warn", t: "HLTV unreachable", why: "temporary projection from the older model"};
+    return {k: "warn", t: "HLTV unreachable", why: "no current grade until the database answers"};
   // the server's own data status - the badge the Prop Board shows for this line (2026-10-13 audit: thin HLTV history read
   // "Limited history" on the board and "Data complete" here: the board reads the grader's flag, these public flags hide it)
   const sd = Array.isArray(v.dstat) ? v.dstat : null;
@@ -2243,18 +2256,21 @@ function render(d) {
 
   // ---- headline
   const head = v.state === "SCOUT" ? `No match scheduled · Lean ${sideTxt(v.side)} ${g.line}`    : v.grade === "LEAN" && v.side ? `Lean ${sideTxt(v.side)} ${g.line}`
-    : v.side ? `${sideTxt(v.side)} ${g.line}` : "No grade";
+    : v.side ? `${sideTxt(v.side)} ${g.line}` : g.withheld ? "No grade – live data unavailable" : "No grade";
+  // an outage card (g.withheld): the server removed its temporary numbers; v is the board's saved grade of this exact pick
+  // (stale) or no grade at all
+  const keptPill = g.withheld && v.side ? ` <span class="pill warn" title="${esc(v.reason || "")}">saved grade · graded ${esc(clockTxt(v.graded_at) || "earlier")} · stale</span>` : "";
   // the board's same-match cap applies to this exact pick: one stake for this line everywhere on the site
   const capPill = g.tape_fight && /^recent record disagrees$/.test(v.cap_reason || "") && !(v.cap_n && v.units_full > v.units) ? ""
     : capChip(v, v.cap_team, capOf(d, "same_result", 3));                // the TAPE FIGHT pill below already says it
-  const gateStop = !("p_more" in g);   // stopped by a gate - the reason shows as a pill instead
+  const gateStop = !("p_more" in g) && !g.withheld;   // stopped by a gate - the reason shows as a pill instead
   // the reason once, in plain words: a stake chip or a FORM / TAPE FIGHT pill already says the cap, so it isn't repeated
-  const why = !v.reason || /^Projection [\d.]+ vs [\d.]+ needed \([^)]*\)$/.test(v.reason) || g.tape_fight || g.form_fight ? ""
+  const why = !v.reason || g.withheld || /^Projection [\d.]+ vs [\d.]+ needed \([^)]*\)$/.test(v.reason) || g.tape_fight || g.form_fight ? ""
     : v.reason.replace(/ · stake capped: .*$/, "");
   const pu = pushOf(g);
-  const sub = v.side ? `${ch(v.p)} ${pu != null ? `win chance excluding pushes · push ${pct(pu)}` : "chance"}${coinFlip(v.p)} · ${v.units}U${capPill}${why ? `<div class="small muted" style="margin-top:4px">${esc(why)}</div>` : ""}`
+  const sub = v.side ? `${ch(v.p)} ${pu != null ? `win chance excluding pushes · push ${pct(pu)}` : "chance"}${coinFlip(v.p)} · ${v.units}U${capPill}${keptPill}${why ? `<div class="small muted" style="margin-top:4px">${esc(why)}</div>` : ""}`
     : gateStop ? "" : esc(v.reason || "");
-  const hc = g.status === "NO GRADE" || v.state === "SCOUT" ? "g-scout" : gClass(v.grade);
+  const hc = g.status === "NO GRADE" || v.state === "SCOUT" || (g.withheld && !v.side) ? "g-scout" : gClass(v.grade);
   h += `<section class="card herocard ${hc}"><div class="hero">
     <div class="badge ${hc}" title="${esc(!v.side ? "No grade" : v.state === "SCOUT" ? "No match scheduled – research only" : v.grade === "LEAN" ? "Lean – 0 units" : "Grade " + v.grade)}">${esc(!v.side || v.state === "SCOUT" ? "–" : v.grade === "LEAN" ? "L" : (v.grade || "L").slice(0, 2))}</div>
     <div><h3>${esc(head)}</h3>
@@ -2298,6 +2314,9 @@ function render(d) {
       + chip(hhs.some(x => x.same_roster === false) ? "H2H same roster" : "H2H", hs2.filter(over).length, hs2.filter(dec).length);
     if (r && "p_more" in g && cmpLine != null) h += `<div class="rates">${r}</div>`;
   }
+  // an outage card with the board's saved grade: it can go on a slip (marked stale there, never verified) or be copied
+  if (g.withheld && v.side) h += `<div class="actions"><button type="button" class="chipbtn" data-act="slip" style="border-color:var(--accent)">+ Add to slip</button><button type="button" class="chipbtn" data-act="copy">Copy pick</button>
+    <button type="button" class="chipbtn" data-act="link">Copy link</button></div>`;
   if ("p_more" in g) h += `<div class="actions">${v.state === "SCOUT" ? `<span title="No upcoming match found for his team – there is nothing to enter on a slip yet"><button type="button" class="chipbtn" disabled>+ Add to slip</button></span>` : `<button type="button" class="chipbtn" data-act="slip" style="border-color:var(--accent)">+ Add to slip</button>`}<button type="button" class="chipbtn" data-act="copy">Copy pick</button>
     <button type="button" class="chipbtn" data-act="link">Copy link</button>
     <button type="button" class="chipbtn" data-act="nudge" data-d="-1">Line &minus;1</button>
@@ -2646,7 +2665,8 @@ Tap to open ${esc(e.nick)}'s ${pr === "hs" ? "headshots" : "kills"} card">
     const t = lined.map(c => c.graded_at).filter(Boolean).sort().pop();
     const issue = lined.map(c => (c.dstat || [])[0] === "verify" ? (c.dstat[1] || "line not confirmed") : (c.dstat || [])[0] === "limited" ? "limited history" : "").find(Boolean)
       || cs.map(c => c.note || (c.dq && c.dq !== "ok" ? c.dq : "")).find(Boolean) || "";
-    return `<td class="small muted">${t ? "graded " + ago(t) : lined.length ? "" : cs.some(c => c.proj != null) ? "projection only" : ""}${issue ? ` · <span class="dstat warn" style="font-size:11px">${esc(issue)}</span>` : ""}${e.benched ? " · benched – not in the lineup or team total" : e.not_on_roster_page ? " · not on roster page" : ""}</td>`;
+    const kept = lined.find(c => c.kept);
+    return `<td class="small muted">${t ? "graded " + ago(t) : lined.length ? "" : cs.some(c => c.proj != null) ? "projection only" : ""}${kept ? ` · <span class="dstat warn" style="font-size:11px" title="${kept.retry_cause === "odds" ? "Thunderpick had no current quote" : "The HLTV database was unreachable"} at the last regrade – the board's last grade, kept until it is regraded">stale grade kept</span>` : ""}${issue ? ` · <span class="dstat warn" style="font-size:11px">${esc(issue)}</span>` : ""}${e.benched ? " · benched – not in the lineup or team total" : e.not_on_roster_page ? " · not on roster page" : ""}</td>`;
   };
   const head = `<tr><th>Player</th>${props.map(pr => `<th class="num">${pr === "hs" ? "HS" : "Kills"} proj</th><th class="num">Line</th><th>Pick</th>`).join("")}<th>Data</th></tr>`;
   const body = j.teams.map(t => {

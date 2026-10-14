@@ -103,6 +103,8 @@ def eligible(rows, now=None, model=None, controls=CONTROLS):
             out("match already in an earlier batch"); continue
         if not r.get("side") or r.get("p") is None or r.get("state") == "SCOUT":
             out("not graded / scout"); continue
+        if r.get("hltv_retry"):
+            out("saved grade kept during an outage (stale)"); continue
         if r.get("grade") not in controls["grades"] or (r.get("units") or 0) <= 0:
             out("below B / no units"); continue
         if r.get("side") not in controls["sides"]:

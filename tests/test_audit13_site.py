@@ -611,8 +611,28 @@ def test_outage_cards_share_one_board_snapshot(card, monkeypatch):
     for i in range(40):                                                      # 40 members, 40 different outage cards
         set_grade(_grade_stub(line=20.5 + i, projection_source=OUTAGE_SRC))
         h = get(f"/api/grade?player=s0und&line={20.5 + i}&prop=kills&maps=12")
-        assert h.code == 200 and h.body()["hltv_outage"]["rows"][0]["line"] == 36.5
-    assert len(builds) == 1                                                  # one board build, not two per card
+        assert h.code == 200 and h.body()["hltv_outage"]["rows"] == [] and h.body()["verdict"]["unavailable"]   # another line's
+    assert len(builds) == 1                                                  # one board build, not two per card   grade: never
+
+
+# 2026-10-14 owner: an outage card reuses a saved board grade only for exactly this pick, shown with its time and stale;
+# otherwise no grade - and its temporary numbers are never shown as a prediction
+def test_outage_card_reuses_only_the_exact_saved_grade_and_withholds_its_own_numbers(card, monkeypatch):
+    set_grade, logged = card
+    kept = _pp_cut_row(graded_line=36.5, line_type="standard", graded_at="2026-10-14T16:40:00+00:00",
+                       hltv_retry="2026-10-14T17:00:00+00:00", retry_cause="hltv")
+    monkeypatch.setattr(server, "_both_boards", lambda: [kept])
+    set_grade(dict(_grade_stub(projection_source=OUTAGE_SRC), ladder=[{"line": 35.5, "side": "More", "p": 0.5}],
+                   simulation={"anchored": True}))
+    b = get("/api/grade?player=s0und&line=36.5&prop=kills&maps=12&book=prizepicks").body()
+    v, g = b["verdict"], b["grade"]
+    assert (v["side"], v["grade"], v["p"], v["units"]) == ("Less", "B+", 0.64, 0.75) and v["kept_from_board"] and v["stale"]
+    assert v["graded_at"] == "2026-10-14T16:40:00+00:00" and b["hltv_outage"]["rows"][0]["stale"]
+    assert g["withheld"] and "p_more" not in g and "lambda_final" not in g and b["ladder"] == [] and b["simulation"] is None
+    assert logged == []                                                      # never recorded as a fresh forecast
+    b = get("/api/grade?player=s0und&line=36.5&prop=kills&maps=12&book=underdog").body()    # another platform
+    assert b["verdict"]["unavailable"] and b["verdict"]["side"] is None and b["verdict"]["p"] is None
+    assert b["verdict"]["units"] == 0.0 and "p_more" not in b["grade"] and logged == []
 
 
 def test_board_answer_is_shared_by_every_member(site, monkeypatch):

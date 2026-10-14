@@ -510,7 +510,7 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12", book="
         e[r["prop"]] = {"proj": r.get("proj"), "line": r["line"], "side": r.get("side"), "p": r.get("p"), "grade": r.get("grade"),
                         "units": r.get("units"), "units_full": r.get("units_full"), "graded_at": r.get("graded_at"), "dstat": r.get("dstat"),
                         "source": r.get("source"), "state": r.get("state"), "ud_team": r.get("team"), "ud_opponent": r.get("opponent"),
-                        "reason": r.get("reason")}
+                        "reason": r.get("reason"), "kept": bool(r.get("hltv_retry")), "retry_cause": r.get("retry_cause")}
     # offered but not graded yet (2026-10-11 audit: damyo's 31.5 showed 'No available line' while it was grading)
     try:                                            # the feed as already read (never a blocking first read here)
         feed = (prizepicks.board()["rows"] if book == "prizepicks" else
@@ -867,45 +867,108 @@ def board_stake(res, prop, scope, line, line_type="standard", book=None):
     return v
 
 
-def outage_verdict(res, prop, scope, line, v, book=None):
-    """During an outage (HLTV unreachable, a Thunderpick blip, the performance model's input revision unavailable) the
-    card's own grade is TEMPORARY: it never carries a stake (2026-10-14 harness finding: a legacy B- 0.5U card next to the
-    board's kept Lean 0U - two stakes for one line, a stake on a fallback grade). When the Prop Board lists this exact line
-    (player, stat, maps, line, start) the card shows the board's kept grade; otherwise the temporary side and chance as a
-    0-unit Lean (never a letter grade at 0U)."""
-    if not isinstance(v, dict) or not v.get("side"):
-        return v
+def _lt_norm(x):
+    """A line's market type for matching: PrizePicks goblin / demon are their own markets; standard and promo lines grade
+    as standard."""
+    return x if x in ("goblin", "demon") else "standard"
+
+
+def kept_board_row(res, prop, scope, line, book=None, line_type="standard"):
+    """The Prop Board's saved grade for exactly this pick, or None: same player, match (the match id when both sides know
+    it, and the start within the join window), platform, stat, maps, line and market type, graded at this line, and its
+    side still offered by the platform's feed. Platforms in order (the card's own, else Underdog first)."""
     nick = (((res.get("player_block") or {}).get("player") or {}).get("nick") or "").lower()
-    st = comparison._ts((res.get("next_match") or {}).get("start"))
+    nm = res.get("next_match") or {}
+    st, slug = comparison._ts(nm.get("start")), nm.get("slug")
+    if not nick or not st:
+        return None
     try:
         rows_ = _bs_rows()
     except Exception:
         rows_ = _BS_CACHE[1]
     for bk in ((book,) if isinstance(book, str) else tuple(book or ("underdog", "prizepicks"))):
         for r in rows_:
-            if ((r.get("book") or "underdog") == bk and str(r.get("nick") or r.get("player") or "").lower() == nick
+            if not ((r.get("book") or "underdog") == bk and str(r.get("nick") or r.get("player") or "").lower() == nick
                     and r.get("prop") == prop and (r.get("scope") or "12") == scope and float(r.get("line") or -1) == float(line)
-                    and r.get("side") and r.get("grade") and st and comparison._ts(r.get("start"))
-                    and abs((comparison._ts(r["start"]) - st).total_seconds()) <= comparison.JOIN_START_MIN * 60):
-                return dict(v, side=r["side"], p=r.get("p"), grade=r["grade"], units=r.get("units") or 0.0, state=r.get("state"),
-                            kept_from_board=True, temporary=False,
-                            reason="The Prop Board's last grade for this line, kept while live data is unavailable - "
-                                   "this card's own numbers below are temporary")
-    return dict(v, grade="LEAN", units=0.0, temporary=True, kept_from_board=False,
-                reason="Temporary grade while live data is unavailable - no stake until it is back")
+                    and _lt_norm(r.get("line_type") or r.get("odds_type")) == _lt_norm(line_type)
+                    and r.get("side") and r.get("grade")):
+                continue
+            try:
+                if r.get("graded_line") is None or float(r["graded_line"]) != float(line):
+                    continue                      # graded at another line
+            except (TypeError, ValueError):
+                continue
+            rs = comparison._ts(r.get("start"))
+            if not rs or abs((rs - st).total_seconds()) > comparison.JOIN_START_MIN * 60:
+                continue
+            if slug and r.get("match_slug") and r["match_slug"] != slug:
+                continue                          # another match at the same time
+            if (r["side"] == "Less" and r.get("under_available") is False) or (r["side"] == "More" and r.get("over_available") is False):
+                continue                          # the feed no longer offers this side
+            return r
+    return None
 
 
-def board_last_hltv(res, prop, scope):
-    """During an HLTV outage the card grades on the old pipeline; this is what the Prop Board still shows for the same player /
-    stat / maps (its last performance-model grades), so the member is told instead of seeing two different numbers."""
-    nick = (((res.get("player_block") or {}).get("player") or {}).get("nick") or "").lower()
-    try:                                          # the same <= 5 s snapshot as board_stake (2026-10-13 audit: every outage
-        rows_ = _bs_rows()                        # card rebuilt both boards - 700 members = 1,400 rebuilds during an outage)
-    except Exception:
-        rows_ = _BS_CACHE[1]
-    rows = [r for r in rows_ if str(r.get("nick") or r.get("player") or "").lower() == nick and r.get("prop") == prop and r.get("side")
-            and (r.get("scope") or "12") == scope and (r.get("line_type") or r.get("odds_type") or "standard") in ("standard", "promo")]
-    return {"rows": [{k: r.get(k) for k in ("book", "line", "side", "grade", "p", "units", "proj", "graded_at", "hltv_retry")} for r in rows[:4]]}
+def _outage_cause(g):
+    cs_ = _transient_causes(g or {})
+    return ("HLTV database unreachable right now" if "hltv" in cs_ or not cs_ else
+            "Thunderpick lists this match but has no current quote")
+
+
+def outage_verdict(res, prop, scope, line, v, book=None, line_type="standard"):
+    """During an outage (HLTV unreachable, a Thunderpick blip, the performance model's input revision unavailable) the
+    card has no grade of its own - its temporary numbers are no forecast (2026-10-14 owner: never a temporary projection or
+    a made-up chance presented as a new prediction, never a stake on it). It shows the Prop Board's saved grade only when
+    that is for exactly this pick (kept_board_row), with the time it was graded and marked stale; otherwise a
+    data-unavailable verdict: no side, chance, grade or stake."""
+    if not isinstance(v, dict):
+        return v
+    r = kept_board_row(res, prop, scope, line, book, line_type)
+    if r is not None:
+        ds_ = r.get("dstat")
+        when = r.get("graded_at") or "an earlier regrade"
+        return {"side": r["side"], "p": r.get("p"), "grade": r["grade"], "units": r.get("units") or 0.0,
+                "units_full": r.get("units_full"), "cap_n": r.get("cap_n"), "cap_team": r.get("team_name") or r.get("team"),
+                "state": r.get("state"), "dstat": ds_,
+                "cap_reason": cap_reason_text(r.get("cap_grade") or [], r.get("cap_n")) if (r.get("units") or 0) > 0 else None,
+                "flagged": bool((ds_ or [None])[0] in ("verify", "limited") or r.get("warn")),
+                "kept_from_board": True, "stale": True, "unavailable": False, "temporary": False,
+                "graded_at": r.get("graded_at"), "kept_book": r.get("book") or "underdog",
+                "kept_cause": r.get("retry_cause") if r.get("hltv_retry") else None,
+                "reason": f"{_outage_cause(res.get('grade'))} - this is the Prop Board's saved grade of this exact pick from "
+                          f"{when} (stale, not a new forecast); regraded when live data is back"}
+    return {"side": None, "p": None, "grade": None, "units": 0.0, "state": "UNAVAILABLE", "unavailable": True,
+            "kept_from_board": False, "stale": False, "temporary": False,
+            "reason": f"{_outage_cause(res.get('grade'))} - no grade for this line until live data is back. The Prop Board has "
+                      "no saved grade of this exact pick (player, match, platform, stat, maps, line and market type) to show"}
+
+
+# what an outage card keeps of its own grade: the line it is for and why it has no grade - never the temporary numbers
+_OUTAGE_GRADE_KEYS = ("line", "prop", "scope", "line_type", "flags", "projection_source", "perf_transient", "odds_transient",
+                      "odds_transient_reason", "odds_transient_source", "input_revisions")
+
+
+def withhold_temporary(res):
+    """An outage card never shows its temporary projection: the chances, projection, ladder, simulation and line
+    comparison all come from the fallback grade, so they are removed (the verdict is outage_verdict's)."""
+    g = res.get("grade") or {}
+    res["grade"] = dict({k: g[k] for k in _OUTAGE_GRADE_KEYS if k in g}, status="DATA UNAVAILABLE", withheld=True,
+                        reason=_outage_cause(g))
+    res["ladder"] = []
+    res["simulation"] = None
+    res["comparison"] = {"error": "no line comparison while live data is unavailable"}
+    return res
+
+
+def outage_info(res, causes):
+    """The card's outage notice: the cause(s), the odds note for a Thunderpick blip, and the saved board grade it shows
+    (only the exact pick - never another line's grade)."""
+    v = res.get("verdict") or {}
+    rows = ([{"book": v.get("kept_book"), "line": (res.get("grade") or {}).get("line"), "side": v.get("side"),
+              "grade": v.get("grade"), "p": v.get("p"), "units": v.get("units"), "graded_at": v.get("graded_at"),
+              "stale": True}] if v.get("kept_from_board") else [])
+    return {"rows": rows, "causes": causes, "odds_note": odds_blip_note(res) if "odds" in causes else None,
+            "unavailable": bool(v.get("unavailable"))}
 
 
 # ---------------------------------------------------------------- research tools: moneylines + slip studio (no grading)
@@ -1880,7 +1943,7 @@ def public(res):
 KEEP_DETAIL = {"p_win", "p_map1", "p_map2", "maps_used", "role", "rank"}
 _FLAG_RULES = (   # (starts with, member-friendly text or None = not shown)
     ("OLD PROJECTION: the performance model is unavailable here (HLTV database unreachable",
-     "HLTV database unreachable right now - temporary projection from the older model; the Prop Board keeps each line's last grade until the database answers again"),
+     "HLTV database unreachable right now - no current grade; the Prop Board keeps each line's last grade (marked stale) until the database answers again"),
     ("OLD PROJECTION", "Projection from the older model - the newer performance model has no HLTV data for this player or matchup"),
     ("CAP:", "Chance capped at 78% on kills props (big kill totals swing more than the model's spread)"),
     ("PROVISIONAL:", "Provisional: projection from BO3.gg history - HLTV has no history for this player"),
@@ -1899,8 +1962,8 @@ _FLAG_RULES = (   # (starts with, member-friendly text or None = not shown)
     ("0 units: SCOUT", "No upcoming match found - scouting view only"),
     ("0 units", None),
 )
-HLTV_NOT_CONNECTED = ("HLTV database not connected right now - temporary projection from the older model; the Prop Board keeps "
-                      "each line's last grade until it is connected again")
+HLTV_NOT_CONNECTED = ("HLTV database not connected right now - no current grade; the Prop Board keeps each line's last grade "
+                      "(marked stale) until it is connected again")
 HLTV_NOT_CONFIGURED = "Projection from the older model - the HLTV database is not configured on this server"
 _REASONS = (("Gate A", "AWPer on a headshot prop"), ("Gate D", "No recent official maps to grade"),
             ("Gate C", "Not on this team's roster"), ("Missing", "Not enough data to grade"))
@@ -3321,19 +3384,25 @@ class Handler(BaseHTTPRequestHandler):
                     res["verdict"] = dict(vv, cap_reason=cap_reason_text(stake_cap_reasons(g_, own, source=odds_selected(res.get("odds"))) if (vv.get("units") or 0) > 0 else [],
                                                                          vv.get("cap_n")),
                                           dstat=ds_, flagged=bool(ds_[0] in ("verify", "limited") or has_warning(g_)))
-                if outage:                               # a temporary grade never carries its own stake (one stake per line)
-                    res["verdict"] = outage_verdict(res, prop, scope, line, res["verdict"], book or ("underdog", "prizepicks"))
                 vv = res["verdict"]
                 for x in res.get("ladder") or []:        # the ladder's own line = the card's verdict (same-match cap included)
                     if isinstance(vv, dict) and vv.get("side") and float(x.get("line") or -1) == float(line):
                         x.update(side=vv["side"], p=vv.get("p"), grade=vv.get("grade"), units=vv.get("units") or 0.0,
                                  state=vv.get("state"))
-                if outage:                               # outage: tell the member what the board still shows - and why
-                    cs_ = _transient_causes(res.get("grade") or {})
-                    res["hltv_outage"] = dict(board_last_hltv(res, prop, scope), causes=cs_,
-                                              odds_note=odds_blip_note(res) if "odds" in cs_ else None)
             except Exception:
                 traceback.print_exc()
+            if outage:                                   # no grade of its own: the board's saved grade of this exact pick
+                cs_ = _transient_causes(res.get("grade") or {})     # (stale) or data unavailable; temporary numbers withheld
+                try:
+                    res["verdict"] = outage_verdict(res, prop, scope, line, res["verdict"], book or ("underdog", "prizepicks"), lt)
+                    res["hltv_outage"] = outage_info(res, cs_)
+                except Exception:                        # fail closed: never the temporary grade or its stake
+                    traceback.print_exc()
+                    res["verdict"] = {"side": None, "p": None, "grade": None, "units": 0.0, "state": "UNAVAILABLE",
+                                      "unavailable": True, "kept_from_board": False, "stale": False, "temporary": False,
+                                      "reason": "Live data unavailable - no grade for this line until it is back"}
+                    res["hltv_outage"] = {"rows": [], "causes": cs_, "odds_note": None, "unavailable": True}
+                withhold_temporary(res)
             t0 = time.time()
             body = json.dumps(public(res), default=str).encode()
             tm["json"] = round(time.time() - t0, 2)

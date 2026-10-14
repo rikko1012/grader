@@ -536,3 +536,20 @@ def test_match_diversity_holds_across_build_presses_and_limited_reports_exposure
     assert e["repeated_matches"] and e["distinct_players"] == e["legs"]
     fresh = sb.new_batch("owner-check", key="reset-0001")
     assert fresh != b and len(all_slips(sb.build(rows, {"sizes": [4], "count": 1}, batch=fresh, key="press-0004", model=M, now=NOW))) == 1
+
+
+# ---------------------------------------------------------------- outages (2026-10-14 owner)
+def test_a_grade_kept_during_an_outage_is_never_picked_or_verified():
+    """The board keeps a line's last grade while HLTV / Thunderpick is unavailable (hltv_retry): stale, not a current
+    forecast - the studio never builds with it and a slip built before the outage is rebuilt, not copied."""
+    rows = board(4, per_match=1, seed=31)
+    st = sb.normalize_settings({"book": "underdog"})
+    kept = dict(rows[0], hltv_retry="2026-10-12T07:58:00+00:00", retry_cause="hltv")
+    assert sb.why_excluded(kept, st, M, NOW).startswith("saved grade kept while live data is unavailable")
+    assert sb.why_excluded(rows[0], st, M, NOW) is None
+    res = sb.build([kept] + rows[1:], {"sizes": [2], "count": 1}, model=M, now=NOW)
+    assert kept["id"] not in {l["row_id"] for s in all_slips(res) for l in s["legs"]}
+    slip = sb.build(rows, {"sizes": [4], "count": 1}, model=M, now=NOW)["slips"][4][0]
+    later = [dict(r, hltv_retry="2026-10-12T07:58:00+00:00") if r["id"] == slip["legs"][0]["row_id"] else r for r in rows]
+    v = sb.verify_before_copy(slip, _boards(later, NOW.timestamp()), now=NOW, model=M)
+    assert v["ok"] is False and v["action"] == "rebuild" and "saved one kept while live data is unavailable" in v["changes"][0]
