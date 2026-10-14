@@ -45,33 +45,71 @@ WHERE t.teamid = %(tid)s AND t.sideid = 0 AND mo.date >= %(since)s
 """
 
 
+_FAILED = object()        # a failed read with no good answer anywhere, kept FAIL_TTL s: one retry per key, shared
+_SERVED = {}              # key -> (state, as_of): "live" | "memory copy" | "stored copy" - reported by projection()
+
+
 def _cached(key, fn):
     """15-minute memory cache; every good answer is also kept on the data disk (hltv_store). When the HLTV database is
     unreachable the last good answer is used - memory first, then disk - so an outage or a restart during one never
-    changes a projection (owner 2026-10-11). Raises only when there is no good answer anywhere."""
+    changes a projection (owner 2026-10-11). Raises only when there is no good answer anywhere. 2026-10-13 audit: one
+    read per key at a time (hltv.single_flight) and a failure with no good answer retried once per FAIL_TTL s for
+    everyone (concurrent grades each re-ran the failing query); served() says which answer was used and how old it is."""
     with _LOCK:
         hit = _CACHE.get(key)
         if hit and time.time() - hit[0] < TTL:
-            return hit[1]
+            return _value(hit[1])
+    return hltv.single_flight(("perf",) + key, lambda: _read(key, fn, hit), lambda: _peek(key))
+
+
+def _value(v):
+    if v is _FAILED:
+        raise hltv.Unavailable("HLTV database unreachable (tried under 30 s ago)")
+    return v
+
+
+def _peek(key):
+    with _LOCK:
+        hit = _CACHE.get(key)
+    return _value(hit[1]) if hit and time.time() - hit[0] < TTL else hltv.MISS
+
+
+def _read(key, fn, hit):
     try:
         val = fn()
     except Exception as e:
         if not hltv.is_transient(e):
             raise
-        if hit:                                # the last good answer in memory, retried again in FAIL_TTL s
+        if hit and hit[1] is not _FAILED:      # the last good answer in memory, retried again in FAIL_TTL s
+            st = _SERVED.get(key) or ("memory copy", None)
             with _LOCK:
                 _CACHE[key] = (time.time() - TTL + hltv.FAIL_TTL, hit[1])
+                _SERVED[key] = ("stored copy" if st[0] == "stored copy" else "memory copy", st[1])
             return hit[1]
         stored = hltv_store.load(("perf",) + key)
+        with _LOCK:
+            _CACHE[key] = (time.time() - TTL + hltv.FAIL_TTL, _FAILED if stored is None else stored[1])
+            if stored is not None:
+                _SERVED[key] = ("stored copy", stored[0])
         if stored is None:
             raise
-        with _LOCK:
-            _CACHE[key] = (time.time() - TTL + hltv.FAIL_TTL, stored[1])
         return stored[1]
     with _LOCK:
+        if len(_SERVED) > 20000:
+            _SERVED.clear()
         _CACHE[key] = (time.time(), val)
+        _SERVED[key] = ("live", time.time())
     hltv_store.save(("perf",) + key, val)
     return val
+
+
+def served(key):
+    """{"state", "as_of", "age_min"} of the answer _cached last gave for key - None when never read."""
+    st = _SERVED.get(key)
+    if not st:
+        return None
+    return {"state": st[0], "as_of": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(st[1])) if st[1] else None,
+            "age_min": round((time.time() - st[1]) / 60, 1) if st[1] else None}
 
 
 def player_maps(nick, team, since):
@@ -95,9 +133,9 @@ def opp_maps(opponent, since):
         con = hltv._connect()
         try:
             with con.cursor() as cur:
-                # exact name variants, then the maintained alias table (2026-10-13 audit: an aliased opponent - 'NIP' - got the
-                # average opponent); a failed read still raises (never 'opponent not in HLTV')
-                tid = hltv._team_id(cur, opponent) or hltv.alias_team_id(opponent)
+                # canonical id: exact name, verified alias, affix variants (2026-10-13 audit: an aliased opponent - 'NIP' - got
+                # the average opponent); a failed read still raises (never 'opponent not in HLTV')
+                tid = hltv.canonical_team_id(cur, opponent)
                 if not tid:
                     return None, []
                 cur.execute(_OPP_SQL, {"tid": tid, "since": since})
@@ -114,7 +152,7 @@ def team_rounds(team, since):
         con = hltv._connect()
         try:
             with con.cursor() as cur:
-                tid = hltv._team_id(cur, team) or hltv.alias_team_id(team)      # the same identity as opp_maps
+                tid = hltv.canonical_team_id(cur, team)      # the same identity as opp_maps
                 if not tid:
                     return None, []
                 cur.execute(_ROUNDS_SQL, {"tid": tid, "since": since})
@@ -162,6 +200,9 @@ def projection(nick, team, opponent, lan, scope="12", prop="kills", day=None):
     out.update(hltv_player_ids=ids, hltv_opp_team=tid, player_maps=len(pm), opp_maps=len(om),
                opp_known=bool(om), lan_known=lan is not None,      # known = HLTV has his maps (a team id alone is no data)
                newest_map_day=max((r[0] for r in pm if r[0] < day), default=None))   # his last HLTV map before the match day
+    # which answers the projection used: read now, or the last good copy (memory / stored) served during an outage, + age
+    out["hltv_data"] = {"player_maps": served(("p", hltv._norm(nick), hltv._norm(team), since)),
+                        "opp_maps": served(("o", hltv._norm(opponent), since)) if opponent else None}
     if not om:            # no team, or a team with no maps in the window: the opponent factor is the pro average (1.00)
         out["data_quality"] = ((out["data_quality"] + "; " if out["data_quality"] != "ok" else "")
                                + ("opponent not in HLTV" if not tid else "opponent has no HLTV maps") + " - average opponent")

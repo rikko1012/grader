@@ -99,19 +99,77 @@ def _series(mid, day, opp, maps, kills, hltv_row=False, team="X"):
     return out
 
 
+@pytest.fixture(autouse=True)
+def tables_not_loaded(monkeypatch):
+    """matchid's team tables are not loaded unless a test says so (_aliases) - whatever another test module left behind."""
+    import matchid
+    monkeypatch.setattr(matchid, "ready", lambda: False)
+
+
+def _aliases(monkeypatch, table):
+    """matchid's canonical team keys for these spellings (normalised name -> 'team:<id>'), as if its tables were loaded."""
+    import matchid
+    monkeypatch.setattr(matchid, "ready", lambda: True)
+    monkeypatch.setattr(matchid, "team_key", lambda n: table.get(hltv._norm(n)))
+
+
 # ---------------------------------------------------------------- C1: one series, one total (HLTV / BO3.gg twins)
-def test_c1_same_series_spelled_differently_counts_once(monkeypatch):
+def test_c1_spellings_merge_only_through_a_verified_alias(monkeypatch):
     d = (date.today() - timedelta(days=3)).isoformat()
     maps = [("de_nuke", 24, False), ("de_mirage", 22, False)]
     b3 = _series(555, d, "FaZe Clan", maps, (14, 13))
     hl = _series("hltv-999", d, "FaZe", maps, (15, 13), hltv_row=True)
     monkeypatch.setattr(cs2_scout, "_hltv_series", lambda pb, back_days=None: [dict(r) for r in hl])
     pb = {"recent_maps": b3, "_older_maps": [], "player": {"nick": "x"}}
-    rf = cs2_scout.recent_form(cs2_scout._form_rows(pb, "kills", keep_n=40, back_days=365), 0.7, 26.5)
+    form = lambda: cs2_scout.recent_form(cs2_scout._form_rows(pb, "kills", keep_n=40, back_days=365), 0.7, 26.5)
+    assert form()["matches"] == 2              # the same scoreline under two names proves nothing: not merged
+    _aliases(monkeypatch, {"faze": "team:6667", "fazeclan": "team:6667", "x": "team:1"})     # the verified alias
+    rf = form()
     assert rf["matches"] == 1 and rf["series"][0]["total"] == 28 and rf["series"][0]["source"] == "HLTV"
     assert (rf["overs"], rf["decided"]) == (1, 1)
     h = cs2_scout.h2h(cs2_scout._hltv_h2h({}, [dict(r) for r in b3], "FaZe Clan"), "FaZe Clan", 26.5)
     assert [s["total"] for s in h["series"]] == [28]                       # one meeting, HLTV's numbers
+
+
+def test_c1_identical_rematches_are_never_guessed(monkeypatch):
+    d = (date.today() - timedelta(days=3)).isoformat()
+    same = [("de_nuke", 24, True), ("de_mirage", 26, True)]                # two meetings, the same scores
+    b3 = _series(1, d, "Rival", same, (20, 21)) + _series(2, d, "Rival", same, (11, 12))
+    hl = _series("hltv-1", d, "Rival", same, (20, 22), hltv_row=True) + _series("hltv-2", d, "Rival", same, (11, 13), hltv_row=True)
+    pb = {"recent_maps": b3, "_older_maps": [], "player": {"nick": "x"}}
+    monkeypatch.setattr(cs2_scout, "_hltv_series", lambda pb, back_days=None: [dict(r) for r in hl])
+    rf = cs2_scout.recent_form(cs2_scout._form_rows(pb, "kills", keep_n=40, back_days=365), 0.7, 26.5)
+    assert sorted(s["total"] for s in rf["series"]) == [24, 42] and {s["source"] for s in rf["series"]} == {"HLTV"}
+    monkeypatch.setattr(cs2_scout, "_hltv_series", lambda pb, back_days=None: [dict(r) for r in hl[:2]])
+    rf = cs2_scout.recent_form(cs2_scout._form_rows(pb, "kills", keep_n=40, back_days=365), 0.7, 26.5)
+    assert sorted(s["total"] for s in rf["series"]) == [23, 41, 42]        # HLTV has one: which BO3.gg one? not guessed
+
+
+def test_c1_orientation_and_teams_must_both_match(monkeypatch):
+    d = (date.today() - timedelta(days=3)).isoformat()
+    maps = [("de_nuke", 24, True), ("de_mirage", 22, False)]
+    # BO3.gg lists his team second (home / away swapped): map_rows orients the row to his team
+    class B:
+        def game_players_many(self, ids):
+            pass
+
+        def game_players(self, gid):
+            return [{"steam_profile": {"player_id": 5, "player": {"slug": "me"}}, "team_clan": {"team_id": 2}, "kills": 17,
+                     "headshots": 8, "win": gid == 11}]
+    mt = {"id": 9, "status": "finished", "start_date": d + "T15:00:00Z", "team1_id": 1, "team2_id": 2,
+          "team1": {"name": "Rival"}, "team2": {"name": "X"},
+          "games": [{"id": 11, "number": 1, "state": "done", "map_name": "de_nuke", "winner_clan_score": 13, "loser_clan_score": 11},
+                    {"id": 12, "number": 2, "state": "done", "map_name": "de_mirage", "winner_clan_score": 13, "loser_clan_score": 9}]}
+    b3 = cs2_scout.map_rows(B(), 5, [mt], lambda m, g: True)
+    assert {(r["team"], r["opponent"]) for r in b3} == {("X", "Rival")}
+    hl = _series("hltv-3", d, "Rival", maps, (18, 17), hltv_row=True)
+    assert cs2_scout._twins({"hltv-3": hl}, {9: b3}) == {9: "hltv-3"}
+    flipped = [dict(r, team="Rival", opponent="X") for r in hl]            # his side the other way round: not the same
+    assert cs2_scout._twins({"hltv-3": flipped}, {9: b3}) == {}
+    other_day = [dict(r, date=(date.today() - timedelta(days=4)).isoformat()) for r in hl]
+    assert cs2_scout._twins({"hltv-3": other_day}, {9: b3}) == {}
+    swapped = [dict(r, number=3 - r["number"]) for r in hl]                 # maps in another order: not proven
+    assert cs2_scout._twins({"hltv-3": swapped}, {9: b3}) == {}
 
 
 def test_c1_two_meetings_never_merge(monkeypatch):
@@ -579,3 +637,306 @@ def test_e1_odds_blip_is_marked_on_the_grade(monkeypatch, offline):
     _fake_run({"found": False, "provenance": {"query": {"team": "Mine"}, "fallback_reason": "no Thunderpick event"}})(
         _args(line=30.5), res2, None, 12)
     assert "odds_transient" not in res2["grade"] and "odds_transient_reason" not in res2["grade"]
+
+
+def test_e1_marker_names_the_source_actually_used(monkeypatch, offline):
+    import market_odds
+    pm = {"found": True, "team_ml": -150, "opp_ml": 130, "team_prob": 0.6, "opp_prob": 0.4, "maps": {}, "transient": True,
+          "provenance": {"query": {"team": "Mine"}, "selected": "polymarket", "blip": True, "p_team": 0.6,
+                         "fallback_reason": "Thunderpick: event listed, no current quote"}}
+    monkeypatch.setattr(market_odds, "recheck", lambda od, **k: (copy.deepcopy(pm), {"result": "changed"}))
+    res = {}
+    _fake_run({"found": False, "provenance": {"query": {"team": "Mine"}}})(_args(line=30.5), res, None, 12)
+    g, gi = res["grade"], res["grader_inputs"]
+    assert g["odds_transient"] is True and g["odds_transient_source"] == "polymarket"
+    assert gi["odds_provenance"]["selected"] == "polymarket"               # the input stays the fallback's, labelled so
+    assert "thunderpick" not in str(g.get("odds_transient_source")).lower()
+
+
+# ---------------------------------------------------------------- spec 1: teams by canonical identity / verified aliases
+def test_team_identity_is_canonical(monkeypatch):
+    assert not hltv.same_team("MOUZ", "MOUZ NXT") and hltv.same_team("Team Vitality", "Vitality")    # tables not loaded
+    assert not hltv.same_team("NIP", "Ninjas in Pyjamas")                   # no alias available: not assumed
+    _aliases(monkeypatch, {"nip": "team:4411", "ninjasinpyjamas": "team:4411", "novaesports": "team:1", "novagaming": "team:2",
+                           "mouz": "team:4494", "mouznxt": "team:11176"})
+    assert hltv.same_team("NIP", "Ninjas in Pyjamas")                      # a verified alias: the same team
+    assert not hltv.same_team("Nova Esports", "Nova Gaming")                # a shared variant, two HLTV teams: never
+    assert not hltv.same_team("MOUZ", "MOUZ NXT") and not cs2_scout._same_team("MOUZ", "MOUZ NXT")
+
+
+def test_canonical_team_id_prefers_a_verified_alias(monkeypatch):
+    class Cur(_Cur):
+        def fetchone(self):
+            return {"apogee": (777,), "betclic": (12916,)}.get(self.p[0]) if isinstance(self.p, tuple) else None
+    _aliases(monkeypatch, {"apogeeesports": "team:12916"})
+    assert hltv.canonical_team_id(Cur(), "Apogee Esports") == 12916       # the alias, not the team called 'Apogee'
+    assert hltv.canonical_team_id(Cur(), "Betclic") == 12916 and hltv.canonical_team_id(Cur(), "Nobody") is None
+
+
+def _run_stubs(monkeypatch, pb, upcoming):
+    monkeypatch.setattr(cs2_scout, "run_player", lambda b, name, args: pb)
+    monkeypatch.setattr(cs2_scout, "_hltv_map_prediction", lambda *a, **k: None)
+    monkeypatch.setattr(hltv, "dsn", lambda: "")
+    import csapi
+    import market_odds
+    monkeypatch.setattr(market_odds, "select", lambda *a, **k: {"found": False, "provenance": {}})
+    monkeypatch.setattr(csapi, "player_check_async", lambda *a, **k: {})
+
+    def offline(*a, **k):
+        raise RuntimeError("offline")
+    return SimpleNamespace(background=False, _run=offline, cs2=SimpleNamespace(search_teams=lambda *a: None),
+                           game_players_many=lambda ids: {}, team_upcoming=lambda tid: {"results": upcoming})
+
+
+def _raw_match(slug, h, home, away, home_id, away_id):
+    st = (datetime.now(timezone.utc) + timedelta(hours=h)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return {"slug": slug, "status": "upcoming", "start_date": st, "team1_id": home_id, "team2_id": away_id, "bo_type": 3,
+            "team1": {"id": home_id, "name": home, "slug": home.lower()}, "team2": {"id": away_id, "name": away, "slug": away.lower()},
+            "tournament": {"name": "Cup", "slug": None}, "games": []}
+
+
+def _graded(monkeypatch, upcoming, member_opp, member_start=None):
+    monkeypatch.setattr(cs2_scout, "_slate_raw", lambda b, h=36: [])
+    pb = {"player": {"id": 7, "nick": "tester", "slug": "tester"}, "team_id": 1, "current_team": "Mine", "team_slug": None,
+          "recent_maps": [], "on_profile_roster": True, "roster_confirmed": True, "is_standin": False, "_matches": [], "per_map": []}
+    b = _run_stubs(monkeypatch, pb, upcoming)
+    args = argparse.Namespace(cmd="full", name="tester", opponent=member_opp, member_opponent=member_opp, match=None, line=None,
+                              team=None, maps=None, faceit_key=None, prop="kills", member_start=member_start)
+    res = {}
+    cs2_scout.run(args, res, b, 12)
+    return res, pb
+
+
+def test_book_opponent_by_canonical_identity(monkeypatch):
+    # MOUZ NXT plays first; the book line is for MOUZ - and his team is listed second (home / away swapped)
+    up = [_raw_match("m-nxt", 3, "MOUZ NXT", "Mine", 50, 1), _raw_match("m-mouz", 9, "MOUZ", "Mine", 51, 1)]
+    res, pb = _graded(monkeypatch, up, "MOUZ")
+    assert res["next_match"]["opponent"] == "MOUZ" and [o["opponent"] for o in res["match_options"]] == ["MOUZ"]
+    assert pb["playing_for"] == "Mine" and res["next_match"]["opponent_id"] == 51       # oriented to his team
+    _aliases(monkeypatch, {"nip": "team:4411", "ninjasinpyjamas": "team:4411", "mine": "team:1"})
+    res, pb = _graded(monkeypatch, [_raw_match("m-nip", 5, "Mine", "Ninjas in Pyjamas", 1, 60)], "NIP")
+    assert res["next_match"]["opponent"] == "Ninjas in Pyjamas"           # the book's alias spelling: the same team
+
+
+def test_two_meetings_with_one_team_never_confused(monkeypatch):
+    up = [_raw_match("group", 4, "Mine", "Rival", 1, 70), _raw_match("final", 30, "Rival", "Mine", 70, 1)]
+    final_start = up[1]["start_date"]
+    res, _ = _graded(monkeypatch, up, "Rival", member_start=final_start)
+    assert res["next_match"]["slug"] == "final"                            # the meeting at the book's start
+    res, _ = _graded(monkeypatch, up, "Rival", member_start=up[0]["start_date"])
+    assert res["next_match"]["slug"] == "group"
+
+
+def test_schedule_and_heads_up_never_take_another_squad(monkeypatch):
+    now = datetime.now(timezone.utc)
+    monkeypatch.setattr(hltv, "upcoming_for", lambda names, matcher, hours=72: [{"opponent": "MOUZ NXT"}, {"opponent": "MOUZ"},
+                                                                                 {"opponent": "Team MOUZ"}])
+    assert [m["opponent"] for m in cs2_scout._hltv_schedule(["Mine"], "MOUZ")] == ["MOUZ", "Team MOUZ"]
+    chosen = ("x", 1, "Mine", {"start": (now + timedelta(hours=5)).isoformat(), "opponent": "MOUZ"})
+    h = {"start": now + timedelta(hours=1), "team": "Mine", "opponent": "MOUZ NXT"}
+    assert cs2_scout._hltv_check_bo3(chosen, [chosen], h)[0] is None        # HLTV's earlier match vs another squad: graded
+
+
+# ---------------------------------------------------------------- spec 2: roster confirmation from the active lineup
+def _bo3_for(lineup_of, team_page, n=12):
+    ms, sb = [], {}
+    for i in range(n):
+        d = (date.today() - timedelta(days=1 + 3 * i)).isoformat()
+        games = []
+        for num in (1, 2):
+            gid = 1000 * (i + 1) + num
+            games.append({"id": gid, "number": num, "map_name": "de_mirage", "state": "done", "winner_clan_score": 13,
+                          "loser_clan_score": 10})
+            sb[gid] = [_sb_row(pid, sl, 1, 18) for pid, sl in lineup_of(i)] + [_sb_row(900 + j, f"o{j}", 2, 15) for j in range(5)]
+        ms.append({"id": 50 + i, "slug": f"m{i}", "status": "finished", "start_date": d + "T12:00:00Z", "team1_id": 1, "team2_id": 2,
+                   "team1": {"id": 1, "name": "Mine", "slug": "mine"}, "team2": {"id": 2, "name": "Opp", "slug": "opp"},
+                   "tournament": {"slug": "ev", "name": "Ev"}, "games": games, "bo_type": 3})
+    prof = {"tester": {"id": 7, "nickname": "tester", "team": {"name": "Mine", "slug": "mine", "id": 1}, "joined_team_at": "2025-01-01"}}
+    return _FakeBO3({"mine": team_page}, {7: ms}, sb, {"tester": [{"slug": "tester", "nickname": "tester"}]}, prof)
+
+
+def _pargs(**k):
+    return argparse.Namespace(**dict(dict(bo3_slug=None, team=None, maps=None, line=None, prop="kills", team_hint=None), **k))
+
+
+ACTIVE = [(7, "tester"), (11, "a"), (12, "b"), (13, "c"), (14, "d")]
+
+
+def _page(extra=()):
+    return {"players": [{"id": pid, "slug": sl, "nickname": sl, "status": 1} for pid, sl in ACTIVE] + list(extra)}
+
+
+def test_lineup_check_cases():
+    bench = [{"id": 15, "slug": "x", "status": 2}, {"id": 16, "slug": "y", "status": 2}, {"id": 99, "slug": "coachy", "is_coach": True}]
+    page = _page(bench)["players"]
+    usual = ["tester", "a", "b", "c", "d"]
+    assert cs2_scout._lineup_check(page, 7, usual)[0] is True
+    assert cs2_scout._lineup_check(page, 7, ["tester", "a", "x", "y", "d"])[0] is False      # two of them benched since
+    assert cs2_scout._lineup_check(page, 7, ["tester", "a", "b", "coachy", "x"])[0] is False # coach / benched never count
+    four = [p for p in page if p["slug"] != "d"]                           # 4 active + 2 benched + a coach on the page
+    assert cs2_scout._lineup_check(four, 7, usual)[0] is None              # the roster isn't known: unknown, not confirmed
+    assert cs2_scout._lineup_check(page, 7, None)[0] is None               # no map of his for the team: unknown
+    assert cs2_scout._lineup_check(None, 7, usual)[0] is None              # no page: unknown
+    assert cs2_scout._lineup_check([dict(p, status=2) if p["id"] == 7 else p for p in page], 7, usual)[0] is False   # benched
+    others = [p for p in page if p["id"] != 7] + [{"id": 17, "slug": "e", "status": 1}]
+    assert cs2_scout._lineup_check(others, 7, usual)[0] is False           # five active players known, he isn't one
+    ok, detail = cs2_scout._lineup_check(page, 7, usual)
+    assert detail == {"team_roster": 5, "on_team_roster": True, "last_lineup_overlap": 5, "starting_lineup": None}
+
+
+def test_roster_confirmation_ignores_benched_players(monkeypatch):
+    monkeypatch.setitem(cs2_scout.EVENT_TYPES, "slug:ev", "online")
+    monkeypatch.setattr(cs2_scout, "window_stats", lambda b, slug, days: {})
+    page = _page([{"id": 15, "slug": "x", "nickname": "x", "status": 2}, {"id": 16, "slug": "y", "nickname": "y", "status": 2},
+                  {"id": 99, "slug": "coachy", "nickname": "coachy", "is_coach": True}])
+    last = lambda i: [(7, "tester"), (11, "a"), (15, "x"), (16, "y"), (14, "d")] if i == 0 else ACTIVE
+    assert cs2_scout.run_player(_bo3_for(last, page), "tester", _pargs())["roster_confirmed"] is False
+    assert cs2_scout.run_player(_bo3_for(lambda i: ACTIVE, page), "tester", _pargs())["roster_confirmed"] is True
+    short = {"players": [p for p in page["players"] if p["slug"] != "d"]}  # 4 active players listed: unknown
+    assert cs2_scout.run_player(_bo3_for(lambda i: ACTIVE, short), "tester", _pargs())["roster_confirmed"] is None
+
+
+def test_listed_team_is_exact(monkeypatch):
+    monkeypatch.setitem(cs2_scout.EVENT_TYPES, "slug:ev", "online")
+    monkeypatch.setattr(cs2_scout, "window_stats", lambda b, slug, days: {})
+    b = _bo3_for(lambda i: ACTIVE, _page())
+    assert cs2_scout.run_player(b, "tester", _pargs(team="Mine Academy"))["on_listed_team"] is False
+    assert cs2_scout.run_player(b, "tester", _pargs(team="Team Mine"))["on_listed_team"] is True
+    assert cs2_scout.run_player(b, "tester", _pargs(team="mine"))["on_listed_team"] is True
+
+
+# ---------------------------------------------------------------- spec 3: a failed HLTV read is never a BO3.gg grade
+@pytest.mark.parametrize("case", ["empty", "timeout", "incomplete", "down", "stored"])
+def test_failed_hltv_series_read_is_transient_empty_is_not(monkeypatch, case):
+    monkeypatch.setattr(hltv, "dsn", lambda: "x")
+    monkeypatch.setattr(hltv, "_CACHE", {})
+    monkeypatch.setattr(hltv, "_META", {})
+    cut = (date.today() - timedelta(days=200)).isoformat()
+
+    class Cur(_Cur):
+        def fetchall(self):
+            if case == "incomplete" and self.since < cut:
+                raise hltv.Unavailable("server closed the connection unexpectedly")      # cut off mid-read
+            return []
+    monkeypatch.setattr(hltv, "_connect", lambda: _Con(Cur()))
+    monkeypatch.setattr(hltv, "_player_ids", lambda c, nick, team: [] if case == "empty" else [42])
+    good = [{"match_id": "hltv-1", "hltv_match": 1, "date": (date.today() - timedelta(days=9)).isoformat(), "number": n,
+             "map": "de_nuke", "kills": 25, "headshots": 9, "rounds": 24, "won": True, "opponent": "Z", "team": "Mine",
+             "source": "hltv", "env": "online"} for n in (1, 2)]
+
+    def series_rows(c, ids, since, *a, **k):
+        c.since = since
+        if case == "timeout" and since < cut:              # the 365-day read times out; the stake check's 90-day read answers
+            raise hltv.Unavailable("canceling statement due to statement timeout")
+        c.fetchall()
+        return []
+    monkeypatch.setattr(hltv, "_series_rows", series_rows)
+    monkeypatch.setattr(hltv, "player_numbers", lambda *a, **k: {"found": False, "note": "x"})
+    monkeypatch.setattr(roles, "refresh_hltv", lambda: None)
+    monkeypatch.setattr(roles, "awp_role", lambda n, t: (None, None))
+    monkeypatch.setattr(cs2_scout, "_hltv_context", lambda pb, args, fresh=False: {"found": True, "environment": None})
+    monkeypatch.setattr(cs2_scout, "_perf_input_once", lambda pb, args, sc: {"version": "perf-2", "lambda": 31.0})
+    seen = {}
+    monkeypatch.setattr(cs2_scout, "grade_leg", lambda d: seen.update(d) or {"prop": d["prop"], "line": d["line"]})
+    d0 = lambda i: (date.today() - timedelta(days=2 + 3 * i)).isoformat()
+    bo3_rows = [{"match_id": 50 + i, "number": n, "date": d0(i), "opponent": f"T{i}", "team": "Mine", "team_id": 1, "map": "de_nuke",
+                 "kills": 20, "headshots": 9, "rounds": 24, "won": True} for i in range(10) for n in (1, 2)]
+    pb = _base_pb(recent_maps=bo3_rows)
+    key = ("series", "tester", "mine", cs2_scout._hltv_since(pb, 365))
+    if case in ("down", "stored"):                         # the database is unreachable for every read
+        monkeypatch.setattr(hltv, "_connect", lambda: (_ for _ in ()).throw(hltv.Unavailable("could not connect")))
+    if case == "stored":                                   # good reads saved earlier (the last-10 one and the stake check's)
+        hltv_store.save(key, [dict(r) for r in good])
+        hltv_store.save(("series", "tester", "mine", (datetime.now(timezone.utc).date() - timedelta(days=90)).isoformat()), [])
+    res = {"player_block": pb, "next_match": {"start": "2026-10-20T15:00:00Z", "opponent": "Foe", "bo": 3, "event": "Cup",
+                                              "event_type": "online", "maps": []}}
+    cs2_scout.finish_line(res, _args(line=40.5))
+    st = seen["hltv_series"]
+    if case == "empty":                                    # a good, EMPTY answer: BO3.gg's rows as before, labelled
+        assert st["state"] == "live" and st["n"] == 0 and "no HLTV series for him - BO3.gg rows" in st["source"]
+        assert "hltv_transient" not in seen and seen["perf"] == {"version": "perf-2", "lambda": 31.0}
+        assert pb["recent_form"]["matches"] == 10
+    elif case == "stored":                                 # the outage: the stored copy of the SAME query, with its age
+        assert st["state"] == "stored copy" and st["n"] == 2 and st["age_min"] is not None and "stored copy" in st["source"]
+        assert "hltv_transient" not in seen and any(s["source"] == "HLTV" for s in pb["recent_form"]["series"])
+    else:                                                  # timed out / cut off / down: transient, never BO3.gg standing in
+        assert st["state"] == "failed" and "transient" in st["source"]
+        assert "could not be read" in seen["hltv_transient"] and seen["perf"]["transient"] is True
+        assert hltv.lookup_failed(key) and hltv._CACHE[key][1] == []          # nothing partial kept as an answer
+        if case != "down":                                 # only the 12-month read failed: this check alone catches it
+            assert "last 10" in seen["hltv_transient"]
+
+
+# ---------------------------------------------------------------- C6: cold and warm grades are identical
+def test_c6_cold_and_warm_grades_are_identical(monkeypatch, offline):
+    import json
+    import market_odds
+    monkeypatch.setattr(market_odds, "recheck", lambda od, **k: (od, {"result": "unchanged"}))
+    monkeypatch.setattr(cs2_scout, "_CONTEXT", {})
+    monkeypatch.setattr(cs2_scout, "BO3", lambda **k: SimpleNamespace(close=lambda: None, background=k.get("background")))
+
+    def run(args, res, b, ttl):
+        _fake_run({"found": False, "provenance": {"query": {"team": "Mine"}}})(args, res, b, ttl)
+        res["player_block"]["_env"] = None
+    monkeypatch.setattr(cs2_scout, "run", run)
+    real_env = cs2_scout._environment
+    monkeypatch.setattr(cs2_scout, "_environment", lambda res, pb: dict(real_env(res, pb) or {}, tonight="lan"))
+    key = lambda g: (g.get("lambda_final"), g.get("p_more"), g.get("grade"), g.get("units"), g.get("side"))
+    cold = cs2_scout.grade("tester", 30.5)
+    (ckey, (at, stored)), = cs2_scout._CONTEXT.items()
+    before = json.dumps(stored, sort_keys=True, default=str)
+    warm = [cs2_scout.grade("tester", 30.5) for _ in range(5)]
+    assert {key(r["grade"]) for r in warm} == {key(cold["grade"])} and cold["grade"].get("p_more") is not None
+    assert {r["grader_inputs"]["kpr"] for r in warm} == {cold["grader_inputs"]["kpr"]} == {0.8}
+    assert json.dumps(cs2_scout._CONTEXT[ckey][1], sort_keys=True, default=str) == before     # nothing accumulates
+
+
+# ---------------------------------------------------------------- C4: forecast cutoff
+def test_c4_last10_only_from_series_before_the_graded_match():
+    st = datetime(2026, 10, 20, 15, tzinfo=timezone.utc)
+    rows = []
+    for mid, day, start in (("a", "2026-10-19", None), ("b", "2026-10-20", "2026-10-20T11:00:00Z"),
+                            ("c", "2026-10-20", "2026-10-20T18:00:00Z"), ("d", "2026-10-21", None), ("e", "2026-10-20", None)):
+        rows += [{"match_id": mid, "date": day, "start": start, "number": n} for n in (1, 2)]
+    before = lambda now: sorted({r["match_id"] for r in cs2_scout._before_match(rows, st.isoformat(), now)})
+    assert before(st - timedelta(hours=1)) == ["a", "b", "e"]              # same-day HLTV row (date only): before an unstarted match
+    assert before(st + timedelta(hours=5)) == ["a", "b"]                   # the match has started: that day's undated series out
+    assert cs2_scout._before_match(rows, None) == rows
+
+
+# ---------------------------------------------------------------- C8: retries bounded and shared under load
+def test_c8_concurrent_failing_reads_hit_the_database_once(monkeypatch):
+    off = _clock(monkeypatch)
+    monkeypatch.setattr(hltv, "dsn", lambda: "x")
+    monkeypatch.setattr(hltv, "_CACHE", {})
+    calls, gate = [], threading.Event()
+
+    def connect():
+        calls.append(1)
+        gate.wait(0.3)                                     # a slow failure: everyone piles up behind it
+        raise hltv.Unavailable("statement timeout")
+    monkeypatch.setattr(hltv, "_connect", connect)
+    out, errs = [], []
+
+    def one(fn):
+        try:
+            out.append(fn())
+        except Exception as e:
+            errs.append(e)
+
+    def wave(fn, n=200):
+        ths = [threading.Thread(target=one, args=(fn,)) for _ in range(n)]
+        [t.start() for t in ths]
+        [t.join() for t in ths]
+    wave(lambda: hltv.recent_series("tester", "Mine", "2025-10-12"))
+    assert len(calls) == 1 and not errs and out == [[]] * 200
+    wave(lambda: hltv.context("tester", "Mine", "Foe", ()))
+    assert len(calls) == 2 and all(o.get("transient") for o in out[200:])
+    off[0] += hltv.FAIL_TTL + 1                            # one retry per key per FAIL_TTL, shared by everyone
+    wave(lambda: hltv.recent_series("tester", "Mine", "2025-10-12"))
+    assert len(calls) == 3
+    # the performance model's reads too: one database call, the failure shared, no stored copy -> transient for all
+    monkeypatch.setattr(perf_live, "_CACHE", {})
+    out.clear()
+    wave(lambda: perf_live.player_maps("tester", "Mine", "2025-08-01"))
+    assert len(calls) == 4 and len(errs) == 200 and all(hltv.is_transient(e) for e in errs)

@@ -325,6 +325,7 @@ def map_rows(b, player_id, matches, want_games):
         rows.append({
             "game_id": g["id"], "match_id": mt["id"], "match": mt.get("slug"),
             "date": (g.get("begin_at") or mt.get("start_date") or "")[:10],
+            "start": mt.get("start_date"),        # the series' scheduled start (forecast cutoff, 2026-10-13)
             "number": g.get("number"), "map": g.get("map_name"),
             "team_id": my_team, "team": (teams.get(my_team) or {}).get("name") or me.get("clan_name"),
             "team_slug": (teams.get(my_team) or {}).get("slug"),
@@ -402,7 +403,7 @@ def _pick_namesake(b, exact, team_hint):
         for sl, t in teams.items():
             # exact name variants / aliases only (2026-10-13 audit: a team CONTAINING the hint was taken - 'Spirit' picked the
             # Spirit Academy player, 'OG' the Dogs Gaming one)
-            if t and _same_team_alias(team_hint, t):
+            if t and _same_team(team_hint, t):
                 return sl
     try:
         playing = {norm(x) for m in _slate_raw(b, 72) for x in ((m.get("team1") or {}).get("name"), (m.get("team2") or {}).get("name")) if x}
@@ -464,8 +465,8 @@ def run_player(b, name, args):
     in_roster = any(x.get("id") == p["id"] for x in roster)
     listed = args.team
     if listed:
-        out["on_listed_team"] = bool(team.get("name")) and (norm(listed) in norm(team.get("name")) or
-                                                             norm(team.get("name")) in norm(listed) or
+        # canonical identity, never a substring (2026-10-13 audit: 'Mine Academy' passed for 'Mine')
+        out["on_listed_team"] = bool(team.get("name")) and (_same_team(listed, team.get("name")) or
                                                              norm(listed) == norm(team.get("slug")))
         out["transfer_check"] = "OK" if out["on_listed_team"] else f"MISMATCH - BO3.gg shows {team.get('name')}, not {listed}"
 
@@ -593,14 +594,13 @@ def run_player(b, name, args):
                                      "headshots" if getattr(args, "prop", "kills") == "hs" else "kills")
     out["steam_id"] = next((r["steam_id"] for r in recent_rows if r["steam_id"]), None)
 
-    # stand-in / roster confirmation from the latest lineup
-    last_lineup = set(recent_rows[0]["lineup"]) if recent_rows else set()
-    roster_slugs = {x.get("slug") for x in roster}
+    # stand-in / roster confirmation: his team's ACTIVE roster vs the lineup of his latest map for that team
     # Being missing from his own team's roster page is not "stand-in" (sixth men, 5-man pages,
     # a profile BO3.gg hasn't updated). Stand-in is decided in run(), once we know who he plays for.
     out["on_profile_roster"] = in_roster
     out["is_standin"] = False
-    out["roster_confirmed"] = in_roster and len(roster) >= 5 and len(last_lineup & roster_slugs) >= 4
+    out["roster_confirmed"], out["lineup_check"] = _lineup_check(roster if team.get("slug") else None, p["id"],
+                                                                 _lineup_for(recent_rows, team.get("id")))
     if recent_rows and recent_rows[0]["team_id"] != team.get("id"):
         out["roster_note"] = f"Last map was played for {recent_rows[0]['team']}, not {team.get('name')}"
     out["_matches"] = matches
@@ -998,6 +998,39 @@ def active_roster(players):
     return [x.get("slug") for x in (players or []) if not x.get("is_coach") and x.get("status") != 2]
 
 
+def _lineup_for(rows, team_id):
+    """The lineup (player slugs) of his newest Maps 1-2 map for team_id in rows (newest first); None when there is none."""
+    r = next((r for r in rows or [] if team_id is not None and r.get("team_id") == team_id and r.get("lineup")), None)
+    return list(r["lineup"]) if r else None
+
+
+def _lineup_check(players, pid, lineup):
+    """Gate C, 'Roster: Confirmed' (2026-10-13 audit: benched players and coaches counted). From the team's ACTIVE roster
+    page (benched - status 2 - and coaches never count) and the lineup of his latest map for that team:
+    True = he is on it, it names 5+ active players and 4+ of that lineup are among them; False = known not to be so (he is
+    benched / not on a 5-player page, or the lineup has changed); None = unknown (no roster page with 5 active players, or
+    no lineup of a map he played for the team) - never 'confirmed', never 'not confirmed' for missing information.
+    A team roster is not the starting lineup of the graded match: no source publishes that before the match
+    (starting_lineup None). Returns (confirmed, detail)."""
+    listed = [x for x in players or [] if not x.get("is_coach")]
+    active = [x for x in listed if x.get("status") != 2]
+    slugs = {x.get("slug") for x in active if x.get("slug")}
+    me = next((x for x in listed if x.get("id") == pid), None)
+    known = len(active) >= 5
+    seen = set(lineup or ()) - {None}
+    overlap = len(seen & slugs) if seen and known else None
+    if me is not None and me.get("status") == 2:
+        ok = False                                   # benched on the page: never confirmed
+    elif not known:
+        ok = None
+    elif me is None:
+        ok = False
+    else:
+        ok = None if overlap is None else overlap >= 4
+    return ok, {"team_roster": len(active) if players is not None else None, "on_team_roster": me is not None and me.get("status") != 2,
+                "last_lineup_overlap": overlap, "starting_lineup": None}
+
+
 H2H_DAYS = 365      # head-to-head: last 12 months only (owner 2026-10-06: older meetings are too far back)
 SAME_ROSTER = 4   # past meeting counts only if the opponent fielded 4+ of today's players (HLTV year test)
 
@@ -1107,29 +1140,16 @@ from comparison import JOIN_START_MIN    # same match: scheduled starts within 4
 
 
 def _same_team(a, b):
-    """Exact team-name variants only (hltv.team_name_variants: 'Nordic Partners Gaming' = 'Nordic Partners'); never fuzzy -
-    an academy is another team."""
-    try:
-        import hltv
-        va, vb = set(hltv.team_name_variants(a or "")), set(hltv.team_name_variants(b or ""))
-        if va and vb:
-            return bool(va & vb)
-    except Exception:
-        pass
-    return bool(a and b) and norm(a) == norm(b)
-
-
-def _same_team_alias(a, b):
-    """_same_team plus the maintained alias table (hltv.same_team: team_aliases.json, exact names only) - never fuzzy."""
+    """The same team by canonical identity (hltv.same_team, 2026-10-13 audit): the HLTV team ids when both names resolve -
+    exact name, verified alias (team_aliases.json), org affix - else exact name variants ('Nordic Partners Gaming' =
+    'Nordic Partners'). Never fuzzy: an academy is another team, 'MOUZ' is not 'MOUZ NXT'."""
     if not a or not b:
         return False
     try:
         import hltv
-        if hltv.same_team(a, b):
-            return True
+        return hltv.same_team(a, b)
     except Exception:
-        pass
-    return _same_team(a, b)
+        return norm(a) == norm(b)
 
 
 def _by_start(items, start, start_of):
@@ -1155,11 +1175,12 @@ def _by_start(items, start, start_of):
 
 
 def _hltv_schedule(team_names, member_opp=None):
-    """His teams' upcoming matches on HLTV's schedule (hltv.py); [] on any problem."""
+    """His teams' upcoming matches on HLTV's schedule (hltv.py); [] on any problem. Teams by canonical identity / verified
+    aliases, never a name containing another (2026-10-13 audit: the book's 'MOUZ' took HLTV's MOUZ NXT match)."""
     try:
         import hltv
-        hl = hltv.upcoming_for(team_names, name_match)
-        return [m for m in hl if not member_opp or name_match(member_opp, m["opponent"])]
+        hl = hltv.upcoming_for(team_names, lambda a, b: 3 if _same_team(a, b) else 0)
+        return [m for m in hl if not member_opp or _same_team(member_opp, m["opponent"])]
     except Exception:
         return []
 
@@ -1189,12 +1210,12 @@ def _hltv_check_bo3(chosen, options, h):
     if start and start.tzinfo is None:
         start = start.replace(tzinfo=timezone.utc)
     when = h["start"].strftime("%a %H:%M UTC")
-    if name_match(h["opponent"], bo3.get("opponent") or "") or name_match(bo3.get("opponent") or "", h["opponent"]):
+    if _same_team(h["opponent"], bo3.get("opponent")):          # canonical identity (2026-10-13 audit: was 'contains')
         if start and abs(h["start"] - start) > timedelta(minutes=30):
             return chosen, (f"HLTV has this match at {when} "
                             f"(BO3.gg: {start.strftime('%a %H:%M UTC')}) - check the start time")
         return chosen, None
-    on_bo3 = any(name_match(h["opponent"], o[3].get("opponent") or "") for o in options)
+    on_bo3 = any(_same_team(h["opponent"], o[3].get("opponent")) for o in options)
     if start and h["start"] < start - timedelta(minutes=90) and not on_bo3:
         return None, (f"BO3.gg is missing his team's next match: HLTV lists {h['team']} vs {h['opponent']} "
                       f"at {when}, before BO3.gg's match vs {bo3.get('opponent')} - graded the HLTV match. "
@@ -1373,6 +1394,12 @@ def hltv_first_gates(pb, d):
             d["hltv_transient"] = "his HLTV series could not be read"
     except Exception:
         pass
+    # the last-10 / head-to-head HLTV read (12 months) and the HLTV-only overall read: a failed read with no good copy is a
+    # blip, never a quiet switch to BO3.gg's rows (2026-10-13 audit) - a good, EMPTY answer (no HLTV history) is not
+    if (pb.get("hltv_series") or {}).get("state") == "failed":
+        d["hltv_transient"] = "his HLTV series (last 10 / head-to-head) could not be read"
+    if pb.get("_hltv_overall_tried") is False:
+        d["hltv_transient"] = "his HLTV maps could not be read"
     if (pb.get("hltv") or {}).get("transient"):
         d["hltv_transient"] = "his HLTV numbers could not be read"
     src.setdefault("sample", "BO3.gg")
@@ -1456,6 +1483,9 @@ def grader_inputs(pb, args, odds=None, hh=None):
         "recent_median": (pb.get("recent_form") or {}).get("median_total"),
         "perf": _perf_input(pb, args),         # performance model (perf.py) on live HLTV data - Maps 1-2 / Map 1
         "recent_n": (pb.get("recent_form") or {}).get("matches"),
+        # which HLTV answer the last 10 / head-to-head used: read now, the last good copy (memory / stored) and its age, a
+        # good empty answer (no HLTV history: BO3.gg rows) or a failure (transient) - recorded, the grader never reads it
+        "hltv_series": copy.deepcopy(pb.get("hltv_series")),
         "trade_pr": pb.get("trade_pr"),
         "opp_rank": pb.get("_opp_rank"),          # opponent's VRS rank (HLTV) - elite-opponent drop
         "rank_band": pb.get("_rank_band"),        # his HLTV rate vs teams ranked within 10 of the opponent
@@ -1958,14 +1988,21 @@ def run(args, res, b, ttl):
                      if not isinstance(tid, int) or tid == newest or lists_him(tid)
                      or (tid == pb.get("team_id") and pb.get("on_profile_roster"))
                      or played_their_last(tid)}
+        def team_players(tid):
+            try:
+                return (b.team(slugs[tid]).get("players") or []) if tid is not None and slugs.get(tid) else None
+            except Exception:
+                return None                           # page unreadable: unknown, never 'not confirmed'
+
         def team_change(tid, tname):
             """He plays tonight's match for tname, not his BO3.gg profile team: is it his team now, a stand-in or a move?
-            tid None = a team BO3.gg has no id for (match found on HLTV / Polymarket / PandaScore)."""
+            tid None = a team BO3.gg has no id for (match found on HLTV / Polymarket / PandaScore). Roster confirmation is
+            the graded match's team's: its active roster vs his latest lineup for it (2026-10-13 audit: 'listed + his last
+            map was for them' confirmed with benched players, and a team with no page was 'not confirmed', not unknown)."""
             if tid is not None and lists_him(tid):
                 # that team's roster lists him: it IS his team - BO3.gg's profile is behind
                 pb["team_note"] = f"BO3.gg profile still shows {pb.get('current_team')}; {tname}'s roster lists him"
                 pb["current_team"], pb["team_id"] = tname, tid
-                pb["roster_confirmed"] = newest == tid        # listed + his last map was for them
             elif pb.get("on_profile_roster"):
                 pb["standin_for"] = tname                     # real stand-in: his own team still lists him
             else:
@@ -1975,7 +2012,7 @@ def run(args, res, b, ttl):
                 pb["current_team"] = tname
                 if tid is not None:
                     pb["team_id"] = tid
-                pb["roster_confirmed"] = False                # his profile team's roster says nothing about this one
+            pb["roster_confirmed"], pb["lineup_check"] = _lineup_check(team_players(tid), pid, _lineup_for(rm, tid))
 
         options = []
         for tid, tname in teams.items():
@@ -1985,7 +2022,10 @@ def run(args, res, b, ttl):
                 options.append((nm_["start"] or "9999", tid, tname, nm_))
         options.sort(key=lambda o: o[0])
         if member_opp:   # the member named the opponent: only matches against them
-            named = [o for o in options if name_match(member_opp, o[3]["opponent"])]
+            # by canonical identity / verified aliases (2026-10-13 audit: 'contains' - the book's 'MOUZ' took a MOUZ NXT match)
+            named = [o for o in options if _same_team(member_opp, o[3]["opponent"])]
+            if len(named) > 1:       # two meetings with the same team (rematch): the one at the book's start, when it says
+                named = _by_start(named, getattr(args, "member_start", None), lambda o: o[3].get("start")) or named
             # the book's opponent can be misspelled (PrizePicks 'Xl' for XI, 2026-10-11): with the book's start time, his
             # team's match starting within JOIN_START_MIN of it is that match (the opponent string only breaks ties)
             options = named or _by_start(options, getattr(args, "member_start", None), lambda o: o[3].get("start"))
@@ -1998,6 +2038,8 @@ def run(args, res, b, ttl):
         # HLTV's schedule (hltv-scraper database) is the most complete: it fills in matches BO3.gg
         # doesn't have, and corrects BO3.gg when it's missing his team's real next match.
         hl = _hltv_schedule([n for n in teams.values() if n], member_opp)
+        if member_opp and len(hl) > 1:          # a rematch on HLTV's schedule: the one at the book's start, when it says
+            hl = _by_start(hl, getattr(args, "member_start", None), lambda m: m.get("start")) or hl
         if member_opp and not hl and getattr(args, "member_start", None):     # misspelled book opponent (see above)
             hl = _by_start(_hltv_schedule([n for n in teams.values() if n]), args.member_start, lambda m: m.get("start"))
         if chosen and hl and not want and not member_opp:
@@ -2009,7 +2051,7 @@ def run(args, res, b, ttl):
             if hl:
                 # HLTV first: a local database read - instant, free, and the most accurate schedule
                 m = hl[0]
-                mine = next((n for n in teams.values() if n and name_match(n, m["team"]) >= 2), m["team"])
+                mine = next((n for n in teams.values() if n and _same_team(n, m["team"])), m["team"])
                 pm, src = {"team": mine, "opponent": m["opponent"],
                            "start": m["start"].strftime("%Y-%m-%dT%H:%M:%SZ"),
                            "title": f"{mine} vs {m['opponent']}{' (' + m['format'].upper() + ')' if m['format'] else ''}"
@@ -2036,7 +2078,7 @@ def run(args, res, b, ttl):
                     cand = []
                     for tname in [n for n in teams.values() if n]:
                         cand += [m for m in pandascore.upcoming(tname)
-                                 if not member_opp or name_match(member_opp, m["opponent"])]
+                                 if not member_opp or _same_team(member_opp, m["opponent"])]
                     if not cand and member_opp:
                         # none of his known teams plays them: the typed opponent's next match -
                         # the other side is his team
@@ -2117,9 +2159,9 @@ def run(args, res, b, ttl):
         opp_id, opp_slug = nm.get("opponent_id"), nm.get("opponent_slug")
         try:
             hits = [] if opp_id else b._run(b.cs2.search_teams(args.opponent, 5)).get("results") or []
-            exact = [t for t in hits if norm(t.get("name")) == norm(args.opponent)
+            exact = [t for t in hits if _same_team(t.get("name"), args.opponent)
                      or norm(t.get("slug")) == norm(args.opponent)]
-            pick = (exact or hits[:1] or [{}])[0]
+            pick = (exact or [{}])[0]          # never the search's first hit (2026-10-13 audit: 'MOUZ' could be MOUZ NXT)
             opp_id, opp_slug = opp_id or pick.get("id"), opp_slug or pick.get("slug")
         except Exception:
             pass
@@ -2136,7 +2178,8 @@ def run(args, res, b, ttl):
         # shown separately and weighted by their own tested weight
         if True:
             if not pb["roster_confirmed"]:
-                res["regional_note"] = "Regional extension disabled - roster not confirmed"
+                res["regional_note"] = ("Regional extension disabled - roster not confirmed" if pb["roster_confirmed"] is False
+                                        else "Regional extension disabled - his lineup is unknown")
             elif not tag or tag["id"] is None:
                 res["regional_note"] = (f"Regional extension doesn't apply - opponent is "
                                         f"{_a_an((tag or {}).get('label', 'roster with no country data'))}")
@@ -2211,6 +2254,52 @@ def _hltv_series(pb, back_days=None):
         return []
 
 
+def _hltv_series_status(pb, back_days=None):
+    """How the _hltv_series read was answered (hltv.read_status) and what that means for the grade - "source": read now from
+    HLTV, HLTV's last good copy of the SAME query (memory / stored, with its age) during an outage, a good EMPTY answer (no
+    HLTV series for him: BO3.gg rows, labelled) or a failure with no copy (state "failed": the grade is transient).
+    None when HLTV is not configured / was not read."""
+    try:
+        import hltv
+        nick = (pb.get("player") or {}).get("nick")
+        st = hltv.read_status(("series", hltv._norm(nick), hltv._norm(pb.get("current_team")), _hltv_since(pb, back_days))) \
+            if nick and hltv.dsn() else None
+    except Exception:
+        return None
+    if not st:
+        return None
+    if st["state"] == "failed":
+        st["source"] = "none - HLTV unreachable and no stored copy (transient)"
+    else:
+        st["source"] = {"live": "HLTV", "memory copy": "HLTV, last good copy (database unreachable)",
+                        "stored copy": "HLTV, stored copy (database unreachable)"}[st["state"]] + \
+            ("" if st.get("n") else ": no HLTV series for him - BO3.gg rows")
+    return st
+
+
+def _before_match(rows, start, now=None):
+    """Forecast cutoff (2026-10-13 audit): only series strictly before the graded match - dated before its UTC day, or on
+    that day and started before it (a BO3.gg row's start; an HLTV row has a date only: before a match that has not
+    started yet). No start known: unchanged."""
+    st = _iso(start) if start else None
+    if st is None:
+        return rows
+    st = st if st.tzinfo else st.replace(tzinfo=timezone.utc)
+    day, now = st.date().isoformat(), now or datetime.now(timezone.utc)
+    by = {}
+    for r in rows:
+        by.setdefault(r["match_id"], []).append(r)
+    keep = set()
+    for mid, maps in by.items():
+        d = min((m.get("date") or "")[:10] for m in maps)
+        s = next((_iso(m["start"]) for m in maps if m.get("start")), None)
+        if s is not None and s.tzinfo is None:
+            s = s.replace(tzinfo=timezone.utc)
+        if d < day or (d == day and (s < st if s is not None else now < st)):
+            keep.add(mid)
+    return [r for r in rows if r["match_id"] in keep]
+
+
 def _hltv_series_failed(pb, back_days=None):
     """The _hltv_series read failed (database unreachable, no earlier good answer) - its [] is not 'no HLTV series'."""
     try:
@@ -2230,58 +2319,70 @@ def _older_bo3(pb, rows, back_days):
     return rows + [r for r in pb.get("_older_maps") or [] if r["match_id"] not in have and (r.get("date") or "") >= cut]
 
 
-def _series_sig(maps):
-    """A series' Maps 1-2 as sorted (map, rounds, won) - the same on HLTV and BO3.gg whatever either calls the teams
-    (sorted: BO3.gg's map order is sometimes off). None unless both maps are known."""
-    m12 = {m.get("number"): m for m in maps if m.get("number") in (1, 2)}
-    if len(m12) < 2 or any(not m.get("map") or not m.get("rounds") for m in m12.values()):
-        return None
-    return sorted((norm(str(m["map"]).removeprefix("de_")), m["rounds"], bool(m.get("won"))) for m in m12.values())
+def _series_detail(maps):
+    """A series' Maps 1-2 in order: ((map, rounds, won), (map, rounds, won)) - None unless both maps are fully known."""
+    m = {r.get("number"): r for r in maps}
+    out = []
+    for n in (1, 2):
+        r = m.get(n)
+        if not r or not r.get("map") or not r.get("rounds") or r.get("won") is None:
+            return None
+        out.append((norm(str(r["map"]).removeprefix("de_")), r["rounds"], bool(r["won"])))
+    return tuple(out)
+
+
+def _days(maps):
+    """The UTC days a series is dated on: its map 1 day and (BO3.gg) its scheduled start's day."""
+    return {d for d in ((maps[0].get("date") or "")[:10], (maps[0].get("start") or "")[:10]) if d}
 
 
 def _same_series(h, x):
-    """How surely an HLTV series and a BO3.gg series (their map rows) are the same series: 3 = within a day with the same
-    Maps 1-2 (map, rounds, result), whatever the opponent is called ('FaZe' / 'FaZe Clan', renamed orgs); 2 = the same day,
-    the same opponent (exact name variants / aliases - BO3.gg's map data is sometimes off); 1 = a day apart, the same
-    opponent, neither side's maps saying otherwise; 0 = not the same series (a rematch, an academy). 2026-10-13 audit: a
-    loose name match counted 'FaZe' / 'FaZe Clan' twice and merged a team's two meetings with one opponent in a day."""
-    try:
-        dd = abs((date.fromisoformat(h[0]["date"][:10]) - date.fromisoformat(x[0]["date"][:10])).days)
-    except (TypeError, ValueError, KeyError, IndexError):
-        return 0
-    if dd > 1:
-        return 0
-    sh, sx = _series_sig(h), _series_sig(x)
-    if sh and sh == sx:
-        return 3
-    if not _same_team_alias(h[0].get("opponent"), x[0].get("opponent")):
-        return 0
-    return 2 if dd == 0 else (0 if sh and sx else 1)
+    """True only when an HLTV series and a BO3.gg series (their map rows) are provably one series. 2026-10-13 audit: a loose
+    name match counted 'FaZe' / 'FaZe Clan' twice and merged a team's two meetings with one opponent in a day - and names
+    or a scoreline alone prove nothing. Required, all of: BOTH teams the same by canonical identity (HLTV team ids /
+    verified aliases, else exact name variants - _same_team, never fuzzy), the same day (HLTV dates a series, it has no
+    start time: its date is the BO3.gg series' map 1 day or scheduled day) and the same Maps 1-2 in order (map, rounds,
+    result)."""
+    hd = (h[0].get("date") or "")[:10]
+    if not hd or hd not in _days(x):
+        return False
+    dh = _series_detail(h)
+    if dh is None or dh != _series_detail(x):
+        return False
+    return _same_team(h[0].get("team"), x[0].get("team")) and _same_team(h[0].get("opponent"), x[0].get("opponent"))
 
 
 def _twins(hl_by, rows_by):
-    """{BO3.gg match id: HLTV match id} for the series both sources have ({match id: map rows} each): every series is
-    paired at most once, surest pair first (a team can meet the same opponent twice in a day)."""
-    def day(rs):
-        try:
-            return date.fromisoformat(rs[0]["date"][:10]).toordinal()
-        except (TypeError, ValueError, KeyError, IndexError):
-            return None
-    xd = {xm: day(xr) for xm, xr in rows_by.items()}
-    cands = []
+    """{BO3.gg match id: HLTV match id} for the series both sources provably have ({match id: map rows} each; _same_series).
+    Ambiguous = not merged: look-alike series (rematches with identical scores) are paired only when every HLTV series of
+    the group matches every BO3.gg series of it and the counts agree - any pairing then gives the same series and numbers;
+    otherwise none of the group is merged."""
+    by_day = {}
+    for xm, xr in rows_by.items():
+        for d in _days(xr):
+            by_day.setdefault(d, set()).add(xm)
+    edges, hs_of = {}, {}
     for hm, hr in hl_by.items():
-        hd = day(hr)
-        for xm, xr in rows_by.items():
-            if hd is None or xd[xm] is None or abs(hd - xd[xm]) > 1:
-                continue                                 # a year of HLTV series x his BO3.gg series: only the same days compared
-            s = _same_series(hr, xr)
-            if s:
-                cands.append((s, hm, xm))
-    out, used = {}, set()
-    for s, hm, xm in sorted(cands, key=lambda c: -c[0]):
-        if hm not in used and xm not in out:
-            out[xm] = hm
-            used.add(hm)
+        for xm in by_day.get((hr[0].get("date") or "")[:10], ()):
+            if _same_series(hr, rows_by[xm]):
+                edges.setdefault(hm, set()).add(xm)
+                hs_of.setdefault(xm, set()).add(hm)
+    out, done = {}, set()
+    for hm in edges:
+        if hm in done:
+            continue
+        hs, xs, todo = set(), set(), [hm]
+        while todo:                                      # the group of series connected to this one
+            a = todo.pop()
+            if a in hs:
+                continue
+            hs.add(a)
+            for xm in edges[a]:
+                xs.add(xm)
+                todo += [b for b in hs_of[xm] if b not in hs]
+        done |= hs
+        if len(hs) == len(xs) and all(edges[a] == xs for a in hs):
+            out.update(zip(sorted(xs, key=str), sorted(hs, key=str)))
     return out
 
 
@@ -2802,9 +2903,10 @@ def finish_line(res, args):
     tonight = (pb.get("_env") or {}).get("tonight")
     if pb.get("recent_maps") is not None:
         _hltv_only_overall(pb)
-        # every series of the last 12 months (the same cached reads): tonight's environment is picked from all of them, then
-        # cut to 10 (2026-10-13 audit: only the newest 40 were kept - 45 online series hid his 6 LAN series 5-8 months back)
-        deep = _form_rows(pb, stat, keep_n=10 ** 6, back_days=365)
+        # every series of the last 12 months (the same cached reads) strictly before the graded match: tonight's environment
+        # is picked from all of them, then cut to 10 (2026-10-13 audit: only the newest 40 were kept - 45 online series hid
+        # his 6 LAN series 5-8 months back)
+        deep = _before_match(_form_rows(pb, stat, keep_n=10 ** 6, back_days=365), getattr(args, "match_start", None))
 
         def last10(need):
             # his last 10 USABLE series (Maps 1-2 both played and the stat recorded; need=1: Map 1), in
@@ -2838,6 +2940,7 @@ def finish_line(res, args):
         res["h2h"] = h2h(hrows, res.get("_h2h_opp"), args.line, stat, res.get("_opp_roster"))
         _regional_note(res)
     _tick(res, "h2h", t0)
+    pb["hltv_series"] = _hltv_series_status(pb, 365)   # source + freshness of the last-10 / H2H HLTV read (failed = transient)
     pb["_rank_band"] = _best_rank_band(pb, (res["hltv_context"] or {}).get("rank_band"))
     _tick(res, "rank_band", t0)
     res["odds"], res["odds_check"] = _revalidated_odds(res.get("odds"))
@@ -2853,9 +2956,12 @@ def finish_line(res, args):
     od_ = res.get("odds") or {}
     if od_.get("transient") is True or (od_.get("provenance") or {}).get("blip") is True:
         # Thunderpick has the match but no current quote (owner 2026-10-13: an odds blip is treated like an HLTV blip) - the
-        # board keeps its last grade, the card says so; never set on any other grade
+        # board keeps its last grade, the card says so; never set on any other grade. The grade's market input is the one
+        # actually used (provenance: the fallback source or none) - odds_transient_source names it, never Thunderpick
         res["grade"]["odds_transient"] = True
         res["grade"]["odds_transient_reason"] = (od_.get("provenance") or {}).get("fallback_reason")
+        used = (od_.get("provenance") or {}).get("selected") if od_.get("found") else None
+        res["grade"]["odds_transient_source"] = None if str(used or "").lower().startswith("thunderpick") else used
     try:                                     # display only (weight 0): HLTV history that stops well before BO3.gg's
         _hltv_staleness(res["grade"], res["grader_inputs"].get("perf"), pb)
     except Exception:
