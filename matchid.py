@@ -1,6 +1,6 @@
 """
 matchid.py - one canonical identity per CS2 match, shared by props, moneylines, slips and the projection's odds
-link (Thunderpick). Settlement does NOT use the match ids - only team_key's aliases (see the last paragraph).
+link (Thunderpick), and - since the 2026-10-13 audit - settlement and evaluation (see the last paragraph).
 
 Every platform spells teams and start times its own way (Underdog "Team Vitality", Polymarket "Overtake", Kalshi "6666",
 BO3.gg "Vitality", HLTV "Overtake Sector"). This module turns (team A, team B, start) into ONE id that is the same on
@@ -46,9 +46,10 @@ Thunderpick-first odds policy, canonical_match() decides whether a Thunderpick q
 graded for (thunderpick.projection_odds via market_odds.select), so an alias or a rule here can change which market
 feeds a grade. That state is versioned: mapping.revision() hashes team_aliases.json, comparison.VERIFIED_TEAM_ALIASES
 and MATCHING_RULES_VERSION below; the revision is part of the shared-context key (cs2_scout) and is recorded with
-every forecast (picklog mapping_rev, full content in picks.db mapping_revisions). Settlement never uses the match
-ids: it keys on the HLTV player id + the opponent's HLTV team id + a date window, or the BO3.gg player id + match slug
-(team_key's maintained aliases do help it resolve a team name to its HLTV id - hltv.resolve_team_id).
+every forecast (picklog mapping_rev, full content in picks.db mapping_revisions). Settlement (2026-10-13 audit) uses the
+SAME identity: an hltv-<id> pick settles from that HLTV match, a BO3.gg-slug pick only from the one HLTV match
+canonical_match(team, opponent, listed start) names (no date window; a hashed / ambiguous id is not settled from HLTV), and
+evaluation (identity.assign rule 3) groups a slug under that settled HLTV match.
 """
 import hashlib
 import json
