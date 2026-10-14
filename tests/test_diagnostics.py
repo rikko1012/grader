@@ -37,7 +37,7 @@ def test_forward_hs_bands():
     P = [dict(_p(i, prop="hs", actual=a, line=14.5), match_start=st, logged_at="2026-10-11T09:00:00+00:00") for i, a in ((1, 16.0), (2, 12.0), (3, 13.0))]
     P.append(dict(_p(4, prop="hs", actual=16.0, line=14.5), match_start="2026-10-09T12:00:00.000+00:00"))     # before FORWARD_FROM
     F = [dict(_f(i, "2026-10-11T10:00:00+00:00", line=14.5, pick="Less"), p_pick=0.6, p_more=0.4,
-              shadow=json.dumps({"perf1_g7": {"p_more": 0.5}, "prior_smooth": {"p_more": 0.42}})) for i in (1, 2, 3)]
+              shadow=json.dumps({"perf1_g7": {"p_more": 0.5}, "prior_smooth": {"p_more": 0.42, "source": "perf-2-prior-smooth"}})) for i in (1, 2, 3)]
     F.append(dict(_f(4, "2026-10-09T10:00:00+00:00", line=14.5), p_more=0.6))
     fw = diagnostics.build(P, F, [])["forward_hs"]
     assert fw["lines"] == 3 and fw["matches"] == 3                              # the pre-registration forecast is out
@@ -45,4 +45,22 @@ def test_forward_hs_bands():
     assert cur["model"] == "current" and [b["n"] for b in cur["bands"]] == [0, 3, 0, 0, 0]
     assert cur["bands"][1]["predicted"] == 0.4 and abs(cur["bands"][1]["actual"] - 1 / 3) < 1e-3
     assert [b["n"] for b in prev["bands"]] == [0, 0, 3, 0, 0] and abs(prev["gap"] - (1 / 3 - 0.5)) < 1e-3
-    assert sm["bands"][1]["predicted"] == 0.42
+    assert sm["bands"][1]["predicted"] == 0.42 and sm["excluded_invalid"] == 0 and sm["versions"] == {"V1": 3}
+
+
+def test_forward_prior_smooth_rows_before_fix_excluded():
+    """prior_smooth rows logged before 2026-10-13 (no source: the old pipeline graded them) or graded by the old pipeline
+    are never counted as the challenger; perf1_g7 rows (always graded by perf-1) are unaffected."""
+    import json
+    st = "2026-10-11T12:00:00.000+00:00"
+    P = [dict(_p(i, prop="hs", actual=16.0, line=14.5), match_start=st, logged_at="2026-10-11T09:00:00+00:00") for i in (1, 2, 3, 4)]
+    sh = [{"prior_smooth": {"p_more": 0.61}},                                                     # pre-fix row: no source
+          {"prior_smooth": {"p_more": 0.61, "source": "legacy"}},                                 # old pipeline
+          {"prior_smooth": {"p_more": 0.44, "source": "perf-2-prior-smooth"}},
+          {"prior_smooth": {"p_more": 0.42, "source": "perf-2-bo3-prior-smooth"}}]
+    F = [dict(_f(i, "2026-10-11T10:00:00+00:00", line=14.5), p_more=0.4, shadow=json.dumps(dict(s, perf1_g7={"p_more": 0.5})))
+         for i, s in zip((1, 2, 3, 4), sh)]
+    fw = diagnostics.build(P, F, [])["forward_hs"]
+    cur, prev, sm = fw["models"]
+    assert cur["n"] == 4 and prev["n"] == 4 and prev["excluded_invalid"] == 0
+    assert sm["n"] == 2 and sm["excluded_invalid"] == 2 and sm["bands"][1]["predicted"] == 0.43

@@ -171,6 +171,42 @@ def smooth_prior_pf(pf, m0=PRIOR_SMOOTH["m0"], T=PRIOR_SMOOTH["T"]):
     return out
 
 
+def _perf_challenger(gi, pf, cfg):
+    """(inputs, config) that grade gi with another performance-model projection pf THROUGH the performance model.
+    grader.grade_leg uses perf only for versions in cfg["perf_versions"] and otherwise falls back to the old pipeline, so
+    pf's own version is added to a copy of the config - the live CONFIG is never changed. 2026-10-13: 'perf-2-prior-smooth'
+    was missing there, so the prior_smooth shadow logged from 2026-10-09 was the old pipeline (lambda = shadow.legacy)."""
+    vs = tuple(cfg.get("perf_versions", ()))
+    return dict(gi, perf=pf), (cfg if pf.get("version") in vs else dict(cfg, perf_versions=vs + (pf.get("version"),)))
+
+
+def shadow_alts(gi):
+    """The comparison versions graded on these inputs: name -> config, or (inputs, config) for a comparison that swaps
+    in another performance-model projection (graded by the performance model under that projection's own version)."""
+    from grader import CONFIG
+    # pre_fix_v2: the behaviour before the 2026-10-09 fix (gap centred on line + 0.5; Maps 1-3 pushes removed per case)
+    alts = {"old_spread": dict(CONFIG, c=1.55, c_hs=1.30),
+            "no_rest_bonus": dict(CONFIG, rest_bonus=0.0),
+            "pre_fix_v2": dict(CONFIG, fix_v2=False),
+            # 2026-10-08 environment revision: the old behaviour and the provisional taper, on identical inputs
+            "online_none": dict(CONFIG, online_guard="none"),
+            "online_taper": dict(CONFIG, online_guard="taper"),
+            # 2026-10-08 perf-1 goes live on Maps 1-2: the old pipeline, on identical inputs
+            "legacy": dict(CONFIG, perf_scopes=()),
+            # 2026-10-08 release comparisons: without the BO3.gg fallback / with the perf-1 normal HS curve
+            "no_bo3": dict(CONFIG, perf_versions=("perf-2", "perf-1")),
+            "perf1_normal_hs": dict(CONFIG, perf_hs_dist=False),
+            # Map 1 candidate (frozen 2026-10-08): the performance model for ONE map (no halving of Maps 1-2)
+            "perf_map1": dict(CONFIG, perf_scopes=("12", "1"))}
+    pf_ = gi.get("perf") if isinstance(gi.get("perf"), dict) else {}
+    if pf_.get("g7"):                     # 2026-10-09 perf-2 live: the perf-1 (G7) projection on the same inputs
+        alts["perf1_g7"] = _perf_challenger(gi, pf_["g7"], CONFIG)
+    sp = smooth_prior_pf(pf_)
+    if sp:                                # 2026-10-09 challenger: prior that relaxes toward the population as history grows
+        alts["prior_smooth"] = _perf_challenger(gi, sp, CONFIG)
+    return alts
+
+
 def _factors(res):
     """Every input and every adjustment behind this grade (for measuring each factor later)."""
     gi, g, pb = res.get("grader_inputs") or {}, res.get("grade") or {}, res.get("player_block") or {}
@@ -192,34 +228,17 @@ def _factors(res):
     out["environment"] = (res.get("hltv_context") or {}).get("environment")   # LAN / online split (tested later)
     # frozen-test comparisons (2026-10-07): the same inputs graded by the alternatives - never shown to members
     try:
-        from grader import grade_leg, CONFIG
-        # pre_fix_v2: the behaviour before the 2026-10-09 fix (gap centred on line + 0.5; Maps 1-3 pushes removed per case)
-        alts = {"old_spread": dict(CONFIG, c=1.55, c_hs=1.30),
-                "no_rest_bonus": dict(CONFIG, rest_bonus=0.0),
-                "pre_fix_v2": dict(CONFIG, fix_v2=False),
-                # 2026-10-08 environment revision: the old behaviour and the provisional taper, on identical inputs
-                "online_none": dict(CONFIG, online_guard="none"),
-                "online_taper": dict(CONFIG, online_guard="taper"),
-                # 2026-10-08 perf-1 goes live on Maps 1-2: the old pipeline, on identical inputs
-                "legacy": dict(CONFIG, perf_scopes=()),
-                # 2026-10-08 release comparisons: without the BO3.gg fallback / with the perf-1 normal HS curve
-                "no_bo3": dict(CONFIG, perf_versions=("perf-2", "perf-1")),
-                "perf1_normal_hs": dict(CONFIG, perf_hs_dist=False),
-                # Map 1 candidate (frozen 2026-10-08): the performance model for ONE map (no halving of Maps 1-2)
-                "perf_map1": dict(CONFIG, perf_scopes=("12", "1"))}
+        from grader import grade_leg
         out["shadow"] = {"live_raw": g.get("probs_raw"),     # the live grade's own Over / Under / push chances
                          "live_online": g.get("online_adj")}   # online weight + the bonus actually applied
-        pf_ = gi.get("perf") if isinstance(gi.get("perf"), dict) else {}
-        if pf_.get("g7"):                     # 2026-10-09 perf-2 live: the perf-1 (G7) projection on the same inputs
-            alts["perf1_g7"] = (dict(gi, perf=pf_["g7"]), CONFIG)
-        if smooth_prior_pf(pf_):              # 2026-10-09 challenger: prior that relaxes toward the population as history grows
-            alts["prior_smooth"] = (dict(gi, perf=smooth_prior_pf(pf_)), CONFIG)
-        for name, cfg in alts.items():
+        for name, cfg in shadow_alts(gi).items():
             gin, cfg = cfg if isinstance(cfg, tuple) else (gi, cfg)
             gg = grade_leg(gin, cfg)
+            # source = the projection that graded it (2026-10-13): a prior_smooth row is valid only with a
+            # '...-prior-smooth' source - rows logged before then carry none and were the old pipeline
             out["shadow"][name] = {"p_more": gg.get("p_more"), "lambda": gg.get("lambda_final"),
                                    "grade": gg.get("grade"), "grade_less": gg.get("grade_less"),
-                                   "raw": gg.get("probs_raw")}
+                                   "raw": gg.get("probs_raw"), "source": gg.get("projection_source")}
     except Exception:
         pass
     try:   # shared-match challenger M1 (shadow, 2026-10-09): one simulated match per forecast - logged, never shown

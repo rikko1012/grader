@@ -113,3 +113,35 @@ published forecast: kills MAE -0.022 (-0.473..+0.488), HS MAE -0.073 (-0.280..+0
 across 0 - no conclusion at 8 matches. Pure source swap A (pre-cutoff Polymarket price on identical inputs) vs B
 (Thunderpick): projections identical on all 287 comparable lines, side / grade / stake different on 9 (market-quality
 cap). Scripts: scratchpad tp_settled.py.
+
+## prior_smooth - smooth newcomer prior (picklog shadow, logged since 2026-10-09) - ROWS BEFORE THE 2026-10-13 FIX ARE INVALID
+
+**What it is.** The live perf-2 projection re-run with the prior target m(r) = 1 - (1 - 0.93) * 800 / (800 + r) instead of
+the flat 0.93 (`picklog.PRIOR_SMOOTH`, `picklog.smooth_prior_pf`; exact rescale of `perf.project`, tests/test_prior_smooth.py).
+Its version is the live version + `-prior-smooth`: `perf-2-prior-smooth`, or `perf-2-bo3-prior-smooth` for players graded on
+BO3.gg history. Logged as `shadow.prior_smooth`; never shown, never changes a member's grade.
+
+**Logging bug (found 2026-10-13).** `grader.grade_leg` uses the performance model only when the projection's version is in
+`cfg["perf_versions"]`, and otherwise falls back to the old pipeline. The challenger's versions were not in
+`CONFIG["perf_versions"]`, so every `shadow.prior_smooth` row logged from 2026-10-09 until the fix is the OLD pipeline's
+output (the same numbers as `shadow.legacy`), not the smooth prior. Replay of all 909 forecasts with saved inputs in the
+2026-10-08 to 10-11 pick log: under the old code prior_smooth lambda and p_more equal `shadow.legacy` on 316 of 316 rows.
+
+**Fix.** `picklog._perf_challenger` grades a swapped-in projection on a COPY of the config with that projection's own
+version added (the live `CONFIG` is unchanged), and every shadow row now carries `source` = grade_leg's
+`projection_source`. Same 909-forecast replay with the new code: 316 of 316 prior_smooth rows graded by
+`perf-2-prior-smooth` (266) / `perf-2-bo3-prior-smooth` (50), kills lambda = the challenger's own projection; every other
+shadow (including `perf1_g7`, whose perf-1 versions were always live) identical apart from the added `source`. Member grades
+are untouched: grader.py is unchanged, so the model_version tags do not change.
+
+**Exclusion rule (all prior_smooth evaluations).**
+- A `shadow.prior_smooth` row is valid only when `shadow.prior_smooth.source` ends with `-prior-smooth`.
+- Rows without `source` (everything logged before the fix was deployed), or with a `legacy ...` source, are INVALID. They
+  measure the old pipeline, which is already logged as `shadow.legacy`. Exclude and count them; never pool them with valid rows.
+- Use the per-row rule, not a date cutoff on the match start. A forecast is appended only when the live forecast changes,
+  so an evaluation snapshot logged before the deploy keeps its invalid row even for a match played after it.
+- `diagnostics.shadow_p_more` applies the rule. The forward check (admin diagnostics, "Forward check") lists the excluded
+  rows as `excluded_invalid` and the exact live tag of every counted row as `versions`.
+- Report per exact tag (MODEL_VERSIONS.md). The fix does not create a new tag (picklog.py and diagnostics.py are not
+  hashed), so `source` is the marker. Every prior_smooth result published before this fix (the forward HS check's
+  "smooth-prior challenger" line included) described the old pipeline and is withdrawn.
