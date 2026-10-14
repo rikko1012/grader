@@ -271,6 +271,12 @@ def _finish(o, pv, selected, fallback_reason, tp_av, q, network, op_mode, mrev, 
               selected_at=_iso(now), tp_error=tp_err, pm_error=pm_err, blip=bool(blip), tp_last_quote=tp_last)
     if selected:
         pv["source"] = pv.get("source") or selected
+    if selected in ("polymarket", "oddspapi") and pv.get("quote_age_s") is None:
+        # the FALLBACK quote's own age (2026-10-14 owner: show the actual fallback source and quote age) - our retrieval
+        # time of that source's list / price, never refreshed by this selection
+        ra = _ts(pv.get("retrieved_at"))
+        nts = now if isinstance(now, (int, float)) else time.time()
+        pv["quote_age_s"] = None if ra is None else round(max(0.0, nts - ra), 1)
     o["provenance"] = pv
     o.pop("transient", None)
     if blip:                        # E1: a temporary fallback - consumers keep the line's last grade / never log it

@@ -440,3 +440,12 @@ def test_recheck_record_never_refreshes_the_quotes_own_time():
     out, chk = M.recheck(cached, tp=TP(later), pm=lambda *a: dict(PM))
     assert out is cached and chk["result"] == "confirmed" and chk["quote_age_s"] == 95
     assert out["provenance"]["retrieved_at"] == cached["provenance"]["retrieved_at"]
+
+
+def test_fallback_provenance_carries_the_fallback_quotes_own_age():
+    """Item 5: the card shows the ACTUAL fallback source and its quote age (our retrieval time of its list, never
+    refreshed by the selection)."""
+    pm = dict(PM, retrieved_at=iso(NOW - timedelta(seconds=95)))
+    o = M.select("ex-Keyd Stars", "Galorys", START, tp=TP(TP_EMPTY), pm=lambda *a: dict(pm), now=NOW.timestamp())
+    pv = o["provenance"]
+    assert pv["selected"] == "polymarket" and 94 <= pv["quote_age_s"] <= 96 and pv["retrieved_at"] == pm["retrieved_at"]

@@ -1118,3 +1118,25 @@ def test_the_label_meaning_is_tested_on_bo3_prices_not_assumed():
     assert T._series_stats(map1)["Match Winner"]["meaning"]["supported"] == "map 1"
     few = dict(list(series.items())[:10])
     assert T._series_stats(few)["Match Winner"]["meaning"]["supported"] is None        # too few BO3 matches: undecided
+
+
+def test_feed_causes_stay_distinct_and_never_infer_suspension():
+    """Item 5 (2026-10-14 owner): a successful empty answer, a 429, a transport failure and a dropped event are named
+    differently; suspension is never inferred (the feed has no such flag)."""
+    p, c = active_poller()
+    assert "successful empty answer" in T.feed_cause(p, "endpoint_empty", c.t)
+    assert T.feed_cause(p, "stale", c.t).startswith("no successful poll since")
+    p.fetch_fns["cs2"] = err_fetch("rate_limited", 429)
+    c.t += T.MIN_GAP_S + 1
+    p.poll_once("cs2")
+    assert T.feed_cause(p, "stale", c.t).startswith("rate limited")
+    for txt in (T.feed_cause(p, s, c.t) for s in ("stale", "endpoint_empty")):
+        assert "suspend" not in txt and "withdrawn" not in txt.replace("whether markets were removed is unknown", "")
+
+
+def test_a_transport_failure_is_not_called_a_rate_limit():
+    q, c2 = active_poller()                                         # its own store: no 429 memory from another test
+    q.fetch_fns["cs2"] = err_fetch("timeout", None)
+    c2.t += T.MIN_GAP_S + 1
+    q.poll_once("cs2")
+    assert T.feed_cause(q, "stale", c2.t).startswith("transport / server failure")
