@@ -875,8 +875,10 @@ def _lt_norm(x):
 
 def kept_board_row(res, prop, scope, line, book=None, line_type="standard"):
     """The Prop Board's saved grade for exactly this pick, or None: same player, match (the match id when both sides know
-    it, and the start within the join window), platform, stat, maps, line and market type, graded at this line, and its
-    side still offered by the platform's feed. Platforms in order (the card's own, else Underdog first)."""
+    it - the platform's listed start can differ from the graded match's start by hours, 2026-10-14 post-deploy check: WBT vs
+    ENCE listed 14:00, BO3.gg 12:00; otherwise the start within the join window), platform, stat, maps, line and market
+    type, graded at this line, and its side still offered by the platform's feed. Platforms in order (the card's own, else
+    Underdog first)."""
     nick = (((res.get("player_block") or {}).get("player") or {}).get("nick") or "").lower()
     nm = res.get("next_match") or {}
     st, slug = comparison._ts(nm.get("start")), nm.get("slug")
@@ -898,11 +900,13 @@ def kept_board_row(res, prop, scope, line, book=None, line_type="standard"):
                     continue                      # graded at another line
             except (TypeError, ValueError):
                 continue
-            rs = comparison._ts(r.get("start"))
-            if not rs or abs((rs - st).total_seconds()) > comparison.JOIN_START_MIN * 60:
-                continue
-            if slug and r.get("match_slug") and r["match_slug"] != slug:
-                continue                          # another match at the same time
+            if slug and r.get("match_slug"):
+                if r["match_slug"] != slug:
+                    continue                      # another match (the id decides, whatever the listed start)
+            else:
+                rs = comparison._ts(r.get("start"))
+                if not rs or abs((rs - st).total_seconds()) > comparison.JOIN_START_MIN * 60:
+                    continue
             if (r["side"] == "Less" and r.get("under_available") is False) or (r["side"] == "More" and r.get("over_available") is False):
                 continue                          # the feed no longer offers this side
             return r

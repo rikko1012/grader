@@ -48,7 +48,7 @@ def test_outage_card_without_a_saved_grade_is_data_unavailable(monkeypatch):
     ("graded at another line", {"graded_line": 29.5}, {}),
     ("another platform", {"book": "prizepicks"}, {"book": "underdog"}),
     ("another match at the same time", {"match_slug": "faze-vs-navi"}, {}),
-    ("another start", {"start": "2026-10-15T18:00:00+00:00"}, {}),
+    ("another start, no match id", {"start": "2026-10-15T18:00:00+00:00", "match_slug": None}, {}),
     ("another stat", {"prop": "hs"}, {}),
     ("other maps", {"scope": "1"}, {}),
     ("another market type", {"line_type": "goblin"}, {}),
@@ -75,6 +75,12 @@ def test_no_platform_card_takes_the_first_platform_that_lists_the_exact_pick(mon
     monkeypatch.setattr(server, "_bs_rows", lambda: [_row(book="prizepicks", grade="B", units=0.5, p=0.58)])
     v = server.outage_verdict(RES, "kills", "12", 30.5, dict(TEMP), book=("underdog", "prizepicks"))
     assert v["kept_book"] == "prizepicks" and v["units"] == 0.5
+
+
+def test_the_match_id_decides_when_the_platforms_start_differs(monkeypatch):
+    # 2026-10-14 post-deploy check: Underdog listed WBT vs ENCE at 14:00, BO3.gg (the graded match) at 12:00 - the same match
+    monkeypatch.setattr(server, "_bs_rows", lambda: [_row(start="2026-10-14T20:00:00+00:00")])
+    assert server.outage_verdict(RES, "kills", "12", 30.5, dict(TEMP))["kept_from_board"]
 
 
 def test_a_row_without_a_match_id_still_needs_the_same_start(monkeypatch):
