@@ -1452,6 +1452,9 @@ def grader_inputs(pb, args, odds=None, hh=None):
     pv_ = (odds or {}).get("provenance") or {}
     d = {
         "prop": args.prop, "line": args.line, "line_type": args.line_type,
+        # the sides the PLATFORM FEED offers for this exact line (prizepicks.directions; None = not known: the grader's
+        # line-type rule) - 2026-10-14 owner: no blanket goblin / demon 'More only'
+        "less_available": getattr(args, "less_available", None),
         "scope": getattr(args, "scope", "12") or "12", "bo": getattr(args, "match_bo", None),
         "maps_played": o.get("maps_played"), "kpr": o.get("kpr"), "hs_pct": o.get("hs_pct"),
         "sample_maps": max((w.get("maps") or 0 for w in (o.get("form_windows") or {}).values()), default=None),
@@ -1760,12 +1763,13 @@ def main():
 
 
 def grade(name, line, prop="kills", line_type="standard", slug=None, faceit_key=None, ttl=12,
-          background=False, match=None, opponent=None, light=False, scope="12", team_hint=None, match_start=None):
+          background=False, match=None, opponent=None, light=False, scope="12", team_hint=None, match_start=None,
+          less_available=None):
     """One-call entry point for the web interface: everything 'full' does, returned as a dict.
     background=True (pre-loading) gives way to member look-ups."""
     args = argparse.Namespace(
         cmd="full", name=name, bo3_slug=slug, team=None, maps=None, opponent=None, line=line,
-        prop=prop, line_type=line_type, team_ml=None, opp_ml=None, faceit=None,
+        prop=prop, line_type=line_type, team_ml=None, opp_ml=None, faceit=None, less_available=less_available,
         faceit_key=faceit_key or os.environ.get("FACEIT_API_KEY"), n=20, refresh=False, ttl=ttl,
         match=match, member_opponent=(opponent or "").strip() or None, light=light,
         scope=scope if scope in ("12", "123", "1") else "12", team_hint=team_hint,

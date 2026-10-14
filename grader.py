@@ -856,7 +856,10 @@ def grade_leg(d, cfg=CONFIG):
     tcap = cfg["tape_fight_cap"]
     u_more = 0.0 if (fight == "More" or zero_units) else units_for_p(
         pm, min(unit_cap if unit_cap is not None else 9, tcap) if tape == "More" else unit_cap)
-    less_ok = line_type == "standard"
+    # Less is offered only where the platform's feed offers it for this exact line (2026-10-14 owner; e.g. PrizePicks
+    # standard lines with allowed_wager_types 'over'); unknown -> the line-type rule (standard yes; goblin / demon not
+    # confirmed)
+    less_ok = bool(d["less_available"]) if d.get("less_available") is not None else line_type == "standard"
     u_less = 0.0 if (not less_ok or fight == "Less" or zero_units) else units_for_p(
         1 - pm, min(unit_cap if unit_cap is not None else 9, tcap) if tape == "Less" else unit_cap)
     for z in zero_units:
@@ -899,7 +902,8 @@ def grade_leg(d, cfg=CONFIG):
                     "online_weight": env.get("stats_weight") if env.get("stats_from") == "online" else None,
                     # the performance model's projection replaces the +6% (2026-10-13 audit: logged 0.06 'applied' there)
                     "mode": cfg.get("online_guard", "full"), "bonus_applied": 0.0 if perf_on else round(online_bonus, 4)},
-        grade_less=grade_from_p(1 - pm) if less_ok else "n/a (no Less on this line)",
+        grade_less=grade_from_p(1 - pm) if less_ok else "n/a (Less not offered or not confirmed by the feed for this line)",
+        less_available=less_ok,
         units=u_more, units_less=u_less, form_fight=fight, tape_fight=tape, scout=scout,
         market_quality=mq,
         lambda_base=round(lam, 2), lambda_final=round(lam_final, 2), sd=round(sd, 2),

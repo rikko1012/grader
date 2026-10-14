@@ -80,10 +80,11 @@ def verdict(g):
             from grader import _cuts
             up, down = _cuts(float(g["line"]))
             side = "More" if g["lambda_final"] > (up + down) / 2 else "Less"
-    # goblin/demon lines have no Less on PrizePicks. If the model expects UNDER, say so (Lean
+    # a line whose feed does not offer / confirm Less (goblin / demon without a feed statement, or an Over-only line).
+    # If the model expects UNDER, say so (Lean
     # Under, 0 units - skip it) instead of headlining a More it thinks loses (azukay 17.5 demon:
     # printed "More 42%", he went under).
-    no_less_side = side == "Less" and g["line_type"] != "standard"
+    no_less_side = side == "Less" and not g.get("less_available", g["line_type"] == "standard")
     p = g["p_more"] if side == "More" else g["p_less"]
     grade = g["grade"] if side == "More" else (g["grade_less"] if not no_less_side else "C")
     units = g.get("units", 0) if side == "More" else g.get("units_less", 0)
