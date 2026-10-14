@@ -812,6 +812,29 @@ def _bs_rows():
     return _BS_CACHE[1]
 
 
+def feed_less_available(name, prop, scope, line, line_type="standard", book=None, start=None):
+    """The platform feed's own Under availability for this exact line - the board grades with its row's (2026-10-14: a
+    PrizePicks line the feed limits to Over has no Under stake), so a card for the same line must too: one stake per line.
+    Platform order as board_stake (the card's own, else Underdog first). None = no platform lists it or the feed doesn't
+    say (the grader's line-type rule)."""
+    n_ = lambda s: re.sub(r"[^a-z0-9]", "", str(s or "").lower())
+    st = comparison._ts(start) if start else None
+    types = ("standard", "promo") if line_type == "standard" else (line_type,)
+    for bk in ((book,) if book else ("underdog", "prizepicks")):
+        try:
+            rows = (prizepicks.board() if bk == "prizepicks" else underdog.board()).get("rows") or []
+        except Exception:
+            continue
+        hits = [r for r in rows if n_(r.get("player")) == n_(name) and r.get("prop") == prop and (r.get("scope") or "12") == scope
+                and float(r.get("line") or -1) == float(line) and (r.get("odds_type") or "standard") in types
+                and (not st or not r.get("start") or not comparison._ts(r["start"])
+                     or abs((comparison._ts(r["start"]) - st).total_seconds()) <= comparison.JOIN_START_MIN * 60)]
+        if hits:
+            vals = {r.get("under_available") for r in hits}
+            return vals.pop() if len(vals) == 1 else None
+    return None
+
+
 def board_stake(res, prop, scope, line, line_type="standard", book=None):
     """The same line on the board with its stake cut by the same-match cap: the card shows that stake too (one stake
     per line on the whole site). Only when the board row is this exact pick (side, line, maps, match) and was cut from
@@ -3200,7 +3223,9 @@ class Handler(BaseHTTPRequestHandler):
         # card, Slate, a share link without one) = the board that lists this exact pick (board_stake, Underdog first)
         book = ("prizepicks" if q.get("book") == "prizepicks" or lt in ("goblin", "demon") else
                 "underdog" if q.get("book") == "underdog" else None)
-        key = (pkey, line, prop, lt, match, (opp or "").lower(), scope, (team or "").lower(), book, (mstart or "")[:16] if opp else "")
+        less_av = feed_less_available(name, prop, scope, line, lt, book, mstart)   # the feed's sides, as the board grades
+        key = (pkey, line, prop, lt, match, (opp or "").lower(), scope, (team or "").lower(), book, (mstart or "")[:16] if opp else "",
+               less_av)
 
         t_in = time.time()
 
@@ -3215,7 +3240,7 @@ class Handler(BaseHTTPRequestHandler):
                     tm["slot"], tm["warm"] = round(time.time() - t0, 2), warm
                     t0 = time.time()
                     res = cs2_scout.grade(name, line, prop, lt, slug=slug, faceit_key=faceit_key(), scope=scope,
-                                          match=match, opponent=opp, team_hint=team, match_start=mstart)
+                                          match=match, opponent=opp, team_hint=team, match_start=mstart, less_available=less_av)
                     tm["grade"] = round(time.time() - t0, 2)
             t0 = time.time()
             if res.get("error"):
