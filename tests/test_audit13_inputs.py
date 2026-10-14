@@ -142,7 +142,9 @@ def test_c1_identical_rematches_are_never_guessed(monkeypatch):
     assert sorted(s["total"] for s in rf["series"]) == [24, 42] and {s["source"] for s in rf["series"]} == {"HLTV"}
     monkeypatch.setattr(cs2_scout, "_hltv_series", lambda pb, back_days=None: [dict(r) for r in hl[:2]])
     rf = cs2_scout.recent_form(cs2_scout._form_rows(pb, "kills", keep_n=40, back_days=365), 0.7, 26.5)
-    assert sorted(s["total"] for s in rf["series"]) == [23, 41, 42]        # HLTV has one: which BO3.gg one? not guessed
+    # HLTV has one: which BO3.gg one is it? Not guessed - and (2026-10-14) not counted twice either: neither BO3.gg
+    # look-alike has HLTV's kills, so both are quarantined and HLTV's series counts once
+    assert sorted(s["total"] for s in rf["series"]) == [42] and set(pb["quarantined_series"]) == {1, 2}
 
 
 def test_c1_orientation_and_teams_must_both_match(monkeypatch):
@@ -840,7 +842,8 @@ def test_failed_hltv_series_read_is_transient_empty_is_not(monkeypatch, case):
     seen = {}
     monkeypatch.setattr(cs2_scout, "grade_leg", lambda d: seen.update(d) or {"prop": d["prop"], "line": d["line"]})
     d0 = lambda i: (date.today() - timedelta(days=2 + 3 * i)).isoformat()
-    bo3_rows = [{"match_id": 50 + i, "number": n, "date": d0(i), "opponent": f"T{i}", "team": "Mine", "team_id": 1, "map": "de_nuke",
+    bo3_rows = [{"match_id": 50 + i, "number": n, "date": d0(i), "opponent": f"T{i}", "team": "Mine", "team_id": 1,
+                 "map": ("de_nuke", "de_mirage")[n - 1],      # a series never plays one map twice (2026-10-14 quarantine rule)
                  "kills": 20, "headshots": 9, "rounds": 24, "won": True} for i in range(10) for n in (1, 2)]
     pb = _base_pb(recent_maps=bo3_rows)
     key = ("series", "tester", "mine", cs2_scout._hltv_since(pb, 365))

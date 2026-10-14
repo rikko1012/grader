@@ -2352,11 +2352,43 @@ def _same_series(h, x):
     return _same_team(h[0].get("team"), x[0].get("team")) and _same_team(h[0].get("opponent"), x[0].get("opponent"))
 
 
-def _twins(hl_by, rows_by):
+def _clean_repeats(rows, quarantine):
+    """BO3.gg map rows without repeated-map records (2026-10-14 audit: 2 BO3.gg series listed one map twice and stayed
+    duplicates). The same provider game listed twice (same game id) is one row; a series that lists one map name for two
+    different games is QUARANTINED - a map can't be played twice in a series, and which record is the real one isn't
+    knowable - its rows are left out (quarantine[match id] = why; HLTV's record of that series, if any, counts instead).
+    Rows without a game id are compared by their complete record (number, map, rounds, result, kills, headshots, deaths)."""
+    seen, by = set(), {}
+    for r in rows:
+        k = (r.get("match_id"), r.get("game_id") if r.get("game_id") is not None else
+             (r.get("number"), r.get("map"), r.get("rounds"), r.get("won"), r.get("kills"), r.get("headshots"), r.get("deaths")))
+        if k in seen:
+            continue
+        seen.add(k)
+        by.setdefault(r.get("match_id"), []).append(r)
+    out = []
+    for mid, maps in by.items():
+        names = [norm(str(m["map"]).removeprefix("de_")) for m in maps if m.get("map")]
+        if len(names) != len(set(names)):
+            quarantine[mid] = "BO3.gg lists one map twice with different records"
+            continue
+        out += maps
+    return out
+
+
+def _map_kills(maps):
+    m = {r.get("number"): r.get("kills") for r in maps}
+    k = (m.get(1), m.get(2))
+    return k if None not in k else None
+
+
+def _twins(hl_by, rows_by, quarantine=None):
     """{BO3.gg match id: HLTV match id} for the series both sources provably have ({match id: map rows} each; _same_series).
     Ambiguous = not merged: look-alike series (rematches with identical scores) are paired only when every HLTV series of
-    the group matches every BO3.gg series of it and the counts agree - any pairing then gives the same series and numbers;
-    otherwise none of the group is merged."""
+    the group matches every BO3.gg series of it and the counts agree - any pairing then gives the same series and numbers.
+    Otherwise (2026-10-14 audit) the complete map records decide: a BO3.gg series pairs with the HLTV series whose Maps 1-2
+    kills are identical when that is unique both ways; the group's other BO3.gg look-alikes are QUARANTINED
+    (quarantine[match id] = why) - never counted next to the HLTV series they may duplicate, never guessed."""
     by_day = {}
     for xm, xr in rows_by.items():
         for d in _days(xr):
@@ -2383,6 +2415,15 @@ def _twins(hl_by, rows_by):
         done |= hs
         if len(hs) == len(xs) and all(edges[a] == xs for a in hs):
             out.update(zip(sorted(xs, key=str), sorted(hs, key=str)))
+            continue
+        kp = [(a, x) for a in hs for x in edges[a] if _map_kills(hl_by[a]) is not None
+              and _map_kills(hl_by[a]) == _map_kills(rows_by[x])]
+        for a, x in kp:
+            if sum(1 for b, _ in kp if b == a) == 1 and sum(1 for _, y in kp if y == x) == 1:
+                out[x] = a
+        if quarantine is not None:
+            for x in xs - set(out):
+                quarantine[x] = "look-alike of an HLTV series (same day, teams and Maps 1-2) - not provably the same or another series"
     return out
 
 
@@ -2390,8 +2431,12 @@ def _hltv_h2h(pb, rows, opponent):
     """Head-to-head / regional rows with HLTV's numbers wherever HLTV has the series (the last-10 does the same - one
     series, one total on the card), plus meetings with tonight's opponent only HLTV has (exact name variants, last
     H2H_DAYS). BO3.gg's lineup / regional fields stay (the same-roster test reads them). 2026-10-11 audit."""
+    q = {}
+    rows = _clean_repeats(rows, q)
     hl = _hltv_series(pb, 365)
     if not hl:
+        if q:
+            pb.setdefault("quarantined_series", {}).update(q)
         return rows
     by_match = {}
     for r in hl:
@@ -2400,8 +2445,12 @@ def _hltv_h2h(pb, rows, opponent):
     groups = {}
     for r in rows:
         groups.setdefault(r["match_id"], []).append(r)
-    pair = _twins(by_match, groups)
+    pair = _twins(by_match, groups, q)
+    if q:
+        pb.setdefault("quarantined_series", {}).update(q)
     for mid, maps in groups.items():
+        if mid in q:
+            continue                                     # quarantined: HLTV's record of the series (if any) counts instead
         twin = pair.get(mid)
         if twin is None:
             out += maps
@@ -2439,14 +2488,21 @@ def _form_rows(pb, stat="kills", keep_n=RECENT_MATCHES, back_days=None):
         # BO3.gg's last 10 matches include BO1s and other-setting series: reach back into his older BO3.gg matches
         # (already loaded for H2H) for the same window as HLTV (2026-10-11 audit: xureba showed 7 of 10)
         rows = _older_bo3(pb, rows, back_days)
+    q = {}
+    rows = _clean_repeats(rows, q)                       # repeated-map records out (2026-10-14 audit)
     if not hl:
+        if q:
+            pb.setdefault("quarantined_series", {}).update(q)
         return rows
     by_match, rows_by = {}, {}
     for r in hl:
         by_match.setdefault(r["match_id"], []).append(r)
     for r in rows:
         rows_by.setdefault(r["match_id"], []).append(r)
-    twin_of = {h: x for x, h in _twins(by_match, rows_by).items()}   # one BO3.gg series per HLTV series
+    twin_of = {h: x for x, h in _twins(by_match, rows_by, q).items()}   # one BO3.gg series per HLTV series
+    if q:
+        pb.setdefault("quarantined_series", {}).update(q)
+        rows = [x for x in rows if x["match_id"] not in q]   # ambiguous look-alikes: HLTV's series counts, never twice
     extra = []
     for mid, hrows in by_match.items():
         usable = all(r[stat] is not None for r in hrows)
