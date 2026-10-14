@@ -23,9 +23,10 @@ Ingestion (members never call upstream) - every request goes through request() (
   - request_log is append-only: a 'started' row before the request is sent, a 'completed' row after (same attempt_id),
     a 'refused' row for every refusal - time, path, caller, instance, pid, commit, status, duration, sanitized headers
     incl. request ids, a key-redacted body snippet of errors. Never the key.
-  - persisted cooldown: 429 -> Retry-After when supplied, else 60 s x 2^(n-1) x (0.8..1.2 jitter) capped at 30 min
-    (jitter BEFORE the cap), n = the 429s of the last R429_WINDOW_S - a persisted, decaying count that a success (an
-    empty 200, an admin probe) does NOT reset; 5xx / timeouts / network -> 30 s x 2^(n-1); 401/403/404 -> 30 min
+  - persisted cooldown: 429 -> 60 s x 2^(n-1) x (0.8..1.2 jitter) capped at 30 min (jitter BEFORE the cap), never
+    shorter than a Retry-After (a minimum, not a schedule), n = the persisted 429 streak (each 429 within 30 min after
+    the last one's cooldown adds one, so a sustained 429 stays at the cap; it starts again only after a clean period)
+    that a success (an empty 200, an admin probe) does NOT reset; 5xx / timeouts / network -> 30 s x 2^(n-1); 401/403/404 -> 30 min
   - adaptive automatic polling per endpoint (cs2 and csgo): 60 s; slower after repeated EMPTY answers (120 / 180 / 300 s)
     and while 429s persist (120 / 240 / 300 s by the 429s of the last 30 min - it relaxes only as they age out of the
     window, i.e. after a sustained clean period); persisted schedule, cooldown and authentication stop
@@ -863,8 +864,8 @@ def _retry_after_s(headers):
 
 
 def _cooldown_update(con, kind, headers, now, rnd):
-    """429 -> Retry-After, else 60 s x 2^(n-1) x jitter capped at 30 min (n = 429s of the last R429_WINDOW_S, this one
-    included); 5xx / timeout / network -> 30 s x 2^(n-1) x jitter; auth / path -> 30 min; success -> no cooldown and no
+    """429 -> 60 s x 2^(n-1) x jitter capped at 30 min, never shorter than a Retry-After (n = the persisted 429 streak:
+    each 429 within R429_WINDOW_S after the last one's cooldown adds one, so a sustained 429 stays at the cap); 5xx / timeout / network -> 30 s x 2^(n-1) x jitter; auth / path -> 30 min; success -> no cooldown and no
     failure streak - the 429 memory is NOT cleared by a success (an empty 200 or a probe included)."""
     c = _state(con, "cooldown", {"until": 0, "reason": None, "n429": 0, "nfail": 0}) or {}
     hist = _recent_429(con, now)
@@ -872,9 +873,20 @@ def _cooldown_update(con, kind, headers, now, rnd):
         c.update(until=0, reason=None, nfail=0)
     elif kind == "rate_limited":
         hist.append(now)
+        # the exponent is the 429 STREAK: +1 for every 429 that follows the last one's cooldown within R429_WINDOW_S;
+        # it starts again only after a clean period that long (a success never resets it). 2026-10-14: the count of the
+        # last 30 min could not hold a sustained 429 at the 30-min cap - a capped wait aged its own 429s out and the
+        # backoff started again near 60 s, about 10 requests an hour for as long as the 429s lasted
+        prev, last = c.get("streak"), c.get("last429")
+        streak = (prev + 1 if prev and last is not None and now - last <= (c.get("last_wait") or 0) + R429_WINDOW_S
+                  else len(hist))
         ra = _retry_after_s(headers)
-        wait = ra if ra is not None else min(COOLDOWN_BASE_S * 2 ** min(len(hist) - 1, 20) * (0.8 + 0.4 * rnd()), COOLDOWN_MAX_S)
-        c.update(until=now + wait, reason=f"HTTP 429 ({'Retry-After' if ra is not None else 'backoff'} {wait:.0f}s)")
+        # 2026-10-14 owner: repeated 429s back off progressively EVEN with a Retry-After - it is a minimum, never a
+        # schedule (a constant 'Retry-After: 60' used to mean one request a minute for as long as the 429s lasted)
+        back = min(COOLDOWN_BASE_S * 2 ** min(streak - 1, 20) * (0.8 + 0.4 * rnd()), COOLDOWN_MAX_S)
+        wait = max(ra, back) if ra is not None else back
+        c.update(until=now + wait, streak=streak, last429=now, last_wait=wait, reason=f"HTTP 429 (backoff {back:.0f}s" + (f", Retry-After {ra:.0f}s" if ra is not None else "")
+                 + f": waiting {wait:.0f}s)")
     elif kind in ("auth", "path", "config"):
         c.update(until=now + COOLDOWN_MAX_S, reason=f"{kind} - configuration problem")
     else:
@@ -1137,13 +1149,9 @@ class Poller:
             sch["last_outcome"] = r.get("kind")
             sch["interval_s"] = interval_for(sch.get("empty_streak", 0), r.get("n429", 0))
             cd = r.get("cooldown") or {}
-            if sch.get("last_nonempty_at") and not sch.get("empty_streak"):
-                # the endpoint carrying quotes resumes as soon as the cooldown ends (Retry-After or the jittered backoff,
-                # persisted) - not a full rate-limit step after it, which left quotes 240-300 s old (2026-10-14). The
-                # gateway's lease, spacing and shared budget still decide every request: the budget is unchanged.
-                sch["next_at"] = max(cd.get("until", 0), now + MIN_GAP_S)
-            else:
-                sch["next_at"] = max(cd.get("until", 0), now + sch["interval_s"])
+            # conservative (2026-10-14 owner): never sooner than BOTH the persisted cooldown (Retry-After as a minimum,
+            # progressive backoff) and the endpoint's rate-limit step - the shared budget is a ceiling, not a polling target
+            sch["next_at"] = max(cd.get("until", 0), now + sch["interval_s"])
             if r.get("kind") == "auth":
                 a = auth_block(self.db)                 # failures under the current key only
                 a.pop("previous_key_stop", None)

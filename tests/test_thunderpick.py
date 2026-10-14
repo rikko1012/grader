@@ -263,10 +263,11 @@ def test_429_retry_after_seconds_and_http_date_and_backoff():
     from email.utils import format_datetime
     c = Clock()
     r = T.request("cs2", "poller", err_fetch("rate_limited", 429, {"retry-after": "41"}), c)
-    assert abs(r["cooldown"]["until"] - (c.t + 41)) < 1
+    # Retry-After is a MINIMUM under the progressive backoff (2026-10-14 owner): first 429 -> 60 s x 0.8-1.2 >= 41 s
+    assert c.t + 41 <= r["cooldown"]["until"] <= c.t + 72 and "Retry-After 41s" in r["cooldown"]["reason"]
     assert T.request("csgo", "admin_probe", ok_fetch(), Clock(c.t + 10))["refused"].startswith("cooldown until")
     when = datetime.fromtimestamp(time.time() + 90, timezone.utc)
-    r2 = T.request("cs2", "poller", err_fetch("rate_limited", 429, {"retry-after": format_datetime(when, usegmt=True)}), Clock(c.t + 60))
+    r2 = T.request("cs2", "poller", err_fetch("rate_limited", 429, {"retry-after": format_datetime(when, usegmt=True)}), Clock(c.t + 80))
     assert "Retry-After" in r2["cooldown"]["reason"]
 
 
@@ -304,7 +305,7 @@ def test_jitter_is_applied_before_the_cap():
 def test_failures_back_off_and_every_attempt_is_audited(tmp_path):
     c = Clock()
     T.request("cs2", "poller", err_fetch("rate_limited", 429, {"retry-after": "5", "x-ratelimit-remaining": "0"}), c)
-    T.request("cs2", "poller", err_fetch("timeout", None), Clock(c.t + 21))
+    T.request("cs2", "poller", err_fetch("timeout", None), Clock(c.t + 80))     # after the >= 48-72 s first-429 backoff
     log = completed()
     assert [r["outcome"] for r in log] == ["timeout", "rate_limited"] and log[1]["headers"]["x-ratelimit-remaining"] == "0"
     started = [r for r in T.request_log() if r["phase"] == "started"]
@@ -1144,36 +1145,92 @@ def test_a_transport_failure_is_not_called_a_rate_limit():
     assert T.feed_cause(q, "stale", c2.t).startswith("transport / server failure")
 
 
-def test_carrying_endpoint_resumes_when_the_cooldown_ends_within_the_same_budget():
-    """2026-10-14: after a 429 the endpoint that carries quotes is retried as soon as the persisted cooldown (Retry-After or
-    the jittered backoff) ends - not a full rate-limit step later; the gateway's lease / spacing / shared budget still
-    decide every request and the budget is unchanged."""
+def test_repeated_429s_back_off_progressively_even_with_a_constant_retry_after():
+    """2026-10-14 owner: Retry-After is a minimum, never a schedule - repeated 429s back off progressively (a constant
+    'Retry-After: 60' used to mean one request a minute for as long as the 429s lasted)."""
     c = Clock()
-    p = T.Poller(fetch_fns={"csgo": ok_fetch()}, clock=c)
-    assert p.poll_once("csgo") is True                               # carries quotes
-    c.t += T.CARRY_MAX_INTERVAL_S
-    p.fetch_fns["csgo"] = err_fetch("rate_limited", 429)
-    assert p.poll_once("csgo") is False
-    cd = T.cooldown(c.t)
-    s = T._sched("csgo")
-    assert cd["active"] and s["next_at"] == max(cd["until"], c.t + T.MIN_GAP_S)    # the cooldown's end, no extra step
-    assert s["next_at"] - c.t < T.interval_for(0, 1)                                # earlier than the old RL step
-    assert p.due() is None                                           # inside the cooldown nothing is sent
-    c.t = s["next_at"] + 0.1
-    p.fetch_fns["csgo"] = ok_fetch()
-    assert T._sched("csgo")["next_at"] <= c.t and T.cooldown(c.t)["active"] is False
-    assert p.poll_once("csgo") is True                               # recovered on its own
-    assert T.SHARED_PER_MIN == 4                                     # the shared budget is unchanged
+    waits = []
+    for _ in range(5):
+        r = T.request("csgo", "poller", err_fetch("rate_limited", 429, {"retry-after": "60"}), c)
+        waits.append(r["cooldown"]["until"] - c.t)
+        c.t = r["cooldown"]["until"] + 1
+    assert all(w >= 60 for w in waits)                                   # never before Retry-After
+    assert waits[2] >= 192 and waits[3] >= 384 and waits[4] >= 768      # 60 s x 2^(n-1) x >= 0.8: progressive
+    assert all(b >= a for a, b in zip(waits[1:], waits[2:]))
 
 
-def test_retry_after_is_honoured_for_the_carrying_endpoint():
+def test_a_sustained_429_stays_at_the_cap_and_only_a_clean_period_restarts_the_backoff():
     c = Clock()
-    p = T.Poller(fetch_fns={"csgo": ok_fetch()}, clock=c)
-    p.poll_once("csgo")
+    waits = []
+    for _ in range(12):                                                  # 429 right after every cooldown, ~4 hours
+        r = T.request("csgo", "poller", err_fetch("rate_limited", 429, {}), c)
+        waits.append(r["cooldown"]["until"] - c.t)
+        c.t = r["cooldown"]["until"] + 1
+    assert all(w == T.COOLDOWN_MAX_S for w in waits[6:]), waits           # a capped wait never ages its own 429s out
+    assert T.request("csgo", "poller", ok_fetch(), c)["ok"]              # a success: the streak stays
     c.t += 60
-    p.fetch_fns["csgo"] = err_fetch("rate_limited", 429, {"retry-after": "200"})
+    r = T.request("csgo", "poller", err_fetch("rate_limited", 429, {}), c)
+    assert r["cooldown"]["until"] - c.t == T.COOLDOWN_MAX_S
+    c.t = r["cooldown"]["until"] + T.R429_WINDOW_S + 5                   # a clean period beyond the cooldown
+    r = T.request("csgo", "poller", err_fetch("rate_limited", 429, {}), c)
+    assert r["cooldown"]["until"] - c.t <= 72 and r["cooldown"]["streak"] == 1
+
+
+def test_a_retry_is_never_sooner_than_the_cooldown_and_the_rate_limit_step():
+    c = Clock()
+    p = T.Poller(fetch_fns={"csgo": ok_fetch()}, clock=c)
+    assert p.poll_once("csgo") is True                                   # the endpoint carries quotes
+    c.t += T.CARRY_MAX_INTERVAL_S
+    p.fetch_fns["csgo"] = err_fetch("rate_limited", 429, {"retry-after": "30"})
+    assert p.poll_once("csgo") is False
+    s, cd = T._sched("csgo"), T.cooldown(c.t)
+    assert s["next_at"] == max(cd["until"], c.t + T.interval_for(0, 1)) >= c.t + T.interval_for(0, 1)
+
+
+def test_cooldown_survives_a_restart_and_only_one_request_is_ever_in_flight():
+    c = Clock()
+    p = T.Poller(fetch_fns={"csgo": err_fetch("rate_limited", 429)}, clock=c)
     p.poll_once("csgo")
-    assert abs(T._sched("csgo")["next_at"] - (c.t + 200)) < 1       # never before Retry-After
+    until = T.cooldown(c.t)["until"]
+    q = T.Poller(fetch_fns={"csgo": ok_fetch(), "cs2": ok_fetch([])}, clock=c)     # a restarted process, same disk
+    assert q.due() is None and T.cooldown(c.t)["active"]                         # the persisted cooldown holds
+    c.t = until + 1
+    started = threading.Event()
+
+    def slow():
+        started.set()
+        time.sleep(0.3)
+        return ([], 200, b"[]", {"headers": {}, "body": ""})
+    out = {}
+    t1 = threading.Thread(target=lambda: out.__setitem__("a", T.request("csgo", "poller", slow, c)))
+    t1.start()
+    started.wait(2)
+    out["b"] = T.request("cs2", "admin_probe", ok_fetch([]), c)                   # a second caller meanwhile
+    t1.join()
+    assert out["b"].get("refused") and "flight" in out["b"]["refused"] and out["a"]["ok"]
+
+
+def test_a_sustained_429_hour_sends_no_more_requests_than_before():
+    # 2026-10-14 harness: the 2026-10-14 scheduling sent 0.89 req/min under a constant Retry-After 60 vs 0.40 before -
+    # now at most the previous rate, and fewer as the 429s go on (the 4/min budget is a ceiling, not a target). Also: the
+    # backoff's memory outlasts its 30-min cap - with a 30-min memory a capped wait aged its own 429s out and the backoff
+    # started again near 60 s (about 10 requests an hour for as long as the 429s lasted)
+    c = Clock()
+    p = T.Poller(fetch_fns={"csgo": ok_fetch(), "cs2": ok_fetch([])}, clock=c)
+    p.poll_once("csgo")
+    p.fetch_fns["csgo"] = err_fetch("rate_limited", 429, {"retry-after": "60"})
+    p.fetch_fns["cs2"] = err_fetch("rate_limited", 429, {"retry-after": "60"})
+    t0, sends = c.t, []
+    end = c.t + 3 * 3600
+    while c.t < end:
+        c.t += T.TICK_S
+        if p.tick() is not None:
+            sends.append(c.t - t0)
+    hour = [sum(1 for s in sends if h * 3600 < s <= (h + 1) * 3600) for h in range(3)]
+    assert hour[0] <= 24, hour                                           # <= the previous 0.40 / min
+    assert hour[1] <= 3 and hour[2] <= 3, hour                           # then about one request per 30-min cap
+    gaps = [b - a for a, b in zip(sends, sends[1:])]
+    assert all(g2 >= g1 * 0.6 or g1 >= T.COOLDOWN_MAX_S * 0.8 for g1, g2 in zip(gaps, gaps[1:])), gaps   # never shrinking back
 
 
 def test_an_endpoint_that_never_returned_an_event_becomes_a_rare_probe():

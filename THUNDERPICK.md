@@ -173,10 +173,12 @@ on identical saved inputs:
 - `request_log` is append-only: a `started` row before sending, a `completed` row after (same `attempt_id`), a
   `refused` row for every refusal (cooldown, in flight, spacing, budget, no key, authentication stop). `request()` never
   raises; a failure to write the audit never turns a 200 into an error.
-- 429 -> Retry-After when given, else 60 s x 2^(n-1) x 0.8-1.2 jitter, capped at 30 min (jitter before the cap), where
-  n = the 429s of the last 30 min - a persisted, decaying count that an empty 200 or a probe success does **not** reset
-  (production 13:38:06 429 then 13:39:07 `[]` used to wipe it). 5xx / timeout / network -> 30 s x 2^(n-1); three
-  authentication failures stop all requests and raise one alert until the key changes.
+- 429 -> 60 s x 2^(n-1) x 0.8-1.2 jitter, capped at 30 min (jitter before the cap), and never shorter than a
+  Retry-After (a minimum, never a schedule), where n = the persisted 429 STREAK: each 429 that follows the last one's
+  cooldown within 30 min adds one, so a sustained 429 stays at the 30-min cap; the streak starts again only after a
+  clean period that long, and an empty 200 or a probe success does **not** reset it (production 13:38:06 429 then
+  13:39:07 `[]` used to wipe it). 5xx / timeout / network -> 30 s x 2^(n-1); three authentication failures stop all
+  requests and raise one alert until the key changes.
 - Both endpoints polled automatically: 60 s each; slower after repeated empty answers (120 / 180 / 300 s) and while
   429s persist (120 / 240 / 300 s by the 429s of the last 30 min - it relaxes only as they age out). Schedule, cooldown,
   429 memory, budget and lease survive restarts.
@@ -237,10 +239,19 @@ No `Retry-After` or `X-RateLimit-*` headers have been returned. 429s occur well 
 
 ## Recovery and feed states (2026-10-14)
 - **Autonomous recovery inside the existing budget.** Every caller (poller, admin probe) goes through the one atomic
-  gateway: persisted cooldown, Retry-After honoured, otherwise backoff 60 s x 2^(n-1) with jitter (cap 30 min); one
-  request in flight (lease); >= 20 s spacing; the shared budget is NOT increased; polling resumes by itself when the
-  cooldown ends, and the endpoint carrying quotes is polled at least every 150 s (quotes live 180 s). A recovered quote
-  is current again only with its own new retrieval time - no timestamp is ever reset to make old odds look fresh.
+  gateway: persisted cooldown, progressive 429 backoff with Retry-After as its minimum (above); one request in flight
+  (lease); >= 20 s spacing; the shared budget is NOT increased; after a failure the next poll waits for BOTH the
+  cooldown and the rate-limit step of its interval (never sooner), and outside a cooldown the endpoint carrying quotes is
+  polled at least every 150 s (quotes live 180 s). A recovered quote is current again only with its own new retrieval
+  time - no timestamp is ever reset to make old odds look fresh.
+- **Why the first recovery change sent MORE requests under sustained 429s (found 2026-10-14 in the offline harness, never
+  deployed).** It retried at the cooldown's end and let a supplied Retry-After replace the backoff, so a constant
+  `Retry-After: 60` meant one request a minute for as long as the 429s lasted (0.89 / min against 0.40 before). Fixed:
+  Retry-After is only a minimum under the progressive backoff and the schedule is the conservative one again. A second
+  defect, older: n was the count of 429s in the last 30 min - equal to the 30-min cap, so a capped wait aged its own
+  429s out and the backoff started again near 60 s (about 10 requests an hour while the 429s lasted); the persisted
+  streak keeps it at the cap (tests: at most 3 requests in each later hour of a sustained 429). The 4 / min local budget
+  is a ceiling, not a polling target and not evidence of the provider's capacity; no live probe was sent to show this.
 - **States kept distinct** (provenance `tp_availability` + `feed_cause`): a successful EMPTY answer (`endpoint_empty`;
   not a failure, and not proof that markets were removed), a 429 rate limit, a transport / server failure, an
   authentication stop, an event no longer in the latest answer (`not_in_latest_answer`: withdrawn, suspended or closed -
