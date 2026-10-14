@@ -46,8 +46,9 @@ def _model_version():
     # market_odds.py / thunderpick.py added 2026-10-13 (the projection's market input can come from Thunderpick)
     # pick_verdict.py added 2026-10-13 (it sets the logged side, Lean / grade and stake). The alias / matching state is
     # NOT hashed here: it is mapping.revision(), recorded on every forecast (mapping_rev)
+    # bo3.py / roles.py added 2026-10-13 audit (cached scoreboards and the AWP role move grades: BO3.gg fallback rows, Gate A)
     for f in ("grader.py", "sim.py", "cs2_scout.py", "hltv.py", "perf.py", "perf_live.py", "scope.py", "hltv_store.py",
-              "market_odds.py", "thunderpick.py", "pick_verdict.py"):
+              "market_odds.py", "thunderpick.py", "pick_verdict.py", "bo3.py", "roles.py"):
         try:
             h.update((Path(__file__).resolve().parent / f).read_bytes())
         except OSError:
@@ -427,6 +428,13 @@ def data_revision():
         _REV["rev"] = f"matches={n};max_id={mx};max_date={md}"
     except Exception:
         _REV["rev"] = None
+    try:      # 2026-10-13: the performance model's pinned input revision (perf_live N0) - the tables above are the full ones
+        import perf_live
+        pin = perf_live.input_revision()
+        if pin:
+            _REV["rev"] = (_REV["rev"] or "matches=?") + f";perf_input={pin}"
+    except Exception:
+        pass
     return _REV["rev"]
 
 
