@@ -305,6 +305,8 @@ def panel(res, rows, board_at=None, now=None, id_map=None):
     for f in g.get("flags") or []:
         if f.startswith("OLD PROJECTION") and "HLTV database unreachable" in f:
             add(against, "HLTV database unreachable right now - temporary projection from the older model", "data")
+        elif f.startswith("OLD PROJECTION") and "HLTV database not configured" in f:   # the real cause (2026-10-13 audit)
+            add(against, "Projection from the older model (HLTV database not connected)", "data")
         elif f.startswith("OLD PROJECTION"):
             add(against, "Projection from the older model (no HLTV data for this player or matchup)", "data")
         elif f.startswith("HLTV STALE"):

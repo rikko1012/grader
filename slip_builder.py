@@ -934,6 +934,15 @@ def _feed_board(b):
             "state": (b.get("feed") or {}).get("state")}
 
 
+def _side_word(s):
+    """Member wording (2026-10-13 audit: the change list said 'More' / 'Less'): Over / Under; More / Less stay internal."""
+    return "Over" if s == "More" else "Under" if s == "Less" else s
+
+
+def _grade_word(g):
+    return "Lean" if g == "LEAN" else "No match scheduled" if g == "SCOUT" else g
+
+
 def verify_before_copy(slip, boards, now=None, model=None, settings=None):
     """Every leg against what its platform shows NOW and the current grade. boards = {book: {"feed": <underdog.board() /
     prizepicks.board()>, "graded": <board_payload(book)>}} (a bare board_payload dict serves as both).
@@ -943,7 +952,7 @@ def verify_before_copy(slip, boards, now=None, model=None, settings=None):
     st = normalize_settings(settings or slip.get("settings") or {"book": slip.get("book")})
     out, flat = [], []
     for i, l in enumerate(slip.get("legs") or []):
-        lab = f"{l.get('nick')} {l.get('prop')} {l.get('line')} {l.get('side')}"
+        lab = f"{l.get('nick')} {l.get('prop')} {l.get('line')} {_side_word(l.get('side'))}"
         ch = []
         b = (boards or {}).get(l.get("book") or "underdog") or {}
         if "rows" in b:                                   # a bare board_payload dict: graded rows and feed in one
@@ -984,7 +993,7 @@ def verify_before_copy(slip, boards, now=None, model=None, settings=None):
             if float(cur.get("line") or -1) != float(l.get("line") or -2):
                 ch.append(f"{lab}: line moved {l.get('line')} -> {cur.get('line')}")
             if cur.get("side") != l.get("side"):
-                ch.append(f"{lab}: model side now {cur.get('side')}")
+                ch.append(f"{lab}: model side now {_side_word(cur.get('side'))}")
             try:
                 same = float(cur.get("graded_line")) == float(l.get("line"))
             except (TypeError, ValueError):
@@ -995,7 +1004,7 @@ def verify_before_copy(slip, boards, now=None, model=None, settings=None):
             if cur.get("graded_model") != l.get("graded_model") or (cur_model and cur.get("graded_model") != cur_model):
                 ch.append(f"{lab}: graded by another model version")
             if cur.get("grade") != l.get("grade"):
-                ch.append(f"{lab}: grade {l.get('grade')} -> {cur.get('grade')}")
+                ch.append(f"{lab}: grade {_grade_word(l.get('grade'))} -> {_grade_word(cur.get('grade'))}")
             if cur.get("p") is None or l.get("p") is None or abs(float(cur["p"]) - float(l["p"])) >= 0.0005:
                 ch.append(f"{lab}: chance changed")
             why = why_excluded(cur, st, cur_model, now)
