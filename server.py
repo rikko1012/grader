@@ -1572,16 +1572,19 @@ def board_forever():
 
             def one(r):
                 members_idle()                            # members first, but the board never stalls
-                # PrizePicks goblin / demon are their own markets (More only); promo and standard grade as standard
+                # PrizePicks goblin / demon are their own markets (their sides: the feed's, prizepicks.directions); promo and
+                # standard grade as standard
                 lt = r.get("odds_type") if r.get("book") == "prizepicks" and r.get("odds_type") in ("goblin", "demon") else "standard"
                 try:
                     if MEMBER_GRADES[0] > 0:              # members still busy: one board grade at a time
                         with _BOARD_BUSY:
                             res = cs2_scout.grade(r["player"], r["line"], r["prop"], lt, scope=r.get("scope") or "12", team_hint=r.get("team"), opponent=r.get("opponent") or None,
-                                                  match_start=r.get("start"), faceit_key=faceit_key(), background=True, light=True)
+                                                  match_start=r.get("start"), faceit_key=faceit_key(), background=True, light=True,
+                                                  less_available=r.get("under_available"))
                     else:
                         res = cs2_scout.grade(r["player"], r["line"], r["prop"], lt, scope=r.get("scope") or "12", team_hint=r.get("team"), opponent=r.get("opponent") or None, faceit_key=faceit_key(),
-                                              match_start=r.get("start"), background=True, light=True)
+                                              match_start=r.get("start"), background=True, light=True,
+                                              less_available=r.get("under_available"))
                     if res.get("error"):
                         old = BOARD.get(r["id"]) or {}
                         if old.get("side") and (old.get("nf_retries") or 0) < 3:   # a graded line is not dropped on one failed
@@ -2027,6 +2030,14 @@ def card_odds_info(res):
         out["tile_note"] = (f"{label}{' (margin removed)' if src == 'thunderpick' else ''} · context"
                             f"{' + stake cap' if mq not in (None, 'HARD') else ''}; not in the projection"
                             if perf else f"{label} · in the projection")
+    # the price ACTUALLY used - Thunderpick or a fallback - with our retrieval time and its age when graded, and whether
+    # the selected odds changed this grade (2026-10-14 owner: a source label alone is not projection integration)
+    if src:
+        out["retrieved_at"] = out.get("retrieved_at") or pv.get("retrieved_at")
+        out["quote_age_s"] = pv.get("quote_age_s")
+        if src != "thunderpick" and not out.get("time_note"):
+            out["time_note"] = f"our retrieval time of {label}'s prices"
+    out["market_effect"] = (g.get("detail") or {}).get("market_effect")
     maps = od.get("maps") or {}
     mpb = (g.get("detail") or {}).get("map_prob_basis")
     kind = _map_basis_kind(mpb, maps)

@@ -30,6 +30,9 @@ def _new_display_keys(g):
     (g.get("detail") or {}).pop("map_prob_basis", None)
     (g.get("detail") or {}).pop("market_in_projection", None)
     (g.get("detail") or {}).pop("market_effect", None)        # 2026-10-14: what the selected odds did (provenance only)
+    g.pop("less_available", None)                                   # 2026-10-14: the feed-sides record (display / verdict)
+    if str(g.get("grade_less", "")).startswith("n/a"):
+        g["grade_less"] = "n/a"                                     # reworded 'no Less' text - same rule
 
 
 def test_old_path_identical_when_model_off():
@@ -41,7 +44,7 @@ def test_old_path_identical_when_model_off():
         d = _inputs(rnd, rnd.choice(["12", "1"]))           # Maps 1-3 changed on purpose 2026-10-11 (three full maps)
         a = old.grade_leg(dict(d)); b = grader.grade_leg(dict(d), dict(grader.CONFIG, perf_scopes=(), fix_v2=False))
         b.pop("projection_source"); b.pop("p_more_model_raw"); b.pop("dist"); b.pop("units_free", None); b.pop("units_free_less", None)
-        _new_display_keys(b)
+        _new_display_keys(a); _new_display_keys(b)
         fa = [f for f in a.pop("flags") if not f.startswith("CAP:")]; fb = [f for f in b.pop("flags") if not f.startswith(("CAP:", "OLD PROJECTION"))]
         assert fa == fb
         assert json.dumps(a, sort_keys=True, default=str) == json.dumps(b, sort_keys=True, default=str)
@@ -165,7 +168,7 @@ def test_live_grades_unchanged_by_candidate_code():
         if d["prop"] == "hs" or rnd.random() < 0.3:
             d["perf"] = dict(d["perf"], version="perf-1") if isinstance(d.get("perf"), dict) and "lambda" in d["perf"] else d["perf"]
         a = old.grade_leg(dict(d)); b = grader.grade_leg(dict(d), dict(grader.CONFIG, perf_hs_dist=False, fix_v2=False, perf_scopes=("12",))); b.pop("dist", None); b.pop("units_free", None); b.pop("units_free_less", None)
-        _new_display_keys(b)
+        _new_display_keys(a); _new_display_keys(b)
         for g in (a, b):     # 2026-10-13: perf lines no longer claim a market step was applied (flag text only)
             g["flags"] = [f for f in g["flags"] if not f.startswith(_MARKET_FLAGS + _LEGACY_STEP_FLAGS)]
         assert json.dumps(a, sort_keys=True, default=str) == json.dumps(b, sort_keys=True, default=str)
