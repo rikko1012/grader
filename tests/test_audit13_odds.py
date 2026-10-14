@@ -66,19 +66,23 @@ def test_e1_a_stale_quote_after_429s_is_a_blip_and_the_fallback_is_marked_transi
     assert nm["found"] is False and nm["transient"] is True and M.p_team(nm) is None
 
 
-def test_e1_a_dead_feed_is_an_outage_not_transient_forever(monkeypatch):
+LONG_S = 6 * 3600     # hours without a usable answer
+
+
+def test_e1_time_alone_never_ends_a_blip(monkeypatch):
+    # 2026-10-14 owner: a stale / empty feed for 30 minutes (or hours) proves no withdrawal - still a blip, cause named
     p, c = active_poller()
     t0 = c.t
-    dead = T.projection_odds("Alpha1", "Bravo1", start_of(1), now=t0 + T.BLIP_MAX_S + 1, poller=p)
-    # past BLIP_MAX_S: a normal fallback - but never a claim that the market was withdrawn (2026-10-14 owner)
-    assert dead["availability"] == "stale" and dead["blip"] is False and "not confirmed withdrawn" in dead["reason"]
-    assert "cleared" not in dead["reason"] and "withdrawn," not in dead["reason"] and dead["feed_cause"]
-    o = sel(p, t0 + T.BLIP_MAX_S + 1)
-    assert "transient" not in o and o["provenance"]["blip"] is False and o["provenance"]["selected"] == "polymarket"
-    assert not o["provenance"]["fallback_reason"].startswith(M.BLIP_TEXT)
-    # polling switched off: no answer is coming - an outage at once
+    long_ = T.projection_odds("Alpha1", "Bravo1", start_of(1), now=t0 + LONG_S, poller=p)
+    assert long_["availability"] == "stale" and long_["blip"] is True and long_["feed_cause"]
+    assert "cleared" not in long_["reason"] and "withdrawn" not in long_["reason"]
+    o = sel(p, t0 + LONG_S)
+    assert o["transient"] is True and o["provenance"]["blip"] is True and o["provenance"]["selected"] == "polymarket"
+    assert o["provenance"]["tp_last_quote"]["age_s"] >= LONG_S - 1      # the old quote's own age, never refreshed
+    # polling switched off HERE (our configuration, not the feed): a normal fallback at once
     monkeypatch.setenv("THUNDERPICK_AUTOPOLL", "0")
-    assert T.projection_odds("Alpha1", "Bravo1", start_of(1), now=t0 + T.QUOTE_MAX_AGE_S + 1, poller=p)["blip"] is False
+    off = T.projection_odds("Alpha1", "Bravo1", start_of(1), now=t0 + T.QUOTE_MAX_AGE_S + 1, poller=p)
+    assert off["blip"] is False and "switched off" in off["reason"]
 
 
 def _repoll(p, c, raw, dt=61):
@@ -98,11 +102,11 @@ def _scenario(name, monkeypatch):
     if name == "endpoint_empty":                                    # an empty [] between full answers: the blip
         _repoll(p, c, [])
         return sel(p, c.t + 5), "endpoint_empty", True
-    if name == "stale_feed_dead":                                   # no answer for BLIP_MAX_S: treated as cleared
-        return sel(p, t0 + T.BLIP_MAX_S + 1), "stale", False
-    if name == "endpoint_empty_cleared":                            # empty answers for BLIP_MAX_S: the feed cleared
+    if name == "stale_for_hours":                                   # time alone proves nothing: still the blip
+        return sel(p, t0 + LONG_S), "stale", True
+    if name == "endpoint_empty_for_hours":                          # empty answers for hours: not proof of withdrawal
         _repoll(p, c, [])
-        return sel(p, t0 + T.BLIP_MAX_S + 1), "endpoint_empty", False
+        return sel(p, t0 + LONG_S), "endpoint_empty", True
     if name == "stale_but_format_excluded":                         # Thunderpick would not price it anyway
         return sel(p, t0 + T.QUOTE_MAX_AGE_S + 1, "Alpha4", "Bravo4", i=4), "stale", False
     if name == "not_in_latest_answer":                              # absent from a newer full answer
@@ -138,7 +142,7 @@ def _scenario(name, monkeypatch):
     raise AssertionError(name)
 
 
-@pytest.mark.parametrize("state", ["stale", "endpoint_empty", "stale_feed_dead", "endpoint_empty_cleared",
+@pytest.mark.parametrize("state", ["stale", "endpoint_empty", "stale_for_hours", "endpoint_empty_for_hours",
                                    "stale_but_format_excluded", "not_in_latest_answer", "no_event", "unlinked", "ambiguous",
                                    "started", "invalid_odds", "draw_listed", "scope_unconfirmed", "format_excluded",
                                    "policy_inactive", "module_unavailable"])
@@ -154,14 +158,14 @@ def test_e1_marks_by_availability_state(state, monkeypatch):
         assert "transient" not in o
 
 
-def test_e1_reader_failure_is_a_blip_only_while_the_failure_run_is_short():
+def test_e1_reader_failure_is_a_blip_however_long_it_runs():
     def boom(*a, **k):
         raise RuntimeError("database is locked (TEST FIXTURE)")
     o = M.select("Alpha1", "Bravo1", None, tp=boom, pm=lambda *a: dict(PM))
     assert o["transient"] is True and o["provenance"]["tp_error"] == "RuntimeError"
-    M._TP_FAIL["since"] = time.time() - T.BLIP_MAX_S - 1               # failing for longer than BLIP_MAX_S
+    M._TP_FAIL["since"] = time.time() - LONG_S                        # failing for hours: still unknown, still a blip
     o = M.select("Alpha1", "Bravo1", None, tp=boom, pm=lambda *a: dict(PM))
-    assert "transient" not in o and o["provenance"]["blip"] is False
+    assert o["transient"] is True and o["provenance"]["blip"] is True
     M.select("Alpha1", "Bravo1", None, tp=lambda *a, **k: {"found": False, "availability": None}, pm=lambda *a: dict(PM))
     assert M._TP_FAIL["since"] is None                               # a successful read ends the run
     assert M.select("Alpha1", "Bravo1", None, tp=boom, pm=lambda *a: dict(PM))["transient"] is True
@@ -179,9 +183,9 @@ def test_e1_revalidate_never_freezes_a_transient_selection():
     out2, chk2 = M.recheck(out, now=blip_at + 30, tp=reader(p), pm=lambda *a: dict(PM))
     assert out2 is not out and out2["transient"] is True and chk2["result"].startswith("transient: ")
     assert out2["provenance"]["sig"] == out["provenance"]["sig"]        # the signature says what the input is
-    # the feed stays dead past BLIP_MAX_S: a normal fallback (not transient forever)
-    out3, chk3 = M.recheck(out2, now=t0 + T.BLIP_MAX_S + 1, tp=reader(p), pm=lambda *a: dict(PM))
-    assert "transient" not in out3 and chk3["result"] == "changed" and out3["provenance"]["selected"] == "polymarket"
+    # the feed stays stale for hours: still a fresh transient decision every time (time proves nothing)
+    out3, chk3 = M.recheck(out2, now=t0 + LONG_S, tp=reader(p), pm=lambda *a: dict(PM))
+    assert out3["transient"] is True and chk3["result"].startswith("transient: ") and out3["provenance"]["selected"] == "polymarket"
     # Thunderpick answers again: Thunderpick is the input again
     p.fetch_fns["cs2"] = ok_fetch(p.data["cs2"]["raw"])
     c.t = blip_at + 40

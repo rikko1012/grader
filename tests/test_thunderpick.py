@@ -353,7 +353,9 @@ def test_empty_feeds_slow_the_schedule_and_markets_reset_it():
         p.poll_once("cs2")
         intervals.append(T._sched("cs2")["interval_s"])
         c.t += 61
-    assert intervals[0] == 60 and intervals[5] == 120 and intervals[10] == 180 and intervals[15] == 300
+    assert intervals[0] == 60 and intervals[5] == 120 and intervals[10] == 180
+    # 2026-10-14: an endpoint that has NEVER returned an event becomes a rare probe past the last empty step
+    assert intervals[15] == T.NEVER_EVENTS_PROBE_S
     p.fetch_fns["cs2"] = ok_fetch([ev()])
     p.poll_once("cs2")
     s = T._sched("cs2")
@@ -1140,3 +1142,53 @@ def test_a_transport_failure_is_not_called_a_rate_limit():
     c2.t += T.MIN_GAP_S + 1
     q.poll_once("cs2")
     assert T.feed_cause(q, "stale", c2.t).startswith("transport / server failure")
+
+
+def test_carrying_endpoint_resumes_when_the_cooldown_ends_within_the_same_budget():
+    """2026-10-14: after a 429 the endpoint that carries quotes is retried as soon as the persisted cooldown (Retry-After or
+    the jittered backoff) ends - not a full rate-limit step later; the gateway's lease / spacing / shared budget still
+    decide every request and the budget is unchanged."""
+    c = Clock()
+    p = T.Poller(fetch_fns={"csgo": ok_fetch()}, clock=c)
+    assert p.poll_once("csgo") is True                               # carries quotes
+    c.t += T.CARRY_MAX_INTERVAL_S
+    p.fetch_fns["csgo"] = err_fetch("rate_limited", 429)
+    assert p.poll_once("csgo") is False
+    cd = T.cooldown(c.t)
+    s = T._sched("csgo")
+    assert cd["active"] and s["next_at"] == max(cd["until"], c.t + T.MIN_GAP_S)    # the cooldown's end, no extra step
+    assert s["next_at"] - c.t < T.interval_for(0, 1)                                # earlier than the old RL step
+    assert p.due() is None                                           # inside the cooldown nothing is sent
+    c.t = s["next_at"] + 0.1
+    p.fetch_fns["csgo"] = ok_fetch()
+    assert T._sched("csgo")["next_at"] <= c.t and T.cooldown(c.t)["active"] is False
+    assert p.poll_once("csgo") is True                               # recovered on its own
+    assert T.SHARED_PER_MIN == 4                                     # the shared budget is unchanged
+
+
+def test_retry_after_is_honoured_for_the_carrying_endpoint():
+    c = Clock()
+    p = T.Poller(fetch_fns={"csgo": ok_fetch()}, clock=c)
+    p.poll_once("csgo")
+    c.t += 60
+    p.fetch_fns["csgo"] = err_fetch("rate_limited", 429, {"retry-after": "200"})
+    p.poll_once("csgo")
+    assert abs(T._sched("csgo")["next_at"] - (c.t + 200)) < 1       # never before Retry-After
+
+
+def test_an_endpoint_that_never_returned_an_event_becomes_a_rare_probe():
+    c = Clock()
+    p = T.Poller(fetch_fns={"cs2": ok_fetch([]), "csgo": ok_fetch([])}, clock=c)
+    p.poll_once("csgo")                                              # csgo once had events: never a rare probe
+    p.fetch_fns["csgo"] = ok_fetch([])
+    p.fetch_fns["csgo"] = ok_fetch([ev()])
+    c.t += 61
+    p.poll_once("csgo")
+    p.fetch_fns["csgo"] = ok_fetch([])
+    for _ in range(T.EMPTY_STEPS[-1][0] + 1):
+        c.t += 400
+        p.poll_once("cs2")
+        c.t += 30
+        p.poll_once("csgo")
+    assert T._sched("cs2")["interval_s"] == T.NEVER_EVENTS_PROBE_S   # never an event: probed every 30 min
+    assert T._sched("csgo")["interval_s"] == T.MAX_INTERVAL_S        # had events before: the normal empty steps

@@ -70,9 +70,9 @@ future. `projection_odds` and the Moneylines block (`board_block`) use the same 
 
 | availability | meaning |
 |---|---|
-| `endpoint_empty` | the endpoint's latest successful answer listed no events - earlier quotes are display / history only (no holding through empty answers). A feed blip (E1, below) while the last full answer listing the event is at most 30 min old |
+| `endpoint_empty` | the endpoint's latest successful answer listed no events - earlier quotes are display / history only (no holding through empty answers). A feed blip (E1, below) however long it lasts - an empty answer is not proof of withdrawal |
 | `not_in_latest_answer` | the event is absent from its endpoint's latest successful nonempty answer (checked by presence, even when re-matching fails) |
-| `stale` | the latest successful answer is older than 180 s (failures / cooldown). A failed request neither extends nor voids anything by itself. A feed blip (E1, below) while the answer listing the event is at most 30 min old; treated as cleared after that |
+| `stale` | the latest successful answer is older than 180 s (failures / cooldown). A failed request neither extends nor voids anything by itself. A feed blip (E1, below) however long it lasts (2026-10-14: time alone proves nothing) |
 | `started` | canonical start <= now; canonical start = the earliest of the HLTV start, the caller's start and the converted Thunderpick start |
 | `scope_unconfirmed` | the market type is not enabled (e.g. a main market other than "Match Winner") |
 | `draw_listed` | a draw price is listed |
@@ -87,10 +87,11 @@ Polymarket and back (audit: 19 of 608 saved HARD forecasts changed grade / stake
 - **Blip** = Thunderpick still holds an event for this exact match (linked + matched) but its quote is not current
   only because of the feed: availability `stale` (the latest successful answer is older than 180 s - in production
   recent 429s keep csgo at the 150 s carry cap and each cooldown pushes the next good poll past 180 s) or
-  `endpoint_empty` (an empty `[]` answer between full answers), while the answer that last listed the event is at most
-  `BLIP_MAX_S` old (30 min = the 429 cooldown cap), polling is on, no authentication stop and nothing but the feed
-  blocks the quote (draw / odds / market type / format / policy) - `projection_odds` returns `"blip": True`; or a
-  reader failure (exception) while the current run of failures is shorter than `BLIP_MAX_S`. Production 2026-10-13
+  `endpoint_empty` (an empty `[]` answer between full answers), whenever polling is on and nothing but the feed blocks
+  the quote (draw / odds / market type / format / policy) - with NO time limit (2026-10-14 owner: 30 minutes of stale or
+  empty answers prove no withdrawal; a 429 run, transport failures and an authentication stop are transport states, not
+  market evidence) - `projection_odds` returns `"blip": True`; or a reader failure (exception), however long it runs.
+  `feed_cause` names which state it is. Production 2026-10-13
   18:11 - 10-14 (d26e83e): 1,155 of 1,837 non-Thunderpick forecasts were such blips (907 `stale`, 248
   `endpoint_empty`). `market_odds.select` / `revalidate` then return the usual
   fallback selection (Polymarket / OddsPapi / no market - a member card can still show a temporary grade) marked:
@@ -102,9 +103,9 @@ Polymarket and back (audit: 19 of 608 saved HARD forecasts changed grade / stake
   card shows a notice, and the grade is never logged as a forecast.
 - **Not a blip** (a normal fallback, no mark, exactly as before): no event / unlinked / ambiguous, `policy_inactive`,
   `scope_unconfirmed`, `format_excluded`, `draw_listed`, `invalid_odds`, `started`, `not_in_latest_answer` (absent from a
-  newer full answer), the module unavailable - and an event no answer listed for longer than `BLIP_MAX_S`, polling off
-  or an authentication stop: the feed's matches are treated as cleared (`"blip": False`, the reason says "treated as
-  cleared (an outage, not a blip)"). A permanently dead or emptied Thunderpick is never "transient forever".
+  newer NONEMPTY answer - the only positive evidence; withdrawn, suspended or closed, the feed does not say which), the
+  module unavailable, and polling switched off here (our configuration). A dead feed is handled on the board's side: its
+  keep-last is bounded (HLTV_MAX_RETRIES), then the line is hidden - never regraded on fallback odds.
 - Re-checks never return a transient selection as the confirmed cached input (it is re-decided at every regrade, so it
   ends with the blip) and record it as `transient: ...`, never `changed`; the odds signature is unchanged (it describes
   the temporary input), so the quote that comes back after the blip is the same input as before it.
@@ -244,9 +245,10 @@ No `Retry-After` or `X-RateLimit-*` headers have been returned. 429s occur well 
   not a failure, and not proof that markets were removed), a 429 rate limit, a transport / server failure, an
   authentication stop, an event no longer in the latest answer (`not_in_latest_answer`: withdrawn, suspended or closed -
   the feed does not say which). Suspension is never inferred (the feed has no such flag).
-- **The 30-minute limit is operational only.** A quote not current for longer than `BLIP_MAX_S` (30 min) stops holding the
-  line's last Thunderpick grade and the line takes the normal fallback; the reason says "market status unknown (not
-  confirmed withdrawn)" - 30 minutes of empty answers is not treated as proof of withdrawal.
+- **No time limit.** An event Thunderpick still holds stays a blip however long its quote is not current (the earlier
+  30-minute `BLIP_MAX_S` cut-off was removed 2026-10-14: an empty feed for 30 minutes is not proof of withdrawal). Only
+  positive evidence (`not_in_latest_answer`) or polling switched off ends it; the board's bounded keep-last then hides the
+  line rather than regrading it on fallback odds.
 - **Fallback shown as it is.** The selected source and its own quote age (`provenance.quote_age_s`, from that source's
   retrieval time) are saved with every forecast; whether the selected odds affected the projection, the probability or
   the stake is recorded by the grader (`detail.market_effect`).

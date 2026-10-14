@@ -47,9 +47,10 @@ Eligibility (owner 2026-10-13: conservative) - a quote feeds projections ONLY wh
     unlinked | ambiguous
   E1 (owner 2026-10-13): "stale" and "endpoint_empty" of an event still held for the match are a feed BLIP
   (projection_odds "blip": True - market_odds marks its fallback transient, the board keeps the line's last grade)
-  while the answer that last listed the event is at most BLIP_MAX_S old, polling is on, no authentication stop and
-  nothing but the feed blocks the quote; longer = treated as cleared (blip False): a normal fallback, never "transient
-  forever". Every other state (no event, not_in_latest_answer, started, ...) is a normal fallback.
+  whenever polling is on and nothing but the feed blocks the quote - with no time limit (2026-10-14 owner: a stale or
+  empty feed for 30 minutes proves no withdrawal; feed_cause keeps successful-empty / 429 / transport / authentication
+  stop distinct). Every other state (no event, not_in_latest_answer - the event missing from a newer nonempty answer,
+  the only positive evidence -, started, polling switched off, ...) is a normal fallback.
   Earlier quotes stay for display with their OWN retrieval time and snapshot hash - never renewed.
   retrieved_at is OUR time (the request's send time - the answer is at least that old); the feed publishes no quote
   time, so source_updated_at is always None.
@@ -987,6 +988,8 @@ EMPTY_STEPS = ((5, 60), (10, 120), (15, 180))       # empty streak below N -> in
 RL_STEPS = (60, 120, 240, 300)
 CARRY_MAX_INTERVAL_S = 150                           # an endpoint returning events: never slower (quotes live 180 s)                      # 429s in the last R429_WINDOW_S: 0, 1, 2, 3+ -> interval
 MAX_INTERVAL_S = 300
+NEVER_EVENTS_PROBE_S = 30 * 60   # an endpoint that never returned an event (esport/cs2 - CS2 is on csgo): a rare probe, so
+                                 # the shared budget and spacing go to the endpoint that carries quotes (2026-10-14)
 MIN_GAP_S = 20
 QUOTE_MAX_AGE_S = int(2.5 * BASE_INTERVAL_S + 30)   # 180 s: a quote older than this is never current
 RESTORE_MAX_AGE_S = 3 * 3600                        # a restart restores the last answer for DISPLAY up to 3 h old
@@ -1134,7 +1137,13 @@ class Poller:
             sch["last_outcome"] = r.get("kind")
             sch["interval_s"] = interval_for(sch.get("empty_streak", 0), r.get("n429", 0))
             cd = r.get("cooldown") or {}
-            sch["next_at"] = max(cd.get("until", 0), now + sch["interval_s"])
+            if sch.get("last_nonempty_at") and not sch.get("empty_streak"):
+                # the endpoint carrying quotes resumes as soon as the cooldown ends (Retry-After or the jittered backoff,
+                # persisted) - not a full rate-limit step after it, which left quotes 240-300 s old (2026-10-14). The
+                # gateway's lease, spacing and shared budget still decide every request: the budget is unchanged.
+                sch["next_at"] = max(cd.get("until", 0), now + MIN_GAP_S)
+            else:
+                sch["next_at"] = max(cd.get("until", 0), now + sch["interval_s"])
             if r.get("kind") == "auth":
                 a = auth_block(self.db)                 # failures under the current key only
                 a.pop("previous_key_stop", None)
@@ -1170,6 +1179,8 @@ class Poller:
         sch["interval_s"] = interval_for(sch["empty_streak"], r.get("n429", 0))
         if not empty:   # the endpoint carrying quotes is polled before they expire (review 2026-10-13: 240 / 300 s under
             sch["interval_s"] = min(sch["interval_s"], CARRY_MAX_INTERVAL_S)   # 429s left them stale every cycle)
+        elif not sch.get("last_nonempty_at") and sch["empty_streak"] >= EMPTY_STEPS[-1][0]:
+            sch["interval_s"] = NEVER_EVENTS_PROBE_S     # never returned an event: a rare probe (still detects a change)
         sch["next_at"] = now + sch["interval_s"]
         _put(f"sched:{name}", sch, self.db)
         self._sched_mem[name] = dict(sch)
@@ -2231,9 +2242,7 @@ def _nf(reason, availability=None):
     return {"found": False, "reason": reason, "availability": availability}
 
 
-BLIP_MAX_S = COOLDOWN_MAX_S     # E1: past this the line stops holding its last Thunderpick grade (a normal fallback) - an
-                                # OPERATIONAL limit, not proof the market was withdrawn (2026-10-14 owner): status stays unknown
-BLIP_STATES = ("stale", "endpoint_empty")
+BLIP_STATES = ("stale", "endpoint_empty")      # E1: no time limit (2026-10-14 owner: time alone proves no withdrawal)
 
 
 def feed_cause(p, st, now_ts):
@@ -2261,12 +2270,14 @@ def _held(p, v, now_ts, mid=None):
     """E1 (owner 2026-10-13: a Thunderpick odds blip is treated like an HLTV blip). The event is still held for this match
     (matched) but its quote is not current only because of the feed: "stale" (the latest successful answer, which lists
     it, is older than QUOTE_MAX_AGE_S - 429 cooldowns between polls) or "endpoint_empty" (the latest successful answer
-    was an empty [] between full answers). A blip (blip=True - market_odds marks its fallback transient) while the
-    feed can come back: the answer that last listed the event is at most BLIP_MAX_S old, polling is on, a key is set, no
-    authentication stop, and nothing but the feed blocks the quote (draw / odds / market type / format / policy).
-    Otherwise blip=False, a normal fallback: an event no answer listed for BLIP_MAX_S is treated as cleared (a dead or
-    emptied feed is never 'transient forever'). The not-current quote is named with its OWN retrieval time and age
-    (quote_retrieved_at / quote_age_s) - recorded, never used."""
+    was an empty [] between full answers). A blip (blip=True - market_odds marks its fallback transient) whenever nothing
+    but the feed blocks the quote (draw / odds / market type / format / policy would block it anyway) and polling is on -
+    however long it lasts, and also while rate limited, failing or stopped by an authentication error (feed_cause names
+    which): 2026-10-14 owner - an empty or stale feed for 30 minutes proves no withdrawal. It ends only on positive
+    evidence (the event missing from a newer NONEMPTY answer: not_in_latest_answer, a normal fallback) or when polling is
+    switched off here. The board's keep-last is bounded on its side (then the line is hidden, never regraded on fallback
+    odds). The not-current quote is named with its OWN retrieval time and age (quote_retrieved_at / quote_age_s) -
+    recorded, never used."""
     st = v["availability"]
     e = v.get("event") or {}
     qt = _ts(e.get("retrieved_at"))
@@ -2278,12 +2289,10 @@ def _held(p, v, now_ts, mid=None):
     reason = v["reason"] + (f" (last quote {int(qage)} s old)" if qage is not None else "") + f" - cause: {cause}"
     if v.get("blocked_by"):           # Thunderpick would not price it anyway: not a blip
         return dict(_nf(f"{reason}; not usable anyway ({v['blocked_by']})", st), blip=False, **seen)
-    if qage is not None and qage <= BLIP_MAX_S and enabled() and autopoll() and not p.alert:
+    if enabled() and autopoll():
         return dict(_nf(reason, st), blip=True, **seen)
-    why = ("Thunderpick polling stopped" if not (enabled() and autopoll()) or p.alert else
-           f"no Thunderpick answer listed it for {int(qage // 60)} min" if qage is not None else "no Thunderpick answer")
-    return dict(_nf(f"{reason}; {why} - market status unknown (not confirmed withdrawn: the feed does not say); "
-                    "normal fallback", st), blip=False, **seen)
+    return dict(_nf(f"{reason}; Thunderpick polling is switched off here - normal fallback (market status unknown)", st),
+                blip=False, **seen)
 
 
 def projection_odds(team, opponent, start_iso, now=None, poller=None, canonical_fn=None, bo=None):

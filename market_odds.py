@@ -56,14 +56,15 @@ Thunderpick quote is recorded beside it with its OWN retrieval time and age - pr
 age_s, source_event_id, match_id, availability, used: False} - never as the input.
 Blip states (the event still held for the match): availability "stale" (the latest successful answer, which lists the
 event, is older than QUOTE_MAX_AGE_S - 429 cooldowns between polls, timeouts, 5xx) and "endpoint_empty" (an empty []
-answer between full answers) while the answer that last listed the event is at most thunderpick.BLIP_MAX_S old and
-nothing but the feed blocks the quote (the reader says so: "blip" in its answer; a reader without the key:
-TP_BLIP_STATES), and a reader failure (exception) while the current run of failures is shorter than BLIP_MAX_S.
+answer between full answers) whenever nothing but the feed blocks the quote (the reader says so: "blip" in its answer;
+a reader without the key: TP_BLIP_STATES), and a reader failure (exception) - with NO time limit (2026-10-14 owner: a
+stale or empty feed for 30 minutes proves no withdrawal; transport failure, rate limiting, successful empty answers and
+authentication stops stay distinct in provenance.tp_last_quote.feed_cause, none of them ends a blip).
 NOT blips - a normal fallback with no mark, exactly as before: no event / unlinked / ambiguous, policy_inactive,
-scope_unconfirmed, format_excluded, draw_listed, invalid_odds, started, not_in_latest_answer (absent from a newer full
-answer), the module unavailable, and an event no answer listed for longer than BLIP_MAX_S (or polling / authentication
-stopped) - treated as cleared: a permanently dead or emptied Thunderpick is never "transient forever". Consumers: the
-grade copies the flag
+scope_unconfirmed, format_excluded, draw_listed, invalid_odds, started, not_in_latest_answer (absent from a newer
+NONEMPTY answer - the only positive evidence), the module unavailable, and polling switched off here. A dead feed is
+handled on the board's side: its keep-last is bounded, then the line is hidden (never regraded on fallback odds).
+Consumers: the grade copies the flag
 (odds_transient) - the board keeps the line's last grade or hides it, the card shows a notice, the grade is never
 logged as a forecast. The odds signature is unchanged (it says what the temporary input is); revalidate never returns
 a transient object as the confirmed "same" input (no freezing: every re-check re-decides it) and records a blip as
@@ -95,8 +96,7 @@ _REVAL, _REVAL_LOCKS, _REVAL_LOCK = {}, {}, threading.Lock()
 # E1 (owner, 2026-10-13): a Thunderpick odds blip is treated like an HLTV blip - see the module doc
 TP_BLIP_STATES = ("stale", "endpoint_empty")   # a reader that does not say (no "blip" key): these states are blips
 BLIP_TEXT = "Thunderpick quote not current (feed blip) - treated like an outage"
-_TP_FAIL = {"since": None}     # the current run of Thunderpick reader failures (a blip only while it is shorter than
-                               # thunderpick.BLIP_MAX_S - a reader that keeps failing is not "transient forever")
+_TP_FAIL = {"since": None}     # the current run of Thunderpick reader failures (recorded; a failure is always a blip)
 
 
 def odds_policy():
@@ -285,20 +285,11 @@ def _finish(o, pv, selected, fallback_reason, tp_av, q, network, op_mode, mrev, 
     return copy.deepcopy(o)
 
 
-def _blip_max():
-    try:
-        import thunderpick
-        return float(getattr(thunderpick, "BLIP_MAX_S", 1800))
-    except Exception:              # noqa: BLE001
-        return 1800.0
-
-
 def _reader_failed():
-    """A Thunderpick reader failure (an exception - unknown, not a feed state) is a blip while the current run of
-    failures is shorter than BLIP_MAX_S; a reader that keeps failing is a normal fallback."""
-    now = time.time()
-    since = _TP_FAIL["since"] = _TP_FAIL["since"] or now
-    return now - since <= _blip_max()
+    """A Thunderpick reader failure (an exception - Thunderpick's state is unknown, not a feed state) is a blip however
+    long the failures run (2026-10-14 owner: time proves nothing); the run's start is recorded for the admin status."""
+    _TP_FAIL["since"] = _TP_FAIL["since"] or time.time()
+    return True
 
 
 def _fallback_text(reason, state):
