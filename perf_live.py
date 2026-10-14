@@ -16,44 +16,62 @@ _CACHE = {}
 # into the live tables - 19,590 matches first fetched 2026-10-12 21:27-21:35 and 2026-10-13 00:23-04:24 UTC - and read by
 # live grades from 04:26:15 UTC with no staged revision and no approval; since then the regular scan also takes every tier.
 # N0 restores the APPROVED INPUT POLICY (the pre-repair coverage) after an unintended activation - it is not a proven
-# accuracy improvement: the 23-match comparison was inconclusive (HLTV_COVERAGE.md). A match is IN N0 when it was first
-# fetched before the backfill began (or has no raw page at all - the 2026-10-11 seed), or, first fetched later and outside
-# the backfill windows, when both its teams are in the VRS top OLD_TOP_N of the dated team_rankings snapshot on or before
-# its first-fetch day (UTC), by HLTV team id: the pre-repair scan rule on STORED historical rankings (daily snapshots from
-# 2026-10-11 - never a later snapshot, never today's list for an older match). Everything else is OUT - the backfill, later
-# all-tier arrivals, a later arrival with no snapshot or no parsed teams, and any match not evaluated yet (FAIL CLOSED: an
-# inclusion list, so a match fetched after the last evaluation waits for the next one). ONLY the performance model's queries
-# read N0; the repaired data stays in storage, and settlement, display, the last-10 / H2H records and the stake checks read
-# the full tables - the grader uses MIXED revisions and every forecast records both (input_revision, picklog data_rev).
+# accuracy improvement: the 23-match comparison was inconclusive (HLTV_COVERAGE.md). It is a RECONSTRUCTED policy, not an
+# exact historical restoration (the pre-repair scanner logged no per-match eligibility):
+#   IN  - every match first fetched before the backfill began (or with no raw page - the 2026-10-11 seed): the KNOWN
+#         original set, kept exactly (production 2026-10-14: 8,597 matches, all discovered in scrape_queue before it);
+#       - a match first fetched later, DATED on or after NEW_FROM (a fresh result the regular scan lists), whose both teams
+#         are in the VRS top OLD_TOP_N of the dated team_rankings snapshot on or before its first-fetch day (UTC), by HLTV
+#         team id - the pre-repair scan rule on the scraper's own STORED rankings (daily copies of the VRS list its scan
+#         read live; never a later snapshot, never today's list for an older match).
+#   OUT - older-dated history first fetched after the start (the backfill and every later all-tier history, whichever
+#         window or job fetched it), lower-tier new matches, a later arrival with no snapshot on or before its day (missing
+#         snapshot = out), no parsed teams or no overview, and any match not evaluated yet (FAIL CLOSED: an inclusion list).
+# Not reproducible exactly: the old scan compared names (lowercased) against the live list AT SCAN TIME - this uses the
+# daily snapshot (intra-day ranking changes are invisible) and team ids (a team whose VRS and HLTV names differ was missed
+# by the old scan, not here). r2 (fetch windows) misjudged 5 matches on production: 4 fresh top-200 results the regular
+# scan fetched inside a backfill window (out) and 1 backfill-listed old match fetched after the windows (in); r3 decides by
+# the match's own date instead. ONLY the performance model's queries read N0; the repaired data stays in storage, and
+# settlement, display, the last-10 / H2H records and the stake checks read the full tables - the grader uses MIXED
+# revisions and every forecast records both (input_revision, picklog data_rev).
 INPUT_REV = "N0"
-INPUT_RULE = "n0-r2"      # the rule above (r1, 2026-10-13: exclusion list + backfill-only fallback - not fail-closed)
+INPUT_RULE = "n0-r3"      # the rule above (r1: exclusion list + backfill-only fallback; r2: fetch windows instead of dates)
 BACKFILL_FROM = "2026-10-12 21:27:00+00"
-BACKFILL_WINDOWS = (("2026-10-12 21:27:00+00", "2026-10-12 21:36:00+00"), ("2026-10-13 00:23:00+00", "2026-10-13 04:25:00+00"))
+NEW_FROM = "2026-10-12"   # the backfill's day: a match dated before it and first fetched after the start is history
 OLD_TOP_N = 200
-INCL_TTL = 10 * 60        # re-evaluated this often (one query set, ~0.3 s): a newly fetched match is out until then
-_W = {"from": BACKFILL_FROM, "w1a": BACKFILL_WINDOWS[0][0], "w1b": BACKFILL_WINDOWS[0][1],
-      "w2a": BACKFILL_WINDOWS[1][0], "w2b": BACKFILL_WINDOWS[1][1], "top": OLD_TOP_N}
-_IN_BACKFILL = "(l.f >= %(w1a)s AND l.f < %(w1b)s) OR (l.f >= %(w2a)s AND l.f < %(w2b)s)"
+INCL_TTL = 10 * 60        # re-evaluated this often (one query set, ~0.5 s): a newly fetched match is out until then
+_W = {"from": BACKFILL_FROM, "top": OLD_TOP_N, "new_from": NEW_FROM}
 _PRE_SQL = """
 SELECT mo.matchid FROM match_overview mo
 LEFT JOIN (SELECT matchid, min(fetched_at) AS f FROM raw_pages GROUP BY matchid) x ON x.matchid = mo.matchid
 WHERE x.f IS NULL OR x.f < %(from)s
 """
-_LATE_SQL = f"""
+# set-based (2026-10-14: the first form took 6.7-9.9 s on production - over the app's 5 s statement timeout, so N0 would
+# never have loaded: the snapshot lookup ran once per later arrival). The snapshot is resolved once per first-fetch DAY
+# (MATERIALIZED - otherwise the planner re-runs it per row), and only fresh later arrivals are judged, by one join each
+_LATE_SQL = """
 WITH first AS (SELECT matchid, min(fetched_at) AS f FROM raw_pages GROUP BY matchid HAVING min(fetched_at) >= %(from)s),
-     snaps AS (SELECT DISTINCT date FROM team_rankings),
-     late AS (SELECT l.matchid, l.f, (SELECT max(s.date) FROM snaps s WHERE s.date <= (l.f AT TIME ZONE 'UTC')::date) AS snap
-              FROM first l)
+     snaps AS MATERIALIZED (SELECT DISTINCT date FROM team_rankings),
+     days AS MATERIALIZED (SELECT x.d, (SELECT max(s.date) FROM snaps s WHERE s.date <= x.d) AS snap
+                           FROM (SELECT DISTINCT (f AT TIME ZONE 'UTC')::date AS d FROM first) x),
+     late AS (SELECT l.matchid, mo.date AS md, dd.snap
+              FROM first l JOIN days dd ON dd.d = (l.f AT TIME ZONE 'UTC')::date
+              LEFT JOIN match_overview mo ON mo.matchid = l.matchid),
+     cand AS (SELECT matchid, snap FROM late WHERE md >= %(new_from)s AND snap IS NOT NULL),
+     mt AS (SELECT DISTINCT m.matchid, m.teamid FROM matches m JOIN cand c ON c.matchid = m.matchid),
+     judged AS (SELECT c.matchid, count(DISTINCT mt.teamid) AS teams,
+                       count(DISTINCT mt.teamid) FILTER (WHERE r.rank <= %(top)s) AS top
+                FROM cand c LEFT JOIN mt ON mt.matchid = c.matchid
+                LEFT JOIN team_rankings r ON r.teamid = mt.teamid AND r.date = c.snap
+                GROUP BY c.matchid)
 SELECT l.matchid,
-       CASE WHEN ({_IN_BACKFILL}) THEN 'backfill'
+       CASE WHEN l.md IS NULL OR l.md < %(new_from)s THEN 'history'
             WHEN l.snap IS NULL THEN 'no_snapshot'
-            WHEN NOT EXISTS (SELECT 1 FROM matches m WHERE m.matchid = l.matchid) THEN 'no_teams'
-            WHEN EXISTS (SELECT 1 FROM (SELECT DISTINCT teamid FROM matches m WHERE m.matchid = l.matchid) t
-                         WHERE NOT EXISTS (SELECT 1 FROM team_rankings r WHERE r.teamid = t.teamid AND r.rank <= %(top)s
-                                           AND r.date = l.snap)) THEN 'outside_top'
+            WHEN coalesce(j.teams, 0) = 0 THEN 'no_teams'
+            WHEN j.top < j.teams THEN 'outside_top'
             ELSE 'in' END AS why,
        l.snap
-FROM late l
+FROM late l LEFT JOIN judged j ON j.matchid = l.matchid
 """
 _SNAP_SQL = "SELECT date, count(*) FROM team_rankings GROUP BY date ORDER BY date"
 _IN = {"val": None, "next": 0.0, "loading": False, "error": None, "loaded_at": None, "stale_since": None}
@@ -74,7 +92,7 @@ def _load_n0():
             snaps = [(str(d), int(n)) for d, n in cur.fetchall()]
     finally:
         con.close()
-    counts = {k: 0 for k in ("in", "backfill", "outside_top", "no_snapshot", "no_teams")}
+    counts = {k: 0 for k in ("in", "history", "outside_top", "no_snapshot", "no_teams")}
     for _, w, _s in late:
         counts[w] = counts.get(w, 0) + 1
     sha = hashlib.sha256(json.dumps([sorted(pre), sorted((m, w) for m, w, _ in late)]).encode()).hexdigest()[:12]
@@ -137,7 +155,7 @@ def input_revision():
     if v is None:
         return None
     c, sn = v["counts"], v.get("snapshots_used") or []
-    rev = (f"{INPUT_REV}/{v['rule']}:pre={len(v['pre'])};late_in={len(v['late_in'])};backfill_out={c.get('backfill', 0)};"
+    rev = (f"{INPUT_REV}/{v['rule']}:pre={len(v['pre'])};late_in={len(v['late_in'])};history_out={c.get('history', 0)};"
            f"late_out={c.get('outside_top', 0)};no_snapshot={c.get('no_snapshot', 0)};no_teams={c.get('no_teams', 0)};"
            f"snapshots={sn[0] + '..' + sn[-1] if sn else '-'};sha={v['sha']}")
     if _IN["stale_since"]:
@@ -148,7 +166,8 @@ def input_revision():
 def input_status():
     v = _IN["val"] or {}
     return {"revision": INPUT_REV, "rule": INPUT_RULE, "pinned": input_revision(), "stale": bool(_IN["stale_since"]),
-            "backfill_windows": BACKFILL_WINDOWS, "old_top_n": OLD_TOP_N, "counts": v.get("counts"),
+            "policy": "reconstructed pre-repair input policy (not an exact historical restoration)",
+            "backfill_from": BACKFILL_FROM, "new_from": NEW_FROM, "old_top_n": OLD_TOP_N, "counts": v.get("counts"),
             "matches_in_n0": (len(v["pre"]) + len(v["late_in"])) if v else None,
             "ranking_snapshots": v.get("snapshots"), "snapshots_used": v.get("snapshots_used"),
             "evaluated_at": _IN["loaded_at"], "last_error": _IN["error"],
