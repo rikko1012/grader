@@ -1,8 +1,11 @@
 """One match identity for EVALUATION (learning ledger units, recap dedup) - 2026-10-12 audit: the pick log stored the same
 match under a BO3.gg slug and under hltv-<id> (359 of 1,808 board rows), so it was counted twice. Original records keep
 their slug; this key only groups them. Not used by grading."""
+import json
 import re
 from datetime import datetime, timezone
+
+RULE_VERSION = 3      # 2 = slug pairing (2026-10-12); 3 = + settlement's canonical HLTV match (2026-10-13) - learning re-keys on a change
 
 _AFFIX = re.compile(r"^(team)\s+|\s+(esports|e-sports|esport|gaming|club|team)$", re.I)
 
@@ -61,4 +64,21 @@ def assign(rows):
             s = str(r.get("match_slug") or "")
             if s in link:
                 out[r["id"]] = link[s]
+    # 2026-10-13 audit (rule 3): the SAME identity settlement used - a BO3.gg slug whose settled rows name exactly one HLTV
+    # match, linked by matchid's canonical match (canonical team ids + verified aliases), is that match
+    canon = {}
+    for r in rows:
+        s = str(r.get("match_slug") or "")
+        if s.startswith("hltv-"):
+            continue
+        try:
+            res = r.get("result") if isinstance(r.get("result"), dict) else json.loads(r.get("result") or "{}")
+        except (TypeError, ValueError):
+            res = {}
+        if (res or {}).get("identity") == "canonical match" and res.get("hltv_match"):
+            canon.setdefault(s, set()).add(int(res["hltv_match"]))
+    for r in rows:
+        ids = canon.get(str(r.get("match_slug") or ""))
+        if ids and len(ids) == 1:
+            out[r["id"]] = f"hltv:{next(iter(ids))}"
     return out
