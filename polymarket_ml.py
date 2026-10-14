@@ -242,8 +242,9 @@ def normalize(raw):
         for i in range(2):
             book = books.get(tokens[i])
             q = book_quote(book) if book else gamma_quote(m, i)
-            if not book and raw.get("book_error"):
-                q["depth"]["error"] = raw["book_error"]
+            if not book and raw.get("book_error"):   # member-visible (the platform block): the cause only (A4)
+                from moneyline import member_error
+                q["depth"]["error"] = member_error(raw["book_error"])
             last = None if last0 is None or last0 <= 0 else (last0 if i == 0 else round(1 - last0, 4))
             q.update({
                 "platform": PLATFORM, "event_id": listing["event_id"], "market_id": str(m.get("id")),

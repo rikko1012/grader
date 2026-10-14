@@ -92,8 +92,12 @@ def rows_from(records):
 
 
 # ---------------------------------------------------------------- direct reads (PrizePicks' partner API, JSON:API)
-_MARKETS = {"headshot": "headshots", "kill": "kills"}
+_MARKETS = {"headshot": "headshots", "headshots": "headshots", "kill": "kills", "kills": "kills"}
 _MAP_SCOPE = re.compile(r"\s+maps?\s*\d+(?:\s*[-+]\s*\d+)*\s*$", re.I)
+# 2026-10-13 audit C14: the whole stat name, exactly - "MAP(S) <maps> Kills|Headshots" (maps "1", "1-2", "1+2", "1&2",
+# "1-3") or the bare stat; "AWP Kills", "Opening Kills", "Kills + Assists", "Headshot Kills" are other stats
+_STAT = re.compile(r"^(?:maps?\s*(\d)((?:\s*[-+&]\s*\d)*)\s+)?([a-z]+)$")
+_SKIPPED = set()                 # stat names not graded (printed once per process)
 
 
 def _plain(text):
@@ -103,15 +107,20 @@ def _plain(text):
 
 
 def market_of(stat):
-    """"MAPS 1-2 Kills" -> ("kills", "1-2"); "MAP 1 Headshots" -> ("headshots", "1"); other stats -> (None, maps)."""
-    text = _plain(stat).lower()
+    """"MAPS 1-2 Kills" -> ("kills", "1-2"); "MAP 1 Headshots" -> ("headshots", "1"); other stats -> (None, maps).
+    Exact stat names only (2026-10-13 audit C14 - never a substring: "MAPS 1-2 AWP Kills" is not total kills, and
+    "MAPS 1&2" is Maps 1-2, never Map 1); a stat that is not read is printed once and never graded."""
+    text = " ".join(_plain(stat).lower().split())
+    m = _STAT.match(text)
     maps = ""
-    m = re.search(r"maps?\s*(\d)((?:\s*[-+]\s*\d)*)", text)
-    if m:
+    if m and m.group(1):
         nums = [m.group(1)] + re.findall(r"\d", m.group(2))
         maps = nums[0] if len(nums) == 1 else f"{nums[0]}-{nums[-1]}"
-        text = text[:m.start()] + text[m.end():]
-    return next((v for k, v in _MARKETS.items() if k in text), None), maps
+    market = _MARKETS.get(m.group(3)) if m else None
+    if market is None and text and text not in _SKIPPED and len(_SKIPPED) < 500:
+        _SKIPPED.add(text)
+        print(f"[prizepicks] stat not graded: {stat!r}", flush=True)
+    return market, maps
 
 
 def parse_direct(body, seen):
@@ -195,18 +204,26 @@ def enrich(records, db_records):
     return records
 
 
-def _history(rows, now):
-    """Append what changed since the last observed board: open / move / id change / removed (still upcoming)."""
+def _copy_snapshot():
+    """The last board read from the scraper's copy (next to SNAPSHOT, the last direct board)."""
+    return SNAPSHOT.with_name(SNAPSHOT.stem + "_copy" + SNAPSHOT.suffix)
+
+
+def _history(rows, now, snap=None, read=None):
+    """Append what changed since the last observed board of the same kind of read (snap: the direct board by default):
+    open / move / id change / removed (still upcoming)."""
+    snap = snap or SNAPSHOT
     with _HLOCK:
         try:
-            last = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+            last = json.loads(snap.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             last = {}
         cur, events = {}, []
         at = datetime.fromtimestamp(now, timezone.utc).isoformat(timespec="seconds")
         base = lambda r: {"at": at, "book": "prizepicks", "market": r["market"], "id": r["market_id"], "line": r["line"],
                           "odds_type": r["odds_type"], "player": r["player"], "team": r["team"], "opponent": r["opponent"],
-                          "start": r["start"], "prop": r["prop"], "scope": r["scope"], "src_seen": r.get("seen_at")}
+                          "start": r["start"], "prop": r["prop"], "scope": r["scope"], "src_seen": r.get("seen_at"),
+                          **({"read": read} if read else {})}
         for r in rows:
             cur[r["market"]] = {"id": r["market_id"], "line": r["line"], "start": r["start"], "row": base(r)}
             p = last.get(r["market"])
@@ -219,16 +236,17 @@ def _history(rows, now):
                     events.append(dict(base(r), event="id_change", old_id=p["id"]))
         for k, p in last.items():
             if k not in cur and (p.get("start") or "") > at:
-                events.append(dict(p.get("row") or {}, at=at, event="removed"))     # pulled / suspended before the start
+                events.append(dict(p.get("row") or {}, at=at, event="removed",      # pulled / suspended before the start
+                                   **({"read": read} if read else {})))
         try:
             HISTORY.parent.mkdir(parents=True, exist_ok=True)
             if events:
                 with HISTORY.open("a", encoding="utf-8") as f:
                     for e in events:
                         f.write(json.dumps(e, default=str) + "\n")
-            tmp = SNAPSHOT.with_suffix(".tmp")
+            tmp = snap.with_suffix(".tmp")
             tmp.write_text(json.dumps(cur, default=str), encoding="utf-8")
-            tmp.replace(SNAPSHOT)
+            tmp.replace(snap)
         except OSError:
             pass
         return events
@@ -279,16 +297,39 @@ def _read_db():
     return records, status
 
 
+def _safe_err(e, db=False):
+    """A read failure in member words (2026-10-13 audit A4: the feed status showed the partner API's host / port and the
+    database host): the exception type and a generic cause; the full text is kept for admin (status_detail)."""
+    if db:
+        return hltv.err_text(e)
+    import moneyline
+    return moneyline.member_error(f"{type(e).__name__}: {e}")
+
+
+def _scraper_err(text):
+    if not text:
+        return text
+    import moneyline
+    return moneyline.member_error(text)
+
+
+def status_detail():
+    """Admin: the last read failures in full (never member-visible) and the scraper copy's own error text."""
+    return dict(_S.get("detail") or {}, scraper_error=(_S["status"] or {}).get("error"))
+
+
 def _load():
     now = time.time()
     records = status = None
     direct_err = db_err = None
+    detail = {}
     try:                                         # 1. PrizePicks itself, like Underdog
         body = _direct()
         records = parse_direct(body, datetime.fromtimestamp(now, timezone.utc))
         status = {"ok": True, "lines": len(records), "source": DIRECT_SOURCE, "error": None, "checked_at": now, "last_ok": now}
     except Exception as e:
-        direct_err = f"{type(e).__name__}: {str(e)[:160]}"
+        direct_err = _safe_err(e)
+        detail["direct"] = f"{type(e).__name__}: {str(e)[:300]}"
     db_records = []
     if hltv.dsn():                               # 2. the scraper's copy: line history, or the whole board as backup
         try:
@@ -298,7 +339,9 @@ def _load():
                 status = dict(db_status, source=f"{db_status.get('source') or 'prizepicks'} via the HLTV scraper "
                                                 f"(direct read failed: {direct_err})")
         except Exception as e:
-            db_err = f"{type(e).__name__}: {str(e)[:160]}"
+            db_err = _safe_err(e, db=True)
+            detail["database"] = f"{type(e).__name__}: {str(e)[:300]}"
+    _S["detail"] = dict(detail, at=now)
     try:
         if records is None:
             raise RuntimeError(f"PrizePicks: direct read failed ({direct_err}); scraper copy unavailable ({db_err or 'no database'})")
@@ -307,8 +350,13 @@ def _load():
         rows = rows_from(records)
         prev = _S["status"] or {}
         _S.update(at=now, rows=rows, status=status, error=None)
+        ev = []
         if status.get("ok"):
-            ev = _history(rows, now)
+            # the line history diffs like with like (2026-10-13 audit D12: the hourly scraper copy diffed against the
+            # last DIRECT board logged false 'removed' / 'move' entries): direct reads against the last direct board,
+            # scraper-copy reads against the last scraper copy
+            direct = status.get("source") == DIRECT_SOURCE
+            ev = _history(rows, now, None if direct else _copy_snapshot(), "direct" if direct else "scraper copy")
             new_read = status.get("last_ok") != prev.get("last_ok")
             # every new read of the scraper's copy (about hourly); direct reads (every few minutes) when something
             # changed, the source switched, or at least every LOG_EVERY
@@ -358,7 +406,8 @@ def board(now=None, wait=False):
     return {"state": state, "at": st.get("last_ok"), "checked_at": st.get("checked_at"), "lines": st.get("lines"),
             "ingested_at": _S["at"] or None,              # when Scout last took a read in
             "source": st.get("source"),
-            "error": _S["error"] or (st.get("error") if state in ("failed", "stale") else None),
+            # the scraper's own error text is shown by its cause only (A4: it can carry hosts / ports)
+            "error": _S["error"] or (_scraper_err(st.get("error")) if state in ("failed", "stale") else None),
             "rows": [dict(r, stale=state != "ok") for r in _S["rows"]]}
 
 
