@@ -452,9 +452,11 @@ def run_player(b, name, args):
     roster = []
     if team.get("slug"):
         td = {}
-        for slug in dict.fromkeys(x for x in (team["slug"], norm(team.get("name"))) if x):
+        # tslug, never `slug` (2026-10-14 audit: the loop overwrote the PLAYER's slug, so window_stats below read the team
+        # slug's stats - the AWP hit-group test ran on the wrong data)
+        for tslug in dict.fromkeys(x for x in (team["slug"], norm(team.get("name"))) if x):
             try:                                   # BO3.gg sometimes renames a team's page (mousesports -> mouz)
-                td = b.team(slug)
+                td = b.team(tslug)
                 break
             except Exception:
                 continue
@@ -2426,8 +2428,13 @@ def _twins(hl_by, rows_by, quarantine=None):
             if sum(1 for b, _ in kp if b == a) == 1 and sum(1 for _, y in kp if y == x) == 1:
                 out[x] = a
         if quarantine is not None:
+            # a duplicate needs an HLTV series to duplicate: a leftover whose every HLTV look-alike is already paired (on its
+            # complete record) with another BO3.gg series is a different provider series - a genuine rematch HLTV lacks - and
+            # stays; one that may still be an unpaired HLTV series' twin is quarantined (2026-10-14 harness finding)
+            paired = {out[y] for y in xs if y in out}
             for x in xs - set(out):
-                quarantine[x] = "look-alike of an HLTV series (same day, teams and Maps 1-2) - not provably the same or another series"
+                if any(a not in paired for a in hs_of.get(x, ())):
+                    quarantine[x] = "look-alike of an HLTV series (same day, teams and Maps 1-2) - not provably the same or another series"
     return out
 
 

@@ -59,8 +59,12 @@ def test_ambiguous_look_alikes_pair_only_on_complete_records(monkeypatch):
     b3 = _s(1, NM, (20, 21), game0=100) + _s(2, NM, (11, 12), game0=200)
     hl = _s("hltv-1", NM, (20, 21), hltv=True)                 # one HLTV series, identical kills to BO3.gg series 1
     totals, q = _last10(monkeypatch, b3, hl)
-    assert totals == [41] and set(q) == {2}                   # 1 pairs on its complete record; 2 is a look-alike: quarantined
-    assert "look-alike" in q[2]
+    # 1 pairs with HLTV on its complete record; 2 is another provider series whose only HLTV look-alike is taken by 1 -
+    # a genuine rematch HLTV lacks: kept, never quarantined (2026-10-14 harness finding: it was lost)
+    assert totals == [23, 41] and not q
+    hl2 = _s("hltv-1", NM, (19, 22), hltv=True)                # HLTV's kills match neither: which one is its twin is unknown
+    totals, q = _last10(monkeypatch, b3, hl2)
+    assert totals == [41] and set(q) == {1, 2} and "look-alike" in q[2]   # both quarantined, HLTV's series counts once
 
 
 def test_twins_never_guess_on_names_or_scorelines_alone():

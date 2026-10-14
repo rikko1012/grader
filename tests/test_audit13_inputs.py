@@ -117,18 +117,34 @@ def _aliases(monkeypatch, table):
 def test_c1_spellings_merge_only_through_a_verified_alias(monkeypatch):
     d = (date.today() - timedelta(days=3)).isoformat()
     maps = [("de_nuke", 24, False), ("de_mirage", 22, False)]
-    b3 = _series(555, d, "FaZe Clan", maps, (14, 13))
-    hl = _series("hltv-999", d, "FaZe", maps, (15, 13), hltv_row=True)
+    # 'Overtake' / 'Overtake Sector' differ by more than an org affix: only a verified alias makes them one team
+    b3 = _series(555, d, "Overtake", maps, (14, 13))
+    hl = _series("hltv-999", d, "Overtake Sector", maps, (15, 13), hltv_row=True)
     monkeypatch.setattr(cs2_scout, "_hltv_series", lambda pb, back_days=None: [dict(r) for r in hl])
     pb = {"recent_maps": b3, "_older_maps": [], "player": {"nick": "x"}}
     form = lambda: cs2_scout.recent_form(cs2_scout._form_rows(pb, "kills", keep_n=40, back_days=365), 0.7, 26.5)
     assert form()["matches"] == 2              # the same scoreline under two names proves nothing: not merged
-    _aliases(monkeypatch, {"faze": "team:6667", "fazeclan": "team:6667", "x": "team:1"})     # the verified alias
+    _aliases(monkeypatch, {"overtake": "team:6667", "overtakesector": "team:6667", "x": "team:1"})     # the verified alias
     rf = form()
     assert rf["matches"] == 1 and rf["series"][0]["total"] == 28 and rf["series"][0]["source"] == "HLTV"
     assert (rf["overs"], rf["decided"]) == (1, 1)
-    h = cs2_scout.h2h(cs2_scout._hltv_h2h({}, [dict(r) for r in b3], "FaZe Clan"), "FaZe Clan", 26.5)
+    h = cs2_scout.h2h(cs2_scout._hltv_h2h({}, [dict(r) for r in b3], "Overtake"), "Overtake", 26.5)
     assert [s["total"] for s in h["series"]] == [28]                       # one meeting, HLTV's numbers
+
+
+def test_c1_org_affix_clan_is_the_same_team_everywhere(monkeypatch):
+    # 2026-10-14 harness finding: 'Clan' is an org affix in matchid's identity, but not in hltv's variants - BO3.gg's
+    # 'FaZe Clan' fell out of the rank band; one rule now (hltv._TEAM_AFFIX = matchid._AFFIX)
+    import hltv
+    assert hltv.team_name_variants("FaZe Clan")[-1] == hltv.team_name_variants("FaZe")[0] == "faze"
+    d = (date.today() - timedelta(days=3)).isoformat()
+    maps = [("de_nuke", 24, False), ("de_mirage", 22, False)]
+    b3 = _series(556, d, "FaZe Clan", maps, (14, 13))
+    hl = _series("hltv-998", d, "FaZe", maps, (15, 13), hltv_row=True)
+    monkeypatch.setattr(cs2_scout, "_hltv_series", lambda pb, back_days=None: [dict(r) for r in hl])
+    pb = {"recent_maps": b3, "_older_maps": [], "player": {"nick": "x"}}
+    rf = cs2_scout.recent_form(cs2_scout._form_rows(pb, "kills", keep_n=40, back_days=365), 0.7, 26.5)
+    assert rf["matches"] == 1 and rf["series"][0]["source"] == "HLTV"
 
 
 def test_c1_identical_rematches_are_never_guessed(monkeypatch):
@@ -528,7 +544,8 @@ def _sb_row(pid, slug, team_id, kills):
 
 def test_a12_role_rank_ignores_benched_players(monkeypatch):
     monkeypatch.setitem(cs2_scout.EVENT_TYPES, "slug:ev", "online")
-    monkeypatch.setattr(cs2_scout, "window_stats", lambda b, slug, days: {})
+    seen = []
+    monkeypatch.setattr(cs2_scout, "window_stats", lambda b, slug, days: seen.append(slug) or {})
     active = [(7, "tester"), (11, "a"), (12, "b"), (13, "c"), (14, "d")]
     kills = {7: 21, 15: 26, 11: 17, 12: 17, 13: 16, 14: 16}
     ms, sb = [], {}
@@ -554,6 +571,9 @@ def test_a12_role_rank_ignores_benched_players(monkeypatch):
                                                                team_hint=None))
     assert pb["benched"] == ["starbench"]                  # still shown as benched
     assert sorted(pb["teammates"]) == ["a", "b", "c", "d"] and sorted(pb["teammate_ratings"]) == ["a", "b", "c", "d"]
+    # 2026-10-14 harness finding: the team-page loop overwrote the PLAYER's slug, so window_stats (the AWP hit-group
+    # test) read the team page's slug - always the player's own now
+    assert seen and set(seen) == {"tester"}
 
 
 # ---------------------------------------------------------------- A13: a Polymarket-found match keeps its format

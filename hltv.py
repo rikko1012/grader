@@ -741,7 +741,8 @@ def _player_ids(cur, nick, team):
     return [best[0]]
 
 
-_TEAM_AFFIX = re.compile(r"^(team)\s+|\s+(esports|e-sports|esport|gaming|club|team)$", re.I)
+# the same org affixes as matchid._AFFIX (2026-10-14 audit: one team identity rule - BO3.gg's 'FaZe Clan' is HLTV 'FaZe')
+_TEAM_AFFIX = re.compile(r"^(team)\s+|\s+(esports|e-sports|esport|e-sport|gaming|club|clan|team)$", re.I)
 
 
 def team_key(name):
