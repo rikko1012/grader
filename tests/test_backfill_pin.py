@@ -16,9 +16,10 @@ class _DB:
     def __init__(self):
         self.calls, self.fail_on, self.fail, self.slow = [], None, None, 0.0
         self.pre = [(100,), (300,)]                                               # first fetched before the backfill / seed
-        self.late = [(101, "history", None), (202, "outside_top", SNAP), (303, "in", SNAP), (404, "no_snapshot", None)]
+        self.late = [(101, "history", None), (202, "outside_top", SNAP), (303, "in", SNAP), (404, "no_snapshot", None),
+                     (707, "no_raw_page", None)]                             # a row of another source, no raw page
         self.snaps = [(date(2026, 10, 11), 350), (SNAP, 351)]
-        self.player = [(D, 20, 24, 10, False, 10, m) for m in (100, 101, 202, 300, 303, 404, 505)]   # 505: never evaluated
+        self.player = [(D, 20, 24, 10, False, 10, m) for m in (100, 101, 202, 300, 303, 404, 505, 707)]   # 505: never evaluated
         self.opp = [(D, 70, 24, m) for m in (100, 101, 202, 505)]
         self.rounds = [(D, 13, 9, m) for m in (100, 202)]
 
@@ -88,11 +89,11 @@ def _evals(d):
 
 def test_only_n0_rows_reach_the_projection(db):
     ids, rows = perf_live.player_maps("x", "y", "2025-08-01")
-    assert ids == [7] and len(rows) == 3                     # 100, 300 (before the backfill), 303 (passed the old rule)
+    assert ids == [7] and len(rows) == 3                     # 100, 300 (before the backfill), 303 (passed the old rule); 707 out
     tid, om = perf_live.opp_maps("z", "2025-08-01")
     assert tid == 55 and len(om) == 1                         # 100 only (101 backfill, 202 all-tier, 505 not evaluated)
     rev = perf_live.input_revision()
-    assert rev.startswith("N0/n0-r3:pre=2;late_in=1;history_out=1;late_out=1;no_snapshot=1;no_teams=0;")
+    assert rev.startswith("N0/n0-r4:pre=2;late_in=1;history_out=1;late_out=1;no_snapshot=1;no_teams=0;no_raw_page=1;")
     assert "snapshots=2026-10-13..2026-10-13" in rev and "STALE" not in rev
     st = perf_live.input_status()
     assert st["ranking_snapshots"] == [("2026-10-11", 350), ("2026-10-13", 351)] and st["stale"] is False
@@ -133,11 +134,11 @@ def test_stale_evaluation_is_used_marked_and_keeps_new_matches_out(db):
 def test_stored_verified_copy_after_restart_and_never_another_rule(db):
     good = perf_live._load_n0()
     db.fail = hltv.Unavailable("HLTV database unreachable")
-    hltv_store.save(("perf_n0", "N0", "n0-r3"), dict(good, rule="n0-r2"))      # an older rule's copy: never used
+    hltv_store.save(("perf_n0", "N0", "n0-r4"), dict(good, rule="n0-r3"))      # an older rule's copy: never used
     with pytest.raises(hltv.Unavailable):
         perf_live.n0()
     hltv_store._LAST.clear()
-    hltv_store.save(("perf_n0", "N0", "n0-r3"), good)
+    hltv_store.save(("perf_n0", "N0", "n0-r4"), good)
     perf_live._IN.update(val=None, next=0.0)
     assert perf_live.n0()["late_in"] == frozenset({303}) and "STALE" in perf_live.input_revision()
 
@@ -147,11 +148,18 @@ def test_cache_and_stored_copy_carry_the_revision_and_rule(db):
     hltv_store.save(("perf", "p", hltv._norm("x"), hltv._norm("y"), since), ([7], [("full tables",)] * 9))     # pre-pin copy
     hltv_store.save(("perf", "p", hltv._norm("x"), hltv._norm("y"), since, "N0"), ([7], [("rule r1",)] * 9))  # r1 copy
     perf_live.player_maps("x", "y", since)
-    assert all(k[-2:] == ("N0", "n0-r3") for k in perf_live._CACHE)
+    assert all(k[-2:] == ("N0", "n0-r4") for k in perf_live._CACHE)
     perf_live._CACHE.clear()
     db.fail = hltv.Unavailable("HLTV database unreachable")
     ids, rows = perf_live.player_maps("x", "y", since)        # the outage serves THIS revision's own answer
     assert len(rows) == 3 and rows[0][1] == 20
+
+
+def test_a_match_without_a_raw_page_is_never_the_original_set():
+    # 2026-10-14 post-deploy check: r3 took "no raw page" as the 2026-10-11 seed, but the seed has raw pages - the only such
+    # rows were a new source's ('cito'), and they entered N0 without the rule
+    assert "IS NULL" not in perf_live._PRE_SQL and "x.f < %(from)s" in perf_live._PRE_SQL
+    assert "'no_raw_page'" in perf_live._LATE_SQL and "NOT EXISTS (SELECT 1 FROM raw_pages" in perf_live._LATE_SQL
 
 
 def test_one_evaluation_for_700_members(db):
@@ -198,4 +206,4 @@ def test_due_evaluation_refreshed_by_one_caller_others_keep_it(db):
 def test_projection_names_the_answers_and_the_revision_it_used(db):
     out = perf_live.projection("x", "y", "z", False, day=D.toordinal() + 5)
     assert out["hltv_data"]["player_maps"]["state"] == "live" and out["hltv_data"]["opp_maps"]["state"] == "live"
-    assert out["hltv_data"]["input_revision"].startswith("N0/n0-r3:") and not out["hltv_data"]["input_revision_stale"]
+    assert out["hltv_data"]["input_revision"].startswith("N0/n0-r4:") and not out["hltv_data"]["input_revision_stale"]

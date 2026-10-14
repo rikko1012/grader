@@ -18,15 +18,18 @@ _CACHE = {}
 # N0 restores the APPROVED INPUT POLICY (the pre-repair coverage) after an unintended activation - it is not a proven
 # accuracy improvement: the 23-match comparison was inconclusive (HLTV_COVERAGE.md). It is a RECONSTRUCTED policy, not an
 # exact historical restoration (the pre-repair scanner logged no per-match eligibility):
-#   IN  - every match first fetched before the backfill began (or with no raw page - the 2026-10-11 seed): the KNOWN
-#         original set, kept exactly (production 2026-10-14: 8,597 matches, all discovered in scrape_queue before it);
+#   IN  - every match first fetched before the backfill began: the KNOWN original set, kept exactly (production
+#         2026-10-14: 8,597 matches, all discovered in scrape_queue before it; the 2026-10-11 seed has raw pages too);
 #       - a match first fetched later, DATED on or after NEW_FROM (a fresh result the regular scan lists), whose both teams
 #         are in the VRS top OLD_TOP_N of the dated team_rankings snapshot on or before its first-fetch day (UTC), by HLTV
 #         team id - the pre-repair scan rule on the scraper's own STORED rankings (daily copies of the VRS list its scan
 #         read live; never a later snapshot, never today's list for an older match).
 #   OUT - older-dated history first fetched after the start (the backfill and every later all-tier history, whichever
 #         window or job fetched it), lower-tier new matches, a later arrival with no snapshot on or before its day (missing
-#         snapshot = out), no parsed teams or no overview, and any match not evaluated yet (FAIL CLOSED: an inclusion list).
+#         snapshot = out), no parsed teams or no overview, a match with NO raw page (r4, 2026-10-14 post-deploy check: r3
+#         counted those as the seed, but the seed has raw pages - the only ones were 3 rows of a new source 'cito' dated
+#         that day, discovered 22:24 UTC, which r3 let in without the rule), and any match not evaluated yet (FAIL
+#         CLOSED: an inclusion list).
 # Not reproducible exactly: the old scan compared names (lowercased) against the live list AT SCAN TIME - this uses the
 # daily snapshot (intra-day ranking changes are invisible) and team ids (a team whose VRS and HLTV names differ was missed
 # by the old scan, not here). r2 (fetch windows) misjudged 5 matches on production: 4 fresh top-200 results the regular
@@ -35,7 +38,8 @@ _CACHE = {}
 # settlement, display, the last-10 / H2H records and the stake checks read the full tables - the grader uses MIXED
 # revisions and every forecast records both (input_revision, picklog data_rev).
 INPUT_REV = "N0"
-INPUT_RULE = "n0-r3"      # the rule above (r1: exclusion list + backfill-only fallback; r2: fetch windows instead of dates)
+INPUT_RULE = "n0-r4"      # the rule above (r1: exclusion list + backfill-only fallback; r2: fetch windows instead of dates;
+                          # r3: a match with no raw page counted as the seed)
 BACKFILL_FROM = "2026-10-12 21:27:00+00"
 NEW_FROM = "2026-10-12"   # the backfill's day: a match dated before it and first fetched after the start is history
 OLD_TOP_N = 200
@@ -44,7 +48,7 @@ _W = {"from": BACKFILL_FROM, "top": OLD_TOP_N, "new_from": NEW_FROM}
 _PRE_SQL = """
 SELECT mo.matchid FROM match_overview mo
 LEFT JOIN (SELECT matchid, min(fetched_at) AS f FROM raw_pages GROUP BY matchid) x ON x.matchid = mo.matchid
-WHERE x.f IS NULL OR x.f < %(from)s
+WHERE x.f < %(from)s
 """
 # set-based (2026-10-14: the first form took 6.7-9.9 s on production - over the app's 5 s statement timeout, so N0 would
 # never have loaded: the snapshot lookup ran once per later arrival). The snapshot is resolved once per first-fetch DAY
@@ -72,6 +76,9 @@ SELECT l.matchid,
             ELSE 'in' END AS why,
        l.snap
 FROM late l LEFT JOIN judged j ON j.matchid = l.matchid
+UNION ALL
+SELECT mo.matchid, 'no_raw_page', NULL::date FROM match_overview mo
+WHERE NOT EXISTS (SELECT 1 FROM raw_pages r WHERE r.matchid = mo.matchid)
 """
 _SNAP_SQL = "SELECT date, count(*) FROM team_rankings GROUP BY date ORDER BY date"
 _IN = {"val": None, "next": 0.0, "loading": False, "error": None, "loaded_at": None, "stale_since": None}
@@ -92,7 +99,7 @@ def _load_n0():
             snaps = [(str(d), int(n)) for d, n in cur.fetchall()]
     finally:
         con.close()
-    counts = {k: 0 for k in ("in", "history", "outside_top", "no_snapshot", "no_teams")}
+    counts = {k: 0 for k in ("in", "history", "outside_top", "no_snapshot", "no_teams", "no_raw_page")}
     for _, w, _s in late:
         counts[w] = counts.get(w, 0) + 1
     sha = hashlib.sha256(json.dumps([sorted(pre), sorted((m, w) for m, w, _ in late)]).encode()).hexdigest()[:12]
@@ -157,6 +164,7 @@ def input_revision():
     c, sn = v["counts"], v.get("snapshots_used") or []
     rev = (f"{INPUT_REV}/{v['rule']}:pre={len(v['pre'])};late_in={len(v['late_in'])};history_out={c.get('history', 0)};"
            f"late_out={c.get('outside_top', 0)};no_snapshot={c.get('no_snapshot', 0)};no_teams={c.get('no_teams', 0)};"
+           f"no_raw_page={c.get('no_raw_page', 0)};"
            f"snapshots={sn[0] + '..' + sn[-1] if sn else '-'};sha={v['sha']}")
     if _IN["stale_since"]:
         rev += ";STALE evaluated " + time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(_IN["loaded_at"] or 0))
