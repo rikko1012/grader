@@ -1021,7 +1021,6 @@ function hitDist(ps) {           // P(exactly k legs hit), legs treated as indep
   for (const p of ps) { const n = new Array(d.length + 1).fill(0); d.forEach((v, k) => { n[k] += v * (1 - p); n[k + 1] += v * p; }); d = n; }
   return d;
 }
-const retLine = (lab, avg) => `<div class="kv"><span>${lab}</span><span style="color:${avg >= 1 ? "var(--good)" : "var(--bad)"}"><b>${avg.toFixed(2)}U</b> back per 1U (${avg >= 1 ? "+" : ""}${(avg - 1).toFixed(2)}U)</span></div>`;
 const legKey = l => [String(l.p).toLowerCase(), l.t, l.sc || "12"].join(":");   // the same prop twice = a duplicate
 // 'On slip' marks only the exact line on the slip: player, line, stat, maps, market type and platform (2026-10-11 audit:
 // one leg marked every line of that player on both platforms)
@@ -1140,8 +1139,9 @@ function drawSlip() {
   if (!s.length) { $("#slip").hidden = true; return; }
   const n = s.length, all = s.reduce((a, x) => a * (x.pc || 0.5), 1);
   const plat = slipBook(s), pn = bookName(plat) || "your app";
-  // a saved standard payout is Underdog's (the slip builder's) - never used for another platform
-  const exact = +manualPay()[manualKey(s)] || null, std = plat === "underdog" ? (+udPay()[n] || null) : null, pay = exact || std;
+  // a payout shows ONLY when the member entered it for THIS exact entry (2026-10-14 owner): no saved standard payout, no
+  // hypothetical average return per 1U
+  const exact = +manualPay()[manualKey(s)] || null;
   const dupPlayer = new Set(s.map(x => String(x.p).toLowerCase())).size < n;
   const teams = {}; s.forEach(x => { const k = x.m || x.tm; teams[k] = (teams[k] || 0) + 1; });
   const same = Object.values(teams).some(c => c > 1);
@@ -1157,16 +1157,15 @@ function drawSlip() {
             + (n >= 3 ? `<div class="kv"><span>${n - 1} of ${n} hit</span><span>${((dist[n - 1] || 0) * 100).toFixed(1)}%</span></div>` : "")
             + `<label class="small muted" style="display:flex;gap:6px;align-items:center;margin:6px 0">Payout ${esc(pn)} shows for this entry
                 <input id="slippay" type="number" min="1" step="0.01" inputmode="decimal" placeholder="e.g. 3" value="${exact ?? ""}" style="width:80px"> x</label>`
-            + (pay ? retLine(`&nbsp;&nbsp;average return at ${+pay.toFixed(2)}x${exact ? "" : ` (your saved standard ${n}-pick payout – line boosts not included)`}`, all * pay)
-                   + `<div class="small muted" style="margin-top:4px">Average return = what 1U gives back on average if every pick must hit, stake included; above 1.00U the grader expects a profit. Flex / partial payouts aren't counted.</div>`
-                   : `<div class="small muted">Enter the payout ${esc(pn)} shows for this entry (boosts included, as shown) to see the expected return – the grader doesn't know ${esc(pn)}'s payouts.</div>`); })())
+            + (exact ? `<div class="kv"><span>Payout you entered for this exact entry</span><span><b>${+exact.toFixed(2)}x</b> if all ${n} hit</span></div>`
+                     : `<div class="small muted">Optional: enter the payout ${esc(pn)} shows for this exact entry to keep it with the slip – the grader doesn't know ${esc(pn)}'s payouts and shows none.</div>`); })())
     + (same ? `<div class="warn">Two or more picks from the same match – they share match conditions and may win or lose together, so the real odds differ from the %.</div>` : "")
     + (dupPlayer ? `<div class="warn">The same player appears twice – his picks move together, so the real chance differs from the %. Check your app allows it.</div>` : "")
     + (s.some(x => x.lt && x.lt !== "standard") ? `<div class="warn">Goblin / demon picks change the entry's payout – use the payout PrizePicks shows for this exact entry.</div>` : "")
     + (leans ? `<div class="warn">${leans} pick${leans > 1 ? "s are" : " is a"} Lean${leans > 1 ? "s" : ""} (0 units) – the weakest legs on the slip.</div>` : "")
     + `<div class="actions"><button type="button" class="chipbtn" id="slipcopy">Copy slip</button><button type="button" class="chipbtn" id="slipclear">Clear</button>
        <button type="button" class="chipbtn" id="slipclose">Close</button></div>
-       <div class="small muted" style="margin-top:8px">Returns use only the payout you enter – confirm it in ${esc(pn)}. Same-match chances are multiplied as if independent – not a tested joint hit rate. Not financial advice.</div>`;
+       <div class="small muted" style="margin-top:8px">No return is computed: a payout appears only when you enter the one ${esc(pn)} shows for this exact entry. Same-match chances are multiplied as if independent – not a tested joint hit rate. Not financial advice.</div>`;
   const pi = $("#slippay");
   if (pi) pi.onchange = () => { const m = manualPay(), k = manualKey(store.get("cs2s_slip", [])), v = +pi.value;
     if (v > 1) m[k] = v; else delete m[k]; store.set("cs2s_manualpay", m); drawSlip(); };
@@ -2107,13 +2106,21 @@ function oddsMatch(d) {
         + `<div class="kv"><span>Raw implied (incl. margin)</span><span>${esc(od.team)} ${pct(pr.implied_team_raw)}${pr.implied_opp_raw != null ? ` · ${esc(od.opponent)} ${pct(pr.implied_opp_raw)}` : ""} · Bookmaker margin ${pct(pr.margin)}</span></div>`;
     }
     if (oi.scope_note) h += `<div class="small muted">Scope: ${esc(oi.scope_note)}</div>`;
-    if (oi.retrieved_at) h += `<div class="small muted">Retrieved ${clockTime(oi.retrieved_at)} – ${esc(oi.time_note || "our retrieval time")}</div>`;
+    // the price ACTUALLY used, with its own age (2026-10-14 owner: show the real fallback source and quote age)
+    if (oi.retrieved_at) h += `<div class="small muted">${esc(oi.label || "Price")} retrieved ${clockTime(oi.retrieved_at)}${oi.quote_age_s != null ? ` (${agoSec(+oi.quote_age_s)} when graded)` : ""} – ${esc(oi.time_note || "our retrieval time")}</div>`;
     if (od.maps?.map1 || od.maps?.map2) h += `<div class="kv"><span>Map winners</span><span>${["map1","map2"].filter(k=>od.maps[k]).map(k=>`${k.replace("map","Map ")}: ${pct(od.maps[k].team_prob)}`).join(" · ")}</span></div>`;
     if (oi.maps_note) h += `<div class="small muted" style="margin-top:6px">${esc(oi.maps_note)}</div>`;
     // Thunderpick's own note is information, not a warning; an exchange's thin-book / wide-spread note stays a warning
     for (const f of od.flags || []) h += `<div class="small muted" style="margin-top:6px">${oi.source === "thunderpick" ? "" : "⚠ "}${esc(f)}</div>`;
   } else h += `<div class="kv"><span>Win chance</span><span class="muted">${esc(oi.match_note || od.note || "No betting market found")}</span></div>`;
   if (oi.fallback) h += `<div class="small muted" style="margin-top:6px">${esc(oi.fallback)}</div>`;
+  // whether the selected odds actually changed this grade (grader detail.market_effect via the server) - a source label
+  // alone is not projection integration
+  const me = oi.market_effect || (d.grade && d.grade.detail && d.grade.detail.market_effect);
+  if (me && typeof me === "object") {
+    const on = ["projection", "probability", "stake"].filter(k => me[k]);
+    h += `<div class="small muted" style="margin-top:6px">Effect of these odds on this grade: ${on.length ? esc(on.join(", ")) : "none - context only"}</div>`;
+  }
   return h;
 }
 // the market-quality stake pill in the source's own words (a bookmaker price is not a thin market)

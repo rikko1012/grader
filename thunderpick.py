@@ -1440,7 +1440,7 @@ class Poller:
                                   "start time unknown - treated as started (no pre-match check possible)")
         elif feed != "current":
             st, why = feed, {"endpoint_empty": "Thunderpick's latest answer listed no CS2 markets - earlier quote display only",
-                             "not_in_latest_answer": "event not in Thunderpick's latest answer",
+                             "not_in_latest_answer": "event not in Thunderpick's latest answer (withdrawn, suspended or closed - the feed does not say which)",
                              "stale": "Thunderpick quote stale - no successful answer within "
                                       f"{QUOTE_MAX_AGE_S}s"}[feed]
         elif e.get("draw_present"):
@@ -2231,8 +2231,30 @@ def _nf(reason, availability=None):
     return {"found": False, "reason": reason, "availability": availability}
 
 
-BLIP_MAX_S = COOLDOWN_MAX_S     # E1: an event no answer listed for longer than this is gone (outage / cleared), not a blip
+BLIP_MAX_S = COOLDOWN_MAX_S     # E1: past this the line stops holding its last Thunderpick grade (a normal fallback) - an
+                                # OPERATIONAL limit, not proof the market was withdrawn (2026-10-14 owner): status stays unknown
 BLIP_STATES = ("stale", "endpoint_empty")
+
+
+def feed_cause(p, st, now_ts):
+    """Why a held quote is not current, kept distinct (2026-10-14 owner): a SUCCESSFUL empty answer, a 429 rate limit, a
+    transport / server failure, an authentication stop, or simply no poll since (stale with nothing failing). Suspension
+    is never inferred - the feed has no such flag."""
+    if st == "endpoint_empty":
+        return "successful empty answer (not a failure; whether markets were removed is unknown)"
+    try:
+        c = cooldown(now_ts, p.db)
+    except Exception:              # noqa: BLE001
+        c = {}
+    if auth_block(p.db).get("blocked"):
+        return "authentication stop"
+    if c.get("active") and str(c.get("reason") or "").startswith("HTTP 429"):
+        return "rate limited (429 cooldown, Retry-After / backoff honoured)"
+    if c.get("active"):
+        return f"transport / server failure ({c.get('reason') or 'cooldown'})"
+    if c.get("recent_429"):
+        return f"rate limited earlier ({c['recent_429']} x 429 in 30 min) - polls spaced, next poll pending"
+    return "no successful poll since (next poll pending)"
 
 
 def _held(p, v, now_ts, mid=None):
@@ -2251,14 +2273,17 @@ def _held(p, v, now_ts, mid=None):
     qage = None if qt is None else round(now_ts - qt, 1)
     seen = {"quote_retrieved_at": e.get("retrieved_at"), "quote_age_s": qage,
             "source_event_id": e.get("source_event_id"), "match_id": mid}
-    reason = v["reason"] + (f" (last quote {int(qage)} s old)" if qage is not None else "")
+    cause = feed_cause(p, st, now_ts)
+    seen["feed_cause"] = cause
+    reason = v["reason"] + (f" (last quote {int(qage)} s old)" if qage is not None else "") + f" - cause: {cause}"
     if v.get("blocked_by"):           # Thunderpick would not price it anyway: not a blip
         return dict(_nf(f"{reason}; not usable anyway ({v['blocked_by']})", st), blip=False, **seen)
     if qage is not None and qage <= BLIP_MAX_S and enabled() and autopoll() and not p.alert:
         return dict(_nf(reason, st), blip=True, **seen)
     why = ("Thunderpick polling stopped" if not (enabled() and autopoll()) or p.alert else
            f"no Thunderpick answer listed it for {int(qage // 60)} min" if qage is not None else "no Thunderpick answer")
-    return dict(_nf(f"{reason}; {why} - treated as cleared (an outage, not a blip)", st), blip=False, **seen)
+    return dict(_nf(f"{reason}; {why} - market status unknown (not confirmed withdrawn: the feed does not say); "
+                    "normal fallback", st), blip=False, **seen)
 
 
 def projection_odds(team, opponent, start_iso, now=None, poller=None, canonical_fn=None, bo=None):
@@ -2285,7 +2310,7 @@ def projection_odds(team, opponent, start_iso, now=None, poller=None, canonical_
         if amb:
             return _nf("two Thunderpick events link to this match - ambiguous, excluded", "ambiguous")
         if gone:
-            return _nf("event not in Thunderpick's latest answer", "not_in_latest_answer")
+            return _nf("event not in Thunderpick's latest answer (withdrawn, suspended or closed - the feed does not say which)", "not_in_latest_answer")
         return _nf("no Thunderpick event for this match")
     v = p.evaluate(rec, now_ts, start_iso=start_iso, bo=bo, hltv_start=c.get("hltv_start"), hltv_bo=c.get("hltv_bo"), pol=pol)
     if v["availability"] in BLIP_STATES:

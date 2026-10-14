@@ -67,10 +67,15 @@ def rows_from(records):
     """prop_lines records (dicts) -> board rows in the shape of underdog.board() rows, plus book / market fields."""
     out = []
     for rec in records:
-        scope = SCOPE.get(str(rec.get("maps")))
-        market = rec.get("market")
-        prop = "hs" if market == "headshots" else "kills" if market == "kills" else None
-        if not scope or not prop or rec.get("line") is None or rec.get("start_time") is None:
+        # the backup copy's market / maps are re-derived from its RAW stat label with the same exact rule as the direct
+        # read (market_of; 2026-10-14 owner) - a label the rule does not read ("MAPS 1-2 AWP Kills", "MAP 3 Kills") or a
+        # copy whose own market / maps disagree with its label stays unsupported, never ordinary kills / headshots
+        lab_market, lab_maps = market_of(rec.get("stat")) if rec.get("stat") else (None, "")
+        if lab_market is None or rec.get("market") != lab_market or str(rec.get("maps")) != lab_maps:
+            continue
+        scope = SCOPE.get(lab_maps)
+        prop = "hs" if lab_market == "headshots" else "kills"
+        if not scope or rec.get("line") is None or rec.get("start_time") is None:
             continue
         ot = rec.get("odds_type") or "standard"
         changed = rec.get("moved_at") or rec.get("first_seen")
@@ -82,6 +87,9 @@ def rows_from(records):
              # PrizePicks' payout modifiers as reported (1.0 on standard lines) - display only. NOT entry payouts: a goblin /
              # demon changes the whole entry's payout, so they never feed the "same payout, easier line" ranking
              "higher": None, "lower": None, "mod_higher": _num(rec.get("higher")), "mod_lower": _num(rec.get("lower")),
+             # sides the feed offered (the copy keeps the direct read's higher / lower: None = not offered / not confirmed)
+             "over_available": rec.get("higher") is not None, "under_available": rec.get("lower") is not None,
+             "direction_basis": rec.get("direction_basis") or "sides as stored with the line (feed basis not recorded)",
              "price_higher": None, "price_lower": None,
              "updated_at": _iso(changed), "seen_at": _iso(rec.get("updated_at")), "first_seen": _iso(rec.get("first_seen")),
              "open_line": _num(rec.get("open_line")), "prev_line": _num(rec.get("prev_line")), "moves": rec.get("moves"),
@@ -104,6 +112,22 @@ def _plain(text):
     import unicodedata
     t = unicodedata.normalize("NFKD", str(text or ""))
     return "".join(c for c in t if not unicodedata.combining(c)).strip()
+
+
+def directions(wagers, odds_type, adjusted=False):
+    """Which sides the FEED offers for one line (2026-10-14 owner: the directions actually available, never a blanket
+    'More only'): allowed_wager_types when PrizePicks sends it ('over' -> Over only); no field on a standard / promo line
+    -> both sides (as on the app); no field on an adjusted-odds goblin / demon line -> Over offered, Under NOT CONFIRMED by
+    the feed (it states no restriction there, so it is neither claimed available nor claimed impossible).
+    higher / lower = 1.0 when offered, None otherwise (the existing row fields); direction_basis says why."""
+    w = {str(x).lower() for x in (wagers or [])}
+    if w:
+        return {"higher": 1.0 if "over" in w else None, "lower": 1.0 if "under" in w else None,
+                "direction_basis": "feed allowed_wager_types: " + ", ".join(sorted(w))}
+    if odds_type in ("goblin", "demon") or adjusted:
+        return {"higher": 1.0, "lower": None,
+                "direction_basis": f"{odds_type} line with adjusted odds: the feed states no allowed sides - Less not confirmed"}
+    return {"higher": 1.0, "lower": 1.0, "direction_basis": "feed states no restriction (standard line)"}
 
 
 def market_of(stat):
@@ -168,8 +192,7 @@ def parse_direct(body, seen):
             start = None
         out.append({"line_id": str(p.get("id", "")), "player": name, "team": team, "opponent": opp, "start_time": start,
                     "market": market, "maps": maps, "line": line, "odds_type": ot,
-                    "higher": None if wagers and "over" not in wagers else 1.0,
-                    "lower": None if ot in ("goblin", "demon") or (wagers and "under" not in wagers) else 1.0,
+                    **directions(wagers, ot, bool(a.get("adjusted_odds"))),
                     "stat": stat, "updated_at": seen, "open_line": None, "prev_line": None, "move": None, "moves": None,
                     "moved_at": None, "first_seen": None, "other_line": None})
     singles = sum(1 for p in body.get("data") or [] if ((p.get("attributes") or {}).get("status") or "pre_game") == "pre_game"

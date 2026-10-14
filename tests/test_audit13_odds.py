@@ -70,7 +70,9 @@ def test_e1_a_dead_feed_is_an_outage_not_transient_forever(monkeypatch):
     p, c = active_poller()
     t0 = c.t
     dead = T.projection_odds("Alpha1", "Bravo1", start_of(1), now=t0 + T.BLIP_MAX_S + 1, poller=p)
-    assert dead["availability"] == "stale" and dead["blip"] is False and "outage" in dead["reason"]
+    # past BLIP_MAX_S: a normal fallback - but never a claim that the market was withdrawn (2026-10-14 owner)
+    assert dead["availability"] == "stale" and dead["blip"] is False and "not confirmed withdrawn" in dead["reason"]
+    assert "cleared" not in dead["reason"] and "withdrawn," not in dead["reason"] and dead["feed_cause"]
     o = sel(p, t0 + T.BLIP_MAX_S + 1)
     assert "transient" not in o and o["provenance"]["blip"] is False and o["provenance"]["selected"] == "polymarket"
     assert not o["provenance"]["fallback_reason"].startswith(M.BLIP_TEXT)

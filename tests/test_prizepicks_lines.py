@@ -14,7 +14,7 @@ def _rec(lid="p1", player="cairne", maps="1-2", market="kills", line=31.5, ot="s
     return {"line_id": lid, "player": player, "team": team, "opponent": opp, "start_time": start, "market": market, "maps": maps,
             "line": line, "odds_type": ot, "open_line": 30.5, "prev_line": 30.5, "move": 1.0, "moves": 1,
             "moved_at": T0 - timedelta(hours=2), "first_seen": T0 - timedelta(hours=5), "other_line": 30.5,
-            "higher": 1.0, "lower": 1.0, "stat": "MAPS 1-2 Kills", "updated_at": T0 - timedelta(minutes=5)}
+            "higher": 1.0, "lower": 1.0, "stat": f"{'MAP' if maps == '1' else 'MAPS'} {maps} {market.title()}", "updated_at": T0 - timedelta(minutes=5)}
 
 
 def test_rows_from_the_database():

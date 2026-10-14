@@ -40,7 +40,9 @@ def _scope(code, label):
     """Which maps a line covers: "12" Maps 1+2, "123" Maps 1+2+3 / 1-3, "1" Map 1 (BO1); None = other."""
     t = (code or label or "").lower().replace(" ", "")
     if "map" not in t:
-        return "12" if ("kill" in t or "headshot" in t) else None
+        # 2026-10-14 owner: an unsupported label stays unsupported - a stat without a map set is not assumed to be
+        # Maps 1-2 (the live feed sends exact codes: kills_on_maps_1_2 / headshots_on_maps_1_2, checked 2026-10-14)
+        return None
     if re.search(r"maps?_?1(_|\+|-|&)2(_|\+|-|&)3|maps?_?1(_|-)3", t):
         return "123"
     if re.search(r"maps?_?1(_|\+|-|&)2$", t) or re.search(r"maps?1\+2(?![+\-&]?3)", t):

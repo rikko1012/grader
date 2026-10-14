@@ -1,0 +1,550 @@
+{
+"_note": "CAPTURED SAMPLE of api.underdogfantasy.com over_under_lines?sport_id=CS, 2026-10-14 ~17:00 UTC",
+"over_under_lines": [
+{
+"id": "85673a5e-6ab2-4730-8a89-0ee9ff6bc0dc",
+"contract_terms_url": null,
+"contract_url": null,
+"entry_stable_id": null,
+"expires_at": null,
+"line_type": "balanced",
+"live_event": false,
+"live_event_stat": null,
+"non_discounted_stat_value": null,
+"options": [
+{
+"id": "21ac36c7-227b-47a8-8190-8e4a682e78cf",
+"american_price": "-112",
+"appearance_id": null,
+"choice": "higher",
+"choice_display": "Higher",
+"choice_display_name_shorter": "30+",
+"choice_display_short": "Higher",
+"choice_id": "over__",
+"decimal_price": "1.9",
+"grouping_id": null,
+"lookup_id": null,
+"odds": {
+"fantasy": {
+"american": "-115",
+"decimal": "1.87",
+"probability": "50",
+"type": "precision"
+},
+"prediction": null,
+"sportsbook": null
+},
+"over_under_line_id": "85673a5e-6ab2-4730-8a89-0ee9ff6bc0dc",
+"payout_multiplier": "1.0",
+"raw_probability": null,
+"rfq_combinable": true,
+"selection_header": "NiKo",
+"selection_subheader": "Higher 29.5 Kills on Maps 1+2",
+"status": "active",
+"type": "OverUnderOption",
+"updated_at": "2026-10-14T16:29:39.932Z"
+},
+{
+"id": "ca69c2e4-f42d-48f8-965b-0f74decca1b8",
+"american_price": "-112",
+"appearance_id": null,
+"choice": "lower",
+"choice_display": "Lower",
+"choice_display_name_shorter": "29-",
+"choice_display_short": "Lower",
+"choice_id": "under__",
+"decimal_price": "1.9",
+"grouping_id": null,
+"lookup_id": null,
+"odds": {
+"fantasy": {
+"american": "-115",
+"decimal": "1.87",
+"probability": "50",
+"type": "precision"
+},
+"prediction": null,
+"sportsbook": null
+},
+"over_under_line_id": "85673a5e-6ab2-4730-8a89-0ee9ff6bc0dc",
+"payout_multiplier": "1.0",
+"raw_probability": null,
+"rfq_combinable": true,
+"selection_header": "NiKo",
+"selection_subheader": "Lower 29.5 Kills on Maps 1+2",
+"status": "active",
+"type": "OverUnderOption",
+"updated_at": "2026-10-14T16:29:39.939Z"
+}
+],
+"over_under": {
+"id": "eda63624-f867-4b10-972e-1eddab3437b2",
+"appearance_stat": {
+"id": "a5b34bd7-3ce8-4948-a05f-a48d55892371-17f53e7e-4ea7-4400-ac0b-658178fb2320",
+"appearance_id": "a5b34bd7-3ce8-4948-a05f-a48d55892371",
+"display_stat": "Kills on Maps 1+2",
+"graded_by": "high_score",
+"hide_current_stat_value": false,
+"pickem_stat_id": "17f53e7e-4ea7-4400-ac0b-658178fb2320",
+"rank": 1,
+"show_current_stat_value_on_track": false,
+"stat": "kills_on_maps_1_2"
+},
+"boost": null,
+"category": "player_prop",
+"display_mode": "default",
+"grid_display_title": null,
+"has_alternates": true,
+"multi_provider": false,
+"option_priority": "none",
+"prediction_market": false,
+"scoring_type_id": null,
+"supercharge_type": null,
+"team_divider": null,
+"title": "NiKo Kills on Maps 1+2 O/U"
+},
+"over_under_id": "eda63624-f867-4b10-972e-1eddab3437b2",
+"provider_id": null,
+"provider_type": "probability",
+"rank": 145199101001099,
+"sort_by": -2,
+"stable_id": "eda63624-f867-4b10-972e-1eddab3437b2|balanced",
+"stat_value": "29.5",
+"status": "active",
+"updated_at": "2026-10-14T16:30:40.715Z"
+},
+{
+"id": "901739fc-ed51-4e06-8ae4-a44897ff15cc",
+"contract_terms_url": null,
+"contract_url": null,
+"entry_stable_id": null,
+"expires_at": null,
+"line_type": "balanced",
+"live_event": false,
+"live_event_stat": null,
+"non_discounted_stat_value": null,
+"options": [
+{
+"id": "eb1d03c7-32b1-4cf6-99f8-0d1181a7177a",
+"american_price": "-112",
+"appearance_id": null,
+"choice": "higher",
+"choice_display": "Higher",
+"choice_display_name_shorter": "30+",
+"choice_display_short": "Higher",
+"choice_id": "over__",
+"decimal_price": "1.9",
+"grouping_id": null,
+"lookup_id": null,
+"odds": {
+"fantasy": {
+"american": "-115",
+"decimal": "1.87",
+"probability": "50",
+"type": "precision"
+},
+"prediction": null,
+"sportsbook": null
+},
+"over_under_line_id": "901739fc-ed51-4e06-8ae4-a44897ff15cc",
+"payout_multiplier": "1.0",
+"raw_probability": null,
+"rfq_combinable": true,
+"selection_header": " XANTARES",
+"selection_subheader": "Higher 29.5 Kills on Maps 1+2",
+"status": "active",
+"type": "OverUnderOption",
+"updated_at": "2026-10-14T16:29:38.605Z"
+},
+{
+"id": "e6ec29d2-7792-4523-b997-813a919db7d5",
+"american_price": "-112",
+"appearance_id": null,
+"choice": "lower",
+"choice_display": "Lower",
+"choice_display_name_shorter": "29-",
+"choice_display_short": "Lower",
+"choice_id": "under__",
+"decimal_price": "1.9",
+"grouping_id": null,
+"lookup_id": null,
+"odds": {
+"fantasy": {
+"american": "-115",
+"decimal": "1.87",
+"probability": "50",
+"type": "precision"
+},
+"prediction": null,
+"sportsbook": null
+},
+"over_under_line_id": "901739fc-ed51-4e06-8ae4-a44897ff15cc",
+"payout_multiplier": "1.0",
+"raw_probability": null,
+"rfq_combinable": true,
+"selection_header": " XANTARES",
+"selection_subheader": "Lower 29.5 Kills on Maps 1+2",
+"status": "active",
+"type": "OverUnderOption",
+"updated_at": "2026-10-14T16:29:38.611Z"
+}
+],
+"over_under": {
+"id": "d8933054-31d2-4464-8eec-b165c224b569",
+"appearance_stat": {
+"id": "db485829-50be-46db-96d2-89c565b06eae-17f53e7e-4ea7-4400-ac0b-658178fb2320",
+"appearance_id": "db485829-50be-46db-96d2-89c565b06eae",
+"display_stat": "Kills on Maps 1+2",
+"graded_by": "high_score",
+"hide_current_stat_value": false,
+"pickem_stat_id": "17f53e7e-4ea7-4400-ac0b-658178fb2320",
+"rank": 1,
+"show_current_stat_value_on_track": false,
+"stat": "kills_on_maps_1_2"
+},
+"boost": null,
+"category": "player_prop",
+"display_mode": "default",
+"grid_display_title": null,
+"has_alternates": true,
+"multi_provider": false,
+"option_priority": "none",
+"prediction_market": false,
+"scoring_type_id": null,
+"supercharge_type": null,
+"team_divider": null,
+"title": " XANTARES Kills on Maps 1+2 O/U"
+},
+"over_under_id": "d8933054-31d2-4464-8eec-b165c224b569",
+"provider_id": null,
+"provider_type": "probability",
+"rank": 145199101001099,
+"sort_by": -3,
+"stable_id": "d8933054-31d2-4464-8eec-b165c224b569|balanced",
+"stat_value": "29.5",
+"status": "active",
+"updated_at": "2026-10-14T16:30:40.715Z"
+},
+{
+"id": "3129ba1c-1dd7-497d-bd99-df56d00682c6",
+"contract_terms_url": null,
+"contract_url": null,
+"entry_stable_id": null,
+"expires_at": null,
+"line_type": "balanced",
+"live_event": false,
+"live_event_stat": null,
+"non_discounted_stat_value": null,
+"options": [
+{
+"id": "93dfdc37-274c-4126-9825-410ffb7db035",
+"american_price": "-112",
+"appearance_id": null,
+"choice": "higher",
+"choice_display": "Higher",
+"choice_display_name_shorter": "14+",
+"choice_display_short": "Higher",
+"choice_id": "over__",
+"decimal_price": "1.9",
+"grouping_id": null,
+"lookup_id": null,
+"odds": {
+"fantasy": {
+"american": "-115",
+"decimal": "1.87",
+"probability": "50",
+"type": "precision"
+},
+"prediction": null,
+"sportsbook": null
+},
+"over_under_line_id": "3129ba1c-1dd7-497d-bd99-df56d00682c6",
+"payout_multiplier": "1.0",
+"raw_probability": null,
+"rfq_combinable": true,
+"selection_header": " sjuush",
+"selection_subheader": "Higher 13.5 Headshots on Maps 1+2",
+"status": "active",
+"type": "OverUnderOption",
+"updated_at": "2026-10-14T16:29:39.174Z"
+},
+{
+"id": "ef8fe53f-d006-4e5a-9205-316d6f9bdd0d",
+"american_price": "-112",
+"appearance_id": null,
+"choice": "lower",
+"choice_display": "Lower",
+"choice_display_name_shorter": "13-",
+"choice_display_short": "Lower",
+"choice_id": "under__",
+"decimal_price": "1.9",
+"grouping_id": null,
+"lookup_id": null,
+"odds": {
+"fantasy": {
+"american": "-115",
+"decimal": "1.87",
+"probability": "50",
+"type": "precision"
+},
+"prediction": null,
+"sportsbook": null
+},
+"over_under_line_id": "3129ba1c-1dd7-497d-bd99-df56d00682c6",
+"payout_multiplier": "1.0",
+"raw_probability": null,
+"rfq_combinable": true,
+"selection_header": " sjuush",
+"selection_subheader": "Lower 13.5 Headshots on Maps 1+2",
+"status": "active",
+"type": "OverUnderOption",
+"updated_at": "2026-10-14T16:29:39.181Z"
+}
+],
+"over_under": {
+"id": "c43cff66-2c60-42ac-92bb-c428746c541c",
+"appearance_stat": {
+"id": "c964170b-9112-4e65-b598-dc7e815a0d0e-24ed46e4-7baf-4a00-8190-c721709a0c52",
+"appearance_id": "c964170b-9112-4e65-b598-dc7e815a0d0e",
+"display_stat": "Headshots on Maps 1+2",
+"graded_by": "high_score",
+"hide_current_stat_value": false,
+"pickem_stat_id": "24ed46e4-7baf-4a00-8190-c721709a0c52",
+"rank": 2,
+"show_current_stat_value_on_track": false,
+"stat": "headshots_on_maps_1_2"
+},
+"boost": null,
+"category": "player_prop",
+"display_mode": "default",
+"grid_display_title": null,
+"has_alternates": false,
+"multi_provider": false,
+"option_priority": "none",
+"prediction_market": false,
+"scoring_type_id": null,
+"supercharge_type": null,
+"team_divider": null,
+"title": " sjuush Headshots on Maps 1+2 O/U"
+},
+"over_under_id": "c43cff66-2c60-42ac-92bb-c428746c541c",
+"provider_id": null,
+"provider_type": "probability",
+"rank": 145199101002099,
+"sort_by": -2,
+"stable_id": "c43cff66-2c60-42ac-92bb-c428746c541c|balanced",
+"stat_value": "13.5",
+"status": "active",
+"updated_at": "2026-10-14T16:30:40.715Z"
+}
+],
+"appearances": [
+{
+"id": "a5b34bd7-3ce8-4948-a05f-a48d55892371",
+"badges": [],
+"lineup_status_id": null,
+"match_id": 272168,
+"match_type": "Game",
+"multiple_picks_allowed": false,
+"player_id": "9721d9cd-667d-4034-a7f6-93111de0977f",
+"position_id": "1c08368b-ee07-40f5-b794-0b055a34e309",
+"sort_by": -4,
+"team_id": "a71094a9-02e2-466d-9e56-c9ec1286bcb4",
+"type": "Player"
+},
+{
+"id": "db485829-50be-46db-96d2-89c565b06eae",
+"badges": [],
+"lineup_status_id": null,
+"match_id": 272169,
+"match_type": "Game",
+"multiple_picks_allowed": false,
+"player_id": "6c6e4320-34e1-4dee-aab8-7b3a48398a09",
+"position_id": "1c08368b-ee07-40f5-b794-0b055a34e309",
+"sort_by": -4,
+"team_id": "ab009807-180c-431a-99bc-4d3b10afad3d",
+"type": "Player"
+},
+{
+"id": "c964170b-9112-4e65-b598-dc7e815a0d0e",
+"badges": [],
+"lineup_status_id": null,
+"match_id": 272169,
+"match_type": "Game",
+"multiple_picks_allowed": false,
+"player_id": "f628f824-2ffb-4d81-939d-4a33bb1f68fa",
+"position_id": "1c08368b-ee07-40f5-b794-0b055a34e309",
+"sort_by": -2,
+"team_id": "9054a4c4-0355-4060-b917-e77ef492e087",
+"type": "Player"
+}
+],
+"players": [
+{
+"id": "9721d9cd-667d-4034-a7f6-93111de0977f",
+"action_path": {
+"behavior": "navigate",
+"key": "Player:player_id=9721d9cd-667d-4034-a7f6-93111de0977f",
+"search": {
+"enabled": false,
+"parameters": {}
+},
+"url": "https://api.underdogfantasy.com/v1/lobbies/scaffolds/players?player_id=9721d9cd-667d-4034-a7f6-93111de0977f&tab_id=picks"
+},
+"country": null,
+"dark_image_url": "https://assets.underdogfantasy.com/player-images/cs/20261009_17-Player_Avatar.png",
+"first_name": null,
+"image_url": "https://assets.underdogfantasy.com/player-images/cs/20261009_17-Player_Avatar.png",
+"jersey_number": null,
+"last_name": "NiKo",
+"light_image_url": "https://assets.underdogfantasy.com/player-images/cs/20261009_17-Player_Avatar.png",
+"position_display_name": "Gamer",
+"position_id": "1c08368b-ee07-40f5-b794-0b055a34e309",
+"position_name": "Gamer",
+"sport_id": "CS",
+"team_id": null
+},
+{
+"id": "6c6e4320-34e1-4dee-aab8-7b3a48398a09",
+"action_path": {
+"behavior": "navigate",
+"key": "Player:player_id=6c6e4320-34e1-4dee-aab8-7b3a48398a09",
+"search": {
+"enabled": false,
+"parameters": {}
+},
+"url": "https://api.underdogfantasy.com/v1/lobbies/scaffolds/players?player_id=6c6e4320-34e1-4dee-aab8-7b3a48398a09&tab_id=picks"
+},
+"country": "",
+"dark_image_url": "https://assets.underdogfantasy.com/player-images/cs/20261009_17-Player_Avatar.png",
+"first_name": "",
+"image_url": "https://assets.underdogfantasy.com/player-images/cs/20261009_17-Player_Avatar.png",
+"jersey_number": "",
+"last_name": "XANTARES",
+"light_image_url": "https://assets.underdogfantasy.com/player-images/cs/20261009_17-Player_Avatar.png",
+"position_display_name": "Gamer",
+"position_id": "1c08368b-ee07-40f5-b794-0b055a34e309",
+"position_name": "Gamer",
+"sport_id": "CS",
+"team_id": "ab009807-180c-431a-99bc-4d3b10afad3d"
+},
+{
+"id": "f628f824-2ffb-4d81-939d-4a33bb1f68fa",
+"action_path": {
+"behavior": "navigate",
+"key": "Player:player_id=f628f824-2ffb-4d81-939d-4a33bb1f68fa",
+"search": {
+"enabled": false,
+"parameters": {}
+},
+"url": "https://api.underdogfantasy.com/v1/lobbies/scaffolds/players?player_id=f628f824-2ffb-4d81-939d-4a33bb1f68fa&tab_id=picks"
+},
+"country": "",
+"dark_image_url": "https://assets.underdogfantasy.com/player-images/cs/20261009_17-Player_Avatar.png",
+"first_name": "",
+"image_url": "https://assets.underdogfantasy.com/player-images/cs/20261009_17-Player_Avatar.png",
+"jersey_number": "",
+"last_name": "sjuush",
+"light_image_url": "https://assets.underdogfantasy.com/player-images/cs/20261009_17-Player_Avatar.png",
+"position_display_name": "Gamer",
+"position_id": "1c08368b-ee07-40f5-b794-0b055a34e309",
+"position_name": "Gamer",
+"sport_id": "CS",
+"team_id": "9054a4c4-0355-4060-b917-e77ef492e087"
+}
+],
+"games": [
+{
+"id": 272168,
+"abbreviated_title": "FAL vs 9Z",
+"away_team_id": "a71094a9-02e2-466d-9e56-c9ec1286bcb4",
+"away_team_score": 0,
+"full_team_names_title": "Team Falcons vs 9z Team",
+"hide_scoreboard": true,
+"home_team_id": "4765731c-83e3-4b05-b3d7-4a37a4c1abad",
+"home_team_score": 0,
+"manually_created": false,
+"match_progress": "Thu 07:00am",
+"matchup_color_roles": {
+"home": {
+"light_mode": "primary",
+"dark_mode": "primary"
+},
+"away": {
+"light_mode": "primary",
+"dark_mode": "primary"
+}
+},
+"matchup_text": null,
+"period": 0,
+"play_by_play_available": false,
+"pre_game_data": null,
+"rank": 99,
+"rescheduled_from": null,
+"scheduled_at": "2026-10-15T11:00:00Z",
+"scoreboard": {
+"state": "pregame",
+"scheduled_at": "2026-10-15T07:00:00-04:00"
+},
+"scoreboard_data": null,
+"season_type": "regular",
+"short_title": "Team Falcons vs 9z Team",
+"sport_group_id": null,
+"sport_group_name": null,
+"sport_id": "CS",
+"sport_name": "CS2",
+"status": "scheduled",
+"title": "Team Falcons vs 9z Team",
+"title_suffix": null,
+"type": "Game",
+"updated_at": "2026-10-14T16:05:34Z",
+"year": 2026
+},
+{
+"id": 272169,
+"abbreviated_title": "NiP vs AUR",
+"away_team_id": "9054a4c4-0355-4060-b917-e77ef492e087",
+"away_team_score": 0,
+"full_team_names_title": "Ninjas in Pyjamas vs Aurora Gaming",
+"hide_scoreboard": true,
+"home_team_id": "ab009807-180c-431a-99bc-4d3b10afad3d",
+"home_team_score": 0,
+"manually_created": false,
+"match_progress": "Thu 04:30am",
+"matchup_color_roles": {
+"home": {
+"light_mode": "primary",
+"dark_mode": "primary"
+},
+"away": {
+"light_mode": "primary",
+"dark_mode": "primary"
+}
+},
+"matchup_text": null,
+"period": 0,
+"play_by_play_available": false,
+"pre_game_data": null,
+"rank": 99,
+"rescheduled_from": null,
+"scheduled_at": "2026-10-15T08:30:00Z",
+"scoreboard": {
+"state": "pregame",
+"scheduled_at": "2026-10-15T04:30:00-04:00"
+},
+"scoreboard_data": null,
+"season_type": "regular",
+"short_title": "Ninjas in Pyjamas vs Aurora Gaming",
+"sport_group_id": null,
+"sport_group_name": null,
+"sport_id": "CS",
+"sport_name": "CS2",
+"status": "scheduled",
+"title": "Ninjas in Pyjamas vs Aurora Gaming",
+"title_suffix": null,
+"type": "Game",
+"updated_at": "2026-10-14T16:05:34Z",
+"year": 2026
+}
+]
+}

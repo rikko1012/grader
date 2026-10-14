@@ -1,0 +1,1338 @@
+{
+"_note": "CAPTURED SAMPLE of partner-api.prizepicks.com/projections (CS2), 2026-10-14 ~17:00 UTC - one line per (stat, odds_type, allowed_wager_types)",
+"data": [
+{
+"type": "projection",
+"id": "15725244",
+"attributes": {
+"adjusted_odds": false,
+"board_time": "2026-10-12T13:30:00.000-04:00",
+"custom_image": null,
+"description": "BetBoom MAPS 1-2",
+"end_time": null,
+"event_type": "team",
+"flash_sale_line_score": null,
+"game_id": "CS2_match_E1UU7NP6OjiaZMbNPi2d5DNm",
+"group_key": "250961-330-CS2_match_E1UU7NP6OjiaZMbNPi2d5DNm-723-false",
+"hr_20": true,
+"in_game": false,
+"is_live": false,
+"is_live_scored": true,
+"is_promo": false,
+"league_ppid": "CS2",
+"line_score": 33,
+"odds_type": "standard",
+"projection_type": "Single Stat",
+"rank": 1,
+"refundable": true,
+"start_time": "2026-10-14T13:30:00.000-04:00",
+"stat_display_name": "MAPS 1-2 Kills",
+"stat_type": "MAPS 1-2 Kills",
+"status": "pre_game",
+"today": true,
+"trending_count": 527,
+"tv_channel": null,
+"updated_at": "2026-10-13T12:22:33.354-04:00"
+},
+"relationships": {
+"duration": {
+"data": {
+"type": "duration",
+"id": "723"
+}
+},
+"game": {
+"data": {
+"type": "game",
+"id": "194872"
+}
+},
+"league": {
+"data": {
+"type": "league",
+"id": "265"
+}
+},
+"new_player": {
+"data": {
+"type": "new_player",
+"id": "250961"
+}
+},
+"projection_type": {
+"data": {
+"type": "projection_type",
+"id": "2"
+}
+},
+"score": {
+"data": null
+},
+"stat_type": {
+"data": {
+"type": "stat_type",
+"id": "330"
+}
+}
+}
+},
+{
+"type": "projection",
+"id": "15725254",
+"attributes": {
+"adjusted_odds": false,
+"allowed_wager_types": "over",
+"board_time": "2026-10-12T13:30:00.000-04:00",
+"custom_image": null,
+"description": "BetBoom MAPS 1-2",
+"end_time": null,
+"event_type": "team",
+"flash_sale_line_score": null,
+"game_id": "CS2_match_E1UU7NP6OjiaZMbNPi2d5DNm",
+"group_key": "250961-337-CS2_match_E1UU7NP6OjiaZMbNPi2d5DNm-723-false",
+"hr_20": true,
+"in_game": false,
+"is_live": false,
+"is_live_scored": true,
+"is_promo": false,
+"league_ppid": "CS2",
+"line_score": 12,
+"odds_type": "standard",
+"projection_type": "Single Stat",
+"rank": 2,
+"refundable": true,
+"start_time": "2026-10-14T13:30:00.000-04:00",
+"stat_display_name": "MAPS 1-2 Headshots",
+"stat_type": "MAPS 1-2 Headshots",
+"status": "pre_game",
+"today": true,
+"trending_count": 325,
+"tv_channel": null,
+"updated_at": "2026-10-14T10:05:25.747-04:00"
+},
+"relationships": {
+"duration": {
+"data": {
+"type": "duration",
+"id": "723"
+}
+},
+"game": {
+"data": {
+"type": "game",
+"id": "194872"
+}
+},
+"league": {
+"data": {
+"type": "league",
+"id": "265"
+}
+},
+"new_player": {
+"data": {
+"type": "new_player",
+"id": "250961"
+}
+},
+"projection_type": {
+"data": {
+"type": "projection_type",
+"id": "2"
+}
+},
+"score": {
+"data": null
+},
+"stat_type": {
+"data": {
+"type": "stat_type",
+"id": "337"
+}
+}
+}
+},
+{
+"type": "projection",
+"id": "15725288",
+"attributes": {
+"adjusted_odds": false,
+"allowed_wager_types": "over",
+"board_time": "2026-10-12T13:30:00.000-04:00",
+"custom_image": null,
+"description": "BetBoom MAPS 1-2",
+"end_time": null,
+"event_type": "team",
+"flash_sale_line_score": null,
+"game_id": "CS2_match_E1UU7NP6OjiaZMbNPi2d5DNm",
+"group_key": "220724-330-CS2_match_E1UU7NP6OjiaZMbNPi2d5DNm-723-false",
+"hr_20": true,
+"in_game": false,
+"is_live": false,
+"is_live_scored": true,
+"is_promo": false,
+"league_ppid": "CS2",
+"line_score": 23.5,
+"odds_type": "standard",
+"projection_type": "Single Stat",
+"rank": 9,
+"refundable": true,
+"start_time": "2026-10-14T13:30:00.000-04:00",
+"stat_display_name": "MAPS 1-2 Kills",
+"stat_type": "MAPS 1-2 Kills",
+"status": "pre_game",
+"today": true,
+"trending_count": 1679,
+"tv_channel": null,
+"updated_at": "2026-10-14T06:23:22.598-04:00"
+},
+"relationships": {
+"duration": {
+"data": {
+"type": "duration",
+"id": "723"
+}
+},
+"game": {
+"data": {
+"type": "game",
+"id": "194872"
+}
+},
+"league": {
+"data": {
+"type": "league",
+"id": "265"
+}
+},
+"new_player": {
+"data": {
+"type": "new_player",
+"id": "220724"
+}
+},
+"projection_type": {
+"data": {
+"type": "projection_type",
+"id": "2"
+}
+},
+"score": {
+"data": null
+},
+"stat_type": {
+"data": {
+"type": "stat_type",
+"id": "330"
+}
+}
+}
+},
+{
+"type": "projection",
+"id": "15725263",
+"attributes": {
+"adjusted_odds": false,
+"board_time": "2026-10-12T13:30:00.000-04:00",
+"custom_image": null,
+"description": "FURIA MAPS 1-2",
+"end_time": null,
+"event_type": "team",
+"flash_sale_line_score": null,
+"game_id": "CS2_match_E1UU7NP6OjiaZMbNPi2d5DNm",
+"group_key": "196762-337-CS2_match_E1UU7NP6OjiaZMbNPi2d5DNm-723-false",
+"hr_20": true,
+"in_game": false,
+"is_live": false,
+"is_live_scored": true,
+"is_promo": false,
+"league_ppid": "CS2",
+"line_score": 15,
+"odds_type": "standard",
+"projection_type": "Single Stat",
+"rank": 12,
+"refundable": true,
+"start_time": "2026-10-14T13:30:00.000-04:00",
+"stat_display_name": "MAPS 1-2 Headshots",
+"stat_type": "MAPS 1-2 Headshots",
+"status": "pre_game",
+"today": true,
+"trending_count": 585,
+"tv_channel": null,
+"updated_at": "2026-10-13T12:22:38.248-04:00"
+},
+"relationships": {
+"duration": {
+"data": {
+"type": "duration",
+"id": "723"
+}
+},
+"game": {
+"data": {
+"type": "game",
+"id": "194872"
+}
+},
+"league": {
+"data": {
+"type": "league",
+"id": "265"
+}
+},
+"new_player": {
+"data": {
+"type": "new_player",
+"id": "196762"
+}
+},
+"projection_type": {
+"data": {
+"type": "projection_type",
+"id": "2"
+}
+},
+"score": {
+"data": null
+},
+"stat_type": {
+"data": {
+"type": "stat_type",
+"id": "337"
+}
+}
+}
+},
+{
+"type": "projection",
+"id": "15724668",
+"attributes": {
+"adjusted_odds": false,
+"allowed_wager_types": "over",
+"board_time": "2026-10-14T12:00:00.000-04:00",
+"custom_image": null,
+"description": "PARIVISION MAP 3",
+"end_time": null,
+"event_type": "team",
+"flash_sale_line_score": null,
+"game_id": "PARIVISIONLegacy46309.4791666667",
+"group_key": "168219-334-PARIVISIONLegacy46309.4791666667-323-false",
+"hr_20": true,
+"in_game": false,
+"is_live": false,
+"is_live_scored": true,
+"is_promo": false,
+"league_ppid": "CS2",
+"line_score": 16,
+"odds_type": "standard",
+"projection_type": "Single Stat",
+"rank": 21,
+"refundable": true,
+"start_time": "2026-10-14T13:30:00.000-04:00",
+"stat_display_name": "MAP 3 Kills",
+"stat_type": "MAP 3 Kills",
+"status": "pre_game",
+"today": true,
+"tv_channel": null,
+"updated_at": "2026-10-14T11:33:07.780-04:00"
+},
+"relationships": {
+"duration": {
+"data": {
+"type": "duration",
+"id": "323"
+}
+},
+"game": {
+"data": {
+"type": "game",
+"id": "195205"
+}
+},
+"league": {
+"data": {
+"type": "league",
+"id": "265"
+}
+},
+"new_player": {
+"data": {
+"type": "new_player",
+"id": "168219"
+}
+},
+"projection_type": {
+"data": {
+"type": "projection_type",
+"id": "2"
+}
+},
+"score": {
+"data": null
+},
+"stat_type": {
+"data": {
+"type": "stat_type",
+"id": "334"
+}
+}
+}
+},
+{
+"type": "projection",
+"id": "15724670",
+"attributes": {
+"adjusted_odds": false,
+"board_time": "2026-10-14T12:00:00.000-04:00",
+"custom_image": null,
+"description": "PARIVISION MAP 3",
+"end_time": null,
+"event_type": "team",
+"flash_sale_line_score": null,
+"game_id": "PARIVISIONLegacy46309.4791666667",
+"group_key": "169068-334-PARIVISIONLegacy46309.4791666667-323-false",
+"hr_20": true,
+"in_game": false,
+"is_live": false,
+"is_live_scored": true,
+"is_promo": false,
+"league_ppid": "CS2",
+"line_score": 15,
+"odds_type": "standard",
+"projection_type": "Single Stat",
+"rank": 23,
+"refundable": true,
+"start_time": "2026-10-14T13:30:00.000-04:00",
+"stat_display_name": "MAP 3 Kills",
+"stat_type": "MAP 3 Kills",
+"status": "pre_game",
+"today": true,
+"tv_channel": null,
+"updated_at": "2026-10-14T11:33:07.780-04:00"
+},
+"relationships": {
+"duration": {
+"data": {
+"type": "duration",
+"id": "323"
+}
+},
+"game": {
+"data": {
+"type": "game",
+"id": "195205"
+}
+},
+"league": {
+"data": {
+"type": "league",
+"id": "265"
+}
+},
+"new_player": {
+"data": {
+"type": "new_player",
+"id": "169068"
+}
+},
+"projection_type": {
+"data": {
+"type": "projection_type",
+"id": "2"
+}
+},
+"score": {
+"data": null
+},
+"stat_type": {
+"data": {
+"type": "stat_type",
+"id": "334"
+}
+}
+}
+},
+{
+"type": "projection",
+"id": "15724678",
+"attributes": {
+"adjusted_odds": false,
+"board_time": "2026-10-14T12:00:00.000-04:00",
+"custom_image": null,
+"description": "PARIVISION MAP 3",
+"end_time": null,
+"event_type": "team",
+"flash_sale_line_score": null,
+"game_id": "PARIVISIONLegacy46309.4791666667",
+"group_key": "168219-341-PARIVISIONLegacy46309.4791666667-323-false",
+"hr_20": true,
+"in_game": false,
+"is_live": false,
+"is_live_scored": true,
+"is_promo": false,
+"league_ppid": "CS2",
+"line_score": 8.5,
+"odds_type": "standard",
+"projection_type": "Single Stat",
+"rank": 31,
+"refundable": true,
+"start_time": "2026-10-14T13:30:00.000-04:00",
+"stat_display_name": "MAP 3 Headshots",
+"stat_type": "MAP 3 Headshots",
+"status": "pre_game",
+"today": true,
+"tv_channel": null,
+"updated_at": "2026-10-14T11:33:07.780-04:00"
+},
+"relationships": {
+"duration": {
+"data": {
+"type": "duration",
+"id": "323"
+}
+},
+"game": {
+"data": {
+"type": "game",
+"id": "195205"
+}
+},
+"league": {
+"data": {
+"type": "league",
+"id": "265"
+}
+},
+"new_player": {
+"data": {
+"type": "new_player",
+"id": "168219"
+}
+},
+"projection_type": {
+"data": {
+"type": "projection_type",
+"id": "2"
+}
+},
+"score": {
+"data": null
+},
+"stat_type": {
+"data": {
+"type": "stat_type",
+"id": "341"
+}
+}
+}
+},
+{
+"type": "projection",
+"id": "15724684",
+"attributes": {
+"adjusted_odds": false,
+"allowed_wager_types": "over",
+"board_time": "2026-10-14T12:00:00.000-04:00",
+"custom_image": null,
+"description": "Legacy MAP 3",
+"end_time": null,
+"event_type": "team",
+"flash_sale_line_score": null,
+"game_id": "PARIVISIONLegacy46309.4791666667",
+"group_key": "332198-341-PARIVISIONLegacy46309.4791666667-323-false",
+"hr_20": true,
+"in_game": false,
+"is_live": false,
+"is_live_scored": true,
+"is_promo": false,
+"league_ppid": "CS2",
+"line_score": 7.5,
+"odds_type": "standard",
+"projection_type": "Single Stat",
+"rank": 37,
+"refundable": true,
+"start_time": "2026-10-14T13:30:00.000-04:00",
+"stat_display_name": "MAP 3 Headshots",
+"stat_type": "MAP 3 Headshots",
+"status": "pre_game",
+"today": true,
+"tv_channel": null,
+"updated_at": "2026-10-14T11:33:07.780-04:00"
+},
+"relationships": {
+"duration": {
+"data": {
+"type": "duration",
+"id": "323"
+}
+},
+"game": {
+"data": {
+"type": "game",
+"id": "195205"
+}
+},
+"league": {
+"data": {
+"type": "league",
+"id": "265"
+}
+},
+"new_player": {
+"data": {
+"type": "new_player",
+"id": "332198"
+}
+},
+"projection_type": {
+"data": {
+"type": "projection_type",
+"id": "2"
+}
+},
+"score": {
+"data": null
+},
+"stat_type": {
+"data": {
+"type": "stat_type",
+"id": "341"
+}
+}
+}
+},
+{
+"type": "projection",
+"id": "15682778",
+"attributes": {
+"adjusted_odds": true,
+"board_time": "2026-10-12T13:30:00.000-04:00",
+"custom_image": null,
+"description": "BetBoom MAP 1",
+"end_time": null,
+"event_type": "team",
+"flash_sale_line_score": null,
+"game_id": "CS2_match_E1UU7NP6OjiaZMbNPi2d5DNm",
+"group_key": "250961-332-CS2_match_E1UU7NP6OjiaZMbNPi2d5DNm-321-false",
+"hr_20": true,
+"in_game": false,
+"is_live": false,
+"is_live_scored": true,
+"is_promo": false,
+"league_ppid": "CS2",
+"line_score": 17.5,
+"odds_type": "demon",
+"projection_type": "Single Stat",
+"rank": 41,
+"refundable": true,
+"start_time": "2026-10-14T13:30:00.000-04:00",
+"stat_display_name": "MAP 1 Kills",
+"stat_type": "MAP 1 Kills",
+"status": "pre_game",
+"today": true,
+"tv_channel": null,
+"updated_at": "2026-10-14T13:07:33.666-04:00"
+},
+"relationships": {
+"duration": {
+"data": {
+"type": "duration",
+"id": "321"
+}
+},
+"game": {
+"data": {
+"type": "game",
+"id": "194872"
+}
+},
+"league": {
+"data": {
+"type": "league",
+"id": "265"
+}
+},
+"new_player": {
+"data": {
+"type": "new_player",
+"id": "250961"
+}
+},
+"projection_type": {
+"data": {
+"type": "projection_type",
+"id": "2"
+}
+},
+"score": {
+"data": null
+},
+"stat_type": {
+"data": {
+"type": "stat_type",
+"id": "332"
+}
+}
+}
+},
+{
+"type": "projection",
+"id": "15682779",
+"attributes": {
+"adjusted_odds": null,
+"board_time": "2026-10-12T13:30:00.000-04:00",
+"custom_image": null,
+"description": "BetBoom MAP 1",
+"end_time": null,
+"event_type": "team",
+"flash_sale_line_score": null,
+"game_id": "CS2_match_E1UU7NP6OjiaZMbNPi2d5DNm",
+"group_key": "250961-332-CS2_match_E1UU7NP6OjiaZMbNPi2d5DNm-321-false",
+"hr_20": true,
+"in_game": false,
+"is_live": false,
+"is_live_scored": true,
+"is_promo": false,
+"league_ppid": "CS2",
+"line_score": 16.5,
+"odds_type": "standard",
+"projection_type": "Single Stat",
+"rank": 43,
+"refundable": true,
+"start_time": "2026-10-14T13:30:00.000-04:00",
+"stat_display_name": "MAP 1 Kills",
+"stat_type": "MAP 1 Kills",
+"status": "pre_game",
+"today": true,
+"trending_count": 402,
+"tv_channel": null,
+"updated_at": "2026-10-14T13:07:33.774-04:00"
+},
+"relationships": {
+"duration": {
+"data": {
+"type": "duration",
+"id": "321"
+}
+},
+"game": {
+"data": {
+"type": "game",
+"id": "194872"
+}
+},
+"league": {
+"data": {
+"type": "league",
+"id": "265"
+}
+},
+"new_player": {
+"data": {
+"type": "new_player",
+"id": "250961"
+}
+},
+"projection_type": {
+"data": {
+"type": "projection_type",
+"id": "2"
+}
+},
+"score": {
+"data": null
+},
+"stat_type": {
+"data": {
+"type": "stat_type",
+"id": "332"
+}
+}
+}
+},
+{
+"type": "projection",
+"id": "15682777",
+"attributes": {
+"adjusted_odds": true,
+"board_time": "2026-10-12T13:30:00.000-04:00",
+"custom_image": null,
+"description": "BetBoom MAP 1",
+"end_time": null,
+"event_type": "team",
+"flash_sale_line_score": null,
+"game_id": "CS2_match_E1UU7NP6OjiaZMbNPi2d5DNm",
+"group_key": "250961-332-CS2_match_E1UU7NP6OjiaZMbNPi2d5DNm-321-false",
+"hr_20": true,
+"in_game": false,
+"is_live": false,
+"is_live_scored": true,
+"is_promo": false,
+"league_ppid": "CS2",
+"line_score": 15.5,
+"odds_type": "goblin",
+"projection_type": "Single Stat",
+"rank": 46,
+"refundable": true,
+"start_time": "2026-10-14T13:30:00.000-04:00",
+"stat_display_name": "MAP 1 Kills",
+"stat_type": "MAP 1 Kills",
+"status": "pre_game",
+"today": true,
+"tv_channel": null,
+"updated_at": "2026-10-14T13:07:33.771-04:00"
+},
+"relationships": {
+"duration": {
+"data": {
+"type": "duration",
+"id": "321"
+}
+},
+"game": {
+"data": {
+"type": "game",
+"id": "194872"
+}
+},
+"league": {
+"data": {
+"type": "league",
+"id": "265"
+}
+},
+"new_player": {
+"data": {
+"type": "new_player",
+"id": "250961"
+}
+},
+"projection_type": {
+"data": {
+"type": "projection_type",
+"id": "2"
+}
+},
+"score": {
+"data": null
+},
+"stat_type": {
+"data": {
+"type": "stat_type",
+"id": "332"
+}
+}
+}
+},
+{
+"type": "projection",
+"id": "15682769",
+"attributes": {
+"adjusted_odds": null,
+"board_time": "2026-10-12T13:30:00.000-04:00",
+"custom_image": null,
+"description": "BetBoom MAP 1",
+"end_time": null,
+"event_type": "team",
+"flash_sale_line_score": null,
+"game_id": "CS2_match_E1UU7NP6OjiaZMbNPi2d5DNm",
+"group_key": "250962-339-CS2_match_E1UU7NP6OjiaZMbNPi2d5DNm-321-false",
+"hr_20": true,
+"in_game": false,
+"is_live": false,
+"is_live_scored": true,
+"is_promo": false,
+"league_ppid": "CS2",
+"line_score": 9.5,
+"odds_type": "standard",
+"projection_type": "Single Stat",
+"rank": 49,
+"refundable": true,
+"start_time": "2026-10-14T13:30:00.000-04:00",
+"stat_display_name": "MAP 1 Headshots",
+"stat_type": "MAP 1 Headshots",
+"status": "pre_game",
+"today": true,
+"trending_count": 125,
+"tv_channel": null,
+"updated_at": "2026-10-14T13:07:34.166-04:00"
+},
+"relationships": {
+"duration": {
+"data": {
+"type": "duration",
+"id": "321"
+}
+},
+"game": {
+"data": {
+"type": "game",
+"id": "194872"
+}
+},
+"league": {
+"data": {
+"type": "league",
+"id": "265"
+}
+},
+"new_player": {
+"data": {
+"type": "new_player",
+"id": "250962"
+}
+},
+"projection_type": {
+"data": {
+"type": "projection_type",
+"id": "2"
+}
+},
+"score": {
+"data": null
+},
+"stat_type": {
+"data": {
+"type": "stat_type",
+"id": "339"
+}
+}
+}
+}
+],
+"included": [
+{
+"type": "team",
+"id": "24091",
+"attributes": {
+"abbreviation": "PARIVISION",
+"logo": null,
+"market": null,
+"name": null,
+"ppid": "CS2_team_eb3b450a-01a7-48f4-9220-5474d4670aba",
+"primary_color": "42a8a7",
+"secondary_color": "0e4142",
+"tertiary_color": null
+}
+},
+{
+"type": "team",
+"id": "24169",
+"attributes": {
+"abbreviation": "Legacy",
+"logo": null,
+"market": null,
+"name": null,
+"ppid": null,
+"primary_color": "d2b15b",
+"secondary_color": null,
+"tertiary_color": null
+}
+},
+{
+"type": "new_player",
+"id": "332198",
+"attributes": {
+"combo": false,
+"display_name": "FL1T",
+"image_url": "https://static.prizepicks.com/images/manual/PARIVISION26.png",
+"jersey_number": null,
+"league": "CS2",
+"league_id": 265,
+"market": null,
+"name": "FL1T",
+"position": "G",
+"ppid": null,
+"team": "PARIVISION",
+"team_name": "PARIVISION"
+},
+"relationships": {
+"league": {
+"data": {
+"type": "league",
+"id": "265"
+}
+},
+"team_data": {
+"data": {
+"type": "team",
+"id": "24091"
+}
+}
+}
+},
+{
+"type": "stat_type",
+"id": "339",
+"attributes": {
+"lfg_ignored_leagues": [],
+"name": "MAP 1 Headshots",
+"rank": 21
+}
+},
+{
+"type": "new_player",
+"id": "220724",
+"attributes": {
+"combo": false,
+"display_name": "FalleN",
+"image_url": "https://static.prizepicks.com/images/manual/6DfKl42.png",
+"jersey_number": null,
+"league": "CS2",
+"league_id": 265,
+"market": "",
+"name": "FalleN",
+"position": "G",
+"ppid": "CS2_player_39781898-a5dd-4e11-85b8-5c6498a72da3",
+"team": "FURIA",
+"team_name": "FURIA"
+},
+"relationships": {
+"league": {
+"data": {
+"type": "league",
+"id": "265"
+}
+},
+"team_data": {
+"data": {
+"type": "team",
+"id": "8"
+}
+}
+}
+},
+{
+"type": "team",
+"id": "8",
+"attributes": {
+"abbreviation": "FURIA",
+"logo": null,
+"market": null,
+"name": "FURIA",
+"ppid": "CS2_team_NtmOMKuYhal0OWzoyE8U6ru",
+"primary_color": null,
+"secondary_color": "ffffff",
+"tertiary_color": null
+}
+},
+{
+"type": "duration",
+"id": "321",
+"attributes": {
+"name": "MAP 1"
+}
+},
+{
+"type": "game",
+"id": "195205",
+"attributes": {
+"created_at": "2026-10-13T12:00:28.503-04:00",
+"end_time": null,
+"external_game_id": "PARIVISIONLegacy46309.4791666667",
+"is_live": false,
+"metadata": {
+"game_id": "PARIVISIONLegacy46309.4791666667",
+"game_info": {
+"status": "pre-game"
+},
+"league_name": "CS2"
+},
+"start_time": "2026-10-14T11:30:00.000-04:00",
+"status": "pre-game",
+"updated_at": "2026-10-13T12:00:28.503-04:00"
+}
+},
+{
+"type": "new_player",
+"id": "196762",
+"attributes": {
+"combo": false,
+"display_name": "Magnojez",
+"image_url": "https://static.prizepicks.com/images/manual/BetBoom25.png",
+"jersey_number": null,
+"league": "CS2",
+"league_id": 265,
+"market": "",
+"name": "Magnojez",
+"position": "G",
+"ppid": "CS2_player_e718a4d0-139c-4be3-9652-3dc41eb9b030",
+"team": "BetBoom",
+"team_name": "BetBoom"
+},
+"relationships": {
+"league": {
+"data": {
+"type": "league",
+"id": "265"
+}
+},
+"team_data": {
+"data": {
+"type": "team",
+"id": "4123"
+}
+}
+}
+},
+{
+"type": "duration",
+"id": "723",
+"attributes": {
+"name": "MAPS 1-2"
+}
+},
+{
+"type": "new_player",
+"id": "169068",
+"attributes": {
+"combo": false,
+"display_name": "dumau",
+"image_url": "https://static.prizepicks.com/images/manual/RaYZl32.png",
+"jersey_number": null,
+"league": "CS2",
+"league_id": 265,
+"market": null,
+"name": "dumau",
+"position": "G",
+"ppid": null,
+"team": "Legacy",
+"team_name": null
+},
+"relationships": {
+"league": {
+"data": {
+"type": "league",
+"id": "265"
+}
+},
+"team_data": {
+"data": {
+"type": "team",
+"id": "24169"
+}
+}
+}
+},
+{
+"type": "team",
+"id": "4123",
+"attributes": {
+"abbreviation": "BetBoom",
+"logo": null,
+"market": null,
+"name": "BetBoom",
+"ppid": "CS2_team_33138171-5ac3-4291-986a-e15d26ee87ae",
+"primary_color": "fe4c5c",
+"secondary_color": "ffffff",
+"tertiary_color": null
+}
+},
+{
+"type": "new_player",
+"id": "168219",
+"attributes": {
+"combo": false,
+"display_name": "latto",
+"image_url": "https://static.prizepicks.com/images/manual/RaYZl32.png",
+"jersey_number": null,
+"league": "CS2",
+"league_id": 265,
+"market": null,
+"name": "latto",
+"position": "G",
+"ppid": null,
+"team": "Legacy",
+"team_name": null
+},
+"relationships": {
+"league": {
+"data": {
+"type": "league",
+"id": "265"
+}
+},
+"team_data": {
+"data": {
+"type": "team",
+"id": "24169"
+}
+}
+}
+},
+{
+"type": "stat_type",
+"id": "332",
+"attributes": {
+"lfg_ignored_leagues": [],
+"name": "MAP 1 Kills",
+"rank": 20
+}
+},
+{
+"type": "game",
+"id": "194872",
+"attributes": {
+"created_at": "2026-10-12T13:30:19.332-04:00",
+"end_time": null,
+"external_game_id": "CS2_match_E1UU7NP6OjiaZMbNPi2d5DNm",
+"is_live": false,
+"metadata": {
+"game_id": "CS2_match_E1UU7NP6OjiaZMbNPi2d5DNm",
+"game_info": {
+"status": "pre-game"
+},
+"league_name": "CS2"
+},
+"start_time": "2026-10-14T13:30:00.000-04:00",
+"status": "pre-game",
+"updated_at": "2026-10-12T13:30:19.332-04:00"
+}
+},
+{
+"type": "new_player",
+"id": "250961",
+"attributes": {
+"combo": false,
+"display_name": "molodoy",
+"image_url": "https://static.prizepicks.com/images/manual/6DfKl42.png",
+"jersey_number": null,
+"league": "CS2",
+"league_id": 265,
+"market": "",
+"name": "molodoy",
+"position": "G",
+"ppid": "CS2_player_limc3XY7iN2nKZGhjMaUqXNA",
+"team": "FURIA",
+"team_name": "FURIA"
+},
+"relationships": {
+"league": {
+"data": {
+"type": "league",
+"id": "265"
+}
+},
+"team_data": {
+"data": {
+"type": "team",
+"id": "8"
+}
+}
+}
+},
+{
+"type": "projection_type",
+"id": "2",
+"attributes": {
+"name": "Single Stat"
+}
+},
+{
+"type": "league",
+"id": "265",
+"attributes": {
+"active": true,
+"f2p_enabled": false,
+"full_logo": null,
+"has_live_projections": false,
+"icon": "csgo",
+"image_url": "https://static.prizepicks.com/images/leagues/production/38.svg",
+"last_five_games_enabled": true,
+"league_icon_id": 38,
+"logo": null,
+"name": "CS2",
+"parent_id": null,
+"parent_name": null,
+"player_headshot_fallback": null,
+"projections_count": 0,
+"rank": 250,
+"show_trending": true
+},
+"relationships": {
+"projection_filters": {
+"data": []
+}
+}
+},
+{
+"type": "new_player",
+"id": "250962",
+"attributes": {
+"combo": false,
+"display_name": "YEKINDAR",
+"image_url": "https://static.prizepicks.com/images/manual/6DfKl42.png",
+"jersey_number": null,
+"league": "CS2",
+"league_id": 265,
+"market": "",
+"name": "YEKINDAR",
+"position": "G",
+"ppid": "CS2_player_8e847f38-0a35-4835-a43b-600ef997cf97",
+"team": "FURIA",
+"team_name": "FURIA"
+},
+"relationships": {
+"league": {
+"data": {
+"type": "league",
+"id": "265"
+}
+},
+"team_data": {
+"data": {
+"type": "team",
+"id": "8"
+}
+}
+}
+},
+{
+"type": "duration",
+"id": "323",
+"attributes": {
+"name": "MAP 3"
+}
+},
+{
+"type": "stat_type",
+"id": "330",
+"attributes": {
+"lfg_ignored_leagues": [
+265
+],
+"name": "MAPS 1-2 Kills",
+"rank": 11
+}
+},
+{
+"type": "stat_type",
+"id": "337",
+"attributes": {
+"lfg_ignored_leagues": [
+265
+],
+"name": "MAPS 1-2 Headshots",
+"rank": 12
+}
+},
+{
+"type": "stat_type",
+"id": "341",
+"attributes": {
+"lfg_ignored_leagues": [],
+"name": "MAP 3 Headshots",
+"rank": 41
+}
+},
+{
+"type": "stat_type",
+"id": "334",
+"attributes": {
+"lfg_ignored_leagues": [],
+"name": "MAP 3 Kills",
+"rank": 40
+}
+}
+]
+}

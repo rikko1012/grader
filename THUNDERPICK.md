@@ -233,3 +233,20 @@ No `Retry-After` or `X-RateLimit-*` headers have been returned. 429s occur well 
 > 8. Which timezone is `startTime` in (it matches UTC+0 so far), and does it change with daylight saving?
 > 9. Does the event-level "Match Winner" market always settle on the series (match) winner, with overtime included,
 >    for every format (BO1 / BO3 / BO5)? Can a BO2 event carry a draw price?
+
+## Recovery and feed states (2026-10-14)
+- **Autonomous recovery inside the existing budget.** Every caller (poller, admin probe) goes through the one atomic
+  gateway: persisted cooldown, Retry-After honoured, otherwise backoff 60 s x 2^(n-1) with jitter (cap 30 min); one
+  request in flight (lease); >= 20 s spacing; the shared budget is NOT increased; polling resumes by itself when the
+  cooldown ends, and the endpoint carrying quotes is polled at least every 150 s (quotes live 180 s). A recovered quote
+  is current again only with its own new retrieval time - no timestamp is ever reset to make old odds look fresh.
+- **States kept distinct** (provenance `tp_availability` + `feed_cause`): a successful EMPTY answer (`endpoint_empty`;
+  not a failure, and not proof that markets were removed), a 429 rate limit, a transport / server failure, an
+  authentication stop, an event no longer in the latest answer (`not_in_latest_answer`: withdrawn, suspended or closed -
+  the feed does not say which). Suspension is never inferred (the feed has no such flag).
+- **The 30-minute limit is operational only.** A quote not current for longer than `BLIP_MAX_S` (30 min) stops holding the
+  line's last Thunderpick grade and the line takes the normal fallback; the reason says "market status unknown (not
+  confirmed withdrawn)" - 30 minutes of empty answers is not treated as proof of withdrawal.
+- **Fallback shown as it is.** The selected source and its own quote age (`provenance.quote_age_s`, from that source's
+  retrieval time) are saved with every forecast; whether the selected odds affected the projection, the probability or
+  the stake is recorded by the grader (`detail.market_effect`).
