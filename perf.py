@@ -117,6 +117,7 @@ def hs_pmf(lam_kills, scope, hs_per_kill, kappa=HS_KAPPA, c=None):
     """Headshots: for each kill total k (kills_pmf), HS | k ~ BetaBinomial(k, a, b) with mean hs_per_kill and
     concentration kappa - so HS <= kills always and every kill total is averaged over. Sums to exactly 1."""
     from math import lgamma, exp
+    hs_per_kill = min(max(hs_per_kill, 1e-6), 1 - 1e-6)   # 2026-10-13 audit: exactly 0 or 1 = lgamma(0), a math domain error
     a, b = hs_per_kill * kappa, (1 - hs_per_kill) * kappa
     out = {}
     for k, pk in kills_pmf(lam_kills, scope, c).items():

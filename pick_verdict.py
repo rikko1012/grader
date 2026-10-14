@@ -70,7 +70,16 @@ def verdict(g):
     if g["p_more"] != g["p_less"]:
         side = "More" if g["p_more"] > g["p_less"] else "Less"
     else:
-        side = "More" if g["lambda_final"] > g["line"] else "Less"
+        # a tie at 3 decimals (or exactly 50% - the old pipeline's Over margin stops there): the model's unrounded chance,
+        # else the line's real cut. 2026-10-13 audit: was the TYPED line - a 30.7 line is cut at 30.5, so a 30.69
+        # projection with the model's Over at 50.65% read as Lean Under
+        raw = g.get("p_more_model_raw", (g.get("probs_raw") or {}).get("p_more_no_push"))
+        if raw is not None and raw != 0.5:
+            side = "More" if raw > 0.5 else "Less"
+        else:
+            from grader import _cuts
+            up, down = _cuts(float(g["line"]))
+            side = "More" if g["lambda_final"] > (up + down) / 2 else "Less"
     # goblin/demon lines have no Less on PrizePicks. If the model expects UNDER, say so (Lean
     # Under, 0 units - skip it) instead of headlining a More it thinks loses (azukay 17.5 demon:
     # printed "More 42%", he went under).

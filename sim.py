@@ -64,7 +64,17 @@ def simulate_grade(g, seed=7):
     q1, q2 = float(det.get("p_map1") or det.get("p_map") or 0.5), float(det.get("p_map2") or det.get("p_map") or 0.5)
     n_maps = 1 if scope == "1" else 3 if scope == "123" else 2
     qs = [q1, q2, (q1 + q2) / 2][:n_maps]
-    won = np.stack([rng.random(RUNS) < q for q in qs])
+    us = [rng.random(RUNS) for _ in qs]
+    won = np.stack([u < q for u, q in zip(us, qs)])
+    # 2026-10-13 audit: a BO3 Maps 1-3 pick only settles when map 3 is played (Underdog voids it after a 2-0), so on a BO3
+    # every run is a 1-1 after two maps (map 1 won / map 2 lost in q1(1-q2) / P(1-1) of them) - no 3-0 / 0-3 scripts.
+    # Same draws as before: the totals (the grade's own distribution) are unchanged, only the scripts' labels / order
+    mb = det.get("map_prob_basis")
+    bo3 = n_maps == 3 and g.get("p_map3") is not None and isinstance(mb, dict) and mb.get("format") == "bo3"
+    if bo3:
+        p11 = q1 * (1 - q2) + (1 - q1) * q2
+        won[0] = us[0] < (q1 * (1 - q2) / p11 if p11 > 0 else 0.5)
+        won[1] = ~won[0]
     rounds = rng.choice(_R, (n_maps, RUNS), p=_P)
     # every map of the prop's scope is played (Maps 1-3 = maps 1, 2 and 3 in full - 2026-10-11; before, map 3 was
     # "played" only after a 1-1, a BO3 assumption that mislabelled BO5 scripts)
@@ -86,6 +96,8 @@ def simulate_grade(g, seed=7):
                 "p_over": round(float(over[mask].sum() / max(decided[mask].sum(), 1)), 3), "exclusive": exclusive}
     if n_maps == 1:
         scen = [row(won[0], "win"), row(~won[0], "loss")]
+    elif bo3:
+        scen = [row(w12 == 2, "win 2-1"), row(w12 == 1, "lose 1-2")]
     elif n_maps == 3:
         scen = [row(w12 == 3, "win 3-0"), row(w12 == 2, "win 2-1"), row(w12 == 1, "lose 1-2"), row(w12 == 0, "lose 0-3")]
     else:
@@ -96,7 +108,8 @@ def simulate_grade(g, seed=7):
             "p_under_raw": round(float(under.mean()), 4), "p_push": round(float(push.mean()), 4),
             "mc_se": round(math.sqrt(0.25 / RUNS), 4), "mean": round(float(total.mean()), 1),
             "p10": round(float(lo)), "p50": round(float(mid)), "p90": round(float(hi)),
-            "scenarios": [s for s in scen if s], "scenarios_note": "heuristic match scripts ordering the grade's own distribution",
+            "scenarios": [s for s in scen if s], "scenarios_note": "heuristic match scripts ordering the grade's own distribution"
+            + ("; BO3: map 3 is played only after a 1-1 (a 2-0 voids the pick), so every script is a 2-1 or a 1-2" if bo3 else ""),
             "runs": RUNS, "anchored": True, "dist": g["dist"].get("kind"), "weight": 0}
 
 

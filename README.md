@@ -48,12 +48,16 @@ Results print to the screen and save to `output/<player>_<command>_<date>.json`.
 - **Maps 1-3** = maps 1, 2 and 3 in full, never maps 4-5 (BO5: always played; BO3 2-0: Underdog voids). The older pipeline described below is the fallback only (rates, form, H2H, Round Swing, win chance,
   Over margin).
 - Gates and caps (stand-in, transfer, sample, rust, AWPer on HS, FORM / TAPE FIGHT, thin market, same-match cap) set
-  the stake on every line and never change the chance. Their inputs read HLTV first (`hltv_first_gates`): AWP share,
+  the stake on every line. On the performance model they set the stake only and never change the chance. On the older
+  pipeline (fallback grades only) some of them also change the chance: each of these widens the spread x1.10 (together
+  at most x1.25) - roster not confirmed, sample under 5 Maps 1-2, under 10, thin data (under 20), stand-in, rust (15+
+  days since the last official map), poor DPR with poor KAST or ADR (and veto uncertainty, only with predicted maps on -
+  off since 2026-10-01); FORM FIGHT there also halves the confidence. Their inputs read HLTV first (`hltv_first_gates`): AWP share,
   last map date, Maps 1-2 count; BO3.gg is the backup. BO3.gg stays primary only for what HLTV's database lacks:
   upcoming schedule pages (maps / veto), team pages with benched / stand-in status, and players HLTV doesn't cover.
 - Every other factor is display only until it passes a chronological test - see `FACTOR_AUDIT.md`.
 
-## What it does automatically (older pipeline: Maps 1-3 projections, and the card's context)
+## What it does automatically (older pipeline: fallback projections, and the card's context)
 - **Roster (Gate C):** current team + 5-man roster from BO3.gg; stand-in if he's not on the roster;
   roster confirmed when his last map's lineup matches it.
 - **Waterfall:** last 3m -> 6m -> 12m -> all-time on current team (+/-8% flag) until 10+ maps,
@@ -68,7 +72,10 @@ Results print to the screen and save to `output/<player>_<command>_<date>.json`.
 - **Last 5:** KPR over the last 5 maps; 70/30 blend when it's 15%+ off the window.
 - **H2H:** Maps 1-2 of each series vs the opponent (map order within the series), kills or
   headshots vs the line, hit rate in wins/losses.
-- **Odds:** Polymarket series price -> American odds -> grader. No market = 50/50, flagged.
+- **Odds:** one series price per grade (`market_odds.select`: Thunderpick first, else Polymarket, else OddsPapi), its
+  exact probability passed to the grader. On every line a price that is not a liquid exchange / sharp book (SOFT) or no
+  price (NONE) caps the stake at 1.5U. Older pipeline only: the price also moves the projection (no market = 50/50,
+  flagged); the performance model takes no market input.
 - **FACEIT:** Steam ID from BO3.gg match data -> exact FACEIT account. Falls back to the
   name/teammate check in `faceit_resolve.py`. `show_to_members` is only true when it's certain.
 
@@ -82,7 +89,7 @@ so a grade never waits on HLTV.
 
 - Set `HLTV_DB_DSN` to the scraper's database (Railway: `${{Postgres.DATABASE_URL}}`).
 - Each grade then shows an **HLTV** card: Rating 3.0 (CT/T), Round Swing, ADR/KAST/K-D, data date.
-- **Round Swing feeds the older pipeline's grade** (Maps 1-3 only; grade_leg's swing multiplier) when the player has
+- **Round Swing feeds the older pipeline's grade** (fallback grades only; grade_leg's swing multiplier) when the player has
   10+ HLTV maps in the window (3m -> 6m -> 12m) *and* those maps are for the same team. Otherwise it
   stays 0 exactly as before. `HLTV_SWING=0` turns it off.
 - The card also shows (display only, never used in the grade): his HLTV stats on the prop maps
