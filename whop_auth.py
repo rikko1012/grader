@@ -61,6 +61,9 @@ LIVE_STATUSES = {"active", "trialing", "canceling"}
 LIFETIME_PLAN = "plan_ZSpLGB3mTmagK"                         # lifetime memberships show "completed"          # canceling = paid until the period ends
 MEMBERSHIPS = "https://api.whop.com/api/v1/memberships"
 NO_RECHECK_MIN = 1       # "no access" re-checked every minute: a new member gets in ~1 min after paying
+UNCLEAR_KEEP_MIN = 3     # Whop gave no clear answer (5xx / timeout): the last known answer is kept this long before asking again
+WHOP_DOWN_S = 30         # after an unclear answer, routine re-checks of OTHER members ask Whop one at a time for this long
+WHOP_PARALLEL = 8        # routine re-checks sent to Whop at once (a restart puts every member signed in 6+ h ago due together)
 JOIN_URL = "https://whop.com/1timeesports/exp_W6a3m1Ps4dxbCG/app/"
 
 
@@ -216,6 +219,9 @@ def has_access(user_id, force=False, last_known=None):
             age = time.time() - hit[0]
             if age < (RECHECK_H * 3600 if hit[1] else NO_RECHECK_MIN * 60):
                 return hit[1]
+        kept = _UNCLEAR.get(user_id)
+        if kept and not force and time.time() < kept[0]:
+            return kept[1]                    # Whop was unclear moments ago: no new call per request (2026-10-13 audit)
         flight = _CHECKING.get(user_id)
         lead = flight is None
         if lead:
@@ -224,8 +230,22 @@ def has_access(user_id, force=False, last_known=None):
         flight.wait(20)
         with _LOCK:
             h2 = _ACCESS_CACHE.get(user_id)
-        return h2[1] if h2 else (hit[1] if hit else bool(last_known))
+            k2 = _UNCLEAR.get(user_id)         # set only while the latest check was unclear (a clear answer removes it)
+        return k2[1] if k2 else h2[1] if h2 else (hit[1] if hit else bool(last_known))
+    probing = slot = False
     try:
+        # bounded and shared (2026-10-13 audit: a crowd of members each asked Whop - up to 3 calls x 15 s each, inside the
+        # request): at most WHOP_PARALLEL routine re-checks at once - a member arriving while all are busy keeps the last
+        # known answer now and is checked on a later request; after an unclear answer only one probe at a time goes to
+        # Whop and the rest keep their last known answer. Sign-in (force) always asks.
+        if not force:
+            if time.time() < _DOWN["until"]:
+                probing = _PROBE.acquire(blocking=False)
+                if not probing:
+                    return _keep_unclear(user_id, hit, last_known)
+            slot = _SLOTS.acquire(blocking=False)
+            if not slot:
+                return hit[1] if hit else bool(last_known)
         ok, sure = False, True
         try:
             ok = plan_access(user_id)
@@ -248,20 +268,42 @@ def has_access(user_id, force=False, last_known=None):
                 sure = False
                 _note(f"access check failed: {type(e).__name__}")
         if not ok and not sure:               # Whop didn't give a clear answer: keep what we knew
-            prev = hit[1] if hit else bool(last_known)
-            return prev
+            _DOWN["until"] = time.time() + WHOP_DOWN_S
+            return _keep_unclear(user_id, hit, last_known)
+        _DOWN["until"] = 0.0
         with _LOCK:
             if len(_ACCESS_CACHE) > 100000:
                 _ACCESS_CACHE.clear()
             _ACCESS_CACHE[user_id] = (time.time(), ok)
+            _UNCLEAR.pop(user_id, None)
         return ok
     finally:
+        if slot:
+            _SLOTS.release()
+        if probing:
+            _PROBE.release()
         with _LOCK:
             _CHECKING.pop(user_id, None)
         flight.set()
 
 
+def _keep_unclear(user_id, hit, last_known):
+    """No clear answer from Whop: the member keeps what we knew - for a few minutes (2026-10-13 audit: nothing was kept,
+    so while Whop was slow every request of the member asked again, inside the request). A kept "no" is asked again after
+    NO_RECHECK_MIN, as before; a kept "yes" is only ever the member's own last known access - Whop never said no."""
+    prev = hit[1] if hit else bool(last_known)
+    with _LOCK:
+        if len(_UNCLEAR) > 100000:
+            _UNCLEAR.clear()
+        _UNCLEAR[user_id] = (time.time() + (UNCLEAR_KEEP_MIN if prev else NO_RECHECK_MIN) * 60, prev)
+    return prev
+
+
 _CHECKING = {}
+_UNCLEAR = {}             # user -> (until, last known answer) after an unclear Whop answer
+_DOWN = {"until": 0.0}    # Whop's last answer was unclear: until then routine re-checks probe one at a time
+_PROBE = threading.Lock()
+_SLOTS = threading.BoundedSemaphore(WHOP_PARALLEL)
 
 
 def _note(msg):
@@ -270,11 +312,21 @@ def _note(msg):
 
 
 def session(cookie_value):
-    """-> {'user', 'name', 'ok'} for a valid session cookie, else None. Re-checks access daily."""
+    """-> {'user', 'name', 'ok'} for a valid session cookie, else None. Re-checks access every RECHECK_H hours.
+    After a CLEAR answer from Whop newer than the cookie's own check, 'renew' = (new cookie value, max-age s) carrying
+    that answer and its time (2026-10-13 audit: 'chk' was never refreshed, so after a restart a member signed in more than
+    6 h ago was re-checked with Whop on every request); the caller re-issues the cookie."""
     s = _unsign(cookie_value)
     if not s or time.time() > s.get("exp", 0):
         return None
     ok = s.get("ok", False)
+    out = {"user": s["u"], "name": s.get("n", "")}
     if time.time() - s.get("chk", 0) > RECHECK_H * 3600 or not ok:
         ok = has_access(s["u"], last_known=s.get("ok"))
-    return {"user": s["u"], "name": s.get("n", ""), "ok": ok}
+        with _LOCK:
+            hit = _ACCESS_CACHE.get(s["u"])
+            unclear = s["u"] in _UNCLEAR
+        if hit and not unclear and hit[1] == ok and int(hit[0]) > s.get("chk", 0):
+            out["renew"] = (_sign(dict(s, chk=int(hit[0]), ok=bool(ok))), max(0, int(s.get("exp", 0) - time.time())))
+    out["ok"] = ok
+    return out

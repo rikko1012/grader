@@ -14,6 +14,7 @@ One grade runs at a time (keeps requests to BO3.gg polite). Standard library onl
 import collections
 import json
 import re
+import secrets
 import shutil
 import os
 import sys
@@ -162,40 +163,85 @@ def player_lock(name):
         return _PLAYER_LOCKS.setdefault(key, threading.Lock())
 
 
+RESULTS_MAX = 20000
+_SWEPT = [0.0]
+
+
+def _store_result(key, status, body, ttl, keep):
+    """(caller holds _RG) Keep one answer; expired answers leave on insert (2026-10-13 audit: they were evicted by count only,
+    so up to 20,000 old grade bodies stayed in memory) - a sweep at most every 5 s, never more than RESULTS_MAX kept."""
+    now = time.time()
+    if now - _SWEPT[0] > 5:
+        _SWEPT[0] = now
+        for k in [k for k, v in _RESULTS.items() if len(v) > 3 and v[3] <= now]:
+            del _RESULTS[k]
+    while len(_RESULTS) >= RESULTS_MAX:
+        del _RESULTS[next(iter(_RESULTS))]            # full of live answers: the oldest go (recomputed if asked again)
+    _RESULTS[key] = (now - max(0, ttl - keep), status, body, now + keep)
+
+
+FAIL_KEEP = 2.0         # a failed computation is handed to everyone asking within this many seconds - never longer
+
+
+def _raise_or_return(failed):
+    if isinstance(failed, BaseException):
+        raise failed
+    return failed
+
+
 def shared(key, compute, ttl=RESULT_TTL):
     """Run compute() once per key: callers arriving while it runs wait for that answer, callers
-    within `ttl` seconds after get it instantly. compute() returns (status, body_bytes)."""
+    within `ttl` seconds after get it instantly. compute() returns (status, body_bytes).
+    A failure (compute raised, or a status other than 200 / 404) goes to the callers that waited for it and to callers
+    within FAIL_KEEP s - they don't each run it again (2026-10-13 audit: 8 waiters waited 1..8 s, and a member crowd
+    multiplied the requests to a failing upstream) - and is never kept as a result beyond that."""
     now = time.time()
     with _RG:
         hit = _RESULTS.get(key)
         if hit and now - hit[0] < ttl:
             return hit[1], hit[2]
-        ev = _INFLIGHT.get(key)
-        leader = ev is None
-        if leader:
-            ev = _INFLIGHT[key] = threading.Event()
+        fail = _RESULTS.get(("!fail", key))            # kept next to the answers (same store, same sweep, same limit)
+        failed = fail[1] if fail and now < fail[3] else None
+        if failed is None:
+            ev = _INFLIGHT.get(key)
+            leader = ev is None
+            if leader:
+                ev = _INFLIGHT[key] = threading.Event()
+    if failed is not None:
+        return _raise_or_return(failed)
     if not leader:
-        ev.wait(900)
+        if not ev.wait(900):
+            return shared(key, compute, ttl)            # still running after 15 min: wait for it again
+        failed = getattr(ev, "failed", None)            # the leader's failure, handed to everyone who waited for it
+        if failed is not None:
+            return _raise_or_return(failed)
         with _RG:
             hit = _RESULTS.get(key)
         if hit:
             return hit[1], hit[2]
-        return shared(key, compute, ttl)                # the leader failed - try once ourselves
+        return shared(key, compute, ttl)
+    failed = None
     try:
         out = compute()
         status, body = out[0], out[1]
         keep = out[2] if len(out) > 2 and out[2] else ttl    # a result may ask to be reused for less time (outage grades)
         if status in (200, 404):
             with _RG:
-                if len(_RESULTS) > 20000:
-                    cut = time.time() - ttl
-                    for k in [k for k, v in _RESULTS.items() if v[0] < cut]:
-                        del _RESULTS[k]
-                _RESULTS[key] = (time.time() - max(0, ttl - keep), status, body)
+                _store_result(key, status, body, ttl, keep)
+        else:
+            failed = (status, body)
         return status, body
+    except BaseException as e:
+        failed = e
+        raise
     finally:
         with _RG:
             _INFLIGHT.pop(key, None)
+            if failed is not None:                      # bounds retries of a failing upstream to one per key per FAIL_KEEP s
+                _store_result(("!fail", key), failed, None, FAIL_KEEP, FAIL_KEEP)
+            else:
+                _RESULTS.pop(("!fail", key), None)
+        ev.failed = failed
         ev.set()
 
 
@@ -212,6 +258,7 @@ STORAGE = {"last_cleanup": None, "freed_mb": 0.0}
 BOARD = {}              # Underdog line id -> board row + its grade summary
 BOARD_WORKERS = 3       # lines graded side by side (one at a time left most of the board ungraded for hours)
 BOARD_EVERY = 15 * 60   # re-grade a line at most this often (members' grades are cached anyway)
+BOARD_TTL = 5           # /api/board: one answer per platform shared by every member for 5 s
 HLTV_RETRY = 90         # a line graded while the HLTV database was unreachable is tried again this soon
 
 
@@ -223,33 +270,64 @@ def _hltv_status(public=False):
         return {"error": str(e)[:80]}
 
 
+def hltv_required(env=None):
+    """The member deployment (REQUIRE_WHOP set, like allowed()): there the HLTV database is part of the service - a missing
+    DSN is an outage, never a reason to grade the whole board on the old pipeline. Locally (no REQUIRE_WHOP) it is not."""
+    return bool((os.environ if env is None else env).get("REQUIRE_WHOP"))
+
+
 def perf_transient(g):
     """True when this grade fell back to the old pipeline only because the HLTV database was unreachable (cs2_scout._perf_input
-    marks that in the grade's projection_source; grader output itself is unchanged)."""
-    return "HLTV database unreachable" in str((g or {}).get("projection_source") or "")
+    marks that in the grade's projection_source; grader output itself is unchanged). 2026-10-13 audit: on the member
+    deployment a missing database ('HLTV database not configured') counts too - it silently regraded the board on the old
+    pipeline and logged it as live."""
+    ps = str((g or {}).get("projection_source") or "")
+    return "HLTV database unreachable" in ps or ("HLTV database not configured" in ps and hltv_required())
+
+
+def odds_transient(g):
+    """True when Thunderpick HAS an event for this match but no current quote (stale / cooldown / reader error) and the grade
+    used the fallback odds (market_odds marks the selection transient; the grade carries g['odds_transient']). Owner
+    2026-10-13: an odds blip is treated like an HLTV blip - the board keeps the line's last grade, nothing is logged."""
+    return bool((g or {}).get("odds_transient"))
+
+
+def grade_transient(g):
+    """A grade the board never stores and the pick log never records as a live forecast: HLTV or odds blip."""
+    return perf_transient(g) or odds_transient(g)
+
+
+def _transient_causes(g):
+    return [c for c, on in (("hltv", perf_transient(g)), ("odds", odds_transient(g))) if on]
 
 
 HLTV_MAX_RETRIES = 20   # a line kept this often (~30 min) while its model stays 'unreachable' drops to a hidden placeholder on the
                         # regular cycle (a slow query, not an outage) - an old-pipeline grade still never goes on the board for it
 
 
-def outage_placeholder(old, r, now=None):
-    """A line whose grade could not use the HLTV database and that has no earlier grade of this line to keep: not shown (no
-    side), tried again in HLTV_RETRY s; after HLTV_MAX_RETRIES it stays hidden but on the regular BOARD_EVERY cycle (a slow
-    query, not an outage - still never an old-pipeline grade on the board)."""
+def outage_placeholder(old, r, now=None, g=None):
+    """A line whose grade could not use the HLTV database (or Thunderpick's quote - g carries the cause) and that has no
+    earlier grade of this line to keep: not shown (no side), tried again in HLTV_RETRY s; after HLTV_MAX_RETRIES it stays
+    hidden but on the regular BOARD_EVERY cycle (a slow query, not an outage - still never an old-pipeline grade on the board)."""
     old = old or {}
     n = (old.get("hltv_retries") or 0) + 1
     now = now or time.time()
-    return {"at": now - BOARD_EVERY + HLTV_RETRY if n <= HLTV_MAX_RETRIES else now, "state": "RETRY", "reason": "HLTV database unreachable - graded again shortly",
-            "graded_line": r.get("line"), "hltv_retries": n, "hltv_retry": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+    odds = g is not None and odds_transient(g) and not perf_transient(g)
+    why = ("Thunderpick lists this match but has no current quote" + (f" ({_member_text(g.get('odds_transient_reason'))})"
+                                                                      if g.get("odds_transient_reason") else "") if odds
+           else "HLTV database unreachable")
+    return {"at": now - BOARD_EVERY + HLTV_RETRY if n <= HLTV_MAX_RETRIES else now, "state": "RETRY", "reason": why + " - graded again shortly",
+            "graded_line": r.get("line"), "hltv_retries": n, "hltv_retry": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "retry_cause": "odds" if odds else "hltv"}
 
 
 def keep_last_hltv_grade(old, g, r=None, now=None):
-    """The HLTV database was unreachable for this grade (g['perf_transient']): the board keeps the last HLTV grade of the
-    line instead of showing an old-pipeline grade next to HLTV grades of the same player (2026-10-11 saadzin: Under 30.5 on
-    the Underdog board, Over 29.5 on PrizePicks and in Match players, ten minutes apart). Returns the row to keep (due again
-    in HLTV_RETRY seconds) or None when the new grade should be stored."""
-    if not perf_transient(g) or not old or not old.get("grade"):
+    """The HLTV database was unreachable for this grade (g['perf_transient']) - or Thunderpick had no current quote
+    (odds_transient): the board keeps the last grade of the line instead of showing an old-pipeline / fallback-odds grade
+    next to the other grades of the same player (2026-10-11 saadzin: Under 30.5 on the Underdog board, Over 29.5 on
+    PrizePicks and in Match players, ten minutes apart). Returns the row to keep (due again in HLTV_RETRY seconds) or None
+    when the new grade should be stored."""
+    if not grade_transient(g) or not old or not old.get("grade"):
         return None
     if r is not None and old.get("graded_line") is not None and float(old["graded_line"]) != float(r.get("line") or -1):
         return None                                   # the line moved: the old grade is for another line
@@ -257,7 +335,8 @@ def keep_last_hltv_grade(old, g, r=None, now=None):
         return None
     now = now or time.time()
     return dict(old, at=now - BOARD_EVERY + HLTV_RETRY, hltv_retry=datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                hltv_retries=(old.get("hltv_retries") or 0) + 1)
+                hltv_retries=(old.get("hltv_retries") or 0) + 1,
+                retry_cause="odds" if odds_transient(g) and not perf_transient(g) else "hltv")
 BOARD_FILE = DATA_DIR / ".cache" / "board.json"
 
 
@@ -291,6 +370,9 @@ def _board_load():
     try:
         saved = json.loads(BOARD_FILE.read_text(encoding="utf-8"))
         rows = saved.get("rows") or {}
+        now = datetime.now(timezone.utc)
+        for k in [k for k, v in rows.items() if _started(v.get("match_start"), now)]:
+            del rows[k]                               # its match started while the server was down: never shown again
         for v in rows.values():
             # grading changed: keep showing the last grades (never an empty board) but regrade every line made by
             # another model version first thing - "at" 0 puts them at the front of the queue
@@ -304,6 +386,38 @@ def _board_load():
         BOARD.update(rows)
     except Exception:
         pass
+
+
+def _started(start, now=None):
+    t = comparison._ts(start)
+    return bool(t and t.tzinfo and t <= (now or datetime.now(timezone.utc)))
+
+
+def _feed_known(fb, book):
+    """This pass's read of one platform's feed is real data (rows, or an answered empty board) - not a failed / not yet
+    loaded read, which must never drop the board's kept grades."""
+    if fb.get("rows"):
+        return True
+    if book == "prizepicks":
+        return fb.get("state") in ("ok", "empty")
+    return not fb.get("error") and bool(fb.get("at"))
+
+
+def prune_board(feeds, now=None):
+    """2026-10-13 audit: BOARD was never pruned (only HLTV-retry rows were) and past 5,000 entries the whole board - current
+    lines and kept HLTV grades included - was cleared, so the Prop Board showed 0 lines. Now each pass drops exactly the
+    entries whose line left its platform's feed or whose match started; a platform whose read failed keeps its entries.
+    feeds = {book: that pass's underdog.board() / prizepicks.board()}. Returns how many were dropped."""
+    now_ = (now or datetime.now(timezone.utc)).isoformat()
+    live, known = set(), set()
+    for book, fb in feeds.items():
+        if _feed_known(fb or {}, book):
+            known.add(book)
+        live |= {r["id"] for r in (fb or {}).get("rows") or [] if not r.get("start") or r["start"] > now_}
+    drop = [k for k in list(BOARD) if k not in live and ("prizepicks" if str(k).startswith("pp:") else "underdog") in known]
+    for k in drop:
+        BOARD.pop(k, None)
+    return len(drop)
 
 
 def _board_l10(rf, r):
@@ -346,12 +460,14 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12", book="
     import perf_live
     st = comparison._ts(start)
     # one platform's graded lines (2026-10-10: PrizePicks like Underdog); the table shows each player's STANDARD line -
-    # PrizePicks goblin / demon markets stay on the board, never mixed into this table
-    rows = [r for r in board_payload(book)["rows"] if (r.get("line_type") or r.get("odds_type") or "standard") == "standard"]
+    # PrizePicks goblin / demon markets stay on the board, never mixed into this table. A promo line is a standard Over /
+    # Under line graded as standard (2026-10-13 audit: it was left out here and re-added from the feed as 'grading...')
+    rows = [r for r in board_payload(book)["rows"] if (r.get("line_type") or r.get("odds_type") or "standard") in ("standard", "promo")]
     same = [r for r in rows if (r.get("scope") or "12") == scope and st and comparison._ts(r.get("start"))
             and abs((comparison._ts(r["start"]) - st).total_seconds()) <= comparison.JOIN_START_MIN * 60
             and ({comparison._team_same(r.get("team_name") or r.get("team"), team), comparison._team_same(r.get("team_name") or r.get("team"), opponent)} & {True})]
     b = BO3()
+    benched = {}                                    # team -> benched nicks (lower): never in a lineup or a team total
     try:
         rosters = {}
         for slug, name in ((team_slug, team), (opp_slug, opponent)):
@@ -360,6 +476,8 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12", book="
                 # active players only: BO3.gg status 2 = benched (not in the lineup)
                 rosters[name] = [x.get("nickname") for x in (td.get("players") or [])
                                  if not x.get("is_coach") and x.get("nickname") and x.get("status") != 2]
+                benched[name] = {x["nickname"].lower() for x in (td.get("players") or [])
+                                 if not x.get("is_coach") and x.get("nickname") and x.get("status") == 2}
             except Exception:
                 rosters[name] = []
     finally:
@@ -374,7 +492,13 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12", book="
             players[(name, n.lower())] = {"nick": n, "team": name, "kills": None, "hs": None}
     for r in same:
         nk = (r.get("nick") or r["player"])
-        e = players.setdefault((side_of(r), nk.lower()), {"nick": nk, "team": side_of(r), "kills": None, "hs": None, "not_on_roster_page": True})
+        # a benched player with a book line (2026-10-13 audit: he was put back into the lineup and the team total, labelled
+        # 'not on roster page'): his line is shown, labelled benched, and never counted in a lineup or a total
+        bn = nk.lower() in benched.get(side_of(r), ())
+        e = players.setdefault((side_of(r), nk.lower()), dict({"nick": nk, "team": side_of(r), "kills": None, "hs": None},
+                                                              **({"benched": True} if bn else {"not_on_roster_page": True})))
+        if r.get("odds_type") == "promo" and (e.get(r["prop"]) or {}).get("line") is not None:
+            continue                                # the player's standard line is the table's line; a promo line never replaces it
         e[r["prop"]] = {"proj": r.get("proj"), "line": r["line"], "side": r.get("side"), "p": r.get("p"), "grade": r.get("grade"),
                         "units": r.get("units"), "units_full": r.get("units_full"), "graded_at": r.get("graded_at"), "dstat": r.get("dstat"),
                         "source": r.get("source"), "state": r.get("state"), "ud_team": r.get("team"), "ud_opponent": r.get("opponent"),
@@ -435,7 +559,8 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12", book="
                                else "no HLTV history"}
     out = []
     for tname in (team, opponent):
-        ps = [e for (t, _), e in players.items() if t == tname]
+        shown = [e for (t, _), e in players.items() if t == tname]
+        ps = [e for e in shown if not e.get("benched")]      # lineups and totals: active players only
         # team totals need the 5 who actually play: Underdog's lineup when it lists exactly 5, else a roster page of
         # exactly 5; otherwise no total (a 6-man roster page would inflate it)
         lined = [e for e in ps if any((e[p] or {}).get("line") is not None for p in ("kills", "hs"))]
@@ -444,9 +569,9 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12", book="
         covered = sum(1 for e in (five or ps) if all((e[p] or {}).get("proj") is not None for p in ("kills", "hs")))
         full = bool(five) and covered == 5
         summ = {prop: (round(sum((e[prop] or {}).get("proj") or 0 for e in five), 1) if full else None) for prop in ("kills", "hs")}
-        out.append({"team": tname, "players": ps, "summary": dict(summ, complete=full, covered=covered, roster=len(ps), basis=basis,
-                                                                  lineup=[e["nick"] for e in five] if five else None),
-                    "exposure": team_exposure(ps)})
+        out.append({"team": tname, "players": shown, "summary": dict(summ, complete=full, covered=covered, roster=len(ps), basis=basis,
+                                                                     lineup=[e["nick"] for e in five] if five else None),
+                    "exposure": team_exposure(shown)})
     return {"match": {"team": team, "opponent": opponent, "start": start, "scope": scope}, "teams": out,
             "at": _dt.now(timezone.utc).isoformat(timespec="seconds")}
 
@@ -502,7 +627,7 @@ def board_payload(book="underdog"):
                                                      "hs_pct", "p_win", "market", "team_name", "opp_name", "match_slug",
                                                      "graded_line", "graded_model", "player_id", "event", "bo", "maps_known",
                                                      "dstat", "source", "support", "concern", "tonight", "hltv_retry",
-                                                     "cap_grade", "warn")}))
+                                                     "retry_cause", "cap_grade", "warn")}))
         rows[-1]["scope"] = r.get("scope") or "12"
         x = rows[-1]
         nick = x.get("nick") or x.get("player") or ""
@@ -524,10 +649,17 @@ def board_payload(book="underdog"):
         cut = x.get("cap_n") if (x.get("units_full") or 0) > (x.get("units") or 0) else None   # the cap cut THIS row (0.5U floor)
         x["cap_reason"] = cap_reason_text(cg if (x.get("units") or 0) > 0 else [], cut)
         x["flagged"] = bool((x.get("dstat") or ["ok"])[0] in ("verify", "limited") or x.pop("warn", False))
-    out = {"book": book, "updated": b["at"], "error": b["error"], "rows": rows, "total": len(b["rows"]),
+    # feed errors / sources reach members in words only - no host, port, driver or URL text (2026-10-13 audit)
+    out = {"book": book, "updated": b["at"], "error": member_source_note(b["error"]), "rows": rows, "total": len(b["rows"]),
            "version": picklog.MODEL_VERSION}
     if book == "prizepicks":
-        out["feed"] = {k: b.get(k) for k in ("state", "at", "checked_at", "lines", "error", "ingested_at", "source")}
+        out["feed"] = {k: b.get(k) for k in ("state", "at", "checked_at", "lines", "ingested_at")}
+        # where this read came from, as an explicit flag (2026-10-13 audit: the page tested the source text for "direct",
+        # which the fallback's own text contains - "direct read failed" - and dropped "via the scraper's copy")
+        src = b.get("source")
+        out["feed"].update(error=member_source_note(b.get("error")), via_scraper=bool(src) and src != prizepicks.DIRECT_SOURCE,
+                           source=None if not src else "PrizePicks (direct)" if src == prizepicks.DIRECT_SOURCE
+                           else "PrizePicks via the scraper's copy")
     return out
 
 
@@ -604,8 +736,8 @@ def cap_reason_text(reasons, cap_n=None):
     return "; ".join(parts) or None
 
 
-_WARN_START = ("HLTV database unreachable", "Projection from the older model", "Provisional", "FORM FIGHT", "TAPE FIGHT",
-               "No upcoming match")
+_WARN_START = ("HLTV database unreachable", "HLTV database not connected", "Projection from the older model", "Provisional",
+               "FORM FIGHT", "TAPE FIGHT", "No upcoming match")
 
 
 def has_warning(g):
@@ -657,37 +789,49 @@ def _both_boards():
     return rows
 
 
-def board_stake(res, prop, scope, line, line_type="standard", book=None):
-    """The same line on the board with its stake cut by the same-match cap: the card shows that stake too (one stake
-    per line on the whole site). Only when the board row is this exact pick (side, line, maps, match) and was cut from
-    exactly this card's stake - otherwise the card's own stake stands. Returns the verdict (a new dict when capped)."""
-    v = res.get("verdict") or {}
-    if not v.get("side") or not v.get("units"):
-        return v
-    nick = ((res.get("player_block") or {}).get("player") or {}).get("nick") or ""
-    st = comparison._ts((res.get("next_match") or {}).get("start"))
-    if time.time() - _BS_CACHE[0] > 5:            # board rows at most 5 s old (no board rebuild per member grade)
-        # single-flight: one request rebuilds, the rest keep the previous rows (a 700-member rush must not rebuild the
-        # board 700 times at once); only the very first build makes others wait
+def _bs_rows():
+    """Both boards' rows at most 5 s old (no board rebuild per member grade). Single-flight: one request rebuilds, the rest
+    keep the previous rows (a 700-member rush must not rebuild the board 700 times at once); only the very first build
+    makes others wait."""
+    if time.time() - _BS_CACHE[0] > 5:
         if _BS_LOCK.acquire(blocking=not _BS_CACHE[0]):
             try:
                 if time.time() - _BS_CACHE[0] > 5:
                     _BS_CACHE[:] = [time.time(), _both_boards()]
             finally:
                 _BS_LOCK.release()
+    return _BS_CACHE[1]
+
+
+def board_stake(res, prop, scope, line, line_type="standard", book=None):
+    """The same line on the board with its stake cut by the same-match cap: the card shows that stake too (one stake
+    per line on the whole site). Only when the board row is this exact pick (side, line, maps, match) and was cut from
+    exactly this card's stake - otherwise the card's own stake stands. Returns the verdict (a new dict when capped).
+    book: the card's platform; a tuple of platforms (a typed card / Slate line / share link with no platform - 2026-10-13
+    audit: those always used Underdog's cap, so a PrizePicks-only line showed another stake than its board) = the first
+    platform whose board lists this exact pick decides, Underdog first."""
+    v = res.get("verdict") or {}
+    if not v.get("side") or not v.get("units"):
+        return v
+    nick = ((res.get("player_block") or {}).get("player") or {}).get("nick") or ""
+    st = comparison._ts((res.get("next_match") or {}).get("start"))
+    rows = _bs_rows()
     book = book or ("prizepicks" if line_type in ("goblin", "demon") else "underdog")   # the card's own platform
-    for r in _BS_CACHE[1]:
-        if (r.get("book") or "underdog") != book:
-            continue
-        if (str(r.get("nick") or r.get("player") or "").lower() == nick.lower() and r.get("prop") == prop
-                and (r.get("scope") or "12") == scope and float(r.get("line") or -1) == float(line) and r.get("side") == v["side"]
-                and r.get("cap_n") and r.get("units_full") == v["units"] and r["units"] < r["units_full"] and st and comparison._ts(r.get("start"))
-                and abs((comparison._ts(r["start"]) - st).total_seconds()) <= comparison.JOIN_START_MIN * 60):
-            out = dict(v, units=r["units"], units_full=r["units_full"], cap_n=r["cap_n"],
-                       cap_team=r.get("team_name") or r.get("team"))
-            if not r["units"]:                  # the cap left no room for this pick: a 0-unit Lean, as on the board
-                out.update(grade="LEAN", reason=r.get("reason") or v.get("reason"))
-            return out
+    for bk in ((book,) if isinstance(book, str) else tuple(book)):
+        exact = [r for r in rows if (r.get("book") or "underdog") == bk
+                 and str(r.get("nick") or r.get("player") or "").lower() == nick.lower() and r.get("prop") == prop
+                 and (r.get("scope") or "12") == scope and float(r.get("line") or -1) == float(line) and r.get("side") == v["side"]
+                 and st and comparison._ts(r.get("start"))
+                 and abs((comparison._ts(r["start"]) - st).total_seconds()) <= comparison.JOIN_START_MIN * 60]
+        for r in exact:
+            if r.get("cap_n") and r.get("units_full") == v["units"] and r["units"] < r["units_full"]:
+                out = dict(v, units=r["units"], units_full=r["units_full"], cap_n=r["cap_n"],
+                           cap_team=r.get("team_name") or r.get("team"))
+                if not r["units"]:              # the cap left no room for this pick: a 0-unit Lean, as on the board
+                    out.update(grade="LEAN", reason=r.get("reason") or v.get("reason"))
+                return out
+        if exact:
+            return v                            # this platform lists the pick uncut: its stake stands
     return v
 
 
@@ -695,8 +839,8 @@ def board_last_hltv(res, prop, scope):
     """During an HLTV outage the card grades on the old pipeline; this is what the Prop Board still shows for the same player /
     stat / maps (its last performance-model grades), so the member is told instead of seeing two different numbers."""
     nick = (((res.get("player_block") or {}).get("player") or {}).get("nick") or "").lower()
-    try:
-        rows_ = _both_boards()
+    try:                                          # the same <= 5 s snapshot as board_stake (2026-10-13 audit: every outage
+        rows_ = _bs_rows()                        # card rebuilt both boards - 700 members = 1,400 rebuilds during an outage)
     except Exception:
         rows_ = _BS_CACHE[1]
     rows = [r for r in rows_ if str(r.get("nick") or r.get("player") or "").lower() == nick and r.get("prop") == prop and r.get("side")
@@ -722,6 +866,8 @@ SLIP_STUDIO = studio_flag()       # on by default (owner 2026-10-12); SLIP_STUDI
 STUDIO_BUILDS_PER_MIN = 20        # Build presses per member per minute (a retry with the same idem key is free)
 STUDIO_EVENTS_PER_MIN = 40        # verify + event calls per member per minute (its own bucket - never eats build quota)
 STUDIO_BODY_MAX = 16 * 1024
+POST_MAX = 20000                  # every other POST body (slip log <= 20,000 bytes; the admin closing-line form far less)
+SLIP_LOG_PER_MIN = 10             # /api/slip_log entries per member per minute
 STUDIO_CAP_TTL = 5                # /api/slip_studio/capacity: one answer per settings shared by every member for 5 s
 SHADOW_LABEL = "Shadow - not a staking recommendation"
 MODEL_NOT_VALIDATED = "Model: not validated yet - market baseline shown, no recommendation"
@@ -850,6 +996,27 @@ def member_source_note(note):
     return s[:200]
 
 
+_RAW_RE = re.compile(r"https?://|Traceback|host=|port=|\b\w+(Error|Exception)\b")
+
+
+def _member_reason(s):
+    """A moneyline block / baseline reason for members (2026-10-13 audit): a source note inside it ('stale: kalshi refresh
+    failing (<raw error>); last good data 40s old') gets member_source_note's words; any other raw error text the same."""
+    if not s or not _RAW_RE.search(str(s)):
+        return s
+    s = re.sub(r"stale: \S+ refresh failing \(.*?\); last good data \d+s old", lambda m: member_source_note(m.group(0)), str(s))
+    return member_source_note(s) if _RAW_RE.search(s) else s
+
+
+def _member_text(s, n=160):
+    """Free text from a provider / reader shown to members: no URLs; anything that reads like an exception or a connection
+    string becomes member_source_note's words."""
+    s = re.sub(r"https?://\S+", "", str(s or "")).strip()
+    if not s:
+        return None
+    return member_source_note(s) if _RAW_RE.search(s) else s[:n]
+
+
 def moneylines_payload():
     """The member view of moneyline.board(): slimmed (no raw platform payloads / rules text), team A first.
     Thunderpick first (2026-10-13): one block per linked match (moneyline.tp_block - memory only), the SAME blocks feed
@@ -872,8 +1039,10 @@ def moneylines_payload():
                 continue
             blk = {k: b.get(k) for k in _ML_BLOCK_KEYS}
             blk["url"] = b.get("url") if p == "polymarket" else None      # Kalshi's page URL form is unverified - not linked
+            blk["reason"] = _member_reason(blk.get("reason"))
             pl[p] = blk
-        base = e.get("baseline") or {}
+        base = dict(e.get("baseline") or {})
+        base["reason"] = _member_reason(base.get("reason"))
         out.append({"match_id": e.get("match_id"), "link_status": e.get("link_status"), "link_reason": e.get("link_reason"),
                     "teams": {"a": (e.get("teams") or {}).get("a", {}).get("name"), "b": (e.get("teams") or {}).get("b", {}).get("name"),
                               "names_by_platform": dict((e.get("teams") or {}).get("names_by_platform") or {})},
@@ -1171,6 +1340,7 @@ def settled_batches():
 
 
 _STUDIO_HITS, _STUDIO_EV_HITS, _STUDIO_GUARD = {}, {}, threading.Lock()
+_SLIP_LOG_HITS = {}                                   # /api/slip_log: its own per-member bucket (studio_rate_ok)
 
 
 def studio_rate_ok(member, idem=None, bucket=None, limit=None):
@@ -1377,7 +1547,8 @@ def board_forever():
         try:
             # both platforms' lines, each graded at its own line and market type with the same pipeline (same
             # projection for the same player / match / stat / maps and model version; only the line differs)
-            rows = underdog.board(wait=True)["rows"] + prizepicks.board(wait=True)["rows"]
+            feeds = {"underdog": underdog.board(wait=True), "prizepicks": prizepicks.board(wait=True)}
+            rows = feeds["underdog"]["rows"] + feeds["prizepicks"]["rows"]
             now = datetime.now(timezone.utc).isoformat()
             # Underdog alternates stay ungraded (as before); PrizePicks goblin / demon are their own markets and are graded
             # a line that moved since its grade is regraded at once (its grade was for another line - 2026-10-11 audit)
@@ -1415,8 +1586,8 @@ def board_forever():
                     if kept:
                         BOARD[r["id"]] = kept
                         return
-                    if perf_transient(g):                 # nothing to keep: the line waits (hidden) and is tried again soon -
-                        BOARD[r["id"]] = outage_placeholder(BOARD.get(r["id"]), r)   # never an old-pipeline grade for a transient reason
+                    if grade_transient(g):                # nothing to keep: the line waits (hidden) and is tried again soon -
+                        BOARD[r["id"]] = outage_placeholder(BOARD.get(r["id"]), r, g=g)   # never an old-pipeline / fallback-odds grade for a transient reason
                         return
                     pb = res.get("player_block") or {}
                     if (r.get("scope") or "12") == "123":   # display only: his Maps 1-3 record (never a grade input)
@@ -1455,7 +1626,7 @@ def board_forever():
                     try:                                  # immutable comparison snapshot (changes only) + the row's evidence
                         ub = underdog.board()
                         pnl = comparison.panel(res, ub["rows"] + prizepicks.board()["rows"], board_at=ub.get("at"), id_map=ud_id_map(ub["rows"]))
-                        if not perf_transient(g):             # an outage grade is no evidence of a changed forecast
+                        if not grade_transient(g):            # an outage grade is no evidence of a changed forecast
                             comparison.snapshot(res, pnl, picklog.MODEL_VERSION)
                         if pnl:
                             BOARD[r["id"]].update(support=(pnl["supports"] or [None])[0], concern=pnl["concern"])
@@ -1464,7 +1635,7 @@ def board_forever():
                     # the platform and the provider's market id travel with the logged forecast (one row per platform)
                     res["book"] = {"book": r.get("book") or "underdog", "market_id": r.get("market_id") or r.get("id"),
                                    "market": r.get("market"), "odds_type": lt}
-                    if not perf_transient(g):                 # never logged as a forecast of the live model (calibration cohorts)
+                    if not grade_transient(g):                # never logged as a forecast of the live model (calibration cohorts)
                         try:
                             picklog.log_async(res, v, test=2)
                         except Exception:
@@ -1477,10 +1648,8 @@ def board_forever():
             from concurrent.futures import ThreadPoolExecutor
             with ThreadPoolExecutor(BOARD_WORKERS, thread_name_prefix="board") as ex:
                 list(ex.map(one, todo))
-            now_ = datetime.now(timezone.utc).isoformat()
-            live_ids = {r["id"] for r in rows if not r.get("start") or r["start"] > now_}
-            for k in [k for k, v in list(BOARD.items()) if v.get("hltv_retry") and k not in live_ids]:
-                BOARD.pop(k, None)                    # a line that left the feed / whose match started is not retried (no endless 10 s pause)
+            # a line that left the feed / whose match started is dropped (no endless 10 s retry pause, no unbounded board)
+            prune_board(feeds)
             _board_save()
             try:                                      # roles: the HLTV scraper's tables (30 min), then Liquipedia
                 roles.refresh_hltv()
@@ -1505,8 +1674,6 @@ def board_forever():
                 slips.log_recommended(board_payload()["rows"], picklog.MODEL_VERSION)
             except Exception:
                 traceback.print_exc()
-            if len(BOARD) > 5000:
-                BOARD.clear()
         except Exception:
             traceback.print_exc()
         # lines waiting on the HLTV database (kept grades / placeholders) are tried again within seconds, not after a full pass
@@ -1617,7 +1784,12 @@ def public(res):
         (res.get("player_block") or {}).pop(k, None)
     rb = (res.get("player_block") or {}).pop("_rank_band", None)
     if rb and isinstance(res.get("hltv_context"), dict):
-        res["hltv_context"]["rank_band"] = rb          # the one the grade used
+        # the one the grade used - on a copy: the context dict is hltv.context's cached answer, shared with later grades
+        # (2026-10-13 audit: BO3.gg's band replaced the cached HLTV band)
+        res["hltv_context"] = dict(res["hltv_context"], rank_band=rb)
+    g_ = res.get("grade")
+    if isinstance(g_, dict) and g_.get("odds_transient_reason"):
+        g_["odds_transient_reason"] = _member_text(g_["odds_transient_reason"])   # reader text in words only
     res.pop("opponent_defense", None)      # shadow feature - admin log only until it is proven
     pb = res.get("player_block") or {}
     for r in pb.get("recent_maps") or []:
@@ -1664,6 +1836,9 @@ _FLAG_RULES = (   # (starts with, member-friendly text or None = not shown)
     ("0 units: SCOUT", "No upcoming match found - scouting view only"),
     ("0 units", None),
 )
+HLTV_NOT_CONNECTED = ("HLTV database not connected right now - temporary projection from the older model; the Prop Board keeps "
+                      "each line's last grade until it is connected again")
+HLTV_NOT_CONFIGURED = "Projection from the older model - the HLTV database is not configured on this server"
 _REASONS = (("Gate A", "AWPer on a headshot prop"), ("Gate D", "No recent official maps to grade"),
             ("Gate C", "Not on this team's roster"), ("Missing", "Not enough data to grade"))
 
@@ -1866,9 +2041,27 @@ def card_odds_info(res):
     return out
 
 
+def odds_blip_note(res):
+    """The card's notice for an odds blip (owner 2026-10-13: handled like an HLTV blip): the real condition - Thunderpick
+    lists this match but has no current quote - and what the card's odds actually are, never presented as current
+    Thunderpick odds."""
+    g = res.get("grade") or {}
+    why = _member_text(g.get("odds_transient_reason"))
+    od = res.get("odds") if isinstance(res.get("odds"), dict) else {}
+    src, book = odds_selected(od), od.get("book")
+    fb = "Polymarket" if src == "polymarket" else (f"{book} via OddsPapi" if book else "OddsPapi") if src == "oddspapi" else None
+    used = (f"this card's odds come from {fb} (the fallback source), not from Thunderpick" if fb else
+            "the Thunderpick price on this card is not a current quote" if src == "thunderpick" else
+            "this card has no betting-market odds")
+    return f"Thunderpick lists this match but has no current quote{f' ({why})' if why else ''} - {used}."
+
+
 def _public_flag(f, src=None, book=None):
     if f.startswith("SOFT BOOK"):                   # the market-quality cap, in the selected source's own words
         return _soft_text(f, src, book)
+    if f.startswith("OLD PROJECTION") and "HLTV database not configured" in f:
+        # the real cause (2026-10-13 audit: it read 'no HLTV data for this player or matchup')
+        return HLTV_NOT_CONNECTED if hltv_required() else HLTV_NOT_CONFIGURED
     if f.startswith("RUST") or f.startswith("Note: last official map"):
         days = next((w for w in f.split() if w.isdigit()), None)
         return (f"Last official map {days} days ago" + (" - extra caution" if f.startswith("RUST") else "")) if days else None
@@ -1933,6 +2126,26 @@ def page():
 
 STATS = {"requests": 0, "ms_total": 0.0, "since": time.time(), "errors_5xx": 0}
 LAST_MEMBER = [0.0]     # last member request on /api/* (the board worker steps aside while members are active)
+_BUSY_RE = re.compile(r"cannot connect|connection|timed? ?out|timeout|getaddrinfo|temporar|unreachable|\b50[234]\b", re.I)
+
+
+def failure_body(e, path=""):
+    """(status, body) for an unexpected failure: members get a plain message with a short reference, the details go to the
+    server log under that reference (2026-10-13 audit: 'Something went wrong: API request to https://api.bo3.gg/... failed:
+    Cannot connect to host api.bo3.gg:443 ...' reached the card). An upstream that could not be reached -> 503, which the
+    page retries by itself. One failure handed to many waiting requests (shared) is logged once, under one reference."""
+    ref = getattr(e, "scout_ref", None)
+    if ref is None:
+        ref = secrets.token_hex(3)
+        try:
+            e.scout_ref = ref
+        except Exception:
+            pass
+        sys.stderr.write(f"  error {ref} on {path}: {type(e).__name__}: {str(e)[:300]}\n")
+        traceback.print_exc()
+    busy = hltv.is_transient(e) or bool(_BUSY_RE.search(str(e)))
+    return (503 if busy else 500), {"error": ("Couldn't reach a data source right now - please try again in a moment" if busy
+                                              else "Something went wrong - please try again") + f" (ref {ref})"}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1959,6 +2172,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         for k, v in (headers or {}).items():
             self.send_header(k, v)
+        renew, self._renew = getattr(self, "_renew", None), None
+        if renew:                                      # Whop just confirmed access: the cookie carries that check (B3)
+            self.send_header("Set-Cookie", f"{whop_auth.COOKIE}={renew[0]}; Max-Age={renew[1]}; Path=/; HttpOnly; Secure; SameSite=Lax")
         self.end_headers()
         self.wfile.write(data)
 
@@ -1970,8 +2186,16 @@ class Handler(BaseHTTPRequestHandler):
         return None
 
     def member(self):
-        """The signed-in Whop member's session (or None)."""
-        return whop_auth.session(self.cookie(whop_auth.COOKIE)) if whop_auth.enabled() else None
+        """The signed-in Whop member's session (or None) - read once per request. When this read re-checked access with
+        Whop and got a clear answer, the response re-issues the cookie with that check (2026-10-13 audit: the check time in
+        the cookie was never refreshed, so after a restart every request of a member signed in 6+ h ago asked Whop again)."""
+        if not whop_auth.enabled():
+            return None
+        if getattr(self, "_sess", False) is False:
+            s = whop_auth.session(self.cookie(whop_auth.COOKIE))
+            self._renew = (s or {}).pop("renew", None)
+            self._sess = s
+        return self._sess
 
     def allowed(self):
         """Grading/search/board: paid Whop members (and the owner's load tests) only. On Railway the data
@@ -1996,6 +2220,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         self._t0 = time.time()
+        self._sess, self._renew = False, None           # per request (a kept-alive connection reuses this handler)
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         try:
@@ -2049,7 +2274,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.studio_capacity(q)
             if u.path == "/api/match_compare":
                 bk_ = "prizepicks" if q.get("book") == "prizepicks" else "underdog"
-                k_ = ("mcmp", q.get("team_slug"), q.get("opp_slug"), q.get("start"), q.get("maps") or "12", bk_)
+                # the team names are part of the key (2026-10-13 audit: matches found on HLTV / Polymarket / PandaScore send
+                # no BO3.gg slugs, so two matches with the same start shared one answer - another match's table)
+                k_ = ("mcmp", q.get("team_slug"), q.get("opp_slug"), comparison._norm(q.get("team")), comparison._norm(q.get("opponent")),
+                      q.get("start"), q.get("maps") or "12", bk_)
 
                 def _mc():
                     return 200, json.dumps(dict(match_compare(q.get("team_slug"), q.get("opp_slug"), q.get("team", ""), q.get("opponent", ""),
@@ -2076,7 +2304,11 @@ class Handler(BaseHTTPRequestHandler):
                     with _MG_LOCK:
                         MEMBER_GRADES[0] -= 1
             if u.path == "/api/board":
-                return self.send(200, board_payload("prizepicks" if q.get("book") == "prizepicks" else "underdog"))
+                # one build + encoding shared by every member for BOARD_TTL s (2026-10-13 load test: 700 members at once
+                # each rebuilt and encoded the whole board; the local test server refused half the connections meanwhile)
+                bk_ = "prizepicks" if q.get("book") == "prizepicks" else "underdog"
+                st_, body_ = shared(("board", bk_), lambda: (200, json.dumps(board_payload(bk_), default=str).encode()), ttl=BOARD_TTL)
+                return self.send(st_, body_)
             if u.path == "/admin":
                 return self.admin(q)
             if u.path == "/admin/thunderpick.json" and self.authed(q.get("token")):
@@ -2647,8 +2879,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, oddspapi.markets_inventory(int(q.get("n") or 3)))
             return self.send(404, {"error": "not found"})
         except Exception as e:
-            traceback.print_exc()
-            return self.send(500, {"error": f"Something went wrong: {e}"})
+            return self.send(*failure_body(e, u.path))
 
     def search(self, q):
         if len(q) < 2:
@@ -2699,8 +2930,15 @@ class Handler(BaseHTTPRequestHandler):
         return self.send(status, body)
 
     def client_ip(self):
-        fwd = self.headers.get("X-Forwarded-For") or ""          # Railway's proxy puts the member first
-        return fwd.split(",")[0].strip() or self.client_address[0]
+        # the hop our proxy appended (Render appends the connecting address last): the first hop is whatever the client
+        # sent, so a made-up X-Forwarded-For got a fresh rate-limit bucket per request (2026-10-13 audit)
+        fwd = self.headers.get("X-Forwarded-For") or ""
+        return fwd.split(",")[-1].strip() or self.client_address[0]
+
+    def rate_key(self):
+        """Who a rate limit counts: the signed-in Whop member (an id no header can change), else the client address."""
+        sess = self.member()
+        return f"whop:{sess['user']}" if sess and sess.get("user") else "ip:" + self.client_ip()
 
     # ------------------------------------------------------------ research tools (moneylines + slip studio)
     def moneylines(self):
@@ -2912,7 +3150,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def grade(self, q):
         load_test = self.load_test()                     # owner's own tests
-        if not load_test and not rate_ok(self.client_ip()):
+        if not load_test and not rate_ok(self.rate_key()):
             return self.send(429, {"error": f"Too many grades - limit is {RATE_LIMIT} a minute. "
                                             f"Wait a moment and try again."})
         name = q.get("player", "").strip()
@@ -2938,8 +3176,10 @@ class Handler(BaseHTTPRequestHandler):
         if mstart and not re.fullmatch(r"[0-9T:.+\-Z ]{10,32}", mstart):
             mstart = None
         pkey = (slug or name).lower()
-        # the card's platform (board / match-players clicks send it; typed cards = Underdog): its stake cap is its own board's
-        book = "prizepicks" if q.get("book") == "prizepicks" or lt in ("goblin", "demon") else "underdog"
+        # the card's platform (board / match-players clicks send it): its stake cap is its own board's; no platform (typed
+        # card, Slate, a share link without one) = the board that lists this exact pick (board_stake, Underdog first)
+        book = ("prizepicks" if q.get("book") == "prizepicks" or lt in ("goblin", "demon") else
+                "underdog" if q.get("book") == "underdog" else None)
         key = (pkey, line, prop, lt, match, (opp or "").lower(), scope, (team or "").lower(), book, (mstart or "")[:16] if opp else "")
 
         t_in = time.time()
@@ -2976,7 +3216,7 @@ class Handler(BaseHTTPRequestHandler):
                     traceback.print_exc()
             res["verdict"] = verdict(res.get("grade"))
             res["caps"] = stake_caps()
-            outage = perf_transient(res.get("grade") or {})
+            outage = grade_transient(res.get("grade") or {})        # HLTV or Thunderpick blip (owner 2026-10-13)
             try:
                 res["underdog"] = underdog.line_for((pb_.get("player") or {}).get("nick") or name, prop)
             except Exception:
@@ -2990,27 +3230,33 @@ class Handler(BaseHTTPRequestHandler):
                 res["comparison"] = {"error": "comparison unavailable"}
             tm["underdog"] = round(time.time() - t0, 2)
             t0 = time.time()
-            try:
-                picklog.log_async(res, res["verdict"], test=load_test)   # written in the background
-            except Exception:
-                traceback.print_exc()
+            if not outage:                               # an outage grade is never logged as a live forecast (2026-10-13 audit:
+                try:                                     # the board path skipped it, member card lookups did not)
+                    picklog.log_async(res, res["verdict"], test=load_test)   # written in the background
+                except Exception:
+                    traceback.print_exc()
             tm["log"] = round(time.time() - t0, 2)
             try:                                         # after logging: the log keeps the grader's own stake
-                res["verdict"] = board_stake(res, prop, scope, line, lt, book)
+                res["verdict"] = board_stake(res, prop, scope, line, lt, book or ("underdog", "prizepicks"))
                 vv = res["verdict"]
                 if isinstance(vv, dict) and vv.get("side"):          # the board row's cap words, on the card too (new dict:
                     g_ = res.get("grade") or {}                      # the logged verdict is being written in the background)
                     own = dict(vv, units=vv.get("units_full") or vv.get("units"))
+                    # dstat: the board's own data badge, sent with the card (2026-10-13 audit: thin HLTV history read
+                    # "Limited history" on the board and "Data complete" on the card for the same line)
+                    ds_ = comparison.data_status(g_, vv)
                     res["verdict"] = dict(vv, cap_reason=cap_reason_text(stake_cap_reasons(g_, own, source=odds_selected(res.get("odds"))) if (vv.get("units") or 0) > 0 else [],
                                                                          vv.get("cap_n")),
-                                          flagged=bool(comparison.data_status(g_, vv)[0] in ("verify", "limited") or has_warning(g_)))
+                                          dstat=ds_, flagged=bool(ds_[0] in ("verify", "limited") or has_warning(g_)))
                 vv = res["verdict"]
                 for x in res.get("ladder") or []:        # the ladder's own line = the card's verdict (same-match cap included)
                     if isinstance(vv, dict) and vv.get("side") and float(x.get("line") or -1) == float(line):
                         x.update(side=vv["side"], p=vv.get("p"), grade=vv.get("grade"), units=vv.get("units") or 0.0,
                                  state=vv.get("state"))
-                if outage:                               # outage: tell the member what the board still shows
-                    res["hltv_outage"] = board_last_hltv(res, prop, scope)
+                if outage:                               # outage: tell the member what the board still shows - and why
+                    cs_ = _transient_causes(res.get("grade") or {})
+                    res["hltv_outage"] = dict(board_last_hltv(res, prop, scope), causes=cs_,
+                                              odds_note=odds_blip_note(res) if "odds" in cs_ else None)
             except Exception:
                 traceback.print_exc()
             t0 = time.time()
@@ -3037,6 +3283,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         u = urlparse(self.path)
+        self._sess, self._renew = False, None           # per request (a kept-alive connection reuses this handler)
         try:
             n = int(self.headers.get("Content-Length") or 0)
         except ValueError:
@@ -3046,10 +3293,19 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(400, {"error": "bad Content-Length"})
         if u.path.startswith("/api/slip_studio/"):
             return self.studio_post(u.path, n)
+        # 2026-10-13 audit: the body was read before any check, as long as the client said (a 10 GB Content-Length was
+        # read into memory). Every body here is small: over POST_MAX it is refused unread, members-only before reading.
+        if n > POST_MAX:
+            self.close_connection = True              # the unread body would corrupt a kept-alive connection
+            return self.send(413, {"error": f"body over {POST_MAX} bytes"})
         if u.path == "/api/slip_log":                  # a member loaded an auto slip (slips.py keeps the log)
-            body = self.rfile.read(min(n, 1 << 20))
             if not self.allowed():
+                self.close_connection = True
                 return self.send(401, {"error": "members_only"})
+            body = self.rfile.read(n)
+            # one member copying slips by hand never needs more; a loop can't grow slips_loaded.jsonl without limit
+            if not self.load_test() and not studio_rate_ok(self.rate_key(), bucket=_SLIP_LOG_HITS, limit=SLIP_LOG_PER_MIN):
+                return self.send(429, {"error": f"Too many slips logged - limit is {SLIP_LOG_PER_MIN} a minute"})
             try:
                 d = json.loads(body)
                 assert isinstance(d, dict) and isinstance(d.get("legs"), list) and 2 <= len(d["legs"]) <= 6
@@ -3075,7 +3331,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(403, b"Forbidden", "text/plain")
         r = picklog.report()
         e = htmllib.escape
-        tok = e(q.get("token"))
+        tok = e(q.get("token") or "")                  # signed in by the X-Admin-Token header alone: no token in the URL (was a 500)
 
         def table(rows, cols):
             head = "".join(f"<th>{e(c)}</th>" for c in cols)

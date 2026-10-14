@@ -625,7 +625,7 @@ async function fetchRetry(url, tries = 4) {
 const shortDate = x => { const d = new Date(String(x) + "T12:00:00Z"); if (isNaN(d)) return esc(x);
   const old = (Date.now() - d) > 300 * 86400000;   // older than ~10 months: show the year
   return d.toLocaleDateString([], {month: "short", day: "numeric", year: old ? "numeric" : undefined, timeZone: "UTC"}); };
-const mapName = m => m ? m.replace(/^de_/, "").replace(/^./, c => c.toUpperCase()) : "–";
+const mapName = m => m ? esc(String(m).replace(/^de_/, "").replace(/^./, c => c.toUpperCase())) : "–";   // escaped: it goes straight into HTML
 const gClass = g => ["A+","A","A-"].includes(g) ? "g-good" : g === "B+" ? "g-bplus" : g === "B" || g === "B-" ? "g-warn" : g === "LEAN" ? "g-scout" : "g-bad";
 const until = d => { const m = Math.round((d - Date.now()) / 60000); if (m <= 0) return m > -150 ? "started" : ""; const h = Math.floor(m / 60);
   return "in " + (h >= 24 ? `${Math.floor(h / 24)}d ${h % 24}h` : h ? `${h}h ${m % 60}m` : `${m}m`); };
@@ -680,7 +680,7 @@ $("#f").onsubmit = async e => {
   if (match) qs.set("match", match);
   if (ctx?.team) qs.set("team", ctx.team);
   if (ctx?.opponent) qs.set("opponent", ctx.opponent);
-  if (ctx?.book === "prizepicks") qs.set("book", "prizepicks");   // stake cap from the card's own board
+  if (ctx?.book === "prizepicks" || ctx?.book === "underdog") qs.set("book", ctx.book);   // stake cap from the card's own board (none: the board listing this exact pick)
   if (ctx?.opponent && ctx?.start) qs.set("start", ctx.start);      // the line's match start (a misspelled book opponent)
   $("#go").disabled = true; $("#out").innerHTML = "";
   const st = $("#status"); st.hidden = false; st.className = "status";
@@ -1087,7 +1087,9 @@ async function addToSlip(d) {
     // regrade the NEW line before asking - an old chance is never attached to a new line
     let n = null;
     try {
-      const qs = new URLSearchParams({player: nick, line: c.new_line, prop: g.prop, maps: g.scope || "12", team: leg.tm, opponent: leg.vs, line_type: c.new_odds_type && c.new_odds_type !== "alt" ? c.new_odds_type : "standard"});
+      // the platform whose line it is and the match start (2026-10-13 audit: no book = Underdog's cap on a PrizePicks line)
+      const qs = new URLSearchParams({player: nick, line: c.new_line, prop: g.prop, maps: g.scope || "12", team: leg.tm, opponent: leg.vs, line_type: c.new_odds_type && c.new_odds_type !== "alt" ? c.new_odds_type : "standard", book: used});
+      if (leg.vs && leg.st) qs.set("start", leg.st);
       const r = await fetch("/api/grade?" + qs); n = r.ok ? await r.json() : null;
     } catch {}
     const nv = n?.verdict || {}, row = (l, s_, p_, gr, u) => `<tr><td>${l}</td><td>${s_ ? sideTxt(s_) : "–"}</td><td class="num">${p_ != null ? pct(p_) : "–"}</td><td>${esc(gr ? gradeWord({grade: gr}) : "–")}</td><td class="num">${u ?? 0}U</td></tr>`;
@@ -1294,7 +1296,9 @@ async function fetchBook(b) {
 function bookStatus(b) {
   const B = BK[b];
   if (b === "prizepicks") {
-    const f = B.feed || {}, when = f.at ? `PrizePicks read ${hhmm(f.at)} (${agoTxt(new Date(f.at * 1000).toISOString())})${f.source && !/direct/.test(f.source) ? " via the scraper's copy" : ""}` : "";
+    // the server's own flag (2026-10-13 audit: the fallback's source text "...direct read failed..." matched /direct/)
+    const f = B.feed || {}, via = f.via_scraper != null ? !!f.via_scraper : !!f.source && !/\(direct\)$/.test(f.source);
+    const when = f.at ? `PrizePicks read ${hhmm(f.at)} (${agoTxt(new Date(f.at * 1000).toISOString())})${via ? " via the scraper's copy" : ""}` : "";
     return f.state === "ok" ? `${B.rows.length} graded PrizePicks lines${B.total > B.rows.length ? ` (${B.total - B.rows.length} still grading)` : ""} · ${when}`
       : f.state === "empty" ? `No PrizePicks CS2 lines right now · ${when || "feed connected"} – this is an empty board, not an error`
       : f.state === "stale" ? `⚠ PrizePicks feed is stale – last good read ${f.at ? hhmm(f.at) : "unknown"}. These lines can't be confirmed as playable.`
@@ -1391,7 +1395,7 @@ function drawBoard() {
       <div><div class="b2top">${bbook === "all" ? `<span class="pill" style="margin:0 4px 0 0;padding:1px 7px">${bookName(r.book || "underdog")}</span>` : ""}<b>${esc(nick)}</b>${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}
           <span class="muted">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}${showMatch ? " · " + shortWhen(r.start) : ""}</span></div>
         <div class="b2pick">${r.side ? esc(sideWord(r)) : "grading…"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}${mktTag(r)}${r.stale ? ` <span class="pill warn" title="The PrizePicks feed is not fresh – this line can't be confirmed as playable">not confirmed</span>` : ""}${r.p != null ? ` · <b>${chance(r.p, r.prop)}</b>${coinFlip(r.p)}` : ""}${isLeanV(r) ? (r.state === "SCOUT" ? " · No match scheduled" : "") : " · " + esc(r.grade || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${capChip(r, r.team_name || r.team)}</div>
-        <div class="b2meta">Proj ${r.proj != null ? num(r.proj, 1) : "–"}${ds ? ` · <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}">${ds[1]}</span>` : ""}${r.source ? `<span class="mx"> · source ${esc(r.source)}</span>` : ""}${r.hltv_retry ? ` · <span class="pill warn" title="The HLTV database was unreachable at the last regrade – this is this line's last grade (source as shown); it is regraded as soon as the database answers">kept grade · HLTV unreachable</span>` : ""}${r.graded_at ? `<span class="mx"> · graded ${agoTxt(r.graded_at)}</span>` : ""}${r.alt && r.book !== "prizepicks" ? ` · alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}${r.book === "prizepicks" && r.open_line != null && +r.open_line !== +r.line ? ` · opened ${r.open_line}` : ""}${r.moved_from != null ? ` · <span class="pill warn">line moved from ${r.moved_from}</span>` : ""}</div>
+        <div class="b2meta">Proj ${r.proj != null ? num(r.proj, 1) : "–"}${ds ? ` · <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}">${ds[1]}</span>` : ""}${r.source ? `<span class="mx"> · source ${esc(r.source)}</span>` : ""}${r.hltv_retry ? (r.retry_cause === "odds" ? ` · <span class="pill warn" title="Thunderpick had no current quote for this match at the last regrade – this is this line's last grade (source as shown); it is regraded as soon as Thunderpick quotes it again">kept grade · Thunderpick odds unavailable</span>` : ` · <span class="pill warn" title="The HLTV database was unreachable at the last regrade – this is this line's last grade (source as shown); it is regraded as soon as the database answers">kept grade · HLTV unreachable</span>`) : ""}${r.graded_at ? `<span class="mx"> · graded ${agoTxt(r.graded_at)}</span>` : ""}${r.alt && r.book !== "prizepicks" ? ` · alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}${r.book === "prizepicks" && r.open_line != null && +r.open_line !== +r.line ? ` · opened ${r.open_line}` : ""}${r.moved_from != null ? ` · <span class="pill warn">line moved from ${r.moved_from}</span>` : ""}</div>
         ${ev(r.support, "up", "+")}${ev(r.concern, "dn", "–")}</div>
       ${!r.side ? "<span></span>" : r.state === "SCOUT" ? `<button type="button" class="bslip" disabled title="No upcoming match found for his team – there is nothing to enter on a slip yet">+ Slip</button>`
         : `<button type="button" class="bslip ${onSlip.has(slipKeyRow(r)) ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}|${mktType(r)}|${r.book || "underdog"}">${onSlip.has(slipKeyRow(r)) ? "On slip" : "+ Slip"}</button>`}
@@ -1440,6 +1444,7 @@ function drawBoard() {
 $("#boardout").addEventListener("click", e => {
   if (e.target.closest("[data-reset]")) return resetBFilters();
   if (e.target.closest("[data-mlall]")) { $("#mlusable").checked = false; return drawBoard(); }
+  if (e.target.closest("[data-mlclear]")) { $("#bsearch").value = ""; return drawBoard(); }
   const cb = e.target.closest("[data-cmp]");
   if (cb) { const [bk, p, l, t, sc, lt] = cb.dataset.cmp.split("|");
     const row = BK[bk].rows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && (x.scope || "12") === sc && mktType(x) === lt);
@@ -1462,7 +1467,14 @@ $("#bbook").onclick = e => { const b = e.target.closest("button"); if (b) setBoo
 // Compare: the same player / match / stat / maps on both platforms (joined by OUR player and match ids from grading),
 // each line with the chance at THAT line. The easier line = the lower one for an Over, the higher one for an Under;
 // not automatically better value (payouts differ), and goblin / demon markets are never compared with standard lines
-const outageNote = d => d.hltv_outage ? `<div class="small" style="margin-top:8px;color:var(--warn)">⚠ HLTV database unreachable right now – this is a temporary projection from the older model.${(d.hltv_outage.rows || []).length ? ` The Prop Board still shows this line's last grade: ${d.hltv_outage.rows.map(o => `${bookName(o.book)} ${o.line} ${esc(sideWord(o))}${isLeanV(o) ? "" : " · " + esc(o.grade)} (${(o.p * 100).toFixed(1)}%)`).join(", ")}.` : ""}</div>` : "";
+// the outage's own cause (owner 2026-10-13: a Thunderpick odds blip is handled like an HLTV blip - the board keeps its last grade)
+const outageNote = d => { const o_ = d.hltv_outage; if (!o_) return "";
+  const cs = Array.isArray(o_.causes) && o_.causes.length ? o_.causes : ["hltv"];
+  const why = [cs.includes("hltv") ? "HLTV database unreachable right now – this is a temporary projection from the older model." : "",
+               // the server's own words: the real condition and where this card's odds come from - never shown as current Thunderpick odds
+               cs.includes("odds") ? esc(o_.odds_note || "Thunderpick lists this match but has no current quote – this card's odds are not current Thunderpick odds.") : ""].filter(Boolean).join(" ");
+  return `<div class="small" style="margin-top:8px;color:var(--warn)">⚠ ${why}${(o_.rows || []).length ? ` The Prop Board still shows this line's last grade: ${o_.rows.map(o => `${bookName(o.book)} ${o.line} ${esc(sideWord(o))}${isLeanV(o) ? "" : " · " + esc(o.grade)} (${(o.p * 100).toFixed(1)}%)`).join(", ")}.`
+    : cs.includes("odds") ? " The Prop Board holds this line back until Thunderpick quotes it again." : ""}</div>`; };
 function drawCompare() {
   const q = ($("#bsearch").value || "").trim().toLowerCase();
   const hit = r => !q || [r.nick, r.player, r.team, r.team_name, r.opponent, r.opp_name].some(x => String(x || "").toLowerCase().includes(q));
@@ -1635,6 +1647,9 @@ const tpLive = (t, m) => { if (!t || !(t.eligible ?? t.usable) || t.started || m
 const mlUsable = m => mlExUsable(m) || tpLive(m.thunderpick, m);
 const agoSec = s => s == null ? "–" : s < 90 ? `${Math.round(s)} s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`;
 const clockTime = s => { const d = new Date(s); return isNaN(d) ? "–" : d.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit", second: "2-digit"}); };
+// Thunderpick's own labels give times in UTC ("retrieved 16:39 UTC"): its block and status use UTC too, never a local
+// clock next to a UTC one (2026-10-13 review)
+const utcTime = s => { const d = new Date(s); return isNaN(d) ? "–" : d.toISOString().slice(11, 19) + " UTC"; };
 // why a platform has no usable price, in a few words
 const mlWhy = blk => !blk ? "no market" : !blk.available ? String(blk.reason || "can't be read").replace(/\.$/, "") : blk.fresh === false ? "price not current"
   : blk.market_open === false ? "market closed" : blk.spread != null ? `spread ${Math.round(blk.spread * 100)}¢` : String(blk.reason || "not usable").replace(/\.$/, "");
@@ -1665,7 +1680,7 @@ function mlThunder(t, m, A, B) {
     ? "Match started – the feed has no live flag, so these odds may be in-play; not used"
     : expired ? `No longer current on this page – last seen ${agoSec(age)}, over the ${lim} s limit; refresh to check`
     : (t.availability_label || "Not usable now");
-  const seen = t.retrieved_at ? `Retrieved by us ${clockTime(t.retrieved_at)} (${agoSec(age)})` : "Retrieval time unknown";
+  const seen = t.retrieved_at ? `Retrieved by us ${utcTime(t.retrieved_at)} (${agoSec(age)})` : "Retrieval time unknown";
   // no link once the match has started (its odds may be in-play - nothing on this tab points at an in-play price)
   const link = t.url && !t.started && !mlStarted(m) ? `<div class="tplinkrow"><a class="tplink" href="${esc(t.url)}" target="_blank" rel="noopener noreferrer">Open match on Thunderpick ↗</a></div>` : "";
   const dec = `Decimal odds: ${esc(A)} ${o(t.odds_a)} · ${esc(B)} ${o(t.odds_b)}`;
@@ -1754,7 +1769,7 @@ function mlCountText(up0) {
 // exchanges (their notes arrive cleaned by the server - no upstream error text or URLs)
 function mlStatusText(d) {
   const t = d.thunderpick || {}, qc = t.quotes_confirmed_at;
-  const tp = t.label ? t.label + (qc ? ` (quotes retrieved ${clockTime(qc)}, ${agoSec(Math.max(0, (mlNow() - Date.parse(qc)) / 1000))})` : "") + " · " : "";
+  const tp = t.label ? t.label + (qc ? ` (quotes retrieved ${utcTime(qc)}, ${agoSec(Math.max(0, (mlNow() - Date.parse(qc)) / 1000))})` : "") + " · " : "";
   const src = Object.entries(d.sources || {}).map(([k, v]) => `${PLAT[k] || k}: ${v.ok ? `prices from ${v.age_s != null ? Math.round(v.age_s) + " s" : "–"} ago`
     : (v.note || "not loaded yet")}`).join(" · ");
   return tp + src;
@@ -1770,13 +1785,20 @@ function drawMoneylines() {
   // one decision per match (server): any platform live, or the earliest stated start passed
   const up0 = list.filter(m => !mlStarted(m)), done = list.filter(mlStarted);
   const onlyU = $("#mlusable").checked, up = onlyU ? up0.filter(mlUsable) : up0;
-  $("#bcount").textContent = mlCountText(up0);
+  // the search box is shared with the Prop Board: a leftover player search says so here (2026-10-13 audit: it emptied
+  // the list and the tab read "No CS2 series-winner prices ... right now" and "0 of 0 matches" while 94 were listed)
+  const all0 = d.matches.filter(m => !mlStarted(m));
+  $("#bcount").textContent = (q ? `search: ${up0.length} of ${all0.length} upcoming · ` : "") + mlCountText(up0);
+  const clearQ = `<button type="button" class="chipbtn" data-mlclear="1">Clear search</button>`;
   const model = d.model || {}, rec = d.recommendation || "Shadow - not a staking recommendation";
   box.innerHTML = `<div class="mlintro"><b style="color:var(--text)">Series winner prices</b><span>Thunderpick bookmaker odds first (primary source) · Polymarket and Kalshi exchange midpoints as attributed comparisons · read by the server about every minute</span>
       <span class="pill">${esc(model.label || "Model: not validated yet - market baseline shown, no recommendation")}</span><span class="pill">${esc(rec)}</span></div>`
     + (up.length ? up.map(m => mlCard(m, model, rec)).join("")
        : `<div class="muted">${up0.length && onlyU ? `None of the ${up0.length} upcoming match${up0.length === 1 ? " has" : "es have"} a usable price right now. <button type="button" class="chipbtn" data-mlall="1">Show all matches</button>`
-         : list.length ? "No upcoming matches match this search." : "No CS2 series-winner prices from Thunderpick, Polymarket or Kalshi right now."}</div>`)
+         : !d.matches.length ? "No CS2 series-winner prices from Thunderpick, Polymarket or Kalshi right now."
+         : q && !list.length ? `No match for “${esc(q)}” among the ${d.matches.length} listed (the search box is shared with the Prop Board). ${clearQ}`
+         : q ? `No upcoming match for “${esc(q)}” – only started ones. ${clearQ}`
+         : "No upcoming matches right now – every listed match has started."}</div>`)
     + (onlyU && up0.length > up.length && up.length ? `<div class="small muted" style="margin:4px 0 10px">${up0.length - up.length} match${up0.length - up.length === 1 ? "" : "es"} without a usable price hidden · <button type="button" class="chipbtn" data-mlall="1">Show all</button></div>` : "")
     + (done.length ? `<details class="mgroup"><summary><b>Started</b> <span class="muted small">${done.length} – in-play prices, never used</span></summary>
         <div class="mbody">${done.map(m => mlCard(m, model, rec)).join("")}</div></details>` : "")
@@ -2112,8 +2134,17 @@ function dataStatus(g, v) {
   // quality only - the source (HLTV / BO3.gg / older model) is shown separately and is not a warning by itself
   const fl = (g.flags || []).join(" | ");
   if (v.state === "SCOUT" || /No upcoming match/i.test(fl)) return {k: "warn", t: "Line not confirmed", why: "no upcoming match found"};
-  if (/unreachable/i.test(String(g.projection_source || "")) || /HLTV database unreachable/i.test(fl))
+  if (/unreachable/i.test(String(g.projection_source || "")) || /HLTV database (unreachable|not connected)/i.test(fl))
     return {k: "warn", t: "HLTV unreachable", why: "temporary projection from the older model"};
+  // the server's own data status - the badge the Prop Board shows for this line (2026-10-13 audit: thin HLTV history read
+  // "Limited history" on the board and "Data complete" here: the board reads the grader's flag, these public flags hide it)
+  const sd = Array.isArray(v.dstat) ? v.dstat : null;
+  if (sd && sd[0] === "ok") return {k: "ok", t: "Data complete", why: ""};
+  if (sd && sd[0] === "limited") return {k: "mid", t: "Limited history", why: "small recent sample"};
+  if (sd && sd[0] === "verify") { const t = issueLabel(sd[1]);
+    return {k: "warn", t, why: t === "Roster not confirmed" ? "the team page doesn't list his lineup yet – the stake is not changed by this"
+      : t === "Stand-in" ? "playing for another team" : t === "Long break" ? "long gap since the last official map"
+      : t === "HLTV out of date" ? `his HLTV history ends ${g.hltv_ends || "early"} – newer matches are only on BO3.gg` : String(sd[1] || "")}; }
   if (/Roster not confirmed/i.test(fl)) return {k: "warn", t: "Roster not confirmed", why: "the team page doesn't list his lineup yet – the stake is not changed by this"};
   if (/Stand-in/i.test(fl)) return {k: "warn", t: "Stand-in", why: "playing for another team"};
   if (/Last official map \d+ days ago - extra caution/i.test(fl)) return {k: "warn", t: "Long break", why: "long gap since the last official map"};
@@ -2280,8 +2311,8 @@ function render(d) {
       : "Not announced yet – using his all-maps stats"}</span></div>`;
   if (!nm?.maps?.length && pb.map_prediction) {
     const top = o => Object.entries(o).slice(0, 3).map(([m, p]) => `${mapName(m)} ${pct(p)}`).join(" · ");
-    h += `<div class="kv"><span>Likely Map 1 <span class="muted small">(context only)</span></span><span>${esc(top(pb.map_prediction.map1))}</span></div>
-      <div class="kv"><span>Likely Map 2 <span class="muted small">(context only)</span></span><span>${esc(top(pb.map_prediction.map2))}</span></div>
+    h += `<div class="kv"><span>Likely Map 1 <span class="muted small">(context only)</span></span><span>${top(pb.map_prediction.map1)}</span></div>
+      <div class="kv"><span>Likely Map 2 <span class="muted small">(context only)</span></span><span>${top(pb.map_prediction.map2)}</span></div>
       ${pb.map_prediction.pool_source ? `<div class="small muted">Map pool: ${pb.map_prediction.pool_source === "event veto" ? "this event's own veto" : esc(pb.map_prediction.pool_source)}</div>` : ""}`;
   }
   if (!nm) h += `<div class="muted">No upcoming match found for ${esc(pb.current_team || "this player's team")} yet.</div>`;
@@ -2608,7 +2639,7 @@ Tap to open ${esc(e.nick)}'s ${pr === "hs" ? "headshots" : "kills"} card">
     const t = lined.map(c => c.graded_at).filter(Boolean).sort().pop();
     const issue = lined.map(c => (c.dstat || [])[0] === "verify" ? (c.dstat[1] || "line not confirmed") : (c.dstat || [])[0] === "limited" ? "limited history" : "").find(Boolean)
       || cs.map(c => c.note || (c.dq && c.dq !== "ok" ? c.dq : "")).find(Boolean) || "";
-    return `<td class="small muted">${t ? "graded " + ago(t) : lined.length ? "" : cs.some(c => c.proj != null) ? "projection only" : ""}${issue ? ` · <span class="dstat warn" style="font-size:11px">${esc(issue)}</span>` : ""}${e.not_on_roster_page ? " · not on roster page" : ""}</td>`;
+    return `<td class="small muted">${t ? "graded " + ago(t) : lined.length ? "" : cs.some(c => c.proj != null) ? "projection only" : ""}${issue ? ` · <span class="dstat warn" style="font-size:11px">${esc(issue)}</span>` : ""}${e.benched ? " · benched – not in the lineup or team total" : e.not_on_roster_page ? " · not on roster page" : ""}</td>`;
   };
   const head = `<tr><th>Player</th>${props.map(pr => `<th class="num">${pr === "hs" ? "HS" : "Kills"} proj</th><th class="num">Line</th><th>Pick</th>`).join("")}<th>Data</th></tr>`;
   const body = j.teams.map(t => {
@@ -2637,7 +2668,7 @@ Tap to open ${esc(e.nick)}'s ${pr === "hs" ? "headshots" : "kills"} card">
     if (c.line != null) return `<span class="muted">${lab} ${c.line}: ${c.side && !c.pending ? "filtered" : "grading…"}</span>`;
     return `<span class="muted">${lab} ${c.proj != null ? `projection ${num(c.proj, 1)} · no line` : "– no projection"}</span>`; };
   const phoneList = j.teams.map(t => `<div class="mcteam"><b>${esc(t.team)}</b></div>` + [...t.players].sort((a, b) => MC.sort === "chance" ? best(b) - best(a) : a.nick.localeCompare(b.nick))
-    .map(e => `<div class="mcp${e.nick.toLowerCase() === MC.focus ? " mfocus" : ""}"><b>${esc(e.nick)}</b><div>${props.map(pr => pickTxt(e, pr)).join("<br>")}</div></div>`).join("")).join("");
+    .map(e => `<div class="mcp${e.nick.toLowerCase() === MC.focus ? " mfocus" : ""}"><b>${esc(e.nick)}</b>${e.benched ? ` <span class="muted small">benched</span>` : ""}<div>${props.map(pr => pickTxt(e, pr)).join("<br>")}</div></div>`).join("")).join("");
   const seg = (id, opts, cur, lab) => `<div class="seg" data-mcseg="${id}" role="group" aria-label="${lab || id}">${opts.map(([v, l]) => `<button type="button" data-v="${v}" class="${v === cur ? "on" : ""}">${l}</button>`).join("")}</div>`;
   el.innerHTML = `<h2>Match players · ${esc(j.match.team)} vs ${esc(j.match.opponent)} · ${j.match.scope === "1" ? "Map 1" : j.match.scope === "123" ? "Maps 1–3" : "Maps 1–2"} · ${bookName(j.book || MC.book)} lines</h2>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">${seg("book", [["underdog", "Underdog"], ["prizepicks", "PrizePicks"]], MC.book, "Platform")}${seg("prop", [["kills", "Kills"], ["hs", "Headshots"], ["both", "Both"]], MC.prop, "Prop")}
