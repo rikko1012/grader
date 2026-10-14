@@ -310,7 +310,7 @@ live projections to the N0 view (exclude the backfill matches from the perf-2 qu
 arm C - repaired history WITH an opponent-strength adjustment, frozen and tested on the large historical set - passes,
 plus forward scoring of both views. Keep the repaired data for coverage, settlement and the shadow logs.
 
-## Controlled rollback of the performance-model input (2026-10-14, release `8f091e14cc`)
+## Controlled rollback of the performance-model input (2026-10-14, release `d88cc8dd8e`)
 
 **Owner rule.** A dataset that reached live grading before its planned validation and activation gate is pinned back to the
 last approved model-input revision as a controlled rollback. That restores the agreed release state; it is NOT a finding that
