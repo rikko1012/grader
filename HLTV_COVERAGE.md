@@ -309,3 +309,57 @@ added, and half of all lines change side / grade / stake. Do not treat its live 
 live projections to the N0 view (exclude the backfill matches from the perf-2 queries, data revision named) until
 arm C - repaired history WITH an opponent-strength adjustment, frozen and tested on the large historical set - passes,
 plus forward scoring of both views. Keep the repaired data for coverage, settlement and the shadow logs.
+
+## Controlled rollback of the performance-model input (2026-10-14, release `a0ce320c2c`)
+
+**Owner rule.** A dataset that reached live grading before its planned validation and activation gate is pinned back to the
+last approved model-input revision as a controlled rollback. That restores the agreed release state; it is NOT a finding that
+incomplete history predicts better. A staged revision stays staged; a deliberately approved activation is not reversed on a
+23-match comparison.
+
+**What was live.** perf_live's queries had no revision filter: the performance model read whatever was in the live `public`
+tables. The backfill (19,590 matches, first fetched 2026-10-12 21:27-21:35 and 2026-10-13 00:23-04:24 UTC) was written there
+directly - no `hltv_rev_*` schema, no `dataset_revisions`, no approval (the "Activation" section above was never run) - so
+live grades used partial repaired history from 00:49 UTC (367 forecasts) and the full repaired history from 04:26:15 UTC
+(first forecast with data_rev matches >= 28,000). Since then the regular scan also takes every tier (the owner's scraper
+report: "New matches from every tier are picked up by each scan"; the scraper repository itself was not inspected from here).
+That is an **unintended activation**, so the rollback applies.
+
+**What is pinned (perf_live `INPUT_REV = "N0"`).** Only the performance model's three queries (player maps, opponent maps, the
+rr-1 shadow's team rounds):
+- matches whose first fetch (min `raw_pages.fetched_at`) falls in the two backfill windows are left out;
+- a match first fetched after the backfill began (>= 2026-10-12 21:27 UTC) is kept only under the pre-repair scan rule: both
+  teams in the VRS top 200 of the latest `team_rankings` snapshot on or before its first fetch, by HLTV team id - otherwise
+  the every-tier scan would drift N0 toward N with every 2-hour scan;
+- a player / opponent known only from those matches is "not in HLTV" again (BO3.gg fallback / average opponent, as before).
+If the old-rule query itself fails (schema), the backfill alone is excluded and the revision string says so; with no
+exclusion set anywhere (memory, stored copy) the projection is transient - never graded on the full tables. The set is loaded
+once for everyone and refreshed every 30 minutes. Each forecast's `data_rev` carries `perf_input=N0:backfill=<n>;late_out=<n>;
+rule=...;sha=...`; `/admin/hltv_status` -> `perf_input` shows the counts and the last load error.
+**Not pinned:** storage (nothing is deleted), settlement, display, the last-10 / H2H records and the stake-check reads
+(sample counts, last map date) - they keep reading the full tables. The original forecasts keep their logged inputs.
+
+**Reconciliation of the comparison above** (recomputed from the saved per-line results, replay_units.json; same 616 kills /
+531 HS lines, 23 matches):
+1. "+0.40 kills" = the mean projection on the identical cohort: 29.492 -> 29.890 (+0.399). Because lines and actuals are
+   identical, the mean signed error rises by exactly the same amount (+0.935 -> +1.333). Over recommendations: Over side
+   346 -> 393 of 616 lines, staked Overs 188 -> 234 (HS: projection +0.270; Over side 233 -> 266, staked Overs 108 -> 126).
+2. "Half the lines changed" (kills 307 of 616): side 99, grade 254, stake 205; side & grade 46, side & stake 44, grade &
+   stake 205 (every stake change is also a grade change), all three 44, grade only 47. By the size of the chance move:
+   < 2 pts 42, 2-5 pts 104, >= 5 pts 161. 51 of the 99 side flips are between two 0U Leans; stake moves median 0.5U, 23 by
+   >= 1U. HS: 216 of 531 (side 75, grade 160, stake 126; < 2 pts 34, 2-5 pts 74, >= 5 pts 108; 53 of 75 side flips 0U).
+3. Absolute scores (old N0 / new N, paired N - N0, 95% by match, 23 distinct matches): kills MAE 5.5794 / 5.5762, -0.0032
+   (-0.193, +0.180); log-loss of P(Over) 0.6809 / 0.6822, +0.0013 (-0.016, +0.016); Brier 0.2446 / 0.2456, +0.0010 (-0.007,
+   +0.008). HS MAE 3.9939 / 3.9749, -0.0190 (-0.106, +0.079); log-loss 0.6360 / 0.6345, -0.0015 (-0.019, +0.016); Brier
+   0.2299 / 0.2288, -0.0010 (-0.009, +0.007). No difference is demonstrated in either direction.
+4. The 20-50% added-history subgroup is EXPLORATORY: the plan pre-specified reporting "per coverage band" but not these cut
+   points, and they were chosen with the results in view.
+5. Contamination: both arms re-grade each forecast from its own saved inputs (line, odds, roster, environment identical) with
+   the same code; only the HLTV history rows differ (as of the forecast time). N0 reproduces 382 of 383 saved projections of
+   the same grading versions; on all 1,147 lines N0 matches the saved projection on 646 because older forecasts were saved
+   under older code (a code difference, not a history one - both arms use today's code).
+
+**Next.** The complete history stays the basis for the next candidate. Opponent handling is tested separately (arm C:
+repaired history + an opponent-strength adjustment, frozen and tested on the large historical set, then forward-scored
+beside N0) - the top-200 selection bias is not kept permanently because a small sample favoured it. Promotion = a versioned
+release naming the revision, with the owner's approval.
