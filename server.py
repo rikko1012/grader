@@ -265,7 +265,15 @@ HLTV_RETRY = 90         # a line graded while the HLTV database was unreachable 
 def _hltv_status(public=False):
     try:
         import hltv
-        return hltv.public_status() if public else hltv.status()
+        if public:
+            return hltv.public_status()
+        out = hltv.status()
+        try:      # 2026-10-13: the performance model's pinned input revision (N0), its counts and last load error
+            import perf_live
+            out = dict(out, perf_input=perf_live.input_status())
+        except Exception as e:  # noqa: BLE001
+            out = dict(out, perf_input={"error": type(e).__name__})
+        return out
     except Exception as e:
         return {"error": str(e)[:80]}
 
@@ -565,7 +573,8 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12", book="
         # exactly 5; otherwise no total (a 6-man roster page would inflate it)
         lined = [e for e in ps if any((e[p] or {}).get("line") is not None for p in ("kills", "hs"))]
         five = lined if len(lined) == 5 else ps if len(ps) == 5 else None
-        basis = "Underdog lineup" if five is lined and len(lined) == 5 else "roster page" if five else None
+        basis = (("PrizePicks" if book == "prizepicks" else "Underdog") + " lineup" if five is lined and len(lined) == 5
+                 else "roster page" if five else None)
         covered = sum(1 for e in (five or ps) if all((e[p] or {}).get("proj") is not None for p in ("kills", "hs")))
         full = bool(five) and covered == 5
         summ = {prop: (round(sum((e[prop] or {}).get("proj") or 0 for e in five), 1) if full else None) for prop in ("kills", "hs")}

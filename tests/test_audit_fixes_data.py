@@ -102,7 +102,7 @@ def test_fallback_match_for_another_team_runs_the_roster_rules(monkeypatch):
     pb2 = _pb(player={"nick": "Fajr", "id": 9}, current_team="LPH Gaming", team_id=21, on_profile_roster=False,
               recent_maps=newmap)
     res, pb2 = _run_select(monkeypatch, pb2, [], hl)
-    assert pb2["roster_confirmed"] is False and "Nordic Partners" in pb2["team_note"] and not pb2.get("standin_for")
+    assert pb2["roster_confirmed"] is None and "Nordic Partners" in pb2["team_note"] and not pb2.get("standin_for")   # no lineup data = unknown (2026-10-13 audit)
     pb3 = _pb(player={"nick": "x", "id": 9}, current_team="Nordic Partners Gaming", team_id=21, recent_maps=[])
     res, pb3 = _run_select(monkeypatch, pb3, [], hl)
     assert pb3["roster_confirmed"] is True and not pb3.get("standin_for")              # same team (name variant): no change

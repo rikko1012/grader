@@ -71,8 +71,10 @@ def db(monkeypatch):
     monkeypatch.setattr(hltv, "_connect", lambda: _Con(d))
     monkeypatch.setattr(hltv, "_player_ids", lambda cur, nick, team: [7])
     monkeypatch.setattr(hltv, "_team_id", lambda cur, name: 55)
+    monkeypatch.setattr(hltv, "canonical_team_id", lambda cur, name: 55)
     monkeypatch.setattr(hltv, "dsn", lambda: "postgres://test")
     monkeypatch.setattr(perf_live, "_CACHE", {})
+    monkeypatch.setattr(perf_live, "_SERVED", {})
     monkeypatch.setattr(perf_live, "_EX", {"val": None, "next": 0.0, "loading": False, "error": None, "loaded_at": None})
     return d
 
@@ -167,3 +169,9 @@ def test_stale_set_refreshed_by_one_caller_others_keep_it(db):
     [t.start() for t in ts]
     [t.join() for t in ts]
     assert _excl_calls(db) == 2 and any(g is first for g in got) and 303 in perf_live.excluded()["ids"]
+
+
+def test_projection_names_the_answers_and_the_revision_it_used(db):
+    out = perf_live.projection("x", "y", "z", False, day=D.toordinal() + 5)
+    assert out["hltv_data"]["player_maps"]["state"] == "live" and out["hltv_data"]["opp_maps"]["state"] == "live"
+    assert out["hltv_data"]["input_revision"].startswith("N0:backfill=1;late_out=1")

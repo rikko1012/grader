@@ -330,8 +330,9 @@ def projection(nick, team, opponent, lan, scope="12", prop="kills", day=None):
                opp_known=bool(om), lan_known=lan is not None,      # known = HLTV has his maps (a team id alone is no data)
                newest_map_day=max((r[0] for r in pm if r[0] < day), default=None))   # his last HLTV map before the match day
     # which answers the projection used: read now, or the last good copy (memory / stored) served during an outage, + age
-    out["hltv_data"] = {"player_maps": served(("p", hltv._norm(nick), hltv._norm(team), since)),
-                        "opp_maps": served(("o", hltv._norm(opponent), since)) if opponent else None}
+    out["hltv_data"] = {"player_maps": served(("p", hltv._norm(nick), hltv._norm(team), since, INPUT_REV)),
+                        "opp_maps": served(("o", hltv._norm(opponent), since, INPUT_REV)) if opponent else None,
+                        "input_revision": input_revision()}
     if not om:            # no team, or a team with no maps in the window: the opponent factor is the pro average (1.00)
         out["data_quality"] = ((out["data_quality"] + "; " if out["data_quality"] != "ok" else "")
                                + ("opponent not in HLTV" if not tid else "opponent has no HLTV maps") + " - average opponent")
