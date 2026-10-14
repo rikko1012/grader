@@ -411,32 +411,34 @@ REV_TTL = 600
 
 
 def data_revision():
-    """The HLTV dataset revision: 'matches=<n>;max_id=<id>;max_date=<day>' from match_overview, cached 10 minutes. None
-    when the database can't be read (never blocks logging). Called from the pick-log writer thread only."""
+    """The HLTV dataset revisions a forecast was graded on - MIXED since 2026-10-14: 'matches=<n>;max_id=<id>;max_date=<day>'
+    = the full tables (match_overview; what the last-10 / H2H records, stake checks, settlement and display read), cached
+    10 minutes, then ';records_input=full;perf_input=<perf_live.input_revision()>' = the performance model's pinned N0
+    (read each time, so a STALE mark shows at once). None when nothing can be read (never blocks logging). Called from the
+    pick-log writer thread only."""
     now = time.time()
-    if now - _REV["at"] < REV_TTL:
-        return _REV["rev"]
-    _REV["at"] = now
-    try:
-        import hltv
-        con = hltv._connect()
+    if now - _REV["at"] >= REV_TTL:
+        _REV["at"] = now
         try:
-            with con.cursor() as cur:
-                cur.execute("SELECT count(*), max(matchid), max(date) FROM match_overview")
-                n, mx, md = cur.fetchone()
-        finally:
-            con.close()
-        _REV["rev"] = f"matches={n};max_id={mx};max_date={md}"
-    except Exception:
-        _REV["rev"] = None
-    try:      # 2026-10-13: the performance model's pinned input revision (perf_live N0) - the tables above are the full ones
+            import hltv
+            con = hltv._connect()
+            try:
+                with con.cursor() as cur:
+                    cur.execute("SELECT count(*), max(matchid), max(date) FROM match_overview")
+                    n, mx, md = cur.fetchone()
+            finally:
+                con.close()
+            _REV["rev"] = f"matches={n};max_id={mx};max_date={md}"
+        except Exception:
+            _REV["rev"] = None
+    try:
         import perf_live
         pin = perf_live.input_revision()
-        if pin:
-            _REV["rev"] = (_REV["rev"] or "matches=?") + f";perf_input={pin}"
     except Exception:
-        pass
-    return _REV["rev"]
+        pin = None
+    if not pin:
+        return _REV["rev"]
+    return (_REV["rev"] or "matches=?") + f";records_input=full;perf_input={pin}"
 
 
 def _shadow(row):

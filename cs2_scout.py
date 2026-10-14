@@ -3018,6 +3018,22 @@ def finish_line(res, args):
         res["grade"]["odds_transient_reason"] = (od_.get("provenance") or {}).get("fallback_reason")
         used = (od_.get("provenance") or {}).get("selected") if od_.get("found") else None
         res["grade"]["odds_transient_source"] = None if str(used or "").lower().startswith("thunderpick") else used
+    # 2026-10-14 audit: the grader reads MIXED input revisions - each component is labelled (never "the old history" for
+    # the whole grade): only the performance model is pinned to N0 (perf_live); records / stake checks read the full tables
+    pf_ = res["grader_inputs"].get("perf") if isinstance(res["grader_inputs"].get("perf"), dict) else {}
+    v_ = str(pf_.get("version") or "")
+    try:
+        import perf_live
+        n0_rev = perf_live.input_revision()
+    except Exception:
+        n0_rev = None
+    res["grade"]["input_revisions"] = {
+        "performance_model": ((pf_.get("hltv_data") or {}).get("input_revision") or n0_rev if v_.startswith("perf-2") and not v_.endswith("-bo3")
+                              else f"player: BO3.gg maps (no HLTV history); opponent: {n0_rev}" if v_.endswith("-bo3")
+                              else "not used (old pipeline)"),
+        "last10_h2h_records": "full HLTV tables (repaired history incl. the 2026-10-13 backfill) + BO3.gg",
+        "stake_checks": "full HLTV tables (maps played, last map date, AWP share) + BO3.gg",
+        "settlement_display": "full HLTV tables"}
     try:                                     # display only (weight 0): HLTV history that stops well before BO3.gg's
         _hltv_staleness(res["grade"], res["grader_inputs"].get("perf"), pb)
     except Exception:
