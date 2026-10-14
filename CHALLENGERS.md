@@ -106,3 +106,10 @@ windows. No settled Thunderpick-priced line yet. Historical frozen test (once, a
 **Decision rule.** Unchanged from the registry: reviewed only at the 300 / 600 / 1000 forward-match windows, plus the
 round-6 historical result; promotion is an explicit admin action with a recorded reason and a new model version.
 lb-001 and the other frozen challengers are unchanged.
+
+**rr-1 forward note 2026-10-14 (first settled Thunderpick-priced lines; development only).** 350 settled lines whose
+latest forecast >= 30 min before start used a captured Thunderpick quote (8 matches). C as logged at the time vs the
+published forecast: kills MAE -0.022 (-0.473..+0.488), HS MAE -0.073 (-0.280..+0.153), log-loss / Brier intervals
+across 0 - no conclusion at 8 matches. Pure source swap A (pre-cutoff Polymarket price on identical inputs) vs B
+(Thunderpick): projections identical on all 287 comparable lines, side / grade / stake different on 9 (market-quality
+cap). Scripts: scratchpad tp_settled.py.
