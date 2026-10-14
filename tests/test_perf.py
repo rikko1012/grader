@@ -22,6 +22,7 @@ def _inputs(rnd, scope):
 
 
 _MARKET_FLAGS = ("Heavy underdog (", "NO MARKET:", "SOFT BOOK:", "No moneyline", "No market price")
+_LEGACY_STEP_FLAGS = ("Star (", "Rested (", "Rust (", "Hot form", "Online match: players beat", "LAN match: ", "online match: ")   # 2026-10-13: not emitted on perf lines (nothing applied there)
 
 
 def _new_display_keys(g):
@@ -165,7 +166,7 @@ def test_live_grades_unchanged_by_candidate_code():
         a = old.grade_leg(dict(d)); b = grader.grade_leg(dict(d), dict(grader.CONFIG, perf_hs_dist=False, fix_v2=False, perf_scopes=("12",))); b.pop("dist", None); b.pop("units_free", None); b.pop("units_free_less", None)
         _new_display_keys(b)
         for g in (a, b):     # 2026-10-13: perf lines no longer claim a market step was applied (flag text only)
-            g["flags"] = [f for f in g["flags"] if not f.startswith(_MARKET_FLAGS)]
+            g["flags"] = [f for f in g["flags"] if not f.startswith(_MARKET_FLAGS + _LEGACY_STEP_FLAGS)]
         assert json.dumps(a, sort_keys=True, default=str) == json.dumps(b, sort_keys=True, default=str)
 
 
