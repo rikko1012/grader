@@ -29,6 +29,7 @@ def _new_display_keys(g):
     """2026-10-13 additions that are display / provenance only (the numbers compared below are unchanged)."""
     (g.get("detail") or {}).pop("map_prob_basis", None)
     (g.get("detail") or {}).pop("market_in_projection", None)
+    (g.get("detail") or {}).pop("market_effect", None)        # 2026-10-14: what the selected odds did (provenance only)
 
 
 def test_old_path_identical_when_model_off():

@@ -376,6 +376,7 @@ def grade_leg(d, cfg=CONFIG):
 
     # Market quality (v7.4): HARD = liquid, tight Polymarket book; SOFT = thin/wide/none
     mq = d.get("market_quality") or ("HARD" if d.get("team_ml") is not None else "NONE")
+    cap_nm = unit_cap         # the same caps WITHOUT the market rule: did the selected odds change the stake? (detail)
     if mq != "HARD":
         unit_cap = min(unit_cap or cfg["soft_market_cap"], cfg["soft_market_cap"])
         # the text names the source the market input really came from (2026-10-13: Thunderpick lines said
@@ -394,7 +395,7 @@ def grade_leg(d, cfg=CONFIG):
     # Stand-in (v7.4.4): playing for another team than his own - graded, with a risk flag + 0.5U cap
     if d.get("standin_for"):
         sd_reasons.append("stand-in")
-        unit_cap = min(unit_cap or 1.0, 1.0)
+        unit_cap, cap_nm = min(unit_cap or 1.0, 1.0), min(cap_nm or 1.0, 1.0)
         flags.append(f"STAND-IN for {d['standin_for']}: different team and role than his usual -"
                      f"{sdi} max 1U")
 
@@ -403,7 +404,7 @@ def grade_leg(d, cfg=CONFIG):
     if rust is not None:
         if rust >= cfg["rust_cap_days"]:
             sd_reasons.append("rust >28d")
-            unit_cap = min(unit_cap or 1.0, 1.0)
+            unit_cap, cap_nm = min(unit_cap or 1.0, 1.0), min(cap_nm or 1.0, 1.0)
             flags.append(f"RUST: last official map {rust} days ago -{sdi} max 1U")
         elif rust >= cfg["rust_flag_days"]:
             sd_reasons.append("rust 15-28d")
@@ -859,6 +860,18 @@ def grade_leg(d, cfg=CONFIG):
     less_ok = line_type == "standard"
     u_less = 0.0 if (not less_ok or fight == "Less" or zero_units) else units_for_p(
         1 - pm, min(unit_cap if unit_cap is not None else 9, tcap) if tape == "Less" else unit_cap)
+    # 2026-10-14 audit: what the SELECTED odds actually did to this grade - a source label alone is no integration.
+    # projection / probability: only the old pipeline reads the win chance (perf-2 takes no market input); stake: the
+    # market-quality rule's cap is binding when the same grade without it would stake more
+    u_more_nm = 0.0 if (fight == "More" or zero_units) else units_for_p(
+        pm, min(cap_nm if cap_nm is not None else 9, tcap) if tape == "More" else cap_nm)
+    u_less_nm = 0.0 if (not less_ok or fight == "Less" or zero_units) else units_for_p(
+        1 - pm, min(cap_nm if cap_nm is not None else 9, tcap) if tape == "Less" else cap_nm)
+    has_price = d.get("p_team_market") is not None or d.get("team_ml") is not None
+    market_effect = {"selected": (d.get("odds_provenance") or {}).get("selected"), "market_quality": mq,
+                     "projection": bool(has_price and not perf_on), "probability": bool(has_price and not perf_on),
+                     "stake": (u_more_nm, u_less_nm) != (u_more, u_less),
+                     "stake_without_market_rule": {"more": u_more_nm, "less": u_less_nm}}
     for z in zero_units:
         flags.append(f"0 units: {z}")
     # what each side's chance alone earns (unrounded chance, no caps) - display only: lets the card name the cap that
@@ -906,6 +919,7 @@ def grade_leg(d, cfg=CONFIG):
         scope=scope, lambda_maps12=round(lam12, 2), p_map3=None if p3 is None else round(p3, 3),
         detail={"rounds": rpm * 2, "stomp": stomp, "p_win": round(p_win, 3), "p_map": round(q, 3), "map_prob_basis": map_basis,
                 "market_in_projection": not perf_on,   # perf-2 takes no market input (only the market-quality cap)
+                "market_effect": market_effect,
                 "outcome_mult": round(outcome, 3), "underdog_mult": round(dog, 3), "rank_band_mult": round(band_mult, 3), "p_map1": round(q1, 3), "p_map2": round(q2, 3),
                 "tape_gap": tape_gap, "lambda_model": round(lam_model, 2), "trade_mult": round(trade_mult, 3), "last10_mult": round(last10_mult, 3),
                 "h2h_edge": round(h2h_edge, 2), "regional_edge": round(reg_edge, 2),
