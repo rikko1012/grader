@@ -88,31 +88,96 @@ def err_text(e):
     return f"{type(e).__name__}: HLTV database unreachable" if is_transient(e) else f"{type(e).__name__}: lookup failed"
 
 
+_META = {}                # key -> {"state": live | memory copy | stored copy | failed, "as_of": when the data was read, "n"}
+
+
 def _remember(key, value, ok=True, ttl=None):
     """Cache a lookup result. ok=False (the lookup FAILED): the previous good value stays and is served meanwhile, and the
     lookup is tried again after FAIL_TTL seconds - with no previous value the failure itself is kept only FAIL_TTL.
-    Returns what is now cached. (2026-10-11 audit: one blip used to be remembered as 'no data' for 15-60 minutes.)"""
+    Returns what is now cached. (2026-10-11 audit: one blip used to be remembered as 'no data' for 15-60 minutes.)
+    read_status(key) says which it was (2026-10-13 audit: a served copy carries its source and age)."""
     ttl = TTL if ttl is None else ttl
     if ok:
         with _LOCK:
             if len(_CACHE) > 5000:
                 _CACHE.clear()
+                _META.clear()
             _CACHE[key] = (time.time(), value, True)
+            _META[key] = {"state": "live", "as_of": time.time(), "n": _size(value)}
         hltv_store.save(key, value)            # kept on the data disk: an outage (or a restart during one) uses it
         return value
     with _LOCK:
-        prev = _CACHE.get(key)
+        prev, meta = _CACHE.get(key), dict(_META.get(key) or {})
     good = prev if prev and (len(prev) < 3 or prev[2]) else None
+    state = (meta.get("state") if meta.get("state") == "stored copy" else "memory copy") if good else "failed"
+    as_of = meta.get("as_of") if good else None
     if good is None:                           # nothing in memory (restart, first look-up): the last good answer on disk
         stored = hltv_store.load(key)
         if stored is not None:
             good = (stored[0], stored[1], True)
+            state, as_of = "stored copy", stored[0]
     keep = good[1] if good else value
     with _LOCK:
         if len(_CACHE) > 5000:
             _CACHE.clear()
+            _META.clear()
         _CACHE[key] = (time.time() - ttl + FAIL_TTL, keep, bool(good))
+        _META[key] = {"state": state, "as_of": as_of, "n": _size(keep) if good else None}
     return keep
+
+
+def _size(v):
+    return len(v) if isinstance(v, (list, tuple)) else None
+
+
+def read_status(key):
+    """How the cached answer under `key` was obtained: {"state": "live" (read from the database) | "memory copy" / "stored
+    copy" (the last good answer of the same query, served because the database failed) | "failed" (no good answer
+    anywhere), "as_of": ISO time the data was read, "age_min", "n": rows}. None = never read (or not configured)."""
+    with _LOCK:
+        m = dict(_META.get(key) or {})
+    if not m:
+        return None
+    at = m.pop("as_of", None)
+    m["as_of"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(at)) if at else None
+    m["age_min"] = round((time.time() - at) / 60, 1) if at else None
+    return m
+
+
+FLIGHT_WAIT = POOL_WAIT + CONNECT_TIMEOUT + 6   # longest one read can take: pool wait, connect, 5 s statement timeout
+_FLIGHTS = {}
+MISS = object()
+
+
+def single_flight(key, read, peek):
+    """One database read per key at a time, shared (2026-10-13 audit: concurrent grades of one player each ran the same
+    failing query - 200 waiting grades = 200 database calls). The first caller runs read(); callers arriving meanwhile wait
+    for it (FLIGHT_WAIT s at most) and take peek() - its answer, the last good one or the failure kept FAIL_TTL - never a
+    read of their own. With the FAIL_TTL failure cache: one retry per key per FAIL_TTL seconds, whatever the load."""
+    with _LOCK:
+        ev = _FLIGHTS.get(key)
+        lead = ev is None
+        if lead:
+            ev = _FLIGHTS[key] = threading.Event()
+    if not lead:
+        ev.wait(FLIGHT_WAIT)
+        got = peek()
+        if got is not MISS:
+            return got
+    try:
+        return read()
+    finally:
+        if lead:
+            with _LOCK:
+                _FLIGHTS.pop(key, None)
+            ev.set()
+
+
+def _peek(key, ttl=None):
+    """single_flight's peek for _remember-cached lookups."""
+    with _LOCK:
+        hit = _CACHE.get(key)
+    return hit[1] if hit and time.time() - hit[0] < (TTL if ttl is None else ttl) else MISS
 
 
 _LAST_FORCED = [0.0]
@@ -399,11 +464,14 @@ def player_numbers(nick, team=None, bo3_last_date=None):
         hit = _CACHE.get(key)
         if hit and time.time() - hit[0] < TTL:
             return hit[1]
-    try:
-        result = _player_numbers(nick, team, bo3_last_date)
-    except Exception as e:  # database down, schema not there yet, ... - never block a grade
-        result = {"found": False, "error": err_text(e), "transient": is_transient(e)}
-    return _remember(key, result, ok=not result.get("error"))
+
+    def read():
+        try:
+            result = _player_numbers(nick, team, bo3_last_date)
+        except Exception as e:  # database down, schema not there yet, ... - never block a grade
+            result = {"found": False, "error": err_text(e), "transient": is_transient(e)}
+        return _remember(key, result, ok=not result.get("error"))
+    return single_flight(key, read, lambda: _peek(key))
 
 
 def _player_numbers(nick, team, bo3_last_date):
@@ -598,17 +666,28 @@ def lookup_failed(key):
     return bool(hit) and len(hit) > 2 and not hit[2]
 
 
-def context(nick, team=None, opponent=None, maps=(), bo3_last_date=None, fresh=False):
+def context(nick, team=None, opponent=None, maps=(), bo3_last_date=None, fresh=False, start=None, playing_for=None):
     """Everything else the scraper has for this grade, for display. Never raises; each section is
-    None when it can't be computed. Cached 15 minutes."""
+    None when it can't be computed. Cached 15 minutes. start / playing_for: the graded match's start and the team he plays
+    it for - the schedule sections (next match, tonight's LAN / online) read that team's schedule, and tonight's label is
+    the graded match's own (its opponent and start), never the team's next match against someone else."""
     if not dsn():
         return {"found": False, "note": "HLTV database not configured (HLTV_DB_DSN)"}
     maps = [m for m in (maps or []) if m]
+    sched = playing_for or team
     key = ("ctx", _norm(nick), _norm(team), _norm(opponent), tuple(_map_key(m) for m in maps))
+    if start:
+        key += (str(start)[:16],)
+    if _norm(sched) != _norm(team):
+        key += ("for", _norm(sched))
     with _LOCK:
         hit = _CACHE.get(key)
         if hit and time.time() - hit[0] < TTL and not fresh:   # fresh: a retry must not read the cached failure back
             return hit[1]
+    return single_flight(key, lambda: _context_read(key, nick, team, opponent, maps, sched, start), lambda: _peek(key))
+
+
+def _context_read(key, nick, team, opponent, maps, sched, start):
     try:
         con = _connect()
     except Exception as e:                   # the previous good context (if any) is served; the failure itself only FAIL_TTL s
@@ -617,8 +696,8 @@ def context(nick, team=None, opponent=None, maps=(), bo3_last_date=None, fresh=F
     try:
         with con.cursor() as cur:
             ids = _player_ids(cur, nick, team)
-            team_id = _team_id(cur, team) if team else None
-            opp_id = _team_id(cur, opponent) if opponent else None
+            team_id = canonical_team_id(cur, team) if team else None
+            opp_id = canonical_team_id(cur, opponent) if opponent else None
             sections = {
                 "prop_maps": lambda: _prop_maps(cur, ids, maps),
                 "eco": lambda: _eco(cur, ids),
@@ -627,8 +706,8 @@ def context(nick, team=None, opponent=None, maps=(), bo3_last_date=None, fresh=F
                 "ranking": lambda: _ranking(cur, team_id),
                 "opp_ranking": lambda: _ranking(cur, opp_id),
                 "rank_band": lambda: _rank_band(cur, ids, opp_id),
-                "next_match": lambda: _next_match(cur, team),
-                "environment": lambda: _environment(cur, ids, team),
+                "next_match": lambda: _next_match(cur, sched),
+                "environment": lambda: _environment(cur, ids, sched, opponent, start),
                 "backup_source": lambda: _backup(cur, ids),
             }
             for name, fn in sections.items():
@@ -665,20 +744,30 @@ def _player_ids(cur, nick, team):
 _TEAM_AFFIX = re.compile(r"^(team)\s+|\s+(esports|e-sports|esport|gaming|club|team)$", re.I)
 
 
-def same_team(a, b):
-    """Two team names are the same team: they share an exact name variant (team_name_variants). Never a substring -
-    'Inner Circle' is not 'Inner Circle Academy', 'NAVI' is not 'NAVI Junior' (settlement, 2026-10-11 audit)."""
-    va, vb = set(team_name_variants(a)), set(team_name_variants(b))
-    if va and vb and va & vb:
-        return True
-    try:                                  # the maintained alias table ('NIP' = 'Ninjas in Pyjamas'), exact names only
+def team_key(name):
+    """A team name's canonical identity: matchid.team_key - the HLTV team id via the exact name, a verified alias
+    (team_aliases.json / comparison.VERIFIED_TEAM_ALIASES) or an org-affix variant - once its lookup tables are loaded. None
+    when unknown, ambiguous (two HLTV teams) or not loaded yet. Memory only."""
+    try:
         import matchid
-        if matchid.ready():
-            ka, kb = matchid.team_key(a), matchid.team_key(b)
-            return bool(ka and ka == kb and str(ka).startswith("team:"))
+        return matchid.team_key(name) if name and matchid.ready() else None
     except Exception:
-        pass
-    return False
+        return None
+
+
+def same_team(a, b):
+    """Two team names are the same team. Canonical identity first: when both names resolve (team_key), the ids decide - a
+    renamed team or another spelling through its verified alias is the same team, two different HLTV teams never are, even
+    with a shared name variant (2026-10-13 audit: 'Nova Esports' / 'Nova Gaming'). Otherwise the exact name variants
+    (team_name_variants). Never a substring - 'Inner Circle' is not 'Inner Circle Academy', 'NAVI' is not 'NAVI Junior',
+    'MOUZ' is not 'MOUZ NXT' (settlement, 2026-10-11 audit)."""
+    if not a or not b:
+        return False
+    ka, kb = team_key(a), team_key(b)
+    if ka and kb:
+        return ka == kb
+    va, vb = set(team_name_variants(a)) or {_norm(a)}, set(team_name_variants(b)) or {_norm(b)}   # 1-letter names: as written
+    return bool(va & vb - {""})
 
 
 def _opp_rows(nick, team, rows, opponent):
@@ -697,19 +786,33 @@ def _opp_rows(nick, team, rows, opponent):
 
 
 def resolve_team_id(cur, name):
-    """The HLTV team id for a book / pick team name: exact name variants first, then the maintained alias table
-    (matchid / team_aliases.json, e.g. 'NIP' -> Ninjas in Pyjamas). None when it can't be resolved exactly."""
+    """The HLTV team id for a book / pick team name (canonical_team_id: exact name, verified alias, org-affix variants).
+    None when it can't be resolved exactly."""
     if not name:
         return None
     try:
-        tid = _team_id(cur, name)
+        return canonical_team_id(cur, name)
     except Exception:              # a failed lookup is no identity: the caller falls back to exact names
-        tid = None
-    if tid:
-        return tid
+        return alias_team_id(name)
+
+
+def canonical_team_id(cur, name):
+    """The HLTV team id of a team name in the order matchid.team_key resolves: the exact name, then a verified alias
+    (team_aliases.json - an alias beats an affix-stripped guess: 'Apogee Esports' is Betclic, not a team called Apogee), then
+    the org-affix variants. None when unresolved. A database failure raises (never 'team not in HLTV' for a blip)."""
+    vs = team_name_variants(name)
+    if not vs:
+        return None
+    # a normalised variant has no spaces, so _team_id looks it up as it is (exactly)
+    return _team_id(cur, vs[0]) or alias_team_id(name) or next((t for t in (_team_id(cur, v) for v in vs[1:]) if t), None)
+
+
+def alias_team_id(name):
+    """The HLTV team id the maintained alias table (matchid / team_aliases.json) gives this exact name, else None. Memory
+    only (no database read)."""
     try:
         import matchid
-        k = matchid.team_key(name) if matchid.ready() else None
+        k = matchid.team_key(name) if name and matchid.ready() else None
         if k and str(k).startswith("team:"):
             return int(str(k).split(":", 1)[1])
     except Exception:
@@ -1130,10 +1233,10 @@ def _ranking(cur, team_id):
             "rank_4w_ago": then[1] if then else None, "change": (then[1] - now[1]) if then else None}
 
 
-def _environment(cur, ids, team):
+def _environment(cur, ids, team, opponent=None, start=None):
     """LAN vs online: his kills per round in each over the last 12 months (all maps) and whether
     tonight's event is LAN (from matches already played at that event). Needs match_overview.lan
-    (hltv-scraper parser v6)."""
+    (hltv-scraper parser v6). With the graded match's opponent (and start): tonight is that match's event only."""
     if not ids:
         return None
     cur.execute("""SELECT mo.lan, sum(ps.k), sum(own.score + opp.score), count(*)
@@ -1147,7 +1250,7 @@ def _environment(cur, ids, team):
     for lan, k, r, n in cur.fetchall():
         if r:
             env["lan" if lan else "online"] = {"maps": n, "kpr": round(k / r, 3)}
-    nm = _next_match(cur, team)
+    nm = _next_match(cur, team, opponent, start) if opponent else _next_match(cur, team)
     tonight = None
     if nm and nm.get("event"):                       # HLTV's own label first: hltv.org/events (scraper)
         try:
@@ -1179,22 +1282,52 @@ def _environment(cur, ids, team):
             "ratio": round(side["kpr"] / allk, 3) if side and allk else None, "ratio_maps": side["maps"] if side else 0}
 
 
-def _next_match(cur, team):
-    """His team's next (or live) match on HLTV's schedule - a second opinion on BO3.gg's slate."""
+def _next_match(cur, team, opponent=None, start=None):
+    """His team's next (or live) match on HLTV's schedule - a second opinion on BO3.gg's slate. With `opponent`: the match
+    against that team (exact name variants / aliases) starting within comparison.JOIN_START_MIN of `start` (when given) -
+    the graded match itself, or None (2026-10-13 audit: tonight's LAN / online label was taken from the team's next / live
+    match against anyone)."""
     if not team:
         return None
     vs = team_name_variants(team) or [_norm(team)]      # 'Nordic Partners Gaming' = HLTV's 'Nordic Partners' (exact variants)
-    cur.execute("""SELECT time, live, team1, team2, event, format, url FROM upcoming_matches
-                   WHERE (lower(regexp_replace(team1, '[^a-zA-Z0-9]', '', 'g')) = ANY(%(t)s)
-                       OR lower(regexp_replace(team2, '[^a-zA-Z0-9]', '', 'g')) = ANY(%(t)s))
-                     AND (live OR time >= now() - interval '3 hours')
-                   ORDER BY live DESC, time LIMIT 1""", {"t": vs})
-    r = cur.fetchone()
-    if not r:
+    sql = """SELECT time, live, team1, team2, event, format, url FROM upcoming_matches
+             WHERE (lower(regexp_replace(team1, '[^a-zA-Z0-9]', '', 'g')) = ANY(%(t)s)
+                 OR lower(regexp_replace(team2, '[^a-zA-Z0-9]', '', 'g')) = ANY(%(t)s))
+               AND (live OR time >= now() - interval '3 hours')
+             ORDER BY live DESC, time"""
+    if opponent:
+        cur.execute(sql, {"t": vs})
+        rows = cur.fetchall()
+    else:
+        cur.execute(sql + " LIMIT 1", {"t": vs})
+        r = cur.fetchone()
+        rows = [r] if r else []
+    out = [{"time": r[0].isoformat() if r[0] else None, "live": r[1], "opponent": r[3] if _norm(r[2]) in vs else r[2],
+            "event": r[4], "format": r[5], "url": r[6], "_at": r[0]} for r in rows]
+    if opponent:
+        out = [m for m in out if same_team(opponent, m["opponent"])]
+        st = _utc_dt(start)
+        if st is not None:
+            from comparison import JOIN_START_MIN
+            out = sorted((m for m in out if m["_at"] is not None and abs((_utc_dt(m["_at"]) - st).total_seconds()) <= JOIN_START_MIN * 60),
+                         key=lambda m: abs((_utc_dt(m["_at"]) - st).total_seconds()))
+    if not out:
         return None
-    opponent = r[3] if _norm(r[2]) in vs else r[2]
-    return {"time": r[0].isoformat() if r[0] else None, "live": r[1], "opponent": opponent,
-            "event": r[4], "format": r[5], "url": r[6]}
+    out[0].pop("_at")
+    return out[0]
+
+
+def _utc_dt(t):
+    """A datetime / ISO string as an aware UTC datetime (naive = UTC); None when unreadable."""
+    from datetime import datetime, timezone
+    if t is None:
+        return None
+    if not isinstance(t, datetime):
+        try:
+            t = datetime.fromisoformat(str(t).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
 
 
 def _backup(cur, ids):
@@ -1262,18 +1395,21 @@ def recent_series(nick, team=None, since=None):
         hit = _CACHE.get(key)
         if hit and time.time() - hit[0] < TTL:
             return hit[1]
-    out, ok = [], True
-    try:
-        con = _connect()
+
+    def read():
+        out, ok = [], True
         try:
-            with con.cursor() as cur:
-                ids = _player_ids(cur, nick, team)
-                out = _series_rows(cur, ids, since) if ids else []
-        finally:
-            con.close()
-    except Exception:
-        ok = False                         # unreachable / timed out: the last good rows stay, retried in FAIL_TTL s
-    return _remember(key, out, ok)
+            con = _connect()
+            try:
+                with con.cursor() as cur:
+                    ids = _player_ids(cur, nick, team)
+                    out = _series_rows(cur, ids, since) if ids else []    # no HLTV player: a good, empty answer
+            finally:
+                con.close()
+        except Exception:
+            out, ok = [], False            # unreachable / timed out / cut off mid-read: never a partial answer; the last good
+        return _remember(key, out, ok)     # rows stay (memory, else the stored copy), retried in FAIL_TTL s
+    return single_flight(key, read, lambda: _peek(key))
 
 
 def settle_totals(nick, team, hltv_match):

@@ -53,15 +53,37 @@ def _k(key):
 
 
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}")
+WINDOW_KINDS = {"series"}  # read with several windows: his series for the 365-day last-10 and the 90/180/365-day stake check
+
+
+def _days_back(s):
+    """Days from the window start s (YYYY-MM-DD...) back from today (UTC); None when unreadable."""
+    from datetime import date, datetime, timezone
+    try:
+        return (datetime.fromtimestamp(time.time(), timezone.utc).date() - date.fromisoformat(s[:10])).days
+    except ValueError:
+        return None
 
 
 def loose(key):
     """The key without its date / map parts: ("p", nick, team, "2025-08-17") -> ("p", nick, team). Exact keys change at UTC
     midnight (the 420-day window start) and when a veto fixes the maps; the loose key still finds the last good answer for
-    the same player / team / opponent, so an outage after midnight or after the veto is covered too."""
+    the same player / team / opponent, so an outage after midnight or after the veto is covered too. A WINDOW_KINDS key keeps
+    its window length in place of the date (("series", nick, team, ("days", 366))): the same window a day later is the same
+    query, another window is not (2026-10-13 audit: after midnight the 365-day read was served the 90-day answer)."""
     if not isinstance(key, tuple):
         return None
-    lk = tuple(x for x in key if not isinstance(x, (tuple, list, set, frozenset)) and not (isinstance(x, str) and _DATE.match(x)))
+    win = bool(key) and key[0] in WINDOW_KINDS
+    lk = []
+    for x in key:
+        if isinstance(x, (tuple, list, set, frozenset)):
+            continue
+        if isinstance(x, str) and _DATE.match(x):
+            if win:
+                lk.append(("days", _days_back(x)))
+            continue
+        lk.append(x)
+    lk = tuple(lk)
     return ("~loose",) + lk if lk != key else None
 
 

@@ -80,7 +80,8 @@ def maps123_record(pb, line=None, stat="kills", hltv_rows=None, today=None):
     hl = _series(hltv_rows if hltv_rows is not None else _hltv_rows(nick, team, since), stat)
     b3 = _series([dict(r, source=None) for r in (pb.get("recent_maps") or [])], stat)
     def same(a, b):
-        return a["date"][:10] == b["date"][:10] and hltv._norm(a.get("opponent"))[:4] == hltv._norm(b.get("opponent"))[:4]
+        # exact name variants / aliases (2026-10-13 audit: a 4-letter prefix took 'Spirit Academy' for 'Spirit')
+        return a["date"][:10] == b["date"][:10] and hltv.same_team(a.get("opponent"), b.get("opponent"))
     allv = hl + [s for s in b3 if not any(same(s, h) for h in hl)]      # BO3.gg only for series HLTV doesn't have
     menv = pb.get("_match_env") or {}
     for s in allv:

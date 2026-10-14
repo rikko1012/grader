@@ -87,9 +87,11 @@ def _team_ok(board_team, page_teams):
     b = _norm(board_team)
     if not b or (board_team or "").lower().startswith("ex-") or not page_teams:
         return True                                   # no current team on one side (ex- roster / free agent on a mix)
+    import hltv
     for t in page_teams:
-        p = _norm(t)
-        if p and (p in b or b in p):                  # exact name variants only - no 4-letter prefix guesses (2026-10-11 audit)
+        # exact name variants / aliases only (hltv.same_team) - no prefix guesses (2026-10-11 audit) and no substrings
+        # (2026-10-13 audit: 'Spirit' in 'Spirit Academy' gave the academy rifler the main team's AWPer role)
+        if _norm(t) and (_norm(t) == b or hltv.same_team(board_team, t)):
             return True
     return False
 
