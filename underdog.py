@@ -50,6 +50,23 @@ def _scope(code, label):
     return None
 
 
+_CODE = re.compile(r"^([a-z]+)(?:_on)?_maps?_?\d(?:[_+&-]\d)*$")         # "kills_on_maps_1_2"
+_LABEL_MAPS = re.compile(r"(?:\bon\s+)?\bmaps?\s*\d(?:\s*[-+&]\s*\d)*")     # "Maps 1+2" / "on Maps 1-3"
+_PROP = {"kills": "kills", "kill": "kills", "headshots": "hs", "headshot": "hs"}
+
+
+def _prop(code, label):
+    """kills / hs from Underdog's stat - the WHOLE stat name, exactly (2026-10-13 audit C14: "AWP Kills", "Opening Kills",
+    "Kills + Assists" are other stats, never total kills): the exact stat code ("kills_on_maps_1_2") when it is one, else
+    the exact label ("Maps 1+2 Kills"); a label naming the other stat skips the line. None = not graded."""
+    m = _CODE.match(code or "")
+    by_code = _PROP.get(m.group(1) if m else (code or ""))
+    by_label = _PROP.get(" ".join(_LABEL_MAPS.sub(" ", (label or "").replace("(", " ").replace(")", " ")).split()))
+    if by_code:
+        return by_code if by_label in (None, by_code) else None
+    return by_label
+
+
 def parse(body):
     apps = {a["id"]: a for a in body.get("appearances", [])}
     players = {p["id"]: p for p in body.get("players", [])}
@@ -66,7 +83,7 @@ def parse(body):
         scope = _scope(code, label)
         if scope is None:
             continue                                   # a map set the grader doesn't grade
-        prop = "hs" if "headshot" in label else "kills" if "kill" in label else None
+        prop = _prop(code, label)
         app = apps.get(stat.get("appearance_id"))
         try:
             value = float(ln.get("stat_value"))

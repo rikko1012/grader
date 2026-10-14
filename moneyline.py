@@ -158,13 +158,15 @@ def _fallback_canonical(team_a, team_b, start_iso, bo=None, event=None, scope="s
             "flipped": keys[0] != ka, "status": "fallback", "reason": "matchid.py not available - name key"}
 
 
-def canonical(team_a, team_b, start_iso, bo=None, event=None, scope="series"):
+def canonical(team_a, team_b, start_iso, bo=None, event=None, scope="series", mint=True):
+    """mint=False: lookup only - never issues a hashed match id (matchid.canonical_match)."""
     try:
         import matchid
     except ImportError:
         return _fallback_canonical(team_a, team_b, start_iso, bo, event, scope)
     try:
-        r = matchid.canonical_match(team_a, team_b, start_iso, bo=bo, event=event, scope=scope)
+        r = (matchid.canonical_match(team_a, team_b, start_iso, bo=bo, event=event, scope=scope) if mint else
+             matchid.canonical_match(team_a, team_b, start_iso, bo=bo, event=event, scope=scope, mint=False))
         return dict(r) if isinstance(r, dict) else {"match_id": None, "status": "error", "reason": "bad reply"}
     except Exception as e:          # noqa: BLE001 - linking failing never blocks the board
         return {"match_id": None, "team_keys": None, "flipped": False, "status": "error",
@@ -530,6 +532,31 @@ def _snapshot_rows(listings, now, platform=None):
 
 # ---------------------------------------------------------------- one source = one refresher
 
+_HTTP_CODE = re.compile(r"\b([45]\d\d)\s+(?:Client|Server)\s+Error|\bHTTP\s*([45]\d\d)\b|\bstatus(?:[ _]code)?\W{0,3}([45]\d\d)\b"
+                        r"|^\s*([45]\d\d)\s*$", re.I)
+
+
+def member_error(text):
+    """A refresh failure in member words (2026-10-13 audit A4: members saw upstream hosts, ports and URLs): the exception
+    type and a generic cause - timeout / HTTP <code> / connection failed / failed. Never a host, port, URL, driver message
+    or key; the full text stays in status()['last_error'] (admin)."""
+    s = str(text or "")
+    if not s:
+        return s
+    m = re.match(r"\s*([A-Za-z_][\w.]*)\s*:", s)
+    name = m.group(1).rsplit(".", 1)[-1] if m else None
+    code = _HTTP_CODE.search(s)
+    if re.search(r"timed? ?out|timeout", s, re.I):
+        cause = "timeout"
+    elif code:
+        cause = "HTTP " + next(g for g in code.groups() if g)
+    elif re.search(r"connect|resolve|unreachable|refused|max retries|getaddrinfo|reset by peer", s, re.I):
+        cause = "connection failed"
+    else:
+        cause = "failed"
+    return f"{name}: {cause}" if name else cause
+
+
 class Source:
     def __init__(self, name, fetch_fn, normalize_fn, interval=INTERVAL, max_backoff=MAX_BACKOFF,
                  canonical_fn=None, snapshot=True):
@@ -623,12 +650,15 @@ class Source:
         return bool(self.last_ok and self.last_success and now_ts - self.last_success <= STALE_AFTER)
 
     def note(self, now_ts=None):
+        """The source's state in member words (it reaches the platform blocks' reasons): the failure's cause only
+        (member_error) - the full error text is status()['last_error'] (admin)."""
         now_ts = time.time() if now_ts is None else now_ts
+        err = member_error(self.last_error)
         if self.last_success is None:
-            return f"{self.name} has not loaded yet" + (f" ({self.last_error})" if self.last_error else "")
+            return f"{self.name} has not loaded yet" + (f" ({err})" if err else "")
         age = int(now_ts - self.last_success)
         if not self.last_ok:
-            return f"stale: {self.name} refresh failing ({self.last_error}); last good data {age}s old"
+            return f"stale: {self.name} refresh failing ({err}); last good data {age}s old"
         if age > STALE_AFTER:
             return f"stale: last good data {age}s old"
         return None

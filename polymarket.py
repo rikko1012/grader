@@ -45,34 +45,67 @@ def name_match(query, outcome):
     return 0
 
 
+def same_team(a, b):
+    """The fallback odds' team match (2026-10-13 audit C13: 'FURIA' picked 'FURIA fe vs Imperial fe'): one team by
+    matchid's team identity (team_key - exact names after normalisation and org affixes, maintained + verified aliases), never
+    substring - Academy / fe / NXT / Young / Force squads are other teams. name_match (loose) stays for its other callers."""
+    try:
+        import matchid
+        return matchid.same_team(a, b)
+    except Exception:                    # noqa: BLE001 - identity unreadable: no match (never a guess)
+        return False
+
+
 def prob_to_american(p):
     p = min(max(p, 0.01), 0.99)
     return round(-100 * p / (1 - p)) if p >= 0.5 else round(100 * (1 - p) / p)
 
 
-_EVENTS = {"at": 0.0, "data": None}
+_EVENTS = {"at": 0.0, "data": None, "retry_at": 0.0, "error": None}
 import threading as _threading
 _EVENTS_LOCK = _threading.Lock()
 EVENTS_TTL = 60   # seconds - the market list is shared by every grade in that minute
+FAIL_RETRY_S = 30  # a failed download is retried no sooner than this (the last good list meanwhile)
+
+
+class Unavailable(RuntimeError):
+    """No event list in memory and the last download failed less than FAIL_RETRY_S ago (no new request)."""
 
 
 def upcoming_events(days_back=1):
     """Open CS2 events whose end date hasn't passed (skips stale never-closed ones).
-    Cached in memory for 60 seconds."""
+    Cached in memory for 60 seconds. 2026-10-13 audit (700 members): one download at a time - while it runs, callers
+    with a list in memory get that list at once (never queued behind a 20 s request); a failed download keeps the last
+    good list and is retried no sooner than FAIL_RETRY_S (a retry delay, not a cached answer); with no list yet, callers
+    inside that delay fail at once (Unavailable) instead of each sending a request."""
     import time as _t
-    if _EVENTS["data"] is not None and _t.time() - _EVENTS["at"] < EVENTS_TTL:
+
+    def ready(now):
+        if _EVENTS["data"] is not None and now - _EVENTS["at"] < EVENTS_TTL:
+            return True
+        if now < _EVENTS["retry_at"]:
+            if _EVENTS["data"] is None:
+                raise Unavailable(f"Polymarket event list unavailable ({_EVENTS['error']}); retried within {FAIL_RETRY_S} s")
+            return True
+        return False
+    if ready(_t.time()):
         return _EVENTS["data"]
-    with _EVENTS_LOCK:                   # one download for everyone waiting (no stampede)
-        if _EVENTS["data"] is not None and _t.time() - _EVENTS["at"] < EVENTS_TTL:
+    if not _EVENTS_LOCK.acquire(blocking=_EVENTS["data"] is None):   # one download for everyone (no stampede)
+        return _EVENTS["data"]                                       # another caller is downloading: the last list
+    try:
+        if ready(_t.time()):
             return _EVENTS["data"]
         try:
             data = _fetch_events(days_back)
-        except Exception:
+        except Exception as e:
+            _EVENTS.update(retry_at=_t.time() + FAIL_RETRY_S, error=type(e).__name__)
             if _EVENTS["data"] is not None:          # Polymarket hiccup: keep the last list
                 return _EVENTS["data"]
             raise
-        _EVENTS.update(at=_t.time(), data=data)
+        _EVENTS.update(at=_t.time(), data=data, retry_at=0.0, error=None)
         return data
+    finally:
+        _EVENTS_LOCK.release()
 
 
 def _fetch_events(days_back):
@@ -90,14 +123,42 @@ def _fetch_events(days_back):
         offset += 100
 
 
+def _jl(x):
+    """A JSON-list field as Gamma sends it (text; a list as is) - None when malformed (polymarket_ml._jl)."""
+    if isinstance(x, list):
+        return x
+    try:
+        v = json.loads(x or "[]")
+    except (TypeError, ValueError):
+        return None
+    return v if isinstance(v, list) else None
+
+
+def _prices(m):
+    try:
+        return [float(x) for x in _jl(m.get("outcomePrices"))]
+    except (TypeError, ValueError):
+        return None
+
+
+def _num(x):
+    try:
+        return float(x or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _price(m, idx):
     """Probability for outcome idx: bid/ask midpoint when the book is tight, else last price."""
-    prices = [float(x) for x in json.loads(m.get("outcomePrices") or "[]")]
+    prices = _prices(m) or []
     last = prices[idx] if idx < len(prices) else None
     bid, ask = m.get("bestBid"), m.get("bestAsk")
-    if bid is not None and ask is not None and float(ask) - float(bid) <= MAX_SPREAD:
-        mid = (float(bid) + float(ask)) / 2      # book quotes outcome 0
-        return (mid if idx == 0 else 1 - mid), "midpoint"
+    try:
+        if bid is not None and ask is not None and float(ask) - float(bid) <= MAX_SPREAD:
+            mid = (float(bid) + float(ask)) / 2      # book quotes outcome 0
+            return (mid if idx == 0 else 1 - mid), "midpoint"
+    except (TypeError, ValueError):
+        pass
     return last, "last price (wide spread)"
 
 
@@ -127,39 +188,67 @@ def cached_events():
     return _EVENTS["data"], (_EVENTS["at"] or None)
 
 
-def match_odds(team, opponent=None, events=None, events_at=None):
+MATCH_WINDOW_H = 3          # the same match: listed within this many hours of the graded match's start (matchid.WINDOW_H)
+
+
+def when(s):
+    """An ISO / Gamma start ('2026-10-12 01:00:00+00', '...Z') -> aware UTC datetime, None when unreadable."""
+    try:
+        t = str(s).strip().replace(" ", "T", 1).replace("Z", "+00:00")
+        t = t + ":00" if re.search(r"[+-]\d{2}$", t) else t
+        d = datetime.fromisoformat(t)
+        return d.replace(tzinfo=timezone.utc) if d.tzinfo is None else d.astimezone(timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def match_odds(team, opponent=None, events=None, events_at=None, start=None):
     """Next Polymarket match for `team` (optionally vs `opponent`) that has NOT started yet.
-    Live and finished matches are skipped - their price isn't a pre-match win chance.
+    Live and finished matches are skipped - their price isn't a pre-match win chance (2026-10-13 audit: the event's own
+    live / ended flags too - a match that starts early is in play before its listed start).
+    Teams by exact identity (same_team: matchid's team identity with maintained + verified aliases - never substring);
+    the price is oriented by the team, whatever the listing order. start (the graded match's start, 2026-10-13 audit):
+    only a listing within MATCH_WINDOW_H of it, the nearest one (a rematch of the same teams is another match); no start:
+    the earliest. An event Gamma lists malformed is skipped (it never breaks the other lookups).
     events_at: when a caller-supplied list was retrieved (epoch s) - recorded as retrieved_at."""
     if events is None:
         events = upcoming_events()
         events_at = _EVENTS["at"] or None
+    want = when(start) if start else None
     best = None
     for ev in events:
-        ml = next((m for m in ev.get("markets", []) if m.get("sportsMarketType") == "moneyline"), None)
-        if not ml or ml.get("closed") or _started(ml):
+        try:
+            ml = next((m for m in ev.get("markets", []) if m.get("sportsMarketType") == "moneyline"), None)
+            if not ml or ml.get("closed") or _started(ml) or ev.get("live") or ev.get("ended"):
+                continue
+        except (AttributeError, TypeError):
             continue
-        outcomes = json.loads(ml.get("outcomes") or "[]")
-        if len(outcomes) != 2:
+        outcomes = _jl(ml.get("outcomes"))
+        if not outcomes or len(outcomes) != 2 or not all(isinstance(o, str) for o in outcomes) or _prices(ml) is None:
             continue
         if team:
-            scores = [name_match(team, o) for o in outcomes]
-            ti = max(range(2), key=lambda i: scores[i])
-            if scores[ti] == 0:
+            hits = [i for i in range(2) if same_team(team, outcomes[i])]
+            if len(hits) != 1:
                 continue
+            ti = hits[0]
             oi = 1 - ti
-            oscore = name_match(opponent, outcomes[oi]) if opponent else 1
-            if opponent and oscore == 0:
+            if opponent and not same_team(opponent, outcomes[oi]):
                 continue
         else:   # player's team unknown (not on BO3.gg): find the match by the opponent alone
-            oscores = [name_match(opponent, o) for o in outcomes]
-            oi = max(range(2), key=lambda i: oscores[i])
-            if oscores[oi] == 0:
+            hits = [i for i in range(2) if same_team(opponent, outcomes[i])]
+            if len(hits) != 1:
                 continue
-            ti, scores, oscore = 1 - oi, [0, 0], oscores[oi]
-        key = (scores[ti] + oscore, ml.get("gameStartTime") or "")
-        # highest name score wins; on a tie, the earliest start
-        if best is None or key[0] > best[0][0] or (key[0] == best[0][0] and key[1] < best[0][1]):
+            oi = hits[0]
+            ti = 1 - oi
+        if want is not None:                         # the graded match: within the window, the nearest listing
+            st = when(ml.get("gameStartTime"))
+            gap = abs((st - want).total_seconds()) if st is not None else None
+            if gap is None or gap > MATCH_WINDOW_H * 3600:
+                continue
+            key = (gap, str(ml.get("gameStartTime") or ""))
+        else:
+            key = (0, str(ml.get("gameStartTime") or ""))   # the earliest start
+        if best is None or key < best[0]:
             best = (key, ev, ml, ti, oi, outcomes)
     if not best:
         who = f"{team} vs {opponent}" if opponent else team
@@ -169,7 +258,7 @@ def match_odds(team, opponent=None, events=None, events_at=None):
     _, ev, ml, ti, oi, outcomes = best
     side = _side(ml, ti)
     flags = []
-    liq = float(ml.get("liquidityNum") or 0)
+    liq = _num(ml.get("liquidityNum"))
     if liq < THIN_LIQUIDITY:
         flags.append(f"Thin market (${liq:,.0f} liquidity) - price is less reliable")
     if side and side["source"] != "midpoint":
@@ -178,23 +267,23 @@ def match_odds(team, opponent=None, events=None, events_at=None):
 
     maps = {}
     for m in ev.get("markets", []):
-        mm = re.search(r"Map (\d) Winner", m.get("question", ""))
+        mm = re.search(r"Map (\d) Winner", str(m.get("question") or ""))
         if m.get("sportsMarketType") == "child_moneyline" and mm:
-            mo = json.loads(m.get("outcomes") or "[]")
+            mo = _jl(m.get("outcomes")) or []
             idx = next((i for i, o in enumerate(mo) if o == outcomes[ti]), None)
-            if idx is not None:
+            if idx is not None and _prices(m) is not None:
                 maps[f"map{mm.group(1)}"] = _side(m, idx)
 
     out = {
         "found": True, "team": outcomes[ti], "opponent": outcomes[oi],
-        "title": ml.get("question", "").replace("Counter-Strike: ", ""),
+        "title": str(ml.get("question") or "").replace("Counter-Strike: ", ""),
         "start": start, "url": f"https://polymarket.com/event/{ev.get('slug')}",
-        "liquidity": round(liq), "volume": round(float(ml.get("volumeNum") or 0)),
+        "liquidity": round(liq), "volume": round(_num(ml.get("volumeNum"))),
         "flags": flags, "maps": maps,
         # forecast record (2026-10-13): the market's own ids and raw prices as listed (outcome order = "outcomes"; the
         # bid / ask quote outcome 0) and OUR retrieval time of the event list - None when not listed, never invented
         "event_slug": ev.get("slug"), "market_id": ml.get("id"), "condition_id": ml.get("conditionId"),
-        "outcomes": outcomes, "outcome_prices": json.loads(ml.get("outcomePrices") or "[]"),
+        "outcomes": outcomes, "outcome_prices": _jl(ml.get("outcomePrices")),
         "best_bid": ml.get("bestBid"), "best_ask": ml.get("bestAsk"),
         "retrieved_at": (datetime.fromtimestamp(events_at, timezone.utc).isoformat(timespec="seconds")
                          if events_at else None),

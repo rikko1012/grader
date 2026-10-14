@@ -18,7 +18,13 @@
 - Full grades take the market input from `market_odds.select` (odds-source-2), re-checked at every regrade: Thunderpick
   when `projection_odds` finds an **eligible** quote (see Eligibility), else Polymarket, else OddsPapi (live for member
   contexts, cache-only for board contexts), else no market - the reason saved (`inputs.odds_provenance.fallback_reason`,
-  with the availability state). Never 50%.
+  with the availability state). Never 50%. A Thunderpick feed blip marks the fallback transient (E1, below).
+- **Fallback sources (2026-10-13 audit):** Polymarket and OddsPapi match teams by matchid's team identity (HLTV ids via
+  exact names, org affixes, maintained + verified aliases) - never substring / one-word containment, so an Academy /
+  fe / NXT / Young / Force squad never prices the main team; the price is oriented by the team, not the listing order;
+  with the graded match's start, only a listing within 3 h of it (the nearest - a rematch is another match). One
+  download at a time per source (others use the last list or wait for that one answer); a failure keeps the last good
+  list and is retried no sooner than 30 s, shared by every caller - never a request per member.
 - **First real forecasts using it (`tp-first-1`):** forecasts 5867-5873 (13:40:11 UTC, version `4f00a300a1`): Legacy vs
   PARIVISION, 2026-10-14 13:30 UTC (`hltv:2399386`, Thunderpick fixture `fx:3297270`). Example below.
 - Moneylines: a Thunderpick block on each matched card (decimal odds, raw implied, margin, margin-adjusted probability,
@@ -64,9 +70,9 @@ future. `projection_odds` and the Moneylines block (`board_block`) use the same 
 
 | availability | meaning |
 |---|---|
-| `endpoint_empty` | the endpoint's latest successful answer listed no events - earlier quotes are display / history only (no holding through empty answers) |
+| `endpoint_empty` | the endpoint's latest successful answer listed no events - earlier quotes are display / history only (no holding through empty answers). A feed blip (E1, below) while the last full answer listing the event is at most 30 min old |
 | `not_in_latest_answer` | the event is absent from its endpoint's latest successful nonempty answer (checked by presence, even when re-matching fails) |
-| `stale` | the latest successful answer is older than 180 s (failures / cooldown). A failed request neither extends nor voids anything by itself |
+| `stale` | the latest successful answer is older than 180 s (failures / cooldown). A failed request neither extends nor voids anything by itself. A feed blip (E1, below) while the answer listing the event is at most 30 min old; treated as cleared after that |
 | `started` | canonical start <= now; canonical start = the earliest of the HLTV start, the caller's start and the converted Thunderpick start |
 | `scope_unconfirmed` | the market type is not enabled (e.g. a main market other than "Match Winner") |
 | `draw_listed` | a draw price is listed |
@@ -74,6 +80,34 @@ future. `projection_odds` and the Moneylines block (`board_block`) use the same 
 | `invalid_odds` | the event's odds are invalid |
 | `policy_inactive` | the policy gate is off (timezone, sanity gate, switch) |
 | `unlinked` / `ambiguous` | no exact canonical match / two Thunderpick events on one match |
+
+### Feed blips (owner decision E1, 2026-10-13: "a Thunderpick odds blip is treated like an HLTV blip")
+Before E1 a quote that stopped being current (429 cooldown, timeouts, a reader failure) switched the grade to
+Polymarket and back (audit: 19 of 608 saved HARD forecasts changed grade / stake from the source switch alone). Now:
+- **Blip** = Thunderpick still holds an event for this exact match (linked + matched) but its quote is not current
+  only because of the feed: availability `stale` (the latest successful answer is older than 180 s - in production
+  recent 429s keep csgo at the 150 s carry cap and each cooldown pushes the next good poll past 180 s) or
+  `endpoint_empty` (an empty `[]` answer between full answers), while the answer that last listed the event is at most
+  `BLIP_MAX_S` old (30 min = the 429 cooldown cap), polling is on, no authentication stop and nothing but the feed
+  blocks the quote (draw / odds / market type / format / policy) - `projection_odds` returns `"blip": True`; or a
+  reader failure (exception) while the current run of failures is shorter than `BLIP_MAX_S`. Production 2026-10-13
+  18:11 - 10-14 (d26e83e): 1,155 of 1,837 non-Thunderpick forecasts were such blips (907 `stale`, 248
+  `endpoint_empty`). `market_odds.select` / `revalidate` then return the usual
+  fallback selection (Polymarket / OddsPapi / no market - a member card can still show a temporary grade) marked:
+  top-level `transient: True`, `provenance.blip: True`, `provenance.fallback_reason` = "Thunderpick quote not current
+  (feed blip) - treated like an outage: <reason> (last quote N s old)". `provenance.selected` / `source` stay the
+  fallback source - nothing calls the input Thunderpick or current; the stale Thunderpick quote is recorded beside it
+  with its own retrieval time and age (`provenance.tp_last_quote`: retrieved_at, age_s, source_event_id, match_id,
+  `used: false`). The grade copies the flag (`odds_transient`); the board keeps the line's last grade or hides it, the
+  card shows a notice, and the grade is never logged as a forecast.
+- **Not a blip** (a normal fallback, no mark, exactly as before): no event / unlinked / ambiguous, `policy_inactive`,
+  `scope_unconfirmed`, `format_excluded`, `draw_listed`, `invalid_odds`, `started`, `not_in_latest_answer` (absent from a
+  newer full answer), the module unavailable - and an event no answer listed for longer than `BLIP_MAX_S`, polling off
+  or an authentication stop: the feed's matches are treated as cleared (`"blip": False`, the reason says "treated as
+  cleared (an outage, not a blip)"). A permanently dead or emptied Thunderpick is never "transient forever".
+- Re-checks never return a transient selection as the confirmed cached input (it is re-decided at every regrade, so it
+  ends with the blip) and record it as `transient: ...`, never `changed`; the odds signature is unchanged (it describes
+  the temporary input), so the quote that comes back after the blip is the same input as before it.
 
 Display keeps each quote's own retrieval time and snapshot hash - never renewed - with plain words, e.g. "Last seen
 14:20 UTC - Thunderpick's latest answer listed no CS2 markets; not confirmed now". Production evidence for the change:

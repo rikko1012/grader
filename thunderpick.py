@@ -45,6 +45,11 @@ Eligibility (owner 2026-10-13: conservative) - a quote feeds projections ONLY wh
                           request neither extends nor voids anything by itself)
     started | scope_unconfirmed | draw_listed | format_excluded (BO2 / unknown) | invalid_odds | policy_inactive |
     unlinked | ambiguous
+  E1 (owner 2026-10-13): "stale" and "endpoint_empty" of an event still held for the match are a feed BLIP
+  (projection_odds "blip": True - market_odds marks its fallback transient, the board keeps the line's last grade)
+  while the answer that last listed the event is at most BLIP_MAX_S old, polling is on, no authentication stop and
+  nothing but the feed blocks the quote; longer = treated as cleared (blip False): a normal fallback, never "transient
+  forever". Every other state (no event, not_in_latest_answer, started, ...) is a normal fallback.
   Earlier quotes stay for display with their OWN retrieval time and snapshot hash - never renewed.
   retrieved_at is OUR time (the request's send time - the answer is at least that old); the feed publishes no quote
   time, so source_updated_at is always None.
@@ -1451,11 +1456,15 @@ class Poller:
             st, why = "policy_inactive", "Thunderpick policy inactive: " + ("; ".join(pol.get("reasons") or []) or "sanity gate")
         else:
             st, why = "current", None
+        # what besides the feed would keep this quote out (E1: a feed blip only when nothing else does)
+        blocked = ("draw_listed" if e.get("draw_present") else "invalid_odds" if not o["two_way"] else
+                   "scope_unconfirmed" if not enabled_m else "format_excluded" if conflict or fmt not in fmts else
+                   "policy_inactive" if mkt not in (pol.get("series_markets") or []) or not pol.get("active") else None)
         return {"availability": st, "reason": why, "event": e, "endpoint": _endpoint(e.get("api_path")), "answer": ans,
                 "seen": seen, "canonical_start": canon, "start_sources": {"hltv": hs, "caller": cs, "thunderpick_utc": tp_start,
                                                                           "matched": ms},
                 "started": started, "series_format": fmt, "format_basis": "HLTV" if fh else ("caller" if fc else None),
-                "oriented": o, "enabled_market": enabled_m, "tz": tz}
+                "oriented": o, "enabled_market": enabled_m, "tz": tz, "blocked_by": blocked}
 
     # -- matching + evidence
     def refresh_matches(self, now=None, restored=False):
@@ -1674,11 +1683,12 @@ TZ_MIN_MATCHES, TZ_MIN_SHARE = 10, 0.9
 TZ_TOLERANCE_H = 0.5        # un-resolve check: evidence within +-30 min of the resolved offset agrees (schedule drift)
 
 
-def _canon(team_a, team_b, start_iso, fn=None):
+def _canon(team_a, team_b, start_iso, fn=None, mint=True):
+    """mint=False: a lookup that never issues a hashed match id (the unresolved-timezone scan)."""
     if fn is not None:
         return fn(team_a, team_b, start_iso)
     import moneyline
-    return moneyline.canonical(team_a, team_b, start_iso, scope="series")
+    return moneyline.canonical(team_a, team_b, start_iso, scope="series", mint=mint)
 
 
 def _offset_from(naive, hs):
@@ -1712,9 +1722,9 @@ def match_event(e, offset_h=None, canonical_fn=None):
                 "offset_h": _offset_from(naive, c.get("hltv_start")) if c.get("source") == "hltv" else None,
                 "hltv_start": c.get("hltv_start"), "hltv_bo": c.get("hltv_bo"), "link_source": c.get("source")}
     found = {}
-    for h in TZ_SCAN_H:
+    for h in TZ_SCAN_H:             # lookup only (2026-10-13 audit): a scan never mints a hashed id per offset tried
         st = (naive - timedelta(hours=h)).replace(tzinfo=timezone.utc)
-        c = _canon(t1, t2, st.strftime("%Y-%m-%dT%H:%M:%SZ"), canonical_fn)
+        c = _canon(t1, t2, st.strftime("%Y-%m-%dT%H:%M:%SZ"), canonical_fn, mint=False)
         if c.get("status") == "linked" and c.get("source") == "hltv" and c.get("match_id"):
             found.setdefault(c["match_id"], c)
     if len(found) != 1:
@@ -2221,10 +2231,42 @@ def _nf(reason, availability=None):
     return {"found": False, "reason": reason, "availability": availability}
 
 
+BLIP_MAX_S = COOLDOWN_MAX_S     # E1: an event no answer listed for longer than this is gone (outage / cleared), not a blip
+BLIP_STATES = ("stale", "endpoint_empty")
+
+
+def _held(p, v, now_ts, mid=None):
+    """E1 (owner 2026-10-13: a Thunderpick odds blip is treated like an HLTV blip). The event is still held for this match
+    (matched) but its quote is not current only because of the feed: "stale" (the latest successful answer, which lists
+    it, is older than QUOTE_MAX_AGE_S - 429 cooldowns between polls) or "endpoint_empty" (the latest successful answer
+    was an empty [] between full answers). A blip (blip=True - market_odds marks its fallback transient) while the
+    feed can come back: the answer that last listed the event is at most BLIP_MAX_S old, polling is on, a key is set, no
+    authentication stop, and nothing but the feed blocks the quote (draw / odds / market type / format / policy).
+    Otherwise blip=False, a normal fallback: an event no answer listed for BLIP_MAX_S is treated as cleared (a dead or
+    emptied feed is never 'transient forever'). The not-current quote is named with its OWN retrieval time and age
+    (quote_retrieved_at / quote_age_s) - recorded, never used."""
+    st = v["availability"]
+    e = v.get("event") or {}
+    qt = _ts(e.get("retrieved_at"))
+    qage = None if qt is None else round(now_ts - qt, 1)
+    seen = {"quote_retrieved_at": e.get("retrieved_at"), "quote_age_s": qage,
+            "source_event_id": e.get("source_event_id"), "match_id": mid}
+    reason = v["reason"] + (f" (last quote {int(qage)} s old)" if qage is not None else "")
+    if v.get("blocked_by"):           # Thunderpick would not price it anyway: not a blip
+        return dict(_nf(f"{reason}; not usable anyway ({v['blocked_by']})", st), blip=False, **seen)
+    if qage is not None and qage <= BLIP_MAX_S and enabled() and autopoll() and not p.alert:
+        return dict(_nf(reason, st), blip=True, **seen)
+    why = ("Thunderpick polling stopped" if not (enabled() and autopoll()) or p.alert else
+           f"no Thunderpick answer listed it for {int(qage // 60)} min" if qage is not None else "no Thunderpick answer")
+    return dict(_nf(f"{reason}; {why} - treated as cleared (an outage, not a blip)", st), blip=False, **seen)
+
+
 def projection_odds(team, opponent, start_iso, now=None, poller=None, canonical_fn=None, bo=None):
     """Thunderpick's series-winner probability for `team` vs `opponent` in the polymarket.match_odds shape, or
-    {"found": False, "reason", "availability"}. Only when evaluate() says "current" (see the module doc). Exact
-    probability (6 dp); American odds for display only. Never a 50% stand-in. A pure read: no poller state changes."""
+    {"found": False, "reason", "availability"} (availability "stale" / "endpoint_empty" also carry "blip": True / False
+    and the not-current quote's own time and age - E1, _held).
+    Only when evaluate() says "current" (see the module doc). Exact probability (6 dp); American odds for display only.
+    Never a 50% stand-in. A pure read: no poller state changes."""
     p = poller or POLLER
     now_ts = p.clock() if now is None else now
     pol = policy(p.db)
@@ -2246,6 +2288,8 @@ def projection_odds(team, opponent, start_iso, now=None, poller=None, canonical_
             return _nf("event not in Thunderpick's latest answer", "not_in_latest_answer")
         return _nf("no Thunderpick event for this match")
     v = p.evaluate(rec, now_ts, start_iso=start_iso, bo=bo, hltv_start=c.get("hltv_start"), hltv_bo=c.get("hltv_bo"), pol=pol)
+    if v["availability"] in BLIP_STATES:
+        return _held(p, v, now_ts, mid)             # E1: "blip" says whether it is a feed blip (market_odds)
     if v["availability"] != "current":
         return _nf(v["reason"], v["availability"])
     e, o, a = v["event"], v["oriented"], v["answer"]

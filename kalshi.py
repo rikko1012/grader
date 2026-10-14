@@ -246,8 +246,9 @@ def normalize(raw):
             else:
                 q = market_quote(m)
                 received = raw.get("received_ts")
-                if t in errs:
-                    q["depth"]["error"] = errs[t]
+                if t in errs:               # member-visible (the platform block): the cause only (2026-10-13 audit A4)
+                    from moneyline import member_error
+                    q["depth"]["error"] = member_error(errs[t])
             last = _f(m.get("last_price_dollars"))
             vol = _f(m.get("volume_fp")) or 0
             rules = (m.get("rules_primary") or "").strip()

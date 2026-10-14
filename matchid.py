@@ -14,6 +14,7 @@ Team identity - team_key(name):
   None                   anything else. Never fuzzy, never substring: an Academy / Junior / Youngsters / female ("fe") /
                          NXT / "2" squad is a different team from its main roster, and a name that hits two HLTV teams
                          after stripping affixes is unresolved rather than guessed.
+  same_team(a, b): two platform spellings of one team by the same rule (the fallback odds: Polymarket, OddsPapi).
 
 Match identity - canonical_match(team_a, team_b, start_iso, bo=None, event=None, scope="series"):
   "hltv:<HLTV match id>" exactly one HLTV match (schedule or finished) of exactly these two teams within WINDOW_H hours
@@ -24,7 +25,8 @@ Match identity - canonical_match(team_a, team_b, start_iso, bo=None, event=None,
                          no separation; it is still used to choose between two HLTV candidates. The hour rounding alone
                          would fork one match whose platforms state 07:25 and 07:35 (or a Kalshi original start next to a
                          moved Polymarket start), so an id already issued for the same two teams within WINDOW_H is
-                         reused (anchored_hash_id; anchors kept in memory and in match_links.db);
+                         reused (anchored_hash_id; anchors kept in memory and in match_links.db). A lookup with
+                         mint=False (Thunderpick's timezone scan) never issues one;
   None                   a team is unresolved, two HLTV matches fit, or HLTV's schedule has never been readable (an id
                          made without it could fork from the hltv:<id> the same match gets later).
   Rematches (the same teams beyond the window) get different ids. scope is NOT part of the match: a series winner and a
@@ -70,7 +72,9 @@ ALIASES_PATH = Path(__file__).resolve().parent / "team_aliases.json"
 # The matching rules' own version (2026-10-13): bump it whenever a rule here changes how a name or a match resolves
 # (normalisation, affixes, WINDOW_H, candidate tie-breaks, alias loading) - it is hashed into mapping.revision(), so every
 # forecast records which rules linked its odds. Alias FILE edits need no bump (the file itself is hashed).
-MATCHING_RULES_VERSION = "match-rules-1"
+# match-rules-2 (2026-10-13 audit): same_team - the fallback odds (Polymarket / OddsPapi) link teams by this identity
+# (was substring / one-word containment there); the timezone scan's lookups never mint hashed ids (mint=False)
+MATCHING_RULES_VERSION = "match-rules-2"
 WINDOW_H = 3                  # an HLTV match of the same two teams starting within this many hours is the same match
 TEAMS_TTL = 3600
 SCHEDULE_TTL = 5 * 60
@@ -203,6 +207,72 @@ def team_key_why(name):
     return _resolve(_index(), name)
 
 
+_IDENT = {}                   # same_team: name -> (team key or None, name tokens); cleared with the index / alias files
+_ALIAS_T = {"sig": None, "fwd": {}, "rev": {}, "checked": 0.0}
+
+
+def _alias_tables():
+    """The maintained + verified aliases without HLTV's tables: {alias: 'team:<id>' | target name} and the reverse
+    {target HLTV name: 'team:<id>'} - so a renamed / respelled team keeps its identity even before HLTV's teams load.
+    Re-read when team_aliases.json changes (checked at most every 5 s)."""
+    now = time.time()
+    if _ALIAS_T["sig"] is not None and _ALIAS_T["sig"][0] == str(ALIASES_PATH) and now - _ALIAS_T["checked"] < 5:
+        return _ALIAS_T["fwd"], _ALIAS_T["rev"]
+    _ALIAS_T["checked"] = now
+    try:
+        sig = (str(ALIASES_PATH), ALIASES_PATH.stat().st_mtime_ns)
+    except OSError:
+        sig = (str(ALIASES_PATH), None)
+    if _ALIAS_T["sig"] != sig:
+        _IDENT.clear()
+        rev = {}
+        try:
+            for e in json.loads(ALIASES_PATH.read_text(encoding="utf-8")).get("aliases", []):
+                if e.get("team_id") is not None and e.get("hltv_name"):
+                    rev[norm(e["hltv_name"])] = f"team:{int(e['team_id'])}"
+        except Exception:
+            pass
+        _ALIAS_T.update(sig=sig, fwd=_load_aliases(), rev=rev)
+    return _ALIAS_T["fwd"], _ALIAS_T["rev"]
+
+
+def _ident(name):
+    """(strong key, name tokens) of one spelling: the strong key is matchid's team identity (team_key: exact names,
+    org affixes, maintained + verified aliases; without HLTV's tables the alias files alone); the tokens are its exact
+    name variants plus an alias's target name."""
+    k = " ".join(str(name or "").split())
+    fwd, rev = _alias_tables()
+    hit = _IDENT.get(k)
+    if hit is None:
+        if len(_IDENT) > 20000:
+            _IDENT.clear()
+        strong, toks = (team_key(k) if k else None), set(name_variants(k))
+        tgt = fwd.get(norm(k)) if k else None
+        if tgt and not tgt.startswith("team:"):
+            toks |= set(name_variants(tgt))
+        if not strong and k:
+            strong = (tgt if tgt and tgt.startswith("team:") else None) or rev.get(norm(k)) or \
+                (rev.get(norm(tgt)) if tgt else None)
+        hit = _IDENT[k] = (strong, frozenset(toks))
+    return hit
+
+
+def same_team(a, b):
+    """Two platform spellings of ONE team (the fallback odds' team match, 2026-10-13 audit C13): both have a team identity
+    (HLTV id via exact names / org affixes / maintained + verified aliases) -> the same identity; otherwise the same exact
+    name after normalisation and org affixes, or an alias's target name. Never fuzzy / substring: Academy / Junior /
+    Young / fe / NXT / Force / Talent / 2 squads are other teams. Never raises."""
+    try:
+        (ka, va), (kb, vb) = _ident(a), _ident(b)
+        if not va or not vb:
+            return False
+        if ka and kb:
+            return ka == kb
+        return bool(va & vb)
+    except Exception:                             # identity never breaks a caller
+        return False
+
+
 # ---------------------------------------------------------------- HLTV sources (background, cached, stored)
 def _db_teams():
     if not hltv.dsn():
@@ -327,6 +397,7 @@ def _rebuild():
     with _LOCK:
         _S["index"], _S["pairs"] = index, pairs
         _ROWS.clear()
+        _IDENT.clear()
 
 
 def _kick():
@@ -373,6 +444,7 @@ def _reset():
             _S[n], _S[n + "_at"], _S[n + "_ok"] = None, 0.0, False
         _S.update(index=None, pairs={}, busy=False, loaded=False, errors={})
         _ROWS.clear()
+        _IDENT.clear()
     with _HLOCK:
         _HASHED.clear()
         _HASHED_PATH[0] = None
@@ -505,9 +577,11 @@ def anchored_hash_id(keys, start):
     return mid
 
 
-def canonical_match(team_a, team_b, start_iso, bo=None, event=None, scope="series"):
+def canonical_match(team_a, team_b, start_iso, bo=None, event=None, scope="series", mint=True):
     """{"match_id", "team_keys": [sorted], "flipped", "status": linked|ambiguous|unlinked, "reason", "source", "hltv_match",
-    "scope"}. Never raises. match_id is None unless status is linked."""
+    "scope"}. Never raises. match_id is None unless status is linked. mint=False: a lookup only - no HLTV match ->
+    unlinked, never a new hashed id (2026-10-13 audit: Thunderpick's timezone scan tried 27 starts per event and left an
+    anchor per window, so two platforms a few minutes apart could get two ids for one match)."""
     out = {"match_id": None, "team_keys": None, "flipped": False, "status": "unlinked", "reason": "", "source": None,
            "hltv_match": None, "scope": scope}
     try:
@@ -550,6 +624,9 @@ def canonical_match(team_a, team_b, start_iso, bo=None, event=None, scope="serie
             return out
         if not sched_ok:
             out["reason"] = "HLTV schedule unavailable - id withheld (it could fork from the HLTV id)"
+            return out
+        if not mint:
+            out["reason"] = f"no HLTV match of these teams within {WINDOW_H} h (lookup only - no hashed id)"
             return out
         out.update(match_id=anchored_hash_id(keys, st), status="linked", source="hash",
                    reason=f"no HLTV match of these teams within {WINDOW_H} h - hashed id")
