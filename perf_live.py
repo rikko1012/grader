@@ -15,114 +15,145 @@ _CACHE = {}
 # state, it is no finding that incomplete history predicts better). The HLTV backfill (HLTV_COVERAGE.md) was written straight
 # into the live tables - 19,590 matches first fetched 2026-10-12 21:27-21:35 and 2026-10-13 00:23-04:24 UTC - and read by
 # live grades from 04:26:15 UTC with no staged revision and no approval; since then the regular scan also takes every tier.
-# N0 = the approved coverage: the backfill's matches left out, and a match first fetched after the backfill began kept only
-# under the pre-repair scan rule (both teams in the VRS top OLD_TOP_N of the latest team_rankings snapshot on or before its
-# first fetch, by HLTV team id). ONLY these queries (the performance model's inputs) are pinned: the repaired data stays in
-# storage, and settlement, display and every other reader see the full tables.
+# N0 restores the APPROVED INPUT POLICY (the pre-repair coverage) after an unintended activation - it is not a proven
+# accuracy improvement: the 23-match comparison was inconclusive (HLTV_COVERAGE.md). A match is IN N0 when it was first
+# fetched before the backfill began (or has no raw page at all - the 2026-10-11 seed), or, first fetched later and outside
+# the backfill windows, when both its teams are in the VRS top OLD_TOP_N of the dated team_rankings snapshot on or before
+# its first-fetch day (UTC), by HLTV team id: the pre-repair scan rule on STORED historical rankings (daily snapshots from
+# 2026-10-11 - never a later snapshot, never today's list for an older match). Everything else is OUT - the backfill, later
+# all-tier arrivals, a later arrival with no snapshot or no parsed teams, and any match not evaluated yet (FAIL CLOSED: an
+# inclusion list, so a match fetched after the last evaluation waits for the next one). ONLY the performance model's queries
+# read N0; the repaired data stays in storage, and settlement, display, the last-10 / H2H records and the stake checks read
+# the full tables - the grader uses MIXED revisions and every forecast records both (input_revision, picklog data_rev).
 INPUT_REV = "N0"
+INPUT_RULE = "n0-r2"      # the rule above (r1, 2026-10-13: exclusion list + backfill-only fallback - not fail-closed)
 BACKFILL_FROM = "2026-10-12 21:27:00+00"
 BACKFILL_WINDOWS = (("2026-10-12 21:27:00+00", "2026-10-12 21:36:00+00"), ("2026-10-13 00:23:00+00", "2026-10-13 04:25:00+00"))
 OLD_TOP_N = 200
-EXCL_TTL = 30 * 60        # later arrivals are checked against the old rule this often (the scan runs every 2 h)
+INCL_TTL = 10 * 60        # re-evaluated this often (one query set, ~0.3 s): a newly fetched match is out until then
 _W = {"from": BACKFILL_FROM, "w1a": BACKFILL_WINDOWS[0][0], "w1b": BACKFILL_WINDOWS[0][1],
       "w2a": BACKFILL_WINDOWS[1][0], "w2b": BACKFILL_WINDOWS[1][1], "top": OLD_TOP_N}
 _IN_BACKFILL = "(l.f >= %(w1a)s AND l.f < %(w1b)s) OR (l.f >= %(w2a)s AND l.f < %(w2b)s)"
-_EXCL_SQL = f"""
+_PRE_SQL = """
+SELECT mo.matchid FROM match_overview mo
+LEFT JOIN (SELECT matchid, min(fetched_at) AS f FROM raw_pages GROUP BY matchid) x ON x.matchid = mo.matchid
+WHERE x.f IS NULL OR x.f < %(from)s
+"""
+_LATE_SQL = f"""
 WITH first AS (SELECT matchid, min(fetched_at) AS f FROM raw_pages GROUP BY matchid HAVING min(fetched_at) >= %(from)s),
-     snaps AS (SELECT DISTINCT date FROM team_rankings)
-SELECT l.matchid, ({_IN_BACKFILL}) AS backfill
-FROM first l
-WHERE ({_IN_BACKFILL})
-   OR EXISTS (SELECT 1 FROM (SELECT DISTINCT teamid FROM matches m WHERE m.matchid = l.matchid) t
-              WHERE NOT EXISTS (SELECT 1 FROM team_rankings r
-                                WHERE r.teamid = t.teamid AND r.rank <= %(top)s
-                                  AND r.date = COALESCE((SELECT max(date) FROM snaps WHERE date <= l.f::date),
-                                                        (SELECT min(date) FROM snaps))))
+     snaps AS (SELECT DISTINCT date FROM team_rankings),
+     late AS (SELECT l.matchid, l.f, (SELECT max(s.date) FROM snaps s WHERE s.date <= (l.f AT TIME ZONE 'UTC')::date) AS snap
+              FROM first l)
+SELECT l.matchid,
+       CASE WHEN ({_IN_BACKFILL}) THEN 'backfill'
+            WHEN l.snap IS NULL THEN 'no_snapshot'
+            WHEN NOT EXISTS (SELECT 1 FROM matches m WHERE m.matchid = l.matchid) THEN 'no_teams'
+            WHEN EXISTS (SELECT 1 FROM (SELECT DISTINCT teamid FROM matches m WHERE m.matchid = l.matchid) t
+                         WHERE NOT EXISTS (SELECT 1 FROM team_rankings r WHERE r.teamid = t.teamid AND r.rank <= %(top)s
+                                           AND r.date = l.snap)) THEN 'outside_top'
+            ELSE 'in' END AS why,
+       l.snap
+FROM late l
 """
-# the backfill alone (the query the 2026-10-13 replay ran on production): used only when the old-rule query itself fails
-_BACKFILL_SQL = f"""
-SELECT l.matchid, TRUE FROM (SELECT matchid, min(fetched_at) AS f FROM raw_pages GROUP BY matchid) l WHERE {_IN_BACKFILL}
-"""
-_EX = {"val": None, "next": 0.0, "loading": False, "error": None, "loaded_at": None}
-_EX_COND = threading.Condition()
+_SNAP_SQL = "SELECT date, count(*) FROM team_rankings GROUP BY date ORDER BY date"
+_IN = {"val": None, "next": 0.0, "loading": False, "error": None, "loaded_at": None, "stale_since": None}
+_IN_COND = threading.Condition()
 
 
-def _load_excluded():
-    """{"ids": frozenset, "backfill", "late_out", "late_rule", "sha"} - the match ids outside N0, from the database."""
-    def run(sql):
-        con = hltv._connect()
-        try:
-            with con.cursor() as cur:
-                cur.execute(sql, _W)
-                return cur.fetchall()
-        finally:
-            con.close()
+def _load_n0():
+    """{"pre", "late_in" (frozensets of the match ids IN N0), "counts", "snapshots", "snapshots_used", "sha", "rule"} from
+    the database. Any failure raises - there is no partial or approximate N0."""
+    con = hltv._connect()
     try:
-        rows, rule = run(_EXCL_SQL), f"top{OLD_TOP_N}@first-fetch"
-    except Exception as e:
-        if hltv.is_transient(e):
-            raise
-        rows, rule = run(_BACKFILL_SQL), f"unavailable ({type(e).__name__}) - backfill only"
-    bf = sorted(int(m) for m, b in rows if b)
-    late = sorted(int(m) for m, b in rows if not b)
-    sha = hashlib.sha256(json.dumps([bf, late]).encode()).hexdigest()[:12]
-    return {"ids": frozenset(bf) | frozenset(late), "backfill": len(bf), "late_out": len(late), "late_rule": rule, "sha": sha}
+        with con.cursor() as cur:
+            cur.execute(_PRE_SQL, _W)
+            pre = frozenset(int(r[0]) for r in cur.fetchall())
+            cur.execute(_LATE_SQL, _W)
+            late = [(int(m), str(w), s) for m, w, s in cur.fetchall()]
+            cur.execute(_SNAP_SQL)
+            snaps = [(str(d), int(n)) for d, n in cur.fetchall()]
+    finally:
+        con.close()
+    counts = {k: 0 for k in ("in", "backfill", "outside_top", "no_snapshot", "no_teams")}
+    for _, w, _s in late:
+        counts[w] = counts.get(w, 0) + 1
+    sha = hashlib.sha256(json.dumps([sorted(pre), sorted((m, w) for m, w, _ in late)]).encode()).hexdigest()[:12]
+    return {"pre": pre, "late_in": frozenset(m for m, w, _ in late if w == "in"), "counts": counts, "snapshots": snaps,
+            "snapshots_used": sorted({str(s) for _, w, s in late if s is not None}), "sha": sha, "rule": INPUT_RULE}
 
 
-def excluded():
-    """The HLTV match ids outside the pinned revision. Shared: one load at a time (700 members at once make one query);
-    a current set is returned at once, a stale one is refreshed by one caller while the others keep using it; a failed
-    load keeps the last good set (memory, then the stored copy on disk) and is tried again after hltv.FAIL_TTL. Raises
-    hltv.Unavailable when no set exists anywhere - the projection is then transient, never graded on the full tables."""
-    with _EX_COND:
+def n0():
+    """The performance model's input revision N0 (the match ids it may read). Shared: one evaluation at a time (700 members
+    at once make one query set); a current one is returned at once, a due one is re-evaluated by one caller while the others
+    keep the previous one. A failed evaluation keeps the last VERIFIED evaluation of this exact rule - memory, then the stored
+    copy on disk - visibly marked stale (input_revision says STALE; newer matches stay out, they were never evaluated), and
+    is tried again after hltv.FAIL_TTL. With none anywhere it raises hltv.Unavailable: the projection is then temporarily
+    unavailable (transient) - never graded on the full tables or on an approximate set."""
+    with _IN_COND:
         while True:
-            val, now = _EX["val"], time.time()
-            if val is not None and (now < _EX["next"] or _EX["loading"]):
+            val, now = _IN["val"], time.time()
+            if val is not None and (now < _IN["next"] or _IN["loading"]):
                 return val
-            if not _EX["loading"]:
-                if val is None and now < _EX["next"]:      # failed a moment ago: one caller tries again after FAIL_TTL
+            if not _IN["loading"]:
+                if val is None and now < _IN["next"]:      # failed a moment ago: one caller tries again after FAIL_TTL
                     raise hltv.Unavailable("HLTV database unreachable - performance-model input revision not available")
-                _EX["loading"] = True
+                _IN["loading"] = True
                 break
-            if not _EX_COND.wait(timeout=hltv.POOL_WAIT + 30):
+            if not _IN_COND.wait(timeout=hltv.POOL_WAIT + 30):
                 raise hltv.Unavailable("HLTV database unreachable - performance-model input revision still loading")
-    err = None
+    err, stored = None, None
     try:
-        new = _load_excluded()
+        new = _load_n0()
     except Exception as e:      # noqa: BLE001 - kept below; never a projection on the full tables
         new, err = None, e
     if new is None:
-        stored = hltv_store.load(("perf_excl", INPUT_REV))
-    with _EX_COND:
-        _EX["loading"] = False
+        stored = hltv_store.load(("perf_n0", INPUT_REV, INPUT_RULE))
+    with _IN_COND:
+        _IN["loading"] = False
         if new is not None:
-            _EX.update(val=new, next=time.time() + EXCL_TTL, error=None, loaded_at=time.time())
+            _IN.update(val=new, next=time.time() + INCL_TTL, error=None, loaded_at=time.time(), stale_since=None)
         else:
-            _EX.update(next=time.time() + hltv.FAIL_TTL, error=f"{type(err).__name__}: {hltv.err_text(err)}")
-            if _EX["val"] is None and stored is not None:
-                _EX.update(val=stored[1], loaded_at=stored[0])
-        _EX_COND.notify_all()
-        val = _EX["val"]
+            _IN.update(next=time.time() + hltv.FAIL_TTL, error=f"{type(err).__name__}: {hltv.err_text(err)}")
+            if _IN["val"] is None and stored is not None and (stored[1] or {}).get("rule") == INPUT_RULE:
+                _IN.update(val=stored[1], loaded_at=stored[0])
+            if _IN["val"] is not None and _IN["stale_since"] is None:
+                _IN["stale_since"] = time.time()
+        _IN_COND.notify_all()
+        val = _IN["val"]
     if new is not None:
-        hltv_store.save(("perf_excl", INPUT_REV), new)
+        hltv_store.save(("perf_n0", INPUT_REV, INPUT_RULE), new)
     if val is None:
         raise hltv.Unavailable("HLTV database unreachable - performance-model input revision not available") from err
     return val
 
 
+def _in_n0(mid, s):
+    return mid in s["pre"] or mid in s["late_in"]
+
+
 def input_revision():
     """The performance-model input revision for forecasts (data_rev) and the admin status - None until it is loaded."""
-    v = _EX["val"]
+    v = _IN["val"]
     if v is None:
         return None
-    return f"{INPUT_REV}:backfill={v['backfill']};late_out={v['late_out']};rule={v['late_rule']};sha={v['sha']}"
+    c, sn = v["counts"], v.get("snapshots_used") or []
+    rev = (f"{INPUT_REV}/{v['rule']}:pre={len(v['pre'])};late_in={len(v['late_in'])};backfill_out={c.get('backfill', 0)};"
+           f"late_out={c.get('outside_top', 0)};no_snapshot={c.get('no_snapshot', 0)};no_teams={c.get('no_teams', 0)};"
+           f"snapshots={sn[0] + '..' + sn[-1] if sn else '-'};sha={v['sha']}")
+    if _IN["stale_since"]:
+        rev += ";STALE evaluated " + time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(_IN["loaded_at"] or 0))
+    return rev
 
 
 def input_status():
-    v = _EX["val"] or {}
-    return {"revision": INPUT_REV, "pinned": input_revision(), "backfill_windows": BACKFILL_WINDOWS, "old_top_n": OLD_TOP_N,
-            "backfill_matches": v.get("backfill"), "later_matches_outside_old_rule": v.get("late_out"),
-            "rule": v.get("late_rule"), "loaded_at": _EX["loaded_at"], "last_error": _EX["error"]}
+    v = _IN["val"] or {}
+    return {"revision": INPUT_REV, "rule": INPUT_RULE, "pinned": input_revision(), "stale": bool(_IN["stale_since"]),
+            "backfill_windows": BACKFILL_WINDOWS, "old_top_n": OLD_TOP_N, "counts": v.get("counts"),
+            "matches_in_n0": (len(v["pre"]) + len(v["late_in"])) if v else None,
+            "ranking_snapshots": v.get("snapshots"), "snapshots_used": v.get("snapshots_used"),
+            "evaluated_at": _IN["loaded_at"], "last_error": _IN["error"],
+            "applies_to": "performance-model queries only (player maps, opponent maps, rr-1 team rounds)",
+            "full_tables": "last-10 / H2H records, stake checks, settlement, display"}
 
 _PLAYER_SQL = """
 WITH pm AS (SELECT matchid, mapid, count(*) AS n FROM player_stats
@@ -231,6 +262,7 @@ def served(key):
 
 def player_maps(nick, team, since):
     def load():
+        s = n0()                      # the revision first: without it nothing is read (fail closed)
         con = hltv._connect()
         try:
             with con.cursor() as cur:
@@ -241,16 +273,16 @@ def player_maps(nick, team, since):
                 raw = cur.fetchall()
         finally:
             con.close()
-        ex = excluded()["ids"]
-        if raw and all(mid in ex for *_, mid in raw):
-            return None, []           # known only from the backfill: not in HLTV under N0 (BO3.gg fallback, as before it)
+        if raw and not any(_in_n0(mid, s) for *_, mid in raw):
+            return None, []           # known only from outside N0 (the backfill): not in HLTV under N0 - BO3.gg fallback, as before
         return ids, [(d.toordinal(), k, r, hs, bool(lan), not (hs == 0 and k >= 12))
-                     for d, k, r, hs, lan, n, mid in raw if n == 10 and mid not in ex]
-    return _cached(("p", hltv._norm(nick), hltv._norm(team), since, INPUT_REV), load)
+                     for d, k, r, hs, lan, n, mid in raw if n == 10 and _in_n0(mid, s)]
+    return _cached(("p", hltv._norm(nick), hltv._norm(team), since, INPUT_REV, INPUT_RULE), load)
 
 
 def opp_maps(opponent, since):
     def load():
+        s = n0()
         con = hltv._connect()
         try:
             with con.cursor() as cur:
@@ -263,17 +295,17 @@ def opp_maps(opponent, since):
                 raw = cur.fetchall()
         finally:
             con.close()
-        ex = excluded()["ids"]
-        if raw and all(mid in ex for *_, mid in raw):
-            return None, []           # known only from the backfill: 'opponent not in HLTV' under N0, as before it
-        return tid, [(d.toordinal(), int(k), int(r)) for d, k, r, mid in raw if mid not in ex]
-    return _cached(("o", hltv._norm(opponent), since, INPUT_REV), load)
+        if raw and not any(_in_n0(mid, s) for *_, mid in raw):
+            return None, []           # known only from outside N0: 'opponent not in HLTV' under N0, as before the backfill
+        return tid, [(d.toordinal(), int(k), int(r)) for d, k, r, mid in raw if _in_n0(mid, s)]
+    return _cached(("o", hltv._norm(opponent), since, INPUT_REV, INPUT_RULE), load)
 
 
 def team_rounds(team, since):
     """A team's HLTV maps as (day_ordinal, rounds won, rounds lost) - SHADOW input of the rr-1 market candidate
     (perf_market.py, 2026-10-13): never read by the live projection. Same cache / last-good fallback as the rest."""
     def load():
+        s = n0()
         con = hltv._connect()
         try:
             with con.cursor() as cur:
@@ -284,11 +316,10 @@ def team_rounds(team, since):
                 raw = cur.fetchall()
         finally:
             con.close()
-        ex = excluded()["ids"]
-        if raw and all(mid in ex for *_, mid in raw):
+        if raw and not any(_in_n0(mid, s) for *_, mid in raw):
             return None, []
-        return tid, [(d.toordinal(), int(a), int(b)) for d, a, b, mid in raw if a is not None and b is not None and mid not in ex]
-    return _cached(("r", hltv._norm(team), since, INPUT_REV), load)
+        return tid, [(d.toordinal(), int(a), int(b)) for d, a, b, mid in raw if a is not None and b is not None and _in_n0(mid, s)]
+    return _cached(("r", hltv._norm(team), since, INPUT_REV, INPUT_RULE), load)
 
 
 def round_shares(team, opponent, day, since):
@@ -330,10 +361,14 @@ def projection(nick, team, opponent, lan, scope="12", prop="kills", day=None):
                opp_known=bool(om), lan_known=lan is not None,      # known = HLTV has his maps (a team id alone is no data)
                newest_map_day=max((r[0] for r in pm if r[0] < day), default=None))   # his last HLTV map before the match day
     # which answers the projection used: read now, or the last good copy (memory / stored) served during an outage, + age
-    out["hltv_data"] = {"player_maps": served(("p", hltv._norm(nick), hltv._norm(team), since, INPUT_REV)),
-                        "opp_maps": served(("o", hltv._norm(opponent), since, INPUT_REV)) if opponent else None,
-                        "input_revision": input_revision()}
+    rev = input_revision()
+    out["hltv_data"] = {"player_maps": served(("p", hltv._norm(nick), hltv._norm(team), since, INPUT_REV, INPUT_RULE)),
+                        "opp_maps": served(("o", hltv._norm(opponent), since, INPUT_REV, INPUT_RULE)) if opponent else None,
+                        "input_revision": rev, "input_revision_stale": bool(rev and "STALE" in rev)}
     if not om:            # no team, or a team with no maps in the window: the opponent factor is the pro average (1.00)
         out["data_quality"] = ((out["data_quality"] + "; " if out["data_quality"] != "ok" else "")
                                + ("opponent not in HLTV" if not tid else "opponent has no HLTV maps") + " - average opponent")
+    if out["hltv_data"]["input_revision_stale"]:    # the last verified N0 while its re-evaluation fails: newer matches are out
+        out["data_quality"] = ((out["data_quality"] + "; " if out["data_quality"] != "ok" else "")
+                               + "HLTV history revision N0 from its last good evaluation (refresh failing - newer matches not counted)")
     return out

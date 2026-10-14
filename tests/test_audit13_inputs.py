@@ -473,7 +473,7 @@ def test_c15_opponent_alias_resolves_for_the_projection(monkeypatch):
         def fetchall(self):           # the pinned query's rows carry the match id (perf_live N0)
             return [(date(2026, 9, 1), 70, 24, 1001)] if "FROM matches t" in self.q else []
     monkeypatch.setattr(hltv, "_connect", lambda: _Con(Cur()))
-    monkeypatch.setattr(perf_live, "excluded", lambda: {"ids": frozenset()})
+    monkeypatch.setattr(perf_live, "n0", lambda: {"pre": frozenset({1001}), "late_in": frozenset()})
     monkeypatch.setattr(matchid, "ready", lambda: True)
     monkeypatch.setattr(matchid, "team_key", lambda n: "team:4411" if hltv._norm(n) == "nip" else None)
     tid, rows = perf_live.opp_maps("NIP", "2025-08-01")
