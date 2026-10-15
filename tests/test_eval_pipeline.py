@@ -251,3 +251,21 @@ def test_history_revision_labels():
     assert learning.history_revision({"logged_at": "2026-10-13T02:00:00+00:00"}) == "partial backfill"
     assert learning.history_revision({"logged_at": "2026-10-14T02:00:00+00:00"}) == "N (backfill live, unintended)"
     assert learning.history_revision({"data_rev": "matches=1;perf_input=N0/n0-r4:pre=8597"}) == "N0 pinned (n0-r4)"
+
+
+def test_a_stale_unit_key_on_a_forecast_copy_never_hides_the_forecast(db, tmp_path):
+    """Production 2026-10-15: 202 units 'without a forecast' because the copies kept the unit key of the moment they were
+    copied, and the canonical match changed afterwards. Units find their forecasts by pick id."""
+    _row(1, "a", "x-vs-y-13-10-2026", 28.5, 2, "underdog")
+    ldb = tmp_path / "l.db"
+    now = datetime(2026, 10, 14, tzinfo=timezone.utc)
+    learning.run_cycle(now=now, picks=picklog.export(), forecasts=picklog.export_forecasts(inputs=True), batches=[], corrections=[],
+                       db=ldb, train=False)
+    con = learning.connect(ldb)
+    con.execute("UPDATE forecast_copy SET unit_key = 'a|old-slug-identity|kills|12'")        # the key a later re-identification left behind
+    con.execute("DELETE FROM ledger")
+    con.commit()
+    learning.run_cycle(now=now + timedelta(hours=1), picks=picklog.export(), forecasts=[], batches=[], corrections=[], db=ldb, train=False)
+    sc = learning.scorecard(learning.connect(ldb))
+    assert sc["buckets"]["scored"] == 1 and sc["buckets"]["incomplete"] == 0
+    assert sc["product"]["units"] == 1

@@ -219,6 +219,7 @@ def connect(db=None):
         line_type TEXT, test INTEGER, inputs_sha1 TEXT, features TEXT, copied_at TEXT);
     CREATE INDEX IF NOT EXISTS fc_unit ON forecast_copy (unit_key);
     CREATE INDEX IF NOT EXISTS fc_logged ON forecast_copy (logged_at);
+    CREATE INDEX IF NOT EXISTS fc_pick ON forecast_copy (pick_id);
     CREATE TABLE IF NOT EXISTS ledger (rid INTEGER PRIMARY KEY AUTOINCREMENT, unit_key TEXT NOT NULL, forecast_id INTEGER,
         settlement_version INTEGER NOT NULL, fingerprint TEXT, bucket TEXT, reason TEXT, match_slug TEXT, match_start TEXT,
         forecast_logged_at TEXT, prop TEXT, scope TEXT, line REAL, actual REAL, over_hit INTEGER, p_over REAL, lam REAL,
@@ -1031,10 +1032,13 @@ def _ingest(con, picks, now, bad_units, corr_ids):
     for p in picks:
         if (p.get("test") or 0) in (0, 2) and p.get("match_slug"):
             units[unit_key(p)].append(p)
+    # 2026-10-15: a unit's forecasts are found by PICK id, never by the unit key stored on the copy. The key is written when
+    # the forecast is copied, but the unit's canonical match can change later (a new pick links a BO3.gg slug to its
+    # hltv-<id>), and stale keys left units "without a forecast" (production: 202 incomplete units vs 13 on a fresh build)
     fc = collections.defaultdict(list)
     for r in con.execute("SELECT forecast_id, pick_id, unit_key, logged_at, line_type, source, line, p_more, p_pick, side, book, "
-                         "probs_raw FROM forecast_copy WHERE unit_key IS NOT NULL"):
-        fc[r["unit_key"]].append(r)
+                         "probs_raw FROM forecast_copy WHERE pick_id IS NOT NULL"):
+        fc[r["pick_id"]].append(r)
     latest = {r["unit_key"]: r for r in con.execute(
         "SELECT l.unit_key, l.settlement_version, l.fingerprint, l.rid, l.processed_at FROM ledger l JOIN "
         "(SELECT unit_key, MAX(settlement_version) v FROM ledger GROUP BY unit_key) m ON m.unit_key = l.unit_key AND m.v = l.settlement_version")}
@@ -1055,7 +1059,7 @@ def _ingest(con, picks, now, bad_units, corr_ids):
         snap = None
         if start:
             cut = _iso(start - timedelta(minutes=EVAL_LEAD_MIN))
-            el = [f for f in fc.get(uk, []) if f["pick_id"] in pids and f["logged_at"] and f["logged_at"] <= cut]
+            el = [f for pid in pids for f in fc.get(pid, []) if f["logged_at"] and f["logged_at"] <= cut]
             if el:
                 snap = max(el, key=lambda f: (f["logged_at"], f["line_type"] in (None, "standard"), src_rank.get(f["source"], 0), -f["forecast_id"]))
         f = dict(con.execute("SELECT * FROM forecast_copy WHERE forecast_id = ?", (snap["forecast_id"],)).fetchone()) if snap else None
@@ -1099,8 +1103,8 @@ def _ingest(con, picks, now, bad_units, corr_ids):
         if start and actual is not None:
             cut = _iso(start - timedelta(minutes=EVAL_LEAD_MIN))
             per = {}
-            for fr_ in fc.get(uk, []):
-                if fr_["pick_id"] in pids and fr_["logged_at"] and fr_["logged_at"] <= cut and fr_["line"] is not None:
+            for fr_ in (f_ for pid in pids for f_ in fc.get(pid, [])):
+                if fr_["logged_at"] and fr_["logged_at"] <= cut and fr_["line"] is not None:
                     k = (float(fr_["line"]), fr_["line_type"] or "standard")
                     if k not in per or fr_["logged_at"] > per[k]["logged_at"]:
                         per[k] = fr_
@@ -1234,10 +1238,10 @@ def product_units(con, rows=None):
             continue
         cut = _iso(_ts(r["match_start"]) - timedelta(minutes=EVAL_LEAD_MIN))
         pids = set(json.loads(r["pick_ids"] or "[]"))
-        fs = [dict(f) for f in con.execute(
-            "SELECT * FROM forecast_copy WHERE unit_key = ? AND source IN ('board', 'board_pp') AND COALESCE(line_type, 'standard') = "
-            "'standard' AND book IS NOT NULL AND line IS NOT NULL AND logged_at IS NOT NULL AND logged_at <= ?", (r["unit_key"], cut))
-            if f["pick_id"] in pids]
+        ph = ",".join("?" * len(pids)) or "NULL"
+        fs = [dict(f) for f in con.execute(          # by pick id (see _ingest: stored unit keys can be stale)
+            f"SELECT * FROM forecast_copy WHERE pick_id IN ({ph}) AND source IN ('board', 'board_pp') AND COALESCE(line_type, 'standard') = "
+            "'standard' AND book IS NOT NULL AND line IS NOT NULL AND logged_at IS NOT NULL AND logged_at <= ?", (*sorted(pids), cut))]
         if not fs:
             excl["no standard board line 30+ min before the start (member / adjusted lines only)"] += 1
             continue
