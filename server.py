@@ -40,6 +40,7 @@ import records
 import roles
 import underdog
 import grade_display
+import perf_shadow
 import whop_auth
 import bo3
 from bo3 import BO3, DATA_DIR, prune, storage_report
@@ -1914,6 +1915,7 @@ def board_forever():
                     except Exception:
                         traceback.print_exc()
                     if not grade_transient(g):                # never logged as a forecast of the live model (calibration cohorts)
+                        perf_shadow.attach(res, r)            # fh-1 shadow (full history), logged beside it - never a live input
                         try:
                             picklog.log_async(res, v, test=2)
                         except Exception:
@@ -2692,6 +2694,14 @@ class Handler(BaseHTTPRequestHandler):
                 num = lambda k: int(q[k]) if (q.get(k) or "").isdigit() else None
                 return self.send(200, picklog.forecasts_page(after_id=num("after") or 0, cutoff_id=num("cutoff"),
                                                              limit=num("limit"), inputs=q.get("inputs") == "1"))
+            if u.path == "/admin/fh1.json" and self.authed(q.get("token")):
+                # fh-1 shadow (perf_shadow): status + a bounded page of its records; replay=1 re-runs a page from saved inputs
+                num = lambda k: int(q[k]) if (q.get(k) or "").isdigit() else None
+                if q.get("replay") == "1":
+                    return self.send(200, picklog.shadow_replay_check(after_id=num("after") or 0, limit=num("limit") or 100))
+                return self.send(200, {"status": perf_shadow.status(),
+                                       "page": picklog.shadow_page(after_id=num("after") or 0, cutoff_id=num("cutoff"),
+                                                                   limit=num("limit"), inputs=q.get("inputs") == "1")})
             if u.path == "/admin/picks.json" and self.authed(q.get("token")):
                 return self.send(200, {"picks": picklog.export()})
             if u.path == "/admin/mark_tests" and self.authed(q.get("token")):

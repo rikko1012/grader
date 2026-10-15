@@ -83,16 +83,52 @@ data hash 49e7ac29547b86a9). Walk-forward with w refitted on earlier days only: 
 - **Development units still count units of the old slug identity** (a match logged under a BO3.gg slug and hltv-<id> was
   two units then); the forward evaluation uses the canonical match identity (identity.assign).
 
-## fh-1 - full HLTV history for the performance model (registered 2026-10-15; not deployed)
+## fh-1 - full HLTV history for the performance model (family `full-history-1`, id `fh-001-<hash>`; production shadow only)
 
 - **Definition:** the live perf-2 formula and parameters unchanged, reading every HLTV match (all tiers) dated before
   the match day within 420 days, instead of the pinned top-200 history (N0).
+- **Shadow only (owner 2026-10-15).** Live history is not switched. This is not presented as an improvement on book-line
+  picks before settled results show one.
+- **Implementation (`perf_shadow.py`, board loop only).**
+  - Live and fh-1 run through the same production projection code: perf.project, perf_live.projection's
+    post-processing, the BO3.gg fallback rule, grader.grade_leg and the verdict.
+  - They differ only in history eligibility:
+    - live arm: the published forecast's exact rows (the live perf_live cache, N0 rule n0-r4), in their order;
+    - fh-1: those rows plus the rows N0 excludes, from the same SQL with the same ids, window and filters.
+  - fh-1 reads the live rows first, then the excluded rows in a fixed order (the query has no ORDER BY). Production with
+    full eligibility could sum in another order; that changes only the last floating-point digits.
+- **Saved before each match.** Each record goes in picks.db `shadow_forecasts`, beside the live forecasts table. The live
+  forecast rows, their dedupe and every existing challenger's inputs are unchanged.
+  - When: whenever either arm's chance, projection, stake, grade or side, the line, or the history snapshot changes. Only
+    before the start. A moved price alone writes no record: the performance model's chances ignore odds.
+  - Contents: both arms' projection, chance, side, grade and stake; the history revisions; the read times and the
+    logging time.
+  - Inputs (`shadow_inputs`, content-addressed): the history snapshot and the grader inputs.
+- **Checks on every record:**
+  - `n0_check`: the live arm rebuilt from the snapshot reproduces the published projection and chance exactly, and the
+    shadow's own N0 view equals the live rows.
+  - Identical history: when full history adds no row, fh-1 equals live exactly (asserted).
+  - Exact replay: every record is re-run from its saved inputs (learning cycle; `/admin/fh1.json?replay=1`).
+- **Evaluation (registered before any fh-1 forecast settled).**
+  - Which record: per forecast, the latest fh-1 record of its pick logged 30+ min before the start. Both arms come from
+    that one record (one grade, one moment).
+  - Where: P1 archived book lines after settlement. Paired log-loss and Brier; projection RMSE, MAE and bias; unique
+    matches.
+  - Groups:
+    - established = live arm on HLTV history with 600+ time-weighted N0 rounds, and the opponent has N0 maps;
+    - thin history / lower tier = everything else.
+  - Also reported: history depth, and whether full history added rows.
+  - Retrospective reconstruction from earlier-dated database rows may supplement this. It is never labelled a forward
+    forecast.
 - **Development evidence (ACCURACY_2026-10-15.md):** 12 months, 8,550 scored matches.
   - Kills MAE +0.131 (+0.118 to +0.143) and better in 10/10 months.
   - Log score +0.031; HS MAE +0.175; bias -0.70 -> +0.20.
   - Not demonstrated on the original top-200 set (+0.004).
   - On archived book lines (41 matches): +0.0015 (-0.0054 to +0.0101).
-- **Forward:** exact as-of replay on matches after 2026-10-16 00:00 UTC. The registered review windows are unchanged.
+  - This is supporting evidence, not a substitute for results on the props members can play. It reconstructs forecasts
+    and only approximates the live pin (74% of pinned forecasts within 0.5%).
+- **Forward:** saved pre-match records only, on matches after the freeze (the first learning cycle after the deploy).
+  The registered review windows are unchanged (300 / 600 / 1,000 distinct forward matches).
 
 ## pl-2 - pl-1 with corrected anchor inputs (family `prop-line-2`, id `pl-002-<hash>`, frozen at its first learning cycle after deploy)
 

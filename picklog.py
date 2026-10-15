@@ -141,6 +141,15 @@ def _db():
     # committed (a reader first) or when `book` did not exist yet. It now runs once every column exists, until its marker
     # is stored (same transaction), and only fills 0s it is sure of: test 2 = the board wrote it; test 0 with a platform =
     # a board line a member opened (only board grades carry a platform). A recorded value is never changed.
+    # 2026-10-15 fh-1 shadow (perf_shadow.py, CHALLENGERS.md): its immutable pre-match records, kept apart from the live
+    # forecasts (whose rows, dedupe and every existing challenger's inputs stay as they were), and their saved inputs
+    # (content-addressed: the history snapshot and the grader inputs each record was computed from)
+    con.execute("""CREATE TABLE IF NOT EXISTS shadow_forecasts (id INTEGER PRIMARY KEY, pick_id INTEGER, forecast_id INTEGER,
+                   challenger TEXT, logged_at TEXT, match_start TEXT, line REAL, prop TEXT, scope TEXT, live_p_more REAL,
+                   ch_p_more REAL, live_lambda REAL, ch_lambda REAL, n0_exact INTEGER, identical INTEGER, grp TEXT,
+                   inputs_sha TEXT, gi_sha TEXT, git_commit TEXT, rec TEXT)""")
+    con.execute("CREATE INDEX IF NOT EXISTS shadow_fc_pick ON shadow_forecasts (pick_id, id)")
+    con.execute("CREATE TABLE IF NOT EXISTS shadow_inputs (sha TEXT PRIMARY KEY, kind TEXT, created_at TEXT, body BLOB)")
     con.execute("CREATE TABLE IF NOT EXISTS schema_marks (name TEXT PRIMARY KEY, at TEXT)")
     if not con.execute("SELECT 1 FROM schema_marks WHERE name = 'on_board_backfill'").fetchone():
         con.execute("UPDATE picks SET on_board = CASE WHEN test = 2 THEN 1 ELSE 2 END "
@@ -406,6 +415,7 @@ def pick_row(res, verdict, test=False):
     row["_odds_policy"] = pv.get("odds_policy") or gi.get("odds_policy")
     row["_mapping_rev"] = gi.get("mapping_rev") or pv.get("mapping_rev")
     row["_quote"] = json.dumps(bk.get("quote"), default=str) if bk.get("quote") else None   # board quote (measurement only)
+    row["_fh1"] = res.get("_fh1")                     # fh-1 shadow record (perf_shadow; board grades only) - never a live input
     return row
 
 
@@ -486,7 +496,7 @@ def _forecast(con, pid, row, kind, gi=None, extra=None):
     last = con.execute("SELECT line, pick, p_pick, grade, units, lambda, model_version, odds_source, odds_sig, odds_policy "
                        "FROM forecasts WHERE pick_id = ? ORDER BY id DESC LIMIT 1", (pid,)).fetchone()
     if last and kind == "update" and _unchanged(last, row, extra):
-        return
+        return False
     con.execute("INSERT INTO forecasts (pick_id, kind, logged_at, match_start, line, pick, p_pick, p_more, grade, units, "
                 "lambda, p_win, rec_hit, sample_maps, model_version, shadow, inputs, probs_raw, data_rev, odds_source, "
                 "odds_policy, mapping_rev, odds_sig, git_commit, quote) "
@@ -497,6 +507,45 @@ def _forecast(con, pid, row, kind, gi=None, extra=None):
                  extra.get("odds_source"), extra.get("odds_policy"), extra.get("mapping_rev"), extra.get("odds_sig"),
                  extra.get("git_commit"), extra.get("quote")))
     _record_mapping(con, extra.get("mapping_rev"))
+    return True
+
+
+SHADOW_KEYS = (("live", "p_more"), ("fh1", "p_more"), ("live", "lambda"), ("fh1", "lambda"), ("live", "units"), ("fh1", "units"),
+               ("live", "grade"), ("fh1", "grade"), ("live", "side"), ("fh1", "side"))
+
+
+def _shadow_forecast(con, pid, row, fh, git_commit=None):
+    """Append the fh-1 record for this pre-match grade when it differs from the last one stored for this pick: either arm's
+    chance / projection / stake / grade / side, the line, or the history snapshot. An unchanged record is not repeated (a
+    moved price alone changes neither arm's chance - the performance model ignores odds - so it writes no record). Its inputs
+    are stored once each (content-addressed). Never raises: the live forecast is already written."""
+    if not fh or not isinstance(fh.get("rec"), dict):
+        return False
+    try:
+        rec = fh["rec"]
+        last = con.execute("SELECT rec FROM shadow_forecasts WHERE pick_id = ? ORDER BY id DESC LIMIT 1", (pid,)).fetchone()
+        if last:
+            lr = json.loads(last["rec"])
+            if (lr.get("line") == rec.get("line") and lr.get("inputs_sha") == rec.get("inputs_sha")
+                    and all((lr.get(a) or {}).get(b) == (rec.get(a) or {}).get(b) for a, b in SHADOW_KEYS)):
+                return False
+        for h, (kind, body) in (fh.get("bodies") or {}).items():
+            con.execute("INSERT OR IGNORE INTO shadow_inputs (sha, kind, created_at, body) VALUES (?,?,?,?)",
+                        (h, kind, rec.get("computed_at"), body))
+        fid = con.execute("SELECT MAX(id) FROM forecasts WHERE pick_id = ?", (pid,)).fetchone()[0]
+        con.execute("INSERT INTO shadow_forecasts (pick_id, forecast_id, challenger, logged_at, match_start, line, prop, scope, "
+                    "live_p_more, ch_p_more, live_lambda, ch_lambda, n0_exact, identical, grp, inputs_sha, gi_sha, git_commit, rec) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (pid, fid, rec.get("challenger"), row["logged_at"], row.get("match_start"), rec.get("line"), rec.get("prop"),
+                     rec.get("scope"), rec["live"].get("p_more"), rec["fh1"].get("p_more"), rec["live"].get("lambda"),
+                     rec["fh1"].get("lambda"), int(bool(rec["n0_check"].get("exact"))), int(bool(rec.get("identical_history"))),
+                     rec.get("group"), rec.get("inputs_sha"), rec.get("gi_sha"), git_commit,
+                     json.dumps(rec, sort_keys=True, default=str)))
+        return True
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        return False
 
 
 def _utc_time(s):
@@ -526,6 +575,7 @@ def write_row(row):
         return None
     row = dict(row)
     gi = row.pop("_gi", None)                       # the exact grader inputs - forecasts table only
+    fh = row.pop("_fh1", None)                      # fh-1 shadow record - shadow_forecasts only
     extra = {"probs_raw": row.pop("_probs", None), "data_rev": data_revision(), "odds_source": row.pop("_odds_src", None),
              "odds_sig": row.pop("_odds_sig", None), "odds_policy": row.pop("_odds_policy", None),
              "mapping_rev": row.pop("_mapping_rev", None), "quote": row.pop("_quote", None),
@@ -537,6 +587,7 @@ def write_row(row):
             cur = con.execute("SELECT id, test, status, match_start FROM picks WHERE key = ?", (key,)).fetchone()
             if cur and cur["status"] == "open" and _before_start(row, cur):
                 _forecast(con, cur["id"], row, "update", gi, extra)  # every changed pre-match forecast, timestamped
+                _shadow_forecast(con, cur["id"], row, fh, extra.get("git_commit"))
                 con.execute("UPDATE picks SET regrades = COALESCE(regrades, 0) + 1 WHERE id = ?", (cur["id"],))
             if cur:
                 # a real member asking for a line first seen in a test makes it a real pick. 2026-10-13 audit D3: so does the
@@ -559,6 +610,8 @@ def write_row(row):
             con.execute(f"INSERT INTO picks ({cols}) VALUES ({', '.join('?' * len(row))})", list(row.values()))
             pid = con.execute("SELECT id FROM picks WHERE key = ?", (key,)).fetchone()["id"]
             _forecast(con, pid, row, "first", gi, extra)
+            if _before_start(row, {"match_start": row.get("match_start")}):
+                _shadow_forecast(con, pid, row, fh, extra.get("git_commit"))
             con.commit()
             return pid
         finally:
@@ -1540,6 +1593,56 @@ def forecasts_page(after_id=0, cutoff_id=None, limit=None, inputs=False):
     nxt = rows[-1]["id"] if rows else after_id
     return {"rows": rows, "cutoff_id": cutoff_id, "next_after": nxt, "done": len(rows) < limit or nxt >= cutoff_id,
             "total_in_cutoff": total, "page_max": cap}
+
+
+SHADOW_PAGE_MAX = {False: 1000, True: 100}      # rows per page without / with each record's saved inputs
+
+
+def shadow_page(after_id=0, cutoff_id=None, limit=None, inputs=False):
+    """Bounded keyset export of the fh-1 shadow records (same contract as forecasts_page); inputs=True adds each record's
+    saved snapshot and grader inputs."""
+    import zlib
+    cap = SHADOW_PAGE_MAX[bool(inputs)]
+    limit = max(1, min(int(limit or cap), cap))
+    after_id = max(0, int(after_id or 0))
+    with _LOCK:
+        con = _db()
+        try:
+            if cutoff_id is None:
+                cutoff_id = con.execute("SELECT COALESCE(MAX(id), 0) FROM shadow_forecasts").fetchone()[0]
+            cutoff_id = int(cutoff_id)
+            rows = [dict(r) for r in con.execute("SELECT * FROM shadow_forecasts WHERE id > ? AND id <= ? ORDER BY id LIMIT ?",
+                                                 (after_id, cutoff_id, limit))]
+            total = con.execute("SELECT COUNT(*) FROM shadow_forecasts WHERE id <= ?", (cutoff_id,)).fetchone()[0]
+            if inputs:
+                for r in rows:
+                    for k in ("inputs_sha", "gi_sha"):
+                        b = con.execute("SELECT body FROM shadow_inputs WHERE sha = ?", (r[k],)).fetchone()
+                        r[k.replace("_sha", "_body")] = json.loads(zlib.decompress(b["body"])) if b else None
+        finally:
+            con.close()
+    for r in rows:
+        r["rec"] = json.loads(r["rec"]) if r.get("rec") else None
+    nxt = rows[-1]["id"] if rows else after_id
+    return {"rows": rows, "cutoff_id": cutoff_id, "next_after": nxt, "done": len(rows) < limit or nxt >= cutoff_id,
+            "total_in_cutoff": total, "page_max": cap}
+
+
+def shadow_replay_check(after_id=0, limit=200):
+    """Replay up to `limit` stored fh-1 records after `after_id` from their saved inputs (perf_shadow.check_record)."""
+    import perf_shadow
+    pg = shadow_page(after_id=after_id, limit=min(int(limit or 100), 100), inputs=True)
+    n, bad = 0, []
+    for r in pg["rows"]:
+        if r.get("inputs_body") is None or r.get("gi_body") is None:
+            bad.append({"id": r["id"], "why": ["saved inputs missing"]})
+            continue
+        ok, why = perf_shadow.check_record(r["rec"], r["inputs_body"], r["gi_body"])
+        n += 1
+        if not ok:
+            bad.append({"id": r["id"], "why": why})
+    return {"rows_checked": n, "mismatches": len(bad), "examples": bad[:5], "next_after": pg["next_after"], "done": pg["done"],
+            "source": "saved inputs (history snapshot + grader inputs) only"}
 
 
 def _forecast_cols():

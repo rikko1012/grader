@@ -126,7 +126,8 @@ LINE_BLEND = {"family": "line-blend-1", "w": {"kills": 0.0, "hs": 0.5}, "scopes"
 
 # Display names (owner review 2026-10-12): lb-001 shrinks our own probability toward 50%; it does not use the book
 # price and does not test projection accuracy against the line. The frozen family id stays as it is.
-CHALLENGER_NAMES = {"line-blend-1": "probability-shrinkage challenger (toward 50%)", "perf-refit-1": "performance-model refit"}
+CHALLENGER_NAMES = {"line-blend-1": "probability-shrinkage challenger (toward 50%)", "perf-refit-1": "performance-model refit",
+                    "full-history-1": "fh-1 full HLTV history (shadow)"}
 
 
 def line_blend_p(p_live, prop, scope, cfg=LINE_BLEND):
@@ -352,6 +353,137 @@ def _ensure_prop_line_2(con, now):
     con.execute("INSERT INTO events (at, kind, detail) VALUES (?,?,?)", (_iso(now), "challenger", json.dumps({"id": cid, "status": "shadow"})))
 
 
+# fh-1 (owner 2026-10-15: a SHADOW only - live history unchanged, no claim of better book-line picks before settled results).
+# The live perf-2 model with every HLTV match in the database instead of the pinned N0. Its records are made by perf_shadow.py
+# in the board loop BEFORE each match (both arms, saved inputs, history revisions, timestamps; picks.db shadow_forecasts) and
+# are only evaluated here after settlement - never a reconstruction from later database rows.
+FULL_HISTORY = {
+    "family": "full-history-1", "shadow": "perf_shadow.py (fh-1)",
+    "change": "performance-model history eligibility only: every HLTV match in the database (all tiers, the 2026-10-13 backfill "
+              "included) instead of the pinned N0 (rule n0-r4)",
+    "unchanged": "perf.PARAMS, perf.SPREAD, the kills cap, grade thresholds, stake rules, the 420-day window, 10-player maps, "
+                 "the 0-HS-on-12+-kills flag, player / opponent identity, the BO3.gg fallback rule",
+    "baseline": "the live arm = the exact rows of the published forecast (perf_live cache, N0 n0-r4), rebuilt from the saved "
+                "snapshot and checked against the published projection and chance (n0_check)",
+    "record": "per forecast: the latest fh-1 record of its pick logged >= 30 min before the start; both arms from that one "
+              "record (one grade, one moment)",
+    "group": "established = live arm on HLTV history with >= 600 time-weighted N0 rounds AND the opponent has N0 maps; "
+             "everything else = thin history / lower tier (fewer rounds, the BO3.gg fallback, or no N0 opponent history)",
+    "scores": "P1 archived book lines: paired log-loss and Brier on P(over); projection error of each arm's mean (RMSE - the "
+              "proper score for a mean - and MAE, comparable with the 2026-10-15 study) and bias; unique matches",
+    "promotion": "the registered review (300 / 600 / 1,000 distinct forward matches); a promotion records the registry only - "
+                 "live history changes only through a code release",
+    "registered": "2026-10-15"}
+FH1_LAG_MIN = 10                    # a forecast is shadowed once its record cut-off (start - 30 min) is this far in the past
+
+
+def _ensure_full_history(con, now):
+    """Freeze fh-1 once (its forward test = forecasts logged after this moment, from their pre-match records)."""
+    if con.execute("SELECT 1 FROM challengers WHERE family = ?", (FULL_HISTORY["family"],)).fetchone():
+        return
+    h = _sha(FULL_HISTORY)
+    cid = f"fh-001-{h[:8]}"
+    con.execute("INSERT INTO challengers (id, family, created_at, frozen_at, snapshot_id, data_hash, training_cutoff, config, "
+                "config_hash, base_config, status, status_at, status_reason, revises, development) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (cid, FULL_HISTORY["family"], _iso(now), _iso(now), None, None, None, json.dumps(FULL_HISTORY, sort_keys=True), h,
+                 json.dumps({"live": "the record's live arm (exact N0 rows of the published forecast)"}), "shadow", _iso(now),
+                 "frozen (owner 2026-10-15: shadow only); forward test = board forecasts logged after the freeze, scored from "
+                 "their immutable pre-match fh-1 records", None, "[]"))
+    con.execute("INSERT INTO events (at, kind, detail) VALUES (?,?,?)", (_iso(now), "challenger", json.dumps({"id": cid, "status": "shadow"})))
+
+
+def read_shadow_records(picks_path=None, after_id=0, limit=3000, bodies=False):
+    """fh-1 records (picks.db shadow_forecasts) with id > after_id, read-only; bodies=True adds each record's saved inputs."""
+    p = _picklog_path(picks_path)
+    if not p.exists():
+        return []
+    con = sqlite3.connect(str(p), timeout=30)
+    con.row_factory = sqlite3.Row
+    try:
+        con.execute("PRAGMA query_only=ON")
+        if not con.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'shadow_forecasts'").fetchone():
+            return []
+        out = [dict(r) for r in con.execute("SELECT * FROM shadow_forecasts WHERE id > ? ORDER BY id LIMIT ?", (after_id, limit))]
+        if bodies:
+            for r in out:
+                for k in ("inputs_sha", "gi_sha"):
+                    b = con.execute("SELECT body FROM shadow_inputs WHERE sha = ?", (r[k],)).fetchone()
+                    r[k.replace("_sha", "_body")] = json.loads(zlib.decompress(b["body"])) if b else None
+    finally:
+        con.close()
+    return out
+
+
+def _copy_fh1(con, recs, now):
+    n, last = 0, _meta(con, "last_fh1_id", 0)
+    for r in recs:
+        con.execute("INSERT OR IGNORE INTO fh1_copy (id, pick_id, forecast_id, logged_at, match_start, line, prop, scope, live_p, ch_p, "
+                    "live_lam, ch_lam, n0_exact, identical, grp, inputs_sha, gi_sha, git_commit, rec, copied_at) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (r["id"], r["pick_id"], r.get("forecast_id"), _niso(r["logged_at"]), _niso(r.get("match_start")), r.get("line"),
+                     r.get("prop"), r.get("scope"), r.get("live_p_more"), r.get("ch_p_more"), r.get("live_lambda"), r.get("ch_lambda"),
+                     r.get("n0_exact"), r.get("identical"), r.get("grp"), r.get("inputs_sha"), r.get("gi_sha"), r.get("git_commit"),
+                     r["rec"] if isinstance(r.get("rec"), str) else json.dumps(r.get("rec"), sort_keys=True, default=str), _iso(now)))
+        last = max(last, r["id"])
+        n += 1
+    _set_meta(con, "last_fh1_id", last)
+    return n
+
+
+def _fh1_shadow(con, ch, now):
+    """fh-1 beside the live forecast, once the record cut-off has passed: the latest record of the forecast's pick logged
+    >= 30 min before the start (p_over_ch = fh-1, p_over_base = the record's live arm, p_over_logged = the forecast)."""
+    n = 0
+    for f in con.execute("SELECT f.* FROM forecast_copy f WHERE f.logged_at > ? AND NOT EXISTS (SELECT 1 FROM shadow s "
+                         "WHERE s.challenger_id = ? AND s.forecast_id = f.forecast_id) ORDER BY f.forecast_id",
+                         (ch["frozen_at"], ch["id"])).fetchall():
+        st = _ts(f["match_start"])
+        if st is None:
+            continue
+        cut = st - timedelta(minutes=EVAL_LEAD_MIN)
+        if now < cut + timedelta(minutes=FH1_LAG_MIN):
+            continue                                  # pre-match records may still be arriving
+        pl = p_over_of(dict(f))
+        rr = con.execute("SELECT * FROM fh1_copy WHERE pick_id = ? AND logged_at <= ? ORDER BY logged_at DESC, id DESC LIMIT 1",
+                         (f["pick_id"], _iso(cut))).fetchone()
+        if rr is None:
+            vals = (None, None, pl, None, f["lambda"], 0, json.dumps({"reject": "no fh-1 record of this pick logged >= 30 min before the start"}))
+        else:
+            rec = json.loads(rr["rec"])
+            note = {"record_id": rr["id"], "record_logged_at": rr["logged_at"], "group": rec.get("group"), "depth": rec.get("depth"),
+                    "identical": bool(rec.get("identical_history")), "n0_exact": bool((rec.get("n0_check") or {}).get("exact")),
+                    "adds": rec.get("adds"), "record_older_than_forecast": rr["logged_at"] < (f["logged_at"] or ""),
+                    "live_source": (rec.get("live") or {}).get("projection_source"), "fh1_source": (rec.get("fh1") or {}).get("projection_source")}
+            pc, pb = rr["ch_p"], rr["live_p"]
+            vals = (pc, pb, pl, rr["ch_lam"], rr["live_lam"], int(pc is not None and pb is not None and abs(pc - pb) > 1e-9),
+                    json.dumps(note, sort_keys=True, default=str))
+        con.execute("INSERT OR IGNORE INTO shadow (challenger_id, forecast_id, p_over_ch, p_over_base, p_over_logged, lam_ch, lam_base, "
+                    "changed, computed_at, note) VALUES (?,?,?,?,?,?,?,?,?,?)", (ch["id"], f["forecast_id"], *vals[:6], _iso(now), vals[6]))
+        n += 1
+    return n
+
+
+def fh1_replay_step(con, recs):
+    """Exact replay of fh-1 records from their saved inputs only (history snapshot + grader inputs), each record once."""
+    import perf_shadow
+    for r in recs:
+        if r.get("inputs_body") is None or r.get("gi_body") is None:
+            ok, why = False, ["saved inputs missing"]
+        else:
+            rec = r["rec"] if isinstance(r["rec"], dict) else json.loads(r["rec"])
+            try:
+                ok, why = perf_shadow.check_record(rec, r["inputs_body"], r["gi_body"])
+            except Exception as e:      # noqa: BLE001 - a replay that cannot run is a failed replay, never a pass
+                ok, why = False, [f"{type(e).__name__}: {str(e)[:120]}"]
+        con.execute("INSERT OR REPLACE INTO fh1_replay (id, ok, detail) VALUES (?,?,?)", (r["id"], int(ok), json.dumps(why)))
+        _set_meta(con, "fh1_replay_last", max(_meta(con, "fh1_replay_last", 0), r["id"]))
+    tot = con.execute("SELECT COUNT(*), COALESCE(SUM(1 - ok), 0) FROM fh1_replay").fetchone()
+    ex = [{"id": x["id"], "why": json.loads(x["detail"])} for x in con.execute("SELECT * FROM fh1_replay WHERE ok = 0 ORDER BY id LIMIT 5")]
+    summ = {"rows_checked": tot[0], "mismatches": tot[1], "examples": ex, "source": "saved inputs (history snapshot + grader inputs) only"}
+    _set_meta(con, "fh1_replay", summ)
+    return summ
+
+
 def _ensure_line_blend(con, now):
     """Freeze the line-blend challenger once (its forward test = forecasts logged after this moment)."""
     if con.execute("SELECT 1 FROM challengers WHERE family = ?", (LINE_BLEND["family"],)).fetchone():
@@ -459,6 +591,11 @@ def connect(db=None):
         PRIMARY KEY (batch_id, slip_idx, leg_idx));
     CREATE TABLE IF NOT EXISTS acks (item TEXT PRIMARY KEY, at TEXT, reason TEXT);
     CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT, kind TEXT, detail TEXT);
+    CREATE TABLE IF NOT EXISTS fh1_copy (id INTEGER PRIMARY KEY, pick_id INTEGER, forecast_id INTEGER, logged_at TEXT,
+        match_start TEXT, line REAL, prop TEXT, scope TEXT, live_p REAL, ch_p REAL, live_lam REAL, ch_lam REAL, n0_exact INTEGER,
+        identical INTEGER, grp TEXT, inputs_sha TEXT, gi_sha TEXT, git_commit TEXT, rec TEXT, copied_at TEXT);
+    CREATE INDEX IF NOT EXISTS fh1_pick ON fh1_copy (pick_id, logged_at);
+    CREATE TABLE IF NOT EXISTS fh1_replay (id INTEGER PRIMARY KEY, ok INTEGER, detail TEXT);
     """)
     # 2026-10-12 owner review: every distinct line kept; raw chances + dataset revision. 2026-10-13: the forecast's odds
     # record - which source supplied the market input (odds_source / the provenance's `selected`), under which odds policy
@@ -1673,8 +1810,86 @@ def product_scorecard(con, rows=None):
             row["promotion"] = PL1_BLOCK if ch["status"] == "blocked" else None
         elif ch["family"] == PROP_LINE_2["family"]:
             row.update(_prop_line_2_extras(con, ch, us))
+        elif ch["family"] == FULL_HISTORY["family"]:
+            row.update(_fh1_extras(con, ch, us))
         out["challengers"].append(row)
     return out
+
+
+def _fh1_block(rs, B=BOOT_B):
+    """Paired live vs fh-1 on the same units (both arms from one pre-match record): probability scores and projection error."""
+    if not rs:
+        return {"units": 0, "matches": 0}
+    br = lambda p, y: (p - y) ** 2
+    gl = lambda u: _ll(u["pL"], u["over"]) - _ll(u["pF"], u["over"])
+    gb = lambda u: br(u["pL"], u["over"]) - br(u["pF"], u["over"])
+    out = {"units": len(rs), "matches": len({u["match"] for u in rs}), "changed_units": sum(1 for u in rs if abs(u["pF"] - u["pL"]) > 1e-9),
+           "log_loss": {"live": _r(sum(_ll(u["pL"], u["over"]) for u in rs) / len(rs), 5), "fh-1": _r(sum(_ll(u["pF"], u["over"]) for u in rs) / len(rs), 5)},
+           "log_loss_gain": _r(sum(gl(u) for u in rs) / len(rs), 5), "log_loss_gain_ci": _ci_ratio(_groups(rs, gl), B=B),
+           "brier": {"live": _r(sum(br(u["pL"], u["over"]) for u in rs) / len(rs), 5), "fh-1": _r(sum(br(u["pF"], u["over"]) for u in rs) / len(rs), 5)},
+           "brier_gain": _r(sum(gb(u) for u in rs) / len(rs), 5), "brier_gain_ci": _ci_ratio(_groups(rs, gb), B=B), "projection": {}}
+    for prop in ("kills", "hs"):
+        g = [u for u in rs if u["prop"] == prop and u["lamL"] is not None and u["lamF"] is not None]
+        if not g:
+            continue
+        ga = lambda u: abs(u["lamL"] - u["actual"]) - abs(u["lamF"] - u["actual"])
+        gs = lambda u: (u["lamL"] - u["actual"]) ** 2 - (u["lamF"] - u["actual"]) ** 2
+        out["projection"][prop] = {
+            "units": len(g), "matches": len({u["match"] for u in g}),
+            "rmse": {"live": _r(math.sqrt(sum((u["lamL"] - u["actual"]) ** 2 for u in g) / len(g)), 3),
+                     "fh-1": _r(math.sqrt(sum((u["lamF"] - u["actual"]) ** 2 for u in g) / len(g)), 3)},
+            "squared_error_gain": _r(sum(gs(u) for u in g) / len(g), 3), "squared_error_gain_ci": _ci_ratio(_groups(g, gs), B=B),
+            "mae": {"live": _r(sum(abs(u["lamL"] - u["actual"]) for u in g) / len(g), 3),
+                    "fh-1": _r(sum(abs(u["lamF"] - u["actual"]) for u in g) / len(g), 3)},
+            "mae_gain": _r(sum(ga(u) for u in g) / len(g), 3), "mae_gain_ci": _ci_ratio(_groups(g, ga), B=B),
+            "bias": {"live": _r(sum(u["lamL"] - u["actual"] for u in g) / len(g), 3), "fh-1": _r(sum(u["lamF"] - u["actual"] for u in g) / len(g), 3)}}
+    return out
+
+
+def _fh1_extras(con, ch, us):
+    """fh-1 vs live on P1 archived book lines (forward, interim): coverage, the checks, paired scores overall and by the
+    registered group (thin history / lower tier vs established), by history depth and by whether full history changed the
+    inputs; + = fh-1 better. The all-tier HLTV study is supporting evidence only (ACCURACY_2026-10-15.md)."""
+    fwd = [u for u in us if u["logged"] > ch["frozen_at"] and u["start"] > ch["frozen_at"]]
+    rej, rs = collections.Counter(), []
+    for u in fwd:
+        s_ = con.execute("SELECT * FROM shadow WHERE challenger_id = ? AND forecast_id = ?", (ch["id"], u["forecast_id"])).fetchone()
+        if s_ is None:
+            rej["not shadowed yet"] += 1
+            continue
+        try:
+            t = json.loads(s_["note"] or "{}") or {}
+        except ValueError:
+            t = {}
+        if s_["p_over_ch"] is None or s_["p_over_base"] is None:
+            rej[t.get("reject") or "no value"] += 1
+            continue
+        rs.append(dict(u, t=t, pL=s_["p_over_base"], pF=s_["p_over_ch"], lamL=s_["lam_base"], lamF=s_["lam_ch"], pP=s_["p_over_logged"]))
+    out = {"registered": FULL_HISTORY["registered"], "frozen_at": ch["frozen_at"], "forward_units": len(fwd), "units": len(rs),
+           "matches": len({u["match"] for u in rs}), "coverage": _r(len(rs) / len(fwd), 3) if fwd else None,
+           "rejections": [{"reason": k, "units": v} for k, v in rej.most_common()],
+           "n0_exact": sum(1 for u in rs if u["t"].get("n0_exact")), "identical_history": sum(1 for u in rs if u["t"].get("identical")),
+           "record_older_than_forecast": sum(1 for u in rs if u["t"].get("record_older_than_forecast")),
+           "live_arm_vs_published_gap": _r(sum(abs(u["pL"] - u["pP"]) for u in rs) / len(rs), 5) if rs else None,
+           "replay": _meta(con, "fh1_replay"),
+           "note": "Interim forward results on archived book lines (decisions only at the registered review windows). The "
+                   "all-tier HLTV study is supporting evidence, not a substitute for results on the props members can play."}
+    if not rs:
+        return {"fh1": out}
+    out["all"] = _fh1_block(rs)
+    by = lambda key: [dict(_fh1_block(g), group=k) for k, g in sorted(_split(rs, key).items(), key=lambda kv: -len(kv[1]))]
+    out["by_group"] = by(lambda u: u["t"].get("group") or "unknown")
+    out["by_depth"] = by(lambda u: u["t"].get("depth") or "unknown")
+    out["by_inputs"] = by(lambda u: "full history adds no row (fh-1 = live)" if u["t"].get("identical") else "full history adds rows")
+    out["n0_exact_only"] = _fh1_block([u for u in rs if u["t"].get("n0_exact")])
+    return {"fh1": out}
+
+
+def _split(rs, key):
+    g = collections.defaultdict(list)
+    for u in rs:
+        g[key(u)].append(u)
+    return g
 
 
 def two_questions(sc):
@@ -1939,6 +2154,9 @@ def shadow_step(con, now, limit=4000, picks=None):
         blend = ch["family"] == LINE_BLEND["family"]
         propline = ch["family"] == PROP_LINE["family"]
         propline2 = ch["family"] == PROP_LINE_2["family"]
+        if ch["family"] == FULL_HISTORY["family"]:      # fh-1: its own pre-match records, once their cut-off has passed
+            n += _fh1_shadow(con, ch, now)
+            continue
         todo = con.execute("SELECT f.* FROM forecast_copy f WHERE f.logged_at > ? AND NOT EXISTS (SELECT 1 FROM shadow s "
                            "WHERE s.challenger_id = ? AND s.forecast_id = f.forecast_id) ORDER BY f.forecast_id LIMIT ?",
                            (ch["frozen_at"], ch["id"], limit)).fetchall()
@@ -2260,9 +2478,10 @@ def slips_scorecard(con, batches):
 
 # ------------------------------------------------------------------------------------------------ cycle + dashboard
 def run_cycle(now=None, picks=None, forecasts=None, batches=None, corrections=None, db=None, picks_path=None,
-              batches_path=None, corrections_path=None, train=True):
+              batches_path=None, corrections_path=None, train=True, fh1_records=None):
     """One learning cycle. Data may be injected (tests / local copies); by default it is read from the pick log."""
     now = _now(now)
+    injected = picks is not None
     with _RUN_LOCK:
         STATE["running"] = True
         con = connect(db)
@@ -2271,6 +2490,7 @@ def run_cycle(now=None, picks=None, forecasts=None, batches=None, corrections=No
             _ensure_line_blend(con, now)
             _ensure_prop_line(con, now)
             _ensure_prop_line_2(con, now)
+            _ensure_full_history(con, now)
             log = {"at": _iso(now)}
             # 1. copy new forecasts (immutable), in pages
             if picks is None:
@@ -2289,6 +2509,26 @@ def run_cycle(now=None, picks=None, forecasts=None, batches=None, corrections=No
                 tag_matches(picks)
                 last = _meta(con, "last_forecast_id", 0)
                 log["forecasts_copied"] = _copy_forecasts(con, picks, sorted((f for f in forecasts or [] if f["id"] > last), key=lambda f: f["id"]), now)[0]
+            # 1b. fh-1 pre-match records (immutable) and their exact replay from saved inputs
+            try:
+                if fh1_records is None and not injected:
+                    tot = 0
+                    while True:
+                        rr = read_shadow_records(picks_path, _meta(con, "last_fh1_id", 0))
+                        tot += _copy_fh1(con, rr, now)
+                        con.commit()
+                        if len(rr) < 3000:
+                            break
+                    log["fh1_copied"] = tot
+                    rb = read_shadow_records(picks_path, _meta(con, "fh1_replay_last", 0), limit=400, bodies=True)
+                    log["fh1_replay_mismatches"] = fh1_replay_step(con, rb)["mismatches"]
+                elif fh1_records:
+                    log["fh1_copied"] = _copy_fh1(con, [r for r in fh1_records if r["id"] > _meta(con, "last_fh1_id", 0)], now)
+                    if any("inputs_body" in r for r in fh1_records):
+                        fh1_replay_step(con, [r for r in fh1_records if r["id"] > _meta(con, "fh1_replay_last", 0)])
+                con.commit()
+            except Exception as e:      # noqa: BLE001 - the shadow never stops the learning cycle
+                log["fh1_error"] = f"{type(e).__name__}: {str(e)[:160]}"
             if _migrate_unit_identity(con, picks, now):
                 log["unit_identity_migrated"] = UNIT_IDENTITY
             if _relabel_sources(con, picks, now):
@@ -2403,6 +2643,7 @@ def build_dashboard(con, now=None):
                                           f"(model version {live}); a promoted configuration reaches members only through a code release.",
         "scorecard": _meta(con, "scorecard"), "scorecard_at": _meta(con, "scorecard_at"),
         "slips": _meta(con, "slips"),
+        "fh1_replay": _meta(con, "fh1_replay"),
         "events": [dict(r) for r in con.execute("SELECT * FROM events ORDER BY id DESC LIMIT 20")],
     }
 
