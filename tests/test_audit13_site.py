@@ -91,7 +91,7 @@ def site(monkeypatch):
 def test_match_compare_answer_is_never_shared_between_matches(site):
     calls = []
 
-    def fake_mc(team_slug, opp_slug, team, opponent, start, scope="12", book="underdog"):
+    def fake_mc(team_slug, opp_slug, team, opponent, start, scope="12", book="underdog", match_slug=None):
         calls.append((team, opponent))
         return {"match": {"team": team, "opponent": opponent, "start": start, "scope": scope}, "teams": []}
     site.setattr(server, "match_compare", fake_mc)

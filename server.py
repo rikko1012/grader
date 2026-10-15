@@ -459,7 +459,17 @@ def ud_id_map(rows=None):
     return out
 
 
-def match_compare(team_slug, opp_slug, team, opponent, start, scope="12", book="underdog"):
+def same_match(r, slug, st):
+    """A board row is for the graded match: its match id decides when both sides know one (2026-10-15 owner - a platform's
+    listed start can differ from the graded match's by hours: Underdog listed WBT vs ENCE at 14:00, BO3.gg 12:00; a
+    rematch has another id, so it never matches); otherwise the listed start within the join window."""
+    if slug and r.get("match_slug"):
+        return r["match_slug"] == slug
+    rs = comparison._ts(r.get("start"))
+    return bool(st and rs and abs((rs - st).total_seconds()) <= comparison.JOIN_START_MIN * 60)
+
+
+def match_compare(team_slug, opp_slug, team, opponent, start, scope="12", book="underdog", match_slug=None):
     """Match player projection comparison (2026-10-09): every player of both teams in this match - OUR projection for
     kills and headshots, the graded Underdog line for the same match and maps when one exists (side, chance, grade,
     stake, freshness, data status), otherwise the projection alone and 'no available line' (no pick invented).
@@ -471,9 +481,10 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12", book="
     # PrizePicks goblin / demon markets stay on the board, never mixed into this table. A promo line is a standard Over /
     # Under line graded as standard (2026-10-13 audit: it was left out here and re-added from the feed as 'grading...')
     rows = [r for r in board_payload(book)["rows"] if (r.get("line_type") or r.get("odds_type") or "standard") in ("standard", "promo")]
-    same = [r for r in rows if (r.get("scope") or "12") == scope and st and comparison._ts(r.get("start"))
-            and abs((comparison._ts(r["start"]) - st).total_seconds()) <= comparison.JOIN_START_MIN * 60
+    same = [r for r in rows if (r.get("scope") or "12") == scope and same_match(r, match_slug, st)
             and ({comparison._team_same(r.get("team_name") or r.get("team"), team), comparison._team_same(r.get("team_name") or r.get("team"), opponent)} & {True})]
+    # the platform's own listed start(s) of this match (from its graded rows): feed lines carry no match id
+    starts = [x for x in {st, *(comparison._ts(r.get("start")) for r in same)} if x]
     b = BO3()
     benched = {}                                    # team -> benched nicks (lower): never in a lineup or a team total
     try:
@@ -521,7 +532,8 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12", book="
     for r in feed:
         if (r.get("line_type") or r.get("odds_type") or "standard") not in ("standard", "promo") or (r.get("scope") or "12") != scope:
             continue
-        if not (st and comparison._ts(r.get("start")) and abs((comparison._ts(r["start"]) - st).total_seconds()) <= comparison.JOIN_START_MIN * 60):
+        fs = comparison._ts(r.get("start"))
+        if not (fs and any(abs((fs - x).total_seconds()) <= comparison.JOIN_START_MIN * 60 for x in starts)):
             continue
         if not ({comparison._team_same(r.get("team"), team), comparison._team_same(r.get("team"), opponent)} & {True}):
             continue
@@ -536,8 +548,7 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12", book="
     except Exception:
         both = _BS_CACHE[1] or []
     for r in both:
-        if (r.get("scope") or "12") == scope and r.get("proj") is not None and st and comparison._ts(r.get("start")) and (
-                abs((comparison._ts(r["start"]) - st).total_seconds()) <= comparison.JOIN_START_MIN * 60):
+        if (r.get("scope") or "12") == scope and r.get("proj") is not None and same_match(r, match_slug, st):
             others.setdefault((str(r.get("nick") or r.get("player") or "").lower(), r.get("prop")), r)
     # same day and LAN / online setting as the graded rows (2026-10-10 audit: these used today's date and no LAN /
     # online blend, so a no-line projection was not comparable with the graded ones next to it)
@@ -862,15 +873,15 @@ def board_stake(res, prop, scope, line, line_type="standard", book=None):
     if not v.get("side") or not v.get("units"):
         return v
     nick = ((res.get("player_block") or {}).get("player") or {}).get("nick") or ""
-    st = comparison._ts((res.get("next_match") or {}).get("start"))
+    nm = res.get("next_match") or {}
+    st, slug = comparison._ts(nm.get("start")), nm.get("slug")
     rows = _bs_rows()
     book = book or ("prizepicks" if line_type in ("goblin", "demon") else "underdog")   # the card's own platform
     for bk in ((book,) if isinstance(book, str) else tuple(book)):
         exact = [r for r in rows if (r.get("book") or "underdog") == bk
                  and str(r.get("nick") or r.get("player") or "").lower() == nick.lower() and r.get("prop") == prop
                  and (r.get("scope") or "12") == scope and float(r.get("line") or -1) == float(line) and r.get("side") == v["side"]
-                 and st and comparison._ts(r.get("start"))
-                 and abs((comparison._ts(r["start"]) - st).total_seconds()) <= comparison.JOIN_START_MIN * 60]
+                 and (st or slug) and same_match(r, slug, st)]
         for r in exact:
             if r.get("cap_n") and r.get("units_full") == v["units"] and r["units"] < r["units_full"]:
                 out = dict(v, units=r["units"], units_full=r["units_full"], cap_n=r["cap_n"],
@@ -898,7 +909,7 @@ def kept_board_row(res, prop, scope, line, book=None, line_type="standard", why=
     nick = (((res.get("player_block") or {}).get("player") or {}).get("nick") or "").lower()
     nm = res.get("next_match") or {}
     st, slug = comparison._ts(nm.get("start")), nm.get("slug")
-    if not nick or not st:
+    if not nick or not (st or slug):
         return None
     try:
         rows_ = _bs_rows()
@@ -916,13 +927,8 @@ def kept_board_row(res, prop, scope, line, book=None, line_type="standard", why=
                     continue                      # graded at another line
             except (TypeError, ValueError):
                 continue
-            if slug and r.get("match_slug"):
-                if r["match_slug"] != slug:
-                    continue                      # another match (the id decides, whatever the listed start)
-            else:
-                rs = comparison._ts(r.get("start"))
-                if not rs or abs((rs - st).total_seconds()) > comparison.JOIN_START_MIN * 60:
-                    continue
+            if not same_match(r, slug, st):
+                continue                          # another match (the id decides, whatever the listed start)
             if (r["side"] == "Less" and r.get("under_available") is False) or (r["side"] == "More" and r.get("over_available") is False):
                 if why is not None:               # the feed no longer offers this side: say so (never "no saved grade")
                     why.append(SIDE_GONE)
@@ -2439,11 +2445,12 @@ class Handler(BaseHTTPRequestHandler):
                 # the team names are part of the key (2026-10-13 audit: matches found on HLTV / Polymarket / PandaScore send
                 # no BO3.gg slugs, so two matches with the same start shared one answer - another match's table)
                 k_ = ("mcmp", q.get("team_slug"), q.get("opp_slug"), comparison._norm(q.get("team")), comparison._norm(q.get("opponent")),
-                      q.get("start"), q.get("maps") or "12", bk_)
+                      q.get("start"), q.get("maps") or "12", bk_, (q.get("match") or "")[:120])
 
                 def _mc():
                     return 200, json.dumps(dict(match_compare(q.get("team_slug"), q.get("opp_slug"), q.get("team", ""), q.get("opponent", ""),
-                                                              q.get("start"), q.get("maps") or "12", bk_), book=bk_), default=str).encode()
+                                                              q.get("start"), q.get("maps") or "12", bk_, (q.get("match") or "")[:120] or None),
+                                                book=bk_), default=str).encode()
                 st_, body_ = shared(k_, _mc, ttl=120)
                 return self.send(st_, body_)
             if u.path == "/api/line_check":

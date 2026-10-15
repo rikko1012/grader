@@ -2633,7 +2633,8 @@ function matchCompareSlot(d) {
 }
 function mcFetch() {
   const d = MC.d || {}, nm = d.next_match || {}, pb = d.player_block || {}, team = pb.playing_for || pb.current_team || "";
-  const qs = new URLSearchParams({team_slug: nm.team_slug || "", opp_slug: nm.opponent_slug || "", team, opponent: nm.opponent, start: nm.start, maps: MC.scope, book: MC.book});
+  const qs = new URLSearchParams({team_slug: nm.team_slug || "", opp_slug: nm.opponent_slug || "", team, opponent: nm.opponent, start: nm.start, maps: MC.scope, book: MC.book,
+                                  match: nm.slug || ""});      // the match id decides which board lines are this match
   const key = qs.toString(); MC.key = key;
   fetchRetry("/api/match_compare?" + qs).then(r => r.json()).then(j => { if (MC.key !== key) return; MC.data = j; drawMatchCompare(); })
     .catch(() => { const el = $("#mcmp"); if (el && MC.key === key) el.innerHTML = `<h2>Match players</h2><div class="small muted">Couldn't load the other players right now – the grade above is unaffected.</div>`; });
