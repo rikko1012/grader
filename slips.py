@@ -34,6 +34,7 @@ def _legs(rows, now_iso):
     for r in rows:
         if (not r.get("side") or r.get("p") is None or r.get("state") == "SCOUT" or r.get("grade") not in GRADES
                 or r.get("hltv_retry")          # a saved grade kept during an outage is no current recommendation
+                or r.get("unavailable")         # the feed does not offer this side
                 or (r.get("units") or 0) <= 0 or (r.get("start") and r["start"] <= now_iso)
                 # role-sensitive props need a confirmed role: HS only for confirmed non-AWPers, kills only for confirmed non-IGLs
                 or (r.get("prop") == "hs" and r.get("awp") is not False) or (r.get("prop") == "kills" and r.get("igl") is not False)):

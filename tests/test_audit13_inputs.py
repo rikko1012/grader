@@ -964,3 +964,18 @@ def test_c8_concurrent_failing_reads_hit_the_database_once(monkeypatch):
     out.clear()
     wave(lambda: perf_live.player_maps("tester", "Mine", "2025-08-01"))
     assert len(calls) == 4 and len(errs) == 200 and all(hltv.is_transient(e) for e in errs)
+
+
+def test_e2_a_blip_graded_on_a_found_fallback_is_a_normal_grade(monkeypatch, offline):
+    # 2026-10-15 owner: provider outages must not indefinitely freeze the grader - a found fallback (provenance.blip,
+    # not transient) grades normally: no odds_transient, the fallback named as the input, never Thunderpick
+    import market_odds
+    pm = {"found": True, "team_ml": -150, "opp_ml": 130, "team_prob": 0.6, "opp_prob": 0.4, "maps": {},
+          "provenance": {"query": {"team": "Mine"}, "selected": "polymarket", "blip": True, "p_team": 0.6, "quote_age_s": 42.0,
+                         "fallback_reason": market_odds.BLIP_FALLBACK_TEXT + ": Thunderpick quote stale"}}
+    monkeypatch.setattr(market_odds, "recheck", lambda od, **k: (copy.deepcopy(pm), {"result": "changed"}))
+    res = {}
+    _fake_run({"found": False, "provenance": {"query": {"team": "Mine"}}})(_args(line=30.5), res, None, 12)
+    g, gi = res["grade"], res["grader_inputs"]
+    assert "odds_transient" not in g and gi["odds_provenance"]["selected"] == "polymarket"
+    assert gi["odds_provenance"]["quote_age_s"] == 42.0 and gi["odds_provenance"]["blip"] is True

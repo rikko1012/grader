@@ -27,7 +27,7 @@ Ingestion (members never call upstream) - every request goes through request() (
     shorter than a Retry-After (a minimum, not a schedule), n = the persisted 429 streak (each 429 within 30 min after
     the last one's cooldown adds one, so a sustained 429 stays at the cap; it starts again only after a clean period)
     that a success (an empty 200, an admin probe) does NOT reset; 5xx / timeouts / network -> 30 s x 2^(n-1); 401/403/404 -> 30 min
-  - adaptive automatic polling per endpoint (cs2 and csgo): 60 s; slower after repeated EMPTY answers (120 / 180 / 300 s)
+  - adaptive automatic polling of esport/csgo only (AUTO_POLL; no automatic cs2 probes, 2026-10-15): 60 s; slower after repeated EMPTY answers (120 / 180 / 300 s)
     and while 429s persist (120 / 240 / 300 s by the 429s of the last 30 min - it relaxes only as they age out of the
     window, i.e. after a sustained clean period); persisted schedule, cooldown and authentication stop
     (THUNDERPICK_AUTOPOLL=0 turns it off)
@@ -89,6 +89,11 @@ PATH = "/api/partners-odds/esport/cs2"          # the CS2 feed (the guide's csgo
 # The only paths this module ever calls (fixed, approved). 2026-10-13 the cs2 path answered 200 with an empty list while
 # CS2 matches were scheduled; csgo carries them (measured behaviour - not a provider statement, provider question 1).
 PATHS = {"cs2": PATH, "csgo": "/api/partners-odds/esport/csgo"}
+# the endpoints the poller requests on its own (owner 2026-10-15): only esport/csgo, the verified endpoint carrying the CS2
+# markets. No automatic esport/cs2 discovery probes - it has answered [] every time, and the probe sent ~20 s after a good
+# csgo answer drew 3 of the 6 cooldowns after the 23bea2fe37 deploy. Not replaced by a daily request; an explicit admin
+# probe (probe("cs2")) still can, through the same gateway, until the provider clarifies or a diagnostic needs it.
+AUTO_POLL = ("csgo",)
 _NAME_OF = {v: k for k, v in PATHS.items()}
 SOURCE = "thunderpick"
 TIMEOUT = (5, 10)
@@ -1242,7 +1247,7 @@ class Poller:
         until, lease, last = _gate_view(self.db)
         if until > now or lease > now or now - last < MIN_GAP_S:
             return None
-        cands = [(s["next_at"], n) for n in PATHS for s in [_sched(n, self.db)] if s["next_at"] <= now]
+        cands = [(s["next_at"], n) for n in AUTO_POLL for s in [_sched(n, self.db)] if s["next_at"] <= now]
         return min(cands)[1] if cands else None
 
     def tick(self):

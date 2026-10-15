@@ -46,7 +46,9 @@ def sel(p, now, team="Alpha1", opp="Bravo1", pm=None, i=1):
 
 
 # ---------------------------------------------------------------- E1
-def test_e1_a_stale_quote_after_429s_is_a_blip_and_the_fallback_is_marked_transient():
+def test_e2_a_stale_quote_after_429s_is_a_blip_and_a_found_fallback_grades_normally():
+    # E2 (owner 2026-10-15: provider outages must not indefinitely freeze the grader): a found fallback is a normal
+    # selection under its own name and quote age; only no eligible fallback is transient (E1)
     p, c = active_poller()
     t0 = c.t
     assert sel(p, t0 + 60)["provenance"]["selected"] == "thunderpick"
@@ -59,11 +61,14 @@ def test_e1_a_stale_quote_after_429s_is_a_blip_and_the_fallback_is_marked_transi
     o = sel(p, now)
     pv = o["provenance"]
     assert pv["selected"] == "polymarket" and o["team_prob"] == PM["team_prob"]   # the usual fallback, never relabelled
-    assert o["transient"] is True and pv["blip"] is True and pv["tp_availability"] == "stale"
-    assert pv["fallback_reason"].startswith(M.BLIP_TEXT + ": ") and "stale" in pv["fallback_reason"]
-    # no market at all during a blip: still marked (a member card shows a temporary grade, never 50%)
+    assert "transient" not in o and pv["blip"] is True and pv["tp_availability"] == "stale"
+    assert pv["fallback_reason"].startswith(M.BLIP_FALLBACK_TEXT + ": ") and "stale" in pv["fallback_reason"]
+    assert "Thunderpick" not in str(pv.get("source")) and "quote_age_s" in pv       # its own source and quote age
+    assert pv["tp_last_quote"]["used"] is False                      # Thunderpick's last quote: recorded, never used
+    # no eligible fallback during a blip: transient (the board keeps / hides the line, the card shows no grade of its own)
     nm = sel(p, now, pm=lambda *a: {"found": False, "note": "TEST FIXTURE"})
     assert nm["found"] is False and nm["transient"] is True and M.p_team(nm) is None
+    assert nm["provenance"]["fallback_reason"].startswith(M.BLIP_TEXT + ": ")
 
 
 LONG_S = 6 * 3600     # hours without a usable answer
@@ -77,8 +82,9 @@ def test_e1_time_alone_never_ends_a_blip(monkeypatch):
     assert long_["availability"] == "stale" and long_["blip"] is True and long_["feed_cause"]
     assert "cleared" not in long_["reason"] and "withdrawn" not in long_["reason"]
     o = sel(p, t0 + LONG_S)
-    assert o["transient"] is True and o["provenance"]["blip"] is True and o["provenance"]["selected"] == "polymarket"
+    assert "transient" not in o and o["provenance"]["blip"] is True and o["provenance"]["selected"] == "polymarket"
     assert o["provenance"]["tp_last_quote"]["age_s"] >= LONG_S - 1      # the old quote's own age, never refreshed
+    assert sel(p, t0 + LONG_S, pm=lambda *a: {"found": False, "note": "TEST FIXTURE"})["transient"] is True   # nothing eligible: still held
     # polling switched off HERE (our configuration, not the feed): a normal fallback at once
     monkeypatch.setenv("THUNDERPICK_AUTOPOLL", "0")
     off = T.projection_odds("Alpha1", "Bravo1", start_of(1), now=t0 + T.QUOTE_MAX_AGE_S + 1, poller=p)
@@ -150,54 +156,71 @@ def test_e1_marks_by_availability_state(state, monkeypatch):
     o, av, blip = _scenario(state, monkeypatch)
     pv = o["provenance"]
     assert pv["tp_availability"] == av and pv["selected"] == "polymarket" and o["team_prob"] == PM["team_prob"]
-    assert bool(o.get("transient")) is blip and pv["blip"] is blip
-    assert str(pv["fallback_reason"]).startswith(M.BLIP_TEXT) is blip
+    assert "transient" not in o and pv["blip"] is blip                # E2: a found fallback is never transient
+    assert str(pv["fallback_reason"]).startswith(M.BLIP_FALLBACK_TEXT) is blip
     if blip:                                                        # the held quote, with its own time - never used
         assert pv["tp_last_quote"]["used"] is False and pv["tp_last_quote"]["age_s"] > 0
-    else:
-        assert "transient" not in o
 
 
 def test_e1_reader_failure_is_a_blip_however_long_it_runs():
     def boom(*a, **k):
         raise RuntimeError("database is locked (TEST FIXTURE)")
     o = M.select("Alpha1", "Bravo1", None, tp=boom, pm=lambda *a: dict(PM))
-    assert o["transient"] is True and o["provenance"]["tp_error"] == "RuntimeError"
+    assert "transient" not in o and o["provenance"]["tp_error"] == "RuntimeError" and o["provenance"]["blip"] is True
+    assert M.select("Alpha1", "Bravo1", None, tp=boom, pm=lambda *a: {"found": False, "note": "TEST FIXTURE"})["transient"] is True   # nothing eligible
     M._TP_FAIL["since"] = time.time() - LONG_S                        # failing for hours: still unknown, still a blip
-    o = M.select("Alpha1", "Bravo1", None, tp=boom, pm=lambda *a: dict(PM))
+    o = M.select("Alpha1", "Bravo1", None, tp=boom, pm=lambda *a: {"found": False, "note": "TEST FIXTURE"})
     assert o["transient"] is True and o["provenance"]["blip"] is True
     M.select("Alpha1", "Bravo1", None, tp=lambda *a, **k: {"found": False, "availability": None}, pm=lambda *a: dict(PM))
     assert M._TP_FAIL["since"] is None                               # a successful read ends the run
-    assert M.select("Alpha1", "Bravo1", None, tp=boom, pm=lambda *a: dict(PM))["transient"] is True
+    assert M.select("Alpha1", "Bravo1", None, tp=boom, pm=lambda *a: {"found": False, "note": "TEST FIXTURE"})["transient"] is True
 
 
-def test_e1_revalidate_never_freezes_a_transient_selection():
+def test_e2_revalidate_a_blip_with_a_found_fallback_is_a_new_input_and_thunderpick_returns_after():
     p, c = active_poller()
     t0 = c.t
     cached = sel(p, t0 + 60)                                         # Thunderpick, current
     blip_at = t0 + T.QUOTE_MAX_AGE_S + 1
     out, chk = M.recheck(cached, now=blip_at, tp=reader(p), pm=lambda *a: dict(PM))
-    assert out is not cached and out["transient"] is True and out["provenance"]["selected"] == "polymarket"
+    assert "transient" not in out and out["provenance"]["selected"] == "polymarket" and out["provenance"]["blip"] is True
+    assert not chk["transient"] and not chk["result"].startswith("transient")
+    assert out["provenance"]["sig"] != cached["provenance"]["sig"]      # another market input: a new forecast input
+    p.fetch_fns["cs2"] = ok_fetch(p.data["cs2"]["raw"])
+    c.t = blip_at + 40
+    p.poll_once("cs2")
+    back = M.revalidate(out, now=c.t + 1, tp=reader(p), pm=lambda *a: dict(PM))
+    assert back["provenance"]["selected"] == "thunderpick" and "transient" not in back
+
+
+def test_e1_revalidate_never_freezes_a_transient_selection():
+    PM_NONE = lambda *a: {"found": False, "note": "TEST FIXTURE"}
+    p, c = active_poller()
+    t0 = c.t
+    cached = sel(p, t0 + 60)                                         # Thunderpick, current
+    blip_at = t0 + T.QUOTE_MAX_AGE_S + 1
+    out, chk = M.recheck(cached, now=blip_at, tp=reader(p), pm=PM_NONE)
+    assert out is not cached and out["transient"] is True and out["provenance"]["selected"] is None
     assert chk["result"].startswith("transient: ") and chk["transient"] is True and chk["blip"] is True
     # the same blip again: a fresh decision every time, never the cached transient object "confirmed"
-    out2, chk2 = M.recheck(out, now=blip_at + 30, tp=reader(p), pm=lambda *a: dict(PM))
+    out2, chk2 = M.recheck(out, now=blip_at + 30, tp=reader(p), pm=PM_NONE)
     assert out2 is not out and out2["transient"] is True and chk2["result"].startswith("transient: ")
     assert out2["provenance"]["sig"] == out["provenance"]["sig"]        # the signature says what the input is
     # the feed stays stale for hours: still a fresh transient decision every time (time proves nothing)
-    out3, chk3 = M.recheck(out2, now=t0 + LONG_S, tp=reader(p), pm=lambda *a: dict(PM))
-    assert out3["transient"] is True and chk3["result"].startswith("transient: ") and out3["provenance"]["selected"] == "polymarket"
+    out3, chk3 = M.recheck(out2, now=t0 + LONG_S, tp=reader(p), pm=PM_NONE)
+    assert out3["transient"] is True and chk3["result"].startswith("transient: ") and out3["provenance"]["selected"] is None
     # Thunderpick answers again: Thunderpick is the input again
     p.fetch_fns["cs2"] = ok_fetch(p.data["cs2"]["raw"])
     c.t = blip_at + 40
     p.poll_once("cs2")
-    back = M.revalidate(out2, now=c.t + 1, tp=reader(p), pm=lambda *a: dict(PM))
+    back = M.revalidate(out2, now=c.t + 1, tp=reader(p), pm=PM_NONE)
     assert back["provenance"]["selected"] == "thunderpick" and "transient" not in back
     assert back["provenance"]["sig"] == cached["provenance"]["sig"]     # the same quote: not a new forecast input
 
 
 def test_e1_a_reader_without_the_flag_reads_the_availability_state():
     stale = {"found": False, "reason": "Thunderpick quote stale (TEST FIXTURE)", "availability": "stale"}
-    assert M.select("a", "b", None, tp=lambda *a, **k: dict(stale), pm=lambda *a: dict(PM))["transient"] is True
+    assert M.select("a", "b", None, tp=lambda *a, **k: dict(stale), pm=lambda *a: {"found": False, "note": "TEST FIXTURE"})["transient"] is True
+    assert M.select("a", "b", None, tp=lambda *a, **k: dict(stale), pm=lambda *a: dict(PM))["provenance"]["blip"] is True
     no = dict(stale, blip=False)
     assert "transient" not in M.select("a", "b", None, tp=lambda *a, **k: dict(no), pm=lambda *a: dict(PM))
 

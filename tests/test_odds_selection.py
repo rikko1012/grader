@@ -1,4 +1,4 @@
-"""market_odds odds-source-2 (2026-10-13): ONE selection policy (Thunderpick -> Polymarket -> OddsPapi by the network flag ->
+"""market_odds odds-source-2 (2026-10-13; odds-source-3 2026-10-15: a blip grades on a found fallback): ONE selection policy (Thunderpick -> Polymarket -> OddsPapi by the network flag ->
 no market), its provenance, the odds signature, the re-check at every regrade, immutability, fallback reasons, never 50%.
 ALL quotes, ids and teams here are LABELLED TEST FIXTURES (the ALLE / ex-Keyd Stars / Galorys names follow the audited
 UNO MILLE chain; the prices are invented for the test)."""
@@ -69,7 +69,7 @@ def test_thunderpick_first_with_the_full_provenance_and_the_match_format():
     assert tp.calls == [{"team": "ex-Keyd Stars", "opponent": "Galorys", "start": START, "bo": 3}]   # bo passed through
     assert pv["query"] == {"team": "ex-Keyd Stars", "opponent": "Galorys", "start": START, "bo": 3}
     assert pv["tp_availability"] == "current" and pv["mapping_rev"].startswith("map-") and len(pv["sig"]) == 40
-    assert pv["odds_policy"] == M.odds_policy() and M.odds_policy().startswith("odds-source-2|")
+    assert pv["odds_policy"] == M.odds_policy() and M.odds_policy().startswith("odds-source-3|")
     assert M.p_team(o) == 0.374684                                    # the exact selected probability, no ML round trip
     for k in ("match_id", "source_event_id", "odds_team", "snapshot_sha256", "retrieved_at", "label"):
         assert pv[k] == tp_found()["provenance"][k]                   # Thunderpick's own provenance kept as given
@@ -77,7 +77,7 @@ def test_thunderpick_first_with_the_full_provenance_and_the_match_format():
 
 def test_odds_policy_names_the_selection_rule_and_the_thunderpick_policy():
     import thunderpick
-    assert M.odds_policy() == f"odds-source-2|{thunderpick.POLICY_VERSION}"
+    assert M.odds_policy() == f"odds-source-3|{thunderpick.POLICY_VERSION}"
 
 
 def test_old_readers_without_bo_still_work():
@@ -95,9 +95,10 @@ def test_fallback_records_thunderpicks_reason_and_availability_and_polymarket_id
     o = M.select("ex-Keyd Stars", "Galorys", START, tp=TP(TP_EMPTY), pm=lambda *a: dict(PM))
     pv = o["provenance"]
     assert pv["selected"] == "polymarket" and o["team_prob"] == 0.325 and o["maps"] == PM["maps"]
-    # E1 (owner 2026-10-13, production evidence 2026-10-14): an empty answer between full answers is a feed blip
-    assert pv["fallback_reason"] == f"{M.BLIP_TEXT}: " + TP_EMPTY["reason"] + " [availability: endpoint_empty]"
-    assert pv["tp_availability"] == "endpoint_empty" and o["transient"] is True
+    # E1 (owner 2026-10-13, production evidence 2026-10-14): an empty answer between full answers is a feed blip;
+    # E2 (2026-10-15): with a found fallback the line grades on it (not transient), the reason says so
+    assert pv["fallback_reason"] == f"{M.BLIP_FALLBACK_TEXT}: " + TP_EMPTY["reason"] + " [availability: endpoint_empty]"
+    assert pv["tp_availability"] == "endpoint_empty" and "transient" not in o and pv["blip"] is True
     assert pv["event_slug"] == "cs2-keydst-gls1-2026-10-13" and pv["price_source"] == "midpoint" and pv["liquidity"] == 5000
     # what match_odds did not return is None - never invented
     assert pv["market_id"] is None and pv["condition_id"] is None and pv["retrieved_at"] is None
@@ -134,9 +135,9 @@ def test_oddspapi_is_live_only_for_member_contexts_and_recorded():
     for o in (member, board):
         pv = o["provenance"]
         assert pv["selected"] == "oddspapi" and pv["book"] == "pinnacle" and pv["fixture_id"] == "fx-test-1"
-        # E1 (owner 2026-10-13): a stale Thunderpick quote is a feed blip - the fallback says so and is marked transient
-        assert pv["fallback_reason"] == f"{M.BLIP_TEXT}: {TP_STALE['reason']}" and pv["polymarket_note"] == NOT_PM["note"]
-        assert o["transient"] is True and pv["blip"] is True
+        # E1 / E2: a stale Thunderpick quote is a feed blip - a found fallback (OddsPapi here) grades, saying so
+        assert pv["fallback_reason"] == f"{M.BLIP_FALLBACK_TEXT}: {TP_STALE['reason']}" and pv["polymarket_note"] == NOT_PM["note"]
+        assert "transient" not in o and pv["blip"] is True
         assert pv["p_team"] == round((1 / 2.4) / (1 / 2.4 + 1 / 1.6), 6)          # exact de-vig, not the 3-dp display
     assert member["provenance"]["sig"] == board["provenance"]["sig"]         # same price -> same market input
 
@@ -409,9 +410,9 @@ def test_reader_error_keeps_a_cached_thunderpick_quote_only_inside_its_own_windo
     old = M.select("ex-Keyd Stars", "Galorys", START, pm=lambda *a: dict(PM),
                    tp=TP(tp_found(retrieved_at=iso(NOW - timedelta(seconds=thunderpick.QUOTE_MAX_AGE_S + 5)))))
     out2, chk2 = M.recheck(old, tp=boom, pm=lambda *a: dict(PM))
-    # E1 (owner 2026-10-13): past its window the fallback is a feed blip - temporary, marked, never a "changed" input
-    assert out2["provenance"]["selected"] == "polymarket" and chk2["result"].startswith("transient: ")
-    assert out2["transient"] is True and out2["provenance"]["blip"] is True
+    # past its window: a feed blip; E2 - the found fallback is the input (not transient), the blip recorded
+    assert out2["provenance"]["selected"] == "polymarket" and not chk2["result"].startswith("transient: ")
+    assert "transient" not in out2 and out2["provenance"]["blip"] is True
 
 
 def test_polymarket_failure_on_a_recheck_never_keeps_a_non_current_thunderpick_quote():

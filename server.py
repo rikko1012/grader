@@ -510,7 +510,8 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12", book="
         e[r["prop"]] = {"proj": r.get("proj"), "line": r["line"], "side": r.get("side"), "p": r.get("p"), "grade": r.get("grade"),
                         "units": r.get("units"), "units_full": r.get("units_full"), "graded_at": r.get("graded_at"), "dstat": r.get("dstat"),
                         "source": r.get("source"), "state": r.get("state"), "ud_team": r.get("team"), "ud_opponent": r.get("opponent"),
-                        "reason": r.get("reason"), "kept": bool(r.get("hltv_retry")), "retry_cause": r.get("retry_cause")}
+                        "reason": r.get("reason"), "kept": bool(r.get("hltv_retry")), "retry_cause": r.get("retry_cause"),
+                        "unavailable": r.get("unavailable")}
     # offered but not graded yet (2026-10-11 audit: damyo's 31.5 showed 'No available line' while it was grading)
     try:                                            # the feed as already read (never a blocking first read here)
         feed = (prizepicks.board()["rows"] if book == "prizepicks" else
@@ -651,6 +652,7 @@ def board_payload(book="underdog"):
     for x in rows:
         x["book"] = x.get("book") or "underdog"
         x["match_id"] = _row_match_id(x)         # canonical match id (matchid.py): the same on every platform; None = unlinked
+        x["unavailable"] = side_unavailable(x)   # the feed no longer offers this side: shown as such, never actionable
     _cap_same_result(rows)                    # within this platform: a slip is one platform's entry
     for x in rows:                            # why a stake is capped + warning marker (display only, sorting clean picks first)
         cg = x.pop("cap_grade", None)
@@ -700,6 +702,20 @@ def awp_role(nick, g, hs_pct, team=None):
 SAME_RESULT_CAP = 3.0   # units (on the 0.5-3U scale), all bets that need the same team to do well / badly in one match
 
 
+SIDE_GONE = "Unavailable—side no longer offered"      # a kept (stale) grade whose side the feed dropped
+SIDE_NOT_OFFERED = "Unavailable—side not offered"     # a current grade leaning to a side the feed does not offer
+
+
+def side_unavailable(r):
+    """The member-facing label when the platform feed does not offer the row's side for this exact line (2026-10-15 owner:
+    a retained PrizePicks Under that is no longer offered must say so - 0U alone does not explain availability), else
+    None. The row keeps its grade for evaluation; it is excluded from recommendations, copying and slips."""
+    side = r.get("side")
+    if (side == "Less" and r.get("under_available") is False) or (side == "More" and r.get("over_available") is False):
+        return SIDE_GONE if r.get("hltv_retry") else SIDE_NOT_OFFERED
+    return None
+
+
 def _cap_same_result(rows):
     """Bets on several players of one team, same side, in one match are one bet on that match's result
     (an upset or an overtime sinks them all). Their units together are capped at SAME_RESULT_CAP.
@@ -710,7 +726,7 @@ def _cap_same_result(rows):
     picks keep 0.5U and the rest become 0-unit Leans ('same-match cap')."""
     groups = {}
     for r in rows:
-        if (r.get("units") or 0) > 0:
+        if (r.get("units") or 0) > 0 and not r.get("unavailable"):   # a side no longer offered is no current bet
             groups.setdefault((r.get("matchup"), r.get("start"), r.get("team"), r.get("side")), []).append(r)
     q = 0.25
     for lst in groups.values():
@@ -873,7 +889,7 @@ def _lt_norm(x):
     return x if x in ("goblin", "demon") else "standard"
 
 
-def kept_board_row(res, prop, scope, line, book=None, line_type="standard"):
+def kept_board_row(res, prop, scope, line, book=None, line_type="standard", why=None):
     """The Prop Board's saved grade for exactly this pick, or None: same player, match (the match id when both sides know
     it - the platform's listed start can differ from the graded match's start by hours, 2026-10-14 post-deploy check: WBT vs
     ENCE listed 14:00, BO3.gg 12:00; otherwise the start within the join window), platform, stat, maps, line and market
@@ -908,7 +924,9 @@ def kept_board_row(res, prop, scope, line, book=None, line_type="standard"):
                 if not rs or abs((rs - st).total_seconds()) > comparison.JOIN_START_MIN * 60:
                     continue
             if (r["side"] == "Less" and r.get("under_available") is False) or (r["side"] == "More" and r.get("over_available") is False):
-                continue                          # the feed no longer offers this side
+                if why is not None:               # the feed no longer offers this side: say so (never "no saved grade")
+                    why.append(SIDE_GONE)
+                continue
             return r
     return None
 
@@ -927,7 +945,8 @@ def outage_verdict(res, prop, scope, line, v, book=None, line_type="standard"):
     data-unavailable verdict: no side, chance, grade or stake."""
     if not isinstance(v, dict):
         return v
-    r = kept_board_row(res, prop, scope, line, book, line_type)
+    why = []
+    r = kept_board_row(res, prop, scope, line, book, line_type, why=why)
     if r is not None:
         ds_ = r.get("dstat")
         when = r.get("graded_at") or "an earlier regrade"
@@ -941,6 +960,11 @@ def outage_verdict(res, prop, scope, line, v, book=None, line_type="standard"):
                 "kept_cause": r.get("retry_cause") if r.get("hltv_retry") else None,
                 "reason": f"{_outage_cause(res.get('grade'))} - this is the Prop Board's saved grade of this exact pick from "
                           f"{when} (stale, not a new forecast); regraded when live data is back"}
+    if why:                                       # the saved grade is for a side the platform no longer offers
+        return {"side": None, "p": None, "grade": None, "units": 0.0, "state": "UNAVAILABLE", "unavailable": True,
+                "kept_from_board": False, "stale": False, "temporary": False, "side_unavailable": SIDE_GONE,
+                "reason": f"{SIDE_GONE} - the Prop Board's saved grade of this pick is for a side the platform no longer "
+                          f"offers; {_outage_cause(res.get('grade'))}, so there is no current grade"}
     return {"side": None, "p": None, "grade": None, "units": 0.0, "state": "UNAVAILABLE", "unavailable": True,
             "kept_from_board": False, "stale": False, "temporary": False,
             "reason": f"{_outage_cause(res.get('grade'))} - no grade for this line until live data is back. The Prop Board has "
@@ -3393,6 +3417,8 @@ class Handler(BaseHTTPRequestHandler):
                     res["verdict"] = dict(vv, cap_reason=cap_reason_text(stake_cap_reasons(g_, own, source=odds_selected(res.get("odds"))) if (vv.get("units") or 0) > 0 else [],
                                                                          vv.get("cap_n")),
                                           dstat=ds_, flagged=bool(ds_[0] in ("verify", "limited") or has_warning(g_)))
+                    if vv.get("side") == "Less" and less_av is False:   # the feed offers no Under for this exact line: shown
+                        res["verdict"]["side_unavailable"] = SIDE_NOT_OFFERED   # as such, never a pick (grade logged as is)
                 vv = res["verdict"]
                 for x in res.get("ladder") or []:        # the ladder's own line = the card's verdict (same-match cap included)
                     if isinstance(vv, dict) and vv.get("side") and float(x.get("line") or -1) == float(line):

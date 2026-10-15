@@ -381,19 +381,23 @@ def test_polling_interval_widens_while_429s_persist_and_relaxes_after_a_clean_pe
     assert p.poll_once("csgo") is True and T._sched("csgo")["interval_s"] == 60
 
 
-def test_scheduler_polls_both_endpoints_spaced_and_resumes_after_restart():
+def test_scheduler_polls_only_csgo_spaced_and_resumes_after_restart():
+    # 2026-10-15 owner: no automatic esport/cs2 discovery probes (not replaced by a daily request); csgo carries CS2
     c = Clock()
-    p = T.Poller(fetch_fns={"cs2": ok_fetch([]), "csgo": ok_fetch([])}, clock=c)
-    assert p.tick() is True                                     # first endpoint
-    assert p.due() is None                                      # spacing: nothing within MIN_GAP_S
-    c.t += T.MIN_GAP_S + 1
-    assert p.tick() is True                                     # the other endpoint
-    assert {r["path"].rsplit("/", 1)[1] for r in T.request_log()} == {"cs2", "csgo"}
+    p = T.Poller(fetch_fns={"cs2": ok_fetch([]), "csgo": ok_fetch([ev()])}, clock=c)
+    assert p.tick() is True and p.due() is None                 # csgo; spacing: nothing within MIN_GAP_S
     c.t += 30
-    q = T.Poller(fetch_fns={"cs2": ok_fetch([]), "csgo": ok_fetch([])}, clock=c)     # a restarted process
-    assert q.due() is None                                      # both scheduled 60 s out - the schedule persisted
+    q = T.Poller(fetch_fns={"cs2": ok_fetch([]), "csgo": ok_fetch([ev()])}, clock=c)     # a restarted process
+    assert q.due() is None                                      # scheduled 60 s out - the schedule persisted
     c.t += 40
-    assert q.due() in ("cs2", "csgo")
+    assert q.due() == "csgo"
+    for _ in range(6 * 60):                                     # six hours of scheduled polling
+        c.t += 60
+        q.tick()
+    assert {r["path"].rsplit("/", 1)[1] for r in T.request_log()} == {"csgo"}      # never cs2
+    c.t += 61
+    assert q.poll_once("cs2", caller="admin_probe") is True         # an explicit probe still can (same gateway)
+    assert "cs2" in {r["path"].rsplit("/", 1)[1] for r in T.request_log()}
 
 
 def test_autopoll_switch_and_status_shows_schedule_and_blocker(monkeypatch):

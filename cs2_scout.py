@@ -3021,10 +3021,10 @@ def finish_line(res, args):
     res["grader_inputs"]["odds_check"] = copy.deepcopy(res["odds_check"])
     res["grade"] = grade_leg(res["grader_inputs"])
     od_ = res.get("odds") or {}
-    if od_.get("transient") is True or (od_.get("provenance") or {}).get("blip") is True:
-        # Thunderpick has the match but no current quote (owner 2026-10-13: an odds blip is treated like an HLTV blip) - the
-        # board keeps its last grade, the card says so; never set on any other grade. The grade's market input is the one
-        # actually used (provenance: the fallback source or none) - odds_transient_source names it, never Thunderpick
+    if od_.get("transient") is True:
+        # Thunderpick has the match but no current quote AND no eligible fallback price (E1 narrowed by E2, owner
+        # 2026-10-15: a found fallback grades normally - market_odds) - the board keeps its last grade, the card says so;
+        # never set on any other grade. odds_transient_source names what was used (none here), never Thunderpick
         res["grade"]["odds_transient"] = True
         res["grade"]["odds_transient_reason"] = (od_.get("provenance") or {}).get("fallback_reason")
         used = (od_.get("provenance") or {}).get("selected") if od_.get("found") else None

@@ -105,6 +105,8 @@ def eligible(rows, now=None, model=None, controls=CONTROLS):
             out("not graded / scout"); continue
         if r.get("hltv_retry"):
             out("saved grade kept during an outage (stale)"); continue
+        if r.get("unavailable"):
+            out("side not offered by the feed"); continue
         if r.get("grade") not in controls["grades"] or (r.get("units") or 0) <= 0:
             out("below B / no units"); continue
         if r.get("side") not in controls["sides"]:

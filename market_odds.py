@@ -47,10 +47,14 @@ Polymarket is "not readable", never downloaded on a member's clock), OddsPapi ca
 Identical re-checks within REVAL_TTL_S share one evaluation (700 members at once) - a failed evaluation too (waiters never
 re-run it one after another) - never past the selected quote's own expiry or the match start.
 
-Thunderpick blips (owner decision E1, 2026-10-13: "a Thunderpick odds blip is treated like an HLTV blip"): when
-Thunderpick HAS an event for this exact match (linked + matched) but no current quote, the selection is the usual
-fallback (Polymarket / OddsPapi / no market - a member card can still show a temporary grade) marked as temporary:
-top-level transient: True, provenance.blip: True, provenance.fallback_reason = BLIP_TEXT + ": <reason> [availability]".
+Thunderpick blips (owner decision E1, 2026-10-13: "a Thunderpick odds blip is treated like an HLTV blip"; narrowed by
+E2, owner 2026-10-15: "provider outages must not indefinitely freeze the grader"): when Thunderpick HAS an event for
+this exact match (linked + matched) but no current quote, the selection is the usual fallback under the existing rule
+(Polymarket, then OddsPapi - the same matching and freshness as for a match Thunderpick does not list). E2: when that
+fallback FOUND a price, it is a normal selection - not transient - with provenance.blip: True and fallback_reason =
+BLIP_FALLBACK_TEXT + ": <reason> [availability]" (the line grades on the fallback, labelled with its own source and quote
+age). Only when no eligible fallback price exists is it temporary: top-level transient: True, provenance.blip: True,
+provenance.fallback_reason = BLIP_TEXT + ": <reason> [availability]" (E1 handling below).
 provenance.selected / source stay the fallback source (nothing calls it Thunderpick or current); the not-current
 Thunderpick quote is recorded beside it with its OWN retrieval time and age - provenance.tp_last_quote {retrieved_at,
 age_s, source_event_id, match_id, availability, used: False} - never as the input.
@@ -87,15 +91,16 @@ from datetime import datetime, timezone
 
 import polymarket
 
-SELECTION_VERSION = "odds-source-2"
-POLICY = ("odds-source-2 (Thunderpick first, then the existing Polymarket rule, then OddsPapi - live for a member's own "
-          "context build, cache-only otherwise; never a 50% stand-in)")
+SELECTION_VERSION = "odds-source-3"     # 3 (2026-10-15, E2): a Thunderpick blip with a found fallback is not transient
+POLICY = ("odds-source-3 (Thunderpick first, then the existing Polymarket rule, then OddsPapi - live for a member's own "
+          "context build, cache-only otherwise; never a 50% stand-in; a Thunderpick blip grades on a found fallback)")
 OP_CACHE_MAX_AGE_S = 30 * 60   # cache-only OddsPapi: prices a member's grade fetched within one shared context's life
 REVAL_TTL_S = 2.0              # identical re-checks inside this window share one evaluation (load: 700 members at once)
 _REVAL, _REVAL_LOCKS, _REVAL_LOCK = {}, {}, threading.Lock()
 # E1 (owner, 2026-10-13): a Thunderpick odds blip is treated like an HLTV blip - see the module doc
 TP_BLIP_STATES = ("stale", "endpoint_empty")   # a reader that does not say (no "blip" key): these states are blips
-BLIP_TEXT = "Thunderpick quote not current (feed blip) - treated like an outage"
+BLIP_TEXT = "Thunderpick quote not current (feed blip) - treated like an outage"     # no eligible fallback price (E1)
+BLIP_FALLBACK_TEXT = "Thunderpick quote not current (feed blip) - fallback odds used"   # E2: graded on the fallback
 _TP_FAIL = {"since": None}     # the current run of Thunderpick reader failures (recorded; a failure is always a blip)
 
 
@@ -265,7 +270,7 @@ def _op_provenance(a, mode, pm_note):
 
 
 def _finish(o, pv, selected, fallback_reason, tp_av, q, network, op_mode, mrev, now, tp_err=None, pm_err=None,
-            blip=False, tp_last=None):
+            blip=False, tp_last=None, hold=None):
     pv = dict(pv, selection=POLICY, odds_policy=odds_policy(), selected=selected, fallback_reason=fallback_reason,
               tp_availability=tp_av, mapping_rev=mrev, query=dict(q), network=bool(network), oddspapi_mode=op_mode,
               selected_at=_iso(now), tp_error=tp_err, pm_error=pm_err, blip=bool(blip), tp_last_quote=tp_last)
@@ -279,7 +284,7 @@ def _finish(o, pv, selected, fallback_reason, tp_av, q, network, op_mode, mrev, 
         pv["quote_age_s"] = None if ra is None else round(max(0.0, nts - ra), 1)
     o["provenance"] = pv
     o.pop("transient", None)
-    if blip:                        # E1: a temporary fallback - consumers keep the line's last grade / never log it
+    if blip if hold is None else hold:   # E1: no eligible fallback - consumers keep the line's last grade / never log it
         o["transient"] = True
     pv["sig"] = odds_signature(o)
     return copy.deepcopy(o)
@@ -314,9 +319,9 @@ def select(team, opponent, start_iso=None, now=None, tp=None, pm=None, bo=None, 
     to OddsPapi's cache / no market, so revalidate can decide from what the failure means for the CACHED input (it never
     keeps a Thunderpick quote that is no longer current). A Thunderpick reader failure falls through in both modes, with
     the reason and provenance.tp_error (revalidate treats it as unknown, not as a feed state).
-    E1 (owner 2026-10-13): when Thunderpick HAS an event for this match but no current quote (a blip - module doc), the
-    usual fallback selection comes back marked transient (top-level transient: True, provenance.blip: True,
-    fallback_reason starting with BLIP_TEXT); otherwise no mark."""
+    E1 / E2 (module doc): when Thunderpick HAS an event for this match but no current quote (a blip), a found fallback is
+    a normal selection (provenance.blip: True, fallback_reason starting with BLIP_FALLBACK_TEXT); with no eligible fallback
+    the selection comes back marked transient (top-level transient: True, fallback_reason starting with BLIP_TEXT)."""
     q = {"team": team, "opponent": opponent, "start": start_iso, "bo": bo}
     mrev = _mapping_rev()
     tp_fn = tp or _tp_default()
@@ -335,9 +340,9 @@ def select(team, opponent, start_iso=None, now=None, tp=None, pm=None, bo=None, 
         return _finish(out, pv, "thunderpick", None, pv.get("availability") or "current", q, network, None, mrev, now)
     tp_av = t.get("availability")
     blip = bool(t["blip"]) if "blip" in t else tp_av in TP_BLIP_STATES
-    tp_reason = _fallback_text(t.get("reason"), tp_av)
-    if blip:
-        tp_reason = f"{BLIP_TEXT}: {tp_reason}"
+    tp_base = _fallback_text(t.get("reason"), tp_av)
+    tp_reason = f"{BLIP_TEXT}: {tp_base}" if blip else tp_base               # no eligible fallback (E1)
+    tp_fb_reason = f"{BLIP_FALLBACK_TEXT}: {tp_base}" if blip else tp_base   # graded on a found fallback (E2)
     # Thunderpick's last quote for this match when the reader names it (a stale one): recorded with its OWN retrieval time
     # and age - never the selected input, never labelled current
     tp_last = ({"retrieved_at": t.get("quote_retrieved_at"), "age_s": t.get("quote_age_s"),
@@ -352,8 +357,8 @@ def select(team, opponent, start_iso=None, now=None, tp=None, pm=None, bo=None, 
         pm_err = str(e) if isinstance(e, PolymarketNotInMemory) else f"Polymarket error ({type(e).__name__})"
         o = {"found": False, "note": pm_err}
     if o.get("found"):
-        return _finish(o, _pm_provenance(o), "polymarket", tp_reason, tp_av, q, network, None, mrev, now, tp_err,
-                       blip=blip, tp_last=tp_last)
+        return _finish(o, _pm_provenance(o), "polymarket", tp_fb_reason, tp_av, q, network, None, mrev, now, tp_err,
+                       blip=blip, tp_last=tp_last, hold=False)
     pm_note, op_mode, op_note = o.get("note"), None, None
     if opponent:                    # bookmaker price (Pinnacle first) - as before, only with a known opponent
         op_mode = "live" if network else "cache-only"
@@ -365,8 +370,8 @@ def select(team, opponent, start_iso=None, now=None, tp=None, pm=None, bo=None, 
         a = copy.deepcopy(dict(a or {}))
         if a.get("found"):
             a["polymarket_note"] = pm_note
-            return _finish(a, _op_provenance(a, op_mode, pm_note), "oddspapi", tp_reason, tp_av, q, network, op_mode,
-                           mrev, now, tp_err, pm_err, blip=blip, tp_last=tp_last)
+            return _finish(a, _op_provenance(a, op_mode, pm_note), "oddspapi", tp_fb_reason, tp_av, q, network, op_mode,
+                           mrev, now, tp_err, pm_err, blip=blip, tp_last=tp_last, hold=False)
         op_note = a.get("note")
     pv = {"source": None, "market": None, "p_team": None, "match_url": None, "polymarket_note": pm_note,
           "oddspapi_note": op_note}

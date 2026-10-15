@@ -241,6 +241,8 @@ def why_excluded(r, st, model, now):
         return "not graded / scout"
     if r.get("hltv_retry"):
         return "saved grade kept while live data is unavailable (stale - not a current forecast)"
+    if r.get("unavailable"):
+        return r["unavailable"]                       # the feed does not offer this side (server.side_unavailable)
     if r.get("grade") not in GRADES or (r.get("units") or 0) <= 0:
         return "below B / no units (Lean, B-)"
     try:

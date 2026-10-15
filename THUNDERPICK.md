@@ -179,7 +179,7 @@ on identical saved inputs:
   clean period that long, and an empty 200 or a probe success does **not** reset it (production 13:38:06 429 then
   13:39:07 `[]` used to wipe it). 5xx / timeout / network -> 30 s x 2^(n-1); three authentication failures stop all
   requests and raise one alert until the key changes.
-- Both endpoints polled automatically: 60 s each; slower after repeated empty answers (120 / 180 / 300 s) and while
+- Automatic polling: esport/csgo only (2026-10-15 owner: no automatic esport/cs2 discovery probes - always [], and the probe sent ~20 s after a good csgo answer drew 3 of 6 cooldowns; not replaced by a daily request; an explicit admin probe still can). csgo: 60 s; slower after repeated empty answers (120 / 180 / 300 s) and while
   429s persist (120 / 240 / 300 s by the 429s of the last 30 min - it relaxes only as they age out). Schedule, cooldown,
   429 memory, budget and lease survive restarts.
 - Status reads (`/admin/thunderpick.json`, the Moneylines state, `status / public_state / market_types / policy`) never

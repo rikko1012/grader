@@ -285,3 +285,27 @@ def test_match_players_marks_a_kept_grade_stale(tmp_path):
                                    "lineup": ["ZywOo"]}, "exposure": {}}]}
     out = run_page(tmp_path, """(() => { MC.data = INPUT; MC.scope = "12"; drawMatchCompare(); return $("#mcmp").innerHTML; })()""", data)
     assert "stale grade kept" in out and "HLTV database was unreachable" in out
+
+
+@needs_node
+def test_an_unavailable_side_is_labelled_and_never_actionable(tmp_path):
+    from datetime import datetime, timedelta, timezone
+    start = (datetime.now(timezone.utc) + timedelta(hours=4)).isoformat()
+    base = {"book": "prizepicks", "player": "Crisp", "nick": "Crisp", "team": "A", "opponent": "B", "matchup": "A vs B", "start": start,
+            "prop": "kills", "scope": "12", "line": 29.5, "side": "Less", "grade": "B", "p": 0.58, "units": 0.5, "state": "GRADE",
+            "proj": 28.1, "dstat": ["ok", ""], "hltv_retry": "2026-10-14T23:00:00+00:00", "unavailable": "Unavailable\u2014side no longer offered"}
+    rows = [dict(base, id="a"), dict(base, id="b", nick="Drop", player="Drop", side="More", unavailable=None, line=30.5)]
+    out = run_page(tmp_path, """(async () => {
+      BK.prizepicks = {rows: INPUT.rows, at: 1, ver: "", err: null, feed: null, total: INPUT.rows.length, loaded: true}; BK.underdog.loaded = true;
+      assignMatchKeys([...BK.prizepicks.rows]); bbook = "prizepicks"; boardRows = viewRows(bbook); bprop = "both"; bside = "both"; bscope = "12";
+      bview = "all"; $("#bbets").checked = true; drawBoard(); const bets = $("#boardout").innerHTML;
+      $("#bbets").checked = false; drawBoard(); const all = $("#boardout").innerHTML;
+      globalThis.fetch = async u => ({ok: true, json: async () => ({status: "verified", note: ""})});
+      store.set("cs2s_slip", []); await addToSlip(boardCard(INPUT.rows[0]));
+      return {bets, all, slip: store.get("cs2s_slip", []).length, line: pickLine(boardCard(INPUT.rows[0])), isBet: isBet(INPUT.rows[0])}; })()""",
+                   {"rows": rows})
+    assert "Crisp" not in re.sub(r"<[^>]+>", " ", out["bets"]) and "Drop" in out["bets"]       # not a bet
+    txt = re.sub(r"<[^>]+>", " ", out["all"])
+    assert "Unavailable\u2014side no longer offered" in txt and "58.0%" not in txt.split("Drop")[0]
+    assert 'disabled title="Unavailable\u2014side no longer offered"' in out["all"]
+    assert out["slip"] == 0 and out["isBet"] is False and "Unavailable\u2014side no longer offered" in out["line"]
