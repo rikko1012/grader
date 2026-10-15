@@ -648,7 +648,7 @@ def board_payload(book="underdog"):
                                                      "hs_pct", "p_win", "market", "team_name", "opp_name", "match_slug",
                                                      "graded_line", "graded_model", "player_id", "event", "bo", "maps_known",
                                                      "dstat", "source", "support", "concern", "tonight", "hltv_retry",
-                                                     "retry_cause", "cap_grade", "warn")}))
+                                                     "retry_cause", "cap_grade", "warn", "graded_sides")}))
         rows[-1]["scope"] = r.get("scope") or "12"
         x = rows[-1]
         nick = x.get("nick") or x.get("player") or ""
@@ -722,9 +722,13 @@ def side_unavailable(r):
     a retained PrizePicks Under that is no longer offered must say so - 0U alone does not explain availability), else
     None. The row keeps its grade for evaluation; it is excluded from recommendations, copying and slips."""
     side = r.get("side")
-    if (side == "Less" and r.get("under_available") is False) or (side == "More" and r.get("over_available") is False):
-        return SIDE_GONE if r.get("hltv_retry") else SIDE_NOT_OFFERED
-    return None
+    k = "under" if side == "Less" else "over" if side == "More" else None
+    if k is None or r.get(f"{k}_available") is not False:
+        return None
+    gs = r.get("graded_sides")
+    if isinstance(gs, dict):                  # offered when graded, dropped since: no longer offered
+        return SIDE_GONE if gs.get(k) is not False else SIDE_NOT_OFFERED
+    return SIDE_GONE if r.get("hltv_retry") else SIDE_NOT_OFFERED   # a grade from before graded_sides was recorded
 
 
 def _cap_same_result(rows):
@@ -1781,7 +1785,9 @@ def board_forever():
                                       "opp_name": (res.get("next_match") or {}).get("opponent"),
                                       "match_slug": (res.get("next_match") or {}).get("slug"),   # exact match id (settling slips)
                                       "tonight": (pb.get("_env") or {}).get("tonight"),   # LAN / online (match table projections)
-                                      "book": r.get("book") or "underdog", "line_type": lt}
+                                      "book": r.get("book") or "underdog", "line_type": lt,
+                                      # the sides the feed offered when this grade was made (display: "no longer offered")
+                                      "graded_sides": {"under": r.get("under_available"), "over": r.get("over_available")}}
                     res["verdict"] = v
                     try:                                  # immutable comparison snapshot (changes only) + the row's evidence
                         ub = underdog.board()

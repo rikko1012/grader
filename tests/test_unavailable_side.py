@@ -15,6 +15,9 @@ def test_the_label_names_a_side_the_feed_does_not_offer():
     kept = {"side": "Less", "under_available": False, "hltv_retry": "2026-10-14T17:00:00+00:00"}
     assert server.side_unavailable(kept) == server.SIDE_GONE == "Unavailable\u2014side no longer offered"
     assert server.side_unavailable(dict(kept, hltv_retry=None)) == server.SIDE_NOT_OFFERED
+    # graded while the Under was offered, dropped since (retained or not): no longer offered
+    assert server.side_unavailable(dict(kept, hltv_retry=None, graded_sides={"under": True, "over": True})) == server.SIDE_GONE
+    assert server.side_unavailable(dict(kept, graded_sides={"under": False, "over": True})) == server.SIDE_NOT_OFFERED
     assert server.side_unavailable({"side": "More", "over_available": False}) == server.SIDE_NOT_OFFERED
     for ok in ({"side": "Less", "under_available": True}, {"side": "Less"}, {"side": "More", "under_available": False}, {}):
         assert server.side_unavailable(ok) is None
