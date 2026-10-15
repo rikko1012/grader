@@ -83,6 +83,17 @@ data hash 49e7ac29547b86a9). Walk-forward with w refitted on earlier days only: 
 - **Development units still count units of the old slug identity** (a match logged under a BO3.gg slug and hltv-<id> was
   two units then); the forward evaluation uses the canonical match identity (identity.assign).
 
+## fh-1 - full HLTV history for the performance model (registered 2026-10-15; not deployed)
+
+- **Definition:** the live perf-2 formula and parameters unchanged, reading every HLTV match (all tiers) dated before
+  the match day within 420 days, instead of the pinned top-200 history (N0).
+- **Development evidence (ACCURACY_2026-10-15.md):** 12 months, 8,550 scored matches.
+  - Kills MAE +0.131 (+0.118 to +0.143) and better in 10/10 months.
+  - Log score +0.031; HS MAE +0.175; bias -0.70 -> +0.20.
+  - Not demonstrated on the original top-200 set (+0.004).
+  - On archived book lines (41 matches): +0.0015 (-0.0054 to +0.0101).
+- **Forward:** exact as-of replay on matches after 2026-10-16 00:00 UTC. The registered review windows are unchanged.
+
 ## pl-2 - pl-1 with corrected anchor inputs (family `prop-line-2`, id `pl-002-<hash>`, frozen at its first learning cycle after deploy)
 
 **Why.** pl-1 can use boosted PrizePicks anchors and stale or withdrawn other-platform lines. Freezing preserved its
