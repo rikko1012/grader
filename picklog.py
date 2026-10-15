@@ -720,10 +720,19 @@ def _hltv_due(r):
         res = json.loads(r["result"] or "{}")
     except ValueError:
         return False
-    # 2026-10-14: an HLTV-confirmed row that still carries the BO3.gg map detail (confirmations before this date kept it, so
-    # the stored detail could disagree with the confirmed total - 7 Fruju vs MARKandLARRY picks) is due once more: the
-    # confirmation now writes HLTV's own detail and source, after which the row is never due again
-    return res.get("source") == "bo3"
+    if res.get("source") != "bo3":
+        return False
+    if not res.get("hltv_checked") or res.get("review"):
+        return True
+    # 2026-10-14: an HLTV-confirmed row whose stored BO3.gg map detail CONTRADICTS its settled total (confirmations before
+    # this date copied the BO3.gg detail forward - 7 Fruju vs MARKandLARRY picks) is due once more; the confirmation now
+    # writes HLTV's own detail and source. Confirmed rows with consistent detail are not re-queued (they would lengthen the
+    # rotation for new settlements waiting for their first HLTV check).
+    try:
+        t = _scope_total_of(res, r["scope"], r["prop"])
+    except Exception:
+        return False
+    return t is not None and r["actual"] is not None and t != r["actual"]
 
 
 def recheck_bo3_with_hltv(now=None, apply=True, days=7, limit=HLTV_RECHECK_MAX):

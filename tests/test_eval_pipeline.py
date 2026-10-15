@@ -65,12 +65,14 @@ def test_the_production_fault_is_reproduced_and_fixed_from_hltv(db, monkeypatch)
     assert again["checked"] == 0 and len((db / "corrections.jsonl").read_text().splitlines()) == 1
 
 
-def test_a_confirmation_with_consistent_detail_logs_nothing(db, monkeypatch):
-    _pick(1, dict(PROD_536, per_map=[[15, 8], [14, 4]], review=False, reverted_full=False))
+def test_confirmed_rows_with_consistent_detail_are_not_requeued(db, monkeypatch):
+    _pick(1, dict(PROD_536, per_map=[[15, 8], [14, 4]], review=False, reverted_full=False))      # confirmed, detail = total
+    _pick(2, {"source": "bo3", "per_map": [[15, 8], [14, 4]], "rounds": [18, 19], "won": [True, True]})   # never checked
     monkeypatch.setattr(picklog, "scope_result", lambda r, same_day_only=False: dict(HLTV_2399144))
     out = picklog.recheck_bo3_with_hltv(now=NOW)
-    assert out["confirmed"] == 1 and not out.get("detail_fixed") and not (db / "corrections.jsonl").exists()
-    assert json.loads(picklog.export()[0]["result"])["source"] == "hltv"
+    assert out["checked"] == 1 and out["confirmed"] == 1 and not out.get("detail_fixed") and not (db / "corrections.jsonl").exists()
+    res = {p["id"]: json.loads(p["result"]) for p in picklog.export()}
+    assert res[1]["source"] == "bo3" and res[2]["source"] == "hltv"                     # only the unchecked row was due
 
 
 def test_the_revert_never_keeps_the_full_scoreboard_maps_as_the_quick_detail(db):
