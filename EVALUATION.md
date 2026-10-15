@@ -244,3 +244,14 @@ Tests: tests/test_eval_pipeline.py.
     inherits an earlier candidate's forward results or review counter.
   - A forced retrain supersedes the earlier candidate; that candidate's forward rows become development data.
   - Tested: tests/test_eval_pipeline.py.
+
+## 11. Display version gd-1 and pl-2 (2026-10-15)
+
+- **Display gd-1:** the grade members see is the MODEL grade - the letter the unrounded chance earns (existing
+  thresholds). A stake rule that holds a graded pick at 0 units keeps that letter and names the restriction; availability
+  is shown separately. It is versioned by `grade_display.DISPLAY_VERSION`, outside the model hash: no chance, threshold or
+  stake changed. The verdict and every logged forecast keep their grade as before (a 0-unit pick is logged `LEAN`), so
+  grade-cohort evaluation is unchanged and a relabelled grade can never read as a better model. Eligibility (Bets only,
+  built slips, copying) stays on units > 0 and availability.
+- **pl-2 registered** (CHALLENGERS.md): pl-1 with corrected anchor eligibility. Its forward clock starts at its own
+  freeze; pl-1's promotion is blocked, with its record kept.

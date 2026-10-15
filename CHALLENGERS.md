@@ -83,6 +83,54 @@ data hash 49e7ac29547b86a9). Walk-forward with w refitted on earlier days only: 
 - **Development units still count units of the old slug identity** (a match logged under a BO3.gg slug and hltv-<id> was
   two units then); the forward evaluation uses the canonical match identity (identity.assign).
 
+## pl-2 - pl-1 with corrected anchor inputs (family `prop-line-2`, id `pl-002-<hash>`, frozen at its first learning cycle after deploy)
+
+**Why.** pl-1 can use boosted PrizePicks anchors and stale or withdrawn other-platform lines. Freezing preserved its
+record; it did not make those inputs valid. **pl-1 is kept as recorded and still logged**, so that pl-2 vs pl-1 isolates
+input eligibility, but its **promotion is blocked** (status `blocked`; never reviewed).
+
+**Unchanged from pl-1:** weights (kills 0.0, HS 0.25), the normal with the live sd, the half-integer cuts, pushes
+conditioned out, and the kills cap.
+
+**Inputs: only the anchors logged with the forecast at forecast time** (`forecasts.quote.anchors`). They are never taken
+from a later board snapshot.
+- Target: the quote from the feed snapshot the line was graded on.
+- Other: the other platform's offer from its feed cache at that same moment, matched on BO3.gg player id (from that
+  line's own board grade) + canonical match + stat + map scope + standard market type.
+- Each record keeps: source id / market id, line, market type, sides offered, side prices and payouts, the provider's
+  times (`source_updated_at`, `source_seen_at`, PrizePicks `provider_read_at`), and **when our server read its cache**
+  (`observed_at`) - kept distinct from the source quote's age.
+
+**Eligibility, fixed before any outcome:**
+- **Target:**
+  - standard market type (never promo / boosted, alternate, goblin / demon);
+  - both sides confirmed offered by the feed (missing = unknown = not verified);
+  - Underdog side prices equal when shown (unequal = priced off the median);
+  - our cache read no older than 30 min at the forecast (a board pass can be long).
+  - Otherwise there is **no pl-2 forecast** for that line, and the reason is recorded.
+- **Other platform:** the same rules, a cache read no older than 10 min, and its feed state ok. Otherwise it is not used,
+  its reason is recorded, and the eligible target line anchors alone.
+- **Labels:** Underdog with equal side prices = price-supported. PrizePicks (no side prices) = price-unverified; its
+  ordinary lines are not invalid, but equal probability is never inferred.
+
+**Comparison set (pl-2's own; never mixed with pl-1's C1).** Arms on pl-2's eligible forward cohort:
+- A2: the target line only.
+- B2: the corrected anchor (target + eligible other platform).
+- C2: pl-2.
+- D: live.
+
+Reported:
+- coverage and every rejection reason;
+- the other platform's use and rejection reasons;
+- the subset where the other platform CHANGED the anchor (an identical line adds no information);
+- the kills identity C2 = B2 (exact);
+- an exact replay of every pl-2 value from its logged trace (`learning.pl2_replay`);
+- point forecasts: MAE for median-type quantities, RMSE for the mean;
+- probability scores, separately.
+
+**Forward clock:** from pl-2's own freeze. Only forecasts logged after it, before the match start, count. Same registered
+review windows.
+
 ## pl-1 - corrections and experiment definition (2026-10-15, owner review; pl-1 itself unchanged)
 
 pl-1 = `pl-001-bb351ec5`, frozen 2026-10-15 02:22:18 UTC. Its code, weights and logged rows are unchanged. These

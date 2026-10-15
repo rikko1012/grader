@@ -631,6 +631,78 @@ def _row_match_id(row):
         return None
 
 
+def _iso_any(t):
+    if t in (None, "", 0):
+        return None
+    if isinstance(t, (int, float)):
+        return datetime.fromtimestamp(t, timezone.utc).isoformat(timespec="seconds")
+    return str(t)
+
+
+def feed_meta(book, b=None):
+    """When OUR server read the platform's feed into its cache (observed_at) - distinct from the provider's own times -
+    and the feed's state. b: a board() answer already in hand (the board pass's own snapshot)."""
+    try:
+        b = b if b is not None else (prizepicks.board() if book == "prizepicks" else underdog.board())
+    except Exception:
+        return None
+    if book == "prizepicks":
+        return {"book": book, "observed_at": _iso_any(b.get("ingested_at")), "provider_read_at": _iso_any(b.get("at")),
+                "feed_state": b.get("state")}
+    return {"book": book, "observed_at": _iso_any(b.get("at")), "provider_read_at": None,
+            "feed_state": "failed" if b.get("error") else ("ok" if b.get("at") else "loading")}
+
+
+def quote_record(book, r, meta):
+    """One platform's offer exactly as read: ids, line, market type, the sides offered, prices / payouts, the provider's
+    timestamps and when our cache read it (pl-2 anchor inputs, 2026-10-15)."""
+    if book == "prizepicks":
+        mt = r.get("odds_type") or "standard"
+        over, under = r.get("over_available"), r.get("under_available")
+    else:
+        mt = "alt" if r.get("alt") else "standard"
+        over = None if r.get("higher") is None else True
+        under = None if r.get("lower") is None else True
+    return {"book": book, "source_id": r.get("id"), "market_id": r.get("market_id"), "line": r.get("line"), "market_type": mt,
+            "over_offered": over, "under_offered": under, "price_over": r.get("price_higher"), "price_under": r.get("price_lower"),
+            "payout_over": r.get("higher"), "payout_under": r.get("lower"), "source_updated_at": r.get("updated_at"),
+            "source_seen_at": r.get("seen_at"), **{k: (meta or {}).get(k) for k in ("observed_at", "provider_read_at", "feed_state")}}
+
+
+def other_anchor(book, player_id, slug, st, prop, scope):
+    """The OTHER platform's offer for exactly this player (BO3.gg id from its own board grade) x canonical match x stat x
+    maps, from its feed cache at this moment. -> (quote record | None, reason | None). Unknown identity = no anchor."""
+    ob = "underdog" if book == "prizepicks" else "prizepicks"
+    try:
+        b = prizepicks.board() if ob == "prizepicks" else underdog.board()
+    except Exception:
+        return None, "other platform feed unreadable"
+    meta = feed_meta(ob, b)
+    if not player_id:
+        return None, "player id unknown"
+    cand = []
+    for x in b.get("rows") or []:
+        if x.get("prop") != prop or (x.get("scope") or "12") != scope:
+            continue
+        gb = BOARD.get(x.get("id")) or {}
+        if gb.get("player_id") != player_id or not same_match({"match_slug": gb.get("match_slug"), "start": x.get("start")}, slug, st):
+            continue
+        cand.append(x)
+    if not cand:
+        return None, "no identified line of the other platform for this player / match / stat / maps in its current read"
+    if ob == "underdog":
+        std = [x for x in cand if not x.get("alt")]
+    else:
+        std = [x for x in cand if (x.get("odds_type") or "standard") in ("standard", "promo")]
+    if not std:
+        return None, "the other platform offers only adjusted / alternate lines here"
+    plain = [x for x in std if (x.get("odds_type") or "standard") == "standard"]
+    pick = plain if plain else std
+    if len(pick) > 1:
+        return None, f"ambiguous: {len(pick)} standard lines on the other platform"
+    return dict(quote_record(ob, pick[0], meta), matched_on="player_id + canonical match + stat + maps"), None
+
+
 def board_at_iso(book):
     """The fetch time of a platform's board as ISO UTC (None when unknown) - recorded with each board forecast's quote."""
     try:
@@ -1728,6 +1800,7 @@ def board_forever():
             # both platforms' lines, each graded at its own line and market type with the same pipeline (same
             # projection for the same player / match / stat / maps and model version; only the line differs)
             feeds = {"underdog": underdog.board(wait=True), "prizepicks": prizepicks.board(wait=True)}
+            pass_meta = {bk_: feed_meta(bk_, fb_) for bk_, fb_ in feeds.items()}     # pl-2 anchors: the graded snapshot
             rows = feeds["underdog"]["rows"] + feeds["prizepicks"]["rows"]
             now = datetime.now(timezone.utc).isoformat()
             # Underdog alternates stay ungraded (as before); PrizePicks goblin / demon are their own markets and are graded
@@ -1831,6 +1904,15 @@ def board_forever():
                                              "feed_odds_type": r.get("odds_type") or ("alt" if r.get("alt") else "standard"),
                                              "over_available": r.get("over_available"), "under_available": r.get("under_available"),
                                              "updated_at": r.get("updated_at"), "board_at": board_at_iso(r.get("book") or "underdog")}}
+                    try:                                  # pl-2 anchor inputs (shadow measurement only), atomically now
+                        bk1 = r.get("book") or "underdog"
+                        nm1 = res.get("next_match") or {}
+                        oq, oy = other_anchor(bk1, (pb.get("player") or {}).get("id"), nm1.get("slug"), comparison._ts(nm1.get("start")),
+                                              r["prop"], r.get("scope") or "12")
+                        res["book"]["quote"]["anchors"] = {"target": quote_record(bk1, r, pass_meta.get(bk1)), "other": oq, "other_reason": oy,
+                                                           "built_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+                    except Exception:
+                        traceback.print_exc()
                     if not grade_transient(g):                # never logged as a forecast of the live model (calibration cohorts)
                         try:
                             picklog.log_async(res, v, test=2)

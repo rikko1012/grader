@@ -135,6 +135,15 @@ function draw() {
     <h3>Challengers on the same board forecasts (forward, interim)</h3>
     ${table(["Challenger", "Units", "Matches", "Changed", "Log loss live", "Challenger", "Gain (+ = challenger better)", "95%"], (PR1.challengers || []).map(c =>
       `<tr><td>${esc(c.id)}</td><td>${c.units ?? 0}</td><td>${c.matches ?? 0}</td><td>${c.changed_units ?? "–"}</td><td>${n4(c.log_loss_live_replay)}</td><td>${n4(c.log_loss_challenger)}</td><td>${n4(c.gain)}</td><td>${ci(c.gain_ci, n4)}</td></tr>`))}
+    ${(PR1.challengers || []).filter(c => c.c1_pl2).map(c => { const m = c.c1_pl2, pf = m.point_forecasts || {};
+      const pr = (xs) => (xs || []).map(x => `${esc(x.label)} ${n4(x.gain)} (${ci(x.ci, n4)}, ${x.units ?? 0} units / ${x.matches ?? 0} matches)`).join(" · ");
+      return `<div class="small"><b>${esc(c.id)} - corrected anchors</b> (frozen ${when(m.frozen_at)}; arms on pl-2's own eligible cohort: A2 target line only · B2 corrected anchor · C2 pl-2 · D live; + = first-named better)
+        <br>Coverage: ${m.eligible_units ?? 0} of ${m.forward_units ?? 0} forward book-line units (${pc(m.coverage)}) · ${m.eligible_matches ?? 0} matches · rejected: ${(m.rejections || []).map(r => `${esc(r.reason)} (${r.units})`).join(" · ") || "none"}
+        <br>Other platform used on ${m.other_used ?? 0} units, changed the anchor on ${m.anchor_changed ?? 0}; not used: ${(m.other_rejections || []).map(r => `${esc(r.reason)} (${r.units})`).join(" · ") || "–"}
+        <br>${pr(m.pairs)}${(m.pairs_anchor_changed || []).length ? `<br>Where the other platform changed the anchor: ${pr(m.pairs_anchor_changed)}` : ""}
+        <br>Kills identity (C2 = B2): ${(m.identity_kills || {}).pl2_differs_from_B2 ?? "–"} differ · exact replay mismatches: ${m.replay_mismatches ?? 0} · target price labels ${esc(JSON.stringify(m.target_price_labels || {}))}
+        <br>Point forecasts: ${Object.entries(pf).map(([k, v]) => `${esc(k)} - MAE (median-type) ${Object.entries(v.mae_median_type || {}).map(([a, b]) => `${esc(a)} ${n2(b)}`).join(", ")}; RMSE (mean-type) independent HLTV mean ${n2((v.rmse_mean_type || {})["independent HLTV mean"])}`).join(" · ") || "–"}</div>`; }).join("")}
+    ${(PR1.challengers || []).filter(c => c.promotion).map(c => `<div class="small"><b>${esc(c.id)}</b>: <span class="pill off">${esc(c.promotion)}</span></div>`).join("")}
     ${(PR1.challengers || []).filter(c => c.c1).map(c => { const m = c.c1, pf = m.point_forecasts || {};
       const pr = (xs) => (xs || []).map(x => `${esc(x.label)} ${n4(x.gain)} (${ci(x.ci, n4)}, ${x.units ?? 0} units / ${x.matches ?? 0} matches)`).join(" · ");
       return `<div class="small"><b>${esc(c.id)} - comparison set C1</b> (registered ${when(m.registered)}; A target line only · B target + other platform's line (line-anchored baseline) · C ${esc(c.id)} · D live; + = first-named better): ${pr(m.pairs)}

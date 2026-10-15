@@ -313,7 +313,8 @@ def test_pl1_is_frozen_and_shadowed_on_forward_board_forecasts(db, tmp_path):
     learning.run_cycle(now=t0, picks=[], forecasts=[], batches=[], corrections=[], db=ldb, train=False)
     con = learning.connect(ldb)
     ch = con.execute("SELECT * FROM challengers WHERE family = 'prop-line-1'").fetchone()
-    assert ch["status"] == "shadow" and ch["frozen_at"] == "2026-10-15T02:00:00+00:00" and json.loads(ch["config"])["w"] == {"kills": 0.0, "hs": 0.25}
+    # 2026-10-15 owner: pl-1's promotion is blocked (known anchor defects); it keeps logging for the pl-2 comparison
+    assert ch["status"] == "blocked" and ch["frozen_at"] == "2026-10-15T02:00:00+00:00" and json.loads(ch["config"])["w"] == {"kills": 0.0, "hs": 0.25}
     _row(1, "a", "x-vs-y-16-10-2026", 28.5, 2, "underdog", logged="2026-10-16T10:00:00+00:00", start="2026-10-16T15:00:00Z")
     gi = {"perf": {"version": "perf-2", "lambda": 31.0, "sd": 6.0}}
     con2 = picklog._db()

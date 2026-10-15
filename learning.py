@@ -225,6 +225,123 @@ def _ensure_prop_line(con, now):
     con.execute("INSERT INTO events (at, kind, detail) VALUES (?,?,?)", (_iso(now), "challenger", json.dumps({"id": cid, "status": "shadow"})))
 
 
+# pl-2 - pl-1 with CORRECTED ANCHOR INPUTS (owner 2026-10-15). Same weights and the same probability calculation as pl-1,
+# so pl-2 vs pl-1 isolates input eligibility. Inputs: ONLY the anchors logged with the forecast at forecast time
+# (forecasts.quote.anchors: the target's quote from the snapshot it was graded on, the other platform's offer from its
+# cache at that moment, matched on BO3.gg player id + canonical match + stat + maps + standard market type; ids, line,
+# market type, sides offered, prices / payouts, provider times and our cache-read time). Rules fixed before any outcome:
+#   target  standard market type (never promo / boosted, alternate, goblin / demon); both sides offered per the feed
+#           (missing = unknown = not verified); Underdog side prices equal when shown (unequal = priced off the median);
+#           our cache read of it <= 30 min before the forecast (a board pass can be long); else NO pl-2 forecast.
+#   other   the same rules, its cache read <= 10 min before the forecast and its feed state ok; else not used (reason
+#           recorded) and the target line alone anchors.
+#   label   Underdog equal side prices = price-supported; PrizePicks (no side prices) = price-unverified - never treated
+#           as equal probability.
+PROP_LINE_2 = {"family": "prop-line-2", "w": dict(PROP_LINE["w"]), "spread": PROP_LINE["spread"], "cap_kills": PROP_LINE["cap_kills"],
+               "base": "pl-1 (same weights and probability calculation; corrected anchor eligibility only)",
+               "target_max_age_min": 30, "other_max_age_min": 10,
+               "ineligible_market_types": ["promo", "alt", "goblin", "demon"],
+               "inputs": "forecasts.quote.anchors logged at forecast time - never a later snapshot",
+               "registered": "2026-10-15"}
+
+
+def _age_min(t_obs, t_fc):
+    a, b = _ts(t_obs), _ts(t_fc)
+    return None if a is None or b is None else (b - a).total_seconds() / 60.0
+
+
+def anchor_eligible(q, t_fc, max_age, cfg=PROP_LINE_2):
+    """(eligible, reason, price_label) for one logged quote record. Missing evidence is unknown, never verified."""
+    if not q:
+        return False, "no quote recorded", None
+    if (q.get("market_type") or "") in cfg["ineligible_market_types"] or (q.get("market_type") or "") != "standard":
+        return False, f"market type {q.get('market_type')!r} (boosted / alternate / adjusted)", None
+    if q.get("over_offered") is not True or q.get("under_offered") is not True:
+        return False, "both sides not confirmed offered by the feed", None
+    age = _age_min(q.get("observed_at"), t_fc)
+    if age is None:
+        return False, "cache-read time unknown (freshness not verified)", None
+    if age > max_age or age < -1:
+        return False, f"cache read {age:.0f} min before the forecast (limit {max_age})", None
+    if q.get("feed_state") not in (None, "ok") and q.get("book") == "prizepicks":
+        return False, f"feed state {q.get('feed_state')}", None
+    if q.get("book") == "underdog":
+        po, pu = q.get("price_over"), q.get("price_under")
+        if po is not None and pu is not None:
+            if abs(float(po) - float(pu)) > 1e-9:
+                return False, "unequal side prices (priced off the median)", None
+            return True, None, "price-supported"
+        return True, None, "price-unverified"
+    return True, None, "price-unverified"
+
+
+def prop_line_2_value(f, feat, quote, cfg=PROP_LINE_2):
+    """pl-2 for one forecast copy from its OWN logged anchors: (p, location, trace) or (None, None, reason / trace)."""
+    pf = feat.get("perf") or {}
+    if f["source"] not in ("board", "board_pp") or (f["line_type"] or "standard") != "standard" or not f["book"]:
+        return None, None, {"reject": "not a standard book line"}
+    if f["prop"] not in cfg["w"] or not pf.get("lambda") or not pf.get("sd") or f["line"] is None:
+        return None, None, {"reject": "no performance-model projection / spread"}
+    an = (quote or {}).get("anchors") or {}
+    if not an:
+        return None, None, {"reject": "no anchors logged with this forecast"}
+    tq, oq = an.get("target"), an.get("other")
+    ok_t, why_t, lab_t = anchor_eligible(tq, f["logged_at"], cfg["target_max_age_min"], cfg)
+    if not ok_t:
+        return None, None, {"reject": f"target: {why_t}", "target": tq}
+    line = float(f["line"])
+    if tq.get("line") is not None and abs(float(tq["line"]) - line) > 1e-9:
+        return None, None, {"reject": "logged target quote is another line", "target": tq}
+    if oq:
+        ok_o, why_o, lab_o = anchor_eligible(oq, f["logged_at"], cfg["other_max_age_min"], cfg)
+    else:
+        ok_o, why_o, lab_o = False, an.get("other_reason") or "no other-platform offer", None
+    lines = [line] + ([float(oq["line"])] if ok_o else [])
+    m = sum(lines) / len(lines)
+    lam, sd = float(pf["lambda"]), float(pf["sd"])
+    mu = m + cfg["w"][f["prop"]] * (lam - m)
+    pc = _normal_over(mu, sd, line, f["prop"], cfg["cap_kills"])
+    trace = {"lam_independent": round(lam, 4), "sd": round(sd, 4), "line": line, "anchor": round(m, 4), "w": cfg["w"][f["prop"]],
+             "location": round(mu, 4), "p_target_only": _normal_over(line, sd, line, f["prop"], cfg["cap_kills"]),
+             "p_anchor": _normal_over(m, sd, line, f["prop"], cfg["cap_kills"]), "p_pl2": pc,
+             "target_label": lab_t, "other_used": bool(ok_o), "other_reason": None if ok_o else why_o, "other_label": lab_o if ok_o else None,
+             "other_line": float(oq["line"]) if ok_o else None, "anchor_changed": bool(ok_o and abs(float(oq["line"]) - line) > 1e-9),
+             "target": tq, "other": oq}
+    return pc, mu, trace
+
+
+def pl2_replay(trace, prop, cfg=PROP_LINE_2):
+    """Recompute pl-2's chance from its logged trace alone (exact-replay check)."""
+    lines = [trace["line"]] + ([trace["other_line"]] if trace.get("other_used") else [])
+    m = sum(lines) / len(lines)
+    mu = m + cfg["w"][prop] * (trace["lam_independent"] - m)
+    return _normal_over(mu, trace["sd"], trace["line"], prop, cfg["cap_kills"])
+
+
+PL1_BLOCK = ("promotion blocked (owner 2026-10-15): known anchor-quality defects - boosted / promo PrizePicks anchors and "
+             "other-platform lines with no staleness limit. Forecasts and results kept; still logged so pl-2 vs pl-1 isolates "
+             "input eligibility; never reviewed for promotion")
+
+
+def _ensure_prop_line_2(con, now):
+    """Freeze pl-2 once (its forward test = forecasts logged after this moment) and block pl-1's promotion."""
+    for r in con.execute("SELECT id FROM challengers WHERE family = ? AND status IN ('shadow', 'eligible_for_review')",
+                         (PROP_LINE["family"],)).fetchall():
+        _challenger_status(con, r["id"], "blocked", PL1_BLOCK, now)
+    if con.execute("SELECT 1 FROM challengers WHERE family = ?", (PROP_LINE_2["family"],)).fetchone():
+        return
+    h = _sha(PROP_LINE_2)
+    cid = f"pl-002-{h[:8]}"
+    base = con.execute("SELECT id FROM challengers WHERE family = ?", (PROP_LINE["family"],)).fetchone()
+    con.execute("INSERT INTO challengers (id, family, created_at, frozen_at, snapshot_id, data_hash, training_cutoff, config, "
+                "config_hash, base_config, status, status_at, status_reason, revises, development) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (cid, PROP_LINE_2["family"], _iso(now), _iso(now), None, PROP_LINE["data_hash"], PROP_LINE["training_cutoff"],
+                 json.dumps(PROP_LINE_2, sort_keys=True), h, json.dumps({"live": "logged chance"}), "shadow", _iso(now),
+                 "frozen (owner 2026-10-15); forward test = book-line forecasts logged after the freeze, from their logged anchors",
+                 base["id"] if base else None, "[]"))
+    con.execute("INSERT INTO events (at, kind, detail) VALUES (?,?,?)", (_iso(now), "challenger", json.dumps({"id": cid, "status": "shadow"})))
+
+
 def _ensure_line_blend(con, now):
     """Freeze the line-blend challenger once (its forward test = forecasts logged after this moment)."""
     if con.execute("SELECT 1 FROM challengers WHERE family = ?", (LINE_BLEND["family"],)).fetchone():
@@ -1438,6 +1555,68 @@ def _prop_line_extras(con, cid, pr):
     return {"c1": out}
 
 
+def _prop_line_2_extras(con, ch, us):
+    """pl-2's comparison set, all arms on pl-2's OWN eligible cohort (forward P1 units where pl-2 has a forecast):
+    A2 target line only, B2 the corrected anchor (target + eligible other platform), C2 pl-2, D live; coverage and every
+    rejection reason; the subset where the other platform actually CHANGED the anchor (an identical line adds nothing);
+    point forecasts with MAE (median-type: target line, anchor, pl-2 location) and RMSE (the mean lam_H); exact replay."""
+    fwd = [u for u in us if u["logged"] > ch["frozen_at"] and u["start"] > ch["frozen_at"]]
+    rej, el = collections.Counter(), []
+    replay_bad = 0
+    for u in fwd:
+        s_ = con.execute("SELECT p_over_ch, note FROM shadow WHERE challenger_id = ? AND forecast_id = ?", (ch["id"], u["forecast_id"])).fetchone()
+        if s_ is None:
+            rej["not shadowed yet"] += 1
+            continue
+        try:
+            t = json.loads(s_["note"] or "{}") or {}
+        except ValueError:
+            t = {}
+        if s_["p_over_ch"] is None:
+            rej[(t.get("reject") or "no value").split(" (")[0]] += 1
+            continue
+        if abs(pl2_replay(t, u["prop"]) - s_["p_over_ch"]) > 1e-12:
+            replay_bad += 1
+        el.append(dict(u, t=t, pA=t["p_target_only"], pB=t["p_anchor"], pC=s_["p_over_ch"], pD=u["p"]))
+    out = {"registered": PROP_LINE_2["registered"], "frozen_at": ch["frozen_at"], "forward_units": len(fwd),
+           "eligible_units": len(el), "eligible_matches": len({u["match"] for u in el}), "coverage": _r(len(el) / len(fwd), 3) if fwd else None,
+           "rejections": [{"reason": k, "units": v} for k, v in rej.most_common()], "replay_mismatches": replay_bad,
+           "other_used": sum(1 for u in el if u["t"].get("other_used")), "anchor_changed": sum(1 for u in el if u["t"].get("anchor_changed")),
+           "other_rejections": [{"reason": k, "units": v} for k, v in collections.Counter(
+               (u["t"].get("other_reason") or "").split(" (")[0] for u in el if not u["t"].get("other_used")).most_common()]}
+    if not el:
+        return {"c1_pl2": out}
+
+    def gain(rs, a, b):
+        f = lambda u: _ll(u["p" + b], u["over"]) - _ll(u["p" + a], u["over"])
+        return {"units": len(rs), "matches": len({u["match"] for u in rs}), "gain": _r(sum(f(u) for u in rs) / len(rs), 5) if rs else None,
+                "ci": _ci_ratio(_groups(rs, f)) if rs else None}
+    pairs = (("B", "A", "corrected anchor vs target line only"), ("A", "D", "target line only vs live"), ("B", "D", "corrected anchor vs live"),
+             ("C", "B", "pl-2 vs corrected anchor"), ("C", "D", "pl-2 vs live"))
+    out["log_loss"] = {k: _r(sum(_ll(u["p" + k], u["over"]) for u in el) / len(el), 5) for k in "ABCD"}
+    out["pairs"] = [dict(gain(el, a, b), pair=f"{a}2 vs {b}2" if b != "D" else f"{a}2 vs D", label=lab) for a, b, lab in pairs]
+    ch_ = [u for u in el if u["t"].get("anchor_changed")]
+    out["pairs_anchor_changed"] = [dict(gain(ch_, a, b), label=lab) for a, b, lab in pairs[:1] + pairs[3:4]]
+    k = [u for u in el if u["prop"] == "kills"]
+    out["identity_kills"] = {"units": len(k), "pl2_differs_from_B2": sum(1 for u in k if abs(u["pC"] - u["pB"]) > 1e-12),
+                             "rule": "kills w = 0: pl-2 equals its corrected anchor B2 exactly"}
+    labels = collections.Counter(u["t"].get("target_label") for u in el)
+    out["target_price_labels"] = dict(labels)
+    pts = {}
+    for prop in ("kills", "hs"):
+        g = [u for u in el if u["prop"] == prop]
+        if g:
+            mae = lambda fn: _r(sum(abs(fn(u) - u["actual"]) for u in g) / len(g), 3)
+            rmse = lambda fn: _r(math.sqrt(sum((fn(u) - u["actual"]) ** 2 for u in g) / len(g)), 3)
+            pts[prop] = {"units": len(g),
+                         "mae_median_type": {"target line": mae(lambda u: u["t"]["line"]), "corrected anchor": mae(lambda u: u["t"]["anchor"]),
+                                             "pl-2 location": mae(lambda u: u["t"]["location"])},
+                         "rmse_mean_type": {"independent HLTV mean": rmse(lambda u: u["t"]["lam_independent"])},
+                         "rmse_for_reference": {"target line": rmse(lambda u: u["t"]["line"]), "pl-2 location": rmse(lambda u: u["t"]["location"])}}
+    out["point_forecasts"] = pts
+    return {"c1_pl2": out}
+
+
 def product_scorecard(con, rows=None):
     us, excl = product_units(con, rows)
     out = {"protocol": PRODUCT, "units": len(us), "matches": len({u["match"] for u in us}),
@@ -1483,6 +1662,9 @@ def product_scorecard(con, rows=None):
         row = dict(paired_stats(pr, slope=False), id=ch["id"], label="P1 board lines, forward (interim - decisions only at the registered windows)")
         if ch["family"] == PROP_LINE["family"]:
             row.update(_prop_line_extras(con, ch["id"], pr))
+            row["promotion"] = PL1_BLOCK if ch["status"] == "blocked" else None
+        elif ch["family"] == PROP_LINE_2["family"]:
+            row.update(_prop_line_2_extras(con, ch, us))
         out["challengers"].append(row)
     return out
 
@@ -1744,16 +1926,29 @@ def shadow_step(con, now, limit=4000, picks=None):
     """Live and challenger chances side by side for every forecast logged after each active challenger's freeze."""
     n = 0
     board_idx = None
-    for ch in con.execute("SELECT * FROM challengers WHERE status IN ('shadow', 'eligible_for_review')").fetchall():
+    for ch in con.execute("SELECT * FROM challengers WHERE status IN ('shadow', 'eligible_for_review', 'blocked')").fetchall():
         cfg, base = json.loads(ch["config"]), json.loads(ch["base_config"])
         blend = ch["family"] == LINE_BLEND["family"]
         propline = ch["family"] == PROP_LINE["family"]
+        propline2 = ch["family"] == PROP_LINE_2["family"]
         todo = con.execute("SELECT f.* FROM forecast_copy f WHERE f.logged_at > ? AND NOT EXISTS (SELECT 1 FROM shadow s "
                            "WHERE s.challenger_id = ? AND s.forecast_id = f.forecast_id) ORDER BY f.forecast_id LIMIT ?",
                            (ch["frozen_at"], ch["id"], limit)).fetchall()
         for i, f in enumerate(todo):
             feat = json.loads(f["features"] or "{}")
             pl = p_over_of(dict(f))
+            if propline2:                                 # pl-2: only the anchors logged with this forecast
+                try:
+                    q = json.loads(f["quote"]) if "quote" in f.keys() and f["quote"] else None
+                except (ValueError, TypeError):
+                    q = None
+                pc, mu, tr = prop_line_2_value(dict(f), feat, q, cfg)
+                con.execute("INSERT OR IGNORE INTO shadow (challenger_id, forecast_id, p_over_ch, p_over_base, p_over_logged, lam_ch, lam_base, "
+                            "changed, computed_at, note) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                            (ch["id"], f["forecast_id"], pc, pl, pl, mu, (tr or {}).get("lam_independent", f["lambda"]),
+                             int(pc is not None and pl is not None and abs(pc - pl) > 1e-9), _iso(now), json.dumps(tr, sort_keys=True, default=str)))
+                n += 1
+                continue
             if propline:                                  # pl-1: needs the unit's board lines at the forecast's time
                 if board_idx is None:
                     board_idx = _board_line_index(con, picks)
@@ -2067,6 +2262,7 @@ def run_cycle(now=None, picks=None, forecasts=None, batches=None, corrections=No
             _ensure_baseline(con, now)
             _ensure_line_blend(con, now)
             _ensure_prop_line(con, now)
+            _ensure_prop_line_2(con, now)
             log = {"at": _iso(now)}
             # 1. copy new forecasts (immutable), in pages
             if picks is None:
