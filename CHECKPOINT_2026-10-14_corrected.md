@@ -14,6 +14,7 @@ performance only. Passing tests and the correctness releases say nothing about w
 
 | item | status |
 |---|---|
+| Current production | commit `27ddd39`, model tag `a310d76b55` (no settled book line yet) |
 | Correctness deployments | `23bea2fe37` live 2026-10-14 22:53:13 UTC (audit fixes + N0 pin n0-r3); `6b6a43f2a6` 00:38:11 UTC (n0-r4); evaluation pipeline 0fafa17 01:02:42 UTC and bc5bef5 (no hashed file: tag unchanged); `a310d76b55` 01:11 UTC (release session: Thunderpick outage repairs) |
 | Forecast log recovered | **complete**: ids 1-26,575 through the new bounded `/admin/forecasts_page.json` (fixed cutoff 26,575, 67 pages of 400 with inputs, no gap or duplicate; the 6,685 rows already held match exactly). Production: no restart, 0 5xx, memory 378 to 921 MB (warm-up). Every Render snapshot is now exact |
 | Railway records | **not recoverable here**: Railway is shut down; its forecast log exists only to 2026-10-08 23:24 UTC and its picks export stops 2026-10-10 16:42. Railway Oct 9-10 snapshots are a separate SUPPLEMENTAL analysis, never pooled. Railway's volume (project "thriving-insight") would be the only source if the owner restores it |
@@ -135,8 +136,12 @@ bankroll allocation.
   +0.002 (-0.025 to +0.032). Not distinguishable from 50% on 15 matches, and not demonstrably worse than printed either.
 - **No settled book line yet** for the versions after it (`23bea2fe37`, `6b6a43f2a6`, `a310d76b55`).
 - **The pooled weakness is concentrated in Oct 11-12** (313626ab10 / 0d6b117256 / c80ac64bc8: 145 units / 10 matches,
-  printed 57.6%, happened 33.1%). Ten matches cannot separate a version effect from a bad slate. The current version's
-  performance cannot be inferred from the pooled figure.
+  printed 57.6%, happened 33.1%). Ten matches cannot separate a version effect from a bad slate. No version's
+  performance, including production's, can be inferred from the pooled figure.
+- **Versions.** `6f6e2d39d7` is a historical version: the most recent one with settled book lines, and the version
+  that produced most of the forecasts affected by the backfill (section 8b). **Current production is commit
+  `27ddd39`, model tag `a310d76b55`**. It has no settled book line yet, so this report says nothing about its
+  accuracy.
 - **Old vs backfilled history:** N0 311 / 20 m, gain -0.035 (-0.062 to -0.008); partial + N 324 / 18 m, +0.005. Those
   are different days and versions, so the difference can't be attributed to the history.
 
@@ -212,7 +217,14 @@ rr-1 +0.0023 (17 m), match_m1 +0.0072 (-0.0035 to +0.0184, 42 m), and perf-1's k
 ## 8b. Forecasts affected by the unintended backfill
 
 **Method.**
-- Source: the complete export (ids 1-26,575, cutoff 2026-10-15 01:05:40 UTC), counted by the release session.
+- **Cutoff: these counts cover forecasts logged up to 2026-10-15 01:05:40 UTC (forecast ids 1-26,575). They are not
+  lifetime totals.** Forecasts logged after the cutoff (under `6b6a43f2a6` and `a310d76b55`, both on the N0 pin) are
+  not in them.
+- Source: the complete export, counted by the release session.
+- **Forecast rows are logged predictions, not bets.** Every changed regrade of a line before its match is a new row. So
+  20,290 affected rows are 2,232 distinct pick lines (a player x match x stat x scope x line x market type, as logged),
+  773 distinct evaluation units (player x match x stat x scope) and 51 distinct matches (canonical identity). Load-test
+  rows are excluded from those three counts.
 - The totals per class were checked independently here and agree.
 - Classes come from each forecast's own `data_rev`, not clock windows: `23bea2fe37` logged from 22:52:52, 21 s before
   its first answer. Origin is from the picks export: member = test 0, board = test 2, load test = test 1.
@@ -232,6 +244,20 @@ rr-1 +0.0023 (17 m), match_m1 +0.0072 (-0.0035 to +0.0184, 42 m), and perf-1's k
 | N0 pin n0-r3, exact (pre=8597) | 23bea2fe37 | 6 | 46 | 52 |
 | N0 pin n0-r4 (to the cutoff; + 1 load-test row) | 6b6a43f2a6 | 61 | 465 | 527 |
 | not affected: before 00:49 (5,019) + 3 old-scan rows inside 00:49-04:26 | | | | 5,022 |
+
+Forecast rows vs distinct props and matches, same cutoff:
+
+| class | forecast rows | distinct pick lines | distinct units | distinct matches |
+|---|---:|---:|---:|---:|
+| not affected (before 00:49 + 3 old-scan rows) | 5,022 | 1,421 | 478 | 29 |
+| partial backfill | 315 | 241 | 135 | 13 |
+| repaired history N | 19,975 | 2,126 | 760 | 50 |
+| **affected (partial + N)** | **20,290** | **2,232** | **773** | **51** |
+| N0 pin n0-r3 (`23bea2fe37`): its own imperfect-pin cohort, never pooled with n0-r4 | 736 | 547 | 340 | 21 |
+| N0 pin n0-r4 (`6b6a43f2a6`) | 527 | 505 | 330 | 20 |
+
+Classes overlap in pick lines, units and matches (one line can be regraded under several histories), so those columns
+do not add up. Rows do.
 
 Check: 5,022 + 315 + 19,975 + 736 + 527 = 26,575. The earlier "367 partial" figure came from an incomplete export. The
 same table is in MODEL_VERSIONS.md under "Affected forecasts".
@@ -293,7 +319,27 @@ Production, read-only checks on 2026-10-15:
   review.** That is identical to the independent reconstruction in this report. P1 product scorecard: 634 units /
   36 matches (this report: 635; the one unit held for review is excluded there).
 - **Advance on newly settled matches, confirmed:** the 01:41:13 UTC cycle scored **45 matches / 729 units** (from 42 /
-  678), with no pause. The latest processed match was largados_e_pelados-vs-galorys-cs-14-10-2026. The loop is running by itself.
+  678), with no pause. The latest processed match was largados_e_pelados-vs-galorys-cs-14-10-2026.
+- **What this proves:** automatic settlement and evaluation have resumed. **It does not mean the model retrained or
+  improved.**
+  - Grading changes only through a code release.
+  - The learning cycle's training step runs only at 150 new distinct matches (now 45), and it only proposes a
+    challenger.
+  - Promotion is an explicit owner action at the registered review windows.
+
+## Production limitations (documented, not provoked)
+
+Two outage paths have offline test coverage but have not occurred during the observed live checks. Neither was
+provoked to close this release.
+
+1. **Fallback during a real Thunderpick blip** (`a310d76b55`, odds-source-3). An event still listed but with a stale,
+   empty, rate-limited or failing quote grades on the found fallback price. Covered by the offline harness and
+   tests; not yet seen on a live blip after the deploy.
+2. **A large provider start-time mismatch** (the platform lists one start time, BO3.gg / HLTV another; outage-card
+   lookup by canonical match id from `6b6a43f2a6`). Covered offline (e.g. WBT vs ENCE 14:00 vs 12:00); not yet seen
+   live since the fix.
+
+Both are to be confirmed when they occur naturally.
 
 
 Scripts (read-only, local): session scratchpad ck/fetch_pages.py (bounded extraction + manifest), ck/build2.py,
