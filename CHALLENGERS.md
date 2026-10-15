@@ -136,8 +136,8 @@ are untouched: grader.py is unchanged, so the model_version tags do not change.
 
 **Exclusion rule (all prior_smooth evaluations).**
 - A `shadow.prior_smooth` row is valid only when `shadow.prior_smooth.source` ends with `-prior-smooth`.
-- Rows without `source` (everything logged before the fix was deployed - it ships in release `23bea2fe37`, deploy time in
-  MODEL_VERSIONS.md), or with a `legacy ...` source, are INVALID. They measure the old pipeline, which is already logged as
+- Rows without `source` (everything logged before the fix was deployed - it ships in release `23bea2fe37`, live from
+  2026-10-14 22:53:13 UTC, MODEL_VERSIONS.md), or with a `legacy ...` source, are INVALID. They measure the old pipeline, which is already logged as
   `shadow.legacy`. Exclude and count them; never pool them with valid rows. From that release the performance model reads
   the pinned input revision N0 (HLTV_COVERAGE.md), so valid prior_smooth rows are on N0 too.
 - Use the per-row rule, not a date cutoff on the match start. A forecast is appended only when the live forecast changes,
