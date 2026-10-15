@@ -292,8 +292,8 @@ Production, read-only checks on 2026-10-15:
 - **01:23:02 UTC cycle:** **678 scored units / 42 matches, 13 incomplete (5 matches), 5 void, 5 push, 1 held for
   review.** That is identical to the independent reconstruction in this report. P1 product scorecard: 634 units /
   36 matches (this report: 635; the one unit held for review is excluded there).
-- **Advance on a newly settled match:** being watched on production; the result is recorded below when the next
-  settled match is scored.
+- **Advance on newly settled matches, confirmed:** the 01:41:13 UTC cycle scored **45 matches / 729 units** (from 42 /
+  678), with no pause. The latest processed match was largados_e_pelados-vs-galorys-cs-14-10-2026. The loop is running by itself.
 
 
 Scripts (read-only, local): session scratchpad ck/fetch_pages.py (bounded extraction + manifest), ck/build2.py,
