@@ -209,6 +209,33 @@ rr-1 +0.0023 (17 m), match_m1 +0.0072 (-0.0035 to +0.0184, 42 m), and perf-1's k
 - Since 2026-10-14 22:53 Thunderpick quotes were mostly stale (429 backoff); `a310d76b55` changes its polling. That is
   the release session's change, outside this report.
 
+## 8b. Forecasts affected by the unintended backfill
+
+**Method.**
+- Source: the complete export (ids 1-26,575, cutoff 2026-10-15 01:05:40 UTC), counted by the release session.
+- The totals per class were checked independently here and agree.
+- Classes come from each forecast's own `data_rev`, not clock windows: `23bea2fe37` logged from 22:52:52, 21 s before
+  its first answer. Origin is from the picks export: member = test 0, board = test 2, load test = test 1.
+- No saved forecast was altered.
+
+| history the performance model read | version | member | board | total |
+|---|---|---:|---:|---:|
+| partial backfill (matches 9,658-27,999), 00:49:50-04:23:06 | 1088faf157 | 203 | 112 | 315 |
+| repaired history N (matches >= 28,000) | 1088faf157 | 172 | 76 | 248 |
+| | acbe039647 | 114 | 41 | 155 |
+| | 4f00a300a1 | 110 | 41 | 151 |
+| | 822a6b4505 | 111 | 41 | 152 |
+| | 17e5e85837 | 341 | 308 | 649 |
+| | 6f6e2d39d7 | 6,546 | 12,074 | 18,620 |
+| **affected (partial + N)** | | **7,597** | **12,693** | **20,290** |
+| N0 pin n0-r3, with the 3 'cito' matches (pre=8600) | 23bea2fe37 | 102 | 582 | 684 |
+| N0 pin n0-r3, exact (pre=8597) | 23bea2fe37 | 6 | 46 | 52 |
+| N0 pin n0-r4 (to the cutoff; + 1 load-test row) | 6b6a43f2a6 | 61 | 465 | 527 |
+| not affected: before 00:49 (5,019) + 3 old-scan rows inside 00:49-04:26 | | | | 5,022 |
+
+Check: 5,022 + 315 + 19,975 + 736 + 527 = 26,575. The earlier "367 partial" figure came from an incomplete export. The
+same table is in MODEL_VERSIONS.md under "Affected forecasts".
+
 ## 9. Supplemental (approximate, never pooled)
 
 - **Railway Oct 9-10, registered view:** 398 / 25 m, gain vs 50% +0.063 (+0.032 to +0.091). These snapshots are earlier
