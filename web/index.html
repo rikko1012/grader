@@ -548,9 +548,9 @@ body.mode-board .workspace-tools,body.mode-slate .workspace-tools{flex-direction
       <p><b>Projection → chance → grade.</b> The projection is compared with the line (a 15.5 line needs 16 for an Over, 15 or less for an Under; on a whole line like 16, exactly 16 is a push) and turned into a chance from how much a player's totals normally swing from match to match. Kills chances are capped at 78% because big kill totals swing more than any model expects.</p>
       <p><b>Stake rules change the units, never the chance.</b> If his last 10 matches clearly disagree at this line, the stake drops to 0 (FORM FIGHT) or 0.5U (TAPE FIGHT). Stand-ins (max 1U), small samples (max 1.5U; under 5 recent maps 0), a month or more without an official map (max 1U) and the market-quality rule (a bookmaker price such as Thunderpick's, a thin exchange book or no betting market: max 1.5U) cap the stake; a player not on the listed team and an AWPer on a headshot line get 0 units. An unconfirmed roster is flagged on the card but does not change the stake. Several bets that need the same team to do well (or badly) in one match share a 3U cap.</p>
       <p><b>Tested before it counts.</b> A factor moves the projection only after it beats the current model on matches it never saw, in date order. Maps, head-to-head, Round Swing, ratings, opening and trade kills, win chance and FACEIT are on every card as context; they move the grade only if they pass that test.</p>
-      <p><b>What the grades mean</b> (chance the pick wins): A+ 80%+ · A 74%+ · A− 68%+ · B+ 63%+ · B 57%+ · B− 55%+ · <i>Lean</i> = 0 units: under 55%, or a stake rule above held it at 0.<br>
+      <p><b>What the grades mean</b> (the model's estimated chance the pick wins): A+ 80%+ · A 74%+ · A− 68%+ · B+ 63%+ · B 57%+ · B− 55%+ · <i>Lean</i> = 0 units: under 55%, or a stake rule above held it at 0.<br>
       <b>Units:</b> A+ 3U · A 2U · A− 1.5U · B+ 1U · B 0.5U · B− 0.5U · Lean 0U. The chance is graded unrounded and shown to 0.1%.</p>
-      <p class="muted">Grades are probabilities, not guarantees – a 60% pick still loses 4 times in 10. Not financial advice.</p>
+      <p class="muted">Every chance on this site is the model's estimate, not a measured hit rate – it has not yet been shown to match how often picks actually win, and a 60% pick still loses 4 times in 10 even when the estimate is right. The units are the grader's stake scale: a relative size set by the grade and the stake rules above, not a tested or optimal bankroll plan. Not financial advice.</p>
     </div>
   </details>
 
@@ -1541,7 +1541,7 @@ function drawCompare() {
         ${g.sort((a, b) => teamNorm(a.any.team_name || a.any.team).localeCompare(teamNorm(b.any.team_name || b.any.team))
             || String(a.any.nick || a.any.player).toLowerCase().localeCompare(String(b.any.nick || b.any.player).toLowerCase())
             || propOrder(a.any.prop) - propOrder(b.any.prop)).map(x => cmpRow(x, false)).join("")}</div></details>`; }).join("");
-  $("#boardout").innerHTML = html + `<div class="small muted" style="margin-top:10px">Book lines are betting thresholds, not projections; each chance is our model at that platform's line (pushes excluded on whole lines).
+  $("#boardout").innerHTML = html + `<div class="small muted" style="margin-top:10px">Book lines are betting thresholds, not projections; each chance is the model's estimate at that platform's line (pushes excluded on whole lines), not a measured hit rate; stakes are the grader's stake scale, not a bankroll plan.
     The easier line is the lower one for an Over and the higher one for an Under – easier, not automatically better value: payouts differ by platform and market type, and a return needs your entry's exact payout.
     ${BK.prizepicks.feed && BK.prizepicks.feed.state !== "ok" ? `<b>PrizePicks feed: ${esc(BK.prizepicks.feed.state)}</b> – its lines aren't confirmed.` : ""}</div>`;
 }
@@ -2268,7 +2268,7 @@ function render(d) {
   const why = !v.reason || g.withheld || /^Projection [\d.]+ vs [\d.]+ needed \([^)]*\)$/.test(v.reason) || g.tape_fight || g.form_fight ? ""
     : v.reason.replace(/ · stake capped: .*$/, "");
   const pu = pushOf(g);
-  const sub = v.side ? `${ch(v.p)} ${pu != null ? `win chance excluding pushes · push ${pct(pu)}` : "chance"}${coinFlip(v.p)} · ${v.units}U${capPill}${keptPill}${why ? `<div class="small muted" style="margin-top:4px">${esc(why)}</div>` : ""}`
+  const sub = v.side ? `${ch(v.p)} ${pu != null ? `model estimate, excluding pushes · push ${pct(pu)}` : "model estimate"}${coinFlip(v.p)} · ${v.units}U${capPill}${keptPill}${why ? `<div class="small muted" style="margin-top:4px">${esc(why)}</div>` : ""}`
     : gateStop ? "" : esc(v.reason || "");
   const hc = g.status === "NO GRADE" || v.state === "SCOUT" || (g.withheld && !v.side) ? "g-scout" : gClass(v.grade);
   h += `<section class="card herocard ${hc}"><div class="hero">

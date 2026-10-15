@@ -720,7 +720,10 @@ def _hltv_due(r):
         res = json.loads(r["result"] or "{}")
     except ValueError:
         return False
-    return res.get("source") == "bo3" and (not res.get("hltv_checked") or bool(res.get("review")))
+    # 2026-10-14: an HLTV-confirmed row that still carries the BO3.gg map detail (confirmations before this date kept it, so
+    # the stored detail could disagree with the confirmed total - 7 Fruju vs MARKandLARRY picks) is due once more: the
+    # confirmation now writes HLTV's own detail and source, after which the row is never due again
+    return res.get("source") == "bo3"
 
 
 def recheck_bo3_with_hltv(now=None, apply=True, days=7, limit=HLTV_RECHECK_MAX):
@@ -737,8 +740,7 @@ def recheck_bo3_with_hltv(now=None, apply=True, days=7, limit=HLTV_RECHECK_MAX):
         # a pick HLTV confirmed while it was held for review (before 2026-10-13 the hold was kept) is re-derived once more:
         # confirmed again -> released, different -> corrected to HLTV's total
         rows = con.execute("SELECT * FROM picks WHERE status IN ('settled', 'push') AND settled_at >= ? "
-                           "AND (scope IS NULL OR scope = '12') AND result LIKE '%\"source\": \"bo3\"%' "
-                           "AND (result NOT LIKE '%hltv_checked%' OR result LIKE '%\"review\": true%')", (since,)).fetchall()
+                           "AND (scope IS NULL OR scope = '12') AND result LIKE '%\"source\": \"bo3\"%'", (since,)).fetchall()
         con.close()
     rows = [r for r in rows if _hltv_due(r)]
     out = {"checked": 0, "confirmed": 0, "corrected": [], "waiting": 0}
@@ -762,8 +764,34 @@ def recheck_bo3_with_hltv(now=None, apply=True, days=7, limit=HLTV_RECHECK_MAX):
             if apply:
                 # 2026-10-13 audit D4: HLTV (authoritative) confirms the total - a hold for review / provisional mark is
                 # released (it used to be copied forward, and the row was never looked at again: unscored for good)
+                # 2026-10-14: the stored detail becomes HLTV's own (source, per-map, rounds, won); the BO3.gg settlement is kept
+                # nested as bo3_detail, and the change is logged (same total / status / hit) - before, the BO3.gg per-map
+                # numbers were copied forward and could disagree with the confirmed total (settlement audit)
                 rel = {k: False for k in ("review", "provisional") if k in old}
-                _save_result(r["id"], dict(old, hltv_checked=True, hltv_match=res["hltv_match"], hltv_total=res["total"], **rel, **_ident(res)))
+                bo3 = {k: v for k, v in old.items() if k != "bo3_detail"}
+                detail = {"source": "hltv", "rounds": res["rounds"], "won": res["won"], "per_map": res["per_map"],
+                          "maps_used": res["maps_used"], "hltv_match": res["hltv_match"], "hltv_checked": True,
+                          "hltv_total": res["total"], **rel, "bo3_detail": bo3, **_ident(res)}
+                old_t = None
+                try:
+                    old_t = _scope_total_of(old, r["scope"], r["prop"])
+                except Exception:
+                    pass
+                with _LOCK:
+                    con = _db()
+                    con.execute("UPDATE picks SET actual_maps=?, result=? WHERE id=?", (json.dumps(res["maps"]), json.dumps(detail, default=str), r["id"]))
+                    con.commit()
+                    con.close()
+                if old_t is not None and old_t != res["total"]:
+                    d = {"id": r["id"], "player": r["player"], "prop": r["prop"], "scope": "12", "line": r["line"], "pick": r["pick"],
+                         "test": r["test"], "old": {"actual": r["actual"], "status": r["status"], "hit": r["hit"]},
+                         "new": {"actual": r["actual"], "status": r["status"], "hit": r["hit"]}, "hltv_match": res["hltv_match"],
+                         "detail_old": {"per_map": old.get("per_map"), "detail_total": old_t, "source": old.get("source")},
+                         "detail_new": {"per_map": res["per_map"], "detail_total": res["total"], "source": "hltv"},
+                         "reason": "HLTV confirms the settled total; stored map detail replaced by HLTV's (it was BO3.gg's full scoreboard)"}
+                    out.setdefault("detail_fixed", []).append(d)
+                    with open(CORRECTIONS, "a", encoding="utf-8") as f:
+                        f.write(json.dumps(dict(d, corrected_at=now.isoformat(timespec="seconds")), default=str) + "\n")
             continue
         detail = {"source": "hltv", "rounds": res["rounds"], "won": res["won"], "per_map": res["per_map"],
                   "maps_used": res["maps_used"], "hltv_match": res["hltv_match"], "hltv_checked": True, "bo3_detail": old, **_ident(res)}
@@ -907,7 +935,9 @@ def revert_full_scoreboard_corrections(now=None, apply=True):
         held = full is not None and _between(r["line"], old["actual"], full)
         new = dict(res, source="bo3", quick=True, full_checked=True, reverted_full=True, provisional=True, rule=SOURCE_RULE,
                    discrepancy={"quick_total": old["actual"], "full_total": full}, review=held,
-                   per_map=old.get("per_map") or res.get("per_map"), full_per_map=res.get("per_map"))
+                   # 2026-10-14: the correction log never kept the quick scoreboard's per-map numbers - the restored total gets
+                   # no per-map detail rather than the full scoreboard's (which gave a different total: settlement audit)
+                   per_map=old.get("per_map"), full_per_map=res.get("per_map"))
         d = {"id": pid, "player": r["player"], "prop": r["prop"], "scope": r["scope"], "line": r["line"], "pick": r["pick"],
              "test": r["test"], "old": {"actual": r["actual"], "status": r["status"], "hit": r["hit"]},
              "new": {"actual": old["actual"], "status": old.get("status"), "hit": old.get("hit")}, "held_for_review": held,
@@ -923,6 +953,18 @@ def revert_full_scoreboard_corrections(now=None, apply=True):
                 with open(CORRECTIONS, "a", encoding="utf-8") as f:
                     f.write(json.dumps(dict(d, corrected_at=now.isoformat(timespec="seconds")), default=str) + "\n")
     return done
+
+
+def _scope_total_of(result, scope, prop):
+    """The total the stored per-map detail gives (None without detail) - as learning.audit computes it."""
+    from scope import scope_total
+    pm, won = result.get("per_map"), result.get("won")
+    if not pm:
+        return None
+    maps = [{"number": i + 1, "kills": km[0], "headshots": km[1], **({"won": won[i]} if won and i < len(won) else {})}
+            for i, km in enumerate(pm) if isinstance(km, (list, tuple)) and len(km) >= 2]
+    t, _ = scope_total(maps, scope or "12", "hs" if prop == "hs" else "kills")
+    return t
 
 
 def _save_result(pick_id, result):
@@ -1445,6 +1487,54 @@ def export_forecasts(inputs=False, last=None):
         else:
             r["has_inputs"] = blob is not None
     return rows
+
+
+PAGE_MAX = {False: 2000, True: 500}     # rows per page without / with decoded grader inputs (~4 KB / ~20 KB a row)
+
+
+def forecasts_page(after_id=0, cutoff_id=None, limit=None, inputs=False):
+    """Bounded export of the forecast history (2026-10-14: the full export of ~25k rows, ~95 MB, restarted production).
+    Keyset pagination on the primary key: rows with after_id < id <= cutoff_id, ascending, at most `limit` (capped by
+    PAGE_MAX). The cutoff is fixed by the first call (the current max id) and passed back unchanged, so rows appended while
+    a client pages are never mixed in, and no row is skipped or repeated (forecast ids are immutable and only ever grow).
+    Only one page is ever in memory. Returns {rows, cutoff_id, next_after, done, total_in_cutoff}."""
+    import zlib
+    cap = PAGE_MAX[bool(inputs)]
+    limit = max(1, min(int(limit or cap), cap))
+    after_id = max(0, int(after_id or 0))
+    cols = "*" if inputs else ", ".join(c for c in _forecast_cols() if c != "inputs") + ", inputs IS NOT NULL AS has_inputs"
+    with _LOCK:
+        con = _db()
+        try:
+            if cutoff_id is None:
+                cutoff_id = con.execute("SELECT COALESCE(MAX(id), 0) FROM forecasts").fetchone()[0]
+            cutoff_id = int(cutoff_id)
+            rows = [dict(r) for r in con.execute(f"SELECT {cols} FROM forecasts WHERE id > ? AND id <= ? ORDER BY id LIMIT ?",
+                                                 (after_id, cutoff_id, limit))]
+            total = con.execute("SELECT COUNT(*) FROM forecasts WHERE id <= ?", (cutoff_id,)).fetchone()[0]
+        finally:
+            con.close()
+    for r in rows:
+        if inputs:
+            blob = r.pop("inputs", None)
+            try:
+                r["inputs"] = json.loads(zlib.decompress(blob)) if blob else None
+            except Exception:
+                r["inputs"] = None
+        else:
+            r["has_inputs"] = bool(r.get("has_inputs"))
+    nxt = rows[-1]["id"] if rows else after_id
+    return {"rows": rows, "cutoff_id": cutoff_id, "next_after": nxt, "done": len(rows) < limit or nxt >= cutoff_id,
+            "total_in_cutoff": total, "page_max": cap}
+
+
+def _forecast_cols():
+    with _LOCK:
+        con = _db()
+        try:
+            return [r[1] for r in con.execute("PRAGMA table_info(forecasts)")]
+        finally:
+            con.close()
 
 
 def report():

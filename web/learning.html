@@ -109,6 +109,32 @@ function draw() {
       `<tr><td>${r.id}</td><td>${when(r.at)}</td><td>${esc(r.action)}</td><td>${esc(r.version_label)}</td><td>${when(r.training_cutoff)}</td><td>${r.eval_matches ? `${r.eval_matches} matches ${when(r.eval_from)} – ${when(r.eval_to)}` : "–"}</td><td style="text-align:left">${esc(r.reason)}</td><td>${esc(r.actor)}</td></tr>`))}
     ${(D.registry || []).length && D.registry[0].previous_id != null ? `<button class="act" onclick="rollback()">Roll back to the previous version</button>` : ""}`;
 
+  // product scorecard (protocol amendment P1, 2026-10-14): the book's own offered lines
+  const P = SC.product || {}, PP = (P.probability || {}).overall || {}, PJ = P.projection || {}, PS = P.staking || {};
+  h += `<h2>Product scorecard · the lines the books offered (P1)</h2>
+    <div class="small muted">${esc((P.protocol || {}).status || "")}. ${esc((P.protocol || {}).forecast || "")}. ${P.units ?? 0} units / ${P.matches ?? 0} matches.
+      Excluded: ${(P.excluded || []).map(e => `${esc(e.reason)} (${e.units})`).join(" · ") || "none"}.</div>
+    <h3>1 · Projection error</h3>${table(MH, [metricRow("Board lines", PJ.metrics || {})])}
+    ${table(["Slice", "|line − actual| − |projection − actual| (+ = ours closer)", "95% (by match)", "Units / matches"],
+      Object.entries(PJ.vs_line || {}).filter(([k, q]) => q && q.q2_projection_vs_line).map(([k, q]) => `<tr><td>${esc(k)}</td><td>${q.q2_projection_vs_line.unit === "share of the line" ? pc(q.q2_projection_vs_line.gain) : n2(q.q2_projection_vs_line.gain)} ${esc(q.q2_projection_vs_line.unit)}</td><td>${q.q2_projection_vs_line.unit === "share of the line" ? (q.q2_projection_vs_line.ci ? pc(q.q2_projection_vs_line.ci[0]) + " to " + pc(q.q2_projection_vs_line.ci[1]) : "–") : ci(q.q2_projection_vs_line.ci, n2)}</td><td>${q.q2_projection_vs_line.units} / ${q.q2_projection_vs_line.matches}</td></tr>`))}
+    <h3>2 · Probability quality and calibration</h3>
+    <div class="small">Log loss ${n4(PP.log_loss)} (${ci(PP.log_loss_ci, n4)}) vs 0.6931 for a flat 50% · Brier ${n4(PP.brier)} · calibration slope ${n2(PP.calibration_slope)} (95% ${ci(PP.calibration_slope_ci)})</div>
+    ${table(["Chance of Over", "Units", "Matches", "Predicted", "Actual Over", "Actual 95%"], ((P.probability || {}).calibration || []).map(b =>
+      `<tr><td>${esc(b.bin)}</td><td>${b.units}</td><td>${b.matches}</td><td>${pc(b.predicted)}</td><td>${pc(b.actual)}</td><td>${ci(b.actual_ci, pc)}</td></tr>`))}
+    <h3>3 · Side selection</h3>
+    ${table(["Side the model favoured", "Units", "Matches", "Printed", "Happened", "Happened − printed 95%"], ((P.side_selection || {}).rows || []).map(d =>
+      `<tr><td>${esc(d.side)}</td><td>${d.units}</td><td>${d.matches}</td><td>${pc(d.predicted)}</td><td>${pc(d.actual)}</td><td>${ci(d.gap_ci, pc)}</td></tr>`))}
+    <div class="small muted">${(P.side_selection || {}).ties_at_50 ?? 0} units at exactly 50% have no side (counted here, not in either row).</div>
+    <h3>4 · Staking</h3>
+    <div class="small">${PS.staked_units ?? 0} staked units / ${PS.staked_matches ?? 0} matches · stake-weighted printed ${pc(PS.stake_weighted_printed)} vs happened ${pc(PS.stake_weighted_hit)} · <span class="muted">${esc(PS.note || "")}</span></div>
+    ${table(["Stake", "Units", "Matches", "Printed", "Happened", "Happened − printed 95%"], (PS.by_stake || []).map(s =>
+      `<tr><td>${s.stake}U</td><td>${s.units}</td><td>${s.matches}</td><td>${pc(s.printed)}</td><td>${pc(s.hit)}</td><td>${ci(s.gap_ci, pc)}</td></tr>`))}
+    <h3>By stat, model version and history revision</h3>
+    ${table(MH, ["prop", "version", "revision"].flatMap(d => ((P.by || {})[d] || []).map(m => metricRow(`${d}: ${m.group}`, m))))}
+    <h3>Challengers on the same board forecasts (forward, interim)</h3>
+    ${table(["Challenger", "Units", "Matches", "Changed", "Log loss live", "Challenger", "Gain (+ = challenger better)", "95%"], (P.challengers || []).map(c =>
+      `<tr><td>${esc(c.id)}</td><td>${c.units ?? 0}</td><td>${c.matches ?? 0}</td><td>${c.changed_units ?? "–"}</td><td>${n4(c.log_loss_live_replay)}</td><td>${n4(c.log_loss_challenger)}</td><td>${n4(c.gain)}</td><td>${ci(c.gain_ci, n4)}</td></tr>`))}`;
+
   // scorecard
   const o = SC.overall || {};
   h += `<h2>Scorecard · all scored evaluation units</h2>

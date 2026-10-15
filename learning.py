@@ -1187,6 +1187,123 @@ def scorecard(con):
     out["diagnosis"] = diagnosis(sc)
     out["questions"] = two_questions(sc)
     out["all_lines"] = all_lines_view([r for r in rows if r["bucket"] == "scored"])
+    out["product"] = product_scorecard(con, rows)
+    return out
+
+
+# PROTOCOL AMENDMENT P1 (owner, 2026-10-14) - the PRODUCT scorecard = the lines the books actually offered. Adopted AFTER the
+# 2026-10-14 checkpoint results were seen (on all sources the registered primary looked better than on the book's lines,
+# because member-typed off-market lines are easy). The registered primary scorecard above is kept unchanged; promotion rules
+# (REVIEW_RULE) are unchanged - any new rule built on P1 applies prospectively only.
+PRODUCT = {
+    "id": "P1-board-lines", "adopted": "2026-10-14",
+    "status": "protocol amendment adopted after the 2026-10-14 checkpoint results were seen; reported beside the registered "
+              "primary scorecard (unchanged); promotion rules unchanged, new rules prospective only",
+    "unit": "the registered unit (player x canonical match x stat x scope) whose settlement is scoreable",
+    "forecast": "the latest BOARD forecast of the unit logged >= 30 min before the start, on a STANDARD line offered by the "
+                "platform feed: platform (book) recorded, the board row's own market id / player id from the feed, canonical "
+                "match, stat, map scope, line and logging time; member-entered lines and goblin / demon lines never enter",
+    "outcome": "the settled total vs that board line; a push on the board line is excluded (counted)",
+    "sections": "projection error | probability quality and calibration | side selection | staking (no payouts: single props "
+                "have no payout of their own)",
+}
+_PRODUCT_SKIP = ("settlement_conflict", "void", "incomplete", "unresolved_identity")
+
+
+def history_revision(f):
+    """Which HLTV history the performance model read for this forecast (the 2026-10-13 backfill went live unintended)."""
+    dr = str(f.get("data_rev") or "")
+    if "perf_input=N0" in dr:
+        rule = dr.split("perf_input=N0/", 1)[1].split(":", 1)[0].split(";", 1)[0] if "perf_input=N0/" in dr else ""
+        return f"N0 pinned ({rule})" if rule else "N0 pinned"
+    t = f.get("logged_at") or ""
+    if t < "2026-10-13T00:49:00+00:00":
+        return "N0 (before backfill)"
+    if t < "2026-10-13T04:26:15+00:00":
+        return "partial backfill"
+    return "N (backfill live, unintended)"
+
+
+def product_units(con, rows=None):
+    """P1 units (see PRODUCT) and the excluded counts by reason."""
+    rows = latest_rows(con) if rows is None else rows
+    out, excl = [], collections.Counter()
+    for r in rows:
+        if r["bucket"] in _PRODUCT_SKIP or r["actual"] is None or not r["match_start"]:
+            excl[f"not scoreable ({r['bucket']})"] += 1
+            continue
+        cut = _iso(_ts(r["match_start"]) - timedelta(minutes=EVAL_LEAD_MIN))
+        pids = set(json.loads(r["pick_ids"] or "[]"))
+        fs = [dict(f) for f in con.execute(
+            "SELECT * FROM forecast_copy WHERE unit_key = ? AND source IN ('board', 'board_pp') AND COALESCE(line_type, 'standard') = "
+            "'standard' AND book IS NOT NULL AND line IS NOT NULL AND logged_at IS NOT NULL AND logged_at <= ?", (r["unit_key"], cut))
+            if f["pick_id"] in pids]
+        if not fs:
+            excl["no standard board line 30+ min before the start (member / adjusted lines only)"] += 1
+            continue
+        f = max(fs, key=lambda x: (x["logged_at"], -x["forecast_id"]))
+        line, actual = f["line"], r["actual"]
+        if not (0 < line <= PLAUSIBLE_MAX.get(r["prop"], {}).get(r["scope"] or "12", 1e9)):
+            excl["implausible board line"] += 1
+            continue
+        if actual == line:
+            excl["push on the board line"] += 1
+            continue
+        p = p_over_of(f)
+        if p is None:
+            excl["board forecast has no probability"] += 1
+            continue
+        out.append({"match": r["match_slug"], "p": p, "over": int(actual > line), "lam": f["lambda"], "actual": actual, "line": line,
+                    "prop": r["prop"], "scope": r["scope"] or "12", "version": f["model_version"] or "untagged",
+                    "revision": history_revision(f), "units": f["units"] or 0, "forecast_id": f["forecast_id"],
+                    "logged": f["logged_at"], "start": r["match_start"], "book": f["book"]})
+    return out, excl
+
+
+def product_scorecard(con, rows=None):
+    us, excl = product_units(con, rows)
+    out = {"protocol": PRODUCT, "units": len(us), "matches": len({u["match"] for u in us}),
+           "excluded": [{"reason": k, "units": v} for k, v in excl.most_common()]}
+    if not us:
+        return out
+    # 1. projection error (vs the actual total, and vs the book's own line)
+    out["projection"] = {"metrics": metrics(us), "vs_line": two_questions(us)}
+    # 2. probability quality and calibration
+    out["probability"] = {"overall": metrics(us, slope=True), "calibration": calibration(us)}
+    # 3. side selection: the side the model favoured (a chance of exactly 50% has no side - counted, never dropped silently)
+    out["side_selection"] = {"rows": directional(us), "ties_at_50": sum(1 for u in us if u["p"] == 0.5)}
+    # 4. staking: staked vs 0U and the stake-weighted hit rate of the favoured side (no payouts - single props have none)
+    st = [u for u in us if (u["units"] or 0) > 0 and u["p"] != 0.5]
+    hit = lambda u: u["over"] if u["p"] > 0.5 else 1 - u["over"]
+    w = sum(u["units"] for u in st)
+    out["staking"] = {"staked_units": len(st), "staked_matches": len({u["match"] for u in st}), "stake_total": _r(w, 2),
+                      "stake_weighted_hit": _r(sum(u["units"] * hit(u) for u in st) / w) if w else None,
+                      "stake_weighted_printed": _r(sum(u["units"] * max(u["p"], 1 - u["p"]) for u in st) / w) if w else None,
+                      "by_stake": [{"stake": s, "units": len(g), "matches": len({u["match"] for u in g}),
+                                    "printed": _r(sum(max(u["p"], 1 - u["p"]) for u in g) / len(g)),
+                                    "hit": _r(sum(hit(u) for u in g) / len(g)),
+                                    "gap_ci": _ci_ratio(_groups(g, lambda u: hit(u) - max(u["p"], 1 - u["p"])))}
+                                   for s in sorted({u["units"] for u in st}) for g in [[u for u in st if u["units"] == s]]],
+                      "note": "stakes are the grader's stake scale (units), not a validated bankroll allocation; no payout is "
+                              "computed for a single prop"}
+    out["by"] = {}
+    for dim in ("prop", "version", "revision"):
+        g = collections.defaultdict(list)
+        for u in us:
+            g[u[dim]].append(u)
+        out["by"][dim] = [dict(metrics(v), group=k) for k, v in sorted(g.items(), key=lambda kv: -len(kv[1]))]
+    # live vs each frozen challenger on the same board forecasts (forward rows only; interim, not a decision)
+    out["challengers"] = []
+    for ch in con.execute("SELECT * FROM challengers WHERE status != 'retired'").fetchall():
+        pr = []
+        for u in us:
+            if u["logged"] <= ch["frozen_at"] or u["start"] <= ch["frozen_at"]:
+                continue
+            s = con.execute("SELECT * FROM shadow WHERE challenger_id = ? AND forecast_id = ?", (ch["id"], u["forecast_id"])).fetchone()
+            if s is not None and s["p_over_ch"] is not None:
+                pr.append(dict(u, p_ch=s["p_over_ch"], p_base=s["p_over_base"], p_logged=s["p_over_logged"], changed=s["changed"]))
+        out["challengers"].append(dict(paired_stats(pr, slope=False), id=ch["id"],
+                                       label="P1 board lines, forward (interim - decisions only at the registered windows)"))
     return out
 
 

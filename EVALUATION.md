@@ -150,3 +150,64 @@ No member grade, side or stake changes (picklog.py is not in the model-version h
   (`by_version` per model) and the scorecard (`by.version`) report each exact tag, and `pooled_across_versions` flags a
   pooled figure spanning more than one tag. The pre-registered decision rules (REVIEW_RULE, the forward HS bands) are
   unchanged: a pooled decision that spans tags must be read against the group column of MODEL_VERSIONS.md.
+
+## 8. Protocol amendment P1 - the product scorecard on offered book lines (owner, 2026-10-14)
+
+**Adopted after the 2026-10-14 checkpoint results were seen.** That timing is stated here on purpose: P1 was not the
+registered primary endpoint. At the checkpoint, the registered primary (section 1: the latest forecast of ANY source 30+
+min before the start) scored better than the lines the books actually offered, because member-typed off-market lines are
+easy (126 units at a printed 87.7% hit 96.8%). The owner made the offered lines the product scorecard.
+
+- **Registered analysis kept unchanged.** Section 1's primary scorecard, the ledger, the lb-001 forward evaluation and
+  learning.REVIEW_RULE are not altered or re-scored. P1 is reported beside them (learning `scorecard.product`, dashboard
+  "Product scorecard").
+- **P1 unit / forecast.** The registered unit (player x canonical match x stat x scope) with a scoreable settlement. Its
+  forecast is the latest BOARD forecast logged >= 30 min before the start, on a STANDARD line from the platform feed. The
+  verified fields are: platform (book), the board row's market id and player id from the feed, canonical match, stat, map
+  scope, line and logging time. Member-entered lines and adjusted markets (goblin / demon) never enter P1; they are
+  reported separately. A push on the board line is excluded and counted.
+- **Four separate sections:**
+  1. projection error (vs the actual total, and vs the book's line);
+  2. probability quality and calibration (log-loss, Brier, calibration bands, slope);
+  3. side selection (the favoured side's printed vs actual rate; a chance of exactly 50% has no side and is counted);
+  4. staking (staked vs 0U, stake-weighted printed vs actual).
+  No payout is computed: a single prop has no payout of its own.
+- **Promotion rules unchanged.** Any new promotion rule built on P1 applies prospectively, to forecasts logged after it
+  is frozen. It is never applied to matches already seen, and never fitted on this week's outcomes (for example, the
+  60-65% band).
+- **History revision** is reported per forecast:
+  - N0 before 2026-10-13 00:49 UTC;
+  - partial backfill until 04:26:15;
+  - N (the unintended backfill) until the N0 pin;
+  - from 2026-10-14 22:53:13 UTC, `perf_input=N0/<rule>` from data_rev.
+
+## 9. Settlement fault of 2026-10-13 (learning paused) - cause and repair (2026-10-14)
+
+Seven Fruju vs MARKandLARRY Maps 1-2 kills picks (524, 536, 551, 560, 830, 923, 936) failed the settlement audit:
+the stored map detail gave 39 / 30, the settled totals were 38 / 29. Learning paused at 2026-10-13 00:53 UTC and stayed
+paused.
+
+**Checked against the underlying records.** HLTV match 2399144, read-only on 2026-10-14:
+- BRACE 23 + 15 = 38;
+- yourwombat 15 + 14 = 29.
+
+The settled totals were right. The stored detail was BO3.gg's FULL scoreboard (map 2: 16 / 15), which counts team-kills
+differently.
+
+**Two code causes:**
+1. `revert_full_scoreboard_corrections` restored the quick totals from the correction log. That log never kept per-map
+   numbers, so the full scoreboard's maps stayed as the "quick" detail.
+2. `recheck_bo3_with_hltv` confirmed the totals from HLTV but copied the BO3.gg detail and `source: bo3` forward.
+
+**Fix.**
+- An HLTV confirmation now writes HLTV's own detail and source. The BO3.gg record is kept nested as `bo3_detail`.
+- When the old detail gave a different total, a detail-only entry is appended to settlement_corrections.jsonl (old and
+  new detail; the settlement itself is unchanged).
+- The revert keeps no per-map detail it does not have.
+- Rows already confirmed with BO3.gg detail are re-derived once on the next settle pass. That is idempotent: a row
+  becomes `source: hltv` and is never due again.
+- Original forecasts are untouched. The learning ledger records the repaired units as a new settlement version (a
+  correction) and resumes by itself once the audit is clean.
+- The faults were not acknowledged to unlock the counter.
+
+Tests: tests/test_eval_pipeline.py.
