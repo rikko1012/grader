@@ -124,7 +124,9 @@ Reported:
 - the other platform's use and rejection reasons;
 - the subset where the other platform CHANGED the anchor (an identical line adds no information);
 - the kills identity C2 = B2 (exact);
-- an exact replay of every pl-2 value from its logged trace (`learning.pl2_replay`);
+- an exact replay of every pl-2 value, settled or not, by re-running pl-2 on its saved inputs: the forecast copy's
+  grader-input features, line, platform and time, plus the logged anchors (`learning.pl2_replay_check`). The note's trace
+  is a rounded summary, never the replay source;
 - point forecasts: MAE for median-type quantities, RMSE for the mean;
 - probability scores, separately.
 

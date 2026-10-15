@@ -310,12 +310,22 @@ def prop_line_2_value(f, feat, quote, cfg=PROP_LINE_2):
     return pc, mu, trace
 
 
-def pl2_replay(trace, prop, cfg=PROP_LINE_2):
-    """Recompute pl-2's chance from its logged trace alone (exact-replay check)."""
-    lines = [trace["line"]] + ([trace["other_line"]] if trace.get("other_used") else [])
-    m = sum(lines) / len(lines)
-    mu = m + cfg["w"][prop] * (trace["lam_independent"] - m)
-    return _normal_over(mu, trace["sd"], trace["line"], prop, cfg["cap_kills"])
+def pl2_replay_check(con, cid, cfg=PROP_LINE_2, limit=20000):
+    """Exact replay: re-run pl-2 on every shadowed forecast's SAVED INPUTS (its forecast copy: grader-input features, line,
+    platform, time and the anchors logged with it) and compare with the stored value. The note's trace is a rounded
+    summary for reading - never the replay source."""
+    n = bad = 0
+    for s_ in con.execute("SELECT s.forecast_id, s.p_over_ch, f.* FROM shadow s JOIN forecast_copy f ON f.forecast_id = s.forecast_id "
+                          "WHERE s.challenger_id = ? LIMIT ?", (cid, limit)).fetchall():
+        try:
+            q = json.loads(s_["quote"]) if s_["quote"] else None
+        except (ValueError, TypeError):
+            q = None
+        pc, _, _ = prop_line_2_value(dict(s_), json.loads(s_["features"] or "{}"), q, cfg)
+        n += 1
+        if not ((pc is None and s_["p_over_ch"] is None) or (pc is not None and s_["p_over_ch"] is not None and pc == s_["p_over_ch"])):
+            bad += 1
+    return {"rows_checked": n, "mismatches": bad, "source": "saved inputs (forecast copy + logged anchors)"}
 
 
 PL1_BLOCK = ("promotion blocked (owner 2026-10-15): known anchor-quality defects - boosted / promo PrizePicks anchors and "
@@ -1559,10 +1569,10 @@ def _prop_line_2_extras(con, ch, us):
     """pl-2's comparison set, all arms on pl-2's OWN eligible cohort (forward P1 units where pl-2 has a forecast):
     A2 target line only, B2 the corrected anchor (target + eligible other platform), C2 pl-2, D live; coverage and every
     rejection reason; the subset where the other platform actually CHANGED the anchor (an identical line adds nothing);
-    point forecasts with MAE (median-type: target line, anchor, pl-2 location) and RMSE (the mean lam_H); exact replay."""
+    point forecasts with MAE (median-type: target line, anchor, pl-2 location) and RMSE (the mean lam_H); the exact replay of
+    EVERY pl-2 row (settled or not) from its saved inputs."""
     fwd = [u for u in us if u["logged"] > ch["frozen_at"] and u["start"] > ch["frozen_at"]]
     rej, el = collections.Counter(), []
-    replay_bad = 0
     for u in fwd:
         s_ = con.execute("SELECT p_over_ch, note FROM shadow WHERE challenger_id = ? AND forecast_id = ?", (ch["id"], u["forecast_id"])).fetchone()
         if s_ is None:
@@ -1575,12 +1585,10 @@ def _prop_line_2_extras(con, ch, us):
         if s_["p_over_ch"] is None:
             rej[(t.get("reject") or "no value").split(" (")[0]] += 1
             continue
-        if abs(pl2_replay(t, u["prop"]) - s_["p_over_ch"]) > 1e-12:
-            replay_bad += 1
         el.append(dict(u, t=t, pA=t["p_target_only"], pB=t["p_anchor"], pC=s_["p_over_ch"], pD=u["p"]))
     out = {"registered": PROP_LINE_2["registered"], "frozen_at": ch["frozen_at"], "forward_units": len(fwd),
            "eligible_units": len(el), "eligible_matches": len({u["match"] for u in el}), "coverage": _r(len(el) / len(fwd), 3) if fwd else None,
-           "rejections": [{"reason": k, "units": v} for k, v in rej.most_common()], "replay_mismatches": replay_bad,
+           "rejections": [{"reason": k, "units": v} for k, v in rej.most_common()], "replay": pl2_replay_check(con, ch["id"]),
            "other_used": sum(1 for u in el if u["t"].get("other_used")), "anchor_changed": sum(1 for u in el if u["t"].get("anchor_changed")),
            "other_rejections": [{"reason": k, "units": v} for k, v in collections.Counter(
                (u["t"].get("other_reason") or "").split(" (")[0] for u in el if not u["t"].get("other_used")).most_common()]}

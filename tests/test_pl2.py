@@ -36,7 +36,7 @@ def test_pl2_uses_only_eligible_logged_anchors_and_replays_exactly():
     other = q(book="prizepicks", line=31.5, po=None, pu=None)
     p, mu, t = L.prop_line_2_value(F, FEAT, {"anchors": {"target": q(), "other": other}})
     assert mu == 31.0 and t["other_used"] and t["anchor_changed"] and t["target_label"] == "price-supported"
-    assert p == t["p_anchor"] and L.pl2_replay(t, "kills") == p           # kills w = 0: pl-2 == its corrected anchor, exactly
+    assert p == t["p_anchor"]                                              # kills w = 0: pl-2 == its corrected anchor, exactly
     stale = dict(other, observed_at="2026-10-16T09:40:00+00:00")
     p2, mu2, t2 = L.prop_line_2_value(F, FEAT, {"anchors": {"target": q(), "other": stale}})
     assert mu2 == 30.5 and not t2["other_used"] and "limit 10" in t2["other_reason"]   # stale: the target alone, reason kept
@@ -44,7 +44,7 @@ def test_pl2_uses_only_eligible_logged_anchors_and_replays_exactly():
     assert t3["other_reason"].startswith("ambiguous") and mu3 == 30.5
     hs = dict(F, prop="hs", line=14.5)
     p4, mu4, t4 = L.prop_line_2_value(hs, {"perf": {"lambda": 16.5, "sd": 3.5}}, {"anchors": {"target": q(line=14.5), "other": None}})
-    assert abs(mu4 - (14.5 + 0.25 * 2.0)) < 1e-12 and L.pl2_replay(t4, "hs") == p4
+    assert abs(mu4 - (14.5 + 0.25 * 2.0)) < 1e-12
 
 
 def test_pl2_gives_no_forecast_when_the_target_is_ineligible():
@@ -115,7 +115,24 @@ def test_end_to_end_logged_anchors_to_the_pl2_scorecard(monkeypatch, tmp_path):
     t = json.loads(sh["note"])
     assert t["other_used"] and t["anchor"] == 31.0 and abs(sh["p_over_ch"] - t["p_anchor"]) < 1e-12
     row = next(c for c in L.scorecard(lcon)["product"]["challengers"] if c["id"] == pl2)["c1_pl2"]
-    assert row["eligible_units"] == 1 and row["coverage"] == 1.0 and row["replay_mismatches"] == 0 and row["anchor_changed"] == 1
+    assert row["eligible_units"] == 1 and row["coverage"] == 1.0 and row["anchor_changed"] == 1
+    assert row["replay"]["rows_checked"] >= 1 and row["replay"]["mismatches"] == 0
     assert row["identity_kills"]["pl2_differs_from_B2"] == 0
     pl1 = next(c for c in L.scorecard(lcon)["product"]["challengers"] if c["id"].startswith("pl-001"))
     assert pl1["promotion"] and "blocked" in pl1["promotion"]
+
+
+def test_the_replay_check_reruns_saved_inputs_and_catches_a_changed_value(tmp_path):
+    con = L.connect(tmp_path / "l.db")
+    L._ensure_prop_line_2(con, datetime(2026, 10, 15, 3, 0, tzinfo=timezone.utc))
+    cid = con.execute("SELECT id FROM challengers WHERE family = 'prop-line-2'").fetchone()["id"]
+    feat = {"perf": {"lambda": 33.123456789, "sd": 6.0987654321}}
+    quote = {"anchors": {"target": q(), "other": q(book="prizepicks", line=31.5, po=None, pu=None)}}
+    con.execute("INSERT INTO forecast_copy (forecast_id, pick_id, logged_at, line, prop, scope, source, book, line_type, features, quote) "
+                "VALUES (1, 1, ?, 30.5, 'hs', '12', 'board', 'underdog', 'standard', ?, ?)", (T, json.dumps(feat), json.dumps(quote)))
+    f = dict(con.execute("SELECT * FROM forecast_copy WHERE forecast_id = 1").fetchone())
+    pc, mu, tr = L.prop_line_2_value(f, feat, quote)
+    con.execute("INSERT INTO shadow (challenger_id, forecast_id, p_over_ch, note) VALUES (?, 1, ?, ?)", (cid, pc, json.dumps(tr)))
+    assert L.pl2_replay_check(con, cid) == {"rows_checked": 1, "mismatches": 0, "source": "saved inputs (forecast copy + logged anchors)"}
+    con.execute("UPDATE shadow SET p_over_ch = p_over_ch + 1e-9 WHERE forecast_id = 1")
+    assert L.pl2_replay_check(con, cid)["mismatches"] == 1
