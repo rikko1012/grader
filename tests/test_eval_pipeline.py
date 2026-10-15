@@ -269,3 +269,63 @@ def test_a_stale_unit_key_on_a_forecast_copy_never_hides_the_forecast(db, tmp_pa
     sc = learning.scorecard(learning.connect(ldb))
     assert sc["buckets"]["scored"] == 1 and sc["buckets"]["incomplete"] == 0
     assert sc["product"]["units"] == 1
+
+
+# ------------------------------------------------------------------------------------------------ pl-1 (shadow only)
+def _fcopy(**kw):
+    base = {"source": "board", "line_type": "standard", "book": "underdog", "prop": "kills", "line": 30.5,
+            "logged_at": "2026-10-16T10:00:00+00:00", "lambda": 33.0}
+    return dict(base, **kw)
+
+
+PERF = {"perf": {"lambda": 33.0, "sd": 6.0}}
+
+
+def test_pl1_target_line_only_is_the_market_median_and_keeps_the_independent_projection():
+    p, mu, tr = learning.prop_line_value(_fcopy(), PERF, [])
+    assert mu == 30.5 and abs(p - 0.5) < 1e-9                     # kills w = 0: mu = the market median = the line
+    assert tr["lam_independent"] == 33.0 and tr["median_market"] == 30.5 and tr["other"] is None
+    assert tr["p_replay"] > 0.6                                    # the independent projection is logged untouched
+    p, mu, tr = learning.prop_line_value(_fcopy(prop="hs", line=14.5), {"perf": {"lambda": 16.5, "sd": 3.5}}, [])
+    assert abs(mu - (14.5 + 0.25 * 2.0)) < 1e-9 and 0.5 < p < tr["p_replay"]
+
+
+def test_pl1_uses_the_other_platform_only_when_logged_before_the_forecast_and_two_sided():
+    before = ("2026-10-16T09:00:00+00:00", "prizepicks", 31.5, True, 7)
+    after = ("2026-10-16T11:00:00+00:00", "prizepicks", 34.5, True, 8)
+    p, mu, tr = learning.prop_line_value(_fcopy(), PERF, [before, after])
+    assert tr["other"]["forecast_id"] == 7 and mu == 31.0 and p > 0.5      # (30.5 + 31.5) / 2; the later 34.5 never seen
+    over_only = ("2026-10-16T09:00:00+00:00", "prizepicks", 31.5, False, 9)
+    p, mu, tr = learning.prop_line_value(_fcopy(), PERF, [over_only])
+    assert mu == 30.5 and tr["other"]["two_sided"] is False               # a threshold with unknown pricing: not a median
+
+
+def test_pl1_never_scores_member_or_adjusted_lines_or_an_over_only_target_alone():
+    assert learning.prop_line_value(_fcopy(source="member", book=None), PERF, [])[0] is None
+    assert learning.prop_line_value(_fcopy(line_type="goblin", book="prizepicks"), PERF, [])[0] is None
+    p, mu, why = learning.prop_line_value(_fcopy(book="prizepicks"), dict(PERF, less_available=False), [])
+    assert p is None and "Over only" in why
+
+
+def test_pl1_is_frozen_and_shadowed_on_forward_board_forecasts(db, tmp_path):
+    ldb = tmp_path / "l.db"
+    t0 = datetime(2026, 10, 15, 2, 0, tzinfo=timezone.utc)
+    learning.run_cycle(now=t0, picks=[], forecasts=[], batches=[], corrections=[], db=ldb, train=False)
+    con = learning.connect(ldb)
+    ch = con.execute("SELECT * FROM challengers WHERE family = 'prop-line-1'").fetchone()
+    assert ch["status"] == "shadow" and ch["frozen_at"] == "2026-10-15T02:00:00+00:00" and json.loads(ch["config"])["w"] == {"kills": 0.0, "hs": 0.25}
+    _row(1, "a", "x-vs-y-16-10-2026", 28.5, 2, "underdog", logged="2026-10-16T10:00:00+00:00", start="2026-10-16T15:00:00Z")
+    gi = {"perf": {"version": "perf-2", "lambda": 31.0, "sd": 6.0}}
+    con2 = picklog._db()
+    con2.execute("UPDATE forecasts SET inputs = ? WHERE id = 1", (__import__("zlib").compress(json.dumps(gi).encode()),))
+    con2.commit()
+    con2.close()
+    learning.run_cycle(now=t0 + timedelta(days=2), picks=picklog.export(), forecasts=picklog.export_forecasts(inputs=True),
+                       batches=[], corrections=[], db=ldb, train=False)
+    s = con.execute("SELECT * FROM shadow WHERE challenger_id = ?", (ch["id"],)).fetchone()
+    t = json.loads(s["note"])
+    assert s["lam_base"] == 31.0 and s["lam_ch"] == 28.5 and abs(s["p_over_ch"] - 0.5) < 1e-9 and t["target"]["book"] == "underdog"
+    sc = learning.scorecard(learning.connect(ldb))["product"]
+    pl = next(c for c in sc["challengers"] if c["id"] == ch["id"])
+    assert pl["units"] == 1 and pl["market_baseline"]["units"] == 1
+    assert set(pl["projection_mae"]["kills"]) >= {"independent", "market_median", "combined"}

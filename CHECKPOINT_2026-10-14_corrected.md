@@ -188,18 +188,19 @@ rr-1 +0.0023 (17 m), match_m1 +0.0072 (-0.0035 to +0.0184, 42 m), and perf-1's k
     (-0.033 to +0.001). The two partly offset.
   - Headshots per kill: 0.521 vs 0.527.
   - Overall bias +0.56 kills, within noise.
-- **(c) The model's disagreement with the book line carries no measurable information.**
+- **(c) The model's disagreement with the book line has not demonstrated reliable predictive value in this evaluated
+  cohort** (36 matches, Oct 11-14, historical versions; it says nothing about current production `a310d76b55`).
   - The slope of (actual - line) on (projection - line) is kills -0.08 (-0.62 to +0.48) and headshots +0.34
-    (-0.23 to +0.95). 1 would mean fully informative, 0 none.
+    (-0.23 to +0.95). 1 would mean fully informative, 0 none; both intervals are wide.
   - Printed chances rise exactly where the projection departs from the line. Those departures are not followed by
     outcomes: for kills, at 0.25-0.5 sd away, printed 63.9% vs happened 40.7%.
-  - A correct average and a correct spread can still give wrong probabilities: the chance is computed against a line
-    that already contains most of the information, so the model's distance from it is mostly noise, and the grader
-    turns that noise into confidence.
+  - A correct average and a correct spread can still give wrong probabilities. In this cohort the chance rises with
+    the distance from the line, and that distance did not reliably predict the outcome, so the confidence was not
+    earned. Whether the distance carries value on other matches is what the forward tests will show.
 - **Selection rules then concentrate stakes** on exactly those departures (1U: printed 65.1%, happened 51.1%).
-- **What follows (not done here):** a candidate that treats the book line as information, for example by shrinking
-  the projection's departure from the line by an amount estimated on earlier matches only. It would be frozen,
-  versioned and tested forward as a separate challenger. Nothing is fitted to this week's 60-65% band, and no printed
+- **What follows:** a candidate that treats the book line as information - now pl-1 (CHALLENGERS.md, FACTOR_AUDIT
+  round 7), frozen and tested forward as a separate challenger. A reasonable candidate, not a guaranteed fix: a line
+  is a threshold, not the expected total. Nothing is fitted to this week's 60-65% band, and no printed
   percentage is remapped from these outcomes.
 
 ## 8. Thunderpick's role (as it is today)

@@ -83,6 +83,58 @@ data hash 49e7ac29547b86a9). Walk-forward with w refitted on earlier days only: 
 - **Development units still count units of the old slug identity** (a match logged under a BO3.gg slug and hltv-<id> was
   two units then); the forward evaluation uses the canonical match identity (identity.assign).
 
+## pl-1 - market-informed prop challenger (family `prop-line-1`, id `pl-001-<hash>`, frozen at its first learning cycle after deploy)
+
+**Does rr-1 already cover it? No.** rr-1 takes the MATCH-WINNER price (Thunderpick, else Polymarket) and turns it into
+expected rounds. It never sees a prop line. pl-1 takes the PROP LINES and never sees the match-winner price. Separate
+families, so each market contribution stays traceable. rr-1 and its results are unchanged.
+
+**Inputs.** All of these are logged at or before the forecast's own time.
+- **Independent projection:** lam_H, the live perf-2 HLTV mean, with its predictive sd. It is logged as it is in every
+  shadow row (`lam_base`, `note.lam_independent`) and never replaced.
+- **The target platform's standard line:** the line being graded.
+- **The other platform's latest standard board line** for the same player x canonical match (current identity, by pick
+  id) x stat x map scope, logged at or before the forecast (`note.other`: book, line, time, forecast id).
+- **Never entered:** match-winner odds (rr-1), member-entered lines, adjusted markets (goblin / demon), and lines the
+  feed offers Over only.
+
+**Threshold vs mean.**
+- A two-sided standard line (equal payouts on both sides) is read as the market's MEDIAN: P(over) = P(under). It is
+  never read as its mean.
+- A line offered Over only is a threshold with unknown pricing, so it never enters the median. Before 2026-10-14 the
+  feed's side availability was not saved, so unknown counts as two-sided; it is labelled `side_info: assumed`.
+- m = the mean of the two-sided lines. Combined median mu = m + w[stat] x (lam_H - m).
+- P(Over) is computed from a normal with the live sd at the target line, pushes conditioned out on whole lines and kills
+  capped 22-78% like live. For a normal, median = mean, so `lam_ch` = mu. The normal replay of the live chance differs
+  from the published one by 0.009 on average.
+
+**Simple market baseline,** logged in the same row: N(m, sd_H) at the target line (`note.p_market`). It has no free
+parameter.
+
+**Fit (earlier data only, outcomes as the target).**
+- Data: board standard lines, 2026-10-11..14, 635 units / 36 matches, data hash f1274a945c16b1da.
+- w per stat on a grid 0..1.2, minimum log-loss of the Over outcome at the target line.
+- A free spread multiplier ran to the grid edge (3.0, i.e. "push everything to 50%"): ill-posed on 36 matches. The
+  spread is therefore fixed at the live sd, whose width was validated on held-out HLTV months and in the checkpoint's
+  width check.
+- Frozen weights: **kills w = 0.0, headshots w = 0.25.**
+- With kills w = 0, pl-1's kills chance is the market median's; it differs from 50% only when the platforms' lines
+  differ. Overlap with lb-001: with no other-platform line, both pull toward the target line.
+
+**Development evidence (walk-forward by match day; 521 units / 30 matches; NOT a validation).** These are the days
+already reported at the checkpoint.
+- Per-fold weights: kills 0 / 0 / 0, headshots 1.2 / 0 / 0. Headshots are unstable.
+- Kills, market baseline vs live: +0.0247 log-loss (-0.0011 to +0.0529). The market median's average miss was 5.29 kills
+  vs the independent projection's 5.55.
+- Headshots, market baseline vs live: +0.0122 (-0.0102 to +0.0342).
+- pl-1 vs live: +0.0073 (-0.0107 to +0.0244).
+- pl-1 vs the market baseline: -0.0113 (-0.0228 to -0.0012), driven by the 6-match first headshot fold.
+
+**Decision rule.** Unchanged: the registered 300 / 600 / 1,000-match windows (REVIEW_RULE). Reported on P1 board lines
+beside the registered view, with three arms on identical forecasts: live, market baseline and pl-1. The dashboard shows
+the market baseline vs live, pl-1 vs the market baseline, and the projection error of the independent, market-median
+and combined means. An improved agreement with the line is never itself the target.
+
 ## rr-1 - market-informed projection (variant `rr-ks`, frozen 2026-10-13 17:51 UTC; logged from this release)
 
 **What it changes (in shadow only).** The projected kills / headshots: the market's series price p for the player's

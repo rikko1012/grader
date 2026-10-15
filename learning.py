@@ -139,6 +139,92 @@ def line_blend_p(p_live, prop, scope, cfg=LINE_BLEND):
     return nd.cdf(cfg["w"][prop] * nd.inv_cdf(q))
 
 
+# pl-1 - MARKET-INFORMED PROP CHALLENGER (owner 2026-10-15; FACTOR_AUDIT round 7, CHALLENGERS.md pl-1). SHADOW ONLY.
+# Independent projection lam_H (the live perf-2 mean) and its predictive sd are kept and logged as they are - never replaced.
+# Market information that enters (all logged at or before the forecast's own time; adjusted markets never):
+#   - the target platform's STANDARD prop line of this forecast;
+#   - the other platform's latest STANDARD board line for the same player x canonical match x stat x map scope;
+#   - NOT Thunderpick / Polymarket match-winner odds (that is rr-1's input - kept apart so each contribution is traceable).
+# A two-sided standard line (equal payouts on both sides) is the market's MEDIAN, not its mean; a line the feed offers Over
+# only is a threshold with unknown pricing and never enters the median (unknown before 2026-10-14 = assumed two-sided).
+#   m = mean of the two-sided lines; mu = m + w[stat] * (lam_H - m); P(Over) from N(mu, sd_H) at the target line
+#   (pushes conditioned out on whole lines; kills capped 22-78% like live). Market baseline: N(m, sd_H).
+# w fitted per stat on EARLIER data only (board standard lines, 2026-10-11..14, 635 units / 36 matches) by the log-loss of
+# the OUTCOME, spread fixed at the live sd (k free ran to the grid edge = ill-posed on 36 matches). FROZEN: any change =
+# a new family / version. Overlap: with no other-platform line, pl-1 pulls toward the target line like lb-001 does.
+PROP_LINE = {"family": "prop-line-1", "w": {"kills": 0.0, "hs": 0.25}, "spread": "live predictive sd (perf sd)", "cap_kills": 0.78,
+             "market": ["target platform standard line", "other platform latest standard board line, same unit, logged <= forecast"],
+             "excluded": ["adjusted markets (goblin / demon)", "member-entered lines", "match-winner odds (rr-1)",
+                          "lines offered Over only (feed)"],
+             "fit": "w per stat, grid 0.00-1.20 step 0.05, minimum mean log-loss of the Over outcome at the target line; ties -> "
+                    "w closest to 1 (the live model)",
+             "data_hash": "f1274a945c16b1da", "training_cutoff": "2026-10-15T01:05:40+00:00",
+             "evidence": {"walk_forward_matches": 30, "walk_forward_units": 521,
+                          "folds_w": {"kills": [0.0, 0.0, 0.0], "hs": [1.2, 0.0, 0.0]},
+                          "kills_market_vs_live": [0.0247, -0.0011, 0.0529], "hs_market_vs_live": [0.0122, -0.0102, 0.0342],
+                          "combined_vs_live_all": [0.0073, -0.0107, 0.0244], "combined_vs_market_all": [-0.0113, -0.0228, -0.0012],
+                          "mae_kills": {"independent": 5.55, "market_median": 5.29},
+                          "note": "development only (walk-forward on the days that were also reported at the 2026-10-14 checkpoint)"}}
+
+
+def _normal_over(mu, sd, line, prop, cap):
+    if sd is None or sd <= 0 or mu is None or line is None:
+        return None
+    if line != int(line):
+        po = 1 - _phi((math.floor(line) + 0.5 - mu) / sd)
+        pu = 1 - po
+    else:
+        po, pu = 1 - _phi((line + 0.5 - mu) / sd), _phi((line - 0.5 - mu) / sd)
+    pr = po / (po + pu) if po + pu > 0 else 0.5
+    if prop == "kills":
+        pr = min(max(pr, 1 - cap), cap)
+    return pr
+
+
+def _two_sided(book, feat):
+    return True if book == "underdog" else feat.get("less_available") is not False
+
+
+def prop_line_value(f, feat, board_lines, cfg=PROP_LINE):
+    """pl-1 for one forecast copy: (p_combined, mean_combined, trace) or (None, None, reason). board_lines = the unit's board
+    standard lines [(logged_at, book, line, two_sided, forecast_id)] (current canonical identity)."""
+    pf = feat.get("perf") or {}
+    if f["source"] not in ("board", "board_pp") or (f["line_type"] or "standard") != "standard" or not f["book"]:
+        return None, None, "not a standard book line (member-entered or adjusted market)"
+    if f["prop"] not in cfg["w"] or not pf.get("lambda") or not pf.get("sd") or f["line"] is None:
+        return None, None, "no performance-model projection / spread"
+    lam, sd, line = float(pf["lambda"]), float(pf["sd"]), float(f["line"])
+    tgt_two = _two_sided(f["book"], feat)
+    oth = [b for b in board_lines if b[1] != f["book"] and b[0] and b[0] <= f["logged_at"]]
+    o = max(oth) if oth else None
+    used = ([line] if tgt_two else []) + ([o[2]] if o and o[3] else [])
+    if not used:
+        return None, None, "no two-sided standard line (target offered Over only, no comparable line)"
+    m = sum(used) / len(used)
+    mu = m + cfg["w"][f["prop"]] * (lam - m)
+    pc = _normal_over(mu, sd, line, f["prop"], cfg["cap_kills"])
+    trace = {"lam_independent": round(lam, 3), "sd": round(sd, 3), "median_market": round(m, 3), "w": cfg["w"][f["prop"]],
+             "mean_combined": round(mu, 3), "p_market": _r(_normal_over(m, sd, line, f["prop"], cfg["cap_kills"]), 4),
+             "p_replay": _r(_normal_over(lam, sd, line, f["prop"], cfg["cap_kills"]), 4),
+             "target": {"book": f["book"], "line": line, "two_sided": tgt_two, "side_info": "feed" if f["book"] == "underdog" or feat.get("less_available") is not None else "assumed"},
+             "other": ({"book": o[1], "line": o[2], "logged_at": o[0], "two_sided": o[3], "forecast_id": o[4]} if o else None)}
+    return pc, mu, trace
+
+
+def _ensure_prop_line(con, now):
+    """Freeze pl-1 once (its forward test = forecasts logged after this moment)."""
+    if con.execute("SELECT 1 FROM challengers WHERE family = ?", (PROP_LINE["family"],)).fetchone():
+        return
+    h = _sha(PROP_LINE)
+    cid = f"pl-001-{h[:8]}"
+    con.execute("INSERT INTO challengers (id, family, created_at, frozen_at, snapshot_id, data_hash, training_cutoff, config, "
+                "config_hash, base_config, status, status_at, status_reason, revises, development) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (cid, PROP_LINE["family"], _iso(now), _iso(now), None, PROP_LINE["data_hash"], PROP_LINE["training_cutoff"],
+                 json.dumps(PROP_LINE, sort_keys=True), h, json.dumps({"live": "logged chance"}), "shadow", _iso(now),
+                 "frozen (owner 2026-10-15); forward test = book-line forecasts logged after the freeze", None, "[]"))
+    con.execute("INSERT INTO events (at, kind, detail) VALUES (?,?,?)", (_iso(now), "challenger", json.dumps({"id": cid, "status": "shadow"})))
+
+
 def _ensure_line_blend(con, now):
     """Freeze the line-blend challenger once (its forward test = forecasts logged after this moment)."""
     if con.execute("SELECT 1 FROM challengers WHERE family = ?", (LINE_BLEND["family"],)).fetchone():
@@ -460,7 +546,8 @@ def features(gi):
     env = gi.get("environment")
     f = {"env": (env.get("tonight") if isinstance(env, dict) else None), "maps_played": gi.get("maps_played"),
          "sample_maps": gi.get("sample_maps"), "roster_confirmed": gi.get("roster_confirmed"),
-         "is_standin": gi.get("is_standin"), "on_listed_team": gi.get("on_listed_team"), "has_inputs": bool(gi)}
+         "is_standin": gi.get("is_standin"), "on_listed_team": gi.get("on_listed_team"), "has_inputs": bool(gi),
+         "less_available": gi.get("less_available")}
     if pf is not None:
         f["perf"] = {k: pf.get(k) for k in _PERF_KEEP if pf.get(k) is not None}
         g7 = pf.get("g7") if isinstance(pf.get("g7"), dict) else None
@@ -1264,6 +1351,37 @@ def product_units(con, rows=None):
     return out, excl
 
 
+def _prop_line_extras(con, cid, pr):
+    """pl-1 on the same forecasts: the simple market baseline vs live and vs pl-1 (log-loss gains, + = the first is better),
+    and the three projections against the actual totals (independent HLTV / market median / combined)."""
+    tr = {}
+    for u in pr:
+        s = con.execute("SELECT note FROM shadow WHERE challenger_id = ? AND forecast_id = ?", (cid, u["forecast_id"])).fetchone()
+        try:
+            t = json.loads(s["note"]) if s and s["note"] and s["note"].startswith("{") else None
+        except ValueError:
+            t = None
+        if t and t.get("p_market") is not None:
+            tr[u["forecast_id"]] = t
+    us = [dict(u, p_m=tr[u["forecast_id"]]["p_market"], t=tr[u["forecast_id"]]) for u in pr if u["forecast_id"] in tr]
+    if not us:
+        return {"market_baseline": {"units": 0, "matches": 0}}
+    g_ml = lambda u: _ll(u["p_base"], u["over"]) - _ll(u["p_m"], u["over"])
+    g_cm = lambda u: _ll(u["p_m"], u["over"]) - _ll(u["p_ch"], u["over"])
+    proj = {}
+    for prop in ("kills", "hs"):
+        g = [u for u in us if u["prop"] == prop]
+        if g:
+            proj[prop] = {k: _r(sum(abs(u["t"][f] - u["actual"]) for u in g) / len(g), 3)
+                          for k, f in (("independent", "lam_independent"), ("market_median", "median_market"), ("combined", "mean_combined"))}
+            proj[prop]["units"] = len(g)
+    return {"market_baseline": {"units": len(us), "matches": len({u["match"] for u in us}),
+                                "gain_vs_live": _r(sum(g_ml(u) for u in us) / len(us), 5), "gain_vs_live_ci": _ci_ratio(_groups(us, g_ml)),
+                                "pl1_gain_vs_market": _r(sum(g_cm(u) for u in us) / len(us), 5), "pl1_gain_vs_market_ci": _ci_ratio(_groups(us, g_cm)),
+                                "with_other_platform_line": sum(1 for u in us if u["t"].get("other"))},
+            "projection_mae": proj}
+
+
 def product_scorecard(con, rows=None):
     us, excl = product_units(con, rows)
     out = {"protocol": PRODUCT, "units": len(us), "matches": len({u["match"] for u in us}),
@@ -1306,8 +1424,10 @@ def product_scorecard(con, rows=None):
             s = con.execute("SELECT * FROM shadow WHERE challenger_id = ? AND forecast_id = ?", (ch["id"], u["forecast_id"])).fetchone()
             if s is not None and s["p_over_ch"] is not None:
                 pr.append(dict(u, p_ch=s["p_over_ch"], p_base=s["p_over_base"], p_logged=s["p_over_logged"], changed=s["changed"]))
-        out["challengers"].append(dict(paired_stats(pr, slope=False), id=ch["id"],
-                                       label="P1 board lines, forward (interim - decisions only at the registered windows)"))
+        row = dict(paired_stats(pr, slope=False), id=ch["id"], label="P1 board lines, forward (interim - decisions only at the registered windows)")
+        if ch["family"] == PROP_LINE["family"]:
+            row.update(_prop_line_extras(con, ch["id"], pr))
+        out["challengers"].append(row)
     return out
 
 
@@ -1540,18 +1660,45 @@ def training_step(con, now, force=False):
     return {"ran": True, "outcome": "challenger frozen" if cid else "no candidate", "challenger": cid, **detail}
 
 
-def shadow_step(con, now, limit=4000):
+def _board_line_index(con, picks):
+    """Board standard lines by the CURRENT canonical unit of their pick (never the key stored on the copy)."""
+    uk = {p["id"]: unit_key(p) for p in picks or [] if p.get("id") is not None}
+    idx = collections.defaultdict(list)
+    for r in con.execute("SELECT forecast_id, pick_id, logged_at, book, line, features FROM forecast_copy WHERE source IN ('board', 'board_pp') "
+                         "AND COALESCE(line_type, 'standard') = 'standard' AND book IS NOT NULL AND line IS NOT NULL"):
+        u = uk.get(r["pick_id"])
+        if u:
+            feat = json.loads(r["features"] or "{}")
+            idx[u].append((r["logged_at"], r["book"], float(r["line"]), _two_sided(r["book"], feat), r["forecast_id"]))
+    return uk, idx
+
+
+def shadow_step(con, now, limit=4000, picks=None):
     """Live and challenger chances side by side for every forecast logged after each active challenger's freeze."""
     n = 0
+    board_idx = None
     for ch in con.execute("SELECT * FROM challengers WHERE status IN ('shadow', 'eligible_for_review')").fetchall():
         cfg, base = json.loads(ch["config"]), json.loads(ch["base_config"])
         blend = ch["family"] == LINE_BLEND["family"]
+        propline = ch["family"] == PROP_LINE["family"]
         todo = con.execute("SELECT f.* FROM forecast_copy f WHERE f.logged_at > ? AND NOT EXISTS (SELECT 1 FROM shadow s "
                            "WHERE s.challenger_id = ? AND s.forecast_id = f.forecast_id) ORDER BY f.forecast_id LIMIT ?",
                            (ch["frozen_at"], ch["id"], limit)).fetchall()
         for i, f in enumerate(todo):
             feat = json.loads(f["features"] or "{}")
             pl = p_over_of(dict(f))
+            if propline:                                  # pl-1: needs the unit's board lines at the forecast's time
+                if board_idx is None:
+                    board_idx = _board_line_index(con, picks)
+                uk_, idx_ = board_idx
+                pc, mu, tr = prop_line_value(dict(f), feat, idx_.get(uk_.get(f["pick_id"]), []), cfg)
+                note = json.dumps(tr, sort_keys=True) if isinstance(tr, dict) else tr
+                con.execute("INSERT OR IGNORE INTO shadow (challenger_id, forecast_id, p_over_ch, p_over_base, p_over_logged, lam_ch, lam_base, "
+                            "changed, computed_at, note) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                            (ch["id"], f["forecast_id"], pc, pl, pl, mu, (tr or {}).get("lam_independent") if isinstance(tr, dict) else f["lambda"],
+                             int(pc is not None and pl is not None and abs(pc - pl) > 1e-9), _iso(now), note))
+                n += 1
+                continue
             if blend:                                     # the live chance itself is the baseline (no replay needed)
                 pc = line_blend_p(pl, f["prop"], f["scope"], cfg)
                 vals = (pc, pl, pl, None, f["lambda"], int(pc is not None and pl is not None and abs(pc - pl) > 1e-9),
@@ -1852,6 +1999,7 @@ def run_cycle(now=None, picks=None, forecasts=None, batches=None, corrections=No
         try:
             _ensure_baseline(con, now)
             _ensure_line_blend(con, now)
+            _ensure_prop_line(con, now)
             log = {"at": _iso(now)}
             # 1. copy new forecasts (immutable), in pages
             if picks is None:
@@ -1877,7 +2025,7 @@ def run_cycle(now=None, picks=None, forecasts=None, batches=None, corrections=No
             corrections = read_corrections(corrections_path) if corrections is None else corrections
             batches = read_batches(batches_path) if batches is None else batches
             # 2. shadow forecasts (measurement only - continues while paused)
-            log["shadow_added"] = shadow_step(con, now)
+            log["shadow_added"] = shadow_step(con, now, picks=picks)
             con.commit()
             # 3. safety
             fl = faults(con, picks, corrections, now)

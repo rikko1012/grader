@@ -211,3 +211,28 @@ differently.
 - The faults were not acknowledged to unlock the counter.
 
 Tests: tests/test_eval_pipeline.py.
+
+## 10. What updates automatically, and what never does (2026-10-15)
+
+- **Every learning cycle** (after settlement passes) copies new forecasts and settles and scores newly eligible units:
+  the registered scorecard, the P1 product scorecard, and every frozen challenger's shadow and paired comparison.
+  **This is automatic settlement and evaluation. It never changes a live weight, grade, chance or stake.** Grading
+  changes only through a code release.
+- **The 150-match training counter** (`learning.N_NEW`, `TRAIN_RULE`):
+  - It counts DISTINCT canonical matches with at least one scored registered evaluation unit, processed after the
+    last training run's cutoff. Only matches are counted - not forecasts, lines or units.
+  - At 150, one training run builds a snapshot: scored registered units with match start before the cutoff, whose
+    perf-2 projection can be inverted exactly, saved with its hash.
+  - It refits only the perf-refit-1 family (perf-2 parameters: prior strengths, LAN/online blend, HS shrink, spreads)
+    by log-loss on time-ordered folds of that snapshot.
+  - It FREEZES a challenger only if both validation gains are positive, and does nothing while one of that family is
+    in its forward test.
+  - Hand-defined challengers (lb-001, rr-1, pl-1) are never retrained by it.
+- **The 300 / 600 / 1,000 promotion review** (REVIEW_RULE) is per challenger. It counts distinct FORWARD matches: the
+  forecast logged after that challenger's freeze AND the match started after it. It is reported on the registered view
+  and on P1 board lines.
+  - A pass makes the challenger "eligible for review" only.
+  - Promotion is an explicit owner action with a written reason and a new model version.
+  - So the training counter (150, since the last training run, all scored matches) and a challenger's review count
+    (300+, since its own freeze) are different clocks.
+- **No match count guarantees an improvement.** A window records the result, whatever it is.

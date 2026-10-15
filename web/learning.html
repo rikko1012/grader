@@ -133,7 +133,11 @@ function draw() {
     ${table(MH, ["prop", "version", "revision"].flatMap(d => ((PR1.by || {})[d] || []).map(m => metricRow(`${d}: ${m.group}`, m))))}
     <h3>Challengers on the same board forecasts (forward, interim)</h3>
     ${table(["Challenger", "Units", "Matches", "Changed", "Log loss live", "Challenger", "Gain (+ = challenger better)", "95%"], (PR1.challengers || []).map(c =>
-      `<tr><td>${esc(c.id)}</td><td>${c.units ?? 0}</td><td>${c.matches ?? 0}</td><td>${c.changed_units ?? "–"}</td><td>${n4(c.log_loss_live_replay)}</td><td>${n4(c.log_loss_challenger)}</td><td>${n4(c.gain)}</td><td>${ci(c.gain_ci, n4)}</td></tr>`))}`;
+      `<tr><td>${esc(c.id)}</td><td>${c.units ?? 0}</td><td>${c.matches ?? 0}</td><td>${c.changed_units ?? "–"}</td><td>${n4(c.log_loss_live_replay)}</td><td>${n4(c.log_loss_challenger)}</td><td>${n4(c.gain)}</td><td>${ci(c.gain_ci, n4)}</td></tr>`))}
+    ${(PR1.challengers || []).filter(c => c.market_baseline).map(c => { const m = c.market_baseline, pm = c.projection_mae || {};
+      return `<div class="small"><b>${esc(c.id)} - three arms on the same forecasts</b>: simple market baseline vs live ${n4(m.gain_vs_live)} (${ci(m.gain_vs_live_ci, n4)}) · ${esc(c.id)} vs market baseline ${n4(m.pl1_gain_vs_market)} (${ci(m.pl1_gain_vs_market_ci, n4)}) · ${m.units ?? 0} units / ${m.matches ?? 0} matches, ${m.with_other_platform_line ?? 0} with the other platform's line
+        <br>Average miss of the mean (lower is better): ${Object.entries(pm).map(([k, v]) => `${esc(k)}: independent HLTV ${n2(v.independent)} · market median ${n2(v.market_median)} · combined ${n2(v.combined)} (${v.units})`).join(" · ") || "–"}
+        <span class="muted">The independent projection is the live one, logged unchanged; agreement with the line is never itself the target.</span></div>`; }).join("")}`;
 
   // scorecard
   const o = SC.overall || {};

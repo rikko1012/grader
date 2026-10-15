@@ -354,3 +354,37 @@ production lines (19 matches): MAE -0.097 (-0.174..-0.022), log-loss -0.010 (-0.
 **Outcome per the frozen rule:** rr-ks becomes a logged SHADOW challenger (CHALLENGERS.md rr-1); it changes no grade,
 chance or stake. Promotion only through the forward review windows and a written owner decision. Full log: scratchpad
 design/round-race/rr_test_FROZEN_RUN.log.
+
+
+## Round 7 - market-informed prop challenger pl-1 (defined 2026-10-15, after the corrected checkpoint)
+
+**Honest record.** pl-1 was designed AFTER the 2026-10-14 checkpoint was seen. Its fit data (board standard lines,
+2026-10-11..14, 635 units / 36 matches, hash f1274a945c16b1da) are the same days the checkpoint reported, so its
+walk-forward numbers are development evidence only. One design change was made after looking: a free spread multiplier
+ran to the edge of a widened grid (3.0), so the spread was fixed at the live sd and only w per stat is fitted. The
+definition, inputs, threshold-vs-median rule and frozen weights are in CHALLENGERS.md (pl-1) and learning.PROP_LINE;
+code `learning.prop_line_value`, scripts session scratchpad ck/pl_fit.py.
+
+| walk-forward (521 units / 30 matches; + = first model better) | log-loss gain (95%, by match) |
+|---|---|
+| kills: market baseline vs live | +0.0247 (-0.0011 to +0.0529) |
+| HS: market baseline vs live | +0.0122 (-0.0102 to +0.0342) |
+| both: pl-1 vs live | +0.0073 (-0.0107 to +0.0244) |
+| both: pl-1 vs market baseline | -0.0113 (-0.0228 to -0.0012) |
+
+Mean projections, kills (average miss): independent 5.55, market median 5.29, pl-1 5.29 (kills w = 0).
+Fold weights: kills 0 / 0 / 0, HS 1.2 / 0 / 0. Frozen: kills 0.0, HS 0.25. Forward test only from its freeze.
+
+**Error diagnosis on the same cohort (descriptive, ck/diag2.py).**
+- **Kills Maps 1-2 (222 units):** the log error splits into rounds (variance 0.011, mean +3.6%, -0.4% to +7.5%) and kill
+  rate (variance 0.058, mean +0.5%). Exact rounds would cut the average miss only from 5.31 to 5.22; an exact kill rate
+  would cut it to 2.76 (an oracle bound that includes irreducible per-match noise).
+- **Headshots (305 units):** most of the error comes from the kills underneath (known kills: 3.72 to 2.53), not the HS
+  share (known share: 3.26). Predicted HS share 0.521 vs actual 0.527.
+- **Spread:** the 50% interval holds 55% / 53% and the 80% interval 83% / 81% (kills / HS). Not too narrow.
+- **Probabilities (Brier decomposition):**
+  - kills: calibration error 0.014, resolution 0.002;
+  - HS: calibration error 0.009, resolution 0.004.
+  The chances barely separate outcomes, and their miscalibration is larger than that separation.
+- **Means vs probabilities:** removing the earlier days' mean bias (walk-forward) changes kills MAE by -0.06 and log-loss
+  by -0.004, both across 0. A better mean is not a better hit probability; the two are separate objectives.
