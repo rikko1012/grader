@@ -250,7 +250,24 @@ the spread or the average.
 
 ## Learning loop
 
-(Filled from production once the settle pass has run.)
+Production, read-only checks on 2026-10-15:
+
+- **01:15 UTC:** the settle pass after the restart re-derived all 7 faulted picks from HLTV. Each now has `source: hltv`,
+  HLTV's per-map detail (BRACE 23 + 15, yourwombat 15 + 14), its review / provisional flags released, and the BO3.gg
+  record kept as `bo3_detail`. The settled totals and hit flags are unchanged. No acknowledgement was used.
+- **01:15:02 UTC:** the learning cycle ran with **no fault**. The pause (since 2026-10-13 00:53) ended by itself.
+- **A second defect, found by comparing production with a fresh rebuild.**
+  - Production scored 490 units / 32 matches and marked 202 units "no forecast 30+ min before the start". A fresh
+    rebuild from the same exports scored 678 / 42 with 13 incomplete.
+  - Cause: forecast copies keep the unit key from when they were copied, and the canonical match identity changed
+    later (identity rule v3 migration on 2026-10-14 22:56 UTC).
+  - Fix (deployed 9f808c2, 01:21 UTC): units find their forecasts by pick id.
+- **01:23:02 UTC cycle:** **678 scored units / 42 matches, 13 incomplete (5 matches), 5 void, 5 push, 1 held for
+  review.** That is identical to the independent reconstruction in this report. P1 product scorecard: 634 units /
+  36 matches (this report: 635; the one unit held for review is excluded there).
+- **Advance on a newly settled match:** being watched on production; the result is recorded below when the next
+  settled match is scored.
+
 
 Scripts (read-only, local): session scratchpad ck/fetch_pages.py (bounded extraction + manifest), ck/build2.py,
 ck/report2.py, ck/extra2.py; settle/hltv_2399144.py (HLTV records of the faulted match).
