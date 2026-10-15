@@ -236,3 +236,11 @@ Tests: tests/test_eval_pipeline.py.
   - So the training counter (150, since the last training run, all scored matches) and a challenger's review count
     (300+, since its own freeze) are different clocks.
 - **No match count guarantees an improvement.** A window records the result, whatever it is.
+- **A refit is a new immutable candidate** (2026-10-15).
+  - When perf-refit-1 trains, the training run saves its cutoff, snapshot id, data hash, the history revision of every
+    training row (`trainings.detail.data_revisions`), and its parameters.
+  - A frozen candidate gets a new id and an immutable `challengers.provenance` record with all of these.
+  - Its forward test and review windows start at its own freeze: forward_units and reviews are keyed by its id. It never
+    inherits an earlier candidate's forward results or review counter.
+  - A forced retrain supersedes the earlier candidate; that candidate's forward rows become development data.
+  - Tested: tests/test_eval_pipeline.py.

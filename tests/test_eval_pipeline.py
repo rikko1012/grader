@@ -327,5 +327,53 @@ def test_pl1_is_frozen_and_shadowed_on_forward_board_forecasts(db, tmp_path):
     assert s["lam_base"] == 31.0 and s["lam_ch"] == 28.5 and abs(s["p_over_ch"] - 0.5) < 1e-9 and t["target"]["book"] == "underdog"
     sc = learning.scorecard(learning.connect(ldb))["product"]
     pl = next(c for c in sc["challengers"] if c["id"] == ch["id"])
-    assert pl["units"] == 1 and pl["market_baseline"]["units"] == 1
-    assert set(pl["projection_mae"]["kills"]) >= {"independent", "market_median", "combined"}
+    c1 = pl["c1"]
+    assert pl["units"] == 1 and c1["units"] == 1 and c1["identity_kills"]["pl1_differs_from_B"] == 0
+    assert {x["pair"] for x in c1["pairs"]} == {"B vs A", "A vs D", "B vs D", "C vs B", "C vs D"}
+    assert set(c1["point_forecasts"]["kills"]["mae_median_type"]) == {"target line", "line anchor m", "pl-1 location"}
+    assert c1["by_anchor_class"][0]["anchor"] == "no quote recorded"            # forecast logged without a quote
+
+
+def test_pl1_kills_identity_holds_with_another_platform_line():
+    p, mu, tr = learning.prop_line_value(_fcopy(), PERF, [("2026-10-16T09:00:00+00:00", "prizepicks", 31.5, True, 7)])
+    assert abs(p - tr["p_market"]) <= 5e-5 and mu == tr["median_market"] and tr["mean_combined"] == tr["median_market"]
+
+
+def test_anchor_classes_follow_the_logged_quote():
+    assert learning.anchor_class("underdog", {"price_over": 1.9, "price_under": 1.9}).startswith("Underdog: equal")
+    assert learning.anchor_class("underdog", {"price_over": 1.8, "price_under": 2.03}).startswith("Underdog: unequal")
+    assert learning.anchor_class("prizepicks", {"feed_odds_type": "promo"}).startswith("PrizePicks promo")
+    assert learning.anchor_class("prizepicks", {"feed_odds_type": "standard"}).endswith("(line-anchored assumption)")
+    assert learning.anchor_class("underdog", None) == "no quote recorded"
+
+
+def test_a_board_forecast_records_its_quote(db):
+    import cs2_scout  # noqa: F401  (pick_row needs the grade layout only)
+    res = {"grade": {"prop": "kills", "line": 30.5, "line_type": "standard", "p_more": 0.55, "p_less": 0.45, "lambda_final": 31.0, "scope": "12"},
+           "player_block": {"player": {"slug": "a", "nick": "a", "id": 1}}, "next_match": {"slug": "x-vs-y-16-10-2026", "start": "2026-10-16T15:00:00Z"},
+           "book": {"book": "underdog", "market_id": "m1", "odds_type": "standard",
+                    "quote": {"price_over": 1.8, "price_under": 2.03, "feed_odds_type": "standard", "updated_at": "2026-10-16T09:59:00Z"}}}
+    v = {"state": "GRADE", "side": "More", "p": 0.55, "grade": "B-", "units": 0.5}
+    picklog.log_grade(res, v, test=2)
+    q = json.loads(picklog.forecasts_page()["rows"][0]["quote"])
+    assert q["price_over"] == 1.8 and q["price_under"] == 2.03
+
+
+def test_a_refit_is_a_new_immutable_version_that_inherits_no_forward_results(tmp_path, monkeypatch):
+    con = learning.connect(tmp_path / "l.db")
+    rows = [{"fid": None, "match": f"m{i}", "start": "2026-10-10T10:00:00+00:00"} for i in range(70)]
+    monkeypatch.setattr(learning, "build_snapshot", lambda con_, now: ("snap-x", "h" * 16, rows * 3))
+    k = iter([0.9, 1.1])
+    monkeypatch.setattr(learning, "refit", lambda rows_, base: {"candidate": True, "config": dict(learning.LIVE_CFG, c_mult=next(k)), "folds": [],
+                                                              "trace": [], "train_loss_live": 0.7, "train_loss_fit": 0.69})
+    t1 = datetime(2026, 10, 20, tzinfo=timezone.utc)
+    a = learning.training_step(con, t1, force=True)
+    con.execute("INSERT INTO reviews (challenger_id, win, decided_at, passed, result) VALUES (?, 300, ?, 0, '{}')", (a["challenger"], learning._iso(t1)))
+    b = learning.training_step(con, t1 + timedelta(days=9), force=True)
+    assert a["challenger"] != b["challenger"]
+    A = con.execute("SELECT * FROM challengers WHERE id = ?", (a["challenger"],)).fetchone()
+    Bc = con.execute("SELECT * FROM challengers WHERE id = ?", (b["challenger"],)).fetchone()
+    assert A["status"] == "superseded" and Bc["frozen_at"] > A["frozen_at"]
+    prov = json.loads(Bc["provenance"])
+    assert prov["snapshot_id"] == "snap-x" and prov["training_cutoff"] == Bc["frozen_at"] and "data_revisions" in prov
+    assert con.execute("SELECT COUNT(*) FROM reviews WHERE challenger_id = ?", (b["challenger"],)).fetchone()[0] == 0

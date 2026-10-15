@@ -93,12 +93,13 @@ function draw() {
       <div class="small">Frozen ${when(c.frozen_at)} · training cutoff ${when(c.training_cutoff)} · snapshot ${esc(c.snapshot)} · data hash ${esc((c.data_hash || "").slice(0, 16))}… · ${c.shadow_forecasts} shadow forecasts${c.revises ? ` · revises ${esc(c.revises)}` : ""}</div>
       <div class="small">Freeze check: ${fc.forward_units ?? 0} forward units, ${fc.units_started_or_logged_before_freeze ?? 0} started or logged before the freeze${fc.earliest_forward_start ? ` · earliest forward match ${when(fc.earliest_forward_start)}` : ""} <span class="muted">(${esc(fc.rule || "")})</span></div>
       ${c.next_review ? `<div class="small">Next review ${esc(c.next_review)}. Decisions are made only at ${esc((D.review_rule?.windows || []).join(" / "))} matches.</div>` : ""}
-      ${table(["Parameter", "Live", "Challenger"], Object.keys(c.config).map(k => `<tr><td>${esc(k)}</td><td>${esc(c.base_config[k] ?? "each row's own")}</td><td>${esc(c.config[k])}</td></tr>`))}
+      ${table(["Parameter", "Live", "Challenger"], Object.keys(c.config).map(k => `<tr><td>${esc(k)}</td><td>${esc(c.base_config[k] ?? "each row's own")}</td><td>${esc(typeof c.config[k] === "object" ? JSON.stringify(c.config[k]) : c.config[k])}</td></tr>`))}
       <h3>Paired forward results <span class="small muted">(${esc(f.label || "interim")})</span></h3>
       ${table(["Units", "Matches", "Changed units", "Log loss live (logged)", "Live replay", "Challenger", "Gain vs live replay", "Gain 95%", "Replay gap"],
         [`<tr><td>${f.units ?? 0}</td><td>${f.matches ?? 0}</td><td>${f.changed_units ?? "–"}</td><td>${n4(f.log_loss_logged)}</td><td>${n4(f.log_loss_live_replay)}</td><td>${n4(f.log_loss_challenger)}</td><td>${n4(f.gain)}</td><td>${ci(f.gain_ci, n4)}</td><td>${n4(f.replay_gap)}</td></tr>`])}
       ${(c.reviews || []).map(r => `<div class="small"><b>Review at ${r.win} matches (${when(r.decided_at)}): ${r.passed ? "PASSED - eligible for review" : "did not pass"}</b> · gain ${n4(r.result.gain)} (${ci(r.result.gain_ci, n4)}, ${pc(r.result.ci_level)} interval) · slope ${n2(r.result.slope)} (${ci(r.result.slope_ci)})
         <br>${Object.entries(r.result.checks || {}).map(([k, v]) => `<span class="pill ${v ? "on" : "off"}">${v ? "✓" : "✗"} ${esc(k)}</span>`).join("")}</div>`).join("")}
+      ${c.provenance ? `<div class="small muted">Provenance (immutable): training cutoff ${when(c.provenance.training_cutoff)} · snapshot ${esc(c.provenance.snapshot_id)} · data hash ${esc((c.provenance.data_hash || "").slice(0, 16))} · ${c.provenance.rows} rows / ${c.provenance.matches} matches · history revisions ${esc(JSON.stringify(c.provenance.data_revisions || {}))}</div>` : ""}
       ${(c.development || []).length ? `<div class="small muted">Development data: ${c.development.map(d => `${esc(d.challenger)} forward results (${d.units} units, ${d.matches} matches)`).join("; ")}</div>` : ""}
       ${c.status === "eligible_for_review" ? `<p><button class="act" onclick="promote('${esc(c.id)}')">Promote (records the decision - live grading changes only with a code release)</button></p>` : ""}
     </div>`;
@@ -134,10 +135,14 @@ function draw() {
     <h3>Challengers on the same board forecasts (forward, interim)</h3>
     ${table(["Challenger", "Units", "Matches", "Changed", "Log loss live", "Challenger", "Gain (+ = challenger better)", "95%"], (PR1.challengers || []).map(c =>
       `<tr><td>${esc(c.id)}</td><td>${c.units ?? 0}</td><td>${c.matches ?? 0}</td><td>${c.changed_units ?? "–"}</td><td>${n4(c.log_loss_live_replay)}</td><td>${n4(c.log_loss_challenger)}</td><td>${n4(c.gain)}</td><td>${ci(c.gain_ci, n4)}</td></tr>`))}
-    ${(PR1.challengers || []).filter(c => c.market_baseline).map(c => { const m = c.market_baseline, pm = c.projection_mae || {};
-      return `<div class="small"><b>${esc(c.id)} - three arms on the same forecasts</b>: simple market baseline vs live ${n4(m.gain_vs_live)} (${ci(m.gain_vs_live_ci, n4)}) · ${esc(c.id)} vs market baseline ${n4(m.pl1_gain_vs_market)} (${ci(m.pl1_gain_vs_market_ci, n4)}) · ${m.units ?? 0} units / ${m.matches ?? 0} matches, ${m.with_other_platform_line ?? 0} with the other platform's line
-        <br>Average miss of the mean (lower is better): ${Object.entries(pm).map(([k, v]) => `${esc(k)}: independent HLTV ${n2(v.independent)} · market median ${n2(v.market_median)} · combined ${n2(v.combined)} (${v.units})`).join(" · ") || "–"}
-        <span class="muted">The independent projection is the live one, logged unchanged; agreement with the line is never itself the target.</span></div>`; }).join("")}`;
+    ${(PR1.challengers || []).filter(c => c.c1).map(c => { const m = c.c1, pf = m.point_forecasts || {};
+      const pr = (xs) => (xs || []).map(x => `${esc(x.label)} ${n4(x.gain)} (${ci(x.ci, n4)}, ${x.units ?? 0} units / ${x.matches ?? 0} matches)`).join(" · ");
+      return `<div class="small"><b>${esc(c.id)} - comparison set C1</b> (registered ${when(m.registered)}; A target line only · B target + other platform's line (line-anchored baseline) · C ${esc(c.id)} · D live; + = first-named better): ${pr(m.pairs)}
+        <br>Where the other platform had a line: ${pr(m.pairs_with_other_line)} · ${m.with_other_platform_line ?? 0} of ${m.units ?? 0} units
+        <br>Kills identity check (w = 0, C must equal B): ${(m.identity_kills || {}).pl1_differs_from_B ?? "–"} of ${(m.identity_kills || {}).units ?? 0} differ (0 expected)
+        <br>By anchor (logged quote): ${(m.by_anchor_class || []).map(x => `${esc(x.anchor)}: B vs D ${n4(x.gain)} (${x.units} units)`).join(" · ") || "–"}
+        <br>Point forecasts: ${Object.entries(pf).map(([k, v]) => `${esc(k)} - MAE (median-type) ${Object.entries(v.mae_median_type || {}).map(([a, b]) => `${esc(a)} ${n2(b)}`).join(", ")}; RMSE (mean-type) independent HLTV mean ${n2((v.rmse_mean_type || {})["independent HLTV mean"])}`).join(" · ") || "–"}
+        <span class="muted">The line is a threshold; reading it as the market's median is an assumption unless its side prices are equal. The independent projection is the live one, logged unchanged.</span></div>`; }).join("")}`;
 
   // scorecard
   const o = SC.overall || {};

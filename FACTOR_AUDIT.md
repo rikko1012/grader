@@ -375,7 +375,7 @@ code `learning.prop_line_value`, scripts session scratchpad ck/pl_fit.py.
 Mean projections, kills (average miss): independent 5.55, market median 5.29, pl-1 5.29 (kills w = 0).
 Fold weights: kills 0 / 0 / 0, HS 1.2 / 0 / 0. Frozen: kills 0.0, HS 0.25. Forward test only from its freeze.
 
-**Error diagnosis on the same cohort (descriptive, ck/diag2.py).**
+**Error diagnosis on the same cohort (descriptive, ck/diag2.py; qualified 2026-10-15 below).**
 - **Kills Maps 1-2 (222 units):** the log error splits into rounds (variance 0.011, mean +3.6%, -0.4% to +7.5%) and kill
   rate (variance 0.058, mean +0.5%). Exact rounds would cut the average miss only from 5.31 to 5.22; an exact kill rate
   would cut it to 2.76 (an oracle bound that includes irreducible per-match noise).
@@ -388,3 +388,21 @@ Fold weights: kills 0 / 0 / 0, HS 1.2 / 0 / 0. Frozen: kills 0.0, HS 0.25. Forwa
   The chances barely separate outcomes, and their miscalibration is larger than that separation.
 - **Means vs probabilities:** removing the earlier days' mean bias (walk-forward) changes kills MAE by -0.06 and log-loss
   by -0.004, both across 0. A better mean is not a better hit probability; the two are separate objectives.
+
+**Qualifications (owner review 2026-10-15).**
+- **The substitutions of actual rounds and actual kill rate are RETROSPECTIVE ORACLE DECOMPOSITIONS.** They use
+  information known only after the match. They show where the realised error sits, not which part is predictably fixable.
+  - They interact: rounds known 5.31 to 5.22 (-0.09); rate known 5.31 to 2.76 (-2.55); both known 0. The two single
+    reductions (2.64) are not additive with the joint one (5.31). In log space the covariance term is -0.0035 of a total
+    variance of 0.0654.
+- **Interval coverage** (50%: 55% / 53%; 80%: 83% / 81%) is broadly compatible with nominal coverage in this sample. It
+  does not show the spread is right for every player, cohort or line.
+- **Calibration by stat x cohort** (descriptive only - nothing is tuned on it; the cohorts overlap and multiple
+  comparisons apply). Favoured side, printed vs happened:
+  - Underdog: kills 57.2% vs 44.6%, HS 56.7% vs 39.8%.
+  - PrizePicks: kills 57.2% vs 50.8%, HS 57.2% vs 60.9%.
+  - Online: kills 44.3%, HS 45.8% happened; LAN: 51.1% / 53.1%.
+  - Thin history (< 500 weighted rounds, 15 matches): kills 60.9% vs 31.0%, HS 58.1% vs 34.0%.
+  - Kills 0.25+ sd from the line: 65.7% vs 43.6%.
+  - The 80% intervals hold 77-85% in every cohort.
+  - These are leads for prospective hypotheses, never fitted on these matches.

@@ -629,6 +629,15 @@ def _row_match_id(row):
         return None
 
 
+def board_at_iso(book):
+    """The fetch time of a platform's board as ISO UTC (None when unknown) - recorded with each board forecast's quote."""
+    try:
+        b = prizepicks.board() if book == "prizepicks" else underdog.board()
+        at = b.get("at")
+        return datetime.fromtimestamp(at, timezone.utc).isoformat(timespec="seconds") if isinstance(at, (int, float)) and at else (at or None)
+    except Exception:
+        return None
+
 def board_payload(book="underdog"):
     """The graded board for one platform. book="prizepicks": PrizePicks' lines (prizepicks.py), each graded at its own
     line and market type; its feed state (ok / stale / failed / empty) travels with it. Default Underdog, unchanged."""
@@ -1800,7 +1809,16 @@ def board_forever():
                         traceback.print_exc()
                     # the platform and the provider's market id travel with the logged forecast (one row per platform)
                     res["book"] = {"book": r.get("book") or "underdog", "market_id": r.get("market_id") or r.get("id"),
-                                   "market": r.get("market"), "odds_type": lt}
+                                   "market": r.get("market"), "odds_type": lt,
+                                   # 2026-10-15 measurement only (never a grade input): the quote this forecast was graded
+                                   # on - per-side prices / payouts, the feed's own market type (PrizePicks 'promo' = a
+                                   # boosted standard line), the sides offered, the provider's update time and the board's
+                                   # fetch time - so a line's use as a market anchor can be checked against its pricing
+                                   "quote": {"price_over": r.get("price_higher"), "price_under": r.get("price_lower"),
+                                             "payout_over": r.get("higher"), "payout_under": r.get("lower"),
+                                             "feed_odds_type": r.get("odds_type") or ("alt" if r.get("alt") else "standard"),
+                                             "over_available": r.get("over_available"), "under_available": r.get("under_available"),
+                                             "updated_at": r.get("updated_at"), "board_at": board_at_iso(r.get("book") or "underdog")}}
                     if not grade_transient(g):                # never logged as a forecast of the live model (calibration cohorts)
                         try:
                             picklog.log_async(res, v, test=2)

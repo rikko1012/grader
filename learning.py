@@ -338,7 +338,7 @@ def connect(db=None):
     # and alias / matching revision - so results can be split by them without joining back to picks.db
     for tbl, col in (("ledger", "lines"), ("forecast_copy", "probs_raw"), ("forecast_copy", "data_rev"),
                      ("forecast_copy", "odds_source"), ("forecast_copy", "odds_policy"), ("forecast_copy", "mapping_rev"),
-                     ("forecast_copy", "odds_selected")):
+                     ("forecast_copy", "odds_selected"), ("forecast_copy", "quote"), ("challengers", "provenance")):
         try:
             con.execute(f"ALTER TABLE {tbl} ADD COLUMN {col} TEXT")
         except sqlite3.OperationalError:
@@ -380,7 +380,7 @@ def read_picklog(picks_path=None, after_forecast_id=0, limit=3000):
         con.execute("PRAGMA query_only=ON")
         con.execute("BEGIN")
         fcols = {r[1] for r in con.execute("PRAGMA table_info(forecasts)")}
-        opt = "".join(f", {c}" for c in ("probs_raw", "data_rev", "odds_source", "odds_policy", "mapping_rev") if c in fcols)
+        opt = "".join(f", {c}" for c in ("probs_raw", "data_rev", "odds_source", "odds_policy", "mapping_rev", "quote") if c in fcols)
         fr = [dict(r) for r in con.execute(
             "SELECT id, pick_id, kind, logged_at, match_start, line, pick, p_pick, p_more, grade, units, lambda, "
             f"model_version, inputs{opt} FROM forecasts WHERE id > ? ORDER BY id LIMIT ?", (after_forecast_id, limit))]
@@ -1019,14 +1019,14 @@ def _copy_forecasts(con, picks, forecasts, now):
         con.execute("INSERT OR IGNORE INTO forecast_copy (forecast_id, pick_id, kind, logged_at, match_start, line, side, p_pick, "
                     "p_more, grade, units, lambda, model_version, unit_key, match_slug, player, prop, scope, source, book, "
                     "line_type, test, inputs_sha1, features, copied_at, probs_raw, data_rev, odds_source, odds_policy, "
-                    "mapping_rev, odds_selected) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "mapping_rev, odds_selected, quote) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (f["id"], f["pick_id"], f.get("kind"), _niso(f.get("logged_at")), _niso(f.get("match_start") or p.get("match_start")),
                      f.get("line"), f.get("pick"), f.get("p_pick"), f.get("p_more"), f.get("grade"), f.get("units"), f.get("lambda"),
                      f.get("model_version"), unit_key(p) if p else None, match_of(p) if p else None, p.get("player"), p.get("prop"),
                      p.get("scope") or "12", source_of(p) if p else None, p.get("book"), p.get("line_type"), p.get("test"),
                      f.get("inputs_sha1"), json.dumps(feat, separators=(",", ":"), default=str), _iso(now),
-                     f.get("probs_raw"), f.get("data_rev"), f.get("odds_source"), o_pol, o_map, pv.get("selected")))
+                     f.get("probs_raw"), f.get("data_rev"), f.get("odds_source"), o_pol, o_map, pv.get("selected"), f.get("quote")))
         last = max(last, f["id"])
         n += 1
     _set_meta(con, "last_forecast_id", last)
@@ -1351,35 +1351,91 @@ def product_units(con, rows=None):
     return out, excl
 
 
+# Comparison set C1 for pl-1 (registered 2026-10-15 ~03:00 UTC, before any pl-1 forward forecast had settled; an analysis
+# of pl-1's frozen shadow rows - pl-1's definition and values are unchanged). Arms on IDENTICAL book-line forecasts:
+#   A  target line only           N(L, sd_H) at L                         (pulls every chance to ~50%)
+#   B  target + other platform    N(m, sd_H) at L  (pl-1's logged line-anchored baseline, note.p_market)
+#   C  pl-1                       N(m + w (lam_H - m), sd_H) at L
+#   D  live                       the published chance
+# B vs A isolates cross-platform information from merely pulling toward 50%. Kills identity: with w = 0, C == B exactly.
+# Anchor eligibility from the forecast's logged quote (forecasts.quote, from 2026-10-15): Underdog equal side prices =
+# price-supported median; unequal prices = not a median; PrizePicks has no side prices = line-anchored ASSUMPTION;
+# PrizePicks 'promo' (boosted) = not a valid anchor; no quote = unknown. Point forecasts: MAE for the median-type
+# quantities (line, anchor, pl-1 location), squared error for the mean-type one (lam_H, a mean).
+C1_REGISTERED = "2026-10-15T03:00:00+00:00"
+
+
+def anchor_class(book, quote):
+    q = quote or {}
+    if not q:
+        return "no quote recorded"
+    if book == "prizepicks":
+        return "PrizePicks promo (boosted): not a valid anchor" if q.get("feed_odds_type") == "promo" else \
+            "PrizePicks: no side prices (line-anchored assumption)"
+    po, pu = q.get("price_over"), q.get("price_under")
+    if po is None or pu is None:
+        return "Underdog: side prices not shown"
+    return "Underdog: equal side prices (price-supported median)" if abs(float(po) - float(pu)) < 1e-9 else \
+        "Underdog: unequal side prices (not a median)"
+
+
 def _prop_line_extras(con, cid, pr):
-    """pl-1 on the same forecasts: the simple market baseline vs live and vs pl-1 (log-loss gains, + = the first is better),
-    and the three projections against the actual totals (independent HLTV / market median / combined)."""
-    tr = {}
+    """pl-1's comparison set C1 (see above) on its forward P1 rows. Gains: + = the first-named arm is better."""
+    us = []
     for u in pr:
-        s = con.execute("SELECT note FROM shadow WHERE challenger_id = ? AND forecast_id = ?", (cid, u["forecast_id"])).fetchone()
+        s_ = con.execute("SELECT note FROM shadow WHERE challenger_id = ? AND forecast_id = ?", (cid, u["forecast_id"])).fetchone()
         try:
-            t = json.loads(s["note"]) if s and s["note"] and s["note"].startswith("{") else None
+            t = json.loads(s_["note"]) if s_ and s_["note"] and s_["note"].startswith("{") else None
         except ValueError:
             t = None
-        if t and t.get("p_market") is not None:
-            tr[u["forecast_id"]] = t
-    us = [dict(u, p_m=tr[u["forecast_id"]]["p_market"], t=tr[u["forecast_id"]]) for u in pr if u["forecast_id"] in tr]
+        if not t or t.get("p_market") is None:
+            continue
+        qr = con.execute("SELECT quote FROM forecast_copy WHERE forecast_id = ?", (u["forecast_id"],)).fetchone()
+        try:
+            q = json.loads(qr["quote"]) if qr and qr["quote"] else None
+        except (ValueError, TypeError):
+            q = None
+        pa = _normal_over(u["line"], t["sd"], u["line"], u["prop"], PROP_LINE["cap_kills"])
+        us.append(dict(u, t=t, pA=pa, pB=t["p_market"], pC=u["p_ch"], pD=u["p_base"], cls=anchor_class((t.get("target") or {}).get("book"), q),
+                       other=bool(t.get("other") and (t["other"] or {}).get("two_sided"))))
     if not us:
-        return {"market_baseline": {"units": 0, "matches": 0}}
-    g_ml = lambda u: _ll(u["p_base"], u["over"]) - _ll(u["p_m"], u["over"])
-    g_cm = lambda u: _ll(u["p_m"], u["over"]) - _ll(u["p_ch"], u["over"])
-    proj = {}
+        return {"c1": {"units": 0, "matches": 0, "registered": C1_REGISTERED}}
+
+    def gain(rs, a, b):
+        f = lambda u: _ll(u["p" + b], u["over"]) - _ll(u["p" + a], u["over"])
+        return {"units": len(rs), "matches": len({u["match"] for u in rs}), "gain": _r(sum(f(u) for u in rs) / len(rs), 5) if rs else None,
+                "ci": _ci_ratio(_groups(rs, f)) if rs else None}
+
+    pairs = (("B", "A", "target + other platform vs target line only"), ("A", "D", "target line only vs live"),
+             ("B", "D", "target + other platform vs live"), ("C", "B", "pl-1 vs target + other platform"), ("C", "D", "pl-1 vs live"))
+    out = {"registered": C1_REGISTERED, "units": len(us), "matches": len({u["match"] for u in us}),
+           "with_other_platform_line": sum(u["other"] for u in us),
+           "log_loss": {k: _r(sum(_ll(u["p" + k], u["over"]) for u in us) / len(us), 5) for k in "ABCD"},
+           "pairs": [dict(gain(us, a, b), pair=f"{a} vs {b}", label=lab) for a, b, lab in pairs],
+           "pairs_with_other_line": [dict(gain([u for u in us if u["other"]], a, b), pair=f"{a} vs {b}", label=lab) for a, b, lab in pairs[:1]]}
+    k = [u for u in us if u["prop"] == "kills"]
+    # the logged baseline (note.p_market) is rounded to 4 decimals, pl-1's own chance is not: equal = within that rounding
+    out["identity_kills"] = {"units": len(k), "pl1_differs_from_B": sum(1 for u in k if abs(u["pC"] - u["pB"]) > 5.1e-5),
+                             "location_differs_from_anchor": sum(1 for u in k if abs(u["t"]["mean_combined"] - u["t"]["median_market"]) > 1e-9),
+                             "rule": "kills w = 0: pl-1 must equal the line-anchored baseline B (to its logged 4-decimal rounding; 0 expected)"}
+    cl = collections.defaultdict(list)
+    for u in us:
+        cl[u["cls"]].append(u)
+    out["by_anchor_class"] = [dict(gain(v, "B", "D"), anchor=c, log_loss={k_: _r(sum(_ll(u["p" + k_], u["over"]) for u in v) / len(v), 5) for k_ in "ABCD"})
+                              for c, v in sorted(cl.items(), key=lambda kv: -len(kv[1]))]
+    pts = {}
     for prop in ("kills", "hs"):
         g = [u for u in us if u["prop"] == prop]
         if g:
-            proj[prop] = {k: _r(sum(abs(u["t"][f] - u["actual"]) for u in g) / len(g), 3)
-                          for k, f in (("independent", "lam_independent"), ("market_median", "median_market"), ("combined", "mean_combined"))}
-            proj[prop]["units"] = len(g)
-    return {"market_baseline": {"units": len(us), "matches": len({u["match"] for u in us}),
-                                "gain_vs_live": _r(sum(g_ml(u) for u in us) / len(us), 5), "gain_vs_live_ci": _ci_ratio(_groups(us, g_ml)),
-                                "pl1_gain_vs_market": _r(sum(g_cm(u) for u in us) / len(us), 5), "pl1_gain_vs_market_ci": _ci_ratio(_groups(us, g_cm)),
-                                "with_other_platform_line": sum(1 for u in us if u["t"].get("other"))},
-            "projection_mae": proj}
+            mae = lambda f: _r(sum(abs(f(u) - u["actual"]) for u in g) / len(g), 3)
+            rmse = lambda f: _r(math.sqrt(sum((f(u) - u["actual"]) ** 2 for u in g) / len(g)), 3)
+            pts[prop] = {"units": len(g),
+                         "mae_median_type": {"target line": mae(lambda u: u["line"]), "line anchor m": mae(lambda u: u["t"]["median_market"]),
+                                             "pl-1 location": mae(lambda u: u["t"]["mean_combined"])},
+                         "rmse_mean_type": {"independent HLTV mean": rmse(lambda u: u["t"]["lam_independent"])},
+                         "mae_independent_mean_for_reference": mae(lambda u: u["t"]["lam_independent"])}
+    out["point_forecasts"] = pts
+    return {"c1": out}
 
 
 def product_scorecard(con, rows=None):
@@ -1640,9 +1696,19 @@ def training_step(con, now, force=False):
     base = dict(LIVE_CFG)
     res = refit(rows, base)
     detail.update(folds=res["folds"], trace=res["trace"], train_loss_live=res["train_loss_live"], train_loss_fit=res["train_loss_fit"])
+    # 2026-10-15: every training run records the history revision(s) its rows were graded on; a frozen candidate carries
+    # its own provenance (cutoff, snapshot, data hash, revisions, parameters) and is a NEW immutable version - its forward
+    # test and review windows start at its own freeze (forward_units / reviews are keyed by its id), never inherited
+    revs = collections.Counter()
+    for r in rows:
+        fr = con.execute("SELECT data_rev, logged_at FROM forecast_copy WHERE forecast_id = ?", (r.get("fid"),)).fetchone()
+        revs[history_revision(dict(fr)) if fr else "unknown"] += 1
+    detail["data_revisions"] = dict(revs)
     cid = None
     if res["candidate"]:
         n = con.execute("SELECT COUNT(*) FROM challengers").fetchone()[0] + 1
+        prov = {"training_cutoff": _iso(now), "snapshot_id": sid, "data_hash": h, "data_revisions": dict(revs), "rows": len(rows),
+                "matches": nm, "parameters": res["config"], "family": TRAIN_RULE["family"]}
         ch_hash = _sha(res["config"])
         cid = f"ch-{n:03d}-{ch_hash[:8]}"
         prev = con.execute("SELECT id FROM challengers ORDER BY created_at DESC, rowid DESC LIMIT 1").fetchone()
@@ -1654,6 +1720,7 @@ def training_step(con, now, force=False):
                     (cid, TRAIN_RULE["family"], _iso(now), _iso(now), sid, h, _iso(now), json.dumps(res["config"], sort_keys=True),
                      ch_hash, json.dumps(base, sort_keys=True), "shadow", _iso(now),
                      "frozen; forward test = forecasts logged after the freeze", prev["id"] if prev else None, json.dumps(dev)))
+        con.execute("UPDATE challengers SET provenance = ? WHERE id = ?", (json.dumps(prov, sort_keys=True, default=str), cid))
     con.execute("INSERT INTO trainings (at, cutoff, snapshot_id, outcome, challenger_id, detail) VALUES (?,?,?,?,?,?)",
                 (_iso(now), _iso(now), sid, "challenger frozen" if cid else "no candidate (no time-ordered validation gain)", cid,
                  json.dumps(detail, default=str)))
@@ -2101,6 +2168,7 @@ def build_dashboard(con, now=None):
                     "frozen_at": ch["frozen_at"], "training_cutoff": ch["training_cutoff"], "snapshot": ch["snapshot_id"],
                     "data_hash": ch["data_hash"], "config": json.loads(ch["config"]), "base_config": json.loads(ch["base_config"]),
                     "revises": ch["revises"], "development": json.loads(ch["development"] or "[]"),
+                    "provenance": json.loads(ch["provenance"]) if "provenance" in ch.keys() and ch["provenance"] else None,
                     "shadow_forecasts": con.execute("SELECT COUNT(*) FROM shadow WHERE challenger_id = ?", (ch["id"],)).fetchone()[0],
                     "forward_interim": dict(paired_stats(fu, slope=False), label="interim - no decision is made between review windows") if fu else {"units": 0, "matches": 0},
                     "reviews": done,

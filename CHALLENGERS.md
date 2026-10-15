@@ -83,6 +83,65 @@ data hash 49e7ac29547b86a9). Walk-forward with w refitted on earlier days only: 
 - **Development units still count units of the old slug identity** (a match logged under a BO3.gg slug and hltv-<id> was
   two units then); the forward evaluation uses the canonical match identity (identity.assign).
 
+## pl-1 - corrections and experiment definition (2026-10-15, owner review; pl-1 itself unchanged)
+
+pl-1 = `pl-001-bb351ec5`, frozen 2026-10-15 02:22:18 UTC. Its code, weights and logged rows are unchanged. These
+corrections fix how it is described and add analyses registered before any of its forward forecasts settled.
+
+- **It is a LINE-ANCHORED baseline, not a market median.** Both sides being offered does not establish equal chances.
+  - Underdog shows per-side prices. In a sample of 184 offers (2026-10-15 01:16-02:31 UTC), 180 were equal (1.90 / 1.90)
+    and 4 unequal (1.80 / 2.03, about 53% Over after removing the margin).
+  - PrizePicks shows no side prices.
+  - pl-1 read neither, so its "median" reading is an assumption. The note key `median_market` holds the line anchor m,
+    and `mean_combined` holds pl-1's distribution LOCATION (frozen key names).
+- **Eligibility as pl-1 applies it.**
+  - The target line must be a standard board line. Underdog lines with unequal payout multipliers never reach the board.
+  - PrizePicks promo (boosted) lines are logged as "standard", so pl-1 does NOT exclude them.
+  - Underdog unequal side prices are not checked.
+  - Another platform's line enters if it is the latest standard board line for the same player (canonical slug) x
+    canonical match x stat x map scope, logged at or before the forecast. There is **no staleness limit**: the latest
+    earlier log is used even if the line was pulled.
+  - If no other line exists, only the target line enters. Lines are combined by a simple mean.
+  - From 2026-10-15 every board forecast logs its quote (`forecasts.quote`: side prices / payouts, the feed's market type
+    incl. promo, sides offered, provider update time, board fetch time). That lets each pl-1 anchor be classed:
+    - Underdog equal prices: price-supported median.
+    - Underdog unequal prices: not a median.
+    - PrizePicks: line-anchored assumption.
+    - PrizePicks promo: not a valid anchor.
+    - Before the quote column existed: no quote.
+  - **A version that uses prices or drops stale or boosted lines would be a new version (pl-2), registered before its
+    data, never retrofitted.**
+- **Predictive distribution, exactly.**
+  - Location mu: pl-1 = m + w (lam_H - m); the baseline = m. Scale: the live predictive sd.
+  - Discretised as a continuous normal at the half-integer cut, so the outcome is an integer count:
+    - x.5 line L: P(Over) = 1 - Phi((floor(L) + 0.5 - mu) / sd).
+    - Whole line L: P(Over) = 1 - Phi((L + 0.5 - mu) / sd), P(Under) = Phi((L - 0.5 - mu) / sd), push = the rest.
+    - The chance used is P(Over | no push) = Over / (Over + Under). Kills are capped at 22-78%.
+  - mu is the location of the continuous normal (its median and its mean). The implied count distribution's median and
+    mean are close to mu but not identical.
+  - lam_H is the live model's mean. The line is a threshold. The three are not interchangeable.
+- **Headshot weight 0.25 is FITTED, weakly identified.**
+  - The frozen rule (pl_fit.py, written before running) fits on all earlier days. Folds only estimate out-of-sample
+    performance. The 1.2 / 0 / 0 fold weights came from 6 / 17 / 22 training matches.
+  - All-day profile, mean log-loss: w 0 0.69356, 0.2 0.69245, **0.25 0.69238**, 0.3 0.69239, 0.4 0.69266, 1.0 0.70115.
+    It is nearly flat between 0.1 and 0.4.
+  - Design history: free spread first (HS w 0.4, k 1.5 at the grid edge), then a widened grid (w 0.8, k 3.0 at the edge),
+    then spread fixed, which gave 0.25. Spread-fixing was decided after seeing the first two fits.
+  - In development, the line-anchored baseline beat pl-1 (-0.0113, -0.0228 to -0.0012). **pl-1 is not the preferred
+    candidate.**
+- **Comparison set C1, registered 2026-10-15 03:00 UTC** (learning `C1_REGISTERED`), arms on identical forward
+  book-line forecasts:
+  - A: target line only, N(L, sd) at L (about 50%).
+  - B: target + eligible other platform (the logged baseline).
+  - C: pl-1.
+  - D: live.
+  - Reported: B vs A (cross-platform information, also on the units with another line), A vs D, B vs D, C vs B, C vs D,
+    and B vs D by anchor class.
+  - Kills identity check: w = 0, so C must equal B to its 4-decimal logged rounding. 0 differences expected; it is
+    counted on the dashboard.
+  - Point forecasts: MAE for the median-type quantities (target line, anchor m, pl-1 location) and RMSE for the
+    mean-type lam_H. A small MAE does not show an accurate mean.
+
 ## pl-1 - market-informed prop challenger (family `prop-line-1`, id `pl-001-<hash>`, frozen at its first learning cycle after deploy)
 
 **Does rr-1 already cover it? No.** rr-1 takes the MATCH-WINNER price (Thunderpick, else Polymarket) and turns it into

@@ -106,7 +106,9 @@ def _db():
     # 2026-10-13 (forecast record): the odds policy that selected the market input, its signature (what the input IS -
     # a moved price or another source is a new forecast, an unchanged quote re-polled is not), the alias / matching
     # revision the odds were linked under (content in mapping_revisions) and the deployed commit (RENDER_GIT_COMMIT)
-    for col in ("probs_raw", "data_rev", "odds_source", "odds_policy", "mapping_rev", "odds_sig", "git_commit"):
+    # 2026-10-15: the board quote the forecast was graded on (prices / payouts / feed market type / sides / times) -
+    # measurement only, for checking whether a line can serve as a market anchor (CHALLENGERS pl-1)
+    for col in ("probs_raw", "data_rev", "odds_source", "odds_policy", "mapping_rev", "odds_sig", "git_commit", "quote"):
         try:
             con.execute(f"ALTER TABLE forecasts ADD COLUMN {col} TEXT")
         except sqlite3.OperationalError:
@@ -403,6 +405,7 @@ def pick_row(res, verdict, test=False):
             pass
     row["_odds_policy"] = pv.get("odds_policy") or gi.get("odds_policy")
     row["_mapping_rev"] = gi.get("mapping_rev") or pv.get("mapping_rev")
+    row["_quote"] = json.dumps(bk.get("quote"), default=str) if bk.get("quote") else None   # board quote (measurement only)
     return row
 
 
@@ -486,13 +489,13 @@ def _forecast(con, pid, row, kind, gi=None, extra=None):
         return
     con.execute("INSERT INTO forecasts (pick_id, kind, logged_at, match_start, line, pick, p_pick, p_more, grade, units, "
                 "lambda, p_win, rec_hit, sample_maps, model_version, shadow, inputs, probs_raw, data_rev, odds_source, "
-                "odds_policy, mapping_rev, odds_sig, git_commit) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "odds_policy, mapping_rev, odds_sig, git_commit, quote) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (pid, kind, row["logged_at"], row.get("match_start"), row["line"], row["pick"], row["p_pick"],
                  row.get("p_more"), row["grade"], row["units"], row.get("lambda"), row.get("p_win"), row.get("rec_hit"),
                  row.get("sample_maps"), row.get("model_version"), _shadow(row), gi, extra.get("probs_raw"), extra.get("data_rev"),
                  extra.get("odds_source"), extra.get("odds_policy"), extra.get("mapping_rev"), extra.get("odds_sig"),
-                 extra.get("git_commit")))
+                 extra.get("git_commit"), extra.get("quote")))
     _record_mapping(con, extra.get("mapping_rev"))
 
 
@@ -525,7 +528,7 @@ def write_row(row):
     gi = row.pop("_gi", None)                       # the exact grader inputs - forecasts table only
     extra = {"probs_raw": row.pop("_probs", None), "data_rev": data_revision(), "odds_source": row.pop("_odds_src", None),
              "odds_sig": row.pop("_odds_sig", None), "odds_policy": row.pop("_odds_policy", None),
-             "mapping_rev": row.pop("_mapping_rev", None),
+             "mapping_rev": row.pop("_mapping_rev", None), "quote": row.pop("_quote", None),
              "git_commit": os.environ.get("RENDER_GIT_COMMIT") or None}    # the deployed commit (Render sets it)
     key, test = row["key"], row["test"]
     with _LOCK:
