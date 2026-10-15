@@ -768,7 +768,9 @@ def recheck_bo3_with_hltv(now=None, apply=True, days=7, limit=HLTV_RECHECK_MAX):
                 # nested as bo3_detail, and the change is logged (same total / status / hit) - before, the BO3.gg per-map
                 # numbers were copied forward and could disagree with the confirmed total (settlement audit)
                 rel = {k: False for k in ("review", "provisional") if k in old}
-                bo3 = {k: v for k, v in old.items() if k != "bo3_detail"}
+                # the BO3.gg record is kept for the audit trail with its hold released too (the hold itself is recorded in
+                # settlement_reviews.jsonl): a confirmed pick carries no review flag anywhere
+                bo3 = dict({k: v for k, v in old.items() if k != "bo3_detail"}, **rel)
                 detail = {"source": "hltv", "rounds": res["rounds"], "won": res["won"], "per_map": res["per_map"],
                           "maps_used": res["maps_used"], "hltv_match": res["hltv_match"], "hltv_checked": True,
                           "hltv_total": res["total"], **rel, "bo3_detail": bo3, **_ident(res)}
