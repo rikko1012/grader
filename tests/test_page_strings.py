@@ -33,15 +33,20 @@ def test_member_wording_rules():
 # ---------------------------------------------------------------- 2026-10-11 confirmed-findings batch (UI)
 def test_scout_reads_lean_everywhere():
     # the internal SCOUT state never shows as a label next to Over / Under: sideWord / pickLine / chips map it to Lean
-    assert 'const isLeanV = v => !!v && (v.grade === "LEAN" || v.grade === "SCOUT" || v.state === "SCOUT");' in HTML
+    # display gd-1 (owner 2026-10-15): Lean = the MODEL grade under 55% (or no match); a 0-unit graded pick keeps its letter
+    assert 'const isLeanV = v => !!v && (mGrade(v) === "LEAN" || v.grade === "SCOUT" || v.state === "SCOUT");' in HTML
+    assert "const mGrade = v => !v ? null : (v.model_grade || v.grade);" in HTML
     assert "sideWord = v => !v.side ? \"–\" : isLeanV(v)" in HTML
     assert 'isLeanV({grade: x.g})' in HTML                                    # Recent chips + slip legs
     assert not re.search(r"SCOUT (Over|Under)|· SCOUT ·", HTML)
     assert 'r.state === "SCOUT" ? `<button type="button" class="bslip" disabled' in HTML   # no '+ Slip' for a no-match row
 
 
-def test_ladder_chips_say_lean_for_zero_units():
-    assert 'isLeanV(x) || !(x.units > 0) ? "LEAN" : x.grade' in HTML
+def test_ladder_chips_show_the_model_grade_and_0u():
+    # superseded 2026-10-15 (owner): a 0-unit chip used to read Lean; it now shows the grade its chance earns plus "0U"
+    assert 'sideWord({side: x.side, grade: mGrade(x)})' in HTML
+    assert '" · " + esc(mGrade(x)) + (+x.units > 0 ? "" : " · 0U")' in HTML
+    assert "const isBet = r => (r.units || 0) > 0 && !sideGone(r);" in HTML        # eligibility stays on units / availability
 
 
 def test_share_link_keeps_maps_platform_and_match():

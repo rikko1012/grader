@@ -39,6 +39,7 @@ import prizepicks
 import records
 import roles
 import underdog
+import grade_display
 import whop_auth
 import bo3
 from bo3 import BO3, DATA_DIR, prune, storage_report
@@ -522,7 +523,8 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12", book="
                         "units": r.get("units"), "units_full": r.get("units_full"), "graded_at": r.get("graded_at"), "dstat": r.get("dstat"),
                         "source": r.get("source"), "state": r.get("state"), "ud_team": r.get("team"), "ud_opponent": r.get("opponent"),
                         "reason": r.get("reason"), "kept": bool(r.get("hltv_retry")), "retry_cause": r.get("retry_cause"),
-                        "unavailable": r.get("unavailable")}
+                        "unavailable": r.get("unavailable"), "model_grade": r.get("model_grade"),   # display gd-1
+                        "stake_reason": r.get("stake_reason"), "available": r.get("available")}
     # offered but not graded yet (2026-10-11 audit: damyo's 31.5 showed 'No available line' while it was grading)
     try:                                            # the feed as already read (never a blocking first read here)
         feed = (prizepicks.board()["rows"] if book == "prizepicks" else
@@ -657,9 +659,12 @@ def board_payload(book="underdog"):
                                                      "hs_pct", "p_win", "market", "team_name", "opp_name", "match_slug",
                                                      "graded_line", "graded_model", "player_id", "event", "bo", "maps_known",
                                                      "dstat", "source", "support", "concern", "tonight", "hltv_retry",
-                                                     "retry_cause", "cap_grade", "warn", "graded_sides")}))
+                                                     "retry_cause", "cap_grade", "warn", "graded_sides",
+                                                     "model_grade", "stake_reason", "available", "display_version")}))
         rows[-1]["scope"] = r.get("scope") or "12"
         x = rows[-1]
+        if x.get("model_grade") is None and x.get("side"):     # a row graded before display gd-1 (until its next regrade)
+            x.update(grade_display.annotate_saved(x))
         nick = x.get("nick") or x.get("player") or ""
         # roles (slip builder + display only; True / False / None = unknown, with the source)
         x["awp"], x["awp_src"] = awp_role(nick, g, x.get("hs_pct"), x.get("team_name") or x.get("team"))
@@ -767,8 +772,10 @@ def _cap_same_result(rows):
         keep = int(SAME_RESULT_CAP // 0.5)
         for r in order[keep:]:                 # even 0.5U each is over the cap: the lowest-chance picks drop to 0U
             r["units"] = 0.0
-            r["grade"] = "LEAN"
+            r["grade"] = "LEAN"                # the verdict's legacy grade (logged forecasts / slips unchanged)
             r["reason"] = f"0 units: same-match cap ({len(lst)} bets on this team) - {r.get('reason') or ''}".rstrip(" -")
+            if r.get("model_grade") in grade_display.LETTERS:      # display gd-1: the grade the chance earns stays
+                r["stake_reason"] = f"same-match exposure cap ({len(lst)} bets on this team)"
         while sum(x["units"] for x in lst) > SAME_RESULT_CAP + 1e-9:
             big = [x for x in order[::-1] if x["units"] > 0.5]       # lowest chance first among the largest stakes
             if not big:
@@ -901,6 +908,8 @@ def board_stake(res, prop, scope, line, line_type="standard", book=None):
                            cap_team=r.get("team_name") or r.get("team"))
                 if not r["units"]:              # the cap left no room for this pick: a 0-unit Lean, as on the board
                     out.update(grade="LEAN", reason=r.get("reason") or v.get("reason"))
+                    if r.get("stake_reason"):           # display gd-1: the model grade stays, the cap is named
+                        out.update(stake_reason=r["stake_reason"])
                 return out
         if exact:
             return v                            # this platform lists the pick uncut: its stake stands
@@ -970,6 +979,7 @@ def outage_verdict(res, prop, scope, line, v, book=None, line_type="standard"):
         ds_ = r.get("dstat")
         when = r.get("graded_at") or "an earlier regrade"
         return {"side": r["side"], "p": r.get("p"), "grade": r["grade"], "units": r.get("units") or 0.0,
+                "model_grade": r.get("model_grade"), "stake_reason": r.get("stake_reason"), "available": r.get("available"),
                 "units_full": r.get("units_full"), "cap_n": r.get("cap_n"), "cap_team": r.get("team_name") or r.get("team"),
                 "state": r.get("state"), "dstat": ds_,
                 "cap_reason": cap_reason_text(r.get("cap_grade") or [], r.get("cap_n")) if (r.get("units") or 0) > 0 else None,
@@ -1796,7 +1806,9 @@ def board_forever():
                                       "tonight": (pb.get("_env") or {}).get("tonight"),   # LAN / online (match table projections)
                                       "book": r.get("book") or "underdog", "line_type": lt,
                                       # the sides the feed offered when this grade was made (display: "no longer offered")
-                                      "graded_sides": {"under": r.get("under_available"), "over": r.get("over_available")}}
+                                      "graded_sides": {"under": r.get("under_available"), "over": r.get("over_available")},
+                                      # display gd-1 (owner 2026-10-15): model grade / stake reason / availability, separate
+                                      **grade_display.annotate(g, v)}
                     res["verdict"] = v
                     try:                                  # immutable comparison snapshot (changes only) + the row's evidence
                         ub = underdog.board()
@@ -3451,10 +3463,19 @@ class Handler(BaseHTTPRequestHandler):
                     if vv.get("side") == "Less" and less_av is False:   # the feed offers no Under for this exact line: shown
                         res["verdict"]["side_unavailable"] = SIDE_NOT_OFFERED   # as such, never a pick (grade logged as is)
                 vv = res["verdict"]
+                if isinstance(vv, dict) and vv.get("side"):          # display gd-1: grade / stake reason / availability
+                    keep_sr = vv.get("stake_reason")
+                    res["verdict"] = vv = dict(vv, **grade_display.annotate(res.get("grade") or {}, vv,
+                                                                            dict(vv, unavailable=vv.get("side_unavailable"))))
+                    if keep_sr:
+                        vv["stake_reason"] = keep_sr
                 for x in res.get("ladder") or []:        # the ladder's own line = the card's verdict (same-match cap included)
                     if isinstance(vv, dict) and vv.get("side") and float(x.get("line") or -1) == float(line):
                         x.update(side=vv["side"], p=vv.get("p"), grade=vv.get("grade"), units=vv.get("units") or 0.0,
-                                 state=vv.get("state"))
+                                 state=vv.get("state"), model_grade=vv.get("model_grade"), stake_reason=vv.get("stake_reason"),
+                                 available=vv.get("available"))
+                    else:
+                        x.update(grade_display.annotate_item(x))
             except Exception:
                 traceback.print_exc()
             if outage:                                   # no grade of its own: the board's saved grade of this exact pick

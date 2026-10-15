@@ -548,7 +548,7 @@ body.mode-board .workspace-tools,body.mode-slate .workspace-tools{flex-direction
       <p><b>Projection → chance → grade.</b> The projection is compared with the line (a 15.5 line needs 16 for an Over, 15 or less for an Under; on a whole line like 16, exactly 16 is a push) and turned into a chance from how much a player's totals normally swing from match to match. Kills chances are capped at 78% because big kill totals swing more than any model expects.</p>
       <p><b>Stake rules change the units, never the chance.</b> If his last 10 matches clearly disagree at this line, the stake drops to 0 (FORM FIGHT) or 0.5U (TAPE FIGHT). Stand-ins (max 1U), small samples (max 1.5U; under 5 recent maps 0), a month or more without an official map (max 1U) and the market-quality rule (a bookmaker price such as Thunderpick's, a thin exchange book or no betting market: max 1.5U) cap the stake; a player not on the listed team and an AWPer on a headshot line get 0 units. An unconfirmed roster is flagged on the card but does not change the stake. Several bets that need the same team to do well (or badly) in one match share a 3U cap.</p>
       <p><b>Tested before it counts.</b> A factor moves the projection only after it beats the current model on matches it never saw, in date order. Maps, head-to-head, Round Swing, ratings, opening and trade kills, win chance and FACEIT are on every card as context; they move the grade only if they pass that test.</p>
-      <p><b>What the grades mean</b> (the model's estimated chance the pick wins): A+ 80%+ · A 74%+ · A− 68%+ · B+ 63%+ · B 57%+ · B− 55%+ · <i>Lean</i> = 0 units: under 55%, or a stake rule above held it at 0.<br>
+      <p><b>What the grades mean</b> (the model's estimated chance the pick wins): A+ 80%+ · A 74%+ · A− 68%+ · B+ 63%+ · B 57%+ · B− 55%+ · <i>Lean</i> = under 55%. A stake rule above can hold a graded pick at 0 units - it keeps its grade and says why (e.g. "B · 59.1% · 0U — same-match exposure cap"); 0-unit picks are never in "Bets only" or built slips.<br>
       <b>Units:</b> A+ 3U · A 2U · A− 1.5U · B+ 1U · B 0.5U · B− 0.5U · Lean 0U. The chance is graded unrounded and shown to 0.1%.</p>
       <p class="muted">Every chance on this site is the model's estimate, not a measured hit rate – it has not yet been shown to match how often picks actually win, and a 60% pick still loses 4 times in 10 even when the estimate is right. The units are the grader's stake scale: a relative size set by the grade and the stake rules above, not a tested or optimal bankroll plan. Not financial advice.</p>
     </div>
@@ -747,7 +747,15 @@ const lineWarn = (p, l, ok) => ok ? "" : p === "hs" && +l >= 24 ? `${l} headshot
 // member wording (2026-10-10 audit): Over / Under everywhere - More / Less are internal values only
 // a 0-unit pick (Lean) or a line with no match scheduled (internal state SCOUT) always reads "Lean Over / Lean Under" -
 // never the internal SCOUT label or a bare Over / Under (owner's Lean rule, 2026-10-11 audit)
-const isLeanV = v => !!v && (v.grade === "LEAN" || v.grade === "SCOUT" || v.state === "SCOUT");
+// display gd-1 (owner 2026-10-15): the grade shown is the MODEL grade - the letter the chance earns (server
+// grade_display.model_grade, from the unrounded chance). A stake rule that holds a graded pick at 0 units is named next to
+// it ("B · 59.1% · 0U — same-match exposure cap"); it never makes the pick a Lean. Bets only / slips / copy stay on
+// units > 0 and availability (isBet, sideGone) - never on this letter.
+const LETTERS = ["A+", "A", "A-", "B+", "B", "B-"];
+const mGrade = v => !v ? null : (v.model_grade || v.grade);
+const isLeanV = v => !!v && (mGrade(v) === "LEAN" || v.grade === "SCOUT" || v.state === "SCOUT");
+const zeroWhy = v => v && v.side && !(+v.units > 0) && LETTERS.includes(mGrade(v)) && !sideGone(v)
+  ? ` — ${esc(v.stake_reason || "a stake rule holds it at 0 units")}` : "";
 // 2026-10-15 owner: a side the platform feed no longer offers is shown as unavailable and is never a bet, a slip leg or a
 // copied pick (the server labels it: board rows `unavailable`, card verdicts `side_unavailable`); its grade stays recorded
 const sideGone = x => (x && (x.unavailable || x.side_unavailable)) || "";
@@ -755,7 +763,7 @@ const isBet = r => (r.units || 0) > 0 && !sideGone(r);
 // owner review 2026-10-12: a chance within 1 point of 50% is shown as what it is - essentially a coin flip
 const coinFlip = p => p != null && Math.abs(p - 0.5) < 0.01 ? ` <span class="pill" title="The model sees this line as essentially 50/50 – the side shown is barely ahead">coin flip</span>` : "";
 const sideWord = v => !v.side ? "–" : isLeanV(v) ? `Lean ${v.side === "More" ? "Over" : "Under"}` : v.side === "More" ? "Over" : "Under";
-const gradeWord = v => v.state === "SCOUT" || v.grade === "SCOUT" ? "No match scheduled" : v.grade === "LEAN" ? "Lean" : (v.grade || "–");
+const gradeWord = v => v.state === "SCOUT" || v.grade === "SCOUT" ? "No match scheduled" : mGrade(v) === "LEAN" ? "Lean" : (mGrade(v) || "–");
 // which projection the grade used: the performance model (Maps 1-2 and, since 2026-10-10, Map 1), else the older
 // pipeline (Maps 1-3)
 const perfGrade = g => String(g.projection_source || "").startsWith("perf") && ["12", "1", "123"].includes(g.scope || "12");
@@ -794,7 +802,7 @@ function remember(d) {
   const sc = g.scope || "12";
   // one chip per player + prop: the newest line replaces older ones
   const h = recentList().filter(x => recentKey(x) !== recentKey({p: nick, t: g.prop}));
-  h.unshift({p: nick, l: g.line, t: g.prop, lt: g.line_type, sc, g: v.state === "SCOUT" ? "SCOUT" : v.grade, s: v.side, u: v.units, pc: v.p, at: Date.now()});
+  h.unshift({p: nick, l: g.line, t: g.prop, lt: g.line_type, sc, g: v.state === "SCOUT" ? "SCOUT" : mGrade(v), s: v.side, u: v.units, pc: v.p, at: Date.now()});
   store.set("cs2s_hist", h.slice(0, 8)); showRecent();
 }
 const recentKey = x => String(x.p || "").toLowerCase() + "|" + (x.t === "hs" ? "hs" : "kills");
@@ -911,11 +919,11 @@ function slateRow(x, i) {
   if (x.error) return `<tr data-slaterow="${i}"><td>${esc(x.player || x.bad)}</td><td colspan="8" class="muted">${esc(x.error)}${dymHtml(x.sugg)}</td></tr>`;
   if (!x.d) return `<tr><td>${esc(x.player)}</td><td>${esc(x.line)} ${propWord(x.prop)}${mapsWord(x.sc)}</td><td colspan="7" class="muted"><span class="spin"></span>grading…</td></tr>`;
   const g = x.d.grade || {}, v = x.d.verdict || {}, nm = x.d.next_match || {};
-  const lab = !v.side ? "–" : v.grade === "LEAN" ? "L" : v.grade || "–";
+  const lab = !v.side ? "–" : mGrade(v) === "LEAN" ? "L" : mGrade(v) || "–";
   const side = sideWord(v), note = noteOf(x.d, x);
   // no upcoming match: research only - it says so instead of an unexplained letter
   const gcell = isScout(v) ? `<span class="muted small" title="No upcoming match found for his team – shown for research, nothing to bet yet">No match scheduled</span>`
-    : `<span class="gtag ${gClass(v.grade)}">${esc(lab)}</span>`;
+    : `<span class="gtag ${gClass(mGrade(v))}">${esc(lab)}</span>`;
   return `<tr data-row="${i}"><td><b>${esc(x.d.player_block?.player?.nick || x.player)}</b></td><td class="num" style="text-align:left">${g.line ?? esc(x.line)} ${propWord(g.prop || x.prop)}${mapsWord(g.scope || x.sc)}${ltTag(g.line_type || x.lt)}</td>
     <td>${esc(side)}</td><td>${gcell}</td>
     <td class="num">${chance(v.p, g.prop, capOf(x.d, "kills_chance", KCAP))}</td><td class="num">${v.units ?? 0}U</td>
@@ -927,8 +935,8 @@ function slateItem(x, i) {
   if (x.error) return `<div class="sitem" data-slaterow="${i}"><b>${esc(x.player || x.bad)}</b><div class="small muted">${esc(x.error)}${dymHtml(x.sugg)}</div></div>`;
   if (!x.d) return `<div class="sitem"><b>${esc(x.player)}</b> <span class="muted">${esc(x.line)} ${propWord(x.prop)}${mapsWord(x.sc)}</span><div class="small muted"><span class="spin"></span>grading…</div></div>`;
   const g = x.d.grade || {}, v = x.d.verdict || {}, nm = x.d.next_match || {}, note = noteOf(x.d, x);
-  const lab = !v.side ? "–" : v.grade === "LEAN" ? "L" : v.grade || "–";
-  const tag = isScout(v) ? `<span class="muted">No match scheduled</span>` : `<span class="gtag ${gClass(v.grade)}">${esc(lab)}</span>`;
+  const lab = !v.side ? "–" : mGrade(v) === "LEAN" ? "L" : mGrade(v) || "–";
+  const tag = isScout(v) ? `<span class="muted">No match scheduled</span>` : `<span class="gtag ${gClass(mGrade(v))}">${esc(lab)}</span>`;
   return `<div class="sitem" data-row="${i}"><div><b>${esc(x.d.player_block?.player?.nick || x.player)}</b> · ${esc(sideWord(v))} ${g.line ?? esc(x.line)} ${propWord(g.prop || x.prop)}${mapsWord(g.scope || x.sc)}${ltTag(g.line_type || x.lt)}</div>
     <div class="small">${tag} <b>${chance(v.p, g.prop, capOf(x.d, "kills_chance", KCAP))}</b> · ${v.units ?? 0}U${nm.opponent ? " · vs " + esc(nm.opponent) : ""}</div>${note ? `<div class="small" style="color:var(--warn)">${esc(note)}</div>` : ""}</div>`;
 }
@@ -1062,11 +1070,11 @@ const sideTxt = s => s === "More" ? "Over" : "Under";
 const pushOf = g => g && g.line != null && +g.line % 1 === 0 && g.probs_raw && g.probs_raw.push != null ? g.probs_raw.push : null;
 const sideGrade = (gr, u, v, sd) => {
   const capped = v.side === sd && v.cap_n && v.units_full > v.units, units = capped ? v.units : (u || 0);
-  return `${gr === "C" || gr === "LEAN" || !units ? "lean" : "grade " + esc(gr)} · ${units}U${capped ? " (capped)" : ""}`; };
+  return `${String(gr || "").startsWith("n/a") ? "not offered" : gr === "C" || gr === "LEAN" ? "lean" : "grade " + esc(gr)} · ${units}U${capped ? " (capped)" : ""}`; };
 const slipBook = s => (s.find(x => x.bk) || {}).bk || null;       // a slip belongs to one platform
 function legFrom(d, extra) {
   const g = d.grade || {}, v = d.verdict || {}, pb = d.player_block || {};
-  return Object.assign({bk: d.book || null, p: pb.player?.nick, pid: pb.player?.id || "", l: g.line, t: g.prop, lt: g.line_type, sc: g.scope || "12", s: v.side, g: v.grade, pc: v.p, u: v.units,
+  return Object.assign({bk: d.book || null, p: pb.player?.nick, pid: pb.player?.id || "", l: g.line, t: g.prop, lt: g.line_type, sc: g.scope || "12", s: v.side, g: mGrade(v), sr: v.stake_reason || "", pc: v.p, u: v.units,
     m: d.next_match?.slug || [pb.current_team || "", d.next_match?.opponent || ""].map(x => x.toLowerCase().replace(/[^a-z0-9]/g, "")).sort().join("|"),
     vs: d.next_match?.opponent || "", tm: pb.playing_for || pb.current_team || "", st: d.next_match?.start || "",
     kg: v.kept_from_board || v.stale ? (v.graded_at || "saved") : "",     // a saved grade kept during an outage: never verified
@@ -1104,7 +1112,7 @@ async function addToSlip(d) {
     const nv0 = n?.verdict || {}, nv = nv0.kept_from_board || nv0.unavailable || nv0.stale || n?.hltv_outage ? {} : nv0, row = (l, s_, p_, gr, u) => `<tr><td>${l}</td><td>${s_ ? sideTxt(s_) : "–"}</td><td class="num">${p_ != null ? pct(p_) : "–"}</td><td>${esc(gr ? gradeWord({grade: gr}) : "–")}</td><td class="num">${u ?? 0}U</td></tr>`;
     const k = await ask(d.from === "board" ? `${bookName(used)} moved this line` : `Your line differs from ${bookName(used)}'s current line`, `${esc(nick)} ${propWord(g.prop)}${mapsWord(g.scope)}: ${d.from === "board" ? esc(c.note) : `you entered ${g.line}; ${bookName(used)} currently shows ${c.new_line}`}.
       <table style="margin-top:8px"><thead><tr><th>Line</th><th>Side</th><th class="num">Chance</th><th>Grade</th><th class="num">Stake</th></tr></thead><tbody>
-      ${row(g.line + " (yours)", v.side, v.p, v.grade, v.units)}${n && nv.side ? row(c.new_line + " (now)", nv.side, nv.p, nv.grade, nv.units) : `<tr><td>${c.new_line} (now)</td><td colspan="4" class="muted">${n?.hltv_outage ? "live data unavailable – no current grade for the new line" : "couldn't regrade – try again"}</td></tr>`}</tbody></table>`,
+      ${row(g.line + " (yours)", v.side, v.p, mGrade(v), v.units)}${n && nv.side ? row(c.new_line + " (now)", nv.side, nv.p, mGrade(nv), nv.units) : `<tr><td>${c.new_line} (now)</td><td colspan="4" class="muted">${n?.hltv_outage ? "live data unavailable – no current grade for the new line" : "couldn't regrade – try again"}</td></tr>`}</tbody></table>`,
       [...(n && nv.side ? [{k: "new", label: `Use ${sideTxt(nv.side)} ${c.new_line}`, primary: true}] : []), {k: "keep", label: `Keep ${g.line} as a research line`}, {k: "cancel", label: "Cancel"}]);
     if (k === "new") { const nl = legFrom(n); nl.bk = used; nl.now = {status: "verified", note: "", at: Date.now()}; nl.replaced = {line: g.line, side: v.side, p: v.p, grade: v.grade, units: v.units}; return pushLeg(nl); }
     if (k !== "keep") return;
@@ -1163,7 +1171,7 @@ function drawSlip() {
   const unver = s.filter(x => x.now?.status !== "verified").length;
   $("#slip").innerHTML = `<h4>Bet slip · ${plat ? bookName(plat) : "research"} · ${n}-pick</h4>` + (unver ? `<div class="warn" style="margin-bottom:6px">${unver === n ? "Research slip" : `${unver} of ${n} picks`}: not verified on ${plat ? bookName(plat) : "a platform"} right now – see each pick.</div>` : "") + s.map((x, i) =>
     `<div class="leg"><span><b>${esc(x.p)}</b> ${isLeanV({grade: x.g}) ? `Lean ${sideTxt(x.s)}` : sideTxt(x.s)} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${ltTag(x.lt)}${legState(x)}
-      <span class="muted small">· ${isLeanV({grade: x.g}) ? "Lean" : esc(x.g)} · ${chance(x.pc || 0, x.t)}${x.vs ? " · vs " + esc(x.vs) : ""}</span></span>
+      <span class="muted small">· ${isLeanV({grade: x.g}) ? "Lean" : esc(x.g) + (x.u != null && !(+x.u > 0) ? " · 0U" + (x.sr ? " — " + esc(x.sr) : "") : "")} · ${chance(x.pc || 0, x.t)}${x.vs ? " · vs " + esc(x.vs) : ""}</span></span>
       <button type="button" class="x" data-rmleg="${i}" title="Remove">✕</button></div>`).join("")
     + (n < 2 ? `<div class="small muted" style="margin-top:10px">Add at least 2 picks (up to 6).</div>`
        : (() => { const dist = hitDist(s.map(x => x.pc || 0.5));
@@ -1201,7 +1209,7 @@ $("#slip").addEventListener("click", e => {
     const mark = x => x.now?.status === "verified" ? "" : x.now?.status === "changed" ? ` [LINE CHANGED: now ${x.now.new_line ?? "?"}]`
       : x.now?.status === "unavailable" ? " [NOT OFFERED NOW]" : x.now?.status === "failed" ? " [NOT CHECKED]"
       : x.now?.status === "stale" ? " [SAVED GRADE – NOT CURRENT]" : " [RESEARCH LINE]";
-    copy(`${s.length}-pick ${bookName(slipBook(s)) || "research"} slip\n` + s.map(x => `${x.p} ${isLeanV({grade: x.g}) ? `Lean ${sideTxt(x.s)}` : sideTxt(x.s).toUpperCase()} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${x.lt && x.lt !== "standard" ? " " + x.lt : ""} · ${isLeanV({grade: x.g}) ? "Lean" : x.g} · ${((x.pc || 0) * 100).toFixed(1)}%${mark(x)}`).join("\n"));
+    copy(`${s.length}-pick ${bookName(slipBook(s)) || "research"} slip\n` + s.map(x => `${x.p} ${isLeanV({grade: x.g}) ? `Lean ${sideTxt(x.s)}` : sideTxt(x.s).toUpperCase()} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${x.lt && x.lt !== "standard" ? " " + x.lt : ""} · ${isLeanV({grade: x.g}) ? "Lean" : x.g + (x.u != null && !(+x.u > 0) ? " · 0U" : "")} · ${((x.pc || 0) * 100).toFixed(1)}%${mark(x)}`).join("\n"));
     // immutable load log (no member identity): what was copied and each leg's live-line state at that moment
     if (s.length >= 2) try {
       const body = JSON.stringify({cid: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()), mode: "member-copy", n: s.length, book: slipBook(s) || "research",
@@ -1337,7 +1345,8 @@ const shortWhen = s => { if (!s) return ""; const d = new Date(s); if (isNaN(d))
   const u = until(d); return d.toLocaleString([], {weekday: "short", hour: "numeric", minute: "2-digit"}) + (u ? " · " + u : ""); };
 function boardCard(r) {     // a board row in the shape addToSlip / pickLine expect
   return {book: r.book || "underdog", grade: {line: r.line, prop: r.prop, line_type: gradeType(r), scope: r.scope || "12"},
-          verdict: {side: r.side, grade: r.grade, p: r.p, units: r.units, kept_from_board: !!r.hltv_retry, stale: !!r.hltv_retry, graded_at: r.graded_at,
+          verdict: {side: r.side, grade: r.grade, model_grade: r.model_grade, stake_reason: r.stake_reason, p: r.p, units: r.units,
+                    kept_from_board: !!r.hltv_retry, stale: !!r.hltv_retry, graded_at: r.graded_at,
                     side_unavailable: r.unavailable || null},
           player_block: {player: {nick: r.nick || r.player, id: r.player_id}, current_team: r.team_name || r.team},
           next_match: {opponent: r.opp_name || r.opponent, start: r.start, slug: r.match_slug}, from: "board"};
@@ -1385,7 +1394,7 @@ function drawBoard() {
   if (ml) return drawMoneylines();
   if (cmpv) return drawCompare();
   const sortBy = $("#bsort").value;
-  const rank = r => !r.side ? 9 : r.state === "SCOUT" ? 7 : (G_RANK[r.grade] ?? 6);
+  const rank = r => !r.side ? 9 : r.state === "SCOUT" ? 7 : (G_RANK[mGrade(r)] ?? 6);
   // within one grade, clean picks come before flagged ones (an open data issue: roster, stand-in, long break, thin history)
   const key = r => sortBy === "g" ? [rank(r), isFlagged(r) ? 1 : 0, -(r.p ?? 0)] : sortBy === "p" ? [-(r.p ?? -1)] : sortBy === "e" ? [-Math.abs(r.edge ?? 0)] : [r.start || "9", rank(r)];
   const q = ($("#bsearch").value || "").trim().toLowerCase();
@@ -1402,14 +1411,14 @@ function drawBoard() {
   const pct0 = x => x == null ? "–" : (x * 100).toFixed(1) + "%";
   const ev = (x, cls, sign) => x && x.text ? `<div class="b2ev ${cls}">${sign} ${esc(x.text)} ${basisTag(x.basis)}</div>` : "";
   const rowHtml = (r, showMatch) => {
-    const nick = r.nick || r.player, gone = sideGone(r), lab = !r.side ? "…" : r.state === "SCOUT" || gone ? "–" : r.grade === "LEAN" ? "L" : r.grade;
-    const ltl = !r.side ? "Still grading" : r.state === "SCOUT" ? "No match scheduled" : r.grade === "LEAN" ? "Lean – 0 units" : `Grade ${r.grade}`;
+    const nick = r.nick || r.player, gone = sideGone(r), lab = !r.side ? "…" : r.state === "SCOUT" || gone ? "–" : mGrade(r) === "LEAN" ? "L" : mGrade(r);
+    const ltl = !r.side ? "Still grading" : r.state === "SCOUT" ? "No match scheduled" : mGrade(r) === "LEAN" ? "Lean – 0 units" : `Grade ${mGrade(r)}${+r.units > 0 ? "" : " – 0 units"}`;
     const ds = (r.dstat || [])[0] === "verify" ? ["warn", issueLabel(r.dstat[1])] : DSTAT[(r.dstat || [])[0]], team = r.team_name || r.team, opp = r.opp_name || r.opponent;
     return `<div class="brow2" data-bl="${esc(nick)}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}|${r.book || "underdog"}">
-      <span class="gtag ${!r.side || r.state === "SCOUT" || gone ? "g-scout" : gClass(r.grade)}" title="${esc(gone || ltl)}">${esc(lab)}</span>
+      <span class="gtag ${!r.side || r.state === "SCOUT" || gone ? "g-scout" : gClass(mGrade(r))}" title="${esc(gone || ltl)}">${esc(lab)}</span>
       <div><div class="b2top">${bbook === "all" ? `<span class="pill" style="margin:0 4px 0 0;padding:1px 7px">${bookName(r.book || "underdog")}</span>` : ""}<b>${esc(nick)}</b>${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}
           <span class="muted">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}${showMatch ? " · " + shortWhen(r.start) : ""}</span></div>
-        <div class="b2pick">${gone ? `<span class="pill bad" title="${esc(bookName(r.book || "underdog"))} does not offer the ${r.side === "Less" ? "Under" : "Over"} for this line any more - not a bet, not on slips; its last grade is kept for the record">${esc(gone)}</span> <span class="muted">${r.side === "Less" ? "Under" : "Over"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}</span></div>` : `${r.side ? esc(sideWord(r)) : "grading…"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}${mktTag(r)}${r.stale ? ` <span class="pill warn" title="The PrizePicks feed is not fresh – this line can't be confirmed as playable">not confirmed</span>` : ""}${r.p != null ? ` · <b>${chance(r.p, r.prop)}</b>${coinFlip(r.p)}` : ""}${isLeanV(r) ? (r.state === "SCOUT" ? " · No match scheduled" : "") : " · " + esc(r.grade || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${capChip(r, r.team_name || r.team)}</div>`}
+        <div class="b2pick">${gone ? `<span class="pill bad" title="${esc(bookName(r.book || "underdog"))} does not offer the ${r.side === "Less" ? "Under" : "Over"} for this line any more - not a bet, not on slips; its last grade is kept for the record">${esc(gone)}</span> <span class="muted">${r.side === "Less" ? "Under" : "Over"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}</span></div>` : `${r.side ? esc(sideWord(r)) : "grading…"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}${mktTag(r)}${r.stale ? ` <span class="pill warn" title="The PrizePicks feed is not fresh – this line can't be confirmed as playable">not confirmed</span>` : ""}${r.p != null ? ` · <b>${chance(r.p, r.prop)}</b>${coinFlip(r.p)}` : ""}${isLeanV(r) ? (r.state === "SCOUT" ? " · No match scheduled" : "") : " · " + esc(mGrade(r) || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${zeroWhy(r)}${capChip(r, r.team_name || r.team)}</div>`}
         <div class="b2meta">Proj ${r.proj != null ? num(r.proj, 1) : "–"}${ds ? ` · <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}">${ds[1]}</span>` : ""}${r.source ? `<span class="mx"> · source ${esc(r.source)}</span>` : ""}${r.hltv_retry ? (r.retry_cause === "odds" ? ` · <span class="pill warn" title="Thunderpick had no current quote for this match at the last regrade – this is this line's last grade from ${esc(clockTxt(r.graded_at) || "earlier")} (source as shown), stale until it is regraded as soon as Thunderpick quotes it again">stale grade kept · Thunderpick odds unavailable</span>` : ` · <span class="pill warn" title="The HLTV database was unreachable at the last regrade – this is this line's last grade from ${esc(clockTxt(r.graded_at) || "earlier")} (source as shown), stale until it is regraded as soon as the database answers">stale grade kept · HLTV unreachable</span>`) : ""}${r.graded_at ? `<span class="mx"> · graded ${agoTxt(r.graded_at)}</span>` : ""}${r.alt && r.book !== "prizepicks" ? ` · alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}${r.book === "prizepicks" && r.open_line != null && +r.open_line !== +r.line ? ` · opened ${r.open_line}` : ""}${r.moved_from != null ? ` · <span class="pill warn">line moved from ${r.moved_from}</span>` : ""}</div>
         ${ev(r.support, "up", "+")}${ev(r.concern, "dn", "–")}</div>
       ${!r.side ? "<span></span>" : gone ? `<button type="button" class="bslip" disabled title="${esc(gone)}">+ Slip</button>` : r.state === "SCOUT" ? `<button type="button" class="bslip" disabled title="No upcoming match found for his team – there is nothing to enter on a slip yet">+ Slip</button>`
@@ -1420,7 +1429,7 @@ function drawBoard() {
     const q2 = boardRows.filter(x => matchKey(x) === matchKey(mrows[0]) && x.side && x.state !== "SCOUT" && isBet(x)
                                      && (x.scope || "12") === bscope && (bside === "both" || x.side === bside)).sort((a, b) => (b.p ?? 0) - (a.p ?? 0));
     if (!q2.length) return `<div class="small muted" style="margin:0 2px 8px">No qualifying bets in this match${bside !== "both" ? ` (${bside === "More" ? "Overs" : "Unders"} only)` : ""}.</div>`;
-    const it = x => `${esc(x.nick || x.player)} ${sideWord({grade: x.grade, side: x.side})} ${x.line} ${propWord(x.prop)}${bbook === "all" ? ` (${bookName(x.book || "underdog")})` : ""} <b>${chance(x.p, x.prop)}</b>`;
+    const it = x => `${esc(x.nick || x.player)} ${sideWord({grade: mGrade(x), side: x.side})} ${x.line} ${propWord(x.prop)}${bbook === "all" ? ` (${bookName(x.book || "underdog")})` : ""} <b>${chance(x.p, x.prop)}</b>`;
     return `<div class="small" style="margin:0 2px 8px;line-height:1.5"><b>Highest chance here:</b> ${q2.slice(0, 3).map(it).join(" · ")}
       <div class="muted">No outside projections yet · value not ranked (no entry payouts)${q2.length > 1 ? " · these picks share match conditions and may win or lose together" : ""}</div></div>`; };
   // Best plays (2026-10-11): the strongest graded picks on the board right now - one per player, best grade first,
@@ -1514,7 +1523,7 @@ function drawCompare() {
   const one = (bk, r) => `<button type="button" class="cmpcell" data-cmp="${bk}|${esc(r.nick || r.player)}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}" title="Open the card at this ${bookName(bk)} line">
       <span class="ln">${r.line}</span>${mktTag(r)}${r.stale ? ` <span class="pill warn">not confirmed</span>` : ""}
       <div style="display:flex;flex-wrap:wrap;gap:0 10px"><span style="white-space:nowrap">Over ${sides(r)[0]}</span><span style="white-space:nowrap">Under ${sides(r)[1]}</span></div>
-      <div class="muted">${esc(sideWord(r))}${isLeanV(r) ? "" : " · " + esc(r.grade)} · ${+(+r.units || 0).toFixed(2)}U</div></button>`;
+      <div class="muted">${esc(sideWord(r))}${isLeanV(r) ? "" : " · " + esc(mGrade(r))} · ${+(+r.units || 0).toFixed(2)}U${zeroWhy(r)}</div></button>`;
   const col = (bk, rows) => `<div><div class="cmpbook">${bookName(bk)}</div>${rows.length ? rows.map(r => one(bk, r)).join("") : `<div class="cmpnone">${bookName(bk)}: not offered</div>`}</div>`;
   const easier = x => {
     const pr = [...x.u, ...x.p].map(y => y.proj).filter(v => v != null);
@@ -2262,7 +2271,7 @@ function render(d) {
   const kcap = capOf(d, "kills_chance", KCAP), ch = p => chance(p, g.prop, kcap);
 
   // ---- headline
-  const head = v.state === "SCOUT" ? `No match scheduled · Lean ${sideTxt(v.side)} ${g.line}`    : v.grade === "LEAN" && v.side ? `Lean ${sideTxt(v.side)} ${g.line}`
+  const head = v.state === "SCOUT" ? `No match scheduled · Lean ${sideTxt(v.side)} ${g.line}`    : mGrade(v) === "LEAN" && v.side ? `Lean ${sideTxt(v.side)} ${g.line}`
     : v.side ? `${sideTxt(v.side)} ${g.line}` : g.withheld ? "No grade – live data unavailable" : "No grade";
   // an outage card (g.withheld): the server removed its temporary numbers; v is the board's saved grade of this exact pick
   // (stale) or no grade at all
@@ -2276,11 +2285,11 @@ function render(d) {
   const why = !v.reason || g.withheld || /^Projection [\d.]+ vs [\d.]+ needed \([^)]*\)$/.test(v.reason) || g.tape_fight || g.form_fight ? ""
     : v.reason.replace(/ · stake capped: .*$/, "");
   const pu = pushOf(g);
-  const sub = v.side ? `${ch(v.p)} ${pu != null ? `model estimate, excluding pushes · push ${pct(pu)}` : "model estimate"}${coinFlip(v.p)} · ${v.units}U${capPill}${keptPill}${gonePill}${why ? `<div class="small muted" style="margin-top:4px">${esc(why)}</div>` : ""}`
+  const sub = v.side ? `${ch(v.p)} ${pu != null ? `model estimate, excluding pushes · push ${pct(pu)}` : "model estimate"}${coinFlip(v.p)} · ${v.units}U${zeroWhy(v)}${capPill}${keptPill}${gonePill}${why ? `<div class="small muted" style="margin-top:4px">${esc(why)}</div>` : ""}`
     : gateStop ? "" : esc(v.reason || "");
-  const hc = g.status === "NO GRADE" || v.state === "SCOUT" || (g.withheld && !v.side) ? "g-scout" : gClass(v.grade);
+  const hc = g.status === "NO GRADE" || v.state === "SCOUT" || (g.withheld && !v.side) ? "g-scout" : gClass(mGrade(v));
   h += `<section class="card herocard ${hc}"><div class="hero">
-    <div class="badge ${hc}" title="${esc(!v.side ? "No grade" : v.state === "SCOUT" ? "No match scheduled – research only" : v.grade === "LEAN" ? "Lean – 0 units" : "Grade " + v.grade)}">${esc(!v.side || v.state === "SCOUT" ? "–" : v.grade === "LEAN" ? "L" : (v.grade || "L").slice(0, 2))}</div>
+    <div class="badge ${hc}" title="${esc(!v.side ? "No grade" : v.state === "SCOUT" ? "No match scheduled – research only" : mGrade(v) === "LEAN" ? "Lean – 0 units" : "Grade " + mGrade(v) + (+v.units > 0 ? "" : " – 0 units"))}">${esc(!v.side || v.state === "SCOUT" ? "–" : mGrade(v) === "LEAN" ? "L" : (mGrade(v) || "L").slice(0, 2))}</div>
     <div><h3>${esc(head)}</h3>
       <div class="sub">${esc(pb.player?.nick || "")} · ${pb.standin_for ? `${esc(pb.current_team || "")} → <b>stand-in for ${esc(pb.standin_for)}</b>` : esc(pb.current_team || "")}${nm?.opponent ? ` vs ${esc(nm.opponent)}${nm.start ? ` · ${shortWhen(nm.start)}` : ""}` : ""} · ${g.line} ${stat}${mapsWord(g.scope) || " (Maps 1–2)"} · ${esc(g.line_type || "")} · <span class="muted">${esc(lineSource(d))}</span></div>${outageNote(d)}
       <div class="sub">${sub}</div>
@@ -2303,7 +2312,7 @@ function render(d) {
       <div class="side ${v.side === "Less" ? "pick" : ""}"><div class="k">Under · ${sideGrade(g.grade_less, g.units_less, v, "Less")}${zTag(g.grade_less, g.units_less)}</div><div class="v">${ch(g.p_less)}${pushOf(g) != null ? ` <span class="muted small">excl. pushes · push ${pct(pushOf(g))}</span>` : ""}</div><div class="bar"><i style="width:${g.p_less*100}%"></i></div></div>
     </div>
     ${Array.isArray(d.ladder) && d.ladder.length > 1 ? `<div class="ladder"><span class="small muted">Nearby lines:</span>${d.ladder.map(x =>
-      `<button type="button" class="chipbtn ${x.line === g.line ? "on" : ""}" data-ladder="${x.line}" title="Grade this line">${x.line} <b class="${x.side === "More" ? "up" : "dn"}">${esc(sideWord({side: x.side, grade: isLeanV(x) || !(x.units > 0) ? "LEAN" : x.grade}))} ${ch(x.p)}</b>${isLeanV(x) || !(x.units > 0) || !x.grade || String(x.grade).startsWith("n/a") ? "" : " · " + esc(x.grade)}</button>`).join("")}</div>` : ""}
+      `<button type="button" class="chipbtn ${x.line === g.line ? "on" : ""}" data-ladder="${x.line}" title="Grade this line">${x.line} <b class="${x.side === "More" ? "up" : "dn"}">${esc(sideWord({side: x.side, grade: mGrade(x)}))} ${ch(x.p)}</b>${isLeanV(x) || !mGrade(x) || String(mGrade(x)).startsWith("n/a") ? "" : " · " + esc(mGrade(x)) + (+x.units > 0 ? "" : " · 0U")}</button>`).join("")}</div>` : ""}
     <div class="stats" style="margin-top:10px">
       <div class="stat"><div class="k">Projection</div><div class="v">${num(g.lambda_final,1)}</div><div class="n">${stat}, ${g.scope === "123" ? "Maps 1–3" : g.scope === "1" ? "Map 1" : "Maps 1–2"}</div></div>
       <div class="stat"><div class="k">Line</div><div class="v">${g.line}</div><div class="n">${g.line % 1 ? `Over needs ${Math.floor(g.line) + 1}+` : `exactly ${g.line} is a push`}</div></div>
@@ -2648,7 +2657,7 @@ function mcWhy(c) {
   let t = `${side} chance ${p.toFixed(1)}% (graded on the unrounded chance).`;
   if (isLeanV(c)) t += c.state === "SCOUT" ? " Lean: 0 units - no match scheduled for his team." : gate ? ` Lean: 0 units - ${gate[1]}.` : p >= 55.05 ? ` Lean: 0 units - ${c.reason || "a gate held the stake at 0"}.`
     : " Lean: below the 55% needed for a graded pick, so 0 units.";
-  else t += ` Grade ${c.grade} from the chance: B- 55%+, B 57%+, B+ 63%+, A- 68%+, A 74%+, A+ 80%+.`;
+  else t += ` Grade ${mGrade(c)} from the chance: B- 55%+, B 57%+, B+ 63%+, A- 68%+, A 74%+, A+ 80%+.` + (+c.units > 0 ? "" : ` 0 units: ${c.stake_reason || "a stake rule holds it at 0"}.`);
   if (c.units_full > c.units) t += ` Stake cut from ${c.units_full}U by the same-match cap.`;
   return t;
 }
@@ -2668,7 +2677,7 @@ function drawMatchCompare() {
     const capped = c.units_full > c.units ? ` <span class="muted small">(capped from ${c.units_full}U)</span>` : "";
     return proj + `<td class="num">${c.line}</td><td><button type="button" class="mcpick" data-mc="${esc(e.nick)}|${c.line}|${pr}" title="${esc(mcWhy(c))}
 Tap to open ${esc(e.nick)}'s ${pr === "hs" ? "headshots" : "kills"} card">
-      <b>${esc(sideWord(c))}</b> ${chance(c.p || 0, pr)}${isLeanV(c) ? (c.state === "SCOUT" ? " · No match scheduled" : "") : " · " + esc(c.grade || "–")} · ${+(+c.units || 0).toFixed(2)}U${capped}</button></td>`;
+      <b>${esc(sideWord(c))}</b> ${chance(c.p || 0, pr)}${isLeanV(c) ? (c.state === "SCOUT" ? " · No match scheduled" : "") : " · " + esc(mGrade(c) || "–")} · ${+(+c.units || 0).toFixed(2)}U${zeroWhy(c)}${capped}</button></td>`;
   };
   const dcell = e => {
     const cs = props.map(pr => e[pr]).filter(Boolean), lined = cs.filter(c => c.line != null);
@@ -2701,7 +2710,7 @@ Tap to open ${esc(e.nick)}'s ${pr === "hs" ? "headshots" : "kills"} card">
   const allEmpty = j.teams.every(t => t.players.every(e => ["kills", "hs"].every(pr => (e[pr] || {}).line == null && (e[pr] || {}).proj == null)));
   const emptyNote = j.teams.flatMap(t => t.players.flatMap(e => ["kills", "hs"].map(pr => (e[pr] || {}).note))).find(Boolean) || "";
   const pickTxt = (e, pr) => { const c = e[pr] || {}, lab = pr === "hs" ? "HS" : "Kills";
-    if (shown(c) && !c.pending) return `<button type="button" class="mcpick" data-mc="${esc(e.nick)}|${c.line}|${pr}" title="${esc(mcWhy(c))}">${lab} ${c.line}: <b>${esc(sideWord(c))}</b> ${chance(c.p || 0, pr)}${isLeanV(c) ? "" : " · " + esc(c.grade || "–")} · ${+(+c.units || 0).toFixed(2)}U</button>`;
+    if (shown(c) && !c.pending) return `<button type="button" class="mcpick" data-mc="${esc(e.nick)}|${c.line}|${pr}" title="${esc(mcWhy(c))}">${lab} ${c.line}: <b>${esc(sideWord(c))}</b> ${chance(c.p || 0, pr)}${isLeanV(c) ? "" : " · " + esc(mGrade(c) || "–")} · ${+(+c.units || 0).toFixed(2)}U${zeroWhy(c)}</button>`;
     if (c.line != null) return `<span class="muted">${lab} ${c.line}: ${c.side && !c.pending ? "filtered" : "grading…"}</span>`;
     return `<span class="muted">${lab} ${c.proj != null ? `projection ${num(c.proj, 1)} · no line` : "– no projection"}</span>`; };
   const phoneList = j.teams.map(t => `<div class="mcteam"><b>${esc(t.team)}</b></div>` + [...t.players].sort((a, b) => MC.sort === "chance" ? best(b) - best(a) : a.nick.localeCompare(b.nick))
