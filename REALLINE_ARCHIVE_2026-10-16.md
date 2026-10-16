@@ -341,7 +341,7 @@ matches.
   - The current perf-2 era is +1.0 (-6.6 to +8.5).
   - Nothing here shows the rule beating the lines members could actually take.
 
-## 7. Headshot model comparison (owner 2026-10-16: resume the headshot proposal; protocol PROTOCOL_HS.md written before it ran)
+## 7. Headshot model comparison (CLOSED; owner 2026-10-16: resume the headshot proposal; protocol PROTOCOL_HS.md written before it ran)
 
 The lead (development, not an advantage): at the original line, the recorded HS projection's disagreement with the line
 carries information (slope 0.50), and the recorded HS estimates are overconfident. Two separate questions:
@@ -367,8 +367,9 @@ carries information (slope 0.50), and the recorded HS estimates are overconfiden
   matches) points the same way. The hs-1 form gains +0.0025 log loss over BASE (-0.0026, +0.0083); its 57% rule picks
   are +0.050 (-0.020, +0.117).
 - **HLTV history (12 months) shows no persistent level bias** in the full-history HS projection. Monthly bias stays
-  between -0.37 and +0.26 HS per series, with no consistent sign. The Over tilt at the lines comes from where the
-  platforms set HS lines, so there is no history-supported level correction to add.
+  between -0.37 and +0.26 HS per series, with no consistent sign. (Corrected, section 8: a near-zero HLTV-wide average
+  does not establish why errors occur on the book-listed players and lines; the cause of the Over tilt at the lines is not
+  identified.)
 
 **Forward (separate).** hs-1 was frozen at 2026-10-16 20:50:42 UTC (commit 6e7dc53).
 - It is registered in the learning registry as `hs-calibration-1`. It is scored only on forecasts logged after its
@@ -389,3 +390,82 @@ carries information (slope 0.50), and the recorded HS estimates are overconfiden
   original or archive lines.
 - The live grader still turns that gap into a grade under the existing rules. Changing that requires a candidate that
   passes the registered review. lb-001, whose kills arm is exactly 50%, is the frozen one under that review.
+
+## 8. Opponent-adjusted kill rate (owner 2026-10-16; protocol PROTOCOL_OA.md written before any result)
+
+**Question.** Does adjusting each historical performance for the opposition faced improve the player's estimated ability?
+
+**Prior work.** It had not been tested.
+- FACTOR_AUDIT R3-oppagg used the upcoming opponent's own kill pace.
+- R4-ko changed the shrinkage of the prediction-time opponent factor.
+- The 2026-10-15 "no opponent adjustment" row removed that factor.
+- None adjusted the history itself.
+
+**Candidate.** A regularised multiplicative model: kills = rounds x exp(mu + player + opponent).
+- Fitted by iterative proportional fitting on maps strictly before each weekly refit date.
+- Shrinkage uses the live constants: player 300 rounds, opponent 5 x 300 player-rounds. Half-life 120 d, window 420 d.
+- History view n0 (the live pin).
+- Variants:
+  - **OA-1** (primary; isolates the change): each historical map's kills are divided by that opponent's fitted defensive
+    factor. Everything else is unchanged: the prediction-time opponent factor, the environment blend, expected rounds
+    21.74, spread and HS ratio.
+  - **OA-2** (secondary): OA-1 plus the upcoming opponent's factor from the same joint fit.
+  - **OA-3** (post-hoc attribution, recorded as an extra configuration): the current player rate with the joint opponent
+    factor only.
+- **Builder check:** the unadjusted sums reproduce the current model's history sums exactly (maximum difference 0).
+
+**HLTV history, chronological** (Jan - Oct 16 2026, Maps 1-2 kills: 85,861 player-series / 8,597 matches). Gains are
+paired vs the current formula on the same history; positive = candidate better; match-grouped 95%.
+
+| Segment | Series | Current MAE | OA-1 MAE gain | OA-1 log-score gain | OA-2 MAE gain | OA-2 log-score gain |
+|---|---|---|---|---|---|---|
+| All | 85,861 | 6.335 | -0.001 (-0.004, +0.002) | -0.0011 (-0.0016, -0.0006) | +0.005 (+0.002, +0.009) | +0.0003 (n.s.) |
+| Book-listed players (628 with an offered line Oct 2-16) | 38,082 | 6.144 | -0.002 (n.s.) | -0.0011 (worse) | +0.007 (+0.002, +0.012) | +0.0009 (-0.0000, +0.0018) |
+| Book-listed, history >= 600 rounds | 20,678 | 5.994 | +0.000 (n.s.) | -0.0001 | **+0.014 (+0.007, +0.021)** | **+0.0023 (+0.0012, +0.0035)** |
+| Book-listed, history < 600 | 17,404 | 6.321 | -0.005 (worse) | -0.0022 (worse) | -0.001 (n.s.) | -0.0007 (n.s.) |
+| Established (>= 600) | 32,871 | 6.000 | +0.003 (n.s.) | -0.0002 | +0.014 (+0.009, +0.019) | +0.0020 (+0.0011, +0.0028) |
+| Thin (< 600) | 52,990 | 6.542 | -0.004 (worse) | -0.0017 (worse) | +0.000 | -0.0008 |
+| Original top-200 set | 40,639 | 6.130 | +0.008 (+0.002, +0.014) | +0.0001 | +0.016 (+0.011, +0.020) | +0.0024 (+0.0016, +0.0031) |
+| Lower tier | 45,222 | 6.518 | -0.009 (worse) | -0.0022 (worse) | -0.004 | -0.0016 (worse) |
+
+**Attribution.**
+- **OA-3 vs current** (joint opponent factor alone): MAE +0.002 (n.s.), log-score +0.0006 to +0.0010.
+- **OA-2 vs OA-3** (adding the historical adjustment to the joint factor):
+  - established +0.012 (+0.006, +0.019); book-listed >= 600 +0.010 (+0.002, +0.019); top-200 +0.017 (+0.011, +0.024);
+  - lower tier -0.008 (worse).
+- **So:** the historical adjustment improves the estimate only inside a consistent joint model (OA-2), and only for
+  established / top-tier players. With the current prediction-time opponent factor (OA-1) it adds nothing.
+- The month-by-month OA-1 gains change sign (2026-06 -0.018, 2026-10 -0.021).
+
+**Practical effect at real lines** (decision-time forecasts at their original, timestamped line; all models rebuilt the
+same way):
+
+| Stat | Obs / matches | Log-loss gain OA-1 vs current | Log-loss gain OA-2 vs current | vs BASE (OA-2) | Projection MSE minus line MSE: current -> OA-2 | 57% rule hit - BASE: current / OA-2 |
+|---|---|---|---|---|---|---|
+| Kills | 1,045 / 147 | -0.0019 (-0.0084, +0.0044) | +0.0016 (-0.0026, +0.0058) | -0.0034 | +1.73 -> +0.90 kills^2 | +0.034 / +0.044 (both include 0) |
+| HS | 882 / 140 | -0.0031 | +0.0003 (-0.0036, +0.0040) | +0.0013 | +0.42 -> +0.25 | +0.056 / +0.071 (+0.012, +0.126) |
+
+- **The offered-line archive** (separate benchmark, capture time not recorded) agrees.
+  - Kills: OA-2 vs current +0.0023 (-0.0014, +0.0059); still worse than BASE.
+  - The kills projection's MSE gap to the line goes +2.59 -> +1.97.
+- **The HS selection difference** (+0.071 vs +0.056) is not a paired test. It sits among several models and both stats, so
+  it is not evidence of better picks.
+
+**Result.**
+- **OA-1, the opponent adjustment of the history itself, does not improve the player estimate.** It is no better overall,
+  no better on book-listed players, and worse on thin / lower-tier players.
+- **OA-2, a consistent joint player-and-opponent model, gives a small, significant gain on established and book-listed
+  established players:** MAE -0.014 kills (about 0.2%) and log score +0.002.
+  - Its effect at genuinely available lines is not established: +0.0016 log loss on kills, +0.0003 on HS.
+  - It narrows the kills projection's gap to the line (MSE gap +1.73 -> +0.90) but does not close it.
+- **Nothing qualifies, and nothing is deployed.**
+
+**Remaining limitation.**
+- The component is real but small. The kills projection's own error relative to the line (section 3: about 2.9 of 3.3
+  kills^2 of disagreement variance) is far larger than anything opponent strength explains.
+- A frozen OA-2 would be a legitimate projection-component candidate for a forward test of projection error. It is not
+  registered here: the owner asked for the comparison, not another shadow.
+
+**Correction to section 7.** Section 7 said the Over tilt at HS lines "comes from where the platforms set HS lines". That
+is withdrawn. A near-zero average bias across all HLTV matches does not establish why errors occur on book-listed players
+and lines, which are a selected subset. The cause of the tilt is not identified.
