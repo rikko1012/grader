@@ -1540,8 +1540,23 @@ LATEST_SQL = ("SELECT l.* FROM ledger l JOIN (SELECT unit_key, MAX(settlement_ve
               "ON m.unit_key = l.unit_key AND m.v = l.settlement_version")
 
 
-def latest_rows(con):
-    return [dict(r) for r in con.execute(LATEST_SQL)]
+def latest_rows(con, stale=None):
+    """The latest settlement version of every unit. A unit row whose picks were re-keyed afterwards (the canonical match
+    id arrived after it was recorded, so the same picks got a newer unit key) is STALE and left out: the same picks are
+    one unit, under the newest key. Found 2026-10-16: 264 board forecasts were counted twice (HLTV id + old slug), which
+    also counted their matches twice. `stale` (a list) receives the rows left out."""
+    rows = [dict(r) for r in con.execute(LATEST_SQL)]
+    owned, keep = set(), []
+    for r in sorted(rows, key=lambda r: r["rid"], reverse=True):
+        pids = set(json.loads(r["pick_ids"] or "[]"))
+        if pids & owned:
+            if stale is not None:
+                stale.append(r)
+            continue
+        owned |= pids
+        keep.append(r)
+    keep.sort(key=lambda r: r["rid"])
+    return keep
 
 
 def _unit(r):
@@ -1552,7 +1567,8 @@ def _unit(r):
 
 
 def scorecard(con):
-    rows = latest_rows(con)
+    stale = []
+    rows = latest_rows(con, stale)
     sc = [_unit(r) for r in rows if r["bucket"] == "scored"]
     lab = {r[0]: r[1] for r in con.execute("SELECT forecast_id, source FROM forecast_copy WHERE source IS NOT NULL")}
     for u in sc:                                       # the line source by the current board rule (SOURCE_RULE, audit D2)
@@ -1565,7 +1581,8 @@ def scorecard(con):
            "bucket_matches": {b: len({r["match_slug"] for r in rows if r["bucket"] == b}) for b in BUCKETS},
            "bucket_reasons": [{"bucket": b, "reason": r, "units": n} for (b, r), n in reasons.most_common(30)],
            "ledger_rows": con.execute("SELECT COUNT(*) FROM ledger").fetchone()[0], "units": len(rows),
-           "superseded": con.execute("SELECT COUNT(*) FROM ledger").fetchone()[0] - len(rows)}
+           "superseded": con.execute("SELECT COUNT(*) FROM ledger").fetchone()[0] - len(rows) - len(stale),
+           "rekeyed_stale": len(stale)}
     for dim in ("stat", "scope", "env", "history", "version", "projection", "source"):
         g = collections.defaultdict(list)
         for u in sc:
@@ -1620,8 +1637,10 @@ def history_revision(f):
 
 def product_units(con, rows=None):
     """P1 units (see PRODUCT) and the excluded counts by reason."""
-    rows = latest_rows(con) if rows is None else rows
-    out, excl = [], collections.Counter()
+    out, excl, stale = [], collections.Counter(), []
+    rows = latest_rows(con, stale) if rows is None else rows
+    if stale:
+        excl["the same picks under an older match key (counted once, under the newest key)"] = len(stale)
     for r in rows:
         if r["bucket"] in _PRODUCT_SKIP or r["actual"] is None or not r["match_start"]:
             excl[f"not scoreable ({r['bucket']})"] += 1

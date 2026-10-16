@@ -404,3 +404,27 @@ def test_p1_units_export_serves_each_challengers_stored_value_for_the_same_forec
     assert body2["next_after"] is None and sorted(r["forecast_id"] for r in rows) == sorted({r["forecast_id"] for r in rows})
     got = next(r for r in rows if r["forecast_id"] == fid)
     assert got["challengers"][ch] == {"p": 0.512, "p_base": 0.6, "lam": 27.0, "lam_base": 27.0} and got["p"] == 0.6
+
+
+def test_picks_re_keyed_to_the_canonical_match_are_one_unit(tmp_path):
+    """Production 2026-10-16: a settled unit recorded under the BO3.gg slug, then again under the HLTV id once the match was
+    identified, stayed in the ledger under both keys - 264 board forecasts counted twice and their matches twice. The newest
+    key owns the picks; the older row is reported as re-keyed, never scored a second time."""
+    con = learning.connect(tmp_path / "l.db")
+    con.execute("INSERT INTO forecast_copy (forecast_id, pick_id, logged_at, match_start, line, side, p_more, lambda, source, book, line_type, prop, scope) "
+                "VALUES (11, 7, '2026-10-14T00:00:00+00:00', '2026-10-14T01:00:00+00:00', 30.5, 'More', 0.541, 31.2, 'board', 'prizepicks', 'standard', 'kills', '12')")
+    for uk, slug, at in (("1|zomblers-vs-overtake-14-10-2026|kills|12", "zomblers-vs-overtake-14-10-2026", "2026-10-14T04:00:00+00:00"),
+                         ("1|hltv:2399232|kills|12", "hltv:2399232", "2026-10-14T06:00:00+00:00")):
+        con.execute("INSERT INTO ledger (unit_key, forecast_id, settlement_version, fingerprint, bucket, match_slug, match_start, forecast_logged_at, "
+                    "prop, scope, line, actual, over_hit, p_over, lam, dims, diag, pick_ids, processed_at, lines) VALUES "
+                    "(?, 11, 1, ?, 'scored', ?, '2026-10-14T01:00:00+00:00', '2026-10-14T00:00:00+00:00', 'kills', '12', 30.5, 43, 1, 0.541, 31.2, "
+                    "'{}', '{}', '[7]', ?, '[]')", (uk, uk, slug, at))
+    con.commit()
+    stale = []
+    rows = learning.latest_rows(con, stale)
+    assert [r["match_slug"] for r in rows] == ["hltv:2399232"] and [r["match_slug"] for r in stale] == ["zomblers-vs-overtake-14-10-2026"]
+    us, excl = learning.product_units(con)
+    assert [(u["forecast_id"], u["match"]) for u in us] == [(11, "hltv:2399232")]
+    assert excl["the same picks under an older match key (counted once, under the newest key)"] == 1
+    sc = learning.scorecard(con)
+    assert sc["units"] == 1 and sc["rekeyed_stale"] == 1 and sc["product"]["matches"] == 1
