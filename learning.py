@@ -127,7 +127,8 @@ LINE_BLEND = {"family": "line-blend-1", "w": {"kills": 0.0, "hs": 0.5}, "scopes"
 # Display names (owner review 2026-10-12): lb-001 shrinks our own probability toward 50%; it does not use the book
 # price and does not test projection accuracy against the line. The frozen family id stays as it is.
 CHALLENGER_NAMES = {"line-blend-1": "probability-shrinkage challenger (toward 50%)", "perf-refit-1": "performance-model refit",
-                    "full-history-1": "fh-1 full HLTV history (shadow)"}
+                    "full-history-1": "fh-1 full HLTV history (shadow)",
+                    "line-correction-1": "lc-1 real-line correction (shadow)"}
 
 
 def line_blend_p(p_live, prop, scope, cfg=LINE_BLEND):
@@ -375,6 +376,22 @@ FULL_HISTORY = {
                  "live history changes only through a code release",
     "registered": "2026-10-15"}
 FH1_LAG_MIN = 10                    # a forecast is shadowed once its record cut-off (start - 30 min) is this far in the past
+# lc-1 (owner 2026-10-16, ACCURACY_2026-10-16.md): the one compact correction of the live chance at real offered lines,
+# logit P(Over) = a_s + b_s * z (z = the projection's standardized disagreement with the line), ridge-fitted per stat on
+# every settled real offered line through 2026-10-16. Its frozen coefficients are perf_shadow.LC1; its value is saved in
+# the pre-match fh-1 record (rec["lc1"]) and scored here after settlement. Development: it collapses to the base rate
+# (~49% Over) - it is NOT an accuracy upgrade and recommends nothing under the fixed rule; it is the forward test of
+# whether the projection's disagreement with the line has value.
+LINE_CORRECTION = {
+    "family": "line-correction-1", "shadow": "perf_shadow.LC1 (lc-1), saved in the pre-match record",
+    "definition": "logit P(Over) = a_s + b_s * (lambda - line) / (c_s * sqrt(lambda)); s = kills / HS; ridge 100",
+    "coefficients": {"kills": [-0.02688, -0.00717], "hs": [-0.04084, 0.00771]},
+    "training": "every settled real offered line (board, standard, latest forecast >= 30 min before the start, one per unit) "
+                "2026-10-11..16: 1,309 units / 78 matches, data hash 654e9c6827b6; ridge chosen leave-last-day-out",
+    "recommendation_rule": "favoured side when its chance >= 0.57 (the live B threshold) - fixed before testing",
+    "promotion": "the registered review (300 / 600 / 1,000 distinct forward matches); a promotion records the registry only",
+    "registered": "2026-10-16"}
+RECOMMEND_AT = 0.57                 # the recommendation-selection rule, fixed 2026-10-16 before testing
 
 
 def _ensure_full_history(con, now):
@@ -430,9 +447,10 @@ def _copy_fh1(con, recs, now):
     return n
 
 
-def _fh1_shadow(con, ch, now):
-    """fh-1 beside the live forecast, once the record cut-off has passed: the latest record of the forecast's pick logged
-    >= 30 min before the start (p_over_ch = fh-1, p_over_base = the record's live arm, p_over_logged = the forecast)."""
+def _fh1_shadow(con, ch, now, arm="fh1"):
+    """A pre-match-record challenger (fh-1, or lc-1 with arm "lc1") beside the live forecast, once the record cut-off has
+    passed: the latest record of the forecast's pick logged >= 30 min before the start (p_over_ch = the challenger,
+    p_over_base = the record's live arm, p_over_logged = the forecast)."""
     n = 0
     for f in con.execute("SELECT f.* FROM forecast_copy f WHERE f.logged_at > ? AND NOT EXISTS (SELECT 1 FROM shadow s "
                          "WHERE s.challenger_id = ? AND s.forecast_id = f.forecast_id) ORDER BY f.forecast_id",
@@ -447,15 +465,20 @@ def _fh1_shadow(con, ch, now):
         rr = con.execute("SELECT * FROM fh1_copy WHERE pick_id = ? AND logged_at <= ? ORDER BY logged_at DESC, id DESC LIMIT 1",
                          (f["pick_id"], _iso(cut))).fetchone()
         if rr is None:
-            vals = (None, None, pl, None, f["lambda"], 0, json.dumps({"reject": "no fh-1 record of this pick logged >= 30 min before the start"}))
+            vals = (None, None, pl, None, f["lambda"], 0, json.dumps({"reject": f"no {arm} record of this pick logged >= 30 min before the start"}))
         else:
             rec = json.loads(rr["rec"])
             note = {"record_id": rr["id"], "record_logged_at": rr["logged_at"], "group": rec.get("group"), "depth": rec.get("depth"),
                     "identical": bool(rec.get("identical_history")), "n0_exact": bool((rec.get("n0_check") or {}).get("exact")),
                     "adds": rec.get("adds"), "record_older_than_forecast": rr["logged_at"] < (f["logged_at"] or ""),
                     "live_source": (rec.get("live") or {}).get("projection_source"), "fh1_source": (rec.get("fh1") or {}).get("projection_source")}
-            pc, pb = rr["ch_p"], rr["live_p"]
-            vals = (pc, pb, pl, rr["ch_lam"], rr["live_lam"], int(pc is not None and pb is not None and abs(pc - pb) > 1e-9),
+            if arm == "fh1":
+                pc, pb, lc = rr["ch_p"], rr["live_p"], rr["ch_lam"]
+            else:                                      # lc-1: the same projection, a corrected chance
+                pc, pb, lc = (rec.get(arm) or {}).get("p_more"), rr["live_p"], rr["live_lam"]
+                if pc is None:
+                    note["reject"] = f"no {arm} value in the record (recorded before {arm} existed)"
+            vals = (pc, pb, pl, lc, rr["live_lam"], int(pc is not None and pb is not None and abs(pc - pb) > 1e-9),
                     json.dumps(note, sort_keys=True, default=str))
         con.execute("INSERT OR IGNORE INTO shadow (challenger_id, forecast_id, p_over_ch, p_over_base, p_over_logged, lam_ch, lam_base, "
                     "changed, computed_at, note) VALUES (?,?,?,?,?,?,?,?,?,?)", (ch["id"], f["forecast_id"], *vals[:6], _iso(now), vals[6]))
@@ -482,6 +505,22 @@ def fh1_replay_step(con, recs):
     summ = {"rows_checked": tot[0], "mismatches": tot[1], "examples": ex, "source": "saved inputs (history snapshot + grader inputs) only"}
     _set_meta(con, "fh1_replay", summ)
     return summ
+
+
+def _ensure_line_correction(con, now):
+    """Freeze lc-1 once (its forward test = forecasts logged after this moment, from their pre-match records)."""
+    if con.execute("SELECT 1 FROM challengers WHERE family = ?", (LINE_CORRECTION["family"],)).fetchone():
+        return
+    h = _sha(LINE_CORRECTION)
+    cid = f"lc-001-{h[:8]}"
+    con.execute("INSERT INTO challengers (id, family, created_at, frozen_at, snapshot_id, data_hash, training_cutoff, config, "
+                "config_hash, base_config, status, status_at, status_reason, revises, development) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (cid, LINE_CORRECTION["family"], _iso(now), _iso(now), None, "654e9c6827b6", "2026-10-16",
+                 json.dumps(LINE_CORRECTION, sort_keys=True), h,
+                 json.dumps({"live": "the record's live arm (the published chance)"}), "shadow", _iso(now),
+                 "frozen (owner 2026-10-16); forward test = board forecasts logged after the freeze, scored from their "
+                 "immutable pre-match records", None, "[]"))
+    con.execute("INSERT INTO events (at, kind, detail) VALUES (?,?,?)", (_iso(now), "challenger", json.dumps({"id": cid, "status": "shadow"})))
 
 
 def _ensure_line_blend(con, now):
@@ -1774,6 +1813,8 @@ def product_scorecard(con, rows=None):
     out["probability"] = {"overall": metrics(us, slope=True), "calibration": calibration(us)}
     # 3. side selection: the side the model favoured (a chance of exactly 50% has no side - counted, never dropped silently)
     out["side_selection"] = {"rows": directional(us), "ties_at_50": sum(1 for u in us if u["p"] == 0.5)}
+    # the recommendation-selection rule (fixed 2026-10-16): the subset a member would actually play, match-grouped
+    out["recommended"] = recommend_stats(us, "p")
     # 4. staking: staked vs 0U and the stake-weighted hit rate of the favoured side (no payouts - single props have none)
     st = [u for u in us if (u["units"] or 0) > 0 and u["p"] != 0.5]
     hit = lambda u: u["over"] if u["p"] > 0.5 else 1 - u["over"]
@@ -1812,6 +1853,8 @@ def product_scorecard(con, rows=None):
             row.update(_prop_line_2_extras(con, ch, us))
         elif ch["family"] == FULL_HISTORY["family"]:
             row.update(_fh1_extras(con, ch, us))
+        elif ch["family"] == LINE_CORRECTION["family"]:
+            row.update(_fh1_extras(con, ch, us, arm="lc1"))
         out["challengers"].append(row)
     return out
 
@@ -1827,7 +1870,8 @@ def _fh1_block(rs, B=BOOT_B):
            "log_loss": {"live": _r(sum(_ll(u["pL"], u["over"]) for u in rs) / len(rs), 5), "fh-1": _r(sum(_ll(u["pF"], u["over"]) for u in rs) / len(rs), 5)},
            "log_loss_gain": _r(sum(gl(u) for u in rs) / len(rs), 5), "log_loss_gain_ci": _ci_ratio(_groups(rs, gl), B=B),
            "brier": {"live": _r(sum(br(u["pL"], u["over"]) for u in rs) / len(rs), 5), "fh-1": _r(sum(br(u["pF"], u["over"]) for u in rs) / len(rs), 5)},
-           "brier_gain": _r(sum(gb(u) for u in rs) / len(rs), 5), "brier_gain_ci": _ci_ratio(_groups(rs, gb), B=B), "projection": {}}
+           "brier_gain": _r(sum(gb(u) for u in rs) / len(rs), 5), "brier_gain_ci": _ci_ratio(_groups(rs, gb), B=B), "projection": {},
+           "recommended": {"live": recommend_stats(rs, "pL", B), "challenger": recommend_stats(rs, "pF", B)}}
     for prop in ("kills", "hs"):
         g = [u for u in rs if u["prop"] == prop and u["lamL"] is not None and u["lamF"] is not None]
         if not g:
@@ -1846,7 +1890,26 @@ def _fh1_block(rs, B=BOOT_B):
     return out
 
 
-def _fh1_extras(con, ch, us):
+def recommend_stats(rs, key, B=BOOT_B, thr=RECOMMEND_AT):
+    """The fixed recommendation rule on these units: the favoured side when its chance >= thr. Picks, matches, mean printed
+    chance and the hit rate with a match-grouped interval (+ by side) - the subset a member would actually play."""
+    sel = []
+    for u in rs:
+        p = u.get(key)
+        if p is None or max(p, 1 - p) < thr:
+            continue
+        sel.append(dict(u, _pp=max(p, 1 - p), _hit=u["over"] if p >= 0.5 else 1 - u["over"], _side="Over" if p >= 0.5 else "Under"))
+    if not sel:
+        return {"picks": 0, "matches": 0, "rule": f"favoured side chance >= {thr}"}
+    side = lambda s: [x for x in sel if x["_side"] == s]
+    return {"picks": len(sel), "matches": len({x["match"] for x in sel}), "rule": f"favoured side chance >= {thr}",
+            "printed": _r(sum(x["_pp"] for x in sel) / len(sel)), "hit": _r(sum(x["_hit"] for x in sel) / len(sel)),
+            "hit_ci": _ci_ratio(_groups(sel, lambda x: x["_hit"]), B=B),
+            "by_side": {s: {"picks": len(side(s)), "hit": _r(sum(x["_hit"] for x in side(s)) / len(side(s))) if side(s) else None}
+                        for s in ("Over", "Under")}}
+
+
+def _fh1_extras(con, ch, us, arm="fh1"):
     """fh-1 vs live on P1 archived book lines (forward, interim): coverage, the checks, paired scores overall and by the
     registered group (thin history / lower tier vs established), by history depth and by whether full history changed the
     inputs; + = fh-1 better. The all-tier HLTV study is supporting evidence only (ACCURACY_2026-10-15.md)."""
@@ -1865,7 +1928,8 @@ def _fh1_extras(con, ch, us):
             rej[t.get("reject") or "no value"] += 1
             continue
         rs.append(dict(u, t=t, pL=s_["p_over_base"], pF=s_["p_over_ch"], lamL=s_["lam_base"], lamF=s_["lam_ch"], pP=s_["p_over_logged"]))
-    out = {"registered": FULL_HISTORY["registered"], "frozen_at": ch["frozen_at"], "forward_units": len(fwd), "units": len(rs),
+    out = {"registered": (FULL_HISTORY if arm == "fh1" else LINE_CORRECTION)["registered"], "arm": arm,
+           "frozen_at": ch["frozen_at"], "forward_units": len(fwd), "units": len(rs),
            "matches": len({u["match"] for u in rs}), "coverage": _r(len(rs) / len(fwd), 3) if fwd else None,
            "rejections": [{"reason": k, "units": v} for k, v in rej.most_common()],
            "n0_exact": sum(1 for u in rs if u["t"].get("n0_exact")), "identical_history": sum(1 for u in rs if u["t"].get("identical")),
@@ -1875,14 +1939,14 @@ def _fh1_extras(con, ch, us):
            "note": "Interim forward results on archived book lines (decisions only at the registered review windows). The "
                    "all-tier HLTV study is supporting evidence, not a substitute for results on the props members can play."}
     if not rs:
-        return {"fh1": out}
+        return {arm: out}
     out["all"] = _fh1_block(rs)
     by = lambda key: [dict(_fh1_block(g), group=k) for k, g in sorted(_split(rs, key).items(), key=lambda kv: -len(kv[1]))]
     out["by_group"] = by(lambda u: u["t"].get("group") or "unknown")
     out["by_depth"] = by(lambda u: u["t"].get("depth") or "unknown")
     out["by_inputs"] = by(lambda u: "full history adds no row (fh-1 = live)" if u["t"].get("identical") else "full history adds rows")
     out["n0_exact_only"] = _fh1_block([u for u in rs if u["t"].get("n0_exact")])
-    return {"fh1": out}
+    return {arm: out}
 
 
 def _split(rs, key):
@@ -2156,6 +2220,9 @@ def shadow_step(con, now, limit=4000, picks=None):
         propline2 = ch["family"] == PROP_LINE_2["family"]
         if ch["family"] == FULL_HISTORY["family"]:      # fh-1: its own pre-match records, once their cut-off has passed
             n += _fh1_shadow(con, ch, now)
+            continue
+        if ch["family"] == LINE_CORRECTION["family"]:   # lc-1: its value saved in the same pre-match records
+            n += _fh1_shadow(con, ch, now, arm="lc1")
             continue
         todo = con.execute("SELECT f.* FROM forecast_copy f WHERE f.logged_at > ? AND NOT EXISTS (SELECT 1 FROM shadow s "
                            "WHERE s.challenger_id = ? AND s.forecast_id = f.forecast_id) ORDER BY f.forecast_id LIMIT ?",
@@ -2491,6 +2558,7 @@ def run_cycle(now=None, picks=None, forecasts=None, batches=None, corrections=No
             _ensure_prop_line(con, now)
             _ensure_prop_line_2(con, now)
             _ensure_full_history(con, now)
+            _ensure_line_correction(con, now)
             log = {"at": _iso(now)}
             # 1. copy new forecasts (immutable), in pages
             if picks is None:

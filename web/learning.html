@@ -143,13 +143,16 @@ function draw() {
         <br>${pr(m.pairs)}${(m.pairs_anchor_changed || []).length ? `<br>Where the other platform changed the anchor: ${pr(m.pairs_anchor_changed)}` : ""}
         <br>Kills identity (C2 = B2): ${(m.identity_kills || {}).pl2_differs_from_B2 ?? "–"} differ · exact replay from saved inputs: ${(m.replay || {}).mismatches ?? "–"} mismatches in ${(m.replay || {}).rows_checked ?? 0} rows · target price labels ${esc(JSON.stringify(m.target_price_labels || {}))}
         <br>Point forecasts: ${Object.entries(pf).map(([k, v]) => `${esc(k)} - MAE (median-type) ${Object.entries(v.mae_median_type || {}).map(([a, b]) => `${esc(a)} ${n2(b)}`).join(", ")}; RMSE (mean-type) independent HLTV mean ${n2((v.rmse_mean_type || {})["independent HLTV mean"])}`).join(" · ") || "–"}</div>`; }).join("")}
-    ${(PR1.challengers || []).filter(c => c.fh1).map(c => { const m = c.fh1;
+    ${(() => { const r = PR1.recommended || {}; return r.picks ? `<div class="small"><b>Live recommendations</b> (${esc(r.rule || "")}, fixed 2026-10-16): ${r.picks} picks / ${r.matches} matches · printed ${pc(r.printed)} · hit ${pc(r.hit)} (${ci(r.hit_ci, pc)}) · Overs ${(r.by_side || {}).Over?.picks ?? 0} hit ${pc((r.by_side || {}).Over?.hit)} · Unders ${(r.by_side || {}).Under?.picks ?? 0} hit ${pc((r.by_side || {}).Under?.hit)}</div>` : ""; })()}
+    ${(PR1.challengers || []).filter(c => c.fh1 || c.lc1).map(c => { const m = c.fh1 || c.lc1;
+      const recl = (b) => { const r = (b && b.recommended) || {}, f = x => !(x && x.picks) ? "0 picks" : `${x.picks} picks, printed ${pc(x.printed)}, hit ${pc(x.hit)} (${ci(x.hit_ci, pc)})`;
+        return r.live ? ` · recommended (>= 57%): live ${f(r.live)} · ${c.lc1 ? "lc-1" : "fh-1"} ${f(r.challenger)}` : ""; };
       const blk = (b) => !(b && b.units) ? "no settled units yet" : `${b.units} units / ${b.matches} matches · log loss live ${n4((b.log_loss || {}).live)} vs fh-1 ${n4((b.log_loss || {})["fh-1"])} (gain ${n4(b.log_loss_gain)}, ${ci(b.log_loss_gain_ci, n4)}) · Brier gain ${n4(b.brier_gain)} (${ci(b.brier_gain_ci, n4)})`
         + Object.entries(b.projection || {}).map(([k, v]) => ` · ${esc(k)} projection: RMSE ${n2(v.rmse.live)} → ${n2(v.rmse["fh-1"])}, MAE ${n2(v.mae.live)} → ${n2(v.mae["fh-1"])} (gain ${n2(v.mae_gain)}, ${ci(v.mae_gain_ci, n2)}), bias ${n2(v.bias.live)} → ${n2(v.bias["fh-1"])}`).join("");
-      return `<div class="small"><b>${esc(c.id)} - full HLTV history (shadow only)</b> (frozen ${when(m.frozen_at)}; both arms from one pre-match record per unit; + = fh-1 better)
+      return `<div class="small"><b>${esc(c.id)} - ${c.lc1 ? "real-line correction lc-1 (shadow only)" : "full HLTV history (shadow only)"}</b> (frozen ${when(m.frozen_at)}; both arms from one pre-match record per unit; + = fh-1 better)
         <br>Coverage: ${m.units ?? 0} of ${m.forward_units ?? 0} forward book-line units (${pc(m.coverage)}) · ${m.matches ?? 0} matches · not scored: ${(m.rejections || []).map(r => `${esc(r.reason)} (${r.units})`).join(" · ") || "none"}
         <br>Checks: live arm reproduces the published forecast exactly on ${m.n0_exact ?? 0} of ${m.units ?? 0} units · full history adds no row on ${m.identical_history ?? 0} · exact replay from saved inputs: ${(m.replay || {}).mismatches ?? "–"} mismatches in ${(m.replay || {}).rows_checked ?? 0} records
-        <br>All: ${blk(m.all)}${(m.by_group || []).map(g => `<br>${esc(g.group)}: ${blk(g)}`).join("")}
+        <br>All: ${blk(m.all)}${recl(m.all)}${(m.by_group || []).map(g => `<br>${esc(g.group)}: ${blk(g)}`).join("")}
         <br><span class="muted">${esc(m.note || "")}</span></div>`; }).join("")}
     ${(PR1.challengers || []).filter(c => c.promotion).map(c => `<div class="small"><b>${esc(c.id)}</b>: <span class="pill off">${esc(c.promotion)}</span></div>`).join("")}
     ${(PR1.challengers || []).filter(c => c.c1).map(c => { const m = c.c1, pf = m.point_forecasts || {};

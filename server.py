@@ -2694,6 +2694,19 @@ class Handler(BaseHTTPRequestHandler):
                 num = lambda k: int(q[k]) if (q.get(k) or "").isdigit() else None
                 return self.send(200, picklog.forecasts_page(after_id=num("after") or 0, cutoff_id=num("cutoff"),
                                                              limit=num("limit"), inputs=q.get("inputs") == "1"))
+            if u.path == "/admin/post_drafts.json" and self.authed(q.get("token")):
+                # publication drafts built ONLY from saved board forecasts of lines offered now (posts.py, owner 2026-10-16)
+                import posts
+                bk_ = "prizepicks" if q.get("book") == "prizepicks" else "underdog"
+                out = posts.drafts(board_payload(bk_)["rows"], bk_, picklog.DB, min_grade=q.get("min") or "B-")
+                try:                                            # the grader's own record at real offered lines (P1)
+                    import learning
+                    pr_ = ((learning.dashboard().get("scorecard") or {}).get("product") or {})
+                    out["grader_record_at_real_lines"] = {"recommended": pr_.get("recommended"), "units": pr_.get("units"),
+                                                          "matches": pr_.get("matches")}
+                except Exception:
+                    out["grader_record_at_real_lines"] = None
+                return self.send(200, out)
             if u.path == "/admin/fh1.json" and self.authed(q.get("token")):
                 # fh-1 shadow (perf_shadow): status + a bounded page of its records; replay=1 re-runs a page from saved inputs
                 num = lambda k: int(q[k]) if (q.get(k) or "").isdigit() else None

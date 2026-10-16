@@ -83,6 +83,27 @@ data hash 49e7ac29547b86a9). Walk-forward with w refitted on earlier days only: 
 - **Development units still count units of the old slug identity** (a match logged under a BO3.gg slug and hltv-<id> was
   two units then); the forward evaluation uses the canonical match identity (identity.assign).
 
+## lc-1 - real-line probability correction (family `line-correction-1`, id `lc-001-<hash>`; production shadow only)
+
+- **Definition:** `logit P(Over) = a_s + b_s * z`, with z = (projection - line) / (c_s * sqrt(projection)) (c = the live
+  spread constants) and s = kills / HS. It keeps the published projection and corrects only the chance.
+- **Frozen fit:** every settled real offered line through 2026-10-16.
+  - P1 units: 1,309 / 78 matches; data hash 654e9c6827b6.
+  - Ridge 100 (chosen leave-last-day-out).
+  - Kills (-0.02688, -0.00717); HS (-0.04084, +0.00771).
+  - Code: `perf_shadow.LC1`, `learning.LINE_CORRECTION`.
+- **Saved before each match.** The value goes in the fh-1 pre-match record (`rec["lc1"]`). It is scored after settlement
+  on the same P1 units as live (the record of each forecast's pick logged 30+ min before the start). Records written
+  before lc-1 existed are rejected and counted.
+- **Recommendation rule (fixed before testing):** the favoured side when its chance is 57% or more. Its picks, matches,
+  hit rate (match-grouped interval) and sides are reported for live and lc-1.
+- **Development (ACCURACY_2026-10-16.md):**
+  - Log loss +0.0132 vs live (-0.0022 to +0.0292), but -0.0004 vs the simple line baseline. AUC 0.473.
+  - It collapses to the base rate (about 49% Over) and recommends nothing.
+  - **Not an accuracy upgrade.** It is the forward test of whether the projection's disagreement with the line has
+    value.
+- **Forward:** the registered review windows (300 / 600 / 1,000 distinct forward matches); promotion only through it.
+
 ## fh-1 - full HLTV history for the performance model (family `full-history-1`, id `fh-001-<hash>`; production shadow only)
 
 - **Definition:** the live perf-2 formula and parameters unchanged, reading every HLTV match (all tiers) dated before

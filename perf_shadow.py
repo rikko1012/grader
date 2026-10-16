@@ -148,6 +148,26 @@ def group(pub_pf):
     return ("established" if est else "thin history / lower tier"), depth
 
 
+# lc-1 (owner 2026-10-16, ACCURACY_2026-10-16.md): the one compact correction of the live chance at offered lines -
+# logit P(Over) = a_s + b_s * z, z = (projection - line) / (c_s * sqrt(projection)) (the projection's standardized
+# disagreement with the line, c = the live spread constants), ridge-fitted per stat on every settled real offered line
+# through 2026-10-16 (1,309 units / 78 matches; ridge 100 chosen leave-last-day-out). FROZEN - saved with every record
+# before the match and scored after settlement; never a live input.
+LC1 = {"version": "lc-1", "w": {"kills": (-0.02688, -0.00717), "hs": (-0.04084, 0.00771)}, "data_hash": "654e9c6827b6",
+       "cutoff_day": "2026-10-16", "ridge": 100}
+
+
+def lc1_p(lam, line, prop, scope="12"):
+    """lc-1's chance of Over for one offered line (None without a projection or line)."""
+    if lam is None or line is None or prop not in LC1["w"]:
+        return None
+    import math
+    c = perf.SPREAD.get((prop, scope or "12"), perf.SPREAD[(prop, "12")])
+    z = (float(lam) - float(line)) / (c * math.sqrt(max(float(lam), 1.0)))
+    a, b = LC1["w"][prop]
+    return round(1 / (1 + math.exp(-(a + b * z))), 6), round(z, 4)
+
+
 def _same(a, b):
     return all(a.get(k) == b.get(k) for k in NUMERIC)
 
@@ -369,6 +389,9 @@ def build(res, r):
                        "inputs_sha": in_sha},
            "read_at": {"live_player": _iso(lp[0]), "live_opp": _iso(lo[0]) if lo else None, "player": _iso(p_at), "opp": _iso(o_at)},
            "inputs_sha": in_sha, "gi_sha": gi_sha}
+    lc = lc1_p(g.get("lambda_final"), g.get("line"), prop, scope)
+    if lc:
+        rec["lc1"] = {"p_more": lc[0], "z": lc[1], "version": LC1["version"], "from": "published projection and line"}
     return rec, {in_sha: ("snapshot", pack(snap)), gi_sha: ("grader_inputs", pack(gi_s))}
 
 
