@@ -1,0 +1,92 @@
+{
+ "2026-10-03": {
+  "board rows (railway)": 103,
+  "with pre-match forecast": 86,
+  "no HLTV ids": 10,
+  "no pre-match forecast": 17
+ },
+ "2026-10-04": {
+  "board rows (railway)": 134,
+  "with pre-match forecast": 115,
+  "no HLTV ids": 18,
+  "no pre-match forecast": 19
+ },
+ "2026-10-05": {
+  "board rows (railway)": 57,
+  "with pre-match forecast": 49,
+  "no HLTV ids": 4,
+  "no pre-match forecast": 8
+ },
+ "2026-10-06": {
+  "board rows (railway)": 43,
+  "with pre-match forecast": 40,
+  "no HLTV ids": 1,
+  "no pre-match forecast": 3
+ },
+ "2026-10-07": {
+  "board rows (railway)": 390,
+  "with pre-match forecast": 361,
+  "no HLTV ids": 61,
+  "no pre-match forecast": 29
+ },
+ "2026-10-08": {
+  "board rows (railway)": 196,
+  "with pre-match forecast": 179,
+  "no HLTV ids": 46,
+  "no pre-match forecast": 17
+ },
+ "2026-10-09": {
+  "board rows (railway)": 144,
+  "with pre-match forecast": 134,
+  "no HLTV ids": 9,
+  "no pre-match forecast": 10
+ },
+ "2026-10-10": {
+  "board rows (railway)": 127,
+  "with pre-match forecast": 113,
+  "no HLTV ids": 20,
+  "no pre-match forecast": 14
+ },
+ "2026-10-11": {
+  "board rows (railway)": 11,
+  "with pre-match forecast": 194,
+  "no HLTV ids": 7,
+  "board rows (render)": 259,
+  "no pre-match forecast": 30
+ },
+ "2026-10-12": {
+  "board rows (render)": 525,
+  "with pre-match forecast": 499,
+  "no HLTV ids": 67,
+  "no pre-match forecast": 26
+ },
+ "2026-10-13": {
+  "board rows (render)": 234,
+  "with pre-match forecast": 228,
+  "no HLTV ids": 10,
+  "no pre-match forecast": 6
+ },
+ "2026-10-14": {
+  "board rows (render)": 787,
+  "with pre-match forecast": 775,
+  "no HLTV ids": 90,
+  "no pre-match forecast": 12
+ },
+ "2026-10-15": {
+  "board rows (render)": 698,
+  "with pre-match forecast": 672,
+  "no HLTV ids": 73,
+  "no pre-match forecast": 26
+ },
+ "2026-10-16": {
+  "board rows (render)": 945,
+  "with pre-match forecast": 925,
+  "no HLTV ids": 107,
+  "no pre-match forecast": 20
+ },
+ "2026-10-17": {
+  "board rows (render)": 145,
+  "with pre-match forecast": 145,
+  "no HLTV ids": 145
+ }
+}
