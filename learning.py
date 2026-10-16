@@ -128,7 +128,8 @@ LINE_BLEND = {"family": "line-blend-1", "w": {"kills": 0.0, "hs": 0.5}, "scopes"
 # price and does not test projection accuracy against the line. The frozen family id stays as it is.
 CHALLENGER_NAMES = {"line-blend-1": "probability-shrinkage challenger (toward 50%)", "perf-refit-1": "performance-model refit",
                     "full-history-1": "fh-1 full HLTV history (shadow)",
-                    "line-correction-1": "lc-1 real-line correction (shadow)"}
+                    "line-correction-1": "lc-1 real-line correction (shadow)",
+                    "hs-calibration-1": "hs-1 headshot calibration (shadow)"}
 
 
 def line_blend_p(p_live, prop, scope, cfg=LINE_BLEND):
@@ -392,6 +393,25 @@ LINE_CORRECTION = {
     "promotion": "the registered review (300 / 600 / 1,000 distinct forward matches); a promotion records the registry only",
     "registered": "2026-10-16"}
 RECOMMEND_AT = 0.57                 # the recommendation-selection rule, fixed 2026-10-16 before testing
+# hs-1 (owner 2026-10-16: resume the headshot proposal; EVALUATION_P2_PROPOSAL.md, defined and frozen in commit 6e7dc53 at
+# 2026-10-16 20:50:42 UTC). HS Maps 1-2 only: P(Over) = 1 / (1 + exp(-(a + b z))), z = (lambda_full - line) /
+# (c_hs sqrt(lambda_full)), lambda_full = fh-1's saved full-history HS projection in the pre-match fh-1 record, line = the
+# forecast's own line. One fit on every development HS Maps 1-2 offered line Oct 2-16 (1,276 lines / 155 matches, ridge 0.3
+# leave-last-day-out, data hash f359ac40f36f). Development support is weak (REALLINE_ARCHIVE_2026-10-16.md); it is the
+# forward test of the one headshot lead, scored only on forecasts logged after its registry freeze.
+HS_CAL = {"family": "hs-calibration-1", "version": "hs-1", "a": -0.15249, "b": 1.01202, "c_hs": 1.264, "prop": "hs", "scope": "12",
+          "defined": "2026-10-16T20:50:42+00:00 (commit 6e7dc53)", "data_hash": "f359ac40f36f",
+          "recommendation_rule": "favoured side when its chance >= 0.57", "registered": "2026-10-16"}
+
+
+def hs1_p(lam_full, line, prop, scope):
+    """hs-1's chance of Over (None outside HS Maps 1-2 or without a full-history projection)."""
+    if prop != HS_CAL["prop"] or (scope or "12") != HS_CAL["scope"] or lam_full is None or line is None:
+        return None
+    z = (float(lam_full) - float(line)) / (HS_CAL["c_hs"] * math.sqrt(max(float(lam_full), 1.0)))
+    return round(1 / (1 + math.exp(-(HS_CAL["a"] + HS_CAL["b"] * z))), 6)
+
+
 SCORECARD_REV = "2026-10-16-rekey"   # a change of scorecard code rebuilds the stored scorecard at the next cycle
 
 
@@ -475,6 +495,10 @@ def _fh1_shadow(con, ch, now, arm="fh1"):
                     "live_source": (rec.get("live") or {}).get("projection_source"), "fh1_source": (rec.get("fh1") or {}).get("projection_source")}
             if arm == "fh1":
                 pc, pb, lc = rr["ch_p"], rr["live_p"], rr["ch_lam"]
+            elif arm == "hs1":                         # hs-1: fh-1's saved full-history projection at the forecast's line
+                pc, pb, lc = hs1_p(rr["ch_lam"], f["line"], f["prop"], f["scope"]), rr["live_p"], rr["ch_lam"]
+                if pc is None:
+                    note["reject"] = "hs-1 covers HS Maps 1-2 with a full-history projection only"
             else:                                      # lc-1: the same projection, a corrected chance
                 pc, pb, lc = (rec.get(arm) or {}).get("p_more"), rr["live_p"], rr["live_lam"]
                 if pc is None:
@@ -506,6 +530,21 @@ def fh1_replay_step(con, recs):
     summ = {"rows_checked": tot[0], "mismatches": tot[1], "examples": ex, "source": "saved inputs (history snapshot + grader inputs) only"}
     _set_meta(con, "fh1_replay", summ)
     return summ
+
+
+def _ensure_hs_cal(con, now):
+    """Freeze hs-1 once in the registry (its forward test = forecasts logged after this moment, from pre-match fh-1 records)."""
+    if con.execute("SELECT 1 FROM challengers WHERE family = ?", (HS_CAL["family"],)).fetchone():
+        return
+    h = _sha(HS_CAL)
+    cid = f"hs-001-{h[:8]}"
+    con.execute("INSERT INTO challengers (id, family, created_at, frozen_at, snapshot_id, data_hash, training_cutoff, config, "
+                "config_hash, base_config, status, status_at, status_reason, revises, development) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (cid, HS_CAL["family"], _iso(now), _iso(now), None, HS_CAL["data_hash"], "2026-10-16", json.dumps(HS_CAL, sort_keys=True), h,
+                 json.dumps({"live": "the record's live arm (the published chance)"}), "shadow", _iso(now),
+                 "frozen (owner 2026-10-16: resume the headshot proposal); forward test = HS Maps 1-2 board forecasts logged after "
+                 "the freeze, from their pre-match fh-1 records", None, "[]"))
+    con.execute("INSERT INTO events (at, kind, detail) VALUES (?,?,?)", (_iso(now), "challenger", json.dumps({"id": cid, "status": "shadow"})))
 
 
 def _ensure_line_correction(con, now):
@@ -1873,6 +1912,8 @@ def product_scorecard(con, rows=None):
             row.update(_prop_line_2_extras(con, ch, us))
         elif ch["family"] == FULL_HISTORY["family"]:
             row.update(_fh1_extras(con, ch, us))
+        elif ch["family"] == HS_CAL["family"]:
+            row.update(_fh1_extras(con, ch, [u for u in us if u["prop"] == "hs" and (u["scope"] or "12") == "12"], arm="hs1"))
         elif ch["family"] == LINE_CORRECTION["family"]:
             row.update(_fh1_extras(con, ch, us, arm="lc1"))
         out["challengers"].append(row)
@@ -1969,7 +2010,7 @@ def _fh1_extras(con, ch, us, arm="fh1"):
             rej[t.get("reject") or "no value"] += 1
             continue
         rs.append(dict(u, t=t, pL=s_["p_over_base"], pF=s_["p_over_ch"], lamL=s_["lam_base"], lamF=s_["lam_ch"], pP=s_["p_over_logged"]))
-    out = {"registered": (FULL_HISTORY if arm == "fh1" else LINE_CORRECTION)["registered"], "arm": arm,
+    out = {"registered": {"fh1": FULL_HISTORY, "hs1": HS_CAL}.get(arm, LINE_CORRECTION)["registered"], "arm": arm,
            "frozen_at": ch["frozen_at"], "forward_units": len(fwd), "units": len(rs),
            "matches": len({u["match"] for u in rs}), "coverage": _r(len(rs) / len(fwd), 3) if fwd else None,
            "rejections": [{"reason": k, "units": v} for k, v in rej.most_common()],
@@ -2261,6 +2302,9 @@ def shadow_step(con, now, limit=4000, picks=None):
         propline2 = ch["family"] == PROP_LINE_2["family"]
         if ch["family"] == FULL_HISTORY["family"]:      # fh-1: its own pre-match records, once their cut-off has passed
             n += _fh1_shadow(con, ch, now)
+            continue
+        if ch["family"] == HS_CAL["family"]:             # hs-1: from fh-1's saved projection in the same pre-match records
+            n += _fh1_shadow(con, ch, now, arm="hs1")
             continue
         if ch["family"] == LINE_CORRECTION["family"]:   # lc-1: its value saved in the same pre-match records
             n += _fh1_shadow(con, ch, now, arm="lc1")
@@ -2600,6 +2644,7 @@ def run_cycle(now=None, picks=None, forecasts=None, batches=None, corrections=No
             _ensure_prop_line_2(con, now)
             _ensure_full_history(con, now)
             _ensure_line_correction(con, now)
+            _ensure_hs_cal(con, now)
             log = {"at": _iso(now)}
             # 1. copy new forecasts (immutable), in pages
             if picks is None:

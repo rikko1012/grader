@@ -147,3 +147,32 @@ def test_a_grade_that_its_own_estimate_does_not_earn_is_never_posted(db):
     add(db, 6, "capped", "kills", 22.5, "prizepicks", "More", 0.56, "B", 0.5)        # 56% earns B-, the saved letter says B
     out = posts.drafts([row(6, "capped", "kills", 22.5, "prizepicks", "More", "B", 0.5)], "prizepicks", db)
     assert out["drafts"] == [] and "is not the letter its 56.0% model estimate earns (B-)" in out["skipped"][0]["why"]
+
+
+def test_hs1_is_scored_from_fh1s_saved_projection_for_hs_maps12_only(tmp_path):
+    """hs-1 (frozen 2026-10-16 20:50:42 UTC): p = sigmoid(a + b z) from fh-1's saved full-history HS projection at the
+    forecast's own line; kills / Map 1 rows are rejected, never scored."""
+    import math
+    assert L.hs1_p(14.0, 13.5, "kills", "12") is None and L.hs1_p(14.0, 13.5, "hs", "1") is None and L.hs1_p(None, 13.5, "hs", "12") is None
+    z = (14.0 - 13.5) / (1.264 * math.sqrt(14.0))
+    assert abs(L.hs1_p(14.0, 13.5, "hs", "12") - 1 / (1 + math.exp(-(-0.15249 + 1.01202 * z)))) < 1e-6
+    con = L.connect(tmp_path / "l.db")
+    st = datetime(2026, 10, 17, 15, 0, tzinfo=timezone.utc)
+    freeze = st - timedelta(hours=10)
+    L._ensure_hs_cal(con, freeze)
+    L._ensure_hs_cal(con, freeze + timedelta(hours=1))
+    ch = con.execute("SELECT * FROM challengers WHERE family = 'hs-calibration-1'").fetchall()
+    assert len(ch) == 1 and ch[0]["id"].startswith("hs-001-") and ch[0]["status"] == "shadow"
+    ch = ch[0]
+    t0 = st - timedelta(hours=3)
+    for fid, prop, line, lam in ((1, "hs", 13.5, 14.0), (2, "kills", 27.5, 29.0)):
+        con.execute("INSERT INTO forecast_copy (forecast_id, pick_id, logged_at, match_start, line, side, p_more, lambda, source, book, line_type, prop, scope) "
+                    "VALUES (?, ?, ?, ?, ?, 'More', 0.6, ?, 'board', 'underdog', 'standard', ?, '12')", (fid, 10 + fid, L._iso(t0), L._iso(st), line, lam, prop))
+        rec = {"challenger": "fh-1", "live": {"p_more": 0.6, "lambda": lam}, "fh1": {"p_more": 0.58, "lambda": lam}, "n0_check": {"exact": True}, "group": "established"}
+        L._copy_fh1(con, [{"id": fid, "pick_id": 10 + fid, "forecast_id": fid, "logged_at": L._iso(t0), "match_start": L._iso(st), "line": line,
+                           "prop": prop, "scope": "12", "live_p_more": 0.6, "ch_p_more": 0.58, "live_lambda": lam, "ch_lambda": lam,
+                           "n0_exact": 1, "identical": 0, "grp": "established", "inputs_sha": "a", "gi_sha": "b", "rec": json.dumps(rec)}], freeze)
+    assert L._fh1_shadow(con, ch, st - timedelta(minutes=15), arm="hs1") == 2
+    s = {r["forecast_id"]: r for r in con.execute("SELECT * FROM shadow WHERE challenger_id = ?", (ch["id"],))}
+    assert abs(s[1]["p_over_ch"] - L.hs1_p(14.0, 13.5, "hs", "12")) < 1e-9 and s[1]["p_over_base"] == 0.6
+    assert s[2]["p_over_ch"] is None and "HS Maps 1-2" in json.loads(s[2]["note"])["reject"]

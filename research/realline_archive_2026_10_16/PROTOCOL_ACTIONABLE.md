@@ -1,4 +1,4 @@
-# Actionable-line question - protocol (written 2026-10-16 ~22:00 UTC before this analysis ran)
+# Actionable-line question - protocol (written 2026-10-16 20:56 UTC - file time - before this analysis ran)
 
 Question: did the grader provide useful information at a line that was actually available when the pick was made, and did
 its fixed recommendation rule (favoured side when the recorded chance >= 57%) benefit there?

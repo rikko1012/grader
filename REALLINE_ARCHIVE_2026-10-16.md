@@ -262,7 +262,7 @@ different observation density or variance changes them.
 **Wording that stays true:** the grader's percentages are model estimates. Nothing here shows it beating real lines, and it
 must not be advertised as proven to.
 
-## 6. The actionable-line question (added 2026-10-16 ~22:30 UTC; protocol written before it ran)
+## 6. The actionable-line question (CLOSED; added 2026-10-16 21:00 UTC, commit f9a1b5d; protocol written 20:56 UTC before it ran)
 
 Question: did the grader provide useful information at a line that was actually available when the pick was made, and
 did its fixed recommendation rule benefit there? Protocol and script: `research/realline_archive_2026_10_16/
@@ -340,3 +340,52 @@ matches.
   - The Railway-era subset (+6.7, interval just above 0) is one of four cuts and comes from older pipelines.
   - The current perf-2 era is +1.0 (-6.6 to +8.5).
   - Nothing here shows the rule beating the lines members could actually take.
+
+## 7. Headshot model comparison (owner 2026-10-16: resume the headshot proposal; protocol PROTOCOL_HS.md written before it ran)
+
+The lead (development, not an advantage): at the original line, the recorded HS projection's disagreement with the line
+carries information (slope 0.50), and the recorded HS estimates are overconfident. Two separate questions:
+1. Does correcting the overconfidence improve probability accuracy?
+2. Does the fixed 57% rule improve selection?
+
+**Development cohort.** HS Maps 1-2 decision-time forecasts (recorded values at the original line; corrected identity).
+- 882 observations / 140 matches in all.
+- Scored on days with at least 300 earlier HS observations: 576 / 50 matches, Oct 12-16. Each model is fitted on earlier
+  days only (the Railway days are training only). Ridge is chosen leave-last-day-out from the fixed grid.
+
+| Model | Log loss | vs LIVE (95%) | vs BASE (95%) | Calibration slope | 57% picks / matches | Hit | Hit - BASE (95%) |
+|---|---|---|---|---|---|---|---|
+| LIVE (recorded) | 0.6948 | - | -0.0014 (-0.0189, +0.0185) | 0.47 (-0.20, 1.20) | 218 / 47 | 52.8% | +0.030 (-0.066, +0.120) |
+| BASE | 0.6933 | +0.0014 | - | - | 0 | - | - |
+| RECAL-LIVE (overconfidence corrected: logit a + b logit p_live) | 0.6930 | +0.0018 (-0.0105, +0.0124) | +0.0004 (-0.0084, +0.0095) | 0.50 | 43 / 22 | 53.5% | +0.029 (-0.146, +0.182) |
+| Z-REC (lc-1 form on the recorded projection) | 0.6918 | +0.0030 (-0.0144, +0.0182) | +0.0016 (-0.0023, +0.0052) | 1.59 | 2 / 2 | - | - |
+| Z-FULL (hs-1 form, refitted each day) | 0.6956 | -0.0008 (-0.0183, +0.0144) | -0.0022 (-0.0102, +0.0049) | -0.07 | 52 / 16 | 51.9% | +0.012 (-0.180, +0.213) |
+
+- **The day-by-day refits are unstable.** The chosen ridge jumps between 0.3 and 100, and the Z-FULL slope runs from 1.29
+  down to 0.05. That is the sign of a weak signal on 50 matches.
+- **The larger development benchmark** (section 3; offered-line archive, capture time not recorded, 1,286 HS lines / 159
+  matches) points the same way. The hs-1 form gains +0.0025 log loss over BASE (-0.0026, +0.0083); its 57% rule picks
+  are +0.050 (-0.020, +0.117).
+- **HLTV history (12 months) shows no persistent level bias** in the full-history HS projection. Monthly bias stays
+  between -0.37 and +0.26 HS per series, with no consistent sign. The Over tilt at the lines comes from where the
+  platforms set HS lines, so there is no history-supported level correction to add.
+
+**Forward (separate).** hs-1 was frozen at 2026-10-16 20:50:42 UTC (commit 6e7dc53).
+- It is registered in the learning registry as `hs-calibration-1`. It is scored only on forecasts logged after its
+  registry freeze, from the pre-match fh-1 records.
+- Forward units at writing (production export 21:04 UTC): **0**.
+
+**Result.**
+- **Probability:** correcting the HS overconfidence moves the estimates from slightly worse than a coin to about coin level:
+  +0.0018 to +0.0030 log loss vs live, with every interval including 0. It does not beat the base rate.
+- **Selection:** the fixed rule improves nothing measurable. The corrected models make far fewer picks (2-52), and no hit
+  rate is distinguishable from the baseline.
+- **Deployment:** nothing qualifies. Development results never qualify a model under the registered rule, and hs-1 has no
+  forward matches.
+
+**Kills.**
+- No kills candidate was built. No additional predictive information has been shown, and no weight or bonus is tried.
+- A large projection-vs-line gap is not evidence of a strong kills pick: the gap carries no measurable information at
+  original or archive lines.
+- The live grader still turns that gap into a grade under the existing rules. Changing that requires a candidate that
+  passes the registered review. lb-001, whose kills arm is exactly 50%, is the frozen one under that review.

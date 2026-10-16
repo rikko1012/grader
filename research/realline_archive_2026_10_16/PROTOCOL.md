@@ -1,4 +1,4 @@
-# Full real-line archive study - protocol (written 2026-10-16 ~21:00 UTC BEFORE any model below was scored)
+# Full real-line archive study - protocol (written 2026-10-16 20:34 UTC - file time - BEFORE any model below was scored)
 
 ## Evidence status
 Every settled day in these sets (2026-10-02 .. 10-17) has been inspected in earlier reports or diagnoses (lb-001 Oct 3-12,
