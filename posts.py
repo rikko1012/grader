@@ -2,17 +2,22 @@
 
 The ten posts of 2026-10-16 carried the right grades but their supporting numbers came from elsewhere ("Over in 15 of
 his last 20" - windows picked because they sounded strong). A draft here is built from one saved forecast and states that
-forecast's own numbers: platform, line, side, the model's chance, the grade and the forecast id / time / model version.
+forecast's own numbers: platform, line, side, the model's estimate (a percentage, described as a model estimate - never
+a hit rate), the grade and the forecast id / time / model version.
 The only context is one fixed rule: the grader's own last-10 record at this line (Maps 1-2 totals, the series the grade
 used, both sides, pushes out) saved WITH the forecast - shown for Maps 1-2 lines only (a Map 1 line's saved record counts
 Maps 1-2 totals, so it is not shown). Historical hit rates are context, never a substitute for the forecast's chance.
 
 Not drafted (the reason is listed): no saved forecast, the platform no longer offers this exact line or side, the board's
-current grade differs from the latest saved forecast (wait for it to be logged), a 0-unit / Lean line, a started match.
+current grade differs from the latest saved forecast (wait for it to be logged), a saved grade that is not the letter its
+own estimate earns (grader.grade_from_p), a 0-unit / Lean line, a started match. No outside record (e.g. the Pikkit
+figures of the picks business) is ever attached to the grader.
 """
 import re
 import sqlite3
 from datetime import datetime, timezone
+
+import grader
 
 LETTERS = ("A+", "A", "A-", "B+", "B", "B-")
 SCOPE_WORDS = {"12": "Maps 1-2", "1": "Map 1", "123": "Maps 1-3"}
@@ -53,7 +58,7 @@ def text(fc, row):
     stat = "headshots" if fc["prop"] == "hs" else "kills"
     scope = SCOPE_WORDS.get(fc.get("scope") or "12", "Maps 1-2")
     maps = "" if (fc.get("scope") or "12") == "12" else f" ({scope})"
-    head = f"{fc['nick']} {side} {fc['line']:g} {stat}{maps} · Grade {fc['grade']} · {fc['p_pick'] * 100:.1f}% model chance 🧞"
+    head = f"{fc['nick']} {side} {fc['line']:g} {stat}{maps} · Grade {fc['grade']} · {fc['p_pick'] * 100:.1f}% model estimate 🧞"
     rec = _record(fc.get("rec_hit"))
     ctx = (f"Grader's last-{rec[2]} record at this line (Maps 1-2): {rec[0]} over, {rec[1]} under. "
            if rec and (fc.get("scope") or "12") == "12" else "")
@@ -99,6 +104,10 @@ def drafts(board_rows, book, db_path, now=None, min_grade="B-"):
             if f["grade"] != r.get("grade"):
                 skipped.append({"line": label, "why": f"the board shows {r.get('grade')} but the latest saved forecast says "
                                                      f"{f['grade']} - wait for the regrade to be logged"})
+                continue
+            if grader.grade_from_p(f["p_pick"] or 0) != f["grade"]:
+                skipped.append({"line": label, "why": f"the saved grade {f['grade']} is not the letter its {f['p_pick']:.1%} "
+                                                     f"model estimate earns ({grader.grade_from_p(f['p_pick'] or 0)})"})
                 continue
             fc = dict(f, nick=p["player"], prop=p["prop"], scope=p["scope"], book=p["book"], team=p["team"], opponent=p["opponent"])
             t = text(fc, r)

@@ -50,7 +50,7 @@ def test_a_draft_states_the_saved_forecast_and_a_fixed_context(db):
     d = out["drafts"][0]
     assert d["verified"] and d["forecast_id"] and d["model_version"] == "TESTVER" and d["chance"] == 0.608 and d["grade"] == "B"
     t = d["text"]
-    assert t.startswith("tester OVER 27.5 kills · Grade B · 60.8% model chance") and "Grader's last-10 record at this line (Maps 1-2): 6 over, 4 under." in t
+    assert t.startswith("tester OVER 27.5 kills · Grade B · 60.8% model estimate") and "Grader's last-10 record at this line (Maps 1-2): 6 over, 4 under." in t
     assert "Alpha vs Bravo, " in t and " CT (PrizePicks)." in t and "Research tool, not betting advice. 21+" in t
     assert d["fits_x"] and d["chars"] == posts.x_len(t) > len(t)            # X counts the link as 23 and an emoji as 2
     assert posts.x_len("whop.com/1timeesports 🧞") == 23 + 1 + 2
@@ -140,4 +140,10 @@ def test_a_map1_line_never_shows_the_maps12_record():
     fc = {"pick": "Less", "prop": "kills", "scope": "1", "nick": "solo", "line": 14.5, "grade": "B", "p_pick": 0.58,
           "rec_hit": "9/10", "match_start": START.isoformat(), "book": "underdog", "team": "Alpha", "opponent": "Bravo"}
     t = posts.text(fc, {})
-    assert t.startswith("solo UNDER 14.5 kills (Map 1) · Grade B · 58.0% model chance") and "record" not in t and "(Underdog)." in t
+    assert t.startswith("solo UNDER 14.5 kills (Map 1) · Grade B · 58.0% model estimate") and "record" not in t and "(Underdog)." in t
+
+
+def test_a_grade_that_its_own_estimate_does_not_earn_is_never_posted(db):
+    add(db, 6, "capped", "kills", 22.5, "prizepicks", "More", 0.56, "B", 0.5)        # 56% earns B-, the saved letter says B
+    out = posts.drafts([row(6, "capped", "kills", 22.5, "prizepicks", "More", "B", 0.5)], "prizepicks", db)
+    assert out["drafts"] == [] and "is not the letter its 56.0% model estimate earns (B-)" in out["skipped"][0]["why"]

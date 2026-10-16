@@ -1859,6 +1859,27 @@ def product_scorecard(con, rows=None):
     return out
 
 
+def p1_units_export(con, now=None):
+    """Every P1 unit with each challenger's STORED value for that same forecast (shadow table; never recomputed), for exact
+    paired evaluation and cohort reconciliation off the server (owner 2026-10-16). Built by the learning cycle (child
+    process) and served as stored. A challenger value counts as forward evidence when the forecast was logged and the match
+    started after that challenger's frozen_at."""
+    us, excl = product_units(con)
+    chs = [dict(c) for c in con.execute("SELECT id, family, status, frozen_at FROM challengers ORDER BY frozen_at")]
+    rows = []
+    for u in us:
+        vals = {}
+        for c in chs:
+            s = con.execute("SELECT p_over_ch, p_over_base, lam_ch, lam_base FROM shadow WHERE challenger_id = ? AND forecast_id = ?",
+                            (c["id"], u["forecast_id"])).fetchone()
+            if s is not None and s["p_over_ch"] is not None:
+                vals[c["id"]] = {"p": s["p_over_ch"], "p_base": s["p_over_base"], "lam": s["lam_ch"], "lam_base": s["lam_base"]}
+        rows.append(dict(u, challengers=vals))
+    rows.sort(key=lambda u: (u["start"], u["forecast_id"]))
+    return {"at": _iso(_now(now)), "protocol": PRODUCT["id"], "unit_rule": PRODUCT["unit"], "forecast_rule": PRODUCT["forecast"],
+            "outcome_rule": PRODUCT["outcome"], "challengers": chs, "excluded": dict(excl), "rows": rows}
+
+
 def _fh1_block(rs, B=BOOT_B):
     """Paired live vs fh-1 on the same units (both arms from one pre-match record): probability scores and projection error."""
     if not rs:
@@ -2644,6 +2665,11 @@ def run_cycle(now=None, picks=None, forecasts=None, batches=None, corrections=No
             d = build_dashboard(con, now)
             _set_meta(con, "dashboard", d)
             con.commit()
+            try:                                       # the paired-evaluation export (served as stored; never fails a cycle)
+                _set_meta(con, "p1_units", p1_units_export(con, now))
+                con.commit()
+            except Exception:
+                traceback.print_exc()
             STATE.update(dashboard=d, dashboard_at=time.time(), last_cycle=log)
             return log
         finally:
@@ -2802,6 +2828,17 @@ def http(path, q, web_dir):
         if q.get("fresh") == "1" and not STATE.get("running"):
             threading.Thread(target=_cycle_safe, daemon=True, name="learning-now").start()
         return 200, dashboard(), "application/json"
+    if path == "/admin/learning/p1_units.json":       # read-only, paged: the stored export of the last cycle
+        num = lambda k, d: int(q[k]) if (q.get(k) or "").isdigit() else d
+        after, limit = num("after", 0), min(num("limit", 1000), 2000)
+        con = connect()
+        try:
+            ex = _meta(con, "p1_units") or {"rows": []}
+        finally:
+            con.close()
+        rows = ex.get("rows") or []
+        return 200, dict({k: v for k, v in ex.items() if k != "rows"}, total=len(rows), after=after,
+                         next_after=after + limit if after + limit < len(rows) else None, rows=rows[after:after + limit]), "application/json"
     confirm = q.get("confirm") == "1"
     try:
         if path == "/admin/learning/promote":

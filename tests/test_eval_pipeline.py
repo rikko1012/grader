@@ -378,3 +378,29 @@ def test_a_refit_is_a_new_immutable_version_that_inherits_no_forward_results(tmp
     prov = json.loads(Bc["provenance"])
     assert prov["snapshot_id"] == "snap-x" and prov["training_cutoff"] == Bc["frozen_at"] and "data_revisions" in prov
     assert con.execute("SELECT COUNT(*) FROM reviews WHERE challenger_id = ?", (b["challenger"],)).fetchone()[0] == 0
+
+
+def test_p1_units_export_serves_each_challengers_stored_value_for_the_same_forecast(db, tmp_path, monkeypatch):
+    """Owner 2026-10-16: exact paired evaluation off the server - the stored shadow value per P1 unit, paged."""
+    _row(1, "a", "x-vs-y-13-10-2026", 28.5, 2, "underdog")
+    _row(2, "b", "x-vs-y-13-10-2026", 26.5, 2, "prizepicks")
+    ldb = tmp_path / "l.db"
+    learning.run_cycle(now=datetime(2026, 10, 14, tzinfo=timezone.utc), picks=picklog.export(), forecasts=picklog.export_forecasts(inputs=True),
+                       batches=[], corrections=[], db=ldb, train=False)
+    con = learning.connect(ldb)
+    ch = con.execute("SELECT id FROM challengers ORDER BY frozen_at LIMIT 1").fetchone()["id"]
+    fid = learning.product_units(con)[0][0]["forecast_id"]
+    con.execute("INSERT OR REPLACE INTO shadow (challenger_id, forecast_id, p_over_ch, p_over_base, p_over_logged, lam_ch, lam_base, changed) "
+                "VALUES (?, ?, 0.512, 0.6, 0.6, 27.0, 27.0, 1)", (ch, fid))
+    learning._set_meta(con, "p1_units", learning.p1_units_export(con))
+    con.commit()
+    con.close()
+    monkeypatch.setattr(learning, "DB_PATH", ldb)
+    st, body, _ = learning.http("/admin/learning/p1_units.json", {"limit": "1"}, tmp_path)
+    assert st == 200 and body["total"] == 2 and len(body["rows"]) == 1 and body["next_after"] == 1
+    assert body["protocol"] == "P1-board-lines" and {c["id"] for c in body["challengers"]} >= {ch}
+    st, body2, _ = learning.http("/admin/learning/p1_units.json", {"after": "1", "limit": "5"}, tmp_path)
+    rows = body["rows"] + body2["rows"]
+    assert body2["next_after"] is None and sorted(r["forecast_id"] for r in rows) == sorted({r["forecast_id"] for r in rows})
+    got = next(r for r in rows if r["forecast_id"] == fid)
+    assert got["challengers"][ch] == {"p": 0.512, "p_base": 0.6, "lam": 27.0, "lam_base": 27.0} and got["p"] == 0.6
