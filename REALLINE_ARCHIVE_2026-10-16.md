@@ -391,7 +391,7 @@ carries information (slope 0.50), and the recorded HS estimates are overconfiden
 - The live grader still turns that gap into a grade under the existing rules. Changing that requires a candidate that
   passes the registered review. lb-001, whose kills arm is exactly 50%, is the frozen one under that review.
 
-## 8. Opponent-adjusted kill rate (owner 2026-10-16; protocol PROTOCOL_OA.md written before any result)
+## 8. Opponent-adjusted kill rate (CLOSED - OA-2 not registered or deployed; owner 2026-10-16; protocol PROTOCOL_OA.md written before any result)
 
 **Question.** Does adjusting each historical performance for the opposition faced improve the player's estimated ability?
 
@@ -469,3 +469,85 @@ same way):
 **Correction to section 7.** Section 7 said the Over tilt at HS lines "comes from where the platforms set HS lines". That
 is withdrawn. A near-zero average bias across all HLTV matches does not establish why errors occur on book-listed players
 and lines, which are a selected subset. The cause of the tilt is not identified.
+
+## 9. Complete-model comparison (owner 2026-10-16; protocol PROTOCOL_MODELS.md written before any fit)
+
+Section 8 (opponent adjustment) is CLOSED. OA-2 is not registered or deployed.
+
+**Design (fixed before fitting).**
+- **Models:**
+  - the current model (CUR: live formula, live-pin history; spread 1.457);
+  - a regularised count model (GLM: Poisson, log link, L2);
+  - one constrained nonlinear model (GBM: histogram boosting, Poisson loss, at most 16 leaves, at least 200 rows per leaf,
+    monotone in the rate / opponent features).
+- **Features:** 14, all pre-match: full-history sums and the current formula's components, opponent-adjusted sums, pre-match
+  Elo, LAN. No market data.
+- **Tuning budget:** 4 configurations per family, chosen on validation (Jul-Aug 2026).
+- **Splits:** train Nov 2025 - Jun 2026. Test A: fit to Aug 31, predict September. Test B: fit to Sep 30, predict Oct 1-16.
+  Every real-line prediction therefore comes from a fit on earlier matches only.
+- **Spread:** each model's own spread from its training residuals.
+- **Selection rule (fixed):** at most one candidate, and only if it improves book-listed players and book-listed established
+  players in history (intervals above 0) AND real-line probabilities vs CUR (interval above 0, and not worse than BASE).
+- **Evidence status:** all periods are development data.
+
+**Validation.** Log score: CUR -3.5272, GLM -3.4944 (best alpha 1e-4), GBM -3.4845 (16 leaves, 150 iterations).
+
+**History test** (Sep 1 - Oct 16; 17,028 player-series / 1,704 matches; gains vs CUR, positive = better; match-grouped 95%):
+
+| Segment | Series | CUR MAE | Full-history CUR gain | GLM MAE gain | GLM log-score gain | GBM MAE gain | GBM log-score gain |
+|---|---|---|---|---|---|---|---|
+| All | 17,028 | 6.238 | +0.078 | +0.137 (+0.114, +0.162) | +0.0230 (+0.0190, +0.0272) | +0.137 | +0.0235 |
+| Book-listed players | 8,988 | 6.099 | +0.050 | +0.091 (+0.060, +0.123) | +0.0162 (+0.0114, +0.0215) | +0.072 | +0.0128 |
+| Book-listed established | 6,497 | 5.959 | +0.016 | +0.047 (+0.016, +0.077) | +0.0075 (+0.0025, +0.0126) | +0.030 | +0.0053 |
+| Book-listed thin | 2,491 | 6.463 | +0.138 | +0.205 | +0.0388 | +0.181 | +0.0324 |
+| Original top-200 set | 12,332 | 6.146 | +0.013 | +0.063 (+0.041, +0.085) | +0.0104 | +0.044 | +0.0073 |
+| Lower tier | 4,696 | 6.477 | +0.246 | +0.330 | +0.0564 | +0.382 | +0.0661 |
+
+**Separating the model from the history.** GLM vs the current formula on full history (fh-1's history set):
+- book-listed MAE +0.041 (+0.019, +0.062), log +0.0054 (+0.0021, +0.0087);
+- book-listed established +0.031 (+0.007, +0.052), log +0.0046 (+0.0010, +0.0079).
+
+**Real lines** (decision-time forecasts at their original, timestamped offered line, Oct 3-16; 1,927 observations / 149
+matches; kills + HS pooled):
+
+| Model | Log loss | vs CUR (95%) | vs BASE (95%) | Calibration slope | AUC | 57% picks / matches | Hit (95%) | Hit - BASE (95%) |
+|---|---|---|---|---|---|---|---|---|
+| Live as recorded | 0.6974 | -0.0001 | -0.0024 | 0.35 | 0.528 | 675 / 127 | 54.1% | +0.043 (-0.013, +0.104) |
+| CUR (rebuilt) | 0.6973 | - | -0.0022 | 0.38 | 0.535 | 787 / 138 | 54.3% | +0.045 (-0.008, +0.098) |
+| Full-history CUR | 0.6929 | +0.0044 (-0.0026, +0.0116) | +0.0022 | 0.54 | 0.542 | 747 / 136 | 55.8% | +0.061 (+0.006, +0.119) |
+| **GLM** | **0.6852** | **+0.0120 (+0.0032, +0.0203)** | +0.0098 (-0.0016, +0.0213) | **0.85 (0.40, 1.27)** | 0.565 | 701 / 131 | **58.8% (53.6-64.4)** | **+0.092 (+0.039, +0.149)** |
+| GBM | 0.6899 | +0.0073 (-0.0020, +0.0165) | +0.0051 | 0.66 | 0.547 | 753 / 140 | 57.1% | +0.074 (+0.019, +0.128) |
+
+- **By stat:**
+  - Kills (147 matches): GLM +0.0138 vs CUR (+0.0049, +0.0235); 57% picks +0.092 (+0.019, +0.167).
+  - HS (140 matches): GLM +0.0099 (+0.0011, +0.0198); 57% picks +0.092 (+0.032, +0.151).
+  - The GLM's kills projection is the first whose squared error is not worse than the line's: -1.21 (-3.16, +0.67), where
+    CUR is +1.73.
+- **Against full-history CUR:** GLM +0.0076 log loss (+0.0008, +0.0139).
+- **Stability:** the gain is similar in both halves of the line period. Oct 3-9: +0.0141 vs CUR, picks +0.119. Oct 10-16:
+  +0.0113 (+0.0016, +0.0209), picks +0.081 (+0.012, +0.145).
+- **Leakage probe:** with features permuted within each day, the gain disappears (-0.031 log score).
+- **What the GLM does:** it weights the opponent-adjusted rate well above the unadjusted rate, keeps the environment rate,
+  uses the joint opponent factor, and is less dispersed than CUR, which is why it is better calibrated.
+
+**Selection (protocol rule).**
+- **GLM: SELECTED** for independent forward confirmation. All three conditions hold.
+- **GBM: not selected.** Its real-line gain vs CUR has an interval that includes 0.
+
+**What this is, and is not.**
+- It is the strongest development result so far. A complete model trained on the full history improves projections for
+  book-listed players and probabilities at genuinely offered lines.
+- Its picks beat the base rate on the predeclared rule.
+- It is NOT established:
+  - every period evaluated has been inspected before;
+  - vs BASE the probability gain's interval still includes 0;
+  - 149 matches is a small sample.
+- **Live grading and the frozen experiments are unchanged. Nothing is deployed or registered.**
+
+**Frozen for forward confirmation.**
+- Definition: `research/realline_archive_2026_10_16/cm1_frozen.json` (cm-1).
+- One fit on every record through 2026-10-16 (98,121 rows; data hash 9073466e2d54); alpha 1e-4; spread 1.473.
+- Frozen 2026-10-16 22:08 UTC.
+- Forward evidence must be predictions saved before matches that start after the freeze, at genuinely offered lines.
+- The mechanism to save them is the owner's decision. Two options: a local scheduled snapshot job (no production change),
+  or a production shadow.
