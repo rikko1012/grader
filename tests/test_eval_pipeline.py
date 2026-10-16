@@ -428,3 +428,19 @@ def test_picks_re_keyed_to_the_canonical_match_are_one_unit(tmp_path):
     assert excl["the same picks under an older match key (counted once, under the newest key)"] == 1
     sc = learning.scorecard(con)
     assert sc["units"] == 1 and sc["rekeyed_stale"] == 1 and sc["product"]["matches"] == 1
+
+
+def test_a_scorecard_code_change_rebuilds_the_stored_scorecard_without_new_settlements(db, tmp_path):
+    _row(1, "a", "x-vs-y-13-10-2026", 28.5, 2, "underdog")
+    ldb, now = tmp_path / "l.db", datetime(2026, 10, 14, tzinfo=timezone.utc)
+    run = lambda t: learning.run_cycle(now=t, picks=picklog.export(), forecasts=picklog.export_forecasts(inputs=True), batches=[],
+                                       corrections=[], db=ldb, train=False)
+    run(now)
+    con = learning.connect(ldb)
+    learning._set_meta(con, "scorecard_rev", "older")
+    con.commit()
+    con.close()
+    run(now + timedelta(hours=1))                              # nothing new settled
+    con = learning.connect(ldb)
+    assert learning._meta(con, "scorecard_rev") == learning.SCORECARD_REV
+    assert learning._meta(con, "scorecard_at") == learning._iso(now + timedelta(hours=1))

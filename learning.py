@@ -392,6 +392,7 @@ LINE_CORRECTION = {
     "promotion": "the registered review (300 / 600 / 1,000 distinct forward matches); a promotion records the registry only",
     "registered": "2026-10-16"}
 RECOMMEND_AT = 0.57                 # the recommendation-selection rule, fixed 2026-10-16 before testing
+SCORECARD_REV = "2026-10-16-rekey"   # a change of scorecard code rebuilds the stored scorecard at the next cycle
 
 
 def _ensure_full_history(con, now):
@@ -2667,9 +2668,11 @@ def run_cycle(now=None, picks=None, forecasts=None, batches=None, corrections=No
                 log["ingest"] = _ingest(con, picks, now, bad, corr_ids)
                 con.commit()
                 _sc = _meta(con, "scorecard")
-                if log["ingest"]["added"] or log["ingest"].get("lines_backfilled") or _sc is None or "sign" not in (_sc.get("questions") or {}):
+                if (log["ingest"]["added"] or log["ingest"].get("lines_backfilled") or _sc is None
+                        or "sign" not in (_sc.get("questions") or {}) or _meta(con, "scorecard_rev") != SCORECARD_REV):
                     _set_meta(con, "scorecard", scorecard(con))
                     _set_meta(con, "scorecard_at", _iso(now))
+                    _set_meta(con, "scorecard_rev", SCORECARD_REV)
                     con.commit()
                 if train:
                     log["training"] = training_step(con, now)

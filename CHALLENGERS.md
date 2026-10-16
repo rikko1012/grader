@@ -103,6 +103,9 @@ data hash 49e7ac29547b86a9). Walk-forward with w refitted on earlier days only: 
   - **Not an accuracy upgrade.** It is the forward test of whether the projection's disagreement with the line has
     value.
 - **Forward:** the registered review windows (300 / 600 / 1,000 distinct forward matches); promotion only through it.
+- **Status (owner 2026-10-16 evening):** no further development. It stays registered only so its prospective test is
+  kept; no new named challenger that repeats "about 50%" without new information is added. Further modelling targets the
+  error the fh-1 and pl-2 experiments expose (ACCURACY_2026-10-16.md section 0.4).
 
 ## fh-1 - full HLTV history for the performance model (family `full-history-1`, id `fh-001-<hash>`; production shadow only)
 

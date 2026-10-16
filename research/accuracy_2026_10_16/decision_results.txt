@@ -1,0 +1,132 @@
+rows as exported 1211 (72 match keys) -> one per forecast 1211 (72 matches)
+export p1_units (19:37 UTC) built 2026-10-16T19:37:12+00:00 units 1211 matches 72
+forecast rule: the latest BOARD forecast of the unit logged >= 30 min before the start, on a STANDARD line offered by the platform feed: platform (book) recorded, the board row's own market id / player id from the feed, canonical match, stat, map scope, line and logging time; member-entered lines and goblin / demon lines never enter
+
+=== 1. cohorts
+  production P1 (all): 1211 units / 72 matches; match starts 2026-10-11T11:30 .. 2026-10-16T18:00; forecasts logged 2026-10-11T06:10 .. 2026-10-16T16:25
+     version a64083e3c2: 87 units / 5 matches, starts 2026-10-11T11:30 .. 2026-10-12T09:00
+     version 313626ab10: 46 units / 4 matches, starts 2026-10-11T21:00 .. 2026-10-12T14:00
+     version fe063dc2e9: 1 units / 1 matches, starts 2026-10-12T09:00 .. 2026-10-12T09:00
+     version c80ac64bc8: 89 units / 8 matches, starts 2026-10-12T09:00 .. 2026-10-12T14:00
+     version 0d6b117256: 10 units / 1 matches, starts 2026-10-12T13:00 .. 2026-10-12T13:00
+     version 1088faf157: 121 units / 9 matches, starts 2026-10-12T14:00 .. 2026-10-13T10:00
+     version 6f6e2d39d7: 302 units / 17 matches, starts 2026-10-13T21:00 .. 2026-10-15T16:00
+     version 23bea2fe37: 30 units / 2 matches, starts 2026-10-15T00:00 .. 2026-10-15T01:00
+     version a310d76b55: 273 units / 17 matches, starts 2026-10-15T08:00 .. 2026-10-16T00:00
+     version 9cfcbd217a: 252 units / 16 matches, starts 2026-10-16T08:00 .. 2026-10-16T18:00
+     by match day: {'2026-10-11': 114, '2026-10-12': 174, '2026-10-13': 86, '2026-10-14': 281, '2026-10-15': 275, '2026-10-16': 281}
+  production P1 recommended (>= 57%): 443 units / 69 matches; match starts 2026-10-11T11:30 .. 2026-10-16T18:00; forecasts logged 2026-10-11T06:14 .. 2026-10-16T16:25
+     version a64083e3c2: 38 units / 5 matches, starts 2026-10-11T11:30 .. 2026-10-12T09:00
+     version 313626ab10: 20 units / 3 matches, starts 2026-10-11T21:00 .. 2026-10-12T14:00
+     version fe063dc2e9: 1 units / 1 matches, starts 2026-10-12T09:00 .. 2026-10-12T09:00
+     version c80ac64bc8: 35 units / 8 matches, starts 2026-10-12T09:00 .. 2026-10-12T14:00
+     version 0d6b117256: 9 units / 1 matches, starts 2026-10-12T13:00 .. 2026-10-12T13:00
+     version 1088faf157: 46 units / 8 matches, starts 2026-10-12T14:00 .. 2026-10-13T10:00
+     version 6f6e2d39d7: 133 units / 17 matches, starts 2026-10-13T21:00 .. 2026-10-15T16:00
+     version 23bea2fe37: 12 units / 2 matches, starts 2026-10-15T00:00 .. 2026-10-15T01:00
+     version a310d76b55: 88 units / 16 matches, starts 2026-10-15T08:00 .. 2026-10-16T00:00
+     version 9cfcbd217a: 61 units / 14 matches, starts 2026-10-16T08:00 .. 2026-10-16T18:00
+     by match day: {'2026-10-11': 48, '2026-10-12': 77, '2026-10-13': 26, '2026-10-14': 130, '2026-10-15': 93, '2026-10-16': 69}
+  research cohort (pull 2026-10-16 ~18:40 UTC, test days only): 1195 units / 72 matches; days 2026-10-12 .. 2026-10-16
+     versions: {'a310d76b55': 337, '6f6e2d39d7': 304, '9cfcbd217a': 248, '1088faf157': 121, 'c80ac64bc8': 89, '313626ab10': 47, '23bea2fe37': 30, '0d6b117256': 10, 'a64083e3c2': 8, 'fe063dc2e9': 1}
+     overlap by forecast id: 1049 in both; research only 146; production only 162
+     production-only by match day: {'2026-10-11': 114, '2026-10-12': 3, '2026-10-13': 1, '2026-10-14': 7, '2026-10-15': 8, '2026-10-16': 29}
+     research-only by day: {'2026-10-12': 39, '2026-10-13': 1, '2026-10-14': 9, '2026-10-15': 20, '2026-10-16': 77}
+     research-only units whose (match, stat, scope, line) is in production with another forecast: 0
+
+=== 2. probability accuracy vs live (forward rows of each candidate; positive gain = candidate better)
+
+  lb-001-c9b0fc42 (line-blend-1, shadow, frozen 2026-10-12T15:49)
+    live arm = live replay on the same inputs; mean |replay - logged chance| = 0.0000
+  forward: 932 units / 57 matches, starts 2026-10-12T21:00 .. 2026-10-16T18:00, Over rate 0.471
+    log loss live 0.6984 | cand 0.6985 | gain -0.00010 95% (-0.0098, +0.0097) 98.33% (-0.0118, +0.0113)
+    Brier    live 0.2525 | cand 0.2525 | gain -0.00007 95% (-0.0048, +0.0047) 98.33% (-0.0058, +0.0055)
+    calibration live: mean pred 0.502, pred - obs -0.0312 (-0.0873, +0.0275), slope 0.30 (-0.34, +0.86)
+    calibration cand: mean pred 0.501, pred - obs -0.0299 (-0.0897, +0.0323), slope -0.29 (-1.48, +1.03)
+    vs BASE on the same rows: log-loss gain -0.00665 (-0.0206, +0.0040), Brier gain -0.00321 (-0.0100, +0.0020)
+    live vs BASE on the same rows: log-loss gain -0.00655 (-0.0238, +0.0098), Brier gain -0.00314 (-0.0115, +0.0049)
+    selection (favoured side >= 57%), same rows:
+    live: 323 picks / 54 matches, printed 0.613, hit 0.533 (+0.451, +0.605); BASE chance of the same sides 0.498 -> beyond BASE +0.034 (-0.046, +0.106); Overs 166 hit 0.47, Unders 157 hit 0.599
+    candidate: 82 picks / 29 matches, printed 0.604, hit 0.415 (+0.287, +0.563); BASE chance of the same sides 0.495 -> beyond BASE -0.080 (-0.209, +0.066); Overs 52 hit 0.365, Unders 30 hit 0.5
+    BASE: 0 picks
+
+  pl-001-bb351ec5 (prop-line-1, blocked, frozen 2026-10-15T02:22)
+    live arm = live replay on the same inputs; mean |replay - logged chance| = 0.0000
+  forward: 512 units / 33 matches, starts 2026-10-15T08:00 .. 2026-10-16T18:00, Over rate 0.455
+    log loss live 0.7090 | cand 0.6951 | gain +0.01387 95% (-0.0032, +0.0337) 98.33% (-0.0065, +0.0377)
+    Brier    live 0.2576 | cand 0.2510 | gain +0.00665 95% (-0.0017, +0.0163) 98.33% (-0.0033, +0.0183)
+    calibration live: mean pred 0.492, pred - obs -0.0367 (-0.1150, +0.0409), slope -0.42 (-1.58, +0.50)
+    calibration cand: mean pred 0.502, pred - obs -0.0467 (-0.1261, +0.0277), slope -0.52 (-3.85, +1.89)
+    vs BASE on the same rows: log-loss gain -0.00502 (-0.0132, +0.0030), Brier gain -0.00251 (-0.0066, +0.0015)
+    live vs BASE on the same rows: log-loss gain -0.01889 (-0.0424, +0.0005), Brier gain -0.00916 (-0.0207, +0.0004)
+    selection (favoured side >= 57%), same rows:
+    live: 147 picks / 30 matches, printed 0.606, hit 0.456 (+0.349, +0.580); BASE chance of the same sides 0.503 -> beyond BASE -0.048 (-0.153, +0.076); Overs 65 hit 0.323, Unders 82 hit 0.561
+    candidate: 3 picks / 3 matches, printed 0.584, hit 1.000 (+1.000, +1.000); BASE chance of the same sides 0.508 -> beyond BASE +0.492 (+0.473, +0.529); Overs 1 hit 1.0, Unders 2 hit 1.0
+    BASE: 0 picks
+    projection kills (276): MAE gain cand vs live +0.115 (-0.040, +0.275); bias live -0.13 cand +0.01 line -0.03; cand vs line MAE gain -0.009 (-0.044, +0.023)
+    projection hs (236): MAE gain cand vs live +0.092 (+0.019, +0.172); bias live +0.12 cand +0.10 line +0.08; cand vs line MAE gain -0.008 (-0.047, +0.030)
+
+  pl-002-b5b076b5 (prop-line-2, shadow, frozen 2026-10-15T03:29)
+    live arm = live replay on the same inputs; mean |replay - logged chance| = 0.0000
+  forward: 440 units / 33 matches, starts 2026-10-15T08:00 .. 2026-10-16T18:00, Over rate 0.457
+    log loss live 0.7091 | cand 0.6962 | gain +0.01284 95% (-0.0056, +0.0337) 98.33% (-0.0090, +0.0375)
+    Brier    live 0.2577 | cand 0.2515 | gain +0.00613 95% (-0.0029, +0.0163) 98.33% (-0.0046, +0.0182)
+    calibration live: mean pred 0.492, pred - obs -0.0356 (-0.1147, +0.0518), slope -0.43 (-1.52, +0.54)
+    calibration cand: mean pred 0.502, pred - obs -0.0451 (-0.1258, +0.0358), slope -1.70 (-5.41, +2.18)
+    vs BASE on the same rows: log-loss gain -0.00601 (-0.0156, +0.0036), Brier gain -0.00300 (-0.0078, +0.0018)
+    live vs BASE on the same rows: log-loss gain -0.01885 (-0.0451, +0.0040), Brier gain -0.00912 (-0.0220, +0.0021)
+    selection (favoured side >= 57%), same rows:
+    live: 124 picks / 30 matches, printed 0.606, hit 0.435 (+0.309, +0.571); BASE chance of the same sides 0.503 -> beyond BASE -0.068 (-0.193, +0.065); Overs 55 hit 0.345, Unders 69 hit 0.507
+    candidate: 0 picks
+    BASE: 0 picks
+    projection kills (240): MAE gain cand vs live +0.081 (-0.082, +0.245); bias live -0.11 cand +0.02 line -0.00; cand vs line MAE gain +0.003 (-0.028, +0.039)
+    projection hs (200): MAE gain cand vs live +0.086 (+0.009, +0.175); bias live +0.16 cand +0.14 line +0.11; cand vs line MAE gain -0.028 (-0.071, +0.011)
+
+  fh-001-ba7806a4 (full-history-1, shadow, frozen 2026-10-15T18:39)
+    live arm = live replay on the same inputs; mean |replay - logged chance| = 0.0000
+  forward: 280 units / 18 matches, starts 2026-10-16T00:00 .. 2026-10-16T18:00, Over rate 0.464
+    log loss live 0.7051 | cand 0.7070 | gain -0.00197 95% (-0.0100, +0.0060) 98.33% (-0.0117, +0.0084)
+    Brier    live 0.2557 | cand 0.2567 | gain -0.00105 95% (-0.0050, +0.0029) 98.33% (-0.0058, +0.0040)
+    calibration live: mean pred 0.501, pred - obs -0.0363 (-0.1426, +0.0701), slope -0.23 (-1.77, +1.47)
+    calibration cand: mean pred 0.516, pred - obs -0.0517 (-0.1578, +0.0553), slope -0.25 (-1.76, +1.34)
+    vs BASE on the same rows: log-loss gain -0.01615 (-0.0548, +0.0147), Brier gain -0.00784 (-0.0268, +0.0073)
+    live vs BASE on the same rows: log-loss gain -0.01418 (-0.0526, +0.0152), Brier gain -0.00679 (-0.0255, +0.0076)
+    selection (favoured side >= 57%), same rows:
+    live: 68 picks / 16 matches, printed 0.604, hit 0.456 (+0.286, +0.636); BASE chance of the same sides 0.496 -> beyond BASE -0.040 (-0.207, +0.137); Overs 41 hit 0.39, Unders 27 hit 0.556
+    candidate: 73 picks / 15 matches, printed 0.600, hit 0.479 (+0.300, +0.677); BASE chance of the same sides 0.489 -> beyond BASE -0.009 (-0.189, +0.187); Overs 56 hit 0.464, Unders 17 hit 0.529
+    BASE: 0 picks
+    projection kills (149): MAE gain cand vs live -0.037 (-0.115, +0.044); bias live -0.03 cand +0.24 line -0.04; cand vs line MAE gain -0.188 (-0.387, -0.006)
+    projection hs (131): MAE gain cand vs live +0.009 (-0.051, +0.072); bias live +0.01 cand +0.15 line -0.16; cand vs line MAE gain -0.026 (-0.181, +0.119)
+
+  lc-001-c80c6b2e (line-correction-1, shadow, frozen 2026-10-16T19:05)
+    no settled forward rows
+
+=== 3. live on every P1 row (each forecast was saved before its match)
+  live vs BASE: 1211 units / 72 matches, starts 2026-10-11T11:30 .. 2026-10-16T18:00, Over rate 0.472
+    log loss BASE 0.6929 | live 0.7051 | gain -0.01216 95% (-0.0277, +0.0038) 98.33% (-0.0312, +0.0080)
+    Brier    BASE 0.2499 | live 0.2557 | gain -0.00583 95% (-0.0134, +0.0020) 98.33% (-0.0152, +0.0039)
+    calibration BASE: mean pred 0.480, pred - obs -0.0077 (-0.0543, +0.0447), slope -0.54 (-2.25, +1.07)
+    calibration live: mean pred 0.502, pred - obs -0.0301 (-0.0762, +0.0204), slope 0.06 (-0.40, +0.54)
+    selection:
+    live: 443 picks / 69 matches, printed 0.614, hit 0.501 (+0.434, +0.566); BASE chance of the same sides 0.498 -> beyond BASE +0.004 (-0.061, +0.068); Overs 224 hit 0.433, Unders 219 hit 0.571
+      a64083e3c2: 38 picks / 5 matches, printed 0.608, hit 0.553 (+0.395, +0.714)
+      313626ab10: 20 picks / 3 matches, printed 0.635, hit 0.250 (+0.000, +0.444)
+      c80ac64bc8: 35 picks / 8 matches, printed 0.617, hit 0.371 (+0.241, +0.577)
+      fe063dc2e9: 1 picks / 1 matches, printed 0.574, hit 0.000 (-)
+      0d6b117256: 9 picks / 1 matches, printed 0.642, hit 0.222 (-)
+      1088faf157: 46 picks / 8 matches, printed 0.614, hit 0.565 (+0.420, +0.812)
+      6f6e2d39d7: 133 picks / 17 matches, printed 0.622, hit 0.594 (+0.489, +0.689)
+      23bea2fe37: 12 picks / 2 matches, printed 0.599, hit 0.583 (+0.500, +0.750)
+      a310d76b55: 88 picks / 16 matches, printed 0.608, hit 0.466 (+0.328, +0.611)
+      9cfcbd217a: 61 picks / 14 matches, printed 0.603, hit 0.459 (+0.280, +0.667)
+
+=== 4. where live errs (diagnosis only, nothing fitted): projection bias and over-confidence by the side live favours
+  live favours Over: 583 units / 68 matches; projection - actual +1.31 (+0.41, +2.23), line - actual +0.11 (-0.78, +1.01); chance - hit +0.100 (+0.035, +0.172)
+  live favours Under: 628 units / 70 matches; projection - actual -0.81 (-1.61, -0.01), line - actual -0.03 (-0.83, +0.80); chance - hit +0.035 (-0.025, +0.094)
+  kills |projection - line| 0-1: 329 units / 71 matches; projection's side hit 0.474 (+0.417, +0.530)
+  hs |projection - line| 0-1: 423 units / 72 matches; projection's side hit 0.511 (+0.455, +0.565)
+  kills |projection - line| 1-2: 191 units / 65 matches; projection's side hit 0.534 (+0.447, +0.618)
+  hs |projection - line| 1-2: 124 units / 49 matches; projection's side hit 0.468 (+0.385, +0.554)
+  kills |projection - line| 2-3: 68 units / 39 matches; projection's side hit 0.441 (+0.333, +0.556)
+  hs |projection - line| 2-3: 31 units / 18 matches; projection's side hit 0.581 (+0.379, +0.769)
+  kills |projection - line| 3-5: 41 units / 23 matches; projection's side hit 0.512 (+0.366, +0.660)
