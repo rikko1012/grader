@@ -14,14 +14,18 @@ evidence.**
 - **Data:** the full archive holds 192 distinct HLTV matches with real offered lines. 159 of them can be scored
   chronologically.
 - **Kills.** The projection's disagreement with the line carries no detectable information. The offered line is the
-  better point forecast. When the line departs from our projection, the departure is right.
+  better point forecast. At the archive's last lines (capture time not recorded), the line's departures from our
+  projection were right.
 - **Headshots.** The full-history projection does carry information the closing line lacks. That information is
   reproducible across both eras, but it is too small, and the projection too biased, to produce a detectable probability
   or pick-selection gain on 159 matches.
-- **Why it fails, specifically:**
-  - The market prices team strength / match context that perf-2 leaves out.
-  - It also prices late information (lineups, vetoes) that arrives after our forecast.
+- **Why it fails, as far as the data shows:**
+  - The line tracks team strength / match context that perf-2 leaves out.
   - Our projection's independent error is about 5-8 times the line's.
+  - Lines that move after our forecasts mostly move toward our projection. What drives those moves is not identified here,
+    and whether they are correct is not established (section 6).
+- **At the line actually available when a pick is made:** see section 6 (added 2026-10-16 after the owner's focused
+  question).
 
 ## 1. Inventory and reconciliation
 
@@ -107,7 +111,10 @@ without checking the opponent.
 
 ## 2. Chronological evaluation (rolling origin by match day; fit on earlier days only; match-grouped 95%)
 
-### E1 - every offered line, last line before the start (2,777 scored observations / 159 matches, Oct 4-16)
+### E1 - every offered line, last line the scraper saw (2,777 scored observations / 159 matches, Oct 4-16)
+
+The archive records the line but not when it was captured. E1 is therefore a market benchmark with that limitation, not a
+verified closing benchmark, and it never enters any forecast. The verified, decision-time comparison is section 6.
 
 All models are rebuilt from strictly earlier HLTV days with the same live formula, so one model version covers all 15 days.
 Positive gain = the model is better.
@@ -185,11 +192,15 @@ the disagreement is pure projection error.
    - perf-2 uses a constant 21.74 rounds per map and no own-team win term.
    - The existing fix for that, rr-1 (series price + round race), passed its HLTV test. But it brings the projection
      toward what the line already prices: its forward line-relative gain is +0.0016 (n.s.).
-3. **Late information goes to the market.**
-   - 293 of our forecast-time lines moved before the start (113 matches). 66% moved toward our rebuilt projection (60-73%),
-     and the move was right (slope 0.87, 0.19 to 1.62).
-   - The projection's information is real but becomes public by the close. A line moving our way is agreement with a later
-     market, not selection skill. Live's realised record at forecast-time lines does not beat BASE.
+3. **Line moves after our forecasts** (Corrected 2026-10-16, see section 6).
+   - The first version of this item compared our forecast-time line with the scraper archive's last line. That archive line
+     has no capture time, so it cannot serve as a verified closing line, and its "the move was right (slope 0.87)" is
+     withdrawn.
+   - On our own timestamped records (section 6), 30% of decision-time lines later moved, and 70% of those moved toward the
+     recorded projection.
+   - The move does not significantly predict the outcome at the original line: slope 0.36 (-0.11 to +0.85).
+   - No cause (lineups, vetoes or anything else) is tested here. A line moving our way is agreement with a later market,
+     not selection skill.
 4. **Headshots are the one place with independent information.**
    - The full-history HS projection is as accurate as the closing line (MSE -0.17, -0.94 to +0.58), with b = 0.59. It is
      reproducible by era: +0.63 (+0.22, +1.10) for Oct 2-10 and +0.53 (-0.10, +1.10) for Oct 11-16.
@@ -204,7 +215,11 @@ the disagreement is pure projection error.
    than Underdog's (slope +1.21, 0.41 to 2.06). But a one-bet-per-pair rule on that difference hits 50.2% (43.9-56.5). It is
    not usable at 0.5-1 kill differences.
 
-## 4. What this archive can establish (power, from the scored matches' own variance)
+## 4. What this archive can establish (power ESTIMATES)
+
+These are estimates. They are conditional on the assumed effect sizes and on the variability observed in these 159 scored
+matches (about 17 observations per match, picks in 65% of matches). They are not universal match requirements: a
+different observation density or variance changes them.
 
 | Distinct matches | Smallest log-loss gain detectable (80% power, 5% two-sided) | Smallest selection edge vs BASE detectable |
 |---|---|---|
@@ -216,8 +231,8 @@ the disagreement is pure projection error.
 
 - The effects the archive points to (+0.0025 log loss on HS; 3-7 points selection) are below what 159 matches can
   separate from zero.
-- The registered windows are not what delays a decision; the effect sizes are. The registered minimum gain (0.002 log loss)
-  needs about 2,000 matches to detect with 80% power.
+- Under these estimates, the registered windows are not what delays a decision; the effect sizes are. The registered
+  minimum gain (0.002 log loss) would need about 2,000 matches to detect with 80% power.
 - A prospective sequential replacement that also allows earlier futility stops, with multiple candidates handled
   explicitly, is proposed in EVALUATION_P2_PROPOSAL.md. It is not adopted.
 
@@ -233,8 +248,8 @@ the disagreement is pure projection error.
 **Specific limitations and missing data (where further work can matter):**
 1. **Team strength / match context.** The market adjusts for it and is right; perf-2 does not. rr-1 is the existing model
    of it. Its value relative to the line is unproven, because the line already contains it.
-2. **Late pre-match information** (lineups, stand-ins, veto). Lines move after our forecasts and the moves are right. We do
-   not observe that information before the market does.
+2. **Line moves after our forecasts.** They move toward our projection more often than not. This analysis does not
+   identify what causes them (no lineup / veto data is tested), and does not establish that they are right (section 6).
 3. **HS level bias.** The full-history HS projection's Over rate runs about 5 points high. Its information (b ~0.6) is the
    only measurable independent signal, worth one prospective HS-only test (definition in the proposal). The effect it
    implies needs several hundred to a thousand matches to confirm.
@@ -246,3 +261,82 @@ the disagreement is pure projection error.
 
 **Wording that stays true:** the grader's percentages are model estimates. Nothing here shows it beating real lines, and it
 must not be advertised as proven to.
+
+## 6. The actionable-line question (added 2026-10-16 ~22:30 UTC; protocol written before it ran)
+
+Question: did the grader provide useful information at a line that was actually available when the pick was made, and
+did its fixed recommendation rule benefit there? Protocol and script: `research/realline_archive_2026_10_16/
+PROTOCOL_ACTIONABLE.md`, `actionable.py`, output `actionable_out.md`. Nothing is fitted; no candidate is used or changed.
+
+**Cohort (exact).**
+- **Decision-time forecast:** per player x HLTV match x stat x scope x platform, the EARLIEST saved board forecast logged at
+  least 30 min before the start. Median lead time is 16.6 h before the start (25%: 11.6 h, 75%: 20.0 h).
+- **Recorded values only:** the live estimate and projection as logged then, at the platform line of that board row.
+  - Render forecast log: 1,606.
+  - Railway forecast log: 128.
+  - Railway pick row at its last write: 624.
+- **Outcome:** the HLTV total at THAT original line. The corrected identity join is used (opponent must agree, including
+  the HLTV record's opponent); ambiguous / other-opponent archive rows are quarantined.
+- **Counts:** 2,358 observations / 178 distinct matches, match days Oct 3-16.
+- **Excluded:**
+  - no verified HLTV identity: 689;
+  - same line on the other platform (copy): 253;
+  - no forecast at least 30 min before the start: 61;
+  - Maps 1-3: 46;
+  - push at the original line: 29;
+  - no HLTV total: 10.
+- **Offered side:** logged only from 2026-10-15 02:44. 383 observations / 16 matches have the favoured side verified as
+  offered. For the other 1,975 the side was not recorded and stays missing.
+- **Other platform's line at the decision:** logged from 2026-10-15 03:26; only 121 observations / 13 matches. Too few to
+  use.
+
+**Results at the original line** (recorded estimates vs FLAT 50% and BASE; match-grouped 95%):
+
+| Cohort | Obs / matches | Log-loss gain vs FLAT | vs BASE | Calibration slope | 57% picks / matches | Hit (95%) | Hit - BASE same side (95%) |
+|---|---|---|---|---|---|---|---|
+| All decision-time forecasts | 2,358 / 178 | -0.0066 (-0.0169, +0.0034) | -0.0052 (-0.0163, +0.0057) | 0.25 (-0.12, 0.65) | 784 / 149 | 52.6% (47.1-58.4) | +0.028 (-0.026, +0.086) |
+| Railway era, Oct 3-10 (mostly older pipelines) | 752 / 111 | -0.0021 (-0.0158, +0.0110) | +0.0019 | 0.44 | 246 / 86 | 56.5% (50.0-63.3) | +0.067 (+0.002, +0.135) |
+| Render era, Oct 11-16 (perf-2 tags) | 1,606 / 67 | -0.0087 (-0.0221, +0.0045) | -0.0085 | 0.19 | 538 / 63 | 50.7% (43.1-58.2) | +0.010 (-0.066, +0.085) |
+| Line + favoured side verified (Oct 16 only) | 383 / 16 | -0.0052 | -0.0066 | - | 86 / 14 | 51.2% (29.2-72.6) | +0.015 (-0.203, +0.229) |
+
+**Projection information at the original line** (slope of actual - line on recorded projection - line):
+
+| Stat | Slope (95%) | Matches | MSE projection - MSE line |
+|---|---|---|---|
+| Kills | +0.18 (-0.23, +0.56) | 176 | +1.64 (-0.57, +3.72) |
+| HS | +0.50 (+0.15, +0.84) | 169 | -0.08 (-1.00, +0.82); as accurate as the line |
+
+**Line movement after the decision (our own timestamped records only).**
+- 2,327 verifiable observations / 173 matches. The 31 Railway observations after its export have no later record.
+- **Last verified line:** captured a median 52 min before the start (25%: 20 min, 75%: 450 min); only 52% within 60 min.
+  It is the last line we verifiably saw, not necessarily the true close.
+- **Unchanged:** 1,635 observations / 172 matches. **Moved:** 692 observations / 120 matches.
+  - Moves of 0.5: 87. Moves of 1: 445. Moves of 1.5 or more: 160.
+- **Direction:** moved toward the recorded projection 70.4% (65.2-75.9); toward live's favoured side 66.9%. The share is
+  similar at every size (0.5: 71%; 1: 69%; 1.5 or more: 74%).
+- **Is the move predictive?** Slope of (actual - original line) on the move: +0.36 (-0.11, +0.85). Not established.
+- **The fixed rule, scored at the ORIGINAL line:**
+
+  | Subset | Picks / matches | Hit | Hit - BASE (95%) |
+  |---|---|---|---|
+  | Unchanged lines | 513 / 138 | 51.9% | +0.020 (-0.038, +0.082) |
+  | Moved lines | 263 / 86 | 54.0% | +0.044 (-0.031, +0.116) |
+  | Moved toward the projection | 205 / 79 | 54.1% | +0.046 (-0.031, +0.130) |
+  | Moved away | 58 / 28 | 53.4% | +0.038 (-0.134, +0.196) |
+
+**Closing benchmark** (separate): live's estimate recorded at the last verified pre-start line, 2,324 observations / 173
+matches.
+- Log loss vs FLAT -0.0060 (-0.0168, +0.0048).
+- 57% picks: 809 / 147 matches, hit 53.3%, +0.033 vs BASE (-0.021, +0.085).
+
+**Direct answer.**
+- **Useful information at an available line: weak and partial.**
+  - The recorded HS projection carried information at the original line; kills did not.
+  - Lines that later moved went our way about 70% of the time.
+  - But the recorded estimates were not better than 50% (-0.0066), they were overconfident (slope 0.25), and the moves are
+    not shown to predict outcomes.
+- **Fixed recommendation rule: no established benefit.** 784 picks / 149 matches hit 52.6%, +2.8 points over the baseline
+  (-2.6 to +8.6).
+  - The Railway-era subset (+6.7, interval just above 0) is one of four cuts and comes from older pipelines.
+  - The current perf-2 era is +1.0 (-6.6 to +8.5).
+  - Nothing here shows the rule beating the lines members could actually take.

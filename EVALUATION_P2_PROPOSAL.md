@@ -1,6 +1,7 @@
 # Proposed amendment P2 - book-line qualification (PROPOSED, not registered)
 
-**Status: draft for the owner's decision (2026-10-16).**
+**Status: draft for the owner's decision (2026-10-16). On hold (owner 2026-10-16 night): the actionable-line question
+(REALLINE_ARCHIVE_2026-10-16.md section 6) comes first; hs-1 is not added and the review rules are not changed.**
 - Nothing here is in force. It takes effect only if the owner approves it in writing. It then applies only to matches that
   start after the registration timestamp recorded with that approval.
 - It changes no past result.
@@ -16,7 +17,9 @@
   estimates without finding better picks (pl-2 on its forward rows), and the reverse.
 - **Multiplicity and repeated looks.** The registered rule corrects for its three looks (98.33%) but not for several
   candidates under review at once. It has no early stop for futility.
-- **The archive's power (REALLINE_ARCHIVE_2026-10-16.md section 4).** At about 17 observations per match:
+- **The archive's power ESTIMATES (REALLINE_ARCHIVE_2026-10-16.md section 4).** These are conditional on the assumed
+  effects and the variability observed in 159 matches (about 17 observations per match); they are not universal
+  requirements:
 
   | Matches | Smallest detectable log-loss gain (80%) | Smallest detectable selection edge |
   |---|---|---|
