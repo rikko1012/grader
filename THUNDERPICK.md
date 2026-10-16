@@ -218,6 +218,28 @@ on identical saved inputs:
 
 No `Retry-After` or `X-RateLimit-*` headers have been returned. 429s occur well below the documented 10 / minute.
 
+## The HLTV scraper's copy and the 75-minute quote life (owner 2026-10-16)
+
+- **What happened:** from 2026-10-15 22:11 UTC every cooldown ended with a few answers, then another 429 (Cloudflare, no
+  body, no `Retry-After`). From 00:08 UTC on 2026-10-16 every request was refused - including the first one after a
+  30-minute silence (00:38). Our own rate cannot explain that. Render's outbound IP is shared with other services, so the
+  limit is probably not ours alone.
+- **The fix (owner's choice):**
+  - The HLTV scraper reads the feed once in every props run: hourly, and after each HLTV scan (`hltv-scraper
+    thunderpick`, hltv-scraper 593ffeb).
+  - It runs on GitHub's machines and saves the answer as received in `thunderpick_snapshots` (HLTV database, 7 days).
+  - One read carries every CS2 match.
+- **How the site uses it:** the poller takes the newest saved read in exactly like its own answer, with the scraper's
+  request time as the retrieval time.
+  - It looks every 60 s, once its own latest answer is over 90 s old.
+  - It uses a saved read only when that read is newer than its own answer.
+  - Admin status shows it under `scraper_copy`.
+- **Quote life:** `QUOTE_MAX_AGE_S` = 75 min (was 180 s). The owner decided that odds up to about an hour old are shown
+  and graded (bookmaker price: the 1.5U market-quality cap applies). Every other eligibility rule is unchanged:
+  Match Winner, two-way, pre-match, linked match, an empty latest answer.
+- **Needs** the `THUNDERPICK_API_KEY` repository secret in hltv-scraper. Without it the step reads nothing and says so.
+- **Pace:** after a 429 the site's own poller stays at 150 s for 6 h (`RATE_PACE_S`).
+
 ## Remaining questions for the provider (ready to send - contains no key)
 > Hi - a few questions about the CS2 partner odds feed (aggr.mightykiwi.xyz):
 > 1. CS2 matches arrive on `esport/csgo`; `esport/cs2` always returns `[]`. Is `csgo` the intended identifier for CS2,

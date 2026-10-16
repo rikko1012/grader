@@ -290,13 +290,13 @@ def test_shared_recheck_is_one_evaluation_and_never_outlives_the_quote(monkeypat
     for _ in range(25):
         assert M.revalidate(cached) is cached
     assert len(tp.calls) == n0 + 1                                    # one evaluation for 25 re-checks
-    # a quote retrieved 179.5 s ago expires inside the window: the shared result is not reused past it
+    # a quote 0.5 s short of its quote life expires inside the window: the shared result is not reused past it
+    import thunderpick
     M._REVAL.clear()
-    tp.answer = lambda: tp_found(retrieved_at=iso(datetime.now(timezone.utc) - timedelta(seconds=179.5)))
+    tp.answer = lambda: tp_found(retrieved_at=iso(datetime.now(timezone.utc) - timedelta(seconds=thunderpick.QUOTE_MAX_AGE_S - 0.5)))
     M.revalidate(cached)
     key = next(iter(M._REVAL))
     assert M._REVAL[key][0] <= datetime.now(timezone.utc).timestamp() + 1.0
-    import thunderpick
     assert M._REVAL[key][0] <= M._ts(tp.answer()["provenance"]["retrieved_at"]) + thunderpick.QUOTE_MAX_AGE_S + 1
 
 

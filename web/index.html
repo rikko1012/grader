@@ -497,7 +497,7 @@ body.mode-board .workspace-tools,body.mode-slate .workspace-tools{flex-direction
       <label class="bchk"><input type="checkbox" id="bbets" checked> Bets only</label>
       <label class="bchk" title="Hide picks with an open data issue (stand-in, long break, limited history)"><input type="checkbox" id="bflag"> Hide flagged</label>
       <label class="bchk" hidden><input type="checkbox" id="cdiff"> Only where lines differ</label>
-      <label class="bchk" hidden title="A price is usable when it is current and pre-match: Thunderpick odds in its latest answer (Match Winner market, within 180 s), or an exchange quote that is open, current and has a tight enough bid/ask spread"><input type="checkbox" id="mlusable" checked> Usable price only</label>
+      <label class="bchk" hidden title="A price is usable when it is current and pre-match: Thunderpick odds in its latest answer (Match Winner market, within 75 minutes), or an exchange quote that is open, current and has a tight enough bid/ask spread"><input type="checkbox" id="mlusable" checked> Usable price only</label>
       <button type="button" class="chipbtn" id="breset" title="Reset every filter">Reset</button>
       <button type="button" class="chipbtn" id="brefresh" title="Refresh the board">↻ Refresh</button>
       <span class="small muted" id="bcount"></span></div>
@@ -1678,7 +1678,7 @@ const mlSide = (sd, tpNow) => {
   const badge = v === "agrees" ? `<span class="pill good">HLTV agrees${c.available ? ` (${c.for} of ${c.available})` : ""}</span>`
     : v === "disagrees" ? `<span class="pill bad">HLTV disagrees${c.available ? ` (${c.against} of ${c.available} favour the other side)` : ""}</span>`
     : v === "mixed" ? `<span class="pill warn">HLTV mixed</span>` : "";
-  const rs = (sd.reasons || []).slice(0, 6);
+  const rs = (sd.reasons || []).filter(r => !/not linked|not resolved|no usable|unavailable|not confirmed|unconfirmed|\bstale\b|not current/i.test(r)).slice(0, 6);
   return `<div class="mlside"><div class="mlsidehead"><b>${esc(sd.label)}</b> <span class="pill">0U</span> ${badge}</div>
     ${lapsed}${rs.length ? `<ul class="mlreasons">${rs.map(r => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
     ${sd.basis ? `<div class="small muted">${esc(sd.basis)}</div>` : ""}</div>`;
@@ -1766,7 +1766,7 @@ function mlCountText(up0) {
 function mlStatusText(d) {
   // owner 2026-10-16: only sources with current prices, as plain update times - never a source's outage state
   const t = d.thunderpick || {}, qc = t.quotes_confirmed_at, qa = qc ? Math.max(0, (mlNow() - Date.parse(qc)) / 1000) : null;
-  const tp = qa != null && qa <= 180 ? [`Thunderpick odds retrieved ${agoSec(qa)}`] : [];
+  const tp = qa != null && qa <= (t.max_age_s || 4500) ? [`Thunderpick odds retrieved ${agoSec(qa)}`] : [];
   const src = Object.entries(d.sources || {}).filter(([k, v]) => v.ok && v.age_s != null).map(([k, v]) => `${PLAT[k] || k}: prices from ${agoSec(v.age_s)}`);
   return [...tp, ...src].join(" · ");
 }
@@ -1796,7 +1796,7 @@ function drawMoneylines() {
          : "No upcoming matches right now – every listed match has started."}</div>`)
 
     + `<details class="small muted" style="margin-top:10px"><summary>Which price is shown</summary>
-        <p><b>Thunderpick first.</b> Bookmaker odds with the margin removed, shown while they are current (updated within the last 3 minutes, before the match starts).</p>
+        <p><b>Thunderpick first.</b> Bookmaker odds with the margin removed, shown while they are current (retrieved within the last 75 minutes, before the match starts).</p>
         <p><b>Exchanges.</b> Polymarket and Kalshi: each platform's bid/ask midpoint for the first team, shown to 0.1%, when the quote is open, current and tight. A last trade is never used as a price.</p>
         <p>Only matches with a current price are listed. This tab shows market prices – no stake or recommendation. Not financial advice.</p></details>`;
 }

@@ -741,7 +741,7 @@ def test_a_429_or_a_timeout_neither_extends_nor_voids_a_fresh_quote():
     assert not s["found"] and s["availability"] == "stale"
     blk = T.board_block("hltv:9001", poller=p)
     assert blk["availability"] == "stale" and blk["usable"] is False and blk["retrieved_at"] == t0
-    assert "no successful Thunderpick answer for 3 min" in blk["availability_label"]
+    assert f"no successful Thunderpick answer for {T.QUOTE_MAX_AGE_S // 60} min" in blk["availability_label"]
 
 
 def test_an_empty_answer_makes_earlier_quotes_display_only_at_once():
@@ -1255,3 +1255,38 @@ def test_an_endpoint_that_never_returned_an_event_becomes_a_rare_probe():
         p.poll_once("csgo")
     assert T._sched("cs2")["interval_s"] == T.NEVER_EVENTS_PROBE_S   # never an event: probed every 30 min
     assert T._sched("csgo")["interval_s"] == T.MAX_INTERVAL_S        # had events before: the normal empty steps
+
+
+# ---------------------------------------------------------------- the HLTV scraper's saved read (owner 2026-10-16)
+def test_the_scrapers_saved_read_takes_over_while_this_server_is_refused():
+    """Thunderpick refuses this server (429) for hours: the HLTV scraper's saved read - newer than our own answer - is taken
+    in exactly like our own, with ITS retrieval time, and counts as current for QUOTE_MAX_AGE_S (75 min: shown and graded)."""
+    import hashlib
+    assert T.QUOTE_MAX_AGE_S == 75 * 60
+    p, c = active_poller()
+    own = p.answer["cs2"]["at"]
+    body = json.dumps(p.data["cs2"]["raw"]).encode()
+    saved = {"at": own + 1200, "body": body, "sha": hashlib.sha256(body).hexdigest()}
+    p.copy_fn = lambda path: saved
+    p.fetch_fns["cs2"] = err_fetch("rate_limited", 429)
+    c.t = own + 1300
+    assert p.poll_once("cs2") is False and T.cooldown(c.t)["active"]
+    assert p.ingest_copy("cs2") is True and p.answer["cs2"]["source"] == "scraper copy" and p.answer["cs2"]["at"] == own + 1200
+    a = T.projection_odds("Alpha1", "Bravo1", start_of(1), poller=p)
+    assert a["found"] and T._ts(a["provenance"]["retrieved_at"]) == own + 1200 and p.copy_state["used"] == 1
+    assert p.ingest_copy("cs2") is False                                  # not newer than what we have: nothing changes
+    c.t = own + 1200 + T.QUOTE_MAX_AGE_S - 60                             # 74 min old: still current
+    assert T.projection_odds("Alpha1", "Bravo1", start_of(1), poller=p)["found"]
+    c.t = own + 1200 + T.QUOTE_MAX_AGE_S + 1
+    s = T.projection_odds("Alpha1", "Bravo1", start_of(1), poller=p)
+    assert not s["found"] and s["availability"] == "stale"
+    # never an older read than our own, never one past its quote life; a failing read leaves the feed as it was
+    mine = p.answer["cs2"]["at"]
+    p.copy_fn = lambda path: {"at": mine - 5, "body": body, "sha": "x"}
+    assert p.ingest_copy("cs2") is False
+    p.copy_fn = lambda path: {"at": mine + 0.5, "body": body, "sha": "x"}          # newer, but 75 min + 0.5 s old
+    assert p.ingest_copy("cs2") is False and p.answer["cs2"]["at"] == mine
+    p.copy_fn = lambda path: (_ for _ in ()).throw(ConnectionError("database down (TEST)"))
+    c.t += T.COPY_EVERY_S + 1
+    assert p._copy_tick() is None and "ConnectionError" in p.copy_state["last_error"] and p.answer["cs2"]["at"] == mine
+    assert T.scraper_copy.__doc__ and "thunderpick_snapshots" in T.COPY_SQL

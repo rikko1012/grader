@@ -121,7 +121,7 @@ BASIS_MARKET_TP = ("Side = Thunderpick's favourite (bookmaker odds, margin remov
                    "source since 2026-10-13. Not yet evaluated as a moneyline baseline: its forecasts are logged "
                    "(ml-sides-2) so it can be. HLTV figures are context.")
 TP_PRICE = "Thunderpick odds, margin removed proportionally"
-RULE_TP = ("ml-sides-2 market input: Thunderpick's eligible series price (in its latest answer, <= 180 s, Match Winner = "
+RULE_TP = ("ml-sides-2 market input: Thunderpick's eligible series price (in its latest answer, <= 75 min, Match Winner = "
            "series winner, two-way, no draw, pre-match, linked match) -> its proportional margin-adjusted probability "
            "for team A; else the ml-baseline-1 exchange baseline; else none (never 50%). Shadow - 0 units.")
 _RULE1 = object()                      # pick(tp=...) default: no Thunderpick input -> exactly ml-sides-1

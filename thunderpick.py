@@ -1003,7 +1003,7 @@ def request_log(limit=60, db=None):
 BASE_INTERVAL_S = 60
 EMPTY_STEPS = ((5, 60), (10, 120), (15, 180))       # empty streak below N -> interval; beyond the last -> MAX_INTERVAL_S
 RL_STEPS = (60, 120, 240, 300)
-CARRY_MAX_INTERVAL_S = 150                           # an endpoint returning events: never slower (quotes live 180 s)                      # 429s in the last R429_WINDOW_S: 0, 1, 2, 3+ -> interval
+CARRY_MAX_INTERVAL_S = 150                           # an endpoint returning events: never slower than this                      # 429s in the last R429_WINDOW_S: 0, 1, 2, 3+ -> interval
 # 2026-10-16 (owner: "never show Thunderpick not usable"): after a 429 the carrying endpoint keeps the slow-but-current pace
 # (CARRY_MAX_INTERVAL_S, inside the 180 s quote life) for RATE_PACE_S. Before, the 429 step counted only the last 30 min -
 # exactly the cooldown - so every cooldown ended back at 60 s and tripped the provider again within 2-13 requests (Oct 15
@@ -1013,12 +1013,42 @@ MAX_INTERVAL_S = 300
 NEVER_EVENTS_PROBE_S = 30 * 60   # an endpoint that never returned an event (esport/cs2 - CS2 is on csgo): a rare probe, so
                                  # the shared budget and spacing go to the endpoint that carries quotes (2026-10-14)
 MIN_GAP_S = 20
-QUOTE_MAX_AGE_S = int(2.5 * BASE_INTERVAL_S + 30)   # 180 s: a quote older than this is never current
+# 2026-10-16 (owner): an answer up to 75 minutes old counts as current - shown AND graded. Thunderpick's edge refuses this
+# server for hours (HTTP 429, shared outbound IP), the HLTV scraper reads the feed from GitHub's machines about hourly
+# (thunderpick_snapshots - scraper_copy below) and one read carries every CS2 match. Was 180 s (2026-10-13).
+QUOTE_MAX_AGE_S = 75 * 60
+COPY_EVERY_S = 60                # how often the poller looks for a newer scraper copy ...
+COPY_WHEN_OLDER_S = 90           # ... once its own latest answer is this old
 RESTORE_MAX_AGE_S = 3 * 3600                        # a restart restores the last answer for DISPLAY up to 3 h old
 DROPPED_KEEP_S = 6 * 3600                           # events missing from a newer answer stay visible ("last seen")
 SEEN_KEEP_S = 2 * 86400
 TICK_S = 5
 AUTH_BLOCK_AFTER = 3
+
+
+COPY_SQL = ("SELECT extract(epoch FROM fetched_at), body_gz, sha256 FROM thunderpick_snapshots "
+            "WHERE outcome = 'ok' AND path = %s ORDER BY fetched_at DESC LIMIT 1")
+
+
+def scraper_copy(api_path=None):
+    """The HLTV scraper's newest successful read of this path from the HLTV database: {"at" (its request time), "body",
+    "sha"} - None when there is none, no table yet or no database. A failed read raises (the poller keeps what it has)."""
+    import hltv
+    if not hltv.dsn():
+        return None
+    con = hltv._connect()
+    try:
+        with con.cursor() as cur:
+            cur.execute("SELECT to_regclass('thunderpick_snapshots')")
+            if cur.fetchone()[0] is None:
+                return None
+            cur.execute(COPY_SQL, (api_path or PATHS["csgo"],))
+            row = cur.fetchone()
+    finally:
+        con.close()
+    if not row or row[1] is None:
+        return None
+    return {"at": float(row[0]), "body": gzip.decompress(bytes(row[1])), "sha": row[2]}
 
 
 def autopoll():
@@ -1114,8 +1144,11 @@ def _endpoint(api_path):
 
 
 class Poller:
-    def __init__(self, fetch_fns=None, clock=time.time, db=None, store=True, canonical_fn=None, board_fn=None):
+    def __init__(self, fetch_fns=None, clock=time.time, db=None, store=True, canonical_fn=None, board_fn=None, copy_fn=None):
         self.fetch_fns = fetch_fns or {}            # tests: {"cs2": fn, "csgo": fn}
+        self.copy_fn = copy_fn or scraper_copy      # the HLTV scraper's saved reads (2026-10-16)
+        self._copy_at = 0.0
+        self.copy_state = {"used": 0, "last_used_at": None, "last_checked": None, "last_error": None}
         self.clock, self.db, self.store = clock, db, store
         self.canonical_fn, self.board_fn = canonical_fn, board_fn
         self.lock = threading.Lock()
@@ -1205,20 +1238,24 @@ class Poller:
         sch["next_at"] = now + sch["interval_s"]
         _put(f"sched:{name}", sch, self.db)
         self._sched_mem[name] = dict(sch)
+        return self._take(name, data, r["body"], now, r["status"], norm, sha, empty)
+
+    def _take(self, name, data, body, now, status, norm, sha, empty, source="poller"):
+        """One successful answer of this endpoint - our own request's, or the scraper's saved read (source)."""
         by_key = {_ekey(e): e for e in norm}
         with self.lock:
             prev_sha = (self.answer.get(name) or {}).get("sha")
             # the endpoint's latest successful answer - an empty one makes every earlier quote of this endpoint
             # display-only at once (owner 2026-10-13: no holding through empty answers)
-            self.answer[name] = {"at": now, "empty": empty, "sha": sha, "ids": frozenset(by_key)}
+            self.answer[name] = {"at": now, "empty": empty, "sha": sha, "ids": frozenset(by_key), "source": source}
             if not empty:
-                self.data[name] = {"events": norm, "raw": data, "at": now, "sha": sha, "by_key": by_key}
+                self.data[name] = {"events": norm, "raw": data, "at": now, "sha": sha, "by_key": by_key, "source": source}
                 for k in by_key:
                     s = self.seen.get(k)
                     self.seen[k] = {"first_seen": s["first_seen"] if s else now, "last_observed": now}
                 if len(self.seen) > 4000:
                     self.seen = {k: v for k, v in self.seen.items() if now - v["last_observed"] <= SEEN_KEEP_S}
-        self._record(True, _iso(now), r["status"], None, r["body"], norm, api_path=PATHS[name], name=name)
+        self._record(True, _iso(now), status, None, body, norm, api_path=PATHS[name], name=name)
         if not empty:
             if sha != prev_sha:
                 try:
@@ -1260,7 +1297,50 @@ class Poller:
 
     def tick(self):
         name = self.due()
-        return self.poll_once(name) if name else None
+        r = self.poll_once(name) if name else None
+        self._copy_tick()
+        return r
+
+    # -- the HLTV scraper's copy (2026-10-16): Thunderpick refuses this server for hours (429 from its edge); the scraper
+    #    reads the feed from GitHub's machines and saves each answer (thunderpick_snapshots). A saved read is taken in
+    #    exactly like our own answer, only when it is NEWER than our latest one; its time is the scraper's request time
+    #    and the same QUOTE_MAX_AGE_S rule decides whether it is current.
+    def _copy_tick(self, now=None):
+        now = self.clock() if now is None else now
+        if now - self._copy_at < COPY_EVERY_S:
+            return None
+        self._copy_at = now
+        name = "csgo"
+        with self.lock:
+            a = (self.answer.get(name) or {}).get("at") or 0
+        if now - a <= COPY_WHEN_OLDER_S:
+            return None                                  # our own answer is fresh
+        try:
+            return self.ingest_copy(name, now)
+        except Exception as e:          # noqa: BLE001 - a failed read of the copy never stops the feed
+            self.copy_state["last_error"] = f"{type(e).__name__}: {str(e)[:120]}"
+            return None
+
+    def ingest_copy(self, name="csgo", now=None):
+        now = self.clock() if now is None else now
+        self.copy_state["last_checked"] = _iso(now)
+        c = self.copy_fn(PATHS[name])
+        if not c:
+            return False
+        with self.lock:
+            mine = (self.answer.get(name) or {}).get("at") or 0
+        if c["at"] <= mine or now - c["at"] > QUOTE_MAX_AGE_S or c["at"] > now + 60:
+            return False
+        data = json.loads(c["body"])
+        if not isinstance(data, list):
+            return False
+        norm = normalize(data, _iso(c["at"]))
+        for e in norm:
+            e["api_path"] = PATHS[name]
+            e["snapshot_sha256"] = c["sha"]
+        self._take(name, data, c["body"], c["at"], 200, norm, c["sha"], len(data) == 0, source="scraper copy")
+        self.copy_state.update(used=self.copy_state["used"] + 1, last_used_at=_iso(c["at"]), last_error=None)
+        return True
 
     def restore(self, now=None):
         """After a restart: each endpoint's last nonempty answer from the history with its OWN retrieval time and hash
@@ -1658,6 +1738,8 @@ class Poller:
                          f">= {MIN_GAP_S}s apart and one in flight (enforced in the gateway); per endpoint {BASE_INTERVAL_S}s, "
                          f"slowing to {MAX_INTERVAL_S}s on empty feeds and while 429s persist",
                "quote_rule": f"current only when in the endpoint's latest successful nonempty answer <= {QUOTE_MAX_AGE_S}s old",
+               "scraper_copy": dict(self.copy_state, rule=f"the HLTV scraper's newest saved read, used when newer than our own "
+                                                          f"answer and <= {QUOTE_MAX_AGE_S}s old"),
                "matched": len(self.matched), "dropped": len(self.dropped), "ambiguous": len(self.ambiguous),
                "instance": instance_id(), "pid": os.getpid(), "store": store_info(self.db)}
         out["state"] = self.state(now)

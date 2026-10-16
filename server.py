@@ -1212,7 +1212,7 @@ def ml_sides_for(board, tp_blocks=None):
 
 # what the Moneylines tab says about Thunderpick's rule (members; the exchanges' own frozen rule is moneyline.BASELINE_RULE)
 TP_RULE = ("Thunderpick (primary bookmaker source): a price is used only when the match is in Thunderpick's latest "
-           "successful answer, that answer is at most {age} s old (our retrieval time - the feed publishes no quote "
+           "successful answer, that answer is at most {age} s old (75 min since 2026-10-16; our retrieval time - the feed publishes no quote "
            "time), the market is the event-level 'Match Winner' (read as the series winner from its label - two "
            "outcomes, no draw price; not provider-confirmed), the format is best-of-1, 3 or 5, and the match has not "
            "started (the feed has no live flag). Decimal odds d -> raw implied chance 1/d (the two add up to more than "

@@ -991,7 +991,7 @@ TP_STATE_LABEL = {
     "current": "Current - listed in Thunderpick's latest answer",
     "endpoint_empty": "Thunderpick's latest answer listed no CS2 markets - not confirmed now",
     "not_in_latest_answer": "Not in Thunderpick's latest answer - not confirmed now",
-    "stale": "Not current - no Thunderpick answer within the 180 s limit",
+    "stale": "Not current - no Thunderpick answer within its 75 min quote life",
     "started": "Match started - the feed has no live flag, so these odds may be in-play; not used",
     "scope_unconfirmed": "Series scope of this market not established - not used",
     "draw_listed": "A draw price is listed - not a two-way series market",
