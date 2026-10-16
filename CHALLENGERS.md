@@ -83,6 +83,54 @@ data hash 49e7ac29547b86a9). Walk-forward with w refitted on earlier days only: 
 - **Development units still count units of the old slug identity** (a match logged under a BO3.gg slug and hltv-<id> was
   two units then); the forward evaluation uses the canonical match identity (identity.assign).
 
+## cm-1 - complete model for forward confirmation (family `complete-model-1`, id `cm-001-<hash>`; production shadow only)
+
+- **Why:** the one candidate selected under PROTOCOL_MODELS.md (REALLINE_ARCHIVE_2026-10-16.md section 9). It is
+  development evidence only: every period scored had been inspected before. It is NOT an established accuracy gain, and its
+  58.8% development hit rate is not a validated future rate.
+- **Frozen artifact:** `cm1_model.json`.
+  - Artifact hash: `cm1.ARTIFACT_SHA` (SHA-256 of the canonical JSON) = `2799a7f4a1b545e1`.
+  - Training: 98,121 player-series, matches 2025-11-01 .. 2026-10-16; training cutoff 2026-10-16; data hash 9073466e2d54.
+  - Frozen 2026-10-16 22:08 UTC.
+- **Mean:** Poisson regression (log link, L2 alpha 1e-4) on 14 standardised pre-match features. They are listed with their
+  formulas in the artifact: full-history rate / environment rate / opponent factor, history sizes, LAN, pre-match Elo of
+  both teams, both teams' rounds per map, and the opponent-adjusted rate with the joint opponent factor.
+- **Uncertainty (not Poisson variance):** the study's discretised normal, sd = c sqrt(lambda).
+  - Kills: c 1.4732, chances capped 22-78%.
+  - HS: lambda_kills x the full-history HS ratio, c_hs 1.2781, no cap.
+  - Pushes are excluded exactly as live p_more.
+- **History rules:**
+  - Full-scoreboard maps only (10 players), all tiers, since 2025-09-01.
+  - Rows in [match day - 420, match day), weights exp(-age / 120); match day = the UTC date of the start.
+  - Opponent-adjustment refits every Monday, on maps strictly before the refit; the latest refit on or before the match
+    day that exists when the forecast is made.
+  - Elo from every series since 2025-09-01, taken at the start of the match day.
+- **Missing data:**
+  - Ineligible (reason saved): no HLTV player; no full-scoreboard map since 2025-09-01; own team or opponent not
+    identified; LAN / online unknown; not Maps 1-2 kills / HS; no refit.
+  - A player with history but none in the window gets prior-only sums and opponent factor 1, as the study did.
+- **Production (cm1.py):**
+  - **Tables:** the learning cycle's separate low-priority process rebuilds them from the HLTV database every 2 h. It reads
+    the study's dump query by month and writes an atomic file with its own hash: about 25 s, 3 MB.
+  - **Forecast:** when the board writes a forecast's pre-match record (perf_shadow), cm-1 is computed from the tables on
+    disk. The record saves the intermediate sums, the 14 features, lambda, the chance, the line, the offered sides and the
+    platform / board times, and the tables' build id and hash.
+  - **Isolation:** the live projection, chance, grade and stake are untouched. The fh-1 and live arms are byte-identical
+    with and without cm-1 (tests/test_cm1.py).
+- **Verified before rollout:** on the study's own dump, the production code reproduces the research implementation for
+  all 17,028 test player-series.
+  - Every history sum and Elo is exact; lambda agrees to 6e-15 relative.
+  - Line probabilities agree to 5e-10 on all 1,927 decision-time forecasts.
+  - A map on the match day itself changes no input.
+  - About 0.13 ms per forecast (research/realline_archive_2026_10_16/repro_cm1.py).
+- **Replay:** perf_shadow.check_record recomputes cm-1 from each record's saved sums (the learning cycle's fh-1 replay
+  includes it).
+- **Scoring:** on the same P1 units as live (Maps 1-2 kills + HS), from the latest pre-match record at least 30 min before
+  the start.
+  - Probability scores and the fixed 57% rule are reported separately, by stat, with match-grouped intervals.
+  - **Forward record = forecasts logged after its registry freeze only.** Nothing is backdated or reconstructed.
+  - Promotion only through the registered review.
+
 ## lc-1 - real-line probability correction (family `line-correction-1`, id `lc-001-<hash>`; production shadow only)
 
 - **Definition:** `logit P(Over) = a_s + b_s * z`, with z = (projection - line) / (c_s * sqrt(projection)) (c = the live

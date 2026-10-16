@@ -1,0 +1,152 @@
+{
+ "constants": {
+  "half_life_days": 120.0,
+  "k0": 300.0,
+  "k_hs": 25.0,
+  "ke": 800.0,
+  "ko": 300.0,
+  "pm": 0.93,
+  "pop": 0.66442,
+  "pop_hs": 0.5106,
+  "rounds_prior": 21.74,
+  "rounds_prior_maps": 10,
+  "window_days": 420
+ },
+ "features_definition": [
+  "log rate_all = log((K + 300 x 0.66442 x 0.93) / (R + 300))",
+  "log rate_env = log((Ke + 800 rate_all) / (Re + 800))",
+  "log opp = log(((ck + 300 x 0.66442 x 5) / (5 cr + 1500)) / 0.66442)",
+  "log(1 + R)",
+  "log(1 + Re)",
+  "log(1 + maps)",
+  "LAN (1 / 0)",
+  "Elo own / 400",
+  "Elo opponent / 400",
+  "(Elo own - Elo opponent) / 400",
+  "log max(team rounds per map, 1)",
+  "log max(opponent rounds per map, 1)",
+  "log adjusted rate = log((sum w k / D_opp + 300 x 0.66442 x 0.93) / (R + 300))",
+  "log D (the upcoming opponent's factor in the refit; 1 when the team is not in it)"
+ ],
+ "frozen_at": "2026-10-16T22:08:21+00:00",
+ "history_rules": {
+  "elo": "every HLTV series since 2025-09-01 (maps with any scoreboard), start 1500, K 24 per series on the map score, updated after each day; the match uses both teams' ratings at the start of its day",
+  "maps": "HLTV maps with exactly 10 players on the scoreboard (all tiers = the full-history view n), dated on or after 2025-09-01 (the study's data start)",
+  "opponent_adjustment": "weekly (Mondays from 2025-10-27) iterative-proportional fit of kills = rounds x exp(mu + player + opponent) on maps strictly before the refit date (420-day window, half-life 120, player prior 300 x mu, opponent prior 1500 x mu, 12 iterations, opponent factors normalised to exposure-weighted mean 1; skipped while fewer than 1,000 rows); a match day uses the latest refit on or before it that exists when the forecast is made",
+  "opponent_conceded": "per map, the kills of the 5 players facing the team, and the map's rounds",
+  "player": "kills / rounds (rounds = both teams' map score), tonight's environment (LAN flag equal to tonight's), headshots on rows whose HS is recorded and not 0 with 12+ kills, map count (unweighted)",
+  "team_rounds": "per map and team, the map's total rounds; rounds per map = (sum w rounds + 21.74 x 10) / (sum w + 10)",
+  "window": "map day in [match day - 420, match day), weight exp(-(match day - map day) / 120); match day = the UTC date of the scheduled start"
+ },
+ "id": "cm-1",
+ "mean_model": {
+  "alpha": 0.0001,
+  "coef": [
+   -0.14324115026456122,
+   0.05663442141143932,
+   0.004679285786507751,
+   0.030942522110731552,
+   -0.0058476013727963546,
+   -0.008337384490271214,
+   -0.0048455498565566964,
+   -0.009133007770985652,
+   -0.00872450583593729,
+   -0.00039593836093999776,
+   0.005246544339608242,
+   0.00199844746250564,
+   0.17160440236590216,
+   0.03722365212085902
+  ],
+  "family": "Poisson regression, log link (sklearn PoissonRegressor, alpha 1e-4)",
+  "features": [
+   "log_rate_all",
+   "log_rate_env",
+   "log_opp",
+   "log_hist_r",
+   "log_env_r",
+   "log_maps",
+   "lan",
+   "elo_own",
+   "elo_opp",
+   "elo_gap",
+   "log_team_rpm",
+   "log_opp_rpm",
+   "log_adj_rate",
+   "log_joint_opp"
+  ],
+  "formula": "lambda_kills = exp(intercept + sum(coef * (x - mean) / std))",
+  "intercept": 3.3503767454275915,
+  "mean": [
+   -0.41924627614378646,
+   -0.41200151112308875,
+   -0.0023040263986760325,
+   6.56753984970065,
+   6.058983134440067,
+   4.297904999795698,
+   0.314998827977701,
+   3.857854011504721,
+   3.857858220282543,
+   -4.20877782009764e-06,
+   3.071730287902916,
+   3.0717261597334913,
+   -0.41985363514664514,
+   -4.9977705409749276e-05
+  ],
+  "std": [
+   0.06950681261110568,
+   0.07881014176789533,
+   0.027043514286188473,
+   1.4727657856557705,
+   1.673542859856179,
+   1.2528116762477413,
+   0.46451541123975526,
+   0.19804468361679783,
+   0.198042695995702,
+   0.20437266372269666,
+   0.025094218393456526,
+   0.025095659488473976,
+   0.07207906423509458,
+   0.033021427441149206
+  ]
+ },
+ "missing_data": {
+  "LAN / online unknown": "ineligible",
+  "no HLTV player id": "ineligible",
+  "no full-scoreboard map in the 420-day window": "zero history sums (prior only) and opponent factor 1, as the study; a player with no full-scoreboard map since 2025-09-01 is ineligible",
+  "no refit on or before the match day": "ineligible",
+  "opponent not in the refit": "factor 1 (as the study)",
+  "own team or opponent not identified in HLTV": "ineligible",
+  "scope other than Maps 1-2 or a stat other than kills / headshots": "ineligible",
+  "team without an Elo history": "rating 1500 (as the study)"
+ },
+ "never": "a live input: no projection, chance, grade or stake changes",
+ "recommendation_rule": "favoured side when its chance >= 0.57 (fixed)",
+ "training": {
+  "data_hash": "9073466e2d54",
+  "fit_through": "2026-10-16",
+  "rows": 98121,
+  "source": "REALLINE_ARCHIVE_2026-10-16.md section 9; research/realline_archive_2026_10_16 (PROTOCOL_MODELS.md, models.py, freeze_glm.py)",
+  "target": "Maps 1-2 kills of player-series with both maps on a full (10-player) HLTV scoreboard, matches 2025-11-01 .. 2026-10-16"
+ },
+ "uncertainty_model": {
+  "hs": {
+   "c_hs": 1.2780600978842453,
+   "cap": null,
+   "distribution": "discretised normal",
+   "mean": "lambda_kills x hs_per_kill (full-history view: (hk + 25 x 0.5106) / (hkk + 25))",
+   "sd": "c_hs * sqrt(max(lambda_hs, 1))"
+  },
+  "kills": {
+   "c_kills": 1.4732069324504315,
+   "cap": [
+    0.22,
+    0.78
+   ],
+   "distribution": "discretised normal",
+   "sd": "c_kills * sqrt(max(lambda, 1))"
+  },
+  "note": "NOT Poisson variance: the Poisson regression gives the MEAN only. The study scored every model with a discretised normal whose sd scales with sqrt(lambda) by a factor re-estimated on the training residuals: c^2 = mean((y - lambda)^2 / lambda).",
+  "push": "half-point line: P(Over) = 1 - Phi((floor(line) + 0.5 - lambda) / sd); whole line: P(Over) / (P(Over) + P(Under)) with P(Over) = 1 - Phi((line + 0.5 - lambda) / sd), P(Under) = Phi((line - 0.5 - lambda) / sd) - the push is excluded, as live p_more"
+ },
+ "version": "cm-1"
+}

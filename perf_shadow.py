@@ -392,7 +392,25 @@ def build(res, r):
     lc = lc1_p(g.get("lambda_final"), g.get("line"), prop, scope)
     if lc:
         rec["lc1"] = {"p_more": lc[0], "z": lc[1], "version": LC1["version"], "from": "published projection and line"}
+    rec["cm1"] = _cm1(ids, team, tid, day, lan, g.get("line"), prop, scope, (res.get("book") or {}).get("quote"))
     return rec, {in_sha: ("snapshot", pack(snap)), gi_sha: ("grader_inputs", pack(gi_s))}
+
+
+def _cm1(ids, team, opp_tid, day, lan, line, prop, scope, quote):
+    """cm-1 (complete-model shadow, cm1.py) for this forecast at this moment - never raises, never touches the live arms."""
+    try:
+        import cm1
+        own = _team_id(team) if team and prop in ("kills", "hs") and (scope or "12") == "12" else None
+        out = cm1.for_forecast(cm1.current(), ids, own, opp_tid, day, lan, line, prop, scope, quote)
+        cm1.STATS["ineligible" if out.get("ineligible") else "computed"] += 1
+        return out
+    except Exception as e:      # noqa: BLE001 - shadow only
+        try:
+            import cm1
+            cm1.STATS["error"] += 1
+        except Exception:
+            pass
+        return {"version": "cm-1", "error": f"{type(e).__name__}: {str(e)[:160]}"}
 
 
 def attach(res, r):
@@ -415,8 +433,14 @@ def attach(res, r):
 
 
 def status():
-    return {"id": ID, "counts": dict(STATS), "last_error": LAST["error"], "last_error_at": LAST["error_at"],
-            "last_record_at": LAST["record_at"], "skips": dict(LAST["skip"].most_common(10))}
+    out = {"id": ID, "counts": dict(STATS), "last_error": LAST["error"], "last_error_at": LAST["error_at"],
+           "last_record_at": LAST["record_at"], "skips": dict(LAST["skip"].most_common(10))}
+    try:
+        import cm1
+        out["cm1"] = cm1.status()
+    except Exception as e:      # noqa: BLE001
+        out["cm1"] = {"error": f"{type(e).__name__}: {e}"}
+    return out
 
 
 # ------------------------------------------------------------------------------------------------ replay from saved inputs
@@ -429,4 +453,8 @@ def check_record(rec, snap, gi):
         for f in ("lambda", "p_more", "p_more_raw", "lambda_perf", "sd", "side", "grade", "units"):
             if a.get(f) != b.get(f):
                 bad.append(f"{k}.{f}: stored {b.get(f)!r} replay {a.get(f)!r}")
+    if rec.get("cm1"):                                  # cm-1: features, lambda and chance from its saved sums only
+        import cm1
+        ok, why = cm1.replay(rec["cm1"])
+        bad += [f"cm1 {w}" for w in why]
     return not bad, bad[:6]

@@ -129,7 +129,8 @@ LINE_BLEND = {"family": "line-blend-1", "w": {"kills": 0.0, "hs": 0.5}, "scopes"
 CHALLENGER_NAMES = {"line-blend-1": "probability-shrinkage challenger (toward 50%)", "perf-refit-1": "performance-model refit",
                     "full-history-1": "fh-1 full HLTV history (shadow)",
                     "line-correction-1": "lc-1 real-line correction (shadow)",
-                    "hs-calibration-1": "hs-1 headshot calibration (shadow)"}
+                    "hs-calibration-1": "hs-1 headshot calibration (shadow)",
+                    "complete-model-1": "cm-1 complete model (shadow, forward confirmation)"}
 
 
 def line_blend_p(p_live, prop, scope, cfg=LINE_BLEND):
@@ -412,6 +413,15 @@ def hs1_p(lam_full, line, prop, scope):
     return round(1 / (1 + math.exp(-(HS_CAL["a"] + HS_CAL["b"] * z))), 6)
 
 
+# cm-1 (owner 2026-10-16: the one candidate selected for independent forward confirmation; REALLINE_ARCHIVE_2026-10-16.md
+# section 9; cm1.py + cm1_model.json). A complete model: Poisson regression for the mean on 14 pre-match features, the study's
+# discretised-normal uncertainty model. Its value is computed at the moment each board forecast's pre-match record is written
+# (rec["cm1"]) and scored here after settlement on the same P1 units as live; Maps 1-2 kills and headshots only.
+CM1 = {"family": "complete-model-1", "version": "cm-1", "artifact": "cm1_model.json", "frozen_at": "2026-10-16T22:08:21+00:00",
+       "training_cutoff": "2026-10-16", "data_hash": "9073466e2d54", "recommendation_rule": "favoured side when its chance >= 0.57",
+       "registered": "2026-10-16"}
+
+
 SCORECARD_REV = "2026-10-16-rekey"   # a change of scorecard code rebuilds the stored scorecard at the next cycle
 
 
@@ -495,6 +505,11 @@ def _fh1_shadow(con, ch, now, arm="fh1"):
                     "live_source": (rec.get("live") or {}).get("projection_source"), "fh1_source": (rec.get("fh1") or {}).get("projection_source")}
             if arm == "fh1":
                 pc, pb, lc = rr["ch_p"], rr["live_p"], rr["ch_lam"]
+            elif arm == "cm1":                         # cm-1: its own value, computed when the pre-match record was written
+                c1 = rec.get("cm1") or {}
+                pc, pb, lc = c1.get("p_more"), rr["live_p"], c1.get("lambda")
+                if pc is None:
+                    note["reject"] = c1.get("ineligible") or c1.get("error") or "no cm-1 value in the record (recorded before cm-1 existed)"
             elif arm == "hs1":                         # hs-1: fh-1's saved full-history projection at the forecast's line
                 pc, pb, lc = hs1_p(rr["ch_lam"], f["line"], f["prop"], f["scope"]), rr["live_p"], rr["ch_lam"]
                 if pc is None:
@@ -530,6 +545,23 @@ def fh1_replay_step(con, recs):
     summ = {"rows_checked": tot[0], "mismatches": tot[1], "examples": ex, "source": "saved inputs (history snapshot + grader inputs) only"}
     _set_meta(con, "fh1_replay", summ)
     return summ
+
+
+def _ensure_cm1(con, now):
+    """Register cm-1 once (its forward record = board forecasts logged after this moment, from their pre-match records)."""
+    if con.execute("SELECT 1 FROM challengers WHERE family = ?", (CM1["family"],)).fetchone():
+        return
+    import cm1
+    cfg = dict(CM1, artifact_sha=cm1.ARTIFACT_SHA)
+    h = _sha(cfg)
+    cid = f"cm-001-{h[:8]}"
+    con.execute("INSERT INTO challengers (id, family, created_at, frozen_at, snapshot_id, data_hash, training_cutoff, config, "
+                "config_hash, base_config, status, status_at, status_reason, revises, development) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (cid, CM1["family"], _iso(now), _iso(now), None, CM1["data_hash"], CM1["training_cutoff"], json.dumps(cfg, sort_keys=True), h,
+                 json.dumps({"live": "the record's live arm (the published chance)"}), "shadow", _iso(now),
+                 "registered (owner 2026-10-16: forward confirmation of the selected complete model); forward record = Maps 1-2 kills / HS "
+                 "board forecasts logged after this moment, scored from their pre-match records", None, "[]"))
+    con.execute("INSERT INTO events (at, kind, detail) VALUES (?,?,?)", (_iso(now), "challenger", json.dumps({"id": cid, "status": "shadow"})))
 
 
 def _ensure_hs_cal(con, now):
@@ -1912,6 +1944,8 @@ def product_scorecard(con, rows=None):
             row.update(_prop_line_2_extras(con, ch, us))
         elif ch["family"] == FULL_HISTORY["family"]:
             row.update(_fh1_extras(con, ch, us))
+        elif ch["family"] == CM1["family"]:
+            row.update(_fh1_extras(con, ch, [u for u in us if u["prop"] in ("kills", "hs") and (u["scope"] or "12") == "12"], arm="cm1"))
         elif ch["family"] == HS_CAL["family"]:
             row.update(_fh1_extras(con, ch, [u for u in us if u["prop"] == "hs" and (u["scope"] or "12") == "12"], arm="hs1"))
         elif ch["family"] == LINE_CORRECTION["family"]:
@@ -2010,7 +2044,7 @@ def _fh1_extras(con, ch, us, arm="fh1"):
             rej[t.get("reject") or "no value"] += 1
             continue
         rs.append(dict(u, t=t, pL=s_["p_over_base"], pF=s_["p_over_ch"], lamL=s_["lam_base"], lamF=s_["lam_ch"], pP=s_["p_over_logged"]))
-    out = {"registered": {"fh1": FULL_HISTORY, "hs1": HS_CAL}.get(arm, LINE_CORRECTION)["registered"], "arm": arm,
+    out = {"registered": {"fh1": FULL_HISTORY, "hs1": HS_CAL, "cm1": CM1}.get(arm, LINE_CORRECTION)["registered"], "arm": arm,
            "frozen_at": ch["frozen_at"], "forward_units": len(fwd), "units": len(rs),
            "matches": len({u["match"] for u in rs}), "coverage": _r(len(rs) / len(fwd), 3) if fwd else None,
            "rejections": [{"reason": k, "units": v} for k, v in rej.most_common()],
@@ -2302,6 +2336,9 @@ def shadow_step(con, now, limit=4000, picks=None):
         propline2 = ch["family"] == PROP_LINE_2["family"]
         if ch["family"] == FULL_HISTORY["family"]:      # fh-1: its own pre-match records, once their cut-off has passed
             n += _fh1_shadow(con, ch, now)
+            continue
+        if ch["family"] == CM1["family"]:                # cm-1: its value saved in the same pre-match records
+            n += _fh1_shadow(con, ch, now, arm="cm1")
             continue
         if ch["family"] == HS_CAL["family"]:             # hs-1: from fh-1's saved projection in the same pre-match records
             n += _fh1_shadow(con, ch, now, arm="hs1")
@@ -2645,6 +2682,7 @@ def run_cycle(now=None, picks=None, forecasts=None, batches=None, corrections=No
             _ensure_full_history(con, now)
             _ensure_line_correction(con, now)
             _ensure_hs_cal(con, now)
+            _ensure_cm1(con, now)
             log = {"at": _iso(now)}
             # 1. copy new forecasts (immutable), in pages
             if picks is None:
@@ -2734,6 +2772,13 @@ def run_cycle(now=None, picks=None, forecasts=None, batches=None, corrections=No
             con.commit()
             try:                                       # the paired-evaluation export (served as stored; never fails a cycle)
                 _set_meta(con, "p1_units", p1_units_export(con, now))
+                con.commit()
+            except Exception:
+                traceback.print_exc()
+            try:                                       # cm-1 tables (HLTV database -> disk) when older than cm1.REFRESH_S
+                import cm1
+                log["cm1_tables"] = cm1.refresh_tables()
+                _set_meta(con, "last_cycle", log)
                 con.commit()
             except Exception:
                 traceback.print_exc()
