@@ -73,7 +73,8 @@ def test_underdog_counts_lines_still_grading():
 def test_studio_capacity_reads_max_slips_and_is_labelled():
     assert "d.max_slips" in HTML and "mx = d.max ||" not in HTML
     assert "cs2s_studio_open" not in HTML                                     # never reopened on its own
-    assert HTML.count("Research – not validated") >= 2                        # studio bar + every built slip
+    assert "Research – not validated" not in HTML and "Is this validated?" not in HTML   # owner 2026-10-16: no unsure labels
+    assert 'seg("repeats", [["as_needed", "When needed"], ["none", "Never"]])' in HTML       # studio-2: the count asked for
     assert "Smaller slips are planned first" in HTML                          # explainer follows Fill first
 
 
@@ -96,7 +97,14 @@ def test_phone_layout_hooks():
     assert m and m.group(1).index('data-v="board"') < m.group(1).index('data-v="slate"')
 
 
-def test_data_status_names_an_outage_and_a_stale_hltv_history():
-    assert 't: "HLTV unreachable", why: "no current grade until the database answers"' in HTML
-    assert 't: "HLTV out of date"' in HTML and '"HLTV out of date"' in HTML.split("const issueLabel")[1][:400]
-    assert "HLTV is missing his recent matches" in HTML                       # the card's HLTV panel shows hl.stale
+def test_no_unsure_badges_or_notes_on_the_member_page():
+    CODE = re.sub(r"(?m)^\s*//.*$|\s//[^`'\"\n]*$", "", HTML)               # the page, without its code comments
+    # owner 2026-10-16: "I never want to see that label or any other unsure label on my site" - what is not confirmed is
+    # left out (grades, chances and stakes unchanged), only definite facts get a badge
+    for t in ('"HLTV unreachable"', '"HLTV out of date"', "HLTV is missing his recent matches", '"Roster not confirmed"',
+              '"Line not confirmed"', "Not usable now", "Research – not validated", "stale grade kept", "saved grade – not current",
+              "research line – not verified", "couldn't check", "live data unavailable", "Unknown (no lineup data)",
+              "lineup unclear", "– provisional", "Model: not validated yet"):
+        assert t not in CODE, t
+    assert '"Stand-in"' in HTML.split("const issueLabel")[1][:300] and '"Long break"' in HTML.split("const issueLabel")[1][:300]
+    assert ".filter(f => !UNSURE.test(f))" in HTML                           # card notes: no hedge flags

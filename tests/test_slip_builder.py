@@ -1,5 +1,6 @@
-"""Slip studio (slip_builder studio-1): batch-wide diversity, size planning, overlap caps, shortages, stored exposure,
-idempotency, concurrency, verify-before-copy, one platform / entry type per slip, moneylines apart. No network."""
+"""Slip studio (slip_builder studio-2): the count asked for (repeats only when needed, the default), the strict
+no-repeat mode (overlap "none" - studio-1's rule), size planning, overlap caps, shortages, stored exposure, idempotency,
+concurrency, verify-before-copy, one platform / entry type per slip, moneylines apart. No network."""
 import itertools
 import json
 import math
@@ -67,7 +68,7 @@ def test_no_repeated_prop_player_or_match_across_all_sizes():
     rows = board(20)
     # the same player's headshots line (shared exposure with his kills) and a namesake row by nick only
     rows.append(row(500, 0, player="p0", nick="p0", player_id=1000, prop="hs", line=15.5, graded_line=15.5, p=0.9, side="Less"))
-    res = sb.build(rows, {"count": 3}, model=M, now=NOW)
+    res = sb.build(rows, {"count": 3, "overlap": "none"}, model=M, now=NOW)
     slips = all_slips(res)
     assert [len(res["slips"][n]) for n in (4, 3, 2)] == [3, 2, 1]        # 20 matches: 12 + 6 + 2 legs
     assert_no_repeats(slips)
@@ -89,7 +90,7 @@ def test_opposing_sides_of_one_market_never_in_one_batch():
 
 def test_four_pick_section_not_starved_by_two_picks():
     rows = board(9)
-    res = sb.build(rows, {"sizes": [2, 3, 4], "count": 3}, model=M, now=NOW)
+    res = sb.build(rows, {"sizes": [2, 3, 4], "count": 3, "overlap": "none"}, model=M, now=NOW)
     assert res["plan"] == {4: 2, 3: 0, 2: 0}                          # planned before picks, largest first
     assert len(res["slips"][4]) == 2 and not res["slips"][2]
     assert "not relaxed" in res["shortage"][2] and "not relaxed" in res["shortage"][3]
@@ -149,7 +150,7 @@ def test_overlap_prefers_fresh_picks_before_reuse():
 
 def test_shortage_message_instead_of_relaxing():
     rows = board(3)
-    res = sb.build(rows, {"sizes": [4], "count": 2}, model=M, now=NOW)
+    res = sb.build(rows, {"sizes": [4], "count": 2, "overlap": "none"}, model=M, now=NOW)
     assert res["slips"][4] == []
     assert "3 unused eligible matches" in res["shortage"][4] and "not relaxed" in res["shortage"][4]
     res = sb.build([], {"sizes": [2]}, model=M, now=NOW)
@@ -215,8 +216,8 @@ def test_moneyline_never_mixed_with_props():
     assert all(l["market_type"] == "moneyline" for s in all_slips(mres) for l in s["legs"]) and all_slips(mres)
     # in one batch: a moneyline entry never reuses a match already carrying a prop
     bid = sb.current_batch("sess-ml")
-    a = sb.build(rows + ml, {"sizes": [2], "count": 1}, batch=bid, key="k1", model=M, now=NOW)
-    b = sb.build(rows + ml, {"market": "moneyline", "sizes": [2], "count": 3}, batch=bid, key="k2", model=M, now=NOW)
+    a = sb.build(rows + ml, {"sizes": [2], "count": 1, "overlap": "none"}, batch=bid, key="k1", model=M, now=NOW)
+    b = sb.build(rows + ml, {"market": "moneyline", "sizes": [2], "count": 3, "overlap": "none"}, batch=bid, key="k2", model=M, now=NOW)
     used = {l["match_slug"] for s in all_slips(a) for l in s["legs"]}
     mlm = {l["match_slug"] for s in all_slips(b) for l in s["legs"]}
     assert len(used) == 2 and len(mlm) == 4 and not used & mlm
@@ -228,9 +229,9 @@ def test_exposure_persists_across_rebuilds_until_new_batch():
     rows = board(12, seed=11)
     bid = sb.current_batch("sess-a")
     assert sb.current_batch("sess-a") == bid                             # a refresh finds the same batch
-    r1 = sb.build(rows, {"sizes": [4], "count": 1}, batch=bid, key="press-1", model=M, now=NOW)
-    sb.build(rows, {"sizes": [2], "count": 2}, batch=bid, key="press-2", model=M, now=NOW)        # size change
-    r3 = sb.build(rows, {"sizes": [3], "count": 3}, batch=bid, key="press-3", model=M, now=NOW)
+    r1 = sb.build(rows, {"sizes": [4], "count": 1, "overlap": "none"}, batch=bid, key="press-1", model=M, now=NOW)
+    sb.build(rows, {"sizes": [2], "count": 2, "overlap": "none"}, batch=bid, key="press-2", model=M, now=NOW)        # size change
+    r3 = sb.build(rows, {"sizes": [3], "count": 3, "overlap": "none"}, batch=bid, key="press-3", model=M, now=NOW)
     batch = sb.get_batch(bid)
     slips = [s for n in batch["slips"] for s in batch["slips"][n]]
     assert len(slips) == 1 + 2 + 1 and batch["builds"] == 3
@@ -337,7 +338,7 @@ def test_search_is_exact_for_one_slip_and_bound_is_reported(monkeypatch):
         assert abs(res["slips"][4][0]["log_chance"] - _brute(rows, 4)) < 1e-6
     monkeypatch.setattr(sb, "NODE_LIMIT", 2)
     rows = board(7, per_match=3, seed=1)
-    res = sb.build(rows, {"sizes": [4, 2], "count": 3}, model=M, now=NOW)
+    res = sb.build(rows, {"sizes": [4, 2], "count": 3, "overlap": "none"}, model=M, now=NOW)
     assert res["search"]["node_limit"] == 2
     assert_no_repeats(all_slips(res))                                   # a bounded search still never breaks a rule
 
@@ -438,14 +439,14 @@ def test_batch_exposure_mode_comes_from_every_build_not_the_last():
     bid = sb.current_batch("sess-mixed")
     sb.build(rows, {"sizes": [2], "count": 3, "overlap": "limited", "max_uses": {"player": 3, "match": 3}}, batch=bid,
              key="m-1", model=M, now=NOW)
-    sb.build(rows, {"sizes": [2], "count": 1}, batch=bid, key="m-2", model=M, now=NOW)            # overlap off
+    sb.build(rows, {"sizes": [2], "count": 1, "overlap": "none"}, batch=bid, key="m-2", model=M, now=NOW)            # overlap off
     e = sb.get_batch(bid)["exposure"]
     assert e["overlap"] == "limited" and e["caps"] == {"player": 3, "match": 3} and e["mixed"] is True
     assert e["no_repeats"] is (max(e["max_uses"].values()) <= 1)
     assert not any(r.startswith("no repeated prop") for r in e["rules"])      # never claimed beside real repeats
     assert "mixes overlap settings" in e["rules"][0]
     plain = sb.current_batch("sess-plain")
-    sb.build(rows, {"sizes": [2], "count": 1}, batch=plain, key="p-1", model=M, now=NOW)
+    sb.build(rows, {"sizes": [2], "count": 1, "overlap": "none"}, batch=plain, key="p-1", model=M, now=NOW)
     e2 = sb.get_batch(plain)["exposure"]
     assert e2["overlap"] == "none" and e2["mixed"] is False and e2["no_repeats"] is True
 
@@ -455,13 +456,13 @@ def test_changed_slip_frees_its_legs_and_replace_builds_one():
     voids it and builds exactly one slip of its size - the batch keeps the same number of live slips."""
     rows = board(3, per_match=2, seed=23)
     bid = sb.current_batch("sess-replace")
-    a = sb.build(rows, {"sizes": [2], "count": 1}, batch=bid, key="r-1", model=M, now=NOW)
+    a = sb.build(rows, {"sizes": [2], "count": 1, "overlap": "none"}, batch=bid, key="r-1", model=M, now=NOW)
     old = a["slips"][2][0]
-    b = sb.build(rows, {"sizes": [2], "count": 1}, batch=bid, key="r-2", model=M, now=NOW)
+    b = sb.build(rows, {"sizes": [2], "count": 1, "overlap": "none"}, batch=bid, key="r-2", model=M, now=NOW)
     assert b["shortage"].get(2)                                      # only one unused match left: no 2-pick
     sb.record_event(bid, old["slip_id"], "verify_changed", key="v-1")
     sb.record_event(bid, old["slip_id"], "verify_ok", key="v-2")    # a later ok never brings it back
-    c = sb.build(rows, {"sizes": [2], "count": 1}, batch=bid, key="r-3", model=M, now=NOW)
+    c = sb.build(rows, {"sizes": [2], "count": 1, "overlap": "none"}, batch=bid, key="r-3", model=M, now=NOW)
     assert len(c["slips"][2]) == 1 and not c["shortage"]           # its matches are eligible again
     reused = {l["match_slug"] for l in c["slips"][2][0]["legs"]} & {l["match_slug"] for l in old["legs"]}
     assert reused
@@ -518,8 +519,8 @@ def test_match_diversity_holds_across_build_presses_and_limited_reports_exposure
     explicit new batch resets usage."""
     rows = board(12, per_match=3, seed=8)                    # 3 different players per match
     b = sb.new_batch("owner-check")
-    r1 = sb.build(rows, {"sizes": [4], "count": 2}, batch=b, key="press-0001", model=M, now=NOW)
-    r2 = sb.build(rows, {"sizes": [2], "count": 3}, batch=b, key="press-0002", model=M, now=NOW)
+    r1 = sb.build(rows, {"sizes": [4], "count": 2, "overlap": "none"}, batch=b, key="press-0001", model=M, now=NOW)
+    r2 = sb.build(rows, {"sizes": [2], "count": 3, "overlap": "none"}, batch=b, key="press-0002", model=M, now=NOW)
     used = [l["match_slug"] for r in (r1, r2) for s in all_slips(r) for l in s["legs"]]
     assert len(used) == len(set(used)) == 12 and [len(r1["slips"][4]), len(r2["slips"][2])] == [2, 2]
     assert "not relaxed" in r2["shortage"][2]                # 3 asked, 2 possible: said, never filled by reuse
@@ -553,3 +554,41 @@ def test_a_grade_kept_during_an_outage_is_never_picked_or_verified():
     later = [dict(r, hltv_retry="2026-10-12T07:58:00+00:00") if r["id"] == slip["legs"][0]["row_id"] else r for r in rows]
     v = sb.verify_before_copy(slip, _boards(later, NOW.timestamp()), now=NOW, model=M)
     assert v["ok"] is False and v["action"] == "rebuild" and "saved one kept while live data is unavailable" in v["changes"][0]
+
+
+# ---------------------------------------------------------------- studio-2 default: the count asked for (owner 2026-10-16)
+def test_default_builds_the_count_asked_for_fresh_picks_first():
+    """"I press 5 slips and only get 2": 9 matches allow two 4-picks without a repeat; the default builds all 5 - fresh
+    picks first, then the least-used ones - never twice in one slip, never the same slip twice."""
+    rows = board(9, per_match=3, seed=31)
+    res = sb.build(rows, {"sizes": [4], "count": 5}, model=M, now=NOW)
+    slips = res["slips"][4]
+    assert len(slips) == 5 and not res["shortage"] and res["settings"]["overlap"] == "as_needed"
+    assert_no_repeats(slips[:2])                                         # the first two use fresh picks only
+    for s_ in slips:
+        assert len({l["match_slug"] for l in s_["legs"]}) == 4 and len({l["player_id"] for l in s_["legs"]}) == 4
+    assert len({frozenset(l["row_id"] for l in s_["legs"]) for s_ in slips}) == 5
+    uses = {}
+    for s_ in slips:
+        for l in s_["legs"]:
+            uses[l["match_slug"]] = uses.get(l["match_slug"], 0) + 1
+    assert max(uses.values()) - min(uses.values()) <= 2                  # least-used first: reuse is spread out
+    assert res["search"]["reused_slips"] == 3 and any(s_["repeats"] for s_ in slips[2:])
+    assert res["exposure"]["overlap"] == "as_needed" and any("only when no fresh slip is left" in r for r in res["exposure"]["rules"])
+    # every size, a thin board and the both-sides rule
+    many = sb.build(rows, {"sizes": [4, 3, 2], "count": 8}, model=M, now=NOW)
+    assert [len(many["slips"][n]) for n in (4, 3, 2)] == [8, 8, 8]
+    thin = sb.build(board(3), {"sizes": [4], "count": 2}, model=M, now=NOW)
+    assert thin["slips"][4] == [] and "no other different 4-pick slip" in thin["shortage"][4]
+
+
+def test_default_keeps_the_both_sides_rule_and_capacity_reports_the_ceiling():
+    rows = [row(1, 1, side="More", p=0.7), row(2, 1, player="p1", nick="p1", player_id=1001, side="Less", p=0.69,
+                                                  line=31.5, graded_line=31.5)]
+    rows += board(6, seed=3)[2:]
+    res = sb.build(rows, {"sizes": [2], "count": 10}, model=M, now=NOW)
+    sides = [l["side"] for s_ in all_slips(res) for l in s_["legs"] if l["player_id"] == 1001]
+    assert sides and len(set(sides)) == 1 and len(res["slips"][2]) == 10
+    cap = sb.capacity(board(9, per_match=3, seed=31), {"sizes": [4]}, model=M, now=NOW)
+    assert cap["max_slips"][4] == 2 and cap["max_different_slips"][4] == sb.MAX_COUNT
+    assert sb.capacity(board(3), {}, model=M, now=NOW)["max_different_slips"][4] == 0

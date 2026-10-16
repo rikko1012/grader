@@ -304,7 +304,7 @@ def panel(res, rows, board_at=None, now=None, id_map=None):
                 add(supports, f"Our previous model also has the {side} ({it['p_side']:.0%})", "context")
     for f in g.get("flags") or []:
         if f.startswith("OLD PROJECTION") and "HLTV database unreachable" in f:
-            add(against, "HLTV database unreachable right now - temporary projection from the older model", "data")
+            continue                                     # owner 2026-10-16: no outage notes on the member site
         elif f.startswith("OLD PROJECTION") and "HLTV database not configured" in f:   # the real cause (2026-10-13 audit)
             add(against, "Projection from the older model (HLTV database not connected)", "data")
         elif f.startswith("OLD PROJECTION"):
@@ -312,7 +312,7 @@ def panel(res, rows, board_at=None, now=None, id_map=None):
         elif f.startswith("HLTV STALE"):
             add(against, f"HLTV history ends {g.get('hltv_ends') or 'early'} - his newer matches are only on BO3.gg", "data")
         elif f.startswith("PROVISIONAL"):
-            add(against, "Provisional projection from BO3.gg history (HLTV has none)", "data")
+            add(against, "Projection from BO3.gg history (HLTV has none)", "data")
         elif "thin history" in f:
             add(against, "Thin history", "data")
     sens = None

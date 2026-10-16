@@ -1004,6 +1004,11 @@ BASE_INTERVAL_S = 60
 EMPTY_STEPS = ((5, 60), (10, 120), (15, 180))       # empty streak below N -> interval; beyond the last -> MAX_INTERVAL_S
 RL_STEPS = (60, 120, 240, 300)
 CARRY_MAX_INTERVAL_S = 150                           # an endpoint returning events: never slower (quotes live 180 s)                      # 429s in the last R429_WINDOW_S: 0, 1, 2, 3+ -> interval
+# 2026-10-16 (owner: "never show Thunderpick not usable"): after a 429 the carrying endpoint keeps the slow-but-current pace
+# (CARRY_MAX_INTERVAL_S, inside the 180 s quote life) for RATE_PACE_S. Before, the 429 step counted only the last 30 min -
+# exactly the cooldown - so every cooldown ended back at 60 s and tripped the provider again within 2-13 requests (Oct 15
+# 22:11-00:08 UTC: usable ~37 of 120 min).
+RATE_PACE_S = 6 * 3600
 MAX_INTERVAL_S = 300
 NEVER_EVENTS_PROBE_S = 30 * 60   # an endpoint that never returned an event (esport/cs2 - CS2 is on csgo): a rare probe, so
                                  # the shared budget and spacing go to the endpoint that carries quotes (2026-10-14)
@@ -1192,6 +1197,9 @@ class Poller:
         sch["interval_s"] = interval_for(sch["empty_streak"], r.get("n429", 0))
         if not empty:   # the endpoint carrying quotes is polled before they expire (review 2026-10-13: 240 / 300 s under
             sch["interval_s"] = min(sch["interval_s"], CARRY_MAX_INTERVAL_S)   # 429s left them stale every cycle)
+            last429 = (_get("cooldown", {}, self.db) or {}).get("last429")
+            if last429 is not None and 0 <= now - float(last429) <= RATE_PACE_S:
+                sch["interval_s"] = CARRY_MAX_INTERVAL_S   # rate-limited in the last 6 h: stay at the slow, still-current pace
         elif not sch.get("last_nonempty_at") and sch["empty_streak"] >= EMPTY_STEPS[-1][0]:
             sch["interval_s"] = NEVER_EVENTS_PROBE_S     # never returned an event: a rare probe (still detects a change)
         sch["next_at"] = now + sch["interval_s"]

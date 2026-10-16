@@ -90,9 +90,10 @@ def test_card_badge_comes_from_the_servers_data_status(tmp_path):
               board: DSTAT["limited"][1]};
     })()""")
     assert out["limited"]["t"] == out["board"] == "Limited history"            # the board's badge for thin HLTV history
-    assert out["roster"]["t"] == "Roster not confirmed" and out["rust"]["t"] == "Long break"
+    # owner 2026-10-16: only definite facts get a badge - no "Roster not confirmed" / "HLTV unreachable" badge
+    assert out["roster"]["t"] == "" and out["rust"]["t"] == "Long break"
     assert out["ok"]["t"] == "Data complete" and out["old"]["t"] == "Limited history"   # older answers: the page's own reading
-    assert out["outage"]["t"] == out["noconf"]["t"] == "HLTV unreachable"
+    assert out["outage"]["t"] == out["noconf"]["t"] == ""
 
 
 @needs_node
@@ -132,17 +133,14 @@ def test_outage_notice_names_its_cause(tmp_path):
       both: outageNote({hltv_outage: {rows: [], causes: ["hltv", "odds"], odds_note: INPUT.note}}),
       older: outageNote({hltv_outage: {rows: []}}),
       none: outageNote({})}))()""", {"rows": rows, "note": note})
-    assert note.replace("'", "&#39;") in out["odds"] and "HLTV" not in out["odds"]
-    assert "saved grade of this exact pick on Underdog, graded " in out["odds"] and "<b>stale</b>, not a new forecast" in out["odds"]
-    assert "no saved grade of this exact pick" in out["oddsHidden"] and "no grade, chance or stake" in out["oddsHidden"]
+    # owner 2026-10-16: plain words only - the latest grade of this exact pick and when it was made, or "being graded"
+    assert "Latest grade of this pick on Underdog: graded " in out["odds"]
     for k in ("odds", "oddsHidden", "oddsOld", "hltv", "both", "older"):
-        assert "temporary projection" not in out[k]
-    assert "no current quote" in out["oddsOld"] and "not current Thunderpick odds" in out["oddsOld"]
-    for k in ("odds", "oddsHidden", "oddsOld"):
-        assert "fallback odds." not in out[k] and "Thunderpick odds temporarily" not in out[k]
-    assert "HLTV database unreachable" in out["hltv"] and "Thunderpick" not in out["hltv"]
-    assert "HLTV database unreachable" in out["both"] and "no current quote" in out["both"]
-    assert "HLTV database unreachable" in out["older"] and out["none"] == ""
+        for w in ("temporary projection", "stale", "unreachable", "not current", "unavailable", "no current quote", "⚠"):
+            assert w not in out[k], (k, w)
+    for k in ("oddsHidden", "oddsOld", "hltv", "both", "older"):
+        assert "This line is being graded" in out[k], k
+    assert out["none"] == ""
 
 
 @needs_node
@@ -152,12 +150,14 @@ def test_board_pill_names_the_kept_grades_cause(tmp_path):
     base = {"book": "underdog", "player": "p1", "nick": "p1", "team": "A", "opponent": "B", "matchup": "A vs B", "start": start, "prop": "kills",
             "scope": "12", "line": 27.5, "side": "More", "grade": "B+", "p": 0.64, "units": 1.0, "state": "GRADE", "proj": 29.1,
             "dstat": ["ok", ""], "hltv_retry": "2026-10-13T12:00:00+00:00"}
-    rows = [dict(base, id="a", retry_cause="odds"), dict(base, id="b", nick="p2", player="p2", retry_cause="hltv")]
+    rows = [dict(base, id="a", retry_cause="odds", graded_at="2026-10-13T11:00:00+00:00"),
+            dict(base, id="b", nick="p2", player="p2", retry_cause="hltv", graded_at="2026-10-13T11:00:00+00:00")]
     out = run_page(tmp_path, """(() => {
       BK.underdog = {rows: INPUT.rows, at: 1, ver: "", err: null, feed: null, total: INPUT.rows.length, loaded: true}; BK.prizepicks.loaded = true;
       assignMatchKeys([...BK.underdog.rows]); bbook = "underdog"; boardRows = viewRows(bbook); bprop = "both"; bside = "both"; bscope = "12";
       bview = "all"; $("#bbets").checked = false; drawBoard(); return $("#boardout").innerHTML; })()""", {"rows": rows})
-    assert "stale grade kept · Thunderpick odds unavailable" in out and "stale grade kept · HLTV unreachable" in out
+    # owner 2026-10-16: the kept grade shows as the line's latest grade with its time - no "stale" pill
+    assert "stale" not in out.lower() and "unreachable" not in out and "graded " in out and "p2" in out
     txt = re.sub(r"<[^>]+>", " ", out)
     assert not re.search(r"\bundefined\b|\bNaN\b", txt)
 
@@ -203,7 +203,7 @@ def test_moneylines_search_that_matches_nothing_says_so(tmp_path):
     s = out["listed:laxie"]
     assert "No match for “laxie” among the 94 listed" in s["html"] and 'data-mlclear="1"' in s["html"]
     assert "No CS2 series-winner prices" not in s["html"] and s["count"].startswith("search: 0 of 94 upcoming")
-    assert "No CS2 series-winner prices from Thunderpick, Polymarket or Kalshi right now." in out["none:"]["html"]   # really none
+    assert "No CS2 series-winner prices right now." in out["none:"]["html"]   # really none
     assert "every listed match has started" in out["started:"]["html"] and "No CS2 series-winner prices" not in out["started:"]["html"]
     assert "No upcoming match for “alpha”" in out["started:alpha"]["html"]
 
@@ -236,13 +236,16 @@ def test_outage_card_shows_no_temporary_prediction(tmp_path):
         r[k] = $("#out").innerHTML; r[k + "_copy"] = pickLine(INPUT[k]); }
       return r; })()""", data)
     un = re.sub(r"<[^>]+>", " ", out["un"])
-    assert "No grade – live data unavailable" in un and "no saved grade of this exact pick" in un
+    assert "Grading…" in un and "This line is being graded" in un
     assert "%" not in un.split("Match")[0] and "Add to slip" not in un and "Projection" not in un.split("Match")[0]
-    assert "no grade – live data unavailable" in out["un_copy"]
+    assert "grading…" in out["un_copy"]
     kept = re.sub(r"<[^>]+>", " ", out["kept"])
-    assert "Under 30.5" in kept and "58.0%" in kept and "saved grade · graded" in kept and "stale" in kept
+    assert "Under 30.5" in kept and "58.0%" in kept and "graded " in kept
     assert "Add to slip" in kept and "Nearby lines" not in kept and "Edge" not in kept.split("Match")[0]
-    assert "saved grade from" in out["kept_copy"] and "(stale)" in out["kept_copy"]
+    assert "graded " in out["kept_copy"]
+    for k in ("un", "kept"):                                  # owner 2026-10-16: no unsure labels, even during an outage
+        for w in ("stale", "live data unavailable", "unreachable", "saved grade"):
+            assert w not in re.sub(r"<[^>]+>", " ", out[k]) + out[k + "_copy"], (k, w)
     for k in ("un", "kept"):
         assert not re.search(r"\bundefined\b|\bNaN\b", re.sub(r"<[^>]+>", " ", out[k]))
 
@@ -264,13 +267,14 @@ def test_a_saved_grade_goes_on_the_slip_as_stale_never_verified(tmp_path):
       await recheckSlip();
       const s = store.get("cs2s_slip", []);
       return {added: a, after: s.map(x => x.now.status), note: s[0].now.note, pill: legState(s[0])}; })()""", data)
-    assert out["added"] == ["stale", "verified", "stale"] and out["after"] == ["stale", "verified", "stale"]
-    assert "not a current forecast" in out["note"] and "saved grade – not current" in out["pill"]
+    assert out["added"] == ["stale", "verified", "stale"] and out["after"] == ["stale", "verified", "stale"]   # never verified
+    assert out["note"] == "" and out["pill"] == ""                       # owner 2026-10-16: no unsure pill on the slip
 
 
-def test_copying_a_slip_flags_a_saved_grade():
-    assert '["changed", "unavailable", "failed", "stale"].includes(x.now?.status)' in HTML
-    assert '" [SAVED GRADE – NOT CURRENT]"' in HTML
+def test_copying_a_slip_stops_only_for_a_changed_or_withdrawn_line():
+    # owner 2026-10-16: no unsure marks - a moved line or a side no longer offered still stops the copy and is marked
+    assert '["changed", "unavailable"].includes(x.now?.status)' in HTML and '" [NOT OFFERED NOW]"' in HTML
+    assert "[SAVED GRADE" not in HTML and "[NOT CHECKED]" not in HTML and "[RESEARCH LINE]" not in HTML
     # a moved line regraded during an outage: a saved / unavailable answer is never offered as the new line's grade
     assert "nv = nv0.kept_from_board || nv0.unavailable || nv0.stale || n?.hltv_outage ? {} : nv0" in HTML
 
@@ -284,7 +288,7 @@ def test_match_players_marks_a_kept_grade_stale(tmp_path):
                        "summary": {"kills": None, "hs": None, "complete": False, "covered": 0, "roster": 5, "basis": "roster page",
                                    "lineup": ["ZywOo"]}, "exposure": {}}]}
     out = run_page(tmp_path, """(() => { MC.data = INPUT; MC.scope = "12"; drawMatchCompare(); return $("#mcmp").innerHTML; })()""", data)
-    assert "stale grade kept" in out and "HLTV database was unreachable" in out
+    assert "stale grade kept" not in out and "unreachable" not in out and "graded " in out   # owner 2026-10-16
 
 
 @needs_node

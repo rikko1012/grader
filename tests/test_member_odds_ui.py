@@ -374,7 +374,7 @@ def test_card_odds_info_thunderpick_perf_grade():
     assert oi["match_label"] == "Win chance (Thunderpick, margin removed)" and oi["footer"] == "Thunderpick"
     assert oi["tile_note"] == "Thunderpick (margin removed) · context + stake cap; not in the projection"
     assert server.card_odds_info(_card(PM_ODDS, mq="HARD"))["tile_note"] == "Polymarket · context; not in the projection"
-    assert oi["scope_note"].startswith("Match Winner - read as the series winner") and "not provider-confirmed" in oi["scope_note"]
+    assert oi["scope_note"] == "Match Winner - series winner"          # owner 2026-10-16: no hedge wording on the card
     assert oi["retrieved_at"] == "2026-10-13T13:59:49Z" and "no quote time" in oi["time_note"]
     assert "model-derived" in oi["maps_note"] and "best-of-3 formula" in oi["maps_note"] and "match simulation" in oi["maps_note"]
     assert "not the projection" in oi["maps_note"] and "updated" not in json.dumps(oi)
@@ -387,16 +387,16 @@ def test_card_odds_info_thunderpick_perf_grade():
 def test_card_odds_info_other_sources_and_no_market():
     pm = server.card_odds_info(_card(PM_ODDS, ps="legacy"))
     assert pm["line"] == "Odds source used: Polymarket (moneyline market, series winner)"
-    assert pm["fallback"] == "Thunderpick not used: no Thunderpick event for this match"
+    assert pm["fallback"] is None                                      # owner 2026-10-16: no "not used" notes on the card
     assert pm["use"].startswith("How odds are used here: the projection uses the win chance")
     assert pm["stake_rule"] == "Thin betting market - unit size limited" and pm["footer"] == "Polymarket"
     op = server.card_odds_info(_card(OP_ODDS))
     assert op["footer"] == "bet365 via OddsPapi" and op["stake_rule"].startswith("Bookmaker price (bet365)")
-    assert op["fallback"] == "Thunderpick not used: Thunderpick quote stale"
+    assert op["fallback"] is None
     no = server.card_odds_info(_card(NONE_ODDS, mq="NONE"))
     assert no["source"] is None and "50/50" not in json.dumps(no)
     assert no["match_note"] == "No betting market found for this match - stake capped at 1.5U; the projection does not use odds"
-    assert no["fallback"] == "Thunderpick not used: no Thunderpick event for this match" and no["footer"] is None
+    assert no["fallback"] is None and no["footer"] is None
     legacy = server.card_odds_info(_card(NONE_ODDS, mq="NONE", ps="legacy"))
     assert "older model grades the match as even" in legacy["match_note"]
 
@@ -446,8 +446,11 @@ def test_page_wording_rules_for_odds():
     assert "Open match on Thunderpick" in HTML and "Open in Thunderpick" not in HTML
     for s in ("Market-implied probability (margin removed, proportional)", "Raw implied (incl. margin)", "Bookmaker margin",
               "Decimal odds", "Retrieved by us", "the feed publishes no quote time", "Exchange comparison",
-              "Thunderpick bookmaker odds first", "Shadow - not a staking recommendation", "Not financial advice"):
+              "Thunderpick bookmaker odds first", "no stake or recommendation", "Not financial advice"):
         assert s in HTML, s
+    # owner 2026-10-16: no unsure labels on the Moneylines tab
+    for s in ("Not usable now", "Model: not validated yet", "not tied to one HLTV match", "Not linked", "price test", "may be in-play"):
+        assert s not in re.sub(r"(?m)//.*$", "", HTML.split("/* ML_RENDER_BEGIN")[1].split("/* ML_RENDER_END */")[0]), s
     tp_js = HTML[HTML.index("/* ML_RENDER_BEGIN"):HTML.index("/* ML_RENDER_END */")]
     tp_js = re.sub(r"(?m)^\s*//.*$", "", tp_js)                                        # the code, not its comments
     assert not re.search(r"slip|bet ?now|place (a )?bet", tp_js, re.I)                 # never a slip / bet prompt
@@ -517,14 +520,13 @@ def test_rendered_thunderpick_card_labels_link_and_comparison(tmp_path):
         assert "Primary source · bookmaker odds" in h and "Decimal odds: Alpha 2.80 · Bravo 1.38" in h
         assert "Market-implied probability (margin removed, proportional)" in h
         assert "Raw implied (incl. margin): Alpha 35.7% · Bravo 72.5% · Bookmaker margin 8.2%" in h
-        assert "Scope: Match Winner - read as the series winner" in h and "price test" in h
+        assert "Scope: series winner (Match Winner market)" in h and "price test" not in h
         assert "Retrieved by us" in h and "the feed publishes no quote time" in h
         assert 'href="https://thunderpick.io/match/2813630"' in h and "Open match on Thunderpick" in h
-        assert "a listed price is not a guarantee for any stake" in h
         assert "slip" not in h.lower() and "updated" not in h.lower()
     b = out["both"]
     assert "Exchange comparison – Polymarket midpoint: <b>Alpha 29.0% · Bravo 71.0%</b>" in b
-    assert "Alpha −8.2 pts vs Thunderpick" in b and "Exchanges: Polymarket only" in b
+    assert "Alpha −8.2 pts vs Thunderpick" in b and "Exchanges: Polymarket only" in b and "not usable" not in b.lower()
     assert ">Polymarket only<" not in b and 'class="mlbase"' not in b                     # never a second headline
     assert b.index("Thunderpick") < b.index("Exchange comparison")                        # Thunderpick first
 
@@ -545,17 +547,11 @@ def test_rendered_started_expired_and_absent_states(tmp_path):
                                                            availability_label="Last seen 00:20 - Thunderpick's latest answer listed no CS2 markets; not confirmed now")),
                      "absent": _ml_match("hltv:5", None, note="Thunderpick: no event linked to this match"),
                      "unlinked": _ml_match(None, None, note="Thunderpick: not checked - this card is not tied to one HLTV match")}})
-    for k in ("started_flag", "started_clock", "expired", "empty"):
+    # owner 2026-10-16: a match with no current price is not shown at all - never a "Not usable" card - and an in-play
+    # price is never shown or linked
+    for k in ("started_flag", "started_clock", "expired", "empty", "absent", "unlinked"):
         assert out[k]["live"] is False and out[k]["usable"] is False, k
-        assert "Not usable now" in out[k]["html"] and "Primary source" not in out[k]["html"], k
-        assert "Last seen – display only, not a current price: Decimal odds" in out[k]["html"], k
-    assert "may be in-play" in out["started_flag"]["html"] and "may be in-play" in out["started_clock"]["html"]
-    assert "Open match on Thunderpick" not in out["started_flag"]["html"] + out["started_clock"]["html"]   # no in-play link
-    assert "Open match on Thunderpick" in out["expired"]["html"]
-    assert "No longer current on this page" in out["expired"]["html"] and "over the 180 s limit" in out["expired"]["html"]
-    assert "listed no CS2 markets" in out["empty"]["html"]
-    assert "Thunderpick: no event linked to this match" in out["absent"]["html"]
-    assert "not tied to one HLTV match" in out["unlinked"]["html"]
+        assert out[k]["html"] == "", k
 
 
 @needs_node
@@ -568,7 +564,7 @@ def test_usable_count_and_filter_include_thunderpick(tmp_path):
                  {"payload": payload, "up": [_ml_match("hltv:1", _live_tp()), _ml_match("hltv:2", None, POLY),
                                              _ml_match("hltv:3", _live_tp(age_s=900)), _ml_match("hltv:4", _live_tp(), POLY)]})
     assert out["usable"] == [True, True, False, True]
-    assert out["text"] == "3 of 4 matches have a usable price (Thunderpick 2 · exchanges 2)"
+    assert out["text"] == "3 matches with prices"
 
 
 @needs_node
@@ -591,8 +587,9 @@ def test_status_line_names_thunderpicks_confirmed_time_and_clean_notes(tmp_path)
     d = {"at": iso(now), "matches": [], "thunderpick": {"label": "Thunderpick odds current", "quotes_confirmed_at": iso(now - timedelta(seconds=50))},
          "sources": {"polymarket": {"ok": True, "age_s": 20}, "kalshi": {"ok": False, "note": "stale: kalshi refresh failing (rate-limited by the provider); last good data 400s old"}}}
     out = run_js(tmp_path, """ML = {data: INPUT, at: Date.now(), err: null}; console.log(JSON.stringify(mlStatusText(INPUT)));""", d)
-    assert out.startswith("Thunderpick odds current (quotes retrieved ") and "50 s ago" in out
-    assert "Kalshi: stale: kalshi refresh failing (rate-limited by the provider)" in out
+    # owner 2026-10-16: only sources with current prices, as plain retrieval times - never a source's outage text
+    assert out == "Thunderpick odds retrieved 50 s ago · Polymarket: prices from 20 s ago", out
+    assert "Kalshi" not in out and "stale" not in out and "rate-limited" not in out
 
 
 @needs_node
@@ -613,9 +610,9 @@ def test_card_odds_lines_render_with_the_source_used(tmp_path):
     assert "⚠" not in tp["match"] and "model-derived" in tp["match"]
     assert tp["foot"] == " · Thunderpick" and "OddsPapi" not in tp["foot"]
     assert ">Bookmaker price · max 1.5U<" in tp["pill"] and "Thin" not in tp["pill"]
-    assert out["op"]["foot"] == " · bet365 via OddsPapi" and "Thunderpick not used: Thunderpick quote stale" in out["op"]["data"]
+    assert out["op"]["foot"] == " · bet365 via OddsPapi" and "Thunderpick not used" not in out["op"]["data"]   # owner 2026-10-16
     assert "50/50" not in out["none"]["match"] and "stake capped at 1.5U" in out["none"]["match"]
-    assert "Thunderpick not used: no Thunderpick event for this match" in out["none"]["match"]
+    assert "Thunderpick not used" not in out["none"]["match"]                 # owner 2026-10-16
     assert "Win chance (Polymarket)" in out["old"]["match"] and "⚠ Thin market" in out["old"]["match"]
 
 

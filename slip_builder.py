@@ -7,7 +7,7 @@ member slips, 2026-10-07 recap). This builder keeps a whole BATCH diversified an
 build(rows, settings, batch=None, key=None, model=None, now=None)
     rows      graded board rows (server.board_payload(book)["rows"]; both platforms may be passed together)
     settings  {"book": "underdog"|"prizepicks", "side": "More"|"Less"|"either", "sizes": [2, 3, 4],
-               "count": 3 | "counts": {4: 3, 3: 3, 2: 3}, "overlap": "none"|"limited",
+               "count": 3 | "counts": {4: 3, 3: 3, 2: 3}, "overlap": "as_needed" (default)|"none"|"limited",
                "max_uses": {"player": 2, "match": 2} (limited only), "stat": "kills"|"hs"|"both",
                "scope": "12"|"1"|"123"|"all", "market": "standard"|"goblin"|"demon"|"moneyline",
                "fill": "large" (default: the largest size planned first) | "small" (the smallest first)}
@@ -24,18 +24,21 @@ lines, Underdog side must be offered, PrizePicks feed not stale, PrizePicks prom
 differs), goblin / demon are their own entry type (a side only when the feed offers it: prizepicks.directions), moneylines are their own entry type (never with props).
 One platform and one entry type per slip, by construction.
 
-Default rules across the WHOLE batch (every size, every Build press until new_batch()): no repeated prop, no repeated
-player (his kills and headshots are one exposure), no repeated match, never both sides of one player's stat. Inside a
-slip: one pick per match, per player and per team, always. overlap="limited": a player / match may appear in up to
-max_uses slips of the batch (caps 1-3, shown in "exposure"), still never twice in one slip and never both sides of one
-market; fresh picks are always preferred over reuse (overlap is allowed, never sought).
+Rules across the WHOLE batch (every size, every Build press until new_batch()). studio-2 default overlap="as_needed"
+(owner 2026-10-16: "I press 5 slips and only get 2"): the count asked for is built. Every slip is filled with FRESH picks
+first (no repeated prop, player - his kills and headshots are one exposure - or match); only when no fresh slip is left
+is a player / match used again, the least-used first (REUSE_PENALTY), and never the same slip twice. overlap="none":
+the strict studio-1 rule - nothing repeats, the count may fall short (said why). overlap="limited": a player / match in
+up to max_uses slips (caps 1-3). Always: never both sides of one player's stat in a batch; inside a slip one pick per
+match, per player and per team.
 
 Selection: slip SIZES are planned before picks - the largest size first (4, then 3, then 2), so 2-pick suggestions
 can't consume the legs a 4-pick needs. Each slip is then filled by a branch-and-bound search maximising
 sum(log chance) - REUSE_PENALTY x (earlier uses of its players and matches in the batch); the search is exact unless
 it visits more than NODE_LIMIT nodes for one slip (reported in "search"). Quality = log of the all-hit chance (the
-model's chances, assumed independent) - payouts are NOT assumed (no verified entry payouts). When the rules can't fill
-the requested count a "shortage" entry explains why; rules are never relaxed to fill it.
+model's chances, assumed independent) - payouts are NOT assumed (no verified entry payouts). A "shortage" entry says why
+when the count can't be built: under "as_needed" only when the eligible picks make no further different slip (fewer
+eligible matches than the slip size, or every combination already used).
 
 Records (SQLite DATA_DIR/.cache/slip_studio.db, WAL, BEGIN IMMEDIATE transactions): every recommended slip is an
 immutable row (triggers refuse UPDATE / DELETE) with batch, settings, rules, version, time and each pick's identity
@@ -62,7 +65,7 @@ from pathlib import Path
 
 import comparison
 
-VERSION = "studio-1"
+VERSION = "studio-2"
 GRADES = ("A+", "A", "A-", "B+", "B")          # B- left out (no evidence it belongs in slips - batch-3)
 SIZES = (4, 3, 2)                              # planning order: largest first
 MAX_COUNT = 10                                 # slips per size per Build press
@@ -71,6 +74,8 @@ DEFAULT_CAPS = {"player": 2, "match": 2}       # overlap="limited" defaults
 MAX_CAP = 3
 NODE_LIMIT = 20000                             # search nodes per slip (bound reported when reached)
 REUSE_PENALTY = 10.0                           # > any log-chance spread: a fresh pick always beats a reused one
+OPEN_CAPS = {"player": 10 ** 6, "match": 10 ** 6}  # "as_needed" second pass: any reuse (least-used first), same in-slip rules
+OVERLAPS = ("as_needed", "none", "limited")
 MONEYLINE = ("moneyline", "ml", "team_ml")
 DATA_DIR = Path(os.environ.get("CS2_DATA_DIR") or Path(__file__).resolve().parent)
 DB_PATH = DATA_DIR / ".cache" / "slip_studio.db"
@@ -81,6 +86,10 @@ _INIT = set()
 RULES_NONE = ("no repeated prop, player or match across the whole batch (all sizes, every Build until a new batch)",
               "a player's kills and headshots are one exposure", "never both sides of one player's stat",
               "one pick per match, player and team inside a slip", "one platform and one entry type per slip")
+RULES_AS_NEEDED = ("fresh picks first: a player, prop or match is used again only when no fresh slip is left for the "
+                   "count you asked for, the least-used first", "a player's kills and headshots are one exposure",
+                   "never both sides of one player's stat", "one pick per match, player and team inside a slip",
+                   "never the same slip twice", "one platform and one entry type per slip")
 
 
 # ---------------------------------------------------------------- settings
@@ -126,11 +135,11 @@ def normalize_settings(s):
             counts[n] = max(1, min(MAX_COUNT, int(v)))
         except (TypeError, ValueError, OverflowError):
             raise ValueError("count must be a whole number")
-    overlap = str(s.get("overlap") or "none").lower()
-    if overlap not in ("none", "limited"):
-        raise ValueError("overlap must be none or limited")
-    if overlap == "none":
-        caps = {"player": 1, "match": 1}
+    overlap = str(s.get("overlap") or "as_needed").lower()
+    if overlap not in OVERLAPS:
+        raise ValueError("overlap must be as_needed, none or limited")
+    if overlap in ("none", "as_needed"):
+        caps = {"player": 1, "match": 1}                 # as_needed: the fresh-picks pass (reuse only in its second pass)
     else:
         mu = s.get("max_uses") or {}
         try:
@@ -427,7 +436,7 @@ def _capacity(pool, usage, caps):
 
 def _plan(st, capacity):
     """Slips per size from the leg budget (none mode), in st["sizes"] order: largest first (fill "large", default) or
-    smallest first (fill "small"); limited mode = as requested."""
+    smallest first (fill "small"); limited / as_needed = as requested."""
     if st["overlap"] != "none":
         return dict(st["counts"])
     plan, left = {}, capacity
@@ -439,13 +448,18 @@ def _plan(st, capacity):
 
 def _select(pool, st, usage, had_prior=False):
     caps = st["max_uses"]
+    soft = st["overlap"] == "as_needed"
     cap0 = _capacity(pool, usage, caps)
     plan = _plan(st, cap0)
-    out, shortage, search = {n: [] for n in SIZES}, {}, {"node_limit": NODE_LIMIT, "nodes": 0, "bound_hit": False}
+    out, shortage, search = {n: [] for n in SIZES}, {}, {"node_limit": NODE_LIMIT, "nodes": 0, "bound_hit": False, "reused_slips": 0}
     for n in st["sizes"]:
         want = st["counts"][n]
         for _ in range(plan[n]):
             legs, nodes, capped = _fill(n, pool, usage, caps)
+            if not legs and soft:                        # no fresh slip left: reuse, least-used first
+                legs, nodes2, capped2 = _fill(n, pool, usage, OPEN_CAPS)
+                nodes, capped = nodes + nodes2, capped or capped2
+                search["reused_slips"] += bool(legs)
             search["nodes"] += nodes
             search["bound_hit"] |= capped
             if not legs:
@@ -453,8 +467,13 @@ def _select(pool, st, usage, had_prior=False):
             usage.add(legs)
             out[n].append(legs)
         if len(out[n]) < want:
-            left = [l for l in pool if not usage.blocked(l, caps)]
+            left = [l for l in pool if not usage.blocked(l, OPEN_CAPS if soft else caps)]
             matches = len({min(l.mk) for l in left if l.mk})
+            if soft:
+                shortage[n] = (f"{len(out[n])} of {want} {n}-pick slips: today's eligible picks make no other different "
+                               f"{n}-pick slip ({matches} eligible match{'es' if matches != 1 else ''}; a slip needs {n} different "
+                               f"matches and players). More slips appear as more lines are graded.")
+                continue
             if st["overlap"] == "none":
                 why = (f"{len(out[n])} of {want} {n}-pick slips: {matches} unused eligible match{'es' if matches != 1 else ''} "
                        f"left in this batch{(' after the smaller slips' if st.get('fill') == 'small' else ' after the larger slips') if n != st['sizes'][0] else ''} ({n} distinct matches and players per slip)")
@@ -627,6 +646,8 @@ def _usage_from(slips):
 def _rules(overlap, caps):
     if overlap == "none":
         return list(RULES_NONE)
+    if overlap == "as_needed":
+        return list(RULES_AS_NEEDED)
     return [f"a player in at most {caps['player']} slips and a match in at most {caps['match']} slips of the batch",
             "fresh picks before any reuse", "never both sides of one player's stat (any maps)",
             "one pick per match, player and team inside a slip", "one platform and one entry type per slip"]
@@ -648,10 +669,11 @@ def _batch_mode(slips, st=None):
         st = st or normalize_settings({})
         return {"overlap": st["overlap"], "caps": dict(st["max_uses"]), "mixed": False, "builds": []}
     lim = [p for p in per if p["overlap"] == "limited"]
+    asn = any(p["overlap"] == "as_needed" for p in per)
     caps = ({k: max(int(p["caps"].get(k) or 1) for p in lim) for k in ("player", "match")} if lim
             else {"player": 1, "match": 1})
     modes = {(p["overlap"], p["caps"].get("player"), p["caps"].get("match")) for p in per}
-    return {"overlap": "limited" if lim else "none", "caps": caps, "mixed": len(modes) > 1, "builds": per}
+    return {"overlap": "as_needed" if asn else "limited" if lim else "none", "caps": caps, "mixed": len(modes) > 1, "builds": per}
 
 
 def _exposure(slips, st=None):
@@ -661,7 +683,8 @@ def _exposure(slips, st=None):
     for s in slips:
         for l in s["legs"]:
             pkey = (l.get("player_id") if l.get("player_id") is not None else _norm(l.get("nick")) + "|" + _norm(l.get("team")))
-            mkey = l.get("match_slug") or "|".join(sorted([_norm(l.get("team")), _norm(l.get("opponent"))])) + "|" + str(l.get("start") or "")[:10]
+            # the canonical match id first (two platform spellings of one match are one match - as in the build itself)
+            mkey = l.get("match_id") or l.get("match_slug") or "|".join(sorted([_norm(l.get("team")), _norm(l.get("opponent"))])) + "|" + str(l.get("start") or "")[:10]
             for d, k, lab in ((pl, pkey, l.get("nick")), (ma, mkey, f"{l.get('team')} vs {l.get('opponent')}"),
                               (pr, (pkey, l.get("prop"), l.get("scope")), f"{l.get('nick')} {l.get('prop')} {l.get('scope')}")):
                 e = d.setdefault(k, {"label": lab, "slips": []})
@@ -672,7 +695,7 @@ def _exposure(slips, st=None):
     rules = _rules(mode["overlap"], mode["caps"])
     if mode["mixed"]:
         rules = ["this batch mixes overlap settings across builds - the rules below are the most permissive one used: "
-                 + "; ".join(f"{p['build_id']}: {'no repeats' if p['overlap'] == 'none' else 'limited (player ' + str(p['caps'].get('player')) + ', match ' + str(p['caps'].get('match')) + ')'}"
+                 + "; ".join(f"{p['build_id']}: {'no repeats' if p['overlap'] == 'none' else 'repeats only when needed' if p['overlap'] == 'as_needed' else 'limited (player ' + str(p['caps'].get('player')) + ', match ' + str(p['caps'].get('match')) + ')'}"
                              for p in mode["builds"])] + rules
     mu = {"prop": top(pr), "player": top(pl), "match": top(ma)}
     return {"overlap": mode["overlap"], "caps": mode["caps"], "mixed": mode["mixed"], "builds": mode["builds"],
@@ -813,7 +836,7 @@ def _compute(rows, st, model, now, batch_id, build_id, prior):
     usage = _usage_from(prior)
     fresh = []
     for leg in pool:
-        b = usage.blocked(leg, st["max_uses"])
+        b = usage.blocked(leg, OPEN_CAPS if st["overlap"] == "as_needed" else st["max_uses"])
         if b:
             out(b, leg.row)
         else:
@@ -846,7 +869,7 @@ def _compute(rows, st, model, now, batch_id, build_id, prior):
         for sid in e["slips"]:
             reps.setdefault(sid, []).append(f"{e['label']} in {e['uses']} slips")
     for s in new:
-        s["repeats"] = reps.get(s["slip_id"], [])        # visible overlap (limited mode only)
+        s["repeats"] = reps.get(s["slip_id"], [])        # visible reuse (as_needed / limited)
     return {"batch_id": batch_id, "build_id": build_id, "builder_version": VERSION, "generated_at": gen, "model": model,
             "settings": st, "slips": slips, "plan": plan, "shortage": shortage, "exposure": exp,
             "excluded": sorted(excluded.values(), key=lambda e: -e["count"]),
@@ -877,7 +900,32 @@ def capacity(rows, settings, model=None, now=None):
             pool.append(leg)
     legs = _capacity(pool, _Usage(), {"player": 1, "match": 1})
     return {"builder_version": VERSION, "settings": {k: st[k] for k in ("book", "side", "stat", "scope", "market")},
-            "lines": len(pool), "matches": len({min(l.mk) for l in pool if l.mk}), "legs": legs, "max_slips": max_slips(legs)}
+            "lines": len(pool), "matches": len({min(l.mk) for l in pool if l.mk}), "legs": legs, "max_slips": max_slips(legs),
+            "max_different_slips": {n: different_slips(pool, n) for n in sorted(SIZES)}}
+
+
+def different_slips(pool, n, limit=MAX_COUNT, node_limit=NODE_LIMIT):
+    """How many different n-pick slips the legs make (one pick per match, player and team inside a slip), counted up to
+    `limit` - the most an "as_needed" build of that size can return (before the both-sides rule across slips)."""
+    legs = sorted(pool, key=lambda l: (-l.logp, l.uid))
+    found, nodes = [0], [0]
+
+    def dfs(start, chosen):
+        if found[0] >= limit or nodes[0] > node_limit:
+            return
+        nodes[0] += 1
+        if len(chosen) == n:
+            found[0] += 1
+            return
+        for j in range(start, len(legs) - (n - len(chosen)) + 1):
+            if not _conflict(legs[j], chosen):
+                chosen.append(legs[j])
+                dfs(j + 1, chosen)
+                chosen.pop()
+            if found[0] >= limit:
+                return
+    dfs(0, [])
+    return found[0]
 
 
 _DEAD_LABEL = {"void": "replaced", "verify_changed": "changed", "dismiss": "dismissed"}

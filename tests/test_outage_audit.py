@@ -227,9 +227,11 @@ def test_shared_result_can_ask_for_a_short_reuse():
     assert len(n) == 2                                   # reused 0.05 s, not RESULT_TTL
 
 
-def test_public_flag_names_the_outage():
+def test_public_flag_never_shows_an_outage_note():
+    # owner 2026-10-16: no unsure labels on the member site - the outage note is left out (the grade is still withheld and
+    # the line still counts as flagged)
     f = "OLD PROJECTION: the performance model is unavailable here (HLTV database unreachable right now (retried once): x) - graded on the old pipeline"
-    assert "unreachable right now" in server._public_flag(f) and "Prop Board" in server._public_flag(f)
+    assert server._public_flag(f) is None and server.has_warning({"flags": [f]})
     assert "no HLTV data" in server._public_flag("OLD PROJECTION: the performance model is unavailable here (player 'x' (y) not found in HLTV) - graded on the old pipeline")
 
 

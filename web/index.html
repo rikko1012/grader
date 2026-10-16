@@ -495,14 +495,14 @@ body.mode-board .workspace-tools,body.mode-slate .workspace-tools{flex-direction
       <select id="bsort" aria-label="Sort the board" style="width:auto;padding:8px 10px"><option value="g">Best grade first</option><option value="p">Highest chance</option><option value="t">Starting soonest</option><option value="e">Biggest edge</option></select>
       <select id="csort" aria-label="Sort Compare" style="width:auto;padding:8px 10px" hidden><option value="t">Match time</option><option value="gap">Biggest line gap</option></select>
       <label class="bchk"><input type="checkbox" id="bbets" checked> Bets only</label>
-      <label class="bchk" title="Hide picks with an open data issue (roster not confirmed, stand-in, long break, limited history)"><input type="checkbox" id="bflag"> Hide flagged</label>
+      <label class="bchk" title="Hide picks with an open data issue (stand-in, long break, limited history)"><input type="checkbox" id="bflag"> Hide flagged</label>
       <label class="bchk" hidden><input type="checkbox" id="cdiff"> Only where lines differ</label>
       <label class="bchk" hidden title="A price is usable when it is current and pre-match: Thunderpick odds in its latest answer (Match Winner market, within 180 s), or an exchange quote that is open, current and has a tight enough bid/ask spread"><input type="checkbox" id="mlusable" checked> Usable price only</label>
       <button type="button" class="chipbtn" id="breset" title="Reset every filter">Reset</button>
       <button type="button" class="chipbtn" id="brefresh" title="Refresh the board">↻ Refresh</button>
       <span class="small muted" id="bcount"></span></div>
     <div id="bstatus" class="small muted" style="margin:-2px 0 10px"></div>
-    <section id="studiobox" class="studiobox" hidden aria-label="Slip studio"><div class="studio-bar"><div><b>Slip studio</b> <span class="pill warn nv">Research – not validated</span> <span class="muted sbsub">2–4-pick slip suggestions</span></div>
+    <section id="studiobox" class="studiobox" hidden aria-label="Slip studio"><div class="studio-bar"><div><b>Slip studio</b> <span class="muted sbsub">2–4-pick slip suggestions</span></div>
       <button type="button" class="chipbtn" id="bstudio" hidden aria-expanded="false" aria-controls="studio">Open</button></div>
       <div id="studio" hidden></div></section>
     <div id="boardout"></div>
@@ -546,7 +546,7 @@ body.mode-board .workspace-tools,body.mode-slate .workspace-tools{flex-direction
       <p><b>Built from official pro matches.</b> Map 1, Maps 1–2 and Maps 1–3 lines use our performance model on every official map a player has played on HLTV: his kills per round, with recent months counting most (a map from about three months ago counts half), weighted toward his numbers in tonight's setting (LAN or online), against how many kills the opponent gives up. Headshot lines add his headshots per kill. A player with a short history is pulled toward the pro average until his own maps take over. FACEIT games never count.</p>
       <p><b>Maps 1–3 lines</b> count maps 1, 2 and 3 in full – never maps 4–5. In a best-of-5 all three are always played; in a best-of-3 that ends 2–0 there is no map 3 and Underdog voids the pick. When the performance model has no data for a player, the older model fills in (also on three full maps).</p>
       <p><b>Projection → chance → grade.</b> The projection is compared with the line (a 15.5 line needs 16 for an Over, 15 or less for an Under; on a whole line like 16, exactly 16 is a push) and turned into a chance from how much a player's totals normally swing from match to match. Kills chances are capped at 78% because big kill totals swing more than any model expects.</p>
-      <p><b>Stake rules change the units, never the chance.</b> If his last 10 matches clearly disagree at this line, the stake drops to 0 (FORM FIGHT) or 0.5U (TAPE FIGHT). Stand-ins (max 1U), small samples (max 1.5U; under 5 recent maps 0), a month or more without an official map (max 1U) and the market-quality rule (a bookmaker price such as Thunderpick's, a thin exchange book or no betting market: max 1.5U) cap the stake; a player not on the listed team and an AWPer on a headshot line get 0 units. An unconfirmed roster is flagged on the card but does not change the stake. Several bets that need the same team to do well (or badly) in one match share a 3U cap.</p>
+      <p><b>Stake rules change the units, never the chance.</b> If his last 10 matches clearly disagree at this line, the stake drops to 0 (FORM FIGHT) or 0.5U (TAPE FIGHT). Stand-ins (max 1U), small samples (max 1.5U; under 5 recent maps 0), a month or more without an official map (max 1U) and the market-quality rule (a bookmaker price such as Thunderpick's, a thin exchange book or no betting market: max 1.5U) cap the stake; a player not on the listed team and an AWPer on a headshot line get 0 units. Several bets that need the same team to do well (or badly) in one match share a 3U cap.</p>
       <p><b>Tested before it counts.</b> A factor moves the projection only after it beats the current model on matches it never saw, in date order. Maps, head-to-head, Round Swing, ratings, opening and trade kills, win chance and FACEIT are on every card as context; they move the grade only if they pass that test.</p>
       <p><b>What the grades mean</b> (the model's estimated chance the pick wins): A+ 80%+ · A 74%+ · A− 68%+ · B+ 63%+ · B 57%+ · B− 55%+ · <i>Lean</i> = under 55%. A stake rule above can hold a graded pick at 0 units - it keeps its grade and says why (e.g. "B · 59.1% · 0U — same-match exposure cap"); 0-unit picks are never in "Bets only" or built slips.<br>
       <b>Units:</b> A+ 3U · A 2U · A− 1.5U · B+ 1U · B 0.5U · B− 0.5U · Lean 0U. The chance is graded unrounded and shown to 0.1%.</p>
@@ -769,19 +769,21 @@ const gradeWord = v => v.state === "SCOUT" || v.grade === "SCOUT" ? "No match sc
 const perfGrade = g => String(g.projection_source || "").startsWith("perf") && ["12", "1", "123"].includes(g.scope || "12");
 const capOf = (d, k, dflt) => (d && d.caps && d.caps[k] != null ? d.caps[k] : dflt);
 const noteOf = (d, x) => { const v = d?.verdict || {}, g = d?.grade || {};
-  if (g.withheld) return v.side ? `saved grade from ${clockTxt(v.graded_at) || "earlier"} (stale) – live data unavailable` : "no grade – live data unavailable";
+  if (g.withheld) return v.side ? `graded ${clockTxt(v.graded_at) || "earlier"}` : "grading…";
   return lineWarn(g.prop || x?.prop, g.line ?? x?.line, marketOk(d)) || ((v.units || 0) === 0 && /0 units: (.+)$/.exec(v.reason || "")?.[1])
     || ((v.units || 0) > 0 && v.cap_reason ? `max ${v.units}U: ${v.cap_reason}` : "") || ""; };
 // display only: well-known main AWPers, shown when BO3.gg has no weapon data (the grade doesn't use this list)
+// owner 2026-10-16: hedge wording never reaches the member page (the grade and stake are unchanged - only the label is left out)
+const UNSURE = /not confirmed|unconfirmed|unavailable|unreachable|provisional|\bstale\b|unknown|unclear|uncertain|not verified|unverified|not validated|hard to predict|not in HLTV|out of date/i;
 const KNOWN_AWP = new Set(["zywoo", "m0nesy", "sh1ro", "broky", "w0nderful", "torzsi", "woro2k", "hallzerk", "s1mple", "device", "jame", "molodoy", "910", "ultimate"]);
 const mapsWord = sc => sc === "123" ? " (Maps 1–3)" : sc === "1" ? " (Map 1)" : "";
 function pickLine(d) {
   const g = d.grade || {}, v = d.verdict || {}, nick = d.player_block?.player?.nick || "";
   const side = isLeanV(v) ? sideWord(v) : (v.side === "More" ? "OVER" : "UNDER");
-  if (!v.side) return `${nick} ${g.line} ${propWord(g.prop)}${mapsWord(g.scope)} · no grade – live data unavailable`;
+  if (!v.side) return `${nick} ${g.line} ${propWord(g.prop)}${mapsWord(g.scope)} · grading…`;
   if (sideGone(v)) return `${nick} ${sideTxt(v.side)} ${g.line} ${propWord(g.prop)}${mapsWord(g.scope)} · ${sideGone(v)}`;
   return `${nick} ${side} ${g.line} ${propWord(g.prop)}${mapsWord(g.scope)} · ${gradeWord(v)} · ${v.units}U · ${((v.p || 0) * 100).toFixed(1)}%`
-    + (v.kept_from_board || v.stale ? ` · saved grade from ${clockTxt(v.graded_at) || "earlier"} (stale)` : "");
+    + (v.kept_from_board || v.stale ? ` · graded ${clockTxt(v.graded_at) || "earlier"}` : "");
 }
 function shareUrl(d) {
   const g = d.grade || {}, u = new URL(location.origin + location.pathname);
@@ -1112,23 +1114,23 @@ async function addToSlip(d) {
     const nv0 = n?.verdict || {}, nv = nv0.kept_from_board || nv0.unavailable || nv0.stale || n?.hltv_outage ? {} : nv0, row = (l, s_, p_, gr, u) => `<tr><td>${l}</td><td>${s_ ? sideTxt(s_) : "–"}</td><td class="num">${p_ != null ? pct(p_) : "–"}</td><td>${esc(gr ? gradeWord({grade: gr}) : "–")}</td><td class="num">${u ?? 0}U</td></tr>`;
     const k = await ask(d.from === "board" ? `${bookName(used)} moved this line` : `Your line differs from ${bookName(used)}'s current line`, `${esc(nick)} ${propWord(g.prop)}${mapsWord(g.scope)}: ${d.from === "board" ? esc(c.note) : `you entered ${g.line}; ${bookName(used)} currently shows ${c.new_line}`}.
       <table style="margin-top:8px"><thead><tr><th>Line</th><th>Side</th><th class="num">Chance</th><th>Grade</th><th class="num">Stake</th></tr></thead><tbody>
-      ${row(g.line + " (yours)", v.side, v.p, mGrade(v), v.units)}${n && nv.side ? row(c.new_line + " (now)", nv.side, nv.p, mGrade(nv), nv.units) : `<tr><td>${c.new_line} (now)</td><td colspan="4" class="muted">${n?.hltv_outage ? "live data unavailable – no current grade for the new line" : "couldn't regrade – try again"}</td></tr>`}</tbody></table>`,
-      [...(n && nv.side ? [{k: "new", label: `Use ${sideTxt(nv.side)} ${c.new_line}`, primary: true}] : []), {k: "keep", label: `Keep ${g.line} as a research line`}, {k: "cancel", label: "Cancel"}]);
+      ${row(g.line + " (yours)", v.side, v.p, mGrade(v), v.units)}${n && nv.side ? row(c.new_line + " (now)", nv.side, nv.p, mGrade(nv), nv.units) : `<tr><td>${c.new_line} (now)</td><td colspan="4" class="muted">being graded – try again in a few minutes</td></tr>`}</tbody></table>`,
+      [...(n && nv.side ? [{k: "new", label: `Use ${sideTxt(nv.side)} ${c.new_line}`, primary: true}] : []), {k: "keep", label: `Keep ${g.line} as your own line`}, {k: "cancel", label: "Cancel"}]);
     if (k === "new") { const nl = legFrom(n); nl.bk = used; nl.now = {status: "verified", note: "", at: Date.now()}; nl.replaced = {line: g.line, side: v.side, p: v.p, grade: v.grade, units: v.units}; return pushLeg(nl); }
     if (k !== "keep") return;
     leg.bk = null; leg.now = {status: "research", note: `Kept at ${g.line}; ${bookName(used)} shows ${c.new_line}`, at: Date.now()};
   } else if (c.status === "unavailable" && d.from === "board") {
     const k = await ask("Line no longer offered", `${bookName(used)} no longer shows ${esc(nick)} ${sideTxt(v.side)} ${g.line} ${propWord(g.prop)}${mapsWord(g.scope)}.`,
-      [{k: "keep", label: "Add as a research line"}, {k: "cancel", label: "Cancel", primary: true}]);
+      [{k: "keep", label: "Add as your own line"}, {k: "cancel", label: "Cancel", primary: true}]);
     if (k !== "keep") return;
     leg.bk = null; leg.now = {status: "research", note: `No longer offered on ${bookName(used)}`, at: Date.now()};
   } else if (c.status === "unavailable") {
-    leg.bk = null; leg.now = {status: "research", note: `Your entered line – not on ${books.map(bookName).join(" or ")} right now`, at: Date.now()};
+    leg.bk = null; leg.now = {status: "research", note: "", at: Date.now()};
   }
   if (leg.kg && leg.now.status === "verified") leg.now = staleNow(leg);
   pushLeg(leg);
 }
-function staleNow(x) { return {status: "stale", at: Date.now(), note: `Saved grade from ${clockTxt(x.kg) || "earlier"} kept while live data is unavailable – not a current forecast. Remove it and add it again once grades are back.`}; }
+function staleNow(x) { return {status: "stale", at: Date.now(), note: ""}; }
 function openSlip() { $("#slip").hidden = false; drawSlip(); recheckSlip(); }
 // re-check every leg's live offer; records it in leg.now (the original selection in leg.orig is never touched)
 async function recheckSlip() {
@@ -1146,9 +1148,7 @@ const legState = x => {
   return st === "verified" ? ` <span class="pill ok" title="Checked against ${bookName(x.bk) || "the platform"} ${x.now.at ? new Date(x.now.at).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"}) : ""}">✓ ${bookName(x.bk) || "verified"}</span>`
     : st === "changed" ? ` <span class="pill warn" title="${esc(x.now.note || "")}">line changed${x.now.new_line != null ? " → " + x.now.new_line : ""}</span>`
     : st === "unavailable" ? ` <span class="pill warn" title="${esc(x.now.note || "")}">offer unavailable</span>`
-    : st === "failed" ? ` <span class="pill" title="${esc(x.now.note || "")}">couldn't check</span>`
-    : st === "stale" ? ` <span class="pill warn" title="${esc(x.now.note || "")}">saved grade – not current</span>`
-    : st === "research" ? ` <span class="pill" title="${esc(x.now.note || "")}">research line – not verified</span>` : "";
+    : "";        // owner 2026-10-16: no unsure pills (not checked / saved grade / your own line)
 };
 const _drawSlip = () => { if (!$("#board").hidden && typeof boardRows !== "undefined" && boardRows.length) drawBoard(); };
 function drawSlip() {
@@ -1168,8 +1168,8 @@ function drawSlip() {
   const teams = {}; s.forEach(x => { const k = x.m || x.tm; teams[k] = (teams[k] || 0) + 1; });
   const same = Object.values(teams).some(c => c > 1);
   const leans = s.filter(x => isLeanV({grade: x.g})).length;
-  const unver = s.filter(x => x.now?.status !== "verified").length;
-  $("#slip").innerHTML = `<h4>Bet slip · ${plat ? bookName(plat) : "research"} · ${n}-pick</h4>` + (unver ? `<div class="warn" style="margin-bottom:6px">${unver === n ? "Research slip" : `${unver} of ${n} picks`}: not verified on ${plat ? bookName(plat) : "a platform"} right now – see each pick.</div>` : "") + s.map((x, i) =>
+  const moved = s.filter(x => ["changed", "unavailable"].includes(x.now?.status)).length;
+  $("#slip").innerHTML = `<h4>Bet slip · ${plat ? bookName(plat) : "your lines"} · ${n}-pick</h4>` + (moved ? `<div class="warn" style="margin-bottom:6px">${moved} of ${n} pick${moved === 1 ? "" : "s"} changed on ${plat ? bookName(plat) : "the platform"} – see each pick.</div>` : "") + s.map((x, i) =>
     `<div class="leg"><span><b>${esc(x.p)}</b> ${isLeanV({grade: x.g}) ? `Lean ${sideTxt(x.s)}` : sideTxt(x.s)} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${ltTag(x.lt)}${legState(x)}
       <span class="muted small">· ${isLeanV({grade: x.g}) ? "Lean" : esc(x.g) + (x.u != null && !(+x.u > 0) ? " · 0U" + (x.sr ? " — " + esc(x.sr) : "") : "")} · ${chance(x.pc || 0, x.t)}${x.vs ? " · vs " + esc(x.vs) : ""}</span></span>
       <button type="button" class="x" data-rmleg="${i}" title="Remove">✕</button></div>`).join("")
@@ -1187,7 +1187,7 @@ function drawSlip() {
     + (leans ? `<div class="warn">${leans} pick${leans > 1 ? "s are" : " is a"} Lean${leans > 1 ? "s" : ""} (0 units) – the weakest legs on the slip.</div>` : "")
     + `<div class="actions"><button type="button" class="chipbtn" id="slipcopy">Copy slip</button><button type="button" class="chipbtn" id="slipclear">Clear</button>
        <button type="button" class="chipbtn" id="slipclose">Close</button></div>
-       <div class="small muted" style="margin-top:8px">No return is computed: a payout appears only when you enter the one ${esc(pn)} shows for this exact entry. Same-match chances are multiplied as if independent – not a tested joint hit rate. Not financial advice.</div>`;
+       <div class="small muted" style="margin-top:8px">No return is computed: a payout appears only when you enter the one ${esc(pn)} shows for this exact entry. Chances are multiplied as if the picks were independent. Not financial advice.</div>`;
   const pi = $("#slippay");
   if (pi) pi.onchange = () => { const m = manualPay(), k = manualKey(store.get("cs2s_slip", [])), v = +pi.value;
     if (v > 1) m[k] = v; else delete m[k]; store.set("cs2s_manualpay", m); drawSlip(); };
@@ -1200,16 +1200,15 @@ $("#slip").addEventListener("click", e => {
   if (e.target.closest("#slipclose")) { $("#slip").hidden = true; return; }
   if (e.target.closest("#slipcopy")) (async () => {
     const s = await recheckSlip();
-    const bad = s.filter(x => ["changed", "unavailable", "failed", "stale"].includes(x.now?.status));
+    const bad = s.filter(x => ["changed", "unavailable"].includes(x.now?.status));
     if (bad.length) {
       const k = await ask("Check these picks first", bad.map(x => `<div>• <b>${esc(x.p)}</b> ${sideTxt(x.s)} ${x.l}: ${esc(x.now.note || x.now.status)}</div>`).join(""),
         [{k: "review", label: "Review slip", primary: true}, {k: "copy", label: "Copy anyway (marked)"}]);
       if (k !== "copy") return;
     }
     const mark = x => x.now?.status === "verified" ? "" : x.now?.status === "changed" ? ` [LINE CHANGED: now ${x.now.new_line ?? "?"}]`
-      : x.now?.status === "unavailable" ? " [NOT OFFERED NOW]" : x.now?.status === "failed" ? " [NOT CHECKED]"
-      : x.now?.status === "stale" ? " [SAVED GRADE – NOT CURRENT]" : " [RESEARCH LINE]";
-    copy(`${s.length}-pick ${bookName(slipBook(s)) || "research"} slip\n` + s.map(x => `${x.p} ${isLeanV({grade: x.g}) ? `Lean ${sideTxt(x.s)}` : sideTxt(x.s).toUpperCase()} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${x.lt && x.lt !== "standard" ? " " + x.lt : ""} · ${isLeanV({grade: x.g}) ? "Lean" : x.g + (x.u != null && !(+x.u > 0) ? " · 0U" : "")} · ${((x.pc || 0) * 100).toFixed(1)}%${mark(x)}`).join("\n"));
+      : x.now?.status === "unavailable" ? " [NOT OFFERED NOW]" : "";
+    copy(`${s.length}-pick ${bookName(slipBook(s)) || "custom"} slip\n` + s.map(x => `${x.p} ${isLeanV({grade: x.g}) ? `Lean ${sideTxt(x.s)}` : sideTxt(x.s).toUpperCase()} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${x.lt && x.lt !== "standard" ? " " + x.lt : ""} · ${isLeanV({grade: x.g}) ? "Lean" : x.g + (x.u != null && !(+x.u > 0) ? " · 0U" : "")} · ${((x.pc || 0) * 100).toFixed(1)}%${mark(x)}`).join("\n"));
     // immutable load log (no member identity): what was copied and each leg's live-line state at that moment
     if (s.length >= 2) try {
       const body = JSON.stringify({cid: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()), mode: "member-copy", n: s.length, book: slipBook(s) || "research",
@@ -1248,7 +1247,7 @@ function linePills(d) {
   const sd = v.side === "More" ? "Over" : "Under", out = [];
   for (const bk of ["underdog", "prizepicks"]) {
     const offs = (cp.offers || []).filter(o => (o.source || "underdog") === bk);
-    const std = offs.find(o => !o.alt), nc = o => o.stale ? ' <span class="muted">· not confirmed</span>' : "";
+    const std = offs.find(o => !o.alt), nc = o => "";
     if (std) {
       if (+std.line === +g.line || !v.side) out.push(`<span class="pill">${bookName(bk)}: same line ${std.line}${nc(std)}</span>`);
       else { const better = v.side === "More" ? std.line < g.line : std.line > g.line;
@@ -1322,13 +1321,10 @@ function bookStatus(b) {
     const f = B.feed || {}, via = f.via_scraper != null ? !!f.via_scraper : !!f.source && !/\(direct\)$/.test(f.source);
     const when = f.at ? `PrizePicks read ${hhmm(f.at)} (${agoTxt(new Date(f.at * 1000).toISOString())})${via ? " via the scraper's copy" : ""}` : "";
     return f.state === "ok" ? `${B.rows.length} graded PrizePicks lines${B.total > B.rows.length ? ` (${B.total - B.rows.length} still grading)` : ""} · ${when}`
-      : f.state === "empty" ? `No PrizePicks CS2 lines right now · ${when || "feed connected"} – this is an empty board, not an error`
-      : f.state === "stale" ? `⚠ PrizePicks feed is stale – last good read ${f.at ? hhmm(f.at) : "unknown"}. These lines can't be confirmed as playable.`
-      : f.state === "failed" ? `⚠ PrizePicks feed failed${f.error ? ` (${f.error})` : ""} – ${B.rows.length ? "showing the last read, not confirmed" : "no lines to show"}`
-      : f.state === "loading" ? "PrizePicks feed loading…" : "PrizePicks feed isn't connected";
+      : f.state === "empty" ? `No PrizePicks CS2 lines right now${when ? " · " + when : ""}`
+      : B.rows.length ? `${B.rows.length} graded PrizePicks lines${f.at ? ` · read ${hhmm(f.at)}` : ""}` : "Loading PrizePicks lines…";
   }
-  return B.err ? `Underdog's feed is unavailable right now – showing the last board${B.at ? " from " + hhmm(B.at) : ""}`
-    : `${B.rows.length} graded Underdog lines${B.total > B.rows.length ? ` (${B.total - B.rows.length} still grading)` : ""}` + (B.at ? ` · board from ${hhmm(B.at)}` : "");
+  return `${B.rows.length} graded Underdog lines${B.total > B.rows.length ? ` (${B.total - B.rows.length} still grading)` : ""}` + (B.at ? ` · board from ${hhmm(B.at)}` : "");
 }
 async function loadBoard(force) {
   if (bbook === "moneylines") return loadMoneylines(force);
@@ -1352,12 +1348,10 @@ function boardCard(r) {     // a board row in the shape addToSlip / pickLine exp
           next_match: {opponent: r.opp_name || r.opponent, start: r.start, slug: r.match_slug}, from: "board"};
 }
 const agoTxt = t => { if (!t) return ""; const m = Math.round((Date.now() - Date.parse(t)) / 60000); return m < 1 ? "just now" : m < 60 ? m + " min ago" : Math.round(m / 60) + " h ago"; };
-const DSTAT = {ok: ["ok", "Data complete"], limited: ["mid", "Limited history"], verify: ["warn", "Line not confirmed"]};
-// the warning badge names the actual open issue (2026-10-10 audit: "Line not confirmed" showed for an unconfirmed roster next
-// to "Underdog: same line"); "Line not confirmed" stays for its own case - no upcoming match to tie the line to
-const issueLabel = why => /roster/i.test(why || "") ? "Roster not confirmed" : /stand-in/i.test(why || "") ? "Stand-in"
-  : /HLTV history ends/i.test(why || "") ? "HLTV out of date"
-  : /gap|stale|break/i.test(why || "") ? "Long break" : "Line not confirmed";
+const DSTAT = {ok: ["ok", "Data complete"], limited: ["mid", "Limited history"]};
+// owner 2026-10-16: only definite facts get a badge (stand-in, long break) - never "not confirmed" / "out of date"
+const issueLabel = why => /stand-in/i.test(why || "") ? "Stand-in" : /roster|HLTV history ends/i.test(why || "") ? ""
+  : /gap|stale|break/i.test(why || "") ? "Long break" : "";
 // flagged = an open data issue on the line (the server's own flag when it sends one)
 const isFlagged = r => r.flagged != null ? !!r.flagged : !!(((r.dstat || [])[0] && r.dstat[0] !== "ok") || r.stale);
 // a stake cap names its reason in a few words (cap_reason from the server, e.g. "long break; same-match cap (4 bets on this
@@ -1413,13 +1407,13 @@ function drawBoard() {
   const rowHtml = (r, showMatch) => {
     const nick = r.nick || r.player, gone = sideGone(r), lab = !r.side ? "…" : r.state === "SCOUT" || gone ? "–" : mGrade(r) === "LEAN" ? "L" : mGrade(r);
     const ltl = !r.side ? "Still grading" : r.state === "SCOUT" ? "No match scheduled" : mGrade(r) === "LEAN" ? "Lean – 0 units" : `Grade ${mGrade(r)}${+r.units > 0 ? "" : " – 0 units"}`;
-    const ds = (r.dstat || [])[0] === "verify" ? ["warn", issueLabel(r.dstat[1])] : DSTAT[(r.dstat || [])[0]], team = r.team_name || r.team, opp = r.opp_name || r.opponent;
+    const ds = (r.dstat || [])[0] === "verify" ? (issueLabel(r.dstat[1]) ? ["warn", issueLabel(r.dstat[1])] : null) : DSTAT[(r.dstat || [])[0]], team = r.team_name || r.team, opp = r.opp_name || r.opponent;
     return `<div class="brow2" data-bl="${esc(nick)}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}|${r.book || "underdog"}">
       <span class="gtag ${!r.side || r.state === "SCOUT" || gone ? "g-scout" : gClass(mGrade(r))}" title="${esc(gone || ltl)}">${esc(lab)}</span>
       <div><div class="b2top">${bbook === "all" ? `<span class="pill" style="margin:0 4px 0 0;padding:1px 7px">${bookName(r.book || "underdog")}</span>` : ""}<b>${esc(nick)}</b>${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}
           <span class="muted">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}${showMatch ? " · " + shortWhen(r.start) : ""}</span></div>
-        <div class="b2pick">${gone ? `<span class="pill bad" title="${esc(bookName(r.book || "underdog"))} does not offer the ${r.side === "Less" ? "Under" : "Over"} for this line any more - not a bet, not on slips; its last grade is kept for the record">${esc(gone)}</span> <span class="muted">${r.side === "Less" ? "Under" : "Over"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}</span></div>` : `${r.side ? esc(sideWord(r)) : "grading…"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}${mktTag(r)}${r.stale ? ` <span class="pill warn" title="The PrizePicks feed is not fresh – this line can't be confirmed as playable">not confirmed</span>` : ""}${r.p != null ? ` · <b>${chance(r.p, r.prop)}</b>${coinFlip(r.p)}` : ""}${isLeanV(r) ? (r.state === "SCOUT" ? " · No match scheduled" : "") : " · " + esc(mGrade(r) || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${zeroWhy(r)}${capChip(r, r.team_name || r.team)}</div>`}
-        <div class="b2meta">Proj ${r.proj != null ? num(r.proj, 1) : "–"}${ds ? ` · <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}">${ds[1]}</span>` : ""}${r.source ? `<span class="mx"> · source ${esc(r.source)}</span>` : ""}${r.hltv_retry ? (r.retry_cause === "odds" ? ` · <span class="pill warn" title="Thunderpick had no current quote for this match at the last regrade – this is this line's last grade from ${esc(clockTxt(r.graded_at) || "earlier")} (source as shown), stale until it is regraded as soon as Thunderpick quotes it again">stale grade kept · Thunderpick odds unavailable</span>` : ` · <span class="pill warn" title="The HLTV database was unreachable at the last regrade – this is this line's last grade from ${esc(clockTxt(r.graded_at) || "earlier")} (source as shown), stale until it is regraded as soon as the database answers">stale grade kept · HLTV unreachable</span>`) : ""}${r.graded_at ? `<span class="mx"> · graded ${agoTxt(r.graded_at)}</span>` : ""}${r.alt && r.book !== "prizepicks" ? ` · alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}${r.book === "prizepicks" && r.open_line != null && +r.open_line !== +r.line ? ` · opened ${r.open_line}` : ""}${r.moved_from != null ? ` · <span class="pill warn">line moved from ${r.moved_from}</span>` : ""}</div>
+        <div class="b2pick">${gone ? `<span class="pill bad" title="${esc(bookName(r.book || "underdog"))} does not offer the ${r.side === "Less" ? "Under" : "Over"} for this line any more - not a bet, not on slips; its last grade is kept for the record">${esc(gone)}</span> <span class="muted">${r.side === "Less" ? "Under" : "Over"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}</span></div>` : `${r.side ? esc(sideWord(r)) : "grading…"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}${mktTag(r)}${r.p != null ? ` · <b>${chance(r.p, r.prop)}</b>${coinFlip(r.p)}` : ""}${isLeanV(r) ? (r.state === "SCOUT" ? " · No match scheduled" : "") : " · " + esc(mGrade(r) || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${zeroWhy(r)}${capChip(r, r.team_name || r.team)}</div>`}
+        <div class="b2meta">Proj ${r.proj != null ? num(r.proj, 1) : "–"}${ds ? ` · <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}">${ds[1]}</span>` : ""}${r.source ? `<span class="mx"> · source ${esc(r.source)}</span>` : ""}${r.graded_at ? `<span class="mx"> · graded ${agoTxt(r.graded_at)}</span>` : ""}${r.alt && r.book !== "prizepicks" ? ` · alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}${r.book === "prizepicks" && r.open_line != null && +r.open_line !== +r.line ? ` · opened ${r.open_line}` : ""}${r.moved_from != null ? ` · <span class="pill warn">line moved from ${r.moved_from}</span>` : ""}</div>
         ${ev(r.support, "up", "+")}${ev(r.concern, "dn", "–")}</div>
       ${!r.side ? "<span></span>" : gone ? `<button type="button" class="bslip" disabled title="${esc(gone)}">+ Slip</button>` : r.state === "SCOUT" ? `<button type="button" class="bslip" disabled title="No upcoming match found for his team – there is nothing to enter on a slip yet">+ Slip</button>`
         : `<button type="button" class="bslip ${onSlip.has(slipKeyRow(r)) ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}|${mktType(r)}|${r.book || "underdog"}">${onSlip.has(slipKeyRow(r)) ? "On slip" : "+ Slip"}</button>`}
@@ -1431,7 +1425,7 @@ function drawBoard() {
     if (!q2.length) return `<div class="small muted" style="margin:0 2px 8px">No qualifying bets in this match${bside !== "both" ? ` (${bside === "More" ? "Overs" : "Unders"} only)` : ""}.</div>`;
     const it = x => `${esc(x.nick || x.player)} ${sideWord({grade: mGrade(x), side: x.side})} ${x.line} ${propWord(x.prop)}${bbook === "all" ? ` (${bookName(x.book || "underdog")})` : ""} <b>${chance(x.p, x.prop)}</b>`;
     return `<div class="small" style="margin:0 2px 8px;line-height:1.5"><b>Highest chance here:</b> ${q2.slice(0, 3).map(it).join(" · ")}
-      <div class="muted">No outside projections yet · value not ranked (no entry payouts)${q2.length > 1 ? " · these picks share match conditions and may win or lose together" : ""}</div></div>`; };
+      ${q2.length > 1 ? `<div class="muted">These picks share match conditions and can win or lose together.</div>` : ""}</div>`; };
   // Best plays (2026-10-11): the strongest graded picks on the board right now - one per player, best grade first,
   // then highest chance; stakes as the board shows them (same-match cap included). Follows the Kills / HS / maps filters.
   const bestPlays = () => {
@@ -1497,12 +1491,10 @@ $("#bbook").onclick = e => { const b = e.target.closest("button"); if (b) setBoo
 function clockTxt(t) { const d = new Date(t); return !t || isNaN(d) ? "" : d.toLocaleString([], {weekday: "short", hour: "numeric", minute: "2-digit"}); }
 const outageNote = d => { const o_ = d.hltv_outage; if (!o_) return "";
   const cs = Array.isArray(o_.causes) && o_.causes.length ? o_.causes : ["hltv"];
-  const why = [cs.includes("hltv") ? "HLTV database unreachable right now – no new grade until it answers again." : "",
-               // the server's own words: the real condition and where this card's odds come from - never shown as current Thunderpick odds
-               cs.includes("odds") ? esc(o_.odds_note || "Thunderpick lists this match but has no current quote – this card's odds are not current Thunderpick odds.") : ""].filter(Boolean).join(" ");
   const o = (o_.rows || [])[0];
-  return `<div class="small" style="margin-top:8px;color:var(--warn)">⚠ ${why}${o ? ` Shown: the Prop Board's saved grade of this exact pick${o.book ? " on " + bookName(o.book) : ""}, graded ${esc(clockTxt(o.graded_at) || "earlier")}${o.graded_at ? ` (${agoTxt(o.graded_at)})` : ""} – <b>stale</b>, not a new forecast.`
-    : " The Prop Board has no saved grade of this exact pick (player, match, platform, stat, maps, line and market type), so this line has no grade, chance or stake until live data is back."}</div>`; };
+  // owner 2026-10-16: plain words - the board's latest grade of this exact pick and when it was made, or that it is being graded
+  return `<div class="small muted" style="margin-top:8px">${o ? `Latest grade of this pick${o.book ? " on " + bookName(o.book) : ""}: graded ${esc(clockTxt(o.graded_at) || "earlier")}${o.graded_at ? ` (${agoTxt(o.graded_at)})` : ""}.`
+    : "This line is being graded – check back in a few minutes."}</div>`; };
 function drawCompare() {
   const q = ($("#bsearch").value || "").trim().toLowerCase();
   const hit = r => !q || [r.nick, r.player, r.team, r.team_name, r.opponent, r.opp_name].some(x => String(x || "").toLowerCase().includes(q));
@@ -1521,13 +1513,13 @@ function drawCompare() {
   $("#bcount").textContent = `${list.length} player markets · ${list.filter(x => x.u.length && x.p.length).length} on both platforms${$("#cdiff").checked ? ` · ${all0.length - list.length} hidden (same line, or on one platform only)` : ""}`;
   const sides = r => r.side === "More" ? [chance(r.p, r.prop), pct(1 - r.p)] : [pct(1 - r.p), chance(r.p, r.prop)];
   const one = (bk, r) => `<button type="button" class="cmpcell" data-cmp="${bk}|${esc(r.nick || r.player)}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}" title="Open the card at this ${bookName(bk)} line">
-      <span class="ln">${r.line}</span>${mktTag(r)}${r.stale ? ` <span class="pill warn">not confirmed</span>` : ""}
+      <span class="ln">${r.line}</span>${mktTag(r)}
       <div style="display:flex;flex-wrap:wrap;gap:0 10px"><span style="white-space:nowrap">Over ${sides(r)[0]}</span><span style="white-space:nowrap">Under ${sides(r)[1]}</span></div>
       <div class="muted">${esc(sideWord(r))}${isLeanV(r) ? "" : " · " + esc(mGrade(r))} · ${+(+r.units || 0).toFixed(2)}U${zeroWhy(r)}</div></button>`;
   const col = (bk, rows) => `<div><div class="cmpbook">${bookName(bk)}</div>${rows.length ? rows.map(r => one(bk, r)).join("") : `<div class="cmpnone">${bookName(bk)}: not offered</div>`}</div>`;
   const easier = x => {
     const pr = [...x.u, ...x.p].map(y => y.proj).filter(v => v != null);
-    if (pr.length > 1 && Math.max(...pr) - Math.min(...pr) > 0.05) return `<div class="cmpeasy muted">Projections differ between the boards – one board is mid-refresh; compare after the next regrade</div>`;
+    if (pr.length > 1 && Math.max(...pr) - Math.min(...pr) > 0.05) return "";
     const u = x.u.find(r => mktType(r) === "standard"), p = x.p.find(r => mktType(r) === "standard");
     if (!u || !p) return `<div class="cmpeasy muted">${x.u.length && x.p.length ? "Different market types – not compared" : "One platform only"}</div>`;
     if (u.line === p.line) return `<div class="cmpeasy">Same line on both</div>`;
@@ -1559,7 +1551,7 @@ function drawCompare() {
             || propOrder(a.any.prop) - propOrder(b.any.prop)).map(x => cmpRow(x, false)).join("")}</div></details>`; }).join("");
   $("#boardout").innerHTML = html + `<div class="small muted" style="margin-top:10px">Book lines are betting thresholds, not projections; each chance is the model's estimate at that platform's line (pushes excluded on whole lines), not a measured hit rate; stakes are the grader's stake scale, not a bankroll plan.
     The easier line is the lower one for an Over and the higher one for an Under – easier, not automatically better value: payouts differ by platform and market type, and a return needs your entry's exact payout.
-    ${BK.prizepicks.feed && BK.prizepicks.feed.state !== "ok" ? `<b>PrizePicks feed: ${esc(BK.prizepicks.feed.state)}</b> – its lines aren't confirmed.` : ""}</div>`;
+</div>`;
 }
 $("#bprop").onclick = e => { const b = e.target.closest("button"); if (!b) return; bprop = b.dataset.v;
   [...$("#bprop").children].forEach(x => x.classList.toggle("on", x === b)); drawBoard(); };
@@ -1628,8 +1620,7 @@ const qty = x => x == null ? "–" : Math.round(x).toLocaleString();
 const PLAT = {polymarket: "Polymarket", kalshi: "Kalshi"};
 function mlPlatform(p, blk, A, B, names) {
   const nm = PLAT[p];
-  if (!blk) return `<div class="mlplat"><div class="mlpname">${nm}</div><div class="small muted">No ${nm} series-winner market for this match</div></div>`;
-  if (!blk.available) return `<div class="mlplat"><div class="mlpname">${nm}</div><div class="small muted">${esc(blk.reason || "Market can't be read")}</div></div>`;
+  if (!blk || !blk.available || !blk.usable) return "";     // owner 2026-10-16: only usable quotes are shown
   const dep = blk.depth || {}, lt = blk.last_trade, n = names && names[p];
   // each block names its own team A: an unlinked match shown once for both exchanges may list the teams the other way round
   const listed = n && (n.a !== A || n.b !== B) && (n.a !== B || n.b !== A) ? `<div class="small muted">Listed as ${esc(n.a)} vs ${esc(n.b)}</div>` : "";
@@ -1651,8 +1642,7 @@ function mlPlatform(p, blk, A, B, names) {
     <div class="small">${blk.team_a_name ? `${esc(blk.team_a_name)}${p === "kalshi" ? " YES contract" : ""}: ` : ""}bid ${cents(blk.bid)} · ask ${cents(blk.ask)} · spread ${cents(blk.spread)}</div>
     <div class="small">Depth at best ${qty(blk.bid_size)} / ${qty(blk.ask_size)}${dep.bid_5c != null ? ` · within 5¢ ${qty(dep.bid_5c)} / ${qty(dep.ask_5c)}` : ""}</div>
     <div class="small muted">Quote read ${esc(ago(blk.received_ts) || "–")}${lt && lt.price != null ? ` · last trade ${cents(lt.price)} (not a quote)` : ""}</div>
-    <div>${blk.usable ? `<span class="pill good">Usable quote</span>` : `<span class="pill warn">Not usable</span>`}${blk.fresh === false ? ` <span class="pill warn">Not current</span>` : blk.market_open === false ? ` <span class="pill warn">Market closed</span>` : ""}</div>
-    ${!blk.usable && blk.reason ? `<div class="small muted">${esc(blk.reason)}</div>` : ""}</div>`;
+    </div>`;
 }
 const mlExUsable = m => !!(m.platforms && ((m.platforms.polymarket || {}).usable || (m.platforms.kalshi || {}).usable));
 // "now" on the server's clock: the time this copy was SERVED (ML.served - X-Served-At / Date header) + how long the page
@@ -1679,20 +1669,17 @@ const clockTime = s => { const d = new Date(s); return isNaN(d) ? "–" : d.toLo
 // clock next to a UTC one (2026-10-13 review)
 const utcTime = s => { const d = new Date(s); return isNaN(d) ? "–" : d.toISOString().slice(11, 19) + " UTC"; };
 // why a platform has no usable price, in a few words
-const mlWhy = blk => !blk ? "no market" : !blk.available ? String(blk.reason || "can't be read").replace(/\.$/, "") : blk.fresh === false ? "price not current"
-  : blk.market_open === false ? "market closed" : blk.spread != null ? `spread ${Math.round(blk.spread * 100)}¢` : String(blk.reason || "not usable").replace(/\.$/, "");
 // tpNow = is the card's Thunderpick price usable on this page now: the server set a Thunderpick-based side from a price
 // that may have reached its limit since (the shared copy is up to 30 s old) - said so, never shown as if still current
 const mlSide = (sd, tpNow) => {
-  if (!sd || !sd.label) return "";
-  const lapsed = sd.baseline_source === "thunderpick" && tpNow === false
-    ? `<div class="small muted">Set from Thunderpick's price when the server built this page – that price is no longer current here; refresh to check</div>` : "";
+  if (!sd || !sd.label || (sd.baseline_source === "thunderpick" && tpNow === false)) return "";
+  const lapsed = "";
   const v = sd.hltv_view, c = sd.hltv_counts || {};
   const badge = v === "agrees" ? `<span class="pill good">HLTV agrees${c.available ? ` (${c.for} of ${c.available})` : ""}</span>`
     : v === "disagrees" ? `<span class="pill bad">HLTV disagrees${c.available ? ` (${c.against} of ${c.available} favour the other side)` : ""}</span>`
-    : v === "mixed" ? `<span class="pill warn">HLTV mixed</span>` : `<span class="pill">No HLTV comparison</span>`;
+    : v === "mixed" ? `<span class="pill warn">HLTV mixed</span>` : "";
   const rs = (sd.reasons || []).slice(0, 6);
-  return `<div class="mlside"><div class="mlsidehead"><b>${esc(sd.label)}</b> <span class="pill">0U · shadow</span> ${badge}</div>
+  return `<div class="mlside"><div class="mlsidehead"><b>${esc(sd.label)}</b> <span class="pill">0U</span> ${badge}</div>
     ${lapsed}${rs.length ? `<ul class="mlreasons">${rs.map(r => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
     ${sd.basis ? `<div class="small muted">${esc(sd.basis)}</div>` : ""}</div>`;
 };
@@ -1701,21 +1688,13 @@ const mlSide = (sd, tpNow) => {
 // tpLive; otherwise its state in plain words and the last seen odds as display only. "Retrieved" = our fetch time, never
 // "updated" (the feed publishes no quote time); the link opens the match page - never a slip, never a stake.
 function mlThunder(t, m, A, B) {
-  if (!t) return m && m.thunderpick_note ? `<div class="small muted mltp mltp-none">${esc(m.thunderpick_note)}</div>` : "";
+  if (!t) return "";
   const o = x => x == null ? "–" : (+x).toFixed(2), lim = t.max_age_s || 180, age = tpAge(t), live = tpLive(t, m);
-  const expired = !live && !!(t.eligible ?? t.usable) && !t.started && !mlStarted(m) && age != null && age > lim;
-  const state = live ? (t.availability_label || "Current") : mlStarted(m) && !t.started
-    ? "Match started – the feed has no live flag, so these odds may be in-play; not used"
-    : expired ? `No longer current on this page – last seen ${agoSec(age)}, over the ${lim} s limit; refresh to check`
-    : (t.availability_label || "Not usable now");
-  const seen = t.retrieved_at ? `Retrieved by us ${utcTime(t.retrieved_at)} (${agoSec(age)})` : "Retrieval time unknown";
+  const seen = t.retrieved_at ? `Retrieved by us ${utcTime(t.retrieved_at)} (${agoSec(age)}) – the feed publishes no quote time` : "";
   // no link once the match has started (its odds may be in-play - nothing on this tab points at an in-play price)
   const link = t.url && !t.started && !mlStarted(m) ? `<div class="tplinkrow"><a class="tplink" href="${esc(t.url)}" target="_blank" rel="noopener noreferrer">Open match on Thunderpick ↗</a></div>` : "";
   const dec = `Decimal odds: ${esc(A)} ${o(t.odds_a)} · ${esc(B)} ${o(t.odds_b)}`;
-  if (!live) return `<div class="mltp off"><div class="mltphead"><b>Thunderpick</b> <span class="pill warn">Not usable now</span></div>
-      <div class="small">${esc(state)}</div>
-      ${t.odds_a != null && t.odds_b != null ? `<div class="small muted">Last seen – display only, not a current price: ${dec}</div>` : ""}
-      <div class="small muted">${seen} – the feed publishes no quote time</div>${link}</div>`;
+  if (!live) return "";   // owner 2026-10-16: a Thunderpick price that is not current is not shown at all
   // when it stops being usable on this page (quote limit or match start), on the page's own clock: the tab re-draws then
   const st = m && m.start ? Date.parse(m.start) : NaN, left = Math.min((lim - age) * 1000 + 1000, isNaN(st) ? Infinity : st - mlNow());
   return `<div class="mltp" data-tpexp="${Math.round(Date.now() + Math.max(0, left))}"><div class="mltphead"><b>Thunderpick</b> <span class="pill good">Primary source · bookmaker odds</span></div>
@@ -1723,9 +1702,8 @@ function mlThunder(t, m, A, B) {
     <div class="small muted">Market-implied probability (margin removed, proportional)</div>
     <div class="small">${dec}</div>
     <div class="small">Raw implied (incl. margin): ${esc(A)} ${pct(t.implied_a_raw)} · ${esc(B)} ${pct(t.implied_b_raw)} · Bookmaker margin ${pct(t.margin)}</div>
-    <div class="small muted">Scope: ${esc(t.scope_label || "series winner")}</div>
-    <div class="small muted">${esc(state)} · ${seen} – the feed publishes no quote time${t.timezone === "unconfirmed" ? " · start time zone unconfirmed" : ""}</div>
-    <div class="small muted">${esc(t.note || "")}</div>${link}</div>`;
+    <div class="small muted">Scope: series winner (${esc(t.market || "Match Winner")} market)</div>
+    ${seen ? `<div class="small muted">${seen}</div>` : ""}${link}</div>`;
 }
 function mlCard(m, model, rec) {
   const A = m.teams.a || "Team A", B = m.teams.b || "Team B", b = m.baseline || {}, P = m.platforms || {};
@@ -1738,13 +1716,8 @@ function mlCard(m, model, rec) {
   // no usable exchange quote: Thunderpick's usable price is the card (with the side); else one muted line instead of a wall
   // of tags; the raw quotes stay one tap away
   if (m.thunderpick_only)    // listed by Thunderpick only (no exchange market): its block alone, no exchange side
-    return `<article class="mlcard${tu ? "" : " nouse"}">${headL}${tpb}<div class="small muted">Thunderpick only - no exchange lists this match, so there is no exchange comparison and no 0U side.</div></article>`;
-  if (!pu && !ku) {
-    if (tu) return `<article class="mlcard">${headL}${tpb}<div class="small muted">Exchanges: Kalshi ${esc(mlWhy(P.kalshi))}; Polymarket ${esc(mlWhy(P.polymarket))}</div>
-      ${mlSide(m.side, tu)}${quotes}</article>`;
-    return `<article class="mlcard nouse">${headL}${tpb}<div class="mlnone">No usable price – Kalshi: ${esc(mlWhy(P.kalshi))}; Polymarket: ${esc(mlWhy(P.polymarket))}</div>
-      ${quotes}</article>`;
-  }
+    return tu ? `<article class="mlcard">${headL}${tpb}</article>` : "";
+  if (!pu && !ku) return tu ? `<article class="mlcard">${headL}${tpb}${mlSide(m.side, tu)}${quotes}</article>` : "";
   // one headline (2026-10-11 audit: "Market probability unavailable" sat above two usable prices): the market baseline when
   // there is one, else the first usable platform's own price for the first team - labelled a price, not a baseline
   const nrm = x => String(x || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -1753,7 +1726,7 @@ function mlCard(m, model, rec) {
     return rev ? (p === "kalshi" ? k.prob_b_yes : (k.prob_a == null ? null : 1 - k.prob_a)) : k.prob_a; };
   const src = b.prob_a != null ? {pa: b.prob_a, from: PLAT[b.platform] || b.platform, base: true}
     : ["polymarket", "kalshi"].map(p => ({pa: priceA(p), from: PLAT[p]})).find(x => x.pa != null) || null;
-  const status = !m.match_id ? `<span class="pill" title="${esc(m.link_reason || "")}">Prices only – not tied to one HLTV match</span>`
+  const status = !m.match_id ? ""
     : m.tie_possible ? `<span class="pill warn">Best-of-2 – a draw is possible</span>`
     : m.disagreement && gap != null ? `<span class="pill bad">Exchanges disagree by ${(gap * 100).toFixed(1)} pts</span>`
     : pu && ku ? `<span class="pill good">Exchanges: both</span>` : `<span class="pill">Exchanges: ${pu ? "Polymarket" : "Kalshi"} only</span>`;
@@ -1766,53 +1739,48 @@ function mlCard(m, model, rec) {
         <span class="small muted">${esc(src.from)} price, the middle of its bid and ask${src.base ? "" : " – a price, not a win probability"} ${status}</span></div>`
     : `<div class="mlbase"><span class="mlprob muted">No price to show</span> ${status}</div>`);
   // three separate badge rows: data quality / freshness, agreement between platforms, model + recommendation status
-  const quality = [m.match_id ? "" : `<span class="pill warn" title="${esc(m.link_reason || "")}">Not tied to one HLTV match – shown as prices only</span>`,
-    ...["polymarket", "kalshi"].filter(p => P[p] && P[p].available).map(p => P[p].usable ? `<span class="pill good">${PLAT[p]} usable</span>`
-      : P[p].fresh === false ? `<span class="pill warn">${PLAT[p]} stale</span>`
-      : P[p].market_open === false ? `<span class="pill warn">${PLAT[p]} market closed / not accepting orders</span>`
-      : `<span class="pill warn">${PLAT[p]} not usable</span>`),
+  const quality = [...["polymarket", "kalshi"].filter(p => P[p] && P[p].usable).map(p => `<span class="pill good">${PLAT[p]}</span>`),
     m.tie_possible ? `<span class="pill warn">Best-of-2 – a draw is possible: prices, not win probabilities</span>` : ""].filter(Boolean).join(" ");
   // a comparison needs a real gap: a merged unlinked card is compared only after orienting both prices to one team
   // (server), otherwise it has no gap and says so - never "agree within 5 pts (0.0)"
-  const unl = m.match_id ? "" : " (unlinked – teams matched by name)";
+  const unl = "";
   const agree = [pu && ku ? (gap != null ? (m.disagreement ? `<span class="pill bad">Exchanges disagree by ${(gap * 100).toFixed(1)} pts${unl}</span>`
                                                            : `<span class="pill">Exchanges agree within 5 pts (${(gap * 100).toFixed(1)})${unl}</span>`)
-                                         : (m.match_id ? "" : `<span class="pill">Not linked – prices not compared</span>`)) : "",
-    P.kalshi && P.kalshi.coherence_flag ? `<span class="pill warn">Kalshi's two YES prices don't add up (gap ${(P.kalshi.coherence_gap * 100).toFixed(1)} pts)</span>` : ""].filter(Boolean).join(" ");
+                                         : "") : ""].filter(Boolean).join(" ");
   // the model / recommendation status is the same for every match: it is said once, above the list
   return `<article class="mlcard">${headL}
     ${base}
     ${mlSide(m.side, tu)}
     <details><summary>Quote details</summary>
-    <div class="mlbadges"><span>Data</span> ${quality || `<span class="pill">No quotes</span>`}</div>
+    ${quality ? `<div class="mlbadges"><span>Prices</span> ${quality}</div>` : ""}
     ${agree ? `<div class="mlbadges"><span>Agreement</span> ${agree}</div>` : ""}
     <div class="mlplats">${mlPlatform("polymarket", P.polymarket, A, B, m.teams.names_by_platform)}${mlPlatform("kalshi", P.kalshi, A, B, m.teams.names_by_platform)}</div></details></article>`;
 }
 // the count above the list - one rule with the "Usable price only" filter: Thunderpick's usable price OR an exchange's
 function mlCountText(up0) {
-  const n = up0.filter(mlUsable).length, ntp = up0.filter(m => tpLive(m.thunderpick, m)).length, nex = up0.filter(mlExUsable).length;
-  return `${n} of ${up0.length} match${up0.length === 1 ? "" : "es"} ${n === 1 ? "has" : "have"} a usable price (Thunderpick ${ntp} · exchanges ${nex})`;
+  const n = up0.filter(mlUsable).length;
+  return `${n} match${n === 1 ? "" : "es"} with prices`;
 }
 // the status line: Thunderpick's own state and the retrieval time of the snapshot serving its current quotes, then the
 // exchanges (their notes arrive cleaned by the server - no upstream error text or URLs)
 function mlStatusText(d) {
-  const t = d.thunderpick || {}, qc = t.quotes_confirmed_at;
-  const tp = t.label ? t.label + (qc ? ` (quotes retrieved ${utcTime(qc)}, ${agoSec(Math.max(0, (mlNow() - Date.parse(qc)) / 1000))})` : "") + " · " : "";
-  const src = Object.entries(d.sources || {}).map(([k, v]) => `${PLAT[k] || k}: ${v.ok ? `prices from ${v.age_s != null ? Math.round(v.age_s) + " s" : "–"} ago`
-    : (v.note || "not loaded yet")}`).join(" · ");
-  return tp + src;
+  // owner 2026-10-16: only sources with current prices, as plain update times - never a source's outage state
+  const t = d.thunderpick || {}, qc = t.quotes_confirmed_at, qa = qc ? Math.max(0, (mlNow() - Date.parse(qc)) / 1000) : null;
+  const tp = qa != null && qa <= 180 ? [`Thunderpick odds retrieved ${agoSec(qa)}`] : [];
+  const src = Object.entries(d.sources || {}).filter(([k, v]) => v.ok && v.age_s != null).map(([k, v]) => `${PLAT[k] || k}: prices from ${agoSec(v.age_s)}`);
+  return [...tp, ...src].join(" · ");
 }
 /* ML_RENDER_END */
 function drawMoneylines() {
   const box = $("#boardout"), d = ML.data;
-  if (!d) { $("#bcount").textContent = ""; $("#bstatus").textContent = ""; box.innerHTML = `<div class="muted">${esc(ML.err || "Loading moneylines…")}</div>`; return; }
+  if (!d) { $("#bcount").textContent = ""; $("#bstatus").textContent = ""; box.innerHTML = `<div class="muted">Loading moneylines…</div>`; return; }
   // Thunderpick first (owner 2026-10-13) - its own honest state, then the exchanges
-  $("#bstatus").textContent = (ML.err ? ML.err + " · " : "") + mlStatusText(d);
+  $("#bstatus").textContent = mlStatusText(d);
   const q = ($("#bsearch").value || "").trim().toLowerCase();
   const list = d.matches.filter(m => !q || [m.teams.a, m.teams.b, m.event].some(x => String(x || "").toLowerCase().includes(q)));
   // one decision per match (server): any platform live, or the earliest stated start passed
   const up0 = list.filter(m => !mlStarted(m)), done = list.filter(mlStarted);
-  const onlyU = $("#mlusable").checked, up = onlyU ? up0.filter(mlUsable) : up0;
+  const onlyU = true, up = up0.filter(mlUsable);      // owner 2026-10-16: matches without a current price are not listed
   // the search box is shared with the Prop Board: a leftover player search says so here (2026-10-13 audit: it emptied
   // the list and the tab read "No CS2 series-winner prices ... right now" and "0 of 0 matches" while 94 were listed)
   const all0 = d.matches.filter(m => !mlStarted(m));
@@ -1820,27 +1788,26 @@ function drawMoneylines() {
   const clearQ = `<button type="button" class="chipbtn" data-mlclear="1">Clear search</button>`;
   const model = d.model || {}, rec = d.recommendation || "Shadow - not a staking recommendation";
   box.innerHTML = `<div class="mlintro"><b style="color:var(--text)">Series winner prices</b><span>Thunderpick bookmaker odds first (primary source) · Polymarket and Kalshi exchange midpoints as attributed comparisons · read by the server about every minute</span>
-      <span class="pill">${esc(model.label || "Model: not validated yet - market baseline shown, no recommendation")}</span><span class="pill">${esc(rec)}</span></div>`
+</div>`
     + (up.length ? up.map(m => mlCard(m, model, rec)).join("")
-       : `<div class="muted">${up0.length && onlyU ? `None of the ${up0.length} upcoming match${up0.length === 1 ? " has" : "es have"} a usable price right now. <button type="button" class="chipbtn" data-mlall="1">Show all matches</button>`
-         : !d.matches.length ? "No CS2 series-winner prices from Thunderpick, Polymarket or Kalshi right now."
+       : `<div class="muted">${up0.length || !d.matches.length ? "No CS2 series-winner prices right now."
          : q && !list.length ? `No match for “${esc(q)}” among the ${d.matches.length} listed (the search box is shared with the Prop Board). ${clearQ}`
          : q ? `No upcoming match for “${esc(q)}” – only started ones. ${clearQ}`
          : "No upcoming matches right now – every listed match has started."}</div>`)
-    + (onlyU && up0.length > up.length && up.length ? `<div class="small muted" style="margin:4px 0 10px">${up0.length - up.length} match${up0.length - up.length === 1 ? "" : "es"} without a usable price hidden · <button type="button" class="chipbtn" data-mlall="1">Show all</button></div>` : "")
-    + (done.length ? `<details class="mgroup"><summary><b>Started</b> <span class="muted small">${done.length} – in-play prices, never used</span></summary>
-        <div class="mbody">${done.map(m => mlCard(m, model, rec)).join("")}</div></details>` : "")
+
     + `<details class="small muted" style="margin-top:10px"><summary>Which price is shown</summary>
-        <p><b>Thunderpick first.</b> ${esc(d.thunderpick_rule || "")}</p>
-        <p><b>Exchanges (comparison).</b> ${esc(d.rule || "")}</p>
-        <p>Exchange probabilities are each platform's bid/ask midpoint for the first team, shown to 0.1%. A last trade is never used as a price. The 0U side follows Thunderpick's usable price first, then the exchange baseline (shadow, not evaluated as a baseline yet). The model column stays empty until a moneyline model passes its walk-forward test – until then this tab shows the market only, with no stake or recommendation. Not financial advice.</p></details>`;
+        <p><b>Thunderpick first.</b> Bookmaker odds with the margin removed, shown while they are current (updated within the last 3 minutes, before the match starts).</p>
+        <p><b>Exchanges.</b> Polymarket and Kalshi: each platform's bid/ask midpoint for the first team, shown to 0.1%, when the quote is open, current and tight. A last trade is never used as a price.</p>
+        <p>Only matches with a current price are listed. This tab shows market prices – no stake or recommendation. Not financial advice.</p></details>`;
 }
 
 // ---------- Slip studio: the server's diversified builder (slip_builder studio-1). One batch at a time: no player,
 // prop or match repeats across the batch's slips (limited overlap = visible caps); every slip is re-checked against the
 // platform and the current grades right before it is copied. Research suggestions - no payouts, no returns.
-const studioCfg = () => Object.assign({book: "underdog", side: "either", sizes: [4, 3, 2], count: 2, stat: "both", scope: "12", overlap: false, cap: 2, fill: "large"},
+const studioCfg = () => { const c = Object.assign({book: "underdog", side: "either", sizes: [4, 3, 2], count: 2, stat: "both", scope: "12", repeats: "as_needed", fill: "large"},
                                       store.get("cs2s_studio", {}));
+  if (c.repeats !== "none") c.repeats = "as_needed";     // studio-2 (owner 2026-10-16): the count asked for is built
+  delete c.overlap; delete c.cap; return c; };
 // the studio is one line ("Slip studio - ... Open") until a member opens it; open / closed is remembered
 function studioShow() {
   const off = STUDIO.off || bbook === "moneylines";
@@ -1883,7 +1850,7 @@ function capText(d, c) {
   const list = fmt(mx), last = STUDIO.last && STUDIO.batch && STUDIO.last.batch_id === STUDIO.batch.batch_id ? STUDIO.last : null;
   const left = last && last.eligible ? fmt(last.eligible.max_slips_left) : null;
   return `<b>Right now:</b> ${d.lines} eligible pick${d.lines === 1 ? "" : "s"} in ${d.matches} match${d.matches === 1 ? "" : "es"} ${where}`
-    + (list ? ` – enough for up to ${list} with no player or match repeated` : "") + "."
+    + (list ? ` – up to ${list} with every player and match used once${c.repeats === "none" ? "" : "; more slips reuse the least-used picks"}` : "") + "."
     + (left ? ` <span class="muted">Still free for your current batch: up to ${left}.</span>` : "");
 }
 const studioSave = c => store.set("cs2s_studio", c);
@@ -1902,7 +1869,7 @@ async function studioCall(method, url, body) {        // a retry repeats the sam
   }
 }
 const studioSettings = c => Object.assign({book: c.book, side: c.side, stat: c.stat, scope: c.scope, market: "standard", sizes: c.sizes, count: +c.count,
-  fill: c.fill === "small" ? "small" : "large", overlap: c.overlap ? "limited" : "none"}, c.overlap ? {max_uses: {player: +c.cap, match: +c.cap}} : {});
+  fill: c.fill === "small" ? "small" : "large", overlap: c.repeats === "none" ? "none" : "as_needed"});
 function studioForm() {
   const c = studioCfg(), seg = (k, opts) => `<div class="seg" data-sk="${k}" role="group">` + opts.map(([v, l]) =>
     `<button type="button" data-v="${v}" class="${String(c[k]) === String(v) ? "on" : ""}" aria-pressed="${String(c[k]) === String(v)}">${l}</button>`).join("") + `</div>`;
@@ -1918,18 +1885,15 @@ function studioForm() {
       ${step(5, "Stat", "Kills, headshots, or both.", seg("stat", [["kills", "Kills"], ["hs", "Headshots"], ["both", "Both"]]))}
       ${step(6, "Maps", "Which maps the line covers.", seg("scope", [["12", "Maps 1–2"], ["1", "Map 1"], ["123", "Maps 1–3"], ["all", "Any"]]))}
       ${step(7, "Fill first", "If picks run short, which slips get them first.", seg("fill", [["large", "Bigger slips"], ["small", "Smaller slips"]]))}
-      <div class="studio-step"><div class="sh"><span class="num">8</span><span class="t">Repeats</span></div><p class="hint">Off = every player, prop and match is used once across your batch (safest).</p>
-        <div class="studio-overlap" style="margin:0"><label><input type="checkbox" id="st-overlap"${c.overlap ? " checked" : ""}> Allow limited overlap</label> <span id="st-capline" class="muted small"></span></div></div>
+      ${step(8, "Repeats", "When needed: fresh picks first – a player or match is used again only to reach your count. Never: no repeats, so you may get fewer slips.", seg("repeats", [["as_needed", "When needed"], ["none", "Never"]]))}
     </div>
     <div class="studio-sum" id="st-sum" aria-live="polite"></div>
     <div class="studio-cap" id="st-capnow" aria-live="polite"></div>
     <div class="studio-actions"><button type="button" class="go" id="st-build">Build</button>
       <button type="button" class="chipbtn" id="st-new" title="Starts over: picks used so far may be suggested again">Start new batch</button>
       <span id="st-status" class="small muted" role="status" aria-live="polite"></span></div>
-    <details class="small muted" style="margin-top:10px"><summary>Is this validated?</summary>
-      <div class="studio-note" style="margin-top:6px">Research suggestions, not tested bets – <span id="st-settled">this builder has no settled batches of its own yet</span>. Nothing here changes a grade or a stake. Not financial advice.</div></details>
+
     <div id="st-out"></div>`;
-  studioCapLine();
   studioSummary();
   studioCapacity();
 }
@@ -1941,14 +1905,9 @@ function studioSummary() {
   const stat = c.stat === "kills" ? "kills" : c.stat === "hs" ? "headshots" : "kills and headshots";
   const maps = {"12": "Maps 1–2", "1": "Map 1", "123": "Maps 1–3", all: "any maps"}[c.scope] || "Maps 1–2";
   el.innerHTML = `You'll get up to <b>${sizes.map(k => `${n} × ${k}-pick`).join(", ")}</b> slip${sizes.length * n === 1 ? "" : "s"} on <b>${bookName(c.book)}</b> – ${side}, ${stat}, ${maps}. `
-    + (c.overlap ? `A player or match can appear in up to <b>${c.cap}</b> slips.` : `<b>No player, prop or match is used twice</b> across your slips until you start a new batch.`)
+    + (c.repeats === "none" ? `<b>No player, prop or match is used twice</b> across your slips until you start a new batch – you may get fewer slips.`
+       : `Fresh picks first – <b>a player or match is used again only when needed</b> to reach your count, never twice in one slip.`)
     + (sizes.length > 1 ? ` If picks run short, ${c.fill === "small" ? "smaller" : "bigger"} slips are filled first.` : "");
-}
-function studioCapLine() {
-  const c = studioCfg();
-  $("#st-capline").innerHTML = c.overlap
-    ? `Up to <select id="st-cap" aria-label="Most slips one player or match can be in">${[2, 3].map(n => `<option${+c.cap === n ? " selected" : ""}>${n}</option>`).join("")}</select> slips each – still never twice in one slip or both sides of a line`
-    : "Off: every player, prop and match is used once (safest)";
 }
 const sizeWord = n => `${n}-pick`;
 function studioLeg(l) {
@@ -1962,7 +1921,7 @@ function studioSlip(s) {
     – slip ${esc(s.slip_id.split("/").slice(1).join("/"))}${s.replaced_by ? ` → see build ${esc(s.replaced_by.split("/").slice(1).join("/"))}` : ""}; it no longer counts toward this batch's repeats.</div>${s.legs.map(studioLeg).join("")}</div>`;
   const note = STUDIO.notes[s.slip_id], cp = STUDIO.copied[s.slip_id], started = s.legs.some(l => Date.parse(l.start) <= Date.now());
   return `<div class="aslip${note ? " changed" : ""}">${s.legs.map(studioLeg).join("")}
-    <div class="nums"><span>Est. chance all ${s.n} hit <b>${pct(s.all_hit)}</b></span> <span class="pill warn nv">Research – not validated</span><span class="muted small">model chances multiplied (picks treated as independent)</span>
+    <div class="nums"><span>Est. chance all ${s.n} hit <b>${pct(s.all_hit)}</b></span> <span class="muted small">model chances multiplied (picks treated as independent)</span>
       ${(s.repeats || []).length ? `<span class="pill">${esc(s.repeats.join("; "))}</span>` : ""}</div>
     <div class="studio-actions"><button type="button" class="bslip" data-verify="${esc(s.slip_id)}"${started || note ? " disabled" : ""}>${note ? "Changed – not for copying" : started ? "Started – locked" : "Verify & copy"}</button>
       <span class="small muted">${bookName(s.book)} · ${sizeWord(s.n)} entry · slip ${esc(s.slip_id.split("/").slice(1).join("/"))}</span></div>
@@ -1996,8 +1955,7 @@ function studioRender() {
   $("#st-out").innerHTML = msg + exp + (slips.length ? bySize : msg ? "" : `<div class="small muted">No slips yet – choose your settings and press Build.</div>`)
     + `<details class="small muted" style="margin-top:8px"><summary>How the studio works</summary>
       ${(b.settings || studioCfg()).fill === "small" ? "Smaller slips are planned first (your Fill first choice), so 4-picks only get the picks that are left." : "Slip sizes are planned largest first, so 2-pick suggestions can't use up the picks a 4-pick needs."} Each slip takes the strongest eligible picks the batch rules allow:
-      one pick per match, player and team in a slip, and – across the whole batch, every Build until you start a new batch – no repeated player, prop or match (or at most the cap you set).
-      When the rules can't fill a size you get the reason instead of a weaker slip. "Verify & copy" re-checks every line on the platform and against the current grade first; any change means a rebuild, never an old chance on a new line.
+      one pick per match, player and team in a slip, and – across the whole batch, every Build until you start a new batch – fresh players, props and matches first; with Repeats “When needed” the least-used picks are used again only to reach your count (never the same slip twice, never both sides of one player's stat). "Verify & copy" re-checks every line on the platform and against the current grade first; any change means a rebuild, never an old chance on a new line.
       The all-hit chance multiplies the model's chances, which assumes the picks are independent. No payouts or returns are assumed. Builder ${esc(b.builder_version || "")}. Not financial advice.</details>`;
 }
 async function studioLoad() {
@@ -2067,8 +2025,8 @@ $("#studio").addEventListener("click", e => {
 $("#studio").addEventListener("change", e => {
   const c = studioCfg(), t = e.target;
   if (t.id === "st-book") c.book = t.value; else if (t.id === "st-count") c.count = +t.value; else if (t.id === "st-stat") c.stat = t.value;
-  else if (t.id === "st-scope") c.scope = t.value; else if (t.id === "st-overlap") c.overlap = t.checked; else if (t.id === "st-cap") c.cap = +t.value; else return;
-  studioSave(c); if (t.id === "st-overlap") studioCapLine(); studioSummary(); studioCapacity();
+  else if (t.id === "st-scope") c.scope = t.value; else return;
+  studioSave(c); studioSummary(); studioCapacity();
 });
 
 // a shared link (?p=ZywOo&l=27.5&t=kills) grades on open
@@ -2169,26 +2127,22 @@ const schedFooter = d => { const s = d && d.next_match && d.next_match.source;
 function dataStatus(g, v) {
   // quality only - the source (HLTV / BO3.gg / older model) is shown separately and is not a warning by itself
   const fl = (g.flags || []).join(" | ");
-  if (v.state === "SCOUT" || /No upcoming match/i.test(fl)) return {k: "warn", t: "Line not confirmed", why: "no upcoming match found"};
+  if (v.state === "SCOUT" || /No upcoming match/i.test(fl)) return {k: "", t: "", why: "no upcoming match found"};
   if (/unreachable/i.test(String(g.projection_source || "")) || /HLTV database (unreachable|not connected)/i.test(fl))
-    return {k: "warn", t: "HLTV unreachable", why: "no current grade until the database answers"};
+    return {k: "", t: "", why: ""};
   // the server's own data status - the badge the Prop Board shows for this line (2026-10-13 audit: thin HLTV history read
   // "Limited history" on the board and "Data complete" here: the board reads the grader's flag, these public flags hide it)
   const sd = Array.isArray(v.dstat) ? v.dstat : null;
   if (sd && sd[0] === "ok") return {k: "ok", t: "Data complete", why: ""};
   if (sd && sd[0] === "limited") return {k: "mid", t: "Limited history", why: "small recent sample"};
   if (sd && sd[0] === "verify") { const t = issueLabel(sd[1]);
-    return {k: "warn", t, why: t === "Roster not confirmed" ? "the team page doesn't list his lineup yet – the stake is not changed by this"
-      : t === "Stand-in" ? "playing for another team" : t === "Long break" ? "long gap since the last official map"
-      : t === "HLTV out of date" ? `his HLTV history ends ${g.hltv_ends || "early"} – newer matches are only on BO3.gg` : String(sd[1] || "")}; }
-  if (/Roster not confirmed/i.test(fl)) return {k: "warn", t: "Roster not confirmed", why: "the team page doesn't list his lineup yet – the stake is not changed by this"};
+    return t ? {k: "warn", t, why: t === "Stand-in" ? "playing for another team" : "long gap since the last official map"} : {k: "", t: "", why: ""}; }
   if (/Stand-in/i.test(fl)) return {k: "warn", t: "Stand-in", why: "playing for another team"};
   if (/Last official map \d+ days ago - extra caution/i.test(fl)) return {k: "warn", t: "Long break", why: "long gap since the last official map"};
-  if (/^HLTV history ends/im.test((g.flags || []).join("\n"))) return {k: "warn", t: "HLTV out of date", why: `his HLTV history ends ${g.hltv_ends || "early"} – newer matches are only on BO3.gg`};
   if (/Small sample|thin history/i.test(fl)) return {k: "mid", t: "Limited history", why: "small recent sample"};   // a thin betting market is not a small sample
   return {k: "ok", t: "Data complete", why: ""};
 }
-const srcLabel = g => { const ps = String(g.projection_source || ""); return ps.startsWith("perf") && !ps.endsWith("-bo3") ? (g.hltv_ends ? `HLTV (ends ${g.hltv_ends})` : "HLTV") : ps.endsWith("-bo3") ? "BO3.gg" : /unreachable/.test(ps) ? "older model (HLTV unreachable)" : "older model (BO3.gg)"; };
+const srcLabel = g => { const ps = String(g.projection_source || ""); return ps.startsWith("perf") && !ps.endsWith("-bo3") ? (g.hltv_ends ? `HLTV (ends ${g.hltv_ends})` : "HLTV") : ps.endsWith("-bo3") ? "BO3.gg" : "older model"; };
 const basisTag = b => `<span class="muted small">(${b === "model" ? "in the model" : b === "stake" ? "stake rule" : b === "data" ? "data" : "context – not in the projection"})</span>`;
 function glance(d, g, v) {
   if (!v.side || !("p_more" in g)) return "";
@@ -2201,7 +2155,7 @@ function glance(d, g, v) {
     <div class="glrow"><span class="k">Line</span><span>${side} ${g.line}${mapsWord(g.scope) || " (Maps 1–2)"} · <b>${chance(v.p, g.prop, capOf(d, "kills_chance", KCAP))}</b>${pushOf(g) != null ? ` excluding pushes · push ${pct(pushOf(g))}` : ""} · ${v.units || 0}U</span></div>
     ${cp?.supports?.length ? `<div class="glrow"><span class="k up">Supports</span><span>${esc(cp.supports[0].text)} ${basisTag(cp.supports[0].basis)}</span></div>` : ""}
     ${cp?.concern ? `<div class="glrow"><span class="k dn">Concern</span><span>${esc(cp.concern.text)} ${basisTag(cp.concern.basis)}</span></div>` : ""}
-    <div class="glrow"><span class="k">Data</span><span><span class="dstat ${ds.k}">${ds.t}</span>${ds.why ? ` <span class="muted small">${esc(ds.why)}</span>` : ""} <span class="muted small">· source ${esc(srcLabel(g))}</span>${cp?.board_at ? ` <span class="muted small">· line checked ${ago(cp.board_at)}</span>` : ""}${oddsData(d)}</span></div>
+    <div class="glrow"><span class="k">Data</span><span>${ds.t ? `<span class="dstat ${ds.k}">${ds.t}</span>` : ""}${ds.t && ds.why ? ` <span class="muted small">${esc(ds.why)}</span>` : ""} <span class="muted small">${ds.t ? "· " : ""}source ${esc(srcLabel(g))}</span>${cp?.board_at ? ` <span class="muted small">· line checked ${ago(cp.board_at)}</span>` : ""}${oddsData(d)}</span></div>
     ${usesBlock(d, g)}
   </section>`;
 }
@@ -2211,7 +2165,7 @@ function usesBlock(d, g) {
   const hs = g.prop === "hs", bo3 = String(g.projection_source || "").endsWith("-bo3");
   const li = xs => xs.map(x => `<li>${x}</li>`).join("");
   const proj = perfGrade(g) ? [
-      `His kills per round on official maps from ${bo3 ? "BO3.gg (HLTV has no history for him – provisional)" : "HLTV"}: recent months count most (a map about 3 months old counts half), measured up to the match day`,
+      `His kills per round on official maps from ${bo3 ? "BO3.gg (HLTV has no history for him)" : "HLTV"}: recent months count most (a map about 3 months old counts half), measured up to the match day`,
       "Weighted toward his numbers in tonight's setting (LAN or online)",
       "Thin history is pulled toward the pro average until he has enough maps",
       "The opponent: how many kills players get per round against them",
@@ -2272,11 +2226,11 @@ function render(d) {
 
   // ---- headline
   const head = v.state === "SCOUT" ? `No match scheduled · Lean ${sideTxt(v.side)} ${g.line}`    : mGrade(v) === "LEAN" && v.side ? `Lean ${sideTxt(v.side)} ${g.line}`
-    : v.side ? `${sideTxt(v.side)} ${g.line}` : g.withheld ? "No grade – live data unavailable" : "No grade";
+    : v.side ? `${sideTxt(v.side)} ${g.line}` : g.withheld ? "Grading…" : "No grade";
   // an outage card (g.withheld): the server removed its temporary numbers; v is the board's saved grade of this exact pick
   // (stale) or no grade at all
   const gonePill = sideGone(v) ? ` <span class="pill bad">${esc(sideGone(v))}</span>` : "";
-  const keptPill = g.withheld && v.side ? ` <span class="pill warn" title="${esc(v.reason || "")}">saved grade · graded ${esc(clockTxt(v.graded_at) || "earlier")} · stale</span>` : "";
+  const keptPill = g.withheld && v.side ? ` <span class="pill">graded ${esc(clockTxt(v.graded_at) || "earlier")}</span>` : "";
   // the board's same-match cap applies to this exact pick: one stake for this line everywhere on the site
   const capPill = g.tape_fight && /^recent record disagrees$/.test(v.cap_reason || "") && !(v.cap_n && v.units_full > v.units) ? ""
     : capChip(v, v.cap_team, capOf(d, "same_result", 3));                // the TAPE FIGHT pill below already says it
@@ -2286,7 +2240,7 @@ function render(d) {
     : v.reason.replace(/ · stake capped: .*$/, "");
   const pu = pushOf(g);
   const sub = v.side ? `${ch(v.p)} ${pu != null ? `model estimate, excluding pushes · push ${pct(pu)}` : "model estimate"}${coinFlip(v.p)} · ${v.units}U${zeroWhy(v)}${capPill}${keptPill}${gonePill}${why ? `<div class="small muted" style="margin-top:4px">${esc(why)}</div>` : ""}`
-    : gateStop ? "" : esc(v.reason || "");
+    : gateStop || g.withheld ? "" : esc(v.reason || "");      // an outage card: the plain note below says it (owner 2026-10-16)
   const hc = g.status === "NO GRADE" || v.state === "SCOUT" || (g.withheld && !v.side) ? "g-scout" : gClass(mGrade(v));
   h += `<section class="card herocard ${hc}"><div class="hero">
     <div class="badge ${hc}" title="${esc(!v.side ? "No grade" : v.state === "SCOUT" ? "No match scheduled – research only" : mGrade(v) === "LEAN" ? "Lean – 0 units" : "Grade " + mGrade(v) + (+v.units > 0 ? "" : " – 0 units"))}">${esc(!v.side || v.state === "SCOUT" ? "–" : mGrade(v) === "LEAN" ? "L" : (mGrade(v) || "L").slice(0, 2))}</div>
@@ -2367,7 +2321,6 @@ function render(d) {
   // ---- recent form: last 10 matches, Maps 1-2
   // ---- lines & comparisons (comparison.py): context only - never changes the grade
   const cp = d.comparison;
-  if (cp && cp.error && v.side) h += `<section class="card"><h2>Lines</h2><div class="small muted">Line comparison unavailable right now – the grade above is unaffected.</div></section>`;
   if (cp && !cp.error && cp.ours && v.side) {
     const side = v.side === "More" ? "over" : "under", Side = side === "over" ? "Over" : "Under", pc1 = x => x == null ? "–" : (x * 100).toFixed(1) + "%";
     const pay = o => (o[`mult_${side}`] ?? 1) === 1 ? "" : ` <span class="pill">pays ${o[`mult_${side}`]}x</span>`;
@@ -2405,7 +2358,7 @@ function render(d) {
       const tag = o => o.alt ? "" : (+o.line === loL ? ' <span class="pill good" title="Lowest standard line: the easier Over – not automatically better value">easier Over line</span>' : "")
         + (+o.line === hiL ? ' <span class="pill good" title="Highest standard line: the easier Under – not automatically better value">easier Under line</span>' : "");
       if (lineSource(d) === "Your entered line") h += `<div class="kv"><span>Your entered line ${g.line}</span><span>Over ${pc1(g.p_more)} · Under ${pc1(g.p_less)}</span></div>`;
-      h += cp.offers.map(o => `<div class="kv"><span>${book(o)} ${o.line}${kind(o)}${moved(o)}${o.stale ? ' <span class="pill warn">not confirmed</span>' : ""}${tag(o)} <span class="muted small">betting line</span></span>
+      h += cp.offers.map(o => `<div class="kv"><span>${book(o)} ${o.line}${kind(o)}${moved(o)}${tag(o)} <span class="muted small">betting line</span></span>
         <span>${side === "over" ? "<b>" : ""}Over ${pc1(o.over_if_decided)}${side === "over" ? "</b>" : ""} · ${side === "under" ? "<b>" : ""}Under ${pc1(o.under_if_decided)}${side === "under" ? "</b>" : ""}${pay(o)}${o.p_push ? ` <span class="muted small">· push ${pc1(o.p_push)}</span>` : ""}</span></div>`).join("");
       if (loL != null) h += `<div class="small muted">Easier line = the lower one for an Over, the higher one for an Under – not automatically better value: payouts differ by platform and market type.</div>`;
       const bl = (cp.best_line || {})[side];
@@ -2461,7 +2414,7 @@ function render(d) {
       if (!cnt.length) return ""; const o = cnt.filter(x => x.total > g.line).length, pu = cnt.filter(x => x.total === g.line).length;
       return ` · over ${g.line} in ${o}/${cnt.length - pu}${pu ? ` (${pu} push)` : ""}${(hh.series || []).some(x => x.same_roster === false) ? " vs this roster" : ""}`; })()}</h2>`;
   const hx = hh?.series || [];      // exact meetings and same-region teams (labelled "regional")
-  if (d.regional_note) h += `<div class="small muted" style="margin-bottom:8px">${esc(regionWords(d.regional_note))}</div>`;
+  if (d.regional_note && regionWords(d.regional_note)) h += `<div class="small muted" style="margin-bottom:8px">${esc(regionWords(d.regional_note))}</div>`;
   if (hx.length) {
     h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th class="mapcol">Maps 1–2</th><th class="num">${g.prop === "hs" ? "HS" : "Kills"}</th><th>Team result</th><th>Prop</th></tr></thead><tbody>`;
     for (const s of hx) h += `<tr><td class="num" style="text-align:left">${shortDate(s.date)}</td><td>${esc(s.opponent)}${s.regional ? ` <span class="pill" style="margin:0;padding:1px 7px" title="${s.regional_level === "region" || perfGrade(g) ? "Same-region team - context, not in the projection" : "Same-country / same-region team - counts lightly in the grade (less than meetings with this team)"}">${s.regional_level === "region" ? "region" : "regional"}</span>` : ""}${s.same_roster === false && !s.regional ? ` <span class="pill" style="margin:0;padding:1px 7px" title="Opponent had a different roster then (${s.roster_overlap} of today's players) - not counted">old roster</span>` : ""}</td>
@@ -2495,8 +2448,9 @@ function render(d) {
     ${mates.map(m => `<div class="mate ${m.me ? "me" : ""}"><span>${esc(m.n)}</span><div class="bar"><i style="width:${(m.r || 0) / maxR * 100}%"></i></div><span class="num">${num(m.r)}</span></div>`).join("")}
     </div></section>
     <section class="card"><h2>Checks</h2>
-      <div class="kv"><span>Roster</span><span>${pb.roster_confirmed ? "Confirmed" : pb.roster_confirmed === false ? "Not confirmed" : "Unknown (no lineup data)"}${pb.standin_for ? " · stand-in" : ""}</span></div>${pb.team_note ? `<div class="small muted" style="margin:-2px 0 6px">${esc(pb.team_note)}</div>` : ""}
-      <div class="kv"><span>AWP</span><span>${esc(KNOWN_AWP.has((pb.player?.nick || "").toLowerCase()) && /unknown|unclear/i.test(pb.awp_note || "") ? "AWPer (known) – BO3.gg has no weapon data yet" : (pb.awp_note || "–"))}</span></div>
+      ${pb.roster_confirmed || pb.standin_for ? `<div class="kv"><span>Roster</span><span>${pb.roster_confirmed ? "Confirmed" : "Stand-in"}${pb.roster_confirmed && pb.standin_for ? " · stand-in" : ""}</span></div>` : ""}${pb.team_note ? `<div class="small muted" style="margin:-2px 0 6px">${esc(pb.team_note)}</div>` : ""}
+      ${(() => { const kn = KNOWN_AWP.has((pb.player?.nick || "").toLowerCase()), un = !pb.awp_note || UNSURE.test(pb.awp_note);
+        return un && !kn ? "" : `<div class="kv"><span>AWP</span><span>${esc(un ? "AWPer" : pb.awp_note)}</span></div>`; })()}
       <div class="kv"><span>IGL</span><span>${pb.is_igl ? "Yes" : "No"}</span></div>
       ${pb.trade_pr != null ? `<div class="kv"><span>Trade kills</span><span>${num(pb.trade_pr,3)}/round</span></div>` : ""}
       ${pb.opening?.kills_per_round != null ? `<div class="kv"><span>Opening kills</span><span>${num(pb.opening.kills_per_round,3)}/round · ${pct(pb.opening.duel_win,0)} duels won</span></div>` : ""}
@@ -2551,9 +2505,8 @@ function render(d) {
         h += `</tbody></table></div>`;
       }
       const bk = hc.backup_source;
-      if (bk || hl?.backup_maps) h += `<div class="small" style="margin-top:6px;color:var(--warn)">* ${bk ? bk.backup_maps : hl.backup_maps} map(s) came from the backup data source (less complete than HLTV; replaced automatically when HLTV data arrives)</div>`;
+      if (bk || hl?.backup_maps) h += `<div class="small" style="margin-top:6px;color:var(--warn)">* ${bk ? bk.backup_maps : hl.backup_maps} map(s) came from the backup data source (replaced automatically when HLTV data arrives)</div>`;
       if (hl?.team_mismatch) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(hl.team_mismatch)}</div>`;
-      if (hl?.stale) h += `<div class="small" style="margin-top:6px;color:var(--warn)">HLTV is missing his recent matches: ${esc(hl.stale)}</div>`;
       h += `<div class="small muted" style="margin-top:6px">${perfGrade(g) ? "Context only – this grade's projection comes from his kills-per-round history, the opponent and LAN / online (see “What this grade uses”)." : "Round Swing and his record vs similar-ranked teams feed the older model's grade; the rest is context."}</div></section>`;
     }
   } catch (e) { console.warn("HLTV card skipped:", e); }
@@ -2583,7 +2536,7 @@ function render(d) {
   // ---- flags
   // "Projection differs from his last-10 average" says what the difference is, in one plain sentence (form_gap)
   const fgt = formGapText(d.form_gap || g.form_gap, scLab);
-  const flags = (g.flags || []).map(f => fgt && /^Projection differs from his last-10 average/.test(f) ? fgt : f);
+  const flags = (g.flags || []).map(f => fgt && /^Projection differs from his last-10 average/.test(f) ? fgt : f).filter(f => !UNSURE.test(f));
   if ((v.units || 0) > 0) flags.push("Units show the model's relative confidence (A+ 3U down to B- 0.5U) - not a payout-based edge or a proven profit; check the payout before betting");
   if (flags.length) h += `<section class="card full"><h2>Notes</h2><ul class="flags">${flags.map(f => `<li>${esc(f)}</li>`).join("")}</ul></section>`;
   h += `<div class="small muted foot">Data: BO3.gg${oddsFooter(d)} · FACEIT${d.hltv?.found || d.hltv_context?.found ? " · HLTV" : ""}${d.csapi?.found ? " · CS API" : ""}${d.next_match?.source === "pandascore" ? " · PandaScore" : ""}${d.next_match?.source === "hltv" ? " · schedule from HLTV" : ""}${schedFooter(d)}${d.liquipedia ? ` · team from <a href="${esc(d.liquipedia.url)}" target="_blank" rel="noopener">Liquipedia</a> (CC-BY-SA 3.0)` : ""} · Not financial advice</div>`;
@@ -2612,7 +2565,7 @@ document.addEventListener("keydown", e => { const h2 = e.target.closest && e.tar
 
 // the H2H panel's regional note in plain words (2026-10-11 audit: "Regional extension disabled" was internal jargon)
 const regionWords = t => String(t || "")
-  .replace(/^Regional extension disabled - roster not confirmed$/, "Series vs other teams from the opponent's region aren't shown – his roster isn't confirmed")
+  .replace(/^Regional extension disabled - roster not confirmed$/, "")
   .replace(/^Regional extension doesn't apply - opponent is (.+)$/, "No same-region series shown – the opponent is $1")
   .replace(/^Regional extension: /, "Also shown: ").replace(/\(context - not in the projection\)/, "(context only – not in the projection)")
   .replace(/^Also shown: no series/, "No series").replace(/ - searched the latest (\d+) opponents/, " (searched his latest $1 opponents)");
@@ -2682,17 +2635,17 @@ Tap to open ${esc(e.nick)}'s ${pr === "hs" ? "headshots" : "kills"} card">
   const dcell = e => {
     const cs = props.map(pr => e[pr]).filter(Boolean), lined = cs.filter(c => c.line != null);
     const t = lined.map(c => c.graded_at).filter(Boolean).sort().pop();
-    const issue = lined.map(c => (c.dstat || [])[0] === "verify" ? (c.dstat[1] || "line not confirmed") : (c.dstat || [])[0] === "limited" ? "limited history" : "").find(Boolean)
-      || cs.map(c => c.note || (c.dq && c.dq !== "ok" ? c.dq : "")).find(Boolean) || "";
+    const issue = lined.map(c => (c.dstat || [])[0] === "verify" ? issueLabel(c.dstat[1]).toLowerCase() : (c.dstat || [])[0] === "limited" ? "limited history" : "").find(Boolean)
+      || cs.map(c => c.note || (c.dq && c.dq !== "ok" ? c.dq : "")).find(x => x && !UNSURE.test(x)) || "";
     const kept = lined.find(c => c.kept);
-    return `<td class="small muted">${t ? "graded " + ago(t) : lined.length ? "" : cs.some(c => c.proj != null) ? "projection only" : ""}${kept ? ` · <span class="dstat warn" style="font-size:11px" title="${kept.retry_cause === "odds" ? "Thunderpick had no current quote" : "The HLTV database was unreachable"} at the last regrade – the board's last grade, kept until it is regraded">stale grade kept</span>` : ""}${issue ? ` · <span class="dstat warn" style="font-size:11px">${esc(issue)}</span>` : ""}${e.benched ? " · benched – not in the lineup or team total" : e.not_on_roster_page ? " · not on roster page" : ""}</td>`;
+    return `<td class="small muted">${t ? "graded " + ago(t) : lined.length ? "" : cs.some(c => c.proj != null) ? "projection only" : ""}${issue ? ` · <span class="dstat warn" style="font-size:11px">${esc(issue)}</span>` : ""}${e.benched ? " · benched – not in the lineup or team total" : e.not_on_roster_page ? " · not on roster page" : ""}</td>`;
   };
   const head = `<tr><th>Player</th>${props.map(pr => `<th class="num">${pr === "hs" ? "HS" : "Kills"} proj</th><th class="num">Line</th><th>Pick</th>`).join("")}<th>Data</th></tr>`;
   const body = j.teams.map(t => {
     const ps = [...t.players].sort((a, b) => MC.sort === "chance" ? best(b) - best(a) : a.nick.localeCompare(b.nick));
     const sm = t.summary, tot = props.map(pr => `${pr === "hs" ? "HS" : "kills"} ${num(sm[pr], 1)}`).join(" · ");
     const note = sm.complete ? `projected team ${tot} <span title="${esc((sm.lineup || []).join(", "))}">(${esc(sm.basis)})</span>`
-      : !sm.basis ? `no team total – lineup unclear (${sm.roster} players listed)` : `no team total – ${sm.covered} of 5 players have projections`;
+      : !sm.basis ? "no team total" : `no team total – ${sm.covered} of 5 players have projections`;
     return `<tr class="mteam"><td colspan="${1 + props.length * 3 + 1}"><b>${esc(t.team)}</b> <span class="muted small">· ${note}</span></td></tr>`
       + ps.map(e => `<tr class="${e.nick.toLowerCase() === MC.focus ? "mfocus" : ""}"><td><b>${esc(e.nick)}</b></td>${props.map(pr => cell(e, pr)).join("")}${dcell(e)}</tr>`).join("");
   }).join("");

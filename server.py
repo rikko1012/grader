@@ -865,8 +865,8 @@ def cap_reason_text(reasons, cap_n=None):
     return "; ".join(parts) or None
 
 
-_WARN_START = ("HLTV database unreachable", "HLTV database not connected", "Projection from the older model", "Provisional",
-               "FORM FIGHT", "TAPE FIGHT", "No upcoming match")
+_WARN_START = ("HLTV database unreachable", "HLTV database not connected", "Grading resumes", "Projection from the older model",
+               "Projection from BO3.gg history", "Provisional", "FORM FIGHT", "TAPE FIGHT", "No upcoming match")
 
 
 def has_warning(g):
@@ -878,6 +878,9 @@ def has_warning(g):
                         # data-quality problem - it no longer marks the line "flagged / open data issue" (2026-10-13)
         if f.startswith(("SOFT BOOK", "NO MARKET")):  # a thin exchange book / no qualified market: still a warning
             return True
+        if f.startswith(("Gate C: roster", "VETO UNCERTAINTY")) or (f.startswith("OLD PROJECTION") and "HLTV database unreachable" in f):
+            # 2026-10-16: no label on the page, still an open data issue
+            return True                                              # (Best plays order, the flagged filter)
         t = _public_flag(f)
         if t and ("caution" in t or "unit size limited" in t or t.startswith(_WARN_START)):
             return True
@@ -2096,12 +2099,12 @@ def public(res):
 # the server (the page AND the raw API response), so the grader can't be copied from it.
 KEEP_DETAIL = {"p_win", "p_map1", "p_map2", "maps_used", "role", "rank"}
 _FLAG_RULES = (   # (starts with, member-friendly text or None = not shown)
-    ("OLD PROJECTION: the performance model is unavailable here (HLTV database unreachable",
-     "HLTV database unreachable right now - no current grade; the Prop Board keeps each line's last grade (marked stale) until the database answers again"),
+    # owner 2026-10-16: no unsure labels on the member site - an outage / unconfirmed note is left out, never reworded
+    ("OLD PROJECTION: the performance model is unavailable here (HLTV database unreachable", None),
     ("OLD PROJECTION", "Projection from the older model - the newer performance model has no HLTV data for this player or matchup"),
     ("CAP:", "Chance capped at 78% on kills props (big kill totals swing more than the model's spread)"),
-    ("PROVISIONAL:", "Provisional: projection from BO3.gg history - HLTV has no history for this player"),
-    ("Gate C: roster", "Roster not confirmed - extra caution"),
+    ("PROVISIONAL:", "Projection from BO3.gg history - HLTV has no history for this player"),
+    ("Gate C: roster", None),
     ("Gate D: only", "Small sample of recent official maps - extra caution, unit size limited"),
     ("Thin data", "Small sample of recent official maps - extra caution, unit size limited"),
     ("Gate A", None), ("Heavy favourite", None), ("Underdog HS", None), ("Role unconfirmed", None),
@@ -2110,14 +2113,13 @@ _FLAG_RULES = (   # (starts with, member-friendly text or None = not shown)
     ("SOFT BOOK", "Thin betting market - unit size limited"),
     ("NO MARKET", "No betting market for this match - unit size limited"),
     ("STAND-IN", "Stand-in - playing for another team, unit size limited"),
-    ("VETO UNCERTAINTY", "Map veto is hard to predict - extra caution"),
+    ("VETO UNCERTAINTY", None),
     ("FORM FIGHT", "FORM FIGHT - his recent record at this line disagrees - no units"),
     ("TAPE FIGHT", "TAPE FIGHT - his recent record at this line disagrees - small stake only"),
     ("0 units: SCOUT", "No upcoming match found - scouting view only"),
     ("0 units", None),
 )
-HLTV_NOT_CONNECTED = ("HLTV database not connected right now - no current grade; the Prop Board keeps each line's last grade "
-                      "(marked stale) until it is connected again")
+HLTV_NOT_CONNECTED = "Grading resumes in a few minutes - the Prop Board keeps each line's latest grade meanwhile"
 HLTV_NOT_CONFIGURED = "Projection from the older model - the HLTV database is not configured on this server"
 _REASONS = (("Gate A", "AWPer on a headshot prop"), ("Gate D", "No recent official maps to grade"),
             ("Gate C", "Not on this team's roster"), ("Missing", "Not enough data to grade"))
@@ -2245,9 +2247,7 @@ def card_odds_info(res):
     if src == "thunderpick":
         label, market = "Thunderpick", pv.get("market") or "Match Winner"
         scope = pv.get("scope") or "series winner"
-        out["scope_note"] = (f"{market} - read as the {scope} because, on BO3 matches, its prices fit the exchange series "
-                             f"prices better than a map-1 reading (price test; "
-                             f"{'provider-confirmed' if pv.get('scope_provider_confirmed') else 'not provider-confirmed'})")
+        out["scope_note"] = f"{market} - {scope}"      # owner 2026-10-16: no hedge wording (the basis stays in THUNDERPICK.md)
         out["price_note"] = "Bookmaker odds, margin removed proportionally"
         out["retrieved_at"] = pv.get("retrieved_at")
         out["time_note"] = "retrieved by us - the feed publishes no quote time"
@@ -2265,12 +2265,12 @@ def card_odds_info(res):
     out["label"] = label
     if src:
         out["line"] = f"Odds source used: {label} ({market}, {scope})"
-        out["fallback"] = f"Thunderpick not used: {fb}" if src != "thunderpick" and fb else None
+        out["fallback"] = None                          # owner 2026-10-16: no "not used / not usable" notes on the card
         out["match_label"] = f"Win chance ({label}{', margin removed' if src == 'thunderpick' else ''})"
         out["footer"] = f"{od.get('book')} via OddsPapi" if src == "oddspapi" and od.get("book") else label
     else:
         out["line"] = "Odds source used: none - no betting market found for this match"
-        out["fallback"] = f"Thunderpick not used: {fb}" if fb else None
+        out["fallback"] = None
         out["match_label"] = "Win chance"
         out["footer"] = None
     if perf:

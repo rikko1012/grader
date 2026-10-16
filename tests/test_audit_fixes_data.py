@@ -319,13 +319,13 @@ def test_stale_hltv_history_is_flagged_not_regraded():
 
 
 # ---------------------------------------------------------------- 25. outage wording on the card
-def test_outage_concern_names_the_outage():
+def test_outage_concern_is_not_shown_to_members():
     g = {"flags": ["OLD PROJECTION: the performance model is unavailable here (HLTV database unreachable right now (timeout)) "
                    "- graded on the old pipeline"], "lambda_final": 20.0, "line": 20.5, "p_more": 0.45, "p_less": 0.55,
          "dist": {"kind": "normal", "lam": 20.0, "sd": 6.0}, "sd": 6.0}
     pnl = comparison.panel({"grade": g, "verdict": {"side": "Less", "p": 0.55}}, [])
     texts = [x["text"] for x in pnl["evidence_against"] if x["basis"] == "data"]
-    assert texts and "unreachable" in texts[0] and not any("no HLTV data" in t for t in texts)
+    assert not any("unreachable" in t or "no HLTV data" in t for t in texts)      # owner 2026-10-16: no outage notes
 
 
 # ---------------------------------------------------------------- 37. the model's spread never leaves the server

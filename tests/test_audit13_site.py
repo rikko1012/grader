@@ -656,7 +656,7 @@ def test_missing_hltv_database_is_an_outage_on_the_member_deployment(monkeypatch
     monkeypatch.setenv("REQUIRE_WHOP", "1")
     assert server.perf_transient({"projection_source": NOCONF_SRC}) and server.grade_transient({"projection_source": NOCONF_SRC})
     t = server._public_flag(NOCONF_FLAG)
-    assert t.startswith("HLTV database not connected") and "no HLTV data for this player" not in t
+    assert t.startswith("Grading resumes") and "no HLTV data for this player" not in t
     assert server.has_warning({"flags": [NOCONF_FLAG]})
     old = {"grade": "B", "side": "More", "graded_line": 29.5, "p": 0.6}
     assert server.keep_last_hltv_grade(old, {"projection_source": NOCONF_SRC}, {"line": 29.5})["hltv_retry"]

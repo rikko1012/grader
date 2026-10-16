@@ -253,9 +253,9 @@ def test_build_rate_limited_per_member(env):
 def test_build_idempotent_and_batch_exposure(env):
     st, a = build(env, "alice", "press-0001")
     assert st == 200 and a["batch_id"] and a["build_id"].endswith("/b1")
-    # the studio's own record (studio-1: nothing settles it yet) - never the shadow batch-3 builder's 3 settled batches
+    # the studio's own record (nothing settles it yet) - never the shadow batch-3 builder's 3 settled batches
     assert a["settled_batches"] == 0 and a["board"]["graded_rows"] == 24
-    assert a["track_record"] == {"builder": "studio-1", "studio_settled": 0, "shadow_builder": slip_batches.VERSION,
+    assert a["track_record"] == {"builder": slip_builder.VERSION, "studio_settled": 0, "shadow_builder": slip_batches.VERSION,
                                  "shadow_settled": 3}
     legs = [l for n in ("2", "3", "4") for s in a["slips"][n] for l in s["legs"]]
     assert legs and all(l["match_id"].startswith("hltv:") for l in legs)    # canonical id carried on every leg
@@ -264,6 +264,16 @@ def test_build_idempotent_and_batch_exposure(env):
     assert a2["build_id"] == a["build_id"]
     st, b = build(env, "alice", "press-0002")                                 # a new press in the same batch
     assert st == 200 and b["batch_id"] == a["batch_id"] and b["build_id"].endswith("/b2")
+    # the default (Repeats "When needed", owner 2026-10-16) reuses only once fresh picks run out: 12 matches fill the first
+    # press (2+2 x 2/3/4 = 18 legs) partly with reuse, never twice in one slip; the strict rule is checked on its own batch
+    for res in (a, b):
+        for n in ("2", "3", "4"):
+            for s in res["slips"][n]:
+                assert len({l["match_id"] for l in s["legs"]}) == len(s["legs"])
+    STRICT = {"book": "underdog", "sizes": [2, 3, 4], "count": 2, "overlap": "none"}
+    st, a = build(env, "alice", "press-0002s", STRICT, new_batch=True)
+    st, b = build(env, "alice", "press-0002t", STRICT)
+    assert st == 200 and b["batch_id"] == a["batch_id"]
     seen = {}
     for res in (a, b):
         for n in ("2", "3", "4"):
@@ -536,7 +546,7 @@ def test_merged_unlinked_card_never_claims_agreement_without_comparing():
     assert m["disagreement"] is False and m["disagreement_gap"] == pytest.approx(0.01)
     # the page's guard: an agreement pill needs a gap (null*100 used to print "agree within 5 pts (0.0)")
     html = (server.BASE / "web" / "index.html").read_text(encoding="utf-8")
-    assert "gap != null" in html and "Not linked – prices not compared" in html
+    assert "gap != null" in html and "Not linked" not in html and "unlinked – teams matched by name" not in html   # owner 2026-10-16
 
 
 def test_validation_only_promotion_is_not_called_validated(monkeypatch, tmp_path):
@@ -580,14 +590,15 @@ def test_studio_capacity_endpoint_auth_shared_and_counts(env):
 
 
 def test_studio_build_fill_small_and_capacity_in_response(env):
+    # the strict mode's leg plan (Repeats "Never"); the default builds every count asked for (test_slip_builder)
     st, d = build(env, "carol", "fill-small-1", {"book": "underdog", "sizes": [2, 3, 4], "counts": {"2": 2, "3": 2, "4": 2},
-                                                 "fill": "small"})
+                                                 "fill": "small", "overlap": "none"})
     assert st == 200, d
     plan = {int(k): v for k, v in d["plan"].items()}
     assert plan == {2: 2, 3: 2, 4: 0}                                       # 12 legs: 2+2 + 3+3 = 10, two left - no 4-pick
     assert {int(k): v for k, v in d["eligible"]["max_slips"].items()} == {2: 6, 3: 4, 4: 3}
     assert d["settings"]["fill"] == "small"
-    st, d = build(env, "dave", "fill-large-1", {"book": "underdog", "sizes": [2, 3, 4], "counts": {"2": 2, "3": 2, "4": 2}})
+    st, d = build(env, "dave", "fill-large-1", {"book": "underdog", "sizes": [2, 3, 4], "counts": {"2": 2, "3": 2, "4": 2}, "overlap": "none"})
     assert st == 200 and {int(k): v for k, v in d["plan"].items()} == {4: 2, 3: 1, 2: 0} and d["settings"]["fill"] == "large"
     assert build(env, "erin", "fill-bad-1", {"book": "underdog", "fill": "medium"})[0] == 400
 

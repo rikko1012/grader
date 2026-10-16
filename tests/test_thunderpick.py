@@ -377,8 +377,10 @@ def test_polling_interval_widens_while_429s_persist_and_relaxes_after_a_clean_pe
     # one success does not relax the 429 step - but an endpoint returning events is never polled slower than its quotes
     # live (review 2026-10-13): capped at CARRY_MAX_INTERVAL_S < QUOTE_MAX_AGE_S
     assert T._sched("csgo")["interval_s"] == T.CARRY_MAX_INTERVAL_S < T.QUOTE_MAX_AGE_S
-    c.t += T.R429_WINDOW_S + 1                                      # 30 min without a 429
-    assert p.poll_once("csgo") is True and T._sched("csgo")["interval_s"] == 60
+    c.t += T.R429_WINDOW_S + 1                                      # 30 min without a 429 - the cooldown's own length:
+    assert p.poll_once("csgo") is True and T._sched("csgo")["interval_s"] == T.CARRY_MAX_INTERVAL_S   # still the slow pace
+    c.t += T.RATE_PACE_S                                            # (2026-10-16: 60 s again here re-tripped the provider)
+    assert p.poll_once("csgo") is True and T._sched("csgo")["interval_s"] == 60   # 6 h without a 429: back to 60 s
 
 
 def test_scheduler_polls_only_csgo_spaced_and_resumes_after_restart():
