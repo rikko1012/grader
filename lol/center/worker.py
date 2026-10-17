@@ -110,10 +110,7 @@ def build_loop():
                                       "previews": [slips.build(con, pl, size, 5, mode, no_overlap=True, preview=True)
                                                    for pl in ("underdog", "prizepicks") for size in (2, 3) for mode in ("mixed",)]})
                 t_link = time.time()
-            if store.get_meta(con, "last_export"):
-                rec = learning.maybe_refit(con)
-                if rec:
-                    STATE["refit"] = rec
+
         except Exception as e:
             _err("build", e)
             try:
@@ -121,6 +118,29 @@ def build_loop():
             except Exception:
                 pass
         time.sleep(60)
+
+
+def refit_loop():
+    """Weekly candidate refits in their own thread (never blocks builds): the first one a week after the start, and
+    only once both backfills are complete. Recorded, never promoted automatically."""
+    from . import learning, riot
+    con = store.connect()
+    if not store.get_meta(con, "last_refit_at"):
+        store.set_meta(con, "last_refit_at", store.now_iso())         # first refit: a week from now
+        con.commit()
+    while True:
+        time.sleep(3600)
+        try:
+            done_le = (STATE.get("riot") or {}).get("backfill", {}).get("done")
+            from . import ingest
+            prog = ingest.progress(con)["tables"]
+            done_lp = all(v["windows_done"] == v["windows"] for k, v in prog.items() if k in ingest.CORE)
+            if done_le and done_lp:
+                rec = learning.maybe_refit(con)
+                if rec:
+                    STATE["refit"] = rec
+        except Exception as e:
+            _err("refit", e)
 
 
 def write_status():
@@ -159,6 +179,7 @@ def main():
     if os.environ.get("LOL_LP", "1") != "0":
         threading.Thread(target=ingest_loop, daemon=True, name="lol-ingest").start()
     threading.Thread(target=build_loop, daemon=True, name="lol-build").start()
+    threading.Thread(target=refit_loop, daemon=True, name="lol-refit").start()
     if os.environ.get("LOL_LE", "1") != "0":
         from . import riot
         threading.Thread(target=riot.loop, args=(STATE["riot"],), daemon=True, name="lol-riot").start()

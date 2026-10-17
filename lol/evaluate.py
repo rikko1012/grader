@@ -69,7 +69,9 @@ def run(rows, which="dev", sims=2000, log=print, lol2=None):
     # ---- score: identical targets for every model (a target missing any model's prediction is dropped and counted)
     report = {"which": which, "periods": {k: v.isoformat() for k, v in P.items()}, "lol2_params": {k: v for k, v in params.items() if k != "priors"},
               "b0_lol1_params": {p: {"lol-1": rep_b["stats"][p]["lol1_params"], "B0": rep_b["stats"][p]["b0_params"]} for p in STATS},
-              "results": {}}
+              "results": {},
+              "market_variant": "not evaluable: no timestamped pre-match prices exist for the evaluated period (the prop-line "
+                                "archive starts 2026-10-17; no saved match-odds history) - evaluated forward only"}
     hist = _comparable_totals(data)
     unit_rows = []
     for prop in STATS:
@@ -133,6 +135,7 @@ def run(rows, which="dev", sims=2000, log=print, lol2=None):
             res["models"] = per
             res["by_role"] = _by(units, per, lambda u: u[0]["role"], samples, preds, prop, scope)
             res["by_history_depth"] = _by(units, per, lambda u: _depth(data, u[0]), samples, preds, prop, scope)
+            res["by_league"] = _by(units, per, lambda u: str(u[0].get("league")), samples, preds, prop, scope)
             report["results"][f"{prop}|{scope}"] = res
             log(f"{prop} {scope}: n={res['n']} " + " | ".join(f"{m} MAE {per[m]['mae']:.3f} LS {per[m]['logscore']:.4f}" for m in per))
     report["_units"] = unit_rows
