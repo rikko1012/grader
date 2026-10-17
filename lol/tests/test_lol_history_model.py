@@ -469,3 +469,12 @@ def test_leaguepedia_sync_resumes_finished_weeks(db, monkeypatch):
     asked.clear()
     sync.sync_leaguepedia(db, since=date(2026, 8, 1), now=now, force=True)
     assert asked == first
+
+
+def test_sync_cli_passes_until_to_leaguepedia(db, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(scout.config, "leaguepedia_credentials", lambda: ("u@b", "p"))
+    monkeypatch.setattr(scout.sync, "sync_leaguepedia", lambda d, **k: seen.update(k) or {"games": 0})
+    args = argparse.Namespace(since="2025-01-01", until="2025-04-01", leagues=None, source="leaguepedia", force=False)
+    scout.run_sync(db, args)
+    assert (str(seen["since"]), str(seen["until"])) == ("2025-01-01", "2025-04-01")

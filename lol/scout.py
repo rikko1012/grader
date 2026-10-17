@@ -288,7 +288,8 @@ def run_sync(db, args):
         if not config.leaguepedia_credentials():
             out["leaguepedia"] = {"skipped": "LEAGUEPEDIA_USER / LEAGUEPEDIA_BOT_PASSWORD not set"}
         else:
-            out["leaguepedia"] = sync.sync_leaguepedia(db, since=since, force=args.force)
+            out["leaguepedia"] = sync.sync_leaguepedia(db, since=since, until=sync.parse_date(args.until),
+                                                       force=args.force)
     return out
 
 
@@ -351,6 +352,7 @@ def main(argv=None):
     common.add_argument("--line-type", choices=["standard", "goblin", "demon"], default="standard")
     common.add_argument("--hours", type=float, default=36)
     common.add_argument("--since", help="sync: first date (YYYY-MM-DD; default about 8 months ago)")
+    common.add_argument("--until", help="sync (Leaguepedia): stop before this date (YYYY-MM-DD; default tomorrow)")
     common.add_argument("--leagues", help="sync / slate: comma-separated LoL Esports slugs, or 'all' (default: majors)")
     common.add_argument("--source", choices=["lolesports", "leaguepedia", "both"], default="both")
     common.add_argument("--force", action="store_true", help="sync: re-derive matches already held (from the cache)")
