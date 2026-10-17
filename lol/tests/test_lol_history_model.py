@@ -623,3 +623,25 @@ def test_no_feed_match_still_listed_missing_in_a_fresh_database(db):
     cache.put("le_done", "getEventDetails?id=NF1", _details(2, 0, 2))
     sync._note_nofeed(db, m)
     assert sorted(r["game_key"] for r in history.missing(db)) == ["le:g1", "le:g2"]
+
+
+def test_leaguepedia_skips_settled_weeks_already_stored(db, monkeypatch):
+    from datetime import datetime, timezone
+    from lol import leaguepedia
+    from lol.tests.test_lol_sources import CARGO
+    (game, players), = leaguepedia.to_history(CARGO)                # a game of 2026-07-29, stored by an earlier run
+    history.save_game(db, game, players)
+    db.commit()
+    asked = []
+
+    class Site:
+        def __init__(self, *a, **k):
+            pass
+
+        def player_games(self, start, end, where=None):
+            asked.append(str(start))
+            return []
+    monkeypatch.setattr(leaguepedia, "Leaguepedia", Site)
+    sync.sync_leaguepedia(db, since=date(2026, 7, 22), until=date(2026, 8, 5),
+                          now=datetime(2026, 10, 17, tzinfo=timezone.utc))
+    assert asked == ["2026-07-22"]                                  # the week holding the stored game is skipped
