@@ -36,8 +36,10 @@ def le_copy_of_m1(con):
                                          "duration_s": 1800, "patch": "16.20.1", "blue_team_id": blue, "red_team_id": red, "blue_kills": 10,
                                          "red_kills": 4, "winner_side": "blue" if blue == "LA" else "red"}], lambda r: r["game_id"], ev, None,
                        "2026-10-11T00:00:00Z")
+        # the same box scores as Leaguepedia's copy (test_center.load_world): cross-source links need them to agree
+        kills = {(1, "LA"): (1, 2, 3, 4, 0), (1, "LB"): (0, 1, 1, 2, 0), (2, "LB"): (0, 1, 2, 1, 0), (2, "LA"): (3, 1, 4, 2, 1)}
         rows = [{"game_id": f"e{n}", "match_id": "X1", "number": n, "player_id": f"{t}{i}", "name": f"le{t}{i}", "team_id": t,
-                 "side": "blue" if t == blue else "red", "role": rl, "kills": 2, "deaths": 1, "assists": 3, "cs": 200}
+                 "side": "blue" if t == blue else "red", "role": rl, "kills": kills[(n, t)][i], "deaths": 1, "assists": 2, "cs": 200}
                 for t in ("LA", "LB") for i, rl in enumerate(roles)]
         store.put_rows(con, "LE:PlayerGame", rows, lambda r: f"{r['game_id']}|{r['player_id']}", ev, None, "2026-10-11T00:00:00Z")
     con.commit()
@@ -211,14 +213,18 @@ def test_compare_harness_scores_both_models_on_the_same_targets(tmp_path, monkey
 
 def test_crosscheck_compares_sources_and_keeps_disagreements(con):
     le_copy_of_m1(con)
+    # one disagreement: the feed gives LA0 9 kills in game 1 (Leaguepedia 1) - still corroborated (19 of 20 rows agree)
+    r = [x for x in store.current_rows(con, "LE:PlayerGame") if x["game_id"] == "e1" and x["player_id"] == "LA0"][0]
+    store.put_rows(con, "LE:PlayerGame", [dict(r, kills=9)], lambda x: f"{x['game_id']}|{x['player_id']}", lambda x: "2026-10-10 09:00:00",
+                   None, "2026-10-12T00:00:00Z")
     load_world(con)
     out = build.build(con)
     cc = out["crosscheck"]
     assert cc["series"] == 1 and cc["games_count"]["agree"] == 1
-    # the LE copy gives every player 2 kills and teams 10 / 4: LP's fixture differs -> disagreements are recorded, kept
-    assert cc["player_kills"]["compared"] == 20 and 0 < cc["player_kills"]["agree"] < 20
+    # disagreements are recorded and kept, never overwritten
+    assert cc["player_kills"]["compared"] == 20 and cc["player_kills"]["agree"] == 19
     assert cc["team_kills_raw"]["compared"] == 4 and cc["team_kills_player_sum"]["compared"] == 4
-    assert cc["player_assists"]["share"] == 0.0 and cc["player_deaths"]["share"] == 1.0
+    assert cc["player_assists"]["share"] == 1.0 and cc["player_deaths"]["share"] == 1.0
     assert cc["reconciliation"] and "does not establish completeness" in cc["note"]
     rec = con.execute("SELECT item, status, evidence FROM reconciliation WHERE item = 'team_kills'").fetchall()
     assert rec and all(r[1] in ("resolved", "unresolved") for r in rec) and json.loads(rec[0][2])["lp_player_sum"] is not None
@@ -429,3 +435,56 @@ def test_forecast_history_uses_the_evaluated_window(tmp_path):
     pin, tin, _ = h.inputs("lol:player:1", "lol:team:1", "lol:team:2", now.date().toordinal())
     assert [r[1] for r in pin] == [3] and len(tin) == 1                 # the 2025 game is stored but not used
     assert h.since.startswith("2026-02-14")
+
+
+def test_spelling_variant_joins_its_page_only_with_a_common_team(con):
+    """A scoreboard link spelled with other capitals ('ALPHMID') and no page of its own resolves to the one page with that
+    name ignoring capitals ('AlphMid') when they played for a common team; otherwise it stays its own id."""
+    from lol.tests.test_center import game_rows
+    extra = [game_rows("M2", 1, "Alpha Esports", "Beta Gaming", "2026-10-12 09:05:00", link_override={"AlphMid": "ALPHMID"}),
+             game_rows("M3", 1, "Gamma Team", "Beta Gaming", "2026-10-13 09:05:00", link_override={"GammTop": "BETAMID"})]
+    load_world(con, extra_games=extra)
+    build.build(con)
+    alph = store.find_entity(con, "player", "leaguepedia:page", "AlphMid")
+    assert store.canonical_id(con, store.find_entity(con, "player", "leaguepedia:page", "ALPHMID") or alph) == alph
+    assert con.execute("SELECT COUNT(DISTINCT pid) FROM c_player_games WHERE name_shown = 'AlphMid'").fetchone()[0] == 1
+    assert store.get_meta(con, "page_variant:ALPHMID") == "AlphMid"
+    # 'BETAMID' on Gamma Team: Beta's mid never played for Gamma - no link
+    assert store.get_meta(con, "page_variant:BETAMID") is None
+    beta = store.find_entity(con, "player", "leaguepedia:page", "BetaMid")
+    assert beta not in {r[0] for r in con.execute("SELECT pid FROM c_player_games WHERE start_utc LIKE '2026-10-13%' AND role = 'top'")}
+
+
+def test_academy_match_on_the_same_day_is_not_its_main_teams_series(con):
+    """2026-10-17 audit: same codes, same day, hours apart (academy vs main roster) - not one series, no links."""
+    load_world(con)
+    le_copy_of_m1(con)
+    m = store.current_rows(con, "LE:Match")[0]
+    m["teams"][0].update(name="Alpha Esports Academy")
+    m["teams"][1].update(name="Beta Gaming Academy")
+    store.put_rows(con, "LE:Match", [m], lambda r: r["match_id"], lambda r: "2026-10-10 09:00:00", None, "2026-10-12T00:00:00Z")
+    for g in [x for x in store.current_rows(con, "LE:Game")]:
+        store.put_rows(con, "LE:Game", [dict(g, start=g["start"].replace("T09:", "T15:").replace("T10:", "T16:"))],
+                       lambda r: r["game_id"], lambda r: "2026-10-10 09:00:00", None, "2026-10-12T00:00:00Z")
+    con.commit()
+    out = build.build(con)
+    assert not out["lolesports"].get("left_out_leaguepedia_has_it")
+    assert store.find_entity(con, "team", "lolesports:team", "LA") != store.find_entity(con, "team", "leaguepedia:page", "Alpha Esports")
+    assert store.find_entity(con, "player", "lolesports:player", "LA2") != store.find_entity(con, "player", "leaguepedia:page", "AlphMid")
+
+
+def test_wrong_existing_link_is_corrected_by_corroborated_games(con):
+    """A LoL Esports player id linked to the wrong Leaguepedia player earlier moves to the page every corroborated shared
+    game puts it on - recorded (history + quarantine), the wrong id keeps its own page."""
+    load_world(con)
+    build.build(con)
+    beta_mid = store.find_entity(con, "player", "leaguepedia:page", "BetaMid")
+    store.link_source(con, beta_mid, "player", "lolesports:player", "LA2", "an earlier wrong link")
+    con.commit()
+    le_copy_of_m1(con)
+    build.build(con)
+    alph = store.find_entity(con, "player", "leaguepedia:page", "AlphMid")
+    assert store.canonical_id(con, store.find_entity(con, "player", "lolesports:player", "LA2")) == alph
+    assert store.canonical_id(con, beta_mid) != alph and store.find_entity(con, "player", "leaguepedia:page", "BetaMid") == beta_mid
+    q = con.execute("SELECT detail FROM quarantine WHERE reason = 'cross_source_link_corrected'").fetchall()
+    assert q and "BetaMid" in q[0][0]

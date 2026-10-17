@@ -100,6 +100,11 @@ def team_resolver(con, at):
     return tid, teams
 
 
+def _variants_of(con, page):
+    return [r[0][len("page_variant:"):] for r in con.execute("SELECT k FROM meta WHERE k LIKE 'page_variant:%' AND v = ?",
+                                                             (json.dumps(page),))]
+
+
 def player_resolver(con, at):
     pages = {page_key(r["OverviewPage"]): r for r in store.current_rows(con, "Players") if r.get("OverviewPage")}
     redirect = defaultdict(set)
@@ -114,7 +119,38 @@ def player_resolver(con, at):
     for a, t in redirect.items():
         if len(t) == 1:
             names_of[next(iter(t))].add(a)
+    # 2026-10-17 audit: a scoreboard link spelled with other capitals than Leaguepedia's page ("Ksaez" / page "KSAEZ",
+    # "SteeelBack" / "Steeelback") has no page of its own and became a second id. Such a link resolves to a page only on
+    # source evidence: Leaguepedia's redirect table (or page list) holds exactly one page for that name ignoring capitals,
+    # AND the link and that page's names played for a common team (scoreboards).
+    fold = lambda x: page_key(x).casefold()
+    ci = defaultdict(set)
+    for a, t in redirect.items():
+        ci[fold(a)] |= t
+    for p in pages:
+        ci[fold(p)].add(p)
+    teams_of = defaultdict(set)
+    for r in store.current_rows(con, "ScoreboardPlayers"):
+        if r.get("Link") and r.get("Team"):
+            teams_of[page_key(r["Link"])].add(page_key(r["Team"]))
     cache = {}
+
+    def variant(n):
+        tg = ci.get(fold(n)) or set()
+        if len(tg) != 1:
+            return None
+        page = next(iter(tg))
+        if page == n:
+            return None
+        names = {page} | names_of.get(page, set())
+        common = teams_of.get(n, set()) & set().union(*(teams_of.get(x, set()) for x in names))
+        if not common:
+            return None
+        if store.get_meta(con, f"page_variant:{n}") != page:
+            store.set_meta(con, f"page_variant:{n}", page)
+            store.quarantine(con, "player", n, "spelling_variant_resolved", {"page": page, "common_teams": sorted(common),
+                                                                               "evidence": "redirect table + common team"}, at)
+        return page
 
     def resolve(link):
         n = page_key(link)
@@ -128,6 +164,9 @@ def player_resolver(con, at):
             return None, "ambiguous"
         if n in pages:
             return n, None
+        v = variant(n)
+        if v:
+            return v, None
         if n not in checked:
             return None, "not_checked_yet"
         store.quarantine(con, "player", n, "no_player_page", None, at)
@@ -153,6 +192,14 @@ def player_resolver(con, at):
                 eid = store.entity(con, "player", SRC_PAGE, page, label=page, at=at)
         else:
             store.entity(con, "player", SRC_PAGE, page, at=at)
+        # ids created earlier for page-less spellings of this page (before the variant rule) join it - the older id survives
+        for v in _variants_of(con, page):
+            old = store.find_entity(con, "player", SRC_PAGE, v)
+            if old and store.canonical_id(con, old) != store.canonical_id(con, eid):
+                a, b = store.canonical_id(con, old), store.canonical_id(con, eid)
+                keep, drop = sorted([a, b], key=lambda e: int(e.rsplit(":", 1)[1]))
+                store.merge(con, keep, drop, f"spelling variant {v!r} of Leaguepedia page {page!r} (redirect table + common team)", at)
+                eid = keep
         cache[page] = eid
         info = pages.get(page) or {}
         for a in {page, info.get("ID"), ids.get(page)} | names_of.get(page, set()):
@@ -233,8 +280,9 @@ def _attach(con, kind, source, skey, target, at):
     if cur is None:
         store.link_source(con, target, kind, source, str(skey), "same series held by both sources", at)
         return 1
-    pages = lambda e: {r[0] for r in con.execute("SELECT skey FROM entity_sources WHERE eid = ? AND source = 'leaguepedia:page'", (e,))}
-    if pages(cur) and pages(target):
+    pages = lambda e: {store.page_variant(con, r[0]) for r in con.execute(
+        "SELECT skey FROM entity_sources WHERE eid = ? AND source = 'leaguepedia:page'", (e,))}
+    if pages(cur) and pages(target) and pages(cur) != pages(target):
         # both ids are Leaguepedia pages: two different players / teams - one LoL Esports id paired with both is a
         # conflict to look at, never a merge (2026-10-17 review)
         store.quarantine(con, kind, f"{source}:{skey}", "cross_source_conflict", {"ids": sorted([cur, target])}, at)
@@ -351,8 +399,20 @@ def link_overlaps(con, overlaps, at):
     for r in store.current_rows(con, "LE:PlayerGame"):
         lpg[r["match_id"]].append(r)
     changed = 0
+    team_votes, player_votes = defaultdict(Counter), defaultdict(Counter)
     for mid, m, s in overlaps:
         lp_tids = {s["team1"], s["team2"]}
+        slot = {(r[0], r[1], r[2]): (r[3], r[4], r[5], r[6]) for r in con.execute(
+            "SELECT game_n, tid, role, pid, kills, deaths, assists FROM c_player_games WHERE sid = ?", (s["sid"],))}
+        rows = lpg.get(mid, [])
+
+        def agree(le_tid, lp_tid):
+            """Box-score corroboration: this LE team's player rows equal the LP rows of `lp_tid` at the same (game,
+            role) in kills, deaths and assists - at least 5 rows and 80% of them."""
+            mine = [p for p in rows if p.get("team_id") == le_tid]
+            ok = sum(1 for p in mine if (slot.get((p.get("number"), lp_tid, role(p.get("role")))) or (None,))[1:] ==
+                     (p.get("kills"), p.get("deaths"), p.get("assists")))
+            return len(mine) >= 5 and ok >= 0.8 * len(mine)
         tmap = {}
         for t in m.get("teams") or []:
             hits = {r[0] for n in (t.get("name"), t.get("code")) if n
@@ -374,20 +434,38 @@ def link_overlaps(con, overlaps, at):
         if len(tmap) != 2 or len(set(tmap.values())) != 2:
             store.quarantine(con, "series", f"lolesports:{mid}", "cross_source_teams_not_matched", {"lp_series": s["sid"]}, at)
             continue
+        if not all(agree(le_tid, lp_tid) for le_tid, lp_tid in tmap.items()):
+            # no link without corroboration: the box scores do not show the same two teams (or the feed has no rows)
+            store.quarantine(con, "series", f"lolesports:{mid}", "cross_source_box_scores_differ", {"lp_series": s["sid"]}, at)
+            continue
         for le_tid, lp_tid in tmap.items():
-            changed += _attach(con, "team", SRC_LE_TEAM, le_tid, lp_tid, at)
-        at_slot = {(r[0], r[1], r[2]): r[3] for r in con.execute("SELECT game_n, tid, role, pid FROM c_player_games WHERE sid = ?", (s["sid"],))}
-        votes = defaultdict(Counter)
-        for p in lpg.get(mid, []):
-            lp_pid = at_slot.get((p.get("number"), tmap.get(p.get("team_id")), role(p.get("role"))))
-            if lp_pid and p.get("player_id"):
-                votes[p["player_id"]][lp_pid] += 1
-        for le_pid, c in votes.items():
-            if len(c) == 1:
-                changed += _attach(con, "player", SRC_LE_PLAYER, le_pid, next(iter(c)), at)
-            else:
-                store.quarantine(con, "player", f"lolesports:{le_pid}", "cross_source_player_conflict", dict(c), at)
+            team_votes[str(le_tid)][lp_tid] += 1
+        for p in rows:
+            hit = slot.get((p.get("number"), tmap.get(p.get("team_id")), role(p.get("role"))))
+            if hit and p.get("player_id") and hit[1:] == (p.get("kills"), p.get("deaths"), p.get("assists")):
+                player_votes[p["player_id"]][hit[0]] += 1
+    for kind, src, votes in (("team", SRC_LE_TEAM, team_votes), ("player", SRC_LE_PLAYER, player_votes)):
+        for le_id, c in votes.items():
+            targets = {store.canonical_id(con, t) for t in c}
+            if len(targets) != 1:
+                store.quarantine(con, kind, f"lolesports:{le_id}", f"cross_source_{kind}_conflict", dict(c), at)
+                continue
+            changed += _verify_and_attach(con, kind, src, le_id, next(iter(targets)), sum(c.values()), at)
     return changed
+
+
+def _verify_and_attach(con, kind, source, skey, target, n_votes, at):
+    """Attach a LoL Esports id where every corroborated shared game puts it. When it is currently part of an id that
+    holds a DIFFERENT Leaguepedia page (an earlier wrong link), it first moves off that id (store.detach_source)."""
+    cur = store.find_entity(con, kind, source, str(skey))
+    pages = lambda e: {store.page_variant(con, r[0]) for r in con.execute(
+        "SELECT skey FROM entity_sources WHERE eid = ? AND source = 'leaguepedia:page'", (e,))}
+    if cur is not None:
+        curc = store.canonical_id(con, cur)
+        if curc != target and pages(curc) and pages(target) and pages(curc) != pages(target):
+            store.detach_source(con, kind, source, str(skey), "every corroborated shared game puts it on another Leaguepedia page",
+                                {"was_with": sorted(pages(curc)), "now": sorted(pages(target)), "corroborated_games": n_votes}, at)
+    return _attach(con, kind, source, skey, target, at)
 
 
 def _lolesports(con, at, series, games, pgs, checks, overlaps=None):
@@ -449,12 +527,16 @@ def _lolesports(con, at, series, games, pgs, checks, overlaps=None):
             continue
         start = _z(m.get("start"))
         a, b = known(teams[0]), known(teams[1])
+        t0 = min((_ts(g.get("start")) for g in lg.get(mid, []) if _ts(g.get("start"))), default=None)
         same = [s for s in lp_by_day.get(start[:10], []) if {s["team1"], s["team2"]} & a and {s["team1"], s["team2"]} & b] if start else []
+        # 2026-10-17 audit: an academy match ("NS Challengers vs DRX Challengers", codes NS / DRX) matched its main teams'
+        # series on the same day by code. Both names on the same day also need game 1 within 60 minutes when both times
+        # are known.
+        same = [s for s in same if t0 is None or _ts(s.get("first_game_utc")) is None or abs(_ts(s["first_game_utc"]) - t0) <= 3600]
         if not same:
             # 2026-10-17 audit: a team named differently in the two sources ("kt Challengers" / "KT Rolster Challengers")
             # hid real overlaps. The same series = one team known AND game 1 starting within 20 minutes of the
             # Leaguepedia series' game 1 (a team never plays two series at once).
-            t0 = min((_ts(g.get("start")) for g in lg.get(mid, []) if _ts(g.get("start"))), default=None)
             if t0 is not None:
                 days = {datetime.fromtimestamp(t0 + d, timezone.utc).strftime("%Y-%m-%d") for d in (-86400, 0, 86400)}
                 same = [s for d in days for s in lp_by_day.get(d, []) if {s["team1"], s["team2"]} & (a | b)
@@ -589,6 +671,10 @@ def split_wrong_merges(con, at):
         multi = [r[0] for r in con.execute("SELECT eid FROM entity_sources WHERE kind = ? AND source = 'leaguepedia:page' "
                                            "GROUP BY eid HAVING COUNT(*) > 1", (kind,))]
         for keep in multi:
+            pages = {store.page_variant(con, r[0]) for r in con.execute(
+                "SELECT skey FROM entity_sources WHERE eid = ? AND source = 'leaguepedia:page'", (keep,))}
+            if len(pages) == 1:                                # spelling variants of one page (player_resolver) - one player
+                continue
             for skey, note in con.execute("SELECT skey, note FROM entity_sources WHERE eid = ? AND source = 'leaguepedia:page' "
                                           "AND note LIKE '%merged from %'", (keep,)).fetchall():
                 drops = [d for d in re.findall(r"merged from (lol:\w+:\d+)", note or "") if d != keep]
@@ -597,7 +683,7 @@ def split_wrong_merges(con, at):
                 x = drops[-1]                                  # the merge that brought this page onto `keep`
                 if store.get_meta(con, f"merged:{x}") != keep:
                     continue
-                moved = con.execute("UPDATE entity_sources SET eid = ?, note = note || '; split back (two Leaguepedia pages)' "
+                moved = con.execute("UPDATE entity_sources SET eid = ?, note = substr(note || '; split back (two Leaguepedia pages)', -1000) "
                                     "WHERE eid = ? AND note LIKE ?", (x, keep, f"%merged from {x}%")).rowcount
                 con.execute("DELETE FROM meta WHERE k = ?", (f"merged:{x}",))
                 con.execute("DELETE FROM aliases WHERE eid IN (?, ?)", (keep, x))     # re-added below by the resolvers

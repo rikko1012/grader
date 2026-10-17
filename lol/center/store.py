@@ -256,6 +256,32 @@ def entity(con, kind, source, skey, label=None, at=None):
     return eid
 
 
+def detach_source(con, kind, source, skey, reason, detail=None, at=None):
+    """A source key that was linked to the wrong internal id moves to a NEW id of its own (the evidence decides where it
+    belongs next). Both ids record it in their history; the stale aliases of the old id from that source are dropped
+    (the build re-adds the valid ones). -> the new id, or None when the key is unknown."""
+    at = at or now_iso()
+    cur = find_entity(con, kind, source, skey)
+    if cur is None:
+        return None
+    new = _next_id(con, kind)
+    con.execute("INSERT INTO entities (eid, kind, label, created_at) VALUES (?, ?, ?, ?)", (new, kind, skey, at))
+    con.execute("UPDATE entity_sources SET eid = ?, note = COALESCE(note || '; ', '') || ? WHERE kind = ? AND source = ? AND skey = ?",
+                (new, f"detached from {cur}: {reason}", kind, source, skey))
+    con.execute("DELETE FROM aliases WHERE eid = ? AND source = ?", (cur, source.split(":")[0]))
+    for eid, change in ((cur, f"released {source}:{skey} to {new}"), (new, f"took {source}:{skey} from {cur}")):
+        con.execute("INSERT INTO entity_history (eid, at, change, detail) VALUES (?, ?, 'detached', ?)",
+                    (eid, at, json.dumps({"change": change, "reason": reason, "evidence": detail}, default=str)))
+    quarantine(con, kind, f"{source}:{skey}", "cross_source_link_corrected", {"from": cur, "to": new, "reason": reason,
+                                                                             "evidence": detail}, at)
+    return new
+
+
+def page_variant(con, page):
+    """The Leaguepedia page a page-less spelling was resolved to (build.player_resolver), else the page itself."""
+    return get_meta(con, f"page_variant:{page}") or page
+
+
 def link_source(con, eid, kind, source, skey, note, at=None):
     """Map one more source key to an existing internal id (a rename, a changed upstream key), with a history entry."""
     at = at or now_iso()
@@ -300,7 +326,8 @@ def merge(con, keep, drop, note, at=None):
     if keep == drop:
         return keep
     at = at or now_iso()
-    con.execute("UPDATE entity_sources SET eid = ?, note = COALESCE(note || '; ', '') || ? WHERE eid = ?", (keep, f"merged from {drop}", drop))
+    con.execute("UPDATE entity_sources SET eid = ?, note = substr(COALESCE(note || '; ', '') || ?, -1000) WHERE eid = ?",
+                (keep, f"merged from {drop}", drop))     # the full record is entity_history; the note keeps the latest moves
     for r in con.execute("SELECT kind, norm, source, raw, first_seen, last_seen FROM aliases WHERE eid = ?", (drop,)).fetchall():
         con.execute("INSERT OR IGNORE INTO aliases (kind, norm, eid, source, raw, first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (r[0], r[1], keep, r[2], r[3], r[4], r[5]))
