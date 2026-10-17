@@ -415,3 +415,32 @@ def test_crosscheck_reports_agreement(db, capsys):
     a = out["agreement"]
     assert a["games held by both"] == 1 and a["team kills agree"] == 1 and a["player K/D/A agree"] == 1
     assert a["inferred winner agrees"] == 1 and out["feed_only_games_by_league"] == {"lck": 1}
+
+
+def _bulk_items():
+    items = []
+    for gid in range(30):
+        g, rows = _game("le", str(gid), "2026-07-29", 1, "T1", "Gen.G", 18, 9,
+                        [("Faker", "blue", "mid", 5, 1, 7, "Azir"), ("Chovy", "red", "mid", 2, 4, 3, "Orianna")],
+                        match=f"M{gid}")
+        items.append((g, rows))
+    items.append(items[0])                                          # the same game twice in one batch
+    return items
+
+
+def _check_bulk(d):
+    history.save_games(d, _bulk_items())
+    history.note_missing(d, "le:3", "le", "le:M3", 1, "lck", "2026-07-29T08:00:00Z", "T1 vs Gen.G", "x")
+    history.save_games(d, _bulk_items()[:5])                        # re-save: replaced, no duplicates, missing cleared
+    d.commit()
+    assert d.query("SELECT count(*) AS n FROM lol_games")[0]["n"] == 30
+    assert d.query("SELECT count(*) AS n FROM lol_player_games")[0]["n"] == 60
+    assert d.query("SELECT count(*) AS n FROM lol_missing")[0]["n"] == 0
+
+
+def test_bulk_save_sqlite(db):
+    _check_bulk(db)
+
+
+def test_bulk_save_postgres(pg_db):
+    _check_bulk(pg_db)

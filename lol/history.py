@@ -89,6 +89,29 @@ class DB:
             cur.executemany(self._sql(sql), [tuple(r) for r in rows])
             return cur
 
+    def upsert_many(self, table, cols, key, rows):
+        """Insert-or-update many rows in as few round trips as possible (PostgreSQL: execute_values, 500 rows a
+        statement - a remote database is ~20 ms a round trip, so row-by-row writes of a season would take hours).
+        Rows repeating a key keep the last one: one statement may not touch a row twice."""
+        rows = list({tuple(r[cols.index(k)] for k in key): tuple(r) for r in rows}.values())
+        if not rows:
+            return
+        if self.kind != "pg":
+            self.executemany(_upsert(table, cols, key), rows)
+            return
+        from psycopg2.extras import execute_values
+        updates = ", ".join(f"{c} = excluded.{c}" for c in cols if c not in key)
+        sql = (f"INSERT INTO {table} ({', '.join(cols)}) VALUES %s "
+               f"ON CONFLICT ({', '.join(key)}) DO UPDATE SET {updates}")
+        with self.lock:
+            execute_values(self.con.cursor(), sql, rows, page_size=500)
+
+    def delete_in(self, table, col, values, chunk=500):
+        values = list(dict.fromkeys(values))
+        for i in range(0, len(values), chunk):
+            part = values[i:i + chunk]
+            self.execute(f"DELETE FROM {table} WHERE {col} IN ({','.join('?' for _ in part)})", part)
+
     def query(self, sql, args=()):
         cur = self.execute(sql, args)
         cols = [d[0] for d in cur.description]
@@ -111,19 +134,29 @@ def _upsert(table, cols, key):
             f"ON CONFLICT ({', '.join(key)}) DO UPDATE SET {updates}")
 
 
+def save_games(db, items):
+    """Many games at once - [(game, players)] (dicts keyed like GAME_COLS / PLAYER_COLS) - in a handful of statements.
+    Idempotent: re-saving a game replaces it, its player rows included (a corrected or re-cleaned name must not leave
+    the old row behind), and clears it from lol_missing."""
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    games, rows = [], []
+    for game, players in items:
+        game = dict(game, fetched_at=game.get("fetched_at") or now)
+        games.append([game.get(c) for c in GAME_COLS])
+        for p in players:
+            p = dict(p, player_key=p.get("player_key") or player_key(p.get("player")))
+            rows.append([p.get(c) for c in PLAYER_COLS])
+    if not games:
+        return
+    keys = [g[0] for g in games]
+    db.upsert_many("lol_games", GAME_COLS, ("game_key",), games)
+    db.delete_in("lol_player_games", "game_key", keys)
+    db.upsert_many("lol_player_games", PLAYER_COLS, ("game_key", "player_key"), rows)
+    db.delete_in("lol_missing", "game_key", keys)
+
+
 def save_game(db, game, players):
-    """One game and its ten player rows (dicts keyed like GAME_COLS / PLAYER_COLS). Idempotent: re-saving replaces."""
-    game = dict(game, fetched_at=game.get("fetched_at") or datetime.now(timezone.utc).isoformat(timespec="seconds"))
-    db.execute(_upsert("lol_games", GAME_COLS, ("game_key",)), [game.get(c) for c in GAME_COLS])
-    db.execute("DELETE FROM lol_player_games WHERE game_key = ?", (game["game_key"],))   # a re-save replaces the game's
-    # player rows - a corrected or re-cleaned name must not leave the old row behind
-    rows = []
-    for p in players:
-        p = dict(p, player_key=p.get("player_key") or player_key(p.get("player")))
-        rows.append([p.get(c) for c in PLAYER_COLS])
-    if rows:
-        db.executemany(_upsert("lol_player_games", PLAYER_COLS, ("game_key", "player_key")), rows)
-    db.execute("DELETE FROM lol_missing WHERE game_key = ?", (game["game_key"],))
+    save_games(db, [(game, players)])
 
 
 def note_missing(db, game_key, source, match_key, game_number, league, played_at, teams_label, reason):

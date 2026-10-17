@@ -163,8 +163,7 @@ def sync_lolesports(db, leagues=None, since=None, max_matches=None, now=None, wo
                     cache.put("le_nofeed", str(m["match_id"]), True)   # old match, no feed: not asked again for 30 days
                 done["no_feed"] += 1
                 continue
-            for game, players in rows:
-                history.save_game(db, game, players)
+            history.save_games(db, rows)
             db.commit()
             done["matches"] += 1
             done["games"] += len(rows)
@@ -192,9 +191,9 @@ def sync_leaguepedia(db, since=None, until=None, where=None, now=None):
             _log(f"  Leaguepedia {day} .. {nxt}: FAILED ({type(e).__name__}) - re-run sync for this week")
             day = nxt
             continue
-        for game, players in leaguepedia.to_history(rows):
-            history.save_game(db, game, players)
-            done["games"] += 1
+        items = leaguepedia.to_history(rows)
+        history.save_games(db, items)                   # one week in a few statements (a remote database)
+        done["games"] += len(items)
         db.commit()
         _log(f"  Leaguepedia {day} .. {nxt}: {len(rows)} player rows")
         day = nxt

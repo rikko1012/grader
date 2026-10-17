@@ -3,8 +3,9 @@
 #
 # Runs where the Leaguepedia secrets live (repository secrets LEAGUEPEDIA_USER, LEAGUEPEDIA_BOT_PASSWORD), the HLTV
 # scraper's pattern: a GitHub Actions job fetches, the scout reads.
-#   - LOL_DB_DSN secret set: the history goes into LoL's own PostgreSQL and stays there.
-#   - not set: a temporary database inside the job; the results are printed and uploaded as an artifact.
+#   - LOL_DB_DSN secret set and reachable: the history goes into LoL's own PostgreSQL and stays there.
+#   - not set / not reachable (warned): a temporary database inside the job; results printed and kept as an artifact.
+# The API answers (lol cache.db) are kept between runs (actions/cache), so a re-run never downloads a finished game twice.
 # Starts when this file is pushed on the LoL branch (re-run it from the Actions tab); never on main, never on a schedule
 # (the recurring sync is lol/deploy/lol-sync.yml).
 name: lol-full-history
@@ -33,7 +34,6 @@ jobs:
     env:
       LEAGUEPEDIA_USER: ${{ secrets.LEAGUEPEDIA_USER }}
       LEAGUEPEDIA_BOT_PASSWORD: ${{ secrets.LEAGUEPEDIA_BOT_PASSWORD }}
-      LOL_DB_DSN: ${{ secrets.LOL_DB_DSN }}
       PYTHONUNBUFFERED: "1"
     steps:
       - name: LoL data folder for this job (the runner context exists only inside steps)
@@ -43,6 +43,12 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt pytest
+      - name: Restore the LoL API cache from the last run
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/lol/cache.db*
+          key: lol-api-cache-${{ github.run_id }}
+          restore-keys: lol-api-cache-
 
       - name: LoL tests (offline)
         run: python -m pytest lol/tests -q -p no:cacheprovider
@@ -50,7 +56,19 @@ jobs:
       - name: Leaguepedia credentials present (names only, never the values)
         run: |
           [ -n "$LEAGUEPEDIA_USER" ] && [ -n "$LEAGUEPEDIA_BOT_PASSWORD" ] || { echo "LEAGUEPEDIA secrets missing"; exit 1; }
-          echo "both set; database: $([ -n "$LOL_DB_DSN" ] && echo 'LoL PostgreSQL (LOL_DB_DSN)' || echo 'temporary (this job only)')"
+          echo "both set"
+
+      - name: LoL database (its own PostgreSQL when LOL_DB_DSN is set and reachable, else a temporary one)
+        env:
+          DSN: ${{ secrets.LOL_DB_DSN }}
+        run: |
+          if [ -z "$DSN" ]; then echo "LOL_DB_DSN not set - temporary database for this job"; exit 0; fi
+          if LOL_DB_DSN="$DSN" python -c "from lol import history; db = history.DB(); print('tables ready:', [r['source'] for r in history.summary(db)][:5]); db.close()"; then
+            echo "LOL_DB_DSN=$DSN" >> "$GITHUB_ENV"
+            echo "LoL PostgreSQL reachable - the history is written there and kept"
+          else
+            echo "::warning::LOL_DB_DSN is set but the database is not reachable - this job uses a temporary database"
+          fi
 
       - name: Leaguepedia live check (login, one week, fields, league short names)
         run: python -m lol.checks leaguepedia
@@ -87,6 +105,13 @@ jobs:
           echo "----- lol/model_fit.json -----"
           cat lol/model_fit.json
           cp lol/model_fit.json "$LOL_DATA_DIR/model_fit.json"
+
+      - name: Save the LoL API cache for the next run
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/lol/cache.db*
+          key: lol-api-cache-${{ github.run_id }}
 
       - name: Keep the results (7 days)
         if: always()
