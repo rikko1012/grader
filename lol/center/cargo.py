@@ -91,6 +91,8 @@ def _opener():
         LOGIN["configured"] = bool(cred)
         if cred:
             _OPENER["logged_in"] = _login(*cred)
+            if _OPENER["logged_in"]:             # a logged-in bot is allowed a steadier pace than anonymous reads
+                PACER.base = PACER.interval = float(os.environ.get("LP_INTERVAL_LOGGED_IN", "3"))
     return _OPENER["o"]
 
 

@@ -12,8 +12,8 @@ The "raw" copy of a game is the scout client's summary of the livestats frames (
 Coverage limits (checked 2026-10-17): no LPL; remakes and forfeits are not flagged by this source (left unknown);
 the per-game winner is inferred (certain only for sweeps and each series' last game).
 
-Units: le_live (every 30 min: the next 7 days' schedule + the last 3 days' results), le_backfill (12 months, newest
-match first, 15 matches per unit, each match checkpointed).
+Units: le_live (every 30 min: the next 7 days' schedule + the last 3 days' results), le_backfill (8 months - LOL_BACKFILL_DAYS -
+newest match first, 15 matches per unit, each match checkpointed).
 """
 import json
 import time
@@ -23,7 +23,7 @@ from . import store
 
 LIVE_EVERY_S = 1800
 BATCH = 15
-BACKFILL_DAYS = 365
+BACKFILL_DAYS = int(__import__("os").environ.get("LOL_BACKFILL_DAYS", "245"))   # 8 months first
 
 
 def _le():

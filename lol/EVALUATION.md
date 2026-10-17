@@ -53,7 +53,7 @@ A projection uses only games on days before the match day, in both the backtest 
 - A series with an unknown or invalid game order, or with a player missing from a game in scope, is excluded and counted.
 
 **Models**
-- **B0 (simple baseline).** The player's per-game average over his earlier games, shrunk toward the TRAIN average for his role in his league (by role alone when the role and league have fewer than 200 TRAIN games). The prior weight k ∈ {2, 5, 10, 20, 40} and the NB size per (stat, scope) are fitted on TRAIN.
+- **B0 (simple baseline).** The player's per-game average over their earlier games, shrunk toward the TRAIN average for their role in their league (by role alone when the role and league have fewer than 200 TRAIN games). The prior weight k ∈ {2, 5, 10, 20, 40} and the NB size per (stat, scope) are fitted on TRAIN.
 - **lol-1.** As specified above: the grid on TRAIN and the NB size on TRAIN.
 - **C1** (the regularised component candidate drafted 2026-10-17) is not run. Its components (team kills x share x opponent) are what lol-1's share form already tests, so it would not add something meaningfully different.
 

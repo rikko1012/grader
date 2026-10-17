@@ -9,7 +9,7 @@ teams, tournaments) are resolved in batches afterwards.
 Order of work (one unit at a time, through the shared pacer):
   1. live sweep: games/players/schedule games of the last 3 days and the schedule of the next 15 days (every 30 min)
   2. pending names (players, redirects, teams, tournaments, rosters), batched
-  3. the 12-month backfill of the core tables, newest window first
+  3. the backfill of the core tables (8 months, LOL_BACKFILL_DAYS), newest window first
   4. secondary tables (ScoreboardTeams, PicksAndBansS7, RosterChanges, Tenures), newest first
   5. correction re-sweeps of the last 35 days (weekly), so later upstream fixes become new revisions
 
@@ -28,7 +28,7 @@ from .names import page_key
 
 EPOCH = date(2024, 1, 1)                 # window alignment (a Monday)
 WINDOW_DAYS = 14
-BACKFILL_DAYS = int(os.environ.get("LOL_BACKFILL_DAYS", "365"))
+BACKFILL_DAYS = int(os.environ.get("LOL_BACKFILL_DAYS", "245"))     # the agreed 8-month window first; longer later
 LIVE_EVERY_S = int(os.environ.get("LOL_LIVE_EVERY", "1800"))
 RESWEEP_DAYS, RESWEEP_EVERY_S = 35, 7 * 86400
 REF_BATCH = 40
