@@ -42,6 +42,15 @@ for the separate full-history run, which replaces this fit when it is done.
 python -m lol.backtest --history-from 2026-02-17 --train-from 2026-03-17 --test-from 2026-08-01 --test-to 2026-10-17 --write
 ```
 
+## Amendment A2 (2026-10-17, measurement correction found in code review, before any TEST number was seen)
+
+Counts are whole numbers, so the "80%" range (`model.interval`) is the narrowest whole-number range holding *at least*
+80% of the model's probability, often 85-90%. Judging it against a flat 80% would call a well-calibrated model
+under-confident. The coverage criterion becomes: **the share of results inside the range is within 4 points of the
+probability the model itself puts on that range** (`cover80_nominal`, averaged over the same series). Everything else
+is unchanged. The same review also fixed, before results: the last-10 baseline taking a day's games in kill order, and
+a game held by both sources being counted twice.
+
 ## Results
 
 (filled in from the command above once the recent history is synced)
