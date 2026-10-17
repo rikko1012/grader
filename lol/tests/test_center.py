@@ -188,14 +188,15 @@ def _ids(con):
     return pid, sid
 
 
-def test_bo3_sweep_is_not_three_games_and_rule_is_unverified(con):
+def test_bo3_sweep_settles_on_the_games_played(con):
     load_world(con)
     build.build(con)
     pid, sid = _ids(con)
-    r = settle.settle(con, "underdog", "kills", "maps_1_2_3", pid, sid, 5.5)
-    # AlphMid: 3 kills in game 1 + 4 in game 2 (as Team2) = 7; game 3 never played -> unverified rule, both readings kept
-    assert r["status"] == "rule_unverified" and r["actual"] == 7 and r["alternatives"] == {"sum_of_games_played": 7, "void": True}
-    assert any("unplayed_game_in_scope" in x for x in r["reasons"])
+    for platform in ("underdog", "prizepicks"):
+        r = settle.settle(con, platform, "kills", "maps_1_2_3", pid, sid, 5.5)
+        # AlphMid: 3 kills in game 1 + 4 in game 2 (as Team2) = 7; game 3 never played -> games 1 + 2 (owner 2026-10-17)
+        assert r["status"] == "graded" and r["actual"] == 7 and r["game_numbers"] == [1, 2] and r["over_hit"] == 1
+        assert any("settled on the games played" in x for x in r["reasons"])
 
 
 def test_bo5_full_scope_grades_and_push_and_dnp(con):
@@ -229,14 +230,16 @@ def test_forfeit_voids_on_underdog_and_settlement_versions(con):
     build.build(con)
     v2 = settle.record(con, "u1", "underdog", "kills", "maps_1_2_3", pid, sid, 5.5)
     rows = con.execute("SELECT version, status, supersedes FROM lol_settlements WHERE unit_key = 'u1' ORDER BY version").fetchall()
-    assert v2["version"] == 2 and [r[1] for r in rows] == ["void", "rule_unverified"] and rows[1][2] is not None
+    assert v2["version"] == 2 and [r[1] for r in rows] == ["void", "graded"] and rows[1][2] is not None
 
 
 def test_rules_have_sources_and_verified_flags():
     for p, spec in rules.RULES.items():
         assert spec["source"] and spec["read_at"]
         assert all(isinstance(v["verified"], bool) and v["handling"] for v in spec["rules"].values())
-    assert "unplayed_game_in_scope" in rules.unverified("underdog") and "unplayed_game_in_scope" in rules.unverified("prizepicks")
+    assert rules.unverified("underdog") == ["remake"]
+    assert rules.unverified("prizepicks") == ["combined", "forfeit", "remake"]
+    assert rules.rule("prizepicks", "unplayed_game_in_scope")["basis"].startswith("owner")
     assert rules.rule("underdog", "player_active")["verified"] is True
 
 

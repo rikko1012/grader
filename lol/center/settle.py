@@ -1,9 +1,8 @@
 """
 Settlement of one LoL player market from the canonical tables, by the platform's own rules (rules.py) - exact scope:
 
-- scope "maps_1_2_3" = the series' games numbered 1, 2 and 3 by the schedule's game order (remakes are not games);
-  a best-of-3 that ends 2-0 has NOT played game 3 - the market then depends on the platform's rule for an unplayed
-  game in scope, which is unverified on both platforms: the result is rule_unverified with both readings recorded
+- scope "maps_1_2_3" = the series' games numbered 1, 2 and 3 by the schedule's game order (remakes are not games),
+  counting the ones played: a best-of-3 that ends 2-0 settles on games 1 + 2 (owner, 2026-10-17: same as CS2)
 - a forfeit inside the scope: Underdog voids (verified); PrizePicks provisional void (unverified)
 - the player must have played every game in scope (Underdog, verified); missing from all of them = DNP (both)
 - stat = line: push (a void-like tie on both platforms)
@@ -77,8 +76,10 @@ def settle(con, platform, stat, scope, pid, sid, line):
         return {"status": "pending", "reasons": ["a stat value is missing upstream"], "games": in_games}
     gids = [played[n]["gid"] for n in in_games]
     if missing:
-        unverified.append("unplayed_game_in_scope")
-        reasons.append(f"game(s) {missing} not played (series {s['score1']}-{s['score2']}, best of {s['best_of']})")
+        if not rules.rule(platform, "unplayed_game_in_scope")["verified"]:
+            unverified.append("unplayed_game_in_scope")
+        reasons.append(f"game(s) {missing} not played (series {s['score1']}-{s['score2']}, best of {s['best_of']}): "
+                       f"settled on the games played")
     res = {"actual": actual, "over_hit": int(actual > line), "push": int(actual == line), "games": gids, "game_numbers": in_games}
     if unverified:
         return dict(res, status="rule_unverified", reasons=reasons + [f"unverified rule: {u}" for u in unverified],

@@ -72,6 +72,15 @@ A projection uses only games on days before the match day, in both the backtest 
 - Otherwise B0 is the production projection for that stat.
 - Either way the result is development evidence. It is not an advantage at real lines. That needs saved pre-match forecasts settled at archived offered lines (300 player-markets across at least 60 series, scored once). No grade or stake is shown until then.
 
+## Amendment A2 (2026-10-17 03:25 UTC, still before any fit): Maps 1-3 in a best-of-3
+
+The owner confirmed the rule for both platforms on 2026-10-17: "the kills from Maps 1-3 reflect the kills from Maps 1-3 - the same as CS2". A Maps 1-3 market counts the games among 1-3 that are played, so a best-of-3 that ends 2-0 settles on games 1 + 2.
+
+This replaces A1's best-of-3 lines. The rest of A1 stands.
+- **Target.** Every best-of-3 series counts under Maps 1-3. The target is the player's total over the games played (two or three). The player must have played every game that was played.
+- **Forecast, for every model alike.** A mixture of the 2-game and 3-game totals, with P(game 3 is played) = 2p(1-p). Here p is the team's per-game win chance from the history's Elo, from earlier days only. The 2-game part uses the Maps 1-2 negative-binomial size and the 3-game part the Maps 1-3 size.
+- **Reporting.** Best-of-3 Maps 1-3 is reported in its own row, next to best-of-5 Maps 1-3. The selection rule is unchanged: it uses Maps 1-2 and best-of-5 Maps 1-3. The best-of-3 Maps 1-3 row is reported, not used to select.
+
 ## Results
 
 (filled in from `python -m lol.backtest` once the history is complete)
