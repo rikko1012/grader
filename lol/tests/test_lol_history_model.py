@@ -444,3 +444,28 @@ def test_bulk_save_sqlite(db):
 
 def test_bulk_save_postgres(pg_db):
     _check_bulk(pg_db)
+
+
+def test_leaguepedia_sync_resumes_finished_weeks(db, monkeypatch):
+    from datetime import datetime, timezone
+    from lol import leaguepedia
+    asked = []
+
+    class Site:
+        def __init__(self, *a, **k):
+            pass
+
+        def player_games(self, start, end, where=None):
+            asked.append(str(start))
+            return []
+    monkeypatch.setattr(leaguepedia, "Leaguepedia", Site)
+    now = datetime(2026, 10, 17, tzinfo=timezone.utc)
+    sync.sync_leaguepedia(db, since=date(2026, 8, 1), now=now)
+    first = list(asked)
+    asked.clear()
+    out = sync.sync_leaguepedia(db, since=date(2026, 8, 1), now=now)
+    assert first and asked == [d for d in first if d >= "2026-10-03"]          # only weeks ending inside the last 14 days
+    assert out["weeks_already_held"] == len(first) - len(asked)
+    asked.clear()
+    sync.sync_leaguepedia(db, since=date(2026, 8, 1), now=now, force=True)
+    assert asked == first

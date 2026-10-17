@@ -173,17 +173,28 @@ def sync_lolesports(db, leagues=None, since=None, max_matches=None, now=None, wo
     return dict(done)
 
 
-def sync_leaguepedia(db, since=None, until=None, where=None, now=None):
-    """Every Leaguepedia scoreboard game since `since`, a week at a time. Needs LEAGUEPEDIA_USER / _BOT_PASSWORD."""
+RECENT_DAYS = 14          # Leaguepedia weeks this recent are always re-read (scoreboards still get corrected)
+
+
+def sync_leaguepedia(db, since=None, until=None, where=None, now=None, force=False):
+    """Every Leaguepedia scoreboard game since `since`, a week at a time. Needs LEAGUEPEDIA_USER / _BOT_PASSWORD.
+    Resumable: each finished week is noted in lol_sync_state, and a later run skips it (except the last RECENT_DAYS and
+    with force=True) - a run stopped by a time limit carries on where it stopped instead of starting over."""
     from . import leaguepedia
     now = now or datetime.now(timezone.utc)
     since = since or (now - timedelta(days=DEFAULT_DAYS)).date()
     until = until or (now + timedelta(days=1)).date()
+    recent = (now - timedelta(days=RECENT_DAYS)).date()
     site = leaguepedia.Leaguepedia()
     done, failed = Counter(), []
     day = since
     while day < until:
         nxt = min(day + timedelta(days=7), until)
+        mark = f"lp:week:{day}:{nxt}:{where or ''}"
+        if not force and nxt <= recent and history.get_state(db, mark):
+            done["weeks_already_held"] += 1
+            day = nxt
+            continue
         try:
             rows = site.player_games(day, nxt, where=where)
         except Exception as e:          # noqa: BLE001 - one bad week never stops the sync; it is reported, not hidden
@@ -195,6 +206,7 @@ def sync_leaguepedia(db, since=None, until=None, where=None, now=None):
         history.save_games(db, items)                   # one week in a few statements (a remote database)
         done["games"] += len(items)
         db.commit()
+        history.set_state(db, mark, f"{len(items)} games")
         _log(f"  Leaguepedia {day} .. {nxt}: {len(rows)} player rows")
         day = nxt
     if not failed:

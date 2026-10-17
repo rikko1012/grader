@@ -288,7 +288,7 @@ def run_sync(db, args):
         if not config.leaguepedia_credentials():
             out["leaguepedia"] = {"skipped": "LEAGUEPEDIA_USER / LEAGUEPEDIA_BOT_PASSWORD not set"}
         else:
-            out["leaguepedia"] = sync.sync_leaguepedia(db, since=since)
+            out["leaguepedia"] = sync.sync_leaguepedia(db, since=since, force=args.force)
     return out
 
 
