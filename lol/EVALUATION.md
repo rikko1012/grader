@@ -138,6 +138,31 @@ Fixes how the single final comparison turns into the production model. Nothing h
 - **Fit file** (`lol/model_fit.json`, written by `python -m lol.evaluate fit`): the selected forms' parameters fitted on DEV-TRAIN + VALID (targets 2026-04-01..07-31), the NB sizes, lol-2's parameters when selected, the selection rule and evidence, the snapshot hash, fitting dates, the simulation seed rule (crc32 of market key and day) and the final report's hash.
 - **Stakes.** Unchanged: 0U for LoL until the real-line requirement (300 settled player-markets across 60+ series) passes. Grades follow the published bands.
 
+## Development record (2026-10-17 13:55 UTC, written before the TEST numbers were returned)
+
+- **History snapshot:** production export after the full backfill, the wrong-merge repair (3 player pairs split) and the
+  duplicate-series fix (LoL Esports copies of Leaguepedia series with a differently named team: 235+ games removed).
+  10,756 games, 107,553 player rows, 3,982 players, 717 teams, 76 leagues (LPL 538 games, Feb-Sep).
+  sha256 of the ordered rows: a1f892f40649a6da1630fbf0a0af935e5ab318b06394bea6457c5b373653c726.
+  An earlier snapshot (8897ada1..., before the duplicate fix) was used for nothing: its tuning run was stopped.
+- **lol-2 tuning (VALID, kills + assists, Maps 1-2 and 1-3 log score):** hl 60, k0 16, k_team 8 (-3.0199 over 7,416 totals;
+  the grid spans -3.0199 to -3.03).
+- **VALID (18,660 DEV-TRAIN targets, 8,126 scored; Maps 1-2: 3,093 totals / 311 series; Maps 1-3: 615 / 62):**
+
+| stat, scope | MAE B0 / lol-1 / lol-2 | log-score gain lol-1 vs B0 (95% CI) | lol-2 vs B0 | lol-2 vs lol-1 |
+|---|---|---|---|---|
+| kills, Maps 1-2 | 3.194 / 3.110 / 3.119 | +0.024 (+0.013, +0.035) | +0.025 (+0.014, +0.036) | +0.001 (-0.008, +0.009) |
+| kills, Maps 1-3 | 4.076 / 4.013 / 3.974 | -0.019 (-0.054, +0.012) | +0.002 (-0.029, +0.031) | +0.022 (+0.003, +0.042) |
+| assists, Maps 1-2 | 5.298 / 5.180 / 5.203 | +0.023 (+0.006, +0.039) | +0.031 (+0.014, +0.047) | +0.008 (-0.002, +0.018) |
+| assists, Maps 1-3 | 7.630 / 7.623 / 7.554 | -0.012 (-0.057, +0.034) | -0.010 (-0.064, +0.040) | +0.002 (-0.037, +0.039) |
+| deaths, Maps 1-2 | 2.676 / 2.584 / 2.589 | +0.035 (+0.023, +0.045) | +0.034 (+0.020, +0.048) | -0.001 (-0.009, +0.007) |
+| deaths, Maps 1-3 | 3.650 / 3.515 / 3.504 | +0.049 (+0.012, +0.087) | +0.056 (+0.010, +0.104) | +0.008 (-0.014, +0.031) |
+
+- **Provisional choice (A1 rule on VALID):** kills B0, assists B0, deaths lol-1. lol-1 and lol-2 beat B0 on Maps 1-2 for
+  every stat; on Maps 1-3 (62 series) the intervals include 0 for kills and assists, so the simpler model stays.
+- **Every model under-projects on VALID** (mean projection minus actual, Maps 1-2: kills -0.36 to -0.47, assists -0.46 to
+  -0.69, deaths -0.37 to -0.59). Recorded, not corrected: a correction would be a new candidate, not part of this plan.
+
 ## Results
 
 (filled in from `python -m lol.backtest` once the history is complete)
