@@ -93,7 +93,7 @@ class Leaguepedia:
             if not err:
                 return [row.get("title") or {} for row in body.get("cargoquery") or []]
             if err.get("code") in ("ratelimited", "maxlag"):
-                wait = min(30 * (attempt + 1), 120)
+                wait = min(60 + 30 * attempt, 180)   # 2026-10-17 run 3: a 30 s wait never sufficed, 60-90 s did
                 print(f"  Leaguepedia {err.get('code')}: waiting {wait} s", file=sys.stderr, flush=True)
                 time.sleep(wait)
                 continue

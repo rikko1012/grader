@@ -208,7 +208,11 @@ def sync_leaguepedia(db, since=None, until=None, where=None, now=None, force=Fal
     while day < until:
         nxt = min(day + timedelta(days=7), until)
         mark = f"lp:week:{day}:{nxt}:{where or ''}"
-        if not force and nxt <= recent and history.get_state(db, mark):
+        if not force and nxt <= recent and (history.get_state(db, mark) or (not where and db.query(
+                "SELECT 1 FROM lol_games WHERE source = 'lp' AND played_at >= ? AND played_at < ? LIMIT 1",
+                (f"{day}T00:00:00Z", f"{nxt}T00:00:00Z")))):
+            # held: marked, or (no filter) a settled week already holding Leaguepedia games - each week is saved in
+            # one commit, so a stored week is complete (also covers weeks saved before the marks existed)
             done["weeks_already_held"] += 1
             day = nxt
             continue

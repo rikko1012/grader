@@ -83,7 +83,9 @@ jobs:
       - name: Leaguepedia live check (login, one week, fields, league short names)
         run: python -m lol.checks leaguepedia
 
-      # Leaguepedia a quarter per step: each step's finish time shows the progress while the job runs
+      # Leaguepedia a quarter per step: each step's finish time shows the progress while the job runs. Leaguepedia
+      # rate-limits the bot account to roughly one week of data every 1.5 minutes (run 3, 2026-10-17); weeks already
+      # in the LoL database are skipped
       - name: Leaguepedia 2025-01-01 .. 2025-04-01 (1 request / second; finished weeks are kept and skipped on a re-run)
         run: python lol_scout.py sync --source leaguepedia --since 2025-01-01 --until 2025-04-01 | tail -c 3000
       - name: Leaguepedia 2025-04-01 .. 2025-07-01 (1 request / second; finished weeks are kept and skipped on a re-run)

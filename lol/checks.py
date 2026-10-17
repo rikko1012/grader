@@ -16,7 +16,8 @@ from . import history, leaguepedia, teams
 
 EXPECTED = {"Link", "Name", "PlayerPage", "Team", "TeamVs", "Role", "Champion", "Kills", "Deaths", "Assists", "CS", "Gold",
             "TeamKills", "PlayerWin", "Side", "GameId", "MatchId", "PlayedAt", "GameN", "Minutes", "Team1", "Team2",
-            "Team1Kills", "Team2Kills", "WinTeam", "Patch", "BestOf", "Tournament", "League", "LeagueShort", "Region"}
+            "Team1Kills", "Team2Kills", "WinTeam", "Patch", "BestOf", "Tournament", "League", "LeagueShort", "Region",
+            "PlayedAt__precision"}                  # Cargo adds a datetime field's precision on its own
 
 
 def _ts(s):
