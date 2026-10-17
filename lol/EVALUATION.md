@@ -81,6 +81,21 @@ This replaces A1's best-of-3 lines. The rest of A1 stands.
 - **Forecast, for every model alike.** A mixture of the 2-game and 3-game totals, with P(game 3 is played) = 2p(1-p). Here p is the team's per-game win chance from the history's Elo, from earlier days only. The 2-game part uses the Maps 1-2 negative-binomial size and the 3-game part the Maps 1-3 size.
 - **Reporting.** Best-of-3 Maps 1-3 is reported in its own row, next to best-of-5 Maps 1-3. The selection rule is unchanged: it uses Maps 1-2 and best-of-5 Maps 1-3. The best-of-3 Maps 1-3 row is reported, not used to select.
 
+## Amendment A3 (2026-10-17 03:30 UTC, still before any fit): market scope follows the series format
+
+The owner confirmed on 2026-10-17 that Maps 1-2 lines are posted on best-of-3 series and Maps 1-3 lines on best-of-5 series. Every game in a market's scope is therefore always played.
+
+This replaces A1's and A2's best-of-3 Maps 1-3 rows.
+
+**Scopes evaluated:**
+- Maps 1-2 = best-of-3 series, games 1 + 2.
+- Maps 1-3 = best-of-5 series, games 1-3.
+- Map 1 is reported for completeness.
+
+**Selection.** Uses Maps 1-2 (best-of-3) and Maps 1-3 (best-of-5). The rule is otherwise unchanged.
+
+**Mismatched lines.** A live line whose scope does not fit its series' format (for example, Maps 1-3 on a best-of-3) is saved, flagged `format_scope_mismatch` and kept out of slips. The A2 mixture is still the forecast for such a line.
+
 ## Results
 
 (filled in from `python -m lol.backtest` once the history is complete)

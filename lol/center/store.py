@@ -267,3 +267,33 @@ def quarantine(con, kind, skey, reason, detail=None, at=None):
 def resolve_quarantine(con, kind, skey, reason, at=None):
     con.execute("UPDATE quarantine SET resolved_at = ? WHERE kind = ? AND skey = ? AND reason = ? AND resolved_at IS NULL",
                 (at or now_iso(), kind, skey, reason))
+
+
+def merge(con, keep, drop, note, at=None):
+    """Two internal ids turned out to be one player / team (e.g. its LoL Esports id and its Leaguepedia page, linked
+    through a series both sources hold): every source mapping and alias of `drop` moves to `keep`; both ids record it;
+    `drop` stays resolvable through canonical_id(). Nothing is deleted except the moved alias duplicates."""
+    if keep == drop:
+        return keep
+    at = at or now_iso()
+    con.execute("UPDATE entity_sources SET eid = ?, note = COALESCE(note || '; ', '') || ? WHERE eid = ?", (keep, f"merged from {drop}", drop))
+    for r in con.execute("SELECT kind, norm, source, raw, first_seen, last_seen FROM aliases WHERE eid = ?", (drop,)).fetchall():
+        con.execute("INSERT OR IGNORE INTO aliases (kind, norm, eid, source, raw, first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (r[0], r[1], keep, r[2], r[3], r[4], r[5]))
+    con.execute("DELETE FROM aliases WHERE eid = ?", (drop,))
+    set_meta(con, f"merged:{drop}", keep)
+    for eid, change in ((keep, f"absorbed {drop}"), (drop, f"merged into {keep}")):
+        con.execute("INSERT INTO entity_history (eid, at, change, detail) VALUES (?, ?, 'merged', ?)", (eid, at, json.dumps({"change": change, "note": note})))
+    return keep
+
+
+def canonical_id(con, eid):
+    """The surviving id of an id that was merged (follows chains); the id itself otherwise."""
+    seen = set()
+    while eid and eid not in seen:
+        seen.add(eid)
+        nxt = get_meta(con, f"merged:{eid}")
+        if not nxt:
+            return eid
+        eid = nxt
+    return eid

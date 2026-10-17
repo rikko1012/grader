@@ -210,7 +210,60 @@ def _z(s):
     return (str(s)[:19] + "Z") if s else None
 
 
-def _lolesports(con, at, series, games, pgs, checks):
+def _attach(con, kind, source, skey, target, at):
+    """Map one more source id onto `target`; when that source id already has its own internal id, the two ids are
+    merged (the older id survives, so ids already saved elsewhere stay valid). -> 1 when anything changed."""
+    cur = store.find_entity(con, kind, source, str(skey))
+    target = store.canonical_id(con, target)
+    if cur == target:
+        return 0
+    if cur is None:
+        store.link_source(con, target, kind, source, str(skey), "same series held by both sources", at)
+        return 1
+    keep, drop = sorted([cur, target], key=lambda e: int(e.rsplit(":", 1)[1]))
+    store.merge(con, keep, drop, f"{kind} identified in a series both sources hold", at)
+    return 1
+
+
+def link_overlaps(con, overlaps, at):
+    """For every real series held by both sources (the LoL Esports copy was left out): its two LoL Esports team ids are
+    the two Leaguepedia teams with exactly those names / codes, and each LoL Esports player id is the Leaguepedia
+    player at the same (game number, team, role) - in every game, or the pair is quarantined, never guessed."""
+    if not overlaps:
+        return 0
+    lpg = defaultdict(list)
+    for r in store.current_rows(con, "LE:PlayerGame"):
+        lpg[r["match_id"]].append(r)
+    changed = 0
+    for mid, m, s in overlaps:
+        lp_tids = {s["team1"], s["team2"]}
+        tmap = {}
+        for t in m.get("teams") or []:
+            hits = {r[0] for n in (t.get("name"), t.get("code")) if n
+                    for r in con.execute("SELECT eid FROM aliases WHERE kind = 'team' AND norm = ? AND source NOT LIKE 'lolesports%'",
+                                         (norm(n),))} & lp_tids
+            if len(hits) == 1:
+                tmap[t["id"]] = next(iter(hits))
+        if len(tmap) != 2 or len(set(tmap.values())) != 2:
+            store.quarantine(con, "series", f"lolesports:{mid}", "cross_source_teams_not_matched", {"lp_series": s["sid"]}, at)
+            continue
+        for le_tid, lp_tid in tmap.items():
+            changed += _attach(con, "team", SRC_LE_TEAM, le_tid, lp_tid, at)
+        at_slot = {(r[0], r[1], r[2]): r[3] for r in con.execute("SELECT game_n, tid, role, pid FROM c_player_games WHERE sid = ?", (s["sid"],))}
+        votes = defaultdict(Counter)
+        for p in lpg.get(mid, []):
+            lp_pid = at_slot.get((p.get("number"), tmap.get(p.get("team_id")), role(p.get("role"))))
+            if lp_pid and p.get("player_id"):
+                votes[p["player_id"]][lp_pid] += 1
+        for le_pid, c in votes.items():
+            if len(c) == 1:
+                changed += _attach(con, "player", SRC_LE_PLAYER, le_pid, next(iter(c)), at)
+            else:
+                store.quarantine(con, "player", f"lolesports:{le_pid}", "cross_source_player_conflict", dict(c), at)
+    return changed
+
+
+def _lolesports(con, at, series, games, pgs, checks, overlaps=None):
     """LoL Esports rows -> canonical series / games / player games (Riot ids, schedule game numbers). An LE match is
     left out when a Leaguepedia series with the same two teams (exact aliases) is on the same day: one source per
     real series. Remakes and forfeits are not reported by this source (flagged, left unknown)."""
@@ -263,8 +316,11 @@ def _lolesports(con, at, series, games, pgs, checks):
             continue
         start = _z(m.get("start"))
         a, b = alias_eids(teams[0].get("name"), teams[0].get("code")), alias_eids(teams[1].get("name"), teams[1].get("code"))
-        if start and any({s["team1"], s["team2"]} & a and {s["team1"], s["team2"]} & b for s in lp_by_day.get(start[:10], [])):
+        same = [s for s in lp_by_day.get(start[:10], []) if {s["team1"], s["team2"]} & a and {s["team1"], s["team2"]} & b] if start else []
+        if same:
             out["left_out_leaguepedia_has_it"] += 1
+            if overlaps is not None and len(same) == 1:
+                overlaps.append((mid, m, same[0]))
             continue
         t1, t2 = tid(teams[0]), tid(teams[1])
         sid = store.entity(con, "series", SRC_LE_MATCH, str(mid), label=f"{teams[0].get('code')} vs {teams[1].get('code')}", at=at)
@@ -352,8 +408,9 @@ def _players_by_game(con):
         yield gid, rows
 
 
-def build(con, at=None):
-    """Rebuild the canonical tables. Returns counts and check results."""
+def build(con, at=None, _again=True):
+    """Rebuild the canonical tables. Returns counts and check results. When the cross-source pass links or merges ids,
+    the tables are rebuilt once more so every row carries the final ids."""
     t0 = time.time()
     at = at or store.now_iso()
     tid, teams = team_resolver(con, at)
@@ -512,7 +569,8 @@ def build(con, at=None):
             s["flags"].append("games_vs_score_mismatch")
             checks["series_games_vs_score_mismatch"] += 1
     n_pg += _flush(con, pgs)
-    le_counts = _lolesports(con, at, series, games, pgs, checks)
+    overlaps = []
+    le_counts = _lolesports(con, at, series, games, pgs, checks, overlaps)
     n_pg += _flush(con, pgs) + le_counts.pop("flushed", 0)
 
     # ---- write the canonical tables
@@ -542,6 +600,10 @@ def build(con, at=None):
     out = {"built_at": at, "seconds": round(time.time() - t0, 1), "series": len(series), "games": len(games),
            "player_games": n_pg, "teams": len(teams), "players_with_page_rows": len(players), "lolesports": le_counts,
            "checks": dict(checks)}
+    linked = link_overlaps(con, overlaps, at)
+    out["cross_source_links"] = linked
     store.set_meta(con, "last_build", out)
     con.commit()
+    if linked and _again:
+        return dict(build(con, at, _again=False), cross_source_links=linked)
     return out
