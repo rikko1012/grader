@@ -516,3 +516,12 @@ def test_copy_without_game_1_and_a_renamed_team_is_still_one_series(con):
     build.build(con)
     assert con.execute("SELECT COUNT(*) FROM c_player_games").fetchone()[0] == 20                  # LP's copy only
     assert con.execute("SELECT COUNT(*) FROM c_games WHERE source = 'lolesports'").fetchone()[0] == 0
+
+
+def test_build_code_change_marks_a_rebuild(con, monkeypatch):
+    from lol.center import worker
+    assert worker.mark_rebuild_on_code_change(con) is True and store.get_meta(con, "dirty")
+    store.set_meta(con, "dirty", None)
+    assert worker.mark_rebuild_on_code_change(con) is False and store.get_meta(con, "dirty") is None
+    monkeypatch.setattr(worker, "code_fingerprint", lambda: "changed")
+    assert worker.mark_rebuild_on_code_change(con) is True and store.get_meta(con, "dirty")

@@ -85,6 +85,28 @@ def ingest_loop():
             time.sleep(300)
 
 
+def code_fingerprint():
+    """sha256 of the code that turns source rows into the canonical history (identity, build, export)."""
+    import hashlib
+    from pathlib import Path
+    h = hashlib.sha256()
+    for name in ("build.py", "export.py", "store.py", "names.py"):
+        h.update((Path(__file__).with_name(name)).read_bytes())
+    return h.hexdigest()[:16]
+
+
+def mark_rebuild_on_code_change(con):
+    """A deploy that changes the build / identity / export code rebuilds the canonical history from the stored source
+    records at the next build window, even when no source row changed (repairs apply without waiting for new data)."""
+    fp = code_fingerprint()
+    if store.get_meta(con, "build_code") != fp:
+        store.set_meta(con, "build_code", fp)
+        store.set_meta(con, "dirty", store.now_iso())
+        con.commit()
+        return True
+    return False
+
+
 def build_loop():
     """When any source changed: the canonical build, the coverage report and the export to the one LoL history (at
     most every BUILD_EVERY_S, the first after 5 min). Every LINK_EVERY_S: offer -> series / player links, the pre-match
@@ -92,6 +114,7 @@ def build_loop():
     from . import build, coverage, export, forecast, handoff, learning, match, slips
     con = store.connect()
     t_build, t_link = time.time() - BUILD_EVERY_S + 300, 0.0
+    mark_rebuild_on_code_change(con)
     while True:
         try:
             try:
