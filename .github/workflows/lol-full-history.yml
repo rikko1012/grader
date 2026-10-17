@@ -39,7 +39,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install -r requirements.txt pytest
+      - run: pip install -r requirements-test.txt
       - name: LoL and CS2 regression checks (no provider credentials)
         run: python -m pytest lol/tests tests -q -p no:cacheprovider
 

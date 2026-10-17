@@ -1,0 +1,4 @@
+-r requirements.txt
+pytest>=8
+pandas>=2.2,<3
+lightgbm>=4,<5
