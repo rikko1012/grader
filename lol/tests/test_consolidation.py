@@ -278,6 +278,11 @@ def test_slips_batch_no_overlap_shortage_and_payouts(con, tmp_path, monkeypatch)
     overs = slips.build(con, "underdog", 1, 1, mode="overs", preview=True)
     assert (len(unders["slips"]) == 1) != (len(overs["slips"]) == 1)                 # the one leg fits exactly one mode
     assert slips.build(con, "underdog", 1, 1, exclude_roles=("mid",), preview=True)["slips"] == []
+    # the member summary: nothing recommended at 0U, the reasons counted over the upcoming forecasts
+    ms = slips.member_summary(con)
+    ud = ms["platforms"]["underdog"]
+    assert ud["recommended"] == [] and ud["upcoming_forecasts"] >= 1 and ud["upcoming_series"] == 1
+    assert any(r.startswith("stake 0U") for r in ud["blocked_by"]) and ms["at"]
 
 
 def test_learning_dashboard_counts_settled_forecasts(con, tmp_path, monkeypatch):

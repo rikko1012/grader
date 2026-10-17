@@ -124,7 +124,7 @@ def member_summary(con, sizes=(2, 3), now=None):
     included) per platform, or exactly why there are none, counted over the forecasts of series not yet started.
     Nothing is added to reach a count."""
     now = now or datetime.now(timezone.utc)
-    out = {"at": store.now_iso(now), "platforms": {}}
+    out = {"at": store.now_iso(now.timestamp()), "platforms": {}}
     for pl in ("underdog", "prizepicks"):
         res = [build(con, pl, size, 5, "mixed", no_overlap=True, preview=False, now=now) for size in sizes]
         upcoming = [f for f in _latest(con, pl) if (forecast._when(f["series_start"]) or now) > now]
