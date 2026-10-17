@@ -72,12 +72,15 @@ def pp_parse(body):
             continue
         ot = a.get("odds_type") or "standard"
         allowed = a.get("allowed_wager_types")
+        if isinstance(allowed, str):
+            allowed = [allowed]
         under = ("under" in allowed) if isinstance(allowed, list) else ot in ("standard", "promo")
+        over = ("over" in allowed) if isinstance(allowed, list) else True
         opp = re.sub(r"\s+maps?\s*\d(?:\s*[-+&]\s*\d)*\s*$", "", str(a.get("description") or ""), flags=re.I).strip()
         rows.append({"id": f"pp:{p.get('id')}", "book": "prizepicks", "player": pl.get("display_name") or pl.get("name"),
                      "team": pl.get("team"), "opponent": opp or None, "position": pl.get("position"),
                      "start": a.get("start_time"), "prop": prop, "scope": scope, "line": float(a["line_score"]),
-                     "odds_type": ot, "over_available": True, "under_available": under,
+                     "odds_type": ot, "over_available": over, "under_available": under,
                      "updated_at": a.get("updated_at"), "stat_label": stat})
     return rows
 
@@ -164,7 +167,8 @@ def archive(book, rows, now=None):
     offered (the CS2 real-line studies needed exactly this). Never fatal."""
     now = now or datetime.now(timezone.utc).isoformat(timespec="seconds")
     last = cache.get("lines_last", book) or {}
-    cur = {r["id"]: [r["line"], r["odds_type"], r["over_available"], r["under_available"]] for r in rows}
+    cur = {r["id"]: [r["line"], r["odds_type"], r["over_available"], r["under_available"], r.get("mult_over"),
+                     r.get("mult_under"), r.get("price_over"), r.get("price_under")] for r in rows}   # a payout move too
     events = []
     for r in rows:
         if last.get(r["id"]) != cur[r["id"]]:

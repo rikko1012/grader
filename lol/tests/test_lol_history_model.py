@@ -478,3 +478,116 @@ def test_sync_cli_passes_until_to_leaguepedia(db, monkeypatch):
     args = argparse.Namespace(since="2025-01-01", until="2025-04-01", leagues=None, source="leaguepedia", force=False)
     scout.run_sync(db, args)
     assert (str(seen["since"]), str(seen["until"])) == ("2025-01-01", "2025-04-01")
+
+
+# ------------------------------------------------------------------ review 2 fixes
+def test_feed_misspelling_still_one_game_with_leaguepedia(db):
+    g, rows = _game("lp", "1", "2026-06-07", 1, "G2 Esports", "Fnatic", 15, 10, [("BrokenBlade", "blue", "top", 3, 2, 5, "Gnar")])
+    history.save_game(db, g, rows)
+    g, rows = _game("le", "1", "2026-06-07", 1, "G2 Esports", "Fnatic", 15, 10, [("BrokenBIade", "blue", "top", 3, 2, 5, "Gnar")])
+    rows[0]["player_id"] = "99566406047571736"
+    history.save_game(db, g, rows)
+    db.commit()
+    (who,) = history.find_players(db, "BrokenBlade")
+    assert len(history.player_games(db, who["player_key"], pid=who["pid"])) == 1
+    assert len(history.all_player_games(db)) == 1
+
+
+def test_team_games_keeps_two_games_against_different_opponents(db):
+    g, rows = _game("lp", "1", "2026-07-29", 1, "T1", "Gen.G", 18, 9, [("Faker", "blue", "mid", 5, 1, 7, "Azir")])
+    history.save_game(db, g, rows)
+    g, rows = _game("le", "2", "2026-07-30", 1, "T1", "KT", 18, 9, [("Faker", "blue", "mid", 2, 2, 2, "Ahri")], match="M2")
+    history.save_game(db, g, rows)
+    db.commit()
+    assert len(history.team_games(db, "T1")) == 2
+
+
+def test_inferred_winners_contradicting_the_last_game_are_dropped():
+    rows = _winners(2, 1, ["blue", "blue", "red"])                  # counts add up, but game 3 must be Blue's
+    assert [g["winner"] for g, _ in rows] == [None, None, "Blue Team"]
+
+
+def test_board_lines_for_another_match_are_not_graded():
+    theirs = {"name": "Gen.G", "code": "GEN"}
+    assert scout._same_match({"opponent": "GEN", "start": "2026-10-20T08:00:00Z"}, theirs, "2026-10-20T09:00:00Z")
+    assert not scout._same_match({"opponent": "KT"}, theirs, "2026-10-20T09:00:00Z")
+    assert not scout._same_match({"opponent": "GEN", "start": "2026-10-23T08:00:00Z"}, theirs, "2026-10-20T09:00:00Z")
+
+
+def test_h2h_counts_pushes_apart(db):
+    for gid, k in (("1", 3), ("2", 5), ("3", 1)):
+        g, rows = _game("le", gid, f"2026-07-2{gid}", 1, "T1", "Gen.G", 18, 9, [("Faker", "blue", "mid", k, 1, 7, "Azir")],
+                        match=f"M{gid}")
+        history.save_game(db, g, rows)
+    db.commit()
+    args = argparse.Namespace(name="Faker", team=None, opponent="Gen.G", prop="kills", scope="1", line=3.0)
+    v = scout.run_h2h(db, args)["vs_line"]
+    assert (v["over"], v["under"], v["push"]) == (1, 1, 1)
+
+
+def test_team_filter_never_falls_back_to_a_namesake(db):
+    g, rows = _game("le", "1", "2026-07-29", 1, "Anubis Gaming", "X", 10, 9, [("Shycarry", "blue", "bot", 4, 2, 3, "Jinx")])
+    history.save_game(db, g, rows)
+    db.commit()
+    pl, cands = scout.resolve_player(db, "Shycarry", "Partizan Sangal")
+    assert pl is None and cands
+
+
+def test_full_without_a_fit_still_shows_lines(db, monkeypatch):
+    for g, rows in _league(days=30):
+        history.save_game(db, g, rows)
+    db.commit()
+    monkeypatch.setattr(model, "PARAMS", None)
+    monkeypatch.setattr(scout.lolesports, "slate", lambda **k: [])
+    monkeypatch.setattr(scout.odds, "match_odds", lambda *a, **k: {"found": False})
+    monkeypatch.setattr(scout.lines, "lines_for", lambda *a, **k: [
+        {"book": "prizepicks", "player": "Team1_mid", "prop": "kills", "scope": "12", "line": 6.5, "odds_type": "standard"}])
+    args = argparse.Namespace(name="Team1_mid", team=None, opponent=None, line=None, prop="kills", scope=None,
+                              line_type="standard", hours=36)
+    res = scout.run_full(db, args)
+    assert "error" in res["projection"] and res["lines"] and res["lines"][0]["graded"] is False
+
+
+def test_leaguepedia_week_drops_games_it_no_longer_returns(db, monkeypatch):
+    from datetime import datetime, timezone
+    from lol import leaguepedia
+    from lol.tests.test_lol_sources import CARGO
+    batches = [CARGO, [dict(r, GameId="LCK/renamed_1") for r in CARGO]]   # the same game re-keyed upstream
+
+    class Site:
+        def __init__(self, *a, **k):
+            pass
+
+        def player_games(self, start, end, where=None):
+            return batches[0] if str(start) == "2026-07-27" else []
+    monkeypatch.setattr(leaguepedia, "Leaguepedia", Site)
+    now = datetime(2026, 10, 17, tzinfo=timezone.utc)
+    sync.sync_leaguepedia(db, since=date(2026, 7, 27), until=date(2026, 8, 3), now=now)
+    batches.pop(0)
+    out = sync.sync_leaguepedia(db, since=date(2026, 7, 27), until=date(2026, 8, 3), now=now, force=True)
+    keys = [r["game_key"] for r in db.query("SELECT game_key FROM lol_games")]
+    assert keys == ["lp:LCK/renamed_1"] and out["stale_removed"] == 1
+
+
+def test_recent_leaguepedia_weeks_are_not_marked_held(db, monkeypatch):
+    from datetime import datetime, timezone
+    from lol import leaguepedia
+
+    class Site:
+        def __init__(self, *a, **k):
+            pass
+
+        def player_games(self, start, end, where=None):
+            return []
+    monkeypatch.setattr(leaguepedia, "Leaguepedia", Site)
+    sync.sync_leaguepedia(db, since=date(2026, 10, 10), now=datetime(2026, 10, 17, tzinfo=timezone.utc))
+    later = sync.sync_leaguepedia(db, since=date(2026, 10, 10), now=datetime(2026, 11, 30, tzinfo=timezone.utc))
+    assert later.get("weeks_already_held", 0) == 0                  # read while recent -> read again once settled
+
+
+def test_no_feed_match_still_listed_missing_in_a_fresh_database(db):
+    from lol import cache
+    m = {"match_id": "NF1", "league": "lck", "start": "2026-05-01T08:00:00Z"}
+    cache.put("le_done", "getEventDetails?id=NF1", _details(2, 0, 2))
+    sync._note_nofeed(db, m)
+    assert sorted(r["game_key"] for r in history.missing(db)) == ["le:g1", "le:g2"]

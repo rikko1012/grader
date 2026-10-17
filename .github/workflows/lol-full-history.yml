@@ -47,7 +47,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/lol/cache.db*
-          key: lol-api-cache-${{ github.run_id }}
+          key: lol-api-cache-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: lol-api-cache-
 
       - name: LoL tests (offline)
@@ -63,7 +63,17 @@ jobs:
           DSN: ${{ secrets.LOL_DB_DSN }}
         run: |
           if [ -z "$DSN" ]; then echo "LOL_DB_DSN not set - temporary database for this job"; exit 0; fi
-          if LOL_DB_DSN="$DSN" python -c "from lol import history; db = history.DB(); print('tables ready:', [r['source'] for r in history.summary(db)][:5]); db.close()"; then
+          # only the error's TYPE is printed and stderr is dropped: a connection error can quote part of the DSN
+          if LOL_DB_DSN="$DSN" python - 2>/dev/null <<'PY'
+          import sys
+          from lol import history
+          try:
+              history.DB().close()
+          except Exception as e:
+              print("database check failed:", type(e).__name__)
+              sys.exit(1)
+          PY
+          then
             echo "LOL_DB_DSN=$DSN" >> "$GITHUB_ENV"
             echo "LoL PostgreSQL reachable - the history is written there and kept"
           else
@@ -102,7 +112,7 @@ jobs:
           d = json.load(open(os.path.join(os.environ["LOL_DATA_DIR"], "status.json")))
           m = d["missing_games"]
           print("missing games:", m["total"], "| filled by Leaguepedia:", m["filled_by_leaguepedia"],
-                "| still missing:", len(m["still_missing"]))
+                "| still missing:", m["still_missing_total"], "(first 50 listed below)")
           for r in d["history"]:
               print(f"  {r['source']} {str(r['league'])[:28]:28s} {r['matches']:6d} matches {r['games']:7d} games  "
                     f"{str(r['first'])[:10]} .. {str(r['last'])[:10]}")
@@ -126,7 +136,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/lol/cache.db*
-          key: lol-api-cache-${{ github.run_id }}
+          key: lol-api-cache-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Keep the results (7 days)
         if: always()

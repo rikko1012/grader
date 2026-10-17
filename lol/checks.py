@@ -19,6 +19,14 @@ EXPECTED = {"Link", "Name", "PlayerPage", "Team", "TeamVs", "Role", "Champion", 
             "Team1Kills", "Team2Kills", "WinTeam", "Patch", "BestOf", "Tournament", "League", "LeagueShort", "Region"}
 
 
+def _ts(s):
+    from datetime import datetime
+    try:
+        return datetime.fromisoformat(str(s).replace("Z", "+00:00")[:19]).timestamp()
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def check_leaguepedia(days=7):
     lp = leaguepedia.Leaguepedia()
     lp.login()
@@ -61,7 +69,9 @@ def crosscheck(db):
     le_only = Counter()
     for g in (x for x in games if x["source"] == "le"):
         key = (g["game_number"], frozenset((teams.key(g["blue_team"]), teams.key(g["red_team"]))))
-        twin = next((x for x in lp.get(key, ()) if history._near(x["played_at"], g["played_at"])), None)
+        near = [x for x in lp.get(key, ()) if history._near(x["played_at"], g["played_at"])]
+        twin = min(near, key=lambda x: abs(_ts(x["played_at"]) - _ts(g["played_at"])), default=None)  # a rematch the
+        # next day is another series: the nearest start is the same game
         if twin is None:
             le_only[g["league"]] += 1
             continue
@@ -92,11 +102,13 @@ def crosscheck(db):
                 if not ok and len(bad) < 15:
                     bad.append(("kda", g["league"], g["played_at"], r["player_key"], (r["kills"], r["deaths"], r["assists"]),
                                 (t["kills"], t["deaths"], t["assists"])))
-    le_keys = {(g["game_number"], frozenset((teams.key(g["blue_team"]), teams.key(g["red_team"]))), str(g["played_at"])[:10])
-               for g in games if g["source"] == "le"}
-    lp_only = Counter(g["league"] for g in games if g["source"] == "lp" and not any(
-        (g["game_number"], frozenset((teams.key(g["blue_team"]), teams.key(g["red_team"]))), d) in le_keys
-        for d in {str(g["played_at"])[:10]}))
+    le_by = defaultdict(list)
+    for g in games:
+        if g["source"] == "le":
+            le_by[(g["game_number"], frozenset((teams.key(g["blue_team"]), teams.key(g["red_team"]))))].append(g["played_at"])
+    lp_only = Counter(g["league"] for g in games if g["source"] == "lp" and not any(       # the same +-1 day window
+        history._near(t, g["played_at"]) for t in
+        le_by.get((g["game_number"], frozenset((teams.key(g["blue_team"]), teams.key(g["red_team"])))), ())))
     print(json.dumps({"agreement": dict(c), "examples": bad, "feed_only_games_by_league": dict(le_only.most_common()),
                       "leaguepedia_only_games_by_league_top": dict(lp_only.most_common(25))}, indent=1, default=str))
 

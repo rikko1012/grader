@@ -213,13 +213,15 @@ def _near(a, b, days=1):
 
 def _dedup(rows, links=None):
     """Drop a game both sources hold - Leaguepedia's row is kept - and give every row `pid`, the player's identity.
-    One game = same player name, champion (feed ids mapped to wiki names), K / D / A, team kills and kills conceded,
-    within a day; only rows from DIFFERENT sources are ever merged (two games of one source never collapse).
+    One game = same champion (feed ids mapped to wiki names), K / D / A, team kills and kills conceded, within a day -
+    NOT the name: the feed spells some players differently ('BrokenBIade', 'JDGxiaofang'), and a champion is played by
+    one player per game, so this already pins the player. Only rows from DIFFERENT sources are ever merged (two games of
+    one source never collapse).
     pid: 'lp:<Leaguepedia page>' or 'le:<LoL Esports player id>' - a feed id seen on the same game as a Leaguepedia page
     takes that page's identity. Two pros who share a name never share a pid."""
     seen, out, link, twin_games = {}, [], {}, set()
     for r in sorted(rows, key=lambda r: (r.get("source") != "lp", r.get("played_at") or "")):
-        k = (r.get("player_key"), champion(r.get("champion")), r.get("kills"), r.get("deaths"), r.get("assists"),
+        k = (champion(r.get("champion")), r.get("kills"), r.get("deaths"), r.get("assists"),
              r.get("team_kills"), r.get("opp_kills"))
         twin = next((s for s in seen.get(k, ()) if s.get("source") != r.get("source")
                      and _near(s.get("played_at"), r.get("played_at"))), None)
@@ -301,7 +303,8 @@ def team_games(db, team, before=None):
     rows = db.query(sql, args)
     seen, out = {}, []
     for r in sorted(rows, key=lambda r: (r.get("source") != "lp", r.get("played_at") or "")):
-        k = (r["game_number"], r["team_kills"], r["opp_kills"])     # one game held by both sources: Leaguepedia's kept
+        k = (r["game_number"], r["team_kills"], r["opp_kills"], teams.key(r["opponent"]))   # one game in both sources:
+        # Leaguepedia's kept (the opponent too: two different games can share a game number and a scoreline)
         if any(s["source"] != r["source"] and _near(s["played_at"], r["played_at"]) for s in seen.get(k, ())):
             continue
         seen.setdefault(k, []).append(r)

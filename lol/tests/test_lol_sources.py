@@ -292,3 +292,19 @@ def test_leaguepedia_league_short_names_become_slugs():
     assert game["league"] == "lck"
     (game, _), = leaguepedia.to_history([dict(r, LeagueShort="NEW") for r in CARGO])
     assert game["league"] == "NEW"                                             # unknown: kept as Leaguepedia writes it
+
+
+def test_prizepicks_allowed_wager_types_as_text():
+    body = fixture("prizepicks_lol_2026-10-17.json")
+    p = next(x for x in body["data"] if x["attributes"]["odds_type"] == "standard"
+             and "Combo" not in x["attributes"]["stat_display_name"])
+    p["attributes"]["allowed_wager_types"] = "over"
+    row = next(r for r in lines.pp_parse(body) if r["id"] == f"pp:{p['id']}")
+    assert row["over_available"] and not row["under_available"]
+
+
+def test_line_archive_records_a_payout_move():
+    rows = lines.ud_parse(fixture("underdog_lol_2026-10-17.json"))
+    lines.archive("underdog", rows, now="t1")
+    moved = [dict(rows[0], mult_over=(rows[0].get("mult_over") or 1.0) + 0.1)] + rows[1:]
+    assert lines.archive("underdog", moved, now="t2") == 1

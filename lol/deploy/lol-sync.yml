@@ -26,6 +26,20 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install requests numpy psycopg2-binary
+      - name: LoL database reachable (a scheduled sync into a throwaway database would keep nothing)
+        env:
+          LOL_DB_DSN: ${{ secrets.LOL_DB_DSN }}
+        run: |
+          [ -n "$LOL_DB_DSN" ] || { echo "LOL_DB_DSN secret missing"; exit 1; }
+          python - 2>/dev/null <<'PY'
+          import sys
+          from lol import history
+          try:
+              history.DB().close()
+          except Exception as e:
+              print("database check failed:", type(e).__name__)
+              sys.exit(1)
+          PY
       - name: sync
         env:
           LOL_DB_DSN: ${{ secrets.LOL_DB_DSN }}
