@@ -32,7 +32,7 @@ def le_copy_of_m1(con):
     roles = ["top", "jungle", "mid", "bot", "support"]
     for n, blue in ((1, "LA"), (2, "LB")):
         red = "LB" if blue == "LA" else "LA"
-        store.put_rows(con, "LE:Game", [{"game_id": f"e{n}", "match_id": "X1", "number": n, "start": f"2026-10-10T0{8 + n}:05:00Z",
+        store.put_rows(con, "LE:Game", [{"game_id": f"e{n}", "match_id": "X1", "number": n, "start": f"2026-10-10T{8 + n:02d}:05:00Z",
                                          "duration_s": 1800, "patch": "16.20.1", "blue_team_id": blue, "red_team_id": red, "blue_kills": 10,
                                          "red_kills": 4, "winner_side": "blue" if blue == "LA" else "red"}], lambda r: r["game_id"], ev, None,
                        "2026-10-11T00:00:00Z")
@@ -493,3 +493,20 @@ def test_wrong_existing_link_is_corrected_by_corroborated_games(con):
     assert store.canonical_id(con, beta_mid) != alph and store.find_entity(con, "player", "leaguepedia:page", "BetaMid") == beta_mid
     q = con.execute("SELECT detail FROM quarantine WHERE reason = 'cross_source_link_corrected'").fetchall()
     assert q and "BetaMid" in q[0][0]
+
+
+def test_copy_without_game_1_and_a_renamed_team_is_still_one_series(con):
+    """2026-10-17 audit: 22 LoL Esports games were copies of Leaguepedia series whose LE copy lacks game 1 (game 2 is the
+    first stored game). Start times are compared game by game, so the copy is left out (no duplicate games)."""
+    load_world(con)
+    build.build(con)
+    le_copy_of_m1(con)
+    con.execute("DELETE FROM lp_current WHERE tbl = 'LE:Game' AND skey = 'e1'")
+    con.execute("DELETE FROM lp_current WHERE tbl = 'LE:PlayerGame' AND skey LIKE 'e1|%'")
+    m = store.current_rows(con, "LE:Match")[0]
+    m["teams"][1].update(name="Beta Academy", code="BAC")
+    store.put_rows(con, "LE:Match", [m], lambda r: r["match_id"], lambda r: "2026-10-10 09:00:00", None, "2026-10-12T00:00:00Z")
+    con.commit()
+    build.build(con)
+    assert con.execute("SELECT COUNT(*) FROM c_player_games").fetchone()[0] == 20                  # LP's copy only
+    assert con.execute("SELECT COUNT(*) FROM c_games WHERE source = 'lolesports'").fetchone()[0] == 0

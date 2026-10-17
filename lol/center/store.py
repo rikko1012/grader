@@ -274,7 +274,18 @@ def detach_source(con, kind, source, skey, reason, detail=None, at=None):
                     (eid, at, json.dumps({"change": change, "reason": reason, "evidence": detail}, default=str)))
     quarantine(con, kind, f"{source}:{skey}", "cross_source_link_corrected", {"from": cur, "to": new, "reason": reason,
                                                                              "evidence": detail}, at)
+    # the id first created for this source key (merged into `cur` earlier) now resolves to where the key went
+    x = created_from(con, kind, source, skey)
+    if x and x not in (cur, new) and canonical_id(con, x) == canonical_id(con, cur):
+        set_meta(con, f"merged:{x}", new)
     return new
+
+
+def created_from(con, kind, source, skey):
+    """The internal id that was first created for (source, skey), from the entity history - or None."""
+    r = con.execute("SELECT eid FROM entity_history WHERE change = 'created' AND detail = ? AND eid LIKE ? ORDER BY id LIMIT 1",
+                    (json.dumps({"source": source, "skey": skey}), f"{SPORT}:{kind}:%")).fetchone()
+    return r[0] if r else None
 
 
 def page_variant(con, page):

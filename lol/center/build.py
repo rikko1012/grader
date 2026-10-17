@@ -482,6 +482,10 @@ def _lolesports(con, at, series, games, pgs, checks, overlaps=None):
     lpg = defaultdict(list)
     for r in store.current_rows(con, "LE:PlayerGame"):
         lpg[r["game_id"]].append(r)
+    lp_times = defaultdict(dict)                       # LP series id -> {game number: start}
+    for g in games:
+        if g.get("source") == "leaguepedia" and g.get("sid") and _ts(g.get("start_utc")) is not None:
+            lp_times[g["sid"]][g["game_n"]] = _ts(g["start_utc"])
     lp_by_day = defaultdict(list)
     for s in series.values():
         when = s.get("scheduled_utc") or s.get("first_game_utc")
@@ -527,20 +531,28 @@ def _lolesports(con, at, series, games, pgs, checks, overlaps=None):
             continue
         start = _z(m.get("start"))
         a, b = known(teams[0]), known(teams[1])
-        t0 = min((_ts(g.get("start")) for g in lg.get(mid, []) if _ts(g.get("start"))), default=None)
+        num = {str(x.get("id")): x.get("number") for x in m.get("games") or []}
+        le_t = {num.get(str(g.get("game_id")), g.get("number")): _ts(g.get("start")) for g in lg.get(mid, []) if _ts(g.get("start"))}
+        t0 = min(le_t.values(), default=None)
+
+        def times_agree(s, tol):
+            """Games of the same number start within `tol` seconds (all comparable games); unknown -> not refuted."""
+            pairs = [(t, lp_times[s["sid"]][n]) for n, t in le_t.items() if n in lp_times.get(s["sid"], {})]
+            return all(abs(x - y) <= tol for x, y in pairs) if pairs else None
         same = [s for s in lp_by_day.get(start[:10], []) if {s["team1"], s["team2"]} & a and {s["team1"], s["team2"]} & b] if start else []
         # 2026-10-17 audit: an academy match ("NS Challengers vs DRX Challengers", codes NS / DRX) matched its main teams'
-        # series on the same day by code. Both names on the same day also need game 1 within 60 minutes when both times
-        # are known.
-        same = [s for s in same if t0 is None or _ts(s.get("first_game_utc")) is None or abs(_ts(s["first_game_utc"]) - t0) <= 3600]
+        # series on the same day by code. Both names on the same day also need the same-numbered games to start within
+        # 60 minutes when the times are known.
+        same = [s for s in same if times_agree(s, 3600) is not False]
         if not same:
             # 2026-10-17 audit: a team named differently in the two sources ("kt Challengers" / "KT Rolster Challengers")
             # hid real overlaps. The same series = one team known AND game 1 starting within 20 minutes of the
             # Leaguepedia series' game 1 (a team never plays two series at once).
             if t0 is not None:
+                # same-numbered games (an LE copy may lack game 1) within 20 minutes; one team already known
                 days = {datetime.fromtimestamp(t0 + d, timezone.utc).strftime("%Y-%m-%d") for d in (-86400, 0, 86400)}
                 same = [s for d in days for s in lp_by_day.get(d, []) if {s["team1"], s["team2"]} & (a | b)
-                        and _ts(s.get("first_game_utc")) is not None and abs(_ts(s["first_game_utc"]) - t0) <= 1200]
+                        and times_agree(s, 1200)]
                 if same:
                     out["left_out_same_start_one_team_known"] += 1
         if same:
@@ -661,41 +673,50 @@ def _players_by_game(con):
 
 
 def split_wrong_merges(con, at):
-    """Repair (2026-10-17): before the cross-source merge guard, two ids that each had their own Leaguepedia page (two
-    different players / teams) could be merged through one LoL Esports id. Every merge that left one id holding two
-    Leaguepedia pages is reversed exactly - each source mapping that merge moved (its note says "merged from X") goes
-    back to X, X stops resolving to the survivor, both ids' aliases are rebuilt by this build, and the split is recorded
-    (entity history + quarantine, reason wrong_merge_split). -> number of merges reversed."""
+    """Repair (2026-10-17): an id holding two or more different Leaguepedia pages (two different players / teams, merged
+    through a wrong cross-source link) is split by SOURCE EVIDENCE: the page the id was created for (or, for an id
+    created from a LoL Esports key, the page named like the id) stays; every other page returns to the id that was first
+    created for that page (entity history), or to a new id when there is none. LoL Esports keys then go wherever their
+    corroborated shared games put them (link_overlaps). Recorded in entity history + quarantine (wrong_merge_split).
+    -> number of pages moved."""
     n = 0
     for kind in ("player", "team"):
         multi = [r[0] for r in con.execute("SELECT eid FROM entity_sources WHERE kind = ? AND source = 'leaguepedia:page' "
                                            "GROUP BY eid HAVING COUNT(*) > 1", (kind,))]
         for keep in multi:
-            pages = {store.page_variant(con, r[0]) for r in con.execute(
-                "SELECT skey FROM entity_sources WHERE eid = ? AND source = 'leaguepedia:page'", (keep,))}
-            if len(pages) == 1:                                # spelling variants of one page (player_resolver) - one player
+            groups = defaultdict(list)                         # canonical page -> its spellings on this id
+            for (sk, seen) in con.execute("SELECT skey, first_seen FROM entity_sources WHERE eid = ? AND source = 'leaguepedia:page' "
+                                          "ORDER BY first_seen", (keep,)).fetchall():
+                groups[store.page_variant(con, sk)].append(sk)
+            if len(groups) == 1:                               # spelling variants of one page (player_resolver) - one player
                 continue
-            for skey, note in con.execute("SELECT skey, note FROM entity_sources WHERE eid = ? AND source = 'leaguepedia:page' "
-                                          "AND note LIKE '%merged from %'", (keep,)).fetchall():
-                drops = [d for d in re.findall(r"merged from (lol:\w+:\d+)", note or "") if d != keep]
-                if not drops:
+            label = ((con.execute("SELECT label FROM entities WHERE eid = ?", (keep,)).fetchone() or [""])[0] or "").casefold()
+            origin = {pg: store.created_from(con, kind, SRC_PAGE, pg) for pg in groups}
+            stay = (next((pg for pg in groups if origin[pg] == keep), None)
+                    or next((pg for pg in groups if pg.casefold() == label), None) or next(iter(groups)))
+            for pg, spellings in groups.items():
+                if pg == stay:
                     continue
-                x = drops[-1]                                  # the merge that brought this page onto `keep`
-                if store.get_meta(con, f"merged:{x}") != keep:
-                    continue
-                moved = con.execute("UPDATE entity_sources SET eid = ?, note = substr(note || '; split back (two Leaguepedia pages)', -1000) "
-                                    "WHERE eid = ? AND note LIKE ?", (x, keep, f"%merged from {x}%")).rowcount
-                con.execute("DELETE FROM meta WHERE k = ?", (f"merged:{x}",))
-                con.execute("DELETE FROM aliases WHERE eid IN (?, ?)", (keep, x))     # re-added below by the resolvers
-                for eid, other in ((keep, x), (x, keep)):
+                x = origin[pg]
+                if x and x != keep and store.canonical_id(con, x) == keep:
+                    target = x
+                    con.execute("DELETE FROM meta WHERE k = ?", (f"merged:{x}",))
+                else:
+                    target = store._next_id(con, kind)
+                    con.execute("INSERT INTO entities (eid, kind, label, created_at) VALUES (?, ?, ?, ?)", (target, kind, pg, at))
+                for sk in spellings:
+                    con.execute("UPDATE entity_sources SET eid = ?, note = substr(COALESCE(note || '; ', '') || ?, -1000) "
+                                "WHERE eid = ? AND source = ? AND skey = ?", (target, f"split from {keep} (two Leaguepedia pages)",
+                                                                                   keep, SRC_PAGE, sk))
+                con.execute("DELETE FROM aliases WHERE eid IN (?, ?)", (keep, target))   # re-added by the resolvers
+                for eid, other in ((keep, target), (target, keep)):
                     con.execute("INSERT INTO entity_history (eid, at, change, detail) VALUES (?, ?, 'split', ?)",
-                                (eid, at, json.dumps({"other": other, "reason": "two Leaguepedia pages - a wrong merge reversed",
-                                                      "sources_moved": moved})))
-                store.quarantine(con, kind, f"split:{keep}|{x}", "wrong_merge_split", {"kept": keep, "restored": x, "page": skey,
-                                                                                       "sources_moved": moved}, at)
+                                (eid, at, json.dumps({"other": other, "page": pg, "kept_page": stay,
+                                                      "reason": "two Leaguepedia pages on one id - a wrong merge reversed"})))
+                store.quarantine(con, kind, f"split:{keep}|{pg}", "wrong_merge_split", {"kept": keep, "kept_page": stay,
+                                                                                        "page": pg, "to": target}, at)
                 n += 1
     return n
-
 
 def build(con, at=None, _again=True):
     """Rebuild the canonical tables. Returns counts and check results. When the cross-source pass links or merges ids,

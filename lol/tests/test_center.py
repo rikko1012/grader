@@ -403,9 +403,32 @@ def test_wrong_merge_of_two_leaguepedia_pages_is_split_back(con):
     assert store.canonical_id(con, b) == a
     assert build.split_wrong_merges(con, "2026-10-17T06:00:00Z") == 1
     assert store.canonical_id(con, b) == b and store.find_entity(con, "player", "leaguepedia:page", "Beta") == b
-    assert store.find_entity(con, "player", "lolesports", "le-2") == b              # everything that merge moved goes back
+    # LoL Esports keys are not moved by the split: they go where their corroborated shared games put them (link_overlaps)
+    assert store.find_entity(con, "player", "lolesports", "le-2") == a
     assert store.find_entity(con, "player", "leaguepedia:page", "Alpha") == a
     assert store.find_entity(con, "player", "lolesports", "le-1") == a              # the earlier, correct merge stays
     q = con.execute("SELECT reason FROM quarantine WHERE skey LIKE 'split:%'").fetchall()
     assert [r[0] for r in q] == ["wrong_merge_split"]
     assert build.split_wrong_merges(con, "2026-10-17T06:10:00Z") == 0
+
+
+def test_split_is_stable_for_the_aiming_lazyfeel_case(con):
+    """2026-10-17 production loop: E was created from Aiming's LoL Esports key; the pages Aiming (id X1) and LazyFeel (id
+    X2) and LazyFeel's LoL Esports key were all merged into E, so every note named the same merges. The split keeps the
+    page named like E, returns LazyFeel's page to the id created for it, and a second pass changes nothing."""
+    e = store.entity(con, "player", "lolesports:player", "le-aiming", label="Aiming")
+    lz = store.entity(con, "player", "lolesports:player", "le-lazyfeel", label="LazyFeel")
+    x1 = store.entity(con, "player", "leaguepedia:page", "Aiming")
+    x2 = store.entity(con, "player", "leaguepedia:page", "LazyFeel")
+    for drop in (x2, x1, lz):
+        store.merge(con, e, drop, "player identified in a series both sources hold")
+    assert build.split_wrong_merges(con, "2026-10-17T21:00:00Z") == 1
+    assert store.find_entity(con, "player", "leaguepedia:page", "Aiming") == e
+    assert store.find_entity(con, "player", "leaguepedia:page", "LazyFeel") == x2 and store.canonical_id(con, x2) == x2
+    assert build.split_wrong_merges(con, "2026-10-17T21:10:00Z") == 0
+    # the evidence then moves LazyFeel's key to his page; the id first created for that key follows it
+    new = store.detach_source(con, "player", "lolesports:player", "le-lazyfeel", "corroborated games", at="2026-10-17T21:11:00Z")
+    build._attach(con, "player", "lolesports:player", "le-lazyfeel", x2, "2026-10-17T21:11:00Z")
+    assert store.canonical_id(con, store.find_entity(con, "player", "lolesports:player", "le-lazyfeel")) == x2
+    assert store.canonical_id(con, lz) == x2 and store.canonical_id(con, new) == x2
+    assert build.split_wrong_merges(con, "2026-10-17T21:20:00Z") == 0
