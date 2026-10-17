@@ -48,12 +48,15 @@ def publish(con, dsn=None):
                                    [tuple(r) + ("github-history", store.sha([r[0], r[1], r[2], r[5], r[6]]))
                                     for r in batch], page_size=500)
                     count += len(batch)
-                # a newer observation of a record replaces the older ones, in this same transaction: a lagging or
-                # reset Scout still reads every record's latest state, and the inbox keeps one row per record
-                # instead of one per collector run
+                # Keep the newest SOURCE observation, not the last upload: a delayed
+                # or restored collector can publish older data after a correction.
+                # For equal source times keep the first observation (matching the
+                # consumer's <= guard). A reset Scout must see the same state.
                 cur.execute("SET LOCAL statement_timeout = 600000")
                 cur.execute("DELETE FROM lol_source_inbox o USING lol_source_inbox n "
-                            "WHERE n.tbl = o.tbl AND n.skey = o.skey AND n.id > o.id")
+                            "WHERE n.tbl = o.tbl AND n.skey = o.skey AND "
+                            "(GREATEST(n.seen_at, n.gone_at) > GREATEST(o.seen_at, o.gone_at) OR "
+                            "(GREATEST(n.seen_at, n.gone_at) = GREATEST(o.seen_at, o.gone_at) AND n.id < o.id))")
                 superseded = cur.rowcount
         return {"published_records": count, "superseded_removed": superseded, "destination": "Scout source inbox"}
     finally:

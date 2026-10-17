@@ -181,3 +181,45 @@ def test_postgres_publish_replay_and_tombstone_reach_scout(pg_db, tmp_path):
     finally:
         collector.close()
         target.close()
+
+
+def test_postgres_delayed_upload_cannot_replace_newer_source_state(pg_db, tmp_path):
+    """A fresh Scout must agree with one that already consumed the correction."""
+    collector = store.connect(tmp_path / "collector.db")
+    old = store.connect(tmp_path / "old-collector.db")
+    target = store.connect(tmp_path / "scout.db")
+    fresh = store.connect(tmp_path / "fresh.db")
+    corrected = {"Page": "A", "Name": "Corrected"}
+    try:
+        store.put_rows(collector, "Teams", [corrected], lambda _: "A", None, None, "2026-10-17T05:00:00Z")
+        store.put_rows(old, "Teams", [{"Page": "A", "Name": "Old"}], lambda _: "A", None, None,
+                       "2026-10-17T02:00:00Z")
+        collector.commit()
+        old.commit()
+        handoff.publish(collector, pg_db.dsn)
+        handoff.consume(target, pg_db.dsn)
+        handoff.publish(old, pg_db.dsn)  # uploaded later, but observed earlier
+        handoff.consume(target, pg_db.dsn)
+        handoff.consume(fresh, pg_db.dsn)
+        assert store.current_rows(target, "Teams") == store.current_rows(fresh, "Teams") == [corrected]
+        assert pg_db.query("SELECT COUNT(*) AS n FROM lol_source_inbox")[0]["n"] == 1
+        # A later source deletion survives a retry of the earlier live snapshot.
+        collector.execute("UPDATE lp_current SET gone_at='2026-10-17T09:00:00Z'")
+        collector.commit()
+        handoff.publish(collector, pg_db.dsn)
+        handoff.publish(old, pg_db.dsn)
+        handoff.consume(target, pg_db.dsn)
+        handoff.consume(fresh, pg_db.dsn)
+        assert store.current_rows(target, "Teams") == store.current_rows(fresh, "Teams") == []
+        # A genuine new sighting restores the row and still reaches both cursors.
+        store.put_rows(old, "Teams", [corrected], lambda _: "A", None, None, "2026-10-17T10:00:00Z")
+        old.commit()
+        handoff.publish(old, pg_db.dsn)
+        handoff.consume(target, pg_db.dsn)
+        handoff.consume(fresh, pg_db.dsn)
+        assert store.current_rows(target, "Teams") == store.current_rows(fresh, "Teams") == [corrected]
+    finally:
+        collector.close()
+        old.close()
+        target.close()
+        fresh.close()
