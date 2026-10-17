@@ -40,7 +40,8 @@ GAME_COLS = ("game_key", "source", "match_key", "game_number", "best_of", "playe
              "duration_s", "patch", "fetched_at")
 PLAYER_COLS = ("game_key", "player_key", "player", "player_id", "team", "team_id", "opponent", "opponent_id", "side",
                "role", "champion", "kills", "deaths", "assists", "cs", "gold", "team_kills", "opp_kills", "win",
-               "duration_s", "match_key", "game_number", "best_of", "played_at", "league", "source")
+               "duration_s", "match_key", "game_number", "best_of", "played_at", "league", "source", "damage", "vision")
+ADDED = {"lol_player_games": {"damage": "INTEGER", "vision": "INTEGER"}}     # 2026-10-17: Leaguepedia-only stats
 
 
 def player_key(name):
@@ -65,6 +66,12 @@ class DB:
         self.lock = threading.Lock()
         for stmt in SCHEMA:
             self.execute(stmt)
+        for tbl, cols in ADDED.items():                     # columns added after a database was created: in place
+            have = {r["name"] for r in self.query(f"PRAGMA table_info({tbl})")} if self.kind == "sqlite" else {
+                r["column_name"] for r in self.query("SELECT column_name FROM information_schema.columns WHERE table_name = ?", (tbl,))}
+            for c, typ in cols.items():
+                if c not in have:
+                    self.execute(f"ALTER TABLE {tbl} ADD COLUMN {c} {typ}")
         self.commit()
 
     def _sql(self, sql):

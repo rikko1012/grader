@@ -115,11 +115,22 @@ def test_forecast_saved_once_per_state_and_read_by_board(con, tmp_path, monkeypa
     assert forecast.run(con, db)["saved"] == 1 and con.execute("SELECT COUNT(*) FROM lol_forecasts").fetchone()[0] == 2
     b = forecast.board(con)
     row, = b["rows"]
-    assert row["forecast"]["line"] == 7.5 and row["grade"] is None and row["forecast"]["current"]
+    fc = row["forecast"]
+    assert fc["line"] == 7.5 and fc["current"] and row["stake"] == 0.0
+    p_side = fc["p_over"] if fc["model_side"] == "over" else fc["p_under"]
+    g, u = forecast.grade_and_units(p_side)
+    assert row["grade"] == (f"Lean {fc['model_side'].title()}" if g == "Lean" else g) and fc["units_policy"] == u
+    assert (fc["stake_restriction"] is not None) == (u > 0)
+    assert forecast.grade_and_units(0.81) == ("A+", 3.0) and forecast.grade_and_units(0.551) == ("B-", 0.5)
+    assert forecast.grade_and_units(0.549) == ("Lean", 0.0)
+    rec = dict(con.execute("SELECT * FROM lol_forecasts ORDER BY id DESC").fetchone())
+    inp = json.loads(rec["inputs"])
+    lo, hi = inp["range80"]
+    assert lo <= inp["median"] <= hi and inp["drivers"] and inp["market"]["price_status"] in ("undocumented_two_sided_price", "one_side_offered")
     assert b["match_tables"] and b["released_to_members"] is False
     elig = forecast.slip_check(con, [f["id"]])
     assert not elig["eligible"] and any("line moved" in x for x in elig["reasons"])
-    assert any("not validated" in x for x in json.loads(f["slip_reasons"]))
+    assert any("not yet validated" in x for x in json.loads(f["slip_reasons"]))
 
 
 def test_saved_forecast_settles_when_the_series_completes(con, tmp_path, monkeypatch):

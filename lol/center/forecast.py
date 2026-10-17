@@ -22,6 +22,19 @@ from . import rules, settle, store
 from .names import ROLE_LABEL
 
 SCOPE = {"maps_1": "1", "maps_1_2": "12", "maps_1_2_3": "123"}
+# the site's published grade bands and unit policy (the same numbers members see on CS2: A+ 80%, A 74%, A- 68%, B+ 63%,
+# B 57%, B- 55%; units 3 / 2 / 1.5 / 1 / 0.5 / 0.5) - copied as published values, not imported (lol never imports CS2)
+BANDS = ((0.80, "A+", 3.0), (0.74, "A", 2.0), (0.68, "A-", 1.5), (0.63, "B+", 1.0), (0.57, "B", 0.5), (0.55, "B-", 0.5))
+LOL_STAKE_RESTRICTION = ("0U - LoL projections are not yet validated at real offered lines (needs 300 settled player-markets "
+                         "across 60+ series, lol/EVALUATION.md); the grade is the model's, the stake is held at 0")
+
+
+def grade_and_units(p):
+    """Published bands on the chosen side's probability -> (grade, units by the published policy). Under 55%: Lean."""
+    for cut, g, u in BANDS:
+        if p >= cut:
+            return g, u
+    return "Lean", 0.0
 SCOPE_LABEL = {"1": "Map 1", "12": "Maps 1-2", "123": "Maps 1-3"}
 FORMAT = {"12": 3, "123": 5}
 STATS = ("kills", "assists", "deaths")
@@ -166,23 +179,62 @@ def forecast_one(con, h, offer, link, now=None):
         flags.append("opponent has no stored games (opponent factor = league average)")
     side = "over" if po >= pu else "under"
     offered = side_offered(offer.get("platform"), offer.get("sides"), side)
+    p_side = po if side == "over" else pu
+    grade, units_policy = grade_and_units(p_side)
+    lo, hi = m.interval(pj["lambda"], pj["nb_size"], 0.8)
+    med = _nb_median(m, pj["lambda"], pj["nb_size"])
     rec = dict(sport=store.SPORT, platform=offer["platform"], market_key=offer["market_key"], line_id=offer.get("line_id"),
                quote_event_id=offer.get("_event_id"), quote_observed_at=offer.get("_observed_at"), stat=stat, scope=scope,
                market_type="single", odds_type=offer.get("odds_type"), line=offer["line"], sides=offer.get("sides"),
                sid=link["sid"], pid=pid, tid=tid, opp_tid=opp, role=role, best_of=bo, series_start=start.strftime("%Y-%m-%dT%H:%M:%SZ"),
                model_version=m.VERSION, fit_sha=fit_sha(), form=pj.get("form"), **{"lambda": round(pj["lambda"], 4)},
                nb_size=pj["nb_size"], p_over=round(po, 4), p_under=round(pu, 4), p_push=round(push, 4), model_side=side,
-               side_offered=None if offered is None else int(bool(offered)),
+               side_offered=None if offered is None else int(bool(offered)), grade=grade,
+               grade_label=(f"Lean {side.title()}" if grade == "Lean" else grade), units_policy=units_policy, units=0.0,
+               stake_restriction=LOL_STAKE_RESTRICTION if units_policy > 0 else None,
                inputs={k: (round(v, 4) if isinstance(v, float) else v) for k, v in pj.items()
                        if k in ("lambda_game", "player_rate", "team_factor", "opp_factor", "strength_factor", "p_win",
                                 "history_games", "history_weight", "data_quality", "role_prior", "form")} | {
-                   "league": league, "team_games": len(tin), "opponent_games": len(oin), "history_last_game": h.last_game},
+                   "league": league, "team_games": len(tin), "opponent_games": len(oin), "history_last_game": h.last_game,
+                   "mean": round(pj["lambda"], 3), "median": med, "range80": [lo, hi], "provisional": _provisional(m),
+                   "drivers": _drivers(pj), "unknowns": ["lineup changes after the forecast", "draft and champions",
+                                                          "sides", "the tournament patch effect (not modelled)"]},
                flags=flags)
     from . import prices
     rec["inputs"]["market"] = prices.classify(offer["platform"], offer)
     elig, why = slip_eligibility(rec)
     rec["slip_eligible"], rec["slip_reasons"] = int(elig), why
     return rec
+
+
+def _nb_median(m, lam, size):
+    c, k = 0.0, 0
+    while k < 1000:
+        c += m.nb_pmf(k, lam, size)
+        if c >= 0.5:
+            return k
+        k += 1
+    return k
+
+
+def _provisional(m):
+    meta = (m.FIT_META or {}) if hasattr(m, "FIT_META") else {}
+    return {"selection": (m.FIT[3] or {}).get("selection") if m.FIT else None, "basis": meta.get("train"),
+            "note": "selected on the development split (lol/EVALUATION.md A4); final comparison pending"}
+
+
+def _drivers(pj):
+    """The measured components of the projection (only what the fitted model actually uses)."""
+    if pj.get("form") == "baseline":
+        return [f"player's per-game average shrunk toward the role ({pj.get('history_games')} earlier games)"]
+    out = [f"player {'share of team output' if pj.get('form') == 'share' else 'per-game rate'} "
+           f"{pj.get('player_rate'):.2f} ({pj.get('history_games')} earlier games)"]
+    if pj.get("team_factor") is not None:
+        out.append(f"team pace factor {pj['team_factor']:.2f}")
+    out.append(f"opponent factor {pj.get('opp_factor'):.2f}")
+    if pj.get("strength_factor") not in (None, 1.0):
+        out.append(f"match-strength factor {pj['strength_factor']:.2f} (win chance {pj.get('p_win') or 0:.0%})")
+    return out
 
 
 def slip_eligibility(rec):
@@ -199,7 +251,8 @@ def slip_eligibility(rec):
         why.append("the model's side is not offered on this line" if rec["side_offered"] == 0 else "offered sides not confirmed by the feed")
     if any(f.startswith("no history") for f in rec["flags"]):
         why.append("no stored history for the player")
-    why.append("no grade / stake: the model is not validated at real lines (lol/EVALUATION.md)")
+    if rec.get("units", 0) <= 0:
+        why.append("stake 0U (LoL projections not yet validated at real lines)")
     return (not why), why
 
 
@@ -264,7 +317,7 @@ def run(con, db=None, now=None):
         cols = ("sport", "platform", "market_key", "line_id", "quote_event_id", "quote_observed_at", "stat", "scope", "market_type",
                 "odds_type", "line", "sides", "sid", "pid", "tid", "opp_tid", "role", "best_of", "series_start", "model_version",
                 "fit_sha", "form", "lambda", "nb_size", "p_over", "p_under", "p_push", "model_side", "side_offered", "inputs",
-                "flags", "slip_eligible", "slip_reasons")
+                "flags", "slip_eligible", "slip_reasons", "grade", "grade_label", "units_policy", "units", "stake_restriction")
         vals = [json.dumps(rec[c], default=str) if c in ("sides", "inputs", "flags", "slip_reasons") else rec[c] for c in cols]
         con.execute(f"INSERT INTO lol_forecasts (forecast_at, state_sha, {', '.join(cols)}) VALUES (?, ?, {', '.join('?' * len(cols))})",
                     [store.now_iso(), sha] + vals)
@@ -321,8 +374,10 @@ def board(con, now=None):
                 "p_under": f["p_under"], "p_push": f["p_push"], "model_side": f["model_side"], "side_offered": f["side_offered"],
                 "model": f"{f['model_version']} ({f['form']}, fit {f['fit_sha']})", "inputs": json.loads(f["inputs"] or "{}"),
                 "flags": json.loads(f["flags"] or "[]"), "slip_eligible": bool(f["slip_eligible"]),
-                "slip_reasons": json.loads(f["slip_reasons"] or "[]"), "current": f["line"] == r["line"]},
-            "grade": None, "stake": None})
+                "slip_reasons": json.loads(f["slip_reasons"] or "[]"), "current": f["line"] == r["line"],
+                "grade": f["grade_label"], "units": f["units"], "units_policy": f["units_policy"],
+                "stake_restriction": f["stake_restriction"]},
+            "grade": (f or {}).get("grade_label"), "stake": (f or {}).get("units")})
     tables = {}
     for x in rows:
         if x["link"]["sid"]:
@@ -335,7 +390,8 @@ def board(con, now=None):
                  "projection": (x["forecast"] or {}).get("projection"), "p_over": (x["forecast"] or {}).get("p_over")})
     settled = [dict(r) for r in con.execute("SELECT * FROM lol_settlements WHERE settled_at >= ? ORDER BY id DESC LIMIT 500",
                                             (store.now_iso(now.timestamp() - 3 * 86400),))]
-    return {"at": store.now_iso(), "released_to_members": False, "grades": "not assigned - model not validated at real lines",
+    return {"at": store.now_iso(), "released_to_members": False,
+            "grades": "model grades from the published bands; stakes held at 0U until validated at real lines",
             "rows": rows, "match_tables": list(tables.values()), "settled_recent": settled,
             "counts": {"offers": len(rows), "with_forecast": sum(1 for x in rows if x["forecast"]),
                        "linked": sum(1 for x in rows if x["link"]["status"] == "matched")}}

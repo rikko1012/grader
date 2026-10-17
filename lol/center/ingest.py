@@ -31,7 +31,7 @@ WINDOW_DAYS = 14
 BACKFILL_DAYS = int(os.environ.get("LOL_BACKFILL_DAYS", "245"))     # the agreed 8-month window first; longer later
 LIVE_EVERY_S = int(os.environ.get("LOL_LIVE_EVERY", "1800"))
 RESWEEP_DAYS, RESWEEP_EVERY_S = 35, 7 * 86400
-REF_BATCH = 40
+REF_BATCH = int(os.environ.get("LOL_REF_BATCH", "80"))   # names per lookup request (URL stays short)
 REF_RECHECK_S = 7 * 86400
 
 

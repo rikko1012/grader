@@ -85,7 +85,8 @@ def rows(con):
                             "assists": p["assists"], "cs": p["cs"], "gold": p["gold"], "team_kills": p["team_kills"],
                             "opp_kills": kills.get(p["opp_tid"]), "win": p["win"], "duration_s": g["length_s"],
                             "match_key": g["sid"], "game_number": g["game_n"], "best_of": s.get("best_of"),
-                            "played_at": g["start_utc"], "league": lg, "source": src})
+                            "played_at": g["start_utc"], "league": lg, "source": src, "damage": p["damage"],
+                            "vision": p["vision"]})
         counts["games"] += 1
     counts["player_rows"] = len(players)
     return games, players, dict(counts)
@@ -101,6 +102,9 @@ def _mirror_pg(dsn, games, players):
         cur = con.cursor()
         for stmt in history.SCHEMA:
             cur.execute(stmt)
+        for tbl, cols in history.ADDED.items():
+            for c, typ in cols.items():
+                cur.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {c} {typ}")
         cur.execute("DELETE FROM lol_player_games")
         cur.execute("DELETE FROM lol_games")
         now = store.now_iso()

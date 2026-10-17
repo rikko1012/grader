@@ -18,7 +18,7 @@ th{background:#19263a;color:var(--muted);font-size:10px;text-transform:uppercase
 </style></head><body><div class="wrap">
 <div class="eyebrow">League of Legends · data center · admin only</div>
 <h1>LoL board <span class="muted small" id="gen"></span></h1>
-<div class="note small">Not released to members. Probabilities are model estimates. No grade or stake is assigned: the projection has not been validated at real lines (lol/EVALUATION.md). One saved pre-match forecast per line feeds this board, the match tables, the cards and the slip check.</div>
+<div class="note small">Not released to members. Probabilities are model estimates; grades use the published bands; stakes are held at 0U until the projection is validated at real offered lines (lol/EVALUATION.md). One saved pre-match forecast per line feeds this board, the match tables, the cards and the slip check.</div>
 <div class="bar" id="tabs"><button data-v="board" class="on">Board</button><button data-v="tables">Match tables</button><button data-v="settled">Settled</button><button data-v="status">Data center</button></div>
 <div id="out" class="muted">Loading…</div>
 </div>
@@ -46,7 +46,7 @@ function boardView() {
     h += `<tr onclick="card(${i})"><td>${esc((x.series_start || "").replace("T", " ").slice(0, 16))}</td><td>${esc(x.player)}</td><td>${esc(x.team)}</td><td>${esc(x.role || "–")}</td><td>${esc(x.opponent)}</td><td>${esc(x.competition || "–")}${x.best_of ? " · BO" + x.best_of : ""}</td><td>${esc(x.stat)}${x.market_type === "combo" ? " <span class=flag>combo</span>" : ""}</td><td>${esc(x.scope)}</td><td>${esc(x.platform)} <span class=muted>${esc(x.odds_type)}</span></td><td class="num">${x.line}</td><td class=small>${esc(sides(x))}</td>`
       + (f ? `<td class="num">${f.projection.toFixed(2)}</td><td class="num">${pct(f.p_over)}</td><td class="num">${pct(f.p_under)}</td><td>${esc(f.model_side)}${f.side_offered === 0 ? " <span class=flag>side not offered</span>" : ""}</td>`
            : `<td colspan=4 class="muted small">${esc(why)}</td>`)
-      + `<td class=muted>not assigned</td><td class=muted>–</td><td>${f ? (f.slip_eligible ? "eligible" : `<span class=muted>no</span>`) : "–"}</td><td class="small muted">quote ${esc((x.quote_seen_at || "").slice(11, 16))}${f ? " · history to " + esc(((f.inputs || {}).history_last_game || "").slice(0, 10)) : ""}</td></tr>`;
+      + `<td>${f ? esc(f.grade || "–") : "–"}</td><td>${f ? (f.units ?? 0) + "U" + (f.units_policy ? ` <span class=muted>(policy ${f.units_policy}U)</span>` : "") : "–"}</td><td>${f ? (f.slip_eligible ? "eligible" : `<span class=muted>no</span>`) : "–"}</td><td class="small muted">quote ${esc((x.quote_seen_at || "").slice(11, 16))}${f ? " · history to " + esc(((f.inputs || {}).history_last_game || "").slice(0, 10)) : ""}</td></tr>`;
   });
   return h + "</tbody></table></div>";
 }
@@ -82,8 +82,12 @@ function card(i) {
   h += `<div class=grid><div><div class=k>Match</div>vs ${esc(x.opponent)} · ${esc(x.competition || "")} BO${x.best_of || "?"}</div><div><div class=k>Start</div>${esc(x.series_start)}</div><div><div class=k>Line</div>${x.line} (${esc(x.odds_type)}) · ${esc(sides(x))}</div><div><div class=k>Canonical ids</div><span class=small>${esc(x.link.sid || "–")} · ${esc(x.link.pid || "–")}</span></div></div>`;
   if (f) {
     const inp = f.inputs || {};
-    h += `<h2>Forecast <span class="muted small">saved ${esc(f.at)} · ${esc(f.model)}</span></h2><div class=grid><div><div class=k>Projection</div>${f.projection.toFixed(2)}</div><div><div class=k>P(over) / P(under) / push</div>${pct(f.p_over)} / ${pct(f.p_under)} / ${pct(f.p_push)}</div><div><div class=k>Model side</div>${esc(f.model_side)} ${f.side_offered === 1 ? "(offered)" : f.side_offered === 0 ? "(not offered)" : "(not confirmed)"}</div><div><div class=k>Grade · stake</div>not assigned · –</div>`;
+    h += `<h2>Forecast <span class="muted small">saved ${esc(f.at)} · ${esc(f.model)}</span></h2><div class=grid><div><div class=k>Projection</div>${f.projection.toFixed(2)}</div><div><div class=k>P(over) / P(under) / push</div>${pct(f.p_over)} / ${pct(f.p_under)} / ${pct(f.p_push)}</div><div><div class=k>Model side</div>${esc(f.model_side)} ${f.side_offered === 1 ? "(offered)" : f.side_offered === 0 ? "(not offered)" : "(not confirmed)"}</div><div><div class=k>Grade · stake</div>${esc(f.grade || "–")} · ${f.units ?? 0}U${f.units_policy ? " (published policy " + f.units_policy + "U)" : ""}</div>${f.stake_restriction ? `<div><div class=k>Stake restriction</div>${esc(f.stake_restriction)}</div>` : ""}`;
+    h += `<div><div class=k>Mean · median · 80% range</div>${inp.mean ?? "–"} · ${inp.median ?? "–"} · ${(inp.range80 || []).join("–")}</div>`;
     for (const k of ["form", "player_rate", "team_factor", "opp_factor", "strength_factor", "p_win", "history_games", "team_games", "opponent_games", "league", "data_quality", "history_last_game"]) if (inp[k] != null) h += `<div><div class=k>${esc(k)}</div>${esc(inp[k])}</div>`;
+    h += `</div><h2>Measured drivers</h2><ul class=small>${(inp.drivers || []).map(z => `<li>${esc(z)}</li>`).join("")}</ul><div class="small muted">Unknowns: ${esc((inp.unknowns || []).join("; "))}</div>`;
+    const mk = inp.market || {};
+    h += `<h2>Market fields</h2><div class=small>${esc(mk.price_status || "–")}${mk.undocumented_no_vig_p_over != null ? " · undocumented two-sided prices, margin-removed P(over) " + pct(mk.undocumented_no_vig_p_over) + " (research only, not in the grade)" : ""}${mk.payout_modifiers ? " · payout modifiers " + esc(JSON.stringify(mk.payout_modifiers)) + " (not probabilities)" : ""}</div><div class=grid>`;
     h += `</div><div style="margin-top:8px">${(f.flags || []).map(z => `<span class=flag>${esc(z)}</span>`).join("")}</div><h2>Slip leg</h2><div>${f.slip_eligible ? "eligible" : "not eligible"}</div><ul class=small>${(f.slip_reasons || []).map(z => `<li>${esc(z)}</li>`).join("")}</ul>`;
   } else h += `<div class="note small">${esc(x.link.status !== "matched" ? "Not linked: " + (x.link.reason || "pending") : "No forecast yet")}</div>`;
   document.getElementById("card").innerHTML = h + `<div class=bar><button onclick="document.getElementById('modal').style.display='none'">Close</button></div>`;

@@ -113,7 +113,9 @@ CREATE TABLE IF NOT EXISTS market_state (platform TEXT NOT NULL, market_key TEXT
 
 
 # columns added after the first production database was created (2026-10-17): added in place, never a rebuild
-ADDED_COLUMNS = {"c_series": {"source": "TEXT", "source_match_id": "TEXT"}, "c_games": {"source": "TEXT", "source_game_id": "TEXT"}}
+ADDED_COLUMNS = {"c_series": {"source": "TEXT", "source_match_id": "TEXT"}, "c_games": {"source": "TEXT", "source_game_id": "TEXT"},
+                 "lol_forecasts": {"grade": "TEXT", "grade_label": "TEXT", "units_policy": "REAL", "units": "REAL",
+                                   "stake_restriction": "TEXT"}}
 
 
 def connect(path=None, tries=6):
