@@ -93,6 +93,13 @@ jobs:
           except Exception as e:
               raise SystemExit('Scout handoff connection failed: ' + type(e).__name__) from None
           print('Scout handoff reachable')
+          # a refused bot login would otherwise read anonymously (refused since 2026-10-17): every unit fails, the
+          # sync still exits 0 and the run looks green with no Leaguepedia data. LOGIN never holds the credentials.
+          from lol.center import cargo
+          cargo._opener()
+          if cargo.LOGIN['result'] != 'Success':
+              raise SystemExit('Leaguepedia bot login failed: %s %s' % (cargo.LOGIN['result'], cargo.LOGIN['note'] or ''))
+          print('Leaguepedia bot login OK')
           PY
       - name: Leaguepedia canonical history (resumable, bounded)
         run: python lol_scout.py sync --source leaguepedia --max-minutes 180

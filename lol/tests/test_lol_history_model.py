@@ -397,26 +397,6 @@ def test_crosscheck_reports_agreement(db, capsys):
     assert a["inferred winner agrees"] == 1 and out["feed_only_games_by_league"] == {"lck": 1}
 
 
-def test_crosscheck_reports_agreement(db, capsys):
-    import json as _json
-    from lol import checks
-    g, rows = _game("lp", "1", "2026-07-29", 1, "T1", "Gen.G", 18, 9, [("Faker", "blue", "mid", 5, 1, 7, "Wukong")],
-                    winner="T1")
-    history.save_game(db, g, rows)
-    g, rows = _game("le", "1", "2026-07-29", 1, "T1", "Gen.G", 18, 9, [("Faker", "blue", "mid", 5, 1, 7, "MonkeyKing")],
-                    winner="T1")
-    g["winner_basis"] = "inferred: inhibitors, towers and gold agree, matches the series score"
-    history.save_game(db, g, rows)
-    g, rows = _game("le", "2", "2026-07-30", 1, "KT", "DRX", 10, 12, [("Bdd", "red", "mid", 3, 3, 3, "Ahri")], match="M2")
-    history.save_game(db, g, rows)
-    db.commit()
-    checks.crosscheck(db)
-    out = _json.loads(capsys.readouterr().out)
-    a = out["agreement"]
-    assert a["games held by both"] == 1 and a["team kills agree"] == 1 and a["player K/D/A agree"] == 1
-    assert a["inferred winner agrees"] == 1 and out["feed_only_games_by_league"] == {"lck": 1}
-
-
 def _bulk_items():
     items = []
     for gid in range(30):
@@ -544,6 +524,39 @@ def test_board_lines_for_another_match_are_not_graded():
     assert scout._same_match({"opponent": "GEN", "start": "2026-10-20T08:00:00Z"}, theirs, "2026-10-20T09:00:00Z")
     assert not scout._same_match({"opponent": "KT"}, theirs, "2026-10-20T09:00:00Z")
     assert not scout._same_match({"opponent": "GEN", "start": "2026-10-23T08:00:00Z"}, theirs, "2026-10-20T09:00:00Z")
+    assert not scout._same_match({"book": "prizepicks", "opponent": "KT"}, theirs, None)
+    nocode = {"name": "Rogue", "code": None}                   # --opponent with no schedule entry: no code known
+    assert scout._same_match({"book": "prizepicks", "opponent": "RGE"}, nocode, None)       # a code: no verdict
+    assert not scout._same_match({"book": "underdog", "opponent": "G2 Esports"}, nocode, None)
+
+
+def test_full_opponent_override_takes_the_code_from_the_schedule(db, monkeypatch):
+    for g, rows in _league(days=30):
+        history.save_game(db, g, rows)
+    db.commit()
+    monkeypatch.setattr(model, "PARAMS", None)
+    monkeypatch.setattr(scout.lolesports, "slate", lambda **k: [
+        {"match_id": "x", "league": "LCK", "start": "2026-10-20T08:00:00Z", "best_of": 3, "state": "unstarted",
+         "teams": [{"name": "Team1", "code": "T1X"}, {"name": "Team2", "code": "T2X"}]},
+        {"match_id": "y", "league": "LCK", "start": "2026-10-20T11:00:00Z", "best_of": 3, "state": "unstarted",
+         "teams": [{"name": "Team3", "code": "T3X"}, {"name": "Team4", "code": "T4X"}]}])
+    monkeypatch.setattr(scout.odds, "match_odds", lambda *a, **k: {"found": False})
+    pp = lambda opp, line: {"book": "prizepicks", "player": "Team1_mid", "opponent": opp, "prop": "kills", "scope": "12",
+                            "line": line, "odds_type": "standard"}
+    monkeypatch.setattr(scout.lines, "lines_for", lambda *a, **k: [pp("T3X", 6.5), pp("T2X", 7.5)])
+    args = argparse.Namespace(name="Team1_mid", team=None, opponent="Team3", line=None, prop="kills", scope=None,
+                              line_type="standard", hours=36)
+    res = scout.run_full(db, args)
+    assert res["match"]["opponent"] == {"name": "Team3", "code": "T3X"}
+    assert [ln["line"] for ln in res["lines"]] == [6.5] and res["lines_other_matches"] == 1
+
+
+def test_slate_leagues_are_normalised(monkeypatch, capsys):
+    seen = []
+    monkeypatch.setattr(scout.lolesports, "slate", lambda hours, leagues: seen.append(leagues) or [])
+    scout.main(["slate", "--leagues", " LCK, lec ,"])
+    scout.main(["slate", "--leagues", "ALL"])
+    assert seen == [["lck", "lec"], "all"]
 
 
 def test_h2h_counts_pushes_apart(db):

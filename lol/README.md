@@ -44,7 +44,7 @@ LoL's folder.
 
 ```
 python lol_scout.py sync                      # fill the history: the last ~8 months (LoL Esports; + Leaguepedia when configured)
-python lol_scout.py sync --since 2025-01-01   # backfill further back
+LOL_BACKFILL_DAYS=700 python lol_scout.py sync   # backfill further back (sync rejects --since)
 python lol_scout.py status                    # what the history holds, which sources are configured
 python lol_scout.py slate                     # LoL matches in the next 36 hours
 python lol_scout.py player Faker              # role, team, per-game averages, Map 1 / Maps 1-2 / Maps 1-3 totals

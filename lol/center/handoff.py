@@ -17,8 +17,11 @@ FIELDS = ("id", "tbl", "skey", "sha", "data", "event_time", "seen_at", "gone_at"
 
 
 def _connect(dsn):
+    # no startup options: a pooled endpoint (Neon's PgBouncer) refuses them (hltv.py, 2026-10-11) - each transaction
+    # sets its own statement timeout instead. Keepalives stop a dead connection from holding the worker's build loop.
     import psycopg2
-    return psycopg2.connect(dsn, connect_timeout=10, options="-c statement_timeout=30000")
+    return psycopg2.connect(dsn, connect_timeout=10, keepalives=1, keepalives_idle=30, keepalives_interval=10,
+                            keepalives_count=3)
 
 
 def publish(con, dsn=None):
@@ -34,8 +37,10 @@ def publish(con, dsn=None):
         from psycopg2.extras import execute_values
         with pg:
             with pg.cursor() as cur:
+                cur.execute("SET LOCAL statement_timeout = 30000")
                 cur.execute("SELECT pg_advisory_xact_lock(hashtext('1time-lol-source-handoff'))")
                 cur.execute(SCHEMA)
+                cur.execute("CREATE INDEX IF NOT EXISTS lol_source_inbox_key ON lol_source_inbox (tbl, skey, id)")
                 while batch := rows.fetchmany(500):
                     execute_values(cur, "INSERT INTO lol_source_inbox "
                                    "(tbl,skey,sha,data,event_time,seen_at,gone_at,producer,observation_key) VALUES %s "
@@ -43,7 +48,14 @@ def publish(con, dsn=None):
                                    [tuple(r) + ("github-history", store.sha([r[0], r[1], r[2], r[5], r[6]]))
                                     for r in batch], page_size=500)
                     count += len(batch)
-        return {"published_records": count, "destination": "Scout source inbox"}
+                # a newer observation of a record replaces the older ones, in this same transaction: a lagging or
+                # reset Scout still reads every record's latest state, and the inbox keeps one row per record
+                # instead of one per collector run
+                cur.execute("SET LOCAL statement_timeout = 600000")
+                cur.execute("DELETE FROM lol_source_inbox o USING lol_source_inbox n "
+                            "WHERE n.tbl = o.tbl AND n.skey = o.skey AND n.id > o.id")
+                superseded = cur.rowcount
+        return {"published_records": count, "superseded_removed": superseded, "destination": "Scout source inbox"}
     finally:
         pg.close()
 
@@ -74,6 +86,15 @@ def apply_records(con, records):
             if current and incoming_time <= local_time:
                 result["older"] += 1
                 continue
+            if current and r["seen_at"] <= current["last_seen"]:
+                # only the removal is newer (a tombstone): mark it gone, never put the collector's older data over
+                # a newer local revision
+                if current["gone_at"]:
+                    result["unchanged"] += 1
+                else:
+                    con.execute("UPDATE lp_current SET gone_at=? WHERE tbl=? AND skey=?", (r["gone_at"], r["tbl"], r["skey"]))
+                    result["imported"] += 1
+                continue
             same = current and current["sha"] == r["sha"] and current["gone_at"] == r["gone_at"]
             store.put_rows(con, r["tbl"], [data], lambda _: r["skey"], lambda _: r["event_time"], None, r["seen_at"])
             if r["gone_at"]:
@@ -82,7 +103,8 @@ def apply_records(con, records):
         store.set_meta(con, "handoff_cursor", cursor)
         if result["imported"]:
             store.set_meta(con, "dirty", store.now_iso())
-        store.set_meta(con, "last_handoff", dict(result, cursor=cursor, at=store.now_iso()))
+        if records:                     # an empty poll keeps the last import's counts on the status page
+            store.set_meta(con, "last_handoff", dict(result, cursor=cursor, at=store.now_iso()))
     return result
 
 
@@ -93,6 +115,7 @@ def consume(con, dsn=None, limit=500):
     pg = _connect(dsn)
     try:
         with pg, pg.cursor() as cur:
+            cur.execute("SET LOCAL statement_timeout = 30000")
             # The producer creates the table. A not-yet-published inbox is normal.
             cur.execute("SELECT to_regclass('public.lol_source_inbox')")
             if cur.fetchone()[0] is None:

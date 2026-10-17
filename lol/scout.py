@@ -202,7 +202,10 @@ def run_full(db, args):
         slate_rows, res["schedule_error"] = [], f"{type(e).__name__}: {e}"
     m, mine, theirs = next_match(team, slate_rows)
     if args.opponent and (not theirs or not teams.matches(args.opponent, theirs["name"], theirs["code"])):
-        m, theirs = None, {"name": args.opponent, "code": None}
+        # the team's code from the schedule when it lists the team at all: PrizePicks names the opponent by code
+        code = next((t["code"] for row in slate_rows for t in row["teams"] if teams.matches(args.opponent, t["name"], t["code"])),
+                    None)
+        m, theirs = None, {"name": args.opponent, "code": code}
     res["match"] = ({"league": m["league"], "start": m["start"], "best_of": m["best_of"], "match_id": m["match_id"],
                      "team": mine, "opponent": theirs} if m else
                     {"opponent": theirs, "note": "not on the LoL Esports schedule in the next "
@@ -257,7 +260,8 @@ def _same_match(ln, theirs, start):
     """A board line belongs to the graded match: its opponent is that opponent (when both are known) and it starts
     within 6 hours of the match (when both are known) - a line for his NEXT match is never graded with this one."""
     if ln.get("opponent") and theirs and theirs.get("name") and \
-            not teams.matches(ln["opponent"], theirs["name"], theirs.get("code")):
+            not teams.matches(ln["opponent"], theirs["name"], theirs.get("code")) and \
+            (theirs.get("code") or ln.get("book") != "prizepicks"):    # a PrizePicks code with no code known: no verdict
         return False
     a, b = _when(ln.get("start")), _when(start)
     return a is None or b is None or abs((a - b).total_seconds()) <= 6 * 3600
@@ -368,6 +372,8 @@ def print_full(res):
             print(f"  {ln['book']:10s} {ln['prop']:7s} {SCOPE_NAME[ln['scope']]:9s} {ln['line']:5.1f} ({ln['odds_type']}): "
                   f"projection {ln['projection']:.2f}  P(over) {ln['p_over']:.1%}  P(under) {ln['p_under']:.1%}  "
                   f"-> {ln['model_side']}")
+    if res.get("lines_other_matches"):
+        print(f"  {res['lines_other_matches']} more line(s) on the board are for another match - not graded")
     print("  (model estimate - see lol/EVALUATION.md for its measured accuracy)")
 
 
@@ -389,19 +395,21 @@ def main(argv=None):
     common.add_argument("--scope", choices=["1", "12", "123"], help="Map 1 / Maps 1-2 / Maps 1-3 (default: from best-of)")
     common.add_argument("--line-type", choices=["standard", "goblin", "demon"], default="standard")
     common.add_argument("--hours", type=float, default=36)
-    common.add_argument("--since", help="sync: first date (YYYY-MM-DD; default about 8 months ago)")
-    common.add_argument("--until", help="sync (Leaguepedia): stop before this date (YYYY-MM-DD; default tomorrow)")
-    common.add_argument("--leagues", help="sync / slate: comma-separated LoL Esports slugs, or 'all' (default: majors)")
+    common.add_argument("--since", help="legacy: sync rejects it (set LOL_BACKFILL_DAYS before the run instead)")
+    common.add_argument("--until", help="legacy: sync rejects it")
+    common.add_argument("--leagues", help="slate: comma-separated LoL Esports slugs, or 'all' (default: majors); sync rejects it")
     common.add_argument("--source", choices=["lolesports", "leaguepedia", "both"], default="both")
     common.add_argument("--max-minutes", type=float, default=120, help="sync: bounded ingestion time before exporting")
-    common.add_argument("--force", action="store_true", help="sync: re-derive matches already held (from the cache)")
+    common.add_argument("--force", action="store_true", help="legacy: sync rejects it")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     for c in ("slate", "sync", "status", "player", "h2h", "odds", "lines", "full"):
         sub.add_parser(c, parents=[common])
     a = ap.parse_args(argv)
     if a.cmd == "slate":
-        res = lolesports.slate(a.hours, None if not a.leagues else ("all" if a.leagues == "all" else a.leagues.split(",")))
+        lg = None if not a.leagues else ("all" if a.leagues.strip().lower() == "all" else
+                                         [x.strip().lower() for x in a.leagues.split(",") if x.strip()])
+        res = lolesports.slate(a.hours, lg)
         for m in res:
             print(f"{m['start']}  {m['league']:12s} BO{m['best_of']}  {m['teams'][0]['name']} vs {m['teams'][1]['name']}")
     elif a.cmd == "odds":

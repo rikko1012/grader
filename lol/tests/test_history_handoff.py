@@ -80,6 +80,35 @@ def test_explicit_deletion_preserves_revision_and_can_be_corrected(tmp_path):
         con.close()
 
 
+def test_a_tombstone_never_puts_older_collector_data_over_a_local_correction(tmp_path):
+    con = store.connect(tmp_path / "scout.db")
+    try:
+        corrected = {"Page": "A", "Name": "Corrected"}
+        store.put_rows(con, "Teams", [corrected], lambda _: "A", None, None, "2026-10-17T05:00:00Z")
+        con.commit()
+        # the collector last saw the old row at 02:00 and found it gone at 09:00
+        result = handoff.apply_records(con, [record(1, {"Page": "A", "Name": "Old"}, seen="2026-10-17T02:00:00Z",
+                                                    gone="2026-10-17T09:00:00Z")])
+        assert result["imported"] == 1 and store.current_rows(con, "Teams") == []
+        cur = con.execute("SELECT c.last_seen, c.gone_at, r.data FROM lp_current c JOIN lp_rows r "
+                          "ON r.tbl=c.tbl AND r.skey=c.skey AND r.rev=c.rev").fetchone()
+        assert json.loads(cur["data"]) == corrected and cur["last_seen"] == "2026-10-17T05:00:00Z"
+        assert cur["gone_at"] == "2026-10-17T09:00:00Z"
+        assert con.execute("SELECT COUNT(*) FROM lp_rows").fetchone()[0] == 1
+    finally:
+        con.close()
+
+
+def test_an_empty_poll_keeps_the_last_import_on_the_status(tmp_path):
+    con = store.connect(tmp_path / "scout.db")
+    try:
+        handoff.apply_records(con, [record(1, {"Page": "A"})])
+        handoff.apply_records(con, [])
+        assert store.get_meta(con, "last_handoff")["imported"] == 1
+    finally:
+        con.close()
+
+
 def test_corrupt_record_is_quarantined_without_blocking_following_records(tmp_path):
     con = store.connect(tmp_path / "scout.db")
     try:
@@ -133,9 +162,19 @@ def test_postgres_publish_replay_and_tombstone_reach_scout(pg_db, tmp_path):
         assert handoff.consume(target, pg_db.dsn)["imported"] == 0
         collector.execute("UPDATE lp_current SET gone_at='2099-01-01T00:00:00Z' WHERE tbl='Teams'")
         collector.commit()
-        handoff.publish(collector, pg_db.dsn)
+        teams = collector.execute("SELECT COUNT(*) FROM lp_current WHERE tbl='Teams'").fetchone()[0]
+        assert handoff.publish(collector, pg_db.dsn)["superseded_removed"] == teams
+        # one row per record: the tombstone replaced each team's older observation
+        assert pg_db.query("SELECT COUNT(*) AS n FROM lol_source_inbox")[0]["n"] == n
         handoff.consume(target, pg_db.dsn, limit=n + 10)
         assert store.current_rows(target, "Teams") == []
+        fresh = store.connect(tmp_path / "fresh.db")      # a reset Scout replays the whole inbox to the same state
+        try:
+            handoff.consume(fresh, pg_db.dsn, limit=n + 10)
+            assert store.current_rows(fresh, "Teams") == [] and len(store.current_rows(fresh, "Players")) == \
+                len(store.current_rows(collector, "Players"))
+        finally:
+            fresh.close()
         # Publishing source records never writes derived serving history.
         assert pg_db.query("SELECT COUNT(*) AS n FROM lol_games")[0]["n"] == 0
         assert pg_db.query("SELECT COUNT(*) AS n FROM lol_player_games")[0]["n"] == 0

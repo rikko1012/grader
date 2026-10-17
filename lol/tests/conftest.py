@@ -48,6 +48,7 @@ def pg_db():
     d = history.DB(dsn=dsn)
     for t in ("lol_player_games", "lol_games", "lol_sync_state"):
         d.execute(f"DELETE FROM {t}")
+    d.execute("DROP TABLE IF EXISTS lol_source_inbox")     # the handoff inbox: handoff.publish creates it again
     d.commit()
     yield d
     d.close()
