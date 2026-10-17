@@ -110,7 +110,12 @@ def build_loop():
                 if store.get_meta(con, "last_export"):
                     STATE["forecasts"] = {"at": store.now_iso(), "counts": forecast.run(con)}
                     STATE["settled"] = {"at": store.now_iso(), "counts": forecast.settle_all(con)}
-                _write("board.json", forecast.board(con))
+                b = forecast.board(con)
+                try:
+                    b["slips_member"] = slips.member_summary(con)    # recommended slips for members, or why none
+                except Exception as e:                              # never blocks the board itself
+                    _err("slips_member", e)
+                _write("board.json", b)
                 _write("learning.json", learning.dashboard(con))
                 _write("slips.json", {"at": store.now_iso(), "note": "preview: no slip is recommended while stakes are held at 0U",
                                       "previews": [slips.build(con, pl, size, 5, mode, no_overlap=True, preview=True)

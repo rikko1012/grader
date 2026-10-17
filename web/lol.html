@@ -61,6 +61,13 @@ tbody tr.row{cursor:pointer}tbody tr.row:hover{background:#1a212d}tbody tr:last-
 .side{border:1px solid var(--line-2);border-radius:10px;padding:8px 12px;min-width:120px}.side.off{border-style:dashed;color:var(--faint)}
 .sheet ul{margin:0;padding-left:18px}.sheet li{margin:3px 0}.closebar{display:flex;justify-content:flex-end;margin-top:16px}
 .gate{max-width:460px;margin:60px auto;text-align:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:28px}.gate a{color:var(--accent-2)}
+.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}.actions .btn{margin-top:0}
+.btn.primary{background:var(--accent);color:#18120e;border-color:var(--accent);font-weight:600}.btn:disabled{opacity:.45;cursor:not-allowed}
+.actmsg{font-size:12.5px;color:var(--muted)}.actmsg.bad{color:#f2a36b}.actmsg.ok{color:var(--up)}
+.slipleg{display:grid;grid-template-columns:1fr auto;gap:6px 12px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}.slipleg:first-child{border-top:0}
+.slipleg .st{grid-column:1/-1;font-size:12.5px}.st.ok{color:var(--up)}.st.bad{color:#f2a36b}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:0 0 14px}.panel h3{margin:0 0 8px;font:600 15px var(--display)}
+.panel ul{margin:6px 0 0;padding-left:18px}.panel li{margin:3px 0}
 @media(max-width:860px){.tablebox.board{display:none}.cards{display:block}}
 @media(max-width:640px){header{padding:0 14px;height:58px;gap:10px}h1{font-size:15px}#who{display:none}.wrap{padding:14px 14px 80px}
   .bar{padding:10px;gap:8px}.bar .seg{width:100%}.bar .seg button{flex:1}.bar select{flex:1 1 calc(50% - 4px);min-width:0;width:calc(50% - 4px)}
@@ -82,6 +89,10 @@ const num = (x, d = 1) => x == null ? NA : Number(x).toFixed(d);
 const FKEY = "scout.lol.filters", SKEY = "scout.lol.scroll";
 const DEF = {view: "board", plat: "all", stat: "all", type: "all", match: "all", playable: false, sort: "start"};
 let F = Object.assign({}, DEF), D = null, lastFocus = null, openRow = null;
+const SLIPKEY = "scout.lol.slip", MAXLEGS = {underdog: 8, prizepicks: 6};
+let SLIP = {legs: []}, CHECK = {};
+try { SLIP = Object.assign({legs: []}, JSON.parse(localStorage.getItem(SLIPKEY) || "{}")); } catch {}
+const saveSlip = () => { try { localStorage.setItem(SLIPKEY, JSON.stringify(SLIP)); } catch {} };
 try { Object.assign(F, JSON.parse(localStorage.getItem(FKEY) || "{}")); } catch {}
 const save = () => { try { localStorage.setItem(FKEY, JSON.stringify(F)); } catch {} };
 function when(s) { if (!s) return NA; const d = new Date(s); return isNaN(d) ? esc(s) : d.toLocaleString([], {weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"}); }
@@ -99,6 +110,40 @@ function pickCell(x) {
   const c = x.pick_offered ? (x.pick_side === "Over" ? "over" : "under") : "off";
   const other = x.sides.filter(s => s.offered).map(s => s.side);
   return `<span class="pick ${c}">${esc(x.pick)}</span>${x.pick_offered ? "" : `<span class="offnote">${other.length ? "Only " + other.join(" / ") + " offered" : "Not offered"}</span>`}`;
+}
+function started(x) { const d = new Date(x.start); return !isNaN(d) && d <= new Date(); }
+function playable(x) { return x.pick_offered && !started(x); }
+function whyNot(x) { return started(x) ? "This match has started." : !x.pick_offered ? `${x.pick_side} is not offered on this line.` : null; }
+function legOf(x) { return {key: x.key, platform: x.platform, platform_label: x.platform_label, player: x.player, team: x.team, opponent: x.opponent,
+  stat: x.stat, stat_name: x.stat_name, scope: x.scope, line: x.line, side: x.pick_side, line_type: x.line_type, match_key: matchKey(x), start: x.start, grade: x.grade}; }
+function legText(l) { return `${l.player} (${l.team}) vs ${l.opponent} - ${l.stat_name}, ${l.scope} - ${l.platform_label}${l.line_type !== "Standard" ? " " + l.line_type : ""} - ${l.side} ${l.line}`; }
+function slipRule(x) {
+  const w = whyNot(x); if (w) return w;
+  if (SLIP.legs.some(l => l.key === x.key)) return "Already in your slip.";
+  if (SLIP.legs.length && SLIP.legs[0].platform !== x.platform) return `Your slip is ${SLIP.legs[0].platform_label}: one platform per slip.`;
+  if (SLIP.legs.some(l => l.match_key === matchKey(x))) return "Your slip already has a pick from this match: picks from the same match are not combined.";
+  if (SLIP.legs.some(l => l.player === x.player && l.team === x.team)) return "This player is already in your slip.";
+  if (SLIP.legs.length >= MAXLEGS[x.platform]) return `${x.platform_label} slips hold up to ${MAXLEGS[x.platform]} picks.`;
+  return null;
+}
+async function fresh() {
+  const r = await fetch("/api/lol/board", {cache: "no-store"}).catch(() => null);
+  if (!r || !r.ok) return null;
+  D = await r.json(); return D;
+}
+function legStatus(l) {
+  const x = (D.rows || []).find(r => r.key === l.key);
+  if (!x) return {ok: false, text: "This line is no longer on the board."};
+  if (started(x)) return {ok: false, text: "This match has started."};
+  if (x.line !== l.line) return {ok: false, text: `The line moved: ${l.line} → ${x.line}.`};
+  const side = x.sides.find(s => s.side === l.side);
+  if (!side || !side.offered) return {ok: false, text: `${l.side} is no longer offered on this line.`};
+  if (x.pick_side !== l.side) return {ok: false, text: `The model's pick on this line is now ${x.pick_side}.`};
+  return {ok: true, text: `${l.side} ${x.line} still posted (line checked ${new Date(x.line_checked).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})}).`};
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch {}
+  try { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); const ok = document.execCommand("copy"); t.remove(); return ok; } catch { return false; }
 }
 function rows() {
   let rs = (D.rows || []).filter(x => (F.plat === "all" || x.platform === F.plat) && (F.stat === "all" || x.stat === F.stat) &&
@@ -149,6 +194,27 @@ function tablesView() {
   return (h || `<div class="empty"><b>No posted LoL lines match these filters.</b>${(D.match_tables || []).length ? `<br><button type="button" id="reset">Reset filters</button>` : ""}</div>`) +
     `<p class="small faint">Underdog payouts (×) are per-pick payout modifiers, not odds. PrizePicks Goblin and Demon are alternate lines with different payouts.</p>`;
 }
+function slipView() {
+  let h = `<section class="panel"><h3>Suggested slips</h3>`;
+  for (const [pl, d] of Object.entries(D.slips || {})) {
+    if ((d.recommended || []).length) {
+      h += `<div><b>${esc(pl)}</b>: ${d.recommended.length} slip${d.recommended.length > 1 ? "s" : ""}</div>`;
+      for (const sl of d.recommended) h += `<ul>${sl.legs.map(l => { const x = (D.rows || []).find(r => r.key === l.key); return `<li>${x ? esc(legText(legOf(x))) : "line no longer on the board"}</li>`; }).join("")}</ul>`;
+    } else {
+      h += `<div style="margin-top:6px"><b>${esc(pl)}</b>: no suggested slip right now.</div><ul class="small muted">${(d.why_none || []).map(r => `<li>${esc(r.text)}${r.picks ? ` (${r.picks} pick${r.picks > 1 ? "s" : ""})` : ""}</li>`).join("") || "<li>No upcoming LoL lines.</li>"}</ul>`;
+    }
+  }
+  if (!Object.keys(D.slips || {}).length) h += `<div class="small muted">No slip information yet.</div>`;
+  h += `<p class="small faint" style="margin:8px 0 0">Suggestions never repeat a prop or a match across slips and are never padded with extra picks.</p></section>`;
+  h += `<section class="panel"><h3>Your slip${SLIP.legs.length ? ` · ${esc(SLIP.legs[0].platform_label)}` : ""}</h3>`;
+  if (!SLIP.legs.length) h += `<div class="small muted">Open a pick on the board and choose <b>Add to slip</b>. One platform per slip; one pick per match and per player; only sides the line offers.</div>`;
+  else {
+    h += `<div>${SLIP.legs.map((l, i) => { const c = CHECK[l.key]; return `<div class="slipleg"><div>${esc(legText(l))}</div><button type="button" class="btn" data-rm="${i}">Remove</button>${c ? `<div class="st ${c.ok ? "ok" : "bad"}">${esc(c.text)}</div>` : ""}</div>`; }).join("")}</div>
+      <div class="actions"><button type="button" class="btn primary" id="copyslip">Recheck lines &amp; copy slip</button><button type="button" class="btn" id="clearslip">Clear</button><span class="actmsg" id="slipmsg"></span></div>
+      <p class="small faint" style="margin:8px 0 0">${esc(D.stake_note)} Your slip is your own selection; it is not a suggestion.</p>`;
+  }
+  return h + `</section>`;
+}
 function others(x) {
   for (const t of D.match_tables || []) for (const m of t.markets)
     if (m.player === x.player && m.stat_name === x.stat_name && m.scope === x.scope && t.start === x.start && t.teams === x.match) return m;
@@ -168,6 +234,8 @@ function card(i, focusBack) {
     ${x.p_push ? `<div><span class="k">Exactly ${x.line} (push)</span>${pct(x.p_push)}</div>` : ""}
     <div><span class="k">Pick</span>${pickCell(x)}</div><div><span class="k">Grade</span>${gradeChip(x)}</div><div><span class="k">Stake</span><b>${x.units}U</b></div></div>
     <div class="small muted" style="margin-top:8px">${esc(x.stake_reason)}</div>
+    <div class="actions"><button type="button" class="btn primary" id="copypick" ${playable(x) ? "" : "disabled"}>Copy pick</button><button type="button" class="btn" id="addslip" ${slipRule(x) ? "disabled" : ""}>Add to slip</button>
+      <span class="actmsg ${playable(x) ? "" : "bad"}" id="actmsg">${esc(whyNot(x) || slipRule(x) || "")}</span></div>
     <h4>Recent average (not the projection)</h4><div>${per == null ? NA : `${num(per, 2)} ${esc(x.stat_name.toLowerCase())} per game over the last ${x.recent_games} games${n ? ` · ${num(per * n, 1)} over ${n} game${n > 1 ? "s" : ""}` : ""}`}</div>
     <h4>What this projection uses</h4>${(x.drivers || []).length ? `<ul class="small">${x.drivers.map(z => `<li>${esc(z)}</li>`).join("")}</ul>` : NA}
     ${(x.not_modelled || []).length ? `<h4>Not in this projection</h4><div class="small muted">${esc(x.not_modelled.join("; "))}</div>` : ""}`;
@@ -179,6 +247,20 @@ function card(i, focusBack) {
   $("#modal").classList.add("open");
   document.body.style.overflow = "hidden";
   $("#closecard").onclick = closeCard;
+  $("#copypick").onclick = async () => {
+    const leg = legOf(x), msg = $("#actmsg");
+    msg.className = "actmsg"; msg.textContent = "Rechecking the line…";
+    if (!await fresh()) { msg.className = "actmsg bad"; msg.textContent = "The board could not be reached - nothing copied."; return; }
+    const st = legStatus(leg);
+    if (!st.ok) { msg.className = "actmsg bad"; msg.textContent = st.text + " Nothing copied."; return; }
+    const ok = await copyText(legText(leg));
+    msg.className = ok ? "actmsg ok" : "actmsg bad"; msg.textContent = ok ? "Copied. " + st.text : "Copy failed in this browser.";
+  };
+  $("#addslip").onclick = () => {
+    const why = slipRule(x); if (why) { $("#actmsg").className = "actmsg bad"; $("#actmsg").textContent = why; return; }
+    SLIP.legs.push(legOf(x)); saveSlip(); CHECK = {};
+    $("#addslip").disabled = true; $("#actmsg").className = "actmsg ok"; $("#actmsg").textContent = `Added - ${SLIP.legs.length} pick${SLIP.legs.length > 1 ? "s" : ""} in your ${x.platform_label} slip.`;
+  };
   $("#closecard").focus();
 }
 function closeCard() {
@@ -203,13 +285,25 @@ function render() {
   for (const t of D.match_tables || []) if (!ms.has(`${t.start}|${t.teams}`)) ms.set(`${t.start}|${t.teams}`, `${t.teams} · ${new Date(t.start).toLocaleString([], {month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"})}`);
   if (F.match !== "all" && !ms.has(F.match)) F.match = "all";
   let h = `<div class="intro"><div><div class="eyebrow">League of Legends · Underdog + PrizePicks</div><h2>LoL prop board</h2><p>Every posted kills, assists and deaths line with the model's projection for the exact games in the prop, the chance of each side, and the grade.</p></div><div class="feeds">${feedsLine()}</div></div>${staleBanner()}`;
-  h += `<div class="bar">${seg("v", F.view, [["board", "Board"], ["tables", "Compare books"]])}${seg("p", F.plat, [["all", "All books"], ["underdog", "Underdog"], ["prizepicks", "PrizePicks"]])}
+  h += `<div class="bar">${seg("v", F.view, [["board", "Board"], ["tables", "Compare books"], ["slip", `Slip${SLIP.legs.length ? " (" + SLIP.legs.length + ")" : ""}`]])}${seg("p", F.plat, [["all", "All books"], ["underdog", "Underdog"], ["prizepicks", "PrizePicks"]])}
     <select id="s" aria-label="Prop"><option value="all">All props</option><option value="kills">Kills</option><option value="assists">Assists</option><option value="deaths">Deaths</option></select>
     <select id="m" aria-label="Match"><option value="all">All matches</option>${[...ms].map(([k, l]) => `<option value="${esc(k)}">${esc(l)}</option>`).join("")}</select>
     ${F.view === "board" ? `<select id="t" aria-label="Line type"><option value="all">All line types</option><option value="standard">Standard lines</option><option value="alt">Goblin / Demon / adjusted</option></select>
     <select id="o" aria-label="Sort"><option value="start">Sort: start time</option><option value="chance">Sort: chance</option></select>
     <label class="chk"><input type="checkbox" id="pl" ${F.playable ? "checked" : ""}> Offered picks only</label>` : ""}</div>`;
-  $("#app").innerHTML = h + (F.view === "board" ? boardView() : tablesView());
+  $("#app").innerHTML = h + (F.view === "board" ? boardView() : F.view === "slip" ? slipView() : tablesView());
+  document.querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { SLIP.legs.splice(+b.dataset.rm, 1); saveSlip(); CHECK = {}; render(); });
+  if ($("#clearslip")) $("#clearslip").onclick = () => { SLIP.legs = []; saveSlip(); CHECK = {}; render(); };
+  if ($("#copyslip")) $("#copyslip").onclick = async () => {
+    $("#slipmsg").textContent = "Rechecking every line…";
+    if (!await fresh()) { $("#slipmsg").className = "actmsg bad"; $("#slipmsg").textContent = "The board could not be reached - nothing copied."; return; }
+    CHECK = {}; for (const l of SLIP.legs) CHECK[l.key] = legStatus(l);
+    const bad = SLIP.legs.filter(l => !CHECK[l.key].ok).length;
+    if (bad) { render(); $("#slipmsg").className = "actmsg bad"; $("#slipmsg").textContent = `${bad} pick${bad > 1 ? "s" : ""} changed - remove ${bad > 1 ? "them" : "it"} before copying. Nothing copied.`; return; }
+    const text = `${SLIP.legs[0].platform_label} - ${SLIP.legs.length} pick${SLIP.legs.length > 1 ? "s" : ""}\n` + SLIP.legs.map(legText).join("\n");
+    const ok = await copyText(text); render();
+    $("#slipmsg").className = ok ? "actmsg ok" : "actmsg bad"; $("#slipmsg").textContent = ok ? "Copied - every line rechecked just now." : "Copy failed in this browser.";
+  };
   $("#s").value = F.stat; $("#m").value = F.match; if ($("#t")) { $("#t").value = F.type; $("#o").value = F.sort; }
   const set = (k, v) => { F[k] = v; save(); render(); };
   for (const [id, k] of [["#v", "view"], ["#p", "plat"]]) $(id).onclick = e => { const b = e.target.closest("button"); if (b) set(k, b.dataset.v); };

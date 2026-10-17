@@ -12,6 +12,7 @@ GET /api/grade?player=&line=&prop=kills|hs&line_type=standard|goblin|demon[&slug
 One grade runs at a time (keeps requests to BO3.gg polite). Standard library only.
 """
 import collections
+import hashlib
 import json
 import re
 import secrets
@@ -1204,6 +1205,44 @@ def _lol_sides(platform, sides):
     return out
 
 
+def _lol_key(platform, market_key):
+    """An opaque, stable key for one offered line (the internal market key is not shown to members)."""
+    return hashlib.sha1(f"{platform}|{market_key}".encode()).hexdigest()[:16]
+
+
+LOL_SLIP_REASON = {"stake 0U": "LoL stakes are 0U until LoL picks have a settled record at real lines - no slip is suggested until then",
+                   "the model's side is not offered": "the pick's side is not offered on that line",
+                   "offered sides not": "the feed does not list the pick's side as offered",
+                   "rule not": "the platform's settlement rule for that prop is not on file",
+                   "not offered as a slip leg": "that stat is not used in slips",
+                   "line scope does not match": "the line's maps do not match the series format",
+                   "no stored history": "no stored history for the player"}
+
+
+def _lol_member_slips(sm):
+    """Recommended LoL slips for members (legs by line key), or why there are none - from the worker's summary."""
+    out = {}
+    for pl, d in (sm.get("platforms") or {}).items():
+        reasons = []
+        for r, n in (d.get("blocked_by") or {}).items():
+            text = next((v for k, v in LOL_SLIP_REASON.items() if r.startswith(k) or k in r), None)
+            if text and text not in [x["text"] for x in reasons]:
+                reasons.append({"text": text, "picks": n})
+        n = d.get("upcoming_series", 0)
+        if n == 0:
+            reasons.append({"text": "no LoL match with lines is still to start", "picks": 0})
+        elif n == 1:
+            reasons.append({"text": "only one match with lines is still to start, and legs from the same match are never combined "
+                                    "(there is no model of how their results move together)", "picks": d.get("upcoming_forecasts", 0)})
+        out[LOL_PLATFORM.get(pl, pl)] = {
+            "recommended": [{"size": sl.get("size"), "legs": [{"key": _lol_key(pl, lg.get("market_key")), "side": lg.get("side"),
+                                                              "line": lg.get("line")} for lg in sl.get("legs") or []],
+                             "entry_payout": sl.get("entry_payout"), "model_chance_all_hit": sl.get("model_chance_all_hit")}
+                            for sl in d.get("recommended") or []],
+            "why_none": reasons, "upcoming_picks": d.get("upcoming_forecasts", 0)}
+    return out
+
+
 def _lol_member_rebuild(path, mt):
     try:
         b = json.loads(path.read_text())
@@ -1224,7 +1263,8 @@ def _lol_member_rebuild(path, mt):
         pick_offered = next(s["offered"] for s in sides if s["side"] == side)
         lt, lt_note = _lol_line_type(x.get("platform"), x.get("odds_type"), inp.get("market"))
         rec = inp.get("recent") or {}
-        rows.append({"platform": x.get("platform"), "platform_label": LOL_PLATFORM.get(x.get("platform"), x.get("platform")),
+        rows.append({"key": _lol_key(x.get("platform"), x.get("market_key")),
+                     "platform": x.get("platform"), "platform_label": LOL_PLATFORM.get(x.get("platform"), x.get("platform")),
                      "player": x.get("player"), "team": x.get("team"), "role": x.get("role"), "opponent": x.get("opponent"),
                      "event": x.get("competition"), "best_of": x.get("best_of"), "start": x.get("series_start"),
                      "match": label.get((x.get("link") or {}).get("sid")) or " vs ".join(sorted(filter(None, [x.get("team"), x.get("opponent")]))),
@@ -1262,7 +1302,8 @@ def _lol_member_rebuild(path, mt):
                        "start": t.get("start"), "markets": markets})
     tables.sort(key=lambda z: z["start"] or "")
     feeds = {LOL_PLATFORM.get(k, k): v for k, v in (b.get("feeds") or {}).items()}
-    body = json.dumps({"at": b.get("at"), "feeds": feeds, "rows": rows, "match_tables": tables, "stake_note": LOL_STAKE_NOTE}).encode()
+    body = json.dumps({"at": b.get("at"), "feeds": feeds, "rows": rows, "match_tables": tables, "stake_note": LOL_STAKE_NOTE,
+                       "slips": _lol_member_slips(b.get("slips_member") or {})}).encode()
     _LOL_MEMBER.update(mtime=mt, body=body)
     return body
 

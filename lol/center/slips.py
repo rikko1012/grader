@@ -117,3 +117,23 @@ def build(con, platform, size, count, mode="mixed", no_overlap=True, exclude_rol
     return {"platform": platform, "size": size, "mode": mode, "no_overlap": no_overlap, "preview": preview,
             "recommended": bool(slips) and not preview, "slips": slips, "shortage": shortage,
             "left_out": {str(k): v for k, v in left.items()}}
+
+
+def member_summary(con, sizes=(2, 3), now=None):
+    """What members may be offered: the RECOMMENDED slips (preview=False - every rule applies, the 0U stake policy
+    included) per platform, or exactly why there are none, counted over the forecasts of series not yet started.
+    Nothing is added to reach a count."""
+    now = now or datetime.now(timezone.utc)
+    out = {"at": store.now_iso(now), "platforms": {}}
+    for pl in ("underdog", "prizepicks"):
+        res = [build(con, pl, size, 5, "mixed", no_overlap=True, preview=False, now=now) for size in sizes]
+        upcoming = [f for f in _latest(con, pl) if (forecast._when(f["series_start"]) or now) > now]
+        reasons = {}
+        for f in upcoming:
+            for r in json.loads(f["slip_reasons"] or "[]"):
+                reasons[r] = reasons.get(r, 0) + 1
+        out["platforms"][pl] = {
+            "recommended": [dict(slip, size=r["size"]) for r in res for slip in r["slips"]],
+            "upcoming_forecasts": len(upcoming), "upcoming_series": len({f["sid"] for f in upcoming}),
+            "blocked_by": dict(sorted(reasons.items(), key=lambda kv: -kv[1]))}
+    return out

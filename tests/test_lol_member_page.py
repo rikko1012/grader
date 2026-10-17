@@ -74,3 +74,28 @@ def test_admin_query_is_read_only(tmp_path, monkeypatch):
     assert "error" in server.lol_admin_query("center", f"WITH a AS (SELECT 1) SELECT * FROM a; ATTACH '{tmp_path / 'x.db'}' AS x")
     assert "error" in server.lol_admin_query("nope", "SELECT 1")
     assert sqlite3.connect(tmp_path / "lol.db").execute("SELECT COUNT(*) FROM t").fetchone()[0] == 1
+
+
+def test_member_slips_explain_why_none_and_map_legs_to_line_keys():
+    sm = {"platforms": {
+        "underdog": {"recommended": [], "upcoming_forecasts": 44, "upcoming_series": 1,
+                     "blocked_by": {"stake 0U (LoL projections not yet validated at real lines)": 44,
+                                    "the model's side is not offered on this line": 23}},
+        "prizepicks": {"recommended": [{"size": 2, "legs": [{"market_key": "pp:1", "side": "over", "line": 9.5},
+                                                            {"market_key": "pp:2", "side": "under", "line": 4.5}],
+                                        "entry_payout": None, "model_chance_all_hit": 0.4}],
+                       "upcoming_forecasts": 10, "upcoming_series": 2, "blocked_by": {}}}}
+    out = server._lol_member_slips(sm)
+    ud, pp = out["Underdog"], out["PrizePicks"]
+    assert ud["recommended"] == [] and any("0U" in r["text"] for r in ud["why_none"])
+    assert any("same match" in r["text"] for r in ud["why_none"]) and any("not offered" in r["text"] for r in ud["why_none"])
+    assert [l["key"] for l in pp["recommended"][0]["legs"]] == [server._lol_key("prizepicks", "pp:1"), server._lol_key("prizepicks", "pp:2")]
+    assert "pp:1" not in json.dumps(out)                                 # internal keys never shown
+
+
+def test_member_rows_carry_an_opaque_line_key(tmp_path, monkeypatch):
+    monkeypatch.setattr(server, "LOL_CENTER", tmp_path)
+    _board(tmp_path)
+    server._LOL_MEMBER.update(mtime=None, body=None)
+    row, = json.loads(server.lol_member_board())["rows"]
+    assert row["key"] == server._lol_key("underdog", "ud:x") and len(row["key"]) == 16
