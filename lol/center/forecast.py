@@ -273,7 +273,7 @@ def _nb_median(m, lam, size):
 def _provisional(m):
     meta = (m.FIT_META or {}) if hasattr(m, "FIT_META") else {}
     return {"selection": (m.FIT[3] or {}).get("selection") if m.FIT else None, "basis": meta.get("train"),
-            "note": "selected on the development split (lol/EVALUATION.md A4); final comparison pending"}
+            "note": "selected by the single final comparison (lol/EVALUATION.md A5, 2026-10-17)"}
 
 
 def _drivers(pj):
