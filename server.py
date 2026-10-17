@@ -1186,27 +1186,40 @@ def lol_center_admin(path, q):
                 "worker": {"running": bool(p and p.poll() is None), "starts": LOL_SUP["starts"],
                                                          "started_at": LOL_SUP["started_at"], "last_exit": LOL_SUP["last_exit"],
                                                          "disabled": LOL_SUP["disabled"]}, "status": read("status.json")}
-    if path in ("/admin/lol/coverage.json", "/admin/lol/quarantine.json", "/admin/lol/links.json"):
+    if path in ("/admin/lol/coverage.json", "/admin/lol/quarantine.json", "/admin/lol/links.json", "/admin/lol/board.json"):
         return read(path.rsplit("/", 1)[1]) or {"note": "not written yet"}
-    if path == "/admin/lol/quotes.json":
+    # paged, read-only exports: the quote archive, the saved forecasts and settlements (the data center's database) and
+    # the one LoL history (DATA_DIR/lol/history.db) - bounded pages, oldest first
+    pages = {"/admin/lol/quotes.json": (LOL_CENTER / "lol.db", "market_events", "id",
+                                        "id, sport, platform, market_key, event, observed_at, source_updated_at, line_id, player, team, "
+                                        "opponent, match_source_id, start_time, stat_label, stat, scope, market_type, odds_type, line, "
+                                        "sides, status, raw_id"),
+             "/admin/lol/forecasts.json": (LOL_CENTER / "lol.db", "lol_forecasts", "id", "*"),
+             "/admin/lol/settlements.json": (LOL_CENTER / "lol.db", "lol_settlements", "id", "*"),
+             "/admin/lol/history.json": (Path(DATA_DIR) / "lol" / "history.db",
+                                         "lol_games" if q.get("table") == "games" else "lol_player_games", "rowid", "rowid AS _row, *")}
+    if path in pages:
         import sqlite3
+        db, table, key, cols = pages[path]
         num = lambda k, d: int(q[k]) if (q.get(k) or "").isdigit() else d
-        after, limit = num("after", 0), min(num("limit", 500), 2000)
-        db = LOL_CENTER / "lol.db"
+        after, limit = num("after", 0), min(num("limit", 500), 5000)
         if not db.exists():
-            return {"rows": [], "note": "no archive yet"}
+            return {"rows": [], "note": "not written yet"}
         con = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=10)
         con.row_factory = sqlite3.Row
         try:
-            sql = ("SELECT id, sport, platform, market_key, event, observed_at, source_updated_at, line_id, player, team, opponent, "
-                   "match_source_id, start_time, stat_label, stat, scope, market_type, odds_type, line, sides, status, raw_id "
-                   "FROM market_events WHERE id > ?" + (" AND platform = ?" if q.get("platform") else "") + " ORDER BY id LIMIT ?")
-            rows = [dict(r) for r in con.execute(sql, (after, q["platform"], limit) if q.get("platform") else (after, limit))]
+            plat = q.get("platform") if table != "lol_player_games" and table != "lol_games" else None
+            sql = f"SELECT {cols} FROM {table} WHERE {key} > ?" + (" AND platform = ?" if plat else "") + f" ORDER BY {key} LIMIT ?"
+            rows = [dict(r) for r in con.execute(sql, (after, plat, limit) if plat else (after, limit))]
+        except sqlite3.OperationalError as e:
+            return {"rows": [], "note": f"not available yet ({str(e)[:80]})"}
         finally:
             con.close()
-        for r in rows:
-            r["sides"] = json.loads(r["sides"]) if r.get("sides") else None
-        return {"after": after, "rows": rows, "next_after": rows[-1]["id"] if len(rows) == limit else None}
+        if table == "market_events":
+            for r in rows:
+                r["sides"] = json.loads(r["sides"]) if r.get("sides") else None
+        last = rows[-1].get("_row", rows[-1].get("id")) if rows else None
+        return {"after": after, "rows": rows, "next_after": last if len(rows) == limit else None}
     return {"error": "unknown LoL view"}
 
 
@@ -2715,6 +2728,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, _DIAG["data"])
             if u.path == "/admin/diagnostics" and self.authed(q.get("token")):
                 return self.send(200, (WEB / "diagnostics.html").read_bytes(), "text/html; charset=utf-8")
+            if u.path == "/admin/lol" and self.authed(q.get("token")):    # admin LoL board / match tables / cards (not released)
+                return self.send(200, (WEB / "lol_admin.html").read_bytes(), "text/html; charset=utf-8")
             if (u.path == "/admin/lol.json" or u.path.startswith("/admin/lol/")) and self.authed(q.get("token")):
                 return self.send(200, lol_center_admin(u.path, q))     # LoL data center (backend only, not released)
             if (u.path in ("/admin/learning", "/admin/learning.json") or u.path.startswith("/admin/learning/")) and self.authed(q.get("token")):

@@ -1,0 +1,198 @@
+"""The consolidated LoL extension: one identity across both sources (link + merge), one history (the data center's
+export), one forecast format (saved pre-match, append-only), slip checks, settlement of saved forecasts, and the
+A1-A3 comparison harness. Every team, player and number is a TEST FIXTURE (no network)."""
+import json
+import random
+from datetime import date, datetime, timedelta, timezone
+
+import numpy as np
+import pytest
+
+from lol import backtest, history, model
+from lol.center import build, export, forecast, markets, match, settle, store
+from lol.tests.test_center import UD, load_world, put
+
+
+@pytest.fixture
+def con(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOL_CENTER_DB", str(tmp_path / "center.db"))
+    c = store.connect()
+    yield c
+    c.close()
+
+
+def le_copy_of_m1(con):
+    """LoL Esports' copy of the Leaguepedia series M1 (same day, same teams, same players by role)."""
+    teams = [{"id": "LA", "name": "Alpha Esports", "code": "ALP", "game_wins": 2}, {"id": "LB", "name": "Beta Gaming", "code": "BET", "game_wins": 0}]
+    games = [{"number": 1, "id": "e1", "state": "completed", "sides": {}}, {"number": 2, "id": "e2", "state": "completed", "sides": {}},
+             {"number": 3, "id": "e3", "state": "unneeded", "sides": {}}]
+    ev = lambda r: "2026-10-10 09:00:00"
+    store.put_rows(con, "LE:Match", [{"match_id": "X1", "league_slug": "tl", "league": "Test League", "start": "2026-10-10T09:00:00Z",
+                                      "best_of": 3, "teams": teams, "games": games}], lambda r: r["match_id"], ev, None, "2026-10-11T00:00:00Z")
+    roles = ["top", "jungle", "mid", "bot", "support"]
+    for n, blue in ((1, "LA"), (2, "LB")):
+        red = "LB" if blue == "LA" else "LA"
+        store.put_rows(con, "LE:Game", [{"game_id": f"e{n}", "match_id": "X1", "number": n, "start": f"2026-10-10T0{8 + n}:05:00Z",
+                                         "duration_s": 1800, "patch": "16.20.1", "blue_team_id": blue, "red_team_id": red, "blue_kills": 10,
+                                         "red_kills": 4, "winner_side": "blue" if blue == "LA" else "red"}], lambda r: r["game_id"], ev, None,
+                       "2026-10-11T00:00:00Z")
+        rows = [{"game_id": f"e{n}", "match_id": "X1", "number": n, "player_id": f"{t}{i}", "name": f"le{t}{i}", "team_id": t,
+                 "side": "blue" if t == blue else "red", "role": rl, "kills": 2, "deaths": 1, "assists": 3, "cs": 200}
+                for t in ("LA", "LB") for i, rl in enumerate(roles)]
+        store.put_rows(con, "LE:PlayerGame", rows, lambda r: f"{r['game_id']}|{r['player_id']}", ev, None, "2026-10-11T00:00:00Z")
+    con.commit()
+
+
+def test_le_first_then_leaguepedia_merges_into_one_identity(con):
+    le_copy_of_m1(con)
+    build.build(con)
+    le_mid = store.find_entity(con, "player", "lolesports:player", "LA2")
+    assert le_mid and con.execute("SELECT COUNT(*) FROM c_player_games").fetchone()[0] == 20       # LE only so far
+    load_world(con)                                                     # Leaguepedia now holds the same series
+    out = build.build(con)
+    assert out["cross_source_links"] > 0 and out["lolesports"].get("left_out_leaguepedia_has_it") == 1
+    lp_mid = store.find_entity(con, "player", "leaguepedia:page", "AlphMid")
+    assert lp_mid == le_mid == store.canonical_id(con, le_mid)          # one id; the older (LE) id survives
+    assert store.find_entity(con, "team", "lolesports:team", "LA") == store.find_entity(con, "team", "leaguepedia:page", "Alpha Esports")
+    pids = {r[0] for r in con.execute("SELECT DISTINCT pid FROM c_player_games WHERE name_shown = 'AlphMid'")}
+    assert pids == {le_mid} and con.execute("SELECT COUNT(*) FROM c_player_games").fetchone()[0] == 20   # one copy of the series
+
+
+def test_export_is_the_one_history_with_canonical_ids(con, tmp_path):
+    load_world(con)
+    build.build(con)
+    db = history.DB(dsn="", path=tmp_path / "history.db")
+    c = export.export(con, db)
+    assert c["games"] == 2 and c["player_rows"] == 20
+    pid = store.find_entity(con, "player", "leaguepedia:page", "AlphMid")
+    rows = history.player_games(db, history.player_key("AlphMid"), pid=pid)
+    assert len(rows) == 2 and all(r["player_id"] == pid and r["pid"] == pid for r in rows)
+    assert {r["role"] for r in rows} == {"mid"} and rows[0]["team_id"].startswith("lol:team:")
+    g = db.query("SELECT * FROM lol_games ORDER BY game_number")
+    assert [x["game_number"] for x in g] == [1, 2] and g[0]["winner"] == "Alpha Esports" and g[0]["match_key"].startswith("lol:series:")
+    export.export(con, db)                                              # a rewrite, never duplicates
+    assert db.query("SELECT COUNT(*) AS n FROM lol_player_games")[0]["n"] == 20
+
+
+PRI = {"kills": {r: v for r, v in zip(model.ROLES, (2.0, 3.0, 4.0, 5.0, 1.0))}, "assists": {r: 6.0 for r in model.ROLES},
+       "deaths": {r: 3.0 for r in model.ROLES}, "team_kills": 14.0}
+PAR = {p: {"form": "rate", "hl": 120.0, "k0": 8.0, "ko": 10.0, "kt": 10.0} for p in ("kills", "assists", "deaths")}
+RR = {(p, s): 6.0 for p in ("kills", "assists", "deaths") for s in ("1", "12", "123")}
+
+
+def _future_world(con, tmp_path, monkeypatch, days_ahead=2):
+    load_world(con)
+    start = (datetime.now(timezone.utc) + timedelta(days=days_ahead)).replace(microsecond=0)
+    put(con, "MatchSchedule", [{"MatchId": "M9", "OverviewPage": "Test League 2026", "Team1": "Alpha Esports", "Team2": "Beta Gaming",
+                                "BestOf": "3", "DateTime_UTC": start.strftime("%Y-%m-%d %H:%M:%S")}], at="2026-10-15T00:00:00Z")
+    build.build(con)
+    db = history.DB(dsn="", path=tmp_path / "history.db")
+    export.export(con, db)
+    monkeypatch.setattr(model, "FIT", ({}, PAR, RR, {}))
+    monkeypatch.setattr(model, "PARAMS", PAR)
+    monkeypatch.setattr(model, "PRIORS", PRI)
+    monkeypatch.setattr(model, "R", RR)
+    raw = dict(UD, games=[dict(UD["games"][0], scheduled_at=start.strftime("%Y-%m-%dT%H:%M:%SZ"))])
+    raw["over_under_lines"] = [dict(raw["over_under_lines"][0], over_under={"appearance_stat": {
+        "appearance_id": "a1", "stat": "kills_on_maps_1_2", "display_stat": "Kills on Maps 1+2"}},
+        options=[{"choice": "higher", "status": "active", "payout_multiplier": "1.1"}, {"choice": "lower", "status": "active", "payout_multiplier": "0.9"}])]
+    markets.poll(con, "underdog", fetcher=lambda p: (200, json.dumps(raw).encode()))
+    match.link_open_markets(con)
+    return db, start, raw
+
+
+def test_forecast_saved_once_per_state_and_read_by_board(con, tmp_path, monkeypatch):
+    db, start, raw = _future_world(con, tmp_path, monkeypatch)
+    assert con.execute("SELECT status FROM market_links").fetchone()[0] == "matched"
+    assert forecast.run(con, db)["saved"] == 1
+    assert forecast.run(con, db).get("unchanged") == 1                 # same offer, inputs and fit: no new record
+    f = dict(con.execute("SELECT * FROM lol_forecasts").fetchone())
+    assert f["scope"] == "12" and f["best_of"] == 3 and 0 < f["p_over"] < 1 and abs(f["p_over"] + f["p_under"] + f["p_push"] - 1) < 1e-3
+    assert f["forecast_at"] < f["series_start"] and f["pid"] == store.find_entity(con, "player", "leaguepedia:page", "AlphMid")
+    assert "format_scope_mismatch" not in json.loads(f["flags"])
+    raw["over_under_lines"][0]["stat_value"] = "7.5"                     # the line moves -> a new record, the old one kept
+    markets.poll(con, "underdog", fetcher=lambda p: (200, json.dumps(raw).encode()))
+    assert forecast.run(con, db)["saved"] == 1 and con.execute("SELECT COUNT(*) FROM lol_forecasts").fetchone()[0] == 2
+    b = forecast.board(con)
+    row, = b["rows"]
+    assert row["forecast"]["line"] == 7.5 and row["grade"] is None and row["forecast"]["current"]
+    assert b["match_tables"] and b["released_to_members"] is False
+    elig = forecast.slip_check(con, [f["id"]])
+    assert not elig["eligible"] and any("line moved" in x for x in elig["reasons"])
+    assert any("not validated" in x for x in json.loads(f["slip_reasons"]))
+
+
+def test_saved_forecast_settles_when_the_series_completes(con, tmp_path, monkeypatch):
+    from lol.tests.test_center import game_rows
+    db, start, raw = _future_world(con, tmp_path, monkeypatch)
+    forecast.run(con, db)
+    day = start.strftime("%Y-%m-%d")
+    for n in (1, 2):
+        sg, sp = game_rows("M9", n, "Alpha Esports", "Beta Gaming", f"{day} 2{n}:00:00")
+        put(con, "ScoreboardGames", [sg])
+        put(con, "ScoreboardPlayers", sp)
+    put(con, "MatchScheduleGame", [{"GameId": f"M9_{n}", "MatchId": "M9", "N_GameInMatch": str(n), "Match_DateTime_UTC": f"{day} 20:00:00"} for n in (1, 2)])
+    put(con, "MatchSchedule", [{"MatchId": "M9", "OverviewPage": "Test League 2026", "Team1": "Alpha Esports", "Team2": "Beta Gaming",
+                                "BestOf": "3", "Team1Score": "2", "Team2Score": "0", "Winner": "1",
+                                "DateTime_UTC": start.strftime("%Y-%m-%d %H:%M:%S")}], at="2026-10-16T00:00:00Z")
+    build.build(con)
+    out = forecast.settle_all(con)
+    s = dict(con.execute("SELECT * FROM lol_settlements").fetchone())
+    assert out == {"graded": 1} and s["line"] == 6.5 and s["actual"] == 6 and s["over_hit"] == 0 and s["version"] == 1   # 3 + 3 kills < 6.5
+
+
+def _synthetic_2026(seed=3):
+    """Six TEST teams, steady skills, best-of-3 and best-of-5 series every 3 days through the A1 window."""
+    rnd, npr = random.Random(seed), np.random.default_rng(seed)
+    teams_ = [f"Squad{i}" for i in range(6)]
+    skill = {(t, r): rnd.uniform(0.6, 1.5) for t in teams_ for r in model.ROLES}
+    base = dict(zip(model.ROLES, (2.4, 2.8, 3.6, 4.6, 0.9)))
+    out, mid = [], 0
+    d = date(2026, 2, 16)
+    while d < date(2026, 10, 16):
+        rnd.shuffle(teams_)
+        for a, b in ((teams_[0], teams_[1]), (teams_[2], teams_[3]), (teams_[4], teams_[5])):
+            mid += 1
+            bo = 5 if mid % 4 == 0 else 3
+            for n in range(1, (3 if bo == 5 else 2) + 1):
+                ka = {r: int(npr.poisson(base[r] * skill[(a, r)])) for r in model.ROLES}
+                kb = {r: int(npr.poisson(base[r] * skill[(b, r)])) for r in model.ROLES}
+                gk, played = f"g{mid}-{n}", f"{d.isoformat()}T08:0{n}:00Z"
+                rows = []
+                for side, t, ks, other in (("blue", a, ka, kb), ("red", b, kb, ka)):
+                    for r in model.ROLES:
+                        rows.append({"game_key": gk, "player": f"{t}_{r}", "player_key": f"{t}_{r}".lower(), "player_id": f"lol:player:{t}{r}",
+                                     "team": t, "opponent": b if t == a else a, "side": side, "role": r, "kills": ks[r], "deaths": 3,
+                                     "assists": 6, "team_kills": sum(ks.values()), "opp_kills": sum(other.values()), "win": None,
+                                     "match_key": f"m{mid}", "game_number": n, "best_of": bo, "played_at": played, "league": "tl",
+                                     "source": "lp"})
+                out.append(({"game_key": gk, "source": "lp", "match_key": f"m{mid}", "game_number": n, "best_of": bo, "played_at": played,
+                             "league": "tl", "blue_team": a, "red_team": b, "blue_kills": sum(ka.values()), "red_kills": sum(kb.values())}, rows))
+        d += timedelta(days=3)
+    return out
+
+
+def test_compare_harness_scores_both_models_on_the_same_targets(tmp_path, monkeypatch):
+    db = history.DB(dsn="", path=tmp_path / "h.db")
+    for g, rows in _synthetic_2026():
+        history.save_game(db, g, rows)
+    db.commit()
+    monkeypatch.setattr(backtest, "GRID", {"hl": (120.0, 480.0), "k0": (4.0, 16.0), "ko": (10.0, 80.0), "kt": (10.0,), "ew": (0.0,)})
+    data = backtest.Data(history.all_player_games(db, since="2026-02-16"))
+    fit, rep = backtest.compare(data, log=lambda m: None)
+    k = rep["stats"]["kills"]
+    for sc, bo in (("12", 3), ("123", 5)):
+        s = k["scopes"][sc]
+        assert s["format"] == bo and s["n"] > 50 and s["series"] > 10
+        assert s["lol1"]["mae"] > 0 and s["b0"]["mae"] > 0
+        g = s["logscore_gain_lol1_minus_b0"]
+        assert g["lo95"] <= g["mean"] <= g["hi95"]
+    assert set(fit["selection"]) == {"kills", "assists", "deaths"} and fit["selection"]["kills"] in ("lol-1", "B0")
+    chosen = fit["params"]["kills"]
+    assert (chosen["form"] == "baseline") == (fit["selection"]["kills"] == "B0")
+    assert "kills|12" in fit["nb_size"] and fit["protocol"].startswith("lol/EVALUATION.md")
+    # the live interface reproduces the harness for the chosen B0 form
+    pj = model.project([(100, 4, 3, 6, 15, 12, None)] * 10, [], [], "mid", 200, "12", "kills",
+                       {"kills": {"form": "baseline", "k0": 5.0}}, fit["priors"], {("kills", "12"): 6.0}, league="tl")
+    prior = model.baseline_prior(fit["priors"], "kills", "mid", "tl")
+    assert pj["lambda_game"] == pytest.approx((40 + 5.0 * prior) / 15)

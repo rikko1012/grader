@@ -98,6 +98,12 @@ CREATE TABLE IF NOT EXISTS lol_settlements (id INTEGER PRIMARY KEY AUTOINCREMENT
     settled_at TEXT NOT NULL, platform TEXT, sid TEXT, pid TEXT, stat TEXT, scope TEXT, line REAL, status TEXT NOT NULL,
     actual REAL, over_hit INTEGER, push INTEGER, games TEXT, detail TEXT, fingerprint TEXT, supersedes INTEGER,
     UNIQUE (unit_key, version));
+CREATE TABLE IF NOT EXISTS lol_forecasts (id INTEGER PRIMARY KEY AUTOINCREMENT, forecast_at TEXT NOT NULL, state_sha TEXT,
+    sport TEXT, platform TEXT, market_key TEXT, line_id TEXT, quote_event_id INTEGER, quote_observed_at TEXT, stat TEXT, scope TEXT,
+    market_type TEXT, odds_type TEXT, line REAL, sides TEXT, sid TEXT, pid TEXT, tid TEXT, opp_tid TEXT, role TEXT, best_of INTEGER,
+    series_start TEXT, model_version TEXT, fit_sha TEXT, form TEXT, lambda REAL, nb_size REAL, p_over REAL, p_under REAL,
+    p_push REAL, model_side TEXT, side_offered INTEGER, inputs TEXT, flags TEXT, slip_eligible INTEGER, slip_reasons TEXT);
+CREATE INDEX IF NOT EXISTS lf_key ON lol_forecasts (platform, market_key, id);
 CREATE TABLE IF NOT EXISTS market_state (platform TEXT NOT NULL, market_key TEXT NOT NULL, state_sha TEXT, open INTEGER,
     last_event_id INTEGER, first_seen TEXT, last_seen TEXT, PRIMARY KEY (platform, market_key));
 """

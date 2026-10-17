@@ -61,7 +61,10 @@ def compute(con):
             "games": {"first": span[0], "last": span[1], "count": span[2]}, "player_rows": n_pg,
             "by_competition": dict(sorted(by_t.items(), key=lambda kv: -(kv[1].get("games") or 0))),
             "by_patch": by_patch, "by_stat": by_stat, "gaps_over_21_days": gaps, "quarantine": q,
-            "markets": markets.status(con),
+            "markets": markets.status(con), "history_export": store.get_meta(con, "last_export"),
+            "series_by_source": {r[0] or "unknown": {"series": r[1], "complete": r[2] or 0} for r in con.execute(
+                "SELECT source, COUNT(*), SUM(status = 'complete') FROM c_series GROUP BY source")},
+            "games_winner_unresolved": con.execute("SELECT COUNT(*) FROM c_games WHERE remake = 0 AND winner_tid IS NULL").fetchone()[0],
             "other_sources": {"thunderpick": "LoL coverage not verified - not used", "polymarket": "not verified - not used",
                               "kalshi": "not verified - not used"}}
 

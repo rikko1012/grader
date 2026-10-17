@@ -12,6 +12,10 @@ concedes for deaths):
                 this match (lol/elo.py), w = his team's time-weighted win rate in his past games (shrunk to 0.5 by K0),
                 R = the league's per-game stat in wins / in losses (TRAIN) - more kills when he is more likely to win
                 than usual, fewer deaths. EW = 0 turns it off.
+  form "baseline" (B0, the simple baseline - lol/EVALUATION.md amendment A1): lambda_game = the player's plain per-game
+                average over every earlier game, shrunk toward the TRAIN average of that role in that league (role alone when
+                that role x league had fewer than 200 TRAIN games) by K0 games. No opponent, team or strength factor.
+  The TRAIN fit picks, per stat, the form the A1 selection rule chose (lol-1 rate / share, or the baseline).
   scope "1" = Map 1, "12" = Maps 1-2, "123" = Maps 1-3: lambda = lambda_game x games.
   Distribution: negative binomial, mean lambda, size R[(prop, scope)] (variance = lambda + lambda^2 / R) - LoL kills are
   overdispersed (a stomp or a loss moves every player's count together), measured on TRAIN.
@@ -70,8 +74,17 @@ def strength(p_win, w_bar, ratio, ew):
     return ((p_win * ratio + 1 - p_win) / (w_bar * ratio + 1 - w_bar)) ** ew
 
 
+def baseline_prior(pri, prop, role, league):
+    """B0's prior: the TRAIN average of this role in this league (>= 200 TRAIN games), else of the role overall."""
+    rl = ((pri.get("role_league") or {}).get(prop) or {}).get(f"{league}|{role}")
+    if rl and rl[1] >= 200:
+        return rl[0]
+    m = pri[prop].get(role)
+    return m if m is not None else sum(pri[prop].values()) / len(pri[prop])
+
+
 def project(player_games, team_games, opp_games, role, day, scope="12", prop="kills", params=None, priors=None, r=None,
-            p_win=None):
+            p_win=None, league=None):
     """player_games: [(day, kills, deaths, assists, team_kills, opp_kills, win)]  - this player's games (win 1 / 0 / None)
     team_games:   [(day, team_kills, opp_kills)]                               - his team's games (any lineup)
     opp_games:    [(day, team_kills, opp_kills)]                               - the opponent's games, from ITS side
@@ -90,11 +103,21 @@ def project(player_games, team_games, opp_games, role, day, scope="12", prop="ki
         role_mean = sum(pri[prop].values()) / len(pri[prop])
     idx = {"kills": 1, "deaths": 2, "assists": 3}[prop]
     pool_i = 4 if POOL[prop] == "team_kills" else 5
-    hl = p["hl"]
-    # opponent factor: kills it concedes (kills / assists) or scores (deaths), per game, over the league average
-    oc, _, ow = _wsum(opp_games, day, hl, (lambda g: (g[2], 0.0)) if POOL[prop] == "team_kills" else (lambda g: (g[1], 0.0)))
-    opp = ((oc + p["ko"] * tk) / (ow + p["ko"])) / tk
-    if p["form"] == "share":
+    hl = p.get("hl") or 1e9
+    if p["form"] != "baseline":
+        # opponent factor: kills it concedes (kills / assists) or scores (deaths), per game, over the league average
+        oc, _, ow = _wsum(opp_games, day, hl, (lambda g: (g[2], 0.0)) if POOL[prop] == "team_kills" else (lambda g: (g[1], 0.0)))
+        opp = ((oc + p["ko"] * tk) / (ow + p["ko"])) / tk
+    if p["form"] == "baseline":
+        x = w = 0.0
+        for g in player_games:
+            if g[0] < day and g[idx] is not None:
+                x += g[idx]
+                w += 1
+        role_mean = baseline_prior(pri, prop, role, league)
+        rate = (x + p["k0"] * role_mean) / (w + p["k0"])
+        lam_game, team, opp, ow = rate, None, 1.0, 0.0
+    elif p["form"] == "share":
         x, pool, w = _wsum(player_games, day, hl, lambda g: (g[idx], g[pool_i]))
         share = (x + p["k0"] * role_mean) / (pool + p["k0"] * tk)
         tc, _, tw = _wsum(team_games, day, hl, (lambda g: (g[1], 0.0)) if POOL[prop] == "team_kills" else (lambda g: (g[2], 0.0)))
@@ -106,7 +129,7 @@ def project(player_games, team_games, opp_games, role, day, scope="12", prop="ki
         rate = (x + p["k0"] * role_mean) / (w + p["k0"])
         team = None
         lam_game = rate * opp
-    ew = p.get("ew") or 0.0
+    ew = (p.get("ew") or 0.0) if p["form"] != "baseline" else 0.0
     w_bar = None
     if ew:
         ws, _, wk = _wsum([g for g in player_games if len(g) > 6 and g[6] is not None], day, hl, lambda g: (g[6], 0.0))

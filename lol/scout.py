@@ -272,17 +272,11 @@ def run_status(db, args):
 
 
 def run_sync(db, args):
-    out = {}
-    since = sync.parse_date(args.since)
-    leagues = None if not args.leagues else ("all" if args.leagues == "all" else args.leagues.split(","))
-    if args.source in ("lolesports", "both"):
-        out["lolesports"] = sync.sync_lolesports(db, leagues=leagues, since=since, force=args.force)
-    if args.source in ("leaguepedia", "both"):
-        if not config.leaguepedia_credentials():
-            out["leaguepedia"] = {"skipped": "LEAGUEPEDIA_USER / LEAGUEPEDIA_BOT_PASSWORD not set"}
-        else:
-            out["leaguepedia"] = sync.sync_leaguepedia(db, since=since)
-    return out
+    """One ingestion path (2026-10-17): the data center (lol/center) reads LoL Esports and Leaguepedia - with source
+    revisions, internal ids, renames and quarantine - and exports the result to this history. sync.py's direct
+    writers are no longer called, so the history has one source of truth."""
+    from .center import cli
+    return cli.sync_once(source=args.source, log=_log)
 
 
 # ------------------------------------------------------------------ printing

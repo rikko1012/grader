@@ -28,7 +28,8 @@ from . import store
 OUT = store.db_path().parent
 BUILD_EVERY_S = 1800
 LINK_EVERY_S = 600
-STATE = {"started_at": None, "markets": {}, "ingest": {}, "riot": {}, "build": None, "links": None, "errors": []}
+STATE = {"started_at": None, "markets": {}, "ingest": {}, "riot": {}, "build": None, "links": None, "forecasts": None,
+         "settled": None, "errors": []}
 
 
 def _err(where, e):
@@ -85,9 +86,10 @@ def ingest_loop():
 
 
 def build_loop():
-    """When any source changed: the canonical build and coverage report (at most every BUILD_EVERY_S, the first one
-    after 5 min); the offer -> series / player links every LINK_EVERY_S."""
-    from . import build, coverage, match
+    """When any source changed: the canonical build, the coverage report and the export to the one LoL history (at
+    most every BUILD_EVERY_S, the first after 5 min). Every LINK_EVERY_S: offer -> series / player links, the pre-match
+    forecasts, settlement of finished series, and the admin board."""
+    from . import build, coverage, export, forecast, match
     con = store.connect()
     t_build, t_link = time.time() - BUILD_EVERY_S + 300, 0.0
     while True:
@@ -95,9 +97,14 @@ def build_loop():
             if store.get_meta(con, "dirty") and time.time() - t_build > BUILD_EVERY_S:
                 STATE["build"] = build.build(con)
                 _write("coverage.json", coverage.refresh(con))
+                STATE["export"] = export.export(con)
                 t_build, t_link = time.time(), 0.0
             if time.time() - t_link > LINK_EVERY_S and store.get_meta(con, "built_at"):
                 STATE["links"] = {"at": store.now_iso(), "counts": match.link_open_markets(con)}
+                if store.get_meta(con, "last_export"):
+                    STATE["forecasts"] = {"at": store.now_iso(), "counts": forecast.run(con)}
+                    STATE["settled"] = {"at": store.now_iso(), "counts": forecast.settle_all(con)}
+                _write("board.json", forecast.board(con))
                 t_link = time.time()
         except Exception as e:
             _err("build", e)
@@ -118,6 +125,7 @@ def write_status():
                "ingest": ingest.progress(con), "pacer": cargo.PACER.view(),
                "leaguepedia_login": dict(cargo.LOGIN, configured=bool(cargo.credentials())),
                "last_build": store.get_meta(con, "last_build"), "links": STATE["links"],
+               "last_export": store.get_meta(con, "last_export"), "forecasts": STATE.get("forecasts"), "settled": STATE.get("settled"),
                "quarantine": {r[0]: r[1] for r in con.execute(
                    "SELECT kind || ':' || reason, COUNT(*) FROM quarantine WHERE resolved_at IS NULL GROUP BY kind, reason")},
                "errors": STATE["errors"][-5:]}
