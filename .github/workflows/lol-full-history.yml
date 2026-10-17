@@ -34,9 +34,10 @@ jobs:
       LEAGUEPEDIA_USER: ${{ secrets.LEAGUEPEDIA_USER }}
       LEAGUEPEDIA_BOT_PASSWORD: ${{ secrets.LEAGUEPEDIA_BOT_PASSWORD }}
       LOL_DB_DSN: ${{ secrets.LOL_DB_DSN }}
-      LOL_DATA_DIR: ${{ runner.temp }}/lol
       PYTHONUNBUFFERED: "1"
     steps:
+      - name: LoL data folder for this job (the runner context exists only inside steps)
+        run: echo "LOL_DATA_DIR=$RUNNER_TEMP/lol" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
