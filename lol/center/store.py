@@ -104,6 +104,9 @@ CREATE TABLE IF NOT EXISTS lol_forecasts (id INTEGER PRIMARY KEY AUTOINCREMENT, 
     series_start TEXT, model_version TEXT, fit_sha TEXT, form TEXT, lambda REAL, nb_size REAL, p_over REAL, p_under REAL,
     p_push REAL, model_side TEXT, side_offered INTEGER, inputs TEXT, flags TEXT, slip_eligible INTEGER, slip_reasons TEXT);
 CREATE INDEX IF NOT EXISTS lf_key ON lol_forecasts (platform, market_key, id);
+CREATE TABLE IF NOT EXISTS crosscheck (sid TEXT NOT NULL, le_match_id TEXT NOT NULL, item TEXT NOT NULL, game_n INTEGER,
+    pid TEXT, lp_value TEXT, le_value TEXT, agree INTEGER NOT NULL, checked_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS cc_item ON crosscheck (item, agree);
 CREATE TABLE IF NOT EXISTS market_state (platform TEXT NOT NULL, market_key TEXT NOT NULL, state_sha TEXT, open INTEGER,
     last_event_id INTEGER, first_seen TEXT, last_seen TEXT, PRIMARY KEY (platform, market_key));
 """

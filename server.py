@@ -1196,6 +1196,7 @@ def lol_center_admin(path, q):
                                         "sides, status, raw_id"),
              "/admin/lol/forecasts.json": (LOL_CENTER / "lol.db", "lol_forecasts", "id", "*"),
              "/admin/lol/settlements.json": (LOL_CENTER / "lol.db", "lol_settlements", "id", "*"),
+             "/admin/lol/crosscheck.json": (LOL_CENTER / "lol.db", "crosscheck", "rowid", "rowid AS _row, *"),
              "/admin/lol/history.json": (Path(DATA_DIR) / "lol" / "history.db",
                                          "lol_games" if q.get("table") == "games" else "lol_player_games", "rowid", "rowid AS _row, *")}
     if path in pages:

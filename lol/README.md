@@ -63,19 +63,31 @@ Run `python lol_scout.py sync` every couple of hours. A match it already holds i
 games. `lol/deploy/lol-sync.yml` is a ready GitHub Actions schedule (the HLTV scraper's set-up), copy it to
 `.github/workflows/` and add the secrets it lists. It's not active until you do.
 
-## Data center (`lol/center`, runs on the server; not released to members)
+## One LoL extension: data center + scout (consolidated 2026-10-17; not released to members)
 
-One low-priority process the server starts (`python -m lol.center.worker`; the server never imports `lol`) keeps:
-- an **append-only quote archive** of every Underdog (`sport_id=LOL`) and PrizePicks (league 121) LoL offer: each poll
-  recorded, then open / change / removed / reopen events with line, offered sides, payouts and times (`DATA_DIR/lol/center/lol.db`);
-- **Leaguepedia ingestion** with explicit fields, deterministic order, bounded pages, one shared pacer, checkpoints, raw
-  responses and every source-row revision kept, internal ids (`lol:player:…`, `lol:series:…`) with source mappings,
-  renames through PlayerRedirects, ambiguous names / rematches quarantined, game order from the schedule's ids. It uses
-  the same `LEAGUEPEDIA_USER` / `LEAGUEPEDIA_BOT_PASSWORD`; without them it keeps retrying at a backed-off pace;
-- each platform's published LoL settlement rules with their sources and whether each is verified (`center/rules.py`).
-
-Admin only: `/admin/lol.json` (worker status), `/admin/lol/quotes.json?after=&limit=` (archive, paged),
-`/admin/lol/coverage.json`, `/admin/lol/quarantine.json`, `/admin/lol/links.json`. `LOL_DATA=0` turns it off.
+- **One ingestion path**: the data center (`lol/center`) - the worker on the server (`python -m lol.center.worker`,
+  started by server.py, which never imports `lol`), or `python lol_scout.py sync` locally. It reads LoL Esports (no
+  login, no LPL) and Leaguepedia (bot login `LEAGUEPEDIA_USER` = `Name@grader`, `LEAGUEPEDIA_BOT_PASSWORD`) with
+  explicit fields, bounded pages, one shared pacer, checkpoints, raw responses and every source-row revision kept.
+- **One identity**: internal ids (`lol:player:N`, `lol:team:N`, `lol:series:N`, `lol:game:N`) with source mappings
+  and history; renames through PlayerRedirects; a LoL Esports id and a Leaguepedia page of the same player / team are
+  linked through the series both sources hold (or merged, older id kept); ambiguity goes to quarantine.
+- **One history**: the data center's canonical tables are exported to `lol_games` / `lol_player_games`
+  (`center/export.py`) - the only writer; the scout, the backtest and the live forecasts read it. One source per real
+  series (Leaguepedia preferred; LoL Esports fills gaps). The 8-month window comes first (`LOL_BACKFILL_DAYS`, 245).
+- **One forecast format**: `center/forecast.py` saves an append-only pre-match record per offered line (line, offered
+  sides, times, inputs, model + fit hash, P(over/under/push), side offered, format check, slip eligibility) through
+  lol-1's interface (`model.project` / `model.probs`, with the A1 baseline as one of its forms). The admin board, match
+  tables, cards and the slip check read those records; saved forecasts are settled by `center/settle.py` once the
+  series completes (versioned; corrections never rewrite a forecast).
+- **Markets**: an append-only archive of every Underdog (`sport_id=LOL`) and PrizePicks (league 121) LoL line. Maps 1-2
+  lines are best-of-3 markets and Maps 1-3 lines best-of-5 (owner); a Maps 1-3 total counts the games played among 1-3
+  (owner, same as CS2). Combined-player lines and fantasy points are archived, never forecast.
+- **Admin only**: `/admin/lol` (board, match tables, cards, status), `/admin/lol.json`, `/admin/lol/quotes.json`,
+  `/admin/lol/{coverage,quarantine,links,board}.json`, `/admin/lol/{forecasts,settlements,history}.json` (paged).
+  `LOL_DATA=0` turns the worker off.
+- **Model selection**: `python -m lol.backtest compare [--write]` runs lol/EVALUATION.md amendments A1-A3 (B0 vs lol-1
+  on the same 8-month data, targets, cutoff and scopes) and writes the selected fit to `lol/model_fit.json`.
 
 ## How the pieces fit
 

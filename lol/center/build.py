@@ -225,6 +225,64 @@ def _attach(con, kind, source, skey, target, at):
     return 1
 
 
+def crosscheck(con, overlaps, at):
+    """Data check on every real series both sources hold: game numbers, winners, team kills, and each player's kills /
+    deaths / assists (players paired by game number, team and role). Every comparison is a row in `crosscheck`
+    (rewritten each build); disagreements are kept, never "fixed" - the history uses Leaguepedia's copy."""
+    con.execute("DELETE FROM crosscheck")
+    if not overlaps:
+        return {}
+    lg, lpg = defaultdict(list), defaultdict(list)
+    for r in store.current_rows(con, "LE:Game"):
+        lg[r["match_id"]].append(r)
+    for r in store.current_rows(con, "LE:PlayerGame"):
+        lpg[r["match_id"]].append(r)
+    rows = []
+    for mid, m, s in overlaps:
+        tmap = {}
+        for t in m.get("teams") or []:
+            e = store.find_entity(con, "team", SRC_LE_TEAM, str(t.get("id")))
+            if e:
+                tmap[t["id"]] = store.canonical_id(con, e)
+        lp_games = {r["game_n"]: dict(r) for r in con.execute("SELECT * FROM c_games WHERE sid = ?", (s["sid"],))}
+        le_games = {g.get("number"): g for g in lg.get(mid, [])}
+        rows.append((s["sid"], mid, "games_count", None, None, str(len(lp_games)), str(len(le_games)), int(len(lp_games) == len(le_games))))
+        for n in sorted(set(lp_games) & set(le_games)):
+            a, b = lp_games[n], le_games[n]
+            le_blue = tmap.get(b.get("blue_team_id"))
+            if le_blue and a["team1"]:
+                rows.append((s["sid"], mid, "blue_side_team", n, None, a["team1"], le_blue, int(a["team1"] == le_blue)))
+            lk = {a["team1"]: a["team1_kills"], a["team2"]: a["team2_kills"]}
+            ek = {tmap.get(b.get("blue_team_id")): b.get("blue_kills"), tmap.get(b.get("red_team_id")): b.get("red_kills")}
+            for t in (a["team1"], a["team2"]):
+                if t in ek:
+                    rows.append((s["sid"], mid, "team_kills", n, t, str(lk.get(t)), str(ek.get(t)), int(lk.get(t) == ek.get(t))))
+            lw = a["winner_tid"]
+            ew = tmap.get(b.get("blue_team_id") if b.get("winner_side") == "blue" else b.get("red_team_id") if b.get("winner_side") == "red" else None)
+            if lw and ew:
+                rows.append((s["sid"], mid, "winner", n, None, lw, ew, int(lw == ew)))
+            slot = {}
+            for r in con.execute("SELECT game_n, tid, role, pid, kills, deaths, assists FROM c_player_games WHERE sid = ? AND game_n = ?",
+                                 (s["sid"], n)):
+                slot[(r[1], r[2])] = r
+            for p in lpg.get(mid, []):
+                if p.get("number") != n:
+                    continue
+                q = slot.get((tmap.get(p.get("team_id")), role(p.get("role"))))
+                if not q:
+                    rows.append((s["sid"], mid, "player_unpaired", n, None, None, str(p.get("player_id")), 0))
+                    continue
+                for stat, i in (("kills", 4), ("deaths", 5), ("assists", 6)):
+                    rows.append((s["sid"], mid, f"player_{stat}", n, q[3], str(q[i]), str(p.get(stat)), int(q[i] == p.get(stat))))
+    con.executemany("INSERT INTO crosscheck (sid, le_match_id, item, game_n, pid, lp_value, le_value, agree, checked_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", [r + (at,) for r in rows])
+    summary = {}
+    for item, n, ok in con.execute("SELECT item, COUNT(*), SUM(agree) FROM crosscheck GROUP BY item"):
+        summary[item] = {"compared": n, "agree": ok or 0, "share": round((ok or 0) / n, 4) if n else None}
+    summary["series"] = len(overlaps)
+    return summary
+
+
 def link_overlaps(con, overlaps, at):
     """For every real series held by both sources (the LoL Esports copy was left out): its two LoL Esports team ids are
     the two Leaguepedia teams with exactly those names / codes, and each LoL Esports player id is the Leaguepedia
@@ -602,6 +660,7 @@ def build(con, at=None, _again=True):
            "checks": dict(checks)}
     linked = link_overlaps(con, overlaps, at)
     out["cross_source_links"] = linked
+    out["crosscheck"] = crosscheck(con, overlaps, at) if not (linked and _again) else {"pending": "after the re-build"}
     store.set_meta(con, "last_build", out)
     con.commit()
     if linked and _again:

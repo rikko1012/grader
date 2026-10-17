@@ -96,6 +96,38 @@ This replaces A1's and A2's best-of-3 Maps 1-3 rows.
 
 **Mismatched lines.** A live line whose scope does not fit its series' format (for example, Maps 1-3 on a best-of-3) is saved, flagged `format_scope_mismatch` and kept out of slips. The A2 mixture is still the forecast for such a line.
 
+## Amendment A4 (2026-10-17 04:05 UTC; no TEST number has been computed or seen): development split, candidates, metrics
+
+The owner's brief of 2026-10-17 adds candidates and factor tests. Using TEST to choose any of them would turn TEST into development data. TEST therefore stays sealed for **one final comparison**. All development moves to a validation split inside the old TRAIN window.
+
+**Periods**
+| Period | Dates | Use |
+|---|---|---|
+| History only | 2026-02-16 to 2026-03-31 | earlier games only |
+| DEV-TRAIN | targets 2026-04-01 to 2026-06-14 | fitting |
+| VALID | targets 2026-06-15 to 2026-07-31 | development: tuning, factor groups, hypotheses, the provisional choice |
+| TEST | targets 2026-08-01 to 2026-10-16 | sealed; scored once, all candidates together, refit on DEV-TRAIN + VALID |
+
+Every period is cut on the series start date, so all players and games of a series stay in one period.
+
+**Candidates.** All are scored on identical targets, the same day cutoff and the A3 scopes.
+- **B0**, the simple baseline.
+- **lol-1**, current.
+- **lol-2**, the proposed revision: whole-match simulation through lol-1's interface. It models both teams, game duration, combined kill pace, the kill split between the teams, and each player's share. Player kills sum to team kills. Assists come from a participation model. Deaths relate to opposing kills plus executions. Each simulation sums the required games.
+- **Market-informed variant.** Only where historical prices saved before the match actually exist. For props they do not (the line archive starts 2026-10-17). Match-winner prices are used only if a timestamped pre-match history is obtained. Otherwise the variant is reported as not evaluable.
+
+**Metrics.** For each stat, scope, role, league group and history-depth band, with 95% intervals from a series-grouped bootstrap:
+- Projections: MAE, squared error, bias.
+- Probabilities: log score of the count, log-loss and Brier of P(over), calibration, and 80% interval coverage.
+- Development line for P(over): the player's median total of the same scope over their previous comparable series (up to 10, at least 3), rounded to x.5. It is model-independent and known before the match. It is development evidence, not a book line.
+
+**Provisional production choice (2026-10-17).** B0 against lol-1 by the A1 rule, applied on VALID instead of TEST. It is labelled provisional on every forecast. The final choice is made only by the TEST comparison above.
+
+**Factor groups and hypotheses.**
+- Factor groups (player, team/opponent, context, draft, market) and the owner's old decision rules are tested on VALID, as increments over the chosen projection.
+- A group or rule is kept only if it improves VALID log score with a 95% interval above 0.
+- Whatever survives is then confirmed on TEST in the single final comparison.
+
 ## Results
 
 (filled in from `python -m lol.backtest` once the history is complete)

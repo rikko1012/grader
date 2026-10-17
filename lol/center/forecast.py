@@ -54,7 +54,7 @@ class History:
 
     def __init__(self, db=None, pids=(), tids=()):
         from .. import elo, history
-        self.db = db or history.DB()
+        self.db = db or history.DB(dsn="")
         game_rows = self.db.query("SELECT DISTINCT game_key, match_key, game_number, played_at, team, team_id, opponent, win "
                                   "FROM lol_player_games WHERE played_at IS NOT NULL")
         md = {}
@@ -178,6 +178,8 @@ def forecast_one(con, h, offer, link, now=None):
                                 "history_games", "history_weight", "data_quality", "role_prior", "form")} | {
                    "league": league, "team_games": len(tin), "opponent_games": len(oin), "history_last_game": h.last_game},
                flags=flags)
+    from . import prices
+    rec["inputs"]["market"] = prices.classify(offer["platform"], offer)
     elig, why = slip_eligibility(rec)
     rec["slip_eligible"], rec["slip_reasons"] = int(elig), why
     return rec

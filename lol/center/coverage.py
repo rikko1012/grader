@@ -15,6 +15,15 @@ from .names import page_key
 STATS = ("kills", "deaths", "assists", "team_kills", "cs", "gold", "damage", "vision", "champion", "role", "side")
 
 
+def _flag_counts(con, table):
+    """How many rows carry each check flag (missing games, games vs score, order conflicts, sources)."""
+    c = defaultdict(int)
+    for (f,) in con.execute(f"SELECT flags FROM {table}"):
+        for x in json.loads(f or "[]"):
+            c[x] += 1
+    return dict(c)
+
+
 def compute(con):
     t0 = time.time()
     tours = {page_key(r["OverviewPage"]): r for r in store.current_rows(con, "Tournaments") if r.get("OverviewPage")}
@@ -65,6 +74,7 @@ def compute(con):
             "series_by_source": {r[0] or "unknown": {"series": r[1], "complete": r[2] or 0} for r in con.execute(
                 "SELECT source, COUNT(*), SUM(status = 'complete') FROM c_series GROUP BY source")},
             "games_winner_unresolved": con.execute("SELECT COUNT(*) FROM c_games WHERE remake = 0 AND winner_tid IS NULL").fetchone()[0],
+            "series_flags": _flag_counts(con, "c_series"), "game_flags": _flag_counts(con, "c_games"),
             "other_sources": {"thunderpick": "LoL coverage not verified - not used", "polymarket": "not verified - not used",
                               "kalshi": "not verified - not used"}}
 

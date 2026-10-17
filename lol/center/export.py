@@ -91,13 +91,40 @@ def rows(con):
     return games, players, dict(counts)
 
 
+def _mirror_pg(dsn, games, players):
+    """The same rewrite in PostgreSQL (lol-scout-db), one transaction; read back the row counts to prove the write."""
+    import psycopg2
+    from psycopg2.extras import execute_values
+    from .. import history
+    con = psycopg2.connect(dsn, connect_timeout=20)
+    try:
+        cur = con.cursor()
+        for stmt in history.SCHEMA:
+            cur.execute(stmt)
+        cur.execute("DELETE FROM lol_player_games")
+        cur.execute("DELETE FROM lol_games")
+        now = store.now_iso()
+        execute_values(cur, f"INSERT INTO lol_games ({', '.join(history.GAME_COLS)}) VALUES %s",
+                       [tuple(dict(g, fetched_at=now).get(c) for c in history.GAME_COLS) for g in games], page_size=2000)
+        execute_values(cur, f"INSERT INTO lol_player_games ({', '.join(history.PLAYER_COLS)}) VALUES %s",
+                       [tuple(p.get(c) for c in history.PLAYER_COLS) for p in players], page_size=2000)
+        con.commit()
+        cur.execute("SELECT (SELECT COUNT(*) FROM lol_games), (SELECT COUNT(*) FROM lol_player_games)")
+        g, p = cur.fetchone()
+        return {"ok": g == len(games) and p == len(players), "games": g, "player_rows": p}
+    finally:
+        con.close()
+
+
 def export(con, db=None):
-    """Rewrite the history from the canonical tables (one transaction). Returns counts."""
+    """Rewrite the history from the canonical tables (one transaction): the local SQLite file (read by the forecasts and
+    the admin export) and, when LOL_DB_DSN is set, the same rewrite in PostgreSQL. Returns counts incl. read-backs."""
+    import os
     from .. import history
     t0 = time.time()
     games, players, counts = rows(con)
     own = db is None
-    db = db or history.DB()
+    db = db or history.DB(dsn="")
     try:
         with db.lock:
             cur = db.con.cursor()
@@ -114,6 +141,14 @@ def export(con, db=None):
     finally:
         if own:
             db.close()
+    dsn = os.environ.get("LOL_DB_DSN")
+    if dsn and own:
+        try:
+            counts["postgres"] = _mirror_pg(dsn, games, players)
+        except Exception as e:                          # the local history stands; the mirror failure is reported
+            counts["postgres"] = {"ok": False, "error": f"{type(e).__name__}: {str(e)[:160]}"}
+    else:
+        counts["postgres"] = {"ok": None, "note": "LOL_DB_DSN not set on this service"}
     counts["seconds"] = round(time.time() - t0, 1)
     store.set_meta(con, "last_export", counts)
     con.commit()

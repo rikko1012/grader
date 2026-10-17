@@ -196,3 +196,47 @@ def test_compare_harness_scores_both_models_on_the_same_targets(tmp_path, monkey
                        {"kills": {"form": "baseline", "k0": 5.0}}, fit["priors"], {("kills", "12"): 6.0}, league="tl")
     prior = model.baseline_prior(fit["priors"], "kills", "mid", "tl")
     assert pj["lambda_game"] == pytest.approx((40 + 5.0 * prior) / 15)
+
+
+def test_crosscheck_compares_sources_and_keeps_disagreements(con):
+    le_copy_of_m1(con)
+    load_world(con)
+    out = build.build(con)
+    cc = out["crosscheck"]
+    assert cc["series"] == 1 and cc["games_count"]["agree"] == 1
+    # the LE copy gives every player 2 kills and teams 10 / 4: LP's fixture differs -> disagreements are recorded, kept
+    assert cc["player_kills"]["compared"] == 20 and 0 < cc["player_kills"]["agree"] < 20
+    assert cc["team_kills"]["compared"] == 4 and cc["player_assists"]["share"] == 0.0 and cc["player_deaths"]["share"] == 1.0
+    bad = con.execute("SELECT lp_value, le_value FROM crosscheck WHERE item = 'player_kills' AND agree = 0").fetchall()
+    assert all(a != b for a, b in bad)
+
+
+def test_price_fields_are_classified_never_inverted():
+    from lol.center import prices
+    o = markets.parse_underdog(UD)[0]
+    c = prices.classify("underdog", o)
+    assert c["price_status"] == "one_side_offered" and c["sides_offered"] == ["higher"] and not c["anchor_eligible"]
+    assert c["undocumented_no_vig_p_over"] is None and c["payout_modifiers"] == {"higher": "1.1"}
+    two = dict(o, sides={"higher": {"status": "active", "payout_multiplier": "1.48", "decimal_price": "1.55"},
+                         "lower": {"status": "active", "payout_multiplier": "0.80", "decimal_price": "2.11"}})
+    c2 = prices.classify("underdog", two)
+    assert c2["undocumented_no_vig_p_over"] == pytest.approx(0.5765, abs=1e-3) and c2["anchor_eligible"]
+    assert abs(c2["undocumented_no_vig_p_over"] - 1 / 1.48) > 0.09          # never 1 / payout modifier
+    gob = prices.classify("prizepicks", {"odds_type": "goblin", "sides": {"higher": {"offered": True}}, "extra": {}})
+    promo = prices.classify("prizepicks", {"odds_type": "standard", "sides": {"higher": {"offered": True}, "lower": {"offered": True}},
+                                           "extra": {"is_promo": True}})
+    assert gob["kind"] == "alternate" and promo["kind"] == "promotional" and not gob["anchor_eligible"] and not promo["anchor_eligible"]
+    assert prices.classify("prizepicks", {"odds_type": "standard", "sides": {"higher": {"offered": True}, "lower": {"offered": True}},
+                                          "extra": {}})["price_status"] == "price_unverified"
+
+
+@pytest.mark.parametrize("lam,size", [(4.0, 3.0), (11.5, 8.0), (25.0, 20.0)])
+def test_probabilities_sum_to_one_no_push_on_halves_monotone(lam, size):
+    last = 1.0
+    for line in [x / 2 for x in range(0, 80)]:
+        o, u, p = model.probs(lam, size, line)
+        assert o + u + p == pytest.approx(1.0, abs=1e-9)
+        if line != int(line):
+            assert p == 0.0
+        assert o <= last + 1e-12
+        last = o
