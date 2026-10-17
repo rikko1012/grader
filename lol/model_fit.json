@@ -1,0 +1,3520 @@
+{
+ "priors": {
+  "kills": {
+   "top": 3.1106,
+   "jungle": 3.8945,
+   "mid": 4.2359,
+   "bot": 4.8272,
+   "support": 0.9694
+  },
+  "assists": {
+   "top": 5.2261,
+   "jungle": 7.7274,
+   "mid": 6.2736,
+   "bot": 5.8327,
+   "support": 11.0753
+  },
+  "deaths": {
+   "top": 3.3247,
+   "jungle": 3.606,
+   "mid": 3.2305,
+   "bot": 3.2016,
+   "support": 3.7121
+  },
+  "team_kills": 17.0387,
+  "win_ratio": {
+   "kills": 2.0117,
+   "assists": 2.1628,
+   "deaths": 0.4983
+  },
+  "role_league": {
+   "kills": {
+    "LoL Champions Korea|top": [
+     2.4538,
+     476
+    ],
+    "LoL Champions Korea|jungle": [
+     3.3046,
+     476
+    ],
+    "LoL Champions Korea|bot": [
+     4.2633,
+     471
+    ],
+    "LoL Champions Korea|support": [
+     0.8529,
+     476
+    ],
+    "LoL Champions Korea|mid": [
+     3.7017,
+     476
+    ],
+    "Rift Legends|mid": [
+     4.6579,
+     152
+    ],
+    "Rift Legends|bot": [
+     4.8882,
+     152
+    ],
+    "Rift Legends|jungle": [
+     4.1513,
+     152
+    ],
+    "Rift Legends|top": [
+     3.4671,
+     152
+    ],
+    "Rift Legends|support": [
+     1.0789,
+     152
+    ],
+    "Prime League Pro Division|top": [
+     3.2081,
+     370
+    ],
+    "Prime League Pro Division|mid": [
+     4.2595,
+     370
+    ],
+    "Prime League Pro Division|bot": [
+     4.7108,
+     370
+    ],
+    "Prime League Pro Division|support": [
+     1.127,
+     370
+    ],
+    "Prime League Pro Division|jungle": [
+     4.073,
+     370
+    ],
+    "Spring Dawn Tournament|jungle": [
+     4.6,
+     20
+    ],
+    "Spring Dawn Tournament|top": [
+     3.7,
+     20
+    ],
+    "Spring Dawn Tournament|mid": [
+     4.2,
+     20
+    ],
+    "Spring Dawn Tournament|bot": [
+     6.7,
+     20
+    ],
+    "Spring Dawn Tournament|support": [
+     1.05,
+     20
+    ],
+    "LIT|mid": [
+     4.0833,
+     228
+    ],
+    "LIT|bot": [
+     4.8202,
+     228
+    ],
+    "LIT|top": [
+     3.0307,
+     228
+    ],
+    "LIT|jungle": [
+     4.1886,
+     228
+    ],
+    "LIT|support": [
+     0.8333,
+     228
+    ],
+    "Arabian League|mid": [
+     4.8623,
+     334
+    ],
+    "Arabian League|jungle": [
+     3.9701,
+     334
+    ],
+    "Arabian League|top": [
+     3.6287,
+     334
+    ],
+    "Arabian League|support": [
+     1.0299,
+     334
+    ],
+    "Arabian League|bot": [
+     5.0659,
+     334
+    ],
+    "Icelandic Esports League|mid": [
+     6.0,
+     12
+    ],
+    "Icelandic Esports League|jungle": [
+     4.9167,
+     12
+    ],
+    "Icelandic Esports League|bot": [
+     4.6667,
+     12
+    ],
+    "Icelandic Esports League|support": [
+     1.0,
+     12
+    ],
+    "Icelandic Esports League|top": [
+     2.75,
+     12
+    ],
+    "Circuito Desafiante|jungle": [
+     3.5629,
+     334
+    ],
+    "Circuito Desafiante|mid": [
+     3.9192,
+     334
+    ],
+    "Circuito Desafiante|top": [
+     3.015,
+     334
+    ],
+    "Circuito Desafiante|bot": [
+     4.5539,
+     334
+    ],
+    "Circuito Desafiante|support": [
+     0.7395,
+     334
+    ],
+    "North American Challengers League|jungle": [
+     3.6138,
+     378
+    ],
+    "North American Challengers League|mid": [
+     3.7513,
+     378
+    ],
+    "North American Challengers League|bot": [
+     4.3122,
+     378
+    ],
+    "North American Challengers League|top": [
+     3.0476,
+     378
+    ],
+    "North American Challengers League|support": [
+     0.8968,
+     378
+    ],
+    "LCK Challengers League|top": [
+     2.9466,
+     468
+    ],
+    "LCK Challengers League|jungle": [
+     3.3312,
+     468
+    ],
+    "LCK Challengers League|mid": [
+     4.1239,
+     468
+    ],
+    "LCK Challengers League|support": [
+     0.9038,
+     468
+    ],
+    "LCK Challengers League|bot": [
+     4.735,
+     468
+    ],
+    "Hellenic Legends League|top": [
+     3.1089,
+     248
+    ],
+    "Hellenic Legends League|bot": [
+     5.1008,
+     248
+    ],
+    "Hellenic Legends League|support": [
+     0.7419,
+     248
+    ],
+    "Hellenic Legends League|jungle": [
+     3.4879,
+     248
+    ],
+    "Hellenic Legends League|mid": [
+     4.7782,
+     248
+    ],
+    "TransIP Road Of Legends|jungle": [
+     4.188,
+     234
+    ],
+    "TransIP Road Of Legends|mid": [
+     4.6453,
+     234
+    ],
+    "TransIP Road Of Legends|bot": [
+     5.1239,
+     234
+    ],
+    "TransIP Road Of Legends|support": [
+     0.9103,
+     234
+    ],
+    "TransIP Road Of Legends|top": [
+     3.5214,
+     234
+    ],
+    "Asia Masters Elite Invitational Tournament|jungle": [
+     4.2339,
+     218
+    ],
+    "Asia Masters Elite Invitational Tournament|top": [
+     3.1055,
+     218
+    ],
+    "Asia Masters Elite Invitational Tournament|support": [
+     0.7202,
+     218
+    ],
+    "Asia Masters Elite Invitational Tournament|bot": [
+     4.9541,
+     218
+    ],
+    "Asia Masters Elite Invitational Tournament|mid": [
+     4.1835,
+     218
+    ],
+    "LCK Academy Series|bot": [
+     5.2706,
+     340
+    ],
+    "LCK Academy Series|top": [
+     3.7529,
+     340
+    ],
+    "LCK Academy Series|jungle": [
+     3.7324,
+     340
+    ],
+    "LCK Academy Series|support": [
+     0.9824,
+     340
+    ],
+    "LCK Academy Series|mid": [
+     3.8171,
+     339
+    ],
+    "Tencent LoL Pro League|top": [
+     2.5122,
+     576
+    ],
+    "Tencent LoL Pro League|jungle": [
+     3.3003,
+     576
+    ],
+    "Tencent LoL Pro League|bot": [
+     3.9965,
+     576
+    ],
+    "Tencent LoL Pro League|support": [
+     0.7118,
+     576
+    ],
+    "Tencent LoL Pro League|mid": [
+     3.6667,
+     576
+    ],
+    "League of Legends Championship Pacific|top": [
+     2.7167,
+     240
+    ],
+    "League of Legends Championship Pacific|jungle": [
+     3.3917,
+     240
+    ],
+    "League of Legends Championship Pacific|mid": [
+     3.4708,
+     240
+    ],
+    "League of Legends Championship Pacific|bot": [
+     4.1417,
+     240
+    ],
+    "League of Legends Championship Pacific|support": [
+     0.8792,
+     240
+    ],
+    "Hellenic Challengers Cup|jungle": [
+     4.555,
+     218
+    ],
+    "Hellenic Challengers Cup|mid": [
+     5.0826,
+     218
+    ],
+    "Hellenic Challengers Cup|top": [
+     3.4541,
+     218
+    ],
+    "Hellenic Challengers Cup|support": [
+     1.2982,
+     218
+    ],
+    "Hellenic Challengers Cup|bot": [
+     5.7523,
+     218
+    ],
+    "LoL EMEA Championship|top": [
+     2.4507,
+     284
+    ],
+    "LoL EMEA Championship|jungle": [
+     3.25,
+     284
+    ],
+    "LoL EMEA Championship|bot": [
+     4.2218,
+     284
+    ],
+    "LoL EMEA Championship|support": [
+     0.7324,
+     284
+    ],
+    "LoL EMEA Championship|mid": [
+     3.5387,
+     284
+    ],
+    "Circuit Brazilian League of Legends|mid": [
+     3.1651,
+     212
+    ],
+    "Circuit Brazilian League of Legends|jungle": [
+     2.967,
+     212
+    ],
+    "Circuit Brazilian League of Legends|bot": [
+     3.9292,
+     212
+    ],
+    "Circuit Brazilian League of Legends|support": [
+     0.7736,
+     212
+    ],
+    "Circuit Brazilian League of Legends|top": [
+     2.6085,
+     212
+    ],
+    "League of Legends Championship Series|top": [
+     2.3271,
+     214
+    ],
+    "League of Legends Championship Series|jungle": [
+     3.0794,
+     214
+    ],
+    "League of Legends Championship Series|support": [
+     0.7383,
+     214
+    ],
+    "League of Legends Championship Series|mid": [
+     3.0514,
+     214
+    ],
+    "League of Legends Championship Series|bot": [
+     3.757,
+     214
+    ],
+    "lck_challengers_league|jungle": [
+     2.1429,
+     7
+    ],
+    "Liga Regional Norte|bot": [
+     5.2079,
+     202
+    ],
+    "Liga Regional Norte|top": [
+     3.4109,
+     202
+    ],
+    "Liga Regional Norte|mid": [
+     4.8812,
+     202
+    ],
+    "Liga Regional Norte|jungle": [
+     3.9752,
+     202
+    ],
+    "Liga Regional Norte|support": [
+     1.1584,
+     202
+    ],
+    "EMEA Masters|top": [
+     3.127,
+     252
+    ],
+    "EMEA Masters|mid": [
+     3.9484,
+     252
+    ],
+    "EMEA Masters|bot": [
+     4.9206,
+     252
+    ],
+    "EMEA Masters|support": [
+     0.9405,
+     252
+    ],
+    "EMEA Masters|jungle": [
+     3.6905,
+     252
+    ],
+    "Liga Regional Sur|jungle": [
+     4.0168,
+     238
+    ],
+    "Liga Regional Sur|mid": [
+     4.5504,
+     238
+    ],
+    "Liga Regional Sur|top": [
+     3.8697,
+     238
+    ],
+    "Liga Regional Sur|bot": [
+     4.8151,
+     238
+    ],
+    "Liga Regional Sur|support": [
+     1.1176,
+     238
+    ],
+    "Liga Espa\u00f1ola de League of Legends|support": [
+     0.9153,
+     236
+    ],
+    "Liga Espa\u00f1ola de League of Legends|top": [
+     2.7627,
+     236
+    ],
+    "Liga Espa\u00f1ola de League of Legends|jungle": [
+     3.6864,
+     236
+    ],
+    "Liga Espa\u00f1ola de League of Legends|mid": [
+     4.0297,
+     236
+    ],
+    "Liga Espa\u00f1ola de League of Legends|bot": [
+     4.4873,
+     236
+    ],
+    "La Ligue Fran\u00e7aise|top": [
+     2.9777,
+     224
+    ],
+    "La Ligue Fran\u00e7aise|mid": [
+     4.0312,
+     224
+    ],
+    "La Ligue Fran\u00e7aise|jungle": [
+     3.7188,
+     224
+    ],
+    "La Ligue Fran\u00e7aise|bot": [
+     4.5268,
+     224
+    ],
+    "La Ligue Fran\u00e7aise|support": [
+     0.8438,
+     224
+    ],
+    "Turkish Championship League|support": [
+     0.9632,
+     190
+    ],
+    "Turkish Championship League|jungle": [
+     4.1316,
+     190
+    ],
+    "Turkish Championship League|mid": [
+     3.9158,
+     190
+    ],
+    "Turkish Championship League|top": [
+     2.6158,
+     190
+    ],
+    "Turkish Championship League|bot": [
+     4.4105,
+     190
+    ],
+    "Arabian League 2nd Division|mid": [
+     5.4423,
+     156
+    ],
+    "Arabian League 2nd Division|support": [
+     1.1859,
+     156
+    ],
+    "Arabian League 2nd Division|top": [
+     3.4423,
+     156
+    ],
+    "Arabian League 2nd Division|bot": [
+     5.7308,
+     156
+    ],
+    "Arabian League 2nd Division|jungle": [
+     5.2179,
+     156
+    ],
+    "LoL Japan League|top": [
+     3.176,
+     358
+    ],
+    "LoL Japan League|jungle": [
+     4.2318,
+     358
+    ],
+    "LoL Japan League|mid": [
+     4.2318,
+     358
+    ],
+    "LoL Japan League|bot": [
+     4.9525,
+     358
+    ],
+    "LoL Japan League|support": [
+     1.0,
+     358
+    ],
+    "Nexus League|bot": [
+     4.9066,
+     182
+    ],
+    "Nexus League|jungle": [
+     3.989,
+     182
+    ],
+    "Nexus League|support": [
+     0.7802,
+     182
+    ],
+    "Nexus League|mid": [
+     4.3022,
+     182
+    ],
+    "Nexus League|top": [
+     3.1209,
+     182
+    ],
+    "RIVALS LEAGUE|top": [
+     4.375,
+     8
+    ],
+    "RIVALS LEAGUE|jungle": [
+     4.0,
+     8
+    ],
+    "RIVALS LEAGUE|bot": [
+     5.25,
+     8
+    ],
+    "RIVALS LEAGUE|mid": [
+     5.375,
+     8
+    ],
+    "RIVALS LEAGUE|support": [
+     1.375,
+     8
+    ],
+    "Esports World Cup|top": [
+     2.6897,
+     464
+    ],
+    "Esports World Cup|mid": [
+     3.8039,
+     464
+    ],
+    "Esports World Cup|bot": [
+     4.6207,
+     464
+    ],
+    "Esports World Cup|support": [
+     0.9763,
+     464
+    ],
+    "Esports World Cup|jungle": [
+     3.7931,
+     464
+    ],
+    "Esports Balkan League|bot": [
+     4.9937,
+     158
+    ],
+    "Esports Balkan League|top": [
+     3.3987,
+     158
+    ],
+    "Esports Balkan League|jungle": [
+     4.0823,
+     158
+    ],
+    "Esports Balkan League|mid": [
+     4.3101,
+     158
+    ],
+    "Esports Balkan League|support": [
+     1.019,
+     158
+    ],
+    "Benelux Ascend Series|support": [
+     1.0532,
+     188
+    ],
+    "Benelux Ascend Series|mid": [
+     4.5479,
+     188
+    ],
+    "Benelux Ascend Series|top": [
+     3.2447,
+     188
+    ],
+    "Benelux Ascend Series|jungle": [
+     4.633,
+     188
+    ],
+    "Benelux Ascend Series|bot": [
+     5.4255,
+     188
+    ],
+    "lck_challengers_league|support": [
+     2.0,
+     1
+    ],
+    "Hitpoint Masters|top": [
+     3.1705,
+     176
+    ],
+    "Hitpoint Masters|jungle": [
+     5.1136,
+     176
+    ],
+    "Hitpoint Masters|mid": [
+     4.9034,
+     176
+    ],
+    "Hitpoint Masters|bot": [
+     6.0057,
+     176
+    ],
+    "Hitpoint Masters|support": [
+     1.267,
+     176
+    ],
+    "Hitpoint Challengers|jungle": [
+     4.5152,
+     198
+    ],
+    "Hitpoint Challengers|mid": [
+     5.3535,
+     198
+    ],
+    "Hitpoint Challengers|support": [
+     1.2929,
+     198
+    ],
+    "Hitpoint Challengers|top": [
+     3.0758,
+     198
+    ],
+    "Hitpoint Challengers|bot": [
+     6.3889,
+     198
+    ],
+    "LOL DK Ligaen|mid": [
+     4.75,
+     16
+    ],
+    "LOL DK Ligaen|jungle": [
+     3.75,
+     16
+    ],
+    "LOL DK Ligaen|support": [
+     1.1875,
+     16
+    ],
+    "LOL DK Ligaen|top": [
+     3.125,
+     16
+    ],
+    "LOL DK Ligaen|bot": [
+     6.125,
+     16
+    ],
+    "Pacific Championship Series|bot": [
+     4.8854,
+     96
+    ],
+    "Pacific Championship Series|top": [
+     3.7396,
+     96
+    ],
+    "Pacific Championship Series|mid": [
+     3.8438,
+     96
+    ],
+    "Pacific Championship Series|jungle": [
+     4.2604,
+     96
+    ],
+    "Pacific Championship Series|support": [
+     1.1146,
+     96
+    ],
+    "Prime League 1st Division|bot": [
+     5.7409,
+     440
+    ],
+    "Prime League 1st Division|jungle": [
+     4.4886,
+     440
+    ],
+    "Prime League 1st Division|support": [
+     1.2205,
+     440
+    ],
+    "Prime League 1st Division|mid": [
+     4.5841,
+     440
+    ],
+    "Prime League 1st Division|top": [
+     3.5341,
+     440
+    ],
+    "Liga Portuguesa|top": [
+     2.7368,
+     114
+    ],
+    "Liga Portuguesa|bot": [
+     5.307,
+     114
+    ],
+    "Liga Portuguesa|mid": [
+     4.3596,
+     114
+    ],
+    "Liga Portuguesa|jungle": [
+     4.4825,
+     114
+    ],
+    "Liga Portuguesa|support": [
+     0.9825,
+     114
+    ],
+    "Vietnam Championship Series|top": [
+     2.8814,
+     118
+    ],
+    "Vietnam Championship Series|jungle": [
+     4.0932,
+     118
+    ],
+    "Vietnam Championship Series|mid": [
+     4.0678,
+     118
+    ],
+    "Vietnam Championship Series|bot": [
+     4.4746,
+     118
+    ],
+    "Vietnam Championship Series|support": [
+     1.178,
+     118
+    ],
+    "Esports Series Madrid|mid": [
+     5.0,
+     14
+    ],
+    "Esports Series Madrid|support": [
+     2.1429,
+     14
+    ],
+    "Esports Series Madrid|jungle": [
+     4.7857,
+     14
+    ],
+    "Esports Series Madrid|bot": [
+     7.3571,
+     14
+    ],
+    "Esports Series Madrid|top": [
+     4.2143,
+     14
+    ],
+    "Streamers Clash|top": [
+     3.9286,
+     98
+    ],
+    "Streamers Clash|jungle": [
+     4.3163,
+     98
+    ],
+    "Streamers Clash|mid": [
+     4.4286,
+     98
+    ],
+    "Streamers Clash|bot": [
+     3.3061,
+     98
+    ],
+    "Streamers Clash|support": [
+     0.6327,
+     98
+    ],
+    "Comic Con Baltics|bot": [
+     7.7,
+     10
+    ],
+    "Comic Con Baltics|top": [
+     2.6,
+     10
+    ],
+    "Comic Con Baltics|mid": [
+     5.2,
+     10
+    ],
+    "Comic Con Baltics|jungle": [
+     4.8,
+     10
+    ],
+    "Comic Con Baltics|support": [
+     0.8,
+     10
+    ],
+    "Northern League of Legends Championship|top": [
+     3.439,
+     164
+    ],
+    "Northern League of Legends Championship|jungle": [
+     3.7195,
+     164
+    ],
+    "Northern League of Legends Championship|mid": [
+     5.0366,
+     164
+    ],
+    "Northern League of Legends Championship|bot": [
+     4.9329,
+     164
+    ],
+    "Northern League of Legends Championship|support": [
+     1.2927,
+     164
+    ],
+    "Asia Masters|jungle": [
+     3.9206,
+     126
+    ],
+    "Asia Masters|bot": [
+     5.0476,
+     126
+    ],
+    "Asia Masters|top": [
+     2.9286,
+     126
+    ],
+    "Asia Masters|mid": [
+     4.7222,
+     126
+    ],
+    "Asia Masters|support": [
+     0.873,
+     126
+    ],
+    "Nexus Tour|jungle": [
+     4.7167,
+     60
+    ],
+    "Nexus Tour|mid": [
+     5.4333,
+     60
+    ],
+    "Nexus Tour|bot": [
+     5.4833,
+     60
+    ],
+    "Nexus Tour|top": [
+     3.1167,
+     60
+    ],
+    "Nexus Tour|support": [
+     0.6667,
+     60
+    ],
+    "Asian Games 2018|top": [
+     3.6833,
+     60
+    ],
+    "Asian Games 2018|support": [
+     1.55,
+     60
+    ],
+    "Asian Games 2018|jungle": [
+     4.8,
+     60
+    ],
+    "Asian Games 2018|mid": [
+     4.0833,
+     60
+    ],
+    "Asian Games 2018|bot": [
+     4.9333,
+     60
+    ],
+    "Komplettligaen|mid": [
+     3.5,
+     8
+    ],
+    "Komplettligaen|top": [
+     3.875,
+     8
+    ],
+    "Komplettligaen|bot": [
+     6.375,
+     8
+    ],
+    "Komplettligaen|jungle": [
+     4.625,
+     8
+    ],
+    "Komplettligaen|support": [
+     1.125,
+     8
+    ],
+    "Esports Nations Cup|top": [
+     3.2901,
+     362
+    ],
+    "Esports Nations Cup|jungle": [
+     4.0773,
+     362
+    ],
+    "Esports Nations Cup|mid": [
+     4.5083,
+     362
+    ],
+    "Esports Nations Cup|bot": [
+     4.8149,
+     362
+    ],
+    "Esports Nations Cup|support": [
+     1.0829,
+     362
+    ],
+    "Kings Lendas|top": [
+     3.6917,
+     120
+    ],
+    "Kings Lendas|jungle": [
+     4.2667,
+     120
+    ],
+    "Kings Lendas|mid": [
+     4.9583,
+     120
+    ],
+    "Kings Lendas|bot": [
+     5.1167,
+     120
+    ],
+    "Kings Lendas|support": [
+     1.05,
+     120
+    ],
+    "Mid-Season Invitational|top": [
+     3.0282,
+     142
+    ],
+    "Mid-Season Invitational|jungle": [
+     3.6479,
+     142
+    ],
+    "Mid-Season Invitational|mid": [
+     4.169,
+     142
+    ],
+    "Mid-Season Invitational|bot": [
+     4.6901,
+     142
+    ],
+    "Mid-Season Invitational|support": [
+     1.0986,
+     142
+    ],
+    "Equal Esports Cup|top": [
+     3.5577,
+     104
+    ],
+    "Equal Esports Cup|jungle": [
+     3.1731,
+     104
+    ],
+    "Equal Esports Cup|mid": [
+     4.4423,
+     104
+    ],
+    "Equal Esports Cup|bot": [
+     4.3077,
+     104
+    ],
+    "Equal Esports Cup|support": [
+     0.8462,
+     104
+    ],
+    "City Heroes Championship|top": [
+     2.0833,
+     12
+    ],
+    "City Heroes Championship|jungle": [
+     5.0,
+     12
+    ],
+    "City Heroes Championship|mid": [
+     5.6667,
+     12
+    ],
+    "City Heroes Championship|bot": [
+     7.1818,
+     11
+    ],
+    "City Heroes Championship|support": [
+     1.1667,
+     12
+    ],
+    "KeSPA Cup|top": [
+     4.2833,
+     60
+    ],
+    "KeSPA Cup|jungle": [
+     4.4833,
+     60
+    ],
+    "KeSPA Cup|mid": [
+     5.35,
+     60
+    ],
+    "KeSPA Cup|bot": [
+     4.7667,
+     60
+    ],
+    "KeSPA Cup|support": [
+     1.3,
+     60
+    ],
+    "University Esports Masters|jungle": [
+     5.0341,
+     88
+    ],
+    "University Esports Masters|support": [
+     1.4886,
+     88
+    ],
+    "University Esports Masters|top": [
+     4.6136,
+     88
+    ],
+    "University Esports Masters|mid": [
+     6.2159,
+     88
+    ],
+    "University Esports Masters|bot": [
+     6.6364,
+     88
+    ]
+   },
+   "assists": {
+    "LoL Champions Korea|top": [
+     5.0567,
+     476
+    ],
+    "LoL Champions Korea|jungle": [
+     7.271,
+     476
+    ],
+    "LoL Champions Korea|bot": [
+     5.5541,
+     471
+    ],
+    "LoL Champions Korea|support": [
+     9.958,
+     476
+    ],
+    "LoL Champions Korea|mid": [
+     5.7815,
+     476
+    ],
+    "Rift Legends|mid": [
+     6.0921,
+     152
+    ],
+    "Rift Legends|bot": [
+     6.4539,
+     152
+    ],
+    "Rift Legends|jungle": [
+     8.2763,
+     152
+    ],
+    "Rift Legends|top": [
+     5.4934,
+     152
+    ],
+    "Rift Legends|support": [
+     12.4605,
+     152
+    ],
+    "Prime League Pro Division|top": [
+     5.3,
+     370
+    ],
+    "Prime League Pro Division|mid": [
+     6.5324,
+     370
+    ],
+    "Prime League Pro Division|bot": [
+     5.8892,
+     370
+    ],
+    "Prime League Pro Division|support": [
+     10.9135,
+     370
+    ],
+    "Prime League Pro Division|jungle": [
+     7.4676,
+     370
+    ],
+    "Spring Dawn Tournament|jungle": [
+     9.5,
+     20
+    ],
+    "Spring Dawn Tournament|top": [
+     6.45,
+     20
+    ],
+    "Spring Dawn Tournament|mid": [
+     6.55,
+     20
+    ],
+    "Spring Dawn Tournament|bot": [
+     5.85,
+     20
+    ],
+    "Spring Dawn Tournament|support": [
+     12.4,
+     20
+    ],
+    "LIT|mid": [
+     5.8377,
+     228
+    ],
+    "LIT|bot": [
+     5.6316,
+     228
+    ],
+    "LIT|top": [
+     5.2456,
+     228
+    ],
+    "LIT|jungle": [
+     7.5175,
+     228
+    ],
+    "LIT|support": [
+     11.2325,
+     228
+    ],
+    "Arabian League|mid": [
+     6.2575,
+     334
+    ],
+    "Arabian League|jungle": [
+     8.006,
+     334
+    ],
+    "Arabian League|top": [
+     5.503,
+     334
+    ],
+    "Arabian League|support": [
+     11.4581,
+     334
+    ],
+    "Arabian League|bot": [
+     5.506,
+     334
+    ],
+    "Icelandic Esports League|mid": [
+     4.75,
+     12
+    ],
+    "Icelandic Esports League|jungle": [
+     8.1667,
+     12
+    ],
+    "Icelandic Esports League|bot": [
+     5.6667,
+     12
+    ],
+    "Icelandic Esports League|support": [
+     10.3333,
+     12
+    ],
+    "Icelandic Esports League|top": [
+     4.6667,
+     12
+    ],
+    "Circuito Desafiante|jungle": [
+     7.4461,
+     334
+    ],
+    "Circuito Desafiante|mid": [
+     6.2784,
+     334
+    ],
+    "Circuito Desafiante|top": [
+     4.9461,
+     334
+    ],
+    "Circuito Desafiante|bot": [
+     5.5569,
+     334
+    ],
+    "Circuito Desafiante|support": [
+     10.8683,
+     334
+    ],
+    "North American Challengers League|jungle": [
+     7.4947,
+     378
+    ],
+    "North American Challengers League|mid": [
+     6.172,
+     378
+    ],
+    "North American Challengers League|bot": [
+     5.6111,
+     378
+    ],
+    "North American Challengers League|top": [
+     4.791,
+     378
+    ],
+    "North American Challengers League|support": [
+     10.209,
+     378
+    ],
+    "LCK Challengers League|top": [
+     4.9295,
+     468
+    ],
+    "LCK Challengers League|jungle": [
+     8.0235,
+     468
+    ],
+    "LCK Challengers League|mid": [
+     6.2329,
+     468
+    ],
+    "LCK Challengers League|support": [
+     10.8226,
+     468
+    ],
+    "LCK Challengers League|bot": [
+     5.6731,
+     468
+    ],
+    "Hellenic Legends League|top": [
+     4.9113,
+     248
+    ],
+    "Hellenic Legends League|bot": [
+     5.2419,
+     248
+    ],
+    "Hellenic Legends League|support": [
+     11.2137,
+     248
+    ],
+    "Hellenic Legends League|jungle": [
+     8.0887,
+     248
+    ],
+    "Hellenic Legends League|mid": [
+     5.9153,
+     248
+    ],
+    "TransIP Road Of Legends|jungle": [
+     7.9957,
+     234
+    ],
+    "TransIP Road Of Legends|mid": [
+     6.3333,
+     234
+    ],
+    "TransIP Road Of Legends|bot": [
+     5.9316,
+     234
+    ],
+    "TransIP Road Of Legends|support": [
+     11.7436,
+     234
+    ],
+    "TransIP Road Of Legends|top": [
+     5.4957,
+     234
+    ],
+    "Asia Masters Elite Invitational Tournament|jungle": [
+     7.8119,
+     218
+    ],
+    "Asia Masters Elite Invitational Tournament|top": [
+     5.289,
+     218
+    ],
+    "Asia Masters Elite Invitational Tournament|support": [
+     11.9174,
+     218
+    ],
+    "Asia Masters Elite Invitational Tournament|bot": [
+     5.7752,
+     218
+    ],
+    "Asia Masters Elite Invitational Tournament|mid": [
+     6.3624,
+     218
+    ],
+    "LCK Academy Series|bot": [
+     5.4882,
+     340
+    ],
+    "LCK Academy Series|top": [
+     4.7824,
+     340
+    ],
+    "LCK Academy Series|jungle": [
+     8.0676,
+     340
+    ],
+    "LCK Academy Series|support": [
+     10.9529,
+     340
+    ],
+    "LCK Academy Series|mid": [
+     6.3864,
+     339
+    ],
+    "Tencent LoL Pro League|top": [
+     4.9861,
+     576
+    ],
+    "Tencent LoL Pro League|jungle": [
+     7.1649,
+     576
+    ],
+    "Tencent LoL Pro League|bot": [
+     5.5156,
+     576
+    ],
+    "Tencent LoL Pro League|support": [
+     10.099,
+     576
+    ],
+    "Tencent LoL Pro League|mid": [
+     5.8611,
+     576
+    ],
+    "League of Legends Championship Pacific|top": [
+     5.175,
+     240
+    ],
+    "League of Legends Championship Pacific|jungle": [
+     7.2542,
+     240
+    ],
+    "League of Legends Championship Pacific|mid": [
+     6.0583,
+     240
+    ],
+    "League of Legends Championship Pacific|bot": [
+     5.6083,
+     240
+    ],
+    "League of Legends Championship Pacific|support": [
+     9.8083,
+     240
+    ],
+    "Hellenic Challengers Cup|jungle": [
+     8.1743,
+     218
+    ],
+    "Hellenic Challengers Cup|mid": [
+     6.6101,
+     218
+    ],
+    "Hellenic Challengers Cup|top": [
+     5.3899,
+     218
+    ],
+    "Hellenic Challengers Cup|support": [
+     12.0413,
+     218
+    ],
+    "Hellenic Challengers Cup|bot": [
+     5.9633,
+     218
+    ],
+    "LoL EMEA Championship|top": [
+     4.6937,
+     284
+    ],
+    "LoL EMEA Championship|jungle": [
+     6.5528,
+     284
+    ],
+    "LoL EMEA Championship|bot": [
+     4.7394,
+     284
+    ],
+    "LoL EMEA Championship|support": [
+     9.5634,
+     284
+    ],
+    "LoL EMEA Championship|mid": [
+     5.3768,
+     284
+    ],
+    "Circuit Brazilian League of Legends|mid": [
+     5.4764,
+     212
+    ],
+    "Circuit Brazilian League of Legends|jungle": [
+     6.434,
+     212
+    ],
+    "Circuit Brazilian League of Legends|bot": [
+     4.7406,
+     212
+    ],
+    "Circuit Brazilian League of Legends|support": [
+     9.316,
+     212
+    ],
+    "Circuit Brazilian League of Legends|top": [
+     4.7217,
+     212
+    ],
+    "League of Legends Championship Series|top": [
+     4.6075,
+     214
+    ],
+    "League of Legends Championship Series|jungle": [
+     6.4766,
+     214
+    ],
+    "League of Legends Championship Series|support": [
+     9.2664,
+     214
+    ],
+    "League of Legends Championship Series|mid": [
+     5.6215,
+     214
+    ],
+    "League of Legends Championship Series|bot": [
+     5.0374,
+     214
+    ],
+    "lck_challengers_league|jungle": [
+     5.5714,
+     7
+    ],
+    "Liga Regional Norte|bot": [
+     6.3515,
+     202
+    ],
+    "Liga Regional Norte|top": [
+     5.6188,
+     202
+    ],
+    "Liga Regional Norte|mid": [
+     7.0594,
+     202
+    ],
+    "Liga Regional Norte|jungle": [
+     8.5198,
+     202
+    ],
+    "Liga Regional Norte|support": [
+     11.9851,
+     202
+    ],
+    "EMEA Masters|top": [
+     5.4246,
+     252
+    ],
+    "EMEA Masters|mid": [
+     6.381,
+     252
+    ],
+    "EMEA Masters|bot": [
+     5.9127,
+     252
+    ],
+    "EMEA Masters|support": [
+     10.9603,
+     252
+    ],
+    "EMEA Masters|jungle": [
+     7.5397,
+     252
+    ],
+    "Liga Regional Sur|jungle": [
+     8.3866,
+     238
+    ],
+    "Liga Regional Sur|mid": [
+     7.0882,
+     238
+    ],
+    "Liga Regional Sur|top": [
+     6.0,
+     238
+    ],
+    "Liga Regional Sur|bot": [
+     6.2101,
+     238
+    ],
+    "Liga Regional Sur|support": [
+     11.6723,
+     238
+    ],
+    "Liga Espa\u00f1ola de League of Legends|support": [
+     10.4831,
+     236
+    ],
+    "Liga Espa\u00f1ola de League of Legends|top": [
+     4.7373,
+     236
+    ],
+    "Liga Espa\u00f1ola de League of Legends|jungle": [
+     7.1186,
+     236
+    ],
+    "Liga Espa\u00f1ola de League of Legends|mid": [
+     5.6144,
+     236
+    ],
+    "Liga Espa\u00f1ola de League of Legends|bot": [
+     5.4703,
+     236
+    ],
+    "La Ligue Fran\u00e7aise|top": [
+     5.1071,
+     224
+    ],
+    "La Ligue Fran\u00e7aise|mid": [
+     6.067,
+     224
+    ],
+    "La Ligue Fran\u00e7aise|jungle": [
+     7.0536,
+     224
+    ],
+    "La Ligue Fran\u00e7aise|bot": [
+     5.4554,
+     224
+    ],
+    "La Ligue Fran\u00e7aise|support": [
+     10.5223,
+     224
+    ],
+    "Turkish Championship League|support": [
+     10.3895,
+     190
+    ],
+    "Turkish Championship League|jungle": [
+     6.5526,
+     190
+    ],
+    "Turkish Championship League|mid": [
+     5.5158,
+     190
+    ],
+    "Turkish Championship League|top": [
+     5.3316,
+     190
+    ],
+    "Turkish Championship League|bot": [
+     5.4579,
+     190
+    ],
+    "Arabian League 2nd Division|mid": [
+     6.9872,
+     156
+    ],
+    "Arabian League 2nd Division|support": [
+     13.1538,
+     156
+    ],
+    "Arabian League 2nd Division|top": [
+     5.5897,
+     156
+    ],
+    "Arabian League 2nd Division|bot": [
+     6.7179,
+     156
+    ],
+    "Arabian League 2nd Division|jungle": [
+     8.4744,
+     156
+    ],
+    "LoL Japan League|top": [
+     5.2374,
+     358
+    ],
+    "LoL Japan League|jungle": [
+     7.9022,
+     358
+    ],
+    "LoL Japan League|mid": [
+     6.7151,
+     358
+    ],
+    "LoL Japan League|bot": [
+     6.1425,
+     358
+    ],
+    "LoL Japan League|support": [
+     10.8994,
+     358
+    ],
+    "Nexus League|bot": [
+     6.2747,
+     182
+    ],
+    "Nexus League|jungle": [
+     8.1429,
+     182
+    ],
+    "Nexus League|support": [
+     11.4945,
+     182
+    ],
+    "Nexus League|mid": [
+     6.7143,
+     182
+    ],
+    "Nexus League|top": [
+     5.4396,
+     182
+    ],
+    "RIVALS LEAGUE|top": [
+     5.875,
+     8
+    ],
+    "RIVALS LEAGUE|jungle": [
+     11.5,
+     8
+    ],
+    "RIVALS LEAGUE|bot": [
+     7.625,
+     8
+    ],
+    "RIVALS LEAGUE|mid": [
+     7.125,
+     8
+    ],
+    "RIVALS LEAGUE|support": [
+     13.0,
+     8
+    ],
+    "Esports World Cup|top": [
+     5.2866,
+     464
+    ],
+    "Esports World Cup|mid": [
+     6.1659,
+     464
+    ],
+    "Esports World Cup|bot": [
+     5.7435,
+     464
+    ],
+    "Esports World Cup|support": [
+     10.5927,
+     464
+    ],
+    "Esports World Cup|jungle": [
+     7.4547,
+     464
+    ],
+    "Esports Balkan League|bot": [
+     5.8734,
+     158
+    ],
+    "Esports Balkan League|top": [
+     5.0316,
+     158
+    ],
+    "Esports Balkan League|jungle": [
+     7.8734,
+     158
+    ],
+    "Esports Balkan League|mid": [
+     6.0823,
+     158
+    ],
+    "Esports Balkan League|support": [
+     11.4494,
+     158
+    ],
+    "Benelux Ascend Series|support": [
+     12.2128,
+     188
+    ],
+    "Benelux Ascend Series|mid": [
+     6.6702,
+     188
+    ],
+    "Benelux Ascend Series|top": [
+     5.5638,
+     188
+    ],
+    "Benelux Ascend Series|jungle": [
+     8.1064,
+     188
+    ],
+    "Benelux Ascend Series|bot": [
+     6.4894,
+     188
+    ],
+    "lck_challengers_league|support": [
+     16.0,
+     1
+    ],
+    "Hitpoint Masters|top": [
+     5.1648,
+     176
+    ],
+    "Hitpoint Masters|jungle": [
+     7.4261,
+     176
+    ],
+    "Hitpoint Masters|mid": [
+     5.6193,
+     176
+    ],
+    "Hitpoint Masters|bot": [
+     5.983,
+     176
+    ],
+    "Hitpoint Masters|support": [
+     12.2841,
+     176
+    ],
+    "Hitpoint Challengers|jungle": [
+     8.1869,
+     198
+    ],
+    "Hitpoint Challengers|mid": [
+     6.2576,
+     198
+    ],
+    "Hitpoint Challengers|support": [
+     12.9394,
+     198
+    ],
+    "Hitpoint Challengers|top": [
+     4.8939,
+     198
+    ],
+    "Hitpoint Challengers|bot": [
+     6.1111,
+     198
+    ],
+    "LOL DK Ligaen|mid": [
+     8.75,
+     16
+    ],
+    "LOL DK Ligaen|jungle": [
+     9.0,
+     16
+    ],
+    "LOL DK Ligaen|support": [
+     12.5,
+     16
+    ],
+    "LOL DK Ligaen|top": [
+     6.125,
+     16
+    ],
+    "LOL DK Ligaen|bot": [
+     6.5625,
+     16
+    ],
+    "Pacific Championship Series|bot": [
+     6.25,
+     96
+    ],
+    "Pacific Championship Series|top": [
+     4.25,
+     96
+    ],
+    "Pacific Championship Series|mid": [
+     6.6042,
+     96
+    ],
+    "Pacific Championship Series|jungle": [
+     8.1042,
+     96
+    ],
+    "Pacific Championship Series|support": [
+     11.2604,
+     96
+    ],
+    "Prime League 1st Division|bot": [
+     6.5614,
+     440
+    ],
+    "Prime League 1st Division|jungle": [
+     8.4636,
+     440
+    ],
+    "Prime League 1st Division|support": [
+     12.4455,
+     440
+    ],
+    "Prime League 1st Division|mid": [
+     6.7614,
+     440
+    ],
+    "Prime League 1st Division|top": [
+     5.5773,
+     440
+    ],
+    "Liga Portuguesa|top": [
+     4.7632,
+     114
+    ],
+    "Liga Portuguesa|bot": [
+     5.6053,
+     114
+    ],
+    "Liga Portuguesa|mid": [
+     5.9649,
+     114
+    ],
+    "Liga Portuguesa|jungle": [
+     7.3596,
+     114
+    ],
+    "Liga Portuguesa|support": [
+     11.4035,
+     114
+    ],
+    "Vietnam Championship Series|top": [
+     5.4237,
+     118
+    ],
+    "Vietnam Championship Series|jungle": [
+     7.5763,
+     118
+    ],
+    "Vietnam Championship Series|mid": [
+     6.2119,
+     118
+    ],
+    "Vietnam Championship Series|bot": [
+     5.7881,
+     118
+    ],
+    "Vietnam Championship Series|support": [
+     10.4237,
+     118
+    ],
+    "Esports Series Madrid|mid": [
+     8.0714,
+     14
+    ],
+    "Esports Series Madrid|support": [
+     13.8571,
+     14
+    ],
+    "Esports Series Madrid|jungle": [
+     7.7857,
+     14
+    ],
+    "Esports Series Madrid|bot": [
+     6.0,
+     14
+    ],
+    "Esports Series Madrid|top": [
+     5.1429,
+     14
+    ],
+    "Streamers Clash|top": [
+     6.2143,
+     98
+    ],
+    "Streamers Clash|jungle": [
+     8.3469,
+     98
+    ],
+    "Streamers Clash|mid": [
+     7.1224,
+     98
+    ],
+    "Streamers Clash|bot": [
+     6.102,
+     98
+    ],
+    "Streamers Clash|support": [
+     9.7959,
+     98
+    ],
+    "Comic Con Baltics|bot": [
+     7.5,
+     10
+    ],
+    "Comic Con Baltics|top": [
+     8.1,
+     10
+    ],
+    "Comic Con Baltics|mid": [
+     7.7,
+     10
+    ],
+    "Comic Con Baltics|jungle": [
+     9.6,
+     10
+    ],
+    "Comic Con Baltics|support": [
+     14.0,
+     10
+    ],
+    "Northern League of Legends Championship|top": [
+     5.7073,
+     164
+    ],
+    "Northern League of Legends Championship|jungle": [
+     8.628,
+     164
+    ],
+    "Northern League of Legends Championship|mid": [
+     6.378,
+     164
+    ],
+    "Northern League of Legends Championship|bot": [
+     6.8963,
+     164
+    ],
+    "Northern League of Legends Championship|support": [
+     11.878,
+     164
+    ],
+    "Asia Masters|jungle": [
+     8.5794,
+     126
+    ],
+    "Asia Masters|bot": [
+     5.9921,
+     126
+    ],
+    "Asia Masters|top": [
+     5.5397,
+     126
+    ],
+    "Asia Masters|mid": [
+     6.8016,
+     126
+    ],
+    "Asia Masters|support": [
+     11.8095,
+     126
+    ],
+    "Nexus Tour|jungle": [
+     7.9,
+     60
+    ],
+    "Nexus Tour|mid": [
+     7.0333,
+     60
+    ],
+    "Nexus Tour|bot": [
+     5.8167,
+     60
+    ],
+    "Nexus Tour|top": [
+     6.5,
+     60
+    ],
+    "Nexus Tour|support": [
+     12.2333,
+     60
+    ],
+    "Asian Games 2018|top": [
+     5.2,
+     60
+    ],
+    "Asian Games 2018|support": [
+     11.45,
+     60
+    ],
+    "Asian Games 2018|jungle": [
+     7.8167,
+     60
+    ],
+    "Asian Games 2018|mid": [
+     6.6833,
+     60
+    ],
+    "Asian Games 2018|bot": [
+     6.2167,
+     60
+    ],
+    "Komplettligaen|mid": [
+     8.75,
+     8
+    ],
+    "Komplettligaen|top": [
+     7.125,
+     8
+    ],
+    "Komplettligaen|bot": [
+     5.625,
+     8
+    ],
+    "Komplettligaen|jungle": [
+     10.25,
+     8
+    ],
+    "Komplettligaen|support": [
+     14.625,
+     8
+    ],
+    "Esports Nations Cup|top": [
+     5.4227,
+     362
+    ],
+    "Esports Nations Cup|jungle": [
+     7.9227,
+     362
+    ],
+    "Esports Nations Cup|mid": [
+     6.5497,
+     362
+    ],
+    "Esports Nations Cup|bot": [
+     6.4696,
+     362
+    ],
+    "Esports Nations Cup|support": [
+     11.4448,
+     362
+    ],
+    "Kings Lendas|top": [
+     5.9083,
+     120
+    ],
+    "Kings Lendas|jungle": [
+     8.1333,
+     120
+    ],
+    "Kings Lendas|mid": [
+     7.05,
+     120
+    ],
+    "Kings Lendas|bot": [
+     6.4333,
+     120
+    ],
+    "Kings Lendas|support": [
+     12.0833,
+     120
+    ],
+    "Mid-Season Invitational|top": [
+     5.6197,
+     142
+    ],
+    "Mid-Season Invitational|jungle": [
+     7.838,
+     142
+    ],
+    "Mid-Season Invitational|mid": [
+     6.3099,
+     142
+    ],
+    "Mid-Season Invitational|bot": [
+     6.1901,
+     142
+    ],
+    "Mid-Season Invitational|support": [
+     10.7394,
+     142
+    ],
+    "Equal Esports Cup|top": [
+     4.7885,
+     104
+    ],
+    "Equal Esports Cup|jungle": [
+     8.1635,
+     104
+    ],
+    "Equal Esports Cup|mid": [
+     6.2788,
+     104
+    ],
+    "Equal Esports Cup|bot": [
+     6.0385,
+     104
+    ],
+    "Equal Esports Cup|support": [
+     10.5769,
+     104
+    ],
+    "City Heroes Championship|top": [
+     5.9167,
+     12
+    ],
+    "City Heroes Championship|jungle": [
+     9.5,
+     12
+    ],
+    "City Heroes Championship|mid": [
+     7.8333,
+     12
+    ],
+    "City Heroes Championship|bot": [
+     5.0,
+     11
+    ],
+    "City Heroes Championship|support": [
+     13.0833,
+     12
+    ],
+    "KeSPA Cup|top": [
+     6.55,
+     60
+    ],
+    "KeSPA Cup|jungle": [
+     10.0167,
+     60
+    ],
+    "KeSPA Cup|mid": [
+     7.35,
+     60
+    ],
+    "KeSPA Cup|bot": [
+     7.4333,
+     60
+    ],
+    "KeSPA Cup|support": [
+     12.3667,
+     60
+    ],
+    "University Esports Masters|jungle": [
+     8.3864,
+     88
+    ],
+    "University Esports Masters|support": [
+     13.2045,
+     88
+    ],
+    "University Esports Masters|top": [
+     5.7045,
+     88
+    ],
+    "University Esports Masters|mid": [
+     6.8182,
+     88
+    ],
+    "University Esports Masters|bot": [
+     6.3523,
+     88
+    ]
+   },
+   "deaths": {
+    "LoL Champions Korea|top": [
+     2.8866,
+     476
+    ],
+    "LoL Champions Korea|jungle": [
+     3.2857,
+     476
+    ],
+    "LoL Champions Korea|bot": [
+     2.7431,
+     471
+    ],
+    "LoL Champions Korea|support": [
+     3.0777,
+     476
+    ],
+    "LoL Champions Korea|mid": [
+     2.6618,
+     476
+    ],
+    "Rift Legends|mid": [
+     3.0592,
+     152
+    ],
+    "Rift Legends|bot": [
+     3.5855,
+     152
+    ],
+    "Rift Legends|jungle": [
+     4.1645,
+     152
+    ],
+    "Rift Legends|top": [
+     3.6711,
+     152
+    ],
+    "Rift Legends|support": [
+     3.7895,
+     152
+    ],
+    "Prime League Pro Division|top": [
+     3.4676,
+     370
+    ],
+    "Prime League Pro Division|mid": [
+     3.1838,
+     370
+    ],
+    "Prime League Pro Division|bot": [
+     3.127,
+     370
+    ],
+    "Prime League Pro Division|support": [
+     3.8649,
+     370
+    ],
+    "Prime League Pro Division|jungle": [
+     3.773,
+     370
+    ],
+    "Spring Dawn Tournament|jungle": [
+     4.1,
+     20
+    ],
+    "Spring Dawn Tournament|top": [
+     4.1,
+     20
+    ],
+    "Spring Dawn Tournament|mid": [
+     3.75,
+     20
+    ],
+    "Spring Dawn Tournament|bot": [
+     3.3,
+     20
+    ],
+    "Spring Dawn Tournament|support": [
+     5.0,
+     20
+    ],
+    "LIT|mid": [
+     3.3377,
+     228
+    ],
+    "LIT|bot": [
+     3.3421,
+     228
+    ],
+    "LIT|top": [
+     3.4211,
+     228
+    ],
+    "LIT|jungle": [
+     3.4561,
+     228
+    ],
+    "LIT|support": [
+     3.4386,
+     228
+    ],
+    "Arabian League|mid": [
+     3.3623,
+     334
+    ],
+    "Arabian League|jungle": [
+     3.5838,
+     334
+    ],
+    "Arabian League|top": [
+     3.9611,
+     334
+    ],
+    "Arabian League|support": [
+     4.1108,
+     334
+    ],
+    "Arabian League|bot": [
+     3.5958,
+     334
+    ],
+    "Icelandic Esports League|mid": [
+     3.0,
+     12
+    ],
+    "Icelandic Esports League|jungle": [
+     3.5833,
+     12
+    ],
+    "Icelandic Esports League|bot": [
+     4.3333,
+     12
+    ],
+    "Icelandic Esports League|support": [
+     4.3333,
+     12
+    ],
+    "Icelandic Esports League|top": [
+     3.4167,
+     12
+    ],
+    "Circuito Desafiante|jungle": [
+     3.512,
+     334
+    ],
+    "Circuito Desafiante|mid": [
+     2.8772,
+     334
+    ],
+    "Circuito Desafiante|top": [
+     3.0659,
+     334
+    ],
+    "Circuito Desafiante|bot": [
+     3.0629,
+     334
+    ],
+    "Circuito Desafiante|support": [
+     3.2994,
+     334
+    ],
+    "North American Challengers League|jungle": [
+     3.3069,
+     378
+    ],
+    "North American Challengers League|mid": [
+     3.1429,
+     378
+    ],
+    "North American Challengers League|bot": [
+     2.6667,
+     378
+    ],
+    "North American Challengers League|top": [
+     2.8968,
+     378
+    ],
+    "North American Challengers League|support": [
+     3.627,
+     378
+    ],
+    "LCK Challengers League|top": [
+     2.9808,
+     468
+    ],
+    "LCK Challengers League|jungle": [
+     3.3996,
+     468
+    ],
+    "LCK Challengers League|mid": [
+     3.1111,
+     468
+    ],
+    "LCK Challengers League|support": [
+     3.4017,
+     468
+    ],
+    "LCK Challengers League|bot": [
+     3.1859,
+     468
+    ],
+    "Hellenic Legends League|top": [
+     3.4032,
+     248
+    ],
+    "Hellenic Legends League|bot": [
+     3.0806,
+     248
+    ],
+    "Hellenic Legends League|support": [
+     3.7903,
+     248
+    ],
+    "Hellenic Legends League|jungle": [
+     3.6331,
+     248
+    ],
+    "Hellenic Legends League|mid": [
+     3.3508,
+     248
+    ],
+    "TransIP Road Of Legends|jungle": [
+     3.6453,
+     234
+    ],
+    "TransIP Road Of Legends|mid": [
+     3.3376,
+     234
+    ],
+    "TransIP Road Of Legends|bot": [
+     3.4658,
+     234
+    ],
+    "TransIP Road Of Legends|support": [
+     3.9145,
+     234
+    ],
+    "TransIP Road Of Legends|top": [
+     4.0769,
+     234
+    ],
+    "Asia Masters Elite Invitational Tournament|jungle": [
+     3.8257,
+     218
+    ],
+    "Asia Masters Elite Invitational Tournament|top": [
+     3.3303,
+     218
+    ],
+    "Asia Masters Elite Invitational Tournament|support": [
+     3.6514,
+     218
+    ],
+    "Asia Masters Elite Invitational Tournament|bot": [
+     3.211,
+     218
+    ],
+    "Asia Masters Elite Invitational Tournament|mid": [
+     3.2018,
+     218
+    ],
+    "LCK Academy Series|bot": [
+     3.5441,
+     340
+    ],
+    "LCK Academy Series|top": [
+     3.5676,
+     340
+    ],
+    "LCK Academy Series|jungle": [
+     3.5118,
+     340
+    ],
+    "LCK Academy Series|support": [
+     3.3765,
+     340
+    ],
+    "LCK Academy Series|mid": [
+     3.5811,
+     339
+    ],
+    "Tencent LoL Pro League|top": [
+     2.7812,
+     576
+    ],
+    "Tencent LoL Pro League|jungle": [
+     3.0573,
+     576
+    ],
+    "Tencent LoL Pro League|bot": [
+     2.6979,
+     576
+    ],
+    "Tencent LoL Pro League|support": [
+     3.1302,
+     576
+    ],
+    "Tencent LoL Pro League|mid": [
+     2.5417,
+     576
+    ],
+    "League of Legends Championship Pacific|top": [
+     3.0917,
+     240
+    ],
+    "League of Legends Championship Pacific|jungle": [
+     3.1292,
+     240
+    ],
+    "League of Legends Championship Pacific|mid": [
+     2.6792,
+     240
+    ],
+    "League of Legends Championship Pacific|bot": [
+     2.5917,
+     240
+    ],
+    "League of Legends Championship Pacific|support": [
+     3.1417,
+     240
+    ],
+    "Hellenic Challengers Cup|jungle": [
+     4.0872,
+     218
+    ],
+    "Hellenic Challengers Cup|mid": [
+     4.0138,
+     218
+    ],
+    "Hellenic Challengers Cup|top": [
+     3.789,
+     218
+    ],
+    "Hellenic Challengers Cup|support": [
+     4.422,
+     218
+    ],
+    "Hellenic Challengers Cup|bot": [
+     3.8991,
+     218
+    ],
+    "LoL EMEA Championship|top": [
+     2.9225,
+     284
+    ],
+    "LoL EMEA Championship|jungle": [
+     2.7958,
+     284
+    ],
+    "LoL EMEA Championship|bot": [
+     2.5493,
+     284
+    ],
+    "LoL EMEA Championship|support": [
+     3.0739,
+     284
+    ],
+    "LoL EMEA Championship|mid": [
+     2.8697,
+     284
+    ],
+    "Circuit Brazilian League of Legends|mid": [
+     2.7028,
+     212
+    ],
+    "Circuit Brazilian League of Legends|jungle": [
+     3.1557,
+     212
+    ],
+    "Circuit Brazilian League of Legends|bot": [
+     2.3302,
+     212
+    ],
+    "Circuit Brazilian League of Legends|support": [
+     2.4575,
+     212
+    ],
+    "Circuit Brazilian League of Legends|top": [
+     2.8255,
+     212
+    ],
+    "League of Legends Championship Series|top": [
+     2.6636,
+     214
+    ],
+    "League of Legends Championship Series|jungle": [
+     2.7383,
+     214
+    ],
+    "League of Legends Championship Series|support": [
+     2.4533,
+     214
+    ],
+    "League of Legends Championship Series|mid": [
+     2.7103,
+     214
+    ],
+    "League of Legends Championship Series|bot": [
+     2.4159,
+     214
+    ],
+    "lck_challengers_league|jungle": [
+     3.5714,
+     7
+    ],
+    "Liga Regional Norte|bot": [
+     3.4554,
+     202
+    ],
+    "Liga Regional Norte|top": [
+     3.3812,
+     202
+    ],
+    "Liga Regional Norte|mid": [
+     3.5792,
+     202
+    ],
+    "Liga Regional Norte|jungle": [
+     3.9703,
+     202
+    ],
+    "Liga Regional Norte|support": [
+     4.302,
+     202
+    ],
+    "EMEA Masters|top": [
+     3.3452,
+     252
+    ],
+    "EMEA Masters|mid": [
+     3.1349,
+     252
+    ],
+    "EMEA Masters|bot": [
+     2.9444,
+     252
+    ],
+    "EMEA Masters|support": [
+     3.7183,
+     252
+    ],
+    "EMEA Masters|jungle": [
+     3.5198,
+     252
+    ],
+    "Liga Regional Sur|jungle": [
+     4.1933,
+     238
+    ],
+    "Liga Regional Sur|mid": [
+     3.6681,
+     238
+    ],
+    "Liga Regional Sur|top": [
+     3.437,
+     238
+    ],
+    "Liga Regional Sur|bot": [
+     2.8782,
+     238
+    ],
+    "Liga Regional Sur|support": [
+     4.2059,
+     238
+    ],
+    "Liga Espa\u00f1ola de League of Legends|support": [
+     3.5,
+     236
+    ],
+    "Liga Espa\u00f1ola de League of Legends|top": [
+     2.8941,
+     236
+    ],
+    "Liga Espa\u00f1ola de League of Legends|jungle": [
+     3.3475,
+     236
+    ],
+    "Liga Espa\u00f1ola de League of Legends|mid": [
+     3.0932,
+     236
+    ],
+    "Liga Espa\u00f1ola de League of Legends|bot": [
+     3.0763,
+     236
+    ],
+    "La Ligue Fran\u00e7aise|top": [
+     3.317,
+     224
+    ],
+    "La Ligue Fran\u00e7aise|mid": [
+     3.1205,
+     224
+    ],
+    "La Ligue Fran\u00e7aise|jungle": [
+     3.5089,
+     224
+    ],
+    "La Ligue Fran\u00e7aise|bot": [
+     2.6964,
+     224
+    ],
+    "La Ligue Fran\u00e7aise|support": [
+     3.4777,
+     224
+    ],
+    "Turkish Championship League|support": [
+     3.3368,
+     190
+    ],
+    "Turkish Championship League|jungle": [
+     3.4947,
+     190
+    ],
+    "Turkish Championship League|mid": [
+     3.1368,
+     190
+    ],
+    "Turkish Championship League|top": [
+     2.9053,
+     190
+    ],
+    "Turkish Championship League|bot": [
+     3.1737,
+     190
+    ],
+    "Arabian League 2nd Division|mid": [
+     3.7756,
+     156
+    ],
+    "Arabian League 2nd Division|support": [
+     4.9551,
+     156
+    ],
+    "Arabian League 2nd Division|top": [
+     3.7564,
+     156
+    ],
+    "Arabian League 2nd Division|bot": [
+     4.4487,
+     156
+    ],
+    "Arabian League 2nd Division|jungle": [
+     4.1474,
+     156
+    ],
+    "LoL Japan League|top": [
+     3.4218,
+     358
+    ],
+    "LoL Japan League|jungle": [
+     3.8212,
+     358
+    ],
+    "LoL Japan League|mid": [
+     3.3715,
+     358
+    ],
+    "LoL Japan League|bot": [
+     2.9441,
+     358
+    ],
+    "LoL Japan League|support": [
+     4.0698,
+     358
+    ],
+    "Nexus League|bot": [
+     2.7912,
+     182
+    ],
+    "Nexus League|jungle": [
+     3.8462,
+     182
+    ],
+    "Nexus League|support": [
+     4.0659,
+     182
+    ],
+    "Nexus League|mid": [
+     3.4011,
+     182
+    ],
+    "Nexus League|top": [
+     3.022,
+     182
+    ],
+    "RIVALS LEAGUE|top": [
+     4.125,
+     8
+    ],
+    "RIVALS LEAGUE|jungle": [
+     3.25,
+     8
+    ],
+    "RIVALS LEAGUE|bot": [
+     3.875,
+     8
+    ],
+    "RIVALS LEAGUE|mid": [
+     3.375,
+     8
+    ],
+    "RIVALS LEAGUE|support": [
+     5.875,
+     8
+    ],
+    "Esports World Cup|top": [
+     3.0927,
+     464
+    ],
+    "Esports World Cup|mid": [
+     3.0129,
+     464
+    ],
+    "Esports World Cup|bot": [
+     2.9397,
+     464
+    ],
+    "Esports World Cup|support": [
+     3.4203,
+     464
+    ],
+    "Esports World Cup|jungle": [
+     3.4483,
+     464
+    ],
+    "Esports Balkan League|bot": [
+     3.6329,
+     158
+    ],
+    "Esports Balkan League|top": [
+     3.6962,
+     158
+    ],
+    "Esports Balkan League|jungle": [
+     3.5886,
+     158
+    ],
+    "Esports Balkan League|mid": [
+     3.1392,
+     158
+    ],
+    "Esports Balkan League|support": [
+     3.8038,
+     158
+    ],
+    "Benelux Ascend Series|support": [
+     3.8404,
+     188
+    ],
+    "Benelux Ascend Series|mid": [
+     3.4574,
+     188
+    ],
+    "Benelux Ascend Series|top": [
+     3.617,
+     188
+    ],
+    "Benelux Ascend Series|jungle": [
+     4.2553,
+     188
+    ],
+    "Benelux Ascend Series|bot": [
+     3.7606,
+     188
+    ],
+    "lck_challengers_league|support": [
+     2.0,
+     1
+    ],
+    "Hitpoint Masters|top": [
+     3.7102,
+     176
+    ],
+    "Hitpoint Masters|jungle": [
+     4.2216,
+     176
+    ],
+    "Hitpoint Masters|mid": [
+     3.9716,
+     176
+    ],
+    "Hitpoint Masters|bot": [
+     4.1875,
+     176
+    ],
+    "Hitpoint Masters|support": [
+     4.4205,
+     176
+    ],
+    "Hitpoint Challengers|jungle": [
+     3.8485,
+     198
+    ],
+    "Hitpoint Challengers|mid": [
+     4.3788,
+     198
+    ],
+    "Hitpoint Challengers|support": [
+     4.4596,
+     198
+    ],
+    "Hitpoint Challengers|top": [
+     3.6566,
+     198
+    ],
+    "Hitpoint Challengers|bot": [
+     4.3283,
+     198
+    ],
+    "LOL DK Ligaen|mid": [
+     3.6875,
+     16
+    ],
+    "LOL DK Ligaen|jungle": [
+     4.25,
+     16
+    ],
+    "LOL DK Ligaen|support": [
+     4.375,
+     16
+    ],
+    "LOL DK Ligaen|top": [
+     3.5,
+     16
+    ],
+    "LOL DK Ligaen|bot": [
+     3.1875,
+     16
+    ],
+    "Pacific Championship Series|bot": [
+     3.6146,
+     96
+    ],
+    "Pacific Championship Series|top": [
+     3.6042,
+     96
+    ],
+    "Pacific Championship Series|mid": [
+     3.4583,
+     96
+    ],
+    "Pacific Championship Series|jungle": [
+     3.4688,
+     96
+    ],
+    "Pacific Championship Series|support": [
+     3.7396,
+     96
+    ],
+    "Prime League 1st Division|bot": [
+     3.85,
+     440
+    ],
+    "Prime League 1st Division|jungle": [
+     4.1341,
+     440
+    ],
+    "Prime League 1st Division|support": [
+     4.5727,
+     440
+    ],
+    "Prime League 1st Division|mid": [
+     3.2864,
+     440
+    ],
+    "Prime League 1st Division|top": [
+     3.7727,
+     440
+    ],
+    "Liga Portuguesa|top": [
+     3.0702,
+     114
+    ],
+    "Liga Portuguesa|bot": [
+     3.7368,
+     114
+    ],
+    "Liga Portuguesa|mid": [
+     3.5702,
+     114
+    ],
+    "Liga Portuguesa|jungle": [
+     3.693,
+     114
+    ],
+    "Liga Portuguesa|support": [
+     3.8158,
+     114
+    ],
+    "Vietnam Championship Series|top": [
+     3.3644,
+     118
+    ],
+    "Vietnam Championship Series|jungle": [
+     3.6864,
+     118
+    ],
+    "Vietnam Championship Series|mid": [
+     3.1271,
+     118
+    ],
+    "Vietnam Championship Series|bot": [
+     3.322,
+     118
+    ],
+    "Vietnam Championship Series|support": [
+     3.2373,
+     118
+    ],
+    "Esports Series Madrid|mid": [
+     4.0714,
+     14
+    ],
+    "Esports Series Madrid|support": [
+     4.8571,
+     14
+    ],
+    "Esports Series Madrid|jungle": [
+     5.1429,
+     14
+    ],
+    "Esports Series Madrid|bot": [
+     4.7857,
+     14
+    ],
+    "Esports Series Madrid|top": [
+     4.7143,
+     14
+    ],
+    "Streamers Clash|top": [
+     3.449,
+     98
+    ],
+    "Streamers Clash|jungle": [
+     3.2857,
+     98
+    ],
+    "Streamers Clash|mid": [
+     2.9082,
+     98
+    ],
+    "Streamers Clash|bot": [
+     3.051,
+     98
+    ],
+    "Streamers Clash|support": [
+     3.9796,
+     98
+    ],
+    "Comic Con Baltics|bot": [
+     3.9,
+     10
+    ],
+    "Comic Con Baltics|top": [
+     4.0,
+     10
+    ],
+    "Comic Con Baltics|mid": [
+     4.5,
+     10
+    ],
+    "Comic Con Baltics|jungle": [
+     3.8,
+     10
+    ],
+    "Comic Con Baltics|support": [
+     4.9,
+     10
+    ],
+    "Northern League of Legends Championship|top": [
+     3.7927,
+     164
+    ],
+    "Northern League of Legends Championship|jungle": [
+     3.9634,
+     164
+    ],
+    "Northern League of Legends Championship|mid": [
+     3.4085,
+     164
+    ],
+    "Northern League of Legends Championship|bot": [
+     3.3659,
+     164
+    ],
+    "Northern League of Legends Championship|support": [
+     3.9085,
+     164
+    ],
+    "Asia Masters|jungle": [
+     3.7778,
+     126
+    ],
+    "Asia Masters|bot": [
+     3.3175,
+     126
+    ],
+    "Asia Masters|top": [
+     3.0556,
+     126
+    ],
+    "Asia Masters|mid": [
+     3.619,
+     126
+    ],
+    "Asia Masters|support": [
+     3.746,
+     126
+    ],
+    "Nexus Tour|jungle": [
+     4.4,
+     60
+    ],
+    "Nexus Tour|mid": [
+     3.6667,
+     60
+    ],
+    "Nexus Tour|bot": [
+     3.6333,
+     60
+    ],
+    "Nexus Tour|top": [
+     3.3333,
+     60
+    ],
+    "Nexus Tour|support": [
+     4.4167,
+     60
+    ],
+    "Asian Games 2018|top": [
+     4.0167,
+     60
+    ],
+    "Asian Games 2018|support": [
+     4.1333,
+     60
+    ],
+    "Asian Games 2018|jungle": [
+     3.8833,
+     60
+    ],
+    "Asian Games 2018|mid": [
+     3.4167,
+     60
+    ],
+    "Asian Games 2018|bot": [
+     3.6167,
+     60
+    ],
+    "Komplettligaen|mid": [
+     3.5,
+     8
+    ],
+    "Komplettligaen|top": [
+     3.375,
+     8
+    ],
+    "Komplettligaen|bot": [
+     4.125,
+     8
+    ],
+    "Komplettligaen|jungle": [
+     4.5,
+     8
+    ],
+    "Komplettligaen|support": [
+     4.0,
+     8
+    ],
+    "Esports Nations Cup|top": [
+     3.2044,
+     362
+    ],
+    "Esports Nations Cup|jungle": [
+     3.826,
+     362
+    ],
+    "Esports Nations Cup|mid": [
+     3.4503,
+     362
+    ],
+    "Esports Nations Cup|bot": [
+     3.4061,
+     362
+    ],
+    "Esports Nations Cup|support": [
+     3.9227,
+     362
+    ],
+    "Kings Lendas|top": [
+     3.8917,
+     120
+    ],
+    "Kings Lendas|jungle": [
+     3.6417,
+     120
+    ],
+    "Kings Lendas|mid": [
+     3.5833,
+     120
+    ],
+    "Kings Lendas|bot": [
+     3.7667,
+     120
+    ],
+    "Kings Lendas|support": [
+     4.2667,
+     120
+    ],
+    "Mid-Season Invitational|top": [
+     3.5493,
+     142
+    ],
+    "Mid-Season Invitational|jungle": [
+     3.4859,
+     142
+    ],
+    "Mid-Season Invitational|mid": [
+     2.8451,
+     142
+    ],
+    "Mid-Season Invitational|bot": [
+     2.9718,
+     142
+    ],
+    "Mid-Season Invitational|support": [
+     3.8028,
+     142
+    ],
+    "Equal Esports Cup|top": [
+     3.4423,
+     104
+    ],
+    "Equal Esports Cup|jungle": [
+     3.4327,
+     104
+    ],
+    "Equal Esports Cup|mid": [
+     2.8365,
+     104
+    ],
+    "Equal Esports Cup|bot": [
+     2.7692,
+     104
+    ],
+    "Equal Esports Cup|support": [
+     3.8462,
+     104
+    ],
+    "City Heroes Championship|top": [
+     3.0,
+     12
+    ],
+    "City Heroes Championship|jungle": [
+     4.5833,
+     12
+    ],
+    "City Heroes Championship|mid": [
+     5.0833,
+     12
+    ],
+    "City Heroes Championship|bot": [
+     3.6364,
+     11
+    ],
+    "City Heroes Championship|support": [
+     5.4167,
+     12
+    ],
+    "KeSPA Cup|top": [
+     4.05,
+     60
+    ],
+    "KeSPA Cup|jungle": [
+     3.7333,
+     60
+    ],
+    "KeSPA Cup|mid": [
+     3.5,
+     60
+    ],
+    "KeSPA Cup|bot": [
+     3.2667,
+     60
+    ],
+    "KeSPA Cup|support": [
+     5.6667,
+     60
+    ],
+    "University Esports Masters|jungle": [
+     5.0909,
+     88
+    ],
+    "University Esports Masters|support": [
+     4.6364,
+     88
+    ],
+    "University Esports Masters|top": [
+     4.7273,
+     88
+    ],
+    "University Esports Masters|mid": [
+     5.25,
+     88
+    ],
+    "University Esports Masters|bot": [
+     4.3864,
+     88
+    ]
+   }
+  }
+ },
+ "params": {
+  "kills": {
+   "form": "share",
+   "hl": 60.0,
+   "k0": 16.0,
+   "ko": 10.0,
+   "kt": 10.0,
+   "ew": 0.5
+  },
+  "assists": {
+   "form": "share",
+   "hl": 60.0,
+   "k0": 64.0,
+   "ko": 20.0,
+   "kt": 20.0,
+   "ew": 0.5
+  },
+  "deaths": {
+   "form": "rate",
+   "hl": 60.0,
+   "k0": 8.0,
+   "ko": 20.0,
+   "kt": 0.0,
+   "ew": 0.5
+  }
+ },
+ "nb_size": {
+  "kills|1": 3.023,
+  "kills|12": 5.402,
+  "kills|123": 7.653,
+  "assists|1": 3.395,
+  "assists|12": 6.814,
+  "assists|123": 8.111,
+  "deaths|1": 8.595,
+  "deaths|12": 12.904,
+  "deaths|123": 16.277
+ },
+ "train": [
+  "2026-04-01",
+  "2026-08-01"
+ ],
+ "fitted_at": "2026-10-17T13:40:05+00:00",
+ "version": "lol-1",
+ "protocol": "lol/EVALUATION.md A1-A5",
+ "selection": {
+  "kills": "lol-1",
+  "assists": "lol-1",
+  "deaths": "lol-1"
+ },
+ "selection_rule": "A1 rule per stat; lol-2 replaces only under the same rule",
+ "selection_evidence": {
+  "kills": {
+   "b0_vs_lol1": "lol-1",
+   "lol2_replaces": false,
+   "Maps 1-2": {
+    "B0": {
+     "mae": 3.2184,
+     "logscore": -2.6729
+    },
+    "lol-1": {
+     "mae": 3.0896,
+     "logscore": -2.6383
+    },
+    "lol-2": {
+     "mae": 3.1267,
+     "logscore": -2.6412
+    }
+   },
+   "Maps 1-3": {
+    "B0": {
+     "mae": 3.8909,
+     "logscore": -2.8578
+    },
+    "lol-1": {
+     "mae": 3.6844,
+     "logscore": -2.8196
+    },
+    "lol-2": {
+     "mae": 3.7422,
+     "logscore": -2.827
+    }
+   }
+  },
+  "assists": {
+   "b0_vs_lol1": "lol-1",
+   "lol2_replaces": false,
+   "Maps 1-2": {
+    "B0": {
+     "mae": 5.4266,
+     "logscore": -3.2872
+    },
+    "lol-1": {
+     "mae": 5.1988,
+     "logscore": -3.2515
+    },
+    "lol-2": {
+     "mae": 5.2427,
+     "logscore": -3.2502
+    }
+   },
+   "Maps 1-3": {
+    "B0": {
+     "mae": 6.5682,
+     "logscore": -3.5008
+    },
+    "lol-1": {
+     "mae": 6.2632,
+     "logscore": -3.4706
+    },
+    "lol-2": {
+     "mae": 6.3151,
+     "logscore": -3.4663
+    }
+   }
+  },
+  "deaths": {
+   "b0_vs_lol1": "lol-1",
+   "lol2_replaces": false,
+   "Maps 1-2": {
+    "B0": {
+     "mae": 2.671,
+     "logscore": -2.6028
+    },
+    "lol-1": {
+     "mae": 2.6089,
+     "logscore": -2.5774
+    },
+    "lol-2": {
+     "mae": 2.6252,
+     "logscore": -2.5794
+    }
+   },
+   "Maps 1-3": {
+    "B0": {
+     "mae": 3.1219,
+     "logscore": -2.773
+    },
+    "lol-1": {
+     "mae": 3.0584,
+     "logscore": -2.7465
+    },
+    "lol-2": {
+     "mae": 3.1063,
+     "logscore": -2.7567
+    }
+   }
+  }
+ },
+ "fit_period": {
+  "targets_from": "2026-04-01",
+  "targets_before": "2026-08-01",
+  "history_from": "2026-02-16"
+ },
+ "final_report_sha256": "eeb40a4777a1d0bdc15bc4bb4049168b6f6ff48426784ef40b3d02fdefa88687",
+ "history_snapshot_sha256": "a1f892f40649a6da1630fbf0a0af935e5ab318b06394bea6457c5b373653c726",
+ "seed_rule": "lol-2 simulation seed = crc32(market_key|day); evaluation seed = crc32(match|scope)",
+ "written_at": "2026-10-17T14:01:27+00:00"
+}
