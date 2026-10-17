@@ -395,3 +395,19 @@ def test_make_fit_applies_the_a1_rule_to_lol2(tmp_path):
     fit = evaluate.make_fit(str(p), "abc")
     assert fit["selection"] == {"kills": "lol-2", "assists": "B0", "deaths": "B0"}
     assert fit["sim"] == {"hl": 60.0} and fit["history_snapshot_sha256"] == "abc" and fit["final_report_sha256"]
+
+
+def test_overlap_with_a_differently_named_team_is_one_series(con):
+    """2026-10-17 audit: LoL Esports names a team differently ("Beta Academy" vs Leaguepedia "Beta Gaming"). One team
+    known + game 1 within 20 minutes = the same series: left out (no duplicate games) and the other team linked."""
+    load_world(con)
+    build.build(con)
+    le_copy_of_m1(con)
+    m = store.current_rows(con, "LE:Match")[0]
+    m["teams"][1].update(name="Beta Academy", code="BAC")
+    store.put_rows(con, "LE:Match", [m], lambda r: r["match_id"], lambda r: "2026-10-10 09:00:00", None, "2026-10-12T00:00:00Z")
+    con.commit()
+    build.build(con)                          # pass 1 finds the overlap by start time and links LB; pass 2 then matches exactly
+    assert not con.execute("SELECT 1 FROM quarantine WHERE reason = 'cross_source_teams_not_matched'").fetchall()
+    assert con.execute("SELECT COUNT(*) FROM c_player_games").fetchone()[0] == 20                  # one copy of the series
+    assert store.canonical_id(con, store.find_entity(con, "team", "lolesports:team", "LB")) ==         store.find_entity(con, "team", "leaguepedia:page", "Beta Gaming")
