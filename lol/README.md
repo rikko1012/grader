@@ -43,8 +43,8 @@ LoL's folder.
 ## Commands
 
 ```
-python lol_scout.py sync                      # fill the history (LoL Esports; + Leaguepedia when configured)
-python lol_scout.py sync --since 2025-01-01   # backfill further back
+python lol_scout.py sync                      # fill the history: the last ~8 months (LoL Esports; + Leaguepedia when configured)
+LOL_BACKFILL_DAYS=700 python lol_scout.py sync   # backfill further back (sync rejects --since)
 python lol_scout.py status                    # what the history holds, which sources are configured
 python lol_scout.py slate                     # LoL matches in the next 36 hours
 python lol_scout.py player Faker              # role, team, per-game averages, Map 1 / Maps 1-2 / Maps 1-3 totals
@@ -59,9 +59,32 @@ python -m lol.backtest                        # the model's chronological test (
 
 ## Keeping the history fresh
 
-Run `python lol_scout.py sync` every couple of hours. A match it already holds is skipped, so a run only fetches new
-games. `lol/deploy/lol-sync.yml` is a ready GitHub Actions schedule (the HLTV scraper's set-up), copy it to
-`.github/workflows/` and add the secrets it lists. It's not active until you do.
+Render's worker owns the serving history. `python lol_scout.py sync` uses that same canonical ingestion path locally.
+The legacy `lol/deploy/lol-sync.yml` template predates this consolidation; do not enable it as a second production writer.
+Use `LOL_BACKFILL_DAYS` to choose the collection window before process start. Unsupported legacy `--since`, `--until`,
+`--leagues` and `--force` options are rejected instead of being silently ignored.
+
+### GitHub history reaches Scout
+
+PR checks run the offline LoL and CS2 tests, including a disposable PostgreSQL service. They do not fetch providers.
+The manual `lol-full-history` job collects from January 2025 through the same data-center pipeline and retains its
+resumable source database. It publishes every current source record (including explicit removals) to `lol_source_inbox`
+in the repository's `LOL_DB_DSN` database, using that secret as `LOL_HANDOFF_DSN`. A missing destination is a failure,
+not a successful artifact-only collection. `LOL_DB_DSN` is deliberately empty inside the collector, so it cannot
+replace Scout's serving tables with an isolated partial snapshot.
+
+Scout's worker reads the inbox automatically through its existing `LOL_DB_DSN`, imports bounded batches with a
+transactional cursor, preserves source revisions, and rebuilds/exports the combined history. Source ids are passed
+across; local canonical ids are never copied between databases. Older collector observations cannot undo newer local
+corrections. Merely being absent from a batch does not delete a record. The status response exposes `history_handoff`
+and `last_history_import`, alongside the normal export/read-back counts.
+
+This path preserves all collected fields. Missing identities or incomplete games still follow the existing quarantine
+and scope checks before becoming grading inputs. It does not promote a model or open the sealed evaluation period.
+The collector can finish a bounded run with partial coverage; coverage and checkpoints are saved for resumption.
+
+Already-running jobs use the code they started with; updating this PR does not migrate their data or replace that
+running process. A live handoff is verified only after this branch is deployed and the revised collector publishes.
 
 ## One LoL extension: data center + scout (consolidated 2026-10-17; not released to members)
 

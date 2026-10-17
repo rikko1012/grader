@@ -18,6 +18,9 @@ from datetime import date, datetime, timedelta, timezone
 from . import cache, history, lolesports
 
 
+DEFAULT_DAYS = 240        # ~8 months: enough recent history for the current props (older seasons: --since)
+
+
 def _log(msg):
     print(msg, file=sys.stderr, flush=True)
 
@@ -33,26 +36,33 @@ def game_winners(played, stats, score):
     """{game_id: (winning team id or None, basis)} for a match's played games (in game order). Certain first: in a sweep
     every game went to the series winner, and the last game of any series is the series winner's. The other games use
     the inferred winner (lolesports.winner) only when every inferred win adds up to the official series score."""
-    if not played or len(played) != sum(v or 0 for v in score.values()):
-        return {g["id"]: (None, "series incomplete in the feed") for g in played}
+    if not played:
+        return {}
+    total = sum(v or 0 for v in score.values())
     ranked = sorted(score, key=lambda t: score[t] or 0, reverse=True)
     tied = len(ranked) < 2 or (score[ranked[0]] or 0) == (score[ranked[1]] or 0)      # e.g. a best-of-2 drawn 1-1
     series_winner = None if tied else ranked[0]
     if series_winner and sum(score[t] or 0 for t in ranked[1:]) == 0:
-        return {g["id"]: (series_winner, "series sweep") for g in played}
-    inferred = {}
+        return {g["id"]: (series_winner, "series sweep") for g in played}            # even with games missing
+    if len(played) != total:                    # a game missing from the feed: only the last game is still certain
+        return {g["id"]: ((series_winner, "last game of the series") if series_winner and g.get("number") == total
+                          else (None, "series incomplete in the feed")) for g in played}
+    inferred, basis = {}, {}
     for g in played:
         s = stats[g["id"]]
-        inferred[g["id"]] = (s["sides"].get(s["winner_side"]) or {}).get("team_id") if s.get("winner_side") else None
+        side, basis[g["id"]] = lolesports.winner(s["sides"]["blue"], s["sides"]["red"])   # today's rule, also on
+        inferred[g["id"]] = (s["sides"].get(side) or {}).get("team_id") if side else None  # games cached earlier
     wins = Counter(inferred.values())
-    consistent = None not in inferred.values() and all(wins.get(t, 0) == (n or 0) for t, n in score.items())
+    consistent = (None not in inferred.values() and all(wins.get(t, 0) == (n or 0) for t, n in score.items())
+                  and (series_winner is None or inferred[played[-1]["id"]] == series_winner))   # the last game is the
+    # series winner's: inferences that put it elsewhere are wrong somewhere, even when the counts add up
     last = played[-1]["id"]
     out = {}
     for g in played:
         if g["id"] == last and series_winner:
             out[g["id"]] = (series_winner, "last game of the series")
         elif consistent:
-            out[g["id"]] = (inferred[g["id"]], stats[g["id"]].get("winner_basis") + ", matches the series score")
+            out[g["id"]] = (inferred[g["id"]], basis[g["id"]] + ", matches the series score")
         else:
             out[g["id"]] = (None, "inferred wins disagree with the series score")
     return out
@@ -112,13 +122,27 @@ def _fetch_match(m, now):
     return det, stats
 
 
+def _note_nofeed(db, m):
+    """A match the feed has no data for: record its completed games in lol_missing from the cached match details (no
+    request), so a database that never saw the run that found it still lists them."""
+    det = cache.get("le_done", f"getEventDetails?id={m['match_id']}")
+    if not det:
+        return
+    label = " vs ".join(t.get("name") or "?" for t in (det.get("match") or {}).get("teams") or [])
+    for g in (det.get("match") or {}).get("games") or []:
+        if g.get("state") == "completed" and not db.query("SELECT 1 FROM lol_games WHERE game_key = ?", (f"le:{g['id']}",)):
+            history.note_missing(db, f"le:{g['id']}", "le", f"le:{m['match_id']}", g.get("number"), m.get("league"),
+                                 m.get("start"), label, "no feed data for this match")
+    db.commit()
+
+
 def sync_lolesports(db, leagues=None, since=None, max_matches=None, now=None, workers=4, force=False):
     """Fetch every completed match not yet held in full. Returns {"matches", "games", "skipped", "no_feed", "errors"}.
     `workers` matches are fetched at once; the per-host pacing in lol/net.py still caps the request rate (4 / s per
     host), and only this thread writes to the database. force=True re-derives matches already held (from the cache:
     finished games are never downloaded twice) - after a change to how rows are built."""
     now = now or datetime.now(timezone.utc)
-    since = since or (now - timedelta(days=120)).date()
+    since = since or (now - timedelta(days=DEFAULT_DAYS)).date()
     known = {} if force else history.known_matches(db, "le")
     todo = sorted(lolesports.matches_since(leagues, since), key=lambda m: m.get("start") or "")
     done = Counter()
@@ -129,6 +153,7 @@ def sync_lolesports(db, leagues=None, since=None, max_matches=None, now=None, wo
             done["skipped"] += 1
         elif cache.get("le_nofeed", str(m["match_id"]), 30 * 86400) is not None:
             done["no_feed"] += 1
+            _note_nofeed(db, m)                 # still listed as missing in THIS database (cache only, no request)
         else:
             pending.append(m)
     if max_matches:
@@ -145,14 +170,21 @@ def sync_lolesports(db, leagues=None, since=None, max_matches=None, now=None, wo
                 done["errors"] += 1
                 continue
             rows = lolesports_rows(m, det, stats)
+            label = " vs ".join(t.get("name") or "?" for t in (det.get("match") or {}).get("teams") or [])
+            for g in (det.get("match") or {}).get("games") or []:
+                if g.get("state") == "completed" and not stats.get(g.get("id")):
+                    history.note_missing(db, f"le:{g['id']}", "le", f"le:{m['match_id']}", g.get("number"),
+                                         m.get("league"), m.get("start"), label,
+                                         "feed has no final frame (stopped before the game ended, or no feed)")
+                    done["games_missing"] += 1
             if not rows:
+                db.commit()
                 st = _when(m.get("start"))
                 if st and now - st > timedelta(days=3):
                     cache.put("le_nofeed", str(m["match_id"]), True)   # old match, no feed: not asked again for 30 days
                 done["no_feed"] += 1
                 continue
-            for game, players in rows:
-                history.save_game(db, game, players)
+            history.save_games(db, rows)
             db.commit()
             done["matches"] += 1
             done["games"] += len(rows)
@@ -162,26 +194,58 @@ def sync_lolesports(db, leagues=None, since=None, max_matches=None, now=None, wo
     return dict(done)
 
 
-def sync_leaguepedia(db, since=None, until=None, where=None, now=None):
-    """Every Leaguepedia scoreboard game since `since`, a week at a time. Needs LEAGUEPEDIA_USER / _BOT_PASSWORD."""
+RECENT_DAYS = 14          # Leaguepedia weeks this recent are always re-read (scoreboards still get corrected)
+
+
+def sync_leaguepedia(db, since=None, until=None, where=None, now=None, force=False):
+    """Every Leaguepedia scoreboard game since `since`, a week at a time. Needs LEAGUEPEDIA_USER / _BOT_PASSWORD.
+    Resumable: each finished week is noted in lol_sync_state, and a later run skips it (except the last RECENT_DAYS and
+    with force=True) - a run stopped by a time limit carries on where it stopped instead of starting over."""
     from . import leaguepedia
     now = now or datetime.now(timezone.utc)
-    since = since or (now - timedelta(days=120)).date()
+    since = since or (now - timedelta(days=DEFAULT_DAYS)).date()
     until = until or (now + timedelta(days=1)).date()
+    recent = (now - timedelta(days=RECENT_DAYS)).date()
     site = leaguepedia.Leaguepedia()
-    done = Counter()
+    done, failed = Counter(), []
     day = since
     while day < until:
         nxt = min(day + timedelta(days=7), until)
-        rows = site.player_games(day, nxt, where=where)
-        for game, players in leaguepedia.to_history(rows):
-            history.save_game(db, game, players)
-            done["games"] += 1
+        mark = f"lp:week:{day}:{nxt}:{where or ''}"
+        if not force and nxt <= recent and (history.get_state(db, mark) or (not where and db.query(
+                "SELECT 1 FROM lol_games WHERE source = 'lp' AND played_at >= ? AND played_at < ? LIMIT 1",
+                (f"{day}T00:00:00Z", f"{nxt}T00:00:00Z")))):
+            # held: marked, or (no filter) a settled week already holding Leaguepedia games - each week is saved in
+            # one commit, so a stored week is complete (also covers weeks saved before the marks existed)
+            done["weeks_already_held"] += 1
+            day = nxt
+            continue
+        try:
+            rows = site.player_games(day, nxt, where=where)
+        except Exception as e:          # noqa: BLE001 - one bad week never stops the sync; it is reported, not hidden
+            failed.append(f"{day}..{nxt}: {type(e).__name__}: {str(e)[:120]}")
+            _log(f"  Leaguepedia {day} .. {nxt}: FAILED ({type(e).__name__}) - re-run sync for this week")
+            day = nxt
+            continue
+        items = leaguepedia.to_history(rows)
+        history.save_games(db, items)                   # one week in a few statements (a remote database)
+        done["games"] += len(items)
+        if items and not where:                         # a game Leaguepedia re-keyed or removed must not stay twice:
+            keep = [g["game_key"] for g, _ in items]     # drop this week's lp games it no longer returns
+            stale = [r["game_key"] for r in db.query(
+                "SELECT game_key FROM lol_games WHERE source = 'lp' AND played_at >= ? AND played_at < ?",
+                (f"{day}T00:00:00Z", f"{nxt}T00:00:00Z")) if r["game_key"] not in set(keep)]
+            db.delete_in("lol_player_games", "game_key", stale)
+            db.delete_in("lol_games", "game_key", stale)
+            done["stale_removed"] += len(stale)
         db.commit()
+        if nxt <= recent:                               # only a week already settled is marked as held: a week read
+            history.set_state(db, mark, f"{len(items)} games")   # while recent is read again later
         _log(f"  Leaguepedia {day} .. {nxt}: {len(rows)} player rows")
         day = nxt
-    history.set_state(db, "lp:last_sync", now.isoformat(timespec="seconds"))
-    return dict(done)
+    if not failed:
+        history.set_state(db, "lp:last_sync", now.isoformat(timespec="seconds"))
+    return dict(done, failed_weeks=failed)
 
 
 def parse_date(s):

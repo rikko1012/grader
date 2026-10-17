@@ -73,8 +73,10 @@ class Data:
                                      "team_name": g1.get("team_id") or g1["team"], "opp_name": g1.get("opponent_id") or g1["opponent"],
                                      "role": g1["role"], "league": g1.get("league"), "best_of": g1.get("best_of"),
                                      "games": {n: (r["kills"], r["deaths"], r["assists"]) for n, r in games.items()}})
-        self.arr = {k: np.array(sorted(v), dtype=float) for k, v in self.player.items()}
-        self.tarr = {k: np.array(sorted(v), dtype=float) for k, v in self.team.items()}
+        # by day only (a stable sort keeps game order within a series): sorting whole tuples would order one day's
+        # games by kills and hand the last-10 baseline the best games of the latest series
+        self.arr = {k: np.array(sorted(v, key=lambda x: x[0]), dtype=float) for k, v in self.player.items()}
+        self.tarr = {k: np.array(sorted(v, key=lambda x: x[0]), dtype=float) for k, v in self.team.items()}
         self.elo = elo.from_rows([dict(r, team=r.get("team_id") or r["team"], opponent=r.get("opponent_id") or r["opponent"])
                                   for r in self.rows], lambda r: self.match_day[r["match_key"]])
         for t in self.targets:
@@ -223,10 +225,11 @@ def evaluate(lam, y, size, base=None):
     ll_nb = np.mean([model.nb_logpmf(int(k), m, size) for k, m in zip(y, lam)])
     ll_po = np.mean([int(k) * math.log(m) - m - math.lgamma(int(k) + 1) for k, m in zip(y, lam)])
     out["loglik_nb"], out["loglik_poisson"] = float(ll_nb), float(ll_po)
-    inside, bins = 0, defaultdict(lambda: [0, 0.0, 0])
+    inside, nominal, bins = 0, 0.0, defaultdict(lambda: [0, 0.0, 0])
     for k, m in zip(y, lam):
         lo, hi = model.interval(m, size, 0.8)
         inside += lo <= k <= hi
+        nominal += sum(model.nb_pmf(j, m, size) for j in range(lo, hi + 1))   # a whole-number range holds >= 80%
         line = math.floor(m) + 0.5
         po, _, _ = model.probs(m, size, line)
         b = min(int(po * 10), 9)
@@ -234,6 +237,7 @@ def evaluate(lam, y, size, base=None):
         bins[b][1] += po
         bins[b][2] += int(k > line)
     out["cover80"] = inside / len(y)
+    out["cover80_nominal"] = nominal / len(y)          # what the model itself says the range holds - compare with this
     out["calibration"] = [{"bin": f"{b / 10:.1f}-{(b + 1) / 10:.1f}", "n": v[0], "predicted_over": round(v[1] / v[0], 3),
                            "actual_over": round(v[2] / v[0], 3)} for b, v in sorted(bins.items()) if v[0] >= 20]
     return out
@@ -306,8 +310,9 @@ def fmt(report):
         if len(key) == 3:
             lines.append("\nkills Maps 1-2 by role and league group:")
             for role, v in r.items():
-                lines.append(f"  {role:8s} n={v['n']:5d}  avg {v['mean_actual']:5.2f}  bias {v['bias']:+.2f}  "
-                             f"MAE {v['mae']:.3f} (role avg {v['mae_role_average']:.3f})  80% range {v['cover80']:.1%}")
+                lines.append(f"  {role:13s} n={v['n']:5d}  avg {v['mean_actual']:5.2f}  bias {v['bias']:+.2f}  "
+                             f"MAE {v['mae']:.3f} (role avg {v['mae_role_average']:.3f})  range holds {v['cover80']:.1%} "
+                             f"(model {v['cover80_nominal']:.1%})")
             continue
         prop, scope = key
         lines.append(f"\n{prop} scope {scope}: n={r['n']}  avg actual {r['mean_actual']:.2f}  avg projection "
@@ -316,7 +321,7 @@ def fmt(report):
                      f"{r['mae_role_average']:.3f} | last 10 games {r['mae_last10']:.3f} (model on the same rows "
                      f"{r['mae_model_same_rows_last10']:.3f})")
         lines.append(f"  log-likelihood NB {r['loglik_nb']:.4f} vs Poisson {r['loglik_poisson']:.4f}; "
-                     f"80% range holds {r['cover80']:.1%}")
+                     f"'80%' range holds {r['cover80']:.1%} (model says {r['cover80_nominal']:.1%})")
         for c in r["calibration"]:
             lines.append(f"    P(over) {c['bin']}: n={c['n']:5d}  predicted {c['predicted_over']:.3f}  "
                          f"actual {c['actual_over']:.3f}")
@@ -325,14 +330,19 @@ def fmt(report):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--history-from", help="use only games on/after this date, as history and as targets (e.g. the "
+                    "8 months the live database holds)")
     ap.add_argument("--train-from", default="2025-03-01")
     ap.add_argument("--test-from", default="2026-04-01")
     ap.add_argument("--test-to")
     ap.add_argument("--write", action="store_true", help="save the TRAIN fit to lol/model_fit.json")
     ap.add_argument("--json", help="also save the full report as JSON here")
     a = ap.parse_args(argv)
+    if a.write:
+        sys.exit("refused: the legacy A1 run scores the sealed TEST period (lol/EVALUATION.md A4); production fits come "
+                 "from the development selection (python -m lol.evaluate)")
     db = history.DB()
-    data = Data(history.all_player_games(db))
+    data = Data(history.all_player_games(db, since=a.history_from))
     log = lambda m: print(m, file=sys.stderr, flush=True)
     fit, report = run(data, date.fromisoformat(a.train_from), date.fromisoformat(a.test_from),
                       date.fromisoformat(a.test_to) if a.test_to else None, log)
@@ -341,9 +351,6 @@ def main(argv=None):
     if a.json:
         with open(a.json, "w", encoding="utf-8") as fh:
             json.dump({"fit": fit, "report": {"|".join(k): v for k, v in report.items()}}, fh, indent=1)
-    if a.write:
-        sys.exit("refused: the legacy A1 run scores the sealed TEST period (lol/EVALUATION.md A4); production fits come "
-                 "from the development selection (python -m lol.evaluate)")
 
 
 # ------------------------------------------------------------------ lol/EVALUATION.md amendments A1-A3: B0 vs lol-1

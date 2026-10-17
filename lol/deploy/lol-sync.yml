@@ -1,7 +1,10 @@
 # LoL history sync on a schedule - the HLTV scraper's pattern: a scheduled job writes the history database, the app only
 # reads it, so a LoL look-up never waits on LoL Esports or Leaguepedia.
 #
-# NOT active here. To turn it on, copy this file to .github/workflows/lol-sync.yml and add the repository secrets:
+# SUPERSEDED (2026-10-17) - do not turn it on. The server worker owns the serving history, and the full history comes
+# from .github/workflows/lol-full-history.yml through the source inbox (lol/README.md). This job would run a second
+# writer from an empty data-center store, and `sync` now rejects its --since. Kept for the record; it was: copy this
+# file to .github/workflows/lol-sync.yml and add the repository secrets:
 #   LOL_DB_DSN                 PostgreSQL the app also reads (writes only lol_* tables - safe next to the HLTV tables,
 #                              but a database of its own is cleaner)
 #   LEAGUEPEDIA_USER           optional: Leaguepedia bot login (YourName@botname) - adds the LPL and every other league
@@ -26,6 +29,20 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install requests numpy psycopg2-binary
+      - name: LoL database reachable (a scheduled sync into a throwaway database would keep nothing)
+        env:
+          LOL_DB_DSN: ${{ secrets.LOL_DB_DSN }}
+        run: |
+          [ -n "$LOL_DB_DSN" ] || { echo "LOL_DB_DSN secret missing"; exit 1; }
+          python - 2>/dev/null <<'PY'
+          import sys
+          from lol import history
+          try:
+              history.DB().close()
+          except Exception as e:
+              print("database check failed:", type(e).__name__)
+              sys.exit(1)
+          PY
       - name: sync
         env:
           LOL_DB_DSN: ${{ secrets.LOL_DB_DSN }}

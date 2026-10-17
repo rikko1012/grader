@@ -18,7 +18,7 @@ import json
 import re
 import sys
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 
 from . import config, elo, history, lines, lolesports, model, odds, sync, teams
 
@@ -83,7 +83,10 @@ def resolve_player(db, name, team=None):
     """The stored player for this name: by --team when given, else the most recently active namesake."""
     cands = history.find_players(db, name)
     if team:
-        cands = [c for c in cands if teams.same_team(team, c["team"])] or cands
+        on_team = [c for c in cands if teams.same_team(team, c["team"])]
+        if not on_team:                 # never a namesake on another team in his place
+            return None, cands
+        cands = on_team
     if not cands:
         return None, []
     best = cands[0]
@@ -93,9 +96,11 @@ def resolve_player(db, name, team=None):
 def run_player(db, args):
     pl, cands = resolve_player(db, args.name, args.team)
     if not pl:
-        return {"found": False, "query": args.name,
-                "note": "Not in the stored history - run `sync` (LoL Esports), or add Leaguepedia for leagues the feed "
-                        "doesn't carry (LPL)."}
+        note = (f"No stored player {args.name} on {args.team} - stored under that name: "
+                + ", ".join(f"{c['player']} ({c['team']})" for c in cands)) if cands else \
+            ("Not in the stored history - run `sync` (LoL Esports), or add Leaguepedia for leagues the feed "
+             "doesn't carry (LPL).")
+        return {"found": False, "query": args.name, "note": note}
     rows = history.player_games(db, pl["player_key"], pid=pl["pid"])
     team_rows = [r for r in rows if teams.same_team(r["team"], pl["team"])]
     last = rows[-1]
@@ -146,9 +151,10 @@ def run_h2h(db, args):
     out = {"found": True, "player": pl["player"], "opponent": args.opponent, "prop": args.prop, "scope": scope,
            "series": ser}
     if args.line is not None and ser:
-        hits = [s["total"] > args.line for s in ser]
-        out["vs_line"] = {"line": args.line, "over": sum(hits), "under": len(hits) - sum(hits),
-                          "over_rate": round(sum(hits) / len(hits), 3)}
+        over = sum(s["total"] > args.line for s in ser)
+        under = sum(s["total"] < args.line for s in ser)
+        out["vs_line"] = {"line": args.line, "over": over, "under": under, "push": len(ser) - over - under,
+                          "over_rate": round(over / (over + under), 3) if over + under else None}
     return out
 
 
@@ -196,7 +202,10 @@ def run_full(db, args):
         slate_rows, res["schedule_error"] = [], f"{type(e).__name__}: {e}"
     m, mine, theirs = next_match(team, slate_rows)
     if args.opponent and (not theirs or not teams.matches(args.opponent, theirs["name"], theirs["code"])):
-        m, theirs = None, {"name": args.opponent, "code": None}
+        # the team's code from the schedule when it lists the team at all: PrizePicks names the opponent by code
+        code = next((t["code"] for row in slate_rows for t in row["teams"] if teams.matches(args.opponent, t["name"], t["code"])),
+                    None)
+        m, theirs = None, {"name": args.opponent, "code": code}
     res["match"] = ({"league": m["league"], "start": m["start"], "best_of": m["best_of"], "match_id": m["match_id"],
                      "team": mine, "opponent": theirs} if m else
                     {"opponent": theirs, "note": "not on the LoL Esports schedule in the next "
@@ -204,23 +213,32 @@ def run_full(db, args):
     opponent = (theirs or {}).get("name")
     start = m["start"] if m else None
     day = (_day(start) if start else datetime.now(timezone.utc).date()).toordinal()
-    before = (date.fromordinal(day)).isoformat()
-    prow = history.player_games(db, pres["player_key"], before=before, pid=pres["pid"])
-    trow = history.team_games(db, team, before=before)
-    orow = history.team_games(db, opponent, before=before) if opponent else []
-    res["inputs"] = {"player_games": len(prow), "team_games": len(trow), "opponent_games": len(orow),
-                     "opponent_found": bool(orow)}
+    # no cut-off by game time here: the model keeps games whose SERIES day is before the match day (as the backtest
+    # does) - a cut on game time would drop the late games of an earlier series that ran past midnight UTC
+    prow = history.player_games(db, pres["player_key"], pid=pres["pid"])
+    trow = history.team_games(db, team)
+    orow = history.team_games(db, opponent) if opponent else []
+    n_before = lambda rows: sum(1 for d in match_days(rows).values() if d < day)
+    res["inputs"] = {"player_series": n_before(prow), "team_series": n_before(trow), "opponent_series": n_before(orow),
+                     "opponent_found": bool(n_before(orow))}
     flags = []
-    if opponent and not orow:
+    if opponent and not res["inputs"]["opponent_found"]:
         flags.append(f"No stored games for {opponent} - opponent factor = league average")
     if not opponent:
         flags.append("Opponent unknown - opponent factor = league average")
     if pres.get("lineup", "").startswith("WARNING"):
         flags.append(pres["lineup"])
     res["flags"] = flags
-    if model.PARAMS is None:
+    projs = {}
+    if model.PARAMS is None:            # no fit yet: still the odds and the lines, ungraded
         res["projection"] = {"error": "no fitted model (python -m lol.backtest --write)"}
-        return res
+    else:
+        projs = _project(db, res, pres, team, opponent, day, prow, trow, orow)
+    _odds_and_lines(res, args, pres, team, opponent, start, m, mine, theirs, projs, flags)
+    return res
+
+
+def _project(db, res, pres, team, opponent, day, prow, trow, orow):
     pin, tin, oin = player_inputs(prow), team_inputs(trow), team_inputs(orow)
     role = pres["role"]
     p_win = None
@@ -235,6 +253,29 @@ def run_full(db, args):
             projs[(prop, scope)] = model.project(pin, tin, oin, role, day, scope, prop, p_win=p_win)
     res["projection"] = {f"{p}|{s}": {k: (round(v, 3) if isinstance(v, float) else v) for k, v in pj.items()}
                          for (p, s), pj in projs.items()}
+    return projs
+
+
+def _same_match(ln, theirs, start):
+    """A board line belongs to the graded match: its opponent is that opponent (when both are known) and it starts
+    within 6 hours of the match (when both are known) - a line for his NEXT match is never graded with this one."""
+    if ln.get("opponent") and theirs and theirs.get("name") and \
+            not teams.matches(ln["opponent"], theirs["name"], theirs.get("code")) and \
+            (theirs.get("code") or ln.get("book") != "prizepicks"):    # a PrizePicks code with no code known: no verdict
+        return False
+    a, b = _when(ln.get("start")), _when(start)
+    return a is None or b is None or abs((a - b).total_seconds()) <= 6 * 3600
+
+
+def _when(s):
+    try:
+        d = datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+        return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def _odds_and_lines(res, args, pres, team, opponent, start, m, mine, theirs, projs, flags):
     # the match's odds: series price, game winners, chance a 3rd / 4th game is played
     if opponent:
         try:
@@ -252,9 +293,12 @@ def run_full(db, args):
                "odds_type": args.line_type, "under_available": args.line_type == "standard"}]
     else:
         try:
-            my = lines.lines_for(pres["player"], team, (mine or {}).get("code"))
+            board = lines.lines_for(pres["player"], team, (mine or {}).get("code"))
         except Exception as e:      # noqa: BLE001
-            my, res["lines_error"] = [], f"{type(e).__name__}: {e}"
+            board, res["lines_error"] = [], f"{type(e).__name__}: {e}"
+        my = [ln for ln in board if _same_match(ln, theirs, start)]
+        if len(my) < len(board):
+            res["lines_other_matches"] = len(board) - len(my)
     res["lines"] = grade_lines(projs, my)
     if any(ln.get("scope") == "123" for ln in my) and (m or {}).get("best_of") == 3:
         flags.append("Maps 1-3 line in a best-of-3: map 3 may not be played (Underdog voids it; check the book's rule)"
@@ -264,7 +308,13 @@ def run_full(db, args):
 
 
 def run_status(db, args):
-    return {"history": history.summary(db), "le_last_sync": history.get_state(db, "le:last_sync"),
+    miss = history.missing(db)
+    return {"history": history.summary(db),
+            "missing_games": {"total": len(miss), "filled_by_leaguepedia": sum(1 for m in miss if m["filled"]),
+                              "still_missing_total": sum(1 for m in miss if not m["filled"]),
+                              "still_missing": [{k: m[k] for k in ("league", "played_at", "teams", "game_number", "reason")}
+                                                for m in miss if not m["filled"]][:50]},
+            "le_last_sync": history.get_state(db, "le:last_sync"),
             "lp_last_sync": history.get_state(db, "lp:last_sync"),
             "leaguepedia_configured": bool(config.leaguepedia_credentials()),
             "database": "postgres (LOL_DB_DSN)" if config.db_dsn() else str(config.HISTORY_DB),
@@ -275,8 +325,12 @@ def run_sync(db, args):
     """One ingestion path (2026-10-17): the data center (lol/center) reads LoL Esports and Leaguepedia - with source
     revisions, internal ids, renames and quarantine - and exports the result to this history. sync.py's direct
     writers are no longer called, so the history has one source of truth."""
+    unsupported = [name for name in ("since", "until", "force", "leagues") if getattr(args, name, None)]
+    if unsupported:
+        raise ValueError("The canonical sync does not support " + ", ".join("--" + x for x in unsupported)
+                         + "; set LOL_BACKFILL_DAYS before starting the process instead of silently ignoring a range.")
     from .center import cli
-    return cli.sync_once(source=args.source, log=_log)
+    return cli.sync_once(source=args.source, max_minutes=getattr(args, "max_minutes", 120), log=_log)
 
 
 # ------------------------------------------------------------------ printing
@@ -312,10 +366,14 @@ def print_full(res):
         print(f"Polymarket: {od['team']} {od.get('team_prob')} vs {od['opponent']} {od.get('opp_prob')} "
               f"(liquidity ${od['liquidity']:,})" + (f"; P(map 3 played) {od['p_game3_played']}" if od.get("p_game3_played") else ""))
     for ln in res.get("lines") or []:
+        if not ln.get("graded"):
+            print(f"  {ln['book']:10s} {ln['prop']:7s} {SCOPE_NAME[ln['scope']]:9s} {ln['line']:5.1f} - {ln.get('note')}")
         if ln.get("graded"):
             print(f"  {ln['book']:10s} {ln['prop']:7s} {SCOPE_NAME[ln['scope']]:9s} {ln['line']:5.1f} ({ln['odds_type']}): "
                   f"projection {ln['projection']:.2f}  P(over) {ln['p_over']:.1%}  P(under) {ln['p_under']:.1%}  "
                   f"-> {ln['model_side']}")
+    if res.get("lines_other_matches"):
+        print(f"  {res['lines_other_matches']} more line(s) on the board are for another match - not graded")
     print("  (model estimate - see lol/EVALUATION.md for its measured accuracy)")
 
 
@@ -337,17 +395,21 @@ def main(argv=None):
     common.add_argument("--scope", choices=["1", "12", "123"], help="Map 1 / Maps 1-2 / Maps 1-3 (default: from best-of)")
     common.add_argument("--line-type", choices=["standard", "goblin", "demon"], default="standard")
     common.add_argument("--hours", type=float, default=36)
-    common.add_argument("--since", help="sync: first date (YYYY-MM-DD; default 120 days ago)")
-    common.add_argument("--leagues", help="sync / slate: comma-separated LoL Esports slugs, or 'all' (default: majors)")
+    common.add_argument("--since", help="legacy: sync rejects it (set LOL_BACKFILL_DAYS before the run instead)")
+    common.add_argument("--until", help="legacy: sync rejects it")
+    common.add_argument("--leagues", help="slate: comma-separated LoL Esports slugs, or 'all' (default: majors); sync rejects it")
     common.add_argument("--source", choices=["lolesports", "leaguepedia", "both"], default="both")
-    common.add_argument("--force", action="store_true", help="sync: re-derive matches already held (from the cache)")
+    common.add_argument("--max-minutes", type=float, default=120, help="sync: bounded ingestion time before exporting")
+    common.add_argument("--force", action="store_true", help="legacy: sync rejects it")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     for c in ("slate", "sync", "status", "player", "h2h", "odds", "lines", "full"):
         sub.add_parser(c, parents=[common])
     a = ap.parse_args(argv)
     if a.cmd == "slate":
-        res = lolesports.slate(a.hours, None if not a.leagues else ("all" if a.leagues == "all" else a.leagues.split(",")))
+        lg = None if not a.leagues else ("all" if a.leagues.strip().lower() == "all" else
+                                         [x.strip().lower() for x in a.leagues.split(",") if x.strip()])
+        res = lolesports.slate(a.hours, lg)
         for m in res:
             print(f"{m['start']}  {m['league']:12s} BO{m['best_of']}  {m['teams'][0]['name']} vs {m['teams'][1]['name']}")
     elif a.cmd == "odds":

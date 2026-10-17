@@ -11,13 +11,15 @@ from lol.tests.conftest import fixture
 # ------------------------------------------------------------------ team identity
 @pytest.mark.parametrize("a,b", [("BNK FEARX", "BNK FearX"), ("FURIA Esports", "FURIA"), ("Team WE", "WE"),
                                  ("Xi'an Team WE", "Team WE"), ("Cloud9 Kia", "Cloud9"), ("FOX", "BNK FearX"),
-                                 ("Gen.G Esports", "Gen.G")])
+                                 ("Gen.G Esports", "Gen.G"), ("Team Liquid Alienware", "TL"), ("AG.AL", "Anyone's Legend"),
+                                 ("Beijing JDG Esports", "JD Gaming")])
 def test_same_team(a, b):
     assert teams.same_team(a, b) and teams.same_team(b, a)
 
 
 @pytest.mark.parametrize("a,b", [("Karmine Corp Blue", "Karmine Corp"), ("T1 Esports Academy", "T1"),
-                                 ("Cloud9", "Team Liquid"), ("", "T1"), ("G2 HEL", "G2 Esports")])
+                                 ("Cloud9", "Team Liquid"), ("", "T1"), ("G2 HEL", "G2 Esports"),
+                                 ("The Secret Club", "Team Secret")])
 def test_other_teams_never_match(a, b):
     assert not teams.same_team(a, b)
 
@@ -128,18 +130,27 @@ def test_clean_name():
     assert lolesports.clean_name("FUR Guigo", "FUR") == "Guigo"
     assert lolesports.clean_name("C9 Loki ", "C9") == "Loki"
     assert lolesports.clean_name("Faker", "T1") == "Faker"
+    assert lolesports.clean_name("BFXClear", "BFX") == "Clear"                  # the prefix glued on (seen in 2026)
+    assert lolesports.clean_name("KTJiwoo", "KT") == "Jiwoo"
+    assert lolesports.clean_name("VITNaakNako", "VIT") == "NaakNako"
+    assert lolesports.clean_name("GENius", "GEN") == "GENius"                  # a name that only starts like the code
+    assert lolesports.clean_name("BFXClear", "T1") == "BFXClear"               # another team's code: untouched
 
 
-def test_winner_inference():
-    assert lolesports.winner({"inhibitors": 2, "towers": 9}, {"inhibitors": 0, "towers": 3})[0] == "blue"
-    assert lolesports.winner({"inhibitors": 0, "towers": 3, "totalGold": 50000}, {"inhibitors": 0, "towers": 7})[0] == "red"
-    assert lolesports.winner({"inhibitors": 1, "towers": 5, "totalGold": 1}, {"inhibitors": 1, "towers": 5, "totalGold": 1}) \
-        == (None, "not inferable")
+def test_winner_inference_needs_agreeing_evidence():
+    assert lolesports.winner({"inhibitors": 2, "towers": 9, "totalGold": 70000},
+                             {"inhibitors": 0, "towers": 3, "totalGold": 52000})[0] == "blue"
+    assert lolesports.winner({"inhibitors": 0, "towers": 3, "gold": 50000}, {"inhibitors": 0, "towers": 7, "gold": 61000})[0] == "red"
+    assert lolesports.winner({"inhibitors": 2, "towers": 9, "totalGold": 50000},        # a comeback: signals disagree
+                             {"inhibitors": 1, "towers": 6, "totalGold": 64000})[0] is None
+    assert lolesports.winner({"inhibitors": 0, "towers": 4, "totalGold": 1}, {"inhibitors": 0, "towers": 3, "totalGold": 1})[0] is None
+    assert lolesports.winner({"inhibitors": 1, "towers": 5, "totalGold": 1}, {"inhibitors": 1, "towers": 5, "totalGold": 1})[0] is None
 
 
 def _frame(ts, state, kills=(0,) * 10, blue_inhib=0, red_inhib=0):
-    def team(ids, inhib):
-        return {"totalGold": 1000, "inhibitors": inhib, "towers": 0, "barons": 0, "totalKills": sum(kills[i - 1] for i in ids),
+    def team(ids, inhib):                   # the side with inhibitors down also leads towers and gold (a clean win)
+        return {"totalGold": 62000 if inhib else 48000, "inhibitors": inhib, "towers": 9 if inhib else 3, "barons": 0,
+                "totalKills": sum(kills[i - 1] for i in ids),
                 "dragons": [], "participants": [{"participantId": i, "kills": kills[i - 1], "deaths": 1, "assists": 2,
                                                  "creepScore": 100, "totalGold": 500, "level": 10} for i in ids]}
     return {"rfc460Timestamp": ts, "gameState": state, "blueTeam": team(range(1, 6), blue_inhib),
@@ -248,3 +259,52 @@ def test_leaguepedia_waits_on_ratelimited(monkeypatch):
 
 def test_leaguepedia_where_values_are_quoted():
     assert leaguepedia._q('Doran (Choi "x")') == '"Doran (Choi \\"x\\")"'
+
+
+def test_finished_tournament_never_reuses_the_list_cached_while_it_ran(monkeypatch):
+    calls = []
+
+    def gw_fetch(endpoint, ttl, **params):
+        calls.append(params)
+        return {"schedule": {"events": [{"n": len(calls)}]}}
+    monkeypatch.setattr(lolesports, "_gw", gw_fetch)
+    lolesports.completed_events("T", ttl=1800)
+    lolesports.completed_events("T", ttl=30 * 86400, final=True)
+    assert calls[0].get("final") is None and calls[1]["final"] == "1"          # two different cache entries
+
+
+def test_cargo_paging_continues_past_the_account_cap(monkeypatch):
+    pages = [[{"i": i} for i in range(500)], [{"i": i} for i in range(500, 700)]]
+    offsets = []
+
+    def cargo(self, tables, fields, where, join_on, order_by, group_by, limit, offset):
+        offsets.append(offset)
+        return pages.pop(0) if pages else []
+    monkeypatch.setattr(leaguepedia.Leaguepedia, "cargo", cargo)
+    monkeypatch.setattr(leaguepedia, "LIMIT", 5000)                            # set above an ordinary account's cap
+    rows = leaguepedia.Leaguepedia(credentials=("u@b", "p")).cargo_all("T", ("x",))
+    assert len(rows) == 700 and offsets == [0, 500]
+
+
+def test_leaguepedia_league_short_names_become_slugs():
+    rows = [dict(r, LeagueShort="LCK") for r in CARGO]
+    (game, _), = leaguepedia.to_history(rows)
+    assert game["league"] == "lck"
+    (game, _), = leaguepedia.to_history([dict(r, LeagueShort="NEW") for r in CARGO])
+    assert game["league"] == "NEW"                                             # unknown: kept as Leaguepedia writes it
+
+
+def test_prizepicks_allowed_wager_types_as_text():
+    body = fixture("prizepicks_lol_2026-10-17.json")
+    p = next(x for x in body["data"] if x["attributes"]["odds_type"] == "standard"
+             and "Combo" not in x["attributes"]["stat_display_name"])
+    p["attributes"]["allowed_wager_types"] = "over"
+    row = next(r for r in lines.pp_parse(body) if r["id"] == f"pp:{p['id']}")
+    assert row["over_available"] and not row["under_available"]
+
+
+def test_line_archive_records_a_payout_move():
+    rows = lines.ud_parse(fixture("underdog_lol_2026-10-17.json"))
+    lines.archive("underdog", rows, now="t1")
+    moved = [dict(rows[0], mult_over=(rows[0].get("mult_over") or 1.0) + 0.1)] + rows[1:]
+    assert lines.archive("underdog", moved, now="t2") == 1

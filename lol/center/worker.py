@@ -89,11 +89,17 @@ def build_loop():
     """When any source changed: the canonical build, the coverage report and the export to the one LoL history (at
     most every BUILD_EVERY_S, the first after 5 min). Every LINK_EVERY_S: offer -> series / player links, the pre-match
     forecasts, settlement of finished series, and the admin board."""
-    from . import build, coverage, export, forecast, learning, match, slips
+    from . import build, coverage, export, forecast, handoff, learning, match, slips
     con = store.connect()
     t_build, t_link = time.time() - BUILD_EVERY_S + 300, 0.0
     while True:
         try:
+            try:
+                STATE["handoff"] = handoff.consume(con)
+            except Exception as exc:
+                con.rollback()
+                # A remote inbox outage must not stop local builds or disclose a DSN.
+                STATE["handoff"] = {"error": type(exc).__name__, "at": store.now_iso()}
             if store.get_meta(con, "dirty") and time.time() - t_build > BUILD_EVERY_S:
                 STATE["build"] = build.build(con)
                 _write("coverage.json", coverage.refresh(con))
@@ -154,6 +160,7 @@ def write_status():
                "leaguepedia_login": dict(cargo.LOGIN, configured=bool(cargo.credentials())),
                "last_build": store.get_meta(con, "last_build"), "links": STATE["links"],
                "last_export": store.get_meta(con, "last_export"), "forecasts": STATE.get("forecasts"), "settled": STATE.get("settled"),
+               "history_handoff": STATE.get("handoff"), "last_history_import": store.get_meta(con, "last_handoff"),
                "quarantine": {r[0]: r[1] for r in con.execute(
                    "SELECT kind || ':' || reason, COUNT(*) FROM quarantine WHERE resolved_at IS NULL GROUP BY kind, reason")},
                "errors": STATE["errors"][-5:]}
