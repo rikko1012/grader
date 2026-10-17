@@ -204,14 +204,16 @@ def run_full(db, args):
     opponent = (theirs or {}).get("name")
     start = m["start"] if m else None
     day = (_day(start) if start else datetime.now(timezone.utc).date()).toordinal()
-    before = (date.fromordinal(day)).isoformat()
-    prow = history.player_games(db, pres["player_key"], before=before, pid=pres["pid"])
-    trow = history.team_games(db, team, before=before)
-    orow = history.team_games(db, opponent, before=before) if opponent else []
-    res["inputs"] = {"player_games": len(prow), "team_games": len(trow), "opponent_games": len(orow),
-                     "opponent_found": bool(orow)}
+    # no cut-off by game time here: the model keeps games whose SERIES day is before the match day (as the backtest
+    # does) - a cut on game time would drop the late games of an earlier series that ran past midnight UTC
+    prow = history.player_games(db, pres["player_key"], pid=pres["pid"])
+    trow = history.team_games(db, team)
+    orow = history.team_games(db, opponent) if opponent else []
+    n_before = lambda rows: sum(1 for d in match_days(rows).values() if d < day)
+    res["inputs"] = {"player_series": n_before(prow), "team_series": n_before(trow), "opponent_series": n_before(orow),
+                     "opponent_found": bool(n_before(orow))}
     flags = []
-    if opponent and not orow:
+    if opponent and not res["inputs"]["opponent_found"]:
         flags.append(f"No stored games for {opponent} - opponent factor = league average")
     if not opponent:
         flags.append("Opponent unknown - opponent factor = league average")
@@ -264,7 +266,12 @@ def run_full(db, args):
 
 
 def run_status(db, args):
-    return {"history": history.summary(db), "le_last_sync": history.get_state(db, "le:last_sync"),
+    miss = history.missing(db)
+    return {"history": history.summary(db),
+            "missing_games": {"total": len(miss), "filled_by_leaguepedia": sum(1 for m in miss if m["filled"]),
+                              "still_missing": [{k: m[k] for k in ("league", "played_at", "teams", "game_number", "reason")}
+                                                for m in miss if not m["filled"]][:50]},
+            "le_last_sync": history.get_state(db, "le:last_sync"),
             "lp_last_sync": history.get_state(db, "lp:last_sync"),
             "leaguepedia_configured": bool(config.leaguepedia_credentials()),
             "database": "postgres (LOL_DB_DSN)" if config.db_dsn() else str(config.HISTORY_DB),

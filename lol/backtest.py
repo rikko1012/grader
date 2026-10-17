@@ -71,8 +71,10 @@ class Data:
                                      "opp": teams.key(g1["opponent"]), "team_name": g1["team"], "opp_name": g1["opponent"],
                                      "role": g1["role"], "league": g1.get("league"), "best_of": g1.get("best_of"),
                                      "games": {n: (r["kills"], r["deaths"], r["assists"]) for n, r in games.items()}})
-        self.arr = {k: np.array(sorted(v), dtype=float) for k, v in self.player.items()}
-        self.tarr = {k: np.array(sorted(v), dtype=float) for k, v in self.team.items()}
+        # by day only (a stable sort keeps game order within a series): sorting whole tuples would order one day's
+        # games by kills and hand the last-10 baseline the best games of the latest series
+        self.arr = {k: np.array(sorted(v, key=lambda x: x[0]), dtype=float) for k, v in self.player.items()}
+        self.tarr = {k: np.array(sorted(v, key=lambda x: x[0]), dtype=float) for k, v in self.team.items()}
         self.elo = elo.from_rows(self.rows, lambda r: self.match_day[r["match_key"]])
         for t in self.targets:
             t["p_win"] = self.elo.p_win(t["team_name"], t["opp_name"], t["day"])
@@ -220,10 +222,11 @@ def evaluate(lam, y, size, base=None):
     ll_nb = np.mean([model.nb_logpmf(int(k), m, size) for k, m in zip(y, lam)])
     ll_po = np.mean([int(k) * math.log(m) - m - math.lgamma(int(k) + 1) for k, m in zip(y, lam)])
     out["loglik_nb"], out["loglik_poisson"] = float(ll_nb), float(ll_po)
-    inside, bins = 0, defaultdict(lambda: [0, 0.0, 0])
+    inside, nominal, bins = 0, 0.0, defaultdict(lambda: [0, 0.0, 0])
     for k, m in zip(y, lam):
         lo, hi = model.interval(m, size, 0.8)
         inside += lo <= k <= hi
+        nominal += sum(model.nb_pmf(j, m, size) for j in range(lo, hi + 1))   # a whole-number range holds >= 80%
         line = math.floor(m) + 0.5
         po, _, _ = model.probs(m, size, line)
         b = min(int(po * 10), 9)
@@ -231,6 +234,7 @@ def evaluate(lam, y, size, base=None):
         bins[b][1] += po
         bins[b][2] += int(k > line)
     out["cover80"] = inside / len(y)
+    out["cover80_nominal"] = nominal / len(y)          # what the model itself says the range holds - compare with this
     out["calibration"] = [{"bin": f"{b / 10:.1f}-{(b + 1) / 10:.1f}", "n": v[0], "predicted_over": round(v[1] / v[0], 3),
                            "actual_over": round(v[2] / v[0], 3)} for b, v in sorted(bins.items()) if v[0] >= 20]
     return out
@@ -303,8 +307,9 @@ def fmt(report):
         if len(key) == 3:
             lines.append("\nkills Maps 1-2 by role and league group:")
             for role, v in r.items():
-                lines.append(f"  {role:8s} n={v['n']:5d}  avg {v['mean_actual']:5.2f}  bias {v['bias']:+.2f}  "
-                             f"MAE {v['mae']:.3f} (role avg {v['mae_role_average']:.3f})  80% range {v['cover80']:.1%}")
+                lines.append(f"  {role:13s} n={v['n']:5d}  avg {v['mean_actual']:5.2f}  bias {v['bias']:+.2f}  "
+                             f"MAE {v['mae']:.3f} (role avg {v['mae_role_average']:.3f})  range holds {v['cover80']:.1%} "
+                             f"(model {v['cover80_nominal']:.1%})")
             continue
         prop, scope = key
         lines.append(f"\n{prop} scope {scope}: n={r['n']}  avg actual {r['mean_actual']:.2f}  avg projection "
@@ -313,7 +318,7 @@ def fmt(report):
                      f"{r['mae_role_average']:.3f} | last 10 games {r['mae_last10']:.3f} (model on the same rows "
                      f"{r['mae_model_same_rows_last10']:.3f})")
         lines.append(f"  log-likelihood NB {r['loglik_nb']:.4f} vs Poisson {r['loglik_poisson']:.4f}; "
-                     f"80% range holds {r['cover80']:.1%}")
+                     f"'80%' range holds {r['cover80']:.1%} (model says {r['cover80_nominal']:.1%})")
         for c in r["calibration"]:
             lines.append(f"    P(over) {c['bin']}: n={c['n']:5d}  predicted {c['predicted_over']:.3f}  "
                          f"actual {c['actual_over']:.3f}")

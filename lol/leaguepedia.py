@@ -32,10 +32,17 @@ PLAYER_GAME_FIELDS = (
     "SP.TeamKills=TeamKills", "SP.PlayerWin=PlayerWin", "SP.Side=Side", "SP.GameId=GameId", "SP.MatchId=MatchId",
     "SG.DateTime_UTC=PlayedAt", "SG.N_GameInMatch=GameN", "SG.Gamelength_Number=Minutes", "SG.Team1=Team1",
     "SG.Team2=Team2", "SG.Team1Kills=Team1Kills", "SG.Team2Kills=Team2Kills", "SG.WinTeam=WinTeam", "SG.Patch=Patch",
-    "MS.BestOf=BestOf", "T.Name=Tournament", "T.League=League", "T.Region=Region")
-PLAYER_GAME_TABLES = "ScoreboardPlayers=SP, ScoreboardGames=SG, MatchSchedule=MS, Tournaments=T, PlayerRedirects=PR"
-PLAYER_GAME_JOIN = ("SP.GameId=SG.GameId, SG.MatchId=MS.MatchId, SG.OverviewPage=T.OverviewPage, "
+    "MS.BestOf=BestOf", "T.Name=Tournament", "T.League=League", "L.League_Short=LeagueShort", "T.Region=Region")
+PLAYER_GAME_TABLES = ("ScoreboardPlayers=SP, ScoreboardGames=SG, MatchSchedule=MS, Tournaments=T, Leagues=L, "
+                      "PlayerRedirects=PR")
+PLAYER_GAME_JOIN = ("SP.GameId=SG.GameId, SG.MatchId=MS.MatchId, SG.OverviewPage=T.OverviewPage, T.League=L.League, "
                     "SP.Link=PR.AllName")
+# Leaguepedia's short league names -> the LoL Esports slugs the rest of lol/ uses (others stay as Leaguepedia writes them)
+LEAGUE_SLUGS = {"LCK": "lck", "LPL": "lpl", "LEC": "lec", "LCS": "lcs", "LCP": "lcp", "CBLOL": "cblol-brazil",
+                "WCS": "worlds", "Worlds": "worlds", "MSI": "msi", "FST": "first_stand", "First Stand": "first_stand",
+                "EWC": "ewc_lol", "LCK CL": "lck_challengers_league", "EM": "emea_masters", "LFL": "lfl",
+                "PRM": "primeleague", "PCS": "pcs", "VCS": "vcs", "LJL": "ljl-japan", "LTA N": "lta_n",
+                "LTA S": "lta_s", "Demacia Cup": "demacia_cup"}
 
 
 class LeaguepediaError(RuntimeError):
@@ -97,13 +104,15 @@ class Leaguepedia:
         raise LeaguepediaError("Cargo still rate-limited after 5 tries")
 
     def cargo_all(self, tables, fields, where=None, join_on=None, order_by=None, group_by=None, max_rows=200000):
+        """Every page. The next page starts after the rows actually received, and only a page shorter than the smallest
+        cap (500, an ordinary account) ends it - a LEAGUEPEDIA_LIMIT above the account's cap never stops it early."""
         out, offset = [], 0
         while offset < max_rows:
             page = self.cargo(tables, fields, where, join_on, order_by, group_by, LIMIT, offset)
             out += page
-            if len(page) < LIMIT:
+            if not page or len(page) < min(LIMIT, 500):
                 break
-            offset += LIMIT
+            offset += len(page)
         return out
 
     # ------------------------------------------------------------------ the grader's queries
@@ -183,7 +192,8 @@ def to_history(rows):
         winner = t1 if str(g0.get("WinTeam") or "") == str(t1) else t2 if str(g0.get("WinTeam") or "") == str(t2) else None
         game = {"game_key": f"lp:{gid}", "source": "lp", "match_key": f"lp:{g0.get('MatchId')}",
                 "game_number": _int(g0.get("GameN")), "best_of": _int(g0.get("BestOf")), "played_at": _iso(g0.get("PlayedAt")),
-                "league": g0.get("League"), "tournament": g0.get("Tournament"), "blue_team": t1, "red_team": t2,
+                "league": LEAGUE_SLUGS.get(g0.get("LeagueShort") or "", g0.get("LeagueShort") or g0.get("League")),
+                "tournament": g0.get("Tournament"), "blue_team": t1, "red_team": t2,
                 "blue_team_id": None, "red_team_id": None, "blue_kills": k1, "red_kills": k2,
                 "winner": winner, "winner_basis": "Leaguepedia" if winner else "no winner listed",
                 "duration_s": dur, "patch": g0.get("Patch")}

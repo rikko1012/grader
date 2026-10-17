@@ -33,7 +33,15 @@ SCHEMA = [
     "CREATE INDEX IF NOT EXISTS lol_pg_match ON lol_player_games (match_key)",
     "CREATE INDEX IF NOT EXISTS lol_g_match ON lol_games (match_key)",
     "CREATE TABLE IF NOT EXISTS lol_sync_state (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)",
+    # completed games a source could not deliver in full (e.g. the feed never reached its final frame) - never dropped
+    # silently: `status` lists them until a source fills them
+    """CREATE TABLE IF NOT EXISTS lol_missing (
+        game_key TEXT PRIMARY KEY, source TEXT, match_key TEXT, game_number INTEGER, league TEXT, played_at TEXT,
+        teams TEXT, reason TEXT, noted_at TEXT)""",
 ]
+MISSING_COLS = ("game_key", "source", "match_key", "game_number", "league", "played_at", "teams", "reason", "noted_at")
+# the feed's internal champion ids that differ from the names Leaguepedia uses (after teams.norm)
+CHAMPIONS = {"monkeyking": "wukong", "nunuwillump": "nunu", "renataglasc": "renata"}
 GAME_COLS = ("game_key", "source", "match_key", "game_number", "best_of", "played_at", "league", "tournament",
              "blue_team", "red_team", "blue_team_id", "red_team_id", "blue_kills", "red_kills", "winner", "winner_basis",
              "duration_s", "patch", "fetched_at")
@@ -107,12 +115,36 @@ def save_game(db, game, players):
     """One game and its ten player rows (dicts keyed like GAME_COLS / PLAYER_COLS). Idempotent: re-saving replaces."""
     game = dict(game, fetched_at=game.get("fetched_at") or datetime.now(timezone.utc).isoformat(timespec="seconds"))
     db.execute(_upsert("lol_games", GAME_COLS, ("game_key",)), [game.get(c) for c in GAME_COLS])
+    db.execute("DELETE FROM lol_player_games WHERE game_key = ?", (game["game_key"],))   # a re-save replaces the game's
+    # player rows - a corrected or re-cleaned name must not leave the old row behind
     rows = []
     for p in players:
         p = dict(p, player_key=p.get("player_key") or player_key(p.get("player")))
         rows.append([p.get(c) for c in PLAYER_COLS])
     if rows:
         db.executemany(_upsert("lol_player_games", PLAYER_COLS, ("game_key", "player_key")), rows)
+    db.execute("DELETE FROM lol_missing WHERE game_key = ?", (game["game_key"],))
+
+
+def note_missing(db, game_key, source, match_key, game_number, league, played_at, teams_label, reason):
+    db.execute(_upsert("lol_missing", MISSING_COLS, ("game_key",)),
+               (game_key, source, match_key, game_number, league, played_at, teams_label, reason,
+                datetime.now(timezone.utc).isoformat(timespec="seconds")))
+
+
+def missing(db):
+    """Completed games no source has delivered in full, each marked `filled` when the other source holds that game
+    (same game number, both teams, within a day)."""
+    out = db.query("SELECT * FROM lol_missing ORDER BY played_at")
+    if not out:
+        return out
+    lp = db.query("SELECT game_number, played_at, blue_team, red_team FROM lol_games WHERE source = 'lp'")
+    for m in out:
+        names = (m.get("teams") or "").split(" vs ")
+        m["filled"] = any(g["game_number"] == m["game_number"] and _near(g["played_at"], m["played_at"])
+                          and len(names) == 2 and {teams.key(g["blue_team"]), teams.key(g["red_team"])} ==
+                          {teams.key(names[0]), teams.key(names[1])} for g in lp)
+    return out
 
 
 def known_matches(db, source):
@@ -132,35 +164,76 @@ def get_state(db, key):
     return rows[0] if rows else None
 
 
-def _dedup(rows):
-    """Drop a game both sources hold (same name, UTC day, champion and K / D / A - Leaguepedia's row is kept) and give
-    every row `pid`, the player's identity: 'lp:<Leaguepedia page>' or 'le:<LoL Esports player id>' - an LoL Esports id
-    seen on the same game as a Leaguepedia page takes that page's identity. Two pros who share a name never share a pid."""
-    seen, out, link = {}, [], {}
+def champion(name):
+    c = teams.norm(name)
+    return CHAMPIONS.get(c, c)
+
+
+def _near(a, b, days=1):
+    """Two ISO times within `days` UTC days (one game, recorded near midnight by two sources)."""
+    try:
+        da, db_ = (datetime.fromisoformat(str(x).replace("Z", "+00:00")[:19]).date() for x in (a, b))
+    except (TypeError, ValueError):
+        return False
+    return abs((da - db_).days) <= days
+
+
+def _dedup(rows, links=None):
+    """Drop a game both sources hold - Leaguepedia's row is kept - and give every row `pid`, the player's identity.
+    One game = same player name, champion (feed ids mapped to wiki names), K / D / A, team kills and kills conceded,
+    within a day; only rows from DIFFERENT sources are ever merged (two games of one source never collapse).
+    pid: 'lp:<Leaguepedia page>' or 'le:<LoL Esports player id>' - a feed id seen on the same game as a Leaguepedia page
+    takes that page's identity. Two pros who share a name never share a pid."""
+    seen, out, link, twin_games = {}, [], {}, set()
     for r in sorted(rows, key=lambda r: (r.get("source") != "lp", r.get("played_at") or "")):
-        k = (r.get("player_key"), str(r.get("played_at") or "")[:10], teams.norm(r.get("champion")),
-             r.get("kills"), r.get("deaths"), r.get("assists"))
-        if k in seen:
-            if r.get("source") == "le" and seen[k].get("source") == "lp" and r.get("player_id"):
-                link.setdefault(f"le:{r['player_id']}", f"lp:{seen[k].get('player_id')}")
+        k = (r.get("player_key"), champion(r.get("champion")), r.get("kills"), r.get("deaths"), r.get("assists"),
+             r.get("team_kills"), r.get("opp_kills"))
+        twin = next((s for s in seen.get(k, ()) if s.get("source") != r.get("source")
+                     and _near(s.get("played_at"), r.get("played_at"))), None)
+        if twin is not None:
+            if r.get("source") == "le" and twin.get("source") == "lp" and r.get("player_id"):
+                link.setdefault(f"le:{r['player_id']}", f"lp:{twin.get('player_id')}")
+            twin_games.add(r.get("game_key"))
             continue
-        seen[k] = r
+        seen.setdefault(k, []).append(r)
         out.append(r)
+    # a game the other source holds goes as a WHOLE: a row of it that found no twin (a name the sources spell apart)
+    # would otherwise count that game twice for that player, his team and the Elo
+    out = [r for r in out if r.get("game_key") not in twin_games]
     for r in out:
         own = f"{r.get('source')}:{r.get('player_id') or r.get('player_key')}"
         r["pid"] = link.get(own, own)
+    if links is not None:
+        links.update(link)
     return sorted(out, key=lambda r: (r.get("played_at") or "", r.get("game_number") or 0))
 
 
-def player_games(db, key, before=None, pid=None):
-    """Every stored game of one player, oldest first: by name (player_key), narrowed to one identity with `pid` (from
-    find_players). `before` (ISO date / time) keeps earlier games only."""
-    sql, args = "SELECT * FROM lol_player_games WHERE player_key = ?", [key]
+def _rows(db, where, args, before=None):
+    sql = f"SELECT * FROM lol_player_games WHERE {where}"
     if before:
         sql += " AND played_at < ?"
-        args.append(before)
-    rows = _dedup(db.query(sql, args))
-    return [r for r in rows if pid is None or r["pid"] == pid]
+        args = list(args) + [before]
+    return db.query(sql, args)
+
+
+def player_games(db, key, before=None, pid=None):
+    """Every stored game of one player, oldest first. By name (player_key); with `pid` (from find_players) narrowed to
+    that one identity AND widened to every name that identity was stored under - the feed sends one player as
+    'BrokenBlade' and 'BrokenBIade', 'BFXClear' and 'Clear', and Leaguepedia keys a renamed player's old games by his
+    old name. `before` (ISO date / time) keeps earlier games only."""
+    by_name = _rows(db, "player_key = ?", [key], before)
+    if pid is None:
+        return _dedup(by_name)
+    links = {}
+    named = _dedup(by_name, links)
+    ids = {r["player_id"] for r in named if r["pid"] == pid and r.get("player_id")}
+    ids |= {own.split(":", 1)[1] for own, to in links.items() if to == pid}
+    if pid.split(":", 1)[1]:
+        ids.add(pid.split(":", 1)[1])
+    extra = _rows(db, f"player_id IN ({','.join('?' for _ in ids)})", sorted(ids), before) if ids else []
+    seen = {(r["game_key"], r["player_key"]) for r in by_name}
+    rows = _dedup(by_name + [r for r in extra if (r["game_key"], r["player_key"]) not in seen])
+    return [r for r in rows if r["pid"] == pid]
 
 
 def find_players(db, name):
@@ -193,12 +266,12 @@ def team_games(db, team, before=None):
         sql += " AND played_at < ?"
         args.append(before)
     rows = db.query(sql, args)
-    seen, out = set(), []
+    seen, out = {}, []
     for r in sorted(rows, key=lambda r: (r.get("source") != "lp", r.get("played_at") or "")):
-        k = (str(r["played_at"] or "")[:10], r["game_number"], r["team_kills"], r["opp_kills"])
-        if k in seen:
+        k = (r["game_number"], r["team_kills"], r["opp_kills"])     # one game held by both sources: Leaguepedia's kept
+        if any(s["source"] != r["source"] and _near(s["played_at"], r["played_at"]) for s in seen.get(k, ())):
             continue
-        seen.add(k)
+        seen.setdefault(k, []).append(r)
         out.append(r)
     return sorted(out, key=lambda r: (r["played_at"] or "", r["game_number"] or 0))
 

@@ -12,7 +12,9 @@ from functools import lru_cache
 
 from . import config
 
-GENERIC = {"team", "esports", "esport", "gaming", "club", "gg", "the", "e", "sports"}
+# words that never tell two teams apart ("Team Liquid" = "Liquid", "FURIA Esports" = "FURIA"). Not "club" / "the" / "gg":
+# "The Secret Club" is not "Team Secret" (2026-10-17: the two merged while "club" and "the" were on this list)
+GENERIC = {"team", "esports", "esport", "gaming", "e", "sports"}
 ALIASES = config.PKG_DIR / "team_aliases.json"
 
 

@@ -32,17 +32,22 @@ def game_winners(played, stats, score):
     """{game_id: (winning team id or None, basis)} for a match's played games (in game order). Certain first: in a sweep
     every game went to the series winner, and the last game of any series is the series winner's. The other games use
     the inferred winner (lolesports.winner) only when every inferred win adds up to the official series score."""
-    if not played or len(played) != sum(v or 0 for v in score.values()):
-        return {g["id"]: (None, "series incomplete in the feed") for g in played}
+    if not played:
+        return {}
+    total = sum(v or 0 for v in score.values())
     ranked = sorted(score, key=lambda t: score[t] or 0, reverse=True)
     tied = len(ranked) < 2 or (score[ranked[0]] or 0) == (score[ranked[1]] or 0)      # e.g. a best-of-2 drawn 1-1
     series_winner = None if tied else ranked[0]
     if series_winner and sum(score[t] or 0 for t in ranked[1:]) == 0:
-        return {g["id"]: (series_winner, "series sweep") for g in played}
-    inferred = {}
+        return {g["id"]: (series_winner, "series sweep") for g in played}            # even with games missing
+    if len(played) != total:                    # a game missing from the feed: only the last game is still certain
+        return {g["id"]: ((series_winner, "last game of the series") if series_winner and g.get("number") == total
+                          else (None, "series incomplete in the feed")) for g in played}
+    inferred, basis = {}, {}
     for g in played:
         s = stats[g["id"]]
-        inferred[g["id"]] = (s["sides"].get(s["winner_side"]) or {}).get("team_id") if s.get("winner_side") else None
+        side, basis[g["id"]] = lolesports.winner(s["sides"]["blue"], s["sides"]["red"])   # today's rule, also on
+        inferred[g["id"]] = (s["sides"].get(side) or {}).get("team_id") if side else None  # games cached earlier
     wins = Counter(inferred.values())
     consistent = None not in inferred.values() and all(wins.get(t, 0) == (n or 0) for t, n in score.items())
     last = played[-1]["id"]
@@ -51,7 +56,7 @@ def game_winners(played, stats, score):
         if g["id"] == last and series_winner:
             out[g["id"]] = (series_winner, "last game of the series")
         elif consistent:
-            out[g["id"]] = (inferred[g["id"]], stats[g["id"]].get("winner_basis") + ", matches the series score")
+            out[g["id"]] = (inferred[g["id"]], basis[g["id"]] + ", matches the series score")
         else:
             out[g["id"]] = (None, "inferred wins disagree with the series score")
     return out
@@ -144,7 +149,15 @@ def sync_lolesports(db, leagues=None, since=None, max_matches=None, now=None, wo
                 done["errors"] += 1
                 continue
             rows = lolesports_rows(m, det, stats)
+            label = " vs ".join(t.get("name") or "?" for t in (det.get("match") or {}).get("teams") or [])
+            for g in (det.get("match") or {}).get("games") or []:
+                if g.get("state") == "completed" and not stats.get(g.get("id")):
+                    history.note_missing(db, f"le:{g['id']}", "le", f"le:{m['match_id']}", g.get("number"),
+                                         m.get("league"), m.get("start"), label,
+                                         "feed has no final frame (stopped before the game ended, or no feed)")
+                    done["games_missing"] += 1
             if not rows:
+                db.commit()
                 st = _when(m.get("start"))
                 if st and now - st > timedelta(days=3):
                     cache.put("le_nofeed", str(m["match_id"]), True)   # old match, no feed: not asked again for 30 days
