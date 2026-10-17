@@ -8,6 +8,13 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "full = collect then publish; publish-only = republish the cached source records (a retry: must add nothing)"
+        required: false
+        default: full
+        type: choice
+        options: [full, publish-only]
 
 permissions:
   contents: read
@@ -102,8 +109,10 @@ jobs:
           print('Leaguepedia bot login OK')
           PY
       - name: Leaguepedia canonical history (resumable, bounded)
+        if: inputs.mode != 'publish-only'
         run: python lol_scout.py sync --source leaguepedia --max-minutes 180
       - name: LoL Esports canonical history (resumable, bounded)
+        if: inputs.mode != 'publish-only'
         run: python lol_scout.py sync --source lolesports --max-minutes 90
       - name: Publish collected source records to Scout (also on partial completion)
         if: always()
