@@ -272,15 +272,64 @@ def _comparable_totals(data):
     return out
 
 
+def _passes(res, a, b):
+    """The A1 rule for model a over model b on one (stat, scope) result: log-score gain interval above 0, MAE not higher."""
+    if a == b:
+        return False
+    if f"logscore_gain_{a}_vs_{b}" in res:
+        lo = res[f"logscore_gain_{a}_vs_{b}"]["lo95"]
+    elif f"logscore_gain_{b}_vs_{a}" in res:
+        lo = -res[f"logscore_gain_{b}_vs_{a}"]["hi95"]
+    else:
+        return False
+    return lo > 0 and res["models"][a]["mae"] <= res["models"][b]["mae"]
+
+
+def make_fit(final_path, snapshot_sha=None):
+    """Amendment A5: the production fit from the single final comparison. -> fit dict (lol/model_fit.json)."""
+    import hashlib
+    raw = open(final_path, "rb").read()
+    d = json.loads(raw)
+    rep, fit = d["report"], d["b0_lol1_fit"]
+    assert rep["which"] == "final", "the fit comes from the final comparison only"
+    evidence = {}
+    for prop in ("kills", "assists", "deaths"):
+        base = fit["selection"][prop]
+        res = [rep["results"].get(f"{prop}|{sc}") for sc in ("12", "123")]
+        lol2 = all(r and _passes(r, "lol-2", base) for r in res)
+        if lol2:
+            fit["selection"][prop] = "lol-2"
+        evidence[prop] = {"b0_vs_lol1": base, "lol2_replaces": lol2,
+                          **{sc: {m: {k: round(r["models"][m][k], 4) for k in ("mae", "logscore")} for m in r["models"]}
+                             for sc, r in zip(("Maps 1-2", "Maps 1-3"), res) if r}}
+    if any(v == "lol-2" for v in fit["selection"].values()):
+        fit["sim"] = d["lol2_params"]
+    fit.update(protocol="lol/EVALUATION.md A1-A5", selection_rule="A1 rule per stat; lol-2 replaces only under the same rule",
+               selection_evidence=evidence,
+               fit_period={"targets_from": rep["periods"]["train_from"], "targets_before": rep["periods"]["eval_from"],
+                           "history_from": rep["periods"]["history_from"]},
+               final_report_sha256=hashlib.sha256(raw).hexdigest(), history_snapshot_sha256=snapshot_sha,
+               seed_rule="lol-2 simulation seed = crc32(market_key|day); evaluation seed = crc32(match|scope)",
+               written_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
+    return fit
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1])
-    ap.add_argument("which", choices=["dev", "final", "tune"])
+    ap.add_argument("which", choices=["dev", "final", "tune", "fit"])
+    ap.add_argument("--final", help="fit: the final comparison's JSON")
+    ap.add_argument("--snapshot-sha", help="fit: the history snapshot's sha256")
     ap.add_argument("--lol2", help='lol-2 settings as JSON, e.g. {"hl": 120, "k0": 8, "k_team": 8}')
     ap.add_argument("--json")
     ap.add_argument("--db", help="a history SQLite file (default: the configured history)")
     ap.add_argument("--sims", type=int, default=2000)
     a = ap.parse_args(argv)
     from pathlib import Path
+    if a.which == "fit":
+        fit = make_fit(a.final, a.snapshot_sha)
+        model.FIT_FILE.write_text(json.dumps(fit, indent=1, default=str) + chr(10), encoding="utf-8")
+        print(json.dumps({"selection": fit["selection"], "evidence": fit["selection_evidence"]}, indent=1))
+        return
     db = history.DB(dsn="", path=Path(a.db)) if a.db else history.DB()
     rows = history.all_player_games(db, since=PERIODS["dev"]["history_from"].isoformat())
     if a.which == "tune":

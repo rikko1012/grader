@@ -128,6 +128,16 @@ Every period is cut on the series start date, so all players and games of a seri
 - A group or rule is kept only if it improves VALID log score with a 95% interval above 0.
 - Whatever survives is then confirmed on TEST in the single final comparison.
 
+## Amendment A5 (2026-10-17 06:00 UTC; TEST not opened - lol/test_opened.json absent): the production choice and the fit file
+
+Fixes how the single final comparison turns into the production model. Nothing here was chosen from a TEST number.
+- **History used.** The repaired export from the data center after the Leaguepedia backfill completed (all 18 windows), pulled once into a SQLite snapshot; the snapshot's file hash is recorded in the fit.
+- **Development.** `python -m lol.evaluate tune` (lol-2 settings, VALID log score) and `python -m lol.evaluate dev` on that snapshot. A partial-history dev run (2026-10-16 23:04 UTC, VALID only) informed nothing but runtime and was superseded.
+- **Final.** `python -m lol.evaluate final` runs once with the tuned lol-2 setting. TEST (2026-08-01..10-16) was never scored before this run.
+- **Choice per stat.** First B0 vs lol-1 by the A1 rule (both Maps 1-2 / best-of-3 and Maps 1-3 / best-of-5: log-score gain 95% interval above 0 and MAE not higher). Then lol-2 replaces that choice only under the same rule against it. Otherwise the simpler choice stays.
+- **Fit file** (`lol/model_fit.json`, written by `python -m lol.evaluate fit`): the selected forms' parameters fitted on DEV-TRAIN + VALID (targets 2026-04-01..07-31), the NB sizes, lol-2's parameters when selected, the selection rule and evidence, the snapshot hash, fitting dates, the simulation seed rule (crc32 of market key and day) and the final report's hash.
+- **Stakes.** Unchanged: 0U for LoL until the real-line requirement (300 settled player-markets across 60+ series) passes. Grades follow the published bands.
+
 ## Results
 
 (filled in from `python -m lol.backtest` once the history is complete)
