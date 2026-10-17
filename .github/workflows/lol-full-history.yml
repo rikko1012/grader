@@ -1,0 +1,99 @@
+# LoL full history: Leaguepedia live check, every game from both sources since 2025, cross-source check, and the
+# full-history backtest (lol/EVALUATION.md). LoL only - it never touches the CS2 code, data or database.
+#
+# Runs where the Leaguepedia secrets live (repository secrets LEAGUEPEDIA_USER, LEAGUEPEDIA_BOT_PASSWORD), the HLTV
+# scraper's pattern: a GitHub Actions job fetches, the scout reads.
+#   - LOL_DB_DSN secret set: the history goes into LoL's own PostgreSQL and stays there.
+#   - not set: a temporary database inside the job; the results are printed and uploaded as an artifact.
+# Starts when this file is pushed on the LoL branch (re-run it from the Actions tab); never on main, never on a schedule
+# (the recurring sync is lol/deploy/lol-sync.yml).
+name: lol-full-history
+
+on:
+  push:
+    branches: [claude/keen-carson-tk8gbd]
+    paths: [.github/workflows/lol-full-history.yml]
+  workflow_dispatch:
+
+concurrency:
+  group: lol-full-history
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash          # -eo pipefail: a failing sync fails its step even when piped
+
+jobs:
+  full-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      LEAGUEPEDIA_USER: ${{ secrets.LEAGUEPEDIA_USER }}
+      LEAGUEPEDIA_BOT_PASSWORD: ${{ secrets.LEAGUEPEDIA_BOT_PASSWORD }}
+      LOL_DB_DSN: ${{ secrets.LOL_DB_DSN }}
+      LOL_DATA_DIR: ${{ runner.temp }}/lol
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt pytest
+
+      - name: LoL tests (offline)
+        run: python -m pytest lol/tests -q -p no:cacheprovider
+
+      - name: Leaguepedia credentials present (names only, never the values)
+        run: |
+          [ -n "$LEAGUEPEDIA_USER" ] && [ -n "$LEAGUEPEDIA_BOT_PASSWORD" ] || { echo "LEAGUEPEDIA secrets missing"; exit 1; }
+          echo "both set; database: $([ -n "$LOL_DB_DSN" ] && echo 'LoL PostgreSQL (LOL_DB_DSN)' || echo 'temporary (this job only)')"
+
+      - name: Leaguepedia live check (login, one week, fields, league short names)
+        run: python -m lol.checks leaguepedia
+
+      - name: Sync Leaguepedia since 2025-01-01 (1 request / second)
+        run: python lol_scout.py sync --source leaguepedia --since 2025-01-01 | tail -c 4000
+
+      - name: Sync the LoL Esports feed since 2025-01-01 (4 requests / second per host)
+        run: python lol_scout.py sync --source lolesports --since 2025-01-01 | tail -c 4000
+
+      - name: Coverage and missing games
+        run: |
+          python lol_scout.py status > "$LOL_DATA_DIR/status.json"
+          python - <<'EOF'
+          import json, os
+          d = json.load(open(os.path.join(os.environ["LOL_DATA_DIR"], "status.json")))
+          m = d["missing_games"]
+          print("missing games:", m["total"], "| filled by Leaguepedia:", m["filled_by_leaguepedia"],
+                "| still missing:", len(m["still_missing"]))
+          for r in d["history"]:
+              print(f"  {r['source']} {str(r['league'])[:28]:28s} {r['matches']:6d} matches {r['games']:7d} games  "
+                    f"{str(r['first'])[:10]} .. {str(r['last'])[:10]}")
+          for x in m["still_missing"][:30]:
+              print("  still missing:", x)
+          EOF
+
+      - name: Cross-source check (games both sources hold)
+        run: python -m lol.checks crosscheck | tee "$LOL_DATA_DIR/crosscheck.json"
+
+      - name: Backtest - full-history protocol (lol/EVALUATION.md)
+        run: |
+          python -m lol.backtest --train-from 2025-03-01 --test-from 2026-04-01 --test-to 2026-10-17 \
+            --json "$LOL_DATA_DIR/full_report.json" --write
+          echo "----- lol/model_fit.json -----"
+          cat lol/model_fit.json
+          cp lol/model_fit.json "$LOL_DATA_DIR/model_fit.json"
+
+      - name: Keep the results (7 days)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lol-full-history
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/lol/*.json
+            ${{ runner.temp }}/lol/history.db

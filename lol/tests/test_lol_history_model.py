@@ -375,3 +375,43 @@ def test_backtest_last10_keeps_game_order_within_a_day(db):
     data = backtest.Data(history.all_player_games(db))
     (arr,) = data.arr.values()
     assert list(arr[:, 1]) == [9.0, 0.0]                             # by day, then game order - never by kills
+
+
+def test_crosscheck_reports_agreement(db, capsys):
+    import json as _json
+    from lol import checks
+    g, rows = _game("lp", "1", "2026-07-29", 1, "T1", "Gen.G", 18, 9, [("Faker", "blue", "mid", 5, 1, 7, "Wukong")],
+                    winner="T1")
+    history.save_game(db, g, rows)
+    g, rows = _game("le", "1", "2026-07-29", 1, "T1", "Gen.G", 18, 9, [("Faker", "blue", "mid", 5, 1, 7, "MonkeyKing")],
+                    winner="T1")
+    g["winner_basis"] = "inferred: inhibitors, towers and gold agree, matches the series score"
+    history.save_game(db, g, rows)
+    g, rows = _game("le", "2", "2026-07-30", 1, "KT", "DRX", 10, 12, [("Bdd", "red", "mid", 3, 3, 3, "Ahri")], match="M2")
+    history.save_game(db, g, rows)
+    db.commit()
+    checks.crosscheck(db)
+    out = _json.loads(capsys.readouterr().out)
+    a = out["agreement"]
+    assert a["games held by both"] == 1 and a["team kills agree"] == 1 and a["player K/D/A agree"] == 1
+    assert a["inferred winner agrees"] == 1 and out["feed_only_games_by_league"] == {"lck": 1}
+
+
+def test_crosscheck_reports_agreement(db, capsys):
+    import json as _json
+    from lol import checks
+    g, rows = _game("lp", "1", "2026-07-29", 1, "T1", "Gen.G", 18, 9, [("Faker", "blue", "mid", 5, 1, 7, "Wukong")],
+                    winner="T1")
+    history.save_game(db, g, rows)
+    g, rows = _game("le", "1", "2026-07-29", 1, "T1", "Gen.G", 18, 9, [("Faker", "blue", "mid", 5, 1, 7, "MonkeyKing")],
+                    winner="T1")
+    g["winner_basis"] = "inferred: inhibitors, towers and gold agree, matches the series score"
+    history.save_game(db, g, rows)
+    g, rows = _game("le", "2", "2026-07-30", 1, "KT", "DRX", 10, 12, [("Bdd", "red", "mid", 3, 3, 3, "Ahri")], match="M2")
+    history.save_game(db, g, rows)
+    db.commit()
+    checks.crosscheck(db)
+    out = _json.loads(capsys.readouterr().out)
+    a = out["agreement"]
+    assert a["games held by both"] == 1 and a["team kills agree"] == 1 and a["player K/D/A agree"] == 1
+    assert a["inferred winner agrees"] == 1 and out["feed_only_games_by_league"] == {"lck": 1}

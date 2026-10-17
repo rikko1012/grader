@@ -181,19 +181,26 @@ def sync_leaguepedia(db, since=None, until=None, where=None, now=None):
     since = since or (now - timedelta(days=DEFAULT_DAYS)).date()
     until = until or (now + timedelta(days=1)).date()
     site = leaguepedia.Leaguepedia()
-    done = Counter()
+    done, failed = Counter(), []
     day = since
     while day < until:
         nxt = min(day + timedelta(days=7), until)
-        rows = site.player_games(day, nxt, where=where)
+        try:
+            rows = site.player_games(day, nxt, where=where)
+        except Exception as e:          # noqa: BLE001 - one bad week never stops the sync; it is reported, not hidden
+            failed.append(f"{day}..{nxt}: {type(e).__name__}: {str(e)[:120]}")
+            _log(f"  Leaguepedia {day} .. {nxt}: FAILED ({type(e).__name__}) - re-run sync for this week")
+            day = nxt
+            continue
         for game, players in leaguepedia.to_history(rows):
             history.save_game(db, game, players)
             done["games"] += 1
         db.commit()
         _log(f"  Leaguepedia {day} .. {nxt}: {len(rows)} player rows")
         day = nxt
-    history.set_state(db, "lp:last_sync", now.isoformat(timespec="seconds"))
-    return dict(done)
+    if not failed:
+        history.set_state(db, "lp:last_sync", now.isoformat(timespec="seconds"))
+    return dict(done, failed_weeks=failed)
 
 
 def parse_date(s):

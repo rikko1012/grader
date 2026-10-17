@@ -87,13 +87,13 @@ class Leaguepedia:
         for k, v in (("where", where), ("join_on", join_on), ("order_by", order_by), ("group_by", group_by)):
             if v:
                 params[k] = v
-        for attempt in range(5):
+        for attempt in range(8):
             body = net.get(API, params=params, sess=self.sess, timeout=60).json()
             err = body.get("error")
             if not err:
                 return [row.get("title") or {} for row in body.get("cargoquery") or []]
             if err.get("code") in ("ratelimited", "maxlag"):
-                wait = 30 * (attempt + 1)
+                wait = min(30 * (attempt + 1), 120)
                 print(f"  Leaguepedia {err.get('code')}: waiting {wait} s", file=sys.stderr, flush=True)
                 time.sleep(wait)
                 continue
@@ -101,7 +101,7 @@ class Leaguepedia:
                 self.login()
                 continue
             raise LeaguepediaError(f"Cargo error {err.get('code')}: {err.get('info')}")
-        raise LeaguepediaError("Cargo still rate-limited after 5 tries")
+        raise LeaguepediaError("Cargo still rate-limited after 8 tries")
 
     def cargo_all(self, tables, fields, where=None, join_on=None, order_by=None, group_by=None, max_rows=200000):
         """Every page. The next page starts after the rows actually received, and only a page shorter than the smallest
