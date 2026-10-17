@@ -1,0 +1,451 @@
+{
+ "data": [
+  {
+   "type": "projection",
+   "id": "15816498",
+   "attributes": {
+    "adjusted_odds": false,
+    "board_time": "2026-10-15T05:00:00.000-04:00",
+    "custom_image": null,
+    "description": "BFX MAPS 1-3",
+    "end_time": null,
+    "event_type": "combo",
+    "flash_sale_line_score": null,
+    "game_id": "BFXWE46312.2083333333",
+    "group_key": "232439-542-BFXWE46312.2083333333-724-false",
+    "hr_20": true,
+    "in_game": false,
+    "is_live": false,
+    "is_live_scored": false,
+    "is_promo": false,
+    "league_ppid": "LoL",
+    "line_score": 26,
+    "odds_type": "standard",
+    "projection_type": "Single Stat",
+    "rank": 1,
+    "refundable": true,
+    "start_time": "2026-10-17T05:00:00.000-04:00",
+    "stat_display_name": "MAPS 1-3 Kills (Combo)",
+    "stat_type": "MAPS 1-3 Kills (Combo)",
+    "status": "pre_game",
+    "today": true,
+    "trending_count": 121,
+    "tv_channel": null,
+    "updated_at": "2026-10-15T10:34:16.256-04:00"
+   },
+   "relationships": {
+    "duration": {
+     "data": {
+      "type": "duration",
+      "id": "724"
+     }
+    },
+    "game": {
+     "data": {
+      "type": "game",
+      "id": "195956"
+     }
+    },
+    "league": {
+     "data": {
+      "type": "league",
+      "id": "121"
+     }
+    },
+    "new_player": {
+     "data": {
+      "type": "new_player",
+      "id": "232439"
+     }
+    },
+    "projection_type": {
+     "data": {
+      "type": "projection_type",
+      "id": "2"
+     }
+    },
+    "score": {
+     "data": null
+    },
+    "stat_type": {
+     "data": {
+      "type": "stat_type",
+      "id": "542"
+     }
+    }
+   }
+  },
+  {
+   "type": "projection",
+   "id": "15820272",
+   "attributes": {
+    "adjusted_odds": true,
+    "allowed_wager_types": "over",
+    "board_time": "2026-10-15T05:00:00.000-04:00",
+    "custom_image": null,
+    "description": "BFX MAPS 1-3",
+    "end_time": null,
+    "event_type": "team",
+    "flash_sale_line_score": null,
+    "game_id": "BFXWE46312.2083333333",
+    "group_key": "40602-331-BFXWE46312.2083333333-724-false",
+    "hr_20": true,
+    "in_game": false,
+    "is_live": false,
+    "is_live_scored": false,
+    "is_promo": false,
+    "league_ppid": "LoL",
+    "line_score": 7.5,
+    "odds_type": "demon",
+    "projection_type": "Single Stat",
+    "rank": 2,
+    "refundable": true,
+    "start_time": "2026-10-17T05:00:00.000-04:00",
+    "stat_display_name": "MAPS 1-3 Kills",
+    "stat_type": "MAPS 1-3 Kills",
+    "status": "pre_game",
+    "today": true,
+    "tv_channel": null,
+    "updated_at": "2026-10-15T12:23:13.730-04:00"
+   },
+   "relationships": {
+    "duration": {
+     "data": {
+      "type": "duration",
+      "id": "724"
+     }
+    },
+    "game": {
+     "data": {
+      "type": "game",
+      "id": "195956"
+     }
+    },
+    "league": {
+     "data": {
+      "type": "league",
+      "id": "121"
+     }
+    },
+    "new_player": {
+     "data": {
+      "type": "new_player",
+      "id": "40602"
+     }
+    },
+    "projection_type": {
+     "data": {
+      "type": "projection_type",
+      "id": "2"
+     }
+    },
+    "score": {
+     "data": null
+    },
+    "stat_type": {
+     "data": {
+      "type": "stat_type",
+      "id": "331"
+     }
+    }
+   }
+  },
+  {
+   "type": "projection",
+   "id": "15815786",
+   "attributes": {
+    "adjusted_odds": false,
+    "board_time": "2026-10-15T05:00:00.000-04:00",
+    "custom_image": null,
+    "description": "BFX MAPS 1-3",
+    "end_time": null,
+    "event_type": "team",
+    "flash_sale_line_score": null,
+    "game_id": "BFXWE46312.2083333333",
+    "group_key": "40602-331-BFXWE46312.2083333333-724-false",
+    "hr_20": true,
+    "in_game": false,
+    "is_live": false,
+    "is_live_scored": false,
+    "is_promo": false,
+    "league_ppid": "LoL",
+    "line_score": 6,
+    "odds_type": "standard",
+    "projection_type": "Single Stat",
+    "rank": 3,
+    "refundable": true,
+    "start_time": "2026-10-17T05:00:00.000-04:00",
+    "stat_display_name": "MAPS 1-3 Kills",
+    "stat_type": "MAPS 1-3 Kills",
+    "status": "pre_game",
+    "today": true,
+    "trending_count": 141,
+    "tv_channel": null,
+    "updated_at": "2026-10-15T10:34:16.256-04:00"
+   },
+   "relationships": {
+    "duration": {
+     "data": {
+      "type": "duration",
+      "id": "724"
+     }
+    },
+    "game": {
+     "data": {
+      "type": "game",
+      "id": "195956"
+     }
+    },
+    "league": {
+     "data": {
+      "type": "league",
+      "id": "121"
+     }
+    },
+    "new_player": {
+     "data": {
+      "type": "new_player",
+      "id": "40602"
+     }
+    },
+    "projection_type": {
+     "data": {
+      "type": "projection_type",
+      "id": "2"
+     }
+    },
+    "score": {
+     "data": null
+    },
+    "stat_type": {
+     "data": {
+      "type": "stat_type",
+      "id": "331"
+     }
+    }
+   }
+  },
+  {
+   "type": "projection",
+   "id": "15820271",
+   "attributes": {
+    "adjusted_odds": true,
+    "allowed_wager_types": "over",
+    "board_time": "2026-10-15T05:00:00.000-04:00",
+    "custom_image": null,
+    "description": "BFX MAPS 1-3",
+    "end_time": null,
+    "event_type": "team",
+    "flash_sale_line_score": null,
+    "game_id": "BFXWE46312.2083333333",
+    "group_key": "40602-331-BFXWE46312.2083333333-724-false",
+    "hr_20": true,
+    "in_game": false,
+    "is_live": false,
+    "is_live_scored": false,
+    "is_promo": false,
+    "league_ppid": "LoL",
+    "line_score": 4.5,
+    "odds_type": "goblin",
+    "projection_type": "Single Stat",
+    "rank": 4,
+    "refundable": true,
+    "start_time": "2026-10-17T05:00:00.000-04:00",
+    "stat_display_name": "MAPS 1-3 Kills",
+    "stat_type": "MAPS 1-3 Kills",
+    "status": "pre_game",
+    "today": true,
+    "tv_channel": null,
+    "updated_at": "2026-10-15T12:23:13.666-04:00"
+   },
+   "relationships": {
+    "duration": {
+     "data": {
+      "type": "duration",
+      "id": "724"
+     }
+    },
+    "game": {
+     "data": {
+      "type": "game",
+      "id": "195956"
+     }
+    },
+    "league": {
+     "data": {
+      "type": "league",
+      "id": "121"
+     }
+    },
+    "new_player": {
+     "data": {
+      "type": "new_player",
+      "id": "40602"
+     }
+    },
+    "projection_type": {
+     "data": {
+      "type": "projection_type",
+      "id": "2"
+     }
+    },
+    "score": {
+     "data": null
+    },
+    "stat_type": {
+     "data": {
+      "type": "stat_type",
+      "id": "331"
+     }
+    }
+   }
+  }
+ ],
+ "included": [
+  {
+   "type": "league",
+   "id": "121",
+   "attributes": {
+    "active": true,
+    "f2p_enabled": false,
+    "full_logo": null,
+    "has_live_projections": false,
+    "icon": "lol",
+    "image_url": "https://static.prizepicks.com/images/leagues/production/48.svg",
+    "last_five_games_enabled": false,
+    "league_icon_id": 48,
+    "logo": null,
+    "name": "LoL",
+    "parent_id": null,
+    "parent_name": null,
+    "player_headshot_fallback": null,
+    "projections_count": 0,
+    "rank": 251,
+    "show_trending": true
+   },
+   "relationships": {
+    "projection_filters": {
+     "data": []
+    }
+   }
+  },
+  {
+   "type": "duration",
+   "id": "724",
+   "attributes": {
+    "name": "MAPS 1-3"
+   }
+  },
+  {
+   "type": "stat_type",
+   "id": "542",
+   "attributes": {
+    "lfg_ignored_leagues": [],
+    "name": "MAPS 1-3 Kills (Combo)",
+    "rank": 1
+   }
+  },
+  {
+   "type": "projection_type",
+   "id": "2",
+   "attributes": {
+    "name": "Single Stat"
+   }
+  },
+  {
+   "type": "stat_type",
+   "id": "331",
+   "attributes": {
+    "lfg_ignored_leagues": [
+     265
+    ],
+    "name": "MAPS 1-3 Kills",
+    "rank": 2
+   }
+  },
+  {
+   "type": "game",
+   "id": "195956",
+   "attributes": {
+    "created_at": "2026-10-15T10:29:34.739-04:00",
+    "end_time": null,
+    "external_game_id": "BFXWE46312.2083333333",
+    "is_live": false,
+    "metadata": {
+     "game_id": "BFXWE46312.2083333333",
+     "game_info": {
+      "status": "pre-game"
+     },
+     "league_name": "LoL"
+    },
+    "start_time": "2026-10-17T05:00:00.000-04:00",
+    "status": "pre-game",
+    "updated_at": "2026-10-15T10:29:34.739-04:00"
+   }
+  },
+  {
+   "type": "new_player",
+   "id": "232439",
+   "attributes": {
+    "combo": true,
+    "display_name": "Cube + Monki + Karis",
+    "image_url": "https://static.prizepicks.com/images/manual/WE 3x Combo.png",
+    "jersey_number": null,
+    "league": "LoL",
+    "league_id": 121,
+    "market": null,
+    "name": "Cube + Monki + Karis",
+    "position": "TOP/JNG/MID",
+    "ppid": null,
+    "team": "WE",
+    "team_name": "WE"
+   },
+   "relationships": {
+    "league": {
+     "data": {
+      "type": "league",
+      "id": "121"
+     }
+    },
+    "team_data": {
+     "data": {
+      "type": "team",
+      "id": "7443"
+     }
+    }
+   }
+  },
+  {
+   "type": "new_player",
+   "id": "40602",
+   "attributes": {
+    "combo": false,
+    "display_name": "Cube",
+    "image_url": "https://static.prizepicks.com/images/manual/WE_LoL.png",
+    "jersey_number": null,
+    "league": "LoL",
+    "league_id": 121,
+    "market": null,
+    "name": "Cube",
+    "position": "TOP",
+    "ppid": null,
+    "team": "WE",
+    "team_name": "WE"
+   },
+   "relationships": {
+    "league": {
+     "data": {
+      "type": "league",
+      "id": "121"
+     }
+    },
+    "team_data": {
+     "data": {
+      "type": "team",
+      "id": "7443"
+     }
+    }
+   }
+  }
+ ]
+}
