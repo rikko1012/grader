@@ -1152,7 +1152,7 @@ def lol_public():
         _LOL_PUB.update(at=time.time(), on=(LOL_CENTER / "public.flag").exists())
     return _LOL_PUB["on"]
 _LOL_MEMBER = {"mtime": None, "body": None, "lock": threading.Lock()}
-LOL_STAKE_NOTE = "LoL stakes start at 0U until LoL picks have a settled record on real lines; grades and chances are shown now."
+LOL_STAKE_NOTE = "0U: LoL stakes start once LoL picks have a settled record at real lines. The grade is the model's grade for this line."
 
 
 def lol_member_board():
@@ -1171,45 +1171,98 @@ def lol_member_board():
         return _lol_member_rebuild(path, mt)
 
 
+LOL_PLATFORM = {"underdog": "Underdog", "prizepicks": "PrizePicks"}
+LOL_STAT = {"kills": "Kills", "assists": "Assists", "deaths": "Deaths", "fantasy_points": "Fantasy points"}
+LOL_SCOPE_GAMES = {"Map 1": "game 1 only", "Maps 1-2": "games 1 and 2 added", "Maps 1-3": "games 1, 2 and 3 added"}
+
+
+def _lol_line_type(platform, odds_type, market):
+    """(short label, sentence) for the kind of line - definite facts from the feed only."""
+    kind = (market or {}).get("kind")
+    if kind == "promotional" or odds_type == "promo":
+        return "Promo", "PrizePicks promotional line"
+    if platform == "prizepicks" and odds_type == "goblin":
+        return "Goblin", "PrizePicks Goblin: an alternate line set below the standard line, with a lower payout"
+    if platform == "prizepicks" and odds_type == "demon":
+        return "Demon", "PrizePicks Demon: an alternate line set above the standard line, with a higher payout"
+    if platform == "underdog" and odds_type not in (None, "balanced"):
+        return "Adjusted", f"Underdog {odds_type} line"
+    return "Standard", "Standard line"
+
+
+def _lol_sides(platform, sides):
+    """[{side, offered, payout}] - payout is Underdog's per-pick payout modifier, never odds; a side the feed does not
+    list as available is not offered."""
+    out = []
+    for key, name in (("higher", "Over"), ("lower", "Under")):
+        s = (sides or {}).get(key) or {}
+        if platform == "underdog":
+            on = bool(s) and (s.get("status") in (None, "active"))
+            out.append({"side": name, "offered": on, "payout": s.get("payout_multiplier") if on else None})
+        else:
+            out.append({"side": name, "offered": s.get("offered") is True, "payout": None})
+    return out
+
+
 def _lol_member_rebuild(path, mt):
     try:
         b = json.loads(path.read_text())
     except (OSError, ValueError):
         return _LOL_MEMBER["body"]
-    plat = {"underdog": "Underdog", "prizepicks": "PrizePicks"}
-    scope = {"Maps 1-2": "Maps 1-2", "Maps 1-3": "Maps 1-3", "Map 1": "Map 1"}
-    rows = []
+    rows, label = [], {}
+    for x in b.get("rows") or []:                               # one match label per series, from both teams' names
+        sid = (x.get("link") or {}).get("sid")
+        if sid and x.get("team") and x.get("opponent"):
+            label.setdefault(sid, " vs ".join(sorted([x["team"], x["opponent"]])))
     for x in b.get("rows") or []:
         f = x.get("forecast")
         if not f or not f.get("current") or x.get("market_type") != "single":
             continue
         inp = f.get("inputs") or {}
-        side = f.get("model_side")
-        offered = [k for k, v in (x.get("sides") or {}).items() if k in ("higher", "lower") and
-                   (v.get("offered") if x.get("platform") == "prizepicks" else (v.get("status") or "active") == "active")]
-        rows.append({"platform": x.get("platform"), "platform_label": plat.get(x.get("platform"), x.get("platform")),
+        side = "Over" if f.get("model_side") == "over" else "Under"
+        sides = _lol_sides(x.get("platform"), x.get("sides"))
+        pick_offered = next(s["offered"] for s in sides if s["side"] == side)
+        lt, lt_note = _lol_line_type(x.get("platform"), x.get("odds_type"), inp.get("market"))
+        rec = inp.get("recent") or {}
+        rows.append({"platform": x.get("platform"), "platform_label": LOL_PLATFORM.get(x.get("platform"), x.get("platform")),
                      "player": x.get("player"), "team": x.get("team"), "role": x.get("role"), "opponent": x.get("opponent"),
-                     "event": x.get("competition"), "best_of": x.get("best_of"), "start": x.get("series_start"), "stat": x.get("stat"),
-                     "stat_label": f"{(x.get('stat') or '').title()} · {scope.get(x.get('scope'), x.get('scope'))}",
-                     "odds_type": x.get("odds_type"), "line": x.get("line"), "sides_offered": offered,
-                     "projection": f.get("projection"), "median": inp.get("median"), "range80": inp.get("range80"),
+                     "event": x.get("competition"), "best_of": x.get("best_of"), "start": x.get("series_start"),
+                     "match": label.get((x.get("link") or {}).get("sid")) or " vs ".join(sorted(filter(None, [x.get("team"), x.get("opponent")]))),
+                     "stat": x.get("stat"), "stat_name": LOL_STAT.get(x.get("stat"), x.get("stat")), "scope": x.get("scope"),
+                     "scope_games": LOL_SCOPE_GAMES.get(x.get("scope")), "line_type": lt, "line_type_note": lt_note,
+                     "line": x.get("line"), "sides": sides, "projection": f.get("projection"), "median": inp.get("median"),
+                     "range80": inp.get("range80"), "recent_games": rec.get("games"), "recent_per_game": rec.get("per_game"),
                      "p_over": f.get("p_over"), "p_under": f.get("p_under"), "p_push": f.get("p_push"),
-                     "pick": f"{'Over' if side == 'over' else 'Under'} {x.get('line')}", "pick_offered": f.get("side_offered") == 1 if f.get("side_offered") is not None else None,
-                     "grade": f.get("grade"), "units": 0.0, "stake_reason": "0U - LoL stakes start after a settled real-line record",
-                     "line_seen": x.get("quote_seen_at"), "forecast_at": f.get("at"), "drivers": inp.get("drivers") or [],
-                     "unknowns": inp.get("unknowns") or []})
+                     "pick_side": side, "pick": f"{side} {x.get('line')}", "pick_offered": pick_offered,
+                     "grade": f.get("grade"), "units": 0.0, "stake_reason": LOL_STAKE_NOTE,
+                     "line_seen": x.get("quote_seen_at"), "line_checked": x.get("quote_checked_at") or x.get("quote_seen_at"),
+                     "forecast_at": f.get("at"), "drivers": inp.get("drivers") or [], "not_modelled": inp.get("unknowns") or []})
     tables = []
     for t in b.get("match_tables") or []:
         mk = [m for m in (t.get("markets") or {}).values() if m.get("market_type") == "single"]
         if not mk:
             continue
         teams = sorted({m.get("team") for m in mk if m.get("team")})
-        tables.append({"teams": " vs ".join(teams), "event": t.get("competition"), "best_of": t.get("best_of"), "start": t.get("start"),
-                       "markets": [{"player": m.get("player"), "team": m.get("team"), "role": m.get("role"),
-                                    "prop": f"{(m.get('stat') or '').title()} · {m.get('scope')}",
-                                    "lines": [dict(l, platform=plat.get(l.get("platform"), l.get("platform"))) for l in m.get("lines") or []]}
-                                   for m in mk]})
-    body = json.dumps({"at": b.get("at"), "rows": rows, "match_tables": tables, "stake_note": LOL_STAKE_NOTE}).encode()
+        markets = []
+        for m in mk:
+            lines = []
+            for ln in m.get("lines") or []:
+                lt, _ = _lol_line_type(ln.get("platform"), ln.get("odds_type"), ln.get("market"))
+                fc = ln.get("projection") is not None and ln.get("current") is not False
+                lines.append({"platform": LOL_PLATFORM.get(ln.get("platform"), ln.get("platform")), "line_type": lt, "line": ln.get("line"),
+                              "sides": _lol_sides(ln.get("platform"), ln.get("sides")), "checked": ln.get("checked_at"),
+                              "projection": ln.get("projection") if fc else None, "p_over": ln.get("p_over") if fc else None,
+                              "p_under": ln.get("p_under") if fc else None, "grade": ln.get("grade") if fc else None,
+                              "pick_side": ({"over": "Over", "under": "Under"}.get(ln.get("model_side")) if fc else None)})
+            lines.sort(key=lambda z: (z["line"] if z["line"] is not None else 1e9, z["platform"]))
+            markets.append({"player": m.get("player"), "team": m.get("team"), "role": m.get("role"),
+                            "stat_name": LOL_STAT.get(m.get("stat"), m.get("stat")), "scope": m.get("scope"), "lines": lines})
+        markets.sort(key=lambda z: (z["team"] or "", z["player"] or "", z["stat_name"] or ""))
+        tables.append({"teams": label.get(t.get("sid")) or " vs ".join(teams), "event": t.get("competition"), "best_of": t.get("best_of"),
+                       "start": t.get("start"), "markets": markets})
+    tables.sort(key=lambda z: z["start"] or "")
+    feeds = {LOL_PLATFORM.get(k, k): v for k, v in (b.get("feeds") or {}).items()}
+    body = json.dumps({"at": b.get("at"), "feeds": feeds, "rows": rows, "match_tables": tables, "stake_note": LOL_STAKE_NOTE}).encode()
     _LOL_MEMBER.update(mtime=mt, body=body)
     return body
 

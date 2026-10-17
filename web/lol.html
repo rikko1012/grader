@@ -1,85 +1,251 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>LoL Prop Grader</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#080a0f;--panel:#10151d;--panel-2:#161c27;--line:#212a38;--line-2:#2b3547;--text:#eef2f8;--muted:#a3adbf;--faint:#7d879a;--accent:#ff7a1a;--accent-2:#ffa53a;--up:#3fb950;--dn:#f0883e}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 Inter,system-ui,sans-serif}
-header{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
-.logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:grid;place-items:center}
-h1{font-size:17px;margin:0}h1 em{font-style:normal;color:var(--accent-2)}.grow{flex:1}
-.sport{display:flex;gap:6px}.sport a{color:var(--muted);text-decoration:none;border:1px solid var(--line-2);border-radius:999px;padding:5px 12px;font-size:12px}
-.sport a.on{color:#170b00;background:var(--accent);border-color:var(--accent)}
-.wrap{max-width:1280px;margin:0 auto;padding:16px}.muted{color:var(--muted)}.small{font-size:12px}
-.bar{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 14px}.seg{display:flex;border:1px solid var(--line-2);border-radius:10px;overflow:hidden}
-.seg button{background:var(--panel);color:var(--muted);border:0;padding:8px 12px;font:inherit;font-size:12px;cursor:pointer}.seg button.on{background:var(--panel-2);color:var(--text)}
-.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
-table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
-th{color:var(--faint);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;background:var(--panel-2)}tbody tr{cursor:pointer}tbody tr:hover{background:#1b2230}
-.num{text-align:right;font-variant-numeric:tabular-nums}.g{display:inline-block;min-width:34px;text-align:center;border-radius:7px;padding:1px 6px;font-weight:700;background:#2a2116;color:var(--accent-2)}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin:12px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 18px}
-.k{color:var(--faint);font-size:11.5px}#modal{position:fixed;inset:0;background:#000b;display:none;align-items:flex-start;justify-content:center;padding:32px 12px;overflow:auto}
-#modal .card{max-width:760px;width:100%}button.close{background:var(--panel-2);color:var(--text);border:1px solid var(--line-2);border-radius:9px;padding:8px 14px;cursor:pointer}
-.gate{max-width:440px;margin:60px auto;text-align:center}.gate a{color:var(--accent-2)}
-@media(max-width:640px){header{flex-wrap:wrap}.wrap{padding:12px}}
+:root{--bg:#090b10;--panel:#11151d;--panel-2:#191f29;--line:#262e3b;--line-2:#3b4659;--text:#f4f5f7;--muted:#a9b2c2;--faint:#8f9bb0;
+  --accent:#f7a45b;--accent-2:#ffc595;--up:#4cc76a;--dn:#ff9b5e;--warn:#e3b341;--display:"Chakra Petch",system-ui,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+*{box-sizing:border-box}html{-webkit-text-size-adjust:100%}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 Inter,system-ui,sans-serif}
+button,select,a{touch-action:manipulation}button:focus-visible,a:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+header{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;padding:0 20px;height:64px;border-bottom:1px solid var(--line);background:#090b10f2;backdrop-filter:blur(12px)}
+.logo{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#ff7a1a,var(--accent));display:grid;place-items:center;flex-shrink:0}
+h1{font:700 17px var(--display);letter-spacing:.4px;margin:0;white-space:nowrap}h1 em{font-style:normal;color:var(--accent-2)}.grow{flex:1}
+.sportsw{display:inline-flex;border:1px solid var(--line-2);border-radius:999px;padding:3px;gap:2px;background:#0b1018}
+.sportsw a{color:var(--muted);text-decoration:none;font:600 12px Inter,system-ui;padding:7px 14px;border-radius:999px;min-height:32px;display:inline-flex;align-items:center}
+.sportsw a.on{background:var(--accent);color:#18120e}.sportsw a:not(.on):hover{color:var(--text);background:#ffffff0d}
+#who{font-size:12px;color:var(--muted);white-space:nowrap}#who a{color:var(--muted)}
+.wrap{max-width:1440px;margin:0 auto;padding:20px 20px 80px}.muted{color:var(--muted)}.faint{color:var(--faint)}.small{font-size:12px}
+.intro{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin:6px 0 16px}
+.eyebrow{font:10px var(--mono);letter-spacing:.16em;color:var(--accent-2);text-transform:uppercase}
+.intro h2{font:600 clamp(24px,3vw,34px)/1.15 var(--display);margin:6px 0 4px;letter-spacing:-.5px}.intro p{margin:0;color:var(--muted);font-size:13px;max-width:640px}
+.feeds{font-size:12px;color:var(--muted);display:flex;gap:6px 14px;flex-wrap:wrap}.feeds b{color:var(--text);font-weight:600}
+.banner{border:1px solid #e3b34155;background:#e3b34112;color:#f2d27a;border-radius:10px;padding:10px 14px;margin:0 0 14px;font-size:13px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:0 0 14px;padding:12px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+.seg{display:inline-flex;border:1px solid var(--line-2);border-radius:10px;overflow:hidden;background:#0b1018}
+.seg button{background:transparent;color:var(--muted);border:0;padding:0 14px;min-height:40px;font:500 13px Inter,system-ui;cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}.seg button.on{background:var(--panel-2);color:var(--accent-2)}
+select{background:#0b1018;color:var(--text);border:1px solid var(--line-2);border-radius:10px;min-height:40px;padding:0 10px;font:13px Inter,system-ui;max-width:100%}
+label.chk{display:inline-flex;align-items:center;gap:8px;min-height:40px;color:var(--muted);font-size:13px;cursor:pointer}label.chk input{width:18px;height:18px;accent-color:var(--accent)}
+.tablebox{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;vertical-align:middle}
+th{color:var(--faint);font:600 10.5px Inter,system-ui;text-transform:uppercase;letter-spacing:.07em;background:var(--panel-2);position:sticky;top:0}
+tbody tr.row{cursor:pointer}tbody tr.row:hover{background:#1a212d}tbody tr:last-child td{border-bottom:0}
+.num{text-align:right;font-variant-numeric:tabular-nums}.sub{display:block;color:var(--faint);font-size:11.5px}
+.g{display:inline-block;min-width:38px;text-align:center;border-radius:7px;padding:2px 7px;font-weight:700;background:#2a2116;color:var(--accent-2);border:1px solid #f7a45b33}
+.g.lean{background:transparent;color:var(--muted);border-color:var(--line-2);font-weight:600}.g.off{background:transparent;color:var(--faint);border:1px dashed var(--line-2);font-weight:500}
+.tag{display:inline-block;border:1px solid var(--line-2);border-radius:6px;padding:0 6px;font-size:11px;color:var(--muted);margin-left:6px}
+.tag.alt{border-color:#b18cff66;color:#cdb6ff}.tag.promo{border-color:#4cc76a66;color:#8fe0a3}
+.pick{font-weight:600}.pick.over{color:var(--up)}.pick.under{color:var(--dn)}.pick.off{color:var(--faint);font-weight:500;text-decoration:line-through}
+.offnote{display:block;color:var(--faint);font-size:11.5px}
+.na{color:var(--faint);font-style:normal}
+.cards{display:none}
+.mcard{display:block;width:100%;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0 0 10px;color:inherit;font:inherit;cursor:pointer}
+.mcard .top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.mcard .who b{font-size:15px}
+.mcard .kv{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.mcard .kv div{font-size:13px;font-variant-numeric:tabular-nums}.mcard .kv .k{display:block;font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em}
+.empty{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:28px 20px;text-align:center;color:var(--muted)}
+.empty button,.btn{background:var(--panel-2);color:var(--text);border:1px solid var(--line-2);border-radius:10px;min-height:44px;padding:0 16px;font:500 13px Inter,system-ui;cursor:pointer;margin-top:12px}
+.skel{height:44px;border-radius:8px;background:linear-gradient(90deg,#141a23,#1b2330,#141a23);background-size:200% 100%;animation:sk 1.2s infinite;margin:0 0 8px}@keyframes sk{to{background-position:-200% 0}}
+.match{background:var(--panel);border:1px solid var(--line);border-radius:12px;margin:0 0 14px;overflow:hidden}
+.match h3{margin:0;padding:14px 16px;font:600 15px var(--display);border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline}
+.match h3 span{font:12px Inter,system-ui;color:var(--muted)}.match table td{white-space:normal}.lines{display:flex;flex-direction:column;gap:6px}
+.ln{display:grid;grid-template-columns:minmax(90px,auto) 58px minmax(120px,1fr) minmax(150px,auto);gap:8px;align-items:baseline;font-size:12.5px}
+.ln b{font-variant-numeric:tabular-nums}
+#modal{position:fixed;inset:0;background:#000c;display:none;align-items:flex-start;justify-content:center;padding:32px 12px;overflow:auto;z-index:50}
+#modal.open{display:flex}.sheet{background:var(--panel);border:1px solid var(--line-2);border-radius:16px;max-width:780px;width:100%;padding:20px 20px 16px}
+.sheet h2{font:600 22px var(--display);margin:2px 0 4px}.sheet h4{margin:18px 0 8px;font:600 11px Inter,system-ui;text-transform:uppercase;letter-spacing:.08em;color:var(--faint)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px 18px}.k{color:var(--faint);font-size:11.5px;display:block}
+.big{font:600 20px var(--display);font-variant-numeric:tabular-nums}.sidebox{display:flex;gap:8px;flex-wrap:wrap}
+.side{border:1px solid var(--line-2);border-radius:10px;padding:8px 12px;min-width:120px}.side.off{border-style:dashed;color:var(--faint)}
+.sheet ul{margin:0;padding-left:18px}.sheet li{margin:3px 0}.closebar{display:flex;justify-content:flex-end;margin-top:16px}
+.gate{max-width:460px;margin:60px auto;text-align:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:28px}.gate a{color:var(--accent-2)}
+@media(max-width:860px){.tablebox.board{display:none}.cards{display:block}}
+@media(max-width:640px){header{padding:0 14px;height:58px;gap:10px}h1{font-size:15px}#who{display:none}.wrap{padding:14px 14px 80px}
+  .bar{padding:10px;gap:8px}.bar .seg{width:100%}.bar .seg button{flex:1}.bar select{flex:1 1 calc(50% - 4px);min-width:0;width:calc(50% - 4px)}
+  #modal{padding:0;align-items:flex-start;background:var(--panel)}.sheet{border-radius:0;min-height:100vh;padding:18px 16px 24px;border:0}
+  .ln{grid-template-columns:1fr 1fr;row-gap:2px}.mcard .kv{grid-template-columns:repeat(2,1fr)}}
 </style></head><body>
 <header><div class="logo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#170b00" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg></div>
-<h1>LoL <em>Prop</em> Grader</h1><span class="grow"></span><nav class="sport" aria-label="Game"><a href="/">CS2</a><a href="/lol" class="on">League of Legends</a></nav><span id="who" class="small muted"></span></header>
-<div class="wrap" id="app"><div class="muted">Loading…</div></div>
-<div id="modal" onclick="if(event.target===this)this.style.display='none'"><div class="card" id="card"></div></div>
+<h1>LoL <em>Prop</em> Grader</h1><nav class="sportsw" aria-label="Game"><a href="/">CS2</a><a href="/lol" class="on" aria-current="page">LoL</a></nav><span class="grow"></span><span id="who"></span></header>
+<main class="wrap" id="app" aria-live="polite"><div class="skel"></div><div class="skel"></div><div class="skel"></div><div class="skel"></div></main>
+<div id="modal" role="dialog" aria-modal="true" aria-labelledby="cardtitle"><div class="sheet" id="card"></div></div>
 <script>
 const $ = (s) => document.querySelector(s);
-const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const pct = (x) => x == null ? "–" : (100 * x).toFixed(1) + "%";
-let D = null, plat = "all", stat = "all", view = "board";
-function when(s) { if (!s) return ""; const d = new Date(s); return isNaN(d) ? esc(s) : d.toLocaleString([], {month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"}); }
-function sides(x) { return (x.sides_offered || []).map(s => s === "higher" ? "Over" : "Under").join(" / ") || "–"; }
-function rows() { return (D.rows || []).filter(x => (plat === "all" || x.platform === plat) && (stat === "all" || x.stat === stat)); }
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const NA = `<span class="na">Unavailable</span>`;
+const pct = (x) => x == null ? NA : (100 * x).toFixed(1) + "%";
+const num = (x, d = 1) => x == null ? NA : Number(x).toFixed(d);
+const FKEY = "scout.lol.filters", SKEY = "scout.lol.scroll";
+const DEF = {view: "board", plat: "all", stat: "all", type: "all", match: "all", playable: false, sort: "start"};
+let F = Object.assign({}, DEF), D = null, lastFocus = null, openRow = null;
+try { Object.assign(F, JSON.parse(localStorage.getItem(FKEY) || "{}")); } catch {}
+const save = () => { try { localStorage.setItem(FKEY, JSON.stringify(F)); } catch {} };
+function when(s) { if (!s) return NA; const d = new Date(s); return isNaN(d) ? esc(s) : d.toLocaleString([], {weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"}); }
+function ago(s) { const d = new Date(s); if (!s || isNaN(d)) return null; return Math.max(0, Math.round((Date.now() - d) / 60000)); }
+function matchKey(x) { return `${x.start}|${x.match}`; }
+function matchName(x) { return x.match; }
+function pside(x) { return x.pick_side === "Over" ? x.p_over : x.p_under; }
+function gradeChip(x) {
+  if (!x.grade) return NA;
+  const cls = !x.pick_offered ? "g off" : (String(x.grade).startsWith("Lean") ? "g lean" : "g");
+  return `<span class="${cls}">${esc(x.grade)}</span>`;
+}
+function typeTag(t) { return t === "Standard" ? "" : `<span class="tag ${t === "Promo" ? "promo" : "alt"}">${esc(t)}</span>`; }
+function pickCell(x) {
+  const c = x.pick_offered ? (x.pick_side === "Over" ? "over" : "under") : "off";
+  const other = x.sides.filter(s => s.offered).map(s => s.side);
+  return `<span class="pick ${c}">${esc(x.pick)}</span>${x.pick_offered ? "" : `<span class="offnote">${other.length ? "Only " + other.join(" / ") + " offered" : "Not offered"}</span>`}`;
+}
+function rows() {
+  let rs = (D.rows || []).filter(x => (F.plat === "all" || x.platform === F.plat) && (F.stat === "all" || x.stat === F.stat) &&
+    (F.type === "all" || (F.type === "standard" ? x.line_type === "Standard" : x.line_type !== "Standard")) &&
+    (F.match === "all" || matchKey(x) === F.match) && (!F.playable || x.pick_offered));
+  const byStart = (a, b) => String(a.start).localeCompare(String(b.start)) || String(a.player).localeCompare(String(b.player));
+  rs.sort(F.sort === "chance" ? ((a, b) => (b.pick_offered - a.pick_offered) || (pside(b) - pside(a)) || byStart(a, b)) : byStart);
+  return rs;
+}
 function boardView() {
+  if (!(D.rows || []).length) return `<div class="empty"><b>No graded LoL lines right now.</b><p class="small">Lines appear here when Underdog or PrizePicks post League of Legends kills, assists or deaths props for a match we can forecast, and the pre-match forecast has been saved.</p>${(D.match_tables || []).length ? `<button type="button" data-go="tables">See the posted lines</button>` : ""}</div>`;
   const rs = rows();
-  if (!rs.length) return `<div class="card muted">No LoL lines to grade right now.</div>`;
-  let h = `<div class="scroll"><table><thead><tr><th>Start</th><th>Player</th><th>Team</th><th>Role</th><th>Opponent</th><th>Event</th><th>Prop</th><th>Book</th><th class="num">Line</th><th class="num">Projection</th><th class="num">Over</th><th class="num">Under</th><th>Pick</th><th>Grade</th><th>Stake</th></tr></thead><tbody>`;
-  rs.forEach((x, i) => {
-    h += `<tr onclick="card(${D.rows.indexOf(x)})"><td>${when(x.start)}</td><td><b>${esc(x.player)}</b></td><td>${esc(x.team)}</td><td>${esc(x.role || "–")}</td><td>${esc(x.opponent)}</td><td>${esc(x.event || "")}${x.best_of ? " · BO" + x.best_of : ""}</td><td>${esc(x.stat_label)}</td><td>${esc(x.platform_label)}</td><td class="num">${x.line}</td><td class="num">${x.projection.toFixed(1)}</td><td class="num">${pct(x.p_over)}</td><td class="num">${pct(x.p_under)}</td><td>${esc(x.pick)}</td><td><span class="g">${esc(x.grade)}</span></td><td>${x.units}U</td></tr>`;
-  });
-  return h + `</tbody></table></div><div class="small muted" style="margin-top:8px">${esc(D.stake_note)} Chances are model estimates for the exact games listed on each prop.</div>`;
+  if (!rs.length) return `<div class="empty"><b>No lines match these filters.</b><br><button type="button" id="reset">Reset filters</button></div>`;
+  let t = `<div class="tablebox board"><table><thead><tr><th>Start</th><th>Player</th><th>Opponent</th><th>Prop</th><th>Book</th><th class="num">Line</th><th class="num">Projection</th><th class="num">Over</th><th class="num">Under</th><th>Pick</th><th>Grade</th><th class="num">Stake</th></tr></thead><tbody>`;
+  let c = `<div class="cards">`;
+  for (const x of rs) {
+    const i = D.rows.indexOf(x);
+    t += `<tr class="row" tabindex="0" data-i="${i}" aria-label="${esc(x.player + " " + x.stat_name + " " + x.scope + " " + x.platform_label + " " + x.line)}"><td>${when(x.start)}<span class="sub">${esc(x.event || "")}${x.best_of ? " · BO" + x.best_of : ""}</span></td>
+      <td><b>${esc(x.player)}</b><span class="sub">${esc(x.team || "")}${x.role ? " · " + esc(x.role) : ""}</span></td><td>${esc(x.opponent || "")}</td>
+      <td>${esc(x.stat_name)}<span class="sub">${esc(x.scope)}</span></td><td>${esc(x.platform_label)}${typeTag(x.line_type)}</td>
+      <td class="num"><b>${x.line}</b></td><td class="num">${num(x.projection)}</td><td class="num">${pct(x.p_over)}</td><td class="num">${pct(x.p_under)}</td>
+      <td>${pickCell(x)}</td><td>${gradeChip(x)}</td><td class="num">${x.units}U</td></tr>`;
+    c += `<button type="button" class="mcard" data-i="${i}"><div class="top"><div class="who"><b>${esc(x.player)}</b><span class="sub">${esc(x.team || "")}${x.role ? " · " + esc(x.role) : ""} · vs ${esc(x.opponent || "")}</span><span class="sub">${when(x.start)}</span></div><div>${gradeChip(x)}</div></div>
+      <div style="margin-top:8px">${esc(x.stat_name)} · ${esc(x.scope)} · ${esc(x.platform_label)}${typeTag(x.line_type)}</div><div style="margin-top:4px">${pickCell(x)}</div>
+      <div class="kv"><div><span class="k">Line</span><b>${x.line}</b></div><div><span class="k">Projection</span>${num(x.projection)}</div><div><span class="k">Over</span>${pct(x.p_over)}</div><div><span class="k">Under</span>${pct(x.p_under)}</div></div></button>`;
+  }
+  return t + `</tbody></table></div>` + c + `</div><p class="small faint" style="margin-top:10px">${esc(D.stake_note)} Projection = the model's expected total for the exact games in the prop. Chances are for this line.</p>`;
+}
+function linesHtml(m) {
+  return `<div class="lines">${m.lines.map(l => {
+    const sides = l.sides.map(s => s.offered ? `${s.side}${s.payout ? " ×" + esc(s.payout) : ""}` : `<span class="faint">${s.side} not offered</span>`).join(" · ");
+    const model = l.projection == null ? `<span class="faint">Projection unavailable</span>` :
+      `proj ${num(l.projection)} · Over ${pct(l.p_over)} · Under ${pct(l.p_under)}${l.grade ? ` · <span class="g ${String(l.grade).startsWith("Lean") ? "lean" : ""}">${esc(l.grade)}</span>` : ""}`;
+    return `<div class="ln"><span>${esc(l.platform)}${typeTag(l.line_type)}</span><b>${l.line}</b><span class="small">${sides}</span><span class="small">${model}</span></div>`;
+  }).join("")}</div>`;
 }
 function tablesView() {
+  let ts = (D.match_tables || []);
+  if (F.match !== "all") ts = ts.filter(t => `${t.start}|${t.teams}` === F.match);
   let h = "";
-  for (const t of D.match_tables || []) {
-    h += `<div class="card"><b>${esc(t.teams || "")}</b> <span class="muted small">${esc(t.event || "")} · BO${t.best_of || "?"} · ${when(t.start)}</span><div class="scroll" style="margin-top:8px"><table><thead><tr><th>Player</th><th>Team</th><th>Role</th><th>Prop</th><th>Lines</th></tr></thead><tbody>`;
-    for (const m of t.markets) h += `<tr><td>${esc(m.player)}</td><td>${esc(m.team)}</td><td>${esc(m.role || "–")}</td><td>${esc(m.prop)}</td><td class="small">${m.lines.map(l => `${esc(l.platform)} ${esc(l.odds_type)} <b>${l.line}</b>${l.projection != null ? " · proj " + l.projection.toFixed(1) + " · Over " + pct(l.p_over) : ""}`).join("<br>")}</td></tr>`;
-    h += "</tbody></table></div></div>";
+  for (const t of ts) {
+    const ms = t.markets.filter(m => (F.stat === "all" || m.stat_name.toLowerCase() === F.stat) && (F.plat === "all" || m.lines.some(l => l.platform.toLowerCase() === F.plat)));
+    if (!ms.length) continue;
+    h += `<section class="match"><h3>${esc(t.teams)}<span>${esc(t.event || "")}${t.best_of ? " · BO" + t.best_of : ""} · ${when(t.start)}</span></h3><div style="overflow-x:auto"><table><thead><tr><th>Player</th><th>Prop</th><th>Lines (same player, same prop, same games)</th></tr></thead><tbody>`;
+    for (const m of ms) h += `<tr><td><b>${esc(m.player)}</b><span class="sub">${esc(m.team || "")}${m.role ? " · " + esc(m.role) : ""}</span></td><td>${esc(m.stat_name)}<span class="sub">${esc(m.scope)}</span></td><td>${linesHtml(m)}</td></tr>`;
+    h += `</tbody></table></div></section>`;
   }
-  return h || `<div class="card muted">No matches with LoL lines right now.</div>`;
+  return (h || `<div class="empty"><b>No posted LoL lines match these filters.</b>${(D.match_tables || []).length ? `<br><button type="button" id="reset">Reset filters</button>` : ""}</div>`) +
+    `<p class="small faint">Underdog payouts (×) are per-pick payout modifiers, not odds. PrizePicks Goblin and Demon are alternate lines with different payouts.</p>`;
 }
-function card(i) {
-  const x = D.rows[i];
-  let h = `<div class="k">${esc(x.platform_label)} · ${esc(x.stat_label)}</div><h2 style="margin:4px 0 10px">${esc(x.player)} <span class="muted" style="font-size:14px">${esc(x.team)} · ${esc(x.role || "")}</span></h2>`;
-  h += `<div class="grid"><div><div class="k">Match</div>vs ${esc(x.opponent)} · ${esc(x.event || "")} BO${x.best_of || "?"}</div><div><div class="k">Start</div>${when(x.start)}</div><div><div class="k">Line</div>${x.line} (${esc(x.odds_type)}) · ${esc(sides(x))}</div><div><div class="k">Projection</div>mean ${x.projection.toFixed(2)} · median ${x.median} · 80% range ${(x.range80 || []).join("–")}</div><div><div class="k">Over / Under / Push</div>${pct(x.p_over)} / ${pct(x.p_under)} / ${pct(x.p_push)}</div><div><div class="k">Pick</div>${esc(x.pick)}${x.pick_offered === false ? " (not offered on this line)" : ""}</div><div><div class="k">Grade · stake</div><span class="g">${esc(x.grade)}</span> · ${x.units}U</div><div><div class="k">Stake</div>${esc(x.stake_reason || "")}</div><div><div class="k">Line seen</div>${when(x.line_seen)}</div><div><div class="k">Forecast made</div>${when(x.forecast_at)}</div></div>`;
-  h += `<h3 style="margin:16px 0 6px;font-size:14px">What drives it</h3><ul class="small">${(x.drivers || []).map(z => `<li>${esc(z)}</li>`).join("")}</ul><div class="small muted">Not known before the match: ${esc((x.unknowns || []).join("; "))}</div>`;
-  $("#card").innerHTML = h + `<div style="margin-top:14px"><button class="close" onclick="$('#modal').style.display='none'">Close</button></div>`;
-  $("#modal").style.display = "flex";
+function others(x) {
+  for (const t of D.match_tables || []) for (const m of t.markets)
+    if (m.player === x.player && m.stat_name === x.stat_name && m.scope === x.scope && t.start === x.start && t.teams === x.match) return m;
+  return null;
 }
+function card(i, focusBack) {
+  const x = D.rows[i]; if (!x) return;
+  openRow = i; lastFocus = focusBack || document.activeElement;
+  const per = x.recent_per_game, n = {"Map 1": 1, "Maps 1-2": 2, "Maps 1-3": 3}[x.scope];
+  let h = `<div class="k">${esc(x.platform_label)} · ${esc(x.stat_name)} · ${esc(x.scope)} (${esc(x.scope_games || "")})</div>
+    <h2 id="cardtitle">${esc(x.player)}</h2><div class="muted">${esc(x.team || "")}${x.role ? " · " + esc(x.role) : ""} · vs ${esc(x.opponent || "")} · ${esc(x.event || "")}${x.best_of ? " · BO" + x.best_of : ""} · ${when(x.start)}</div>
+    <h4>The line</h4><div class="grid"><div><span class="k">Line</span><span class="big">${x.line}</span> ${typeTag(x.line_type)}</div><div style="grid-column:span 2"><span class="k">Line type</span>${esc(x.line_type_note)}</div></div>
+    <div class="sidebox" style="margin-top:10px">${x.sides.map(s => `<div class="side ${s.offered ? "" : "off"}"><span class="k">${s.side}</span>${s.offered ? "Offered" + (s.payout ? ` · payout ×${esc(s.payout)}` : "") : "Not offered"}</div>`).join("")}</div>
+    ${x.sides.some(s => s.payout) ? `<div class="small faint" style="margin-top:6px">Underdog's payout modifier for that pick. It changes the payout; it is not odds or a probability.</div>` : ""}
+    <h4>The model</h4><div class="grid"><div><span class="k">Projection (expected total)</span><span class="big">${num(x.projection, 2)}</span></div><div><span class="k">Median · 80% range</span>${x.median ?? "–"} · ${(x.range80 || []).length ? x.range80.join("–") : NA}</div>
+    <div><span class="k">Over ${x.line}</span><span class="big">${pct(x.p_over)}</span></div><div><span class="k">Under ${x.line}</span><span class="big">${pct(x.p_under)}</span></div>
+    ${x.p_push ? `<div><span class="k">Exactly ${x.line} (push)</span>${pct(x.p_push)}</div>` : ""}
+    <div><span class="k">Pick</span>${pickCell(x)}</div><div><span class="k">Grade</span>${gradeChip(x)}</div><div><span class="k">Stake</span><b>${x.units}U</b></div></div>
+    <div class="small muted" style="margin-top:8px">${esc(x.stake_reason)}</div>
+    <h4>Recent average (not the projection)</h4><div>${per == null ? NA : `${num(per, 2)} ${esc(x.stat_name.toLowerCase())} per game over the last ${x.recent_games} games${n ? ` · ${num(per * n, 1)} over ${n} game${n > 1 ? "s" : ""}` : ""}`}</div>
+    <h4>What this projection uses</h4>${(x.drivers || []).length ? `<ul class="small">${x.drivers.map(z => `<li>${esc(z)}</li>`).join("")}</ul>` : NA}
+    ${(x.not_modelled || []).length ? `<h4>Not in this projection</h4><div class="small muted">${esc(x.not_modelled.join("; "))}</div>` : ""}`;
+  const m = others(x);
+  if (m && m.lines.length > 1) h += `<h4>Same prop on every book</h4>${linesHtml(m)}`;
+  h += `<h4>Times</h4><div class="grid small"><div><span class="k">Line posted at this number</span>${when(x.line_seen)}</div><div><span class="k">Line last checked</span>${when(x.line_checked)}</div><div><span class="k">Forecast saved</span>${when(x.forecast_at)}</div></div>
+    <div class="closebar"><button type="button" class="btn" id="closecard">Close</button></div>`;
+  $("#card").innerHTML = h;
+  $("#modal").classList.add("open");
+  document.body.style.overflow = "hidden";
+  $("#closecard").onclick = closeCard;
+  $("#closecard").focus();
+}
+function closeCard() {
+  $("#modal").classList.remove("open"); document.body.style.overflow = ""; openRow = null;
+  if (lastFocus && document.body.contains(lastFocus)) lastFocus.focus();
+}
+function feedsLine() {
+  const parts = Object.entries(D.feeds || {}).map(([k, v]) => `<span>${esc(k)} lines checked <b>${when(v)}</b></span>`);
+  return parts.join("");
+}
+function staleBanner() {
+  const out = [];
+  for (const [k, v] of Object.entries(D.feeds || {})) { const m = ago(v); if (m != null && m > 15) out.push(`${esc(k)} lines were last checked ${m} minutes ago.`); }
+  const b = ago(D.at); if (b != null && b > 25) out.push(`This board was last updated ${b} minutes ago.`);
+  return out.length ? `<div class="banner" role="status">${out.join(" ")}</div>` : "";
+}
+function seg(id, cur, opts) { return `<div class="seg" id="${id}" role="group">${opts.map(([v, l]) => `<button type="button" data-v="${v}" class="${cur === v ? "on" : ""}" aria-pressed="${cur === v}">${l}</button>`).join("")}</div>`; }
 function render() {
-  let h = `<div class="bar"><div class="seg" id="v"><button data-v="board" class="${view === "board" ? "on" : ""}">Board</button><button data-v="tables" class="${view === "tables" ? "on" : ""}">Compare books</button></div>`;
-  h += `<div class="seg" id="p"><button data-v="all" class="${plat === "all" ? "on" : ""}">All books</button><button data-v="underdog" class="${plat === "underdog" ? "on" : ""}">Underdog</button><button data-v="prizepicks" class="${plat === "prizepicks" ? "on" : ""}">PrizePicks</button></div>`;
-  h += `<div class="seg" id="s"><button data-v="all" class="${stat === "all" ? "on" : ""}">All props</button><button data-v="kills" class="${stat === "kills" ? "on" : ""}">Kills</button><button data-v="assists" class="${stat === "assists" ? "on" : ""}">Assists</button></div><span class="grow"></span><span class="small muted">Updated ${when(D.at)}</span></div>`;
-  $("#app").innerHTML = h + (view === "board" ? boardView() : tablesView());
-  $("#v").onclick = e => { if (e.target.dataset.v) { view = e.target.dataset.v; render(); } };
-  $("#p").onclick = e => { if (e.target.dataset.v) { plat = e.target.dataset.v; render(); } };
-  $("#s").onclick = e => { if (e.target.dataset.v) { stat = e.target.dataset.v; render(); } };
+  const y = window.scrollY, tb = $(".tablebox.board"), sl = tb ? tb.scrollLeft : 0;
+  const ms = new Map();
+  for (const x of D.rows || []) ms.set(matchKey(x), `${matchName(x)} · ${new Date(x.start).toLocaleString([], {month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"})}`);
+  for (const t of D.match_tables || []) if (!ms.has(`${t.start}|${t.teams}`)) ms.set(`${t.start}|${t.teams}`, `${t.teams} · ${new Date(t.start).toLocaleString([], {month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"})}`);
+  if (F.match !== "all" && !ms.has(F.match)) F.match = "all";
+  let h = `<div class="intro"><div><div class="eyebrow">League of Legends · Underdog + PrizePicks</div><h2>LoL prop board</h2><p>Every posted kills, assists and deaths line with the model's projection for the exact games in the prop, the chance of each side, and the grade.</p></div><div class="feeds">${feedsLine()}</div></div>${staleBanner()}`;
+  h += `<div class="bar">${seg("v", F.view, [["board", "Board"], ["tables", "Compare books"]])}${seg("p", F.plat, [["all", "All books"], ["underdog", "Underdog"], ["prizepicks", "PrizePicks"]])}
+    <select id="s" aria-label="Prop"><option value="all">All props</option><option value="kills">Kills</option><option value="assists">Assists</option><option value="deaths">Deaths</option></select>
+    <select id="m" aria-label="Match"><option value="all">All matches</option>${[...ms].map(([k, l]) => `<option value="${esc(k)}">${esc(l)}</option>`).join("")}</select>
+    ${F.view === "board" ? `<select id="t" aria-label="Line type"><option value="all">All line types</option><option value="standard">Standard lines</option><option value="alt">Goblin / Demon / adjusted</option></select>
+    <select id="o" aria-label="Sort"><option value="start">Sort: start time</option><option value="chance">Sort: chance</option></select>
+    <label class="chk"><input type="checkbox" id="pl" ${F.playable ? "checked" : ""}> Offered picks only</label>` : ""}</div>`;
+  $("#app").innerHTML = h + (F.view === "board" ? boardView() : tablesView());
+  $("#s").value = F.stat; $("#m").value = F.match; if ($("#t")) { $("#t").value = F.type; $("#o").value = F.sort; }
+  const set = (k, v) => { F[k] = v; save(); render(); };
+  for (const [id, k] of [["#v", "view"], ["#p", "plat"]]) $(id).onclick = e => { const b = e.target.closest("button"); if (b) set(k, b.dataset.v); };
+  $("#s").onchange = e => set("stat", e.target.value); $("#m").onchange = e => set("match", e.target.value);
+  if ($("#t")) { $("#t").onchange = e => set("type", e.target.value); $("#o").onchange = e => set("sort", e.target.value); $("#pl").onchange = e => set("playable", e.target.checked); }
+  const r = $("#reset"); if (r) r.onclick = () => { F = Object.assign({}, DEF, {view: F.view}); save(); render(); };
+  const go = document.querySelector("[data-go]"); if (go) go.onclick = () => set("view", go.dataset.go);
+  document.querySelectorAll("[data-i]").forEach(el => {
+    el.onclick = () => card(+el.dataset.i, el);
+    if (el.tagName === "TR") el.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); card(+el.dataset.i, el); } };
+  });
+  const tb2 = $(".tablebox.board"); if (tb2) tb2.scrollLeft = sl;
+  window.scrollTo(0, y);
 }
+async function load(first) {
+  let r;
+  try { r = await fetch("/api/lol/board", {cache: "no-store"}); } catch { r = null; }
+  if (r && r.status === 401) { gate(await r.json().catch(() => ({}))); return false; }
+  if (!r || !r.ok) {
+    if (first || !D) $("#app").innerHTML = `<div class="empty"><b>The LoL board could not be loaded.</b><p class="small">${r ? "The server answered " + r.status + "." : "No connection."}</p><button type="button" id="retry">Try again</button></div>`;
+    const b = $("#retry"); if (b) b.onclick = () => load(true);
+    return false;
+  }
+  D = await r.json();
+  if (openRow == null) render();
+  if (first) { try { const y = +sessionStorage.getItem(SKEY); if (y) window.scrollTo(0, y); } catch {} }
+  return true;
+}
+function gate(s) {
+  $("#app").innerHTML = `<div class="gate"><h2>Members only</h2><p class="muted">Sign in with Whop to see the LoL board.</p><p><a href="/auth/login">Sign in</a>${s.upgrade ? ` · <a href="${esc(s.upgrade)}">Join on Whop</a>` : ""}</p></div>`;
+}
+document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal").classList.contains("open")) closeCard(); });
+$("#modal").addEventListener("click", e => { if (e.target.id === "modal") closeCard(); });
+window.addEventListener("scroll", () => { try { sessionStorage.setItem(SKEY, String(window.scrollY)); } catch {} }, {passive: true});
 (async () => {
   const s = await fetch("/auth/me").then(r => r.json()).catch(() => ({}));
-  if (s.required && !s.member) {
-    $("#app").innerHTML = `<div class="gate card"><h2>Members only</h2><p class="muted">Sign in with Whop to see the LoL board.</p><p><a href="/auth/login">Sign in</a>${s.upgrade ? ` · <a href="${esc(s.upgrade)}">Join on Whop</a>` : ""}</p></div>`;
-    return;
-  }
-  if (s.name) $("#who").innerHTML = `${esc(s.name)} · <a href="/auth/logout" style="color:var(--muted)">Sign out</a>`;
-  const r = await fetch("/api/lol/board");
-  if (!r.ok) { $("#app").innerHTML = `<div class="card muted">The LoL board is not available right now.</div>`; return; }
-  D = await r.json();
-  render();
-  setInterval(async () => { try { const r2 = await fetch("/api/lol/board"); if (r2.ok) { D = await r2.json(); if ($("#modal").style.display !== "flex") render(); } } catch {} }, 120000);
+  if (s.required && !s.member) { gate(s); return; }
+  if (s.name) $("#who").innerHTML = `${esc(s.name)} · <a href="/auth/logout">Sign out</a>`;
+  if (await load(true)) setInterval(() => load(false), 120000);
 })();
 </script></body></html>

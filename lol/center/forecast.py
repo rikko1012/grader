@@ -224,6 +224,9 @@ def forecast_one(con, h, offer, link, now=None):
                    "drivers": _drivers(pj), "unknowns": ["lineup changes after the forecast", "draft and champions",
                                                           "sides", "the tournament patch effect (not modelled)"]},
                flags=flags)
+    j = {"kills": 1, "deaths": 2, "assists": 3}[stat]
+    last = [r[j] for r in pin if r[j] is not None][-10:]
+    rec["inputs"]["recent"] = {"games": len(last), "per_game": round(sum(last) / len(last), 2) if last else None}
     from . import prices
     rec["inputs"]["market"] = prices.classify(offer["platform"], offer)
     elig, why = slip_eligibility(rec)
@@ -407,7 +410,7 @@ def board(con, now=None):
     lab = lambda e: label.get(store.canonical_id(con, e)) if e else None
     series = {r["sid"]: dict(r) for r in con.execute("SELECT * FROM c_series")}
     rows = []
-    q = ("SELECT s.platform, s.market_key, e.id AS event_id, e.observed_at, e.player, e.team, e.opponent, e.start_time, e.stat, e.scope, "
+    q = ("SELECT s.platform, s.market_key, s.last_seen AS checked_at, e.id AS event_id, e.observed_at, e.player, e.team, e.opponent, e.start_time, e.stat, e.scope, "
          "e.stat_label, e.market_type, e.odds_type, e.line, e.sides, l.status AS link_status, l.reason AS link_reason, l.sid, l.pid, "
          "l.tid, l.opp_tid, l.role FROM market_state s JOIN market_events e ON e.id = s.last_event_id LEFT JOIN market_links l ON "
          "l.platform = s.platform AND l.market_key = s.market_key WHERE s.open = 1 ORDER BY e.start_time, e.player")
@@ -423,7 +426,7 @@ def board(con, now=None):
             "competition": s.get("tournament") or (s.get("tournament_page") or "").replace("LE:", ""), "best_of": s.get("best_of"),
             "series_start": s.get("scheduled_utc") or r["start_time"], "stat": r["stat"], "scope": SCOPE_LABEL.get(SCOPE.get(r["scope"] or ""), r["stat_label"]),
             "stat_label": r["stat_label"], "market_type": r["market_type"], "odds_type": r["odds_type"], "line": r["line"],
-            "sides": json.loads(r["sides"] or "{}"), "quote_seen_at": r["observed_at"],
+            "sides": json.loads(r["sides"] or "{}"), "quote_seen_at": r["observed_at"], "quote_checked_at": r["checked_at"],
             "link": {"status": r.get("link_status"), "reason": r.get("link_reason"), "sid": r.get("sid"), "pid": r.get("pid")},
             "forecast": None if not f else {
                 "id": f["id"], "at": f["forecast_at"], "line": f["line"], "projection": f["lambda"], "p_over": f["p_over"],
@@ -439,14 +442,19 @@ def board(con, now=None):
         if x["link"]["sid"]:
             t = tables.setdefault(x["link"]["sid"], {"sid": x["link"]["sid"], "teams": None, "competition": x["competition"],
                                                       "best_of": x["best_of"], "start": x["series_start"], "markets": {}})
-            key = f"{x['player']}|{x['stat']}|{x['scope']}|{x['market_type']}"
+            key = f"{x['link']['pid'] or x['player']}|{x['stat']}|{x['scope']}|{x['market_type']}"    # exact: same player id
             t["markets"].setdefault(key, {"player": x["player"], "team": x["team"], "role": x["role"], "stat": x["stat"],
                                           "scope": x["scope"], "market_type": x["market_type"], "lines": []})["lines"].append(
-                {"platform": x["platform"], "odds_type": x["odds_type"], "line": x["line"],
-                 "projection": (x["forecast"] or {}).get("projection"), "p_over": (x["forecast"] or {}).get("p_over")})
+                {"platform": x["platform"], "odds_type": x["odds_type"], "line": x["line"], "sides": x["sides"],
+                 "checked_at": x["quote_checked_at"], "projection": (x["forecast"] or {}).get("projection"),
+                 "p_over": (x["forecast"] or {}).get("p_over"), "p_under": (x["forecast"] or {}).get("p_under"),
+                 "model_side": (x["forecast"] or {}).get("model_side"), "grade": (x["forecast"] or {}).get("grade"),
+                 "current": (x["forecast"] or {}).get("current"),
+                 "market": ((x["forecast"] or {}).get("inputs") or {}).get("market")})
     settled = [dict(r) for r in con.execute("SELECT * FROM lol_settlements WHERE settled_at >= ? ORDER BY id DESC LIMIT 500",
                                             (store.now_iso(now.timestamp() - 3 * 86400),))]
-    return {"at": store.now_iso(), "released_to_members": False,
+    feeds = {r[0]: r[1] for r in con.execute("SELECT platform, MAX(polled_at) FROM market_polls WHERE ok = 1 GROUP BY platform")}
+    return {"at": store.now_iso(), "released_to_members": False, "feeds": feeds,
             "grades": "model grades from the published bands; stakes held at 0U until validated at real lines",
             "rows": rows, "match_tables": list(tables.values()), "settled_recent": settled,
             "counts": {"offers": len(rows), "with_forecast": sum(1 for x in rows if x["forecast"]),

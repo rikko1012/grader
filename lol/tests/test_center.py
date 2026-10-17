@@ -390,3 +390,22 @@ def test_lolesports_unscheduled_series_and_vs_title_link(con):
     # only games that ended before the series' start count: the same offer for M7 itself finds no earlier roster
     early = dict(o, start_time="2026-10-20T18:00:00Z")
     assert match.link(con, early)["reason"] in ("player_not_on_team", "series_ambiguous")
+
+
+def test_wrong_merge_of_two_leaguepedia_pages_is_split_back(con):
+    """Repair: a merge made before the guard (one LoL Esports id paired with two Leaguepedia players) is reversed."""
+    a = store.entity(con, "player", "leaguepedia:page", "Alpha")
+    le = store.entity(con, "player", "lolesports", "le-1")
+    store.merge(con, a, le, "player identified in a series both sources hold")
+    b = store.entity(con, "player", "leaguepedia:page", "Beta")
+    store.link_source(con, b, "player", "lolesports", "le-2", "x")
+    store.merge(con, a, b, "player identified in a series both sources hold")     # the old bug: two pages on one id
+    assert store.canonical_id(con, b) == a
+    assert build.split_wrong_merges(con, "2026-10-17T06:00:00Z") == 1
+    assert store.canonical_id(con, b) == b and store.find_entity(con, "player", "leaguepedia:page", "Beta") == b
+    assert store.find_entity(con, "player", "lolesports", "le-2") == b              # everything that merge moved goes back
+    assert store.find_entity(con, "player", "leaguepedia:page", "Alpha") == a
+    assert store.find_entity(con, "player", "lolesports", "le-1") == a              # the earlier, correct merge stays
+    q = con.execute("SELECT reason FROM quarantine WHERE skey LIKE 'split:%'").fetchall()
+    assert [r[0] for r in q] == ["wrong_merge_split"]
+    assert build.split_wrong_merges(con, "2026-10-17T06:10:00Z") == 0
