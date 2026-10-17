@@ -32,6 +32,7 @@ def dashboard(con):
     status = defaultdict(int)
     groups = defaultdict(list)
     series = set()
+    units = []
     for r in rows:
         status[r["st"]] += 1
         if r["st"] != "graded":
@@ -42,7 +43,8 @@ def dashboard(con):
         side_hit = (hit == 1.0) if r["model_side"] == "over" else (hit == 0.0)
         u = {"err": r["lambda"] - r["actual"], "brier": (p - hit) ** 2,
              "ll": -(hit * math.log(max(p, 1e-6)) + (1 - hit) * math.log(max(1 - p, 1e-6))), "p": p, "hit": hit,
-             "side_hit": side_hit, "p_side": max(p, 1 - p)}
+             "side_hit": side_hit, "p_side": max(p, 1 - p), "sid": r["sid"], "offered": r["side_offered"] == 1}
+        units.append(u)
         for key in ("all", f"stat {r['stat']}", f"scope {r['scope']}", f"platform {r['platform']}", f"role {r['role']}",
                     f"grade {r['grade_label']}"):
             groups[key].append(u)
@@ -62,11 +64,45 @@ def dashboard(con):
                   "calibration": [{"bin": f"{b / 10:.1f}", "n": v[0], "predicted": round(v[1] / v[0], 3), "actual": round(v[2] / v[0], 3)}
                                   for b, v in sorted(bins.items())]}
     graded = len(groups.get("all", []))
-    return {"at": store.now_iso(), "settled_by_status": dict(status), "metrics": out,
+    counts = {"forecast_rows_saved": con.execute("SELECT COUNT(*) FROM lol_forecasts").fetchone()[0],
+              "forecast_rows_pre_match": con.execute("SELECT COUNT(*) FROM lol_forecasts WHERE forecast_at < series_start").fetchone()[0],
+              "distinct_offered_props": con.execute("SELECT COUNT(*) FROM (SELECT DISTINCT platform, market_key, line FROM lol_forecasts "
+                                                    "WHERE forecast_at < series_start)").fetchone()[0],
+              "distinct_player_props": con.execute("SELECT COUNT(*) FROM (SELECT DISTINCT pid, stat, scope, sid FROM lol_forecasts "
+                                                   "WHERE forecast_at < series_start)").fetchone()[0],
+              "distinct_matches": con.execute("SELECT COUNT(DISTINCT sid) FROM lol_forecasts WHERE forecast_at < series_start").fetchone()[0],
+              "graded_offered_props": graded, "graded_matches": len(series)}
+    return {"at": store.now_iso(), "settled_by_status": dict(status), "counts": counts, "metrics": out,
+            "series_grouped_95ci": {"all": _grouped_ci(units), "offered_side_only": _grouped_ci([u for u in units if u["offered"]])},
             "evidence": {"graded_player_markets": graded, "series": len(series), "required": REQUIRED,
                          "met": graded >= REQUIRED["player_markets"] and len(series) >= REQUIRED["series"]},
             "candidates": store.get_meta(con, "candidates") or [],
             "note": "forward record of saved pre-match forecasts at offered lines; no promotion happens automatically"}
+
+
+def _grouped_ci(units, n_boot=2000, seed=7):
+    """Brier, log-loss, side hit rate and projection error with 95% intervals from a bootstrap that resamples whole
+    series (same-match props are correlated). None until there are at least 2 series."""
+    import random
+    by = defaultdict(list)
+    for u in units:
+        by[u["sid"]].append(u)
+    sids = sorted(by)
+    if len(sids) < 2:
+        return {"series": len(sids), "props": len(units), "note": "fewer than 2 settled series - no interval"}
+    rnd = random.Random(seed)
+    keys = ("brier", "ll", "side_hit", "err")
+    mean = lambda us, k: sum(float(u[k]) for u in us) / len(us)
+    draws = {k: [] for k in keys}
+    for _ in range(n_boot):
+        us = [u for s in (rnd.choice(sids) for _ in sids) for u in by[s]]
+        for k in keys:
+            draws[k].append(mean(us, k))
+    out = {"series": len(sids), "props": len(units)}
+    for k in keys:
+        d = sorted(draws[k])
+        out[k] = {"mean": round(mean(units, k), 4), "lo95": round(d[int(0.025 * n_boot)], 4), "hi95": round(d[int(0.975 * n_boot) - 1], 4)}
+    return out
 
 
 def maybe_refit(con, history_db=None, now=None):

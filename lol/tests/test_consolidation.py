@@ -291,6 +291,12 @@ def test_learning_dashboard_counts_settled_forecasts(con, tmp_path, monkeypatch)
     d = learning.dashboard(con)
     assert d["settled_by_status"] == {"graded": 1} and d["metrics"]["all"]["n"] == 1
     assert d["evidence"]["met"] is False and d["evidence"]["graded_player_markets"] == 1
+    c = d["counts"]
+    assert c["forecast_rows_saved"] >= c["distinct_offered_props"] >= 1 and c["distinct_matches"] == 1 and c["graded_matches"] == 1
+    assert d["series_grouped_95ci"]["all"]["series"] == 1 and "no interval" in d["series_grouped_95ci"]["all"]["note"]
+    units = [{"sid": f"s{i % 4}", "brier": 0.2 + i % 3 / 100, "ll": 0.6, "side_hit": i % 2 == 0, "err": 0.5, "offered": True} for i in range(20)]
+    ci = learning._grouped_ci(units)
+    assert ci["series"] == 4 and ci["brier"]["lo95"] <= ci["brier"]["mean"] <= ci["brier"]["hi95"]
 
 
 def test_export_survives_blank_and_duplicate_names_in_one_game(con, tmp_path):

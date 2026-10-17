@@ -230,3 +230,36 @@ registered final comparison, so none is used; they stay hypotheses. H2H shows no
 **Limits.** Development lines are the player's own median, not book lines - this is not evidence of an advantage at
 Underdog / PrizePicks lines. Stakes stay 0U until 300 settled player-markets across 60+ series at offered lines.
 Projections run slightly low on Maps 1-2 (bias -0.1 to -0.2 kills/deaths, -0.2 to -0.4 assists).
+
+## Amendment A6 (2026-10-17 21:10 UTC): what the results show, the data repair, and forward evaluation
+
+**What the results show.**
+- The MAE gains of lol-1 over B0 (Results, above) are evidence that lol-1 predicts players' actual totals better than the simple baseline over August–October.
+- The P(over) scores in those tables are measured at each player's own historical-median line. They are not evidence of an advantage at Underdog or PrizePicks lines, and nothing here claims one.
+- The August–October period chose the production model: VALID's provisional choice was B0 for kills and assists, and the final period selected lol-1. Its numbers are kept as recorded. They are not an untouched validation of the selected model.
+
+**Data repair (2026-10-17 evening) and the fit.**
+The identity and duplicate repairs found these defects:
+- LoL Esports academy matches had been linked to their main teams' series. Academy players' games sat in main-roster players' histories (e.g. DuDu 45 games, Lehends 29).
+- Spelling variants of one Leaguepedia page had been split into separate ids.
+- LoL Esports copies of Leaguepedia series had been counted twice.
+
+They affected both the training snapshot (a1f892f4) and the live inputs. The effect on the fit was measured with a frozen refit: the same fit period and the selected lol-1 settings, with only role priors, team-kill mean, win ratios and NB sizes re-estimated on the repaired history.
+- The NB sizes are unchanged.
+- The team-kill mean moved 17.0387 → 17.0360.
+- Projections over the August–October targets moved by at most 0.011 (mean ≤ 0.003).
+- MAE changed by at most 0.0001.
+
+The deployed fit is therefore kept, with no new version. Live forecasts made after the repair use the repaired history; each records the export it used (`inputs.data_version`). Forecasts saved before the repair are unchanged.
+
+**Live history window.** Scout stores every source record it receives; the full-history collector reaches back to 2025-01-01. Live projections and Elo use the games of the last 245 days (`LOL_FORECAST_HISTORY_DAYS`), the window lol-1 was evaluated on.
+
+**Forward evaluation (from now on).** `learning.dashboard` scores:
+- **What it scores:** saved pre-match forecasts at the offered lines, with their saved inputs.
+- **Statuses:** pushes and voids are counted apart from graded results, per platform rule.
+- **Counts:** forecast rows, distinct offered props, distinct player props and distinct matches are kept separate.
+- **Uncertainty:** intervals resample whole series, because same-match props are correlated.
+
+The real-line requirement is unchanged: 300 settled player-markets across 60+ series.
+
+**Future factors** (league-adjusted kill pace is the first candidate: cross-league team and opponent factors are relative to an all-league average) are judged as increments over the deployed lol-1, not over B0. They are tested on forward data or a development split that excludes the opened August–October period.
