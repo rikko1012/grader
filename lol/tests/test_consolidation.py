@@ -373,3 +373,41 @@ def test_played_game_missing_from_data_keeps_settlement_pending_and_live_series_
     build.build(con)
     assert con.execute("SELECT status FROM c_series").fetchone()[0] == "in_progress"
     assert settle.settle(con, "underdog", "kills", "maps_1_2", pid, sid, 5.5)["status"] == "pending"
+
+
+def test_make_fit_applies_the_a1_rule_to_lol2(tmp_path):
+    """A5: lol-2 replaces the B0 / lol-1 choice only when its gain interval is above 0 and MAE not higher on both scopes."""
+    import json as _j
+    from lol import evaluate
+
+    def res(gain_lo, mae2):
+        return {"logscore_gain_lol-2_vs_B0": {"mean": 0.05, "lo95": gain_lo, "hi95": 0.1},
+                "logscore_gain_lol-2_vs_lol-1": {"mean": 0.05, "lo95": gain_lo, "hi95": 0.1},
+                "logscore_gain_lol-1_vs_B0": {"mean": 0.0, "lo95": -0.1, "hi95": 0.1},
+                "models": {"B0": {"mae": 3.0, "logscore": -2.6}, "lol-1": {"mae": 3.0, "logscore": -2.6}, "lol-2": {"mae": mae2, "logscore": -2.5}}}
+    d = {"report": {"which": "final", "periods": {"history_from": "2026-02-16", "train_from": "2026-04-01", "eval_from": "2026-08-01"},
+                    "results": {"kills|12": res(0.01, 2.9), "kills|123": res(0.02, 2.9), "assists|12": res(0.01, 2.9),
+                                "assists|123": res(-0.01, 2.9), "deaths|12": res(0.01, 3.1), "deaths|123": res(0.01, 2.9)}},
+         "b0_lol1_fit": {"selection": {"kills": "B0", "assists": "B0", "deaths": "B0"}, "params": {}, "nb_size": {}, "priors": {}},
+         "lol2_params": {"hl": 60.0}}
+    p = tmp_path / "final.json"
+    p.write_text(_j.dumps(d))
+    fit = evaluate.make_fit(str(p), "abc")
+    assert fit["selection"] == {"kills": "lol-2", "assists": "B0", "deaths": "B0"}
+    assert fit["sim"] == {"hl": 60.0} and fit["history_snapshot_sha256"] == "abc" and fit["final_report_sha256"]
+
+
+def test_overlap_with_a_differently_named_team_is_one_series(con):
+    """2026-10-17 audit: LoL Esports names a team differently ("Beta Academy" vs Leaguepedia "Beta Gaming"). One team
+    known + game 1 within 20 minutes = the same series: left out (no duplicate games) and the other team linked."""
+    load_world(con)
+    build.build(con)
+    le_copy_of_m1(con)
+    m = store.current_rows(con, "LE:Match")[0]
+    m["teams"][1].update(name="Beta Academy", code="BAC")
+    store.put_rows(con, "LE:Match", [m], lambda r: r["match_id"], lambda r: "2026-10-10 09:00:00", None, "2026-10-12T00:00:00Z")
+    con.commit()
+    build.build(con)                          # pass 1 finds the overlap by start time and links LB; pass 2 then matches exactly
+    assert not con.execute("SELECT 1 FROM quarantine WHERE reason = 'cross_source_teams_not_matched'").fetchall()
+    assert con.execute("SELECT COUNT(*) FROM c_player_games").fetchone()[0] == 20                  # one copy of the series
+    assert store.canonical_id(con, store.find_entity(con, "team", "lolesports:team", "LB")) ==         store.find_entity(con, "team", "leaguepedia:page", "Beta Gaming")

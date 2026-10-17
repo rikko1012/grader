@@ -17,7 +17,7 @@ import json
 import re
 import time
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from . import store
 from .names import norm, page_key, role
@@ -216,6 +216,13 @@ def _z(s):
     return (str(s)[:19] + "Z") if s else None
 
 
+def _ts(s):
+    try:
+        return datetime.fromisoformat(str(s)[:19].replace(" ", "T")).replace(tzinfo=timezone.utc).timestamp() if s else None
+    except ValueError:
+        return None
+
+
 def _attach(con, kind, source, skey, target, at):
     """Map one more source id onto `target`; when that source id already has its own internal id, the two ids are
     merged (the older id survives, so ids already saved elsewhere stay valid). -> 1 when anything changed."""
@@ -353,6 +360,17 @@ def link_overlaps(con, overlaps, at):
                                          (norm(n),))} & lp_tids
             if len(hits) == 1:
                 tmap[t["id"]] = next(iter(hits))
+        for t in m.get("teams") or []:                         # already linked through an earlier shared series
+            e = store.find_entity(con, "team", SRC_LE_TEAM, str(t.get("id")))
+            if t["id"] not in tmap and e and store.canonical_id(con, e) in lp_tids:
+                tmap[t["id"]] = store.canonical_id(con, e)
+        ids = [t["id"] for t in m.get("teams") or []]
+        if len(ids) == 2 and len(tmap) == 1:
+            # one team identified and the series is the same real series: the other team is the series' other team
+            known_le, = tmap
+            rest = lp_tids - {tmap[known_le]}
+            if len(rest) == 1:
+                tmap[ids[1] if ids[0] == known_le else ids[0]] = next(iter(rest))
         if len(tmap) != 2 or len(set(tmap.values())) != 2:
             store.quarantine(con, "series", f"lolesports:{mid}", "cross_source_teams_not_matched", {"lp_series": s["sid"]}, at)
             continue
@@ -418,14 +436,31 @@ def _lolesports(con, at, series, games, pgs, checks, overlaps=None):
         return {r[0] for n in names if n for r in con.execute("SELECT eid FROM aliases WHERE kind = 'team' AND norm = ? "
                                                                "AND source NOT LIKE 'lolesports%'", (norm(n),))}
 
+    def known(t):
+        """The team's ids known without guessing: Leaguepedia aliases of its name / code, and the id its LoL Esports team
+        id already resolves to (linked through an earlier series both sources hold)."""
+        e = store.find_entity(con, "team", SRC_LE_TEAM, str(t.get("id")))
+        return alias_eids(t.get("name"), t.get("code")) | ({store.canonical_id(con, e)} if e else set())
+
     for mid, m in matches.items():
         teams = m.get("teams") or []
         if len(teams) != 2 or not all(t.get("id") for t in teams):
             out["skipped_not_two_teams"] += 1
             continue
         start = _z(m.get("start"))
-        a, b = alias_eids(teams[0].get("name"), teams[0].get("code")), alias_eids(teams[1].get("name"), teams[1].get("code"))
+        a, b = known(teams[0]), known(teams[1])
         same = [s for s in lp_by_day.get(start[:10], []) if {s["team1"], s["team2"]} & a and {s["team1"], s["team2"]} & b] if start else []
+        if not same:
+            # 2026-10-17 audit: a team named differently in the two sources ("kt Challengers" / "KT Rolster Challengers")
+            # hid real overlaps. The same series = one team known AND game 1 starting within 20 minutes of the
+            # Leaguepedia series' game 1 (a team never plays two series at once).
+            t0 = min((_ts(g.get("start")) for g in lg.get(mid, []) if _ts(g.get("start"))), default=None)
+            if t0 is not None:
+                days = {datetime.fromtimestamp(t0 + d, timezone.utc).strftime("%Y-%m-%d") for d in (-86400, 0, 86400)}
+                same = [s for d in days for s in lp_by_day.get(d, []) if {s["team1"], s["team2"]} & (a | b)
+                        and _ts(s.get("first_game_utc")) is not None and abs(_ts(s["first_game_utc"]) - t0) <= 1200]
+                if same:
+                    out["left_out_same_start_one_team_known"] += 1
         if same:
             out["left_out_leaguepedia_has_it"] += 1
             if overlaps is not None and len(same) == 1:
