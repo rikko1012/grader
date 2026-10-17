@@ -318,19 +318,15 @@ def run_status(db, args):
 
 
 def run_sync(db, args):
-    out = {}
-    since = sync.parse_date(args.since)
-    leagues = None if not args.leagues else ("all" if args.leagues.strip().lower() == "all" else
-                                             [x.strip().lower() for x in args.leagues.split(",") if x.strip()])
-    if args.source in ("lolesports", "both"):
-        out["lolesports"] = sync.sync_lolesports(db, leagues=leagues, since=since, force=args.force)
-    if args.source in ("leaguepedia", "both"):
-        if not config.leaguepedia_credentials():
-            out["leaguepedia"] = {"skipped": "LEAGUEPEDIA_USER / LEAGUEPEDIA_BOT_PASSWORD not set"}
-        else:
-            out["leaguepedia"] = sync.sync_leaguepedia(db, since=since, until=sync.parse_date(args.until),
-                                                       force=args.force)
-    return out
+    """One ingestion path (2026-10-17): the data center (lol/center) reads LoL Esports and Leaguepedia - with source
+    revisions, internal ids, renames and quarantine - and exports the result to this history. sync.py's direct
+    writers are no longer called, so the history has one source of truth."""
+    unsupported = [name for name in ("since", "until", "force", "leagues") if getattr(args, name, None)]
+    if unsupported:
+        raise ValueError("The canonical sync does not support " + ", ".join("--" + x for x in unsupported)
+                         + "; set LOL_BACKFILL_DAYS before starting the process instead of silently ignoring a range.")
+    from .center import cli
+    return cli.sync_once(source=args.source, max_minutes=getattr(args, "max_minutes", 120), log=_log)
 
 
 # ------------------------------------------------------------------ printing
@@ -397,6 +393,7 @@ def main(argv=None):
     common.add_argument("--until", help="sync (Leaguepedia): stop before this date (YYYY-MM-DD; default tomorrow)")
     common.add_argument("--leagues", help="sync / slate: comma-separated LoL Esports slugs, or 'all' (default: majors)")
     common.add_argument("--source", choices=["lolesports", "leaguepedia", "both"], default="both")
+    common.add_argument("--max-minutes", type=float, default=120, help="sync: bounded ingestion time before exporting")
     common.add_argument("--force", action="store_true", help="sync: re-derive matches already held (from the cache)")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)

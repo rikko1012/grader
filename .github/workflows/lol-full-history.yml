@@ -1,144 +1,132 @@
-# LoL full history: Leaguepedia live check, every game from both sources since 2025, cross-source check, and the
-# full-history backtest (lol/EVALUATION.md). LoL only - it never touches the CS2 code, data or database.
-#
-# Runs where the Leaguepedia secrets live (repository secrets LEAGUEPEDIA_USER, LEAGUEPEDIA_BOT_PASSWORD), the HLTV
-# scraper's pattern: a GitHub Actions job fetches, the scout reads.
-#   - LOL_DB_DSN secret set and reachable: the history goes into LoL's own PostgreSQL and stays there.
-#   - not set / not reachable (warned): a temporary database inside the job; results printed and kept as an artifact.
-# The API answers (lol cache.db) are kept between runs (actions/cache), so a re-run never downloads a finished game twice.
-# Starts when this file is pushed on the LoL branch (re-run it from the Actions tab); never on main, never on a schedule
-# (the recurring sync is lol/deploy/lol-sync.yml).
+# PR checks are offline. The long source collection is manual and publishes raw
+# records to Scout's inbox; only Scout's canonical exporter writes serving history.
 name: lol-full-history
 
 on:
   push:
     branches: [claude/keen-carson-tk8gbd]
-    paths: [.github/workflows/lol-full-history.yml]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
-
-concurrency:
-  group: lol-full-history
-  cancel-in-progress: false
 
 permissions:
   contents: read
 
 defaults:
   run:
-    shell: bash          # -eo pipefail: a failing sync fails its step even when piped
+    shell: bash
 
 jobs:
-  full-history:
+  offline-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 350          # GitHub-hosted maximum is 360; Leaguepedia covers every league, minor ones too
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: lol_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
-      LEAGUEPEDIA_USER: ${{ secrets.LEAGUEPEDIA_USER }}
-      LEAGUEPEDIA_BOT_PASSWORD: ${{ secrets.LEAGUEPEDIA_BOT_PASSWORD }}
-      PYTHONUNBUFFERED: "1"
+      LOL_TEST_PG_DSN: postgresql://postgres:postgres@localhost:5432/lol_test
     steps:
-      - name: LoL data folder for this job (the runner context exists only inside steps)
-        run: echo "LOL_DATA_DIR=$RUNNER_TEMP/lol" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: '3.12'
       - run: pip install -r requirements.txt pytest
-      - name: Restore the LoL API cache from the last run
+      - name: LoL and CS2 regression checks (no provider credentials)
+        run: python -m pytest lol/tests tests -q -p no:cacheprovider
+
+  full-history:
+    if: github.event_name == 'workflow_dispatch'
+    needs: offline-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    concurrency:
+      group: lol-full-history-collector
+      cancel-in-progress: false
+    env:
+      LEAGUEPEDIA_USER: ${{ secrets.LEAGUEPEDIA_USER }}
+      LEAGUEPEDIA_BOT_PASSWORD: ${{ secrets.LEAGUEPEDIA_BOT_PASSWORD }}
+      LOL_HANDOFF_DSN: ${{ secrets.LOL_DB_DSN }}
+      LOL_DB_DSN: '' # never replace Scout's serving tables from an isolated job
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt pytest
+      - name: Isolated paths and full-history window
+        run: |
+          echo "LOL_DATA_DIR=$RUNNER_TEMP/lol" >> "$GITHUB_ENV"
+          echo "LOL_CENTER_DB=$RUNNER_TEMP/lol/center/lol.db" >> "$GITHUB_ENV"
+          python - <<'PY'
+          import os
+          from datetime import datetime, timezone, date
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+              f.write('LOL_BACKFILL_DAYS=%d\n' % (datetime.now(timezone.utc).date() - date(2025, 1, 1)).days)
+          PY
+      - name: Restore resumable source history and API cache
         uses: actions/cache/restore@v4
         with:
-          path: ${{ runner.temp }}/lol/cache.db*
-          key: lol-api-cache-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: lol-api-cache-
-
-      - name: LoL tests (offline)
-        run: python -m pytest lol/tests -q -p no:cacheprovider
-
-      - name: Leaguepedia credentials present (names only, never the values)
+          path: |
+            ${{ runner.temp }}/lol/center/lol.db*
+            ${{ runner.temp }}/lol/cache.db*
+          key: lol-canonical-history-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: lol-canonical-history-v1-
+      - name: Credentials and persistent Scout handoff required (names only)
         run: |
-          [ -n "$LEAGUEPEDIA_USER" ] && [ -n "$LEAGUEPEDIA_BOT_PASSWORD" ] || { echo "LEAGUEPEDIA secrets missing"; exit 1; }
-          echo "both set"
-
-      - name: LoL database (its own PostgreSQL when LOL_DB_DSN is set and reachable, else a temporary one)
-        env:
-          DSN: ${{ secrets.LOL_DB_DSN }}
-        run: |
-          if [ -z "$DSN" ]; then echo "LOL_DB_DSN not set - temporary database for this job"; exit 0; fi
-          # only the error's TYPE is printed and stderr is dropped: a connection error can quote part of the DSN
-          if LOL_DB_DSN="$DSN" python - 2>/dev/null <<'PY'
-          import sys
-          from lol import history
+          [ -n "$LEAGUEPEDIA_USER" ] && [ -n "$LEAGUEPEDIA_BOT_PASSWORD" ] && [ -n "$LOL_HANDOFF_DSN" ] || { echo 'Missing Leaguepedia credentials or LOL_DB_DSN repository secret'; exit 1; }
+          python - <<'PY'
+          import os
+          from lol.center import handoff
           try:
-              history.DB().close()
+              c = handoff._connect(os.environ['LOL_HANDOFF_DSN'])
+              c.close()
           except Exception as e:
-              print("database check failed:", type(e).__name__)
-              sys.exit(1)
+              raise SystemExit('Scout handoff connection failed: ' + type(e).__name__) from None
+          print('Scout handoff reachable')
           PY
-          then
-            echo "LOL_DB_DSN=$DSN" >> "$GITHUB_ENV"
-            echo "LoL PostgreSQL reachable - the history is written there and kept"
-          else
-            echo "::warning::LOL_DB_DSN is set but the database is not reachable - this job uses a temporary database"
-          fi
-
-      - name: Leaguepedia live check (login, one week, fields, league short names)
-        run: python -m lol.checks leaguepedia
-
-      # Leaguepedia a quarter per step: each step's finish time shows the progress while the job runs
-      - name: Leaguepedia 2025-01-01 .. 2025-04-01 (1 request / second; finished weeks are kept and skipped on a re-run)
-        run: python lol_scout.py sync --source leaguepedia --since 2025-01-01 --until 2025-04-01 | tail -c 3000
-      - name: Leaguepedia 2025-04-01 .. 2025-07-01 (1 request / second; finished weeks are kept and skipped on a re-run)
-        run: python lol_scout.py sync --source leaguepedia --since 2025-04-01 --until 2025-07-01 | tail -c 3000
-      - name: Leaguepedia 2025-07-01 .. 2025-10-01 (1 request / second; finished weeks are kept and skipped on a re-run)
-        run: python lol_scout.py sync --source leaguepedia --since 2025-07-01 --until 2025-10-01 | tail -c 3000
-      - name: Leaguepedia 2025-10-01 .. 2026-01-01 (1 request / second; finished weeks are kept and skipped on a re-run)
-        run: python lol_scout.py sync --source leaguepedia --since 2025-10-01 --until 2026-01-01 | tail -c 3000
-      - name: Leaguepedia 2026-01-01 .. 2026-04-01 (1 request / second; finished weeks are kept and skipped on a re-run)
-        run: python lol_scout.py sync --source leaguepedia --since 2026-01-01 --until 2026-04-01 | tail -c 3000
-      - name: Leaguepedia 2026-04-01 .. 2026-07-01 (1 request / second; finished weeks are kept and skipped on a re-run)
-        run: python lol_scout.py sync --source leaguepedia --since 2026-04-01 --until 2026-07-01 | tail -c 3000
-      - name: Leaguepedia 2026-07-01 .. 2026-10-01 (1 request / second; finished weeks are kept and skipped on a re-run)
-        run: python lol_scout.py sync --source leaguepedia --since 2026-07-01 --until 2026-10-01 | tail -c 3000
-      - name: Leaguepedia 2026-10-01 .. 2026-10-19 (1 request / second; finished weeks are kept and skipped on a re-run)
-        run: python lol_scout.py sync --source leaguepedia --since 2026-10-01 --until 2026-10-19 | tail -c 3000
-
-      - name: Sync the LoL Esports feed since 2025-01-01 (4 requests / second per host)
-        run: python lol_scout.py sync --source lolesports --since 2025-01-01 | tail -c 4000
-
-      - name: Coverage and missing games
+      - name: Leaguepedia canonical history (resumable, bounded)
+        run: python lol_scout.py sync --source leaguepedia --max-minutes 180
+      - name: LoL Esports canonical history (resumable, bounded)
+        run: python lol_scout.py sync --source lolesports --max-minutes 90
+      - name: Publish collected source records to Scout (also on partial completion)
+        if: always()
+        run: python -m lol.center.handoff
+      - name: Coverage and cross-source reconciliation
+        if: always()
         run: |
-          python lol_scout.py status > "$LOL_DATA_DIR/status.json"
-          python - <<'EOF'
+          python - <<'PY'
           import json, os
-          d = json.load(open(os.path.join(os.environ["LOL_DATA_DIR"], "status.json")))
-          m = d["missing_games"]
-          print("missing games:", m["total"], "| filled by Leaguepedia:", m["filled_by_leaguepedia"],
-                "| still missing:", m["still_missing_total"], "(first 50 listed below)")
-          for r in d["history"]:
-              print(f"  {r['source']} {str(r['league'])[:28]:28s} {r['matches']:6d} matches {r['games']:7d} games  "
-                    f"{str(r['first'])[:10]} .. {str(r['last'])[:10]}")
-          for x in m["still_missing"][:30]:
-              print("  still missing:", x)
-          EOF
-
-      - name: Cross-source check (games both sources hold)
-        run: python -m lol.checks crosscheck | tee "$LOL_DATA_DIR/crosscheck.json"
-
-      - name: Backtest - full-history protocol (lol/EVALUATION.md)
-        run: |
-          python -m lol.backtest --train-from 2025-03-01 --test-from 2026-04-01 --test-to 2026-10-17 \
-            --json "$LOL_DATA_DIR/full_report.json" --write
-          echo "----- lol/model_fit.json -----"
-          cat lol/model_fit.json
-          cp lol/model_fit.json "$LOL_DATA_DIR/model_fit.json"
-
-      - name: Save the LoL API cache for the next run
+          from pathlib import Path
+          from lol.center import coverage, ingest, store
+          c = store.connect()
+          try:
+              report = {'coverage': coverage.compute(c), 'ingest': ingest.progress(c), 'last_export': store.get_meta(c, 'last_export')}
+              Path(os.environ['LOL_DATA_DIR'], 'coverage.json').write_text(json.dumps(report, indent=2))
+              print(json.dumps(report['ingest']['tables'], indent=2))
+          finally:
+              c.close()
+          PY
+      # Model selection stays in the registered evaluation process. A scraper run
+      # never opens TEST, overwrites model_fit.json or promotes a production fit.
+      - name: Save resumable history
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: ${{ runner.temp }}/lol/cache.db*
-          key: lol-api-cache-${{ github.run_id }}-${{ github.run_attempt }}
-
-      - name: Keep the results (7 days)
+          path: |
+            ${{ runner.temp }}/lol/center/lol.db*
+            ${{ runner.temp }}/lol/cache.db*
+          key: lol-canonical-history-v1-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Keep collected history and coverage
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -148,3 +136,4 @@ jobs:
           path: |
             ${{ runner.temp }}/lol/*.json
             ${{ runner.temp }}/lol/history.db
+            ${{ runner.temp }}/lol/center/lol.db*

@@ -1,0 +1,4 @@
+{
+  "_doc": "Hand-checked feed team names -> Leaguepedia team page, used only when Leaguepedia's own names/redirects do not contain the feed's exact name. Keys: '<platform>:<feed name>' or '<feed name>'. Each entry must be verified against the scheduled opponent before it is added; never a guess or a similarity match. Academy teams are separate pages.",
+  "teams": {}
+}

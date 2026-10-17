@@ -60,22 +60,25 @@ class Data:
                 win = r.get("win")
                 self.player[r["pid"]].append((d0, r["kills"], r["deaths"], r["assists"], r["team_kills"], r["opp_kills"],
                                               win or 0, 0 if win is None else 1))
-                if (r["game_key"], r["team"]) not in team_seen:
-                    team_seen.add((r["game_key"], r["team"]))
-                    self.team[teams.key(r["team"])].append((d0, r["team_kills"], r["opp_kills"]))
+                tkey = r.get("team_id") or teams.key(r["team"])       # the data center's id when present (no name merges)
+                if (r["game_key"], tkey) not in team_seen:
+                    team_seen.add((r["game_key"], tkey))
+                    self.team[tkey].append((d0, r["team_kills"], r["opp_kills"]))
                 if r.get("game_number"):
                     per_player[r["pid"]][int(r["game_number"])] = r
             for pk, games in per_player.items():
                 g1 = games.get(1) or games[min(games)]
-                self.targets.append({"match": mk, "player": pk, "day": d0, "team": teams.key(g1["team"]),
-                                     "opp": teams.key(g1["opponent"]), "team_name": g1["team"], "opp_name": g1["opponent"],
+                self.targets.append({"match": mk, "player": pk, "day": d0, "team": g1.get("team_id") or teams.key(g1["team"]),
+                                     "opp": g1.get("opponent_id") or teams.key(g1["opponent"]),
+                                     "team_name": g1.get("team_id") or g1["team"], "opp_name": g1.get("opponent_id") or g1["opponent"],
                                      "role": g1["role"], "league": g1.get("league"), "best_of": g1.get("best_of"),
                                      "games": {n: (r["kills"], r["deaths"], r["assists"]) for n, r in games.items()}})
         # by day only (a stable sort keeps game order within a series): sorting whole tuples would order one day's
         # games by kills and hand the last-10 baseline the best games of the latest series
         self.arr = {k: np.array(sorted(v, key=lambda x: x[0]), dtype=float) for k, v in self.player.items()}
         self.tarr = {k: np.array(sorted(v, key=lambda x: x[0]), dtype=float) for k, v in self.team.items()}
-        self.elo = elo.from_rows(self.rows, lambda r: self.match_day[r["match_key"]])
+        self.elo = elo.from_rows([dict(r, team=r.get("team_id") or r["team"], opponent=r.get("opponent_id") or r["opponent"])
+                                  for r in self.rows], lambda r: self.match_day[r["match_key"]])
         for t in self.targets:
             t["p_win"] = self.elo.p_win(t["team_name"], t["opp_name"], t["day"])
 
@@ -335,6 +338,9 @@ def main(argv=None):
     ap.add_argument("--write", action="store_true", help="save the TRAIN fit to lol/model_fit.json")
     ap.add_argument("--json", help="also save the full report as JSON here")
     a = ap.parse_args(argv)
+    if a.write:
+        sys.exit("refused: the legacy A1 run scores the sealed TEST period (lol/EVALUATION.md A4); production fits come "
+                 "from the development selection (python -m lol.evaluate)")
     db = history.DB()
     data = Data(history.all_player_games(db, since=a.history_from))
     log = lambda m: print(m, file=sys.stderr, flush=True)
@@ -345,10 +351,173 @@ def main(argv=None):
     if a.json:
         with open(a.json, "w", encoding="utf-8") as fh:
             json.dump({"fit": fit, "report": {"|".join(k): v for k, v in report.items()}}, fh, indent=1)
+
+
+# ------------------------------------------------------------------ lol/EVALUATION.md amendments A1-A3: B0 vs lol-1
+SCOPE_FORMAT = {"1": None, "12": 3, "123": 5}        # A3: Maps 1-2 = best-of-3, Maps 1-3 = best-of-5 (owner 2026-10-17)
+B0_K = (2.0, 5.0, 10.0, 20.0, 40.0)
+A1_PERIODS = {"history_from": date(2026, 2, 16), "train_from": date(2026, 4, 1), "test_from": date(2026, 8, 1),
+              "test_to": date(2026, 10, 17)}
+# amendment A4: TEST (2026-08-01..10-16) is sealed - this module's CLI and every helper default to the development split;
+# TEST is scored only by `python -m lol.evaluate final`, which records that it was opened
+A4_DEV = {"history_from": date(2026, 2, 16), "train_from": date(2026, 4, 1), "test_from": date(2026, 6, 15),
+          "test_to": date(2026, 8, 1)}
+
+
+def series_fmt(targets, prop, scope):
+    """(indices, totals): targets of the scope's series format where the player played every game of the scope."""
+    n, bo = model.SCOPE_GAMES[scope], SCOPE_FORMAT[scope]
+    j = {"kills": 0, "deaths": 1, "assists": 2}[prop]
+    idx, tot = [], []
+    for i, t in enumerate(targets):
+        if bo and t.get("best_of") != bo:
+            continue
+        if all(g in t["games"] for g in range(1, n + 1)):
+            idx.append(i)
+            tot.append(sum(t["games"][g][j] for g in range(1, n + 1)))
+    return np.array(idx, dtype=int), np.array(tot, dtype=float)
+
+
+def role_league_priors(data, d_from, d_to):
+    """{prop: {"league|role": [TRAIN mean per game, games]}} - B0's prior."""
+    tot = defaultdict(lambda: defaultdict(lambda: [0.0, 0]))
+    for r in data.rows:
+        if d_from <= _day(r["played_at"]) < d_to:
+            key = "%s|%s" % (r.get("league"), r["role"])
+            for p in PROPS:
+                c = tot[p][key]
+                c[0] += r[p]
+                c[1] += 1
+    return {p: {k: [round(v[0] / v[1], 4), v[1]] for k, v in d.items()} for p, d in tot.items()}
+
+
+def b0_lam(f_unweighted, targets, prop, k0, pri):
+    x = {"kills": f_unweighted["pk"], "deaths": f_unweighted["pd"], "assists": f_unweighted["pa"]}[prop]
+    prior = np.array([model.baseline_prior(pri, prop, t["role"], t.get("league")) for t in targets])
+    return (x + k0 * prior) / (f_unweighted["pw"] + k0)
+
+
+def _logscores(lam, y, size):
+    return np.array([model.nb_logpmf(int(k), m, size) for k, m in zip(y, lam)])
+
+
+def grouped_boot(diff, groups, n=2000, seed=11):
+    """Series-grouped bootstrap of the mean of `diff` -> (mean, lo95, hi95, units, groups)."""
+    by = defaultdict(list)
+    for d, g in zip(diff, groups):
+        by[g].append(d)
+    keys = list(by)
+    sums = np.array([sum(by[k]) for k in keys])
+    cnts = np.array([len(by[k]) for k in keys])
+    rng = np.random.default_rng(seed)
+    est = np.sort([sums[i].sum() / cnts[i].sum() for i in (rng.integers(0, len(keys), len(keys)) for _ in range(n))])
+    return float(sums.sum() / cnts.sum()), float(est[int(0.025 * n)]), float(est[int(0.975 * n) - 1]), int(cnts.sum()), len(keys)
+
+
+def _breakdown(sel_of, keys, l1, l0, y, ls1, ls0, min_n):
+    out = {}
+    for k in keys:
+        sel = np.array([sel_of(i) == k for i in range(len(y))])
+        if sel.sum() >= min_n:
+            out[str(k)] = {"n": int(sel.sum()), "mae_lol1": round(float(np.abs(l1[sel] - y[sel]).mean()), 4),
+                           "mae_b0": round(float(np.abs(l0[sel] - y[sel]).mean()), 4),
+                           "logscore_gain": round(float((ls1[sel] - ls0[sel]).mean()), 4)}
+    return out
+
+
+def compare(data, periods=None, log=print):
+    """B0 vs lol-1 exactly as amendments A1-A3: same targets, same day cutoff, same scopes; parameters and NB sizes on
+    TRAIN; TEST reported once. Returns (fit of the selected forms, report)."""
+    P = dict(A4_DEV, **(periods or {}))
+    d_tr, d_te, d_end = (P[k].toordinal() for k in ("train_from", "test_from", "test_to"))
+    pri = data.priors(d_tr, d_te)
+    pri["role_league"] = role_league_priors(data, d_tr, d_te)
+    train = [t for t in data.targets if d_tr <= t["day"] < d_te]
+    test = [t for t in data.targets if d_te <= t["day"] < d_end]
+    log("A1: targets train %d, test %d (match-players)" % (len(train), len(test)))
+    feats_tr = {hl: features(data, train, hl) for hl in GRID["hl"]}
+    fu_tr, fu_te = features(data, train, 1e9), features(data, test, 1e9)
+    fit = {"priors": pri, "params": {}, "nb_size": {}, "train": [P["train_from"].isoformat(), P["test_from"].isoformat()],
+           "fitted_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "version": model.VERSION,
+           "protocol": "lol/EVALUATION.md A1-A3", "selection": {}}
+    report = {"periods": {k: v.isoformat() for k, v in P.items()}, "n_train_targets": len(train), "n_test_targets": len(test),
+              "stats": {}}
+    for prop in PROPS:
+        games_tr = _actual_games(train, prop)
+        best = None                                                    # lol-1: the same grid and objective as run()
+        for form in ("rate", "share"):
+            for hl in GRID["hl"]:
+                for k0 in GRID["k0"]:
+                    for ko in GRID["ko"]:
+                        for kt in (GRID["kt"] if form == "share" else (0.0,)):
+                            for ew in GRID["ew"]:
+                                p = {"form": form, "hl": hl, "k0": k0, "ko": ko, "kt": kt, "ew": ew}
+                                mse = per_game_err(lam_game(feats_tr[hl], train, prop, p, pri), games_tr)
+                                if best is None or mse < best[0]:
+                                    best = (mse, p)
+        p1 = best[1]
+        b0 = min((per_game_err(b0_lam(fu_tr, train, prop, k, pri), games_tr), k) for k in B0_K)
+        p0 = {"form": "baseline", "k0": b0[1], "hl": None, "ko": None, "kt": None, "ew": 0.0}
+        lam1_tr, lam0_tr = lam_game(feats_tr[p1["hl"]], train, prop, p1, pri), b0_lam(fu_tr, train, prop, p0["k0"], pri)
+        f1_te = features(data, test, p1["hl"])
+        lam1_te, lam0_te = lam_game(f1_te, test, prop, p1, pri), b0_lam(fu_te, test, prop, p0["k0"], pri)
+        out = {"lol1_params": p1, "lol1_train_mse": round(best[0], 4), "b0_params": p0, "b0_train_mse": round(b0[0], 4), "scopes": {}}
+        sizes = {}
+        for scope, n in model.SCOPE_GAMES.items():
+            i_tr, y_tr = series_fmt(train, prop, scope)
+            s1 = fit_size(lam1_tr[i_tr] * n, y_tr) if len(y_tr) else 8.0
+            s0 = fit_size(lam0_tr[i_tr] * n, y_tr) if len(y_tr) else 8.0
+            sizes[scope] = (s1, s0)
+            i_te, y = series_fmt(test, prop, scope)
+            if not len(y):
+                out["scopes"][scope] = {"n": 0}
+                continue
+            l1, l0 = lam1_te[i_te] * n, lam0_te[i_te] * n
+            ls1, ls0 = _logscores(l1, y, s1), _logscores(l0, y, s0)
+            boot = grouped_boot(ls1 - ls0, [test[i]["match"] for i in i_te])
+            e1, e0 = evaluate(l1, y, s1), evaluate(l0, y, s0)
+            leagues = sorted({str(test[i].get("league")) for i in i_te})
+            out["scopes"][scope] = {
+                "format": SCOPE_FORMAT[scope], "n": int(len(y)), "series": boot[4], "nb_size_lol1": s1, "nb_size_b0": s0,
+                "lol1": {k: e1[k] for k in ("mae", "bias", "loglik_nb", "cover80", "calibration")},
+                "b0": {k: e0[k] for k in ("mae", "bias", "loglik_nb", "cover80", "calibration")},
+                "logscore_gain_lol1_minus_b0": {"mean": boot[0], "lo95": boot[1], "hi95": boot[2]},
+                "by_league": _breakdown(lambda j: str(test[i_te[j]].get("league")), leagues, l1, l0, y, ls1, ls0, 50),
+                "by_role": _breakdown(lambda j: test[i_te[j]]["role"], model.ROLES, l1, l0, y, ls1, ls0, 30)}
+        ok = all(out["scopes"].get(sc, {}).get("n") and out["scopes"][sc]["logscore_gain_lol1_minus_b0"]["lo95"] > 0
+                 and out["scopes"][sc]["lol1"]["mae"] <= out["scopes"][sc]["b0"]["mae"] for sc in ("12", "123"))
+        chosen = "lol-1" if ok else "B0"
+        fit["selection"][prop] = chosen
+        fit["params"][prop] = p1 if ok else p0
+        for scope, (s1, s0) in sizes.items():
+            fit["nb_size"]["%s|%s" % (prop, scope)] = s1 if ok else s0
+        out["selected"] = chosen
+        report["stats"][prop] = out
+        log("%s: selected %s" % (prop, chosen))
+    return fit, report
+
+
+def main_compare(argv=None):
+    ap = argparse.ArgumentParser(description="B0 vs lol-1 on the DEVELOPMENT split (A4); TEST only via lol.evaluate final")
+    ap.add_argument("--write", action="store_true", help="save the selected TRAIN fit to lol/model_fit.json")
+    ap.add_argument("--json", help="save the report here")
+    a = ap.parse_args(argv)
+    db = history.DB()
+    data = Data(history.all_player_games(db, since=A1_PERIODS["history_from"].isoformat()))
+    fit, report = compare(data, log=lambda m: print(m, file=sys.stderr, flush=True))
+    out = json.dumps({"fit": fit, "report": report}, indent=1, default=str)
+    if a.json:
+        with open(a.json, "w", encoding="utf-8") as fh:
+            fh.write(out)
+    else:
+        print(out)
     if a.write:
         FIT_FILE.write_text(json.dumps(fit, indent=1) + "\n", encoding="utf-8")
-        print(f"\nsaved {FIT_FILE}", file=sys.stderr)
+        print("saved %s" % FIT_FILE, file=sys.stderr)
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "compare":
+        main_compare(sys.argv[2:])
+    else:
+        main()

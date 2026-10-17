@@ -59,9 +59,58 @@ python -m lol.backtest                        # the model's chronological test (
 
 ## Keeping the history fresh
 
-Run `python lol_scout.py sync` every couple of hours. A match it already holds is skipped, so a run only fetches new
-games. `lol/deploy/lol-sync.yml` is a ready GitHub Actions schedule (the HLTV scraper's set-up), copy it to
-`.github/workflows/` and add the secrets it lists. It's not active until you do.
+Render's worker owns the serving history. `python lol_scout.py sync` uses that same canonical ingestion path locally.
+The legacy `lol/deploy/lol-sync.yml` template predates this consolidation; do not enable it as a second production writer.
+Use `LOL_BACKFILL_DAYS` to choose the collection window before process start. Unsupported legacy `--since`, `--until`,
+`--leagues` and `--force` options are rejected instead of being silently ignored.
+
+### GitHub history reaches Scout
+
+PR checks run the offline LoL and CS2 tests, including a disposable PostgreSQL service. They do not fetch providers.
+The manual `lol-full-history` job collects from January 2025 through the same data-center pipeline and retains its
+resumable source database. It publishes every current source record (including explicit removals) to `lol_source_inbox`
+in the repository's `LOL_DB_DSN` database, using that secret as `LOL_HANDOFF_DSN`. A missing destination is a failure,
+not a successful artifact-only collection. `LOL_DB_DSN` is deliberately empty inside the collector, so it cannot
+replace Scout's serving tables with an isolated partial snapshot.
+
+Scout's worker reads the inbox automatically through its existing `LOL_DB_DSN`, imports bounded batches with a
+transactional cursor, preserves source revisions, and rebuilds/exports the combined history. Source ids are passed
+across; local canonical ids are never copied between databases. Older collector observations cannot undo newer local
+corrections. Merely being absent from a batch does not delete a record. The status response exposes `history_handoff`
+and `last_history_import`, alongside the normal export/read-back counts.
+
+This path preserves all collected fields. Missing identities or incomplete games still follow the existing quarantine
+and scope checks before becoming grading inputs. It does not promote a model or open the sealed evaluation period.
+The collector can finish a bounded run with partial coverage; coverage and checkpoints are saved for resumption.
+
+Already-running jobs use the code they started with; updating this PR does not migrate their data or replace that
+running process. A live handoff is verified only after this branch is deployed and the revised collector publishes.
+
+## One LoL extension: data center + scout (consolidated 2026-10-17; not released to members)
+
+- **One ingestion path**: the data center (`lol/center`) - the worker on the server (`python -m lol.center.worker`,
+  started by server.py, which never imports `lol`), or `python lol_scout.py sync` locally. It reads LoL Esports (no
+  login, no LPL) and Leaguepedia (bot login `LEAGUEPEDIA_USER` = `Name@grader`, `LEAGUEPEDIA_BOT_PASSWORD`) with
+  explicit fields, bounded pages, one shared pacer, checkpoints, raw responses and every source-row revision kept.
+- **One identity**: internal ids (`lol:player:N`, `lol:team:N`, `lol:series:N`, `lol:game:N`) with source mappings
+  and history; renames through PlayerRedirects; a LoL Esports id and a Leaguepedia page of the same player / team are
+  linked through the series both sources hold (or merged, older id kept); ambiguity goes to quarantine.
+- **One history**: the data center's canonical tables are exported to `lol_games` / `lol_player_games`
+  (`center/export.py`) - the only writer; the scout, the backtest and the live forecasts read it. One source per real
+  series (Leaguepedia preferred; LoL Esports fills gaps). The 8-month window comes first (`LOL_BACKFILL_DAYS`, 245).
+- **One forecast format**: `center/forecast.py` saves an append-only pre-match record per offered line (line, offered
+  sides, times, inputs, model + fit hash, P(over/under/push), side offered, format check, slip eligibility) through
+  lol-1's interface (`model.project` / `model.probs`, with the A1 baseline as one of its forms). The admin board, match
+  tables, cards and the slip check read those records; saved forecasts are settled by `center/settle.py` once the
+  series completes (versioned; corrections never rewrite a forecast).
+- **Markets**: an append-only archive of every Underdog (`sport_id=LOL`) and PrizePicks (league 121) LoL line. Maps 1-2
+  lines are best-of-3 markets and Maps 1-3 lines best-of-5 (owner); a Maps 1-3 total counts the games played among 1-3
+  (owner, same as CS2). Combined-player lines and fantasy points are archived, never forecast.
+- **Admin only**: `/admin/lol` (board, match tables, cards, status), `/admin/lol.json`, `/admin/lol/quotes.json`,
+  `/admin/lol/{coverage,quarantine,links,board}.json`, `/admin/lol/{forecasts,settlements,history}.json` (paged).
+  `LOL_DATA=0` turns the worker off.
+- **Model selection**: `python -m lol.backtest compare [--write]` runs lol/EVALUATION.md amendments A1-A3 (B0 vs lol-1
+  on the same 8-month data, targets, cutoff and scopes) and writes the selected fit to `lol/model_fit.json`.
 
 ## How the pieces fit
 

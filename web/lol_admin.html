@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LoL data center</title>
+<style>
+:root{--bg:#090d14;--panel:#111b29;--line:#293950;--text:#eef4fc;--muted:#a4b4ca;--acc:#ffb477;--up:#3fb950;--dn:#f0883e}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 Inter,system-ui,sans-serif}
+.wrap{max-width:1440px;margin:0 auto;padding:24px 16px}h1{font-size:28px;margin:6px 0 4px}h2{font-size:17px;margin:26px 0 10px}
+.eyebrow{font:11px ui-monospace,monospace;letter-spacing:.15em;color:var(--acc);text-transform:uppercase}.muted{color:var(--muted)}.small{font-size:12px}
+.note{padding:10px 14px;border-left:2px solid var(--acc);background:#ff8c4208;margin:10px 0}
+.bar{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}button{font:inherit;font-size:12px;background:#0c1420;color:var(--text);border:1px solid var(--line);border-radius:9px;padding:9px 12px;cursor:pointer}
+button.on{border-color:#ff8c42;color:var(--acc)}.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:#0e1723}
+table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{background:#19263a;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.07em}tbody tr:hover{background:#1c2a3f66;cursor:pointer}
+.num{text-align:right;font-variant-numeric:tabular-nums}.flag{display:inline-block;border:1px solid #8e653d66;color:#ffc68f;border-radius:999px;padding:1px 8px;margin:1px;font-size:11px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin:12px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px 18px}
+.k{color:var(--muted);font-size:12px}#modal{position:fixed;inset:0;background:#000a;display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
+#modal .card{max-width:820px;width:100%}
+</style></head><body><div class="wrap">
+<div class="eyebrow">League of Legends · data center · admin only</div>
+<h1>LoL board <span class="muted small" id="gen"></span></h1>
+<div class="note small">Not released to members. Probabilities are model estimates; grades use the published bands; stakes are held at 0U until the projection is validated at real offered lines (lol/EVALUATION.md). One saved pre-match forecast per line feeds this board, the match tables, the cards and the slip check.</div>
+<div class="bar" id="tabs"><button data-v="board" class="on">Board</button><button data-v="tables">Match tables</button><button data-v="settled">Settled</button><button data-v="status">Data center</button></div>
+<div id="out" class="muted">Loading…</div>
+</div>
+<div id="modal" onclick="if(event.target===this)this.style.display='none'"><div class="card" id="card"></div></div>
+<script>
+const tok = new URLSearchParams(location.search).get("token");
+const q = (p) => fetch(p + (p.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(tok || "")).then(r => r.json());
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const pct = (x) => x == null ? "–" : (100 * x).toFixed(1) + "%";
+let B = null, S = null, view = "board";
+function sides(x) {
+  const s = x.sides || {}; const o = [];
+  for (const k of ["higher", "lower"]) { const v = s[k]; if (!v) continue;
+    const on = x.platform === "underdog" ? (v.status || "active") === "active" : v.offered;
+    o.push(`${k === "higher" ? "Over" : "Under"}${on === true ? "" : on === false ? " ✕" : " ?"}${v.payout_multiplier ? " ×" + v.payout_multiplier : ""}`); }
+  return o.join(" · ");
+}
+function boardView() {
+  const rows = B.rows || [];
+  let h = `<div class="small muted">${B.counts.offers} open lines · ${B.counts.linked} linked to a canonical series and player · ${B.counts.with_forecast} with a saved forecast</div>`;
+  h += `<div class="scroll"><table><thead><tr><th>Start (UTC)</th><th>Player</th><th>Team</th><th>Role</th><th>Opponent</th><th>Competition</th><th>Stat</th><th>Scope</th><th>Platform</th><th class="num">Line</th><th>Sides</th><th class="num">Projection</th><th class="num">P(over)</th><th class="num">P(under)</th><th>Model side</th><th>Grade</th><th>Stake</th><th>Slip leg</th><th>Freshness</th></tr></thead><tbody>`;
+  rows.forEach((x, i) => {
+    const f = x.forecast;
+    const why = x.link.status !== "matched" ? `not linked: ${x.link.reason || x.link.status || "pending"}` : (!f ? "no forecast yet" : "");
+    h += `<tr onclick="card(${i})"><td>${esc((x.series_start || "").replace("T", " ").slice(0, 16))}</td><td>${esc(x.player)}</td><td>${esc(x.team)}</td><td>${esc(x.role || "–")}</td><td>${esc(x.opponent)}</td><td>${esc(x.competition || "–")}${x.best_of ? " · BO" + x.best_of : ""}</td><td>${esc(x.stat)}${x.market_type === "combo" ? " <span class=flag>combo</span>" : ""}</td><td>${esc(x.scope)}</td><td>${esc(x.platform)} <span class=muted>${esc(x.odds_type)}</span></td><td class="num">${x.line}</td><td class=small>${esc(sides(x))}</td>`
+      + (f ? `<td class="num">${f.projection.toFixed(2)}</td><td class="num">${pct(f.p_over)}</td><td class="num">${pct(f.p_under)}</td><td>${esc(f.model_side)}${f.side_offered === 0 ? " <span class=flag>side not offered</span>" : ""}</td>`
+           : `<td colspan=4 class="muted small">${esc(why)}</td>`)
+      + `<td>${f ? esc(f.grade || "–") : "–"}</td><td>${f ? (f.units ?? 0) + "U" + (f.units_policy ? ` <span class=muted>(policy ${f.units_policy}U)</span>` : "") : "–"}</td><td>${f ? (f.slip_eligible ? "eligible" : `<span class=muted>no</span>`) : "–"}</td><td class="small muted">quote ${esc((x.quote_seen_at || "").slice(11, 16))}${f ? " · history to " + esc(((f.inputs || {}).history_last_game || "").slice(0, 10)) : ""}</td></tr>`;
+  });
+  return h + "</tbody></table></div>";
+}
+function tablesView() {
+  let h = `<div class="small muted">Identical markets side by side (same player, stat, scope and market type); line types differ as labelled.</div>`;
+  for (const t of B.match_tables || []) {
+    h += `<div class="card"><b>${esc(t.competition || "")}</b> <span class=muted>BO${t.best_of || "?"} · ${esc((t.start || "").replace("T", " ").slice(0, 16))} UTC · ${esc(t.sid)}</span><div class="scroll"><table><thead><tr><th>Player</th><th>Team</th><th>Role</th><th>Stat</th><th>Scope</th><th>Lines (platform · type · line · projection · P(over))</th></tr></thead><tbody>`;
+    for (const m of Object.values(t.markets)) {
+      h += `<tr><td>${esc(m.player)}</td><td>${esc(m.team)}</td><td>${esc(m.role || "–")}</td><td>${esc(m.stat)}</td><td>${esc(m.scope)}</td><td class=small>${m.lines.map(l => `${esc(l.platform)} · ${esc(l.odds_type)} · ${l.line}${l.projection != null ? " · " + l.projection.toFixed(2) + " · " + pct(l.p_over) : ""}`).join("<br>")}</td></tr>`;
+    }
+    h += "</tbody></table></div></div>";
+  }
+  return h || "No linked series.";
+}
+function settledView() {
+  const r = B.settled_recent || [];
+  if (!r.length) return "No settled LoL forecasts in the last 3 days.";
+  let h = `<div class="scroll"><table><thead><tr><th>Settled</th><th>Unit</th><th>Platform</th><th>Stat</th><th>Scope</th><th class="num">Line</th><th>Status</th><th class="num">Actual</th><th>Over hit</th><th>Version</th></tr></thead><tbody>`;
+  r.forEach(s => h += `<tr><td>${esc(s.settled_at)}</td><td class=small>${esc(s.unit_key)}</td><td>${esc(s.platform)}</td><td>${esc(s.stat)}</td><td>${esc(s.scope)}</td><td class="num">${s.line}</td><td>${esc(s.status)}</td><td class="num">${s.actual ?? "–"}</td><td>${s.over_hit == null ? "–" : s.over_hit ? "yes" : "no"}</td><td>${s.version}</td></tr>`);
+  return h + "</tbody></table></div>";
+}
+function statusView() {
+  const st = (S || {}).status || {};
+  const m = st.markets || {};
+  let h = `<div class="card grid">`;
+  for (const p of Object.keys(m)) h += `<div><div class=k>${esc(p)} archive</div>${m[p].open_markets} open · since ${esc((m[p].archive_since || "").slice(0, 16))} · ${m[p].ok_24h}/${m[p].polls_24h} polls ok (24 h)</div>`;
+  h += `<div><div class=k>Leaguepedia login</div>${esc(((st.leaguepedia_login || {}).result) || "–")}</div><div><div class=k>Last build</div>${esc((st.last_build || {}).built_at || "–")} · ${(st.last_build || {}).games || 0} games</div><div><div class=k>History export</div>${(st.last_export || {}).games || 0} games · ${(st.last_export || {}).player_rows || 0} player rows</div><div><div class=k>Worker</div>${S && S.worker && S.worker.running ? "running" : "not running"}</div></div>`;
+  return h + `<pre class="small muted" style="white-space:pre-wrap">${esc(JSON.stringify({ingest: st.ingest, riot: st.riot, links: st.links, forecasts: st.forecasts, quarantine: st.quarantine}, null, 1))}</pre>`;
+}
+function card(i) {
+  const x = B.rows[i], f = x.forecast;
+  let h = `<div class="eyebrow">${esc(x.platform)} · ${esc(x.stat_label || x.stat)}</div><h2 style="margin-top:6px">${esc(x.player)} <span class=muted>${esc(x.team)} · ${esc(x.role || "")}</span></h2>`;
+  h += `<div class=grid><div><div class=k>Match</div>vs ${esc(x.opponent)} · ${esc(x.competition || "")} BO${x.best_of || "?"}</div><div><div class=k>Start</div>${esc(x.series_start)}</div><div><div class=k>Line</div>${x.line} (${esc(x.odds_type)}) · ${esc(sides(x))}</div><div><div class=k>Canonical ids</div><span class=small>${esc(x.link.sid || "–")} · ${esc(x.link.pid || "–")}</span></div></div>`;
+  if (f) {
+    const inp = f.inputs || {};
+    h += `<h2>Forecast <span class="muted small">saved ${esc(f.at)} · ${esc(f.model)}</span></h2><div class=grid><div><div class=k>Projection</div>${f.projection.toFixed(2)}</div><div><div class=k>P(over) / P(under) / push</div>${pct(f.p_over)} / ${pct(f.p_under)} / ${pct(f.p_push)}</div><div><div class=k>Model side</div>${esc(f.model_side)} ${f.side_offered === 1 ? "(offered)" : f.side_offered === 0 ? "(not offered)" : "(not confirmed)"}</div><div><div class=k>Grade · stake</div>${esc(f.grade || "–")} · ${f.units ?? 0}U${f.units_policy ? " (published policy " + f.units_policy + "U)" : ""}</div>${f.stake_restriction ? `<div><div class=k>Stake restriction</div>${esc(f.stake_restriction)}</div>` : ""}`;
+    h += `<div><div class=k>Mean · median · 80% range</div>${inp.mean ?? "–"} · ${inp.median ?? "–"} · ${(inp.range80 || []).join("–")}</div>`;
+    for (const k of ["form", "player_rate", "team_factor", "opp_factor", "strength_factor", "p_win", "history_games", "team_games", "opponent_games", "league", "data_quality", "history_last_game"]) if (inp[k] != null) h += `<div><div class=k>${esc(k)}</div>${esc(inp[k])}</div>`;
+    h += `</div><h2>Measured drivers</h2><ul class=small>${(inp.drivers || []).map(z => `<li>${esc(z)}</li>`).join("")}</ul><div class="small muted">Unknowns: ${esc((inp.unknowns || []).join("; "))}</div>`;
+    const mk = inp.market || {};
+    h += `<h2>Market fields</h2><div class=small>${esc(mk.price_status || "–")}${mk.undocumented_no_vig_p_over != null ? " · undocumented two-sided prices, margin-removed P(over) " + pct(mk.undocumented_no_vig_p_over) + " (research only, not in the grade)" : ""}${mk.payout_modifiers ? " · payout modifiers " + esc(JSON.stringify(mk.payout_modifiers)) + " (not probabilities)" : ""}</div><div class=grid>`;
+    h += `</div><div style="margin-top:8px">${(f.flags || []).map(z => `<span class=flag>${esc(z)}</span>`).join("")}</div><h2>Slip leg</h2><div>${f.slip_eligible ? "eligible" : "not eligible"}</div><ul class=small>${(f.slip_reasons || []).map(z => `<li>${esc(z)}</li>`).join("")}</ul>`;
+  } else h += `<div class="note small">${esc(x.link.status !== "matched" ? "Not linked: " + (x.link.reason || "pending") : "No forecast yet")}</div>`;
+  document.getElementById("card").innerHTML = h + `<div class=bar><button onclick="document.getElementById('modal').style.display='none'">Close</button></div>`;
+  document.getElementById("modal").style.display = "flex";
+}
+function render() {
+  document.getElementById("out").innerHTML = !B || B.note ? esc((B || {}).note || "Not written yet") : ({board: boardView, tables: tablesView, settled: settledView, status: statusView}[view])();
+  document.getElementById("gen").textContent = B && B.at ? "· board " + B.at : "";
+}
+document.getElementById("tabs").onclick = (e) => { const v = e.target.dataset.v; if (!v) return; view = v;
+  [...document.querySelectorAll("#tabs button")].forEach(b => b.classList.toggle("on", b.dataset.v === v)); render(); };
+Promise.all([q("/admin/lol/board.json"), q("/admin/lol.json")]).then(([b, s]) => { B = b; S = s; render(); })
+  .catch(e => document.getElementById("out").textContent = "Could not load: " + e);
+</script></body></html>

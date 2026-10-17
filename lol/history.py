@@ -7,9 +7,10 @@ web app share). Every table is lol_* so it can live next to the HLTV scraper's t
   lol_player_games  one row per player per game: K / D / A, CS, gold, champion, role, team and opponent kills, result
   lol_sync_state    small key -> value notes (last sync per source)
 
-Rows carry their source ('le' = LoL Esports feed, 'lp' = Leaguepedia) and keys are source-prefixed ('le:<game id>'),
-so the two sources never overwrite each other; reads drop a game that both sources hold (lp kept - exact game length
-and official winner)."""
+Since 2026-10-17 the history is written ONLY by the data center (lol/center/export.py): one row per real game (the
+data center keeps one source per series), keyed by the data center's ids (game_key lol:game:N, player_id lol:player:N,
+team ids lol:team:N), each row still naming its source ('lp' Leaguepedia, 'le' LoL Esports). Rows written by the older
+direct sync (source-prefixed keys 'le:<game id>') are read the same way: reads drop a game both sources hold."""
 import sqlite3
 import threading
 from datetime import datetime, timezone
@@ -47,7 +48,8 @@ GAME_COLS = ("game_key", "source", "match_key", "game_number", "best_of", "playe
              "duration_s", "patch", "fetched_at")
 PLAYER_COLS = ("game_key", "player_key", "player", "player_id", "team", "team_id", "opponent", "opponent_id", "side",
                "role", "champion", "kills", "deaths", "assists", "cs", "gold", "team_kills", "opp_kills", "win",
-               "duration_s", "match_key", "game_number", "best_of", "played_at", "league", "source")
+               "duration_s", "match_key", "game_number", "best_of", "played_at", "league", "source", "damage", "vision")
+ADDED = {"lol_player_games": {"damage": "INTEGER", "vision": "INTEGER"}}     # 2026-10-17: Leaguepedia-only stats
 
 
 def player_key(name):
@@ -72,6 +74,12 @@ class DB:
         self.lock = threading.Lock()
         for stmt in SCHEMA:
             self.execute(stmt)
+        for tbl, cols in ADDED.items():                     # columns added after a database was created: in place
+            have = {r["name"] for r in self.query(f"PRAGMA table_info({tbl})")} if self.kind == "sqlite" else {
+                r["column_name"] for r in self.query("SELECT column_name FROM information_schema.columns WHERE table_name = ?", (tbl,))}
+            for c, typ in cols.items():
+                if c not in have:
+                    self.execute(f"ALTER TABLE {tbl} ADD COLUMN {c} {typ}")
         self.commit()
 
     def _sql(self, sql):
@@ -219,6 +227,9 @@ def _dedup(rows, links=None):
     one source never collapse).
     pid: 'lp:<Leaguepedia page>' or 'le:<LoL Esports player id>' - a feed id seen on the same game as a Leaguepedia page
     takes that page's identity. Two pros who share a name never share a pid."""
+    # The center already resolved canonical games and identities. Legacy row fingerprints must not merge them.
+    canonical = [r for r in rows if str(r.get("game_key") or "").startswith("lol:game:")]
+    rows = [r for r in rows if not str(r.get("game_key") or "").startswith("lol:game:")]
     seen, out, link, twin_games = {}, [], {}, set()
     for r in sorted(rows, key=lambda r: (r.get("source") != "lp", r.get("played_at") or "")):
         k = (champion(r.get("champion")), r.get("kills"), r.get("deaths"), r.get("assists"),
@@ -235,7 +246,11 @@ def _dedup(rows, links=None):
     # a game the other source holds goes as a WHOLE: a row of it that found no twin (a name the sources spell apart)
     # would otherwise count that game twice for that player, his team and the Elo
     out = [r for r in out if r.get("game_key") not in twin_games]
+    out.extend(canonical)
     for r in out:
+        if str(r.get("player_id") or "").startswith("lol:player:"):   # the data center's id: already one per player
+            r["pid"] = r["player_id"]
+            continue
         own = f"{r.get('source')}:{r.get('player_id') or r.get('player_key')}"
         r["pid"] = link.get(own, own)
     if links is not None:
@@ -256,6 +271,9 @@ def player_games(db, key, before=None, pid=None):
     that one identity AND widened to every name that identity was stored under - the feed sends one player as
     'BrokenBlade' and 'BrokenBIade', 'BFXClear' and 'Clear', and Leaguepedia keys a renamed player's old games by his
     old name. `before` (ISO date / time) keeps earlier games only."""
+    if pid and str(pid).startswith("lol:player:"):
+        # Canonical ids already span source spellings and renames. Never split them as legacy source ids.
+        return _dedup(_rows(db, "player_id = ?", [pid], before))
     by_name = _rows(db, "player_key = ?", [key], before)
     if pid is None:
         return _dedup(by_name)
@@ -287,22 +305,28 @@ def team_names(db):
     return [r["team"] for r in db.query("SELECT DISTINCT team FROM lol_player_games WHERE team IS NOT NULL")]
 
 
-def team_games(db, team, before=None):
-    """Every stored game a team played (one row per game: the team's and the opponent's kills), oldest first. Team
-    names are matched by identity (teams.same_team) across every spelling stored."""
-    names = [n for n in team_names(db) if teams.same_team(n, team)]
-    if not names:
-        return []
-    marks = ",".join("?" for _ in names)
+def team_games(db, team, before=None, team_id=None):
+    """Every stored game a team played (one row per game: the team's and the opponent's kills), oldest first. With a
+    data-center team_id ('lol:team:N') the team is matched by that id; otherwise by name identity (teams.same_team)
+    across every spelling stored."""
+    if team_id:
+        where, args = "team_id = ?", [team_id]
+    else:
+        names = [n for n in team_names(db) if teams.same_team(n, team)]
+        if not names:
+            return []
+        where, args = f"team IN ({','.join('?' for _ in names)})", list(names)
     sql = (f"SELECT DISTINCT game_key, match_key, game_number, best_of, played_at, team, opponent, team_kills, opp_kills, "
-           f"win, duration_s, league, source FROM lol_player_games WHERE team IN ({marks})")
-    args = list(names)
+           f"win, duration_s, league, source FROM lol_player_games WHERE {where}")
     if before:
         sql += " AND played_at < ?"
         args.append(before)
     rows = db.query(sql, args)
     seen, out = {}, []
     for r in sorted(rows, key=lambda r: (r.get("source") != "lp", r.get("played_at") or "")):
+        if str(r.get("game_key") or "").startswith("lol:game:"):
+            out.append(r)
+            continue
         k = (r["game_number"], r["team_kills"], r["opp_kills"], teams.key(r["opponent"]))   # one game in both sources:
         # Leaguepedia's kept (the opponent too: two different games can share a game number and a scoreline)
         if any(s["source"] != r["source"] and _near(s["played_at"], r["played_at"]) for s in seen.get(k, ())):

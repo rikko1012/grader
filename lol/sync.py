@@ -1,4 +1,8 @@
-"""Fill the LoL game history (lol/history.py) from the sources. Run on a schedule (like the HLTV scraper); the scout only
+"""SUPERSEDED for writing (2026-10-17): the history is now written only by the data center (lol/center: worker in
+production, `python -m lol sync` locally) - one ingestion path. The helpers here (game_winners, lolesports_rows) stay
+for reference and their tests; nothing calls sync_lolesports / sync_leaguepedia any more.
+
+Fill the LoL game history (lol/history.py) from the sources. Run on a schedule (like the HLTV scraper); the scout only
 reads what this wrote.
 
   sync_lolesports  every completed match of the chosen leagues since a date, from the LoL Esports API + livestats feed.

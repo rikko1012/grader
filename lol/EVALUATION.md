@@ -24,7 +24,115 @@
   and the CS2 work showed real offered lines behave differently. Grades and stakes need the real-line check first
   (`lines_archive.jsonl` collects those lines from now on).
 
-## Amendment A1 (2026-10-17, owner decision, written before any TEST number was seen)
+## Amendment A1 (written 2026-10-17 03:20 UTC, before any fit or TEST number): consolidated data, 8-month window, baseline
+
+Supersedes the data / period lines above. The earlier protocol stays for the record. Nothing below was chosen after seeing a result.
+
+**Data**
+- One canonical history: the data center's tables (`lol/center`), exported to `lol_games` / `lol_player_games`.
+- Sources: Leaguepedia (bot login) and LoL Esports. One source per real series; LoL Esports and Leaguepedia ids are linked through the series both hold.
+- Window: games from 2026-02-16 to 2026-10-16 (the agreed 8 months).
+- Coverage is reported per league: games, missing games, unresolved winners.
+- Only finished games count. A live-stats game without finished frames is never stored.
+
+**Periods**
+| Period | Dates | Role |
+|---|---|---|
+| History only | 2026-02-16 to 2026-03-31 | earlier games for the first targets |
+| TRAIN | targets 2026-04-01 to 2026-07-31 | priors, grids and negative-binomial sizes |
+| TEST | targets 2026-08-01 to 2026-10-16 | reported once |
+
+A projection uses only games on days before the match day, in both the backtest and live.
+
+**Targets and settlement (identical for every model)**
+- One (series, player) for each scope:
+  - Map 1;
+  - Maps 1-2: every best-of-3 or best-of-5 series in which the player played games 1 and 2;
+  - Maps 1-3 in a best-of-5;
+  - Maps 1-3 in a best-of-3 that reached game 3. This is reported separately and marked conditional. A 2-0 best-of-3 is never scored under Maps 1-3: no platform's rule for it is confirmed.
+- A series with an unknown or invalid game order, or with a player missing from a game in scope, is excluded and counted.
+
+**Models**
+- **B0 (simple baseline).** The player's per-game average over their earlier games, shrunk toward the TRAIN average for their role in their league (by role alone when the role and league have fewer than 200 TRAIN games). The prior weight k ∈ {2, 5, 10, 20, 40} and the NB size per (stat, scope) are fitted on TRAIN.
+- **lol-1.** As specified above: the grid on TRAIN and the NB size on TRAIN.
+- **C1** (the regularised component candidate drafted 2026-10-17) is not run. Its components (team kills x share x opponent) are what lol-1's share form already tests, so it would not add something meaningfully different.
+
+**TEST metrics, for kills and for assists**
+- MAE and bias.
+- Mean negative-binomial log score per (series, player).
+- 80% interval coverage.
+- Calibration at the nearest x.5 line. These are synthetic lines, development evidence only.
+- The log-score difference (lol-1 minus B0), with a 95% interval from a series-grouped bootstrap (2,000 resamples).
+- Breakdowns by league group and by role.
+
+**Selection (per stat)**
+- lol-1 is the production projection for a stat if, on TEST, both hold for Maps 1-2 and for best-of-5 Maps 1-3:
+  - the lower bound of the log-score gain interval is above 0;
+  - its MAE is not higher than B0's.
+- Otherwise B0 is the production projection for that stat.
+- Either way the result is development evidence. It is not an advantage at real lines. That needs saved pre-match forecasts settled at archived offered lines (300 player-markets across at least 60 series, scored once). No grade or stake is shown until then.
+
+## Amendment A2 (2026-10-17 03:25 UTC, still before any fit): Maps 1-3 in a best-of-3
+
+The owner confirmed the rule for both platforms on 2026-10-17: "the kills from Maps 1-3 reflect the kills from Maps 1-3 - the same as CS2". A Maps 1-3 market counts the games among 1-3 that are played, so a best-of-3 that ends 2-0 settles on games 1 + 2.
+
+This replaces A1's best-of-3 lines. The rest of A1 stands.
+- **Target.** Every best-of-3 series counts under Maps 1-3. The target is the player's total over the games played (two or three). The player must have played every game that was played.
+- **Forecast, for every model alike.** A mixture of the 2-game and 3-game totals, with P(game 3 is played) = 2p(1-p). Here p is the team's per-game win chance from the history's Elo, from earlier days only. The 2-game part uses the Maps 1-2 negative-binomial size and the 3-game part the Maps 1-3 size.
+- **Reporting.** Best-of-3 Maps 1-3 is reported in its own row, next to best-of-5 Maps 1-3. The selection rule is unchanged: it uses Maps 1-2 and best-of-5 Maps 1-3. The best-of-3 Maps 1-3 row is reported, not used to select.
+
+## Amendment A3 (2026-10-17 03:30 UTC, still before any fit): market scope follows the series format
+
+The owner confirmed on 2026-10-17 that Maps 1-2 lines are posted on best-of-3 series and Maps 1-3 lines on best-of-5 series. Every game in a market's scope is therefore always played.
+
+This replaces A1's and A2's best-of-3 Maps 1-3 rows.
+
+**Scopes evaluated:**
+- Maps 1-2 = best-of-3 series, games 1 + 2.
+- Maps 1-3 = best-of-5 series, games 1-3.
+- Map 1 is reported for completeness.
+
+**Selection.** Uses Maps 1-2 (best-of-3) and Maps 1-3 (best-of-5). The rule is otherwise unchanged.
+
+**Mismatched lines.** A live line whose scope does not fit its series' format (for example, Maps 1-3 on a best-of-3) is saved, flagged `format_scope_mismatch` and kept out of slips. The A2 mixture is still the forecast for such a line.
+
+## Amendment A4 (2026-10-17 04:05 UTC; no TEST number has been computed or seen): development split, candidates, metrics
+
+The owner's brief of 2026-10-17 adds candidates and factor tests. Using TEST to choose any of them would turn TEST into development data. TEST therefore stays sealed for **one final comparison**. All development moves to a validation split inside the old TRAIN window.
+
+**Periods**
+| Period | Dates | Use |
+|---|---|---|
+| History only | 2026-02-16 to 2026-03-31 | earlier games only |
+| DEV-TRAIN | targets 2026-04-01 to 2026-06-14 | fitting |
+| VALID | targets 2026-06-15 to 2026-07-31 | development: tuning, factor groups, hypotheses, the provisional choice |
+| TEST | targets 2026-08-01 to 2026-10-16 | sealed; scored once, all candidates together, refit on DEV-TRAIN + VALID |
+
+Every period is cut on the series start date, so all players and games of a series stay in one period.
+
+**Candidates.** All are scored on identical targets, the same day cutoff and the A3 scopes.
+- **B0**, the simple baseline.
+- **lol-1**, current.
+- **lol-2**, the proposed revision: whole-match simulation through lol-1's interface. It models both teams, game duration, combined kill pace, the kill split between the teams, and each player's share. Player kills sum to team kills. Assists come from a participation model. Deaths relate to opposing kills plus executions. Each simulation sums the required games.
+- **Market-informed variant.** Only where historical prices saved before the match actually exist. For props they do not (the line archive starts 2026-10-17). Match-winner prices are used only if a timestamped pre-match history is obtained. Otherwise the variant is reported as not evaluable.
+
+**Metrics.** For each stat, scope, role, league group and history-depth band, with 95% intervals from a series-grouped bootstrap:
+- Projections: MAE, squared error, bias.
+- Probabilities: log score of the count, log-loss and Brier of P(over), calibration, and 80% interval coverage.
+- Development line for P(over): the player's median total of the same scope over their previous comparable series (up to 10, at least 3), rounded to x.5. It is model-independent and known before the match. It is development evidence, not a book line.
+
+**Provisional production choice (2026-10-17).** B0 against lol-1 by the A1 rule, applied on VALID instead of TEST. It is labelled provisional on every forecast. The final choice is made only by the TEST comparison above.
+
+**Factor groups and hypotheses.**
+- Factor groups (player, team/opponent, context, draft, market) and the owner's old decision rules are tested on VALID, as increments over the chosen projection.
+- A group or rule is kept only if it improves VALID log score with a 95% interval above 0.
+- Whatever survives is then confirmed on TEST in the single final comparison.
+
+## Archived PR #8 protocol notes
+
+The earlier branch protocol below is retained for provenance. Its source-only dataset and dates are superseded by the consolidated amendments A1-A4 above; it is not a second production protocol. The measurement correction (discrete interval coverage) and chronological-ordering fix remain applicable.
+
+### Earlier branch amendment A1 (2026-10-17, owner decision, written before any TEST number was seen)
 
 The owner chose to cover the current props with about 8 months of recent history and to fetch the full history in a
 separate run. Until that run exists, the fit and the results below use:
@@ -42,7 +150,7 @@ for the separate full-history run, which replaces this fit when it is done.
 python -m lol.backtest --history-from 2026-02-17 --train-from 2026-03-17 --test-from 2026-08-01 --test-to 2026-10-17 --write
 ```
 
-## Amendment A2 (2026-10-17, measurement correction found in code review, before any TEST number was seen)
+### Earlier branch amendment A2 (2026-10-17, measurement correction found in code review, before any TEST number was seen)
 
 Counts are whole numbers, so the "80%" range (`model.interval`) is the narrowest whole-number range holding *at least*
 80% of the model's probability, often 85-90%. Judging it against a flat 80% would call a well-calibrated model

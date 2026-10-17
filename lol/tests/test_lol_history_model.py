@@ -471,13 +471,45 @@ def test_leaguepedia_sync_resumes_finished_weeks(db, monkeypatch):
     assert asked == first
 
 
-def test_sync_cli_passes_until_to_leaguepedia(db, monkeypatch):
+def test_sync_cli_uses_canonical_ingestion(db, monkeypatch):
+    from lol.center import cli
     seen = {}
-    monkeypatch.setattr(scout.config, "leaguepedia_credentials", lambda: ("u@b", "p"))
-    monkeypatch.setattr(scout.sync, "sync_leaguepedia", lambda d, **k: seen.update(k) or {"games": 0})
-    args = argparse.Namespace(since="2025-01-01", until="2025-04-01", leagues=None, source="leaguepedia", force=False)
-    scout.run_sync(db, args)
-    assert (str(seen["since"]), str(seen["until"])) == ("2025-01-01", "2025-04-01")
+    monkeypatch.setattr(cli, "sync_once", lambda **k: seen.update(k) or {"export": {"games": 0}})
+    monkeypatch.setattr(scout.sync, "sync_leaguepedia", lambda *a, **k: pytest.fail("legacy writer called"))
+    args = argparse.Namespace(since=None, until=None, leagues=None, source="leaguepedia", force=False, max_minutes=15)
+    assert scout.run_sync(db, args) == {"export": {"games": 0}}
+    assert seen["source"] == "leaguepedia" and seen["max_minutes"] == 15
+
+
+@pytest.mark.parametrize("flag,value", [("since", "2025-01-01"), ("until", "2025-04-01"), ("force", True), ("leagues", "lck")])
+def test_sync_cli_rejects_unsupported_legacy_flags(db, monkeypatch, flag, value):
+    from lol.center import cli
+    monkeypatch.setattr(cli, "sync_once", lambda **k: pytest.fail("a rejected request must not ingest or export"))
+    args = argparse.Namespace(since=None, until=None, leagues=None, source="leaguepedia", force=False)
+    setattr(args, flag, value)
+    with pytest.raises(ValueError, match="LOL_BACKFILL_DAYS"):
+        scout.run_sync(db, args)
+
+
+def test_legacy_write_refused_before_loading_or_scoring_test(monkeypatch):
+    monkeypatch.setattr(history, "DB", lambda: pytest.fail("sealed-test run must be refused before reading history"))
+    with pytest.raises(SystemExit, match="refused"):
+        backtest.main(["--write"])
+
+
+def test_canonical_player_renames_and_distinct_games_survive_legacy_dedup(db):
+    for src, gid, name, day in (("lp", "11", "OldName", "2026-07-29"), ("le", "12", "NewName", "2026-07-30")):
+        g, rows = _game(src, gid, day, 1, "T1", "Gen.G", 18, 9, [(name, "blue", "mid", 5, 1, 7, "Azir")])
+        g.update(game_key=f"lol:game:{gid}", match_key=f"lol:series:{gid}")
+        rows[0].update(game_key=g["game_key"], match_key=g["match_key"], player_id="lol:player:1")
+        history.save_game(db, g, rows)
+    db.commit()
+    rows = history.player_games(db, "newname", pid="lol:player:1")
+    assert [r["player"] for r in rows] == ["OldName", "NewName"]
+    assert {r["pid"] for r in rows} == {"lol:player:1"}
+    assert len(history.all_player_games(db)) == 2
+    assert len(history.team_games(db, "T1")) == 2
+    assert len(history.player_games(db, "newname", pid="lol:player:1", before="2026-07-30")) == 1
 
 
 # ------------------------------------------------------------------ review 2 fixes

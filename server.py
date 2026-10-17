@@ -1133,6 +1133,183 @@ _ML_BLOCK_KEYS = ("available", "prob_a", "bid", "ask", "spread", "bid_size", "as
 RESEARCH = {"matchid_ready": False, "moneyline_started": [], "errors": []}
 
 
+# ------------------------------------------------------------ LoL data center (lol/center) - backend only, not released
+# The server never imports lol (the lol package's isolation rule, lol/tests/test_lol_isolation.py): it starts the worker
+# process and reads the files it writes, plus the quote archive read-only. No member page shows any of it.
+LOL_CENTER = Path(DATA_DIR) / "lol" / "center"
+LOL_SUP = {"proc": None, "starts": 0, "started_at": None, "last_exit": None, "disabled": None}
+
+
+_LOL_PUB = {"at": 0.0, "on": False}
+
+
+def lol_public():
+    """The owner's release switch for the member LoL page (default off): LOL_PUBLIC=1, or the flag file the admin release
+    action writes on the data disk (checked at most every 15 s)."""
+    if os.environ.get("LOL_PUBLIC", "0") == "1":
+        return True
+    if time.time() - _LOL_PUB["at"] > 15:
+        _LOL_PUB.update(at=time.time(), on=(LOL_CENTER / "public.flag").exists())
+    return _LOL_PUB["on"]
+_LOL_MEMBER = {"mtime": None, "body": None, "lock": threading.Lock()}
+LOL_STAKE_NOTE = "LoL stakes start at 0U until LoL picks have a settled record on real lines; grades and chances are shown now."
+
+
+def lol_member_board():
+    """The member view of the LoL board (bytes, cached until the worker rewrites board.json): only lines with a saved
+    pre-match forecast; no internal ids, admin flags or slip internals. Read-only file access - never imports lol."""
+    path = LOL_CENTER / "board.json"
+    try:
+        mt = path.stat().st_mtime
+    except OSError:
+        return None
+    if _LOL_MEMBER["mtime"] == mt and _LOL_MEMBER["body"] is not None:
+        return _LOL_MEMBER["body"]
+    with _LOL_MEMBER["lock"]:                                   # single flight: concurrent members wait for one rebuild
+        if _LOL_MEMBER["mtime"] == mt and _LOL_MEMBER["body"] is not None:
+            return _LOL_MEMBER["body"]
+        return _lol_member_rebuild(path, mt)
+
+
+def _lol_member_rebuild(path, mt):
+    try:
+        b = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return _LOL_MEMBER["body"]
+    plat = {"underdog": "Underdog", "prizepicks": "PrizePicks"}
+    scope = {"Maps 1-2": "Maps 1-2", "Maps 1-3": "Maps 1-3", "Map 1": "Map 1"}
+    rows = []
+    for x in b.get("rows") or []:
+        f = x.get("forecast")
+        if not f or not f.get("current") or x.get("market_type") != "single":
+            continue
+        inp = f.get("inputs") or {}
+        side = f.get("model_side")
+        offered = [k for k, v in (x.get("sides") or {}).items() if k in ("higher", "lower") and
+                   (v.get("offered") if x.get("platform") == "prizepicks" else (v.get("status") or "active") == "active")]
+        rows.append({"platform": x.get("platform"), "platform_label": plat.get(x.get("platform"), x.get("platform")),
+                     "player": x.get("player"), "team": x.get("team"), "role": x.get("role"), "opponent": x.get("opponent"),
+                     "event": x.get("competition"), "best_of": x.get("best_of"), "start": x.get("series_start"), "stat": x.get("stat"),
+                     "stat_label": f"{(x.get('stat') or '').title()} · {scope.get(x.get('scope'), x.get('scope'))}",
+                     "odds_type": x.get("odds_type"), "line": x.get("line"), "sides_offered": offered,
+                     "projection": f.get("projection"), "median": inp.get("median"), "range80": inp.get("range80"),
+                     "p_over": f.get("p_over"), "p_under": f.get("p_under"), "p_push": f.get("p_push"),
+                     "pick": f"{'Over' if side == 'over' else 'Under'} {x.get('line')}", "pick_offered": f.get("side_offered") == 1 if f.get("side_offered") is not None else None,
+                     "grade": f.get("grade"), "units": 0.0, "stake_reason": "0U - LoL stakes start after a settled real-line record",
+                     "line_seen": x.get("quote_seen_at"), "forecast_at": f.get("at"), "drivers": inp.get("drivers") or [],
+                     "unknowns": inp.get("unknowns") or []})
+    tables = []
+    for t in b.get("match_tables") or []:
+        mk = [m for m in (t.get("markets") or {}).values() if m.get("market_type") == "single"]
+        if not mk:
+            continue
+        teams = sorted({m.get("team") for m in mk if m.get("team")})
+        tables.append({"teams": " vs ".join(teams), "event": t.get("competition"), "best_of": t.get("best_of"), "start": t.get("start"),
+                       "markets": [{"player": m.get("player"), "team": m.get("team"), "role": m.get("role"),
+                                    "prop": f"{(m.get('stat') or '').title()} · {m.get('scope')}",
+                                    "lines": [dict(l, platform=plat.get(l.get("platform"), l.get("platform"))) for l in m.get("lines") or []]}
+                                   for m in mk]})
+    body = json.dumps({"at": b.get("at"), "rows": rows, "match_tables": tables, "stake_note": LOL_STAKE_NOTE}).encode()
+    _LOL_MEMBER.update(mtime=mt, body=body)
+    return body
+
+
+def lol_center_supervise():
+    """Keep one LoL data-center worker running (python -m lol.center.worker, low priority); restart it with backoff
+    (1 min doubling to 30 min; reset after an hour up). LOL_DATA=0 starts nothing."""
+    import subprocess
+    if os.environ.get("LOL_DATA", "1") == "0":
+        LOL_SUP["disabled"] = "LOL_DATA=0"
+        return
+    time.sleep(int(os.environ.get("LOL_START_DELAY", "90")))
+    backoff = 60
+    while True:
+        cmd = [sys.executable, "-m", "lol.center.worker"]
+        if os.name == "posix" and shutil.which("nice"):
+            cmd = ["nice", "-n", "15"] + cmd
+        t0, log = time.time(), LOL_CENTER / "worker.log"
+        try:
+            LOL_CENTER.mkdir(parents=True, exist_ok=True)
+            if log.exists() and log.stat().st_size > 5_000_000:
+                log.replace(log.with_suffix(".log.1"))
+            with open(log, "ab") as fh:
+                LOL_SUP["proc"] = subprocess.Popen(cmd, cwd=str(BASE), stdout=subprocess.DEVNULL, stderr=fh,
+                                                   creationflags=getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0) if os.name == "nt" else 0)
+                LOL_SUP["starts"] += 1
+                LOL_SUP["started_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                LOL_SUP["proc"].wait()
+            LOL_SUP["last_exit"] = {"at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "code": LOL_SUP["proc"].returncode,
+                                    "log_tail": log.read_bytes()[-600:].decode("utf-8", "replace") if log.exists() else ""}
+        except Exception as e:
+            LOL_SUP["last_exit"] = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
+        backoff = 60 if time.time() - t0 > 3600 else min(1800, backoff * 2)
+        time.sleep(backoff)
+
+
+def lol_center_admin(path, q):
+    """Admin-only LoL views: the worker's files, and the quote archive (read-only, bounded pages)."""
+    def read(name):
+        try:
+            return json.loads((LOL_CENTER / name).read_text())
+        except (OSError, ValueError):
+            return None
+    if path == "/admin/lol/release":
+        # the owner's release action (admin token): on=1 writes the flag on the data disk, on=0 removes it
+        flag = LOL_CENTER / "public.flag"
+        if q.get("on") == "1":
+            LOL_CENTER.mkdir(parents=True, exist_ok=True)
+            flag.write_text(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+        elif q.get("on") == "0" and flag.exists():
+            flag.unlink()
+        _LOL_PUB["at"] = 0.0
+        return {"public": lol_public(), "flag": flag.exists(), "env": os.environ.get("LOL_PUBLIC", "0") == "1"}
+    if path == "/admin/lol.json":
+        p = LOL_SUP.get("proc")
+        # names only (never values) of credential-like settings, to check a bot login was entered under the expected names
+        names = sorted(k for k in os.environ if any(w in k.upper() for w in ("LEAGUEPEDIA", "LIQUIPEDIA", "FANDOM", "LOL_")))
+        return {"released_to_members": lol_public(), "credential_env_names_present": names,
+                "worker": {"running": bool(p and p.poll() is None), "starts": LOL_SUP["starts"],
+                                                         "started_at": LOL_SUP["started_at"], "last_exit": LOL_SUP["last_exit"],
+                                                         "disabled": LOL_SUP["disabled"]}, "status": read("status.json")}
+    if path in ("/admin/lol/coverage.json", "/admin/lol/quarantine.json", "/admin/lol/links.json", "/admin/lol/board.json",
+                "/admin/lol/learning.json", "/admin/lol/slips.json"):
+        return read(path.rsplit("/", 1)[1]) or {"note": "not written yet"}
+    # paged, read-only exports: the quote archive, the saved forecasts and settlements (the data center's database) and
+    # the one LoL history (DATA_DIR/lol/history.db) - bounded pages, oldest first
+    pages = {"/admin/lol/quotes.json": (LOL_CENTER / "lol.db", "market_events", "id",
+                                        "id, sport, platform, market_key, event, observed_at, source_updated_at, line_id, player, team, "
+                                        "opponent, match_source_id, start_time, stat_label, stat, scope, market_type, odds_type, line, "
+                                        "sides, status, raw_id"),
+             "/admin/lol/forecasts.json": (LOL_CENTER / "lol.db", "lol_forecasts", "id", "*"),
+             "/admin/lol/settlements.json": (LOL_CENTER / "lol.db", "lol_settlements", "id", "*"),
+             "/admin/lol/crosscheck.json": (LOL_CENTER / "lol.db", "crosscheck", "rowid", "rowid AS _row, *"),
+             "/admin/lol/history.json": (Path(DATA_DIR) / "lol" / "history.db",
+                                         "lol_games" if q.get("table") == "games" else "lol_player_games", "rowid", "rowid AS _row, *")}
+    if path in pages:
+        import sqlite3
+        db, table, key, cols = pages[path]
+        num = lambda k, d: int(q[k]) if (q.get(k) or "").isdigit() else d
+        after, limit = num("after", 0), min(num("limit", 500), 5000)
+        if not db.exists():
+            return {"rows": [], "note": "not written yet"}
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=10)
+        con.row_factory = sqlite3.Row
+        try:
+            plat = q.get("platform") if table != "lol_player_games" and table != "lol_games" else None
+            sql = f"SELECT {cols} FROM {table} WHERE {key} > ?" + (" AND platform = ?" if plat else "") + f" ORDER BY {key} LIMIT ?"
+            rows = [dict(r) for r in con.execute(sql, (after, plat, limit) if plat else (after, limit))]
+        except sqlite3.OperationalError as e:
+            return {"rows": [], "note": f"not available yet ({str(e)[:80]})"}
+        finally:
+            con.close()
+        if table == "market_events":
+            for r in rows:
+                r["sides"] = json.loads(r["sides"]) if r.get("sides") else None
+        last = rows[-1].get("_row", rows[-1].get("id")) if rows else None
+        return {"after": after, "rows": rows, "next_after": last if len(rows) == limit else None}
+    return {"error": "unknown LoL view"}
+
+
 def start_research():
     """Boot (its own thread, after the grading threads): load matchid's tables, then start the moneyline refreshers.
     Each step in its own try - a failure here never touches grading, /health or the other step."""
@@ -2525,12 +2702,20 @@ class Handler(BaseHTTPRequestHandler):
                                        "storage": dict(storage_cached(), **STORAGE)})
             if u.path in ("/", "/index.html"):
                 return self.send(200, page(), "text/html; charset=utf-8")
+            if u.path == "/lol" and lol_public():                       # the member LoL page (owner's release switch)
+                return self.send(200, (WEB / "lol.html").read_bytes(), "text/html; charset=utf-8")
+            if u.path == "/api/lol/board" and lol_public():
+                if not self.allowed():
+                    sess = self.member()
+                    return self.send(401, {"error": "members_only", "signed_in": bool(sess), "upgrade": whop_auth.upgrade_url()})
+                body = lol_member_board()
+                return self.send(200, body, "application/json") if body else self.send(503, {"error": "lol board not ready"})
             # ---- Sign in with Whop (paid product only). Off until the WHOP_* variables are set.
             if u.path == "/auth/me":
                 sess = self.member()
                 return self.send(200, {"required": whop_auth.enabled(), "signed_in": bool(sess),
                                        "member": bool(sess and sess["ok"]), "name": (sess or {}).get("name"),
-                                       "upgrade": whop_auth.upgrade_url(), "slip_studio": SLIP_STUDIO})
+                                       "upgrade": whop_auth.upgrade_url(), "slip_studio": SLIP_STUDIO, "lol": lol_public()})
             if u.path == "/auth/login" and whop_auth.enabled():
                 url, pkce = whop_auth.start_login()
                 return self.redirect(url, [f"{whop_auth.PKCE_COOKIE}={pkce}; Max-Age=900; Path=/; HttpOnly; Secure; SameSite=Lax"])
@@ -2638,6 +2823,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, _DIAG["data"])
             if u.path == "/admin/diagnostics" and self.authed(q.get("token")):
                 return self.send(200, (WEB / "diagnostics.html").read_bytes(), "text/html; charset=utf-8")
+            if u.path == "/admin/lol" and self.authed(q.get("token")):    # admin LoL board / match tables / cards (not released)
+                return self.send(200, (WEB / "lol_admin.html").read_bytes(), "text/html; charset=utf-8")
+            if (u.path == "/admin/lol.json" or u.path.startswith("/admin/lol/")) and self.authed(q.get("token")):
+                return self.send(200, lol_center_admin(u.path, q))     # LoL data center (backend only, not released)
             if (u.path in ("/admin/learning", "/admin/learning.json") or u.path.startswith("/admin/learning/")) and self.authed(q.get("token")):
                 import learning                           # continuous measurement dashboard (shadow; never changes a grade)
                 return self.send(*learning.http(u.path, q, WEB))
@@ -3726,6 +3915,8 @@ if __name__ == "__main__":
     threading.Thread(target=start_research, daemon=True, name="research").start()
     # continuous learning (learning.py): measures settled matches every 15 min - shadow only, never touches grading
     threading.Thread(target=lambda: __import__("learning").forever(), daemon=True, name="learning").start()
+    # LoL data center: one supervised low-priority child process (line archive + Leaguepedia); not released to members
+    threading.Thread(target=lol_center_supervise, daemon=True, name="lol-center").start()
     try:
         hltv.search_players("a")                      # loads the HLTV player-search index in the background
     except Exception:
