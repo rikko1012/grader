@@ -24,6 +24,54 @@
   and the CS2 work showed real offered lines behave differently. Grades and stakes need the real-line check first
   (`lines_archive.jsonl` collects those lines from now on).
 
+## Amendment A1 (written 2026-10-17 03:20 UTC, before any fit or TEST number): consolidated data, 8-month window, baseline
+
+Supersedes the data / period lines above. The earlier protocol stays for the record. Nothing below was chosen after seeing a result.
+
+**Data**
+- One canonical history: the data center's tables (`lol/center`), exported to `lol_games` / `lol_player_games`.
+- Sources: Leaguepedia (bot login) and LoL Esports. One source per real series; LoL Esports and Leaguepedia ids are linked through the series both hold.
+- Window: games from 2026-02-16 to 2026-10-16 (the agreed 8 months).
+- Coverage is reported per league: games, missing games, unresolved winners.
+- Only finished games count. A live-stats game without finished frames is never stored.
+
+**Periods**
+| Period | Dates | Role |
+|---|---|---|
+| History only | 2026-02-16 to 2026-03-31 | earlier games for the first targets |
+| TRAIN | targets 2026-04-01 to 2026-07-31 | priors, grids and negative-binomial sizes |
+| TEST | targets 2026-08-01 to 2026-10-16 | reported once |
+
+A projection uses only games on days before the match day, in both the backtest and live.
+
+**Targets and settlement (identical for every model)**
+- One (series, player) for each scope:
+  - Map 1;
+  - Maps 1-2: every best-of-3 or best-of-5 series in which the player played games 1 and 2;
+  - Maps 1-3 in a best-of-5;
+  - Maps 1-3 in a best-of-3 that reached game 3. This is reported separately and marked conditional. A 2-0 best-of-3 is never scored under Maps 1-3: no platform's rule for it is confirmed.
+- A series with an unknown or invalid game order, or with a player missing from a game in scope, is excluded and counted.
+
+**Models**
+- **B0 (simple baseline).** The player's per-game average over his earlier games, shrunk toward the TRAIN average for his role in his league (by role alone when the role and league have fewer than 200 TRAIN games). The prior weight k ∈ {2, 5, 10, 20, 40} and the NB size per (stat, scope) are fitted on TRAIN.
+- **lol-1.** As specified above: the grid on TRAIN and the NB size on TRAIN.
+- **C1** (the regularised component candidate drafted 2026-10-17) is not run. Its components (team kills x share x opponent) are what lol-1's share form already tests, so it would not add something meaningfully different.
+
+**TEST metrics, for kills and for assists**
+- MAE and bias.
+- Mean negative-binomial log score per (series, player).
+- 80% interval coverage.
+- Calibration at the nearest x.5 line. These are synthetic lines, development evidence only.
+- The log-score difference (lol-1 minus B0), with a 95% interval from a series-grouped bootstrap (2,000 resamples).
+- Breakdowns by league group and by role.
+
+**Selection (per stat)**
+- lol-1 is the production projection for a stat if, on TEST, both hold for Maps 1-2 and for best-of-5 Maps 1-3:
+  - the lower bound of the log-score gain interval is above 0;
+  - its MAE is not higher than B0's.
+- Otherwise B0 is the production projection for that stat.
+- Either way the result is development evidence. It is not an advantage at real lines. That needs saved pre-match forecasts settled at archived offered lines (300 player-markets across at least 60 series, scored once). No grade or stake is shown until then.
+
 ## Results
 
 (filled in from `python -m lol.backtest` once the history is complete)
