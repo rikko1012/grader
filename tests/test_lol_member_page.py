@@ -59,3 +59,18 @@ def test_member_view_unoffered_side_and_alternate_line(tmp_path, monkeypatch):
     row, = json.loads(server.lol_member_board())["rows"]
     assert row["pick"] == "Under 9.5" and row["pick_offered"] is False and row["line_type"] == "Demon"
     assert [(x["side"], x["offered"]) for x in row["sides"]] == [("Over", True), ("Under", False)]
+
+
+def test_admin_query_is_read_only(tmp_path, monkeypatch):
+    import sqlite3
+    monkeypatch.setattr(server, "LOL_CENTER", tmp_path)
+    c = sqlite3.connect(tmp_path / "lol.db")
+    c.execute("CREATE TABLE t (x INTEGER)")
+    c.execute("INSERT INTO t VALUES (1)")
+    c.commit()
+    c.close()
+    assert server.lol_admin_query("center", "SELECT x FROM t")["rows"] == [{"x": 1}]
+    assert "error" in server.lol_admin_query("center", "DELETE FROM t")
+    assert "error" in server.lol_admin_query("center", f"WITH a AS (SELECT 1) SELECT * FROM a; ATTACH '{tmp_path / 'x.db'}' AS x")
+    assert "error" in server.lol_admin_query("nope", "SELECT 1")
+    assert sqlite3.connect(tmp_path / "lol.db").execute("SELECT COUNT(*) FROM t").fetchone()[0] == 1

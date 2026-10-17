@@ -1327,6 +1327,8 @@ def lol_center_admin(path, q):
     if path in ("/admin/lol/coverage.json", "/admin/lol/quarantine.json", "/admin/lol/links.json", "/admin/lol/board.json",
                 "/admin/lol/learning.json", "/admin/lol/slips.json"):
         return read(path.rsplit("/", 1)[1]) or {"note": "not written yet"}
+    if path == "/admin/lol/query.json":
+        return lol_admin_query(q.get("db") or "center", q.get("sql") or "")
     # paged, read-only exports: the quote archive, the saved forecasts and settlements (the data center's database) and
     # the one LoL history (DATA_DIR/lol/history.db) - bounded pages, oldest first
     pages = {"/admin/lol/quotes.json": (LOL_CENTER / "lol.db", "market_events", "id",
@@ -1361,6 +1363,31 @@ def lol_center_admin(path, q):
         last = rows[-1].get("_row", rows[-1].get("id")) if rows else None
         return {"after": after, "rows": rows, "next_after": last if len(rows) == limit else None}
     return {"error": "unknown LoL view"}
+
+
+def lol_admin_query(which, sql):
+    """Admin audit view: one read-only SELECT on the LoL data center (center) or history database. Opened read-only, and
+    an authorizer allows only reads (no ATTACH, PRAGMA writes or any change); 5000 rows, 15 s."""
+    import sqlite3
+    db = {"center": LOL_CENTER / "lol.db", "history": Path(DATA_DIR) / "lol" / "history.db"}.get(which)
+    if db is None or not db.exists():
+        return {"error": "unknown or missing database"}
+    if not sql.lstrip().lower().startswith(("select", "with")):
+        return {"error": "SELECT only"}
+    ok = {sqlite3.SQLITE_SELECT, sqlite3.SQLITE_READ, sqlite3.SQLITE_FUNCTION, getattr(sqlite3, "SQLITE_RECURSIVE", 33)}
+    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=10)
+    con.row_factory = sqlite3.Row
+    con.set_authorizer(lambda action, *a: sqlite3.SQLITE_OK if action in ok else sqlite3.SQLITE_DENY)
+    t0 = time.time()
+    con.set_progress_handler(lambda: 1 if time.time() - t0 > 15 else 0, 20000)
+    try:
+        cur = con.execute(sql)
+        rows = [dict(r) for r in cur.fetchmany(5000)]
+        return {"rows": rows, "truncated": len(rows) == 5000, "seconds": round(time.time() - t0, 2)}
+    except sqlite3.Error as e:
+        return {"error": f"{type(e).__name__}: {str(e)[:200]}"}
+    finally:
+        con.close()
 
 
 def start_research():
