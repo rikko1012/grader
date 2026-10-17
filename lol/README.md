@@ -63,6 +63,20 @@ Run `python lol_scout.py sync` every couple of hours. A match it already holds i
 games. `lol/deploy/lol-sync.yml` is a ready GitHub Actions schedule (the HLTV scraper's set-up), copy it to
 `.github/workflows/` and add the secrets it lists. It's not active until you do.
 
+## Data center (`lol/center`, runs on the server; not released to members)
+
+One low-priority process the server starts (`python -m lol.center.worker`; the server never imports `lol`) keeps:
+- an **append-only quote archive** of every Underdog (`sport_id=LOL`) and PrizePicks (league 121) LoL offer: each poll
+  recorded, then open / change / removed / reopen events with line, offered sides, payouts and times (`DATA_DIR/lol/center/lol.db`);
+- **Leaguepedia ingestion** with explicit fields, deterministic order, bounded pages, one shared pacer, checkpoints, raw
+  responses and every source-row revision kept, internal ids (`lol:player:…`, `lol:series:…`) with source mappings,
+  renames through PlayerRedirects, ambiguous names / rematches quarantined, game order from the schedule's ids. It uses
+  the same `LEAGUEPEDIA_USER` / `LEAGUEPEDIA_BOT_PASSWORD`; without them it keeps retrying at a backed-off pace;
+- each platform's published LoL settlement rules with their sources and whether each is verified (`center/rules.py`).
+
+Admin only: `/admin/lol.json` (worker status), `/admin/lol/quotes.json?after=&limit=` (archive, paged),
+`/admin/lol/coverage.json`, `/admin/lol/quarantine.json`, `/admin/lol/links.json`. `LOL_DATA=0` turns it off.
+
 ## How the pieces fit
 
 - `history.py`: the database (`lol_games`, `lol_player_games`, `lol_sync_state`; SQLite or Postgres). Each row keeps its

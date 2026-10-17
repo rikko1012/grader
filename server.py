@@ -1133,6 +1133,80 @@ _ML_BLOCK_KEYS = ("available", "prob_a", "bid", "ask", "spread", "bid_size", "as
 RESEARCH = {"matchid_ready": False, "moneyline_started": [], "errors": []}
 
 
+# ------------------------------------------------------------ LoL data center (lol/center) - backend only, not released
+# The server never imports lol (the lol package's isolation rule, lol/tests/test_lol_isolation.py): it starts the worker
+# process and reads the files it writes, plus the quote archive read-only. No member page shows any of it.
+LOL_CENTER = Path(DATA_DIR) / "lol" / "center"
+LOL_SUP = {"proc": None, "starts": 0, "started_at": None, "last_exit": None, "disabled": None}
+
+
+def lol_center_supervise():
+    """Keep one LoL data-center worker running (python -m lol.center.worker, low priority); restart it with backoff
+    (1 min doubling to 30 min; reset after an hour up). LOL_DATA=0 starts nothing."""
+    import subprocess
+    if os.environ.get("LOL_DATA", "1") == "0":
+        LOL_SUP["disabled"] = "LOL_DATA=0"
+        return
+    time.sleep(int(os.environ.get("LOL_START_DELAY", "90")))
+    backoff = 60
+    while True:
+        cmd = [sys.executable, "-m", "lol.center.worker"]
+        if os.name == "posix" and shutil.which("nice"):
+            cmd = ["nice", "-n", "15"] + cmd
+        t0, log = time.time(), LOL_CENTER / "worker.log"
+        try:
+            LOL_CENTER.mkdir(parents=True, exist_ok=True)
+            if log.exists() and log.stat().st_size > 5_000_000:
+                log.replace(log.with_suffix(".log.1"))
+            with open(log, "ab") as fh:
+                LOL_SUP["proc"] = subprocess.Popen(cmd, cwd=str(BASE), stdout=subprocess.DEVNULL, stderr=fh)
+                LOL_SUP["starts"] += 1
+                LOL_SUP["started_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                LOL_SUP["proc"].wait()
+            LOL_SUP["last_exit"] = {"at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "code": LOL_SUP["proc"].returncode,
+                                    "log_tail": log.read_bytes()[-600:].decode("utf-8", "replace") if log.exists() else ""}
+        except Exception as e:
+            LOL_SUP["last_exit"] = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
+        backoff = 60 if time.time() - t0 > 3600 else min(1800, backoff * 2)
+        time.sleep(backoff)
+
+
+def lol_center_admin(path, q):
+    """Admin-only LoL views: the worker's files, and the quote archive (read-only, bounded pages)."""
+    def read(name):
+        try:
+            return json.loads((LOL_CENTER / name).read_text())
+        except (OSError, ValueError):
+            return None
+    if path == "/admin/lol.json":
+        p = LOL_SUP.get("proc")
+        return {"released_to_members": False, "worker": {"running": bool(p and p.poll() is None), "starts": LOL_SUP["starts"],
+                                                         "started_at": LOL_SUP["started_at"], "last_exit": LOL_SUP["last_exit"],
+                                                         "disabled": LOL_SUP["disabled"]}, "status": read("status.json")}
+    if path in ("/admin/lol/coverage.json", "/admin/lol/quarantine.json", "/admin/lol/links.json"):
+        return read(path.rsplit("/", 1)[1]) or {"note": "not written yet"}
+    if path == "/admin/lol/quotes.json":
+        import sqlite3
+        num = lambda k, d: int(q[k]) if (q.get(k) or "").isdigit() else d
+        after, limit = num("after", 0), min(num("limit", 500), 2000)
+        db = LOL_CENTER / "lol.db"
+        if not db.exists():
+            return {"rows": [], "note": "no archive yet"}
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=10)
+        con.row_factory = sqlite3.Row
+        try:
+            sql = ("SELECT id, sport, platform, market_key, event, observed_at, source_updated_at, line_id, player, team, opponent, "
+                   "match_source_id, start_time, stat_label, stat, scope, market_type, odds_type, line, sides, status, raw_id "
+                   "FROM market_events WHERE id > ?" + (" AND platform = ?" if q.get("platform") else "") + " ORDER BY id LIMIT ?")
+            rows = [dict(r) for r in con.execute(sql, (after, q["platform"], limit) if q.get("platform") else (after, limit))]
+        finally:
+            con.close()
+        for r in rows:
+            r["sides"] = json.loads(r["sides"]) if r.get("sides") else None
+        return {"after": after, "rows": rows, "next_after": rows[-1]["id"] if len(rows) == limit else None}
+    return {"error": "unknown LoL view"}
+
+
 def start_research():
     """Boot (its own thread, after the grading threads): load matchid's tables, then start the moneyline refreshers.
     Each step in its own try - a failure here never touches grading, /health or the other step."""
@@ -2638,6 +2712,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, _DIAG["data"])
             if u.path == "/admin/diagnostics" and self.authed(q.get("token")):
                 return self.send(200, (WEB / "diagnostics.html").read_bytes(), "text/html; charset=utf-8")
+            if (u.path == "/admin/lol.json" or u.path.startswith("/admin/lol/")) and self.authed(q.get("token")):
+                return self.send(200, lol_center_admin(u.path, q))     # LoL data center (backend only, not released)
             if (u.path in ("/admin/learning", "/admin/learning.json") or u.path.startswith("/admin/learning/")) and self.authed(q.get("token")):
                 import learning                           # continuous measurement dashboard (shadow; never changes a grade)
                 return self.send(*learning.http(u.path, q, WEB))
@@ -3726,6 +3802,8 @@ if __name__ == "__main__":
     threading.Thread(target=start_research, daemon=True, name="research").start()
     # continuous learning (learning.py): measures settled matches every 15 min - shadow only, never touches grading
     threading.Thread(target=lambda: __import__("learning").forever(), daemon=True, name="learning").start()
+    # LoL data center: one supervised low-priority child process (line archive + Leaguepedia); not released to members
+    threading.Thread(target=lol_center_supervise, daemon=True, name="lol-center").start()
     try:
         hltv.search_players("a")                      # loads the HLTV player-search index in the background
     except Exception:
