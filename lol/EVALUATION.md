@@ -24,6 +24,24 @@
   and the CS2 work showed real offered lines behave differently. Grades and stakes need the real-line check first
   (`lines_archive.jsonl` collects those lines from now on).
 
+## Amendment A1 (2026-10-17, owner decision, written before any TEST number was seen)
+
+The owner chose to cover the current props with about 8 months of recent history and to fetch the full history in a
+separate run. Until that run exists, the fit and the results below use:
+
+- **Data:** LoL Esports feed games from **2026-02-17** on only, for history and for targets (`--history-from
+  2026-02-17`): the same window the live database holds after a default `sync`.
+- **TRAIN:** matches 2026-03-17 to 2026-07-31 (17 Feb to 16 Mar is history only). **TEST:** matches 2026-08-01 to
+  2026-10-16.
+- Everything else (grid, metrics, pass criteria) as above.
+
+The full-history protocol (TRAIN 2025-03-01 to 2026-03-31, TEST 2026-04-01 to 2026-10-16, Leaguepedia included) is
+for the separate full-history run, which replaces this fit when it is done.
+
+```
+python -m lol.backtest --history-from 2026-02-17 --train-from 2026-03-17 --test-from 2026-08-01 --test-to 2026-10-17 --write
+```
+
 ## Results
 
-(filled in from `python -m lol.backtest` once the history is complete)
+(filled in from the command above once the recent history is synced)

@@ -14,6 +14,9 @@ from datetime import date, datetime, timedelta, timezone
 from . import cache, history, lolesports
 
 
+DEFAULT_DAYS = 240        # ~8 months: enough recent history for the current props (older seasons: --since)
+
+
 def _log(msg):
     print(msg, file=sys.stderr, flush=True)
 
@@ -114,7 +117,7 @@ def sync_lolesports(db, leagues=None, since=None, max_matches=None, now=None, wo
     host), and only this thread writes to the database. force=True re-derives matches already held (from the cache:
     finished games are never downloaded twice) - after a change to how rows are built."""
     now = now or datetime.now(timezone.utc)
-    since = since or (now - timedelta(days=120)).date()
+    since = since or (now - timedelta(days=DEFAULT_DAYS)).date()
     known = {} if force else history.known_matches(db, "le")
     todo = sorted(lolesports.matches_since(leagues, since), key=lambda m: m.get("start") or "")
     done = Counter()
@@ -162,7 +165,7 @@ def sync_leaguepedia(db, since=None, until=None, where=None, now=None):
     """Every Leaguepedia scoreboard game since `since`, a week at a time. Needs LEAGUEPEDIA_USER / _BOT_PASSWORD."""
     from . import leaguepedia
     now = now or datetime.now(timezone.utc)
-    since = since or (now - timedelta(days=120)).date()
+    since = since or (now - timedelta(days=DEFAULT_DAYS)).date()
     until = until or (now + timedelta(days=1)).date()
     site = leaguepedia.Leaguepedia()
     done = Counter()

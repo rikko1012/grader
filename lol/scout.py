@@ -343,7 +343,7 @@ def main(argv=None):
     common.add_argument("--scope", choices=["1", "12", "123"], help="Map 1 / Maps 1-2 / Maps 1-3 (default: from best-of)")
     common.add_argument("--line-type", choices=["standard", "goblin", "demon"], default="standard")
     common.add_argument("--hours", type=float, default=36)
-    common.add_argument("--since", help="sync: first date (YYYY-MM-DD; default 120 days ago)")
+    common.add_argument("--since", help="sync: first date (YYYY-MM-DD; default about 8 months ago)")
     common.add_argument("--leagues", help="sync / slate: comma-separated LoL Esports slugs, or 'all' (default: majors)")
     common.add_argument("--source", choices=["lolesports", "leaguepedia", "both"], default="both")
     common.add_argument("--force", action="store_true", help="sync: re-derive matches already held (from the cache)")

@@ -322,6 +322,8 @@ def fmt(report):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--history-from", help="use only games on/after this date, as history and as targets (e.g. the "
+                    "8 months the live database holds)")
     ap.add_argument("--train-from", default="2025-03-01")
     ap.add_argument("--test-from", default="2026-04-01")
     ap.add_argument("--test-to")
@@ -329,7 +331,7 @@ def main(argv=None):
     ap.add_argument("--json", help="also save the full report as JSON here")
     a = ap.parse_args(argv)
     db = history.DB()
-    data = Data(history.all_player_games(db))
+    data = Data(history.all_player_games(db, since=a.history_from))
     log = lambda m: print(m, file=sys.stderr, flush=True)
     fit, report = run(data, date.fromisoformat(a.train_from), date.fromisoformat(a.test_from),
                       date.fromisoformat(a.test_to) if a.test_to else None, log)

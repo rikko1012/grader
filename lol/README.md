@@ -43,7 +43,7 @@ LoL's folder.
 ## Commands
 
 ```
-python lol_scout.py sync                      # fill the history (LoL Esports; + Leaguepedia when configured)
+python lol_scout.py sync                      # fill the history: the last ~8 months (LoL Esports; + Leaguepedia when configured)
 python lol_scout.py sync --since 2025-01-01   # backfill further back
 python lol_scout.py status                    # what the history holds, which sources are configured
 python lol_scout.py slate                     # LoL matches in the next 36 hours
