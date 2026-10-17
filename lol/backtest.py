@@ -60,20 +60,23 @@ class Data:
                 win = r.get("win")
                 self.player[r["pid"]].append((d0, r["kills"], r["deaths"], r["assists"], r["team_kills"], r["opp_kills"],
                                               win or 0, 0 if win is None else 1))
-                if (r["game_key"], r["team"]) not in team_seen:
-                    team_seen.add((r["game_key"], r["team"]))
-                    self.team[teams.key(r["team"])].append((d0, r["team_kills"], r["opp_kills"]))
+                tkey = r.get("team_id") or teams.key(r["team"])       # the data center's id when present (no name merges)
+                if (r["game_key"], tkey) not in team_seen:
+                    team_seen.add((r["game_key"], tkey))
+                    self.team[tkey].append((d0, r["team_kills"], r["opp_kills"]))
                 if r.get("game_number"):
                     per_player[r["pid"]][int(r["game_number"])] = r
             for pk, games in per_player.items():
                 g1 = games.get(1) or games[min(games)]
-                self.targets.append({"match": mk, "player": pk, "day": d0, "team": teams.key(g1["team"]),
-                                     "opp": teams.key(g1["opponent"]), "team_name": g1["team"], "opp_name": g1["opponent"],
+                self.targets.append({"match": mk, "player": pk, "day": d0, "team": g1.get("team_id") or teams.key(g1["team"]),
+                                     "opp": g1.get("opponent_id") or teams.key(g1["opponent"]),
+                                     "team_name": g1.get("team_id") or g1["team"], "opp_name": g1.get("opponent_id") or g1["opponent"],
                                      "role": g1["role"], "league": g1.get("league"), "best_of": g1.get("best_of"),
                                      "games": {n: (r["kills"], r["deaths"], r["assists"]) for n, r in games.items()}})
         self.arr = {k: np.array(sorted(v), dtype=float) for k, v in self.player.items()}
         self.tarr = {k: np.array(sorted(v), dtype=float) for k, v in self.team.items()}
-        self.elo = elo.from_rows(self.rows, lambda r: self.match_day[r["match_key"]])
+        self.elo = elo.from_rows([dict(r, team=r.get("team_id") or r["team"], opponent=r.get("opponent_id") or r["opponent"])
+                                  for r in self.rows], lambda r: self.match_day[r["match_key"]])
         for t in self.targets:
             t["p_win"] = self.elo.p_win(t["team_name"], t["opp_name"], t["day"])
 
@@ -339,8 +342,8 @@ def main(argv=None):
         with open(a.json, "w", encoding="utf-8") as fh:
             json.dump({"fit": fit, "report": {"|".join(k): v for k, v in report.items()}}, fh, indent=1)
     if a.write:
-        FIT_FILE.write_text(json.dumps(fit, indent=1) + "\n", encoding="utf-8")
-        print(f"\nsaved {FIT_FILE}", file=sys.stderr)
+        sys.exit("refused: the legacy A1 run scores the sealed TEST period (lol/EVALUATION.md A4); production fits come "
+                 "from the development selection (python -m lol.evaluate)")
 
 
 # ------------------------------------------------------------------ lol/EVALUATION.md amendments A1-A3: B0 vs lol-1

@@ -79,8 +79,11 @@ def run(rows, which="dev", sims=2000, log=print, lol2=None):
         j = {"kills": 0, "deaths": 1, "assists": 2}[prop]
         for scope, (n, bo) in SCOPES.items():
             units = []
-            dropped = 0
+            dropped = unknown_bo = 0
             for t in test:
+                if bo and t.get("best_of") is None:
+                    unknown_bo += 1
+                    continue
                 if bo and t.get("best_of") != bo:
                     continue
                 if not all(g in t["games"] for g in range(1, n + 1)):
@@ -100,7 +103,8 @@ def run(rows, which="dev", sims=2000, log=print, lol2=None):
                                            "lol-2": nb_from_moments(*samples[k])}})
             if not units:
                 continue
-            res = {"n": len(units), "series": len({u[0]["match"] for u in units}), "dropped_missing_prediction": dropped}
+            res = {"n": len(units), "series": len({u[0]["match"] for u in units}), "dropped_missing_prediction": dropped,
+                   "dropped_unknown_best_of": unknown_bo}
             per = {}
             for name in ("B0", "lol-1", "lol-2"):
                 mae, se, bias, ls, cov, brier, ll, cal, mass = [], [], [], [], [], [], [], [], []

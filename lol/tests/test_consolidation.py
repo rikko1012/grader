@@ -347,3 +347,29 @@ def test_le_team_total_counting_an_execution_is_classified_not_excluded(con):
     build.build(con)
     g = con.execute("SELECT team1_kills, team1_kills_raw, team_kills_status, n_players FROM c_games WHERE source_game_id = 'e1'").fetchone()
     assert g[0] == blue_k and g[1] == blue_k + 1 and "opponent_deaths_incl_1_execution" in g[2] and g[3] == 10
+
+
+def test_two_leaguepedia_players_are_never_merged(con):
+    load_world(con)
+    build.build(con)
+    a = store.find_entity(con, "player", "leaguepedia:page", "AlphMid")
+    b = store.find_entity(con, "player", "leaguepedia:page", "AlphTop")
+    store.link_source(con, a, "player", "lolesports:player", "LEX", "test", "2026-10-12T00:00:00Z")
+    assert build._attach(con, "player", "lolesports:player", "LEX", b, "2026-10-12T00:00:00Z") == 0
+    assert store.canonical_id(con, a) == a and store.canonical_id(con, b) == b
+    assert con.execute("SELECT COUNT(*) FROM quarantine WHERE reason = 'cross_source_conflict'").fetchone()[0] == 1
+
+
+def test_played_game_missing_from_data_keeps_settlement_pending_and_live_series_not_complete(con):
+    load_world(con, best_of="3", score=(2, 1))          # 2-1: game 3 was played, but only games 1-2 are in the data
+    build.build(con)
+    pid = store.find_entity(con, "player", "leaguepedia:page", "AlphMid")
+    sid = con.execute("SELECT sid FROM c_series").fetchone()[0]
+    r = settle.settle(con, "underdog", "kills", "maps_1_2_3", pid, sid, 5.5)
+    assert r["status"] == "pending" and "missing from the data" in r["reasons"][0]
+    put(con, "MatchSchedule", [{"MatchId": "M1", "OverviewPage": "Test League 2026", "Team1": "Alpha Esports", "Team2": "Beta Gaming",
+                                "Team1Score": "1", "Team2Score": "0", "BestOf": "3", "DateTime_UTC": "2026-10-10 09:00:00"}],
+        at="2026-10-12T00:00:00Z")                      # a best-of-3 at 1-0: in progress, not complete
+    build.build(con)
+    assert con.execute("SELECT status FROM c_series").fetchone()[0] == "in_progress"
+    assert settle.settle(con, "underdog", "kills", "maps_1_2", pid, sid, 5.5)["status"] == "pending"

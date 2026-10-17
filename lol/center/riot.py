@@ -36,7 +36,8 @@ def _key_match(r):
 
 
 def _save(con, tbl, rows, key, raw, at, event_time=None):
-    snap = store.save_raw(con, "lolesports", tbl, {}, json.dumps(raw, default=str).encode(), n_rows=len(rows), fetched_at=at)
+    snap = store.save_raw(con, "lolesports", tbl, {"key": key(rows[0]) if rows else None}, json.dumps(raw, default=str).encode(),
+                          n_rows=len(rows), fetched_at=at, dedupe=True)
     return store.put_rows(con, tbl, rows, key, event_time, snap, at)
 
 

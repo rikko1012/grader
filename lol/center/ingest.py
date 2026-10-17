@@ -180,7 +180,7 @@ def sweep(con, tbl, lo, hi, max_pages=200):
     while True:
         rows, raw, params = lp.cargo(s["tables"], s["fields"], s["order"], where=where, join_on=s.get("join_on"), offset=offset)
         at = store.now_iso()
-        snap = store.save_raw(con, "leaguepedia", f"cargoquery:{tbl}", params, raw, n_rows=len(rows), fetched_at=at)
+        snap = store.save_raw(con, "leaguepedia", f"cargoquery:{tbl}", params, raw, n_rows=len(rows), fetched_at=at, dedupe=True)
         c = store.put_rows(con, tbl, rows, s["key"], lambda r: r.get(s["tcol"]), snap, at)
         con.commit()
         tot["pages"] += 1
@@ -206,7 +206,7 @@ def lookup(con, tbl, names):
     while True:
         rows, raw, params = lp.cargo(s["tables"], s["fields"], s["order"], where=s["where"](q), offset=offset)
         at = store.now_iso()
-        snap = store.save_raw(con, "leaguepedia", f"cargoquery:{tbl}", params, raw, n_rows=len(rows), fetched_at=at)
+        snap = store.save_raw(con, "leaguepedia", f"cargoquery:{tbl}", params, raw, n_rows=len(rows), fetched_at=at, dedupe=True)
         c = store.put_rows(con, tbl, rows, s["key"], None, snap, at)
         tot["pages"] += 1
         tot["rows"] += len(rows)

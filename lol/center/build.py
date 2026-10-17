@@ -225,6 +225,12 @@ def _attach(con, kind, source, skey, target, at):
     if cur is None:
         store.link_source(con, target, kind, source, str(skey), "same series held by both sources", at)
         return 1
+    pages = lambda e: {r[0] for r in con.execute("SELECT skey FROM entity_sources WHERE eid = ? AND source = 'leaguepedia:page'", (e,))}
+    if pages(cur) and pages(target):
+        # both ids are Leaguepedia pages: two different players / teams - one LoL Esports id paired with both is a
+        # conflict to look at, never a merge (2026-10-17 review)
+        store.quarantine(con, kind, f"{source}:{skey}", "cross_source_conflict", {"ids": sorted([cur, target])}, at)
+        return 0
     keep, drop = sorted([cur, target], key=lambda e: int(e.rsplit(":", 1)[1]))
     store.merge(con, keep, drop, f"{kind} identified in a series both sources hold", at)
     return 1
@@ -470,7 +476,7 @@ def _lolesports(con, at, series, games, pgs, checks, overlaps=None):
                 ksum[p.get("side")] += p.get("kills") or 0
                 dsum[p.get("side")] += p.get("deaths") or 0
             raw = {"blue": g.get("blue_kills"), "red": g.get("red_kills")}
-            complete = len(src) == 10
+            complete = len(src) == 10 and all(p.get("kills") is not None and p.get("side") in ("blue", "red") for p in src)
             canon = {s: (ksum[s] if complete else raw[s]) for s in ("blue", "red")}
             st = []
             for s, o in (("blue", "red"), ("red", "blue")):
@@ -630,9 +636,11 @@ def build(con, at=None, _again=True):
         seen = set()
         # canonical team kills = the sum of all of this game's player rows by side (resolved or not); raw totals kept
         src_k = {1: 0, 2: 0}
+        usable = 0
         for p in players:
-            if _int(p.get("Side")) in src_k:
-                src_k[_int(p.get("Side"))] += _int(p.get("Kills")) or 0
+            if _int(p.get("Side")) in src_k and _int(p.get("Kills")) is not None:
+                src_k[_int(p.get("Side"))] += _int(p.get("Kills"))
+                usable += 1
         lg_name = (tours.get(page_key(r.get("OverviewPage"))) or {}).get("League") or page_key(r.get("OverviewPage"))
         for p in players:
             who, why = pid(p.get("Link"))
@@ -665,7 +673,7 @@ def build(con, at=None, _again=True):
             flags.append("players_incomplete")
             checks["games_players_incomplete"] += 1
         tk1, tk2 = _int(r.get("Team1Kills")), _int(r.get("Team2Kills"))
-        complete = len(players) == 10
+        complete = len(players) == 10 and usable == 10
         c1, c2 = (src_k[1], src_k[2]) if complete else (tk1, tk2)
         if not complete:
             kstatus = "raw_total_source_rows_incomplete"
@@ -726,7 +734,10 @@ def build(con, at=None, _again=True):
     con.execute("DELETE FROM c_series")
     con.execute("DELETE FROM c_games")
     for mid, s in series.items():
-        status = "complete" if (s.get("winner") or (s.get("score1") or 0) + (s.get("score2") or 0) > 0) else "scheduled"
+        need = (s["best_of"] // 2 + 1) if s.get("best_of") else None
+        won = max(s.get("score1") or 0, s.get("score2") or 0)
+        done = bool(s.get("winner")) or bool(s.get("ff")) or (need is not None and won >= need)
+        status = "complete" if done else ("in_progress" if (s.get("score1") or 0) + (s.get("score2") or 0) > 0 else "scheduled")
         tn = tours.get(s["tournament_page"]) or {}
         con.execute("INSERT OR REPLACE INTO c_series (sid, lp_match_id, tournament_page, tournament, best_of, team1, team2, team1_name, "
                     "team2_name, score1, score2, winner, ff, nullified, scheduled_utc, first_game_utc, n_games, n_remakes, status, flags, "

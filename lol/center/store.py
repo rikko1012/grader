@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE IF NOT EXISTS raw_snapshots (id INTEGER PRIMARY KEY AUTOINCREMENT, source TEXT NOT NULL, endpoint TEXT,
     params TEXT, fetched_at TEXT NOT NULL, status TEXT, n_rows INTEGER, sha256 TEXT, body BLOB);
 CREATE INDEX IF NOT EXISTS raw_src ON raw_snapshots (source, fetched_at);
+CREATE INDEX IF NOT EXISTS raw_ep ON raw_snapshots (source, endpoint, params, id);
 CREATE TABLE IF NOT EXISTS lp_rows (tbl TEXT NOT NULL, skey TEXT NOT NULL, rev INTEGER NOT NULL, sha TEXT NOT NULL,
     data TEXT NOT NULL, event_time TEXT, first_seen TEXT NOT NULL, last_seen TEXT NOT NULL, snapshot_id INTEGER,
     PRIMARY KEY (tbl, skey, rev));
@@ -79,6 +80,7 @@ CREATE TABLE IF NOT EXISTS c_player_games (gid TEXT NOT NULL, pid TEXT NOT NULL,
     deaths INTEGER, assists INTEGER, team_kills INTEGER, gold INTEGER, cs INTEGER, damage INTEGER, vision INTEGER,
     win INTEGER, name_shown TEXT, PRIMARY KEY (gid, pid));
 CREATE INDEX IF NOT EXISTS cpg_pid ON c_player_games (pid, start_utc);
+CREATE INDEX IF NOT EXISTS cpg_sid ON c_player_games (sid, game_n);
 CREATE TABLE IF NOT EXISTS market_polls (id INTEGER PRIMARY KEY AUTOINCREMENT, platform TEXT NOT NULL,
     polled_at TEXT NOT NULL, ok INTEGER NOT NULL, http INTEGER, n_markets INTEGER, n_events INTEGER, error TEXT,
     body_sha TEXT, raw_id INTEGER, seconds REAL);
@@ -158,10 +160,17 @@ def set_meta(con, k, v):
     con.execute("INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v", (k, json.dumps(v, default=str)))
 
 
-def save_raw(con, source, endpoint, params, body, status="ok", n_rows=None, fetched_at=None):
-    """Keep one upstream response exactly as received (gzip). Returns the snapshot id."""
+def save_raw(con, source, endpoint, params, body, status="ok", n_rows=None, fetched_at=None, dedupe=False):
+    """Keep one upstream response exactly as received (gzip). Returns the snapshot id. dedupe=True: when the last copy of
+    the same endpoint + params has the same bytes, that copy's id is returned and nothing new is stored."""
     if isinstance(body, str):
         body = body.encode()
+    if dedupe:
+        h = hashlib.sha256(body or b"").hexdigest()
+        last = con.execute("SELECT id, sha256 FROM raw_snapshots WHERE source = ? AND endpoint = ? AND params = ? ORDER BY id DESC LIMIT 1",
+                           (source, endpoint, json.dumps(params, sort_keys=True, default=str))).fetchone()
+        if last and last[1] == h:
+            return last[0]
     cur = con.execute("INSERT INTO raw_snapshots (source, endpoint, params, fetched_at, status, n_rows, sha256, body) "
                       "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                       (source, endpoint, json.dumps(params, sort_keys=True, default=str), fetched_at or now_iso(), status,

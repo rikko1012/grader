@@ -1151,7 +1151,7 @@ def lol_public():
     if time.time() - _LOL_PUB["at"] > 15:
         _LOL_PUB.update(at=time.time(), on=(LOL_CENTER / "public.flag").exists())
     return _LOL_PUB["on"]
-_LOL_MEMBER = {"mtime": None, "body": None}
+_LOL_MEMBER = {"mtime": None, "body": None, "lock": threading.Lock()}
 LOL_STAKE_NOTE = "LoL stakes start at 0U until LoL picks have a settled record on real lines; grades and chances are shown now."
 
 
@@ -1165,6 +1165,13 @@ def lol_member_board():
         return None
     if _LOL_MEMBER["mtime"] == mt and _LOL_MEMBER["body"] is not None:
         return _LOL_MEMBER["body"]
+    with _LOL_MEMBER["lock"]:                                   # single flight: concurrent members wait for one rebuild
+        if _LOL_MEMBER["mtime"] == mt and _LOL_MEMBER["body"] is not None:
+            return _LOL_MEMBER["body"]
+        return _lol_member_rebuild(path, mt)
+
+
+def _lol_member_rebuild(path, mt):
     try:
         b = json.loads(path.read_text())
     except (OSError, ValueError):

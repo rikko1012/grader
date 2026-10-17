@@ -60,6 +60,11 @@ def settle(con, platform, stat, scope, pid, sid, line):
     if any(g["chronobreak"] for g in played.values()):
         reasons.append("chronobreak in scope (stats as recorded after the revert)")
     missing = [n for n in want if n not in played]
+    played_count = (s["score1"] or 0) + (s["score2"] or 0)
+    absent_but_played = [n for n in missing if n <= played_count]
+    if absent_but_played:
+        return {"status": "pending", "reasons": [f"game(s) {absent_but_played} were played (series {s['score1']}-{s['score2']}) "
+                                                 f"but are missing from the data"]}
     rows = {r["game_n"]: dict(r) for r in con.execute("SELECT * FROM c_player_games WHERE sid = ? AND pid = ?", (sid, pid))}
     in_games = [n for n in want if n in played and n in rows]
     if not in_games:
