@@ -8,9 +8,9 @@ teams, tournaments) are resolved in batches afterwards.
 
 Order of work (one unit at a time, through the shared pacer):
   1. live sweep: games/players/schedule games of the last 3 days and the schedule of the next 15 days (every 30 min)
-  2. pending names (players, redirects, teams, tournaments, rosters), batched
+  2. pending names identity needs (player redirects, teams, tournaments, rosters of current tournaments), batched
   3. the backfill of the core tables (8 months, LOL_BACKFILL_DAYS), newest window first
-  4. secondary tables (ScoreboardTeams, PicksAndBansS7, RosterChanges, Tenures), newest first
+  4. secondary tables (ScoreboardTeams, PicksAndBansS7, RosterChanges), then player pages and tenures
   5. correction re-sweeps of the last 35 days (weekly), so later upstream fixes become new revisions
 
     python -m lol.center.ingest run [--max-units N] [--until-done]   (local backfill; LOL_CENTER_DB / CS2_DATA_DIR choose the file)
@@ -261,9 +261,11 @@ def _recent_tournaments(con, days=30):
         "c.event_time < ?", (lo, hi)) if r[0]}
 
 
-def pending_names(con, tbl, now=None):
+def pending_names(con, tbl, now=None, live_only=False):
     now = now or time.time()
     seen = _seen_names(con)[tbl]
+    if live_only:                                   # rosters: only tournaments scheduled within 30 days either side
+        seen = seen & _recent_tournaments(con)
     checked = {r[0]: r[1] for r in con.execute("SELECT name, checked_at FROM ref_state WHERE kind = ?", (tbl,))}
     recheck = store.now_iso(now - REF_RECHECK_S)
     live = _recent_tournaments(con) if tbl == "TournamentPlayers" else set()
@@ -293,8 +295,10 @@ def next_unit(con, now=None):
     live = _ck(con, "live")
     if not live or live["updated_at"] < store.now_iso(now - LIVE_EVERY_S):
         return ("live", None)
-    for tbl in ("PlayerRedirects", "Players", "Teams", "TeamRedirects", "Tournaments", "TournamentPlayers"):
-        names = pending_names(con, tbl, now)
+    # during the backfill only the lookups identity needs (redirects, teams, tournaments, current rosters); player
+    # profile pages and tenures wait until every window is in (2026-10-17: they were most of the request budget)
+    for tbl in ("PlayerRedirects", "Teams", "TeamRedirects", "Tournaments", "TournamentPlayers"):
+        names = pending_names(con, tbl, now, live_only=(tbl == "TournamentPlayers"))
         if names:
             return ("ref", (tbl, names[:REF_BATCH if tbl != "TournamentPlayers" else 8]))
     wins = windows(today)
@@ -303,9 +307,10 @@ def next_unit(con, now=None):
             for tbl in tier_tables:
                 if not _complete(_ck(con, f"w|{tbl}|{lo}"), hi, now):
                     return ("window", (tbl, lo, hi))
-    names = pending_names(con, "Tenures", now)
-    if names:
-        return ("ref", ("Tenures", names[:REF_BATCH]))
+    for tbl in ("Players", "Tenures"):
+        names = pending_names(con, tbl, now)
+        if names:
+            return ("ref", (tbl, names[:REF_BATCH]))
     cut = _d(today - timedelta(days=RESWEEP_DAYS))
     for lo, hi in wins:
         if hi <= cut:
