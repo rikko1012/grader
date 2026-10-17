@@ -89,7 +89,7 @@ def build_loop():
     """When any source changed: the canonical build, the coverage report and the export to the one LoL history (at
     most every BUILD_EVERY_S, the first after 5 min). Every LINK_EVERY_S: offer -> series / player links, the pre-match
     forecasts, settlement of finished series, and the admin board."""
-    from . import build, coverage, export, forecast, match
+    from . import build, coverage, export, forecast, learning, match, slips
     con = store.connect()
     t_build, t_link = time.time() - BUILD_EVERY_S + 300, 0.0
     while True:
@@ -105,7 +105,15 @@ def build_loop():
                     STATE["forecasts"] = {"at": store.now_iso(), "counts": forecast.run(con)}
                     STATE["settled"] = {"at": store.now_iso(), "counts": forecast.settle_all(con)}
                 _write("board.json", forecast.board(con))
+                _write("learning.json", learning.dashboard(con))
+                _write("slips.json", {"at": store.now_iso(), "note": "preview: no slip is recommended while stakes are held at 0U",
+                                      "previews": [slips.build(con, pl, size, 5, mode, no_overlap=True, preview=True)
+                                                   for pl in ("underdog", "prizepicks") for size in (2, 3) for mode in ("mixed",)]})
                 t_link = time.time()
+            if store.get_meta(con, "last_export"):
+                rec = learning.maybe_refit(con)
+                if rec:
+                    STATE["refit"] = rec
         except Exception as e:
             _err("build", e)
             try:

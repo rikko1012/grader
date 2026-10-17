@@ -75,9 +75,17 @@ def rows(con):
         if not win:
             counts["games_winner_unresolved"] += 1
         kills = {g["team1"]: g["team1_kills"], g["team2"]: g["team2_kills"]}
+        keys_used = set()
         for p in pg_by.get(g["gid"], []):
             pid = store.canonical_id(con, p["pid"])
-            players.append({"game_key": g["gid"], "player_key": history.player_key(p["name_shown"] or label(pid)),
+            # the history's key is (game, name key): a blank name or two players with the same name in one game get the
+            # internal id instead (2026-10-17: the export failed on such a game) - lookups by id are unaffected
+            pkey = history.player_key(p["name_shown"] or label(pid))
+            if not pkey or pkey in keys_used:
+                counts["player_key_from_id"] = counts.get("player_key_from_id", 0) + 1
+                pkey = f"{pkey}#{pid}" if pkey else pid
+            keys_used.add(pkey)
+            players.append({"game_key": g["gid"], "player_key": pkey,
                             "player": p["name_shown"] or label(pid), "player_id": pid, "team": label(p["tid"]),
                             "team_id": store.canonical_id(con, p["tid"]), "opponent": label(p["opp_tid"]),
                             "opponent_id": store.canonical_id(con, p["opp_tid"]), "side": (p["side"] or "").lower() or None,

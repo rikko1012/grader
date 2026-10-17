@@ -251,3 +251,40 @@ def test_probabilities_sum_to_one_no_push_on_halves_monotone(lam, size):
             assert p == 0.0
         assert o <= last + 1e-12
         last = o
+
+
+def test_slips_batch_no_overlap_shortage_and_payouts(con, tmp_path, monkeypatch):
+    from lol.center import slips
+    db, start, raw = _future_world(con, tmp_path, monkeypatch)
+    forecast.run(con, db)
+    # stakes are held at 0U: nothing is recommended; the preview builds what would be built
+    real = slips.build(con, "underdog", 2, 3)
+    assert real["slips"] == [] and real["shortage"] and not real["recommended"]
+    prev = slips.build(con, "underdog", 1, 3, preview=True)
+    assert len(prev["slips"]) == 1 and prev["shortage"].startswith("1 of 3")          # one prop: never repeated
+    leg = prev["slips"][0]["legs"][0]
+    assert 0 < leg["p_side"] < 1 and prev["slips"][0]["chance_note"].startswith("model estimate")
+    unders = slips.build(con, "underdog", 1, 1, mode="unders", preview=True)
+    overs = slips.build(con, "underdog", 1, 1, mode="overs", preview=True)
+    assert (len(unders["slips"]) == 1) != (len(overs["slips"]) == 1)                 # the one leg fits exactly one mode
+    assert slips.build(con, "underdog", 1, 1, exclude_roles=("mid",), preview=True)["slips"] == []
+
+
+def test_learning_dashboard_counts_settled_forecasts(con, tmp_path, monkeypatch):
+    from lol.center import learning
+    test_saved_forecast_settles_when_the_series_completes(con, tmp_path, monkeypatch)
+    d = learning.dashboard(con)
+    assert d["settled_by_status"] == {"graded": 1} and d["metrics"]["all"]["n"] == 1
+    assert d["evidence"]["met"] is False and d["evidence"]["graded_player_markets"] == 1
+
+
+def test_export_survives_blank_and_duplicate_names_in_one_game(con, tmp_path):
+    load_world(con)
+    build.build(con)
+    con.execute("UPDATE c_player_games SET name_shown = '' WHERE rowid IN (SELECT rowid FROM c_player_games LIMIT 2)")
+    con.execute("UPDATE c_player_games SET name_shown = 'Same' WHERE rowid IN (SELECT rowid FROM c_player_games WHERE game_n = 2 LIMIT 2)")
+    con.commit()
+    db = history.DB(dsn="", path=tmp_path / "h.db")
+    c = export.export(con, db)
+    assert c["player_rows"] == 20 and c.get("player_key_from_id", 0) == 1      # blank names fall back to the label; the duplicate gets the id
+    assert db.query("SELECT COUNT(DISTINCT player_id) AS n FROM lol_player_games")[0]["n"] == 10

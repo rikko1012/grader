@@ -1186,7 +1186,8 @@ def lol_center_admin(path, q):
                 "worker": {"running": bool(p and p.poll() is None), "starts": LOL_SUP["starts"],
                                                          "started_at": LOL_SUP["started_at"], "last_exit": LOL_SUP["last_exit"],
                                                          "disabled": LOL_SUP["disabled"]}, "status": read("status.json")}
-    if path in ("/admin/lol/coverage.json", "/admin/lol/quarantine.json", "/admin/lol/links.json", "/admin/lol/board.json"):
+    if path in ("/admin/lol/coverage.json", "/admin/lol/quarantine.json", "/admin/lol/links.json", "/admin/lol/board.json",
+                "/admin/lol/learning.json", "/admin/lol/slips.json"):
         return read(path.rsplit("/", 1)[1]) or {"note": "not written yet"}
     # paged, read-only exports: the quote archive, the saved forecasts and settlements (the data center's database) and
     # the one LoL history (DATA_DIR/lol/history.db) - bounded pages, oldest first
