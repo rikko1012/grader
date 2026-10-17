@@ -16,7 +16,8 @@ validated at real lines (lol/EVALUATION.md); probabilities are model estimates.
 """
 import hashlib
 import json
-from datetime import datetime, timezone
+import os
+from datetime import datetime, timedelta, timezone
 
 from . import rules, settle, store
 from .names import ROLE_LABEL
@@ -70,15 +71,24 @@ def _when(s):
         return None
 
 
+# The history window the model was evaluated with (lol/EVALUATION.md A1: 8 months, 2026-02-16..10-16). Scout keeps
+# every source record it receives (the full-history collector reaches back to 2025-01-01); live projections and Elo
+# use the games of the last HISTORY_DAYS days, so more stored history never changes the evaluated model's inputs.
+HISTORY_DAYS = int(os.environ.get("LOL_FORECAST_HISTORY_DAYS", "245"))
+
+
 class History:
     """The canonical history for one forecast cycle: the rows of the players and teams on the open lines only, plus one
-    compact row per game and team for the Elo (memory stays small on the server)."""
+    compact row per game and team for the Elo (memory stays small on the server). Only games of the last HISTORY_DAYS
+    days (the evaluated window)."""
 
-    def __init__(self, db=None, pids=(), tids=()):
+    def __init__(self, db=None, pids=(), tids=(), now=None):
         from .. import elo, history
         self.db = db or history.DB(dsn="")
+        now = now or datetime.now(timezone.utc)
+        self.since = (now - timedelta(days=HISTORY_DAYS)).strftime("%Y-%m-%dT%H:%M:%S")
         game_rows = self.db.query("SELECT DISTINCT game_key, match_key, game_number, played_at, team, team_id, opponent, win "
-                                  "FROM lol_player_games WHERE played_at IS NOT NULL")
+                                  "FROM lol_player_games WHERE played_at IS NOT NULL AND played_at >= ?", (self.since,))
         md = {}
         for r in game_rows:
             d = _when(r["played_at"]).date().toordinal()
@@ -91,7 +101,8 @@ class History:
         pids, tids = sorted(set(pids) - {None}), sorted(set(tids) - {None})
         for i in range(0, len(pids), 200):
             chunk = pids[i:i + 200]
-            for r in self.db.query(f"SELECT * FROM lol_player_games WHERE player_id IN ({','.join('?' * len(chunk))})", chunk):
+            for r in self.db.query(f"SELECT * FROM lol_player_games WHERE player_id IN ({','.join('?' * len(chunk))}) "
+                                   "AND played_at >= ?", chunk + [self.since]):
                 r["_day"] = md.get(r["match_key"])
                 if r["_day"] is not None:
                     self.by_player.setdefault(r["player_id"], []).append(r)
@@ -99,7 +110,7 @@ class History:
             chunk = tids[i:i + 200]
             seen = set()
             for r in self.db.query("SELECT DISTINCT game_key, match_key, team_id, team_kills, opp_kills FROM lol_player_games "
-                                   f"WHERE team_id IN ({','.join('?' * len(chunk))})", chunk):
+                                   f"WHERE team_id IN ({','.join('?' * len(chunk))}) AND played_at >= ?", chunk + [self.since]):
                 k = (r["game_key"], r["team_id"])
                 if k in seen or md.get(r["match_key"]) is None:
                     continue
@@ -136,7 +147,7 @@ class History:
     def all_rows(self):
         """Every history row (only when lol-2 is the selected model for some stat)."""
         if self._all is None:
-            self._all = self.db.query("SELECT * FROM lol_player_games WHERE played_at IS NOT NULL")
+            self._all = self.db.query("SELECT * FROM lol_player_games WHERE played_at IS NOT NULL AND played_at >= ?", (self.since,))
         return self._all
 
 
@@ -219,7 +230,7 @@ def forecast_one(con, h, offer, link, now=None):
                inputs={k: (round(v, 4) if isinstance(v, float) else v) for k, v in pj.items()
                        if k in ("lambda_game", "player_rate", "team_factor", "opp_factor", "strength_factor", "p_win",
                                 "history_games", "history_weight", "data_quality", "role_prior", "form")} | {
-                   "league": league, "team_games": len(tin), "opponent_games": len(oin), "history_last_game": h.last_game,
+                   "league": league, "team_games": len(tin), "opponent_games": len(oin), "history_last_game": h.last_game, "history_since": h.since, "data_version": _data_version(con),
                    "mean": round(pj["lambda"], 3), "median": med, "range80": [lo, hi], "provisional": _provisional(m),
                    "drivers": _drivers(pj), "unknowns": ["lineup changes after the forecast", "draft and champions",
                                                           "sides", "the tournament patch effect (not modelled)"]},
@@ -345,6 +356,12 @@ def slip_check(con, legs, now=None):
     return {"eligible": not why, "reasons": why, "legs": len(rows)}
 
 
+def _data_version(con):
+    """The history export the forecast's inputs came from (time and size of the last export)."""
+    e = store.get_meta(con, "last_export") or {}
+    return {"export_at": e.get("at") or e.get("exported_at"), "games": e.get("games"), "player_rows": e.get("player_rows")}
+
+
 def _sha(rec):
     return store.sha({k: rec.get(k) for k in ("quote_event_id", "line", "sides", "lambda", "nb_size", "p_over", "p_under",
                                               "fit_sha", "flags", "series_start")})
@@ -358,7 +375,7 @@ def run(con, db=None, now=None):
          "JOIN market_events e ON e.id = s.last_event_id WHERE l.status = 'matched' AND s.open = 1")
     todo = con.execute(q).fetchall()
     ids = lambda col: {store.canonical_id(con, r[col]) for r in todo}
-    h = History(db, ids("pid"), ids("tid") | ids("opp_tid"))
+    h = History(db, ids("pid"), ids("tid") | ids("opp_tid"), now=now)
     h.fit, h.sim_states = fit_json(), {}
     for r in todo:
         offer = json.loads(r["data"])

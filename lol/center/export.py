@@ -170,6 +170,7 @@ def export(con, db=None):
     else:
         counts["postgres"] = {"ok": None, "note": "LOL_DB_DSN not set on this service"}
     counts["seconds"] = round(time.time() - t0, 1)
+    counts["at"] = store.now_iso()                      # the data version a forecast records (forecast._data_version)
     store.set_meta(con, "last_export", counts)
     con.commit()
     return counts

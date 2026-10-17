@@ -411,3 +411,21 @@ def test_overlap_with_a_differently_named_team_is_one_series(con):
     assert not con.execute("SELECT 1 FROM quarantine WHERE reason = 'cross_source_teams_not_matched'").fetchall()
     assert con.execute("SELECT COUNT(*) FROM c_player_games").fetchone()[0] == 20                  # one copy of the series
     assert store.canonical_id(con, store.find_entity(con, "team", "lolesports:team", "LB")) ==         store.find_entity(con, "team", "leaguepedia:page", "Beta Gaming")
+
+
+def test_forecast_history_uses_the_evaluated_window(tmp_path):
+    """Scout stores all history; live inputs use the last HISTORY_DAYS days only (the evaluated 8-month window)."""
+    db = history.DB(dsn="", path=tmp_path / "h.db")
+    now = datetime(2026, 10, 17, tzinfo=timezone.utc)
+    for key, when, k in (("old", "2025-03-01T10:00:00Z", 9), ("new", "2026-09-01T10:00:00Z", 3)):
+        g = {"game_key": f"lol:game:{key}", "source": "lp", "match_key": f"lol:series:{key}", "game_number": 1, "best_of": 3,
+             "played_at": when, "blue_team": "A", "red_team": "B", "blue_team_id": "lol:team:1", "red_team_id": "lol:team:2"}
+        ps = [{"game_key": f"lol:game:{key}", "match_key": f"lol:series:{key}", "game_number": 1, "played_at": when,
+               "player": "P", "player_key": "p", "player_id": "lol:player:1", "team": "A", "team_id": "lol:team:1",
+               "opponent": "B", "opponent_id": "lol:team:2", "role": "mid", "kills": k, "deaths": 1, "assists": 2,
+               "team_kills": 10, "opp_kills": 5, "win": 1}]
+        history.save_game(db, g, ps)
+    h = forecast.History(db, {"lol:player:1"}, {"lol:team:1"}, now=now)
+    pin, tin, _ = h.inputs("lol:player:1", "lol:team:1", "lol:team:2", now.date().toordinal())
+    assert [r[1] for r in pin] == [3] and len(tin) == 1                 # the 2025 game is stored but not used
+    assert h.since.startswith("2026-02-14")
