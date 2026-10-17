@@ -103,15 +103,35 @@ CREATE TABLE IF NOT EXISTS market_state (platform TEXT NOT NULL, market_key TEXT
 """
 
 
-def connect(path=None):
+# columns added after the first production database was created (2026-10-17): added in place, never a rebuild
+ADDED_COLUMNS = {"c_series": {"source": "TEXT", "source_match_id": "TEXT"}, "c_games": {"source": "TEXT", "source_game_id": "TEXT"}}
+
+
+def connect(path=None, tries=6):
+    """One connection (WAL). Several threads open theirs at start-up: a 'database is locked' while the schema is checked
+    is retried (seen once in production, 2026-10-17 02:40 UTC)."""
     p = Path(path or db_path())
     p.parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(str(p), timeout=60)
-    con.row_factory = sqlite3.Row
-    con.execute("PRAGMA journal_mode=WAL")
-    con.execute("PRAGMA synchronous=NORMAL")
-    con.executescript(SCHEMA)
-    return con
+    for i in range(tries):
+        con = sqlite3.connect(str(p), timeout=60)
+        con.row_factory = sqlite3.Row
+        try:
+            con.execute("PRAGMA journal_mode=WAL")
+            con.execute("PRAGMA synchronous=NORMAL")
+            con.executescript(SCHEMA)
+            for tbl, cols in ADDED_COLUMNS.items():
+                have = {r[1] for r in con.execute(f"PRAGMA table_info({tbl})")}
+                for c, typ in cols.items():
+                    if c not in have:
+                        con.execute(f"ALTER TABLE {tbl} ADD COLUMN {c} {typ}")
+            con.commit()
+            return con
+        except sqlite3.OperationalError as e:
+            con.close()
+            if "locked" not in str(e) or i == tries - 1:
+                raise
+            import time
+            time.sleep(1 + 2 * i)
 
 
 def get_meta(con, k, default=None):

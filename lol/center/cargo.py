@@ -74,15 +74,23 @@ class Pacer:
 
 PACER = Pacer()
 _OPENER = {"o": None, "logged_in": None}
+LOGIN = {"configured": False, "attempted_at": None, "result": None, "note": None}     # never the credentials
+
+
+def credentials():
+    """(login name, bot password) from the environment, or None. The lol package's names first."""
+    user = os.environ.get("LEAGUEPEDIA_USER") or os.environ.get("LEAGUEPEDIA_BOT_USER")
+    pw = os.environ.get("LEAGUEPEDIA_BOT_PASSWORD") or os.environ.get("LEAGUEPEDIA_BOT_PASS")
+    return (user, pw) if user and pw else None
 
 
 def _opener():
     if _OPENER["o"] is None:
         _OPENER["o"] = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
-        user = os.environ.get("LEAGUEPEDIA_USER") or os.environ.get("LEAGUEPEDIA_BOT_USER")
-        pw = os.environ.get("LEAGUEPEDIA_BOT_PASSWORD") or os.environ.get("LEAGUEPEDIA_BOT_PASS")
-        if user and pw:
-            _OPENER["logged_in"] = _login(user, pw)
+        cred = credentials()
+        LOGIN["configured"] = bool(cred)
+        if cred:
+            _OPENER["logged_in"] = _login(*cred)
     return _OPENER["o"]
 
 
@@ -95,14 +103,23 @@ def _raw(params, data=None, timeout=60):
 
 
 def _login(user, pw):
-    """Bot-password login (Special:BotPasswords). Never logs the credentials. Returns True/False."""
+    """Bot-password login (Special:BotPasswords). Records only the result code, never the credentials.
+    The login name a bot password needs is 'AccountName@BotName' (shown on Special:BotPasswords)."""
+    import time as _t
+    LOGIN["attempted_at"] = _t.time()
+    LOGIN["note"] = None if "@" in user else "the login name has no '@': a bot password needs AccountName@BotName"
     try:
         PACER.wait()
         tok = json.loads(_raw({"action": "query", "meta": "tokens", "type": "login", "format": "json"}))["query"]["tokens"]["logintoken"]
         PACER.wait()
         r = json.loads(_raw({"action": "login", "format": "json"}, data={"lgname": user, "lgpassword": pw, "lgtoken": tok}))
-        return (r.get("login") or {}).get("result") == "Success"
-    except Exception:
+        lg = r.get("login") or {}
+        LOGIN["result"] = lg.get("result") or ((r.get("error") or {}).get("code")) or "no result"
+        if lg.get("reason"):
+            LOGIN["note"] = (LOGIN["note"] + "; " if LOGIN["note"] else "") + str(lg.get("reason"))[:160]
+        return LOGIN["result"] == "Success"
+    except Exception as e:
+        LOGIN["result"] = f"error: {type(e).__name__}"
         return False
 
 

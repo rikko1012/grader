@@ -174,6 +174,168 @@ def _flush(con, pgs):
     return n
 
 
+SRC_LE_TEAM, SRC_LE_PLAYER, SRC_LE_MATCH, SRC_LE_GAME = "lolesports:team", "lolesports:player", "lolesports:match", "lolesports:game"
+
+
+def le_patch(version):
+    """The livestats game version '16.20.826.3891' -> the patch name Leaguepedia uses, '26.20' (Riot's year-numbered
+    patches since 2025: game version 15.x = patch 25.x, 16.x = 26.x). Anything else is kept as given."""
+    try:
+        a, b = str(version).split(".")[:2]
+        a, b = int(a), int(b)
+        return f"{a + 10}.{b:02d}" if a >= 15 else f"{a}.{b}"
+    except (ValueError, TypeError):
+        return version
+
+
+def le_winners(games, score, side_team):
+    """Game id -> winning Riot team id. Certain first (as the lol scout's sync): a sweep's games and a series' last game
+    go to the series winner; the other games keep the inferred winner only when the inferred wins add up to the score."""
+    if not games:
+        return {}
+    ranked = sorted(score, key=lambda t: score[t] or 0, reverse=True)
+    sw = ranked[0] if len(ranked) == 2 and (score[ranked[0]] or 0) > (score[ranked[1]] or 0) else None
+    if sw and not (score[ranked[1]] or 0):
+        return {g["game_id"]: sw for g in games}
+    inferred = {g["game_id"]: side_team[g["game_id"]].get(g.get("winner_side")) for g in games}
+    wins = Counter(inferred.values())
+    ok = None not in inferred.values() and all(wins.get(t, 0) == (n or 0) for t, n in score.items())
+    out = {g["game_id"]: (inferred[g["game_id"]] if ok else None) for g in games}
+    if sw:
+        out[games[-1]["game_id"]] = sw
+    return out
+
+
+def _z(s):
+    return (str(s)[:19] + "Z") if s else None
+
+
+def _lolesports(con, at, series, games, pgs, checks):
+    """LoL Esports rows -> canonical series / games / player games (Riot ids, schedule game numbers). An LE match is
+    left out when a Leaguepedia series with the same two teams (exact aliases) is on the same day: one source per
+    real series. Remakes and forfeits are not reported by this source (flagged, left unknown)."""
+    matches = {r["match_id"]: r for r in store.current_rows(con, "LE:Match") if r.get("match_id")}
+    out = Counter()
+    if not matches:
+        return dict(out)
+    lg = defaultdict(list)
+    for r in store.current_rows(con, "LE:Game"):
+        lg[r["match_id"]].append(r)
+    lpg = defaultdict(list)
+    for r in store.current_rows(con, "LE:PlayerGame"):
+        lpg[r["game_id"]].append(r)
+    lp_by_day = defaultdict(list)
+    for s in series.values():
+        when = s.get("scheduled_utc") or s.get("first_game_utc")
+        if when and s.get("source") == "leaguepedia":
+            lp_by_day[when[:10]].append(s)
+    tcache, pcache = {}, {}
+
+    def tid(t):
+        if not t or not t.get("id"):
+            return None
+        if t["id"] not in tcache:
+            e = store.entity(con, "team", SRC_LE_TEAM, str(t["id"]), label=t.get("name"), at=at)
+            for a in (t.get("name"), t.get("code")):
+                if a:
+                    store.add_alias(con, "team", a, e, "lolesports", at)
+            tcache[t["id"]] = e
+        return tcache[t["id"]]
+
+    def pid(p):
+        if not p.get("player_id"):
+            return None
+        if p["player_id"] not in pcache:
+            e = store.entity(con, "player", SRC_LE_PLAYER, str(p["player_id"]), label=p.get("name"), at=at)
+            if p.get("name"):
+                store.add_alias(con, "player", p["name"], e, "lolesports", at)
+            pcache[p["player_id"]] = e
+        return pcache[p["player_id"]]
+
+    def alias_eids(*names):
+        return {r[0] for n in names if n for r in con.execute("SELECT eid FROM aliases WHERE kind = 'team' AND norm = ? "
+                                                               "AND source NOT LIKE 'lolesports%'", (norm(n),))}
+
+    for mid, m in matches.items():
+        teams = m.get("teams") or []
+        if len(teams) != 2 or not all(t.get("id") for t in teams):
+            out["skipped_not_two_teams"] += 1
+            continue
+        start = _z(m.get("start"))
+        a, b = alias_eids(teams[0].get("name"), teams[0].get("code")), alias_eids(teams[1].get("name"), teams[1].get("code"))
+        if start and any({s["team1"], s["team2"]} & a and {s["team1"], s["team2"]} & b for s in lp_by_day.get(start[:10], [])):
+            out["left_out_leaguepedia_has_it"] += 1
+            continue
+        t1, t2 = tid(teams[0]), tid(teams[1])
+        sid = store.entity(con, "series", SRC_LE_MATCH, str(mid), label=f"{teams[0].get('code')} vs {teams[1].get('code')}", at=at)
+        score = {teams[0]["id"]: teams[0].get("game_wins"), teams[1]["id"]: teams[1].get("game_wins")}
+        slots = sorted(m.get("games") or [], key=lambda g: g.get("number") or 99)
+        number_of = {str(g.get("id")): g.get("number") for g in slots}
+        done = bool(slots) and all(g.get("state") in ("completed", "unneeded") for g in slots)
+        w1, w2 = score[teams[0]["id"]] or 0, score[teams[1]["id"]] or 0
+        winner = (1 if w1 > w2 else 2) if done and w1 != w2 else None
+        gl = sorted(lg.get(mid, []), key=lambda g: number_of.get(g["game_id"], g.get("number")) or 99)
+        flags = ["source_lolesports", "remake_and_forfeit_not_reported"]
+        ns = [number_of.get(g["game_id"], g.get("number")) for g in gl]
+        if len(ns) != len(set(ns)) or None in ns:
+            flags.append("game_order_invalid")
+            store.quarantine(con, "series", sid, "game_order_invalid", [str(x) for x in ns], at)
+            checks["le_series_game_order_invalid"] += 1
+        completed_slots = sum(1 for g in slots if g.get("state") == "completed")
+        if done and completed_slots != len(gl):
+            flags.append("games_missing_from_feed")
+            checks["le_series_games_missing"] += 1
+        side_team = {g["game_id"]: {"blue": g.get("blue_team_id"), "red": g.get("red_team_id")} for g in gl}
+        winners = le_winners(gl, score, side_team) if done and completed_slots == len(gl) else {}
+        series[f"LE:{mid}"] = dict(sid=sid, tournament_page=f"LE:{m.get('league_slug')}", tournament=m.get("league"),
+                                   best_of=m.get("best_of"), team1=t1, team2=t2, team1_name=teams[0].get("name"),
+                                   team2_name=teams[1].get("name"), score1=teams[0].get("game_wins"), score2=teams[1].get("game_wins"),
+                                   winner=winner, ff=None, nullified=0, scheduled_utc=start,
+                                   first_game_utc=min((_z(g["start"]) for g in gl if g.get("start")), default=None),
+                                   n_games=len(gl), n_remakes=0, status="complete" if done else "scheduled", flags=flags,
+                                   source="lolesports", source_match_id=str(mid))
+        out["series"] += 1
+        tmap = {teams[0]["id"]: t1, teams[1]["id"]: t2}
+        for g in gl:
+            n = number_of.get(g["game_id"], g.get("number"))
+            gid = store.entity(con, "game", SRC_LE_GAME, g["game_id"], label=g["game_id"], at=at)
+            blue, red = tmap.get(g.get("blue_team_id")), tmap.get(g.get("red_team_id"))
+            wt = tmap.get(winners.get(g["game_id"]))
+            gflags = [] if wt else ["winner_unknown"]
+            kills, seen = Counter(), set()
+            for p in lpg.get(g["game_id"], []):
+                who = pid(p)
+                if who is None or who in seen:
+                    checks["le_player_row_unusable"] += 1
+                    continue
+                seen.add(who)
+                pt = tmap.get(p.get("team_id"))
+                if p.get("kills") is not None:
+                    kills[p.get("side")] += p["kills"]
+                pgs.append(dict(gid=gid, pid=who, tid=pt, opp_tid=red if pt == blue else blue, sid=sid, game_n=n,
+                                start_utc=_z(g.get("start")), tournament_page=f"LE:{m.get('league_slug')}", patch=le_patch(g.get("patch")),
+                                side={"blue": "Blue", "red": "Red"}.get(p.get("side")), role=role(p.get("role")),
+                                champion=p.get("champion"), kills=p.get("kills"), deaths=p.get("deaths"), assists=p.get("assists"),
+                                team_kills=g.get("blue_kills") if p.get("side") == "blue" else g.get("red_kills"),
+                                gold=p.get("gold"), cs=p.get("cs"), damage=None, vision=None,
+                                win=(1 if wt == pt else 0) if wt else None, name_shown=p.get("name")))
+            if len(seen) != 10:
+                gflags.append("players_incomplete")
+                checks["le_games_players_incomplete"] += 1
+            elif kills["blue"] != (g.get("blue_kills") or 0) or kills["red"] != (g.get("red_kills") or 0):
+                gflags.append("kills_mismatch")
+                checks["le_games_kills_mismatch"] += 1
+            games.append(dict(gid=gid, sid=sid, game_n=n, lp_game_id=None, riot_game_id=None, start_utc=_z(g.get("start")),
+                              patch=le_patch(g.get("patch")), length_s=round(g["duration_s"], 1) if g.get("duration_s") else None,
+                              team1=blue, team2=red, team1_side="Blue", winner_tid=wt, team1_kills=g.get("blue_kills"),
+                              team2_kills=g.get("red_kills"), remake=0, ff=None, chronobreak=0, n_players=len(seen),
+                              tournament_page=f"LE:{m.get('league_slug')}", flags=gflags, source="lolesports", source_game_id=g["game_id"]))
+            out["games"] += 1
+            if len(pgs) >= 5000:
+                out["flushed"] += _flush(con, pgs)
+    return dict(out)
+
+
 def _players_by_game(con):
     """ScoreboardPlayers rows streamed in GameId order, grouped: (GameId, [rows]) - never all in memory at once."""
     cur = con.execute("SELECT json_extract(r.data, '$.GameId') AS g, r.data FROM lp_current c JOIN lp_rows r ON r.tbl = c.tbl "
@@ -233,14 +395,15 @@ def build(con, at=None):
                            best_of=_int(r.get("BestOf")), team1=tid(r.get("Team1")), team2=tid(r.get("Team2")),
                            team1_name=r.get("Team1"), team2_name=r.get("Team2"), score1=_int(r.get("Team1Score")),
                            score2=_int(r.get("Team2Score")), winner=_int(r.get("Winner")), ff=_int(r.get("FF")),
-                           nullified=int(_truthy(r.get("IsNullified"))), scheduled_utc=_iso(r.get("DateTime_UTC")), flags=[])
+                           nullified=int(_truthy(r.get("IsNullified"))), scheduled_utc=_iso(r.get("DateTime_UTC")), flags=[],
+                           source="leaguepedia", source_match_id=mid)
     for r in sg:                                           # scoreboards without a schedule row
         mid = r.get("MatchId")
         if mid and mid not in series:
             series[mid] = dict(sid=sid_for(mid, None), lp_match_id=mid, tournament_page=page_key(r.get("OverviewPage")),
                                best_of=None, team1=tid(r.get("Team1")), team2=tid(r.get("Team2")), team1_name=r.get("Team1"),
                                team2_name=r.get("Team2"), score1=None, score2=None, winner=None, ff=None, nullified=0,
-                               scheduled_utc=None, flags=["no_schedule_row"])
+                               scheduled_utc=None, flags=["no_schedule_row"], source="leaguepedia", source_match_id=mid)
             checks["series_without_schedule"] += 1
 
     # ---- games (player rows are written in chunks as they are produced)
@@ -319,7 +482,7 @@ def build(con, at=None):
                  team1=t1, team2=t2, team1_side="Blue", winner_tid={1: t1, 2: t2}.get(w), team1_kills=tk1, team2_kills=tk2,
                  remake=int(_truthy((sch or {}).get("IsRemake"))), ff=_int((sch or {}).get("FF")),
                  chronobreak=int(_truthy((sch or {}).get("IsChronobreak"))), n_players=len(seen),
-                 tournament_page=page_key(r.get("OverviewPage")), flags=flags)
+                 tournament_page=page_key(r.get("OverviewPage")), flags=flags, source="leaguepedia", source_game_id=gid_lp)
         games.append(g)
         if r.get("MatchId"):
             by_series[r["MatchId"]].append(g)
@@ -349,6 +512,8 @@ def build(con, at=None):
             s["flags"].append("games_vs_score_mismatch")
             checks["series_games_vs_score_mismatch"] += 1
     n_pg += _flush(con, pgs)
+    le_counts = _lolesports(con, at, series, games, pgs, checks)
+    n_pg += _flush(con, pgs) + le_counts.pop("flushed", 0)
 
     # ---- write the canonical tables
     con.execute("DELETE FROM c_series")
@@ -356,20 +521,27 @@ def build(con, at=None):
     for mid, s in series.items():
         status = "complete" if (s.get("winner") or (s.get("score1") or 0) + (s.get("score2") or 0) > 0) else "scheduled"
         tn = tours.get(s["tournament_page"]) or {}
-        con.execute("INSERT OR REPLACE INTO c_series VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                    (s["sid"], mid, s["tournament_page"], tn.get("Name"), s["best_of"], s["team1"], s["team2"], s["team1_name"],
-                     s["team2_name"], s["score1"], s["score2"], s["winner"], s["ff"], s["nullified"], s["scheduled_utc"],
-                     s.get("first_game_utc"), s.get("n_games") or 0, s.get("n_remakes") or 0, status, json.dumps(sorted(set(s["flags"])))))
+        con.execute("INSERT OR REPLACE INTO c_series (sid, lp_match_id, tournament_page, tournament, best_of, team1, team2, team1_name, "
+                    "team2_name, score1, score2, winner, ff, nullified, scheduled_utc, first_game_utc, n_games, n_remakes, status, flags, "
+                    "source, source_match_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (s["sid"], mid if s.get("source") == "leaguepedia" else None, s["tournament_page"], tn.get("Name") or s.get("tournament"),
+                     s["best_of"], s["team1"], s["team2"], s["team1_name"], s["team2_name"], s["score1"], s["score2"], s["winner"], s["ff"],
+                     s["nullified"], s["scheduled_utc"], s.get("first_game_utc"), s.get("n_games") or 0, s.get("n_remakes") or 0,
+                     s.get("status") or status, json.dumps(sorted(set(s["flags"]))), s.get("source"), s.get("source_match_id")))
     for g in games:
-        con.execute("INSERT OR REPLACE INTO c_games VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                    (g["gid"], g["sid"], g["game_n"], g["lp_game_id"], g["riot_game_id"], g["start_utc"], g["patch"], g["length_s"],
+        con.execute("INSERT OR REPLACE INTO c_games (gid, sid, game_n, lp_game_id, riot_game_id, start_utc, patch, length_s, team1, team2, "
+                    "team1_side, winner_tid, team1_kills, team2_kills, remake, ff, chronobreak, n_players, tournament_page, flags, source, "
+                    "source_game_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (g["gid"], g["sid"], g["game_n"], g.get("lp_game_id"), g.get("riot_game_id"), g["start_utc"], g["patch"], g["length_s"],
                      g["team1"], g["team2"], g["team1_side"], g["winner_tid"], g["team1_kills"], g["team2_kills"], g["remake"],
-                     g["ff"], g["chronobreak"], g["n_players"], g["tournament_page"], json.dumps(g["flags"])))
+                     g["ff"], g["chronobreak"], g["n_players"], g["tournament_page"], json.dumps(g["flags"]), g.get("source"),
+                     g.get("source_game_id")))
     store.set_meta(con, "built_at", at)
     store.set_meta(con, "dirty", None)
     con.commit()
     out = {"built_at": at, "seconds": round(time.time() - t0, 1), "series": len(series), "games": len(games),
-           "player_games": n_pg, "teams": len(teams), "players_with_page_rows": len(players), "checks": dict(checks)}
+           "player_games": n_pg, "teams": len(teams), "players_with_page_rows": len(players), "lolesports": le_counts,
+           "checks": dict(checks)}
     store.set_meta(con, "last_build", out)
     con.commit()
     return out

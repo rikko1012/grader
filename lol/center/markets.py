@@ -73,6 +73,13 @@ def _split(title, sep=" @ "):
     return (parts[0].strip(), parts[1].strip()) if len(parts) == 2 else (None, None)
 
 
+def _pair(title):
+    """'A vs B' / 'A vs. B' -> (A, B) with NO side meaning (which is home is not stated) - used only as the two names."""
+    import re as _re
+    parts = _re.split(r"\s+vs\.?\s+", str(title or ""), maxsplit=1)
+    return [p.strip() for p in parts] if len(parts) == 2 else None
+
+
 def parse_underdog(body):
     apps = {a.get("id"): a for a in body.get("appearances") or []}
     players = {p.get("id"): p for p in body.get("players") or []}
@@ -84,10 +91,14 @@ def parse_underdog(body):
         app = apps.get(st.get("appearance_id")) or {}
         pl = players.get(app.get("player_id")) or {}
         g = games.get(app.get("match_id")) or {}
+        # "Away @ Home" says which id is which name; "A vs B" does not (2026-10-17: "MVK Esports vs FURIA" with a
+        # placeholder short title "TBD-2 vs TBD-1") - then team / opponent stay unknown and only the two names are kept
         away_n, home_n = _split(g.get("full_team_names_title"))
         away_a, home_a = _split(g.get("short_title"))
-        home = app.get("team_id") and app.get("team_id") == g.get("home_team_id")
-        away = app.get("team_id") and app.get("team_id") == g.get("away_team_id")
+        if away_a and "TBD" in (away_a + (home_a or "")).upper():
+            away_a = home_a = None
+        home = bool(away_n) and app.get("team_id") and app.get("team_id") == g.get("home_team_id")
+        away = bool(away_n) and app.get("team_id") and app.get("team_id") == g.get("away_team_id")
         stat, scope = ud_stat(st.get("stat"), st.get("display_stat"))
         sides = {}
         for o in ln.get("options") or []:
@@ -113,7 +124,8 @@ def parse_underdog(body):
                    "team_source_id": app.get("team_id"), "stat_code": st.get("stat"), "graded_by": st.get("graded_by"),
                    "live_event": ln.get("live_event"), "game_status": g.get("status"), "abbreviated_title": g.get("abbreviated_title"),
                    "full_team_names_title": g.get("full_team_names_title"), "position": pl.get("position_name"),
-                   "has_alternates": ou.get("has_alternates"), "title": (ou.get("title") or "").strip()}))
+                   "has_alternates": ou.get("has_alternates"), "title": (ou.get("title") or "").strip(),
+                   "matchup_names": None if (home or away) and away_n else (_pair(g.get("full_team_names_title")) or _pair(g.get("title")))}))
     return out
 
 

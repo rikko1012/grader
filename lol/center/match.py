@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from . import store
+from .markets import _pair
 from .names import norm, page_key
 
 WINDOW_H = 18
@@ -90,6 +91,9 @@ def link(con, offer):
     start = _when(offer.get("start_time"))
     if start is None:
         return {"status": "unmatched", "reason": "no_start_time"}
+    pair = (ex.get("matchup_names") or _pair(offer.get("match_title"))) if not offer.get("team") else None
+    if pair and len(pair) == 2:
+        return _link_by_pair(con, offer, start, pair)
     own = team_ids(con, [offer.get("team"), ex.get("team_abbr")], offer.get("platform"))
     opp = team_ids(con, [offer.get("opponent"), ex.get("opponent_abbr")], offer.get("platform"))
     if not own or not opp:
@@ -125,6 +129,40 @@ def link(con, offer):
     pid = next(iter(hits))
     return {"status": "matched", "reason": None, "sid": s["sid"], "tid": tid, "opp_tid": opp_tid, "pid": pid,
             "role": recent_role(con, pid, before), "best_of": s["best_of"]}
+
+
+def _series_between(con, a, b, start):
+    lo = (start - timedelta(hours=WINDOW_H)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    hi = (start + timedelta(hours=WINDOW_H)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return [dict(r) for r in con.execute("SELECT * FROM c_series WHERE COALESCE(scheduled_utc, first_game_utc) >= ? AND "
+                                         "COALESCE(scheduled_utc, first_game_utc) <= ?", (lo, hi))
+            if (r["team1"] in a and r["team2"] in b) or (r["team2"] in a and r["team1"] in b)]
+
+
+def _link_by_pair(con, offer, start, pair):
+    """The feed names the two teams but not which one the player is on: the series must be the one scheduled between
+    those two teams, and the player's exact name must be on exactly one of the two teams' recent rosters."""
+    a, b = team_ids(con, [pair[0]], offer.get("platform")), team_ids(con, [pair[1]], offer.get("platform"))
+    if not a or not b:
+        return {"status": "unmatched", "reason": "team_not_known", "detail": {"matchup": pair}}
+    cands = _series_between(con, a, b, start)
+    if not cands:
+        return {"status": "unmatched", "reason": "no_scheduled_series", "detail": {"matchup": pair}}
+    if len(cands) > 1:
+        return {"status": "quarantined", "reason": "series_ambiguous", "detail": {"series": [c["sid"] for c in cands]}}
+    s = cands[0]
+    before = s["scheduled_utc"] or s["first_game_utc"] or start.strftime("%Y-%m-%dT%H:%M:%SZ")
+    k = norm(offer.get("player"))
+    named = {r[0] for r in con.execute("SELECT DISTINCT eid FROM aliases WHERE kind = 'player' AND norm = ?", (k,))} if k else set()
+    hits = {(t, p) for t in (s["team1"], s["team2"]) for p in candidate_players(con, t, s["tournament_page"], before) & named}
+    if not hits:
+        return {"status": "unmatched", "reason": "player_not_on_team", "sid": s["sid"], "detail": {"player": offer.get("player")}}
+    if len(hits) > 1:
+        return {"status": "quarantined", "reason": "player_ambiguous", "sid": s["sid"], "detail": {"hits": sorted(map(list, hits))}}
+    tid, pid = next(iter(hits))
+    opp_tid = s["team2"] if tid == s["team1"] else s["team1"]
+    return {"status": "matched", "reason": None, "sid": s["sid"], "tid": tid, "opp_tid": opp_tid, "pid": pid,
+            "role": recent_role(con, pid, before), "best_of": s["best_of"], "basis": "player on exactly one of the two named teams"}
 
 
 def link_open_markets(con, at=None):

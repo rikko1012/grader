@@ -5,12 +5,15 @@ package's isolation rule). The admin pages read the files this worker writes and
 
 Inside the worker:
 - markets thread: polls Underdog and PrizePicks LoL every LOL_ARCHIVE_EVERY s (default 120) into the quote archive
-- ingest thread: Leaguepedia units one at a time through the shared pacer; when data changed, every 30 min: the
-  canonical build, the coverage report and the offer -> series/player links
+- riot thread: LoL Esports (no login) - next 7 days' schedule and last 3 days' results every 30 min, 12-month
+  backfill in between (riot.py)
+- ingest thread: Leaguepedia units one at a time through the shared pacer
+- build thread: when any source changed, every 30 min: the canonical build and the coverage report; the offer ->
+  series / player links every 10 min
 - main thread: writes status.json / coverage.json / quarantine.json / links.json in DATA_DIR/lol/center every 60 s
   (atomic); exits when the parent server is gone
 
-Switches (environment): LOL_ARCHIVE=0 no market polling; LOL_LP=0 no Leaguepedia. (LOL_DATA=0, read by server.py,
+Switches (environment): LOL_ARCHIVE=0 no market polling; LOL_LP=0 no Leaguepedia; LOL_LE=0 no LoL Esports. (LOL_DATA=0, read by server.py,
 starts nothing.) No member page reads any of this; member LoL pages are not released.
 """
 import json
@@ -25,7 +28,7 @@ from . import store
 OUT = store.db_path().parent
 BUILD_EVERY_S = 1800
 LINK_EVERY_S = 600
-STATE = {"started_at": None, "markets": {}, "ingest": {}, "build": None, "links": None, "errors": []}
+STATE = {"started_at": None, "markets": {}, "ingest": {}, "riot": {}, "build": None, "links": None, "errors": []}
 
 
 def _err(where, e):
@@ -55,15 +58,12 @@ def markets_loop():
 
 
 def ingest_loop():
-    from . import build, coverage, ingest, match
+    """Leaguepedia units only (a rate-limited unit can wait many minutes - the build has its own thread)."""
+    from . import ingest
     con = store.connect()
-    t_build = t_link = 0.0
     while True:
         try:
-            if os.environ.get("LOL_LP", "1") != "0":
-                u = ingest.next_unit(con)
-            else:
-                u = None
+            u = ingest.next_unit(con)
             if u is None:
                 STATE["ingest"]["idle_since"] = STATE["ingest"].get("idle_since") or store.now_iso()
                 time.sleep(60)
@@ -75,14 +75,6 @@ def ingest_loop():
                                            **{k: agg.get(k) for k in ("rows", "new", "changed", "gone", "error") if agg.get(k) is not None}}
                 if not ok:
                     time.sleep(300)
-            if store.get_meta(con, "dirty") and time.time() - t_build > BUILD_EVERY_S:
-                STATE["build"] = build.build(con)
-                _write("coverage.json", coverage.refresh(con))
-                t_build = time.time()
-                t_link = 0.0
-            if time.time() - t_link > LINK_EVERY_S and store.get_meta(con, "built_at"):
-                STATE["links"] = {"at": store.now_iso(), "counts": match.link_open_markets(con)}
-                t_link = time.time()
         except Exception as e:
             _err("ingest", e)
             try:
@@ -92,15 +84,39 @@ def ingest_loop():
             time.sleep(300)
 
 
+def build_loop():
+    """When any source changed: the canonical build and coverage report (at most every BUILD_EVERY_S, the first one
+    after 5 min); the offer -> series / player links every LINK_EVERY_S."""
+    from . import build, coverage, match
+    con = store.connect()
+    t_build, t_link = time.time() - BUILD_EVERY_S + 300, 0.0
+    while True:
+        try:
+            if store.get_meta(con, "dirty") and time.time() - t_build > BUILD_EVERY_S:
+                STATE["build"] = build.build(con)
+                _write("coverage.json", coverage.refresh(con))
+                t_build, t_link = time.time(), 0.0
+            if time.time() - t_link > LINK_EVERY_S and store.get_meta(con, "built_at"):
+                STATE["links"] = {"at": store.now_iso(), "counts": match.link_open_markets(con)}
+                t_link = time.time()
+        except Exception as e:
+            _err("build", e)
+            try:
+                con.rollback()
+            except Exception:
+                pass
+        time.sleep(60)
+
+
 def write_status():
     from . import cargo, ingest, markets
     con = store.connect()
     try:
         out = {"at": store.now_iso(), "pid": os.getpid(), "started_at": STATE["started_at"], "db": str(store.db_path()),
                "db_mb": round(store.db_path().stat().st_size / 1e6, 1) if store.db_path().exists() else None,
-               "markets_live": STATE["markets"], "markets": markets.status(con), "ingest_live": STATE["ingest"],
+               "markets_live": STATE["markets"], "markets": markets.status(con), "ingest_live": STATE["ingest"], "riot": STATE["riot"],
                "ingest": ingest.progress(con), "pacer": cargo.PACER.view(),
-               "leaguepedia_login": bool(os.environ.get("LEAGUEPEDIA_USER") and os.environ.get("LEAGUEPEDIA_BOT_PASSWORD")),
+               "leaguepedia_login": dict(cargo.LOGIN, configured=bool(cargo.credentials())),
                "last_build": store.get_meta(con, "last_build"), "links": STATE["links"],
                "quarantine": {r[0]: r[1] for r in con.execute(
                    "SELECT kind || ':' || reason, COUNT(*) FROM quarantine WHERE resolved_at IS NULL GROUP BY kind, reason")},
@@ -124,7 +140,12 @@ def main():
     parent = os.getppid()
     if os.environ.get("LOL_ARCHIVE", "1") != "0":
         threading.Thread(target=markets_loop, daemon=True, name="lol-markets").start()
-    threading.Thread(target=ingest_loop, daemon=True, name="lol-ingest").start()
+    if os.environ.get("LOL_LP", "1") != "0":
+        threading.Thread(target=ingest_loop, daemon=True, name="lol-ingest").start()
+    threading.Thread(target=build_loop, daemon=True, name="lol-build").start()
+    if os.environ.get("LOL_LE", "1") != "0":
+        from . import riot
+        threading.Thread(target=riot.loop, args=(STATE["riot"],), daemon=True, name="lol-riot").start()
     while True:
         try:
             write_status()

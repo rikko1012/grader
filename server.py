@@ -1180,7 +1180,10 @@ def lol_center_admin(path, q):
             return None
     if path == "/admin/lol.json":
         p = LOL_SUP.get("proc")
-        return {"released_to_members": False, "worker": {"running": bool(p and p.poll() is None), "starts": LOL_SUP["starts"],
+        # names only (never values) of credential-like settings, to check a bot login was entered under the expected names
+        names = sorted(k for k in os.environ if any(w in k.upper() for w in ("LEAGUEPEDIA", "LIQUIPEDIA", "FANDOM", "LOL_")))
+        return {"released_to_members": False, "credential_env_names_present": names,
+                "worker": {"running": bool(p and p.poll() is None), "starts": LOL_SUP["starts"],
                                                          "started_at": LOL_SUP["started_at"], "last_exit": LOL_SUP["last_exit"],
                                                          "disabled": LOL_SUP["disabled"]}, "status": read("status.json")}
     if path in ("/admin/lol/coverage.json", "/admin/lol/quarantine.json", "/admin/lol/links.json"):

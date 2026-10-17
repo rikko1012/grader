@@ -311,3 +311,70 @@ def test_offer_links_through_schedule_not_name_alone(con):
                                 "BestOf": "3", "DateTime_UTC": "2026-10-20 15:00:00"}], at="2026-10-15T01:00:00Z")
     build.build(con)
     assert match.link(con, o)["reason"] == "series_ambiguous"
+
+
+# ---------------------------------------------------------------- LoL Esports source (no login)
+def le_world(con, wins=(3, 1), slots=5, done=True):
+    teams = [{"id": "RA", "name": "Red Arrows", "code": "RA", "game_wins": wins[0]}, {"id": "BB", "name": "Blue Bears", "code": "BB", "game_wins": wins[1]}]
+    n_played = sum(wins)
+    games = [{"number": n, "id": f"g{n}", "state": ("completed" if n <= n_played else "unneeded") if done else "unstarted",
+              "sides": {"RA": "blue", "BB": "red"}} for n in range(1, slots + 1)]
+    put_le = lambda tbl, rows, key: store.put_rows(con, tbl, rows, key, lambda r: "2026-10-20 18:00:00", None, "2026-10-21T00:00:00Z")
+    put_le("LE:Match", [{"match_id": "M7", "league_slug": "worlds", "league": "Worlds", "start": "2026-10-20T18:00:00Z", "best_of": 5,
+                         "teams": teams, "games": games}], lambda r: r["match_id"])
+    if not done:
+        return
+    for n in range(1, n_played + 1):
+        winner_side = "blue" if n != 2 else "red"           # RA wins games 1, 3, 4; BB wins game 2 (3-1)
+        bk, rk = (10, 4) if winner_side == "blue" else (5, 12)
+        # rows arrive in REVERSE game order: the schedule number decides the order
+        put_le("LE:Game", [{"game_id": f"g{n}", "match_id": "M7", "number": n, "start": f"2026-10-20T{17 + n}:05:00Z", "duration_s": 1900,
+                            "patch": "16.20.826.3891", "blue_team_id": "RA", "red_team_id": "BB", "blue_kills": bk, "red_kills": rk,
+                            "winner_side": winner_side, "winner_basis": "inferred from inhibitors"}], lambda r: r["game_id"])
+        rows = []
+        for side, team, k in (("blue", "RA", bk), ("red", "BB", rk)):
+            ks = [k - 4, 1, 1, 1, 1] if k >= 4 else [k, 0, 0, 0, 0]
+            for i, rl in enumerate(["top", "jungle", "mid", "bot", "support"]):
+                rows.append({"game_id": f"g{n}", "match_id": "M7", "number": n, "player_id": f"{team}{i}", "name": f"{team}p{i}",
+                             "team_id": team, "side": side, "role": rl, "kills": ks[i], "deaths": 1, "assists": 3, "cs": 250})
+        put_le("LE:PlayerGame", rows, lambda r: f"{r['game_id']}|{r['player_id']}")
+    con.commit()
+
+
+def test_lolesports_build_ids_order_winners_patch(con):
+    le_world(con)
+    out = build.build(con)
+    assert out["lolesports"]["series"] == 1 and out["lolesports"]["games"] == 4 and out["player_games"] == 40
+    s = con.execute("SELECT * FROM c_series").fetchone()
+    assert s["source"] == "lolesports" and s["status"] == "complete" and s["best_of"] == 5 and s["winner"] == 1
+    gs = con.execute("SELECT game_n, patch, winner_tid, flags FROM c_games ORDER BY game_n").fetchall()
+    ra = store.find_entity(con, "team", "lolesports:team", "RA")
+    assert [g[0] for g in gs] == [1, 2, 3, 4] and gs[0][1] == "26.20"
+    assert [g[2] == ra for g in gs] == [True, False, True, True]   # inferred wins add up to 3-1 -> kept; last game certain
+    assert not any("kills_mismatch" in g[3] for g in gs)
+    pid = store.find_entity(con, "player", "lolesports:player", "RA2")
+    r = settle.settle(con, "underdog", "kills", "maps_1_2_3", pid, s["sid"], 2.5)
+    assert r["status"] == "graded" and r["actual"] == 3 and r["game_numbers"] == [1, 2, 3]
+
+
+def test_lolesports_unscheduled_series_and_vs_title_link(con):
+    le_world(con)                                                        # M7 played 2026-10-20: RA / BB players have games
+    nxt = {"match_id": "M8", "league_slug": "worlds", "league": "Worlds", "start": "2026-10-22T18:00:00Z", "best_of": 5,
+           "teams": [{"id": "RA", "name": "Red Arrows", "code": "RA", "game_wins": 0}, {"id": "BB", "name": "Blue Bears", "code": "BB", "game_wins": 0}],
+           "games": [{"number": 1, "id": "h1", "state": "unstarted", "sides": {}}]}
+    store.put_rows(con, "LE:Match", [nxt], lambda r: r["match_id"], lambda r: "2026-10-22 18:00:00", None, "2026-10-21T00:00:00Z")
+    build.build(con)
+    assert con.execute("SELECT status FROM c_series WHERE source_match_id = 'M8'").fetchone()[0] == "scheduled"
+    # an Underdog line whose game title is "A vs B" (no away/home): the player decides the team
+    raw = dict(UD, games=[dict(UD["games"][0], full_team_names_title="Red Arrows vs Blue Bears", short_title="TBD-2 vs TBD-1",
+                               title="Red Arrows vs Blue Bears", scheduled_at="2026-10-22T18:00:00Z")],
+               players=[dict(UD["players"][0], last_name="RAp2")])
+    o = markets.parse_underdog(raw)[0]
+    assert o["team"] is None and o["extra"]["matchup_names"] == ["Red Arrows", "Blue Bears"]
+    o["platform"] = "underdog"
+    r = match.link(con, o)
+    assert r["status"] == "matched" and r["tid"] == store.find_entity(con, "team", "lolesports:team", "RA")
+    assert r["sid"] == store.find_entity(con, "series", "lolesports:match", "M8") and r["role"] == "Mid"
+    # only games that ended before the series' start count: the same offer for M7 itself finds no earlier roster
+    early = dict(o, start_time="2026-10-20T18:00:00Z")
+    assert match.link(con, early)["reason"] in ("player_not_on_team", "series_ambiguous")
