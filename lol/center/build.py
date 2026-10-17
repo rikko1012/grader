@@ -14,6 +14,7 @@ Canonical LoL tables from the stored Leaguepedia rows: internal ids with source 
 c_series / c_games / c_player_games are rebuilt from scratch on every build; ids, mappings, history and quarantine persist.
 """
 import json
+import re
 import time
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
@@ -542,11 +543,45 @@ def _players_by_game(con):
         yield gid, rows
 
 
+def split_wrong_merges(con, at):
+    """Repair (2026-10-17): before the cross-source merge guard, two ids that each had their own Leaguepedia page (two
+    different players / teams) could be merged through one LoL Esports id. Every merge that left one id holding two
+    Leaguepedia pages is reversed exactly - each source mapping that merge moved (its note says "merged from X") goes
+    back to X, X stops resolving to the survivor, both ids' aliases are rebuilt by this build, and the split is recorded
+    (entity history + quarantine, reason wrong_merge_split). -> number of merges reversed."""
+    n = 0
+    for kind in ("player", "team"):
+        multi = [r[0] for r in con.execute("SELECT eid FROM entity_sources WHERE kind = ? AND source = 'leaguepedia:page' "
+                                           "GROUP BY eid HAVING COUNT(*) > 1", (kind,))]
+        for keep in multi:
+            for skey, note in con.execute("SELECT skey, note FROM entity_sources WHERE eid = ? AND source = 'leaguepedia:page' "
+                                          "AND note LIKE '%merged from %'", (keep,)).fetchall():
+                drops = [d for d in re.findall(r"merged from (lol:\w+:\d+)", note or "") if d != keep]
+                if not drops:
+                    continue
+                x = drops[-1]                                  # the merge that brought this page onto `keep`
+                if store.get_meta(con, f"merged:{x}") != keep:
+                    continue
+                moved = con.execute("UPDATE entity_sources SET eid = ?, note = note || '; split back (two Leaguepedia pages)' "
+                                    "WHERE eid = ? AND note LIKE ?", (x, keep, f"%merged from {x}%")).rowcount
+                con.execute("DELETE FROM meta WHERE k = ?", (f"merged:{x}",))
+                con.execute("DELETE FROM aliases WHERE eid IN (?, ?)", (keep, x))     # re-added below by the resolvers
+                for eid, other in ((keep, x), (x, keep)):
+                    con.execute("INSERT INTO entity_history (eid, at, change, detail) VALUES (?, ?, 'split', ?)",
+                                (eid, at, json.dumps({"other": other, "reason": "two Leaguepedia pages - a wrong merge reversed",
+                                                      "sources_moved": moved})))
+                store.quarantine(con, kind, f"split:{keep}|{x}", "wrong_merge_split", {"kept": keep, "restored": x, "page": skey,
+                                                                                       "sources_moved": moved}, at)
+                n += 1
+    return n
+
+
 def build(con, at=None, _again=True):
     """Rebuild the canonical tables. Returns counts and check results. When the cross-source pass links or merges ids,
     the tables are rebuilt once more so every row carries the final ids."""
     t0 = time.time()
     at = at or store.now_iso()
+    wrong_merges = split_wrong_merges(con, at)
     tid, teams = team_resolver(con, at)
     pid, players = player_resolver(con, at)
     tours = {page_key(r["OverviewPage"]): r for r in store.current_rows(con, "Tournaments") if r.get("OverviewPage")}
@@ -761,7 +796,7 @@ def build(con, at=None, _again=True):
     con.commit()
     out = {"built_at": at, "seconds": round(time.time() - t0, 1), "series": len(series), "games": len(games),
            "player_games": n_pg, "teams": len(teams), "players_with_page_rows": len(players), "lolesports": le_counts,
-           "checks": dict(checks), "identity_exclusions_by_league_month": ident_excl}
+           "checks": dict(checks), "identity_exclusions_by_league_month": ident_excl, "wrong_merges_split": wrong_merges}
     linked = link_overlaps(con, overlaps, at)
     out["cross_source_links"] = linked
     out["crosscheck"] = crosscheck(con, overlaps, at) if not (linked and _again) else {"pending": "after the re-build"}
