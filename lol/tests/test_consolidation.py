@@ -525,3 +525,37 @@ def test_build_code_change_marks_a_rebuild(con, monkeypatch):
     assert worker.mark_rebuild_on_code_change(con) is False and store.get_meta(con, "dirty") is None
     monkeypatch.setattr(worker, "code_fingerprint", lambda: "changed")
     assert worker.mark_rebuild_on_code_change(con) is True and store.get_meta(con, "dirty")
+
+
+def test_le_backfill_stops_cleanly_when_the_feed_refuses(con, monkeypatch):
+    """2026-10-17 collector run: one HTTP 403 from feed.lolesports.com crashed the whole step. A refusal now stops the
+    pass with nothing lost (the match stays to do); another HTTP error is recorded and retried, quarantined after 3."""
+    from lol.center import riot
+    from lol.net import HttpError
+    calls = {"n": 0}
+
+    class FakeLE:
+        MAJOR = ["x"]
+
+        @staticmethod
+        def matches_since(leagues, since):
+            return [{"match_id": f"M{i}", "start": f"2026-10-0{i}T10:00:00Z"} for i in (1, 2, 3)]
+
+        @staticmethod
+        def event_details(mid):
+            calls["n"] += 1
+            if mid == "M3":
+                raise HttpError(500, "https://feed.lolesports.com/x")
+            if mid == "M2":
+                raise HttpError(403, "https://feed.lolesports.com/x")
+            return {}
+    monkeypatch.setattr(riot, "_le", lambda: FakeLE)
+    monkeypatch.setattr(riot, "store_match", lambda con, m, d: {"rows": 1, "new": 1, "changed": 0})
+    monkeypatch.setattr(riot, "BACKFILL_GAP_S", 0)
+    b = riot.run_backfill(con)
+    assert b["failed"] == 1 and b["stopped"].startswith("feed refused HTTP 403") and b["matches"] == 0
+    assert not riot._done(con, "M2") and not riot._done(con, "M3")              # nothing marked done that was not stored
+    for _ in range(2):
+        riot.run_backfill(con)
+    assert riot._done(con, "M3") is not None or store.get_meta(con, "le_fail:M3") >= 3
+    assert con.execute("SELECT COUNT(*) FROM quarantine WHERE reason = 'source_unavailable'").fetchone()[0] == 1

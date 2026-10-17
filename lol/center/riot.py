@@ -129,9 +129,29 @@ def run_backfill(con, leagues=None, days=BACKFILL_DAYS):
     todo = [m for m in ms if not _done(con, m["match_id"])][:BATCH]
     if not todo:
         return None
-    tot = {"rows": 0, "new": 0, "changed": 0, "matches": 0, "remaining": len([m for m in ms if not _done(con, m["match_id"])]) - len(todo)}
+    tot = {"rows": 0, "new": 0, "changed": 0, "matches": 0, "failed": 0,
+           "remaining": len([m for m in ms if not _done(con, m["match_id"])]) - len(todo)}
+    from ..net import HttpError
     for m in todo:
-        c = store_match(con, m, le.event_details(m["match_id"]))
+        try:
+            c = store_match(con, m, le.event_details(m["match_id"]))
+        except HttpError as e:
+            con.rollback()
+            if e.status in (403, 429):
+                # the feed refused (2026-10-17: HTTP 403 after ~360 matches from a GitHub runner): stop this pass without
+                # losing anything - the match stays to do, the next pass resumes from it
+                tot["stopped"] = f"feed refused HTTP {e.status} at match {m['match_id']}"
+                store.set_meta(con, "le_backfill_refused", {"at": store.now_iso(), "status": e.status, "match": m["match_id"]})
+                con.commit()
+                break
+            n = (store.get_meta(con, f"le_fail:{m['match_id']}", 0) or 0) + 1
+            store.set_meta(con, f"le_fail:{m['match_id']}", n)
+            if n >= 3:                                   # unavailable at the source: recorded, never stored as zeros
+                store.quarantine(con, "series", f"lolesports:{m['match_id']}", "source_unavailable", {"http": e.status, "tries": n})
+                _mark_done(con, m["match_id"])
+            con.commit()
+            tot["failed"] += 1
+            continue
         _mark_done(con, m["match_id"])
         tot["matches"] += 1
         time.sleep(BACKFILL_GAP_S)                    # the backfill is never urgent: a steady trickle, not bursts
@@ -156,6 +176,8 @@ def loop(state):
             state["backfill"] = dict(b, at=store.now_iso()) if b else {"done": True, "at": store.now_iso()}
             if not b:
                 time.sleep(300)
+            elif b.get("stopped"):
+                time.sleep(1800)                             # the feed refused: back off, then resume where it stopped
         except Exception as e:
             state["error"] = {"at": store.now_iso(), "error": f"{type(e).__name__}: {str(e)[:300]}"}
             try:

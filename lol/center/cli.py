@@ -20,7 +20,10 @@ def sync_once(source="both", max_minutes=120, log=print):
             if not b:
                 break
             n += b["matches"]
-            log(f"  LoL Esports backfill: {n} matches, {b['remaining']} left")
+            log(f"  LoL Esports backfill: {n} matches, {b['remaining']} left" + (f" - {b['stopped']}" if b.get("stopped") else ""))
+            if b.get("stopped"):
+                out["lolesports_backfill_stopped"] = b["stopped"]
+                break
         out["lolesports_backfill_matches"] = n
     if source in ("leaguepedia", "both"):
         if not (os.environ.get("LEAGUEPEDIA_USER") and os.environ.get("LEAGUEPEDIA_BOT_PASSWORD")):
