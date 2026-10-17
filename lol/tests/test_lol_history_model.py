@@ -99,16 +99,38 @@ def _stats(winner_side):
                          "champion": "Ahri", "kills": 6, "deaths": 1, "assists": 4, "cs": 300, "gold": 1}]}
 
 
-def test_winner_kept_only_when_it_adds_up_to_the_score():
+def _winners(score_blue, score_red, inferred, in_feed=None):
     m = {"match_id": "X", "best_of": 3, "start": "2026-09-06T08:00:00Z", "league": "lck"}
-    ok = sync.lolesports_rows(m, _details(2, 0, 2), {"g1": _stats("blue"), "g2": _stats("blue")})
-    assert [g["winner"] for g, _ in ok] == ["Blue Team", "Blue Team"]
-    p = ok[0][1][0]
+    n = in_feed if in_feed is not None else len(inferred)
+    det = _details(score_blue, score_red, n)
+    return sync.lolesports_rows(m, det, {f"g{i + 1}": _stats(w) for i, w in enumerate(inferred[:n])})
+
+
+def test_rows_from_the_feed():
+    (g, players), _ = _winners(2, 0, ["blue", "blue"])
+    p = players[0]
     assert (p["player"], p["team"], p["opponent"], p["team_kills"], p["opp_kills"], p["win"]) == \
         ("Ace", "Blue Team", "Red Team", 15, 6, 1)
-    bad = sync.lolesports_rows(m, _details(2, 0, 2), {"g1": _stats("blue"), "g2": _stats("red")})
-    assert [g["winner"] for g, _ in bad] == [None, None] and bad[0][1][0]["win"] is None
-    assert "disagree" in bad[0][0]["winner_basis"]
+
+
+@pytest.mark.parametrize("score,inferred,want,basis", [
+    ((2, 0), ["blue", "red"], ["Blue Team", "Blue Team"], "series sweep"),               # a sweep is certain
+    ((2, 1), ["blue", "red", "blue"], ["Blue Team", "Red Team", "Blue Team"], "matches the series score"),
+    ((2, 1), ["blue", "blue", "blue"], [None, None, "Blue Team"], "disagree"),           # only the last game is certain
+    ((1, 1), ["blue", "red"], ["Blue Team", "Red Team"], "matches the series score"),    # a drawn best-of-2
+    ((1, 1), ["blue", "blue"], [None, None], "disagree"),
+])
+def test_game_winners(score, inferred, want, basis):
+    rows = _winners(*score, inferred)
+    assert [g["winner"] for g, _ in rows] == want
+    assert basis in rows[0][0]["winner_basis"]
+    for (g, players) in rows:
+        assert players[0]["win"] == (None if g["winner"] is None else int(g["winner"] == "Blue Team"))
+
+
+def test_incomplete_series_keeps_no_winner():
+    rows = _winners(2, 0, ["blue", "blue"], in_feed=1)
+    assert [g["winner"] for g, _ in rows] == [None] and "incomplete" in rows[0][0]["winner_basis"]
 
 
 # ------------------------------------------------------------------ the model

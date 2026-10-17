@@ -181,6 +181,12 @@ def run_full(db, args):
     pres = run_player(db, args)
     res["player"] = pres
     if not pres.get("found"):
+        # no history (e.g. the LPL before Leaguepedia is set up): still show his lines - ungraded, never a guess
+        try:
+            res["lines"] = [dict(ln, graded=False, note="no stored history - not projected")
+                            for ln in lines.lines_for(args.name, args.team)]
+        except Exception as e:      # noqa: BLE001
+            res["lines_error"] = f"{type(e).__name__}: {e}"
         return res
     team = pres["team"]
     # the match: the next one on the schedule for his team, unless --opponent says otherwise
@@ -270,7 +276,7 @@ def run_sync(db, args):
     since = sync.parse_date(args.since)
     leagues = None if not args.leagues else ("all" if args.leagues == "all" else args.leagues.split(","))
     if args.source in ("lolesports", "both"):
-        out["lolesports"] = sync.sync_lolesports(db, leagues=leagues, since=since)
+        out["lolesports"] = sync.sync_lolesports(db, leagues=leagues, since=since, force=args.force)
     if args.source in ("leaguepedia", "both"):
         if not config.leaguepedia_credentials():
             out["leaguepedia"] = {"skipped": "LEAGUEPEDIA_USER / LEAGUEPEDIA_BOT_PASSWORD not set"}
@@ -284,6 +290,9 @@ def print_full(res):
     p = res.get("player") or {}
     if not p.get("found"):
         print(p.get("note") or "player not found")
+        for ln in res.get("lines") or []:
+            print(f"  {ln['book']:10s} {ln['prop']:7s} {SCOPE_NAME[ln['scope']]:9s} {ln['line']:5.1f} ({ln['odds_type']}) "
+                  f"- {ln['note']}")
         return
     print(f"\n{p['player']} ({p['role']}, {p['team']}) - {p['games']} stored games, {p['first']} .. {p['last']}")
     m = res.get("match") or {}
@@ -337,6 +346,7 @@ def main(argv=None):
     common.add_argument("--since", help="sync: first date (YYYY-MM-DD; default 120 days ago)")
     common.add_argument("--leagues", help="sync / slate: comma-separated LoL Esports slugs, or 'all' (default: majors)")
     common.add_argument("--source", choices=["lolesports", "leaguepedia", "both"], default="both")
+    common.add_argument("--force", action="store_true", help="sync: re-derive matches already held (from the cache)")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     for c in ("slate", "sync", "status", "player", "h2h", "odds", "lines", "full"):

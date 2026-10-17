@@ -25,30 +25,53 @@ def _when(s):
         return None
 
 
-def lolesports_rows(match, details, stats):
-    """One match -> [(game_row, player_rows)] for history.save_game. `stats` = {game_id: lolesports.game_stats()}.
-    The winner of each game is inferred (lolesports.winner) and kept only when the inferred wins equal the series score
-    the API reports; otherwise every game of the match keeps winner = None ('inferred wins disagree with the score')."""
-    m = details.get("match") or {}
-    tinfo = {t.get("id"): t for t in m.get("teams") or []}
-    played = [g for g in m.get("games") or [] if g.get("state") == "completed" and stats.get(g.get("id"))]
-    wins = Counter()
+def game_winners(played, stats, score):
+    """{game_id: (winning team id or None, basis)} for a match's played games (in game order). Certain first: in a sweep
+    every game went to the series winner, and the last game of any series is the series winner's. The other games use
+    the inferred winner (lolesports.winner) only when every inferred win adds up to the official series score."""
+    if not played or len(played) != sum(v or 0 for v in score.values()):
+        return {g["id"]: (None, "series incomplete in the feed") for g in played}
+    ranked = sorted(score, key=lambda t: score[t] or 0, reverse=True)
+    tied = len(ranked) < 2 or (score[ranked[0]] or 0) == (score[ranked[1]] or 0)      # e.g. a best-of-2 drawn 1-1
+    series_winner = None if tied else ranked[0]
+    if series_winner and sum(score[t] or 0 for t in ranked[1:]) == 0:
+        return {g["id"]: (series_winner, "series sweep") for g in played}
+    inferred = {}
     for g in played:
         s = stats[g["id"]]
-        if s.get("winner_side"):
-            wins[(s["sides"].get(s["winner_side"]) or {}).get("team_id")] += 1
+        inferred[g["id"]] = (s["sides"].get(s["winner_side"]) or {}).get("team_id") if s.get("winner_side") else None
+    wins = Counter(inferred.values())
+    consistent = None not in inferred.values() and all(wins.get(t, 0) == (n or 0) for t, n in score.items())
+    last = played[-1]["id"]
+    out = {}
+    for g in played:
+        if g["id"] == last and series_winner:
+            out[g["id"]] = (series_winner, "last game of the series")
+        elif consistent:
+            out[g["id"]] = (inferred[g["id"]], stats[g["id"]].get("winner_basis") + ", matches the series score")
+        else:
+            out[g["id"]] = (None, "inferred wins disagree with the series score")
+    return out
+
+
+def lolesports_rows(match, details, stats):
+    """One match -> [(game_row, player_rows)] for history.save_game. `stats` = {game_id: lolesports.game_stats()}.
+    Game winners from game_winners(): certain ones (sweep, last game) always; inferred ones only when they add up to the
+    series score the API reports, otherwise winner = None."""
+    m = details.get("match") or {}
+    tinfo = {t.get("id"): t for t in m.get("teams") or []}
+    played = sorted([g for g in m.get("games") or [] if g.get("state") == "completed" and stats.get(g.get("id"))],
+                    key=lambda g: g.get("number") or 0)
     score = {tid: (t.get("result") or {}).get("gameWins") for tid, t in tinfo.items()}
-    complete = len(played) == sum(v or 0 for v in score.values())
-    consistent = complete and all(wins.get(tid, 0) == (n or 0) for tid, n in score.items())
+    winners = game_winners(played, stats, score)
     out = []
     for g in played:
         s = stats[g["id"]]
         sides = s["sides"]
         name = {side: (tinfo.get(sides[side]["team_id"]) or {}).get("name") for side in ("blue", "red")}
         code = {side: (tinfo.get(sides[side]["team_id"]) or {}).get("code") for side in ("blue", "red")}
-        w_side = s.get("winner_side") if consistent else None
-        basis = (s.get("winner_basis") + ", matches the series score") if w_side else \
-            ("inferred wins disagree with the series score" if complete else "series incomplete in the feed")
+        w_team, basis = winners[g["id"]]
+        w_side = next((side for side in ("blue", "red") if w_team and sides[side]["team_id"] == w_team), None)
         game = {"game_key": f"le:{g['id']}", "source": "le", "match_key": f"le:{match['match_id']}",
                 "game_number": g.get("number"), "best_of": match.get("best_of") or (m.get("strategy") or {}).get("count"),
                 "played_at": s.get("start") or match.get("start"), "league": match.get("league"),
@@ -85,13 +108,14 @@ def _fetch_match(m, now):
     return det, stats
 
 
-def sync_lolesports(db, leagues=None, since=None, max_matches=None, now=None, workers=4):
+def sync_lolesports(db, leagues=None, since=None, max_matches=None, now=None, workers=4, force=False):
     """Fetch every completed match not yet held in full. Returns {"matches", "games", "skipped", "no_feed", "errors"}.
     `workers` matches are fetched at once; the per-host pacing in lol/net.py still caps the request rate (4 / s per
-    host), and only this thread writes to the database."""
+    host), and only this thread writes to the database. force=True re-derives matches already held (from the cache:
+    finished games are never downloaded twice) - after a change to how rows are built."""
     now = now or datetime.now(timezone.utc)
     since = since or (now - timedelta(days=120)).date()
-    known = history.known_matches(db, "le")
+    known = {} if force else history.known_matches(db, "le")
     todo = sorted(lolesports.matches_since(leagues, since), key=lambda m: m.get("start") or "")
     done = Counter()
     pending = []

@@ -28,7 +28,9 @@ PROPS = ("kills", "assists", "deaths")
 GRID = {"hl": (60.0, 120.0, 240.0, 480.0, 960.0), "k0": (4.0, 8.0, 16.0, 32.0, 64.0),
         "ko": (5.0, 10.0, 20.0, 40.0, 80.0, 160.0), "kt": (5.0, 10.0, 20.0, 40.0, 80.0), "ew": (0.0, 0.5, 1.0, 1.5)}
 FIT_FILE = config.PKG_DIR / "model_fit.json"
-STAT_I = {"kills": 1, "deaths": 2, "assists": 3}
+# where the books post most LoL props (a TEST breakdown, not a filter)
+TOP_LEAGUES = {"worlds", "msi", "first_stand", "lck", "lpl", "lec", "lcs", "lcp", "cblol-brazil", "lta_n", "lta_s", "ewc_lol",
+               "demacia_cup"}
 
 
 def _day(iso):
@@ -286,6 +288,11 @@ def run(data, train_from, test_from, test_to=None, log=print):
                     if sel.sum() >= 30:
                         by_role[role] = evaluate(lam_te[idx][sel] * n, y[sel], size,
                                                  {"role_average": role_base[idx][sel] * n})
+                for group, member in (("top leagues", True), ("other leagues", False)):
+                    sel = np.array([(test[i]["league"] in TOP_LEAGUES) == member for i in idx])
+                    if sel.sum() >= 30:
+                        by_role[group] = evaluate(lam_te[idx][sel] * n, y[sel], size,
+                                                  {"role_average": role_base[idx][sel] * n})
                 report[("kills", "12", "by_role")] = by_role
     return fit, report
 
@@ -294,7 +301,7 @@ def fmt(report):
     lines = []
     for key, r in report.items():
         if len(key) == 3:
-            lines.append(f"\nkills Maps 1-2 by role:")
+            lines.append("\nkills Maps 1-2 by role and league group:")
             for role, v in r.items():
                 lines.append(f"  {role:8s} n={v['n']:5d}  avg {v['mean_actual']:5.2f}  bias {v['bias']:+.2f}  "
                              f"MAE {v['mae']:.3f} (role avg {v['mae_role_average']:.3f})  80% range {v['cover80']:.1%}")
