@@ -32,7 +32,10 @@ def test_member_view_is_filtered_and_switch_defaults_off(tmp_path, monkeypatch):
     server._LOL_MEMBER.update(mtime=None, body=None)
     view = json.loads(server.lol_member_board())
     row, = view["rows"]                                            # the combo / unforecast line is not shown
-    assert row["units"] == 0.0 and row["grade"] == "B" and row["pick"] == "Over 9.5" and row["sides_offered"] == ["higher", "lower"]
+    assert row["units"] == 0.0 and row["grade"] == "B" and row["pick"] == "Over 9.5" and row["pick_offered"] is True
+    assert [(x["side"], x["offered"], x["payout"]) for x in row["sides"]] == [("Over", True, "1.0"), ("Under", True, None)]
+    assert row["scope"] == "Maps 1-3" and row["stat_name"] == "Kills" and row["line_type"] == "Standard"
+    assert row["recent_per_game"] is None                         # missing stays missing (shown as unavailable), never 0
     text = json.dumps(view)
     for hidden in ("lol:player", "lol:series", "slip_reasons", "stake_restriction", "price_status", "market_key", "units_policy"):
         assert hidden not in text
@@ -41,3 +44,18 @@ def test_member_view_is_filtered_and_switch_defaults_off(tmp_path, monkeypatch):
     assert server.lol_public() is True
     out = server.lol_center_admin("/admin/lol/release", {"on": "0"})
     assert out["public"] is False and not (tmp_path / "public.flag").exists()
+
+
+def test_member_view_unoffered_side_and_alternate_line(tmp_path, monkeypatch):
+    """A PrizePicks Demon line offers More only: an Under pick is shown as not offered (not playable)."""
+    monkeypatch.setattr(server, "LOL_CENTER", tmp_path)
+    _board(tmp_path)
+    b = json.loads((tmp_path / "board.json").read_text())
+    r = b["rows"][0]
+    r.update(platform="prizepicks", odds_type="demon", sides={"higher": {"offered": True}, "lower": {"offered": False}})
+    r["forecast"].update(model_side="under", p_over=0.4, p_under=0.6, side_offered=0)
+    (tmp_path / "board.json").write_text(json.dumps(b))
+    server._LOL_MEMBER.update(mtime=None, body=None)
+    row, = json.loads(server.lol_member_board())["rows"]
+    assert row["pick"] == "Under 9.5" and row["pick_offered"] is False and row["line_type"] == "Demon"
+    assert [(x["side"], x["offered"]) for x in row["sides"]] == [("Over", True), ("Under", False)]
