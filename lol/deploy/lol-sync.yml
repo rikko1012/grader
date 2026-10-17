@@ -1,0 +1,38 @@
+# LoL history sync on a schedule - the HLTV scraper's pattern: a scheduled job writes the history database, the app only
+# reads it, so a LoL look-up never waits on LoL Esports or Leaguepedia.
+#
+# NOT active here. To turn it on, copy this file to .github/workflows/lol-sync.yml and add the repository secrets:
+#   LOL_DB_DSN                 PostgreSQL the app also reads (writes only lol_* tables - safe next to the HLTV tables,
+#                              but a database of its own is cleaner)
+#   LEAGUEPEDIA_USER           optional: Leaguepedia bot login (YourName@botname) - adds the LPL and every other league
+#   LEAGUEPEDIA_BOT_PASSWORD   optional: its bot password
+name: lol-sync
+on:
+  schedule:
+    - cron: "23 */2 * * *"      # every 2 hours
+  workflow_dispatch:
+    inputs:
+      since:
+        description: "first date to (re)check, YYYY-MM-DD (default: 10 days ago)"
+        required: false
+concurrency: lol-sync
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests numpy psycopg2-binary
+      - name: sync
+        env:
+          LOL_DB_DSN: ${{ secrets.LOL_DB_DSN }}
+          LEAGUEPEDIA_USER: ${{ secrets.LEAGUEPEDIA_USER }}
+          LEAGUEPEDIA_BOT_PASSWORD: ${{ secrets.LEAGUEPEDIA_BOT_PASSWORD }}
+          LOL_DATA_DIR: ${{ runner.temp }}/lol
+        run: |
+          SINCE="${{ github.event.inputs.since }}"
+          python -m lol sync --since "${SINCE:-$(date -u -d '10 days ago' +%F)}"
+          python -m lol status
