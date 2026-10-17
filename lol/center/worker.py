@@ -28,6 +28,7 @@ from . import store
 OUT = store.db_path().parent
 BUILD_EVERY_S = 1800
 LINK_EVERY_S = 600
+HANDOFF_BATCH = int(os.environ.get("LOL_HANDOFF_BATCH", "5000"))   # inbox records imported per loop (about once a minute)
 STATE = {"started_at": None, "markets": {}, "ingest": {}, "riot": {}, "build": None, "links": None, "forecasts": None,
          "settled": None, "errors": []}
 
@@ -85,6 +86,24 @@ def ingest_loop():
             time.sleep(300)
 
 
+def _memory():
+    """This worker's resident memory now and at its peak (MB), where the platform reports it."""
+    out = {}
+    try:
+        import resource                                   # Linux (Render): ru_maxrss in KB
+        out["peak_mb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1)
+    except Exception:
+        pass
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    out["rss_mb"] = round(int(line.split()[1]) / 1024, 1)
+    except OSError:
+        pass
+    return out
+
+
 def code_fingerprint():
     """sha256 of the code that turns source rows into the canonical history (identity, build, export)."""
     import hashlib
@@ -118,7 +137,7 @@ def build_loop():
     while True:
         try:
             try:
-                STATE["handoff"] = handoff.consume(con)
+                STATE["handoff"] = handoff.consume(con, limit=HANDOFF_BATCH)
             except Exception as exc:
                 con.rollback()
                 # A remote inbox outage must not stop local builds or disclose a DSN.
@@ -191,7 +210,7 @@ def write_status():
                "history_handoff": STATE.get("handoff"), "last_history_import": store.get_meta(con, "last_handoff"),
                "quarantine": {r[0]: r[1] for r in con.execute(
                    "SELECT kind || ':' || reason, COUNT(*) FROM quarantine WHERE resolved_at IS NULL GROUP BY kind, reason")},
-               "errors": STATE["errors"][-5:]}
+               "errors": STATE["errors"][-5:], "memory": _memory()}
         quarantine = [dict(r) for r in con.execute("SELECT kind, skey, reason, detail, first_seen, last_seen FROM quarantine "
                                                    "WHERE resolved_at IS NULL ORDER BY last_seen DESC LIMIT 500")]
         links = [dict(r) for r in con.execute("SELECT l.*, e.player, e.team, e.opponent, e.start_time, e.stat, e.scope, e.line "
