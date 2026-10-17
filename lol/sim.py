@@ -220,6 +220,8 @@ def fit(train_rows, hl=120.0, k0=8.0, k_team=8.0, elo_fn=None, log=lambda m: Non
     mu_k = np.exp(Xk @ bk)
     size_k = _nb_size(yk, mu_k)
     # winner's kill share: logistic mean on log D (least squares on the logit), Beta precision by moments
+    if len(share_rows) < 50:
+        raise ValueError(f"lol-2 needs games with a known winner to fit the kill split ({len(share_rows)} found)")
     L = np.array([[1.0, r[0]] for r in share_rows])
     s = np.clip(np.array([r[1] for r in share_rows]), 0.02, 0.98)
     bw = np.linalg.lstsq(L, np.log(s / (1 - s)), rcond=None)[0]
@@ -348,3 +350,30 @@ def summarize(x, line=None):
         over, under = float((x > line).mean()), float((x < line).mean())
         out.update(p_over=over, p_under=under, p_push=1.0 - over - under)
     return out
+
+
+def state_until(rows, hl, day):
+    """The pre-match state from every history game on days before `day` (production: one per forecast cycle)."""
+    st = State(hl)
+    for g in sorted(games_from_rows(rows), key=lambda g: g["played_at"]):
+        d = _day(g["played_at"])
+        if d < day:
+            st.add_game(d, g)
+    return st
+
+
+def context(st, params, team_a, team_b, p_win, day, posted=None):
+    """Both lineups = each team's last fielded lineup before `day`; the posted player (pid, role) takes their role's slot
+    on their team when not in it. -> ctx for simulate() or None (a team without a known lineup)."""
+    ctx = {"p_win": p_win if p_win is not None else 0.5,
+           "team_a": team_feats(st, team_a, day, params["priors"], params["k_team"]),
+           "team_b": team_feats(st, team_b, day, params["priors"], params["k_team"])}
+    for side, tm in (("a", team_a), ("b", team_b)):
+        lu = dict(st.lineup.get(tm) or {})
+        if posted and posted.get("team") == tm and posted.get("role") in ROLES:
+            lu[posted["role"]] = posted["pid"]
+        if len(lu) != 5:
+            return None
+        ctx["lineup_" + side] = [dict(player_feats(st, pid, role, day, params["priors"], params["k0"]), pid=pid, role=role)
+                                 for role, pid in sorted(lu.items())]
+    return ctx

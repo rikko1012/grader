@@ -37,11 +37,7 @@ def dev_line(prev_totals):
     return math.floor(float(np.median(prev_totals[-10:]))) + 0.5
 
 
-def pmf_logscore(samples, y, floor):
-    return math.log(max(float((samples == y).mean()), floor))
-
-
-def run(rows, which="dev", sims=2000, log=print):
+def run(rows, which="dev", sims=2000, log=print, lol2=None):
     P = PERIODS[which]
     d_tr, d_ev, d_end = (P[k].toordinal() for k in ("train_from", "eval_from", "eval_to"))
     data = backtest.Data(rows)
@@ -69,48 +65,7 @@ def run(rows, which="dev", sims=2000, log=print):
                 n = SCOPES[scope][0]
                 preds["lol-1"][(t["match"], t["player"], prop, scope)] = (l1[i] * n, s1)
                 preds["B0"][(t["match"], t["player"], prop, scope)] = (l0[i] * n, s0)
-    # ---- lol-2: fit on the fit period's games, simulate each scored series once (both lineups)
-    day_of = {mk: d for mk, d in data.match_day.items()}
-    fit_rows = [r for r in data.rows if d_tr <= day_of[r["match_key"]] < d_ev or day_of[r["match_key"]] < d_tr]
-    eg = elo.from_rows([dict(r, team=r["team_id"], opponent=r["opponent_id"]) for r in data.rows if r.get("team_id")],
-                       lambda r: day_of[r["match_key"]])
-    elo_fn = lambda a, b, day: eg.p_win(a, b, day)
-    params = sim.fit(fit_rows, hl=120.0, k0=8.0, k_team=8.0, elo_fn=elo_fn, log=log)
-    games = sorted(sim.games_from_rows(data.rows), key=lambda g: g["played_at"])
-    st = sim.State(params["hl"])
-    by_day = defaultdict(list)
-    for g in games:
-        by_day[sim._day(g["played_at"])].append(g)
-    series_games = defaultdict(list)
-    for g in games:
-        series_games[g["match_key"]].append(g)
-    targets_by_match = defaultdict(list)
-    for t in test:
-        targets_by_match[t["match"]].append(t)
-    samples = {}
-    for day in sorted(by_day):
-        if d_ev <= day < d_end:
-            for mk in {g["match_key"] for g in by_day[day]}:
-                if mk not in targets_by_match or day_of.get(mk) != day:
-                    continue
-                g1 = min(series_games[mk], key=lambda g: g["n"] or 99)
-                if (g1["n"] or 1) != 1:
-                    continue
-                ctx = {"p_win": elo_fn(g1["a"], g1["b"], day),
-                       "team_a": sim.team_feats(st, g1["a"], day, params["priors"], params["k_team"]),
-                       "team_b": sim.team_feats(st, g1["b"], day, params["priors"], params["k_team"])}
-                for side in ("a", "b"):
-                    ctx["lineup_" + side] = [dict(sim.player_feats(st, q["pid"], q["role"], day, params["priors"], params["k0"]),
-                                                  pid=q["pid"], role=q["role"]) for q in g1["players"] if q["team"] == g1[side]]
-                if len(ctx["lineup_a"]) != 5 or len(ctx["lineup_b"]) != 5:
-                    continue
-                for scope, (n, bo) in SCOPES.items():
-                    tot = sim.simulate(params, ctx, n, sims=sims, seed=hash((mk, scope)) % (2 ** 32))
-                    for (pid, stat), x in tot.items():
-                        if stat in STATS:
-                            samples[(mk, pid, stat, scope)] = x
-        for g in by_day[day]:
-            st.add_game(day, g)
+    samples, params = lol2_samples(data, test, d_tr, d_ev, d_end, lol2 or {}, sims, log)
     # ---- score: identical targets for every model (a target missing any model's prediction is dropped and counted)
     report = {"which": which, "periods": {k: v.isoformat() for k, v in P.items()}, "lol2_params": {k: v for k, v in params.items() if k != "priors"},
               "b0_lol1_params": {p: {"lol-1": rep_b["stats"][p]["lol1_params"], "B0": rep_b["stats"][p]["b0_params"]} for p in STATS},
@@ -139,7 +94,7 @@ def run(rows, which="dev", sims=2000, log=print):
                                   "league": t.get("league"), "team": t["team"], "opp": t["opp"], "best_of": t.get("best_of"),
                                   "p_win": t.get("p_win"), "stat": prop, "scope": scope, "y": y, "line": line, "prev": prev_tot,
                                   "pred": {"B0": preds["B0"][k], "lol-1": preds["lol-1"][k],
-                                           "lol-2": (float(samples[k].mean()), float(samples[k].var()))}})
+                                           "lol-2": nb_from_moments(*samples[k])}})
             if not units:
                 continue
             res = {"n": len(units), "series": len({u[0]["match"] for u in units}), "dropped_missing_prediction": dropped}
@@ -148,16 +103,12 @@ def run(rows, which="dev", sims=2000, log=print):
                 mae, se, bias, ls, cov, brier, ll, cal = [], [], [], [], [], [], [], []
                 for t, y, k, line in units:
                     if name == "lol-2":
-                        x = samples[k]
-                        mean = float(x.mean())
-                        ls.append(pmf_logscore(x, y, 1.0 / (2 * len(x))))
-                        lo, hi = np.percentile(x, 10), np.percentile(x, 90)
-                        po = float((x > line).mean()) if line is not None else None
+                        mean, size = nb_from_moments(*samples[k])
                     else:
                         mean, size = preds[name][k]
-                        ls.append(model.nb_logpmf(int(y), mean, size))
-                        lo, hi = model.interval(mean, size, 0.8)
-                        po = model.probs(mean, size, line)[0] if line is not None else None
+                    ls.append(model.nb_logpmf(int(y), mean, size))
+                    lo, hi = model.interval(mean, size, 0.8)
+                    po = model.probs(mean, size, line)[0] if line is not None else None
                     mae.append(abs(mean - y))
                     se.append((mean - y) ** 2)
                     bias.append(mean - y)
@@ -188,6 +139,81 @@ def run(rows, which="dev", sims=2000, log=print):
     return report, params, fit_b
 
 
+def lol2_samples(data, test, d_tr, d_ev, d_end, settings, sims, log=print):
+    """lol-2 fitted on the fit period's games; every scored series simulated once with both lineups (game 1's players).
+    -> ({(match, pid, stat, scope): moment summary (mean, var)}, params)"""
+    hl, k0, k_team = settings.get("hl", 120.0), settings.get("k0", 8.0), settings.get("k_team", 8.0)
+    day_of = {mk: d for mk, d in data.match_day.items()}
+    fit_rows = [r for r in data.rows if day_of[r["match_key"]] < d_ev]
+    eg = elo.from_rows([dict(r, team=r["team_id"], opponent=r["opponent_id"]) for r in data.rows if r.get("team_id")],
+                       lambda r: day_of[r["match_key"]])
+    elo_fn = lambda a, b, day: eg.p_win(a, b, day)
+    params = sim.fit(fit_rows, hl=hl, k0=k0, k_team=k_team, elo_fn=elo_fn, log=log)
+    games = sorted(sim.games_from_rows(data.rows), key=lambda g: g["played_at"])
+    st = sim.State(params["hl"])
+    by_day, series_games = defaultdict(list), defaultdict(list)
+    for g in games:
+        by_day[sim._day(g["played_at"])].append(g)
+        series_games[g["match_key"]].append(g)
+    wanted = {t["match"] for t in test}
+    out = {}
+    for day in sorted(by_day):
+        if d_ev <= day < d_end:
+            for mk in {g["match_key"] for g in by_day[day]}:
+                if mk not in wanted or day_of.get(mk) != day:
+                    continue
+                g1 = min(series_games[mk], key=lambda g: g["n"] or 99)
+                if (g1["n"] or 1) != 1:
+                    continue
+                ctx = {"p_win": elo_fn(g1["a"], g1["b"], day),
+                       "team_a": sim.team_feats(st, g1["a"], day, params["priors"], params["k_team"]),
+                       "team_b": sim.team_feats(st, g1["b"], day, params["priors"], params["k_team"])}
+                for side in ("a", "b"):
+                    ctx["lineup_" + side] = [dict(sim.player_feats(st, q["pid"], q["role"], day, params["priors"], params["k0"]),
+                                                  pid=q["pid"], role=q["role"]) for q in g1["players"] if q["team"] == g1[side]]
+                if len(ctx["lineup_a"]) != 5 or len(ctx["lineup_b"]) != 5:
+                    continue
+                for scope, (n, bo) in SCOPES.items():
+                    tot = sim.simulate(params, ctx, n, sims=sims, seed=hash((mk, scope)) % (2 ** 32))
+                    for (pid, stat), x in tot.items():
+                        if stat in STATS:
+                            out[(mk, pid, stat, scope)] = (float(x.mean()), float(x.var()))
+        for g in by_day[day]:
+            st.add_game(day, g)
+    return out, params
+
+
+def nb_from_moments(mean, var):
+    """The simulated total as a negative binomial with the simulation's mean and variance (smooth, monotone in the line;
+    scored like B0 and lol-1 - no Monte Carlo noise in the log score)."""
+    return mean, (mean * mean / (var - mean)) if var > mean + 1e-9 else 1e6
+
+
+def tune(rows, grid, sims=1000, log=print):
+    """Development only (VALID): lol-2 settings by mean log score over kills and assists, Maps 1-2 and Maps 1-3."""
+    P = PERIODS["dev"]
+    d_tr, d_ev, d_end = (P[k].toordinal() for k in ("train_from", "eval_from", "eval_to"))
+    data = backtest.Data(rows)
+    test = [t for t in data.targets if d_ev <= t["day"] < d_end]
+    out = []
+    for setting in grid:
+        samples, _ = lol2_samples(data, test, d_tr, d_ev, d_end, setting, sims, log=lambda m: None)
+        ls = []
+        for t in test:
+            for prop, j in (("kills", 0), ("assists", 2)):
+                for scope in ("12", "123"):
+                    n, bo = SCOPES[scope]
+                    if t.get("best_of") != bo or not all(g in t["games"] for g in range(1, n + 1)):
+                        continue
+                    k = (t["match"], t["player"], prop, scope)
+                    if k in samples:
+                        mean, size = nb_from_moments(*samples[k])
+                        ls.append(model.nb_logpmf(sum(t["games"][g][j] for g in range(1, n + 1)), mean, size))
+        out.append(dict(setting, logscore=float(np.mean(ls)) if ls else None, n=len(ls)))
+        log(f"lol-2 {setting}: mean log score {out[-1]['logscore']:.4f} on {len(ls)}")
+    return sorted(out, key=lambda r: -(r["logscore"] or -1e9))
+
+
 def _depth(data, t):
     arr = data.arr.get(t["player"])
     n = int((arr[:, 0] < t["day"]).sum()) if arr is not None else 0
@@ -200,7 +226,7 @@ def _by(units, per, key, samples, preds, prop, scope):
         g = key((t, y, k, line))
         out[g]["B0"].append(abs(preds["B0"][k][0] - y))
         out[g]["lol-1"].append(abs(preds["lol-1"][k][0] - y))
-        out[g]["lol-2"].append(abs(float(samples[k].mean()) - y))
+        out[g]["lol-2"].append(abs(samples[k][0] - y))
     return {g: {"n": len(v["B0"]), **{m: round(float(np.mean(v[m])), 4) for m in v}} for g, v in out.items() if len(v["B0"]) >= 30}
 
 
@@ -231,19 +257,29 @@ def _comparable_totals(data):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1])
-    ap.add_argument("which", choices=["dev", "final"])
+    ap.add_argument("which", choices=["dev", "final", "tune"])
+    ap.add_argument("--lol2", help='lol-2 settings as JSON, e.g. {"hl": 120, "k0": 8, "k_team": 8}')
     ap.add_argument("--json")
     ap.add_argument("--db", help="a history SQLite file (default: the configured history)")
     ap.add_argument("--sims", type=int, default=2000)
     a = ap.parse_args(argv)
     from pathlib import Path
     db = history.DB(dsn="", path=Path(a.db)) if a.db else history.DB()
-    rows = history.all_player_games(db, since=PERIODS[a.which]["history_from"].isoformat())
+    rows = history.all_player_games(db, since=PERIODS["dev"]["history_from"].isoformat())
+    if a.which == "tune":
+        grid = [{"hl": hl, "k0": k0, "k_team": kt} for hl in (60.0, 120.0, 240.0) for k0 in (4.0, 8.0, 16.0) for kt in (8.0,)]
+        res = tune(rows, grid, sims=a.sims, log=lambda m: print(m, file=sys.stderr, flush=True))
+        txt = json.dumps(res, indent=1)
+        if a.json:
+            open(a.json, "w", encoding="utf-8").write(txt)
+        print(txt)
+        return
     if a.which == "final":
         if TEST_MARK.exists():
             print("TEST was already opened:", TEST_MARK.read_text(), file=sys.stderr)
         TEST_MARK.write_text(json.dumps({"opened_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}) + "\n")
-    rep, params, fit_b = run(rows, a.which, sims=a.sims, log=lambda m: print(m, file=sys.stderr, flush=True))
+    rep, params, fit_b = run(rows, a.which, sims=a.sims, log=lambda m: print(m, file=sys.stderr, flush=True),
+                             lol2=json.loads(a.lol2) if a.lol2 else None)
     units = rep.pop("_units")
     out = json.dumps({"report": rep, "lol2_params": params, "b0_lol1_fit": fit_b}, indent=1, default=str)
     if a.json:

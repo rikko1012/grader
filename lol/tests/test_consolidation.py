@@ -288,3 +288,38 @@ def test_export_survives_blank_and_duplicate_names_in_one_game(con, tmp_path):
     c = export.export(con, db)
     assert c["player_rows"] == 20 and c.get("player_key_from_id", 0) == 1      # blank names fall back to the label; the duplicate gets the id
     assert db.query("SELECT COUNT(DISTINCT player_id) AS n FROM lol_player_games")[0]["n"] == 10
+
+
+def test_lol2_simulation_is_coherent(tmp_path):
+    """Player kills sum to team kills in every simulated game; assists come from the team's other kills; deaths are at
+    least the opposing kills; the scope sums games; probabilities straight from the totals are monotone."""
+    from lol import sim
+    db = history.DB(dsn="", path=tmp_path / "h.db")
+    for g, rows in _synthetic_2026():
+        for r in rows:
+            r["team_id"], r["opponent_id"], r["duration_s"], r["cs"] = r["team"], r["opponent"], 1900.0, 250
+            r["win"] = int(r["team_kills"] > r["opp_kills"])
+        history.save_game(db, g, rows)
+    db.commit()
+    rows = history.all_player_games(db)
+    params = sim.fit([r for r in rows if r["played_at"] < "2026-08-01"], hl=120.0, k0=8.0, k_team=8.0, elo_fn=lambda a, b, d: 0.5)
+    st = sim.state_until(rows, params["hl"], backtest._day("2026-09-01T00:00:00Z"))
+    teams_ = sorted(st.lineup)
+    ctx = sim.context(st, params, teams_[0], teams_[1], 0.6, backtest._day("2026-09-01T00:00:00Z"))
+    assert ctx and len(ctx["lineup_a"]) == 5
+    one = sim.simulate(params, ctx, 1, sims=3000, seed=1)
+    k_a = sum(one[(q["pid"], "kills")] for q in ctx["lineup_a"])
+    d_b = sum(one[(q["pid"], "deaths")] for q in ctx["lineup_b"])
+    assert (d_b >= k_a).all()                                         # deaths >= opposing kills (+ executions)
+    for q in ctx["lineup_a"]:
+        assert (one[(q["pid"], "assists")] <= k_a - one[(q["pid"], "kills")]).all()
+        fp = 3 * one[(q["pid"], "kills")] + 2 * one[(q["pid"], "assists")] - one[(q["pid"], "deaths")] + 0.02 * one[(q["pid"], "cs")]
+        assert np.allclose(fp, one[(q["pid"], "fantasy")])
+    three = sim.simulate(params, ctx, 3, sims=3000, seed=1)
+    pid = ctx["lineup_a"][2]["pid"]
+    assert three[(pid, "kills")].mean() == pytest.approx(3 * one[(pid, "kills")].mean(), rel=0.12)
+    last = 1.0
+    for line in [x / 2 for x in range(1, 60, 2)]:
+        s = sim.summarize(three[(pid, "kills")], line)
+        assert s["p_push"] == pytest.approx(0.0) and s["p_over"] <= last + 1e-12 and s["median"] >= s["p10"]
+        last = s["p_over"]

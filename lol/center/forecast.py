@@ -46,6 +46,15 @@ def _model():
     return model
 
 
+def fit_json():
+    """The saved fit as written (selection per stat, and lol-2's parameters when it was selected)."""
+    m = _model()
+    try:
+        return json.loads(m.FIT_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
 def fit_sha():
     m = _model()
     try:
@@ -121,6 +130,15 @@ class History:
         a, b = self.label.get(tid), self.label.get(opp)
         return self.elo.p_win(a, b, day) if a and b else None
 
+    sim_states = None
+    _all = None
+
+    def all_rows(self):
+        """Every history row (only when lol-2 is the selected model for some stat)."""
+        if self._all is None:
+            self._all = self.db.query("SELECT * FROM lol_player_games WHERE played_at IS NOT NULL")
+        return self._all
+
 
 def side_offered(platform, sides, side):
     """Whether the feed offers `side` ('over' / 'under') on this line: True / False / None (not confirmed)."""
@@ -158,7 +176,13 @@ def forecast_one(con, h, offer, link, now=None):
         return {"skip": "player role unknown"}
     p_win = h.p_win(tid, opp, day)
     league = h.league(pid, day)
-    pj = m.project(pin, tin, oin, role, day, scope, stat, p_win=p_win, league=league)
+    fj = getattr(h, "fit", None) or {}
+    if (fj.get("selection") or {}).get(stat) == "lol-2" and fj.get("sim"):
+        pj = _sim_projection(h, fj["sim"], pid, tid, opp, role, day, scope, stat, p_win, offer)
+        if pj is None:
+            return {"skip": "lol-2: a team's lineup is not known from earlier games"}
+    else:
+        pj = m.project(pin, tin, oin, role, day, scope, stat, p_win=p_win, league=league)
     flags = []
     bo = s["best_of"]
     if FORMAT.get(scope) and bo and bo != FORMAT[scope]:
@@ -207,6 +231,31 @@ def forecast_one(con, h, offer, link, now=None):
     return rec
 
 
+def _sim_projection(h, params, pid, tid, opp, role, day, scope, stat, p_win, offer):
+    """lol-2: simulate the whole match (both lineups as last fielded; the posted player in their role's slot) and sum
+    the scope's games; the total as a negative binomial with the simulation's mean and variance."""
+    from .. import sim
+    if day not in h.sim_states:
+        h.sim_states[day] = sim.state_until(h.all_rows(), params["hl"], day)
+    ctx = sim.context(h.sim_states[day], params, tid, opp, p_win, day, posted={"pid": pid, "team": tid, "role": role})
+    if ctx is None:
+        return None
+    n = {"1": 1, "12": 2, "123": 3}[scope]
+    tot = sim.simulate(params, ctx, n, sims=4000, seed=abs(hash((offer.get("market_key"), day))) % (2 ** 32))
+    x = tot[(pid, stat)]
+    mean, var = float(x.mean()), float(x.var())
+    size = mean * mean / (var - mean) if var > mean + 1e-9 else 1e6
+    lp = [q for q in ctx["lineup_a"] if q["pid"] == pid]
+    return {"version": "lol-2", "form": "lol-2 simulation", "lambda": mean, "lambda_game": mean / n, "nb_size": size,
+            "player_rate": (lp[0]["kill_share"] if lp else None), "team_factor": None, "opp_factor": 1.0,
+            "strength_factor": None, "p_win": p_win, "history_games": int(round((h.sim_states[day].p[pid].at(day, params["hl"])[0])))
+            if pid in h.sim_states[day].p else 0, "history_weight": None,
+            "data_quality": "ok", "role_prior": None,
+            "sim": {"team_pace": [round(ctx["team_a"]["pace"], 3), round(ctx["team_b"]["pace"], 3)],
+                    "duration_logs": [round(ctx["team_a"]["logdur"], 3), round(ctx["team_b"]["logdur"], 3)],
+                    "sd": round(float(x.std()), 3)}}
+
+
 def _nb_median(m, lam, size):
     c, k = 0.0, 0
     while k < 1000:
@@ -225,6 +274,11 @@ def _provisional(m):
 
 def _drivers(pj):
     """The measured components of the projection (only what the fitted model actually uses)."""
+    if pj.get("form") == "lol-2 simulation":
+        s = pj.get("sim") or {}
+        return [f"whole-match simulation: both teams' kill pace {s.get('team_pace')}, game length, win chance "
+                f"{(pj.get('p_win') or 0.5):.0%}, the player's share of team kills {pj.get('player_rate') or 0:.2f}",
+                f"simulated spread of the total: sd {s.get('sd')}"]
     if pj.get("form") == "baseline":
         return [f"player's per-game average shrunk toward the role ({pj.get('history_games')} earlier games)"]
     out = [f"player {'share of team output' if pj.get('form') == 'share' else 'per-game rate'} "
@@ -301,6 +355,7 @@ def run(con, db=None, now=None):
     todo = con.execute(q).fetchall()
     ids = lambda col: {store.canonical_id(con, r[col]) for r in todo}
     h = History(db, ids("pid"), ids("tid") | ids("opp_tid"))
+    h.fit, h.sim_states = fit_json(), {}
     for r in todo:
         offer = json.loads(r["data"])
         offer.update(platform=r["platform"], _event_id=r["event_id"], _observed_at=r["observed_at"])
