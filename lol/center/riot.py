@@ -22,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 from . import store
 
 LIVE_EVERY_S = 1800
+BACKFILL_GAP_S = float(__import__("os").environ.get("LOL_LE_BACKFILL_GAP", "2"))   # 2026-10-17 load test: unpaced backfill bursts cost the web server connections
 BATCH = 15
 BACKFILL_DAYS = int(__import__("os").environ.get("LOL_BACKFILL_DAYS", "245"))   # 8 months first
 
@@ -133,6 +134,7 @@ def run_backfill(con, leagues=None, days=BACKFILL_DAYS):
         c = store_match(con, m, le.event_details(m["match_id"]))
         _mark_done(con, m["match_id"])
         tot["matches"] += 1
+        time.sleep(BACKFILL_GAP_S)                    # the backfill is never urgent: a steady trickle, not bursts
         for k in ("rows", "new", "changed"):
             tot[k] += c[k]
         con.commit()

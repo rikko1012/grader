@@ -1233,7 +1233,8 @@ def lol_center_supervise():
             if log.exists() and log.stat().st_size > 5_000_000:
                 log.replace(log.with_suffix(".log.1"))
             with open(log, "ab") as fh:
-                LOL_SUP["proc"] = subprocess.Popen(cmd, cwd=str(BASE), stdout=subprocess.DEVNULL, stderr=fh)
+                LOL_SUP["proc"] = subprocess.Popen(cmd, cwd=str(BASE), stdout=subprocess.DEVNULL, stderr=fh,
+                                                   creationflags=getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0) if os.name == "nt" else 0)
                 LOL_SUP["starts"] += 1
                 LOL_SUP["started_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
                 LOL_SUP["proc"].wait()
