@@ -241,7 +241,8 @@ def _sim_projection(h, params, pid, tid, opp, role, day, scope, stat, p_win, off
     if ctx is None:
         return None
     n = {"1": 1, "12": 2, "123": 3}[scope]
-    tot = sim.simulate(params, ctx, n, sims=4000, seed=abs(hash((offer.get("market_key"), day))) % (2 ** 32))
+    import zlib
+    tot = sim.simulate(params, ctx, n, sims=4000, seed=zlib.crc32(f"{offer.get('market_key')}|{day}".encode()))
     x = tot[(pid, stat)]
     mean, var = float(x.mean()), float(x.var())
     size = mean * mean / (var - mean) if var > mean + 1e-9 else 1e6

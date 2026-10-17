@@ -81,8 +81,11 @@ def maybe_refit(con, history_db=None, now=None):
     try:
         today = datetime.fromtimestamp(now, timezone.utc).date()
         data = backtest.Data(history.all_player_games(db, since=(today - timedelta(days=245)).isoformat()))
-        periods = {"train_from": today - timedelta(days=245 - 45), "test_from": today - timedelta(days=28),
-                   "test_to": today + timedelta(days=1)}
+        # the forward weeks never overlap the sealed TEST period (2026-08-01..10-16, lol/EVALUATION.md A4)
+        fwd_from = max(today - timedelta(days=28), date(2026, 10, 17))
+        if fwd_from >= today:
+            return None
+        periods = {"train_from": today - timedelta(days=245 - 45), "test_from": fwd_from, "test_to": today + timedelta(days=1)}
         fit, rep = backtest.compare(data, periods, log=lambda m: None)
     finally:
         if history_db is None:

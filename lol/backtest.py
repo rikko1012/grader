@@ -348,6 +348,10 @@ SCOPE_FORMAT = {"1": None, "12": 3, "123": 5}        # A3: Maps 1-2 = best-of-3,
 B0_K = (2.0, 5.0, 10.0, 20.0, 40.0)
 A1_PERIODS = {"history_from": date(2026, 2, 16), "train_from": date(2026, 4, 1), "test_from": date(2026, 8, 1),
               "test_to": date(2026, 10, 17)}
+# amendment A4: TEST (2026-08-01..10-16) is sealed - this module's CLI and every helper default to the development split;
+# TEST is scored only by `python -m lol.evaluate final`, which records that it was opened
+A4_DEV = {"history_from": date(2026, 2, 16), "train_from": date(2026, 4, 1), "test_from": date(2026, 6, 15),
+          "test_to": date(2026, 8, 1)}
 
 
 def series_fmt(targets, prop, scope):
@@ -414,7 +418,7 @@ def _breakdown(sel_of, keys, l1, l0, y, ls1, ls0, min_n):
 def compare(data, periods=None, log=print):
     """B0 vs lol-1 exactly as amendments A1-A3: same targets, same day cutoff, same scopes; parameters and NB sizes on
     TRAIN; TEST reported once. Returns (fit of the selected forms, report)."""
-    P = dict(A1_PERIODS, **(periods or {}))
+    P = dict(A4_DEV, **(periods or {}))
     d_tr, d_te, d_end = (P[k].toordinal() for k in ("train_from", "test_from", "test_to"))
     pri = data.priors(d_tr, d_te)
     pri["role_league"] = role_league_priors(data, d_tr, d_te)
@@ -484,7 +488,7 @@ def compare(data, periods=None, log=print):
 
 
 def main_compare(argv=None):
-    ap = argparse.ArgumentParser(description="A1-A3: B0 vs lol-1 on the consolidated 8-month history")
+    ap = argparse.ArgumentParser(description="B0 vs lol-1 on the DEVELOPMENT split (A4); TEST only via lol.evaluate final")
     ap.add_argument("--write", action="store_true", help="save the selected TRAIN fit to lol/model_fit.json")
     ap.add_argument("--json", help="save the report here")
     a = ap.parse_args(argv)

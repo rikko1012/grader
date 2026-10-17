@@ -49,11 +49,8 @@ def _boot_diff(vals_in, vals_out, groups_in, groups_out, n=2000, seed=5):
 
 
 def _p_over(pred, line, name):
-    mean, second = pred
-    if name == "lol-2":                                      # (mean, variance): moment-matched NB for the line probability
-        size = mean * mean / max(second - mean, 1e-6)
-        return model.probs(mean, size, line)[0]
-    return model.probs(mean, second, line)[0]
+    mean, size = pred                                        # every model is stored as (mean, NB size) - lol-2 moment-matched
+    return model.probs(mean, size, line)[0]
 
 
 def conditions(units, rows):

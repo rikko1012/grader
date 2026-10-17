@@ -1140,6 +1140,73 @@ LOL_CENTER = Path(DATA_DIR) / "lol" / "center"
 LOL_SUP = {"proc": None, "starts": 0, "started_at": None, "last_exit": None, "disabled": None}
 
 
+_LOL_PUB = {"at": 0.0, "on": False}
+
+
+def lol_public():
+    """The owner's release switch for the member LoL page (default off): LOL_PUBLIC=1, or the flag file the admin release
+    action writes on the data disk (checked at most every 15 s)."""
+    if os.environ.get("LOL_PUBLIC", "0") == "1":
+        return True
+    if time.time() - _LOL_PUB["at"] > 15:
+        _LOL_PUB.update(at=time.time(), on=(LOL_CENTER / "public.flag").exists())
+    return _LOL_PUB["on"]
+_LOL_MEMBER = {"mtime": None, "body": None}
+LOL_STAKE_NOTE = "LoL stakes start at 0U until LoL picks have a settled record on real lines; grades and chances are shown now."
+
+
+def lol_member_board():
+    """The member view of the LoL board (bytes, cached until the worker rewrites board.json): only lines with a saved
+    pre-match forecast; no internal ids, admin flags or slip internals. Read-only file access - never imports lol."""
+    path = LOL_CENTER / "board.json"
+    try:
+        mt = path.stat().st_mtime
+    except OSError:
+        return None
+    if _LOL_MEMBER["mtime"] == mt and _LOL_MEMBER["body"] is not None:
+        return _LOL_MEMBER["body"]
+    try:
+        b = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return _LOL_MEMBER["body"]
+    plat = {"underdog": "Underdog", "prizepicks": "PrizePicks"}
+    scope = {"Maps 1-2": "Maps 1-2", "Maps 1-3": "Maps 1-3", "Map 1": "Map 1"}
+    rows = []
+    for x in b.get("rows") or []:
+        f = x.get("forecast")
+        if not f or not f.get("current") or x.get("market_type") != "single":
+            continue
+        inp = f.get("inputs") or {}
+        side = f.get("model_side")
+        offered = [k for k, v in (x.get("sides") or {}).items() if k in ("higher", "lower") and
+                   (v.get("offered") if x.get("platform") == "prizepicks" else (v.get("status") or "active") == "active")]
+        rows.append({"platform": x.get("platform"), "platform_label": plat.get(x.get("platform"), x.get("platform")),
+                     "player": x.get("player"), "team": x.get("team"), "role": x.get("role"), "opponent": x.get("opponent"),
+                     "event": x.get("competition"), "best_of": x.get("best_of"), "start": x.get("series_start"), "stat": x.get("stat"),
+                     "stat_label": f"{(x.get('stat') or '').title()} · {scope.get(x.get('scope'), x.get('scope'))}",
+                     "odds_type": x.get("odds_type"), "line": x.get("line"), "sides_offered": offered,
+                     "projection": f.get("projection"), "median": inp.get("median"), "range80": inp.get("range80"),
+                     "p_over": f.get("p_over"), "p_under": f.get("p_under"), "p_push": f.get("p_push"),
+                     "pick": f"{'Over' if side == 'over' else 'Under'} {x.get('line')}", "pick_offered": f.get("side_offered") == 1 if f.get("side_offered") is not None else None,
+                     "grade": f.get("grade"), "units": 0.0, "stake_reason": "0U - LoL stakes start after a settled real-line record",
+                     "line_seen": x.get("quote_seen_at"), "forecast_at": f.get("at"), "drivers": inp.get("drivers") or [],
+                     "unknowns": inp.get("unknowns") or []})
+    tables = []
+    for t in b.get("match_tables") or []:
+        mk = [m for m in (t.get("markets") or {}).values() if m.get("market_type") == "single"]
+        if not mk:
+            continue
+        teams = sorted({m.get("team") for m in mk if m.get("team")})
+        tables.append({"teams": " vs ".join(teams), "event": t.get("competition"), "best_of": t.get("best_of"), "start": t.get("start"),
+                       "markets": [{"player": m.get("player"), "team": m.get("team"), "role": m.get("role"),
+                                    "prop": f"{(m.get('stat') or '').title()} · {m.get('scope')}",
+                                    "lines": [dict(l, platform=plat.get(l.get("platform"), l.get("platform"))) for l in m.get("lines") or []]}
+                                   for m in mk]})
+    body = json.dumps({"at": b.get("at"), "rows": rows, "match_tables": tables, "stake_note": LOL_STAKE_NOTE}).encode()
+    _LOL_MEMBER.update(mtime=mt, body=body)
+    return body
+
+
 def lol_center_supervise():
     """Keep one LoL data-center worker running (python -m lol.center.worker, low priority); restart it with backoff
     (1 min doubling to 30 min; reset after an hour up). LOL_DATA=0 starts nothing."""
@@ -1178,11 +1245,21 @@ def lol_center_admin(path, q):
             return json.loads((LOL_CENTER / name).read_text())
         except (OSError, ValueError):
             return None
+    if path == "/admin/lol/release":
+        # the owner's release action (admin token): on=1 writes the flag on the data disk, on=0 removes it
+        flag = LOL_CENTER / "public.flag"
+        if q.get("on") == "1":
+            LOL_CENTER.mkdir(parents=True, exist_ok=True)
+            flag.write_text(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+        elif q.get("on") == "0" and flag.exists():
+            flag.unlink()
+        _LOL_PUB["at"] = 0.0
+        return {"public": lol_public(), "flag": flag.exists(), "env": os.environ.get("LOL_PUBLIC", "0") == "1"}
     if path == "/admin/lol.json":
         p = LOL_SUP.get("proc")
         # names only (never values) of credential-like settings, to check a bot login was entered under the expected names
         names = sorted(k for k in os.environ if any(w in k.upper() for w in ("LEAGUEPEDIA", "LIQUIPEDIA", "FANDOM", "LOL_")))
-        return {"released_to_members": False, "credential_env_names_present": names,
+        return {"released_to_members": lol_public(), "credential_env_names_present": names,
                 "worker": {"running": bool(p and p.poll() is None), "starts": LOL_SUP["starts"],
                                                          "started_at": LOL_SUP["started_at"], "last_exit": LOL_SUP["last_exit"],
                                                          "disabled": LOL_SUP["disabled"]}, "status": read("status.json")}
@@ -2617,12 +2694,20 @@ class Handler(BaseHTTPRequestHandler):
                                        "storage": dict(storage_cached(), **STORAGE)})
             if u.path in ("/", "/index.html"):
                 return self.send(200, page(), "text/html; charset=utf-8")
+            if u.path == "/lol" and lol_public():                       # the member LoL page (owner's release switch)
+                return self.send(200, (WEB / "lol.html").read_bytes(), "text/html; charset=utf-8")
+            if u.path == "/api/lol/board" and lol_public():
+                if not self.allowed():
+                    sess = self.member()
+                    return self.send(401, {"error": "members_only", "signed_in": bool(sess), "upgrade": whop_auth.upgrade_url()})
+                body = lol_member_board()
+                return self.send(200, body, "application/json") if body else self.send(503, {"error": "lol board not ready"})
             # ---- Sign in with Whop (paid product only). Off until the WHOP_* variables are set.
             if u.path == "/auth/me":
                 sess = self.member()
                 return self.send(200, {"required": whop_auth.enabled(), "signed_in": bool(sess),
                                        "member": bool(sess and sess["ok"]), "name": (sess or {}).get("name"),
-                                       "upgrade": whop_auth.upgrade_url(), "slip_studio": SLIP_STUDIO})
+                                       "upgrade": whop_auth.upgrade_url(), "slip_studio": SLIP_STUDIO, "lol": lol_public()})
             if u.path == "/auth/login" and whop_auth.enabled():
                 url, pkce = whop_auth.start_login()
                 return self.redirect(url, [f"{whop_auth.PKCE_COOKIE}={pkce}; Max-Age=900; Path=/; HttpOnly; Secure; SameSite=Lax"])

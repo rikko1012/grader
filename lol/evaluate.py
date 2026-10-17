@@ -15,6 +15,7 @@ import argparse
 import json
 import math
 import sys
+import zlib
 from collections import defaultdict
 from datetime import date, datetime, timezone
 
@@ -102,7 +103,7 @@ def run(rows, which="dev", sims=2000, log=print, lol2=None):
             res = {"n": len(units), "series": len({u[0]["match"] for u in units}), "dropped_missing_prediction": dropped}
             per = {}
             for name in ("B0", "lol-1", "lol-2"):
-                mae, se, bias, ls, cov, brier, ll, cal = [], [], [], [], [], [], [], []
+                mae, se, bias, ls, cov, brier, ll, cal, mass = [], [], [], [], [], [], [], [], []
                 for t, y, k, line in units:
                     if name == "lol-2":
                         mean, size = nb_from_moments(*samples[k])
@@ -110,6 +111,7 @@ def run(rows, which="dev", sims=2000, log=print, lol2=None):
                         mean, size = preds[name][k]
                     ls.append(model.nb_logpmf(int(y), mean, size))
                     lo, hi = model.interval(mean, size, 0.8)
+                    mass.append(sum(model.nb_pmf(v, mean, size) for v in range(int(lo), int(hi) + 1)))
                     po = model.probs(mean, size, line)[0] if line is not None else None
                     mae.append(abs(mean - y))
                     se.append((mean - y) ** 2)
@@ -122,7 +124,9 @@ def run(rows, which="dev", sims=2000, log=print, lol2=None):
                         ll.append(-(hit * math.log(pc) + (1 - hit) * math.log(1 - pc)))
                         cal.append((po, hit))
                 per[name] = {"mae": float(np.mean(mae)), "mse": float(np.mean(se)), "bias": float(np.mean(bias)),
-                             "logscore": float(np.mean(ls)), "cover80": float(np.mean(cov)), "n_lines": len(brier),
+                             "logscore": float(np.mean(ls)), "cover80": float(np.mean(cov)),
+                             "cover80_expected": float(np.mean(mass)), "n_lines": len(brier),
+                             "_ae": mae, "_br": [None] * 0 + brier,
                              "brier": float(np.mean(brier)) if brier else None, "logloss": float(np.mean(ll)) if ll else None,
                              "calibration": _cal(cal), "_ls": ls}
             groups = [u[0]["match"] for u in units]
@@ -130,8 +134,14 @@ def run(rows, which="dev", sims=2000, log=print, lol2=None):
                 d = np.array(per[a]["_ls"]) - np.array(per[b]["_ls"])
                 bt = backtest.grouped_boot(d, groups)
                 res[f"logscore_gain_{a}_vs_{b}"] = {"mean": bt[0], "lo95": bt[1], "hi95": bt[2]}
+            for a, b in (("lol-1", "B0"), ("lol-2", "B0"), ("lol-2", "lol-1")):
+                d = np.array(per[b]["_ae"]) - np.array(per[a]["_ae"])
+                bt = backtest.grouped_boot(d, groups)
+                res[f"mae_gain_{a}_vs_{b}"] = {"mean": bt[0], "lo95": bt[1], "hi95": bt[2]}
             for name in per:
                 per[name].pop("_ls")
+                per[name].pop("_ae")
+                per[name].pop("_br")
             res["models"] = per
             res["by_role"] = _by(units, per, lambda u: u[0]["role"], samples, preds, prop, scope)
             res["by_history_depth"] = _by(units, per, lambda u: _depth(data, u[0]), samples, preds, prop, scope)
@@ -151,12 +161,12 @@ def lol2_samples(data, test, d_tr, d_ev, d_end, settings, sims, log=print):
     eg = elo.from_rows([dict(r, team=r["team_id"], opponent=r["opponent_id"]) for r in data.rows if r.get("team_id")],
                        lambda r: day_of[r["match_key"]])
     elo_fn = lambda a, b, day: eg.p_win(a, b, day)
-    params = sim.fit(fit_rows, hl=hl, k0=k0, k_team=k_team, elo_fn=elo_fn, log=log)
+    params = sim.fit(fit_rows, hl=hl, k0=k0, k_team=k_team, elo_fn=elo_fn, log=log, fit_from=d_tr)
     games = sorted(sim.games_from_rows(data.rows), key=lambda g: g["played_at"])
     st = sim.State(params["hl"])
     by_day, series_games = defaultdict(list), defaultdict(list)
     for g in games:
-        by_day[sim._day(g["played_at"])].append(g)
+        by_day[day_of[g["match_key"]]].append(g)               # each game counts on its series' day (the match day)
         series_games[g["match_key"]].append(g)
     wanted = {t["match"] for t in test}
     out = {}
@@ -177,7 +187,7 @@ def lol2_samples(data, test, d_tr, d_ev, d_end, settings, sims, log=print):
                 if len(ctx["lineup_a"]) != 5 or len(ctx["lineup_b"]) != 5:
                     continue
                 for scope, (n, bo) in SCOPES.items():
-                    tot = sim.simulate(params, ctx, n, sims=sims, seed=hash((mk, scope)) % (2 ** 32))
+                    tot = sim.simulate(params, ctx, n, sims=sims, seed=zlib.crc32(f"{mk}|{scope}".encode()))
                     for (pid, stat), x in tot.items():
                         if stat in STATS:
                             out[(mk, pid, stat, scope)] = (float(x.mean()), float(x.var()))
@@ -279,7 +289,7 @@ def main(argv=None):
         return
     if a.which == "final":
         if TEST_MARK.exists():
-            print("TEST was already opened:", TEST_MARK.read_text(), file=sys.stderr)
+            sys.exit(f"TEST was already opened ({TEST_MARK.read_text().strip()}); a second scoring is not allowed (A4)")
         TEST_MARK.write_text(json.dumps({"opened_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}) + "\n")
     rep, params, fit_b = run(rows, a.which, sims=a.sims, log=lambda m: print(m, file=sys.stderr, flush=True),
                              lol2=json.loads(a.lol2) if a.lol2 else None)

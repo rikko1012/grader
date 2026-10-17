@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LoL Prop Grader</title>
+<style>
+:root{--bg:#080a0f;--panel:#10151d;--panel-2:#161c27;--line:#212a38;--line-2:#2b3547;--text:#eef2f8;--muted:#a3adbf;--faint:#7d879a;--accent:#ff7a1a;--accent-2:#ffa53a;--up:#3fb950;--dn:#f0883e}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 Inter,system-ui,sans-serif}
+header{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+.logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:grid;place-items:center}
+h1{font-size:17px;margin:0}h1 em{font-style:normal;color:var(--accent-2)}.grow{flex:1}
+.sport{display:flex;gap:6px}.sport a{color:var(--muted);text-decoration:none;border:1px solid var(--line-2);border-radius:999px;padding:5px 12px;font-size:12px}
+.sport a.on{color:#170b00;background:var(--accent);border-color:var(--accent)}
+.wrap{max-width:1280px;margin:0 auto;padding:16px}.muted{color:var(--muted)}.small{font-size:12px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 14px}.seg{display:flex;border:1px solid var(--line-2);border-radius:10px;overflow:hidden}
+.seg button{background:var(--panel);color:var(--muted);border:0;padding:8px 12px;font:inherit;font-size:12px;cursor:pointer}.seg button.on{background:var(--panel-2);color:var(--text)}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{color:var(--faint);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;background:var(--panel-2)}tbody tr{cursor:pointer}tbody tr:hover{background:#1b2230}
+.num{text-align:right;font-variant-numeric:tabular-nums}.g{display:inline-block;min-width:34px;text-align:center;border-radius:7px;padding:1px 6px;font-weight:700;background:#2a2116;color:var(--accent-2)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin:12px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 18px}
+.k{color:var(--faint);font-size:11.5px}#modal{position:fixed;inset:0;background:#000b;display:none;align-items:flex-start;justify-content:center;padding:32px 12px;overflow:auto}
+#modal .card{max-width:760px;width:100%}button.close{background:var(--panel-2);color:var(--text);border:1px solid var(--line-2);border-radius:9px;padding:8px 14px;cursor:pointer}
+.gate{max-width:440px;margin:60px auto;text-align:center}.gate a{color:var(--accent-2)}
+@media(max-width:640px){header{flex-wrap:wrap}.wrap{padding:12px}}
+</style></head><body>
+<header><div class="logo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#170b00" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg></div>
+<h1>LoL <em>Prop</em> Grader</h1><span class="grow"></span><nav class="sport" aria-label="Game"><a href="/">CS2</a><a href="/lol" class="on">League of Legends</a></nav><span id="who" class="small muted"></span></header>
+<div class="wrap" id="app"><div class="muted">Loading…</div></div>
+<div id="modal" onclick="if(event.target===this)this.style.display='none'"><div class="card" id="card"></div></div>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const pct = (x) => x == null ? "–" : (100 * x).toFixed(1) + "%";
+let D = null, plat = "all", stat = "all", view = "board";
+function when(s) { if (!s) return ""; const d = new Date(s); return isNaN(d) ? esc(s) : d.toLocaleString([], {month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"}); }
+function sides(x) { return (x.sides_offered || []).map(s => s === "higher" ? "Over" : "Under").join(" / ") || "–"; }
+function rows() { return (D.rows || []).filter(x => (plat === "all" || x.platform === plat) && (stat === "all" || x.stat === stat)); }
+function boardView() {
+  const rs = rows();
+  if (!rs.length) return `<div class="card muted">No LoL lines to grade right now.</div>`;
+  let h = `<div class="scroll"><table><thead><tr><th>Start</th><th>Player</th><th>Team</th><th>Role</th><th>Opponent</th><th>Event</th><th>Prop</th><th>Book</th><th class="num">Line</th><th class="num">Projection</th><th class="num">Over</th><th class="num">Under</th><th>Pick</th><th>Grade</th><th>Stake</th></tr></thead><tbody>`;
+  rs.forEach((x, i) => {
+    h += `<tr onclick="card(${D.rows.indexOf(x)})"><td>${when(x.start)}</td><td><b>${esc(x.player)}</b></td><td>${esc(x.team)}</td><td>${esc(x.role || "–")}</td><td>${esc(x.opponent)}</td><td>${esc(x.event || "")}${x.best_of ? " · BO" + x.best_of : ""}</td><td>${esc(x.stat_label)}</td><td>${esc(x.platform_label)}</td><td class="num">${x.line}</td><td class="num">${x.projection.toFixed(1)}</td><td class="num">${pct(x.p_over)}</td><td class="num">${pct(x.p_under)}</td><td>${esc(x.pick)}</td><td><span class="g">${esc(x.grade)}</span></td><td>${x.units}U</td></tr>`;
+  });
+  return h + `</tbody></table></div><div class="small muted" style="margin-top:8px">${esc(D.stake_note)} Chances are model estimates for the exact games listed on each prop.</div>`;
+}
+function tablesView() {
+  let h = "";
+  for (const t of D.match_tables || []) {
+    h += `<div class="card"><b>${esc(t.teams || "")}</b> <span class="muted small">${esc(t.event || "")} · BO${t.best_of || "?"} · ${when(t.start)}</span><div class="scroll" style="margin-top:8px"><table><thead><tr><th>Player</th><th>Team</th><th>Role</th><th>Prop</th><th>Lines</th></tr></thead><tbody>`;
+    for (const m of t.markets) h += `<tr><td>${esc(m.player)}</td><td>${esc(m.team)}</td><td>${esc(m.role || "–")}</td><td>${esc(m.prop)}</td><td class="small">${m.lines.map(l => `${esc(l.platform)} ${esc(l.odds_type)} <b>${l.line}</b>${l.projection != null ? " · proj " + l.projection.toFixed(1) + " · Over " + pct(l.p_over) : ""}`).join("<br>")}</td></tr>`;
+    h += "</tbody></table></div></div>";
+  }
+  return h || `<div class="card muted">No matches with LoL lines right now.</div>`;
+}
+function card(i) {
+  const x = D.rows[i];
+  let h = `<div class="k">${esc(x.platform_label)} · ${esc(x.stat_label)}</div><h2 style="margin:4px 0 10px">${esc(x.player)} <span class="muted" style="font-size:14px">${esc(x.team)} · ${esc(x.role || "")}</span></h2>`;
+  h += `<div class="grid"><div><div class="k">Match</div>vs ${esc(x.opponent)} · ${esc(x.event || "")} BO${x.best_of || "?"}</div><div><div class="k">Start</div>${when(x.start)}</div><div><div class="k">Line</div>${x.line} (${esc(x.odds_type)}) · ${esc(sides(x))}</div><div><div class="k">Projection</div>mean ${x.projection.toFixed(2)} · median ${x.median} · 80% range ${(x.range80 || []).join("–")}</div><div><div class="k">Over / Under / Push</div>${pct(x.p_over)} / ${pct(x.p_under)} / ${pct(x.p_push)}</div><div><div class="k">Pick</div>${esc(x.pick)}${x.pick_offered === false ? " (not offered on this line)" : ""}</div><div><div class="k">Grade · stake</div><span class="g">${esc(x.grade)}</span> · ${x.units}U</div><div><div class="k">Stake</div>${esc(x.stake_reason || "")}</div><div><div class="k">Line seen</div>${when(x.line_seen)}</div><div><div class="k">Forecast made</div>${when(x.forecast_at)}</div></div>`;
+  h += `<h3 style="margin:16px 0 6px;font-size:14px">What drives it</h3><ul class="small">${(x.drivers || []).map(z => `<li>${esc(z)}</li>`).join("")}</ul><div class="small muted">Not known before the match: ${esc((x.unknowns || []).join("; "))}</div>`;
+  $("#card").innerHTML = h + `<div style="margin-top:14px"><button class="close" onclick="$('#modal').style.display='none'">Close</button></div>`;
+  $("#modal").style.display = "flex";
+}
+function render() {
+  let h = `<div class="bar"><div class="seg" id="v"><button data-v="board" class="${view === "board" ? "on" : ""}">Board</button><button data-v="tables" class="${view === "tables" ? "on" : ""}">Compare books</button></div>`;
+  h += `<div class="seg" id="p"><button data-v="all" class="${plat === "all" ? "on" : ""}">All books</button><button data-v="underdog" class="${plat === "underdog" ? "on" : ""}">Underdog</button><button data-v="prizepicks" class="${plat === "prizepicks" ? "on" : ""}">PrizePicks</button></div>`;
+  h += `<div class="seg" id="s"><button data-v="all" class="${stat === "all" ? "on" : ""}">All props</button><button data-v="kills" class="${stat === "kills" ? "on" : ""}">Kills</button><button data-v="assists" class="${stat === "assists" ? "on" : ""}">Assists</button></div><span class="grow"></span><span class="small muted">Updated ${when(D.at)}</span></div>`;
+  $("#app").innerHTML = h + (view === "board" ? boardView() : tablesView());
+  $("#v").onclick = e => { if (e.target.dataset.v) { view = e.target.dataset.v; render(); } };
+  $("#p").onclick = e => { if (e.target.dataset.v) { plat = e.target.dataset.v; render(); } };
+  $("#s").onclick = e => { if (e.target.dataset.v) { stat = e.target.dataset.v; render(); } };
+}
+(async () => {
+  const s = await fetch("/auth/me").then(r => r.json()).catch(() => ({}));
+  if (s.required && !s.member) {
+    $("#app").innerHTML = `<div class="gate card"><h2>Members only</h2><p class="muted">Sign in with Whop to see the LoL board.</p><p><a href="/auth/login">Sign in</a>${s.upgrade ? ` · <a href="${esc(s.upgrade)}">Join on Whop</a>` : ""}</p></div>`;
+    return;
+  }
+  if (s.name) $("#who").innerHTML = `${esc(s.name)} · <a href="/auth/logout" style="color:var(--muted)">Sign out</a>`;
+  const r = await fetch("/api/lol/board");
+  if (!r.ok) { $("#app").innerHTML = `<div class="card muted">The LoL board is not available right now.</div>`; return; }
+  D = await r.json();
+  render();
+  setInterval(async () => { try { const r2 = await fetch("/api/lol/board"); if (r2.ok) { D = await r2.json(); if ($("#modal").style.display !== "flex") render(); } } catch {} }, 120000);
+})();
+</script></body></html>

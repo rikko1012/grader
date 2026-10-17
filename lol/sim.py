@@ -168,10 +168,17 @@ def player_feats(st, pid, role, day, pri, k0):
 
 
 # ------------------------------------------------------------------ the fitted components
-def fit(train_rows, hl=120.0, k0=8.0, k_team=8.0, elo_fn=None, log=lambda m: None):
-    """Fit every component on the training games (features from earlier days only). -> params dict."""
-    games = sorted(games_from_rows(train_rows), key=lambda g: g["played_at"])
-    pri = role_priors(games)
+def fit(train_rows, hl=120.0, k0=8.0, k_team=8.0, elo_fn=None, log=lambda m: None, fit_from=None):
+    """Fit every component on the training games (features from earlier days only). Games before `fit_from` (a day
+    ordinal) only build the pre-match state; the regressions and priors use games from `fit_from` on - the same fit
+    period as B0 / lol-1. Each game counts on its series' day (the match day), like the backtest. -> params dict."""
+    allg = games_from_rows(train_rows)
+    sday = {}
+    for g in allg:
+        d = _day(g["played_at"])
+        sday[g["match_key"]] = min(sday.get(g["match_key"], d), d)
+    games = sorted(allg, key=lambda g: (sday[g["match_key"]], g["played_at"]))
+    pri = role_priors([g for g in games if fit_from is None or sday[g["match_key"]] >= fit_from])
     st = State(hl)
     X_d, y_d, X_k, y_k, lnd_k, share_rows = [], [], [], [], [], []
     dm_rows = {"kills": [], "deaths": []}
@@ -179,9 +186,10 @@ def fit(train_rows, hl=120.0, k0=8.0, k_team=8.0, elo_fn=None, log=lambda m: Non
     cs_res = []
     by_day = defaultdict(list)
     for g in games:
-        by_day[_day(g["played_at"])].append(g)
+        by_day[sday[g["match_key"]]].append(g)
     for day in sorted(by_day):
-        for g in by_day[day]:
+        fitting = fit_from is None or day >= fit_from
+        for g in by_day[day] if fitting else ():
             fa, fb = team_feats(st, g["a"], day, pri, k_team), team_feats(st, g["b"], day, pri, k_team)
             p = elo_fn(g["a"], g["b"], day) if elo_fn else 0.5
             close = abs(p - 0.5)
@@ -236,7 +244,7 @@ def fit(train_rows, hl=120.0, k0=8.0, k_team=8.0, elo_fn=None, log=lambda m: Non
     nn = np.array([r[2] for r in part_rows], dtype=float)
     extra_a = np.mean((obs - q) ** 2 - q * (1 - q) / nn)
     phi_a = float(max(np.mean(q * (1 - q)) / max(extra_a, 1e-4) - 1, 2.0))
-    params = {"version": VERSION, "hl": hl, "k0": k0, "k_team": k_team, "priors": pri,
+    params = {"version": VERSION, "hl": hl, "k0": k0, "k_team": k_team, "priors": pri, "fit_from": fit_from,
               "duration": {"coef": bd.tolist(), "sd": sd_d}, "kills": {"coef": bk.tolist(), "size": size_k},
               "winner_share": {"coef": bw.tolist(), "phi": phi_w}, "alloc_alpha": alpha, "participation_phi": phi_a,
               "executions": max(pri["_executions"], 0.0), "cs_sd": float(np.std(cs_res)) if cs_res else 0.25,
@@ -353,12 +361,16 @@ def summarize(x, line=None):
 
 
 def state_until(rows, hl, day):
-    """The pre-match state from every history game on days before `day` (production: one per forecast cycle)."""
-    st = State(hl)
-    for g in sorted(games_from_rows(rows), key=lambda g: g["played_at"]):
+    """The pre-match state from every history game whose series day is before `day` (production: one per cycle)."""
+    allg = games_from_rows(rows)
+    sday = {}
+    for g in allg:
         d = _day(g["played_at"])
-        if d < day:
-            st.add_game(d, g)
+        sday[g["match_key"]] = min(sday.get(g["match_key"], d), d)
+    st = State(hl)
+    for g in sorted(allg, key=lambda g: (sday[g["match_key"]], g["played_at"])):
+        if sday[g["match_key"]] < day:
+            st.add_game(sday[g["match_key"]], g)
     return st
 
 
