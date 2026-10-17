@@ -75,6 +75,13 @@ def compute(con):
                 "SELECT source, COUNT(*), SUM(status = 'complete') FROM c_series GROUP BY source")},
             "games_winner_unresolved": con.execute("SELECT COUNT(*) FROM c_games WHERE remake = 0 AND winner_tid IS NULL").fetchone()[0],
             "series_flags": _flag_counts(con, "c_series"), "game_flags": _flag_counts(con, "c_games"),
+            "team_kills_status_by_source": {f"{r[0]}|{r[1]}": r[2] for r in con.execute(
+                "SELECT source, CASE WHEN team_kills_status LIKE '%execution%' THEN 'raw counts executions' ELSE team_kills_status END, "
+                "COUNT(*) FROM c_games WHERE remake = 0 GROUP BY 1, 2")},
+            "winner_status_by_source": {f"{r[0]}|{r[1]}": r[2] for r in con.execute(
+                "SELECT source, winner_status, COUNT(*) FROM c_games WHERE remake = 0 GROUP BY 1, 2")},
+            "identity_exclusions_by_league_month": (store.get_meta(con, "last_build") or {}).get("identity_exclusions_by_league_month"),
+            "crosscheck": (store.get_meta(con, "last_build") or {}).get("crosscheck"),
             "other_sources": {"thunderpick": "LoL coverage not verified - not used", "polymarket": "not verified - not used",
                               "kalshi": "not verified - not used"}}
 

@@ -189,20 +189,25 @@ def le_patch(version):
 
 
 def le_winners(games, score, side_team):
-    """Game id -> winning Riot team id. Certain first (as the lol scout's sync): a sweep's games and a series' last game
-    go to the series winner; the other games keep the inferred winner only when the inferred wins add up to the score."""
+    """Game id -> (verified winner or None, status, inferred winner). LoL Esports records no per-game winner, so a game's
+    winner is VERIFIED only when it follows with certainty from the official series score - and only when every played
+    game is present (games present = sum of the score): every game of a sweep ("derived_sweep"), and the last game of
+    any series ("derived_last_game"). Otherwise the winner inferred from the final frame (inhibitors / towers / gold) is
+    kept as "inferred_unverified" - never certified, not even when the inferred wins add up to the score (two wrong
+    labels can still add up; 2026-10-17 owner)."""
     if not games:
         return {}
+    inferred = {g["game_id"]: side_team[g["game_id"]].get(g.get("winner_side")) for g in games}
+    out = {g["game_id"]: (None, "inferred_unverified" if inferred[g["game_id"]] else "unknown", inferred[g["game_id"]]) for g in games}
+    total = sum((v or 0) for v in score.values())
     ranked = sorted(score, key=lambda t: score[t] or 0, reverse=True)
     sw = ranked[0] if len(ranked) == 2 and (score[ranked[0]] or 0) > (score[ranked[1]] or 0) else None
-    if sw and not (score[ranked[1]] or 0):
-        return {g["game_id"]: sw for g in games}
-    inferred = {g["game_id"]: side_team[g["game_id"]].get(g.get("winner_side")) for g in games}
-    wins = Counter(inferred.values())
-    ok = None not in inferred.values() and all(wins.get(t, 0) == (n or 0) for t, n in score.items())
-    out = {g["game_id"]: (inferred[g["game_id"]] if ok else None) for g in games}
-    if sw:
-        out[games[-1]["game_id"]] = sw
+    if not sw or total != len(games):
+        return out
+    if not (score[ranked[1]] or 0):
+        return {g["game_id"]: (sw, "derived_sweep", inferred[g["game_id"]]) for g in games}
+    last = games[-1]["game_id"]
+    out[last] = (sw, "derived_last_game", inferred[last])
     return out
 
 
@@ -230,6 +235,8 @@ def crosscheck(con, overlaps, at):
     deaths / assists (players paired by game number, team and role). Every comparison is a row in `crosscheck`
     (rewritten each build); disagreements are kept, never "fixed" - the history uses Leaguepedia's copy."""
     con.execute("DELETE FROM crosscheck")
+    con.execute("DELETE FROM reconciliation")
+    recon = []
     if not overlaps:
         return {}
     lg, lpg = defaultdict(list), defaultdict(list)
@@ -252,15 +259,42 @@ def crosscheck(con, overlaps, at):
             le_blue = tmap.get(b.get("blue_team_id"))
             if le_blue and a["team1"]:
                 rows.append((s["sid"], mid, "blue_side_team", n, None, a["team1"], le_blue, int(a["team1"] == le_blue)))
-            lk = {a["team1"]: a["team1_kills"], a["team2"]: a["team2_kills"]}
-            ek = {tmap.get(b.get("blue_team_id")): b.get("blue_kills"), tmap.get(b.get("red_team_id")): b.get("red_kills")}
-            for t in (a["team1"], a["team2"]):
-                if t in ek:
-                    rows.append((s["sid"], mid, "team_kills", n, t, str(lk.get(t)), str(ek.get(t)), int(lk.get(t) == ek.get(t))))
+            side_of = {tmap.get(b.get("blue_team_id")): "blue", tmap.get(b.get("red_team_id")): "red"}
+            le_k = defaultdict(int)
+            le_d = defaultdict(int)
+            for p in lpg.get(mid, []):
+                if p.get("number") == n:
+                    le_k[p.get("side")] += p.get("kills") or 0
+                    le_d[p.get("side")] += p.get("deaths") or 0
+            for t, raw_lp, canon_lp in ((a["team1"], a.get("team1_kills_raw"), a["team1_kills"]), (a["team2"], a.get("team2_kills_raw"), a["team2_kills"])):
+                sd = side_of.get(t)
+                if not sd:
+                    continue
+                raw_le = b.get(f"{sd}_kills")
+                rows.append((s["sid"], mid, "team_kills_raw", n, t, str(raw_lp), str(raw_le), int(raw_lp == raw_le)))
+                rows.append((s["sid"], mid, "team_kills_player_sum", n, t, str(canon_lp), str(le_k[sd]), int(canon_lp == le_k[sd])))
+                if raw_lp != raw_le or canon_lp != le_k[sd]:
+                    other = "red" if sd == "blue" else "blue"
+                    ev = {"lp_raw_total": raw_lp, "lp_player_sum": canon_lp, "le_raw_total": raw_le, "le_player_sum": le_k[sd],
+                          "le_opponent_deaths": le_d[other]}
+                    if canon_lp == le_k[sd] and raw_le == le_d[other] and raw_le != le_k[sd]:
+                        res, status = ("player kills agree in both sources; LoL Esports' team total equals the opposing deaths, i.e. "
+                                       f"it also counts {raw_le - le_k[sd]} death(s) no champion was credited with (execution). Canonical "
+                                       "team kills = player-kill sum (both sources)"), "resolved"
+                    elif canon_lp != le_k[sd]:
+                        res, status = ("player-level kills differ between the sources (see player_kills rows); Leaguepedia's "
+                                       "official scoreboard is kept for this series; no third source to settle it"), "unresolved"
+                    else:
+                        res, status = "team totals differ, player sums agree; canonical = player-kill sum", "resolved"
+                    recon.append((s["sid"], mid, n, t, "team_kills", str(raw_lp), str(raw_le), json.dumps(ev), res, status))
             lw = a["winner_tid"]
             ew = tmap.get(b.get("blue_team_id") if b.get("winner_side") == "blue" else b.get("red_team_id") if b.get("winner_side") == "red" else None)
             if lw and ew:
-                rows.append((s["sid"], mid, "winner", n, None, lw, ew, int(lw == ew)))
+                rows.append((s["sid"], mid, "winner_official_vs_le_inferred", n, None, lw, ew, int(lw == ew)))
+                if lw != ew:
+                    recon.append((s["sid"], mid, n, None, "winner", lw, ew, json.dumps({"le_basis": b.get("winner_basis")}),
+                                  "Leaguepedia's official result kept; LoL Esports' frame-inferred winner was the other team",
+                                  "resolved"))
             slot = {}
             for r in con.execute("SELECT game_n, tid, role, pid, kills, deaths, assists FROM c_player_games WHERE sid = ? AND game_n = ?",
                                  (s["sid"], n)):
@@ -274,12 +308,22 @@ def crosscheck(con, overlaps, at):
                     continue
                 for stat, i in (("kills", 4), ("deaths", 5), ("assists", 6)):
                     rows.append((s["sid"], mid, f"player_{stat}", n, q[3], str(q[i]), str(p.get(stat)), int(q[i] == p.get(stat))))
+                    if q[i] != p.get(stat):
+                        recon.append((s["sid"], mid, n, q[3], f"player_{stat}", str(q[i]), str(p.get(stat)), None,
+                                      "player stat differs between the sources; Leaguepedia's official scoreboard kept for this "
+                                      "series (LP-sourced); no third source", "unresolved"))
     con.executemany("INSERT INTO crosscheck (sid, le_match_id, item, game_n, pid, lp_value, le_value, agree, checked_at) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", [r + (at,) for r in rows])
+    con.executemany("INSERT INTO reconciliation (sid, le_match_id, game_n, tid, item, lp_value, le_value, evidence, resolution, status, "
+                    "checked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [r + (at,) for r in recon])
     summary = {}
     for item, n, ok in con.execute("SELECT item, COUNT(*), SUM(agree) FROM crosscheck GROUP BY item"):
         summary[item] = {"compared": n, "agree": ok or 0, "share": round((ok or 0) / n, 4) if n else None}
     summary["series"] = len(overlaps)
+    summary["reconciliation"] = {f"{i}:{st}": n for i, st, n in con.execute(
+        "SELECT item, status, COUNT(*) FROM reconciliation GROUP BY item, status")}
+    summary["note"] = ("agreement on the series BOTH sources hold (Leaguepedia + LoL Esports' major leagues) - it measures source "
+                       "agreement there; it does not establish completeness or accuracy of the rest of the history")
     return summary
 
 
@@ -400,7 +444,7 @@ def _lolesports(con, at, series, games, pgs, checks, overlaps=None):
             flags.append("games_missing_from_feed")
             checks["le_series_games_missing"] += 1
         side_team = {g["game_id"]: {"blue": g.get("blue_team_id"), "red": g.get("red_team_id")} for g in gl}
-        winners = le_winners(gl, score, side_team) if done and completed_slots == len(gl) else {}
+        winners = le_winners(gl, score, side_team) if done else {}
         series[f"LE:{mid}"] = dict(sid=sid, tournament_page=f"LE:{m.get('league_slug')}", tournament=m.get("league"),
                                    best_of=m.get("best_of"), team1=t1, team2=t2, team1_name=teams[0].get("name"),
                                    team2_name=teams[1].get("name"), score1=teams[0].get("game_wins"), score2=teams[1].get("game_wins"),
@@ -414,10 +458,33 @@ def _lolesports(con, at, series, games, pgs, checks, overlaps=None):
             n = number_of.get(g["game_id"], g.get("number"))
             gid = store.entity(con, "game", SRC_LE_GAME, g["game_id"], label=g["game_id"], at=at)
             blue, red = tmap.get(g.get("blue_team_id")), tmap.get(g.get("red_team_id"))
-            wt = tmap.get(winners.get(g["game_id"]))
-            gflags = [] if wt else ["winner_unknown"]
+            wv, wstatus, winf = winners.get(g["game_id"], (None, "unknown", None))
+            wt = tmap.get(wv)
+            gflags = [] if wt else ["winner_not_verified"]
+            # canonical team kills = the sum of this source's own player kills (all of its rows, resolved or not); the raw
+            # team total is kept; when it equals the opposing deaths it counts deaths no champion was credited with
+            # (executions) - checked on the raw final frames 2026-10-17
+            src = lpg.get(g["game_id"], [])
+            ksum, dsum = Counter(), Counter()
+            for p in src:
+                ksum[p.get("side")] += p.get("kills") or 0
+                dsum[p.get("side")] += p.get("deaths") or 0
+            raw = {"blue": g.get("blue_kills"), "red": g.get("red_kills")}
+            complete = len(src) == 10
+            canon = {s: (ksum[s] if complete else raw[s]) for s in ("blue", "red")}
+            st = []
+            for s, o in (("blue", "red"), ("red", "blue")):
+                if not complete:
+                    st.append("raw_total_source_rows_incomplete")
+                elif raw[s] == ksum[s]:
+                    st.append("consistent")
+                elif raw[s] is not None and raw[s] == dsum[o] and raw[s] > ksum[s]:
+                    st.append(f"raw_counts_opponent_deaths_incl_{raw[s] - ksum[s]}_execution")
+                else:
+                    st.append("raw_total_unexplained")
+            kstatus = "consistent" if st == ["consistent", "consistent"] else ";".join(st)
             kills, seen = Counter(), set()
-            for p in lpg.get(g["game_id"], []):
+            for p in src:
                 who = pid(p)
                 if who is None or who in seen:
                     checks["le_player_row_unusable"] += 1
@@ -430,19 +497,22 @@ def _lolesports(con, at, series, games, pgs, checks, overlaps=None):
                                 start_utc=_z(g.get("start")), tournament_page=f"LE:{m.get('league_slug')}", patch=le_patch(g.get("patch")),
                                 side={"blue": "Blue", "red": "Red"}.get(p.get("side")), role=role(p.get("role")),
                                 champion=p.get("champion"), kills=p.get("kills"), deaths=p.get("deaths"), assists=p.get("assists"),
-                                team_kills=g.get("blue_kills") if p.get("side") == "blue" else g.get("red_kills"),
+                                team_kills=canon.get(p.get("side")),
                                 gold=p.get("gold"), cs=p.get("cs"), damage=None, vision=None,
                                 win=(1 if wt == pt else 0) if wt else None, name_shown=p.get("name")))
             if len(seen) != 10:
                 gflags.append("players_incomplete")
                 checks["le_games_players_incomplete"] += 1
-            elif kills["blue"] != (g.get("blue_kills") or 0) or kills["red"] != (g.get("red_kills") or 0):
-                gflags.append("kills_mismatch")
-                checks["le_games_kills_mismatch"] += 1
+            if kstatus != "consistent":
+                gflags.append("team_total_differs_from_player_sum")
+                checks["le_games_team_total_" + ("executions" if "execution" in kstatus else "other")] += 1
+            checks[f"le_winner_{wstatus}"] += 1
             games.append(dict(gid=gid, sid=sid, game_n=n, lp_game_id=None, riot_game_id=None, start_utc=_z(g.get("start")),
                               patch=le_patch(g.get("patch")), length_s=round(g["duration_s"], 1) if g.get("duration_s") else None,
-                              team1=blue, team2=red, team1_side="Blue", winner_tid=wt, team1_kills=g.get("blue_kills"),
-                              team2_kills=g.get("red_kills"), remake=0, ff=None, chronobreak=0, n_players=len(seen),
+                              team1=blue, team2=red, team1_side="Blue", winner_tid=wt, team1_kills=canon["blue"],
+                              team2_kills=canon["red"], team1_kills_raw=raw["blue"], team2_kills_raw=raw["red"],
+                              team_kills_status=kstatus, winner_status=wstatus if wt else ("inferred_unverified" if winf else "unknown"),
+                              winner_inferred_tid=tmap.get(winf), remake=0, ff=None, chronobreak=0, n_players=len(seen),
                               tournament_page=f"LE:{m.get('league_slug')}", flags=gflags, source="lolesports", source_game_id=g["game_id"]))
             out["games"] += 1
             if len(pgs) >= 5000:
@@ -523,6 +593,7 @@ def build(con, at=None, _again=True):
 
     # ---- games (player rows are written in chunks as they are produced)
     con.execute("DELETE FROM c_player_games")
+    ident_excl = {}
     games, pgs, n_pg = [], [], 0
     by_series = defaultdict(list)
     sched_game = {}
@@ -557,10 +628,19 @@ def build(con, at=None, _again=True):
         t1, t2 = tid(r.get("Team1")), tid(r.get("Team2"))
         kills = {1: 0, 2: 0}
         seen = set()
+        # canonical team kills = the sum of all of this game's player rows by side (resolved or not); raw totals kept
+        src_k = {1: 0, 2: 0}
+        for p in players:
+            if _int(p.get("Side")) in src_k:
+                src_k[_int(p.get("Side"))] += _int(p.get("Kills")) or 0
+        lg_name = (tours.get(page_key(r.get("OverviewPage"))) or {}).get("League") or page_key(r.get("OverviewPage"))
         for p in players:
             who, why = pid(p.get("Link"))
             if who is None:
                 checks[f"player_unresolved_{why}"] += 1
+                ident = ident_excl.setdefault(lg_name, {})
+                k = f"{str(r.get('DateTime_UTC'))[:7]} {why}"
+                ident[k] = ident.get(k, 0) + 1
                 continue
             if who in seen:
                 store.quarantine(con, "player_game", f"{gid_lp}|{who}", "duplicate_player_in_game", None, at)
@@ -576,31 +656,42 @@ def build(con, at=None, _again=True):
                             start_utc=_iso(r.get("DateTime_UTC")), tournament_page=page_key(r.get("OverviewPage")),
                             patch=r.get("Patch"), side={1: "Blue", 2: "Red"}.get(side), role=role(p.get("Role")),
                             champion=p.get("Champion"), kills=_int(p.get("Kills")), deaths=_int(p.get("Deaths")),
-                            assists=_int(p.get("Assists")), team_kills=_int(p.get("TeamKills")), gold=_int(p.get("Gold")),
+                            assists=_int(p.get("Assists")), team_kills=None, gold=_int(p.get("Gold")),
                             cs=_int(p.get("CS")), damage=_int(p.get("DamageToChampions")), vision=_int(p.get("VisionScore")),
                             win=1 if _truthy(p.get("PlayerWin")) else 0, name_shown=p.get("Name")))
             if p.get("Name"):
                 store.add_alias(con, "player", p["Name"], who, "leaguepedia:scoreboard_name", at)
-        if len(pgs) >= 5000:
-            n_pg += _flush(con, pgs)
         if len(seen) != 10:
             flags.append("players_incomplete")
             checks["games_players_incomplete"] += 1
         tk1, tk2 = _int(r.get("Team1Kills")), _int(r.get("Team2Kills"))
-        if len(seen) == 10 and tk1 is not None and tk2 is not None and (kills[1] != tk1 or kills[2] != tk2):
-            flags.append("kills_mismatch")
-            checks["games_kills_mismatch"] += 1
+        complete = len(players) == 10
+        c1, c2 = (src_k[1], src_k[2]) if complete else (tk1, tk2)
+        if not complete:
+            kstatus = "raw_total_source_rows_incomplete"
+        elif (tk1, tk2) == (c1, c2):
+            kstatus = "consistent"
+        else:
+            kstatus = "raw_total_differs_from_player_sum"
+            flags.append("team_total_differs_from_player_sum")
+            checks["lp_games_team_total_differs"] += 1
+        for q in pgs[len(pgs) - len(seen):]:                           # this game's rows: the canonical team kills
+            q["team_kills"] = c1 if q["side"] == "Blue" else c2
         w = _int(r.get("Winner"))
         g = dict(gid=gid, sid=series[r["MatchId"]]["sid"] if r.get("MatchId") in series else None, game_n=n, lp_game_id=gid_lp,
                  riot_game_id=riot or None, start_utc=_iso(r.get("DateTime_UTC")), patch=r.get("Patch"),
                  length_s=round(_float(r.get("Gamelength_Number")) * 60, 1) if _float(r.get("Gamelength_Number")) else None,
-                 team1=t1, team2=t2, team1_side="Blue", winner_tid={1: t1, 2: t2}.get(w), team1_kills=tk1, team2_kills=tk2,
+                 team1=t1, team2=t2, team1_side="Blue", winner_tid={1: t1, 2: t2}.get(w), team1_kills=c1, team2_kills=c2,
+                 team1_kills_raw=tk1, team2_kills_raw=tk2, team_kills_status=kstatus,
+                 winner_status="official" if {1: t1, 2: t2}.get(w) else "unknown", winner_inferred_tid=None,
                  remake=int(_truthy((sch or {}).get("IsRemake"))), ff=_int((sch or {}).get("FF")),
                  chronobreak=int(_truthy((sch or {}).get("IsChronobreak"))), n_players=len(seen),
                  tournament_page=page_key(r.get("OverviewPage")), flags=flags, source="leaguepedia", source_game_id=gid_lp)
         games.append(g)
         if r.get("MatchId"):
             by_series[r["MatchId"]].append(g)
+        if len(pgs) >= 5000:
+            n_pg += _flush(con, pgs)
     # schedule games without a scoreboard (remakes, forfeits, missing data) still count for game order
     for mid, rows in msg.items():
         have = {g["lp_game_id"] for g in by_series.get(mid, [])}
@@ -647,17 +738,19 @@ def build(con, at=None, _again=True):
     for g in games:
         con.execute("INSERT OR REPLACE INTO c_games (gid, sid, game_n, lp_game_id, riot_game_id, start_utc, patch, length_s, team1, team2, "
                     "team1_side, winner_tid, team1_kills, team2_kills, remake, ff, chronobreak, n_players, tournament_page, flags, source, "
-                    "source_game_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "source_game_id, team1_kills_raw, team2_kills_raw, team_kills_status, winner_status, winner_inferred_tid) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (g["gid"], g["sid"], g["game_n"], g.get("lp_game_id"), g.get("riot_game_id"), g["start_utc"], g["patch"], g["length_s"],
                      g["team1"], g["team2"], g["team1_side"], g["winner_tid"], g["team1_kills"], g["team2_kills"], g["remake"],
                      g["ff"], g["chronobreak"], g["n_players"], g["tournament_page"], json.dumps(g["flags"]), g.get("source"),
-                     g.get("source_game_id")))
+                     g.get("source_game_id"), g.get("team1_kills_raw"), g.get("team2_kills_raw"), g.get("team_kills_status"),
+                     g.get("winner_status"), g.get("winner_inferred_tid")))
     store.set_meta(con, "built_at", at)
     store.set_meta(con, "dirty", None)
     con.commit()
     out = {"built_at": at, "seconds": round(time.time() - t0, 1), "series": len(series), "games": len(games),
            "player_games": n_pg, "teams": len(teams), "players_with_page_rows": len(players), "lolesports": le_counts,
-           "checks": dict(checks)}
+           "checks": dict(checks), "identity_exclusions_by_league_month": ident_excl}
     linked = link_overlaps(con, overlaps, at)
     out["cross_source_links"] = linked
     out["crosscheck"] = crosscheck(con, overlaps, at) if not (linked and _again) else {"pending": "after the re-build"}

@@ -18,7 +18,8 @@ from collections import Counter
 from . import store
 
 ROLE = {"Top": "top", "Jungle": "jungle", "Mid": "mid", "Bot": "bot", "Support": "support"}
-EXCLUDE_FLAGS = ("kills_mismatch", "players_incomplete")
+EXCLUDE_FLAGS = ()        # 2026-10-17: no whole-game exclusion for a team-total field or a missing player row
+VERIFIED_WINNER = {"official", "derived_sweep", "derived_last_game"}
 
 
 def _labels(con):
@@ -65,12 +66,19 @@ def rows(con):
             continue
         lg, tour = league_of(s)
         src = "lp" if (g.get("source") or s.get("source")) == "leaguepedia" else "le"
-        win = label(g["winner_tid"])
+        verified = g.get("winner_status") in VERIFIED_WINNER and g["winner_tid"]
+        win = label(g["winner_tid"]) if verified else None
+        counts["winner_" + str(g.get("winner_status") or "unknown")] = counts.get("winner_" + str(g.get("winner_status") or "unknown"), 0) + 1
+        ks = g.get("team_kills_status") or "unknown"
+        counts["team_kills_" + ("consistent" if ks == "consistent" else "executions" if "execution" in ks else ks.split(";")[0])] = \
+            counts.get("team_kills_" + ("consistent" if ks == "consistent" else "executions" if "execution" in ks else ks.split(";")[0]), 0) + 1
+        if "players_incomplete" in flags:
+            counts["games_with_unresolved_player_rows"] = counts.get("games_with_unresolved_player_rows", 0) + 1
         games.append({"game_key": g["gid"], "source": src, "match_key": g["sid"], "game_number": g["game_n"],
                       "best_of": s.get("best_of"), "played_at": g["start_utc"], "league": lg, "tournament": tour,
                       "blue_team": label(g["team1"]), "red_team": label(g["team2"]), "blue_team_id": g["team1"],
                       "red_team_id": g["team2"], "blue_kills": g["team1_kills"], "red_kills": g["team2_kills"],
-                      "winner": win, "winner_basis": ("Leaguepedia" if src == "lp" else "LoL Esports") if win else "unresolved",
+                      "winner": win, "winner_basis": g.get("winner_status") or "unknown",
                       "duration_s": g["length_s"], "patch": g["patch"]})
         if not win:
             counts["games_winner_unresolved"] += 1
@@ -91,7 +99,7 @@ def rows(con):
                             "opponent_id": store.canonical_id(con, p["opp_tid"]), "side": (p["side"] or "").lower() or None,
                             "role": ROLE.get(p["role"]), "champion": p["champion"], "kills": p["kills"], "deaths": p["deaths"],
                             "assists": p["assists"], "cs": p["cs"], "gold": p["gold"], "team_kills": p["team_kills"],
-                            "opp_kills": kills.get(p["opp_tid"]), "win": p["win"], "duration_s": g["length_s"],
+                            "opp_kills": kills.get(p["opp_tid"]), "win": p["win"] if verified else None, "duration_s": g["length_s"],
                             "match_key": g["sid"], "game_number": g["game_n"], "best_of": s.get("best_of"),
                             "played_at": g["start_utc"], "league": lg, "source": src, "damage": p["damage"],
                             "vision": p["vision"]})

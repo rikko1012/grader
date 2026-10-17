@@ -107,13 +107,17 @@ CREATE INDEX IF NOT EXISTS lf_key ON lol_forecasts (platform, market_key, id);
 CREATE TABLE IF NOT EXISTS crosscheck (sid TEXT NOT NULL, le_match_id TEXT NOT NULL, item TEXT NOT NULL, game_n INTEGER,
     pid TEXT, lp_value TEXT, le_value TEXT, agree INTEGER NOT NULL, checked_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS cc_item ON crosscheck (item, agree);
+CREATE TABLE IF NOT EXISTS reconciliation (sid TEXT, le_match_id TEXT, game_n INTEGER, tid TEXT, item TEXT NOT NULL,
+    lp_value TEXT, le_value TEXT, evidence TEXT, resolution TEXT NOT NULL, status TEXT NOT NULL, checked_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS market_state (platform TEXT NOT NULL, market_key TEXT NOT NULL, state_sha TEXT, open INTEGER,
     last_event_id INTEGER, first_seen TEXT, last_seen TEXT, PRIMARY KEY (platform, market_key));
 """
 
 
 # columns added after the first production database was created (2026-10-17): added in place, never a rebuild
-ADDED_COLUMNS = {"c_series": {"source": "TEXT", "source_match_id": "TEXT"}, "c_games": {"source": "TEXT", "source_game_id": "TEXT"},
+ADDED_COLUMNS = {"c_series": {"source": "TEXT", "source_match_id": "TEXT"},
+                 "c_games": {"source": "TEXT", "source_game_id": "TEXT", "team1_kills_raw": "INTEGER", "team2_kills_raw": "INTEGER",
+                             "team_kills_status": "TEXT", "winner_status": "TEXT", "winner_inferred_tid": "TEXT"},
                  "lol_forecasts": {"grade": "TEXT", "grade_label": "TEXT", "units_policy": "REAL", "units": "REAL",
                                    "stake_restriction": "TEXT"}}
 

@@ -157,7 +157,11 @@ def test_kills_mismatch_and_order_conflict_flagged(con):
     sg, sp = game_rows("M1", 2, "Beta Gaming", "Alpha Esports", "2026-10-10 09:50:00", kills1=(0, 1, 2, 1, 0), kills2=(3, 1, 4, 2, 1), winner=2)
     put(con, "ScoreboardGames", [dict(sg, Team1Kills="9", N_GameInMatch="3")], at="2026-10-11T00:00:00Z")
     out = build.build(con)
-    assert out["checks"]["games_kills_mismatch"] == 1 and out["checks"]["order_conflict"] == 1
+    assert out["checks"]["lp_games_team_total_differs"] == 1 and out["checks"]["order_conflict"] == 1
+    # the raw team total (9) is kept; the canonical team kills are the player-kill sum (no whole-game exclusion)
+    g = con.execute("SELECT team1_kills, team1_kills_raw, team_kills_status FROM c_games WHERE lp_game_id = 'M1_2'").fetchone()
+    assert tuple(g) == (4, 9, "raw_total_differs_from_player_sum")
+    assert con.execute("SELECT COUNT(*) FROM c_player_games WHERE gid = (SELECT gid FROM c_games WHERE lp_game_id = 'M1_2')").fetchone()[0] == 10
 
 
 def test_rename_keeps_player_id_and_ambiguous_link_is_quarantined(con):
@@ -353,8 +357,13 @@ def test_lolesports_build_ids_order_winners_patch(con):
     gs = con.execute("SELECT game_n, patch, winner_tid, flags FROM c_games ORDER BY game_n").fetchall()
     ra = store.find_entity(con, "team", "lolesports:team", "RA")
     assert [g[0] for g in gs] == [1, 2, 3, 4] and gs[0][1] == "26.20"
-    assert [g[2] == ra for g in gs] == [True, False, True, True]   # inferred wins add up to 3-1 -> kept; last game certain
-    assert not any("kills_mismatch" in g[3] for g in gs)
+    # 3-1: only the last game's winner follows with certainty from the official score; the frame-inferred winners of
+    # games 1-3 add up to 3-1 but are NOT certified (two wrong labels can still add up)
+    assert [g[2] == ra for g in gs] == [False, False, False, True] and [g[2] for g in gs][:3] == [None, None, None]
+    st = [r[0] for r in con.execute("SELECT winner_status FROM c_games ORDER BY game_n")]
+    inf = [r[0] == ra for r in con.execute("SELECT winner_inferred_tid FROM c_games ORDER BY game_n")]
+    assert st == ["inferred_unverified"] * 3 + ["derived_last_game"] and inf == [True, False, True, True]
+    assert not any("team_total_differs" in g[3] for g in gs)
     pid = store.find_entity(con, "player", "lolesports:player", "RA2")
     r = settle.settle(con, "underdog", "kills", "maps_1_2_3", pid, s["sid"], 2.5)
     assert r["status"] == "graded" and r["actual"] == 3 and r["game_numbers"] == [1, 2, 3]

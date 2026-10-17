@@ -217,7 +217,11 @@ def test_crosscheck_compares_sources_and_keeps_disagreements(con):
     assert cc["series"] == 1 and cc["games_count"]["agree"] == 1
     # the LE copy gives every player 2 kills and teams 10 / 4: LP's fixture differs -> disagreements are recorded, kept
     assert cc["player_kills"]["compared"] == 20 and 0 < cc["player_kills"]["agree"] < 20
-    assert cc["team_kills"]["compared"] == 4 and cc["player_assists"]["share"] == 0.0 and cc["player_deaths"]["share"] == 1.0
+    assert cc["team_kills_raw"]["compared"] == 4 and cc["team_kills_player_sum"]["compared"] == 4
+    assert cc["player_assists"]["share"] == 0.0 and cc["player_deaths"]["share"] == 1.0
+    assert cc["reconciliation"] and "does not establish completeness" in cc["note"]
+    rec = con.execute("SELECT item, status, evidence FROM reconciliation WHERE item = 'team_kills'").fetchall()
+    assert rec and all(r[1] in ("resolved", "unresolved") for r in rec) and json.loads(rec[0][2])["lp_player_sum"] is not None
     bad = con.execute("SELECT lp_value, le_value FROM crosscheck WHERE item = 'player_kills' AND agree = 0").fetchall()
     assert all(a != b for a, b in bad)
 
@@ -323,3 +327,23 @@ def test_lol2_simulation_is_coherent(tmp_path):
         s = sim.summarize(three[(pid, "kills")], line)
         assert s["p_push"] == pytest.approx(0.0) and s["p_over"] <= last + 1e-12 and s["median"] >= s["p10"]
         last = s["p_over"]
+
+
+def test_le_team_total_counting_an_execution_is_classified_not_excluded(con):
+    """LoL Esports' team total = opposing deaths (one execution): canonical team kills = the player-kill sum, the raw total
+    kept, the game and every player row stay in the history."""
+    le_copy_of_m1(con)
+    rows = store.current_rows(con, "LE:Game")
+    g1 = [r for r in rows if r["number"] == 1][0]
+    pg = [r for r in store.current_rows(con, "LE:PlayerGame") if r["number"] == 1]
+    # blue (LA) players: 10 kills in total; make the red side die 11 times (one death credited to no champion)
+    blue_k = sum(p["kills"] for p in pg if p["side"] == "blue")
+    store.put_rows(con, "LE:Game", [dict(g1, blue_kills=blue_k + 1)], lambda r: r["game_id"], lambda r: "2026-10-10 09:00:00", None, "2026-10-12T00:00:00Z")
+    red = [p for p in pg if p["side"] == "red"]
+    extra = blue_k + 1 - sum(p["deaths"] for p in red)
+    store.put_rows(con, "LE:PlayerGame", [dict(red[0], deaths=red[0]["deaths"] + extra)], lambda r: f"{r['game_id']}|{r['player_id']}",
+                   lambda r: "2026-10-10 09:00:00", None, "2026-10-12T00:00:00Z")
+    con.commit()
+    build.build(con)
+    g = con.execute("SELECT team1_kills, team1_kills_raw, team_kills_status, n_players FROM c_games WHERE source_game_id = 'e1'").fetchone()
+    assert g[0] == blue_k and g[1] == blue_k + 1 and "opponent_deaths_incl_1_execution" in g[2] and g[3] == 10
