@@ -612,6 +612,7 @@ def test_postgres_mirror_reads_back_and_rolls_back(pg_db, con, monkeypatch):
     cols = ", ".join(history.PLAYER_COLS)
     got = sorted(tuple(r[c] for c in history.PLAYER_COLS) for r in pg_db.query(f"SELECT {cols} FROM lol_player_games"))
     assert got == sorted(players)
+    pg_db.con.rollback()                              # end the read's transaction: it holds a lock the next TRUNCATE waits on
     bad_g, bad_p, _ = _bad_rows(con)
     with pytest.raises(Exception):
         export._mirror_pg(os.environ["LOL_TEST_PG_DSN"], bad_g, bad_p)
