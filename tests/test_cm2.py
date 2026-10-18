@@ -194,7 +194,8 @@ def test_cm2_cannot_alter_the_live_output(F_fake, monkeypatch, T):
     published grade and the board result itself are identical, and the stored record replays."""
     import hltv
     monkeypatch.setattr(hltv, "canonical_team_id", lambda cur, name: {"Opp": OPP, "Team": TEAM}.get(name))
-    monkeypatch.setattr(cm1, "current", lambda *a, **k: cm1.build_tables(synth_rows(), through=date.fromordinal(DAY)))
+    T1 = cm1.build_tables(synth_rows(), built_at="2026-10-18T00:00:00+00:00", through=date.fromordinal(DAY))   # one fixed build
+    monkeypatch.setattr(cm1, "current", lambda *a, **k: T1)
     res, r = F.live_res()
     before = copy.deepcopy(res)
     out = {}
