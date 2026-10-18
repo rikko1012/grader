@@ -2,6 +2,7 @@
 card's distribution view, operational checks, Slips history, and the page's destinations / compact rows / moneyline rows /
 card tabs / Slate preview. Every row, id, team, time and number below is a LABELLED TEST FIXTURE."""
 import json
+import pathlib
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -227,3 +228,18 @@ def test_a_pushed_pick_counts_as_won_and_the_export_keeps_pushes_apart(tmp_path)
     con = L.connect(tmp_path / "l.db")
     ex = L.p1_units_export(con)
     assert "pushes" in ex and ex["pushes"] == [] and ex["rows"] == []      # pushes never enter the scored rows
+
+
+def test_opening_an_address_routes_after_the_whole_script_ran():
+    # production 2026-10-18: opening /#results directly threw "Cannot access 'RES' before initialization" (the first
+    # applyHash ran before the Results / Slips state further down the script existed) and the page stayed on "Loading"
+    html = (pathlib.Path(__file__).resolve().parents[1] / "web" / "index.html").read_text(encoding="utf-8")
+    assert "else if (location.hash) setTimeout(applyHash, 0);" in html and "else if (location.hash) applyHash();" not in html
+    assert html.index("const RES = {") > html.index("setTimeout(applyHash, 0)")      # the reason the deferral is needed
+
+
+def test_more_settings_reads_as_a_button():
+    # owner 2026-10-18: "more settings should look like a button on slips tab"
+    html = (pathlib.Path(__file__).resolve().parents[1] / "web" / "index.html").read_text(encoding="utf-8")
+    assert '<summary><span class="adv-btn">More settings</span>' in html and ".adv-btn{display:inline-flex" in html
+    assert ".studio-adv>summary::-webkit-details-marker{display:none}" in html
