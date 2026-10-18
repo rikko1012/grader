@@ -3,6 +3,7 @@ export), one forecast format (saved pre-match, append-only), slip checks, settle
 A1-A3 comparison harness. Every team, player and number is a TEST FIXTURE (no network)."""
 import json
 import random
+import sqlite3
 from datetime import date, datetime, timedelta, timezone
 
 import numpy as np
@@ -590,9 +591,17 @@ def test_a_failed_export_leaves_the_previous_history(con, tmp_path, monkeypatch)
     path = tmp_path / "history.db"
     db = history.DB(dsn="", path=path)
     export.export(con, db)
-    monkeypatch.setattr(export, "rows", _bad_rows)
-    with pytest.raises(Exception):
+    # Build the failing payload BEFORE replacing rows: _bad_rows itself calls rows.
+    # Replacing it with _bad_rows made this test pass on RecursionError, before any write.
+    bad_rows = _bad_rows(con)
+    monkeypatch.setattr(export, "rows", lambda _con: bad_rows)
+    statements = []
+    db.con.set_trace_callback(statements.append)
+    with pytest.raises(sqlite3.ProgrammingError, match="not supported"):
         export.export(con, db)
+    db.con.set_trace_callback(None)
+    assert any(s.startswith("DELETE FROM lol_player_games") for s in statements)
+    assert sum(s.startswith("INSERT INTO lol_player_games") for s in statements) == 20
     other = history.DB(dsn="", path=path)                               # another reader: the committed copy
     assert other.query("SELECT COUNT(*) AS n FROM lol_player_games")[0]["n"] == 20
     other.close()
