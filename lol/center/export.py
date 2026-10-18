@@ -40,7 +40,10 @@ def _league(con):
 
 
 def rows(con):
-    """(game rows, player rows, counts) in the history's column shapes."""
+    """(game rows as dicts, player rows as tuples in history.PLAYER_COLS order, counts). 2026-10-18 memory: the export took
+    the LoL worker from ~90 MB to a 532 MB peak (the container reached 2,100 of 2,147 MB) because every player row was held
+    three times at once - the grouped source rows, the output dicts and a full tuple list per database write. Source rows
+    are now released as they are used, output rows are tuples, and the writes stream them. The rows written are identical."""
     from .. import history
     label = _labels(con)
     league_of = _league(con)
@@ -84,7 +87,7 @@ def rows(con):
             counts["games_winner_unresolved"] += 1
         kills = {g["team1"]: g["team1_kills"], g["team2"]: g["team2_kills"]}
         keys_used = set()
-        for p in pg_by.get(g["gid"], []):
+        for p in pg_by.pop(g["gid"], []):              # released as it is used (2026-10-18 memory)
             pid = store.canonical_id(con, p["pid"])
             # the history's key is (game, name key): a blank name or two players with the same name in one game get the
             # internal id instead (2026-10-17: the export failed on such a game) - lookups by id are unaffected
@@ -93,19 +96,30 @@ def rows(con):
                 counts["player_key_from_id"] = counts.get("player_key_from_id", 0) + 1
                 pkey = f"{pkey}#{pid}" if pkey else pid
             keys_used.add(pkey)
-            players.append({"game_key": g["gid"], "player_key": pkey,
-                            "player": p["name_shown"] or label(pid), "player_id": pid, "team": label(p["tid"]),
-                            "team_id": store.canonical_id(con, p["tid"]), "opponent": label(p["opp_tid"]),
-                            "opponent_id": store.canonical_id(con, p["opp_tid"]), "side": (p["side"] or "").lower() or None,
-                            "role": ROLE.get(p["role"]), "champion": p["champion"], "kills": p["kills"], "deaths": p["deaths"],
-                            "assists": p["assists"], "cs": p["cs"], "gold": p["gold"], "team_kills": p["team_kills"],
-                            "opp_kills": kills.get(p["opp_tid"]), "win": p["win"] if verified else None, "duration_s": g["length_s"],
-                            "match_key": g["sid"], "game_number": g["game_n"], "best_of": s.get("best_of"),
-                            "played_at": g["start_utc"], "league": lg, "source": src, "damage": p["damage"],
-                            "vision": p["vision"]})
+            row = {"game_key": g["gid"], "player_key": pkey,
+                   "player": p["name_shown"] or label(pid), "player_id": pid, "team": label(p["tid"]),
+                   "team_id": store.canonical_id(con, p["tid"]), "opponent": label(p["opp_tid"]),
+                   "opponent_id": store.canonical_id(con, p["opp_tid"]), "side": (p["side"] or "").lower() or None,
+                   "role": ROLE.get(p["role"]), "champion": p["champion"], "kills": p["kills"], "deaths": p["deaths"],
+                   "assists": p["assists"], "cs": p["cs"], "gold": p["gold"], "team_kills": p["team_kills"],
+                   "opp_kills": kills.get(p["opp_tid"]), "win": p["win"] if verified else None, "duration_s": g["length_s"],
+                   "match_key": g["sid"], "game_number": g["game_n"], "best_of": s.get("best_of"),
+                   "played_at": g["start_utc"], "league": lg, "source": src, "damage": p["damage"],
+                   "vision": p["vision"]}
+            players.append(tuple(row.get(c) for c in history.PLAYER_COLS))
         counts["games"] += 1
     counts["player_rows"] = len(players)
     return games, players, dict(counts)
+
+
+def _game_args(games, now):
+    from .. import history
+    return (tuple(dict(g, fetched_at=now).get(c) for c in history.GAME_COLS) for g in games)
+
+
+def _pg_args(games, players, now=None):
+    """The rows for the two INSERTs, streamed (no second full copy of the history in memory)."""
+    return _game_args(games, now or store.now_iso()), iter(players)
 
 
 def _mirror_pg(dsn, games, players):
@@ -125,11 +139,9 @@ def _mirror_pg(dsn, games, players):
         # until a vacuum (the database kept growing). TRUNCATE frees the old storage at once and is transactional - a
         # failed export rolls back to the previous copy; every export writes the full history, so nothing is lost.
         cur.execute("TRUNCATE lol_player_games, lol_games")
-        now = store.now_iso()
-        execute_values(cur, f"INSERT INTO lol_games ({', '.join(history.GAME_COLS)}) VALUES %s",
-                       [tuple(dict(g, fetched_at=now).get(c) for c in history.GAME_COLS) for g in games], page_size=2000)
-        execute_values(cur, f"INSERT INTO lol_player_games ({', '.join(history.PLAYER_COLS)}) VALUES %s",
-                       [tuple(p.get(c) for c in history.PLAYER_COLS) for p in players], page_size=2000)
+        ga, pa = _pg_args(games, players)
+        execute_values(cur, f"INSERT INTO lol_games ({', '.join(history.GAME_COLS)}) VALUES %s", ga, page_size=2000)
+        execute_values(cur, f"INSERT INTO lol_player_games ({', '.join(history.PLAYER_COLS)}) VALUES %s", pa, page_size=2000)
         con.commit()
         cur.execute("SELECT (SELECT COUNT(*) FROM lol_games), (SELECT COUNT(*) FROM lol_player_games)")
         g, p = cur.fetchone()
@@ -165,9 +177,9 @@ def export(con, db=None):
             gcols, pcols = history.GAME_COLS, history.PLAYER_COLS
             now = store.now_iso()
             cur.executemany(db._sql(f"INSERT INTO lol_games ({', '.join(gcols)}) VALUES ({', '.join('?' * len(gcols))})"),
-                            [tuple(dict(g, fetched_at=now).get(c) for c in gcols) for g in games])
+                            _game_args(games, now))
             cur.executemany(db._sql(f"INSERT INTO lol_player_games ({', '.join(pcols)}) VALUES ({', '.join('?' * len(pcols))})"),
-                            [tuple(p.get(c) for c in pcols) for p in players])
+                            iter(players))
             db.con.commit()
         history.set_state(db, "center:export", json.dumps(dict(counts, at=store.now_iso())))
     finally:
