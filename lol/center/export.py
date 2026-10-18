@@ -135,13 +135,14 @@ def _mirror_pg(dsn, games, players):
         g, p = cur.fetchone()
         out = {"ok": g == len(games) and p == len(players), "games": g, "player_rows": p}
         try:                                            # the database's size, so its disk use is visible on the status page
-            cur.execute("SELECT pg_database_size(current_database()), relname, pg_total_relation_size(c.oid), n_dead_tup "
-                        "FROM pg_class c JOIN pg_stat_user_tables t ON t.relid = c.oid ORDER BY pg_total_relation_size(c.oid) DESC LIMIT 6")
-            rows = cur.fetchall()
-            out["db_mb"] = round(rows[0][0] / 1e6, 1) if rows else None
-            out["tables_mb"] = {r[1]: {"mb": round(r[2] / 1e6, 1), "dead_rows": r[3]} for r in rows}
-        except Exception:
+            cur.execute("SELECT pg_database_size(current_database())")
+            out["db_mb"] = round(cur.fetchone()[0] / 1e6, 1)
+            cur.execute("SELECT relname, pg_total_relation_size(relid), n_dead_tup FROM pg_stat_user_tables "
+                        "ORDER BY pg_total_relation_size(relid) DESC LIMIT 6")
+            out["tables_mb"] = {r[0]: {"mb": round(r[1] / 1e6, 1), "dead_rows": r[2]} for r in cur.fetchall()}
+        except Exception as e:
             con.rollback()
+            out["size_error"] = f"{type(e).__name__}: {str(e)[:120]}"
         return out
     finally:
         con.close()
