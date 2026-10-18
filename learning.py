@@ -1707,8 +1707,9 @@ def history_revision(f):
     return "N (backfill live, unintended)"
 
 
-def product_units(con, rows=None):
-    """P1 units (see PRODUCT) and the excluded counts by reason."""
+def product_units(con, rows=None, pushes=None):
+    """P1 units (see PRODUCT) and the excluded counts by reason. pushes: a list that receives each unit pushed on its board
+    line (same forecast rule, its own saved chance) - kept apart from the scored units (member Results only)."""
     out, excl, stale = [], collections.Counter(), []
     rows = latest_rows(con, stale) if rows is None else rows
     if stale:
@@ -1733,6 +1734,9 @@ def product_units(con, rows=None):
             continue
         if actual == line:
             excl["push on the board line"] += 1
+            if pushes is not None and p_over_of(f) is not None:
+                pushes.append({"match": r["match_slug"], "p": p_over_of(f), "prop": r["prop"], "scope": r["scope"] or "12",
+                               "version": f["model_version"] or "untagged", "start": r["match_start"], "logged": f["logged_at"]})
             continue
         p = p_over_of(f)
         if p is None:
@@ -1959,7 +1963,8 @@ def p1_units_export(con, now=None):
     paired evaluation and cohort reconciliation off the server (owner 2026-10-16). Built by the learning cycle (child
     process) and served as stored. A challenger value counts as forward evidence when the forecast was logged and the match
     started after that challenger's frozen_at."""
-    us, excl = product_units(con)
+    pushes = []
+    us, excl = product_units(con, pushes=pushes)
     chs = [dict(c) for c in con.execute("SELECT id, family, status, frozen_at FROM challengers ORDER BY frozen_at")]
     rows = []
     for u in us:
@@ -1972,7 +1977,7 @@ def p1_units_export(con, now=None):
         rows.append(dict(u, challengers=vals))
     rows.sort(key=lambda u: (u["start"], u["forecast_id"]))
     return {"at": _iso(_now(now)), "protocol": PRODUCT["id"], "unit_rule": PRODUCT["unit"], "forecast_rule": PRODUCT["forecast"],
-            "outcome_rule": PRODUCT["outcome"], "challengers": chs, "excluded": dict(excl), "rows": rows}
+            "outcome_rule": PRODUCT["outcome"], "challengers": chs, "excluded": dict(excl), "rows": rows, "pushes": pushes}
 
 
 def _fh1_block(rs, B=BOOT_B):

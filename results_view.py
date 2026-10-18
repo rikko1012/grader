@@ -36,6 +36,7 @@ def _line(picks, B=0, seed=7, **extra):
         return dict(extra, picks=0)
     w = sum(x["win"] for x in picks)
     out = dict(extra, picks=len(picks), matches=len({x["match"] for x in picks}), wins=w, losses=len(picks) - w,
+               pushes=sum(1 for x in picks if x.get("push")),
                printed=round(sum(x["printed"] for x in picks) / len(picks), 4), observed=round(w / len(picks), 4))
     if B:
         out["observed_ci"] = _ci(picks, B, seed)
@@ -56,6 +57,13 @@ def member_results(export, B=1000, seed=7):
         picks.append({"match": r["match"], "printed": side_p, "win": int(r["over"] if p >= 0.5 else 1 - r["over"]),
                       "side": "Over" if p >= 0.5 else "Under", "prop": r.get("prop"), "scope": r.get("scope") or "12",
                       "version": r.get("version") or "untagged", "start": r.get("start"), "logged": r.get("logged")})
+    for r in (export or {}).get("pushes") or []:       # owner 2026-10-18: a push on a pick counts as a win here
+        p = r.get("p")
+        if p is None or max(p, 1 - p) < RULE:
+            continue
+        picks.append({"match": r["match"], "printed": max(p, 1 - p), "win": 1, "push": True, "side": "Over" if p >= 0.5 else "Under",
+                      "prop": r.get("prop"), "scope": r.get("scope") or "12", "version": r.get("version") or "untagged",
+                      "start": r.get("start"), "logged": r.get("logged")})
     starts = sorted(r["start"] for r in rows if r.get("start"))
     by_stat = [_line([x for x in picks if (x["prop"], x["scope"]) == k], stat=STAT.get(k[0], k[0]), scope=SCOPE.get(k[1], k[1]))
                for k in sorted({(x["prop"], x["scope"]) for x in picks})]
@@ -65,7 +73,7 @@ def member_results(export, B=1000, seed=7):
     by_version = sorted((_line(v, version=k, first=min(x["start"] for x in v)[:10], last=max(x["start"] for x in v)[:10])
                          for k, v in vers.items()), key=lambda d: d["first"], reverse=True)
     return {"as_of": (export or {}).get("at"),
-            "rule": f"The favoured side when its printed chance was {int(RULE * 100)}% or more",
+            "rule": f"The favoured side when its printed chance was {round(RULE * 100)}% or more",
             "definition": "Lines the board listed on a standard Underdog or PrizePicks line, graded at least 30 minutes before "
                           "the match; one result per player, match, stat and maps (refreshes and the other platform's copy are "
                           "not counted twice); settled on official stats. Lines typed in by members and goblin / demon lines "
@@ -78,4 +86,4 @@ def member_results(export, B=1000, seed=7):
             "by_chance": [_line([x for x in picks if lo <= x["printed"] < hi], band=lab) for lo, hi, lab in BANDS],
             "by_version": by_version,
             "note": "The printed chance is the model's estimate at grading time; the observed rate is how often those picks "
-                    "won. No returns are shown: a single prop has no payout of its own."}
+                    "won, a push counting as won. No returns are shown: a single prop has no payout of its own."}
