@@ -167,7 +167,7 @@ def player_lock(name):
 
 
 RESULTS_MAX = 20000
-RESULTS_MAX_BYTES = int(float(os.environ.get("RESULTS_MEM_MB", "150")) * 1e6)   # 2026-10-18: bodies bounded by bytes too
+RESULTS_MAX_BYTES = int(float(os.environ.get("RESULTS_MEM_MB", "100")) * 1e6)   # 2026-10-18: bodies bounded by bytes too
 _RES_BYTES = [0, 0.0]                                 # approx bytes of cached bodies, last re-count time
 _SWEPT = [0.0]
 

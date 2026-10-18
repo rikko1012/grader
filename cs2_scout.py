@@ -1877,7 +1877,7 @@ def _timing_done(res, name, kind, background, t0):
 
 import membudget as _membudget  # noqa: E402
 # grade contexts (deep copies) bounded by bytes as well as count (2026-10-18 Render out-of-memory fix); a miss recomputes
-_CONTEXT = _membudget.BudgetLRU("contexts", _membudget.env_mb("CONTEXT_MEM_MB", 200), max_items=3000)
+_CONTEXT = _membudget.BudgetLRU("contexts", _membudget.env_mb("CONTEXT_MEM_MB", 100), max_items=3000)
 CONTEXT_TTL = 600          # older than this: rebuilt in the background (the grade doesn't wait)
 CONTEXT_STALE = 30 * 60    # older than this: rebuilt before grading
 _REFRESHING, _REFRESH_LOCK = set(), threading.Lock()

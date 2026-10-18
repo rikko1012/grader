@@ -126,6 +126,14 @@ def process_memory():
             out["container_mb"] = round(int(open(cur).read().strip()) / 1e6, 1)
             v = open(lim).read().strip()
             out["container_limit_mb"] = None if v == "max" else round(int(v) / 1e6, 1)
+            try:                                      # anon = what an out-of-memory kill counts; file = reclaimable cache
+                st = dict(l.split() for l in open(os.path.join(os.path.dirname(cur), "memory.stat")) if len(l.split()) == 2)
+                for k, name in (("anon", "container_anon_mb"), ("file", "container_file_cache_mb"), ("rss", "container_anon_mb"),
+                                ("cache", "container_file_cache_mb")):
+                    if k in st and name not in out:
+                        out[name] = round(int(st[k]) / 1e6, 1)
+            except (OSError, ValueError):
+                pass
             break
         except (OSError, ValueError):
             continue

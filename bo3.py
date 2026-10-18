@@ -192,8 +192,8 @@ QUEUE_PLACES = 2       # queued requests one look-up may hold at once (fair turn
 # up to ~170 KB each as Python objects - they outgrew Render's 2 GB and the service was killed three times). The disk
 # cache keeps everything; an evicted entry is just read from disk again.
 import membudget  # noqa: E402
-_MEM = membudget.BudgetLRU("bo3_finished", membudget.env_mb("BO3_MEM_MB", 300))     # finished-map scoreboards / vetoes
-_TMEM = membudget.BudgetLRU("bo3_expiring", membudget.env_mb("BO3_TMEM_MB", 150))   # key -> (fetched_at, data)
+_MEM = membudget.BudgetLRU("bo3_finished", membudget.env_mb("BO3_MEM_MB", 150))     # finished-map scoreboards / vetoes
+_TMEM = membudget.BudgetLRU("bo3_expiring", membudget.env_mb("BO3_TMEM_MB", 80))   # key -> (fetched_at, data)
 
 
 def _tmem_put(key, data, at):
