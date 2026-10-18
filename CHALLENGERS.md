@@ -137,10 +137,87 @@ data hash 49e7ac29547b86a9). Walk-forward with w refitted on earlier days only: 
   - So cm-1 becoming available after its deploy, or moving with its 2-hourly tables, was not saved while the live grade
     stayed the same.
   - In 48 of 102 consecutive records over a tables change, its chance had moved.
+  - **Correction (2026-10-18 17:00 UTC):** in all 49 record pairs where cm-1 moved, the history inputs (inputs_sha) also
+    changed, so the old rule saved those records too. A recurrence in ordinary operation is not shown; the only
+    observed gap is the deploy transition below.
   - Now any shadow arm that appears, becomes available or unavailable, or changes value appends a new timestamped
     pre-match record. Earlier records are unchanged.
   - **Gap, permanent:** 37 of the first 271 forward units (Oct 17 matches) have no cm-1 value. Their last record at least
     30 minutes before the start predates the deploy. They are reported as missing, never filled in.
+
+## cm-2 - corrected complete model, Maps 1-2 kills only (family `complete-model-2-kills`, id `cm-002-<hash>`; production shadow only)
+
+Accuracy handoff 2026-10-18 (claude-handoffs/accuracy-2026-10-18). A SEPARATE experiment from cm-1. cm-1's artifact,
+records, registration, clock and results are unchanged, and none of them count for cm-2.
+
+- **Artifact:** `cm2_model.json` = the research's `candidate_artifact.json`, byte for byte (sha256 3997cfce...11b1).
+  - 14-feature GLM, fixed regularization, fit through 2026-09-30.
+  - Nothing is fitted, searched or tuned in production.
+  - The feature constants equal cm-1's (checked at import), so the weights apply to the features they were fitted on.
+- **Inference:** `cm2.forecast` = `candidate_runtime.forecast`, the same arithmetic in the same order.
+  - It replays all 522 strict development kills props: mean within 1e-10, chance within 1e-12 (tests/test_cm2.py).
+  - mean = exp(intercept + standardised features x weights); sd = spread_c x sqrt(max(mean, 1)).
+  - Whole and half lines have separate thresholds.
+  - **Saved:** raw Over, Under and push; Over given no push (uncapped); and p_more, which is that conditional chance inside
+    the old kills cap of 22-78%.
+  - p_more is the value scored, like the live p_more on decided props. It is not an outright win probability.
+  - No Over margin or legacy adjustment is applied.
+- **Corrected inputs (tables), applied in every table including ratings:**
+  - Only complete scoreboards: ten unique players, five per team, kills and scores present, one positive round count,
+    nonnegative kills.
+  - An unknown historical environment stays unknown (NaN). It counts in overall history, never in LAN-only or online-only
+    history.
+  - Source rows are never deleted; excluded maps are counted by reason in the tables' meta.
+  - The database read keeps NULL as None (cm-1's read turned it into False).
+  - cm-1's table build is unchanged: an optional `env` argument that cm-1 never passes. Its tables hash on the test fixture
+    is pinned.
+  - **Pipeline check (research source dump, 300,457 rows):**
+    - 37 incomplete maps and 20 unknown-environment rows, as in the report.
+    - 521 of the 522 strict props have identical features; mean within 2e-14.
+    - The 522nd is a player with no maps in the 420-day window. The research scored it on priors only; cm-2 marks it
+      ineligible, by the handoff's rule.
+- **Ineligible, with the reason saved, and never borrowing a legacy or cm-1 value:**
+  - another stat or scope;
+  - tables not built yet;
+  - unknown target environment;
+  - player, team or opponent not identified in HLTV;
+  - a line that is not a whole or half number;
+  - no HLTV player rows, or no player maps in the window.
+- **Record:** saved inside the same pre-match fh-1 record, in the same write. It contains:
+  - sums, the 14 features with their names, all outputs;
+  - artifact, file and constants hashes;
+  - the tables' build time, hash and exclusions (history version and source);
+  - the quote identity: book, source and market ids, canonical match, line, market type, sides offered, provider and
+    observed times;
+  - the computed time.
+  - Building a table records when the database was read. A match's date does not prove when its rows arrived.
+- **Replay:** `cm2.replay` recomputes features and every output from the record's own saved values. It never reads tables
+  or the board. perf_shadow.check_record includes it.
+- **Live output unchanged:** tests/test_cm2.py builds the pre-match record with cm-2 absent, failing and computed.
+  - The board result, live arm, fh-1 arm, cm-1 values and published grade are identical in all three cases.
+  - The live model tag is unchanged (cm2.py and perf_shadow.py are not in the model hash).
+- **Tables:** built in the learning child process every 2 h, after cm-1's. Saved as plain .npy files that the server
+  memory-maps read-only, so there is no second resident copy of the history in the server.
+- **Registry:**
+  - Registered once by the learning cycle; frozen_at = registration time (UTC) = the forward clock.
+  - The config records the promotion rule BEFORE any forward result exists:
+    - the existing REVIEW_RULE windows (300 / 600 / 1000 distinct forward matches of cm-2's own record), checked with
+      review_checks;
+    - a pass = eligible_for_review only; live grading changes only by an owner decision;
+    - retired at a failed window with gain <= 0, or at the last window.
+- **Forward unit:** a Maps 1-2 kills P1 unit logged after registration whose latest pre-match record before the 30-minute
+  cut-off was also saved after registration. Older records are rejected with that reason.
+- **Scorecard:** the P1 challengers row reports:
+  - paired log-loss and Brier with match-resampled intervals;
+  - MAE, RMSE and bias;
+  - the fixed 57% rule for each arm, as different pick sets;
+  - coverage and rejections;
+  - match-equal sensitivity;
+  - calibration bands for both arms;
+  - exact live model tag x cm-2 tables.
+- **Evidence status:** the development comparison is retrospective and was selected on months earlier research had seen.
+  - Strict book lines Oct 11-16: kills log-loss 0.7016 -> 0.6852.
+  - It is not forward evidence and not a production accuracy rate. No improvement is claimed before the registered review.
 
 ## lc-1 - real-line probability correction (family `line-correction-1`, id `lc-001-<hash>`; production shadow only)
 

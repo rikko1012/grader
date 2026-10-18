@@ -393,6 +393,9 @@ def build(res, r):
     if lc:
         rec["lc1"] = {"p_more": lc[0], "z": lc[1], "version": LC1["version"], "from": "published projection and line"}
     rec["cm1"] = _cm1(ids, team, tid, day, lan, g.get("line"), prop, scope, (res.get("book") or {}).get("quote"))
+    bk = res.get("book") or {}
+    rec["cm2"] = _cm2(ids, team, tid, day, lan, g.get("line"), prop, scope, bk.get("quote"),
+                      {"book": bk.get("book"), "market_id": bk.get("market_id"), "match": nm.get("slug"), "start": nm.get("start") or r.get("start")})
     return rec, {in_sha: ("snapshot", pack(snap)), gi_sha: ("grader_inputs", pack(gi_s))}
 
 
@@ -411,6 +414,24 @@ def _cm1(ids, team, opp_tid, day, lan, line, prop, scope, quote):
         except Exception:
             pass
         return {"version": "cm-1", "error": f"{type(e).__name__}: {str(e)[:160]}"}
+
+
+def _cm2(ids, team, opp_tid, day, lan, line, prop, scope, quote, identity):
+    """cm-2 (the corrected Maps 1-2 kills shadow, cm2.py) for this forecast at this moment - never raises, never touches the
+    live arms or cm-1."""
+    try:
+        import cm2
+        own = _team_id(team) if team and prop == "kills" and (scope or "12") == "12" else None
+        out = cm2.for_forecast(cm2.current(), ids, own, opp_tid, day, lan, line, prop, scope, quote, identity)
+        cm2.STATS["ineligible" if out.get("ineligible") else "computed"] += 1
+        return out
+    except Exception as e:      # noqa: BLE001 - shadow only
+        try:
+            import cm2
+            cm2.STATS["error"] += 1
+        except Exception:
+            pass
+        return {"version": "cm-2", "error": f"{type(e).__name__}: {str(e)[:160]}"}
 
 
 def attach(res, r):
@@ -440,6 +461,11 @@ def status():
         out["cm1"] = cm1.status()
     except Exception as e:      # noqa: BLE001
         out["cm1"] = {"error": f"{type(e).__name__}: {e}"}
+    try:
+        import cm2
+        out["cm2"] = cm2.status()
+    except Exception as e:      # noqa: BLE001
+        out["cm2"] = {"error": f"{type(e).__name__}: {e}"}
     return out
 
 
@@ -457,4 +483,8 @@ def check_record(rec, snap, gi):
         import cm1
         ok, why = cm1.replay(rec["cm1"])
         bad += [f"cm1 {w}" for w in why]
+    if rec.get("cm2"):                                  # cm-2: the same, from its own saved sums and artifact
+        import cm2
+        ok, why = cm2.replay(rec["cm2"])
+        bad += [f"cm2 {w}" for w in why]
     return not bad, bad[:6]

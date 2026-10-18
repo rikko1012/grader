@@ -422,6 +422,31 @@ CM1 = {"family": "complete-model-1", "version": "cm-1", "artifact": "cm1_model.j
        "registered": "2026-10-16"}
 
 
+# cm-2 (accuracy handoff 2026-10-18, claude-handoffs/accuracy-2026-10-18): the CORRECTED complete model for Maps 1-2 kills
+# only - cm-1's 14 features from corrected tables (complete scoreboards; unknown environment never online / LAN), the research's
+# 14-feature GLM refitted once through 2026-09-30 (cm2_model.json). A separate experiment: cm-1's registration, clock, records
+# and results are untouched and nothing from them counts for cm-2. Its forward record = Maps 1-2 kills board forecasts logged
+# after cm-2's own registration whose latest pre-match record before the 30-minute cut-off was also saved after it.
+# The promotion rule is recorded here BEFORE any forward result exists (owner brief: no goalposts moved afterwards).
+CM2 = {"family": "complete-model-2-kills", "version": "cm-2", "artifact": "cm2_model.json",
+       "artifact_file_sha256": "3997cfce1d7ba7c09e6c3a28d663b64faa505c7dd21a805a311762dc3f4211b1",
+       "fit_through": "2026-09-30", "training_cutoff": "2026-09-30", "scope": "Maps 1-2 kills only (headshots, Map 1, Maps 1-3: not covered)",
+       "inputs": "cm-1 features from corrected tables: complete 5-v-5 scoreboards in every table incl. ratings; unknown historical "
+                 "environment in overall history only; unknown target environment / identity / history = ineligible with its reason",
+       "probability": "discretised normal, sd = spread_c sqrt(max(lambda, 1)); scored value = Over given no push inside the kills "
+                      "cap 22-78% (raw Over / Under / push and the uncapped value saved beside it)",
+       "evaluation": "the registered P1 scorecard: latest standard board forecast >= 30 min before the start, one unit per player x "
+                     "match x stat x maps, decided props only, pushes / voids apart, intervals resample whole matches; paired with "
+                     "the live arm of the same pre-match record",
+       "recommendation_rule": "favoured side when its chance >= 0.57 (secondary; different pick sets are not compared as one)",
+       "promotion_rule": {"reviews": "the existing REVIEW_RULE windows - 300 / 600 / 1000 distinct forward matches of cm-2's own "
+                                     "record (not cm-1's), decisions only there", "checks": "review_checks (unchanged)",
+                          "on_pass": "status eligible_for_review only - live grading changes only by an owner decision",
+                          "on_fail": "retired at a failed window with gain <= 0 or at the last window"},
+       "development_evidence": "retrospective only (Oct 11-16 development lines; months seen by earlier research) - never "
+                               "counted as forward evidence", "registered": "2026-10-18"}
+
+
 SCORECARD_REV = "2026-10-16-rekey"   # a change of scorecard code rebuilds the stored scorecard at the next cycle
 
 
@@ -510,6 +535,15 @@ def _fh1_shadow(con, ch, now, arm="fh1"):
                 pc, pb, lc = c1.get("p_more"), rr["live_p"], c1.get("lambda")
                 if pc is None:
                     note["reject"] = c1.get("ineligible") or c1.get("error") or "no cm-1 value in the record (recorded before cm-1 existed)"
+            elif arm == "cm2":                         # cm-2: its own value, from a record saved after its registration
+                c2 = rec.get("cm2") or {}
+                pc, pb, lc = c2.get("p_more"), rr["live_p"], c2.get("lambda")
+                note["cm2"] = {"tables_sha": (c2.get("tables") or {}).get("tables_sha"), "artifact_sha": c2.get("artifact_sha"),
+                               "computed_at": c2.get("computed_at")}
+                if rr["logged_at"] <= ch["frozen_at"]:
+                    pc, note["reject"] = None, "latest pre-match record saved before cm-2's registration"
+                elif pc is None:
+                    note["reject"] = c2.get("ineligible") or c2.get("error") or "no cm-2 value in the record"
             elif arm == "hs1":                         # hs-1: fh-1's saved full-history projection at the forecast's line
                 pc, pb, lc = hs1_p(rr["ch_lam"], f["line"], f["prop"], f["scope"]), rr["live_p"], rr["ch_lam"]
                 if pc is None:
@@ -561,6 +595,26 @@ def _ensure_cm1(con, now):
                  json.dumps({"live": "the record's live arm (the published chance)"}), "shadow", _iso(now),
                  "registered (owner 2026-10-16: forward confirmation of the selected complete model); forward record = Maps 1-2 kills / HS "
                  "board forecasts logged after this moment, scored from their pre-match records", None, "[]"))
+    con.execute("INSERT INTO events (at, kind, detail) VALUES (?,?,?)", (_iso(now), "challenger", json.dumps({"id": cid, "status": "shadow"})))
+
+
+def _ensure_cm2(con, now):
+    """Register cm-2 once; frozen_at = this moment (UTC), its forward clock. Never re-registered, never backdated."""
+    if con.execute("SELECT 1 FROM challengers WHERE family = ?", (CM2["family"],)).fetchone():
+        return
+    import cm2
+    if cm2.ARTIFACT_FILE_SHA != CM2["artifact_file_sha256"]:
+        raise RuntimeError("cm2_model.json is not the registered artifact")
+    cfg = dict(CM2, artifact_sha=cm2.ARTIFACT_SHA, constants_sha=cm2.CONSTANTS_SHA, review_rule=REVIEW_RULE)
+    h = _sha(cfg)
+    cid = f"cm-002-{h[:8]}"
+    con.execute("INSERT INTO challengers (id, family, created_at, frozen_at, snapshot_id, data_hash, training_cutoff, config, "
+                "config_hash, base_config, status, status_at, status_reason, revises, development) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (cid, CM2["family"], _iso(now), _iso(now), None, cm2.ARTIFACT_FILE_SHA[:12], CM2["training_cutoff"], json.dumps(cfg, sort_keys=True), h,
+                 json.dumps({"live": "the record's live arm (the published chance)"}), "shadow", _iso(now),
+                 "registered (accuracy handoff 2026-10-18: corrected Maps 1-2 kills model, a separate experiment from cm-1); forward "
+                 "record = Maps 1-2 kills board forecasts logged after this moment, scored from pre-match records saved after it",
+                 None, "[]"))
     con.execute("INSERT INTO events (at, kind, detail) VALUES (?,?,?)", (_iso(now), "challenger", json.dumps({"id": cid, "status": "shadow"})))
 
 
@@ -1950,6 +2004,8 @@ def product_scorecard(con, rows=None):
             row.update(_fh1_extras(con, ch, us))
         elif ch["family"] == CM1["family"]:
             row.update(_fh1_extras(con, ch, [u for u in us if u["prop"] in ("kills", "hs") and (u["scope"] or "12") == "12"], arm="cm1"))
+        elif ch["family"] == CM2["family"]:
+            row.update(_fh1_extras(con, ch, [u for u in us if u["prop"] == "kills" and (u["scope"] or "12") == "12"], arm="cm2"))
         elif ch["family"] == HS_CAL["family"]:
             row.update(_fh1_extras(con, ch, [u for u in us if u["prop"] == "hs" and (u["scope"] or "12") == "12"], arm="hs1"))
         elif ch["family"] == LINE_CORRECTION["family"]:
@@ -2049,7 +2105,7 @@ def _fh1_extras(con, ch, us, arm="fh1"):
             rej[t.get("reject") or "no value"] += 1
             continue
         rs.append(dict(u, t=t, pL=s_["p_over_base"], pF=s_["p_over_ch"], lamL=s_["lam_base"], lamF=s_["lam_ch"], pP=s_["p_over_logged"]))
-    out = {"registered": {"fh1": FULL_HISTORY, "hs1": HS_CAL, "cm1": CM1}.get(arm, LINE_CORRECTION)["registered"], "arm": arm,
+    out = {"registered": {"fh1": FULL_HISTORY, "hs1": HS_CAL, "cm1": CM1, "cm2": CM2}.get(arm, LINE_CORRECTION)["registered"], "arm": arm,
            "frozen_at": ch["frozen_at"], "forward_units": len(fwd), "units": len(rs),
            "matches": len({u["match"] for u in rs}), "coverage": _r(len(rs) / len(fwd), 3) if fwd else None,
            "rejections": [{"reason": k, "units": v} for k, v in rej.most_common()],
@@ -2067,7 +2123,33 @@ def _fh1_extras(con, ch, us, arm="fh1"):
     out["by_depth"] = by(lambda u: u["t"].get("depth") or "unknown")
     out["by_inputs"] = by(lambda u: "full history adds no row (fh-1 = live)" if u["t"].get("identical") else "full history adds rows")
     out["n0_exact_only"] = _fh1_block([u for u in rs if u["t"].get("n0_exact")])
+    if arm == "cm2":
+        out.update(_cm2_more(rs))
     return {arm: out}
+
+
+def _cm2_more(rs, B=BOOT_B):
+    """cm-2 extras (handoff 2026-10-18): match-equal sensitivity (every match weighs the same), calibration by chance band for
+    both arms, and the exact live model tag x cm-2 tables behind the units. + = cm-2 better."""
+    gl = lambda u: _ll(u["pL"], u["over"]) - _ll(u["pF"], u["over"])
+    gb = lambda u: (u["pL"] - u["over"]) ** 2 - (u["pF"] - u["over"]) ** 2
+    me = lambda fn: [(s_ / n_, 1) for s_, n_ in _groups(rs, fn) if n_]
+
+    def cal(key):
+        out = []
+        for lo in (0.2, 0.3, 0.4, 0.5, 0.6, 0.7):
+            g = [u for u in rs if lo <= u[key] < lo + 0.1 or (lo == 0.7 and u[key] >= 0.8)]
+            if g:
+                out.append({"band": f"{lo:.1f}-{lo + 0.1:.1f}", "units": len(g), "matches": len({u['match'] for u in g}),
+                            "mean_p_over": _r(sum(u[key] for u in g) / len(g)), "over_rate": _r(sum(u["over"] for u in g) / len(g))})
+        return out
+    ver = collections.Counter((u.get("version") or "untagged", (u["t"].get("cm2") or {}).get("tables_sha")) for u in rs)
+    mgl, mgb = me(gl), me(gb)
+    return {"match_equal": {"matches": len(mgl), "log_loss_gain": _r(sum(x for x, _ in mgl) / len(mgl), 5) if mgl else None,
+                            "log_loss_gain_ci": _ci_ratio(mgl, B=B), "brier_gain": _r(sum(x for x, _ in mgb) / len(mgb), 5) if mgb else None,
+                            "brier_gain_ci": _ci_ratio(mgb, B=B)},
+            "calibration": {"live": cal("pL"), "cm2": cal("pF")},
+            "versions": [{"live_version": v, "cm2_tables": t, "units": n} for (v, t), n in ver.most_common()]}
 
 
 def _split(rs, key):
@@ -2344,6 +2426,9 @@ def shadow_step(con, now, limit=4000, picks=None):
             continue
         if ch["family"] == CM1["family"]:                # cm-1: its value saved in the same pre-match records
             n += _fh1_shadow(con, ch, now, arm="cm1")
+            continue
+        if ch["family"] == CM2["family"]:                # cm-2: likewise, its own value and its own registration
+            n += _fh1_shadow(con, ch, now, arm="cm2")
             continue
         if ch["family"] == HS_CAL["family"]:             # hs-1: from fh-1's saved projection in the same pre-match records
             n += _fh1_shadow(con, ch, now, arm="hs1")
@@ -2688,6 +2773,10 @@ def run_cycle(now=None, picks=None, forecasts=None, batches=None, corrections=No
             _ensure_line_correction(con, now)
             _ensure_hs_cal(con, now)
             _ensure_cm1(con, now)
+            try:
+                _ensure_cm2(con, now)
+            except Exception:
+                traceback.print_exc()
             log = {"at": _iso(now)}
             # 1. copy new forecasts (immutable), in pages
             if picks is None:
@@ -2783,6 +2872,8 @@ def run_cycle(now=None, picks=None, forecasts=None, batches=None, corrections=No
             try:                                       # cm-1 tables (HLTV database -> disk) when older than cm1.REFRESH_S
                 import cm1
                 log["cm1_tables"] = cm1.refresh_tables()
+                import cm2
+                log["cm2_tables"] = cm2.refresh_tables()
                 _set_meta(con, "last_cycle", log)
                 con.commit()
             except Exception:

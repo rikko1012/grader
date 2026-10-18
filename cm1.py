@@ -55,9 +55,11 @@ WHERE mo.date >= %s AND mo.date <= %s ORDER BY mo.date, mo.matchid, mm.number"""
 
 
 # ------------------------------------------------------------------------------------------------ tables (pure)
-def build_tables(rows, built_at=None, through=None):
+def build_tables(rows, built_at=None, through=None, env=None):
     """rows: (matchid, date 'YYYY-MM-DD', lan, map_no, player, team, opp, k, hs, own, opp_score) - the study's dump rows.
-    Returns the tables dict (numpy arrays + meta). Exactly the study's rules (acc2/build.py, oa_build.py)."""
+    Returns the tables dict (numpy arrays + meta). Exactly the study's rules (acc2/build.py, oa_build.py).
+    env: cm-1 itself never passes it (its frozen rule: 1.0 if lan else 0.0, so an unknown environment counts as online);
+    cm2.py passes its corrected rule (unknown = NaN: overall history only, never the LAN or online subset)."""
     built_at = built_at or datetime.now(timezone.utc).isoformat(timespec="seconds")
     maps = {}
     for r in rows:
@@ -74,7 +76,7 @@ def build_tables(rows, built_at=None, through=None):
             rd = (r[9] or 0) + (r[10] or 0)
             hs = r[8]
             ok = hs is not None and not (hs == 0 and k >= 12)
-            ph.append((r[4], day, k, rd, hs if hs is not None else 0, 1.0 if r[2] else 0.0, 1.0 if ok else 0.0, r[6]))
+            ph.append((r[4], day, k, rd, hs if hs is not None else 0, env(r[2]) if env else (1.0 if r[2] else 0.0), 1.0 if ok else 0.0, r[6]))
             c = conc.setdefault(r[6], [0, 0, day])
             c[0] += k
             c[1] = rd
