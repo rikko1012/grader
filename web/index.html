@@ -2924,7 +2924,7 @@ function otOpenDesk(key, opener) {
     return `<button type="button" class="ot-offer" data-ot-card="${index}" aria-label="Open ${esc(r.nick || r.player)} ${esc(propWord(r.prop))} ${esc(r.line)} on ${esc(bookName(r.book || 'underdog'))}">
       <small>${esc(bookName(r.book || 'underdog'))} · ${esc(propWord(r.prop))} · ${esc(mktType(r))}</small>
       <span><b>Line ${esc(r.line)}</b> · Projection ${r.proj == null ? '—' : num(r.proj,1)}</span>
-      <span>${pick}</span><small>${unavailable ? 'Unavailable' : `${esc(mGrade(r) || '')} · ${r.units == null ? '—' : esc(r.units)+'U'}`}</small>
+      <span>${pick}</span><small>${unavailable ? 'Unavailable' : `${esc(mGrade(r) || '')} · ${r.units == null ? '—' : esc(r.units)+'U'}${!r.units && r.stake_reason ? ' · ' + esc(r.stake_reason) : ''}`}</small>
       ${r.graded_at ? `<span class="ot-status">Graded ${esc(clockTxt(r.graded_at))} · ${esc(agoTxt(r.graded_at))}</span>` : ''}
     </button>`;
   };

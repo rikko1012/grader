@@ -123,3 +123,20 @@ def test_new_page_text_has_no_banned_hedges():
 def test_lol_push_uses_the_existing_probability():
     lol = (server.WEB / "lol.html").read_text(encoding="utf-8")
     assert "pct(x.p_push)" in lol and "Stake ${esc(x.units)}U" in lol
+
+
+@needs_node
+def test_dialog_names_the_stake_reason_of_an_earned_letter_at_0u(tmp_path):
+    """32 live rows on 2026-10-18 showed an earned letter at 0U ("B · 0U") in the dialog with no reason; the grader's own
+    stake reason is shown beside it (grades and stakes unchanged)."""
+    out = run_page(tmp_path, """(() => {
+      boardRows = [{book: "underdog", nick: "910", player: "910", team: "A", opponent: "B", match_id: "hltv:1", start: "2026-10-19T08:00:00Z",
+                    prop: "hs", scope: "12", line: 9.5, side: "Less", p: 0.58, grade: "LEAN", model_grade: "B", units: 0,
+                    stake_reason: "AWPer on a headshot prop", graded_at: "2026-10-18T18:40:00Z"}];
+      assignMatchKeys(boardRows);
+      const dlg = {innerHTML: "", showModal() {}, querySelector: () => ({focus() {}})}, q = document.querySelector;
+      document.querySelector = s => s === "#ot-match-desk" ? dlg : q(s);
+      otOpenDesk(matchKey(boardRows[0]), null);
+      return dlg.innerHTML;
+    })()""")
+    assert "B · 0U · AWPer on a headshot prop" in out
