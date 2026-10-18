@@ -58,6 +58,7 @@ def test_member_view_unoffered_side_and_alternate_line(tmp_path, monkeypatch):
     server._LOL_MEMBER.update(mtime=None, body=None)
     row, = json.loads(server.lol_member_board())["rows"]
     assert row["pick"] == "Under 9.5" and row["pick_offered"] is False and row["line_type"] == "Demon"
+    assert row["grade"] is None                       # never a letter grade on a side the line does not offer
     assert [(x["side"], x["offered"]) for x in row["sides"]] == [("Over", True), ("Under", False)]
 
 

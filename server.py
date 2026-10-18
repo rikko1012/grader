@@ -1243,6 +1243,11 @@ def _lol_member_slips(sm):
     return out
 
 
+def _lol_side_offered(platform, sides, model_side):
+    name = {"over": "Over", "under": "Under"}.get(model_side)
+    return any(x["side"] == name and x["offered"] for x in _lol_sides(platform, sides))
+
+
 def _lol_member_rebuild(path, mt):
     try:
         b = json.loads(path.read_text())
@@ -1274,7 +1279,8 @@ def _lol_member_rebuild(path, mt):
                      "range80": inp.get("range80"), "recent_games": rec.get("games"), "recent_per_game": rec.get("per_game"),
                      "p_over": f.get("p_over"), "p_under": f.get("p_under"), "p_push": f.get("p_push"),
                      "pick_side": side, "pick": f"{side} {x.get('line')}", "pick_offered": pick_offered,
-                     "grade": f.get("grade"), "units": 0.0, "stake_reason": LOL_STAKE_NOTE,
+                     # a side the line does not offer is the model's direction, never a pick: no letter grade
+                     "grade": f.get("grade") if pick_offered else None, "units": 0.0, "stake_reason": LOL_STAKE_NOTE,
                      "line_seen": x.get("quote_seen_at"), "line_checked": x.get("quote_checked_at") or x.get("quote_seen_at"),
                      "forecast_at": f.get("at"), "drivers": inp.get("drivers") or [], "not_modelled": inp.get("unknowns") or []})
     tables = []
@@ -1292,7 +1298,8 @@ def _lol_member_rebuild(path, mt):
                 lines.append({"platform": LOL_PLATFORM.get(ln.get("platform"), ln.get("platform")), "line_type": lt, "line": ln.get("line"),
                               "sides": _lol_sides(ln.get("platform"), ln.get("sides")), "checked": ln.get("checked_at"),
                               "projection": ln.get("projection") if fc else None, "p_over": ln.get("p_over") if fc else None,
-                              "p_under": ln.get("p_under") if fc else None, "grade": ln.get("grade") if fc else None,
+                              "p_under": ln.get("p_under") if fc else None,
+                              "grade": ln.get("grade") if fc and _lol_side_offered(ln.get("platform"), ln.get("sides"), ln.get("model_side")) else None,
                               "pick_side": ({"over": "Over", "under": "Under"}.get(ln.get("model_side")) if fc else None)})
             lines.sort(key=lambda z: (z["line"] if z["line"] is not None else 1e9, z["platform"]))
             markets.append({"player": m.get("player"), "team": m.get("team"), "role": m.get("role"),
