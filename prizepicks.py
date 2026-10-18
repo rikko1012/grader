@@ -136,6 +136,13 @@ VERIFIED_SIDES = {
     # TeSeS MAPS 1-2 Headshots 16 (Falcons vs Aurora, 2026-10-18 11:30 UTC): feed allowed_wager_types 'over' (feed
     # updated 2026-10-18 01:40 UTC); owner confirmed Less pickable in the app 2026-10-18 ~03:15 UTC
     "15870993": {"line": 16.0, "higher": 1.0, "lower": 1.0, "checked": "owner app check 2026-10-18 03:15 UTC"},
+    # owner (2026-10-18 04:10 UTC): Less is available on these PrizePicks lines too (feed allowed_wager_types 'over')
+    "15870992": {"line": 16.0, "higher": 1.0, "lower": 1.0, "checked": "owner app check 2026-10-18 04:10 UTC"},   # NiKo MAPS 1-2 Headshots 16.0
+    "15870997": {"line": 15.5, "higher": 1.0, "lower": 1.0, "checked": "owner app check 2026-10-18 04:10 UTC"},   # Jimpphat MAPS 1-2 Headshots 15.5
+    "15870292": {"line": 16.0, "higher": 1.0, "lower": 1.0, "checked": "owner app check 2026-10-18 04:10 UTC"},   # r3salt MAPS 1-2 Headshots 16.0
+    "15870296": {"line": 14.5, "higher": 1.0, "lower": 1.0, "checked": "owner app check 2026-10-18 04:10 UTC"},   # dex MAPS 1-2 Headshots 14.5
+    "15870310": {"line": 16.5, "higher": 1.0, "lower": 1.0, "checked": "owner app check 2026-10-18 04:10 UTC"},   # flouzer MAPS 1-2 Headshots 16.5
+    "15870311": {"line": 17.0, "higher": 1.0, "lower": 1.0, "checked": "owner app check 2026-10-18 04:10 UTC"},   # ayuki MAPS 1-2 Headshots 17.0
 }
 
 
