@@ -425,12 +425,14 @@ def prune_board(feeds, now=None):
     lines and kept HLTV grades included - was cleared, so the Prop Board showed 0 lines. Now each pass drops exactly the
     entries whose line left its platform's feed or whose match started; a platform whose read failed keeps its entries.
     feeds = {book: that pass's underdog.board() / prizepicks.board()}. Returns how many were dropped."""
-    now_ = (now or datetime.now(timezone.utc)).isoformat()
+    now_ = now or datetime.now(timezone.utc)
     live, known = set(), set()
     for book, fb in feeds.items():
         if _feed_known(fb or {}, book):
             known.add(book)
-        live |= {r["id"] for r in (fb or {}).get("rows") or [] if not r.get("start") or r["start"] > now_}
+        # each platform's own listed start locks its own line, compared as times (2026-10-18: as text, a start written with
+        # another UTC offset compared wrong - the 2026-10-13 audit fixed the same in _before_start)
+        live |= {r["id"] for r in (fb or {}).get("rows") or [] if not _started(r.get("start"), now_)}
     drop = [k for k in list(BOARD) if k not in live and ("prizepicks" if str(k).startswith("pp:") else "underdog") in known]
     for k in drop:
         BOARD.pop(k, None)
@@ -468,12 +470,26 @@ def ud_id_map(rows=None):
     return out
 
 
-def same_match(r, slug, st):
+def _slug_mid(slug):
+    """The canonical id an HLTV-fallback match slug ("hltv-2399657") names ("hltv:2399657"); None for any other slug."""
+    m = re.fullmatch(r"hltv-(\d+)", str(slug or ""))
+    return f"hltv:{m.group(1)}" if m else None
+
+
+def same_match(r, slug, st, mid=None):
     """A board row is for the graded match: its match id decides when both sides know one (2026-10-15 owner - a platform's
     listed start can differ from the graded match's by hours: Underdog listed WBT vs ENCE at 14:00, BO3.gg 12:00; a
-    rematch has another id, so it never matches); otherwise the listed start within the join window."""
+    rematch has another id, so it never matches); otherwise the listed start within the join window.
+    2026-10-18 audit: one match can carry two slugs - the HLTV fallback's "hltv-2399657" until BO3.gg lists it, then BO3.gg's
+    "gamerlegion-vs-ex-rustec-16-10-2026" (GamerLegion vs ex-RUSTEC, Oct 16: lines graded on each side of the switch were
+    different matches here, so a card missed its board row's same-match stake). Two different slugs are the same match only
+    when both resolve to the SAME canonical HLTV match id (the fallback slug names it; a board row carries matchid's id;
+    mid = the card's) - never by names or a time window."""
     if slug and r.get("match_slug"):
-        return r["match_slug"] == slug
+        if r["match_slug"] == slug:
+            return True
+        a, b = _slug_mid(slug) or mid, _slug_mid(r["match_slug"]) or r.get("match_id")
+        return bool(a and b and str(a).startswith("hltv:") and a == b)
     rs = comparison._ts(r.get("start"))
     return bool(st and rs and abs((rs - st).total_seconds()) <= comparison.JOIN_START_MIN * 60)
 
@@ -629,6 +645,15 @@ def team_exposure(players):
             "units": round(sum(c.get("units") or 0 for c in picks), 2), "leans": leans, "both_props": both}
 
 
+def _card_match_id(res):
+    """The canonical match id of a card's graded match (the same lookup as a board row's), or None (identity only)."""
+    pb, nm = res.get("player_block") or {}, res.get("next_match") or {}
+    if _slug_mid(nm.get("slug")):
+        return _slug_mid(nm.get("slug"))
+    return _row_match_id({"team_name": pb.get("playing_for") or pb.get("current_team"), "opp_name": nm.get("opponent"),
+                          "start": nm.get("start"), "bo": nm.get("bo"), "event": nm.get("event")})
+
+
 def _row_match_id(row):
     """matchid.match_id_for_row, or None while matchid's tables are still loading (a member request never waits for the
     first HLTV read - the boot thread does it) or if linking fails. Identity only: no grade reads it."""
@@ -724,11 +749,11 @@ def board_payload(book="underdog"):
     """The graded board for one platform. book="prizepicks": PrizePicks' lines (prizepicks.py), each graded at its own
     line and market type; its feed state (ok / stale / failed / empty) travels with it. Default Underdog, unchanged."""
     b = prizepicks.board() if book == "prizepicks" else underdog.board()
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
     rows = []
     for r in b["rows"]:
-        if r.get("start") and r["start"] < now:
-            continue                                  # started: locked on Underdog
+        if _started(r.get("start"), now):
+            continue                                  # started on its own platform's listed start (compared as times)
         g = BOARD.get(r["id"]) or {}
         if not g.get("side"):
             continue                                  # not graded yet: never shown
@@ -1008,13 +1033,14 @@ def board_stake(res, prop, scope, line, line_type="standard", book=None):
     nick = ((res.get("player_block") or {}).get("player") or {}).get("nick") or ""
     nm = res.get("next_match") or {}
     st, slug = comparison._ts(nm.get("start")), nm.get("slug")
+    mid = _card_match_id(res)
     rows = _bs_rows()
     book = book or ("prizepicks" if line_type in ("goblin", "demon") else "underdog")   # the card's own platform
     for bk in ((book,) if isinstance(book, str) else tuple(book)):
         exact = [r for r in rows if (r.get("book") or "underdog") == bk
                  and str(r.get("nick") or r.get("player") or "").lower() == nick.lower() and r.get("prop") == prop
                  and (r.get("scope") or "12") == scope and float(r.get("line") or -1) == float(line) and r.get("side") == v["side"]
-                 and (st or slug) and same_match(r, slug, st)]
+                 and (st or slug) and same_match(r, slug, st, mid)]
         for r in exact:
             if r.get("cap_n") and r.get("units_full") == v["units"] and r["units"] < r["units_full"]:
                 out = dict(v, units=r["units"], units_full=r["units_full"], cap_n=r["cap_n"],
@@ -1046,6 +1072,7 @@ def kept_board_row(res, prop, scope, line, book=None, line_type="standard", why=
     st, slug = comparison._ts(nm.get("start")), nm.get("slug")
     if not nick or not (st or slug):
         return None
+    mid = _card_match_id(res)
     try:
         rows_ = _bs_rows()
     except Exception:
@@ -1062,7 +1089,7 @@ def kept_board_row(res, prop, scope, line, book=None, line_type="standard", why=
                     continue                      # graded at another line
             except (TypeError, ValueError):
                 continue
-            if not same_match(r, slug, st):
+            if not same_match(r, slug, st, mid):
                 continue                          # another match (the id decides, whatever the listed start)
             if (r["side"] == "Less" and r.get("under_available") is False) or (r["side"] == "More" and r.get("over_available") is False):
                 if why is not None:               # the feed no longer offers this side: say so (never "no saved grade")

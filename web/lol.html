@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LoL Prop Grader</title>
+<title>1time Esports · LoL Matchroom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -75,9 +75,144 @@ tbody tr.row{cursor:pointer}tbody tr.row:hover{background:#1a212d}tbody tr:last-
   .ln{grid-template-columns:1fr 1fr;row-gap:2px;padding:6px 0;border-top:1px solid var(--line)}.ln:first-child{border-top:0}
   .match table,.match tbody,.match tr,.match td{display:block;width:100%}.match thead{display:none}.match td{border-bottom:0;padding:6px 14px}
   .match tr{border-bottom:1px solid var(--line);padding:6px 0}.match td:nth-child(1),.match td:nth-child(2){display:inline-block;width:auto;padding-bottom:0}.mcard .kv{grid-template-columns:repeat(2,1fr)}}
-</style></head><body>
+
+/* ONE_TIME_MATCHROOM_START */
+/* 1time Esports / Matchroom. Shared presentation only; no forecast changes. */
+:root {
+  --bg:#0a0d12; --panel:#111720; --panel-2:#192330; --line:#273343;
+  --line-2:#3b4d62; --text:#f3f6fa; --muted:#b1bdcc; --faint:#94a3b6;
+  --accent:#ffad68; --accent-2:#ffca9f; --radius:16px;
+  --display:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+body {background:radial-gradient(ellipse at 75% 0,#22324855,transparent 52%),var(--bg);color:var(--text)}
+button,input,select,textarea {font-family:Inter,system-ui,sans-serif}
+button,a,input,select,textarea,summary {touch-action:manipulation}
+button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visible {outline:3px solid var(--accent);outline-offset:3px}
+[hidden] {display:none!important}
+.scout-rail {width:208px;background:#0d121a;padding:28px 16px;border-right:1px solid var(--line)}
+.rail-brand {font:800 22px var(--display);letter-spacing:-1px;gap:10px}
+.rail-mark,.logo {background:var(--accent);box-shadow:none;border-radius:11px}
+.rail-word {letter-spacing:-.8px}.rail-edition {color:var(--muted);letter-spacing:.13em;margin:13px 0 30px}
+.rail-link {min-height:48px;text-decoration:none;border-radius:10px;margin:5px 0}
+.rail-link.on {background:#ffad6810;border-color:#ffad6838;color:var(--accent-2)}
+.wrap {margin-left:208px;max-width:1720px;padding:0 32px 100px}
+header {height:72px;margin:0 -32px;padding:0 32px;background:#0a0d12f5}
+header h1 {font:800 18px var(--display);text-transform:none;letter-spacing:-.5px}
+header h1 em {color:var(--text)}
+header .tag {font:11px var(--display);letter-spacing:.02em;text-transform:none}
+.workspace-intro {padding:28px 0 22px;margin:0;align-items:center}
+.workspace-intro h2 {font:700 clamp(27px,3vw,40px)/1.1 var(--display);letter-spacing:-1.2px;margin:8px 0}
+.workspace-intro p {font-size:13px;max-width:640px}
+.workspace-intro .eyebrow {font:600 10px var(--display);letter-spacing:.18em}
+body.mode-board .workspace-intro,body.mode-slate .workspace-intro {display:flex;justify-content:space-between;padding:30px 0 24px;align-items:center}
+body.mode-board:not(.scout-compact) .workspace-intro>div:first-child,body.mode-slate:not(.scout-compact) .workspace-intro>div:first-child {display:block}
+.workspace-tools button {min-height:40px}
+.research-strip {display:none}
+.board-command>span {font:600 12px var(--display);letter-spacing:.02em;text-transform:none;color:var(--muted)}
+.bbar {gap:10px;padding:16px;background:#111720;border-radius:16px;border-color:var(--line)}
+#bbook {padding:0 0 12px;gap:4px}
+#bbook button {min-height:42px;flex:1 1 0!important;font-size:13px;padding:10px 12px!important}
+#bbook button.on,#bbook button[data-v=underdog].on,#bbook button[data-v=prizepicks].on,#bbook button[data-v=moneylines].on {background:#253347;color:#fff;border-color:#43566d}
+.seg {background:#0b1119;border-color:var(--line)}
+.seg button {min-height:40px}.seg button.on {background:#27374b;color:#fff}
+.chipbtn,.bslip {min-height:38px}.go {background:var(--accent);color:#211207;letter-spacing:0;text-transform:none;font-weight:700}
+#bsearch {min-height:44px}.bbar input[type=search] {flex-basis:240px}
+.ot-summary {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}
+.ot-metric {border:1px solid var(--line);border-radius:13px;padding:16px 18px;background:linear-gradient(135deg,#1b2635,#111720)}
+.ot-metric span {display:block;color:var(--muted);font-size:11px;margin-bottom:8px}
+.ot-metric strong {font:700 27px var(--display);letter-spacing:-.8px;font-variant-numeric:tabular-nums}
+.ot-metric small {font-size:11px;color:var(--muted);margin-left:8px}
+.mgroup {border:1px solid #2d3b4d;border-radius:16px;background:#101722;margin:0 0 18px}
+.mgroup>summary {background:#182332;padding:20px;flex-wrap:wrap}
+.mgroup>summary b {font:650 19px var(--display);letter-spacing:-.4px}
+.mgroup>summary .small {color:var(--muted);font-size:12px;margin-left:21px}
+.mgroup .mbody {padding:14px}
+.ot-match-tools {display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;margin:0 0 12px}
+.ot-match-tools p {margin:0;flex:1 1 340px;font-size:12px;color:var(--muted);line-height:1.7}
+.ot-match-tools p b {color:var(--text)}
+.ot-open-match {border:1px solid #ffad6855;border-radius:9px;min-height:42px;padding:9px 13px;background:#ffad680b;color:var(--accent-2);font:600 12px var(--display);cursor:pointer}
+.ot-match-warning {padding:9px 12px;margin:0 0 12px;border:1px solid #d5a64d55;background:#d5a64d09;border-radius:9px;color:#f0cc88;font-size:12px}
+.brow2 {grid-template-columns:44px minmax(0,1fr) auto;border:1px solid #293647;background:#121c28;padding:16px;border-radius:12px;gap:14px}
+.brow2:hover {background:#1a283a;border-color:#5b7190}
+.b2top {font-size:16px}.b2top .muted {font-size:11px;display:block;margin-top:3px}
+.b2pick {font-size:15px;font-weight:500;line-height:1.7;margin-top:7px}
+.b2pick b {color:var(--text)}.b2meta {font-size:12px;color:var(--muted)}
+.b2ev {font-size:12px}.bslip {background:#ffad680c;color:var(--accent-2);border:1px solid #ffad6850;min-height:42px;padding:8px 12px}
+.bslip:disabled {background:transparent;border-color:var(--line);color:var(--faint)}
+.brow2 .gtag {background:#202d3d;border-color:#41526b;color:#edf4ff;border-radius:10px;font-size:15px}
+.brow2 .g-a,.brow2 .g-ap,.brow2 .g-am {background:#173b32;color:#a4e7c9;border-color:#386d5e}
+.ot-featured {padding:0!important;border:0;background:transparent;margin:18px 0 24px!important}
+.ot-featured>.blist {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:12px 0}
+.ot-featured .brow2 {grid-template-columns:34px minmax(0,1fr);align-content:start;background:linear-gradient(145deg,#20324a,#131d2c);border-color:#39516d}
+.ot-featured .brow2 .bslip {grid-column:2;justify-self:start}.ot-featured .b2top {font-size:16px}.ot-featured .b2pick {font-size:14px}
+.glegend {padding:14px;margin-top:16px;border-top:1px solid var(--line);line-height:1.8;color:var(--muted)}
+.mlcard {border:1px solid var(--line);background:linear-gradient(120deg,#182332,#111720);border-radius:16px;padding:22px;margin-bottom:16px}
+.mlhead b {font:650 21px var(--display);letter-spacing:-.6px}.mlhead .small {margin-top:5px}
+.mlprob {font-weight:700;font-variant-numeric:tabular-nums}.mlside {border-top:1px solid var(--line);margin-top:15px;padding-top:15px}
+.mlreasons {line-height:1.8}.mlcard details {border-top:1px solid var(--line);padding-top:12px;margin-top:14px}
+#studiobox {background:#111b29;border:1px solid #344763;border-radius:14px;margin:16px 0}
+#studio {background:transparent}.studio-step {background:#141f2c}.studio-row>.t {font-size:12px}
+.studio-bar {padding:16px}.studio-bar>b {font:600 16px var(--display)}
+#f {background:linear-gradient(130deg,#1b283a,#111720);border-color:#35485f;padding:26px}
+#f .workspace-section-title h2 {font-size:19px;text-transform:none;letter-spacing:-.3px}
+.herocard {background:linear-gradient(120deg,#203149,#121b29)!important;border-color:#3e536d}
+.hero h3 {font-family:var(--display);font-weight:750}.stat .v,.side .v {font-family:var(--display)}
+.card h2 {text-transform:none;letter-spacing:0;font:650 15px var(--display);color:var(--text)}
+#cardpop #popbody {border:1px solid #43536b;box-shadow:0 24px 100px #000b}
+.ot-desk {color:var(--text);background:#0e1520;border:1px solid #465a75;border-radius:20px;padding:0;width:min(1120px,calc(100% - 36px));max-width:none;max-height:88dvh;overflow:auto;box-shadow:0 30px 120px #000b}
+.ot-desk::backdrop {background:#03070dce;backdrop-filter:blur(5px)}
+.ot-desk-head {position:sticky;top:0;z-index:2;background:#142031;padding:22px 26px;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;justify-content:space-between;gap:20px}
+.ot-desk-head h2 {font:700 25px var(--display);letter-spacing:-.7px;margin:7px 0}
+.ot-desk-head p {margin:0;font-size:12px;color:var(--muted)}
+.ot-desk-content {padding:22px 26px}.ot-desk-content h3 {font:650 16px var(--display);margin:22px 0 12px}
+.ot-desk-list {display:grid;gap:10px}.ot-desk-row {display:grid;grid-template-columns:130px minmax(0,1fr);gap:15px;background:#152031;border:1px solid var(--line);border-radius:12px;padding:14px}
+.ot-desk-player strong {display:block;font-size:15px}.ot-desk-player small {font-size:11px;color:var(--muted)}
+.ot-offers {display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px}
+.ot-offer {text-align:left;border:1px solid #36485f;border-radius:9px;background:#101924;color:var(--text);padding:12px;cursor:pointer;font:13px/1.6 var(--display)}
+.ot-offer:hover {border-color:var(--accent);background:#1c2b3f}.ot-offer>span {display:block}.ot-offer small {color:var(--muted);font-size:11px}
+.ot-desk-close {flex-shrink:0;min-height:44px;border:1px solid var(--line-2);border-radius:9px;padding:8px 14px;color:var(--text);background:#1c2b3e;cursor:pointer}
+.ot-status {display:inline-block;border:1px solid #42526a;border-radius:6px;color:var(--muted);padding:1px 6px;font-size:10px;margin-top:5px}
+/* LoL keeps its independent routing, controls, and grading rules. */
+body.ot-lol .wrap {margin:0 auto;max-width:1500px;padding:28px 28px 90px}
+body.ot-lol header {margin:0;padding:0 28px}
+body.ot-lol .intro {margin:0 0 24px}.ot-lol .intro h2 {font:700 34px var(--display);letter-spacing:-1px}
+.ot-lol .bar {padding:16px;gap:10px;border-radius:15px;background:#131e2c}
+.ot-lol .tablebox {border-radius:15px}.ot-lol td {padding:15px 12px}.ot-lol th {padding:15px 12px;background:#1b293b;color:var(--muted)}
+.ot-lol tr.row:hover {background:#1d2b3f}.ot-lol .mcard {padding:17px;background:linear-gradient(130deg,#1b293b,#111b28);border-radius:14px;border-color:#35475e}
+.ot-lol .sheet {background:#121d2b;border-color:#42566e;padding:24px;border-radius:18px}
+.ot-lol .panel {background:#142031;border-color:#33465d;border-radius:14px}
+.ot-push {display:block;color:#e3c88e;font-size:11px;margin-top:3px}
+@media(min-width:1180px) {body.hasslip:not(.locked) .wrap {margin-left:208px}}
+@media(max-width:1150px) and (min-width:761px) {
+  .scout-rail {width:78px;padding:24px 12px}.wrap {margin-left:78px;padding:0 24px 90px}header{padding:0 24px;margin:0 -24px}
+  .ot-featured>.blist {grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:760px) {
+  .wrap {margin:0;padding:0 14px 120px}header {height:64px;margin:0 -14px;padding:0 14px}header h1 {font-size:16px}
+  .workspace-intro {padding:20px 0 16px;gap:12px}.workspace-intro h2 {font-size:28px}.workspace-tools {flex-direction:column}
+  body.mode-board .workspace-intro {display:flex}.workspace-intro p {display:none}.workspace-tools #scout-guide {display:none}
+  .workspace-intro .eyebrow {font-size:9px}.workspace-tools button {font-size:11px}
+  body.mode-board .workspace-intro,body.mode-slate .workspace-intro {padding:22px 0 18px}.ot-featured>.blist {grid-template-columns:minmax(0,1fr)}
+  #bbook {overflow:auto}#bbook button {flex:0 0 auto!important;min-height:42px;font-size:12px}
+  .ot-summary {gap:7px;margin:12px 0}.ot-metric {padding:12px 10px}.ot-metric strong {font-size:22px}.ot-metric span {font-size:10px}.ot-metric small {display:block;margin:4px 0 0;font-size:10px}
+  .bbar {padding:12px;gap:8px}.bbar .seg button {min-height:40px;font-size:11px}
+  .mgroup>summary {padding:16px 13px}.mgroup>summary b {font-size:17px}.mgroup .mbody {padding:10px}
+  .ot-match-tools {align-items:stretch}.ot-open-match {width:100%}.ot-match-tools p {font-size:12px}
+  .brow2 {grid-template-columns:36px minmax(0,1fr);padding:13px;gap:10px}.brow2 .bslip {grid-column:2;justify-self:start;min-height:42px;font-size:12px}
+  .b2top {font-size:15px}.b2pick {font-size:14px;overflow-wrap:anywhere}.b2meta {font-size:11px}
+  .mlcard {padding:17px}.mlhead b {font-size:19px}.mlprob {font-size:18px;line-height:1.7}
+  #f {padding:18px}.ot-desk {width:calc(100% - 14px);max-height:94dvh;border-radius:14px}
+  .ot-desk-head {padding:16px 14px;gap:8px}.ot-desk-head h2 {font-size:20px}.ot-desk-content {padding:15px 12px}
+  .ot-desk-row {grid-template-columns:minmax(0,1fr);gap:10px;padding:12px}.ot-offers {grid-template-columns:minmax(0,1fr)}
+  .ot-lol header {padding:0 14px!important}.ot-lol header h1 {font-size:15px}.ot-lol .sportsw {margin-left:auto}
+  body.ot-lol .wrap {padding:22px 14px 80px}.ot-lol .intro h2 {font-size:29px}.ot-lol .bar {padding:12px}
+}
+@media(prefers-reduced-motion:reduce) {*,*::before,*::after {animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+/* ONE_TIME_MATCHROOM_END */
+</style></head><body class="ot-lol">
 <header><div class="logo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#170b00" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg></div>
-<h1>LoL <em>Prop</em> Grader</h1><nav class="sportsw" aria-label="Game"><a href="/">CS2</a><a href="/lol" class="on" aria-current="page">LoL</a></nav><span class="grow"></span><span id="who"></span></header>
+<h1>1time <em>Esports</em></h1><nav class="sportsw" aria-label="Game"><a href="/">CS2</a><a href="/lol" class="on" aria-current="page">LoL</a></nav><span class="grow"></span><span id="who"></span></header>
 <main class="wrap" id="app" aria-live="polite"><div class="skel"></div><div class="skel"></div><div class="skel"></div><div class="skel"></div></main>
 <div id="modal" role="dialog" aria-modal="true" aria-labelledby="cardtitle"><div class="sheet" id="card"></div></div>
 <script>
@@ -166,11 +301,11 @@ function boardView() {
     t += `<tr class="row" tabindex="0" data-i="${i}" aria-label="${esc(x.player + " " + x.stat_name + " " + x.scope + " " + x.platform_label + " " + x.line)}"><td>${when(x.start)}<span class="sub">${esc(x.event || "")}${x.best_of ? " · BO" + x.best_of : ""}</span></td>
       <td><b>${esc(x.player)}</b><span class="sub">${esc(x.team || "")}${x.role ? " · " + esc(x.role) : ""}</span></td><td>${esc(x.opponent || "")}</td>
       <td>${esc(x.stat_name)}<span class="sub">${esc(x.scope)}</span></td><td>${esc(x.platform_label)}${typeTag(x.line_type)}</td>
-      <td class="num"><b>${x.line}</b></td><td class="num">${num(x.projection)}</td><td class="num">${pct(x.p_over)}</td><td class="num">${pct(x.p_under)}</td>
+      <td class="num"><b>${x.line}</b></td><td class="num">${num(x.projection)}</td><td class="num">${pct(x.p_over)}</td><td class="num">${pct(x.p_under)}${x.p_push > 0 ? `<span class="ot-push">Push ${pct(x.p_push)}</span>` : ""}</td>
       <td>${pickCell(x)}</td><td>${gradeChip(x)}</td><td class="num">${x.units}U</td></tr>`;
     c += `<button type="button" class="mcard" data-i="${i}"><div class="top"><div class="who"><b>${esc(x.player)}</b><span class="sub">${esc(x.team || "")}${x.role ? " · " + esc(x.role) : ""} · vs ${esc(x.opponent || "")}</span><span class="sub">${when(x.start)}</span></div><div>${gradeChip(x)}</div></div>
       <div style="margin-top:8px">${esc(x.stat_name)} · ${esc(x.scope)} · ${esc(x.platform_label)}${typeTag(x.line_type)}</div><div style="margin-top:4px">${pickCell(x)}</div>
-      <div class="kv"><div><span class="k">Line</span><b>${x.line}</b></div><div><span class="k">Projection</span>${num(x.projection)}</div><div><span class="k">Over</span>${pct(x.p_over)}</div><div><span class="k">Under</span>${pct(x.p_under)}</div></div></button>`;
+      <div class="kv"><div><span class="k">Line</span><b>${x.line}</b></div><div><span class="k">Projection</span>${num(x.projection)}</div><div><span class="k">Over</span>${pct(x.p_over)}</div><div><span class="k">Under</span>${pct(x.p_under)}</div></div><span class="small muted">Stake ${esc(x.units)}U</span>${x.p_push > 0 ? `<span class="ot-push">Exactly ${x.line}: ${pct(x.p_push)} push</span>` : ""}</button>`;
   }
   return t + `</tbody></table></div>` + c + `</div><p class="small faint" style="margin-top:10px">${esc(D.stake_note)} Projection = the model's expected total for the exact games in the prop. Chances are for this line.</p>`;
 }
@@ -286,7 +421,7 @@ function render() {
   for (const x of D.rows || []) ms.set(matchKey(x), `${matchName(x)} · ${new Date(x.start).toLocaleString([], {month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"})}`);
   for (const t of D.match_tables || []) if (!ms.has(`${t.start}|${t.teams}`)) ms.set(`${t.start}|${t.teams}`, `${t.teams} · ${new Date(t.start).toLocaleString([], {month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"})}`);
   if (F.match !== "all" && !ms.has(F.match)) F.match = "all";
-  let h = `<div class="intro"><div><div class="eyebrow">League of Legends · Underdog + PrizePicks</div><h2>LoL prop board</h2><p>Every posted kills, assists and deaths line with the model's projection for the exact games in the prop, the chance of each side, and the grade.</p></div><div class="feeds">${feedsLine()}</div></div>${staleBanner()}`;
+  let h = `<div class="intro"><div><div class="eyebrow">League of Legends · Underdog + PrizePicks</div><h2>League of Legends. In focus.</h2><p>Every posted kills, assists and deaths line with the model's projection for the exact games in the prop, the chance of each side, and the grade.</p></div><div class="feeds">${feedsLine()}</div></div>${staleBanner()}`;
   h += `<div class="bar">${seg("v", F.view, [["board", "Board"], ["tables", "Compare books"], ["slip", `Slip${SLIP.legs.length ? " (" + SLIP.legs.length + ")" : ""}`]])}${seg("p", F.plat, [["all", "All books"], ["underdog", "Underdog"], ["prizepicks", "PrizePicks"]])}
     <select id="s" aria-label="Prop"><option value="all">All props</option><option value="kills">Kills</option><option value="assists">Assists</option><option value="deaths">Deaths</option></select>
     <select id="m" aria-label="Match"><option value="all">All matches</option>${[...ms].map(([k, l]) => `<option value="${esc(k)}">${esc(l)}</option>`).join("")}</select>

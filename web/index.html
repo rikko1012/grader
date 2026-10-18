@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CS2 Prop Grader</title>
+<title>1time Esports · CS2 Matchroom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -472,18 +472,153 @@ body.mode-board .workspace-tools,body.mode-slate .workspace-tools{flex-direction
   .slatewide{display:none}.slatelist{display:grid}.mcwide{display:none}.mclist{display:block}.mapcol{display:none}.parts{display:none}
   .studio-bar .sbsub{display:none}.b2meta .mx{display:none}}
 @media(max-width:760px){#popbody .popbar{margin:-12px -12px 8px;top:-12px}}   /* the popup's own 12px padding on phones (no sideways scroll) */   /* the one-line grade bar: no box of its own (header and card popup) */
+
+/* ONE_TIME_MATCHROOM_START */
+/* 1time Esports / Matchroom. Shared presentation only; no forecast changes. */
+:root {
+  --bg:#0a0d12; --panel:#111720; --panel-2:#192330; --line:#273343;
+  --line-2:#3b4d62; --text:#f3f6fa; --muted:#b1bdcc; --faint:#94a3b6;
+  --accent:#ffad68; --accent-2:#ffca9f; --radius:16px;
+  --display:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+body {background:radial-gradient(ellipse at 75% 0,#22324855,transparent 52%),var(--bg);color:var(--text)}
+button,input,select,textarea {font-family:Inter,system-ui,sans-serif}
+button,a,input,select,textarea,summary {touch-action:manipulation}
+button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visible {outline:3px solid var(--accent);outline-offset:3px}
+[hidden] {display:none!important}
+.scout-rail {width:208px;background:#0d121a;padding:28px 16px;border-right:1px solid var(--line)}
+.rail-brand {font:800 22px var(--display);letter-spacing:-1px;gap:10px}
+.rail-mark,.logo {background:var(--accent);box-shadow:none;border-radius:11px}
+.rail-word {letter-spacing:-.8px}.rail-edition {color:var(--muted);letter-spacing:.13em;margin:13px 0 30px}
+.rail-link {min-height:48px;text-decoration:none;border-radius:10px;margin:5px 0}
+.rail-link.on {background:#ffad6810;border-color:#ffad6838;color:var(--accent-2)}
+.wrap {margin-left:208px;max-width:1720px;padding:0 32px 100px}
+header {height:72px;margin:0 -32px;padding:0 32px;background:#0a0d12f5}
+header h1 {font:800 18px var(--display);text-transform:none;letter-spacing:-.5px}
+header h1 em {color:var(--text)}
+header .tag {font:11px var(--display);letter-spacing:.02em;text-transform:none}
+.workspace-intro {padding:28px 0 22px;margin:0;align-items:center}
+.workspace-intro h2 {font:700 clamp(27px,3vw,40px)/1.1 var(--display);letter-spacing:-1.2px;margin:8px 0}
+.workspace-intro p {font-size:13px;max-width:640px}
+.workspace-intro .eyebrow {font:600 10px var(--display);letter-spacing:.18em}
+body.mode-board .workspace-intro,body.mode-slate .workspace-intro {display:flex;justify-content:space-between;padding:30px 0 24px;align-items:center}
+body.mode-board:not(.scout-compact) .workspace-intro>div:first-child,body.mode-slate:not(.scout-compact) .workspace-intro>div:first-child {display:block}
+.workspace-tools button {min-height:40px}
+.research-strip {display:none}
+.board-command>span {font:600 12px var(--display);letter-spacing:.02em;text-transform:none;color:var(--muted)}
+.bbar {gap:10px;padding:16px;background:#111720;border-radius:16px;border-color:var(--line)}
+#bbook {padding:0 0 12px;gap:4px}
+#bbook button {min-height:42px;flex:1 1 0!important;font-size:13px;padding:10px 12px!important}
+#bbook button.on,#bbook button[data-v=underdog].on,#bbook button[data-v=prizepicks].on,#bbook button[data-v=moneylines].on {background:#253347;color:#fff;border-color:#43566d}
+.seg {background:#0b1119;border-color:var(--line)}
+.seg button {min-height:40px}.seg button.on {background:#27374b;color:#fff}
+.chipbtn,.bslip {min-height:38px}.go {background:var(--accent);color:#211207;letter-spacing:0;text-transform:none;font-weight:700}
+#bsearch {min-height:44px}.bbar input[type=search] {flex-basis:240px}
+.ot-summary {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}
+.ot-metric {border:1px solid var(--line);border-radius:13px;padding:16px 18px;background:linear-gradient(135deg,#1b2635,#111720)}
+.ot-metric span {display:block;color:var(--muted);font-size:11px;margin-bottom:8px}
+.ot-metric strong {font:700 27px var(--display);letter-spacing:-.8px;font-variant-numeric:tabular-nums}
+.ot-metric small {font-size:11px;color:var(--muted);margin-left:8px}
+.mgroup {border:1px solid #2d3b4d;border-radius:16px;background:#101722;margin:0 0 18px}
+.mgroup>summary {background:#182332;padding:20px;flex-wrap:wrap}
+.mgroup>summary b {font:650 19px var(--display);letter-spacing:-.4px}
+.mgroup>summary .small {color:var(--muted);font-size:12px;margin-left:21px}
+.mgroup .mbody {padding:14px}
+.ot-match-tools {display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;margin:0 0 12px}
+.ot-match-tools p {margin:0;flex:1 1 340px;font-size:12px;color:var(--muted);line-height:1.7}
+.ot-match-tools p b {color:var(--text)}
+.ot-open-match {border:1px solid #ffad6855;border-radius:9px;min-height:42px;padding:9px 13px;background:#ffad680b;color:var(--accent-2);font:600 12px var(--display);cursor:pointer}
+.ot-match-warning {padding:9px 12px;margin:0 0 12px;border:1px solid #d5a64d55;background:#d5a64d09;border-radius:9px;color:#f0cc88;font-size:12px}
+.brow2 {grid-template-columns:44px minmax(0,1fr) auto;border:1px solid #293647;background:#121c28;padding:16px;border-radius:12px;gap:14px}
+.brow2:hover {background:#1a283a;border-color:#5b7190}
+.b2top {font-size:16px}.b2top .muted {font-size:11px;display:block;margin-top:3px}
+.b2pick {font-size:15px;font-weight:500;line-height:1.7;margin-top:7px}
+.b2pick b {color:var(--text)}.b2meta {font-size:12px;color:var(--muted)}
+.b2ev {font-size:12px}.bslip {background:#ffad680c;color:var(--accent-2);border:1px solid #ffad6850;min-height:42px;padding:8px 12px}
+.bslip:disabled {background:transparent;border-color:var(--line);color:var(--faint)}
+.brow2 .gtag {background:#202d3d;border-color:#41526b;color:#edf4ff;border-radius:10px;font-size:15px}
+.brow2 .g-a,.brow2 .g-ap,.brow2 .g-am {background:#173b32;color:#a4e7c9;border-color:#386d5e}
+.ot-featured {padding:0!important;border:0;background:transparent;margin:18px 0 24px!important}
+.ot-featured>.blist {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:12px 0}
+.ot-featured .brow2 {grid-template-columns:34px minmax(0,1fr);align-content:start;background:linear-gradient(145deg,#20324a,#131d2c);border-color:#39516d}
+.ot-featured .brow2 .bslip {grid-column:2;justify-self:start}.ot-featured .b2top {font-size:16px}.ot-featured .b2pick {font-size:14px}
+.glegend {padding:14px;margin-top:16px;border-top:1px solid var(--line);line-height:1.8;color:var(--muted)}
+.mlcard {border:1px solid var(--line);background:linear-gradient(120deg,#182332,#111720);border-radius:16px;padding:22px;margin-bottom:16px}
+.mlhead b {font:650 21px var(--display);letter-spacing:-.6px}.mlhead .small {margin-top:5px}
+.mlprob {font-weight:700;font-variant-numeric:tabular-nums}.mlside {border-top:1px solid var(--line);margin-top:15px;padding-top:15px}
+.mlreasons {line-height:1.8}.mlcard details {border-top:1px solid var(--line);padding-top:12px;margin-top:14px}
+#studiobox {background:#111b29;border:1px solid #344763;border-radius:14px;margin:16px 0}
+#studio {background:transparent}.studio-step {background:#141f2c}.studio-row>.t {font-size:12px}
+.studio-bar {padding:16px}.studio-bar>b {font:600 16px var(--display)}
+#f {background:linear-gradient(130deg,#1b283a,#111720);border-color:#35485f;padding:26px}
+#f .workspace-section-title h2 {font-size:19px;text-transform:none;letter-spacing:-.3px}
+.herocard {background:linear-gradient(120deg,#203149,#121b29)!important;border-color:#3e536d}
+.hero h3 {font-family:var(--display);font-weight:750}.stat .v,.side .v {font-family:var(--display)}
+.card h2 {text-transform:none;letter-spacing:0;font:650 15px var(--display);color:var(--text)}
+#cardpop #popbody {border:1px solid #43536b;box-shadow:0 24px 100px #000b}
+.ot-desk {color:var(--text);background:#0e1520;border:1px solid #465a75;border-radius:20px;padding:0;width:min(1120px,calc(100% - 36px));max-width:none;max-height:88dvh;overflow:auto;box-shadow:0 30px 120px #000b}
+.ot-desk::backdrop {background:#03070dce;backdrop-filter:blur(5px)}
+.ot-desk-head {position:sticky;top:0;z-index:2;background:#142031;padding:22px 26px;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;justify-content:space-between;gap:20px}
+.ot-desk-head h2 {font:700 25px var(--display);letter-spacing:-.7px;margin:7px 0}
+.ot-desk-head p {margin:0;font-size:12px;color:var(--muted)}
+.ot-desk-content {padding:22px 26px}.ot-desk-content h3 {font:650 16px var(--display);margin:22px 0 12px}
+.ot-desk-list {display:grid;gap:10px}.ot-desk-row {display:grid;grid-template-columns:130px minmax(0,1fr);gap:15px;background:#152031;border:1px solid var(--line);border-radius:12px;padding:14px}
+.ot-desk-player strong {display:block;font-size:15px}.ot-desk-player small {font-size:11px;color:var(--muted)}
+.ot-offers {display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px}
+.ot-offer {text-align:left;border:1px solid #36485f;border-radius:9px;background:#101924;color:var(--text);padding:12px;cursor:pointer;font:13px/1.6 var(--display)}
+.ot-offer:hover {border-color:var(--accent);background:#1c2b3f}.ot-offer>span {display:block}.ot-offer small {color:var(--muted);font-size:11px}
+.ot-desk-close {flex-shrink:0;min-height:44px;border:1px solid var(--line-2);border-radius:9px;padding:8px 14px;color:var(--text);background:#1c2b3e;cursor:pointer}
+.ot-status {display:inline-block;border:1px solid #42526a;border-radius:6px;color:var(--muted);padding:1px 6px;font-size:10px;margin-top:5px}
+/* LoL keeps its independent routing, controls, and grading rules. */
+body.ot-lol .wrap {margin:0 auto;max-width:1500px;padding:28px 28px 90px}
+body.ot-lol header {margin:0;padding:0 28px}
+body.ot-lol .intro {margin:0 0 24px}.ot-lol .intro h2 {font:700 34px var(--display);letter-spacing:-1px}
+.ot-lol .bar {padding:16px;gap:10px;border-radius:15px;background:#131e2c}
+.ot-lol .tablebox {border-radius:15px}.ot-lol td {padding:15px 12px}.ot-lol th {padding:15px 12px;background:#1b293b;color:var(--muted)}
+.ot-lol tr.row:hover {background:#1d2b3f}.ot-lol .mcard {padding:17px;background:linear-gradient(130deg,#1b293b,#111b28);border-radius:14px;border-color:#35475e}
+.ot-lol .sheet {background:#121d2b;border-color:#42566e;padding:24px;border-radius:18px}
+.ot-lol .panel {background:#142031;border-color:#33465d;border-radius:14px}
+.ot-push {display:block;color:#e3c88e;font-size:11px;margin-top:3px}
+@media(min-width:1180px) {body.hasslip:not(.locked) .wrap {margin-left:208px}}
+@media(max-width:1150px) and (min-width:761px) {
+  .scout-rail {width:78px;padding:24px 12px}.wrap {margin-left:78px;padding:0 24px 90px}header{padding:0 24px;margin:0 -24px}
+  .ot-featured>.blist {grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:760px) {
+  .wrap {margin:0;padding:0 14px 120px}header {height:64px;margin:0 -14px;padding:0 14px}header h1 {font-size:16px}
+  .workspace-intro {padding:20px 0 16px;gap:12px}.workspace-intro h2 {font-size:28px}.workspace-tools {flex-direction:column}
+  body.mode-board .workspace-intro {display:flex}.workspace-intro p {display:none}.workspace-tools #scout-guide {display:none}
+  .workspace-intro .eyebrow {font-size:9px}.workspace-tools button {font-size:11px}
+  body.mode-board .workspace-intro,body.mode-slate .workspace-intro {padding:22px 0 18px}.ot-featured>.blist {grid-template-columns:minmax(0,1fr)}
+  #bbook {overflow:auto}#bbook button {flex:0 0 auto!important;min-height:42px;font-size:12px}
+  .ot-summary {gap:7px;margin:12px 0}.ot-metric {padding:12px 10px}.ot-metric strong {font-size:22px}.ot-metric span {font-size:10px}.ot-metric small {display:block;margin:4px 0 0;font-size:10px}
+  .bbar {padding:12px;gap:8px}.bbar .seg button {min-height:40px;font-size:11px}
+  .mgroup>summary {padding:16px 13px}.mgroup>summary b {font-size:17px}.mgroup .mbody {padding:10px}
+  .ot-match-tools {align-items:stretch}.ot-open-match {width:100%}.ot-match-tools p {font-size:12px}
+  .brow2 {grid-template-columns:36px minmax(0,1fr);padding:13px;gap:10px}.brow2 .bslip {grid-column:2;justify-self:start;min-height:42px;font-size:12px}
+  .b2top {font-size:15px}.b2pick {font-size:14px;overflow-wrap:anywhere}.b2meta {font-size:11px}
+  .mlcard {padding:17px}.mlhead b {font-size:19px}.mlprob {font-size:18px;line-height:1.7}
+  #f {padding:18px}.ot-desk {width:calc(100% - 14px);max-height:94dvh;border-radius:14px}
+  .ot-desk-head {padding:16px 14px;gap:8px}.ot-desk-head h2 {font-size:20px}.ot-desk-content {padding:15px 12px}
+  .ot-desk-row {grid-template-columns:minmax(0,1fr);gap:10px;padding:12px}.ot-offers {grid-template-columns:minmax(0,1fr)}
+  .ot-lol header {padding:0 14px!important}.ot-lol header h1 {font-size:15px}.ot-lol .sportsw {margin-left:auto}
+  body.ot-lol .wrap {padding:22px 14px 80px}.ot-lol .intro h2 {font-size:29px}.ot-lol .bar {padding:12px}
+}
+@media(prefers-reduced-motion:reduce) {*,*::before,*::after {animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+/* ONE_TIME_MATCHROOM_END */
 </style>
 </head>
 <body class="locked">
-<aside class="scout-rail" aria-label="Workspace navigation"><div class="rail-brand"><span class="rail-mark">⌖</span><span class="rail-word">SCOUT</span></div><div class="rail-edition">COUNTER-STRIKE INTELLIGENCE</div><div id="railgame" hidden><div class="rail-label">GAME</div><div class="railgame"><a class="on" href="/" aria-current="page">CS2</a><a href="/lol">League of Legends</a></div></div><div class="rail-label">WORKSPACE</div><a href="#one" class="rail-link on" data-scout-route="one" title="Single Prop" aria-label="Single Prop"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5M7 10h6M10 7v6"/></svg><span class="route-label">Single Prop</span><span class="route-arrow" aria-hidden="true">›</span></a><a href="#board" class="rail-link" data-scout-route="board" title="Prop Board" aria-label="Prop Board"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="route-label">Prop Board</span><span class="route-arrow" aria-hidden="true">›</span></a><a href="#slate" class="rail-link" data-scout-route="slate" title="Slate" aria-label="Slate"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h13M8 12h13M8 19h13M3 5h1M3 12h1M3 19h1"/></svg><span class="route-label">Slate</span><span class="route-arrow" aria-hidden="true">›</span></a><div class="rail-bottom"><b>Built for your research.</b><p>Player history. Match context.<br>One place to compare.</p><p><span class="rail-key">K</span> Kills &nbsp; <span class="rail-key">H</span> Headshots</p></div></aside>
+<aside class="scout-rail" aria-label="Workspace navigation"><div class="rail-brand"><span class="rail-mark">⌖</span><span class="rail-word">1time</span></div><div class="rail-edition">ESPORTS / MATCHROOM</div><div id="railgame" hidden><div class="rail-label">GAME</div><div class="railgame"><a class="on" href="/" aria-current="page">CS2</a><a href="/lol">League of Legends</a></div></div><div class="rail-label">WORKSPACE</div><a href="#one" class="rail-link on" data-scout-route="one" title="Single Prop" aria-label="Single Prop"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5M7 10h6M10 7v6"/></svg><span class="route-label">Single Prop</span><span class="route-arrow" aria-hidden="true">›</span></a><a href="#board" class="rail-link" data-scout-route="board" title="Prop Board" aria-label="Prop Board"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="route-label">Prop Board</span><span class="route-arrow" aria-hidden="true">›</span></a><a href="#slate" class="rail-link" data-scout-route="slate" title="Slate" aria-label="Slate"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h13M8 12h13M8 19h13M3 5h1M3 12h1M3 19h1"/></svg><span class="route-label">Slate</span><span class="route-arrow" aria-hidden="true">›</span></a><div class="rail-bottom"><b>Built for your research.</b><p>Player history. Match context.<br>One place to compare.</p><p><span class="rail-key">K</span> Kills &nbsp; <span class="rail-key">H</span> Headshots</p></div></aside>
 <div class="wrap">
-  <header><div class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#170b00" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg></div><h1>CS2 <em>Prop</em> Grader</h1><nav class="sportsw" id="sportsw" aria-label="Game" hidden><a class="on" href="/" aria-current="page">CS2</a><a id="sportlol" href="/lol">LoL</a></nav><span class="grow"></span><form class="mini" id="mini" autocomplete="off"><input id="mp" placeholder="Player" aria-label="Player"><input id="ml" class="l" inputmode="decimal" placeholder="Line" aria-label="Line"><select id="mlt" class="msel" title="Line type" aria-label="Line type"><option value="standard">Standard</option><option value="goblin">Goblin</option><option value="demon">Demon</option></select><select id="msc" class="msel" title="Maps" aria-label="Maps"><option value="12">Maps 1–2</option><option value="123">Maps 1–3</option><option value="1">Map 1</option></select>
+  <header><div class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#170b00" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg></div><h1>1time <em>Esports</em></h1><nav class="sportsw" id="sportsw" aria-label="Game" hidden><a class="on" href="/" aria-current="page">CS2</a><a id="sportlol" href="/lol">LoL</a></nav><span class="grow"></span><form class="mini" id="mini" autocomplete="off"><input id="mp" placeholder="Player" aria-label="Player"><input id="ml" class="l" inputmode="decimal" placeholder="Line" aria-label="Line"><select id="mlt" class="msel" title="Line type" aria-label="Line type"><option value="standard">Standard</option><option value="goblin">Goblin</option><option value="demon">Demon</option></select><select id="msc" class="msel" title="Maps" aria-label="Maps"><option value="12">Maps 1–2</option><option value="123">Maps 1–3</option><option value="1">Map 1</option></select>
     <div class="seg" id="mprop" role="group" aria-label="Prop"><button type="button" data-v="kills">K</button><button type="button" data-v="hs">HS</button></div><button class="go" aria-label="Grade this line">Grade</button></form>
     <span class="tag" id="tag">CS2 kills &amp; headshots</span></header>
 
   <div id="gate" class="card" hidden style="text-align:center;padding:28px 18px"></div>
   <div id="who" class="small muted" hidden style="text-align:right;margin:-6px 0 8px"></div>
-<section class="workspace-intro" aria-label="Research workspace"><div><div class="eyebrow">CS2 / Research terminal</div><h2 id="workspace-title">Every angle. One player.</h2><p id="workspace-desc">Explore the projection, compare the lines, and see what supports the grade.</p></div><div class="workspace-tools"><button type="button" id="scout-density" aria-pressed="false" title="Switch board and table spacing">↕ Compact view</button><button type="button" id="scout-guide">How it works</button></div></section><div class="research-strip"><div><span class="step">01</span><div><b>Player intelligence</b><small>History meets projection</small></div></div><div><span class="step">02</span><div><b>Compare the market</b><small>Underdog + PrizePicks</small></div></div><div><span class="step">03</span><div><b>Review your entry</b><small>Line checks &amp; exposure</small></div></div></div>
+<section class="workspace-intro" aria-label="Research workspace"><div><div class="eyebrow">CS2 / Matchroom</div><h2 id="workspace-title">Every angle. One player.</h2><p id="workspace-desc">Explore the projection, compare the lines, and see what supports the grade.</p></div><div class="workspace-tools"><button type="button" id="scout-density" aria-pressed="false" title="Switch board and table spacing">↕ Compact view</button><button type="button" id="scout-guide">How it works</button></div></section><div class="research-strip"><div><span class="step">01</span><div><b>Player intelligence</b><small>History meets projection</small></div></div><div><span class="step">02</span><div><b>Compare the market</b><small>Underdog + PrizePicks</small></div></div><div><span class="step">03</span><div><b>Review your entry</b><small>Line checks &amp; exposure</small></div></div></div>
   <div class="modes" id="modes"><div class="seg" id="mode"><button type="button" data-v="one" class="on">Single Prop</button><button type="button" data-v="board">Prop Board</button><button type="button" data-v="slate">Slate</button></div>
     <span class="small muted">Shortcuts: <b>K</b> kills &middot; <b>H</b> headshots</span></div>
   <section class="card" id="slate" hidden><div class="workspace-section-title"><h2>Grade your slate</h2><p>Research up to 15 lines together.</p></div>
@@ -513,8 +648,10 @@ body.mode-board .workspace-tools,body.mode-slate .workspace-tools{flex-direction
     <section id="studiobox" class="studiobox" hidden aria-label="Slip studio"><div class="studio-bar"><div><b>Slip studio</b> <span class="muted sbsub">2–4-pick slip suggestions</span></div>
       <button type="button" class="chipbtn" id="bstudio" hidden aria-expanded="false" aria-controls="studio">Open</button></div>
       <div id="studio" hidden></div></section>
+    <div id="ot-board-overview"></div>
     <div id="boardout"></div>
   </section>
+  <dialog id="ot-match-desk" class="ot-desk" aria-labelledby="ot-desk-title"></dialog>
   <div id="cardpop" hidden><div id="popbody" role="dialog" aria-modal="true" aria-label="Player card"><div class="popbar" id="popbar"><button type="button" class="chipbtn" id="popclose" title="Close (Esc)">✕ Close</button></div></div></div>
   <form id="f" autocomplete="off"><div class="workspace-section-title"><h2>Explore a player</h2><p>Choose a market. See the full picture.</p></div>
     <div class="field">
@@ -571,6 +708,40 @@ body.mode-board .workspace-tools,body.mode-slate .workspace-tools{flex-direction
 <div class="slip" id="slip" hidden></div>
 
 <script>
+/* Pure view helpers. Deliberately do not estimate probabilities or change stakes. */
+const OTView = Object.freeze({
+  playerKey(row) {
+    if (row.player_id != null && row.player_id !== '') return `id:${row.player_id}`;
+    return JSON.stringify([String(row.nick || row.player || '').toLowerCase(),
+      String(row.team_name || row.team || '').toLowerCase()]);
+  },
+  shortlist(rows, eligible) {
+    const seen = new Set();
+    return [...rows].filter(r => eligible(r) && !r.stale && !r.hltv_retry
+        && Number.isFinite(r.p) && r.p >= 0 && r.p <= 1)
+      .sort((a,b) => b.p - a.p)
+      .filter(r => { const key = this.playerKey(r); if (seen.has(key)) return false; seen.add(key); return true; })
+      .slice(0,3);
+  },
+  startTimes(rows) {
+    const bySource = new Map();
+    for (const r of rows) {
+      const epoch = Date.parse(r.start);
+      if (!Number.isFinite(epoch)) continue;
+      const key = JSON.stringify([r.book || 'underdog', epoch]);
+      bySource.set(key, {book:r.book || 'underdog', epoch});
+    }
+    return [...bySource.values()].sort((a,b) => a.epoch-b.epoch || a.book.localeCompare(b.book));
+  },
+  startMismatch(rows) {
+    return new Set(this.startTimes(rows).map(x=>x.epoch)).size > 1;
+  },
+  sortMatches(matches) {
+    const time = m => Number.isFinite(Date.parse(m.start)) ? Date.parse(m.start) : Infinity;
+    return [...matches].sort((a,b)=>time(a)-time(b));
+  }
+});
+
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const pct = (x, d = 1) => x == null ? "–" : (x * 100).toFixed(d) + "%";
@@ -952,7 +1123,7 @@ function slateItem(x, i) {
     <div class="small">${tag} <b>${chance(v.p, g.prop, capOf(x.d, "kills_chance", KCAP))}</b> · ${v.units ?? 0}U${nm.opponent ? " · vs " + esc(nm.opponent) : ""}</div>${note ? `<div class="small" style="color:var(--warn)">${esc(note)}</div>` : ""}</div>`;
 }
 // what the letters mean - one short line under every list that shows them
-const gradeLegend = () => `<div class="glegend">Grades from the chance the pick wins: A+ 80%+ · A 74%+ · A− 68%+ · B+ 63%+ · B 57%+ · B− 55%+ · <span class="gtag g-scout">L</span> = Lean, 0 units (under 55%, or a stake rule held it at 0).</div>`;
+const gradeLegend = () => `<div class="glegend">Grades from the chance the pick wins: A+ 80%+ · A 74%+ · A− 68%+ · B+ 63%+ · B 57%+ · B− 55%+ · <span class="gtag g-scout">L</span> = Lean, below 55%. Grades use the unrounded probability. An earned letter grade can have 0U when a stake rule applies; its reason is shown separately.</div>`;
 function drawSlate() {
   const key = r => { const v = r.d?.verdict || {}, g = r.d?.grade || {};
     return {p: v.p ?? -1, u: v.units ?? -1, pl: (r.player || "").toLowerCase(), pr: g.lambda_final ?? -1}[slateSort.k]; };
@@ -1295,12 +1466,18 @@ const viewRows = b => b === "all" ? [...BK.underdog.rows, ...BK.prizepicks.rows]
 // match / player showed up twice on the Prop Board and in Compare.
 const teamNorm = s => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "").replace(/(esports?|gaming|clan|club)$/, "");
 // A team plays one match at a time, so sharing EITHER team is enough (platforms spell opponents differently: "XI" vs "Xl").
+// 2026-10-18: the server's canonical HLTV match id (match_id "hltv:...", the same on both platforms) decides first - rows
+// with one id are one match whatever each platform lists as its start (Underdog listed WBT vs ENCE 2 h after the graded
+// start), and two different ids are never merged. Rows without an HLTV id keep the names + 45-minute rule.
 function assignMatchKeys(rows) {
   const seen = [];
   for (const r of rows) {
     const teams = new Set([r.team_name, r.team, r.opp_name, r.opponent].map(teamNorm).filter(Boolean)), t0 = Date.parse(r.start), t = isNaN(t0) ? null : t0;
-    let hit = seen.find(x => [...teams].some(n => x.teams.has(n)) && (x.t === null && t === null || x.t !== null && t !== null && Math.abs(x.t - t) <= 45 * 60000));
-    if (!hit) { hit = {teams: new Set(), t, key: [...teams].sort().join("|") + "|" + (t === null ? "" : new Date(t).toISOString().slice(0, 16))}; seen.push(hit); }
+    const mid = /^hltv:/.test(r.match_id || "") ? r.match_id : null;
+    let hit = mid ? seen.find(x => x.mid === mid) : null;
+    if (!hit) hit = seen.find(x => (!mid || !x.mid) && [...teams].some(n => x.teams.has(n)) && (x.t === null && t === null || x.t !== null && t !== null && Math.abs(x.t - t) <= 45 * 60000));
+    if (!hit) { hit = {teams: new Set(), t, mid, key: [...teams].sort().join("|") + "|" + (t === null ? "" : new Date(t).toISOString().slice(0, 16))}; seen.push(hit); }
+    if (mid && !hit.mid) hit.mid = mid;
     teams.forEach(n => hit.teams.add(n));
     r._mk = hit.key;
   }
@@ -1399,8 +1576,9 @@ function drawBoard() {
   for (const id of ["#bprop", "#bside", "#bscope"]) $(id).hidden = ml;
   $("#bbets").closest("label").hidden = $("#bflag").closest("label").hidden = cmpv || ml;
   $("#csort").hidden = $("#cdiff").closest("label").hidden = !cmpv;
-  $("#mlusable").closest("label").hidden = !ml;
+  $("#mlusable").closest("label").hidden = true; // prices are always required by the current policy
   studioShow();
+  $("#ot-board-overview").innerHTML = "";
   if (ml) return drawMoneylines();
   if (cmpv) return drawCompare();
   const sortBy = $("#bsort").value;
@@ -1418,6 +1596,7 @@ function drawBoard() {
   const rows = boardRows.filter(r => (bprop === "both" || r.prop === bprop) && (r.scope || "12") === bscope && (bside === "both" || r.side === bside)
                                     && (!$("#bbets").checked || isBet(r)) && (!$("#bflag").checked || !isFlagged(r)) && hit(r)).sort(cmp);
   $("#bcount").textContent = boardRows.length ? `${rows.length} of ${boardRows.length} lines` : "";
+  $("#ot-board-overview").innerHTML = otBoardSummary(rows);
   const pct0 = x => x == null ? "–" : (x * 100).toFixed(1) + "%";
   const ev = (x, cls, sign) => x && x.text ? `<div class="b2ev ${cls}">${sign} ${esc(x.text)} ${basisTag(x.basis)}</div>` : "";
   const rowHtml = (r, showMatch) => {
@@ -1434,23 +1613,22 @@ function drawBoard() {
       ${!r.side ? "<span></span>" : gone ? `<button type="button" class="bslip" disabled title="${esc(gone)}">Unavailable</button>` : r.state === "SCOUT" ? `<button type="button" class="bslip" disabled title="No upcoming match found for his team – there is nothing to enter on a slip yet">+ Slip</button>`
         : `<button type="button" class="bslip ${onSlip.has(slipKeyRow(r)) ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}|${mktType(r)}|${r.book || "underdog"}">${onSlip.has(slipKeyRow(r)) ? "On slip" : "+ Slip"}</button>`}
     </div>`; };
-  // every qualifying bet in a match, kills + headshots, following Overs / Unders / Both - alternatives, not a slip
+  // Rank only the already-filtered rows. One player per summary, even across books.
   const matchRank = mrows => {
-    const q2 = boardRows.filter(x => matchKey(x) === matchKey(mrows[0]) && x.side && x.state !== "SCOUT" && isBet(x)
-                                     && (x.scope || "12") === bscope && (bside === "both" || x.side === bside)).sort((a, b) => (b.p ?? 0) - (a.p ?? 0));
-    if (!q2.length) return `<div class="small muted" style="margin:0 2px 8px">No qualifying bets in this match${bside !== "both" ? ` (${bside === "More" ? "Overs" : "Unders"} only)` : ""}.</div>`;
-    const it = x => `${esc(x.nick || x.player)} ${sideWord({grade: mGrade(x), side: x.side})} ${x.line} ${propWord(x.prop)}${bbook === "all" ? ` (${bookName(x.book || "underdog")})` : ""} <b>${chance(x.p, x.prop)}</b>`;
-    return `<div class="small" style="margin:0 2px 8px;line-height:1.5"><b>Highest chance here:</b> ${q2.slice(0, 3).map(it).join(" · ")}
-      ${q2.length > 1 ? `<div class="muted">These picks share match conditions and can win or lose together.</div>` : ""}</div>`; };
+    const q2 = OTView.shortlist(mrows, x => x.side && x.state !== "SCOUT" && isBet(x) && !sideGone(x));
+    const it = x => `${esc(x.nick || x.player)} ${sideWord({grade:mGrade(x),side:x.side})} ${x.line} ${propWord(x.prop)} <b>${chance(x.p,x.prop)}</b>`;
+    return `<div class="ot-match-tools"><p><b>Top picks in this view:</b> ${q2.length ? q2.map(it).join(" · ") : "No qualifying picks with these filters."}${q2.length > 1 ? "<br>These picks share match conditions." : ""}</p>
+      <button type="button" class="ot-open-match" data-ot-match="${esc(matchKey(mrows[0]))}">Research match ↗</button></div>${otStartNotice(mrows)}`;
+  };
   // Best plays (2026-10-11): the strongest graded picks on the board right now - one per player, best grade first,
   // then highest chance; stakes as the board shows them (same-match cap included). Follows the Kills / HS / maps filters.
   const bestPlays = () => {
     if (bview !== "matches" || !$("#bbets").checked) return "";
-    const seen = new Set(), top = rows.filter(r => r.side && isBet(r) && r.state !== "SCOUT" && !r.stale)
+    const seen = new Set(), seenMatches = new Set(), top = rows.filter(r => r.side && isBet(r) && r.state !== "SCOUT" && !r.stale)
       .sort((a, b) => (G_RANK[a.grade] ?? 9) - (G_RANK[b.grade] ?? 9) || isFlagged(a) - isFlagged(b) || (b.p ?? 0) - (a.p ?? 0))
-      .filter(r => { const k = String(r.nick || r.player).toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 6);
+      .filter(r => { const k = OTView.playerKey(r), mk = matchKey(r); if (seen.has(k) || seenMatches.has(mk)) return false; seen.add(k); seenMatches.add(mk); return true; }).slice(0, 3);
     if (top.length < 2) return "";
-    return `<div class="card" style="margin-bottom:12px;padding:12px"><div class="small muted" style="margin-bottom:6px"><b style="color:var(--text)">Best plays right now</b> · strongest graded picks${bbook === "all" ? " on either platform" : ""} · one per player</div>
+    return `<div class="card ot-featured" style="margin-bottom:12px;padding:12px"><div class="small muted" style="margin-bottom:6px"><b style="color:var(--text)">Match highlights</b> · strongest graded picks${bbook === "all" ? " on either platform" : ""} · one per match</div>
       <div class="blist">${top.map(r => rowHtml(r, true)).join("")}</div>
       <div class="small muted" style="margin-top:6px">Ranked by grade, then chance. Picks from one match share its conditions – see the match groups below.</div></div>`;
   };
@@ -1476,6 +1654,8 @@ function drawBoard() {
   $("#boardout").querySelectorAll("details.mgroup").forEach(d => d.addEventListener("toggle", () => { const o = store.get("cs2s_mopen", {}); o[d.dataset.mk] = d.open; store.set("cs2s_mopen", o); }));
 }
 $("#boardout").addEventListener("click", e => {
+  const deskButton=e.target.closest('[data-ot-match]');
+  if (deskButton) return otOpenDesk(deskButton.dataset.otMatch,deskButton);
   if (e.target.closest("[data-reset]")) return resetBFilters();
   if (e.target.closest("[data-mlall]")) { $("#mlusable").checked = false; return drawBoard(); }
   if (e.target.closest("[data-mlclear]")) { $("#bsearch").value = ""; return drawBoard(); }
@@ -1687,17 +1867,19 @@ const utcTime = s => { const d = new Date(s); return isNaN(d) ? "–" : d.toISOS
 // why a platform has no usable price, in a few words
 // tpNow = is the card's Thunderpick price usable on this page now: the server set a Thunderpick-based side from a price
 // that may have reached its limit since (the shared copy is up to 30 s old) - said so, never shown as if still current
-const mlSide = (sd, tpNow) => {
+const mlSide = (sd, tpNow, context = {}) => {
   if (!sd || !sd.label || (sd.baseline_source === "thunderpick" && tpNow === false)) return "";
+  const quoteOnly = context.quote && sd.kind !== "market";
   const lapsed = "";
+  const displayLabel = quoteOnly ? "Market quote shown · analysis uses HLTV context only" : sd.label;
   const v = sd.hltv_view, c = sd.hltv_counts || {};
   const badge = v === "agrees" ? `<span class="pill good">HLTV agrees${c.available ? ` (${c.for} of ${c.available})` : ""}</span>`
     : v === "disagrees" ? `<span class="pill bad">HLTV disagrees${c.available ? ` (${c.against} of ${c.available} favour the other side)` : ""}</span>`
     : v === "mixed" ? `<span class="pill warn">HLTV mixed</span>` : "";
-  const rs = (sd.reasons || []).filter(r => !/not linked|not resolved|no usable|unavailable|not confirmed|unconfirmed|\bstale\b|not current/i.test(r)).slice(0, 6);
-  return `<div class="mlside"><div class="mlsidehead"><b>${esc(sd.label)}</b> <span class="pill">0U</span> ${badge}</div>
+  const rs = (sd.reasons || []).filter(r => !/not linked|not resolved|no usable|no market price|unavailable|not confirmed|unconfirmed|\bstale\b|not current/i.test(r)).slice(0, 6);
+  return `<div class="mlside"><div class="mlsidehead"><b>${esc(displayLabel)}</b> ${badge}</div>
     ${lapsed}${rs.length ? `<ul class="mlreasons">${rs.map(r => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
-    ${sd.basis ? `<div class="small muted">${esc(sd.basis)}</div>` : ""}</div>`;
+    ${!quoteOnly && sd.basis ? `<div class="small muted">${esc(sd.basis)}</div>` : ""}</div>`;
 };
 // Thunderpick first (2026-10-13): bookmaker odds, raw implied chances incl. the margin and the proportional
 // margin-removed market-implied probability, kept apart from the exchanges' prices. Usable (the primary price) only while
@@ -1766,7 +1948,7 @@ function mlCard(m, model, rec) {
   // the model / recommendation status is the same for every match: it is said once, above the list
   return `<article class="mlcard">${headL}
     ${base}
-    ${mlSide(m.side, tu)}
+    ${mlSide(m.side, tu, {quote: !!src, linked: !!m.match_id})}
     <details><summary>Quote details</summary>
     ${quality ? `<div class="mlbadges"><span>Prices</span> ${quality}</div>` : ""}
     ${agree ? `<div class="mlbadges"><span>Agreement</span> ${agree}</div>` : ""}
@@ -1796,7 +1978,7 @@ function drawMoneylines() {
   const list = d.matches.filter(m => !q || [m.teams.a, m.teams.b, m.event].some(x => String(x || "").toLowerCase().includes(q)));
   // one decision per match (server): any platform live, or the earliest stated start passed
   const up0 = list.filter(m => !mlStarted(m)), done = list.filter(mlStarted);
-  const onlyU = true, up = up0.filter(mlUsable);      // owner 2026-10-16: matches without a current price are not listed
+  const onlyU = true, up = OTView.sortMatches(up0.filter(mlUsable));      // owner 2026-10-16: matches without a current price are not listed
   // the search box is shared with the Prop Board: a leftover player search says so here (2026-10-13 audit: it emptied
   // the list and the tab read "No CS2 series-winner prices ... right now" and "0 of 0 matches" while 94 were listed)
   const all0 = d.matches.filter(m => !mlStarted(m));
@@ -2618,7 +2800,7 @@ function mcFetch() {
     .catch(() => { const el = $("#mcmp"); if (el && MC.key === key) el.innerHTML = `<h2>Match players</h2><div class="small muted">Couldn't load the other players right now – the grade above is unaffected.</div>`; });
 }
 // why a pick reads the way it does: the chance is the model's full-precision figure; the grade comes from that chance
-// (B- from 55%, B from 57% ...); "Lean" means 0 units - under 55%, or a gate held the stake at 0 even above it
+// (B- from 55%, B from 57% ...); letter grade and stake restriction are separate
 function mcWhy(c) {
   // the grade and stake are decided on the grader's full-precision chance; the board publishes it to 0.1%, so a shown
   // 55.0% can be a 54.96% Lean - the explanation comes from the grader's own reason, never from the rounded figure
@@ -2705,13 +2887,76 @@ document.addEventListener("click", e => {
     gradeNow(nick, line, prop, "standard", MC.scope, !$("#cardpop").hidden, {team: c.ud_team || t?.team, opponent: c.ud_opponent || null, book: MC.book, start: MC.data.match?.start || null});
   }
 });
+// Matchroom reads the same board snapshot; all card requests still use gradeNow.
+// No fuzzy identity matching, quote fetching, new probability or stake calculation here.
+let otDeskRows = [], otDeskReturn = null;
+function otStartNotice(rows) {
+  if (!OTView.startMismatch(rows)) return '';
+  const times = OTView.startTimes(rows).map(x => `${bookName(x.book)}: ${clockTxt(new Date(x.epoch).toISOString())}`);
+  return `<div class="ot-match-warning" role="note"><b>Platforms list different start times.</b> ${times.map(esc).join(' · ')}. Each platform locks its own line at its own listed start.</div>`;
+}
+function otBoardSummary(rows) {
+  const matches = new Set(rows.map(matchKey)).size;
+  const players = new Set(rows.map(r => OTView.playerKey(r))).size;
+  return `<section class="ot-summary" aria-label="Filtered board overview">
+    <div class="ot-metric"><span>Matching lines</span><strong>${rows.length}</strong><small>current filters</small></div>
+    <div class="ot-metric"><span>Players</span><strong>${players}</strong><small>across these lines</small></div>
+    <div class="ot-metric"><span>Match groups</span><strong>${matches}</strong><small>shared exposure matters</small></div>
+  </section>`;
+}
+function otOpenDesk(key, opener) {
+  const dlg = $('#ot-match-desk');
+  // Only rows in the existing displayed match group and selected scope. Do not merge events by guessed names.
+  otDeskRows = boardRows.filter(r => matchKey(r) === key && (r.scope || '12') === bscope);
+  if (!otDeskRows.length) return;
+  otDeskReturn = opener;
+  const first = headRow(otDeskRows), teams = new Map();
+  otDeskRows.forEach((r,index) => {
+    const team = r.team_name || r.team || '';
+    if (!teams.has(team)) teams.set(team,new Map());
+    const group = teams.get(team), player = OTView.playerKey(r);
+    if (!group.has(player)) group.set(player,[]);
+    group.get(player).push({r,index});
+  });
+  const offer = ({r,index}) => {
+    const unavailable = sideGone(r);
+    const pick = unavailable ? `${esc(unavailable)}` : r.side ? `${esc(sideWord(r))} ${esc(r.line)} · ${chance(r.p,r.prop)}` : 'Being graded';
+    return `<button type="button" class="ot-offer" data-ot-card="${index}" aria-label="Open ${esc(r.nick || r.player)} ${esc(propWord(r.prop))} ${esc(r.line)} on ${esc(bookName(r.book || 'underdog'))}">
+      <small>${esc(bookName(r.book || 'underdog'))} · ${esc(propWord(r.prop))} · ${esc(mktType(r))}</small>
+      <span><b>Line ${esc(r.line)}</b> · Projection ${r.proj == null ? '—' : num(r.proj,1)}</span>
+      <span>${pick}</span><small>${unavailable ? 'Unavailable' : `${esc(mGrade(r) || '')} · ${r.units == null ? '—' : esc(r.units)+'U'}`}</small>
+      ${r.graded_at ? `<span class="ot-status">Graded ${esc(clockTxt(r.graded_at))} · ${esc(agoTxt(r.graded_at))}</span>` : ''}
+    </button>`;
+  };
+  dlg.innerHTML = `<div class="ot-desk-head"><div><span class="eyebrow">MATCHROOM · ${esc((SCOPE_TXT[bscope] || 'Maps 1–2'))}</span><h2 id="ot-desk-title">${esc(first.team_name || first.team)} vs ${esc(first.opp_name || first.opponent)}</h2><p>${first.event ? esc(first.event) + ' · ' : ''}${otDeskRows.length} posted lines in this platform view</p></div><button type="button" class="ot-desk-close" data-ot-close>Close</button></div>
+    <div class="ot-desk-content">${otStartNotice(otDeskRows)}<p class="small muted">Players with posted lines in this view. Each offer keeps its own projection, probability, grade and stake. Select an offer for its full player analysis.</p>
+    ${[...teams.entries()].map(([team,players])=>`${team ? `<h3>${esc(team)}</h3>` : ''}<div class="ot-desk-list">${[...players.values()].map(entries=>`<div class="ot-desk-row"><div class="ot-desk-player"><strong>${esc(entries[0].r.nick || entries[0].r.player)}</strong><small>${entries[0].r.awp?'AWP':entries[0].r.igl?'IGL':'Player'}</small></div><div class="ot-offers">${entries.sort((a,b)=>propOrder(a.r.prop)-propOrder(b.r.prop)).map(offer).join('')}</div></div>`).join('')}</div>`).join('')}
+    <p class="small muted" style="margin-top:20px">Book lines are thresholds, not independent projections. Picks from this match share match conditions.</p></div>`;
+  dlg.showModal();
+  dlg.querySelector('[data-ot-close]').focus();
+}
+function otCloseDesk() {
+  $('#ot-match-desk').close();
+  if (otDeskReturn && otDeskReturn.isConnected) otDeskReturn.focus();
+}
+$('#ot-match-desk').addEventListener('click',e=>{
+  if (e.target.closest('[data-ot-close]')) return otCloseDesk();
+  const button=e.target.closest('[data-ot-card]');
+  if (!button) return;
+  const r=otDeskRows[Number(button.dataset.otCard)]; if (!r) return;
+  otCloseDesk();
+  gradeNow(r.nick || r.player,String(r.line),r.prop,gradeType(r),r.scope || '12',true,
+    {team:r.team,opponent:r.opponent,book:r.book || 'underdog',start:r.start});
+});
+$('#ot-match-desk').addEventListener('cancel',e=>{e.preventDefault();otCloseDesk();});
+
 </script>
 <button type="button" class="scout-top" id="scout-top" aria-label="Back to top" hidden>↑</button>
 <script id="scout-presentation">
 // Presentation controls only; routes delegate to the existing application controls.
 (() => {
  const q = s => document.querySelector(s);
- const modeCopy = {one:['Every angle. One player.','Explore the projection, compare the lines, and see what supports the grade.'],board:['Your board. A clearer edge.','Compare available lines across platforms. Find a match, then examine every angle.'],slate:['A full slate. In focus.','Research multiple lines together, compare their grades, and review your selections.']};
+ const modeCopy = {one:['Know the player. Read the match.','Projections, player history and the exact line you are researching.'],board:['Your next pick starts here.','Compare the board. Open a match. Understand what supports each grade.'],slate:['Your slate, together.','Research multiple lines and review their grades in one place.']};
  const reduced=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
  const scrollToEl=el=>el?.scrollIntoView({behavior:reduced()?'instant':'smooth',block:'start'});
  function syncMode(){

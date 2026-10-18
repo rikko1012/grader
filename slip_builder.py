@@ -483,6 +483,12 @@ def _select(pool, st, usage, had_prior=False):
                        f"slips of this batch; one pick per match and player inside a slip)")
             if search["bound_hit"]:
                 why += f"; search stopped at its {NODE_LIMIT}-node bound"
+            total_matches = len({min(l.mk) for l in pool if l.mk})
+            if total_matches < n:
+                shortage[n] = (why + f". Rules are not relaxed. The filtered pool has {total_matches} distinct eligible matches; "
+                               f"a {n}-pick slip needs {n}. Allowing repeats across slips or starting a new "
+                               "batch cannot supply the missing matches. Broaden the filters or wait for more lines.")
+                continue
             tips = ["ask for fewer slips"] + (["allow limited overlap"] if st["overlap"] == "none" else [])
             tips += ["start a new batch"] if had_prior else []
             shortage[n] = (why + ". Rules are not relaxed to fill the count - "
