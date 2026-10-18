@@ -130,6 +130,23 @@ def directions(wagers, odds_type, adjusted=False):
     return {"higher": 1.0, "lower": 1.0, "direction_basis": "feed states no restriction (standard line)"}
 
 
+# Offers whose sides the owner checked in the PrizePicks app because the feed's field disagreed. Exact projection id AND
+# line: a moved line is a new offer and goes back to the feed's rule. Nothing broader is inferred from these.
+VERIFIED_SIDES = {
+    # TeSeS MAPS 1-2 Headshots 16 (Falcons vs Aurora, 2026-10-18 11:30 UTC): feed allowed_wager_types 'over' (feed
+    # updated 2026-10-18 01:40 UTC); owner confirmed Less pickable in the app 2026-10-18 ~03:15 UTC
+    "15870993": {"line": 16.0, "higher": 1.0, "lower": 1.0, "checked": "owner app check 2026-10-18 03:15 UTC"},
+}
+
+
+def verified_sides(projection_id, line, dirs):
+    v = VERIFIED_SIDES.get(projection_id)
+    if not v or line is None or float(line) != v["line"]:
+        return dirs
+    return dict(dirs, higher=v["higher"], lower=v["lower"],
+                direction_basis=f"{v['checked']} (this offer only; feed said: {dirs.get('direction_basis')})")
+
+
 def market_of(stat):
     """"MAPS 1-2 Kills" -> ("kills", "1-2"); "MAP 1 Headshots" -> ("headshots", "1"); other stats -> (None, maps).
     Exact stat names only (2026-10-13 audit C14 - never a substring: "MAPS 1-2 AWP Kills" is not total kills, and
@@ -192,7 +209,7 @@ def parse_direct(body, seen):
             start = None
         out.append({"line_id": str(p.get("id", "")), "player": name, "team": team, "opponent": opp, "start_time": start,
                     "market": market, "maps": maps, "line": line, "odds_type": ot,
-                    **directions(wagers, ot, bool(a.get("adjusted_odds"))),
+                    **verified_sides(str(p.get("id", "")), line, directions(wagers, ot, bool(a.get("adjusted_odds")))),
                     "stat": stat, "updated_at": seen, "open_line": None, "prev_line": None, "move": None, "moves": None,
                     "moved_at": None, "first_seen": None, "other_line": None})
     singles = sum(1 for p in body.get("data") or [] if ((p.get("attributes") or {}).get("status") or "pre_game") == "pre_game"

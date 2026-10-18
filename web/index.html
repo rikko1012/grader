@@ -1209,7 +1209,14 @@ $("#slip").addEventListener("click", e => {
   if (e.target.closest("#slipclose")) { $("#slip").hidden = true; return; }
   if (e.target.closest("#slipcopy")) (async () => {
     const s = await recheckSlip();
-    const bad = s.filter(x => ["changed", "unavailable"].includes(x.now?.status));
+    // 2026-10-18 owner: a side that is not offered (or not confirmed) is never copied - also from a slip saved earlier
+    const gone = s.filter(x => x.now?.status === "unavailable");
+    if (gone.length) {
+      await ask("Remove these picks first", gone.map(x => `<div>• <b>${esc(x.p)}</b> ${sideTxt(x.s)} ${x.l}: ${esc(x.now.note || "this side is not offered now")}</div>`).join(""),
+        [{k: "review", label: "Review slip", primary: true}]);
+      return;
+    }
+    const bad = s.filter(x => x.now?.status === "changed");
     if (bad.length) {
       const k = await ask("Check these picks first", bad.map(x => `<div>• <b>${esc(x.p)}</b> ${sideTxt(x.s)} ${x.l}: ${esc(x.now.note || x.now.status)}</div>`).join(""),
         [{k: "review", label: "Review slip", primary: true}, {k: "copy", label: "Copy anyway (marked)"}]);
@@ -1424,7 +1431,7 @@ function drawBoard() {
         <div class="b2pick">${gone ? `<span class="pill bad" title="${esc(bookName(r.book || "underdog"))} does not offer the ${r.side === "Less" ? "Under" : "Over"} for this line any more - not a bet, not on slips; its last grade is kept for the record">${esc(gone)}</span> <span class="muted">${r.side === "Less" ? "Under" : "Over"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}</span></div>` : `${r.side ? esc(sideWord(r)) : "grading…"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}${mktTag(r)}${r.p != null ? ` · <b>${chance(r.p, r.prop)}</b>${coinFlip(r.p)}` : ""}${isLeanV(r) ? (r.state === "SCOUT" ? " · No match scheduled" : "") : " · " + esc(mGrade(r) || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${zeroWhy(r)}${capChip(r, r.team_name || r.team)}</div>`}
         <div class="b2meta">Proj ${r.proj != null ? num(r.proj, 1) : "–"}${ds ? ` · <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}">${ds[1]}</span>` : ""}${r.source ? `<span class="mx"> · source ${esc(r.source)}</span>` : ""}${r.graded_at ? `<span class="mx"> · graded ${agoTxt(r.graded_at)}</span>` : ""}${r.alt && r.book !== "prizepicks" ? ` · alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}${r.book === "prizepicks" && r.open_line != null && +r.open_line !== +r.line ? ` · opened ${r.open_line}` : ""}${r.moved_from != null ? ` · <span class="pill warn">line moved from ${r.moved_from}</span>` : ""}</div>
         ${ev(r.support, "up", "+")}${ev(r.concern, "dn", "–")}</div>
-      ${!r.side ? "<span></span>" : gone ? `<button type="button" class="bslip" disabled title="${esc(gone)}">+ Slip</button>` : r.state === "SCOUT" ? `<button type="button" class="bslip" disabled title="No upcoming match found for his team – there is nothing to enter on a slip yet">+ Slip</button>`
+      ${!r.side ? "<span></span>" : gone ? `<button type="button" class="bslip" disabled title="${esc(gone)}">Unavailable</button>` : r.state === "SCOUT" ? `<button type="button" class="bslip" disabled title="No upcoming match found for his team – there is nothing to enter on a slip yet">+ Slip</button>`
         : `<button type="button" class="bslip ${onSlip.has(slipKeyRow(r)) ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}|${mktType(r)}|${r.book || "underdog"}">${onSlip.has(slipKeyRow(r)) ? "On slip" : "+ Slip"}</button>`}
     </div>`; };
   // every qualifying bet in a match, kills + headshots, following Overs / Unders / Both - alternatives, not a slip

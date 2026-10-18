@@ -1434,6 +1434,8 @@ def memprof(action):
             tracemalloc.start(8)
         _MEMPROF.update(base=tracemalloc.take_snapshot(), started=time.time())
         return {"tracing": True, "memory": _memory_report()}
+    if action == "containers":
+        return {"memory": _memory_report(), "containers": _scan_containers()}
     if action == "stop":
         tracemalloc.stop()
         _MEMPROF.update(base=None, started=None)
@@ -1449,6 +1451,48 @@ def memprof(action):
                          for d in diff[:30]]
     out["objects"] = Counter(type(o).__name__ for o in gc.get_objects()).most_common(20)
     return out
+
+
+def _scan_containers(top=30):
+    """Module-level containers of this app's own modules: entries and an estimated size (JSON length of a sample of
+    items x entries x the measured Python/JSON ratio). Cheap - finds retained datasets without tracing."""
+    import random
+    import membudget
+    base = str(BASE)
+    out = []
+    for mname, mod in list(sys.modules.items()):
+        f = getattr(mod, "__file__", "") or ""
+        if not f.startswith(base) or "site-packages" in f:
+            continue
+        cands = []
+        for gname, v in list(vars(mod).items()):
+            if gname.startswith("__"):
+                continue
+            cands.append((gname, v))
+            d = getattr(v, "__dict__", None)              # one level into module-level objects (sources, clients, stores)
+            if isinstance(d, dict) and not isinstance(v, type) and type(v).__name__ not in ("module", "function"):
+                cands += [(f"{gname}.{a}", x) for a, x in list(d.items())]
+            if isinstance(v, dict) and len(v) < 50:          # e.g. moneyline.SOURCES = {name: Source}
+                for k2, x in list(v.items()):
+                    d2 = getattr(x, "__dict__", None)
+                    if isinstance(d2, dict) and not isinstance(x, type):
+                        cands += [(f"{gname}[{k2}].{a}", y) for a, y in list(d2.items())]
+        for gname, v in cands:
+            if isinstance(v, membudget.BudgetLRU):
+                st = v.stats()
+                out.append({"name": f"{mname}.{gname}", "entries": st["entries"], "est_mb": st["mb"], "kind": "BudgetLRU"})
+                continue
+            if not isinstance(v, (dict, list, set, tuple)) or isinstance(v, type) or len(v) < 50:
+                continue
+            try:
+                items = list(v.items()) if isinstance(v, dict) else list(v)
+                sample = random.sample(items, min(40, len(items)))
+                per = sum(membudget.json_cost(x) for x in sample) / max(len(sample), 1)
+                out.append({"name": f"{mname}.{gname}", "entries": len(v), "est_mb": round(per * len(v) / 1e6, 1),
+                            "kind": type(v).__name__})
+            except Exception as e:
+                out.append({"name": f"{mname}.{gname}", "entries": len(v), "error": type(e).__name__})
+    return sorted(out, key=lambda r: -(r.get("est_mb") or 0))[:top]
 
 
 def _memory_report():

@@ -75,3 +75,14 @@ def test_backup_copy_is_re_read_from_its_raw_label():
     for bad in (dict(good, stat="MAPS 1-2 AWP Kills"), dict(good, stat="MAP 3 Kills", maps="3"),
                 dict(good, maps="1"), dict(good, market="headshots"), dict(good, stat=None)):
         assert PP.rows_from([bad]) == [], bad
+
+
+
+def test_prizepicks_verified_side_applies_to_that_exact_offer_only():
+    import prizepicks
+    feed = prizepicks.directions({"over"}, "standard")
+    assert feed["lower"] is None                                         # the feed's rule stands everywhere else
+    ok = prizepicks.verified_sides("15870993", 16, feed)
+    assert ok["lower"] == 1.0 and "this offer only" in ok["direction_basis"]
+    assert prizepicks.verified_sides("15870993", 16.5, feed)["lower"] is None       # moved line: a new offer
+    assert prizepicks.verified_sides("99999999", 16, feed)["lower"] is None
