@@ -121,8 +121,10 @@ def _mirror_pg(dsn, games, players):
         for tbl, cols in history.ADDED.items():
             for c, typ in cols.items():
                 cur.execute(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {c} {typ}")
-        cur.execute("DELETE FROM lol_player_games")
-        cur.execute("DELETE FROM lol_games")
+        # TRUNCATE, not DELETE: a DELETE of every row on each export left ~107k dead rows per export on lol-scout-db's disk
+        # until a vacuum (the database kept growing). TRUNCATE frees the old storage at once and is transactional - a
+        # failed export rolls back to the previous copy; every export writes the full history, so nothing is lost.
+        cur.execute("TRUNCATE lol_player_games, lol_games")
         now = store.now_iso()
         execute_values(cur, f"INSERT INTO lol_games ({', '.join(history.GAME_COLS)}) VALUES %s",
                        [tuple(dict(g, fetched_at=now).get(c) for c in history.GAME_COLS) for g in games], page_size=2000)
@@ -131,7 +133,16 @@ def _mirror_pg(dsn, games, players):
         con.commit()
         cur.execute("SELECT (SELECT COUNT(*) FROM lol_games), (SELECT COUNT(*) FROM lol_player_games)")
         g, p = cur.fetchone()
-        return {"ok": g == len(games) and p == len(players), "games": g, "player_rows": p}
+        out = {"ok": g == len(games) and p == len(players), "games": g, "player_rows": p}
+        try:                                            # the database's size, so its disk use is visible on the status page
+            cur.execute("SELECT pg_database_size(current_database()), relname, pg_total_relation_size(c.oid), n_dead_tup "
+                        "FROM pg_class c JOIN pg_stat_user_tables t ON t.relid = c.oid ORDER BY pg_total_relation_size(c.oid) DESC LIMIT 6")
+            rows = cur.fetchall()
+            out["db_mb"] = round(rows[0][0] / 1e6, 1) if rows else None
+            out["tables_mb"] = {r[1]: {"mb": round(r[2] / 1e6, 1), "dead_rows": r[3]} for r in rows}
+        except Exception:
+            con.rollback()
+        return out
     finally:
         con.close()
 
