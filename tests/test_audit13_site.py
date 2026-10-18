@@ -563,6 +563,7 @@ def test_post_body_is_capped_before_reading(site):
 def test_slip_log_is_rate_limited_per_member(site, monkeypatch):
     got = []
     monkeypatch.setattr(server.slips, "log_loaded", lambda d: got.append(d) or True)
+    monkeypatch.setattr(server, "slip_leg_problem", lambda leg: None)        # this test is about the rate limit
     codes = []
     for i in range(server.SLIP_LOG_PER_MIN + 3):
         body = json.dumps({"cid": f"c{i}", "legs": [{"id": 1}, {"id": 2}]}).encode()

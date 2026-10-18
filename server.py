@@ -965,6 +965,36 @@ def feed_less_available(name, prop, scope, line, line_type="standard", book=None
     return None
 
 
+def slip_leg_problem(leg):
+    """Server-side check of one copied slip leg against the platform feed NOW (2026-10-18 owner: a side that is not
+    offered or not confirmed is never accepted - also from a slip saved earlier). -> None when the exact line is listed
+    with this side offered, else the reason."""
+    n_ = lambda x: re.sub(r"[^a-z0-9]", "", str(x or "").lower())
+    side, book = str(leg.get("side") or ""), leg.get("book")
+    want = "under_available" if side in ("Less", "Under", "lower", "under") else "over_available" if side in ("More", "Over", "higher", "over") else None
+    if want is None:
+        return "no side"
+    lt = leg.get("line_type") or "standard"
+    types = ("standard", "promo") if lt == "standard" else (lt,)
+    try:
+        line = float(leg.get("line"))
+    except (TypeError, ValueError):
+        return "no line"
+    for bk in ((book,) if book in ("underdog", "prizepicks") else ("underdog", "prizepicks")):
+        try:
+            rows = (prizepicks.board() if bk == "prizepicks" else underdog.board()).get("rows") or []
+        except Exception:
+            continue
+        hits = [r for r in rows if n_(r.get("player")) == n_(leg.get("nick")) and r.get("prop") == leg.get("prop")
+                and (r.get("scope") or "12") == (leg.get("scope") or "12") and float(r.get("line") or -1) == line
+                and (r.get("odds_type") or "standard") in types]
+        if any(r.get(want) is True for r in hits):
+            return None
+        if hits:
+            return f"{leg.get('nick')} {side} {line}: this side is not offered (or not confirmed) on {bk} now"
+    return f"{leg.get('nick')} {side} {line}: this line is not on the platform now"
+
+
 def board_stake(res, prop, scope, line, line_type="standard", book=None):
     """The same line on the board with its stake cut by the same-match cap: the card shows that stake too (one stake
     per line on the whole site). Only when the board row is this exact pick (side, line, maps, match) and was cut from
@@ -4092,6 +4122,12 @@ class Handler(BaseHTTPRequestHandler):
                 d = json.loads(body)
                 assert isinstance(d, dict) and isinstance(d.get("legs"), list) and 2 <= len(d["legs"]) <= 6
                 assert all(isinstance(l, dict) for l in d["legs"]) and len(body) <= 20000
+            except Exception:
+                return self.send(400, {"error": "bad slip"})
+            problems = [x for x in (slip_leg_problem(l) for l in d["legs"]) if x]
+            if problems:                               # rejected on the server too: nothing logged as a valid copy
+                return self.send(409, {"error": "slip_has_unavailable_legs", "legs": problems})
+            try:
                 new = slips.log_loaded(d)
             except Exception:
                 return self.send(400, {"error": "bad slip"})

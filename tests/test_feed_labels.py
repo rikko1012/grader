@@ -78,11 +78,20 @@ def test_backup_copy_is_re_read_from_its_raw_label():
 
 
 
-def test_prizepicks_verified_side_applies_to_that_exact_offer_only():
+def test_prizepicks_verified_side_applies_to_that_exact_fresh_offer_only():
+    from datetime import datetime, timedelta, timezone
     import prizepicks
     feed = prizepicks.directions({"over"}, "standard")
+    at = datetime(2026, 10, 18, 3, 30, tzinfo=timezone.utc)
+    start = datetime(2026, 10, 18, 11, 30, tzinfo=timezone.utc)
     assert feed["lower"] is None                                         # the feed's rule stands everywhere else
-    ok = prizepicks.verified_sides("15870993", 16, feed)
-    assert ok["lower"] == 1.0 and "this offer only" in ok["direction_basis"]
-    assert prizepicks.verified_sides("15870993", 16.5, feed)["lower"] is None       # moved line: a new offer
-    assert prizepicks.verified_sides("99999999", 16, feed)["lower"] is None
+    ok = prizepicks.verified_sides("15870993", 16, feed, start=start, now=at)
+    assert ok["lower"] == 1.0 and "this offer only" in ok["direction_basis"] and "opened this offer" in ok["direction_basis"]
+    stated = prizepicks.verified_sides("15870992", 16, feed, start=start, now=at + timedelta(hours=1))
+    assert "not individually opened" in stated["direction_basis"]
+    assert prizepicks.verified_sides("15870993", 16.5, feed, start=start, now=at)["lower"] is None        # moved line
+    assert prizepicks.verified_sides("99999999", 16, feed, start=start, now=at)["lower"] is None          # other id
+    assert prizepicks.verified_sides("15870993", 16, feed, status="suspended", start=start, now=at)["lower"] is None
+    assert prizepicks.verified_sides("15870993", 16, feed, start=start, now=at, live=True)["lower"] is None
+    assert prizepicks.verified_sides("15870993", 16, feed, start=start, now=at + timedelta(hours=7))["lower"] is None  # stale
+    assert prizepicks.verified_sides("15870993", 16, feed, start=at, now=at + timedelta(minutes=1))["lower"] is None   # started

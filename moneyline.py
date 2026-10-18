@@ -635,6 +635,8 @@ class Source:
                 self.failures += 1
                 self.last_error = f"{type(e).__name__}: {str(e)[:200]}"
                 self.next_delay = self.backoff(self.failures)
+                if getattr(e, "retry_after", None):          # the source asked us to wait (e.g. Kalshi Retry-After)
+                    self.next_delay = max(self.next_delay, float(e.retry_after))
                 self.version += 1
             return False
         if self.snapshot:

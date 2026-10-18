@@ -24,3 +24,16 @@ def test_memory_report_shape():
     import server
     m = server._memory_report()
     assert set(m["caches"]) == {"bo3_finished", "bo3_expiring", "contexts", "results"} and "server_rss_mb" in m
+
+
+def test_slip_leg_rejected_when_side_not_offered(monkeypatch):
+    import server
+    rows = [{"player": "TeSeS", "prop": "hs", "scope": "12", "line": 16.0, "odds_type": "standard", "over_available": True, "under_available": False},
+            {"player": "kyousuke", "prop": "hs", "scope": "12", "line": 19.5, "odds_type": "standard", "over_available": True, "under_available": True}]
+    monkeypatch.setattr(server.prizepicks, "board", lambda: {"rows": rows})
+    monkeypatch.setattr(server.underdog, "board", lambda: {"rows": []})
+    leg = lambda nick, side, line: {"nick": nick, "prop": "hs", "scope": "12", "line": line, "side": side, "book": "prizepicks"}
+    assert "not offered" in server.slip_leg_problem(leg("TeSeS", "Less", 16))
+    assert server.slip_leg_problem(leg("TeSeS", "More", 16)) is None
+    assert server.slip_leg_problem(leg("kyousuke", "Less", 19.5)) is None
+    assert "not on the platform" in server.slip_leg_problem(leg("kyousuke", "Less", 20.5))    # moved / withdrawn line

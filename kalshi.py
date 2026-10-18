@@ -59,17 +59,58 @@ def now_iso():
 
 # ---------------------------------------------------------------- fetch (network)
 
+# One cooldown for every Kalshi request in this process (events + orderbooks, all worker threads). A 429 starts it -
+# Retry-After when Kalshi sends it (seconds or an HTTP date), else 30 s doubling per consecutive 429, at most 10 min -
+# and no Kalshi request is sent until it ends (2026-10-18: the orderbook workers kept requesting after 429s).
+COOL = {"until": 0.0, "hits": 0, "last_retry_after": None, "last_429": None}
+COOL_MAX = 600
+
+
+class RateLimited(RuntimeError):
+    def __init__(self, msg, retry_after):
+        super().__init__(msg)
+        self.retry_after = retry_after
+
+
+def _retry_after(r):
+    v = (r.headers or {}).get("Retry-After")
+    if not v:
+        return None
+    try:
+        return max(0.0, float(v))
+    except ValueError:
+        pass
+    try:
+        from email.utils import parsedate_to_datetime
+        return max(0.0, (parsedate_to_datetime(v) - datetime.now(timezone.utc)).total_seconds())
+    except (TypeError, ValueError):
+        return None
+
+
+def _get(url, session=None, params=None):
+    wait = COOL["until"] - time.time()
+    if wait > 0:
+        raise RateLimited(f"Kalshi rate limit: cooling down {wait:.0f} s (no request sent)", wait)
+    r = (session or requests).get(url, params=params, headers=HEADERS, timeout=TIMEOUT)
+    if r.status_code == 429:
+        ra = _retry_after(r)
+        COOL["hits"] += 1
+        delay = min(COOL_MAX, ra if ra is not None else 30 * 2 ** (COOL["hits"] - 1))
+        COOL.update(until=time.time() + delay, last_retry_after=ra, last_429=now_iso())
+        raise RateLimited(f"Kalshi 429: cooling down {delay:.0f} s" + (" (Retry-After)" if ra is not None else ""), delay)
+    r.raise_for_status()
+    COOL["hits"] = 0
+    return r
+
+
 def fetch_events(session=None, status="open"):
     """All open KXCS2GAME events with their markets nested.  Raises on HTTP / timeout errors."""
-    get = (session or requests).get
     events, cursor = [], None
     for _ in range(MAX_PAGES):
         params = {"series_ticker": SERIES, "status": status, "with_nested_markets": "true", "limit": PAGE}
         if cursor:
             params["cursor"] = cursor
-        r = get(f"{API}/events", params=params, headers=HEADERS, timeout=TIMEOUT)
-        r.raise_for_status()
-        j = r.json()
+        j = _get(f"{API}/events", session, params).json()
         events += j.get("events") or []
         cursor = j.get("cursor")
         if not cursor:
@@ -78,10 +119,7 @@ def fetch_events(session=None, status="open"):
 
 
 def fetch_orderbook(ticker, session=None):
-    get = (session or requests).get
-    r = get(f"{API}/markets/{ticker}/orderbook", headers=HEADERS, timeout=TIMEOUT)
-    r.raise_for_status()
-    return r.json()
+    return _get(f"{API}/markets/{ticker}/orderbook", session).json()
 
 
 def fetch(session=None, now=None):

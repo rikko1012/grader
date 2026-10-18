@@ -130,28 +130,35 @@ def directions(wagers, odds_type, adjusted=False):
     return {"higher": 1.0, "lower": 1.0, "direction_basis": "feed states no restriction (standard line)"}
 
 
-# Offers whose sides the owner checked in the PrizePicks app because the feed's field disagreed. Exact projection id AND
-# line: a moved line is a new offer and goes back to the feed's rule. Nothing broader is inferred from these.
+# Offers whose sides the owner confirmed in the PrizePicks app because the feed's allowed_wager_types said "over" only.
+# Exact projection id AND line, and only while fresh: VERIFIED_FOR seconds after the confirmation and never after the
+# match start; a moved line, another projection id, a non-pre-game status (suspended / live) or a withdrawn offer (not in
+# the feed) goes back to the feed's rule. Nothing broader is inferred from these.
+VERIFIED_FOR = 6 * 3600
+_CHECKED = "owner opened this offer in the PrizePicks app: Less pickable"
+_STATED = "owner statement covering the listed lines (Less available) - not individually opened"
 VERIFIED_SIDES = {
-    # TeSeS MAPS 1-2 Headshots 16 (Falcons vs Aurora, 2026-10-18 11:30 UTC): feed allowed_wager_types 'over' (feed
-    # updated 2026-10-18 01:40 UTC); owner confirmed Less pickable in the app 2026-10-18 ~03:15 UTC
-    "15870993": {"line": 16.0, "higher": 1.0, "lower": 1.0, "checked": "owner app check 2026-10-18 03:15 UTC"},
-    # owner (2026-10-18 04:10 UTC): Less is available on these PrizePicks lines too (feed allowed_wager_types 'over')
-    "15870992": {"line": 16.0, "higher": 1.0, "lower": 1.0, "checked": "owner app check 2026-10-18 04:10 UTC"},   # NiKo MAPS 1-2 Headshots 16.0
-    "15870997": {"line": 15.5, "higher": 1.0, "lower": 1.0, "checked": "owner app check 2026-10-18 04:10 UTC"},   # Jimpphat MAPS 1-2 Headshots 15.5
-    "15870292": {"line": 16.0, "higher": 1.0, "lower": 1.0, "checked": "owner app check 2026-10-18 04:10 UTC"},   # r3salt MAPS 1-2 Headshots 16.0
-    "15870296": {"line": 14.5, "higher": 1.0, "lower": 1.0, "checked": "owner app check 2026-10-18 04:10 UTC"},   # dex MAPS 1-2 Headshots 14.5
-    "15870310": {"line": 16.5, "higher": 1.0, "lower": 1.0, "checked": "owner app check 2026-10-18 04:10 UTC"},   # flouzer MAPS 1-2 Headshots 16.5
-    "15870311": {"line": 17.0, "higher": 1.0, "lower": 1.0, "checked": "owner app check 2026-10-18 04:10 UTC"},   # ayuki MAPS 1-2 Headshots 17.0
+    "15870993": {"player": "TeSeS", "line": 16.0, "at": "2026-10-18T03:15:00Z", "basis": _CHECKED},
+    "15870992": {"player": "NiKo", "line": 16.0, "at": "2026-10-18T04:10:00Z", "basis": _STATED},
+    "15870997": {"player": "Jimpphat", "line": 15.5, "at": "2026-10-18T04:10:00Z", "basis": _STATED},
+    "15870292": {"player": "r3salt", "line": 16.0, "at": "2026-10-18T04:10:00Z", "basis": _STATED},
+    "15870296": {"player": "dex", "line": 14.5, "at": "2026-10-18T04:10:00Z", "basis": _STATED},
+    "15870310": {"player": "flouzer", "line": 16.5, "at": "2026-10-18T04:10:00Z", "basis": _STATED},
+    "15870311": {"player": "ayuki", "line": 17.0, "at": "2026-10-18T04:10:00Z", "basis": _STATED},
 }
 
 
-def verified_sides(projection_id, line, dirs):
+def verified_sides(projection_id, line, dirs, status="pre_game", start=None, now=None, live=False):
     v = VERIFIED_SIDES.get(projection_id)
-    if not v or line is None or float(line) != v["line"]:
+    if not v or line is None or float(line) != v["line"] or (status or "pre_game") != "pre_game" or live:
         return dirs
-    return dict(dirs, higher=v["higher"], lower=v["lower"],
-                direction_basis=f"{v['checked']} (this offer only; feed said: {dirs.get('direction_basis')})")
+    now = now or datetime.now(timezone.utc)
+    at = datetime.fromisoformat(v["at"].replace("Z", "+00:00"))
+    if (now - at).total_seconds() > VERIFIED_FOR or (start is not None and now >= start):
+        return dirs                                   # stale confirmation or the match has started: the feed's rule
+    return dict(dirs, higher=1.0, lower=1.0,
+                direction_basis=f"{v['basis']} ({v['at']}; this offer only, until {VERIFIED_FOR // 3600} h after; "
+                                f"feed said: {dirs.get('direction_basis')})")
 
 
 def market_of(stat):
@@ -216,7 +223,8 @@ def parse_direct(body, seen):
             start = None
         out.append({"line_id": str(p.get("id", "")), "player": name, "team": team, "opponent": opp, "start_time": start,
                     "market": market, "maps": maps, "line": line, "odds_type": ot,
-                    **verified_sides(str(p.get("id", "")), line, directions(wagers, ot, bool(a.get("adjusted_odds")))),
+                    **verified_sides(str(p.get("id", "")), line, directions(wagers, ot, bool(a.get("adjusted_odds"))),
+                                     status=a.get("status"), start=start, live=bool(a.get("is_live"))),
                     "stat": stat, "updated_at": seen, "open_line": None, "prev_line": None, "move": None, "moves": None,
                     "moved_at": None, "first_seen": None, "other_line": None})
     singles = sum(1 for p in body.get("data") or [] if ((p.get("attributes") or {}).get("status") or "pre_game") == "pre_game"
