@@ -382,8 +382,24 @@ def snapshot(res, pnl, model_version, key=None):
             return False
 
 
+def offer_side(row, side, book):
+    """Explicit availability wins. Underdog's positive payout modifier also identifies an offered side; it is NOT odds."""
+    if side not in ("More", "Less"):
+        return False
+    key = "over_available" if side == "More" else "under_available"
+    if key in row:
+        return row[key] is True
+    if book != "underdog":
+        return False
+    try:
+        value = float(row.get("higher" if side == "More" else "lower"))
+        return math.isfinite(value) and value > 0
+    except (TypeError, ValueError):
+        return False
+
+
 def line_check(board, player, prop, scope, line=None, team=None, start=None, now=None, pid=None, id_map=None, failed=False,
-               book="underdog", odds_type="standard"):
+               book="underdog", odds_type="standard", side=None, opponent=None):
     """Before a pick goes on a slip / is copied: what the platform shows NOW for this player / stat / maps.
     status: "verified" (the exact line of the same market type is up and the feed is fresh) / "changed" (other line(s)
     for the same player + market) / "unavailable" (nothing for it) / "ambiguous" (two players fit) / "failed" (feed error
@@ -400,6 +416,13 @@ def line_check(board, player, prop, scope, line=None, team=None, start=None, now
                 "note": f"PrizePicks feed is {(board or {}).get('state') or 'unavailable'} - this line can't be confirmed right now"}
     id_map = id_map or {}
     st = _ts(start)
+    if side is not None:
+        if side not in ("More", "Less") or not team or st is None:
+            return {"status": "failed", "book": book, "at": at, "rows": [], "note": "Regrade this pick with its team, start and selected side"}
+        if st <= now:
+            return {"status": "unavailable", "book": book, "at": at, "rows": [], "note": "Match started / locked"}
+        if (board or {}).get("error") or not at or now.timestamp() - at > STALE_MIN * 60 or at > now.timestamp() + 60:
+            return {"status": "stale", "book": book, "at": at, "rows": [], "note": f"{name} feed not fresh - refresh before copying"}
     out = []
     for r in (board or {}).get("rows") or []:
         if r.get("prop") != prop or (r.get("scope") or "12") != (scope or "12"):
@@ -413,13 +436,18 @@ def line_check(board, player, prop, scope, line=None, team=None, start=None, now
         if team and _team_same(r.get("team"), team) is False:
             continue
         rs = _ts(r.get("start"))
+        if side is not None and (rs is None or _team_same(r.get("team"), team) is not True):
+            continue
+        if opponent and _team_same(r.get("opponent"), opponent) is not True:
+            continue
         if st and rs and abs((rs - st).total_seconds()) > JOIN_START_MIN * 60:
             continue
         out.append(dict({k: r.get(k) for k in ("id", "line", "higher", "lower", "alt", "start", "team", "opponent", "ud_player_id")},
-                        odds_type=r.get("odds_type") or ("alt" if r.get("alt") else "standard")))
+                        odds_type=r.get("odds_type") or ("alt" if r.get("alt") else "standard"),
+                        side_offered=offer_side(r, side, book) if side is not None else None))
     try:
         want = float(line) if line not in (None, "") else None
-    except ValueError:
+    except (TypeError, ValueError):
         want = None
     base = {"book": book, "at": at, "stale": bool(at and now.timestamp() - at > STALE_MIN * 60) if book == "underdog" else False,
             "rows": sorted(out, key=lambda o: (o["line"], o["alt"]))}
@@ -429,6 +457,8 @@ def line_check(board, player, prop, scope, line=None, team=None, start=None, now
     match_kind = (lambda o: not o["alt"]) if kind == "standard" else (lambda o: o["odds_type"] == kind)
     same = [o for o in out if want is not None and o["line"] == want and match_kind(o)]
     if same:
+        if side is not None and not all(o["side_offered"] for o in same):
+            return dict(base, status="unavailable", note=f"{name}: this side is not offered (or not confirmed) on this line")
         return dict(base, status="verified", note=None)
     if out:
         pref = [o for o in out if match_kind(o)] or [o for o in out if not o["alt"]] or out

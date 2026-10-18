@@ -30,7 +30,7 @@ def test_maps123_is_maps_1_2_and_3():
     # BO3 that went 1-1: maps 1-3
     assert scope_total([m(1, 10, 5, True), m(2, 11, 5, False), m(3, 30, 9, True)], "123", "kills") == (51, [1, 2, 3])
     # BO3 that ended 2-0: no map 3 - the pick voids (Underdog: a player must play each map of the selection)
-    assert scope_total([m(1, 10, 5, True), m(2, 11, 5, True)], "123", "kills") == (None, MAP3_NOT_PLAYED)
+    assert scope_total([m(1, 10, 5, True), m(2, 11, 5, True)], "123", "kills", best_of=3) == (None, MAP3_NOT_PLAYED)
     # 1-1 but map 3 not in yet: wait, never a 2-map total
     assert scope_total([m(1, 10, 5, True), m(2, 11, 5, False)], "123", "kills")[0] is None
 
@@ -113,12 +113,14 @@ def test_live_record_builder_matches_scope_rules():
         assert (s12["total"] if s12 else None) == t12
 
 
-def _fake_hltv(monkeypatch, series):
+def _fake_hltv(monkeypatch, series, best_of="bo3"):
     import hltv
 
     class Cur:
         def __enter__(self): return self
         def __exit__(self, *a): return False
+        def execute(self, q, args=None): self.q = q
+        def fetchone(self): return (best_of,) if "SELECT format" in self.q else (0,)
 
     class Con:
         def cursor(self): return Cur()

@@ -65,7 +65,7 @@ from pathlib import Path
 
 import comparison
 
-VERSION = "studio-2"
+VERSION = "studio-3"
 GRADES = ("A+", "A", "A-", "B+", "B")          # B- left out (no evidence it belongs in slips - batch-3)
 SIZES = (4, 3, 2)                              # planning order: largest first
 MAX_COUNT = 10                                 # slips per size per Build press
@@ -248,6 +248,12 @@ def why_excluded(r, st, model, now):
         return "started / locked"
     if not r.get("side") or r.get("p") is None or r.get("state") == "SCOUT":
         return "not graded / scout"
+    try:
+        chance = float(r["p"])
+    except (TypeError, ValueError):
+        return "invalid probability"
+    if r.get("side") not in ("More", "Less") or not math.isfinite(chance) or not 0 <= chance <= 1:
+        return "invalid probability or side"
     if r.get("hltv_retry"):
         return "saved grade kept while live data is unavailable (stale - not a current forecast)"
     if r.get("unavailable"):
@@ -306,7 +312,8 @@ def pick_record(r):
             "start": r.get("start"), "event": r.get("event"),
             "prop": "moneyline" if mt == "moneyline" else r.get("prop"), "scope": r.get("scope") or "12",
             "line": r.get("line"), "side": r.get("side"), "book": r.get("book") or "underdog", "market_type": mt,
-            "grade": r.get("grade"), "p": r.get("p"), "units": r.get("units"), "graded_model": r.get("graded_model"),
+            "grade": r.get("grade"), "p": r.get("p"), "model_outcomes": r.get("model_outcomes"),
+            "units": r.get("units"), "graded_model": r.get("graded_model"),
             "graded_at": r.get("graded_at"), "graded_line": r.get("graded_line"),
             "mult": _mult(r) if (r.get("book") or "underdog") == "underdog" else None}
 
@@ -859,13 +866,13 @@ def _compute(rows, st, model, now, batch_id, build_id, prior):
     for n in SIZES:
         for legs in chosen[n]:
             k += 1
-            allp = 1.0
-            for l in legs:
-                allp *= l.p
+            from slip_probability import summary as probability_summary
+            probability = probability_summary([l.rec for l in legs])
             slips[n].append({"slip_id": f"{build_id or 'preview'}/s{k}", "batch_id": batch_id, "build_id": build_id,
                              "n": n, "book": st["book"], "entry_type": st["market"], "generated_at": gen,
                              "builder_version": VERSION, "settings": st, "rules": rules,
-                             "all_hit": round(allp, 6), "log_chance": round(sum(l.logp for l in legs), 6),
+                             **probability,
+                             "selection_log_score": round(sum(l.logp for l in legs), 6),
                              "legs": [dict(l.rec) for l in legs]})
     new = [s for n in SIZES for s in slips[n]]
     allslips = prior + new
@@ -1039,7 +1046,8 @@ def verify_before_copy(slip, boards, now=None, model=None, settings=None):
                                        team=l.get("book_team") or l.get("team"), start=l.get("start"), now=now,
                                        pid=l.get("player_id"), id_map=id_map if l.get("book") == "underdog" else {},
                                        book=l.get("book") or "underdog",
-                                       odds_type=l.get("market_type") if l.get("market_type") in ("goblin", "demon") else "standard")
+                                       odds_type=l.get("market_type") if l.get("market_type") in ("goblin", "demon") else "standard",
+                                       side=l.get("side"), opponent=l.get("opponent"))
             lc_status = lc.get("status")
             if lc_status != "verified":
                 ch.append(f"{lab}: {lc.get('note') or lc_status}")
@@ -1059,7 +1067,7 @@ def verify_before_copy(slip, boards, now=None, model=None, settings=None):
             # the board kept its last grade while live data is unavailable: stale, not a current forecast of this line
             ch.append(f"{lab}: the grade is a saved one kept while live data is unavailable - can't be confirmed right now")
         else:
-            if float(cur.get("line") or -1) != float(l.get("line") or -2):
+            if cur.get("line") is None or l.get("line") is None or float(cur["line"]) != float(l["line"]):
                 ch.append(f"{lab}: line moved {l.get('line')} -> {cur.get('line')}")
             if cur.get("side") != l.get("side"):
                 ch.append(f"{lab}: model side now {_side_word(cur.get('side'))}")
@@ -1076,6 +1084,8 @@ def verify_before_copy(slip, boards, now=None, model=None, settings=None):
                 ch.append(f"{lab}: grade {_grade_word(l.get('grade'))} -> {_grade_word(cur.get('grade'))}")
             if cur.get("p") is None or l.get("p") is None or abs(float(cur["p"]) - float(l["p"])) >= 0.0005:
                 ch.append(f"{lab}: chance changed")
+            if l.get("model_outcomes") is not None and cur.get("model_outcomes") != l.get("model_outcomes"):
+                ch.append(f"{lab}: outcome probabilities changed")
             why = why_excluded(cur, st, cur_model, now)
             if why and why not in ("started / locked",):
                 ch.append(f"{lab}: no longer eligible ({why})")

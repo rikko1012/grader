@@ -1210,7 +1210,9 @@ showExamples(); const _sr = showRecent; showRecent = () => { _sr(); showExamples
 // bet slip: add single props, build a 2-6 pick entry (saved in this browser)
 // manual slip payouts (2026-10-10 walkthrough): no platform tables - the return uses only the payout the member enters
 // for THIS entry (what Underdog shows), else their saved standard payout for this size (labelled as such), else none
-const manualKey = s => s.map(x => [String(x.p).toLowerCase(), x.t, x.sc || "12", x.l, x.s].join(":")).sort().join("|");
+const slipEvent = x => [x.m || x.match_slug || [x.tm || x.team || "", x.vs || x.opponent || ""].map(y => String(y).toLowerCase()).sort().join("/"),
+  x.st || x.start ? new Date(x.st || x.start).getTime() : ""].join("@");
+const manualKey = s => s.map(x => [String(x.p).toLowerCase(), x.t, x.sc || "12", x.l, x.s, x.bk || "", x.lt || "standard", slipEvent(x)].join(":")).sort().join("|");
 const manualPay = () => store.get("cs2s_manualpay", {});
 const udExact = () => store.get("cs2s_udexact", {});          // exact payout for one slip, by its picks (member-entered)
 const udPay = () => store.get("cs2s_udpay", {});              // standard payout per slip size (member-entered)
@@ -1219,11 +1221,11 @@ function hitDist(ps) {           // P(exactly k legs hit), legs treated as indep
   for (const p of ps) { const n = new Array(d.length + 1).fill(0); d.forEach((v, k) => { n[k] += v * (1 - p); n[k + 1] += v * p; }); d = n; }
   return d;
 }
-const legKey = l => [String(l.p).toLowerCase(), l.t, l.sc || "12"].join(":");   // the same prop twice = a duplicate
+const legKey = l => [String(l.p).toLowerCase(), l.t, l.sc || "12", slipEvent(l)].join(":");   // the same prop in the same match
 // 'On slip' marks only the exact line on the slip: player, line, stat, maps, market type and platform (2026-10-11 audit:
 // one leg marked every line of that player on both platforms)
-const slipKeyLeg = x => [String(x.p).toLowerCase(), +x.l, x.t, x.sc || "12", x.lt || "standard", x.bk || "underdog"].join("|");
-const slipKeyRow = r => [String(r.nick || r.player).toLowerCase(), +r.line, r.prop, r.scope || "12", gradeType(r), r.book || "underdog"].join("|");
+const slipKeyLeg = x => [String(x.p).toLowerCase(), +x.l, x.t, x.sc || "12", x.lt || "standard", x.bk || "underdog", slipEvent(x)].join("|");
+const slipKeyRow = r => [String(r.nick || r.player).toLowerCase(), +r.line, r.prop, r.scope || "12", gradeType(r), r.book || "underdog", slipEvent(r)].join("|");
 // ---- slip line checks (2026-10-09): every leg keeps its ORIGINAL selection (orig) and, separately, the latest
 // check of the live Underdog offer (now). Checks run on add, on opening the slip and before Copy; nothing is ever
 // replaced silently. States: verified / changed / unavailable (Underdog no longer shows it) / failed (couldn't check) /
@@ -1231,7 +1233,7 @@ const slipKeyRow = r => [String(r.nick || r.player).toLowerCase(), +r.line, r.pr
 async function lineCheck(x, book) {
   try {
     const qs = new URLSearchParams({player: x.p, prop: x.t, maps: x.sc || "12", line: x.l, team: x.tm || "", start: x.st || "", pid: x.pid || "",
-                                    book: book || x.bk || "underdog", lt: x.lt || "standard"});
+                                    book: book || x.bk || "underdog", lt: x.lt || "standard", side: x.s || "", opponent: x.vs || ""});
     const r = await fetch("/api/line_check?" + qs);
     return r.ok ? await r.json() : {status: "failed", note: "Couldn't reach the server to check this line"};
   } catch { return {status: "failed", note: "Couldn't reach the server to check this line"}; }
@@ -1257,6 +1259,7 @@ const slipBook = s => (s.find(x => x.bk) || {}).bk || null;       // a slip belo
 function legFrom(d, extra) {
   const g = d.grade || {}, v = d.verdict || {}, pb = d.player_block || {};
   return Object.assign({bk: d.book || null, p: pb.player?.nick, pid: pb.player?.id || "", l: g.line, t: g.prop, lt: g.line_type, sc: g.scope || "12", s: v.side, g: mGrade(v), sr: v.stake_reason || "", pc: v.p, u: v.units,
+    model_outcomes: g.probs_raw ? {...g.probs_raw} : null,
     m: d.next_match?.slug || [pb.current_team || "", d.next_match?.opponent || ""].map(x => x.toLowerCase().replace(/[^a-z0-9]/g, "")).sort().join("|"),
     vs: d.next_match?.opponent || "", tm: pb.playing_for || pb.current_team || "", st: d.next_match?.start || "",
     kg: v.kept_from_board || v.stale ? (v.graded_at || "saved") : "",     // a saved grade kept during an outage: never verified
@@ -1291,7 +1294,7 @@ async function addToSlip(d) {
       if (leg.vs && leg.st) qs.set("start", leg.st);
       const r = await fetch("/api/grade?" + qs); n = r.ok ? await r.json() : null;
     } catch {}
-    const nv0 = n?.verdict || {}, nv = nv0.kept_from_board || nv0.unavailable || nv0.stale || n?.hltv_outage ? {} : nv0, row = (l, s_, p_, gr, u) => `<tr><td>${l}</td><td>${s_ ? sideTxt(s_) : "–"}</td><td class="num">${p_ != null ? pct(p_) : "–"}</td><td>${esc(gr ? gradeWord({grade: gr}) : "–")}</td><td class="num">${u ?? 0}U</td></tr>`;
+    const nv0 = n?.verdict || {}, nv = nv0.kept_from_board || sideGone(nv0) || nv0.unavailable || nv0.stale || n?.hltv_outage ? {} : nv0, row = (l, s_, p_, gr, u) => `<tr><td>${l}</td><td>${s_ ? sideTxt(s_) : "–"}</td><td class="num">${p_ != null ? pct(p_) : "–"}</td><td>${esc(gr ? gradeWord({grade: gr}) : "–")}</td><td class="num">${u ?? 0}U</td></tr>`;
     const k = await ask(d.from === "board" ? `${bookName(used)} moved this line` : `Your line differs from ${bookName(used)}'s current line`, `${esc(nick)} ${propWord(g.prop)}${mapsWord(g.scope)}: ${d.from === "board" ? esc(c.note) : `you entered ${g.line}; ${bookName(used)} currently shows ${c.new_line}`}.
       <table style="margin-top:8px"><thead><tr><th>Line</th><th>Side</th><th class="num">Chance</th><th>Grade</th><th class="num">Stake</th></tr></thead><tbody>
       ${row(g.line + " (yours)", v.side, v.p, mGrade(v), v.units)}${n && nv.side ? row(c.new_line + " (now)", nv.side, nv.p, mGrade(nv), nv.units) : `<tr><td>${c.new_line} (now)</td><td colspan="4" class="muted">being graded – try again in a few minutes</td></tr>`}</tbody></table>`,
@@ -1339,7 +1342,7 @@ function drawSlip() {
   try { _drawSlip(); } catch {}
   if ($("#slip").hidden) return;
   if (!s.length) { $("#slip").hidden = true; return; }
-  const n = s.length, all = s.reduce((a, x) => a * (x.pc || 0.5), 1);
+  const n = s.length, estimate = manualProbability(s);
   const plat = slipBook(s), pn = bookName(plat) || "your app";
   // a payout shows ONLY when the member entered it for THIS exact entry (2026-10-14 owner): no saved standard payout, no
   // hypothetical average return per 1U
@@ -1354,9 +1357,8 @@ function drawSlip() {
       <span class="muted small">· ${isLeanV({grade: x.g}) ? "Lean" : esc(x.g) + (x.u != null && !(+x.u > 0) ? " · 0U" + (x.sr ? " — " + esc(x.sr) : "") : "")} · ${chance(x.pc || 0, x.t)}${x.vs ? " · vs " + esc(x.vs) : ""}</span></span>
       <button type="button" class="x" data-rmleg="${i}" title="Remove">✕</button></div>`).join("")
     + (n < 2 ? `<div class="small muted" style="margin-top:10px">Add at least 2 picks (up to 6).</div>`
-       : (() => { const dist = hitDist(s.map(x => x.pc || 0.5));
-          return `<div class="kv"><span>All ${n} hit (grader's %)</span><span><b>${(all * 100).toFixed(1)}%</b></span></div>`
-            + (n >= 3 ? `<div class="kv"><span>${n - 1} of ${n} hit</span><span>${((dist[n - 1] || 0) * 100).toFixed(1)}%</span></div>` : "")
+       : (() => {
+          return (estimate ? studioChance({n, legs: s.map(x => ({line: x.l, scope: x.sc})), ...estimate}) : `<div class="small muted">Regrade every leg to calculate a combined chance.</div>`)
             + `<label class="small muted" style="display:flex;gap:6px;align-items:center;margin:6px 0">Payout ${esc(pn)} shows for this entry
                 <input id="slippay" type="number" min="1" step="0.01" inputmode="decimal" placeholder="e.g. 3" value="${exact ?? ""}" style="width:80px"> x</label>`
             + (exact ? `<div class="kv"><span>Payout you entered for this exact entry</span><span><b>${+exact.toFixed(2)}x</b> if all ${n} hit</span></div>`
@@ -1380,6 +1382,8 @@ $("#slip").addEventListener("click", e => {
   if (e.target.closest("#slipclose")) { $("#slip").hidden = true; return; }
   if (e.target.closest("#slipcopy")) (async () => {
     const s = await recheckSlip();
+    const unchecked = s.filter(x => x.bk && x.now?.status !== "verified" && !["changed", "unavailable", "research"].includes(x.now?.status));
+    if (unchecked.length) { toast("Refresh these picks before copying: the platform check did not complete."); return; }
     // 2026-10-18 owner: a side that is not offered (or not confirmed) is never copied - also from a slip saved earlier
     const gone = s.filter(x => x.now?.status === "unavailable");
     if (gone.length) {
@@ -1400,6 +1404,7 @@ $("#slip").addEventListener("click", e => {
     if (s.length >= 2) try {
       const body = JSON.stringify({cid: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()), mode: "member-copy", n: s.length, book: slipBook(s) || "research",
         grader: boardVer || "", legs: s.map(x => ({nick: x.p, prop: x.t, scope: x.sc, line: x.l, side: x.s, book: x.bk || null, line_type: x.lt || "standard", p: x.pc, grade: x.g, match_slug: x.m,
+          team: x.tm, opponent: x.vs, start: x.st, player_id: x.pid, model_outcomes: x.model_outcomes,
           check: x.now?.status || "unchecked", orig_line: x.orig?.line ?? x.l, check_note: x.now?.note || ""}))});
       fetch("/api/slip_log", {method: "POST", headers: {"Content-Type": "application/json"}, body}).catch(() => {});
     } catch {}
@@ -1533,7 +1538,7 @@ async function loadBoard(force) {
 const shortWhen = s => { if (!s) return ""; const d = new Date(s); if (isNaN(d)) return "";
   const u = until(d); return d.toLocaleString([], {weekday: "short", hour: "numeric", minute: "2-digit"}) + (u ? " · " + u : ""); };
 function boardCard(r) {     // a board row in the shape addToSlip / pickLine expect
-  return {book: r.book || "underdog", grade: {line: r.line, prop: r.prop, line_type: gradeType(r), scope: r.scope || "12"},
+  return {book: r.book || "underdog", grade: {line: r.line, prop: r.prop, line_type: gradeType(r), scope: r.scope || "12", probs_raw: r.model_outcomes},
           verdict: {side: r.side, grade: r.grade, model_grade: r.model_grade, stake_reason: r.stake_reason, p: r.p, units: r.units,
                     kept_from_board: !!r.hltv_retry, stale: !!r.hltv_retry, graded_at: r.graded_at,
                     side_unavailable: r.unavailable || null},
@@ -1711,16 +1716,23 @@ function drawCompare() {
   const one = (bk, r) => `<button type="button" class="cmpcell" data-cmp="${bk}|${esc(r.nick || r.player)}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}" title="Open the card at this ${bookName(bk)} line">
       <span class="ln">${r.line}</span>${mktTag(r)}
       <div style="display:flex;flex-wrap:wrap;gap:0 10px"><span style="white-space:nowrap">Over ${sides(r)[0]}</span><span style="white-space:nowrap">Under ${sides(r)[1]}</span></div>
-      <div class="muted">${esc(sideWord(r))}${isLeanV(r) ? "" : " · " + esc(mGrade(r))} · ${+(+r.units || 0).toFixed(2)}U${zeroWhy(r)}</div></button>`;
+      <div class="muted">${sideGone(r) ? `<span class="pill bad">${esc(sideGone(r))}</span>` : `${esc(sideWord(r))}${isLeanV(r) ? "" : " · " + esc(mGrade(r))} · ${+(+r.units || 0).toFixed(2)}U${zeroWhy(r)}`}</div></button>`;
   const col = (bk, rows) => `<div><div class="cmpbook">${bookName(bk)}</div>${rows.length ? rows.map(r => one(bk, r)).join("") : `<div class="cmpnone">${bookName(bk)}: not offered</div>`}</div>`;
   const easier = x => {
     const pr = [...x.u, ...x.p].map(y => y.proj).filter(v => v != null);
     if (pr.length > 1 && Math.max(...pr) - Math.min(...pr) > 0.05) return "";
     const u = x.u.find(r => mktType(r) === "standard"), p = x.p.find(r => mktType(r) === "standard");
     if (!u || !p) return `<div class="cmpeasy muted">${x.u.length && x.p.length ? "Different market types – not compared" : "One platform only"}</div>`;
+    const current = r => !r.stale && !r.hltv_retry && !sideGone(r) && r.available !== false &&
+      r.state !== "SCOUT" && (!r.start || Date.parse(r.start) > Date.now());
+    if (!current(u) || !current(p) || (u.graded_model && p.graded_model && u.graded_model !== p.graded_model)) return "";
     if (u.line === p.line) return `<div class="cmpeasy">Same line on both</div>`;
     const lo = u.line < p.line ? ["underdog", u] : ["prizepicks", p], hi = u.line > p.line ? ["underdog", u] : ["prizepicks", p];
-    return `<div class="cmpeasy">Easier Over: <b>${bookName(lo[0])} ${lo[1].line}</b><br>Easier Under: <b>${bookName(hi[0])} ${hi[1].line}</b></div>`;
+    const offered = (r, side) => r.book === "prizepicks" ? r[side === "More" ? "over_available" : "under_available"] === true
+      : r[side === "More" ? "higher" : "lower"] != null && +r[side === "More" ? "higher" : "lower"] > 0;
+    const over = offered(u, "More") && offered(p, "More") ? `Easier Over: <b>${bookName(lo[0])} ${lo[1].line}</b>` : "";
+    const under = offered(u, "Less") && offered(p, "Less") ? `Easier Under: <b>${bookName(hi[0])} ${hi[1].line}</b>` : "";
+    return `<div class="cmpeasy">${[over, under].filter(Boolean).join("<br>")}</div>`;
   };
   const cmpRow = (x, withMatch) => {
     const all = [...x.u, ...x.p], pr = all.map(y => y.proj).filter(v => v != null), spread = pr.length > 1 ? Math.max(...pr) - Math.min(...pr) : 0;
@@ -2108,6 +2120,27 @@ function studioSummary() {
     + (sizes.length > 1 ? ` If picks run short, ${c.fill === "small" ? "smaller" : "bigger"} slips are filled first.` : "");
 }
 const sizeWord = n => `${n}-pick`;
+function manualProbability(legs) {
+  const raw = legs.map(l => {
+    const r = l.model_outcomes;
+    if (!r || !["More", "Less"].includes(l.s)) return null;
+    const a = [r.over, r.under, r.push];
+    if (!a.every(v => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1)) return null;
+    const total = a.reduce((x, y) => x + y, 0);
+    return Math.abs(total - 1) <= 0.0002 ? r[l.s === "More" ? "over" : "under"] / total : null;
+  });
+  if (legs.length && raw.every(p => p != null)) return {all_hit: raw.reduce((a, p) => a * p, 1), all_hit_basis: "model_unconditional"};
+  if (!legs.length || !legs.every(l => typeof l.pc === "number" && Number.isFinite(l.pc) && l.pc >= 0 && l.pc <= 1)) return null;
+  return {all_hit: legs.reduce((a, l) => a * l.pc, 1), all_hit_basis: legs.some(l => l.l != null && Number.isInteger(+l.l)) ? "conditional_no_push" : "display_estimate"};
+}
+function studioChance(s) {
+  const conditional = s.all_hit_basis === "conditional_no_push" || (!s.all_hit_basis &&
+    (s.legs || []).some(l => l.market_type !== "moneyline" && l.line != null && Number.isInteger(+l.line)));
+  const basis = s.all_hit_basis === "model_unconditional" ? "full outcome probabilities before grade safety adjustments" : "shown model chances";
+  const maps = (s.legs || []).some(l => l.scope === "123") ? "; assumes all three selected maps are played" : "";
+  return `<span>Est. chance all ${s.n} hit${conditional ? " if none push" : ""} <b>${pct(s.all_hit)}</b></span> `
+    + `<span class="muted small">${basis} multiplied; picks treated as independent${conditional ? "; pushes can reduce or void the entry" : ""}${maps}</span>`;
+}
 function studioLeg(l) {
   const mt = l.market_type && l.market_type !== "standard" ? ` <span class="pill" style="margin:0;padding:1px 7px">${esc(l.market_type)}</span>` : "";
   return `<div class="lg"><span><span class="gtag ${gClass(l.grade)}" style="font-size:11px;padding:1px 6px">${esc(l.grade)}</span> <b>${esc(l.nick || l.player)}</b>
@@ -2119,7 +2152,7 @@ function studioSlip(s) {
     – slip ${esc(s.slip_id.split("/").slice(1).join("/"))}${s.replaced_by ? ` → see build ${esc(s.replaced_by.split("/").slice(1).join("/"))}` : ""}; it no longer counts toward this batch's repeats.</div>${s.legs.map(studioLeg).join("")}</div>`;
   const note = STUDIO.notes[s.slip_id], cp = STUDIO.copied[s.slip_id], started = s.legs.some(l => Date.parse(l.start) <= Date.now());
   return `<div class="aslip${note ? " changed" : ""}">${s.legs.map(studioLeg).join("")}
-    <div class="nums"><span>Est. chance all ${s.n} hit <b>${pct(s.all_hit)}</b></span> <span class="muted small">model chances multiplied (picks treated as independent)</span>
+    <div class="nums">${studioChance(s)}
       ${(s.repeats || []).length ? `<span class="pill">${esc(s.repeats.join("; "))}</span>` : ""}</div>
     <div class="studio-actions"><button type="button" class="bslip" data-verify="${esc(s.slip_id)}"${started || note ? " disabled" : ""}>${note ? "Changed – not for copying" : started ? "Started – locked" : "Verify & copy"}</button>
       <span class="small muted">${bookName(s.book)} · ${sizeWord(s.n)} entry · slip ${esc(s.slip_id.split("/").slice(1).join("/"))}</span></div>
@@ -2154,7 +2187,7 @@ function studioRender() {
     + `<details class="small muted" style="margin-top:8px"><summary>How the studio works</summary>
       ${(b.settings || studioCfg()).fill === "small" ? "Smaller slips are planned first (your Fill first choice), so 4-picks only get the picks that are left." : "Slip sizes are planned largest first, so 2-pick suggestions can't use up the picks a 4-pick needs."} Each slip takes the strongest eligible picks the batch rules allow:
       one pick per match, player and team in a slip, and – across the whole batch, every Build until you start a new batch – fresh players, props and matches first; with Repeats “When needed” the least-used picks are used again only to reach your count (never the same slip twice, never both sides of one player's stat). "Verify & copy" re-checks every line on the platform and against the current grade first; any change means a rebuild, never an old chance on a new line.
-      The all-hit chance multiplies the model's chances, which assumes the picks are independent. No payouts or returns are assumed. Builder ${esc(b.builder_version || "")}. Not financial advice.</details>`;
+      The all-hit chance multiplies saved outcome probabilities, which assumes the picks are independent. Older slips without push probabilities are labelled conditional on no pushes. No payouts or returns are assumed. Builder ${esc(b.builder_version || "")}. Not financial advice.</details>`;
 }
 async function studioLoad() {
   try {
@@ -2502,12 +2535,12 @@ function render(d) {
   if (nm) h += `<div class="kv"><span>Opponent</span><span>${esc(nm.opponent)}${d.opponent_nationality?.id ? ` <span class="muted small">(${esc(d.opponent_nationality.label)})</span>` : ""}</span></div>
     <div class="kv"><span>Starts</span><span>${when(nm.start)}</span></div>
     <div class="kv"><span>Event</span><span>${esc(nm.event || "–")}</span></div>
-    <div class="kv"><span>Maps 1–2</span><span>${nm.maps?.length ? nm.maps.slice(0,2).map(mapName).join(" · ")
+    <div class="kv"><span>${scLab}</span><span>${nm.maps?.length ? nm.maps.slice(0, sc === "1" ? 1 : sc === "123" ? 3 : 2).map(mapName).join(" · ")
       : "Not announced yet – using his all-maps stats"}</span></div>`;
   if (!nm?.maps?.length && pb.map_prediction) {
-    const top = o => Object.entries(o).slice(0, 3).map(([m, p]) => `${mapName(m)} ${pct(p)}`).join(" · ");
+    const top = o => Object.entries(o || {}).slice(0, 3).map(([m, p]) => `${mapName(m)} ${pct(p)}`).join(" · ");
     h += `<div class="kv"><span>Likely Map 1 <span class="muted small">(context only)</span></span><span>${top(pb.map_prediction.map1)}</span></div>
-      <div class="kv"><span>Likely Map 2 <span class="muted small">(context only)</span></span><span>${top(pb.map_prediction.map2)}</span></div>
+      ${sc !== "1" && +nm?.bo !== 1 ? `<div class="kv"><span>Likely Map 2 <span class="muted small">(context only)</span></span><span>${top(pb.map_prediction.map2)}</span></div>` : ""}
       ${pb.map_prediction.pool_source ? `<div class="small muted">Map pool: ${pb.map_prediction.pool_source === "event veto" ? "this event's own veto" : esc(pb.map_prediction.pool_source)}</div>` : ""}`;
   }
   if (!nm) h += `<div class="muted">No upcoming match found for ${esc(pb.current_team || "this player's team")} yet.</div>`;
@@ -2604,20 +2637,20 @@ function render(d) {
       <td class="small mapcol">${s.maps.map(mapName).join('<span class="dot"> · </span>')}</td><td class="num"><span class="parts">${s.values.join(" + ")} = </span><b>${s.total}</b></td>
       <td>${esc(s.result)}</td>${cmpLine == null ? `<td class="muted">–</td>` : `<td class="${s.total > g.line ? "hit" : s.total === g.line ? "muted" : "miss"}">${s.total > g.line ? "Over" : s.total === g.line ? "Push" : "Under"}</td>`}</tr>`;
     h += `</tbody></table></div><div class="small muted" style="margin-top:8px">Average ${rf.avg_total} · median ${rf.median_total} ${stat} on ${sc === "1" ? "Map 1" : has123 ? "Maps 1–3" : "Maps 1–2"}${rf.series.some(x => x.source) ? ` · <span class="src" style="vertical-align:baseline">H</span> = numbers from HLTV` : ""}</div>`;
-  } else h += `<div class="muted">No recent matches with two maps.</div>`;
+  } else h += `<div class="muted">No recent results for ${scLab}.</div>`;
   h += `</section>`;
 
   // ---- H2H
-  h += `<section class="card"><h2>Head-to-head vs ${esc(hh?.opponent_query || nm?.opponent || "opponent")}${(() => { if (sc !== "12") return " · Maps 1–2 totals"; const cnt = (hh?.series || []).filter(x => x.same_roster !== false && !x.regional);
+  const hx = sc === "1" ? map1(hh?.series) : (hh?.series || []);
+  h += `<section class="card"><h2>Head-to-head vs ${esc(hh?.opponent_query || nm?.opponent || "opponent")}${(() => { if (sc === "123") return " · Maps 1–2 totals (separate context)"; const cnt = hx.filter(x => x.same_roster !== false && !x.regional);
       if (!cnt.length) return ""; const o = cnt.filter(x => x.total > g.line).length, pu = cnt.filter(x => x.total === g.line).length;
       return ` · over ${g.line} in ${o}/${cnt.length - pu}${pu ? ` (${pu} push)` : ""}${(hh.series || []).some(x => x.same_roster === false) ? " vs this roster" : ""}`; })()}</h2>`;
-  const hx = hh?.series || [];      // exact meetings and same-region teams (labelled "regional")
   if (d.regional_note && regionWords(d.regional_note)) h += `<div class="small muted" style="margin-bottom:8px">${esc(regionWords(d.regional_note))}</div>`;
   if (hx.length) {
-    h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th class="mapcol">Maps 1–2</th><th class="num">${g.prop === "hs" ? "HS" : "Kills"}</th><th>Team result</th><th>Prop</th></tr></thead><tbody>`;
+    h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th class="mapcol">${sc === "1" ? "Map 1" : "Maps 1–2"}</th><th class="num">${g.prop === "hs" ? "HS" : "Kills"}</th><th>Series result</th><th>Prop</th></tr></thead><tbody>`;
     for (const s of hx) h += `<tr><td class="num" style="text-align:left">${shortDate(s.date)}</td><td>${esc(s.opponent)}${s.regional ? ` <span class="pill" style="margin:0;padding:1px 7px" title="${s.regional_level === "region" || perfGrade(g) ? "Same-region team - context, not in the projection" : "Same-country / same-region team - counts lightly in the grade (less than meetings with this team)"}">${s.regional_level === "region" ? "region" : "regional"}</span>` : ""}${s.same_roster === false && !s.regional ? ` <span class="pill" style="margin:0;padding:1px 7px" title="Opponent had a different roster then (${s.roster_overlap} of today's players) - not counted">old roster</span>` : ""}</td>
       <td class="small mapcol">${s.maps.map(mapName).join('<span class="dot"> · </span>')}</td><td class="num"><span class="parts">${s.values.join(" + ")} = </span><b>${s.total}</b></td>
-      <td>${esc(s.result)}</td>${sc !== "12" ? `<td class="muted">–</td>` : `<td class="${s.total > g.line ? "hit" : s.total === g.line ? "muted" : "miss"}">${s.total > g.line ? "Over" : s.total === g.line ? "Push" : "Under"}</td>`}</tr>`;
+      <td>${esc(s.result)}</td>${sc === "123" ? `<td class="muted">–</td>` : `<td class="${s.total > g.line ? "hit" : s.total === g.line ? "muted" : "miss"}">${s.total > g.line ? "Over" : s.total === g.line ? "Push" : "Under"}</td>`}</tr>`;
     h += `</tbody></table></div>`;
   } else h += `<div class="muted">No meetings with this team in the last 12 months.</div>`;
   h += `</section>`;
@@ -2649,7 +2682,7 @@ function render(d) {
       ${pb.roster_confirmed || pb.standin_for ? `<div class="kv"><span>Roster</span><span>${pb.roster_confirmed ? "Confirmed" : "Stand-in"}${pb.roster_confirmed && pb.standin_for ? " · stand-in" : ""}</span></div>` : ""}${pb.team_note ? `<div class="small muted" style="margin:-2px 0 6px">${esc(pb.team_note)}</div>` : ""}
       ${(() => { const kn = KNOWN_AWP.has((pb.player?.nick || "").toLowerCase()), un = !pb.awp_note || UNSURE.test(pb.awp_note);
         return un && !kn ? "" : `<div class="kv"><span>AWP</span><span>${esc(un ? "AWPer" : pb.awp_note)}</span></div>`; })()}
-      <div class="kv"><span>IGL</span><span>${pb.is_igl ? "Yes" : "No"}</span></div>
+      <div class="kv" title="The card's local IGL reference list is not a complete roster-role database"><span>IGL reference list</span><span>${pb.is_igl ? "Listed" : "Not listed"}</span></div>
       ${pb.trade_pr != null ? `<div class="kv"><span>Trade kills</span><span>${num(pb.trade_pr,3)}/round</span></div>` : ""}
       ${pb.opening?.kills_per_round != null ? `<div class="kv"><span>Opening kills</span><span>${num(pb.opening.kills_per_round,3)}/round · ${pct(pb.opening.duel_win,0)} duels won</span></div>` : ""}
       ${o.flags?.length ? `<div class="kv"><span>Sample</span><span>${esc(o.flags.join("; "))}</span></div>` : ""}

@@ -148,7 +148,7 @@ def test_cache_and_stored_copy_carry_the_revision_and_rule(db):
     hltv_store.save(("perf", "p", hltv._norm("x"), hltv._norm("y"), since), ([7], [("full tables",)] * 9))     # pre-pin copy
     hltv_store.save(("perf", "p", hltv._norm("x"), hltv._norm("y"), since, "N0"), ([7], [("rule r1",)] * 9))  # r1 copy
     perf_live.player_maps("x", "y", since)
-    assert all(k[-2:] == ("N0", "n0-r4") for k in perf_live._CACHE)
+    assert all(k[-3:] == ("N0", "n0-r4", perf_live.ROW_POLICY) for k in perf_live._CACHE)
     perf_live._CACHE.clear()
     db.fail = hltv.Unavailable("HLTV database unreachable")
     ids, rows = perf_live.player_maps("x", "y", since)        # the outage serves THIS revision's own answer

@@ -271,12 +271,12 @@ def test_a_saved_grade_goes_on_the_slip_as_stale_never_verified(tmp_path):
     assert out["note"] == "" and out["pill"] == ""                       # owner 2026-10-16: no unsure pill on the slip
 
 
-def test_copying_a_slip_stops_only_for_a_changed_or_withdrawn_line():
+def test_copying_a_slip_marks_changes_without_unsure_labels():
     # owner 2026-10-16: no unsure marks - a moved line or a side no longer offered still stops the copy and is marked
     assert '["changed", "unavailable"].includes(x.now?.status)' in HTML and '" [NOT OFFERED NOW]"' in HTML
     assert "[SAVED GRADE" not in HTML and "[NOT CHECKED]" not in HTML and "[RESEARCH LINE]" not in HTML
     # a moved line regraded during an outage: a saved / unavailable answer is never offered as the new line's grade
-    assert "nv = nv0.kept_from_board || nv0.unavailable || nv0.stale || n?.hltv_outage ? {} : nv0" in HTML
+    assert "nv = nv0.kept_from_board || sideGone(nv0) || nv0.unavailable || nv0.stale || n?.hltv_outage ? {} : nv0" in HTML
 
 
 @needs_node

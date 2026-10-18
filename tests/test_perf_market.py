@@ -28,7 +28,8 @@ def _gi(**kw):
 
 def test_identical_to_the_frozen_reference_implementation():
     if not os.path.exists(REF):
-        return                                            # local-only reference copy
+        import pytest
+        pytest.skip("historical rr reference implementation is not available")
     sp = importlib.util.spec_from_file_location("rr_ref", REF)
     ref = importlib.util.module_from_spec(sp)
     sp.loader.exec_module(ref)
