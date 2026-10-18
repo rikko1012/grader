@@ -148,3 +148,36 @@ def rss_of(pid):
                     return round(int(line.split()[1]) / 1024, 1)
     except OSError:
         return None
+
+
+ALLOC = {"arena_max": None, "trims": 0, "last_trim_freed_mb": None, "platform": None}
+
+
+def tune_allocator(arenas=2, trim_every=60):
+    """glibc malloc on Linux (Render): many threads each get their own malloc arena, and memory freed by the bounded
+    caches stays in those arenas instead of returning to the OS - the process's resident memory kept climbing while
+    every cache stayed at its budget (2026-10-18 measurements). Cap the arenas (before the server's threads start) and
+    hand freed memory back every `trim_every` seconds. No-op off Linux/glibc. Changes no data and no computation."""
+    import ctypes
+    import threading
+    import time
+    try:
+        libc = ctypes.CDLL("libc.so.6")
+    except OSError:
+        ALLOC["platform"] = "no glibc - not tuned"
+        return False
+    M_ARENA_MAX = -8
+    ALLOC["arena_max"] = arenas if libc.mallopt(M_ARENA_MAX, arenas) == 1 else None
+    ALLOC["platform"] = "glibc"
+
+    def trim():
+        while True:
+            time.sleep(trim_every)
+            before = process_memory().get("server_rss_mb")
+            libc.malloc_trim(0)
+            after = process_memory().get("server_rss_mb")
+            ALLOC["trims"] += 1
+            if before is not None and after is not None:
+                ALLOC["last_trim_freed_mb"] = round(before - after, 1)
+    threading.Thread(target=trim, daemon=True, name="malloc-trim").start()
+    return True

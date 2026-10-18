@@ -1502,6 +1502,7 @@ def _memory_report():
     proc = LOL_SUP.get("proc")
     if proc is not None and proc.poll() is None:
         out["lol_worker_rss_mb"] = membudget.rss_of(proc.pid)
+    out["allocator"] = dict(membudget.ALLOC)
     out["caches"] = {"bo3_finished": bo3._MEM.stats(), "bo3_expiring": bo3._TMEM.stats(), "contexts": cs2_scout._CONTEXT.stats(),
                      "results": {"entries": len(_RESULTS), "mb": round(_RES_BYTES[0] / 1e6, 1),
                                  "budget_mb": round(RESULTS_MAX_BYTES / 1e6)}}
@@ -4123,6 +4124,7 @@ th{{color:#8b95a8}}input{{background:#1a2130;color:#e8ecf3;border:1px solid #252
 
 
 if __name__ == "__main__":
+    __import__("membudget").tune_allocator()          # before any thread starts (2026-10-18 out-of-memory fix)
     threading.Thread(target=warm_start, daemon=True, name="warm-start").start()
     threading.Thread(target=board_forever, daemon=True, name="underdog-board").start()
     def _pack_cache():   # one-time: old per-file cache -> one packed file (same data, ~1/3 the disk)
