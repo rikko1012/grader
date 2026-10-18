@@ -432,3 +432,20 @@ def test_split_is_stable_for_the_aiming_lazyfeel_case(con):
     assert store.canonical_id(con, store.find_entity(con, "player", "lolesports:player", "le-lazyfeel")) == x2
     assert store.canonical_id(con, lz) == x2 and store.canonical_id(con, new) == x2
     assert build.split_wrong_merges(con, "2026-10-17T21:20:00Z") == 0
+
+
+def test_worker_stage_memory_is_recorded_per_step(monkeypatch):
+    """2026-10-18 memory: each worker step records its start / peak / end resident memory (TEST values)."""
+    from lol.center import worker
+    seq = iter([100.0, 180.0, 120.0])
+    monkeypatch.setattr(worker, "_rss", lambda: next(seq))
+    monkeypatch.setattr(worker, "MEM", {"stages": {}, "active": {}, "unattributed": {"peak_mb": 0.0}})
+    with worker.stage("export"):
+        worker.MEM["active"]["export"]["peak"] = max(worker.MEM["active"]["export"]["peak"], worker._rss())   # one sample
+    st = worker.MEM["stages"]["export"]
+    assert st["runs"] == 1 and st["peak_mb"] == 180.0 and st["last"]["start_mb"] == 100.0 and st["last"]["end_mb"] == 120.0
+    assert worker.MEM["active"] == {}
+    monkeypatch.setattr(worker, "_rss", lambda: None)                  # no /proc (Windows): runs counted, no memory
+    with worker.stage("board"):
+        pass
+    assert worker.MEM["stages"]["board"]["runs"] == 1 and worker.MEM["stages"]["board"]["last"]["peak_mb"] is None

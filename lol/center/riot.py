@@ -163,16 +163,20 @@ def run_backfill(con, leagues=None, days=BACKFILL_DAYS):
     return tot
 
 
-def loop(state):
-    """Worker thread: live every 30 min; backfill units in between."""
+def loop(state, stage=None):
+    """Worker thread: live every 30 min; backfill units in between. `stage` (worker.stage) measures each pass's memory."""
+    import contextlib
+    stage = stage or (lambda name: contextlib.nullcontext())
     con = store.connect()
     while True:
         try:
             last = store.get_meta(con, "le_live_at")
             if not last or last < store.now_iso(time.time() - LIVE_EVERY_S):
-                state["live"] = dict(run_live(con), at=store.now_iso())
+                with stage("riot:live"):
+                    state["live"] = dict(run_live(con), at=store.now_iso())
                 continue
-            b = run_backfill(con)
+            with stage("riot:backfill"):
+                b = run_backfill(con)
             state["backfill"] = dict(b, at=store.now_iso()) if b else {"done": True, "at": store.now_iso()}
             if not b:
                 time.sleep(300)

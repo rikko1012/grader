@@ -33,6 +33,62 @@ STATE = {"started_at": None, "markets": {}, "ingest": {}, "riot": {}, "build": N
          "settled": None, "errors": []}
 
 
+# 2026-10-18 memory: the worker reached ~445 MB before any build and 532 MB during one, while the container stood at 2,100 of
+# 2,147 MB. Which step? A sampler reads this process's resident memory every 0.5 s and credits it to every step running at
+# that moment; a peak while no step runs is "unattributed" (e.g. the LoL Esports pass). Measurement only.
+MEM = {"stages": {}, "active": {}, "unattributed": {"peak_mb": 0.0}}
+
+
+def _rss():
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) / 1024
+    except OSError:
+        return None
+    return None
+
+
+def _mem_sampler(every=0.5):
+    while True:
+        time.sleep(every)
+        r = _rss()
+        if r is None:
+            return
+        act = list(MEM["active"].values())
+        for cur in act:
+            cur["peak"] = max(cur["peak"], r)
+        if not act and r > MEM["unattributed"]["peak_mb"]:
+            MEM["unattributed"] = {"peak_mb": round(r, 1), "at": store.now_iso()}
+
+
+class stage:
+    """with stage("export"): ... - records the step's start / peak / end resident memory and its duration."""
+
+    def __init__(self, name):
+        self.name = name
+
+    def __enter__(self):
+        r = _rss()
+        MEM["active"][self.name] = {"peak": r or 0.0, "start": r, "t0": time.time()}
+        return self
+
+    def __exit__(self, *exc):
+        cur = MEM["active"].pop(self.name, None)
+        if cur is not None:
+            r = _rss()
+            peak = max(cur["peak"], r or 0.0)
+            st = MEM["stages"].setdefault(self.name, {"runs": 0, "peak_mb": 0.0})
+            st["runs"] += 1
+            st["last"] = {"at": store.now_iso(), "seconds": round(time.time() - cur["t0"], 1),
+                          "start_mb": round(cur["start"], 1) if cur["start"] is not None else None,
+                          "peak_mb": round(peak, 1) if r is not None else None, "end_mb": round(r, 1) if r is not None else None}
+            if r is not None and peak > st["peak_mb"]:
+                st["peak_mb"], st["peak_at"] = round(peak, 1), store.now_iso()
+        return False
+
+
 def _err(where, e):
     STATE["errors"] = (STATE["errors"] + [{"at": store.now_iso(), "where": where, "error": f"{type(e).__name__}: {str(e)[:300]}"}])[-20:]
 
@@ -49,7 +105,8 @@ def markets_loop():
     while True:
         for platform in ("underdog", "prizepicks"):
             try:
-                STATE["markets"][platform] = dict(markets.poll(con, platform), at=store.now_iso())
+                with stage(f"markets:{platform}"):
+                    STATE["markets"][platform] = dict(markets.poll(con, platform), at=store.now_iso())
             except Exception as e:                 # a failure of one poll never stops the archive
                 _err(f"markets:{platform}", e)
                 try:
@@ -72,7 +129,8 @@ def ingest_loop():
             else:
                 STATE["ingest"].pop("idle_since", None)
                 STATE["ingest"]["current"] = [u[0], u[1] if u[0] != "ref" else [u[1][0], len(u[1][1])]]
-                ok, agg = ingest.run_unit(con, u)
+                with stage("ingest"):
+                    ok, agg = ingest.run_unit(con, u)
                 STATE["ingest"]["last"] = {"unit": STATE["ingest"].pop("current"), "ok": ok, "at": store.now_iso(),
                                            **{k: agg.get(k) for k in ("rows", "new", "changed", "gone", "error") if agg.get(k) is not None}}
                 if not ok:
@@ -137,7 +195,8 @@ def build_loop():
     while True:
         try:
             try:
-                STATE["handoff"] = handoff.consume(con, limit=HANDOFF_BATCH)
+                with stage("handoff"):
+                    STATE["handoff"] = handoff.consume(con, limit=HANDOFF_BATCH)
             except Exception as exc:
                 con.rollback()
                 # A remote inbox outage must not stop local builds or disclose a DSN.
@@ -149,25 +208,35 @@ def build_loop():
                 t_build = 0.0
                 flag.unlink()
             if store.get_meta(con, "dirty") and time.time() - t_build > BUILD_EVERY_S:
-                STATE["build"] = build.build(con)
-                _write("coverage.json", coverage.refresh(con))
-                STATE["export"] = export.export(con)
+                with stage("build"):
+                    STATE["build"] = build.build(con)
+                with stage("coverage"):
+                    _write("coverage.json", coverage.refresh(con))
+                with stage("export"):
+                    STATE["export"] = export.export(con)
                 t_build, t_link = time.time(), 0.0
             if time.time() - t_link > LINK_EVERY_S and store.get_meta(con, "built_at"):
-                STATE["links"] = {"at": store.now_iso(), "counts": match.link_open_markets(con)}
+                with stage("links"):
+                    STATE["links"] = {"at": store.now_iso(), "counts": match.link_open_markets(con)}
                 if store.get_meta(con, "last_export"):
-                    STATE["forecasts"] = {"at": store.now_iso(), "counts": forecast.run(con)}
-                    STATE["settled"] = {"at": store.now_iso(), "counts": forecast.settle_all(con)}
-                b = forecast.board(con)
+                    with stage("forecasts"):
+                        STATE["forecasts"] = {"at": store.now_iso(), "counts": forecast.run(con)}
+                    with stage("settle"):
+                        STATE["settled"] = {"at": store.now_iso(), "counts": forecast.settle_all(con)}
+                with stage("board"):
+                    b = forecast.board(con)
                 try:
-                    b["slips_member"] = slips.member_summary(con)    # recommended slips for members, or why none
+                    with stage("slips_member"):
+                        b["slips_member"] = slips.member_summary(con)    # recommended slips for members, or why none
                 except Exception as e:                              # never blocks the board itself
                     _err("slips_member", e)
                 _write("board.json", b)
-                _write("learning.json", learning.dashboard(con))
-                _write("slips.json", {"at": store.now_iso(), "note": "preview: no slip is recommended while stakes are held at 0U",
-                                      "previews": [slips.build(con, pl, size, 5, mode, no_overlap=True, preview=True)
-                                                   for pl in ("underdog", "prizepicks") for size in (2, 3) for mode in ("mixed",)]})
+                with stage("learning"):
+                    _write("learning.json", learning.dashboard(con))
+                with stage("slips_preview"):
+                    _write("slips.json", {"at": store.now_iso(), "note": "preview: no slip is recommended while stakes are held at 0U",
+                                          "previews": [slips.build(con, pl, size, 5, mode, no_overlap=True, preview=True)
+                                                       for pl in ("underdog", "prizepicks") for size in (2, 3) for mode in ("mixed",)]})
                 t_link = time.time()
 
         except Exception as e:
@@ -195,7 +264,8 @@ def refit_loop():
             prog = ingest.progress(con)["tables"]
             done_lp = all(v["windows_done"] == v["windows"] for k, v in prog.items() if k in ingest.CORE)
             if done_le and done_lp:
-                rec = learning.maybe_refit(con)
+                with stage("refit"):
+                    rec = learning.maybe_refit(con)
                 if rec:
                     STATE["refit"] = rec
         except Exception as e:
@@ -216,7 +286,8 @@ def write_status():
                "history_handoff": STATE.get("handoff"), "last_history_import": store.get_meta(con, "last_handoff"),
                "quarantine": {r[0]: r[1] for r in con.execute(
                    "SELECT kind || ':' || reason, COUNT(*) FROM quarantine WHERE resolved_at IS NULL GROUP BY kind, reason")},
-               "errors": STATE["errors"][-5:], "memory": _memory()}
+               "errors": STATE["errors"][-5:], "memory": dict(_memory(), stages=MEM["stages"], running=sorted(MEM["active"]),
+                                                              unattributed=MEM["unattributed"])}
         quarantine = [dict(r) for r in con.execute("SELECT kind, skey, reason, detail, first_seen, last_seen FROM quarantine "
                                                    "WHERE resolved_at IS NULL ORDER BY last_seen DESC LIMIT 500")]
         links = [dict(r) for r in con.execute("SELECT l.*, e.player, e.team, e.opponent, e.start_time, e.stat, e.scope, e.line "
@@ -234,6 +305,7 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     STATE["started_at"] = store.now_iso()
     parent = os.getppid()
+    threading.Thread(target=_mem_sampler, daemon=True, name="lol-mem").start()
     if os.environ.get("LOL_ARCHIVE", "1") != "0":
         threading.Thread(target=markets_loop, daemon=True, name="lol-markets").start()
     if os.environ.get("LOL_LP", "1") != "0":
@@ -242,7 +314,7 @@ def main():
     threading.Thread(target=refit_loop, daemon=True, name="lol-refit").start()
     if os.environ.get("LOL_LE", "1") != "0":
         from . import riot
-        threading.Thread(target=riot.loop, args=(STATE["riot"],), daemon=True, name="lol-riot").start()
+        threading.Thread(target=riot.loop, args=(STATE["riot"], stage), daemon=True, name="lol-riot").start()
     while True:
         try:
             write_status()
