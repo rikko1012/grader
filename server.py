@@ -759,6 +759,9 @@ def _check(state, **kw):
     return dict(kw, state=state)
 
 
+MEM_WARMUP_MIN = 20
+
+
 def ops_checks(now=None):
     """Operational checks for /health (2026-10-18 release brief, section 5) - each reads the real input state, never a
     provider request: platform feed ages and failures, odds sources' upstream ages (a cache read never counts as a new
@@ -822,13 +825,18 @@ def ops_checks(now=None):
         import membudget
         m = membudget.process_memory()
         lim = m.get("container_limit_mb") or 0
-        hist = [h for h in list(membudget.HISTORY)[-60:] if h.get("anon") is not None]
+        # growth over the last hour of one-minute samples, leaving out the first MEM_WARMUP_MIN after the process started:
+        # that is the caches filling to their budgets (2026-10-18 soak: ~600 MB in the first minutes after every deploy read
+        # as 943 MB/h "growth"); real growth after it still warns
+        allh = [h for h in list(membudget.HISTORY) if h.get("anon") is not None]
+        hist = allh[MEM_WARMUP_MIN:][-60:]
         growth = round((hist[-1]["anon"] - hist[0]["anon"]) * 60 / max(len(hist) - 1, 1), 1) if len(hist) >= 10 else None
         anon_share = round(m["container_anon_mb"] / lim, 3) if lim and m.get("container_anon_mb") else None
         kills = (m.get("container_events") or {}).get("oom_kill")
         out["memory"] = _check("fail" if kills else "warn" if (anon_share or 0) > 0.8 or (growth or 0) > 150 else "ok",
                                total_mb=m.get("container_mb"), anon_mb=m.get("container_anon_mb"), limit_mb=lim or None,
                                anon_share=anon_share, warn_share=0.8, anon_growth_mb_per_h=growth, warn_growth=150,
+                               growth_window_min=len(hist), warming_up=len(allh) < MEM_WARMUP_MIN + 10,
                                limit_hits=(m.get("container_events") or {}).get("max"), oom_kills=kills)
     except Exception as e:
         out["memory"] = _check("warn", error=type(e).__name__)

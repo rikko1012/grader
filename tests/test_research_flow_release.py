@@ -80,6 +80,24 @@ def test_ops_checks_read_real_input_state(monkeypatch):
     assert out["grading_backlog"]["listed"] == 0
 
 
+def test_memory_growth_check_skips_the_warm_up_and_still_catches_real_growth(monkeypatch):
+    import membudget
+    monkeypatch.setattr(membudget, "process_memory", lambda: {"container_limit_mb": 2147.5, "container_anon_mb": 820.0, "container_mb": 1800.0,
+                                                             "container_events": {"oom_kill": 0, "max": 5}})
+    now = datetime(2026, 10, 18, 12, 0, tzinfo=timezone.utc)
+
+    def mem(hist):
+        monkeypatch.setattr(membudget, "HISTORY", __import__("collections").deque(hist, maxlen=1440))
+        return server.ops_checks(now=now)["checks"]["memory"]
+    warm = [{"anon": 30.0 * i} for i in range(20)]                       # 0 -> 570 MB in the first 20 minutes: the cache fill
+    flat = mem(warm + [{"anon": 600.0 + 0.2 * i} for i in range(40)])   # then ~12 MB/h
+    assert flat["state"] == "ok" and flat["anon_growth_mb_per_h"] < 20 and not flat["warming_up"]
+    early = mem(warm[:15])
+    assert early["state"] == "ok" and early["warming_up"] and early["anon_growth_mb_per_h"] is None
+    leak = mem(warm + [{"anon": 600.0 + 5 * i} for i in range(40)])     # 300 MB/h after the warm-up
+    assert leak["state"] == "warn" and leak["anon_growth_mb_per_h"] == 300.0
+
+
 def test_settlement_lag_counts_open_picks_long_after_their_start(monkeypatch, tmp_path):
     import picklog
     monkeypatch.setattr(picklog, "DB", tmp_path / "picks.db")
