@@ -164,6 +164,10 @@ def test_a_saved_record_replays_exactly_from_its_own_values(T, monkeypatch):
     assert cm2.replay(stored) == (True, [])
     for k in ("p_more", "p_over_raw", "lambda", "p_push_raw"):
         assert not cm2.replay(dict(stored, **{k: stored[k] + 1e-9}))[0], k
+    # a last-bit difference from another platform's libm (seen: ~1e-16, Windows vs the Linux record writer) is not a change
+    assert cm2.replay(dict(stored, p_more=stored["p_more"] + 2e-16, p_over_raw=stored["p_over_raw"] - 2e-16))[0]
+    assert not cm2.replay(dict(stored, features=stored["features"][:-1]))[0]
+    assert not cm2.replay(dict(stored, p_more=None))[0]
     assert not cm2.replay(dict(stored, inputs=dict(stored["inputs"], k=stored["inputs"]["k"] + 1)))[0]
 
 

@@ -288,6 +288,14 @@ def for_forecast(t, player_ids, team_id, opp_id, day, lan, line, prop, scope, qu
     return out
 
 
+# replay tolerance (the handoff's reference: means 1e-10, probabilities 1e-12). On the platform that wrote the record the
+# replay is bit-identical (production: 0 mismatches); another platform's libm can differ in the last bit of erf / exp
+# (~1e-16 seen on Windows), which must not read as a changed forecast - while any real change (>= 1e-9) is caught.
+TOL = {"lambda": 1e-10, "sd": 1e-10, "p_over_raw": 1e-12, "p_under_raw": 1e-12, "p_push_raw": 1e-12, "p_over_given_no_push": 1e-12,
+       "p_more": 1e-12}
+TOL_FEATURE = 1e-12
+
+
 def replay(rec):
     """(ok, detail): recompute the features and every output from the record's saved sums only (no tables, no board)."""
     if not rec or rec.get("ineligible") or rec.get("error"):
@@ -298,9 +306,11 @@ def replay(rec):
         r = forecast(x, rec["line"])
     except Exception as e:      # noqa: BLE001 - a replay that cannot run is a failed replay
         return False, [f"{type(e).__name__}: {str(e)[:120]}"]
-    if rec.get("features") != x:
+    fs = rec.get("features")
+    if not isinstance(fs, list) or len(fs) != len(x) or any(not isinstance(a, (int, float)) or abs(a - b) > TOL_FEATURE for a, b in zip(fs, x)):
         bad.append("features differ")
-    bad += [f"{k}: stored {rec.get(k)!r} replay {r[k]!r}" for k in OUTPUTS if rec.get(k) != r[k]]
+    bad += [f"{k}: stored {rec.get(k)!r} replay {r[k]!r}" for k in OUTPUTS
+            if not isinstance(rec.get(k), (int, float)) or abs(rec[k] - r[k]) > TOL[k]]
     if rec.get("artifact_sha") != ARTIFACT_SHA:
         bad.append(f"artifact {rec.get('artifact_sha')} != {ARTIFACT_SHA}")
     return not bad, bad
