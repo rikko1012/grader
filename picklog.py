@@ -512,11 +512,25 @@ def _forecast(con, pid, row, kind, gi=None, extra=None):
 
 SHADOW_KEYS = (("live", "p_more"), ("fh1", "p_more"), ("live", "lambda"), ("fh1", "lambda"), ("live", "units"), ("fh1", "units"),
                ("live", "grade"), ("fh1", "grade"), ("live", "side"), ("fh1", "side"))
+# a record's two main arms (compared field by field above) and its parts that are not forecasts; every OTHER dict in a
+# record is a shadow arm (lc1, cm1, any later registration)
+_NOT_ARMS = ("live", "fh1", "published", "n0_check", "history", "read_at", "adds")
+
+
+def _shadow_arms(rec):
+    """Each shadow arm's own forecast and availability. 2026-10-18 audit: a record was repeated only when the live / fh-1
+    arms changed, so cm-1 becoming available after its deploy, or moving with its 2-hourly tables, was never saved while
+    the live grade stayed the same (37 forward units had no cm-1 value; in 48 of 102 consecutive records over a tables
+    change its chance moved). Now an arm that appears, becomes available or unavailable (its reason / error type), or
+    changes its value appends a new timestamped record. Old records are never touched."""
+    return {k: (v.get("p_more"), v.get("lambda"), v.get("ineligible"), str(v["error"]).split(":")[0][:60] if v.get("error") else None)
+            for k, v in sorted(rec.items()) if k not in _NOT_ARMS and isinstance(v, dict)}
 
 
 def _shadow_forecast(con, pid, row, fh, git_commit=None):
     """Append the fh-1 record for this pre-match grade when it differs from the last one stored for this pick: either arm's
-    chance / projection / stake / grade / side, the line, or the history snapshot. An unchanged record is not repeated (a
+    chance / projection / stake / grade / side, the line, the history snapshot, or any shadow arm's value or availability
+    (_shadow_arms). An unchanged record is not repeated (a
     moved price alone changes neither arm's chance - the performance model ignores odds - so it writes no record). Its inputs
     are stored once each (content-addressed). Never raises: the live forecast is already written."""
     if not fh or not isinstance(fh.get("rec"), dict):
@@ -527,7 +541,8 @@ def _shadow_forecast(con, pid, row, fh, git_commit=None):
         if last:
             lr = json.loads(last["rec"])
             if (lr.get("line") == rec.get("line") and lr.get("inputs_sha") == rec.get("inputs_sha")
-                    and all((lr.get(a) or {}).get(b) == (rec.get(a) or {}).get(b) for a, b in SHADOW_KEYS)):
+                    and all((lr.get(a) or {}).get(b) == (rec.get(a) or {}).get(b) for a, b in SHADOW_KEYS)
+                    and _shadow_arms(lr) == _shadow_arms(rec)):
                 return False
         for h, (kind, body) in (fh.get("bodies") or {}).items():
             con.execute("INSERT OR IGNORE INTO shadow_inputs (sha, kind, created_at, body) VALUES (?,?,?,?)",

@@ -242,6 +242,27 @@ def test_pick_log_saves_records_beside_unchanged_live_rows(fake, pdb):
     assert len(pg["rows"]) == 1 and not pg["done"] and pg["rows"][0]["rec"]["challenger"] == "fh-1"
 
 
+def test_a_shadow_arm_change_appends_a_record_while_the_live_rows_stay_identical(fake, pdb):
+    """2026-10-18 audit: cm-1 becoming available / moving with its tables is saved even when the live grade is unchanged."""
+    res, r = live_res()
+    res = _board_res(res)
+    S.attach(res, r)
+    res["_fh1"]["rec"]["cm1"] = {"version": "cm-1", "ineligible": "cm-1 tables not built yet"}         # TEST: before tables
+    pid = picklog.write_row(picklog.pick_row(res, verdict(res["grade"]), test=2))
+    con = sqlite3.connect(pdb)
+    con.row_factory = sqlite3.Row
+    live = lambda: [dict(x) for x in con.execute("SELECT * FROM forecasts WHERE pick_id = ?", (pid,))]
+    pick = lambda: dict(con.execute("SELECT * FROM picks WHERE id = ?", (pid,)).fetchone())
+    base_f, base_p = live(), pick()
+    res["_fh1"]["rec"]["cm1"] = {"version": "cm-1", "p_more": 0.61, "lambda": 31.0}                   # TEST: tables built
+    picklog.write_row(picklog.pick_row(res, verdict(res["grade"]), test=2))
+    picklog.write_row(picklog.pick_row(res, verdict(res["grade"]), test=2))                            # unchanged: nothing new
+    sh = con.execute("SELECT rec FROM shadow_forecasts WHERE pick_id = ? ORDER BY id", (pid,)).fetchall()
+    assert [json.loads(x["rec"])["cm1"].get("p_more") for x in sh] == [None, 0.61]
+    assert live() == base_f
+    counters = ("requests", "regrades")                       # board-write counters, incremented on every pre-match write
+    assert {k: v for k, v in pick().items() if k not in counters} == {k: v for k, v in base_p.items() if k not in counters}
+
 def test_learning_scores_the_latest_record_before_the_cutoff_after_it_passes(tmp_path):
     con = L.connect(tmp_path / "l.db")
     st = datetime(2026, 10, 17, 15, 0, tzinfo=timezone.utc)

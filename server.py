@@ -1469,6 +1469,9 @@ def memprof(action):
             tracemalloc.start(8)
         _MEMPROF.update(base=tracemalloc.take_snapshot(), started=time.time())
         return {"tracing": True, "memory": _memory_report()}
+    if action == "history":                       # the server's own minute samples (last 24 h) - read-only
+        import membudget
+        return {"memory": _memory_report(), "history": list(membudget.HISTORY)}
     if action == "exceptions":
         return {"memory": _memory_report(), **_scan_exceptions()}
     if action == "containers":
@@ -1568,6 +1571,9 @@ def _memory_report():
     if proc is not None and proc.poll() is None:
         out["lol_worker_rss_mb"] = membudget.rss_of(proc.pid)
     out["allocator"] = dict(membudget.ALLOC)
+    out["processes_mb"] = membudget.processes()
+    out["sampled_peaks"] = dict(membudget.PEAK)            # highest minute samples since this process started
+    out["history_minutes"] = len(membudget.HISTORY)       # /admin/memprof.json?action=history
     out["caches"] = {"bo3_finished": bo3._MEM.stats(), "bo3_expiring": bo3._TMEM.stats(), "contexts": cs2_scout._CONTEXT.stats(),
                      "results": {"entries": len(_RESULTS), "mb": round(_RES_BYTES[0] / 1e6, 1),
                                  "budget_mb": round(RESULTS_MAX_BYTES / 1e6)}}

@@ -551,3 +551,6 @@ matches; kills + HS pooled):
 - Forward evidence must be predictions saved before matches that start after the freeze, at genuinely offered lines.
 - The mechanism to save them is the owner's decision. Two options: a local scheduled snapshot job (no production change),
   or a production shadow.
+- **Update (2026-10-16 22:31 UTC):** the owner chose the production shadow. It is live (commit 325e947) and registered as
+  `cm-001-4e5f42fb`, with frozen_at 22:35:14 UTC; see CHALLENGERS.md. The "nothing is deployed or registered" line above
+  describes the 22:08 freeze only.

@@ -130,6 +130,17 @@ data hash 49e7ac29547b86a9). Walk-forward with w refitted on earlier days only: 
   - Probability scores and the fixed 57% rule are reported separately, by stat, with match-grouped intervals.
   - **Forward record = forecasts logged after its registry freeze only.** Nothing is backdated or reconstructed.
   - Promotion only through the registered review.
+- **Registry:** `cm-001-4e5f42fb`, frozen_at 2026-10-16T22:35:14Z (the forward clock). The shadow went live at 22:31:36 (commit
+  325e947); no record with a cm-1 value was written before 22:35:14.
+- **Logging repair (2026-10-18; picklog `_shadow_arms`):** a record used to be repeated only when the live / fh-1 arms
+  changed.
+  - So cm-1 becoming available after its deploy, or moving with its 2-hourly tables, was not saved while the live grade
+    stayed the same.
+  - In 48 of 102 consecutive records over a tables change, its chance had moved.
+  - Now any shadow arm that appears, becomes available or unavailable, or changes value appends a new timestamped
+    pre-match record. Earlier records are unchanged.
+  - **Gap, permanent:** 37 of the first 271 forward units (Oct 17 matches) have no cm-1 value. Their last record at least
+    30 minutes before the start predates the deploy. They are reported as missing, never filled in.
 
 ## lc-1 - real-line probability correction (family `line-correction-1`, id `lc-001-<hash>`; production shadow only)
 
