@@ -142,6 +142,12 @@ def build_loop():
                 con.rollback()
                 # A remote inbox outage must not stop local builds or disclose a DSN.
                 STATE["handoff"] = {"error": type(exc).__name__, "at": store.now_iso()}
+            flag = store.db_path().parent / "rebuild.flag"       # admin request (/admin/lol/rebuild): build now
+            if flag.exists():
+                store.set_meta(con, "dirty", store.now_iso())
+                con.commit()
+                t_build = 0.0
+                flag.unlink()
             if store.get_meta(con, "dirty") and time.time() - t_build > BUILD_EVERY_S:
                 STATE["build"] = build.build(con)
                 _write("coverage.json", coverage.refresh(con))

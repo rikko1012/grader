@@ -1400,6 +1400,11 @@ def lol_center_admin(path, q):
             flag.unlink()
         _LOL_PUB["at"] = 0.0
         return {"public": lol_public(), "flag": flag.exists(), "env": os.environ.get("LOL_PUBLIC", "0") == "1"}
+    if path == "/admin/lol/rebuild":
+        # admin: ask the worker to rebuild + export from the stored source records at its next loop (no data changes)
+        LOL_CENTER.mkdir(parents=True, exist_ok=True)
+        (LOL_CENTER / "rebuild.flag").write_text(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+        return {"requested": True}
     if path == "/admin/lol.json":
         p = LOL_SUP.get("proc")
         # names only (never values) of credential-like settings, to check a bot login was entered under the expected names
