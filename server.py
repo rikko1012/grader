@@ -1434,6 +1434,8 @@ def memprof(action):
             tracemalloc.start(8)
         _MEMPROF.update(base=tracemalloc.take_snapshot(), started=time.time())
         return {"tracing": True, "memory": _memory_report()}
+    if action == "exceptions":
+        return {"memory": _memory_report(), **_scan_exceptions()}
     if action == "containers":
         return {"memory": _memory_report(), "containers": _scan_containers()}
     if action == "stop":
@@ -1451,6 +1453,34 @@ def memprof(action):
                          for d in diff[:30]]
     out["objects"] = Counter(type(o).__name__ for o in gc.get_objects()).most_common(20)
     return out
+
+
+def _scan_exceptions():
+    """Live futures and exception objects that keep tracebacks (and with them every frame's locals) alive: counts, the
+    raising code lines, and what holds them."""
+    import asyncio
+    import concurrent.futures
+    import gc
+    from collections import Counter
+    objs = gc.get_objects()
+    futs = [o for o in objs if isinstance(o, (concurrent.futures.Future, asyncio.Future))]
+    excs = [o for o in objs if isinstance(o, BaseException) and o.__traceback__ is not None]
+    where, kinds = Counter(), Counter()
+    for e in excs:
+        tb = e.__traceback__
+        while tb.tb_next:
+            tb = tb.tb_next
+        where[f"{tb.tb_frame.f_code.co_filename.rsplit('/', 1)[-1]}:{tb.tb_lineno}"] += 1
+        kinds[f"{type(e).__name__}: {str(e)[:80]}"] += 1
+    holders = Counter()
+    for e in excs[:15]:
+        for r in gc.get_referrers(e):
+            if r is not objs and r is not excs:
+                holders[type(r).__name__ + (f" {r.__class__.__module__}" if hasattr(r, "__class__") else "")] += 1
+    fstate = Counter((type(f).__module__ + "." + type(f).__name__, getattr(f, "_state", "?"),
+                      bool(getattr(f, "_exception", None))) for f in futs)
+    return {"futures": [[*k, n] for k, n in fstate.most_common(10)], "exceptions_with_traceback": len(excs),
+            "raised_at": where.most_common(10), "kinds": kinds.most_common(10), "held_by": holders.most_common(10)}
 
 
 def _scan_containers(top=30):
