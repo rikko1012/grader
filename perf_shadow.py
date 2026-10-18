@@ -281,12 +281,9 @@ def _live_entry(key):
 
 
 def _bo3_rows(pb):
-    """cs2_scout._perf_input_once's BO3.gg rows, built the same way."""
-    me = pb.get("_match_env") or {}
-    return [(date.fromisoformat(r["date"]).toordinal(), r["kills"], r["rounds"], r.get("headshots"),
-             (r.get("env") or me.get(r.get("match_id"))) == "lan",
-             not (r.get("headshots") == 0 and (r["kills"] or 0) >= 12))
-            for r in pb.get("recent_maps") or [] if r.get("kills") is not None and r.get("rounds") and r.get("date")]
+    """cs2_scout._perf_input_once's BO3.gg rows - the same function (bo3-env-2: unknown environment stays None)."""
+    import cs2_scout
+    return cs2_scout.bo3_perf_rows(pb)
 
 
 def build(res, r):

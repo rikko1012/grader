@@ -1,5 +1,34 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
+## `c36104d079` — BO3.gg environment correction (`bo3-env-2`), 2026-10-18
+
+Base: live tag `807a289529` (main `0fc44c2`). The only grading change is `cs2_scout.py`: the BO3.gg history rows behind
+**perf-2-bo3** projections (players HLTV has no history for).
+
+- **Before:** each historical map's environment was `(map label or match label) == "lan"`, so an absent or unexpected
+  label made the map an ONLINE map.
+- **Now (`hist_env`):**
+  - only "lan" / "online" (or a boolean) count;
+  - the map's own label comes first, then the same historical match's verified label (its tournament type);
+  - tonight's environment is never used for an earlier match;
+  - anything else stays unknown.
+- perf.project already keeps unknown maps in the overall history and out of both the LAN-only and online-only history.
+  The HLTV path already did this (`verified-history-1`); the BO3.gg path did not.
+- **Changed cohort, by construction:** perf-2-bo3 forecasts whose match tonight is ONLINE and whose BO3.gg rows include at
+  least one map with an unknown environment.
+  - Their online-only history loses those maps; the overall rate is unchanged.
+  - With all labels known, the rows are identical to the old rule's (tested).
+  - For a LAN tonight, the old False and the new None are both outside the LAN subset; this was measured on the fixture,
+    not assumed for every input.
+- **Saved before/after on identical inputs:** every perf-2-bo3 projection now saves
+  - `env_rule` (bo3-env-2);
+  - `env_labels` (LAN / online / unknown map counts);
+  - and, when any label is unknown, `env_rule_before` = the old rule's lambda and rate, from the same inputs at the same
+    moment.
+- Old forecasts and settlements are never rewritten. fh-1 snapshots store their rows as saved, so old records replay as
+  they were. cm-1 and cm-2 are unaffected (HLTV tables only).
+- No weights, thresholds, bonuses or stake rules changed. This is a correctness repair, not an accuracy claim.
+
 ## Unreleased correctness candidate — full audit, 2026-10-18
 
 Based on `1735928`; normalized Git/LF model tag **`807a289529`**, builder **`studio-3`**.

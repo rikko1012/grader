@@ -1312,6 +1312,35 @@ def _perf_input(pb, args):
             return {"error": f"HLTV database unreachable right now (retried once): {type(e).__name__}", "transient": True}
 
 
+ENV_LABELS = {"lan": True, "online": False}
+BO3_ENV_RULE = "bo3-env-2"   # 2026-10-18: unknown historical environment stays unknown (was: counted as online)
+
+
+def hist_env(label, match_label=None):
+    """A historical BO3.gg map's environment for the performance model: True = LAN, False = online, None = unknown.
+    Only recognised values count - the map's own label, else the same historical match's verified label (its tournament
+    type, match_envs). Never tonight's environment. Absent, empty or unexpected labels stay unknown: perf.project keeps
+    them in the overall history and out of both the LAN-only and the online-only history. (Before bo3-env-2 the rule was
+    '(env or match env) == "lan"', which made every unknown map an online map.)"""
+    for v in (label, match_label):
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str) and v.strip().lower() in ENV_LABELS:
+            return ENV_LABELS[v.strip().lower()]
+    return None
+
+
+def bo3_perf_rows(pb, rule=BO3_ENV_RULE):
+    """The BO3.gg rows perf-2-bo3 projects from: (day, kills, rounds, hs, lan, hs_ok). rule="bo3-env-1" rebuilds the old
+    rows (unknown = online) - kept only for the saved before/after comparison, never for a grade."""
+    me = pb.get("_match_env") or {}
+    env = (lambda r: hist_env(r.get("env"), me.get(r.get("match_id")))) if rule == BO3_ENV_RULE else \
+        (lambda r: (r.get("env") or me.get(r.get("match_id"))) == "lan")
+    return [(date.fromisoformat(r["date"]).toordinal(), r["kills"], r["rounds"], r.get("headshots"), env(r),
+             not (r.get("headshots") == 0 and (r["kills"] or 0) >= 12))
+            for r in pb.get("recent_maps") or [] if r.get("kills") is not None and r.get("rounds") and r.get("date")]
+
+
 def _perf_input_once(pb, args, sc):
     if True:
         import perf_live
@@ -1329,11 +1358,7 @@ def _perf_input_once(pb, args, sc):
                    "hltv_player_ids": out.get("hltv_player_ids")}
         if no_hltv:
             # perf-2-bo3 (live, provisional): the same model on his BO3.gg maps when HLTV has no history
-            me = pb.get("_match_env") or {}
-            rows = [(date.fromisoformat(r["date"]).toordinal(), r["kills"], r["rounds"], r.get("headshots"),
-                     (r.get("env") or me.get(r.get("match_id"))) == "lan",
-                     not (r.get("headshots") == 0 and (r["kills"] or 0) >= 12))
-                    for r in pb.get("recent_maps") or [] if r.get("kills") is not None and r.get("rounds") and r.get("date")]
+            rows = bo3_perf_rows(pb)
             if rows:
                 import perf
                 since = (date.today() - timedelta(days=420)).isoformat()
@@ -1347,6 +1372,15 @@ def _perf_input_once(pb, args, sc):
                            opp_maps=len(om), opp_known=bool(om),
                            g7=perf_live.g7_fields(perf.project(rows, om, lan_, day, sc, pr_,
                                                               perf.PARAMS_PERF1, perf.SPREAD_PERF1, "perf-1-bo3")))
+                # 2026-10-18 bo3-env-2: the environment labels behind this projection, and - when any is unknown - the
+                # old rule's projection on these same inputs at this same moment (the saved before/after comparison;
+                # measurement only, never graded)
+                nl = sum(1 for x in rows if x[4] is True)
+                no = sum(1 for x in rows if x[4] is False)
+                bo3.update(env_rule=BO3_ENV_RULE, env_labels={"lan": nl, "online": no, "unknown": len(rows) - nl - no})
+                if len(rows) - nl - no:
+                    old = perf.project(bo3_perf_rows(pb, "bo3-env-1"), om, lan_, day, sc, pr_, version=perf.VERSION + "-bo3")
+                    bo3["env_rule_before"] = {"rule": "bo3-env-1", "lambda": old["lambda"], "rate": old["rate"]}
                 if not om:
                     dq = bo3.get("data_quality")
                     bo3["data_quality"] = ((dq + "; ") if dq not in (None, "ok") else "") + ("opponent not in HLTV" if not tid else "opponent has no HLTV maps") + " - average opponent"

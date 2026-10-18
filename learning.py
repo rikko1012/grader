@@ -574,10 +574,22 @@ def fh1_replay_step(con, recs):
             except Exception as e:      # noqa: BLE001 - a replay that cannot run is a failed replay, never a pass
                 ok, why = False, [f"{type(e).__name__}: {str(e)[:120]}"]
         con.execute("INSERT OR REPLACE INTO fh1_replay (id, ok, detail) VALUES (?,?,?)", (r["id"], int(ok), json.dumps(why)))
+        if r["id"] > _meta(con, "fh1_replay_last", 0):        # cm-2 counted once per record, by what actually happened
+            try:
+                import cm2
+                rec_ = r["rec"] if isinstance(r["rec"], dict) else json.loads(r["rec"])
+                st_, _ = cm2.replay_status(rec_.get("cm2"))
+            except Exception:
+                st_ = "mismatch"
+            c2 = _meta(con, "cm2_replay", {}) or {}
+            k_ = {"replayed": "computed_replayed", "ineligible": "ineligible_skipped", "mismatch": "mismatched"}.get(st_, "missing_or_error")
+            c2[k_] = c2.get(k_, 0) + 1
+            _set_meta(con, "cm2_replay", c2)
         _set_meta(con, "fh1_replay_last", max(_meta(con, "fh1_replay_last", 0), r["id"]))
     tot = con.execute("SELECT COUNT(*), COALESCE(SUM(1 - ok), 0) FROM fh1_replay").fetchone()
     ex = [{"id": x["id"], "why": json.loads(x["detail"])} for x in con.execute("SELECT * FROM fh1_replay WHERE ok = 0 ORDER BY id LIMIT 5")]
-    summ = {"rows_checked": tot[0], "mismatches": tot[1], "examples": ex, "source": "saved inputs (history snapshot + grader inputs) only"}
+    summ = {"rows_checked": tot[0], "mismatches": tot[1], "examples": ex, "source": "saved inputs (history snapshot + grader inputs) only",
+            "cm2": _meta(con, "cm2_replay", {}) or {}}
     _set_meta(con, "fh1_replay", summ)
     return summ
 

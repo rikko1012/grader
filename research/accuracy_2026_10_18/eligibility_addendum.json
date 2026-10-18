@@ -1,0 +1,96 @@
+{
+ "rule": "eligible = at least one HLTV map in the 420 days before the match day (x[5] = log1p(maps) > 0); same as cm-2",
+ "bootstrap": {
+  "B": 4000,
+  "seed": 20261018,
+  "unit": "match"
+ },
+ "excluded": [
+  {
+   "match": "hltv:2399134",
+   "hltv_match": 2399134,
+   "hltv_player": 11162,
+   "player": "Hatz",
+   "prop": "hs",
+   "line": 12.5
+  },
+  {
+   "match": "hltv:2399134",
+   "hltv_match": 2399134,
+   "hltv_player": 11162,
+   "player": "Hatz",
+   "prop": "kills",
+   "line": 24.5
+  }
+ ],
+ "original": {
+  "kills": {
+   "props": 522,
+   "matches": 59,
+   "log_loss_saved": 0.7015996556453474,
+   "log_loss_candidate": 0.6851861653139049,
+   "gain": 0.016413490331442578,
+   "ci95": [
+    0.006296775653874764,
+    0.026693500695518547
+   ]
+  },
+  "hs": {
+   "props": 494,
+   "matches": 59,
+   "log_loss_saved": 0.690834939212189,
+   "log_loss_candidate": 0.6826414975973147,
+   "gain": 0.008193441614874217,
+   "ci95": [
+    -0.002197746878178732,
+    0.01787484625021611
+   ]
+  },
+  "combined": {
+   "props": 1016,
+   "matches": 59,
+   "log_loss_saved": 0.6963656301355242,
+   "log_loss_candidate": 0.6839488957745391,
+   "gain": 0.012416734360985128,
+   "ci95": [
+    0.003984788646997336,
+    0.02100043483399049
+   ]
+  }
+ },
+ "eligible": {
+  "kills": {
+   "props": 521,
+   "matches": 59,
+   "log_loss_saved": 0.7012443153881742,
+   "log_loss_candidate": 0.6853442871724142,
+   "gain": 0.01590002821575997,
+   "ci95": [
+    0.005817032611706555,
+    0.026419325057852664
+   ]
+  },
+  "hs": {
+   "props": 493,
+   "matches": 59,
+   "log_loss_saved": 0.6906075008605561,
+   "log_loss_candidate": 0.6827691540643975,
+   "gain": 0.007838346796158642,
+   "ci95": [
+    -0.002596756438314011,
+    0.01756354291170249
+   ]
+  },
+  "combined": {
+   "props": 1014,
+   "matches": 59,
+   "log_loss_saved": 0.6960727674965413,
+   "log_loss_candidate": 0.6840922747244337,
+   "gain": 0.011980492772107647,
+   "ci95": [
+    0.0034784856995644466,
+    0.02056128013720346
+   ]
+  }
+ }
+}

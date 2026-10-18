@@ -172,6 +172,21 @@ records, registration, clock and results are unchanged, and none of them count f
   - The database read keeps NULL as None (cm-1's read turned it into False).
   - cm-1's table build is unchanged: an optional `env` argument that cm-1 never passes. Its tables hash on the test fixture
     is pinned.
+  - **Three different counts - never merged in a claim:**
+    - 522 = inference tests (the reference arithmetic on the research's saved features);
+    - 521 = production-eligible history reconstructions;
+    - 1 excluded, the player with no maps in the window.
+    The research's 1,016-prop strict table has two such rows (that player's kills and HS props). The eligibility-aligned
+    recomputation (no refit) is in research/accuracy_2026_10_18/ (rule, script, results).
+  - **Replay validation (2026-10-18 finish fixes):**
+    - Saved features and outputs must be finite real numbers; NaN, infinity, null, bool and text are rejected, as are
+      vectors that are not 14 long.
+    - Version, artifact (16-character and canonical) and constants identities must match the registered artifact.
+      `artifact_canonical_sha` is the canonical-JSON hash. Older records carry the same value under the old name
+      `artifact_file_sha`, which never meant raw file bytes.
+    - Replay reports computed-and-replayed, ineligible/skipped, missing/error and mismatched separately. An ineligible
+      record is never counted as a reconstructed forecast.
+    - Forecasts, weights and the registration (`cm-002-9f1db397`, 21:55:07Z) are unchanged by this.
   - **Pipeline check (research source dump, 300,457 rows):**
     - 37 incomplete maps and 20 unknown-environment rows, as in the report.
     - 521 of the 522 strict props have identical features; mean within 2e-14.

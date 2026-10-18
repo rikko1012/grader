@@ -265,3 +265,101 @@ def test_cm2_extras_report_match_equal_calibration_and_versions():
     assert out["match_equal"]["matches"] == 6 and out["match_equal"]["log_loss_gain"] > 0
     assert out["versions"] == [{"live_version": "v1", "cm2_tables": "t1", "units": len(rs)}]
     assert sum(b["units"] for b in out["calibration"]["cm2"]) == len(rs)
+
+
+# ---------------------------------------------------------------- finish-fixes 2026-10-18 item 2: replay validation
+@pytest.fixture
+def REC(T):
+    return json.loads(json.dumps(cm2.for_forecast(T, [PLAYER], TEAM, OPP, DAY, False, 20.5, "kills", "12"), sort_keys=True))
+
+
+def test_a_valid_record_replays_and_legitimate_last_bit_differences_pass(REC):
+    assert cm2.replay_status(REC) == ("replayed", []) and cm2.replay(REC) == (True, [])
+    assert REC["artifact_canonical_sha"] == cm2.ARTIFACT_CANONICAL_SHA and "artifact_file_sha" not in REC
+    assert cm2.replay_status(dict(REC, p_more=REC["p_more"] + 2e-16, lambda_=0))[0] == "replayed"
+    old = {k: v for k, v in REC.items() if k != "artifact_canonical_sha"}
+    old["artifact_file_sha"] = cm2.ARTIFACT_CANONICAL_SHA                    # records written before the rename
+    assert cm2.replay_status(old)[0] == "replayed"
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf"), None, True, "0.6"])
+def test_every_output_rejects_nonfinite_null_bool_and_text(REC, bad):
+    for k in cm2.OUTPUTS:
+        st, why = cm2.replay_status(dict(REC, **{k: bad}))
+        assert st == "mismatch" and not cm2.replay(dict(REC, **{k: bad}))[0], (k, bad)
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), None, True])
+def test_every_feature_rejects_nonfinite_null_and_bool(REC, bad):
+    for i in range(14):
+        fs = list(REC["features"])
+        fs[i] = bad
+        assert cm2.replay_status(dict(REC, features=fs))[0] == "mismatch", (i, bad)
+
+
+def test_malformed_vectors_identity_metadata_and_tampering_are_rejected(REC):
+    cases = [dict(REC, features=REC["features"][:-1]), dict(REC, features=REC["features"] + [0.0]), dict(REC, features="x"),
+             dict(REC, constants_sha="incorrect"), dict(REC, artifact_sha="incorrect"), dict(REC, artifact_canonical_sha="0" * 64),
+             dict(REC, version="cm-1"), {k: v for k, v in REC.items() if k != "constants_sha"},
+             {k: v for k, v in REC.items() if k != "version"}, {k: v for k, v in REC.items() if k != "inputs"},
+             dict(REC, line=20.3), dict(REC, line=float("nan")), dict(REC, prop="hs"), dict(REC, scope="1"),
+             dict(REC, p_more=REC["p_more"] + 1e-9), dict(REC, inputs=dict(REC["inputs"], k=REC["inputs"]["k"] + 1)),
+             dict(REC, inputs=dict(REC["inputs"], k=float("nan"))), dict(REC, inputs=dict(REC["inputs"], r=-1e9))]
+    for i, c in enumerate(cases):
+        assert cm2.replay_status(c)[0] == "mismatch", i
+        assert not cm2.replay(c)[0], i
+
+
+def test_ineligible_missing_and_error_records_are_counted_apart(T):
+    inel = cm2.for_forecast(T, [PLAYER], TEAM, OPP, DAY, None, 20.5, "kills", "12")
+    assert cm2.replay_status(inel) == ("ineligible", ["target environment (LAN / online) unknown"])
+    assert cm2.replay_status(dict(inel, constants_sha="incorrect"))[0] == "mismatch"
+    assert cm2.replay_status(dict(inel, p_more=0.6))[0] == "mismatch"                    # an ineligible record with a forecast
+    assert cm2.replay_status(None)[0] == "missing" and cm2.replay_status({"version": "cm-2", "error": "boom"})[0] == "error"
+
+
+def test_learning_replay_counts_cm2_by_what_happened(tmp_path, REC, T):
+    con = L.connect(tmp_path / "l.db")
+    inel = cm2.for_forecast(T, [PLAYER], TEAM, OPP, DAY, None, 20.5, "kills", "12")
+    recs = [{"id": 1, "rec": {"cm2": REC}}, {"id": 2, "rec": {"cm2": inel}}, {"id": 3, "rec": {}},
+            {"id": 4, "rec": {"cm2": dict(REC, p_more=float("nan"))}}, {"id": 5, "rec": json.dumps({"cm2": REC})}]
+    for r in recs:
+        r.update(inputs_body=None, gi_body=None)
+    s = L.fh1_replay_step(con, recs)
+    assert s["cm2"] == {"computed_replayed": 2, "ineligible_skipped": 1, "missing_or_error": 1, "mismatched": 1}
+    L.fh1_replay_step(con, recs[:2])                                          # already counted records are not counted twice
+    assert L._meta(con, "cm2_replay") == s["cm2"]
+
+
+def test_a_failed_refresh_keeps_the_last_good_tables_and_reloads_do_not_pile_up(T, tmp_path, monkeypatch):
+    cm2.save_tables(T, tmp_path)
+    cm2._T.update(tables=None, mtime=0.0, checked=0.0, meta=None)
+    try:
+        good = cm2.current(tmp_path)["meta"]["dir"]
+        real = np.save
+        calls = {"n": 0}
+
+        def boom(path, a):
+            calls["n"] += 1
+            if calls["n"] == 3:
+                raise OSError("disk full (test)")
+            return real(path, a)
+        monkeypatch.setattr(cm2.np, "save", boom)
+        with pytest.raises(OSError):
+            cm2.save_tables(T, tmp_path)                                   # partial write
+        monkeypatch.setattr(cm2.np, "save", real)
+        assert not list(tmp_path.glob("*.tmp")) and json.loads((tmp_path / "cm2_tables.json").read_text())["dir"] == good
+        cm2._T["checked"] = 0.0
+        assert cm2.current(tmp_path)["meta"]["dir"] == good                # still the last good snapshot
+        monkeypatch.setattr(cm2.hltv if hasattr(cm2, "hltv") else __import__("hltv"), "dsn", lambda: "x")
+        monkeypatch.setattr(cm2, "fetch_rows", lambda today: (_ for _ in ()).throw(RuntimeError("db down (test)")))
+        assert "error" in cm2.refresh_tables(force=True, cache=tmp_path)
+        assert json.loads((tmp_path / "cm2_tables.json").read_text())["dir"] == good
+        cm2._T.update(tables=None, mtime=0.0, checked=0.0, meta=None)      # release this process's mapping (Windows cannot
+        import gc                                                          # delete a mapped file; Linux unlinks it anyway)
+        gc.collect()
+        for _ in range(4):                                                 # repeated refreshes: at most two table dirs kept
+            cm2.save_tables(T, tmp_path)
+        assert len([d for d in tmp_path.iterdir() if d.is_dir()]) <= 2
+    finally:
+        cm2._T.update(tables=None, mtime=0.0, checked=0.0, meta=None)

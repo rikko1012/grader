@@ -48,7 +48,10 @@ ARTIFACT = json.loads(ARTIFACT_PATH.read_bytes())
 # supplied research file has CRLF (its raw-byte sha256 3997cfce...11b1 is provenance only, CM2 in learning.py)
 ARTIFACT_CANONICAL_SHA = hashlib.sha256(json.dumps(ARTIFACT, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 ARTIFACT_SHA = ARTIFACT_CANONICAL_SHA[:16]
-ARTIFACT_FILE_SHA = ARTIFACT_CANONICAL_SHA          # the record field keeps its name; the value is the canonical hash
+# Records written before 2026-10-18 22:30 UTC carry this canonical hash under the misleading name "artifact_file_sha"
+# (it never was a raw-file-byte hash); later records use "artifact_canonical_sha". replay accepts either name and checks
+# the value against the canonical hash only.
+ARTIFACT_FILE_SHA = ARTIFACT_CANONICAL_SHA
 CONSTANTS_SHA = hashlib.sha256(json.dumps({"fit": ARTIFACT["fit"], "feature_names": ARTIFACT["feature_names"],
                                            "feature_constants": ARTIFACT["feature_constants"]},
                                           sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:16]
@@ -134,9 +137,13 @@ def save_tables(t, cache=None):
     name = f"cm2_tables_{t['meta']['tables_sha']}_{int(time.time() * 1000)}"
     tmp = cache / (name + ".tmp")
     tmp.mkdir()
-    for k, a in t["arrays"].items():
-        np.save(tmp / f"{k}.npy", np.ascontiguousarray(a))
-    os.replace(tmp, cache / name)
+    try:
+        for k, a in t["arrays"].items():
+            np.save(tmp / f"{k}.npy", np.ascontiguousarray(a))
+        os.replace(tmp, cache / name)
+    except BaseException:                      # a failed / partial save: the pointer still names the last good tables
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
     ptr = cache / POINTER.name
     prev = None
     try:
@@ -247,7 +254,7 @@ def _line_ok(line):
 def for_forecast(t, player_ids, team_id, opp_id, day, lan, line, prop, scope, quote=None, identity=None):
     """The cm-2 record of one forecast (saved inside the pre-match fh-1 record, in the same write), or one with
     "ineligible": why. Pure apart from the clock."""
-    base = {"version": VERSION, "artifact_sha": ARTIFACT_SHA, "artifact_file_sha": ARTIFACT_FILE_SHA, "constants_sha": CONSTANTS_SHA,
+    base = {"version": VERSION, "artifact_sha": ARTIFACT_SHA, "artifact_canonical_sha": ARTIFACT_CANONICAL_SHA, "constants_sha": CONSTANTS_SHA,
             "computed_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "prop": prop, "scope": scope or "12"}
     if prop != "kills" or (scope or "12") != "12":
         return dict(base, ineligible="cm-2 covers Maps 1-2 kills only")
@@ -296,24 +303,79 @@ TOL = {"lambda": 1e-10, "sd": 1e-10, "p_over_raw": 1e-12, "p_under_raw": 1e-12, 
 TOL_FEATURE = 1e-12
 
 
-def replay(rec):
-    """(ok, detail): recompute the features and every output from the record's saved sums only (no tables, no board)."""
-    if not rec or rec.get("ineligible") or rec.get("error"):
-        return True, []
+def _num(v):
+    """A finite real number - never a bool, None, string, NaN or infinity."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
+def _identity(rec):
     bad = []
-    try:
-        x = cm1.features(rec["inputs"])
-        r = forecast(x, rec["line"])
-    except Exception as e:      # noqa: BLE001 - a replay that cannot run is a failed replay
-        return False, [f"{type(e).__name__}: {str(e)[:120]}"]
-    fs = rec.get("features")
-    if not isinstance(fs, list) or len(fs) != len(x) or any(not isinstance(a, (int, float)) or abs(a - b) > TOL_FEATURE for a, b in zip(fs, x)):
-        bad.append("features differ")
-    bad += [f"{k}: stored {rec.get(k)!r} replay {r[k]!r}" for k in OUTPUTS
-            if not isinstance(rec.get(k), (int, float)) or abs(rec[k] - r[k]) > TOL[k]]
+    if rec.get("version") != VERSION:
+        bad.append(f"version {rec.get('version')!r} != {VERSION!r}")
     if rec.get("artifact_sha") != ARTIFACT_SHA:
-        bad.append(f"artifact {rec.get('artifact_sha')} != {ARTIFACT_SHA}")
-    return not bad, bad
+        bad.append(f"artifact {rec.get('artifact_sha')!r} != {ARTIFACT_SHA}")
+    canon = rec.get("artifact_canonical_sha", rec.get("artifact_file_sha"))
+    if canon != ARTIFACT_CANONICAL_SHA:
+        bad.append(f"artifact canonical sha {canon!r} != {ARTIFACT_CANONICAL_SHA}")
+    if rec.get("constants_sha") != CONSTANTS_SHA:
+        bad.append(f"constants {rec.get('constants_sha')!r} != {CONSTANTS_SHA}")
+    return bad
+
+
+def replay_status(rec):
+    """(status, detail) for one saved cm-2 record, from its own saved values only (no tables, no board):
+    "replayed" - a computed forecast, recomputed within tolerance; "ineligible" - explicitly skipped with its reason (NOT a
+    replayed forecast); "missing" - no cm-2 part; "error" - the part records an error; "mismatch" - anything malformed,
+    non-finite, of the wrong identity, or recomputed differently."""
+    if not rec:
+        return "missing", ["no cm-2 part in the record"]
+    if not isinstance(rec, dict):
+        return "mismatch", ["cm-2 part is not an object"]
+    if rec.get("error"):
+        return "error", [str(rec["error"])[:160]]
+    bad = _identity(rec)
+    if rec.get("ineligible"):
+        if not isinstance(rec["ineligible"], str):
+            bad.append("ineligible reason is not text")
+        if any(k in rec for k in OUTPUTS) or "features" in rec:
+            bad.append("an ineligible record carries forecast values")
+        return ("mismatch", bad) if bad else ("ineligible", [rec["ineligible"]])
+    if rec.get("prop") != "kills" or rec.get("scope") != "12":
+        bad.append(f"stat / scope {rec.get('prop')!r} / {rec.get('scope')!r} is not Maps 1-2 kills")
+    ln, s, fs = rec.get("line"), rec.get("inputs"), rec.get("features")
+    if not _num(ln) or _line_ok(ln) != ln:
+        bad.append(f"line {ln!r} is not a whole or half number")
+    if not isinstance(s, dict):
+        bad.append("inputs missing")
+    if not isinstance(fs, list) or len(fs) != 14 or not all(_num(v) for v in fs):
+        bad.append("features missing, malformed or not finite")
+    miss = [k for k in OUTPUTS if not _num(rec.get(k))]
+    if miss:
+        bad.append("outputs missing or not finite: " + ", ".join(miss))
+    if bad:
+        return "mismatch", bad
+    try:
+        x = cm1.features(s)
+        if not all(_num(v) for v in x):
+            return "mismatch", ["reconstructed features are not finite"]
+        r = forecast(x, ln)
+    except Exception as e:      # noqa: BLE001 - a replay that cannot run is a failed replay
+        return "mismatch", [f"{type(e).__name__}: {str(e)[:120]}"]
+    if not all(_num(r[k]) for k in OUTPUTS):
+        return "mismatch", ["reconstructed outputs are not finite"]
+    if any(abs(a - b) > TOL_FEATURE for a, b in zip(fs, x)):
+        bad.append("features differ")
+    bad += [f"{k}: stored {rec[k]!r} replay {r[k]!r}" for k in OUTPUTS if abs(rec[k] - r[k]) > TOL[k]]
+    return ("mismatch", bad) if bad else ("replayed", [])
+
+
+def replay(rec):
+    """(ok, detail) - the check_record interface: ok for a replayed forecast or an explicitly ineligible record (nothing to
+    reconstruct; counted apart by replay_status), never for a missing / malformed / mismatched one with a cm-2 part."""
+    st, why = replay_status(rec)
+    if st == "missing":
+        return True, []
+    return st in ("replayed", "ineligible", "error"), ([] if st in ("replayed", "ineligible", "error") else why)
 
 
 STATS = {"computed": 0, "ineligible": 0, "error": 0}
@@ -326,5 +388,5 @@ def status():
             m = json.loads(POINTER.read_text())
         except (OSError, ValueError):
             m = None
-    return {"version": VERSION, "artifact_sha": ARTIFACT_SHA, "artifact_file_sha": ARTIFACT_FILE_SHA, "constants_sha": CONSTANTS_SHA,
+    return {"version": VERSION, "artifact_sha": ARTIFACT_SHA, "artifact_canonical_sha": ARTIFACT_CANONICAL_SHA, "constants_sha": CONSTANTS_SHA,
             "tables": m, "counts": dict(STATS)}

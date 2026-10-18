@@ -1688,7 +1688,18 @@ def shadow_replay_check(after_id=0, limit=200):
     import perf_shadow
     pg = shadow_page(after_id=after_id, limit=min(int(limit or 100), 100), inputs=True)
     n, bad = 0, []
+    cm2c = {"computed_replayed": 0, "ineligible_skipped": 0, "missing_or_error": 0, "mismatched": 0}
+    cm2bad = []
     for r in pg["rows"]:
+        try:
+            import cm2
+            st, why = cm2.replay_status((r["rec"] if isinstance(r["rec"], dict) else json.loads(r["rec"])).get("cm2"))
+        except Exception as e:      # noqa: BLE001
+            st, why = "mismatch", [f"{type(e).__name__}: {str(e)[:120]}"]
+        k = {"replayed": "computed_replayed", "ineligible": "ineligible_skipped", "mismatch": "mismatched"}.get(st, "missing_or_error")
+        cm2c[k] += 1
+        if st == "mismatch":
+            cm2bad.append({"id": r["id"], "why": why[:3]})
         if r.get("inputs_body") is None or r.get("gi_body") is None:
             bad.append({"id": r["id"], "why": ["saved inputs missing"]})
             continue
@@ -1697,7 +1708,10 @@ def shadow_replay_check(after_id=0, limit=200):
         if not ok:
             bad.append({"id": r["id"], "why": why})
     return {"rows_checked": n, "mismatches": len(bad), "examples": bad[:5], "next_after": pg["next_after"], "done": pg["done"],
-            "source": "saved inputs (history snapshot + grader inputs) only"}
+            "source": "saved inputs (history snapshot + grader inputs) only",
+            # cm-2 accounted apart: only "computed_replayed" are reconstructed forecasts; ineligible records are skipped, not
+            # replayed (finish-fixes 2026-10-18)
+            "cm2": dict(cm2c, examples=cm2bad[:5])}
 
 
 def _forecast_cols():
