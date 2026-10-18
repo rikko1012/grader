@@ -1,6 +1,7 @@
 """Performance model (perf-1) tests: the old path is unchanged when the model is off, the new path uses ONE probability
 source, gates still apply, other scopes are untouched, and the model never looks at the match day or later."""
 import importlib.util, json, math, os, random, sys
+import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import grader, perf
 
@@ -37,7 +38,7 @@ def _new_display_keys(g):
 
 def test_old_path_identical_when_model_off():
     if not os.path.exists(PRE):
-        return
+        pytest.skip("historical grader_pre_perf.py reference is not available")
     sp = importlib.util.spec_from_file_location("gpre", PRE); old = importlib.util.module_from_spec(sp); sp.loader.exec_module(old)
     rnd = random.Random(1)
     for _ in range(1500):
@@ -158,7 +159,7 @@ def test_hs_release_one_distribution_for_everything():
 def test_live_grades_unchanged_by_candidate_code():
     pre = os.path.join(os.environ.get("TEMP", "/tmp"), "grader_pre_final.py")
     if not os.path.exists(pre):
-        return
+        pytest.skip("historical grader_pre_final.py reference is not available")
     sp = importlib.util.spec_from_file_location("gcand", pre); old = importlib.util.module_from_spec(sp); sp.loader.exec_module(old)
     rnd = random.Random(8)
     for _ in range(1000):

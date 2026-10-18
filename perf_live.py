@@ -7,6 +7,7 @@ from datetime import date, timedelta
 import hltv, hltv_store, perf
 
 TTL = 15 * 60
+ROW_POLICY = "verified-history-1"
 _LOCK = threading.Lock()
 _CACHE = {}
 
@@ -185,7 +186,7 @@ def input_status():
 _PLAYER_SQL = """
 WITH pm AS (SELECT matchid, mapid, count(*) AS n FROM player_stats
             WHERE sideid = 0 AND matchid IN (SELECT matchid FROM player_stats WHERE playerid = ANY(%(ids)s))
-            GROUP BY matchid, mapid)
+            GROUP BY matchid, mapid HAVING count(*) = 10 AND count(DISTINCT playerid) = 10)
 SELECT mo.date, ps.k, own.score + opp.score, h.hs, mo.lan, pm.n
 FROM player_stats ps
 JOIN match_maps mm ON mm.matchid = ps.matchid AND mm.mapid = ps.mapid
@@ -205,6 +206,8 @@ JOIN match_maps mm ON mm.matchid = t.matchid AND mm.mapid = t.mapid
 JOIN player_stats ps ON ps.matchid = t.matchid AND ps.mapid = t.mapid AND ps.sideid = 0 AND ps.teamid = o.teamid
 WHERE t.teamid = %(tid)s AND t.sideid = 0 AND mo.date >= %(since)s
 GROUP BY mo.date, t.matchid, t.mapid
+HAVING count(*) = 5 AND count(DISTINCT ps.playerid) = 5 AND count(ps.k) = 5
+   AND MIN(ps.k) >= 0 AND MIN(t.score) >= 0 AND MIN(o.score) >= 0 AND MAX(t.score + o.score) > 0
 """
 
 
@@ -287,6 +290,14 @@ def served(key):
             "age_min": round((time.time() - st[1]) / 60, 1) if st[1] else None}
 
 
+def player_key(nick, team, since):
+    return ("p", hltv._norm(nick), hltv._norm(team), since, INPUT_REV, INPUT_RULE, ROW_POLICY)
+
+
+def opponent_key(opponent, since):
+    return ("o", hltv._norm(opponent), since, INPUT_REV, INPUT_RULE, ROW_POLICY)
+
+
 def player_maps(nick, team, since):
     def load():
         s = n0()                      # the revision first: without it nothing is read (fail closed)
@@ -302,9 +313,9 @@ def player_maps(nick, team, since):
             con.close()
         if raw and not any(_in_n0(mid, s) for *_, mid in raw):
             return None, []           # known only from outside N0 (the backfill): not in HLTV under N0 - BO3.gg fallback, as before
-        return ids, [(d.toordinal(), k, r, hs, bool(lan), not (hs == 0 and k >= 12))
+        return ids, [(d.toordinal(), k, r, hs, None if lan is None else bool(lan), not (hs == 0 and k >= 12))
                      for d, k, r, hs, lan, n, mid in raw if n == 10 and _in_n0(mid, s)]
-    return _cached(("p", hltv._norm(nick), hltv._norm(team), since, INPUT_REV, INPUT_RULE), load)
+    return _cached(player_key(nick, team, since), load)
 
 
 def opp_maps(opponent, since):
@@ -325,7 +336,7 @@ def opp_maps(opponent, since):
         if raw and not any(_in_n0(mid, s) for *_, mid in raw):
             return None, []           # known only from outside N0: 'opponent not in HLTV' under N0, as before the backfill
         return tid, [(d.toordinal(), int(k), int(r)) for d, k, r, mid in raw if _in_n0(mid, s)]
-    return _cached(("o", hltv._norm(opponent), since, INPUT_REV, INPUT_RULE), load)
+    return _cached(opponent_key(opponent, since), load)
 
 
 def team_rounds(team, since):
@@ -389,9 +400,9 @@ def projection(nick, team, opponent, lan, scope="12", prop="kills", day=None):
                newest_map_day=max((r[0] for r in pm if r[0] < day), default=None))   # his last HLTV map before the match day
     # which answers the projection used: read now, or the last good copy (memory / stored) served during an outage, + age
     rev = input_revision()
-    out["hltv_data"] = {"player_maps": served(("p", hltv._norm(nick), hltv._norm(team), since, INPUT_REV, INPUT_RULE)),
-                        "opp_maps": served(("o", hltv._norm(opponent), since, INPUT_REV, INPUT_RULE)) if opponent else None,
-                        "input_revision": rev, "input_revision_stale": bool(rev and "STALE" in rev)}
+    out["hltv_data"] = {"player_maps": served(player_key(nick, team, since)),
+                        "opp_maps": served(opponent_key(opponent, since)) if opponent else None,
+                        "input_revision": rev, "row_policy": ROW_POLICY, "input_revision_stale": bool(rev and "STALE" in rev)}
     if not om:            # no team, or a team with no maps in the window: the opponent factor is the pro average (1.00)
         out["data_quality"] = ((out["data_quality"] + "; " if out["data_quality"] != "ok" else "")
                                + ("opponent not in HLTV" if not tid else "opponent has no HLTV maps") + " - average opponent")

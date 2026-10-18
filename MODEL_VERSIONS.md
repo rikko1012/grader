@@ -1,5 +1,26 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
+## Unreleased correctness candidate — full audit, 2026-10-18
+
+Based on `1735928`; normalized Git/LF model tag **`807a289529`**, builder **`studio-3`**.
+This entry records a local release candidate, not a deployment. Deploy time and first production forecast are not yet known.
+See `AUDIT_2026-10-18.txt` for evidence, limits and the release checks.
+
+- Historical NULL environment stays unknown; it no longer enters the online-only rate. Player maps require ten distinct
+  players; opponent concession totals require five distinct players with valid kills and round scores. Cache policy
+  `verified-history-1` separates these inputs from earlier cached rows. N0/n0-r4 inclusion, weights and thresholds stay fixed.
+- Full-history shadow cache keys and environment handling follow the live adapter. New snapshots record `row_policy`.
+  Preserve prior snapshots and results; report the new live tag/row-policy cohort separately. No challenger is promoted.
+- Maps 1–3 only voids a two-map sweep when the stored format confirms BO3. BO5/unknown-format partial data waits.
+  No historical settlements are rewritten by this release.
+- Copy checks enforce offered side, identity and freshness; the manual-slip keys include the event. New slip records carry
+  the original grade's raw Over/Under/push distribution; saved older estimates retain their numbers and get conditional labels.
+- UI repairs cover unavailable sides in Compare, first-map context/H2H, and factual IGL-list wording.
+
+The input corrections can change grades and stakes; they are not a display-only change. The known-environment projection
+identity check matched 3,000 cases against the base version. That does not establish an accuracy gain. No outcome-driven
+parameter tuning was performed.
+
 Every logged pick and forecast carries `model_version` = the first 10 hex characters of SHA-1 over
 `grader.py`, `sim.py`, `cs2_scout.py`, `hltv.py`, in that order, as checked out on the server (LF line endings).
 From G8 (2026-10-09) the tag also covers `perf.py`, `perf_live.py`, `scope.py` (appended in that order); from 2026-10-11 also `hltv_store.py`;

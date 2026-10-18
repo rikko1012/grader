@@ -1,0 +1,113 @@
+CS2 Scout: source and regression audit — 2026-10-18
+
+STATUS
+Release candidate in an isolated checkout, based on main 1735928.
+No production deployment, production database change, wager, or historical result rewrite was performed.
+This is a correctness release. It does not certify predictive profitability or the absence of every possible bug.
+
+CONFIRMED DEFECTS REPAIRED
+
+1. Unknown environment was converted to online.
+   perf_live converted a NULL LAN flag to False, and perf.project included it in the online-only blend.
+   NULL now remains unknown. Its stats contribute to the overall sample only.
+   Cache identity includes verified-history-1; old disk/memory entries cannot bypass the repair.
+
+2. Incomplete opponent scoreboards could become full team totals.
+   The opponent query summed any available player rows and divided them by the full team's rounds.
+   It now requires five distinct players with five nonmissing kill totals and valid round scores.
+   The player-map query also requires ten distinct players, not merely ten rows.
+   A relational fixture tests complete, missing, duplicate, and missing-kill scoreboards.
+
+3. A BO5 at 2–0 could be prematurely voided as a BO3 sweep.
+   Maps 1–3 now require confirmed BO3 format before two same-direction map wins prove no Map 3.
+   BO5 and unknown-format partial records wait. Fully populated Maps 1–3 still use maps 1, 2 and 3 only.
+   Invalid actual totals and invalid outcome sides no longer silently turn into results.
+
+4. Copy checks did not verify the selected side.
+   The browser now sends side, team, opponent and start with the line check.
+   The shared check verifies the exact market/line, selected side, team and opponent, start window and feed freshness.
+   Explicit availability takes precedence; Underdog's positive side modifier can prove availability, but is not treated as odds.
+   A stale or failed check cannot verify a book-linked manual slip.
+   The moved-line dialog no longer offers an unavailable side as the replacement.
+
+5. The manual slip log could accept a namesake line from another match.
+   Logging now uses the same identity and freshness check as copying. Browser payloads include team, opponent and start.
+   Raw Underdog rows lacking PrizePicks-style availability flags are supported through their side modifiers.
+   A changed line is rejected with the current line in the explanation.
+
+6. Manual slip identity and exact payout storage omitted the event.
+   Event/start, platform and market type are included in the relevant saved keys.
+   Repeating the same player/stat/line in another match no longer inherits the earlier entry's exact payout or On-slip badge.
+   Older stored entries without sufficient identity need a new check; no identity is guessed.
+
+7. Slip “all hit” estimates ignored the distinction between wins and pushes.
+   New studio-3 entries save the raw Over/Under/push outcomes from the SAME grade, carried through the board payload.
+   Their all-win estimate multiplies outright win probabilities, explicitly labelled before grade safety adjustments.
+   Older records retain their original numbers; whole-line products are labelled “if none push.”
+   Manual and automatic slips use matching semantics; a 0% probability is no longer replaced with 50%.
+   A changed raw distribution triggers a recheck even when the rounded individual chance has not moved.
+   Maps 1–3 estimates explicitly assume all selected maps are played. No void probability or payout is invented.
+   Selection scores remain based on existing grade probabilities and diversity rules; they are stored separately from log(all_hit).
+
+8. The comparison page could show an unavailable pick like a usable grade.
+   Compare now displays the unavailable-side reason and suppresses easier-line claims involving stale/unavailable rows.
+   Cross-platform easier-side labels require evidence that both platforms offer that side.
+
+9. Map 1 cards displayed incompatible context.
+   BO1/Map 1 cards no longer show a likely Map 2. Confirmed map names respect the selected scope.
+   The H2H table and headline use first-map totals for Map 1, matching the existing first-map chip.
+   Maps 1–2 H2H shown on a Maps 1–3 card is clearly separate context, with no false hit comparison.
+
+10. The card overstated its IGL reference.
+    The card's CSV membership now says “IGL reference list: Listed / Not listed”, rather than claiming an absent name is not an IGL.
+    This changes presentation only. It does not replace the frozen legacy model's input policy or the board's separate sourced role data.
+
+11. Three historical-reference tests could silently succeed without running.
+    Missing local reference files now produce explicit skips rather than passes.
+
+FORECAST AND EXPERIMENT INTEGRITY
+
+- No weights, spread constants, priors, grade cutoffs, rest settings, learned coefficients or promotion thresholds changed.
+- The input repairs can change projections and therefore grades/stakes. They require a new model-version cohort.
+- The N0/n0-r4 match inclusion policy is retained; this is not a backfill rollback or full-history promotion.
+- The full-history comparison uses the same new cache-key helpers and unknown-environment representation as live.
+  Its snapshot records row_policy. A saved snapshot with unknown environments replays both arms exactly.
+  Report new results separately by live model tag and row policy; do not silently pool these with earlier experiments.
+- Prior immutable forecasts, already saved slips, and settled results are not overwritten.
+- Previously voided Maps 1–3 entries need a read-only identity/format review before any correction.
+  Do not blindly re-settle all historical voids; forfeit and platform rules still apply.
+
+VALIDATION
+
+- The test command is: python -u -m pytest tests lol/tests -q -ra --disable-warnings --tb=short
+  Local HTTP tests require loopback access. The initial sandbox-only run could not bind sockets; that was not an app defect.
+- Both CS2 and LoL suites are included to catch shared-server regressions. Areas covered include grading, settlement,
+  forecast replay, exact identity, availability, source fallback, provider cooldowns, slip diversity/concurrency,
+  authentication, rate limits, cache budgeting, learning/evaluation, moneylines, member UI and LoL isolation.
+- New behavioral regressions live in tests/test_full_audit_20261018.py, plus the full-history replay test.
+- Probability checks cover kills/headshots, all three map scopes, integer/half-point lines, monotonicity and total mass.
+- A before/after comparison of perf.py against 1735928 reproduced 3,000 known-environment projection cases EXACTLY.
+  The 500 deliberately unknown-environment histories changed as intended. This is identity evidence, not accuracy evidence.
+- A local Chrome preview inspected the repaired card context and slip wording using labelled synthetic fixtures.
+  It was not a production deployment or a real-money slip test. Existing production UI evidence was read-only.
+- Final test totals, exact commit and normalized model tag are recorded with the delivered bundle.
+
+REMAINING LIMITS AND RELEASE CHECKS
+
+1. Four PostgreSQL integration tests require LOL_TEST_PG_DSN and were skipped locally.
+   They must run against a disposable PostgreSQL database in CI, never by repointing tests at production.
+   The opponent aggregation behavior was tested with a local relational fixture; real PostgreSQL query execution remains a release check.
+2. No production load/soak test was performed. Bounded caches and concurrency tests do not establish 20,000-user capacity.
+3. No new settled real-line scorecard was generated. Passing tests does not prove calibration, ranking power or an edge over books.
+   The current model still uses fixed baseline round expectations and approximate outcome distributions. Those are model limitations,
+   not fixed by this patch. Keep prospective comparisons and match-grouped uncertainty; do not promote a challenger from these tests.
+4. Frozen cm-1 retains its original historical NULL-environment encoding (NULL becomes online in its archived feature-table build).
+   It is shadow-only. This audit does NOT validate or promote it. Before promotion, quantify those rows and register a corrected
+   historical-input candidate if needed; preserve the original experiment and do not silently refit it.
+5. Before production release, apply to the current branch without overwriting unrelated changes, run the complete suite and CI PostgreSQL
+   checks, recompute the Linux/LF model tag, and record the real deploy/first-forecast times. Windows working-tree hashes can differ.
+6. After deploy, verify one saved forecast and its full-history replay, a whole-line slip, Map 1 context, an unavailable PrizePicks side,
+   an Underdog copy, and a BO5 partial Maps 1–3 settlement. Observe board regrading and memory on the existing health endpoints.
+   Do not create provider requests outside the shared gateways to force failures.
+
+This report distinguishes verified repairs, regression evidence, and checks that still require the deployed environment.

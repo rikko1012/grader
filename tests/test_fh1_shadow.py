@@ -143,6 +143,18 @@ def test_identical_history_gives_identical_outputs(fake):
         assert rec["live"] == rec["fh1"]                                            # every field, exactly
 
 
+def test_unknown_history_environment_replays_in_both_arms(fake):
+    fake["player"] = [tuple(list(x[:4]) + [None] + list(x[5:])) for x in PLAYER]
+    res, row = live_res()
+    rec, bodies = S.build(res, row)
+    assert rec["n0_check"]["exact"]
+    snap = S.unpack(bodies[rec["inputs_sha"]][1])
+    assert snap["row_policy"] == perf_live.ROW_POLICY
+    assert all(x[4] is None for x in snap["player"]["live"] + snap["player"]["extra"])
+    replay = S.replay(snap, res["grader_inputs"])
+    assert replay["live"] == rec["live"] and replay["fh1"] == rec["fh1"]
+
+
 def test_project_arm_on_any_snapshot_without_extras_is_the_live_arm():
     import random
     rnd = random.Random(3)

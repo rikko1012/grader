@@ -58,12 +58,17 @@ def test_memory_report_shape():
 
 def test_slip_leg_rejected_when_side_not_offered(monkeypatch):
     import server
+    from datetime import datetime, timedelta, timezone
+    now = datetime.now(timezone.utc)
+    start = (now + timedelta(hours=3)).isoformat()
     rows = [{"player": "TeSeS", "prop": "hs", "scope": "12", "line": 16.0, "odds_type": "standard", "over_available": True, "under_available": False},
             {"player": "kyousuke", "prop": "hs", "scope": "12", "line": 19.5, "odds_type": "standard", "over_available": True, "under_available": True}]
-    monkeypatch.setattr(server.prizepicks, "board", lambda: {"rows": rows})
+    for r in rows:
+        r.update(team="Alpha", opponent="Bravo", start=start)
+    monkeypatch.setattr(server.prizepicks, "board", lambda: {"rows": rows, "state": "ok", "at": now.timestamp()})
     monkeypatch.setattr(server.underdog, "board", lambda: {"rows": []})
-    leg = lambda nick, side, line: {"nick": nick, "prop": "hs", "scope": "12", "line": line, "side": side, "book": "prizepicks"}
+    leg = lambda nick, side, line: {"nick": nick, "prop": "hs", "scope": "12", "line": line, "side": side, "book": "prizepicks", "team": "Alpha", "opponent": "Bravo", "start": start}
     assert "not offered" in server.slip_leg_problem(leg("TeSeS", "Less", 16))
     assert server.slip_leg_problem(leg("TeSeS", "More", 16)) is None
     assert server.slip_leg_problem(leg("kyousuke", "Less", 19.5)) is None
-    assert "not on the platform" in server.slip_leg_problem(leg("kyousuke", "Less", 20.5))    # moved / withdrawn line
+    assert "now shows 19.5" in server.slip_leg_problem(leg("kyousuke", "Less", 20.5))    # moved / withdrawn line rejected with the current line

@@ -58,7 +58,8 @@ def project(player_maps, opp_maps, lan, day, scope="12", prop="kills", params=PA
     rate = rate_all
     env_rounds = 0.0
     if lan is not None:
-        ke_, re_ = _wsum([x for x in player_maps if bool(x[4]) == bool(lan)], day, p["hl"], lambda x: (x[1], x[2]))
+        # Unknown environment contributes to the overall rate, never to the online-only sample.
+        ke_, re_ = _wsum([x for x in player_maps if x[4] is not None and bool(x[4]) == bool(lan)], day, p["hl"], lambda x: (x[1], x[2]))
         rate = (ke_ + p["ke"] * rate_all) / (re_ + p["ke"])
         env_rounds = re_
     ck, cr = _wsum(opp_maps, day, p["hl"], lambda x: (x[1], x[2]))

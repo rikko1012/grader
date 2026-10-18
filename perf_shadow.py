@@ -245,7 +245,7 @@ def _player_raw(ids, since, live_at):
                 raw = cur.fetchall()
         finally:
             con.close()
-        return [(d.toordinal(), k, r, hs, bool(lan), not (hs == 0 and k >= 12), int(n), int(mid)) for d, k, r, hs, lan, n, mid in raw]
+        return [(d.toordinal(), k, r, hs, None if lan is None else bool(lan), not (hs == 0 and k >= 12), int(n), int(mid)) for d, k, r, hs, lan, n, mid in raw]
     return _cached(("p", tuple(sorted(ids)), since), load, live_at)
 
 
@@ -313,12 +313,12 @@ def build(res, r):
     since = (date.fromordinal(day) - timedelta(days=420)).isoformat()
     since_today = (date.today() - timedelta(days=420)).isoformat()
     rev, rule = perf_live.INPUT_REV, perf_live.INPUT_RULE
-    lp = _live_entry(("p", hltv._norm(nick), hltv._norm(team), since, rev, rule))
+    lp = _live_entry(perf_live.player_key(nick, team, since))
     if lp is None:
         return None, "live player rows not in the live cache"
-    lo = _live_entry(("o", hltv._norm(opponent), since, rev, rule)) if opponent else None
+    lo = _live_entry(perf_live.opponent_key(opponent, since)) if opponent else None
     bo3 = ver.endswith("-bo3")
-    lob = _live_entry(("o", hltv._norm(opponent), since_today, rev, rule)) if opponent and bo3 else None
+    lob = _live_entry(perf_live.opponent_key(opponent, since_today)) if opponent and bo3 else None
     if not bo3 and opponent and lo is None:
         return None, "live opponent rows not in the live cache"
     s = perf_live.n0()
@@ -333,7 +333,7 @@ def build(res, r):
     live_rows = [list(x) for x in live_pm]
     p_consistent = (sorted(own_n0, key=str) == sorted(live_rows, key=str)) if live_ids else (not any_n0)
     snap = {"format": FORMAT, "day": day, "lan": lan, "scope": scope, "prop": prop, "since": since, "since_today": since_today,
-            "opponent": opponent,
+            "opponent": opponent, "row_policy": perf_live.ROW_POLICY,
             "player": {"live_id": list(live_ids) if live_ids else None, "live": live_rows, "id": ids or None, "extra": extra}}
     tid, o_at, o_consistent, o_extra_n = None, None, True, 0
     if opponent:

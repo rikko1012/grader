@@ -1178,6 +1178,7 @@ def scope_result(r, same_day_only=False):
     link, oid, why = (own, None, None) if own is not None else _canonical_hltv(r)
     if link is None and why:
         return {"status": "none", "reason": f"no canonical HLTV match for this pick ({why}) - not settled from HLTV"}
+    best_of = None
     con = hltv._connect()
     try:
         with con.cursor() as cur:
@@ -1200,6 +1201,14 @@ def scope_result(r, same_day_only=False):
                 on = [x for x in on if x["date"] >= day]     # an earlier meeting is not this match (previous rule)
             mids = {x["hltv_match"] for x in on}
             forfeits = _forfeited(cur, next(iter(mids))) if len(mids) == 1 else None
+            if len(mids) == 1 and (_col(r, "scope") or "12") == "123" and not any(x["number"] == 3 for x in on):
+                # Two matching map results do not prove a sweep: a BO5 can be 2-0 and still be playing.
+                # Use the same stored series format as the match model; unknown format means wait.
+                cur.execute("SELECT format FROM scrape_queue WHERE matchid = %s", (next(iter(mids)),))
+                fmt = cur.fetchone()
+                import re
+                match = re.fullmatch(r"(?:bo|best\s*of\s*)([135])", str(fmt[0] if fmt else "").strip(), re.I)
+                best_of = int(match.group(1)) if match else None
     finally:
         con.close()
     if not on and rows and link is not None:
@@ -1213,10 +1222,12 @@ def scope_result(r, same_day_only=False):
     ms = sorted(on, key=lambda x: x["number"])
     maps = [{"number": x["number"], "kills": x["kills"], "headshots": x["headshots"], "won": x["won"]} for x in ms]
     sc = _col(r, "scope") or "12"
-    total, used = scope_total(maps, sc, r["prop"])
+    total, used = scope_total(maps, sc, r["prop"], best_of=best_of)
     if total is None and used == MAP3_NOT_PLAYED:
         return {"status": "void", "reason": used}      # Underdog voids Maps 1-3 when map 3 isn't played
     if total is None:
+        if sc == "123" and not any(x["number"] == 3 for x in ms):
+            return {"status": "wait", "reason": "map 3 not scraped yet; no confirmed BO3 sweep"}
         if sc == "123" and len(ms) == 2 and ms[0]["won"] != ms[1]["won"]:
             return {"status": "wait", "reason": "1-1 after two maps: map 3 not in yet"}
         if any(x[("headshots" if r["prop"] == "hs" else "kills")] is None for x in ms):
