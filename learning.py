@@ -429,7 +429,8 @@ CM1 = {"family": "complete-model-1", "version": "cm-1", "artifact": "cm1_model.j
 # after cm-2's own registration whose latest pre-match record before the 30-minute cut-off was also saved after it.
 # The promotion rule is recorded here BEFORE any forward result exists (owner brief: no goalposts moved afterwards).
 CM2 = {"family": "complete-model-2-kills", "version": "cm-2", "artifact": "cm2_model.json",
-       "artifact_file_sha256": "3997cfce1d7ba7c09e6c3a28d663b64faa505c7dd21a805a311762dc3f4211b1",
+       "artifact_canonical_sha256": "6e586047c5b1823a7b342dda8329599d162a3dff119d9c96427ad1cd44fdc37c",
+       "supplied_file_sha256": "3997cfce1d7ba7c09e6c3a28d663b64faa505c7dd21a805a311762dc3f4211b1 (candidate_artifact.json as supplied, CRLF)",
        "fit_through": "2026-09-30", "training_cutoff": "2026-09-30", "scope": "Maps 1-2 kills only (headshots, Map 1, Maps 1-3: not covered)",
        "inputs": "cm-1 features from corrected tables: complete 5-v-5 scoreboards in every table incl. ratings; unknown historical "
                  "environment in overall history only; unknown target environment / identity / history = ineligible with its reason",
@@ -603,14 +604,14 @@ def _ensure_cm2(con, now):
     if con.execute("SELECT 1 FROM challengers WHERE family = ?", (CM2["family"],)).fetchone():
         return
     import cm2
-    if cm2.ARTIFACT_FILE_SHA != CM2["artifact_file_sha256"]:
+    if cm2.ARTIFACT_CANONICAL_SHA != CM2["artifact_canonical_sha256"]:
         raise RuntimeError("cm2_model.json is not the registered artifact")
     cfg = dict(CM2, artifact_sha=cm2.ARTIFACT_SHA, constants_sha=cm2.CONSTANTS_SHA, review_rule=REVIEW_RULE)
     h = _sha(cfg)
     cid = f"cm-002-{h[:8]}"
     con.execute("INSERT INTO challengers (id, family, created_at, frozen_at, snapshot_id, data_hash, training_cutoff, config, "
                 "config_hash, base_config, status, status_at, status_reason, revises, development) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (cid, CM2["family"], _iso(now), _iso(now), None, cm2.ARTIFACT_FILE_SHA[:12], CM2["training_cutoff"], json.dumps(cfg, sort_keys=True), h,
+                (cid, CM2["family"], _iso(now), _iso(now), None, cm2.ARTIFACT_CANONICAL_SHA[:12], CM2["training_cutoff"], json.dumps(cfg, sort_keys=True), h,
                  json.dumps({"live": "the record's live arm (the published chance)"}), "shadow", _iso(now),
                  "registered (accuracy handoff 2026-10-18: corrected Maps 1-2 kills model, a separate experiment from cm-1); forward "
                  "record = Maps 1-2 kills board forecasts logged after this moment, scored from pre-match records saved after it",

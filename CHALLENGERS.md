@@ -150,7 +150,8 @@ data hash 49e7ac29547b86a9). Walk-forward with w refitted on earlier days only: 
 Accuracy handoff 2026-10-18 (claude-handoffs/accuracy-2026-10-18). A SEPARATE experiment from cm-1. cm-1's artifact,
 records, registration, clock and results are unchanged, and none of them count for cm-2.
 
-- **Artifact:** `cm2_model.json` = the research's `candidate_artifact.json`, byte for byte (sha256 3997cfce...11b1).
+- **Artifact:** `cm2_model.json` = the research's `candidate_artifact.json`, the same JSON content (canonical sha256
+  6e586047...c37c; the supplied CRLF file's raw sha256 3997cfce...11b1 is kept as provenance).
   - 14-feature GLM, fixed regularization, fit through 2026-09-30.
   - Nothing is fitted, searched or tuned in production.
   - The feature constants equal cm-1's (checked at import), so the weights apply to the features they were fitted on.

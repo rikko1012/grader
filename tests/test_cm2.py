@@ -28,7 +28,8 @@ def T():
 
 
 def test_the_artifact_is_the_supplied_candidate_and_matches_cm1_features():
-    assert cm2.ARTIFACT_FILE_SHA == L.CM2["artifact_file_sha256"] == "3997cfce1d7ba7c09e6c3a28d663b64faa505c7dd21a805a311762dc3f4211b1"
+    # the supplied candidate_artifact.json, by content (canonical JSON - line endings differ between checkouts)
+    assert cm2.ARTIFACT_CANONICAL_SHA == L.CM2["artifact_canonical_sha256"] == "6e586047c5b1823a7b342dda8329599d162a3dff119d9c96427ad1cd44fdc37c"
     a = cm2.ARTIFACT
     assert a["prop"] == "kills" and a["scope"] == "12" and a["fit"]["fit_through"] == "2026-09-30" and len(a["fit"]["coef"]) == 14
     assert all(a["feature_constants"][k] == cm1.K[k] for k in a["feature_constants"])     # the features the weights were fitted on
@@ -64,8 +65,12 @@ def test_probability_coherence_and_semantics():
 
 
 def test_cm1_tables_are_unchanged_by_the_correction():
-    t = cm1.build_tables(synth_rows(), built_at="2026-10-18T00:00:00+00:00", through=date.fromordinal(DAY))
-    assert t["meta"]["tables_sha"] == "1b96f233ae65a92a"          # pinned before cm1.build_tables gained its env argument
+    # cm-1's default = its frozen rule '1.0 if lan else 0.0' (an unknown environment counts as online), on every array
+    rows = _unknown_env(synth_rows(), {1, 2, 3})
+    a = cm1.build_tables(rows, built_at="2026-10-18T00:00:00+00:00", through=date.fromordinal(DAY))
+    b = cm1.build_tables(rows, built_at="2026-10-18T00:00:00+00:00", through=date.fromordinal(DAY), env=lambda v: 1.0 if v else 0.0)
+    assert a["meta"]["tables_sha"] == b["meta"]["tables_sha"] and not np.isnan(a["arrays"]["p_rows"][:, 4]).any()
+    assert a["meta"]["artifact_sha"] == cm1.ARTIFACT_SHA and "unknown_env_rows" not in a["meta"]
 
 
 def _unknown_env(rows, mids):

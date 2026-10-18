@@ -43,10 +43,12 @@ CACHE = DATA_DIR / ".cache"
 POINTER = CACHE / "cm2_tables.json"
 REFRESH_S = 2 * 3600
 ARTIFACT_PATH = HERE / "cm2_model.json"
-_RAW = ARTIFACT_PATH.read_bytes()
-ARTIFACT = json.loads(_RAW)
-ARTIFACT_FILE_SHA = hashlib.sha256(_RAW).hexdigest()
-ARTIFACT_SHA = hashlib.sha256(json.dumps(ARTIFACT, sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:16]
+ARTIFACT = json.loads(ARTIFACT_PATH.read_bytes())
+# identity = the canonical JSON (sorted keys, no spaces), independent of line endings: git stores the file with LF, the
+# supplied research file has CRLF (its raw-byte sha256 3997cfce...11b1 is provenance only, CM2 in learning.py)
+ARTIFACT_CANONICAL_SHA = hashlib.sha256(json.dumps(ARTIFACT, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+ARTIFACT_SHA = ARTIFACT_CANONICAL_SHA[:16]
+ARTIFACT_FILE_SHA = ARTIFACT_CANONICAL_SHA          # the record field keeps its name; the value is the canonical hash
 CONSTANTS_SHA = hashlib.sha256(json.dumps({"fit": ARTIFACT["fit"], "feature_names": ARTIFACT["feature_names"],
                                            "feature_constants": ARTIFACT["feature_constants"]},
                                           sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:16]
