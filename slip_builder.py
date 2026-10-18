@@ -965,6 +965,14 @@ def get_batch(batch_id):
             "exposure": _exposure(live)}
 
 
+def member_batches(session_id, limit=6):
+    """The member's batches, newest first: the open one and up to `limit` earlier ones - every record as stored (the
+    Slips page shows them as Active / History; nothing is deleted or rewritten)."""
+    o = _owner(session_id)
+    with _db() as con:
+        ids = [r[0] for r in con.execute("SELECT batch_id FROM batches WHERE owner=? ORDER BY seq DESC LIMIT ?", (o, int(limit) + 1))]
+    return [b for b in (get_batch(i) for i in ids) if b]
+
 def get_slip(slip_id):
     with _db() as con:
         r = con.execute("SELECT record FROM slips WHERE slip_id=?", (slip_id,)).fetchone()

@@ -607,10 +607,93 @@ body.ot-lol .intro {margin:0 0 24px}.ot-lol .intro h2 {font:700 34px var(--displ
 @media(prefers-reduced-motion:reduce) {*,*::before,*::after {animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 
 /* ONE_TIME_MATCHROOM_END */
+
+/* RESEARCH_FLOW_START - 2026-10-18 release: destinations, compact board, player detail, moneyline rows, slips, results.
+   Presentation only: every number comes from the same data as before. */
+:root{--hdr:72px}
+body.mode-matches .wrap>#out,body.mode-matches .wrap>#status,body.mode-matches .wrap>#recent,body.mode-matches .wrap>#examples,body.mode-matches .wrap>details.how,
+body.mode-moneylines .wrap>#out,body.mode-moneylines .wrap>#status,body.mode-moneylines .wrap>#recent,body.mode-moneylines .wrap>#examples,body.mode-moneylines .wrap>details.how,
+body.mode-slips .wrap>#out,body.mode-slips .wrap>#status,body.mode-slips .wrap>#recent,body.mode-slips .wrap>#examples,body.mode-slips .wrap>details.how,
+body.mode-results .wrap>#out,body.mode-results .wrap>#status,body.mode-results .wrap>#recent,body.mode-results .wrap>#examples,body.mode-results .wrap>details.how{display:none!important}
+body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode-slips .research-strip,body.mode-results .research-strip{display:none}
+#scout-jumps{display:none!important}
+.rail-label.rail-tools{margin-top:22px}
+.tools-nav{display:flex;gap:6px;flex-wrap:wrap}.tools-nav a{color:var(--muted);text-decoration:none;font-size:12px;border:1px solid var(--line);border-radius:9px;padding:9px 12px;min-height:40px;display:inline-flex;align-items:center}
+.tools-nav a:hover{color:var(--text);border-color:var(--line-2)}body.mode-one .tools-nav a[data-tool="one"],body.mode-slate .tools-nav a[data-tool="slate"]{color:var(--accent-2);border-color:#ffad6855}
+/* filters: the bar stays in reach while scrolling (desktop); active filters as chips */
+@media(min-width:761px){#board .bbar{position:sticky;top:var(--hdr);z-index:15;box-shadow:0 10px 24px #0007}}
+.bchips{display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 10px}.bchips:empty{display:none}
+.fchip{border:1px solid #ffad6855;background:#ffad680d;color:var(--accent-2);border-radius:999px;padding:6px 11px;font:500 12px Inter,system-ui;cursor:pointer;min-height:32px}
+.fchip span{opacity:.7;margin-left:4px}.fchip.clear{border-color:var(--line-2);background:transparent;color:var(--muted)}
+/* compact board rows */
+.clist{display:grid;gap:6px}
+.crow-head,.brow2.crow{display:grid;grid-template-columns:40px minmax(150px,1.5fr) minmax(130px,1.1fr) 52px 52px minmax(130px,1fr) minmax(120px,1fr) auto;gap:12px;align-items:center}
+.crow-head{padding:0 14px;font:600 10px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+.brow2.crow{padding:10px 14px;border-radius:10px;cursor:pointer}
+.crow .c-who b{font-size:14px}.crow .c-match{display:block;font-size:11px;margin-top:2px}
+.crow .c-mkt{font-size:12px;color:var(--muted)}.crow .c-book{margin:0 2px 0 0;padding:1px 7px}
+.crow .c-num{font-variant-numeric:tabular-nums;font-size:14px}.crow .c-num .k{display:none}
+.crow .c-pick{margin:0;font-size:13px;line-height:1.5}.crow .c-stake{font-size:12px;color:var(--muted)}
+.crow .c-meta{grid-column:2/-1;font-size:11px;margin-top:-6px}
+.crow .bslip{min-height:36px;padding:6px 11px}
+@media(max-width:1280px) and (min-width:761px){.crow-head,.brow2.crow{grid-template-columns:38px minmax(140px,1.4fr) 52px 52px minmax(120px,1fr) minmax(110px,1fr) auto}.crow-head span:nth-child(3),.crow .c-mkt{display:none}
+  .crow .c-match:after{content:""}}
+@media(max-width:760px){.crow-head{display:none}
+  .brow2.crow{grid-template-columns:34px minmax(0,1fr) auto;grid-template-areas:"g who act" "g mkt act" "g nums nums" "g pick pick" "g stake stake" "g meta meta";row-gap:4px;column-gap:10px;padding:11px 12px}
+  .crow>.gtag{grid-area:g;align-self:start}.crow .c-who{grid-area:who}.crow .c-mkt{grid-area:mkt;font-size:11px}.crow .c-act{grid-area:act;align-self:start}
+  .crow .c-num{display:inline-flex;gap:4px;font-size:13px}.crow .c-num .k{display:inline;color:var(--faint);font-size:11px}
+  .crow .c-num:nth-of-type(1){grid-area:nums}.crow .c-num:nth-of-type(2){grid-area:nums;justify-self:start;margin-left:86px}
+  .crow .c-pick{grid-area:pick;font-size:14px;overflow-wrap:anywhere}.crow .c-stake{grid-area:stake;font-size:11px}.crow .c-meta{grid-area:meta;margin:0}}
+/* moneylines: compact rows with aligned source columns */
+.mlrow{display:grid;grid-template-columns:minmax(180px,1.4fr) repeat(3,minmax(120px,1fr));gap:12px;align-items:start;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0 0 8px;background:#111a26}
+.mlrow.mlhdr{border:0;background:transparent;padding:0 14px;margin-bottom:4px;font:600 10px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+.mlm b{display:block;font-size:14px}.mlq{display:flex;flex-direction:column;gap:2px;font-size:12px}.mlqn{display:none}.mlqv b{display:block;font-size:14px;font-variant-numeric:tabular-nums}
+.mlqv span{color:var(--muted);font-variant-numeric:tabular-nums}.mlage{font-size:11px;color:var(--accent-2)}
+.mlmore{grid-column:1/-1}.mlmore>summary{cursor:pointer;color:var(--muted);font-size:12px;min-height:32px;display:flex;align-items:center}.mlmore .mlcard{margin:8px 0 0;padding:14px}
+@media(max-width:760px){.mlrow{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:11px}.mlrow.mlhdr{display:none}.mlm{grid-column:1/-1}
+  .mlqn{display:block;font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em}.mlqn small{display:none}.mlqv b{font-size:13px}}
+/* slips page */
+#slips .studiobox{margin-top:8px}.studio-ess{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:12px 0}
+.sf{display:flex;flex-direction:column;gap:6px}.sl{font:600 11px var(--display);color:var(--muted)}
+.studio-boardf{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 10px}
+.studio-adv{margin:0 0 12px}.studio-adv>summary{cursor:pointer;color:var(--muted);font-size:12px;min-height:36px;display:flex;align-items:center}
+.studio-repeats{margin-top:6px;padding:8px 10px;border:1px solid #f5c54240;border-radius:8px;background:#f5c54208}
+.histbatch{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:8px 0;background:#111a26}.histbatch>summary{cursor:pointer;font-size:13px;min-height:32px;display:flex;align-items:center}
+.aslip.hist{opacity:.95}
+@media(max-width:760px){.studio-ess{grid-template-columns:minmax(0,1fr)}}
+/* results */
+.res-head{grid-template-columns:repeat(3,minmax(0,1fr))}.res-h{font:650 15px var(--display);margin:18px 0 8px}
+.restab{width:100%;border-collapse:collapse;font-size:13px}.restab th,.restab td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left}.restab .num{text-align:right;font-variant-numeric:tabular-nums}
+.res-more{margin-top:14px}.res-more>summary{cursor:pointer;color:var(--muted)}
+/* slate preview */
+.slateprev{width:100%;border-collapse:collapse;font-size:12px}.slateprev th,.slateprev td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+/* player detail: a drawer on desktop, full screen on phones; tabs; distribution; a sticky action bar */
+@media(min-width:761px){#cardpop{justify-content:flex-end;padding:0}#cardpop #popbody{max-width:none;width:min(980px,calc(100vw - 230px));height:100vh;max-height:100vh;border-radius:0;border-width:0 0 0 1px;padding:16px 22px 0}
+  #popbody .popbar{top:-16px;margin:-16px -22px 8px;padding:12px 22px}}
+.cardtabs{display:flex;gap:4px;margin:14px 0 12px;border-bottom:1px solid var(--line);overflow-x:auto}
+.cardtabs button{background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);font:600 13px Inter,system-ui;padding:11px 14px;min-height:44px;cursor:pointer;white-space:nowrap}
+.cardtabs button[aria-selected="true"]{color:var(--text);border-bottom-color:var(--accent)}
+.cardpane{display:grid;gap:14px}.cardpane>.card,.cardpane>.two{margin:0}
+@media(min-width:1100px){.cardpane#cpane-history,.cardpane#cpane-match{grid-template-columns:repeat(2,minmax(0,1fr))}.cardpane>.full,.cardpane>#mcmp{grid-column:1/-1}}
+.distcard svg.dist{width:100%;height:auto;max-height:200px;display:block;margin:4px 0 8px}
+.dist .db.o{fill:#4fbf8f}.dist .db.u{fill:#6d8fd6}.dist .db.push{fill:#e3c88e}.dist .db.out{opacity:.38}
+.dist .dl{stroke:var(--accent);stroke-width:2;stroke-dasharray:4 3}.dist .dm{stroke:var(--text);stroke-width:1;opacity:.55}
+.dist .dlt{fill:var(--accent-2);font:600 11px Inter,system-ui;text-anchor:middle}.dist .dt{fill:var(--faint);font:10px Inter,system-ui;text-anchor:middle}
+.distkey{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:6px}.distkey i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.distkey .k-o{background:#4fbf8f}.distkey .k-u{background:#6d8fd6}.distkey .k-p{background:#e3c88e}.distkey .k-m{background:var(--text);opacity:.55;width:3px}
+.popact{position:sticky;bottom:0;z-index:4;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 0 calc(10px + env(safe-area-inset-bottom));margin-top:14px;background:linear-gradient(transparent,var(--bg) 22%);border-top:1px solid var(--line)}
+.popact .go{margin:0;min-height:44px}.popact .chipbtn{min-height:44px}.popact .popwhy{flex:1 1 200px}
+@media(max-width:760px){:root{--hdr:64px}
+  #cardpop{padding:0}#cardpop #popbody{max-width:none;width:100%;height:100dvh;max-height:100dvh;border-radius:0;border:0;padding:12px 14px 0}
+  #popbody .popbar{top:-12px;margin:-12px -14px 8px;padding:10px 14px}
+  #mode{grid-template-columns:repeat(5,1fr)!important}#mode button.tool{display:none}#mode button{font-size:11px;padding:10px 2px}
+  .bchips{position:sticky;top:var(--hdr);z-index:14;background:var(--bg);padding:6px 0;margin:0 0 8px}}
+@media(prefers-reduced-motion:reduce){.cardtabs button,.fchip{transition:none}}
+/* RESEARCH_FLOW_END */
 </style>
 </head>
 <body class="locked">
-<aside class="scout-rail" aria-label="Workspace navigation"><div class="rail-brand"><span class="rail-mark">⌖</span><span class="rail-word">1time</span></div><div class="rail-edition">ESPORTS / MATCHROOM</div><div id="railgame" hidden><div class="rail-label">GAME</div><div class="railgame"><a class="on" href="/" aria-current="page">CS2</a><a href="/lol">League of Legends</a></div></div><div class="rail-label">WORKSPACE</div><a href="#one" class="rail-link on" data-scout-route="one" title="Single Prop" aria-label="Single Prop"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5M7 10h6M10 7v6"/></svg><span class="route-label">Single Prop</span><span class="route-arrow" aria-hidden="true">›</span></a><a href="#board" class="rail-link" data-scout-route="board" title="Prop Board" aria-label="Prop Board"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="route-label">Prop Board</span><span class="route-arrow" aria-hidden="true">›</span></a><a href="#slate" class="rail-link" data-scout-route="slate" title="Slate" aria-label="Slate"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h13M8 12h13M8 19h13M3 5h1M3 12h1M3 19h1"/></svg><span class="route-label">Slate</span><span class="route-arrow" aria-hidden="true">›</span></a><div class="rail-bottom"><b>Built for your research.</b><p>Player history. Match context.<br>One place to compare.</p><p><span class="rail-key">K</span> Kills &nbsp; <span class="rail-key">H</span> Headshots</p></div></aside>
+<aside class="scout-rail" aria-label="Workspace navigation"><div class="rail-brand"><span class="rail-mark">⌖</span><span class="rail-word">1time</span></div><div class="rail-edition">ESPORTS / MATCHROOM</div><div id="railgame" hidden><div class="rail-label">GAME</div><div class="railgame"><a class="on" href="/" aria-current="page">CS2</a><a href="/lol">League of Legends</a></div></div><div class="rail-label">RESEARCH</div><a href="#board" class="rail-link" data-scout-route="board" title="Board" aria-label="Board"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="3" rx="1"/><rect x="3" y="10.5" width="18" height="3" rx="1"/><rect x="3" y="17" width="18" height="3" rx="1"/></svg><span class="route-label">Board</span><span class="route-arrow" aria-hidden="true">›</span></a><a href="#matches" class="rail-link" data-scout-route="matches" title="Matches" aria-label="Matches"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="route-label">Matches</span><span class="route-arrow" aria-hidden="true">›</span></a><a href="#moneylines" class="rail-link" data-scout-route="moneylines" title="Moneylines" aria-label="Moneylines"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg><span class="route-label">Moneylines</span><span class="route-arrow" aria-hidden="true">›</span></a><a href="#slips" class="rail-link" data-scout-route="slips" title="Slips" aria-label="Slips"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg><span class="route-label">Slips</span><span class="route-arrow" aria-hidden="true">›</span></a><a href="#results" class="rail-link" data-scout-route="results" title="Results" aria-label="Results"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16M7 16v-5M12 16V7M17 16v-8"/></svg><span class="route-label">Results</span><span class="route-arrow" aria-hidden="true">›</span></a><div class="rail-label rail-tools">TOOLS</div><a href="#one" class="rail-link" data-scout-route="one" title="Single prop" aria-label="Single prop"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5M7 10h6M10 7v6"/></svg><span class="route-label">Single prop</span><span class="route-arrow" aria-hidden="true">›</span></a><a href="#slate" class="rail-link" data-scout-route="slate" title="Slate" aria-label="Slate"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h13M8 12h13M8 19h13M3 5h1M3 12h1M3 19h1"/></svg><span class="route-label">Slate</span><span class="route-arrow" aria-hidden="true">›</span></a><div class="rail-bottom"><b>Built for your research.</b><p>Player history. Match context.<br>One place to compare.</p><p><span class="rail-key">K</span> Kills &nbsp; <span class="rail-key">H</span> Headshots</p></div></aside>
 <div class="wrap">
   <header><div class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#170b00" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg></div><h1>1time <em>Esports</em></h1><nav class="sportsw" id="sportsw" aria-label="Game" hidden><a class="on" href="/" aria-current="page">CS2</a><a id="sportlol" href="/lol">LoL</a></nav><span class="grow"></span><form class="mini" id="mini" autocomplete="off"><input id="mp" placeholder="Player" aria-label="Player"><input id="ml" class="l" inputmode="decimal" placeholder="Line" aria-label="Line"><select id="mlt" class="msel" title="Line type" aria-label="Line type"><option value="standard">Standard</option><option value="goblin">Goblin</option><option value="demon">Demon</option></select><select id="msc" class="msel" title="Maps" aria-label="Maps"><option value="12">Maps 1–2</option><option value="123">Maps 1–3</option><option value="1">Map 1</option></select>
     <div class="seg" id="mprop" role="group" aria-label="Prop"><button type="button" data-v="kills">K</button><button type="button" data-v="hs">HS</button></div><button class="go" aria-label="Grade this line">Grade</button></form>
@@ -618,19 +701,20 @@ body.ot-lol .intro {margin:0 0 24px}.ot-lol .intro h2 {font:700 34px var(--displ
 
   <div id="gate" class="card" hidden style="text-align:center;padding:28px 18px"></div>
   <div id="who" class="small muted" hidden style="text-align:right;margin:-6px 0 8px"></div>
-<section class="workspace-intro" aria-label="Research workspace"><div><div class="eyebrow">CS2 / Matchroom</div><h2 id="workspace-title">Every angle. One player.</h2><p id="workspace-desc">Explore the projection, compare the lines, and see what supports the grade.</p></div><div class="workspace-tools"><button type="button" id="scout-density" aria-pressed="false" title="Switch board and table spacing">↕ Compact view</button><button type="button" id="scout-guide">How it works</button></div></section><div class="research-strip"><div><span class="step">01</span><div><b>Player intelligence</b><small>History meets projection</small></div></div><div><span class="step">02</span><div><b>Compare the market</b><small>Underdog + PrizePicks</small></div></div><div><span class="step">03</span><div><b>Review your entry</b><small>Line checks &amp; exposure</small></div></div></div>
-  <div class="modes" id="modes"><div class="seg" id="mode"><button type="button" data-v="one" class="on">Single Prop</button><button type="button" data-v="board">Prop Board</button><button type="button" data-v="slate">Slate</button></div>
+<section class="workspace-intro" aria-label="Research workspace"><div><div class="eyebrow">CS2 / Matchroom</div><h2 id="workspace-title">Every angle. One player.</h2><p id="workspace-desc">Explore the projection, compare the lines, and see what supports the grade.</p></div><div class="workspace-tools"><nav class="tools-nav" aria-label="Tools"><a href="#one" data-tool="one">Single prop</a><a href="#slate" data-tool="slate">Slate</a></nav><button type="button" id="scout-density" aria-pressed="false" title="Switch board and table spacing">↕ Compact view</button><button type="button" id="scout-guide">How it works</button></div></section><div class="research-strip"><div><span class="step">01</span><div><b>Player intelligence</b><small>History meets projection</small></div></div><div><span class="step">02</span><div><b>Compare the market</b><small>Underdog + PrizePicks</small></div></div><div><span class="step">03</span><div><b>Review your entry</b><small>Line checks &amp; exposure</small></div></div></div>
+  <div class="modes" id="modes"><nav class="seg" id="mode" aria-label="Sections"><button type="button" data-v="board">Board</button><button type="button" data-v="matches">Matches</button><button type="button" data-v="moneylines">Lines</button><button type="button" data-v="slips">Slips</button><button type="button" data-v="results">Results</button><button type="button" data-v="one" class="on tool">Single prop</button><button type="button" data-v="slate" class="tool">Slate</button></nav>
     <span class="small muted">Shortcuts: <b>K</b> kills &middot; <b>H</b> headshots</span></div>
   <section class="card" id="slate" hidden><div class="workspace-section-title"><h2>Grade your slate</h2><p>Research up to 15 lines together.</p></div>
     <textarea id="slatetxt" spellcheck="false" aria-label="Your props, one per line" placeholder="ZywOo 27.5 K&#10;ropz 22.5 HS&#10;donk 30.5&#10;m0NESY 14.5 hs goblin"></textarea>
     <div class="help">One prop per line: player, line, then K or HS (no K/HS = kills), optionally goblin / demon; add m13 for Maps 1–3 or bo1 for Map 1. Up to 15 lines.</div>
+    <div id="slateprev" aria-live="polite"></div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="go" id="slatego" type="button" style="margin-left:0">Grade slate</button><span id="slatestatus" class="small muted"></span><button type="button" class="chipbtn" id="slateedit" hidden>Edit lines</button></div>
     <div id="slateout" style="margin-top:14px"></div>
   </section>
   <section class="card" id="board" hidden><div class="board-command"><span>Prop board</span><div><button type="button" id="scout-filters" aria-expanded="true" aria-controls="bbar">Hide filters</button></div></div>
     <div class="bbar" id="bbar">
       <div class="seg" id="bbook" title="Which platform's lines"><button type="button" data-v="all" class="on">All Books</button><button type="button" data-v="underdog">Underdog</button><button type="button" data-v="prizepicks">PrizePicks</button><button type="button" data-v="compare">Compare</button><button type="button" data-v="moneylines" title="Series-winner prices: Thunderpick bookmaker odds first; Polymarket and Kalshi exchange midpoints for comparison">Moneylines</button></div>
-      <div class="seg" id="bview" title="Group by match or list every prop"><button type="button" data-v="matches" class="on">Matches</button><button type="button" data-v="all">All props</button></div>
+      <div class="seg" id="bview" hidden title="Group by match or list every prop"><button type="button" data-v="matches" class="on">Matches</button><button type="button" data-v="all">All props</button></div>
       <div class="seg" id="bprop"><button type="button" data-v="kills" class="on">Kills</button><button type="button" data-v="hs">Headshots</button><button type="button" data-v="both">Both</button></div>
       <div class="seg" id="bscope" title="Which maps the lines cover"><button type="button" data-v="12" class="on">Maps 1–2</button><button type="button" data-v="1">Map 1</button><button type="button" data-v="123">Maps 1–3</button></div>
       <div class="seg" id="bside" title="Show the grader's Overs, Unders, or both"><button type="button" data-v="More">Overs</button><button type="button" data-v="both" class="on">Both</button><button type="button" data-v="Less">Unders</button></div>
@@ -644,12 +728,19 @@ body.ot-lol .intro {margin:0 0 24px}.ot-lol .intro h2 {font:700 34px var(--displ
       <button type="button" class="chipbtn" id="breset" title="Reset every filter">Reset</button>
       <button type="button" class="chipbtn" id="brefresh" title="Refresh the board">↻ Refresh</button>
       <span class="small muted" id="bcount"></span></div>
+    <div id="bchips" class="bchips" aria-label="Active filters"></div>
     <div id="bstatus" class="small muted" style="margin:-2px 0 10px"></div>
+    <div id="ot-board-overview"></div>
+    <div id="boardout"></div>
+  </section>
+  <section class="card" id="slips" hidden aria-labelledby="slips-title"><div class="workspace-section-title"><h2 id="slips-title">Slips</h2><p>Build suggested slips from today's graded picks, then check every line before you copy.</p></div>
     <section id="studiobox" class="studiobox" hidden aria-label="Slip studio"><div class="studio-bar"><div><b>Slip studio</b> <span class="muted sbsub">2–4-pick slip suggestions</span></div>
       <button type="button" class="chipbtn" id="bstudio" hidden aria-expanded="false" aria-controls="studio">Open</button></div>
       <div id="studio" hidden></div></section>
-    <div id="ot-board-overview"></div>
-    <div id="boardout"></div>
+    <div id="sliphist" aria-live="polite"></div>
+  </section>
+  <section class="card" id="results" hidden aria-labelledby="results-title"><div class="workspace-section-title"><h2 id="results-title">Results</h2><p>How the board's picks have done, from grades saved before each match.</p></div>
+    <div id="resultsout" aria-live="polite"><div class="muted">Loading results…</div></div>
   </section>
   <dialog id="ot-match-desk" class="ot-desk" aria-labelledby="ot-desk-title"></dialog>
   <div id="cardpop" hidden><div id="popbody" role="dialog" aria-modal="true" aria-label="Player card"><div class="popbar" id="popbar"><button type="button" class="chipbtn" id="popclose" title="Close (Esc)">✕ Close</button></div></div></div>
@@ -1024,7 +1115,7 @@ function closePop() {
   hidePop();
   if (history.state && history.state.card) try { history.back(); } catch {}
 }
-$("#cardpop").addEventListener("click", e => { if (e.target.id === "cardpop" || e.target.closest("#popclose")) closePop(); });
+$("#cardpop").addEventListener("click", e => { if (e.target.id === "cardpop" || e.target.closest("#popclose") || e.target.closest("[data-popclose]")) closePop(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !document.querySelector(".askwrap")) closePop(); });
 let lastCard = null;
 document.addEventListener("click", e => {
@@ -1045,40 +1136,63 @@ document.addEventListener("click", e => {
 });
 showRecent();
 
-// modes: one prop / slate
-// every view has its own address (#one, #board, #board/<platform>, #slate): links and the Back button work
-const VIEWS = ["one", "board", "slate"], BOOKS = ["all", "underdog", "prizepicks", "compare", "moneylines"];
-const viewHash = () => { const m = ($("#mode button.on") || {}).dataset?.v || "one"; return "#" + m + (m === "board" ? "/" + bbook : ""); };
+// destinations (2026-10-18 release): Board (compact list), Matches (grouped by match), Moneylines, Slips, Results; the
+// tools Single prop and Slate. Every view has its own address - #board/<platform>, #matches/<platform>, #moneylines,
+// #slips, #results, #one, #slate - so links and the Back button work; the board keeps its platform, filters and search.
+const VIEWS = ["one", "board", "slate", "slips", "results"], BOOKS = ["all", "underdog", "prizepicks", "compare", "moneylines"];
+const ROUTES = ["board", "matches", "moneylines", "slips", "results", "one", "slate"];
+let MODE = "one";
+const curRoute = () => MODE !== "board" ? MODE : bbook === "moneylines" ? "moneylines" : bview === "matches" ? "matches" : "board";
+const viewHash = () => { const r = curRoute(); return "#" + r + (r === "board" || r === "matches" ? "/" + bbook : ""); };
 function pushView(replace) {
   const h = viewHash(), card = !!(history.state && history.state.card);   // a closed card's entry is reused, not stacked
   if (location.hash === h && !card) return;
   try { history[replace || card ? "replaceState" : "pushState"](null, "", location.pathname + location.search + h); } catch {}
 }
+function markRoute() {
+  const r = curRoute();
+  [...$("#mode").children].forEach(x => { const on = x.dataset.v === r; x.classList.toggle("on", on); x.setAttribute("aria-current", on ? "page" : "false"); });
+  document.body.dataset.route = r;
+}
 function setMode(m, fromHash) {
   if (!VIEWS.includes(m)) m = "one";
-  [...$("#mode").children].forEach(x => x.classList.toggle("on", x.dataset.v === m));
+  MODE = m;
   $("#slate").hidden = m !== "slate"; $("#board").hidden = m !== "board"; $("#f").style.display = m === "one" ? "" : "none";
+  $("#slips").hidden = m !== "slips"; $("#results").hidden = m !== "results";
+  markRoute();
   if (m === "board") loadBoard();
+  if (m === "slips") try { slipsOpen(); } catch {}
+  if (m === "results") try { loadResults(); } catch {}
+  if (m === "slate") try { slateBoardLines(); } catch {}
   if (!fromHash) pushView();
   try { showExamples(); } catch {}
   try { miniPlace(); } catch {}
 }
+// a destination: Board / Matches set the board's grouping (the platform is kept), Moneylines its platform; the rest are views
+function goRoute(r, fromHash, bk) {
+  if (r === "board" || r === "matches") {
+    bview = r === "matches" ? "matches" : "all";
+    if (bk && BOOKS.includes(bk) && bk !== "moneylines") setBook(bk, true); else if (bbook === "moneylines") setBook("all", true);
+    return setMode("board", fromHash);
+  }
+  if (r === "moneylines") { setBook("moneylines", true); return setMode("board", fromHash); }
+  return setMode(r, fromHash);
+}
 function applyHash() {
   let [m, bk] = location.hash.replace(/^#/, "").split("/");
   if (!m) m = "one";
-  if (!VIEWS.includes(m)) return false;                 // an in-page anchor, not a view
+  if (!ROUTES.includes(m)) return false;                // an in-page anchor, not a view
   hidePop();
-  const cur = ($("#mode button.on") || {}).dataset?.v;
-  if (m === "board" && !BOOKS.includes(bk)) {           // '#board' alone: this entry gets its platform (Back stays in step)
-    if (cur !== m) setMode(m, true);
-    pushView(true); return true;
-  }
-  if (m === "board" && bk !== bbook) setBook(bk, true);
-  else if (cur === m) return true;
-  setMode(m, true); return true;
+  if (m === "board" && bk === "moneylines") m = "moneylines";    // older links
+  const cur = curRoute(), grouped = m === "board" || m === "matches";
+  if (m === cur && (!grouped || bk === bbook)) return true;
+  goRoute(m, true, bk);
+  if (grouped && !BOOKS.includes(bk)) pushView(true);  // '#board' alone: this entry gets its platform (Back stays in step)
+  return true;
 }
 window.addEventListener("popstate", applyHash); window.addEventListener("hashchange", applyHash);
-$("#mode").onclick = e => { const b = e.target.closest("button"); if (b) { hidePop(); setMode(b.dataset.v); } };
+$("#mode").onclick = e => { const b = e.target.closest("button"); if (b) { hidePop(); goRoute(b.dataset.v); } };
+document.querySelectorAll("[data-tool]").forEach(a => a.addEventListener("click", e => { e.preventDefault(); hidePop(); goRoute(a.dataset.tool); }));
 
 // slate: several props at once -> sortable table; a row opens its full card
 let slate = [], slateSort = {k: "p", dir: -1};
@@ -1090,7 +1204,8 @@ function parseSlate(txt) {
     if (!m) { out.push({bad: s}); continue; }
     const rest = m[3].toLowerCase();
     out.push({player: m[1].trim(), line: m[2].replace(",", "."),
-              prop: /\b(hs|h|headshots?)\b/.test(rest) ? "hs" : "kills",
+              prop: /\b(hs|h|headshots?)\b/.test(rest) ? "hs" : "kills", propSet: /\b(hs|h|headshots?|k|kills?)\b/.test(rest),
+              scSet: /\b(m13|1-3|maps?\s*1-3|maps?\s*123|bo1|m1|map\s*1|m12|maps?\s*1-2)\b/.test(rest),
               lt: /goblin/.test(rest) ? "goblin" : /demon/.test(rest) ? "demon" : "standard",
               sc: /\b(m13|1-3|maps?\s*1-3|maps?\s*123)\b/.test(rest) ? "123" : /\b(bo1|m1|map\s*1)\b/.test(rest) ? "1" : "12"});
   }
@@ -1567,10 +1682,10 @@ function capChip(x, team, sameCap) {
   const sameTxt = `${x.cap_n || "Several"} bets need ${team || "this team"} to ${x.side === "More" ? "do well" : "do badly"} in this match – one upset or overtime decides them all, so together they're capped at ${sameCap ?? 3}U`;
   const full = capParts(reason).map(p => /same[- ]match/i.test(p) ? sameTxt : CAP_FULL[p.toLowerCase()] || p).join(". ") + "."
     + (same ? ` Without the same-match cap: ${+x.units_full}U.` : "");
-  return ` <span class="pill capchip" style="margin:0" title="${esc(full)}">capped: ${esc(capShort(reason))}</span>`;
+  return ` <span class="pill capchip" style="margin:0" title="${esc(full)}" data-tip="${esc(full)}" tabindex="0">capped: ${esc(capShort(reason))}</span>`;
 }
 function drawBoard() {
-  saveBFilters(); try { filtersLabel(); } catch {}
+  saveBFilters(); try { filtersLabel(); } catch {} try { drawChips(); } catch {}
   try {                                       // phones: the platform tabs scroll sideways - keep the chosen one in view
     const bb = $("#bbook"), on = bb.querySelector("button.on");
     if (on && bb.scrollWidth > bb.clientWidth) { const a = bb.getBoundingClientRect(), o = on.getBoundingClientRect();
@@ -1604,20 +1719,35 @@ function drawBoard() {
   $("#ot-board-overview").innerHTML = otBoardSummary(rows);
   const pct0 = x => x == null ? "–" : (x * 100).toFixed(1) + "%";
   const ev = (x, cls, sign) => x && x.text ? `<div class="b2ev ${cls}">${sign} ${esc(x.text)} ${basisTag(x.basis)}</div>` : "";
+  // one compact row per offer (2026-10-18 release): the player and match, the platform / stat / maps / market type, the
+  // line, our projection, the graded side's chance, the grade and stake (with its reason) and the action. A side the
+  // platform no longer offers shows as unavailable - never with a playable chance. Support / concern notes are on the card.
   const rowHtml = (r, showMatch) => {
     const nick = r.nick || r.player, gone = sideGone(r), lab = !r.side ? "…" : r.state === "SCOUT" || gone ? "–" : mGrade(r) === "LEAN" ? "L" : mGrade(r);
     const ltl = !r.side ? "Still grading" : r.state === "SCOUT" ? "No match scheduled" : mGrade(r) === "LEAN" ? "Lean – 0 units" : `Grade ${mGrade(r)}${+r.units > 0 ? "" : " – 0 units"}`;
     const ds = (r.dstat || [])[0] === "verify" ? (issueLabel(r.dstat[1]) ? ["warn", issueLabel(r.dstat[1])] : null) : DSTAT[(r.dstat || [])[0]], team = r.team_name || r.team, opp = r.opp_name || r.opponent;
-    return `<div class="brow2" data-bl="${esc(nick)}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}|${r.book || "underdog"}">
-      <span class="gtag ${!r.side || r.state === "SCOUT" || gone ? "g-scout" : gClass(mGrade(r))}" title="${esc(gone || ltl)}">${esc(lab)}</span>
-      <div><div class="b2top">${bbook === "all" ? `<span class="pill" style="margin:0 4px 0 0;padding:1px 7px">${bookName(r.book || "underdog")}</span>` : ""}<b>${esc(nick)}</b>${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}
-          <span class="muted">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}${showMatch ? " · " + shortWhen(r.start) : ""}</span></div>
-        <div class="b2pick">${gone ? `<span class="pill bad" title="${esc(bookName(r.book || "underdog"))} does not offer the ${r.side === "Less" ? "Under" : "Over"} for this line any more - not a bet, not on slips; its last grade is kept for the record">${esc(gone)}</span> <span class="muted">${r.side === "Less" ? "Under" : "Over"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}</span></div>` : `${r.side ? esc(sideWord(r)) : "grading…"} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope)}${mktTag(r)}${r.p != null ? ` · <b>${chance(r.p, r.prop)}</b>${coinFlip(r.p)}` : ""}${isLeanV(r) ? (r.state === "SCOUT" ? " · No match scheduled" : "") : " · " + esc(mGrade(r) || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${zeroWhy(r)}${capChip(r, r.team_name || r.team)}</div>`}
-        <div class="b2meta">Proj ${r.proj != null ? num(r.proj, 1) : "–"}${ds ? ` · <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}">${ds[1]}</span>` : ""}${r.source ? `<span class="mx"> · source ${esc(r.source)}</span>` : ""}${r.graded_at ? `<span class="mx"> · graded ${agoTxt(r.graded_at)}</span>` : ""}${r.alt && r.book !== "prizepicks" ? ` · alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : ""}${r.book === "prizepicks" && r.open_line != null && +r.open_line !== +r.line ? ` · opened ${r.open_line}` : ""}${r.moved_from != null ? ` · <span class="pill warn">line moved from ${r.moved_from}</span>` : ""}</div>
-        ${ev(r.support, "up", "+")}${ev(r.concern, "dn", "–")}</div>
-      ${!r.side ? "<span></span>" : gone ? `<button type="button" class="bslip" disabled title="${esc(gone)}">Unavailable</button>` : r.state === "SCOUT" ? `<button type="button" class="bslip" disabled title="No upcoming match found for his team – there is nothing to enter on a slip yet">+ Slip</button>`
-        : `<button type="button" class="bslip ${onSlip.has(slipKeyRow(r)) ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}|${mktType(r)}|${r.book || "underdog"}">${onSlip.has(slipKeyRow(r)) ? "On slip" : "+ Slip"}</button>`}
+    const sideW = r.side === "Less" ? "Under" : "Over";
+    const pick = gone ? `<span class="pill bad" title="${esc(bookName(r.book || "underdog"))} does not offer the ${sideW} for this line any more - not a bet, not on slips; its last grade is kept for the record">${esc(gone)}</span> <span class="muted">${sideW} ${r.line}</span>`
+      : !r.side ? `<span class="muted">grading…</span>`
+      : `${esc(sideWord(r))}${r.p != null ? ` <b>${chance(r.p, r.prop)}</b>${coinFlip(r.p)}` : ""}`;
+    const stake = gone || !r.side ? "" : `${isLeanV(r) ? (r.state === "SCOUT" ? "No match scheduled" : "Lean") : esc(mGrade(r) || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${zeroWhy(r)}${capChip(r, team)}`;
+    const meta = [r.graded_at ? `graded ${agoTxt(r.graded_at)}` : "", r.alt && r.book !== "prizepicks" ? `alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : "",
+      r.book === "prizepicks" && r.open_line != null && +r.open_line !== +r.line ? `opened ${r.open_line}` : "",
+      r.moved_from != null ? `<span class="pill warn">line moved from ${r.moved_from}</span>` : ""].filter(Boolean).join(" · ");
+    return `<div class="brow2 crow" data-bl="${esc(nick)}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}|${r.book || "underdog"}">
+      <span class="gtag ${!r.side || r.state === "SCOUT" || gone ? "g-scout" : gClass(mGrade(r))}" title="${esc(gone || ltl)}" data-tip="${esc(gone || ltl)}">${esc(lab)}</span>
+      <div class="c-who"><b>${esc(nick)}</b>${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}
+        <span class="muted c-match">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}${showMatch ? " · " + shortWhen(r.start) : ""}</span></div>
+      <div class="c-mkt"><span class="pill c-book">${bookName(r.book || "underdog")}</span> ${propWord(r.prop)}${mapsWord(r.scope)}${mktTag(r)}${ds ? ` <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}" data-tip="${esc((r.dstat || [])[1] || ds[1])}">${ds[1]}</span>` : ""}</div>
+      <div class="c-num"><span class="k">Line</span><b>${r.line}</b></div>
+      <div class="c-num"><span class="k">Proj</span>${r.proj != null ? num(r.proj, 1) : "–"}</div>
+      <div class="c-pick b2pick">${pick}</div>
+      <div class="c-stake">${stake}</div>
+      <div class="c-act">${!r.side ? "<span></span>" : gone ? `<button type="button" class="bslip" disabled title="${esc(gone)}">Unavailable</button>` : r.state === "SCOUT" ? `<button type="button" class="bslip" disabled title="No upcoming match found for his team – there is nothing to enter on a slip yet">+ Slip</button>`
+        : `<button type="button" class="bslip ${onSlip.has(slipKeyRow(r)) ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}|${mktType(r)}|${r.book || "underdog"}">${onSlip.has(slipKeyRow(r)) ? "On slip" : "+ Slip"}</button>`}</div>
+      ${meta ? `<div class="c-meta muted">${meta}</div>` : ""}
     </div>`; };
+  const rowHead = `<div class="crow-head" aria-hidden="true"><span></span><span>Player · match</span><span>Market</span><span>Line</span><span>Proj</span><span>Pick · chance</span><span>Grade · stake</span><span></span></div>`;
   // Rank only the already-filtered rows. One player per summary, even across books.
   const matchRank = mrows => {
     const q2 = OTView.shortlist(mrows, x => x.side && x.state !== "SCOUT" && isBet(x) && !sideGone(x));
@@ -1625,25 +1755,13 @@ function drawBoard() {
     return `<div class="ot-match-tools"><p><b>Top picks in this view:</b> ${q2.length ? q2.map(it).join(" · ") : "No qualifying picks with these filters."}${q2.length > 1 ? "<br>These picks share match conditions." : ""}</p>
       <button type="button" class="ot-open-match" data-ot-match="${esc(matchKey(mrows[0]))}">Research match ↗</button></div>${otStartNotice(mrows)}`;
   };
-  // Best plays (2026-10-11): the strongest graded picks on the board right now - one per player, best grade first,
-  // then highest chance; stakes as the board shows them (same-match cap included). Follows the Kills / HS / maps filters.
-  const bestPlays = () => {
-    if (bview !== "matches" || !$("#bbets").checked) return "";
-    const seen = new Set(), seenMatches = new Set(), top = rows.filter(r => r.side && isBet(r) && r.state !== "SCOUT" && !r.stale)
-      .sort((a, b) => (G_RANK[a.grade] ?? 9) - (G_RANK[b.grade] ?? 9) || isFlagged(a) - isFlagged(b) || (b.p ?? 0) - (a.p ?? 0))
-      .filter(r => { const k = OTView.playerKey(r), mk = matchKey(r); if (seen.has(k) || seenMatches.has(mk)) return false; seen.add(k); seenMatches.add(mk); return true; }).slice(0, 3);
-    if (top.length < 2) return "";
-    return `<div class="card ot-featured" style="margin-bottom:12px;padding:12px"><div class="small muted" style="margin-bottom:6px"><b style="color:var(--text)">Match highlights</b> · strongest graded picks${bbook === "all" ? " on either platform" : ""} · one per match</div>
-      <div class="blist">${top.map(r => rowHtml(r, true)).join("")}</div>
-      <div class="small muted" style="margin-top:6px">Ranked by grade, then chance. Picks from one match share its conditions – see the match groups below.</div></div>`;
-  };
   let html;
   const grading = (bbook === "all" ? ["underdog", "prizepicks"] : [bbook]).reduce((a, b) => a + Math.max(0, ((BK[b] || {}).total || 0) - ((BK[b] || {}).rows || []).length), 0);
   if (!rows.length && !boardRows.length && grading) {         // after a restart the lines are graded one by one: say so
     html = `<div class="muted"><span class="spin"></span>Grading ${grading} ${bookName(bbook)} line${grading === 1 ? "" : "s"} – the first grades appear within a few minutes; this list refreshes on its own.</div>`;
     clearTimeout(drawBoard.t); drawBoard.t = setTimeout(() => { if (!$("#board").hidden && !boardRows.length) loadBoard(true); }, 60000);
   } else if (!rows.length) html = `<div class="muted">${boardRows.length ? `No lines match these filters. <button type="button" class="chipbtn" data-reset="1">Reset filters</button>` : `No ${bookName(bbook)} CS2 lines right now.${boardAt && bbook === "underdog" ? ` Checked ${new Date(boardAt * 1000).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})} · checks again every 5 minutes – new lines are graded automatically.` : ""}`}</div>`;
-  else if (bview === "all") html = `<div class="blist">${rows.map(r => rowHtml(r, true)).join("")}</div>`;
+  else if (bview === "all") html = `<div class="blist clist">${rowHead}${rows.map(r => rowHtml(r, true)).join("")}</div>`;
   else {
     const groups = new Map();
     for (const r of rows) { const k = matchKey(r); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
@@ -1653,9 +1771,9 @@ function drawBoard() {
       const maps = (r.maps_known || []).filter(Boolean);
       return `<details class="mgroup" data-mk="${esc(k)}" ${open ? "open" : ""}><summary><b>${esc((r.team_name || r.team || "") + " vs " + (r.opp_name || r.opponent || ""))}</b>
         <span class="muted small">${shortWhen(r.start)}${r.event ? " · " + esc(r.event) : ""}${r.bo ? " · BO" + esc(r.bo) : ""} · ${maps.length ? "maps: " + maps.map(mapName).join(", ") : "maps not announced"} · ${g.length} line${g.length > 1 ? "s" : ""}${bets ? `, ${bets} bet${bets > 1 ? "s" : ""}` : ""}</span></summary>
-        <div class="mbody">${matchRank(g)}<div class="blist">${g.map(x => rowHtml(x, false)).join("")}</div></div></details>`; }).join("");
+        <div class="mbody">${matchRank(g)}<div class="blist clist">${rowHead}${g.map(x => rowHtml(x, false)).join("")}</div></div></details>`; }).join("");
   }
-  $("#boardout").innerHTML = (rows.length ? bestPlays() : "") + html + (rows.length ? `<div class="small muted" style="margin-top:10px">${bookName(bbook)} lines, graded – each at its own line${bbook === "prizepicks" ? " and market type (standard, goblin, demon)" : ""}. Tap a pick for the full analysis.</div>${gradeLegend()}` : "");
+  $("#boardout").innerHTML = html + (rows.length ? `<div class="small muted" style="margin-top:10px">${bookName(bbook)} lines, graded – each at its own line${bbook === "prizepicks" ? " and market type (standard, goblin, demon)" : ""}. Tap a pick for the full analysis.</div>${gradeLegend()}` : "");
   $("#boardout").querySelectorAll("details.mgroup").forEach(d => d.addEventListener("toggle", () => { const o = store.get("cs2s_mopen", {}); o[d.dataset.mk] = d.open; store.set("cs2s_mopen", o); }));
 }
 $("#boardout").addEventListener("click", e => {
@@ -1680,6 +1798,7 @@ $("#boardout").addEventListener("click", e => {
 function setBook(v, quiet) {
   if (!BOOKS.includes(v)) return; bbook = v;
   [...$("#bbook").children].forEach(x => x.classList.toggle("on", x.dataset.v === v));
+  try { markRoute(); } catch {}
   if (!quiet) { pushView(); loadBoard(false); }
 }
 $("#bbook").onclick = e => { const b = e.target.closest("button"); if (b) setBook(b.dataset.v); };
@@ -1771,17 +1890,44 @@ $("#bbets").onchange = drawBoard; $("#bflag").onchange = drawBoard; $("#cdiff").
 $("#bview").onclick = e => { const b = e.target.closest("button"); if (!b) return; bview = b.dataset.v;
   [...$("#bview").children].forEach(x => x.classList.toggle("on", x === b)); drawBoard(); };
 function resetBFilters() {
-  bprop = "kills"; bside = "both"; bscope = "12"; bview = "matches";   // the platform choice is kept
+  bprop = "kills"; bside = "both"; bscope = "12";   // the platform and the Board / Matches grouping (the route) are kept
   $("#bsort").value = "g"; $("#bbets").checked = true; $("#bsearch").value = ""; $("#bflag").checked = false;
   $("#csort").value = "t"; $("#cdiff").checked = false; $("#mlusable").checked = true;
   for (const [id, v] of [["#bprop", bprop], ["#bside", bside], ["#bscope", bscope], ["#bview", bview]]) [...$(id).children].forEach(x => x.classList.toggle("on", x.dataset.v === v));
   drawBoard();
 }
 $("#breset").onclick = resetBFilters;
+// the active filters as chips under the bar (2026-10-18 release): each one clears on its own; "Clear all" = Reset
+const CHIP_TXT = {prop: {hs: "Headshots", both: "Kills + headshots"}, scope: {"1": "Map 1", "123": "Maps 1–3"}, side: {More: "Overs", Less: "Unders"},
+  sort: {p: "Sorted by chance", t: "Starting soonest", e: "Biggest edge"}};
+function drawChips() {
+  const el = $("#bchips"); if (!el) return;
+  const ml = bbook === "moneylines", cmpv = bbook === "compare", q = ($("#bsearch").value || "").trim();
+  const chips = [];
+  if (!ml && bprop !== "kills") chips.push(["prop", CHIP_TXT.prop[bprop]]);
+  if (!ml && bscope !== "12") chips.push(["scope", CHIP_TXT.scope[bscope]]);
+  if (!ml && bside !== "both") chips.push(["side", CHIP_TXT.side[bside] + " only"]);
+  if (q) chips.push(["q", `“${q}”`]);
+  if (!ml && !cmpv && !$("#bbets").checked) chips.push(["bets", "Including 0U lines"]);
+  if (!ml && !cmpv && $("#bflag").checked) chips.push(["flag", "Hiding flagged"]);
+  if (!ml && !cmpv && $("#bsort").value !== "g") chips.push(["sort", CHIP_TXT.sort[$("#bsort").value] || "Sorted"]);
+  el.innerHTML = chips.length ? chips.map(([k, t]) => `<button type="button" class="fchip" data-chip="${k}" aria-label="Clear filter: ${esc(t)}">${esc(t)} <span aria-hidden="true">✕</span></button>`).join("")
+    + `<button type="button" class="fchip clear" data-chip="all">Clear all</button>` : "";
+}
+$("#bchips").addEventListener("click", e => {
+  const c = e.target.closest("[data-chip]"); if (!c) return;
+  const k = c.dataset.chip;
+  if (k === "all") return resetBFilters();
+  if (k === "prop") bprop = "kills"; else if (k === "scope") bscope = "12"; else if (k === "side") bside = "both";
+  else if (k === "q") $("#bsearch").value = ""; else if (k === "bets") $("#bbets").checked = true; else if (k === "flag") $("#bflag").checked = false;
+  else if (k === "sort") $("#bsort").value = "g";
+  for (const [id, v] of [["#bprop", bprop], ["#bside", bside], ["#bscope", bscope]]) [...$(id).children].forEach(x => x.classList.toggle("on", x.dataset.v === v));
+  drawBoard();
+});
 restoreBFilters();
 // filters: one "Filters (n active)" button - closed by default on phones (2026-10-11 audit: the filter wall pushed the first
 // pick a full screen down), open on wider screens
-const activeFilters = () => [bview !== "matches", bprop !== "kills", bside !== "both", bscope !== "12", $("#bsort").value !== "g", !$("#bbets").checked, $("#bflag").checked].filter(Boolean).length;
+const activeFilters = () => [bprop !== "kills", bside !== "both", bscope !== "12", $("#bsort").value !== "g", !$("#bbets").checked, $("#bflag").checked].filter(Boolean).length;
 function filtersLabel() {
   const b = $("#scout-filters"); if (!b) return;
   const closed = $("#board").classList.contains("filters-collapsed"), n = activeFilters();
@@ -1966,6 +2112,29 @@ function mlCard(m, model, rec) {
     ${agree ? `<div class="mlbadges"><span>Agreement</span> ${agree}</div>` : ""}
     <div class="mlplats">${mlPlatform("polymarket", P.polymarket, A, B, m.teams.names_by_platform)}${mlPlatform("kalshi", P.kalshi, A, B, m.teams.names_by_platform)}</div></details></article>`;
 }
+// compact rows (2026-10-18 release): one row per match with aligned Thunderpick / Polymarket / Kalshi columns, each with
+// its own price for both teams and how old it is (Thunderpick: our retrieval time - the feed has no quote time; exchanges:
+// when the quote was read). Market prices only: the series-winner model has no independent probability that has beaten
+// the market, so none is shown as one. The full detail (odds, margin, bid / ask, HLTV context) is one tap away.
+function mlCell(name, sub, pa, pb, A, B, age) {
+  return `<div class="mlq"><span class="mlqn">${name}<small>${sub}</small></span>${pa == null ? `<span class="muted mlqv">–</span>`
+    : `<span class="mlqv"><b>${esc(A)} ${pct(pa)}</b><span>${esc(B)} ${pct(pb)}</span></span>`}${pa != null && age ? `<span class="mlage">${esc(age)}</span>` : ""}</div>`;
+}
+function mlRow(m) {
+  const full = mlCard(m, {}, ""); if (!full) return "";
+  const A = m.teams.a || "Team A", B = m.teams.b || "Team B", P = m.platforms || {}, t = m.thunderpick, tu = tpLive(t, m);
+  const nrm = x => String(x || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const ex = p => { const k = P[p]; if (!k || !k.usable) return [null, null, ""];
+    const rev = k.team_a_name && nrm(k.team_a_name) === nrm(B) && nrm(k.team_a_name) !== nrm(A);
+    const pa = rev ? (p === "kalshi" ? k.prob_b_yes : (k.prob_a == null ? null : 1 - k.prob_a)) : k.prob_a;
+    return [pa, pa == null ? null : 1 - pa, k.received_ts ? "read " + (ago(k.received_ts) || "") : ""]; };
+  const [pa1, pb1, a1] = ex("polymarket"), [pa2, pb2, a2] = ex("kalshi");
+  return `<article class="mlrow"><div class="mlm"><b>${esc(A)} vs ${esc(B)}</b><span class="small muted">${m.start ? when(m.start) : "start not listed"}${m.event ? " · " + esc(m.event) : ""}${m.bo ? " · BO" + esc(m.bo) : ""}</span></div>
+    ${mlCell("Thunderpick", "bookmaker, margin removed", tu ? +t.p_a : null, tu ? +t.p_b : null, A, B, tu ? "retrieved " + agoSec(tpAge(t)) : "")}
+    ${mlCell("Polymarket", "exchange midpoint", pa1, pb1, A, B, a1)}
+    ${mlCell("Kalshi", "exchange midpoint", pa2, pb2, A, B, a2)}
+    <details class="mlmore"><summary>Context and quote details</summary>${full}</details></article>`;
+}
 // the count above the list - one rule with the "Usable price only" filter: Thunderpick's usable price OR an exchange's
 function mlCountText(up0) {
   const n = up0.filter(mlUsable).length;
@@ -1997,9 +2166,9 @@ function drawMoneylines() {
   $("#bcount").textContent = (q ? `search: ${up0.length} of ${all0.length} upcoming · ` : "") + mlCountText(up0);
   const clearQ = `<button type="button" class="chipbtn" data-mlclear="1">Clear search</button>`;
   const model = d.model || {}, rec = d.recommendation || "Shadow - not a staking recommendation";
-  box.innerHTML = `<div class="mlintro"><b style="color:var(--text)">Series winner prices</b><span>Thunderpick bookmaker odds first (primary source) · Polymarket and Kalshi exchange midpoints as attributed comparisons · read by the server about every minute</span>
+  box.innerHTML = `<div class="mlintro"><b style="color:var(--text)">Series winner prices</b><span>Market prices only – each column is that source's own price with its age. The server reads each source about every minute; a read never makes an older quote newer.</span>
 </div>`
-    + (up.length ? up.map(m => mlCard(m, model, rec)).join("")
+    + (up.length ? `<div class="mlrow mlhdr" aria-hidden="true"><span>Match</span><span>Thunderpick</span><span>Polymarket</span><span>Kalshi</span></div>` + up.map(m => mlRow(m)).join("")
        : `<div class="muted">${up0.length || !d.matches.length ? "No CS2 series-winner prices right now."
          : q && !list.length ? `No match for “${esc(q)}” among the ${d.matches.length} listed (the search box is shared with the Prop Board). ${clearQ}`
          : q ? `No upcoming match for “${esc(q)}” – only started ones. ${clearQ}`
@@ -2019,8 +2188,8 @@ const studioCfg = () => { const c = Object.assign({book: "underdog", side: "eith
   if (c.repeats !== "none") c.repeats = "as_needed";     // studio-2 (owner 2026-10-16): the count asked for is built
   delete c.overlap; delete c.cap; return c; };
 // the studio is one line ("Slip studio - ... Open") until a member opens it; open / closed is remembered
-function studioShow() {
-  const off = STUDIO.off || bbook === "moneylines";
+function studioShow() {                 // the studio lives on the Slips page (2026-10-18 release)
+  const off = STUDIO.off;
   $("#studiobox").hidden = $("#bstudio").hidden = off;
 }
 // opened only when the member asks (2026-10-11 audit: a remembered open studio pushed the picks ~1,900 px down on phones)
@@ -2030,8 +2199,7 @@ function studioToggle(open) {
   b.textContent = open ? "Close" : "Open"; b.setAttribute("aria-expanded", String(open)); b.classList.toggle("primary", !open);
   if (open && !box.dataset.ready) {
     box.dataset.ready = "1";
-    if (["underdog", "prizepicks"].includes(bbook) && !store.get("cs2s_studio", null)) studioSave(Object.assign(studioCfg(), {book: bbook}));
-    studioForm(); studioLoad();
+    studioForm(); studioLoad();          // settings are the studio's own; "Use board filters" copies the board's on request
   } else if (open) studioCapacity();
 }
 // "Right now: 23 eligible picks in 9 matches - enough for up to ..." (GET /api/slip_studio/capacity), refreshed when a
@@ -2059,8 +2227,11 @@ function capText(d, c) {
     return parts.length > 1 ? parts.slice(0, -1).join(", ") + " or " + parts[parts.length - 1] : parts[0]; };
   const list = fmt(mx), last = STUDIO.last && STUDIO.batch && STUDIO.last.batch_id === STUDIO.batch.batch_id ? STUDIO.last : null;
   const left = last && last.eligible ? fmt(last.eligible.max_slips_left) : null;
+  // the limiting constraint: one pick per match inside a slip, so an n-pick slip needs n different matches
+  const big = [4, 3, 2].find(n => c.sizes.includes(n) && mx[n] != null);
+  const lim = big && d.matches && +mx[big] === Math.floor(d.matches / big) ? ` Limited by matches: each ${big}-pick slip needs ${big} different matches.` : big && mx[big] != null ? " Limited by eligible players and picks." : "";
   return `<b>Right now:</b> ${d.lines} eligible pick${d.lines === 1 ? "" : "s"} in ${d.matches} match${d.matches === 1 ? "" : "es"} ${where}`
-    + (list ? ` – up to ${list} with every player and match used once${c.repeats === "none" ? "" : "; more slips reuse the least-used picks"}` : "") + "."
+    + (list ? ` – up to ${list} with every player and match used once${c.repeats === "none" ? "" : "; more slips reuse the least-used picks"}` : "") + "." + lim
     + (left ? ` <span class="muted">Still free for your current batch: up to ${left}.</span>` : "");
 }
 const studioSave = c => store.set("cs2s_studio", c);
@@ -2086,17 +2257,24 @@ function studioForm() {
   const sizes = `<div class="seg" data-sk="sizes" role="group">` + [2, 3, 4].map(n => `<button type="button" data-v="${n}" class="${c.sizes.includes(n) ? "on" : ""}" aria-pressed="${c.sizes.includes(n)}">${n}-pick</button>`).join("") + `</div>`;
   // numbered steps side by side (owner 2026-10-12: bring back this layout; "how many slips" stays visible up front)
   const step = (n, title, hint, ctl) => `<div class="studio-step"><div class="sh"><span class="num">${n}</span><span class="t">${title}</span></div><p class="hint">${hint}</p>${ctl}</div>`;
-  $("#studio").innerHTML = `<div class="small muted">Builds ready-to-check slips from today's graded picks. Pick your settings, press <b>Build</b>, then <b>Verify &amp; copy</b> the slip you like.</div>
-    <div class="studio-steps">
-      ${step(1, "Platform", "Where you'll enter the slip. Each slip uses one platform.", seg("book", [["underdog", "Underdog"], ["prizepicks", "PrizePicks"]]))}
-      ${step(2, "Overs or Unders", "Which picks can go in. “Both” allows either side.", seg("side", [["More", "Overs only"], ["Less", "Unders only"], ["either", "Both"]]))}
-      ${step(3, "Slip sizes", "How many props in one entry (a 3-pick needs all 3 to hit). Choose one or more.", sizes)}
-      ${step(4, "How many slips", "How many slips to build for each size you chose.", seg("count", [[1, "1"], [2, "2"], [3, "3"], [5, "5"], [8, "8"]]))}
-      ${step(5, "Stat", "Kills, headshots, or both.", seg("stat", [["kills", "Kills"], ["hs", "Headshots"], ["both", "Both"]]))}
-      ${step(6, "Maps", "Which maps the line covers.", seg("scope", [["12", "Maps 1–2"], ["1", "Map 1"], ["123", "Maps 1–3"], ["all", "Any"]]))}
-      ${step(7, "Fill first", "If picks run short, which slips get them first.", seg("fill", [["large", "Bigger slips"], ["small", "Smaller slips"]]))}
-      ${step(8, "Repeats", "When needed: fresh picks first – a player or match is used again only to reach your count. Never: no repeats, so you may get fewer slips.", seg("repeats", [["as_needed", "When needed"], ["none", "Never"]]))}
+  // 2026-10-18 release: the essentials up front, the rest under "More settings"; the board's filters are used only when
+  // the member presses "Use board filters" (never mixed in silently)
+  const bf = `${bookName(["underdog", "prizepicks"].includes(bbook) ? bbook : c.book)} · ${bside === "More" ? "Overs" : bside === "Less" ? "Unders" : "Overs and Unders"} · ${bprop === "hs" ? "headshots" : bprop === "both" ? "kills and headshots" : "kills"} · ${{"12": "Maps 1–2", "1": "Map 1", "123": "Maps 1–3"}[bscope] || "Maps 1–2"}`;
+  const field = (title, ctl) => `<div class="sf"><span class="sl">${title}</span>${ctl}</div>`;
+  $("#studio").innerHTML = `<div class="small muted">Builds ready-to-check slips from today's graded picks. Choose the essentials, press <b>Build</b>, then <b>Verify &amp; copy</b> the slip you like.</div>
+    <div class="studio-ess">
+      ${field("Platform", seg("book", [["underdog", "Underdog"], ["prizepicks", "PrizePicks"]]))}
+      ${field("Overs or Unders", seg("side", [["More", "Overs only"], ["Less", "Unders only"], ["either", "Both"]]))}
+      ${field("Slip sizes", sizes)}
     </div>
+    <div class="studio-boardf"><button type="button" class="chipbtn" id="st-usebf">Use board filters</button> <span class="small muted">${esc(bf)}</span></div>
+    <details class="studio-adv"><summary>More settings – how many, stat, maps, fill order, repeats</summary><div class="studio-steps">
+      ${step(1, "How many slips", "How many slips to build for each size you chose.", seg("count", [[1, "1"], [2, "2"], [3, "3"], [5, "5"], [8, "8"]]))}
+      ${step(2, "Stat", "Kills, headshots, or both.", seg("stat", [["kills", "Kills"], ["hs", "Headshots"], ["both", "Both"]]))}
+      ${step(3, "Maps", "Which maps the line covers.", seg("scope", [["12", "Maps 1–2"], ["1", "Map 1"], ["123", "Maps 1–3"], ["all", "Any"]]))}
+      ${step(4, "Fill first", "If picks run short, which slips get them first.", seg("fill", [["large", "Bigger slips"], ["small", "Smaller slips"]]))}
+      ${step(5, "Repeats", "When needed: fresh picks first – a player or match is used again only to reach your count. Never: no player, prop or match repeats anywhere in the batch, so you may get fewer slips.", seg("repeats", [["as_needed", "When needed"], ["none", "Never"]]))}
+    </div></details>
     <div class="studio-sum" id="st-sum" aria-live="polite"></div>
     <div class="studio-cap" id="st-capnow" aria-live="polite"></div>
     <div class="studio-actions"><button type="button" class="go" id="st-build">Build</button>
@@ -2178,12 +2356,16 @@ function studioRender() {
   const norep = (mu.player || 0) <= 1 && (mu.match || 0) <= 1 && (mu.prop || 0) <= 1;
   const exp = `<div class="studio-exp"><b>Your batch so far:</b> ${e.slips || 0} slip${e.slips === 1 ? "" : "s"} · ${e.distinct_players || 0} player${e.distinct_players === 1 ? "" : "s"} · ${e.distinct_matches || 0} match${e.distinct_matches === 1 ? "" : "es"}
       · ${norep ? `<span style="color:var(--good)">no repeats</span>` : `most uses: player ${mu.player || 0}, match ${mu.match || 0}`}${e.overlap === "limited" ? ` (cap ${e.caps.player})` : ""}
+      ${norep ? "" : `<div class="studio-repeats">${rep("Repeated players", e.repeated_players)}${rep("Repeated matches", e.repeated_matches)}</div>`}
       <details class="small muted" style="margin-top:4px"><summary>Details</summary>started ${esc(shortWhen(b.created_at).split(" · ")[0])} · ${b.builds} build${b.builds === 1 ? "" : "s"} · ${e.legs || 0} picks${e.mixed ? " · mixed overlap settings across builds" : ""}${b.superseded ? ` · ${b.superseded} replaced / changed slip${b.superseded === 1 ? "" : "s"} no longer counted` : ""}
-      ${rep("Repeated players", e.repeated_players)}${rep("Repeated matches", e.repeated_matches)}
       ${(e.rules || []).length ? `<ul>${e.rules.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</details></div>`;
-  const bySize = [4, 3, 2].map(n => ((b.slips || {})[n] || []).length ? `<div class="studio-sz">${sizeWord(n)} slips</div>` + b.slips[n].map(studioSlip).join("") : "").join("");
+  const active = n => ((b.slips || {})[n] || []).filter(s => !s.legs.some(l => Date.parse(l.start) <= Date.now()));
+  const lockedN = [4, 3, 2].reduce((a, n) => a + ((b.slips || {})[n] || []).length - active(n).length, 0);
+  const bySize = [4, 3, 2].map(n => active(n).length ? `<div class="studio-sz">${sizeWord(n)} slips</div>` + active(n).map(studioSlip).join("") : "").join("")
+    + (lockedN ? `<div class="small muted" style="margin-top:8px">${lockedN} slip${lockedN === 1 ? " has" : "s have"} started – see History below.</div>` : "");
   const msg = short || elig || excl ? `<div class="studio-exp" style="border-color:#f5c54240"><b>${slips.length ? "Couldn't fill every size" : "No slips from this build"}</b>${short}${elig}${excl}</div>` : "";
   $("#st-out").innerHTML = msg + exp + (slips.length ? bySize : msg ? "" : `<div class="small muted">No slips yet – choose your settings and press Build.</div>`)
+    + `<div class="small muted" style="margin-top:6px">Each slip's chance is the model's estimate, not a measured hit rate.</div>`
     + `<details class="small muted" style="margin-top:8px"><summary>How the studio works</summary>
       ${(b.settings || studioCfg()).fill === "small" ? "Smaller slips are planned first (your Fill first choice), so 4-picks only get the picks that are left." : "Slip sizes are planned largest first, so 2-pick suggestions can't use up the picks a 4-pick needs."} Each slip takes the strongest eligible picks the batch rules allow:
       one pick per match, player and team in a slip, and – across the whole batch, every Build until you start a new batch – fresh players, props and matches first; with Repeats “When needed” the least-used picks are used again only to reach your count (never the same slip twice, never both sides of one player's stat). "Verify & copy" re-checks every line on the platform and against the current grade first; any change means a rebuild, never an old chance on a new line.
@@ -2214,7 +2396,7 @@ async function studioBuild(newBatch, why, replace) {
     if (newBatch) { STUDIO.notes = {}; STUDIO.copied = {}; }
     STUDIO.last = d;
     const made = [4, 3, 2].map(n => [n, (d.slips[n] || []).length]).filter(x => x[1]);
-    await studioLoad();
+    await studioLoad(); loadSlipHistory();
     $("#st-status").textContent = (made.length ? `Built ${made.map(([n, k]) => `${k} × ${sizeWord(n)}`).join(", ")}` : "No new slips")
       + (d.replaced ? " to replace the changed slip" : "")
       + ` from ${d.board.graded_rows} graded ${bookName(d.settings.book)} lines · ${new Date().toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})}`;
@@ -2248,6 +2430,12 @@ $("#studio").addEventListener("click", e => {
     [...sb.parentElement.children].forEach(x => { const on = k === "sizes" ? c.sizes.includes(+x.dataset.v) : x.dataset.v === String(c[k]);
       x.classList.toggle("on", on); x.setAttribute("aria-pressed", String(on)); });
     return;
+  }
+  if (e.target.closest("#st-usebf")) {             // copies the board's filters into the studio, once, on request
+    const c = studioCfg();
+    if (["underdog", "prizepicks"].includes(bbook)) c.book = bbook;
+    c.side = bside === "both" ? "either" : bside; c.stat = bprop; c.scope = bscope;
+    studioSave(c); studioForm(); $("#st-status").textContent = "Board filters applied."; return;
   }
   if (e.target.closest("#st-build")) return studioBuild(false);
   if (e.target.closest("#st-new")) return studioBuild(true);
@@ -2772,11 +2960,14 @@ function render(d) {
   if (flags.length) h += `<section class="card full"><h2>Notes</h2><ul class="flags">${flags.map(f => `<li>${esc(f)}</li>`).join("")}</ul></section>`;
   h += `<div class="small muted foot">Data: BO3.gg${oddsFooter(d)} · FACEIT${d.hltv?.found || d.hltv_context?.found ? " · HLTV" : ""}${d.csapi?.found ? " · CS API" : ""}${d.next_match?.source === "pandascore" ? " · PandaScore" : ""}${d.next_match?.source === "hltv" ? " · schedule from HLTV" : ""}${schedFooter(d)}${d.liquipedia ? ` · team from <a href="${esc(d.liquipedia.url)}" target="_blank" rel="noopener">Liquipedia</a> (CC-BY-SA 3.0)` : ""} · Not financial advice</div>`;
   const out = $("#out"); out.innerHTML = h;
+  // 2026-10-18 release: the headline card, then Overview / History / Match / Markets tabs (cardTabs); the older two-column
+  // layout stays for a card without a headline section
+  matchCompareSlot(d);
+  if (cardTabs(out, d)) { try { if (!$("#cardpop").hidden) popActions(); } catch {} return; }
   const kids = [...out.children], cols = document.createElement("div"), main = document.createElement("div"), side = document.createElement("div");
   cols.className = "cols"; cols.append(main, side);
   kids.slice(1).forEach(k => { if (!k.classList.contains("full") && !k.classList.contains("foot")) (k.classList.contains("sc") ? side : main).appendChild(k); });
   out.insertBefore(cols, kids[0].nextSibling);
-  matchCompareSlot(d);
   foldCard();
 }
 // phones (2026-10-11 audit: a card was 11 screens tall): every section below the headline and "At a glance" folds to its
@@ -2929,12 +3120,14 @@ function otStartNotice(rows) {
   return `<div class="ot-match-warning" role="note"><b>Platforms list different start times.</b> ${times.map(esc).join(' · ')}. Each platform locks its own line at its own listed start.</div>`;
 }
 function otBoardSummary(rows) {
-  const matches = new Set(rows.map(matchKey)).size;
-  const players = new Set(rows.map(r => OTView.playerKey(r))).size;
+  // offers = rows (each platform's line); markets = player x match x stat x maps (two platforms' lines on one market are
+  // two offers but one outcome - never counted as independent picks)
+  const markets = new Set(rows.map(r => [OTView.playerKey(r), matchKey(r), r.prop, r.scope || "12"].join("|"))).size;
+  const matches = new Set(rows.map(matchKey)).size, players = new Set(rows.map(r => OTView.playerKey(r))).size;
   return `<section class="ot-summary" aria-label="Filtered board overview">
-    <div class="ot-metric"><span>Matching lines</span><strong>${rows.length}</strong><small>current filters</small></div>
-    <div class="ot-metric"><span>Players</span><strong>${players}</strong><small>across these lines</small></div>
-    <div class="ot-metric"><span>Match groups</span><strong>${matches}</strong><small>shared exposure matters</small></div>
+    <div class="ot-metric"><span>Offers</span><strong>${rows.length}</strong><small>platform lines</small></div>
+    <div class="ot-metric"><span>Markets</span><strong>${markets}</strong><small>player · stat · maps</small></div>
+    <div class="ot-metric"><span>Players</span><strong>${players}</strong><small>in ${matches} match${matches === 1 ? "" : "es"}</small></div>
   </section>`;
 }
 function otOpenDesk(key, opener) {
@@ -2983,23 +3176,217 @@ $('#ot-match-desk').addEventListener('click',e=>{
 });
 $('#ot-match-desk').addEventListener('cancel',e=>{e.preventDefault();otCloseDesk();});
 
+// ---------- player detail (2026-10-18 release): the headline card stays on top; everything below is grouped into
+// Overview / History / Match / Markets - the player's own results come before the ten-player match table. Sections are
+// only moved into their tab, never recomputed.
+const CARD_TABS = [["overview", "Overview"], ["history", "History"], ["match", "Match"], ["markets", "Markets"]];
+function cardTab(title) {
+  const t = String(title || "").trim();
+  if (/^(Last |Head-to-head|Stats|HLTV|FACEIT|Second source)/.test(t)) return "history";
+  if (/^Projection comparison/.test(t)) return "markets";
+  if (/^(Match|Role|Checks|Notes)/.test(t)) return "match";
+  return "overview";
+}
+// the model's distribution for this total (server: dist_view - shown only when it reproduces the grade's own chances)
+function distChart(d) {
+  const v = d.dist_view, g = d.grade || {};
+  if (!v || !Array.isArray(v.pmf) || v.pmf.length < 3) return "";
+  const W = 560, H = 160, pad = 18, n = v.pmf.length, k0 = v.pmf[0][0], maxp = Math.max(...v.pmf.map(x => x[1]));
+  const bw = (W - 2 * pad) / n, base = H - 24, y = p => base - (p / maxp) * (base - 22);
+  const xOf = k => pad + (k - k0) * bw + bw / 2;
+  const bars = v.pmf.map(([k, p], i) => {
+    const cls = k > v.line ? "o" : k < v.line ? "u" : "push", inside = k >= v.lo && k <= v.hi;
+    return `<rect class="db ${cls}${inside ? "" : " out"}" x="${(pad + i * bw + 0.6).toFixed(1)}" y="${y(p).toFixed(1)}" width="${Math.max(1, bw - 1.2).toFixed(1)}" height="${(base - y(p)).toFixed(1)}"><title>${k}: ${(p * 100).toFixed(1)}%</title></rect>`; }).join("");
+  const lx = xOf(v.line).toFixed(1), mx = xOf(v.mean).toFixed(1);
+  const step = n > 30 ? 5 : n > 14 ? 2 : 1;
+  const ticks = v.pmf.filter(([k]) => k % step === 0).map(([k]) => `<text x="${xOf(k).toFixed(1)}" y="${H - 8}" class="dt">${k}</text>`).join("");
+  const unit = g.prop === "hs" ? "headshots" : "kills", side = (d.verdict || {}).side;
+  const label = `Model distribution of ${unit}: mean ${v.mean}, 8 in 10 between ${v.lo} and ${v.hi}; line ${v.line}: Over ${pct(v.over)}, Under ${pct(v.under)}${v.push ? `, push ${pct(v.push)}` : ""}`;
+  return `<section class="card distcard"><h2>Model distribution · ${unit}${mapsWord(g.scope) || " (Maps 1–2)"}</h2>
+    <svg class="dist" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}">${bars}
+      <line class="dm" x1="${mx}" x2="${mx}" y1="16" y2="${base}"/><line class="dl" x1="${lx}" x2="${lx}" y1="10" y2="${base}"/>
+      <text class="dlt" x="${lx}" y="9">line ${v.line}</text>${ticks}</svg>
+    <div class="distkey small"><span><i class="k-o"></i>Over (above the line) ${pct(v.over)}</span><span><i class="k-u"></i>Under ${pct(v.under)}</span>${v.push ? `<span><i class="k-p"></i>Push at ${v.line} ${pct(v.push)}</span>` : ""}<span><i class="k-m"></i>Mean ${v.mean} · median ${v.median}</span></div>
+    <div class="small muted">8 in 10 of the model's outcomes fall between ${v.lo} and ${v.hi} (faded bars are outside that range). ${esc(v.note)}${g.prop === "kills" ? "; the printed kills chance is capped at 78%" : ""}${side && v.push ? "; the printed chance leaves pushes out" : ""}.</div></section>`;
+}
+function cardTabs(out, d) {
+  const kids = [...out.children], hero = kids.find(x => x.classList.contains("herocard"));
+  if (!hero) return false;
+  const panes = Object.fromEntries(CARD_TABS.map(([k]) => [k, []]));
+  for (const el of kids) { if (el === hero) continue; const h2 = el.querySelector("h2"); panes[cardTab(h2 && h2.textContent)].push(el); }
+  const dc = distChart(d);
+  let want = store.get("cs2s_cardtab", "overview");
+  if (!panes[want] || (!panes[want].length && !(want === "overview" && dc))) want = "overview";
+  const bar = document.createElement("div"); bar.className = "cardtabs"; bar.setAttribute("role", "tablist"); bar.setAttribute("aria-label", "Player detail");
+  bar.innerHTML = CARD_TABS.map(([k, l]) => `<button type="button" role="tab" id="ctab-${k}" data-ctab="${k}" aria-controls="cpane-${k}" aria-selected="${k === want}" tabindex="${k === want ? 0 : -1}">${l}</button>`).join("");
+  hero.after(bar);
+  let prev = bar;
+  for (const [k] of CARD_TABS) {
+    const pane = document.createElement("div");
+    pane.className = "cardpane"; pane.id = "cpane-" + k; pane.setAttribute("role", "tabpanel"); pane.setAttribute("aria-labelledby", "ctab-" + k); pane.hidden = k !== want;
+    if (k === "overview" && dc) pane.insertAdjacentHTML("beforeend", dc);
+    panes[k].forEach(el => pane.appendChild(el));
+    if (!pane.children.length) pane.innerHTML = `<div class="small muted">Nothing more for this line.</div>`;
+    prev.after(pane); prev = pane;
+  }
+  return true;
+}
+function cardTabGo(k, focus) {
+  const bar = document.querySelector("#out .cardtabs"); if (!bar) return;
+  bar.querySelectorAll("[data-ctab]").forEach(b => { const on = b.dataset.ctab === k; b.setAttribute("aria-selected", String(on)); b.tabIndex = on ? 0 : -1; if (on && focus) b.focus(); });
+  document.querySelectorAll("#out .cardpane").forEach(p => { p.hidden = p.id !== "cpane-" + k; });
+  store.set("cs2s_cardtab", k);
+}
+document.addEventListener("click", e => { const b = e.target.closest && e.target.closest("#out [data-ctab]"); if (b) cardTabGo(b.dataset.ctab); });
+document.addEventListener("keydown", e => {
+  const b = e.target.closest && e.target.closest("#out [data-ctab]"); if (!b || !["ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key)) return;
+  e.preventDefault();
+  const ks = CARD_TABS.map(x => x[0]), i = ks.indexOf(b.dataset.ctab);
+  cardTabGo(e.key === "Home" ? ks[0] : e.key === "End" ? ks[ks.length - 1] : ks[(i + (e.key === "ArrowRight" ? 1 : ks.length - 1)) % ks.length], true);
+});
+// the popup's action bar: always in reach on a phone (add to slip / copy / close), enabled exactly when the card's own
+// buttons are - an unavailable side or a no-match line stays unplayable here too
+function popActions() {
+  const box = $("#popbody"); if (!box) return;
+  let bar = $("#popact");
+  if (!bar) { bar = document.createElement("div"); bar.id = "popact"; bar.className = "popact"; }
+  box.appendChild(bar);
+  const add = document.querySelector("#out .herocard [data-act='slip']"), cp = document.querySelector("#out .herocard [data-act='copy']");
+  const off = document.querySelector("#out .herocard .actions span[title] button[disabled]");
+  const why = !add && off ? (off.closest("span[title]") || {}).title || "" : "";
+  bar.innerHTML = `<button type="button" class="go" data-act="slip"${add ? "" : " disabled"}>+ Add to slip</button>`
+    + `<button type="button" class="chipbtn" data-act="copy"${cp ? "" : " disabled"}>Copy pick</button>`
+    + `<button type="button" class="chipbtn" data-popclose="1">Close</button>${why ? `<span class="small muted popwhy">${esc(why)}</span>` : ""}`;
+}
+// tooltips that also work on tap and keyboard focus (title-only hints never show on a phone)
+document.addEventListener("focusin", e => { const t = e.target.closest && e.target.closest("[data-tip]"); if (t && t.dataset.tip) toast(t.dataset.tip); });
+document.addEventListener("click", e => {
+  const t = e.target.closest && e.target.closest("[data-tip]");
+  if (t && t.dataset.tip && matchMedia("(pointer: coarse)").matches) { e.stopPropagation(); e.preventDefault(); toast(t.dataset.tip); }
+}, true);
+// ---------- Slips page (2026-10-18 release): the studio, then History - slips that have started and earlier batches,
+// each leg with its result from the pick log once settled. Records are shown as stored; nothing is deleted.
+function slipsOpen() {
+  studioShow();
+  if (!STUDIO.off && !STUDIO.open) studioToggle(true);
+  loadSlipHistory();
+}
+const HIST = {data: null, err: null};
+async function loadSlipHistory() {
+  if (STUDIO.off || !$("#sliphist")) { if ($("#sliphist")) $("#sliphist").innerHTML = ""; return; }
+  try {
+    const {status, d} = await studioCall("GET", "/api/slip_studio/history");
+    if (status !== 200) throw new Error(d.error || "HTTP " + status);
+    HIST.data = d; HIST.err = null;
+  } catch (e) { HIST.err = e.message; }
+  drawSlipHistory();
+}
+const LEG_RES = {hit: ["good", "✓ hit"], miss: ["bad", "✗ missed"], push: ["", "push"], void: ["", "void"]};
+const SLIP_OUT = {won: ["good", "Won – every leg hit"], lost: ["bad", "Lost"], reduced: ["warn", "No leg lost – a push or void; the platform's rules decide the entry"],
+  "in play": ["", "In play"], "not started": ["", "Not started"]};
+function drawSlipHistory() {
+  const el = $("#sliphist"); if (!el) return;
+  const d = HIST.data; if (!d) { el.innerHTML = HIST.err ? `<div class="small muted">History couldn't load right now.</div>` : ""; return; }
+  const cur = STUDIO.batch && STUDIO.batch.batch_id;
+  const groups = (d.batches || []).map(b => ({b, slips: (b.slips || []).filter(s => b.batch_id !== cur || s.started)})).filter(g => g.slips.length);
+  if (!groups.length) { el.innerHTML = `<h3 class="res-h">History</h3><div class="small muted">No started or earlier slips yet.</div>`; return; }
+  const leg = (l, r) => `<div class="lg"><span><b>${esc(l.nick || l.player)}</b> ${l.side === "More" ? "Over" : "Under"} ${esc(l.line)} ${propWord(l.prop)}${mapsWord(l.scope)}</span>
+    <span class="m">${r ? `<span class="pill ${LEG_RES[r][0]}">${LEG_RES[r][1]}</span>` : `<span class="muted">waiting for the result</span>`} · ${esc(l.team || "")} vs ${esc(l.opponent || "")}</span></div>`;
+  const slip = s => { const o = SLIP_OUT[s.outcome] || ["", s.outcome];
+    return `<div class="aslip hist"><div class="small"><span class="pill ${o[0]}">${esc(o[1])}</span> <span class="muted">${bookName(s.book)} · ${s.n}-pick · slip ${esc(String(s.slip_id || "").split("/").slice(1).join("/"))}${s.status && s.status !== "live" ? " · " + esc(s.status) : ""}</span></div>
+      ${(s.legs || []).map((l, i) => leg(l, (s.leg_results || [])[i])).join("")}</div>`; };
+  el.innerHTML = `<h3 class="res-h">History</h3>` + groups.map((g, i) => `<details class="histbatch" ${i === 0 ? "open" : ""}><summary>${g.b.batch_id === cur ? "Current batch – started slips" : "Batch of " + esc(shortWhen(g.b.created_at).split(" · ")[0])} · ${g.slips.length} slip${g.slips.length === 1 ? "" : "s"}</summary>
+    ${g.slips.map(slip).join("")}</details>`).join("")
+    + `<div class="small muted" style="margin-top:6px">A leg settles from official stats, as on the board. No payouts are assumed.</div>`;
+}
+// Slate preview (2026-10-18 release): every typed line as it will be graded - player, line, stat, maps, market type -
+// matched against the lines the board already has (no extra requests). A line no platform posts is a typed
+// (hypothetical) line; a maps choice that wasn't typed is shown as the default it will use, never silently assumed.
+function slateOffers(x) {
+  const nk = String(x.player || "").toLowerCase();
+  return [...BK.underdog.rows, ...BK.prizepicks.rows].filter(r => String(r.nick || r.player || "").toLowerCase() === nk && r.prop === x.prop);
+}
+function slatePosted(x) {
+  const offs = slateOffers(x), same = offs.filter(r => (r.scope || "12") === x.sc && +r.line === +x.line && mktType(r) === x.lt);
+  const matches = new Set(offs.map(r => matchKey(r)));
+  if (same.length) return {kind: "posted", text: same.map(r => `${bookName(r.book || "underdog")} ${r.line}`).join(" · ") + ` · vs ${r0(same).opp}${r0(same).when ? " · " + r0(same).when : ""}`};
+  const scopes = [...new Set(offs.map(r => r.scope || "12"))];
+  if (offs.length && !scopes.includes(x.sc)) return {kind: "typed", text: `Posted only on ${scopes.map(s => ({"12": "Maps 1–2", "1": "Map 1", "123": "Maps 1–3"})[s]).join(", ")} – add bo1 or m13 to match it`};
+  if (offs.length) return {kind: "typed", text: `Typed line – posted at ${[...new Set(offs.filter(r => (r.scope || "12") === x.sc).map(r => r.line))].join(", ")}${matches.size > 1 ? ` · ${matches.size} matches posted` : ""}`};
+  return {kind: "typed", text: "Typed line – no platform posts it right now"};
+}
+const r0 = rs => ({opp: esc(rs[0].opp_name || rs[0].opponent || ""), when: shortWhen(rs[0].start).split(" · ")[0]});
+function slatePreview() {
+  const el = $("#slateprev"); if (!el) return;
+  const items = parseSlate($("#slatetxt").value);
+  if (!items.length) { el.innerHTML = ""; return; }
+  const loaded = BK.underdog.loaded || BK.prizepicks.loaded;
+  el.innerHTML = `<div class="small muted" style="margin:8px 0 4px">What will be graded${loaded ? "" : " (loading the board's lines to match them…)"}:</div><div class="scroll"><table class="slateprev"><thead><tr><th>Player</th><th>Line</th><th>Stat</th><th>Maps</th><th>Type</th><th>Posted?</th></tr></thead><tbody>`
+    + items.map(x => { if (x.bad) return `<tr><td colspan="6" class="muted">${esc(x.bad)} – couldn't read this line (use: player line K/HS)</td></tr>`;
+      const p = loaded ? slatePosted(x) : null;
+      return `<tr><td>${esc(x.player)}</td><td>${esc(x.line)}</td><td>${x.prop === "hs" ? "Headshots" : "Kills"}${x.propSet ? "" : ' <span class="muted small">(default)</span>'}</td>
+        <td>${({"12": "Maps 1–2", "1": "Map 1", "123": "Maps 1–3"})[x.sc]}${x.scSet ? "" : ' <span class="muted small">(not typed – default)</span>'}</td><td>${x.lt === "standard" ? "Standard" : x.lt[0].toUpperCase() + x.lt.slice(1)}</td>
+        <td>${p ? `<span class="pill ${p.kind === "posted" ? "good" : ""}">${p.kind === "posted" ? "Posted" : "Typed"}</span> <span class="small muted">${p.text}</span>` : "–"}</td></tr>`; }).join("")
+    + `</tbody></table></div>`;
+}
+let slatePrevT = null;
+$("#slatetxt").addEventListener("input", () => { clearTimeout(slatePrevT); slatePrevT = setTimeout(slatePreview, 250); });
+function slateBoardLines() {      // the board's own cached lines (shared server copy; no provider request)
+  Promise.all(["underdog", "prizepicks"].filter(b => !BK[b].loaded).map(b => fetchBook(b).catch(() => {}))).then(() => { assignMatchKeys([...BK.underdog.rows, ...BK.prizepicks.rows]); slatePreview(); });
+}
+// ---------- Results (2026-10-18 release): the stored scorecard - grades saved at least 30 minutes before each match,
+// against what happened. Wins and losses with pushes counted separately; the printed chance next to how often the picks
+// won. No returns: a single prop has no payout of its own.
+const RES = {data: null, at: 0, err: null};
+async function loadResults(force) {
+  if (!$("#resultsout")) return;
+  if (!force && RES.data && Date.now() - RES.at < 300000) return drawResults();
+  try {
+    const r = await fetch("/api/results"); const d = await r.json().catch(() => ({}));
+    if (r.status === 401 && d.error === "members_only") return showGate(d);
+    if (!r.ok) throw new Error(d.error || "HTTP " + r.status);
+    Object.assign(RES, {data: d, at: Date.now(), err: null});
+  } catch (e) { RES.err = e.message; }
+  drawResults();
+}
+function drawResults() {
+  const el = $("#resultsout"), d = RES.data; if (!el) return;
+  if (!d) { el.innerHTML = `<div class="muted">${RES.err ? "Results couldn't load right now – try again in a minute." : "Loading results…"}</div>`; return; }
+  const P = d.picks || {}, L = d.lines || {}, pc = x => x == null ? "–" : (x * 100).toFixed(1) + "%";
+  if (!P.picks) { el.innerHTML = `<div class="muted">No settled picks yet.</div>`; return; }
+  const tbl = (rows, key, lab) => { const rs = (rows || []).filter(r => r.picks); return rs.length ? `<div class="scroll"><table class="restab"><thead><tr><th>${lab}</th><th class="num">Picks</th><th class="num">Matches</th><th class="num">Won–lost</th><th class="num">Printed chance</th><th class="num">Won</th></tr></thead><tbody>`
+    + rs.map(r => `<tr><td>${esc(key(r))}</td><td class="num">${r.picks}</td><td class="num">${r.matches}</td><td class="num">${r.wins}–${r.losses}</td><td class="num">${pc(r.printed)}</td><td class="num">${pc(r.observed)}</td></tr>`).join("")
+    + `</tbody></table></div>` : ""; };
+  const ci = P.observed_ci ? ` (95% range ${pc(P.observed_ci[0])}–${pc(P.observed_ci[1])}, resampling whole matches)` : "";
+  el.innerHTML = `<div class="ot-summary res-head">
+      <div class="ot-metric"><span>Picks</span><strong>${P.picks}</strong><small>in ${P.matches} matches</small></div>
+      <div class="ot-metric"><span>Won–lost</span><strong>${P.wins}–${P.losses}</strong><small>${L.pushes || 0} pushes not counted</small></div>
+      <div class="ot-metric"><span>Printed · won</span><strong>${pc(P.printed)} · ${pc(P.observed)}</strong><small>average chance shown · how often they won</small></div></div>
+    <p class="small">${esc(d.rule)}: won ${pc(P.observed)}${ci}, against an average printed chance of ${pc(P.printed)}.</p>
+    <h3 class="res-h">By stat and maps</h3>${tbl(d.by_stat, r => r.stat + " · " + r.scope, "Stat")}
+    <h3 class="res-h">By printed chance</h3>${tbl(d.by_chance, r => r.band, "Chance")}
+    <h3 class="res-h">By side</h3>${tbl(d.by_side, r => r.side, "Side")}
+    <details class="res-more"><summary>By model version</summary>${tbl(d.by_version, r => r.version + " · " + r.first + (r.last !== r.first ? " to " + r.last : ""), "Version")}</details>
+    <p class="small muted">${esc(d.definition)} ${L.settled} settled lines in ${L.matches} matches${L.first ? `, ${L.first} to ${L.last}` : ""}. ${esc(d.note)}${d.as_of ? ` Scorecard of ${esc(clockTxt(d.as_of))}.` : ""}</p>`;
+}
 </script>
 <button type="button" class="scout-top" id="scout-top" aria-label="Back to top" hidden>↑</button>
 <script id="scout-presentation">
 // Presentation controls only; routes delegate to the existing application controls.
 (() => {
  const q = s => document.querySelector(s);
- const modeCopy = {one:['Know the player. Read the match.','Projections, player history and the exact line you are researching.'],board:['Your next pick starts here.','Compare the board. Open a match. Understand what supports each grade.'],slate:['Your slate, together.','Research multiple lines and review their grades in one place.']};
+ const modeCopy = {one:['Know the player. Read the match.','Projections, player history and the exact line you are researching.'],board:['Every graded line.','Each platform’s line, our projection, the chance and the stake – one row per offer.'],matches:['Match by match.','Every graded line grouped by match. Open a match to research all its players.'],moneylines:['Series winners.','Market prices from Thunderpick, Polymarket and Kalshi, with how old each one is.'],slips:['Your slips.','Build suggested slips and check every line before you copy.'],results:['How the picks did.','Grades saved before each match, against what happened.'],slate:['Your slate, together.','Research multiple lines and review their grades in one place.']};
  const reduced=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
  const scrollToEl=el=>el?.scrollIntoView({behavior:reduced()?'instant':'smooth',block:'start'});
  function syncMode(){
   const m=q('#mode button.on')?.dataset.v || 'one';
   for(const k of Object.keys(modeCopy))document.body.classList.toggle('mode-'+k,m===k);
-  q('#workspace-title').textContent=modeCopy[m][0];q('#workspace-desc').textContent=modeCopy[m][1];
+  const mc=modeCopy[m]||modeCopy.one;
+  q('#workspace-title').textContent=mc[0];q('#workspace-desc').textContent=mc[1];
   document.querySelectorAll('[data-scout-route]').forEach(b=>{b.classList.toggle('on',b.dataset.scoutRoute===m);if(b.dataset.scoutRoute===m)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
   document.querySelectorAll('#mode button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===m)));
  }
- document.querySelectorAll('[data-scout-route]').forEach(b=>b.addEventListener('click',e=>{if(e.ctrlKey||e.metaKey||e.shiftKey||e.button)return;e.preventDefault();q('#mode button[data-v="'+b.dataset.scoutRoute+'"]').click();}));
+ document.querySelectorAll('[data-scout-route]').forEach(b=>b.addEventListener('click',e=>{if(e.ctrlKey||e.metaKey||e.shiftKey||e.button)return;e.preventDefault();q('#mode button[data-v="'+b.dataset.scoutRoute+'"]')?.click();}));
  new MutationObserver(syncMode).observe(q('#mode'),{subtree:true,attributes:true,attributeFilter:['class']});syncMode();
  function density(compact){document.body.classList.toggle('scout-compact',compact);q('#scout-density').setAttribute('aria-pressed',String(compact));q('#scout-density').textContent=compact?'↕ Comfortable view':'↕ Compact view';}
  try{density(localStorage.getItem('scout-ui-density')==='compact');}catch{}

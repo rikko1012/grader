@@ -844,8 +844,29 @@ def ops_checks(now=None):
     return res
 
 
+def studio_history_payload(batches, now=None):
+    """Leg results and slip outcomes for member_batches() (pure apart from the pick-log read)."""
+    now = now or datetime.now(timezone.utc)
+    legs = [l for b in batches for ss in (b.get("slips") or {}).values() for s_ in ss for l in s_.get("legs") or []]
+    res = slip_batches.leg_result_from_picks(picklog.rows_for_matches({l.get("match_slug") for l in legs}))
+    out = []
+    for b in batches:
+        slips = []
+        for ss in (b.get("slips") or {}).values():
+            for s_ in ss:
+                rs = [res(l) if l.get("prop") != "moneyline" else None for l in s_.get("legs") or []]
+                started = any(_started(l.get("start"), now) for l in s_.get("legs") or [])
+                outcome = ("lost" if "miss" in rs else "won" if rs and all(r == "hit" for r in rs)
+                           else "reduced" if rs and all(r in ("hit", "push", "void") for r in rs) else "in play" if started else "not started")
+                slips.append(dict(s_, leg_results=rs, started=started, outcome=outcome))
+        out.append({"batch_id": b["batch_id"], "created_at": b.get("created_at"), "closed_at": b.get("closed_at"),
+                    "builder_version": b.get("builder_version"), "slips": slips})
+    return {"at": now.isoformat(timespec="seconds"), "batches": out}
+
+
 def results_payload():
     """Member Results (results_view.member_results) from the learning cycle's stored P1 export."""
+    import learning
     import results_view
     con = learning.connect()
     try:
@@ -3165,19 +3186,21 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/auth/logout":
                 return self.redirect("/", [f"{whop_auth.COOKIE}=; Max-Age=0; Path=/"])
             if u.path in ("/api/search", "/api/grade", "/api/board", "/api/line_check", "/api/match_compare", "/api/moneylines",
-                          "/api/slip_studio/batch", "/api/slip_studio/capacity", "/api/results") and not self.allowed():
+                          "/api/slip_studio/batch", "/api/slip_studio/capacity", "/api/slip_studio/history", "/api/results") and not self.allowed():
                 sess = self.member()
                 return self.send(401, {"error": "members_only", "signed_in": bool(sess),
                                        "upgrade": whop_auth.upgrade_url()})
             if u.path == "/api/search":
                 return self.search(q.get("q", "").strip())
             if u.path.startswith("/api/") and u.path not in ("/api/board", "/api/moneylines", "/api/slip_studio/batch",
-                                                             "/api/slip_studio/capacity", "/api/results"):
+                                                             "/api/slip_studio/capacity", "/api/slip_studio/history", "/api/results"):
                 LAST_MEMBER[0] = time.time()      # research reads are cheap: they don't make the board worker step aside
             if u.path == "/api/moneylines":
                 return self.moneylines()
             if u.path == "/api/slip_studio/batch":
                 return self.studio_batch(q)
+            if u.path == "/api/slip_studio/history":
+                return self.studio_history()
             if u.path == "/api/slip_studio/capacity":
                 return self.studio_capacity(q)
             if u.path == "/api/match_compare":
@@ -3933,6 +3956,19 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(404, {"error": "unknown batch"})
         return self.send(200, dict(b, current=(b["batch_id"] == cur), settled_batches=settled_batches(),
                                    track_record=studio_track_record(), builder_version=slip_builder.VERSION))
+
+    def studio_history(self):
+        """GET /api/slip_studio/history: the member's open batch and recent earlier ones, each slip with its legs'
+        results from the pick log (hit / miss / push / void / waiting - the shadow builder's settlement rule) and the
+        slip's outcome: won (every leg hit), lost (any leg missed), reduced (no leg lost, a push or void - the platform's
+        rules decide the entry), live or waiting. Records are shown as stored; no payout is assumed."""
+        if not SLIP_STUDIO:
+            return self.send(404, {"error": "slip_studio_off"})
+        sid = self.studio_member()
+        if not sid:
+            return self.send(401, {"error": "members_only"})
+        import slip_builder
+        return self.send(200, studio_history_payload(slip_builder.member_batches(sid)))
 
     def studio_capacity(self, q):
         """GET /api/slip_studio/capacity?book=&side=&stat=&scope=[&market=]: eligible lines / matches and the most slips of each

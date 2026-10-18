@@ -1575,6 +1575,20 @@ def export():
     return rows
 
 
+def rows_for_matches(slugs):
+    """The pick-log rows of these exact match slugs (settlement fields only) - for settling a member's slip legs
+    (slip_batches.leg_result_from_picks) without exporting the whole log."""
+    slugs = sorted({s for s in slugs if s})[:200]
+    if not slugs:
+        return []
+    with _LOCK:
+        con = _db()
+        try:
+            return [dict(r) for r in con.execute(
+                f"SELECT player, prop, scope, match_slug, status, actual, result FROM picks WHERE match_slug IN ({','.join('?' * len(slugs))})", slugs)]
+        finally:
+            con.close()
+
 def export_forecasts(inputs=False, last=None):
     """The forecast history; inputs=True decodes each forecast's exact grader inputs (large)."""
     import zlib

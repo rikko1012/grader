@@ -92,9 +92,13 @@ def test_phone_layout_hooks():
               'id="scout-filters"', "Filters${n ? ` (${n} active)` : \"\"}", "add m13 for Maps 1–3 or bo1 for Map 1"):
         assert k in HTML
     assert 'id="scout-expand"' not in HTML and 'id="scout-collapse"' not in HTML
-    # one nav order everywhere: Single Prop, Prop Board, Slate
-    m = re.search(r'<div class="seg" id="mode">(.*?)</div>', HTML)
-    assert m and m.group(1).index('data-v="board"') < m.group(1).index('data-v="slate"')
+    # one nav order everywhere (2026-10-18 release): Board, Matches, Moneylines, Slips, Results, then the tools
+    m = re.search(r'<nav class="seg" id="mode"[^>]*>(.*?)</nav>', HTML)
+    order = [m.group(1).index(f'data-v="{v}"') for v in ("board", "matches", "moneylines", "slips", "results", "one", "slate")]
+    assert order == sorted(order)
+    rail = HTML[HTML.index('class="scout-rail"'):HTML.index('<div class="rail-bottom">')]
+    assert [rail.index(f'data-scout-route="{v}"') for v in ("board", "matches", "moneylines", "slips", "results", "one", "slate")] == \
+        sorted(rail.index(f'data-scout-route="{v}"') for v in ("board", "matches", "moneylines", "slips", "results", "one", "slate"))
 
 
 def test_no_unsure_badges_or_notes_on_the_member_page():
