@@ -1419,6 +1419,38 @@ def lol_center_admin(path, q):
     return {"error": "unknown LoL view"}
 
 
+_MEMPROF = {"base": None, "started": None}
+
+
+def memprof(action):
+    """Admin memory profiler (2026-10-18 out-of-memory hunt): action=start begins tracemalloc and takes a baseline;
+    report = the 30 code lines whose retained memory grew most since the baseline + object counts by type;
+    stop = ends tracing (its own overhead goes with it). Read-only for the app."""
+    import gc
+    import tracemalloc
+    from collections import Counter
+    if action == "start":
+        if not tracemalloc.is_tracing():
+            tracemalloc.start(8)
+        _MEMPROF.update(base=tracemalloc.take_snapshot(), started=time.time())
+        return {"tracing": True, "memory": _memory_report()}
+    if action == "stop":
+        tracemalloc.stop()
+        _MEMPROF.update(base=None, started=None)
+        return {"tracing": False}
+    out = {"memory": _memory_report(), "tracing": tracemalloc.is_tracing()}
+    if tracemalloc.is_tracing() and _MEMPROF["base"] is not None:
+        snap = tracemalloc.take_snapshot()
+        diff = snap.compare_to(_MEMPROF["base"], "traceback")
+        out["since_s"] = round(time.time() - _MEMPROF["started"])
+        out["traced_mb"] = round(tracemalloc.get_traced_memory()[0] / 1e6, 1)
+        out["growth"] = [{"mb": round(d.size_diff / 1e6, 2), "count": d.count_diff,
+                          "where": [f"{f.filename.rsplit('/', 1)[-1]}:{f.lineno}" for f in d.traceback][:8]}
+                         for d in diff[:30]]
+    out["objects"] = Counter(type(o).__name__ for o in gc.get_objects()).most_common(20)
+    return out
+
+
 def _memory_report():
     """The whole container as Render counts it (cgroup), this web process, the LoL worker, and the bounded caches."""
     import membudget
@@ -2971,6 +3003,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, _DIAG["data"])
             if u.path == "/admin/diagnostics" and self.authed(q.get("token")):
                 return self.send(200, (WEB / "diagnostics.html").read_bytes(), "text/html; charset=utf-8")
+            if u.path == "/admin/memprof.json" and self.authed(q.get("token")):
+                return self.send(200, memprof(q.get("action") or "report"))
             if u.path == "/admin/lol" and self.authed(q.get("token")):    # admin LoL board / match tables / cards (not released)
                 return self.send(200, (WEB / "lol_admin.html").read_bytes(), "text/html; charset=utf-8")
             if (u.path == "/admin/lol.json" or u.path.startswith("/admin/lol/")) and self.authed(q.get("token")):
