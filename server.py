@@ -746,6 +746,115 @@ def board_at_iso(book):
     except Exception:
         return None
 
+_OPS = {"at": 0.0, "out": None}
+OPS_TTL = 60
+
+
+def _age_s(t, now):
+    ts = comparison._ts(t) if not isinstance(t, (int, float)) else (datetime.fromtimestamp(t, timezone.utc) if t else None)
+    return round((now - ts).total_seconds()) if ts else None
+
+
+def _check(state, **kw):
+    return dict(kw, state=state)
+
+
+def ops_checks(now=None):
+    """Operational checks for /health (2026-10-18 release brief, section 5) - each reads the real input state, never a
+    provider request: platform feed ages and failures, odds sources' upstream ages (a cache read never counts as a new
+    quote), the HLTV database, the grading backlog, container memory and its growth, and settlement lag. Cached OPS_TTL s.
+    state: ok / warn / fail (the thresholds are listed with each value)."""
+    t = time.time()
+    if now is None and _OPS["out"] is not None and t - _OPS["at"] < OPS_TTL:
+        return _OPS["out"]
+    now = now or datetime.now(timezone.utc)
+    out = {}
+    try:
+        ub = underdog._BOARD
+        a = _age_s(ub.get("at"), now) if ub.get("at") else None
+        out["feed_underdog"] = _check("fail" if a is None or a > 1800 else "warn" if a > 600 or ub.get("error") else "ok",
+                                      age_s=a, warn_s=600, fail_s=1800, error=member_source_note(ub.get("error")), lines=len(ub.get("rows") or []))
+    except Exception as e:
+        out["feed_underdog"] = _check("fail", error=type(e).__name__)
+    try:
+        pb = prizepicks.board()
+        a = _age_s(pb.get("at"), now) if pb.get("at") else None
+        out["feed_prizepicks"] = _check("fail" if a is None or a > 1800 else "warn" if a > 600 or pb.get("state") not in ("ok", "empty") else "ok",
+                                        age_s=a, warn_s=600, fail_s=1800, feed_state=pb.get("state"), lines=len(pb.get("rows") or []))
+    except Exception as e:
+        out["feed_prizepicks"] = _check("fail", error=type(e).__name__)
+    try:                                   # upstream retrieval time of the quotes being served (not our cache read time)
+        import thunderpick
+        ps = thunderpick.public_state() or {}
+        a = _age_s(ps.get("retrieved_at"), now)
+        out["odds_thunderpick"] = _check("warn" if a is None or a > 3600 else "ok", upstream_age_s=a, warn_s=3600,
+                                         policy_limit_s=4500, state_label=ps.get("label"), last_success_at=ps.get("last_success_at"))
+    except Exception as e:
+        out["odds_thunderpick"] = _check("warn", error=type(e).__name__)
+    try:
+        import moneyline
+        for name, st in moneyline.status().items():
+            out[f"odds_{name}"] = _check("ok" if st.get("ok") else "warn" if (st.get("consecutive_failures") or 0) < 5 else "fail",
+                                         age_s=st.get("age_s"), consecutive_failures=st.get("consecutive_failures"))
+    except Exception as e:
+        out["odds_exchanges"] = _check("warn", error=type(e).__name__)
+    try:
+        hs = hltv.public_status()
+        rev = picklog.data_revision() or ""
+        md = re.search(r"max_date=(\d{4}-\d{2}-\d{2})", rev)
+        days = (now.date() - datetime.strptime(md.group(1), "%Y-%m-%d").date()).days if md else None
+        out["hltv_db"] = _check("fail" if hs.get("breaker_on") or not hs.get("configured") else "warn" if days is None or days > 2 else "ok",
+                                breaker_on=hs.get("breaker_on"), latest_match_day_age_d=days, warn_d=2)
+    except Exception as e:
+        out["hltv_db"] = _check("warn", error=type(e).__name__)
+    try:                                   # listed, not-started lines without a current grade, and the oldest grade shown
+        rows = [r for bk in ("underdog", "prizepicks") for r in ((prizepicks.board() if bk == "prizepicks" else underdog.board()).get("rows") or [])
+                if not _started(r.get("start"), now)]
+        graded = [BOARD.get(r["id"]) for r in rows if (BOARD.get(r["id"]) or {}).get("side")]
+        ages = [_age_s(g.get("graded_at"), now) for g in graded if g.get("graded_at")]
+        share = round(1 - len(graded) / len(rows), 3) if rows else 0.0
+        oldest = max([a for a in ages if a is not None], default=None)
+        out["grading_backlog"] = _check("warn" if share > 0.3 or (oldest or 0) > 2700 else "ok", listed=len(rows), graded=len(graded),
+                                        ungraded_share=share, warn_share=0.3, oldest_grade_age_s=oldest, warn_age_s=2700)
+    except Exception as e:
+        out["grading_backlog"] = _check("warn", error=type(e).__name__)
+    try:
+        import membudget
+        m = membudget.process_memory()
+        lim = m.get("container_limit_mb") or 0
+        hist = [h for h in list(membudget.HISTORY)[-60:] if h.get("anon") is not None]
+        growth = round((hist[-1]["anon"] - hist[0]["anon"]) * 60 / max(len(hist) - 1, 1), 1) if len(hist) >= 10 else None
+        anon_share = round(m["container_anon_mb"] / lim, 3) if lim and m.get("container_anon_mb") else None
+        kills = (m.get("container_events") or {}).get("oom_kill")
+        out["memory"] = _check("fail" if kills else "warn" if (anon_share or 0) > 0.8 or (growth or 0) > 150 else "ok",
+                               total_mb=m.get("container_mb"), anon_mb=m.get("container_anon_mb"), limit_mb=lim or None,
+                               anon_share=anon_share, warn_share=0.8, anon_growth_mb_per_h=growth, warn_growth=150,
+                               limit_hits=(m.get("container_events") or {}).get("max"), oom_kills=kills)
+    except Exception as e:
+        out["memory"] = _check("warn", error=type(e).__name__)
+    try:                                   # picks still open 8 h after their listed start (a BO3 is over well before)
+        out["settlement_lag"] = dict(_check("ok"), **picklog.settlement_lag(now))
+        out["settlement_lag"]["state"] = "warn" if out["settlement_lag"].get("open_after_8h") else "ok"
+    except Exception as e:
+        out["settlement_lag"] = _check("warn", error=type(e).__name__)
+    rank = {"ok": 0, "warn": 1, "fail": 2}
+    res = {"state": max((c.get("state", "warn") for c in out.values()), key=lambda x: rank.get(x, 1)), "at": now.isoformat(timespec="seconds"),
+           "checks": out}
+    _OPS.update(at=t, out=res)
+    return res
+
+
+def results_payload():
+    """Member Results (results_view.member_results) from the learning cycle's stored P1 export."""
+    import results_view
+    con = learning.connect()
+    try:
+        ex = learning._meta(con, "p1_units") or {}
+    finally:
+        con.close()
+    return results_view.member_results(ex)
+
+
 def board_payload(book="underdog"):
     """The graded board for one platform. book="prizepicks": PrizePicks' lines (prizepicks.py), each graded at its own
     line and market type; its feed state (ok / stale / failed / empty) travels with it. Default Underdog, unchanged."""
@@ -3025,7 +3134,7 @@ class Handler(BaseHTTPRequestHandler):
                                        "traffic": {"requests": STATS["requests"], "errors_5xx": STATS["errors_5xx"],
                                                    "avg_server_ms": round(STATS["ms_total"] / max(STATS["requests"], 1), 1),
                                                    "since": datetime.fromtimestamp(STATS["since"], timezone.utc).isoformat(timespec="seconds")},
-                                       "storage": dict(storage_cached(), **STORAGE)})
+                                       "storage": dict(storage_cached(), **STORAGE), "ops": ops_checks()})
             if u.path in ("/", "/index.html"):
                 return self.send(200, page(), "text/html; charset=utf-8")
             if u.path == "/lol" and lol_public():                       # the member LoL page (owner's release switch)
@@ -3056,14 +3165,14 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/auth/logout":
                 return self.redirect("/", [f"{whop_auth.COOKIE}=; Max-Age=0; Path=/"])
             if u.path in ("/api/search", "/api/grade", "/api/board", "/api/line_check", "/api/match_compare", "/api/moneylines",
-                          "/api/slip_studio/batch", "/api/slip_studio/capacity") and not self.allowed():
+                          "/api/slip_studio/batch", "/api/slip_studio/capacity", "/api/results") and not self.allowed():
                 sess = self.member()
                 return self.send(401, {"error": "members_only", "signed_in": bool(sess),
                                        "upgrade": whop_auth.upgrade_url()})
             if u.path == "/api/search":
                 return self.search(q.get("q", "").strip())
             if u.path.startswith("/api/") and u.path not in ("/api/board", "/api/moneylines", "/api/slip_studio/batch",
-                                                             "/api/slip_studio/capacity"):
+                                                             "/api/slip_studio/capacity", "/api/results"):
                 LAST_MEMBER[0] = time.time()      # research reads are cheap: they don't make the board worker step aside
             if u.path == "/api/moneylines":
                 return self.moneylines()
@@ -3104,6 +3213,11 @@ class Handler(BaseHTTPRequestHandler):
                 finally:
                     with _MG_LOCK:
                         MEMBER_GRADES[0] -= 1
+            if u.path == "/api/results":
+                # the stored, immutable P1 scorecard export (learning cycle), summarised for members - shared by every
+                # member for 5 minutes; never recomputes a forecast
+                st_, body_ = shared(("results",), lambda: (200, json.dumps(results_payload(), default=str).encode()), ttl=300)
+                return self.send(st_, body_)
             if u.path == "/api/board":
                 # one build + encoding shared by every member for BOARD_TTL s (2026-10-13 load test: 700 members at once
                 # each rebuilt and encoded the whole board; the local test server refused half the connections meanwhile)
@@ -4071,6 +4185,11 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception:
                     traceback.print_exc()
             tm["log"] = round(time.time() - t0, 2)
+            try:                                         # the card's distribution chart (display only, dist_view.py)
+                import dist_view
+                res["dist_view"] = None if outage else dist_view.view(res.get("grade"))
+            except Exception:
+                res["dist_view"] = None
             try:                                         # after logging: the log keeps the grader's own stake
                 res["verdict"] = board_stake(res, prop, scope, line, lt, book or ("underdog", "prizepicks"))
                 vv = res["verdict"]

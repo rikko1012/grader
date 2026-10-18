@@ -563,6 +563,21 @@ def _shadow_forecast(con, pid, row, fh, git_commit=None):
         return False
 
 
+def settlement_lag(now=None, hours=8):
+    """Operations (/health): member and board picks still open `hours` after their listed start - a best-of-3 is long over
+    by then, so these wait on missing results or an identity / settlement problem. Read-only."""
+    now = now or datetime.now(timezone.utc)
+    cut = (now - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%S")
+    con = _db()
+    try:
+        n, oldest = con.execute("SELECT COUNT(*), MIN(substr(match_start, 1, 19)) FROM picks WHERE status = 'open' AND test IN (0, 2) "
+                                "AND match_start IS NOT NULL AND substr(match_start, 1, 19) < ?", (cut,)).fetchone()
+        m = con.execute("SELECT COUNT(DISTINCT match_slug) FROM picks WHERE status = 'open' AND test IN (0, 2) "
+                        "AND match_start IS NOT NULL AND substr(match_start, 1, 19) < ?", (cut,)).fetchone()[0]
+    finally:
+        con.close()
+    return {"open_after_8h": n, "matches": m, "oldest_start": oldest, "hours": hours}
+
 def _utc_time(s):
     """An ISO time as an aware UTC datetime (no offset = UTC, as recap / learning read it); None when unreadable."""
     try:
