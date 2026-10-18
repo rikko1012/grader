@@ -167,6 +167,8 @@ def player_lock(name):
 
 
 RESULTS_MAX = 20000
+RESULTS_MAX_BYTES = int(float(os.environ.get("RESULTS_MEM_MB", "150")) * 1e6)   # 2026-10-18: bodies bounded by bytes too
+_RES_BYTES = [0, 0.0]                                 # approx bytes of cached bodies, last re-count time
 _SWEPT = [0.0]
 
 
@@ -178,9 +180,13 @@ def _store_result(key, status, body, ttl, keep):
         _SWEPT[0] = now
         for k in [k for k, v in _RESULTS.items() if len(v) > 3 and v[3] <= now]:
             del _RESULTS[k]
-    while len(_RESULTS) >= RESULTS_MAX:
-        del _RESULTS[next(iter(_RESULTS))]            # full of live answers: the oldest go (recomputed if asked again)
+    size = lambda v: len(v[2]) if len(v) > 2 and isinstance(v[2], (bytes, str)) else 2000
+    if now - _RES_BYTES[1] > 5:                       # re-count at most every 5 s (other code also removes answers)
+        _RES_BYTES[0], _RES_BYTES[1] = sum(size(v) for v in _RESULTS.values()), now
+    while _RESULTS and (len(_RESULTS) >= RESULTS_MAX or _RES_BYTES[0] > RESULTS_MAX_BYTES):
+        _RES_BYTES[0] -= size(_RESULTS.pop(next(iter(_RESULTS))))   # the oldest go (recomputed if asked again)
     _RESULTS[key] = (now - max(0, ttl - keep), status, body, now + keep)
+    _RES_BYTES[0] += size(_RESULTS[key])
 
 
 FAIL_KEEP = 2.0         # a failed computation is handed to everyone asking within this many seconds - never longer
@@ -1411,6 +1417,19 @@ def lol_center_admin(path, q):
         last = rows[-1].get("_row", rows[-1].get("id")) if rows else None
         return {"after": after, "rows": rows, "next_after": last if len(rows) == limit else None}
     return {"error": "unknown LoL view"}
+
+
+def _memory_report():
+    """The whole container as Render counts it (cgroup), this web process, the LoL worker, and the bounded caches."""
+    import membudget
+    out = membudget.process_memory()
+    proc = LOL_SUP.get("proc")
+    if proc is not None and proc.poll() is None:
+        out["lol_worker_rss_mb"] = membudget.rss_of(proc.pid)
+    out["caches"] = {"bo3_finished": bo3._MEM.stats(), "bo3_expiring": bo3._TMEM.stats(), "contexts": cs2_scout._CONTEXT.stats(),
+                     "results": {"entries": len(_RESULTS), "mb": round(_RES_BYTES[0] / 1e6, 1),
+                                 "budget_mb": round(RESULTS_MAX_BYTES / 1e6)}}
+    return out
 
 
 def lol_admin_query(which, sql):
@@ -2822,6 +2841,7 @@ class Handler(BaseHTTPRequestHandler):
                                        "whop_signin": {"on": whop_auth.enabled(), "recent_errors": whop_auth.LAST_ERRORS[-3:]},
                                        "memory_mb": memory_mb(), "threads": threading.active_count(),
                                        "hltv": _hltv_status(public=True),
+                                       "memory": _memory_report(),
                                        "caches": {"results": len(_RESULTS), "contexts": len(cs2_scout._CONTEXT),
                                                   "scoreboards": len(bo3._MEM), "expiring": len(bo3._TMEM)},
                                        "traffic": {"requests": STATS["requests"], "errors_5xx": STATS["errors_5xx"],

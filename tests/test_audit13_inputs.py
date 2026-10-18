@@ -216,8 +216,8 @@ def test_c1_two_meetings_never_merge(monkeypatch):
 def test_c2_empty_scoreboard_is_asked_again(monkeypatch, tmp_path):
     monkeypatch.setattr(kvstore, "DB_PATH", tmp_path / "cache.db")
     monkeypatch.setattr(kvstore, "_local", threading.local())
-    monkeypatch.setattr(bo3, "_MEM", {})
-    monkeypatch.setattr(bo3, "_TMEM", {})
+    monkeypatch.setattr(bo3, "_MEM", __import__("membudget").BudgetLRU("t", 50))
+    monkeypatch.setattr(bo3, "_TMEM", __import__("membudget").BudgetLRU("t2", 50))
     monkeypatch.setattr(bo3, "_next_slot", [0.0])
     off = _clock(monkeypatch)
     published, calls = {"v": False}, []

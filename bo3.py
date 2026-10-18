@@ -188,16 +188,16 @@ HONEST_HEADERS = {
 }
 MIN_GAP = 0.25         # seconds between requests (4/s) - shared by every BO3 client in this process
 QUEUE_PLACES = 2       # queued requests one look-up may hold at once (fair turns between members)
-_MEM = {}              # finished-map scoreboards/vetoes never change: kept in memory after first read
-_MEM_MAX = 40000       # ~2 GB worst case - stays well inside the Railway service memory
-_TMEM = {}             # key -> (fetched_at, data) for data that expires (schedules, rosters, lists)
-_TMEM_MAX = 20000
+# In-memory copies of the packed disk cache, bounded by BYTES (2026-10-18: bounded by count - 40,000 + 20,000 entries,
+# up to ~170 KB each as Python objects - they outgrew Render's 2 GB and the service was killed three times). The disk
+# cache keeps everything; an evicted entry is just read from disk again.
+import membudget  # noqa: E402
+_MEM = membudget.BudgetLRU("bo3_finished", membudget.env_mb("BO3_MEM_MB", 300))     # finished-map scoreboards / vetoes
+_TMEM = membudget.BudgetLRU("bo3_expiring", membudget.env_mb("BO3_TMEM_MB", 150))   # key -> (fetched_at, data)
 
 
 def _tmem_put(key, data, at):
-    if len(_TMEM) >= _TMEM_MAX:
-        _TMEM.clear()                                   # simple bound - refills from disk
-    _TMEM[key] = (at, data)
+    _TMEM.put(key, (at, data), membudget.json_cost(data))
 FOREVER = 10 ** 6      # hours - finished map stats never change
 PARTIAL_GAME_TTL = 0.5  # hours - a map scoreboard with fewer than 10 players is asked again after this, never kept for good
 
@@ -250,8 +250,9 @@ class BO3:
         name = hashlib.sha1(key.encode()).hexdigest()
         ttl = self._ttl_now
         forever = ttl >= FOREVER
-        if forever and key in _MEM:                     # (never a partial scoreboard)
-            return _MEM[key]
+        hit = _MEM.get(key) if forever else None       # (never a partial scoreboard)
+        if hit is not None:
+            return hit
         hit = _TMEM.get(key) if ttl > 0 else None       # changing data (schedules, rosters): memory
         if hit and time.time() - hit[0] < _good_for(endpoint, hit[1], ttl) * 3600:   # copy until it expires - no disk read
             return hit[1]
@@ -259,8 +260,7 @@ class BO3:
         if got and time.time() - got[0] < _good_for(endpoint, got[1], ttl) * 3600:
             at, data = got
             if forever and not _partial(endpoint, data):
-                if len(_MEM) < _MEM_MAX:
-                    _MEM[key] = data
+                _MEM.put(key, data)
             else:
                 _tmem_put(key, data, at)
             return data
@@ -284,8 +284,7 @@ class BO3:
         data = slim(endpoint, data)
         kvstore.put(bucket, name, data)                 # a partial scoreboard too: asked again after PARTIAL_GAME_TTL, not per read
         if forever and not _partial(endpoint, data):
-            if len(_MEM) < _MEM_MAX:
-                _MEM[key] = data
+            _MEM.put(key, data)
         else:
             _tmem_put(key, data, time.time())
         return data
