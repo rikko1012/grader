@@ -101,17 +101,24 @@ def fetch(session=None, now=None):
     t0 = time.time()
 
     def one(t):
-        if time.time() - t0 > BOOK_BUDGET:
-            raise TimeoutError(f"orderbook budget {BOOK_BUDGET}s spent")
-        b = fetch_orderbook(t, session)
-        return b, now_iso()
+        # errors are returned as text, never raised into the future: a future holding an exception keeps its traceback
+        # (every frame and local) in a reference cycle - 2026-10-18 production showed hundreds retained (Kalshi 429s)
+        try:
+            if time.time() - t0 > BOOK_BUDGET:
+                raise TimeoutError(f"orderbook budget {BOOK_BUDGET}s spent")
+            b = fetch_orderbook(t, session)
+            return b, now_iso(), None
+        except Exception as e:         # noqa: BLE001 - one book failing never blocks the rest
+            return None, None, f"{type(e).__name__}: {str(e)[:120]}"
     with ThreadPoolExecutor(max_workers=BOOK_WORKERS) as pool:
         futs = {t: pool.submit(one, t) for t in wanted}
         for t, f in futs.items():
-            try:
-                books[t], book_ts[t] = f.result()
-            except Exception as e:     # noqa: BLE001 - one book failing never blocks the rest
-                book_errors[t] = f"{type(e).__name__}: {str(e)[:120]}"
+            b, ts, err = f.result()
+            if err:
+                book_errors[t] = err
+            else:
+                books[t], book_ts[t] = b, ts
+        futs.clear()
     return {"events": events, "received_ts": received_list, "books": books,
             "book_ts": book_ts, "book_errors": book_errors}
 

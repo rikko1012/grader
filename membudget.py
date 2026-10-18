@@ -171,9 +171,14 @@ def tune_allocator(arenas=2, trim_every=60):
     ALLOC["platform"] = "glibc"
 
     def trim():
+        import gc
+        n = 0
         while True:
             time.sleep(trim_every)
+            n += 1
             before = process_memory().get("server_rss_mb")
+            if n % 5 == 0:                                 # full collection every 5 min: reference cycles (failed futures,
+                ALLOC["gc_freed"] = gc.collect()           # exceptions with tracebacks) otherwise wait for a rare gen-2 pass
             libc.malloc_trim(0)
             after = process_memory().get("server_rss_mb")
             ALLOC["trims"] += 1
