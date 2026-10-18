@@ -76,6 +76,22 @@ def test_export_is_the_one_history_with_canonical_ids(con, tmp_path):
     assert db.query("SELECT COUNT(*) AS n FROM lol_player_games")[0]["n"] == 20
 
 
+def test_export_streams_its_rows_without_extra_copies(con, tmp_path):
+    """2026-10-18 memory: player rows are compact tuples in the history's column order and both writes stream them (no
+    second full list per database), with the same rows written."""
+    load_world(con)
+    build.build(con)
+    games, players, _ = export.rows(con)
+    assert players and all(isinstance(p, tuple) and len(p) == len(history.PLAYER_COLS) for p in players)
+    ga, pa = export._pg_args(games, players, now="2026-10-18T00:00:00Z")
+    assert not isinstance(ga, (list, tuple)) and not isinstance(pa, (list, tuple))      # iterators, consumed page by page
+    assert list(pa) == players and len(list(ga)) == len(games)
+    db = history.DB(dsn="", path=tmp_path / "history.db")
+    export.export(con, db)
+    cols = ", ".join(history.PLAYER_COLS)
+    assert sorted(tuple(r[c] for c in history.PLAYER_COLS) for r in db.query(f"SELECT {cols} FROM lol_player_games")) == sorted(players)
+
+
 PRI = {"kills": {r: v for r, v in zip(model.ROLES, (2.0, 3.0, 4.0, 5.0, 1.0))}, "assists": {r: 6.0 for r in model.ROLES},
        "deaths": {r: 3.0 for r in model.ROLES}, "team_kills": 14.0}
 PAR = {p: {"form": "rate", "hl": 120.0, "k0": 8.0, "ko": 10.0, "kt": 10.0} for p in ("kills", "assists", "deaths")}
@@ -559,3 +575,46 @@ def test_le_backfill_stops_cleanly_when_the_feed_refuses(con, monkeypatch):
         riot.run_backfill(con)
     assert riot._done(con, "M3") is not None or store.get_meta(con, "le_fail:M3") >= 3
     assert con.execute("SELECT COUNT(*) FROM quarantine WHERE reason = 'source_unavailable'").fetchone()[0] == 1
+
+
+def _bad_rows(con):
+    """export.rows() with one unbindable value appended - a write that fails part-way through (TEST)."""
+    games, players, counts = export.rows(con)
+    return games, players + [tuple([object()] * len(history.PLAYER_COLS))], counts
+
+
+def test_a_failed_export_leaves_the_previous_history(con, tmp_path, monkeypatch):
+    """The streamed write is still one transaction: a failure part-way leaves the last good copy readable."""
+    load_world(con)
+    build.build(con)
+    path = tmp_path / "history.db"
+    db = history.DB(dsn="", path=path)
+    export.export(con, db)
+    monkeypatch.setattr(export, "rows", _bad_rows)
+    with pytest.raises(Exception):
+        export.export(con, db)
+    other = history.DB(dsn="", path=path)                               # another reader: the committed copy
+    assert other.query("SELECT COUNT(*) AS n FROM lol_player_games")[0]["n"] == 20
+    other.close()
+    db.con.rollback()
+    assert db.query("SELECT COUNT(*) AS n FROM lol_games")[0]["n"] == 2
+
+
+def test_postgres_mirror_reads_back_and_rolls_back(pg_db, con, monkeypatch):
+    """PostgreSQL (CI): the streamed mirror writes every row and proves it by read-back; a failing mirror rolls back to
+    the previous copy."""
+    import os
+    load_world(con)
+    build.build(con)
+    games, players, _ = export.rows(con)
+    out = export._mirror_pg(os.environ["LOL_TEST_PG_DSN"], games, players)
+    assert out["ok"] is True and out["games"] == len(games) == 2 and out["player_rows"] == len(players) == 20
+    cols = ", ".join(history.PLAYER_COLS)
+    got = sorted(tuple(r[c] for c in history.PLAYER_COLS) for r in pg_db.query(f"SELECT {cols} FROM lol_player_games"))
+    assert got == sorted(players)
+    pg_db.con.rollback()                              # end the read's transaction: it holds a lock the next TRUNCATE waits on
+    bad_g, bad_p, _ = _bad_rows(con)
+    with pytest.raises(Exception):
+        export._mirror_pg(os.environ["LOL_TEST_PG_DSN"], bad_g, bad_p)
+    pg_db.con.rollback()
+    assert pg_db.query("SELECT COUNT(*) AS n FROM lol_player_games")[0]["n"] == 20
