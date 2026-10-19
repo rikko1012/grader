@@ -87,3 +87,16 @@ Each is tested on the development split as an increment over the chosen projecti
 - head-to-head, shrunk toward broader evidence.
 
 A selection preference, such as no support props in a slip, belongs in the slip settings, not in the probabilities.
+
+## Update 2026-10-19 (A7 / A7.1, lol/EVALUATION.md)
+
+The owner's full list (role; draft; game length / pace; opponent and matchup; form and sample quality; individual
+stats; team context; patch; situational; market) was tested as one combined increment over lol-1 and by group.
+- **In the grade for kills and assists (lol-1f):** expected game length and kill pace of both teams; expected stomp; lane
+  opponent; last-5 form and opponents' strength in the sample; KP%, kill / death / damage share, DPM, CS / min, vision;
+  team form, playoffs, league group; patch age and games on the current patch; rest days, roster continuity, champion
+  pool depth - on top of lol-1's role, form, team pace, opponent factor and Elo win chance.
+- **Deaths:** the same features are measured and shown at weight 0 (the combined model failed on Maps 1-3).
+- **Market team win odds:** saved with every forecast from 2026-10-19 (Polymarket match winner); judged forward.
+- **Still unavailable before props close:** the draft (champions, composition, counter-picks), side for games 2+, GD / XPD / CSD
+  at 15 (not ingested), champion patch strength (no table), travel and coaching (no source).

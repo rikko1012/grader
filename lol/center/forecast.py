@@ -15,6 +15,7 @@ made before the series' start is the pre-match forecast. No grade and no stake a
 validated at real lines (lol/EVALUATION.md); probabilities are model estimates.
 """
 import hashlib
+import math
 import json
 import os
 from datetime import datetime, timedelta, timezone
@@ -45,6 +46,80 @@ ROLE_IN = {"Top": "top", "Jungle": "jungle", "Mid": "mid", "Bot": "bot", "Suppor
 def _model():
     from .. import model
     return model
+
+
+# lol-1f (lol/EVALUATION.md A7 / A7.1, 2026-10-19): the owner's factor list, tested as increments over lol-1; only the stats
+# whose combined factor model passed the registered rule carry a fit (kills, assists - deaths stays lol-1)
+_FF = {"fit": None, "mtime": None, "index": None, "index_key": None}
+
+
+def factor_fit():
+    from .. import factor_study
+    try:
+        mt = factor_study.FIT_FILE.stat().st_mtime
+    except OSError:
+        return None
+    if _FF["mtime"] != mt:
+        try:
+            _FF["fit"], _FF["mtime"] = json.loads(factor_study.FIT_FILE.read_text(encoding="utf-8")), mt
+        except (OSError, ValueError):
+            _FF["fit"] = None
+    return _FF["fit"]
+
+
+def factor_index(h):
+    """The A7 feature index for this cycle: every team's game results / lengths / kills (pace, opponent strength) and team
+    damage totals, plus the full histories of the players on the teams of the open lines only (memory: never every
+    player's history). The same features as the study (tested in lol/tests/test_factors_a7.py). Rebuilt only when the
+    history or the set of teams changes."""
+    from .. import factors
+    teams_ = sorted(set(getattr(h, "factor_teams", ()) or ()) - {None})
+    key = (h.since[:10], h.last_game, tuple(teams_), tuple(sorted(set(getattr(h, "factor_pids", ()) or ()) - {None})))
+    if _FF["index_key"] != key:
+        _FF["index"] = None
+        q = h.db.query
+        team_rows = q("SELECT DISTINCT game_key, match_key, game_number, team_id, team_kills, opp_kills, duration_s, win "
+                      "FROM lol_player_games WHERE played_at IS NOT NULL AND played_at >= ?", (h.since,))
+        team_dmg = {(r["game_key"], r["team_id"]): r["d"] or 0 for r in
+                    q("SELECT game_key, team_id, SUM(damage) AS d FROM lol_player_games WHERE played_at >= ? GROUP BY game_key, team_id", (h.since,))}
+        pids = set(getattr(h, "factor_pids", ()) or ())
+        for i in range(0, len(teams_), 200):
+            ch = teams_[i:i + 200]
+            pids |= {r["player_id"] for r in q(f"SELECT DISTINCT player_id FROM lol_player_games WHERE team_id IN ({','.join('?' * len(ch))}) "
+                                               "AND played_at >= ?", ch + [h.since])}
+        rows, pl = [], sorted(pids - {None})
+        cols = ("game_key, match_key, game_number, played_at, player_id, team, team_id, opponent, opponent_id, role, champion, kills, "
+                "deaths, assists, team_kills, opp_kills, duration_s, damage, cs, vision, win, league")
+        for i in range(0, len(pl), 200):
+            ch = pl[i:i + 200]
+            rows += q(f"SELECT {cols} FROM lol_player_games WHERE player_id IN ({','.join('?' * len(ch))}) AND played_at >= ?", ch + [h.since])
+        games = {g["game_key"]: g for g in q("SELECT game_key, patch, tournament, league, played_at FROM lol_games WHERE played_at >= ?", (h.since,))}
+        _FF["index"] = factors.Index(rows, games, match_day=h.md, team_rows=team_rows, team_dmg=team_dmg)
+        _FF["index_key"] = key
+    return _FF["index"]
+
+
+# every factor of the owner's 2026-10-19 list that is not (or cannot be) in a grade, and why
+NOT_PRE_MATCH = ("the draft: champions picked, composition and counter-picks (known only after the draft)",
+                 "side for games 2+ (picked by the loser of the previous game)",
+                 "gold / XP / CS difference at 15 minutes (not in the data yet)",
+                 "patch strength of a champion (no champion table yet)", "travel, time zones and coaching (no source)")
+
+
+def factor_panel(stat, feats, contrib, mult, fit_stat, team_win_):
+    """What the card shows: every measured factor, its value and its effect on this projection (0 when it is not in the
+    grade), the market win chance being logged, and what is not knowable before the match."""
+    from .. import factors
+    rows = []
+    for k in factors.FEATS:
+        eff = contrib.get(k)
+        rows.append({"factor": factors.LABEL.get(k, k), "key": k, "value": round(feats.get(k, 0.0), 4),
+                     "effect_pct": None if eff is None else round((math.exp(eff) - 1) * 100, 2)})
+    rows.sort(key=lambda r: -abs(r["effect_pct"] or 0))
+    return {"model": "lol-1f" if fit_stat else "lol-1", "multiplier": round(mult, 4),
+            "status": ("in the grade (A7 test passed for this stat)" if fit_stat else
+                       "measured, weight 0 (the A7 test did not pass for this stat)"),
+            "factors": rows, "team_win": team_win_, "not_pre_match": list(NOT_PRE_MATCH)}
 
 
 def fit_json():
@@ -162,8 +237,9 @@ def side_offered(platform, sides, side):
     return s.get("offered")
 
 
-def forecast_one(con, h, offer, link, now=None):
-    """-> forecast record dict (not saved) or {"skip": reason}."""
+def forecast_one(con, h, offer, link, now=None, market=None):
+    """-> forecast record dict (not saved) or {"skip": reason}. market(team, opponent, start) -> the match-winner price at
+    this moment (lol/odds.match_odds) or None: saved with the record for forward evaluation only (A7), never an input."""
     m = _model()
     now = now or datetime.now(timezone.utc)
     stat, scope = offer.get("stat"), SCOPE.get(offer.get("scope") or "")
@@ -194,6 +270,19 @@ def forecast_one(con, h, offer, link, now=None):
             return {"skip": "lol-2: a team's lineup is not known from earlier games"}
     else:
         pj = m.project(pin, tin, oin, role, day, scope, stat, p_win=p_win, league=league)
+    fpanel = None
+    ff = factor_fit()
+    if ff and pj.get("form") in ("share", "rate"):
+        from .. import factors
+        fs = (ff.get("stats") or {}).get(stat)
+        feats = factor_index(h).features(pid, tid, opp, role, day, league, p_win, s["tournament"] or s["tournament_page"], ff["consts"])
+        mult, contrib = factors.adjust(feats, fs)
+        if fs:
+            pj = dict(pj, version="lol-1f", lambda_lol1=pj["lambda"], factor_mult=mult)
+            pj["lambda"] *= mult
+            pj["lambda_game"] *= mult
+            pj["sd"] = math.sqrt(pj["lambda"] + pj["lambda"] ** 2 / pj["nb_size"])
+        fpanel = (feats, contrib, mult, fs)
     flags = []
     bo = s["best_of"]
     if FORMAT.get(scope) and bo and bo != FORMAT[scope]:
@@ -222,7 +311,7 @@ def forecast_one(con, h, offer, link, now=None):
                quote_event_id=offer.get("_event_id"), quote_observed_at=offer.get("_observed_at"), stat=stat, scope=scope,
                market_type="single", odds_type=offer.get("odds_type"), line=offer["line"], sides=offer.get("sides"),
                sid=link["sid"], pid=pid, tid=tid, opp_tid=opp, role=role, best_of=bo, series_start=start.strftime("%Y-%m-%dT%H:%M:%SZ"),
-               model_version=m.VERSION, fit_sha=fit_sha(), form=pj.get("form"), **{"lambda": round(pj["lambda"], 4)},
+               model_version=pj.get("version") or m.VERSION, fit_sha=fit_sha(), form=pj.get("form"), **{"lambda": round(pj["lambda"], 4)},
                nb_size=pj["nb_size"], p_over=round(po, 4), p_under=round(pu, 4), p_push=round(push, 4), model_side=side,
                side_offered=None if offered is None else int(bool(offered)), grade=grade,
                grade_label=(f"Lean {side.title()}" if grade == "Lean" else grade), units_policy=units_policy, units=0.0,
@@ -240,6 +329,11 @@ def forecast_one(con, h, offer, link, now=None):
     rec["inputs"]["recent"] = {"games": len(last), "per_game": round(sum(last) / len(last), 2) if last else None}
     from . import prices
     rec["inputs"]["market"] = prices.classify(offer["platform"], offer)
+    rec["inputs"]["team_win"] = team_win(p_win, offer, start, market)
+    if fpanel:
+        rec["inputs"]["factors"] = factor_panel(stat, *fpanel, rec["inputs"]["team_win"])
+        if pj.get("lambda_lol1") is not None:
+            rec["inputs"]["lambda_lol1"] = round(pj["lambda_lol1"], 4)
     elig, why = slip_eligibility(rec)
     rec["slip_eligible"], rec["slip_reasons"] = int(elig), why
     return rec
@@ -356,6 +450,27 @@ def slip_check(con, legs, now=None):
     return {"eligible": not why, "reasons": why, "legs": len(rows)}
 
 
+def team_win(p_win, offer, start, market):
+    """The team's pre-match win chance two ways (A7, 2026-10-19 owner: "including team win odds"): the Elo chance the model
+    uses, and the match-winner market's price at this moment when one is open (Polymarket's two-outcome midpoint carries no
+    bookmaker margin, so it is the market's win chance as is). Measurement only - judged forward before it may enter a grade."""
+    out = {"elo": None if p_win is None else round(p_win, 4), "market": None}
+    if market is None or not offer.get("team"):
+        return out
+    try:
+        o = market(offer.get("team"), offer.get("opponent"), start.isoformat()) or {}
+    except Exception as e:      # noqa: BLE001 - a price lookup never blocks a forecast
+        out["market"] = {"error": type(e).__name__}
+        return out
+    if not o.get("found"):
+        out["market"] = {"found": False}
+        return out
+    out["market"] = {"found": True, "p": o.get("team_prob"), "price_source": o.get("source"), "liquidity": o.get("liquidity"),
+                     "flags": o.get("flags"), "market_id": o.get("market_id"), "retrieved_at": o.get("retrieved_at"),
+                     "source": "polymarket"}
+    return out
+
+
 def _data_version(con):
     """The history export the forecast's inputs came from (time and size of the last export)."""
     e = store.get_meta(con, "last_export") or {}
@@ -367,8 +482,8 @@ def _sha(rec):
                                               "fit_sha", "flags", "series_start")})
 
 
-def run(con, db=None, now=None):
-    """One forecast cycle over every open linked offer. Appends changed forecasts. Returns counts."""
+def run(con, db=None, now=None, market=None):
+    """One forecast cycle over every open linked offer. Appends changed forecasts. Returns counts. market: see forecast_one."""
     counts = {}
     q = ("SELECT l.platform, l.market_key, l.sid, l.tid, l.opp_tid, l.pid, l.role, e.id AS event_id, e.observed_at, e.data "
          "FROM market_links l JOIN market_state s ON s.platform = l.platform AND s.market_key = l.market_key "
@@ -377,10 +492,11 @@ def run(con, db=None, now=None):
     ids = lambda col: {store.canonical_id(con, r[col]) for r in todo}
     h = History(db, ids("pid"), ids("tid") | ids("opp_tid"), now=now)
     h.fit, h.sim_states = fit_json(), {}
+    h.factor_pids, h.factor_teams = ids("pid"), ids("tid") | ids("opp_tid")
     for r in todo:
         offer = json.loads(r["data"])
         offer.update(platform=r["platform"], _event_id=r["event_id"], _observed_at=r["observed_at"])
-        rec = forecast_one(con, h, offer, dict(r), now)
+        rec = forecast_one(con, h, offer, dict(r), now, market)
         if "skip" in rec:
             counts["skip: " + rec["skip"]] = counts.get("skip: " + rec["skip"], 0) + 1
             continue

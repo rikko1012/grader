@@ -210,6 +210,9 @@ body.ot-lol .intro {margin:0 0 24px}.ot-lol .intro h2 {font:700 34px var(--displ
 @media(prefers-reduced-motion:reduce) {*,*::before,*::after {animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 
 /* ONE_TIME_MATCHROOM_END */
+.ftab{width:100%;border-collapse:collapse;margin-top:6px}.ftab td,.ftab th{padding:5px 6px;border-bottom:1px solid var(--line, #262e3b);text-align:left}
+.ftab th{font-weight:600;color:var(--faint, #8793a8);font-size:11px}.ftab .num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.ftab b.up{color:#7fd8be}.ftab b.down{color:#ff9b8a}
 </style></head><body class="ot-lol">
 <header><div class="logo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#170b00" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg></div>
 <h1>1time <em>Esports</em></h1><nav class="sportsw" aria-label="Game"><a href="/">CS2</a><a href="/lol" class="on" aria-current="page">LoL</a></nav><span class="grow"></span><span id="who"></span></header>
@@ -357,6 +360,26 @@ function others(x) {
     if (m.player === x.player && m.stat_name === x.stat_name && m.scope === x.scope && t.start === x.start && t.teams === x.match) return m;
   return null;
 }
+// every factor of the owner's list (2026-10-19): what is in this grade and by how much, the team win chance two ways,
+// and what cannot be known before the match (lol/EVALUATION.md A7 / A7.1)
+function factorsHtml(x) {
+  const F = x.factors, tw = x.team_win || (F && F.team_win) || {};
+  if (!F && !tw.elo) return "";
+  const m = tw.market || {}, pw = v => v == null ? "–" : Math.round(v * 100) + "%";
+  const win = `<div class="grid small"><div><span class="k">Team win chance · model (Elo)</span><b>${pw(tw.elo)}</b></div>
+    <div><span class="k">Team win chance · market</span>${m.found ? `<b>${pw(m.p)}</b> <span class="faint">Polymarket${m.liquidity != null ? " · $" + Number(m.liquidity).toLocaleString() + " liquidity" : ""}</span>` : `<span class="faint">no open market</span>`}</div></div>
+    <div class="small faint" style="margin-top:4px">The model's win chance is in the projection. The market's is saved with every forecast and is tested against results before it can count.</div>`;
+  if (!F) return `<h4>Team win chance</h4>${win}`;
+  const inG = F.model === "lol-1f", eff = r => r.effect_pct == null || !inG ? `<span class="faint">weight 0</span>` : `<b class="${r.effect_pct >= 0 ? "up" : "down"}">${r.effect_pct >= 0 ? "+" : "−"}${Math.abs(r.effect_pct).toFixed(1)}%</b>`;
+  const rowsF = F.factors.filter(r => r.key !== "no_history" && !/^lg_|_missing$/.test(r.key));
+  const top = rowsF.slice(0, 8), rest = rowsF.slice(8);
+  const tr = r => `<tr><td>${esc(r.factor)}</td><td class="num">${r.value == null ? "–" : (+r.value).toFixed(2)}</td><td class="num">${eff(r)}</td></tr>`;
+  return `<h4>Team win chance</h4>${win}
+    <h4>Every factor</h4><div class="small muted">${inG ? `In this grade: the projection is ${F.multiplier >= 1 ? "raised" : "lowered"} ${Math.abs((F.multiplier - 1) * 100).toFixed(1)}% by these factors together.` : "Measured for this stat at weight 0: the test against results did not pass, so they do not move this grade."}</div>
+    <table class="ftab small"><thead><tr><th>Factor</th><th class="num">Value</th><th class="num">Effect</th></tr></thead><tbody>${top.map(tr).join("")}</tbody></table>
+    ${rest.length ? `<details class="small"><summary>All ${rowsF.length} factors</summary><table class="ftab small"><tbody>${rest.map(tr).join("")}</tbody></table></details>` : ""}
+    <div class="small faint" style="margin-top:6px">Values are this player's numbers relative to his role (log ratios; 0 = average). Not in any grade (decided after props close, or no data source yet): ${esc(F.not_pre_match.join("; "))}.</div>`;
+}
 function card(i, focusBack) {
   const x = D.rows[i]; if (!x) return;
   openRow = i; lastFocus = focusBack || document.activeElement;
@@ -375,6 +398,7 @@ function card(i, focusBack) {
       <span class="actmsg ${playable(x) ? "" : "bad"}" id="actmsg">${esc(whyNot(x) || slipRule(x) || "")}</span></div>
     <h4>Recent average (not the projection)</h4><div>${per == null ? NA : `${num(per, 2)} ${esc(x.stat_name.toLowerCase())} per game over the last ${x.recent_games} games${n ? ` · ${num(per * n, 1)} over ${n} game${n > 1 ? "s" : ""}` : ""}`}</div>
     <h4>What this projection uses</h4>${(x.drivers || []).length ? `<ul class="small">${x.drivers.map(z => `<li>${esc(z)}</li>`).join("")}</ul>` : NA}
+    ${factorsHtml(x)}
     ${(x.not_modelled || []).length ? `<h4>Not in this projection</h4><div class="small muted">${esc(x.not_modelled.join("; "))}</div>` : ""}`;
   const m = others(x);
   if (m && m.lines.length > 1) h += `<h4>Same prop on every book</h4>${linesHtml(m)}`;

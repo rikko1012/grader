@@ -39,6 +39,12 @@ STATE = {"started_at": None, "markets": {}, "ingest": {}, "riot": {}, "build": N
 MEM = {"stages": {}, "active": {}, "unattributed": {"peak_mb": 0.0}}
 
 
+
+def _market_odds(team, opponent, start):
+    """The match-winner price for a forecast record (lol/odds.py, Polymarket; cached 60 s per process)."""
+    from .. import odds
+    return odds.match_odds(team, opponent, start)
+
 def _rss():
     try:
         with open("/proc/self/status") as f:
@@ -220,7 +226,7 @@ def build_loop():
                     STATE["links"] = {"at": store.now_iso(), "counts": match.link_open_markets(con)}
                 if store.get_meta(con, "last_export"):
                     with stage("forecasts"):
-                        STATE["forecasts"] = {"at": store.now_iso(), "counts": forecast.run(con)}
+                        STATE["forecasts"] = {"at": store.now_iso(), "counts": forecast.run(con, market=_market_odds)}
                     with stage("settle"):
                         STATE["settled"] = {"at": store.now_iso(), "counts": forecast.settle_all(con)}
                 with stage("board"):

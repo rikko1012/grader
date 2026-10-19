@@ -338,3 +338,23 @@ team's last five games). Live forecasts do not know the starters before the matc
 features the live forecast can compute, both use the **lineup each team fielded in its last game before the match day**
 (by role). Nothing else changes: periods, features, ridge, the decision rule. The study is re-run once with this
 definition; the A7.1 run alone decides, under A7's rule. The change is forced by what is knowable live, not by a result.
+
+### A7.1 result (2026-10-19; lol/eval/factors_a71_2026-10-19.json) - the deciding run
+
+| stat | Maps 1-2 log-score gain (95%) | Maps 1-3 | Maps 1-2 MAE lol-1 -> ALL | A7 rule |
+|---|---|---|---|---|
+| kills | +0.0043 (+0.0019, +0.0069) | +0.0025 (-0.0027, +0.0079) | 3.006 -> 2.995 | pass |
+| assists | +0.0068 (+0.0016, +0.0118) | +0.0027 (-0.0069, +0.0126) | 5.135 -> 5.089 | pass |
+| deaths | +0.0051 (+0.0008, +0.0092) | -0.0068 (-0.0159, +0.0020) | 2.511 -> 2.494 | fail |
+
+**Production (lol-1f).** `python -m lol.factor_study fit` refitted ALL on F-TRAIN + F-VALID (66,513 units per stat) into
+`lol/factor_fit.json` for kills and assists; deaths has no fit and stays lol-1. Live forecasts (lol/center/forecast.py) use
+the same code (lol/factors.py); on the pulled history the live index reproduced the study's features exactly (300 and
+400 sampled F-VALID targets, maximum difference 0.0). Each lol-1f forecast records lol-1's projection (`lambda_lol1`), the
+multiplier and every feature's effect; deaths forecasts show the same features at weight 0. Every forecast also saves the
+team's Elo win chance and, when a market is open, the Polymarket match-winner price (no bookmaker margin) for a forward
+test. Forecasts made before lol-1f keep their version. Stakes stay 0U under the unchanged real-line requirement.
+
+**What this does and does not show.** The gains are small (about +0.004 to +0.007 log score per player-market on
+development data; lol-1's gain over B0 was about +0.035). They are development evidence on synthetic totals, not evidence
+of an advantage at Underdog / PrizePicks lines - that still needs the forward real-line count.

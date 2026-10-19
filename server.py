@@ -1485,7 +1485,8 @@ def _lol_member_rebuild(path, mt):
                      # a side the line does not offer is the model's direction, never a pick: no letter grade
                      "grade": f.get("grade") if pick_offered else None, "units": 0.0, "stake_reason": LOL_STAKE_NOTE,
                      "line_seen": x.get("quote_seen_at"), "line_checked": x.get("quote_checked_at") or x.get("quote_seen_at"),
-                     "forecast_at": f.get("at"), "drivers": inp.get("drivers") or [], "not_modelled": inp.get("unknowns") or []})
+                     "forecast_at": f.get("at"), "drivers": inp.get("drivers") or [], "not_modelled": inp.get("unknowns") or [],
+                     "model_version": str(f.get("model") or "").split(" ")[0] or None, "factors": inp.get("factors"), "team_win": inp.get("team_win")})
     tables = []
     for t in b.get("match_tables") or []:
         mk = [m for m in (t.get("markets") or {}).values() if m.get("market_type") == "single"]
