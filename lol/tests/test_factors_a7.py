@@ -92,3 +92,20 @@ def test_a_stat_without_a_passing_fit_keeps_lol1_and_shows_weight_0(con, tmp_pat
     assert f["model_version"] == "lol-1" and "lambda_lol1" not in inp
     assert inp["factors"]["model"] == "lol-1" and all(r["effect_pct"] is None for r in inp["factors"]["factors"])
     assert inp["team_win"]["market"] is None                               # no lookup supplied: nothing invented
+
+
+def test_the_live_forecast_path_never_needs_scipy():
+    """2026-10-19 production: the worker loaded the fit through lol.factor_study (scipy, not installed on the server) and
+    every LoL cycle failed. The live path - forecast, factor fit, feature index - must import and run without scipy."""
+    import subprocess
+    import sys
+    code = ("import builtins; real = builtins.__import__\n"
+            "def block(name, *a, **k):\n"
+            "    if name == 'scipy' or name.startswith('scipy.'): raise ModuleNotFoundError('scipy blocked')\n"
+            "    return real(name, *a, **k)\n"
+            "builtins.__import__ = block\n"
+            "from lol.center import forecast\nfrom lol import factors\n"
+            "f = forecast.factor_fit(); assert f and f['stats']['kills'] and f['consts']\n"
+            "print('ok')\n")
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0 and r.stdout.strip().endswith("ok"), r.stderr

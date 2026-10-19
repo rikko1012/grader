@@ -53,15 +53,19 @@ def _model():
 _FF = {"fit": None, "mtime": None, "index": None, "index_key": None}
 
 
+FACTOR_FIT_FILE = "factor_fit.json"     # lol/factor_fit.json - read directly: the live worker never imports the study (scipy)
+
+
 def factor_fit():
-    from .. import factor_study
+    from .. import config
+    path = config.PKG_DIR / FACTOR_FIT_FILE
     try:
-        mt = factor_study.FIT_FILE.stat().st_mtime
+        mt = path.stat().st_mtime
     except OSError:
         return None
     if _FF["mtime"] != mt:
         try:
-            _FF["fit"], _FF["mtime"] = json.loads(factor_study.FIT_FILE.read_text(encoding="utf-8")), mt
+            _FF["fit"], _FF["mtime"] = json.loads(path.read_text(encoding="utf-8")), mt
         except (OSError, ValueError):
             _FF["fit"] = None
     return _FF["fit"]
