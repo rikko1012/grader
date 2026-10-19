@@ -713,6 +713,11 @@ body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode
 .studio-ess .seg{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);width:100%}
 .studio-ess .seg button{min-width:0;padding-left:6px;padding-right:6px;text-align:center}
 .crow .c-mkt .pill,.crow .c-mkt .dstat{white-space:nowrap;display:inline-block}
+.crow .c-mkt .lgap,.crow .c-mkt .lbump{margin-left:2px}
+.lgap,.lbump{display:inline-flex;gap:4px;align-items:center;white-space:nowrap;font:600 10.5px Inter,system-ui,sans-serif;border-radius:6px;padding:2px 7px;cursor:help;vertical-align:middle}
+.lgap{color:#c9b6ff;background:#bba5ff14;border:1px dashed #bba5ff66}
+.lbump.up{color:#7fd8be;background:#7fd8be14;border:1px solid #7fd8be55}.lbump.down{color:#ff9b8a;background:#ff9b8a14;border:1px solid #ff9b8a55}
+.lgap:focus-visible,.lbump:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media(max-width:760px){.bchips{margin:0 -15px 8px;padding:8px 15px;background:#090b10e0;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}}
 @media(max-width:1150px) and (min-width:761px){.mini.on{min-width:0;flex:1 1 auto}.mini .msel,.mini .seg{display:none!important}
   .mini input{min-width:0;flex:1 1 90px}.mini input.l{flex:0 0 60px}}
@@ -1757,6 +1762,36 @@ function drawBoard() {
   // one compact row per offer (2026-10-18 release): the player and match, the platform / stat / maps / market type, the
   // line, our projection, the graded side's chance, the grade and stake (with its reason) and the action. A side the
   // platform no longer offers shows as unavailable - never with a playable chance. Support / concern notes are on the card.
+  // line discrepancy (2026-10-19 owner): the other platform's standard line for the same player, stat and maps in the same
+  // match (canonical HLTV id when both have one, else starts within 3 h - a player plays one match at a time), shown next
+  // to this row's market when the two differ. Goblin / demon / alt lines are never compared with standard ones. Facts only:
+  // which line is easier depends on the side (lower for an Over, higher for an Under); payouts can differ.
+  const stdIdx = {underdog: new Map(), prizepicks: new Map()};
+  const sk = x => [String(x.nick || x.player).toLowerCase(), x.prop, x.scope || "12"].join("|");
+  for (const b of ["underdog", "prizepicks"]) for (const x of (BK[b] || {}).rows || []) {
+    if (mktType(x) !== "standard" || x.line == null) continue;
+    if (!stdIdx[b].has(sk(x))) stdIdx[b].set(sk(x), []); stdIdx[b].get(sk(x)).push(x); }
+  const sameMatch = (a, b) => /^hltv:/.test(a.match_id || "") && /^hltv:/.test(b.match_id || "") ? a.match_id === b.match_id
+    : Math.abs(Date.parse(a.start) - Date.parse(b.start)) <= 3 * 3600000;
+  const lineGap = r => {
+    if (mktType(r) !== "standard" || r.line == null) return "";
+    const ob = (r.book || "underdog") === "prizepicks" ? "underdog" : "prizepicks";
+    const o = (stdIdx[ob].get(sk(r)) || []).find(x => sameMatch(x, r));
+    if (!o || +o.line === +r.line) return "";
+    const d = +(+o.line - +r.line).toFixed(1), side = r.side === "Less" ? "Under" : r.side === "More" ? "Over" : null;
+    const easier = side ? ` For the ${side}, the ${side === "Over" ? "lower" : "higher"} line is the easier one; payouts can differ.` : "";
+    const tip = `Line discrepancy: ${bookName(ob)} lists ${o.line} for the same player, stat and maps – ${Math.abs(d)} ${d > 0 ? "higher" : "lower"} than this line.${easier}`;
+    return ` <span class="lgap" title="${esc(tip)}" data-tip="${esc(tip)}" tabindex="0">≠ ${esc(bookName(ob))} ${esc(o.line)}</span>`;
+  };
+  // bump (2026-10-19 owner): the platform moved this line from where it opened (PrizePicks: the scraper's opening line;
+  // Underdog: the first line Scout observed for this player / stat / start), or while this page was open (moved_from)
+  const bump = r => {
+    const from = r.moved_from != null ? r.moved_from : r.open_line;
+    if (from == null || r.line == null || +from === +r.line) return "";
+    const up = +r.line > +from, bk = bookName(r.book || "underdog");
+    const tip = `Bumped ${up ? "up" : "down"}: ${bk} ${r.moved_from != null ? "moved this line while this page was open" : "opened this line at " + from}${r.moved_from != null && r.open_line != null && +r.open_line !== +from ? ` (opened at ${r.open_line})` : ""}; it is ${r.line} now.${r.moved_at ? " Moved " + agoTxt(r.moved_at) + "." : ""} The grade is for ${r.line}.`;
+    return ` <span class="lbump ${up ? "up" : "down"}" title="${esc(tip)}" data-tip="${esc(tip)}" tabindex="0">${up ? "▲" : "▼"} bumped from ${esc(from)}</span>`;
+  };
   const rowHtml = (r, showMatch) => {
     const nick = r.nick || r.player, gone = sideGone(r), lab = !r.side ? "…" : r.state === "SCOUT" || gone ? "–" : mGrade(r) === "LEAN" ? "L" : mGrade(r);
     const ltl = !r.side ? "Still grading" : r.state === "SCOUT" ? "No match scheduled" : mGrade(r) === "LEAN" ? "Lean – 0 units" : `Grade ${mGrade(r)}${+r.units > 0 ? "" : " – 0 units"}`;
@@ -1767,13 +1802,12 @@ function drawBoard() {
       : `${esc(sideWord(r))}${r.p != null ? ` <b>${chance(r.p, r.prop)}</b>${coinFlip(r.p)}` : ""}`;
     const stake = gone || !r.side ? "" : `${isLeanV(r) ? (r.state === "SCOUT" ? "No match scheduled" : "Lean") : esc(mGrade(r) || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${zeroWhy(r)}${capChip(r, team)}`;
     const meta = [r.graded_at ? `graded ${agoTxt(r.graded_at)}` : "", r.alt && r.book !== "prizepicks" ? `alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : "",
-      r.book === "prizepicks" && r.open_line != null && +r.open_line !== +r.line ? `opened ${r.open_line}` : "",
-      r.moved_from != null ? `<span class="pill warn">line moved from ${r.moved_from}</span>` : ""].filter(Boolean).join(" · ");
+].filter(Boolean).join(" · ");
     return `<div class="brow2 crow" data-bl="${esc(nick)}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}|${r.book || "underdog"}">
       <span class="gtag ${!r.side || r.state === "SCOUT" || gone ? "g-scout" : gClass(mGrade(r))}" title="${esc(gone || ltl)}" data-tip="${esc(gone || ltl)}">${esc(lab)}</span>
       <div class="c-who"><b>${esc(nick)}</b>${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}
         <span class="muted c-match">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}${showMatch ? " · " + shortWhen(r.start) : ""}</span></div>
-      <div class="c-mkt"><span class="pill c-book">${bookName(r.book || "underdog")}</span> ${propWord(r.prop)}${mapsWord(r.scope)}${mktTag(r)}${ds ? ` <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}" data-tip="${esc((r.dstat || [])[1] || ds[1])}">${ds[1]}</span>` : ""}</div>
+      <div class="c-mkt"><span class="pill c-book">${bookName(r.book || "underdog")}</span> ${propWord(r.prop)}${mapsWord(r.scope)}${mktTag(r)}${ds ? ` <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}" data-tip="${esc((r.dstat || [])[1] || ds[1])}">${ds[1]}</span>` : ""}${bump(r)}${lineGap(r)}</div>
       <div class="c-num"><span class="k">Line</span><b>${r.line}</b></div>
       <div class="c-num"><span class="k">Proj</span>${r.proj != null ? num(r.proj, 1) : "–"}</div>
       <div class="c-pick b2pick">${pick}</div>

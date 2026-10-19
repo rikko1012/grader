@@ -168,6 +168,77 @@ def _log_moves(rows):
         pass
 
 
+_OPEN = {"by": None}    # "player|prop|scope|start" -> {"open", "first", "line", "moved_at"} (standard lines only)
+
+
+def _open_path():
+    import os
+    from pathlib import Path
+    return Path(os.environ.get("CS2_DATA_DIR") or Path(__file__).resolve().parent) / ".cache" / "ud_open.json"
+
+
+def _opening(rows, now=None):
+    """Bumps (2026-10-19, display only - never a grade input): each standard line's OPENING value - the first line Scout
+    observed for this player / stat / maps / start - and when it last moved, kept in .cache/ud_open.json. The first read
+    after this existed seeds openings from the move log (ud_moves.db, keyed without the maps) only where that key has a
+    single standard line on the board, so a Maps 1-2 and a Map 1 line are never mixed up. Never raises."""
+    import json
+    import os
+    import sqlite3
+    try:
+        now = now or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        path = _open_path()
+        if _OPEN["by"] is None:
+            try:
+                _OPEN["by"] = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                _OPEN["by"] = {}
+                db = path.with_name("ud_moves.db")
+                std = [r for r in rows if not r["alt"]]
+                one = {}
+                for r in std:
+                    one.setdefault((norm(r["player"]), r["prop"], r["start"]), []).append(r)
+                if db.exists():
+                    con = sqlite3.connect(db, timeout=10)
+                    try:
+                        for pl, prop, start, line, at in con.execute(
+                                "SELECT player, prop, start, line, at FROM moves WHERE rowid IN "
+                                "(SELECT min(rowid) FROM moves GROUP BY player, prop, start)"):
+                            hit = one.get((norm(pl), prop, start)) or []
+                            if len(hit) == 1:
+                                r = hit[0]
+                                _OPEN["by"]["|".join((norm(r["player"]), r["prop"], r["scope"], str(r["start"])))] = \
+                                    {"open": line, "first": at, "line": line, "moved_at": None}
+                    except sqlite3.Error:
+                        pass
+                    finally:
+                        con.close()
+        by, changed = _OPEN["by"], False
+        for r in rows:
+            if r["alt"]:
+                continue
+            k = "|".join((norm(r["player"]), r["prop"], r["scope"], str(r["start"])))
+            e = by.get(k)
+            if e is None:
+                e = by[k] = {"open": r["line"], "first": now, "line": r["line"], "moved_at": None}
+                changed = True
+            elif e["line"] != r["line"]:
+                e.update(line=r["line"], moved_at=now)
+                changed = True
+            r["open_line"], r["first_seen"], r["moved_at"] = e["open"], e["first"], e["moved_at"]
+        old = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - 3 * 86400))
+        for k in [k for k in by if k.rsplit("|", 1)[-1][:19] < old]:      # matches long over
+            del by[k]
+            changed = True
+        if changed:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(by), encoding="utf-8")
+            os.replace(tmp, path)
+    except Exception:
+        pass
+
+
 def _refresh():
     import requests
     try:
@@ -175,6 +246,7 @@ def _refresh():
         r.raise_for_status()
         rows = parse(r.json())
         _log_moves(rows)
+        _opening(rows)
         with _LOCK:
             _BOARD.update(at=time.time(), rows=rows, error=None)
     except Exception as e:                              # keep the last board; try again later
