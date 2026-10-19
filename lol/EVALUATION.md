@@ -316,3 +316,25 @@ Each group is fitted alone, and all groups together ("ALL").
 Single groups are reported as evidence only; a group that passes alone while ALL fails is not promoted (it needs forward
 data). A passing stat becomes model version lol-1f with ALL's coefficients refitted on F-TRAIN + F-VALID; forecasts made
 before it keep their version. Stakes stay 0U under the unchanged real-line requirement.
+
+### A7 result as run (2026-10-19; lol/eval/factors_a7_2026-10-19.json)
+
+F-TRAIN 36,832 units per stat, F-VALID 29,681. ALL vs lol-1 on F-VALID, log-score gain (95% series-grouped interval):
+
+| stat | Map 1 | Maps 1-2 | Maps 1-3 | Maps 1-2 MAE lol-1 -> ALL | A7 rule |
+|---|---|---|---|---|---|
+| kills | +0.0048 (+0.0035, +0.0062) | +0.0051 (+0.0026, +0.0078) | +0.0022 (-0.0030, +0.0077) | 3.006 -> 2.993 | pass |
+| assists | +0.0038 (+0.0014, +0.0063) | +0.0069 (+0.0018, +0.0119) | +0.0039 (-0.0062, +0.0138) | 5.135 -> 5.086 | pass |
+| deaths | +0.0044 (+0.0023, +0.0066) | +0.0056 (+0.0018, +0.0096) | -0.0067 (-0.0162, +0.0023) | 2.511 -> 2.494 | fail (Maps 1-3 below 0) |
+
+Single groups (evidence only): individual statistics carry most of it (kills Maps 1-2 +0.0024, assists +0.0032), then form;
+pace, script, team and patch add nothing measurable over lol-1 (whose match-strength term already uses the Elo win chance).
+Kills Maps 1-3 MAE rose 3.696 -> 3.721 although its log score did not fall; recorded.
+
+## Amendment A7.1 (2026-10-19, written after the A7 result, before re-running): lineups knowable before the match
+
+The A7 run took each match's actual game-1 starters for two features (the lane opponent; whether today's five played the
+team's last five games). Live forecasts do not know the starters before the match. To make the tested features the same
+features the live forecast can compute, both use the **lineup each team fielded in its last game before the match day**
+(by role). Nothing else changes: periods, features, ridge, the decision rule. The study is re-run once with this
+definition; the A7.1 run alone decides, under A7's rule. The change is forced by what is knowable live, not by a result.
