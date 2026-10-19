@@ -263,3 +263,56 @@ The deployed fit is therefore kept, with no new version. Live forecasts made aft
 The real-line requirement is unchanged: 300 settled player-markets across 60+ series.
 
 **Future factors** (league-adjusted kill pace is the first candidate: cross-league team and opponent factors are relative to an all-league average) are judged as increments over the deployed lol-1, not over B0. They are tested on forward data or a development split that excludes the opened August–October period.
+
+## Amendment A7 (2026-10-19, written before any A7 number was computed): the owner's full factor list as increments over lol-1
+
+The owner's brief of 2026-10-19 lists every factor that should go into a LoL prop grade, "including team win odds". Under
+the standing rule a factor moves a grade only after a chronological test shows it helps; the rest are shown at weight 0.
+A6 requires new factors to be judged as increments over the deployed lol-1, on forward data or a development split that
+excludes the opened August-October period.
+
+**Data.** Production's repaired history (lol_games + lol_player_games), pulled read-only on 2026-10-19 (local copy
+sha256 prefix b8345d955b098cd2). It starts 2025-11; the 2025-01..10 backfill never landed.
+
+**Periods (cut on the series start day).**
+| Period | Targets | Use |
+|---|---|---|
+| History only | 2025-11-01 .. 2025-12-31 | earlier games only |
+| F-TRAIN | 2026-01-01 .. 2026-04-30 | fit the increment coefficients |
+| F-VALID | 2026-05-01 .. 2026-07-31 | scored once for this amendment |
+| (spent) | 2026-08-01 .. 2026-10-16 | not used |
+
+Caveat recorded in advance: lol-1's own settings were fitted on 2026-04..07 targets, which overlap F-TRAIN's last month and
+F-VALID. The base projection is therefore partly in-sample there; this makes an increment harder, not easier, to pass.
+
+**Base.** The deployed lol-1 (lol/model_fit.json: params, priors, NB sizes) with the Elo win chance from the same history,
+unchanged. Every candidate multiplies its per-game mean: mean = lol-1 mean x exp(beta . z).
+
+**Factors (pre-match only: games on days before the match day; z-scored on F-TRAIN; missing = 0 plus an indicator).**
+| Group | Owner's items | Features |
+|---|---|---|
+| pace | expected game length / tempo; patch pace | both teams' time-weighted game length; combined kills per minute (both teams) |
+| script | team strength differential, expected stomp | (p_win - 0.5)^2 from Elo (the strength term itself is already in lol-1) |
+| matchup | lane opponent, opponent style | the opposing player in the same role (game 1 starters): his deaths (kills / assists) or kills (deaths) per game vs his role |
+| form | L5-L10 form, sample quality | last-5 average vs long-run rate; opponents' win rate in his last 10 games |
+| individual | KP%, kill / damage share, DPM, CS/min, vision, death share | each vs the role average, shrunk |
+| team | team form, CKPM style, stage, league | team last-10 win rate vs long-run; playoffs flag; league group |
+| patch | patch age, sample on current patch | days since the league's current patch first appeared; share of his last 10 games on it |
+| situational | schedule density, roster stability, champion comfort | days since the team's last game; share of the team's last 5 games with today's 5 starters; distinct champions in his last 20 |
+
+Not testable pre-match or not in the data, and shown at weight 0: the actual draft and champion classes (known only after
+the draft; no class table); GD / XPD / CSD at 15 (not ingested); side for games 2+ (not known); travel and coaching (no
+source); patch champion strength (no table). Market team win odds: no timestamped pre-match history exists for the
+period, so they are logged with every live forecast from this release and judged forward (as A4's market variant).
+
+**Fit.** Per stat (kills, assists, deaths), beta by negative-binomial maximum likelihood on F-TRAIN targets of all scopes
+(Map 1, Maps 1-2 best-of-3, Maps 1-3 best-of-5), NB size fixed at lol-1's, ridge penalty 1.0 per standardised coefficient.
+Each group is fitted alone, and all groups together ("ALL").
+
+**Decision (one per stat, fixed now).** ALL replaces lol-1 for a stat only if on F-VALID:
+- Maps 1-2 log-score gain over lol-1 has a 95% series-grouped bootstrap interval (2,000 resamples) above 0;
+- Maps 1-3 log-score gain point estimate is not below 0;
+- Maps 1-2 MAE is not higher than lol-1's.
+Single groups are reported as evidence only; a group that passes alone while ALL fails is not promoted (it needs forward
+data). A passing stat becomes model version lol-1f with ALL's coefficients refitted on F-TRAIN + F-VALID; forecasts made
+before it keep their version. Stakes stay 0U under the unchanged real-line requirement.
