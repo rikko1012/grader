@@ -1,0 +1,46 @@
+{
+ "theta": {
+  "alpha": 0.5524470379979979,
+  "beta": 0.8018118294647186,
+  "gamma": 0.2013930911567348
+ },
+ "fit_n": 58003,
+ "hold_n": 32041,
+ "hold_matches": 3208,
+ "kills Maps 1-2": {
+  "n": 32041,
+  "mae_perf2": 6.302,
+  "mae_perf3": 6.3303,
+  "mae_gain": -0.0282,
+  "mae_gain_ci": [
+   -0.0433,
+   -0.0129
+  ],
+  "bias_perf2": -0.426,
+  "bias_perf3": 0.378
+ },
+ "kills Map 1": {
+  "n": 32041,
+  "mae_perf2": 4.1987,
+  "mae_perf3": 4.2234,
+  "mae_gain": -0.0247,
+  "mae_gain_ci": [
+   -0.0318,
+   -0.0175
+  ],
+  "bias_perf2": -0.145,
+  "bias_perf3": 0.257
+ },
+ "hs Maps 1-2": {
+  "n": 32021,
+  "mae_perf2": 4.0369,
+  "mae_perf3": 4.0449,
+  "mae_gain": -0.0079,
+  "mae_gain_ci": [
+   -0.0149,
+   -0.0008
+  ],
+  "bias_perf2": -0.361,
+  "bias_perf3": 0.06
+ }
+}
