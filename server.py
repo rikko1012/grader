@@ -2749,6 +2749,10 @@ def public(res):
         r.pop("steam_id", None)
         r.pop("lineup", None)
     pb.pop("steam_id", None)
+    try:                                   # display only: HS% of each last-10 series (owner 2026-10-20)
+        series_hs(pb, (res.get("grade") or {}).get("prop"))
+    except Exception:
+        traceback.print_exc()
     try:                                   # the card's odds lines, from the full grade (before the recipe is stripped)
         res["odds_info"] = card_odds_info(res)
     except Exception:
@@ -3035,8 +3039,51 @@ def _public_flag(f, src=None, book=None):
     return None                                     # anything not listed stays private
 
 
+def _hs_norm(s):
+    return re.sub(r"[^a-z0-9]", "", str(s or "").lower())
+
+
+def series_hs(pb, prop):
+    """Each last-10 series' headshots / kills on the maps the table shows (owner 2026-10-20: HS% on the card) - display
+    only, never a grade input. The maps come from the same rows as the table: HLTV's series (the cached read the grade
+    just made), else his BO3.gg maps; a series is filled only when the matched maps reproduce the table's own numbers
+    (same date, opponent and per-map values) and every map has a real headshot count (0 with 12+ kills = missing)."""
+    import cs2_scout
+    stat = "headshots" if prop == "hs" else "kills"
+    try:
+        hl = cs2_scout._hltv_series(pb, 365)
+    except Exception:
+        hl = []
+    pool = {}
+    for m in list(hl or []) + list(pb.get("recent_maps") or []):
+        pool.setdefault((str(m.get("date"))[:10], _hs_norm(m.get("opponent"))), []).append(m)
+    for key in ("recent_form", "recent_form_map1", "recent_form_123"):
+        rf = pb.get(key)
+        for s in (rf or {}).get("series") or [] if isinstance(rf, dict) else []:
+            n = len(s.get("values") or [])
+            cands = {}
+            for m in pool.get((str(s.get("date"))[:10], _hs_norm(s.get("opponent"))), []):
+                cands.setdefault((m.get("source"), m.get("match_id")), []).append(m)
+            for ms in cands.values():
+                ms = sorted(ms, key=lambda m: m.get("number") or 9)[:n]
+                if len(ms) != n or [m.get(stat) for m in ms] != list(s["values"]):
+                    continue
+                if any(m.get("headshots") is None or not m.get("kills") or (m["headshots"] == 0 and m["kills"] >= 12) for m in ms):
+                    continue
+                k, h = sum(m["kills"] for m in ms), sum(m["headshots"] for m in ms)
+                s["hs"], s["hs_kills"], s["hs_pct"] = h, k, round(100 * h / k, 1)
+                break
+
+
 def protect_recipe(res):
     g = res.get("grade")
+    sim0 = res.get("simulation")
+    if isinstance(g, dict) and isinstance(sim0, dict) and sim0.get("anchored") and "rounds" not in sim0:
+        try:                                        # display only (sim_rounds.py): the same runs grouped by map length,
+            import sim_rounds                       # read from the full grade before its detail is trimmed below
+            res["simulation"] = dict(sim0, rounds=sim_rounds.round_view(g))
+        except Exception:
+            traceback.print_exc()
     if isinstance(g, dict):
         flags = []
         src, book = odds_selected(res.get("odds")), (res.get("odds") or {}).get("book")
@@ -3054,7 +3101,7 @@ def protect_recipe(res):
             g["reason"] = next((t for k, t in _REASONS if g["reason"].startswith(k)), "Not graded")
     sim = res.get("simulation")
     if isinstance(sim, dict):
-        res["simulation"] = {k: sim.get(k) for k in ("p_more", "p_push", "mean", "p10", "p50", "p90", "scenarios", "scenarios_note", "anchored")}
+        res["simulation"] = {k: sim.get(k) for k in ("p_more", "p_push", "mean", "p10", "p50", "p90", "scenarios", "scenarios_note", "anchored", "rounds")}
     res.pop("simulation_error", None)
     o = (res.get("player_block") or {}).get("overall") or {}
     for k in ("kpr", "hs_pct", "form_blend", "kpr_single_window", "hs_single_window"):

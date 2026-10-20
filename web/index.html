@@ -238,6 +238,8 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
   .herocard .stats{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
   .herocard .stat{padding:7px 8px;min-width:0} .herocard .stat .k{font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .herocard .stat .v{font-size:16px}
   .herocard .stat .n{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .l10 th,.l10 td{padding:9px 4px;font-size:12px} .l10 th{font-size:9px;letter-spacing:.02em}
+  .rsim th,.rsim td{padding:8px 6px} .rsim td:first-child{min-width:84px}
   .rates{gap:6px;margin-top:10px} .rate{min-width:0;flex:1;padding:6px 6px} .rate b{font-size:15px} .rate span{font-size:10.5px}
   .actions{gap:5px} .actions .chipbtn{padding:6px 10px;font-size:12px}
   .herocard .small.muted{font-size:11.5px}
@@ -2772,6 +2774,7 @@ function render(d) {
       <div class="stat ${g.lambda_final - g.line > 0 ? "up" : "down"}"><div class="k">Edge</div><div class="v">${(g.lambda_final - g.line > 0 ? "+" : "") + (Math.abs(g.lambda_final - g.line) < 0.1 ? (g.lambda_final - g.line).toFixed(2) : (g.lambda_final - g.line).toFixed(1))}</div><div class="n">projection − line</div></div>
       ${sc === "123" && !has123 ? `<div class="stat"><div class="k">Last ${pb.recent_form?.matches || 10}</div><div class="v">${pb.recent_form?.avg_total ?? "–"} <span class="small muted">avg</span></div><div class="n">Maps 1–2 totals – no Maps 1–3 record</div></div>`
         : `<div class="stat"><div class="k">Last ${rf.matches || 10}${envW ? " " + envW : ""}${sc === "1" ? " · Map 1" : sc === "123" ? " · Maps 1–3" : ""}</div><div class="v">${rf.avg_total ?? "–"} <span class="small muted">avg</span></div><div class="n">${rf.overs ?? "–"}/${rf.decided ?? rf.matches ?? "–"} over${rf.pushes ? ` · ${rf.pushes} push` : ""} · median ${rf.median_total ?? "–"}</div></div>`}
+      ${hsTile(pb, rf, envW)}
     </div>`;
   }
   {
@@ -2888,6 +2891,7 @@ function render(d) {
       </tbody></table></div>
       ${Math.abs(sm.p_more - (g.p_more ?? sm.p_more)) > 0.015 ? `<div class="small muted" style="margin-top:6px">The grade shows ${pct(g.p_more)} for Over: ${(g.flags || []).some(f => f.startsWith("CAP") || f.startsWith("Chance capped")) ? "high chances are capped on the grade (see notes)" : perfGrade(g) ? "both come from the same distribution – the gap is run-to-run noise" : "the older model adds safety margins on top of the distribution"}. The simulation shows the distribution itself.</div>` : ""}
     </section>`;
+    h += roundSim(sm.rounds, g, unit);
   }
 
   h += `<section class="card"><h2>Last ${rf.matches ?? 10} ${envW ? envW + " series" : "matches"} · ${sc === "123" && !has123 ? "Maps 1–2" : scLab}${cmpLine != null && rf.hit_rate != null ? ` · over ${g.line} in ${rf.overs}/${rf.decided ?? rf.series?.length ?? rf.matches} (${pct(rf.hit_rate,0)})${rf.pushes ? ` · ${rf.pushes} push` : ""}` : ""}</h2>`
@@ -2899,10 +2903,10 @@ function render(d) {
   }
   if (rf.series?.length) {
     h += chart(rf.series, cmpLine, sc === "123" && !has123 ? null : g.lambda_final);
-    h += `<div class="scroll"><table><thead><tr><th>Date</th><th>Opponent</th><th class="mapcol">${sc === "1" ? "Map 1" : has123 ? "Maps played" : "Maps 1–2"}</th><th class="num">${g.prop === "hs" ? "HS" : "Kills"}</th><th>Team result</th><th>Prop</th></tr></thead><tbody>`;
-    for (const s of rf.series) h += `<tr><td class="num" style="text-align:left">${shortDate(s.date)}</td><td>${esc(s.opponent)}${s.source ? `<span class="src" title="Numbers from HLTV">H</span>` : ""}</td>
-      <td class="small mapcol">${s.maps.map(mapName).join('<span class="dot"> · </span>')}</td><td class="num"><span class="parts">${s.values.join(" + ")} = </span><b>${s.total}</b></td>
-      <td>${esc(s.result)}</td>${cmpLine == null ? `<td class="muted">–</td>` : `<td class="${s.total > g.line ? "hit" : s.total === g.line ? "muted" : "miss"}">${s.total > g.line ? "Over" : s.total === g.line ? "Push" : "Under"}</td>`}</tr>`;
+    h += `<div class="scroll"><table class="l10"><thead><tr><th>Date</th><th>Opponent</th><th class="mapcol">${sc === "1" ? "Map 1" : has123 ? "Maps played" : "Maps 1–2"}</th><th class="num">${g.prop === "hs" ? "HS" : "Kills"}</th><th class="num" title="Headshots / kills on these maps">HS%</th><th>Result</th><th>Prop</th></tr></thead><tbody>`;
+    for (const s of rf.series) { const hx = hsOfSeries(s); h += `<tr><td class="num" style="text-align:left">${shortDate(s.date)}</td><td>${esc(s.opponent)}${s.source ? `<span class="src" title="Numbers from HLTV">H</span>` : ""}</td>
+      <td class="small mapcol">${s.maps.map(mapName).join('<span class="dot"> · </span>')}</td><td class="num"><span class="parts">${s.values.join(" + ")} = </span><b>${s.total}</b></td><td class="num">${hx ? num(hx.pct * 100, 1) + "%" : `<span class="muted">–</span>`}</td>
+      <td>${esc(s.result)}</td>${cmpLine == null ? `<td class="muted">–</td>` : `<td class="${s.total > g.line ? "hit" : s.total === g.line ? "muted" : "miss"}">${s.total > g.line ? "Over" : s.total === g.line ? "Push" : "Under"}</td>`}</tr>`; }
     h += `</tbody></table></div><div class="small muted" style="margin-top:8px">Average ${rf.avg_total} · median ${rf.median_total} ${stat} on ${sc === "1" ? "Map 1" : has123 ? "Maps 1–3" : "Maps 1–2"}${rf.series.some(x => x.source) ? ` · <span class="src" style="vertical-align:baseline">H</span> = numbers from HLTV` : ""}</div>`;
   } else h += `<div class="muted">No recent results for ${scLab}.</div>`;
   h += `</section>`;
@@ -3263,8 +3267,32 @@ function cardTab(title) {
   const t = String(title || "").trim();
   if (/^(Last |Head-to-head|Stats|HLTV|FACEIT|Second source)/.test(t)) return "history";
   if (/^Projection comparison/.test(t)) return "markets";
+  if (/^(Match simulation|Round simulation)/.test(t)) return "sim";     // Overview, right under the model distribution
   if (/^(Match|Role|Checks|Notes)/.test(t)) return "match";
   return "overview";
+}
+// HS% (owner 2026-10-20, display only): headshots / kills of each last-10 series (server: series_hs - the same maps as
+// the table, filled only when they reproduce the table's numbers) and his 3 / 12-month HS% (form windows)
+const hsOfSeries = s => s && s.hs_kills ? {hs: s.hs, k: s.hs_kills, pct: s.hs / s.hs_kills} : null;
+function hsTile(pb, rf, envW) {
+  const fw = (pb.overall || {}).form_windows || {}, per = (rf.series || []).map(hsOfSeries).filter(Boolean);
+  const k = per.reduce((a, x) => a + x.k, 0), hs = per.reduce((a, x) => a + x.hs, 0);
+  const last = per.length >= 3 ? hs / k * 100 : null, w = x => fw[x]?.hs_pct != null ? `${x} ${num(fw[x].hs_pct, 1)}%` : "";
+  if (last == null && fw["3m"]?.hs_pct == null) return "";
+  const head = last != null ? `last ${per.length}${envW ? " " + envW : ""}` : "3 months";
+  return `<div class="stat" title="Headshots / kills - ${head}${w("3m") ? " · " + w("3m") : ""}${w("12m") ? " · " + w("12m") : ""}"><div class="k">HS%</div><div class="v">${num(last != null ? last : fw["3m"].hs_pct, 1)}%</div><div class="n">${[head, last != null ? w("3m") : w("6m"), w("12m")].filter(Boolean).join(" · ")}</div></div>`;
+}
+// round simulation (owner 2026-10-20): the match simulation's own 20,000 runs grouped by how long the maps ran
+// (server: sim_rounds.round_view, display only) - shown on Overview right under the model distribution
+function roundSim(rv, g, unit) {
+  if (!rv || !Array.isArray(rv.rows) || !rv.rows.length) return "";
+  const pc = x => `<b class="${x >= .5 ? "up" : "dn"}">${(x * 100).toFixed(1)}%</b>`, mapsW = rv.maps === 1 ? "the map" : `the ${rv.maps} maps`;
+  return `<section class="card simcard"><h2>Round simulation · ${(rv.runs || 20000).toLocaleString("en-US")} runs</h2>
+    <div class="small muted" style="margin:-4px 0 10px">The same runs as the match simulation, grouped by how many rounds ${mapsW} lasted (OT = overtime). Round counts come from real pro maps; which runs get the long maps is an illustration, not a tested forecast.</div>
+    <div class="kv"><span>Rounds</span><span>avg <b>${rv.rounds_mean}</b> · 8 in 10: ${rv.rounds_p10}–${rv.rounds_p90} · ${num(rv.per_round, 2)} ${unit}/round</span></div>
+    <div class="scroll"><table class="simtab rsim"><thead><tr><th>Maps</th><th class="num">Chance</th><th class="num">Rounds</th><th class="num">Avg</th><th class="num">Over ${g.line}</th></tr></thead><tbody>
+    ${rv.rows.map(x => `<tr><td><b>${esc(x.label)}</b><div class="muted small">${esc(x.note)}</div></td><td class="num">${pct(x.chance)}</td><td class="num">${x.rounds}</td><td class="num">${x.avg}</td><td class="num">${pc(x.p_over)}</td></tr>`).join("")}
+    </tbody></table></div></section>`;
 }
 // the model's distribution for this total (server: dist_view - shown only when it reproduces the grade's own chances)
 function distChart(d) {
@@ -3291,8 +3319,9 @@ function distChart(d) {
 function cardTabs(out, d) {
   const kids = [...out.children], hero = kids.find(x => x.classList.contains("herocard"));
   if (!hero) return false;
-  const panes = Object.fromEntries(CARD_TABS.map(([k]) => [k, []]));
-  for (const el of kids) { if (el === hero) continue; const h2 = el.querySelector("h2"); panes[cardTab(h2 && h2.textContent)].push(el); }
+  const panes = Object.fromEntries(CARD_TABS.map(([k]) => [k, []])), sims = [];
+  for (const el of kids) { if (el === hero) continue; const h2 = el.querySelector("h2"), t = cardTab(h2 && h2.textContent); (t === "sim" ? sims : panes[t]).push(el); }
+  sims.sort((a, b) => (a.classList.contains("simcard") ? 0 : 1) - (b.classList.contains("simcard") ? 0 : 1));   // rounds first
   const dc = distChart(d);
   let want = store.get("cs2s_cardtab", "overview");
   if (!panes[want] || (!panes[want].length && !(want === "overview" && dc))) want = "overview";
@@ -3304,6 +3333,7 @@ function cardTabs(out, d) {
     const pane = document.createElement("div");
     pane.className = "cardpane"; pane.id = "cpane-" + k; pane.setAttribute("role", "tabpanel"); pane.setAttribute("aria-labelledby", "ctab-" + k); pane.hidden = k !== want;
     if (k === "overview" && dc) pane.insertAdjacentHTML("beforeend", dc);
+    if (k === "overview") sims.forEach(el => pane.appendChild(el));
     panes[k].forEach(el => pane.appendChild(el));
     if (!pane.children.length) pane.innerHTML = `<div class="small muted">Nothing more for this line.</div>`;
     prev.after(pane); prev = pane;
