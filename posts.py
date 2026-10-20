@@ -115,6 +115,8 @@ def drafts(board_rows, book, db_path, now=None, min_grade="B-"):
                         "platform": book, "line": f["line"], "side": f["pick"], "chance": f["p_pick"], "grade": f["grade"],
                         "stake_units_saved": f["units"], "stake_units_board": r.get("units"), "projection": f["lambda"],
                         "match_start": p["match_start"], "last10_saved": f["rec_hit"], "text": t, "chars": x_len(t),
+                        "player": p["player"], "prop": p["prop"], "scope": p["scope"] or "12", "player_id": r.get("player_id"),
+                        "match_slug": r.get("match_slug"),
                         "fits_x": x_len(t) <= X_LIMIT, "verified": True})
     finally:
         con.close()

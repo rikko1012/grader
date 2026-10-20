@@ -872,6 +872,35 @@ def studio_history_payload(batches, now=None):
     return {"at": now.isoformat(timespec="seconds"), "batches": out}
 
 
+def content_book_page():
+    """The live content book: today's verified drafts on both platforms (posts.drafts - saved forecast + line offered now),
+    the board's own facts (other platform's line, opening line) and the Results tab's current figures."""
+    import content_book
+    import posts
+    drafts, rows, skipped = [], [], 0
+    for bk in ("prizepicks", "underdog"):
+        try:
+            b = board_payload(bk)["rows"]
+            rows += b
+            d = posts.drafts(b, bk, picklog.DB, min_grade="B-")
+            drafts += d["drafts"]
+            skipped += len(d["skipped"])
+        except Exception:
+            traceback.print_exc()
+    drafts.sort(key=lambda d: (posts.LETTERS.index(d["grade"]), -(d["chance"] or 0)))
+    res = None
+    try:
+        r = results_payload() or {}
+        pk = r.get("picks") or {}
+        if pk.get("picks"):
+            res = (f"{pk['picks']} picks in {pk.get('matches')} matches: printed {pk['printed'] * 100:.1f}% average chance, "
+                   f"won {pk['observed'] * 100:.1f}% (a push counts as won), as of {r.get('as_of')}")
+    except Exception:
+        res = None
+    return content_book.page(content_book.live_scripts(drafts, rows), datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+                             skipped, res)
+
+
 def results_payload():
     """Member Results (results_view.member_results) from the learning cycle's stored P1 export."""
     import learning
@@ -3294,6 +3323,20 @@ class Handler(BaseHTTPRequestHandler):
                     _DIAG.update(at=time.time(), data=diagnostics.build(picklog.export(), picklog.export_forecasts(inputs=True),
                                                                         slip_batches.read()))
                 return self.send(200, _DIAG["data"])
+            if u.path in ("/content-book", "/content-book.md"):
+                # the video creator's content book (owner 2026-10-19): the 1,000-idea library + today's real lines, built
+                # on every load from verified saved forecasts (posts.drafts). Admin token, or CONTENT_BOOK_KEY - a separate
+                # read-only key for this page only (never the admin token). Unknown key = 404 (the page is not advertised).
+                import hmac
+                ck = os.environ.get("CONTENT_BOOK_KEY") or ""
+                if not (self.authed(q.get("token")) or (ck and hmac.compare_digest(str(q.get("key") or ""), ck))):
+                    return self.send(404, {"error": "not found"})
+                import content_book
+                if u.path.endswith(".md"):
+                    return self.send(200, content_book.markdown().encode(), "text/markdown; charset=utf-8",
+                                     {"Content-Disposition": 'attachment; filename="1time-content-book.md"'})
+                st_, body_ = shared(("content_book",), lambda: (200, content_book_page().encode()), ttl=60)
+                return self.send(st_, body_, "text/html; charset=utf-8")
             if u.path == "/admin/diagnostics" and self.authed(q.get("token")):
                 return self.send(200, (WEB / "diagnostics.html").read_bytes(), "text/html; charset=utf-8")
             if u.path == "/admin/memprof.json" and self.authed(q.get("token")):
