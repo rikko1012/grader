@@ -461,3 +461,26 @@ win chance (the same p lol-1 uses):
 
 **Decision.** A9's rule, unchanged (A7's rule + Map 1 point >= 0 + a smaller assists Under gap at book-style lines, in BOTH
 F-VALID and the spent period). Kills: evidence only. A pass becomes lol-1g for assists.
+
+### A10 result (2026-10-20; lol/eval/wlmix_a10_2026-10-20.json) - wl-mix FAILS
+
+Assists Map 1 log-score gain F-VALID -0.0018, spent -0.0010; Maps 1-2 F-VALID +0.0023 (+0.0005, +0.0039), spent +0.0002
+(-0.0019, +0.0021); the Under gap unchanged (F-VALID 68.8% / 64.2%). Nothing changes.
+
+**Diagnostic (not a test; scratchpad lol_form_diag.py).** lol-1f's assists error by how far the book-style line (his last-10
+median) sits from the projection: where the line is 5-30% ABOVE the projection - the Under picks - actual assists beat the
+projection by about +3% in both F-VALID and the spent period; where the line is below, the error is about 0. Kills show no
+such pattern. Reading: assists are shrunk too hard toward the role's share (lol-1's assists K0 = 64 games of prior vs 16 for
+kills), so a player in strong form is projected low and his Under over-prints.
+
+## Amendment A11 (2026-10-20, written after the diagnostic, before any A11 number): assists prior weight (k0-a) - LAST candidate
+
+**Attempt count:** A8, A9 and A10 failed on these periods; this is the fourth and last candidate tested on them. If it fails,
+the assists question moves to forward data only (Worlds 2026 Main Event onward).
+
+**Candidate k0-a.** lol-1f for assists with lol-1's assists prior weight K0 replaced by one of {8, 16, 32} (everything else -
+half-life, KO, KT, EW, NB size, lol-1f's coefficients - unchanged); chosen on F-TRAIN by mean NB log score over all scopes.
+
+**Decision.** A9's rule, unchanged, in BOTH F-VALID and the spent period. Caveat recorded in advance: lol-1 chose K0 = 64
+on 2026-04..07 targets (overlapping F-VALID) by squared error, which makes F-VALID harder to pass, not easier. A pass becomes
+lol-1g (assists K0 changed; kills and deaths unchanged).
