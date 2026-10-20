@@ -19,7 +19,7 @@ RULES = [
     "No profit, ROI or record claims about the grader. If you show results, show the Results tab exactly as it is, losses included.",
     "Never pick a stat window because it sounds strong (\"hit in 9 of his last 10\"). The only allowed context is what the live script gives you.",
     "Lean and 0-unit lines are not picks. Show them only as examples of the grader saying \"pass\".",
-    "Every video ends with: \"Research tool, not betting advice. 21+. Gambling problem? Call 1-800-GAMBLER.\" (check your state's rules).",
+    "Every video and caption ends with: \"Research tool, not betting advice.\"",
     "Lines move. Film the line check (the platform showing the same number) and post the same day; if the line moved, re-pull the live section.",
     "Never target or feature anyone under 21; no school settings, no cartoon styles aimed at kids.",
 ]
@@ -76,7 +76,7 @@ GUIDE = [
     ("Words to use / avoid", [
         "Use: 'graded', 'model estimate', 'the grader projects', 'research', 'the line', 'Lean = pass'.",
         "Avoid: 'lock', 'guaranteed', 'easy money', 'hit rate' (for a single pick), 'we're up X units', anything aimed at under-21s.",
-        "Always end: 'Research tool, not betting advice. 21+. Gambling problem? Call 1-800-GAMBLER.'",
+        "Always end: 'Research tool, not betting advice.'",
     ]),
 ]
 

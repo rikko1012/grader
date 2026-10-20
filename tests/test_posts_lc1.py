@@ -51,7 +51,7 @@ def test_a_draft_states_the_saved_forecast_and_a_fixed_context(db):
     assert d["verified"] and d["forecast_id"] and d["model_version"] == "TESTVER" and d["chance"] == 0.608 and d["grade"] == "B"
     t = d["text"]
     assert t.startswith("tester OVER 27.5 kills · Grade B · 60.8% model estimate") and "Grader's last-10 record at this line (Maps 1-2): 6 over, 4 under." in t
-    assert "Alpha vs Bravo, " in t and " CT (PrizePicks)." in t and "Research tool, not betting advice. 21+" in t
+    assert "Alpha vs Bravo, " in t and " CT (PrizePicks)." in t and t.endswith("Research tool, not betting advice.") and "21+" not in t
     assert d["fits_x"] and d["chars"] == posts.x_len(t) > len(t)            # X counts the link as 23 and an emoji as 2
     assert posts.x_len("whop.com/1timeesports 🧞") == 23 + 1 + 2
 

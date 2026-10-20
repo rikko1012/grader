@@ -21,7 +21,7 @@ import grader
 
 LETTERS = ("A+", "A", "A-", "B+", "B", "B-")
 SCOPE_WORDS = {"12": "Maps 1-2", "1": "Map 1", "123": "Maps 1-3"}
-FOOTER = "Full slate in 1Time 👉 whop.com/1timeesports\nResearch tool, not betting advice. 21+"
+FOOTER = "Full slate in 1Time 👉 whop.com/1timeesports\nResearch tool, not betting advice."
 X_LIMIT = 280
 _URL = re.compile(r"(?:https?://)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?:/\S*)?", re.I)
 

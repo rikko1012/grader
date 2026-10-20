@@ -9,7 +9,7 @@ For the video creator. Shoot from this library; take every number from the **liv
 3. No profit, ROI or record claims about the grader. If you show results, show the Results tab exactly as it is, losses included.
 4. Never pick a stat window because it sounds strong ("hit in 9 of his last 10"). The only allowed context is what the live script gives you.
 5. Lean and 0-unit lines are not picks. Show them only as examples of the grader saying "pass".
-6. Every video ends with: "Research tool, not betting advice. 21+. Gambling problem? Call 1-800-GAMBLER." (check your state's rules).
+6. Every video and caption ends with: "Research tool, not betting advice."
 7. Lines move. Film the line check (the platform showing the same number) and post the same day; if the line moved, re-pull the live section.
 8. Never target or feature anyone under 21; no school settings, no cartoon styles aimed at kids.
 
@@ -60,7 +60,7 @@ For the video creator. Shoot from this library; take every number from the **liv
 
 - Use: 'graded', 'model estimate', 'the grader projects', 'research', 'the line', 'Lean = pass'.
 - Avoid: 'lock', 'guaranteed', 'easy money', 'hit rate' (for a single pick), 'we're up X units', anything aimed at under-21s.
-- Always end: 'Research tool, not betting advice. 21+. Gambling problem? Call 1-800-GAMBLER.'
+- Always end: 'Research tool, not betting advice.'
 
 
 ## Pillars

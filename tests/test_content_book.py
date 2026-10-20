@@ -17,7 +17,7 @@ def test_the_library_has_1000_distinct_ideas_rules_and_the_product_guide():
     assert all(r[1] in cb.FORMATS for r in rows)
     md = cb.markdown()
     assert len(re.findall(r"(?m)^\d+\. \*\*", md)) == 1000
-    assert "1-800-GAMBLER" in md and "Know the product" in md and "model estimate" in md
+    assert "1-800-GAMBLER" not in md and "21+." not in md and "Research tool, not betting advice." in md and "Know the product" in md and "model estimate" in md
     for head in ("What 1Time is", "How a CS2 grade is made", "What members see and use", "What the grader is NOT"):
         assert f"### {head}" in md
     assert "A+ 80%+, A 74%+, A- 68%+, B+ 63%+, B 57%+, B- 55%+" in md and "A+ 3U, A 2U, A- 1.5U, B+ 1U, B and B- 0.5U" in md
