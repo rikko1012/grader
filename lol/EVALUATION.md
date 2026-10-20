@@ -484,3 +484,13 @@ half-life, KO, KT, EW, NB size, lol-1f's coefficients - unchanged); chosen on F-
 **Decision.** A9's rule, unchanged, in BOTH F-VALID and the spent period. Caveat recorded in advance: lol-1 chose K0 = 64
 on 2026-04..07 targets (overlapping F-VALID) by squared error, which makes F-VALID harder to pass, not easier. A pass becomes
 lol-1g (assists K0 changed; kills and deaths unchanged).
+
+### A11 result (2026-10-20; lol/eval/k0_a11_2026-10-20.json) - k0-a FAILS (last candidate on these periods)
+
+F-TRAIN mean NB log score: K0 64 (lol-1) -2.98273; 32 -2.98313; 16 -2.98498; 8 -2.98912. lol-1's K0 stayed best, so the
+candidate equals lol-1f and fails A9's rule. The hot-form subset's +3% does not survive as a better projection overall.
+
+**Where this leaves the assists question.** Four registered candidates (ep-1, lr-1, wl-mix, k0-a) failed; per A11 no further
+projection candidate is tested on these periods. The assists Under gap (about 4 points at book-style lines) remains recorded.
+The only remaining direct remedy is recalibrating assists chances themselves (owner decision; it lowers printed chances),
+otherwise forward data from the Worlds 2026 Main Event decides. lol-1f is unchanged.
