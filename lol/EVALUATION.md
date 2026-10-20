@@ -434,3 +434,30 @@ of an assists level that runs low; lol-1f's assists bias drifts from about +2% (
 Kills is reported with the same candidate as evidence only (kills is calibrated; no kills change in this amendment).
 A pass becomes model version lol-1g (kills and deaths unchanged); earlier forecasts keep their version; stakes stay 0U;
 the forward record is reported per version.
+
+### A9 result (2026-10-20; lol/eval/level_a9_2026-10-20.json) - lr-1 FAILS
+
+Chosen on F-TRAIN: W=60, K=160 (the weakest correction in the grid; every grid point scored below lol-1f on F-TRAIN). Assists
+Maps 1-2 log-score gain: F-VALID -0.0009 (-0.0040, +0.0023), spent +0.0012 (-0.0028, +0.0053). The Under gap did not
+close (F-VALID printed 68.9% / won 64.1%; spent 68.0% / 65.5%). Map 1 assists bias is already near 0 while its Unders still
+over-print, so the gap is the distribution's SHAPE, not the level. Nothing changes.
+
+## Amendment A10 (2026-10-20, written after A9's result and before any A10 number): win/loss mixture (wl-mix)
+
+Second candidate for the owner's assists fix (A9's owner decision applies). **Attempt count:** A8 and A9 failed; this is the
+third candidate tested on these periods, recorded here so the result is read with that in mind.
+
+**Why.** lol-1 sets a game's mean from the Elo win chance p and the population ratio of the stat in wins to losses
+(priors win_ratio), but draws the total from ONE negative binomial around that blended mean. A player's assists in a won
+game and in a lost game are two different distributions; their mixture is wider and right-skewed - which is what an
+Under that over-prints above the mean looks like.
+
+**Candidate wl-mix (assists).** For a scope of n games (n = 1, 2, 3) with lol-1f mean mu (total) and p = the target's Elo
+win chance (the same p lol-1 uses):
+- per-game mean mu1 = mu / n; win mean mw = mu1 * R / (p * R + 1 - p), loss mean ml = mu1 / (p * R + 1 - p) (R = lol-1's
+  win_ratio for the stat, unchanged), so the mixture mean is exactly mu;
+- the number of wins k ~ Binomial(n, p); the total | k ~ NB(k * mw + (n - k) * ml, size s);
+- s per (stat, scope) by maximum likelihood on F-TRAIN (grid 0.5 .. 200, log-spaced, 60 points); nothing else is fitted.
+
+**Decision.** A9's rule, unchanged (A7's rule + Map 1 point >= 0 + a smaller assists Under gap at book-style lines, in BOTH
+F-VALID and the spent period). Kills: evidence only. A pass becomes lol-1g for assists.
