@@ -358,3 +358,30 @@ test. Forecasts made before lol-1f keep their version. Stakes stay 0U under the 
 **What this does and does not show.** The gains are small (about +0.004 to +0.007 log score per player-market on
 development data; lol-1's gain over B0 was about +0.035). They are development evidence on synthetic totals, not evidence
 of an advantage at Underdog / PrizePicks lines - that still needs the forward real-line count.
+
+## Amendment A8 (2026-10-20, written before any candidate number was computed): event pace (ep-1)
+
+**Why.** The owner asked (2026-10-20) for better LoL grades. The forward record is 2 settled series (Worlds 2026 Play-In,
+lol-1, 101 lines: graded 38-40 at P1, printed 68.7%), far too few to tune on. A trend scan of lol-1f's own projections on
+the pulled history (scratchpad lol_trends.py / lol_trends2.py; aggregate bias by period, scope, tournament and home league
+- no candidate was scored) showed: domestic leagues within about 2%; international events off by about 10-15% in both
+directions, event by event (MSI 2026 and Esports World Cup 2026 projected too low; Worlds 2026 Play-In too high: kills
++24%, assists +34% on 4 Map 1 series). Reading: each event has its own kill environment (patch, stage, field) that a
+player's domestic history cannot carry. **Disclosure:** that scan looked at F-VALID and the spent period in aggregate, so
+neither is a clean hold-out for this idea; hence the two-period rule below and the forward check.
+
+**Candidate ep-1 (one family, all events, domestic included).** For a target series on day d in tournament T (its game 1's
+tournament name) and stat s:
+- every game of T on days before d, between teams A and B: actual = both teams' total s in that game; expected = the mean of
+  A's and B's average per-game total s (own + opponent's) over their games outside T in the 120 days before d (a team
+  with no such games is left out of the sum);
+- c = (sum actual + K * m) / (sum expected + K * m), m = mean expected per game; no earlier game of T: c = 1;
+- the projection becomes lol-1f mean x c^b (the NB size unchanged).
+- Grid chosen on F-TRAIN only (best mean NB log score over all scopes): K in {2, 5, 10, 20, 40, 80} games, b in {0.5, 1.0}.
+
+**Decision (per stat, kills and assists; fixed now).** ep-1 replaces lol-1f for a stat only if it passes A7's rule (Maps 1-2
+log-score gain 95% series-grouped interval above 0; Maps 1-3 point estimate not below 0; Maps 1-2 MAE not higher) in BOTH
+F-VALID (2026-05-01..07-31) and the spent period (2026-08-01..10-16), and Map 1's log-score gain point estimate is not below 0
+in both (the next live events are best-of-1). International events are reported separately (evidence only). A passing stat
+becomes lol-1g, refitted on nothing (K and b stay as chosen on F-TRAIN); forecasts before it keep their version; stakes
+stay 0U; the forward real-line record is reported per version.
