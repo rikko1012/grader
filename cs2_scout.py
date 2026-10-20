@@ -1346,7 +1346,7 @@ CM2_KEEP = ("version", "lambda", "lambda_kills", "rate", "rate_all_envs", "opp_f
             "spread_c", "data_quality")
 
 
-def _cm2_live(out, pb, day, tonight):
+def _cm2_live(out, pb, day, tonight, opponent=None):
     """Kills Maps 1-2 on the HLTV route: cm-2's projection and spread replace perf-2's. perf-2's numbers stay beside it
     as `perf2` (what the shadow comparisons keep measuring against). When cm-2 cannot forecast this line the grade stays
     on perf-2 and the reason is saved."""
@@ -1355,10 +1355,18 @@ def _cm2_live(out, pb, day, tonight):
     try:
         import cm2
         import perf_shadow
+        t = cm2.current()
+        if t is None:               # no tables: nothing to look up
+            return dict(out, cm2_live={"ineligible": "cm-2 tables not built yet"})
         team = pb.get("playing_for") or pb.get("current_team")
-        r = cm2.projection(cm2.current(), out.get("hltv_player_ids") or [], perf_shadow._team_id(team) if team else None,
-                           out.get("hltv_opp_team"), day, None if tonight is None else tonight == "lan")
+        # the opponent by the cm-2 shadow's rule (perf_shadow.build): the live read's id, else the canonical id on the full
+        # database - an opponent whose maps all sit outside N0 has no live-read id but is in cm-2's full-history tables
+        opp_id = out.get("hltv_opp_team") or (perf_shadow._team_id(opponent) if opponent else None)
+        r = cm2.projection(t, out.get("hltv_player_ids") or [], perf_shadow._team_id(team) if team else None,
+                           opp_id, day, None if tonight is None else tonight == "lan")
     except Exception as e:      # noqa: BLE001 - cm-2 unavailable: the line stays on perf-2 and says so
+        if _transient_hltv_error(e):
+            raise               # an HLTV blip is transient (_perf_input: retry, then keep the last grade) - never a quiet perf-2 grade
         return dict(out, cm2_live={"ineligible": f"cm-2 unavailable ({type(e).__name__})"})
     if r.get("ineligible"):
         return dict(out, cm2_live={"ineligible": r["ineligible"]})
@@ -1414,7 +1422,7 @@ def _perf_input_once(pb, args, sc):
                     bo3["data_quality"] = ((dq + "; ") if dq not in (None, "ok") else "") + ("opponent not in HLTV" if not tid else "opponent has no HLTV maps") + " - average opponent"
                 return bo3
         if not out.get("error") and args.prop != "hs" and sc == "12":
-            out = _cm2_live(out, pb, day, tonight)
+            out = _cm2_live(out, pb, day, tonight, getattr(args, "opponent", None))
         return out                         # {"error": ...} when unavailable - the grader says so instead of silently falling back
 
 

@@ -1,5 +1,16 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
+## `794a775f51` — cm-2 live: opponent lookup by the shadow's rule + HLTV blips stay transient, 2026-10-20
+
+Fix to `8404c86d3c` (live 01:14-~01:45 UTC). Only `cs2_scout._cm2_live` changed.
+- **Opponent id:** the live perf-2 read gives no opponent id when every one of the opponent's maps sits outside N0 (the pin),
+  so 23 of 259 kills Maps 1-2 forecasts on `8404c86d3c` fell back to perf-2 ("own team or opponent not identified in HLTV")
+  although cm-2's full-history tables have the team. cm-2 now takes the opponent exactly as the cm-2 shadow record does
+  (perf_shadow.build): the live read's id, else the canonical id by name. perf-2 itself is unchanged (still N0).
+- **Transient rule:** an HLTV database error during cm-2's team lookup is re-raised to `_perf_input` (retry, then keep the
+  last grade) instead of quietly grading on perf-2. No tables = no lookups (perf-2, reason saved).
+- No thresholds, bands, caps, stakes or the cm-2 fit changed.
+
 ## `8404c86d3c` — cm-2 projects CS2 kills Maps 1-2 live (`perf-cm2`), 2026-10-20
 
 Owner decision 2026-10-20 (answer "1" to: promote cm-2 now for kills Maps 1-2, overriding the 300-match review rule).

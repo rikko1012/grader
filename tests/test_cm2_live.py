@@ -97,3 +97,22 @@ def test_the_fh1_shadow_still_compares_against_perf2_on_cm2_lines(fake, monkeypa
     assert rec["n0_check"]["published_reproduced"] and rec["n0_check"]["exact"]
     assert rec["published"]["proj_version"] == "perf-cm2" and rec["published"]["p_more"] == g["p_more"]
     assert rec["live"] == base["live"] and rec["fh1"] == base["fh1"]  # both arms still replay perf-2 exactly
+
+
+def test_an_opponent_outside_n0_is_found_by_the_shadows_rule(live):
+    """perf_live gives no opponent id when all his maps sit outside N0; cm-2 (full history) takes the canonical id by name,
+    exactly as perf_shadow.build does for the cm-2 record."""
+    r = cs2_scout._cm2_live(dict(_out(), hltv_opp_team=None), PB, DAY, "online", "Opp")
+    assert r["version"] == "perf-cm2" and r["lambda"] == cm2.projection(live, [PLAYER], TEAM, OPP, DAY, False)["lambda"]
+    assert cs2_scout._cm2_live(dict(_out(), hltv_opp_team=None), PB, DAY, "online", "Unknown")["version"] == "perf-2"
+
+
+def test_an_hltv_blip_in_the_team_lookup_is_transient_never_a_quiet_perf2_grade(live, monkeypatch):
+    import psycopg2
+
+    def boom(name):
+        raise psycopg2.OperationalError("server closed the connection unexpectedly")
+    monkeypatch.setattr(perf_shadow, "_team_id", boom)
+    assert cs2_scout._transient_hltv_error(psycopg2.OperationalError("x"))
+    with pytest.raises(psycopg2.OperationalError):
+        cs2_scout._cm2_live(_out(), PB, DAY, "online", "Opp")
