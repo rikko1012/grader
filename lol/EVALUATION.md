@@ -494,3 +494,29 @@ candidate equals lol-1f and fails A9's rule. The hot-form subset's +3% does not 
 projection candidate is tested on these periods. The assists Under gap (about 4 points at book-style lines) remains recorded.
 The only remaining direct remedy is recalibrating assists chances themselves (owner decision; it lowers printed chances),
 otherwise forward data from the Worlds 2026 Main Event decides. lol-1f is unchanged.
+
+## Amendment A12 (2026-10-20, written before any A12 number): a sharper win chance (sp-1) - owner override
+
+**Owner instruction (2026-10-20):** "find the issue and fix projection accuracy". A11 said no further PROJECTION candidate
+would be tested on these periods for the assists question; this is a different hypothesis aimed at a measured defect, run
+on the owner's instruction, with a fresh hold-out added. Read with the attempt count (A8-A11 failed) in mind.
+
+**The defect (measured before this amendment; scratchpad lol_elo_calib.py, lol_strength_room.py).**
+- lol-1's Elo win chance is compressed: domestic game 1, teams given 64% win 68%, 74% -> 78%, 36% -> 32%, 26% -> 22%;
+  almost every match sits at 40-60%.
+- Strength is the largest lever: replacing the expected result by the realised game-1 result (an oracle, a ceiling only)
+  cuts Map 1 MAE from 2.03 to 1.81 (kills) and 3.52 to 2.78 (assists) in the spent period.
+- No pipeline bug: live lol-1 lambdas equal the backtest's for the same players (4.75 vs 4.77 etc.).
+
+**Candidate sp-1.**
+- Win chance p' = sigmoid(a * logit(p_elo) + c * (KD_team - KD_opp)), KD = the team's time-weighted (half-life 60 days)
+  kill differential per game over its games before the match day (0 when none). a, c by maximum likelihood on F-TRAIN game-1
+  results (each team-match once).
+- lol-1f's projection with its strength factor recomputed from p' (lol-1's formula, win_ratio unchanged); the exponent EW
+  re-chosen on F-TRAIN from {0.5, 0.75, 1.0, 1.25, 1.5} by mean NB log score over all scopes (kills and assists separately).
+  Everything else of lol-1f unchanged (its coefficients, NB sizes; its own features keep the Elo p).
+
+**Decision (per stat).** sp-1 replaces lol-1f for a stat only if A7's rule (Maps 1-2 log-score 95% interval above 0; Maps 1-3
+point not below 0; Maps 1-2 MAE not higher) and Map 1's log-score point >= 0 hold in BOTH F-VALID and the spent period, AND
+on the fresh hold-out (series from 2026-10-17 in the 2026-10-19 pull, all scopes) the Map 1 log-score point estimate is not
+below 0. p' calibration (game-1 log loss vs Elo) is reported for each period. A pass becomes lol-1g.
