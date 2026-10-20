@@ -385,3 +385,25 @@ F-VALID (2026-05-01..07-31) and the spent period (2026-08-01..10-16), and Map 1'
 in both (the next live events are best-of-1). International events are reported separately (evidence only). A passing stat
 becomes lol-1g, refitted on nothing (K and b stay as chosen on F-TRAIN); forecasts before it keep their version; stakes
 stay 0U; the forward real-line record is reported per version.
+
+### A8 result (2026-10-20; lol/eval/event_pace_a8_2026-10-20.json) - ep-1 FAILS, nothing changes
+
+Chosen on F-TRAIN: kills K=40, b=0.5; assists K=80, b=0.5 (F-TRAIN mean log score gain about +0.0001 / -0.00001).
+
+| stat | period | Map 1 LS gain | Maps 1-2 LS gain (95%) | Maps 1-3 | Maps 1-2 MAE | A8 rule |
+|---|---|---|---|---|---|---|
+| kills | F-VALID | +0.0001 | +0.0005 (-0.0002, +0.0012) | -0.0004 | 2.989 -> 2.989 | fail |
+| kills | spent | +0.0003 | +0.0008 (-0.0002, +0.0018) | -0.0001 | 3.074 -> 3.076 | fail |
+| assists | F-VALID | -0.0000 | +0.0003 (-0.0004, +0.0011) | -0.0004 | 5.069 -> 5.069 | fail |
+| assists | spent | +0.0007 | +0.0017 (+0.0009, +0.0026) | +0.0005 | 5.159 -> 5.150 | pass |
+
+Decision: fail for both stats (A8 needs both periods). International events alone show larger gains (kills Maps 1-2
+F-VALID +0.0075 on 15 series) - evidence only, a selected subset, not promoted. lol-1f stays.
+
+**Other checks on the same day (evidence only, no change).**
+- lol-1f at book-style lines (evaluate.dev_line), out of its fit (Aug 1 - Oct 16): kills graded picks printed 67.5%, won
+  67.2% (16,840 picks, 1,363 series); assists printed 67.8%, won 65.6% - assists Unders 68.5% printed / 64.6% won, the same
+  pattern in F-VALID (68.6% / 64.2%). Book-style lines are a proxy; real lines are sharper (the CS2 record).
+- Forward (2 Worlds Play-In best-of-5s, lol-1): the model's side when the platform offered it went 11-26, when it did not
+  27-14. CS2's 521 P1 lines with saved offered sides do not show over-only lines shading the Over (Over hit 56.6%, 95%
+  46.7-67.0%, 46 matches), so no rule is built on it. The LoL page already shows "No pick" when the model's side is not offered.
