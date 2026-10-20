@@ -520,3 +520,21 @@ on the owner's instruction, with a fresh hold-out added. Read with the attempt c
 point not below 0; Maps 1-2 MAE not higher) and Map 1's log-score point >= 0 hold in BOTH F-VALID and the spent period, AND
 on the fresh hold-out (series from 2026-10-17 in the 2026-10-19 pull, all scopes) the Map 1 log-score point estimate is not
 below 0. p' calibration (game-1 log loss vs Elo) is reported for each period. A pass becomes lol-1g.
+
+### A12 result (2026-10-20; lol/eval/strength_a12_2026-10-20.json) - sp-1 FAILS
+
+Win model on F-TRAIN: a = 1.026 (Elo's scale is right on average), c = 0.038 per kill of margin. Game-1 log loss Elo -> sp-1:
+F-TRAIN 0.6529 -> 0.6414, F-VALID 0.6532 -> 0.6525, spent 0.6503 -> 0.6485, hold-out 0.5545 -> 0.5464. EW stayed 0.5 for both
+stats. Kills Maps 1-2 log-score gain: F-VALID -0.0010, spent -0.0005; assists -0.0006 / -0.0003; hold-out Map 1 -0.0016 (kills)
+/ -0.0021 (assists). Fails for both stats. The oracle headroom (knowing the game's winner) is outcome randomness that no
+pre-match strength measure recovers.
+
+**Further checks the same day (evidence only).**
+- The hold-out week (series from 2026-10-17) runs high: Map 1 kills bias +0.72 (36 series), led by LCK AS 2026 2nd
+  Championship (+29%), with Worlds 2026 Play-In (+24%), EM Summer Main Event (+12%) and promotion events in the first half of
+  October. Several other October events run low (Mongolia -14%, TCL Promotion -24%).
+- **Bug recorded, not changed:** lol-1f's "playoffs" feature is `"playoff" in tournament name`, so Championship, Main Event,
+  Play-In and Promotion stages are never flagged (FACTORS.md describes it as Leaguepedia IsPlayoffs, which is itself 0 for
+  these stages). On F-TRAIN those missed stages are projected correctly (kills +0.1%, 359 series, 11 events), so correcting the
+  definition would not change accuracy; it is left for the next refit.
+- Live lol-1 forecasts reproduce the backtest's projections (no pipeline bug).
