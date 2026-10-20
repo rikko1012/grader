@@ -30,6 +30,7 @@ For the video creator. Shoot from this library; take every number from the **liv
 ### How a CS2 grade is made
 
 - Projection: the player's kills (or headshots) per round, weighted toward recent maps, adjusted for the opponent, the match environment (LAN or online) and expected rounds - for the exact maps in the prop (Map 1, Maps 1-2 or Maps 1-3).
+- Maps 1-2 kills lines use the complete model (since 2026-10-20): those kill rates plus opponent-adjusted kills, both teams' Elo ratings and how long their maps run, fitted together on past matches.
 - Chance: the probability of Over and Under at that exact line from the projection's spread. Whole-number lines can push; the push chance is shown separately.
 - Grade from the chance of the chosen side: A+ 80%+, A 74%+, A- 68%+, B+ 63%+, B 57%+, B- 55%+. Under 55% = Lean (not a pick).
 - Kills chances are capped at 78% (very high printed kills chances did not hold up), so kills can't show A+.
