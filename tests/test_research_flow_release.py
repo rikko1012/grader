@@ -205,12 +205,19 @@ def test_moneyline_rows_show_each_sources_price_and_age(tmp_path):
 def test_card_sections_go_to_their_tab_and_the_chart_is_guarded(tmp_path):
     out = run_page(tmp_path, """(() => ({
       tabs: ["Last 10 matches · Maps 1–2", "Head-to-head vs X", "Stats · Maps 1–2 only", "HLTV", "FACEIT form", "Match", "Match players · A vs B",
-             "Match simulation · 20,000 runs", "Role · rifler", "Checks", "Projection comparison", "Notes", "Model distribution"].map(cardTab),
+             "Match simulation · 20,000 runs", "Role · rifler", "Checks", "Projection comparison", "Notes", "Model distribution",
+             "Round simulation · 20,000 runs"].map(cardTab),
+      rounds: roundSim({maps: 2, rounds_mean: 43.5, rounds_p10: 36, rounds_p90: 53, per_round: 0.69, runs: 20000,
+                        rows: [{label: "Overtime", note: "a map to OT", chance: 0.233, rounds: 52.9, avg: 38.8, p_over: 0.894}]}, {line: 31.5}, "kills"),
+      noRounds: roundSim(null, {line: 31.5}, "kills"),
       none: distChart({grade: {prop: "kills", scope: "12"}, dist_view: null}),
       chart: distChart({grade: {prop: "kills", scope: "12", line: 26}, verdict: {side: "More"},
                         dist_view: {pmf: [[24, 0.2], [25, 0.3], [26, 0.2], [27, 0.3]], mean: 25.6, median: 25, lo: 24, hi: 27, line: 26, over: 0.3, under: 0.5, push: 0.2, note: "N"}})
     }))()""")
-    assert out["tabs"] == ["history", "history", "history", "history", "history", "match", "match", "match", "match", "match", "markets", "match", "overview"]
+    # owner 2026-10-20: the simulations ("sim") render on Overview right under the model distribution (cardTabs)
+    assert out["tabs"] == ["history", "history", "history", "history", "history", "match", "match", "sim", "match", "match", "markets", "match",
+                           "overview", "sim"]
+    assert "Round simulation · 20,000 runs" in out["rounds"] and "Over 31.5" in out["rounds"] and "89.4%" in out["rounds"] and out["noRounds"] == ""
     assert out["none"] == ""
     assert "Push at 26 20.0%" in out["chart"] and 'role="img"' in out["chart"] and "line 26" in out["chart"] and "8 in 10" in out["chart"]
 
