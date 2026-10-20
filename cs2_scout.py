@@ -1341,6 +1341,34 @@ def bo3_perf_rows(pb, rule=BO3_ENV_RULE):
             for r in pb.get("recent_maps") or [] if r.get("kills") is not None and r.get("rounds") and r.get("date")]
 
 
+CM2_LIVE_VERSION = "perf-cm2"     # owner 2026-10-20: kills Maps 1-2 projected by cm-2 (cm2.py); rollback: CM2_LIVE=0
+CM2_KEEP = ("version", "lambda", "lambda_kills", "rate", "rate_all_envs", "opp_factor", "hs_per_kill", "sd", "rounds_per_map",
+            "spread_c", "data_quality")
+
+
+def _cm2_live(out, pb, day, tonight):
+    """Kills Maps 1-2 on the HLTV route: cm-2's projection and spread replace perf-2's. perf-2's numbers stay beside it
+    as `perf2` (what the shadow comparisons keep measuring against). When cm-2 cannot forecast this line the grade stays
+    on perf-2 and the reason is saved."""
+    if os.environ.get("CM2_LIVE", "1") == "0":
+        return out
+    try:
+        import cm2
+        import perf_shadow
+        team = pb.get("playing_for") or pb.get("current_team")
+        r = cm2.projection(cm2.current(), out.get("hltv_player_ids") or [], perf_shadow._team_id(team) if team else None,
+                           out.get("hltv_opp_team"), day, None if tonight is None else tonight == "lan")
+    except Exception as e:      # noqa: BLE001 - cm-2 unavailable: the line stays on perf-2 and says so
+        return dict(out, cm2_live={"ineligible": f"cm-2 unavailable ({type(e).__name__})"})
+    if r.get("ineligible"):
+        return dict(out, cm2_live={"ineligible": r["ineligible"]})
+    pf = dict(out, version=CM2_LIVE_VERSION, perf2={k: out.get(k) for k in CM2_KEEP if k in out}, lambda_kills=r["lambda"],
+              cm2_live={"model": r["version"], "lambda": r["lambda"], "sd": r["sd"], "features": r["features"], "inputs": r["inputs"],
+                        "tables_sha": r["tables_sha"], "artifact_sha": r["artifact_sha"]})
+    pf["lambda"], pf["sd"] = r["lambda"], r["sd"]
+    return pf
+
+
 def _perf_input_once(pb, args, sc):
     if True:
         import perf_live
@@ -1385,6 +1413,8 @@ def _perf_input_once(pb, args, sc):
                     dq = bo3.get("data_quality")
                     bo3["data_quality"] = ((dq + "; ") if dq not in (None, "ok") else "") + ("opponent not in HLTV" if not tid else "opponent has no HLTV maps") + " - average opponent"
                 return bo3
+        if not out.get("error") and args.prop != "hs" and sc == "12":
+            out = _cm2_live(out, pb, day, tonight)
         return out                         # {"error": ...} when unavailable - the grader says so instead of silently falling back
 
 
@@ -3076,6 +3106,8 @@ def finish_line(res, args):
         n0_rev = None
     res["grade"]["input_revisions"] = {
         "performance_model": ((pf_.get("hltv_data") or {}).get("input_revision") or n0_rev if v_.startswith("perf-2") and not v_.endswith("-bo3")
+                              else f"cm-2 tables {((pf_.get('cm2_live') or {}).get('tables_sha') or '')[:12]} (full HLTV history); "
+                                   f"perf-2 comparison on {(pf_.get('hltv_data') or {}).get('input_revision') or n0_rev}" if v_ == CM2_LIVE_VERSION
                               else f"player: BO3.gg maps (no HLTV history); opponent: {n0_rev}" if v_.endswith("-bo3")
                               else "not used (old pipeline)"),
         "last10_h2h_records": "full HLTV tables (repaired history incl. the 2026-10-13 backfill) + BO3.gg",

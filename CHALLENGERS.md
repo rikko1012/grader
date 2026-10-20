@@ -147,6 +147,11 @@ data hash 49e7ac29547b86a9). Walk-forward with w refitted on earlier days only: 
 
 ## cm-2 - corrected complete model, Maps 1-2 kills only (family `complete-model-2-kills`, id `cm-002-<hash>`; production shadow only)
 
+**2026-10-20: promoted by owner override** (MODEL_VERSIONS `8404c86d3c`): kills Maps 1-2 live grades use cm-2 (`perf-cm2`) before
+the 300-match review. The shadow record, its registration and its forward clock are unchanged and keep running; from the
+promotion on, the "live" side of the cm-2 comparison is cm-2 itself on those lines, so the review compares against the
+saved `perf2` projection (fh-1 live arm). Rollback `CM2_LIVE=0`.
+
 Accuracy handoff 2026-10-18 (claude-handoffs/accuracy-2026-10-18). A SEPARATE experiment from cm-1. cm-1's artifact,
 records, registration, clock and results are unchanged, and none of them count for cm-2.
 

@@ -295,7 +295,11 @@ def build(res, r):
     if not pub or pub.get("error") or pub.get("lambda") is None:
         return None, "live grade not on the performance model"
     ver = str(pub.get("version") or "")
-    if ver not in (perf.VERSION, perf.VERSION + "-bo3") or g.get("projection_source") != ver or "p_more" not in g:
+    cm2_live = ver == "perf-cm2" and g.get("projection_source") == ver and isinstance(pub.get("perf2"), dict)
+    if cm2_live:          # cm-2 graded this line (2026-10-20): both arms replay perf-2 - checked against perf-2's own numbers
+        pub = dict(pub, **pub["perf2"])
+        ver = str(pub.get("version") or "")
+    if ver not in (perf.VERSION, perf.VERSION + "-bo3") or (g.get("projection_source") != ver and not cm2_live) or "p_more" not in g:
         return None, "live grade not on the performance model"
     pb = res.get("player_block") or {}
     nm = res.get("next_match") or {}
@@ -367,7 +371,7 @@ def build(res, r):
     rp = replay(snap, gi_s)
     if "error" in rp["live"] or "error" in rp["fh1"]:
         return None, "an arm has no performance-model projection: " + str(rp["live"].get("error") or rp["fh1"].get("error"))
-    pub_ok = _same(rp["pf"]["live"], pub) and rp["live"]["p_more"] == g.get("p_more")
+    pub_ok = _same(rp["pf"]["live"], pub) and (cm2_live or rp["live"]["p_more"] == g.get("p_more"))
     p_extra_n = sum(1 for x in extra if x[0] < day)
     identical = not extra and not snap["opp"].get("extra") and not (snap.get("opp_bo3") or {}).get("extra")
     if identical and not (_same(rp["pf"]["live"], rp["pf"]["fh1"]) and rp["live"]["p_more"] == rp["fh1"]["p_more"]):
@@ -376,7 +380,7 @@ def build(res, r):
     in_sha, gi_sha = sha(snap), sha(gi_s)
     rec = {"format": FORMAT, "challenger": ID, "computed_at": _now_iso(), "line": g.get("line"), "prop": prop, "scope": scope,
            "day": day, "live": rp["live"], "fh1": rp["fh1"],
-           "published": {"p_more": g.get("p_more"), "lambda": g.get("lambda_final"), "proj_version": ver},
+           "published": {"p_more": g.get("p_more"), "lambda": g.get("lambda_final"), "proj_version": "perf-cm2" if cm2_live else ver},
            "n0_check": {"published_reproduced": pub_ok, "player_read_consistent": p_consistent, "opp_read_consistent": o_consistent,
                         "n0_sha": n0_sha, "live_revision": (pub.get("hltv_data") or {}).get("input_revision"),
                         "exact": bool(pub_ok and p_consistent and o_consistent)},

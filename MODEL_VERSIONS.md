@@ -1,5 +1,29 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
+## `8404c86d3c` — cm-2 projects CS2 kills Maps 1-2 live (`perf-cm2`), 2026-10-20
+
+Owner decision 2026-10-20 (answer "1" to: promote cm-2 now for kills Maps 1-2, overriding the 300-match review rule).
+This is an explicit owner override, not a passed review: cm-2's registered forward review (300 matches) has not been reached.
+
+- **What changed:** kills Maps 1-2 lines on the HLTV route take their projection AND spread from cm-2
+  (`cm2.projection`, artifact `6e586047c5b1823a`, the frozen 14-feature fit; sd = 1.4757 x sqrt(lambda)). The grade's
+  `projection_source` is `perf-cm2`. The chance still goes through the same grader path (discretised normal, kills cap
+  78%, push handling) and the same stake rules; no thresholds, bands or caps changed.
+- **Unchanged:** HS lines, Map 1, Maps 1-3, the BO3.gg fallback (perf-2-bo3), LoL, settlement.
+- **Kept beside it:** every perf-cm2 projection saves `perf2` (perf-2's version, lambda, sd, rate, opponent factor,
+  rounds) and `cm2_live` (features, inputs, tables sha, artifact sha). A line cm-2 cannot forecast (environment unknown,
+  team / opponent not in HLTV, tables not built, any cm-2 error) stays on perf-2 and saves `cm2_live.ineligible`.
+- **Comparison continues:** the fh-1 shadow keeps replaying perf-2 on every line (perf-cm2 lines are checked against the
+  saved `perf2` numbers); the cm-2 shadow record and its forward clock (`cm-002-9f1db397`) are unchanged.
+- **Model tag:** cm1.py, cm2.py and cm2_model.json are now part of the model hash (picklog._model_version).
+- **Pre-release impact (production fh-1 records 6102-7301, 738 kills Maps 1-2 lines):** cm-2 computed 738 / 739
+  (1 player not in HLTV). Projection change: mean +0.22, median +0.10, sd 0.98 kills; 41 over 2 kills, none over 4.
+  Lines at 55%+: 349 -> 371; 57%+: 255 -> 255; 63%+: 69 -> 73; Overs among 55%+: 135 -> 168. Side flips 140.
+- **Evidence (supporting, not a passed review):** development MAE 6.238 -> 6.101; real-line eligible kills log-loss gain
+  +0.0159 (95% +0.0058, +0.0264); forward cm-2 +0.0097 on 11 matches. The perf-3 projection fix failed its hold-out
+  (research/proj_fix_2026_10_20).
+- **Rollback:** set `CM2_LIVE=0` on Render (one step, no deploy), or revert this commit. Old forecasts are never rewritten.
+
 ## `c36104d079` — BO3.gg environment correction (`bo3-env-2`), 2026-10-18
 
 Base: live tag `807a289529` (main `0fc44c2`). The only grading change is `cs2_scout.py`: the BO3.gg history rows behind

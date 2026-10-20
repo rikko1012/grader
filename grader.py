@@ -86,7 +86,7 @@ CONFIG = {
     # 2026-10-08 release (PROVISIONAL - confirmation on matches from Oct 9 on):
     #  perf-1-bo3: the performance model on BO3.gg maps for players HLTV has no history for (proxy test: short-history
     #  model beat the old pipeline on 414 board lines, MAE 5.08 -> 4.91, log-loss -0.017, range crosses 0)
-    "perf_versions": ("perf-2", "perf-2-bo3", "perf-1", "perf-1-bo3"),   # perf-1 inputs: the logged G7 comparison
+    "perf_versions": ("perf-2", "perf-2-bo3", "perf-1", "perf-1-bo3", "perf-cm2"),   # perf-cm2: kills Maps 1-2 by cm-2 (2026-10-20)   # perf-1 inputs: the logged G7 comparison
     #  perf2_hs: headshot probabilities from perf.hs_probs (HS | kills beta-binomial, kappa 100 on TRAIN; board HS
     #  log-loss 0.6666 -> 0.6592, 95% -0.0144 to -0.0000)
     "perf_hs_dist": True,
@@ -720,10 +720,15 @@ def grade_leg(d, cfg=CONFIG):
     if perf_on:
         # performance model (perf.py): its projection and spread replace the old pipeline's; the old pipeline's
         # corrections for its own biases (gap compression, Over margin, confidence halving) do not apply to it
-        flags.append(f"Projection {pf['lambda']:.1f} from the performance model ({pf.get('version')}: "
-                     f"{pf.get('rate', 0):.3f} kills/round x opponent {pf.get('opp_factor', 1):.2f} x "
-                     f"{pf.get('rounds_per_map', 0):.1f} rounds/map; data: {pf.get('data_quality')}) - old pipeline "
-                     + (f"n/a ({legacy_na})" if legacy_na else f"{lam_final:.1f}"))
+        if pf.get("version") == "perf-cm2":
+            flags.append(f"Projection {pf['lambda']:.1f} from the complete model (perf-cm2: his kill rates overall and in tonight's "
+                         f"setting, opponent-adjusted kills, kills the opponent allows, both teams' Elo and rounds per map, fitted together) - perf-2 projected "
+                         f"{(pf.get('perf2') or {}).get('lambda') or 0:.1f}")
+        else:
+            flags.append(f"Projection {pf['lambda']:.1f} from the performance model ({pf.get('version')}: "
+                         f"{pf.get('rate', 0):.3f} kills/round x opponent {pf.get('opp_factor', 1):.2f} x "
+                         f"{pf.get('rounds_per_map', 0):.1f} rounds/map; data: {pf.get('data_quality')}) - old pipeline "
+                         + (f"n/a ({legacy_na})" if legacy_na else f"{lam_final:.1f}"))
         lam_final = float(pf["lambda"])
         # lambda_maps12 reports the model's Maps 1-2 equivalent whatever the scope (2026-10-11: on Map 1 / Maps 1-3
         # it used to repeat the scope's own total); Map 1 = half of Maps 1-2, Maps 1-3 = 1.5 x Maps 1-2

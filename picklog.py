@@ -48,8 +48,10 @@ def _model_version():
     # NOT hashed here: it is mapping.revision(), recorded on every forecast (mapping_rev)
     # bo3.py / roles.py added 2026-10-13 audit (cached scoreboards and the AWP role move grades: BO3.gg fallback rows, Gate A);
     # polymarket.py / oddspapi.py too (they decide the fallback market input: team matching, live/ended events)
+    # cm1.py / cm2.py / cm2_model.json added 2026-10-20: cm-2 projects kills Maps 1-2 live (perf-cm2)
     for f in ("grader.py", "sim.py", "cs2_scout.py", "hltv.py", "perf.py", "perf_live.py", "scope.py", "hltv_store.py",
-              "market_odds.py", "thunderpick.py", "pick_verdict.py", "bo3.py", "roles.py", "polymarket.py", "oddspapi.py"):
+              "market_odds.py", "thunderpick.py", "pick_verdict.py", "bo3.py", "roles.py", "polymarket.py", "oddspapi.py",
+              "cm1.py", "cm2.py", "cm2_model.json"):
         try:
             h.update((Path(__file__).resolve().parent / f).read_bytes())
         except OSError:

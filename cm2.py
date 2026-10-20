@@ -218,6 +218,32 @@ def _phi(z):
     return 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
 
 
+def projection(t, player_ids, team_id, opp_id, day, lan):
+    """cm-2's Maps 1-2 kills projection for LIVE grading (owner 2026-10-20: promoted for kills Maps 1-2 ahead of the
+    registered review). The same eligibility, inputs, features and arithmetic as the shadow record; {"ineligible": why}
+    when cm-2 cannot forecast (the grade then stays on perf-2 and says why)."""
+    if t is None:
+        return {"ineligible": "cm-2 tables not built yet"}
+    if lan is None:
+        return {"ineligible": "target environment (LAN / online) unknown"}
+    if not player_ids:
+        return {"ineligible": "player not identified in HLTV"}
+    if not team_id or not opp_id:
+        return {"ineligible": "own team or opponent not identified in HLTV"}
+    s = cm1.inputs(t, player_ids, team_id, opp_id, day, lan)
+    if s.get("ineligible"):
+        return s
+    if not s["maps"]:
+        return {"ineligible": "no player maps in the 420 days before the match day"}
+    x = cm1.features(s)
+    if not all(math.isfinite(v) for v in x):
+        return {"ineligible": "a feature is not finite"}
+    eta = FIT["intercept"] + sum(b * (v - m) / sd for b, v, m, sd in zip(FIT["coef"], x, FIT["mean"], FIT["std"]))
+    lam = math.exp(eta)
+    return {"lambda": lam, "sd": FIT["spread_c"] * math.sqrt(max(lam, 1.0)), "features": x, "inputs": s,
+            "tables_sha": (t.get("meta") or {}).get("tables_sha"), "artifact_sha": ARTIFACT_SHA, "version": VERSION}
+
+
 def forecast(features, line):
     """candidate_runtime.forecast (the research's inference reference), the same arithmetic in the same order."""
     if not math.isfinite(line) or line < 0 or line * 2 != int(line * 2):

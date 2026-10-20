@@ -69,4 +69,4 @@ def test_perf_shadows_graded_by_their_own_model():
             assert abs(sh["prior_smooth"]["lambda"] - sh["legacy"]["lambda"]) > 0.01
         n += 1
     assert n == 12
-    assert tuple(grader.CONFIG["perf_versions"]) == live == ("perf-2", "perf-2-bo3", "perf-1", "perf-1-bo3")
+    assert tuple(grader.CONFIG["perf_versions"]) == live == ("perf-2", "perf-2-bo3", "perf-1", "perf-1-bo3", "perf-cm2")
