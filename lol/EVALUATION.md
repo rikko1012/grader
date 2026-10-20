@@ -407,3 +407,30 @@ F-VALID +0.0075 on 15 series) - evidence only, a selected subset, not promoted. 
 - Forward (2 Worlds Play-In best-of-5s, lol-1): the model's side when the platform offered it went 11-26, when it did not
   27-14. CS2's 521 P1 lines with saved offered sides do not show over-only lines shading the Over (Over hit 56.6%, 95%
   46.7-67.0%, 46 matches), so no rule is built on it. The LoL page already shows "No pick" when the model's side is not offered.
+
+## Amendment A9 (2026-10-20, written before any candidate number): assists level (lr-1) - owner-chosen fix
+
+**Owner decision (2026-10-20, answer "1").** Fix the assists Under gap as a tested change, released as a new model version
+only if it passes, accepting that assists Under chances may print lower. This is the owner's explicit exception to the
+"never fix calibration by lowering percentages" rule, for this change only.
+
+**Evidence that motivates it (recorded in A8's checks).** At book-style lines, out of lol-1f's fit, assists Unders print
+about 4 points above what they win and assists Overs about 1.7 below, in both F-VALID and the spent period - the signature
+of an assists level that runs low; lol-1f's assists bias drifts from about +2% (Jan-Apr) to about -2% / -3% (May-Oct).
+
+**Candidate lr-1 (assists only).** For a target on day d in league L:
+- residual units = every earlier assists target's game-1 total (scope Map 1, all leagues) on days in [d - W, d), with lol-1f's
+  projection mu and the actual y;
+- global ratio c_G = sum y / sum mu over all of them (1 if none);
+- league ratio c_L = (sum y_L + K * mbar_L * c_G) / (sum mu_L + K * mbar_L), mbar_L = mean mu_L (c_G if L has none);
+- projection = lol-1f mean x c_L (every scope; the NB size unchanged).
+- W in {14, 30, 60} days, K in {10, 40, 160} units, chosen on F-TRAIN by mean NB log score over all scopes.
+
+**Decision (fixed now).** lr-1 replaces lol-1f for assists only if, in BOTH F-VALID and the spent period:
+1. A7's rule holds (Maps 1-2 log-score gain 95% series-grouped interval above 0; Maps 1-3 point estimate not below 0; Maps 1-2
+   MAE not higher);
+2. Map 1's log-score gain point estimate is not below 0;
+3. at book-style lines (evaluate.dev_line), the assists Under gap |printed - won| is smaller than lol-1f's.
+Kills is reported with the same candidate as evidence only (kills is calibrated; no kills change in this amendment).
+A pass becomes model version lol-1g (kills and deaths unchanged); earlier forecasts keep their version; stakes stay 0U;
+the forward record is reported per version.
