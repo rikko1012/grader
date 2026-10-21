@@ -1163,6 +1163,7 @@ class Poller:
         self.last_refused = None
         self.alert = None
         self._relink = False                         # restored quotes waiting for the canonical matcher
+        self._linked_index = None                    # matchid's index object the current links were made under
         self._labels = None                          # markets[] label registry (lazy): label -> observation
         self._sched_mem = {}                         # name -> this poller's last written schedule (hot-path reads)
         self._written = None                         # (level, label) -> {"cls", "full", "at"} last market_evidence row
@@ -1296,6 +1297,7 @@ class Poller:
         return min(cands)[1] if cands else None
 
     def tick(self):
+        self._index_tick()
         name = self.due()
         r = self.poll_once(name) if name else None
         self._copy_tick()
@@ -1394,6 +1396,26 @@ class Poller:
             self._relink = True
             self._try_relink(now)
         return got
+
+    def _index_tick(self, now=None):
+        """Audit 16/17: links (match id + side) are made under matchid's index of that moment. When matchid rebuilds it
+        (HLTV schedule every 5 min, teams hourly, alias edits) a hashed id can become hltv:<id> or a team key can change
+        and flip the canonical side. Relink from the answers already in memory (no upstream request) as soon as the
+        index changes, instead of waiting for the next nonempty Thunderpick answer."""
+        if self.canonical_fn is not None:
+            return False
+        idx = _matchid_index()
+        if idx is None or idx is self._linked_index:
+            return False
+        with self.lock:
+            has = bool(self.matched or self.ambiguous or self.dropped)
+        if not has:
+            return False
+        try:
+            self.refresh_matches(now, restored=True)
+        except Exception as e:          # noqa: BLE001 - matching never stops the feed
+            self.store_error = f"matching: {type(e).__name__}: {str(e)[:120]}"
+        return True
 
     def _try_relink(self, now=None):
         try:
@@ -1586,6 +1608,8 @@ class Poller:
         -> ambiguous, both excluded. Timezone evidence keeps accruing after resolution. Events whose only problem is
         their odds still link (shown as invalid_odds, never priced); other problems (teams, start) never link."""
         now = self.clock() if now is None else now
+        if self.canonical_fn is None:
+            self._linked_index = _matchid_index()       # captured first: a rebuild during linking relinks again
         live, evs, disp = self._linkable()
         ok = lambda e: not e.get("problem") or set(e["problem"].split("; ")) <= _ODDS_PROBLEMS     # noqa: E731
         tz = tz_state(self.db)
@@ -1805,6 +1829,20 @@ def _canon(team_a, team_b, start_iso, fn=None, mint=True):
     return moneyline.canonical(team_a, team_b, start_iso, scope="series", mint=mint)
 
 
+def _matchid_index():
+    """matchid's current lookup index object (identity changes on every rebuild); None when not loaded / unavailable."""
+    try:
+        import matchid
+        return matchid._S.get("index")
+    except Exception:              # noqa: BLE001
+        return None
+
+
+def _keys(c):
+    k = c.get("team_keys")
+    return sorted(k) if k else None
+
+
 def _offset_from(naive, hs):
     if not hs:
         return None
@@ -1831,7 +1869,8 @@ def match_event(e, offset_h=None, canonical_fn=None):
         c = _canon(t1, t2, st.strftime("%Y-%m-%dT%H:%M:%SZ"), canonical_fn)
         if (c.get("status") != "linked") or not c.get("match_id"):
             return {"reason": c.get("reason") or c.get("status") or "unlinked"}
-        return {"match_id": c["match_id"], "flipped": bool(c.get("flipped")), "method": f"canonical, start UTC{-offset_h:+g}",
+        return {"match_id": c["match_id"], "flipped": bool(c.get("flipped")), "team_keys": _keys(c),
+                "method": f"canonical, start UTC{-offset_h:+g}",
                 "tz": "resolved", "start_utc": st.isoformat(), "hltv_match": c.get("hltv_match"),
                 "offset_h": _offset_from(naive, c.get("hltv_start")) if c.get("source") == "hltv" else None,
                 "hltv_start": c.get("hltv_start"), "hltv_bo": c.get("hltv_bo"), "link_source": c.get("source")}
@@ -1845,7 +1884,8 @@ def match_event(e, offset_h=None, canonical_fn=None):
         return {"reason": "no HLTV match of these teams near this start" if not found else "ambiguous: several HLTV matches"}
     mid, c = next(iter(found.items()))
     hs = c.get("hltv_start")
-    return {"match_id": mid, "flipped": bool(c.get("flipped")), "method": "unique HLTV match of the two teams (timezone unconfirmed)",
+    return {"match_id": mid, "flipped": bool(c.get("flipped")), "team_keys": _keys(c),
+            "method": "unique HLTV match of the two teams (timezone unconfirmed)",
             "tz": "unconfirmed", "start_utc": hs, "offset_h": _offset_from(naive, hs), "hltv_match": c.get("hltv_match"),
             "hltv_start": hs, "hltv_bo": c.get("hltv_bo"), "link_source": c.get("source")}
 
@@ -2398,6 +2438,35 @@ def _held(p, v, now_ts, mid=None):
                 blip=False, **seen)
 
 
+def _current_flip(rec, e, fn=None, start_iso=None):
+    """(flipped, sorted team keys) of a matched event under matchid's CURRENT index (audit 16): the link-time flip goes
+    stale when a team key changes (e.g. name:x -> team:<id>) and would put the opponent's price on the query team. A
+    lookup only (never mints). Falls back to the link-time flip when the event's teams do not resolve now."""
+    ce = _canon(e.get("team1"), e.get("team2"), rec.get("start_utc") or start_iso, fn, mint=False)
+    keys = _keys(ce)
+    if keys or ce.get("match_id"):
+        return bool(ce.get("flipped")), keys
+    return bool(rec.get("flipped")), None
+
+
+def _relinked(p, mid, c, fn=None):
+    """Audit 17: no record under `mid`, but one linked under an older id of the same two teams (a hashed cs2:<hash> id
+    from before HLTV listed the match) now resolves to `mid` -> that record (the poller relinks it on its next tick).
+    Read-only; cheap: only records with the query's exact team keys are re-checked. None unless exactly one."""
+    keys = _keys(c)
+    if not keys:
+        return None
+    with p.lock:
+        cands = [r for k, r in p.matched.items() if k != mid and r.get("team_keys") == keys]
+    hits = []
+    for r in cands:
+        e = r["event"]
+        cc = _canon(e.get("team1"), e.get("team2"), r.get("start_utc"), fn, mint=False)
+        if cc.get("status") == "linked" and cc.get("match_id") == mid:
+            hits.append(r)
+    return hits[0] if len(hits) == 1 else None
+
+
 def projection_odds(team, opponent, start_iso, now=None, poller=None, canonical_fn=None, bo=None):
     """Thunderpick's series-winner probability for `team` vs `opponent` in the polymarket.match_odds shape, or
     {"found": False, "reason", "availability"} (availability "stale" / "endpoint_empty" also carry "blip": True / False
@@ -2416,8 +2485,11 @@ def projection_odds(team, opponent, start_iso, now=None, poller=None, canonical_
         return _nf(f"match not linked ({c.get('reason') or c.get('status')})",
                    "ambiguous" if c.get("status") == "ambiguous" else "unlinked")
     mid = c["match_id"]
+    fn = canonical_fn or p.canonical_fn
     with p.lock:
         rec, gone, amb = p.matched.get(mid), p.dropped.get(mid), mid in p.ambiguous
+    if not rec and not gone and not amb:
+        rec = _relinked(p, mid, c, fn)
     if not rec:
         if amb:
             return _nf("two Thunderpick events link to this match - ambiguous, excluded", "ambiguous")
@@ -2429,7 +2501,12 @@ def projection_odds(team, opponent, start_iso, now=None, poller=None, canonical_
         return _held(p, v, now_ts, mid)             # E1: "blip" says whether it is a feed blip (market_odds)
     if v["availability"] != "current":
         return _nf(v["reason"], v["availability"])
-    e, o, a = v["event"], v["oriented"], v["answer"]
+    e, a = v["event"], v["answer"]
+    flip, ekeys = _current_flip(rec, e, fn, start_iso)
+    if ekeys and _keys(c) and ekeys != _keys(c):
+        # the event's teams no longer resolve to this match's teams under the current index: relink pending (tick)
+        return dict(_nf("Thunderpick event's teams resolve to other teams now - relink pending", "unlinked"), blip=True)
+    o = _orient(e, flip)                            # the quote's side from the SAME index as the query's side
     team_is_a = not bool(c.get("flipped"))
     pa = o["two_way"]["p_a"]
     p_team = round(pa if team_is_a else 1 - pa, 6)
@@ -2446,7 +2523,7 @@ def projection_odds(team, opponent, start_iso, now=None, poller=None, canonical_
             "fixture_id": e.get("fixture_id"), "url_id": e.get("url_id"), "tournament": e.get("tournament"),
             "competition": e.get("competition"), "api_path": e.get("api_path"),
             "source_team1": e.get("team1"), "source_team2": e.get("team2"), "team_is_a": team_is_a,
-            "flipped": bool(rec.get("flipped")),            # True: Thunderpick lists the canonical team B first
+            "flipped": flip,                                # True: Thunderpick lists the canonical team B first
             "odds_team": odds_t, "odds_opp": odds_o, "implied_team_raw": round(1 / odds_t, 6),
             "implied_opp_raw": round(1 / odds_o, 6), "margin": o["two_way"]["margin"], "p_team": p_team, "p_opp": p_opp,
             "method": "proportional margin-adjusted market probability", "retrieved_at": e.get("retrieved_at"),
@@ -2479,7 +2556,8 @@ def board_block(match_id, now=None, poller=None, start_iso=None, bo=None):
         return None
     pol = policy(p.db)
     v = p.evaluate(rec or gone, now_ts, start_iso=start_iso, bo=bo, pol=pol, dropped=bool(gone))
-    e, o, a = v["event"], v["oriented"], v["answer"] or {}
+    e, a = v["event"], v["answer"] or {}
+    o = _orient(e, _current_flip(rec or gone, e, p.canonical_fn, start_iso)[0])    # audit 16: current index's side
     tw = o["two_way"]
     cur = v["availability"] == "current"
     sch = p.sch(v["endpoint"])

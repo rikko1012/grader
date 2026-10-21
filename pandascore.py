@@ -12,16 +12,18 @@ import json
 import os
 import re
 import sys
-import threading
 import time
 from datetime import datetime, timezone
 
 import requests
 
+import membudget
+
 BASE = "https://api.pandascore.co/csgo"
 _SESSION = requests.Session()
 _SESSION.headers.update({"User-Agent": "cs2-scout/1.0 (https://github.com/rikko1012/cs2-scout)"})
-_CACHE, _LOCK = {}, threading.Lock()
+# audit 37: was a plain dict never emptied, keyed by member-typed opponent text - now byte- and count-bounded
+_CACHE = membudget.BudgetLRU("pandascore", membudget.env_mb("PANDASCORE_MEM_MB", 10), max_items=2000)   # (fetched at, data)
 GENERIC = {"team", "esports", "esport", "gaming", "club", "gg", "the"}
 
 
@@ -30,11 +32,10 @@ def key():
 
 
 def _get(path, ttl, **params):
-    ck = (path, tuple(sorted(params.items())))
-    with _LOCK:
-        hit = _CACHE.get(ck)
-        if hit and time.time() - hit[0] < ttl:
-            return hit[1]
+    ck = (path, tuple(sorted((k, " ".join(str(v).split()).lower()) for k, v in params.items())))   # case / spacing variants share one entry
+    hit = _CACHE.get(ck)
+    if hit and time.time() - hit[0] < ttl:
+        return hit[1]
     try:
         r = _SESSION.get(BASE + path, params=params, timeout=15,
                          headers={"Authorization": f"Bearer {key()}"})
@@ -43,8 +44,7 @@ def _get(path, ttl, **params):
     if r.status_code != 200:
         raise RuntimeError(f"PandaScore {path} -> HTTP {r.status_code}")
     data = r.json()
-    with _LOCK:
-        _CACHE[ck] = (time.time(), data)
+    _CACHE.put(ck, (time.time(), data), membudget.json_cost(data))
     return data
 
 

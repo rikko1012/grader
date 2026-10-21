@@ -27,11 +27,28 @@ _LOCK, _LAST = threading.Lock(), [0.0]
 _SESSION = requests.Session()
 _SESSION.headers.update({"User-Agent": "cs2-scout/1.0 (https://github.com/rikko1012/cs2-scout)"})
 _FIX = {"at": 0.0, "data": None}
-_ODDS = {}
+_ODDS = {}                   # fixtureId -> (fetched at, /odds answer); pruned on write (audit 47: was never emptied)
 FIX_TTL = 600
+ODDS_KEEP_S = 30 * 60        # = market_odds.OP_CACHE_MAX_AGE_S: no reader uses an older entry
+ODDS_MAX = 500
+_OLOCK = threading.Lock()
 FAIL_RETRY_S = 30            # a failed request is not repeated sooner than this (2026-10-13 audit: never cached as an answer)
 _FAIL = {}                   # request key -> (retry not before, error) - fixtures / odds per fixture
 _FLIGHT, _FLIGHT_LOCK = {}, threading.Lock()
+
+
+def _odds_put(fid, odds):
+    """Store one fixture's prices and drop entries no reader will use again (older than ODDS_KEEP_S; at most ODDS_MAX)."""
+    now = time.time()
+    h = (now, odds)
+    with _OLOCK:
+        _ODDS[fid] = h
+        old = [k for k, v in _ODDS.items() if now - v[0] > max(FIX_TTL, ODDS_KEEP_S)]
+        for k in old:
+            _ODDS.pop(k, None)
+        while len(_ODDS) > ODDS_MAX:
+            _ODDS.pop(min(_ODDS, key=lambda k: _ODDS[k][0]), None)
+    return h
 
 
 def key():
@@ -200,8 +217,7 @@ def match_odds(team, opponent=None, cache_only=False, max_age=None, start=None):
                 h = _ODDS.get(fid)
                 if h and time.time() - h[0] < FIX_TTL:   # fetched by the request we waited for
                     return h
-                h = _ODDS[fid] = (time.time(), _get("/odds", fixtureId=fid))
-                return h
+                return _odds_put(fid, _get("/odds", fixtureId=fid))
             got_at, odds = _once(("odds", fx["fixtureId"]), load)
         for book in BOOKS:
             d1, d2 = _price(odds, book, "171"), _price(odds, book, "172")
@@ -240,8 +256,10 @@ def markets_inventory(n=3):
         out["fixtures"] = []
         for fx in up:
             hit = _ODDS.get(fx["fixtureId"])
-            odds = hit[1] if hit and time.time() - hit[0] < FIX_TTL else _get("/odds", fixtureId=fx["fixtureId"])
-            _ODDS[fx["fixtureId"]] = (time.time(), odds)
+            if hit and time.time() - hit[0] < FIX_TTL:
+                odds = hit[1]                            # never re-stamped as freshly fetched
+            else:
+                odds = _odds_put(fx["fixtureId"], _get("/odds", fixtureId=fx["fixtureId"]))[1]
             books = {}
             for book, bd in (odds.get("bookmakerOdds") or {}).items():
                 ms = {}
