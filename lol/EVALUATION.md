@@ -555,3 +555,31 @@ log-score gain 95% series-grouped interval above 0; Maps 1-3 and Map 1 point est
 book-style lines smaller than lol-1f's; AND on the hold-out week (series from 2026-10-17 in the newest pull) the Map 1 log-score
 point estimate is not below 0. The projection (mean, MAE) is unchanged by construction. A pass becomes lol-1g (assists chances,
 median and 80% range from the mixture); kills and deaths unchanged; stakes stay 0U.
+
+### A13 result (2026-10-21; lol/eval/sh1_a13_2026-10-21.json) - sh-1 FAILS, nothing changes
+
+Run once with `python -m lol.sh1_study <2026-10-19 pull> <2026-10-21 pull> <report>` (lol/sh1_study.py; the mixture itself is
+lol/sh1.py, standard library only, tested in lol/tests/test_sh1.py; the study's vectorised likelihood matched it to 4e-14). Grid as
+registered, read with steps of 0.1: s = lol-1's size x {0.8, 0.9, ..., 1.4}, w in {0, 0.1, ..., 0.6}. F-VALID and the spent period
+from the 2026-10-19 pull (A7-A12's data); the hold-out = assists targets from 2026-10-17 in the 2026-10-21 pull (games to
+2026-10-20; sha256 prefix 69b36bbfabde8476; 17 games newer than the 10-19 pull).
+
+Chosen on F-TRAIN (every scope kept lol-1's size): Map 1 s 3.395, w 0.3; Maps 1-2 s 6.814, w 0.5; Maps 1-3 s 8.111, w 0.5.
+
+| period | Map 1 LS gain (95%) | Maps 1-2 LS gain (95%) | Maps 1-3 LS gain (95%) | Under gap lol-1f -> sh-1 (printed / won) | A13 rule |
+|---|---|---|---|---|---|
+| F-TRAIN (fit) | +0.0038 (+0.0023, +0.0052) | +0.0075 (+0.0040, +0.0111) | +0.0079 (+0.0014, +0.0145) | - | - |
+| F-VALID | +0.0046 (+0.0029, +0.0064) | +0.0033 (-0.0004, +0.0073) | +0.0030 (-0.0040, +0.0108) | 68.6 / 64.2 (4.4) -> 68.2 / 66.2 (2.0) | fail (Maps 1-2 interval reaches below 0) |
+| spent | +0.0058 (+0.0038, +0.0077) | +0.0078 (+0.0039, +0.0119) | +0.0040 (-0.0007, +0.0091) | 68.5 / 64.6 (3.9) -> 68.1 / 66.5 (1.6) | pass |
+| hold-out | -0.0046 (-0.0176, +0.0085), 420 units / 42 series | -0.0048 (-0.0279, +0.0178), 30 series | -0.0232, 5 series | - | fail (Map 1 point below 0) |
+
+Decision: **fail** (A13 needs F-VALID, the spent period and the hold-out). lol-1f's assists distribution stays.
+
+**Recorded with the result.**
+- The mixture's mean is not exactly lol-1f's mu: the normal part is renormalised over totals >= 0 as registered, which cuts its
+  negative tail and lifts its mean; at the chosen w the mixture mean sits about +0.16 (Map 1), +0.11 (Maps 1-2), +0.08 (Maps 1-3)
+  assists above mu in every period. The registered "mean unchanged by construction" holds for the projection (mu, MAE) but not
+  for the mixture's own mean; part of the smaller Under gap may come from that shift rather than from shape alone.
+- The shape evidence is consistent in the development periods (Map 1 gain about +0.005 in all three; the Under gap roughly halves),
+  but it did not clear F-VALID's Maps 1-2 interval and the hold-out week's Map 1 is negative (a small week that runs high: Map 1
+  assists bias +0.80, i.e. projected above actual). Attempt count: sixth candidate; no further assists candidate is registered here.
