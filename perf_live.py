@@ -132,14 +132,22 @@ def n0():
         new = _load_n0()
     except Exception as e:      # noqa: BLE001 - kept below; never a projection on the full tables
         new, err = None, e
-    if new is None:
+    if new is None or _IN["val"] is None:
         stored = hltv_store.load(("perf_n0", INPUT_REV, INPUT_RULE))
+    if new is not None:
+        base = _IN["val"] if _IN["val"] is not None else (
+            stored[1] if stored is not None and (stored[1] or {}).get("rule") == INPUT_RULE else None)
+        lost = _shrunk(base, new)
+        if lost:                # refused like a failed evaluation: the last verified set stays, marked STALE
+            new, err = None, Shrunk(lost)
     with _IN_COND:
         _IN["loading"] = False
         if new is not None:
             _IN.update(val=new, next=time.time() + INCL_TTL, error=None, loaded_at=time.time(), stale_since=None)
         else:
-            _IN.update(next=time.time() + hltv.FAIL_TTL, error=f"{type(err).__name__}: {hltv.err_text(err)}")
+            shrunk = isinstance(err, Shrunk)    # not an outage: re-checked at the normal pace, with its reason
+            _IN.update(next=time.time() + (INCL_TTL if shrunk else hltv.FAIL_TTL),
+                       error=str(err) if shrunk else f"{type(err).__name__}: {hltv.err_text(err)}")
             if _IN["val"] is None and stored is not None and (stored[1] or {}).get("rule") == INPUT_RULE:
                 _IN.update(val=stored[1], loaded_at=stored[0])
             if _IN["val"] is not None and _IN["stale_since"] is None:
@@ -151,6 +159,25 @@ def n0():
     if val is None:
         raise hltv.Unavailable("HLTV database unreachable - performance-model input revision not available") from err
     return val
+
+
+class Shrunk(RuntimeError):
+    """An N0 evaluation that drops matches the last verified one had - refused (the last verified set is kept, STALE)."""
+
+
+def _shrunk(old, new):
+    """2026-10-21 audit: the scraper's raw_pages upsert rewrites fetched_at on every re-fetch, so a re-fetched seed match
+    (a correction requeue, a re-scrape, a rebuild) leaves 'pre' and a re-fetched late arrival is judged again on a later
+    snapshot. The known original set is kept exactly: an evaluation whose 'pre' is not a superset of the last verified
+    'pre', or that loses any IN match, is refused. '' when nothing was lost (or there is nothing to compare with)."""
+    if not old or not old.get("pre"):
+        return ""
+    gone_pre = len(set(old["pre"]) - set(new["pre"]))
+    gone_in = len((set(old["pre"]) | set(old.get("late_in") or ())) - (set(new["pre"]) | set(new.get("late_in") or ())))
+    if not gone_pre and not gone_in:
+        return ""
+    return (f"N0 evaluation refused - it would drop {gone_pre} seed match(es) and {gone_in} IN match(es) of the last "
+            f"verified set (sha {old.get('sha')} -> {new.get('sha')}); the last verified set is kept")
 
 
 def _in_n0(mid, s):
@@ -196,7 +223,10 @@ JOIN matches opp ON opp.matchid = ps.matchid AND opp.teamid <> ps.teamid AND opp
 LEFT JOIN map_headshots h ON h.mapstatsid = mm.mapstatsid AND h.playerid = ps.playerid
 JOIN pm ON pm.matchid = ps.matchid AND pm.mapid = ps.mapid
 WHERE ps.playerid = ANY(%(ids)s) AND ps.sideid = 0 AND mo.date >= %(since)s
+  AND ps.k IS NOT NULL AND own.score IS NOT NULL AND opp.score IS NOT NULL
 """
+# 2026-10-21 audit: a map with his kills or a round score missing (NULL) crashed perf.project (TypeError -> the old pipeline
+# for every line of the player); such a map is left out, as _OPP_SQL leaves out a map without all five kills
 _OPP_SQL = """
 SELECT mo.date, SUM(ps.k), MAX(t.score + o.score), t.matchid
 FROM matches t
@@ -275,10 +305,29 @@ def _read(key, fn, hit):
     with _LOCK:
         if len(_SERVED) > 20000:
             _SERVED.clear()
+        _prune()
         _CACHE[key] = (time.time(), val)
         _SERVED[key] = ("live", time.time())
     hltv_store.save(("perf",) + key, val)
     return val
+
+
+PRUNE_AGE = 6 * 3600      # an entry nobody re-read for this long (yesterday's 'since', a finished match day) is dropped
+PRUNE_EVERY = 10 * 60
+_PRUNED = [0.0]
+
+
+def _prune():
+    """Under _LOCK. 2026-10-21 audit: every new match day adds keys (since = day - 420) and _CACHE never let go of the old
+    ones. A key still in use is re-read every TTL (or re-stamped by the outage path every FAIL_TTL), so only abandoned
+    keys reach PRUNE_AGE; after eviction the disk copy (hltv_store) still covers an outage."""
+    now = time.time()
+    if now - _PRUNED[0] < PRUNE_EVERY:
+        return
+    _PRUNED[0] = now
+    for k in [k for k, v in _CACHE.items() if now - v[0] > PRUNE_AGE]:
+        _CACHE.pop(k, None)
+        _SERVED.pop(k, None)
 
 
 def served(key):
