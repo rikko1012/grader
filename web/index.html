@@ -747,6 +747,9 @@ body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode
 @media(max-width:1000px){.crow .c-why{flex:1 1 100%;order:8;margin-top:6px}.crow .c-who{flex-basis:calc(100% - 150px)}.crow .bwhy{padding:6px 8px}}
 @container board (max-width:719px){.crow .c-why{flex:1 1 100%;order:8;margin-top:6px}.crow .c-who{flex-basis:calc(100% - 150px)}}
 @media(max-width:480px){.c-why .wrow{grid-template-columns:minmax(0,1fr);gap:0;padding:4px 0}}
+.l10{display:inline-block;margin-left:6px;font:600 10.5px Inter,system-ui,sans-serif;padding:1px 7px;border-radius:6px;border:1px solid var(--line-2);color:var(--muted);white-space:nowrap;vertical-align:middle;cursor:help}
+.l10.hi{color:#3fb950;border-color:#3fb95066}.l10.lo{color:#ff9b8a;border-color:#ff9b8a55}
+@media(max-width:760px){.bchips{max-width:100vw}}   /* the sticky chip row overhung the phone screen by 1px */
 </style>
 </head>
 <body class="locked">
@@ -776,7 +779,7 @@ body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode
       <div class="seg" id="bscope" title="Which maps the lines cover"><button type="button" data-v="12" class="on">Maps 1–2</button><button type="button" data-v="1">Map 1</button><button type="button" data-v="123">Maps 1–3</button></div>
       <div class="seg" id="bside" title="Show the grader's Overs, Unders, or both"><button type="button" data-v="More">Overs</button><button type="button" data-v="both" class="on">Both</button><button type="button" data-v="Less">Unders</button></div>
       <input id="bsearch" type="search" placeholder="Player or team" aria-label="Search a player or team" style="width:150px;padding:8px 10px">
-      <select id="bsort" aria-label="Sort the board" style="width:auto;padding:8px 10px"><option value="g">Best grade first</option><option value="p">Highest chance</option><option value="t">Starting soonest</option><option value="e">Biggest edge</option></select>
+      <select id="bsort" aria-label="Sort the board" style="width:auto;padding:8px 10px"><option value="g">Best grade first</option><option value="p">Highest chance</option><option value="t">Starting soonest</option><option value="e">Biggest edge</option><option value="h">Hit rate (last 10)</option></select>
       <select id="csort" aria-label="Sort Compare" style="width:auto;padding:8px 10px" hidden><option value="t">Match time</option><option value="gap">Biggest line gap</option></select>
       <label class="bchk"><input type="checkbox" id="bbets" checked> Bets only</label>
       <label class="bchk" title="Hide picks with an open data issue (stand-in, long break, limited history)"><input type="checkbox" id="bflag"> Hide flagged</label>
@@ -1762,6 +1765,10 @@ const dsOf = r => (r.dstat || [])[0] === "verify" ? (issueLabel(r.dstat[1]) ? ["
 const l10Of = r => { const n = +r.l10_n, o = r.l10_over;
   if (!r || !r.side || sideGone(r) || r.l10_n == null || o == null || !(n > 0)) return null;
   const k = r.side === "Less" ? n - +o : +o; return {k, n, over: +o, push: +r.l10_push || 0, rate: k / n}; };
+const l10Chip = r => { const l = l10Of(r); if (!l) return "";
+  const sd = r.side === "Less" ? "Under" : "Over", maps = ({"1": "Map 1", "123": "Maps 1–3"})[r.scope] || "Maps 1–2";
+  const tip = `Last 10 at this line (${maps}): ${l.k} of ${l.n} decided matches went ${sd}${l.push ? `; ${l.push} push${l.push > 1 ? "es" : ""} left out` : ""}. The same record as the card's Last 10.`;
+  return ` <span class="l10 ${l.rate >= .6 ? "hi" : l.rate <= .4 ? "lo" : ""}" title="${esc(tip)}" data-tip="${esc(tip)}" tabindex="0">L10 ${l.k}/${l.n}</span>`; };
 // "Why" on a board row (QoL 2026-10-21): the row's own data only - the top supporting point and the main concern (each with
 // its basis), his last 10 at this line, why the stake is what it is, data status, LAN / online and when it was graded
 const UNIT_SCALE = {"A+": 3, "A": 2, "A-": 1.5, "B+": 1, "B": 0.5, "B-": 0.5};
@@ -1811,7 +1818,9 @@ function drawBoard() {
   const sortBy = $("#bsort").value;
   const rank = r => !r.side ? 9 : r.state === "SCOUT" ? 7 : (G_RANK[mGrade(r)] ?? 6);
   // within one grade, clean picks come before flagged ones (an open data issue: roster, stand-in, long break, thin history)
-  const key = r => sortBy === "g" ? [rank(r), isFlagged(r) ? 1 : 0, -(r.p ?? 0)] : sortBy === "p" ? [-(r.p ?? -1)] : sortBy === "e" ? [-Math.abs(r.edge ?? 0)] : [r.start || "9", rank(r)];
+  // Hit rate: the pick's side over his last 10 at this line (l10Of); lines without a record go last
+  const hr = r => { const l = l10Of(r); return l ? [0, -l.rate, -l.n, -(r.p ?? 0)] : [1, 0, 0, -(r.p ?? 0)]; };
+  const key = r => sortBy === "g" ? [rank(r), isFlagged(r) ? 1 : 0, -(r.p ?? 0)] : sortBy === "p" ? [-(r.p ?? -1)] : sortBy === "e" ? [-Math.abs(r.edge ?? 0)] : sortBy === "h" ? hr(r) : [r.start || "9", rank(r)];
   const q = ($("#bsearch").value || "").trim().toLowerCase();
   const hit = r => !q || [r.nick, r.player, r.team, r.team_name, r.opponent, r.opp_name].some(x => String(x || "").toLowerCase().includes(q));
   const cmp = (a, b) => { const A = key(a), B = key(b); for (let i = 0; i < A.length; i++) if (A[i] !== B[i]) return A[i] > B[i] ? 1 : -1; return 0; };
@@ -1867,7 +1876,7 @@ function drawBoard() {
     const sideW = r.side === "Less" ? "Under" : "Over";
     const pick = gone ? `<span class="pill bad" title="${esc(bookName(r.book || "underdog"))} does not offer the ${sideW} for this line any more - not a bet, not on slips; its last grade is kept for the record">${esc(gone)}</span> <span class="muted">${sideW} ${r.line}</span>`
       : !r.side ? `<span class="muted">grading…</span>`
-      : `${esc(sideWord(r))}${r.p != null ? ` <b>${chance(r.p, r.prop)}</b>${coinFlip(r.p)}` : ""}`;
+      : `${esc(sideWord(r))}${r.p != null ? ` <b>${chance(r.p, r.prop)}</b>${coinFlip(r.p)}` : ""}${l10Chip(r)}`;
     const stake = gone || !r.side ? "" : `${isLeanV(r) ? (r.state === "SCOUT" ? "No match scheduled" : "Lean") : esc(mGrade(r) || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${zeroWhy(r)}${capChip(r, team)}`;
     const meta = [r.graded_at ? `graded ${agoTxt(r.graded_at)}` : "", r.alt && r.book !== "prizepicks" ? `alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : "",
 ].filter(Boolean).join(" · ");
@@ -2045,7 +2054,7 @@ function resetBFilters() {
 $("#breset").onclick = resetBFilters;
 // the active filters as chips under the bar (2026-10-18 release): each one clears on its own; "Clear all" = Reset
 const CHIP_TXT = {prop: {hs: "Headshots", both: "Kills + headshots"}, scope: {"1": "Map 1", "123": "Maps 1–3"}, side: {More: "Overs", Less: "Unders"},
-  sort: {p: "Sorted by chance", t: "Starting soonest", e: "Biggest edge"}};
+  sort: {p: "Sorted by chance", t: "Starting soonest", e: "Biggest edge", h: "Sorted by hit rate"}};
 function drawChips() {
   const el = $("#bchips"); if (!el) return;
   const ml = bbook === "moneylines", cmpv = bbook === "compare", q = ($("#bsearch").value || "").trim();
