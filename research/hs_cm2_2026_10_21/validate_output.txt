@@ -1,0 +1,22 @@
+P1 lines 580 excl {'forecast: not a standard line (goblin / demon / promo)': 239, 'forecast: no PrizePicks / Underdog board quote on its pick (member / unquoted line)': 1640, 'unit: no standard board forecast >= 30 min before the start': 16, 'pick in hold-out not resolved to an HLTV unit: player not identified in HLTV': 29, 'pick in hold-out not resolved to an HLTV unit: no HLTV match found': 107, 'unit not settled in HLTV: headshots flagged unrecorded (0 HS on 12+ kills)': 1, 'unit: push on the board line': 10, 'unit not settled in HLTV: player not on both maps': 2, 'unit not settled in HLTV: maps 1-2 not both in HLTV': 4} pushes 10
+a) production P1 HS12 units in hold-out (to Oct 19 18:00): 280; same forecast chosen here: 271
+   over agrees 271 / 271 actual agrees 271 p agrees 271
+   mine in the same window 276 not in production export 5
+   missing reasons {'q=True mid=None pids=True': 4, 'q=True mid=hltv: pids=False': 1, 'q=True mid=None pids=False': 1, 'q=True mid=hltv: pids=True': 1, 'q=False mid=hltv: pids=True': 1, 'q=False mid=hltv: pids=False': 1}
+   extra 62625 7376 2398989 14932 prizepicks 2026-10-19T11:28:07+00:00 2026-10-19T12:00:00+00:00 prod units same match: 8
+   extra 61782 7191 2398990 21809 prizepicks 2026-10-19T08:12:55+00:00 2026-10-19T09:00:00+00:00 prod units same match: 10
+   extra 61808 6936 2398990 22860 underdog 2026-10-19T08:15:20+00:00 2026-10-19T09:00:00+00:00 prod units same match: 10
+   extra 62624 7350 2398989 21266 prizepicks 2026-10-19T11:27:06+00:00 2026-10-19T12:00:00+00:00 prod units same match: 8
+   extra 60347 7395 2399097 20252 underdog 2026-10-19T01:08:01+00:00 2026-10-19T14:00:00+00:00 prod units same match: 0
+   miss 53710 hltv:2399087 prizepicks 2026-10-17T02:02:25+00:00 2026-10-17T08:00:00+00:00 pick 5896 mid None opp 13776 13776 team 13619 pids [22927] q True
+   miss 55321 hltv:2399267 prizepicks 2026-10-17T10:17:36+00:00 2026-10-17T11:00:00+00:00 pick 5412 mid hltv:2399267 opp 9215 None team None pids None q True
+   miss 55354 hltv:2399676 underdog 2026-10-17T10:20:44+00:00 2026-10-17T11:00:00+00:00 pick 5805 mid None opp 13714 None team None pids None q True
+   miss 61350 hltv:2398989 prizepicks 2026-10-19T06:41:00+00:00 2026-10-19T09:00:00+00:00 pick 7350 mid hltv:2398989 opp 7532 7532 team 14030 pids [21266] q True
+   miss 61471 hltv:2398989 underdog 2026-10-19T07:04:16+00:00 2026-10-19T09:00:00+00:00 pick 6861 mid hltv:2398989 opp 14030 14030 team 7532 pids [14932] q False
+   miss 62110 hltv:2398990 prizepicks 2026-10-19T08:44:15+00:00 2026-10-19T12:00:00+00:00 pick 7192 mid None opp 6248 6248 team 12474 pids [22860] q True
+   miss 62113 hltv:2398990 prizepicks 2026-10-19T08:44:16+00:00 2026-10-19T12:00:00+00:00 pick 7191 mid None opp 12474 12474 team 6248 pids [21809] q True
+   miss 62162 hltv:2398990 underdog 2026-10-19T08:50:30+00:00 2026-10-19T12:00:00+00:00 pick 7082 mid hltv:2398990 opp 12474 None team None pids None q False
+   miss 62881 hltv:2399686 underdog 2026-10-19T13:06:48+00:00 2026-10-19T13:45:00+00:00 pick 7425 mid None opp None None team None pids [5615] q True
+   actual disagreements (fid, prod, hltv) []
+b) perf-2 rebuild on 580 P1 lines: |kills lambda diff| median 0.0004, share < 0.01: 0.897, share < 0.25: 1.000; hs/kill diff<0.002 0.995
+c) cm-2 rebuild vs live perf-cm2 kills on 3000 forecasts: ineligible here 64; |lambda diff| median 0.00000, share < 0.01 0.993, share < 0.25 0.999, max 0.633

@@ -1,0 +1,298 @@
+{
+ "protocol": "research/hs_cm2_2026_10_21/PROTOCOL.md @ e7e5e12",
+ "run_at": "2026-10-21T19:04:33+00:00",
+ "hltv_pulled_at": "2026-10-21T18:57:24+00:00",
+ "holdout": "matches from 2026-10-17T00:00:00+00:00 to 2026-10-21T18:57:24+00:00",
+ "cm2_tables": {
+  "tables_sha": "5a0291a4d3c87bd4",
+  "rows": 304940,
+  "rows_raw": 305358,
+  "excluded_maps": {
+   "not_ten_rows": 38
+  },
+  "unknown_env_rows": 20,
+  "n_refits": 52,
+  "refits": [
+   "2026-10-05",
+   "2026-10-12",
+   "2026-10-19"
+  ]
+ },
+ "n0": {
+  "pre": 8597,
+  "late_in": 241,
+  "late_counts": {
+   "outside_top": 113,
+   "history": 19580,
+   "in": 241
+  }
+ },
+ "bootstrap": {
+  "resamples": 2000,
+  "grouping": "match",
+  "seed": 20261021,
+  "interval": "percentile 2.5-97.5"
+ },
+ "metric1_hltv_wide": {
+  "player_series": 1866,
+  "matches": 187,
+  "mae_base_perf2_n0": 3.962,
+  "mae_candidate": 3.8993,
+  "mae_gain": 0.0627,
+  "mae_gain_ci95": [
+   0.0204,
+   0.1052
+  ],
+  "bias_base": 0.057,
+  "bias_candidate": 0.13,
+  "excluded": {
+   "headshots flagged unrecorded (0 HS on 12+ kills)": 2,
+   "player not on both maps": 3,
+   "series without maps 1 and 2 in HLTV (player-rows on map 1)": 140
+  },
+  "candidate_eligible": 1811,
+  "ineligible_reasons": {
+   "no player maps in the 420 days before the match day": 55
+  },
+  "eligible_only": {
+   "player_series": 1811,
+   "matches": 187,
+   "mae_base_perf2_n0": 3.911,
+   "mae_candidate": 3.8464,
+   "mae_gain": 0.0646,
+   "mae_gain_ci95": [
+    0.0211,
+    0.1085
+   ],
+   "bias_base": -0.019,
+   "bias_candidate": 0.056
+  },
+  "baseline_with_n0_history_only": {
+   "player_series": 1534,
+   "matches": 182,
+   "mae_base_perf2_n0": 3.8376,
+   "mae_candidate": 3.8227,
+   "mae_gain": 0.015,
+   "mae_gain_ci95": [
+    -0.021,
+    0.0525
+   ],
+   "bias_base": 0.044,
+   "bias_candidate": 0.129
+  }
+ },
+ "metric2_p1": {
+  "lines": 580,
+  "matches": 70,
+  "overs": 269,
+  "log_loss_published": 0.6861,
+  "log_loss_candidate": 0.68122,
+  "log_loss_gain": 0.00489,
+  "log_loss_gain_ci95": [
+   -0.00133,
+   0.01116
+  ],
+  "brier_gain": 0.00242,
+  "brier_gain_ci95": [
+   -0.00064,
+   0.00549
+  ],
+  "mean_p_over_published": 0.4914,
+  "mean_p_over_candidate": 0.4927,
+  "observed_over": 0.4638,
+  "excluded": {
+   "forecast: not a standard line (goblin / demon / promo)": 239,
+   "forecast: no PrizePicks / Underdog board quote on its pick (member / unquoted line)": 1640,
+   "unit: no standard board forecast >= 30 min before the start": 16,
+   "pick in hold-out not resolved to an HLTV unit: player not identified in HLTV": 29,
+   "pick in hold-out not resolved to an HLTV unit: no HLTV match found": 107,
+   "unit not settled in HLTV: headshots flagged unrecorded (0 HS on 12+ kills)": 1,
+   "unit: push on the board line": 10,
+   "unit not settled in HLTV: player not on both maps": 2,
+   "unit not settled in HLTV: maps 1-2 not both in HLTV": 4
+  },
+  "pushes_excluded": 10,
+  "candidate_eligible": 553,
+  "ineligible_reasons": {
+   "own team or opponent not identified in HLTV": 27
+  },
+  "by_book": {
+   "prizepicks": {
+    "lines": 241,
+    "matches": 49,
+    "overs": 121,
+    "log_loss_published": 0.68275,
+    "log_loss_candidate": 0.67741,
+    "log_loss_gain": 0.00534,
+    "log_loss_gain_ci95": [
+     -0.0048,
+     0.01653
+    ],
+    "brier_gain": 0.00264,
+    "brier_gain_ci95": [
+     -0.00232,
+     0.00811
+    ],
+    "mean_p_over_published": 0.4836,
+    "mean_p_over_candidate": 0.4871,
+    "observed_over": 0.5021
+   },
+   "underdog": {
+    "lines": 339,
+    "matches": 56,
+    "overs": 148,
+    "log_loss_published": 0.68849,
+    "log_loss_candidate": 0.68392,
+    "log_loss_gain": 0.00456,
+    "log_loss_gain_ci95": [
+     -0.00235,
+     0.01148
+    ],
+    "brier_gain": 0.00227,
+    "brier_gain_ci95": [
+     -0.0011,
+     0.00564
+    ],
+    "mean_p_over_published": 0.4969,
+    "mean_p_over_candidate": 0.4968,
+    "observed_over": 0.4366
+   }
+  },
+  "eligible_only": {
+   "lines": 553,
+   "matches": 65,
+   "overs": 260,
+   "log_loss_published": 0.6868,
+   "log_loss_candidate": 0.68168,
+   "log_loss_gain": 0.00513,
+   "log_loss_gain_ci95": [
+    -0.00127,
+    0.01185
+   ],
+   "brier_gain": 0.00254,
+   "brier_gain_ci95": [
+    -0.00059,
+    0.00582
+   ],
+   "mean_p_over_published": 0.494,
+   "mean_p_over_candidate": 0.4954,
+   "observed_over": 0.4702
+  },
+  "published_version": {
+   "perf-2": 580
+  },
+  "resolved_by": {
+   "hltv id": 480,
+   "lookup": 100
+  },
+  "identity_vs_hltv_match": {
+   "team_id_matches": 565,
+   "opp_id_matches": 558
+  },
+  "calibration": {
+   "published": [
+    {
+     "band": "50-55%",
+     "lines": 315,
+     "matches": 69,
+     "printed": 0.5229,
+     "won": 0.5143,
+     "won_ci95": [
+      0.46,
+      0.57
+     ]
+    },
+    {
+     "band": "55-60%",
+     "lines": 173,
+     "matches": 66,
+     "printed": 0.5708,
+     "won": 0.5723,
+     "won_ci95": [
+      0.491,
+      0.653
+     ]
+    },
+    {
+     "band": "60-65%",
+     "lines": 70,
+     "matches": 47,
+     "printed": 0.6188,
+     "won": 0.5857,
+     "won_ci95": [
+      0.477,
+      0.696
+     ]
+    },
+    {
+     "band": "65%+",
+     "lines": 22,
+     "matches": 14,
+     "printed": 0.6917,
+     "won": 0.7727,
+     "won_ci95": [
+      0.565,
+      0.95
+     ]
+    }
+   ],
+   "candidate": [
+    {
+     "band": "50-55%",
+     "lines": 323,
+     "matches": 68,
+     "printed": 0.5213,
+     "won": 0.5759,
+     "won_ci95": [
+      0.517,
+      0.633
+     ]
+    },
+    {
+     "band": "55-60%",
+     "lines": 183,
+     "matches": 67,
+     "printed": 0.5702,
+     "won": 0.612,
+     "won_ci95": [
+      0.538,
+      0.686
+     ]
+    },
+    {
+     "band": "60-65%",
+     "lines": 53,
+     "matches": 37,
+     "printed": 0.6215,
+     "won": 0.5094,
+     "won_ci95": [
+      0.38,
+      0.659
+     ]
+    },
+    {
+     "band": "65%+",
+     "lines": 21,
+     "matches": 13,
+     "printed": 0.6761,
+     "won": 0.7619,
+     "won_ci95": [
+      0.5,
+      0.963
+     ]
+    }
+   ]
+  },
+  "point": {
+   "lines": 580,
+   "mae_published_lambda": 3.8254,
+   "mae_candidate": 3.7895
+  }
+ },
+ "decision_rule": "pass only if metric1 mae_gain_ci95 lower bound > 0 AND metric2 log_loss_gain >= 0",
+ "decision": "PASS",
+ "decision_parts": {
+  "metric1_interval_above_0": true,
+  "metric2_point_ge_0": true
+ }
+}
