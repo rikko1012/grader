@@ -1010,6 +1010,21 @@ function pick(i) { $("#player").value = items[i].nick; slug = items[i].slug; hid
 function hideSug() { $("#sug").style.display = "none"; }
 
 // ---------- grade
+let instant = null;              // {key, html}: the next card request's headline, drawn from the Board row that opened it
+const reqKey = (p, l, t, lt, sc) => [String(p || "").trim().toLowerCase(), String(l).trim().replace(",", "."), t === "hs" ? "hs" : "kills", lt || "standard", sc || "12"].join("|");
+function popActsOff() { const bar = document.querySelector("#popact"); if (bar) bar.querySelectorAll("button:not([data-popclose])").forEach(b => { b.disabled = true; }); }
+// the card's headline from a board row's own data (the same grade / side / line / chance / stake / cap chip as the row)
+function instantHtml(r) {
+  const gone = sideGone(r), g = mGrade(r), team = r.team_name || r.team, opp = r.opp_name || r.opponent, none = !r.side || r.state === "SCOUT" || gone;
+  const hc = none ? "g-scout" : gClass(g), lab = none ? "–" : g === "LEAN" ? "L" : String(g || "L").slice(0, 2);
+  const head = !r.side ? "Grading…" : r.state === "SCOUT" ? `No match scheduled · Lean ${sideTxt(r.side)} ${r.line}` : g === "LEAN" ? `Lean ${sideTxt(r.side)} ${r.line}` : `${sideTxt(r.side)} ${r.line}`;
+  const pu = pushOf({line: r.line, probs_raw: r.model_outcomes});
+  const sub = !r.side ? "" : gone ? `<span class="pill bad">${esc(gone)}</span>`
+    : `${chance(r.p, r.prop)} ${pu != null ? `model estimate, excluding pushes · push ${pct(pu)}` : "model estimate"}${coinFlip(r.p)} · ${+(+r.units || 0).toFixed(2)}U${zeroWhy(r)}${capChip(r, team)}`;
+  return `<section class="card herocard ${hc}" data-instant="1"><div class="hero"><div class="badge ${hc}">${esc(lab)}</div><div><h3>${esc(head)}</h3>
+    <div class="sub">${esc(r.nick || r.player)} · ${esc(team || "")}${opp ? ` vs ${esc(opp)}${r.start ? ` · ${shortWhen(r.start)}` : ""}` : ""} · ${esc(r.line)} ${r.prop === "hs" ? "headshots" : "kills"}${mapsWord(r.scope) || " (Maps 1–2)"} · ${esc(gradeType(r))} · <span class="muted">${esc(bookName(r.book || "underdog"))} line (a betting line)</span></div>
+    <div class="sub">${sub}</div></div></div></section>`;
+}
 $("#f").onsubmit = async e => {
   e.preventDefault(); hideSug();
   const player = $("#player").value.trim(), line = $("#line").value.trim().replace(",", ".");
@@ -1021,18 +1036,24 @@ $("#f").onsubmit = async e => {
   if (ctx?.opponent) qs.set("opponent", ctx.opponent);
   if (ctx?.book === "prizepicks" || ctx?.book === "underdog") qs.set("book", ctx.book);   // stake cap from the card's own board (none: the board listing this exact pick)
   if (ctx?.opponent && ctx?.start) qs.set("start", ctx.start);      // the line's match start (a misspelled book opponent)
-  $("#go").disabled = true; $("#out").innerHTML = "";
+  // instant card (QoL 2026-10-21): a Board tap shows that row's headline at once; the full card replaces the WHOLE
+  // headline when it arrives (never merged). Until then the card's actions are off - they belong to the full card.
+  const pre = instant && instant.key === reqKey(player, line, prop, $("#lt").value, $("#scope").value) ? instant.html : "";
+  instant = null;
+  $("#go").disabled = true; $("#out").innerHTML = pre;
+  if (pre) { lastCard = null; popActsOff(); }
   const st = $("#status"); st.hidden = false; st.className = "status";
   const t0 = Date.now();
-  const tick = () => st.innerHTML = `<span class="spin"></span>Grading ${esc(player)} ${esc(line)} ${prop === "hs" ? "headshots" : "kills"} · ${Math.round((Date.now() - t0) / 1000)}s<div class="small" style="margin-top:6px">Players in upcoming matches are pre-loaded and take a few seconds. Anyone else takes up to a minute the first time.</div>`;
+  const tick = () => st.innerHTML = pre ? `<span class="spin"></span>Loading the full analysis · ${Math.round((Date.now() - t0) / 1000)}s` : `<span class="spin"></span>Grading ${esc(player)} ${esc(line)} ${prop === "hs" ? "headshots" : "kills"} · ${Math.round((Date.now() - t0) / 1000)}s<div class="small" style="margin-top:6px">Players in upcoming matches are pre-loaded and take a few seconds. Anyone else takes up to a minute the first time.</div>`;
   tick(); const iv = setInterval(tick, 1000);
   try {
     const r = await fetchRetry("/api/grade?" + qs);
     const d = await r.json();
-    if (r.status === 401 && d.error === "members_only") { st.hidden = true; return showGate(d); }   // session ended
+    if (r.status === 401 && d.error === "members_only") { st.hidden = true; $("#out").innerHTML = ""; return showGate(d); }   // session ended
     if (!r.ok) { const er = new Error(d.error || "Something went wrong"); er.sugg = d.suggestions; throw er; }
     st.hidden = true; if (ctx?.book) d.book = ctx.book; render(d); remember(d);
   } catch (err) {
+    if (pre) $("#out").innerHTML = "";
     st.className = "status err"; st.textContent = err.message;
     st.insertAdjacentHTML("beforeend", dymHtml(err.sugg));
   } finally { clearInterval(iv); $("#go").disabled = false; }
@@ -1978,6 +1999,7 @@ function boardClick(e) {
     if (r) { addToSlip(boardCard(r)); drawBoard(); } return; }
   const r = e.target.closest("[data-bl]");
   if (r) { const [p, l, t, sc, lt] = r.dataset.bl.split("|"), row = rowOfBl(r.dataset.bl);
+    if (row) instant = {key: reqKey(p, l, t, gradeType(row), sc), html: instantHtml(row)};
     gradeNow(p, l, t, row ? gradeType(row) : (lt || "standard"), sc, true, row ? {team: row.team, opponent: row.opponent, book: row.book || "underdog", start: row.start} : null); }
 }
 $("#boardout").addEventListener("click", boardClick);

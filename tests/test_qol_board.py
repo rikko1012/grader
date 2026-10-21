@@ -152,3 +152,30 @@ def test_top_plays_one_per_player_bets_only_never_unavailable_or_outage_rows(tmp
     h = out["h"]
     assert "Top plays" in h and "Offers" not in h and "Markets" not in h
     assert "70.0%" in h and "A- · 1.5U" in h and "L10 7/10" in h        # the row's own chance, grade and stake
+
+
+# ------------------------------------------------------------------ 6. instant card headline from the Board row
+@needs_node
+def test_instant_headline_is_the_rows_own_and_is_replaced_never_kept(tmp_path):
+    rows = [_row(1, line=28.0, model_outcomes={"over": 0.55, "under": 0.38, "push": 0.07}, units=1.0, model_grade="B+", grade="B+", p=0.61,
+                 cap_reason="bookmaker price")]
+    out = page(tmp_path, r"""
+      const row = boardRows[0], r = {html: instantHtml(row)};
+      const go = async (key, fetchImpl) => { fetch = fetchImpl; instant = {key, html: r.html};
+        $("#player").value = "p1"; $("#line").value = "28.0"; prop = "kills"; $("#lt").value = "standard"; $("#scope").value = "12";
+        const p = $("#f").onsubmit({preventDefault() {}}); const during = $("#out").innerHTML; return {p, during}; };
+      const a = await go(reqKey("p1", "28.0", "kills", "standard", "12"), () => new Promise(() => {}));
+      r.pending = a.during; r.status = $("#status").innerHTML; r.cardOff = lastCard;
+      const b = await go(reqKey("p1", "28.0", "kills", "standard", "12"), async () => ({ok: false, status: 500, json: async () => ({error: "boom"})}));
+      await b.p; r.afterError = $("#out").innerHTML; r.err = $("#status").textContent;
+      const c = await go(reqKey("p2", "28.0", "kills", "standard", "12"), () => new Promise(() => {}));
+      r.otherKey = c.during;
+      return r;""", {"rows": rows}, sync=False)
+    t = txt(out["html"])
+    for s in ("Over 28", "p1 · Alpha vs Bravo", "28 kills (Maps 1–2)", "61.0% model estimate, excluding pushes · push 7.0%", "1U", "capped: bookmaker price",
+              "Underdog line (a betting line)"):
+        assert s in t, s
+    assert "B+" in out["html"] and not re.search(r"preview|provisional|not confirmed", out["html"], re.I)   # no hedge label
+    assert out["pending"] == out["html"] and "Loading the full analysis" in out["status"] and out["cardOff"] is None
+    assert out["afterError"] == "" and out["err"] == "boom"            # a failed full card never leaves the headline alone
+    assert out["otherKey"] == ""                                        # only the exact line the row opened
