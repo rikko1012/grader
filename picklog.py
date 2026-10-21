@@ -151,6 +151,12 @@ def _db():
                    ch_p_more REAL, live_lambda REAL, ch_lambda REAL, n0_exact INTEGER, identical INTEGER, grp TEXT,
                    inputs_sha TEXT, gi_sha TEXT, git_commit TEXT, rec TEXT)""")
     con.execute("CREATE INDEX IF NOT EXISTS shadow_fc_pick ON shadow_forecasts (pick_id, id)")
+    # 2026-10-21 audit 11: member Slips history (rows_for_matches) and posts.drafts look picks up by match slug - an
+    # index instead of a full table scan per request (one-time build, single TEXT column)
+    try:
+        con.execute("CREATE INDEX IF NOT EXISTS picks_match ON picks (match_slug)")
+    except sqlite3.OperationalError:
+        pass                               # a pre-match_slug database (old test fixtures): nothing to index
     con.execute("CREATE TABLE IF NOT EXISTS shadow_inputs (sha TEXT PRIMARY KEY, kind TEXT, created_at TEXT, body BLOB)")
     con.execute("CREATE TABLE IF NOT EXISTS schema_marks (name TEXT PRIMARY KEY, at TEXT)")
     if not con.execute("SELECT 1 FROM schema_marks WHERE name = 'on_board_backfill'").fetchone():
@@ -171,6 +177,18 @@ def _db():
     except Exception:
         pass
     _SCHEMA_OK[0] = True
+    return con
+
+
+def _read_db():
+    """A read-only connection that does NOT take _LOCK (2026-10-21 audit 11/41): under WAL a reader sees the last
+    committed state and never blocks the writer, so member reads no longer queue behind each other, the pick-log writer
+    or settlement. The schema / migrations still run once under _LOCK, before the first lock-free read."""
+    if not _SCHEMA_OK[0]:
+        with _LOCK:
+            _db().close()
+    con = _db()
+    con.execute("PRAGMA query_only=ON")
     return con
 
 
@@ -1325,7 +1343,11 @@ def fix_scope_settlements(apply=False, scopes=("1", "123"), test=None, until=Non
             if apply:
                 with _LOCK:
                     con = _db()
-                    con.execute("UPDATE picks SET status='void', hit=NULL WHERE id=?", (r["id"],))
+                    # 2026-10-21 audit 10: store exactly what the correction log records (actual cleared too) -
+                    # a stale actual made learning.pending_corrections report it unapplied and paused learning
+                    con.execute("UPDATE picks SET status='void', actual=NULL, hit=NULL, "
+                                "settled_at=COALESCE(settled_at, ?) WHERE id=?",
+                                (datetime.now(timezone.utc).isoformat(timespec="seconds"), r["id"]))
                     con.commit()
                     con.close()
                     with open(CORRECTIONS, "a", encoding="utf-8") as f:
@@ -1410,8 +1432,9 @@ def fix_scope_settlements(apply=False, scopes=("1", "123"), test=None, until=Non
     summary["bo3_quick_full_disagree"] = len(disagree)
     summary["rule"] = SOURCE_RULE
     return {"summary": summary, "checked": len(rows), "differs": diffs, "stale_details": details, "skipped": unresolved,
-            "bo3_disagreements": disagree, "applied": bool(apply) and False,
-            "note": "BO3.gg-based differences are reported, never applied by the audit (provisional source)"}
+            "bo3_disagreements": disagree, "applied": bool(apply),
+            "note": "applied covers the HLTV-verified changes only; BO3.gg-based differences are reported, never applied "
+                    "by the audit (provisional source)"}
 
 
 def _bo3_totals(b, map_rows, r):
@@ -1570,26 +1593,45 @@ def mark_tests(ids):
 
 
 def export():
-    with _LOCK:
-        con = _db()
-        rows = [dict(r) for r in con.execute("SELECT * FROM picks ORDER BY id")]
+    con = _read_db()                       # lock-free WAL read (audit 41): one statement = one consistent snapshot
+    try:
+        return [dict(r) for r in con.execute("SELECT * FROM picks ORDER BY id")]
+    finally:
         con.close()
-    return rows
 
 
-def rows_for_matches(slugs):
+SETTLEMENT_COLS = "player, prop, scope, match_slug, status, actual, result"   # what slip_batches.leg_result_from_picks reads
+
+
+def settlement_rows():
+    """Every pick-log row, settlement fields only (no factors) - for slip_batches.leg_result_from_picks over all batches.
+    Same result as passing export(), at a fraction of the memory (audit 41: export() carries ~4-5 KB of factors per row)."""
+    con = _read_db()
+    try:
+        return [dict(r) for r in con.execute(f"SELECT {SETTLEMENT_COLS} FROM picks ORDER BY id")]
+    finally:
+        con.close()
+
+
+def rows_for_matches(slugs, cap=200):
     """The pick-log rows of these exact match slugs (settlement fields only) - for settling a member's slip legs
-    (slip_batches.leg_result_from_picks) without exporting the whole log."""
-    slugs = sorted({s for s in slugs if s})[:200]
+    (slip_batches.leg_result_from_picks) without exporting the whole log. Indexed (picks_match), lock-free;
+    cap=None reads every slug (in chunks of 200 bound parameters)."""
+    slugs = sorted({s for s in slugs if s})
+    if cap is not None:
+        slugs = slugs[:cap]
     if not slugs:
         return []
-    with _LOCK:
-        con = _db()
-        try:
-            return [dict(r) for r in con.execute(
-                f"SELECT player, prop, scope, match_slug, status, actual, result FROM picks WHERE match_slug IN ({','.join('?' * len(slugs))})", slugs)]
-        finally:
-            con.close()
+    con = _read_db()
+    try:
+        out = []
+        for i in range(0, len(slugs), 200):
+            part = slugs[i:i + 200]
+            out += [dict(r) for r in con.execute(
+                f"SELECT {SETTLEMENT_COLS} FROM picks WHERE match_slug IN ({','.join('?' * len(part))})", part)]
+        return out
+    finally:
+        con.close()
 
 def export_forecasts(inputs=False, last=None):
     """The forecast history; inputs=True decodes each forecast's exact grader inputs (large)."""
@@ -1726,9 +1768,10 @@ def _forecast_cols():
 
 
 def report():
-    with _LOCK:
-        con = _db()
+    con = _read_db()
+    try:
         rows = [dict(r) for r in con.execute("SELECT * FROM picks WHERE COALESCE(test, 0) = 0 ORDER BY id DESC")]
+    finally:
         con.close()
     settled = [r for r in rows if r["status"] == "settled"]
 
