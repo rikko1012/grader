@@ -749,6 +749,11 @@ body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode
 @media(max-width:480px){.c-why .wrow{grid-template-columns:minmax(0,1fr);gap:0;padding:4px 0}}
 .l10{display:inline-block;margin-left:6px;font:600 10.5px Inter,system-ui,sans-serif;padding:1px 7px;border-radius:6px;border:1px solid var(--line-2);color:var(--muted);white-space:nowrap;vertical-align:middle;cursor:help}
 .l10.hi{color:#3fb950;border-color:#3fb95066}.l10.lo{color:#ff9b8a;border-color:#ff9b8a55}
+.ot-featured .tphead{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}.ot-featured .tphead b{font:600 15px var(--display);letter-spacing:.02em}
+.ot-featured .tplay{grid-template-columns:40px minmax(0,1fr)!important;align-items:start}.ot-featured .tpbody{min-width:0}
+.ot-featured .tplay .bslip{margin-top:9px}.ot-featured .tplay .b2top{font-size:15px;overflow-wrap:anywhere}.ot-featured .tplay .b2pick{font-size:14px}
+.ot-featured .tplay .b2meta .pill{margin:0}
+@media(max-width:760px){.ot-featured .tplay:nth-child(n+4){display:none}}
 @media(max-width:760px){.bchips{max-width:100vw}}   /* the sticky chip row overhung the phone screen by 1px */
 </style>
 </head>
@@ -869,13 +874,13 @@ const OTView = Object.freeze({
     return JSON.stringify([String(row.nick || row.player || '').toLowerCase(),
       String(row.team_name || row.team || '').toLowerCase()]);
   },
-  shortlist(rows, eligible) {
+  shortlist(rows, eligible, n = 3) {
     const seen = new Set();
     return [...rows].filter(r => eligible(r) && !r.stale && !r.hltv_retry
         && Number.isFinite(r.p) && r.p >= 0 && r.p <= 1)
       .sort((a,b) => b.p - a.p)
       .filter(r => { const key = this.playerKey(r); if (seen.has(key)) return false; seen.add(key); return true; })
-      .slice(0,3);
+      .slice(0,n);
   },
   startTimes(rows) {
     const bySource = new Map();
@@ -1869,7 +1874,7 @@ function drawBoard() {
                                     && (!$("#bbets").checked || isBet(r)) && (!$("#bflag").checked || !isFlagged(r)) && hit(r)
                                     && floorOk(r) && (!bquick.bump || bumpFrom(r) != null) && (!bquick.gap || gapRow(r)) && (!bquick.fresh || isFresh(r))).sort(cmp);
   $("#bcount").textContent = boardRows.length ? `${rows.length} of ${boardRows.length} lines` : "";
-  $("#ot-board-overview").innerHTML = otBoardSummary(rows);
+  $("#ot-board-overview").innerHTML = otTopPlays(rows);   // QoL 2026-10-21: top plays in place of the Offers / Markets / Players counters
   const pct0 = x => x == null ? "–" : (x * 100).toFixed(1) + "%";
   const ev = (x, cls, sign) => x && x.text ? `<div class="b2ev ${cls}">${sign} ${esc(x.text)} ${basisTag(x.basis)}</div>` : "";
   // one compact row per offer (2026-10-18 release): the player and match, the platform / stat / maps / market type, the
@@ -1950,7 +1955,7 @@ function drawBoard() {
   $("#boardout").innerHTML = html + (rows.length ? `<div class="small muted" style="margin-top:10px">${bookName(bbook)} lines, graded – each at its own line${bbook === "prizepicks" ? " and market type (standard, goblin, demon)" : ""}. Tap a pick for the full analysis.</div>${gradeLegend()}` : "");
   $("#boardout").querySelectorAll("details.mgroup").forEach(d => d.addEventListener("toggle", () => { const o = store.get("cs2s_mopen", {}); o[d.dataset.mk] = d.open; store.set("cs2s_mopen", o); }));
 }
-$("#boardout").addEventListener("click", e => {
+function boardClick(e) {
   const deskButton=e.target.closest('[data-ot-match]');
   if (deskButton) return otOpenDesk(deskButton.dataset.otMatch,deskButton);
   if (e.target.closest("[data-reset]")) return resetBFilters();
@@ -1974,7 +1979,9 @@ $("#boardout").addEventListener("click", e => {
   const r = e.target.closest("[data-bl]");
   if (r) { const [p, l, t, sc, lt] = r.dataset.bl.split("|"), row = rowOfBl(r.dataset.bl);
     gradeNow(p, l, t, row ? gradeType(row) : (lt || "standard"), sc, true, row ? {team: row.team, opponent: row.opponent, book: row.book || "underdog", start: row.start} : null); }
-});
+}
+$("#boardout").addEventListener("click", boardClick);
+$("#ot-board-overview").addEventListener("click", boardClick);     // Top plays: the same card / slip actions as the rows
 function setBook(v, quiet) {
   if (!BOOKS.includes(v)) return;
   if (!quiet) try { keepScroll(); } catch {}
@@ -3321,6 +3328,26 @@ function otStartNotice(rows) {
   if (!OTView.startMismatch(rows)) return '';
   const times = OTView.startTimes(rows).map(x => `${bookName(x.book)}: ${clockTxt(new Date(x.epoch).toISOString())}`);
   return `<div class="ot-match-warning" role="note"><b>Platforms list different start times.</b> ${times.map(esc).join(' · ')}. Each platform locks its own line at its own listed start.</div>`;
+}
+// Top plays (QoL 2026-10-21): the best 3-6 plays under the current filters - one per player, bets only (units > 0, side
+// still offered, a match scheduled), never a kept-from-outage row (stale / hltv_retry, excluded by OTView.shortlist) or a
+// started match. Ranked on the row's chance; every number is the row's own (the same grade / chance / stake as the board).
+const hasStarted = (r, now) => { const t = Date.parse(r && r.start || ""); return !isNaN(t) && t <= (now || Date.now()); };
+function otTopPlays(rows) {
+  const top = OTView.shortlist(rows.filter(r => !hasStarted(r)), x => x.side && x.state !== "SCOUT" && isBet(x) && !sideGone(x), 6);
+  if (!top.length) return "";
+  const onSlip = new Set(store.get("cs2s_slip", []).map(slipKeyLeg));
+  const card = r => {
+    const nick = r.nick || r.player, team = r.team_name || r.team, opp = r.opp_name || r.opponent, bk = r.book || "underdog", g = mGrade(r);
+    const bl = `${nick}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}|${bk}`, on = onSlip.has(slipKeyRow(r));
+    return `<div class="brow2 tplay" data-bl="${esc(bl)}" title="Open the full card">
+      <span class="gtag ${gClass(g)}">${esc(g)}</span>
+      <div class="tpbody"><div class="b2top"><b>${esc(nick)}</b> <span class="muted">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}</span></div>
+        <div class="b2pick">${esc(sideWord(r))} ${esc(r.line)} ${propWord(r.prop)}${mapsWord(r.scope)} · <b>${chance(r.p, r.prop)}</b>${l10Chip(r)}</div>
+        <div class="b2meta">${bookName(bk)}${mktTag(r)} · ${esc(g)} · ${+(+r.units).toFixed(2)}U${capChip(r, team)} · ${shortWhen(r.start)}</div>
+        <button type="button" class="bslip ${on ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}|${mktType(r)}|${bk}">${on ? "On slip" : "+ Slip"}</button></div></div>`; };
+  return `<section class="ot-featured" aria-label="Top plays"><div class="tphead"><b>Top plays</b><span class="small muted">Highest chance under these filters · one per player · bets only</span></div>
+    <div class="blist">${top.map(card).join("")}</div></section>`;
 }
 function otBoardSummary(rows) {
   // offers = rows (each platform's line); markets = player x match x stat x maps (two platforms' lines on one market are

@@ -134,3 +134,21 @@ def test_grade_and_chance_floors_use_the_shown_model_grade_and_chance(tmp_path):
     assert out["bump"] == ["p6"] and out["gap"] == ["p1", "p1pp"] and out["fresh"] == ["p6"]
     assert "New in the last hour" in out["qchips"] and out["saved"]["qk"] == ["fresh"]
     assert out["reset"] == [False, "", ""]
+
+
+# ------------------------------------------------------------------ 8. Top plays strip
+@needs_node
+def test_top_plays_one_per_player_bets_only_never_unavailable_or_outage_rows(tmp_path):
+    rows = [_row(1, p=0.80, units=0.0, model_grade="A+", grade="A+", stake_reason="same-match exposure cap"),   # 0U: not a bet
+            _row(2, p=0.79, side="Less", unavailable="Unavailable—side no longer offered"),
+            _row(3, p=0.78, hltv_retry=True), _row(4, p=0.77, stale=True), _row(5, p=0.76, state="SCOUT"),
+            _row(6, p=0.75, start=(NOW - timedelta(minutes=5)).isoformat()),                                    # started
+            _row(7, p=0.70, model_grade="A-", grade="A-", units=1.5), _row(17, nick="p7", player="p7", p=0.69, book="prizepicks", id="pp:17"),
+            *[_row(i, p=0.60 - i / 1000) for i in range(8, 14)]]
+    out = page(tmp_path, r"""
+      $("#bbets").checked = false; drawBoard(); const h = $("#ot-board-overview").innerHTML;
+      return {h, order: [...h.matchAll(/data-bl="(p\d+)\|/g)].map(m => m[1])};""", {"rows": rows})
+    assert out["order"] == ["p7", "p8", "p9", "p10", "p11", "p12"]      # p7 once (its best line), 6 at most, highest chance first
+    h = out["h"]
+    assert "Top plays" in h and "Offers" not in h and "Markets" not in h
+    assert "70.0%" in h and "A- · 1.5U" in h and "L10 7/10" in h        # the row's own chance, grade and stake
