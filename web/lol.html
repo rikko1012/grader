@@ -27,6 +27,7 @@ h1{font:700 17px var(--display);letter-spacing:.4px;margin:0;white-space:nowrap}
 .seg button{background:transparent;color:var(--muted);border:0;padding:0 14px;min-height:40px;font:500 13px Inter,system-ui;cursor:pointer}
 .seg button+button{border-left:1px solid var(--line)}.seg button.on{background:var(--panel-2);color:var(--accent-2)}
 select{background:#0b1018;color:var(--text);border:1px solid var(--line-2);border-radius:10px;min-height:40px;padding:0 10px;font:13px Inter,system-ui;max-width:100%}
+.bar input[type=search]{background:#0b1018;color:var(--text);border:1px solid var(--line-2);border-radius:10px;min-height:40px;padding:0 12px;font:13px Inter,system-ui;flex:1 1 200px;min-width:0;max-width:320px}
 label.chk{display:inline-flex;align-items:center;gap:8px;min-height:40px;color:var(--muted);font-size:13px;cursor:pointer}label.chk input{width:18px;height:18px;accent-color:var(--accent)}
 .tablebox{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
 table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;vertical-align:middle}
@@ -70,7 +71,7 @@ tbody tr.row{cursor:pointer}tbody tr.row:hover{background:#1a212d}tbody tr:last-
 .panel ul{margin:6px 0 0;padding-left:18px}.panel li{margin:3px 0}
 @media(max-width:860px){.tablebox.board{display:none}.cards{display:block}}
 @media(max-width:640px){header{padding:0 14px;height:58px;gap:10px}h1{font-size:15px}#who{display:none}.wrap{padding:14px 14px 80px}
-  .bar{padding:10px;gap:8px}.bar .seg{width:100%}.bar .seg button{flex:1}.bar select{flex:1 1 calc(50% - 4px);min-width:0;width:calc(50% - 4px)}
+  .bar{padding:10px;gap:8px}.bar input[type=search]{flex:1 1 100%;max-width:none;font-size:16px}.bar .seg{width:100%}.bar .seg button{flex:1}.bar select{flex:1 1 calc(50% - 4px);min-width:0;width:calc(50% - 4px)}
   #modal{padding:0;align-items:flex-start;background:var(--panel)}.sheet{border-radius:0;min-height:100vh;padding:18px 16px 24px;border:0}
   .ln{grid-template-columns:1fr 1fr;row-gap:2px;padding:6px 0;border-top:1px solid var(--line)}.ln:first-child{border-top:0}
   .match table,.match tbody,.match tr,.match td{display:block;width:100%}.match thead{display:none}.match td{border-bottom:0;padding:6px 14px}
@@ -225,8 +226,12 @@ const NA = `<span class="na">Unavailable</span>`;
 const pct = (x) => x == null ? NA : (100 * x).toFixed(1) + "%";
 const num = (x, d = 1) => x == null ? NA : Number(x).toFixed(d);
 const FKEY = "scout.lol.filters", SKEY = "scout.lol.scroll";
-const DEF = {view: "board", plat: "all", stat: "all", type: "all", match: "all", playable: false, sort: "start"};
+const DEF = {view: "board", plat: "all", stat: "all", type: "all", match: "all", playable: false, sort: "start", floor: "all", q: ""};
+// the published grade order (A+ best); a Lean or a line with no pick sits below every letter
+const GRANK = {"A+": 0, "A": 1, "A-": 2, "B+": 3, "B": 4, "B-": 5};
+const FLOORS = [["all", "Any grade"], ["A-", "A- and up"], ["B+", "B+ and up"], ["B", "B and up"], ["B-", "B- and up"]];
 let F = Object.assign({}, DEF), D = null, lastFocus = null, openRow = null, shownD = null, shownSlip = 0;   // shownD: the board data the page last drew
+let NOTE = null;                                // a one-time notice drawn above the board (a shared line that left the board)
 const SLIPKEY = "scout.lol.slip", MAXLEGS = {underdog: 8, prizepicks: 6};
 let SLIP = {legs: []}, CHECK = {};
 try { SLIP = Object.assign({legs: []}, JSON.parse(localStorage.getItem(SLIPKEY) || "{}")); } catch {}
@@ -235,6 +240,18 @@ try { Object.assign(F, JSON.parse(localStorage.getItem(FKEY) || "{}")); } catch 
 const save = () => { try { localStorage.setItem(FKEY, JSON.stringify(F)); } catch {} };
 function when(s) { if (!s) return NA; const d = new Date(s); return isNaN(d) ? esc(s) : d.toLocaleString([], {weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"}); }
 function ago(s) { const d = new Date(s); if (!s || isNaN(d)) return null; return Math.max(0, Math.round((Date.now() - d) / 60000)); }
+// "Forecast saved 12 min ago" - from the row's own saved forecast time (forecast_at), nothing else
+function savedAgo(x) {
+  const m = ago(x.forecast_at); if (m == null) return "";
+  if (m < 1) return "Forecast saved just now";
+  if (m < 60) return `Forecast saved ${m} min ago`;
+  if (m < 1440) { const h = Math.floor(m / 60), r = m % 60; return `Forecast saved ${h} h${r ? " " + r + " min" : ""} ago`; }
+  const d = Math.floor(m / 1440); return `Forecast saved ${d} day${d > 1 ? "s" : ""} ago`;
+}
+function gradeRank(x) { return x.pick_offered && x.grade in GRANK ? GRANK[x.grade] : x.pick_offered && x.grade ? 6 : 7; }
+function hit(x, q) { return !q || [x.player, x.team, x.opponent].some(v => String(v || "").toLowerCase().includes(q)); }
+const lineUrl = (k) => `${location.origin}/lol?line=${encodeURIComponent(k)}`;
+function setUrl(k) { try { history.replaceState(null, "", k ? `/lol?line=${encodeURIComponent(k)}` : "/lol"); } catch {} }
 function matchKey(x) { return `${x.start}|${x.match}`; }
 function matchName(x) { return x.match; }
 function pside(x) { return x.pick_side === "Over" ? x.p_over : x.p_under; }
@@ -268,7 +285,7 @@ function slipRule(x) {
   return null;
 }
 async function fresh() {
-  const r = await fetch("/api/lol/board", {cache: "no-store"}).catch(() => null);
+  const r = await fetch("/api/lol/board", {cache: "no-cache"}).catch(() => null);
   if (!r || !r.ok) return null;
   D = await r.json(); return D;
 }
@@ -286,12 +303,16 @@ async function copyText(text) {
   try { await navigator.clipboard.writeText(text); return true; } catch {}
   try { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); const ok = document.execCommand("copy"); t.remove(); return ok; } catch { return false; }
 }
+function qText() { return String(F.q || "").trim().toLowerCase(); }
 function rows() {
   let rs = (D.rows || []).filter(x => (F.plat === "all" || x.platform === F.plat) && (F.stat === "all" || x.stat === F.stat) &&
     (F.type === "all" || (F.type === "standard" ? x.line_type === "Standard" : x.line_type !== "Standard")) &&
-    (F.match === "all" || matchKey(x) === F.match) && (!F.playable || playable(x)));        // a started match is not an offered pick (audit 61)
+    (F.match === "all" || matchKey(x) === F.match) && (!F.playable || playable(x)) &&       // a started match is not an offered pick (audit 61)
+    (F.floor === "all" || !(F.floor in GRANK) || gradeRank(x) <= GRANK[F.floor]) && hit(x, qText()));   // floor = the row's shown grade
   const byStart = (a, b) => String(a.start).localeCompare(String(b.start)) || String(a.player).localeCompare(String(b.player));
-  rs.sort(F.sort === "chance" ? ((a, b) => (playable(b) - playable(a)) || (b.pick_offered - a.pick_offered) || (b.pick_offered ? pside(b) - pside(a) : 0) || byStart(a, b)) : byStart);
+  const byChance = (a, b) => (b.pick_offered ? pside(b) : 0) - (a.pick_offered ? pside(a) : 0);
+  rs.sort(F.sort === "chance" ? ((a, b) => (playable(b) - playable(a)) || (b.pick_offered - a.pick_offered) || (b.pick_offered ? pside(b) - pside(a) : 0) || byStart(a, b))
+    : F.sort === "grade" ? ((a, b) => (playable(b) - playable(a)) || (gradeRank(a) - gradeRank(b)) || byChance(a, b) || byStart(a, b)) : byStart);
   return rs;
 }
 function boardView() {
@@ -306,10 +327,10 @@ function boardView() {
       <td><b>${esc(x.player)}</b><span class="sub">${esc(x.team || "")}${x.role ? " · " + esc(x.role) : ""}</span></td><td>${esc(x.opponent || "")}</td>
       <td>${esc(x.stat_name)}<span class="sub">${esc(x.scope)}</span></td><td>${esc(x.platform_label)}${typeTag(x.line_type)}</td>
       <td class="num"><b>${x.line}</b></td><td class="num">${num(x.projection)}</td><td class="num">${pct(x.p_over)}</td><td class="num">${pct(x.p_under)}${x.p_push > 0 ? `<span class="ot-push">Push ${pct(x.p_push)}</span>` : ""}</td>
-      <td>${pickCell(x)}</td><td>${gradeChip(x)}</td><td class="num">${x.units}U</td></tr>`;
+      <td>${pickCell(x)}</td><td>${gradeChip(x)}${savedAgo(x) ? `<span class="sub saved">${esc(savedAgo(x))}</span>` : ""}</td><td class="num">${x.units}U</td></tr>`;
     c += `<button type="button" class="mcard" data-k="${k}"><div class="top"><div class="who"><b>${esc(x.player)}</b><span class="sub">${esc(x.team || "")}${x.role ? " · " + esc(x.role) : ""} · vs ${esc(x.opponent || "")}</span><span class="sub">${when(x.start)}${startedTag(x)}</span></div><div>${gradeChip(x)}</div></div>
       <div style="margin-top:8px">${esc(x.stat_name)} · ${esc(x.scope)} · ${esc(x.platform_label)}${typeTag(x.line_type)}</div><div style="margin-top:4px">${pickCell(x)}</div>
-      <div class="kv"><div><span class="k">Line</span><b>${x.line}</b></div><div><span class="k">Projection</span>${num(x.projection)}</div><div><span class="k">Over</span>${pct(x.p_over)}</div><div><span class="k">Under</span>${pct(x.p_under)}</div></div><span class="small muted">Stake ${esc(x.units)}U</span>${x.p_push > 0 ? `<span class="ot-push">Exactly ${x.line}: ${pct(x.p_push)} push</span>` : ""}</button>`;
+      <div class="kv"><div><span class="k">Line</span><b>${x.line}</b></div><div><span class="k">Projection</span>${num(x.projection)}</div><div><span class="k">Over</span>${pct(x.p_over)}</div><div><span class="k">Under</span>${pct(x.p_under)}</div></div><span class="small muted">Stake ${esc(x.units)}U${savedAgo(x) ? " · " + esc(savedAgo(x)) : ""}</span>${x.p_push > 0 ? `<span class="ot-push">Exactly ${x.line}: ${pct(x.p_push)} push</span>` : ""}</button>`;
   }
   return t + `</tbody></table></div>` + c + `</div><p class="small faint" style="margin-top:10px">${esc(D.stake_note)} Projection = the model's expected total for the exact games in the prop. Chances are for this line.</p>`;
 }
@@ -326,7 +347,9 @@ function tablesView() {
   if (F.match !== "all") ts = ts.filter(t => `${t.start}|${t.teams}` === F.match);
   let h = "";
   for (const t of ts) {
-    const ms = t.markets.filter(m => (F.stat === "all" || m.stat_name.toLowerCase() === F.stat) && (F.plat === "all" || m.lines.some(l => l.platform.toLowerCase() === F.plat)));
+    const q = qText(), teamHit = q && String(t.teams || "").toLowerCase().includes(q);
+    const ms = t.markets.filter(m => (F.stat === "all" || m.stat_name.toLowerCase() === F.stat) && (F.plat === "all" || m.lines.some(l => l.platform.toLowerCase() === F.plat)) &&
+      (teamHit || hit(m, q)));
     if (!ms.length) continue;
     h += `<section class="match"><h3>${esc(t.teams)}<span>${esc(t.event || "")}${t.best_of ? " · BO" + t.best_of : ""} · ${when(t.start)}${startedTag(t)}</span></h3><div style="overflow-x:auto"><table><thead><tr><th>Player</th><th>Prop</th><th>Lines (same player, same prop, same games)</th></tr></thead><tbody>`;
     for (const m of ms) h += `<tr><td><b>${esc(m.player)}</b><span class="sub">${esc(m.team || "")}${m.role ? " · " + esc(m.role) : ""}</span></td><td>${esc(m.stat_name)}<span class="sub">${esc(m.scope)}</span></td><td>${linesHtml(m)}</td></tr>`;
@@ -397,6 +420,7 @@ function card(k, focusBack) {
     <div><span class="k">Pick</span>${pickCell(x)}</div><div><span class="k">Grade</span>${gradeChip(x)}</div><div><span class="k">Stake</span><b>${x.units}U</b></div></div>
     <div class="small muted" style="margin-top:8px">${esc(x.stake_reason)}</div>
     <div class="actions"><button type="button" class="btn primary" id="copypick" ${playable(x) ? "" : "disabled"}>Copy pick</button><button type="button" class="btn" id="addslip" ${slipRule(x) ? "disabled" : ""}>Add to slip</button>
+      <button type="button" class="btn" id="copylink">Copy link</button>
       <span class="actmsg ${playable(x) ? "" : "bad"}" id="actmsg">${esc(whyNot(x) || slipRule(x) || "")}</span></div>
     <h4>Recent average (not the projection)</h4><div>${per == null ? NA : `${num(per, 2)} ${esc(x.stat_name.toLowerCase())} per game over the last ${x.recent_games} games${n ? ` · ${num(per * n, 1)} over ${n} game${n > 1 ? "s" : ""}` : ""}`}</div>
     <h4>What this projection uses</h4>${(x.drivers || []).length ? `<ul class="small">${x.drivers.map(z => `<li>${esc(z)}</li>`).join("")}</ul>` : NA}
@@ -410,6 +434,11 @@ function card(k, focusBack) {
   $("#modal").classList.add("open");
   document.body.style.overflow = "hidden";
   $("#closecard").onclick = closeCard;
+  setUrl(k);                                     // this card's own address: /lol?line=<line key>
+  $("#copylink").onclick = async () => {
+    const ok = await copyText(lineUrl(k)), msg = $("#actmsg");
+    msg.className = ok ? "actmsg ok" : "actmsg bad"; msg.textContent = ok ? "Link copied - it opens this line's card." : "Copy failed in this browser.";
+  };
   $("#copypick").onclick = async () => {
     const leg = legOf(x), msg = $("#actmsg");
     msg.className = "actmsg"; msg.textContent = "Rechecking the line…";
@@ -427,7 +456,7 @@ function card(k, focusBack) {
   $("#closecard").focus();
 }
 function closeCard() {
-  $("#modal").classList.remove("open"); document.body.style.overflow = ""; openRow = null;
+  $("#modal").classList.remove("open"); document.body.style.overflow = ""; openRow = null; setUrl(null);
   // the data may have been replaced while the card was open (poll, Copy pick, Add to slip): redraw so rows, lines and the slip count match it
   const k = lastFocus && lastFocus.dataset ? lastFocus.dataset.k : null;
   if (D !== shownD || SLIP.legs.length !== shownSlip) { render(); if (k != null) lastFocus = [...document.querySelectorAll("[data-k]")].find(el => el.dataset.k === k && el.tagName === lastFocus.tagName) || lastFocus; }
@@ -446,17 +475,21 @@ function staleBanner() {
 function seg(id, cur, opts) { return `<div class="seg" id="${id}" role="group">${opts.map(([v, l]) => `<button type="button" data-v="${v}" class="${cur === v ? "on" : ""}" aria-pressed="${cur === v}">${l}</button>`).join("")}</div>`; }
 function render() {
   shownD = D; shownSlip = SLIP.legs.length;
+  const ae = document.activeElement, typing = ae && ae.id === "q" ? [ae.selectionStart] : null;   // a redraw (typing, the poll) keeps the search box focused
   const y = window.scrollY, tb = $(".tablebox.board"), sl = tb ? tb.scrollLeft : 0;
   const ms = new Map();
   for (const x of D.rows || []) ms.set(matchKey(x), `${matchName(x)} · ${new Date(x.start).toLocaleString([], {month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"})}`);
   for (const t of D.match_tables || []) if (!ms.has(`${t.start}|${t.teams}`)) ms.set(`${t.start}|${t.teams}`, `${t.teams} · ${new Date(t.start).toLocaleString([], {month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"})}`);
   if (F.match !== "all" && !ms.has(F.match)) F.match = "all";
-  let h = `<div class="intro"><div><div class="eyebrow">League of Legends · Underdog + PrizePicks</div><h2>League of Legends. In focus.</h2><p>Every posted kills, assists and deaths line with the model's projection for the exact games in the prop, the chance of each side, and the grade.</p></div><div class="feeds">${feedsLine()}</div></div>${staleBanner()}`;
+  let h = `<div class="intro"><div><div class="eyebrow">League of Legends · Underdog + PrizePicks</div><h2>League of Legends. In focus.</h2><p>Every posted kills, assists and deaths line with the model's projection for the exact games in the prop, the chance of each side, and the grade.</p></div><div class="feeds">${feedsLine()}</div></div>${staleBanner()}${NOTE ? `<div class="banner" role="status">${esc(NOTE)}</div>` : ""}`;
+  NOTE = null;
   h += `<div class="bar">${seg("v", F.view, [["board", "Board"], ["tables", "Compare books"], ["slip", `Slip${SLIP.legs.length ? " (" + SLIP.legs.length + ")" : ""}`]])}${seg("p", F.plat, [["all", "All books"], ["underdog", "Underdog"], ["prizepicks", "PrizePicks"]])}
     <select id="s" aria-label="Prop"><option value="all">All props</option><option value="kills">Kills</option><option value="assists">Assists</option><option value="deaths">Deaths</option></select>
     <select id="m" aria-label="Match"><option value="all">All matches</option>${[...ms].map(([k, l]) => `<option value="${esc(k)}">${esc(l)}</option>`).join("")}</select>
+    ${F.view !== "slip" ? `<input type="search" id="q" placeholder="Player or team" aria-label="Search a player or team" autocomplete="off" value="${esc(F.q || "")}">` : ""}
     ${F.view === "board" ? `<select id="t" aria-label="Line type"><option value="all">All line types</option><option value="standard">Standard lines</option><option value="alt">Goblin / Demon / adjusted</option></select>
-    <select id="o" aria-label="Sort"><option value="start">Sort: start time</option><option value="chance">Sort: chance</option></select>
+    <select id="g" aria-label="Grade floor">${FLOORS.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>
+    <select id="o" aria-label="Sort"><option value="start">Sort: start time</option><option value="grade">Sort: best grade</option><option value="chance">Sort: chance</option></select>
     <label class="chk"><input type="checkbox" id="pl" ${F.playable ? "checked" : ""}> Offered picks only</label>` : ""}</div>`;
   $("#app").innerHTML = h + (F.view === "board" ? boardView() : F.view === "slip" ? slipView() : tablesView());
   document.querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { SLIP.legs.splice(+b.dataset.rm, 1); saveSlip(); CHECK = {}; render(); });
@@ -471,8 +504,14 @@ function render() {
     const ok = await copyText(text); render();
     $("#slipmsg").className = ok ? "actmsg ok" : "actmsg bad"; $("#slipmsg").textContent = ok ? "Copied - every line rechecked just now." : "Copy failed in this browser.";
   };
-  $("#s").value = F.stat; $("#m").value = F.match; if ($("#t")) { $("#t").value = F.type; $("#o").value = F.sort; }
+  $("#s").value = F.stat; $("#m").value = F.match; if ($("#t")) { $("#t").value = F.type; $("#o").value = F.sort; $("#g").value = F.floor; }
   const set = (k, v) => { F[k] = v; save(); render(); };
+  const qi = $("#q");
+  if (qi) {
+    qi.oninput = e => { F.q = e.target.value; save(); render(); };       // redraw as the member types
+    if (typing) { qi.focus(); try { qi.setSelectionRange(typing[0], typing[0]); } catch {} }   // ... keeping the cursor in the box
+  }
+  if ($("#g")) $("#g").onchange = e => set("floor", e.target.value);
   for (const [id, k] of [["#v", "view"], ["#p", "plat"]]) $(id).onclick = e => { const b = e.target.closest("button"); if (b) set(k, b.dataset.v); };
   $("#s").onchange = e => set("stat", e.target.value); $("#m").onchange = e => set("match", e.target.value);
   if ($("#t")) { $("#t").onchange = e => set("type", e.target.value); $("#o").onchange = e => set("sort", e.target.value); $("#pl").onchange = e => set("playable", e.target.checked); }
@@ -487,7 +526,7 @@ function render() {
 }
 async function load(first) {
   let r;
-  try { r = await fetch("/api/lol/board", {cache: "no-store"}); } catch { r = null; }
+  try { r = await fetch("/api/lol/board", {cache: "no-cache"}); } catch { r = null; }
   if (r && r.status === 401) { gate(await r.json().catch(() => ({}))); return false; }
   if (!r || !r.ok) {
     if (first || !D) $("#app").innerHTML = `<div class="empty"><b>The LoL board could not be loaded.</b><p class="small">${r ? "The server answered " + r.status + "." : "No connection."}</p><button type="button" id="retry">Try again</button></div>`;
@@ -509,6 +548,20 @@ window.addEventListener("scroll", () => { try { sessionStorage.setItem(SKEY, Str
   const s = await fetch("/auth/me").then(r => r.json()).catch(() => ({}));
   if (s.required && !s.member) { gate(s); return; }
   if (s.name) $("#who").innerHTML = `${esc(s.name)} · <a href="/auth/logout">Sign out</a>`;
-  if (await load(true)) setInterval(() => load(false), 120000);
+  if (!await load(true)) return;
+  openLinked();
+  poll();
 })();
+// a shared link (/lol?line=<key>) opens that line's card; a line no longer on the board says so and opens nothing
+function openLinked() {
+  let k = null; try { k = new URLSearchParams(location.search).get("line"); } catch {}
+  if (!k) return;
+  if ((D.rows || []).some(r => r.key === k)) card(k);
+  else { NOTE = "That line is no longer on the board."; setUrl(null); render(); }
+}
+// refresh every 2 minutes plus a random 0-20 s (700 members never ask together), skipped while the tab is hidden;
+// the browser re-checks its copy with the server (ETag), so an unchanged board costs a 304 with no body
+function poll() {
+  setTimeout(async () => { if (document.visibilityState !== "hidden") await load(false); poll(); }, 120000 + Math.floor(Math.random() * 20000));
+}
 </script></body></html>
