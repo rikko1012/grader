@@ -61,9 +61,9 @@ def test_rollback_flag_keeps_perf2(live, monkeypatch):
     assert cs2_scout._cm2_live(_out(), PB, DAY, "online") == _out()
 
 
-@pytest.mark.parametrize("prop,scope,route", [("kills", "12", "cm2"), ("hs", "12", "perf2"), ("kills", "1", "perf2"),
-                                              ("kills", "123", "perf2")])
-def test_only_kills_maps_1_2_on_the_hltv_route(live, monkeypatch, prop, scope, route):
+@pytest.mark.parametrize("prop,scope,route", [("kills", "12", "cm2"), ("hs", "12", "cm2"), ("kills", "1", "perf2"),
+                                              ("hs", "1", "perf2"), ("kills", "123", "perf2")])
+def test_only_maps_1_2_on_the_hltv_route(live, monkeypatch, prop, scope, route):
     import perf_live
     monkeypatch.setattr(perf_live, "projection", lambda *a, **k: _out())
     monkeypatch.setattr(cs2_scout, "match_day", lambda s: DAY)
@@ -116,3 +116,38 @@ def test_an_hltv_blip_in_the_team_lookup_is_transient_never_a_quiet_perf2_grade(
     assert cs2_scout._transient_hltv_error(psycopg2.OperationalError("x"))
     with pytest.raises(psycopg2.OperationalError):
         cs2_scout._cm2_live(_out(), PB, DAY, "online", "Opp")
+
+
+def test_hs_maps_1_2_on_cm2_kills_hs_cm2(live, monkeypatch):
+    """hs-cm2 (research/hs_cm2_2026_10_21, passed its registered rule 2026-10-21): an HS Maps 1-2 line takes cm-2's kills and
+    HS per kill from the same cm-2 tables (cm1.hs_ratio) under the live HS | kills beta-binomial; perf-2's numbers stay in perf2."""
+    import cm1
+    import perf
+    out = dict(_out(), lambda_kills=30.0, hs_per_kill=0.5, **{"lambda": 15.0}, spread_c_kills=1.3, spread_c=1.1)
+    pf = cs2_scout._cm2_live(out, PB, DAY, "online", "Opp", "hs")
+    ref = cm2.projection(live, [PLAYER], TEAM, OPP, DAY, False)
+    hsr = cm1.hs_ratio(ref["inputs"])
+    assert pf["version"] == "perf-cm2" and pf["lambda_kills"] == ref["lambda"] and pf["hs_per_kill"] == hsr
+    assert pf["spread_c_kills"] == cm2.FIT["spread_c"] and abs(pf["lambda"] - ref["lambda"] * hsr) < 1e-12
+    assert pf["perf2"]["hs_per_kill"] == 0.5 and pf["perf2"]["lambda_kills"] == 30.0 and pf["perf2"]["spread_c_kills"] == 1.3
+    d = _base()
+    g = grader.grade_leg(dict(copy.deepcopy(d), perf=pf, prop="hs", scope="12", line=10.5))
+    assert g["projection_source"] == "perf-cm2"
+    o, u, _ = perf.hs_probs(ref["lambda"], "12", hsr, 10.5, c=cm2.FIT["spread_c"])
+    assert abs(g["p_more"] - round(o / (o + u), 3)) < 1e-9
+    assert any("headshots per kill" in f for f in g["flags"])
+
+
+def test_hs_rollback_flag_keeps_perf2(live, monkeypatch):
+    monkeypatch.setattr(cs2_scout, "CM2_HS_LIVE", False)
+    assert cs2_scout._cm2_live(_out(), PB, DAY, "online", "Opp", "hs") == _out()
+    assert cs2_scout._cm2_live(_out(), PB, DAY, "online", "Opp", "kills")["version"] == "perf-cm2"
+
+
+def test_no_team_lookup_when_cm2_cannot_forecast(live, monkeypatch):
+    """2026-10-21 audit no 19: environment unknown / player not in HLTV = ineligible before any HLTV team lookup."""
+    def boom(name):
+        raise AssertionError("team lookup made")
+    monkeypatch.setattr(perf_shadow, "_team_id", boom)
+    assert cs2_scout._cm2_live(_out(), PB, DAY, None, "Opp")["cm2_live"]["ineligible"].startswith("target environment")
+    assert cs2_scout._cm2_live(dict(_out(), hltv_player_ids=[]), PB, DAY, "lan", "Opp")["cm2_live"]["ineligible"] == "player not identified in HLTV"

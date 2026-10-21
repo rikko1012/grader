@@ -726,7 +726,9 @@ def grade_leg(d, cfg=CONFIG):
         # corrections for its own biases (gap compression, Over margin, confidence halving) do not apply to it
         if pf.get("version") == "perf-cm2":
             flags.append(f"Projection {pf['lambda']:.1f} from the complete model (perf-cm2: his kill rates overall and in tonight's "
-                         f"setting, opponent-adjusted kills, kills the opponent allows, both teams' Elo and rounds per map, fitted together) - perf-2 projected "
+                         f"setting, opponent-adjusted kills, kills the opponent allows, both teams' Elo and rounds per map, fitted together"
+                         + (f"; {pf.get('lambda_kills') or 0:.1f} kills x {(pf.get('hs_per_kill') or 0) * 100:.1f}% headshots per kill"
+                            if prop == "hs" else "") + ") - perf-2 projected "
                          f"{(pf.get('perf2') or {}).get('lambda') or 0:.1f}")
         else:
             flags.append(f"Projection {pf['lambda']:.1f} from the performance model ({pf.get('version')}: "

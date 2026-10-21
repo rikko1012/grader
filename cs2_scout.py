@@ -30,6 +30,7 @@ import copy
 import csv
 import hashlib
 import json
+import math
 import os
 import re
 import sys
@@ -1351,16 +1352,24 @@ def bo3_perf_rows(pb, rule=BO3_ENV_RULE):
 
 CM2_LIVE_VERSION = "perf-cm2"     # owner 2026-10-20: kills Maps 1-2 projected by cm-2 (cm2.py); rollback: CM2_LIVE=0
 CM2_KEEP = ("version", "lambda", "lambda_kills", "rate", "rate_all_envs", "opp_factor", "hs_per_kill", "sd", "rounds_per_map",
-            "spread_c", "data_quality")
+            "spread_c", "spread_c_kills", "data_quality")
+CM2_HS_LIVE = os.environ.get("CM2_HS_LIVE", "1") != "0"   # hs-cm2 (research/hs_cm2_2026_10_21): HS Maps 1-2 on cm-2 kills
 
 
-def _cm2_live(out, pb, day, tonight, opponent=None):
-    """Kills Maps 1-2 on the HLTV route: cm-2's projection and spread replace perf-2's. perf-2's numbers stay beside it
-    as `perf2` (what the shadow comparisons keep measuring against). When cm-2 cannot forecast this line the grade stays
-    on perf-2 and the reason is saved."""
-    if os.environ.get("CM2_LIVE", "1") == "0":
+def _cm2_live(out, pb, day, tonight, opponent=None, prop="kills"):
+    """Maps 1-2 on the HLTV route: cm-2's kills projection and spread replace perf-2's. Kills lines since 2026-10-20; HS lines
+    since 2026-10-21 (hs-cm2: cm-2 kills under the live HS | kills beta-binomial, HS per kill from the same cm-2 tables -
+    cm1.hs_ratio; nothing fitted). perf-2's numbers stay beside it as `perf2` (the shadow comparisons keep measuring against
+    them). When cm-2 cannot forecast this line the grade stays on perf-2 and the reason is saved."""
+    if os.environ.get("CM2_LIVE", "1") == "0" or (prop == "hs" and not CM2_HS_LIVE):
         return out
+    # cm-2's own eligibility first - no HLTV team lookups for a line it cannot forecast (2026-10-21 audit no 19)
+    if tonight is None:
+        return dict(out, cm2_live={"ineligible": "target environment (LAN / online) unknown"})
+    if not out.get("hltv_player_ids"):
+        return dict(out, cm2_live={"ineligible": "player not identified in HLTV"})
     try:
+        import cm1
         import cm2
         import perf_shadow
         t = cm2.current()
@@ -1371,17 +1380,27 @@ def _cm2_live(out, pb, day, tonight, opponent=None):
         # database - an opponent whose maps all sit outside N0 has no live-read id but is in cm-2's full-history tables
         opp_id = out.get("hltv_opp_team") or (perf_shadow._team_id(opponent) if opponent else None)
         r = cm2.projection(t, out.get("hltv_player_ids") or [], perf_shadow._team_id(team) if team else None,
-                           opp_id, day, None if tonight is None else tonight == "lan")
+                           opp_id, day, tonight == "lan")
+        hsr = cm1.hs_ratio(r["inputs"]) if prop == "hs" and not r.get("ineligible") else None
     except Exception as e:      # noqa: BLE001 - cm-2 unavailable: the line stays on perf-2 and says so
         if _transient_hltv_error(e):
             raise               # an HLTV blip is transient (_perf_input: retry, then keep the last grade) - never a quiet perf-2 grade
         return dict(out, cm2_live={"ineligible": f"cm-2 unavailable ({type(e).__name__})"})
     if r.get("ineligible"):
         return dict(out, cm2_live={"ineligible": r["ineligible"]})
-    pf = dict(out, version=CM2_LIVE_VERSION, perf2={k: out.get(k) for k in CM2_KEEP if k in out}, lambda_kills=r["lambda"],
-              cm2_live={"model": r["version"], "lambda": r["lambda"], "sd": r["sd"], "features": r["features"], "inputs": r["inputs"],
-                        "tables_sha": r["tables_sha"], "artifact_sha": r["artifact_sha"]})
-    pf["lambda"], pf["sd"] = r["lambda"], r["sd"]
+    rec = {"model": r["version"], "lambda": r["lambda"], "sd": r["sd"], "features": r["features"], "inputs": r["inputs"],
+           "tables_sha": r["tables_sha"], "artifact_sha": r["artifact_sha"]}
+    pf = dict(out, version=CM2_LIVE_VERSION, perf2={k: out.get(k) for k in CM2_KEEP if k in out}, lambda_kills=r["lambda"])
+    if prop == "hs":
+        import cm2
+        c = cm2.FIT["spread_c"]
+        lam = r["lambda"] * hsr
+        rec.update(hs_per_kill=hsr, spread_c_kills=c)
+        pf.update(hs_per_kill=hsr, spread_c_kills=c, cm2_live=rec)
+        pf["lambda"], pf["sd"] = lam, (out.get("spread_c") or 1.0) * math.sqrt(max(lam, 1.0))
+    else:
+        pf["cm2_live"] = rec
+        pf["lambda"], pf["sd"] = r["lambda"], r["sd"]
     return pf
 
 
@@ -1429,8 +1448,8 @@ def _perf_input_once(pb, args, sc):
                     dq = bo3.get("data_quality")
                     bo3["data_quality"] = ((dq + "; ") if dq not in (None, "ok") else "") + ("opponent not in HLTV" if not tid else "opponent has no HLTV maps") + " - average opponent"
                 return bo3
-        if not out.get("error") and args.prop != "hs" and sc == "12":
-            out = _cm2_live(out, pb, day, tonight, getattr(args, "opponent", None))
+        if not out.get("error") and sc == "12":
+            out = _cm2_live(out, pb, day, tonight, getattr(args, "opponent", None), "hs" if args.prop == "hs" else "kills")
         return out                         # {"error": ...} when unavailable - the grader says so instead of silently falling back
 
 

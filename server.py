@@ -994,6 +994,12 @@ def awp_role(nick, g, hs_pct, team=None):
     """(True / False / None, source). HLTV's real AWP kill share first (weapon stats, last 90 days),
     then Liquipedia's role listing, BO3.gg's body-shot kill rate, the known list, then HS%."""
     lp, src = roles.awp_role(nick, team)            # HLTV AWP share, then Liquipedia (roles.py)
+    # a stand-in / just-moved player's role rows carry his own team: retry with it, as the card's gate does
+    # (cs2_scout.hltv_first_gates, 2026-10-21 audit no 24) so the chip and the HS stake rule agree
+    for own in dict.fromkeys(t for t in (g.get("own_teams") or ()) if t and t != team):
+        if lp is not None:
+            break
+        lp, src = roles.awp_role(nick, own)
     if lp is not None:
         return lp, src
     snip = g.get("snip")
@@ -2617,6 +2623,7 @@ def board_forever():
                                       **_board_l10(rf, r),
                                       "hs_pct": fw.get("hs_pct"), "p_win": (g.get("detail") or {}).get("p_win"),
                                       "snip": pb.get("sniping_equiv"), "awp_note": pb.get("awp_note"),
+                                      "own_teams": [t for t in (pb.get("profile_team"), pb.get("current_team")) if t],
                                       "market": g.get("market_quality"),
                                       "team_name": pb.get("playing_for") or pb.get("current_team"),
                                       "opp_name": (res.get("next_match") or {}).get("opponent"),
@@ -2728,7 +2735,7 @@ def board_forever():
             try:                                      # shadow batches: settle finished ones (each once, durable) every 30 min
                 if time.time() - _SLIP_SETTLED[0] > 1800:
                     _SLIP_SETTLED[0] = time.time()
-                    slip_batches.settle_all(slip_batches.leg_result_from_picks(picklog.export()))
+                    slip_batches.settle_all(slip_batches.leg_result_from_picks(picklog.settlement_rows()))
             except Exception:
                 traceback.print_exc()
             try:                                      # the builder's own record: each new recommended slip, once
@@ -3577,7 +3584,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, {"version": comparison.VERSION, "total": len(lines), "sources": comparison.SOURCES,
                                        "snapshots": [json.loads(x) for x in lines[-n:] if x.strip()]})
             if u.path == "/admin/slip_batch_results.json" and self.authed(q.get("token")):
-                new = slip_batches.settle_all(slip_batches.leg_result_from_picks(picklog.export()))
+                new = slip_batches.settle_all(slip_batches.leg_result_from_picks(picklog.settlement_rows()))
                 return self.send(200, {"version": slip_batches.VERSION, "new": len(new), "results": slip_batches.results(),
                                        "payout_note": "standard 3x/6x/10x and x Underdog multipliers are ASSUMPTIONS, not real entries"})
             if u.path == "/admin/forecasts.json" and self.authed(q.get("token")):
