@@ -389,6 +389,13 @@ def _load():
     if hltv.dsn():                               # 2. the scraper's copy: line history, or the whole board as backup
         try:
             db_records, db_status = _read_db()
+            prev = _S["status"] or {}
+            if records is None and prev.get("source") == DIRECT_SOURCE and _S["at"]                     and (db_status.get("last_ok") or 0) <= (prev.get("last_ok") or 0):
+                # one failed direct read never puts back an OLDER scraper copy over the last direct board (2026-10-21
+                # audit #7: lines went back and were regraded); keep the last board, it ages into stale like Underdog's
+                detail["kept"] = "last direct board (scraper copy is older)"
+                _S.update(detail=dict(detail, at=now), tried=now, busy=False)
+                return
             if records is None:
                 records = db_records
                 status = dict(db_status, source=f"{db_status.get('source') or 'prizepicks'} via the HLTV scraper "

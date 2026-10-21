@@ -216,11 +216,12 @@ def test_direct_first_scraper_copy_for_history_and_as_backup(tmp_path, monkeypat
     assert b["state"] in ("ok", "empty") and b["source"] == pp.DIRECT_SOURCE and len(b["rows"]) == len(pp.rows_from(pp.parse_direct(_BODY, T0)))
     row = next(r for r in b["rows"] if r["market_id"] == first["line_id"])
     assert row["open_line"] == first["line"] - 1 and row["other_line"] == 99.5
-    # 2. PrizePicks does not answer: the scraper's copy is the whole board, and says so
+    # 2. PrizePicks does not answer and there is no direct board yet (a restart): the scraper's copy is the whole
+    #    board, and says so (an older copy never replaces a direct board: tests/test_audit21_lines_slips.py)
     def down():
         raise ConnectionError("timeout")
     monkeypatch.setattr(pp, "_direct", down)
-    pp._S.update(tried=0.0, at=0.0, busy=False)
+    pp._S.update(tried=0.0, at=0.0, rows=[], status={}, busy=False)
     pp._load()
     assert "via the HLTV scraper" in pp._S["status"]["source"] and "timeout" in pp._S["status"]["source"]
     assert [r["market_id"] for r in pp._S["rows"]] == [first["line_id"]]
