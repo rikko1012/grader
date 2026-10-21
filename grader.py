@@ -709,6 +709,10 @@ def grade_leg(d, cfg=CONFIG):
         p3 = None if d.get("bo") == 5 else q1 * (1 - q2) + (1 - q1) * q2
         lam_final = lam12 + lam3
     scale = lam_final / lam12 if lam12 else 1.0
+    if lam_final <= 0 and perf_will_project:
+        # a hot-form cut past 100% (form_trend > 1/hot_k) leaves the unused old-pipeline number at or below 0: it must not
+        # block the performance model's grade (2026-10-21 audit no 28). Old-pipeline lines still fail as before.
+        lam_final, legacy_na = 0.0, legacy_na or "hot-form cut past 100%"
     sd = math.sqrt(lam_final) * c * sd_mult
     pf = d.get("perf") if isinstance(d.get("perf"), dict) else None
     perf_on = (scope in cfg.get("perf_scopes", ()) and bool(pf) and pf.get("lambda") is not None and pf.get("sd")
