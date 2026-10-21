@@ -538,3 +538,20 @@ pre-match strength measure recovers.
   these stages). On F-TRAIN those missed stages are projected correctly (kills +0.1%, 359 series, 11 events), so correcting the
   definition would not change accuracy; it is left for the next refit.
 - Live lol-1 forecasts reproduce the backtest's projections (no pipeline bug).
+
+## Amendment A13 (2026-10-21, written before any A13 number on F-VALID, the spent period or the hold-out): assists shape (sh-1)
+
+**Owner instruction (2026-10-21):** make LoL projections more accurate. **Attempt count:** sixth candidate after A8-A12; read the
+result with that in mind. The idea comes from the audit scout's F-TRAIN-only sizing (scratchpad audit/lol_accuracy_v2: real
+assists residuals are much LESS right-skewed than the negative binomial - standardised skew 0.62 vs 1.11 on Map 1 - so the NB puts
+too much mass just below the mean and Unders over-print). wl-mix (A10) added skew, the opposite direction.
+
+**Candidate sh-1 (assists only; the lol-1f mean is unchanged).** P(total) = (1 - w) x NB(mean mu, size s) + w x a discretised
+normal with mean mu and the same NB variance (mu + mu^2 / s), renormalised over totals >= 0. s and w per scope, fitted on F-TRAIN only
+by maximum NB-mixture log likelihood (grid: s around lol-1's size x {0.8 .. 1.4}, w in {0, 0.1 .. 0.6}).
+
+**Decision (fixed now).** sh-1 replaces lol-1f's assists distribution only if, in BOTH F-VALID and the spent period: Maps 1-2
+log-score gain 95% series-grouped interval above 0; Maps 1-3 and Map 1 point estimates not below 0; the assists Under gap at
+book-style lines smaller than lol-1f's; AND on the hold-out week (series from 2026-10-17 in the newest pull) the Map 1 log-score
+point estimate is not below 0. The projection (mean, MAE) is unchanged by construction. A pass becomes lol-1g (assists chances,
+median and 80% range from the mixture); kills and deaths unchanged; stakes stay 0U.
