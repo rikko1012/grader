@@ -41,8 +41,11 @@ const $ = s => document.querySelector(s), esc = s => String(s ?? "").replace(/[&
 const pc = x => x == null ? "–" : (x * 100).toFixed(1) + "%", n2 = x => x == null ? "–" : (+x).toFixed(2);
 let D = null, cohort = "eval";
 async function load() {
-  try { const r = await fetch("/admin/diagnostics.json?token=" + encodeURIComponent(tok)); D = await r.json(); }
+  let r;
+  try { r = await fetch("/admin/diagnostics.json?token=" + encodeURIComponent(tok)); D = await r.json(); }
   catch (e) { $("#out").textContent = "Couldn't load diagnostics: " + e.message; return; }
+  if (!r.ok || !D || D.error || !D.cohorts) {      // an error body (e.g. the build failed) - say so, never hang on Loading
+    $("#out").textContent = "Couldn't load diagnostics: " + ((D && D.error) || ("server answered " + r.status)); D = null; return; }
   const vers = new Set(); for (const c of ["first", "eval"]) (D.cohorts[c]?.summary || []).forEach(s => vers.add(s.version));
   $("#fver").innerHTML = `<option value="">All versions</option>` + [...vers].map(v => `<option>${esc(v)}</option>`).join("");
   $("#gen").textContent = "generated " + D.generated; draw();
@@ -64,9 +67,10 @@ function draw() {
       <td>${s.bias_ci ? `${n2(s.bias_ci[0])}–${n2(s.bias_ci[1])}` : "–"}</td><td>${s.in80 == null ? "–" : pc(s.in80) + ` (${s.in80_n})`}</td><td>${n2(s.rounds_bias)}</td>
       <td>${s.top_selections.n ? `${pc(s.top_selections.hit_rate)} / ${pc(s.top_selections.predicted)} (${s.top_selections.n})` : "–"}</td></tr>`).join("")}</tbody></table></div>
     ${fwdHs()}
-    ${(D.cohorts[cohort].by_projection_source || []).length ? `<h2>Board lines by projection source</h2><div class="small muted">Bias = projection minus actual (+ = projected too high), match-grouped 95% interval. Lines replayed from saved inputs only.</div>
-      <div class="scroll"><table><thead><tr><th>Projection</th><th>Lines</th><th>Matches</th><th>Bias</th><th>Bias 95%</th><th>Hit</th><th>Predicted</th></tr></thead><tbody>
-      ${D.cohorts[cohort].by_projection_source.filter(x => (!$("#fprop").value || x.prop === $("#fprop").value) && (!$("#fscope").value || x.scope === $("#fscope").value)).map(x => `<tr><td>${esc(x.projection)} · ${esc(x.prop)} · ${esc(x.scope)}</td><td>${x.n}</td><td>${x.matches}</td><td>${n2(x.proj_bias)}</td><td>${x.bias_ci ? `${n2(x.bias_ci[0])}–${n2(x.bias_ci[1])}` : "–"}</td><td>${pc(x.hit_rate)}</td><td>${pc(x.predicted)}</td></tr>`).join("")}</tbody></table></div>` : ""}
+    ${(D.cohorts[cohort].by_projection_source || []).length ? `<h2>Underdog board lines by projection source</h2><div class="small muted">Underdog board lines only, each model version on its own. Bias = projection minus actual (+ = projected too high), match-grouped 95% interval. Lines replayed from saved inputs only.</div>
+      ${$("#fsrc").value && $("#fsrc").value !== "board" ? `<div class="small muted">Not shown for the selected forecast source: this table covers Underdog board lines only.</div>` : `
+      <div class="scroll"><table><thead><tr><th>Projection / stat / maps / version</th><th>Lines</th><th>Matches</th><th>Bias</th><th>Bias 95%</th><th>Hit</th><th>Predicted</th></tr></thead><tbody>
+      ${D.cohorts[cohort].by_projection_source.filter(x => (!$("#fprop").value || x.prop === $("#fprop").value) && (!$("#fscope").value || x.scope === $("#fscope").value) && (!$("#fver").value || x.version === $("#fver").value)).map(x => `<tr><td>${esc(x.projection)} · ${esc(x.prop)} · ${esc(x.scope)} · ${esc(x.version ?? Object.keys(x.versions || {}).join(", "))}</td><td>${x.n}</td><td>${x.matches}</td><td>${n2(x.proj_bias)}</td><td>${x.bias_ci ? `${n2(x.bias_ci[0])}–${n2(x.bias_ci[1])}` : "–"}</td><td>${pc(x.hit_rate)}</td><td>${pc(x.predicted)}</td></tr>`).join("")}</tbody></table></div>`}` : ""}
     <h2>Calibration</h2>${rows.map(s => `<div class="card"><b>${esc(s.source)} · ${esc(s.prop)} · ${esc(s.scope)} · ${esc(s.version)}</b>
       <div class="scroll"><table><thead><tr><th>Printed chance</th><th>Lines</th><th>Predicted</th><th>Actual</th></tr></thead><tbody>
       ${s.calibration.map(b => `<tr><td>${b.bin}</td><td>${b.n}</td><td>${pc(b.predicted)}</td><td>${pc(b.actual)}</td></tr>`).join("")}</tbody></table></div>
