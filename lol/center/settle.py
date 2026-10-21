@@ -66,6 +66,12 @@ def settle(con, platform, stat, scope, pid, sid, line):
         return {"status": "pending", "reasons": [f"game(s) {absent_but_played} were played (series {s['score1']}-{s['score2']}) "
                                                  f"but are missing from the data"]}
     rows = {r["game_n"]: dict(r) for r in con.execute("SELECT * FROM c_player_games WHERE sid = ? AND pid = ?", (sid, pid))}
+    # audit 43: a game whose scoreboard does not have its 10 player rows yet says nothing about this player - absence (DNP,
+    # Underdog void, PrizePicks partial) is read only from complete scoreboards
+    unknown = [n for n in played if n not in rows and ((played[n].get("n_players") or 0) < 10
+                                                         or "players_incomplete" in (played[n].get("flags") or ""))]
+    if unknown:
+        return {"status": "pending", "reasons": [f"player rows of game(s) {unknown} are incomplete in the data"]}
     in_games = [n for n in want if n in played and n in rows]
     if not in_games:
         return {"status": "dnp", "reasons": ["player in none of the games in scope"], "games": []}

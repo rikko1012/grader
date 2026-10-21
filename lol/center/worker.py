@@ -99,6 +99,24 @@ def _err(where, e):
     STATE["errors"] = (STATE["errors"] + [{"at": store.now_iso(), "where": where, "error": f"{type(e).__name__}: {str(e)[:300]}"}])[-20:]
 
 
+def _rollback(con):
+    try:
+        con.rollback()
+    except Exception:
+        pass
+
+
+def _step(con, name, fn):
+    """One build-loop stage: its result, or None after recording the error (the loop goes on to the next stage)."""
+    try:
+        with stage(name):
+            return fn()
+    except Exception as e:
+        _err(name, e)
+        _rollback(con)
+        return None
+
+
 def _write(name, obj):
     tmp = OUT / (name + ".tmp")
     tmp.write_text(json.dumps(obj, default=str))
@@ -214,43 +232,44 @@ def build_loop():
                 t_build = 0.0
                 flag.unlink()
             if store.get_meta(con, "dirty") and time.time() - t_build > BUILD_EVERY_S:
-                with stage("build"):
-                    STATE["build"] = build.build(con)
-                with stage("coverage"):
-                    _write("coverage.json", coverage.refresh(con))
-                with stage("export"):
-                    STATE["export"] = export.export(con)
+                # audit 12: an attempt always advances the clock - a failing build is retried at the next build window,
+                # never every minute - and the links / forecasts / board below still run on the last good build
                 t_build, t_link = time.time(), 0.0
-            if time.time() - t_link > LINK_EVERY_S and store.get_meta(con, "built_at"):
-                with stage("links"):
-                    STATE["links"] = {"at": store.now_iso(), "counts": match.link_open_markets(con)}
-                if store.get_meta(con, "last_export"):
-                    with stage("forecasts"):
-                        STATE["forecasts"] = {"at": store.now_iso(), "counts": forecast.run(con, market=_market_odds)}
-                    with stage("settle"):
-                        STATE["settled"] = {"at": store.now_iso(), "counts": forecast.settle_all(con)}
-                with stage("board"):
-                    b = forecast.board(con)
                 try:
-                    with stage("slips_member"):
-                        b["slips_member"] = slips.member_summary(con)    # recommended slips for members, or why none
-                except Exception as e:                              # never blocks the board itself
-                    _err("slips_member", e)
-                _write("board.json", b)
-                with stage("learning"):
-                    _write("learning.json", learning.dashboard(con))
-                with stage("slips_preview"):
-                    _write("slips.json", {"at": store.now_iso(), "note": "preview: no slip is recommended while stakes are held at 0U",
-                                          "previews": [slips.build(con, pl, size, 5, mode, no_overlap=True, preview=True)
-                                                       for pl in ("underdog", "prizepicks") for size in (2, 3) for mode in ("mixed",)]})
+                    with stage("build"):
+                        STATE["build"] = build.build(con)
+                    with stage("coverage"):
+                        _write("coverage.json", coverage.refresh(con))
+                    with stage("export"):
+                        STATE["export"] = export.export(con)
+                except Exception as e:
+                    _err("build", e)
+                    _rollback(con)
+            if time.time() - t_link > LINK_EVERY_S and store.get_meta(con, "built_at"):
                 t_link = time.time()
-
+                # each stage on its own: one failing stage never skips settlement, board.json, learning or slips
+                _step(con, "links", lambda: STATE.__setitem__("links", {"at": store.now_iso(), "counts": match.link_open_markets(con)}))
+                if store.get_meta(con, "last_export"):
+                    _step(con, "forecasts", lambda: STATE.__setitem__(
+                        "forecasts", {"at": store.now_iso(), "counts": forecast.run(con, market=_market_odds)}))
+                    _step(con, "settle", lambda: STATE.__setitem__("settled", {"at": store.now_iso(), "counts": forecast.settle_all(con)}))
+                b = _step(con, "board", lambda: forecast.board(con))
+                if b is not None:
+                    try:
+                        with stage("slips_member"):
+                            b["slips_member"] = slips.member_summary(con)    # recommended slips for members, or why none
+                    except Exception as e:                              # never blocks the board itself
+                        _err("slips_member", e)
+                        _rollback(con)
+                    _step(con, "board_write", lambda: _write("board.json", b))
+                _step(con, "learning", lambda: _write("learning.json", learning.dashboard(con)))
+                _step(con, "slips_preview", lambda: _write("slips.json", {
+                    "at": store.now_iso(), "note": "preview: no slip is recommended while stakes are held at 0U",
+                    "previews": [slips.build(con, pl, size, 5, mode, no_overlap=True, preview=True)
+                                 for pl in ("underdog", "prizepicks") for size in (2, 3) for mode in ("mixed",)]}))
         except Exception as e:
             _err("build", e)
-            try:
-                con.rollback()
-            except Exception:
-                pass
+            _rollback(con)
         time.sleep(60)
 
 

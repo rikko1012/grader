@@ -166,10 +166,14 @@ def _link_by_pair(con, offer, start, pair):
 
 
 def link_open_markets(con, at=None):
-    """Link every market seen in the archive (latest state). Changes are written with history. Returns counts."""
+    """Link every OPEN market in the archive (latest state). Changes are written with history. Returns counts. A closed
+    market keeps its last stored link: nothing reads the links of closed markets (forecasts, the board and the status
+    file read open ones; settlement reads the saved forecast), and relinking the whole archive grew without bound
+    (audit 13)."""
     at = at or store.now_iso()
     counts = {}
-    rows = con.execute("SELECT e.platform, e.market_key, e.data FROM market_state s JOIN market_events e ON e.id = s.last_event_id").fetchall()
+    rows = con.execute("SELECT e.platform, e.market_key, e.data FROM market_state s JOIN market_events e ON e.id = s.last_event_id "
+                       "WHERE s.open = 1").fetchall()
     for platform, key, data in rows:
         o = json.loads(data)
         o["platform"] = platform
