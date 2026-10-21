@@ -1,5 +1,39 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
+## `f663af8917` — audit fixes (65 confirmed bugs) + hs-cm2 (HS Maps 1-2 on cm-2 kills), 2026-10-21
+
+Base: `794a775f51`. Two kinds of change; no parameter, coefficient, band, threshold or cap changed.
+
+**1. hs-cm2 (model change, passed its registered rule).** research/hs_cm2_2026_10_21 (protocol e7e5e12, result c83d446):
+HS Maps 1-2 lines on the HLTV route take cm-2's kills (lambda, spread 1.4757 x sqrt) and HS per kill from the same cm-2
+tables (cm1.hs_ratio, k_hs 25) under the live HS | kills beta-binomial (kappa 100). Nothing fitted. Hold-out (matches from
+2026-10-17): HLTV-wide HS MAE gain +0.063 (95% +0.020, +0.105; mostly players with no N0 history - established players +0.015,
+n.s.); P1 offered lines (580, 70 matches) log-loss gain +0.0049 (-0.0013, +0.0112). It projects HS slightly higher (Over lean).
+Version `perf-cm2` (same as kills Maps 1-2); perf-2's numbers saved as `perf2`; ineligible lines stay perf-2 with the reason.
+Rollback: `CM2_HS_LIVE=0` (HS only) or `CM2_LIVE=0` (all cm-2).
+
+**2. Audit bug fixes (2026-10-21 audit: 16 reviewers, every finding re-checked by 1-3 independent verifiers; 65 confirmed).**
+Grade-relevant ones (each with a regression test):
+- Cards / grader: H2H no longer crashes on an HLTV-only meeting whose headshots are not scraped (HS lines that errored now
+  grade); a very hot form trend no longer crashes performance-model lines (old-pipeline-only number); benched-on-profile
+  players are not stand-ins (benched players ignored); the AWPer HS gate retries the player's own team for stand-ins;
+  Polymarket / PandaScore opponent-only fallbacks respect the book's start; a background refresh no longer replaces a
+  PandaScore-found match with SCOUT; nearby-line chips show the card's letter.
+- HLTV / projection: namesake player choice uses team ids/aliases and recent maps; two HLTV teams sharing a name are no longer
+  picked arbitrarily; NULL-kills/score player rows filtered (no crash to the old pipeline); a shrunken N0 evaluation is refused
+  (last verified set kept); events-lookup timeouts are transient (no silent LAN/online change); context lookups serve the last
+  good copy; cm-2's team id has a last-good fallback.
+- Odds: Thunderpick win chance oriented by the current team index (never the opponent's); a hashed-id quote survives HLTV
+  listing the match.
+- Lines: one failed PrizePicks direct read no longer swaps in the scraper's older copy; Underdog records which sides are
+  offered (an Under that cannot be placed is no longer staked); a PrizePicks Under that opens after grading regrades at once;
+  board grades re-read their row (moved lines graded at the current line).
+Everything else (server, memory caps, timeouts, settlement storage, web pages): no grade change. Full list per finding:
+scratchpad audit_sorted.json; commits e48343a, 180b6e8, abdf057, 6a36212, e956815, 475514f, ed84924, 72baaa5.
+
+LoL (not in this tag; lol-1f unchanged): live features now use the league of the match being forecast and Elo keyed by team id
+(both = the tested A7.1 definition); worker stages isolated; settlement waits for complete scoreboards.
+
 ## `794a775f51` — cm-2 live: opponent lookup by the shadow's rule + HLTV blips stay transient, 2026-10-20
 
 Fix to `8404c86d3c` (live 01:14-~01:45 UTC). Only `cs2_scout._cm2_live` changed.
