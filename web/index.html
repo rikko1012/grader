@@ -749,6 +749,8 @@ body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode
 @media(max-width:480px){.c-why .wrow{grid-template-columns:minmax(0,1fr);gap:0;padding:4px 0}}
 .l10{display:inline-block;margin-left:6px;font:600 10.5px Inter,system-ui,sans-serif;padding:1px 7px;border-radius:6px;border:1px solid var(--line-2);color:var(--muted);white-space:nowrap;vertical-align:middle;cursor:help}
 .l10.hi{color:#3fb950;border-color:#3fb95066}.l10.lo{color:#ff9b8a;border-color:#ff9b8a55}
+.pickoffers{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:9px}.pickoffers[hidden]{display:none}
+.pickoffers .chipbtn{white-space:normal;text-align:left;max-width:100%}
 .ot-featured .tphead{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}.ot-featured .tphead b{font:600 15px var(--display);letter-spacing:.02em}
 .ot-featured .tplay{grid-template-columns:40px minmax(0,1fr)!important;align-items:start}.ot-featured .tpbody{min-width:0}
 .ot-featured .tplay .bslip{margin-top:9px}.ot-featured .tplay .b2top{font-size:15px;overflow-wrap:anywhere}.ot-featured .tplay .b2pick{font-size:14px}
@@ -817,6 +819,7 @@ body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode
       <label for="player">Player</label>
       <input id="player" placeholder="e.g. ZywOo" required>
       <div class="suggest" id="sug"></div>
+      <div class="pickoffers" id="pickoffers" hidden aria-live="polite"></div>
     </div>
     <div class="field">
       <label for="line">Line</label>
@@ -1006,7 +1009,38 @@ $("#player").addEventListener("keydown", e => {
 });
 $("#sug").onmousedown = e => { const d = e.target.closest("[data-i]"); if (d) pick(+d.dataset.i); };
 $("#player").addEventListener("blur", () => setTimeout(hideSug, 120));
-function pick(i) { $("#player").value = items[i].nick; slug = items[i].slug; hideSug(); $("#line").focus(); }
+function pick(i) { $("#player").value = items[i].nick; slug = items[i].slug; hideSug(); $("#line").focus(); try { showPosted(items[i].nick); } catch {} }
+// Single prop (QoL 2026-10-21): after a name is picked from the suggestions, his lines posted on the Board as one-tap chips -
+// each fills line / stat / maps / line type and grades with the Board's own team, opponent, start and platform (the Spinx
+// case: no grading on the wrong maps). Exact name only (never fuzzy); the board's shared copy - no platform request.
+let POSTED = [];
+const postedOf = nick => { const nk = String(nick || "").toLowerCase();
+  return [...BK.underdog.rows, ...BK.prizepicks.rows].filter(r => r.side && !hasStarted(r) && [r.nick, r.player].some(x => String(x || "").toLowerCase() === nk))
+    .sort((a, b) => propOrder(a.prop) - propOrder(b.prop) || ["12", "1", "123"].indexOf(a.scope || "12") - ["12", "1", "123"].indexOf(b.scope || "12")
+      || String(a.book || "").localeCompare(String(b.book || "")) || a.line - b.line); };
+function drawPosted(nick, loading) {
+  const el = $("#pickoffers"); if (!el) return;
+  POSTED = postedOf(nick);
+  el.hidden = false;
+  el.innerHTML = loading && !POSTED.length ? `<span class="small muted">Looking up his posted lines…</span>`
+    : !POSTED.length ? `<span class="small muted">No posted lines for ${esc(nick)} on the board right now – type a line to grade it.</span>`
+    : `<span class="small muted">Posted lines:</span>` + POSTED.map((r, i) => { const t = mktType(r);
+        return `<button type="button" class="chipbtn" data-posted="${i}" title="Grade this ${esc(bookName(r.book || "underdog"))} line for ${esc(r.team_name || r.team || "")} vs ${esc(r.opp_name || r.opponent || "")}">${esc(bookName(r.book || "underdog"))} <b>${esc(r.line)}</b> ${r.prop === "hs" ? "HS" : "K"} · ${({"1": "Map 1", "123": "Maps 1–3"})[r.scope] || "Maps 1–2"}${t !== "standard" ? " · " + esc(t) : ""} <span class="muted">vs ${esc(r.opp_name || r.opponent || "")}</span></button>`; }).join("");
+}
+function showPosted(nick) {
+  const need = ["underdog", "prizepicks"].filter(b => !BK[b].loaded);
+  drawPosted(nick, need.length > 0);
+  if (need.length) Promise.all(need.map(b => fetchBook(b).catch(() => {}))).then(() => { assignMatchKeys([...BK.underdog.rows, ...BK.prizepicks.rows]);
+    if ($("#player").value.trim().toLowerCase() === String(nick).toLowerCase()) drawPosted(nick, false); });
+}
+$("#player").addEventListener("input", () => { const el = $("#pickoffers"); if (el) { el.hidden = true; el.innerHTML = ""; } POSTED = []; });
+function gradePosted(i) {
+  const r = POSTED[+i]; if (!r) return;
+  const nick = r.nick || r.player, sc = r.scope || "12";
+  instant = {key: reqKey(nick, r.line, r.prop, gradeType(r), sc), html: instantHtml(r)};
+  gradeNow(nick, String(r.line), r.prop, gradeType(r), sc, !$("#cardpop").hidden, {team: r.team, opponent: r.opponent, book: r.book || "underdog", start: r.start});
+}
+document.addEventListener("click", e => { const b = e.target.closest && e.target.closest("[data-posted]"); if (b) gradePosted(b.dataset.posted); });
 function hideSug() { $("#sug").style.display = "none"; }
 
 // ---------- grade

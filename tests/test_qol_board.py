@@ -179,3 +179,23 @@ def test_instant_headline_is_the_rows_own_and_is_replaced_never_kept(tmp_path):
     assert out["pending"] == out["html"] and "Loading the full analysis" in out["status"] and out["cardOff"] is None
     assert out["afterError"] == "" and out["err"] == "boom"            # a failed full card never leaves the headline alone
     assert out["otherKey"] == ""                                        # only the exact line the row opened
+
+
+# ------------------------------------------------------------------ 3. Single prop: the picked player's posted lines
+@needs_node
+def test_single_prop_posted_line_chips_fill_and_grade_with_the_boards_match(tmp_path):
+    rows = [_row(1, nick="Spinx", player="Spinx", scope="1", line=14.5, team="Team Alpha", opponent="Bravo Gaming"),
+            _row(2, nick="Spinx", player="Spinx", prop="hs", line=9.5, book="prizepicks", id="pp:2", line_type="goblin", odds_type="goblin"),
+            _row(3, nick="Spinx", player="Spinx", line=30.5, start=(NOW - timedelta(minutes=2)).isoformat()),   # started: gone
+            _row(4, nick="Spinx2", player="Spinx2")]                                                              # a namesake: never fuzzy
+    out = page(tmp_path, r"""
+      $("#cardpop").hidden = true; drawPosted("spinx", false); const html = $("#pickoffers").innerHTML, calls = [];
+      gradeNow = (...a) => calls.push(a); gradePosted(0); gradePosted(1);
+      return {html, n: POSTED.length, calls, inst: instant && instant.key};""", {"rows": rows})
+    t = txt(out["html"])
+    assert out["n"] == 2 and "Underdog 14.5 K · Map 1 vs Bravo" in t and "PrizePicks 9.5 HS · Maps 1–2 · goblin" in t and "30.5" not in t
+    a, b = out["calls"]
+    assert a[:6] == ["Spinx", "14.5", "kills", "standard", "1", False]
+    assert a[6] == {"team": "Team Alpha", "opponent": "Bravo Gaming", "book": "underdog", "start": rows[0]["start"]}
+    assert b[:5] == ["Spinx", "9.5", "hs", "goblin", "12"] and b[6]["book"] == "prizepicks"
+    assert out["inst"] == "spinx|9.5|hs|goblin|12"                       # the chip's line opens with its instant headline
