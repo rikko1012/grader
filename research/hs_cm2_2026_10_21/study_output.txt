@@ -1,0 +1,9 @@
+{
+ "decision": "PASS",
+ "decision_parts": {
+  "metric1_interval_above_0": true,
+  "metric2_point_ge_0": true
+ }
+}
+metric1_hltv_wide {"player_series": 1866, "matches": 187, "mae_base_perf2_n0": 3.962, "mae_candidate": 3.8993, "mae_gain": 0.0627, "mae_gain_ci95": [0.0204, 0.1052], "bias_base": 0.057, "bias_candidate": 0.13, "excluded": {"headshots flagged unrecorded (0 HS on 12+ kills)": 2, "player not on both maps": 3, "series without maps 1 and 2 in HLTV (player-rows on map 1)": 140}, "candidate_eligible": 1811, "ineligible_reasons": {"no player maps in the 420 days before the match day": 55}}
+metric2_p1 {"lines": 580, "matches": 70, "overs": 269, "log_loss_published": 0.6861, "log_loss_candidate": 0.68122, "log_loss_gain": 0.00489, "log_loss_gain_ci95": [-0.00133, 0.01116], "brier_gain": 0.00242, "brier_gain_ci95": [-0.00064, 0.00549], "mean_p_over_published": 0.4914, "mean_p_over_candidate": 0.4927, "observed_over": 0.4638, "excluded": {"forecast: not a standard line (goblin / demon / promo)": 239, "forecast: no PrizePicks / Underdog board quote on its pick (member / unquoted line)": 1640, "unit: no standard board forecast >= 30 min before the start": 16, "pick in hold-out not resolved to an HLTV unit: player not identified in HLTV": 29, "pick in hold-out not resolved to an HLTV unit: no HLTV match found": 107, "unit not settled in HLTV: headshots flagged unrecorded (0 HS on 12+ kills)": 1, "unit: push on the board line": 10, "unit not settled in HLTV: player not on both maps": 2, "unit not settled in HLTV: maps 1-2 not both in HLTV": 4}, "pushes_excluded": 10, "candidate_eligible": 553, "ineligible_reasons": {"own team or opponent not identified in HLTV": 27}, "published_version": {"perf-2": 580}, "resolved_by": {"hltv id": 480, "lookup": 100}, "identity_vs_hltv_match": {"team_id_matches": 565, "opp_id_matches": 558}, "point": {"lines": 580, "mae_published_lambda": 3.8254, "mae_candidate": 3.7895}}
