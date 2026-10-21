@@ -383,6 +383,13 @@ def context(st, params, team_a, team_b, p_win, day, posted=None):
     for side, tm in (("a", team_a), ("b", team_b)):
         lu = dict(st.lineup.get(tm) or {})
         if posted and posted.get("team") == tm and posted.get("role") in ROLES:
+            # audit 45: a posted player listed in another slot swaps with the player of his posted role - never two slots
+            old = [r for r, p in lu.items() if p == posted["pid"] and r != posted["role"]]
+            displaced = lu.get(posted["role"])
+            for r in old:
+                del lu[r]
+            if old and displaced is not None and displaced != posted["pid"]:
+                lu[old[0]] = displaced
             lu[posted["role"]] = posted["pid"]
         if len(lu) != 5:
             return None

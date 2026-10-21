@@ -166,15 +166,17 @@ class History:
         self.db = db or history.DB(dsn="")
         now = now or datetime.now(timezone.utc)
         self.since = (now - timedelta(days=HISTORY_DAYS)).strftime("%Y-%m-%dT%H:%M:%S")
-        game_rows = self.db.query("SELECT DISTINCT game_key, match_key, game_number, played_at, team, team_id, opponent, win "
-                                  "FROM lol_player_games WHERE played_at IS NOT NULL AND played_at >= ?", (self.since,))
+        game_rows = self.db.query("SELECT DISTINCT game_key, match_key, game_number, played_at, team, team_id, opponent, opponent_id, "
+                                  "win FROM lol_player_games WHERE played_at IS NOT NULL AND played_at >= ?", (self.since,))
         md = {}
         for r in game_rows:
             d = _when(r["played_at"]).date().toordinal()
             md[r["match_key"]] = min(md.get(r["match_key"], d), d)
         self.md = md
-        self.elo = elo.from_rows(game_rows, lambda r: md[r["match_key"]])
-        self.label = {r["team_id"]: r["team"] for r in game_rows}
+        # keyed by the data center's team id, exactly as the evaluated / fitted Elo (backtest.Data, evaluate.lol2_samples):
+        # one rating per canonical team (no name merges), and a team without earlier games is at BASE (audit 44)
+        self.elo = elo.from_rows([dict(r, team=r.get("team_id") or r["team"], opponent=r.get("opponent_id") or r["opponent"])
+                                  for r in game_rows], lambda r: md[r["match_key"]])
         self.last_game = max((r["played_at"] for r in game_rows), default=None)
         self.by_player, self.by_team = {}, {}
         pids, tids = sorted(set(pids) - {None}), sorted(set(tids) - {None})
@@ -217,8 +219,19 @@ class History:
         return rs[-1] if rs else None
 
     def p_win(self, tid, opp, day):
-        a, b = self.label.get(tid), self.label.get(opp)
-        return self.elo.p_win(a, b, day) if a and b else None
+        return self.elo.p_win(tid, opp, day) if tid and opp else None
+
+    league_of = None
+
+    def series_league(self, con, s):
+        """(league, tournament) of the series being forecast - the mapping the export gives that series' games, i.e. the
+        league / tournament the A7 study's target carried (audit 15); (None, None) when the series has no page."""
+        if not (s["tournament_page"] or ""):
+            return None, None
+        if self.league_of is None:
+            from . import export
+            self.league_of = export._league(con)
+        return self.league_of(s)
 
     sim_states = None
     _all = None
@@ -266,7 +279,8 @@ def forecast_one(con, h, offer, link, now=None, market=None):
     if not role:
         return {"skip": "player role unknown"}
     p_win = h.p_win(tid, opp, day)
-    league = h.league(pid, day)
+    league, tour = h.series_league(con, s)
+    league = league or h.league(pid, day)          # the player's last league only when the series has none
     fj = getattr(h, "fit", None) or {}
     if (fj.get("selection") or {}).get(stat) == "lol-2" and fj.get("sim"):
         pj = _sim_projection(h, fj["sim"], pid, tid, opp, role, day, scope, stat, p_win, offer)
@@ -279,7 +293,7 @@ def forecast_one(con, h, offer, link, now=None, market=None):
     if ff and pj.get("form") in ("share", "rate"):
         from .. import factors
         fs = (ff.get("stats") or {}).get(stat)
-        feats = factor_index(h).features(pid, tid, opp, role, day, league, p_win, s["tournament"] or s["tournament_page"], ff["consts"])
+        feats = factor_index(h).features(pid, tid, opp, role, day, league, p_win, tour or s["tournament"] or s["tournament_page"], ff["consts"])
         mult, contrib = factors.adjust(feats, fs)
         if fs:
             pj = dict(pj, version="lol-1f", lambda_lol1=pj["lambda"], factor_mult=mult)
@@ -289,6 +303,7 @@ def forecast_one(con, h, offer, link, now=None, market=None):
         fpanel = (feats, contrib, mult, fs)
     flags = []
     bo = s["best_of"]
+    mix = None                  # A2 mixture parts [(weight, lambda, size)] when the line's chance comes from one
     if FORMAT.get(scope) and bo and bo != FORMAT[scope]:
         flags.append("format_scope_mismatch")
         if scope == "123" and bo == 3 and p_win is not None:       # A2: a mixture over 2 or 3 games
@@ -297,6 +312,7 @@ def forecast_one(con, h, offer, link, now=None, market=None):
             o3, u3, q3 = m.probs(3 * lg, m.R[(stat, "123")], offer["line"])
             o2, u2, q2 = m.probs(2 * lg, m.R[(stat, "12")], offer["line"])
             po, pu, push = p3 * o3 + (1 - p3) * o2, p3 * u3 + (1 - p3) * u2, p3 * q3 + (1 - p3) * q2
+            mix = [(p3, 3 * lg, m.R[(stat, "123")]), (1 - p3, 2 * lg, m.R[(stat, "12")])]
         else:
             po, pu, push = m.probs(pj["lambda"], pj["nb_size"], offer["line"])
     else:
@@ -309,13 +325,20 @@ def forecast_one(con, h, offer, link, now=None, market=None):
     offered = side_offered(offer.get("platform"), offer.get("sides"), side)
     p_side = po if side == "over" else pu
     grade, units_policy = grade_and_units(p_side)
-    lo, hi = m.interval(pj["lambda"], pj["nb_size"], 0.8)
-    med = _nb_median(m, pj["lambda"], pj["nb_size"])
+    if mix:
+        # audit 42: the projection, median and 80% range shown with the chance are those of the same 2-or-3-game
+        # distribution (mean lambda_game x (2 + p3)); the 3-game total stays in the inputs
+        lo, med, hi = _mix_quantiles(m, mix, (0.1, 0.5, 0.9))
+        lam_shown = sum(w * lam for w, lam, _ in mix)
+    else:
+        lo, hi = m.interval(pj["lambda"], pj["nb_size"], 0.8)
+        med = _nb_median(m, pj["lambda"], pj["nb_size"])
+        lam_shown = pj["lambda"]
     rec = dict(sport=store.SPORT, platform=offer["platform"], market_key=offer["market_key"], line_id=offer.get("line_id"),
                quote_event_id=offer.get("_event_id"), quote_observed_at=offer.get("_observed_at"), stat=stat, scope=scope,
                market_type="single", odds_type=offer.get("odds_type"), line=offer["line"], sides=offer.get("sides"),
                sid=link["sid"], pid=pid, tid=tid, opp_tid=opp, role=role, best_of=bo, series_start=start.strftime("%Y-%m-%dT%H:%M:%SZ"),
-               model_version=pj.get("version") or m.VERSION, fit_sha=fit_sha(), form=pj.get("form"), **{"lambda": round(pj["lambda"], 4)},
+               model_version=pj.get("version") or m.VERSION, fit_sha=fit_sha(), form=pj.get("form"), **{"lambda": round(lam_shown, 4)},
                nb_size=pj["nb_size"], p_over=round(po, 4), p_under=round(pu, 4), p_push=round(push, 4), model_side=side,
                side_offered=None if offered is None else int(bool(offered)), grade=grade,
                grade_label=(f"Lean {side.title()}" if grade == "Lean" else grade), units_policy=units_policy, units=0.0,
@@ -324,7 +347,7 @@ def forecast_one(con, h, offer, link, now=None, market=None):
                        if k in ("lambda_game", "player_rate", "team_factor", "opp_factor", "strength_factor", "p_win",
                                 "history_games", "history_weight", "data_quality", "role_prior", "form")} | {
                    "league": league, "team_games": len(tin), "opponent_games": len(oin), "history_last_game": h.last_game, "history_since": h.since, "data_version": _data_version(con),
-                   "mean": round(pj["lambda"], 3), "median": med, "range80": [lo, hi], "provisional": _provisional(m),
+                   "mean": round(lam_shown, 3), "median": med, "range80": [lo, hi], "provisional": _provisional(m),
                    "drivers": _drivers(pj), "unknowns": ["lineup changes after the forecast", "draft and champions",
                                                           "sides", "the tournament patch effect (not modelled)"]},
                flags=flags)
@@ -334,6 +357,9 @@ def forecast_one(con, h, offer, link, now=None, market=None):
     from . import prices
     rec["inputs"]["market"] = prices.classify(offer["platform"], offer)
     rec["inputs"]["team_win"] = team_win(p_win, offer, start, market)
+    if mix:
+        rec["inputs"]["lambda_3_games"] = round(pj["lambda"], 4)
+        rec["inputs"]["p_3_games"] = round(mix[0][0], 4)
     if fpanel:
         rec["inputs"]["factors"] = factor_panel(stat, *fpanel, rec["inputs"]["team_win"])
         if pj.get("lambda_lol1") is not None:
@@ -377,6 +403,18 @@ def _nb_median(m, lam, size):
             return k
         k += 1
     return k
+
+
+def _mix_quantiles(m, mix, qs):
+    """Quantiles (smallest k with cdf >= q) of a mixture of negative binomials [(weight, lambda, size)]."""
+    out, c, k, i = [], 0.0, 0, 0
+    while i < len(qs) and k <= 10000:
+        c += sum(w * m.nb_pmf(k, lam, size) for w, lam, size in mix)
+        while i < len(qs) and c >= qs[i]:
+            out.append(k)
+            i += 1
+        k += 1
+    return out + [k] * (len(qs) - len(out))
 
 
 def _provisional(m):
@@ -495,32 +533,47 @@ def run(con, db=None, now=None, market=None):
     todo = con.execute(q).fetchall()
     ids = lambda col: {store.canonical_id(con, r[col]) for r in todo}
     h = History(db, ids("pid"), ids("tid") | ids("opp_tid"), now=now)
-    h.fit, h.sim_states = fit_json(), {}
-    h.factor_pids, h.factor_teams = ids("pid"), ids("tid") | ids("opp_tid")
-    for r in todo:
-        offer = json.loads(r["data"])
-        offer.update(platform=r["platform"], _event_id=r["event_id"], _observed_at=r["observed_at"])
-        rec = forecast_one(con, h, offer, dict(r), now, market)
-        if "skip" in rec:
-            counts["skip: " + rec["skip"]] = counts.get("skip: " + rec["skip"], 0) + 1
-            continue
-        sha = _sha(rec)
-        last = con.execute("SELECT state_sha FROM lol_forecasts WHERE platform = ? AND market_key = ? ORDER BY id DESC LIMIT 1",
-                           (rec["platform"], rec["market_key"])).fetchone()
-        if last and last[0] == sha:
-            counts["unchanged"] = counts.get("unchanged", 0) + 1
-            continue
-        cols = ("sport", "platform", "market_key", "line_id", "quote_event_id", "quote_observed_at", "stat", "scope", "market_type",
-                "odds_type", "line", "sides", "sid", "pid", "tid", "opp_tid", "role", "best_of", "series_start", "model_version",
-                "fit_sha", "form", "lambda", "nb_size", "p_over", "p_under", "p_push", "model_side", "side_offered", "inputs",
-                "flags", "slip_eligible", "slip_reasons", "grade", "grade_label", "units_policy", "units", "stake_restriction")
-        vals = [json.dumps(rec[c], default=str) if c in ("sides", "inputs", "flags", "slip_reasons") else rec[c] for c in cols]
-        con.execute(f"INSERT INTO lol_forecasts (forecast_at, state_sha, {', '.join(cols)}) VALUES (?, ?, {', '.join('?' * len(cols))})",
-                    [store.now_iso(), sha] + vals)
-        counts["saved"] = counts.get("saved", 0) + 1
-    con.commit()
-    if db is None:
-        h.db.close()
+    try:
+        h.fit, h.sim_states = fit_json(), {}
+        h.factor_pids, h.factor_teams = ids("pid"), ids("tid") | ids("opp_tid")
+        for r in todo:
+            # audit 12: one bad offer (a feed row without a usable line, an error in its inputs) is counted and skipped;
+            # it never stops the other offers, the commit, settlement or the board
+            try:
+                offer = json.loads(r["data"])
+                offer.update(platform=r["platform"], _event_id=r["event_id"], _observed_at=r["observed_at"])
+                ln = offer.get("line")
+                if not isinstance(ln, (int, float)) or isinstance(ln, bool) or not math.isfinite(ln):
+                    counts["skip: no numeric line"] = counts.get("skip: no numeric line", 0) + 1
+                    continue
+                rec = forecast_one(con, h, offer, dict(r), now, market)
+                if "skip" in rec:
+                    counts["skip: " + rec["skip"]] = counts.get("skip: " + rec["skip"], 0) + 1
+                    continue
+                sha = _sha(rec)
+                last = con.execute("SELECT state_sha FROM lol_forecasts WHERE platform = ? AND market_key = ? ORDER BY id DESC LIMIT 1",
+                                   (rec["platform"], rec["market_key"])).fetchone()
+                if last and last[0] == sha:
+                    counts["unchanged"] = counts.get("unchanged", 0) + 1
+                    continue
+                cols = ("sport", "platform", "market_key", "line_id", "quote_event_id", "quote_observed_at", "stat", "scope", "market_type",
+                        "odds_type", "line", "sides", "sid", "pid", "tid", "opp_tid", "role", "best_of", "series_start", "model_version",
+                        "fit_sha", "form", "lambda", "nb_size", "p_over", "p_under", "p_push", "model_side", "side_offered", "inputs",
+                        "flags", "slip_eligible", "slip_reasons", "grade", "grade_label", "units_policy", "units", "stake_restriction")
+                vals = [json.dumps(rec[c], default=str) if c in ("sides", "inputs", "flags", "slip_reasons") else rec[c] for c in cols]
+                con.execute(f"INSERT INTO lol_forecasts (forecast_at, state_sha, {', '.join(cols)}) VALUES (?, ?, {', '.join('?' * len(cols))})",
+                            [store.now_iso(), sha] + vals)
+                counts["saved"] = counts.get("saved", 0) + 1
+            except Exception as e:      # noqa: BLE001
+                k = f"error: {type(e).__name__}"
+                counts[k] = counts.get(k, 0) + 1
+                errs = counts.setdefault("_errors", [])
+                if len(errs) < 5:
+                    errs.append({"market": f"{r['platform']}|{r['market_key']}", "error": f"{type(e).__name__}: {str(e)[:200]}"})
+        con.commit()
+    finally:
+        if db is None:
+            h.db.close()
     return counts
 
 
@@ -528,15 +581,33 @@ def settle_all(con):
     """Settle every pre-match forecast whose series is complete (the latest forecast made before the series start, per
     platform / market / line). Versioned: an upstream correction becomes a new settlement version."""
     out = {}
+    # audit 13: a settlement changes only when the canonical tables (a build) or the settlement rules / code change, so
+    # the full pass runs once per such change; in between only units without a recorded settlement are tried
+    key = store.sha([store.get_meta(con, "built_at"), rules.RULES, _settle_code()])
+    full = store.get_meta(con, "settle_pass") != key
+    done = set() if full else {u for (u,) in con.execute("SELECT DISTINCT unit_key FROM lol_settlements")}
     rows = con.execute("SELECT f.* FROM lol_forecasts f JOIN (SELECT platform, market_key, line, MAX(id) AS id FROM lol_forecasts "
                        "WHERE forecast_at < series_start GROUP BY platform, market_key, line) z ON z.id = f.id "
                        "JOIN c_series s ON s.sid = f.sid WHERE s.status = 'complete'").fetchall()
     for f in rows:
         unit = f"{f['platform']}|{f['market_key']}|{f['line']}"
+        if unit in done:
+            out["unchanged"] = out.get("unchanged", 0) + 1
+            continue
         res = settle.record(con, unit, f["platform"], f["stat"], "maps_" + "_".join(f["scope"]), store.canonical_id(con, f["pid"]),
                             f["sid"], f["line"])
         out[res["status"]] = out.get(res["status"], 0) + 1
+    if full:
+        store.set_meta(con, "settle_pass", key)
+        con.commit()
     return out
+
+
+def _settle_code():
+    try:
+        return hashlib.sha256(open(settle.__file__, "rb").read()).hexdigest()[:16]
+    except OSError:
+        return None
 
 
 def board(con, now=None):
