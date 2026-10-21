@@ -199,3 +199,24 @@ def test_single_prop_posted_line_chips_fill_and_grade_with_the_boards_match(tmp_
     assert a[6] == {"team": "Team Alpha", "opponent": "Bravo Gaming", "book": "underdog", "start": rows[0]["start"]}
     assert b[:5] == ["Spinx", "9.5", "hs", "goblin", "12"] and b[6]["book"] == "prizepicks"
     assert out["inst"] == "spinx|9.5|hs|goblin|12"                       # the chip's line opens with its instant headline
+
+
+# ------------------------------------------------------------------ 9. saved + shareable views
+@needs_node
+def test_views_round_trip_through_the_link_and_storage(tmp_path):
+    out = page(tmp_path, r"""
+      bbook = "prizepicks"; bview = "matches"; bprop = "hs"; bside = "Less"; bscope = "1"; $("#bsort").value = "h"; $("#bbets").checked = true;
+      $("#bflag").checked = true; $("#bsearch").value = "Vitality"; $("#bgrade").value = "A-"; $("#bchance").value = "0.6"; bquick.gap = true; bquick.fresh = true;
+      const v = curView(), url = viewUrl(v), u = new URL(url);
+      const back = viewFromParams(u.searchParams, u.hash);
+      const junk = cleanView({bk: "moneylines", r: "x", p: "assists", sc: "5", sd: "Over", s: "zzz", b: "0", f: "7", q: "x".repeat(99), g: "C", c: "0.99", k: "gap,steal"});
+      saveView("PP HS Unders"); const stored = JSON.parse(localStorage.getItem("cs2s_views"));
+      saveView("PP HS Unders again");                           // the same filters under a new name: one entry, renamed
+      const stored2 = JSON.parse(localStorage.getItem("cs2s_views"));
+      return {v, url, back, junk, stored, stored2, name: viewName(v)};""", {"rows": []})
+    assert out["back"] == out["v"]                                      # the link reproduces the exact filters
+    assert out["url"].startswith("https://x/?bv=1&") and out["url"].endswith("#matches/prizepicks") and "vq=Vitality" in out["url"]
+    assert out["junk"] == {"bk": "all", "r": "board", "p": "kills", "sc": "12", "sd": "both", "s": "g", "b": 0, "f": 0, "q": "x" * 40, "g": "", "c": "", "k": ["gap"]}
+    assert [x["n"] for x in out["stored"]] == ["PP HS Unders"] and out["stored"][0]["v"] == out["v"]
+    assert [x["n"] for x in out["stored2"]] == ["PP HS Unders again"]
+    assert out["name"].startswith("PrizePicks · Headshots · Map 1 · Unders") and len(out["name"]) <= 40
