@@ -778,6 +778,9 @@ body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode
       <div class="seg" id="bprop"><button type="button" data-v="kills" class="on">Kills</button><button type="button" data-v="hs">Headshots</button><button type="button" data-v="both">Both</button></div>
       <div class="seg" id="bscope" title="Which maps the lines cover"><button type="button" data-v="12" class="on">Maps 1–2</button><button type="button" data-v="1">Map 1</button><button type="button" data-v="123">Maps 1–3</button></div>
       <div class="seg" id="bside" title="Show the grader's Overs, Unders, or both"><button type="button" data-v="More">Overs</button><button type="button" data-v="both" class="on">Both</button><button type="button" data-v="Less">Unders</button></div>
+      <select id="bgrade" aria-label="Grade floor" title="Show only picks at this model grade or better" style="width:auto;padding:8px 10px"><option value="">Any grade</option><option value="A">A and up</option><option value="A-">A− and up</option><option value="B+">B+ and up</option><option value="B">B and up</option></select>
+      <select id="bchance" aria-label="Chance floor" title="Show only picks at this chance or higher" style="width:auto;padding:8px 10px"><option value="">Any chance</option><option value="0.55">55%+ chance</option><option value="0.6">60%+ chance</option><option value="0.65">65%+ chance</option><option value="0.7">70%+ chance</option></select>
+      <div class="seg" id="bquick" role="group" aria-label="Quick filters"><button type="button" data-q="bump" aria-pressed="false" title="The platform moved the line from where it opened">Bumped</button><button type="button" data-q="gap" aria-pressed="false" title="Underdog and PrizePicks list different standard lines">Lines differ</button><button type="button" data-q="fresh" aria-pressed="false" title="Line first seen in the last hour">New &lt;1h</button></div>
       <input id="bsearch" type="search" placeholder="Player or team" aria-label="Search a player or team" style="width:150px;padding:8px 10px">
       <select id="bsort" aria-label="Sort the board" style="width:auto;padding:8px 10px"><option value="g">Best grade first</option><option value="p">Highest chance</option><option value="t">Starting soonest</option><option value="e">Biggest edge</option><option value="h">Hit rate (last 10)</option></select>
       <select id="csort" aria-label="Sort Compare" style="width:auto;padding:8px 10px" hidden><option value="t">Match time</option><option value="gap">Biggest line gap</option></select>
@@ -1675,7 +1678,8 @@ const matchKey = r => r._mk || [teamNorm(r.team_name || r.team), teamNorm(r.opp_
 const propOrder = p => p === "kills" ? 0 : 1;
 // filters survive reloads and the board <-> card round trip
 function saveBFilters() { store.set("cs2s_bf", {bbook, bprop, bside, bscope, bview, sort: $("#bsort").value, bets: $("#bbets").checked, q: $("#bsearch").value,
-  flag: $("#bflag").checked, csort: $("#csort").value, cdiff: $("#cdiff").checked, mlu: $("#mlusable").checked}); }
+  flag: $("#bflag").checked, csort: $("#csort").value, cdiff: $("#cdiff").checked, mlu: $("#mlusable").checked,
+  gf: $("#bgrade").value, cf: $("#bchance").value, qk: Object.keys(bquick).filter(k => bquick[k])}); }
 function restoreBFilters() {
   const f = store.get("cs2s_bf", null); if (!f) return;
   bprop = f.bprop || bprop; bside = f.bside || bside; bscope = f.bscope || bscope; bview = f.bview || bview; bbook = BOOKS.includes(f.bbook) ? f.bbook : bbook;
@@ -1683,6 +1687,9 @@ function restoreBFilters() {
   if (f.csort && [...$("#csort").options].some(o => o.value === f.csort)) $("#csort").value = f.csort;
   $("#bbets").checked = f.bets !== false; $("#bsearch").value = f.q || "";
   $("#bflag").checked = !!f.flag; $("#cdiff").checked = !!f.cdiff; $("#mlusable").checked = f.mlu !== false;
+  $("#bgrade").value = f.gf in GRADE_FLOORS ? f.gf : ""; $("#bchance").value = ["0.55", "0.6", "0.65", "0.7"].includes(f.cf) ? f.cf : "";
+  for (const k of Object.keys(bquick)) bquick[k] = Array.isArray(f.qk) && f.qk.includes(k);
+  quickMark();
   for (const [id, v] of [["#bbook", bbook], ["#bprop", bprop], ["#bside", bside], ["#bscope", bscope], ["#bview", bview]]) [...$(id).children].forEach(x => x.classList.toggle("on", x.dataset.v === v));
 }   // bside: the grader's pick - More (Overs), Less (Unders) or both
 const G_RANK = {"A+": 0, "A": 1, "A-": 2, "B+": 3, "B": 4, "B-": 4.5, "LEAN": 5};
@@ -1797,6 +1804,20 @@ function rowOfBl(bl) {
   const [p, l, t, sc, lt, bk] = String(bl || "").split("|");
   return boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && (x.scope || "12") === sc && mktType(x) === (lt || "standard") && (x.book || "underdog") === (bk || "underdog"));
 }
+// quick filters + floors (QoL 2026-10-21) - on the row's own data: the MODEL grade shown on the row (never its units; "Bets only"
+// stays the stake filter) and its printed chance. A side no longer offered or a line with no match shows no grade or chance.
+let bquick = {bump: false, gap: false, fresh: false};
+const bumpFrom = r => { const from = r.moved_from != null ? r.moved_from : r.open_line;     // Bumped: moved from where it opened
+  return from == null || r.line == null || +from === +r.line ? null : from; };
+const isFresh = (r, now) => { const t = Date.parse(r.first_seen || ""); return !isNaN(t) && (now || Date.now()) - t <= 3600000; };   // first seen < 1 h ago
+const GRADE_FLOORS = {"A": "A and up", "A-": "A− and up", "B+": "B+ and up", "B": "B and up"};
+function floorOk(r) {
+  const gf = $("#bgrade").value, cf = +$("#bchance").value || 0;
+  if (!gf && !cf) return true;
+  if (!r.side || sideGone(r) || r.state === "SCOUT") return false;
+  if (gf && !(LETTERS.includes(mGrade(r)) && G_RANK[mGrade(r)] <= G_RANK[gf])) return false;
+  return !cf || (r.p != null && +r.p >= cf - 1e-9);
+}
 function drawBoard() {
   saveBFilters(); try { filtersLabel(); } catch {} try { drawChips(); } catch {}
   try {                                       // phones: the platform tabs scroll sideways - keep the chosen one in view
@@ -1809,6 +1830,7 @@ function drawBoard() {
   $("#bsort").hidden = cmpv || ml;            // sort doesn't apply to Compare
   for (const id of ["#bprop", "#bside", "#bscope"]) $(id).hidden = ml;
   $("#bbets").closest("label").hidden = $("#bflag").closest("label").hidden = cmpv || ml;
+  $("#bgrade").hidden = $("#bchance").hidden = $("#bquick").hidden = cmpv || ml;
   $("#csort").hidden = $("#cdiff").closest("label").hidden = !cmpv;
   $("#mlusable").closest("label").hidden = true; // prices are always required by the current policy
   studioShow();
@@ -1829,8 +1851,23 @@ function drawBoard() {
   [...$("#bscope").children].forEach(b => { b.hidden = !scopes.has(b.dataset.v); });
   $("#bscope").hidden = scopes.size < 2;
   if (!scopes.has(bscope) && scopes.size) { bscope = scopes.has("12") ? "12" : [...scopes][0]; [...$("#bscope").children].forEach(x => x.classList.toggle("on", x.dataset.v === bscope)); }
+  // line discrepancy index (2026-10-19 owner; see lineGap below) - built before filtering: "Lines differ" filters on it
+  const stdIdx = {underdog: new Map(), prizepicks: new Map()};
+  const sk = x => [String(x.nick || x.player).toLowerCase(), x.prop, x.scope || "12"].join("|");
+  for (const b of ["underdog", "prizepicks"]) for (const x of (BK[b] || {}).rows || []) {
+    if (mktType(x) !== "standard" || x.line == null) continue;
+    if (!stdIdx[b].has(sk(x))) stdIdx[b].set(sk(x), []); stdIdx[b].get(sk(x)).push(x); }
+  const sameMatch = (a, b) => /^hltv:/.test(a.match_id || "") && /^hltv:/.test(b.match_id || "") ? a.match_id === b.match_id
+    : Math.abs(Date.parse(a.start) - Date.parse(b.start)) <= 3 * 3600000;
+  const gapRow = r => {             // the other platform's standard line for this player / stat / maps / match, when it differs
+    if (mktType(r) !== "standard" || r.line == null) return null;
+    const ob = (r.book || "underdog") === "prizepicks" ? "underdog" : "prizepicks";
+    const o = (stdIdx[ob].get(sk(r)) || []).find(x => sameMatch(x, r));
+    return o && +o.line !== +r.line ? o : null;
+  };
   const rows = boardRows.filter(r => (bprop === "both" || r.prop === bprop) && (r.scope || "12") === bscope && (bside === "both" || r.side === bside)
-                                    && (!$("#bbets").checked || isBet(r)) && (!$("#bflag").checked || !isFlagged(r)) && hit(r)).sort(cmp);
+                                    && (!$("#bbets").checked || isBet(r)) && (!$("#bflag").checked || !isFlagged(r)) && hit(r)
+                                    && floorOk(r) && (!bquick.bump || bumpFrom(r) != null) && (!bquick.gap || gapRow(r)) && (!bquick.fresh || isFresh(r))).sort(cmp);
   $("#bcount").textContent = boardRows.length ? `${rows.length} of ${boardRows.length} lines` : "";
   $("#ot-board-overview").innerHTML = otBoardSummary(rows);
   const pct0 = x => x == null ? "–" : (x * 100).toFixed(1) + "%";
@@ -1842,18 +1879,9 @@ function drawBoard() {
   // match (canonical HLTV id when both have one, else starts within 3 h - a player plays one match at a time), shown next
   // to this row's market when the two differ. Goblin / demon / alt lines are never compared with standard ones. Facts only:
   // which line is easier depends on the side (lower for an Over, higher for an Under); payouts can differ.
-  const stdIdx = {underdog: new Map(), prizepicks: new Map()};
-  const sk = x => [String(x.nick || x.player).toLowerCase(), x.prop, x.scope || "12"].join("|");
-  for (const b of ["underdog", "prizepicks"]) for (const x of (BK[b] || {}).rows || []) {
-    if (mktType(x) !== "standard" || x.line == null) continue;
-    if (!stdIdx[b].has(sk(x))) stdIdx[b].set(sk(x), []); stdIdx[b].get(sk(x)).push(x); }
-  const sameMatch = (a, b) => /^hltv:/.test(a.match_id || "") && /^hltv:/.test(b.match_id || "") ? a.match_id === b.match_id
-    : Math.abs(Date.parse(a.start) - Date.parse(b.start)) <= 3 * 3600000;
   const lineGap = r => {
-    if (mktType(r) !== "standard" || r.line == null) return "";
+    const o = gapRow(r); if (!o) return "";
     const ob = (r.book || "underdog") === "prizepicks" ? "underdog" : "prizepicks";
-    const o = (stdIdx[ob].get(sk(r)) || []).find(x => sameMatch(x, r));
-    if (!o || +o.line === +r.line) return "";
     const d = +(+o.line - +r.line).toFixed(1), side = r.side === "Less" ? "Under" : r.side === "More" ? "Over" : null;
     const easier = side ? ` For the ${side}, the ${side === "Over" ? "lower" : "higher"} line is the easier one; payouts can differ.` : "";
     const tip = `Line discrepancy: ${bookName(ob)} lists ${o.line} for the same player, stat and maps – ${Math.abs(d)} ${d > 0 ? "higher" : "lower"} than this line.${easier}`;
@@ -1862,8 +1890,7 @@ function drawBoard() {
   // bump (2026-10-19 owner): the platform moved this line from where it opened (PrizePicks: the scraper's opening line;
   // Underdog: the first line Scout observed for this player / stat / start), or while this page was open (moved_from)
   const bump = r => {
-    const from = r.moved_from != null ? r.moved_from : r.open_line;
-    if (from == null || r.line == null || +from === +r.line) return "";
+    const from = bumpFrom(r); if (from == null) return "";
     const up = +r.line > +from, bk = bookName(r.book || "underdog");
     const tip = `Bumped ${up ? "up" : "down"}: ${bk} ${r.moved_from != null ? "moved this line while this page was open" : "opened this line at " + from}${r.moved_from != null && r.open_line != null && +r.open_line !== +from ? ` (opened at ${r.open_line})` : ""}; it is ${r.line} now.${r.moved_at ? " Moved " + agoTxt(r.moved_at) + "." : ""} The grade is for ${r.line}.`;
     return ` <span class="lbump ${up ? "up" : "down"}" title="${esc(tip)}" data-tip="${esc(tip)}" tabindex="0">${up ? "▲" : "▼"} bumped from ${esc(from)}</span>`;
@@ -2048,10 +2075,13 @@ function resetBFilters() {
   bprop = "kills"; bside = "both"; bscope = "12";   // the platform and the Board / Matches grouping (the route) are kept
   $("#bsort").value = "g"; $("#bbets").checked = true; $("#bsearch").value = ""; $("#bflag").checked = false;
   $("#csort").value = "t"; $("#cdiff").checked = false; $("#mlusable").checked = true;
+  $("#bgrade").value = ""; $("#bchance").value = ""; for (const k of Object.keys(bquick)) bquick[k] = false; quickMark();
   for (const [id, v] of [["#bprop", bprop], ["#bside", bside], ["#bscope", bscope], ["#bview", bview]]) [...$(id).children].forEach(x => x.classList.toggle("on", x.dataset.v === v));
   drawBoard();
 }
 $("#breset").onclick = resetBFilters;
+const QUICK_TXT = {bump: "Bumped", gap: "Lines differ", fresh: "New in the last hour", watch: "Watchlist"};
+function quickMark() { [...$("#bquick").children].forEach(b => { const on = !!bquick[b.dataset.q]; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); }); }
 // the active filters as chips under the bar (2026-10-18 release): each one clears on its own; "Clear all" = Reset
 const CHIP_TXT = {prop: {hs: "Headshots", both: "Kills + headshots"}, scope: {"1": "Map 1", "123": "Maps 1–3"}, side: {More: "Overs", Less: "Unders"},
   sort: {p: "Sorted by chance", t: "Starting soonest", e: "Biggest edge", h: "Sorted by hit rate"}};
@@ -2066,6 +2096,9 @@ function drawChips() {
   if (!ml && !cmpv && !$("#bbets").checked) chips.push(["bets", "Including 0U lines"]);
   if (!ml && !cmpv && $("#bflag").checked) chips.push(["flag", "Hiding flagged"]);
   if (!ml && !cmpv && $("#bsort").value !== "g") chips.push(["sort", CHIP_TXT.sort[$("#bsort").value] || "Sorted"]);
+  if (!ml && !cmpv && $("#bgrade").value) chips.push(["gf", GRADE_FLOORS[$("#bgrade").value] || "Grade floor"]);
+  if (!ml && !cmpv && +$("#bchance").value) chips.push(["cf", `${Math.round(+$("#bchance").value * 100)}%+ chance`]);
+  for (const k of Object.keys(bquick)) if (!ml && !cmpv && bquick[k]) chips.push(["q:" + k, QUICK_TXT[k]]);
   el.innerHTML = chips.length ? chips.map(([k, t]) => `<button type="button" class="fchip" data-chip="${k}" aria-label="Clear filter: ${esc(t)}">${esc(t)} <span aria-hidden="true">✕</span></button>`).join("")
     + `<button type="button" class="fchip clear" data-chip="all">Clear all</button>` : "";
 }
@@ -2076,13 +2109,16 @@ $("#bchips").addEventListener("click", e => {
   if (k === "prop") bprop = "kills"; else if (k === "scope") bscope = "12"; else if (k === "side") bside = "both";
   else if (k === "q") $("#bsearch").value = ""; else if (k === "bets") $("#bbets").checked = true; else if (k === "flag") $("#bflag").checked = false;
   else if (k === "sort") $("#bsort").value = "g";
+  else if (k === "gf") $("#bgrade").value = ""; else if (k === "cf") $("#bchance").value = "";
+  else if (k.startsWith("q:")) { bquick[k.slice(2)] = false; quickMark(); }
   for (const [id, v] of [["#bprop", bprop], ["#bside", bside], ["#bscope", bscope]]) [...$(id).children].forEach(x => x.classList.toggle("on", x.dataset.v === v));
   drawBoard();
 });
 restoreBFilters();
 // filters: one "Filters (n active)" button - closed by default on phones (2026-10-11 audit: the filter wall pushed the first
 // pick a full screen down), open on wider screens
-const activeFilters = () => [bprop !== "kills", bside !== "both", bscope !== "12", $("#bsort").value !== "g", !$("#bbets").checked, $("#bflag").checked].filter(Boolean).length;
+const activeFilters = () => [bprop !== "kills", bside !== "both", bscope !== "12", $("#bsort").value !== "g", !$("#bbets").checked, $("#bflag").checked,
+  !!$("#bgrade").value, !!$("#bchance").value, ...Object.values(bquick)].filter(Boolean).length;
 function filtersLabel() {
   const b = $("#scout-filters"); if (!b) return;
   const closed = $("#board").classList.contains("filters-collapsed"), n = activeFilters();
@@ -2092,6 +2128,8 @@ $("#scout-filters").onclick = () => { $("#board").classList.toggle("filters-coll
 try { if (matchMedia("(max-width:760px)").matches) $("#board").classList.add("filters-collapsed"); } catch {}
 filtersLabel();
 $("#bsearch").oninput = drawBoard;
+$("#bgrade").onchange = drawBoard; $("#bchance").onchange = drawBoard;
+$("#bquick").onclick = e => { const b = e.target.closest("[data-q]"); if (!b || !(b.dataset.q in bquick)) return; bquick[b.dataset.q] = !bquick[b.dataset.q]; quickMark(); drawBoard(); };
 $("#bsort").onchange = drawBoard;
 $("#brefresh").onclick = () => loadBoard(true);
 let boardVer = "";

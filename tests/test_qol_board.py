@@ -108,3 +108,29 @@ def test_no_chip_without_a_record_and_hit_rate_sort_puts_them_last(tmp_path):
               none: l10Chip(boardRows.find(x => x.id === "ud:3")), gone: l10Chip(boardRows.find(x => x.id === "ud:5"))};""", {"rows": rows})
     assert out["order"][:4] == ["p4", "p2", "p1", "p3"] and out["none"] == "" and out["gone"] == ""
     assert "Sorted by hit rate" in out["chips"]
+
+
+# ------------------------------------------------------------------ 4. grade / chance floors + quick filters
+@needs_node
+def test_grade_and_chance_floors_use_the_shown_model_grade_and_chance(tmp_path):
+    iso = lambda m: (NOW - timedelta(minutes=m)).isoformat()
+    rows = [_row(1, model_grade="A-", grade="A-", p=0.69, units=1.5), _row(2, model_grade="B+", grade="B+", p=0.63, units=0.0, stake_reason="same-match exposure cap"),
+            _row(3, model_grade="B", grade="B", p=0.58), _row(4, model_grade="LEAN", grade="LEAN", p=0.54, units=0.0),
+            _row(5, model_grade="A", grade="A", p=0.75, unavailable="Unavailable—side no longer offered"),
+            _row(6, open_line=26.5, first_seen=iso(30)), _row(7, first_seen=iso(90), open_line=27.5),
+            _row(8, nick="p1", player="p1", book="prizepicks", id="pp:8", line=28.5)]             # p1 on PrizePicks at 28.5: lines differ
+    out = page(tmp_path, r"""
+      $("#bbets").checked = false; const shown = () => { drawBoard(); return [...$("#boardout").innerHTML.matchAll(/data-bl="(p\d)\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|(\w+)/g)].map(m => m[1] + (m[2] === "prizepicks" ? "pp" : "")).sort(); };
+      const r = {};
+      $("#bgrade").value = "B+"; r.bplus = shown();
+      $("#bgrade").value = ""; $("#bchance").value = "0.6"; r.c60 = shown(); r.chips = $("#bchips").innerHTML; r.n = activeFilters();
+      $("#bchance").value = ""; bquick.bump = true; r.bump = shown(); bquick.bump = false;
+      bquick.gap = true; r.gap = shown(); bquick.gap = false; bquick.fresh = true; r.fresh = shown(); r.qchips = $("#bchips").innerHTML;
+      saveBFilters(); r.saved = JSON.parse(localStorage.getItem("cs2s_bf"));
+      resetBFilters(); r.reset = [bquick.fresh, $("#bgrade").value, $("#bchance").value];
+      return r;""", {"rows": rows})
+    assert out["bplus"] == ["p1", "p2"]                       # the model grade, even at 0U (Bets only is the stake filter)
+    assert out["c60"] == ["p1", "p2"] and "60%+ chance" in out["chips"] and out["n"] >= 2   # never an unavailable side's chance
+    assert out["bump"] == ["p6"] and out["gap"] == ["p1", "p1pp"] and out["fresh"] == ["p6"]
+    assert "New in the last hour" in out["qchips"] and out["saved"]["qk"] == ["fresh"]
+    assert out["reset"] == [False, "", ""]
