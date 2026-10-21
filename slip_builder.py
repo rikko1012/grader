@@ -1055,7 +1055,7 @@ def verify_before_copy(slip, boards, now=None, model=None, settings=None):
                                        pid=l.get("player_id"), id_map=id_map if l.get("book") == "underdog" else {},
                                        book=l.get("book") or "underdog",
                                        odds_type=l.get("market_type") if l.get("market_type") in ("goblin", "demon") else "standard",
-                                       side=l.get("side"), opponent=l.get("opponent"))
+                                       side=l.get("side"), opponent=l.get("book_opponent") or l.get("opponent"))
             lc_status = lc.get("status")
             if lc_status != "verified":
                 ch.append(f"{lab}: {lc.get('note') or lc_status}")

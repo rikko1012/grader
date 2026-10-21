@@ -100,7 +100,11 @@ def parse(body):
         away, home = _sides(title)
         team = home if app.get("team_id") == game.get("home_team_id") else away if app.get("team_id") == game.get("away_team_id") else ""
         opp = away if team == home else home if team == away else ""
-        pay = {o.get("choice"): o.get("payout_multiplier") for o in ln.get("options") or []}
+        # the sides Underdog offers on this line (2026-10-21 audit #9, the LoL parser's rule for the same API): an option
+        # that is present with status None / "active"; a missing or suspended side is not offered (no payout, *_available
+        # False), so the grader never stakes it and the board, card and slips agree
+        offered = {o.get("choice") for o in ln.get("options") or [] if o.get("status") in (None, "active")}
+        pay = {o.get("choice"): o.get("payout_multiplier") for o in ln.get("options") or [] if o.get("choice") in offered}
         dec = {}
         for o in ln.get("options") or []:              # Underdog's displayed per-pick price (decimal), when shown
             try:
@@ -109,22 +113,34 @@ def parse(body):
                 dec[o.get("choice")] = None
         hi, lo = pay.get("higher"), pay.get("lower")
         alt = not (str(hi) in ("1.0", "1", "None") and str(lo) in ("1.0", "1", "None"))
+        if ln.get("line_type") not in (None, "balanced"):     # an adjusted line (as lol/center/markets.py): never standard
+            alt = True
         rows.append({"id": ln.get("id"), "scope": scope, "player": name, "team": team, "opponent": opp, "matchup": title,
                      "start": game.get("scheduled_at"), "prop": prop, "line": value,
                      "higher": float(hi) if hi not in (None, "") else None,
                      "lower": float(lo) if lo not in (None, "") else None, "alt": alt,
+                     "over_available": "higher" in offered, "under_available": "lower" in offered,
                      # comparison layer (2026-10-09): Underdog's own ids, per-side price and the line's update time
                      "ud_player_id": app.get("player_id"), "ud_match_id": app.get("match_id"),
                      "price_higher": dec.get("higher"), "price_lower": dec.get("lower"), "updated_at": ln.get("updated_at")})
     return rows
 
 
-_LAST_SEEN = {}     # (player, prop, start) -> (line, higher, lower) - only changes are logged
+_LAST_SEEN = {}     # (player, prop, scope, start) -> (line, higher, lower) - only changes are logged
+
+
+def _moves_db(con):
+    """The moves table, with its scope column (2026-10-21 audit #40: rows logged before it have scope NULL)."""
+    con.execute("""CREATE TABLE IF NOT EXISTS moves (at TEXT, player TEXT, team TEXT, opponent TEXT,
+                   start TEXT, prop TEXT, line REAL, higher REAL, lower REAL, line_id TEXT, scope TEXT)""")
+    if "scope" not in {c[1] for c in con.execute("PRAGMA table_info(moves)")}:
+        con.execute("ALTER TABLE moves ADD COLUMN scope TEXT")
 
 
 def _log_moves(rows):
     """Every new Underdog line and every change of line or payout, with the time (line-movement
-    history: tested later against results - tracking only, never used in grades untested)."""
+    history: tested later against results - tracking only, never used in grades untested). Keyed per maps (2026-10-21
+    audit #40: a Maps 1-2 and a Map 1 line of the same player overwrote each other and logged false moves every refresh)."""
     import os
     import sqlite3
     from pathlib import Path
@@ -134,10 +150,13 @@ def _log_moves(rows):
         if not _LAST_SEEN.get("_seeded") and db.exists():   # after a restart: the last logged state of each line
             con = sqlite3.connect(db, timeout=10)
             try:
-                for pl, prop, start, line, hi, lo in con.execute(
-                        "SELECT player, prop, start, line, higher, lower FROM moves WHERE rowid IN "
-                        "(SELECT max(rowid) FROM moves GROUP BY player, prop, start)"):
-                    _LAST_SEEN.setdefault((norm(pl), prop, start), (line, hi, lo))
+                _moves_db(con)
+                con.commit()
+                # rows logged before the scope column (scope NULL) are not guessed into a scope: never seeded
+                for pl, prop, scope, start, line, hi, lo in con.execute(
+                        "SELECT player, prop, scope, start, line, higher, lower FROM moves WHERE rowid IN "
+                        "(SELECT max(rowid) FROM moves WHERE scope IS NOT NULL GROUP BY player, prop, scope, start)"):
+                    _LAST_SEEN.setdefault((norm(pl), prop, scope, start), (line, hi, lo))
             except sqlite3.Error:
                 pass
             finally:
@@ -148,19 +167,20 @@ def _log_moves(rows):
         for r in rows:
             if r["alt"]:
                 continue
-            k = (norm(r["player"]), r["prop"], r["start"])
+            sc = r.get("scope") or "12"                     # parse() always sets it; "12" as everywhere else
+            k = (norm(r["player"]), r["prop"], sc, r["start"])
             v = (r["line"], r["higher"], r["lower"])
             if _LAST_SEEN.get(k) != v:
                 new.append((now, r["player"], r["team"], r["opponent"], r["start"], r["prop"], r["line"],
-                            r["higher"], r["lower"], r["id"]))
+                            r["higher"], r["lower"], r["id"], sc))
                 _LAST_SEEN[k] = v
         if not new:
             return
         con = sqlite3.connect(db, timeout=10)
         try:
-            con.execute("""CREATE TABLE IF NOT EXISTS moves (at TEXT, player TEXT, team TEXT, opponent TEXT,
-                           start TEXT, prop TEXT, line REAL, higher REAL, lower REAL, line_id TEXT)""")
-            con.executemany("INSERT INTO moves VALUES (?,?,?,?,?,?,?,?,?,?)", new)
+            _moves_db(con)
+            con.executemany("INSERT INTO moves (at, player, team, opponent, start, prop, line, higher, lower, line_id, scope) "
+                            "VALUES (?,?,?,?,?,?,?,?,?,?,?)", new)
             con.commit()
         finally:
             con.close()

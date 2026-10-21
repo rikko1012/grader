@@ -62,8 +62,10 @@ VERIFIED_TEAM_ALIASES = (
 
 
 def _team_same(a, b):
-    """Exact name variants only (hltv.team_name_variants) plus VERIFIED_TEAM_ALIASES - an academy never matches its
-    main team."""
+    """VERIFIED_TEAM_ALIASES, then canonical identity like hltv.same_team (2026-10-21 audit #8: the grader links a line
+    through team_aliases.json / HLTV team ids, so this check must too): when both names resolve (hltv.team_key) the ids
+    decide - two different HLTV teams never match through a shared variant ('Nova Esports' / 'Nova Gaming'). Otherwise
+    exact name variants only (hltv.team_name_variants) - an academy never matches its main team."""
     if not a or not b:
         return None
     pair = {_norm(a), _norm(b)}
@@ -71,6 +73,9 @@ def _team_same(a, b):
         return True
     try:
         import hltv
+        ka, kb = hltv.team_key(a), hltv.team_key(b)
+        if ka and kb:
+            return ka == kb
         va, vb = set(hltv.team_name_variants(a)), set(hltv.team_name_variants(b))
     except Exception:
         va, vb = {_norm(a)}, {_norm(b)}
