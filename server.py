@@ -13,6 +13,7 @@ One grade runs at a time (keeps requests to BO3.gg polite). Standard library onl
 """
 import collections
 import copy
+import gzip
 import hashlib
 import json
 import re
@@ -253,6 +254,70 @@ def shared(key, compute, ttl=RESULT_TTL):
                 _RESULTS.pop(("!fail", key), None)
         ev.failed = failed
         ev.set()
+
+
+# ---- member responses: gzip + ETag made ONCE per shared body (2026-10-21 QoL item 5). The board, the LoL board, the
+# moneylines and the pages went uncompressed with no-store to every member; now each distinct body is hashed and
+# compressed once (700 members asking for the same body share that work), the compressed copy is kept in the result store
+# (it counts toward RESULTS_MAX_BYTES and leaves with the same sweep), and a member whose browser already holds the body
+# gets "304 Not Modified" with no body. Bodies are never changed - only how they travel.
+GZIP_MIN = 1024                                       # smaller bodies go as they are
+MEMBER_CACHE = "private, no-cache"                    # the browser keeps a private copy and must re-check it every time
+_ENC_LOCKS, _ENC_GUARD = {}, threading.Lock()
+
+
+def encoded(key, body, keep=60):
+    """(etag, gzip bytes or None) for `body` - computed once per body object under `key` (single flight: callers arriving
+    while it is compressed wait for that copy). A different body under the same key (the next board build) replaces it."""
+    ek = ("!enc", key)
+    with _RG:
+        hit = _RESULTS.get(ek)
+        if hit and hit[1][0] is body:
+            return hit[1][1], hit[2] or None
+    with _ENC_GUARD:
+        if len(_ENC_LOCKS) > 1000:                    # keys are a small fixed set; never grows without bound
+            _ENC_LOCKS.clear()
+        lk = _ENC_LOCKS.setdefault(key, threading.Lock())
+    with lk:
+        with _RG:
+            hit = _RESULTS.get(ek)
+            if hit and hit[1][0] is body:
+                return hit[1][1], hit[2] or None
+        etag = '"' + hashlib.blake2b(body, digest_size=12).hexdigest() + '"'
+        gz = gzip.compress(body, 6, mtime=0) if len(body) >= GZIP_MIN else b""
+        with _RG:
+            _store_result(ek, (body, etag), gz, keep, keep)
+    return etag, gz or None
+
+
+def accepts_gzip(header):
+    """True when Accept-Encoding allows gzip (q=0 refuses it)."""
+    for part in (header or "").lower().split(","):
+        name, _, params = part.strip().partition(";")
+        if name.strip() in ("gzip", "*"):
+            q = re.search(r"q\s*=\s*([0-9.]+)", params)
+            try:
+                return not q or float(q.group(1)) > 0
+            except ValueError:
+                return False
+    return False
+
+
+def etag_matches(header, etag):
+    """If-None-Match holds this body's tag (plain or gzip copy; a proxy may have weakened it to W/"...")."""
+    if not header:
+        return False
+    for t in header.split(","):
+        t = t.strip()
+        if t == "*":
+            return True
+        if t.startswith("W/"):
+            t = t[2:]
+        if t.endswith('-gz"'):
+            t = t[:-4] + '"'
+        if t == etag:
+            return True
+    return False
 
 
 PLAUSIBLE_MAX = {"kills": {"1": 50, "12": 90, "123": 130}, "hs": {"1": 35, "12": 60, "123": 90}}   # line sanity (see /api/grade)
@@ -3236,6 +3301,7 @@ def memory_mb():
 
 
 _PAGE = {"mtime": None, "data": b""}
+_WEBFILES = {}                                          # name -> {"mtime", "data"} for the other member pages
 
 
 def page():
@@ -3245,6 +3311,16 @@ def page():
     if _PAGE["mtime"] != mt:
         _PAGE["data"], _PAGE["mtime"] = f.read_bytes(), mt
     return _PAGE["data"]
+
+
+def web_file(name):
+    """A member page from memory (re-read only when the file changes) - lol.html was read from disk on every request."""
+    f = WEB / name
+    mt = f.stat().st_mtime
+    c = _WEBFILES.get(name)
+    if not c or c["mtime"] != mt:
+        c = _WEBFILES[name] = {"mtime": mt, "data": f.read_bytes()}
+    return c["data"]
 
 
 STATS = {"requests": 0, "ms_total": 0.0, "since": time.time(), "errors_5xx": 0}
@@ -3309,17 +3385,37 @@ class Handler(BaseHTTPRequestHandler):
             STATS["client_gone"] = STATS.get("client_gone", 0) + 1
 
     def _write_response(self, code, data, ctype, headers):
+        headers = dict(headers or {})
         self.send_response(code)
-        self.send_header("Content-Type", ctype)
-        self.send_header("Content-Length", str(len(data)))
-        self.send_header("Cache-Control", "no-store")
-        for k, v in (headers or {}).items():
+        if code != 304:                                # a 304 carries no body (and no length of one)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", headers.pop("Cache-Control", "no-store"))   # no-store unless a member route says so
+        for k, v in headers.items():
             self.send_header(k, v)
         renew, self._renew = getattr(self, "_renew", None), None
         if renew:                                      # Whop just confirmed access: the cookie carries that check (B3)
             self.send_header("Set-Cookie", f"{whop_auth.COOKIE}={renew[0]}; Max-Age={renew[1]}; Path=/; HttpOnly; Secure; SameSite=Lax")
         self.end_headers()
-        self.wfile.write(data)
+        if code != 304:
+            self.wfile.write(data)
+
+    def send_shared(self, key, status, body, ctype="application/json", headers=None, keep=60):
+        """A shared member body (board, LoL board, moneylines, the pages) with its once-made ETag and gzip copy:
+        If-None-Match on the same body -> 304, Accept-Encoding gzip -> the compressed copy, Cache-Control private, no-cache.
+        Anything that is not a 200 body goes through send() unchanged (no-store)."""
+        if status != 200 or not isinstance(body, bytes):
+            return self.send(status, body, ctype, headers)
+        etag, gz = encoded(key, body, keep)
+        use_gz = gz is not None and accepts_gzip(self.headers.get("Accept-Encoding"))
+        h = {"Cache-Control": MEMBER_CACHE, "Vary": "Accept-Encoding", "ETag": etag[:-1] + '-gz"' if use_gz else etag}
+        h.update(headers or {})
+        if etag_matches(self.headers.get("If-None-Match"), etag):
+            STATS["not_modified"] = STATS.get("not_modified", 0) + 1
+            return self.send(304, b"", ctype, h)
+        if use_gz:
+            h["Content-Encoding"] = "gzip"
+        return self.send(200, gz if use_gz else body, ctype, h)
 
     def cookie(self, name):
         for part in (self.headers.get("Cookie") or "").split(";"):
@@ -3381,15 +3477,15 @@ class Handler(BaseHTTPRequestHandler):
                                                    "since": datetime.fromtimestamp(STATS["since"], timezone.utc).isoformat(timespec="seconds")},
                                        "storage": dict(storage_cached(), **STORAGE), "ops": ops_checks()})
             if u.path in ("/", "/index.html"):
-                return self.send(200, page(), "text/html; charset=utf-8")
+                return self.send_shared(("page", "index"), 200, page(), "text/html; charset=utf-8", keep=600)
             if u.path == "/lol" and lol_public():                       # the member LoL page (owner's release switch)
-                return self.send(200, (WEB / "lol.html").read_bytes(), "text/html; charset=utf-8")
+                return self.send_shared(("page", "lol"), 200, web_file("lol.html"), "text/html; charset=utf-8", keep=600)
             if u.path == "/api/lol/board" and lol_public():
                 if not self.allowed():
                     sess = self.member()
                     return self.send(401, {"error": "members_only", "signed_in": bool(sess), "upgrade": whop_auth.upgrade_url()})
                 body = lol_member_board()
-                return self.send(200, body, "application/json") if body else self.send(503, {"error": "lol board not ready"})
+                return self.send_shared(("lolboard",), 200, body, keep=300) if body else self.send(503, {"error": "lol board not ready"})
             # ---- Sign in with Whop (paid product only). Off until the WHOP_* variables are set.
             if u.path == "/auth/me":
                 sess = self.member()
@@ -3475,7 +3571,7 @@ class Handler(BaseHTTPRequestHandler):
                 # each rebuilt and encoded the whole board; the local test server refused half the connections meanwhile)
                 bk_ = "prizepicks" if q.get("book") == "prizepicks" else "underdog"
                 st_, body_ = shared(("board", bk_), lambda: (200, json.dumps(board_payload(bk_), default=str).encode()), ttl=BOARD_TTL)
-                return self.send(st_, body_)
+                return self.send_shared(("board", bk_), st_, body_)
             if u.path == "/admin":
                 return self.admin(q)
             if u.path == "/admin/thunderpick.json" and self.authed(q.get("token")):
@@ -4179,7 +4275,7 @@ class Handler(BaseHTTPRequestHandler):
         # the shared body is up to ML_TTL old: X-Served-At = the server's clock as THIS copy leaves, so the page measures a
         # Thunderpick quote's age from serve time, not from the cached build time (2026-10-13 review: a 179 s quote built
         # 29 s before the fetch still read as usable at a true 208 s). Per response, the body bytes stay shared.
-        return self.send(st_, body_, headers={"X-Served-At": datetime.now(timezone.utc).isoformat(timespec="milliseconds")})
+        return self.send_shared(("moneylines",), st_, body_, headers={"X-Served-At": datetime.now(timezone.utc).isoformat(timespec="milliseconds")})
 
     def studio_member(self):
         """Whose slip batches these are: the signed-in Whop member (user id), a load test (fixed id, optional X-Test-Member
