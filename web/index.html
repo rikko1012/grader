@@ -734,6 +734,19 @@ body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode
 @media(max-width:1150px) and (min-width:761px){.mini.on{min-width:0;flex:1 1 auto}.mini .msel,.mini .seg{display:none!important}
   .mini input{min-width:0;flex:1 1 90px}.mini input.l{flex:0 0 60px}}
 /* RESEARCH_FLOW_END */
+/* QOL_BOARD (2026-10-21): the row's Why panel, last-10 chip, grade / chance floors, quick filters, top plays, saved views,
+   marks since the last look, the card's previous / next. Display and navigation only. */
+.bwhy{background:none;border:1px solid var(--line-2);color:var(--muted);border-radius:7px;padding:6px 9px;font:600 12px Inter,system-ui,sans-serif;cursor:pointer;min-height:36px;white-space:nowrap}
+.bwhy:hover,.bwhy[aria-expanded=true]{border-color:var(--accent);color:var(--accent-2)}
+.crow .c-act{display:flex;align-items:center;justify-content:flex-end;gap:6px}
+.crow .c-why{grid-column:1/-1;background:#0e141e;border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-size:12.5px;line-height:1.55;cursor:default;min-width:0}
+.crow .c-why[hidden]{display:none!important}
+.c-why .wrow{display:grid;grid-template-columns:96px minmax(0,1fr);gap:10px;padding:3px 0;overflow-wrap:anywhere}
+.c-why .wrow>.k{font:600 10px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--faint);padding-top:3px}
+.c-why .wrow>.k.up{color:#3fb950}.c-why .wrow>.k.dn{color:#f0883e}
+@media(max-width:1000px){.crow .c-why{flex:1 1 100%;order:8;margin-top:6px}.crow .c-who{flex-basis:calc(100% - 150px)}.crow .bwhy{padding:6px 8px}}
+@container board (max-width:719px){.crow .c-why{flex:1 1 100%;order:8;margin-top:6px}.crow .c-who{flex-basis:calc(100% - 150px)}}
+@media(max-width:480px){.c-why .wrow{grid-template-columns:minmax(0,1fr);gap:0;padding:4px 0}}
 </style>
 </head>
 <body class="locked">
@@ -1727,14 +1740,55 @@ const CAP_FULL = {"small sample": "Small sample of recent official maps – stak
   "long break": "A month or more since his last official map – stake limited", "recent record disagrees": "His recent record at this line disagrees – small stake only"};
 const capParts = t => String(t || "").split(/;\s*/).map(x => x.trim()).filter(Boolean);
 const capShort = t => capParts(t).map(x => /same[- ]match|together|one team|same team/i.test(x) ? "same match" : x.toLowerCase()).join(" + ") || "same match";
+const capReasonOf = x => x ? x.cap_reason || (x.cap_n && x.units_full > x.units ? "same match" : "") : "";
+function capFull(x, team, sameCap) {      // the stake cap in full words (the chip's tooltip and the board row's Why panel)
+  const same = x.cap_n && x.units_full > x.units, reason = capReasonOf(x);
+  const sameTxt = `${x.cap_n || "Several"} bets need ${team || "this team"} to ${x.side === "More" ? "do well" : "do badly"} in this match – one upset or overtime decides them all, so together they're capped at ${sameCap ?? 3}U`;
+  return capParts(reason).map(p => /same[- ]match/i.test(p) ? sameTxt : CAP_FULL[p.toLowerCase()] || p).join(". ") + "."
+    + (same ? ` Without the same-match cap: ${+x.units_full}U.` : "");
+}
 function capChip(x, team, sameCap) {
   if (!x) return "";
-  const same = x.cap_n && x.units_full > x.units, reason = x.cap_reason || (same ? "same match" : "");
+  const reason = capReasonOf(x);
   if (!reason) return "";
-  const sameTxt = `${x.cap_n || "Several"} bets need ${team || "this team"} to ${x.side === "More" ? "do well" : "do badly"} in this match – one upset or overtime decides them all, so together they're capped at ${sameCap ?? 3}U`;
-  const full = capParts(reason).map(p => /same[- ]match/i.test(p) ? sameTxt : CAP_FULL[p.toLowerCase()] || p).join(". ") + "."
-    + (same ? ` Without the same-match cap: ${+x.units_full}U.` : "");
+  const full = capFull(x, team, sameCap);
   return ` <span class="pill capchip" style="margin:0" title="${esc(full)}" data-tip="${esc(full)}" tabindex="0">capped: ${esc(capShort(reason))}</span>`;
+}
+// the board row's data badge (server dstat): "Data complete" / "Limited history" / a definite fact (stand-in, long break)
+const dsOf = r => (r.dstat || [])[0] === "verify" ? (issueLabel(r.dstat[1]) ? ["warn", issueLabel(r.dstat[1])] : null) : DSTAT[(r.dstat || [])[0]];
+// last 10 at this line for the PICK's side (server l10_*: the same record as the card's "Last 10" tile, in the line's own
+// maps - Map 1 values for Map 1, Maps 1-3 totals for Maps 1-3). Pushes are left out: Unders = decided games minus Overs.
+// Nothing when the server sends no record (fewer than 3 matches).
+const l10Of = r => { const n = +r.l10_n, o = r.l10_over;
+  if (!r || !r.side || sideGone(r) || r.l10_n == null || o == null || !(n > 0)) return null;
+  const k = r.side === "Less" ? n - +o : +o; return {k, n, over: +o, push: +r.l10_push || 0, rate: k / n}; };
+// "Why" on a board row (QoL 2026-10-21): the row's own data only - the top supporting point and the main concern (each with
+// its basis), his last 10 at this line, why the stake is what it is, data status, LAN / online and when it was graded
+const UNIT_SCALE = {"A+": 3, "A": 2, "A-": 1.5, "B+": 1, "B": 0.5, "B-": 0.5};
+function stakeWhy(r) {
+  const gone = sideGone(r), g = mGrade(r), u = +(+r.units || 0).toFixed(2);
+  if (gone) return `${esc(gone)} – not a bet and not on slips`;
+  if (r.state === "SCOUT") return "No match scheduled – 0 units";
+  if (g === "LEAN") return "Lean – the chance is under 55%, so 0 units";
+  if (!(u > 0)) return `${esc(g || "–")} · 0U — ${esc(r.stake_reason || "a stake rule holds it at 0 units")}`;
+  if (capReasonOf(r)) return `${esc(g)} · ${u}U — ${esc(capFull(r, r.team_name || r.team))}`;
+  return UNIT_SCALE[g] === u ? `${esc(g)} · ${u}U – the full stake for a ${esc(g)} grade` : `${esc(g)} · ${u}U`;
+}
+function whyHtml(r) {
+  const row = (k, v, cls) => v ? `<div class="wrow"><span class="k${cls ? " " + cls : ""}">${k}</span><span>${v}</span></div>` : "";
+  const ev = x => x && x.text ? `${esc(x.text)} ${basisTag(x.basis)}` : "";
+  const l = l10Of(r), ds = dsOf(r), src = r.source && !UNSURE.test(r.source) ? `projection from ${esc(r.source)}` : "";
+  const l10 = l ? `${l.over}/${l.n} over${l.push ? ` · ${l.push} push` : ""}${r.l10_avg != null ? ` · avg ${esc(r.l10_avg)}` : ""}` : "";
+  const tn = r.tonight === "lan" ? "LAN" : r.tonight === "online" ? "Online" : "";
+  return row("Supports", ev(r.support), "up") + row("Concern", ev(r.concern), "dn") + row("Last 10", l10) + row("Stake", stakeWhy(r))
+    + row("Data", [ds ? esc(ds[1]) : "", src].filter(Boolean).join(" · ")) + row("Setting", tn)
+    + row("Graded", r.graded_at ? `${esc(clockTxt(r.graded_at))} (${esc(agoTxt(r.graded_at))})` : "");
+}
+const WHY_OPEN = new Set();          // board rows whose Why panel is open (kept across redraws)
+// a board row from its data-bl key (player | line | stat | maps | market type | platform)
+function rowOfBl(bl) {
+  const [p, l, t, sc, lt, bk] = String(bl || "").split("|");
+  return boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && (x.scope || "12") === sc && mktType(x) === (lt || "standard") && (x.book || "underdog") === (bk || "underdog"));
 }
 function drawBoard() {
   saveBFilters(); try { filtersLabel(); } catch {} try { drawChips(); } catch {}
@@ -1808,7 +1862,8 @@ function drawBoard() {
   const rowHtml = (r, showMatch) => {
     const nick = r.nick || r.player, gone = sideGone(r), lab = !r.side ? "…" : r.state === "SCOUT" || gone ? "–" : mGrade(r) === "LEAN" ? "L" : mGrade(r);
     const ltl = !r.side ? "Still grading" : r.state === "SCOUT" ? "No match scheduled" : mGrade(r) === "LEAN" ? "Lean – 0 units" : `Grade ${mGrade(r)}${+r.units > 0 ? "" : " – 0 units"}`;
-    const ds = (r.dstat || [])[0] === "verify" ? (issueLabel(r.dstat[1]) ? ["warn", issueLabel(r.dstat[1])] : null) : DSTAT[(r.dstat || [])[0]], team = r.team_name || r.team, opp = r.opp_name || r.opponent;
+    const ds = dsOf(r), team = r.team_name || r.team, opp = r.opp_name || r.opponent;
+    const bl = `${nick}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}|${r.book || "underdog"}`, wOpen = WHY_OPEN.has(bl);
     const sideW = r.side === "Less" ? "Under" : "Over";
     const pick = gone ? `<span class="pill bad" title="${esc(bookName(r.book || "underdog"))} does not offer the ${sideW} for this line any more - not a bet, not on slips; its last grade is kept for the record">${esc(gone)}</span> <span class="muted">${sideW} ${r.line}</span>`
       : !r.side ? `<span class="muted">grading…</span>`
@@ -1816,7 +1871,8 @@ function drawBoard() {
     const stake = gone || !r.side ? "" : `${isLeanV(r) ? (r.state === "SCOUT" ? "No match scheduled" : "Lean") : esc(mGrade(r) || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${zeroWhy(r)}${capChip(r, team)}`;
     const meta = [r.graded_at ? `graded ${agoTxt(r.graded_at)}` : "", r.alt && r.book !== "prizepicks" ? `alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : "",
 ].filter(Boolean).join(" · ");
-    return `<div class="brow2 crow" data-bl="${esc(nick)}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}|${r.book || "underdog"}">
+    const whyB = r.side ? `<button type="button" class="bwhy" data-bwhy="1" aria-expanded="${wOpen}" title="Why this grade and stake">Why</button>` : "";
+    return `<div class="brow2 crow" data-bl="${esc(bl)}">
       <span class="gtag ${!r.side || r.state === "SCOUT" || gone ? "g-scout" : gClass(mGrade(r))}" title="${esc(gone || ltl)}" data-tip="${esc(gone || ltl)}">${esc(lab)}</span>
       <div class="c-who"><b>${esc(nick)}</b>${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}
         <span class="muted c-match">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}${showMatch ? " · " + shortWhen(r.start) : ""}</span></div>
@@ -1825,9 +1881,9 @@ function drawBoard() {
       <div class="c-num"><span class="k">Proj</span>${r.proj != null ? num(r.proj, 1) : "–"}</div>
       <div class="c-pick b2pick">${pick}</div>
       <div class="c-stake">${stake}</div>
-      <div class="c-act">${!r.side ? "<span></span>" : gone ? `<button type="button" class="bslip" disabled title="${esc(gone)}">Unavailable</button>` : r.state === "SCOUT" ? `<button type="button" class="bslip" disabled title="No upcoming match found for his team – there is nothing to enter on a slip yet">+ Slip</button>`
+      <div class="c-act">${whyB}${!r.side ? "<span></span>" : gone ? `<button type="button" class="bslip" disabled title="${esc(gone)}">Unavailable</button>` : r.state === "SCOUT" ? `<button type="button" class="bslip" disabled title="No upcoming match found for his team – there is nothing to enter on a slip yet">+ Slip</button>`
         : `<button type="button" class="bslip ${onSlip.has(slipKeyRow(r)) ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}|${mktType(r)}|${r.book || "underdog"}">${onSlip.has(slipKeyRow(r)) ? "On slip" : "+ Slip"}</button>`}</div>
-      ${meta ? `<div class="c-meta muted">${meta}</div>` : ""}
+      ${meta ? `<div class="c-meta muted">${meta}</div>` : ""}${wOpen && r.side ? `<div class="c-why">${whyHtml(r)}</div>` : ""}
     </div>`; };
   const rowHead = `<div class="crow-head" aria-hidden="true"><span></span><span>Player · match</span><span>Market</span><span>Line</span><span>Proj</span><span>Pick · chance</span><span>Grade · stake</span><span></span></div>`;
   // Rank only the already-filtered rows. One player per summary, even across books.
@@ -1868,13 +1924,19 @@ $("#boardout").addEventListener("click", e => {
   if (cb) { const [bk, p, l, t, sc, lt] = cb.dataset.cmp.split("|");
     const row = BK[bk].rows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && (x.scope || "12") === sc && mktType(x) === lt);
     return gradeNow(p, l, t, row ? gradeType(row) : lt, sc, true, row ? {team: row.team, opponent: row.opponent, book: bk, start: row.start} : {book: bk}); }
+  const wb = e.target.closest("[data-bwhy]");
+  if (wb) { e.stopPropagation(); const el = wb.closest("[data-bl]"); if (!el) return;
+    const k = el.dataset.bl, p = el.querySelector(".c-why"), open = !p || p.hidden;
+    if (open) { WHY_OPEN.add(k); if (p) p.hidden = false; else { const row = rowOfBl(k); el.insertAdjacentHTML("beforeend", `<div class="c-why">${row ? whyHtml(row) : ""}</div>`); } }
+    else { WHY_OPEN.delete(k); p.hidden = true; }
+    wb.setAttribute("aria-expanded", String(open)); return; }
+  if (e.target.closest(".c-why")) return;            // reading the Why panel never opens the card
   const b = e.target.closest("[data-bslip]");
   if (b) { e.stopPropagation(); const [p, l, t, lt, bk] = b.dataset.bslip.split("|");
     const r = boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && mktType(x) === (lt || "standard") && (x.book || "underdog") === (bk || "underdog"));
     if (r) { addToSlip(boardCard(r)); drawBoard(); } return; }
   const r = e.target.closest("[data-bl]");
-  if (r) { const [p, l, t, sc, lt, bk] = r.dataset.bl.split("|");
-    const row = boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && (x.scope || "12") === sc && mktType(x) === (lt || "standard") && (x.book || "underdog") === (bk || "underdog"));
+  if (r) { const [p, l, t, sc, lt] = r.dataset.bl.split("|"), row = rowOfBl(r.dataset.bl);
     gradeNow(p, l, t, row ? gradeType(row) : (lt || "standard"), sc, true, row ? {team: row.team, opponent: row.opponent, book: row.book || "underdog", start: row.start} : null); }
 });
 function setBook(v, quiet) {
