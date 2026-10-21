@@ -752,6 +752,10 @@ body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode
 .bviews{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.bviews[hidden]{display:none}.bviews select{width:auto;padding:7px 10px;max-width:220px}
 #bviews .bvform{display:flex;gap:6px;align-items:center;background:none;border:0;padding:0;margin:0;box-shadow:none;border-radius:0}#bviews .bvform[hidden]{display:none}.bvform input{width:190px;padding:7px 10px}
 @media(max-width:760px){.bviews{flex:1 1 100%}.bviews select{flex:1 1 100%;max-width:none}.bvform{flex:1 1 100%}.bvform input{flex:1 1 auto;width:auto;min-width:0}}
+.nmark,.lockb{display:inline-block;margin-left:5px;font:600 10px Inter,system-ui,sans-serif;padding:1px 6px;border-radius:6px;white-space:nowrap;vertical-align:middle}
+.nmark{color:var(--accent-2);background:#f7a45b14;border:1px solid #f7a45b55;cursor:help}.nmark.up{color:#7fd8be;border-color:#7fd8be55;background:#7fd8be12}
+.nmark.down{color:#ff9b8a;border-color:#ff9b8a55;background:#ff9b8a12}.nmark.grade{color:#c9b6ff;border-color:#bba5ff66;background:#bba5ff12}
+.lockb{color:#f5c542;border:1px solid #f5c54266;background:#f5c54212}
 .pickoffers{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:9px}.pickoffers[hidden]{display:none}
 .pickoffers .chipbtn{white-space:normal;text-align:left;max-width:100%}
 .ot-featured .tphead{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}.ot-featured .tphead b{font:600 15px var(--display);letter-spacing:.02em}
@@ -1779,17 +1783,67 @@ function bookStatus(b) {
   }
   return `${B.rows.length} graded Underdog lines${B.total > B.rows.length ? ` (${B.total - B.rows.length} still grading)` : ""}` + (B.at ? ` · board from ${hhmm(B.at)}` : "");
 }
-async function loadBoard(force) {
+async function loadBoard(force, quiet) {
   if (bbook === "moneylines") return loadMoneylines(force);
   const need = bbook === "compare" || bbook === "all" ? ["underdog", "prizepicks"] : [bbook];
   if (!force && need.every(b => BK[b].loaded)) { boardRows = viewRows(bbook); $("#bstatus").textContent = need.map(bookStatus).join(" · "); return drawBoard(); }
-  $("#bstatus").textContent = need.some(b => BK[b].loaded) ? "Refreshing… (showing the current lines)" : "Loading the board…";
-  try { await Promise.all(need.map(fetchBook)); } catch (e) { $("#bstatus").textContent = `Couldn't refresh (${e.message})`; }
+  if (!quiet) $("#bstatus").textContent = need.some(b => BK[b].loaded) ? "Refreshing… (showing the current lines)" : "Loading the board…";
+  const before = Object.fromEntries(need.map(b => [b, BK[b].loaded ? BK[b].rows : null]));
+  try { await Promise.all(need.map(fetchBook)); AUTO.last = Date.now(); } catch (e) { $("#bstatus").textContent = `Couldn't refresh (${e.message})`; }
   assignMatchKeys([...BK.underdog.rows, ...BK.prizepicks.rows]);
   boardRows = viewRows(bbook); boardAt = BK.underdog.at; boardVer = BK.underdog.ver || BK.prizepicks.ver || "";
   $("#bstatus").textContent = need.map(bookStatus).join(" · ");
+  try { seenSave(need.filter(b => BK[b].loaded)); } catch {}
+  try { watchAlerts(before); } catch {}
   drawBoard();
 }
+// ---------- auto-refresh + marks (QoL 2026-10-21). The Board refreshes itself every 60-90 s (random, per member) while it is
+// on screen and the tab is visible; nothing while hidden (on return: one refresh after a few random seconds if the last is
+// over a minute old). The server answers from its one shared board copy - no grading or platform request per member.
+const AUTO = {t: null, last: 0};
+const boardOnScreen = () => MODE === "board" && bbook !== "moneylines" && !$("#board").hidden;
+function autoSchedule(ms) { clearTimeout(AUTO.t); AUTO.t = setTimeout(autoTick, ms != null ? ms : 60000 + Math.random() * 30000); }
+function autoTick() {
+  if (document.visibilityState === "visible" && boardOnScreen()) loadBoard(true, true).catch(() => {});
+  autoSchedule();
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return clearTimeout(AUTO.t);
+  if (boardOnScreen()) try { drawBoard(); } catch {}              // started matches drop off, countdowns move on at once
+  autoSchedule(Date.now() - AUTO.last > 60000 ? 2000 + Math.random() * 10000 : null);
+});
+autoSchedule();
+// "since your last look" (stored in this browser): each line's key -> [line, model grade, start]. The previous visit's copy
+// (SEEN0) is the baseline for the whole visit; every load writes the current lines back for the next visit.
+const markKey = r => [String(r.nick || r.player || "").toLowerCase(), r.prop, r.scope || "12", mktType(r), r.book || "underdog", String(r.start || "").slice(0, 16)].join("|");
+const SEEN0 = (() => { const x = store.get("cs2s_seen", null); return x && x.rows && x.books ? x : null; })();
+function seenSave(books) {
+  if (!books.length) return;
+  const old = store.get("cs2s_seen", null) || {}, rows = {}, now = Date.now(), keep = old.rows || {};
+  for (const [k, v] of Object.entries(keep)) if (!books.includes(k.split("|")[4]) && Array.isArray(v) && now - (v[2] || 0) < 86400000) rows[k] = v;
+  for (const b of books) for (const r of BK[b].rows) if (r.side) rows[markKey(r)] = [r.line, mGrade(r) || null, Date.parse(r.start) || now];
+  store.set("cs2s_seen", {at: now, books: Object.assign({}, old.books || {}, Object.fromEntries(books.map(b => [b, now]))), rows});
+}
+function sinceMark(r, base) {
+  base = base === undefined ? SEEN0 : base;
+  if (!base || !r.side || !(base.books || {})[r.book || "underdog"]) return null;
+  const was = base.rows[markKey(r)];
+  if (!was) return {kind: "new"};
+  if (was[0] != null && +was[0] !== +r.line) return {kind: "line", from: was[0], up: +r.line > +was[0]};
+  if (was[1] && mGrade(r) && was[1] !== mGrade(r)) return {kind: "grade", from: was[1]};
+  return null;
+}
+function markChip(r) {
+  const m = sinceMark(r); if (!m) return "";
+  if (m.kind === "line" && bumpFrom(r) != null && +bumpFrom(r) === +m.from) return "";   // the bump chip already says it
+  const [cls, label, tip] = m.kind === "new" ? ["new", "New", "New since your last look"]
+    : m.kind === "line" ? [m.up ? "up" : "down", `${m.up ? "▲" : "▼"} was ${m.from}`, `Line moved since your last look: ${m.from} → ${r.line}`]
+    : ["grade", `was ${m.from === "LEAN" ? "Lean" : m.from}`, `Grade changed since your last look: ${m.from === "LEAN" ? "Lean" : m.from} → ${mGrade(r) === "LEAN" ? "Lean" : mGrade(r)}`];
+  return ` <span class="nmark ${cls}" title="${esc(tip)}" data-tip="${esc(tip)}" tabindex="0">${esc(label)}</span>`;
+}
+// "locks in 12m": the line's own listed start, under an hour away
+const lockChip = r => { const t = Date.parse(r.start || ""), m = Math.ceil((t - Date.now()) / 60000);
+  return isNaN(t) || m <= 0 || m > 60 ? "" : ` <span class="lockb" title="${esc(bookName(r.book || "underdog"))} locks this line at the match start">locks in ${m}m</span>`; };
 const shortWhen = s => { if (!s) return ""; const d = new Date(s); if (isNaN(d)) return "";
   const u = until(d); return d.toLocaleString([], {weekday: "short", hour: "numeric", minute: "2-digit"}) + (u ? " · " + u : ""); };
 function boardCard(r) {     // a board row in the shape addToSlip / pickLine expect
@@ -1932,8 +1986,9 @@ function drawBoard() {
   };
   const rows = boardRows.filter(r => (bprop === "both" || r.prop === bprop) && (r.scope || "12") === bscope && (bside === "both" || r.side === bside)
                                     && (!$("#bbets").checked || isBet(r)) && (!$("#bflag").checked || !isFlagged(r)) && hit(r)
-                                    && floorOk(r) && (!bquick.bump || bumpFrom(r) != null) && (!bquick.gap || gapRow(r)) && (!bquick.fresh || isFresh(r))).sort(cmp);
-  $("#bcount").textContent = boardRows.length ? `${rows.length} of ${boardRows.length} lines` : "";
+                                    && !hasStarted(r) && floorOk(r) && (!bquick.bump || bumpFrom(r) != null) && (!bquick.gap || gapRow(r)) && (!bquick.fresh || isFresh(r))).sort(cmp);
+  const liveN = boardRows.filter(r => !hasStarted(r)).length;       // a match that started drops off (its line is locked)
+  $("#bcount").textContent = boardRows.length ? `${rows.length} of ${liveN} lines` : "";
   $("#ot-board-overview").innerHTML = otTopPlays(rows);   // QoL 2026-10-21: top plays in place of the Offers / Markets / Players counters
   const pct0 = x => x == null ? "–" : (x * 100).toFixed(1) + "%";
   const ev = (x, cls, sign) => x && x.text ? `<div class="b2ev ${cls}">${sign} ${esc(x.text)} ${basisTag(x.basis)}</div>` : "";
@@ -1975,7 +2030,7 @@ function drawBoard() {
     const whyB = r.side ? `<button type="button" class="bwhy" data-bwhy="1" aria-expanded="${wOpen}" title="Why this grade and stake">Why</button>` : "";
     return `<div class="brow2 crow" data-bl="${esc(bl)}">
       <span class="gtag ${!r.side || r.state === "SCOUT" || gone ? "g-scout" : gClass(mGrade(r))}" title="${esc(gone || ltl)}" data-tip="${esc(gone || ltl)}">${esc(lab)}</span>
-      <div class="c-who"><b>${esc(nick)}</b>${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}
+      <div class="c-who"><b>${esc(nick)}</b>${markChip(r)}${lockChip(r)}${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}
         <span class="muted c-match">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}${showMatch ? " · " + shortWhen(r.start) : ""}</span></div>
       <div class="c-mkt"><span class="pill c-book">${bookName(r.book || "underdog")}</span> ${propWord(r.prop)}${mapsWord(r.scope)}${mktTag(r)}${ds ? ` <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}" data-tip="${esc((r.dstat || [])[1] || ds[1])}">${ds[1]}</span>` : ""}${bump(r)}${lineGap(r)}</div>
       <div class="c-num"><span class="k">Line</span><b>${r.line}</b></div>
@@ -2072,7 +2127,7 @@ function drawCompare() {
   const pairs = new Map();
   for (const [bk, rows] of [["underdog", BK.underdog.rows], ["prizepicks", BK.prizepicks.rows]])
     for (const r of rows) {
-      if ((bprop !== "both" && r.prop !== bprop) || (r.scope || "12") !== bscope || !hit(r) || !r.side) continue;
+      if ((bprop !== "both" && r.prop !== bprop) || (r.scope || "12") !== bscope || !hit(r) || !r.side || hasStarted(r)) continue;
       const k = keyOf(r); if (!pairs.has(k)) pairs.set(k, {u: [], p: [], any: r}); pairs.get(k)[bk === "underdog" ? "u" : "p"].push(r);
     }
   // the gap between the two platforms' standard lines (null when one platform has no standard line)
@@ -3483,7 +3538,7 @@ function otBoardSummary(rows) {
 function otOpenDesk(key, opener) {
   const dlg = $('#ot-match-desk');
   // Only rows in the existing displayed match group and selected scope. Do not merge events by guessed names.
-  otDeskRows = boardRows.filter(r => matchKey(r) === key && (r.scope || '12') === bscope);
+  otDeskRows = boardRows.filter(r => matchKey(r) === key && (r.scope || '12') === bscope && !hasStarted(r));
   if (!otDeskRows.length) return;
   otDeskReturn = opener;
   const first = headRow(otDeskRows), teams = new Map();

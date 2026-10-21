@@ -220,3 +220,44 @@ def test_views_round_trip_through_the_link_and_storage(tmp_path):
     assert [x["n"] for x in out["stored"]] == ["PP HS Unders"] and out["stored"][0]["v"] == out["v"]
     assert [x["n"] for x in out["stored2"]] == ["PP HS Unders again"]
     assert out["name"].startswith("PrizePicks · Headshots · Map 1 · Unders") and len(out["name"]) <= 40
+
+
+# ------------------------------------------------------------------ 7. auto-refresh, marks since the last look, locks badge, started rows
+@needs_node
+def test_auto_refresh_is_jittered_and_paused_when_hidden(tmp_path):
+    out = page(tmp_path, r"""
+      const delays = [], calls = []; setTimeout = (f, ms) => { delays.push(ms); return 0; }; clearTimeout = () => {};
+      loadBoard = async (force, quiet) => { calls.push([force, quiet]); };
+      MODE = "board"; bbook = "all"; $("#board").hidden = false;
+      for (let i = 0; i < 200; i++) autoSchedule();
+      const r = {min: Math.min(...delays), max: Math.max(...delays), spread: new Set(delays.map(x => Math.round(x / 1000))).size};
+      autoTick(); r.visible = calls.length;
+      document.visibilityState = "hidden"; autoTick(); r.hidden = calls.length;
+      document.visibilityState = "visible"; bbook = "moneylines"; autoTick(); r.ml = calls.length;
+      bbook = "all"; MODE = "one"; autoTick(); r.other = calls.length; r.args = calls[0];
+      return r;""", {"rows": []}, sync=False)
+    assert out["min"] >= 60000 and out["max"] <= 90000 and out["spread"] > 10     # never faster than 60 s, spread out per member
+    assert (out["visible"], out["hidden"], out["ml"], out["other"]) == (1, 1, 1, 1)   # only a visible Board refreshes
+    assert out["args"] == [True, True]                                             # quiet: the list stays as it is meanwhile
+
+
+@needs_node
+def test_marks_since_the_last_look_lock_badge_and_started_rows_drop(tmp_path):
+    rows = [_row(1), _row(2, line=28.5), _row(3, model_grade="A-", grade="A-", units=1.5, p=0.69), _row(4),
+            _row(5, start=(NOW + timedelta(minutes=12, seconds=30)).isoformat()), _row(6, start=(NOW - timedelta(minutes=1)).isoformat()),
+            _row(7, line=27.5, open_line=26.5)]
+    out = page(tmp_path, r"""
+      seenSave(["underdog"]); const snap = JSON.parse(localStorage.getItem("cs2s_seen"));
+      const base = JSON.parse(JSON.stringify(snap)), k = r => markKey(boardRows.find(x => x.id === r));
+      delete base.rows[k("ud:1")]; base.rows[k("ud:2")][0] = 27.5; base.rows[k("ud:3")][1] = "B"; base.rows[k("ud:7")][0] = 26.5;
+      const m = id => sinceMark(boardRows.find(x => x.id === id), base);
+      const r = {n: Object.keys(snap.rows).length, new: m("ud:1"), line: m("ud:2"), grade: m("ud:3"), same: m("ud:4"),
+                 none: sinceMark(boardRows[0], null), otherBook: sinceMark(Object.assign({}, boardRows[3], {book: "prizepicks"}), base),
+                 lock: lockChip(boardRows.find(x => x.id === "ud:5")), nolock: lockChip(boardRows[0])};
+      $("#bbets").checked = false; drawBoard(); r.html = $("#boardout").innerHTML; r.count = $("#bcount").textContent;
+      return r;""", {"rows": rows})
+    assert out["n"] == 7
+    assert out["new"] == {"kind": "new"} and out["line"] == {"kind": "line", "from": 27.5, "up": True} and out["grade"] == {"kind": "grade", "from": "B"}
+    assert out["same"] is None and out["none"] is None and out["otherBook"] is None    # no baseline for a platform not loaded last time
+    assert "locks in 13m" in out["lock"] and out["nolock"] == ""
+    assert "data-bl=\"p6|" not in out["html"] and out["count"] == "6 of 6 lines"     # a started match drops off
