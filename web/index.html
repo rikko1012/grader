@@ -752,6 +752,8 @@ body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode
 .bviews{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.bviews[hidden]{display:none}.bviews select{width:auto;padding:7px 10px;max-width:220px}
 #bviews .bvform{display:flex;gap:6px;align-items:center;background:none;border:0;padding:0;margin:0;box-shadow:none;border-radius:0}#bviews .bvform[hidden]{display:none}.bvform input{width:190px;padding:7px 10px}
 @media(max-width:760px){.bviews{flex:1 1 100%}.bviews select{flex:1 1 100%;max-width:none}.bvform{flex:1 1 100%}.bvform input{flex:1 1 auto;width:auto;min-width:0}}
+.bstar{background:none;border:0;padding:0 5px 0 0;margin:0;color:var(--faint);font-size:15px;line-height:1;cursor:pointer;vertical-align:-1px;min-width:22px;min-height:22px}
+.bstar:hover,.bstar.on{color:var(--accent-2)}
 .nmark,.lockb{display:inline-block;margin-left:5px;font:600 10px Inter,system-ui,sans-serif;padding:1px 6px;border-radius:6px;white-space:nowrap;vertical-align:middle}
 .nmark{color:var(--accent-2);background:#f7a45b14;border:1px solid #f7a45b55;cursor:help}.nmark.up{color:#7fd8be;border-color:#7fd8be55;background:#7fd8be12}
 .nmark.down{color:#ff9b8a;border-color:#ff9b8a55;background:#ff9b8a12}.nmark.grade{color:#c9b6ff;border-color:#bba5ff66;background:#bba5ff12}
@@ -794,7 +796,7 @@ body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode
       <div class="seg" id="bside" title="Show the grader's Overs, Unders, or both"><button type="button" data-v="More">Overs</button><button type="button" data-v="both" class="on">Both</button><button type="button" data-v="Less">Unders</button></div>
       <select id="bgrade" aria-label="Grade floor" title="Show only picks at this model grade or better" style="width:auto;padding:8px 10px"><option value="">Any grade</option><option value="A">A and up</option><option value="A-">A− and up</option><option value="B+">B+ and up</option><option value="B">B and up</option></select>
       <select id="bchance" aria-label="Chance floor" title="Show only picks at this chance or higher" style="width:auto;padding:8px 10px"><option value="">Any chance</option><option value="0.55">55%+ chance</option><option value="0.6">60%+ chance</option><option value="0.65">65%+ chance</option><option value="0.7">70%+ chance</option></select>
-      <div class="seg" id="bquick" role="group" aria-label="Quick filters"><button type="button" data-q="bump" aria-pressed="false" title="The platform moved the line from where it opened">Bumped</button><button type="button" data-q="gap" aria-pressed="false" title="Underdog and PrizePicks list different standard lines">Lines differ</button><button type="button" data-q="fresh" aria-pressed="false" title="Line first seen in the last hour">New &lt;1h</button></div>
+      <div class="seg" id="bquick" role="group" aria-label="Quick filters"><button type="button" data-q="bump" aria-pressed="false" title="The platform moved the line from where it opened">Bumped</button><button type="button" data-q="gap" aria-pressed="false" title="Underdog and PrizePicks list different standard lines">Lines differ</button><button type="button" data-q="fresh" aria-pressed="false" title="Line first seen in the last hour">New &lt;1h</button><button type="button" data-q="watch" aria-pressed="false" title="Only the players you starred">★ Watchlist</button></div>
       <input id="bsearch" type="search" placeholder="Player or team" aria-label="Search a player or team" style="width:150px;padding:8px 10px">
       <select id="bsort" aria-label="Sort the board" style="width:auto;padding:8px 10px"><option value="g">Best grade first</option><option value="p">Highest chance</option><option value="t">Starting soonest</option><option value="e">Biggest edge</option><option value="h">Hit rate (last 10)</option></select>
       <select id="csort" aria-label="Sort Compare" style="width:auto;padding:8px 10px" hidden><option value="t">Match time</option><option value="gap">Biggest line gap</option></select>
@@ -1112,7 +1114,7 @@ document.addEventListener("click", e => { const b = e.target.closest("[data-dym]
 // ---------- quality of life: saved settings, shortcuts, recent grades, copy/share, slate
 const store = {get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
                set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }};
-function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("on"), 1800); }
+function toast(msg, ms) { const t = $("#toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("on"), ms || 1800); }
 async function copy(text) {
   try { await navigator.clipboard.writeText(text); toast("Copied"); }
   catch { const a = document.createElement("textarea"); a.value = text; document.body.append(a); a.select();
@@ -1925,7 +1927,34 @@ function rowOfBl(bl) {
 }
 // quick filters + floors (QoL 2026-10-21) - on the row's own data: the MODEL grade shown on the row (never its units; "Bets only"
 // stays the stake filter) and its printed chance. A side no longer offered or a line with no match shows no grade or chance.
-let bquick = {bump: false, gap: false, fresh: false};
+let bquick = {bump: false, gap: false, fresh: false, watch: false};
+// watchlist (QoL 2026-10-21): starred players, kept in this browser; the Watchlist chip shows only them and the auto-refresh
+// says (in-tab toast) when one of their lines is posted, moves or changes grade
+const watchList = () => { const x = store.get("cs2s_watch", []); return Array.isArray(x) ? x.map(String).slice(0, 60) : []; };
+const isWatched = (r, wl) => (wl || watchList()).includes(String(r.nick || r.player || "").toLowerCase());
+function toggleWatch(nick) {
+  const k = String(nick || "").toLowerCase(), wl = watchList(), on = !wl.includes(k);
+  store.set("cs2s_watch", on ? [k, ...wl].slice(0, 60) : wl.filter(x => x !== k));
+  toast(on ? `★ ${nick} added to your watchlist – notes appear here while this tab is open` : `${nick} removed from your watchlist`, on ? 3000 : 1800);
+  return on;
+}
+function watchAlerts(before) {        // before = {book: that platform's rows before this refresh (null = first load)}
+  const wl = watchList(); if (!wl.length) return [];
+  const out = [];
+  for (const [b, prevRows] of Object.entries(before || {})) {
+    if (!prevRows) continue;
+    const prev = new Map(prevRows.map(r => [markKey(r), r]));
+    for (const r of BK[b].rows) {
+      if (!r.side || !isWatched(r, wl) || hasStarted(r)) continue;
+      const o = prev.get(markKey(r)), what = `${r.nick || r.player} ${propWord(r.prop)}${mapsWord(r.scope)} on ${bookName(b)}`;
+      if (!o) out.push(`★ ${what}: line posted at ${r.line} – ${sideWord(r)} ${pct(r.p)}`);
+      else if (+o.line !== +r.line) out.push(`★ ${what}: line moved ${o.line} → ${r.line}`);
+      else if (mGrade(o) && mGrade(r) && mGrade(o) !== mGrade(r)) out.push(`★ ${what}: grade ${gradeWord(o)} → ${gradeWord(r)}`);
+    }
+  }
+  if (out.length) toast(out[0] + (out.length > 1 ? ` (+${out.length - 1} more on your watchlist)` : ""), 8000);
+  return out;
+}
 const bumpFrom = r => { const from = r.moved_from != null ? r.moved_from : r.open_line;     // Bumped: moved from where it opened
   return from == null || r.line == null || +from === +r.line ? null : from; };
 const isFresh = (r, now) => { const t = Date.parse(r.first_seen || ""); return !isNaN(t) && (now || Date.now()) - t <= 3600000; };   // first seen < 1 h ago
@@ -1984,9 +2013,10 @@ function drawBoard() {
     const o = (stdIdx[ob].get(sk(r)) || []).find(x => sameMatch(x, r));
     return o && +o.line !== +r.line ? o : null;
   };
+  const wl = watchList();
   const rows = boardRows.filter(r => (bprop === "both" || r.prop === bprop) && (r.scope || "12") === bscope && (bside === "both" || r.side === bside)
                                     && (!$("#bbets").checked || isBet(r)) && (!$("#bflag").checked || !isFlagged(r)) && hit(r)
-                                    && !hasStarted(r) && floorOk(r) && (!bquick.bump || bumpFrom(r) != null) && (!bquick.gap || gapRow(r)) && (!bquick.fresh || isFresh(r))).sort(cmp);
+                                    && !hasStarted(r) && floorOk(r) && (!bquick.watch || isWatched(r, wl)) && (!bquick.bump || bumpFrom(r) != null) && (!bquick.gap || gapRow(r)) && (!bquick.fresh || isFresh(r))).sort(cmp);
   const liveN = boardRows.filter(r => !hasStarted(r)).length;       // a match that started drops off (its line is locked)
   $("#bcount").textContent = boardRows.length ? `${rows.length} of ${liveN} lines` : "";
   $("#ot-board-overview").innerHTML = otTopPlays(rows);   // QoL 2026-10-21: top plays in place of the Offers / Markets / Players counters
@@ -2030,7 +2060,7 @@ function drawBoard() {
     const whyB = r.side ? `<button type="button" class="bwhy" data-bwhy="1" aria-expanded="${wOpen}" title="Why this grade and stake">Why</button>` : "";
     return `<div class="brow2 crow" data-bl="${esc(bl)}">
       <span class="gtag ${!r.side || r.state === "SCOUT" || gone ? "g-scout" : gClass(mGrade(r))}" title="${esc(gone || ltl)}" data-tip="${esc(gone || ltl)}">${esc(lab)}</span>
-      <div class="c-who"><b>${esc(nick)}</b>${markChip(r)}${lockChip(r)}${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}
+      <div class="c-who"><button type="button" class="bstar${isWatched(r, wl) ? " on" : ""}" data-bstar="${esc(nick)}" aria-pressed="${isWatched(r, wl)}" title="${isWatched(r, wl) ? "On your watchlist – tap to remove" : "Add to your watchlist"}" aria-label="Watchlist: ${esc(nick)}">${isWatched(r, wl) ? "★" : "☆"}</button><b>${esc(nick)}</b>${markChip(r)}${lockChip(r)}${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}
         <span class="muted c-match">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}${showMatch ? " · " + shortWhen(r.start) : ""}</span></div>
       <div class="c-mkt"><span class="pill c-book">${bookName(r.book || "underdog")}</span> ${propWord(r.prop)}${mapsWord(r.scope)}${mktTag(r)}${ds ? ` <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}" data-tip="${esc((r.dstat || [])[1] || ds[1])}">${ds[1]}</span>` : ""}${bump(r)}${lineGap(r)}</div>
       <div class="c-num"><span class="k">Line</span><b>${r.line}</b></div>
@@ -2087,6 +2117,8 @@ function boardClick(e) {
     else { WHY_OPEN.delete(k); p.hidden = true; }
     wb.setAttribute("aria-expanded", String(open)); return; }
   if (e.target.closest(".c-why")) return;            // reading the Why panel never opens the card
+  const st = e.target.closest("[data-bstar]");
+  if (st) { e.stopPropagation(); toggleWatch(st.dataset.bstar); return drawBoard(); }
   const b = e.target.closest("[data-bslip]");
   if (b) { e.stopPropagation(); const [p, l, t, lt, bk] = b.dataset.bslip.split("|");
     const r = boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && mktType(x) === (lt || "standard") && (x.book || "underdog") === (bk || "underdog"));

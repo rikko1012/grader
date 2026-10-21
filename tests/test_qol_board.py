@@ -261,3 +261,27 @@ def test_marks_since_the_last_look_lock_badge_and_started_rows_drop(tmp_path):
     assert out["same"] is None and out["none"] is None and out["otherBook"] is None    # no baseline for a platform not loaded last time
     assert "locks in 13m" in out["lock"] and out["nolock"] == ""
     assert "data-bl=\"p6|" not in out["html"] and out["count"] == "6 of 6 lines"     # a started match drops off
+
+
+# ------------------------------------------------------------------ 11. watchlist + in-tab alerts
+@needs_node
+def test_watchlist_star_filter_and_alerts_on_post_move_and_grade_change(tmp_path):
+    rows = [_row(1, nick="ZywOo", player="ZywOo"), _row(2, nick="ropz", player="ropz"), _row(3)]
+    out = page(tmp_path, r"""
+      const msgs = []; toast = (m, ms) => msgs.push([m, ms]);
+      const r = {on: toggleWatch("ZywOo")}; toggleWatch("ropz"); r.off = toggleWatch("ropz"); r.list = watchList();
+      $("#bbets").checked = false; bquick.watch = true; drawBoard(); r.html = $("#boardout").innerHTML; bquick.watch = false;
+      const prev = BK.underdog.rows.map(x => Object.assign({}, x));
+      const cur = (over) => { BK.underdog.rows = prev.map(x => Object.assign({}, x, x.nick === "ZywOo" ? over : {})); };
+      msgs.length = 0; cur({line: 28.5}); r.moved = watchAlerts({underdog: prev});
+      cur({model_grade: "A-"}); r.grade = watchAlerts({underdog: prev});
+      BK.underdog.rows = prev.slice(); r.posted = watchAlerts({underdog: prev.filter(x => x.nick !== "ZywOo")});
+      r.first = watchAlerts({underdog: null}); r.quiet = (BK.underdog.rows = prev.map(x => Object.assign({}, x, {line: 30.5})), watchAlerts({underdog: prev}).filter(m => !/ZywOo/.test(m)));
+      r.toasts = msgs; return r;""", {"rows": rows})
+    assert out["on"] is True and out["off"] is False and out["list"] == ["zywoo"]
+    assert out["html"].count('class="brow2 crow"') == 1 and 'class="bstar on"' in out["html"] and "★" in out["html"]
+    assert out["moved"] == ["★ ZywOo kills on Underdog: line moved 27.5 → 28.5"]
+    assert out["grade"] == ["★ ZywOo kills on Underdog: grade B → A-"]
+    assert out["posted"] == ["★ ZywOo kills on Underdog: line posted at 27.5 – Over 58.0%"]
+    assert out["first"] == [] and out["quiet"] == []                    # nothing on the first load; never a player not starred
+    assert all(ms == 8000 for _, ms in out["toasts"])
