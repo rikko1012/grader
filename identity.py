@@ -5,13 +5,15 @@ import json
 import re
 from datetime import datetime, timezone
 
-RULE_VERSION = 3      # 2 = slug pairing (2026-10-12); 3 = + settlement's canonical HLTV match (2026-10-13) - learning re-keys on a change
+RULE_VERSION = 4      # 2 = slug pairing (2026-10-12); 3 = + settlement's canonical HLTV match (2026-10-13); 4 = hltv/matchid's
+                      # org affixes (+ clan, e-sport; 2026-10-21 audit) - learning re-keys on a change
 
-_AFFIX = re.compile(r"^(team)\s+|\s+(esports|e-sports|esport|gaming|club|team)$", re.I)
+# the same org affixes as hltv._TEAM_AFFIX / matchid._AFFIX (2026-10-21 audit: 'FaZe Clan' and HLTV 'FaZe' were two matches)
+_AFFIX = re.compile(r"^(team)\s+|\s+(esports|e-sports|esport|e-sport|gaming|club|clan|team)$", re.I)
 
 
 def team_norm(name):
-    """Lower-case alphanumerics with the 'Team' / 'Esports' / 'Gaming' / 'Club' affixes removed ('Aurora Gaming' = 'Aurora',
+    """Lower-case alphanumerics with the 'Team' / 'Esports' / 'Gaming' / 'Club' / 'Clan' affixes removed ('Aurora Gaming' = 'Aurora',
     'Team Spirit' = 'Spirit'). Academies and 'Junior' sides stay different teams."""
     s = str(name or "").strip()
     for _ in range(2):

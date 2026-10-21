@@ -196,6 +196,7 @@ def _cached(key, fn, live_at=0.0):
         with _LOCK:
             if len(_RAW) > 20000:
                 _RAW.clear()
+            _prune(t)
             _RAW[key] = (t, val)
             _FAIL.pop(key, None)
         return val, t
@@ -205,6 +206,23 @@ def _cached(key, fn, live_at=0.0):
             h = _RAW.get(key)
         return (h[1], h[0]) if h and time.time() - h[0] < TTL and h[0] >= live_at else hltv.MISS
     return hltv.single_flight(("fh1",) + key, read, peek)
+
+
+PRUNE_AGE = 6 * 3600              # an entry nobody re-read for this long is dropped (= perf_live.PRUNE_AGE)
+PRUNE_EVERY = 10 * 60
+_PRUNED = [0.0]
+
+
+def _prune(now):
+    """Under _LOCK: drop entries nobody re-read for PRUNE_AGE and old failure marks (2026-10-21 audit: _RAW was only
+    cleared at 20,000 keys, about 20 days of board keys)."""
+    if now - _PRUNED[0] < PRUNE_EVERY:
+        return
+    _PRUNED[0] = now
+    for k in [k for k, v in _RAW.items() if now - v[0] > PRUNE_AGE]:
+        _RAW.pop(k, None)
+    for k in [k for k, v in _FAIL.items() if now - v > FAIL_WAIT]:
+        _FAIL.pop(k, None)
 
 
 def _player_ids(nick, team):
@@ -221,16 +239,34 @@ def _player_ids(nick, team):
 
 
 def _team_id(name):
-    import hltv
+    """The canonical HLTV team id. Also read by the LIVE cm-2 route (cs2_scout._cm2_live), so a transient failure serves the
+    last good answer like the live projection's reads do - memory (kept up to PRUNE_AGE past its TTL), then the stored copy
+    on disk (2026-10-21 audit: an outage past 15 min, or a restart during one, made every kills Maps 1-2 line transient)."""
+    import hltv, hltv_store
+    key, skey = ("tid", hltv._norm(name)), ("shadow_tid", hltv._norm(name))
 
     def load():
         con = hltv._connect()
         try:
             with con.cursor() as cur:
-                return hltv.canonical_team_id(cur, name)
+                tid = hltv.canonical_team_id(cur, name)
         finally:
             con.close()
-    return _cached(("tid", hltv._norm(name)), load)[0]
+        hltv_store.save(skey, tid)
+        return tid
+    try:
+        return _cached(key, load)[0]
+    except Exception as e:
+        if not hltv.is_transient(e):
+            raise
+        with _LOCK:
+            h = _RAW.get(key)
+        if h is not None:
+            return h[1]
+        stored = hltv_store.load(skey)
+        if stored is not None:
+            return stored[1]
+        raise
 
 
 def _player_raw(ids, since, live_at):
@@ -310,7 +346,7 @@ def build(res, r):
     prop = "hs" if g.get("prop") == "hs" else "kills"
     tonight = (pb.get("_env") or {}).get("tonight")
     lan = None if tonight is None else tonight == "lan"
-    day = cs2_scout.match_day(r.get("start") or nm.get("start"))
+    day = cs2_scout.match_day(nm.get("start") or r.get("start"))   # the schedule start the live forecast used (args.match_start)
     since = (date.fromordinal(day) - timedelta(days=420)).isoformat()
     since_today = (date.today() - timedelta(days=420)).isoformat()
     rev, rule = perf_live.INPUT_REV, perf_live.INPUT_RULE

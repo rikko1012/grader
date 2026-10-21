@@ -125,13 +125,16 @@ def shadow_entry(gi, grade):
     Over / Under / push, side, grade and stake under the SAME grader and stake rules (grade_leg on the forecast's own
     inputs with the candidate projection in place of perf-2's). None when there is no perf-2 projection to compare."""
     pf = (gi or {}).get("perf")
+    published = pf.get("version") if isinstance(pf, dict) else None
+    if published == "perf-cm2" and isinstance(pf.get("perf2"), dict):
+        pf = dict(pf, **pf["perf2"])     # cm-2 graded this line (2026-10-20): compared with perf-2's own numbers, as fh-1 is
     if not isinstance(pf, dict) or pf.get("version") != "perf-2" or pf.get("lambda_kills") is None:
         return None
     scope, prop = gi.get("scope") or "12", gi.get("prop") or "kills"
     pv = gi.get("odds_provenance") or {}
     out = {"version": VERSION, "variant": VARIANT, "p_series": _market_p(gi), "bo": gi.get("bo"),
            "market_source": pv.get("selected"), "market_retrieved_at": pv.get("retrieved_at"),
-           "perf2_lambda": pf.get("lambda")}
+           "perf2_lambda": pf.get("lambda"), "published_version": published}
     rs = pf.get("round_share")
     if not isinstance(rs, dict) or rs.get("error") or rs.get("team") is None or rs.get("opp") is None:
         return dict(out, status="round share unavailable", reason=(rs or {}).get("error") if isinstance(rs, dict) else None)

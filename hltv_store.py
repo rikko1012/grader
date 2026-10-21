@@ -54,6 +54,8 @@ def _k(key):
 
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}")
 WINDOW_KINDS = {"series"}  # read with several windows: his series for the 365-day last-10 and the 90/180/365-day stake check
+MATCH_KINDS = {"ctx"}      # the date in the key is the graded MATCH's start, not a window: kept (2026-10-21 audit: another
+                           # match against the same opponent - a LAN last week - was served as tonight's context)
 
 
 def _days_back(s):
@@ -70,15 +72,17 @@ def loose(key):
     midnight (the 420-day window start) and when a veto fixes the maps; the loose key still finds the last good answer for
     the same player / team / opponent, so an outage after midnight or after the veto is covered too. A WINDOW_KINDS key keeps
     its window length in place of the date (("series", nick, team, ("days", 366))): the same window a day later is the same
-    query, another window is not (2026-10-13 audit: after midnight the 365-day read was served the 90-day answer)."""
+    query, another window is not (2026-10-13 audit: after midnight the 365-day read was served the 90-day answer). A
+    MATCH_KINDS key keeps its match start (only the map set is loosened)."""
     if not isinstance(key, tuple):
         return None
     win = bool(key) and key[0] in WINDOW_KINDS
+    match = bool(key) and key[0] in MATCH_KINDS
     lk = []
     for x in key:
         if isinstance(x, (tuple, list, set, frozenset)):
             continue
-        if isinstance(x, str) and _DATE.match(x):
+        if isinstance(x, str) and _DATE.match(x) and not match:
             if win:
                 lk.append(("days", _days_back(x)))
             continue
