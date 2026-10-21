@@ -227,6 +227,14 @@ def _reserve_slot():
         return at - now
 
 
+def _retryable(e):
+    """Rate limit / gateway errors by text; timeouts by type (a TimeoutError's text is empty)."""
+    if any(c in str(e) for c in ("429", "502", "503", "504", "Timeout")):
+        return True
+    cause = e.__cause__ or e
+    return isinstance(cause, (asyncio.TimeoutError, TimeoutError)) or type(cause).__name__.endswith("TimeoutError")
+
+
 class BO3:
     def __init__(self, ttl_hours=12, background=False):
         self.ttl = ttl_hours
@@ -277,7 +285,7 @@ class BO3:
                 data = await self._raw(endpoint, params)
                 break
             except Exception as e:
-                if attempt == 2 or not any(c in str(e) for c in ("429", "502", "503", "504", "Timeout")):
+                if attempt == 2 or not _retryable(e):
                     raise
                 await asyncio.sleep(10 * (attempt + 1))
         self.requests += 1

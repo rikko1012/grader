@@ -24,13 +24,18 @@ from pathlib import Path
 
 import requests
 
+import membudget
+
 BASE = "https://api.csapi.de"
 MIN_GAP = 0.5
 TTL = 6 * 3600
 STALE_DAYS = 7          # CS API's newest match this many days older than BO3.gg's = stale warning
 _SESSION = requests.Session()
 _SESSION.headers.update({"User-Agent": "cs2-scout/1.0 (https://github.com/rikko1012/cs2-scout)"})
-_LOCK, _LAST, _CACHE = threading.Lock(), [0.0], {}
+FAIL_RETRY_S = 300      # a failed check ("CS API unavailable") is asked again after this - never kept as the answer
+# audit 38: _CACHE was a plain dict never emptied (date-keyed /players windows added new keys every day)
+_LOCK, _LAST = threading.Lock(), [0.0]
+_CACHE = membudget.BudgetLRU("csapi", membudget.env_mb("CSAPI_MEM_MB", 20), max_items=4000)   # key -> (fetched at, data)
 
 
 def _get(path, **params):
@@ -48,7 +53,7 @@ def _get(path, **params):
             _LAST[0] = time.time()
     r.raise_for_status()
     data = r.json()
-    _CACHE[ck] = (time.time(), data)
+    _CACHE.put(ck, (time.time(), data), membudget.json_cost(data))
     return data
 
 
@@ -120,10 +125,15 @@ _FILE = Path(os.environ.get("CS2_DATA_DIR") or Path(__file__).resolve().parent) 
 _SAVED = [0.0]
 
 
+def _failed(res):
+    return str((res or {}).get("note") or "").startswith("CS API unavailable")
+
+
 def _load():
     try:
         now = time.time()
-        _DONE.update({k: tuple(v) for k, v in json.loads(_FILE.read_text("utf-8")).items() if now - v[0] < TTL})
+        _DONE.update({k: tuple(v) for k, v in json.loads(_FILE.read_text("utf-8")).items()
+                      if now - v[0] < TTL and not _failed(v[1])})
     except Exception:
         pass
 
@@ -135,7 +145,7 @@ def _save():
     try:
         _FILE.parent.mkdir(parents=True, exist_ok=True)
         tmp = _FILE.with_suffix(f".{threading.get_ident()}.tmp")
-        tmp.write_text(json.dumps(dict(list(_DONE.items())), default=str), "utf-8")
+        tmp.write_text(json.dumps({k: v for k, v in list(_DONE.items()) if not _failed(v[1])}, default=str), "utf-8")
         os.replace(tmp, _FILE)
     except Exception:
         pass
@@ -150,10 +160,15 @@ def _worker():
                 if not _PENDING:
                     break
                 key, args = _PENDING.pop(0)
-            _DONE[key] = (time.time(), player_check(*args))
-            if len(_DONE) > 5000:
-                _DONE.clear()
-            _save()
+            _store(key, player_check(*args))
+
+
+def _store(key, res):
+    # audit 39: a transient failure is not the player's answer - it expires after FAIL_RETRY_S (not TTL), never saved
+    _DONE[key] = ((time.time() - TTL + FAIL_RETRY_S) if _failed(res) else time.time(), res)
+    if len(_DONE) > 5000:
+        _DONE.clear()
+    _save()
 
 
 def player_check_async(nick, bo3_team=None, bo3_last_date=None):

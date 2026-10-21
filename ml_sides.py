@@ -970,6 +970,7 @@ def refresh(board_matches, now=None, max_matches=MAX_MATCHES, wait=True):
     try:
         specs = _specs(list(board_matches or []), now, max_matches)
         now_ts = time.time()
+        _prune({s[0] for s in specs}, now)
         with _LOCK:
             stale = [s for s in specs if not _fresh(_EV.get(s[0]), now_ts)]
         if not stale:
@@ -985,6 +986,16 @@ def refresh(board_matches, now=None, max_matches=MAX_MATCHES, wait=True):
         return {"pairs": len(specs), "stale": len(stale), "ok": ok, "error": err, "secs": round(time.time() - t0, 2)}
     except Exception as e:      # noqa: BLE001
         return {"pairs": 0, "stale": 0, "ok": False, "error": f"{type(e).__name__}", "secs": round(time.time() - t0, 2)}
+
+
+def _prune(keep, now=None):
+    """Audit 46: drop evidence of past cutoff days that the current board no longer asks for (keys are (team, team,
+    cutoff day), so every pair got a new entry each UTC day and none was ever removed). Yesterday's entries stay
+    (matches that started yesterday); the stored copies in hltv_store still cover a restart."""
+    oldest = (cutoff_day(None, now) - timedelta(days=1)).isoformat()
+    with _LOCK:
+        for k in [k for k in _EV if k not in keep and k[2] < oldest]:
+            _EV.pop(k, None)
 
 
 def _kick(board_matches, now=None):

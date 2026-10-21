@@ -1,6 +1,10 @@
 import aiohttp
 from typing import Dict, Any, Optional
 
+# Explicit deadline: aiohttp's default is total=300 s with no read timeout, so one stalled
+# BO3.gg body held a member's grade (player lock + cold slot) for 5 minutes.
+TIMEOUT = aiohttp.ClientTimeout(total=20, sock_connect=5, sock_read=15)
+
 class CS2APIClient:
     def __init__(self):
         self.base_url = "https://api.bo3.gg/api/v1"
@@ -23,7 +27,7 @@ class CS2APIClient:
     async def _ensure_session(self):
         """Ensure we have an active session"""
         if self.session is None or self.session.closed:
-            self.session = aiohttp.ClientSession(headers=self.headers)
+            self.session = aiohttp.ClientSession(headers=self.headers, timeout=TIMEOUT)
 
     async def _make_request(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Base request method"""
@@ -35,7 +39,7 @@ class CS2APIClient:
                 response.raise_for_status()
                 return await response.json()
         except Exception as e:
-            raise Exception(f"API request to {url} failed: {str(e)}")
+            raise Exception(f"API request to {url} failed: {str(e) or type(e).__name__}") from e
 
     async def close(self):
         """Close the session"""
