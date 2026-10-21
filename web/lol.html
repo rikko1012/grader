@@ -226,7 +226,7 @@ const pct = (x) => x == null ? NA : (100 * x).toFixed(1) + "%";
 const num = (x, d = 1) => x == null ? NA : Number(x).toFixed(d);
 const FKEY = "scout.lol.filters", SKEY = "scout.lol.scroll";
 const DEF = {view: "board", plat: "all", stat: "all", type: "all", match: "all", playable: false, sort: "start"};
-let F = Object.assign({}, DEF), D = null, lastFocus = null, openRow = null;
+let F = Object.assign({}, DEF), D = null, lastFocus = null, openRow = null, shownD = null, shownSlip = 0;   // shownD: the board data the page last drew
 const SLIPKEY = "scout.lol.slip", MAXLEGS = {underdog: 8, prizepicks: 6};
 let SLIP = {legs: []}, CHECK = {};
 try { SLIP = Object.assign({legs: []}, JSON.parse(localStorage.getItem(SLIPKEY) || "{}")); } catch {}
@@ -244,6 +244,7 @@ function gradeChip(x) {
   if (!x.grade) return NA;
   return `<span class="${String(x.grade).startsWith("Lean") ? "g lean" : "g"}">${esc(x.grade)}</span>`;
 }
+function startedTag(x) { return started(x) ? `<span class="tag">Started</span>` : ""; }
 function typeTag(t) { return t === "Standard" ? "" : `<span class="tag ${t === "Promo" ? "promo" : "alt"}">${esc(t)}</span>`; }
 function pickCell(x) {
   if (x.pick_offered) return `<span class="pick ${x.pick_side === "Over" ? "over" : "under"}">${esc(x.pick)}</span>`;
@@ -288,9 +289,9 @@ async function copyText(text) {
 function rows() {
   let rs = (D.rows || []).filter(x => (F.plat === "all" || x.platform === F.plat) && (F.stat === "all" || x.stat === F.stat) &&
     (F.type === "all" || (F.type === "standard" ? x.line_type === "Standard" : x.line_type !== "Standard")) &&
-    (F.match === "all" || matchKey(x) === F.match) && (!F.playable || x.pick_offered));
+    (F.match === "all" || matchKey(x) === F.match) && (!F.playable || playable(x)));        // a started match is not an offered pick (audit 61)
   const byStart = (a, b) => String(a.start).localeCompare(String(b.start)) || String(a.player).localeCompare(String(b.player));
-  rs.sort(F.sort === "chance" ? ((a, b) => (b.pick_offered - a.pick_offered) || (b.pick_offered ? pside(b) - pside(a) : 0) || byStart(a, b)) : byStart);
+  rs.sort(F.sort === "chance" ? ((a, b) => (playable(b) - playable(a)) || (b.pick_offered - a.pick_offered) || (b.pick_offered ? pside(b) - pside(a) : 0) || byStart(a, b)) : byStart);
   return rs;
 }
 function boardView() {
@@ -300,13 +301,13 @@ function boardView() {
   let t = `<div class="tablebox board"><table><thead><tr><th>Start</th><th>Player</th><th>Opponent</th><th>Prop</th><th>Book</th><th class="num">Line</th><th class="num">Projection</th><th class="num">Over</th><th class="num">Under</th><th>Pick</th><th>Grade</th><th class="num">Stake</th></tr></thead><tbody>`;
   let c = `<div class="cards">`;
   for (const x of rs) {
-    const i = D.rows.indexOf(x);
-    t += `<tr class="row" tabindex="0" data-i="${i}" aria-label="${esc(x.player + " " + x.stat_name + " " + x.scope + " " + x.platform_label + " " + x.line)}"><td>${when(x.start)}<span class="sub">${esc(x.event || "")}${x.best_of ? " · BO" + x.best_of : ""}</span></td>
+    const k = esc(x.key);
+    t += `<tr class="row" tabindex="0" data-k="${k}" aria-label="${esc(x.player + " " + x.stat_name + " " + x.scope + " " + x.platform_label + " " + x.line)}"><td>${when(x.start)}${startedTag(x)}<span class="sub">${esc(x.event || "")}${x.best_of ? " · BO" + x.best_of : ""}</span></td>
       <td><b>${esc(x.player)}</b><span class="sub">${esc(x.team || "")}${x.role ? " · " + esc(x.role) : ""}</span></td><td>${esc(x.opponent || "")}</td>
       <td>${esc(x.stat_name)}<span class="sub">${esc(x.scope)}</span></td><td>${esc(x.platform_label)}${typeTag(x.line_type)}</td>
       <td class="num"><b>${x.line}</b></td><td class="num">${num(x.projection)}</td><td class="num">${pct(x.p_over)}</td><td class="num">${pct(x.p_under)}${x.p_push > 0 ? `<span class="ot-push">Push ${pct(x.p_push)}</span>` : ""}</td>
       <td>${pickCell(x)}</td><td>${gradeChip(x)}</td><td class="num">${x.units}U</td></tr>`;
-    c += `<button type="button" class="mcard" data-i="${i}"><div class="top"><div class="who"><b>${esc(x.player)}</b><span class="sub">${esc(x.team || "")}${x.role ? " · " + esc(x.role) : ""} · vs ${esc(x.opponent || "")}</span><span class="sub">${when(x.start)}</span></div><div>${gradeChip(x)}</div></div>
+    c += `<button type="button" class="mcard" data-k="${k}"><div class="top"><div class="who"><b>${esc(x.player)}</b><span class="sub">${esc(x.team || "")}${x.role ? " · " + esc(x.role) : ""} · vs ${esc(x.opponent || "")}</span><span class="sub">${when(x.start)}${startedTag(x)}</span></div><div>${gradeChip(x)}</div></div>
       <div style="margin-top:8px">${esc(x.stat_name)} · ${esc(x.scope)} · ${esc(x.platform_label)}${typeTag(x.line_type)}</div><div style="margin-top:4px">${pickCell(x)}</div>
       <div class="kv"><div><span class="k">Line</span><b>${x.line}</b></div><div><span class="k">Projection</span>${num(x.projection)}</div><div><span class="k">Over</span>${pct(x.p_over)}</div><div><span class="k">Under</span>${pct(x.p_under)}</div></div><span class="small muted">Stake ${esc(x.units)}U</span>${x.p_push > 0 ? `<span class="ot-push">Exactly ${x.line}: ${pct(x.p_push)} push</span>` : ""}</button>`;
   }
@@ -327,7 +328,7 @@ function tablesView() {
   for (const t of ts) {
     const ms = t.markets.filter(m => (F.stat === "all" || m.stat_name.toLowerCase() === F.stat) && (F.plat === "all" || m.lines.some(l => l.platform.toLowerCase() === F.plat)));
     if (!ms.length) continue;
-    h += `<section class="match"><h3>${esc(t.teams)}<span>${esc(t.event || "")}${t.best_of ? " · BO" + t.best_of : ""} · ${when(t.start)}</span></h3><div style="overflow-x:auto"><table><thead><tr><th>Player</th><th>Prop</th><th>Lines (same player, same prop, same games)</th></tr></thead><tbody>`;
+    h += `<section class="match"><h3>${esc(t.teams)}<span>${esc(t.event || "")}${t.best_of ? " · BO" + t.best_of : ""} · ${when(t.start)}${startedTag(t)}</span></h3><div style="overflow-x:auto"><table><thead><tr><th>Player</th><th>Prop</th><th>Lines (same player, same prop, same games)</th></tr></thead><tbody>`;
     for (const m of ms) h += `<tr><td><b>${esc(m.player)}</b><span class="sub">${esc(m.team || "")}${m.role ? " · " + esc(m.role) : ""}</span></td><td>${esc(m.stat_name)}<span class="sub">${esc(m.scope)}</span></td><td>${linesHtml(m)}</td></tr>`;
     h += `</tbody></table></div></section>`;
   }
@@ -380,9 +381,10 @@ function factorsHtml(x) {
     ${rest.length ? `<details class="small"><summary>All ${rowsF.length} factors</summary><table class="ftab small"><tbody>${rest.map(tr).join("")}</tbody></table></details>` : ""}
     <div class="small faint" style="margin-top:6px">Values are this player's numbers relative to his role (log ratios; 0 = average). Not in any grade (decided after props close, or no data source yet): ${esc(F.not_pre_match.join("; "))}.</div>`;
 }
-function card(i, focusBack) {
-  const x = D.rows[i]; if (!x) return;
-  openRow = i; lastFocus = focusBack || document.activeElement;
+function card(k, focusBack) {
+  const x = (D.rows || []).find(r => r.key === k);
+  if (!x) { render(); return; }                 // the line left the board since it was drawn: redraw, open nothing
+  openRow = k; lastFocus = focusBack || document.activeElement;
   const per = x.recent_per_game, n = {"Map 1": 1, "Maps 1-2": 2, "Maps 1-3": 3}[x.scope];
   let h = `<div class="k">${esc(x.platform_label)} · ${esc(x.stat_name)} · ${esc(x.scope)} (${esc(x.scope_games || "")})</div>
     <h2 id="cardtitle">${esc(x.player)}</h2><div class="muted">${esc(x.team || "")}${x.role ? " · " + esc(x.role) : ""} · vs ${esc(x.opponent || "")} · ${esc(x.event || "")}${x.best_of ? " · BO" + x.best_of : ""} · ${when(x.start)}</div>
@@ -426,6 +428,9 @@ function card(i, focusBack) {
 }
 function closeCard() {
   $("#modal").classList.remove("open"); document.body.style.overflow = ""; openRow = null;
+  // the data may have been replaced while the card was open (poll, Copy pick, Add to slip): redraw so rows, lines and the slip count match it
+  const k = lastFocus && lastFocus.dataset ? lastFocus.dataset.k : null;
+  if (D !== shownD || SLIP.legs.length !== shownSlip) { render(); if (k != null) lastFocus = [...document.querySelectorAll("[data-k]")].find(el => el.dataset.k === k && el.tagName === lastFocus.tagName) || lastFocus; }
   if (lastFocus && document.body.contains(lastFocus)) lastFocus.focus();
 }
 function feedsLine() {
@@ -440,6 +445,7 @@ function staleBanner() {
 }
 function seg(id, cur, opts) { return `<div class="seg" id="${id}" role="group">${opts.map(([v, l]) => `<button type="button" data-v="${v}" class="${cur === v ? "on" : ""}" aria-pressed="${cur === v}">${l}</button>`).join("")}</div>`; }
 function render() {
+  shownD = D; shownSlip = SLIP.legs.length;
   const y = window.scrollY, tb = $(".tablebox.board"), sl = tb ? tb.scrollLeft : 0;
   const ms = new Map();
   for (const x of D.rows || []) ms.set(matchKey(x), `${matchName(x)} · ${new Date(x.start).toLocaleString([], {month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"})}`);
@@ -472,9 +478,9 @@ function render() {
   if ($("#t")) { $("#t").onchange = e => set("type", e.target.value); $("#o").onchange = e => set("sort", e.target.value); $("#pl").onchange = e => set("playable", e.target.checked); }
   const r = $("#reset"); if (r) r.onclick = () => { F = Object.assign({}, DEF, {view: F.view}); save(); render(); };
   const go = document.querySelector("[data-go]"); if (go) go.onclick = () => set("view", go.dataset.go);
-  document.querySelectorAll("[data-i]").forEach(el => {
-    el.onclick = () => card(+el.dataset.i, el);
-    if (el.tagName === "TR") el.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); card(+el.dataset.i, el); } };
+  document.querySelectorAll("[data-k]").forEach(el => {
+    el.onclick = () => card(el.dataset.k, el);
+    if (el.tagName === "TR") el.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); card(el.dataset.k, el); } };
   });
   const tb2 = $(".tablebox.board"); if (tb2) tb2.scrollLeft = sl;
   window.scrollTo(0, y);

@@ -41,8 +41,10 @@ function boardView() {
   let h = `<div class="small muted">${B.counts.offers} open lines · ${B.counts.linked} linked to a canonical series and player · ${B.counts.with_forecast} with a saved forecast</div>`;
   h += `<div class="scroll"><table><thead><tr><th>Start (UTC)</th><th>Player</th><th>Team</th><th>Role</th><th>Opponent</th><th>Competition</th><th>Stat</th><th>Scope</th><th>Platform</th><th class="num">Line</th><th>Sides</th><th class="num">Projection</th><th class="num">P(over)</th><th class="num">P(under)</th><th>Model side</th><th>Grade</th><th>Stake</th><th>Slip leg</th><th>Freshness</th></tr></thead><tbody>`;
   rows.forEach((x, i) => {
-    const f = x.forecast;
-    const why = x.link.status !== "matched" ? `not linked: ${x.link.reason || x.link.status || "pending"}` : (!f ? "no forecast yet" : "");
+    // a forecast saved for an earlier line is never shown as this line's chances (audit 62: the members' board drops these rows)
+    const f0 = x.forecast, f = f0 && f0.current !== false ? f0 : null;
+    const why = x.link.status !== "matched" ? `not linked: ${x.link.reason || x.link.status || "pending"}`
+      : f0 && !f ? `line moved: latest forecast is for line ${f0.line}, none at ${x.line}` : (!f ? "no forecast yet" : "");
     h += `<tr onclick="card(${i})"><td>${esc((x.series_start || "").replace("T", " ").slice(0, 16))}</td><td>${esc(x.player)}</td><td>${esc(x.team)}</td><td>${esc(x.role || "–")}</td><td>${esc(x.opponent)}</td><td>${esc(x.competition || "–")}${x.best_of ? " · BO" + x.best_of : ""}</td><td>${esc(x.stat)}${x.market_type === "combo" ? " <span class=flag>combo</span>" : ""}</td><td>${esc(x.scope)}</td><td>${esc(x.platform)} <span class=muted>${esc(x.odds_type)}</span></td><td class="num">${x.line}</td><td class=small>${esc(sides(x))}</td>`
       + (f ? `<td class="num">${f.projection.toFixed(2)}</td><td class="num">${pct(f.p_over)}</td><td class="num">${pct(f.p_under)}</td><td>${esc(f.model_side)}${f.side_offered === 0 ? " <span class=flag>side not offered</span>" : ""}</td>`
            : `<td colspan=4 class="muted small">${esc(why)}</td>`)
@@ -55,7 +57,7 @@ function tablesView() {
   for (const t of B.match_tables || []) {
     h += `<div class="card"><b>${esc(t.competition || "")}</b> <span class=muted>BO${t.best_of || "?"} · ${esc((t.start || "").replace("T", " ").slice(0, 16))} UTC · ${esc(t.sid)}</span><div class="scroll"><table><thead><tr><th>Player</th><th>Team</th><th>Role</th><th>Stat</th><th>Scope</th><th>Lines (platform · type · line · projection · P(over))</th></tr></thead><tbody>`;
     for (const m of Object.values(t.markets)) {
-      h += `<tr><td>${esc(m.player)}</td><td>${esc(m.team)}</td><td>${esc(m.role || "–")}</td><td>${esc(m.stat)}</td><td>${esc(m.scope)}</td><td class=small>${m.lines.map(l => `${esc(l.platform)} · ${esc(l.odds_type)} · ${l.line}${l.projection != null ? " · " + l.projection.toFixed(2) + " · " + pct(l.p_over) : ""}`).join("<br>")}</td></tr>`;
+      h += `<tr><td>${esc(m.player)}</td><td>${esc(m.team)}</td><td>${esc(m.role || "–")}</td><td>${esc(m.stat)}</td><td>${esc(m.scope)}</td><td class=small>${m.lines.map(l => `${esc(l.platform)} · ${esc(l.odds_type)} · ${l.line}${l.current === false ? " · no forecast at this line (latest is for an earlier line)" : l.projection != null ? " · " + l.projection.toFixed(2) + " · " + pct(l.p_over) : ""}`).join("<br>")}</td></tr>`;
     }
     h += "</tbody></table></div></div>";
   }
@@ -82,7 +84,8 @@ function card(i) {
   h += `<div class=grid><div><div class=k>Match</div>vs ${esc(x.opponent)} · ${esc(x.competition || "")} BO${x.best_of || "?"}</div><div><div class=k>Start</div>${esc(x.series_start)}</div><div><div class=k>Line</div>${x.line} (${esc(x.odds_type)}) · ${esc(sides(x))}</div><div><div class=k>Canonical ids</div><span class=small>${esc(x.link.sid || "–")} · ${esc(x.link.pid || "–")}</span></div></div>`;
   if (f) {
     const inp = f.inputs || {};
-    h += `<h2>Forecast <span class="muted small">saved ${esc(f.at)} · ${esc(f.model)}</span></h2><div class=grid><div><div class=k>Projection</div>${f.projection.toFixed(2)}</div><div><div class=k>P(over) / P(under) / push</div>${pct(f.p_over)} / ${pct(f.p_under)} / ${pct(f.p_push)}</div><div><div class=k>Model side</div>${esc(f.model_side)} ${f.side_offered === 1 ? "(offered)" : f.side_offered === 0 ? "(not offered)" : "(not confirmed)"}</div><div><div class=k>Grade · stake</div>${esc(f.grade || "–")} · ${f.units ?? 0}U${f.units_policy ? " (published policy " + f.units_policy + "U)" : ""}</div>${f.stake_restriction ? `<div><div class=k>Stake restriction</div>${esc(f.stake_restriction)}</div>` : ""}`;
+    if (f.current === false) h += `<div class="note small">This forecast is for line ${esc(f.line)}; the offer is now ${esc(x.line)}. No forecast exists at the current line, so these numbers are not its chances.</div>`;
+    h += `<h2>Forecast${f.current === false ? " for line " + esc(f.line) : ""} <span class="muted small">saved ${esc(f.at)} · ${esc(f.model)}</span></h2><div class=grid><div><div class=k>Projection</div>${f.projection.toFixed(2)}</div><div><div class=k>P(over) / P(under) / push</div>${pct(f.p_over)} / ${pct(f.p_under)} / ${pct(f.p_push)}</div><div><div class=k>Model side</div>${esc(f.model_side)} ${f.side_offered === 1 ? "(offered)" : f.side_offered === 0 ? "(not offered)" : "(not confirmed)"}</div><div><div class=k>Grade · stake</div>${esc(f.grade || "–")} · ${f.units ?? 0}U${f.units_policy ? " (published policy " + f.units_policy + "U)" : ""}</div>${f.stake_restriction ? `<div><div class=k>Stake restriction</div>${esc(f.stake_restriction)}</div>` : ""}`;
     h += `<div><div class=k>Mean · median · 80% range</div>${inp.mean ?? "–"} · ${inp.median ?? "–"} · ${(inp.range80 || []).join("–")}</div>`;
     for (const k of ["form", "player_rate", "team_factor", "opp_factor", "strength_factor", "p_win", "history_games", "team_games", "opponent_games", "league", "data_quality", "history_last_game"]) if (inp[k] != null) h += `<div><div class=k>${esc(k)}</div>${esc(inp[k])}</div>`;
     h += `</div><h2>Measured drivers</h2><ul class=small>${(inp.drivers || []).map(z => `<li>${esc(z)}</li>`).join("")}</ul><div class="small muted">Unknowns: ${esc((inp.unknowns || []).join("; "))}</div>`;

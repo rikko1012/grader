@@ -646,6 +646,16 @@ body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode
   .crow .c-mkt{flex:1 1 100%;font-size:11px}.crow .c-num{flex:0 0 auto;display:inline-flex;gap:4px;font-size:13px}.crow .c-num .k{display:inline;color:var(--faint);font-size:11px}
   .crow .c-pick{flex:1 1 auto;font-size:14px;overflow-wrap:anywhere}.crow .c-stake{flex:1 1 100%;font-size:11px}.crow .c-meta{flex:1 1 100%;margin:0}
   .crow .c-who{order:1}.crow .c-act{order:2}.crow .c-mkt{order:3}.crow .c-num{order:4}.crow .c-pick{order:5}.crow .c-stake{order:6}.crow .c-meta{order:7}}
+/* 2026-10-21 audit 23: the open desktop slip takes 440px, so while it is open the board rows follow the board's own width
+   (the viewport rules above stay for phones, tablets and a closed slip). Full grid needs ~875px, the 7-column ~700px (checked in Chrome at 1180-1920px). */
+@media(min-width:1180px){body.hasslip:not(.locked) #boardout{container:board/inline-size}}
+@container board (min-width:720px) and (max-width:874px){.crow-head,.brow2.crow{grid-template-columns:38px minmax(140px,1.4fr) 52px 52px minmax(120px,1fr) minmax(110px,1fr) auto}.crow-head span:nth-child(3),.crow .c-mkt{display:none}}
+@container board (max-width:719px){.crow-head{display:none}
+  #boardout .brow2.crow{display:flex;flex-wrap:wrap;align-items:center;column-gap:12px;row-gap:3px;position:relative;padding:11px 12px 11px 56px}
+  .crow>.gtag{position:absolute;left:12px;top:12px}.crow .c-who{flex:1 1 calc(100% - 90px);min-width:0}.crow .c-act{flex:0 0 auto}
+  .crow .c-mkt{display:block;flex:1 1 100%;font-size:11px}.crow .c-num{flex:0 0 auto;display:inline-flex;gap:4px;font-size:13px}.crow .c-num .k{display:inline;color:var(--faint);font-size:11px}
+  .crow .c-pick{flex:1 1 auto;font-size:14px;overflow-wrap:anywhere}.crow .c-stake{flex:1 1 100%;font-size:11px}.crow .c-meta{flex:1 1 100%;margin:0}
+  .crow .c-who{order:1}.crow .c-act{order:2}.crow .c-mkt{order:3}.crow .c-num{order:4}.crow .c-pick{order:5}.crow .c-stake{order:6}.crow .c-meta{order:7}}
 /* moneylines: compact rows with aligned source columns */
 .mlrow{display:grid;grid-template-columns:minmax(180px,1.4fr) repeat(3,minmax(120px,1fr));gap:12px;align-items:start;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0 0 8px;background:#111a26}
 .mlrow.mlhdr{border:0;background:transparent;padding:0 14px;margin-bottom:4px;font:600 10px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
@@ -1538,7 +1548,8 @@ $("#slip").addEventListener("click", e => {
   if (e.target.closest("#slipclose")) { $("#slip").hidden = true; return; }
   if (e.target.closest("#slipcopy")) (async () => {
     const s = await recheckSlip();
-    const unchecked = s.filter(x => x.bk && x.now?.status !== "verified" && !["changed", "unavailable", "research"].includes(x.now?.status));
+    // "stale" = the line verified but the leg's grade was kept during an outage: it copies like a verified leg (audit 22)
+    const unchecked = s.filter(x => x.bk && x.now?.status !== "verified" && !["changed", "unavailable", "research", "stale"].includes(x.now?.status));
     if (unchecked.length) { toast("Refresh these picks before copying: the platform check did not complete."); return; }
     // 2026-10-18 owner: a side that is not offered (or not confirmed) is never copied - also from a slip saved earlier
     const gone = s.filter(x => x.now?.status === "unavailable");
@@ -3233,7 +3244,7 @@ function otOpenDesk(key, opener) {
     return `<button type="button" class="ot-offer" data-ot-card="${index}" aria-label="Open ${esc(r.nick || r.player)} ${esc(propWord(r.prop))} ${esc(r.line)} on ${esc(bookName(r.book || 'underdog'))}">
       <small>${esc(bookName(r.book || 'underdog'))} · ${esc(propWord(r.prop))} · ${esc(mktType(r))}</small>
       <span><b>Line ${esc(r.line)}</b> · Projection ${r.proj == null ? '—' : num(r.proj,1)}</span>
-      <span>${pick}</span><small>${unavailable ? 'Unavailable' : `${esc(mGrade(r) || '')} · ${r.units == null ? '—' : esc(r.units)+'U'}${!r.units && r.stake_reason ? ' · ' + esc(r.stake_reason) : ''}`}</small>
+      <span>${pick}</span><small>${unavailable ? 'Unavailable' : `${isLeanV(r) ? (r.state === 'SCOUT' ? 'No match scheduled' : 'Lean') : esc(mGrade(r) || '')} · ${r.units == null ? '—' : esc(r.units)+'U'}${!r.units && r.stake_reason ? ' · ' + esc(r.stake_reason) : ''}`}</small>
       ${r.graded_at ? `<span class="ot-status">Graded ${esc(clockTxt(r.graded_at))} · ${esc(agoTxt(r.graded_at))}</span>` : ''}
     </button>`;
   };
