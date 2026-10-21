@@ -339,6 +339,14 @@ def outage_placeholder(old, r, now=None, g=None):
             "retry_cause": "odds" if odds else "hltv"}
 
 
+def side_opened(g, r):
+    """The feed now offers the Under this board grade was made without (audit 55): the grade (Lean 0U 'only Over is
+    offered') is for another set of sides than the card's, so it is regraded at once and never shown or kept meanwhile.
+    Only the Under is a grading input (less_available); a side that was withdrawn is labelled by side_unavailable."""
+    gs = (g or {}).get("graded_sides") or {}
+    return "under" in gs and gs["under"] is not True and (r or {}).get("under_available") is True
+
+
 def keep_last_hltv_grade(old, g, r=None, now=None):
     """The HLTV database was unreachable for this grade (g['perf_transient']) - or Thunderpick had no current quote
     (odds_transient): the board keeps the last grade of the line instead of showing an old-pipeline / fallback-odds grade
@@ -349,6 +357,8 @@ def keep_last_hltv_grade(old, g, r=None, now=None):
         return None
     if r is not None and old.get("graded_line") is not None and float(old["graded_line"]) != float(r.get("line") or -1):
         return None                                   # the line moved: the old grade is for another line
+    if r is not None and side_opened(old, r):
+        return None                                   # graded without the Under the feed now offers: another grade
     if (old.get("hltv_retries") or 0) >= HLTV_MAX_RETRIES:
         return None
     now = now or time.time()
@@ -927,6 +937,8 @@ def board_payload(book="underdog"):
             continue                                  # not graded yet: never shown
         if g.get("graded_line") is not None and (r.get("line") is None or float(g["graded_line"]) != float(r["line"])):
             continue                                  # the line moved: graded afresh within seconds, never shown with the old grade
+        if side_opened(g, r):
+            continue                                  # graded before the Under was offered: regraded first, never shown meanwhile
         rows.append(dict(r, **{k: g.get(k) for k in ("grade", "side", "p", "units", "proj", "reason", "graded_at", "model_outcomes",
                                                      "nick", "state", "edge", "l10_over", "l10_n", "l10_push", "l10_avg",
                                                      "hs_pct", "p_win", "market", "team_name", "opp_name", "match_slug",
@@ -1291,8 +1303,12 @@ def outage_verdict(res, prop, scope, line, v, book=None, line_type="standard"):
                 "model_grade": r.get("model_grade"), "stake_reason": r.get("stake_reason"), "available": r.get("available"),
                 "units_full": r.get("units_full"), "cap_n": r.get("cap_n"), "cap_team": r.get("team_name") or r.get("team"),
                 "state": r.get("state"), "dstat": ds_,
-                "cap_reason": cap_reason_text(r.get("cap_grade") or [], r.get("cap_n")) if (r.get("units") or 0) > 0 else None,
-                "flagged": bool((ds_ or [None])[0] in ("verify", "limited") or r.get("warn")),
+                # the board row's own cap reason + warning marker (board_payload already turned cap_grade / warn into
+                # them and popped both - audit 52/57: reading the popped keys dropped them on the outage card)
+                "cap_reason": ((r.get("cap_reason") if "cap_reason" in r else cap_reason_text(r.get("cap_grade") or [], r.get("cap_n")))
+                               if (r.get("units") or 0) > 0 else None),
+                "flagged": (bool(r.get("flagged")) if "flagged" in r
+                            else bool((ds_ or [None])[0] in ("verify", "limited") or r.get("warn"))),
                 "kept_from_board": True, "stale": True, "unavailable": False, "temporary": False,
                 "graded_at": r.get("graded_at"), "kept_book": r.get("book") or "underdog",
                 "kept_cause": r.get("retry_cause") if r.get("hltv_retry") else None,
@@ -1323,6 +1339,9 @@ def withhold_temporary(res):
     res["ladder"] = []
     res["simulation"] = None
     res["comparison"] = {"error": "no line comparison while live data is unavailable"}
+    fg = res.get("form_gap")                  # audit 56: its projection / gap are the temporary grade's lambda
+    if isinstance(fg, dict):
+        res["form_gap"] = {k: v for k, v in fg.items() if k not in ("projection", "gap")}
     return res
 
 
@@ -1357,6 +1376,9 @@ STUDIO_EVENTS_PER_MIN = 40        # verify + event calls per member per minute (
 STUDIO_BODY_MAX = 16 * 1024
 POST_MAX = 20000                  # every other POST body (slip log <= 20,000 bytes; the admin closing-line form far less)
 SLIP_LOG_PER_MIN = 10             # /api/slip_log entries per member per minute
+MC_PER_MIN = 30                   # /api/match_compare requests per member per minute (audit 20; a card asks once per maps / platform)
+MC_TEAM_MAX = 80                  # longest team / opponent name /api/match_compare accepts
+MC_START_AHEAD_D = 21             # latest match start it accepts (days ahead; a past start already projects as today)
 STUDIO_CAP_TTL = 5                # /api/slip_studio/capacity: one answer per settings shared by every member for 5 s
 SHADOW_LABEL = "Shadow - not a staking recommendation"
 MODEL_NOT_VALIDATED = "Model: not validated yet - market baseline shown, no recommendation"
@@ -2266,6 +2288,24 @@ def settled_batches():
 
 _STUDIO_HITS, _STUDIO_EV_HITS, _STUDIO_GUARD = {}, {}, threading.Lock()
 _SLIP_LOG_HITS = {}                                   # /api/slip_log: its own per-member bucket (studio_rate_ok)
+_MC_HITS = {}                                         # /api/match_compare: its own per-member bucket (audit 20)
+
+
+def match_compare_problem(q):
+    """Why a /api/match_compare query is refused, or None (audit 20: every value is part of the cache key and of the
+    projection keys, so a member looping start dates or names made fresh HLTV queries and cache entries each time)."""
+    if (q.get("maps") or "12") not in ("1", "12", "123"):
+        return "bad maps"
+    if any(len(q.get(k) or "") > MC_TEAM_MAX for k in ("team", "opponent", "team_slug", "opp_slug")):
+        return "name too long"
+    st = comparison._ts(q.get("start"))
+    if st is None:
+        return None                                   # no usable start: projected as today (cs2_scout.match_day)
+    if st.tzinfo is None:
+        st = st.replace(tzinfo=timezone.utc)
+    if st > datetime.now(timezone.utc) + timedelta(days=MC_START_AHEAD_D):   # each future day = new projection keys
+        return "start out of range"
+    return None
 
 
 def studio_rate_ok(member, idem=None, bucket=None, limit=None):
@@ -2458,8 +2498,30 @@ def members_idle(max_wait=45):
         time.sleep(2)
 
 
+BOARD_RESCAN_S = 60                # board pass: re-read the feeds for moved / new lines this often (audit 21)
+
+
+def current_feed_row(r):
+    """The feed's current row with r's id (in memory, no network), tagged with that feed's fetch time and read meta - the
+    snapshot this grade is actually made from (audit 21: the quote said the current fetch time for an older line). None
+    when the line is no longer listed."""
+    bk = r.get("book") or "underdog"
+    try:
+        b = prizepicks.board() if bk == "prizepicks" else underdog.board()
+    except Exception:
+        return r                                      # the feed cache is unreadable: grade the pass's own snapshot
+    cur = next((x for x in b["rows"] if x.get("id") == r.get("id")), None)
+    if cur is None:
+        return None
+    at = b.get("at")
+    return dict(cur, _board_at=(datetime.fromtimestamp(at, timezone.utc).isoformat(timespec="seconds")
+                                if isinstance(at, (int, float)) and at else (at or None)),
+                _feed_meta=feed_meta(bk, b))
+
+
 _SLIP_SETTLED = [0.0]
 _DIAG = {}
+_DIAG_LOCK = threading.Lock()       # one diagnostics rebuild at a time (a second admin tab waits, never builds twice)
 
 
 def board_forever():
@@ -2478,8 +2540,12 @@ def board_forever():
             now = datetime.now(timezone.utc).isoformat()
             # Underdog alternates stay ungraded (as before); PrizePicks goblin / demon are their own markets and are graded
             # a line that moved since its grade is regraded at once (its grade was for another line - 2026-10-11 audit)
-            moved = lambda r: (BOARD.get(r["id"]) or {}).get("graded_line") is not None and float(BOARD[r["id"]]["graded_line"]) != float(r.get("line") or -1)
-            todo = [r for r in rows if (not r["alt"] or r.get("book") == "prizepicks") and (not r.get("start") or r["start"] > now)
+            # audit 55: so is a line whose platform now offers the Under it was graded without
+            moved = lambda r: (((BOARD.get(r["id"]) or {}).get("graded_line") is not None
+                                and float(BOARD[r["id"]]["graded_line"]) != float(r.get("line") or -1))
+                               or side_opened(BOARD.get(r["id"]), r))
+            gradable = lambda r, now_: (not r["alt"] or r.get("book") == "prizepicks") and (not r.get("start") or r["start"] > now_)
+            todo = [r for r in rows if gradable(r, now)
                     and (time.time() - (BOARD.get(r["id"]) or {}).get("at", 0) > BOARD_EVERY or moved(r))]
             # lines from an older model version first, then soonest matches; one match's lines and each player's kills /
             # headshots back to back (the second grade of a player is served from his warm data)
@@ -2489,6 +2555,11 @@ def board_forever():
 
             def one(r):
                 members_idle()                            # members first, but the board never stalls
+                # audit 21: the row as the feed has it NOW (the pass's snapshot can be minutes or hours old while members
+                # grade): graded at its current line / sides / start, skipped when it left the feed or its match started
+                r = current_feed_row(r)
+                if r is None or not gradable(r, datetime.now(timezone.utc).isoformat()):
+                    return
                 # PrizePicks goblin / demon are their own markets (their sides: the feed's, prizepicks.directions); promo and
                 # standard grade as standard
                 lt = r.get("odds_type") if r.get("book") == "prizepicks" and r.get("odds_type") in ("goblin", "demon") else "standard"
@@ -2577,13 +2648,13 @@ def board_forever():
                                              "payout_over": r.get("higher"), "payout_under": r.get("lower"),
                                              "feed_odds_type": r.get("odds_type") or ("alt" if r.get("alt") else "standard"),
                                              "over_available": r.get("over_available"), "under_available": r.get("under_available"),
-                                             "updated_at": r.get("updated_at"), "board_at": board_at_iso(r.get("book") or "underdog")}}
+                                             "updated_at": r.get("updated_at"), "board_at": r.get("_board_at") or board_at_iso(r.get("book") or "underdog")}}
                     try:                                  # pl-2 anchor inputs (shadow measurement only), atomically now
                         bk1 = r.get("book") or "underdog"
                         nm1 = res.get("next_match") or {}
                         oq, oy = other_anchor(bk1, (pb.get("player") or {}).get("id"), nm1.get("slug"), comparison._ts(nm1.get("start")),
                                               r["prop"], r.get("scope") or "12")
-                        res["book"]["quote"]["anchors"] = {"target": quote_record(bk1, r, pass_meta.get(bk1)), "other": oq, "other_reason": oy,
+                        res["book"]["quote"]["anchors"] = {"target": quote_record(bk1, r, r.get("_feed_meta") or pass_meta.get(bk1)), "other": oq, "other_reason": oy,
                                                            "built_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
                     except Exception:
                         traceback.print_exc()
@@ -2598,9 +2669,46 @@ def board_forever():
                 if len(BOARD) % 10 == 0:
                     _board_save()
 
+            # audit 21: a live queue, not a frozen list - every BOARD_RESCAN_S the feeds (in memory) are re-read and lines
+            # that moved, opened the Under or were first posted since the pass began go to the front, so they are not
+            # hidden until the whole pass ends (each line at most 3 times a pass)
+            q_, lk_, seen_ = collections.deque(todo), threading.Lock(), {}
+            queued_, scan_ = {r["id"] for r in todo}, [time.time()]
+
+            def next_row():
+                with lk_:
+                    if time.time() - scan_[0] >= BOARD_RESCAN_S:
+                        scan_[0] = time.time()
+                        now_ = datetime.now(timezone.utc).isoformat()
+                        try:
+                            cur = underdog.board()["rows"] + prizepicks.board()["rows"]
+                        except Exception:
+                            cur = []
+                        # only a line whose line / Under differs from what this pass already tried (a failed regrade
+                        # is not retried in a loop - the next pass does that)
+                        front = [r for r in cur if r["id"] not in queued_ and gradable(r, now_) and len(seen_.get(r["id"], ())) < 3
+                                 and (r.get("line"), r.get("under_available")) not in seen_.get(r["id"], ())
+                                 and (r["id"] not in BOARD or moved(r))]
+                        for r in reversed(front):
+                            q_.appendleft(r)
+                            queued_.add(r["id"])
+                    if not q_:
+                        return None
+                    r = q_.popleft()
+                    queued_.discard(r["id"])
+                    seen_.setdefault(r["id"], set()).add((r.get("line"), r.get("under_available")))
+                    return r
+
+            def work(_):
+                while True:
+                    r = next_row()
+                    if r is None:
+                        return
+                    one(r)
+
             from concurrent.futures import ThreadPoolExecutor
             with ThreadPoolExecutor(BOARD_WORKERS, thread_name_prefix="board") as ex:
-                list(ex.map(one, todo))
+                list(ex.map(work, range(BOARD_WORKERS)))
             # a line that left the feed / whose match started is dropped (no endless 10 s retry pause, no unbounded board)
             prune_board(feeds)
             _board_save()
@@ -3085,6 +3193,7 @@ def protect_recipe(res):
         except Exception:
             traceback.print_exc()
     if isinstance(g, dict):
+        g = res["grade"] = dict(g)                  # the member copy: the full grade object itself is left as it was
         flags = []
         src, book = odds_selected(res.get("odds")), (res.get("odds") or {}).get("book")
         for f in g.get("flags") or []:
@@ -3095,7 +3204,9 @@ def protect_recipe(res):
                 flags.append(t)
         g["flags"] = flags
         g["detail"] = {k: v for k, v in (g.get("detail") or {}).items() if k in KEEP_DETAIL}
-        for k in ("lambda_base", "sd", "value", "market", "model_grade", "p_more_model", "h2h", "regional"):
+        # dist / online_adj carry the spread (sd; HS: spread constant c, hs_per_kill) and the online weights (audit 58);
+        # the chart uses dist_view, computed from the full grade before public()
+        for k in ("lambda_base", "sd", "value", "market", "model_grade", "p_more_model", "h2h", "regional", "dist", "online_adj"):
             g.pop(k, None)
         if g.get("reason"):
             g["reason"] = next((t for k, t in _REASONS if g["reason"].startswith(k)), "Not graded")
@@ -3153,6 +3264,18 @@ def failure_body(e, path=""):
                                               else "Something went wrong - please try again") + f" (ref {ref})"}
 
 
+def token_eq(given, secret):
+    """Constant-time token check on bytes (audit 54: compare_digest on str raises TypeError for any non-ASCII value, so
+    a stray header or ?token= gave a 500 / a dropped POST instead of a refusal)."""
+    import hmac
+    return hmac.compare_digest(str(given or "").encode("utf-8", "surrogateescape"), str(secret).encode("utf-8", "surrogateescape"))
+
+
+# the client (or the proxy) went away mid-response, or a write timed out: nothing more can be sent on that connection -
+# never counted or logged as a server failure, never a second response (audit 53)
+CLIENT_GONE = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, TimeoutError)
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"      # keep-alive: browsers/Railway's proxy reuse connections
     timeout = 30                       # idle keep-alive connections are closed after 30 s
@@ -3171,6 +3294,14 @@ class Handler(BaseHTTPRequestHandler):
             SEARCH_TIMES.append(round(time.time() - getattr(self, "_t0", time.time()), 3))
         if code >= 500:
             STATS["errors_5xx"] += 1
+        self._sent = True                              # a response has started: a later failure never sends a second one
+        try:
+            self._write_response(code, data, ctype, headers)
+        except CLIENT_GONE:
+            self.close_connection = True
+            STATS["client_gone"] = STATS.get("client_gone", 0) + 1
+
+    def _write_response(self, code, data, ctype, headers):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
@@ -3226,6 +3357,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         self._t0 = time.time()
         self._sess, self._renew = False, None           # per request (a kept-alive connection reuses this handler)
+        self._sent = False
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         try:
@@ -3289,6 +3421,11 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/api/slip_studio/capacity":
                 return self.studio_capacity(q)
             if u.path == "/api/match_compare":
+                bad_ = match_compare_problem(q)
+                if bad_:
+                    return self.send(400, {"error": bad_})
+                if not self.load_test() and not studio_rate_ok(self.rate_key(), bucket=_MC_HITS, limit=MC_PER_MIN):
+                    return self.send(429, {"error": f"Too many requests - limit is {MC_PER_MIN} a minute"})
                 bk_ = "prizepicks" if q.get("book") == "prizepicks" else "underdog"
                 # the team names are part of the key (2026-10-13 audit: matches found on HLTV / Polymarket / PandaScore send
                 # no BO3.gg slugs, so two matches with the same start shared one answer - another match's table)
@@ -3366,9 +3503,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, {"version": slip_batches.VERSION, "batches": slip_batches.read()})
             if u.path == "/admin/diagnostics.json" and self.authed(q.get("token")):
                 import diagnostics                        # admin-only diagnostic dashboard (flags, never causes)
-                if not _DIAG.get("at") or time.time() - _DIAG["at"] > 600 or q.get("fresh"):
-                    _DIAG.update(at=time.time(), data=diagnostics.build(picklog.export(), picklog.export_forecasts(inputs=True),
-                                                                        slip_batches.read()))
+                # bounded pages, never the whole forecast history with inputs in memory (2026-10-21 audit 0)
+                asked = time.time()
+                with _DIAG_LOCK:
+                    stale = not _DIAG.get("at") or time.time() - _DIAG["at"] > 600 or (q.get("fresh") and _DIAG["at"] <= asked)
+                    if stale:
+                        _DIAG.update(data=diagnostics.build_from_log(picklog, slip_batches.read()), at=time.time())
                 return self.send(200, _DIAG["data"])
             if u.path in ("/content-book", "/content-book.md"):
                 # the video creator's content book (owner 2026-10-19): the 1,000-idea library + today's real lines, built
@@ -3376,7 +3516,7 @@ class Handler(BaseHTTPRequestHandler):
                 # read-only key for this page only (never the admin token). Unknown key = 404 (the page is not advertised).
                 import hmac
                 ck = os.environ.get("CONTENT_BOOK_KEY") or ""
-                if not (self.authed(q.get("token")) or (ck and hmac.compare_digest(str(q.get("key") or ""), ck))):
+                if not (self.authed(q.get("token")) or (ck and token_eq(q.get("key"), ck))):
                     return self.send(404, {"error": "not found"})
                 import content_book
                 if u.path.endswith(".md"):
@@ -3441,8 +3581,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, {"version": slip_batches.VERSION, "new": len(new), "results": slip_batches.results(),
                                        "payout_note": "standard 3x/6x/10x and x Underdog multipliers are ASSUMPTIONS, not real entries"})
             if u.path == "/admin/forecasts.json" and self.authed(q.get("token")):
-                return self.send(200, {"forecasts": picklog.export_forecasts(inputs=bool(q.get("inputs")),
-                                                                           last=q.get("last") if (q.get("last") or "").isdigit() else None)})
+                # capped at one page's worth (2026-10-21 audit 0: no ?last= loaded the whole history, with inputs too);
+                # the full history is /admin/forecasts_page.json
+                cap = picklog.PAGE_MAX[bool(q.get("inputs"))]
+                last = min(int(q["last"]), cap) if (q.get("last") or "").isdigit() and int(q["last"]) > 0 else cap
+                return self.send(200, {"forecasts": picklog.export_forecasts(inputs=bool(q.get("inputs")), last=last),
+                                       "last": last, "capped_at": cap, "full_history": "/admin/forecasts_page.json"})
             if u.path == "/admin/forecasts_page.json" and self.authed(q.get("token")):
                 # bounded, cursor-paginated export (the unbounded one above restarted production on 2026-10-14)
                 num = lambda k: int(q[k]) if (q.get(k) or "").isdigit() else None
@@ -3947,7 +4091,13 @@ class Handler(BaseHTTPRequestHandler):
                 import oddspapi                           # read-only source inventory (2026-10-09)
                 return self.send(200, oddspapi.markets_inventory(int(q.get("n") or 3)))
             return self.send(404, {"error": "not found"})
+        except CLIENT_GONE:
+            self.close_connection = True                # the client left: not a server failure, nothing more to send
         except Exception as e:
+            if self._sent:                              # part of a response is already out: a second one would corrupt it
+                failure_body(e, u.path)                 # (logged once, under a reference)
+                self.close_connection = True
+                return
             return self.send(*failure_body(e, u.path))
 
     def search(self, q):
@@ -4380,16 +4530,30 @@ class Handler(BaseHTTPRequestHandler):
     def load_test(self):
         """The owner's load-test / audit header - constant-time compare like the admin token."""
         import hmac
-        return bool(ADMIN_TOKEN) and hmac.compare_digest(str(self.headers.get("X-Load-Test") or ""), ADMIN_TOKEN)
+        return bool(ADMIN_TOKEN) and token_eq(self.headers.get("X-Load-Test"), ADMIN_TOKEN)
 
     def authed(self, token):
         # the admin link's ?token= still works; scripts send the X-Admin-Token header instead, so the token stays out
         # of URLs and logs (2026-10-10). Constant-time compare.
         import hmac
         tok = token or self.headers.get("X-Admin-Token") or ""
-        return bool(ADMIN_TOKEN) and hmac.compare_digest(str(tok), ADMIN_TOKEN)
+        return bool(ADMIN_TOKEN) and token_eq(tok, ADMIN_TOKEN)
 
     def do_POST(self):
+        """Same failure handling as do_GET (audit 54: an exception here dropped the connection with no response)."""
+        self._sent = False
+        try:
+            return self._do_post()
+        except CLIENT_GONE:
+            self.close_connection = True
+        except Exception as e:
+            self.close_connection = True                # an unread body would corrupt a kept-alive connection
+            if self._sent:
+                failure_body(e, urlparse(self.path).path)
+                return
+            return self.send(*failure_body(e, urlparse(self.path).path))
+
+    def _do_post(self):
         u = urlparse(self.path)
         self._sess, self._renew = False, None           # per request (a kept-alive connection reuses this handler)
         try:

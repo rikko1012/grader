@@ -95,8 +95,48 @@ def _quantiles(dist, qs=(0.1, 0.9)):
     return None, None
 
 
-def build(picks, forecasts, batches=(), now=None):
+def _replay(gi, r):
+    """Replay one evaluation forecast's saved grader inputs: its own 80% range, predicted vs actual rounds / kill rate /
+    headshots per kill, and the projection source. Adds fields + flags to r (needs actual, prop, rounds, maps_used,
+    per_map, flags)."""
     import grader
+    try:
+        g = grader.grade_leg(dict(gi))
+        lo, hi = _quantiles(g.get("dist"))
+        if lo is not None:
+            r["in80"] = int(lo <= r["actual"] <= hi)
+        pf = gi.get("perf") if isinstance(gi.get("perf"), dict) else {}
+        if pf.get("rounds_per_map") and r["rounds"] and r["maps_used"]:
+            pred_r = pf["rounds_per_map"] * len(r["maps_used"])
+            act_r = sum(r["rounds"][i - 1] for i in r["maps_used"] if i - 1 < len(r["rounds"]))
+            r["rounds_pred"], r["rounds_act"] = round(pred_r, 1), act_r
+            if act_r < 0.8 * pred_r:
+                r["flags"].append("short match (rounds 20%+ below expected)")
+            elif act_r > 1.2 * pred_r:
+                r["flags"].append("long match (rounds 20%+ above expected)")
+            if r["per_map"] and pf.get("rate") is not None:
+                kills = sum(r["per_map"][i - 1][0] for i in r["maps_used"] if i - 1 < len(r["per_map"]))
+                r["rate_pred"] = round(pf["rate"] * pf.get("opp_factor", 1.0), 4)
+                r["rate_act"] = round(kills / act_r, 4) if act_r else None
+                if r["rate_act"] is not None and abs(r["rate_act"] / r["rate_pred"] - 1) > 0.25:
+                    r["flags"].append("kill rate 25%+ off the forecast rate")
+                if r["prop"] == "hs" and pf.get("hs_per_kill") and kills:
+                    hs = sum(r["per_map"][i - 1][1] or 0 for i in r["maps_used"] if i - 1 < len(r["per_map"]))
+                    r["hsk_pred"], r["hsk_act"] = round(pf["hs_per_kill"], 3), round(hs / kills, 3)
+                    if abs(r["hsk_act"] - r["hsk_pred"]) > 0.12:
+                        r["flags"].append("headshots per kill 0.12+ off the forecast")
+        src = str(g.get("projection_source") or "")
+        if "unreachable" in src:
+            r["flags"].append("HLTV-outage projection")
+        elif src.startswith("legacy"):
+            r["flags"].append("older-model projection")
+        elif src.endswith("-bo3"):
+            r["flags"].append("BO3.gg-history projection")
+    except Exception:
+        r["flags"].append("replay failed")
+
+
+def build(picks, forecasts, batches=(), now=None):
     import recap
     now = now or datetime.now().astimezone()
     by_pick = collections.defaultdict(list)
@@ -153,7 +193,8 @@ def build(picks, forecasts, batches=(), now=None):
             excl["eval snapshot line pushed"] += 1; continue
         hit = int((p["actual"] > f["line"]) == (side == "More"))
         rows["eval"].append(dict(base, version=f.get("model_version") or "untagged", side=side, p=f.get("p_pick"), lam=f.get("lambda"),
-                                 grade=f.get("grade"), units=f.get("units"), hit=hit, line=f["line"], inputs=f.get("inputs")))
+                                 grade=f.get("grade"), units=f.get("units"), hit=hit, line=f["line"], inputs=f.get("inputs"),
+                                 replayed=f.get("replayed")))
         if cohort_src == "board" and p["prop"] == "hs" and base["scope"] == "12" and _ts(f["logged_at"]) >= _ts(FORWARD_FROM):
             try:
                 sh = json.loads(f.get("shadow") or "null") or {}
@@ -173,41 +214,12 @@ def build(picks, forecasts, batches=(), now=None):
             r["flags"] = []
             r["err"] = (r["lam"] - r["actual"]) if r["lam"] is not None else None
             gi = r.pop("inputs", None)
-            if gi:
-                try:
-                    g = grader.grade_leg(dict(gi))
-                    lo, hi = _quantiles(g.get("dist"))
-                    if lo is not None:
-                        r["in80"] = int(lo <= r["actual"] <= hi)
-                    pf = gi.get("perf") if isinstance(gi.get("perf"), dict) else {}
-                    if pf.get("rounds_per_map") and r["rounds"] and r["maps_used"]:
-                        pred_r = pf["rounds_per_map"] * len(r["maps_used"])
-                        act_r = sum(r["rounds"][i - 1] for i in r["maps_used"] if i - 1 < len(r["rounds"]))
-                        r["rounds_pred"], r["rounds_act"] = round(pred_r, 1), act_r
-                        if act_r < 0.8 * pred_r:
-                            r["flags"].append("short match (rounds 20%+ below expected)")
-                        elif act_r > 1.2 * pred_r:
-                            r["flags"].append("long match (rounds 20%+ above expected)")
-                        if r["per_map"] and pf.get("rate") is not None:
-                            kills = sum(r["per_map"][i - 1][0] for i in r["maps_used"] if i - 1 < len(r["per_map"]))
-                            r["rate_pred"] = round(pf["rate"] * pf.get("opp_factor", 1.0), 4)
-                            r["rate_act"] = round(kills / act_r, 4) if act_r else None
-                            if r["rate_act"] is not None and abs(r["rate_act"] / r["rate_pred"] - 1) > 0.25:
-                                r["flags"].append("kill rate 25%+ off the forecast rate")
-                            if r["prop"] == "hs" and pf.get("hs_per_kill") and kills:
-                                hs = sum(r["per_map"][i - 1][1] or 0 for i in r["maps_used"] if i - 1 < len(r["per_map"]))
-                                r["hsk_pred"], r["hsk_act"] = round(pf["hs_per_kill"], 3), round(hs / kills, 3)
-                                if abs(r["hsk_act"] - r["hsk_pred"]) > 0.12:
-                                    r["flags"].append("headshots per kill 0.12+ off the forecast")
-                    src = str(g.get("projection_source") or "")
-                    if "unreachable" in src:
-                        r["flags"].append("HLTV-outage projection")
-                    elif src.startswith("legacy"):
-                        r["flags"].append("older-model projection")
-                    elif src.endswith("-bo3"):
-                        r["flags"].append("BO3.gg-history projection")
-                except Exception:
-                    r["flags"].append("replay failed")
+            pre = r.pop("replayed", None)                       # replayed page by page by build_from_log (bounded memory)
+            if pre is not None:
+                r["flags"].extend(pre.get("flags") or [])
+                r.update({k: v for k, v in pre.items() if k != "flags"})
+            elif gi:
+                _replay(gi, r)
             if r["settled_from"] == "bo3" and not r.get("hltv_checked"):        # HLTV confirmed the total: verified
                 r["flags"].append("settled from BO3.gg (not HLTV-verified)")
         groups = collections.defaultdict(list)
@@ -251,14 +263,14 @@ def build(picks, forecasts, batches=(), now=None):
         by_src = collections.defaultdict(list)
         for r in rs:
             if r["source"] == "board" and r["err"] is not None and "replay failed" not in r["flags"] and "in80" in r:
-                by_src[(src_of(r), r["prop"], r["scope"])].append(r)
+                by_src[(src_of(r), r["prop"], r["scope"], r["version"])].append(r)    # each exact tag on its own (D8, audit 63)
         src_summ = []
-        for (src, prop, sc), g_ in sorted(by_src.items()):
+        for (src, prop, sc, ver), g_ in sorted(by_src.items()):
             bym = collections.defaultdict(list)
             for r in g_:
                 bym[r["match"]].append(r)
-            src_summ.append({"projection": src, "prop": prop, "scope": sc, "n": len(g_), "matches": len(bym),
-                             "versions": dict(collections.Counter(r["version"] for r in g_)),   # pooled tags, named (D8)
+            src_summ.append({"projection": src, "prop": prop, "scope": sc, "version": ver, "source": "board",
+                             "n": len(g_), "matches": len(bym), "versions": {ver: len(g_)},
                              "proj_bias": round(sum(r["err"] for r in g_) / len(g_), 3),
                              "bias_ci": _boot(bym, lambda xs: sum(r["err"] for r in xs) / len(xs)),
                              "hit_rate": round(sum(r["hit"] for r in g_) / len(g_), 4),
@@ -288,6 +300,80 @@ def build(picks, forecasts, batches=(), now=None):
         "leg_predicted": round(sum(x["p"] for x in legs if x["p"]) / len(legs), 4) if legs else None,
     }
     return out
+
+
+# 2026-10-21 audit 0: the dashboard used to load every picks row (with its large `factors` JSON) and every forecast with
+# its decoded grader inputs (~20 KB a row) into one list - heavier than the unbounded export that restarted production
+# on 2026-10-14. build_from_log reads the same data in bounded pages: picks without `factors`, the forecast history
+# without inputs (keeping only each pick's evaluation snapshot, a few fields), then inputs page by page for those
+# snapshots only - each replayed and dropped at once. Same output as build(export(), export_forecasts(inputs=True)).
+_FC_KEEP = ("id", "pick_id", "logged_at", "line", "pick", "p_pick", "p_more", "lambda", "grade", "units", "model_version")
+
+
+def picks_light(picklog):
+    """Every picks row without the large `factors` column (diagnostics never reads it)."""
+    with picklog._LOCK:
+        con = picklog._db()
+        try:
+            cols = [r[1] for r in con.execute("PRAGMA table_info(picks)") if r[1] != "factors"]
+            return [dict(r) for r in con.execute(f"SELECT {', '.join(cols)} FROM picks ORDER BY id")]
+        finally:
+            con.close()
+
+
+def _eval_candidate(p):
+    """A pick build() could put in the evaluation cohort (the cheap part of its exclusions; build re-checks them all)."""
+    return ((p.get("test") or 0) != 1 and p.get("status") not in ("open", "void", "push") and p.get("actual") is not None
+            and p.get("hit") is not None and _ts(p.get("match_start")) is not None)
+
+
+def build_from_log(picklog, batches=(), now=None):
+    picks = picks_light(picklog)
+    cand = {p["id"]: p for p in picks if _eval_candidate(p)}
+    cutoff = {pid: _ts(p["match_start"]) - timedelta(minutes=EVAL_LEAD_MIN) for pid, p in cand.items()}
+    best = {}
+    after, cut = 0, None                                        # pass 1: forecasts without inputs, one page at a time
+    while True:
+        pg = picklog.forecasts_page(after_id=after, cutoff_id=cut, inputs=False)
+        cut, after = pg["cutoff_id"], pg["next_after"]
+        for f in pg["rows"]:
+            pid = f.get("pick_id")
+            t = _ts(f.get("logged_at")) if pid in cand else None
+            if t is None or t > cutoff[pid]:
+                continue
+            b = best.get(pid)
+            if b is None or f["logged_at"] > b["logged_at"]:    # same tie rule as build's max(): the earliest id wins ties
+                keep = {k: f.get(k) for k in _FC_KEEP}
+                if cand[pid].get("prop") == "hs":               # forward HS check reads the shadow models
+                    keep["shadow"] = f.get("shadow")
+                keep["has_inputs"] = bool(f.get("has_inputs"))
+                best[pid] = keep
+        if pg["done"]:
+            break
+    want = sorted(f["id"] for f in best.values() if f.pop("has_inputs"))
+    by_id = {f["id"]: f for f in best.values()}
+    i = 0                                                       # pass 2: inputs of the chosen snapshots only
+    while i < len(want):
+        pg = picklog.forecasts_page(after_id=want[i] - 1, cutoff_id=cut, inputs=True)
+        for f in pg["rows"]:
+            mine = by_id.get(f["id"])
+            if mine is None or not f.get("inputs"):
+                continue
+            p = cand[f["pick_id"]]
+            try:
+                res = json.loads(p.get("result") or "{}")
+            except ValueError:
+                res = {}
+            r = {"actual": p["actual"], "prop": p["prop"], "rounds": res.get("rounds"), "maps_used": res.get("maps_used"),
+                 "per_map": res.get("per_map"), "flags": []}
+            _replay(f["inputs"], r)
+            mine["replayed"] = {k: v for k, v in r.items() if k not in ("actual", "prop", "rounds", "maps_used", "per_map")}
+        last = pg["next_after"]
+        while i < len(want) and want[i] <= last:
+            i += 1
+        if pg["done"] and not pg["rows"]:
+            break
+    return build(picks, list(best.values()), batches, now=now)
 
 
 POOLING_NOTE = ("MODEL_VERSIONS.md: exact model_version tags may be pooled only inside one 'same grading' group, and no "
