@@ -244,9 +244,10 @@ def test_auto_refresh_is_jittered_and_paused_when_hidden(tmp_path):
 @needs_node
 def test_marks_since_the_last_look_lock_badge_and_started_rows_drop(tmp_path):
     rows = [_row(1), _row(2, line=28.5), _row(3, model_grade="A-", grade="A-", units=1.5, p=0.69), _row(4),
-            _row(5, start=(NOW + timedelta(minutes=12, seconds=30)).isoformat()), _row(6, start=(NOW - timedelta(minutes=1)).isoformat()),
+            _row(5), _row(6, start=(NOW - timedelta(minutes=1)).isoformat()),
             _row(7, line=27.5, open_line=26.5)]
     out = page(tmp_path, r"""
+      BK.underdog.rows.find(x => x.id === "ud:5").start = new Date(Date.now() + 750000).toISOString();   // 12.5 min from now
       seenSave(["underdog"]); const snap = JSON.parse(localStorage.getItem("cs2s_seen"));
       const base = JSON.parse(JSON.stringify(snap)), k = r => markKey(boardRows.find(x => x.id === r));
       delete base.rows[k("ud:1")]; base.rows[k("ud:2")][0] = 27.5; base.rows[k("ud:3")][1] = "B"; base.rows[k("ud:7")][0] = 26.5;
@@ -285,3 +286,42 @@ def test_watchlist_star_filter_and_alerts_on_post_move_and_grade_change(tmp_path
     assert out["posted"] == ["★ ZywOo kills on Underdog: line posted at 27.5 – Over 58.0%"]
     assert out["first"] == [] and out["quiet"] == []                    # nothing on the first load; never a player not starred
     assert all(ms == 8000 for _, ms in out["toasts"])
+
+
+# ------------------------------------------------------------------ 12. previous / next in the card
+@needs_node
+def test_previous_next_steps_the_board_order_and_requests_only_after_a_dwell(tmp_path):
+    rows = [_row(i, p=0.70 - i / 100) for i in range(1, 6)]
+    out = page(tmp_path, r"""
+      const timers = [], calls = []; setTimeout = (f, ms) => { timers.push([f, ms]); return timers.length; }; clearTimeout = () => {};
+      $("#bbets").checked = false; bview = "all"; drawBoard();
+      const r = {order: NAV.order.map(k => k.split("|")[0])};
+      const realGrade = gradeNow; gradeNow = (...a) => { calls.push(a); NAV.i = a[7] != null ? a[7] : -1; };
+      $("#cardpop").hidden = false; NAV.i = 0;
+      navStep(1); navStep(1); navStep(1); r.i = NAV.i; r.callsBefore = calls.length; r.head = $("#out").innerHTML;
+      const dwell = timers.filter(t => t[1] === 600); r.dwells = dwell.length;
+      dwell.slice(0, -1).forEach(t => t[0]()); r.staleFired = calls.length;          // a line already left: no request
+      dwell[dwell.length - 1][0](); r.call = calls[calls.length - 1]; r.inst = instant && instant.key;
+      navStep(-5); r.clamped = NAV.i;
+      gradeNow = realGrade; realGrade("x", "20.5", "kills", "standard", "12", false, null); r.other = NAV.i;
+      const s0 = REQ.seq; REQ.seq++; r.seqMoved = REQ.seq === s0 + 1;
+      return r;""", {"rows": rows})
+    assert out["order"] == ["p1", "p2", "p3", "p4", "p5"]
+    assert out["i"] == 3 and out["callsBefore"] == 0 and "Over 27.5" in out["head"]   # steps draw the row's headline, no request
+    assert out["dwells"] == 3 and out["staleFired"] == 0
+    c = out["call"]
+    assert c[:6] == ["p4", "27.5", "kills", "standard", "12", True] and c[7] == 3 and out["inst"] == "p4|27.5|kills|standard|12"
+    assert out["clamped"] == 3                                          # past the first line: stays put
+    assert out["other"] == -1                                           # a card opened any other way has no previous / next
+
+
+@needs_node
+def test_an_answer_for_a_line_already_left_is_never_drawn(tmp_path):
+    out = page(tmp_path, r"""
+      let resolve; fetch = () => new Promise(res => { resolve = res; });
+      $("#player").value = "p1"; $("#line").value = "27.5"; $("#cardpop").hidden = false;
+      const p = $("#f").onsubmit({preventDefault() {}});
+      $("#out").innerHTML = "NEXT LINE"; REQ.seq++;                   // the member stepped on meanwhile
+      resolve({ok: true, status: 200, json: async () => ({grade: {line: 27.5}, verdict: {}, player_block: {player: {nick: "p1"}}})});
+      await p; return $("#out").innerHTML;""", {"rows": []}, board=False, sync=False)
+    assert out == "NEXT LINE"

@@ -754,6 +754,8 @@ body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode
 @media(max-width:760px){.bviews{flex:1 1 100%}.bviews select{flex:1 1 100%;max-width:none}.bvform{flex:1 1 100%}.bvform input{flex:1 1 auto;width:auto;min-width:0}}
 .bstar{background:none;border:0;padding:0 5px 0 0;margin:0;color:var(--faint);font-size:15px;line-height:1;cursor:pointer;vertical-align:-1px;min-width:22px;min-height:22px}
 .bstar:hover,.bstar.on{color:var(--accent-2)}
+#popbar .popnav{display:flex;align-items:center;gap:6px;margin-right:auto}#popbar .popnav[hidden]{display:none}
+#popbar .popnav .chipbtn{min-height:36px}#popbar .popnav .chipbtn[disabled]{opacity:.4;cursor:default}
 .nmark,.lockb{display:inline-block;margin-left:5px;font:600 10px Inter,system-ui,sans-serif;padding:1px 6px;border-radius:6px;white-space:nowrap;vertical-align:middle}
 .nmark{color:var(--accent-2);background:#f7a45b14;border:1px solid #f7a45b55;cursor:help}.nmark.up{color:#7fd8be;border-color:#7fd8be55;background:#7fd8be12}
 .nmark.down{color:#ff9b8a;border-color:#ff9b8a55;background:#ff9b8a12}.nmark.grade{color:#c9b6ff;border-color:#bba5ff66;background:#bba5ff12}
@@ -1056,6 +1058,7 @@ function hideSug() { $("#sug").style.display = "none"; }
 
 // ---------- grade
 let instant = null;              // {key, html}: the next card request's headline, drawn from the Board row that opened it
+const REQ = {seq: 0};
 const reqKey = (p, l, t, lt, sc) => [String(p || "").trim().toLowerCase(), String(l).trim().replace(",", "."), t === "hs" ? "hs" : "kills", lt || "standard", sc || "12"].join("|");
 function popActsOff() { const bar = document.querySelector("#popact"); if (bar) bar.querySelectorAll("button:not([data-popclose])").forEach(b => { b.disabled = true; }); }
 // the card's headline from a board row's own data (the same grade / side / line / chance / stake / cap chip as the row)
@@ -1085,23 +1088,26 @@ $("#f").onsubmit = async e => {
   // headline when it arrives (never merged). Until then the card's actions are off - they belong to the full card.
   const pre = instant && instant.key === reqKey(player, line, prop, $("#lt").value, $("#scope").value) ? instant.html : "";
   instant = null;
+  const seq = ++REQ.seq, live = () => seq === REQ.seq;   // a newer card request (previous / next) makes this one's answer moot
   $("#go").disabled = true; $("#out").innerHTML = pre;
-  if (pre) { lastCard = null; popActsOff(); }
+  if (pre) { lastCard = null; popActsOff(); try { miniSync(null); } catch {} }
   const st = $("#status"); st.hidden = false; st.className = "status";
   const t0 = Date.now();
-  const tick = () => st.innerHTML = pre ? `<span class="spin"></span>Loading the full analysis · ${Math.round((Date.now() - t0) / 1000)}s` : `<span class="spin"></span>Grading ${esc(player)} ${esc(line)} ${prop === "hs" ? "headshots" : "kills"} · ${Math.round((Date.now() - t0) / 1000)}s<div class="small" style="margin-top:6px">Players in upcoming matches are pre-loaded and take a few seconds. Anyone else takes up to a minute the first time.</div>`;
+  const tick = () => live() && (st.innerHTML = pre ? `<span class="spin"></span>Loading the full analysis · ${Math.round((Date.now() - t0) / 1000)}s` : `<span class="spin"></span>Grading ${esc(player)} ${esc(line)} ${prop === "hs" ? "headshots" : "kills"} · ${Math.round((Date.now() - t0) / 1000)}s<div class="small" style="margin-top:6px">Players in upcoming matches are pre-loaded and take a few seconds. Anyone else takes up to a minute the first time.</div>`);
   tick(); const iv = setInterval(tick, 1000);
   try {
     const r = await fetchRetry("/api/grade?" + qs);
     const d = await r.json();
+    if (!live()) return;
     if (r.status === 401 && d.error === "members_only") { st.hidden = true; $("#out").innerHTML = ""; return showGate(d); }   // session ended
     if (!r.ok) { const er = new Error(d.error || "Something went wrong"); er.sugg = d.suggestions; throw er; }
     st.hidden = true; if (ctx?.book) d.book = ctx.book; render(d); remember(d);
   } catch (err) {
+    if (!live()) return;
     if (pre) $("#out").innerHTML = "";
     st.className = "status err"; st.textContent = err.message;
     st.insertAdjacentHTML("beforeend", dymHtml(err.sugg));
-  } finally { clearInterval(iv); $("#go").disabled = false; }
+  } finally { clearInterval(iv); if (live()) $("#go").disabled = false; }
 };
 // a misspelled name: the server's closest players as one-tap chips (each regrades the same line)
 const dymHtml = sg => { sg = (Array.isArray(sg) ? sg : []).map(x => typeof x === "string" ? x : x && x.nick).filter(Boolean).slice(0, 5);
@@ -1224,12 +1230,46 @@ function showRecent() {
 }
 const cardCtx = d => ({team: d.player_block?.playing_for || d.player_block?.current_team || null, opponent: d.next_match?.opponent || null,
                        start: d.next_match?.start || null, book: d.book || null});
-function gradeNow(p, l, t, lt, sc, pop, c) {
+function gradeNow(p, l, t, lt, sc, pop, c, nav) {
+  NAV.i = nav != null && nav >= 0 ? nav : -1;
   $("#player").value = p; $("#line").value = l; setProp(t || "kills"); $("#lt").value = lt || "standard"; $("#scope").value = sc || "12";
   slug = null; match = null; ctx = c || null;
   if (pop) openPop(); else { hidePop(); setMode("one"); }
+  try { navDraw(); } catch {}
   $("#f").requestSubmit();
 }
+// previous / next in the card (QoL 2026-10-21): steps through the Board's filtered order without closing the card. Each step
+// shows that row's headline at once (instantHtml); the full card is requested only when the member stays ~600 ms on a line
+// (/api/grade is limited per IP and phone carriers share IPs). Opened any other way, the card has no previous / next.
+const NAV = {i: -1, order: [], t: null};
+function navDraw() {
+  const bar = $("#popbar"); if (!bar || !bar.querySelector) return;
+  let nv = bar.querySelector(".popnav");
+  if (!nv) { nv = document.createElement("div"); nv.className = "popnav"; bar.prepend(nv); }
+  const n = NAV.order.length, on = NAV.i >= 0 && n > 1;
+  nv.hidden = !on;
+  nv.innerHTML = on ? `<button type="button" class="chipbtn" data-nav="-1" ${NAV.i <= 0 ? "disabled" : ""} aria-label="Previous line on the board">‹ Prev</button><span class="small muted">${NAV.i + 1} / ${n}</span><button type="button" class="chipbtn" data-nav="1" ${NAV.i >= n - 1 ? "disabled" : ""} aria-label="Next line on the board">Next ›</button>` : "";
+}
+function navStep(d) {
+  if (NAV.i < 0) return;
+  const i = NAV.i + d, bl = NAV.order[i]; if (bl == null) return;
+  const row = rowOfBl(bl); if (!row) return;
+  NAV.i = i; REQ.seq++; navDraw();               // an answer still on its way for the line we left is dropped
+  const [p, l, t, sc] = bl.split("|"), lt = gradeType(row);
+  $("#out").innerHTML = instantHtml(row); lastCard = null; popActsOff(); $("#status").hidden = true;
+  try { miniSync(boardCard(row)); } catch {}
+  try { $("#popbody").scrollTop = 0; } catch {}
+  clearTimeout(NAV.t);
+  NAV.t = setTimeout(() => { if ($("#cardpop").hidden || NAV.i !== i) return;
+    instant = {key: reqKey(p, l, t, lt, sc), html: instantHtml(row)};
+    gradeNow(p, l, t, lt, sc, true, {team: row.team, opponent: row.opponent, book: row.book || "underdog", start: row.start}, i); }, 600);
+}
+$("#popbar").addEventListener("click", e => { const b = e.target.closest("[data-nav]"); if (b && !b.disabled) navStep(+b.dataset.nav); });
+document.addEventListener("keydown", e => {
+  if ($("#cardpop").hidden || NAV.i < 0 || !["ArrowLeft", "ArrowRight"].includes(e.key) || e.ctrlKey || e.metaKey || e.altKey) return;
+  const el = e.target; if (el && el.closest && el.closest("input,textarea,select,[contenteditable],[data-ctab],[role=tab]")) return;
+  e.preventDefault(); navStep(e.key === "ArrowRight" ? 1 : -1);
+});
 // board: the full card opens over the board, so the list keeps its place
 // the popup is its own history step (2026-10-11 audit): the phone's Back button closes the card and stays on this tab
 function openPop() {
@@ -2079,6 +2119,10 @@ function drawBoard() {
     return `<div class="ot-match-tools"><p><b>Top picks in this view:</b> ${q2.length ? q2.map(it).join(" · ") : "No qualifying picks with these filters."}${q2.length > 1 ? "<br>These picks share match conditions." : ""}</p>
       <button type="button" class="ot-open-match" data-ot-match="${esc(matchKey(mrows[0]))}">Research match ↗</button></div>${otStartNotice(mrows)}`;
   };
+  // the order the rows are drawn in (previous / next in the card): the list as sorted, or match by match
+  NAV.order = (bview === "all" ? rows : (() => { const gs = new Map(); for (const r of rows) { const k = matchKey(r); if (!gs.has(k)) gs.set(k, []); gs.get(k).push(r); }
+    return [...gs.values()].sort((a, b) => String(a[0].start || "9").localeCompare(String(b[0].start || "9"))).flat(); })())
+    .filter(r => r.side).map(r => `${r.nick || r.player}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}|${r.book || "underdog"}`);
   let html;
   const grading = (bbook === "all" ? ["underdog", "prizepicks"] : [bbook]).reduce((a, b) => a + Math.max(0, ((BK[b] || {}).total || 0) - ((BK[b] || {}).rows || []).length), 0);
   if (!rows.length && !boardRows.length && grading) {         // after a restart the lines are graded one by one: say so
@@ -2126,7 +2170,7 @@ function boardClick(e) {
   const r = e.target.closest("[data-bl]");
   if (r) { const [p, l, t, sc, lt] = r.dataset.bl.split("|"), row = rowOfBl(r.dataset.bl);
     if (row) instant = {key: reqKey(p, l, t, gradeType(row), sc), html: instantHtml(row)};
-    gradeNow(p, l, t, row ? gradeType(row) : (lt || "standard"), sc, true, row ? {team: row.team, opponent: row.opponent, book: row.book || "underdog", start: row.start} : null); }
+    gradeNow(p, l, t, row ? gradeType(row) : (lt || "standard"), sc, true, row ? {team: row.team, opponent: row.opponent, book: row.book || "underdog", start: row.start} : null, NAV.order.indexOf(r.dataset.bl)); }
 }
 $("#boardout").addEventListener("click", boardClick);
 $("#ot-board-overview").addEventListener("click", boardClick);     // Top plays: the same card / slip actions as the rows
@@ -3570,7 +3614,7 @@ function otBoardSummary(rows) {
 function otOpenDesk(key, opener) {
   const dlg = $('#ot-match-desk');
   // Only rows in the existing displayed match group and selected scope. Do not merge events by guessed names.
-  otDeskRows = boardRows.filter(r => matchKey(r) === key && (r.scope || '12') === bscope && !hasStarted(r));
+  otDeskRows = boardRows.filter(r => matchKey(r) === key && (r.scope || '12') === bscope);
   if (!otDeskRows.length) return;
   otDeskReturn = opener;
   const first = headRow(otDeskRows), teams = new Map();
