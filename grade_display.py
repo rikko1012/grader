@@ -72,11 +72,14 @@ def annotate(g, v, row=None):
 
 
 def annotate_item(x):
-    """A 'Nearby lines' chip (cs2_scout._ladder: side, p, grade, units - no grader letters): its letter from its own
-    3-decimal chance. Only the card's own line is shown anywhere else, and that one carries the card's exact fields."""
+    """A 'Nearby lines' chip (cs2_scout._ladder: side, p, grade, units, exact_grade): the card's own model_grade for that
+    line when the chip carries it (2026-10-21 audit no 29: the 3-decimal chance turned an unrounded 54.97% Lean into 'B-');
+    otherwise (older saved chips / rows) its letter from its own 3-decimal chance."""
     x = x or {}
     if not x.get("side") or x.get("state") == "SCOUT":
         return {"model_grade": x.get("grade"), "display_version": DISPLAY_VERSION}
+    if x.get("exact_grade"):
+        return {"model_grade": x["exact_grade"], "display_version": DISPLAY_VERSION}
     if x.get("grade") in LETTERS:
         return {"model_grade": x["grade"], "display_version": DISPLAY_VERSION}
     letter = _letter_from_p(x.get("p"))

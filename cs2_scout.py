@@ -464,7 +464,8 @@ def run_player(b, name, args):
     out["roster"] = [x.get("nickname") for x in roster]
     # BO3.gg marks benched players with status 2 (2026-10-09: Aurora's page lists MAJ3R benched) - display only
     out["benched"] = [x.get("nickname") for x in roster if x.get("status") == 2]
-    in_roster = any(x.get("id") == p["id"] for x in roster)
+    # active listings only: a benched (status 2) listing is not "his team still lists him" (2026-10-21 audit no 2)
+    in_roster = _lists_active(roster, p["id"])
     listed = args.team
     if listed:
         # canonical identity, never a substring (2026-10-13 audit: 'Mine Academy' passed for 'Mine')
@@ -1033,6 +1034,11 @@ def _lineup_check(players, pid, lineup):
                 "last_lineup_overlap": overlap, "starting_lineup": None}
 
 
+def _lists_active(players, pid):
+    """Does this roster page list him as an ACTIVE player? A BO3.gg status-2 (benched) listing does not count."""
+    return any(x.get("id") == pid and x.get("status") != 2 for x in players or [])
+
+
 H2H_DAYS = 365      # head-to-head: last 12 months only (owner 2026-10-06: older meetings are too far back)
 SAME_ROSTER = 4   # past meeting counts only if the opponent fielded 4+ of today's players (HLTV year test)
 
@@ -1048,6 +1054,8 @@ def h2h(rows, opponent, line=None, stat="kills", opp_roster=None):
             skipped += 1
             continue
         m12 = maps[:2]
+        if any(m.get(stat) is None for m in m12):
+            continue  # HLTV-only meeting whose headshots the scraper hasn't read yet (as recent_form)
         wins = [m["won"] for m in m12]
         series.append({"date": m12[0]["date"], "team": m12[0]["team"], "opponent": m12[0]["opponent"],
                        "maps": [m["map"] for m in m12], "values": [m[stat] for m in m12],
@@ -1442,6 +1450,12 @@ def hltv_first_gates(pb, d):
         import roles
         roles.refresh_hltv()                        # 30-minute cache; never raises
         awp, why = roles.awp_role(nick, team)
+        # the role is the player's: a stand-in / just-moved player's HLTV and Liquipedia rows carry his own team, so retry
+        # with it (still team-matched, so namesakes stay apart) - 2026-10-21 audit no 24
+        for own in dict.fromkeys(t for t in (pb.get("profile_team"), pb.get("current_team")) if t and t != team):
+            if awp is not None:
+                break
+            awp, why = roles.awp_role(nick, own)
         if awp is not None:
             d["sniping"] = 100 if awp else 0
             pb["awp_note"] = ("AWPer" if awp else "Rifler") + f" ({why})"
@@ -1980,7 +1994,12 @@ def _refresh_context(ckey, args, ttl):
                     b.close()
                 if res.get("player_block"):
                     res["player_block"].pop("_matches", None)
-                if not res.get("error"):
+                # a background rebuild never reads PandaScore (members' quota), so its "no match" for a match only PandaScore
+                # had is not evidence: keep the saved context, which goes stale and is rebuilt by a member (audit no 27)
+                saved = _CONTEXT.get(ckey)
+                lost = (not res.get("next_match") and saved and
+                        ((saved[1].get("next_match") or {}).get("source") == "pandascore"))
+                if not res.get("error") and not lost:
                     _store_context(ckey, res)
         except Exception:
             pass                                # keep the saved context; the next grade tries again
@@ -2047,9 +2066,13 @@ def run(args, res, b, ttl):
         if pb.get("team_id"):
             slugs.setdefault(pb["team_id"], pb.get("team_slug"))
 
-        def lists_him(tid):
+        def lists_him(tid, active=False):
+            """active=True: only an active listing counts (a team that benches him is not a team he plays for now)"""
             try:
-                return any(x.get("id") == pid for x in (b.team(slugs[tid]).get("players") or [])) if slugs.get(tid) else False
+                if not slugs.get(tid):
+                    return False
+                players = b.team(slugs[tid]).get("players") or []
+                return _lists_active(players, pid) if active else any(x.get("id") == pid for x in players)
             except Exception:
                 return False
 
@@ -2065,7 +2088,7 @@ def run(args, res, b, ttl):
                 return True                       # can't check: keep the team rather than guess
         if not member_opp:
             teams = {tid: tn for tid, tn in teams.items()
-                     if not isinstance(tid, int) or tid == newest or lists_him(tid)
+                     if not isinstance(tid, int) or tid == newest or lists_him(tid, active=True)
                      or (tid == pb.get("team_id") and pb.get("on_profile_roster"))
                      or played_their_last(tid)}
         def team_players(tid):
@@ -2146,8 +2169,14 @@ def run(args, res, b, ttl):
                     pm = o
                     break
             if member_opp and not pm:
+                # the book's start picks the match (2026-10-21 audit no 26: without it the opponent-only [None] lookup took
+                # the opponent's EARLIEST listing - another team's match). His team: the listing at the start, else as
+                # before; opponent only: with a start, only the listing at that start
+                ms = getattr(args, "member_start", None)
                 for tname in [n for n in teams.values() if n] + [None]:
-                    o = match_odds(tname, member_opp)
+                    o = match_odds(tname, member_opp, start=ms) if ms else {}
+                    if not o.get("found") and (tname is not None or not ms):
+                        o = match_odds(tname, member_opp)
                     if o.get("found"):
                         pm = o
                         break
@@ -2156,14 +2185,19 @@ def run(args, res, b, ttl):
                 try:
                     import pandascore
                     cand = []
+                    ms = getattr(args, "member_start", None)
                     for tname in [n for n in teams.values() if n]:
                         cand += [m for m in pandascore.upcoming(tname)
                                  if not member_opp or _same_team(member_opp, m["opponent"])]
+                    if len(cand) > 1 and ms:            # a rematch: the one at the book's start, when it says
+                        cand = _by_start(cand, ms, lambda m: m.get("start")) or cand
                     if not cand and member_opp:
                         # none of his known teams plays them: the typed opponent's next match -
-                        # the other side is his team
+                        # the other side is his team; with the book's start, only the match at that start (audit no 26)
                         cand = [dict(m, team=m["opponent"], opponent=m["team"])
                                 for m in pandascore.upcoming(member_opp)]
+                        if ms:
+                            cand = _by_start(cand, ms, lambda m: m.get("start"))
                     if cand:
                         m = min(cand, key=lambda m: m["start"] or "9999")
                         pm, src = {"team": m["team"], "opponent": m["opponent"], "start": m["start"], "bo": _bo_of(m.get("bo")),
@@ -2733,8 +2767,13 @@ def _ladder(res, pb, args):
         # each line through the member verdict (2026-10-11 audit: the chips printed the raw letter - 'Over 70.7% · A-' on a
         # 0-unit AWPer headshot pick the card calls Lean Over): gates, Lean, goblin/demon Under and the tie-break all match
         v = pick_verdict.verdict(g)
+        try:   # the card's gd-1 letter (grader letter on the UNROUNDED chance) - display only (2026-10-21 audit no 29)
+            import grade_display
+            mg = grade_display.model_grade(g, v)
+        except Exception:
+            mg = None
         out.append({"line": ln, "side": v["side"], "p": v.get("p"), "grade": v.get("grade"), "units": v.get("units") or 0.0,
-                    "state": v.get("state")})
+                    "state": v.get("state"), "exact_grade": mg})
     return out
 
 
