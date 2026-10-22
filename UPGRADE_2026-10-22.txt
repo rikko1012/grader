@@ -1,0 +1,56 @@
+LoL member workspace and grading-evidence repair
+Base: origin/main 4e77d48. Branch: codex/lol-ui-accuracy-20261022.
+
+Member UI
+- Responsive research cards with an optional horizontally scrollable table.
+- Navigation separated from book, prop, scope, model-side and search filters.
+- Compact phone controls; secondary filters expand on request.
+- Counts reflect the filtered board. Ready picks must be offered, upcoming and recently checked.
+- First 48 matching lines render initially; Show more retains the full filtered set.
+- Compare books filters the actual offers, not just the enclosing player row.
+- Whole-number push probability travels through the comparison serializer and is displayed.
+- Player research has a visible top Close button, a bottom return button, Escape and a keyboard focus loop.
+
+Correctness
+- CS2 picklog.report no longer crashes on settled rows missing probability/outcome.
+  Unknown outcomes are not counted as losses. Calibration compares identical cohorts
+  with valid probabilities and outcomes; exclusions are counted on the admin page.
+  Its bands now separate Lean and B- at the actual 55% threshold. The threaded
+  read test now fails when the report raises, instead of passing with a thread warning.
+- A successful cached-board HTTP response is not treated as a new quote check.
+- Manual copy/add and server slip rechecks reject quote checks older than 15 minutes,
+  missing check times, times more than one minute in the future, and missing starts.
+  The 15-minute rule matches the pre-existing stale-feed warning. Existing availability,
+  stake, same-match and player-overlap restrictions remain in force.
+- LoL learning reports split model version, fit and offered/unoffered selected side.
+- An explicit offered-picks-printed-60%+ cohort is recorded, including per-model cohorts.
+- The evidence counter uses distinct series/player/stat/scope units, not alternate lines
+  or repeated book offers. Existing aggregate metrics remain for compatibility.
+- Probabilities scored on non-push results are explicitly described as conditional on no push.
+
+Accuracy findings (read-only production exports, 2026-10-22 around 15:25 UTC)
+- CS2 P1 scorecard: 2,727 props, 157 matches, mixed historical versions.
+  Favoured-side hits 51.34%; mean predicted side chance 55.94%.
+  Match-bootstrap hit interval 48.46%-54.17%. Log loss 0.7003.
+- Latest CS2 tag f663af8917: 24/35 (68.57%) from only TWO matches.
+  Three predictions at 60%+ all won, but came from ONE match. Neither establishes 60% performance.
+- Saved paired candidate probability gains, against their own logged bases, all have
+  intervals containing zero except ch-009, whose observed change is non-positive.
+  These are different eligible cohorts and must not be ranked as one common test.
+- LoL's existing aggregate dashboard: 101 settled book-line records, TWO series,
+  46.5% selected-side hits versus 65.0% conditional side chance. This mixes model
+  versions, book offers and alternate lines and is not the current-model win rate.
+- Six recent LoL candidate studies were already rejected in EVALUATION.md. Repeatedly
+  searching their spent holdouts would not provide a new independent validation.
+
+No projection coefficients, grade thresholds or stakes were changed. These repairs improve
+usability, input checks and measurement; they do not establish a predictive accuracy gain.
+No 60% guarantee is made. Keep version-separated forward scoring; any future model promotion
+must use its registered comparison and untouched forecasts rather than an attractive recent win rate.
+
+Release status: changes prepared on the isolated branch, not deployed by this document.
+
+Validation: 1,547 tests passed, five optional checks skipped, zero warnings in the final
+combined tests + lol/tests run. Chrome checks used the real captured member-board payload:
+desktop and 390px phone layout, no horizontal page overflow, player search, exact-platform
+comparison, scope/side filters, card/table switch and modal keyboard navigation.

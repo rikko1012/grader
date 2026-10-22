@@ -477,15 +477,19 @@ def slip_check(con, legs, now=None):
     if len({r["pid"] for r in rows}) < len(rows):
         why.append("the same player twice")
     for r in rows:
-        st = con.execute("SELECT e.line, e.sides, s.open FROM market_state s JOIN market_events e ON e.id = s.last_event_id "
+        st = con.execute("SELECT e.line, e.sides, s.open, s.last_seen FROM market_state s JOIN market_events e ON e.id = s.last_event_id "
                          "WHERE s.platform = ? AND s.market_key = ?", (r["platform"], r["market_key"])).fetchone()
         if not st or not st["open"]:
             why.append(f"leg {r['id']}: line no longer offered")
+        elif not _when(st["last_seen"]) or not -60 <= (now - _when(st["last_seen"])).total_seconds() <= 900:
+            why.append(f"leg {r['id']}: line check missing, invalid or older than 15 minutes")
         elif st["line"] != r["line"]:
             why.append(f"leg {r['id']}: line moved {r['line']} -> {st['line']}")
         elif side_offered(r["platform"], json.loads(st["sides"] or "{}"), r["model_side"]) is not True:
             why.append(f"leg {r['id']}: {r['model_side']} no longer offered")
-        if _when(r["series_start"]) and _when(r["series_start"]) <= now:
+        if not _when(r["series_start"]):
+            why.append(f"leg {r['id']}: series start missing")
+        elif _when(r["series_start"]) <= now:
             why.append(f"leg {r['id']}: series started")
         if not r["slip_eligible"]:
             why.append(f"leg {r['id']}: not eligible ({'; '.join(json.loads(r['slip_reasons'] or '[]'))})")
@@ -656,6 +660,7 @@ def board(con, now=None):
                 {"platform": x["platform"], "odds_type": x["odds_type"], "line": x["line"], "sides": x["sides"],
                  "checked_at": x["quote_checked_at"], "projection": (x["forecast"] or {}).get("projection"),
                  "p_over": (x["forecast"] or {}).get("p_over"), "p_under": (x["forecast"] or {}).get("p_under"),
+                 "p_push": (x["forecast"] or {}).get("p_push"),
                  "model_side": (x["forecast"] or {}).get("model_side"), "grade": (x["forecast"] or {}).get("grade"),
                  "current": (x["forecast"] or {}).get("current"),
                  "market": ((x["forecast"] or {}).get("inputs") or {}).get("market")})

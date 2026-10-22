@@ -31,3 +31,6 @@ slips_recommended.jsonl
 
 # any local secrets file (2026-10-13: .env.thunderpick holds the Thunderpick partner key)
 .env.*
+
+# Local regression runs (including Windows socket-enabled runs).
+.test-tmp/

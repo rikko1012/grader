@@ -7,6 +7,7 @@ board's width (container queries), viewport rules untouched; 59: the Matchroom o
 import json
 import re
 import subprocess
+from datetime import datetime, timezone
 
 from tests.test_audit13_site_ui import HARNESS, HTML, NODE, ROOT, needs_node
 
@@ -122,6 +123,7 @@ def _lol_row(key, player, start, p_over=0.6, offered=True):
     return {"key": key, "platform": "underdog", "platform_label": "Underdog", "player": player, "team": "T1", "opponent": "GEN",
             "match": "T1 vs GEN", "stat": "kills", "stat_name": "Kills", "scope": "Maps 1-2", "line": 4.5, "line_type": "Standard",
             "start": start, "projection": 5.1, "p_over": p_over, "p_under": 1 - p_over, "p_push": 0, "pick_side": "Over",
+            "line_checked": datetime.now(timezone.utc).isoformat(),
             "pick": "Over 4.5", "pick_offered": offered, "grade": "B+", "units": 0,
             "sides": [{"side": "Over", "offered": True}, {"side": "Under", "offered": True}], "stake_reason": "0U", "line_type_note": ""}
 

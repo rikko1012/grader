@@ -1631,6 +1631,7 @@ def _lol_member_rebuild(path, mt):
                               "sides": _lol_sides(ln.get("platform"), ln.get("sides")), "checked": ln.get("checked_at"),
                               "projection": ln.get("projection") if fc else None, "p_over": ln.get("p_over") if fc else None,
                               "p_under": ln.get("p_under") if fc else None,
+                              "p_push": ln.get("p_push") if fc else None,
                               "grade": ln.get("grade") if fc and _lol_side_offered(ln.get("platform"), ln.get("sides"), ln.get("model_side")) else None,
                               "pick_side": ({"over": "Over", "under": "Under"}.get(ln.get("model_side")) if fc else None)})
             lines.sort(key=lambda z: (z["line"] if z["line"] is not None else 1e9, z["platform"]))
@@ -4773,6 +4774,7 @@ th{{color:#8b95a8}}input{{background:#1a2130;color:#e8ecf3;border:1px solid #252
  · <span class=k>void</span> {r['void']} · <span class=k>hit rate</span> {'' if r['hit_rate_all'] is None else f"{r['hit_rate_all']:.1%}"}
  · <span class=k>CLV avg</span> {r['clv_avg']} ({r['clv_n']} lines, {'' if r['clv_positive'] is None else f"{r['clv_positive']:.0%} positive"})
  · <span class=k>units net (flat ±1, not payout-adjusted)</span> {r['units_net_flat']}</p>
+<p>Hit rate uses {r.get('scored', r['settled'])} records with a known outcome. Calibration tables use {r.get('calibration_scored', r['settled'])} records with both an outcome and a valid saved probability. Missing outcomes: {r.get('missing_outcome', 0)}; missing/invalid probabilities: {r.get('missing_probability', 0)}. All records remain in the log.</p>
 <h3>Printed % vs actual (settled)</h3>{table(pct(r['by_printed_pct']), ['bucket', 'n', 'printed', 'actual'])}
 <h3>By units</h3>{table(pct(r['by_units']), ['bucket', 'n', 'printed', 'actual'])}
 <h3>Picks (newest first) - enter Underdog's closing line for CLV</h3><div class=scroll><table>

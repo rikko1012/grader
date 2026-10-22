@@ -216,6 +216,25 @@ body.ot-lol .intro {margin:0 0 24px}.ot-lol .intro h2 {font:700 34px var(--displ
 .ftab{width:100%;border-collapse:collapse;margin-top:6px}.ftab td,.ftab th{padding:5px 6px;border-bottom:1px solid var(--line, #262e3b);text-align:left}
 .ftab th{font-weight:600;color:var(--faint, #8793a8);font-size:11px}.ftab .num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .ftab b.up{color:#7fd8be}.ftab b.down{color:#ff9b8a}
+/* Research workspace: concise navigation, responsive cards, explicit comparison. */
+.workspace-nav{display:flex;margin:22px 0 12px}.workspace-nav .seg{border:0;background:transparent;border-radius:0;gap:22px}
+.workspace-nav .seg button{padding:10px 2px;border:0;border-bottom:2px solid transparent;border-radius:0;font-size:15px}
+.workspace-nav .seg button.on{background:transparent;color:var(--text);border-bottom-color:var(--accent)}
+.intro{padding:24px 0 12px}.intro h2{font-size:clamp(28px,4vw,46px);letter-spacing:-1.8px}.intro p{max-width:600px;line-height:1.7}
+.bar{background:#111923b8;border-radius:16px;padding:16px;gap:10px}.bar select{min-height:44px}.bar #m{max-width:300px}
+.overview{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);border-radius:16px;background:linear-gradient(110deg,#1c2b3d,#111821);margin:18px 0 26px;padding:20px 8px}
+.overview>div{display:flex;flex-direction:column;padding:0 24px;border-right:1px solid var(--line)}.overview>div:last-child{border:0}.overview strong{font:600 28px var(--display);font-variant-numeric:tabular-nums}.overview span{color:var(--muted);font-size:12px;margin-top:4px}
+.results-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0 0 16px}.results-heading h3{font-size:18px;margin:0 0 3px}
+.tablebox.board.hide-table{display:none}.cards.card-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.card-grid .mcard{margin:0;padding:20px;border-radius:16px;background:linear-gradient(140deg,#182231,#111720);transition:border-color .15s,transform .15s;overflow:hidden}
+.card-grid .mcard:hover{border-color:var(--accent);transform:translateY(-2px)}.mcard .who b{font-size:23px;letter-spacing:-.5px}.mcard .sub{white-space:normal}.card-meta{display:flex;justify-content:space-between;gap:8px;color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:18px}.card-market{font-size:13px;color:var(--muted);margin-top:18px}.mcard .pick{font-size:19px}.mcard .kv{padding:14px 0;margin-top:16px;grid-template-columns:repeat(4,minmax(0,1fr));border-bottom:1px solid var(--line)}.mcard .kv div{font-size:17px}.mcard .kv .k{font-size:10px;margin-bottom:5px}.card-footer{display:block;margin-top:12px}.mcard .g{padding:5px 9px;font-size:14px}
+.sheet-head{position:sticky;top:-1px;z-index:2;background:var(--panel);display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);margin-bottom:18px}.sheet-head .btn{margin:0}.sheet .grid{padding:16px;border:1px solid var(--line);border-radius:12px;background:#0c131c}.sheet .big{font-size:26px}.sheet .actions{padding:12px 0}.sheet{max-width:860px}
+@media(max-width:1150px){.cards.card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){.cards.card-grid{grid-template-columns:1fr}.card-grid .mcard{padding:18px}.overview{padding:16px 0;margin:14px 0 22px}.overview>div{padding:0 10px}.overview strong{font-size:24px}.overview span{font-size:10px}.results-heading{align-items:flex-start}.results-heading .seg button{padding:0 10px}.results-heading .small{display:block;max-width:210px}.bar #m{max-width:none}.intro{padding:12px 0 4px}.intro h2{letter-spacing:-1px}.mcard .kv{grid-template-columns:repeat(4,minmax(0,1fr))}.workspace-nav .seg{width:100%;gap:0;justify-content:space-between}.workspace-nav .seg button{flex:1}.sheet-head{top:0}.overview span{min-height:30px}}
+.filter-toggle{display:none}
+@media(max-width:640px){.ot-lol .bar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.ot-lol .bar select{width:100%;max-width:none}.bar .seg,.bar input[type=search],.bar .filter-toggle,.bar .chk{grid-column:1/-1}.bar .filter-toggle{display:block;margin:0;order:10;min-height:36px;background:transparent;border-color:var(--line);font-size:12px}.bar:not(.filters-open) #m,.bar:not(.filters-open) #scope,.bar:not(.filters-open) #t,.bar:not(.filters-open) #g,.bar:not(.filters-open) #o,.bar:not(.filters-open) .chk{display:none}.workspace-nav .seg button{font-size:13px;white-space:nowrap}.ot-lol .sheet{border-radius:0;padding:16px}.ot-lol .intro{margin-bottom:14px}}
+@media(prefers-reduced-motion:reduce){.card-grid .mcard{transition:none}.card-grid .mcard:hover{transform:none}.skel{animation:none}}
+@media(max-width:860px){.tablebox.board:not(.hide-table){display:block}.tablebox.board:not(.hide-table)+.cards{display:none}}
 </style></head><body class="ot-lol">
 <header><div class="logo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#170b00" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg></div>
 <h1>1time <em>Esports</em></h1><nav class="sportsw" aria-label="Game"><a href="/">CS2</a><a href="/lol" class="on" aria-current="page">LoL</a></nav><span class="grow"></span><span id="who"></span></header>
@@ -228,12 +247,14 @@ const NA = `<span class="na">Unavailable</span>`;
 const pct = (x) => x == null ? NA : (100 * x).toFixed(1) + "%";
 const num = (x, d = 1) => x == null ? NA : Number(x).toFixed(d);
 const FKEY = "scout.lol.filters", SKEY = "scout.lol.scroll";
-const DEF = {view: "board", plat: "all", stat: "all", type: "all", match: "all", playable: false, sort: "start", floor: "all", q: ""};
+const DEF = {view: "board", plat: "all", stat: "all", type: "all", match: "all", playable: false, sort: "start", floor: "all", q: "", scope: "all", side: "all", layout: "cards"};
 // the published grade order (A+ best); a Lean or a line with no pick sits below every letter
 const GRANK = {"A+": 0, "A": 1, "A-": 2, "B+": 3, "B": 4, "B-": 5};
 const FLOORS = [["all", "Any grade"], ["A-", "A- and up"], ["B+", "B+ and up"], ["B", "B and up"], ["B-", "B- and up"]];
 let F = Object.assign({}, DEF), D = null, lastFocus = null, openRow = null, shownD = null, shownSlip = 0;   // shownD: the board data the page last drew
 let NOTE = null;                                // a one-time notice drawn above the board (a shared line that left the board)
+let visibleLimit = 48;
+let filtersOpen = false;
 const SLIPKEY = "scout.lol.slip", MAXLEGS = {underdog: 8, prizepicks: 6};
 let SLIP = {legs: []}, CHECK = {}, SENT = {};       // SENT: the last "Send to my slip" result, shown under that suggested slip
 try { SLIP = Object.assign({legs: []}, JSON.parse(localStorage.getItem(SLIPKEY) || "{}")); } catch {}
@@ -272,8 +293,14 @@ function pickCell(x) {
   return `<span class="pick off">${esc(x.pick_side)} unavailable</span><span class="offnote">${o ? `Offered: ${o.side} ${x.line} at ${pct(p)}` : "No side offered"}</span>`;
 }
 function started(x) { const d = new Date(x.start); return !isNaN(d) && d <= new Date(); }
-function playable(x) { return x.pick_offered && !started(x); }
-function whyNot(x) { return started(x) ? "This match has started." : !x.pick_offered ? `${x.pick_side} is not offered on this line.` : null; }
+// Match the existing stale-feed warning: fetching a cached board does not refresh its source quote.
+function quoteIssue(x) {
+  const at = Date.parse(x.line_checked || "");
+  if (!Number.isFinite(at) || at > Date.now() + 60000) return "The line check time is missing or invalid.";
+  return Date.now() - at > 15 * 60000 ? "The line has not been checked in the last 15 minutes." : null;
+}
+function playable(x) { return !whyNot(x); }
+function whyNot(x) { return !Number.isFinite(Date.parse(x.start || "")) ? "The match start time is missing." : started(x) ? "This match has started." : !x.pick_offered ? `${x.pick_side} is not offered on this line.` : quoteIssue(x); }
 function legOf(x) { return {key: x.key, platform: x.platform, platform_label: x.platform_label, player: x.player, team: x.team, opponent: x.opponent,
   stat: x.stat, stat_name: x.stat_name, scope: x.scope, line: x.line, side: x.pick_side, line_type: x.line_type, match_key: matchKey(x), start: x.start, grade: x.grade}; }
 function legText(l) { return `${l.player} (${l.team}) vs ${l.opponent} - ${l.stat_name}, ${l.scope} - ${l.platform_label}${l.line_type !== "Standard" ? " " + l.line_type : ""} - ${l.side} ${l.line}`; }
@@ -289,7 +316,7 @@ function slipRule(x) {
 async function fresh() {
   const r = await fetch("/api/lol/board", {cache: "no-cache"}).catch(() => null);
   if (!r || !r.ok) return null;
-  D = await r.json(); return D;
+  try { D = await r.json(); return D; } catch { return null; }
 }
 function sameProp(r, l) { return r.platform === l.platform && r.player === l.player && r.team === l.team && r.stat === l.stat && r.scope === l.scope && r.line_type === l.line_type && matchKey(r) === l.match_key; }
 function legStatus(l) {
@@ -300,6 +327,8 @@ function legStatus(l) {
     return {ok: false, text: moved ? `The line moved: ${l.line} → ${moved.line}.` : "This line was pulled - it is no longer on the board."};
   }
   if (started(x)) return {ok: false, text: "This match has started."};
+  if (!Number.isFinite(Date.parse(x.start || ""))) return {ok: false, text: "The match start time is missing."};
+  const issue = quoteIssue(x); if (issue) return {ok: false, text: issue};
   if (x.line !== l.line) return {ok: false, text: `The line moved: ${l.line} → ${x.line}.`};
   const side = x.sides.find(s => s.side === l.side);
   if (!side || !side.offered) return {ok: false, text: `${l.side} is no longer offered on this line.`};
@@ -314,6 +343,7 @@ function qText() { return String(F.q || "").trim().toLowerCase(); }
 function rows() {
   let rs = (D.rows || []).filter(x => (F.plat === "all" || x.platform === F.plat) && (F.stat === "all" || x.stat === F.stat) &&
     (F.type === "all" || (F.type === "standard" ? x.line_type === "Standard" : x.line_type !== "Standard")) &&
+    (F.scope === "all" || x.scope === F.scope) && (F.side === "all" || x.pick_side === F.side) &&
     (F.match === "all" || matchKey(x) === F.match) && (!F.playable || playable(x)) &&       // a started match is not an offered pick (audit 61)
     (F.floor === "all" || !(F.floor in GRANK) || gradeRank(x) <= GRANK[F.floor]) && hit(x, qText()));   // floor = the row's shown grade
   const byStart = (a, b) => String(a.start).localeCompare(String(b.start)) || String(a.player).localeCompare(String(b.player));
@@ -324,10 +354,10 @@ function rows() {
 }
 function boardView() {
   if (!(D.rows || []).length) return `<div class="empty"><b>No graded LoL lines right now.</b><p class="small">Lines appear here when Underdog or PrizePicks post League of Legends kills, assists or deaths props for a match we can forecast, and the pre-match forecast has been saved.</p>${(D.match_tables || []).length ? `<button type="button" data-go="tables">See the posted lines</button>` : ""}</div>`;
-  const rs = rows();
+  const allRows = rows(), rs = allRows.slice(0, visibleLimit);
   if (!rs.length) return `<div class="empty"><b>No lines match these filters.</b><br><button type="button" id="reset">Reset filters</button></div>`;
-  let t = `<div class="tablebox board"><table><thead><tr><th>Start</th><th>Player</th><th>Opponent</th><th>Prop</th><th>Book</th><th class="num">Line</th><th class="num">Projection</th><th class="num">Over</th><th class="num">Under</th><th>Pick</th><th>Grade</th><th class="num">Stake</th></tr></thead><tbody>`;
-  let c = `<div class="cards">`;
+  let t = `<div class="tablebox board ${F.layout === "cards" ? "hide-table" : ""}"><table><thead><tr><th>Start</th><th>Player</th><th>Opponent</th><th>Prop</th><th>Book</th><th class="num">Line</th><th class="num">Projection</th><th class="num">Over</th><th class="num">Under</th><th>Pick</th><th>Grade</th><th class="num">Stake</th></tr></thead><tbody>`;
+  let c = `<div class="cards ${F.layout === "cards" ? "card-grid" : ""}">`;
   for (const x of rs) {
     const k = esc(x.key);
     t += `<tr class="row" tabindex="0" data-k="${k}" aria-label="${esc(x.player + " " + x.stat_name + " " + x.scope + " " + x.platform_label + " " + x.line)}"><td>${when(x.start)}${startedTag(x)}<span class="sub">${esc(x.event || "")}${x.best_of ? " · BO" + x.best_of : ""}</span></td>
@@ -335,17 +365,17 @@ function boardView() {
       <td>${esc(x.stat_name)}<span class="sub">${esc(x.scope)}</span></td><td>${esc(x.platform_label)}${typeTag(x.line_type)}</td>
       <td class="num"><b>${x.line}</b></td><td class="num">${num(x.projection)}</td><td class="num">${pct(x.p_over)}</td><td class="num">${pct(x.p_under)}${x.p_push > 0 ? `<span class="ot-push">Push ${pct(x.p_push)}</span>` : ""}</td>
       <td>${pickCell(x)}</td><td>${gradeChip(x)}${savedAgo(x) ? `<span class="sub saved">${esc(savedAgo(x))}</span>` : ""}</td><td class="num">${x.units}U</td></tr>`;
-    c += `<button type="button" class="mcard" data-k="${k}"><div class="top"><div class="who"><b>${esc(x.player)}</b><span class="sub">${esc(x.team || "")}${x.role ? " · " + esc(x.role) : ""} · vs ${esc(x.opponent || "")}</span><span class="sub">${when(x.start)}${startedTag(x)}</span></div><div>${gradeChip(x)}</div></div>
-      <div style="margin-top:8px">${esc(x.stat_name)} · ${esc(x.scope)} · ${esc(x.platform_label)}${typeTag(x.line_type)}</div><div style="margin-top:4px">${pickCell(x)}</div>
-      <div class="kv"><div><span class="k">Line</span><b>${x.line}</b></div><div><span class="k">Projection</span>${num(x.projection)}</div><div><span class="k">Over</span>${pct(x.p_over)}</div><div><span class="k">Under</span>${pct(x.p_under)}</div></div><span class="small muted">Stake ${esc(x.units)}U${savedAgo(x) ? " · " + esc(savedAgo(x)) : ""}</span>${x.p_push > 0 ? `<span class="ot-push">Exactly ${x.line}: ${pct(x.p_push)} push</span>` : ""}</button>`;
+    c += `<button type="button" class="mcard" data-k="${k}"><div class="card-meta"><span>${esc(x.platform_label)}</span><span>${esc(x.scope)}</span></div><div class="top"><div class="who"><b>${esc(x.player)}</b><span class="sub">${esc(x.team || "")}${x.role ? " · " + esc(x.role) : ""} · vs ${esc(x.opponent || "")}</span><span class="sub">${when(x.start)}${startedTag(x)}</span></div><div>${gradeChip(x)}</div></div>
+      <div class="card-market">${esc(x.stat_name)} ${typeTag(x.line_type)}</div><div style="margin-top:4px">${pickCell(x)}</div>
+      <div class="kv"><div><span class="k">Line</span><b>${x.line}</b></div><div><span class="k">Projection</span>${num(x.projection)}</div><div><span class="k">Over</span>${pct(x.p_over)}</div><div><span class="k">Under</span>${pct(x.p_under)}</div></div><span class="card-footer small muted">Stake ${esc(x.units)}U${savedAgo(x) ? " · " + esc(savedAgo(x)) : ""}</span>${x.p_push > 0 ? `<span class="ot-push">Exactly ${x.line}: ${pct(x.p_push)} push</span>` : ""}</button>`;
   }
-  return t + `</tbody></table></div>` + c + `</div><p class="small faint" style="margin-top:10px">${esc(D.stake_note)} Projection = the model's expected total for the exact games in the prop. Chances are for this line.</p>`;
+  return t + `</tbody></table></div>` + c + `</div><div class="results-heading"><span class="small muted">Showing ${rs.length} of ${allRows.length} matching lines</span>${rs.length < allRows.length ? `<button type="button" class="btn" id="morelines">Show 48 more lines</button>` : ""}</div><p class="small faint" style="margin-top:10px">${esc(D.stake_note)} Projection = the model's expected total for the exact games in the prop. Chances are for this line.</p>`;
 }
 function linesHtml(m) {
   return `<div class="lines">${m.lines.map(l => {
     const sides = l.sides.map(s => s.offered ? `${s.side}${s.payout ? " ×" + esc(s.payout) : ""}` : `<span class="faint">${s.side} not offered</span>`).join(" · ");
     const model = l.projection == null ? `<span class="faint">Projection unavailable</span>` :
-      `proj ${num(l.projection)} · Over ${pct(l.p_over)} · Under ${pct(l.p_under)}${!l.grade ? "" : (l.sides.find(z => z.side === l.pick_side) || {}).offered ? ` · <span class="g ${String(l.grade).startsWith("Lean") ? "lean" : ""}">${esc(l.grade)}</span>` : ` · <span class="faint">${esc(l.pick_side || "")} unavailable - no pick</span>`}`;
+      `proj ${num(l.projection)} · Over ${pct(l.p_over)} · Under ${pct(l.p_under)}${l.p_push > 0 ? ` · Push ${pct(l.p_push)}` : ""}${!l.grade ? "" : (l.sides.find(z => z.side === l.pick_side) || {}).offered ? ` · <span class="g ${String(l.grade).startsWith("Lean") ? "lean" : ""}">${esc(l.grade)}</span>` : ` · <span class="faint">${esc(l.pick_side || "")} unavailable - no pick</span>`}`;
     return `<div class="ln"><span>${esc(l.platform)}${typeTag(l.line_type)}</span><b>${l.line}</b><span class="small">${sides}</span><span class="small">${model}</span></div>`;
   }).join("")}</div>`;
 }
@@ -355,8 +385,11 @@ function tablesView() {
   let h = "";
   for (const t of ts) {
     const q = qText(), teamHit = q && String(t.teams || "").toLowerCase().includes(q);
-    const ms = t.markets.filter(m => (F.stat === "all" || m.stat_name.toLowerCase() === F.stat) && (F.plat === "all" || m.lines.some(l => l.platform.toLowerCase() === F.plat)) &&
+    let ms = t.markets.filter(m => (F.stat === "all" || m.stat_name.toLowerCase() === F.stat) && (F.plat === "all" || m.lines.some(l => l.platform.toLowerCase() === F.plat)) &&
       (teamHit || hit(m, q)));
+    ms = ms.filter(m => F.scope === "all" || m.scope === F.scope).map(m => ({...m,
+      lines: m.lines.filter(l => (F.plat === "all" || l.platform.toLowerCase() === F.plat) &&
+        (F.side === "all" || l.pick_side === F.side))})).filter(m => m.lines.length);
     if (!ms.length) continue;
     h += `<section class="match"><h3>${esc(t.teams)}<span>${esc(t.event || "")}${t.best_of ? " · BO" + t.best_of : ""} · ${when(t.start)}${startedTag(t)}</span></h3><div style="overflow-x:auto"><table><thead><tr><th>Player</th><th>Prop</th><th>Lines (same player, same prop, same games)</th></tr></thead><tbody>`;
     for (const m of ms) h += `<tr><td><b>${esc(m.player)}</b><span class="sub">${esc(m.team || "")}${m.role ? " · " + esc(m.role) : ""}</span></td><td>${esc(m.stat_name)}<span class="sub">${esc(m.scope)}</span></td><td>${linesHtml(m)}</td></tr>`;
@@ -457,7 +490,7 @@ function card(k, focusBack) {
   if (!x) { render(); return; }                 // the line left the board since it was drawn: redraw, open nothing
   openRow = k; lastFocus = focusBack || document.activeElement;
   const per = x.recent_per_game, n = {"Map 1": 1, "Maps 1-2": 2, "Maps 1-3": 3}[x.scope];
-  let h = `<div class="k">${esc(x.platform_label)} · ${esc(x.stat_name)} · ${esc(x.scope)} (${esc(x.scope_games || "")})</div>
+  let h = `<div class="sheet-head"><span class="eyebrow">Player research</span><button type="button" class="btn" id="closecard" aria-label="Close player research">Close ✕</button></div><div class="k">${esc(x.platform_label)} · ${esc(x.stat_name)} · ${esc(x.scope)} (${esc(x.scope_games || "")})</div>
     <h2 id="cardtitle">${esc(x.player)}</h2><div class="muted">${esc(x.team || "")}${x.role ? " · " + esc(x.role) : ""} · vs ${esc(x.opponent || "")} · ${esc(x.event || "")}${x.best_of ? " · BO" + x.best_of : ""} · ${when(x.start)}</div>
     <h4>The line</h4><div class="grid"><div><span class="k">Line</span><span class="big">${x.line}</span> ${typeTag(x.line_type)}</div><div style="grid-column:span 2"><span class="k">Line type</span>${esc(x.line_type_note)}</div></div>
     <div class="sidebox" style="margin-top:10px">${x.sides.map(s => `<div class="side ${s.offered ? "" : "off"}"><span class="k">${s.side}</span>${s.offered ? "Offered" + (s.payout ? ` · payout ×${esc(s.payout)}` : "") : "Not offered"}</div>`).join("")}</div>
@@ -477,11 +510,13 @@ function card(k, focusBack) {
   const m = others(x);
   if (m && m.lines.length > 1) h += `<h4>Same prop on every book</h4>${linesHtml(m)}`;
   h += `<h4>Times</h4><div class="grid small"><div><span class="k">Line posted at this number</span>${when(x.line_seen)}</div><div><span class="k">Line last checked</span>${when(x.line_checked)}</div><div><span class="k">Forecast saved</span>${when(x.forecast_at)}</div></div>
-    <div class="closebar"><button type="button" class="btn" id="closecard">Close</button></div>`;
+    <div class="closebar"><button type="button" class="btn" id="closecardbottom">Back to board</button></div>`;
   $("#card").innerHTML = h;
   $("#modal").classList.add("open");
   document.body.style.overflow = "hidden";
   $("#closecard").onclick = closeCard;
+  $("#closecardbottom").onclick = closeCard;
+  $("#modal").scrollTop = 0;
   setUrl(k);                                     // this card's own address: /lol?line=<line key>
   $("#copylink").onclick = async () => {
     const ok = await copyText(lineUrl(k)), msg = $("#actmsg");
@@ -521,6 +556,11 @@ function staleBanner() {
   return out.length ? `<div class="banner" role="status">${out.join(" ")}</div>` : "";
 }
 function seg(id, cur, opts) { return `<div class="seg" id="${id}" role="group">${opts.map(([v, l]) => `<button type="button" data-v="${v}" class="${cur === v ? "on" : ""}" aria-pressed="${cur === v}">${l}</button>`).join("")}</div>`; }
+function overview() {
+  const rs = rows(), available = rs.filter(playable), matches = new Set(rs.map(matchKey));
+  return `<div class="overview"><div><strong>${rs.length}</strong><span>Matching lines</span></div><div><strong>${matches.size}</strong><span>Matches</span></div><div title="Offered, upcoming and checked within 15 minutes"><strong>${available.filter(x => x.pick_side === "Over").length}</strong><span>Ready Overs</span></div><div title="Offered, upcoming and checked within 15 minutes"><strong>${available.filter(x => x.pick_side === "Under").length}</strong><span>Ready Unders</span></div></div>
+    <div class="results-heading"><div><h3>Your research board</h3><span class="small muted">Projections and model chances · select a player to compare and build</span></div>${seg("layout", F.layout, [["cards", "Cards"], ["table", "Table"]])}</div>`;
+}
 function render() {
   shownD = D; shownSlip = SLIP.legs.length;
   const ae = document.activeElement, typing = ae && ae.id === "q" ? [ae.selectionStart] : null;   // a redraw (typing, the poll) keeps the search box focused
@@ -529,23 +569,29 @@ function render() {
   for (const x of D.rows || []) ms.set(matchKey(x), `${matchName(x)} · ${new Date(x.start).toLocaleString([], {month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"})}`);
   for (const t of D.match_tables || []) if (!ms.has(`${t.start}|${t.teams}`)) ms.set(`${t.start}|${t.teams}`, `${t.teams} · ${new Date(t.start).toLocaleString([], {month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"})}`);
   if (F.match !== "all" && !ms.has(F.match)) F.match = "all";
-  let h = `<div class="intro"><div><div class="eyebrow">League of Legends · Underdog + PrizePicks</div><h2>League of Legends. In focus.</h2><p>Every posted kills, assists and deaths line with the model's projection for the exact games in the prop, the chance of each side, and the grade.</p></div><div class="feeds">${feedsLine()}</div></div>${staleBanner()}${NOTE ? `<div class="banner" role="status">${esc(NOTE)}</div>` : ""}`;
+  let h = `<div class="intro"><div><div class="eyebrow">League of Legends · Underdog + PrizePicks</div><h2>Read the match. Find your pick.</h2><p>Every posted kills, assists and deaths line with the model's projection for the exact games in the prop, the chance of each side, and the grade.</p></div><div class="feeds">${feedsLine()}</div></div>${staleBanner()}${NOTE ? `<div class="banner" role="status">${esc(NOTE)}</div>` : ""}`;
   NOTE = null;
-  h += `<div class="bar">${seg("v", F.view, [["board", "Board"], ["tables", "Compare books"], ["slip", `Slip${SLIP.legs.length ? " (" + SLIP.legs.length + ")" : ""}`]])}${seg("p", F.plat, [["all", "All books"], ["underdog", "Underdog"], ["prizepicks", "PrizePicks"]])}
+  h += `<div class="workspace-nav">${seg("v", F.view, [["board", "Board"], ["tables", "Compare books"], ["slip", `Slip${SLIP.legs.length ? " (" + SLIP.legs.length + ")" : ""}`]])}</div><div class="bar ${filtersOpen ? "filters-open" : ""}">${seg("p", F.plat, [["all", "All books"], ["underdog", "Underdog"], ["prizepicks", "PrizePicks"]])}
+    <button type="button" class="btn filter-toggle" id="filtertoggle" aria-expanded="${filtersOpen}">${filtersOpen ? "Fewer filters" : "More filters"}${[F.match, F.scope, F.type, F.floor].filter(v => v !== "all").length ? " · filters active" : ""}</button>
     <select id="s" aria-label="Prop"><option value="all">All props</option><option value="kills">Kills</option><option value="assists">Assists</option><option value="deaths">Deaths</option></select>
     <select id="m" aria-label="Match"><option value="all">All matches</option>${[...ms].map(([k, l]) => `<option value="${esc(k)}">${esc(l)}</option>`).join("")}</select>
-    ${F.view !== "slip" ? `<input type="search" id="q" placeholder="Player or team" aria-label="Search a player or team" autocomplete="off" value="${esc(F.q || "")}">` : ""}
+    ${F.view !== "slip" ? `<select id="scope" aria-label="Map scope"><option value="all">All map scopes</option>${[...new Set((D.rows || []).map(x => x.scope).concat((D.match_tables || []).flatMap(t => t.markets.map(m => m.scope))))].sort().map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join("")}</select>
+    <select id="side" aria-label="Model side"><option value="all">Overs + Unders</option><option value="Over">Overs</option><option value="Under">Unders</option></select><input type="search" id="q" placeholder="Player or team" aria-label="Search a player or team" autocomplete="off" value="${esc(F.q || "")}">` : ""}
     ${F.view === "board" ? `<select id="t" aria-label="Line type"><option value="all">All line types</option><option value="standard">Standard lines</option><option value="alt">Goblin / Demon / adjusted</option></select>
     <select id="g" aria-label="Grade floor">${FLOORS.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>
     <select id="o" aria-label="Sort"><option value="start">Sort: start time</option><option value="grade">Sort: best grade</option><option value="chance">Sort: chance</option></select>
     <label class="chk"><input type="checkbox" id="pl" ${F.playable ? "checked" : ""}> Offered picks only</label>` : ""}</div>`;
-  $("#app").innerHTML = h + (F.view === "board" ? boardView() : F.view === "slip" ? slipView() : tablesView());
+  $("#app").innerHTML = h + (F.view === "board" ? overview() + boardView() : F.view === "slip" ? slipView() : tablesView());
   document.querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { SLIP.legs.splice(+b.dataset.rm, 1); saveSlip(); CHECK = {}; render(); });
   if ($("#clearslip")) $("#clearslip").onclick = () => { SLIP.legs = []; saveSlip(); CHECK = {}; render(); };
   if ($("#copyslip")) $("#copyslip").onclick = copySlip;
   document.querySelectorAll("[data-send]").forEach(b => b.onclick = () => sendSuggested(b.dataset.send));
   $("#s").value = F.stat; $("#m").value = F.match; if ($("#t")) { $("#t").value = F.type; $("#o").value = F.sort; $("#g").value = F.floor; }
-  const set = (k, v) => { F[k] = v; save(); render(); };
+  const set = (k, v) => { F[k] = v; visibleLimit = 48; save(); render(); };
+  $("#filtertoggle").onclick = () => { filtersOpen = !filtersOpen; render(); };
+  if ($("#morelines")) $("#morelines").onclick = () => { visibleLimit += 48; render(); };
+  for (const id of ["scope", "side"]) if ($("#" + id)) { $("#" + id).value = F[id]; $("#" + id).onchange = e => set(id, e.target.value); }
+  if ($("#layout")) $("#layout").onclick = e => { const b = e.target.closest("button"); if (b) set("layout", b.dataset.v); };
   const qi = $("#q");
   if (qi) {
     qi.oninput = e => { F.q = e.target.value; save(); render(); };       // redraw as the member types
@@ -581,7 +627,16 @@ async function load(first) {
 function gate(s) {
   $("#app").innerHTML = `<div class="gate"><h2>Members only</h2><p class="muted">Sign in with Whop to see the LoL board.</p><p><a href="/auth/login">Sign in</a>${s.upgrade ? ` · <a href="${esc(s.upgrade)}">Join on Whop</a>` : ""}</p></div>`;
 }
-document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal").classList.contains("open")) closeCard(); });
+document.addEventListener("keydown", e => {
+  if (!$("#modal").classList.contains("open")) return;
+  if (e.key === "Escape") closeCard();
+  if (e.key === "Tab") {
+    const els = [...$("#card").querySelectorAll('button:not(:disabled),a[href],input,select,summary,[tabindex="0"]')].filter(el => el.getClientRects().length);
+    const first = els[0], last = els[els.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+});
 $("#modal").addEventListener("click", e => { if (e.target.id === "modal") closeCard(); });
 window.addEventListener("scroll", () => { try { sessionStorage.setItem(SKEY, String(window.scrollY)); } catch {} }, {passive: true});
 (async () => {
