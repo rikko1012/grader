@@ -9,7 +9,10 @@ HTML = (Path(__file__).parent.parent / "web" / "index.html").read_text(encoding=
 def test_no_average_return_or_saved_standard_payout_in_the_slip_panel():
     for gone in ("back per 1U", "average return at", "Average return =", "your saved standard", "retLine("):
         assert gone not in HTML, gone
-    assert "Payout you entered for this exact entry" in HTML and "No return is computed" in HTML
+    # 2026-10-21 slips U11 (owner rule: no payout figures): the member-entered payout box, its display and its storage are gone
+    for gone in ("Payout you entered for this exact entry", 'id="slippay"', "manualPay()", "udExact()", "udPay()", "Payout ${esc(pn)} shows"):
+        assert gone not in HTML, gone
+    assert 'localStorage.removeItem(k)); } catch {}' in HTML and '"cs2s_manualpay", "cs2s_udexact", "cs2s_udpay"' in HTML
 
 
 def test_card_shows_the_used_price_age_and_the_odds_effect():
