@@ -1,5 +1,15 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
+## Slip builder `studio-4` (CS2 model tag unchanged: f663af8917), 2026-10-22
+
+Slips release (no grade, chance, projection or stake changes): "build around" - settings.must_include (up to 2 board row ids,
+each checked by why_excluded, the batch's both-sides rule and the other pin; left-out ids reported as pinned_left_out); every slip of
+that build holds the eligible pins (stored per slip as built_around). Pins skip the batch's no-repeat / overlap caps (the member
+asked for them in every slip); in-slip rules (one pick per match / player / team, never both sides of a stat) still apply.
+Also: Verify refuses replaced / changed / dismissed slips (no copy text); copy text header "<Book> - n-pick entry - standard lines -
+1Time grader" (no internal ids); member slip-copy logging fixed (slip_key without a board id); Studio legs on HLTV-only matches
+settle (board rows carry settle_slug = BO3.gg slug else hltv-<id>); LoL batch keeps building past one failing slip.
+
 ## `f663af8917` — audit fixes (65 confirmed bugs) + hs-cm2 (HS Maps 1-2 on cm-2 kills), 2026-10-21
 
 Base: `794a775f51`. Two kinds of change; no parameter, coefficient, band, threshold or cap changed.

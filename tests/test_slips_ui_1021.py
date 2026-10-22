@@ -368,3 +368,18 @@ def test_verify_on_an_already_replaced_slip_does_not_rebuild(tmp_path):
       return {builds: B.length, notes: STUDIO.notes["x/b1/s1"]};
     })()""")
     assert out["builds"] == 0 and out["notes"] == ["line moved 20.5 to 21.5", "replaced in build b3"]
+
+
+@needs_node
+def test_u7_built_slip_marks_its_pinned_leg_from_built_around(tmp_path):
+    """The builder stores a pinned build's ids per slip as built_around (slip_builder.build, studio-4); the slip marks that leg."""
+    out = run(tmp_path, "index.html", """(() => {
+      STUDIO.pins = [];
+      const fut = new Date(Date.now() + 3600e3).toISOString();
+      const leg = id => ({row_id: id, nick: "p" + id, prop: "kills", scope: "12", line: 30.5, side: "More", p: 0.6, grade: "B", units: 1, start: fut,
+                          book: "underdog", match: "m" + id});
+      const s = {slip_id: "b/1", book: "underdog", n: 2, legs: [leg("ud:1"), leg("ud:2")], built_around: ["ud:1"], status: "live"};
+      const h = studioSlip(s);
+      return {pins: (h.match(/build around/g) || []).length};
+    })()""")
+    assert out["pins"] == 1
