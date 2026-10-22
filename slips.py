@@ -23,9 +23,17 @@ _LOCK = threading.Lock()
 _SEEN = {"rec": None, "load": None}
 
 
+def _leg_ident(l):
+    """A leg's identity for the key: its board id, or - for the page's member copies, whose legs carry no id (2026-10-21
+    bug: l['id'] raised KeyError, /api/slip_log answered 400 and no member copy was ever logged) - the pick itself."""
+    if l.get("id") is not None:
+        return str(l["id"])
+    return "/".join(str(l.get(k) if l.get(k) is not None else "") for k in ("nick", "prop", "scope", "book", "match_slug")).lower()
+
+
 def slip_key(legs):
-    """One slip = its picks (board id, line, side), order ignored."""
-    return "|".join(sorted(f"{l['id']}:{l['line']}:{l['side']}" for l in legs))
+    """One slip = its picks (board id or pick identity, line, side), order ignored."""
+    return "|".join(sorted(f"{_leg_ident(l)}:{l.get('line')}:{l.get('side')}" for l in legs))
 
 
 def _legs(rows, now_iso):
@@ -162,7 +170,7 @@ def log_loaded(d):
     rec = {"cid": cid, "key": slip_key(legs), "logged_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
            **{k: d.get(k) for k in ("builder", "grader", "board_at", "mode", "n", "all", "pay", "pay_source")},
            "legs": [{k: l.get(k) for k in ("id", "nick", "prop", "scope", "line", "side", "p", "grade", "matchup", "start", "mult",
-                                           "match_slug", "check", "orig_line", "check_note")}
+                                           "match_slug", "book", "line_type", "check", "orig_line", "check_note")}
                     for l in legs]}
     with _LOCK:
         seen = _seen("load", LOADED, "cid")

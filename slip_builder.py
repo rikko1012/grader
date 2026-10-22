@@ -65,7 +65,7 @@ from pathlib import Path
 
 import comparison
 
-VERSION = "studio-3"
+VERSION = "studio-4"                           # studio-4: "build around" pinned picks (settings.must_include)
 GRADES = ("A+", "A", "A-", "B+", "B")          # B- left out (no evidence it belongs in slips - batch-3)
 SIZES = (4, 3, 2)                              # planning order: largest first
 MAX_COUNT = 10                                 # slips per size per Build press
@@ -77,6 +77,7 @@ REUSE_PENALTY = 10.0                           # > any log-chance spread: a fres
 OPEN_CAPS = {"player": 10 ** 6, "match": 10 ** 6}  # "as_needed" second pass: any reuse (least-used first), same in-slip rules
 OVERLAPS = ("as_needed", "none", "limited")
 MONEYLINE = ("moneyline", "ml", "team_ml")
+MAX_PINS = 2                                   # settings.must_include: up to 2 board row ids every slip is built around
 DATA_DIR = Path(os.environ.get("CS2_DATA_DIR") or Path(__file__).resolve().parent)
 DB_PATH = DATA_DIR / ".cache" / "slip_studio.db"
 _LOCK = threading.Lock()                       # the connection pool + first-time schema init (held briefly, never in a txn)
@@ -146,8 +147,15 @@ def normalize_settings(s):
             caps = {k: max(1, min(MAX_CAP, int(mu.get(k, DEFAULT_CAPS[k])))) for k in ("player", "match")}
         except (TypeError, ValueError, AttributeError, OverflowError):
             raise ValueError("max_uses must be whole numbers")
-    return {"book": book, "side": side, "stat": stat, "scope": scope, "market": market, "sizes": sizes,
-            "counts": counts, "overlap": overlap, "max_uses": caps, "fill": fill}
+    out = {"book": book, "side": side, "stat": stat, "scope": scope, "market": market, "sizes": sizes,
+           "counts": counts, "overlap": overlap, "max_uses": caps, "fill": fill}
+    pins = s.get("must_include")
+    if pins:                                             # only stored when used (older settings stay byte-identical)
+        if not isinstance(pins, (list, tuple)) or len(pins) > MAX_PINS or not all(
+                isinstance(x, str) and 0 < len(x) <= 128 for x in pins):
+            raise ValueError(f"must_include must be a list of up to {MAX_PINS} board row ids")
+        out["must_include"] = list(dict.fromkeys(pins))  # order kept, a repeated id once
+    return out
 
 
 # ---------------------------------------------------------------- row identity
@@ -308,7 +316,10 @@ def pick_record(r):
     return {"row_id": r.get("id"), "player": r.get("player"), "nick": r.get("nick") or r.get("player"),
             "player_id": r.get("player_id"), "ud_player_id": r.get("ud_player_id"),
             "team": _team(r), "opponent": _opp(r), "book_team": r.get("team"), "book_opponent": r.get("opponent"),
-            "match_id": r.get("match_id"), "ud_match_id": r.get("ud_match_id"), "match_slug": r.get("match_slug"),
+            "match_id": r.get("match_id"), "ud_match_id": r.get("ud_match_id"),
+            # the pick log's key for the match (an HLTV-only match: hltv-<id>, server.settle_slug) - without it the leg
+            # never settles (2026-10-21 bug: History 'waiting' for ever, and the whole shadow batch with it)
+            "match_slug": r.get("match_slug") or r.get("settle_slug"),
             "start": r.get("start"), "event": r.get("event"),
             "prop": "moneyline" if mt == "moneyline" else r.get("prop"), "scope": r.get("scope") or "12",
             "line": r.get("line"), "side": r.get("side"), "book": r.get("book") or "underdog", "market_type": mt,
@@ -388,11 +399,16 @@ def _conflict(a, chosen):
     return any(a.mk & c.mk or a.pk & c.pk or a.tk & c.tk for c in chosen)
 
 
-def _fill(n, pool, usage, caps):
-    """Best n-leg slip from pool under the batch caps: branch and bound on sum(score). Returns (legs | None, nodes, capped)."""
+def _fill(n, pool, usage, caps, seed=()):
+    """Best n-leg slip from pool under the batch caps: branch and bound on sum(score). Returns (legs | None, nodes, capped).
+    seed = the pinned legs ("build around", settings.must_include): every slip starts from them (they are not subject to
+    the batch's overlap caps - the member asked for them in every slip); the other legs never share their match, player or
+    team, and the whole slip (seed included) is never a slip the batch already has."""
+    seed = list(seed)
+    sid = {l.uid for l in seed}
     usable = []
     for leg in pool:
-        if usage.blocked(leg, caps):
+        if leg.uid in sid or (seed and _conflict(leg, seed)) or usage.blocked(leg, caps):
             continue
         leg.score = leg.logp - REUSE_PENALTY * (usage.players(leg) + usage.matches(leg))
         usable.append(leg)
@@ -424,7 +440,9 @@ def _fill(n, pool, usage, caps):
             chosen.pop()
             if nodes[0] > NODE_LIMIT:
                 return
-    dfs(0, [], 0.0)
+    if len(seed) > n:
+        return None, 0, False
+    dfs(0, list(seed), 0.0)
     return best["legs"], nodes[0], nodes[0] > NODE_LIMIT
 
 
@@ -441,30 +459,41 @@ def _capacity(pool, usage, caps):
     return k
 
 
-def _plan(st, capacity):
+def _plan(st, capacity, pinned=0):
     """Slips per size from the leg budget (none mode), in st["sizes"] order: largest first (fill "large", default) or
-    smallest first (fill "small"); limited / as_needed = as requested."""
+    smallest first (fill "small"); limited / as_needed = as requested. pinned = legs every slip already holds (they take
+    nothing from the budget; a size that can't hold them gets none)."""
     if st["overlap"] != "none":
-        return dict(st["counts"])
+        return {n: (c if n >= pinned else 0) for n, c in st["counts"].items()}
     plan, left = {}, capacity
     for n in st["sizes"]:                                # 4, then 3, then 2 (fill "small": 2, then 3, then 4)
-        plan[n] = min(st["counts"][n], left // n)
-        left -= plan[n] * n
+        per = n - pinned
+        plan[n] = 0 if per < 0 else st["counts"][n] if per == 0 else min(st["counts"][n], left // per)
+        left -= plan[n] * max(per, 0)
     return plan
 
 
-def _select(pool, st, usage, had_prior=False):
+def _select(pool, st, usage, had_prior=False, pins=()):
     caps = st["max_uses"]
     soft = st["overlap"] == "as_needed"
+    pins = list(pins)
+    k = len(pins)
+    if pins:                                             # the other legs: never a pinned leg, nor its match / player / team
+        pu = {l.uid for l in pins}
+        pool = [l for l in pool if l.uid not in pu and not _conflict(l, pins)]
     cap0 = _capacity(pool, usage, caps)
-    plan = _plan(st, cap0)
+    plan = _plan(st, cap0, k)
     out, shortage, search = {n: [] for n in SIZES}, {}, {"node_limit": NODE_LIMIT, "nodes": 0, "bound_hit": False, "reused_slips": 0}
     for n in st["sizes"]:
         want = st["counts"][n]
+        if n < k:
+            shortage[n] = (f"0 of {want} {n}-pick slips: a {n}-pick slip can't hold the {k} picks this build is built "
+                           f"around. Ask for {k}-pick slips or larger, or build around one pick.")
+            continue
         for _ in range(plan[n]):
-            legs, nodes, capped = _fill(n, pool, usage, caps)
+            legs, nodes, capped = _fill(n, pool, usage, caps, pins)
             if not legs and soft:                        # no fresh slip left: reuse, least-used first
-                legs, nodes2, capped2 = _fill(n, pool, usage, OPEN_CAPS)
+                legs, nodes2, capped2 = _fill(n, pool, usage, OPEN_CAPS, pins)
                 nodes, capped = nodes + nodes2, capped or capped2
                 search["reused_slips"] += bool(legs)
             search["nodes"] += nodes
@@ -476,10 +505,16 @@ def _select(pool, st, usage, had_prior=False):
         if len(out[n]) < want:
             left = [l for l in pool if not usage.blocked(l, OPEN_CAPS if soft else caps)]
             matches = len({min(l.mk) for l in left if l.mk})
+            pin_note = ""
+            if k:
+                pin_note = (f" Every slip of this build holds the {k} pick{'s' if k != 1 else ''} it is built around"
+                            + (" - a slip of just those picks is offered once (the same slip is never offered twice)."
+                               if n == k else f", so the other {n - k} come from other matches." if n - k > 1
+                               else ", so the other pick comes from another match."))
             if soft:
                 shortage[n] = (f"{len(out[n])} of {want} {n}-pick slips: today's eligible picks make no other different "
                                f"{n}-pick slip ({matches} eligible match{'es' if matches != 1 else ''}; a slip needs {n} different "
-                               f"matches and players). More slips appear as more lines are graded.")
+                               f"matches and players). More slips appear as more lines are graded." + pin_note)
                 continue
             if st["overlap"] == "none":
                 why = (f"{len(out[n])} of {want} {n}-pick slips: {matches} unused eligible match{'es' if matches != 1 else ''} "
@@ -491,15 +526,16 @@ def _select(pool, st, usage, had_prior=False):
             if search["bound_hit"]:
                 why += f"; search stopped at its {NODE_LIMIT}-node bound"
             total_matches = len({min(l.mk) for l in pool if l.mk})
-            if total_matches < n:
-                shortage[n] = (why + f". Rules are not relaxed. The filtered pool has {total_matches} distinct eligible matches; "
-                               f"a {n}-pick slip needs {n}. Allowing repeats across slips or starting a new "
-                               "batch cannot supply the missing matches. Broaden the filters or wait for more lines.")
+            if total_matches < n - k:
+                shortage[n] = (why + f". Rules are not relaxed. The filtered pool has {total_matches} distinct eligible matches"
+                               f"{' besides the pinned picks' if k else ''}; a {n}-pick slip needs {n - k}{' more' if k else ''}. "
+                               "Allowing repeats across slips or starting a new "
+                               "batch cannot supply the missing matches. Broaden the filters or wait for more lines." + pin_note)
                 continue
             tips = ["ask for fewer slips"] + (["allow limited overlap"] if st["overlap"] == "none" else [])
             tips += ["start a new batch"] if had_prior else []
             shortage[n] = (why + ". Rules are not relaxed to fill the count - "
-                           + (", ".join(tips[:-1]) + " or " if len(tips) > 1 else "") + tips[-1] + ".")
+                           + (", ".join(tips[:-1]) + " or " if len(tips) > 1 else "") + tips[-1] + "." + pin_note)
     return out, plan, shortage, search, cap0
 
 
@@ -847,15 +883,19 @@ def _compute(rows, st, model, now, batch_id, build_id, prior):
         seen.add(leg.uid)
         pool.append(leg)
     usage = _usage_from(prior)
+    pins, pinned_left_out = _pins(rows, st, model, now, usage)
+    pin_uids = {l.uid for l in pins}
     fresh = []
     for leg in pool:
+        if leg.uid in pin_uids:
+            continue                                      # seeds every slip (never counted as left out / in the pool)
         b = usage.blocked(leg, OPEN_CAPS if st["overlap"] == "as_needed" else st["max_uses"])
         if b:
             out(b, leg.row)
         else:
             fresh.append(leg)
     eligible_n, eligible_matches = len(pool), len({min(l.mk) for l in pool if l.mk})
-    chosen, plan, shortage, search, capacity = _select(fresh, st, usage, bool(prior))
+    chosen, plan, shortage, search, capacity = _select(fresh, st, usage, bool(prior), pins)
     if not pool:
         shortage["all"] = (f"No eligible picks on {'PrizePicks' if st['book'] == 'prizepicks' else 'Underdog'} for these settings"
                            + (" - most left out: " + "; ".join(f"{e['reason']} ({e['count']})" for e in
@@ -873,6 +913,7 @@ def _compute(rows, st, model, now, batch_id, build_id, prior):
                              "builder_version": VERSION, "settings": st, "rules": rules,
                              **probability,
                              "selection_log_score": round(sum(l.logp for l in legs), 6),
+                             **({"built_around": [l.rec["row_id"] for l in pins]} if pins else {}),
                              "legs": [dict(l.rec) for l in legs]})
     new = [s for n in SIZES for s in slips[n]]
     allslips = prior + new
@@ -890,7 +931,51 @@ def _compute(rows, st, model, now, batch_id, build_id, prior):
                          # the most slips of each size the eligible picks support with no repeats (all of them / what this
                          # batch has left) - one pick per match and player, so 9 matches = 2 four-picks, 3 three-picks or 4 two-picks
                          "max_slips": max_slips(full_cap), "max_slips_left": max_slips(capacity)},
-            "search": search}
+            "search": search,
+            # "build around" (settings.must_include): the pinned picks every slip of this build holds, and the ids left
+            # out with the builder's own reason (why_excluded / the batch's both-sides rule / clash with the other pin)
+            "pinned": [{"id": l.rec["row_id"], "label": _leg_label(l.rec)} for l in pins],
+            "pinned_left_out": pinned_left_out}
+
+
+def _leg_label(rec):
+    return f"{rec.get('nick') or rec.get('player')} {rec.get('prop')} {_side_word(rec.get('side'))} {rec.get('line')}"
+
+
+def _pins(rows, st, model, now, usage):
+    """settings.must_include -> (pinned _Legs in the order asked, [{id, why}] left out). Each id must be a board row the
+    builder itself would use (why_excluded = None: this platform, entry type, filters, grade, line, role ...); the batch's
+    both-sides rule still applies, and two pins never share a match, player or team (one slip holds both). The batch's
+    no-repeat / overlap caps do not apply to a pin: the member asked for it in every slip of this build."""
+    want = st.get("must_include") or []
+    if not want:
+        return [], []
+    by_id = {}
+    for r in rows:
+        by_id.setdefault(str(r.get("id")), []).append(r)
+    pins, left = [], []
+    for pid in want:
+        cands = by_id.get(pid) or []
+        if not cands:
+            left.append({"id": pid, "why": "not on the current board (the line may have been pulled or moved)"})
+            continue
+        leg, whys = None, []
+        for r in sorted(cands, key=lambda r: (r.get("book") or "underdog") != st["book"]):   # this platform's row first
+            why = why_excluded(r, st, model, now)
+            if why is None:
+                leg = _Leg(r)
+                break
+            whys.append(why)
+        if leg is None:
+            left.append({"id": pid, "why": whys[0]})
+        elif usage.opposing(leg):
+            left.append({"id": pid, "why": "other side of this player's stat already in this batch"})
+        elif _conflict(leg, pins):
+            left.append({"id": pid, "why": "same match, player or team as the other pick you built around (one pick per "
+                                           "match, player and team inside a slip)"})
+        else:
+            pins.append(leg)
+    return pins, left
 
 
 def max_slips(legs):
@@ -972,6 +1057,13 @@ def member_batches(session_id, limit=6):
     with _db() as con:
         ids = [r[0] for r in con.execute("SELECT batch_id FROM batches WHERE owner=? ORDER BY seq DESC LIMIT ?", (o, int(limit) + 1))]
     return [b for b in (get_batch(i) for i in ids) if b]
+
+def slip_status(batch_id, slip_id):
+    """None while the slip counts; else {"status": replaced / changed / dismissed, "replaced_by"} (DEAD_KINDS)."""
+    with _db() as con:
+        d = _dead(con, batch_id).get(slip_id)
+    return {"status": _DEAD_LABEL[d["kind"]], "replaced_by": d.get("replaced_by")} if d else None
+
 
 def get_slip(slip_id):
     with _db() as con:
@@ -1117,8 +1209,8 @@ def copy_text(slip):
     platform, market type)."""
     book, words = _BOOK.get(slip.get("book") or "underdog", _BOOK["underdog"])
     et = slip.get("entry_type") or "standard"
-    lines = [f"{book} - {slip.get('n')}-pick entry - {et} lines - CS2 Scout {slip.get('builder_version') or VERSION} "
-             f"(slip {slip.get('slip_id')})"]
+    # what members paste: the 1Time name, never internal ids or builder versions (those stay on the stored record)
+    lines = [f"{book} - {slip.get('n')}-pick entry - {et} lines - 1Time grader"]
     for i, l in enumerate(slip.get("legs") or [], 1):
         mt = l.get("market_type") or "standard"
         if mt == "moneyline":

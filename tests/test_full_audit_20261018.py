@@ -79,7 +79,7 @@ def test_builder_revalidates_raw_outcomes_even_when_displayed_chance_does_not_ch
     monkeypatch.setattr(sb, "DB_PATH", tmp_path / "slips.db")
     rows = board(2, per_match=1, model_outcomes={"over": .54, "under": .36, "push": .1}, line=30, graded_line=30)
     slip = sb.build(rows, {"sizes": [2], "count": 1}, now=NOW, model=M)["slips"][2][0]
-    assert slip["all_hit"] == .2916 and slip["builder_version"] == "studio-3"
+    assert slip["all_hit"] == .2916 and slip["builder_version"] == "studio-4"
     assert sb.verify_before_copy(slip, _boards(rows, NOW.timestamp()), now=NOW, model=M)["ok"]
     rows[0] = dict(rows[0], model_outcomes={"over": .51, "under": .34, "push": .15})
     assert not sb.verify_before_copy(slip, _boards(rows, NOW.timestamp()), now=NOW, model=M)["ok"]

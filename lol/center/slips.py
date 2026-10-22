@@ -63,7 +63,8 @@ def build(con, platform, size, count, mode="mixed", no_overlap=True, exclude_rol
     legs, left = candidates(con, platform, mode, exclude_roles, preview, now)
     used_props, used_matches, slips = set(), set(), []
     pool = list(legs)
-    for _ in range(count):
+
+    def pick():
         slip, sids, props = [], set(), set()
         for f in pool:
             prop = (f["pid"], f["stat"])
@@ -76,10 +77,33 @@ def build(con, platform, size, count, mode="mixed", no_overlap=True, exclude_rol
             props.add(prop)
             if len(slip) == size:
                 break
-        if len(slip) < size:
-            break
-        check = forecast.slip_check(con, [f["id"] for f in slip], now)
-        if not preview and not check["eligible"]:
+        return slip, props, sids
+
+    done = False
+    for _ in range(count):
+        while True:
+            slip, props, sids = pick()
+            if len(slip) < size:
+                done = True
+                break
+            check = forecast.slip_check(con, [f["id"] for f in slip], now)
+            if preview or check["eligible"]:
+                break
+            # 2026-10-21 bug: the first slip failing the re-check ended the WHOLE batch (one moved line = no slips and a
+            # wrong shortage). Now the legs that fail on their own are dropped from the pool (and reported in left_out) and
+            # the slip is built again from the rest - bounded: every pass removes at least one leg, or stops.
+            bad = []
+            for f in slip:
+                c1 = forecast.slip_check(con, [f["id"]], now)
+                if not c1["eligible"]:
+                    bad.append(f)
+                    left[f["id"]] = list(c1.get("reasons") or []) or ["the line or side changed since the forecast"]
+            if not bad:
+                done = True                                 # a slip-level failure no single leg explains: stop, as before
+                break
+            pool[:] = [f for f in pool if f not in bad]
+            legs = [f for f in legs if f not in bad]
+        if done:
             break
         mods = []
         for f in slip:

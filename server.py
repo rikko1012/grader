@@ -552,6 +552,11 @@ def _slug_mid(slug):
     return f"hltv:{m.group(1)}" if m else None
 
 
+def _settle_slug(nm):
+    """The match key the pick log settles under (same rule as picklog.pick_row): BO3.gg's slug, else hltv-<HLTV match id>."""
+    return nm.get("slug") or (f"hltv-{nm['hltv_match']}" if nm.get("hltv_match") else None)
+
+
 def same_match(r, slug, st, mid=None):
     """A board row is for the graded match: its match id decides when both sides know one (2026-10-15 owner - a platform's
     listed start can differ from the graded match's by hours: Underdog listed WBT vs ENCE at 14:00, BO3.gg 12:00; a
@@ -1006,7 +1011,7 @@ def board_payload(book="underdog"):
             continue                                  # graded before the Under was offered: regraded first, never shown meanwhile
         rows.append(dict(r, **{k: g.get(k) for k in ("grade", "side", "p", "units", "proj", "reason", "graded_at", "model_outcomes",
                                                      "nick", "state", "edge", "l10_over", "l10_n", "l10_push", "l10_avg",
-                                                     "hs_pct", "p_win", "market", "team_name", "opp_name", "match_slug",
+                                                     "hs_pct", "p_win", "market", "team_name", "opp_name", "match_slug", "settle_slug",
                                                      "graded_line", "graded_model", "player_id", "event", "bo", "maps_known",
                                                      "dstat", "source", "support", "concern", "tonight", "hltv_retry",
                                                      "retry_cause", "cap_grade", "warn", "graded_sides",
@@ -1562,7 +1567,8 @@ def _lol_member_slips(sm):
         out[LOL_PLATFORM.get(pl, pl)] = {
             "recommended": [{"size": sl.get("size"), "legs": [{"key": _lol_key(pl, lg.get("market_key")), "side": lg.get("side"),
                                                               "line": lg.get("line")} for lg in sl.get("legs") or []],
-                             "entry_payout": sl.get("entry_payout"), "model_chance_all_hit": sl.get("model_chance_all_hit")}
+                             # no entry payout to members (owner rule: no payout / returns figures) - the chance stays
+                             "model_chance_all_hit": sl.get("model_chance_all_hit")}
                             for sl in d.get("recommended") or []],
             "why_none": reasons, "upcoming_picks": d.get("upcoming_forecasts", 0)}
     return out
@@ -2407,7 +2413,9 @@ def _no_json_constant(c):
 _IDEM_RE = re.compile(r"^[A-Za-z0-9_.:-]{8,64}$")
 _BATCH_RE = re.compile(r"^[0-9a-f]{12}-\d{1,9}$")
 _SLIP_RE = re.compile(r"^[0-9a-f]{12}-\d{1,9}/b\d{1,9}/s\d{1,4}$")
-_SETTING_KEYS = {"book", "side", "stat", "scope", "market", "sizes", "count", "counts", "overlap", "max_uses", "fill"}
+_SETTING_KEYS = {"book", "side", "stat", "scope", "market", "sizes", "count", "counts", "overlap", "max_uses", "fill",
+                 "must_include"}
+_ROW_ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")    # a board row id (Underdog line uuid, "pp:<line id>")
 
 
 def studio_settings(s):
@@ -2437,6 +2445,10 @@ def studio_settings(s):
         if not isinstance(m, dict) or set(m) - {"player", "match"} or not all(
                 isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 3 for v in m.values()):
             raise ValueError("max_uses must be {player, match} with values 1-3")
+    if "must_include" in s:                              # "build around": up to 2 board row ids (U7 shared contract)
+        m = s["must_include"]
+        if not isinstance(m, list) or len(m) > 2 or not all(isinstance(x, str) and _ROW_ID_RE.match(x) for x in m):
+            raise ValueError("must_include must be a list of up to 2 board row ids")
     import slip_builder
     return slip_builder.normalize_settings(s)
 
@@ -2693,6 +2705,11 @@ def board_forever():
                                       "team_name": pb.get("playing_for") or pb.get("current_team"),
                                       "opp_name": (res.get("next_match") or {}).get("opponent"),
                                       "match_slug": (res.get("next_match") or {}).get("slug"),   # exact match id (settling slips)
+                                      # the pick log's match key (picklog.pick_row: a match only HLTV has is logged as
+                                      # hltv-<HLTV match id>). 2026-10-21 bug: Studio legs on such matches carried slug None
+                                      # and never settled. Kept apart from match_slug, whose None still means "match by the
+                                      # start time" for the card stake / anchor lookups (unchanged).
+                                      "settle_slug": _settle_slug(res.get("next_match") or {}),
                                       "tonight": (pb.get("_env") or {}).get("tonight"),   # LAN / online (match table projections)
                                       "book": r.get("book") or "underdog", "line_type": lt,
                                       # the sides the feed offered when this grade was made (display: "no longer offered")
@@ -4448,6 +4465,18 @@ class Handler(BaseHTTPRequestHandler):
         if rec is None:
             return err
         book = rec.get("book") or "underdog"
+        dead = sb.slip_status(rec["batch_id"], rec["slip_id"])
+        if dead:
+            # 2026-10-21: a replaced / changed / dismissed slip no longer counts toward the batch (exposure, usage) - it
+            # got ok + copy_text again when its lines happened to be unchanged. Never copied: a changed or dismissed one
+            # is rebuilt (replace), a replaced one points at its replacement.
+            why = {"replaced": "this slip was replaced - copy its replacement",
+                   "changed": "a line on this slip changed since it was built - it is rebuilt from the current board",
+                   "dismissed": "this slip was dismissed - build again for a current one"}[dead["status"]]
+            return self.send(200, {"ok": False, "action": "replaced" if dead["status"] == "replaced" else "rebuild",
+                                   "status": dead["status"], "replaced_by": dead.get("replaced_by"), "changes": [why],
+                                   "legs": [], "slip_id": rec["slip_id"], "batch_id": rec["batch_id"], "book": book,
+                                   "copy_text": None})
         feed = prizepicks.board() if book == "prizepicks" else underdog.board()
         graded = graded_board(book, max_age=2)
         v = sb.verify_before_copy(rec, {book: {"feed": feed, "graded": graded}}, model=graded.get("version"))
