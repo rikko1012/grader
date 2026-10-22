@@ -18,6 +18,10 @@ import kvstore
 import perf_live
 import roles
 
+# the graded match is always tomorrow: history fixtures are dated relative to today, and a fixed date (once 2026-10-20) turns
+# into a time bomb when today reaches it (the forecast cutoff then drops the match-day rows)
+_NEXT_START = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT15:00:00Z")
+
 
 def _clock(monkeypatch):
     """The wall clock, movable forward: off[0] seconds are added to time.time() everywhere."""
@@ -317,7 +321,7 @@ def test_c3_blip_keeps_tonight_transient(monkeypatch, offline):
     import hltv as h
     monkeypatch.setattr(h, "allow_probe", lambda: False)
     pb = _base_pb()
-    res = {"player_block": pb, "next_match": {"start": "2026-10-20T15:00:00Z", "opponent": "Foe", "bo": 3, "event": "Cup",
+    res = {"player_block": pb, "next_match": {"start": _NEXT_START, "opponent": "Foe", "bo": 3, "event": "Cup",
                                               "event_type": "online", "maps": []}}
     cs2_scout.finish_line(res, _args(line=30.5))
     assert pb["_env_transient"] and res["grader_inputs"]["perf"]["transient"]
@@ -625,7 +629,7 @@ def test_maps123_record_never_takes_an_academy_for_its_main_team():
 def _fake_run(odds):
     def run(args, res, b, ttl):
         res["player_block"] = _base_pb()
-        res["next_match"] = {"start": "2026-10-20T15:00:00Z", "slug": "x", "opponent": "Foe", "bo": 3, "event": "Some Cup",
+        res["next_match"] = {"start": _NEXT_START, "slug": "x", "opponent": "Foe", "bo": 3, "event": "Some Cup",
                              "event_type": "online", "maps": [], "opponent_id": None, "opponent_slug": None}
         res["odds"] = copy.deepcopy(odds)
         args.match_start, args.match_bo, args.opponent = res["next_match"]["start"], 3, "Foe"
@@ -872,7 +876,7 @@ def test_failed_hltv_series_read_is_transient_empty_is_not(monkeypatch, case):
     if case == "stored":                                   # good reads saved earlier (the last-10 one and the stake check's)
         hltv_store.save(key, [dict(r) for r in good])
         hltv_store.save(("series", "tester", "mine", (datetime.now(timezone.utc).date() - timedelta(days=90)).isoformat()), [])
-    res = {"player_block": pb, "next_match": {"start": "2026-10-20T15:00:00Z", "opponent": "Foe", "bo": 3, "event": "Cup",
+    res = {"player_block": pb, "next_match": {"start": _NEXT_START, "opponent": "Foe", "bo": 3, "event": "Cup",
                                               "event_type": "online", "maps": []}}
     cs2_scout.finish_line(res, _args(line=40.5))
     st = seen["hltv_series"]

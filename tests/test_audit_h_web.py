@@ -99,11 +99,11 @@ def test_open_slip_board_rows_use_container_queries():
 @needs_node
 def test_matchroom_offer_never_prints_internal_labels(tmp_path):
     rows = [{"nick": "lean1", "player": "lean1", "team": "A", "team_name": "A", "opponent": "B", "opp_name": "B", "prop": "kills",
-             "scope": "12", "line": 29.5, "side": "More", "p": 0.53, "grade": "LEAN", "units": 0, "book": "underdog", "start": "2026-10-22T18:00:00Z"},
+             "scope": "12", "line": 29.5, "side": "More", "p": 0.53, "grade": "LEAN", "units": 0, "book": "underdog", "start": "2099-10-22T18:00:00Z"},
             {"nick": "scout1", "player": "scout1", "team": "A", "team_name": "A", "opponent": "B", "opp_name": "B", "prop": "kills",
-             "scope": "12", "line": 25.5, "side": "Less", "p": 0.58, "grade": "SCOUT", "state": "SCOUT", "units": 0, "book": "underdog", "start": "2026-10-22T18:00:00Z"},
+             "scope": "12", "line": 25.5, "side": "Less", "p": 0.58, "grade": "SCOUT", "state": "SCOUT", "units": 0, "book": "underdog", "start": "2099-10-22T18:00:00Z"},
             {"nick": "bet1", "player": "bet1", "team": "A", "team_name": "A", "opponent": "B", "opp_name": "B", "prop": "kills",
-             "scope": "12", "line": 31.5, "side": "More", "p": 0.66, "grade": "B", "units": 1, "book": "underdog", "start": "2026-10-22T18:00:00Z"}]
+             "scope": "12", "line": 31.5, "side": "More", "p": 0.66, "grade": "B", "units": 1, "book": "underdog", "start": "2099-10-22T18:00:00Z"}]
     out = run(tmp_path, "index.html", """(() => {
       boardRows = INPUT.rows; bscope = "12";
       const dlg = $("#ot-match-desk"); dlg.showModal = () => {}; dlg.querySelector = () => ({focus() {}});
