@@ -13,6 +13,7 @@ calibration on REAL lines (the only test that proves the grades beat PrizePicks)
 Stored in SQLite on the data volume (CS2_DATA_DIR/picks.db).
 """
 import json
+import math
 import os
 import sqlite3
 import queue
@@ -1774,6 +1775,9 @@ def report():
     finally:
         con.close()
     settled = [r for r in rows if r["status"] == "settled"]
+    scored = [r for r in settled if r.get("hit") in (0, 1)]
+    calibrated = [r for r in scored if isinstance(r.get("p_pick"), (int, float))
+                  and math.isfinite(r["p_pick"]) and 0 <= r["p_pick"] <= 1]
 
     def bucket(rs, key, bounds):
         out = []
@@ -1785,18 +1789,20 @@ def report():
                             "actual": round(sum(r["hit"] for r in b_) / len(b_), 3)})
         return out
 
-    pbounds = ((0.5, 0.57, "C 50-57%"), (0.57, 0.63, "B 57-63%"), (0.63, 0.68, "B+ 63-68%"),
+    pbounds = ((0.5, 0.55, "Lean 50-55%"), (0.55, 0.57, "B- 55-57%"), (0.57, 0.63, "B 57-63%"), (0.63, 0.68, "B+ 63-68%"),
                (0.68, 0.74, "A- 68-74%"), (0.74, 0.80, "A 74-80%"), (0.80, 1.01, "A+ 80%+"))
     ubounds = ((0, 0.01, "0U"), (0.5, 0.51, "0.5U"), (1, 1.01, "1U"), (1.5, 1.51, "1.5U"), (2, 2.01, "2U"))
-    units_won = sum((r["units"] or 0) * (1 if r["hit"] else -1) for r in settled)
+    units_won = sum((r["units"] or 0) * (1 if r["hit"] else -1) for r in scored)
     clv = [r["clv"] for r in rows if r["clv"] is not None]
     return {
         "total": len(rows), "open": sum(r["status"] == "open" for r in rows), "settled": len(settled),
         "void": sum(r["status"] == "void" for r in rows),
         "push": sum(r["status"] == "push" for r in rows),
-        "by_printed_pct": bucket(settled, "p_pick", pbounds),
-        "by_units": bucket(settled, "units", ubounds),
-        "hit_rate_all": round(sum(r["hit"] for r in settled) / len(settled), 3) if settled else None,
+        "scored": len(scored), "calibration_scored": len(calibrated),
+        "missing_outcome": len(settled) - len(scored), "missing_probability": len(scored) - len(calibrated),
+        "by_printed_pct": bucket(calibrated, "p_pick", pbounds),
+        "by_units": bucket(calibrated, "units", ubounds),
+        "hit_rate_all": round(sum(r["hit"] for r in scored) / len(scored), 3) if scored else None,
         "units_net_flat": round(units_won, 2),
         "clv_avg": round(sum(clv) / len(clv), 2) if clv else None, "clv_n": len(clv),
         "clv_positive": round(sum(c > 0 for c in clv) / len(clv), 3) if clv else None,

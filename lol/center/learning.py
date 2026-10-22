@@ -32,22 +32,32 @@ def dashboard(con):
     status = defaultdict(int)
     groups = defaultdict(list)
     series = set()
+    player_props = set()
     units = []
     for r in rows:
         status[r["st"]] += 1
         if r["st"] != "graded":
             continue
         series.add(r["sid"])
+        player_props.add((r["sid"], r["pid"], r["stat"], r["scope"]))
         p = r["p_over"] / max(r["p_over"] + r["p_under"], 1e-9)       # P(over | no push) at the offered line
         hit = float(r["over_hit"])
         side_hit = (hit == 1.0) if r["model_side"] == "over" else (hit == 0.0)
         u = {"err": r["lambda"] - r["actual"], "brier": (p - hit) ** 2,
              "ll": -(hit * math.log(max(p, 1e-6)) + (1 - hit) * math.log(max(1 - p, 1e-6))), "p": p, "hit": hit,
-             "side_hit": side_hit, "p_side": max(p, 1 - p), "sid": r["sid"], "offered": r["side_offered"] == 1}
+             "side_hit": side_hit, "p_side": p if r["model_side"] == "over" else 1 - p,
+             "sid": r["sid"], "offered": r["side_offered"] == 1}
         units.append(u)
         for key in ("all", f"stat {r['stat']}", f"scope {r['scope']}", f"platform {r['platform']}", f"role {r['role']}",
-                    f"grade {r['grade_label']}"):
+                    f"grade {r['grade_label']}", f"model {r['model_version']}",
+                    f"fit {r['model_version']} {r['fit_sha']}",
+                    "side offered" if u["offered"] else "side not offered"):
             groups[key].append(u)
+        # Compare the displayed (unconditional) chance with decisions separately from no-push calibration.
+        printed = r["p_over"] if r["model_side"] == "over" else r["p_under"]
+        if u["offered"] and printed >= 0.60:
+            groups["offered picks printed 60%+"].append(u)
+            groups[f"model {r['model_version']} offered picks printed 60%+"].append(u)
     out = {}
     for k, us in groups.items():
         n = len(us)
@@ -57,7 +67,7 @@ def dashboard(con):
             bins[b][0] += 1
             bins[b][1] += u["p"]
             bins[b][2] += u["hit"]
-        out[k] = {"n": n, "mae": round(sum(abs(u["err"]) for u in us) / n, 3), "bias": round(sum(u["err"] for u in us) / n, 3),
+        out[k] = {"n": n, "series": len({u["sid"] for u in us}), "mae": round(sum(abs(u["err"]) for u in us) / n, 3), "bias": round(sum(u["err"] for u in us) / n, 3),
                   "brier": round(sum(u["brier"] for u in us) / n, 4), "logloss": round(sum(u["ll"] for u in us) / n, 4),
                   "side_hit_rate": round(sum(u["side_hit"] for u in us) / n, 3),
                   "mean_p_side": round(sum(u["p_side"] for u in us) / n, 3),
@@ -71,13 +81,16 @@ def dashboard(con):
               "distinct_player_props": con.execute("SELECT COUNT(*) FROM (SELECT DISTINCT pid, stat, scope, sid FROM lol_forecasts "
                                                    "WHERE forecast_at < series_start)").fetchone()[0],
               "distinct_matches": con.execute("SELECT COUNT(DISTINCT sid) FROM lol_forecasts WHERE forecast_at < series_start").fetchone()[0],
-              "graded_offered_props": graded, "graded_matches": len(series)}
+              "graded_offered_props": graded, "graded_matches": len(series), "graded_distinct_player_props": len(player_props)}
     return {"at": store.now_iso(), "settled_by_status": dict(status), "counts": counts, "metrics": out,
             "series_grouped_95ci": {"all": _grouped_ci(units), "offered_side_only": _grouped_ci([u for u in units if u["offered"]])},
-            "evidence": {"graded_player_markets": graded, "series": len(series), "required": REQUIRED,
-                         "met": graded >= REQUIRED["player_markets"] and len(series) >= REQUIRED["series"]},
+            "evidence": {"graded_player_markets": len(player_props), "series": len(series), "required": REQUIRED,
+                         "unit": "distinct series/player/stat/scope, independent of book or alternate line",
+                         "met": len(player_props) >= REQUIRED["player_markets"] and len(series) >= REQUIRED["series"]},
             "candidates": store.get_meta(con, "candidates") or [],
-            "note": "forward record of saved pre-match forecasts at offered lines; no promotion happens automatically"}
+            "note": "forward record of saved pre-match forecasts at offered lines; all mixes versions and alternate lines; "
+                    "mean_p_side and probability scores condition on no push; inspect model/fit and offered-side groups; "
+                    "no promotion happens automatically"}
 
 
 def _grouped_ci(units, n_boot=2000, seed=7):

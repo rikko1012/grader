@@ -71,16 +71,35 @@ def test_reads_do_not_take_the_global_lock(db):
     got = {}
 
     def read():
-        got["m"] = picklog.rows_for_matches({"vitality-vs-furia-10-10-2026"})
-        got["e"] = picklog.export()
-        got["s"] = picklog.settlement_rows()
-        got["r"] = picklog.report()
+        try:
+            got["m"] = picklog.rows_for_matches({"vitality-vs-furia-10-10-2026"})
+            got["e"] = picklog.export()
+            got["s"] = picklog.settlement_rows()
+            got["r"] = picklog.report()
+        except Exception as exc:
+            got["error"] = exc
     with picklog._LOCK:                                               # a writer holds the lock the whole time
         t = threading.Thread(target=read)
         t.start()
         t.join(5)
         assert not t.is_alive(), "a read waited on picklog._LOCK"
+    assert "error" not in got, repr(got.get("error"))
+    assert got["r"]["missing_outcome"] == 1
     assert len(got["m"]) == 1 and got["m"][0]["actual"] == 44.0 and len(got["e"]) == 1 and len(got["s"]) == 1
+
+
+def test_report_never_scores_missing_outcome_as_loss_or_missing_chance_as_zero(db):
+    _insert(status="settled", hit=None, p_pick=.9, units=2)
+    _insert(status="settled", hit=1, p_pick=None, units=1)
+    _insert(status="settled", hit=0, p_pick=.56, units=.5)
+    _insert(status="settled", hit=1, p_pick=float('inf'), units=.5)
+    report = picklog.report()
+    assert report['settled'] == 4 and report['scored'] == 3
+    assert report['missing_outcome'] == 1 and report['missing_probability'] == 2
+    assert report['hit_rate_all'] == .667 and report['units_net_flat'] == 1.0
+    assert report['by_printed_pct'] == [{'bucket': 'B- 55-57%', 'n': 1, 'printed': .56, 'actual': 0.0}]
+    assert sum(b['n'] for b in report['by_units']) == 1
+    assert len(report['rows']) == 4
 
 
 def test_lock_free_read_sees_committed_writes_only(db):
