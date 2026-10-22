@@ -68,7 +68,9 @@ tbody tr.row{cursor:pointer}tbody tr.row:hover{background:#1a212d}tbody tr:last-
 .slipleg{display:grid;grid-template-columns:1fr auto;gap:6px 12px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}.slipleg:first-child{border-top:0}
 .slipleg .st{grid-column:1/-1;font-size:12.5px}.st.ok{color:var(--up)}.st.bad{color:#f2a36b}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:0 0 14px}.panel h3{margin:0 0 8px;font:600 15px var(--display)}
-.panel ul{margin:6px 0 0;padding-left:18px}.panel li{margin:3px 0}
+.panel ul{margin:6px 0 0;padding-left:18px}.panel li{margin:3px 0;overflow-wrap:anywhere}
+.sugg{border-top:1px solid var(--line);padding:10px 0 4px;margin-top:8px}.sugghead{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px;color:var(--muted)}.sugghead b{color:var(--text)}
+.sugg .actions{margin-top:8px}.plhead{margin-top:6px}.sugg+.plhead{margin-top:16px}
 @media(max-width:860px){.tablebox.board{display:none}.cards{display:block}}
 @media(max-width:640px){header{padding:0 14px;height:58px;gap:10px}h1{font-size:15px}#who{display:none}.wrap{padding:14px 14px 80px}
   .bar{padding:10px;gap:8px}.bar input[type=search]{flex:1 1 100%;max-width:none;font-size:16px}.bar .seg{width:100%}.bar .seg button{flex:1}.bar select{flex:1 1 calc(50% - 4px);min-width:0;width:calc(50% - 4px)}
@@ -233,7 +235,7 @@ const FLOORS = [["all", "Any grade"], ["A-", "A- and up"], ["B+", "B+ and up"], 
 let F = Object.assign({}, DEF), D = null, lastFocus = null, openRow = null, shownD = null, shownSlip = 0;   // shownD: the board data the page last drew
 let NOTE = null;                                // a one-time notice drawn above the board (a shared line that left the board)
 const SLIPKEY = "scout.lol.slip", MAXLEGS = {underdog: 8, prizepicks: 6};
-let SLIP = {legs: []}, CHECK = {};
+let SLIP = {legs: []}, CHECK = {}, SENT = {};       // SENT: the last "Send to my slip" result, shown under that suggested slip
 try { SLIP = Object.assign({legs: []}, JSON.parse(localStorage.getItem(SLIPKEY) || "{}")); } catch {}
 const saveSlip = () => { try { localStorage.setItem(SLIPKEY, JSON.stringify(SLIP)); } catch {} };
 try { Object.assign(F, JSON.parse(localStorage.getItem(FKEY) || "{}")); } catch {}
@@ -289,9 +291,14 @@ async function fresh() {
   if (!r || !r.ok) return null;
   D = await r.json(); return D;
 }
+function sameProp(r, l) { return r.platform === l.platform && r.player === l.player && r.team === l.team && r.stat === l.stat && r.scope === l.scope && r.line_type === l.line_type && matchKey(r) === l.match_key; }
 function legStatus(l) {
+  if (started(l)) return {ok: false, text: "This match has started."};            // the leg's own start: refused even once the row is gone
   const x = (D.rows || []).find(r => r.key === l.key);
-  if (!x) return {ok: false, text: "This line is no longer on the board."};
+  if (!x) {
+    const moved = (D.rows || []).find(r => sameProp(r, l) && r.line !== l.line);
+    return {ok: false, text: moved ? `The line moved: ${l.line} → ${moved.line}.` : "This line was pulled - it is no longer on the board."};
+  }
   if (started(x)) return {ok: false, text: "This match has started."};
   if (x.line !== l.line) return {ok: false, text: `The line moved: ${l.line} → ${x.line}.`};
   const side = x.sides.find(s => s.side === l.side);
@@ -362,22 +369,63 @@ function slipView() {
   let h = `<section class="panel"><h3>Suggested slips</h3>`;
   for (const [pl, d] of Object.entries(D.slips || {})) {
     if ((d.recommended || []).length) {
-      h += `<div><b>${esc(pl)}</b>: ${d.recommended.length} slip${d.recommended.length > 1 ? "s" : ""}</div>`;
-      for (const sl of d.recommended) h += `<ul>${sl.legs.map(l => { const x = (D.rows || []).find(r => r.key === l.key); return `<li>${x ? esc(legText(legOf(x))) : "line no longer on the board"}</li>`; }).join("")}</ul>`;
+      h += `<div class="plhead"><b>${esc(pl)}</b>: ${d.recommended.length} slip${d.recommended.length > 1 ? "s" : ""}</div>`;
+      d.recommended.forEach((sl, i) => {
+        const id = `${pl}|${i}`, m = SENT.d === D ? SENT[id] : null;      // a result for this board only (the poll may replace it)
+        h += `<div class="sugg"><div class="sugghead"><span>${sl.legs.length} picks</span>${sl.model_chance_all_hit != null ? `<span>Est. chance all hit <b>${pct(sl.model_chance_all_hit)}</b></span>` : ""}</div>
+          <ul>${sl.legs.map(l => { const x = (D.rows || []).find(r => r.key === l.key); return `<li>${x ? esc(legText(legOf(x))) : "line no longer on the board"}</li>`; }).join("")}</ul>
+          <div class="actions"><button type="button" class="btn" data-send="${esc(id)}">Send to my slip</button>${m ? `<span class="actmsg ${m.ok ? "ok" : "bad"}">${esc(m.text)}</span>` : ""}</div></div>`;
+      });
     } else {
       h += `<div style="margin-top:6px"><b>${esc(pl)}</b>: no suggested slip right now.</div><ul class="small muted">${(d.why_none || []).map(r => `<li>${esc(r.text)}${r.picks ? ` (${r.picks} pick${r.picks > 1 ? "s" : ""})` : ""}</li>`).join("") || "<li>No upcoming LoL lines.</li>"}</ul>`;
     }
   }
   if (!Object.keys(D.slips || {}).length) h += `<div class="small muted">No slip information yet.</div>`;
-  h += `<p class="small faint" style="margin:8px 0 0">Suggestions never repeat a prop or a match across slips and are never padded with extra picks.</p></section>`;
+  h += `<p class="small faint" style="margin:8px 0 0">Suggestions never repeat a prop or a match across slips and are never padded with extra picks. Est. chance all hit = each pick's chance multiplied (every pick is from a different match).</p></section>`;
   h += `<section class="panel"><h3>Your slip${SLIP.legs.length ? ` · ${esc(SLIP.legs[0].platform_label)}` : ""}</h3>`;
   if (!SLIP.legs.length) h += `<div class="small muted">Open a pick on the board and choose <b>Add to slip</b>. One platform per slip; one pick per match and per player; only sides the line offers.</div>`;
   else {
-    h += `<div>${SLIP.legs.map((l, i) => { const c = CHECK[l.key]; return `<div class="slipleg"><div>${esc(legText(l))}</div><button type="button" class="btn" data-rm="${i}">Remove</button>${c ? `<div class="st ${c.ok ? "ok" : "bad"}">${esc(c.text)}</div>` : ""}</div>`; }).join("")}</div>
+    h += `<div>${SLIP.legs.map((l, i) => { const c = CHECK[l.key] || (started(l) ? {ok: false, text: "This match has started - remove it."} : null); return `<div class="slipleg"><div>${esc(legText(l))}</div><button type="button" class="btn" data-rm="${i}">Remove</button>${c ? `<div class="st ${c.ok ? "ok" : "bad"}">${esc(c.text)}</div>` : ""}</div>`; }).join("")}</div>
       <div class="actions"><button type="button" class="btn primary" id="copyslip">Recheck lines &amp; copy slip</button><button type="button" class="btn" id="clearslip">Clear</button><span class="actmsg" id="slipmsg"></span></div>
       <p class="small faint" style="margin:8px 0 0">${esc(D.stake_note)} Your slip is your own selection; it is not a suggestion.</p>`;
   }
   return h + `</section>`;
+}
+// Send a suggested slip to the member's own slip: every leg goes through Add to slip's own rules (slipRule: one platform,
+// one pick per match and per player, the platform's leg limit, started matches refused) and must still be the suggested
+// line and side on the board; a leg left out is named with the reason. Nothing is fetched and nothing is regraded.
+function sendSuggested(id) {
+  const cut = id.lastIndexOf("|"), pl = id.slice(0, cut), sl = (((D.slips || {})[pl] || {}).recommended || [])[+id.slice(cut + 1)];
+  if (!sl) { render(); return; }
+  const added = [], out = [];
+  for (const l of sl.legs) {
+    const x = (D.rows || []).find(r => r.key === l.key), side = l.side ? l.side[0].toUpperCase() + l.side.slice(1).toLowerCase() : null;
+    const why = !x ? "this line is no longer on the board" : (l.line != null && x.line !== l.line) ? `the line moved: ${l.line} → ${x.line}`
+      : (side && side !== x.pick_side) ? `the model's pick on this line is now ${x.pick_side}` : slipRule(x);
+    if (why) out.push(`${x ? x.player : "a pick"}: ${why.replace(/\.$/, "")}`);
+    else { SLIP.legs.push(legOf(x)); added.push(x); }
+  }
+  if (added.length) { saveSlip(); CHECK = {}; }
+  const n = added.length, lab = added.length ? added[0].platform_label : pl;
+  SENT = {d: D, [id]: {ok: !out.length, text: (n ? `Sent ${n} pick${n > 1 ? "s" : ""} to your ${lab} slip.` + (out.length ? ` Not sent - ${out.join("; ")}.` : "") : `Nothing sent - ${out.join("; ")}.`)}};
+  render();
+}
+// Copy the member's own slip: every leg is rechecked on a fresh board first; a leg whose match started, or whose line moved,
+// was pulled or lost its side, is never copied - the copy is refused and each such pick is named (remove it, then copy)
+async function copySlip() {
+  $("#slipmsg").className = "actmsg"; $("#slipmsg").textContent = "Rechecking every line…";
+  if (!await fresh()) { $("#slipmsg").className = "actmsg bad"; $("#slipmsg").textContent = "The board could not be reached - nothing copied."; return false; }
+  CHECK = {}; for (const l of SLIP.legs) CHECK[l.key] = legStatus(l);
+  const bad = SLIP.legs.filter(l => !CHECK[l.key].ok);
+  if (bad.length) {
+    render(); $("#slipmsg").className = "actmsg bad";
+    $("#slipmsg").textContent = `Nothing copied - ${bad.map(l => `${l.player} (${l.stat_name}, ${l.scope}): ${CHECK[l.key].text.replace(/\.$/, "")}`).join("; ")}. Remove ${bad.length > 1 ? "these picks" : "this pick"}, then copy.`;
+    return false;
+  }
+  const text = `${SLIP.legs[0].platform_label} - ${SLIP.legs.length} pick${SLIP.legs.length > 1 ? "s" : ""}\n` + SLIP.legs.map(legText).join("\n");
+  const ok = await copyText(text); render();
+  $("#slipmsg").className = ok ? "actmsg ok" : "actmsg bad"; $("#slipmsg").textContent = ok ? "Copied - every line rechecked just now." : "Copy failed in this browser.";
+  return ok ? text : false;
 }
 function others(x) {
   for (const t of D.match_tables || []) for (const m of t.markets)
@@ -494,16 +542,8 @@ function render() {
   $("#app").innerHTML = h + (F.view === "board" ? boardView() : F.view === "slip" ? slipView() : tablesView());
   document.querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { SLIP.legs.splice(+b.dataset.rm, 1); saveSlip(); CHECK = {}; render(); });
   if ($("#clearslip")) $("#clearslip").onclick = () => { SLIP.legs = []; saveSlip(); CHECK = {}; render(); };
-  if ($("#copyslip")) $("#copyslip").onclick = async () => {
-    $("#slipmsg").textContent = "Rechecking every line…";
-    if (!await fresh()) { $("#slipmsg").className = "actmsg bad"; $("#slipmsg").textContent = "The board could not be reached - nothing copied."; return; }
-    CHECK = {}; for (const l of SLIP.legs) CHECK[l.key] = legStatus(l);
-    const bad = SLIP.legs.filter(l => !CHECK[l.key].ok).length;
-    if (bad) { render(); $("#slipmsg").className = "actmsg bad"; $("#slipmsg").textContent = `${bad} pick${bad > 1 ? "s" : ""} changed - remove ${bad > 1 ? "them" : "it"} before copying. Nothing copied.`; return; }
-    const text = `${SLIP.legs[0].platform_label} - ${SLIP.legs.length} pick${SLIP.legs.length > 1 ? "s" : ""}\n` + SLIP.legs.map(legText).join("\n");
-    const ok = await copyText(text); render();
-    $("#slipmsg").className = ok ? "actmsg ok" : "actmsg bad"; $("#slipmsg").textContent = ok ? "Copied - every line rechecked just now." : "Copy failed in this browser.";
-  };
+  if ($("#copyslip")) $("#copyslip").onclick = copySlip;
+  document.querySelectorAll("[data-send]").forEach(b => b.onclick = () => sendSuggested(b.dataset.send));
   $("#s").value = F.stat; $("#m").value = F.match; if ($("#t")) { $("#t").value = F.type; $("#o").value = F.sort; $("#g").value = F.floor; }
   const set = (k, v) => { F[k] = v; save(); render(); };
   const qi = $("#q");
