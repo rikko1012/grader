@@ -259,6 +259,10 @@ def test_a_saved_grade_goes_on_the_slip_as_stale_never_verified(tmp_path):
             "board": {"book": "underdog", "nick": "ropz", "player": "ropz", "line": 20.5, "prop": "kills", "scope": "12", "side": "More",
                       "grade": "B", "p": 0.57, "units": 0.5, "hltv_retry": "2026-10-14T17:00:00+00:00", "graded_at": "2026-10-14T16:00:00+00:00",
                       "start": "2026-10-14T18:00:00Z", "match_slug": "m2"}}
+    # 2026-10-21 slips audit 3: a started match is never added, so these legs' matches are upcoming (fixture dates moved)
+    for k in ("kept", "fresh"):
+        data[k]["next_match"] = dict(data[k]["next_match"], start="2099-10-14T18:00:00Z")
+    data["board"]["start"] = "2099-10-14T18:00:00Z"
     out = run_page(tmp_path, """(async () => {
       globalThis.fetch = async u => ({ok: true, json: async () => (String(u).includes("/api/line_check") ? {status: "verified", note: ""} : {})});
       store.set("cs2s_slip", []);
@@ -273,7 +277,8 @@ def test_a_saved_grade_goes_on_the_slip_as_stale_never_verified(tmp_path):
 
 def test_copying_a_slip_marks_changes_without_unsure_labels():
     # owner 2026-10-16: no unsure marks - a moved line or a side no longer offered still stops the copy and is marked
-    assert '["changed", "unavailable"].includes(x.now?.status)' in HTML and '" [NOT OFFERED NOW]"' in HTML
+    # 2026-10-21 slips audit 2: a moved line or a side no longer offered is never copied at all (no "Copy anyway (marked)")
+    assert '["changed", "unavailable"].includes(x.now?.status)' in HTML and "Copy anyway (marked)" not in HTML
     assert "[SAVED GRADE" not in HTML and "[NOT CHECKED]" not in HTML and "[RESEARCH LINE]" not in HTML
     # a moved line regraded during an outage: a saved / unavailable answer is never offered as the new line's grade
     assert "nv = nv0.kept_from_board || sideGone(nv0) || nv0.unavailable || nv0.stale || n?.hltv_outage ? {} : nv0" in HTML

@@ -957,7 +957,7 @@ function showGate(state) {
 (async () => {
   try {
     const s = await fetch("/auth/me").then(r => r.json());
-    try { STUDIO.off = !s.slip_studio; studioShow(); } catch {}   // owner switch (default off)
+    try { studioSwitch(!!s.slip_studio); } catch {}   // owner switch (default off)
     try { if (s.lol) { $("#sportsw").hidden = false; $("#railgame").hidden = false; } } catch {}     // owner's LoL release switch (default off)
     if (!s.required) return document.body.classList.remove("locked");
     if (!s.member) return showGate(s);
@@ -1506,8 +1506,14 @@ showExamples(); const _sr = showRecent; showRecent = () => { _sr(); showExamples
 // bet slip: add single props, build a 2-6 pick entry (saved in this browser)
 // manual slip payouts (2026-10-10 walkthrough): no platform tables - the return uses only the payout the member enters
 // for THIS entry (what Underdog shows), else their saved standard payout for this size (labelled as such), else none
-const slipEvent = x => [x.m || x.match_slug || [x.tm || x.team || "", x.vs || x.opponent || ""].map(y => String(y).toLowerCase()).sort().join("/"),
+// the match a leg / board row belongs to: its slug, else the two team names normalised the SAME way for a leg (legFrom) and
+// a row (2026-10-21 slips audit 7: the leg was normalised with '|' and the row raw with '/', so "On slip" never showed)
+const evNorm = (a, b) => [a || "", b || ""].map(y => String(y).toLowerCase().replace(/[^a-z0-9]/g, "")).sort().join("|");
+const slipEvent = x => [x.m || x.match_slug || evNorm(x.tm || x.team_name || x.team, x.vs || x.opp_name || x.opponent),
   x.st || x.start ? new Date(x.st || x.start).getTime() : ""].join("@");
+// a leg whose match start has passed: the platform has locked the line (2026-10-21 slips audit 3)
+const legStarted = (x, now) => { const t = Date.parse((x && (x.st || x.start)) || ""); return !isNaN(t) && t <= (now || Date.now()); };
+const LOCKED_RX = /started|locked/i;
 const manualKey = s => s.map(x => [String(x.p).toLowerCase(), x.t, x.sc || "12", x.l, x.s, x.bk || "", x.lt || "standard", slipEvent(x)].join(":")).sort().join("|");
 const manualPay = () => store.get("cs2s_manualpay", {});
 const udExact = () => store.get("cs2s_udexact", {});          // exact payout for one slip, by its picks (member-entered)
@@ -1556,7 +1562,7 @@ function legFrom(d, extra) {
   const g = d.grade || {}, v = d.verdict || {}, pb = d.player_block || {};
   return Object.assign({bk: d.book || null, p: pb.player?.nick, pid: pb.player?.id || "", l: g.line, t: g.prop, lt: g.line_type, sc: g.scope || "12", s: v.side, g: mGrade(v), sr: v.stake_reason || "", pc: v.p, u: v.units,
     model_outcomes: g.probs_raw ? {...g.probs_raw} : null,
-    m: d.next_match?.slug || [pb.current_team || "", d.next_match?.opponent || ""].map(x => x.toLowerCase().replace(/[^a-z0-9]/g, "")).sort().join("|"),
+    m: d.next_match?.slug || evNorm(pb.current_team, d.next_match?.opponent), rid: d.row_id || "",
     vs: d.next_match?.opponent || "", tm: pb.playing_for || pb.current_team || "", st: d.next_match?.start || "",
     kg: v.kept_from_board || v.stale ? (v.graded_at || "saved") : "",     // a saved grade kept during an outage: never verified
     orig: {line: g.line, side: v.side, p: v.p, grade: v.grade, units: v.units, at: Date.now()}}, extra || {});
@@ -1574,13 +1580,16 @@ async function addToSlip(d) {
   if (!nick || !v.side) return;
   if (sideGone(v)) return toast(`${sideGone(v)} – not added to the slip`);
   const leg = legFrom(d), plat = slipBook(store.get("cs2s_slip", []));
+  // 2026-10-21 slips audit 3: a match that has started is locked on the platform - never added (or copied)
+  if (legStarted(leg)) return toast(`${nick}'s match has started – the line is locked, not added to the slip`);
   if (leg.bk && plat && leg.bk !== plat) return pushLeg(leg);                  // refused: one platform per slip
   // check the leg's own platform; a typed line: the slip's platform, else every platform that offers that market type
   const lt0 = g.line_type || "standard", books = leg.bk ? [leg.bk] : plat ? [plat] : lt0 !== "standard" ? ["prizepicks"] : ["underdog", "prizepicks"];
   let c = null, used = books[0];
   for (const b of books) { const r = await lineCheck(leg, b); if (r.status === "verified") { c = r; used = b; break; } if (!c || (c.status !== "changed" && r.status === "changed")) { c = r; used = b; } }
+  if (LOCKED_RX.test(c.note || "") && c.status !== "verified") return toast(`${nick}: ${bookName(used)} shows the match as started – the line is locked, not added to the slip`);
   if (c.status === "verified") leg.bk = used;
-  leg.now = {status: c.status === "ambiguous" ? "research" : c.status, note: c.note || "", at: Date.now(), new_line: c.new_line};
+  leg.now = checkNow(c, c.status === "ambiguous" ? "research" : null);
   if (c.status === "changed" && c.new_line != null) {
     // regrade the NEW line before asking - an old chance is never attached to a new line
     let n = null;
@@ -1594,15 +1603,14 @@ async function addToSlip(d) {
     const k = await ask(d.from === "board" ? `${bookName(used)} moved this line` : `Your line differs from ${bookName(used)}'s current line`, `${esc(nick)} ${propWord(g.prop)}${mapsWord(g.scope)}: ${d.from === "board" ? esc(c.note) : `you entered ${g.line}; ${bookName(used)} currently shows ${c.new_line}`}.
       <table style="margin-top:8px"><thead><tr><th>Line</th><th>Side</th><th class="num">Chance</th><th>Grade</th><th class="num">Stake</th></tr></thead><tbody>
       ${row(g.line + " (yours)", v.side, v.p, mGrade(v), v.units)}${n && nv.side ? row(c.new_line + " (now)", nv.side, nv.p, mGrade(nv), nv.units) : `<tr><td>${c.new_line} (now)</td><td colspan="4" class="muted">being graded – try again in a few minutes</td></tr>`}</tbody></table>`,
-      [...(n && nv.side ? [{k: "new", label: `Use ${sideTxt(nv.side)} ${c.new_line}`, primary: true}] : []), {k: "keep", label: `Keep ${g.line} as your own line`}, {k: "cancel", label: "Cancel"}]);
-    if (k === "new") { const nl = legFrom(n); nl.bk = used; nl.now = {status: "verified", note: "", at: Date.now()}; nl.replaced = {line: g.line, side: v.side, p: v.p, grade: v.grade, units: v.units}; return pushLeg(nl); }
+      // 2026-10-21 slips audit 3: a board line that moved is never kept as "your own line" (it could be copied unmarked)
+      [...(n && nv.side ? [{k: "new", label: `Use ${sideTxt(nv.side)} ${c.new_line}`, primary: true}] : []), ...(d.from === "board" ? [] : [{k: "keep", label: `Keep ${g.line} as your own line`}]), {k: "cancel", label: "Cancel"}]);
+    if (k === "new") { const nl = legFrom(n); nl.bk = used; nl.rid = leg.rid; nl.now = {status: "verified", note: "", at: Date.now()}; nl.replaced = {line: g.line, side: v.side, p: v.p, grade: v.grade, units: v.units}; return pushLeg(nl); }
     if (k !== "keep") return;
-    leg.bk = null; leg.now = {status: "research", note: `Kept at ${g.line}; ${bookName(used)} shows ${c.new_line}`, at: Date.now()};
+    leg.bk = null; leg.mv = 1; leg.now = {status: "research", note: `Kept at ${g.line}; ${bookName(used)} shows ${c.new_line}`, at: Date.now()};
   } else if (c.status === "unavailable" && d.from === "board") {
-    const k = await ask("Line no longer offered", `${bookName(used)} no longer shows ${esc(nick)} ${sideTxt(v.side)} ${g.line} ${propWord(g.prop)}${mapsWord(g.scope)}.`,
-      [{k: "keep", label: "Add as your own line"}, {k: "cancel", label: "Cancel", primary: true}]);
-    if (k !== "keep") return;
-    leg.bk = null; leg.now = {status: "research", note: `No longer offered on ${bookName(used)}`, at: Date.now()};
+    // a pulled board line is not added (2026-10-21: it used to become an unchecked "own line" that copied unmarked)
+    return toast(`${bookName(used)} no longer offers ${nick} ${sideTxt(v.side)} ${g.line} ${propWord(g.prop)}${mapsWord(g.scope)} – not added to the slip`);
   } else if (c.status === "unavailable") {
     leg.bk = null; leg.now = {status: "research", note: "", at: Date.now()};
   }
@@ -1610,15 +1618,25 @@ async function addToSlip(d) {
   pushLeg(leg);
 }
 function staleNow(x) { return {status: "stale", at: Date.now(), note: ""}; }
+// a /api/line_check answer as the leg's live state. 2026-10-21 slips audit 1: the server's "stale" means the platform FEED
+// is not fresh - the line is unconfirmed, so it is "failed" (blocks Copy). The copyable "stale" is only staleNow() above:
+// a line the feed verifies on a leg whose grade was kept during an HLTV outage (audit 22).
+const FEED_NOTE = "The platform's line feed is not fresh right now – refresh before copying";
+function checkNow(c, as) {
+  const st = as || (c.status === "stale" ? "failed" : LOCKED_RX.test(c.note || "") && c.status !== "verified" ? "started" : c.status);
+  return Object.assign({status: st, note: c.status === "stale" ? c.note || FEED_NOTE : c.note || "", at: Date.now(), new_line: c.new_line}, c.status === "stale" ? {feed: 1} : {});
+}
 function openSlip() { $("#slip").hidden = false; drawSlip(); recheckSlip(); }
 // re-check every leg's live offer; records it in leg.now (the original selection in leg.orig is never touched)
 async function recheckSlip() {
   const s = store.get("cs2s_slip", []); if (!s.length) return s;
   const plat = slipBook(s);
-  const res = await Promise.all(s.map(x => !(x.now?.status === "research") && (x.bk || plat) ? lineCheck(x, x.bk || plat) : null));
+  // a started leg is not checked (its line is locked) - it is marked "started" and blocks Copy, research legs included
+  const res = await Promise.all(s.map(x => legStarted(x) ? null : !(x.now?.status === "research") && (x.bk || plat) ? lineCheck(x, x.bk || plat) : null));
   const cur = store.get("cs2s_slip", []);
-  res.forEach((c, i) => { if (c && cur[i] && legKey(cur[i]) === legKey(s[i])) {
-    cur[i].now = {status: c.status === "ambiguous" ? "unavailable" : c.status, note: c.note || "", at: Date.now(), new_line: c.new_line};
+  cur.forEach(x => { if (legStarted(x)) x.now = {status: "started", note: "Match started – the line is locked", at: Date.now()}; });
+  res.forEach((c, i) => { if (c && cur[i] && legKey(cur[i]) === legKey(s[i]) && !legStarted(cur[i])) {
+    cur[i].now = checkNow(c, c.status === "ambiguous" ? "unavailable" : null);
     if (cur[i].kg && cur[i].now.status === "verified") cur[i].now = staleNow(cur[i]); } });     // the line is up; the grade is not current
   store.set("cs2s_slip", cur); drawSlip(); return cur;
 }
@@ -1678,9 +1696,24 @@ $("#slip").addEventListener("click", e => {
   if (e.target.closest("#slipclose")) { $("#slip").hidden = true; return; }
   if (e.target.closest("#slipcopy")) (async () => {
     const s = await recheckSlip();
-    // "stale" = the line verified but the leg's grade was kept during an outage: it copies like a verified leg (audit 22)
+    // 2026-10-21 slips audit 3: a started match is locked - never copied, research legs included
+    const started = s.filter(x => x.now?.status === "started" || legStarted(x));
+    if (started.length) {
+      await ask("Remove started picks first", started.map(x => `<div>• <b>${esc(x.p)}</b> ${sideTxt(x.s)} ${x.l}: the match has started – the line is locked</div>`).join(""),
+        [{k: "review", label: "Review slip", primary: true}]);
+      return;
+    }
+    // "stale" = the line verified but the leg's grade was kept during an outage: it copies like a verified leg (audit 22);
+    // a stale platform FEED is "failed" (checkNow) and never copies
     const unchecked = s.filter(x => x.bk && x.now?.status !== "verified" && !["changed", "unavailable", "research", "stale"].includes(x.now?.status));
-    if (unchecked.length) { toast("Refresh these picks before copying: the platform check did not complete."); return; }
+    if (unchecked.length) { toast(unchecked.some(x => x.now?.feed) ? `${bookName(slipBook(s)) || "The platform"}'s line feed is not fresh right now – refresh these picks before copying.` : "Refresh these picks before copying: the platform check did not complete."); return; }
+    // a board line that moved or was pulled and was kept as "your own line" (older saved slips) is never copied
+    const kept = s.filter(x => x.now?.status === "research" && (x.mv || /^Kept at|^No longer offered/.test(x.now.note || "")));
+    if (kept.length) {
+      await ask("Remove these picks first", kept.map(x => `<div>• <b>${esc(x.p)}</b> ${sideTxt(x.s)} ${x.l}: ${esc(x.now.note || "not the line the platform shows now")} – not copied</div>`).join(""),
+        [{k: "review", label: "Review slip", primary: true}]);
+      return;
+    }
     // 2026-10-18 owner: a side that is not offered (or not confirmed) is never copied - also from a slip saved earlier
     const gone = s.filter(x => x.now?.status === "unavailable");
     if (gone.length) {
@@ -1688,15 +1721,15 @@ $("#slip").addEventListener("click", e => {
         [{k: "review", label: "Review slip", primary: true}]);
       return;
     }
+    // 2026-10-21 slips audit 2: a changed line is never copied (no copy-anyway button) - the old line and chance are not on offer
     const bad = s.filter(x => x.now?.status === "changed");
     if (bad.length) {
-      const k = await ask("Check these picks first", bad.map(x => `<div>• <b>${esc(x.p)}</b> ${sideTxt(x.s)} ${x.l}: ${esc(x.now.note || x.now.status)}</div>`).join(""),
-        [{k: "review", label: "Review slip", primary: true}, {k: "copy", label: "Copy anyway (marked)"}]);
-      if (k !== "copy") return;
+      await ask("Check these picks first", bad.map(x => `<div>• <b>${esc(x.p)}</b> ${sideTxt(x.s)} ${x.l}: ${esc(x.now.note || x.now.status)}</div>`).join("")
+        + `<div class="small muted" style="margin-top:6px">Remove them, or add the current line from the board – it is graded at its own line.</div>`,
+        [{k: "review", label: "Review slip", primary: true}]);
+      return;
     }
-    const mark = x => x.now?.status === "verified" ? "" : x.now?.status === "changed" ? ` [LINE CHANGED: now ${x.now.new_line ?? "?"}]`
-      : x.now?.status === "unavailable" ? " [NOT OFFERED NOW]" : "";
-    copy(`${s.length}-pick ${bookName(slipBook(s)) || "custom"} slip\n` + s.map(x => `${x.p} ${isLeanV({grade: x.g}) ? `Lean ${sideTxt(x.s)}` : sideTxt(x.s).toUpperCase()} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${x.lt && x.lt !== "standard" ? " " + x.lt : ""} · ${isLeanV({grade: x.g}) ? "Lean" : x.g + (x.u != null && !(+x.u > 0) ? " · 0U" : "")} · ${((x.pc || 0) * 100).toFixed(1)}%${mark(x)}`).join("\n"));
+    copy(`${s.length}-pick ${bookName(slipBook(s)) || "custom"} slip\n` + s.map(x => `${x.p} ${isLeanV({grade: x.g}) ? `Lean ${sideTxt(x.s)}` : sideTxt(x.s).toUpperCase()} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${x.lt && x.lt !== "standard" ? " " + x.lt : ""} · ${isLeanV({grade: x.g}) ? "Lean" : x.g + (x.u != null && !(+x.u > 0) ? " · 0U" : "")} · ${((x.pc || 0) * 100).toFixed(1)}%`).join("\n"));
     // immutable load log (no member identity): what was copied and each leg's live-line state at that moment
     if (s.length >= 2) try {
       const body = JSON.stringify({cid: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()), mode: "member-copy", n: s.length, book: slipBook(s) || "research",
@@ -1888,13 +1921,17 @@ const lockChip = r => { const t = Date.parse(r.start || ""), m = Math.ceil((t - 
   return isNaN(t) || m <= 0 || m > 60 ? "" : ` <span class="lockb" title="${esc(bookName(r.book || "underdog"))} locks this line at the match start">locks in ${m}m</span>`; };
 const shortWhen = s => { if (!s) return ""; const d = new Date(s); if (isNaN(d)) return "";
   const u = until(d); return d.toLocaleString([], {weekday: "short", hour: "numeric", minute: "2-digit"}) + (u ? " · " + u : ""); };
+// "+ Slip" names the exact row (2026-10-21 slips audit 6: player|line|stat|type|platform alone added the first of two matches
+// or maps): the row's own id, else its full identity including maps and the match
+const bslipKey = r => r.id ? `id|${r.book || "underdog"}|${r.id}`
+  : [r.nick || r.player, r.line, r.prop, r.scope || "12", mktType(r), r.book || "underdog", r.match_slug || r.start || ""].join("|");
 function boardCard(r) {     // a board row in the shape addToSlip / pickLine expect
   return {book: r.book || "underdog", grade: {line: r.line, prop: r.prop, line_type: gradeType(r), scope: r.scope || "12", probs_raw: r.model_outcomes},
           verdict: {side: r.side, grade: r.grade, model_grade: r.model_grade, stake_reason: r.stake_reason, p: r.p, units: r.units,
                     kept_from_board: !!r.hltv_retry, stale: !!r.hltv_retry, graded_at: r.graded_at,
                     side_unavailable: r.unavailable || null},
           player_block: {player: {nick: r.nick || r.player, id: r.player_id}, current_team: r.team_name || r.team},
-          next_match: {opponent: r.opp_name || r.opponent, start: r.start, slug: r.match_slug}, from: "board"};
+          next_match: {opponent: r.opp_name || r.opponent, start: r.start, slug: r.match_slug}, from: "board", row_id: r.id || ""};
 }
 const agoTxt = t => { if (!t) return ""; const m = Math.round((Date.now() - Date.parse(t)) / 60000); return m < 1 ? "just now" : m < 60 ? m + " min ago" : Math.round(m / 60) + " h ago"; };
 const DSTAT = {ok: ["ok", "Data complete"], limited: ["mid", "Limited history"]};
@@ -2108,7 +2145,7 @@ function drawBoard() {
       <div class="c-pick b2pick">${pick}</div>
       <div class="c-stake">${stake}</div>
       <div class="c-act">${whyB}${!r.side ? "<span></span>" : gone ? `<button type="button" class="bslip" disabled title="${esc(gone)}">Unavailable</button>` : r.state === "SCOUT" ? `<button type="button" class="bslip" disabled title="No upcoming match found for his team – there is nothing to enter on a slip yet">+ Slip</button>`
-        : `<button type="button" class="bslip ${onSlip.has(slipKeyRow(r)) ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}|${mktType(r)}|${r.book || "underdog"}">${onSlip.has(slipKeyRow(r)) ? "On slip" : "+ Slip"}</button>`}</div>
+        : `<button type="button" class="bslip ${onSlip.has(slipKeyRow(r)) ? "on" : ""}" data-bslip="${esc(bslipKey(r))}">${onSlip.has(slipKeyRow(r)) ? "On slip" : "+ Slip"}</button>`}</div>
       ${meta ? `<div class="c-meta muted">${meta}</div>` : ""}${wOpen && r.side ? `<div class="c-why">${whyHtml(r)}</div>` : ""}
     </div>`; };
   const rowHead = `<div class="crow-head" aria-hidden="true"><span></span><span>Player · match</span><span>Market</span><span>Line</span><span>Proj</span><span>Pick · chance</span><span>Grade · stake</span><span></span></div>`;
@@ -2164,8 +2201,7 @@ function boardClick(e) {
   const st = e.target.closest("[data-bstar]");
   if (st) { e.stopPropagation(); toggleWatch(st.dataset.bstar); return drawBoard(); }
   const b = e.target.closest("[data-bslip]");
-  if (b) { e.stopPropagation(); const [p, l, t, lt, bk] = b.dataset.bslip.split("|");
-    const r = boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && mktType(x) === (lt || "standard") && (x.book || "underdog") === (bk || "underdog"));
+  if (b) { e.stopPropagation(); const r = boardRows.find(x => bslipKey(x) === b.dataset.bslip);
     if (r) { addToSlip(boardCard(r)); drawBoard(); } return; }
   const r = e.target.closest("[data-bl]");
   if (r) { const [p, l, t, sc, lt] = r.dataset.bl.split("|"), row = rowOfBl(r.dataset.bl);
@@ -2673,7 +2709,7 @@ function capText(d, c) {
   const fmt = m => { const parts = [4, 3, 2].filter(n => c.sizes.includes(n) && m && m[n] != null).map(n => `${m[n]} ${words[n]}-pick${+m[n] === 1 ? "" : "s"}`);
     return parts.length > 1 ? parts.slice(0, -1).join(", ") + " or " + parts[parts.length - 1] : parts[0]; };
   const list = fmt(mx), last = STUDIO.last && STUDIO.batch && STUDIO.last.batch_id === STUDIO.batch.batch_id ? STUDIO.last : null;
-  const left = last && last.eligible ? fmt(last.eligible.max_slips_left) : null;
+  const left = c.repeats === "none" && last && last.eligible ? fmt(last.eligible.max_slips_left) : null;
   // the limiting constraint: one pick per match inside a slip, so an n-pick slip needs n different matches
   const big = [4, 3, 2].find(n => c.sizes.includes(n) && mx[n] != null);
   const lim = big && d.matches && +mx[big] === Math.floor(d.matches / big) ? ` Limited by matches: each ${big}-pick slip needs ${big} different matches.` : big && mx[big] != null ? " Limited by eligible players and picks." : "";
@@ -2810,7 +2846,9 @@ function studioRender() {
   const lockedN = [4, 3, 2].reduce((a, n) => a + ((b.slips || {})[n] || []).length - active(n).length, 0);
   const bySize = [4, 3, 2].map(n => active(n).length ? `<div class="studio-sz">${sizeWord(n)} slips</div>` + active(n).map(studioSlip).join("") : "").join("")
     + (lockedN ? `<div class="small muted" style="margin-top:8px">${lockedN} slip${lockedN === 1 ? " has" : "s have"} started – see History below.</div>` : "");
-  const msg = short || elig || excl ? `<div class="studio-exp" style="border-color:#f5c54240"><b>${slips.length ? "Couldn't fill every size" : "No slips from this build"}</b>${short}${elig}${excl}</div>` : "";
+  // 2026-10-21 UI review 10: the warning heading only when a size was short; otherwise eligibility is a plain note
+  const msg = short ? `<div class="studio-exp" style="border-color:#f5c54240"><b>${slips.length ? "Couldn't fill every size" : "No slips from this build"}</b>${short}${elig}${excl}</div>`
+    : elig || excl ? `<div class="studio-note">${elig}${excl}</div>` : "";
   $("#st-out").innerHTML = msg + exp + (slips.length ? bySize : msg ? "" : `<div class="small muted">No slips yet – choose your settings and press Build.</div>`)
     + `<div class="small muted" style="margin-top:6px">Each slip's chance is the model's estimate, not a measured hit rate.</div>`
     + `<details class="small muted" style="margin-top:8px"><summary>How the studio works</summary>
@@ -3596,7 +3634,7 @@ function otTopPlays(rows) {
       <div class="tpbody"><div class="b2top"><b>${esc(nick)}</b> <span class="muted">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}</span></div>
         <div class="b2pick">${esc(sideWord(r))} ${esc(r.line)} ${propWord(r.prop)}${mapsWord(r.scope)} · <b>${chance(r.p, r.prop)}</b>${l10Chip(r)}</div>
         <div class="b2meta">${bookName(bk)}${mktTag(r)} · ${esc(g)} · ${+(+r.units).toFixed(2)}U${capChip(r, team)} · ${shortWhen(r.start)}</div>
-        <button type="button" class="bslip ${on ? "on" : ""}" data-bslip="${esc(nick)}|${r.line}|${r.prop}|${mktType(r)}|${bk}">${on ? "On slip" : "+ Slip"}</button></div></div>`; };
+        <button type="button" class="bslip ${on ? "on" : ""}" data-bslip="${esc(bslipKey(r))}">${on ? "On slip" : "+ Slip"}</button></div></div>`; };
   return `<section class="ot-featured" aria-label="Top plays"><div class="tphead"><b>Top plays</b><span class="small muted">Highest chance under these filters · one per player · bets only</span></div>
     <div class="blist">${top.map(card).join("")}</div></section>`;
 }
@@ -3773,6 +3811,12 @@ document.addEventListener("click", e => {
 }, true);
 // ---------- Slips page (2026-10-18 release): the studio, then History - slips that have started and earlier batches,
 // each leg with its result from the pick log once settled. Records are shown as stored; nothing is deleted.
+// the owner's studio switch from /auth/me; a direct link to #slips ran slipsOpen() before it answered (2026-10-21 UI review 9:
+// the studio stayed collapsed and History never loaded), so the Slips page is opened again once the switch is known
+function studioSwitch(on) {
+  STUDIO.off = !on; studioShow();
+  if (MODE === "slips") slipsOpen();
+}
 function slipsOpen() {
   studioShow();
   if (!STUDIO.off && !STUDIO.open) studioToggle(true);
