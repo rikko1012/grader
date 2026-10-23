@@ -150,7 +150,7 @@ Status per situation:
 Remakes do not hold any pick pending. HLTV keeps only the final map, so a remake cannot be seen and the pick settles on
 the recorded map as before. That limitation is documented and was not changed.
 
-Code (branch close2/rulelookup, commit e5bad92; full suite 1689 passed, 5 skipped; 3 new tests in tests/test_rule_lookup.py, 2 fail before): `platform_rules.SEARCHES` and `missing_evidence()` record the above
+Code (branch close2/rulelookup, commit e5bad92; full suite 1689 passed, 5 skipped; 3 new tests in tests/test_rule_lookup.py, all 3 fail before): `platform_rules.SEARCHES` and `missing_evidence()` record the above
 for each unverified rule. `picklog.rule_pending_page()` and the admin-only **`/admin/rule_pending.json?after=&limit=`**
 endpoint (limit <= 500, settlement fields only, lock-free read) list open picks with `result.rule_pending`, each with its
 reason, `rule_verified` and `missing_evidence`. When the rule is published but the data did not decide it (Underdog,
