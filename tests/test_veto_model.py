@@ -208,7 +208,9 @@ def test_roster_and_identity(table):
     p_id["identity"] = True
     lineup1 = [10, 11, 12, 13, 14]
     # team 3000 = a new org fielding 4 of team 1's players: with identity on it inherits team 1's vetoes
-    r_off = _p(table, team_a_id=3000, lineup_a=lineup1[:4] + [999])
+    p_off = copy.deepcopy(vm.PARAMS)
+    p_off["identity"] = False
+    r_off = _p(table, team_a_id=3000, lineup_a=lineup1[:4] + [999], params=p_off)
     r_on = _p(table, team_a_id=3000, lineup_a=lineup1[:4] + [999], params=p_id)
     assert r_off["history"]["team_a"] == 0 and r_on["history"]["team_a"] > 0
     assert r_on["inclusion"]["cache"] < r_off["inclusion"]["cache"]
