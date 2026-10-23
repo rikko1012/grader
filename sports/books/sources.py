@@ -1,12 +1,12 @@
 """Market-source adapters -> canonical OfferSnapshot records (worker only; every request through ledger.reserve).
 
 Polymarket (gamma API, public) - read 2026-10-23: events by tag_slug nba / nfl; a player prop is a market with
-  sportsMarketType in PM_STAT, question "<Player>: <Stat> O/U <line>", outcomes ["Yes", "No"], bestBid / bestAsk of
-  the YES token, line, gameStartTime ("2026-10-23 23:00:00+00"), liquidityNum, volumeNum, updatedAt (a MARKET update
+  sportsMarketType in PM_STAT, question "<Player>: <Stat> O/U <line>", outcomes ["Yes", "No"] (NBA) or ["Over",
+  "Under"] (NFL), bestBid / bestAsk of the FIRST (Yes / Over) token, line, gameStartTime ("2026-10-23 23:00:00+00"), liquidityNum, volumeNum, updatedAt (a MARKET update
   time, not a quote time -> source_time_unknown, kept in extras). Event slug "nba-nyk-bos-2026-10-23" = league, away,
   home, US date -> resolved with the foundation's exact team aliases + ESPN event index. Contract text (description):
-  YES = more than the line; NO = the line or fewer; full game incl. OT; "If the player is listed as inactive or
-  otherwise does not take the court ... resolve No" -> a Polymarket YES price is UNCONDITIONAL on playing (the
+  YES / Over = more than the line; NO / Under = the line or fewer; full game incl. OT; a player who is inactive or
+  does not play resolves NO / Under (NBA and NFL texts) -> a Polymarket YES price is UNCONDITIONAL on playing (the
   consensus rule mc-1 handles it, REGISTER.md 10).
 The Odds API - foundation adapters.oddsapi_offers (documented shape) + this module's event resolution by full team
   names (exact ESPN display names) and the credit ledger. Key: ODDS_API_KEY (Render only).
@@ -45,7 +45,9 @@ def key_state():
 def _get(source, url, params=None, headers=None, cost=1.0):
     ok, why = ledger.reserve(source, cost, url.split("?")[0][-80:])
     if not ok:
-        raise net.HttpError(None, url, f"budget: {why}")
+        e = net.HttpError(None, url, f"budget: {why}")
+        e.args = (f"budget refused ({why}) for {url.split('?')[0]}",)
+        raise e
     try:
         r = net.get(url, params=params, headers=headers, timeout=30, tries=1)
     except net.HttpError as e:
@@ -123,7 +125,7 @@ def polymarket_offers(events, league, observed_at, resolver=None):
                 outs = json.loads(m.get("outcomes") or "[]")
             except ValueError:
                 outs = []
-            if outs != ["Yes", "No"]:
+            if outs not in (["Yes", "No"], ["Over", "Under"]):     # NBA props Yes/No, NFL props Over/Under
                 b.q("offer", "polymarket", key, "outcomes_not_yes_no", {"outcomes": m.get("outcomes")})
                 continue
             name = q.group("name").strip()

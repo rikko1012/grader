@@ -1,0 +1,856 @@
+{
+ "sport": "nba",
+ "phase": "tune",
+ "register": "sports/research/REGISTER.md (+A1)",
+ "markets": {
+  "points": {
+   "market": "points",
+   "procedure": [
+    "half-lives (base mean, default family)",
+    "feature selection",
+    "family",
+    "cal-1"
+   ],
+   "half_life_tune_crps": {
+    "(3, 10)": 3.5549216527544236,
+    "(3, 20)": 3.561392121835922,
+    "(3, 40)": 3.5791338043204575,
+    "(5, 10)": 3.562169687854464,
+    "(5, 20)": 3.57128007940909,
+    "(5, 40)": 3.5904158904588814,
+    "(10, 10)": 3.5829463255515703,
+    "(10, 20)": 3.5979699274933483,
+    "(10, 40)": 3.6187955087128696
+   },
+   "half_lives": [
+    3,
+    10
+   ],
+   "rows": {
+    "train": 40770,
+    "tune": 11976,
+    "train_games": 2571,
+    "tune_games": 725
+   },
+   "feature_tests": {
+    "nba.minutes_trend": {
+     "track": "statistical",
+     "tune_crps_diff": 2.2496158132912163e-05,
+     "ci": [
+      -0.0020651804113192497,
+      0.002246667119122458
+     ],
+     "beta_std": -0.019868682557980636,
+     "passed": false,
+     "kept": false
+    },
+    "nba.usage": {
+     "track": "statistical",
+     "tune_crps_diff": -0.0032192376906584816,
+     "ci": [
+      -0.0048535374298940585,
+      -0.0015998429794834264
+     ],
+     "beta_std": 0.012426845507525793,
+     "passed": true,
+     "kept": true
+    },
+    "nba.shot_trend": {
+     "track": "statistical",
+     "tune_crps_diff": -0.0008286436472821019,
+     "ci": [
+      -0.001662603972825397,
+      5.028821677214355e-05
+     ],
+     "beta_std": 0.0074293928625975515,
+     "passed": false,
+     "kept": false
+    },
+    "nba.role_stability": {
+     "track": "statistical",
+     "tune_crps_diff": -0.0044406698448714406,
+     "ci": [
+      -0.007981155776295516,
+      -0.0008348524366872644
+     ],
+     "beta_std": 0.030442073097194575,
+     "passed": true,
+     "kept": true
+    },
+    "nba.starter_prev": {
+     "track": "statistical",
+     "tune_crps_diff": -0.005308431100237975,
+     "ci": [
+      -0.008118443152525447,
+      -0.0025270129822715136
+     ],
+     "beta_std": 0.024045653746297014,
+     "passed": true,
+     "kept": true
+    },
+    "nba.team_pace": {
+     "track": "statistical",
+     "tune_crps_diff": -0.0004734644534685511,
+     "ci": [
+      -0.001178259783034775,
+      0.0002569876391098513
+     ],
+     "beta_std": 0.005881601705158364,
+     "passed": false,
+     "kept": false
+    },
+    "nba.opp_pace": {
+     "track": "statistical",
+     "tune_crps_diff": -0.0049652795459369445,
+     "ci": [
+      -0.007904869464516975,
+      -0.002201412915610617
+     ],
+     "beta_std": 0.024917681016504527,
+     "passed": true,
+     "kept": true
+    },
+    "nba.opp_positional_defence": {
+     "track": "statistical",
+     "tune_crps_diff": -0.001690076335299741,
+     "ci": [
+      -0.0041283337501767485,
+      0.0007910503924187225
+     ],
+     "beta_std": 0.022989351898880725,
+     "passed": false,
+     "kept": false
+    },
+    "nba.back_to_back": {
+     "track": "statistical",
+     "tune_crps_diff": 0.00017826439918126386,
+     "ci": [
+      -0.0008449948540237659,
+      0.0012605726730186403
+     ],
+     "beta_std": 0.008465693913211938,
+     "passed": false,
+     "kept": false
+    },
+    "nba.rest_days": {
+     "track": "statistical",
+     "tune_crps_diff": 0.0009225943954578645,
+     "ci": [
+      -0.0008141129046065314,
+      0.0027239791696727525
+     ],
+     "beta_std": -0.014080560971168724,
+     "passed": false,
+     "kept": false
+    },
+    "nba.teammate_absent_lag": {
+     "track": "statistical",
+     "tune_crps_diff": -0.00018640114979004101,
+     "ci": [
+      -0.0013048914265052776,
+      0.0009603789828664591
+     ],
+     "beta_std": 0.009090934339104016,
+     "passed": false,
+     "kept": false
+    },
+    "nba.teammate_absent_sameday": {
+     "track": "statistical",
+     "tune_crps_diff": -0.009490217341485026,
+     "ci": [
+      -0.01687495924071368,
+      -0.002147023557903423
+     ],
+     "beta_std": 0.05869522875875932,
+     "passed": true,
+     "kept": true
+    },
+    "nba.home": {
+     "track": "statistical",
+     "tune_crps_diff": -0.0005766657717438115,
+     "ci": [
+      -0.0014022856951015922,
+      0.0002536924456536273
+     ],
+     "beta_std": 0.008234351916553676,
+     "passed": false,
+     "kept": false
+    },
+    "nba.postseason": {
+     "track": "statistical",
+     "not_evaluable_on_tune": "constant or missing on tune rows",
+     "passed": false,
+     "kept": false
+    }
+   },
+   "joint": {
+    "features": [
+     "nba.usage",
+     "nba.role_stability",
+     "nba.starter_prev",
+     "nba.opp_pace",
+     "nba.teammate_absent_sameday"
+    ],
+    "tune_crps_diff": -0.025577386490110557,
+    "ci": [
+     -0.03479128817474004,
+     -0.01657142863754771
+    ],
+    "beta_std": {
+     "nba.usage": 0.011383315931727561,
+     "nba.role_stability": 0.020712611027282255,
+     "nba.starter_prev": 0.013307149401717925,
+     "nba.opp_pace": 0.023512295018806414,
+     "nba.teammate_absent_sameday": 0.058312204025437
+    },
+    "used": true
+   },
+   "family_tune_crps": {
+    "poisson": 3.6797404736493906,
+    "negbin": 3.529344266264313,
+    "mixture": 3.5115521861949883,
+    "ratio": 3.4637127839011357
+   },
+   "family": "ratio",
+   "cal": {
+    "c": 0.98,
+    "s": 0.98,
+    "tune_crps_raw": 3.4637127839011357,
+    "tune_crps_cal": 3.4607011914445556
+   },
+   "market_track": {
+    "label": "market-informed (closing game lines; available about kickoff)",
+    "tests": {},
+    "train_coverage": {
+     "nba.game_total": 0.0,
+     "nba.blowout_risk": 0.0
+    },
+    "run": false,
+    "why": "game lines cover < 50% of eligible train rows (amendment A1c)"
+   }
+  },
+  "rebounds": {
+   "market": "rebounds",
+   "procedure": [
+    "half-lives (base mean, default family)",
+    "feature selection",
+    "family",
+    "cal-1"
+   ],
+   "half_life_tune_crps": {
+    "(3, 10)": 1.37631487740276,
+    "(3, 20)": 1.373359787321555,
+    "(3, 40)": 1.3751019939869333,
+    "(5, 10)": 1.380909245629095,
+    "(5, 20)": 1.3778564286484953,
+    "(5, 40)": 1.3796553344089273,
+    "(10, 10)": 1.3914216083563402,
+    "(10, 20)": 1.3881002698542932,
+    "(10, 40)": 1.389972089102348
+   },
+   "half_lives": [
+    3,
+    20
+   ],
+   "rows": {
+    "train": 40770,
+    "tune": 11976,
+    "train_games": 2571,
+    "tune_games": 725
+   },
+   "feature_tests": {
+    "nba.minutes_trend": {
+     "track": "statistical",
+     "tune_crps_diff": 0.00017295444367906897,
+     "ci": [
+      -0.0004044352708024708,
+      0.0007946619383320982
+     ],
+     "beta_std": -0.012091195613655813,
+     "passed": false,
+     "kept": false
+    },
+    "nba.role_stability": {
+     "track": "statistical",
+     "tune_crps_diff": -0.0016468956756064393,
+     "ci": [
+      -0.0031334545881330856,
+      -0.00020425425526493212
+     ],
+     "beta_std": 0.02737554160421894,
+     "passed": true,
+     "kept": true
+    },
+    "nba.starter_prev": {
+     "track": "statistical",
+     "tune_crps_diff": -0.0004118736610169745,
+     "ci": [
+      -0.0011831276202111521,
+      0.0003855078262857109
+     ],
+     "beta_std": 0.0160812381103499,
+     "passed": false,
+     "kept": false
+    },
+    "nba.team_pace": {
+     "track": "statistical",
+     "tune_crps_diff": -5.178263808596267e-05,
+     "ci": [
+      -0.0005663451707810487,
+      0.0004792885344150587
+     ],
+     "beta_std": 0.009000661260336067,
+     "passed": false,
+     "kept": false
+    },
+    "nba.opp_pace": {
+     "track": "statistical",
+     "tune_crps_diff": -0.0012974112447743514,
+     "ci": [
+      -0.0020312494006266045,
+      -0.0006185726105420813
+     ],
+     "beta_std": 0.01342294200167614,
+     "passed": true,
+     "kept": true
+    },
+    "nba.opp_positional_defence": {
+     "track": "statistical",
+     "tune_crps_diff": -0.0005039312265135138,
+     "ci": [
+      -0.0008266960969585201,
+      -0.00017479899614270415
+     ],
+     "beta_std": 0.005735790787712337,
+     "passed": true,
+     "kept": true
+    },
+    "nba.back_to_back": {
+     "track": "statistical",
+     "tune_crps_diff": -0.0001792508002097666,
+     "ci": [
+      -0.0004427296517845225,
+      6.803564921040143e-05
+     ],
+     "beta_std": 0.0046315766735517214,
+     "passed": false,
+     "kept": false
+    },
+    "nba.rest_days": {
+     "track": "statistical",
+     "tune_crps_diff": -0.0002983894922472062,
+     "ci": [
+      -0.0006476077081057831,
+      6.700699680306482e-06
+     ],
+     "beta_std": -0.005308549334118781,
+     "passed": false,
+     "kept": false
+    },
+    "nba.teammate_absent_lag": {
+     "track": "statistical",
+     "tune_crps_diff": 5.715835042111175e-05,
+     "ci": [
+      -0.0001982403542132187,
+      0.0003101809986424617
+     ],
+     "beta_std": 0.004744716784773982,
+     "passed": false,
+     "kept": false
+    },
+    "nba.teammate_absent_sameday": {
+     "track": "statistical",
+     "tune_crps_diff": -0.0005596873926918583,
+     "ci": [
+      -0.0032524547716140167,
+      0.002249120350308917
+     ],
+     "beta_std": 0.041769921970796445,
+     "passed": false,
+     "kept": false
+    },
+    "nba.home": {
+     "track": "statistical",
+     "tune_crps_diff": 2.6937942467517508e-05,
+     "ci": [
+      -0.00026190793254372987,
+      0.0003241849537192336
+     ],
+     "beta_std": 0.006269645597264585,
+     "passed": false,
+     "kept": false
+    },
+    "nba.postseason": {
+     "track": "statistical",
+     "not_evaluable_on_tune": "constant or missing on tune rows",
+     "passed": false,
+     "kept": false
+    }
+   },
+   "joint": {
+    "features": [
+     "nba.role_stability",
+     "nba.opp_pace",
+     "nba.opp_positional_defence"
+    ],
+    "tune_crps_diff": -0.0033289244190204017,
+    "ci": [
+     -0.005030517034544498,
+     -0.0016496792102158938
+    ],
+    "beta_std": {
+     "nba.role_stability": 0.027285086332403657,
+     "nba.opp_pace": 0.012836716431050322,
+     "nba.opp_positional_defence": 0.005045902041660084
+    },
+    "used": true
+   },
+   "family_tune_crps": {
+    "poisson": 1.3781425281943642,
+    "negbin": 1.3700308629025346,
+    "mixture": 1.3703613019985326,
+    "ratio": 1.3718623726619905
+   },
+   "family": "negbin",
+   "cal": {
+    "c": 0.99,
+    "s": 0.98,
+    "tune_crps_raw": 1.3700308629025346,
+    "tune_crps_cal": 1.3696487992963653
+   },
+   "market_track": {
+    "label": "market-informed (closing game lines; available about kickoff)",
+    "tests": {},
+    "train_coverage": {
+     "nba.game_total": 0.0,
+     "nba.blowout_risk": 0.0
+    },
+    "run": false,
+    "why": "game lines cover < 50% of eligible train rows (amendment A1c)"
+   }
+  },
+  "assists": {
+   "market": "assists",
+   "procedure": [
+    "half-lives (base mean, default family)",
+    "feature selection",
+    "family",
+    "cal-1"
+   ],
+   "half_life_tune_crps": {
+    "(3, 10)": 0.996478253715509,
+    "(3, 20)": 1.0008711445349427,
+    "(3, 40)": 1.008382845759834,
+    "(5, 10)": 0.9996142237236194,
+    "(5, 20)": 1.0042099162149278,
+    "(5, 40)": 1.01196271268784,
+    "(10, 10)": 1.0059432033152493,
+    "(10, 20)": 1.0110252895398277,
+    "(10, 40)": 1.0193359656238488
+   },
+   "half_lives": [
+    3,
+    10
+   ],
+   "rows": {
+    "train": 40770,
+    "tune": 11976,
+    "train_games": 2571,
+    "tune_games": 725
+   },
+   "feature_tests": {
+    "nba.minutes_trend": {
+     "track": "statistical",
+     "tune_crps_diff": 5.899882933743393e-05,
+     "ci": [
+      -7.024951681120326e-05,
+      0.00019837557125727958
+     ],
+     "beta_std": -0.004608253943420027,
+     "passed": false,
+     "kept": false
+    },
+    "nba.usage": {
+     "track": "statistical",
+     "tune_crps_diff": -0.0005753975046470412,
+     "ci": [
+      -0.001350037731934818,
+      0.0001899731212384122
+     ],
+     "beta_std": 0.020218972947978597,
+     "passed": false,
+     "kept": false
+    },
+    "nba.role_stability": {
+     "track": "statistical",
+     "tune_crps_diff": -0.0017387240557605438,
+     "ci": [
+      -0.002915685217152822,
+      -0.0006250167945185918
+     ],
+     "beta_std": 0.03812583067173534,
+     "passed": true,
+     "kept": true
+    },
+    "nba.starter_prev": {
+     "track": "statistical",
+     "tune_crps_diff": -0.0017203292078457146,
+     "ci": [
+      -0.002584039184236476,
+      -0.0008535371730603443
+     ],
+     "beta_std": 0.02977683874928824,
+     "passed": true,
+     "kept": true
+    },
+    "nba.team_pace": {
+     "track": "statistical",
+     "tune_crps_diff": -0.00019094683969448004,
+     "ci": [
+      -0.00037385563854233005,
+      -4.150254027866576e-06
+     ],
+     "beta_std": 0.005582787569903908,
+     "passed": true,
+     "kept": true
+    },
+    "nba.opp_pace": {
+     "track": "statistical",
+     "tune_crps_diff": -0.0007830014133988856,
+     "ci": [
+      -0.0017809093536098413,
+      0.0001229577698377747
+     ],
+     "beta_std": 0.028283268522483748,
+     "passed": false,
+     "kept": false
+    },
+    "nba.opp_positional_defence": {
+     "track": "statistical",
+     "tune_crps_diff": -0.00012422720543458986,
+     "ci": [
+      -0.0007377976112480452,
+      0.0005228072389786516
+     ],
+     "beta_std": 0.019948067915652845,
+     "passed": false,
+     "kept": false
+    },
+    "nba.back_to_back": {
+     "track": "statistical",
+     "tune_crps_diff": 0.00019821984158718183,
+     "ci": [
+      -4.9595789553912636e-05,
+      0.00046804741988842847
+     ],
+     "beta_std": 0.007012652745179594,
+     "passed": false,
+     "kept": false
+    },
+    "nba.rest_days": {
+     "track": "statistical",
+     "tune_crps_diff": 0.00023486265552475174,
+     "ci": [
+      -0.000322963705876233,
+      0.0007852278488319986
+     ],
+     "beta_std": -0.016575998094601377,
+     "passed": false,
+     "kept": false
+    },
+    "nba.teammate_absent_lag": {
+     "track": "statistical",
+     "tune_crps_diff": 2.7721494314624607e-05,
+     "ci": [
+      -0.00024762907990880627,
+      0.00029720884935755996
+     ],
+     "beta_std": 0.007609217750251935,
+     "passed": false,
+     "kept": false
+    },
+    "nba.teammate_absent_sameday": {
+     "track": "statistical",
+     "tune_crps_diff": 0.001404322545905201,
+     "ci": [
+      -0.0009142443477352069,
+      0.003890621922342971
+     ],
+     "beta_std": 0.06098605024903329,
+     "passed": false,
+     "kept": false
+    },
+    "nba.home": {
+     "track": "statistical",
+     "tune_crps_diff": -0.00015854818316062233,
+     "ci": [
+      -0.0006711714845388927,
+      0.00032906653129608464
+     ],
+     "beta_std": 0.016083448635416386,
+     "passed": false,
+     "kept": false
+    },
+    "nba.postseason": {
+     "track": "statistical",
+     "not_evaluable_on_tune": "constant or missing on tune rows",
+     "passed": false,
+     "kept": false
+    }
+   },
+   "joint": {
+    "features": [
+     "nba.role_stability",
+     "nba.starter_prev",
+     "nba.team_pace"
+    ],
+    "tune_crps_diff": -0.0025526064607899984,
+    "ci": [
+     -0.0038131652276456826,
+     -0.0013467139851289188
+    ],
+    "beta_std": {
+     "nba.role_stability": 0.030815091491151744,
+     "nba.starter_prev": 0.015937023498887235,
+     "nba.team_pace": 0.006061910434602435
+    },
+    "used": true
+   },
+   "family_tune_crps": {
+    "poisson": 0.99531397555409,
+    "negbin": 0.9939256472547191,
+    "mixture": 0.9945539321323942,
+    "ratio": 0.9966550747327989
+   },
+   "family": "negbin",
+   "cal": {
+    "c": 1.02,
+    "s": 1.0,
+    "tune_crps_raw": 0.9939256472547191,
+    "tune_crps_cal": 0.9934774631047082
+   },
+   "market_track": {
+    "label": "market-informed (closing game lines; available about kickoff)",
+    "tests": {},
+    "train_coverage": {
+     "nba.game_total": 0.0,
+     "nba.blowout_risk": 0.0
+    },
+    "run": false,
+    "why": "game lines cover < 50% of eligible train rows (amendment A1c)"
+   }
+  },
+  "threes": {
+   "market": "threes",
+   "procedure": [
+    "half-lives (base mean, default family)",
+    "feature selection",
+    "family",
+    "cal-1"
+   ],
+   "half_life_tune_crps": {
+    "(3, 10)": 0.6520150115825796,
+    "(3, 20)": 0.6508560726184012,
+    "(3, 40)": 0.652107251374149,
+    "(5, 10)": 0.6522816602424969,
+    "(5, 20)": 0.651344510375141,
+    "(5, 40)": 0.6527450131836436,
+    "(10, 10)": 0.6534876681824768,
+    "(10, 20)": 0.652789436079989,
+    "(10, 40)": 0.6544292448857001
+   },
+   "half_lives": [
+    3,
+    20
+   ],
+   "rows": {
+    "train": 40770,
+    "tune": 11976,
+    "train_games": 2571,
+    "tune_games": 725
+   },
+   "feature_tests": {
+    "nba.minutes_trend": {
+     "track": "statistical",
+     "tune_crps_diff": -6.36165405526645e-05,
+     "ci": [
+      -0.00032879365366809905,
+      0.00020383631165810852
+     ],
+     "beta_std": -0.018107538114641778,
+     "passed": false,
+     "kept": false
+    },
+    "nba.usage": {
+     "track": "statistical",
+     "tune_crps_diff": -5.330087269160676e-06,
+     "ci": [
+      -7.569207073974321e-05,
+      6.632218308692315e-05
+     ],
+     "beta_std": 0.0038903614808727225,
+     "passed": false,
+     "kept": false
+    },
+    "nba.shot_trend": {
+     "track": "statistical",
+     "tune_crps_diff": -0.00014282023677534411,
+     "ci": [
+      -0.00034087046562591847,
+      4.305043704708832e-05
+     ],
+     "beta_std": 0.011624114970165545,
+     "passed": false,
+     "kept": false
+    },
+    "nba.role_stability": {
+     "track": "statistical",
+     "tune_crps_diff": 1.0323318295592078e-05,
+     "ci": [
+      -0.0005544074169334059,
+      0.0005937172870799825
+     ],
+     "beta_std": 0.033131187819584906,
+     "passed": false,
+     "kept": false
+    },
+    "nba.starter_prev": {
+     "track": "statistical",
+     "tune_crps_diff": -0.00016817018355958044,
+     "ci": [
+      -0.0004598245516450483,
+      0.00012553310714932795
+     ],
+     "beta_std": 0.01727304803121378,
+     "passed": false,
+     "kept": false
+    },
+    "nba.team_pace": {
+     "track": "statistical",
+     "tune_crps_diff": 2.9859302089420742e-05,
+     "ci": [
+      -7.440792212407317e-05,
+      0.00013275321195420846
+     ],
+     "beta_std": 0.0060274286977535655,
+     "passed": false,
+     "kept": false
+    },
+    "nba.opp_pace": {
+     "track": "statistical",
+     "tune_crps_diff": 9.505308884285695e-05,
+     "ci": [
+      -0.0002844717038093234,
+      0.0004806756748831737
+     ],
+     "beta_std": 0.02189902795425461,
+     "passed": false,
+     "kept": false
+    },
+    "nba.opp_positional_defence": {
+     "track": "statistical",
+     "tune_crps_diff": 0.00012234619997103662,
+     "ci": [
+      -0.00017815451222825106,
+      0.0004161911387506643
+     ],
+     "beta_std": 0.024244369473266348,
+     "passed": false,
+     "kept": false
+    },
+    "nba.back_to_back": {
+     "track": "statistical",
+     "tune_crps_diff": 2.0886648931121552e-05,
+     "ci": [
+      -8.813122686893522e-05,
+      0.0001356417973072288
+     ],
+     "beta_std": 0.006390513721669682,
+     "passed": false,
+     "kept": false
+    },
+    "nba.rest_days": {
+     "track": "statistical",
+     "tune_crps_diff": -0.0001348759483935706,
+     "ci": [
+      -0.00032197595536833816,
+      5.920900893193252e-05
+     ],
+     "beta_std": -0.010894815224098443,
+     "passed": false,
+     "kept": false
+    },
+    "nba.teammate_absent_lag": {
+     "track": "statistical",
+     "tune_crps_diff": 8.332495767847524e-05,
+     "ci": [
+      -6.064293325437582e-05,
+      0.00023508842012734136
+     ],
+     "beta_std": 0.008833821892531105,
+     "passed": false,
+     "kept": false
+    },
+    "nba.teammate_absent_sameday": {
+     "track": "statistical",
+     "tune_crps_diff": 0.001073193332158555,
+     "ci": [
+      0.00011585988397795365,
+      0.002077839550210571
+     ],
+     "beta_std": 0.05607006051563044,
+     "passed": false,
+     "kept": false
+    },
+    "nba.home": {
+     "track": "statistical",
+     "tune_crps_diff": -7.52582254412217e-05,
+     "ci": [
+      -0.00032954908725514283,
+      0.0001864087903796044
+     ],
+     "beta_std": 0.014895971141335534,
+     "passed": false,
+     "kept": false
+    },
+    "nba.postseason": {
+     "track": "statistical",
+     "not_evaluable_on_tune": "constant or missing on tune rows",
+     "passed": false,
+     "kept": false
+    }
+   },
+   "family_tune_crps": {
+    "poisson": 0.6524635821195838,
+    "negbin": 0.6508560726184012,
+    "mixture": 0.6510076084892207,
+    "ratio": 0.6567333187207749
+   },
+   "family": "negbin",
+   "cal": {
+    "c": 0.99,
+    "s": 1.0,
+    "tune_crps_raw": 0.6508560726184012,
+    "tune_crps_cal": 0.6508166367487936
+   },
+   "market_track": {
+    "label": "market-informed (closing game lines; available about kickoff)",
+    "tests": {},
+    "train_coverage": {
+     "nba.game_total": 0.0,
+     "nba.blowout_risk": 0.0
+    },
+    "run": false,
+    "why": "game lines cover < 50% of eligible train rows (amendment A1c)"
+   }
+  }
+ },
+ "generated_at": "2026-10-23T22:54:37Z",
+ "dnp_diagnostic": {
+  "rows": 70621,
+  "dnp": 5589,
+  "share": 0.07914076549468288,
+  "definition": "rows of players with prior EW minutes >= 15 listed in the box who did not play"
+ },
+ "config_sha": "18599dcf3401878f"
+}

@@ -49,8 +49,18 @@ def _month(t=None):
     return datetime.fromtimestamp(t or time.time(), tz=timezone.utc).strftime("%Y-%m")
 
 
-def reserve(source, cost=1.0, detail=""):
-    """-> (ok, reason). Atomically checks gap / per-minute / monthly budget / cool-down and records the spend."""
+def reserve(source, cost=1.0, detail="", wait_s=30.0):
+    """-> (ok, reason). Pacing (gap / per-minute) is WAITED for up to wait_s; a monthly budget, a provider-reported
+    low balance or a cool-down refuses at once."""
+    t_end = time.time() + wait_s
+    while True:
+        ok, why = _reserve(source, cost, detail)
+        if ok or not why or not (why.startswith("gap") or why.endswith("/min")) or time.time() >= t_end:
+            return ok, why
+        time.sleep(min(LIMITS[source]["gap_s"], 2.0))
+
+
+def _reserve(source, cost=1.0, detail=""):
     lim = LIMITS[source]
     con = connect()
     try:
@@ -74,9 +84,10 @@ def reserve(source, cost=1.0, detail=""):
                 why = f"monthly budget {used:.0f}+{cost:.0f} > {lim['monthly']}-{lim['reserve']}"
             elif st and st[1] is not None and lim["monthly"] is not None and st[1] - cost < lim["reserve"]:
                 why = f"provider says {st[1]:.0f} credits remain"
-        con.execute("INSERT INTO log (source, at, month, cost, outcome, detail) VALUES (?,?,?,?,?,?)",
-                    (source, now, _month(now), cost if why is None else 0, "sent" if why is None else "refused",
-                     (why or detail)[:200]))
+        if why is None or not (why.startswith("gap") or why.endswith("/min")):      # pacing waits are not logged
+            con.execute("INSERT INTO log (source, at, month, cost, outcome, detail) VALUES (?,?,?,?,?,?)",
+                        (source, now, _month(now), cost if why is None else 0, "sent" if why is None else "refused",
+                         (why or detail)[:200]))
         con.execute("COMMIT")
         return why is None, why
     finally:
