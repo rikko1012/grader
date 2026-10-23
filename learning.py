@@ -1975,21 +1975,44 @@ def cands_report(con, us, key, B=BOOT_B):
     out["brier"] = {"live": _r(sum(br(u["p_logged"], u["over"]) for u in pr) / len(pr), 5),
                     rv["id"]: _r(sum(br(u["p_ch"], u["over"]) for u in pr) / len(pr), 5),
                     "gain": _r(sum(gb(u) for u in pr) / len(pr), 5), "gain_ci": _ci_ratio(_groups(pr, gb), B=B)}
-
-    def side(col):      # favoured side: hit rate, mean chance and |gap| per side (a tie at exactly 50% has no side - counted)
-        res = {"ties_at_50": sum(1 for u in pr if u[col] == 0.5)}
-        for s_ in ("Over", "Under"):
-            sel = [u for u in pr if (u[col] > 0.5 if s_ == "Over" else u[col] < 0.5)]
-            if not sel:
-                res[s_] = {"picks": 0}
-                continue
-            hit = sum(u["over"] if s_ == "Over" else 1 - u["over"] for u in sel) / len(sel)
-            pf = sum(u[col] if s_ == "Over" else 1 - u[col] for u in sel) / len(sel)
-            res[s_] = {"picks": len(sel), "hit": _r(hit), "mean_chance": _r(pf), "abs_gap": _r(abs(pf - hit))}
-        return res
-    out["favoured_side"] = {"live": side("p_logged"), rv["id"]: side("p_ch"),
+    out["favoured_side"] = {"live": _cands_side(pr, "p_logged"), rv["id"]: _cands_side(pr, "p_ch"),
                             "note": "calibration by side is a promotion guard; the Over / Under mix is for reading only"}
+    # 2026-10-23 closeout: the registered rule is read AT a look, on that look's cohort (REVIEW_RULE: the first W distinct
+    # forward matches by start, frozen) - the running figures above keep growing past a window and are never the look figure.
+    # Same statistics and level as registered (REGISTER.md: 95% match-grouped); no pass / fail is computed here (owner decides).
+    first = {}
+    for u in pr:
+        first[u["match"]] = min(first.get(u["match"], "~"), str(u.get("start") or "~"))
+    order = [m for m, _ in sorted(first.items(), key=lambda kv: (kv[1], kv[0]))]
+    out["looks"] = []
+    for w in rv["looks"]:
+        if nm < w:
+            break
+        keep = set(order[:w])
+        lc = [u for u in pr if u["match"] in keep]
+        gl = lambda u: _ll(u["p_logged"], u["over"]) - _ll(u["p_ch"], u["over"])
+        out["looks"].append({
+            "window": w, "matches": len(keep), "units": len(lc), "level": 0.95,
+            "cohort": "the first W distinct forward matches by start with an eligible unit (REVIEW_RULE cohort)",
+            "cohort_ok": len(keep) >= rv["min_cohort_matches"],
+            "log_loss_gain_vs_logged": _r(sum(gl(u) for u in lc) / len(lc), 5), "log_loss_gain_vs_logged_ci": _ci_ratio(_groups(lc, gl), B=B),
+            "brier_gain": _r(sum(gb(u) for u in lc) / len(lc), 5),
+            "favoured_side": {"live": _cands_side(lc, "p_logged"), rv["id"]: _cands_side(lc, "p_ch")}})
     return out
+
+
+def _cands_side(units, col):
+    """Favoured side per arm on units: hit rate, mean favoured chance and |gap| per side (ties at exactly 50% counted)."""
+    res = {"ties_at_50": sum(1 for u in units if u[col] == 0.5)}
+    for s_ in ("Over", "Under"):
+        sel = [u for u in units if (u[col] > 0.5 if s_ == "Over" else u[col] < 0.5)]
+        if not sel:
+            res[s_] = {"picks": 0}
+            continue
+        hit = sum(u["over"] if s_ == "Over" else 1 - u["over"] for u in sel) / len(sel)
+        pf = sum(u[col] if s_ == "Over" else 1 - u[col] for u in sel) / len(sel)
+        res[s_] = {"picks": len(sel), "hit": _r(hit), "mean_chance": _r(pf), "abs_gap": _r(abs(pf - hit))}
+    return res
 
 
 # Comparison set C1 for pl-1 (registered 2026-10-15 ~03:00 UTC, before any pl-1 forward forecast had settled; an analysis

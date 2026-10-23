@@ -156,3 +156,23 @@ def test_learning_copies_and_reports(tmp_path, monkeypatch):
     assert rep["paired"]["gain_vs_logged"] > 0 and rep["brier"]["gain"] > 0       # nearer on both Unders that hit
     assert rep["favoured_side"]["rm-1"]["Under"]["picks"] == 1 and rep["favoured_side"]["live"]["Over"]["picks"] == 1
     assert learning.cands_report(con, us, "th1")["eligible_units"] == 0
+
+
+def test_cands_look_uses_the_frozen_first_w_matches(tmp_path):
+    """REVIEW_RULE cohort: the look figure is computed on the first W distinct forward matches by start, never on the running
+    set that keeps growing past the window (closeout 2026-10-23)."""
+    con = learning.connect(tmp_path / "learning.db")
+    us = []
+    for i in range(1, 303):                       # 302 matches; the last two start latest and lose badly for rm-1
+        late = i > 300
+        con.execute("INSERT INTO forecast_copy (forecast_id, cands) VALUES (?, ?)",
+                    (i, json.dumps({"rm1": {"eligible": True, "p_more": 0.9 if late else 0.5, "live_replay": 0.5, "live": {"p_more": 0.5}}})))
+        u = _unit(i, f"m{i:03d}", 0.5, 0)
+        u["start"] = f"2026-10-{24 + i // 100:02d}T{(i % 100) // 10:02d}:{i % 10}0:00+00:00"
+        us.append(u)
+    rep = learning.cands_report(con, us, "rm1", B=50)
+    assert rep["eligible_matches"] == 302 and rep["look_reached"] == 300 and rep["next_look"] == 600
+    (lk,) = rep["looks"]
+    assert lk["window"] == 300 and lk["matches"] == 300 and lk["units"] == 300 and lk["level"] == 0.95
+    assert lk["log_loss_gain_vs_logged"] == 0 and rep["paired"]["gain_vs_logged"] < 0     # the 2 late matches are outside the look
+    assert learning.cands_report(con, us[:299], "rm1", B=50)["looks"] == []
