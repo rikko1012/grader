@@ -49,6 +49,13 @@ ROUTES = {
     "/api/sports/offers": ("sports.web:offers", MEMBER, ("GET",)),
     "/api/sports/admin/coverage": ("sports.web:admin_coverage", ADMIN, ("GET",)),
     # ---- agent routes below: ONE line each, handler in sports/api_<NAME>.py ----
+    "/api/sports/slips/rules": ("sports.api_slips:rules_view", MEMBER, ("GET",)),
+    "/api/sports/slips/pool": ("sports.api_slips:pool_view", MEMBER, ("GET",)),
+    "/api/sports/slips/build": ("sports.api_slips:build", MEMBER, ("GET", "POST")),
+    "/api/sports/slips/validate": ("sports.api_slips:validate_view", MEMBER, ("GET", "POST")),
+    "/api/sports/slips/settle": ("sports.api_slips:settle_view", MEMBER, ("GET", "POST")),
+    "/api/sports/admin/slips/build": ("sports.api_slips:admin_build", ADMIN, ("GET", "POST")),
+    "/api/sports/admin/slips/log": ("sports.api_slips:admin_log", ADMIN, ("GET",)),
 }
 # ---------------------------------------------------------------------------------------------------- end of table
 
