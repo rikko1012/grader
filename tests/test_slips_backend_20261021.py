@@ -28,7 +28,7 @@ def _page_body(cid="c1234567"):
     """Exactly what web/index.html's Copy slip posts (mode member-copy): legs carry no "id"."""
     return {"cid": cid, "mode": "member-copy", "n": 2, "book": "underdog", "grader": "x",
             "legs": [{"nick": n, "prop": "kills", "scope": "12", "line": 30.5, "side": "More", "book": "underdog",
-                      "line_type": "standard", "p": 0.6, "grade": "B", "match_slug": "m" + n, "team": "T", "opponent": "O",
+                      "line_type": "standard", "p": 0.6, "grade": "B", "match_slug": "m" + n, "team": "T" + n, "opponent": "O",
                       "start": "2026-10-22T00:00:00Z", "player_id": 1, "model_outcomes": None, "check": "verified",
                       "orig_line": 30.5, "check_note": ""} for n in ("a", "b")]}
 
