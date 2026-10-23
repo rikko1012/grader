@@ -1225,12 +1225,24 @@ def _canonical_hltv(r):
     for t in _settle_teams(r):
         cm = matchid.canonical_match(t, _col(r, "opponent"), _col(r, "match_start"))
         if cm.get("hltv_match") is not None:
-            k = str(matchid.team_key(_col(r, "opponent")) or "")
+            # the opponent's key as the match was linked: a dated rename (matchid match-rules-3, 'LP' listed for HLTV
+            # BARCA on 2026-10-21) links the new team id, which the opponent's rows carry
+            side = cm.get("team_keys_by_side") or []
+            k = str((side[1] if len(side) == 2 else None) or matchid.team_key(_col(r, "opponent")) or "")
             return int(cm["hltv_match"]), (int(k[5:]) if k.startswith("team:") else None), None
         why.append(f"{t} vs {_col(r, 'opponent')}: {cm.get('reason') or cm.get('status')}")
         if cm.get("status") == "ambiguous":
             break
     return None, None, "; ".join(why) or "no canonical match"
+
+
+def matchid_renamed_id(name, start):
+    """matchid.renamed_team_id (dated team renames); None when matchid is unavailable. Memory only."""
+    try:
+        import matchid
+        return matchid.renamed_team_id(name, start)
+    except Exception:
+        return None
 
 
 def scope_result(r, same_day_only=False):
@@ -1263,7 +1275,12 @@ def scope_result(r, same_day_only=False):
                 rows = hltv._series_rows(cur, ids, "2000-01-01", "AND mo.date BETWEEN %(d)s::date - 1 AND %(d)s::date + 1",
                                          {"d": day}, maxn=3, need=(1,)) if ids else []
             opp = (r["opponent"] or "").strip()
-            if oid is not None:                              # the canonical opponent (matchid team id + aliases)
+            # an hltv-<id> pick whose opponent is listed under a renamed team's old name (dated rename, matchid
+            # match-rules-3): its own match's rows against the NEW team id are this opponent; else the usual rule
+            rid = matchid_renamed_id(opp, r["match_start"]) if own is not None and oid is None else None
+            if rid is not None and any(x.get("opponent_id") == rid for x in rows):
+                on = [x for x in rows if x.get("opponent_id") == rid]
+            elif oid is not None:                            # the canonical opponent (matchid team id + aliases)
                 on = [x for x in rows if x.get("opponent_id") in (None, oid)]
             else:
                 on, how = hltv.opponent_rows(cur, rows, opp)     # opponent's HLTV team id first, exact names as fallback
