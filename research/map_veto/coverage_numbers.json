@@ -1,0 +1,250 @@
+{
+ "records": 21444,
+ "distinct_matches": 21444,
+ "teams": 1548,
+ "events": 1283,
+ "first_date": "2024-10-01",
+ "last_date": "2026-10-22",
+ "tables": {
+  "quarter_status": {
+   "2024Q4|complete": 1791,
+   "2024Q4|inferred": 10,
+   "2024Q4|missing": 1,
+   "2025Q1|anomalous": 2,
+   "2025Q1|complete": 2579,
+   "2025Q1|inferred": 2,
+   "2025Q2|anomalous": 2,
+   "2025Q2|complete": 2101,
+   "2025Q2|inferred": 9,
+   "2025Q2|missing": 2,
+   "2025Q3|anomalous": 1,
+   "2025Q3|complete": 2570,
+   "2025Q3|inferred": 1,
+   "2025Q4|complete": 2510,
+   "2025Q4|inferred": 2,
+   "2026Q1|anomalous": 3,
+   "2026Q1|complete": 3329,
+   "2026Q1|missing": 1,
+   "2026Q2|complete": 2635,
+   "2026Q2|inferred": 1,
+   "2026Q2|missing": 2,
+   "2026Q2|partial": 1,
+   "2026Q3|complete": 2958,
+   "2026Q3|inferred": 2,
+   "2026Q3|missing": 1,
+   "2026Q4|complete": 926,
+   "2026Q4|inferred": 2
+  },
+  "quarter_format": {
+   "2024Q4|bo1": 369,
+   "2024Q4|bo3": 1396,
+   "2024Q4|bo5": 36,
+   "2024Q4|unknown": 1,
+   "2025Q1|bo1": 508,
+   "2025Q1|bo3": 2054,
+   "2025Q1|bo5": 20,
+   "2025Q1|unknown": 1,
+   "2025Q2|bo1": 371,
+   "2025Q2|bo3": 1708,
+   "2025Q2|bo5": 33,
+   "2025Q2|unknown": 2,
+   "2025Q3|bo1": 93,
+   "2025Q3|bo3": 2451,
+   "2025Q3|bo5": 28,
+   "2025Q4|bo1": 212,
+   "2025Q4|bo3": 2258,
+   "2025Q4|bo5": 42,
+   "2026Q1|bo1": 369,
+   "2026Q1|bo3": 2936,
+   "2026Q1|bo5": 26,
+   "2026Q1|unknown": 2,
+   "2026Q2|bo1": 140,
+   "2026Q2|bo3": 2470,
+   "2026Q2|bo5": 27,
+   "2026Q2|unknown": 2,
+   "2026Q3|bo1": 176,
+   "2026Q3|bo3": 2755,
+   "2026Q3|bo5": 29,
+   "2026Q3|unknown": 1,
+   "2026Q4|bo1": 171,
+   "2026Q4|bo3": 749,
+   "2026Q4|bo5": 8
+  },
+  "quarter_tier": {
+   "2024Q4|T1": 118,
+   "2024Q4|T2": 361,
+   "2024Q4|T3": 1323,
+   "2025Q1|T1": 84,
+   "2025Q1|T2": 504,
+   "2025Q1|T3": 1995,
+   "2025Q2|T1": 123,
+   "2025Q2|T2": 609,
+   "2025Q2|T3": 1382,
+   "2025Q3|T1": 118,
+   "2025Q3|T2": 638,
+   "2025Q3|T3": 1816,
+   "2025Q4|T1": 97,
+   "2025Q4|T2": 573,
+   "2025Q4|T3": 1842,
+   "2026Q1|T1": 153,
+   "2026Q1|T2": 628,
+   "2026Q1|T3": 2552,
+   "2026Q2|T1": 177,
+   "2026Q2|T2": 489,
+   "2026Q2|T3": 1973,
+   "2026Q3|T1": 125,
+   "2026Q3|T2": 498,
+   "2026Q3|T3": 2338,
+   "2026Q4|T1": 56,
+   "2026Q4|T2": 155,
+   "2026Q4|T3": 717
+  },
+  "format_status": {
+   "bo1|anomalous": 2,
+   "bo1|complete": 2406,
+   "bo1|inferred": 1,
+   "bo3|anomalous": 3,
+   "bo3|complete": 18772,
+   "bo3|inferred": 1,
+   "bo3|partial": 1,
+   "bo5|anomalous": 1,
+   "bo5|complete": 221,
+   "bo5|inferred": 27,
+   "unknown|anomalous": 2,
+   "unknown|missing": 7
+  },
+  "lan": {
+   "2024Q4|LAN": 556,
+   "2024Q4|online": 1246,
+   "2025Q1|LAN": 322,
+   "2025Q1|online": 2261,
+   "2025Q2|LAN": 488,
+   "2025Q2|online": 1626,
+   "2025Q3|LAN": 583,
+   "2025Q3|online": 1989,
+   "2025Q4|LAN": 865,
+   "2025Q4|online": 1647,
+   "2026Q1|LAN": 1203,
+   "2026Q1|online": 2130,
+   "2026Q2|LAN": 963,
+   "2026Q2|online": 1676,
+   "2026Q3|LAN": 836,
+   "2026Q3|online": 2125,
+   "2026Q4|LAN": 466,
+   "2026Q4|online": 462
+  }
+ },
+ "templates": {
+  "bo1": {
+   "rrrrrr:ABBAAB": 981,
+   "rrrrrr:ABABAB": 702,
+   "rrrrrr:AABBBA": 695,
+   "rrrrrr:AABBAB": 25,
+   "rrrrrr:ABBABA": 4
+  },
+  "bo3": {
+   "rrpprr:ABABAB": 16254,
+   "rrpprr:ABABBA": 2519
+  },
+  "bo5": {
+   "rrpppp:ABABAB": 246,
+   "rrpppp:ABABBA": 2
+  }
+ },
+ "pools_by_month": {
+  "2024-10": {
+   "ancient,anubis,dust2,inferno,mirage,nuke,vertigo": 730
+  },
+  "2024-11": {
+   "ancient,anubis,dust2,inferno,mirage,nuke,vertigo": 649
+  },
+  "2024-12": {
+   "ancient,anubis,dust2,inferno,mirage,nuke,vertigo": 422
+  },
+  "2025-01": {
+   "ancient,anubis,dust2,inferno,mirage,nuke,train": 452,
+   "ancient,anubis,dust2,inferno,mirage,nuke,vertigo": 103
+  },
+  "2025-02": {
+   "ancient,anubis,dust2,inferno,mirage,nuke,train": 882
+  },
+  "2025-03": {
+   "ancient,anubis,dust2,inferno,mirage,nuke,train": 1144
+  },
+  "2025-04": {
+   "ancient,anubis,dust2,inferno,mirage,nuke,train": 791
+  },
+  "2025-05": {
+   "ancient,anubis,dust2,inferno,mirage,nuke,train": 768,
+   "ancient,anubis,cache,dust2,inferno,mirage,train": 4
+  },
+  "2025-06": {
+   "ancient,anubis,dust2,inferno,mirage,nuke,train": 547
+  },
+  "2025-07": {
+   "ancient,anubis,dust2,inferno,mirage,nuke,train": 439,
+   "ancient,dust2,inferno,mirage,nuke,overpass,train": 212
+  },
+  "2025-08": {
+   "ancient,dust2,inferno,mirage,nuke,overpass,train": 853,
+   "ancient,cache,dust2,inferno,mirage,overpass,train": 10,
+   "ancient,anubis,dust2,inferno,mirage,nuke,train": 3
+  },
+  "2025-09": {
+   "ancient,dust2,inferno,mirage,nuke,overpass,train": 1054
+  },
+  "2025-10": {
+   "ancient,dust2,inferno,mirage,nuke,overpass,train": 1079
+  },
+  "2025-11": {
+   "ancient,dust2,inferno,mirage,nuke,overpass,train": 955
+  },
+  "2025-12": {
+   "ancient,dust2,inferno,mirage,nuke,overpass,train": 478
+  },
+  "2026-01": {
+   "ancient,anubis,dust2,inferno,mirage,nuke,overpass": 462,
+   "ancient,dust2,inferno,mirage,nuke,overpass,train": 256
+  },
+  "2026-02": {
+   "ancient,anubis,dust2,inferno,mirage,nuke,overpass": 1099,
+   "ancient,dust2,inferno,mirage,nuke,overpass,train": 5
+  },
+  "2026-03": {
+   "ancient,anubis,dust2,inferno,mirage,nuke,overpass": 1507
+  },
+  "2026-04": {
+   "ancient,anubis,dust2,inferno,mirage,nuke,overpass": 1059
+  },
+  "2026-05": {
+   "ancient,anubis,dust2,inferno,mirage,nuke,overpass": 1011
+  },
+  "2026-06": {
+   "ancient,anubis,dust2,inferno,mirage,nuke,overpass": 533,
+   "ancient,anubis,cache,dust2,inferno,mirage,nuke": 33
+  },
+  "2026-07": {
+   "ancient,anubis,cache,dust2,inferno,mirage,nuke": 663,
+   "ancient,anubis,dust2,inferno,mirage,nuke,overpass": 23
+  },
+  "2026-08": {
+   "ancient,anubis,cache,dust2,inferno,mirage,nuke": 946
+  },
+  "2026-09": {
+   "ancient,anubis,cache,dust2,inferno,mirage,nuke": 1328
+  },
+  "2026-10": {
+   "ancient,anubis,cache,dust2,inferno,mirage,nuke": 928
+  }
+ },
+ "misc": {
+  "pool_own veto": 21399,
+  "listed_order_known": 16513,
+  "lineups_both_5plus": 21444,
+  "complete_first_actor_is_listed_team1": 6661,
+  "complete_with_listed": 16472,
+  "pool_event veto": 33,
+  "pool_period pool": 12
+ },
+ "tier_by_mid": null
+}
