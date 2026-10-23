@@ -14,7 +14,11 @@ Research cutoff: 2026-10-22 00:00 UTC. Two-year window: 2024-10-22 .. 2026-10-21
 the untouched confirmation set (forward).
 
 ## Data periods (set in phase 1 after the inventory; previously inspected periods are DEVELOPMENT data)
-(to be filled by phase 1)
+Set by phase 1 (COVERAGE.md, 2026-10-23):
+- DEVELOPMENT: every match dated <= 2026-10-21 (HLTV history 2024-10-22..2026-10-21; real lines 2026-10-02..2026-10-21; forecasts
+  2026-10-07..2026-10-21). All real-line days were inspected by earlier studies - none is a holdout.
+- FORWARD CONFIRMATION: matches starting >= 2026-10-22 00:00 UTC. Local exports contain some 2026-10-22+ rows; exclude them from fits.
+- Round data: use `rounds_archive.sqlite` (DB map_rounds + recovered overtime, validated); production map_rounds lacks every OT map.
 
 ## Experiment register
 | id | date registered | hypothesis | data / split | primary metric | promotion rule | status | result |

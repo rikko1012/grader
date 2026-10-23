@@ -1,0 +1,1334 @@
+{
+ "data_issues": {
+  "est_rows": 289,
+  "bytes": 114688,
+  "columns": [
+   [
+    "matchid",
+    "integer"
+   ],
+   [
+    "severity",
+    "character varying"
+   ],
+   [
+    "code",
+    "character varying"
+   ],
+   [
+    "message",
+    "text"
+   ],
+   [
+    "found_at",
+    "timestamp with time zone"
+   ]
+  ]
+ },
+ "events": {
+  "est_rows": 132,
+  "bytes": 81920,
+  "columns": [
+   [
+    "eventid",
+    "integer"
+   ],
+   [
+    "name",
+    "character varying"
+   ],
+   [
+    "lan",
+    "boolean"
+   ],
+   [
+    "location",
+    "character varying"
+   ],
+   [
+    "updated_at",
+    "timestamp with time zone"
+   ]
+  ]
+ },
+ "fantasies": {
+  "est_rows": -1,
+  "bytes": 8192,
+  "columns": [
+   [
+    "fantasyid",
+    "integer"
+   ],
+   [
+    "teamid",
+    "integer"
+   ],
+   [
+    "playerid",
+    "integer"
+   ],
+   [
+    "cost",
+    "integer"
+   ]
+  ]
+ },
+ "fantasy_overview": {
+  "est_rows": -1,
+  "bytes": 16384,
+  "columns": [
+   [
+    "fantasyid",
+    "integer"
+   ],
+   [
+    "name",
+    "character varying"
+   ]
+  ]
+ },
+ "map_headshots": {
+  "est_rows": 676835,
+  "bytes": 80125952,
+  "columns": [
+   [
+    "mapstatsid",
+    "integer"
+   ],
+   [
+    "matchid",
+    "integer"
+   ],
+   [
+    "playerid",
+    "integer"
+   ],
+   [
+    "k",
+    "integer"
+   ],
+   [
+    "hs",
+    "integer"
+   ]
+  ]
+ },
+ "map_player_stats": {
+  "est_rows": 1876675,
+  "bytes": 433831936,
+  "columns": [
+   [
+    "mapstatsid",
+    "integer"
+   ],
+   [
+    "matchid",
+    "integer"
+   ],
+   [
+    "playerid",
+    "integer"
+   ],
+   [
+    "teamid",
+    "integer"
+   ],
+   [
+    "sideid",
+    "integer"
+   ],
+   [
+    "k",
+    "integer"
+   ],
+   [
+    "hs",
+    "integer"
+   ],
+   [
+    "a",
+    "integer"
+   ],
+   [
+    "fa",
+    "integer"
+   ],
+   [
+    "d",
+    "integer"
+   ],
+   [
+    "td",
+    "integer"
+   ],
+   [
+    "ok",
+    "integer"
+   ],
+   [
+    "od",
+    "integer"
+   ],
+   [
+    "mk",
+    "integer"
+   ],
+   [
+    "clutches",
+    "integer"
+   ],
+   [
+    "kast",
+    "double precision"
+   ],
+   [
+    "adr",
+    "double precision"
+   ],
+   [
+    "swing",
+    "double precision"
+   ],
+   [
+    "rating",
+    "double precision"
+   ],
+   [
+    "ek",
+    "integer"
+   ],
+   [
+    "ehs",
+    "integer"
+   ],
+   [
+    "ed",
+    "integer"
+   ],
+   [
+    "etd",
+    "integer"
+   ],
+   [
+    "eok",
+    "integer"
+   ],
+   [
+    "eod",
+    "integer"
+   ],
+   [
+    "ekast",
+    "double precision"
+   ],
+   [
+    "eadr",
+    "double precision"
+   ]
+  ]
+ },
+ "map_round_economy": {
+  "est_rows": 2380340,
+  "bytes": 332808192,
+  "columns": [
+   [
+    "mapstatsid",
+    "integer"
+   ],
+   [
+    "matchid",
+    "integer"
+   ],
+   [
+    "round",
+    "integer"
+   ],
+   [
+    "half",
+    "integer"
+   ],
+   [
+    "teamid",
+    "integer"
+   ],
+   [
+    "side",
+    "character varying"
+   ],
+   [
+    "equipment",
+    "integer"
+   ],
+   [
+    "buy",
+    "character varying"
+   ],
+   [
+    "won",
+    "boolean"
+   ]
+  ]
+ },
+ "map_rounds": {
+  "est_rows": 1107111,
+  "bytes": 115761152,
+  "columns": [
+   [
+    "mapstatsid",
+    "integer"
+   ],
+   [
+    "matchid",
+    "integer"
+   ],
+   [
+    "round",
+    "integer"
+   ],
+   [
+    "half",
+    "integer"
+   ],
+   [
+    "winnerid",
+    "integer"
+   ],
+   [
+    "winner_side",
+    "character varying"
+   ],
+   [
+    "win_type",
+    "character varying"
+   ]
+  ]
+ },
+ "map_vetoes": {
+  "est_rows": 197399,
+  "bytes": 16670720,
+  "columns": [
+   [
+    "matchid",
+    "integer"
+   ],
+   [
+    "step",
+    "integer"
+   ],
+   [
+    "teamid",
+    "integer"
+   ],
+   [
+    "action",
+    "character varying"
+   ],
+   [
+    "mapid",
+    "integer"
+   ]
+  ]
+ },
+ "maps": {
+  "est_rows": 9,
+  "bytes": 81920,
+  "columns": [
+   [
+    "mapid",
+    "integer"
+   ],
+   [
+    "name",
+    "character varying"
+   ]
+  ]
+ },
+ "mapstats_page_status": {
+  "est_rows": 11,
+  "bytes": 204800,
+  "columns": [
+   [
+    "mapstatsid",
+    "integer"
+   ],
+   [
+    "kind",
+    "character varying"
+   ],
+   [
+    "attempts",
+    "integer"
+   ],
+   [
+    "last_error",
+    "text"
+   ],
+   [
+    "not_before",
+    "timestamp with time zone"
+   ],
+   [
+    "updated_at",
+    "timestamp with time zone"
+   ]
+  ]
+ },
+ "mapstats_pages": {
+  "est_rows": 123693,
+  "bytes": 108257280,
+  "columns": [
+   [
+    "mapstatsid",
+    "integer"
+   ],
+   [
+    "kind",
+    "character varying"
+   ],
+   [
+    "matchid",
+    "integer"
+   ],
+   [
+    "parser_version",
+    "integer"
+   ],
+   [
+    "fetched_at",
+    "timestamp with time zone"
+   ],
+   [
+    "html_gz",
+    "bytea"
+   ]
+  ]
+ },
+ "mapstats_status": {
+  "est_rows": -1,
+  "bytes": 16384,
+  "columns": [
+   [
+    "mapstatsid",
+    "integer"
+   ],
+   [
+    "attempts",
+    "integer"
+   ],
+   [
+    "last_error",
+    "text"
+   ],
+   [
+    "not_before",
+    "timestamp with time zone"
+   ],
+   [
+    "updated_at",
+    "timestamp with time zone"
+   ]
+  ]
+ },
+ "match_maps": {
+  "est_rows": 59530,
+  "bytes": 10723328,
+  "columns": [
+   [
+    "matchid",
+    "integer"
+   ],
+   [
+    "number",
+    "integer"
+   ],
+   [
+    "mapid",
+    "integer"
+   ],
+   [
+    "mapstatsid",
+    "integer"
+   ],
+   [
+    "url",
+    "text"
+   ],
+   [
+    "start_ct",
+    "integer"
+   ],
+   [
+    "picked_by",
+    "integer"
+   ]
+  ]
+ },
+ "match_overview": {
+  "est_rows": 26935,
+  "bytes": 4866048,
+  "columns": [
+   [
+    "matchid",
+    "integer"
+   ],
+   [
+    "event",
+    "character varying"
+   ],
+   [
+    "date",
+    "date"
+   ],
+   [
+    "parser_version",
+    "integer"
+   ],
+   [
+    "source",
+    "character varying"
+   ],
+   [
+    "forfeited_maps",
+    "integer"
+   ],
+   [
+    "lan",
+    "boolean"
+   ]
+  ]
+ },
+ "matches": {
+  "est_rows": 404586,
+  "bytes": 50028544,
+  "columns": [
+   [
+    "matchid",
+    "integer"
+   ],
+   [
+    "teamid",
+    "integer"
+   ],
+   [
+    "mapid",
+    "integer"
+   ],
+   [
+    "sideid",
+    "integer"
+   ],
+   [
+    "score",
+    "integer"
+   ]
+  ]
+ },
+ "player_awp": {
+  "est_rows": -1,
+  "bytes": 0,
+  "columns": [
+   [
+    "playerid",
+    "integer"
+   ],
+   [
+    "nickname",
+    "character varying"
+   ],
+   [
+    "kills",
+    "integer"
+   ],
+   [
+    "awp_kills",
+    "integer"
+   ],
+   [
+    "awp_share",
+    "numeric"
+   ],
+   [
+    "start_date",
+    "date"
+   ],
+   [
+    "end_date",
+    "date"
+   ],
+   [
+    "roles",
+    "text"
+   ],
+   [
+    "is_igl",
+    "boolean"
+   ],
+   [
+    "is_awper",
+    "boolean"
+   ],
+   [
+    "team_match",
+    "boolean"
+   ]
+  ]
+ },
+ "player_roles": {
+  "est_rows": 2525,
+  "bytes": 622592,
+  "columns": [
+   [
+    "playerid",
+    "integer"
+   ],
+   [
+    "nickname",
+    "text"
+   ],
+   [
+    "hltv_team",
+    "text"
+   ],
+   [
+    "wiki_title",
+    "text"
+   ],
+   [
+    "wiki_team",
+    "text"
+   ],
+   [
+    "roles",
+    "text"
+   ],
+   [
+    "is_igl",
+    "boolean"
+   ],
+   [
+    "is_awper",
+    "boolean"
+   ],
+   [
+    "team_match",
+    "boolean"
+   ],
+   [
+    "status",
+    "text"
+   ],
+   [
+    "updated_at",
+    "timestamp with time zone"
+   ]
+  ]
+ },
+ "player_series": {
+  "est_rows": -1,
+  "bytes": 0,
+  "columns": [
+   [
+    "playerid",
+    "integer"
+   ],
+   [
+    "player",
+    "character varying"
+   ],
+   [
+    "teamid",
+    "integer"
+   ],
+   [
+    "team",
+    "character varying"
+   ],
+   [
+    "opponentid",
+    "integer"
+   ],
+   [
+    "opponent",
+    "character varying"
+   ],
+   [
+    "matchid",
+    "integer"
+   ],
+   [
+    "date",
+    "date"
+   ],
+   [
+    "event",
+    "character varying"
+   ],
+   [
+    "lan",
+    "boolean"
+   ],
+   [
+    "won",
+    "integer"
+   ],
+   [
+    "lost",
+    "integer"
+   ],
+   [
+    "maps_in_series",
+    "bigint"
+   ],
+   [
+    "map1",
+    "text"
+   ],
+   [
+    "map2",
+    "text"
+   ],
+   [
+    "map3",
+    "text"
+   ],
+   [
+    "k1",
+    "integer"
+   ],
+   [
+    "k2",
+    "integer"
+   ],
+   [
+    "k3",
+    "integer"
+   ],
+   [
+    "hs1",
+    "integer"
+   ],
+   [
+    "hs2",
+    "integer"
+   ],
+   [
+    "hs3",
+    "integer"
+   ],
+   [
+    "kills_1_2",
+    "bigint"
+   ],
+   [
+    "hs_1_2",
+    "bigint"
+   ],
+   [
+    "kills_1_3",
+    "bigint"
+   ],
+   [
+    "hs_1_3",
+    "bigint"
+   ]
+  ]
+ },
+ "player_stats": {
+  "est_rows": 2663763,
+  "bytes": 548184064,
+  "columns": [
+   [
+    "matchid",
+    "integer"
+   ],
+   [
+    "playerid",
+    "integer"
+   ],
+   [
+    "teamid",
+    "integer"
+   ],
+   [
+    "mapid",
+    "integer"
+   ],
+   [
+    "sideid",
+    "integer"
+   ],
+   [
+    "k",
+    "integer"
+   ],
+   [
+    "d",
+    "integer"
+   ],
+   [
+    "ek",
+    "integer"
+   ],
+   [
+    "ed",
+    "integer"
+   ],
+   [
+    "roundswing",
+    "double precision"
+   ],
+   [
+    "adr",
+    "double precision"
+   ],
+   [
+    "eadr",
+    "double precision"
+   ],
+   [
+    "kast",
+    "double precision"
+   ],
+   [
+    "ekast",
+    "double precision"
+   ],
+   [
+    "rating",
+    "double precision"
+   ]
+  ]
+ },
+ "player_weapon_kills": {
+  "est_rows": 62388,
+  "bytes": 7266304,
+  "columns": [
+   [
+    "playerid",
+    "integer"
+   ],
+   [
+    "weapon",
+    "text"
+   ],
+   [
+    "kills",
+    "integer"
+   ],
+   [
+    "start_date",
+    "date"
+   ],
+   [
+    "end_date",
+    "date"
+   ]
+  ]
+ },
+ "players": {
+  "est_rows": 6219,
+  "bytes": 892928,
+  "columns": [
+   [
+    "playerid",
+    "integer"
+   ],
+   [
+    "name",
+    "character varying"
+   ]
+  ]
+ },
+ "prop_grades": {
+  "est_rows": 7594,
+  "bytes": 3956736,
+  "columns": [
+   [
+    "book",
+    "text"
+   ],
+   [
+    "line_id",
+    "text"
+   ],
+   [
+    "start_time",
+    "timestamp with time zone"
+   ],
+   [
+    "player",
+    "text"
+   ],
+   [
+    "team",
+    "text"
+   ],
+   [
+    "opponent",
+    "text"
+   ],
+   [
+    "market",
+    "text"
+   ],
+   [
+    "maps",
+    "text"
+   ],
+   [
+    "line",
+    "numeric"
+   ],
+   [
+    "odds_type",
+    "text"
+   ],
+   [
+    "status",
+    "text"
+   ],
+   [
+    "result",
+    "text"
+   ],
+   [
+    "actual",
+    "numeric"
+   ],
+   [
+    "map_values",
+    "text"
+   ],
+   [
+    "matchid",
+    "integer"
+   ],
+   [
+    "note",
+    "text"
+   ],
+   [
+    "updated_at",
+    "timestamp with time zone"
+   ]
+  ]
+ },
+ "prop_lines": {
+  "est_rows": 280,
+  "bytes": 278528,
+  "columns": [
+   [
+    "book",
+    "text"
+   ],
+   [
+    "line_id",
+    "text"
+   ],
+   [
+    "start_time",
+    "timestamp with time zone"
+   ],
+   [
+    "player",
+    "text"
+   ],
+   [
+    "team",
+    "text"
+   ],
+   [
+    "opponent",
+    "text"
+   ],
+   [
+    "market",
+    "text"
+   ],
+   [
+    "maps",
+    "text"
+   ],
+   [
+    "line",
+    "numeric"
+   ],
+   [
+    "odds_type",
+    "text"
+   ],
+   [
+    "open_line",
+    "numeric"
+   ],
+   [
+    "prev_line",
+    "numeric"
+   ],
+   [
+    "move",
+    "numeric"
+   ],
+   [
+    "moves",
+    "integer"
+   ],
+   [
+    "moved_at",
+    "timestamp with time zone"
+   ],
+   [
+    "first_seen",
+    "timestamp with time zone"
+   ],
+   [
+    "other_line",
+    "numeric"
+   ],
+   [
+    "higher",
+    "numeric"
+   ],
+   [
+    "lower",
+    "numeric"
+   ],
+   [
+    "stat",
+    "text"
+   ],
+   [
+    "updated_at",
+    "timestamp with time zone"
+   ]
+  ]
+ },
+ "prop_status": {
+  "est_rows": 2,
+  "bytes": 65536,
+  "columns": [
+   [
+    "book",
+    "text"
+   ],
+   [
+    "ok",
+    "boolean"
+   ],
+   [
+    "lines",
+    "integer"
+   ],
+   [
+    "source",
+    "text"
+   ],
+   [
+    "error",
+    "text"
+   ],
+   [
+    "checked_at",
+    "timestamp with time zone"
+   ],
+   [
+    "last_ok",
+    "timestamp with time zone"
+   ],
+   [
+    "writer",
+    "text"
+   ]
+  ]
+ },
+ "raw_pages": {
+  "est_rows": 26446,
+  "bytes": 1407614976,
+  "columns": [
+   [
+    "matchid",
+    "integer"
+   ],
+   [
+    "url",
+    "text"
+   ],
+   [
+    "fetched_at",
+    "timestamp with time zone"
+   ],
+   [
+    "html_gz",
+    "bytea"
+   ]
+  ]
+ },
+ "scrape_queue": {
+  "est_rows": 28275,
+  "bytes": 9322496,
+  "columns": [
+   [
+    "matchid",
+    "integer"
+   ],
+   [
+    "url",
+    "text"
+   ],
+   [
+    "team1",
+    "character varying"
+   ],
+   [
+    "score1",
+    "integer"
+   ],
+   [
+    "team2",
+    "character varying"
+   ],
+   [
+    "score2",
+    "integer"
+   ],
+   [
+    "event",
+    "character varying"
+   ],
+   [
+    "format",
+    "character varying"
+   ],
+   [
+    "status",
+    "character varying"
+   ],
+   [
+    "attempts",
+    "integer"
+   ],
+   [
+    "last_error",
+    "text"
+   ],
+   [
+    "found_at",
+    "timestamp with time zone"
+   ],
+   [
+    "updated_at",
+    "timestamp with time zone"
+   ],
+   [
+    "not_before",
+    "timestamp with time zone"
+   ]
+  ]
+ },
+ "scraper_state": {
+  "est_rows": -1,
+  "bytes": 32768,
+  "columns": [
+   [
+    "key",
+    "character varying"
+   ],
+   [
+    "value",
+    "text"
+   ],
+   [
+    "updated_at",
+    "timestamp with time zone"
+   ]
+  ]
+ },
+ "sides": {
+  "est_rows": 3,
+  "bytes": 49152,
+  "columns": [
+   [
+    "sideid",
+    "integer"
+   ],
+   [
+    "name",
+    "character varying"
+   ]
+  ]
+ },
+ "team_rankings": {
+  "est_rows": 4619,
+  "bytes": 565248,
+  "columns": [
+   [
+    "date",
+    "date"
+   ],
+   [
+    "rank",
+    "integer"
+   ],
+   [
+    "teamid",
+    "integer"
+   ],
+   [
+    "points",
+    "integer"
+   ]
+  ]
+ },
+ "teams": {
+  "est_rows": 1930,
+  "bytes": 409600,
+  "columns": [
+   [
+    "teamid",
+    "integer"
+   ],
+   [
+    "name",
+    "character varying"
+   ],
+   [
+    "country",
+    "character varying"
+   ],
+   [
+    "country_name",
+    "character varying"
+   ]
+  ]
+ },
+ "thunderpick_snapshots": {
+  "est_rows": 107,
+  "bytes": 8060928,
+  "columns": [
+   [
+    "id",
+    "bigint"
+   ],
+   [
+    "fetched_at",
+    "timestamp with time zone"
+   ],
+   [
+    "path",
+    "text"
+   ],
+   [
+    "http_status",
+    "integer"
+   ],
+   [
+    "outcome",
+    "text"
+   ],
+   [
+    "events",
+    "integer"
+   ],
+   [
+    "sha256",
+    "text"
+   ],
+   [
+    "body_gz",
+    "bytea"
+   ],
+   [
+    "duration_ms",
+    "integer"
+   ],
+   [
+    "runner",
+    "text"
+   ],
+   [
+    "error",
+    "text"
+   ]
+  ]
+ },
+ "upcoming_matches": {
+  "est_rows": 190,
+  "bytes": 163840,
+  "columns": [
+   [
+    "matchid",
+    "integer"
+   ],
+   [
+    "time",
+    "timestamp with time zone"
+   ],
+   [
+    "team1",
+    "character varying"
+   ],
+   [
+    "team2",
+    "character varying"
+   ],
+   [
+    "event",
+    "character varying"
+   ],
+   [
+    "format",
+    "character varying"
+   ],
+   [
+    "stars",
+    "integer"
+   ],
+   [
+    "live",
+    "boolean"
+   ],
+   [
+    "title",
+    "character varying"
+   ],
+   [
+    "url",
+    "text"
+   ],
+   [
+    "scraped_at",
+    "timestamp with time zone"
+   ]
+  ]
+ },
+ "weapons_status": {
+  "est_rows": 2502,
+  "bytes": 294912,
+  "columns": [
+   [
+    "playerid",
+    "integer"
+   ],
+   [
+    "fetched_at",
+    "timestamp with time zone"
+   ],
+   [
+    "attempts",
+    "integer"
+   ],
+   [
+    "last_error",
+    "text"
+   ],
+   [
+    "not_before",
+    "timestamp with time zone"
+   ],
+   [
+    "updated_at",
+    "timestamp with time zone"
+   ]
+  ]
+ }
+}

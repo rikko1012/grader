@@ -1,0 +1,22 @@
+{
+ "duplicate_groups_same_day_pair_score": 45,
+ "matches": 20848,
+ "complete_series": 20787,
+ "maps": 46970,
+ "maps_full_scoreboard": 46909,
+ "maps_hs_full": 46909,
+ "ot_maps": 5455,
+ "rounds_db_full": 41515,
+ "rounds_any_full": 46968,
+ "ot_recovered": 5453,
+ "ud_moves": {
+  "rows": 7654,
+  "first": "2026-10-11T04:52:25Z",
+  "last": "2026-10-23T04:31:50Z"
+ },
+ "history_csv": {
+  "rows": 11104,
+  "first_seen": "2026-10-02 19:13",
+  "last_seen": "2026-10-23 04:21"
+ }
+}
