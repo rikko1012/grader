@@ -96,7 +96,7 @@ Source licences / terms (checked 2026-10-23)
   contracts, store, owner-12 contract cases, adapters, worker, web, isolation, payouts, legacy, model properties).
 - Esports suite after integration: **1731 passed, 5 skipped** (identical to the base).
 
-## Load test (700 simultaneous members, `sports/research/load_sports700.py`, in-process server, fixture upstreams)
+## Load test (700 simultaneous members, `scripts/load_sports700.py`, in-process server, fixture upstreams)
 
 Budget set before the run: 0 esports errors; esports p99 within +25% of the base. Each member: 3 esports requests
 (+1 sports request when on). Windows workstation, clean runs after socket cool-down.
