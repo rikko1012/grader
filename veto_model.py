@@ -41,26 +41,40 @@ TEMPLATES = {
 }
 N_MAPS = {"bo1": 1, "bo3": 3, "bo5": 5}
 
-# Frozen settings (chosen on development folds only; see research/map_veto/REGISTER.md + RESULTS.md).
+# Frozen settings: tuned on D1-D3, factors admitted on D4 (research/map_veto/tuning_log.json, REGISTER.md).
 PARAMS = {
-    "half_life_days": 120.0,     # team-history recency
-    "k_team": 4.0,               # shrinkage of a team's rate toward the pool-wide rate (opportunity units)
-    "k_glob": 20.0,              # shrinkage of the pool-wide rate toward the kind mean
-    "glob_half_life_days": 120.0,
-    "beta": {"ban1": 1.0, "banN": 1.0, "pick": 1.0},
-    "eps": 0.05,                 # uniform-legal mix at every step (calibration)
-    "max_records": 60,           # most recent vetoes per team used
-    "rho": 0.0,                  # roster continuity: weight = overlap ** rho (candidate factor; 0 = off)
-    "identity": False,           # borrow vetoes of another team id fielding >= 3 of the current players (candidate)
-    "gamma": {"ban1": 0.0, "banN": 0.0, "pick": 0.0},   # opponent pick (on removals) / removal (on picks) rates
-    "delta": {"ban1": 0.0, "banN": 0.0, "pick": 0.0},   # map strength difference (candidate)
+    "half_life_days": 60.0,
+    "k_team": 1.0,
+    "k_glob": 20.0,
+    "glob_half_life_days": 60.0,
+    "beta": {
+        "ban1": 1.2,
+        "banN": 1.0,
+        "pick": 1.0
+    },
+    "eps": 0.05,
+    "max_records": 20,
+    "rho": 2.0,
+    "identity": True,
+    "gamma": {
+        "ban1": 0.25,
+        "banN": 0.0,
+        "pick": 0.25
+    },
+    "delta": {
+        "ban1": 4.0,
+        "banN": 4.0,
+        "pick": 4.0
+    },
     "k_strength": 6.0,
-    "fmt_split": False,          # BO1 removals as their own kinds (candidate)
-    "tmpl_alpha": 1.0,           # event template counts vs the format mix
-    "first_a0": 0.0, "first_elo": 0.0, "first_listed": 0.0,   # P(team A acts first) logistic (candidate terms)
+    "fmt_split": False,
+    "tmpl_alpha": 0.25,
+    "first_a0": 0.0,
+    "first_elo": 0.0,
+    "first_listed": -0.5
 }
 MAX_KEEP = 80
-CACHE_MAX = 4096
+CACHE_MAX = 1024
 ELO_K = 24.0
 
 
@@ -117,22 +131,22 @@ _PARSED = {t: parse_template(t) for ts in TEMPLATES.values() for t in ts}
 _ACT = {"removed": "r", "picked": "p", "leftover": "L"}
 
 
-def fmt_of(kinds):
-    k = kinds.rstrip("L")
-    if k in ("rrpprr", "rrppr", "rrpp", "rpprr"):
-        return "bo3"
-    if k in ("rrrrrr", "rrrrr"):
-        return "bo1"
-    if k in ("rrpppp", "rrppp"):
-        return "bo5"
-    return None
+LAYOUTS = {"bo3": "rrpprrL", "bo1": "rrrrrrL", "bo5": "rrppppL"}
+
+
+def fmt_of(kinds, steps=None):
+    """Format from the veto layout: the (step, kind) pairs must fit exactly one procedure; None if none or ambiguous."""
+    steps = steps or list(range(1, len(kinds) + 1))
+    fits = [f for f, lay in LAYOUTS.items()
+            if all(1 <= s <= 7 and lay[s - 1] == k for s, k in zip(steps, kinds))]
+    return fits[0] if len(fits) == 1 else None
 
 
 def make_record(mid, date, event, lan, teams, listed, actions, lineups=None, map_winner=None, winner=None):
     """One match as the model stores it. actions = [(step, team_id|None, 'removed'|'picked'|'leftover', map_key)]."""
     v = sorted((int(s), t, a, map_key(m)) for s, t, a, m in actions)
     kinds = "".join(_ACT.get(a, "?") for _, _, a, _ in v)
-    fmt = fmt_of(kinds) if v else None
+    fmt = fmt_of(kinds, [s for s, _, _, _ in v]) if v else None
     first = v[0][1] if v else None
     pattern = "".join("" if t is None else ("A" if t == first else "B") for _, t, _, _ in v)
     tmpl = kinds.rstrip("L") + ":" + pattern
@@ -141,9 +155,11 @@ def make_record(mid, date, event, lan, teams, listed, actions, lineups=None, map
     teams = sorted(teams)
     if not v:
         status = "missing"
-    elif len(set(maps)) != len(maps) or fmt is None or len(teams) != 2 or any(
-            t is not None and t not in teams for _, t, _, _ in v):
+    elif len(set(maps)) != len(maps) or len(teams) != 2 or any(
+            t is not None and t not in teams for _, t, _, _ in v) or (fmt is None and len(v) >= 6):
         status = "anomalous"
+    elif fmt is None:
+        status = "partial"           # too few steps to tell BO3 from BO5
     elif len(v) == 7 and consecutive and kinds.endswith("L") and tmpl in TEMPLATES[fmt]:
         status = "complete"
     elif len(v) == 6 and consecutive and tmpl in TEMPLATES[fmt]:
@@ -204,11 +220,16 @@ def _kind(kind, fmt, params):
     return ("b1" + kind) if params.get("fmt_split") and fmt == "bo1" and kind != "pick" else kind
 
 
+def _elo0():
+    return 1500.0
+
+
 class VetoTable:
     """Team veto histories + pool-wide rates + template counts + Elo, holding ONLY matches dated before `cutoff`.
     Fill it day by day with add_day (chronological; same-day matches never see each other)."""
 
-    def __init__(self):
+    def __init__(self, keep=MAX_KEEP, glob_half_life=None):
+        self.keep = keep              # most recent vetoes kept per team (bounded memory)
         self.cutoff = None            # day ordinal; everything stored is strictly earlier
         self.team = collections.defaultdict(list)
         self.player_teams = collections.defaultdict(dict)   # pid -> {team_id: last day}
@@ -217,12 +238,21 @@ class VetoTable:
         self.g_day = None
         self.tmpl_g = collections.defaultdict(float)        # (fmt, template) decayed
         self.tmpl_ev = collections.defaultdict(collections.Counter)   # (event, fmt) -> template counts
-        self.elo = collections.defaultdict(lambda: 1500.0)
+        self.elo = collections.defaultdict(_elo0)
         self.last_lineup = {}
-        self.glob_half_life = PARAMS["glob_half_life_days"]
+        self.glob_half_life = glob_half_life or PARAMS["glob_half_life_days"]
         self.stamp = 0
 
     # -- building
+    def _acts(self, acts):
+        """Interned action tuples (the same (kind, map, avail) recurs thousands of times): bounded memory."""
+        it = self.__dict__.setdefault("_intern", {})
+        out = []
+        for a in acts:
+            a = (a[0], a[1], tuple(a[2]))
+            out.append(it.setdefault(a, a))
+        return tuple(out)
+
     def _decay_to(self, day):
         if self.g_day is not None and day > self.g_day:
             f = 0.5 ** ((day - self.g_day) / self.glob_half_life)
@@ -270,14 +300,14 @@ class VetoTable:
                 continue
             for t in r["teams"]:
                 opp = r["teams"][0] if t == r["teams"][1] else r["teams"][1]
-                lu = frozenset(r["lineups"].get(str(t), ()))
+                lu = tuple(sorted(r["lineups"].get(str(t), ())))
                 ea = 1 / (1 + 10 ** ((pre_elo[opp] - pre_elo[t]) / 400))
                 mres = tuple((m, (1.0 if w == t else 0.0) - ea) for m, w in sorted(r.get("map_winner", {}).items())
                              if w is not None)
-                rec = TeamRec(day, r["mid"], r["fmt"], opp, lu, tuple(per[t]), mres, r.get("event"))
+                rec = TeamRec(day, r["mid"], r["fmt"], opp, lu, self._acts(per[t]), mres, r.get("event"))
                 lst = self.team[t]
                 lst.append(rec)
-                if len(lst) > MAX_KEEP:
+                if len(lst) > self.keep:
                     del lst[0]
                 if lu:
                     self.last_lineup[t] = (day, lu)
@@ -306,7 +336,7 @@ class VetoTable:
 
     # -- serialisation (the server loads a file; never the DB per call)
     def to_json(self):
-        return {"cutoff": self.cutoff, "g_day": self.g_day, "glob_half_life": self.glob_half_life,
+        return {"keep": self.keep, "cutoff": self.cutoff, "g_day": self.g_day, "glob_half_life": self.glob_half_life,
                 "team": {str(t): [[r.day, r.mid, r.fmt, r.opp, sorted(r.lineup), [list(a[:2]) + [list(a[2])] for a in r.acts],
                                    [list(x) for x in r.maps], r.event] for r in lst] for t, lst in self.team.items()},
                 "gC": [[k[0], k[1], v] for k, v in self.gC.items()], "gE": [[k[0], k[1], v] for k, v in self.gE.items()],
@@ -317,10 +347,10 @@ class VetoTable:
 
     @classmethod
     def from_json(cls, d):
-        t = cls()
+        t = cls(keep=d.get("keep", MAX_KEEP))
         t.cutoff, t.g_day, t.glob_half_life = d["cutoff"], d["g_day"], d["glob_half_life"]
         for tid, lst in d["team"].items():
-            t.team[int(tid)] = [TeamRec(r[0], r[1], r[2], r[3], frozenset(r[4]), tuple((a[0], a[1], tuple(a[2])) for a in r[5]),
+            t.team[int(tid)] = [TeamRec(r[0], r[1], r[2], r[3], tuple(r[4]), t._acts((a[0], a[1], tuple(a[2])) for a in r[5]),
                                         tuple((x[0], x[1]) for x in r[6]), r[7]) for r in lst]
         for k0, k1, v in d["gC"]:
             t.gC[(k0, k1)] = v
@@ -333,7 +363,7 @@ class VetoTable:
         for k, v in d["elo"].items():
             t.elo[int(k)] = v
         for k, v in d["last_lineup"].items():
-            t.last_lineup[int(k)] = (v[0], frozenset(v[1]))
+            t.last_lineup[int(k)] = (v[0], tuple(v[1]))
             for p in v[1]:
                 t.player_teams[p][int(k)] = v[0]
         for tid, lst in t.team.items():
@@ -353,39 +383,46 @@ class VetoTable:
             return cls.from_json(json.load(f))
 
     # -- features
-    def history(self, tid, lineup, params, limit=None):
+    def _upto(self, tid, before_day):
+        lst = self.team.get(tid, [])
+        if before_day is None or not lst or lst[-1].day < before_day:
+            return lst
+        return lst[:bisect.bisect_left([r.day for r in lst], before_day)]
+
+    def history(self, tid, lineup, params, limit=None, before_day=None):
         """[(TeamRec, roster weight)] newest first: the team's own vetoes (+ those of another team id fielding >= 3 of
-        the current players when params['identity'])."""
+        the current players when params['identity']); only records dated before before_day."""
         limit = limit or params["max_records"]
-        own = self.team.get(tid, [])[-limit:]
+        own = self._upto(tid, before_day)[-limit:]
         rho = params.get("rho", 0.0)
         cur = frozenset(lineup or ())
 
         def w(rec):
             if not rho or not cur or not rec.lineup:
                 return 1.0
-            ov = len(rec.lineup & cur) / max(len(cur), 1)
+            ov = len(cur.intersection(rec.lineup)) / max(len(cur), 1)
             return max(ov, 0.1) ** rho
         out = [(r, w(r)) for r in reversed(own)]
         if params.get("identity") and len(cur) >= 3:
             others = {t for p in cur for t in self.player_teams.get(p, {}) if t != tid}
             extra = []
             for t in sorted(others):
-                for r in self.team.get(t, []):
-                    if len(r.lineup & cur) >= 3:
+                for r in self._upto(t, before_day)[-limit:]:
+                    if len(cur.intersection(r.lineup)) >= 3:
                         extra.append((r, w(r)))
             extra.sort(key=lambda x: (-x[0].day, x[0].mid))
             out = sorted(out + extra[:limit], key=lambda x: (-x[0].day, x[0].mid))[:limit]
         return out
 
-    def global_rate(self, kk, pool, params):
+    def global_rate(self, kk, pool, params, glob=None):
+        gC, gE = glob or (self.gC, self.gE)
         kg = params["k_glob"]
-        C = sum(self.gC.get((kk, m), 0.0) for m in pool)
-        E = sum(self.gE.get((kk, m), 0.0) for m in pool)
+        C = sum(gC.get((kk, m), 0.0) for m in pool)
+        E = sum(gE.get((kk, m), 0.0) for m in pool)
         gbar = C / E if E > 0 else 1.0 / len(pool)
-        return {m: (self.gC.get((kk, m), 0.0) + kg * gbar) / (self.gE.get((kk, m), 0.0) + kg) for m in pool}
+        return {m: (gC.get((kk, m), 0.0) + kg * gbar) / (gE.get((kk, m), 0.0) + kg) for m in pool}
 
-    def team_stats(self, tid, lineup, before_day, pool, params):
+    def team_stats(self, tid, lineup, before_day, pool, params, glob=None):
         """Shrunk choice rates by kind + map strength for one team, from history strictly before the table cutoff."""
         h = params["half_life_days"]
         kt = params["k_team"]
@@ -394,7 +431,7 @@ class VetoTable:
         E = collections.defaultdict(float)
         S = collections.defaultdict(float)
         SW = collections.defaultdict(float)
-        hist = self.history(tid, lineup, params)
+        hist = self.history(tid, lineup, params, before_day=before_day)
         for rec, rw in hist:
             wt = rw * (0.5 ** ((before_day - rec.day) / h) if h else 1.0)
             for kind, m, avail in rec.acts:
@@ -411,21 +448,26 @@ class VetoTable:
         kinds = ("ban1", "banN", "pick") + (("b1ban1", "b1banN") if params.get("fmt_split") else ())
         rates = {}
         for kk in kinds:
-            g = self.global_rate(kk, pool, params)
+            g = self.global_rate(kk, pool, params, glob)
             rates[kk] = {m: (C[(kk, m)] + kt * g[m]) / (E[(kk, m)] + kt) for m in pool}
         ks = params["k_strength"]
         strength = {m: S[m] / (SW[m] + ks) for m in pool}
         return {"rates": rates, "strength": strength, "n": len(hist), "hist": hist}
 
-    def template_prior(self, fmt, event, params):
-        ts = TEMPLATES[fmt]
-        g = {t: self.tmpl_g.get((fmt, t), 0.0) + 0.5 for t in ts}
-        tot = sum(g.values())
-        g = {t: v / tot for t, v in g.items()}
-        ev = self.tmpl_ev.get((event, fmt)) if event is not None else None
-        n = sum(ev.values()) if ev else 0
-        a = params["tmpl_alpha"]
-        return {t: ((ev or {}).get(t, 0) + a * g[t]) / (n + a) for t in ts}
+    def template_prior(self, fmt, event, params, snap=None):
+        tmpl_g, tmpl_ev = snap or (self.tmpl_g, self.tmpl_ev)
+        return template_prior(fmt, tmpl_g, tmpl_ev.get((event, fmt)) if event is not None else None, params)
+
+
+def template_prior(fmt, tmpl_g, ev, params):
+    """P(template): earlier vetoes at the same event (counts) + tmpl_alpha x the format's recent mix (+0.5)."""
+    ts = TEMPLATES[fmt]
+    g = {t: tmpl_g.get((fmt, t), 0.0) + 0.5 for t in ts}
+    tot = sum(g.values())
+    g = {t: v / tot for t, v in g.items()}
+    n = sum(ev.values()) if ev else 0
+    a = params["tmpl_alpha"]
+    return {t: ((ev or {}).get(t, 0) + a * g[t]) / (n + a) for t in ts}
 
 
 # ------------------------------------------------------------------ prediction
@@ -521,6 +563,34 @@ def _beam(steps, W, pool, known, eps, actor_ids, prior, width=64):
     return out
 
 
+def sequence_distribution(W, fmt, pool, tp, pa, known, eps, ta, tb, beam=False):
+    """Exact mixture over (template, first actor) of the per-order DP. W[(A|B, kind)][map] = exp(utility) where A is
+    team ta and B team tb. Returns ({played order: prob} normalised, {(template, 'a'|'b'): unnormalised mass},
+    beam sequences (unnormalised), Z = P(known actions))."""
+    dist = collections.defaultdict(float)
+    order_w = {}
+    beams = []
+    for t in TEMPLATES[fmt]:
+        steps = _PARSED[t]
+        for first, pf in (("a", pa), ("b", 1 - pa)):
+            prior = tp[t] * pf
+            if prior <= 0:
+                continue
+            ids = {"A": ta, "B": tb} if first == "a" else {"A": tb, "B": ta}
+            # W is keyed by real team: remap actor letters of this order onto the team's utilities
+            Wo = {(X, k): W[("A" if ids[X] == ta else "B", k)] for X in "AB" for k in ("ban1", "banN", "pick")}
+            res = _run_order(steps, Wo, pool, known, eps, ids)
+            order_w[(t, first)] = sum(res.values()) * prior
+            for seq, p in res.items():
+                dist[seq] += p * prior
+            if beam:
+                beams.extend(_beam(steps, Wo, pool, known, eps, ids, prior))
+    Z = sum(dist.values())
+    if Z <= 0:
+        raise IllegalVeto("the known actions fit no veto order this format uses")
+    return {s: p / Z for s, p in dist.items()}, order_w, beams, Z
+
+
 def _facts(name, st, pool, fmt):
     """Plain facts from the team's actual recent vetoes (unweighted counts, last 10 vetoes)."""
     recent = [r for r, _ in st["hist"]][:10]
@@ -571,6 +641,7 @@ def _norm_known(known_actions, pool, team_a, team_b, fmt):
 
 _CACHE = collections.OrderedDict()
 _CACHE_LOCK = threading.Lock()
+_INFLIGHT = {}
 _TABLE = {"t": None}
 
 
@@ -590,7 +661,8 @@ def first_actor_prior(table, team_a, team_b, params, listed_first=None):
 
 
 def predict(team_a_id, team_b_id, format, pool, before=None, known_actions=(), first_actor_prob=None, event=None,
-            lineup_a=None, lineup_b=None, listed_first=None, table=None, params=None, top=10, names=None):
+            lineup_a=None, lineup_b=None, listed_first=None, table=None, params=None, top=10, names=None,
+            return_dist=False):
     """Distribution over complete legal veto sequences for team A vs team B.
 
     format: 'bo1' | 'bo3' | 'bo5'; pool: the 7 maps of the event's active pool (map names or keys); before: the
@@ -598,6 +670,7 @@ def predict(team_a_id, team_b_id, format, pool, before=None, known_actions=(), f
     steps [{step, team, action ('removed'|'picked'|'leftover'), map}] - the prediction is conditioned on them exactly;
     first_actor_prob: P(team A takes step 1) when known/estimated elsewhere (else the model's prior); event: event
     name for event-specific order rules; lineup_a/b: current player ids (else each team's last recorded lineup).
+    return_dist=True adds "_dist" (every played order -> probability; uncached, for research/tests).
     Raises IllegalVeto for impossible inputs."""
     params = params or PARAMS
     table = table or _TABLE["t"]
@@ -621,21 +694,44 @@ def predict(team_a_id, team_b_id, format, pool, before=None, known_actions=(), f
            tuple(sorted((s, k["team"], k["action"], k["map"]) for s, k in known.items())),
            None if first_actor_prob is None else round(float(first_actor_prob), 6), event, la, lb, listed_first, top,
            tuple(sorted((names or {}).items())))
-    with _CACHE_LOCK:
-        hit = _CACHE.get(key)
-        if hit is not None:
-            _CACHE.move_to_end(key)
-            return hit
-    out = _predict(table, params, team_a_id, team_b_id, fmt, pool_k, bday, known, first_actor_prob, event,
-                   la, lb, listed_first, top, names or {})
-    with _CACHE_LOCK:
-        _CACHE[key] = out
-        while len(_CACHE) > CACHE_MAX:
-            _CACHE.popitem(last=False)
-    return out
+    if return_dist:
+        return _predict(table, params, team_a_id, team_b_id, fmt, pool_k, bday, known, first_actor_prob, event,
+                        la, lb, listed_first, top, names or {}, True)
+    while True:                                   # single-flight: one computation per key, others wait for it
+        with _CACHE_LOCK:
+            hit = _CACHE.get(key)
+            if hit is not None:
+                _CACHE.move_to_end(key)
+                return hit
+            ev = _INFLIGHT.get(key)
+            if ev is None:
+                ev = _INFLIGHT[key] = threading.Event()
+                owner = True
+            else:
+                owner = False
+        if not owner:
+            ev.wait(5.0)
+            with _CACHE_LOCK:
+                hit = _CACHE.get(key)
+            if hit is not None:
+                return hit
+            continue                              # the owner failed (bad input): compute (and raise) ourselves
+        try:
+            out = _predict(table, params, team_a_id, team_b_id, fmt, pool_k, bday, known, first_actor_prob, event,
+                           la, lb, listed_first, top, names or {})
+            with _CACHE_LOCK:
+                _CACHE[key] = out
+                while len(_CACHE) > CACHE_MAX:
+                    _CACHE.popitem(last=False)
+            return out
+        finally:
+            with _CACHE_LOCK:
+                _INFLIGHT.pop(key, None)
+            ev.set()
 
 
-def _predict(table, params, ta, tb, fmt, pool, bday, known, fprob, event, la, lb, listed_first, top, names):
+def _predict(table, params, ta, tb, fmt, pool, bday, known, fprob, event, la, lb, listed_first, top, names,
+             return_dist=False):
     if la is None and ta in table.last_lineup:
         la = tuple(sorted(table.last_lineup[ta][1]))
     if lb is None and tb in table.last_lineup:
@@ -647,29 +743,7 @@ def _predict(table, params, ta, tb, fmt, pool, bday, known, fprob, event, la, lb
     if not 0.0 <= pa <= 1.0:
         raise IllegalVeto("first_actor_prob must be in [0, 1]")
     tp = table.template_prior(fmt, event, params)
-    eps = params["eps"]
-    dist = collections.defaultdict(float)
-    order_w = {}
-    beams = []
-    for t in TEMPLATES[fmt]:
-        steps = _PARSED[t]
-        for first, pf in (("a", pa), ("b", 1 - pa)):
-            prior = tp[t] * pf
-            if prior <= 0:
-                continue
-            ids = {"A": ta, "B": tb} if first == "a" else {"A": tb, "B": ta}
-            # W is keyed by real team: remap actor letters of this order onto the team's utilities
-            Wo = {(X, k): W[("A" if ids[X] == ta else "B", k)] for X in "AB" for k in ("ban1", "banN", "pick")}
-            res = _run_order(steps, Wo, pool, known, eps, ids)
-            mass = sum(res.values()) * prior
-            order_w[(t, first)] = mass
-            for seq, p in res.items():
-                dist[seq] += p * prior
-            beams.extend(_beam(steps, Wo, pool, known, eps, ids, prior))
-    Z = sum(dist.values())
-    if Z <= 0:
-        raise IllegalVeto("the known actions fit no veto order this format uses")
-    dist = {s: p / Z for s, p in dist.items()}
+    dist, order_w, beams, Z = sequence_distribution(W, fmt, pool, tp, pa, known, params["eps"], ta, tb, beam=True)
     n = N_MAPS[fmt]
     pos = [collections.defaultdict(float) for _ in range(n)]
     incl = collections.defaultdict(float)
@@ -704,37 +778,45 @@ def _predict(table, params, ta, tb, fmt, pool, bday, known, fprob, event, la, lb
         "action_sequences_remaining_mass": round(max(0.0, 1 - sum(p for _, p in aseq)), 6),
         "history": {"team_a": sa["n"], "team_b": sb["n"]},
         "facts": _facts(na, sa, pool, fmt) + _facts(nb, sb, pool, fmt),
-        "_dist": dist,
+        **({"_dist": dist} if return_dist else {}),
     }
 
 
 # ------------------------------------------------------------------ table builder from the HLTV DB
-def build_table_from_db(conn, cutoff, days=400):
-    """VetoTable from the HLTV Postgres (read-only, bounded by date) holding matches dated in
-    [cutoff - days, cutoff). cutoff = the first day NOT included (eg today's date for a live table)."""
+def build_table_from_db(conn, cutoff, days=400, chunk_days=31):
+    """VetoTable from the HLTV Postgres (read-only SELECTs, each bounded to a chunk_days date window, so memory stays
+    small) holding matches dated in [cutoff - days, cutoff). cutoff = the first day NOT included (today for a live
+    table). Run it in a background job and swap the loaded table in; never per request."""
     cut = _day(cutoff)
-    start = dt.date.fromordinal(cut - days).isoformat()
-    end = dt.date.fromordinal(cut).isoformat()
     cur = conn.cursor()
-    cur.execute("SET statement_timeout = 120000")
+    cur.execute("SET statement_timeout = 60000")
     cur.execute("SELECT mapid, name FROM maps")
     mname = {r[0]: map_key(r[1]) for r in cur.fetchall()}
-    cur.execute("SELECT matchid, event, date, lan FROM match_overview WHERE date >= %s AND date < %s", (start, end))
-    ov = {r[0]: r[1:] for r in cur.fetchall()}
-    rng = "JOIN match_overview mo USING (matchid) WHERE mo.date >= %s AND mo.date < %s"
-    cur.execute(f"SELECT matchid, step, teamid, action, mapid FROM map_vetoes {rng}", (start, end))
-    acts = collections.defaultdict(list)
-    for mid, st, tid, a, mp in cur.fetchall():
-        acts[mid].append((st, tid, a, mname.get(mp, str(mp))))
-    cur.execute(f"SELECT matchid, teamid, mapid, score FROM matches {rng} AND sideid = 0", (start, end))
-    teams, series, mw = collections.defaultdict(set), collections.defaultdict(dict), collections.defaultdict(lambda: collections.defaultdict(dict))
-    for mid, tid, mp, sc in cur.fetchall():
-        teams[mid].add(tid)
-        (series[mid].__setitem__(tid, sc) if mp == 0 else mw[mid][mname.get(mp, str(mp))].__setitem__(tid, sc))
-    cur.execute(f"SELECT DISTINCT matchid, teamid, playerid FROM player_stats {rng} AND mapid = 0", (start, end))
+    ov, acts = {}, collections.defaultdict(list)
+    teams, series = collections.defaultdict(set), collections.defaultdict(dict)
+    mw = collections.defaultdict(lambda: collections.defaultdict(dict))
     lu = collections.defaultdict(lambda: collections.defaultdict(set))
-    for mid, tid, pid in cur.fetchall():
-        lu[mid][tid].add(pid)
+    rng = "JOIN match_overview mo USING (matchid) WHERE mo.date >= %s AND mo.date < %s"
+    d = cut - days
+    while d < cut:
+        a, b = dt.date.fromordinal(d).isoformat(), dt.date.fromordinal(min(d + chunk_days, cut)).isoformat()
+        cur.execute("SELECT matchid, event, date, lan FROM match_overview WHERE date >= %s AND date < %s", (a, b))
+        for r in cur.fetchall():
+            ov[r[0]] = r[1:]
+        cur.execute(f"SELECT matchid, step, teamid, action, mapid FROM map_vetoes {rng}", (a, b))
+        for mid, st, tid, act, mp in cur.fetchall():
+            acts[mid].append((st, tid, act, mname.get(mp, str(mp))))
+        cur.execute(f"SELECT matchid, teamid, mapid, score FROM matches {rng} AND sideid = 0", (a, b))
+        for mid, tid, mp, sc in cur.fetchall():
+            teams[mid].add(tid)
+            if mp == 0:
+                series[mid][tid] = sc
+            else:
+                mw[mid][mname.get(mp, str(mp))][tid] = sc
+        cur.execute(f"SELECT DISTINCT matchid, teamid, playerid FROM player_stats {rng} AND mapid = 0", (a, b))
+        for mid, tid, pid in cur.fetchall():
+            lu[mid][tid].add(pid)
+        d += chunk_days
     cur.close()
     return finish_cutoff(build_table_from_rows(ov, acts, teams, series, mw, lu), cut)
 

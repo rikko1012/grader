@@ -1,0 +1,42 @@
+{
+ "version": "veto-1-a140ca69ec",
+ "params_sha": "a140ca69ec",
+ "params": {
+  "half_life_days": 60.0,
+  "k_team": 1.0,
+  "k_glob": 20.0,
+  "glob_half_life_days": 60.0,
+  "beta": {
+   "ban1": 1.2,
+   "banN": 1.0,
+   "pick": 1.0
+  },
+  "eps": 0.05,
+  "max_records": 20,
+  "rho": 2.0,
+  "identity": true,
+  "gamma": {
+   "ban1": 0.25,
+   "banN": 0.0,
+   "pick": 0.25
+  },
+  "delta": {
+   "ban1": 4.0,
+   "banN": 4.0,
+   "pick": 4.0
+  },
+  "k_strength": 6.0,
+  "fmt_split": false,
+  "tmpl_alpha": 0.25,
+  "first_a0": 0.0,
+  "first_elo": 0.0,
+  "first_listed": -0.5
+ },
+ "tuning_log_sha256": "f237921959d8bc121717581848e7650447bd602b9bcffacdc3bcef52d29477fc",
+ "frozen_at": "2026-10-23T19:26:39+00:00",
+ "final_period": [
+  "2026-08-23",
+  "2026-10-22"
+ ],
+ "note": "FINAL scored once after this file is committed"
+}
