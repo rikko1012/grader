@@ -785,6 +785,41 @@ def card_identity(res, v, prop=None, scope=None, line=None, book=None):
     return out
 
 
+def card_veto(res):
+    """The card's map-veto panel (veto_serve: veto-1, display only - never a grade input): the answer the background thread
+    stored for this match, or None (the match is then queued for the background; nothing is computed here)."""
+    try:
+        import veto_serve
+        return veto_serve.for_card(res)
+    except Exception:
+        return None
+
+
+def veto_body(match_id):
+    """/api/veto: the stored panel of one canonical match id (memory only), shared by every member for VETO_TTL s."""
+    try:
+        import veto_serve
+        return json.dumps({"match_id": match_id, "veto": veto_serve.for_match(match_id)}, default=str).encode()
+    except Exception:
+        return json.dumps({"match_id": match_id, "veto": None}).encode()
+
+
+VETO_TTL = 30
+_RQ = {"t": 0.0, "n": 0, "busy": False}
+BUSY_RPS = 20              # more requests a second than this = members are being served: background veto work waits
+
+
+def members_busy():
+    """True while the server answers more than BUSY_RPS requests a second (sampled once a second; no lock, no I/O): the
+    veto background (veto_serve.BUSY) steps aside so a member crowd never queues behind its CPU work."""
+    now = time.time()
+    if now - _RQ["t"] >= 1.0:
+        n = STATS["requests"]
+        _RQ["busy"] = _RQ["t"] > 0 and (n - _RQ["n"]) / (now - _RQ["t"]) > BUSY_RPS
+        _RQ.update(t=now, n=n)
+    return _RQ["busy"]
+
+
 def _row_match_id(row):
     """matchid.match_id_for_row, or None while matchid's tables are still loading (a member request never waits for the
     first HLTV read - the boot thread does it) or if linking fails. Identity only: no grade reads it."""
@@ -2095,6 +2130,12 @@ def start_research():
         RESEARCH["matchid_ready"] = matchid.warm()
     except Exception as e:
         RESEARCH["errors"].append(f"matchid: {type(e).__name__}: {str(e)[:160]}")
+    try:                                   # map veto (veto_serve, veto-1): DISPLAY + LOGGING only - its own background thread
+        import veto_serve                  # builds the table in a child process, predicts board matches once per input
+        veto_serve.BUSY = members_busy     # change; members only read the stored answer; it steps aside for a crowd
+        RESEARCH["veto_started"] = veto_serve.start()
+    except Exception as e:
+        RESEARCH["errors"].append(f"veto: {type(e).__name__}: {str(e)[:160]}")
     try:                                   # Thunderpick partner odds: one poller, shared request budget (admin-only until
         import thunderpick                 # adaptive poller, matching, evidence-gated Thunderpick-first policy
         import market_odds
@@ -3711,7 +3752,7 @@ class Handler(BaseHTTPRequestHandler):
                                            f"{whop_auth.PKCE_COOKIE}=; Max-Age=0; Path=/"])
             if u.path == "/auth/logout":
                 return self.redirect("/", [f"{whop_auth.COOKIE}=; Max-Age=0; Path=/"])
-            if u.path in ("/api/search", "/api/grade", "/api/board", "/api/line_check", "/api/match_compare", "/api/moneylines",
+            if u.path in ("/api/search", "/api/grade", "/api/board", "/api/line_check", "/api/match_compare", "/api/moneylines", "/api/veto",
                           "/api/slip_studio/batch", "/api/slip_studio/capacity", "/api/slip_studio/history", "/api/results") and not self.allowed():
                 sess = self.member()
                 return self.send(401, {"error": "members_only", "signed_in": bool(sess),
@@ -3729,6 +3770,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.studio_history()
             if u.path == "/api/slip_studio/capacity":
                 return self.studio_capacity(q)
+            if u.path == "/api/veto":                    # map veto panel of one match (Matchroom): a stored answer, no compute
+                mid_ = (q.get("match") or "")[:40]
+                if not re.fullmatch(r"hltv:\d{1,9}", mid_):
+                    return self.send(400, {"error": "match must be an HLTV match id (hltv:<id>)"})
+                st_, body_ = shared(("veto", mid_), lambda: (200, veto_body(mid_)), ttl=VETO_TTL)
+                return self.send_shared(("veto", mid_), st_, body_)
             if u.path == "/api/match_compare":
                 bad_ = match_compare_problem(q)
                 if bad_:
@@ -4254,6 +4301,10 @@ class Handler(BaseHTTPRequestHandler):
                         return self.send(200, out)
                 finally:
                     con.close()
+            if u.path == "/admin/veto.json" and self.authed(q.get("token")):
+                # veto-1 serving: status | records (paged, <= 200) | score (prospective, cached 10 min) | store | rebuild
+                import veto_serve
+                return self.send(200, veto_serve.admin(q))
             if u.path == "/admin/veto_backtest" and self.authed(q.get("token")):
                 import hltv
                 return self.send(200, hltv.veto_backtest(int(q.get("days") or 30), int(q.get("limit") or 250)))
@@ -4850,6 +4901,7 @@ class Handler(BaseHTTPRequestHandler):
                                       "reason": "Live data unavailable - no grade for this line until it is back"}
                     res["hltv_outage"] = {"rows": [], "causes": cs_, "odds_note": None, "unavailable": True}
                 withhold_temporary(res)
+            res["veto"] = card_veto(res)                 # map veto panel: the background's stored answer (display only)
             t0 = time.time()
             body = json.dumps(public(res), default=str).encode()
             tm["json"] = round(time.time() - t0, 2)

@@ -1,5 +1,32 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
+## DRAFT - Map veto display + logging (veto/vserve; CS2 model tag unchanged: `aa6696d5d6`; display / logging / shadow only)
+
+No grade, chance, stake, threshold, model weight or frozen constant changed; no file the model tag hashes was edited
+(grader / cs2_scout / hltv / perf ... untouched; 500/500 recent production forecasts replay identical). Map-informed
+grading stays OFF (use_predicted_maps=False, unchanged; the old hltv.predict_maps output still travels in the grader
+inputs / pred_maps exactly as before).
+- Display: veto-1 (`veto-1-a140ca69ec`, research/map_veto, passed its registered FINAL test) replaces the old
+  "Likely Map 1 / Map 2 (context only)" lines on the player card and adds a panel to the Matchroom: veto state
+  (pending / in progress / confirmed), confirmed picks and bans (BO3.gg's match page; HLTV stores vetoes only for
+  finished matches), predicted Map 1 / Map 2 per slot (top 5 + other maps), the 5 most likely full series with
+  "Other combinations: x%", forecast time, and plain facts from each team's last 10 vetoes. No pool / hedge label.
+- Serving (veto_serve.py `vserve-1`): table built in a CHILD process (streamed two-pass builder, identical to
+  veto_model.build_table_from_db; trimmed to each team's newest 20 vetoes - predictions identical; peak ~64 MB RSS in the
+  child, then it exits); the web process loads it line by line (~12 MB resident, load peak ~13 MB). Rebuilt on the UTC day
+  change and when the last 21 days' stored vetoes change (checked every 2 h); a failure keeps the last good table (retry
+  30 min). One background thread predicts each HLTV-schedule match (next 36 h, live up to 8 h) once per input change;
+  members only read the stored answer (/api/veto, card payload); the background steps aside while members are served.
+- Logging: every changed prediction in CS2_DATA_DIR/veto_log.db (version, table cutoff + sha, team + lineup ids, pool +
+  internal source, known actions, all slot marginals, 35 sets, 42 Map 1/2 pairs, top 20 sequences + remaining mass,
+  facts; pre_start flag), bounded (60,000 rows, 60 per match, 400 days); tables archived 14 cutoffs for exact replay.
+  Each grade forecast carries shadow.veto (the record id). The frozen simulator's Map 1 / Map 2 is saved per upcoming BO3
+  (veto_baselines) for the prospective score: /admin/veto.json?action=score (also status | records | store | rebuild).
+- Shadow vm-1 (`vm-1-ceabd6f325`, research/map_veto/props, AM-1): every appended CS2 forecast row carries shadow.vm1 with
+  arm A1 (map context) and arm C0 (no-map control) from vm1.shadow_entry on veto-1's PRE-veto prediction (no confirmed
+  actions, before = match date, all sequences); computed in the pick-log writer thread; a failure logs an ineligible
+  entry; never the RETROSPECTIVE arm. vm1.py / vm1_params.json at the repo root are byte-identical copies (tested).
+
 ## Closeout 2 release 2026-10-23 (CS2 model tag unchanged: `aa6696d5d6`; slips / settlement timing / experiment rules, no model change)
 
 No grade, chance, stake, threshold, model weight, shadow value or frozen constant changed. Model accuracy is NOT shown

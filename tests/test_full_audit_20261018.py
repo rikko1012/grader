@@ -208,10 +208,15 @@ def test_map1_card_uses_map1_h2h_and_does_not_show_map2(tmp_path):
     card = _outage_card(dict(KEPT, kept_from_board=False, stale=False), {})
     card["grade"].update(scope="1", line=15.5)
     card["player_block"]["map_prediction"] = {"map1": {"de_mirage": .5}, "map2": {"de_inferno": .5}}
+    # 2026-10-23 veto-1 (veto_serve) replaces the old 'Likely Map 1 / 2' lines; a Map 1 card still shows Map 1 only
+    card["veto"] = {"state": "pending", "format": "bo3", "at": "2026-10-23T18:00:00+00:00", "confirmed": [], "bans": [],
+                    "slots": [{"slot": "Map 1", "top": [["mirage", "Mirage", .5]], "other": .5},
+                              {"slot": "Map 2", "top": [["inferno", "Inferno", .5]], "other": .5}],
+                    "combos": [[["Mirage", "Inferno", "Nuke"], .2]], "combos_other": .8, "facts": []}
     card["next_match"]["bo"] = 1
     card["h2h"] = {"series": [{"date": "2026-09-01", "opponent": "MOUZ", "values": [10, 22], "total": 32,
                                 "maps": ["de_mirage", "de_inferno"], "result": "L", "same_roster": True}]}
     out = run_page(tmp_path, """(() => {try {render(INPUT);} catch(e) {if(!/nextSibling/.test(e.message))throw e;} return $('#out').innerHTML;})()""", card)
-    assert "Likely Map 1" in out and "Likely Map 2" not in out
+    assert "Map 1 · Predicted" in out and "Map 2 · Predicted" not in out and "Likely Map" not in out
     h2h = out.split("Head-to-head vs")[1].split("</section>")[0]
     assert "over 15.5 in 0/1" in h2h and "<b>10</b>" in h2h and "<b>32</b>" not in h2h
