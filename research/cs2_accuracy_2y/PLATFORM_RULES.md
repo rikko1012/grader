@@ -78,7 +78,7 @@ chart for the league in question". That chart is not public. The browser pane re
 | Player has no row on a played, scraped in-scope map (benched / stand-in) | void (U1 "must play in each map"), verified | played other maps: CS2 threshold in-app only, **pending**. Played no map: DNP void (P2) | unchanged (map missing, so not settled from HLTV) |
 | Substituted mid-map, over / under 50% of rounds | rule verified (U1), **not applied**: HLTV map rows carry no per-player rounds | not published | n/a |
 | Remake / restart | not published for CS2 (chronobreak rule only). Cannot be seen in the data: HLTV keeps the final map | not published | n/a |
-| Rescheduled / postponed | grades within 36 h of the posted start, else void (U1/U2), verified, **not applied** (see "Still open") | "depending on the sport" (P2), CS2 in-app: unverified, not applied | n/a |
+| Rescheduled / postponed | grades within 36 h of the posted start, else void (U1/U2), verified, **applied from closeout 2** (close2/resched 3111d6a; see "Still open" 3) | "depending on the sport" (P2), CS2 in-app: unverified, not applied | n/a |
 | Overtime | counts (U1). Already how totals are computed | not published (in-app) | n/a |
 | Entry: all picks from one team | **refused** (U4) | **refused** (P1) | unverified (platform unknown) |
 | Entry: number of picks | standard 2-8, flex 3-8 (U5) | 2-6, power and flex (P1). Colorado minimum 3 not checked (state unknown) | not checked |
@@ -170,9 +170,19 @@ forfeits, DNP / activity, substitutions and remakes. Each rule is then switched 
    in `platform_rules.RULES["prizepicks"]`.
 2. **PrizePicks CS2 combination rules** (for example, opposing players of one match). Same blocker as item 1. Entry
    checks for PrizePicks are `unverified` unless a published rule refuses them.
-3. **Underdog reschedule (36 h).** The rule is verified but not applied. matchid links a match only within 3 h of the
-   listed start (matchid.WINDOW_H, not this branch's file), and the actual start of a finished match is not stored
-   with the pick. Applying the rule needs the HLTV start time saved at settlement.
+3. **Underdog reschedule (36 h).** [Superseded 2026-10-23, closeout 2: now applied.] Original text: "The rule is
+   verified but not applied. matchid links a match only within 3 h of the listed start (matchid.WINDOW_H), and the
+   actual start of a finished match is not stored with the pick."
+   **Now (close2/resched 3111d6a, deployed with the closeout-2 release):** settlement timing is separate from identity.
+   picklog `schedule_obs` keeps the original scheduled start, every observed re-listing (the pick's own line id /
+   match) and the actual-start evidence (HLTV match time for the exact match id, else its UTC date as a range; BO3.gg
+   map 1 begin_at / start_date). `platform_rules.reschedule_decision`: Underdog <= 36 h after the original start
+   grades, > 36 h voids, unknown / a date range spanning 36 h / > 36 h early = pending with a specific reason
+   (rule_pending, never voided by the clock). Identity is never widened: a re-listed pick links only through the same
+   3 h canonical rule at the start the platform itself re-listed for that line id, and only if every such start names
+   the same single HLTV match. PrizePicks: unverified, settlement unchanged (hook: set verified + void_after_h).
+   Production check (counts): Underdog 2,094 / 5,009 line ids changed start since 2026-10-11, none by more than 36 h
+   (largest 9 h); 0 picks would void or go pending under the rule on the available HLTV dates.
 4. **Underdog "over 50% of rounds"** for mid-map substitutions. Not detectable: HLTV map rows carry no rounds played per
    player.
 5. **Remakes.** No CS2 rule on either platform, and they cannot be seen in HLTV data.
