@@ -36,7 +36,7 @@ def _page_body(cid="c1234567"):
 def test_member_copy_without_ids_is_logged_through_the_real_handler(site, tmp_path):
     site.setattr(slips, "LOADED", tmp_path / "loaded.jsonl")
     site.setattr(slips, "_SEEN", {"rec": None, "load": None})
-    site.setattr(server, "slip_leg_problem", lambda leg: None)          # the leg checks have their own tests
+    site.setattr(server, "slip_leg_check", lambda leg, feeds=None, now=None: None)          # the leg checks have their own tests
     h = post("/api/slip_log", body=json.dumps(_page_body()).encode())
     assert h.code == 200 and h.body() == {"ok": True, "duplicate": False}
     rec = json.loads((tmp_path / "loaded.jsonl").read_text().splitlines()[0])

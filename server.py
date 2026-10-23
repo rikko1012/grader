@@ -1329,36 +1329,136 @@ def slip_lock(check, *starts, now=None):
     return out
 
 
-def slip_leg_problem(leg):
-    """Server-side check of one copied slip leg against the platform feed NOW (2026-10-18 owner: a side that is not
-    offered or not confirmed is never accepted - also from a slip saved earlier). -> None when the exact line is listed
-    with this side offered, else the reason."""
-    side, book = str(leg.get("side") or ""), leg.get("book")
-    side = "Less" if side in ("Less", "Under", "lower", "under") else "More" if side in ("More", "Over", "higher", "over") else None
+SLIP_RETRY = "Could not check the lines right now - try again"
+
+
+def _slip_side(v):
+    v = str(v or "")
+    return "Less" if v in ("Less", "Under", "lower", "under") else "More" if v in ("More", "Over", "higher", "over") else None
+
+
+_SLIP_IDX = {}                                        # book -> ((feed at, rows), {normalized player: [rows]})
+
+
+def _slip_feed(bk):
+    """The platform's cached feed (no network I/O) + its rows by normalized player name, built once per feed refresh and
+    shared by every member's check (no lock: a race only builds the same index twice)."""
+    b = prizepicks.board() if bk == "prizepicks" else underdog.board()
+    rows = b.get("rows") or []
+    key = (b.get("at"), len(rows), id(rows[0]) if rows else None)
+    c = _SLIP_IDX.get(bk)
+    if c is None or c[0] != key:
+        idx = {}
+        for r in rows:
+            idx.setdefault(comparison._norm(r.get("player")), []).append(r)
+        c = _SLIP_IDX[bk] = (key, idx)
+    return b, c[1]
+
+
+def slip_leg_check(leg, feeds=None, now=None):
+    """The ONE server rule for a slip leg against the platform feed NOW (2026-10-18 owner: a side that is not offered or
+    not confirmed is never accepted - also from a slip saved earlier; closeout2 copyval: this answer decides whether the
+    page may write the slip to the clipboard at all). -> None when the exact line is listed with this side offered and
+    the match has not started, else {"code", "reason"} with a plain member-facing reason.
+    The lock (slip_builder.lock_time rule): the earliest of the leg's own start / graded start / saved lock, the platform's
+    CURRENT start of the matched rows, and the graded match start the server itself holds for the leg's row and for the
+    matched rows (BOARD - not only the page's word). feeds: {book: board()} shared by one request's legs (cached boards:
+    no network I/O, no lock held while checking)."""
+    from slip_builder import _ts
+    now = now or datetime.now(timezone.utc)
+    side, book = _slip_side(leg.get("side")), leg.get("book")
     if side is None:
-        return "no side"
-    lt = leg.get("line_type") or "standard"
+        return {"code": "side", "reason": "Side not offered"}
     try:
         line = float(leg.get("line"))
     except (TypeError, ValueError):
-        return "no line"
-    problems = []
+        return {"code": "gone", "reason": "Line not on the platform now"}
+    g0 = BOARD.get(str(leg.get("row_id"))) if leg.get("row_id") else None
+    own = [t for t in (_ts(x) for x in (leg.get("start"), leg.get("match_start"), leg.get("lock_at"),
+                                         (g0 or {}).get("match_start"))) if t is not None]
+    if own and min(own) <= now:
+        return {"code": "locked", "reason": "Match started"}
+    feeds = {} if feeds is None else feeds
+    lt = leg.get("line_type") or "standard"
+    found = []
     for bk in ((book,) if book in ("underdog", "prizepicks") else ("underdog", "prizepicks")):
         try:
-            feed = prizepicks.board() if bk == "prizepicks" else underdog.board()
-            check = comparison.line_check(feed, leg.get("nick"), leg.get("prop"), leg.get("scope") or "12", line,
+            if bk not in feeds:
+                feeds[bk] = _slip_feed(bk)
+            fb, idx = feeds[bk]
+            # only this player's rows (line_check matches by exact normalized name here: no provider-id map) - the
+            # same answer as the whole feed without scanning ~2,000 rows per leg (a feed error reads "try again" either
+            # way: line_check's failed and stale both map to SLIP_RETRY below)
+            sub = dict(fb, rows=idx.get(comparison._norm(leg.get("nick")), []))
+            check = comparison.line_check(sub, leg.get("nick"), leg.get("prop"), leg.get("scope") or "12", line,
                                           team=leg.get("team"), start=leg.get("start"), opponent=leg.get("opponent"),
-                                          book=bk, odds_type=lt, side=side)
+                                          book=bk, odds_type=lt, side=side, now=now)
         except Exception:
+            found.append((3, "retry", SLIP_RETRY))
             continue
-        check = slip_lock(check, leg.get("start"), leg.get("match_start"), leg.get("lock_at"))
-        if check["status"] == "verified":
+        graded = [(BOARD.get(str(r.get("id"))) or {}).get("match_start") for r in check.get("rows") or [] if r.get("id")]
+        check = slip_lock(check, leg.get("start"), leg.get("match_start"), leg.get("lock_at"), *graded, now=now)
+        st, note = check.get("status"), check.get("note") or ""
+        if st == "verified":
             return None
-        if check["status"] not in ("changed", "unavailable") or check.get("rows") or check.get("note") == LOCKED_NOTE:
-            problems.append(check.get("note") or check["status"])
-    if problems:
-        return f"{leg.get('nick')} {side} {line}: " + "; ".join(problems)
-    return f"{leg.get('nick')} {side} {line}: this line is not on the platform now"
+        if note == LOCKED_NOTE:
+            found.append((0, "locked", "Match started"))
+        elif st == "changed" and check.get("new_line") is not None:
+            nl = float(check["new_line"])
+            found.append((1, "moved", f"Line moved to {int(nl) if nl.is_integer() else nl}"))
+        elif st == "unavailable" and check.get("rows"):
+            found.append((2, "side", "Side not offered"))
+        elif st in ("failed", "stale") and note.startswith("Regrade"):
+            found.append((4, "regrade", "Regrade this pick with its team and match start"))
+        elif st in ("failed", "stale"):
+            found.append((3, "retry", SLIP_RETRY))          # feed down / not fresh: never confirmed, never copied
+        else:                                               # no line for it / two players fit
+            found.append((5, "gone", "Line not on the platform now"))
+    if not found:
+        return {"code": "gone", "reason": "Line not on the platform now"}
+    _, code, reason = min(found)
+    return {"code": code, "reason": reason}
+
+
+def _leg_label(leg):
+    side = _slip_side(leg.get("side"))
+    return f"{leg.get('nick')} {'Over' if side == 'More' else 'Under' if side == 'Less' else ''} {leg.get('line')}".replace("  ", " ")
+
+
+def slip_leg_problem(leg, feeds=None, now=None):
+    """slip_leg_check as one line: '<nick> <Over/Under> <line>: <reason>' (None = the leg is up)."""
+    c = slip_leg_check(leg, feeds, now)
+    return None if c is None else f"{_leg_label(leg)}: {c['reason']}"
+
+
+def slip_check(d):
+    """Every rule a copied slip must pass on the server BEFORE the page writes it to the clipboard (closeout2 copyval,
+    owner: validation first, the clipboard only on the server's OK): each leg (slip_leg_check incl. the lock rule), one
+    platform per slip, at least 2 picks, and the platform's published entry rules (platform_rules.entry_check).
+    -> {"ok", "legs": [member-facing lines], "problems": [{leg, nick, code, reason}]}.
+    Bounded: <= 6 legs, each platform's cached feed read once per request, no lock held, no network I/O."""
+    legs = d["legs"]
+    feeds, out = {}, []
+    for i, l in enumerate(legs):
+        c = slip_leg_check(l, feeds)
+        if c:
+            out.append(dict(c, leg=i, nick=l.get("nick"), text=f"{_leg_label(l)}: {c['reason']}"))
+    books_ = {l.get("book") for l in legs if l.get("book")}
+    if len(books_) > 1 or (books_ and d.get("book") in ("underdog", "prizepicks") and books_ != {d.get("book")}):
+        names = sorted({"prizepicks": "PrizePicks", "underdog": "Underdog"}.get(str(b), str(b)) for b in books_ | (
+            {d.get("book")} if d.get("book") in ("underdog", "prizepicks") else set()))
+        out.append({"leg": None, "code": "platforms", "text": "One platform per slip - these picks are on " + " and ".join(names)})
+    if len(legs) < 2:
+        out.append({"leg": None, "code": "size", "text": "Entries need at least 2 picks"})
+    if not out:                                        # 2026-10-23: the platform's published entry rules (platform_rules.py)
+        ec = platform_rules.entry_check(legs, d.get("book") if d.get("book") in ("underdog", "prizepicks") else None)
+        if ec.get("eligible") is False:
+            for r in ec.get("refusals") or []:
+                out.append({"leg": None, "code": "entry",
+                            "text": "Entries need players from at least 2 different teams" if "different teams" in r else r})
+    for x in out:
+        x.setdefault("reason", x["text"])
+    return {"ok": not out, "legs": [x["text"] for x in out], "problems": out}
 
 
 def board_stake(res, prop, scope, line, line_type="standard", book=None):
@@ -4800,34 +4900,32 @@ class Handler(BaseHTTPRequestHandler):
         if n > POST_MAX:
             self.close_connection = True              # the unread body would corrupt a kept-alive connection
             return self.send(413, {"error": f"body over {POST_MAX} bytes"})
-        if u.path == "/api/slip_log":                  # a member loaded an auto slip (slips.py keeps the log)
+        if u.path == "/api/slip_log":
+            # closeout2 copyval: the page's Copy slip waits for THIS answer and writes the clipboard only on {"ok": true}
+            # (owner: validate first - a refused, failed or timed-out check leaves the clipboard untouched). One call
+            # validates (slip_check: the server's own rules) and logs the copy (slips.py) - only a valid slip is logged.
             if not self.allowed():
                 self.close_connection = True
                 return self.send(401, {"error": "members_only"})
             body = self.rfile.read(n)
             # one member copying slips by hand never needs more; a loop can't grow slips_loaded.jsonl without limit
             if not self.load_test() and not studio_rate_ok(self.rate_key(), bucket=_SLIP_LOG_HITS, limit=SLIP_LOG_PER_MIN):
-                return self.send(429, {"error": f"Too many slips logged - limit is {SLIP_LOG_PER_MIN} a minute"})
+                return self.send(429, {"error": f"Too many copies - limit is {SLIP_LOG_PER_MIN} a minute. Wait a moment and try again."})
             try:
                 d = json.loads(body)
-                assert isinstance(d, dict) and isinstance(d.get("legs"), list) and 2 <= len(d["legs"]) <= 6
+                assert isinstance(d, dict) and isinstance(d.get("legs"), list) and 1 <= len(d["legs"]) <= 6
                 assert all(isinstance(l, dict) for l in d["legs"]) and len(body) <= 20000
             except Exception:
                 return self.send(400, {"error": "bad slip"})
-            problems = [x for x in (slip_leg_problem(l) for l in d["legs"]) if x]
-            books_ = {l.get("book") for l in d["legs"] if l.get("book")}
-            if len(books_) > 1 or (books_ and d.get("book") in ("underdog", "prizepicks") and books_ != {d.get("book")}):
-                problems.append("one platform per slip - these legs are on " + ", ".join(sorted(map(str, books_))))
-            if not problems:                           # 2026-10-23: the platform's published entry rules (platform_rules.py)
-                ec = platform_rules.entry_check(d["legs"], d.get("book") if d.get("book") in ("underdog", "prizepicks") else None)
-                if ec.get("eligible") is False:
-                    problems.extend(ec.get("refusals") or [])
-            if problems:                               # rejected on the server too: nothing logged as a valid copy
-                return self.send(409, {"error": "slip_has_unavailable_legs", "legs": problems})
+            v = slip_check(d)
+            if not v["ok"]:                            # rejected on the server: not copied, nothing logged
+                return self.send(409, {"ok": False, "error": "slip_has_unavailable_legs", "legs": v["legs"], "problems": v["problems"]})
             try:
                 new = slips.log_loaded(d)
-            except Exception:
+            except ValueError:
                 return self.send(400, {"error": "bad slip"})
+            except Exception:                          # the log file failed: the slip itself is valid - still copied
+                return self.send(200, {"ok": True, "logged": False})
             return self.send(200, {"ok": True, "duplicate": not new})
         form = {k: v[0] for k, v in parse_qs(self.rfile.read(n).decode()).items()}
         if u.path != "/admin/closing" or not self.authed(form.get("token")):

@@ -71,4 +71,4 @@ def test_slip_leg_rejected_when_side_not_offered(monkeypatch):
     assert "not offered" in server.slip_leg_problem(leg("TeSeS", "Less", 16))
     assert server.slip_leg_problem(leg("TeSeS", "More", 16)) is None
     assert server.slip_leg_problem(leg("kyousuke", "Less", 19.5)) is None
-    assert "now shows 19.5" in server.slip_leg_problem(leg("kyousuke", "Less", 20.5))    # moved / withdrawn line rejected with the current line
+    assert "Line moved to 19.5" in server.slip_leg_problem(leg("kyousuke", "Less", 20.5))    # moved / withdrawn line rejected with the current line

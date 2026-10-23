@@ -39,7 +39,7 @@ def test_bug1_stale_feed_on_add_is_not_verified_and_kept_grade_still_copies(tmp_
       const T = [], C = [];
       toast = m => T.push(m); copy = t => C.push(t);
       let feed = "stale";
-      fetch = async u => ({ok: true, status: 200, json: async () => (String(u).includes("line_check") ? {status: feed, note: "feed"} : {})});
+      fetch = async u => ({ok: true, status: 200, json: async () => (String(u).includes("line_check") ? {status: feed, note: "feed"} : String(u).includes("slip_log") ? {ok: true} : {})});
       const fut = new Date(Date.now() + 3600e3).toISOString();
       const row = nick => ({id: "ud:" + nick, book: "underdog", nick, player: nick, line: 30.5, prop: "kills", scope: "12", side: "More", grade: "B", p: 0.6, units: 1,
         team_name: "T" + nick, opp_name: "O" + nick, start: fut, match_slug: "m-" + nick});
@@ -99,7 +99,7 @@ def test_bug3_started_or_moved_research_legs_block_copy(tmp_path):
     out = run(tmp_path, "index.html", """(async () => {
       const T = [], C = [], A = [], F = [];
       toast = m => T.push(m); copy = t => C.push(t); ask = async (title, body, btns) => { A.push(title); return "review"; };
-      fetch = async u => { F.push(String(u)); return {ok: true, status: 200, json: async () => (String(u).includes("line_check") ? {status: "verified"} : {})}; };
+      fetch = async u => { F.push(String(u)); return {ok: true, status: 200, json: async () => (String(u).includes("line_check") ? {status: "verified"} : String(u).includes("slip_log") ? {ok: true} : {})}; };
       """ + LEG + """
       const res = {};
       store.set("cs2s_slip", [leg("a"), leg("b", {bk: null, st: past, now: {status: "research", note: ""}})]);
@@ -116,7 +116,7 @@ def test_bug3_started_or_moved_research_legs_block_copy(tmp_path):
     })()""")
     assert out["started"]["copied"] == 0 and out["started"]["state"] == "started", out
     assert out["moved"]["copied"] == 0 and len(out["moved"]["asks"]) == 2, out
-    assert out["typed"]["copied"] == 1                                   # a plain research line still copies
+    assert out["typed"]["copied"] == 1                                   # a plain research line copies on the server's OK
     assert out["checks"] == 3          # one check per platform leg per Copy; started / research legs are never fetched
 
 
