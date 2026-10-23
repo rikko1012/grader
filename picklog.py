@@ -1250,6 +1250,31 @@ def matchid_renamed_id(name, start):
         return None
 
 
+def _rename_roster_ok(cur, r, mid):
+    """Settlement gate for a dated team rename (matchid match-rules-4): when a name on the pick (its team or opponent)
+    resolves to a renamed team's OLD id at this start and HLTV match `mid` has the NEW team but not the old one (the link
+    went through the rename), the new team's lineup in `mid` must hold >= matchid.RENAME_MIN_PLAYERS of the rename
+    entry's HLTV player ids. True when no rename is involved. Raises on a database error (the caller's transient rule)."""
+    import matchid
+    pairs = set()
+    for name in _settle_teams(r) + [_col(r, "opponent")]:
+        to = matchid_renamed_id(name, r["match_start"]) if name else None
+        k = str(matchid.team_key(name) or "") if to is not None else ""
+        if to is not None and k.startswith("team:"):
+            pairs.add((int(k[5:]), int(to)))
+    if not pairs:
+        return True
+    cur.execute("SELECT DISTINCT teamid FROM matches WHERE matchid = %s", (int(mid),))
+    teams = {x[0] for x in cur.fetchall()}
+    for old, new in pairs:
+        if old in teams or new not in teams:
+            continue                                  # not linked through the rename
+        cur.execute("SELECT DISTINCT playerid FROM player_stats WHERE matchid = %s AND teamid = %s", (int(mid), new))
+        if len({x[0] for x in cur.fetchall()} & matchid.rename_players(old, new)) < matchid.RENAME_MIN_PLAYERS:
+            return False
+    return True
+
+
 def scope_result(r, same_day_only=False):
     """The pick's series from HLTV and its total for the line's scope, via the shared scope rules (scope.py).
     Returns {"status": "ok", "total", "maps_used", "maps", "per_map", "rounds", "won", "hltv_match"} or
@@ -1279,6 +1304,8 @@ def scope_result(r, same_day_only=False):
             else:                                            # matchid not loaded: the previous rule
                 rows = hltv._series_rows(cur, ids, "2000-01-01", "AND mo.date BETWEEN %(d)s::date - 1 AND %(d)s::date + 1",
                                          {"d": day}, maxn=3, need=(1,)) if ids else []
+            if link is not None and not _rename_roster_ok(cur, r, link):
+                return {"status": "none", "reason": f"HLTV match {link}: dated team rename not confirmed by its lineup - not settled"}
             opp = (r["opponent"] or "").strip()
             # an hltv-<id> pick whose opponent is listed under a renamed team's old name (dated rename, matchid
             # match-rules-3): its own match's rows against the NEW team id are this opponent; else the usual rule

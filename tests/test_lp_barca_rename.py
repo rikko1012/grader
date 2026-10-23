@@ -58,7 +58,8 @@ def without_renames(monkeypatch, tmp_path):
 def test_maintained_rename_entry_is_dated_and_keyed_on_team_ids():
     d = json.loads(matchid.ALIASES_PATH.read_text(encoding="utf-8"))
     rn = [e for e in d.get("renames", []) if e.get("from_team_id") == LP]
-    assert len(rn) == 1 and rn[0]["to_team_id"] == BARCA and rn[0]["valid_from"] == "2026-10-21" and rn[0]["proof"]
+    assert len(rn) == 1 and rn[0]["to_team_id"] == BARCA and rn[0]["valid_from"] == "2026-10-20T18:00:00Z" and rn[0]["proof"]
+    assert sorted(rn[0]["players"]) == [14010, 16314, 20521, 21284, 23550]          # the five HLTV ids in LP's and BARCA's lineups
     assert not any(matchid.norm(a["name"]) in ("lp", "barca") for a in d["aliases"])      # never a name alias
 
 
@@ -135,25 +136,33 @@ def test_two_barca_candidates_stay_unresolved(mi):
 
 def test_successor_key_and_renamed_team_id(mi):
     assert matchid.renamed_team_id("LP", PAIN_LP_START) == BARCA
-    assert matchid.renamed_team_id("LP", "2026-10-20T23:00:00Z") is None
+    assert matchid.renamed_team_id("LP", "2026-10-20T17:59:00Z") is None             # before the 18:00 UTC announcement
+    assert matchid.renamed_team_id("LP", "2026-10-20T18:00:00Z") == BARCA
     assert matchid.renamed_team_id("paiN", PAIN_LP_START) is None
     assert matchid.renamed_team_id("BARCA", PAIN_LP_START) is None
 
 
 def test_mapping_revision_records_the_rename_and_rules():
     rev, content = mapping.current_content()
-    assert content["matching_rules"] == "match-rules-3"
+    assert content["matching_rules"] == "match-rules-4"
     assert any(e.get("to_team_id") == BARCA for e in content["team_aliases"].get("renames", []))
 
 
 # ---------------------------------------------------------------- settlement identity
-def _fake_hltv(monkeypatch, series):
+def _fake_hltv(monkeypatch, series, teams=None, lineup=None):
+    """teams: {matchid: [HLTV team ids]}, lineup: {(matchid, teamid): [HLTV player ids]} (the rename's lineup gate)."""
     class Cur:
         def __enter__(s): return s
         def __exit__(s, *a): return False
-        def execute(s, q, a=None): s.q = q
+        def execute(s, q, a=None): s.q, s.a = q, a
         def fetchone(s): return (0,)
-        def fetchall(s): return []
+
+        def fetchall(s):
+            if "FROM matches WHERE matchid" in s.q:
+                return [(t,) for t in (teams or {}).get(s.a[0], ())]
+            if "FROM player_stats WHERE matchid" in s.q:
+                return [(p,) for p in (lineup or {}).get(tuple(s.a), ())]
+            return []
 
     class Con:
         def cursor(s): return Cur()
@@ -212,3 +221,85 @@ def test_own_id_pick_before_the_date_keeps_the_old_opponent_rule(mi, monkeypatch
     _fake_hltv(monkeypatch, rows)
     r = dict(pick("Galorys", "LP", "hltv-2399205", scope="1"), match_start="2026-10-14T21:00:00.000+00:00")
     assert picklog.scope_result(r)["status"] == "none"
+
+
+# ---------------------------------------------------------------- closeout 2026-10-23: stricter rule (match-rules-4)
+FIVE = [14010, 16314, 20521, 21284, 23550]                 # zmb, pancc, Alisson, happ, divine (HLTV ids, LP and BARCA)
+
+
+def test_effective_time_is_the_announcement_2026_10_20_1800_utc(mi):
+    """@LyPcs2 (now 'BARCA esports') announced the rename 2026-10-20 18:00 UTC: a line before that is LP's, after it BARCA's."""
+    mi(finished=FINISHED + [{"matchid": 2400010, "date": datetime(2026, 10, 20).date(), "team_ids": [BARCA, FLUXO]}])
+    before = matchid.canonical_match("LP", "Fluxo", "2026-10-20T17:30:00Z")
+    assert before["hltv_match"] is None and "renamed" not in before
+    after = matchid.canonical_match("LP", "Fluxo", "2026-10-20T19:00:00Z")
+    assert after["match_id"] == "hltv:2400010" and after["renamed"]["to"] == [f"team:{BARCA}", f"team:{FLUXO}"]
+
+
+def test_lp_playing_its_own_match_that_day_is_never_renamed(mi):
+    """LP 13304 and BARCA both on HLTV the same day: LP is still its own team - an 'LP vs paiN' line stays unlinked."""
+    mi(finished=FINISHED + [{"matchid": 2400011, "date": datetime(2026, 10, 21).date(), "team_ids": [LP, FLUXO]}])
+    cm = matchid.canonical_match("LP", "paiN", PAIN_LP_START)
+    assert cm["hltv_match"] is None and "renamed" not in cm and f"team:{LP}" in cm["team_keys"]
+    assert matchid.canonical_match("LP", "Fluxo", PAIN_LP_START)["match_id"] == "hltv:2400011"     # its own fixture
+
+
+def test_lp_scheduled_within_the_window_blocks_the_rename_outside_it_does_not(mi):
+    sched = lambda h: [{"matchid": 2400012, "start": datetime(2026, 10, 21, h, tzinfo=timezone.utc), "team1": "LP",
+                        "team2": "Fluxo", "event": "", "format": "bo3"}]
+    mi(schedule=sched(16))                                 # LP's own match 2 h after the line: inside WINDOW_H
+    assert matchid.canonical_match("paiN", "LP", PAIN_LP_START)["hltv_match"] is None
+    mi(schedule=sched(23))                                 # 9 h later: outside the window (a timed match, same UTC date)
+    cm = matchid.canonical_match("paiN", "LP", PAIN_LP_START)
+    assert cm["hltv_match"] == 2399805 and cm["renamed"]
+
+
+def test_same_opponent_twice(mi):
+    """BARCA vs paiN twice: two on the same date (no times) = unresolved; timed and 6 h apart = the one in the window."""
+    mi(finished=FINISHED + [{"matchid": 2400013, "date": datetime(2026, 10, 21).date(), "team_ids": [PAIN, BARCA]}])
+    assert matchid.canonical_match("LP", "paiN", PAIN_LP_START)["hltv_match"] is None
+    t = lambda m, h: {"matchid": m, "start": datetime(2026, 10, 21, h, tzinfo=timezone.utc), "team1": "paiN", "team2": "BARCA",
+                      "event": "Circuit X Curitiba Season 4", "format": "bo3"}
+    mi(finished=[f for f in FINISHED if f["matchid"] != 2399805], schedule=[t(2399805, 14), t(2400014, 20)])
+    assert matchid.canonical_match("LP", "paiN", PAIN_LP_START)["match_id"] == "hltv:2399805"
+    assert matchid.canonical_match("LP", "paiN", "2026-10-21T20:00:00Z")["match_id"] == "hltv:2400014"
+
+
+def test_platform_spellings_of_both_teams(mi):
+    """PrizePicks 'LP', Polymarket / Kalshi 'largadosypelados' (maintained alias of 13304), 'paiN Gaming' (affix)."""
+    for a, b in (("LP", "paiN"), ("largadosypelados", "paiN"), ("largadosypelados", "paiN Gaming"), ("paiN Gaming", "LP")):
+        cm = matchid.canonical_match(a, b, PAIN_LP_START)
+        assert cm["match_id"] == "hltv:2399805" and cm["renamed"], (a, b)
+    assert matchid.renamed_team_id("largadosypelados", PAIN_LP_START) == BARCA
+    assert matchid.renamed_team_id("Largados y Pelados", PAIN_LP_START) == BARCA    # same normalised alias (spaces dropped)
+    assert matchid.renamed_team_id("Largados", PAIN_LP_START) is None               # not an HLTV name or alias: unresolved
+
+
+def test_rename_players_lists_the_entry_ids(mi):
+    assert matchid.rename_players(LP, BARCA) == frozenset(FIVE)
+    assert matchid.rename_players(BARCA, LP) == frozenset() and matchid.RENAME_MIN_PLAYERS == 4
+
+
+def test_settlement_requires_the_barca_lineup_to_match_the_lp_roster(mi, monkeypatch):
+    """Linking keeps the date / opponent rule; settling on the renamed link needs >= 4 of LP's five in BARCA's lineup."""
+    teams = {2399805: [PAIN, BARCA]}
+    for lineup, ok in ((FIVE, True), (FIVE[:4] + [99], True), (FIVE[:3] + [98, 99], False), ([], False)):
+        _fake_hltv(monkeypatch, rows_2399805("pain"), teams=teams, lineup={(2399805, BARCA): lineup})
+        for slug, sc in (("pain-vs-lp-21-10-2026", "12"), ("hltv-2399805", "1")):        # canonical link and own HLTV id
+            res = picklog.scope_result(pick("paiN", "LP", slug, scope=sc))
+            assert (res["status"] == "ok") is ok, (lineup, slug, res)
+            if not ok:
+                assert "rename not confirmed" in res["reason"]
+        _fake_hltv(monkeypatch, rows_2399805("lp"), teams=teams, lineup={(2399805, BARCA): lineup})
+        res = picklog.scope_result(pick("LP", "paiN", "lp-vs-pain-21-10-2026"))           # an LP player's own line
+        assert (res["status"] == "ok") is ok, (lineup, res)
+
+
+def test_lineup_gate_never_touches_lines_without_a_rename(mi, monkeypatch):
+    """A Galorys player vs LP on 2026-10-14 (LP's own match 2399205) and paiN vs BARCA by name: no lineup needed."""
+    rows = [dict(x, hltv_match=2399205, date="2026-10-14", opponent="LP", opponent_id=LP) for x in rows_2399805("pain")]
+    _fake_hltv(monkeypatch, rows, teams={2399205: [GALORYS, LP]}, lineup={})
+    r = dict(pick("Galorys", "LP", "galorys-vs-lp-14-10-2026"), match_start="2026-10-14T21:00:00.000+00:00")
+    assert picklog.scope_result(r)["status"] == "ok"
+    _fake_hltv(monkeypatch, rows_2399805("pain"), teams={2399805: [PAIN, BARCA]}, lineup={})
+    assert picklog.scope_result(pick("paiN", "BARCA", "pain-vs-barca-21-10-2026"))["status"] == "ok"
