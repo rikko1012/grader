@@ -127,6 +127,10 @@ was truncated, so they do not contradict this; they do say the < 600 widening al
 being small here.
 
 ## 4. Forward rule (frozen in CHALLENGERS.md on branch shadow/cs2-cands)
+Implemented on branch `shadow/cs2-cands` (commit c1293dd, from origin/main 5faaaf9; NOT merged, NOT deployed): `cands_shadow.py`
+(frozen 2026-10-23 07:45 UTC, constants sha256 3d00b8c8...), hooked into `picklog._factors` as `forecasts.shadow.cands`,
+copied / reported by `learning.cands_report` (scorecard.product.candidates_2y), tests/test_cands_shadow.py; full suite 1,412
+passed. Parity with this folder's code on the 2,692 development units: max |difference| 5e-7.
 Frozen config = `candidates/results/params_FINAL.json` (sha256 `66a39c0c20ef2e35...`) for exactly the passing cells; logged per
 forecast as shadows `rm1` / `th1` (raw chances stored apart from any recommendation; live grades byte-identical). Forward set =
 P1 units of matches starting at/after the shadow deploy (and >= 2026-10-22). Looks only at 300 / 600 / 1,000 distinct forward
