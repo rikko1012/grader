@@ -55,10 +55,11 @@ _CHILD = textwrap.dedent("""
             pass
 
     out = {}
-    for p in ("/sports", "/api/sports/status", "/api/sports/offers?league=nba", "/definitely-not-a-route", "/auth/me"):
+    for p in ("/sports", "/api/sports/status", "/api/sports/offers?league=nba", "/api/sports/token",
+              "/definitely-not-a-route", "/auth/me"):
         h = H(p)
         h.do_GET()
-        out[p] = [h.code, h.wfile.getvalue().decode("utf-8", "replace")[:200]]
+        out[p] = [h.code, h.wfile.getvalue().decode("utf-8", "replace")[:400]]
     out["sports_imported"] = sorted(m for m in sys.modules if m == "sports" or m.startswith("sports."))
     print("RESULT" + json.dumps(out))
 """)
@@ -90,10 +91,26 @@ def test_flags_off_esports_serves_and_sports_is_never_imported(tmp_path):
 
 
 def test_flags_on_without_a_store_degrades_to_sports_errors_only(tmp_path):
-    out = _run_child(tmp_path, SPORTS_API="1", SPORTS_UI="1", SPORTS_DATA_DIR=str(tmp_path / "sports_data"))
+    out = _run_child(tmp_path, SPORTS_API="1", SPORTS_UI="1", SPORTS_API_MODE="inprocess",
+                     SPORTS_DATA_DIR=str(tmp_path / "sports_data"))
     assert out["/sports"][0] == 200
     assert out["/api/sports/status"][0] == 200 and '"ready": false' in out["/api/sports/status"][1]
     assert out["/api/sports/offers?league=nba"][0] == 503
+    assert out["/auth/me"][0] == 200
+
+
+def test_service_mode_esports_threads_never_load_sports_work(tmp_path):
+    """Default SPORTS_API_MODE=service: the esports process imports only sports.gateway + sports.authtoken (standard
+    library), mints tokens, serves the page and answers every other sports path 404 not_here - the sports store,
+    models and route handlers are never imported in the esports process."""
+    out = _run_child(tmp_path, SPORTS_API="1", SPORTS_UI="1", SPORTS_TOKEN_SECRET="t" * 40,
+                     SPORTS_API_BASE="https://sports.example.test", SPORTS_DATA_DIR=str(tmp_path / "sports_data"))
+    assert out["sports_imported"] == ["sports", "sports.authtoken", "sports.gateway"]
+    assert out["/sports"][0] == 200
+    for p in ("/api/sports/status", "/api/sports/offers?league=nba"):
+        assert out[p][0] == 404 and '"not_here"' in out[p][1] and "sports.example.test" in out[p][1]
+    tok = json.loads(out["/api/sports/token"][1])                  # no Whop configured locally -> allowed()
+    assert out["/api/sports/token"][0] == 200 and tok["token"].startswith("st1.") and tok["api_base"]
     assert out["/auth/me"][0] == 200
 
 
@@ -125,14 +142,14 @@ def _handler():
 
 def test_a_sports_exception_cannot_break_esports(monkeypatch):
     H = _handler()
-    from sports import web
+    from sports import gateway
     monkeypatch.setenv("SPORTS_API", "1")
     monkeypatch.setenv("SPORTS_UI", "1")
 
     def boom(*a, **k):
         raise RuntimeError("sports exploded")
-    monkeypatch.setattr(web, "handle", boom)
-    for p in ("/api/sports/status", "/sports"):
+    monkeypatch.setattr(gateway, "handle_get", boom)
+    for p in ("/api/sports/status", "/sports", "/api/sports/token", "/sports/app.css"):
         h = H(p)
         h.do_GET()
         assert h.code == 503 and json.loads(h.wfile.getvalue())["error"] == "sports_unavailable"
