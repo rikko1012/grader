@@ -3723,6 +3723,8 @@ class Handler(BaseHTTPRequestHandler):
                                                    "avg_server_ms": round(STATS["ms_total"] / max(STATS["requests"], 1), 1),
                                                    "since": datetime.fromtimestamp(STATS["since"], timezone.utc).isoformat(timespec="seconds")},
                                        "storage": dict(storage_cached(), **STORAGE), "ops": ops_checks()})
+            if (u.path == "/sports" or u.path.startswith(("/sports/", "/api/sports/"))) and self._sports_on(u.path):
+                return self._sports_route(u, q)          # the ONE sports hook: flags off = this line does nothing
             if u.path in ("/", "/index.html"):
                 return self.send_shared(("page", "index"), 200, page(), "text/html; charset=utf-8", keep=600)
             if u.path == "/lol" and lol_public():                       # the member LoL page (owner's release switch)
@@ -4916,6 +4918,28 @@ class Handler(BaseHTTPRequestHandler):
         """The owner's load-test / audit header - constant-time compare like the admin token."""
         import hmac
         return bool(ADMIN_TOKEN) and token_eq(self.headers.get("X-Load-Test"), ADMIN_TOKEN)
+
+    @staticmethod
+    def _sports_on(path):
+        """Sports (sports/, NFL/NBA) is behind SPORTS_UI (/sports, /sports/<asset>) and SPORTS_API (/api/sports/*), both
+        OFF by default. Read from the environment here, so with the flags off nothing from sports is ever imported."""
+        flag = "SPORTS_UI" if path == "/sports" or path.startswith("/sports/") else "SPORTS_API"
+        return os.environ.get(flag, "").strip().lower() in ("1", "true", "yes", "on")
+
+    def _sports_route(self, u, q):
+        """Sports answers through sports/gateway.py (standard library only). In the default SPORTS_API_MODE=service the
+        sports API runs in its own process / Render service: this thread only mints a member token after the server-side
+        paid check, serves the static page, or answers 404 - it never runs sports queries. Any sports failure is a 503
+        for that sports request only (sports/tests/test_isolation_server.py)."""
+        try:
+            from sports import gateway
+            code, body, ctype, hdrs = gateway.handle_get(
+                u.path, u.query, q, member=lambda: (self.member() or {}).get("user"), allowed=self.allowed,
+                admin=lambda: self.authed(q.get("token")), headers=self.headers)
+        except Exception as e:                          # noqa: BLE001 - sports must not break esports
+            sys.stderr.write(f"  sports route failed: {type(e).__name__}: {str(e)[:200]}\n")
+            return self.send(503, {"error": "sports_unavailable"})
+        return self.send(code, body, ctype, hdrs)
 
     def authed(self, token):
         # the admin link's ?token= still works; scripts send the X-Admin-Token header instead, so the token stays out
