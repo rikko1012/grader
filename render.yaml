@@ -37,3 +37,72 @@ services:
         sync: false           # the hltv-scraper Postgres (projections, settlement, PrizePicks backup copy)
       - key: FACEIT_API_KEY
         sync: false
+      # ---- Scout Sports (sports/RUNBOOK.md). ALL OFF: with these off nothing from sports/ is imported here.
+      - key: SPORTS_UI
+        value: "0"
+      - key: SPORTS_API
+        value: "0"
+      - key: SPORTS_API_MODE
+        value: service        # esports only mints member tokens + serves the static page; never runs sports work
+      - key: SPORTS_API_BASE
+        sync: false           # public origin of scout-sports-api, e.g. https://scout-sports-api.onrender.com
+      - key: SPORTS_TOKEN_SECRET
+        sync: false           # >= 32 random characters; the SAME value on scout-sports-api
+
+  # Scout Sports API + its ingestion worker (owner approved 2026-10-23). Its own container, CPU, memory and disk, so a
+  # sports load / failure cannot reach esports request threads. The ingestion worker runs as a supervised CHILD
+  # process here (not a separate Render worker) because a Render disk attaches to one service only and the API must
+  # read the store the worker writes (sports/RUNBOOK.md "Architecture"). Flags OFF: the service answers only
+  # /api/sports/health until SPORTS_API=1; nothing is ingested until SPORTS_INGEST=1.
+  - type: web
+    name: scout-sports-api
+    runtime: docker
+    dockerCommand: python -m sports.service
+    plan: standard            # 2 GB / 1 CPU: worker cap 768 MB + service cap 900 MB (measured: worker 110-130 MB per
+                              # cycle, service <= 50 MB under 700 members) - headroom for the model / assistant agents
+    region: ohio
+    healthCheckPath: /api/sports/health
+    autoDeploy: false         # deploy by hand during the staged rollout
+    disk:
+      name: scout-sports-data
+      mountPath: /sports-data
+      sizeGB: 10              # measured ~50 MB first cycle + 10-15 MB/hour at the default cadence (~0.3 GB/day)
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: SPORTS_DATA_DIR
+        value: /sports-data
+      - key: SPORTS_API
+        value: "0"
+      - key: SPORTS_UI
+        value: "0"
+      - key: SPORTS_INGEST
+        value: "0"
+      - key: SPORTS_TRAIN
+        value: "0"
+      - key: SPORTS_TOKEN_SECRET
+        sync: false           # the SAME value as on cs2-scout
+      - key: SPORTS_ALLOWED_ORIGINS
+        sync: false           # https://cs2-scout.onrender.com (plus the custom domain if members use one), comma list
+      - key: ADMIN_TOKEN
+        sync: false           # the same admin token as cs2-scout (X-Admin-Token for /api/sports/admin/ops)
+      - key: ODDS_API_KEY
+        sync: false           # optional The Odds API key - set in the Environment tab only, never in git
+      - key: SPORTS_LEAGUES
+        value: nba nfl
+      - key: SPORTS_INGEST_EVERY_MIN
+        value: "10"
+      - key: SPORTS_KALSHI_EVERY_MIN
+        value: "30"
+      - key: SPORTS_WORKER_MAX_MB
+        value: "768"
+      - key: SPORTS_STORE_MAX_MB
+        value: "8000"         # ingestion pauses itself at 8 GB of the 10 GB disk
+      - key: SPORTS_SERVICE_MAX_MB
+        value: "900"
+      - key: SPORTS_SERVICE_THREADS
+        value: "32"
+      - key: SPORTS_DB_POOL
+        value: "4"
+      - key: SPORTS_REQUEST_BUDGET_S
+        value: "4"

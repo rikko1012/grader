@@ -141,6 +141,21 @@ class Sampler(threading.Thread):
         self.threads = {k: 0 for k in self.procs}
         self.start_rss = {k: self._rss(p) for k, p in self.procs.items()}
         self.stop_ev = threading.Event()
+        self.host_cpu = []                                 # whole-machine CPU % (other sessions' load shows here)
+        self.others_cpu_before = self._others()
+
+    def _others(self):
+        """CPU % of python processes that are NOT part of this run (other sessions' tests share the workstation)."""
+        mine = {p.pid for p in self.procs.values()} | {os.getpid()}
+        tot = 0.0
+        for p in psutil.process_iter(["pid", "name"]):
+            if p.info["pid"] in mine or "python" not in (p.info["name"] or "").lower():
+                continue
+            try:
+                tot += p.cpu_percent(interval=None)
+            except psutil.Error:
+                pass
+        return tot
 
     @staticmethod
     def _rss(p):
@@ -150,7 +165,9 @@ class Sampler(threading.Thread):
             return 0.0
 
     def run(self):
+        psutil.cpu_percent(interval=None)
         while not self.stop_ev.is_set():
+            self.host_cpu.append(psutil.cpu_percent(interval=None))
             for k, p in self.procs.items():
                 self.peak[k] = max(self.peak[k], self._rss(p))
                 try:
@@ -161,7 +178,8 @@ class Sampler(threading.Thread):
 
     def report(self):
         end = {k: self._rss(p) for k, p in self.procs.items()}
-        return {k: {"rss_start_mb": round(self.start_rss[k], 1), "rss_peak_mb": round(self.peak[k], 1),
+        out = {"host_cpu_pct_mean": round(sum(self.host_cpu[1:]) / max(1, len(self.host_cpu) - 1), 1)}
+        return out | {k: {"rss_start_mb": round(self.start_rss[k], 1), "rss_peak_mb": round(self.peak[k], 1),
                     "rss_end_mb": round(end[k], 1), "threads_peak": self.threads[k]} for k in self.procs}
 
 
@@ -256,6 +274,8 @@ def run_one(code, store_dir, cfg, seed):
         for _ in range(20):                                # warm (same as the foundation script)
             _call(P.esp_port, "/api/moneylines", {"Cookie": "cs2s=good-warm"})
         S = Sampler({"esports": P.esp, "service": P.svc, "ingest": P.ing})
+        time.sleep(1.0)
+        S.others_cpu_before = S._others()                  # second sample = CPU % over the last second
         S.start()
         res, wall = burst(P, seed)
         rec["wall_s"] = round(wall, 2)
@@ -275,6 +295,7 @@ def run_one(code, store_dir, cfg, seed):
         S.stop_ev.set()
         S.join()
         rec["processes"] = S.report()
+        rec["other_python_cpu_pct_before"] = round(S.others_cpu_before, 1)
         rec.update(admin_stats(P))
         if P.ing:
             lines = (Path(work) / "ingest.out").read_text().splitlines()

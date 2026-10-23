@@ -121,6 +121,49 @@ def feed_state():
     return out
 
 
+ALERT_RULES = {                                         # sports/RUNBOOK.md section 9 - thresholds in one place
+    "feed_stale_min": float(os.environ.get("SPORTS_ALERT_FEED_STALE_MIN", "45")),     # pick'em feeds: 10-min cadence
+    "kalshi_stale_min": float(os.environ.get("SPORTS_ALERT_KALSHI_STALE_MIN", "90")),  # Kalshi: 30-min cadence
+    "store_warn_mb": float(os.environ.get("SPORTS_ALERT_STORE_MB", "6000")),
+    "rss_warn_frac": 0.8,
+}
+
+
+def alerts(o):
+    """-> [{"level": "page"|"warn", "code", "detail"}] from an ops() snapshot. Pure function (tested)."""
+    out = []
+    ingest_on = o["flags"].get("SPORTS_INGEST")
+    w = o["worker"]
+    if ingest_on and not w.get("pid"):
+        out.append({"level": "page", "code": "worker_down", "detail": {"last_exit": w.get("last_exit"),
+                                                                       "next_start": w.get("next_start")}})
+    if ingest_on and w.get("starts", 0) >= 5 and (w.get("last_exit") or {}).get("ran_s", 9999) < 120:
+        out.append({"level": "page", "code": "worker_crash_loop", "detail": {"starts": w["starts"]}})
+    feeds = o.get("feeds") or {}
+    if ingest_on:
+        for plat, f in (feeds.get("platforms") or {}).items():
+            lim = ALERT_RULES["kalshi_stale_min"] if plat.startswith("kalshi") else ALERT_RULES["feed_stale_min"]
+            if f.get("age_min") is None or f["age_min"] > lim:
+                out.append({"level": "warn", "code": "feed_stale", "detail": {"platform": plat, **f, "limit_min": lim}})
+    mb = feeds.get("store_mb")
+    stop_mb = float(os.environ.get("SPORTS_STORE_MAX_MB", "1500"))
+    if mb is not None and mb >= stop_mb:
+        out.append({"level": "page", "code": "store_full_ingest_paused", "detail": {"store_mb": mb, "max_mb": stop_mb}})
+    elif mb is not None and mb >= min(ALERT_RULES["store_warn_mb"], 0.8 * stop_mb):
+        out.append({"level": "warn", "code": "store_large", "detail": {"store_mb": mb, "max_mb": stop_mb}})
+    if o.get("rss_mb") and o["rss_mb"] > ALERT_RULES["rss_warn_frac"] * o["rss_max_mb"]:
+        out.append({"level": "warn", "code": "service_memory_high", "detail": {"rss_mb": o["rss_mb"]}})
+    svc = o["service"]
+    if svc["requests"] and (svc["rejected_busy"] + svc["errors_5xx"]) / svc["requests"] > 0.01:
+        out.append({"level": "warn", "code": "service_shedding", "detail": {k: svc[k] for k in
+                                                                         ("requests", "rejected_busy", "errors_5xx")}})
+    if o["db_pool"].get("waits_timed_out") or o["db_pool"].get("queries_interrupted"):
+        out.append({"level": "warn", "code": "store_slow", "detail": o["db_pool"]})
+    if not o.get("token_configured"):
+        out.append({"level": "page", "code": "token_secret_missing", "detail": "SPORTS_TOKEN_SECRET unset or short"})
+    return out
+
+
 def ops():
     with _SLOCK:
         s = dict(STATS)
@@ -130,6 +173,12 @@ def ops():
             "rss_max_mb": MAX_MB, "draining": _STATE["draining"], "threads": threading.active_count(),
             "db_pool": web.pool_stats(), "cache": web.cache_stats(), "flags": flags.state(), "worker": dict(WORKER),
             "token_configured": authtoken.configured(), "feeds": feed_state()}
+
+
+def ops_with_alerts():
+    o = ops()
+    o["alerts"] = alerts(o)
+    return o
 
 
 # ------------------------------------------------------------------------------------------------------- handler
@@ -224,7 +273,7 @@ class Handler(BaseHTTPRequestHandler):
                          and __import__("hmac").compare_digest(admin_header, os.environ["ADMIN_TOKEN"]))
         if u.path == "/api/sports/admin/ops":
             if ops_admin or (claims and claims["role"] == "admin"):
-                return self._send(200, ops(), headers=cors)
+                return self._send(200, ops_with_alerts(), headers=cors)
             return self._send(403, {"error": "admin_only"}, headers=cors)
         if claims is None:
             with _SLOCK:
@@ -358,11 +407,32 @@ def serve(host="0.0.0.0", port=None):
     return srv
 
 
+def check(url):
+    """On-call / cron check: python -m sports.service --check https://scout-sports-api.onrender.com
+    (needs ADMIN_TOKEN in the environment). Prints the alerts; exit 2 on a page, 1 on a warning, 0 when clean."""
+    import urllib.request
+    req = urllib.request.Request(url.rstrip("/") + "/api/sports/admin/ops",
+                                 headers={"X-Admin-Token": os.environ.get("ADMIN_TOKEN", "")})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            o = json.loads(r.read())
+    except Exception as e:                              # noqa: BLE001
+        print(json.dumps({"level": "page", "code": "service_unreachable", "detail": f"{type(e).__name__}: {e}"}))
+        return 2
+    for a in o.get("alerts", []):
+        print(json.dumps(a, default=str))
+    levels = {a["level"] for a in o.get("alerts", [])}
+    return 2 if "page" in levels else 1 if levels else 0
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="python -m sports.service")
     p.add_argument("--host", default=os.environ.get("SPORTS_SERVICE_HOST", "0.0.0.0"))
     p.add_argument("--port", type=int, default=None)
+    p.add_argument("--check", metavar="URL", help="print the service's alerts and exit (0 clean, 1 warn, 2 page)")
     a = p.parse_args(argv)
+    if a.check:
+        raise SystemExit(check(a.check))
     srv = serve(a.host, a.port)
     try:
         srv.serve_forever()
