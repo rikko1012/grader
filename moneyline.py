@@ -49,7 +49,13 @@ History (CS2_DATA_DIR/.cache/ml_snapshots.db, rows immutable)
   ml_quotes     every quote (usable AND unusable) when it CHANGES (bid / ask / sizes / depth / status / usability /
                 link) and otherwise once per HEARTBEAT (10 min) - an unchanged quote is not re-written every minute;
                 unique on (platform, market_id, outcome_id, received_ts) - re-inserting is a no-op.  Above
-                SNAPSHOT_MAX_MB the store stops growing (snapshot_error on admin) instead of filling the data disk.
+                SNAPSHOT_MAX_MB of LIVE pages (or below DISK_FLOOR_MB free disk) the store stops growing (snapshot_error
+                on admin) instead of filling the data disk.  2026-10-23 (mlstore-1): the old guard measured the FILE (500 MB)
+                and paused every quote write once it was reached; now ml_store.py archives raw rows of days older than
+                7 days to verified gzip files beside the store (the rows the evaluation reads stay live; a row may leave
+                only for a verified archived day - trigger) and freed pages are reused, so writes keep going.
+  ml_gaps       every interval > GAP_MIN_S with no saved quote for a platform (when, why); never backfilled.
+  ml_archive    manifest of archived days (file, rows, sha256); ml_meta small key/value bookkeeping.
   ml_forecasts  shadow log of the baseline per linked match, model_version "ml-baseline-1", written
                 when the baseline (platform / probability / availability) changes or every 30 min.
                 Next to every baseline row the frozen SHADOW candidate (ml_model.py, model_version
@@ -72,6 +78,7 @@ Public:
 import json
 import os
 import re
+import shutil
 import sqlite3
 import threading
 import time
@@ -92,7 +99,10 @@ DISAGREE = 0.05
 COHERENCE = 0.05
 FORECAST_EVERY = 1800    # shadow log: also re-log an unchanged baseline every 30 min
 HEARTBEAT = 600          # ml_quotes: an unchanged quote is re-written at most every 10 min
-SNAPSHOT_MAX_MB = float(os.environ.get("ML_SNAPSHOT_MAX_MB") or 500)   # size cap of ml_snapshots.db (+ WAL)
+SNAPSHOT_MAX_MB = float(os.environ.get("ML_SNAPSHOT_MAX_MB") or 900)   # cap on LIVE pages of ml_snapshots.db (+ WAL)
+DISK_FLOOR_MB = float(os.environ.get("ML_DISK_FLOOR_MB") or 400)     # no quote write below this free space on the disk
+LEGACY_FILE_CAP_MB = 500  # the pre-mlstore-1 guard: file size > 500 MB paused every quote write
+GAP_MIN_S = 1800          # no saved quote for a platform this long (3 heartbeats) = a recorded gap (ml_gaps)
 GROUP_TTL = 3600         # another platform's started / best-of-2 signal is trusted for 1 h after its refresh
 CANON_TTL = 600          # re-ask matchid at most every 10 min per listing
 BOARD_TTL = 5            # board() recomputed at most every 5 s (single flight)
@@ -367,8 +377,25 @@ CREATE INDEX IF NOT EXISTS ml_quotes_match ON ml_quotes(match_id, received_ts);
 CREATE INDEX IF NOT EXISTS ml_quotes_received ON ml_quotes(received_ts);
 CREATE TRIGGER IF NOT EXISTS ml_quotes_no_update BEFORE UPDATE ON ml_quotes
   BEGIN SELECT RAISE(ABORT, 'ml_quotes rows are immutable'); END;
-CREATE TRIGGER IF NOT EXISTS ml_quotes_no_delete BEFORE DELETE ON ml_quotes
-  BEGIN SELECT RAISE(ABORT, 'ml_quotes rows are immutable'); END;
+CREATE TABLE IF NOT EXISTS ml_archive (
+  day TEXT NOT NULL, part INTEGER NOT NULL, file TEXT, rows INTEGER NOT NULL, sha256 TEXT, bytes INTEGER,
+  min_rowid INTEGER, max_rowid INTEGER, archived_at TEXT NOT NULL, verified INTEGER NOT NULL, version TEXT,
+  PRIMARY KEY (day, part));
+CREATE TRIGGER IF NOT EXISTS ml_archive_no_update BEFORE UPDATE ON ml_archive
+  BEGIN SELECT RAISE(ABORT, 'ml_archive rows are immutable'); END;
+CREATE TRIGGER IF NOT EXISTS ml_archive_no_delete BEFORE DELETE ON ml_archive
+  BEGIN SELECT RAISE(ABORT, 'ml_archive rows are immutable'); END;
+CREATE TRIGGER IF NOT EXISTS ml_quotes_delete_archived_only BEFORE DELETE ON ml_quotes
+  WHEN NOT EXISTS (SELECT 1 FROM ml_archive a WHERE a.day = substr(OLD.received_ts, 1, 10) AND a.verified = 1)
+  BEGIN SELECT RAISE(ABORT, 'ml_quotes rows are immutable (only rows of a verified archived day may leave)'); END;
+CREATE TABLE IF NOT EXISTS ml_gaps (
+  platform TEXT NOT NULL, last_saved_before TEXT NOT NULL, first_saved_after TEXT NOT NULL, gap_s REAL,
+  reason TEXT, backfill TEXT, recorded_at TEXT NOT NULL, PRIMARY KEY (platform, last_saved_before));
+CREATE TRIGGER IF NOT EXISTS ml_gaps_no_update BEFORE UPDATE ON ml_gaps
+  BEGIN SELECT RAISE(ABORT, 'ml_gaps rows are immutable'); END;
+CREATE TRIGGER IF NOT EXISTS ml_gaps_no_delete BEFORE DELETE ON ml_gaps
+  BEGIN SELECT RAISE(ABORT, 'ml_gaps rows are immutable'); END;
+CREATE TABLE IF NOT EXISTS ml_meta (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT);
 CREATE TABLE IF NOT EXISTS ml_forecasts (
   match_id TEXT NOT NULL, model_version TEXT NOT NULL, logged_ts TEXT NOT NULL,
   platform TEXT, prob_a REAL, team_a TEXT, team_b TEXT, start TEXT, available INTEGER,
@@ -394,6 +421,12 @@ def _connect():
         con.execute("PRAGMA journal_mode=WAL")
     except sqlite3.DatabaseError:
         pass
+    if con.execute("SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='ml_quotes_no_delete'").fetchone():
+        try:                          # mlstore-1: replaced by ml_quotes_delete_archived_only (verified archived days only)
+            con.execute("DROP TRIGGER IF EXISTS ml_quotes_no_delete")
+            con.commit()
+        except sqlite3.OperationalError:
+            pass
     con.executescript(_SCHEMA)
     have = {r[1] for r in con.execute("PRAGMA table_info(ml_forecasts)")}
     for col, typ in _FC_EXTRA_COLS:
@@ -417,12 +450,23 @@ def write_snapshots(rows, force=False):
             "source_ts", "status", "current", "usable", "unusable_reason", "start", "bo", "event_title",
             "source", "scope", "team_a", "team_b", "prob_a", "captured_at"]
     with _DB_LOCK:
-        mb = _store_mb()
-        if mb > SNAPSHOT_MAX_MB:
-            raise SnapshotCapReached(f"ml_snapshots.db is {mb:.0f} MB (cap {SNAPSHOT_MAX_MB:.0f} MB) - "
-                                     "quote snapshots paused; archive or raise ML_SNAPSHOT_MAX_MB")
+        if _OPEN["file_mb"] is None:
+            _OPEN["file_mb"] = _store_mb()        # the file this process found (for the pre-mlstore-1 cap gap reason)
         con = _connect()
         try:
+            sz = store_sizes(con)
+            why = None
+            if sz["live_mb"] > SNAPSHOT_MAX_MB:
+                why = (f"ml_snapshots.db holds {sz['live_mb']:.0f} MB of live rows (cap {SNAPSHOT_MAX_MB:.0f} MB; file "
+                       f"{sz['file_mb']:.0f} MB) - quote snapshots paused until the archive frees space")
+            elif sz["disk_free_mb"] is not None and sz["disk_free_mb"] < DISK_FLOOR_MB:
+                why = (f"data disk has {sz['disk_free_mb']:.0f} MB free (floor {DISK_FLOOR_MB:.0f} MB) - "
+                       "quote snapshots paused")
+            if why:
+                for plat in {r.get("platform") for r in rows}:
+                    _PAUSED.setdefault(plat, why)
+                _kick_archive()
+                raise SnapshotCapReached(why)
             last = _last_written(con)
             keep = []
             for r in rows:
@@ -435,21 +479,91 @@ def write_snapshots(rows, force=False):
                     keep.append((k, sig, at, r))
             if not keep:
                 return 0
+            prev = {}                             # newest stored received time per platform, before this write
+            for (plat, _m, _o), (_sig, at) in last.items():
+                if at is not None and (prev.get(plat) is None or at > prev[plat]):
+                    prev[plat] = at
             before = con.total_changes
             con.executemany(f"INSERT OR IGNORE INTO ml_quotes ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
                             [tuple(r.get(c) for c in cols) for _, _, _, r in keep])
+            n_new = con.total_changes - before
+            if n_new:
+                _record_gaps(con, prev, keep)
             con.commit()
             for k, sig, at, _ in keep:
                 prev = last.get(k)
                 if prev is None or prev[1] is None or (at is not None and at >= prev[1]):
                     last[k] = (sig, at)
-            return con.total_changes - before
+            return n_new
         finally:
             con.close()
 
 
 class SnapshotCapReached(RuntimeError):
     pass
+
+
+_OPEN = {"file_mb": None}     # ml_snapshots.db file size when this process first wrote (memory)
+_PAUSED = {}                  # platform -> why its quote writes were refused in this process (cleared by the next write)
+NO_BACKFILL = "none - Polymarket/Kalshi quotes are captured only by this collector; no archived copy of the gap exists"
+
+
+def _kick_archive():
+    try:
+        import ml_store
+        ml_store.kick()
+    except Exception:       # noqa: BLE001 - never fails a write
+        pass
+
+
+def _record_gaps(con, prev, keep):
+    """One immutable ml_gaps row per platform whose first new row comes > GAP_MIN_S after its newest stored row (same
+    transaction as the rows). The reason is what this process knows: its own cap pause; the pre-mlstore-1 500 MB file cap
+    (once per platform, when this process found the file above it); otherwise a generic outage. Never backfilled."""
+    first = {}
+    for (plat, _m, _o), _sig, at, _r in keep:
+        if at is not None and (first.get(plat) is None or at < first[plat]):
+            first[plat] = at
+    now = _iso(_utcnow())
+    for plat, a in first.items():
+        b = prev.get(plat)
+        paused = _PAUSED.pop(plat, None)
+        if b is None or (a - b).total_seconds() < GAP_MIN_S:
+            continue
+        reason = None
+        key = f"legacy_cap_gap:{plat}"
+        if (_OPEN["file_mb"] or 0) > LEGACY_FILE_CAP_MB and not con.execute(
+                "SELECT 1 FROM ml_meta WHERE key = ?", (key,)).fetchone():
+            reason = ("store cap: before mlstore-1 the 500 MB FILE-size cap paused every quote write "
+                      "(SnapshotCapReached); this gap ends at the first write after the fix"
+                      + (f"; after the restart: {paused}" if paused else ""))
+            con.execute("INSERT OR IGNORE INTO ml_meta (key, value, updated_at) VALUES (?,?,?)",
+                        (key, json.dumps({"last_saved_before": _iso(b), "first_saved_after": _iso(a)}), now))
+        elif paused:
+            reason = f"store cap: {paused}"
+        con.execute("INSERT OR IGNORE INTO ml_gaps (platform, last_saved_before, first_saved_after, gap_s, reason, "
+                    "backfill, recorded_at) VALUES (?,?,?,?,?,?,?)",
+                    (plat, _iso(b), _iso(a), round((a - b).total_seconds(), 1),
+                     reason or "no quote saved (process down, source refresh failing or no listings)", NO_BACKFILL, now))
+
+
+def store_sizes(con):
+    """{file_mb, live_mb, free_pages_mb, wal_mb, disk_free_mb} - live = pages in use (deleted rows' pages are reused)."""
+    p = db_path()
+    ps = con.execute("PRAGMA page_size").fetchone()[0]
+    pc = con.execute("PRAGMA page_count").fetchone()[0]
+    fl = con.execute("PRAGMA freelist_count").fetchone()[0]
+    try:
+        wal = p.with_name(p.name + "-wal").stat().st_size
+    except OSError:
+        wal = 0
+    try:
+        free = shutil.disk_usage(str(p.parent)).free / 1e6
+    except OSError:
+        free = None
+    return {"file_mb": round(pc * ps / 1e6, 2), "live_mb": round(((pc - fl) * ps + wal) / 1e6, 2),
+            "free_pages_mb": round(fl * ps / 1e6, 2), "wal_mb": round(wal / 1e6, 2),
+            "disk_free_mb": None if free is None else round(free, 1)}
 
 
 # the columns whose change makes a new ml_quotes row (everything a reader of the history uses; not received / source
@@ -680,7 +794,7 @@ class Source:
                 "next_refresh_s": self.next_delay, "refreshes": self.refreshes,
                 "listings": len(self.listings), "quotes": n_q, "snapshot_rows_written": self.rows_written,
                 "snapshot_error": self.snapshot_error, "running": bool(self._thread and self._thread.is_alive()),
-                "note": self.note(now_ts),
+                "note": self.note(now_ts), "snapshot_store": _store_state(),
             }
 
     def _loop(self):
@@ -716,9 +830,25 @@ SOURCES = {
 _START_LOCK = threading.Lock()
 
 
+def _store_state():
+    """ml_store.state() - memory only (the archiver thread refreshes it); {} before its first read."""
+    try:
+        import ml_store
+        return ml_store.state()
+    except Exception as e:      # noqa: BLE001
+        return {"error": f"{type(e).__name__}: {str(e)[:120]}"}
+
+
 def start(sources=None):
-    """Start one background refresher per source (idempotent).  Returns the names started now."""
+    """Start one background refresher per source (idempotent) and, for the real sources, the store archiver (ml_store).
+    Returns the names started now."""
     srcs = SOURCES if sources is None else sources
+    if sources is None:
+        try:
+            import ml_store
+            ml_store.start()
+        except Exception:       # noqa: BLE001 - the archiver never blocks the quotes
+            pass
     started = []
     with _START_LOCK:
         for name, s in srcs.items():
