@@ -42,14 +42,15 @@ def fit(sport, hcon, as_of=None, out_path=None):
     cfg = json.loads((ART_DIR / f"model_config_{sport}.json").read_text(encoding="utf-8"))
     as_of = as_of or now_utc()
     arts = {}
-    frames = {}
-    for mk in SPORT_MARKETS[sport]:
+    cur_hl, df = None, None
+    for mk in _ordered(sport, cfg["markets"]):
         c = cfg["markets"][mk]
         hl = tuple(c["half_lives"])
-        if hl not in frames:
-            df = study._frame(sport, hcon, hl) if as_of is None else _frame_asof(sport, hcon, hl, as_of)
-            frames[hl] = study._nfl_fill(df) if sport == "nfl" else df
-        df = frames[hl]
+        if hl != cur_hl:
+            df = None                                            # release the previous frame first
+            df = _frame_asof(sport, hcon, hl, as_of)
+            df = study._nfl_fill(df) if sport == "nfl" else df
+            cur_hl = hl
         el = model.eligible(df, mk)
         tr = df[el & np.isfinite(df.f(f"y_{mk}"))]
         f = study.Fitted(mk, hl)
@@ -75,8 +76,13 @@ def fit(sport, hcon, as_of=None, out_path=None):
 def _frame_asof(sport, hcon, hl, as_of, upcoming=None, absences=None):
     if sport == "nba":
         return featurize.nba_frame(hcon, h_min=hl[0], h_rate=hl[1], upcoming=upcoming, as_of=as_of,
-                                   absences=absences)
-    return featurize.nfl_frame(hcon, h_opp=hl[0], upcoming=upcoming, as_of=as_of)
+                                   absences=absences, with_lags=False)
+    return featurize.nfl_frame(hcon, h_opp=hl[0], upcoming=upcoming, as_of=as_of, with_lags=False)
+
+
+def _ordered(sport, cfg_markets):
+    """Markets grouped by half-life so only ONE feature frame is held at a time (memory bound)."""
+    return sorted(SPORT_MARKETS[sport], key=lambda mk: tuple(cfg_markets[mk]["half_lives"]))
 
 
 def load_artifact(sport):
@@ -278,14 +284,15 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
     mcfg = market_config()
     dnp = mcfg.get("dnp_share", {}).get(league, 0.0)
     icon = inputs_db()
-    frames = {}
-    for mk in SPORT_MARKETS[league]:
+    cur_hl, df = None, None
+    for mk in _ordered(league, art["markets"]):
         am = art["markets"][mk]
         hl = tuple(am["half_lives"])
-        if hl not in frames:
+        if hl != cur_hl:
+            df = None
             df = _frame_asof(league, hcon, hl, forecast_at, upcoming=up, absences=absences)
-            frames[hl] = study._nfl_fill(df) if league == "nfl" else df
-        df = frames[hl]
+            df = study._nfl_fill(df) if league == "nfl" else df
+            cur_hl = hl
         upi = np.flatnonzero(df["is_up"] == 1)
         el = model.eligible(df, mk)
         rowpos = {(df["game_id"][i], df["player_id"][i]): i for i in upi}

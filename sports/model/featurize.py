@@ -85,7 +85,7 @@ def _team_upcoming(tg, league, as_of, up_keys, upcoming):
     return concat(tg, up).sort("team", "ts")
 
 
-def nba_frame(con, h_min=5, h_rate=20, upcoming=None, as_of=None, absences=None):
+def nba_frame(con, h_min=5, h_rate=20, upcoming=None, as_of=None, absences=None, with_lags=True):
     """absences: {(game_id, team): [player_id, ...] | None} for UPCOMING games - the players the injury report lists
     as Out (forward source: ESPN injury report in the store). None / missing = no report -> unknown (NaN)."""
     pg = Frame.from_sql(con, "SELECT p.*, g.start_utc, g.season, g.season_type, g.spread_home, g.total_line "
@@ -148,7 +148,8 @@ def nba_frame(con, h_min=5, h_rate=20, upcoming=None, as_of=None, absences=None)
         df["starter_rate10"] = np.nanmean(lag_matrix(df["starter"], gs, 10), axis=1)
     lags = {}
     for mk, c in NBA_MARKETS.items():
-        lags[mk] = lag_matrix(df[c], gs, LAGS)
+        if with_lags:                                   # the B0 / B1 baselines need them (study); forward does not
+            lags[mk] = lag_matrix(df[c], gs, LAGS).astype(np.float32)
         df[f"y_{mk}"] = df[c]
     # ---- join context -------------------------------------------------------------------------------------------
     ti = lookup(key_of(df["game_id"], df["team"]), tkey)
@@ -217,7 +218,7 @@ NFL_FILL0 = ("pass_att", "pass_cmp", "pass_yds", "carries", "rush_yds", "targets
              "rz_carries", "i10_targets", "i10_carries", "rec_air_yds")
 
 
-def nfl_frame(con, h_opp=4, upcoming=None, as_of=None):
+def nfl_frame(con, h_opp=4, upcoming=None, as_of=None, with_lags=True):
     pg = Frame.from_sql(con, "SELECT p.*, g.start_utc, g.spread_home, g.total_line, g.roof, g.temp, g.wind "
                              "FROM nfl_pg p JOIN games g ON g.league='nfl' AND g.game_id = p.game_id "
                              "WHERE g.status = 'final' AND p.position IN ('QB','RB','WR','TE','FB')")
@@ -284,7 +285,8 @@ def nfl_frame(con, h_opp=4, upcoming=None, as_of=None):
         df[f"S_{c}"] = m * w
     lags = {}
     for mk, c in NFL_MARKETS.items():
-        lags[mk] = lag_matrix(df[c], gs, 20)
+        if with_lags:
+            lags[mk] = lag_matrix(df[c], gs, 20).astype(np.float32)
         df[f"y_{mk}"] = df[c]
     with np.errstate(all="ignore"):
         df["l3_snap"] = np.nanmean(lag_matrix(df["offense_pct"], gs, 3), axis=1)

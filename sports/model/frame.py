@@ -19,17 +19,33 @@ class Frame:
         self.attrs = dict(attrs or {})
 
     @classmethod
-    def from_sql(cls, con, sql, args=()):
+    def from_sql(cls, con, sql, args=(), chunk=20000):
+        """Query -> Frame, read in chunks (bounded transient memory: one chunk of Python row objects at a time).
+        A column is float when every value is numeric or NULL (NULL -> NaN), else object (NULL -> '')."""
         cur = con.execute(sql, args)
         names = [d[0] for d in cur.description]
-        rows = cur.fetchall()
+        parts = {n: [] for n in names}
+        while True:
+            rows = cur.fetchmany(chunk)
+            if not rows:
+                break
+            for i, n in enumerate(names):
+                vals = [r[i] for r in rows]
+                if all(v is None or isinstance(v, (int, float)) for v in vals):
+                    parts[n].append(np.array([np.nan if v is None else v for v in vals], dtype=float))
+                else:
+                    parts[n].append(np.array(["" if v is None else str(v) for v in vals], dtype=object))
+            del rows
         cols = {}
-        for i, n in enumerate(names):
-            vals = [r[i] for r in rows]
-            if all(v is None or isinstance(v, (int, float)) for v in vals):
-                cols[n] = np.array([np.nan if v is None else float(v) for v in vals], dtype=float)
+        for n, ps in parts.items():
+            if not ps:
+                cols[n] = np.zeros(0)
+            elif any(p.dtype == object for p in ps):
+                cols[n] = np.concatenate([p if p.dtype == object else
+                                          np.array(["" if x != x else str(int(x)) if float(x).is_integer() else str(x)
+                                                    for x in p], dtype=object) for p in ps])
             else:
-                cols[n] = np.array(["" if v is None else str(v) for v in vals], dtype=object)
+                cols[n] = np.concatenate(ps)
         return cls(cols)
 
     def __len__(self):
