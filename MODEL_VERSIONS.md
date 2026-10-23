@@ -1,5 +1,29 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
+## `aa6696d5d6` — bug-fix release (no model change): CS2 accuracy audit fixes (cs2acc-1), 2026-10-23
+
+Base: `f663af8917`. Bug-fix release (no model change): no parameter, coefficient, band, threshold, cap or factor changed; the
+cm-2 / hs-cm2 model (cm1.py, cm2.py, cm2_model.json) is unchanged. Source: research/cs2-accuracy-2y AUDIT.md (AU-1) and
+UNDER_TRACE.md. Each fix has a regression test (tests/test_au1_duplicate_units.py, tests/test_cs2acc1_fixes.py).
+- **D1 duplicate P1 units (evaluation only, no grade changes).** identity rule 5 (identity.RULE_VERSION 5): an hltv-<id>
+  record and a BO3.gg-slug record of the same player on the same team with starts within 60 minutes are one evaluation match.
+  Fixes the 8 units of MARKandLARRY 2026-10-12 (BRACE, micalis, sav, yourwombat) scored under both
+  'martyrdom-vs-markandlarry-12-10-2026' and 'hltv:2399144'. Two BO3.gg slugs are never merged, each hltv id joins one slug,
+  a team's same-day series 3 h apart stay two (FORZE Reload 2026-10-14 guard). The learning ledger re-keys once on the
+  version change (_migrate_unit_identity; old ledger kept as ledger_v4_*).
+- **Player aliases (I3).** hltv.PLAYER_ALIASES, exact names, used only when HLTV shows the aliased player on the graded team:
+  Techno4K = HLTV Techno (20275, The MongolZ), brain = HLTV Brain47 (23294, Phantom Academy). dev1ce not added (owner decision).
+  Lines that can change: these two players' lines (they leave the perf-2-bo3 BO3.gg fallback for the HLTV route: perf-2, and
+  cm-2 / hs-cm2 for Maps 1-2 where eligible) and their HLTV numbers panel.
+- **Team aliases (I5).** team_aliases.json: Orgless Aust = LFO 8 (13976), Sökerorg = LFO 10 (14084), Martyrdom = Fruju (14055),
+  each verified on HLTV and BO3.gg (same fixture and event, identical five players). The mapping revision changes (recorded as
+  mapping_rev). Lines that can change: matches with these spellings (opponent adjustment, H2H, match linking and settlement
+  identity of those teams and their opponents). LP -> BARCA (HLTV 2399805, paiN's opponent 2026-10-21) NOT added: the roster
+  is the same, but 'LP' is an exact HLTV team (13304), so a name alias cannot express a dated rename; it needs a separate rule.
+- **perf-2-bo3 history window (cosmetic).** cs2_scout's BO3.gg fallback reads opponent history from 420 days before the match
+  day (as perf_live), not before today. Lines that can change: perf-2-bo3 lines on matches after today (UTC), by under
+  0.01 kills (edge weight e^-3.5).
+
 ## Slip builder `studio-4` (CS2 model tag unchanged: f663af8917), 2026-10-22
 
 Slips release (no grade, chance, projection or stake changes): "build around" - settings.must_include (up to 2 board row ids,
