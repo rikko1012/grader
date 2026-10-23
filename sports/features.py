@@ -260,7 +260,7 @@ MARKET_STAT = {"points": "pts", "rebounds": "reb", "assists": "ast", "threes": "
 
 def compute(df, sport, market, column):
     """The feature's pre-game value per row of a featurize.frame() (np.ndarray, NaN = unknown)."""
-    g = lambda c: df[c].to_numpy(float)                                  # noqa: E731
+    g = lambda c: np.asarray(df[c], float)                               # noqa: E731
     with np.errstate(divide="ignore", invalid="ignore"):
         if sport == "nba":
             st = MARKET_STAT[market]
@@ -277,7 +277,7 @@ def compute(df, sport, market, column):
                 "rest_days": np.log(np.clip(g("rest_days"), 0.5, 7)),
                 "absent_lag": g("absent_share_lag"), "absent_sameday": g("absent_share"),
                 "home": g("home"),
-                "postseason": df["season_type"].isin(["postseason", "play_in"]).to_numpy(float),
+                "postseason": np.isin(df["season_type"], ["postseason", "play_in"]).astype(float),
             }[column]
         st = MARKET_STAT[market]
         allow = {"rec": "allow_rec", "rec_yds": "allow_rec_yds", "rush_yds": "allow_rush_yds",
@@ -290,11 +290,11 @@ def compute(df, sport, market, column):
             "opp_pos_allow": g(allow), "qb_change_lag": g("qb_change_lag"),
             "team_spread": g("team_spread"), "implied_total": g("implied_total"),
             "neutral_pass_rate": g("npass_l6"), "team_plays": g("plays_l6"), "opp_plays": g("opp_plays_l6"),
-            "wind": np.where(df["dome"].to_numpy(float) == 1, 0.0, g("wind")),
-            "temp": np.where(df["dome"].to_numpy(float) == 1, 70.0, g("temp")),
+            "wind": np.where(g("dome") == 1, 0.0, g("wind")),
+            "temp": np.where(g("dome") == 1, 70.0, g("temp")),
             "dome": g("dome"), "home": g("home"),
             "short_week": np.where(np.isfinite(g("rest_days")), (g("rest_days") < 6).astype(float), np.nan),
-            "postseason": (df["season_type"] == "postseason").to_numpy(float),
+            "postseason": (np.asarray(df["season_type"]) == "postseason").astype(float),
         }[column]
 
 

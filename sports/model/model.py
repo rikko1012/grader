@@ -30,30 +30,45 @@ FAMILIES = {"count": ("poisson", "negbin", "mixture", "ratio"), "yards": ("norma
 K_GRID = (0.0, 5.0, 10.0, 25.0, 50.0, 100.0, 200.0, 400.0, 800.0)
 
 
+def _map(keys, table, default=np.nan):
+    return np.array([table.get(k, default) for k in keys], dtype=float)
+
+
+def _ratio_by(keys, num, den):
+    out = {}
+    keys = np.asarray(keys)
+    for k in np.unique(keys):
+        m = keys == k
+        out[str(k)] = float(np.nansum(num[m]) / max(np.nansum(den[m]), 1))
+    return out
+
+
 # ========================================================================================================= eligibility
 def eligible(df, market):
     sp = SPEC[market]
     if sp["sport"] == "nba":
-        m = (df["prior_n"] >= 5) & (df["l10_min"] >= 15)
+        with np.errstate(invalid="ignore"):
+            m = (df["prior_n"] >= 5) & (df["l10_min"] >= 15)
     else:
         m = df["prior_n"] >= 3
+        np.seterr(invalid="ignore")
         if market == "pass_yds":
             m &= (df["position"] == "QB") & (df["l6_pass_att"] >= 15)
         elif market in ("rush_yds", "rush_att"):
             m &= df["l6_carries"] >= 6
         else:
             m &= df["l6_targets"] >= 3
-    return m.fillna(False).to_numpy()
+    return np.asarray(m, bool)
 
 
 def partition(df, sport):
     """'train' | 'tune' | 'test' | 'test2' | 'refit_only' per row (REGISTER.md 4)."""
-    s = df["start"]
+    s = df["start_utc"]
     if sport == "nba":
         out = np.where(s < "2025-10-01", "train", np.where(s < "2026-02-01", "tune",
                        np.where(s < "2026-07-01", "test", "refit_only")))
     else:
-        se, wk = df["season"].to_numpy(), df["week"].to_numpy()
+        se, wk = np.asarray(df["season"]), np.asarray(df["week"])
         out = np.where(se <= 2024, "train", np.where((se == 2025) & (wk <= 9), "tune",
                        np.where(se == 2025, "test", "test2")))
     return np.asarray(out)
@@ -65,30 +80,28 @@ def base_inputs(df, market, prior, k):
     sp = SPEC[market]
     if sp["sport"] == "nba":
         st = sp["stat"]
-        r_pos = df["pos_g"].map(prior["rate_pos"]).to_numpy(float)
-        rate = (np.nan_to_num(df[f"S_{st}"].to_numpy(float)) + k * r_pos) / \
-            (np.nan_to_num(df["S_min"].to_numpy(float)) + k + 1e-9)
-        e_opp = df["ew_min"].to_numpy(float)
+        r_pos = _map(df["pos_g"], prior["rate_pos"])
+        rate = (np.nan_to_num(np.asarray(df[f"S_{st}"], float)) + k * r_pos) / \
+            (np.nan_to_num(np.asarray(df["S_min"], float)) + k + 1e-9)
+        e_opp = np.asarray(df["ew_min"], float)
         return e_opp * rate, e_opp, rate
     o, e = sp["opp"], sp["eff"]
-    e_opp = df[f"ew_{o}"].to_numpy(float)
+    e_opp = np.asarray(df[f"ew_{o}"], float)
     if e is None:
         return e_opp, e_opp, np.ones(len(df))
-    e_pos = df["position"].map(prior["eff_pos"]).to_numpy(float)
-    eff = (np.nan_to_num(df[f"S_{e}"].to_numpy(float)) + k * e_pos) / \
-        (np.nan_to_num(df[f"S_{o}"].to_numpy(float)) + k + 1e-9)
+    e_pos = _map(df["position"], prior["eff_pos"])
+    eff = (np.nan_to_num(np.asarray(df[f"S_{e}"], float)) + k * e_pos) / \
+        (np.nan_to_num(np.asarray(df[f"S_{o}"], float)) + k + 1e-9)
     return e_opp * eff, e_opp, eff
 
 
 def fit_priors(tr, market):
     sp = SPEC[market]
     if sp["sport"] == "nba":
-        g = tr.groupby("pos_g")
-        return {"rate_pos": {p: float(v[sp["stat"]].sum() / max(v["min"].sum(), 1)) for p, v in g}}
+        return {"rate_pos": _ratio_by(tr["pos_g"], tr[sp["stat"]], tr["min"])}
     if sp["eff"] is None:
         return {"eff_pos": {}}
-    g = tr.groupby("position")
-    return {"eff_pos": {p: float(v[sp["eff"]].sum() / max(v[sp["opp"]].sum(), 1)) for p, v in g}}
+    return {"eff_pos": _ratio_by(tr["position"], tr[sp["eff"]], tr[sp["opp"]])}
 
 
 def poisson_dev(y, mu):
@@ -100,7 +113,7 @@ def poisson_dev(y, mu):
 
 
 def fit_k(tr, market, prior):
-    y = tr[f"y_{market}"].to_numpy(float)
+    y = np.asarray(tr[f"y_{market}"], float)
     best = None
     for k in K_GRID:
         mu, _, _ = base_inputs(tr, market, prior, k)
@@ -118,7 +131,7 @@ def design(df, feats, stats=None):
     cols, fit = [], stats is None
     stats = stats or {}
     for f in feats:
-        x = df[f].to_numpy(float)
+        x = np.asarray(df[f], float)
         if fit:
             ok = np.isfinite(x)
             stats[f] = {"mean": float(np.mean(x[ok])) if ok.any() else 0.0,
@@ -157,17 +170,7 @@ def fit_glm(X, y, offset, ridge=1e-4, iters=50):
 
 # =========================================================================================================== families
 def _nb_ll(y, mu, a):
-    r = 1.0 / a
-    lg = np.vectorize(math.lgamma, otypes=[float]) if not _HAS_SCIPY else _gammaln
-    return float(np.sum(lg(y + r) - lg(r) - lg(y + 1) + r * np.log(r / (r + mu)) + y * np.log(mu / (r + mu))))
-
-
-try:
-    from scipy.special import gammaln as _gammaln
-    _HAS_SCIPY = True
-except ImportError:                                     # pragma: no cover - production image has no scipy
-    _HAS_SCIPY = False
-    _gammaln = None
+    return dists.nb_loglik(y, mu, a)
 
 
 def fit_alpha(y, mu):
@@ -227,7 +230,8 @@ def _binom_pmf_matrix(nmax, p, rmax):
 
 
 def _lg(x):
-    return _gammaln(x) if _HAS_SCIPY else np.vectorize(math.lgamma, otypes=[float])(x)
+    """log Gamma at positive integers = log((x-1)!) (numpy table)."""
+    return dists.logfact(np.asarray(x) - 1)
 
 
 def _nb_counts(mu, alpha, nmax):
@@ -262,29 +266,29 @@ class MixFit:
     @staticmethod
     def fit(tr, market, mu_tr, ctx_tr):
         sp = SPEC[market]
-        y = tr[f"y_{market}"].to_numpy(float)
+        y = np.asarray(tr[f"y_{market}"], float)
         if sp["mix"] in ("minutes",):
-            rho = (tr["min"].to_numpy(float) / np.maximum(tr["ew_min"].to_numpy(float), 1))
+            rho = (np.asarray(tr["min"], float) / np.maximum(np.asarray(tr["ew_min"], float), 1))
             q = _quantile_points(rho, 40)
             q = q / q.mean()
             a_c = fit_alpha(y, mu_tr * rho / np.mean(rho))
             return {"rho": q.tolist(), "alpha_c": a_c}
         if sp["mix"] == "threes":
-            rho = (tr["min"].to_numpy(float) / np.maximum(tr["ew_min"].to_numpy(float), 1))
+            rho = (np.asarray(tr["min"], float) / np.maximum(np.asarray(tr["ew_min"], float), 1))
             q = _quantile_points(rho, 40)
             q = q / q.mean()
             p3 = ctx_tr["p3"]
             a3 = (mu_tr / np.maximum(p3, 1e-3)) * rho / np.mean(rho)
-            alpha_3a = fit_alpha(tr["fg3a"].to_numpy(float), np.maximum(a3, 1e-3))
+            alpha_3a = fit_alpha(np.asarray(tr["fg3a"], float), np.maximum(a3, 1e-3))
             return {"rho": q.tolist(), "alpha_3a": alpha_3a}
-        opp = tr[sp["opp"]].to_numpy(float)
+        opp = np.asarray(tr[sp["opp"]], float)
         e_opp = np.maximum(ctx_tr["e_opp"], 1e-3)
         alpha_o = fit_alpha(opp, e_opp)
         out = {"alpha_opp": alpha_o}
         if sp["mix"] == "binom":
             return out
         units = {"rec_yards": "rec", "pass_yards": "pass_cmp", "unit_yards": sp["opp"]}[sp["mix"]]
-        n = tr[units].to_numpy(float)
+        n = np.asarray(tr[units], float)
         upm = ctx_tr["unit_mean"]
         ok = n > 0
         r = (y[ok] - n[ok] * upm[ok]) / np.sqrt(n[ok])
@@ -297,10 +301,10 @@ def mix_context(df, market, mu, e_opp, eff, prior):
     """Per-row quantities the mixture needs, all pre-game (EB conversion rates)."""
     sp = SPEC[market]
     if sp["mix"] == "threes":
-        p_pos = df["pos_g"].map(prior.get("p3_pos", {})).fillna(0.35).to_numpy(float)
+        p_pos = _map(df["pos_g"], prior.get("p3_pos", {}), 0.35)
         k3 = prior.get("k3", 100.0)
-        p3 = (np.nan_to_num(df["S_fg3m"].to_numpy(float)) + k3 * p_pos) / \
-            (np.nan_to_num(df["S_fg3a"].to_numpy(float)) + k3)
+        p3 = (np.nan_to_num(np.asarray(df["S_fg3m"], float)) + k3 * p_pos) / \
+            (np.nan_to_num(np.asarray(df["S_fg3a"], float)) + k3)
         return {"p3": p3}
     if sp["sport"] == "nba" or sp["mix"] is None:
         return {}
@@ -308,17 +312,17 @@ def mix_context(df, market, mu, e_opp, eff, prior):
     if sp["mix"] == "binom":
         ctx["p"] = np.clip(mu / np.maximum(e_opp, 1e-3), 0.01, 0.99)
     elif sp["mix"] == "rec_yards":
-        c_pos = df["position"].map(prior.get("catch_pos", {})).fillna(0.65).to_numpy(float)
+        c_pos = _map(df["position"], prior.get("catch_pos", {}), 0.65)
         kc = prior.get("kc", 20.0)
-        p = (np.nan_to_num(df["S_rec"].to_numpy(float)) + kc * c_pos) / \
-            (np.nan_to_num(df["S_targets"].to_numpy(float)) + kc)
+        p = (np.nan_to_num(np.asarray(df["S_rec"], float)) + kc * c_pos) / \
+            (np.nan_to_num(np.asarray(df["S_targets"], float)) + kc)
         ctx["p"] = np.clip(p, 0.05, 0.98)
         ctx["unit_mean"] = mu / np.maximum(e_opp * ctx["p"], 1e-3)
     elif sp["mix"] == "pass_yards":
         c_pos = prior.get("cmp_all", 0.64)
         kc = prior.get("kc", 60.0)
-        p = (np.nan_to_num(df["S_pass_cmp"].to_numpy(float)) + kc * c_pos) / \
-            (np.nan_to_num(df["S_pass_att"].to_numpy(float)) + kc)
+        p = (np.nan_to_num(np.asarray(df["S_pass_cmp"], float)) + kc * c_pos) / \
+            (np.nan_to_num(np.asarray(df["S_pass_att"], float)) + kc)
         ctx["p"] = np.clip(p, 0.3, 0.9)
         ctx["unit_mean"] = mu / np.maximum(e_opp * ctx["p"], 1e-3)
     else:
@@ -374,7 +378,7 @@ def family_pmf(family, market, mu, ctx, par, lo, ks):
 
 
 def fit_family_params(tr, market, mu_tr, ctx_tr):
-    y = tr[f"y_{market}"].to_numpy(float)
+    y = np.asarray(tr[f"y_{market}"], float)
     par = {"ratio": fit_ratio(y, np.maximum(mu_tr, 0.05))}
     if SPEC[market]["kind"] == "count":
         par["alpha"] = fit_alpha(y, mu_tr)
@@ -389,15 +393,13 @@ def fit_mix_priors(tr, market, prior):
     """EB priors the mixture's conversion rates shrink to (train)."""
     sp = SPEC[market]
     if sp["mix"] == "threes":
-        g = tr.groupby("pos_g")
-        prior["p3_pos"] = {p: float(v["fg3m"].sum() / max(v["fg3a"].sum(), 1)) for p, v in g}
+        prior["p3_pos"] = _ratio_by(tr["pos_g"], tr["fg3m"], tr["fg3a"])
         prior["k3"] = 100.0 if "k3" not in prior else prior["k3"]
     if sp["mix"] == "rec_yards":
-        g = tr.groupby("position")
-        prior["catch_pos"] = {p: float(v["rec"].sum() / max(v["targets"].sum(), 1)) for p, v in g}
+        prior["catch_pos"] = _ratio_by(tr["position"], tr["rec"], tr["targets"])
         prior["kc"] = 20.0
     if sp["mix"] == "pass_yards":
-        prior["cmp_all"] = float(tr["pass_cmp"].sum() / max(tr["pass_att"].sum(), 1))
+        prior["cmp_all"] = float(np.nansum(tr["pass_cmp"]) / max(np.nansum(tr["pass_att"]), 1))
         prior["kc"] = 60.0
     return prior
 
