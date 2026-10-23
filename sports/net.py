@@ -102,22 +102,38 @@ def backoff(attempt, base=3.0, cap=30.0):
 
 def get(url, params=None, headers=None, timeout=30, tries=3, ok=(200,)):
     """GET with pacing and retries -> Response for a status in `ok`; raises HttpError otherwise. A 429 / 5xx / dropped
-    connection is retried with a growing, jittered pause (backoff()). A Retry-After is obeyed in full: up to
-    MAX_SLEEP_S it is slept and the call retried; a longer one becomes a hold (hold()) and the call fails at once with
-    not_before set - the caller records it and skips the source until then, never retrying early. While a hold is in
-    force no request is sent to that host."""
+    connection is retried with a growing, jittered pause (backoff()). A Retry-After is obeyed in full: it becomes a
+    hold (hold()); a hold that fits the call's MAX_SLEEP_S wait budget is waited out, a longer one fails the call at
+    once with not_before set - the caller records it and skips the source until then, never retrying early. The hold
+    is re-checked right before EVERY send (after pacing, after backoff, on every retry), so no request goes out while
+    any hold - including one another request set meanwhile - is in force."""
     return _request(url, params, headers, timeout, tries, ok,
                     lambda: session().get(url, params=params, headers=headers, timeout=timeout))
 
 
+def _clear_to_send(host, url, budget):
+    """Return only when no hold is in force on `host`. A remaining hold is waited out if it fits the call's wait budget
+    (budget[0] seconds, shared by every wait in the call), else the call fails with held=True and nothing is sent.
+    Re-read after every sleep: another request may have extended the hold meanwhile."""
+    while True:
+        with _LOCK:
+            nb = _HOLD.get(host)
+        remaining = (nb - time.time()) if nb else 0.0
+        if remaining <= 0:
+            return
+        if remaining > budget[0]:
+            raise HttpError(429, url, "", not_before=nb, held=True)
+        time.sleep(remaining)
+        budget[0] -= remaining
+
+
 def _request(url, params, headers, timeout, tries, ok, send):
     host = urlsplit(url).netloc
-    nb = _HOLD.get(host)
-    if nb and time.time() < nb:
-        raise HttpError(429, url, "", not_before=nb, held=True)
+    budget = [MAX_SLEEP_S]                   # the most this call ever sleeps for holds (a source's Retry-After)
     last = None
     for attempt in range(tries):
-        _wait(host)
+        _wait(host)                          # pacing first, then the hold check, then - and only then - the send
+        _clear_to_send(host, url, budget)
         try:
             r = send()
         except (requests.ConnectionError, requests.Timeout) as e:
@@ -131,9 +147,8 @@ def _request(url, params, headers, timeout, tries, ok, send):
             if ra is not None:
                 until = time.time() + ra
                 hold(host, until)
-                if ra <= MAX_SLEEP_S and attempt + 1 < tries:
-                    time.sleep(ra)                   # the full wait the source asked for, never less
-                    continue
+                if ra <= budget[0] and attempt + 1 < tries:
+                    continue                 # the next attempt's _clear_to_send waits out the full hold
                 raise HttpError(r.status_code, url, r.text[:300], not_before=until)
             last = HttpError(r.status_code, url, r.text[:300])
         if attempt + 1 < tries:

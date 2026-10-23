@@ -47,7 +47,9 @@ server. **The provider is off by default** and starts only when all three of the
    per the docs). The call is made only if the account would still have more than CS2's floor left. That floor is
    max(`SPORTS_ODDSPAPI_CS2_FLOOR`, default 50, CS2's unused share), where CS2's share = limit - Sports allocation.
    Sports stops first; it never spends CS2's share or the account's last requests.
-3. **No backoff on refusal:** a refusal by this guard is not a provider failure, and it is retried at the next due
+3. **Fail closed:** if that fresh account read fails, times out, or carries no numeric `request_limit` /
+   `request_count` on an active subscription, no billable request is sent. The earlier reading is never reused.
+4. **No backoff on refusal:** a refusal by this guard is not a provider failure, and it is retried at the next due
    time.
 
 **Spending:**
@@ -134,9 +136,11 @@ model's `chance` (`sharp-1`) is **unchanged**: the book consensus is shown and l
 - **Markets are batched:** one Odds API call per game; FanDuel needs one request per stat tab, BetRivers one per game.
 - **Rate limits:** 1 request per second per host (`net.py`).
 - **Backoff:** errors back off 60 s doubling to 30 min; a 401/403 refusal waits 6 h.
-- **Retry-After:** obeyed in full. A wait of up to 60 s is slept inside the call. A longer one becomes a hold:
-  `net.py` sends nothing to that host before the provider's time, the worker saves it (`hold:<host>` setting, so a
-  restart honours it too), and the provider cools down until exactly that time. It is never retried early.
+- **Retry-After:** obeyed in full; every Retry-After becomes a hold on that host. `net.py` checks the current hold
+  right before **every** send: after pacing, after backoff and on each retry, so a hold another request set meanwhile
+  also counts. A call waits out a hold only within its own 60 s wait budget; beyond that it fails without sending.
+  The worker saves holds (`hold:<host>` setting, so a restart honours them too), and the provider cools down until
+  exactly that time. It is never retried early.
 - **Odds API budget:** the densest ladder whose estimated credits fit `SPORTS_ODDS_API_MONTHLY_CREDITS` (re-planned
   daily from ESPN's real schedule, `plan.py`); every call is checked against the daily allowance and the reserve.
 

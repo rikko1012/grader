@@ -2,6 +2,7 @@
 before every billable call so CS2's share is never spent, and Retry-After obeyed in full (held, persisted, never
 retried early). Data shapes are the documented ones (fixture marked NOT real data)."""
 import time
+import time as _wall
 from datetime import datetime, timezone
 
 import pytest
@@ -171,7 +172,88 @@ def test_account_answer_never_carries_the_key(on, monkeypatch):
     assert "api_key" not in acc
 
 
+# ----------------------------------------------------------------------- fail closed on the fresh account read
+
+class AccountFails(FakeAPI):
+    """The first /account answer (read's opening look) is fine; every later one fails the given way."""
+
+    def __init__(self, data, how):
+        super().__init__(data)
+        self.how, self.n_account = how, 0
+
+    def __call__(self, url, params=None, **kw):
+        if url.endswith("/v4/account"):
+            self.n_account += 1
+            if self.n_account > 1:
+                self.calls.append("/account")
+                if self.how == "timeout":
+                    raise net.HttpError(None, url, "ReadTimeout")       # what net.get raises after a timeout
+                if self.how == "5xx":
+                    raise net.HttpError(503, url, "")
+                bad = {"missing_fields": {"current_subscription_id": "s", "subscriptions": [
+                           {"subscription_id": "s", "is_active": True, "request_limit": 250}]},
+                       "string_counts": {"current_subscription_id": "s", "subscriptions": [
+                           {"subscription_id": "s", "is_active": True, "request_limit": "250",
+                            "request_count": "1"}]},
+                       "no_active": {"subscriptions": [{"is_active": False, "request_limit": 250,
+                                                        "request_count": 1}]},
+                       "not_a_dict": ["unexpected"]}[self.how]
+
+                class R:
+                    status_code = 200
+
+                    def json(self_inner):
+                        return bad
+                return R()
+        return super().__call__(url, params, **kw)
+
+
+@pytest.mark.parametrize("how", ["timeout", "5xx", "missing_fields", "string_counts", "no_active", "not_a_dict"])
+def test_no_billable_request_when_the_fresh_account_read_fails(db, on, monkeypatch, how):
+    api = AccountFails(doc(), how)
+    monkeypatch.setattr(net, "get", api)
+    res = providers.PROVIDERS["oddspapi"].read(db, NBA, NOW)
+    assert api.billable() == []                                               # fail closed: nothing billable sent
+    assert res.budget_denied and "fresh /v4/account" in res.budget_denied
+    assert op.used_this_month(db, NOW) == 0                                   # and no allocation taken
+
+
+def test_quota_readable():
+    assert op.quota_readable(_acc(250, 3))
+    assert not op.quota_readable(_acc(250, None)) and not op.quota_readable(None)
+    assert not op.quota_readable({"subscriptions": [{"is_active": True, "request_limit": True, "request_count": 1}]})
+
+
 # ----------------------------------------------------------------------------------------------- Retry-After
+
+class Clock:
+    """A deterministic clock for net.py: sleeping advances it; on_sleep lets a test act as a concurrent request."""
+
+    def __init__(self, t0=1_900_000_000.0):
+        self.t, self.sleeps, self.on_sleep = t0, [], None
+
+    def time(self):
+        return self.t
+
+    def monotonic(self):
+        return self.t
+
+    def sleep(self, s):
+        self.sleeps.append(s)
+        self.t += max(0.0, s)
+        if self.on_sleep:
+            self.on_sleep(s)
+
+    strftime = staticmethod(_wall.strftime)
+    gmtime = staticmethod(_wall.gmtime)
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    c = Clock()
+    monkeypatch.setattr(net, "time", c)
+    return c
+
 
 class _Resp:
     def __init__(self, status, retry_after=None):
@@ -179,24 +261,86 @@ class _Resp:
         self.headers = {"Retry-After": retry_after} if retry_after is not None else {}
 
 
-def test_short_retry_after_is_slept_in_full_then_retried(monkeypatch):
-    slept, answers = [], [_Resp(429, "5"), _Resp(200)]
-    monkeypatch.setattr(net.time, "sleep", slept.append)
-    r = net._request("https://short.example.test/a", None, None, 5, 3, (200,), lambda: answers.pop(0))
-    waits = [x for x in slept if x >= 1]                                      # host pacing sleeps are under 1 s
-    assert r.status_code == 200 and waits == [5]                             # exactly what the source asked
+def _sender(clock, answers, sent):
+    def send():
+        sent.append(clock.t)
+        return answers.pop(0)
+    return send
 
 
-def test_long_retry_after_is_a_hold_never_retried_early(monkeypatch):
-    sent = []
-    monkeypatch.setattr(net.time, "sleep", lambda s: s < 1 or pytest.fail("slept through / retried a long wait"))
+def test_short_retry_after_is_waited_out_in_full_then_retried(clock):
+    sent, t0 = [], clock.t
+    r = net._request("https://short.example.test/a", None, None, 5, 3, (200,),
+                     _sender(clock, [_Resp(429, "5"), _Resp(200)], sent))
+    assert r.status_code == 200 and len(sent) == 2
+    assert sent[1] >= t0 + 5 and sent[1] - t0 < 5.001                         # the full wait, never less
+
+
+def test_long_retry_after_is_a_hold_never_retried_early(clock):
+    sent, t0 = [], clock.t
     with pytest.raises(net.HttpError) as e:
         net._request("https://long.example.test/a", None, None, 5, 3, (200,),
-                     lambda: sent.append(1) or _Resp(429, "3600"))
-    assert len(sent) == 1 and e.value.not_before - time.time() > 3500
-    with pytest.raises(net.HttpError) as e2:                                  # same host, any path: nothing is sent
-        net._request("https://long.example.test/b", None, None, 5, 3, (200,), lambda: sent.append(1) or _Resp(200))
+                     _sender(clock, [_Resp(429, "3600")], sent))
+    assert len(sent) == 1 and e.value.not_before == t0 + 3600 and not e.value.held
+    assert sum(clock.sleeps) < 1                                              # no sleeping through it
+    with pytest.raises(net.HttpError) as e2:                                  # any path on that host: nothing sent
+        net._request("https://long.example.test/b", None, None, 5, 3, (200,), _sender(clock, [_Resp(200)], sent))
     assert e2.value.held and len(sent) == 1
+
+
+def test_hold_set_by_a_concurrent_request_during_pacing_blocks_the_send(clock, monkeypatch):
+    host, sent = "pace.example.test", []
+    real_wait = net._wait
+
+    def wait_then_other_request_gets_429(h):
+        real_wait(h)
+        net.hold(h, clock.t + 3600)                                            # set while this call was pacing
+    monkeypatch.setattr(net, "_wait", wait_then_other_request_gets_429)
+    with pytest.raises(net.HttpError) as e:
+        net._request(f"https://{host}/a", None, None, 5, 3, (200,), _sender(clock, [_Resp(200)], sent))
+    assert e.value.held and sent == []
+
+
+def test_hold_set_during_backoff_blocks_the_retry(clock):
+    host, sent = "backoff.example.test", []
+
+    def during_backoff(s):
+        if s >= 1 and not net.holds():                                         # the backoff sleep, not pacing
+            net.hold(host, clock.t + 3600)
+    clock.on_sleep = during_backoff
+    with pytest.raises(net.HttpError) as e:
+        net._request(f"https://{host}/a", None, None, 5, 3, (200,), _sender(clock, [_Resp(503), _Resp(200)], sent))
+    assert e.value.held and len(sent) == 1                                     # the retry was never sent
+
+
+def test_hold_extended_while_waiting_is_waited_again_before_sending(clock):
+    host, sent, t0 = "extend.example.test", [], clock.t
+    net.hold(host, t0 + 5)
+    extended = []
+
+    def other_request_extends(s):
+        if not extended:
+            extended.append(1)
+            net.hold(host, t0 + 12)                                            # a concurrent 429 said 12 s
+    clock.on_sleep = other_request_extends
+    r = net._request(f"https://{host}/a", None, None, 5, 3, (200,), _sender(clock, [_Resp(200)], sent))
+    assert r.status_code == 200 and sent == [t0 + 12]                          # sent exactly when the hold ended
+
+
+def test_holds_extended_past_the_call_budget_fail_without_sending(clock):
+    host, sent, t0 = "budget.example.test", [], clock.t
+    net.hold(host, t0 + 40)
+    clock.on_sleep = lambda s: net.hold(host, clock.t + 40)                    # keeps being extended
+    with pytest.raises(net.HttpError) as e:
+        net._request(f"https://{host}/a", None, None, 5, 3, (200,), _sender(clock, [_Resp(200)], sent))
+    assert e.value.held and sent == [] and sum(clock.sleeps) <= net.MAX_SLEEP_S
+
+
+def test_an_expired_hold_does_not_delay(clock):
+    host, sent = "expired.example.test", []
+    net.hold(host, clock.t - 1)
+    r = net._request(f"https://{host}/a", None, None, 5, 3, (200,), _sender(clock, [_Resp(200)], sent))
+    assert r.status_code == 200 and sum(clock.sleeps) == 0
 
 
 def test_http_date_retry_after_is_read():

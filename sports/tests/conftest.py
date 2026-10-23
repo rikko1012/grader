@@ -28,6 +28,7 @@ def private_sports_data(monkeypatch, tmp_path):
         raise ConnectionError("network disabled in tests")
     monkeypatch.setattr(net, "get", offline)
     monkeypatch.setattr(net, "_HOLD", {})                 # Retry-After holds never leak between tests
+    monkeypatch.setattr(net, "_LAST", {})                 # nor host pacing slots (a fake clock may have set them)
     yield
     con = getattr(cache._local, "con", None)
     if con is not None:

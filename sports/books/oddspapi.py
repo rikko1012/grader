@@ -125,6 +125,13 @@ def subscription(account):
     return next((s for s in subs if s.get("subscription_id") == cur), subs[0] if subs else None)
 
 
+def quota_readable(account):
+    """True only for an account answer whose active subscription reports numeric request_limit and request_count."""
+    sub = subscription(account) if isinstance(account, dict) else None
+    return bool(sub) and all(isinstance(sub.get(k), (int, float)) and not isinstance(sub.get(k), bool)
+                             for k in ("request_limit", "request_count"))
+
+
 def guard(account, used, alloc, floor):
     """-> (ok, reason, numbers). ok = one more Sports request leaves the account above CS2's floor and Sports inside
     its allocation."""
@@ -277,7 +284,11 @@ class OddsPapi(Provider):
             return None
         res.requests += 1
         res.http_status = r.status_code
-        return r.json()
+        try:
+            return r.json()
+        except ValueError:
+            res.error = f"{path}: answer is not JSON"
+            return None
 
     def account(self, res=None):
         """GET /v4/account (unmetered) - the api_key field of the answer is dropped before anything else sees it."""
@@ -287,9 +298,15 @@ class OddsPapi(Provider):
             body.pop("api_key", None)
         return body
 
-    def _billable(self, db, path, params, res, now, account):
-        account = self.account(res) or account          # a FRESH look at the whole account before every billable call
-        ok, why, nums = guard(account, used_this_month(db, now), allocation(), cs2_floor())
+    def _billable(self, db, path, params, res, now, account):   # noqa: ARG002 (the earlier reading is never used)
+        # a FRESH look at the whole account before every billable call - and fail CLOSED: a failed, timed-out or
+        # malformed answer (no active subscription with numeric request_limit / request_count) means no request,
+        # never a fall back to the earlier reading
+        fresh = self.account(res)
+        if not quota_readable(fresh):
+            res.budget_denied = "fresh /v4/account read failed or carried no quota numbers: no billable request"
+            return None
+        ok, why, nums = guard(fresh, used_this_month(db, now), allocation(), cs2_floor())
         if not ok:
             res.budget_denied = why
             return None
@@ -339,6 +356,9 @@ class OddsPapi(Provider):
         account = self.account(res)
         if not isinstance(account, dict):
             res.error = res.error or "GET /v4/account failed"
+            return res
+        if not quota_readable(account):
+            res.budget_denied = "/v4/account carried no quota numbers: no billable request"
             return res
         books = books_for(account, lg["family"])
         if not books:
