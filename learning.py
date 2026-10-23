@@ -1907,13 +1907,42 @@ def legacy_margin_report(con, us, B=BOOT_B):
 # the REVIEW_RULE windows (300 / 600 / 1,000 distinct matches with an eligible logged unit); th-1 also needs >= 60 cohort matches.
 CANDS_REVIEW = {
     "rm1": {"id": "rm-1", "family": "rounds-mixture-1", "frozen_at": "2026-10-23T07:45:00+00:00", "cells": ["kills 1", "kills 123", "hs 1"],
-            "looks": [300, 600, 1000], "min_cohort_matches": 0},
+            "looks": [300, 600, 1000], "min_cohort_matches": 0,
+            "look_counter": "distinct forward matches with >= 1 rm-1-eligible paired P1 unit (kills Map 1 / kills Maps 1-3 / HS Map 1 "
+                            "on a perf-2 / perf-2-bo3 grade)"},
     "th1": {"id": "th-1", "family": "thin-fallback-1", "frozen_at": "2026-10-23T07:45:00+00:00", "cells": ["kills 1 (history < 150 rounds)"],
-            "looks": [300, 600, 1000], "min_cohort_matches": 60},
+            "looks": [300, 600, 1000], "min_cohort_matches": 60,
+            "look_counter": "distinct forward matches with >= 1 paired P1 unit in th-1's cell (kills Map 1 on a perf-2 / perf-2-bo3 grade) "
+                            "carrying a logged th-1 entry, cohort (< 150 weighted rounds) or not (AMENDMENT 2026-10-23 A3); the look "
+                            "is skipped unless >= 60 of those matches have a cohort unit; statistics use cohort units only"},
 }
+# The registered text (REGISTER.md 6d9bb32 / CHALLENGERS.md 2026-10-23 07:45 UTC), kept verbatim:
 CANDS_RULE = ("promotion only if, at a look, the forward paired log-loss gain's 95% match-grouped interval is above 0, Brier is "
               "not worse (point), favoured-side calibration is not worse (|gap| at most 1.0 pt worse and not significantly worse) "
               "and coverage is identical; the Over / Under mix is reported for reading only, never a reason; the owner decides")
+# AMENDMENT 2026-10-23 (research/cs2_accuracy_2y/AMENDMENT_2026-10-23.md; made before any eligible forward rm-1 / th-1 outcome
+# existed - 0 eligible of 1,998 forward forecasts in production, ids 81456..83453 to 16:56 UTC; research commit b937869,
+# 2026-10-23 17:00:47 UTC). Supersedes the 95% level above
+# as the DECISION level; the 95% figures stay in the report for reading only. Family = 2 candidates x 3 looks = 6 primary
+# one-sided tests, one-sided family-wise alpha 0.025 split by Bonferroni: each test at one-sided 0.025 / 6 = 0.0041667.
+CANDS_AMENDMENT = {
+    "id": "cands-amend-1", "made_at": "2026-10-23T16:54:15+00:00", "doc": "research/cs2_accuracy_2y/AMENDMENT_2026-10-23.md (research commit b937869)",
+    "family": ["rm-1", "th-1"], "looks": [300, 600, 1000], "alpha_one_sided_family": 0.025, "tests": 6,
+    "alpha_one_sided_per_test": 0.025 / 6,
+    "statistic": "unit-weighted mean over the look cohort's units of [LL(logged live) - LL(candidate)], LL = -ln p(outcome), "
+                 "p = P(Over | no push) at the offered P1 line clipped to [1e-4, 1 - 1e-4]; + = candidate better",
+    "method": "match-clustered nonparametric bootstrap (matches resampled with replacement, multinomial weights), ratio sum/count, "
+              "percentile; decision bound = the floor(alpha x B)-th order statistic (0-based) of the B resampled ratios",
+    "B": 4000, "seed": 20261023, "guard_B": 2000, "guard_level": 0.95, "calibration_tol": 0.010,
+}
+CANDS_RULE_AMENDED = (
+    "AMENDED 2026-10-23 (cands-amend-1): at each look W in 300 / 600 / 1,000 (look cohort = the first W counted matches by start), "
+    "the candidate meets the rule only if (1) th-1: >= 60 look-cohort matches with a cohort unit, else the look is skipped; "
+    "(2) primary: the one-sided lower bound at alpha 0.025 / 6 = 0.0041667 (= the lower end of a two-sided 99.17% percentile "
+    "interval; match-clustered bootstrap, B = 4,000) of the paired log-loss gain vs the logged live chance is > 0; (3) Brier gain "
+    "point >= 0; (4) calibration by favoured side, each side: |gap| candidate - |gap| live <= 1.0 pt and its 95% match-clustered "
+    "interval not entirely > 0; (5) coverage identical (0 forward cell units without a scored candidate chance). (3)-(5) are "
+    "conditions, not tests, and spend no alpha. Meeting the rule = eligible for the owner's review; never automatic promotion")
 
 
 def _cands_of(f):
@@ -1936,6 +1965,11 @@ def cands_report(con, us, key, B=BOOT_B):
     logged / rejected; then paired log loss, Brier, and the favoured side (hit, mean chance, |gap|) for each arm."""
     rv = CANDS_REVIEW[key]
     counts, pr = collections.Counter(), []
+    cell_other = []       # th-1: forward paired units in its cell outside the cohort (th-1 = live there) - look counter only
+    gaps = []             # forward units in a candidate cell whose entry is missing / errored (coverage check)
+    cells = {(c.split()[0], c.split()[1]) for c in rv["cells"]}
+    in_cell = lambda u: (str(u.get("prop")), str(u.get("scope") or "12")) in cells
+    forward = lambda u: u["logged"] > rv["frozen_at"] and str(u.get("start") or "") >= "2026-10-22"
     for u in us:
         r = con.execute("SELECT cands FROM forecast_copy WHERE forecast_id = ?", (u["forecast_id"],)).fetchone()
         try:
@@ -1944,28 +1978,45 @@ def cands_report(con, us, key, B=BOOT_B):
             e = None
         if e is None:
             counts[f"not logged (forecast before {rv['id']})"] += 1
+            if forward(u) and in_cell(u):
+                gaps.append(u)
             continue
         if e.get("eligible") is False:
-            counts["not eligible (" + str(e.get("reason") or "?")[:60] + ")"] += 1
+            why = str(e.get("reason") or "?")
+            counts["not eligible (" + why[:60] + ")"] += 1
+            lp = (e.get("live") or {}).get("p_more")
+            if (key == "th1" and (why.startswith("history >= 150") or why.startswith("no saved history depth")) and forward(u)
+                    and lp is not None and abs(float(lp) - float(u["p"])) <= 1e-9):
+                cell_other.append(u)
             continue
         if e.get("eligible") is not True or e.get("p_more") is None:
             counts[f"rejected ({rv['id']} error)"] += 1
+            if forward(u) and in_cell(u):
+                gaps.append(u)
             continue
         lp = (e.get("live") or {}).get("p_more")
         if lp is None or abs(float(lp) - float(u["p"])) > 1e-9:
             counts["rejected (stored live chance differs from the P1 chance)"] += 1
             continue
-        if u["logged"] <= rv["frozen_at"] or str(u.get("start") or "") < "2026-10-22":
+        if not forward(u):
             counts["rejected (logged before the freeze / match before 2026-10-22)"] += 1
             continue
         pm = float(e["p_more"])
         pr.append(dict(u, p_logged=u["p"], p_base=float(e.get("live_replay", lp)), p_ch=pm, changed=int(abs(pm - u["p"]) > 1e-9)))
     nm = len({u["match"] for u in pr})
-    out = {"id": rv["id"], "family": rv["family"], "review": dict(rv, rule=CANDS_RULE), "counts": dict(counts),
-           "eligible_units": len(pr), "eligible_matches": nm, "next_look": next((n for n in rv["looks"] if nm < n), None),
-           "look_reached": max([n for n in rv["looks"] if nm >= n], default=None), "cohort_ok": nm >= rv["min_cohort_matches"],
+    counted = pr + cell_other     # AMENDMENT 2026-10-23 A3: th-1 looks count its cell; for rm-1 cell_other is always empty
+    nl = len({u["match"] for u in counted})
+    out = {"id": rv["id"], "family": rv["family"], "review": dict(rv, rule=CANDS_RULE_AMENDED, rule_registered=CANDS_RULE,
+                                                                   amendment=CANDS_AMENDMENT),
+           "counts": dict(counts), "eligible_units": len(pr), "eligible_matches": nm, "look_matches": nl,
+           "next_look": next((n for n in rv["looks"] if nl < n), None),
+           "look_reached": max([n for n in rv["looks"] if nl >= n], default=None), "cohort_ok": nm >= rv["min_cohort_matches"],
+           "coverage_gaps": len(gaps),
            "label": "P1 board lines, forward, eligible forecasts only - interim until a look is reached"}
-    if not pr:
+    if not pr and not cell_other:
+        return out
+    if not pr:           # th-1 cell matches counted, no cohort unit yet: looks (skipped) below, no running statistics
+        out["looks"] = _cands_looks(rv, pr, counted, nl, gaps, B)
         return out
     st = paired_stats(pr, slope=False)
     st["gain_vs_logged_ci"] = _ci_ratio(_groups(pr, lambda u: _ll(u["p_logged"], u["over"]) - _ll(u["p_ch"], u["over"])), B=B)
@@ -1980,25 +2031,125 @@ def cands_report(con, us, key, B=BOOT_B):
     # 2026-10-23 closeout: the registered rule is read AT a look, on that look's cohort (REVIEW_RULE: the first W distinct
     # forward matches by start, frozen) - the running figures above keep growing past a window and are never the look figure.
     # Same statistics and level as registered (REGISTER.md: 95% match-grouped); no pass / fail is computed here (owner decides).
+    out["looks"] = _cands_looks(rv, pr, counted, nl, gaps, B)
+    return out
+
+
+def _cands_looks(rv, pr, counted, nl, gaps, B):
+    """One entry per reached look on its frozen cohort (REVIEW_RULE: the first W counted matches by start): the 95% figures
+    (reading only) and the AMENDMENT 2026-10-23 decision quantities (cands_decision)."""
     first = {}
-    for u in pr:
+    for u in counted:
         first[u["match"]] = min(first.get(u["match"], "~"), str(u.get("start") or "~"))
     order = [m for m, _ in sorted(first.items(), key=lambda kv: (kv[1], kv[0]))]
-    out["looks"] = []
+    gl = lambda u: _ll(u["p_logged"], u["over"]) - _ll(u["p_ch"], u["over"])
+    gb = lambda u: (u["p_logged"] - u["over"]) ** 2 - (u["p_ch"] - u["over"]) ** 2
+    looks = []
     for w in rv["looks"]:
-        if nm < w:
+        if nl < w:
             break
         keep = set(order[:w])
         lc = [u for u in pr if u["match"] in keep]
-        gl = lambda u: _ll(u["p_logged"], u["over"]) - _ll(u["p_ch"], u["over"])
-        out["looks"].append({
-            "window": w, "matches": len(keep), "units": len(lc), "level": 0.95,
-            "cohort": "the first W distinct forward matches by start with an eligible unit (REVIEW_RULE cohort)",
-            "cohort_ok": len(keep) >= rv["min_cohort_matches"],
-            "log_loss_gain_vs_logged": _r(sum(gl(u) for u in lc) / len(lc), 5), "log_loss_gain_vs_logged_ci": _ci_ratio(_groups(lc, gl), B=B),
-            "brier_gain": _r(sum(gb(u) for u in lc) / len(lc), 5),
-            "favoured_side": {"live": _cands_side(lc, "p_logged"), rv["id"]: _cands_side(lc, "p_ch")}})
-    return out
+        cm = len({u["match"] for u in lc})
+        look = {
+            "window": w, "matches": len(keep), "units": len(lc), "cohort_matches": cm, "level": 0.95,
+            "level_note": "95% figures are for reading only; the decision level is AMENDMENT 2026-10-23 (see decision)",
+            "cohort": "the first W distinct forward counted matches by start (REVIEW_RULE cohort; th-1: its cell, AMENDMENT A3)",
+            "cohort_ok": cm >= rv["min_cohort_matches"]}
+        if lc:
+            look.update({
+                "log_loss_gain_vs_logged": _r(sum(gl(u) for u in lc) / len(lc), 5), "log_loss_gain_vs_logged_ci": _ci_ratio(_groups(lc, gl), B=B),
+                "brier_gain": _r(sum(gb(u) for u in lc) / len(lc), 5),
+                "favoured_side": {"live": _cands_side(lc, "p_logged"), rv["id"]: _cands_side(lc, "p_ch")}})
+        look["decision"] = cands_decision(lc, cohort_ok=look["cohort_ok"], coverage_gaps=sum(1 for u in gaps if u["match"] in keep))
+        looks.append(look)
+    return looks
+
+
+def _boot_weights(n, B, seed, chunk=500):
+    """Match-clustered bootstrap: B rows of multinomial(n, 1/n) resampling counts over the n matches, yielded in chunks so
+    memory stays at chunk x n integers."""
+    import numpy as np
+    rng = np.random.default_rng(seed)
+    left = B
+    while left > 0:
+        k = min(chunk, left)
+        left -= k
+        yield rng.multinomial(n, [1.0 / n] * n, size=k)
+
+
+def cands_decision(lc, cohort_ok=True, coverage_gaps=0, cfg=None):
+    """AMENDMENT 2026-10-23 decision quantities for ONE look on its cohort units lc (each with match, over, p_logged, p_ch):
+    the primary one-sided bound at alpha 0.025 / 6, the Brier point and the favoured-side calibration guard (95%), coverage,
+    and whether every condition is met. Never promotes (the owner decides)."""
+    import numpy as np
+    cfg = cfg or CANDS_AMENDMENT
+    a = cfg["alpha_one_sided_per_test"]
+    res = {"amendment": cfg["id"], "alpha_one_sided": round(a, 7), "two_sided_equivalent": round(1 - 2 * a, 5),
+           "method": cfg["method"], "B": cfg["B"], "seed": cfg["seed"], "cohort_ok": bool(cohort_ok), "coverage_gaps": int(coverage_gaps),
+           "promotion": "never automatic; meeting the rule = eligible for the owner's review"}
+    if not cohort_ok:
+        res["skipped"] = "look skipped: fewer than the registered minimum of cohort matches"
+    if not lc:
+        return dict(res, units=0, rule_met=False)
+    ms = sorted({u["match"] for u in lc})
+    ix = {m: i for i, m in enumerate(ms)}
+    n = len(ms)
+    # per-match sums: 0 log-loss gain, 1 units, 2 Brier gain, then per arm (live, candidate) x side (Over, Under):
+    # favoured picks, sum of favoured chance, favoured hits (ties at exactly 0.5 favour no side)
+    S = np.zeros((n, 15))
+    for u in lc:
+        i, y = ix[u["match"]], u["over"]
+        S[i, 0] += _ll(u["p_logged"], y) - _ll(u["p_ch"], y)
+        S[i, 1] += 1
+        S[i, 2] += (u["p_logged"] - y) ** 2 - (u["p_ch"] - y) ** 2
+        for j, col in enumerate(("p_logged", "p_ch")):
+            p = u[col]
+            if p == 0.5:
+                continue
+            side = 0 if p > 0.5 else 1
+            b = 3 + j * 6 + side * 3
+            S[i, b] += 1
+            S[i, b + 1] += p if side == 0 else 1 - p
+            S[i, b + 2] += y if side == 0 else 1 - y
+
+    def gaps_of(T):          # T: (..., 15) sums -> |mean favoured chance - hit rate| per arm x side, (..., 2, 2); nan = no picks
+        out = np.full(T.shape[:-1] + (2, 2), np.nan)
+        for j in range(2):
+            for sd in range(2):
+                b = 3 + j * 6 + sd * 3
+                with np.errstate(invalid="ignore", divide="ignore"):
+                    out[..., j, sd] = np.abs(T[..., b + 1] - T[..., b + 2]) / T[..., b]
+        return out
+
+    tot = S.sum(axis=0)
+    gain = tot[0] / tot[1]
+    ratios = np.sort(np.concatenate([(W @ S[:, 0]) / (W @ S[:, 1]) for W in _boot_weights(n, cfg["B"], cfg["seed"])]))
+    lb = float(ratios[int(math.floor(a * cfg["B"]))])
+    g0 = gaps_of(tot)
+    diffs = np.concatenate([(lambda G: G[:, 1, :] - G[:, 0, :])(gaps_of(W @ S))
+                            for W in _boot_weights(n, cfg["guard_B"], cfg["seed"] + 1)])
+    tail = (1 - cfg["guard_level"]) / 2
+    calib = {}
+    for sd, name in enumerate(("Over", "Under")):
+        picks = {"live": int(tot[3 + sd * 3]), "candidate": int(tot[9 + sd * 3])}
+        pt = g0[1, sd] - g0[0, sd]
+        if np.isnan(pt):
+            calib[name] = {"applicable": False, "met": True, "picks": picks,
+                           "note": "one arm has no favoured pick on this side (reported, not a condition)"}
+            continue
+        d = np.sort(diffs[:, sd][~np.isnan(diffs[:, sd])])
+        lo = float(d[int(math.floor(tail * len(d)))]) if len(d) else None
+        hi = float(d[min(len(d) - 1, int(math.ceil((1 - tail) * len(d))) - 1)]) if len(d) else None
+        met = bool(pt <= cfg["calibration_tol"] + 1e-12 and not (lo is not None and lo > 0))
+        calib[name] = {"applicable": True, "abs_gap_live": _r(float(g0[0, sd]), 4), "abs_gap_candidate": _r(float(g0[1, sd]), 4),
+                       "diff": _r(float(pt), 4), "diff_ci95": [_r(lo, 4), _r(hi, 4)], "met": met, "picks": picks}
+    brier = float(tot[2] / tot[1])
+    primary_met = lb > 0
+    rule_met = bool(cohort_ok and primary_met and brier >= 0 and all(c["met"] for c in calib.values()) and coverage_gaps == 0)
+    return dict(res, units=int(tot[1]), matches=n, log_loss_gain_vs_logged=_r(float(gain), 5),
+                primary_lower_bound=_r(lb, 5), primary_met=bool(primary_met), brier_gain=_r(brier, 5), brier_met=bool(brier >= 0),
+                calibration=calib, coverage_met=coverage_gaps == 0, rule_met=rule_met)
 
 
 def _cands_side(units, col):

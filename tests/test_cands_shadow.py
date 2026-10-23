@@ -176,3 +176,95 @@ def test_cands_look_uses_the_frozen_first_w_matches(tmp_path):
     assert lk["window"] == 300 and lk["matches"] == 300 and lk["units"] == 300 and lk["level"] == 0.95
     assert lk["log_loss_gain_vs_logged"] == 0 and rep["paired"]["gain_vs_logged"] < 0     # the 2 late matches are outside the look
     assert learning.cands_report(con, us[:299], "rm1", B=50)["looks"] == []
+
+
+# ---- AMENDMENT 2026-10-23 (research/cs2_accuracy_2y/AMENDMENT_2026-10-23.md): decision level + th-1 look counter
+def _th1_con(tmp_path, n_cell, n_cohort, gain=True):
+    """n_cell forward matches with a kills Map 1 perf-2 unit outside th-1's cohort (th-1 entry not eligible, history >= 150);
+    the first n_cohort of them also carry a th-1 cohort unit."""
+    con = learning.connect(tmp_path / "learning.db")
+    us, fid = [], 0
+    for i in range(n_cell):
+        start = f"2026-10-{24 + i // 200:02d}T{(i % 200) // 10:02d}:{i % 10}0:00+00:00"
+        fid += 1
+        con.execute("INSERT INTO forecast_copy (forecast_id, cands) VALUES (?, ?)", (fid, json.dumps(
+            {"th1": {"eligible": False, "reason": "history >= 150 weighted rounds (not in the th-1 cohort)", "live": {"p_more": 0.6}}})))
+        u = _unit(fid, f"m{i:04d}", 0.6, 1)
+        u["start"] = start
+        us.append(u)
+        if i < n_cohort:
+            fid += 1
+            con.execute("INSERT INTO forecast_copy (forecast_id, cands) VALUES (?, ?)", (fid, json.dumps(
+                {"th1": {"eligible": True, "p_more": 0.45 if gain else 0.7, "live_replay": 0.6, "live": {"p_more": 0.6}}})))
+            u = _unit(fid, f"m{i:04d}", 0.6, i % 3 == 0)
+            u["start"] = start
+            us.append(u)
+    return con, us
+
+
+def test_th1_look_counts_its_cell_not_only_the_cohort(tmp_path):
+    """REGISTER 6d9bb32: looks at 300 distinct forward matches with an eligible logged unit, 'th-1 ADDITIONALLY needs >= 60
+    distinct cohort matches' - the look counter is th-1's cell (kills Map 1 on perf-2), the 60 counts cohort matches."""
+    con, us = _th1_con(tmp_path, 300, 60)
+    rep = learning.cands_report(con, us, "th1", B=50)
+    assert rep["eligible_matches"] == 60 and rep["look_matches"] == 300 and rep["look_reached"] == 300
+    (lk,) = rep["looks"]
+    assert lk["matches"] == 300 and lk["cohort_matches"] == 60 and lk["cohort_ok"] is True and lk["units"] == 60
+    assert lk["decision"]["cohort_ok"] is True and lk["decision"]["units"] == 60      # statistics on cohort units only
+
+
+def test_th1_look_skipped_below_60_cohort_matches(tmp_path):
+    con, us = _th1_con(tmp_path, 300, 59)
+    (lk,) = learning.cands_report(con, us, "th1", B=50)["looks"]
+    assert lk["cohort_ok"] is False and lk["decision"]["rule_met"] is False and "skipped" in lk["decision"]
+    (tmp_path / "b").mkdir()
+    con2, us2 = _th1_con(tmp_path / "b", 299, 0)
+    rep = learning.cands_report(con2, us2, "th1", B=50)
+    assert rep["look_matches"] == 299 and rep["look_reached"] is None and rep["next_look"] == 300
+
+
+def test_amended_decision_level_is_bonferroni_over_2_candidates_x_3_looks():
+    cfg = learning.CANDS_AMENDMENT
+    assert cfg["tests"] == 6 and abs(cfg["alpha_one_sided_per_test"] - 0.025 / 6) < 1e-15
+    assert learning.CANDS_REVIEW["rm1"]["looks"] == cfg["looks"] == [300, 600, 1000]
+    assert "95% match-grouped interval is above 0" in learning.CANDS_RULE          # registered text kept verbatim
+    import numpy as np
+    lc = []
+    for m in range(40):
+        for k in range(3):
+            y = int((m * 3 + k) % 4 != 0)
+            lc.append({"match": f"m{m:02d}", "over": y, "p_logged": 0.55, "p_ch": 0.6 if m % 5 else 0.5})
+    d = learning.cands_decision(lc)
+    # independent recomputation of the decision bound: the floor(alpha B)-th order statistic of the clustered bootstrap
+    ms = sorted({u["match"] for u in lc})
+    s = np.array([sum(learning._ll(u["p_logged"], u["over"]) - learning._ll(u["p_ch"], u["over"]) for u in lc if u["match"] == m) for m in ms])
+    c = np.array([sum(1 for u in lc if u["match"] == m) for m in ms])
+    rat = np.sort(np.concatenate([(W @ s) / (W @ c) for W in learning._boot_weights(len(ms), cfg["B"], cfg["seed"])]))
+    assert d["primary_lower_bound"] == round(float(rat[int(math.floor(cfg["alpha_one_sided_per_test"] * cfg["B"]))]), 5)
+    assert d["two_sided_equivalent"] == round(1 - 2 * 0.025 / 6, 5) and d["promotion"].startswith("never automatic")
+    assert d["primary_met"] == (d["primary_lower_bound"] > 0)
+
+
+def test_amended_decision_guards_block_a_worse_calibrated_candidate():
+    lc = [{"match": f"m{i // 4}", "over": int(i % 10 < 7), "p_logged": 0.7, "p_ch": 0.95} for i in range(400)]
+    d = learning.cands_decision(lc)
+    assert d["calibration"]["Over"]["met"] is False and d["calibration"]["Over"]["diff"] > 0.2 and d["rule_met"] is False
+    good = [{"match": f"m{i // 4}", "over": int(i % 10 < 7), "p_logged": 0.5 + 0.001, "p_ch": 0.7} for i in range(4000)]
+    g = learning.cands_decision(good)
+    assert g["primary_met"] and g["brier_met"] and g["calibration"]["Over"]["met"] and g["rule_met"] is True
+    assert learning.cands_decision(good, coverage_gaps=1)["rule_met"] is False
+
+
+def test_rm1_look_reports_the_amended_decision(tmp_path):
+    con = learning.connect(tmp_path / "learning.db")
+    us = []
+    for i in range(1, 301):
+        con.execute("INSERT INTO forecast_copy (forecast_id, cands) VALUES (?, ?)",
+                    (i, json.dumps({"rm1": {"eligible": True, "p_more": 0.5, "live_replay": 0.5, "live": {"p_more": 0.5}}})))
+        u = _unit(i, f"m{i:03d}", 0.5, 0)
+        u["start"] = f"2026-10-{24 + i // 100:02d}T{(i % 100) // 10:02d}:{i % 10}0:00+00:00"
+        us.append(u)
+    rep = learning.cands_report(con, us, "rm1", B=50)
+    (lk,) = rep["looks"]
+    assert rep["review"]["rule"] == learning.CANDS_RULE_AMENDED and rep["review"]["rule_registered"] == learning.CANDS_RULE
+    assert lk["decision"]["primary_lower_bound"] == 0 and lk["decision"]["primary_met"] is False and lk["decision"]["rule_met"] is False

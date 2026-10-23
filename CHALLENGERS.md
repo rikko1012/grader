@@ -33,7 +33,7 @@ stake; grader.py and every file in the model_version hash are unchanged.
   by the same code, a pairing check), the live grade's own `p_more`, the projection, and SEPARATELY the recommendation `rec` =
   {side} (no grade / stake is computed for these shadows). Learning copies the entry (`forecast_copy.cands`) and reports it as
   `scorecard.product.candidates_2y.{rm1,th1}` (`learning.cands_report`); `p1_units_export` rows carry `cands`.
-- **Forward rule (registered, REGISTER.md).** Forward set = settled P1 units of matches starting at/after the deploy (and >=
+- **[Amended 2026-10-23: A2 decision level, A3 th-1 look counter - see the AMENDMENT bullet below; original text kept]** **Forward rule (registered, REGISTER.md).** Forward set = settled P1 units of matches starting at/after the deploy (and >=
   2026-10-22) whose P1 forecast carries an eligible entry and whose stored live chance equals the P1 chance. Looks only at
   300 / 600 / 1,000 distinct forward matches with an eligible unit; th-1 also needs >= 60 distinct cohort matches at a look,
   otherwise that look is skipped. Promotion needs, at a look: paired log-loss gain of P(Over | no push) vs the logged live
@@ -46,6 +46,30 @@ stake; grader.py and every file in the model_version hash are unchanged.
   (-0.0073..+0.0125) on 297 units / 21 matches - i.e. no detectable line gain; its HLTV gain is in the distribution shape
   (Map 1 kills +0.042 nats, every fold > 0). th-1's development real-line cell had 10 units / 5 matches; the 60-cohort-match
   minimum may not be reached before the 1,000-match look, in which case it stays a shadow ("not enough forward evidence").
+- **Registered scope (A1, 2026-10-23).** The cells above are the ONLY deployment scope: the registration (REGISTER.md 6d9bb32)
+  evaluated 6 cells per candidate in development and implements a shadow "only for cells that pass, live elsewhere". Kills /
+  HS Maps 1-2 (and every other cell) were development evaluations that FAILED the gate (rm-1 kills Maps 1-2: real-line point
+  -0.0002 on 1,233 units / 136 matches, G3; HS Maps 1-2 / 1-3: < 50-round subgroup worse, G4; th-1 every cell but kills Map 1:
+  G1). Development figures over all scopes (e.g. +0.0004 on all 2,692 real-line units) describe the study population, not the
+  shadow's scope; the scope-matched development figure is +0.0029 [-0.0073, +0.0125] (297 units / 21 matches). Adding a cell
+  would be a new registration with its own clock. Production since the deploy offered only Maps 1-2 lines, so 0 forecasts are
+  eligible (1,998 / 1,998 through id 83453, 2026-10-23 16:56 UTC); the implementation matches the registration (no change).
+- **AMENDMENT 2026-10-23 (cands-amend-1; research/cs2_accuracy_2y/AMENDMENT_2026-10-23.md; research commit b937869, 2026-10-23
+  17:00:47 UTC, BEFORE any eligible forward rm-1 / th-1 outcome existed - 0 eligible of 1,998 forward forecasts; effective in the report from deploy <COORDINATOR: deploy
+  time / commit>).** (A2) Decision level: the family is 2 candidates x 3 looks = 6 primary tests, one-sided family-wise alpha
+  0.025 split by Bonferroni, so each look's primary test is one-sided at 0.025 / 6 = 0.0041667: the lower bound (the
+  floor(alpha B)-th order statistic, i.e. the lower end of a two-sided 99.17% percentile interval) of the match-clustered
+  bootstrap (B = 4,000, seed 20261023) of the unit-weighted paired log-loss gain vs the logged live chance must be > 0. The
+  registered 95% interval is still reported, for reading only. Cells are pooled into ONE test per candidate (no per-cell test);
+  Brier point >= 0, favoured-side calibration (per side |gap| candidate - live <= 1.0 pt and its 95% clustered interval not
+  entirely > 0) and coverage identical are conditions that must all hold and spend no alpha; the side mix is reading only. No
+  futility stop; a skipped look's alpha is not re-used. (A3) th-1 look counter = distinct forward matches with >= 1 paired P1
+  unit in th-1's cell (kills Map 1 on a perf-2 / perf-2-bo3 grade) carrying a logged th-1 entry, cohort or not (the original
+  REGISTER text: looks count matches with an eligible logged unit and th-1 "additionally" needs >= 60 distinct cohort matches);
+  the look is skipped unless >= 60 of its cohort matches have a cohort unit (< 150 weighted rounds); statistics use cohort units
+  only. The 60 is therefore NOT redundant. No logged value, cell, constant or eligibility flag changed. Implemented in
+  `learning.cands_report` / `learning.cands_decision` (`CANDS_AMENDMENT`, `CANDS_RULE_AMENDED`; `CANDS_RULE` kept verbatim);
+  the report shows each look's decision quantities and `rule_met`, never an automatic promotion.
 - **Code.** `cands_shadow.py` (`entries`, `rm1_entry`, `th1_entry`), called from `picklog._factors`; `learning.CANDS_REVIEW`,
   `learning.cands_report`. Tests: tests/test_cands_shadow.py (live grades byte-identical, cells / eligibility, mean kept, Map 1
   = one-map case, values equal the research implementation, learning copy + report). Parity on the 2,692 development P1 units

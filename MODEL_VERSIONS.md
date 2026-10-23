@@ -32,6 +32,13 @@ promotion reason). Forward rule (CHALLENGERS.md): reviews at 300 / 600 / 1000 di
 only with a forward real-line log-loss gain interval > 0, Brier and favoured-side calibration not worse, coverage identical; the
 owner decides. No refit or constant change without a new version.
 
+**[Scope correction 2026-10-23, AMENDMENT_2026-10-23 A1]** The sentence above mixes populations: "beats live HLTV-wide in every
+fold" holds for all 6 development cells, and "+0.0004 [-0.0024, +0.0030], 2,692 units" is every development real-line unit (all
+scopes, mostly Maps 1-2). The shadow's registered scope is only kills Map 1, kills Maps 1-3, HS Map 1 (rm-1) and kills Map 1
+< 150 rounds (th-1); the scope-matched development real-line figure is +0.0029 [-0.0073, +0.0125] (297 units / 21 matches,
+inconclusive). Maps 1-2 failed the development gate and is not in the shadow. Decision level amended before any eligible forward
+outcome (CHALLENGERS.md AMENDMENT 2026-10-23: one-sided 0.025 / 6 per look, conditions as listed there). No model change.
+
 ## Night release 2026-10-23 (CS2 model tag unchanged: `aa6696d5d6`; operational + identity repairs, no model change)
 
 Owner-authorized consolidated release. Replay harness: 257 recent production forecasts (tag aa6696d5d6; perf-cm2 kills/HS,
