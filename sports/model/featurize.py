@@ -34,7 +34,7 @@ def epoch(start_utc):
 
 def iso_week(ts):
     d = ts.astype("int64").astype("datetime64[s]").astype("datetime64[D]")
-    return np.array([x.item().isocalendar()[:2] for x in d], dtype=object)
+    return ["%d-W%02d" % tuple(x.item().isocalendar()[:2]) for x in d]
 
 
 def _assert_pit(f, gs, league):

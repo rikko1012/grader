@@ -322,7 +322,7 @@ def score_partition(final, df, market, sport, mask, label):
     lo, ks = dists.grid(market)
     y = np.asarray(d[f"y_{market}"], float)
     games = np.asarray(d["game_id"])
-    blocks = (np.array(["%d-W%02d" % w for w in featurize.iso_week(d["ts"])], dtype=object) if sport == "nba" else
+    blocks = (np.array(featurize.iso_week(d["ts"]), dtype=object) if sport == "nba" else
               np.array([f"{int(a)}-{int(b)}" for a, b in zip(d["season"], d["week"])], dtype=object))
     bl = baseline_pmfs(d, sport, market, lo, ks)
     b0_pmf, b0_mean, n10 = bl["b0"]
