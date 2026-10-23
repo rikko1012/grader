@@ -29,7 +29,7 @@ MAPS = {"1": 1, "12": 2, "123": 3}
 SOURCES = ("perf-2", "perf-2-bo3", "perf-cm2")
 CAP = rm.CAP
 MAX_OT = 8                 # overtime periods enumerated (mass beyond is ~1e-7 and renormalised away)
-SEQ_MASS_MIN = 0.98        # the veto prediction must list sequences covering >= 98% (ask veto_model.predict(top=250))
+SEQ_MASS_MIN = 0.98        # the listed sequences must cover >= 98%: call veto_model.predict(top=250) for BO1/BO3, top=2520 for BO5
 
 
 # ------------------------------------------------------------------ params
@@ -262,7 +262,7 @@ def _prune(pmf, tol=1e-10):
 # ------------------------------------------------------------------ the distribution of one forecast
 def sequences_from_prediction(pred, retro_order=None):
     """[(played order, weight)] from a veto_model.predict output (its 'sequences' list; ask for top=250 so the list is
-    complete) or, RETROSPECTIVE arm only, the confirmed played order with weight 1. Returns (seqs, covered mass)."""
+    complete: top=250 BO1/BO3, top=2520 BO5) or, RETROSPECTIVE arm only, the confirmed played order with weight 1. Returns (seqs, covered mass)."""
     if retro_order is not None:
         return [(tuple(retro_order), 1.0)], 1.0
     seqs = [(tuple(s), float(p)) for s, p in pred.get("sequences") or [] if p > 0]
@@ -283,7 +283,7 @@ def _rho(scope, src, P):
 def shadow_entry(forecast_inputs, veto_prediction, match_ctx, params=None, retro_order=None, use_maps=True,
                  live_p_more=None):
     """vm-1 shadow record of one forecast. forecast_inputs = the grader's saved inputs (prop, line, scope, bo, perf{...});
-    veto_prediction = veto_model.predict(...) for the match (pre-veto, top=250); match_ctx = match_context(...).
+    veto_prediction = veto_model.predict(...) for the match (pre-veto, top=250; BO5 top=2520); match_ctx = match_context(...).
     retro_order = RETROSPECTIVE confirmed played order (never for live); use_maps=False = the no-map control C0.
     Never raises (errors come back as eligible None + error)."""
     try:
