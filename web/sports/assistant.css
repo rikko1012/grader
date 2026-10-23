@@ -1,0 +1,68 @@
+/* Scout Sports research assistant - every rule is scoped under .sa-root (no global selectors). */
+.sa-root {
+  --sa-bg: #f7f8fa; --sa-panel: #ffffff; --sa-ink: #14171c; --sa-muted: #5b6370; --sa-line: #dfe3ea;
+  --sa-accent: #2456d6; --sa-accent-ink: #ffffff; --sa-warn: #8a5a00; --sa-warn-bg: #fff4dc; --sa-bad: #a1251b;
+  --sa-chip: #eef2fb; --sa-hist: #1f7a4d; --sa-mkt: #7a4a1f; --sa-fc: #4b3aa8; --sa-ref: #4a5568;
+  --sa-radius: 10px; --sa-focus: 0 0 0 3px rgba(36, 86, 214, .35);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--sa-ink);
+  background: var(--sa-bg); min-height: 100vh; box-sizing: border-box;
+}
+@media (prefers-color-scheme: dark) {
+  .sa-root {
+    --sa-bg: #0f1216; --sa-panel: #171b21; --sa-ink: #e8ebf0; --sa-muted: #9aa3b2; --sa-line: #2a3039;
+    --sa-accent: #6d93ff; --sa-accent-ink: #0b0e12; --sa-warn: #ffcf70; --sa-warn-bg: #2f2512; --sa-bad: #ff8a80;
+    --sa-chip: #1f2633; --sa-hist: #6fd3a0; --sa-mkt: #f0b37a; --sa-fc: #b3a6ff; --sa-ref: #b8c0cc;
+  }
+}
+.sa-root *, .sa-root *::before, .sa-root *::after { box-sizing: inherit; }
+.sa-root .sa-wrap { max-width: 860px; margin: 0 auto; padding: 20px 16px 48px; }
+.sa-root header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.sa-root h1 { font-size: 1.35rem; margin: 0; letter-spacing: -.01em; }
+.sa-root .sa-sub { color: var(--sa-muted); margin: 4px 0 16px; font-size: .92rem; }
+.sa-root .sa-seg { display: inline-flex; border: 1px solid var(--sa-line); border-radius: 999px; overflow: hidden; }
+.sa-root .sa-seg button { border: 0; background: transparent; color: var(--sa-ink); padding: 6px 16px; font: inherit;
+  cursor: pointer; min-height: 36px; }
+.sa-root .sa-seg button[aria-pressed="true"] { background: var(--sa-accent); color: var(--sa-accent-ink); }
+.sa-root .sa-panel { background: var(--sa-panel); border: 1px solid var(--sa-line); border-radius: var(--sa-radius);
+  padding: 14px; margin-top: 12px; }
+.sa-root textarea { width: 100%; min-height: 76px; resize: vertical; font: inherit; color: var(--sa-ink);
+  background: transparent; border: 1px solid var(--sa-line); border-radius: 8px; padding: 10px; }
+.sa-root textarea:focus, .sa-root button:focus-visible, .sa-root a:focus-visible { outline: none; box-shadow: var(--sa-focus); }
+.sa-root .sa-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  margin-top: 8px; }
+.sa-root .sa-meta { color: var(--sa-muted); font-size: .85rem; }
+.sa-root .sa-btn { border: 1px solid var(--sa-accent); background: var(--sa-accent); color: var(--sa-accent-ink);
+  border-radius: 8px; padding: 8px 18px; font: inherit; font-weight: 600; cursor: pointer; min-height: 40px; }
+.sa-root .sa-btn.sa-ghost { background: transparent; color: var(--sa-accent); }
+.sa-root .sa-btn[disabled] { opacity: .5; cursor: not-allowed; }
+.sa-root .sa-examples { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.sa-root .sa-examples button { border: 1px solid var(--sa-line); background: var(--sa-chip); color: var(--sa-ink);
+  border-radius: 999px; padding: 4px 12px; font: inherit; font-size: .85rem; cursor: pointer; min-height: 32px; }
+.sa-root .sa-dates { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 8px; }
+.sa-root .sa-date { background: var(--sa-chip); border-radius: 6px; padding: 2px 8px; font-size: .82rem; }
+.sa-root .sa-answer { white-space: pre-wrap; overflow-wrap: anywhere; min-height: 1.5em; }
+.sa-root .sa-answer .sa-cite { display: inline-block; font-size: .72rem; vertical-align: super; line-height: 1;
+  padding: 1px 5px; margin: 0 1px; border-radius: 4px; background: var(--sa-chip); color: var(--sa-ref);
+  text-decoration: none; }
+.sa-root .sa-removed { background: var(--sa-warn-bg); color: var(--sa-warn); border-radius: 4px; padding: 0 4px;
+  font-size: .85em; }
+.sa-root .sa-steps { list-style: none; margin: 10px 0 0; padding: 0; font-size: .85rem; color: var(--sa-muted); }
+.sa-root .sa-steps li { padding: 2px 0; }
+.sa-root .sa-note { margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: var(--sa-warn-bg);
+  color: var(--sa-warn); font-size: .88rem; }
+.sa-root .sa-error { color: var(--sa-bad); }
+.sa-root .sa-ev { margin: 0; padding: 0; list-style: none; }
+.sa-root .sa-ev li { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; padding: 8px 0;
+  border-top: 1px solid var(--sa-line); font-size: .85rem; }
+.sa-root .sa-ev li:first-child { border-top: 0; }
+.sa-root .sa-cat { font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; }
+.sa-root .sa-cat.historical_stats { color: var(--sa-hist); } .sa-root .sa-cat.market_quotes { color: var(--sa-mkt); }
+.sa-root .sa-cat.forecasts { color: var(--sa-fc); } .sa-root .sa-cat.reference { color: var(--sa-ref); }
+.sa-root .sa-id { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .78rem;
+  overflow-wrap: anywhere; color: var(--sa-muted); }
+.sa-root .sa-cursor { display: inline-block; width: .5em; height: 1em; background: var(--sa-muted); vertical-align: -2px;
+  animation: sa-blink 1s steps(2) infinite; }
+@keyframes sa-blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .sa-root .sa-cursor { animation: none; } }
+.sa-root .sa-hidden { display: none !important; }
+.sa-root h2 { font-size: 1rem; margin: 0 0 8px; }
