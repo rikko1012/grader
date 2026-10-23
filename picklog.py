@@ -22,6 +22,8 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import platform_rules
+
 DB = Path(os.environ.get("CS2_DATA_DIR") or Path(__file__).resolve().parent) / "picks.db"
 _LOCK = threading.Lock()
 VOID_AFTER_D = 3          # never found finished after 3 days -> void
@@ -779,8 +781,9 @@ def _settle_one(b, map_rows, r, now):
         return _set_result(r, _settle_hltv(r, now, start), now)
     # HLTV first - the official record (BO3.gg's quick scoreboards and map order are sometimes off)
     hv = _hltv_totals(r)
-    if hv == "transient":
+    if hv in ("transient", "pending"):
         return 0          # 2026-10-13 audit D5: HLTV unreachable - never BO3.gg's result or a void as if HLTV had no match
+        #                   2026-10-23: "pending" = HLTV shows a case the platform's published rules do not decide
     if hv == "wait" and now < start + timedelta(hours=HLTV_WAIT_H):
         return 0          # HLTV has the match but not this stat yet (scraped every ~2 h)
     if isinstance(hv, tuple):
@@ -1167,6 +1170,53 @@ def _forfeited(cur, mid):
         return None
 
 
+_MAP_STATE_SQL = """
+SELECT mm.number, count(ps.playerid) FILTER (WHERE t.name = %(team)s OR %(team)s IS NULL)
+FROM match_maps mm
+LEFT JOIN player_stats ps ON ps.matchid = mm.matchid AND ps.mapid = mm.mapid AND ps.sideid = 0
+LEFT JOIN matches own ON own.matchid = mm.matchid AND own.teamid = ps.teamid AND own.mapid = mm.mapid AND own.sideid = 0
+LEFT JOIN teams t ON t.teamid = own.teamid
+WHERE mm.matchid = %(mid)s
+GROUP BY mm.number
+"""
+
+
+def _map_state(cur, mid, team=None):
+    """(played map numbers, numbers whose stats are scraped for the player's team - 5+ of its players' rows, the same
+    joins as hltv._series_rows -, series map count from the score or None). None when it cannot be read (unknown ->
+    the platform rules leave the pick pending). HLTV unreachable raises (as _forfeited)."""
+    try:
+        cur.execute(_MAP_STATE_SQL, {"mid": mid, "team": team})
+        rows = cur.fetchall()
+        cur.execute("SELECT score1, score2 FROM scrape_queue WHERE matchid = %s", (mid,))
+        sq = cur.fetchone()
+    except Exception as e:
+        import hltv
+        if hltv.is_transient(e):
+            raise
+        return None
+    try:
+        played = {int(n) for n, _c in rows}
+        scraped = {int(n) for n, c in rows if (c or 0) >= 5}
+        total = (int(sq[0]) + int(sq[1])) if sq and sq[0] is not None and sq[1] is not None else None
+    except (TypeError, ValueError, IndexError):
+        return None
+    return played, scraped, total
+
+
+def _note_pending(r, res):
+    """A settlement the platform's published rules do not decide: the pick stays open (never voided by the clock) and
+    the reason is recorded on it once (result.rule_pending) for the admin output."""
+    note = {"rule_pending": {"reason": res.get("reason"), "rule": res.get("rule"), "platform": res.get("platform"),
+                             "forfeited_maps": res.get("forfeited_maps")}}
+    try:
+        cur = json.loads(_col(r, "result") or "{}")
+    except (TypeError, ValueError):
+        cur = {}
+    if not isinstance(cur, dict) or cur.get("rule_pending") != note["rule_pending"]:
+        _save_result(r["id"], dict(cur if isinstance(cur, dict) else {}, **note))
+
+
 def _team_confirmed(cur, ids, team):
     """The HLTV player's maps include the pick's team: an exact name variant, or the team's HLTV id via the alias table
     (hltv.resolve_team_id). No team on the pick = nothing to confirm against (unconfirmed)."""
@@ -1320,6 +1370,11 @@ def scope_result(r, same_day_only=False):
                 on = [x for x in on if x["date"] >= day]     # an earlier meeting is not this match (previous rule)
             mids = {x["hltv_match"] for x in on}
             forfeits = _forfeited(cur, next(iter(mids))) if len(mids) == 1 else None
+            plat = platform_rules.platform_of(_col(r, "book"))
+            # the match's map rows (played / scraped numbers, series score): which map a forfeit was, and whether he
+            # sat out a map of the line - only needed when a platform rule depends on it (2026-10-23 platform rules)
+            mstate = (_map_state(cur, next(iter(mids)), on[0].get("team"))
+                      if len(mids) == 1 and (forfeits or plat) else None)
             if len(mids) == 1 and (_col(r, "scope") or "12") == "123" and not any(x["number"] == 3 for x in on):
                 # Two matching map results do not prove a sweep: a BO5 can be 2-0 and still be playing.
                 # Use the same stored series format as the match model; unknown format means wait.
@@ -1336,8 +1391,26 @@ def scope_result(r, same_day_only=False):
         return {"status": "none", "reason": "match not in HLTV yet"}
     if len(mids) > 1:
         return {"status": "error", "reason": f"{len(mids)} HLTV matches vs this opponent around that day - ambiguous"}
+    sc = _col(r, "scope") or "12"
     if forfeits:
-        return {"status": "void", "reason": f"{forfeits} forfeited map(s)"}
+        # 2026-10-23 platform rules (platform_rules.py): Underdog voids only a forfeit inside the line's maps (a map-3
+        # forfeit after Maps 1-2 were played grades); PrizePicks publishes no CS2 forfeit rule -> pending, never guessed;
+        # a line with no platform keeps the standing rule (any forfeited map voids, 2026-10-08)
+        played, scraped, n_series = mstate or (None, None, None)
+        fset = platform_rules.forfeited_numbers(forfeits, played, n_series) if played is not None else None
+        d = platform_rules.forfeit_decision(plat, sc, fset, any_played=bool(played) if played is not None else True)
+        if d["action"] == "void":
+            return {"status": "void", "reason": f"{forfeits} forfeited map(s)" if plat is None else d["reason"],
+                    "rule": d["rule"], "forfeited_maps": sorted(fset) if fset else None}
+        if d["action"] == "pending":
+            return {"status": "pending", "reason": d["reason"], "rule": d["rule"], "platform": plat,
+                    "forfeited_maps": sorted(fset) if fset else None}
+    if plat and mstate:
+        d = platform_rules.dnp_decision(plat, sc, {x["number"] for x in on}, mstate[1])
+        if d and d["action"] == "void":
+            return {"status": "void", "reason": d["reason"], "rule": d["rule"]}
+        if d and d["action"] == "pending":
+            return {"status": "pending", "reason": d["reason"], "rule": d["rule"], "platform": plat}
     ms = sorted(on, key=lambda x: x["number"])
     maps = [{"number": x["number"], "kills": x["kills"], "headshots": x["headshots"], "won": x["won"]} for x in ms]
     sc = _col(r, "scope") or "12"
@@ -1375,6 +1448,9 @@ def _settle_scope(r, now, start):
         res = {"status": "none"}
     if res["status"] == "void":
         return ("void", None, None, None)
+    if res["status"] == "pending":                    # platform rule not published: open, never voided by the clock
+        _note_pending(r, res)
+        return None
     if res["status"] != "ok":
         return ("void", None, None, None) if now > start + timedelta(days=VOID_AFTER_D) else None
     _save_result(r["id"], {"source": "hltv", "rounds": res["rounds"], "won": res["won"], "per_map": res["per_map"],
@@ -1558,6 +1634,9 @@ def _hltv_totals(r, same_day_only=False):
         return "transient" if hltv.is_transient(e) else None
     if res["status"] == "void":
         return ("void", None, None, None)
+    if res["status"] == "pending":                    # 2026-10-23: platform rule not published - no BO3.gg fallback either
+        _note_pending(r, res)
+        return "pending"
     if res["status"] == "wait":
         return "wait"
     if res["status"] != "ok":
@@ -1615,12 +1694,23 @@ def _settle_hltv(r, now, start):
     actual = tot.get("headshots" if r["prop"] == "hs" else "kills") if tot.get("found") else None
     if actual is None and tot.get("transient"):
         return None                                   # HLTV unreachable: never a void on that (2026-10-11 audit)
-    try:                                              # a forfeited map voids the pick (2026-10-08)
-        con = hltv._connect()
+    try:                                              # a forfeited map voids the pick (2026-10-08) - per platform since
+        con = hltv._connect()                         # 2026-10-23 (platform_rules.forfeit_decision, as scope_result)
         try:
             with con.cursor() as cur:
-                if _forfeited(cur, int(r["match_slug"].split("-", 1)[1])):
-                    return ("void", None, None, None)
+                mid = int(r["match_slug"].split("-", 1)[1])
+                ff = _forfeited(cur, mid)
+                if ff:
+                    plat = platform_rules.platform_of(_col(r, "book"))
+                    ms = _map_state(cur, mid) if plat else None
+                    fset = platform_rules.forfeited_numbers(ff, ms[0], ms[2]) if ms else None
+                    d = platform_rules.forfeit_decision(plat, "12", fset, any_played=bool(ms[0]) if ms else True)
+                    if d["action"] == "void":
+                        return ("void", None, None, None)
+                    if d["action"] == "pending":
+                        _note_pending(r, {"reason": d["reason"], "rule": d["rule"], "platform": plat,
+                                          "forfeited_maps": sorted(fset) if fset else None})
+                        return None
         finally:
             con.close()
     except Exception as e:
