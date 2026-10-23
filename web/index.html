@@ -638,6 +638,21 @@ body.ot-lol .intro {margin:0 0 24px}.ot-lol .intro h2 {font:700 34px var(--displ
 
 /* ONE_TIME_MATCHROOM_END */
 
+/* VETO_PANEL - map veto veto-1 (display only): confirmed maps, predicted Map 1 / Map 2, full-series combinations */
+.veto{margin-top:10px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2)}
+.veto-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-bottom:6px}
+.veto-head b{font:600 14px var(--display)}.veto-head .pill{margin:0}
+.veto-lab{font-size:12px;font-weight:600;color:var(--muted);margin:8px 0 4px;letter-spacing:.3px}
+.veto-chips{display:flex;flex-wrap:wrap;gap:6px}
+.veto-chip{display:inline-flex;gap:6px;align-items:baseline;padding:4px 9px;border:1px solid var(--line-2);border-radius:8px;font-size:13px;white-space:nowrap}
+.veto-chip b{font-variant-numeric:tabular-nums}.veto-chip.conf{border-color:var(--good);color:var(--good)}
+.veto-chip.other{color:var(--muted);border-style:dashed}
+.veto ol{margin:2px 0 0;padding-left:20px;font-size:13px}.veto ol li{margin:2px 0}
+.veto ol b{font-variant-numeric:tabular-nums;margin-left:6px}
+.veto ul.veto-facts{margin:8px 0 0;padding-left:18px;font-size:12.5px;color:var(--muted)}
+.ot-veto:empty{display:none}.ot-veto{margin-bottom:14px}
+@media(max-width:560px){.veto{padding:10px}.veto-chip{font-size:12.5px;padding:4px 7px}}
+
 /* RESEARCH_FLOW_START - 2026-10-18 release: destinations, compact board, player detail, moneyline rows, slips, results.
    Presentation only: every number comes from the same data as before. */
 :root{--hdr:72px}
@@ -950,6 +965,32 @@ const OTView = Object.freeze({
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const pct = (x, d = 1) => x == null ? "–" : (x * 100).toFixed(d) + "%";
+// map veto panel (veto-1, display only - never a grade input; veto_serve.py). Confirmed maps are shown as confirmed; predicted
+// slots each carry their OWN chances (never one series); whole series are listed separately with the probability left
+// outside the shortlist; the forecast time and the veto state (pending / in progress / confirmed) are always shown.
+const VETO_STATE = {pending: ["Veto pending", ""], partial: ["Veto in progress", "warn"], confirmed: ["Veto confirmed", "good"]};
+function vetoPanel(v, opt) {
+  if (!v || !v.state) return "";
+  const only = (opt || {}).slots;           // a Map 1 line's card shows the Map 1 slot only (as before)
+  const [stTxt, stCls] = VETO_STATE[v.state] || VETO_STATE.pending;
+  let h = `<div class="veto" data-veto="${esc(v.state)}"><div class="veto-head"><b>Map veto</b><span class="pill ${stCls}">${esc(stTxt)}</span>`
+    + `<span class="small muted">${v.state === "confirmed" ? "Updated" : "Forecast"} ${esc(clockTxt(v.at))}${v.at ? " · " + esc(agoTxt(v.at)) : ""}</span></div>`;
+  if ((v.confirmed || []).length) h += `<div class="veto-lab">Confirmed</div><div class="veto-chips">` + v.confirmed.map(c =>
+    `<span class="veto-chip conf">${esc(c.slot)} <b>${esc(c.name)}</b>${c.by ? ` <span class="small">(${esc(c.by)} pick)</span>` : ""}</span>`).join("") + `</div>`;
+  if ((v.bans || []).length) h += `<div class="small muted" style="margin-top:6px">Removed: ${v.bans.map(b => `${esc(b.name)}${b.by ? " (" + esc(b.by) + ")" : ""}`).join(" · ")}</div>`;
+  const slots = (v.slots || []).filter(s => !only || only.includes(s.slot));
+  for (const s of slots) h += `<div class="veto-lab">${esc(s.slot)} · Predicted</div><div class="veto-chips">`
+    + s.top.map(([, name, p]) => `<span class="veto-chip">${esc(name)} <b>${pct(p)}</b></span>`).join("")
+    + (s.other > 0.0005 ? `<span class="veto-chip other">Other maps <b>${pct(s.other)}</b></span>` : "") + `</div>`;
+  if (slots.length > 1) h += `<div class="small muted" style="margin-top:4px">Each map slot's chances are for that slot on its own – they do not add up to one series.</div>`;
+  if ((v.combos || []).length) {
+    const lab = v.format === "bo5" ? "Map 1 · Map 2 · Map 3 · Map 4 · Decider" : "Map 1 · Map 2 · Decider";
+    h += `<div class="veto-lab">Most likely full series (${lab})</div><ol>` + v.combos.map(([maps, p]) => `<li>${maps.map(esc).join(" · ")}<b>${pct(p)}</b></li>`).join("")
+      + `</ol>` + (v.combos_other != null ? `<div class="small muted">Other combinations: ${pct(v.combos_other)}</div>` : "");
+  }
+  if ((v.facts || []).length) h += `<ul class="veto-facts">${v.facts.map(f => `<li>${esc(f)}</li>`).join("")}</ul>`;
+  return h + `</div>`;
+}
 const num = (x, d = 2) => x == null ? "–" : Number(x).toFixed(d);
 // kills chances are capped at 78% (caps.kills_chance): a capped chance says so wherever it shows - same number, labelled
 const KCAP = 0.78;
@@ -3589,12 +3630,8 @@ function render(d) {
     <div class="kv"><span>Event</span><span>${esc(nm.event || "–")}</span></div>
     <div class="kv"><span>${scLab}</span><span>${nm.maps?.length ? nm.maps.slice(0, sc === "1" ? 1 : sc === "123" ? 3 : 2).map(mapName).join(" · ")
       : "Not announced yet – using his all-maps stats"}</span></div>`;
-  if (!nm?.maps?.length && pb.map_prediction) {
-    const top = o => Object.entries(o || {}).slice(0, 3).map(([m, p]) => `${mapName(m)} ${pct(p)}`).join(" · ");
-    h += `<div class="kv"><span>Likely Map 1 <span class="muted small">(context only)</span></span><span>${top(pb.map_prediction.map1)}</span></div>
-      ${sc !== "1" && +nm?.bo !== 1 ? `<div class="kv"><span>Likely Map 2 <span class="muted small">(context only)</span></span><span>${top(pb.map_prediction.map2)}</span></div>` : ""}
-      ${pb.map_prediction.pool_source ? `<div class="small muted">Map pool: ${pb.map_prediction.pool_source === "event veto" ? "this event's own veto" : esc(pb.map_prediction.pool_source)}</div>` : ""}`;
-  }
+  // map veto (veto-1 replaces the old Likely Map 1 / Map 2 lines; display only - the grade does not use predicted maps)
+  if (nm && d.veto) h += vetoPanel(d.veto, {slots: sc === "1" ? ["Map 1", "Map"] : null});
   if (!nm) h += `<div class="muted">No upcoming match found for ${esc(pb.current_team || "this player's team")} yet.</div>`;
   if (d.match_note) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(d.match_note)}</div>`;
   if (d.schedule_heads_up) h += `<div class="small" style="margin-top:6px;color:var(--warn)">HLTV heads-up: ${esc(d.schedule_heads_up)}</div>`;
@@ -4040,11 +4077,20 @@ function otOpenDesk(key, opener) {
     </button>`;
   };
   dlg.innerHTML = `<div class="ot-desk-head"><div><span class="eyebrow">MATCHROOM · ${esc((SCOPE_TXT[bscope] || 'Maps 1–2'))}</span><h2 id="ot-desk-title">${esc(first.team_name || first.team)} vs ${esc(first.opp_name || first.opponent)}</h2><p>${first.event ? esc(first.event) + ' · ' : ''}${otDeskRows.length} posted lines in this platform view</p></div><button type="button" class="ot-desk-close" data-ot-close>Close</button></div>
-    <div class="ot-desk-content">${otStartNotice(otDeskRows)}<p class="small muted">Players with posted lines in this view. Each offer keeps its own projection, probability, grade and stake. Select an offer for its full player analysis.</p>
+    <div class="ot-desk-content">${otStartNotice(otDeskRows)}<div class="ot-veto" id="ot-veto"></div><p class="small muted">Players with posted lines in this view. Each offer keeps its own projection, probability, grade and stake. Select an offer for its full player analysis.</p>
     ${[...teams.entries()].map(([team,players])=>`${team ? `<h3>${esc(team)}</h3>` : ''}<div class="ot-desk-list">${[...players.values()].map(entries=>`<div class="ot-desk-row"><div class="ot-desk-player"><strong>${esc(entries[0].r.nick || entries[0].r.player)}</strong><small>${entries[0].r.awp?'AWP':entries[0].r.igl?'IGL':'Player'}</small></div><div class="ot-offers">${entries.sort((a,b)=>propOrder(a.r.prop)-propOrder(b.r.prop)).map(offer).join('')}</div></div>`).join('')}</div>`).join('')}
     <p class="small muted" style="margin-top:20px">Book lines are thresholds, not independent projections. Picks from this match share match conditions.</p></div>`;
   dlg.showModal();
   dlg.querySelector('[data-ot-close]').focus();
+  otDeskVeto(otDeskRows);
+}
+// the match's map veto panel (veto-1, display only): the server's stored answer for this canonical HLTV match id
+function otDeskVeto(rows) {
+  const mid = (rows.find(r => /^hltv:\d+$/.test(r.match_id || "")) || {}).match_id;
+  if (!mid) return;
+  fetchRetry("/api/veto?match=" + encodeURIComponent(mid)).then(r => r.json()).then(j => {
+    const el = $("#ot-veto"); if (el && otDeskRows === rows && j && j.veto) el.innerHTML = vetoPanel(j.veto);
+  }).catch(() => {});
 }
 function otCloseDesk() {
   $('#ot-match-desk').close();

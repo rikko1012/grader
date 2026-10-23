@@ -333,6 +333,11 @@ def _factors(res):
         out.setdefault("shadow", {})["cands"] = cands_shadow.entries(gi, g)
     except Exception as e:     # noqa: BLE001 - a shadow never stops the pick log
         out.setdefault("shadow", {})["cands"] = {"error": f"{type(e).__name__}: {str(e)[:120]}"}
+    try:   # map veto veto-1 (display + logging only, 2026-10-23): the veto record (veto_serve, veto_log.db) this forecast's
+        import veto_serve   # match had when it was logged - replayable from that record; never a grade input
+        out.setdefault("shadow", {})["veto"] = veto_serve.forecast_ref(veto_serve.match_id_of(res))
+    except Exception as e:     # noqa: BLE001 - a shadow never stops the pick log
+        out.setdefault("shadow", {})["veto"] = {"error": f"{type(e).__name__}: {str(e)[:120]}"}
     try:   # shared-match challenger M1 (shadow, 2026-10-09): one simulated match per forecast - logged, never shown
         import match_model
         pf = gi.get("perf") if isinstance(gi.get("perf"), dict) else {}
