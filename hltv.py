@@ -474,7 +474,7 @@ JOIN players p         ON p.playerid = ps.playerid
 JOIN teams t           ON t.teamid = ps.teamid
 JOIN match_overview mo ON mo.matchid = ps.matchid
 JOIN sides s           ON s.sideid = ps.sideid
-WHERE ps.playerid IN (SELECT playerid FROM players WHERE lower(regexp_replace(name, '[^a-zA-Z0-9]', '', 'g')) = %(nick)s)
+WHERE ps.playerid IN (SELECT playerid FROM players WHERE lower(regexp_replace(name, '[^a-zA-Z0-9]', '', 'g')) = ANY(%(nicks)s))
   AND ps.mapid <> 0
   AND mo.date >= current_date - interval '12 months'
 ORDER BY mo.date DESC
@@ -507,12 +507,12 @@ def _player_numbers(nick, team, bo3_last_date):
     try:
         with con.cursor() as cur:
             try:
-                cur.execute(_SQL, {"nick": _norm(nick)})
+                cur.execute(_SQL, {"nicks": player_nicks(nick)})
             except Exception as e:
                 if "source" not in str(e):
                     raise
                 # database from an older scraper version (before the source column)
-                cur.execute(_SQL.replace("mo.source", "'hltv'"), {"nick": _norm(nick)})
+                cur.execute(_SQL.replace("mo.source", "'hltv'"), {"nicks": player_nicks(nick)})
             rows = cur.fetchall()
     finally:
         con.close()
@@ -524,6 +524,10 @@ def _player_numbers(nick, team, bo3_last_date):
     for r in rows:
         by_player.setdefault(r[0], []).append(r)
     tv = set(team_name_variants(team)) if team else set()     # exact variants: 'Chicken Coop Esports' = 'Chicken Coop'
+    own = _norm(nick)                                          # an alias-only candidate (PLAYER_ALIASES) needs this team
+    by_player = {pid: rs for pid, rs in by_player.items() if _norm(rs[0][1]) == own or tv & {_norm(r[2]) for r in rs}}
+    if not by_player:
+        return {"found": False, "note": f"{nick} has no HLTV maps in the last 12 months"}
 
     def score(pid):
         teams = {_norm(r[2]) for r in by_player[pid]}
@@ -592,7 +596,7 @@ def history(nick, cutoff, team=None):
             with con.cursor() as cur:
                 cur.execute(_SQL.replace("current_date", "%(cut)s::date").replace(
                     "ORDER BY mo.date DESC", "AND mo.date < %(cut)s::date ORDER BY mo.date DESC")
-                    .replace("mo.source", "'hltv'"), {"nick": _norm(nick), "cut": cut.isoformat()})
+                    .replace("mo.source", "'hltv'"), {"nicks": [_norm(nick)], "cut": cut.isoformat()})
                 rows = cur.fetchall()
         finally:
             con.close()
@@ -761,21 +765,40 @@ def _context_read(key, nick, team, opponent, maps, sched, start):
 _NO_TID = object()
 
 
+# Verified player-name aliases: BO3.gg / board nick (normalised) -> the HLTV nick (normalised) of the SAME player. Exact
+# names only, never fuzzy. An alias candidate is used only when HLTV shows him playing for the graded team (so a BO3.gg
+# namesake on another team never gets this player's history); the player's own nick is always looked up as well.
+# 2026-10-23 accuracy audit I3 (proof: same match, same team, HLTV scoreboard totals = the settled BO3.gg totals):
+#   Techno4K = HLTV 'Techno' (id 20275, The MongolZ), brain = HLTV 'Brain47' (id 23294, Phantom Academy; HLTV 'brain'
+#   5615 is a different player with no maps since 2024). dev1ce / device is NOT here (owner decision pending).
+PLAYER_ALIASES = {"techno4k": "techno", "brain": "brain47"}
+
+
+def player_nicks(nick):
+    """[the normalised nick, then its verified HLTV alias if any]."""
+    n = _norm(nick)
+    a = PLAYER_ALIASES.get(n)
+    return [n] + ([a] if a and a != n else [])
+
+
 def _player_ids(cur, nick, team, team_id=_NO_TID):
     """The HLTV id of this nick (namesakes: the one who played for `team`). 2026-10-21 audit: 'played for the team' is the
     team's canonical HLTV id (exact name, verified alias, affix variant - canonical_team_id) or an exact name variant, and
     among unconfirmed candidates the most maps in the last 12 months decides (player_numbers' window; all-time rows only
     break a tie) - an alias spelling ('DENDELE CS') no longer hands the projection a veteran namesake with more old maps."""
     tid = (resolve_team_id(cur, team) if team else None) if team_id is _NO_TID else team_id
+    nicks = player_nicks(nick)
     cur.execute("""SELECT ps.playerid, bool_or(lower(regexp_replace(t.name, '[^a-zA-Z0-9]', '', 'g')) = ANY(%(teams)s)
                                                OR ps.teamid = %(tid)s),
-                          count(*) FILTER (WHERE mo.date >= current_date - interval '12 months'), count(*)
+                          count(*) FILTER (WHERE mo.date >= current_date - interval '12 months'), count(*),
+                          bool_or(lower(regexp_replace(p.name, '[^a-zA-Z0-9]', '', 'g')) = %(nick)s)
                    FROM players p JOIN player_stats ps USING (playerid) JOIN teams t ON t.teamid = ps.teamid
                    LEFT JOIN match_overview mo ON mo.matchid = ps.matchid
-                   WHERE lower(regexp_replace(p.name, '[^a-zA-Z0-9]', '', 'g')) = %(nick)s
-                   GROUP BY ps.playerid""", {"nick": _norm(nick), "teams": team_name_variants(team) or [""],
+                   WHERE lower(regexp_replace(p.name, '[^a-zA-Z0-9]', '', 'g')) = ANY(%(nicks)s)
+                   GROUP BY ps.playerid""", {"nick": nicks[0], "nicks": nicks, "teams": team_name_variants(team) or [""],
                                              "tid": tid if tid is not None else -1})
-    rows = cur.fetchall()
+    # an alias-only candidate (PLAYER_ALIASES) counts only when he played for this team
+    rows = [r[:4] for r in cur.fetchall() if len(r) < 5 or r[4] or r[1]]
     if not rows:
         return []
     best = max(rows, key=lambda r: (bool(r[1]),) + tuple(r[2:]))   # player_numbers' rule: on the team, then 12-month maps

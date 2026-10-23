@@ -1424,7 +1424,7 @@ def _perf_input_once(pb, args, sc):
             rows = bo3_perf_rows(pb)
             if rows:
                 import perf
-                since = (date.today() - timedelta(days=420)).isoformat()
+                since = (date.fromordinal(day) - timedelta(days=420)).isoformat()   # the match day, as perf_live (2026-10-23 audit)
                 opp = getattr(args, "opponent", None)
                 tid, om = perf_live.opp_maps(opp, since) if opp else (None, [])
                 lan_ = None if tonight is None else tonight == "lan"

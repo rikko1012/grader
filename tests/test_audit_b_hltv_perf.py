@@ -221,7 +221,7 @@ def test_35_clan_affix_links_the_bo3_slug_and_the_hltv_id():
                             "match_start": "2026-10-21T15:00:00Z"},
                            {"id": 2, "match_slug": "hltv-2390001", "team": "FaZe", "opponent": "Vitality",
                             "match_start": "2026-10-21T15:00:00Z"}])
-    assert out == {1: "hltv:2390001", 2: "hltv:2390001"} and identity.RULE_VERSION == 4
+    assert out == {1: "hltv:2390001", 2: "hltv:2390001"} and identity.RULE_VERSION >= 4
 
 
 # ---------------------------------------------------------------- audit 36: a failed index load backs off

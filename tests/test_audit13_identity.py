@@ -15,7 +15,7 @@ def test_settled_canonical_match_groups_every_spelling():
             _r(3, "hltv-905", team="Ninjas in Pyjamas")]                         # the HLTV spelling of the same match
     m = identity.assign(rows)
     assert m[1] == m[2] == m[3] == "hltv:905"
-    assert identity.RULE_VERSION == 4
+    assert identity.RULE_VERSION >= 4
 
 
 def test_rematch_and_ambiguous_slugs_stay_apart():

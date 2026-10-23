@@ -24,6 +24,9 @@
     {"name": "MongolZ", "hltv_name": "The MongolZ",
      "proof": "2026-10-13: Thunderpick 'MongolZ vs Alliance' 2026-10-19 12:00 UTC Private Club #2 = HLTV 2398990 'Alliance vs The MongolZ' 12:00 UTC 1win Private Club #2 Playoffs (Polymarket 'Alliance vs TheMongolz', same match)"},
     {"name": "EA Copenhagen", "team_id": 13838, "hltv_name": "EAC",
-     "proof": "2026-10-13: Thunderpick 'WBT vs EA Copenhagen' 08:00, 'EA Copenhagen vs BOJONG' 14:00, 'EA Copenhagen vs ENCE' 18:00 UTC 2026-10-15 Elisa BreakOut Series #2 = HLTV 2399418 / 2399421 / 2399423 'EAC' at the same three times (not 'EAC Rising', a different squad)"}
+     "proof": "2026-10-13: Thunderpick 'WBT vs EA Copenhagen' 08:00, 'EA Copenhagen vs BOJONG' 14:00, 'EA Copenhagen vs ENCE' 18:00 UTC 2026-10-15 Elisa BreakOut Series #2 = HLTV 2399418 / 2399421 / 2399423 'EAC' at the same three times (not 'EAC Rising', a different squad)"},
+    {"name": "Orgless Aust", "team_id": 13976, "hltv_name": "LFO 8", "proof": "2026-10-23 (accuracy audit I5): BO3.gg 'rooster-vs-orgless-aust-12-10-2026' (team 7543, clan 'Orgless (Aus)') 09:00 UTC ESL Challenger League S52 Oceania Cup 3 = HLTV 2399145 'Rooster vs LFO 8' 2026-10-12, same event; identical five players both sides (cookie, Supers, c4put, Zoot, junn)"},
+    {"name": "Sökerorg", "team_id": 14084, "hltv_name": "LFO 10", "proof": "2026-10-23 (accuracy audit I5): BO3.gg 'forze-reload-vs-sokerorg-14-10-2026' (team 25400) 17:15 UTC CCT Europe Series 11 = HLTV 2399301 'FORZE Reload vs LFO 10' 2026-10-14, same event; identical five players (Sapec, Mann3n, L00m1, flaw, dottie)"},
+    {"name": "Martyrdom", "team_id": 14055, "hltv_name": "Fruju", "proof": "2026-10-23 (accuracy audit D1/I5): BO3.gg team 25347 (clans 'Fruju', 'Ice Block', 'MARTYRDOM'), match 'fruju-vs-markandlarry-12-10-2026' (first listed as 'martyrdom-vs-markandlarry-12-10-2026') 09:00 UTC = HLTV 2399144 'MARKandLARRY vs Fruju' 2026-10-12 ESL Challenger League S52 Oceania Cup 3; identical five players (Harbor, PearL, Kezza, vanillaicey, camille)"}
   ]
 }

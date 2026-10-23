@@ -5,8 +5,9 @@ import json
 import re
 from datetime import datetime, timezone
 
-RULE_VERSION = 4      # 2 = slug pairing (2026-10-12); 3 = + settlement's canonical HLTV match (2026-10-13); 4 = hltv/matchid's
-                      # org affixes (+ clan, e-sport; 2026-10-21 audit) - learning re-keys on a change
+RULE_VERSION = 5      # 2 = slug pairing (2026-10-12); 3 = + settlement's canonical HLTV match (2026-10-13); 4 = hltv/matchid's
+                      # org affixes (+ clan, e-sport; 2026-10-21 audit); 5 = same player + team + start within 60 min
+                      # (2026-10-23 accuracy audit D1: an aliased opponent split one match) - learning re-keys on a change
 
 # the same org affixes as hltv._TEAM_AFFIX / matchid._AFFIX (2026-10-21 audit: 'FaZe Clan' and HLTV 'FaZe' were two matches)
 _AFFIX = re.compile(r"^(team)\s+|\s+(esports|e-sports|esport|e-sport|gaming|club|clan|team)$", re.I)
@@ -30,6 +31,12 @@ def _start(s):
 
 
 LINK_H = 3.0          # an hltv-<id> record joins the BO3.gg match of the same teams whose start is nearest within 3 h
+PLAYER_LINK_MIN = 60  # rule 5: an hltv-<id> record and a BO3.gg slug of the same player on the same team within 60 min
+                      # (shorter than any series, so a team's same-day series 3 h apart stay two matches)
+
+
+def _player_key(r):
+    return str(r.get("slug") or r.get("player") or "").strip().lower()
 
 
 def assign(rows):
@@ -38,7 +45,11 @@ def assign(rows):
       teams) whose starts are within LINK_H hours are ONE match -> 'hltv:<id>';
     - two different BO3.gg slugs are never merged (a same-day rematch stays two matches), each hltv id joins at most one
       BO3.gg slug (the nearest start);
-    - a row whose BO3.gg slug does not name its own teams, or without teams / start, keeps its slug (as is)."""
+    - a row whose BO3.gg slug does not name its own teams, or without teams / start, keeps its slug (as is);
+    - rule 5 (2026-10-23 accuracy audit D1): an 'hltv-<id>' record and a BO3.gg-slug record of the SAME player on the
+      same (normalised) team whose starts are within PLAYER_LINK_MIN minutes are one match, even when the opponent is
+      spelled differently ('Martyrdom' on BO3.gg = 'Fruju' on HLTV) - a player cannot play two series at once. Two BO3.gg
+      slugs are still never merged, and each hltv id joins at most one BO3.gg slug (nearest start)."""
     out, groups = {}, {}
     for r in rows:
         slug = str(r.get("match_slug") or "")
@@ -83,4 +94,34 @@ def assign(rows):
         ids = canon.get(str(r.get("match_slug") or ""))
         if ids and len(ids) == 1:
             out[r["id"]] = f"hltv:{next(iter(ids))}"
+    # rule 5: same player + same team + start within PLAYER_LINK_MIN, for slugs / hltv ids rules 2-3 left unlinked
+    linked_h, linked_o = set(), set()            # already joined by rules 2-3: never re-linked, never doubled
+    for r in rows:
+        s = str(r.get("match_slug") or "")
+        if s and not s.startswith("hltv-") and out.get(r["id"], s) != s:
+            linked_o.add(s); linked_h.add(out[r["id"]])
+    ev = {}                                      # (player, team) -> {"h": {slug: [starts]}, "o": {slug: [starts]}}
+    for r in rows:
+        s, who, tm, st = str(r.get("match_slug") or ""), _player_key(r), team_norm(r.get("team")), _start(r.get("match_start"))
+        if not s or not who or not tm or st is None:
+            continue
+        side = "h" if s.startswith("hltv-") else "o"
+        ev.setdefault((who, tm), {"h": {}, "o": {}})[side].setdefault(s, []).append(st)
+    cand = {}
+    for e in ev.values():
+        for x, tx in e["h"].items():
+            for y, ty in e["o"].items():
+                d = min(abs((a - b).total_seconds()) for a in tx for b in ty)
+                if d <= PLAYER_LINK_MIN * 60:
+                    cand[(x, y)] = min(d, cand.get((x, y), d))
+    used_h, used_o, plink = set(), set(), {}
+    for (x, y), _d in sorted(cand.items(), key=lambda kv: (kv[1], kv[0])):
+        hx = f"hltv:{x[5:]}"
+        if x in used_h or y in used_o or hx in linked_h or y in linked_o:
+            continue
+        used_h.add(x); used_o.add(y); plink[y] = hx
+    for r in rows:
+        s = str(r.get("match_slug") or "")
+        if s in plink:
+            out[r["id"]] = plink[s]
     return out
