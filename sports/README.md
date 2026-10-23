@@ -148,8 +148,8 @@ or member release until a registered comparison on untouched forecasts supports 
 - **Pinnacle is unavailable from the US**, and that is respected. On the Ohio server the sharp side is Kalshi and
   Polymarket. The sportsbook consensus (`books/`) is shown beside the chance, not inside it.
 - **Three books refuse direct requests.** DraftKings, BetMGM and Caesars answer a plain request with 403. Those
-  refusals are not worked around (no browser, no disguised client). Their prices need The Odds API (`ODDS_API_KEY`),
-  and Caesars needs one of its paid plans.
+  refusals are not worked around (no browser, no disguised client). Their prices would need The Odds API, and the
+  owner's decision is free sources only, so they stay out. FanDuel and BetRivers are the live books.
 - **Exchange midpoints may lean slightly toward Over.** sports-market-maker found YES buyers dominate on Kalshi.
   `report` measures it by source.
 - **College**: no Kalshi or Polymarket player props. College lines are matched only with an Odds API key (or Pinnacle outside

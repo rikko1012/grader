@@ -5,6 +5,11 @@ collects them into Sports storage, and everything else reads that storage. No br
 manual tabs are involved, and nothing a member does triggers a provider call. Isolated from CS2 and LoL like the rest
 of `sports/`. **Production stays off:** this branch starts nothing on the server.
 
+**Owner decision (2026-10-23): free sources only. No paid odds feed will be bought.** The live sportsbook
+sources are FanDuel's and BetRivers' own public feeds. DraftKings, BetMGM and Caesars stay out: their sites refuse
+this server, and the only legitimate route to their prices is a metered feed. The Odds API adapter stays in the
+code, inert without `ODDS_API_KEY`; with a free Starter key it would be held to that tier's 500 credits a month.
+
 ## Sources
 
 | Book | Own public feed | Documented feed (The Odds API) |
