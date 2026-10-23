@@ -26,6 +26,8 @@ databases; this process only reads.
 from __future__ import annotations
 
 import argparse
+import gzip
+import hashlib
 import json
 import os
 import random
@@ -85,6 +87,70 @@ def rss_mb():
         return m.WS / 1e6
     except Exception:                                   # noqa: BLE001
         return None
+
+
+# ------------------------------------------------------------------------------- shared encoded bodies (gzip + ETag)
+GZIP_MIN = 1024
+ENC_MAX_ENTRIES = 64
+ENC_MAX_BYTES = 64_000_000
+_ENC = {}                                               # etag -> gzip bytes (insertion order = age)
+_ENC_FLIGHT = {}
+_ENC_LOCK = threading.Lock()
+ENC_STATS = {"gzip_built": 0, "gzip_served": 0, "identity_served": 0, "not_modified": 0, "bytes_out": 0}
+
+
+def etag_of(body):
+    return '"' + hashlib.blake2b(body, digest_size=12).hexdigest() + '"'
+
+
+def etag_matches(header, etag):
+    if not header:
+        return False
+    gz = etag[:-1] + '-gz"'
+    for t in header.split(","):
+        t = t.strip()
+        if t.startswith("W/"):
+            t = t[2:]
+        if t in (etag, gz, "*"):
+            return True
+    return False
+
+
+def gzipped(etag, body):
+    """The gzip copy of a body, made ONCE per ETag (single-flight: simultaneous misses wait for one compression)."""
+    with _ENC_LOCK:
+        hit = _ENC.get(etag)
+        if hit is not None:
+            return hit
+        ev = _ENC_FLIGHT.get(etag)
+        leader = ev is None
+        if leader:
+            ev = _ENC_FLIGHT[etag] = threading.Event()
+    if not leader:
+        ev.wait(5)
+        with _ENC_LOCK:
+            hit = _ENC.get(etag)
+        return hit if hit is not None else gzip.compress(body, 6)
+    try:
+        gz = gzip.compress(body, 6)
+        with _ENC_LOCK:
+            ENC_STATS["gzip_built"] += 1
+            _ENC[etag] = gz
+            while len(_ENC) > ENC_MAX_ENTRIES or sum(len(v) for v in _ENC.values()) > ENC_MAX_BYTES:
+                _ENC.pop(next(iter(_ENC)))
+        return gz
+    finally:
+        with _ENC_LOCK:
+            _ENC_FLIGHT.pop(etag, None)
+        ev.set()
+
+
+def accepts_gzip(header):
+    for part in (header or "").lower().split(","):
+        name, _, q = part.strip().partition(";")
+        if name.strip() in ("gzip", "*") and q.strip() not in ("q=0", "q=0.0", "q=0.00", "q=0.000"):
+            return True
+    return False
 
 
 def allowed_origins():
@@ -193,7 +259,8 @@ def ops():
             "rss_max_mb": MAX_MB, "draining": _STATE["draining"], "threads": threading.active_count(),
             "db_pool": web.pool_stats(), "cache": web.cache_stats(), "flags": flags.state(), "worker": dict(WORKER),
             "jobs": {k: dict(v) for k, v in JOBS.items()}, "prebuilt": prebuilt_state(),
-            "token_configured": authtoken.configured(), "feeds": feed_state()}
+            "token_configured": authtoken.configured(), "feeds": feed_state(),
+            "encoding": dict(ENC_STATS, cached_bodies=len(_ENC))}
 
 
 def ops_with_alerts():
@@ -224,6 +291,33 @@ class Handler(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json", headers=None):
         if not isinstance(body, (bytes, bytearray)):
             body = json.dumps(body, default=str).encode("utf-8")
+        headers = dict(headers or {})
+        cache = "no-store"
+        if self.command == "GET" and code == 200 and len(body) >= 256 and getattr(self, "_member_ok", False):
+            # member answers (snapshot-backed, they change every ~45 s): revalidate with ETag -> 304, gzip once per body
+            etag = etag_of(body)
+            cache = "private, no-cache"
+            headers["Vary"] = "Accept-Encoding" + (", Origin" if "Vary" in headers else "")
+            if etag_matches(self.headers.get("If-None-Match"), etag):
+                with _ENC_LOCK:
+                    ENC_STATS["not_modified"] += 1
+                headers["ETag"] = etag
+                return self._send_raw(304, b"", ctype, headers, cache)
+            if len(body) >= GZIP_MIN and accepts_gzip(self.headers.get("Accept-Encoding")):
+                body = gzipped(etag, body)
+                headers["Content-Encoding"] = "gzip"
+                headers["ETag"] = etag[:-1] + '-gz"'
+                with _ENC_LOCK:
+                    ENC_STATS["gzip_served"] += 1
+            else:
+                headers["ETag"] = etag
+                with _ENC_LOCK:
+                    ENC_STATS["identity_served"] += 1
+        return self._send_raw(code, body, ctype, headers, cache)
+
+    def _send_raw(self, code, body, ctype, headers, cache):
+        with _ENC_LOCK:
+            ENC_STATS["bytes_out"] += len(body)
         with _SLOCK:
             STATS["requests"] += 1
             STATS["ms_total"] += (time.time() - self._t0) * 1000
@@ -231,9 +325,10 @@ class Handler(BaseHTTPRequestHandler):
                 STATS["errors_5xx"] += 1
         try:
             self.send_response(code)
-            self.send_header("Content-Type", ctype)
+            if code != 304:
+                self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
+            self.send_header("Cache-Control", cache)
             self.send_header("X-Content-Type-Options", "nosniff")
             for k, v in (headers or {}).items():
                 self.send_header(k, v)
@@ -241,7 +336,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Connection", "close")
                 self.close_connection = True
             self.end_headers()
-            if self.command != "HEAD":
+            if self.command != "HEAD" and code != 304:
                 self.wfile.write(body)
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, socket.timeout):
             self.close_connection = True
@@ -263,6 +358,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _serve(self, method):
         self._t0 = time.time()
+        self._member_ok = False
         u = urlparse(self.path)
         cors, ok = self._cors()
         if method == "POST":
@@ -312,6 +408,7 @@ class Handler(BaseHTTPRequestHandler):
             body = self.rfile.read(n) if n else b""
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         req = web.Request(path=u.path, query=q, method=method, body=body, member=claims["sub"], role=claims["role"])
+        self._member_ok = True
         try:
             code, data, ctype = web.dispatch(req)
         except Exception as e:                          # noqa: BLE001 - one route's failure is that route's 503
@@ -408,6 +505,10 @@ def schedule():
                          "flag": "SPORTS_INGEST"},
         "slips-settle": {"argv": _py("-m", "sports.slips", "settle"), "every_s": 3600, "timeout_s": 900,
                          "flag": "SPORTS_INGEST"},
+        "ui-snapshots": {"argv": _py("-m", "sports.snapshots", "build", *leagues), "every_s": 60, "timeout_s": 180,
+                         "flag": "SPORTS_INGEST"},
+        "ui-history": {"argv": _py("-m", "sports.snapshots", "history", *leagues, "--max-players", "400"),
+                       "every_s": 86400, "timeout_s": 10800, "flag": "SPORTS_INGEST"},
         "assistant-runner": {"argv": _py("-m", "sports.assistant.runner"), "every_s": None, "timeout_s": None,
                              "flag": "SPORTS_ASSISTANT"},
         "lab-runner": {"argv": _py("-m", "sports.lab.runner"), "every_s": None, "timeout_s": None,

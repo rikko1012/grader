@@ -10,7 +10,7 @@ Contract (sports/web.py SNAPSHOTS table, one line per snapshot):
   max_age_s old; otherwise it falls back to its normal single-flight load (counted as a miss), so a stopped worker
   degrades to the old behaviour, never to an error.
 
-Files: <SPORTS_DATA_DIR>/snapshots/<name>.snap = HMAC-SHA256 tag + pickle, written atomically (tmp + os.replace).
+Files: <SPORTS_DATA_DIR>/prebuilt/<name>.snap = HMAC-SHA256 tag + pickle, written atomically (tmp + os.replace).
 Pickle keeps the handler's exact types (tuples, sets); the tag key derives from SPORTS_TOKEN_SECRET (environment, never
 on disk), so a file not written by our own worker is never unpickled. No secret -> snapshots off (fallback only).
 
@@ -37,7 +37,7 @@ TAG = 32
 
 
 def snap_dir() -> Path:
-    return config.DATA_DIR / "snapshots"
+    return config.DATA_DIR / "prebuilt"          # (the UI agent's files live in snapshots/<league>/)
 
 
 def _key():

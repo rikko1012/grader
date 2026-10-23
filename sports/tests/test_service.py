@@ -532,3 +532,44 @@ def test_alerts_clean_and_each_rule(monkeypatch):
     assert codes(_ops(db_pool={"waits_timed_out": 1, "queries_interrupted": 0})) == {"store_slow"}
     assert codes(_ops(token_configured=False)) == {"token_secret_missing"}
     assert service.alerts(_ops(flags={"SPORTS_INGEST": False}, worker={"pid": None})) == []   # ingest off: no worker alerts
+
+
+def test_member_answers_get_etag_304_and_gzip_once_per_body(svc, monkeypatch):
+    import gzip as gz
+    big = {"rows": [{"i": i, "player": "x" * 40} for i in range(500)]}
+    monkeypatch.setitem(web.ROUTES, "/api/sports/bigsnap", ("sports.web:bigsnap", web.MEMBER, ("GET",)))
+    monkeypatch.setitem(web._HANDLERS, "sports.web:bigsnap", lambda req: (200, big))
+    built0 = service.ENC_STATS["gzip_built"]
+    code, body, hd = _get(svc, "/api/sports/bigsnap", _auth())
+    assert code == 200 and body == big and hd["Cache-Control"] == "private, no-cache" and "ETag" in hd
+    assert "Content-Encoding" not in hd                                          # no Accept-Encoding: identity
+    c = http.client.HTTPConnection("127.0.0.1", svc, timeout=10)
+    for _ in range(3):
+        c.request("GET", "/api/sports/bigsnap", headers=dict(_auth(), **{"Accept-Encoding": "gzip, deflate"}))
+        r = c.getresponse()
+        data = r.read()
+        assert r.status == 200 and r.getheader("Content-Encoding") == "gzip"
+        assert json.loads(gz.decompress(data)) == big and r.getheader("ETag").endswith('-gz"')
+    gz_etag = r.getheader("ETag")
+    c.close()
+    assert service.ENC_STATS["gzip_built"] - built0 == 1                         # compressed once, served 3 times
+    for tag in (hd["ETag"], gz_etag, "W/" + hd["ETag"]):
+        code, body, h2 = _get(svc, "/api/sports/bigsnap", dict(_auth(), **{"If-None-Match": tag}))
+        assert code == 304 and body is None
+    assert _get(svc, "/api/sports/bigsnap", dict(_auth(), **{"If-None-Match": '"other"'}))[0] == 200
+    code, _, h3 = _get(svc, "/api/sports/bigsnap")                               # no token: 401, never cached
+    assert code == 401 and h3["Cache-Control"] == "no-store" and "ETag" not in h3
+
+
+def test_gzip_single_flight_compresses_once_under_simultaneous_misses():
+    body = b'{"x": "' + b"y" * 200000 + b'"}'
+    etag = service.etag_of(body)
+    out = []
+    ts = [threading.Thread(target=lambda: out.append(service.gzipped(etag, body))) for _ in range(30)]
+    n0 = service.ENC_STATS["gzip_built"]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join(10)
+    assert len(out) == 30 and len(set(out)) == 1 and service.ENC_STATS["gzip_built"] - n0 == 1
+    assert service.accepts_gzip("br, gzip;q=0.8") and not service.accepts_gzip("gzip;q=0") and not service.accepts_gzip(None)

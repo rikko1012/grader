@@ -92,7 +92,7 @@ ARCH_PLACEHOLDER
 | sports service | RSS `SPORTS_SERVICE_MAX_MB` | 900 MB | stop accepting, drain 20 s, exit 3 (Render restarts) |
 | sports service | idle kept-alive connection | 30 s | closed |
 | ingestion child | address space / RSS `SPORTS_WORKER_MAX_MB` | 768 MB | RLIMIT_AS (Linux) + RSS check -> exit, restarted |
-| ingestion child | store size `SPORTS_STORE_MAX_MB` | 8,000 MB on Render (1,500 code default) | ingestion pauses itself |
+| ingestion child | store size `SPORTS_STORE_MAX_MB` | 16,000 MB on Render (1,500 code default) | ingestion pauses itself |
 | ingestion child | jobs | timeout 300 s, 3 attempts, exponential backoff + jitter | job marked failed, loop continues |
 | supervisor | worker restarts | 30 s x 2^n (cap 15 min) x jitter 0.5-1.0; reset after 10 min healthy | `worker_crash_loop` alert |
 | esports gateway (proxy mode only) | in-flight / slot wait / timeout | 16 / 200 ms / 2.5 s | 503 `sports_busy` / `sports_unavailable` |
@@ -106,6 +106,8 @@ ARCH_PLACEHOLDER
 | snapshots | `python -m sports.service snapshots` (web.SNAPSHOTS, e.g. the slips leg pool) | every 45 s (+-10% jitter) | SPORTS_API | 120 s |
 | slips-ingest | `python -m sports.slips ingest` (slip spool -> slips.db) | every 5 min | SPORTS_INGEST | 300 s |
 | slips-settle | `python -m sports.slips settle` | hourly | SPORTS_INGEST | 900 s |
+| ui-snapshots | `python -m sports.snapshots build nba nfl` (the member pages' JSON under `snapshots/<league>/`; measured 4.7 s wall for both leagues on the 2026-10-23 store, ~33 MB of files) | every 60 s | SPORTS_INGEST | 180 s |
+| ui-history | `python -m sports.snapshots history nba nfl --max-players 400` (ESPN game logs; ~300 MB / 275k records on the first full run, UI agent) | daily | SPORTS_INGEST | 3 h |
 | assistant-runner | `python -m sports.assistant.runner` (needs the `anthropic` SDK from requirements-sports.txt + ANTHROPIC_API_KEY) | long-running | SPORTS_ASSISTANT | - |
 | lab-runner | `python -m sports.lab.runner` (training; applies the worker memory cap) | long-running | SPORTS_TRAIN | - |
 
@@ -126,7 +128,7 @@ service on ONE disk. If the worker is ever split into its own Render service, sp
 ### 5c. Prebuilt snapshots
 
 Heavy shared answers are registered in `web.SNAPSHOTS` and built by the `snapshots` job; `web.cached` serves the
-prebuilt value (HMAC-tagged pickle under `<SPORTS_DATA_DIR>/snapshots/`, key derived from SPORTS_TOKEN_SECRET) and only
+prebuilt value (HMAC-tagged pickle under `<SPORTS_DATA_DIR>/prebuilt/`, key derived from SPORTS_TOKEN_SECRET) and only
 falls back to a request-time build on a miss (counted in `/api/sports/admin/ops` -> `prebuilt.stats`). The slips leg
 pool (~2 s cold build, slips agent's measurement) is the first entry.
 
@@ -152,9 +154,10 @@ at 0). Otherwise create it by hand:
    (4 GB, 2 CPU) before setting `SPORTS_TRAIN=1`**: the lab training child has its own 768 MB cap and is CPU-bound;
    on 1 CPU it would compete with the API. `Starter` (512 MB) is not recommended.
 5. **Advanced -> Health Check Path** `/api/sports/health`. **Auto-Deploy** `No`.
-6. **Advanced -> Add Disk**: Name `scout-sports-data`, Mount Path `/sports-data`, Size `10 GB`. Reason: first
-   ingestion cycle ~50 MB, then ~10-15 MB/hour at the default cadence (~0.3 GB/day, foundation measurement);
-   ingestion pauses itself at 8 GB (`SPORTS_STORE_MAX_MB`) - roughly 3-4 weeks before retention / compaction is needed
+6. **Advanced -> Add Disk**: Name `scout-sports-data`, Mount Path `/sports-data`, Size `20 GB`. Reason (measured):
+   first ingestion cycle ~50 MB; history ingestion ~300 MB (275k records, UI agent); then ~10-15 MB/hour at the
+   default cadence (~0.3 GB/day, foundation); UI snapshots ~33 MB (rewritten in place); slip spool <= 50 MB/day.
+   Ingestion pauses itself at 16 GB (`SPORTS_STORE_MAX_MB`) - roughly 7 weeks before retention / compaction is needed
    (open item, section 12). Disks can be grown later from the Disks tab, not shrunk.
 7. **Environment -> Add Environment Variable** for each row:
 
@@ -173,7 +176,7 @@ at 0). Otherwise create it by hand:
    | SPORTS_INGEST_EVERY_MIN | 10 | no |
    | SPORTS_KALSHI_EVERY_MIN | 30 | no |
    | SPORTS_WORKER_MAX_MB | 768 | no |
-   | SPORTS_STORE_MAX_MB | 8000 | no |
+   | SPORTS_STORE_MAX_MB | 16000 | no |
    | SPORTS_SERVICE_MAX_MB | 900 | no |
    | SPORTS_SERVICE_THREADS | 32 | no |
    | SPORTS_DB_POOL | 4 | no |
@@ -258,7 +261,7 @@ Esports side: `/health` (unchanged) and, with `SPORTS_API=1`, `/api/sports/admin
 1. Is esports affected? cs2-scout `/health`: `traffic.errors_5xx`, `avg_server_ms`, `memory_mb` vs the usual. If yes,
    kill switch (section 8) first, investigate second.
 2. `python -m sports.service --check https://scout-sports-api.onrender.com` - act on pages.
-3. Render -> scout-sports-api -> Metrics: memory below the plan with headroom; disk usage vs the 8 GB cap.
+3. Render -> scout-sports-api -> Metrics: memory below the plan with headroom; disk usage vs the 16 GB cap.
 4. A member reports "Sports unavailable": `/api/sports/health` up? Token endpoint 401 for that member = their Whop
    access, not sports; 503 `sports_auth_not_configured` = the secret is missing on one side.
 5. Before enabling any sports change: re-run section 11's load script on it against the section 1 budgets.

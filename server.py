@@ -3560,6 +3560,21 @@ def page():
     return _PAGE["data"]
 
 
+_SPORTS_NAV_AFTER = (b'<a id="sportlol" href="/lol">LoL</a></nav>',                      # index.html header
+                     b'<a href="/lol" class="on" aria-current="page">LoL</a></nav>')       # lol.html header
+_SPORTS_NAV = b'<nav class="sportsw" aria-label="Sports"><a href="/sports">NFL / NBA</a></nav>'
+
+
+def sports_nav(body):
+    """The ONE Sports link on the esports pages, added only when SPORTS_UI is on (Handler._sports_on). Pure bytes edit
+    after the game switcher - no sports import; with the flag off the page bytes are untouched
+    (sports/tests/test_isolation_server.py). A page without the marker is returned unchanged."""
+    for marker in _SPORTS_NAV_AFTER:
+        if marker in body:
+            return body.replace(marker, marker + _SPORTS_NAV, 1)
+    return body
+
+
 def web_file(name):
     """A member page from memory (re-read only when the file changes) - lol.html was read from disk on every request."""
     f = WEB / name
@@ -3726,8 +3741,12 @@ class Handler(BaseHTTPRequestHandler):
             if (u.path == "/sports" or u.path.startswith(("/sports/", "/api/sports/"))) and self._sports_on(u.path):
                 return self._sports_route(u, q)          # the ONE sports hook: flags off = this line does nothing
             if u.path in ("/", "/index.html"):
+                if self._sports_on("/sports"):                          # sports nav link: SPORTS_UI only (else unchanged)
+                    return self.send_shared(("page", "index", "sports"), 200, sports_nav(page()), "text/html; charset=utf-8", keep=600)
                 return self.send_shared(("page", "index"), 200, page(), "text/html; charset=utf-8", keep=600)
             if u.path == "/lol" and lol_public():                       # the member LoL page (owner's release switch)
+                if self._sports_on("/sports"):
+                    return self.send_shared(("page", "lol", "sports"), 200, sports_nav(web_file("lol.html")), "text/html; charset=utf-8", keep=600)
                 return self.send_shared(("page", "lol"), 200, web_file("lol.html"), "text/html; charset=utf-8", keep=600)
             if u.path == "/api/lol/board" and lol_public():
                 if not self.allowed():

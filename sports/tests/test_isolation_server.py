@@ -183,3 +183,29 @@ def test_rollback_is_flags_off_even_with_the_service_configured(tmp_path):
     for p in ("/sports", "/api/sports/status", "/api/sports/offers?league=nba", "/api/sports/token"):
         assert out[p] == unknown, p
     assert out["/auth/me"][0] == 200
+
+
+def test_esports_pages_are_byte_identical_with_sports_ui_off_and_get_one_link_with_it_on(monkeypatch):
+    import server
+    H = _handler()
+    monkeypatch.setattr(server, "lol_public", lambda: True)
+    raw = {"/": server.page(), "/lol": server.web_file("lol.html")}
+
+    def get(path):
+        h = H(path)
+        h.do_GET()
+        return h.code, h.wfile.getvalue()
+    for flag in (None, "0", "off"):
+        if flag is None:
+            monkeypatch.delenv("SPORTS_UI", raising=False)
+        else:
+            monkeypatch.setenv("SPORTS_UI", flag)
+        for p, body in raw.items():
+            code, out = get(p)
+            assert code == 200 and out == body, p                    # untouched bytes with the flag off
+            assert b'href="/sports"' not in out
+    monkeypatch.setenv("SPORTS_UI", "1")
+    for p, body in raw.items():
+        code, out = get(p)
+        assert code == 200 and out.count(b'href="/sports"') == 1, p  # exactly ONE link
+        assert out.replace(server._SPORTS_NAV, b"", 1) == body        # and nothing else changed
