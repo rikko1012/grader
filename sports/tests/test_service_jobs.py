@@ -92,7 +92,8 @@ def test_snapshot_build_failure_is_reported_not_raised(monkeypatch):
 def test_schedule_names_every_worker_side_process_with_its_flag():
     s = service.schedule()
     want = {"ingest-loop": "SPORTS_INGEST", "snapshots": "SPORTS_API", "slips-ingest": "SPORTS_INGEST",
-            "slips-settle": "SPORTS_INGEST", "assistant-runner": "SPORTS_ASSISTANT", "lab-runner": "SPORTS_TRAIN"}
+            "slips-settle": "SPORTS_INGEST", "assistant-runner": "SPORTS_ASSISTANT", "lab-runner": "SPORTS_TRAIN",
+            "ui-snapshots": "SPORTS_INGEST", "ui-history": "SPORTS_INGEST"}
     assert {k: v["flag"] for k, v in s.items()} == want
     assert s["slips-ingest"]["argv"][1:] == ["-m", "sports.slips", "ingest"]
     assert s["slips-settle"]["argv"][1:] == ["-m", "sports.slips", "settle"]
@@ -109,7 +110,7 @@ def test_supervise_starts_only_flagged_jobs(monkeypatch):
     monkeypatch.setattr(service, "JOBS", {})
     stop = threading.Event()
     assert service.supervise(stop) == {}
-    assert all(not j["enabled"] for j in service.JOBS.values()) and len(service.JOBS) == 6
+    assert all(not j["enabled"] for j in service.JOBS.values()) and len(service.JOBS) == 8
     stop.set()
 
 

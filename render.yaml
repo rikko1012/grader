@@ -69,7 +69,7 @@ services:
     disk:
       name: scout-sports-data
       mountPath: /sports-data
-      sizeGB: 10              # measured ~50 MB first cycle + 10-15 MB/hour at the default cadence (~0.3 GB/day)
+      sizeGB: 20              # measured: ~50 MB first cycle, ~300 MB history ingestion, +10-15 MB/hour (~0.3 GB/day)
     envVars:
       - key: PORT
         value: "10000"
@@ -106,7 +106,7 @@ services:
       - key: SPORTS_WORKER_MAX_MB
         value: "768"
       - key: SPORTS_STORE_MAX_MB
-        value: "8000"         # ingestion pauses itself at 8 GB of the 10 GB disk
+        value: "16000"        # ingestion pauses itself at 16 GB of the 20 GB disk
       - key: SPORTS_SERVICE_MAX_MB
         value: "900"
       - key: SPORTS_SERVICE_THREADS

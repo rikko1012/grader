@@ -38,7 +38,9 @@ SPORTS = ["/api/sports/status", "/api/sports/offers?league=nba&limit=200", "/api
 SPORTS_ALL = SPORTS + ["/api/sports/slips/rules", "/api/sports/slips/pool?league=nba&platform=underdog",
                        "/api/sports/slips/pool?league=nfl&platform=prizepicks",
                        "/api/sports/slips/build?league=nba&platform=underdog",
-                       "/api/sports/slips/build?league=nfl&platform=prizepicks", "/api/sports/assistant/status"]
+                       "/api/sports/slips/build?league=nfl&platform=prizepicks", "/api/sports/assistant/status",
+                       "/api/sports/board?league=nba", "/api/sports/board?league=nfl", "/api/sports/slate?league=nba",
+                       "/api/sports/manifest?league=nfl"]
 ORIGIN = "https://cs2-scout.example.test"
 SECRET = secrets.token_hex(24)
 ADMIN = secrets.token_hex(16)
@@ -98,6 +100,8 @@ class Procs:
         if not d.exists():
             d.mkdir()
             shutil.copy2(Path(self.store_dir) / "canonical.db", d / "canonical.db")
+            if (Path(self.store_dir) / "snapshots").exists():  # UI snapshots prebuilt once from this store
+                shutil.copytree(Path(self.store_dir) / "snapshots", d / "snapshots")
         return str(d)
 
     def start_esports(self):
@@ -237,17 +241,19 @@ def burst(P, seed):
             st, dt, _, tr = _call(P.esp_port, "/api/sports/token", cookie)
             out.append(("token", "/api/sports/token", st, dt, tr))
         elif P.mode == "service" and P.scenario == "notoken":
-            st, dt, _, tr = _call(P.svc_port, p, {"Authorization": f"Bearer {P.shared_token}", "Origin": ORIGIN})
+            st, dt, _, tr = _call(P.svc_port, p, {"Authorization": f"Bearer {P.shared_token}", "Origin": ORIGIN,
+                                                  "Accept-Encoding": "gzip"})
             out.append(("sports", p, st, dt, tr))
         elif P.mode == "service":
             st, dt, body, tr = _call(P.esp_port, "/api/sports/token", cookie)
             out.append(("token", "/api/sports/token", st, dt, tr))
             tok = json.loads(body)["token"] if st == 200 else "none"
-            st, dt2, _, tr = _call(P.svc_port, p, {"Authorization": f"Bearer {tok}", "Origin": ORIGIN})
+            st, dt2, _, tr = _call(P.svc_port, p, {"Authorization": f"Bearer {tok}", "Origin": ORIGIN,
+                                                   "Accept-Encoding": "gzip"})
             out.append(("sports", p, st, dt2, tr))
             out.append(("sports_flow", p, st, dt + dt2, 0))
         else:
-            st, dt, _, tr = _call(P.esp_port, p, cookie)
+            st, dt, _, tr = _call(P.esp_port, p, dict(cookie, **{"Accept-Encoding": "gzip"}))
             out.append(("sports", p, st, dt, tr))
         return out
     t0 = time.time()
@@ -294,7 +300,7 @@ def admin_stats(P):
             d = json.loads(body)
             o["service_ops"] = {"service": d["service"], "db_pool": d["db_pool"], "cache": d["cache"],
                                 "rss_mb": d["rss_mb"], "threads": d["threads"], "prebuilt": d.get("prebuilt"),
-                                "jobs": d.get("jobs"), "alerts": d.get("alerts")}
+                                "jobs": d.get("jobs"), "alerts": d.get("alerts"), "encoding": d.get("encoding")}
     if P.mode in ("service", "proxy"):
         st, _, body, _ = _call(P.esp_port, "/api/sports/admin/gateway", {"X-Admin-Token": ADMIN})
         if st == 200:
