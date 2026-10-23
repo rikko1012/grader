@@ -183,3 +183,8 @@ process - nothing auto-promotes.
   box-score did-not-play rows, and NBA mi-hist runs only if game lines exist for >= 50% of eligible rows (coverage is
   reported either way); (d) NFL rush_att has no separate opportunity under it, so its mixture family is not defined
   (Poisson / NB / empirical-ratio compared).
+- **A2 (2026-10-23, after a development run on train / tune only, before any locked-test score):** (a) the sm-1 base
+  includes a fitted intercept (train) - without it any feature with a non-zero mean passed the tune test by acting as
+  a level shift (seen in development: `postseason` "passed" on a tune partition with no postseason game); (b) a
+  feature that is constant or has < 30 known values on the tune rows is recorded "not evaluable on tune" and cannot be
+  kept. No locked-test row had been scored.
