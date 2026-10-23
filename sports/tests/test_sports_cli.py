@@ -1,5 +1,5 @@
 """The command line end to end, offline: board -> edges -> record -> report, with the saved answers."""
-from sports import espn, kalshi, lines, oddsapi, pinnacle, polymarket, scout
+from sports import espn, kalshi, lines, pinnacle, polymarket, scout
 from sports.tests.conftest import fixture
 
 
@@ -34,14 +34,4 @@ def test_leagues_lists_every_league(capsys):
     out = capsys.readouterr().out
     for k in ("nba", "nfl", "wnba", "cbb", "cfb"):
         assert f"  {k} " in out
-    assert "off (set ODDS_API_KEY" in out
-
-
-def test_odds_api_failure_never_leaks_the_key(monkeypatch):
-    monkeypatch.setenv("ODDS_API_KEY", "secret123")
-
-    def boom(url, params=None, headers=None, **kw):
-        raise oddsapi.net.HttpError(401, url + "?apiKey=secret123", "bad key secret123")
-    monkeypatch.setattr(oddsapi.net, "get_json", boom)
-    q, st = oddsapi.load(scout.config.league("nba"), refresh=True)
-    assert q == [] and "secret123" not in st["error"]
+    assert "The Odds API feed off (ODDS_API_KEY not set)" in out

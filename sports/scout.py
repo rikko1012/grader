@@ -3,8 +3,7 @@
   leagues                         the leagues and where each one's data comes from
   slate   LEAGUE [--hours 36]     games coming up (ESPN)
   lines   LEAGUE                  the PrizePicks + Underdog board  [--platform pp|ud] [--player NAME] [--market KEY]
-  sharp   LEAGUE                  Kalshi + Polymarket prop prices (+ Pinnacle where it serves this location, + The Odds
-                                  API consensus when ODDS_API_KEY is set)
+  sharp   LEAGUE                  Kalshi + Polymarket prop prices (+ Pinnacle where it serves this location)
   edges   LEAGUE                  every pick'em line beside the sharp chance, best first
                                   [--platform pp|ud] [--min 0.55] [--limit 40] [--player NAME] [--all] [--record]
   player  LEAGUE NAME             his game log, recent averages, his lines and the chance of each side
@@ -12,6 +11,8 @@
   settle  [LEAGUE]                grade saved forecasts from ESPN box scores
   report  [LEAGUE]                how the saved forecasts did (hit rate, Brier, log loss, game-clustered interval)
   watch   LEAGUE [LEAGUE ...]     record every --every minutes (default 20) and settle each hour, until stopped
+  books   LEAGUE                  stored sportsbook offers side by side (books worker data; no provider call)
+  books-health / books-plan / books-run / books-verify     see sports/books/cli.py
 
 Results print to the screen and save to <SPORTS_DATA_DIR>/output/<league>_<command>_<date>.json.
 Nothing here places a bet or changes any CS2 / LoL grade.
@@ -23,7 +24,8 @@ import time
 from contextlib import closing
 from datetime import datetime, timezone
 
-from . import config, edges, espn, kalshi, lines, markets, names, oddsapi, pinnacle, polymarket, projection, record
+from . import config, edges, espn, kalshi, lines, markets, names, pinnacle, polymarket, projection, record
+from .books import cli as books_cli
 
 PLATFORM = {"pp": "prizepicks", "prizepicks": "prizepicks", "ud": "underdog", "underdog": "underdog"}
 
@@ -63,8 +65,7 @@ def sharp_quotes(lg, refresh=False):
     q, st = pinnacle.load(lg, refresh=refresh)
     k, st3 = kalshi.load(lg, refresh=refresh)
     pm, st4 = polymarket.load(lg, refresh=refresh)
-    c, st2 = oddsapi.load(lg, refresh=refresh)
-    return q + k + pm + c, {"pinnacle": st, "kalshi": st3, "polymarket": st4, "odds_api": st2}
+    return q + k + pm, {"pinnacle": st, "kalshi": st3, "polymarket": st4}
 
 
 def board(lg, refresh=False, injuries=True):
@@ -80,7 +81,12 @@ def board(lg, refresh=False, injuries=True):
             depth = espn.depth_index(lg)
         except Exception as e:                      # so are depth charts
             st2["espn_depth"] = {"ok": False, "error": str(e)[:120]}
-    return edges.build(lg, offers, quotes, inj, depth), {**st, **st2}
+    rows = edges.build(lg, offers, quotes, inj, depth)
+    try:
+        books_cli.attach(lg, rows)              # stored sportsbook prices only - never a provider call
+    except Exception as e:
+        st2["books_store"] = {"ok": False, "error": str(e)[:120]}
+    return rows, {**st, **st2}
 
 
 def _status_line(st):
@@ -97,7 +103,8 @@ def _status_line(st):
 def cmd_leagues(a):
     rows = [(k, v["name"], f"{v['espn'][0]}/{v['espn'][1]}", v["pp"], v["ud"], v["pin"]) for k, v in config.LEAGUES.items()]
     _table(rows, ["key", "league", "ESPN", "PrizePicks", "Underdog", "Pinnacle"])
-    print(f"\n  The Odds API consensus: {'ON' if config.odds_api_key() else 'off (set ODDS_API_KEY to add it)'}")
+    print(f"\n  sportsbook odds: stored by the books worker (python -m sports.books.worker); The Odds API feed "
+          f"{'ON' if config.odds_api_key() else 'off (ODDS_API_KEY not set)'}")
 
 
 def cmd_slate(a):
@@ -147,9 +154,10 @@ def _print_edges(rows):
                     (r["odds_type"] or "")[:8], f"{r['side'].upper()}{mult}", _pct(r["chance"]),
                     _pct(r["eff"]) if r.get("eff") is not None else "",
                     f"{s['source'][:3]} " + "|".join(f"{x:g}" for x in lines_),
-                    f"{s['gap']:+g}" if s["gap"] else "0", (r.get("role") or "")[:16], (r.get("injury") or "")[:22]))
+                    f"{s['gap']:+g}" if s["gap"] else "0", books_cli.label(r.get("books"), r["side"]),
+                    (r.get("role") or "")[:16], (r.get("injury") or "")[:22]))
     _table(out, ["bk", "start", "player", "market", "line", "type", "side", "chance", "UD eff", "sharp", "gap",
-                 "role", "injury"])
+                 "books", "role", "injury"])
 
 
 def cmd_edges(a):
@@ -365,9 +373,22 @@ def main(argv=None):
     for name in ("settle", "report"):
         s = sub.add_parser(name)
         s.add_argument("league", nargs="?")
+    s = sub.add_parser("books")
+    s.add_argument("league")
+    s.add_argument("--player")
+    s.add_argument("--market")
+    s.add_argument("--limit", type=int, default=80)
+    sub.add_parser("books-health")
+    sub.add_parser("books-plan")
+    s = sub.add_parser("books-run")
+    s.add_argument("--once", action="store_true")
+    s.add_argument("--leagues", default="nba,nfl")
+    s = sub.add_parser("books-verify")
+    s.add_argument("--providers", default="")
     a = p.parse_args(argv)
     if getattr(a, "league", None) and a.cmd in ("settle", "report"):
         a.league = config.league(a.league)["key"]
     {"leagues": cmd_leagues, "slate": cmd_slate, "lines": cmd_lines, "sharp": cmd_sharp, "edges": cmd_edges,
      "player": cmd_player, "record": cmd_record, "settle": cmd_settle, "report": cmd_report,
-     "watch": cmd_watch}[a.cmd](a)
+     "watch": cmd_watch, "books": books_cli.cmd_view, "books-health": books_cli.cmd_health,
+     "books-plan": books_cli.cmd_plan, "books-run": books_cli.cmd_run, "books-verify": books_cli.cmd_verify}[a.cmd](a)

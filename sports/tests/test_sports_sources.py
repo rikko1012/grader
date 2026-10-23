@@ -2,7 +2,7 @@
 API's documented event-odds format."""
 import pytest
 
-from sports import config, espn, kalshi, lines, markets, names, oddsapi, pinnacle
+from sports import config, espn, kalshi, lines, markets, names, pinnacle
 from sports.tests.conftest import fixture
 
 NBA = config.league("nba")
@@ -102,30 +102,6 @@ def test_pinnacle_location_refusal_is_reported_not_worked_around(monkeypatch):
     assert len(calls) == 1 and calls[0]["Origin"] == "https://www.pinnacle.com"   # asked once, as the site asks
     q, st = pinnacle.load(NBA)
     assert q == [] and "not worked around" in st["error"] and len(calls) == 1    # not asked again for 6 h
-
-
-def test_odds_api_consensus_needs_two_books():
-    ev = {"id": "e1", "commence_time": "2026-10-24T00:00:00Z", "home_team": "Miami Heat", "away_team": "Detroit Pistons",
-          "bookmakers": [
-              {"key": "draftkings", "markets": [{"key": "player_points", "outcomes": [
-                  {"name": "Over", "description": "Bam Adebayo", "price": 1.91, "point": 17.5},
-                  {"name": "Under", "description": "Bam Adebayo", "price": 1.91, "point": 17.5},
-                  {"name": "Over", "description": "Tyler Herro", "price": 1.8, "point": 21.5},
-                  {"name": "Under", "description": "Tyler Herro", "price": 2.0, "point": 21.5}]}]},
-              {"key": "fanduel", "markets": [{"key": "player_points", "outcomes": [
-                  {"name": "Over", "description": "Bam Adebayo", "price": 1.8, "point": 17.5},
-                  {"name": "Under", "description": "Bam Adebayo", "price": 2.0, "point": 17.5}]}]}]}
-    q = oddsapi.parse_event(ev, NBA)
-    assert len(q) == 1                                # Herro has one book only: not a consensus
-    bam = q[0]
-    fd = (1 / 1.8) / (1 / 1.8 + 1 / 2.0)
-    assert bam["books"] == 2 and bam["p_over"] == pytest.approx((0.5 + fd) / 2)
-    assert bam["start"] == "2026-10-24T00:00:00Z" and bam["source"] == "consensus"
-
-
-def test_odds_api_is_off_without_a_key():
-    q, st = oddsapi.load(NBA)
-    assert q == [] and not st["ok"] and "ODDS_API_KEY" in st["error"]
 
 
 def test_espn_gamelog_basketball_and_football():

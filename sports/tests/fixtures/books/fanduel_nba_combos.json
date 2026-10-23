@@ -1,0 +1,280 @@
+{
+ "_sample": {
+  "source": "FanDuel OH event-page eventId=36220759 tab=player-combos (real response)",
+  "observed_at": "2026-10-23T21:04:34Z",
+  "sanitized": "trimmed to a few markets; nothing else changed"
+ },
+ "attachments": {
+  "events": {
+   "36220759": {
+    "competitionId": 10547864,
+    "inPlay": false,
+    "eventId": 36220759,
+    "key": "EVENT:36220759",
+    "name": "New York Knicks @ Boston Celtics",
+    "eventTypeId": 7522,
+    "countryCode": "GB",
+    "timezone": "GMT",
+    "openDate": "2026-10-23T23:10:00.000Z",
+    "videoAvailable": false,
+    "primaryMarketId": "739.192984560"
+   }
+  },
+  "markets": {
+   "739.193058146": {
+    "marketId": "739.193058146",
+    "eventTypeId": 7522,
+    "competitionId": 10547864,
+    "eventId": 36220759,
+    "marketName": "Paul George - Pts + Reb + Ast",
+    "marketTime": "2026-10-23T23:10:00.000Z",
+    "marketType": "PLAYER_D_TOTAL_POINTS_+_REB_+_AST",
+    "bspMarket": false,
+    "sgmMarket": true,
+    "inPlay": false,
+    "numberOfRunners": 2,
+    "numberOfActiveRunners": 2,
+    "numberOfWinners": 1,
+    "sortPriority": 4,
+    "bettingType": "MOVING_HANDICAP",
+    "marketStatus": "OPEN",
+    "runners": [
+     {
+      "selectionId": 12234250,
+      "handicap": 24.5,
+      "runnerName": "Paul George Over",
+      "sortPriority": 1,
+      "result": {
+       "type": "OVER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/b87da10c-33e9-4c62-bc2e-52eb32f1f1ef/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -115,
+        "americanOddsInt": -115
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.869565217391304
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 115
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -113,
+         "americanOddsInt": -113
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.884955752212389
+         },
+         "fractionalOdds": {
+          "numerator": 100,
+          "denominator": 113
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 12234251,
+      "handicap": 24.5,
+      "runnerName": "Paul George Under",
+      "sortPriority": 2,
+      "result": {
+       "type": "UNDER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/b87da10c-33e9-4c62-bc2e-52eb32f1f1ef/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -111,
+        "americanOddsInt": -111
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.900900900900901
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 111
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -113,
+         "americanOddsInt": -113
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.884955752212389
+         },
+         "fractionalOdds": {
+          "numerator": 100,
+          "denominator": 113
+         }
+        }
+       }
+      ]
+     }
+    ],
+    "canTurnInPlay": true,
+    "associatedMarkets": [
+     {
+      "eventId": 36220759,
+      "eventTypeId": 7522,
+      "externalMarketId": "42.618412813"
+     }
+    ],
+    "isSuperSubEnabled": false,
+    "isBetProtectEligible": true,
+    "shouldDisplayStatsInRunner": true,
+    "eachwayAvailable": false,
+    "legTypes": [
+     "SIMPLE_SELECTION"
+    ]
+   },
+   "739.193058143": {
+    "marketId": "739.193058143",
+    "eventTypeId": 7522,
+    "competitionId": 10547864,
+    "eventId": 36220759,
+    "marketName": "Paul George - Reb + Ast",
+    "marketTime": "2026-10-23T23:10:00.000Z",
+    "marketType": "PLAYER_D_TOTAL_REBOUNDS_+_ASSISTS",
+    "bspMarket": false,
+    "sgmMarket": true,
+    "inPlay": false,
+    "numberOfRunners": 2,
+    "numberOfActiveRunners": 2,
+    "numberOfWinners": 1,
+    "sortPriority": 4,
+    "bettingType": "MOVING_HANDICAP",
+    "marketStatus": "OPEN",
+    "runners": [
+     {
+      "selectionId": 12234250,
+      "handicap": 7.5,
+      "runnerName": "Paul George Over",
+      "sortPriority": 1,
+      "result": {
+       "type": "OVER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/b87da10c-33e9-4c62-bc2e-52eb32f1f1ef/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 102,
+        "americanOddsInt": 102
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 2.02
+        },
+        "fractionalOdds": {
+         "numerator": 102,
+         "denominator": 100
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 106,
+         "americanOddsInt": 106
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 2.06
+         },
+         "fractionalOdds": {
+          "numerator": 106,
+          "denominator": 100
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 12234251,
+      "handicap": 7.5,
+      "runnerName": "Paul George Under",
+      "sortPriority": 2,
+      "result": {
+       "type": "UNDER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/b87da10c-33e9-4c62-bc2e-52eb32f1f1ef/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -130,
+        "americanOddsInt": -130
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.769230769230769
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 130
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -136,
+         "americanOddsInt": -136
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.735294117647059
+         },
+         "fractionalOdds": {
+          "numerator": 100,
+          "denominator": 136
+         }
+        }
+       }
+      ]
+     }
+    ],
+    "canTurnInPlay": true,
+    "associatedMarkets": [
+     {
+      "eventId": 36220759,
+      "eventTypeId": 7522,
+      "externalMarketId": "42.618412814"
+     }
+    ],
+    "isSuperSubEnabled": false,
+    "isBetProtectEligible": true,
+    "shouldDisplayStatsInRunner": true,
+    "eachwayAvailable": false,
+    "legTypes": [
+     "SIMPLE_SELECTION"
+    ]
+   }
+  }
+ }
+}

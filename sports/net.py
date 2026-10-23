@@ -12,7 +12,7 @@ from . import config
 _GAPS = {"site.web.api.espn.com": 0.5, "site.api.espn.com": 0.5,      # ESPN: unofficial, so at most 2 / second
          "guest.api.arcadia.pinnacle.com": 1.0,                       # Pinnacle guest API: 1 / second
          "partner-api.prizepicks.com": 2.0, "api.underdogfantasy.com": 1.0,
-         "api.the-odds-api.com": 1.0, "api.elections.kalshi.com": 1.5,
+         "api.the-odds-api.com": 1.0, "api.elections.kalshi.com": 1.5, "eu-offering-api.kambicdn.com": 1.0,
          "gamma-api.polymarket.com": 1.0}
 _LAST = {}
 _LOCK = threading.Lock()

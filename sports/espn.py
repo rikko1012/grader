@@ -36,7 +36,8 @@ def _event(e):
     side = {}
     for x in c.get("competitors") or []:
         t = x.get("team") or {}
-        side[x.get("homeAway")] = {"id": t.get("id"), "abbr": t.get("abbreviation"), "name": t.get("displayName")}
+        side[x.get("homeAway")] = {"id": t.get("id"), "abbr": t.get("abbreviation"), "name": t.get("displayName"),
+                                   "nick": t.get("name")}        # "Celtics", "Trail Blazers" - every book prints it
     st = (c.get("status") or e.get("status") or {}).get("type") or {}
     return {"id": e.get("id"), "start": utc_iso(e.get("date")), "name": e.get("name"), "short": e.get("shortName"),
             "home": side.get("home"), "away": side.get("away"), "state": st.get("state"),
@@ -44,15 +45,24 @@ def _event(e):
 
 
 def scoreboard(lg, start, end, refresh=False):
-    """Games whose dates fall in [start, end] (dates, US calendar days as ESPN files them)."""
-    rng = f"{start:%Y%m%d}-{end:%Y%m%d}" if end != start else f"{start:%Y%m%d}"
-    past = end < datetime.now(timezone.utc).date() - timedelta(days=1)
-    params = {"dates": rng, "limit": 500}
-    if lg["key"] == "cfb":
-        params["groups"] = 80                     # FBS (ESPN's default lists only ranked games)
-    body = cache.fetch("espn:scoreboard", f"{lg['key']}:{rng}", 6 * 3600 if past else 300,
-                       lambda: net.get_json(f"{SITE}/{_path(lg)}/scoreboard", params=params), refresh=refresh)
-    return [_event(e) for e in body.get("events") or []]
+    """Games whose dates fall in [start, end] (dates, US calendar days as ESPN files them). Asked ONE day at a time:
+    ESPN's scoreboard answers 400 to a dates=A-B range (NBA, 2026-10-23), so each day is its own cached request."""
+    out, seen, day = [], set(), start
+    today = datetime.now(timezone.utc).date()
+    while day <= end:
+        d = f"{day:%Y%m%d}"
+        params = {"dates": d, "limit": 500}
+        if lg["key"] == "cfb":
+            params["groups"] = 80                 # FBS (ESPN's default lists only ranked games)
+        body = cache.fetch("espn:scoreboard", f"{lg['key']}:{d}", 6 * 3600 if day < today - timedelta(days=1) else 300,
+                           lambda params=params: net.get_json(f"{SITE}/{_path(lg)}/scoreboard", params=params),
+                           refresh=refresh)
+        for e in body.get("events") or []:
+            if e.get("id") not in seen:
+                seen.add(e.get("id"))
+                out.append(_event(e))
+        day += timedelta(days=1)
+    return out
 
 
 def slate(lg, hours=36, now=None):

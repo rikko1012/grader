@@ -80,7 +80,7 @@ ODDS_API = {
                  "player_pass_completions": "pass_cmp", "player_pass_tds": "pass_td",
                  "player_pass_interceptions": "pass_int", "player_rush_yds": "rush_yds",
                  "player_rush_attempts": "rush_att", "player_receptions": "rec", "player_reception_yds": "rec_yds",
-                 "player_rush_reception_yds": "rush_rec_yds"},
+                 "player_rush_reception_yds": "rush_rec_yds", "player_pass_rush_yds": "pass_rush_yds"},
 }
 
 
