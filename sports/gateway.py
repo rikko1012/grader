@@ -12,7 +12,7 @@ SPORTS_API_MODE (read per request)
                GET /api/sports/admin/gateway  admin: these counters
              Every other /api/sports/* path answers 404 {"error":"not_here","api_base":...} without sports work.
   proxy      The esports server forwards GET /api/sports/* to SPORTS_UPSTREAM (a private sports service) with a
-             hard budget: at most SPORTS_PROXY_MAX_INFLIGHT (8) at once, SPORTS_PROXY_QUEUE_MS (25 ms) to get a
+             hard budget: at most SPORTS_PROXY_MAX_INFLIGHT (16) at once, SPORTS_PROXY_QUEUE_MS (200 ms) to get a
              slot or 503 sports_busy, SPORTS_PROXY_TIMEOUT_S (2.5 s) per request, a LIFO keep-alive pool of the same
              size, a 4 MB response cap and a circuit breaker (5 consecutive failures -> 5 s of immediate 503s).
   inprocess  Legacy foundation path (sports/web.py inside the esports process). Dev / tests only - measured
@@ -156,7 +156,7 @@ class _Proxy:
         self.tokens = {}                                # member -> (exp, token): one mint per member per life
 
     def configure(self):
-        size = max(1, _int("SPORTS_PROXY_MAX_INFLIGHT", "8"))
+        size = max(1, _int("SPORTS_PROXY_MAX_INFLIGHT", "16"))
         with self.lock:
             if self.size != size:
                 self.size, self.slots = size, threading.BoundedSemaphore(size)
@@ -201,7 +201,7 @@ class _Proxy:
             _bump("proxy_circuit_open")
             return _j(503, {"error": "sports_unavailable"}, {"Retry-After": "5"})
         slots = self.configure()
-        if not slots.acquire(timeout=_float("SPORTS_PROXY_QUEUE_MS", "25") / 1000.0):
+        if not slots.acquire(timeout=_float("SPORTS_PROXY_QUEUE_MS", "200") / 1000.0):
             _bump("proxy_busy")
             return _j(503, {"error": "sports_busy"}, {"Retry-After": "2"})
         with _SLOCK:
