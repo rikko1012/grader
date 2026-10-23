@@ -55,7 +55,7 @@ if the registered-cell development point is the true effect.**
 | **th-1** thin / fallback | **kills Map 1 only** (perf-2 bands D0 < 50, D1 50-150 weighted rounds) | kills Map 1 cohort **+0.0309 [+0.0257, +0.0361]** (12,974 rows / 3,894 m), every fold > 0 | **+0.0682 [+0.0305, +0.0976]** (only **10 units / 5 m**) | **PASS (dev) -> shadow for that cell.** Every other cell fails G1 (one fold's interval crosses 0, mostly F2 2025-Q4) although their pooled gains are positive |
 
 What the gains are made of:
-- **rm-1 improves the shape, not the picks.** On HLTV the gain is in the integer log score (the tails: overtime maps). At the
+- **[Scope note 2026-10-23: AMENDMENT A1 - the all-unit figures in this bullet and the next are the whole development population (2,375 of 2,692 units Maps 1-2, not a registered cell); the registered cells' figure is +0.0029 [-0.0073, +0.0125], 297 u / 21 m]** **rm-1 improves the shape, not the picks.** On HLTV the gain is in the integer log score (the tails: overtime maps). At the
   lines that are actually offered (close to the projection) it changes almost nothing: real-line log loss +0.0004
   [-0.0024, +0.0030] on all 2,692 units / 155 m, split equally between units whose favoured side is unchanged (+0.0002) and
   units whose side flips (+0.0002, 246 units). It does correct the HLTV "actual beats the projection only 45% of the time"
@@ -169,6 +169,7 @@ was truncated, so they do not contradict this; they do say the < 600 widening al
 being small here.
 
 ## 4. Forward rule (frozen in CHALLENGERS.md on branch shadow/cs2-cands)
+**[Amended 2026-10-23: A2 decision level (one-sided 0.025 / 6 per look, not 95%), A3 th-1 look counter = its kills Map 1 cell, the 60 counts cohort matches - AMENDMENT_2026-10-23.md; text below kept]**
 Implemented on branch `shadow/cs2-cands` (commit c1293dd, from origin/main 5faaaf9; NOT merged, NOT deployed): `cands_shadow.py`
 (frozen 2026-10-23 07:45 UTC, constants sha256 3d00b8c8...), hooked into `picklog._factors` as `forecasts.shadow.cands`,
 copied / reported by `learning.cands_report` (scorecard.product.candidates_2y), tests/test_cands_shadow.py; full suite 1,412

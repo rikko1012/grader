@@ -32,6 +32,7 @@ Set by phase 1 (COVERAGE.md, 2026-10-23):
 | CX-B | 2026-10-22 (Codex) | A + earlier full-buy / eco frequency and full-buy success | same | rounds MAE; family kills MAE | none | done | rounds +0.0168 [+0.0096, +0.0239]; family -0.0029 [-0.0124, +0.0058], worse in all 4 months - no improvement |
 | CX-C | 2026-10-22 (Codex) | player opening-kill/death balance, deaths, assists beyond recent kill rate | 87,170 player-maps / 3,802 matches | kills/map MAE | none | done | +0.00057 [+0.000001, +0.00112] (negligible); family +0.0005 [-0.0006, +0.0017] - inconclusive |
 | CX-OT | 2026-10-22 (Codex, diagnostic) | current-tag real-line losses vs overtime | f663af8917 P1: 230 props / 15 matches | Under hit by OT / no-OT | n/a (retrospective) | done | Under hit 16.9% in 8 OT matches vs 73.8% in 7 non-OT; explains losses after the fact, NOT a pre-match rule. Data fact: all 5,466 maps missing round outcomes are OT maps (economy stops at regulation); cm-1/cm-2 read final scores (include OT) |
+| AM-1 | 2026-10-23 16:54 UTC (amendment `cands-amend-1`, made BEFORE any eligible forward rm-1 / th-1 outcome existed: 0 eligible forward forecasts, ids 81456..83425) | Not an experiment: corrects the rm-1 / th-1 forward decision procedure (repeated looks) and resolves th-1's look counter; restates the registered deployment scope | forward P1 units from the deploy (2026-10-23 07:55:42 UTC) | unchanged (paired log loss vs logged live at the P1 line) | per look one-sided alpha 0.025 / 6 (2 candidates x 3 looks, Bonferroni), match-clustered percentile bootstrap B = 4,000; Brier / calibration / coverage / th-1 >= 60 cohort matches as conditions; owner decides | amended | AMENDMENT_2026-10-23.md; code learning.CANDS_AMENDMENT (branch close2/contracts) |
 | CR-1 | 2026-10-23 (owner review of ED-1 / UT-1 / CANDIDATES; logged with the corrections, descriptive only) | Corrections: (a) signed projection errors on real P1 lines (actual - projection, projection - line, actual - line) by stat, scope, version tag, favoured side, projection source; (b) power of rm-1's registered forward rule | (a) data/p1_units.json 2026-10-23T04:29:55Z: development start < 2026-10-22 (2,692 u / 155 m), confirmation >= 2026-10-22 (230 u / 15 m, descriptive only); (b) cands/p1_cands.csv.gz development per-unit paired log loss | means with match-grouped 95% bootstrap (B = 2,000); P(primary test passes) at 300 / 600 / 1,000 matches | none (no candidate, nothing promoted; no frozen definition changed) | done | corrections/results/signed_bias.md, power_rm1.md; see "Corrections 2026-10-23" below |
 
 ## Corrections 2026-10-23 (owner review)
@@ -141,7 +142,7 @@ combination would be a new registration). Live grading is untouched; every resul
   G5 coverage identical.
   A candidate passes if >= 1 cell passes G1-G5. Nothing is tuned after seeing these numbers; a failed candidate is reported as
   failed (no re-run with changed definitions under the same id).
-- Forward confirmation (passing candidates only): the shadow config is re-fitted ONCE on all development data (matches
+- **[Amended 2026-10-23: A2 decision level, A3 th-1 look counter - AMENDMENT_2026-10-23.md; text below kept as registered]** Forward confirmation (passing candidates only): the shadow config is re-fitted ONCE on all development data (matches
   <= 2026-10-21) with the same code, frozen (parameters + sha256 in CHALLENGERS.md) before deployment, and logged per forecast
   beside the live grade (raw probabilities stored apart from any recommendation; live grades byte-identical). Forward set = P1
   units of matches starting at/after the shadow's deploy time (and >= 2026-10-22 00:00 UTC). Looks only at the REVIEW_RULE
@@ -196,3 +197,19 @@ combination would be a new registration). Live grading is untouched; every resul
   and with a separate cm-2-ineligible fallback band (ED-1: -3.01 kills, c 1.86). It is a new definition, not a re-run.
 - Known mismatch (stated before the run): live perf-2 reads the N0-pinned history (smaller r_w, other lam) while the HLTV fit
   uses full-history perf-2; the real-line evaluation uses exactly the saved live inputs, i.e. what a deployment would apply.
+
+## Amendment 2026-10-23 (AM-1, `cands-amend-1`) - rm-1 / th-1 forward confirmation
+Made 2026-10-23 from 16:54 UTC (this commit), before any eligible forward rm-1 / th-1 outcome existed or was examined (production:
+1,970 / 1,970 forecasts since the deploy `eligible: false`, all Maps 1-2 lines; ids 81456..83425). The section "Frozen candidate
+definitions rm-1 / th-1" above is kept verbatim; its "Forward confirmation" bullet carries an [Amended] marker. Full text:
+AMENDMENT_2026-10-23.md. Effective in the production report from deploy <COORDINATOR: deploy time UTC / main commit>.
+- A1 scope (no change): deployment scope = the gate-passing cells only (rm-1 kills Map 1, kills Maps 1-3, HS Map 1; th-1 kills
+  Map 1 < 150 weighted rounds), on perf-2 / perf-2-bo3 grades. Maps 1-2 was evaluated in development and failed; it is not
+  registered. Implementation = registration (no eligibility change).
+- A2 level: family 2 candidates x 3 looks = 6 primary one-sided tests at family-wise 0.025 (Bonferroni) -> each look one-sided
+  0.0041667 (lower end of a two-sided 99.17% match-clustered percentile bootstrap interval, B = 4,000, seed 20261023) > 0;
+  replaces "95% interval > 0" as the decision level (the 95% figure stays, for reading). Brier point >= 0, favoured-side
+  calibration (<= 1.0 pt worse, 95% interval not entirely worse), coverage identical, th-1 >= 60 cohort matches = conditions.
+- A3 th-1: looks count distinct forward matches with a th-1 unit in its cell (kills Map 1 on perf-2 / perf-2-bo3, cohort or
+  not), as the original "additionally needs >= 60 distinct cohort matches" requires; the 60 counts cohort matches; statistics on
+  cohort units only.

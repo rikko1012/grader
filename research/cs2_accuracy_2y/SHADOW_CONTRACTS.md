@@ -48,7 +48,7 @@ frozen REVIEW_RULE cohort. No shadow value, eligibility rule or decision rule ch
 P1 units, pooled over its cells; `look_reached` = largest of 300 / 600 / 1,000 <= that count. For rm-1 this matches
 REGISTER / CHALLENGERS ("distinct forward matches with >= 1 eligible logged unit").
 
-**th-1 ambiguity.** For th-1 the eligible units ARE the cohort (< 150 rounds), so the code's look counter equals the cohort
+**[Resolved 2026-10-23: AMENDMENT A3 - the original REGISTER text's reading was adopted: looks count th-1's cell, the 60 counts cohort matches]** **th-1 ambiguity.** For th-1 the eligible units ARE the cohort (< 150 rounds), so the code's look counter equals the cohort
 count and "th-1 additionally needs >= 60 distinct cohort matches" can never bind (`cohort_ok` is always true at a look). The
 text, however, says "the 60-cohort-match minimum may not be reached before the 1,000-match look" - which only makes sense if
 the look counter counts a wider set (e.g. forward matches with a logged th-1 entry in its cell, kills Map 1 on perf-2, at any
@@ -58,7 +58,7 @@ Proposed wording for the owner: "th-1 look counter = distinct forward matches wi
 Map 1 on a perf-2 / perf-2-bo3 grade) carrying a logged th-1 entry, eligible or not; the look is skipped unless >= 60 of
 those matches have a th-1-eligible (< 150 rounds) unit; the statistics use eligible units only."
 
-**Level / alpha spending.** REVIEW_RULE (learning.py) sets `ci_level` = 0.9833 (95% family-wise over 3 looks, Bonferroni)
+**[Resolved 2026-10-23: AMENDMENT A2 - one-sided 0.025 / 6 per look (2 candidates x 3 looks, Bonferroni) before any eligible outcome; the 98.33% wording below is not the policy]** **Level / alpha spending.** REVIEW_RULE (learning.py) sets `ci_level` = 0.9833 (95% family-wise over 3 looks, Bonferroni)
 and other conditions (min_gain 0.002, slope band). The rm-1 / th-1 registration (REGISTER.md "Forward confirmation", repeated
 in CHALLENGERS.md) borrows only the look WINDOWS and requires a **95%** match-grouped interval > 0 at the look; the code
 computes 95% (`_ci_ratio` default) - so code = registration, but the registration has no alpha spending: with up to 3 looks
