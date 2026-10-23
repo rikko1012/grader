@@ -25,9 +25,11 @@ Every repo we looked at that tested this properly reached the same conclusion:
   treats the market as the best forecast available.
 
 So the ranking uses the market's chance. The player's ESPN history is shown beside it as a check, not as a second
-opinion of equal weight. In the first live record (2026-10-23, 3,656 NBA forecasts, history found for 98%), the two
-differed by 8.6 points on average and by 11.6 points on standard lines. Some players match closely and others don't, so
-neither can be called right yet. The forecast log scores both on the same props once games settle.
+opinion of equal weight. The first live record (2026-10-23) saved 3,656 NBA and 3,247 NFL forecasts, all priced from
+Kalshi, with the player's history found for 98% of each. The two chances differed by 8.6 points on average in both
+leagues. On ordinary lines (PrizePicks standard, Underdog) the gap was 11.1 points for NBA and 10.5 for NFL. Some players
+match closely and others don't, so neither can be called right yet. The forecast log scores both on the same props once
+games settle.
 
 ## Data sources (checked 2026-10-23 from an Ohio server, the same region as Render)
 
