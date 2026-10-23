@@ -98,9 +98,9 @@ class TheOddsAPI(Provider):
         try:
             r = net.get(f"{BASE}{path}", params={"apiKey": config.odds_api_key(), **params}, tries=1)
         except net.HttpError as e:
-            res.requests += 1
+            res.requests += int(not e.held)
             res.http_status, res.error = e.status, _redact(f"{e} {e.body[:120]}")
-            res.blocked = e.status in (401, 403)
+            res.blocked, res.not_before = e.status in (401, 403), e.not_before_iso
             return None
         res.requests += 1
         res.http_status = r.status_code

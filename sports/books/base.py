@@ -52,6 +52,9 @@ class FetchResult:
     http_status: int = None
     error: str = None               # None = success (an empty list is a successful empty answer)
     blocked: bool = False           # the provider refused this server (403 / access denied) - not retried soon
+    not_before: str = None          # the provider's Retry-After as a UTC time: nothing is sent to it before then
+    budget_denied: str = None       # a metered call NOT made because the quota guard said no (not a provider failure)
+    unmapped: list = field(default_factory=list)   # provider market names that mapped to no stat (shown in health)
 
 
 class Provider:

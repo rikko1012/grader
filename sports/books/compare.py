@@ -21,6 +21,8 @@ MIN_BOOKS = 2
 
 
 def _ladder(db, provider):
+    if provider == "oddspapi":
+        return "minimal"                    # read a few times a day at most: stale after 12 h (2 x its 6 h rung)
     if provider == "theoddsapi":
         v = store.setting(db, "odds_api_ladder", "minimal")
         return v if v in schedule.LADDERS else "minimal"

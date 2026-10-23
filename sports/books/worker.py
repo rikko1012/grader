@@ -26,7 +26,7 @@ import sys
 import time
 from datetime import datetime, timedelta, timezone
 
-from .. import config
+from .. import config, net
 from . import events as canon
 from . import plan, providers, schedule, store
 from .base import Event
@@ -44,10 +44,74 @@ def _now():
     return datetime.now(timezone.utc)
 
 
-def _cooldown(failures, blocked, now):
+def _cooldown(failures, blocked, now, not_before=None):
+    """Next attempt: 6 h after a refusal, else 60 s doubling to 30 min - and never before the provider's own
+    Retry-After time (not_before), however long it is."""
     if blocked:
-        return now + timedelta(hours=BLOCKED_COOLDOWN_H)
-    return now + timedelta(seconds=min(MAX_BACKOFF_S, 60 * 2 ** max(0, failures)))
+        until = now + timedelta(hours=BLOCKED_COOLDOWN_H)
+    else:
+        until = now + timedelta(seconds=min(MAX_BACKOFF_S, 60 * 2 ** max(0, failures)))
+    nb = dt(not_before) if not_before else None
+    return max(until, nb) if nb else until
+
+
+def load_holds(db, now):
+    """Retry-After holds saved by an earlier pass (or process) -> net.hold, so no request goes out before them."""
+    for r in db.all("SELECT key, value FROM sports_book_settings WHERE key LIKE 'hold:%'"):
+        t = dt(r["value"])
+        if t and t > now:
+            net.hold(r["key"][len("hold:"):], t.timestamp())
+
+
+def save_holds(db, now):
+    for host, until in net.holds().items():
+        store.set_setting(db, f"hold:{host}", datetime.fromtimestamp(until, timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"), now=now)
+
+
+def _league_reads(db, name, prov, leagues, now, info):
+    """Providers that read a whole league per request (OddsPapi): due per league, every read through the provider's
+    own quota guard; a budget refusal is not a failure (no backoff), it just waits for the next due time."""
+    from datetime import timedelta as _td
+    with_games = [k for k in leagues if k in prov.leagues]
+    for key in with_games:
+        lg = config.league(key)
+        nd = store.due(db, name, key, "league")
+        if nd and dt(nd) > now:
+            continue
+        fid = store.start_fetch(db, name, key, "league", now=now)
+        res = prov.read(db, lg, now)
+        if res.budget_denied:
+            store.finish_fetch(db, fid, res, now=now)
+            info.setdefault("budget", {})[key] = res.budget_denied
+            store.set_due(db, name, key, "league", now + _td(minutes=60))
+            continue
+        if res.error is not None:
+            store.finish_fetch(db, fid, res, now=now)
+            fails = store.provider_state(db, name)["failures"]
+            until = _cooldown(fails, res.blocked, now, res.not_before)
+            store.note_result(db, name, res, now=now, cooldown_until=iso(until))
+            info["error"], info["cooling_down_until"] = res.error, iso(until)
+            return
+        keys = canon.keys_for(lg, name, res.events, now=now) if res.events else {}
+        store.record_events(db, name, key, res.events, keys, now=now)
+        by_ev = {}
+        for o in res.offers:
+            by_ev.setdefault(o["provider_event_id"], []).append(o)
+        new = removed = 0
+        for ev in res.events:
+            n, r = store.save_offers(db, fid, name, key, ev.provider_event_id, keys.get(ev.provider_event_id),
+                                     by_ev.get(ev.provider_event_id, []), True, now=now)
+            new, removed = new + n, removed + r
+        store.finish_fetch(db, fid, res, len(res.offers), new, removed, now=now)
+        store.note_result(db, name, res, now=now)
+        store.set_due(db, name, key, "league", now + _td(minutes=prov.interval_min(db, len(with_games), now)))
+        info["fetched"] += 1
+        info["offers"] += len(res.offers)
+        info["new_quotes"] += new
+        info["removed"] += removed
+        if res.unmapped:
+            info.setdefault("unmapped_markets", {})[key] = res.unmapped[:20]
 
 
 def _games(db, prov, lg, now):
@@ -124,6 +188,7 @@ def run_once(db, leagues=LEAGUES, now=None, provs=None, probe=True):
     if not store.take_lease(db, HOLDER, LEASE_TTL_S, now=now):
         return {"busy": True}
     summary = {"at": iso(now), "providers": {}}
+    load_holds(db, now)
     try:
         for name, prov in (providers.PROVIDERS if provs is None else provs).items():
             info = summary["providers"].setdefault(name, {"fetched": 0, "offers": 0, "new_quotes": 0, "removed": 0})
@@ -134,6 +199,9 @@ def run_once(db, leagues=LEAGUES, now=None, provs=None, probe=True):
             st = store.provider_state(db, name)
             if st["cooldown_until"] and dt(st["cooldown_until"]) > now:
                 info["cooling_down_until"] = st["cooldown_until"]
+                continue
+            if prov.kind == "feed_league":
+                _league_reads(db, name, prov, leagues, now, info)
                 continue
             ladder = _feed_ladder(db, now) if prov.kind == "feed" else schedule.direct_ladder()
             if ladder is None:
@@ -181,13 +249,14 @@ def run_once(db, leagues=LEAGUES, now=None, provs=None, probe=True):
                     break
             if failed is not None:
                 fails = store.provider_state(db, name)["failures"]
-                until = _cooldown(fails, failed.blocked, now)
+                until = _cooldown(fails, failed.blocked, now, failed.not_before)
                 store.note_result(db, name, failed, now=now, cooldown_until=iso(until))
                 info["error"] = failed.error
                 info["cooling_down_until"] = iso(until)
         if probe:
             summary["probes"] = _probe_blocked(db, now)
     finally:
+        save_holds(db, now)
         store.release_lease(db, HOLDER)
     return summary
 
@@ -206,6 +275,28 @@ def verify(db, provider_names=None, leagues=LEAGUES, now=None):
             ok, why = prov.configured()
             if not ok:
                 out[name] = {"skipped": why}
+                continue
+            if prov.kind == "feed_league":                       # one guarded read per league
+                for key in leagues:
+                    lg = config.league(key)
+                    fid = store.start_fetch(db, name, key, "league", now=now)
+                    res = prov.read(db, lg, now)
+                    keys = canon.keys_for(lg, name, res.events, now=now) if res.events else {}
+                    if res.error is None and not res.budget_denied:
+                        store.record_events(db, name, key, res.events, keys, now=now)
+                        for ev in res.events:
+                            store.save_offers(db, fid, name, key, ev.provider_event_id, keys.get(ev.provider_event_id),
+                                              [o for o in res.offers if o["provider_event_id"] == ev.provider_event_id],
+                                              True, now=now)
+                    store.finish_fetch(db, fid, res, len(res.offers), now=now)
+                    books = {}
+                    for o in res.offers:
+                        books.setdefault(o["book"], set()).add(o["market"])
+                    out[f"{name}:{key}"] = {"games": len(res.events), "offers": len(res.offers), "error": res.error,
+                                            "budget": res.budget_denied, "requests_billed": res.credits_used,
+                                            "mapped_to_espn": sum(1 for k in keys.values() if k.startswith("espn:")),
+                                            "books": {b: sorted(m) for b, m in books.items()},
+                                            "unmapped_markets": res.unmapped[:20]}
                 continue
             for key in leagues:
                 lg = config.league(key)

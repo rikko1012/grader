@@ -343,6 +343,10 @@ def tick(db, leagues=LEAGUES, now=None, clock=None):
     if not take_lease(db, now):
         return {"busy": True}
     out = {"at": iso(now)}
+    for r in db.all("SELECT key, value FROM sports_game_settings WHERE key LIKE 'hold:%'"):
+        t = dt(r["value"])                                 # a source's Retry-After from an earlier tick / process
+        if t and t > now:
+            net.hold(r["key"][len("hold:"):], t.timestamp())
     try:
         for key in leagues:
             lg = config.league(key)
@@ -369,6 +373,9 @@ def tick(db, leagues=LEAGUES, now=None, clock=None):
                 info["error"] = f"{type(e).__name__}: {str(e)[:200]}"
             take_lease(db, now)
     finally:
+        for host, until in net.holds().items():
+            store.set_setting(db, f"hold:{host}", datetime.fromtimestamp(until, timezone.utc).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"), now=now)
         release_lease(db)
     return out
 

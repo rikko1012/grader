@@ -68,7 +68,9 @@ play-by-play. That is roughly 180 MB per NBA season and 45 MB per NFL season. On
 - BPI / FPI and rosters daily
 - NWS weather with the NFL context
 
-One tick at a time (a lease), host pacing from `net.py`, and Kalshi 429s honour `Retry-After`.
+One tick at a time (a lease) and host pacing from `net.py`. A source's `Retry-After` is obeyed in full: up to 60 s it
+is slept, and a longer one is a hold saved in `sports_game_settings` (`hold:<host>`), so nothing is sent to that
+host before then, even after a restart.
 Backfill: `python sports_scout.py games-backfill nba --season 2026 2027` (ESPN names NBA seasons by their end year)
 and `games-backfill nfl --season 2025 2026`. It stops at the first run of unplayed games.
 

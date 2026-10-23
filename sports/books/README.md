@@ -31,6 +31,46 @@ says why. Its documentation (read 2026-10-23) says:
 - player-prop coverage "varies" by bookmaker. **Real coverage per book is unverified until a key is set** (see
   Verification).
 
+## OddsPapi through the CS2 account (`oddspapi.py`): built, OFF until verified
+
+The site already holds an OddsPapi key for CS2 (`ODDSPAPI_API_KEY`, Railway name `odds_papi_api`). OddsPapi lists
+DraftKings, BetMGM, Caesars, FanDuel and BetRivers. Sports can read up to 3 of them per league in **one** request
+(`/v4/odds-by-tournaments`), DraftKings, BetMGM and Caesars first: these are the books whose own sites refuse this
+server. **The provider is off by default** and starts only when all three of these are set on the worker's service:
+`SPORTS_ODDSPAPI=1`, the key, and `SPORTS_ODDSPAPI_MONTHLY_REQUESTS` > 0.
+
+**Sharing the account with CS2.** CS2's `oddspapi.py` is not changed and the key is not copied anywhere.
+1. **Allocation:** Sports has an explicit monthly allocation, `SPORTS_ODDSPAPI_MONTHLY_REQUESTS`. Each billable call
+   first takes one request of it with a single conditional UPDATE in the Sports store, so all Sports workers
+   together never exceed it.
+2. **Account check:** before every billable call, Sports reads the whole account with `GET /v4/account` (not metered
+   per the docs). The call is made only if the account would still have more than CS2's floor left. That floor is
+   max(`SPORTS_ODDSPAPI_CS2_FLOOR`, default 50, CS2's unused share), where CS2's share = limit - Sports allocation.
+   Sports stops first; it never spends CS2's share or the account's last requests.
+3. **No backoff on refusal:** a refusal by this guard is not a provider failure, and it is retried at the next due
+   time.
+
+**Spending:**
+- The catalog (tournaments, participants, player-prop markets) costs 3 requests, cached 30 / 30 / 7 days.
+- Each league read costs 1 request.
+- Read cadence = Sports allocation left ÷ days left in the month ÷ leagues with games, never more often than every
+  3 h.
+
+**Retry-After:** a hold. No OddsPapi request is sent before the provider's time, and it survives a restart.
+
+**Unverified until the owner's check** (run on the service that holds the key):
+- which books this account entitles to player props for sports 11 (basketball) and 14 (American football);
+- OddsPapi's player-prop market names (unknown names map to nothing and are listed, never guessed into a stat);
+- whether `request_count` resets monthly.
+
+```
+python sports_scout.py books-oddspapi account     # not metered: entitlements, quota, the guard's numbers (no key printed)
+SPORTS_ODDSPAPI=1 SPORTS_ODDSPAPI_MONTHLY_REQUESTS=<n> python sports_scout.py books-oddspapi catalog   # <= 3 requests
+SPORTS_ODDSPAPI=1 SPORTS_ODDSPAPI_MONTHLY_REQUESTS=<n> python sports_scout.py books-verify --providers oddspapi  # 1 per league
+```
+Leave `SPORTS_ODDSPAPI` unset until those three answers are in and the allocation is agreed against CS2's usage
+(see `request_count` in `account`).
+
 ## Adapter contract (`base.py`) - replaceable without touching Scout
 
 ```
@@ -94,6 +134,9 @@ model's `chance` (`sharp-1`) is **unchanged**: the book consensus is shown and l
 - **Markets are batched:** one Odds API call per game; FanDuel needs one request per stat tab, BetRivers one per game.
 - **Rate limits:** 1 request per second per host (`net.py`).
 - **Backoff:** errors back off 60 s doubling to 30 min; a 401/403 refusal waits 6 h.
+- **Retry-After:** obeyed in full. A wait of up to 60 s is slept inside the call. A longer one becomes a hold:
+  `net.py` sends nothing to that host before the provider's time, the worker saves it (`hold:<host>` setting, so a
+  restart honours it too), and the provider cools down until exactly that time. It is never retried early.
 - **Odds API budget:** the densest ladder whose estimated credits fit `SPORTS_ODDS_API_MONTHLY_CREDITS` (re-planned
   daily from ESPN's real schedule, `plan.py`); every call is checked against the daily allowance and the reserve.
 
@@ -132,6 +175,10 @@ first and last price per offer) is a decision to make before it is needed.
 | `SPORTS_FANDUEL_STATE` | Same | `oh` |
 | `SPORTS_BETRIVERS_OPERATOR` | Same | `rsiusoh` |
 | `SPORTS_DB_DSN` | Worker **and** web service, only for the separate-service option | unset = SQLite |
+| `SPORTS_ODDSPAPI` | The worker's service: `1` turns the OddsPapi provider on (after the owner's check) | unset = off |
+| `ODDSPAPI_API_KEY` (or `odds_papi_api`) | The CS2 key, already on the site; read, never copied | - |
+| `SPORTS_ODDSPAPI_MONTHLY_REQUESTS` | Sports' share of that account per month | 0 = nothing |
+| `SPORTS_ODDSPAPI_CS2_FLOOR` | Requests always left to CS2 on the account | 50 |
 | `SPORTS_DATA_DIR` | Optional storage folder | `<CS2_DATA_DIR>/sports` |
 
 ## Verification
@@ -166,5 +213,9 @@ Additive unless marked **breaking**:
   `sports/research/forecasts/` (MANIFEST.json: count, time range, schema, sha256).
 - (game data) new package `sports/games/` - see its README: game store (`sports_game_*` tables), factor contract
   `sports-factors/1`, board rows gain `factors`, forecasts gain a `factors` column (added automatically). The worker
-  (`python -m sports.books.worker`) now also runs the game-data tick each pass (`--no-games` to skip). `net.get`
-  honours a 429's Retry-After (at most 60 s); Kalshi pacing is 2 s.
+  (`python -m sports.books.worker`) now also runs the game-data tick each pass (`--no-games` to skip). Kalshi
+  pacing is 2 s.
+- (OddsPapi / Retry-After) new provider `oddspapi` (off by default; kind `feed_league`, read per league by the
+  worker), `FetchResult.not_before` / `budget_denied` / `unmapped`, `net.HttpError.not_before` / `held`,
+  `net.hold()` / `net.holds()`, CLI `books-oddspapi account|catalog`, health table gains an OddsPapi column. A
+  Retry-After longer than 60 s is now a persisted hold instead of a capped sleep.

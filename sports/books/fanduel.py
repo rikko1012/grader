@@ -157,8 +157,8 @@ class FanDuel(Provider):
             res.requests, res.http_status = 1, 200
             res.events = parse_events(body, lg)
         except net.HttpError as e:
-            res.requests, res.http_status, res.error = 1, e.status, str(e)
-            res.blocked = e.status in (401, 403)
+            res.requests, res.http_status, res.error = int(not e.held), e.status, str(e)
+            res.blocked, res.not_before = e.status in (401, 403), e.not_before_iso
         return res
 
     def props(self, lg, event):
@@ -171,8 +171,8 @@ class FanDuel(Provider):
                 res.http_status = 200
                 res.offers += parse_props(body, lg, event)
             except net.HttpError as e:
-                res.requests += 1
+                res.requests += int(not e.held)
                 res.http_status, res.error = e.status, f"{tab}: {e}"
-                res.blocked = e.status in (401, 403)
+                res.blocked, res.not_before = e.status in (401, 403), e.not_before_iso
                 break                                          # one failed tab stops this game; the worker backs off
         return res

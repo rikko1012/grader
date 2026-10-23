@@ -124,7 +124,8 @@ class BetRivers(Provider):
             body = net.get_json(f"{BASE}/{operator()}/listView/{PATHS[lg['key']]}.json", params=PARAMS, tries=1)
             res.requests, res.http_status, res.events = 1, 200, parse_events(body, lg)
         except net.HttpError as e:
-            res.requests, res.http_status, res.error, res.blocked = 1, e.status, str(e), e.status in (401, 403)
+            res.requests, res.http_status, res.error, res.blocked = int(not e.held), e.status, str(e), e.status in (401, 403)
+            res.not_before = e.not_before_iso
         return res
 
     def props(self, lg, event):
@@ -134,5 +135,6 @@ class BetRivers(Provider):
                                 params={**PARAMS, "includeParticipants": "true"}, tries=1)
             res.requests, res.http_status, res.offers = 1, 200, parse_props(body, lg, event)
         except net.HttpError as e:
-            res.requests, res.http_status, res.error, res.blocked = 1, e.status, str(e), e.status in (401, 403)
+            res.requests, res.http_status, res.error, res.blocked = int(not e.held), e.status, str(e), e.status in (401, 403)
+            res.not_before = e.not_before_iso
         return res

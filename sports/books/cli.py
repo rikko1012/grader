@@ -62,9 +62,11 @@ def health(db, now=None):
     """-> one row per book: the status table's data (also used by tests)."""
     now = now or datetime.now(timezone.utc)
     feed_ok, feed_why = providers.PROVIDERS["theoddsapi"].configured()
+    op_ok, op_why = providers.PROVIDERS["oddspapi"].configured()
     rows = []
     for book in providers.BOOKS:
-        direct = next((p for p in providers.ROUTES[book] if p != "theoddsapi"), None) or f"direct:{book}"
+        direct = next((p for p in providers.ROUTES[book] if p not in ("theoddsapi", "oddspapi")), None) \
+            or f"direct:{book}"
         st = store.provider_state(db, direct)
         last_ok = db.one("SELECT MAX(finished_at) AS t FROM sports_book_fetches WHERE provider = ? AND scope = 'props' "
                          "AND ok = 1 AND n_offers > 0", (direct,))["t"]
@@ -90,9 +92,12 @@ def health(db, now=None):
             blocker = (blocker + "; " if blocker else "") + f"documented feed: {feed_why}"
         if book == "caesars":
             blocker = (blocker + "; " if blocker else "") + "Odds API lists Caesars on paid plans only"
+        op_last = db.one("SELECT MAX(q.observed_at) AS t FROM sports_book_quotes q WHERE q.provider = 'oddspapi' "
+                         "AND q.book = ?", (book,))["t"]
         rows.append({"book": book, "direct": dstat, "direct_provider": direct, "feed": "on" if feed_ok else "off",
+                     "oddspapi": "on" if op_ok else "off", "oddspapi_why": None if op_ok else op_why,
                      "nba": cov["nba"], "nfl": cov["nfl"], "last_ok": last_ok, "feed_last": feed_last,
-                     "blocker": blocker})
+                     "oddspapi_last": op_last, "blocker": blocker})
     return rows
 
 
@@ -102,10 +107,65 @@ def cmd_health(a):
         rows = health(db)
     finally:
         db.close()
-    _table([(r["book"], r["direct"], r["feed"], f"{r['nba'][0]} offers / {r['nba'][1]} stats",
-             f"{r['nfl'][0]} offers / {r['nfl'][1]} stats", r["last_ok"] or r["feed_last"] or "-", r["blocker"] or "-")
-            for r in rows], ["book", "own feed", "Odds API", "NBA open props", "NFL open props", "latest success",
-                             "blocker"])
+    _table([(r["book"], r["direct"], r["feed"], r["oddspapi"], f"{r['nba'][0]} offers / {r['nba'][1]} stats",
+             f"{r['nfl'][0]} offers / {r['nfl'][1]} stats",
+             r["last_ok"] or r["oddspapi_last"] or r["feed_last"] or "-", r["blocker"] or "-")
+            for r in rows], ["book", "own feed", "Odds API", "OddsPapi", "NBA open props", "NFL open props",
+                             "latest success", "blocker"])
+    why = next((r["oddspapi_why"] for r in rows if r["oddspapi_why"]), None)
+    if why:
+        print(f"\n  OddsPapi: {why}")
+
+
+def cmd_oddspapi(a):
+    """Owner checks for the shared OddsPapi account. account: GET /v4/account (not metered) - entitlements and the
+    quota guard's numbers; the key itself is never printed. catalog: NBA / NFL tournament ids and every player-prop
+    market with the stat it maps to (spends up to 3 requests, only through the guard, and needs SPORTS_ODDSPAPI=1)."""
+    from . import oddspapi as op
+    prov = providers.PROVIDERS["oddspapi"]
+    if not op.api_key():
+        print("  ODDSPAPI_API_KEY (or odds_papi_api) is not set in this environment: run this on the service that "
+              "holds the CS2 OddsPapi key")
+        return
+    from .base import FetchResult
+    res = FetchResult()
+    acc = prov.account(res)
+    if not isinstance(acc, dict):
+        print(f"  /v4/account failed: {res.error}")
+        return
+    sub = op.subscription(acc) or {}
+    db = store.connect()
+    try:
+        now = datetime.now(timezone.utc)
+        ok, why, nums = op.guard(acc, op.used_this_month(db, now), op.allocation(), op.cs2_floor())
+        print(f"  subscription: active={bool(sub)} valid {sub.get('valid_from')} -> {sub.get('valid_until')} "
+              f"sports {sub.get('sport_ids')}")
+        print(f"  quota: {nums or '-'}")
+        for b in op.BOOK_PRIORITY:
+            e = (sub.get("bookmakers") or {}).get(b)
+            print(f"  {b:11s} listed={e is not None} player_props={bool((e or {}).get('has_player_props'))}")
+        print(f"  books Sports would read: NBA {op.books_for(acc, 'basketball')}  NFL {op.books_for(acc, 'football')}")
+        print(f"  guard: {'a request would be allowed' if ok else 'no request: ' + why}")
+        print(f"  provider: {'on' if prov.configured()[0] else 'off - ' + prov.configured()[1]}")
+        if a.what == "catalog":
+            if not prov.configured()[0]:
+                print("  catalog needs the provider on (SPORTS_ODDSPAPI=1 and a monthly allocation)")
+                return
+            for key in ("nba", "nfl"):
+                lg = config.league(key)
+                r2 = FetchResult()
+                cat = prov.catalog(db, lg, now, acc, r2)
+                if cat is None:
+                    print(f"  {key}: {r2.budget_denied or r2.error}")
+                    continue
+                tid, parts, mkts = cat
+                print(f"  {key}: tournament {tid}, {len(parts)} participants")
+                for mid, info in sorted(mkts.items()):
+                    if info["sport"] == op.SPORT[lg["family"]]:
+                        print(f"    {mid:>6} {info['name']!r:45} period={info['period']!r:12} -> "
+                              f"{op.map_market(lg['family'], info['name']) or 'NOT MAPPED'}")
+    finally:
+        db.close()
 
 
 def cmd_plan(a):

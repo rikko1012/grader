@@ -10,12 +10,14 @@ from .. import net
 from .base import FetchResult
 from .betrivers import BetRivers
 from .fanduel import FanDuel
+from .oddspapi import OddsPapi
 from .theoddsapi import TheOddsAPI
 
-PROVIDERS = {"theoddsapi": TheOddsAPI(), "fanduel": FanDuel(), "betrivers": BetRivers()}
+PROVIDERS = {"theoddsapi": TheOddsAPI(), "fanduel": FanDuel(), "betrivers": BetRivers(), "oddspapi": OddsPapi()}
 BOOKS = ("draftkings", "fanduel", "betmgm", "caesars", "betrivers")
-ROUTES = {"draftkings": ("theoddsapi",), "fanduel": ("fanduel", "theoddsapi"), "betmgm": ("theoddsapi",),
-          "caesars": ("theoddsapi",), "betrivers": ("betrivers", "theoddsapi")}
+ROUTES = {"draftkings": ("oddspapi", "theoddsapi"), "fanduel": ("fanduel", "oddspapi", "theoddsapi"),
+          "betmgm": ("oddspapi", "theoddsapi"), "caesars": ("oddspapi", "theoddsapi"),
+          "betrivers": ("betrivers", "oddspapi", "theoddsapi")}
 PROBE_EVERY_H = 6
 BLOCKED = {
     "draftkings": "https://sportsbook-nash.draftkings.com/api/sportscontent/dkusoh/v1/leagues/42648",
@@ -33,4 +35,5 @@ def probe(book):
         res.http_status = r.status_code
     except net.HttpError as e:
         res.http_status, res.error, res.blocked = e.status, f"direct feed refused: {e}", e.status in (401, 403)
+        res.not_before = e.not_before_iso
     return res

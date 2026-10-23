@@ -499,6 +499,8 @@ def main(argv=None):
     s = sub.add_parser("books-run")
     s.add_argument("--once", action="store_true")
     s.add_argument("--leagues", default="nba,nfl")
+    s = sub.add_parser("books-oddspapi")
+    s.add_argument("what", choices=("account", "catalog"))
     s = sub.add_parser("books-verify")
     s.add_argument("--providers", default="")
     a = p.parse_args(argv)
@@ -509,4 +511,4 @@ def main(argv=None):
      "watch": cmd_watch, "export-forecasts": cmd_export, "import-forecasts": cmd_import, "games-backfill": cmd_games_backfill, "games-tick": cmd_games_tick,
      "games-status": cmd_games_status, "games-derive": cmd_games_derive, "factors": cmd_factors,
      "factors-contract": cmd_factors_contract, "books": books_cli.cmd_view, "books-health": books_cli.cmd_health,
-     "books-plan": books_cli.cmd_plan, "books-run": books_cli.cmd_run, "books-verify": books_cli.cmd_verify}[a.cmd](a)
+     "books-plan": books_cli.cmd_plan, "books-oddspapi": books_cli.cmd_oddspapi, "books-run": books_cli.cmd_run, "books-verify": books_cli.cmd_verify}[a.cmd](a)
