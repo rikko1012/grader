@@ -1,0 +1,8 @@
+{
+  "_note": "One group per player whose name two sources spell differently; the first spelling is the key. Only add a group after checking both sources show the same player (same team, same game). Checked 2026-10-23: each pair below is one player listed by Underdog under the first name and by PrizePicks / Kalshi under the second, same team and game.",
+  "groups": [
+    ["Luguentz Dort", "Lu Dort"],
+    ["Miles McBride", "Deuce McBride"],
+    ["Zonovan Knight", "Bam Knight"]
+  ]
+}

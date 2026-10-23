@@ -1,0 +1,180 @@
+{
+ "_fitted_at": "2026-10-23T19:51Z",
+ "_sources": {
+  "basketball": "https://github.com/sportsdataverse/sportsdataverse-data/releases/download/espn_nba_player_boxscores/player_box_2026.csv",
+  "football": "https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_week_2025.csv"
+ },
+ "_method": "games-weighted least squares on player-season mean/variance (fit_dispersion.py docstring)",
+ "basketball": {
+  "points": {
+   "shape": "normal",
+   "a": 3.1024,
+   "b": 0.0,
+   "players": 256,
+   "games": 17147
+  },
+  "rebounds": {
+   "shape": "count",
+   "a": 1.0,
+   "b": 0.0496,
+   "players": 256,
+   "games": 17147
+  },
+  "assists": {
+   "shape": "count",
+   "a": 1.0,
+   "b": 0.0493,
+   "players": 256,
+   "games": 17147
+  },
+  "threes": {
+   "shape": "count",
+   "a": 1.0,
+   "b": 0.0621,
+   "players": 246,
+   "games": 16485
+  },
+  "pra": {
+   "shape": "normal",
+   "a": 3.1614,
+   "b": 0.0,
+   "players": 256,
+   "games": 17147
+  },
+  "pr": {
+   "shape": "normal",
+   "a": 3.1421,
+   "b": 0.0,
+   "players": 256,
+   "games": 17147
+  },
+  "pa": {
+   "shape": "normal",
+   "a": 3.0121,
+   "b": 0.0,
+   "players": 256,
+   "games": 17147
+  },
+  "ra": {
+   "shape": "count",
+   "a": 1.0,
+   "b": 0.0521,
+   "players": 256,
+   "games": 17147
+  },
+  "steals": {
+   "shape": "count",
+   "a": 1.0,
+   "b": 0.0451,
+   "players": 256,
+   "games": 17147
+  },
+  "blocks": {
+   "shape": "count",
+   "a": 1.0,
+   "b": 0.1306,
+   "players": 256,
+   "games": 17147
+  },
+  "stocks": {
+   "shape": "count",
+   "a": 1.0,
+   "b": 0.0799,
+   "players": 256,
+   "games": 17147
+  },
+  "turnovers": {
+   "shape": "count",
+   "a": 1.0,
+   "b": 0.0096,
+   "players": 256,
+   "games": 17147
+  }
+ },
+ "football": {
+  "pass_yds": {
+   "shape": "normal",
+   "a": 20.7576,
+   "b": 0.0,
+   "players": 38,
+   "games": 515
+  },
+  "pass_att": {
+   "shape": "count",
+   "a": 1.0,
+   "b": 0.0286,
+   "players": 38,
+   "games": 515
+  },
+  "pass_cmp": {
+   "shape": "count",
+   "a": 1.0,
+   "b": 0.0243,
+   "players": 38,
+   "games": 515
+  },
+  "pass_td": {
+   "shape": "count",
+   "a": 1.0,
+   "b": 0.0,
+   "players": 38,
+   "games": 515
+  },
+  "pass_int": {
+   "shape": "count",
+   "a": 1.0,
+   "b": 0.0,
+   "players": 38,
+   "games": 515
+  },
+  "rush_yds": {
+   "shape": "normal",
+   "a": 15.7885,
+   "b": 0.0796,
+   "players": 46,
+   "games": 734
+  },
+  "rush_att": {
+   "shape": "count",
+   "a": 1.0,
+   "b": 0.0559,
+   "players": 46,
+   "games": 734
+  },
+  "rec": {
+   "shape": "count",
+   "a": 1.0,
+   "b": 0.0286,
+   "players": 164,
+   "games": 2400
+  },
+  "rec_yds": {
+   "shape": "normal",
+   "a": 20.21,
+   "b": 0.0199,
+   "players": 164,
+   "games": 2400
+  },
+  "rush_rec_yds": {
+   "shape": "normal",
+   "a": 20.5212,
+   "b": 0.0066,
+   "players": 153,
+   "games": 2308
+  },
+  "pass_rush_yds": {
+   "shape": "normal",
+   "a": 19.8201,
+   "b": 0.0,
+   "players": 38,
+   "games": 515
+  },
+  "targets": {
+   "shape": "count",
+   "a": 1.0,
+   "b": 0.0382,
+   "players": 164,
+   "games": 2400
+  }
+ }
+}
