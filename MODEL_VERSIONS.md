@@ -1,5 +1,22 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
+## Closeout 2 release 2026-10-23 (CS2 model tag unchanged: `aa6696d5d6`; slips / settlement timing / experiment rules, no model change)
+
+No grade, chance, stake, threshold, model weight, shadow value or frozen constant changed. Model accuracy is NOT shown
+improved by any of this; rm-1 / th-1 have 0 eligible forward forecasts so far.
+- Copy slip: the server checks every leg (offered line + side, lock rule, one platform, 2+ teams, 2+ picks) BEFORE the
+  clipboard is written; any refusal / error / timeout copies nothing and shows the reason. /api/slip_log validates and
+  logs only valid slips. Typed "own lines" no platform lists are no longer copied.
+- Underdog 36 h reschedule rule applied (platform_rules.reschedule_decision): original scheduled start, re-listings and
+  actual-start evidence stored (picklog schedule_obs); <= 36 h grades, > 36 h voids, unknown = pending with reason.
+  Identity is never widened. PrizePicks reschedule: unverified, unchanged.
+- PrizePicks CS2 forfeit / no-show / partial-map and both platforms' remake rules: re-searched, not published -> still
+  pending (platform_rules.SEARCHES); admin-only /admin/rule_pending.json lists the pending picks with missing evidence.
+- rm-1 / th-1 decision rule amended before any eligible outcome (research/cs2_accuracy_2y/AMENDMENT_2026-10-23.md,
+  cands-amend-1): one-sided match-clustered bootstrap (B=4000), Bonferroni 0.025/6 per look (2 candidates x 3 looks);
+  Brier / calibration / coverage / th-1 >= 60 thin matches as conditions; th-1 look counter per its original text.
+- Research documentation (corrected reports, frozen REGISTER, amendment, contracts, rules evidence) merged into main.
+
 ## Closeout release 2026-10-23 (CS2 model tag unchanged: `aa6696d5d6`; settlement / identity / slips / storage, no model change)
 
 No grade, chance, stake, threshold or frozen experiment changed. Evidence: research/cs2_accuracy_2y/ (LP_BARCA_EVIDENCE.md,
