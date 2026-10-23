@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>1time Scout · Sports</title>
+<meta name="description" content="Scout Sports: NBA and NFL player props, projections and history.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/sports/sports.css">
+</head>
+<body class="ss">
+<a class="ss-skip" href="#ss-main">Skip to content</a>
+<header class="ss-top" id="ss-top"></header>
+<div class="ss-wrap">
+  <nav class="ss-tabs" aria-label="Sports workspace">
+    <div class="ss-seg" role="group" aria-label="League" id="ss-league">
+      <button type="button" data-lg="nba" aria-pressed="true">NBA</button><button type="button" data-lg="nfl" aria-pressed="false">NFL</button>
+    </div>
+    <div class="ss-views" id="ss-views">
+      <a href="#/slate" data-view="slate">Slate</a><a href="#/board" data-view="board">Prop board</a><a href="#/results" data-view="results">Results</a><a href="/sports/slips.html" data-view="slips" id="ss-sliplink">Slip Studio</a>
+    </div>
+  </nav>
+  <div id="ss-banner" class="ss-banners" aria-live="polite"></div>
+  <main id="ss-main" tabindex="-1"></main>
+  <footer class="ss-foot" id="ss-foot"></footer>
+</div>
+<dialog id="ss-src" class="ss-dialog" aria-labelledby="ss-src-h"><form method="dialog"><h2 id="ss-src-h">Source</h2><div id="ss-src-body"></div><button class="ss-btn" value="close">Close</button></form></dialog>
+<script src="/sports/shell.js"></script>
+<script src="/sports/stats.js"></script>
+<script src="/sports/app.js"></script>
+</body></html>

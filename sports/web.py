@@ -49,6 +49,13 @@ ROUTES = {
     "/api/sports/offers": ("sports.web:offers", MEMBER, ("GET",)),
     "/api/sports/admin/coverage": ("sports.web:admin_coverage", ADMIN, ("GET",)),
     # ---- agent routes below: ONE line each, handler in sports/api_<NAME>.py ----
+    "/api/sports/manifest": ("sports.api_board:manifest", MEMBER, ("GET",)),
+    "/api/sports/slate": ("sports.api_board:slate", MEMBER, ("GET",)),
+    "/api/sports/board": ("sports.api_board:board", MEMBER, ("GET",)),
+    "/api/sports/forecast": ("sports.api_board:forecast", MEMBER, ("GET",)),
+    "/api/sports/player": ("sports.api_board:player", MEMBER, ("GET",)),
+    "/api/sports/history": ("sports.api_board:history", MEMBER, ("GET",)),
+    "/api/sports/results": ("sports.api_board:results", MEMBER, ("GET",)),
 }
 # ---------------------------------------------------------------------------------------------------- end of table
 
