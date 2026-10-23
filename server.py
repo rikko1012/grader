@@ -931,6 +931,13 @@ def ops_checks(now=None):
                                          age_s=st.get("age_s"), consecutive_failures=st.get("consecutive_failures"))
     except Exception as e:
         out["odds_exchanges"] = _check("warn", error=type(e).__name__)
+    try:                                   # moneyline quote store (ml_store alerts: memory only, thresholds listed)
+        import ml_store
+        a = ml_store.alerts(now_ts=now.timestamp())
+        out["ml_store"] = _check("warn" if a["state"] == "alert" else "ok", alert_state=a["state"], on=a["on"],
+                                 thresholds=a["thresholds"])
+    except Exception as e:
+        out["ml_store"] = _check("warn", error=type(e).__name__)
     try:
         hs = hltv.public_status()
         rev = picklog.data_revision() or ""
@@ -3695,6 +3702,9 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception as e:
                     q["_sides"] = {"error": str(e)[:80]}
                 return self.send(200, moneylines_status())
+            if u.path == "/admin/ml_store.json" and self.authed(q.get("token")):
+                import ml_store                           # read-only: store state + alerts, or the bounded unified lookup
+                return self.send(*ml_store.admin_lookup(q))
             if u.path == "/admin/ml_eval" and self.authed(q.get("token")):
                 return self.send(200, ml_eval_admin(q.get("refresh") == "1"))
             if u.path == "/admin/slips.json" and self.authed(q.get("token")):
