@@ -47,8 +47,8 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements-test.txt
-      - name: LoL and CS2 regression checks (no provider credentials)
-        run: python -m pytest lol/tests tests -q -p no:cacheprovider
+      - name: LoL, sports and CS2 regression checks (no provider credentials)
+        run: python -m pytest lol/tests tests sports/tests -q -p no:cacheprovider
 
   full-history:
     if: github.event_name == 'workflow_dispatch'
