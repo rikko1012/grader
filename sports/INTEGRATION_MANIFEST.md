@@ -24,7 +24,8 @@ nothing here is deployed or enabled for members.
   web RSS (container 629 / 2,148 MB, 0 OOM events), threads 21, HLTV pool 5 open / 16 max, disk 74.5% used
   (1,309 MB free of 5,196 MB on /data), ops state "fail" only because the Underdog / PrizePicks feeds were still
   loading after the restart (Thunderpick / Polymarket ok). Snapshot kept in the foundation scratch folder.
-- After integration: see "Tests" below (esports suite unchanged and green; the CI esports step restored byte-identical).
+- After integration (commit b119ec1): esports suite **1731 passed, 5 skipped** (281 s) - unchanged; the CI esports
+  step restored byte-identical.
 
 ## Review of d393292, file by file
 
@@ -91,9 +92,27 @@ Source licences / terms (checked 2026-10-23)
 
 ## Tests
 
-- Sports suite: `python -m pytest sports/tests -q` -> see the final commit message / report (44 data-branch tests +
-  the foundation's contract, store, adapter, worker, web, isolation, payout, legacy and model-property tests).
-- Esports suite after integration: same command as the baseline; must equal 1731 passed / 5 skipped.
+- Sports suite: `python -m pytest sports/tests -q` -> **130 passed** (44 data-branch tests + 86 foundation tests:
+  contracts, store, owner-12 contract cases, adapters, worker, web, isolation, payouts, legacy, model properties).
+- Esports suite after integration: **1731 passed, 5 skipped** (identical to the base).
+
+## Load test (700 simultaneous members, `sports/research/load_sports700.py`, in-process server, fixture upstreams)
+
+Budget set before the run: 0 esports errors; esports p99 within +25% of the base. Each member: 3 esports requests
+(+1 sports request when on). Windows workstation, clean runs after socket cool-down.
+
+| Run | Esports requests | 5xx | p50 / p95 / p99 ms | Sports requests | Peak RSS |
+|---|---|---|---|---|---|
+| base 2fbfc0e | 2,100 | 0 | 110 / 1,052 / 1,097 | - | 94 MB |
+| integration, flags OFF | 2,100 | 0 | 105 / 1,017 / 1,080 | - | 94 MB |
+| integration, SPORTS_API+UI ON (store of 28k offers) | 2,100 | 0 | 163 / 1,208 / 1,659 | 700 (0 errors, p99 1,202) | 105 MB |
+| integration, ON + sports raising on every call | 2,100 | 0 | 126 / 1,062 / 1,524 | 700 (all 503) | 95 MB |
+
+- Flags off: no measurable change (within run-to-run noise). This is the state production keeps.
+- **Flags on breaks the +25% esports-p99 budget (+51%)** while the same burst carries 33% more requests. Before an
+  enable: serve /api/sports/* from its own process (or behind the existing caches with a request budget) and re-run
+  this test against the real staging baseline. An earlier run without single-flight caching pushed RSS to 271 MB
+  (466 simultaneous store queries) - fixed by `web._cached` single-flight (tested).
 
 ## Release / rollback
 
