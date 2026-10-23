@@ -98,7 +98,7 @@ def _chance(fam, market, shape, quotes, line):
             "method": f"between rungs {lo:g} and {hi:g}", "far": all(f["far"] for f in fs)}
 
 
-def build(lg, offers, quotes, injuries=None):
+def build(lg, offers, quotes, injuries=None, depth=None):
     fam = lg["family"]
     idx = _index(quotes)
     rows = []
@@ -109,6 +109,7 @@ def build(lg, offers, quotes, injuries=None):
         row["sides_offered"] = [s for s in ("over", "under") if o["sides"][s]["offered"]]
         inj = (injuries or {}).get(o["player_key"])
         row["injury"] = f"{inj['status']}" + (f" ({inj['detail']})" if inj.get("detail") else "") if inj else None
+        row["role"] = ((depth or {}).get(o["player_key"]) or {}).get("role")      # ESPN depth chart: shown, not used
         qs, why = _pick(o, idx.get((o["player_key"], o["market"]), [])) if spec else ([], "market not modelled")
         if not qs:
             row.update({"sharp": None, "reason": why or "no sharp price for this player and stat", "side": None,

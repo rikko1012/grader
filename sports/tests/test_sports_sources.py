@@ -190,3 +190,38 @@ def test_polymarket_keeps_only_prop_markets_when_caching(monkeypatch):
     assert all(set(m) <= set(polymarket._KEEP) for m in evs[0]["markets"])
     q, st = polymarket.load(config.league("cbb"))
     assert q == [] and "no Polymarket player props" in st["error"]
+
+
+def test_espn_depth_charts_roles():
+    nfl = espn.parse_depth(fixture("espn_depth_nfl.json"), "football", "DET")
+    assert nfl["jared goff"]["role"] == "QB1" and nfl["jahmyr gibbs"]["role"] == "RB1"
+    assert nfl["sione vaki"]["role"] == "RB2" and nfl["sam laporta"]["role"] == "TE1"
+    assert "aidan hutchinson" not in nfl and "jake bates" not in nfl          # offence only
+    assert any(r["role"] == "WR1" for r in nfl.values())
+    nba = espn.parse_depth(fixture("espn_depth_nba.json"), "basketball", "NYK")
+    assert nba["jalen brunson"]["role"] == "starter (PG)"
+    assert nba[names.key("Miles McBride")]["role"] == "bench (PG #2)"        # listed twice: the higher spot kept
+
+
+def test_espn_depth_index_over_all_teams(monkeypatch):
+    calls = []
+
+    def fake(url, params=None, headers=None, **kw):
+        calls.append(url)
+        if url.endswith("/teams"):
+            return fixture("espn_teams_nfl.json")
+        if url.endswith("/teams/8/depthcharts"):
+            return fixture("espn_depth_nfl.json")
+        raise espn.net.HttpError(500, url)
+    monkeypatch.setattr(espn.net, "get_json", fake)
+    idx = espn.depth_index(NFL)
+    assert idx["jared goff"]["team"] == "DET" and idx["jared goff"]["role"] == "QB1"   # other teams failed: kept going
+    assert len(calls) == 33
+    assert espn.depth_index(config.league("cfb")) == {}
+
+
+def test_espn_splits():
+    s = espn.parse_splits(fixture("espn_splits_nfl.json"))
+    assert s["cats"]["split"]["Home"]["receptions"] == "14" and s["cats"]["split"]["Away"]["receivingYards"] == "286"
+    b = espn.parse_splits(fixture("espn_splits_nba.json"))
+    assert b["cats"]["byOpponent"]["Oklahoma City Thunder"]["avgPoints"] == "13.0"

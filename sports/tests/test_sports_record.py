@@ -106,3 +106,20 @@ def test_report_counts_each_prop_once_and_scores_it(con):
     lo, hi = al["hit_rate_95"]
     assert lo <= 2 / 3 <= hi
     assert set(rep["by_band"]) == {"60%+"} and rep["by_band"]["60%+"]["props"] == 9
+
+
+def test_an_older_log_gains_the_role_column(tmp_path):
+    import sqlite3
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)
+    old.executescript(record.SCHEMA.replace(", injury TEXT, role TEXT);", ", injury TEXT);"))
+    old.close()
+    c = record.connect(path)
+    try:
+        assert "role" in {r["name"] for r in c.execute("PRAGMA table_info(forecasts)")}
+        rows = _rows("Nikola Jokic", "nikola jokic", 25.5, 0.55)
+        rows[0]["role"] = "starter (C)"
+        assert record.save(c, rows, now=BEFORE) == 1
+        assert c.execute("SELECT role FROM forecasts").fetchone()["role"] == "starter (C)"
+    finally:
+        c.close()

@@ -70,13 +70,17 @@ def sharp_quotes(lg, refresh=False):
 def board(lg, refresh=False, injuries=True):
     offers, st = lines.load(lg, refresh=refresh)
     quotes, st2 = sharp_quotes(lg, refresh=refresh)
-    inj = {}
+    inj, depth = {}, {}
     if injuries:
         try:
             inj = espn.injuries(lg)
         except Exception as e:                      # injuries are context only; a failure never blocks the board
             st2["espn_injuries"] = {"ok": False, "error": str(e)[:120]}
-    return edges.build(lg, offers, quotes, inj), {**st, **st2}
+        try:
+            depth = espn.depth_index(lg)
+        except Exception as e:                      # so are depth charts
+            st2["espn_depth"] = {"ok": False, "error": str(e)[:120]}
+    return edges.build(lg, offers, quotes, inj, depth), {**st, **st2}
 
 
 def _status_line(st):
@@ -143,9 +147,9 @@ def _print_edges(rows):
                     (r["odds_type"] or "")[:8], f"{r['side'].upper()}{mult}", _pct(r["chance"]),
                     _pct(r["eff"]) if r.get("eff") is not None else "",
                     f"{s['source'][:3]} " + "|".join(f"{x:g}" for x in lines_),
-                    f"{s['gap']:+g}" if s["gap"] else "0", (r.get("injury") or "")[:22]))
+                    f"{s['gap']:+g}" if s["gap"] else "0", (r.get("role") or "")[:16], (r.get("injury") or "")[:22]))
     _table(out, ["bk", "start", "player", "market", "line", "type", "side", "chance", "UD eff", "sharp", "gap",
-                 "injury"])
+                 "role", "injury"])
 
 
 def cmd_edges(a):
@@ -198,6 +202,56 @@ def cmd_record(a):
         _status_line(st)
 
 
+# board abbreviations ESPN spells differently (PrizePicks / Underdog -> ESPN)
+_ESPN_ABBR = {"NYK": "NY", "GSW": "GS", "SAS": "SA", "NOP": "NO", "UTA": "UTAH", "WAS": "WSH", "LA": "LAR"}
+SPLIT_COLS = {"basketball": [("min", "avgMinutes"), ("pts", "avgPoints"), ("reb", "avgRebounds"), ("ast", "avgAssists"),
+                             ("3pm-a", "avgThreePointFieldGoalsMade-avgThreePointFieldGoalsAttempted")],
+              "football": [("cmp", "completions"), ("pass yds", "passingYards"), ("pass td", "passingTouchdowns"),
+                           ("car", "rushingAttempts"), ("rush yds", "rushingYards"), ("rec", "receptions"),
+                           ("rec yds", "receivingYards")]}
+
+
+def _opponent(lg, mine):
+    """ESPN's name of tonight's opponent, from his line's game ("NYK @ BOS") and team."""
+    r = next((r for r in mine if r.get("game") and r.get("team") and " @ " in r["game"]), None)
+    if not r:
+        return None
+    away, home = r["game"].split(" @ ")
+    opp = home if r["team"] == away else away if r["team"] == home else None
+    if not opp:
+        return None
+    by = {t["abbr"]: t["name"] for t in espn.teams(lg)}
+    return by.get(opp) or by.get(_ESPN_ABBR.get(opp, ""))
+
+
+def _print_context(lg, ath, mine):
+    """Depth-chart role and splits (ESPN) - context for reading his lines, never an input to a chance."""
+    fam = lg["family"]
+    try:
+        role = (espn.depth_index(lg).get(names.key(ath["name"])) or {}).get("role")
+    except Exception:
+        role = None
+    print(f"\n  depth chart: {role or 'not listed'}")
+    try:
+        sp = espn.splits(lg, ath["id"])
+    except Exception as e:
+        print(f"  splits: unavailable ({str(e)[:60]})")
+        return
+    opp = _opponent(lg, mine)
+    want = [("split", "All Splits"), ("split", "Home"), ("split", "Away"), ("split", "Road"), ("byPosition", "As Starter"),
+            ("byPosition", "As Reserve"), ("byOpponent", opp)]
+    cols = [(lab, n) for lab, n in SPLIT_COLS.get(fam, []) if n in sp["names"]]
+    out = []
+    for cat, name in want:
+        row = (sp["cats"].get(cat) or {}).get(name) if name else None
+        if row:
+            out.append((f"vs {name}" if cat == "byOpponent" else name, row.get("gamesPlayed", "-"),
+                        *[row.get(n, "-") for _, n in cols]))
+    if out:
+        print("  splits this season (ESPN" + ("; football rows are season totals" if fam == "football" else "") + "):")
+        _table(out, ["split", "g", *[lab for lab, _ in cols]])
+
+
 def cmd_player(a):
     lg = config.league(a.league)
     aths = espn.search_athlete(lg, a.name)
@@ -213,6 +267,7 @@ def cmd_player(a):
              *[f"{markets.value(fam, m, g['parts']):g}" for m in cols]) for g in shown], ["date", "opp", *cols])
     rows, st = board(lg, refresh=a.refresh)
     mine = [r for r in rows if r["player_key"] == names.key(ath["name"])]
+    _print_context(lg, ath, mine)
     print(f"\n  his lines ({len(mine)}):")
     out = []
     for r in sorted(mine, key=lambda r: (r["market"], r["platform"], r["line"])):

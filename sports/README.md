@@ -41,8 +41,10 @@ games settle.
 | **Polymarket** player props (`polymarket.py`) | "Player: Points O/U 17.5" markets. Their YES midpoint is the chance of Over | Public prediction-market API, no key (the same read API the project already uses) | Works. NBA points / rebounds / assists / threes / steals / blocks, NFL passing / rushing / receiving yards, receptions, passing TDs / attempts / completions. Only markets with a 5¢-or-tighter bid/ask count (2026-10-23: 153 of ~3,500 NBA props) |
 | **The Odds API** (`oddsapi.py`) | DraftKings / FanDuel / BetMGM / ... with each book's margin removed, averaged when 2+ books quote the same line | `ODDS_API_KEY` (free tier 500 credits/month) | Optional, off without a key |
 | **Pinnacle** guest API (`pinnacle.py`) | The sharpest book's props | No key | **Refuses US locations** ("Access from United States is prohibited"). Reported as such and **never worked around**. Works only from a non-US server |
-| **ESPN** public APIs (`espn.py`) | Schedule, game logs, box scores (settlement), injuries | Public, no key | Works for every league |
+| **ESPN** public APIs (`espn.py`) | Schedule, game logs, box scores (settlement), injuries, **depth charts** (each player's role: QB1, RB2, WR1-3, TE1, starter / bench), **splits** (home / away, vs opponent, starter / reserve) | Public, no key; the API hosts publish no robots.txt | Works for every league (depth charts: NBA, WNBA, NFL). Role found for 99.7% of NFL lines on 2026-10-23. Role and splits are shown and logged, never used in a chance |
 | **NBA.com** (`swar/nba_api`) | NBA stats | `stats.nba.com` times out and `cdn.nba.com` answers 403 from cloud servers | Not used: the server cannot reach it. ESPN gives the same game logs |
+| **Basketball-Reference** (`sportsipy`'s source) | Game logs, splits | Its robots.txt disallows `*/gamelog/` and `*/splits/` for every bot | Not scraped |
+| **Pro-Football-Reference** (`sportsipy`, `NFLDeepDive`) | Game logs, season tables | Answers a Cloudflare bot challenge | Not scraped |
 
 Kalshi's own start times are not game starts (it listed CHI @ MIL at 23:00Z; ESPN, PrizePicks and Underdog all say
 20:00Z). So Kalshi prices are matched by the game date in their market code, never by time. Polymarket's start times
@@ -131,6 +133,12 @@ or member release until a registered comparison on untouched forecasts supports 
 | `dkori/odds-derived-ff-projections` | **AGPL-3.0** | The method only: no-vig, negative binomial counts, measured constants. **No code copied**: AGPL code inside a paid web service would oblige publishing that service's source |
 | The Odds API repos (`odds-api`, `oddsapi_ev`, `sports-betting-intelligence`) | various | The optional consensus source (`oddsapi.py`) follows the same API |
 | `nflverse` data | CC-BY | The NFL dispersion fit (weekly player stats CSV) |
+| `nflverse/nfl_data_py` | MIT | Reads nflverse's published files. Live player data stays scraper-based (ESPN), so it is not a dependency |
+| `roclark/sportsipy` | MIT | Scrapes Sports-Reference sites. Not used: Basketball-Reference's robots.txt disallows game logs and splits, and Pro-Football-Reference sits behind a Cloudflare challenge |
+| `Erichollman96/NFLDeepDive` | none | Scrapes Pro-Football-Reference season tables (Cloudflare). Not used |
+| `jaretpr/NFL_Stats_Props_Analyzer` | MIT | ESPN box scores + The Odds API: the same two sources as `espn.py` / `oddsapi.py` |
+| `HenryWinNguyen/nba-muse` | none | A natural-language NBA stats query app (OpenAI + DuckDB). Not a data source |
+| `PSN-01/NFL-WRS-RBS-TES-Individual-Stats`, `khirata215/NFL_Data` | none | Notebooks / helpers over nfl_data_py. Nothing new to read |
 
 ## Known limits
 

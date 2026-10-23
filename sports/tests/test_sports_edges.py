@@ -107,3 +107,9 @@ def test_polymarket_matches_by_start_and_the_tighter_exchange_wins_a_tie():
     assert r["sharp"]["source"] == "polymarket" and r["chance"] == pytest.approx(0.60)
     late = dict(poly, start="2026-10-24T23:00:00Z")
     assert edges.build(NBA, [offer()], [late])[0]["chance"] is None
+
+
+def test_depth_role_is_shown_never_used():
+    depth = {"jalen brunson": {"role": "starter (PG)"}}
+    r = edges.build(NBA, [offer()], [quote()], None, depth)[0]
+    assert r["role"] == "starter (PG)" and r["chance"] == pytest.approx(0.55)

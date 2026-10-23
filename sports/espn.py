@@ -9,8 +9,12 @@ documented by pseudo-r/Public-ESPN-API (MIT):
   site.api.espn.com/apis/site/v2/sports/<sport>/<league>/injuries
   site.web.api.espn.com/apis/common/v3/sports/<sport>/<league>/athletes/<id>/gamelog[?season=YYYY]
   site.web.api.espn.com/apis/search/v2?query=<name>&type=player                      (name -> athlete id)
+  site.web.api.espn.com/apis/common/v3/sports/<sport>/<league>/athletes/<id>/splits  (home / away / opponent ...)
+  site.api.espn.com/apis/site/v2/sports/<sport>/<league>/teams[/<id>/depthcharts]    (who starts where)
 
-Unofficial: 2 requests / second at most, and everything is cached (a final box score for good).
+Unofficial: 2 requests / second at most, and everything is cached (a final box score for good). The ESPN API hosts
+publish no robots.txt (checked 2026-10-23). Basketball-Reference's robots.txt disallows */gamelog/ and */splits/ and
+Pro-Football-Reference answers a Cloudflare challenge, so neither is scraped.
 """
 import re
 from datetime import datetime, timedelta, timezone
@@ -192,3 +196,80 @@ def injuries(lg, refresh=False):
                 "detail": " ".join(x for x in (det.get("side"), det.get("type"), det.get("detail")) if x) or None,
                 "return": det.get("returnDate")}
     return out
+
+
+DEPTH_LEAGUES = ("nba", "wnba", "nfl")         # college has 130-360 teams: no depth charts read
+_NFL_OFFENSE = ("qb", "rb", "wr1", "wr2", "wr3", "te")
+
+
+def teams(lg):
+    """-> [{"id", "abbr", "name"}] for the league."""
+    body = cache.fetch("espn:teams", lg["key"], 7 * 86400,
+                       lambda: net.get_json(f"{SITE}/{_path(lg)}/teams", params={"limit": 500}))
+    out = []
+    for sp in body.get("sports") or []:
+        for le in sp.get("leagues") or []:
+            for t in le.get("teams") or []:
+                t = t.get("team") or {}
+                out.append({"id": t.get("id"), "abbr": t.get("abbreviation"), "name": t.get("displayName")})
+    return out
+
+
+def _role(family, pos, depth):
+    """('wr2', 0) -> 'WR2'; ('rb', 1) -> 'RB2'; ('pg', 0) -> 'starter (PG)'; ('c', 2) -> 'bench (C #3)'."""
+    p = pos.upper()
+    if family == "basketball":
+        return f"starter ({p})" if depth == 0 else f"bench ({p} #{depth + 1})"
+    if p[-1:].isdigit():
+        return p if depth == 0 else f"{p} backup #{depth}"
+    return f"{p}{depth + 1}"
+
+
+def parse_depth(body, family, team_abbr=None):
+    """One team's depth chart -> {player_key: {"name", "id", "team", "pos", "depth", "role"}}. A player listed at two
+    positions keeps the higher one (lower depth). Football keeps the offence (QB, RB, WR1-3, TE) only."""
+    out = {}
+    for grp in body.get("depthchart") or []:
+        for key, slot in (grp.get("positions") or {}).items():
+            if family == "football" and key not in _NFL_OFFENSE:
+                continue
+            for i, a in enumerate(slot.get("athletes") or []):
+                pk = names.key(a.get("displayName"))
+                if pk and (pk not in out or i < out[pk]["depth"]):
+                    out[pk] = {"name": a.get("displayName"), "id": a.get("id"), "team": team_abbr, "pos": key,
+                               "depth": i, "role": _role(family, key, i)}
+    return out
+
+
+def depth_index(lg, refresh=False):
+    """{player_key: role row} over every team's depth chart (cached 6 h; one request per team)."""
+    if lg["key"] not in DEPTH_LEAGUES:
+        return {}
+
+    def load():
+        idx = {}
+        for t in teams(lg):
+            try:
+                body = net.get_json(f"{SITE}/{_path(lg)}/teams/{t['id']}/depthcharts")
+            except net.HttpError:
+                continue                               # one team failing leaves the others
+            for pk, row in parse_depth(body, lg["family"], t["abbr"]).items():
+                if pk not in idx or row["depth"] < idx[pk]["depth"]:
+                    idx[pk] = row
+        return idx
+    return cache.fetch("espn:depth", lg["key"], 6 * 3600, load, refresh=refresh)
+
+
+def parse_splits(body):
+    """Splits -> {"names": [...], "cats": {category: {split name: {stat name: value}}}}."""
+    nm = body.get("names") or []
+    cats = {}
+    for c in body.get("splitCategories") or []:
+        cats[c.get("name")] = {s.get("displayName"): dict(zip(nm, s.get("stats") or [])) for s in c.get("splits") or []}
+    return {"names": nm, "cats": cats}
+
+
+def splits(lg, athlete_id, refresh=False):
+    body = cache.fetch("espn:splits", f"{lg['key']}:{athlete_id}", 6 * 3600,
+                       lambda: net.get_json(f"{WEB}/{_path(lg)}/athletes/{athlete_id}/splits"), refresh=refresh)
+    return parse_splits(body)
