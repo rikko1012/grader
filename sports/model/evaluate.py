@@ -21,8 +21,9 @@ def scores(pmf, lo, y, mean, l_ref):
         "p_over_ref": p_over, "hit_ref": hit,
         "logloss_ref": -(hit * np.log(pc) + (1 - hit) * np.log(1 - pc)),
         "brier_ref": (p_over - hit) ** 2,
-        "cov50": dists.central_cover(pmf, lo, y, 0.5), "cov80": dists.central_cover(pmf, lo, y, 0.8),
-        "cov90": dists.central_cover(pmf, lo, y, 0.9),
+        "cov50": dists.pit_cover(pmf, lo, y, 0.5), "cov80": dists.pit_cover(pmf, lo, y, 0.8),
+        "cov90": dists.pit_cover(pmf, lo, y, 0.9),
+        "cov80_inclusive_interval": dists.central_cover(pmf, lo, y, 0.8),
     }
 
 

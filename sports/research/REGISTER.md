@@ -188,3 +188,10 @@ process - nothing auto-promotes.
   a level shift (seen in development: `postseason` "passed" on a tune partition with no postseason game); (b) a
   feature that is constant or has < 30 known values on the tune rows is recorded "not evaluable on tune" and cannot be
   kept. No locked-test row had been scored.
+- **A3 (2026-10-23, after the NFL tune-partition dry run of the scoring code, before any locked-test score):** interval
+  coverage of a DISCRETE forecast is measured with the randomised PIT (the expected share of [F(y-), F(y)] inside
+  the central band; exactly the nominal level for a calibrated forecast). The inclusive quantile interval
+  [q_(1-l)/2, q_(1+l)/2] over-covers by construction when atoms are large (receptions: 0.90 "80%" coverage on tune
+  for a forecast whose PIT is calibrated) - criterion 4 would have rejected every count market for a reason that is
+  not miscalibration. The inclusive-interval number is still reported (`cov80_inclusive_interval`). Criterion 4's
+  band [0.76, 0.84] is unchanged.

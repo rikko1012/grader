@@ -193,3 +193,18 @@ def pit_mid(pmf, lo, y):
     ks = np.arange(lo, lo + pmf.shape[1])
     y = np.asarray(y, float)[:, None]
     return (pmf * (ks[None, :] < y)).sum(axis=1) + 0.5 * (pmf * (ks[None, :] == y)).sum(axis=1)
+
+
+def pit_cover(pmf, lo, y, level):
+    """Expected coverage of the central `level` band by the RANDOMISED PIT (u ~ U(F(y-), F(y))): the share of
+    [F(y-), F(y)] inside [(1-level)/2, (1+level)/2]. Exactly `level` on average for a calibrated discrete forecast,
+    unlike an inclusive quantile interval, which over-covers by construction when atoms are large (amendment A3)."""
+    ks = np.arange(lo, lo + pmf.shape[1])
+    y = np.asarray(y, float)[:, None]
+    f_lo = (pmf * (ks[None, :] < y)).sum(axis=1)
+    f_hi = f_lo + (pmf * (ks[None, :] == y)).sum(axis=1)
+    a, b = (1 - level) / 2, (1 + level) / 2
+    ov = np.clip(np.minimum(f_hi, b) - np.maximum(f_lo, a), 0, None)
+    w = f_hi - f_lo
+    inside = ((f_lo >= a) & (f_lo <= b)).astype(float)
+    return np.where(w > 1e-12, ov / np.maximum(w, 1e-12), inside)
