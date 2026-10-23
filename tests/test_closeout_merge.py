@@ -17,7 +17,7 @@ def _leg(nick, team, bk="underdog"):
 def test_slip_log_refuses_an_entry_from_one_team(site, monkeypatch):
     got = []
     monkeypatch.setattr(server.slips, "log_loaded", lambda d: got.append(d) or True)
-    monkeypatch.setattr(server, "slip_leg_problem", lambda leg: None)
+    monkeypatch.setattr(server, "slip_leg_check", lambda leg, feeds=None, now=None: None)
     body = lambda bk, legs: json.dumps({"cid": "c" + bk + str(len(got)) + str(legs[1]["team"]), "book": bk, "legs": legs}).encode()
     for bk in ("underdog", "prizepicks"):
         h = post("/api/slip_log", body=body(bk, [_leg("a", "Alpha", bk), _leg("b", "Alpha", bk)]))

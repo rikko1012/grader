@@ -116,7 +116,7 @@ def test_server_recheck_uses_the_same_lock(monkeypatch):
 def test_slip_log_refuses_two_platforms(site, monkeypatch):
     got = []
     monkeypatch.setattr(server.slips, "log_loaded", lambda d: got.append(d) or True)
-    monkeypatch.setattr(server, "slip_leg_problem", lambda leg: None)        # every leg's own line is up
+    monkeypatch.setattr(server, "slip_leg_check", lambda leg, feeds=None, now=None: None)        # every leg's own line is up
     body = lambda bk, legs: json.dumps({"cid": "c" + bk + str(len(got)), "book": bk, "legs": legs}).encode()
     h = post("/api/slip_log", body=body("underdog", [{"book": "underdog"}, {"book": "prizepicks"}]))
     assert h.code == 409 and not got                                           # before: 200, logged as a valid copy

@@ -36,7 +36,7 @@ def test_slip_with_a_kept_grade_leg_copies(tmp_path):
     out = run(tmp_path, "index.html", """(async () => {
       const T = [], C = [];
       toast = m => T.push(m); copy = t => C.push(t);
-      fetch = async u => ({ok: true, status: 200, json: async () => (String(u).includes("line_check") ? {status: "verified"} : {})});
+      fetch = async u => ({ok: true, status: 200, json: async () => (String(u).includes("line_check") ? {status: "verified"} : String(u).includes("slip_log") ? {ok: true} : {})});   // the server's OK (closeout2 copyval)
       const leg = (p, kg) => ({p, bk: "underdog", t: "kills", sc: "12", l: 30.5, s: "More", g: "B", u: 1, pc: 0.6, kg, now: {status: "verified"}});
       store.set("cs2s_slip", [leg("kept", "2026-10-21T10:00Z"), leg("normal", "")]);
       const click = LIS["#slip"].find(x => x[0] === "click")[1];
