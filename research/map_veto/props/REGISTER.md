@@ -116,3 +116,25 @@ vm-1 is implemented as a pure function module (research/map_veto/props/vm1.py: s
 veto_prediction, match_context) -> {version, eligible, p_over, lam, rounds_mean, ot_prob, ...}), bounded and fast, frozen
 (version + params sha) before any forward unit exists. Logging it beside the live grade is the serving phase's job; it is
 shadow only (never shown, never changes a grade, chance or stake).
+
+## Amendment AM-1 (2026-10-23, before any forward unit exists)
+Made after the development results (RESULTS.md, commit a325fd8) and after the owner's rule "if map prediction improves
+but props do not, ship the map display and keep the grading effect in shadow". The text above is unchanged. **0 forward
+units existed at amendment time**: vm-1 is not yet logged by the server, so no forward vm-1 entry has been written.
+
+The serving phase logs two shadow entries per forecast with the frozen module vm-1-ceabd6f325: **A1** (shadow_entry(...,
+use_maps=True)) and **C0** (shadow_entry(..., use_maps=False)). Both get the same veto prediction and match context, so they
+are eligible on the same units.
+
+- **PRIMARY forward question = the map effect, A1 vs C0**, on identical units where both are eligible: paired per-unit
+  log-loss gain (C0 minus A1; > 0 = maps help), the same six cells, the same look schedule (one look per cell at 300
+  distinct forward matches; else once on 2027-03-31 if >= 100 matches, else no decision), the same alpha split (one-sided,
+  0.05 / 6 = 0.00833 per cell), match-clustered bootstrap (10,000 resamples), lower 99.167% bound > 0.
+- **A1 vs live** (the section 4 comparison) is still reported, but it is **explicitly NOT evidence for maps**: in
+  development its gain equals C0's, i.e. it is the rm-1 rounds-mixture shape, which is already in shadow as rm-1.
+- **Activation of a map effect in grading** requires BOTH (1) the primary A1-vs-C0 test passes in that cell AND (2) A1 is
+  not worse than live in that cell: the Brier non-inferiority and favoured-side calibration non-inferiority conditions of
+  section 4 (upper 95% bound of mean(Brier_A1 - Brier_live) < +0.0025; for Over- and Under-favoured units gap_A1 -
+  gap_live <= +0.01 point and upper 95% bound < +0.03), with the >= 90% eligibility coverage condition. Section 4's
+  log-loss condition for A1 vs live no longer counts as map evidence on its own. A2 (RETROSPECTIVE) never enters any rule.
+- Only passing cells may be activated, with the frozen version, by a separate owner-approved release.
