@@ -16,6 +16,8 @@ Read 2026-10-23 15:40-15:45 UTC (full wording and URLs: research/cs2_accuracy_2y
             https://www.prizepicks.com/help-center/refunds-and-cancellations (October 19, 2026)
   PrizePicks' sport-specific rules are in the in-app scoring chart (not public; app.prizepicks.com could not be opened):
   every CS2-specific PrizePicks rule beyond the general DNP / lineup rules is unverified.
+Re-searched 2026-10-23 16:40-16:52 UTC (SEARCHES below): PrizePicks forfeits / activity and both platforms' remake
+rules are still not published anywhere public; app.prizepicks.com refused by the browser tool - all stay pending.
 """
 
 READ_AT = "2026-10-23T15:45Z"
@@ -49,7 +51,7 @@ RULES = {
         "rounds_over_half": {"verified": True, "action": "not checked", "source": _UD_ESPORTS,
                              "note": "the >50% of rounds condition needs per-player rounds played, which HLTV's map rows do "
                                      "not carry - a mid-map substitution is not detected (limitation, not a rule gap)"},
-        "remake": {"verified": False, "action": "not detectable",
+        "remake": {"verified": False, "action": "not detectable", "searched": "remake",
                    "note": "no CS2 remake / restart rule is published (the chronobreak rule is for maps rewound in game); "
                            "HLTV keeps only the final map, so a remake is not seen in the data"},
         "reschedule": {"verified": True, "action": "grade within 36 h, else void", "source": _UD_DELAYS,
@@ -71,9 +73,10 @@ RULES = {
                                  "being voided and the entry fee being refunded."},
     },
     "prizepicks": {
-        "forfeit_in_scope": {"verified": False, "action": "pending",
+        "forfeit_in_scope": {"verified": False, "action": "pending", "searched": "pp_forfeit",
                              "note": "PrizePicks publishes no forfeit rule; CS2 specifics are in the in-app scoring chart"},
-        "forfeit_outside_scope": {"verified": False, "action": "pending", "note": "not published (in-app scoring chart)"},
+        "forfeit_outside_scope": {"verified": False, "action": "pending", "searched": "pp_forfeit",
+                                  "note": "not published (in-app scoring chart)"},
         "whole_match_forfeit": {"verified": True, "action": "void", "source": _PP_DNP,
                                 "quote": "If a player in your lineup does not participate in a single second/snap for any "
                                          "reason, they will be DNPd.",
@@ -85,8 +88,11 @@ RULES = {
         "player_missed_map_in_scope": {"verified": False, "action": "pending", "source": _PP_DNP,
                                        "quote": "Different PrizePicks markets have specific rules regarding what qualifies "
                                                 "as a DNP.",
+                                       "searched": "pp_activity",
                                        "note": "the CS2 threshold (play a map of the scope? every map?) is in-app only"},
-        "remake": {"verified": False, "action": "not detectable", "note": "not published"},
+        "partial_map_substitution": {"verified": False, "action": "not checked", "searched": "pp_activity",
+                                     "note": "not published; also not detectable (HLTV map rows carry no per-player rounds)"},
+        "remake": {"verified": False, "action": "not detectable", "searched": "remake", "note": "not published"},
         "reschedule": {"verified": False, "action": "not applied", "source": _PP_DNP,
                        "quote": "Depending on the sport, picks may be DNPd when a game is canceled or postponed to a new day.",
                        "note": "the CS2 rule is in the in-app scoring chart"},
@@ -108,6 +114,46 @@ RULES = {
                                  "team, this will make the lineup ineligible."},
     },
 }
+
+
+# 2026-10-23 16:40-16:52 UTC re-search (owner: official sources or the signed-in app only; never inferred from our own
+# settlement history). Nothing below became verified, so these situations stay PENDING / not applied. Each entry: what
+# was searched and what is still missing - shown with every pending pick (/admin/rule_pending.json).
+SEARCHED_AT = "2026-10-23T16:52Z"
+SEARCHES = {
+    "pp_forfeit": {
+        "searched": ["https://www.prizepicks.com/help-center (all 27 articles listed; none on esports, CS2, maps or forfeits)",
+                     _PP_DNP + " (October 19, 2026: no 'forfeit', 'esports' or 'map')",
+                     "https://www.prizepicks.com/help-center/refunds-and-cancellations (October 19, 2026: no forfeit rule)",
+                     "https://www.prizepicks.com/help-center/potential-outcomes (October 19, 2026: no forfeit rule)",
+                     "https://www.prizepicks.com/help-center/placing-entries ('specific rules in the scoring chart')",
+                     "https://www.prizepicks.com/reboots (NFL/NBA/WNBA/MLB/CFB only)",
+                     "web search restricted to prizepicks.com: CS2 / Maps 1-2 / forfeit / scoring chart",
+                     "app.prizepicks.com (in-app scoring chart): refused by the browser tool's safety restriction - not read"],
+        "missing": "PrizePicks' CS2 scoring-chart text (in the app: menu > Help Center > Scoring Chart > CS2) on forfeited "
+                   "maps inside / outside the line's maps. Needs the owner to read it in the signed-in app.",
+    },
+    "pp_activity": {
+        "searched": [_PP_DNP + " ('Different PrizePicks markets have specific rules regarding what qualifies as a DNP.')",
+                     "the same PrizePicks pages and app attempt as for forfeits"],
+        "missing": "PrizePicks' CS2 activity rule (must the player play every map of the line, one map, or a share of rounds; "
+                   "mid-map substitutions). In-app scoring chart only.",
+    },
+    "remake": {
+        "searched": ["https://help.underdogsports.com/en/articles/10905524-pick-em-scoring-esports (chronobreak rule only)",
+                     "https://app.underdogsports.com/rules/sports/misc, Esports section (chronobreak rule only)",
+                     "help.underdogsports.com search: 'remake', 'restart', 'replay', 'replayed map' (no esports remake rule)",
+                     "PrizePicks help center pages above (no remake / restart rule)"],
+        "missing": "a published CS2 remake / restarted-map rule on either platform (Underdog's chronobreak rule is for a map "
+                   "rewound in game, not a remake). Not detectable in HLTV data either: no pick is held pending on it.",
+    },
+}
+
+
+def missing_evidence(platform, rule_name):
+    """{'searched': [...], 'missing': str} for an unverified rule, or None (verified / unknown)."""
+    r = rule(platform, rule_name)
+    return SEARCHES.get(r.get("searched")) if not r.get("verified") else None
 
 
 def platform_of(book):
