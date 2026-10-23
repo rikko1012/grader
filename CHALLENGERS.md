@@ -5,6 +5,48 @@ same forecasts and decided only at the fixed review windows (learning.REVIEW_RUL
 matches). Passing = "eligible for review"; promotion is an explicit admin action with a recorded reason, versioned, with
 rollback. A correction or method change is a NEW family/version with its own evaluation period.
 
+## lm-0 - legacy pipeline without the Over margin (family `legacy-margin-0`, version `lm-0/2026-10-23`; picklog shadow only)
+
+**Frozen 2026-10-23 06:08 UTC, before any lm-0 value existed and before any outcome was looked at.** Owner decision: the live
+old-pipeline Over margin stays UNCHANGED in production (`grader.CONFIG["over_margin"]` = kills 1.0 / HS 0.6; an Over on the
+old pipeline is scored as if it projected that much lower, never flipping the side). lm-0 records, next to each live grade,
+what the same grader would have said with the margin neutralised. It is never shown and never changes a grade, chance or stake.
+
+- **Definition (exact).** `grader.grade_leg(<the forecast's own saved grader inputs>, dict(CONFIG, over_margin={"kills": 0.0,
+  "hs": 0.0}, under_margin={"kills": 0.0, "hs": 0.0}))`. No other key changes: the kills cap, the big-gap trust rule, the
+  form-fight halving, the tape fight, stakes and grade bands are the live ones. `under_margin` is already 0 / 0 live; it is set
+  to 0 only so the comparison stays margin-free if that key ever changes. The margin acts only on a favoured Over
+  (`pm > 0.5`), so an Under-favoured line has the same chance in both arms (it stays in the cohort, as an unchanged unit).
+- **Eligibility.** Only forecasts whose LIVE grade has `projection_source` starting with `legacy` (the old pipeline: the
+  performance model was unavailable for that line). perf-2 / perf-2-bo3 / perf-cm2 grades never use the margin; they are
+  logged as `{"eligible": false, "live_source": ...}` with NO lm-0 probability - never as an identical copy - and never enter
+  the comparison. Forecasts logged before lm-0 was deployed carry no lm-0 entry and are counted as "not logged".
+- **What is stored** (`forecasts.shadow.lm0`, one per appended forecast): `version`, `eligible`, `live_source`, the regrade's
+  `source`, its raw Over / Under / push probabilities (`raw`, before caps and margins - identical to the live raw by
+  construction), the scored `p_more` (P(Over | no push) after the cap and the margin rule - the probability lm-0 is judged on)
+  and `p_more_model`, the projection, and SEPARATELY the recommendation `rec` = {side, grade, units} from
+  `pick_verdict.verdict`; plus the live grade's own `p_more` for the exact pairing check.
+- **Primary metric.** Paired log loss of P(Over | no push), lm-0 vs the logged live chance, on settled P1 units (EVALUATION.md
+  section 8 / `learning.product_units`: the latest standard board forecast >= 30 min before the start, board-line pushes
+  excluded) whose P1 forecast is eligible. Match-grouped bootstrap 95% interval. Secondary: Brier, and the hit rate of each
+  arm's favoured side (with its Over / Under split). A unit whose stored live `p_more` disagrees with the P1 chance is rejected
+  and counted.
+- **Review window.** Forward settled eligible P1 units only. Minimum **30 distinct matches and 60 units** before any reading
+  beyond "interim". Why so few and why it will still be slow: legacy grades are rare - the bounded `forecasts_page` read of
+  the last 30,000 production forecasts (2026-10-16 to 10-23) found 53 legacy forecasts on 16 picks, of which 0 were P1 units
+  (member lines, or logged less than 30 minutes before the start). A larger window is not reachable in any useful time; a
+  smaller one cannot separate a few points of probability. Even at 30 matches the interval is expected to be wide: the
+  likely honest outcome is "no detectable difference", and that is a valid result. If the minimum is not reached by
+  2027-01-23, the interim figures are reported as descriptive only and the owner decides whether to keep logging.
+- **Decision rule.** lm-0 is "eligible for review" only if the paired log-loss gain's 95% interval is above 0 AND Brier is
+  not worse, on the full eligible cohort. Promotion would be an explicit owner action (new MODEL_VERSIONS entry, rollback).
+  **lm-0 is never promoted for producing more Overs, or for winning on the examples that prompted it** (the Over/Under mix,
+  individual lines, and any cohort chosen after the fact are reported for reading only).
+- **Code.** `picklog.LM0`, `picklog.legacy_margin_shadow` (called from `picklog._factors`), stored with each forecast's
+  shadow; learning copies it (`forecast_copy.lm0`) and reports it as `scorecard.product.legacy_margin`
+  (`learning.legacy_margin_report`). grader.py is unchanged, so no model_version tag changes. Tests:
+  tests/test_lm0_shadow.py.
+
 ## lb-001 - probability-shrinkage challenger (family id `line-blend-1`, frozen 2026-10-12 15:49:04 UTC on production)
 
 **Name.** It is a *probability-shrinkage* challenger: it pulls our own published chance toward 50%. It does **not** use
