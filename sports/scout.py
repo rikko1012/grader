@@ -3,7 +3,8 @@
   leagues                         the leagues and where each one's data comes from
   slate   LEAGUE [--hours 36]     games coming up (ESPN)
   lines   LEAGUE                  the PrizePicks + Underdog board  [--platform pp|ud] [--player NAME] [--market KEY]
-  sharp   LEAGUE                  Pinnacle player props, margin removed (+ The Odds API consensus when ODDS_API_KEY is set)
+  sharp   LEAGUE                  Kalshi + Polymarket prop prices (+ Pinnacle where it serves this location, + The Odds
+                                  API consensus when ODDS_API_KEY is set)
   edges   LEAGUE                  every pick'em line beside the sharp chance, best first
                                   [--platform pp|ud] [--min 0.55] [--limit 40] [--player NAME] [--all] [--record]
   player  LEAGUE NAME             his game log, recent averages, his lines and the chance of each side
@@ -22,7 +23,7 @@ import time
 from contextlib import closing
 from datetime import datetime, timezone
 
-from . import config, edges, espn, kalshi, lines, markets, names, oddsapi, pinnacle, projection, record
+from . import config, edges, espn, kalshi, lines, markets, names, oddsapi, pinnacle, polymarket, projection, record
 
 PLATFORM = {"pp": "prizepicks", "prizepicks": "prizepicks", "ud": "underdog", "underdog": "underdog"}
 
@@ -61,8 +62,9 @@ def _save(league, cmd, data):
 def sharp_quotes(lg, refresh=False):
     q, st = pinnacle.load(lg, refresh=refresh)
     k, st3 = kalshi.load(lg, refresh=refresh)
+    pm, st4 = polymarket.load(lg, refresh=refresh)
     c, st2 = oddsapi.load(lg, refresh=refresh)
-    return q + k + c, {"pinnacle": st, "kalshi": st3, "odds_api": st2}
+    return q + k + pm + c, {"pinnacle": st, "kalshi": st3, "polymarket": st4, "odds_api": st2}
 
 
 def board(lg, refresh=False, injuries=True):

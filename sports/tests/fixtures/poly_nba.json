@@ -1,0 +1,106 @@
+[
+{
+"slug": "nba-nyk-bos-2026-10-23",
+"startTime": "2026-10-23T23:00:00Z",
+"markets": [
+{
+"question": "Paul George: Points O/U 17.5",
+"sportsMarketType": "points",
+"line": 17.5,
+"bestBid": 0.5,
+"bestAsk": 0.51,
+"outcomes": "[\"Yes\", \"No\"]",
+"active": true,
+"closed": false,
+"acceptingOrders": true,
+"gameStartTime": "2026-10-23 23:00:00+00",
+"liquidityNum": 1496.0951,
+"slug": "nba-nyk-bos-2026-10-23-points-paul-george-17pt5"
+},
+{
+"question": "Paul George: Rebounds O/U 4.5",
+"sportsMarketType": "rebounds",
+"line": 4.5,
+"bestBid": 0.45,
+"bestAsk": 0.46,
+"outcomes": "[\"Yes\", \"No\"]",
+"active": true,
+"closed": false,
+"acceptingOrders": true,
+"gameStartTime": "2026-10-23 23:00:00+00",
+"liquidityNum": 2107.6847,
+"slug": "nba-nyk-bos-2026-10-23-rebounds-paul-george-4pt5"
+},
+{
+"question": "Jalen Brunson: Rebounds O/U 3.5",
+"sportsMarketType": "rebounds",
+"line": 3.5,
+"bestBid": 0.4,
+"bestAsk": 0.42,
+"outcomes": "[\"Yes\", \"No\"]",
+"active": true,
+"closed": false,
+"acceptingOrders": true,
+"gameStartTime": "2026-10-23 23:00:00+00",
+"liquidityNum": 3109.4074,
+"slug": "nba-nyk-bos-2026-10-23-rebounds-jalen-brunson-3pt5"
+},
+{
+"question": "Paul George: Assists O/U 3.5",
+"sportsMarketType": "assists",
+"line": 3.5,
+"bestBid": 0.38,
+"bestAsk": 0.39,
+"outcomes": "[\"Yes\", \"No\"]",
+"active": true,
+"closed": false,
+"acceptingOrders": true,
+"gameStartTime": "2026-10-23 23:00:00+00",
+"liquidityNum": 23656.1844,
+"slug": "nba-nyk-bos-2026-10-23-assists-paul-george-3pt5"
+},
+{
+"question": "Jayson Tatum: Points O/U 26.5",
+"sportsMarketType": "points",
+"line": 26.5,
+"bestBid": 0.15,
+"bestAsk": 0.5,
+"outcomes": "[\"Yes\", \"No\"]",
+"active": true,
+"closed": false,
+"acceptingOrders": true,
+"gameStartTime": "2026-10-23 23:00:00+00",
+"liquidityNum": 1150.5436,
+"slug": "nba-nyk-bos-2026-10-23-points-jayson-tatum-26pt5"
+},
+{
+"question": "Jalen Brunson: Points O/U 25.5",
+"sportsMarketType": "points",
+"line": 25.5,
+"bestBid": 0.01,
+"bestAsk": 0.51,
+"outcomes": "[\"Yes\", \"No\"]",
+"active": true,
+"closed": false,
+"acceptingOrders": true,
+"gameStartTime": "2026-10-23 23:00:00+00",
+"liquidityNum": 1702.8511,
+"slug": "nba-nyk-bos-2026-10-23-points-jalen-brunson-25pt5"
+},
+{
+"question": "Knicks vs. Celtics",
+"sportsMarketType": "moneyline",
+"line": null,
+"bestBid": 0.43,
+"bestAsk": 0.44,
+"outcomes": "[\"Knicks\", \"Celtics\"]",
+"active": true,
+"closed": false,
+"acceptingOrders": true,
+"gameStartTime": "2026-10-23 23:00:00+00",
+"liquidityNum": 1319096.9273,
+"slug": "nba-nyk-bos-2026-10-23"
+}
+]
+}
+]

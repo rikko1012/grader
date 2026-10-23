@@ -96,3 +96,14 @@ def test_injury_is_shown_never_used():
     inj = {"jalen brunson": {"status": "Questionable", "detail": "Left Ankle Sprain"}}
     r = edges.build(NBA, [offer()], [quote()], inj)[0]
     assert r["injury"] == "Questionable (Left Ankle Sprain)" and r["chance"] == pytest.approx(0.55)
+
+
+def test_polymarket_matches_by_start_and_the_tighter_exchange_wins_a_tie():
+    poly = quote(source="polymarket", start="2026-10-23T23:00:00Z", game="nba-nyk-bos-2026-10-23", p_over=0.40,
+                 spread=0.01, id="poly:1")
+    kal = quote(source="kalshi", start=None, date="2026-10-23", game="NYK vs BOS (Oct 23)", p_over=0.48, spread=0.03,
+                id="k:1")
+    r = edges.build(NBA, [offer()], [kal, poly])[0]
+    assert r["sharp"]["source"] == "polymarket" and r["chance"] == pytest.approx(0.60)
+    late = dict(poly, start="2026-10-24T23:00:00Z")
+    assert edges.build(NBA, [offer()], [late])[0]["chance"] is None

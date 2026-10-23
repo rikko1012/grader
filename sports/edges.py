@@ -4,7 +4,7 @@ Matching (never by substring): same player key (names.key), same market, and the
 START_TOLERANCE, or for Kalshi (no reliable start time) the same US game date. One source naming the player in two games
 (two players with one name) = ambiguous for that source, left out with the reason.
 Quote choice: the sharp line equal to the offer's line first, else the nearest; on a tie Pinnacle, then the 2+ book
-consensus, then Kalshi.
+consensus, then the exchanges (Kalshi, Polymarket) - between those two, the tighter bid/ask spread.
 
 Each side's chance is "given no push" (both platforms void a tied pick: PrizePicks dnps-reboots-and-ties, Underdog
 help article 10982402); the push chance is shown beside it.
@@ -74,8 +74,8 @@ def _pick(offer, cands):
         keep += qs
     if not keep:
         return [], "ambiguous: one name in two sharp games" if ambiguous else "sharp price is for another game"
-    rank = {"pinnacle": 0, "consensus": 1, "kalshi": 2}
-    keep.sort(key=lambda q: (abs(q["line"] - offer["line"]), rank.get(q["source"], 9)))
+    rank = {"pinnacle": 0, "consensus": 1, "kalshi": 2, "polymarket": 2}
+    keep.sort(key=lambda q: (abs(q["line"] - offer["line"]), rank.get(q["source"], 9), q.get("spread") or 0))
     best = keep[0]
     if best["line"] == offer["line"]:
         return [best], None

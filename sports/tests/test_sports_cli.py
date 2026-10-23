@@ -1,5 +1,5 @@
 """The command line end to end, offline: board -> edges -> record -> report, with the saved answers."""
-from sports import espn, kalshi, lines, oddsapi, pinnacle, scout
+from sports import espn, kalshi, lines, oddsapi, pinnacle, polymarket, scout
 from sports.tests.conftest import fixture
 
 
@@ -9,6 +9,7 @@ def _offline_sources(monkeypatch):
     monkeypatch.setattr(pinnacle, "load", lambda lg, refresh=False: ([], {"ok": False, "error": "refused for this "
                                                                            "server's location - not worked around"}))
     monkeypatch.setattr(kalshi, "_events", lambda s: fixture("kalshi_nbapts.json")["events"] if s == "KXNBAPTS" else [])
+    monkeypatch.setattr(polymarket, "_events", lambda series, hours: fixture("poly_nba.json"))
     monkeypatch.setattr(espn, "injuries", lambda lg, refresh=False: {})
 
 
@@ -21,7 +22,7 @@ def test_edges_record_report(monkeypatch, capsys):
                         real_save(con, rows, baselines, now=datetime(2026, 10, 23, 12, tzinfo=timezone.utc)))
     scout.main(["edges", "nba", "--all", "--record"])
     out = capsys.readouterr().out
-    assert "kalshi: " in out and "not worked around" in out and "Karl-Anthony Towns" in out
+    assert "kalshi: " in out and "polymarket: 4" in out and "not worked around" in out and "Karl-Anthony Towns" in out
     assert "recorded" in out and "recorded 0 new" not in out
     scout.main(["report", "nba"])
     out = capsys.readouterr().out

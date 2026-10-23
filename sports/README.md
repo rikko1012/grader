@@ -38,18 +38,21 @@ games settle.
 | **PrizePicks** partner API (`lines.py`) | The board: standard / goblin / demon lines, More-only flags | Public, the same API the CS2 and LoL readers use | Works (NBA ~9,000 lines, NFL ~4,000) |
 | **Underdog** (`lines.py`) | The board, each side's payout modifier | Public | Works |
 | **Kalshi** player props (`kalshi.py`) | "Player N+ points / yards / receptions ..." ladders. Their YES midpoint is the chance of Over | Public, US-regulated exchange, no key | Works. **The default sharp source.** NBA 10 stats, WNBA 4, NFL 10 |
+| **Polymarket** player props (`polymarket.py`) | "Player: Points O/U 17.5" markets. Their YES midpoint is the chance of Over | Public prediction-market API, no key (the same read API the project already uses) | Works. NBA points / rebounds / assists / threes / steals / blocks, NFL passing / rushing / receiving yards, receptions, passing TDs / attempts / completions. Only markets with a 5¢-or-tighter bid/ask count (2026-10-23: 153 of ~3,500 NBA props) |
 | **The Odds API** (`oddsapi.py`) | DraftKings / FanDuel / BetMGM / ... with each book's margin removed, averaged when 2+ books quote the same line | `ODDS_API_KEY` (free tier 500 credits/month) | Optional, off without a key |
 | **Pinnacle** guest API (`pinnacle.py`) | The sharpest book's props | No key | **Refuses US locations** ("Access from United States is prohibited"). Reported as such and **never worked around**. Works only from a non-US server |
 | **ESPN** public APIs (`espn.py`) | Schedule, game logs, box scores (settlement), injuries | Public, no key | Works for every league |
 | **NBA.com** (`swar/nba_api`) | NBA stats | `stats.nba.com` times out and `cdn.nba.com` answers 403 from cloud servers | Not used: the server cannot reach it. ESPN gives the same game logs |
 
 Kalshi's own start times are not game starts (it listed CHI @ MIL at 23:00Z; ESPN, PrizePicks and Underdog all say
-20:00Z). So Kalshi prices are matched by the game date in their market code, never by time.
+20:00Z). So Kalshi prices are matched by the game date in their market code, never by time. Polymarket's start times
+match the other sources, so its prices are matched by start time.
 
 ## How a line's chance is worked out
 
-1. **Remove the margin** from a two-sided price, proportionally: p = (1/over) / (1/over + 1/under). Kalshi needs no
-   margin removal; its bid/ask midpoint is used, and only when the gap between bid and ask is 5¢ or less.
+1. **Remove the margin** from a two-sided price, proportionally: p = (1/over) / (1/over + 1/under). The exchanges
+   (Kalshi, Polymarket) need no margin removal; their bid/ask midpoint is used, and only when the gap between bid and
+   ask is 5¢ or less. When both quote the same line, the tighter market is used.
 2. **Same line**: the pick'em line equals the sharp line, so that chance is used as it is.
 3. **Different line**: a distribution is fitted so it reproduces the sharp price, then read at the pick'em line.
    - Its spread was **measured** on last season's box scores, one variance function per stat (`fit_dispersion.py` →
@@ -73,7 +76,7 @@ Kalshi's own start times are not game starts (it listed CHI @ MIL at 23:00Z; ESP
 python sports_scout.py leagues                 # leagues and their source ids
 python sports_scout.py slate nba               # games in the next 36 hours (ESPN)
 python sports_scout.py lines nfl --platform ud # the Underdog NFL board
-python sports_scout.py sharp nba               # Kalshi (+ Odds API, + Pinnacle where allowed) prices
+python sports_scout.py sharp nba               # Kalshi + Polymarket (+ Odds API, + Pinnacle where allowed) prices
 python sports_scout.py edges nba               # the board, best first (standard lines, gaps in range)
 python sports_scout.py edges nfl --platform pp --min 0.55
 python sports_scout.py edges nba --all         # goblins, demons and far gaps too
@@ -131,11 +134,13 @@ or member release until a registered comparison on untouched forecasts supports 
 
 ## Known limits
 
-- **Pinnacle is unavailable from the US**, and that is respected. On the Ohio server the sharp side is Kalshi, plus the
-  Odds API consensus when a key is set.
-- **Kalshi midpoints may lean slightly toward Over.** sports-market-maker found YES buyers dominate. `report` measures it
-  by source.
-- **College**: no Kalshi player-prop series. College lines are matched only with an Odds API key (or Pinnacle outside
+- **Pinnacle is unavailable from the US**, and that is respected. On the Ohio server the sharp side is Kalshi and
+  Polymarket, plus the Odds API consensus when a key is set.
+- **No direct sportsbook feeds.** DraftKings and Caesars refuse direct requests from a server. Reading FanDuel, BetMGM
+  and BetRivers directly was not built. The licensed route to those books' prices is The Odds API (`ODDS_API_KEY`).
+- **Exchange midpoints may lean slightly toward Over.** sports-market-maker found YES buyers dominate on Kalshi.
+  `report` measures it by source.
+- **College**: no Kalshi or Polymarket player props. College lines are matched only with an Odds API key (or Pinnacle outside
   the US).
 - **Stats with no sharp price** (targets, turnovers in most games, fantasy score, longest play, touchdown scorers) get
   the history baseline only, never a sharp chance.
