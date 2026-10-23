@@ -32,8 +32,10 @@ Match identity - canonical_match(team_a, team_b, start_iso, bo=None, event=None,
   Dated renames (team_aliases.json "renames", 2026-10-23): HLTV sometimes moves a roster to a NEW team id under a new name
   (LP 13304 -> BARCA 14107, same five players, from 2026-10-21) while a platform keeps the old name. A rename entry
   {from_team_id, to_team_id, valid_from} applies only inside canonical_match: when a side resolves to from_team_id, the
-  start is on/after valid_from (UTC date), the original pair has NO HLTV match in the window, and the pair with
-  to_team_id has exactly one, that match is linked ("renamed" in the result). Never a name alias: team_key('LP') stays
+  start is on/after valid_from (an ISO UTC time, or a date = 00:00 UTC), from_team_id has NO HLTV match of its own in
+  the window (against anyone - match-rules-4), and the pair with to_team_id has exactly one, that match is linked
+  ("renamed" in the result). Settlement additionally requires the new team's lineup in that match to contain at least
+  RENAME_MIN_PLAYERS of the entry's HLTV player ids (picklog._rename_roster_ok). Never a name alias: team_key('LP') stays
   team:13304, so LP's history, same_team and an LP line before the date (or with no BARCA match) are unchanged.
   Rematches (the same teams beyond the window) get different ids. scope is NOT part of the match: a series winner and a
   map 1 winner of the same match share match_id and differ in market_key(match_id, scope, platform, market_id).
@@ -85,7 +87,12 @@ ALIASES_PATH = Path(__file__).resolve().parent / "team_aliases.json"
 # name that resolves to the old HLTV team, for a start on/after the rename's valid_from, links to the NEW team's HLTV match
 # when (and only when) the old team has no HLTV match there and the new one has exactly one with the same opponent within
 # WINDOW_H. Team identity (team_key / same_team / history reads) is unchanged: 'LP' stays HLTV 13304.
-MATCHING_RULES_VERSION = "match-rules-3"
+# match-rules-4 (2026-10-23 closeout, LP -> BARCA evidence): valid_from may be an exact UTC time (LP's own account
+# announced "A LyP agora e BARCA Esports" 2026-10-20 18:00 UTC); the old team must have NO HLTV match of its own (any
+# opponent) within WINDOW_H / that UTC date, not just none against this opponent; entries carry the HLTV player ids
+# settlement checks the new team's lineup against.
+MATCHING_RULES_VERSION = "match-rules-4"
+RENAME_MIN_PLAYERS = 4        # settlement: the new team's lineup in the linked match must hold >= 4 of the entry's players
 WINDOW_H = 3                  # an HLTV match of the same two teams starting within this many hours is the same match
 TEAMS_TTL = 3600
 SCHEDULE_TTL = 5 * 60
@@ -176,9 +183,21 @@ def _build_index(teams, schedule):
     return {"exact": exact, "variant": variant, "sched": sched, "aliases": _load_aliases(), "renames": _load_renames()}
 
 
+def _valid_from(v):
+    """A rename's valid_from as an aware UTC datetime: an ISO time ('2026-10-20T18:00:00Z') or a date (00:00 UTC)."""
+    v = str(v).strip()
+    if len(v) == 10:
+        return datetime.combine(date.fromisoformat(v), datetime.min.time(), timezone.utc)
+    t = _utc(v)
+    if t is None:
+        raise ValueError(v)
+    return t
+
+
 def _load_renames():
-    """team_aliases.json "renames" (maintained, each with proof): {"team:<from id>": [(valid_from date, "team:<to id>")]},
-    keyed on HLTV team ids, never on a name. An unreadable / incomplete entry is skipped (no rename = previous behaviour)."""
+    """team_aliases.json "renames" (maintained, each with proof): {"team:<from id>": [(valid_from UTC datetime,
+    "team:<to id>")]}, keyed on HLTV team ids, never on a name. An unreadable / incomplete entry is skipped (no rename =
+    previous behaviour)."""
     out = {}
     try:
         data = json.loads(ALIASES_PATH.read_text(encoding="utf-8"))
@@ -186,7 +205,7 @@ def _load_renames():
         return out
     for e in data.get("renames") or []:
         try:
-            a, b, d = int(e["from_team_id"]), int(e["to_team_id"]), date.fromisoformat(str(e["valid_from"])[:10])
+            a, b, d = int(e["from_team_id"]), int(e["to_team_id"]), _valid_from(e["valid_from"])
         except Exception:
             continue
         if a != b:
@@ -202,10 +221,23 @@ def successor_key(index, key, start):
         st = start if isinstance(start, datetime) else _utc(start)
         if not index or not key or st is None:
             return None
-        hits = {to for d, to in (index.get("renames") or {}).get(key, ()) if st.date() >= d}
+        hits = {to for d, to in (index.get("renames") or {}).get(key, ()) if st >= d}
         return next(iter(hits)) if len(hits) == 1 else None
     except Exception:
         return None
+
+
+def rename_players(from_id, to_id):
+    """The HLTV player ids a maintained rename entry names (team_aliases.json "players"), as a frozenset; empty when
+    the entry has none (settlement then never confirms the rename)."""
+    try:
+        data = json.loads(ALIASES_PATH.read_text(encoding="utf-8"))
+        for e in data.get("renames") or []:
+            if int(e.get("from_team_id", -1)) == int(from_id) and int(e.get("to_team_id", -1)) == int(to_id):
+                return frozenset(int(p) for p in e.get("players") or ())
+    except Exception:
+        pass
+    return frozenset()
 
 
 def renamed_team_id(name, start):
@@ -652,6 +684,17 @@ def _fit(keys, st, bo=None, event=None):
     return fit
 
 
+def _plays(key, st):
+    """True when the team `key` has any HLTV match (any opponent) within WINDOW_H of st, or a finished one dated within
+    the window's UTC dates - the same fit as _fit. A renamed team that still plays its own matches is not renamed."""
+    with _LOCK:
+        cands = [c for k, v in _S["pairs"].items() if key in k for c in v]
+    win = timedelta(hours=WINDOW_H)
+    days = {(st - win).date(), st.date(), (st + win).date()}
+    return any((c["start"] is not None and abs(c["start"] - st) <= win) or (c["start"] is None and c["date"] in days)
+               for c in cands)
+
+
 def canonical_match(team_a, team_b, start_iso, bo=None, event=None, scope="series", mint=True):
     """{"match_id", "team_keys": [sorted], "flipped", "status": linked|ambiguous|unlinked, "reason", "source", "hltv_match",
     "scope"}. Never raises. match_id is None unless status is linked. mint=False: a lookup only - no HLTV match ->
@@ -677,7 +720,7 @@ def canonical_match(team_a, team_b, start_iso, bo=None, event=None, scope="serie
         with _LOCK:
             sched_ok = _S["schedule_ok"]
         fit = _fit(keys, st, bo, event)
-        if not fit:
+        if not fit and not any(_plays(k, st) for k in (ka, kb) if successor_key(index, k, st)):
             # dated rename (match-rules-3): the old team id has no HLTV match here; its successor team may (LP -> BARCA).
             # Linked only when the successor pair has exactly one HLTV match - else the previous result stands
             sa, sb = successor_key(index, ka, st), successor_key(index, kb, st)
