@@ -162,6 +162,13 @@ def _db():
         pass                               # a pre-match_slug database (old test fixtures): nothing to index
     con.execute("CREATE TABLE IF NOT EXISTS shadow_inputs (sha TEXT PRIMARY KEY, kind TEXT, created_at TEXT, body BLOB)")
     con.execute("CREATE TABLE IF NOT EXISTS schema_marks (name TEXT PRIMARY KEY, at TEXT)")
+    # 2026-10-23 closeout 2 (reschedules): every start time seen for a pick, kept apart from the immutable pick row -
+    # kind 'platform' = the platform's listed start for the pick's line (ref = its market id), 'match' = the match
+    # source's start for the pick's own match (same pick key = same match slug / HLTV id), 'actual' = the start evidence
+    # read at settlement (HLTV schedule time / BO3.gg map-1 begin / match date). Changes only, OBS_MAX per pick and kind
+    con.execute("""CREATE TABLE IF NOT EXISTS schedule_obs (id INTEGER PRIMARY KEY, pick_id INTEGER, kind TEXT, start TEXT,
+                   seen_at TEXT, source TEXT, ref TEXT)""")
+    con.execute("CREATE UNIQUE INDEX IF NOT EXISTS schedule_obs_u ON schedule_obs (pick_id, kind, start, source)")
     if not con.execute("SELECT 1 FROM schema_marks WHERE name = 'on_board_backfill'").fetchone():
         con.execute("UPDATE picks SET on_board = CASE WHEN test = 2 THEN 1 ELSE 2 END "
                     "WHERE COALESCE(on_board, 0) = 0 AND (test = 2 OR (test = 0 AND book IS NOT NULL))")
@@ -478,6 +485,7 @@ def pick_row(res, verdict, test=False):
     row["_mapping_rev"] = gi.get("mapping_rev") or pv.get("mapping_rev")
     row["_quote"] = json.dumps(bk.get("quote"), default=str) if bk.get("quote") else None   # board quote (measurement only)
     row["_fh1"] = res.get("_fh1")                     # fh-1 shadow record (perf_shadow; board grades only) - never a live input
+    row["_platform_start"] = bk.get("start")          # the platform's listed start for this line (schedule_obs; 2026-10-23)
     return row
 
 
@@ -668,6 +676,7 @@ def write_row(row):
     row = dict(row)
     gi = row.pop("_gi", None)                       # the exact grader inputs - forecasts table only
     fh = row.pop("_fh1", None)                      # fh-1 shadow record - shadow_forecasts only
+    pstart = row.pop("_platform_start", None)       # the platform's listed start - schedule_obs only
     extra = {"probs_raw": row.pop("_probs", None), "data_rev": data_revision(), "odds_source": row.pop("_odds_src", None),
              "odds_sig": row.pop("_odds_sig", None), "odds_policy": row.pop("_odds_policy", None),
              "mapping_rev": row.pop("_mapping_rev", None), "quote": row.pop("_quote", None),
@@ -682,6 +691,7 @@ def write_row(row):
                 _shadow_forecast(con, cur["id"], row, fh, extra.get("git_commit"))
                 con.execute("UPDATE picks SET regrades = COALESCE(regrades, 0) + 1 WHERE id = ?", (cur["id"],))
             if cur:
+                _observe(con, cur["id"], row, pstart)        # a re-listed start of this line / match (changes only)
                 # a real member asking for a line first seen in a test makes it a real pick. 2026-10-13 audit D3: so does the
                 # board grading a line an owner load test reached first (it stayed test 1 - out of every cohort - with no
                 # platform); the board's write fills the platform + market id the row lacks. A board row the owner marked
@@ -702,12 +712,237 @@ def write_row(row):
             con.execute(f"INSERT INTO picks ({cols}) VALUES ({', '.join('?' * len(row))})", list(row.values()))
             pid = con.execute("SELECT id FROM picks WHERE key = ?", (key,)).fetchone()["id"]
             _forecast(con, pid, row, "first", gi, extra)
+            _observe(con, pid, row, pstart)                  # the start(s) as first listed - the ORIGINAL scheduled start
             if _before_start(row, {"match_start": row.get("match_start")}):
                 _shadow_forecast(con, pid, row, fh, extra.get("git_commit"))
             con.commit()
             return pid
         finally:
             con.close()
+
+
+OBS_MAX = 20              # schedule_obs rows per pick and kind (a line re-listed more often keeps its first 20 starts)
+
+
+def _z(t):
+    """A start as 'YYYY-MM-DDTHH:MM:SSZ' (UTC) - one spelling per instant, so a re-read never looks like a reschedule."""
+    t = t if isinstance(t, datetime) else _utc_time(t) if t else None
+    if t is None:
+        return None
+    t = t.replace(tzinfo=timezone.utc) if t.tzinfo is None else t.astimezone(timezone.utc)
+    return t.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _record_obs(con, pid, kind, start, seen_at, source, ref=None):
+    """One schedule observation (caller holds _LOCK and commits). Same start again = nothing; bounded per pick and kind."""
+    st = _z(start)
+    if pid is None or st is None:
+        return
+    con.execute("INSERT OR IGNORE INTO schedule_obs (pick_id, kind, start, seen_at, source, ref) SELECT ?, ?, ?, ?, ?, ? "
+                "WHERE (SELECT COUNT(*) FROM schedule_obs WHERE pick_id = ? AND kind = ?) < ?",
+                (pid, kind, st, seen_at, source, None if ref is None else str(ref), pid, kind, OBS_MAX))
+
+
+def _observe(con, pid, row, pstart):
+    """The starts a write brings: the match source's start for the pick's own match, and the platform's listed start for
+    its line (board grades)."""
+    _record_obs(con, pid, "match", row.get("match_start"), row.get("logged_at"), "grade")
+    if row.get("book") and pstart:
+        _record_obs(con, pid, "platform", pstart, row.get("logged_at"), row.get("book"), row.get("market_id"))
+
+
+def _save_obs(pid, kind, start, source, ref=None):
+    try:
+        with _LOCK:
+            con = _db()
+            try:
+                _record_obs(con, pid, kind, start, datetime.now(timezone.utc).isoformat(timespec="seconds"), source, ref)
+                con.commit()
+            finally:
+                con.close()
+    except sqlite3.Error:
+        pass
+
+
+def schedule_obs(pick_id):
+    """Every start observation of one pick, oldest first ([] when none / unreadable). Lock-free read."""
+    if pick_id is None:
+        return []
+    try:
+        con = _read_db()
+        try:
+            return [dict(x) for x in con.execute("SELECT kind, start, seen_at, source, ref FROM schedule_obs "
+                                                 "WHERE pick_id = ? ORDER BY seen_at, id", (pick_id,))]
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return []
+
+
+_BACKFILLED = [False]
+
+
+def backfill_obs(force=False):
+    """Once (schema_marks 'schedule_obs_backfill'): the start observations picks made before 2026-10-23 already have
+    evidence for - every match_start their forecast history recorded (kind 'match', source 'forecast'), and the
+    platforms' own line logs: Underdog's ud_moves.db (every new start of a line id) and PrizePicks' pp_lines.jsonl
+    (opens / moves / removals with the line's start, by market id), as kind 'platform' with the time each was logged.
+    Read outside the lock; one write transaction. Returns the rows offered (duplicates are ignored)."""
+    if _BACKFILLED[0] and not force:
+        return 0
+    with _LOCK:
+        con = _db()
+        try:
+            done = con.execute("SELECT 1 FROM schema_marks WHERE name = 'schedule_obs_backfill'").fetchone()
+        finally:
+            con.close()
+    if done and not force:
+        _BACKFILLED[0] = True
+        return 0
+    con = _read_db()
+    try:
+        fc = con.execute("SELECT pick_id, match_start, MIN(logged_at) FROM forecasts WHERE match_start IS NOT NULL "
+                         "GROUP BY pick_id, match_start").fetchall()
+        lines = {}
+        for pid, book, mid in con.execute("SELECT id, book, market_id FROM picks WHERE book IS NOT NULL AND market_id IS NOT NULL"):
+            lines.setdefault((book, str(mid)), []).append(pid)
+    finally:
+        con.close()
+    rows = [(pid, "match", st, at, "forecast", None) for pid, st, at in fc]
+    ud = DB.parent / ".cache" / "ud_moves.db"
+    if ud.exists():
+        try:
+            uc = sqlite3.connect(f"file:{ud}?mode=ro", uri=True, timeout=10)
+            try:
+                for at, start, lid in uc.execute("SELECT at, start, line_id FROM moves WHERE line_id IS NOT NULL ORDER BY at"):
+                    for pid in lines.get(("underdog", str(lid)), ()):
+                        rows.append((pid, "platform", start, at, "underdog line log", lid))
+            finally:
+                uc.close()
+        except sqlite3.Error:
+            pass
+    pp = DB.parent / ".cache" / "pp_lines.jsonl"
+    try:
+        with pp.open(encoding="utf-8") as f:
+            for ln in f:
+                try:
+                    e = json.loads(ln)
+                except ValueError:
+                    continue
+                for pid in lines.get(("prizepicks", str(e.get("id"))), ()):
+                    rows.append((pid, "platform", e.get("start"), e.get("at"), "prizepicks line log", e.get("id")))
+    except OSError:
+        pass
+    with _LOCK:
+        con = _db()
+        try:
+            for pid, kind, st, at, src, ref in sorted(rows, key=lambda x: (x[0], str(x[3] or ""))):
+                _record_obs(con, pid, kind, st, at, src, ref)
+            con.execute("INSERT OR IGNORE INTO schema_marks (name, at) VALUES ('schedule_obs_backfill', ?)",
+                        (datetime.now(timezone.utc).isoformat(timespec="seconds"),))
+            con.commit()
+        finally:
+            con.close()
+    _BACKFILLED[0] = True
+    return len(rows)
+
+
+def original_start(r, obs=None):
+    """(the pick's ORIGINAL scheduled start, where it comes from). The platform's listed start for the pick's line when
+    it was recorded with the first forecast (picks made before 2026-10-23 have none: a later observation may already be
+    the re-listed start, so it is never taken as the original); else the start logged with the pick."""
+    obs = schedule_obs(_col(r, "id")) if obs is None else obs
+    logged, mid = _utc_time(_col(r, "logged_at")), _col(r, "market_id")
+    for o in obs:
+        seen = _utc_time(o.get("seen_at"))
+        if (o.get("kind") == "platform" and (mid is None or o.get("ref") in (None, str(mid)))
+                and logged is not None and seen is not None and seen <= logged + timedelta(minutes=1)):
+            return _utc_time(o["start"]), f"{o.get('source')} listing at the first forecast"
+    t = _utc_time(_col(r, "match_start"))
+    return t, "start logged with the pick" if t else None
+
+
+def relisted_starts(r, obs=None, min_h=None):
+    """[(start, observation)] - other starts seen for THIS pick's own line (the platform listing with its market id) or
+    own match (the same pick key = the same match slug / HLTV id), more than min_h (default matchid.WINDOW_H) from the
+    logged start; in the order they were seen."""
+    import matchid
+    obs = schedule_obs(_col(r, "id")) if obs is None else obs
+    base, mid = _utc_time(_col(r, "match_start")), _col(r, "market_id")
+    gap = timedelta(hours=matchid.WINDOW_H if min_h is None else min_h)
+    out = []
+    for o in obs:
+        if o.get("kind") == "match" or (o.get("kind") == "platform" and (mid is None or o.get("ref") in (None, str(mid)))):
+            t = _utc_time(o.get("start"))
+            if t is not None and base is not None and abs(t - base) > gap:
+                out.append((t, o))
+    return sorted(out, key=lambda x: (x[1].get("seen_at") or "", x[0]))
+
+
+def _hltv_start_evidence(mid, day=None):
+    """(lo, hi, source) of HLTV match `mid`'s start: HLTV's schedule time for that exact id (matchid's copy), else the
+    match's UTC date (00:00 .. 24:00), else (None, None, why)."""
+    try:
+        import matchid
+        t = matchid.hltv_start(mid)
+    except Exception:
+        t = None
+    if t is not None:
+        return t, t, f"HLTV schedule time of match {mid}"
+    try:
+        d = datetime.fromisoformat(str(day)[:10]).replace(tzinfo=timezone.utc) if day else None
+    except ValueError:
+        d = None
+    if d is not None:
+        return d, d + timedelta(days=1), f"HLTV match {mid} dated {str(day)[:10]} (UTC day only)"
+    return None, None, f"HLTV match {mid}: no schedule time or date"
+
+
+def _bo3_start_evidence(mt):
+    """(lo, hi, source) of a BO3.gg match's start (its exact slug): map 1's begin_at, else the match's start_date."""
+    g1 = next((g for g in (mt or {}).get("games") or [] if g.get("number") == 1), None)
+    t = _utc_time(g1.get("begin_at")) if g1 and g1.get("begin_at") else None
+    if t is not None:
+        return t, t, "BO3.gg map 1 begin_at"
+    t = _utc_time((mt or {}).get("start_date")) if (mt or {}).get("start_date") else None
+    return (t, t, "BO3.gg match start_date") if t is not None else (None, None, "BO3.gg match: no start time")
+
+
+def settlement_timing(r, lo, hi, source, obs=None):
+    """The platform's reschedule rule for a pick whose match was found by exact identity -> (decision, evidence).
+    decision: platform_rules.reschedule_decision; evidence: what is stored with the settlement (result.schedule) - the
+    original start and where it comes from, the start bounds and their source, every re-listed start seen."""
+    obs = schedule_obs(_col(r, "id")) if obs is None else obs
+    orig, how = original_start(r, obs)
+    d = platform_rules.reschedule_decision(_col(r, "book"), orig, lo, hi, source)
+    ev = {"original": _z(orig), "original_from": how, "start_lo": _z(lo), "start_hi": _z(hi), "source": source,
+          "relisted": [_z(t) for t, _o in relisted_starts(r, obs)], "decision": d["action"], "late_h": d.get("late_h"),
+          "rule_verified": d.get("verified"), "reason": d["reason"]}
+    if lo is not None:
+        _save_obs(_col(r, "id"), "actual", lo, source + (" (lower bound)" if hi is not None and hi != lo else ""))
+    return d, ev
+
+
+def _reschedule_hold(r, obs=None):
+    """A pick whose own line / match was seen re-listed to a later start (inside the platform's window) and that the
+    exact identity has not found: pending with the reason (never voided by the VOID_AFTER_D clock) - None otherwise
+    (no verified rule, no re-listing, or re-listed beyond the window: the clock's void is the rule's void)."""
+    p = platform_rules.platform_of(_col(r, "book"))
+    rule = platform_rules.rule(p, "reschedule")
+    if p is None or not rule.get("verified") or not rule.get("void_after_h"):
+        return None
+    obs = schedule_obs(_col(r, "id")) if obs is None else obs
+    orig, _how = original_start(r, obs)
+    later = relisted_starts(r, obs)
+    if orig is None or not later:
+        return None
+    t, o = later[-1]
+    late = (t - orig).total_seconds() / 3600
+    if late > rule["void_after_h"]:
+        return None
+    return {"reason": f"{p}: line re-listed for {_z(t)} (seen {o.get('seen_at')}, {round(late, 1)} h from the original "
+                      f"start {_z(orig)}) - no exact HLTV identity found at the new start; pending, not voided by the clock",
+            "rule": "reschedule", "platform": p}
 
 
 def _quick_rows(b, player_id, mt):
@@ -732,6 +967,11 @@ def _quick_rows(b, player_id, mt):
 def settle(b, map_rows):
     """Fill in actual Maps 1-2 totals for matches that have finished."""
     now = datetime.now(timezone.utc)
+    try:
+        backfill_obs()                                # once: start evidence older picks already have (2026-10-23)
+    except Exception:
+        import traceback
+        traceback.print_exc()
     with _LOCK:
         con = _db()
         rows = con.execute("SELECT * FROM picks WHERE status = 'open'").fetchall()
@@ -810,15 +1050,19 @@ def _settle_one(b, map_rows, r, now):
         if len(maps) == 2 and all(x.get(stat) is not None for x in maps):   # D13: a missing stat is never a 0
             # quick=True: settled from BO3.gg's quick scoreboard - recheck_bo3_quick() re-derives it from the full
             # scoreboard once that is out (2026-10-12 audit: the quick one can be a kill short)
-            _save_result(r["id"], {"source": "bo3", "rounds": [x.get("rounds") for x in maps],
-                                   "won": [x.get("won") for x in maps], **({"quick": True} if quick else {}),
-                                   "per_map": [[x.get("kills"), x.get("headshots")] for x in maps]})
             actual = sum(x[stat] for x in maps)
             if actual == r["line"]:                   # whole-number line landed exactly: push
                 upd = ("push", json.dumps([x["map"] for x in maps]), actual, None)
             else:
                 hit = actual > r["line"] if r["pick"] == "More" else actual < r["line"]
                 upd = ("settled", json.dumps([x["map"] for x in maps]), actual, int(hit))
+            # 2026-10-23: the platform's reschedule window, on the start of this exact BO3.gg match (its slug)
+            lo, hi, src = _bo3_start_evidence(mt)
+            upd = _timed(r, upd, {"source": "bo3", "rounds": [x.get("rounds") for x in maps],
+                                  "won": [x.get("won") for x in maps], **({"quick": True} if quick else {}),
+                                  "per_map": [[x.get("kills"), x.get("headshots")] for x in maps]}, lo, hi, src)
+            if upd is None:
+                return 0                              # pending with the reason: never the clock's void below
         elif (len([g for g in mt.get("games") or [] if (g.get("number") or 9) <= 2]) >= 2
               and now < start + timedelta(days=VOID_AFTER_D)):
             return 0      # Maps 1-2 were played but BO3.gg hasn't published the stats yet: wait
@@ -931,7 +1175,8 @@ def recheck_bo3_with_hltv(now=None, apply=True, days=7, limit=HLTV_RECHECK_MAX):
                 bo3 = dict({k: v for k, v in old.items() if k != "bo3_detail"}, **rel)
                 detail = {"source": "hltv", "rounds": res["rounds"], "won": res["won"], "per_map": res["per_map"],
                           "maps_used": res["maps_used"], "hltv_match": res["hltv_match"], "hltv_checked": True,
-                          "hltv_total": res["total"], **rel, "bo3_detail": bo3, **_ident(res)}
+                          "hltv_total": res["total"], **rel, "bo3_detail": bo3, **_ident(res),
+                          **({"schedule": old["schedule"]} if isinstance(old, dict) and old.get("schedule") else {})}
                 old_t = None
                 try:
                     old_t = _scope_total_of(old, r["scope"], r["prop"])
@@ -954,7 +1199,8 @@ def recheck_bo3_with_hltv(now=None, apply=True, days=7, limit=HLTV_RECHECK_MAX):
                         f.write(json.dumps(dict(d, corrected_at=now.isoformat(timespec="seconds")), default=str) + "\n")
             continue
         detail = {"source": "hltv", "rounds": res["rounds"], "won": res["won"], "per_map": res["per_map"],
-                  "maps_used": res["maps_used"], "hltv_match": res["hltv_match"], "hltv_checked": True, "bo3_detail": old, **_ident(res)}
+                  "maps_used": res["maps_used"], "hltv_match": res["hltv_match"], "hltv_checked": True, "bo3_detail": old, **_ident(res),
+                  **({"schedule": old["schedule"]} if isinstance(old, dict) and old.get("schedule") else {})}   # start evidence kept
         d = {"id": r["id"], "player": r["player"], "prop": r["prop"], "scope": "12", "line": r["line"], "pick": r["pick"],
              "test": r["test"], "old": {"actual": r["actual"], "status": r["status"], "hit": r["hit"]},
              "new": {"actual": res["total"], "status": st, "hit": hit}, "hltv_match": res["hltv_match"],
@@ -1170,6 +1416,19 @@ def _forfeited(cur, mid):
         return None
 
 
+def _match_date(cur, mid):
+    """HLTV's UTC date of a match (match_overview.date) or None. HLTV unreachable raises (as _forfeited)."""
+    try:
+        cur.execute("SELECT date FROM match_overview WHERE matchid = %s", (mid,))
+        row = cur.fetchone()
+        return str(row[0])[:10] if row and row[0] else None
+    except Exception as e:
+        import hltv
+        if hltv.is_transient(e):
+            raise
+        return None
+
+
 _MAP_STATE_SQL = """
 SELECT mm.number, count(ps.playerid) FILTER (WHERE t.name = %(team)s OR %(team)s IS NULL)
 FROM match_maps mm
@@ -1204,17 +1463,48 @@ def _map_state(cur, mid, team=None):
     return played, scraped, total
 
 
-def _note_pending(r, res):
+def _note_pending(r, res, base=None):
     """A settlement the platform's published rules do not decide: the pick stays open (never voided by the clock) and
-    the reason is recorded on it once (result.rule_pending) for the admin output."""
+    the reason is recorded on it once (result.rule_pending) for the admin output. base: the result to store it with
+    (the match's result read this pass, 2026-10-23 reschedule rule) instead of the row's stored one."""
     note = {"rule_pending": {"reason": res.get("reason"), "rule": res.get("rule"), "platform": res.get("platform"),
                              "forfeited_maps": res.get("forfeited_maps")}}
+    if base is not None:
+        _save_result(r["id"], dict(base, **note))
+        return
     try:
         cur = json.loads(_col(r, "result") or "{}")
     except (TypeError, ValueError):
         cur = {}
     if not isinstance(cur, dict) or cur.get("rule_pending") != note["rule_pending"]:
         _save_result(r["id"], dict(cur if isinstance(cur, dict) else {}, **note))
+
+
+def _timed(r, upd, result, lo, hi, source):
+    """The platform's reschedule rule on a settlement found by exact identity (2026-10-23 closeout 2). upd: the outcome
+    tuple; result: the result dict to store (None = keep the row's). Stores the start evidence with it (result.schedule)
+    and returns the tuple to store - the outcome, a void (played beyond the platform's window) - or None (pending: the
+    evidence does not decide it; the pick stays open, never voided by the clock, the reason recorded)."""
+    d, ev = settlement_timing(r, lo, hi, source)
+    if result is None:
+        try:
+            result = json.loads(_col(r, "result") or "{}")
+        except (TypeError, ValueError):
+            result = {}
+        result = result if isinstance(result, dict) else {}
+        result.pop("rule_pending", None)
+    result = dict(result, schedule=ev)
+    if d["action"] == "pending":
+        if (_col(r, "status") or "open") != "open":   # an admin recheck of a settled pick: evidence only, no pending note
+            _save_result(r["id"], result)
+            return None
+        _note_pending(r, {"reason": d["reason"], "rule": "reschedule", "platform": platform_rules.platform_of(_col(r, "book"))},
+                      base=result)
+        return None
+    _save_result(r["id"], result)
+    if d["action"] == "void":
+        return ("void", upd[1] if upd else None, None, None)
+    return upd
 
 
 def _team_confirmed(cur, ids, team):
@@ -1262,7 +1552,7 @@ def _player_identity(cur, r):
     return [], found
 
 
-def _canonical_hltv(r):
+def _canonical_hltv(r, how=False):
     """2026-10-13 audit D1 (owner: settlement on the SAME canonical identity as grading): the pick's HLTV match =
     matchid.canonical_match(team, opponent, listed start) - the call the projection's odds link makes
     (thunderpick.projection_odds): canonical team ids + the maintained aliases, an HLTV schedule time within
@@ -1273,9 +1563,9 @@ def _canonical_hltv(r):
     import matchid
     try:
         if not ((matchid.status().get("teams") or {}).get("rows")):
-            return None, None, None
+            return (None, None, None) + ((None,) if how else ())
     except Exception:
-        return None, None, "match identity unavailable"
+        return (None, None, "match identity unavailable") + ((None,) if how else ())
     why = []
     for t in _settle_teams(r):
         cm = matchid.canonical_match(t, _col(r, "opponent"), _col(r, "match_start"))
@@ -1284,11 +1574,43 @@ def _canonical_hltv(r):
             # BARCA on 2026-10-21) links the new team id, which the opponent's rows carry
             side = cm.get("team_keys_by_side") or []
             k = str((side[1] if len(side) == 2 else None) or matchid.team_key(_col(r, "opponent")) or "")
-            return int(cm["hltv_match"]), (int(k[5:]) if k.startswith("team:") else None), None
+            return (int(cm["hltv_match"]), (int(k[5:]) if k.startswith("team:") else None), None) + (("canonical match",) if how else ())
         why.append(f"{t} vs {_col(r, 'opponent')}: {cm.get('reason') or cm.get('status')}")
         if cm.get("status") == "ambiguous":
             break
-    return None, None, "; ".join(why) or "no canonical match"
+    else:
+        rel = _relisted_hltv(r, matchid)
+        if rel[0] is not None:
+            return rel if how else rel[:3]
+        if rel[2]:
+            why.append(rel[2])
+    out = (None, None, "; ".join(why) or "no canonical match")
+    return out + (None,) if how else out
+
+
+def _relisted_hltv(r, matchid):
+    """2026-10-23 closeout 2: the canonical match at a start THIS pick's own line / match was re-listed for (schedule_obs:
+    the platform's listing of its market id, or its own match's start on a later grade) - the same canonical_match rule
+    (exact team ids + aliases, WINDOW_H around that observed start), never a wider window around the logged start. Linked
+    only when every observed start names the same single HLTV match. (match id, opponent id, why, how)."""
+    found, why = {}, []
+    for st, o in relisted_starts(r):
+        for t in _settle_teams(r):
+            cm = matchid.canonical_match(t, _col(r, "opponent"), st.isoformat(), mint=False)
+            if cm.get("hltv_match") is not None:
+                side = cm.get("team_keys_by_side") or []
+                k = str((side[1] if len(side) == 2 else None) or matchid.team_key(_col(r, "opponent")) or "")
+                found[int(cm["hltv_match"])] = (int(k[5:]) if k.startswith("team:") else None, o)
+                break
+            if cm.get("status") == "ambiguous":
+                why.append(f"re-listed start {_z(st)}: {cm.get('reason')}")
+                break
+    if len(found) == 1 and not why:
+        mid, (oid, o) = next(iter(found.items()))
+        return mid, oid, None, f"canonical match at the re-listed start ({o.get('kind')} {o.get('source')} {o.get('start')})"
+    if len(found) > 1:
+        why.append(f"re-listed starts name {len(found)} HLTV matches ({', '.join(str(m) for m in sorted(found))}) - not linked")
+    return None, None, "; ".join(why) or None, None
 
 
 def matchid_renamed_id(name, start):
@@ -1337,7 +1659,7 @@ def scope_result(r, same_day_only=False):
     day = (r["match_start"] or "")[:10]
     slug = str(_col(r, "match_slug") or "")
     own = int(slug[5:]) if slug.startswith("hltv-") and slug[5:].isdigit() else None
-    link, oid, why = (own, None, None) if own is not None else _canonical_hltv(r)
+    link, oid, why, how = (own, None, None, None) if own is not None else _canonical_hltv(r, how=True)
     if link is None and why:
         return {"status": "none", "reason": f"no canonical HLTV match for this pick ({why}) - not settled from HLTV"}
     best_of = None
@@ -1431,7 +1753,8 @@ def scope_result(r, same_day_only=False):
             "per_map": [[x["kills"], x["headshots"]] for x in ms], "rounds": [x["rounds"] for x in ms],
             "won": [x["won"] for x in ms], "hltv_match": ms[0]["hltv_match"],
             # which identity the match was read under (stored with the settlement - evaluation keys on verified ones)
-            "identity": "hltv id" if own is not None else "canonical match" if link is not None else "date window (matchid not loaded)"}
+            "identity": "hltv id" if own is not None else (how or "canonical match") if link is not None else "date window (matchid not loaded)",
+            "date": ms[0].get("date")}             # HLTV's UTC match date (start evidence for the reschedule rule)
 
 
 def _ident(res):
@@ -1454,10 +1777,17 @@ def _settle_scope(r, now, start):
         _note_pending(r, res)
         return None
     if res["status"] != "ok":
-        return ("void", None, None, None) if now > start + timedelta(days=VOID_AFTER_D) else None
-    _save_result(r["id"], {"source": "hltv", "rounds": res["rounds"], "won": res["won"], "per_map": res["per_map"],
-                           "maps_used": res["maps_used"], "hltv_match": res["hltv_match"], **_ident(res)})
-    return _outcome(r, res["total"], res["maps"])
+        if now > start + timedelta(days=VOID_AFTER_D):
+            hold = _reschedule_hold(r) if not str(_col(r, "match_slug") or "").startswith("hltv-") else None
+            if hold:                                  # 2026-10-23: re-listed inside the platform's window, identity not
+                _note_pending(r, hold)                # found at the new start - pending with the reason, not a void
+                return None
+            return ("void", None, None, None)
+        return None
+    lo, hi, src = _hltv_start_evidence(res["hltv_match"], res.get("date"))
+    return _timed(r, _outcome(r, res["total"], res["maps"]),
+                  {"source": "hltv", "rounds": res["rounds"], "won": res["won"], "per_map": res["per_map"],
+                   "maps_used": res["maps_used"], "hltv_match": res["hltv_match"], **_ident(res)}, lo, hi, src)
 
 
 CORRECTIONS = DB.parent / "settlement_corrections.jsonl"
@@ -1643,9 +1973,11 @@ def _hltv_totals(r, same_day_only=False):
         return "wait"
     if res["status"] != "ok":
         return None
-    _save_result(r["id"], {"source": "hltv", "rounds": res["rounds"], "won": res["won"], "per_map": res["per_map"],
-                           "maps_used": res["maps_used"], "hltv_match": res["hltv_match"], **_ident(res)})
-    return _outcome(r, res["total"], res["maps"])
+    lo, hi, src = _hltv_start_evidence(res["hltv_match"], res.get("date"))
+    upd = _timed(r, _outcome(r, res["total"], res["maps"]),
+                 {"source": "hltv", "rounds": res["rounds"], "won": res["won"], "per_map": res["per_map"],
+                  "maps_used": res["maps_used"], "hltv_match": res["hltv_match"], **_ident(res)}, lo, hi, src)
+    return "pending" if upd is None else upd          # 2026-10-23: start evidence does not decide the platform's window
 
 
 def recheck_with_hltv():
@@ -1682,7 +2014,7 @@ def _settle_hltv(r, now, start):
     """A match only HLTV has: Maps 1-2 kills / headshots from the hltv-scraper database.
     None = not yet (stats or headshots not scraped); void after VOID_AFTER_D days without them."""
     import hltv
-    tot, transient = {"found": False}, False
+    tot, transient, mdate = {"found": False}, False, None
     for team in _settle_teams(r):                     # the match's team first, then the BO3.gg profile team (2026-10-13)
         try:
             tot = hltv.settle_totals(r["player"], team, int(r["match_slug"].split("-", 1)[1]))
@@ -1701,6 +2033,8 @@ def _settle_hltv(r, now, start):
         try:
             with con.cursor() as cur:
                 mid = int(r["match_slug"].split("-", 1)[1])
+                if actual is not None:                # the match's UTC date (start evidence, 2026-10-23 reschedule rule)
+                    mdate = _match_date(cur, mid)
                 ff = _forfeited(cur, mid)
                 if ff:
                     plat = platform_rules.platform_of(_col(r, "book"))
@@ -1722,9 +2056,13 @@ def _settle_hltv(r, now, start):
         return ("void", None, None, None) if now > start + timedelta(days=VOID_AFTER_D) else None
     maps = json.dumps(tot.get("maps"))
     if actual == r["line"]:
-        return ("push", maps, actual, None)
-    hit = actual > r["line"] if r["pick"] == "More" else actual < r["line"]
-    return ("settled", maps, actual, int(hit))
+        upd = ("push", maps, actual, None)
+    else:
+        hit = actual > r["line"] if r["pick"] == "More" else actual < r["line"]
+        upd = ("settled", maps, actual, int(hit))
+    mid = int(r["match_slug"].split("-", 1)[1])
+    lo, hi, src = _hltv_start_evidence(mid, mdate)
+    return _timed(r, upd, None, lo, hi, src)          # 2026-10-23: the platform's reschedule window (its own HLTV id)
 
 
 def set_closing(pick_id, closing):
