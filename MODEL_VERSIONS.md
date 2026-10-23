@@ -1,6 +1,6 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
-## DRAFT - Map veto display + logging (veto/vserve; CS2 model tag unchanged: `aa6696d5d6`; display / logging / shadow only)
+## Map veto display + logging, live 2026-10-23 20:30 UTC (main 0ee4d3e, PRs #12 + #14; rollback 2fbfc0e; CS2 model tag unchanged: `aa6696d5d6`; display / logging / shadow only)
 
 No grade, chance, stake, threshold, model weight or frozen constant changed; no file the model tag hashes was edited
 (grader / cs2_scout / hltv / perf ... untouched; 500/500 recent production forecasts replay identical). Map-informed
