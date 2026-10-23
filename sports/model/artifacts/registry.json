@@ -1,0 +1,46 @@
+{
+ "updated_at": "2026-10-23",
+ "rule": "REGISTER.md 7: history gate H -> 'history-validated'; forward gate F -> 'forward-validated'. Nothing promotes automatically; stakes stay 0 until F.",
+ "versions": {
+  "sm-1": {
+   "role": "champion (shadow research forecasts)",
+   "track": "statistical-only",
+   "validation": {
+    "points": "history-validated",
+    "rebounds": "history-validated",
+    "assists": "history-validated",
+    "threes": "history-validated",
+    "pass_yds": "unvalidated",
+    "rush_yds": "unvalidated",
+    "rec_yds": "unvalidated",
+    "rush_att": "unvalidated",
+    "rec": "unvalidated"
+   },
+   "evidence": [
+    "sports/research/results/model_study_nba_test.json",
+    "sports/research/results/model_study_nfl_test.json"
+   ]
+  },
+  "mi-1": {
+   "role": "challenger (forward only)",
+   "track": "market-informed",
+   "validation": {}
+  },
+  "mc-1": {
+   "role": "market baseline (forward only)",
+   "track": "market-only consensus",
+   "validation": {}
+  },
+  "sharp-2": {
+   "role": "foundation market-only baseline",
+   "track": "market-only (Kalshi)",
+   "validation": {}
+  },
+  "mkt-<source>": {
+   "role": "single-source market baselines",
+   "track": "market-only",
+   "validation": {}
+  }
+ },
+ "challengers": []
+}

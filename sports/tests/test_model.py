@@ -22,7 +22,7 @@ def test_negbin_poisson_normal_match_math():
     p = dists.negbin(np.array([m]), 0.2, 0, KS)[0]
     ref = [math.exp(math.lgamma(k + r) - math.lgamma(r) - math.lgamma(k + 1) + r * math.log(r / (r + m))
                     + k * math.log(m / (r + m))) for k in range(80)]
-    assert max(abs(a - b) for a, b in zip(p, ref)) < 1e-10
+    assert max(abs(a - b) for a, b in zip(p, ref)) < 1e-9          # support truncated at 79, renormalised
     q = dists.poisson(np.array([4.2]), 0, KS)[0]
     assert abs(q[3] - math.exp(-4.2) * 4.2 ** 3 / 6) < 1e-12
     assert max(abs(dists.erf(x) - math.erf(x)) for x in np.linspace(-6, 6, 241)) < 2e-7
@@ -304,6 +304,21 @@ def test_forward_forecast_replays_identically(tmp_path, monkeypatch):
         assert res2["written"].get("sm-1") == 0
         snap = pipeline.write_snapshot(now="2026-01-31T21:30:00Z")
         assert snap["leagues"]["nba"]["forecasts"] >= 1
+        # settlement -> scorecard + diagnostic queue, automatically and once; a correction supersedes
+        from sports.contracts import Settlement
+        from sports.model import learning
+        offer = store.get(scon, rid)
+        st = Settlement(settlement_id="s1", platform=offer.platform, offer_id=offer.offer_id, side=fc.chosen_side,
+                        line=offer.line, event_id=offer.event_id, player_id=offer.player_id, stat="points",
+                        status="win" if fc.chosen_side == "over" else "loss", outcome="over", source_value=40.0,
+                        source="espn", source_ref="x", rule_version="test", settled_at="2026-02-01T04:00:00Z")
+        store.put(scon, st)
+        r1 = learning.on_settled(scon, now="2026-02-02T00:00:00Z")
+        assert r1["scorecard_rows_added"] == 1
+        assert learning.on_settled(scon, now="2026-02-02T00:00:00Z")["scorecard_rows_added"] == 0
+        sc = learning.scorecard()
+        assert sc[0]["model_version"] == "sm-1" and sc[0]["graded"] == 1
+        assert any(d["kind"] == "large_miss" for d in learning.diagnostics())      # 40 points vs a 17.5 line
 
 
 def test_api_model_reads_snapshots_only(tmp_path, monkeypatch):

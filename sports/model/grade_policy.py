@@ -14,6 +14,7 @@ STAKE_POLICY = "sports-sp-1"
 BE_LOW, BE_HIGH = 0.5345, 0.5559
 BANDS = (("A", 0.60), ("B", BE_HIGH), ("C", BE_LOW))
 TEXT_UNVALIDATED = "Projection only - model not yet validated"
+TEXT_HISTORY = "Projection - validated on past games, not yet on live lines"
 STATES = ("unvalidated", "history-validated", "forward-validated")
 
 
@@ -48,7 +49,8 @@ def apply(p_over, p_under, sides_available, validation_state="unvalidated", data
         reason = None
     stake = 0.0 if reason else _stake(b)
     return {"policy": VERSION, "validation_state": validation_state, "chosen_side": side, "chosen_p": p, "band": b,
-            "grade": b if validated else None, "label": label if validated else TEXT_UNVALIDATED,
+            "grade": b if validated else None,
+            "label": label if validated else (TEXT_HISTORY if validation_state == "history-validated" else TEXT_UNVALIDATED),
             "stake_units": stake, "stake_reason": reason, "stake_policy": STAKE_POLICY,
             "data_quality": list(data_quality), "sides": sides}
 

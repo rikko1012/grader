@@ -1,0 +1,11 @@
+{
+ "version": "mc-1",
+ "frozen_at": "2026-10-23",
+ "dnp_share": {
+  "nba": 0.074857,
+  "nfl": 0.0
+ },
+ "dnp_definition": "NBA: share of ds-1 TRAIN box rows (start < 2025-10-01) of players with prior EW minutes >= 15 who did not play; NFL: not measurable from ds-1 (players without snaps are absent) -> 0 with reason code",
+ "rows": 45874,
+ "sha": "8119ce6b61539999"
+}

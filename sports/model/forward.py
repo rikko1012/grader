@@ -72,9 +72,10 @@ def fit(sport, hcon, as_of=None, out_path=None):
     return art
 
 
-def _frame_asof(sport, hcon, hl, as_of, upcoming=None):
+def _frame_asof(sport, hcon, hl, as_of, upcoming=None, absences=None):
     if sport == "nba":
-        return featurize.nba_frame(hcon, h_min=hl[0], h_rate=hl[1], upcoming=upcoming, as_of=as_of)
+        return featurize.nba_frame(hcon, h_min=hl[0], h_rate=hl[1], upcoming=upcoming, as_of=as_of,
+                                   absences=absences)
     return featurize.nfl_frame(hcon, h_opp=hl[0], upcoming=upcoming, as_of=as_of)
 
 
@@ -171,6 +172,33 @@ def upcoming_rows(scon, hcon, league, now):
     return list(rows.values()), idmap, skipped
 
 
+REPORT_MAX_AGE_H = 24
+
+
+def injury_absences(scon, league, rows, forecast_at):
+    """{(game_id, team): [ds-1 player ids listed Out]} from the ESPN injury report in the store, known at forecast_at
+    and read within REPORT_MAX_AGE_H; a team without a fresh report -> None (unknown)."""
+    if league != "nba":
+        return {}
+    recs = [store._rec(r) for r in store._latest_rows(scon, "context", "league = ?", [league], forecast_at, 20000)]
+    fresh = [c for c in recs if (parse_utc(forecast_at) - parse_utc(c.observed_at)).total_seconds()
+             <= REPORT_MAX_AGE_H * 3600]
+    team_of = _current_team(scon, league)
+    abbr = _teams(scon, league)
+    seen_report = bool(fresh)                     # ESPN publishes one league-wide report: a fresh read covers every team
+    out_by_team = {}
+    for c in fresh:
+        if c.status == "out" and c.present == "yes":
+            t = abbr.get(team_of.get(c.subject_id))
+            if t:
+                out_by_team.setdefault(t, []).append(c.subject_id)
+    res = {}
+    for r in rows:
+        for team in (r["team"], r["opp"]):
+            res[(r["game_id"], team)] = out_by_team.get(team, []) if seen_report else None
+    return res
+
+
 # ---------------------------------------------------------------------------------------------- forecasting
 def _row_dict(df, i):
     out = {}
@@ -245,6 +273,8 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
             continue
         meta = store.row_meta(scon, rid)
         quotes.setdefault((q.event_id, q.player_id, q.stat), []).append((rid, q, meta.get("last_seen_at")))
+    absences = injury_absences(scon, league, up, forecast_at)
+    out["injury_report"] = "fresh ESPN report" if any(v is not None for v in absences.values()) else         ("no fresh report: same-game absence unknown" if league == "nba" else "not used")
     mcfg = market_config()
     dnp = mcfg.get("dnp_share", {}).get(league, 0.0)
     icon = inputs_db()
@@ -253,7 +283,7 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
         am = art["markets"][mk]
         hl = tuple(am["half_lives"])
         if hl not in frames:
-            df = _frame_asof(league, hcon, hl, forecast_at, upcoming=up)
+            df = _frame_asof(league, hcon, hl, forecast_at, upcoming=up, absences=absences)
             frames[hl] = study._nfl_fill(df) if league == "nfl" else df
         df = frames[hl]
         upi = np.flatnonzero(df["is_up"] == 1)
@@ -261,10 +291,12 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
         rowpos = {(df["game_id"][i], df["player_id"][i]): i for i in upi}
         f = study.from_config(am)
         lo, ks = dists.grid(mk)
-        sub = df[upi]
-        pm, mu = study.pmf_for(f, sub, mk, league)
-        pmf_of = {(sub["game_id"][j], sub["player_id"][j]): (pm[j], float(mu[j]), bool(el[upi[j]])) for j in
-                  range(len(upi))}
+        # each forecast's PMF is computed from its OWN saved row (pmf_from_row) - exactly the replay path, so a
+        # replay is bit-identical (a batched matrix product rounds the last bit differently from a one-row one)
+        pmf_of = {}
+        for i in upi:
+            pmf_i, mu_i = pmf_from_row(am, _row_dict(df, i), mk, league)
+            pmf_of[(df["game_id"][i], df["player_id"][i])] = (pmf_i, mu_i, bool(el[i]))
         for rid, o in store.offers(scon, league=league, stat=mk, limit=500000):
             if o.platform not in TARGETS or (o.event_id, o.player_id) not in idmap:
                 continue
@@ -285,6 +317,8 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
             dq = row.get("prior_n") or 0
             if (league == "nba" and dq < 10) or (league == "nfl" and dq < 6):
                 codes.append("thin_history")
+            if league == "nba" and row.get("absent_share") is None:
+                codes.append("teammate_absence_unknown")
             data_version = "ds-1:" + _sha(row)[:16]
             written = []
             fc, pol = build_forecast(o, rid, forecast_at, MODEL_VERSION, f"sm-1:{art['sha']}", pmf, lo, mean, (rid,),

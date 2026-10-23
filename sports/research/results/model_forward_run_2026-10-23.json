@@ -1,0 +1,55 @@
+{
+ "nba": {
+  "league": "nba",
+  "forecast_at": "2026-10-23T23:04:23Z",
+  "artifact": "5ec8adf73a6dad18",
+  "upcoming_rows": 94,
+  "skipped": {},
+  "written": {
+   "sm-1": 515,
+   "mi-1": 394,
+   "mc-1": 394,
+   "mkt-kalshi": 390,
+   "mkt-polymarket": 96
+  },
+  "no_forecast": {
+   "market: spread > 0.05": 62,
+   "market: no quote": 55,
+   "market: no trades and no open interest": 3,
+   "market: quote suspended": 1
+  },
+  "injury_report": "fresh ESPN report"
+ },
+ "nfl": {
+  "league": "nfl",
+  "forecast_at": "2026-10-23T23:04:39Z",
+  "artifact": "cc56aeb8b88c31d8",
+  "upcoming_rows": 201,
+  "skipped": {},
+  "written": {
+   "sm-1": 884,
+   "mi-1": 568,
+   "mc-1": 568,
+   "mkt-kalshi": 568,
+   "mkt-polymarket": 3
+  },
+  "no_forecast": {
+   "market: no quote": 158,
+   "market: spread > 0.05": 146,
+   "market: no trades and no open interest": 9,
+   "market: one-sided quote": 3
+  },
+  "injury_report": "not used"
+ },
+ "snapshot": {
+  "written_at": "2026-10-23T23:04:56Z",
+  "leagues": {
+   "nba": {
+    "forecasts": 1789
+   },
+   "nfl": {
+    "forecasts": 2591
+   }
+  }
+ }
+}

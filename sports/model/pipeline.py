@@ -39,9 +39,9 @@ def run(a):
                 res = study.run(sport, hcon, ph)
                 out[f"{sport}:{ph}"] = {m: r.get("gate_H", r.get("family")) for m, r in res["markets"].items()}
         return out
-    if a.job == "fit":
+    if a.job == "fit":                                     # a CHALLENGER refit; the committed champion is untouched
         hcon = datasets.connect(read_only=True)
-        return {s: forward.fit(s, hcon)["sha"] for s in ("nba", "nfl")}
+        return {s: learning.retrain(s, hcon) for s in ("nba", "nfl")}
     if a.job == "forecast":
         flags.require("SPORTS_INGEST")                    # writes the canonical store
         hcon = datasets.connect(read_only=True)
@@ -119,7 +119,7 @@ def write_snapshot(now=None):
     except Exception as e:                                           # noqa: BLE001 - snapshot stays writable
         sc, gates, diag = [], [], [{"error": str(e)[:200]}]
     _atomic_write(api_dir() / "model_meta.json", {
-        "written_at": now, "registry": forward.registry(), "artifacts": {s: _art_meta(forward.load_artifact(s))
+        "written_at": now, "registry": forward.registry(), "challengers": _runtime_challengers(), "artifacts": {s: _art_meta(forward.load_artifact(s))
                                                                          for s in ("nba", "nfl")},
         "features": features.with_effects(), "studies": studies})
     _atomic_write(api_dir() / "admin_learning.json", {"written_at": now, "scorecard": sc, "forward_gate": gates,
@@ -169,3 +169,11 @@ def summarize_study(res):
                                   "kept": (r.get("joint") or {}).get("features") if (r.get("joint") or {}).get("used")
                                   else [], "rows": r.get("rows")}
     return out
+
+
+def _runtime_challengers():
+    p = config.DATA_DIR / "model" / "challengers" / "registry_runtime.json"
+    try:
+        return json.loads(p.read_text(encoding="utf-8")).get("challengers", [])
+    except (OSError, ValueError):
+        return []

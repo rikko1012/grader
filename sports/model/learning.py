@@ -54,12 +54,14 @@ def _pit(fc, value, pmf_row=None, lo=None):
     return float(p[ks < value].sum() + 0.5 * p[ks == value].sum())
 
 
-def on_settled(scon, log=None):
-    """Scorecard + diagnostic queue for every forecast whose offer has a (new) settlement. Idempotent."""
+def on_settled(scon, log=None, now=None, days=30):
+    """Scorecard + diagnostic queue for every forecast (of the last `days`) whose offer has a (new) settlement.
+    Idempotent: one row per forecast x current settlement; a corrected settlement supersedes the earlier row."""
     lcon = db()
     icon = forward.inputs_db()
     rows = scon.execute("SELECT record_id FROM records WHERE kind='forecast' AND known_at >= ?",
-                        ((parse_utc(now_utc()) - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ"),)).fetchall()
+                        ((parse_utc(now or now_utc()) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ"),)
+                        ).fetchall()
     n_new = n_diag = 0
     for (fid,) in rows:
         fc = store.get(scon, fid)
@@ -188,17 +190,20 @@ def retrain_due(sport, lcon):
 
 def retrain(sport, hcon):
     """Fit a CHALLENGER artifact (same frozen configuration, all data to now). The champion file is untouched."""
-    path = forward.ART_DIR / "challengers" / f"sm1_{sport}_{now_utc().replace(':', '')}.json"
+    path = config.DATA_DIR / "model" / "challengers" / f"sm1_{sport}_{now_utc().replace(':', '')}.json"
     art = forward.fit(sport, hcon, out_path=path)
     lcon = db()
     lcon.execute("INSERT OR REPLACE INTO fits VALUES (?,?,?,?,?,?)", (sport, art["sha"], art["fitted_at"],
                                                                        art["data_as_of"], None, "challenger"))
     lcon.commit()
     lcon.close()
-    reg = forward.registry()
-    reg.setdefault("challengers", []).append({"sport": sport, "sha": art["sha"], "path": str(path.name),
-                                              "fitted_at": art["fitted_at"], "promoted": False})
-    (forward.ART_DIR / "registry.json").write_text(json.dumps(reg, indent=1, sort_keys=True), encoding="utf-8")
+    rp = config.DATA_DIR / "model" / "challengers" / "registry_runtime.json"
+    reg = json.loads(rp.read_text(encoding="utf-8")) if rp.exists() else {"challengers": []}
+    reg["challengers"].append({"sport": sport, "sha": art["sha"], "path": str(path.name),
+                               "fitted_at": art["fitted_at"], "promoted": False,
+                               "note": "challenger only: the champion is the committed artifact; promotion needs the "
+                                       "registered gate + the owner release process"})
+    rp.write_text(json.dumps(reg, indent=1, sort_keys=True), encoding="utf-8")
     return {"challenger": art["sha"], "path": str(path)}
 
 

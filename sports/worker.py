@@ -328,12 +328,20 @@ def _ingest_oddsapi(con, lg, observed_at):
         key = config.odds_api_key()
         events = net.get_json(f"{oddsapi.BASE}/sports/{sport}/events", params={"apiKey": key})
         b = adapters.Batch()
+        from .books import ledger                       # credit budget shared with sports/books (free tier 500/mo)
+        mk = oddsapi.CORE.get(lg["family"], [])
+        partial = False
         for ev in sorted(events, key=lambda e: e.get("commence_time") or "")[:16]:
+            ok, why = ledger.reserve("oddsapi", len(mk), "worker ingest")
+            if not ok:
+                b.q("offer", "oddsapi", ev.get("id"), f"credit_budget: {why}")
+                partial = True                          # a partial read never marks unseen offers removed
+                break
             body = net.get_json(f"{oddsapi.BASE}/sports/{sport}/events/{ev['id']}/odds",
                                 params={"apiKey": key, "regions": "us", "oddsFormat": "decimal",
                                         "markets": ",".join(oddsapi.CORE.get(lg["family"], []))})
             b.extend(adapters.oddsapi_offers(body, lg, observed_at))
-        return _store_offers(con, "oddsapi", lg["key"], b, observed_at, True)
+        return _store_offers(con, "oddsapi", lg["key"], b, observed_at, not partial)
     except (net.HttpError, ValueError, KeyError) as e:
         return {"ok": False, "error": str(e).replace(config.odds_api_key() or "\0", "***")[:200]}
 

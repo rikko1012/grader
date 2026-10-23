@@ -85,7 +85,9 @@ def _team_upcoming(tg, league, as_of, up_keys, upcoming):
     return concat(tg, up).sort("team", "ts")
 
 
-def nba_frame(con, h_min=5, h_rate=20, upcoming=None, as_of=None):
+def nba_frame(con, h_min=5, h_rate=20, upcoming=None, as_of=None, absences=None):
+    """absences: {(game_id, team): [player_id, ...] | None} for UPCOMING games - the players the injury report lists
+    as Out (forward source: ESPN injury report in the store). None / missing = no report -> unknown (NaN)."""
     pg = Frame.from_sql(con, "SELECT p.*, g.start_utc, g.season, g.season_type, g.spread_home, g.total_line "
                              "FROM nba_pg p JOIN games g ON g.league='nba' AND g.game_id = p.game_id "
                              "WHERE g.status = 'final'")
@@ -103,9 +105,7 @@ def nba_frame(con, h_min=5, h_rate=20, upcoming=None, as_of=None):
     tg["pace"] = poss * 48 / min48
     tg["pace_l10"] = roll_prior(tg["pace"], tgs, 10, 3)
     tg["rest_days"] = (tg["ts"] - gshift(tg["ts"], tgs, 1)) / 86400
-    absent = _team_absence(pg, tg, tgs)
-    if up_keys:                         # this game's absences are unknown until the injury report (never "nobody")
-        absent = np.where(np.isin(tg["game_id"], [k[0] for k in up_keys]), np.nan, absent)
+    absent = _team_absence(pg, tg, tgs, absences or {}, {k[0] for k in up_keys})
     tg["absent_share"] = absent
     tg["absent_share_lag"] = gshift(absent, tgs, 1)
     tkey = key_of(tg["game_id"], tg["team"])
@@ -166,9 +166,11 @@ def nba_frame(con, h_min=5, h_rate=20, upcoming=None, as_of=None):
     return df
 
 
-def _team_absence(pg, tg, tgs):
+def _team_absence(pg, tg, tgs, absences=None, up_games=()):
     """Share (EW minutes / 240) of rotation players (prior EW min >= 20, played within the team's last 3 games) who
-    did not play the team's game (did-not-play row or missing from the box)."""
+    did not play the team's game (did-not-play row or missing from the box). For an UPCOMING game the absentees are
+    the injury report's Out players (absences); without a report the value is unknown (NaN), never "nobody"."""
+    absences = absences or {}
     rows = {}
     for i in range(len(pg)):
         rows.setdefault((pg["game_id"][i], pg["team"][i]), []).append(i)
@@ -188,8 +190,13 @@ def _team_absence(pg, tg, tgs):
                 ew[pid] = e
             if pg["played"][i] == 1:
                 played_now.add(pid)
-        miss = [p for p, last in last_played.items() if k - last <= 3 and ew.get(p, 0) >= 20 and p not in played_now]
-        out[j] = sum(ew[p] for p in miss) / 240.0
+        rot = [p for p, last in last_played.items() if k - last <= 3 and ew.get(p, 0) >= 20]
+        gid = tg["game_id"][j]
+        if gid in up_games:
+            outs = absences.get((gid, team))
+            out[j] = np.nan if outs is None else sum(ew[p] for p in rot if p in set(outs)) / 240.0
+        else:
+            out[j] = sum(ew[p] for p in rot if p not in played_now) / 240.0
         for p in played_now:
             last_played[p] = k
         k += 1
