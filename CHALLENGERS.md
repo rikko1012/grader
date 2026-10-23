@@ -55,8 +55,7 @@ stake; grader.py and every file in the model_version hash are unchanged.
   would be a new registration with its own clock. Production since the deploy offered only Maps 1-2 lines, so 0 forecasts are
   eligible (1,998 / 1,998 through id 83453, 2026-10-23 16:56 UTC); the implementation matches the registration (no change).
 - **AMENDMENT 2026-10-23 (cands-amend-1; research/cs2_accuracy_2y/AMENDMENT_2026-10-23.md; research commit b937869, 2026-10-23
-  17:00:47 UTC, BEFORE any eligible forward rm-1 / th-1 outcome existed - 0 eligible of 1,998 forward forecasts; effective in the report from deploy <COORDINATOR: deploy
-  time / commit>).** (A2) Decision level: the family is 2 candidates x 3 looks = 6 primary tests, one-sided family-wise alpha
+  17:00:47 UTC, BEFORE any eligible forward rm-1 / th-1 outcome existed - 0 eligible of 1,998 forward forecasts; effective in the report from deploy 2026-10-23 17:27:27 UTC (push) / live by 17:29 UTC, main 02ca430).** (A2) Decision level: the family is 2 candidates x 3 looks = 6 primary tests, one-sided family-wise alpha
   0.025 split by Bonferroni, so each look's primary test is one-sided at 0.025 / 6 = 0.0041667: the lower bound (the
   floor(alpha B)-th order statistic, i.e. the lower end of a two-sided 99.17% percentile interval) of the match-clustered
   bootstrap (B = 4,000, seed 20261023) of the unit-weighted paired log-loss gain vs the logged live chance must be > 0. The

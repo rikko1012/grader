@@ -3,7 +3,7 @@
 **Made 2026-10-23, drafted from 16:54:15 UTC, recorded by the research commit that adds this file (branch
 research/cs2-accuracy-2y; `git log -- research/cs2_accuracy_2y/AMENDMENT_2026-10-23.md` gives the exact time) and implemented on
 branch close2/contracts (learning.py `CANDS_AMENDMENT`, effective in the production report from deploy
-<COORDINATOR: deploy time UTC / main commit>).**
+2026-10-23 17:27:27 UTC (push) / live by 17:29 UTC, main 02ca430).**
 
 **It was made BEFORE any eligible forward outcome existed or was examined.** Production check (bounded keyset reads of
 `/admin/forecasts_page.json`, pages of 500, cutoff id 83425): every forecast logged since the shadow deploy (ids 81456..83425,

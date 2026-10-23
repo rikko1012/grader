@@ -202,7 +202,7 @@ combination would be a new registration). Live grading is untouched; every resul
 Made 2026-10-23 from 16:54 UTC (this commit), before any eligible forward rm-1 / th-1 outcome existed or was examined (production:
 1,970 / 1,970 forecasts since the deploy `eligible: false`, all Maps 1-2 lines; ids 81456..83425). The section "Frozen candidate
 definitions rm-1 / th-1" above is kept verbatim; its "Forward confirmation" bullet carries an [Amended] marker. Full text:
-AMENDMENT_2026-10-23.md. Effective in the production report from deploy <COORDINATOR: deploy time UTC / main commit>.
+AMENDMENT_2026-10-23.md. Effective in the production report from deploy 2026-10-23 17:27:27 UTC (push) / live by 17:29 UTC, main 02ca430.
 - A1 scope (no change): deployment scope = the gate-passing cells only (rm-1 kills Map 1, kills Maps 1-3, HS Map 1; th-1 kills
   Map 1 < 150 weighted rounds), on perf-2 / perf-2-bo3 grades. Maps 1-2 was evaluated in development and failed; it is not
   registered. Implementation = registration (no eligibility change).
