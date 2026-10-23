@@ -753,7 +753,7 @@ def card_identity(res, v, prop=None, scope=None, line=None, book=None):
     out = dict(v)
     if not out.get("kept_from_board"):
         out["graded_model"] = picklog.MODEL_VERSION if out.get("side") else None
-    mid = None
+    mid, hit = None, None
     try:
         mid = _card_match_id(res)
     except Exception:
@@ -774,8 +774,13 @@ def card_identity(res, v, prop=None, scope=None, line=None, book=None):
                     mid = hit["match_id"]
                     break
     except Exception:
-        pass
+        hit = None
     out["match_id"] = mid
+    try:                                    # the slip lock rule (slip_builder.lock_time): the earlier of the exact board
+        from slip_builder import lock_iso  # row's platform start (when a board lists this offer) and the graded match's
+        out["lock_at"] = lock_iso({"start": (hit or {}).get("start"), "match_start": (res.get("next_match") or {}).get("start")})
+    except Exception:
+        out["lock_at"] = None
     return out
 
 
@@ -1043,10 +1048,14 @@ def board_payload(book="underdog"):
     b = prizepicks.board() if book == "prizepicks" else underdog.board()
     now = datetime.now(timezone.utc)
     rows = []
+    from slip_builder import lock_time, lock_iso
     for r in b["rows"]:
         if _started(r.get("start"), now):
             continue                                  # started on its own platform's listed start (compared as times)
         g = BOARD.get(r["id"]) or {}
+        lk = lock_time({"start": r.get("start"), "match_start": g.get("match_start")})
+        if lk is not None and lk <= now:
+            continue                                  # the slip lock rule: the earlier of that start and the graded match's
         if not g.get("side"):
             continue                                  # not graded yet: never shown
         if g.get("graded_line") is not None and (r.get("line") is None or float(g["graded_line"]) != float(r["line"])):
@@ -1059,8 +1068,10 @@ def board_payload(book="underdog"):
                                                      "graded_line", "graded_model", "player_id", "event", "bo", "maps_known",
                                                      "dstat", "source", "support", "concern", "tonight", "hltv_retry",
                                                      "retry_cause", "cap_grade", "warn", "graded_sides",
-                                                     "model_grade", "stake_reason", "available", "display_version")}))
+                                                     "model_grade", "stake_reason", "available", "display_version",
+                                                     "match_start")}))
         rows[-1]["scope"] = r.get("scope") or "12"
+        rows[-1]["lock_at"] = lock_iso(rows[-1])      # one lock time for board, card, slip, Studio and the server recheck
         x = rows[-1]
         if x.get("model_grade") is None and x.get("side"):     # a row graded before display gd-1 (until its next regrade)
             x.update(grade_display.annotate_saved(x))
@@ -1290,6 +1301,26 @@ def feed_less_available(name, prop, scope, line, line_type="standard", book=None
     return None
 
 
+LOCKED_NOTE = "Match started / locked"
+
+
+def slip_lock(check, *starts, now=None):
+    """A comparison.line_check answer under the ONE slip lock rule (slip_builder.lock_time): the earliest of the leg's
+    own start, the graded match's start, the leg's saved lock and the platform's CURRENT listed start of the matched rows
+    (a match rescheduled earlier). Past it, a verified / changed line is 'unavailable' - 'Match started / locked' - never
+    a copyable line. Adds lock_at (the client keeps it on the leg). Identity is untouched."""
+    from slip_builder import _ts
+    now = now or datetime.now(timezone.utc)
+    ts = [t for t in (_ts(x) for x in list(starts) + [r.get("start") for r in (check or {}).get("rows") or []]) if t is not None]
+    out = dict(check or {})
+    lk = min(ts) if ts else None
+    out["lock_at"] = lk.isoformat(timespec="seconds") if lk else None
+    if lk is not None and lk <= now and out.get("status") in ("verified", "changed", "stale"):
+        out.update(status="unavailable", note=LOCKED_NOTE, rows=[])
+        out.pop("new_line", None)
+    return out
+
+
 def slip_leg_problem(leg):
     """Server-side check of one copied slip leg against the platform feed NOW (2026-10-18 owner: a side that is not
     offered or not confirmed is never accepted - also from a slip saved earlier). -> None when the exact line is listed
@@ -1312,9 +1343,10 @@ def slip_leg_problem(leg):
                                           book=bk, odds_type=lt, side=side)
         except Exception:
             continue
+        check = slip_lock(check, leg.get("start"), leg.get("match_start"), leg.get("lock_at"))
         if check["status"] == "verified":
             return None
-        if check["status"] not in ("changed", "unavailable") or check.get("rows"):
+        if check["status"] not in ("changed", "unavailable") or check.get("rows") or check.get("note") == LOCKED_NOTE:
             problems.append(check.get("note") or check["status"])
     if problems:
         return f"{leg.get('nick')} {side} {line}: " + "; ".join(problems)
@@ -3609,11 +3641,13 @@ class Handler(BaseHTTPRequestHandler):
                 book = "prizepicks" if q.get("book") == "prizepicks" else "underdog"
                 try:
                     ub = prizepicks.board() if book == "prizepicks" else underdog.board()
-                    return self.send(200, comparison.line_check(ub, q.get("player", ""), q.get("prop", "kills"), q.get("maps", "12"),
-                                                                q.get("line"), q.get("team"), q.get("start"), pid=q.get("pid") or None,
-                                                                id_map=ud_id_map(ub["rows"]) if book == "underdog" else {},
-                                                                book=book, odds_type=q.get("lt") or "standard",
-                                                                side=q.get("side") or None, opponent=q.get("opponent") or None))
+                    lc_ = comparison.line_check(ub, q.get("player", ""), q.get("prop", "kills"), q.get("maps", "12"),
+                                                q.get("line"), q.get("team"), q.get("start"), pid=q.get("pid") or None,
+                                                id_map=ud_id_map(ub["rows"]) if book == "underdog" else {},
+                                                book=book, odds_type=q.get("lt") or "standard",
+                                                side=q.get("side") or None, opponent=q.get("opponent") or None)
+                    # the slip lock rule (earlier of the platform's current start and the graded match's)
+                    return self.send(200, slip_lock(lc_, q.get("start"), (q.get("ms") or "")[:40] or None, (q.get("lk") or "")[:40] or None))
                 except Exception:
                     return self.send(200, comparison.line_check(None, "", "", "", failed=True, book=book))
             if u.path == "/api/grade":
@@ -4766,6 +4800,9 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 return self.send(400, {"error": "bad slip"})
             problems = [x for x in (slip_leg_problem(l) for l in d["legs"]) if x]
+            books_ = {l.get("book") for l in d["legs"] if l.get("book")}
+            if len(books_) > 1 or (books_ and d.get("book") in ("underdog", "prizepicks") and books_ != {d.get("book")}):
+                problems.append("one platform per slip - these legs are on " + ", ".join(sorted(map(str, books_))))
             if problems:                               # rejected on the server too: nothing logged as a valid copy
                 return self.send(409, {"error": "slip_has_unavailable_legs", "legs": problems})
             try:

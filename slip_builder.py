@@ -171,6 +171,26 @@ def _ts(s):
         return None
 
 
+# ONE lock rule for every slip surface (closeout slipsem 2026-10-23; the same rule in web/index.html lockOf and in
+# server.board_payload / card_identity / slip_lock): a line locks at the EARLIER of its platform's listed start (the row's
+# / leg's "start") and the graded match's own start (BO3.gg / HLTV next_match.start: a board row's / Studio leg's
+# "match_start"); "lock_at" is a value one of them already computed. Production 2026-10-23 16:05 UTC: Underdog listed 6 of
+# 16 matches 10 min after the graded start (17:10 vs 17:00) - the board kept those lines up and a typed card locked 10 min
+# earlier than the same line from the board. Identity never comes from a start: match_id / match_slug / settle_slug decide.
+LOCK_KEYS = ("start", "match_start", "lock_at")
+
+
+def lock_time(r):
+    """The earliest known lock time of a row / leg (aware datetime), or None when it carries no start at all."""
+    ts = [t for t in (_ts((r or {}).get(k)) for k in LOCK_KEYS) if t is not None]
+    return min(ts) if ts else None
+
+
+def lock_iso(r):
+    t = lock_time(r)
+    return t.isoformat(timespec="seconds") if t else None
+
+
 def is_moneyline(r):
     return str(r.get("prop") or "").lower() in MONEYLINE or str(r.get("market_type") or "").lower() == "moneyline"
 
@@ -249,10 +269,9 @@ def why_excluded(r, st, model, now):
             return "stat not selected"
         if st["scope"] != "all" and (r.get("scope") or "12") != st["scope"]:
             return "maps not selected"
-    t = _ts(r.get("start"))
-    if t is None:
+    if _ts(r.get("start")) is None:
         return "no start time"
-    if t <= now:
+    if lock_time(r) <= now:                           # the earlier of the platform's start and the graded match's
         return "started / locked"
     if not r.get("side") or r.get("p") is None or r.get("state") == "SCOUT":
         return "not graded / scout"
@@ -321,6 +340,8 @@ def pick_record(r):
             # never settles (2026-10-21 bug: History 'waiting' for ever, and the whole shadow batch with it)
             "match_slug": r.get("match_slug") or r.get("settle_slug"),
             "start": r.get("start"), "event": r.get("event"),
+            # the lock rule's inputs (lock_time): the graded match's own start and the computed lock (display / checks only)
+            "match_start": r.get("match_start"), "lock_at": lock_iso(r),
             "prop": "moneyline" if mt == "moneyline" else r.get("prop"), "scope": r.get("scope") or "12",
             "line": r.get("line"), "side": r.get("side"), "book": r.get("book") or "underdog", "market_type": mt,
             "grade": r.get("grade"), "p": r.get("p"), "model_outcomes": r.get("model_outcomes"),
@@ -1133,8 +1154,11 @@ def verify_before_copy(slip, boards, now=None, model=None, settings=None):
         else:
             graded, feed = b.get("graded"), _feed_board(b.get("feed") or b.get("graded"))
         lc_status = None
-        t = _ts(l.get("start"))
-        if t is None or t <= now:
+        cur0 = next((r for r in (graded or {}).get("rows") or [] if r.get("id") == l.get("row_id")
+                     and (r.get("book") or "underdog") == (l.get("book") or "underdog")), None)
+        # the lock rule on the leg as built AND on its current row (a match rescheduled earlier locks at the new start)
+        t = min([x for x in (lock_time(l), lock_time(cur0)) if x is not None], default=None)
+        if _ts(l.get("start")) is None or t is None or t <= now:
             ch.append(f"{lab}: match started / locked")
         if l.get("market_type") != "moneyline":
             gr = (graded or {}).get("rows") or []

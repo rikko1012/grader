@@ -11,7 +11,7 @@ from tests.test_slip_builder import M, NOW, _boards, board, private_db, row  # n
 def test_whole_number_push_is_not_an_all_win_chance():
     leg = lambda line: {"side": "More", "line": line, "p": .55 / .95, "model_outcomes": {"over": .55, "under": .40, "push": .05}}
     full = summary([leg(14), leg(13)])
-    assert full["all_hit"] == pytest.approx(.3025) and full["all_hit_basis"] == "model_unconditional"   # .55 x .55
+    assert full["all_hit"] == pytest.approx(.3025) and full["all_hit_basis"] == "shown_chance"   # (.55/.95 x .95) x 2 (closeout slipsem)
     old = summary([{k: v for k, v in leg(14).items() if k != "model_outcomes"}] * 2)                   # an older record
     assert old["all_hit"] == pytest.approx(.335180, abs=1e-6) and old["all_hit_basis"] == "conditional_no_push"
     half = {"side": "Less", "line": 20.5, "p": .6, "model_outcomes": {"over": .4, "under": .6, "push": 0.0}}

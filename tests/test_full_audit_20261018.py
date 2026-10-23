@@ -69,7 +69,7 @@ def test_invalid_actual_total_never_becomes_a_win_or_loss(bad):
 def test_slip_all_win_is_not_a_no_push_probability_and_zero_stays_zero():
     legs = [{"side": "More", "p": .6, "line": 10, "model_outcomes": {"over": .54, "under": .36, "push": .1}}] * 2
     out = summary(legs)
-    assert out["all_hit"] == .2916 and out["all_hit_basis"] == "model_unconditional"
+    assert out["all_hit"] == pytest.approx(.2916) and out["all_hit_basis"] == "shown_chance"   # (.6 x .9) x 2 (closeout slipsem)
     old = summary([{k: v for k, v in l.items() if k != "model_outcomes"} for l in legs])
     assert old["all_hit"] == .36 and old["all_hit_basis"] == "conditional_no_push"
     assert summary([{"p": 0, "line": 10.5}])["all_hit"] == 0
@@ -79,7 +79,8 @@ def test_builder_revalidates_raw_outcomes_even_when_displayed_chance_does_not_ch
     monkeypatch.setattr(sb, "DB_PATH", tmp_path / "slips.db")
     rows = board(2, per_match=1, model_outcomes={"over": .54, "under": .36, "push": .1}, line=30, graded_line=30)
     slip = sb.build(rows, {"sizes": [2], "count": 1}, now=NOW, model=M)["slips"][2][0]
-    assert slip["all_hit"] == .2916 and slip["builder_version"] == "studio-4"
+    # closeout slipsem: each leg's shown chance x its no-push chance (.9)
+    assert slip["all_hit"] == pytest.approx(slip["legs"][0]["p"] * slip["legs"][1]["p"] * .81, abs=1e-6) and slip["builder_version"] == "studio-4"
     assert sb.verify_before_copy(slip, _boards(rows, NOW.timestamp()), now=NOW, model=M)["ok"]
     rows[0] = dict(rows[0], model_outcomes={"over": .51, "under": .34, "push": .15})
     assert not sb.verify_before_copy(slip, _boards(rows, NOW.timestamp()), now=NOW, model=M)["ok"]
