@@ -1,0 +1,146 @@
+"""Corrections 2026-10-23, item 3: SIGNED projection errors on the real P1 lines.
+
+For every P1 unit (data/p1_units.json, production learning export at 2026-10-23T04:29:55Z; pushes already excluded by P1):
+    actual - projection,  projection - line,  actual - line      (projection = the saved lam of the unit's P1 forecast;
+                                                                   kills: the kills mean; HS: the HS mean)
+by stat (kills / HS), scope (Map 1 / Maps 1-2 / Maps 1-3), model version tag, favoured side (logged p > 0.5 Over, < 0.5 Under,
+exactly 0.5 = tie, no side) and - pre-cutoff only, via the ED-1 join - projection source (perf-2 / perf-cm2 / perf-2-bo3).
+Match-grouped percentile bootstrap 95% (B = 2,000, seed 20261023; the group's distinct matches are resampled).
+
+Two sets, never pooled:
+  DEVELOPMENT  matches starting before 2026-10-22 00:00 UTC (2,692 units / 155 m) - inspected by earlier studies.
+  CONFIRMATION matches starting at/after 2026-10-22 00:00 UTC (230 units / 15 m, all f663af8917) - descriptive only.
+
+Reads JSON / csv.gz only (never .pkl); contacts nothing.
+usage: python signed_bias.py <scratchpad>/cs2acc  -> results/signed_bias.json, results/signed_bias.md
+"""
+import json
+import os
+import sys
+
+import numpy as np
+import pandas as pd
+
+B, SEED = 2000, 20261023
+CUT = "2026-10-22"
+SCOPE = {"1": "Map 1", "12": "Maps 1-2", "123": "Maps 1-3"}
+METRICS = [("a_p", "actual - projection"), ("p_l", "projection - line"), ("a_l", "actual - line")]
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def load(S):
+    r = pd.DataFrame(json.load(open(os.path.join(S, "data", "p1_units.json")))["rows"])
+    r["scope"] = r.scope.astype(str)
+    r["a_p"] = r.actual - r.lam
+    r["p_l"] = r.lam - r.line
+    r["a_l"] = r.actual - r.line
+    r["side"] = np.where(r.p > 0.5, "Over-favoured", np.where(r.p < 0.5, "Under-favoured", "tie at 50%"))
+    r["set"] = np.where(r.start < CUT, "development", "confirmation")
+    e = pd.read_csv(os.path.join(S, "ed1", "p1.csv.gz"), usecols=["forecast_id", "prop", "scope", "lam", "source"])
+    e["scope"] = e.scope.astype(str)
+    m = r.merge(e.rename(columns={"lam": "lam_ed1"}), on=["forecast_id", "prop", "scope"], how="left")
+    assert len(m) == len(r)
+    dev = m[m.set == "development"]
+    chk = {"dev_units": int(len(dev)), "dev_joined_to_ed1": int(dev.lam_ed1.notna().sum()),
+           "dev_lam_mismatch_vs_ed1": int((abs(dev.lam - dev.lam_ed1) > 1e-9).sum()),
+           "confirmation_units": int((m.set == "confirmation").sum())}
+    m["source"] = m.source.fillna("(not joined)")
+    return m, chk
+
+
+def boot_group(g, rng):
+    """means + match-grouped percentile 95% CIs for the three signed metrics on one group."""
+    codes, uniq = pd.factorize(g.match)
+    k = len(uniq)
+    cnt = np.bincount(codes, minlength=k).astype(float)
+    sums = {c: np.bincount(codes, weights=g[c].values, minlength=k) for c, _ in METRICS}
+    W = rng.multinomial(k, np.full(k, 1.0 / k), size=B).astype(float)          # B x k match weights
+    den = W @ cnt
+    out = {"units": int(len(g)), "matches": int(k), "over_rate": round(float(g.over.mean()), 4)}
+    for c, _ in METRICS:
+        pt = float(g[c].mean())
+        bs = (W @ sums[c]) / den
+        lo, hi = np.percentile(bs, [2.5, 97.5])
+        out[c] = {"mean": round(pt, 3), "lo": round(float(lo), 3), "hi": round(float(hi), 3),
+                  "excludes_0": bool(lo > 0 or hi < 0)}
+    return out
+
+
+def table(d, keys, rng, min_matches=1):
+    rows = []
+    for kv, g in d.groupby(keys, sort=True):
+        kv = kv if isinstance(kv, tuple) else (kv,)
+        if g.match.nunique() < min_matches:
+            continue
+        rows.append(dict(zip(keys, kv), **boot_group(g, rng)))
+    return rows
+
+
+def fmt(x, m):
+    if m < 2:
+        return f"{x['mean']:+.2f} (1 match, no interval)"
+    s = f"{x['mean']:+.2f} [{x['lo']:+.2f}, {x['hi']:+.2f}]"
+    return f"**{s}**" if x["excludes_0"] and m >= 10 else s
+
+
+def md(rows, keys, title, note=""):
+    lab = {"prop": "stat", "scope": "scope", "version": "version tag", "side": "favoured side", "source": "projection source"}
+    h = [lab[k] for k in keys] + ["units / matches", "over rate"] + [n for _, n in METRICS]
+    L = [f"### {title}", ""] + ([note, ""] if note else [])
+    L += ["| " + " | ".join(h) + " |", "|" + "---|" * len(h)]
+    for r in rows:
+        cells = [SCOPE.get(r[k], r[k]) if k == "scope" else ("HS" if r[k] == "hs" else r[k]) for k in keys]
+        small = " (< 10 m)" if r["matches"] < 10 else ""
+        cells += [f"{r['units']} / {r['matches']}{small}", f"{100 * r['over_rate']:.1f}%"] + [fmt(r[c], r['matches']) for c, _ in METRICS]
+        L.append("| " + " | ".join(cells) + " |")
+    return "\n".join(L) + "\n"
+
+
+def main(S):
+    d, chk = load(S)
+    rng = np.random.default_rng(SEED)
+    res = {"checks": chk, "B": B, "seed": SEED, "cutoff": CUT, "sets": {}}
+    out_md = ["# Signed projection errors on real P1 lines (Corrections 2026-10-23, item 3)", "",
+              "Generated by `corrections/signed_bias.py` from `data/p1_units.json` (2026-10-23T04:29:55Z export; pushes excluded "
+              "by P1). Projection = the saved `lam` of the unit's P1 forecast. Match-grouped percentile bootstrap 95% (B = 2,000, "
+              "seed 20261023). **Bold** = interval excludes 0 AND the cell has >= 10 distinct matches (nominal 95%, no multiplicity "
+              "correction; cells with < 10 matches are shown unbolded, 1-match cells get no interval). projection - line split by "
+              "favoured side is signed BY CONSTRUCTION (the side is chosen from it) - read the side split on actual - projection "
+              "and actual - line. Checks: " + json.dumps(chk), ""]
+    specs = [(["prop", "scope"], "by stat x scope"),
+             (["prop", "scope", "side"], "by stat x scope x favoured side"),
+             (["prop", "scope", "version"], "by stat x scope x model version tag"),
+             (["prop", "scope", "version", "side"], "by stat x scope x version tag x favoured side"),
+             (["prop", "scope", "source"], "by stat x scope x projection source (ED-1 join)")]
+    for st in ("development", "confirmation"):
+        dd = d[d.set == st]
+        res["sets"][st] = {"units": int(len(dd)), "matches": int(dd.match.nunique()), "tables": {}}
+        out_md.append(f"## {st.upper()} set ({'start < 2026-10-22 00:00 UTC' if st == 'development' else 'start >= 2026-10-22 00:00 UTC - confirmation data, DESCRIPTIVE ONLY, no inference'}): "
+                      f"{len(dd)} units / {dd.match.nunique()} matches\n")
+        for keys, title in specs:
+            if st == "confirmation" and ("version" in keys or "source" in keys):
+                continue          # one tag (f663af8917) only
+            rows = table(dd, keys, rng)
+            res["sets"][st]["tables"][title] = rows
+            out_md.append(md(rows, keys, title))
+        summ = {}
+        out_md.append(f"**Summary ({st}): cells with >= 10 distinct matches whose interval excludes 0** (projection - line "
+                      "by side is excluded from the count: signed by construction)\n")
+        for c, name in METRICS:
+            cells = [(t, r) for t, v in res["sets"][st]["tables"].items() for r in v
+                     if r["matches"] >= 10 and not (c == "p_l" and "side" in r)]
+            ex = [t.replace("by ", "") + ": " + " / ".join(str(r[k]) for k in ("prop", "scope", "version", "side", "source") if k in r)
+                  + f" {r[c]['mean']:+.2f} [{r[c]['lo']:+.2f}, {r[c]['hi']:+.2f}] ({r['units']} u / {r['matches']} m)"
+                  for t, r in cells if r[c]["excludes_0"]]
+            summ[c] = {"cells_ge_10_matches": len(cells), "excluding_0": ex}
+            out_md.append(f"- **{name}**: {len(ex)} of {len(cells)} cells" + (":\n  - " + "\n  - ".join(ex) if ex else ""))
+        res["sets"][st]["summary"] = summ
+        out_md.append("")
+    os.makedirs(os.path.join(HERE, "results"), exist_ok=True)
+    json.dump(res, open(os.path.join(HERE, "results", "signed_bias.json"), "w"), indent=1)
+    open(os.path.join(HERE, "results", "signed_bias.md"), "w", encoding="utf-8").write("\n".join(out_md))
+    print(json.dumps(chk))
+
+
+if __name__ == "__main__":
+    main(sys.argv[1])

@@ -27,8 +27,64 @@ Scripts are in `under_trace/`:
 
 The generated tables are in `under_trace/out/`.
 
+## Corrections 2026-10-23 (owner review)
+
+The owner found overstated conclusions in this file. The original text is kept unchanged; each overstated sentence is prefixed
+**[Superseded 2026-10-23: Cn]** and is replaced by item Cn here. No original number was changed. New computations:
+`corrections/signed_bias.py` -> `corrections/results/signed_bias.md` / `.json`.
+
+**C3. Similar Over / Under hit rates (and "symmetric" overconfidence) do not establish that there is no directional projection
+bias.** A signed bias can coexist with equal hit rates on both sides (for example when it is offset by where the lines sit, or
+when it is concentrated in one scope, tag or side). Measured directly now, on the same P1 units (data/p1_units.json,
+2026-10-23T04:29:55Z; pushes excluded), split into the DEVELOPMENT set (start < 2026-10-22 00:00 UTC, 2,692 u / 155 m) and the
+CONFIRMATION set (start >= 2026-10-22, 230 u / 15 m, descriptive only). Note: section 3 below pooled both sets (1,355 kills Maps
+1-2 lines / 151 m); the table here separates them. Projection = the unit's saved lam; match-grouped 95% bootstrap, B = 2,000.
+
+| set | stat / scope | units / m | actual - projection | projection - line | actual - line |
+|---|---|---|---|---|---|
+| development | kills Map 1 | 150 / 19 | -0.81 [-2.04, +0.59] | +0.20 [-0.00, +0.39] | -0.61 [-1.74, +0.70] |
+| development | kills Maps 1-2 | 1,233 / 136 | +0.07 [-0.70, +0.92] | +0.13 [-0.03, +0.30] | +0.20 [-0.57, +1.04] |
+| development | HS Map 1 | 127 / 19 | -0.13 [-0.75, +0.43] | **+0.17 [+0.03, +0.31]** | +0.04 [-0.51, +0.54] |
+| development | HS Maps 1-2 | 1,142 / 136 | -0.03 [-0.46, +0.42] | **+0.16 [+0.08, +0.24]** | +0.13 [-0.31, +0.58] |
+| development | Maps 1-3 kills / HS | 20 / 2 each | +3.08 / +0.97 | -0.88 / -0.45 | +2.20 / +0.53 (2 m: no inference) |
+| confirmation | kills Maps 1-2 | 127 / 15 | **+3.76 [+0.45, +7.01]** | -0.34 [-0.65, +0.06] | **+3.42 [+0.14, +6.67]** |
+| confirmation | HS Maps 1-2 | 103 / 14 | +1.62 [-0.44, +3.68] | -0.19 [-0.46, +0.13] | +1.43 [-0.62, +3.51] |
+
+By favoured side (development; logged p > 0.5 = Over-favoured), actual - projection: kills Map 1 Over **-1.84 [-3.55, -0.13]**
+(82 u / 17 m), Under +0.45 [-0.81, +1.87]; kills Maps 1-2 Over -0.69 [-1.69, +0.47] (612 u / 125 m), Under +0.83 [-0.12, +1.84]
+(618 u / 120 m); HS Maps 1-2 Over -0.51 [-1.16, +0.21], Under +0.35 [-0.09, +0.79]. On every Map 1 / Maps 1-2 cell the
+projection overshoots in the direction of the favoured side (Over-favoured too high, Under-favoured too low); individually only
+kills Map 1 Over-favoured is significant. By version tag (cells >= 10 m): kills Maps 1-2 9cfcbd217a Under-favoured **+1.88
+[+0.11, +3.69]** (152 u / 26 m: those Under-favoured projections were too low); HS Maps 1-2 a310d76b55 Over-favoured **-1.29
+[-2.48, -0.06]** (33 u / 10 m); projection - line for 6f6e2d39d7 kills Maps 1-2 **+0.58 [+0.10, +1.07]** and HS **+0.43 [+0.13,
++0.72]** (16 m). 3 of 48 actual - projection cells with >= 10 matches exclude 0 at nominal 95% (~2.4 expected by chance; the
+cells overlap). By projection source: perf-2-bo3 kills Map 1 -7.17 (13 u / 4 m) and HS Map 1 -5.15 (6 u / 2 m) are large
+negatives on very few matches (consistent with AU-1 / ED-1 on the BO3.gg fallback route).
+
+What the data shows: (i) no significant signed actual - projection error at the stat x scope level in development, with
+intervals of about +-0.8 kills (Maps 1-2) and +-1.3 kills (Map 1) - a bias of that size is not excluded; (ii) HS projections sat
+significantly above the lines (+0.16 / +0.17 HS) while HS outcomes did not (actual - line +0.13 / +0.04, n.s.); (iii) within
+sides the signed errors point toward the line (selection on projection error; significant for kills Map 1 Over-favoured and in
+two version-tag cells); (iv) the confirmation slate (f663af8917, Oct 22) had a significant positive kills error (+3.76) -
+descriptive only, an overtime-heavy slate. "No systematic below-line projection", "not systematically low", "symmetric",
+"not an Under-direction bias" below are superseded by (i)-(iv).
+
+**C4. "Lines sit above the players' history" describes the disagreement; it does not show our projections are right.** The
+measured fact is: on the Oct 15 / Oct 22 / Oct 23 slates, the players' raw-history baseline minus the line was lower than usual
+(+0.16 kills Oct 22, -0.27 Oct 23, about +0.6 normally), and the prior and opponent steps then moved projections further below
+those lines. Which side was closer is answered only by settled outcomes: for the Oct 22 slate (confirmation set, 127 kills
+Maps 1-2 u / 15 m) actual - line +3.42 [+0.14, +6.67] and actual - projection +3.76 [+0.45, +7.01], i.e. the outcomes landed
+above both, closer to the lines than to the projections (descriptive; OT-heavy). The Oct 23 board has no settled outcomes in
+this data. The prior-shrink and opponent step-out tests (section 4) measure whether each step reduces error on the HLTV
+replays; they do not validate the projection-vs-line disagreement on a particular slate.
+
+**C1 (as in ERROR_BREAKDOWN.md C1). "OT is not predictable before the match"** is replaced by: no tested pre-match proxy (pair
+prior OT frequency terciles over 365 days, market closeness, cm-2 Elo gap; 129 Maps 1-2 matches, realized OT series 27.9% /
+34.9% / 25.6% by tercile, intervals about +-13 pts) separated OT-prone matches; Codex CX-A (prior OT / close-map frequency) moved
+rounds MAE by +0.0099 [+0.0034, +0.0159] rounds. Untested inputs are not covered.
+
 ## Answer in one paragraph
-**Over the whole P1 period, projections are not systematically below the real lines.**
+**[Superseded 2026-10-23: C3]** **Over the whole P1 period, projections are not systematically below the real lines.**
 
 | Line type | mean(projection − line) | mean(actual − line) |
 |---|---|---|
@@ -40,7 +96,7 @@ The Under share of graded (55%+) picks has two different patterns:
 - **HS: a mild Under lean, 59.1% [53.6, 64.4].** It comes mostly from the right-skewed HS distribution, which outcomes confirm
   (see G).
 
-**The concentration you see on the board is day- and slate-driven.** On Oct 15, Oct 22 and the current Oct 23 board, the lines
+**The concentration you see on the board is day- and slate-driven.** **[Superseded 2026-10-23: C4]** On Oct 15, Oct 22 and the current Oct 23 board, the lines
 sit at or above what the players actually average. The model's raw-history baseline minus the line was +0.16 kills on Oct 22
 and −0.27 on Oct 23, against about +0.6 normally. The two steps that always lower projections then push those lines to Under:
 - the prior shrink, −0.49 kills on average;
@@ -49,7 +105,7 @@ and −0.27 on Oct 23, against about +0.6 normally. The two steps that always lo
 Both steps are **justified by outcomes**. Removing either one makes the error worse, with intervals excluding zero on the
 rounds-normalised actual.
 
-**Unders did not win at their printed rate, and neither did Overs.** The overconfidence is about the same on both sides:
+**Unders did not win at their printed rate, and neither did Overs.** **[Superseded 2026-10-23: C3]** The overconfidence is about the same on both sides:
 
 | Graded picks | Under: won vs printed | Over: won vs printed |
 |---|---|---|
@@ -91,7 +147,7 @@ tested. **No implementation bug was found in the projection path.** Every step r
   - cm-2 +0.13;
   - projection − line −0.72.
 - **HS, perf-cm2: graded Under share is 91%** (55 graded lines). Projection − line is −0.33.
-- Today's lines sit above the listed players' own raw history. That is the main reason, and it is a property of the slate, not
+- **[Superseded 2026-10-23: C4]** Today's lines sit above the listed players' own raw history. That is the main reason, and it is a property of the slate, not
   of a model step.
 
 ## 2. The calculation, step by step (decomposition across ALL eligible lines)
@@ -117,7 +173,7 @@ perf-2, with R = 21.74 × maps:
 | **graded Unders**, kills Maps 1-2 | perf-cm2 | 107/32 | **−0.41** | −0.59 | +0.16 | −0.65 | −0.18 | 0 | −1.67 |
 | **graded Unders**, HS Maps 1-2 | perf-2 | 315/111 | **−0.57** | −0.24 | +0.08 | −0.21 | 0 | 0 | −0.93 |
 
-**For graded Unders, about half the gap is the line itself** (the line is above his raw history). The other half is the prior
+**For graded Unders, about half the gap is the line itself** **[Superseded 2026-10-23: C4]** (the line is above his raw history). The other half is the prior
 shrink plus the opponent factor. All CIs and the Map 1, Maps 1-3 and bo3 rows are in `out/report.md`.
 
 **cm-2** (597 of 597 lines recompute λ to 1e-6). At the training mean, exp(intercept) is 28.50 kills. On the P1 lines:
@@ -156,7 +212,7 @@ shrink plus the opponent factor. All CIs and the Map 1, Maps 1-3 and bo3 rows ar
 | HS Maps 1-2 | 1238/150 | +0.13 [+0.06, +0.21] | +0.25 [−0.17, +0.71] | +0.12 [−0.30, +0.58] | 49.1% |
 | Maps 1-3 (both stats) | 20+20/2 | −0.88 / −0.45 | +2.20 / +0.53 | +3.08 / +0.97 | 2 matches only |
 
-- **The lines are not above actual outcomes on average.** Unders are therefore not favoured by the lines, and the projection is
+- **[Superseded 2026-10-23: C3]** **The lines are not above actual outcomes on average.** Unders are therefore not favoured by the lines, and the projection is
   not systematically low.
 - **f663af8917 (Oct 22)** had projection − line −0.35 against actual − line **+3.36** kills. Its 15 matches ran +5.4 rounds above
   R, with 8 overtime series.
@@ -167,7 +223,7 @@ part:
   [−0.32, +1.38].
 - Graded Unders: rate part **+0.85 [+0.15, +1.63]**. Graded Overs: **−1.09 [−1.71, −0.45]**.
 
-**This is selection on projection error, and it is symmetric.** When the model departs from the line, part of the departure is
+**[Superseded 2026-10-23: C3]** **This is selection on projection error, and it is symmetric.** When the model departs from the line, part of the departure is
 its own noise. The line carries information. This explains the overconfidence on both sides. It is not an Under-direction bias.
 
 **Printed vs won** (graded; full bands in `out/report.md` section 4):
@@ -293,7 +349,7 @@ Notes for the record (not bugs in the P1 window):
   - Both teams' prior OT frequency (365 days, terciles): realised OT series 27.9% / 34.9% / 25.6%. Printed vs observed Over
     within 4 points in each tercile.
   - Market closeness and the cm-2 Elo gap do no better.
-- **OT is not foreseeable from these proxies.** Codex's round study found the same: prior OT and close-map frequency did not
+- **[Superseded 2026-10-23: C1]** **OT is not foreseeable from these proxies.** Codex's round study found the same: prior OT and close-map frequency did not
   beat the baseline.
 
 **(c) How many Under losses OT explains.**
@@ -312,11 +368,11 @@ come in OT series, and whole slates move together (Oct 22: +5.4 rounds). It is n
 from the pre-match information tested. The distribution already carries the average OT mass.
 
 ## What this means (diagnostic; no change proposed to live grading)
-- **Direction.** Unders are concentrated on HS (skew, justified) and on slates whose lines sit above the players' history (Oct
+- **Direction.** **[Superseded 2026-10-23: C3, C4]** Unders are concentrated on HS (skew, justified) and on slates whose lines sit above the players' history (Oct
   15, 22 and 23). The prior and opponent steps add to that and both pass step-out tests. **None of this is a bug, and there is
   no systematic below-line projection.**
 - **Confidence.** Picks more than about 1 kill from the line are overconfident on both sides, by about 8-10 points for kills and
   4-5 for HS. That is the open accuracy problem. Following the grades-accuracy rule, the fix belongs in a tested challenger, not
   in lowering percentages.
-- **Correlated risk.** Same-slate Unders share overtime risk (the owner's Oct 6 concern). Since OT is not predictable before the
+- **Correlated risk.** Same-slate Unders share overtime risk (the owner's Oct 6 concern). **[Superseded 2026-10-23: C1]** Since OT is not predictable before the
   match, the lever is exposure (slip / slate concentration), not the projection.

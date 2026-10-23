@@ -5,11 +5,53 @@ looked at by earlier studies, so nothing here is a holdout result. Live grading 
 machine-readable output is in `candidates/results/` (`report.json`, `tables.md` = every table, `params_<fold>.json`). All
 intervals are match-grouped bootstrap 95% (B = 2,000; subgroups B = 1,000) unless marked Bonferroni (99.58%, 12 cells).
 
+## Corrections 2026-10-23 (owner review)
+
+The original text is kept unchanged; overstated sentences are prefixed **[Superseded 2026-10-23: C5]**. No number was changed.
+Script: `corrections/power_rm1.py` -> `corrections/results/power_rm1.md` / `.json`.
+
+**C5. Current real-line results for rm-1 are INCONCLUSIVE, and "a forward pass looks / is unlikely" is withdrawn** (it was not
+backed by a power analysis). Development real-line effect: all 2,692 units / 155 m **+0.0004 [-0.0024, +0.0030]**; the
+registered cells (kills Map 1, kills Maps 1-3, HS Map 1) **+0.0029 [-0.0073, +0.0125]** (297 u / 21 m). Both intervals contain 0
+and also contain effects the forward rule could detect; the data neither support nor rule out a real-line gain. (The power script's own
+bootstrap, another seed, gives [-0.0021, +0.0030] and [-0.0068, +0.0123] for the same points.)
+
+Power of the registered forward rule (primary test only: paired log-loss gain, 95% match-grouped interval > 0; Brier /
+calibration guards not modelled, so these are UPPER bounds on P(pass)). Per-match sd of the linearised paired log-loss
+difference from the development real lines: sigma_m 0.0169 (90% range 0.0152-0.0186) on all units (17.4 u per match);
+0.0237 (0.0147-0.0297, only 21 matches) on the registered cells (14.1 u per match). SE at a look = sigma_m / sqrt(M).
+Normal approximation, checked by Monte Carlo (400 simulated looks, bootstrap B = 500 each; agreement within 0.03).
+
+| true effect (nats per unit) | registered cells: P(pass) at 300 / 600 / 1,000 m | all-units population: 300 / 600 / 1,000 m |
+|---|---|---|
+| -0.0020 | 0.000 / 0.000 / 0.000 | 0.000 / 0.000 / 0.000 |
+| 0 (no effect) | 0.025 / 0.025 / 0.025 | 0.025 / 0.025 / 0.025 |
+| +0.0004 (development point, all units) | 0.048 / 0.061 / 0.077 | **0.061 / 0.084 / 0.113** |
+| +0.0010 | 0.109 / 0.177 / 0.266 | 0.175 / 0.305 / 0.464 |
+| +0.0029 (development point, registered cells) | **0.563 / 0.850 / 0.972** | 0.844 / 0.988 / 1.000 |
+| +0.0050 | 0.955 / 0.999 / 1.000 | 0.999 / 1.000 / 1.000 |
+| +0.0100 | 1.000 / 1.000 / 1.000 | 1.000 / 1.000 / 1.000 |
+
+- Smallest true effect with 80% power: registered cells +0.0038 / +0.0027 / +0.0021 at 300 / 600 / 1,000 m; all units +0.0027 /
+  +0.0019 / +0.0015.
+- If the true effect equals the all-units development point (+0.0004), P(pass) is 6% / 8% / 11% (about 13,400 matches would be
+  needed for 80%). If it equals the registered-cell point (+0.0029), P(pass) is 56% / 85% / 97% (80% at about 526 matches;
+  with sigma_m at its 90% range, 39-93% at 300 m). The two points differ because they are different populations; the forward
+  rule tests the registered cells (learning.CANDS_REVIEW `cells`).
+- Under the stricter 98.33% level used by the general REVIEW_RULE (3-look Bonferroni), the registered-cell figures at +0.0029
+  are 0.392 / 0.727 / 0.930 (the frozen CANDS_RULE says 95%).
+- Calendar: only 21 of 155 development matches (14%, 11 days) had a unit in the registered cells, so reaching 300 eligible
+  matches would take months at that rate (an observation about the development period, not a forecast of the feed).
+
+Statement for the record: **current real-line evidence on rm-1 is inconclusive; the probability of a forward pass depends on the
+unknown true effect and is about 2.5% if rm-1 has no real-line effect, rising to about 56% (300 m) / 85% (600 m) / 97% (1,000 m)
+if the registered-cell development point is the true effect.**
+
 ## 0. Decisions
 
 | candidate | cells that pass the registered gate G1-G5 | HLTV effect (pooled, nats per player-series) | real-line effect on the passing cells | decision |
 |---|---|---|---|---|
-| **rm-1** rounds mixture | **kills Map 1, kills Maps 1-3, HS Map 1** | kills Map 1 **+0.0423 [+0.0271, +0.0625]** (14,664 m); kills Maps 1-3 **+0.0166 [+0.0147, +0.0187]** (5,408 m); HS Map 1 **+0.0077 [+0.0069, +0.0085]** (14,664 m); every fold > 0 | **+0.0029 [-0.0073, +0.0125]** log loss (297 units / 21 m): no measurable change on real lines | **PASS (dev) -> shadow for those 3 cells.** Maps 1-2 kills fails G3 (real-line point -0.0002, 1,233 u / 136 m); HS Maps 1-2 and HS Maps 1-3 fail G4 (thin history < 50 rounds significantly worse; HS Maps 1-3 Under-side calibration worse) |
+| **rm-1** rounds mixture | **kills Map 1, kills Maps 1-3, HS Map 1** | kills Map 1 **+0.0423 [+0.0271, +0.0625]** (14,664 m); kills Maps 1-3 **+0.0166 [+0.0147, +0.0187]** (5,408 m); HS Map 1 **+0.0077 [+0.0069, +0.0085]** (14,664 m); every fold > 0 | **+0.0029 [-0.0073, +0.0125]** log loss (297 units / 21 m): **[Superseded 2026-10-23: C5 - inconclusive]** no measurable change on real lines | **PASS (dev) -> shadow for those 3 cells.** Maps 1-2 kills fails G3 (real-line point -0.0002, 1,233 u / 136 m); HS Maps 1-2 and HS Maps 1-3 fail G4 (thin history < 50 rounds significantly worse; HS Maps 1-3 Under-side calibration worse) |
 | **th-1** thin / fallback | **kills Map 1 only** (perf-2 bands D0 < 50, D1 50-150 weighted rounds) | kills Map 1 cohort **+0.0309 [+0.0257, +0.0361]** (12,974 rows / 3,894 m), every fold > 0 | **+0.0682 [+0.0305, +0.0976]** (only **10 units / 5 m**) | **PASS (dev) -> shadow for that cell.** Every other cell fails G1 (one fold's interval crosses 0, mostly F2 2025-Q4) although their pooled gains are positive |
 
 What the gains are made of:
@@ -141,7 +183,7 @@ matches at a look; at ~10 Map 1 thin units per 5 matches in 11 days of P1, that 
 so th-1 stays a shadow and is reported as "not enough forward evidence".
 
 Expectation stated now (so it cannot be re-read later): rm-1's real-line effect in development is ~0 (interval +-0.01 on 297
-units); a forward pass at 300 matches is unlikely unless Map 1 / Maps 1-3 lines become common. Its value is the corrected
+units); **[Superseded 2026-10-23: C5]** a forward pass at 300 matches is unlikely unless Map 1 / Maps 1-3 lines become common. Its value is the corrected
 distribution shape (calibration near the projection, PIT, tails) - which the forward rule does not reward by itself.
 
 ## 5. Reproduce / resume
