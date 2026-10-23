@@ -1,5 +1,16 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
+## Shadow logging: rm-1 / th-1 (CS2 model tag unchanged: `aa6696d5d6`), 2026-10-23 - shadow only, no model change
+
+rm-1 (rounds-mixture distribution: live mean, kills mixed over a pre-match rounds + overtime distribution; logged for kills Map 1,
+kills Maps 1-3, HS Map 1) and th-1 (thin-history level + spread correction, kills Map 1, < 150 weighted rounds), frozen
+2026-10-23 07:45 UTC (cands_shadow.py, constants sha 3d00b8c8...). Logged in forecasts.shadow.cands; live grades byte-identical.
+Development (research/cs2_accuracy_2y/CANDIDATES.md): rm-1 beats live HLTV-wide in every fold (kills Map 1 +0.0423 nats) but shows
+no measurable real-line gain (+0.0004 [-0.0024, +0.0030], 2,692 units); it shifts picks toward Unders as a by-product (not a
+promotion reason). Forward rule (CHALLENGERS.md): reviews at 300 / 600 / 1000 distinct forward matches from this deploy; promotion
+only with a forward real-line log-loss gain interval > 0, Brier and favoured-side calibration not worse, coverage identical; the
+owner decides. No refit or constant change without a new version.
+
 ## Night release 2026-10-23 (CS2 model tag unchanged: `aa6696d5d6`; operational + identity repairs, no model change)
 
 Owner-authorized consolidated release. Replay harness: 257 recent production forecasts (tag aa6696d5d6; perf-cm2 kills/HS,
