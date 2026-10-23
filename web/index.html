@@ -607,6 +607,7 @@ body.ot-lol .intro {margin:0 0 24px}.ot-lol .intro h2 {font:700 34px var(--displ
 .ot-lol tr.row:hover {background:#1d2b3f}.ot-lol .mcard {padding:17px;background:linear-gradient(130deg,#1b293b,#111b28);border-radius:14px;border-color:#35475e}
 .ot-lol .sheet {background:#121d2b;border-color:#42566e;padding:24px;border-radius:18px}
 .ot-lol .panel {background:#142031;border-color:#33465d;border-radius:14px}
+.ysel {margin-top:6px;padding:4px 8px;border:1px solid currentColor;border-radius:6px;display:inline-block}
 .ot-push {display:block;color:#e3c88e;font-size:11px;margin-top:3px}
 @media(min-width:1180px) {body.hasslip:not(.locked) .wrap {margin-left:208px}}
 @media(max-width:1150px) and (min-width:761px) {
@@ -955,6 +956,10 @@ const KCAP = 0.78;
 const isCapped = (p, prop, cap) => prop !== "hs" && p != null && Math.abs(+p - (cap ?? KCAP)) < 0.0005;   // exactly at the cap
 const capTip = cap => `Kills chances are capped at ${((cap ?? KCAP) * 100).toFixed(1)}% – big kill totals swing more than any model expects, so the grade never uses a higher kills chance.`;
 const chance = (p, prop, cap) => p == null ? "–" : isCapped(p, prop, cap) ? `<span class="capd" title="${esc(capTip(cap))}">${pct(p)} (capped)</span>` : pct(p);
+// night/consistency 2026-10-23: one probability everywhere - on a whole-number line every chance shown (card, board row,
+// match table, Matchroom, slip leg) is P(side | no push); each surface says so with the same tag (the card already did)
+const pushTag = (line, mo) => line != null && +line % 1 === 0 && mo && +mo.push > 0
+  ? ` <span class="muted small pushtag" title="Exactly ${esc(line)} is a push (no action). This chance leaves pushes out; push ${pct(+mo.push)}.">excl. push</span>` : "";
 // Busy moments (hundreds of members at once): a refused connection or a "busy" answer from the
 // host is retried automatically (1 s, 2 s, 4 s) - members never see it.
 // ---------- members only (Sign in with Whop - paid product). Off until the server enables it.
@@ -1130,7 +1135,10 @@ $("#f").onsubmit = async e => {
     if (!live()) return;
     if (r.status === 401 && d.error === "members_only") { st.hidden = true; $("#out").innerHTML = ""; return showGate(d); }   // session ended
     if (!r.ok) { const er = new Error(d.error || "Something went wrong"); er.sugg = d.suggestions; throw er; }
-    st.hidden = true; if (ctx?.book) d.book = ctx.book; render(d); remember(d);
+    st.hidden = true; if (ctx?.book) d.book = ctx.book;
+    if (ctx?.side === "More" || ctx?.side === "Less") d.asked_side = ctx.side;   // the side of the offer the member opened
+    if (ctx?.book && ctx?.start) d.line_start = ctx.start;                        // that platform's listed start (slip lock)
+    render(d); remember(d);
   } catch (err) {
     if (!live()) return;
     if (pre) $("#out").innerHTML = "";
@@ -1291,7 +1299,7 @@ function navStep(d) {
   clearTimeout(NAV.t);
   NAV.t = setTimeout(() => { if ($("#cardpop").hidden || NAV.i !== i) return;
     instant = {key: reqKey(p, l, t, lt, sc), html: instantHtml(row)};
-    gradeNow(p, l, t, lt, sc, true, {team: row.team, opponent: row.opponent, book: row.book || "underdog", start: row.start}, i); }, 600);
+    gradeNow(p, l, t, lt, sc, true, {team: row.team, opponent: row.opponent, book: row.book || "underdog", start: row.start, side: row.side || null}, i); }, 600);
 }
 $("#popbar").addEventListener("click", e => { const b = e.target.closest("[data-nav]"); if (b && !b.disabled) navStep(+b.dataset.nav); });
 document.addEventListener("keydown", e => {
@@ -1539,7 +1547,11 @@ showExamples(); const _sr = showRecent; showRecent = () => { _sr(); showExamples
 // the match a leg / board row belongs to: its slug, else the two team names normalised the SAME way for a leg (legFrom) and
 // a row (2026-10-21 slips audit 7: the leg was normalised with '|' and the row raw with '/', so "On slip" never showed)
 const evNorm = (a, b) => [a || "", b || ""].map(y => String(y).toLowerCase().replace(/[^a-z0-9]/g, "")).sort().join("|");
-const slipEvent = x => [x.m || x.match_slug || evNorm(x.tm || x.team_name || x.team, x.vs || x.opp_name || x.opponent),
+// night/consistency 2026-10-23: the canonical match id (matchid.py: the board row's match_id, the card's verdict.match_id,
+// a Studio leg's match_id) decides when the pick carries one - the same match read "k27|virtuspro" from the board, the
+// card and "hltv-2399849" from a Studio leg, and a card's BO3.gg start (22:00) differed from the platform's (13:00), so one
+// pick was two picks on the slip and teammates in one match were not paired
+const slipEvent = x => (x.mid || x.match_id) ? "id:" + (x.mid || x.match_id) : [x.m || x.match_slug || evNorm(x.tm || x.team_name || x.team, x.vs || x.opp_name || x.opponent),
   x.st || x.start ? new Date(x.st || x.start).getTime() : ""].join("@");
 // a leg whose match start has passed: the platform has locked the line (2026-10-21 slips audit 3)
 const legStarted = (x, now) => { const t = Date.parse((x && (x.st || x.start)) || ""); return !isNaN(t) && t <= (now || Date.now()); };
@@ -1592,8 +1604,9 @@ function legFrom(d, extra) {
   const g = d.grade || {}, v = d.verdict || {}, pb = d.player_block || {};
   return Object.assign({bk: d.book || null, p: pb.player?.nick, pid: pb.player?.id || "", l: g.line, t: g.prop, lt: g.line_type, sc: g.scope || "12", s: v.side, g: mGrade(v), sr: v.stake_reason || "", pc: v.p, u: v.units,
     model_outcomes: g.probs_raw ? {...g.probs_raw} : null,
-    m: d.next_match?.slug || evNorm(pb.current_team, d.next_match?.opponent), rid: d.row_id || "",
-    vs: d.next_match?.opponent || "", tm: pb.playing_for || pb.current_team || "", st: d.next_match?.start || "",
+    m: d.next_match?.slug || evNorm(pb.current_team, d.next_match?.opponent), rid: d.row_id || "", mid: v.match_id || "",
+    // the platform's own listed start when the card was opened from its line (it locks the line then), else the match's
+    vs: d.next_match?.opponent || "", tm: pb.playing_for || pb.current_team || "", st: d.line_start || d.next_match?.start || "",
     kg: v.kept_from_board || v.stale ? (v.graded_at || "saved") : "",     // a saved grade kept during an outage: never verified
     orig: {line: g.line, side: v.side, p: v.p, grade: v.grade, units: v.units, at: Date.now()}}, extra || {});
 }
@@ -1636,7 +1649,7 @@ async function addToSlip(d) {
       ${row(g.line + " (yours)", v.side, v.p, mGrade(v), v.units)}${n && nv.side ? row(c.new_line + " (now)", nv.side, nv.p, mGrade(nv), nv.units) : `<tr><td>${c.new_line} (now)</td><td colspan="4" class="muted">being graded – try again in a few minutes</td></tr>`}</tbody></table>`,
       // 2026-10-21 slips audit 3: a board line that moved is never kept as "your own line" (it could be copied unmarked)
       [...(n && nv.side ? [{k: "new", label: `Use ${sideTxt(nv.side)} ${c.new_line}`, primary: true}] : []), ...(d.from === "board" ? [] : [{k: "keep", label: `Keep ${g.line} as your own line`}]), {k: "cancel", label: "Cancel"}]);
-    if (k === "new") { const nl = legFrom(n); nl.bk = used; nl.rid = leg.rid; nl.now = {status: "verified", note: "", at: Date.now()}; nl.replaced = {line: g.line, side: v.side, p: v.p, grade: v.grade, units: v.units}; return pushLeg(nl); }
+    if (k === "new") { const nl = legFrom(n); nl.bk = used; nl.rid = leg.rid; nl.st = leg.st || nl.st; nl.mid = nl.mid || leg.mid; nl.now = {status: "verified", note: "", at: Date.now()}; nl.replaced = {line: g.line, side: v.side, p: v.p, grade: v.grade, units: v.units}; return pushLeg(nl); }
     if (k !== "keep") return;
     leg.bk = null; leg.mv = 1; leg.now = {status: "research", note: `Kept at ${g.line}; ${bookName(used)} shows ${c.new_line}`, at: Date.now()};
   } else if (c.status === "unavailable" && d.from === "board") {
@@ -1723,7 +1736,7 @@ function swapBest0(s) {
 const rowLabel = r => `${r.nick || r.player} ${sideTxt(r.side)} ${r.line} ${propWord(r.prop)}${mapsWord(r.scope || "12")}`;
 function legRow(x, i, pins) {
   const st = x.now?.status === "started" || legStarted(x), lean = isLeanV({grade: x.g});
-  const meta = [lean ? "Lean" : esc(x.g) + (x.u != null && !(+x.u > 0) ? " · 0U" + (x.sr ? " — " + esc(x.sr) : "") : ""), chance(x.pc || 0, x.t),
+  const meta = [lean ? "Lean" : esc(x.g) + (x.u != null && !(+x.u > 0) ? " · 0U" + (x.sr ? " — " + esc(x.sr) : "") : ""), chance(x.pc || 0, x.t) + pushTag(x.l, x.model_outcomes),
                 x.vs ? "vs " + esc(x.vs) : "", st ? "" : legStartTxt(x)].filter(Boolean).join(" · ");
   return `<div class="leg${st ? " started" : ""}"><span><b>${esc(x.p)}</b> ${lean ? `Lean ${sideTxt(x.s)}` : sideTxt(x.s)} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${ltTag(x.lt)}${legState(x, i)}
       <span class="lmeta muted small">${meta}</span></span>
@@ -2099,7 +2112,7 @@ const bslipKey = r => r.id ? `id|${r.book || "underdog"}|${r.id}`
   : [r.nick || r.player, r.line, r.prop, r.scope || "12", mktType(r), r.book || "underdog", r.match_slug || r.start || ""].join("|");
 function boardCard(r) {     // a board row in the shape addToSlip / pickLine expect
   return {book: r.book || "underdog", grade: {line: r.line, prop: r.prop, line_type: gradeType(r), scope: r.scope || "12", probs_raw: r.model_outcomes},
-          verdict: {side: r.side, grade: r.grade, model_grade: r.model_grade, stake_reason: r.stake_reason, p: r.p, units: r.units,
+          verdict: {side: r.side, grade: r.grade, model_grade: r.model_grade, stake_reason: r.stake_reason, p: r.p, units: r.units, match_id: r.match_id || null,
                     kept_from_board: !!r.hltv_retry, stale: !!r.hltv_retry, graded_at: r.graded_at,
                     side_unavailable: r.unavailable || null},
           player_block: {player: {nick: r.nick || r.player, id: r.player_id}, current_team: r.team_name || r.team},
@@ -2304,7 +2317,7 @@ function drawBoard() {
     const sideW = r.side === "Less" ? "Under" : "Over";
     const pick = gone ? `<span class="pill bad" title="${esc(bookName(r.book || "underdog"))} does not offer the ${sideW} for this line any more - not a bet, not on slips; its last grade is kept for the record">${esc(gone)}</span> <span class="muted">${sideW} ${r.line}</span>`
       : !r.side ? `<span class="muted">grading…</span>`
-      : `${esc(sideWord(r))}${r.p != null ? ` <b>${chance(r.p, r.prop)}</b>${coinFlip(r.p)}` : ""}${l10Chip(r)}`;
+      : `${esc(sideWord(r))}${r.p != null ? ` <b>${chance(r.p, r.prop)}</b>${pushTag(r.line, r.model_outcomes)}${coinFlip(r.p)}` : ""}${l10Chip(r)}`;
     const stake = gone || !r.side ? "" : `${isLeanV(r) ? (r.state === "SCOUT" ? "No match scheduled" : "Lean") : esc(mGrade(r) || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${zeroWhy(r)}${capChip(r, team)}`;
     const meta = [r.graded_at ? `graded ${agoTxt(r.graded_at)}` : "", r.alt && r.book !== "prizepicks" ? `alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : "",
 ].filter(Boolean).join(" · ");
@@ -2364,7 +2377,7 @@ function boardClick(e) {
   const cb = e.target.closest("[data-cmp]");
   if (cb) { const [bk, p, l, t, sc, lt] = cb.dataset.cmp.split("|");
     const row = BK[bk].rows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && (x.scope || "12") === sc && mktType(x) === lt);
-    return gradeNow(p, l, t, row ? gradeType(row) : lt, sc, true, row ? {team: row.team, opponent: row.opponent, book: bk, start: row.start} : {book: bk}); }
+    return gradeNow(p, l, t, row ? gradeType(row) : lt, sc, true, row ? {team: row.team, opponent: row.opponent, book: bk, start: row.start, side: row.side || null} : {book: bk}); }
   const wb = e.target.closest("[data-bwhy]");
   if (wb) { e.stopPropagation(); const el = wb.closest("[data-bl]"); if (!el) return;
     const k = el.dataset.bl, p = el.querySelector(".c-why"), open = !p || p.hidden;
@@ -2382,7 +2395,7 @@ function boardClick(e) {
   const r = e.target.closest("[data-bl]");
   if (r) { const [p, l, t, sc, lt] = r.dataset.bl.split("|"), row = rowOfBl(r.dataset.bl);
     if (row) instant = {key: reqKey(p, l, t, gradeType(row), sc), html: instantHtml(row)};
-    gradeNow(p, l, t, row ? gradeType(row) : (lt || "standard"), sc, true, row ? {team: row.team, opponent: row.opponent, book: row.book || "underdog", start: row.start} : null, NAV.order.indexOf(r.dataset.bl)); }
+    gradeNow(p, l, t, row ? gradeType(row) : (lt || "standard"), sc, true, row ? {team: row.team, opponent: row.opponent, book: row.book || "underdog", start: row.start, side: row.side || null} : null, NAV.order.indexOf(r.dataset.bl)); }
 }
 $("#boardout").addEventListener("click", boardClick);
 $("#ot-board-overview").addEventListener("click", boardClick);     // Top plays: the same card / slip actions as the rows
@@ -3141,7 +3154,7 @@ const studioFind = id => { const b = STUDIO.batch; return b ? [4, 3, 2].flatMap(
 // leg on the platform; a moved / pulled / started line is refused there exactly as from the board
 const studioCard = l => ({book: l.book || "underdog", row_id: l.row_id || "", from: "board",
   grade: {line: l.line, prop: l.prop, line_type: ["goblin", "demon"].includes(l.market_type) ? l.market_type : "standard", scope: l.scope || "12", probs_raw: l.model_outcomes || null},
-  verdict: {side: l.side, grade: l.grade, p: l.p, units: l.units},
+  verdict: {side: l.side, grade: l.grade, p: l.p, units: l.units, match_id: l.match_id || null},
   player_block: {player: {nick: l.nick || l.player, id: l.player_id}, current_team: l.team_name || l.team},
   next_match: {opponent: l.opp_name || l.opponent, start: l.start, slug: l.match_slug}});
 async function studioToMySlip(id) {
@@ -3419,11 +3432,16 @@ function render(d) {
   const sub = v.side ? `${ch(v.p)} ${pu != null ? `model estimate, excluding pushes · push ${pct(pu)}` : "model estimate"}${coinFlip(v.p)} · ${v.units}U${zeroWhy(v)}${capPill}${keptPill}${gonePill}${why ? `<div class="small muted" style="margin-top:4px">${esc(why)}</div>` : ""}`
     : gateStop || g.withheld ? "" : esc(v.reason || "");      // an outage card: the plain note below says it (owner 2026-10-16)
   const hc = g.status === "NO GRADE" || v.state === "SCOUT" || (g.withheld && !v.side) ? "g-scout" : gClass(mGrade(v));
+  // night/consistency 2026-10-23: the card opened from an offer (board row / match table / Matchroom) whose side differs
+  // from this card's graded pick says so in plain words - the side the member opened, with this card's own numbers for
+  // it, next to the graded pick (the headline, the slip button and every stake stay the graded pick's)
+  const ask_ = (d.asked_side === "More" || d.asked_side === "Less") && v.side && d.asked_side !== v.side && "p_more" in g && !g.withheld ? d.asked_side : null;
+  const ysel = ask_ ? `<div class="ysel small">Your side: ${sideTxt(ask_)} ${g.line} · ${ch(ask_ === "More" ? g.p_more : g.p_less)} · ${ask_ === "More" ? sideGrade(g.grade, g.units, v, "More") : sideGrade(g.grade_less, g.units_less, v, "Less")} <span class="muted">· Graded pick: <b>${sideTxt(v.side)} ${g.line}</b></span></div>` : "";
   h += `<section class="card herocard ${hc}"><div class="hero">
     <div class="badge ${hc}" title="${esc(!v.side ? "No grade" : v.state === "SCOUT" ? "No match scheduled – research only" : mGrade(v) === "LEAN" ? "Lean – 0 units" : "Grade " + mGrade(v) + (+v.units > 0 ? "" : " – 0 units"))}">${esc(!v.side || v.state === "SCOUT" ? "–" : mGrade(v) === "LEAN" ? "L" : (mGrade(v) || "L").slice(0, 2))}</div>
     <div><h3>${esc(head)}</h3>
       <div class="sub">${esc(pb.player?.nick || "")} · ${pb.standin_for ? `${esc(pb.current_team || "")} → <b>stand-in for ${esc(pb.standin_for)}</b>` : esc(pb.current_team || "")}${nm?.opponent ? ` vs ${esc(nm.opponent)}${nm.start ? ` · ${shortWhen(nm.start)}` : ""}` : ""} · ${g.line} ${stat}${mapsWord(g.scope) || " (Maps 1–2)"} · ${esc(g.line_type || "")} · <span class="muted">${esc(lineSource(d))}</span></div>${outageNote(d)}
-      <div class="sub">${sub}</div>
+      <div class="sub">${sub}</div>${ysel}
       ${gateStop ? `<span class="pill bad">${esc(g.reason || g.status)}</span>` : ""}
       ${g.form_fight ? `<span class="pill warn">FORM FIGHT – his last 10 at this line disagree · 0 units${perfGrade(g) ? "" : " (older model: chance halved)"}</span>` : ""}
       ${pb.standin_for ? `<span class="pill warn">STAND-IN for ${esc(pb.standin_for)} · max ${capOf(d, "standin", 1)}U</span>` : ""}
@@ -3439,8 +3457,8 @@ function render(d) {
   h += glance(d, g, v);
   if ("p_more" in g) {
     h += `<div class="sides">
-      <div class="side ${v.side === "More" ? "pick" : ""}"><div class="k">Over · ${sideGrade(g.grade, g.units, v, "More")}${zTag(g.grade, g.units)}</div><div class="v">${ch(g.p_more)}${pushOf(g) != null ? ` <span class="muted small">excl. pushes</span>` : ""}</div><div class="bar"><i style="width:${g.p_more*100}%"></i></div></div>
-      <div class="side ${v.side === "Less" ? "pick" : ""}"><div class="k">Under · ${sideGrade(g.grade_less, g.units_less, v, "Less")}${zTag(g.grade_less, g.units_less)}</div><div class="v">${ch(g.p_less)}${pushOf(g) != null ? ` <span class="muted small">excl. pushes · push ${pct(pushOf(g))}</span>` : ""}</div><div class="bar"><i style="width:${g.p_less*100}%"></i></div></div>
+      <div class="side ${v.side === "More" ? "pick" : ""}"><div class="k">Over · ${sideGrade(g.grade, g.units, v, "More")}${zTag(g.grade, g.units)}${ask_ === "More" ? " · your side" : ask_ && v.side === "More" ? " · graded pick" : ""}</div><div class="v">${ch(g.p_more)}${pushOf(g) != null ? ` <span class="muted small">excl. pushes</span>` : ""}</div><div class="bar"><i style="width:${g.p_more*100}%"></i></div></div>
+      <div class="side ${v.side === "Less" ? "pick" : ""}"><div class="k">Under · ${sideGrade(g.grade_less, g.units_less, v, "Less")}${zTag(g.grade_less, g.units_less)}${ask_ === "Less" ? " · your side" : ask_ && v.side === "Less" ? " · graded pick" : ""}</div><div class="v">${ch(g.p_less)}${pushOf(g) != null ? ` <span class="muted small">excl. pushes · push ${pct(pushOf(g))}</span>` : ""}</div><div class="bar"><i style="width:${g.p_less*100}%"></i></div></div>
     </div>
     ${Array.isArray(d.ladder) && d.ladder.length > 1 ? `<div class="ladder"><span class="small muted">Nearby lines:</span>${d.ladder.map(x =>
       `<button type="button" class="chipbtn ${x.line === g.line ? "on" : ""}" data-ladder="${x.line}" title="Grade this line">${x.line} <b class="${x.side === "More" ? "up" : "dn"}">${esc(sideWord({side: x.side, grade: mGrade(x)}))} ${ch(x.p)}</b>${isLeanV(x) || !mGrade(x) || String(mGrade(x)).startsWith("n/a") ? "" : " · " + esc(mGrade(x)) + (+x.units > 0 ? "" : " · 0U")}</button>`).join("")}</div>` : ""}
@@ -3812,7 +3830,7 @@ function drawMatchCompare() {
     const capped = c.units_full > c.units ? ` <span class="muted small">(capped from ${c.units_full}U)</span>` : "";
     return proj + `<td class="num">${c.line}</td><td><button type="button" class="mcpick" data-mc="${esc(e.nick)}|${c.line}|${pr}" title="${esc(mcWhy(c))}
 Tap to open ${esc(e.nick)}'s ${pr === "hs" ? "headshots" : "kills"} card">
-      <b>${esc(sideWord(c))}</b> ${chance(c.p || 0, pr)}${isLeanV(c) ? (c.state === "SCOUT" ? " · No match scheduled" : "") : " · " + esc(mGrade(c) || "–")} · ${+(+c.units || 0).toFixed(2)}U${zeroWhy(c)}${capped}</button></td>`;
+      <b>${esc(sideWord(c))}</b> ${chance(c.p || 0, pr)}${pushTag(c.line, c.model_outcomes)}${isLeanV(c) ? (c.state === "SCOUT" ? " · No match scheduled" : "") : " · " + esc(mGrade(c) || "–")} · ${+(+c.units || 0).toFixed(2)}U${zeroWhy(c)}${capped}</button></td>`;
   };
   const dcell = e => {
     const cs = props.map(pr => e[pr]).filter(Boolean), lined = cs.filter(c => c.line != null);
@@ -3845,7 +3863,7 @@ Tap to open ${esc(e.nick)}'s ${pr === "hs" ? "headshots" : "kills"} card">
   const allEmpty = j.teams.every(t => t.players.every(e => ["kills", "hs"].every(pr => (e[pr] || {}).line == null && (e[pr] || {}).proj == null)));
   const emptyNote = j.teams.flatMap(t => t.players.flatMap(e => ["kills", "hs"].map(pr => (e[pr] || {}).note))).find(Boolean) || "";
   const pickTxt = (e, pr) => { const c = e[pr] || {}, lab = pr === "hs" ? "HS" : "Kills";
-    if (shown(c) && !c.pending) return `<button type="button" class="mcpick" data-mc="${esc(e.nick)}|${c.line}|${pr}" title="${esc(mcWhy(c))}">${lab} ${c.line}: <b>${esc(sideWord(c))}</b> ${chance(c.p || 0, pr)}${isLeanV(c) ? "" : " · " + esc(mGrade(c) || "–")} · ${+(+c.units || 0).toFixed(2)}U${zeroWhy(c)}</button>`;
+    if (shown(c) && !c.pending) return `<button type="button" class="mcpick" data-mc="${esc(e.nick)}|${c.line}|${pr}" title="${esc(mcWhy(c))}">${lab} ${c.line}: <b>${esc(sideWord(c))}</b> ${chance(c.p || 0, pr)}${pushTag(c.line, c.model_outcomes)}${isLeanV(c) ? "" : " · " + esc(mGrade(c) || "–")} · ${+(+c.units || 0).toFixed(2)}U${zeroWhy(c)}</button>`;
     if (c.line != null) return `<span class="muted">${lab} ${c.line}: ${c.side && !c.pending ? "filtered" : "grading…"}</span>`;
     return `<span class="muted">${lab} ${c.proj != null ? `projection ${num(c.proj, 1)} · no line` : "– no projection"}</span>`; };
   const phoneList = j.teams.map(t => `<div class="mcteam"><b>${esc(t.team)}</b></div>` + [...t.players].sort((a, b) => MC.sort === "chance" ? best(b) - best(a) : a.nick.localeCompare(b.nick))
@@ -3868,7 +3886,7 @@ document.addEventListener("click", e => {
   if (pk && MC.data) {
     const [nick, line, prop] = pk.dataset.mc.split("|");
     const t = MC.data.teams.find(t => t.players.some(p => p.nick === nick)), c = t?.players.find(p => p.nick === nick)?.[prop] || {};
-    gradeNow(nick, line, prop, "standard", MC.scope, !$("#cardpop").hidden, {team: c.ud_team || t?.team, opponent: c.ud_opponent || null, book: MC.book, start: MC.data.match?.start || null});
+    gradeNow(nick, line, prop, "standard", MC.scope, !$("#cardpop").hidden, {team: c.ud_team || t?.team, opponent: c.ud_opponent || null, book: MC.book, start: MC.data.match?.start || null, side: c.side || null});
   }
 });
 // Matchroom reads the same board snapshot; all card requests still use gradeNow.
@@ -3893,7 +3911,7 @@ function otTopPlays(rows) {
     return `<div class="brow2 tplay" data-bl="${esc(bl)}" title="Open the full card">
       <span class="gtag ${gClass(g)}">${esc(g)}</span>
       <div class="tpbody"><div class="b2top"><b>${esc(nick)}</b> <span class="muted">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}</span></div>
-        <div class="b2pick">${esc(sideWord(r))} ${esc(r.line)} ${propWord(r.prop)}${mapsWord(r.scope)} · <b>${chance(r.p, r.prop)}</b>${l10Chip(r)}</div>
+        <div class="b2pick">${esc(sideWord(r))} ${esc(r.line)} ${propWord(r.prop)}${mapsWord(r.scope)} · <b>${chance(r.p, r.prop)}</b>${pushTag(r.line, r.model_outcomes)}${l10Chip(r)}</div>
         <div class="b2meta">${bookName(bk)}${mktTag(r)} · ${esc(g)} · ${+(+r.units).toFixed(2)}U${capChip(r, team)} · ${shortWhen(r.start)}</div>
         <button type="button" class="bslip ${on ? "on" : ""}" data-bslip="${esc(bslipKey(r))}">${on ? "On slip" : "+ Slip"}</button></div></div>`; };
   return `<section class="ot-featured" aria-label="Top plays"><div class="tphead"><b>Top plays</b><span class="small muted">Highest chance under these filters · one per player · bets only</span></div>
@@ -3926,7 +3944,7 @@ function otOpenDesk(key, opener) {
   });
   const offer = ({r,index}) => {
     const unavailable = sideGone(r);
-    const pick = unavailable ? `${esc(unavailable)}` : r.side ? `${esc(sideWord(r))} ${esc(r.line)} · ${chance(r.p,r.prop)}` : 'Being graded';
+    const pick = unavailable ? `${esc(unavailable)}` : r.side ? `${esc(sideWord(r))} ${esc(r.line)} · ${chance(r.p,r.prop)}${pushTag(r.line, r.model_outcomes)}` : 'Being graded';
     return `<button type="button" class="ot-offer" data-ot-card="${index}" aria-label="Open ${esc(r.nick || r.player)} ${esc(propWord(r.prop))} ${esc(r.line)} on ${esc(bookName(r.book || 'underdog'))}">
       <small>${esc(bookName(r.book || 'underdog'))} · ${esc(propWord(r.prop))} · ${esc(mktType(r))}</small>
       <span><b>Line ${esc(r.line)}</b> · Projection ${r.proj == null ? '—' : num(r.proj,1)}</span>
@@ -3952,7 +3970,7 @@ $('#ot-match-desk').addEventListener('click',e=>{
   const r=otDeskRows[Number(button.dataset.otCard)]; if (!r) return;
   otCloseDesk();
   gradeNow(r.nick || r.player,String(r.line),r.prop,gradeType(r),r.scope || '12',true,
-    {team:r.team,opponent:r.opponent,book:r.book || 'underdog',start:r.start});
+    {team:r.team,opponent:r.opponent,book:r.book || 'underdog',start:r.start,side:r.side || null});
 });
 $('#ot-match-desk').addEventListener('cancel',e=>{e.preventDefault();otCloseDesk();});
 

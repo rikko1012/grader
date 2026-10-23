@@ -629,7 +629,12 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12", book="
                         "source": r.get("source"), "state": r.get("state"), "ud_team": r.get("team"), "ud_opponent": r.get("opponent"),
                         "reason": r.get("reason"), "kept": bool(r.get("hltv_retry")), "retry_cause": r.get("retry_cause"),
                         "unavailable": r.get("unavailable"), "model_grade": r.get("model_grade"),   # display gd-1
-                        "stake_reason": r.get("stake_reason"), "available": r.get("available")}
+                        "stake_reason": r.get("stake_reason"), "available": r.get("available"),
+                        # night/consistency 2026-10-23: the row's push mass (the chance's denominator is shown the same way
+                        # as on the board / card) and its identity (model version, match id, row id, cap words)
+                        "model_outcomes": r.get("model_outcomes"), "graded_model": r.get("graded_model"),
+                        "match_id": r.get("match_id"), "row_id": r.get("id"), "cap_n": r.get("cap_n"),
+                        "cap_reason": r.get("cap_reason"), "player_id": r.get("player_id")}
     # offered but not graded yet (2026-10-11 audit: damyo's 31.5 showed 'No available line' while it was grading)
     try:                                            # the feed as already read (never a blocking first read here)
         feed = (prizepicks.board()["rows"] if book == "prizepicks" else
@@ -733,6 +738,45 @@ def _card_match_id(res):
         return _slug_mid(nm.get("slug"))
     return _row_match_id({"team_name": pb.get("playing_for") or pb.get("current_team"), "opp_name": nm.get("opponent"),
                           "start": nm.get("start"), "bo": nm.get("bo"), "event": nm.get("event")})
+
+
+def card_identity(res, v, prop=None, scope=None, line=None, book=None):
+    """The card verdict with the identity a board row carries (night/consistency 2026-10-23: the card sent no model version
+    or match id, so a card could not be shown to be the same grade as its board row / slip leg): graded_model = the
+    version that made THIS grade (a live card: the running model; an outage card keeps the board row's own); match_id =
+    the board row's own id when a board lists exactly this offer (same platform, player, stat, maps, line and match -
+    same_match), else the canonical id of the graded match (a platform's listed start can be hours from BO3.gg's, and a
+    match with no HLTV id hashes its start, so the card's own lookup could name another id than the row's). A new dict;
+    identity only, never a grade input. No network: the board snapshot is the 5 s single-flight copy."""
+    if not isinstance(v, dict):
+        return v
+    out = dict(v)
+    if not out.get("kept_from_board"):
+        out["graded_model"] = picklog.MODEL_VERSION if out.get("side") else None
+    mid = None
+    try:
+        mid = _card_match_id(res)
+    except Exception:
+        pass
+    try:
+        if prop and line is not None:
+            nick = (((res.get("player_block") or {}).get("player") or {}).get("nick") or "").lower()
+            nm = res.get("next_match") or {}
+            st, slug = comparison._ts(nm.get("start")), nm.get("slug")
+            books = (book,) if isinstance(book, str) else tuple(book or ("underdog", "prizepicks"))
+            rows = _bs_rows() if nick and (st or slug) else []
+            for bk in books:
+                hit = next((r for r in rows if (r.get("book") or "underdog") == bk and r.get("match_id")
+                            and str(r.get("nick") or r.get("player") or "").lower() == nick and r.get("prop") == prop
+                            and (r.get("scope") or "12") == (scope or "12") and float(r.get("line") or -1) == float(line)
+                            and same_match(r, slug, st, mid)), None)
+                if hit:
+                    mid = hit["match_id"]
+                    break
+    except Exception:
+        pass
+    out["match_id"] = mid
+    return out
 
 
 def _row_match_id(row):
@@ -1387,6 +1431,7 @@ def outage_verdict(res, prop, scope, line, v, book=None, line_type="standard"):
                             else bool((ds_ or [None])[0] in ("verify", "limited") or r.get("warn"))),
                 "kept_from_board": True, "stale": True, "unavailable": False, "temporary": False,
                 "graded_at": r.get("graded_at"), "kept_book": r.get("book") or "underdog",
+                "graded_model": r.get("graded_model"),     # the saved grade's own model version (night/consistency)
                 "kept_cause": r.get("retry_cause") if r.get("hltv_retry") else None,
                 "reason": f"{_outage_cause(res.get('grade'))} - this is the Prop Board's saved grade of this exact pick from "
                           f"{when} (stale, not a new forecast); regraded when live data is back"}
@@ -4629,6 +4674,8 @@ class Handler(BaseHTTPRequestHandler):
                                                                             dict(vv, unavailable=vv.get("side_unavailable"))))
                     if keep_sr:
                         vv["stake_reason"] = keep_sr
+                if isinstance(vv, dict):                 # identity of this grade (night/consistency 2026-10-23): the model
+                    vv = res["verdict"] = card_identity(res, vv, prop, scope, line, book)   # version + match id, as a board row
                 for x in res.get("ladder") or []:        # the ladder's own line = the card's verdict (same-match cap included)
                     if isinstance(vv, dict) and vv.get("side") and float(x.get("line") or -1) == float(line):
                         x.update(side=vv["side"], p=vv.get("p"), grade=vv.get("grade"), units=vv.get("units") or 0.0,
@@ -4641,7 +4688,8 @@ class Handler(BaseHTTPRequestHandler):
             if outage:                                   # no grade of its own: the board's saved grade of this exact pick
                 cs_ = _transient_causes(res.get("grade") or {})     # (stale) or data unavailable; temporary numbers withheld
                 try:
-                    res["verdict"] = outage_verdict(res, prop, scope, line, res["verdict"], book or ("underdog", "prizepicks"), lt)
+                    res["verdict"] = card_identity(res, outage_verdict(res, prop, scope, line, res["verdict"], book or ("underdog", "prizepicks"), lt),
+                                                   prop, scope, line, book)
                     res["hltv_outage"] = outage_info(res, cs_)
                 except Exception:                        # fail closed: never the temporary grade or its stake
                     traceback.print_exc()
