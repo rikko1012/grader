@@ -188,3 +188,36 @@ process - nothing auto-promotes.
   a level shift (seen in development: `postseason` "passed" on a tune partition with no postseason game); (b) a
   feature that is constant or has < 30 known values on the tune rows is recorded "not evaluable on tune" and cannot be
   kept. No locked-test row had been scored.
+- **A3 (2026-10-23, after the NFL tune-partition dry run of the scoring code, before any locked-test score):** interval
+  coverage of a DISCRETE forecast is measured with the randomised PIT (the expected share of [F(y-), F(y)] inside
+  the central band; exactly the nominal level for a calibrated forecast). The inclusive quantile interval
+  [q_(1-l)/2, q_(1+l)/2] over-covers by construction when atoms are large (receptions: 0.90 "80%" coverage on tune
+  for a forecast whose PIT is calibrated) - criterion 4 would have rejected every count market for a reason that is
+  not miscalibration. The inclusive-interval number is still reported (`cov80_inclusive_interval`). Criterion 4's
+  band [0.76, 0.84] is unchanged.
+
+## 10. Market candidates (owner decision 2026-10-23: every book is a primary source) - registered before any evaluation
+
+All forward only (no historical player-prop quotes exist). Implemented in `sports/model/market.py`; sources in
+`sports/books/`.
+- **mc-1 market-only consensus.** Quote eligibility per source: Kalshi = `sharp2.eligible_rung`; Polymarket =
+  two-sided YES quote, spread <= 0.05, liquidity > 0, observed before the start and <= 15 min before the forecast;
+  The Odds API (each book separately) = both sides at the same line, decimal odds > 1, de-vigged multiplicatively on
+  that exhaustive pair only, age from the book's last_update (else observed age) <= 15 min; Thunderpick and OddsPapi
+  excluded until their format is verified from a live answer. Only the same canonical event, player, stat, full-game
+  scope and ordinary variants (capabilities.compatible). Every source gives P(Over | no push) at its line (books
+  refund pushes); Polymarket resolves a non-playing player NO, so its midpoint is divided by (1 - d), d = the frozen
+  DNP share in `sports/model/artifacts/market_mc1.json` (NBA measured on ds-1 TRAIN rows; NFL 0, reason-coded).
+  Lines are translated with the foundation's dispersion.json shape (fair.at_line), never sm-1. Per source the quote
+  nearest the target line (ties: lower line). Combination: equal-weight mean of log-odds over sources (weights fixed
+  now; nothing estimated). 1 source = "single source", >= 2 = "consensus". The target's own platform is never a source
+  for it. Unconditional output with the shape's push mass at a whole target line.
+- **mkt-<source>**: the same rule with one source (each book evaluated on its own).
+- **mi-1 market-informed**: sm-1's calibrated PMF for the player, shifted by one mean factor c fitted (least squares on
+  log-odds) to the same eligible sources' P(Over | no push).
+- Evaluation: on the same settled target offers, separately per version (sm-1, mi-1, mc-1, mkt-*, sharp-2): log-loss
+  and Brier at the offered line, chosen-side calibration (hit - p, game-clustered interval), counts by source. Gate F
+  (section 7) applies to sm-1, mi-1 and mc-1 alike. A source that changes the consensus is reported with the cases
+  where it actually moved the anchor (sources field of each forecast).
+- Stake policy sports-sp-1 (reachable only after gate F): A 1.0U, B 0.5U, C / Lean 0U; any data-quality code = 0U
+  with its reason; the letter stays.

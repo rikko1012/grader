@@ -1,0 +1,43 @@
+{
+ "label": "POST-HOC (not a registered result): sm-1 points with nba.teammate_absent_sameday removed, same family and cal-1, refit on train, scored on the locked test that was already inspected",
+ "crps_diff_vs_b1": {
+  "diff": -0.0725987923652095,
+  "ci_game": [
+   -0.08723945155105943,
+   -0.057307245413717095
+  ],
+  "ci_date_block": [
+   -0.10169030062441897,
+   -0.05085971591972645
+  ]
+ },
+ "crps_diff_vs_b0": {
+  "diff": -0.24226636909737917,
+  "ci_game": [
+   -0.26245201699156456,
+   -0.22355744868715158
+  ],
+  "ci_date_block": [
+   -0.2549706317883997,
+   -0.23045869590231477
+  ]
+ },
+ "crps": {
+  "sm1": 3.510018953629246,
+  "b1": 3.582617745994455,
+  "b0": 3.752285322726625
+ },
+ "ece": 0.021706314826113467,
+ "cov80": 0.7920128119051802,
+ "gate_H_if_registered": {
+  "criteria": {
+   "1_crps_beats_b1_and_b0": true,
+   "2_ref_logloss_not_worse_than_b1": true,
+   "3_calibration": false,
+   "4_cov80_in_0.76_0.84": true,
+   "5_no_slice_significantly_worse": true,
+   "6_nfl_secondary_test": true
+  },
+  "passed": false
+ }
+}

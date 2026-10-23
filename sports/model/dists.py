@@ -34,41 +34,57 @@ def _norm(p):
     return p / s
 
 
+LOGFACT = np.concatenate([[0.0], np.cumsum(np.log(np.arange(1, 5001, dtype=float)))])   # log k!, k = 0..5000
+
+
+def logfact(k):
+    return LOGFACT[np.clip(np.asarray(k, int), 0, len(LOGFACT) - 1)]
+
+
 def poisson(mu, lo, ks):
     mu = np.maximum(np.asarray(mu, float), 1e-6)[:, None]
     k = np.maximum(ks[None, :], 0)
-    logp = k * np.log(mu) - mu - _lgamma(k + 1)
+    logp = k * np.log(mu) - mu - logfact(k)
     p = np.where(ks[None, :] >= 0, np.exp(logp), 0.0)
     return _norm(p)
-
-
-def _lgamma(x):
-    try:
-        from scipy.special import gammaln          # optional speed-up; identical values
-        return gammaln(x)
-    except ImportError:
-        f = np.vectorize(math.lgamma, otypes=[float])
-        return f(x)
 
 
 def negbin(mu, alpha, lo, ks):
-    """var = mu + alpha mu^2 (alpha -> 0 = Poisson). alpha scalar or per row."""
+    """var = mu + alpha mu^2 (alpha -> 0 = Poisson). alpha scalar or per row. Computed by the exact recursion
+    P(k) = P(k-1) (k-1+r) / k * mu / (r + mu) in log space (numpy only - no scipy in production)."""
     mu = np.maximum(np.asarray(mu, float), 1e-6)[:, None]
     a = np.broadcast_to(np.maximum(np.asarray(alpha, float), 1e-6), mu.shape[:1])[:, None]
     r = 1.0 / a
-    k = np.maximum(ks[None, :], 0)
-    logp = (_lgamma(k + r) - _lgamma(r) - _lgamma(k + 1) + r * np.log(r / (r + mu)) + k * np.log(mu / (r + mu)))
-    p = np.where(ks[None, :] >= 0, np.exp(logp), 0.0)
+    kmax = int(max(ks.max(), 0))
+    j = np.arange(1, kmax + 1, dtype=float)[None, :]
+    steps = np.log(j - 1 + r) - np.log(j) + np.log(mu / (r + mu))
+    logp_all = np.concatenate([r * np.log(r / (r + mu)), r * np.log(r / (r + mu)) + np.cumsum(steps, axis=1)], axis=1)
+    k = ks.astype(int)
+    p = np.where(k[None, :] >= 0, np.exp(logp_all[:, np.clip(k, 0, kmax)]), 0.0)
     return _norm(p)
 
 
+def nb_loglik(y, mu, alpha):
+    """Sum of NB log-likelihoods of integer y (exact: lgamma(y + r) - lgamma(r) = sum_{j<y} log(r + j))."""
+    y = np.maximum(np.rint(np.asarray(y, float)), 0).astype(int)
+    mu = np.maximum(np.asarray(mu, float), 1e-6)
+    r = 1.0 / max(float(alpha), 1e-8)
+    T = np.concatenate([[0.0], np.cumsum(np.log(r + np.arange(max(int(y.max()), 1), dtype=float)))])
+    return float(np.sum(T[y] - logfact(y) + r * np.log(r / (r + mu)) + y * np.log(mu / (r + mu))))
+
+
+def erf(x):
+    """erf by the Numerical Recipes erfc Chebyshev fit (fractional error < 1.2e-7 everywhere)."""
+    x = np.asarray(x, float)
+    z = np.abs(x)
+    t = 1.0 / (1.0 + 0.5 * z)
+    r = t * np.exp(-z * z - 1.26551223 + t * (1.00002368 + t * (0.37409196 + t * (0.09678418 + t * (
+        -0.18628806 + t * (0.27886807 + t * (-1.13520398 + t * (1.48851587 + t * (-0.82215223 + t * 0.17087277)))))))))
+    return np.where(x >= 0, 1 - r, r - 1)
+
+
 def _phi(z):
-    try:
-        from scipy.special import ndtr
-        return ndtr(z)
-    except ImportError:
-        erf = np.vectorize(math.erf, otypes=[float])
-        return 0.5 * (1.0 + erf(z / math.sqrt(2.0)))
+    return 0.5 * (1.0 + erf(np.asarray(z, float) / math.sqrt(2.0)))
 
 
 def normal(mu, var, lo, ks):
@@ -177,3 +193,18 @@ def pit_mid(pmf, lo, y):
     ks = np.arange(lo, lo + pmf.shape[1])
     y = np.asarray(y, float)[:, None]
     return (pmf * (ks[None, :] < y)).sum(axis=1) + 0.5 * (pmf * (ks[None, :] == y)).sum(axis=1)
+
+
+def pit_cover(pmf, lo, y, level):
+    """Expected coverage of the central `level` band by the RANDOMISED PIT (u ~ U(F(y-), F(y))): the share of
+    [F(y-), F(y)] inside [(1-level)/2, (1+level)/2]. Exactly `level` on average for a calibrated discrete forecast,
+    unlike an inclusive quantile interval, which over-covers by construction when atoms are large (amendment A3)."""
+    ks = np.arange(lo, lo + pmf.shape[1])
+    y = np.asarray(y, float)[:, None]
+    f_lo = (pmf * (ks[None, :] < y)).sum(axis=1)
+    f_hi = f_lo + (pmf * (ks[None, :] == y)).sum(axis=1)
+    a, b = (1 - level) / 2, (1 + level) / 2
+    ov = np.clip(np.minimum(f_hi, b) - np.maximum(f_lo, a), 0, None)
+    w = f_hi - f_lo
+    inside = ((f_lo >= a) & (f_lo <= b)).astype(float)
+    return np.where(w > 1e-12, ov / np.maximum(w, 1e-12), inside)

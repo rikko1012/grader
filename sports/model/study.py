@@ -30,10 +30,15 @@ def _frame(sport, con, hl):
     return featurize.nfl_frame(con, h_opp=hl[0])
 
 
+def sub(df, mask):
+    """Row subset (Frame keeps the per-row lag matrices aligned)."""
+    return df[np.asarray(mask)]
+
+
 def _nfl_fill(df):
     for c in ("ew_target_share", "ew_air_yards_share"):
         if c in df:
-            df[c] = df[c].fillna(0.0)
+            df[c] = np.nan_to_num(df[c])
     return df
 
 
@@ -86,7 +91,8 @@ class Fitted:
             if isinstance(o, np.ndarray):
                 return clean(o.tolist())
             return o
-        return clean({"market": self.market, "half_lives": list(self.hl), "prior": self.prior, "k": self.k,
+        mi = getattr(self, "mi", None)
+        return clean({"mi_hist": mi.config() if mi is not None else None, "market": self.market, "half_lives": list(self.hl), "prior": self.prior, "k": self.k,
                       "features": self.feats, "design": self.stats, "beta": list(self.beta), "family": self.family,
                       "family_params": self.par, "cal": list(self.cal)})
 
@@ -109,7 +115,7 @@ def mean_model(f, df_tr, df, market, sport, feats):
     cols = _feature_cols(df_tr, sport, market, feats)
     X_tr, stats = model.design(df_tr, cols)
     X_tr = np.column_stack([np.ones(len(df_tr)), X_tr])             # intercept: part of the base (amendment A2)
-    y_tr = df_tr[f"y_{market}"].to_numpy(float)
+    y_tr = np.asarray(df_tr[f"y_{market}"], float)
     beta = model.fit_glm(X_tr, y_tr, np.log(np.maximum(mu0_tr, 1e-3)))
     f.prior, f.k, f.feats, f.stats, f.beta = prior, k, feats, stats, beta
     return predict_mean(f, df, market, sport)
@@ -141,7 +147,7 @@ def pmf_for(f, df, market, sport, family=None, cal=None):
 def _crps(f, df, market, sport, family, cal=(1.0, 1.0)):
     lo, _ = dists.grid(market)
     p, mu = pmf_for(f, df, market, sport, family, cal)
-    return dists.crps(p, lo, df[f"y_{market}"].to_numpy(float)), p, mu
+    return dists.crps(p, lo, np.asarray(df[f"y_{market}"], float)), p, mu
 
 
 def default_family(market):
@@ -176,8 +182,8 @@ def run_market(sport, market, frames, log=print):
     el = model.eligible(df, market)
     part = model.partition(df, sport)
     tr, tu = df[el & (part == "train")].copy(), df[el & (part == "tune")].copy()
-    rep["rows"] = {"train": len(tr), "tune": len(tu), "train_games": int(tr["game_id"].nunique()),
-                   "tune_games": int(tu["game_id"].nunique())}
+    rep["rows"] = {"train": len(tr), "tune": len(tu), "train_games": len(np.unique(tr["game_id"])),
+                   "tune_games": len(np.unique(tu["game_id"]))}
     log(f"[{sport}:{market}] half-lives {best_hl} rows {rep['rows']}")
     # 2. features, one at a time on the base, then jointly
     base = Fitted(market, best_hl)
@@ -186,11 +192,11 @@ def run_market(sport, market, frames, log=print):
     fam0 = default_family(market)
     base_crps, _, _ = _crps(base, tu, market, sport, fam0)
     tests, kept = {}, []
-    games = tu["game_id"].to_numpy()
+    games = np.asarray(tu["game_id"])
     for track in ("statistical", "history"):
         for r in features.candidates(sport, market, track):
             col = _feature_cols(tu, sport, market, [r["id"]])[0]
-            v = tu[col].to_numpy(float)
+            v = np.asarray(tu[col], float)
             if np.nanstd(v) == 0 or np.isfinite(v).sum() < 30:       # cannot be evaluated on tune (amendment A2)
                 tests[r["id"]] = {"track": track, "not_evaluable_on_tune": "constant or missing on tune rows",
                                   "passed": False, "kept": False}
@@ -235,7 +241,7 @@ def run_market(sport, market, frames, log=print):
     # 4. cal-1 (coordinate search on the registered grids)
     lo, ks = dists.grid(market)
     p_raw, mu = pmf_for(final, tu, market, sport, final.family, (1.0, 1.0))
-    y = tu[f"y_{market}"].to_numpy(float)
+    y = np.asarray(tu[f"y_{market}"], float)
 
     def cr(c, s):
         return float(dists.crps(dists.transform(p_raw, lo, ks, mu, c, s), lo, y).mean())
@@ -246,17 +252,78 @@ def run_market(sport, market, frames, log=print):
     rep["cal"] = {"c": final.cal[0], "s": final.cal[1], "tune_crps_raw": cr(1.0, 1.0),
                   "tune_crps_cal": cr(*final.cal)}
     log(f"[{sport}:{market}] family {final.family} cal {final.cal}")
+    final.mi = market_track(final, tr, tu, market, sport, rep, cr_fn=None)
     return final, rep
+
+
+def _calibrate(f, tu, market, sport):
+    lo, ks = dists.grid(market)
+    p_raw, mu = pmf_for(f, tu, market, sport, f.family, (1.0, 1.0))
+    y = np.asarray(tu[f"y_{market}"], float)
+
+    def cr(c, s):
+        return float(dists.crps(dists.transform(p_raw, lo, ks, mu, c, s), lo, y).mean())
+    c_best = min(C_GRID, key=lambda c: cr(c, 1.0))
+    s_best = min(S_GRID, key=lambda s: cr(c_best, s))
+    c_best = min(C_GRID, key=lambda c: cr(c, s_best))
+    f.cal = (float(c_best), float(s_best))
+
+
+def market_track(final, tr, tu, market, sport, rep, cr_fn=None):
+    """mi-hist (REGISTER.md 5): sm-1 + game spread / total terms, same protocol, separate claim. -> Fitted | None."""
+    cands = features.candidates(sport, market, "market")
+    out = {"label": "market-informed (closing game lines; available about kickoff)", "tests": {}}
+    rep["market_track"] = out
+    cov = {}
+    for r in cands:
+        col = _feature_cols(tr, sport, market, [r["id"]])[0]
+        _feature_cols(tu, sport, market, [r["id"]])
+        cov[r["id"]] = float(np.isfinite(np.asarray(tr[col], float)).mean())
+    out["train_coverage"] = cov
+    usable = [r for r in cands if cov[r["id"]] >= 0.5]
+    if not usable:
+        out["run"] = False
+        out["why"] = "game lines cover < 50% of eligible train rows (amendment A1c)"
+        return None
+    fam = final.family
+    ref_crps, _, _ = _crps(final, tu, market, sport, fam, final.cal)
+    games = np.asarray(tu["game_id"])
+    kept = []
+    for r in usable:
+        f = Fitted(market, final.hl)
+        mean_model(f, tr, tr, market, sport, final.feats + [r["id"]])
+        fit_family_params(f, tr, market, sport)
+        f.family = fam
+        _calibrate(f, tu, market, sport)
+        c, _, _ = _crps(f, tu, market, sport, fam, f.cal)
+        d = evaluate.boot_mean(c - ref_crps, games)
+        ok = d[2] is not None and d[2] < 0
+        out["tests"][r["id"]] = {"tune_crps_diff_vs_sm1": d[0], "ci": [d[1], d[2]],
+                                 "beta_std": float(f.beta[-1]), "passed": bool(ok)}
+        if ok:
+            kept.append(r["id"])
+    out["run"] = True
+    if not kept:
+        out["kept"] = []
+        return None
+    f = Fitted(market, final.hl)
+    mean_model(f, tr, tr, market, sport, final.feats + kept)
+    fit_family_params(f, tr, market, sport)
+    f.family = fam
+    _calibrate(f, tu, market, sport)
+    out["kept"] = kept
+    out["cal"] = list(f.cal)
+    return f
 
 
 def score_partition(final, df, market, sport, mask, label):
     """B0 / B1 / sm-1 on the rows of one locked partition -> report (all paired differences)."""
-    d = df[mask].copy()
+    d = sub(df, mask)
     lo, ks = dists.grid(market)
-    y = d[f"y_{market}"].to_numpy(float)
-    games = d["game_id"].to_numpy()
-    blocks = (d["start"].dt.strftime("%G-W%V") if sport == "nba" else
-              d["season"].astype(str) + "-" + d["week"].astype(str)).to_numpy()
+    y = np.asarray(d[f"y_{market}"], float)
+    games = np.asarray(d["game_id"])
+    blocks = (np.array(featurize.iso_week(d["ts"]), dtype=object) if sport == "nba" else
+              np.array([f"{int(a)}-{int(b)}" for a, b in zip(d["season"], d["week"])], dtype=object))
     bl = baseline_pmfs(d, sport, market, lo, ks)
     b0_pmf, b0_mean, n10 = bl["b0"]
     l_ref = np.floor(b0_mean) + 0.5
@@ -333,6 +400,10 @@ def run(sport, con, phase="tune", log=print, markets_=None):
                 rep["test2"] = score_partition(final, df, market, sport, el & (part == "test2"),
                                                "secondary locked test (2026 weeks 1-7)")
             rep["gate_H"] = gate(rep["test"], rep.get("test2"))
+            mc = cfgs["markets"][market].get("mi_hist")
+            if mc:
+                mi = from_config(mc)
+                rep["market_track_test"] = score_market_track(final, mi, df, market, sport, el & (part == "test"))
             out["markets"][market] = rep
             log(f"[{sport}:{market}] gate {rep['gate_H']}")
     if phase == "tune":
@@ -353,3 +424,24 @@ def from_config(c):
     f.beta = np.asarray(c["beta"], float)
     f.family, f.par, f.cal = c["family"], c["family_params"], tuple(c["cal"])
     return f
+
+
+def score_market_track(sm, mi, df, market, sport, mask):
+    d = sub(df, mask)
+    lo, ks = dists.grid(market)
+    y = np.asarray(d[f"y_{market}"], float)
+    games = np.asarray(d["game_id"])
+    ok = np.ones(len(d), bool)
+    for fid in mi.feats:
+        if fid not in sm.feats:
+            ok &= np.isfinite(np.asarray(d[_feature_cols(d, sport, market, [fid])[0]], float))
+    d, y, games = sub(d, ok), y[ok], games[ok]
+    p_sm, _ = pmf_for(sm, d, market, sport)
+    p_mi, _ = pmf_for(mi, d, market, sport)
+    b0_mean = np.nanmean(d.attrs["lags"][market][:, :10], axis=1) if len(d) else np.zeros(0)
+    l_ref = np.floor(b0_mean) + 0.5
+    a = evaluate.scores(p_mi, lo, y, dists.mean_of(p_mi, ks), l_ref)
+    b = evaluate.scores(p_sm, lo, y, dists.mean_of(p_sm, ks), l_ref)
+    return {"label": "mi-hist vs sm-1 on rows with game lines (LOCKED test)", "rows": int(len(d)),
+            "mi_hist": evaluate.summarize(a, games),
+            "paired_vs_sm1": {m: evaluate.paired(a, b, games, None, m) for m in ("crps", "logloss_ref", "ae")}}

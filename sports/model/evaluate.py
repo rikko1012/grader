@@ -21,8 +21,9 @@ def scores(pmf, lo, y, mean, l_ref):
         "p_over_ref": p_over, "hit_ref": hit,
         "logloss_ref": -(hit * np.log(pc) + (1 - hit) * np.log(1 - pc)),
         "brier_ref": (p_over - hit) ** 2,
-        "cov50": dists.central_cover(pmf, lo, y, 0.5), "cov80": dists.central_cover(pmf, lo, y, 0.8),
-        "cov90": dists.central_cover(pmf, lo, y, 0.9),
+        "cov50": dists.pit_cover(pmf, lo, y, 0.5), "cov80": dists.pit_cover(pmf, lo, y, 0.8),
+        "cov90": dists.pit_cover(pmf, lo, y, 0.9),
+        "cov80_inclusive_interval": dists.central_cover(pmf, lo, y, 0.8),
     }
 
 
@@ -105,23 +106,23 @@ def slice_masks(df, sport, p_over_ref):
     out["side:over"] = p_over_ref > 0.5
     out["side:under"] = p_over_ref <= 0.5
     if sport == "nba":
-        sl = df["starter_lag"].to_numpy(float)
+        sl = np.asarray(df["starter_lag"], float)
         out["role:started_prev"] = sl == 1
         out["role:bench_prev"] = sl == 0
-        n = df["prior_n"].to_numpy()
+        n = np.asarray(df["prior_n"])
         for a, b in ((5, 10), (10, 20), (20, 40), (40, 10 ** 6)):
             out[f"depth:{a}-{b - 1 if b < 10 ** 6 else '+'}"] = (n >= a) & (n < b)
     else:
-        pos = df["position"].to_numpy()
+        pos = np.asarray(df["position"])
         for p in ("QB", "RB", "WR", "TE"):
             out[f"role:{p}"] = pos == p
-        n = df["prior_n"].to_numpy()
+        n = np.asarray(df["prior_n"])
         for a, b in ((3, 6), (6, 12), (12, 10 ** 6)):
             out[f"depth:{a}-{b - 1 if b < 10 ** 6 else '+'}"] = (n >= a) & (n < b)
     out["band:<0.4"] = p_over_ref < 0.4
     out["band:0.4-0.6"] = (p_over_ref >= 0.4) & (p_over_ref < 0.6)
     out["band:>=0.6"] = p_over_ref >= 0.6
-    st = df["season_type"].to_numpy()
+    st = np.asarray(df["season_type"])
     out["season:regular"] = st == "regular"
     out["season:postseason"] = (st == "postseason") | (st == "play_in")
     return out

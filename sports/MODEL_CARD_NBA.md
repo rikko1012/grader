@@ -1,0 +1,116 @@
+# Model card - Scout Sports sm-1, NBA (statistical-only)
+
+Generated 2026-10-23 from the committed study results (`sports/research/results/model_study_nba_*.json`) and artifact `sports/model/artifacts/sm1_nba.json` (sha `5ec8adf73a6dad18`, fitted 2026-10-23T23:00:17Z on data known at 2026-10-23T23:00:00Z). Registered protocol: `sports/research/REGISTER.md` (+ amendments A1-A3, all made before any locked-test score). Data rights: ESPN and Kalshi display rights are owner-attested (owner attestation 2026-10-23); nflverse data is CC-BY 4.0 (FTN-charted fields CC-BY-SA 4.0).
+
+## What the model is
+
+E[minutes] (EW mean of prior minutes) x per-minute rate (empirical-Bayes shrinkage to the train position-group rate, k fitted on train) x exp(intercept + fitted GLM terms of the features that passed the registered tune test), then one fitted outcome distribution per prop (family chosen on tune) and cal-1 (mean factor c, spread scale s fitted on tune). Conditional on playing: pick'em platforms void a DNP; the DNP share of rotation players in ds-1 train is 7.5% (reported, never mixed into pOver / pUnder).
+
+Every probability is read from ONE distribution per prop: pOver = P(X > L), pUnder = P(X < L), pPush = P(X = L), unconditional (sum 1); the conditional-on-no-push values are separate named fields. Replay: the forward path computes each PMF from its saved feature row; a replay from saved inputs is bit-identical (200 / 200 sampled live forecasts on 2026-10-23).
+
+## Data (ds-1)
+
+ESPN public site API box scores: 2023-24, 2024-25, 2025-26 (regular, play-in, playoffs) and 2026-27 to 2026-10-22: 3,974 games with box scores (4 playoff summaries answered HTTP 404 after 4 attempts), ~105k player rows. Point-in-time rule: a row feeds a forecast only if its game started before the forecast game and start + 4 h <= forecast time.
+
+## Per market
+
+### Points (`points`)
+
+- Validation state: **history-validated** (history gate H passed). Not forward-validated: stakes 0, grade withheld (sports-gp-1).
+- Configuration (tune): half-lives [3, 10], family **ratio** (tune CRPS poisson 3.6797, negbin 3.5293, mixture 3.5116, ratio 3.4637), cal-1 c = 0.98, s = 0.98; features kept: nba.usage, nba.role_stability, nba.starter_prev, nba.opp_pace, nba.teammate_absent_sameday.
+- Rows: train 40770 (2571 games), tune 11976 (725 games), LOCKED test 9834 (593 games); forward artifact fit on 62842 rows / 3905 games.
+
+| LOCKED test | sm-1 | B1 history-shape | B0 hist-rate |
+|---|---|---|---|
+| CRPS (primary) | 3.467 | 3.583 | 3.752 |
+| MAE | 4.914 | 5.068 | 5.120 |
+| log-loss at L_ref | 0.665 | 0.688 | 0.703 |
+| Brier at L_ref | 0.236 | 0.247 | 0.255 |
+| 80% PIT coverage | 0.792 | 0.769 | 0.756 |
+| RMSE | 6.319 | 6.490 | 6.562 |
+| bias (mean - actual) | -0.187 | -0.105 | 0.080 |
+| NLL | 3.177 | 3.226 | n/a |
+| ECE / in-the-large at L_ref | 0.018 / -0.0130 | 0.041 / +0.0228 | 0.066 / +0.0108 |
+
+- CRPS difference sm-1 - B1: -0.1153, game-clustered 95% [-0.1341, -0.0951], date-block [-0.1523, -0.0877]; sm-1 - B0: -0.2850 [-0.3075, -0.2632].
+- Log-loss at L_ref sm-1 - B1: -0.0226 [-0.0265, -0.0184]; push check at the whole line: predicted 0.064 vs observed 0.067.
+- Market track: not run (game lines cover < 50% of eligible train rows (amendment A1c)).
+- Declared slices with the weakest CRPS difference vs B1: role:started_prev n=5776 -0.0667 [-0.0917, -0.0416]; band:0.4-0.6 n=5967 -0.0707 [-0.0910, -0.0514]; side:under n=7025 -0.0984 [-0.1185, -0.0786].
+- Caveat: `nba.teammate_absent_sameday` (kept) is known only at the injury report; history reconstructs it from box-score did-not-play rows; forward it comes from ESPN's injury report (Out) and is UNKNOWN (train mean + reason code teammate_absence_unknown) without a fresh report. POST-HOC sensitivity (not registered; the test had been inspected): without it CRPS sm-1 - B1 = -0.0726 [-0.0872, -0.0573] - the gain is not mainly that feature.
+- Limitation: the empirical-ratio family stores 200 ratio quantiles per mean quintile, so its probabilities move in steps of about 0.5 percentage points.
+
+### Rebounds (`rebounds`)
+
+- Validation state: **history-validated** (history gate H passed). Not forward-validated: stakes 0, grade withheld (sports-gp-1).
+- Configuration (tune): half-lives [3, 20], family **negbin** (tune CRPS poisson 1.3781, negbin 1.3700, mixture 1.3704, ratio 1.3719), cal-1 c = 0.99, s = 0.98; features kept: nba.role_stability, nba.opp_pace, nba.opp_positional_defence.
+- Rows: train 40770 (2571 games), tune 11976 (725 games), LOCKED test 9834 (593 games); forward artifact fit on 62842 rows / 3905 games.
+
+| LOCKED test | sm-1 | B1 history-shape | B0 hist-rate |
+|---|---|---|---|
+| CRPS (primary) | 1.378 | 1.398 | 1.486 |
+| MAE | 1.971 | 1.995 | 2.040 |
+| log-loss at L_ref | 0.663 | 0.671 | 0.700 |
+| Brier at L_ref | 0.235 | 0.239 | 0.253 |
+| 80% PIT coverage | 0.787 | 0.766 | 0.756 |
+| RMSE | 2.574 | 2.604 | 2.661 |
+| bias (mean - actual) | -0.004 | 0.025 | 0.066 |
+| NLL | 2.252 | 2.276 | n/a |
+| ECE / in-the-large at L_ref | 0.009 / -0.0006 | 0.012 / +0.0053 | 0.068 / +0.0201 |
+
+- CRPS difference sm-1 - B1: -0.0196, game-clustered 95% [-0.0258, -0.0134], date-block [-0.0253, -0.0133]; sm-1 - B0: -0.1081 [-0.1175, -0.0987].
+- Log-loss at L_ref sm-1 - B1: -0.0087 [-0.0120, -0.0055]; push check at the whole line: predicted 0.167 vs observed 0.159.
+- Market track: not run (game lines cover < 50% of eligible train rows (amendment A1c)).
+- Declared slices with the weakest CRPS difference vs B1: depth:5-9 n=51 +0.0162 [-0.1045, +0.1695]; season:postseason n=1449 -0.0112 [-0.0249, +0.0011]; role:started_prev n=5776 -0.0130 [-0.0209, -0.0041].
+
+### Assists (`assists`)
+
+- Validation state: **history-validated** (history gate H passed). Not forward-validated: stakes 0, grade withheld (sports-gp-1).
+- Configuration (tune): half-lives [3, 10], family **negbin** (tune CRPS poisson 0.9953, negbin 0.9939, mixture 0.9946, ratio 0.9967), cal-1 c = 1.02, s = 1.0; features kept: nba.role_stability, nba.starter_prev, nba.team_pace.
+- Rows: train 40770 (2571 games), tune 11976 (725 games), LOCKED test 9834 (593 games); forward artifact fit on 62842 rows / 3905 games.
+
+| LOCKED test | sm-1 | B1 history-shape | B0 hist-rate |
+|---|---|---|---|
+| CRPS (primary) | 1.024 | 1.037 | 1.102 |
+| MAE | 1.495 | 1.503 | 1.528 |
+| log-loss at L_ref | 0.658 | 0.667 | 0.693 |
+| Brier at L_ref | 0.233 | 0.237 | 0.249 |
+| 80% PIT coverage | 0.787 | 0.768 | 0.745 |
+| RMSE | 1.982 | 2.002 | 2.039 |
+| bias (mean - actual) | 0.073 | 0.012 | 0.037 |
+| NLL | 1.910 | 1.930 | n/a |
+| ECE / in-the-large at L_ref | 0.019 / +0.0186 | 0.017 / +0.0043 | 0.056 / +0.0170 |
+
+- CRPS difference sm-1 - B1: -0.0126, game-clustered 95% [-0.0164, -0.0088], date-block [-0.0183, -0.0077]; sm-1 - B0: -0.0782 [-0.0846, -0.0717].
+- Log-loss at L_ref sm-1 - B1: -0.0086 [-0.0114, -0.0059]; push check at the whole line: predicted 0.230 vs observed 0.221.
+- Market track: not run (game lines cover < 50% of eligible train rows (amendment A1c)).
+- Declared slices with the weakest CRPS difference vs B1: season:postseason n=1449 -0.0059 [-0.0141, +0.0019]; band:>=0.6 n=895 -0.0061 [-0.0207, +0.0093]; role:started_prev n=5776 -0.0093 [-0.0146, -0.0038].
+
+### 3-pointers made (`threes`)
+
+- Validation state: **history-validated** (history gate H passed). Not forward-validated: stakes 0, grade withheld (sports-gp-1).
+- Configuration (tune): half-lives [3, 20], family **negbin** (tune CRPS poisson 0.6525, negbin 0.6509, mixture 0.6510, ratio 0.6567), cal-1 c = 0.99, s = 1.0; features kept: none (base only).
+- Rows: train 40770 (2571 games), tune 11976 (725 games), LOCKED test 9834 (593 games); forward artifact fit on 62842 rows / 3905 games.
+
+| LOCKED test | sm-1 | B1 history-shape | B0 hist-rate |
+|---|---|---|---|
+| CRPS (primary) | 0.647 | 0.652 | 0.697 |
+| MAE | 0.970 | 0.972 | 0.993 |
+| log-loss at L_ref | 0.603 | 0.607 | 0.632 |
+| Brier at L_ref | 0.211 | 0.213 | 0.224 |
+| 80% PIT coverage | 0.799 | 0.783 | 0.759 |
+| RMSE | 1.313 | 1.323 | 1.354 |
+| bias (mean - actual) | -0.004 | -0.002 | 0.020 |
+| NLL | 1.421 | 1.431 | n/a |
+| ECE / in-the-large at L_ref | 0.016 / +0.0073 | 0.024 / +0.0069 | 0.050 / +0.0196 |
+
+- CRPS difference sm-1 - B1: -0.0059, game-clustered 95% [-0.0080, -0.0038], date-block [-0.0085, -0.0036]; sm-1 - B0: -0.0508 [-0.0554, -0.0460].
+- Log-loss at L_ref sm-1 - B1: -0.0031 [-0.0052, -0.0010]; push check at the whole line: predicted 0.359 vs observed 0.352.
+- Market track: not run (game lines cover < 50% of eligible train rows (amendment A1c)).
+- Declared slices with the weakest CRPS difference vs B1: depth:10-19 n=87 +0.0042 [-0.0188, +0.0268]; depth:5-9 n=51 +0.0040 [-0.0147, +0.0236]; role:started_prev n=5776 -0.0040 [-0.0065, -0.0014].
+
+## Intended use and limits
+
+- Research / shadow forecasts only. A history-validated market is NOT a betting-edge claim: no forecast of this version has settled at a real offered line; gate F (>= 300 settled props, >= 100 games, chosen-side calibration, log-loss vs sharp-2 / mc-1) decides that, at the 300 / 600 / 1,000 windows.
+- Historical evaluation uses a pre-game reference line (floor of the last-10 mean + 0.5), not book lines: books set lines with information the model lacks, so accuracy at offered lines can be lower.
+- Players outside the validated population (NBA < 5 prior games or < 15 L10 minutes; NFL < 3 games or below the pool thresholds) still get a research forecast, reason-coded `outside_validated_population` / `thin_history`.
+- Every factor of the owner's list is in `sports/features.py` with its status and measured tune effect; unavailable (licensed) factors are absent, never imputed.

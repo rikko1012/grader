@@ -19,6 +19,23 @@ MODELS = {
     "nfl rec yards normal mean 54": (_fair("normal", "football", "rec_yds", 54.0), mc.standard_lines(54.0, 2.5, 20)),
     "nfl rush yards near zero": (_fair("normal", "football", "rush_yds", 3.0), [-0.5, 0.5, 1.0, 2.5, 5.5, 10.0]),
 }
+# model agent: sm-1 distribution families (sports/model) - one PMF per prop read at every line
+from sports.model import dists as _d, model as _m  # noqa: E402
+
+
+def _sm1(pmf, lo):
+    return lambda line: _d.line_probs(pmf, lo, line)
+
+
+_lo, _ks = _d.grid("points")
+MODELS["sm-1 points minutes-mixture"] = (_sm1(_m.mixture_pmf("points", __import__("numpy").array([22.0]), {},
+                                                             {"rho": [0.5, 0.9, 1.0, 1.1, 1.3], "alpha_c": 0.04},
+                                                             _lo, _ks)[0], _lo), mc.standard_lines(22.0))
+_lo, _ks = _d.grid("rec")
+MODELS["sm-1 receptions binomial mixture"] = (_sm1(_m.mixture_pmf(
+    "rec", __import__("numpy").array([4.5]), {"e_opp": __import__("numpy").array([6.5]),
+                                               "p": __import__("numpy").array([0.69])},
+    {"alpha_opp": 0.12}, _lo, _ks)[0], _lo), mc.standard_lines(4.5, n=9))
 
 
 @pytest.mark.parametrize("name", sorted(MODELS))

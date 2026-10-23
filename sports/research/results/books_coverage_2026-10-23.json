@@ -1,0 +1,136 @@
+{
+ "nba": {
+  "league": "nba",
+  "observed_at": "2026-10-23T23:04:13Z",
+  "keys": {
+   "kalshi": "no key needed",
+   "polymarket": "no key needed",
+   "oddsapi": "key not set here",
+   "thunderpick": "key not set here",
+   "oddspapi": "key not set here"
+  },
+  "polymarket": {
+   "events": 110,
+   "offers": 2622,
+   "inserted": 2622,
+   "duplicate": 0,
+   "revision": 0,
+   "invalid": 0,
+   "quarantined": 0,
+   "resolved_players": 2622
+  },
+  "oddsapi": {
+   "ok": false,
+   "status": "key not set here"
+  },
+  "thunderpick": {
+   "source": "thunderpick",
+   "status": "key not set here"
+  },
+  "oddspapi": {
+   "source": "oddspapi",
+   "status": "key not set here"
+  },
+  "budget": {
+   "oddsapi": {
+    "month": "2026-10",
+    "used": 0,
+    "requests": 0,
+    "refused": 0,
+    "limit": 500,
+    "reserve": 50
+   },
+   "thunderpick": {
+    "month": "2026-10",
+    "used": 0,
+    "requests": 0,
+    "refused": 0,
+    "limit": null,
+    "reserve": 0
+   },
+   "oddspapi": {
+    "month": "2026-10",
+    "used": 0,
+    "requests": 0,
+    "refused": 0,
+    "limit": 1000,
+    "reserve": 50
+   },
+   "polymarket": {
+    "month": "2026-10",
+    "used": 2.0,
+    "requests": 2,
+    "refused": 0,
+    "limit": null,
+    "reserve": 0
+   }
+  }
+ },
+ "nfl": {
+  "league": "nfl",
+  "observed_at": "2026-10-23T23:04:15Z",
+  "keys": {
+   "kalshi": "no key needed",
+   "polymarket": "no key needed",
+   "oddsapi": "key not set here",
+   "thunderpick": "key not set here",
+   "oddspapi": "key not set here"
+  },
+  "polymarket": {
+   "events": 83,
+   "offers": 2012,
+   "inserted": 2012,
+   "duplicate": 0,
+   "revision": 0,
+   "invalid": 0,
+   "quarantined": 0,
+   "resolved_players": 1663
+  },
+  "oddsapi": {
+   "ok": false,
+   "status": "key not set here"
+  },
+  "thunderpick": {
+   "source": "thunderpick",
+   "status": "key not set here"
+  },
+  "oddspapi": {
+   "source": "oddspapi",
+   "status": "key not set here"
+  },
+  "budget": {
+   "oddsapi": {
+    "month": "2026-10",
+    "used": 0,
+    "requests": 0,
+    "refused": 0,
+    "limit": 500,
+    "reserve": 50
+   },
+   "thunderpick": {
+    "month": "2026-10",
+    "used": 0,
+    "requests": 0,
+    "refused": 0,
+    "limit": null,
+    "reserve": 0
+   },
+   "oddspapi": {
+    "month": "2026-10",
+    "used": 0,
+    "requests": 0,
+    "refused": 0,
+    "limit": 1000,
+    "reserve": 50
+   },
+   "polymarket": {
+    "month": "2026-10",
+    "used": 8.0,
+    "requests": 8,
+    "refused": 0,
+    "limit": null,
+    "reserve": 0
+   }
+  }
+ }
+}
