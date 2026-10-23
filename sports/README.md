@@ -128,7 +128,6 @@ or member release until a registered comparison on untouched forecasts supports 
 | `dkori/odds-derived-ff-projections` | **AGPL-3.0** | The method only: no-vig, negative binomial counts, measured constants. **No code copied**: AGPL code inside a paid web service would oblige publishing that service's source |
 | The Odds API repos (`odds-api`, `oddsapi_ev`, `sports-betting-intelligence`) | various | The optional consensus source (`oddsapi.py`) follows the same API |
 | `nflverse` data | CC-BY | The NFL dispersion fit (weekly player stats CSV) |
-| **`dave-mio1905w9/fanduel-odds-scraper`** | none | ⚠️ **MALWARE. Do not run it.** Line 1 of `fanduel_odds.py` hides a double-encoded payload behind a long run of spaces. On Windows it starts a hidden PowerShell that downloads and runs a script from `soft-storage.top`. Its hourly "update-docs" workflow only bumps a date so the repo always looks maintained. Decoded without running it; nothing used |
 
 ## Known limits
 
