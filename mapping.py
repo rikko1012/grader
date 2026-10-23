@@ -75,13 +75,17 @@ def _build(path):
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         entries = data.get("aliases") or []
+        renames = data.get("renames") or []
         status = "ok"
     except FileNotFoundError:
-        entries, status = [], "missing"
+        entries, renames, status = [], [], "missing"
     except Exception as e:             # noqa: BLE001 - an unreadable file is a state of its own (matchid then has no aliases)
-        entries, status = [], f"unreadable ({type(e).__name__})"
+        entries, renames, status = [], [], f"unreadable ({type(e).__name__})"
     entries = sorted((e for e in entries if isinstance(e, dict)), key=_canon)
-    return {"team_aliases": {"file": path.name, "status": status, "entries": entries},
+    ta = {"file": path.name, "status": status, "entries": entries}
+    if renames:                        # dated team renames (matchid match-rules-3); absent = the content hashed before
+        ta["renames"] = sorted((e for e in renames if isinstance(e, dict)), key=_canon)
+    return {"team_aliases": ta,
             "verified_team_aliases": sorted(_verified(), key=_canon),
             "matching_rules": _rules_version()}
 
