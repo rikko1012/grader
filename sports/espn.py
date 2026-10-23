@@ -39,16 +39,29 @@ def _event(e):
             "completed": bool(st.get("completed")), "status": st.get("description")}
 
 
-def scoreboard(lg, start, end, refresh=False):
-    """Games whose dates fall in [start, end] (dates, US calendar days as ESPN files them)."""
-    rng = f"{start:%Y%m%d}-{end:%Y%m%d}" if end != start else f"{start:%Y%m%d}"
-    past = end < datetime.now(timezone.utc).date() - timedelta(days=1)
-    params = {"dates": rng, "limit": 500}
+def scoreboard_raw(lg, day, refresh=False):
+    """ESPN's scoreboard body for ONE US calendar day (cached). 2026-10-23: a date RANGE (dates=YYYYMMDD-YYYYMMDD,
+    with or without limit) answers HTTP 400 "Failed to get events endpoint." for NBA and NFL, so ranges are read one
+    day at a time (integration fix, sports/INTEGRATION_MANIFEST.md)."""
+    d = f"{day:%Y%m%d}"
+    past = day < datetime.now(timezone.utc).date() - timedelta(days=1)
+    params = {"dates": d, "limit": 500}
     if lg["key"] == "cfb":
         params["groups"] = 80                     # FBS (ESPN's default lists only ranked games)
-    body = cache.fetch("espn:scoreboard", f"{lg['key']}:{rng}", 6 * 3600 if past else 300,
+    return cache.fetch("espn:scoreboard", f"{lg['key']}:{d}", 6 * 3600 if past else 300,
                        lambda: net.get_json(f"{SITE}/{_path(lg)}/scoreboard", params=params), refresh=refresh)
-    return [_event(e) for e in body.get("events") or []]
+
+
+def scoreboard(lg, start, end, refresh=False):
+    """Games whose dates fall in [start, end] (dates, US calendar days as ESPN files them)."""
+    out, seen, day = [], set(), start
+    while day <= end:
+        for e in scoreboard_raw(lg, day, refresh=refresh).get("events") or []:
+            if e.get("id") not in seen:
+                seen.add(e.get("id"))
+                out.append(_event(e))
+        day += timedelta(days=1)
+    return out
 
 
 def slate(lg, hours=36, now=None):

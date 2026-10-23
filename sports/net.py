@@ -1,6 +1,7 @@
 """Polite HTTP for every sports source: honest user agent (browser headers only where a source needs them, as the CS2 /
 LoL board readers do), a minimum gap between requests to the same host shared by every caller in the process, and a
 short retry on 429 / 5xx / connection errors. Same idea as lol/net.py, kept separate (the isolation rule)."""
+import random
 import threading
 import time
 from urllib.parse import urlsplit
@@ -47,9 +48,15 @@ def session():
     return s
 
 
+def backoff(attempt, base=3.0, cap=30.0):
+    """Exponential backoff with jitter: uniform(0.5, 1.5) x base x 2^attempt, capped (integration fix: the data branch
+    slept a fixed 3 s / 6 s, so parallel workers retried in lock-step)."""
+    return min(cap, base * (2 ** attempt)) * random.uniform(0.5, 1.5)
+
+
 def get(url, params=None, headers=None, timeout=30, tries=3, ok=(200,)):
     """GET with pacing and retries -> Response for a status in `ok`; raises HttpError otherwise. A 429 / 5xx / dropped
-    connection is retried with a growing pause (3 s, 6 s)."""
+    connection is retried with a growing, jittered pause (backoff())."""
     host = urlsplit(url).netloc
     last = None
     for attempt in range(tries):
@@ -65,7 +72,7 @@ def get(url, params=None, headers=None, timeout=30, tries=3, ok=(200,)):
                 raise HttpError(r.status_code, url, r.text[:300])
             last = HttpError(r.status_code, url, r.text[:300])
         if attempt + 1 < tries:
-            time.sleep(3 * (attempt + 1))
+            time.sleep(backoff(attempt))
     if isinstance(last, HttpError):
         raise last
     raise HttpError(None, url, str(last))

@@ -1,0 +1,156 @@
+{
+ "nba_2026-10-20": {
+  "date": "2026-10-20",
+  "league": "nba",
+  "counts": {
+   "markets": 743,
+   "compared": 743,
+   "result_agree": 743,
+   "final_value_compared": 472,
+   "final_value_agree": 469
+  },
+  "value_disagreements": [
+   {
+    "ticker": "KXNBAPRA-26OCT20OKCSAS-SASVWEMBANYAMA1-45",
+    "kalshi_value": 27.0,
+    "espn": 28.0
+   },
+   {
+    "ticker": "KXNBAPRA-26OCT20OKCSAS-SASVWEMBANYAMA1-40",
+    "kalshi_value": 27.0,
+    "espn": 28.0
+   },
+   {
+    "ticker": "KXNBAPRA-26OCT20OKCSAS-SASVWEMBANYAMA1-35",
+    "kalshi_value": 27.0,
+    "espn": 28.0
+   }
+  ],
+  "kalshi_fair_price_markets": []
+ },
+ "nba_2026-10-21": {
+  "date": "2026-10-21",
+  "league": "nba",
+  "counts": {
+   "markets": 2678,
+   "compared": 2651,
+   "result_agree": 2650,
+   "final_value_compared": 1653,
+   "final_value_agree": 1642,
+   "player_not_in_box": 27,
+   "result_disagree": 1
+  },
+  "value_disagreements": [
+   {
+    "ticker": "KXNBAREB-26OCT21CHABKN-CHABMILLER24-8",
+    "kalshi_value": 2.0,
+    "espn": 3.0
+   },
+   {
+    "ticker": "KXNBAREB-26OCT21CHABKN-CHABMILLER24-6",
+    "kalshi_value": 2.0,
+    "espn": 3.0
+   },
+   {
+    "ticker": "KXNBAREB-26OCT21CHABKN-CHABMILLER24-4",
+    "kalshi_value": 2.0,
+    "espn": 3.0
+   },
+   {
+    "ticker": "KXNBAAST-26OCT21MINMIA-MIADMITCHELL2-12",
+    "kalshi_value": 10.0,
+    "espn": 11.0
+   },
+   {
+    "ticker": "KXNBAAST-26OCT21MINMIA-MINJMCDANIELS3-6",
+    "kalshi_value": 0.0,
+    "espn": 1.0
+   },
+   {
+    "ticker": "KXNBAAST-26OCT21MINMIA-MINJMCDANIELS3-4",
+    "kalshi_value": 0.0,
+    "espn": 1.0
+   },
+   {
+    "ticker": "KXNBAAST-26OCT21MINMIA-MINJMCDANIELS3-2",
+    "kalshi_value": 0.0,
+    "espn": 1.0
+   },
+   {
+    "ticker": "KXNBAPRA-26OCT21CHABKN-CHABMILLER24-40",
+    "kalshi_value": 21.0,
+    "espn": 22.0
+   },
+   {
+    "ticker": "KXNBAPRA-26OCT21CHABKN-CHABMILLER24-35",
+    "kalshi_value": 21.0,
+    "espn": 22.0
+   },
+   {
+    "ticker": "KXNBAPRA-26OCT21CHABKN-CHABMILLER24-30",
+    "kalshi_value": 21.0,
+    "espn": 22.0
+   },
+   {
+    "ticker": "KXNBASTL-26OCT21CHITOR-CHINPOWELL24-2",
+    "kalshi_result": "no",
+    "espn": 2.0,
+    "strike": 1.5
+   },
+   {
+    "ticker": "KXNBASTL-26OCT21CHITOR-CHINPOWELL24-2",
+    "kalshi_value": 1.0,
+    "espn": 2.0
+   }
+  ],
+  "kalshi_fair_price_markets": []
+ },
+ "nba_2026-10-22": {
+  "date": "2026-10-22",
+  "league": "nba",
+  "counts": {
+   "markets": 574,
+   "compared": 574,
+   "result_agree": 574,
+   "final_value_compared": 388,
+   "final_value_agree": 388
+  },
+  "value_disagreements": [],
+  "kalshi_fair_price_markets": []
+ },
+ "nfl_2026-10-18": {
+  "date": "2026-10-18",
+  "league": "nfl",
+  "counts": {
+   "markets": 3948,
+   "compared": 3825,
+   "result_agree": 3825,
+   "player_not_in_box": 123
+  },
+  "value_disagreements": [],
+  "kalshi_fair_price_markets": []
+ },
+ "nfl_2026-10-19": {
+  "date": "2026-10-19",
+  "league": "nfl",
+  "counts": {
+   "markets": 320,
+   "compared": 310,
+   "result_agree": 310,
+   "player_not_in_box": 10
+  },
+  "value_disagreements": [],
+  "kalshi_fair_price_markets": []
+ },
+ "nfl_2026-10-22": {
+  "date": "2026-10-22",
+  "league": "nfl",
+  "counts": {
+   "markets": 398,
+   "compared": 398,
+   "result_agree": 398
+  },
+  "value_disagreements": [],
+  "kalshi_fair_price_markets": []
+ }
+}

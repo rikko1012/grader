@@ -1,0 +1,154 @@
+"""Isolation proof (owner brief 2): with the sports flags off the esports server starts and serves without importing
+sports or needing any sports credential / database; with them on, a sports failure is a 503 for that sports request
+only and esports pages keep working. Rollback = flags off (no database restore)."""
+import ast
+import email.message
+import io
+import json
+import os
+import subprocess
+import sys
+import textwrap
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_server_imports_sports_only_inside_the_one_hook():
+    tree = ast.parse((ROOT / "server.py").read_text(encoding="utf-8"))
+    hits = []
+    for fn in ast.walk(tree):
+        for node in ast.walk(fn):
+            if isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] == "sports":
+                hits.append(node.lineno)
+            elif isinstance(node, ast.Import) and any(a.name.split(".")[0] == "sports" for a in node.names):
+                hits.append(node.lineno)
+    owners = set()
+    for fn in ast.walk(tree):
+        if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for node in ast.walk(fn):
+                if getattr(node, "lineno", None) in hits and isinstance(node, (ast.Import, ast.ImportFrom)):
+                    owners.add(fn.name)
+    assert hits and owners == {"_sports_route"}, (hits, owners)
+    src = (ROOT / "server.py").read_text(encoding="utf-8")
+    assert src.count("self._sports_route(") == 1                  # one hook call site
+
+
+_CHILD = textwrap.dedent("""
+    import email.message, io, json, os, sys
+    sys.path.insert(0, ROOT)
+    import server
+
+    class H(server.Handler):
+        def __init__(self, path):
+            self.path = path
+            self.headers, self.rfile, self.wfile = email.message.Message(), io.BytesIO(), io.BytesIO()
+            self.client_address, self.close_connection = ("10.0.0.1", 1), False
+            self.code = None
+        def send_response(self, code, message=None):
+            self.code = code
+        def send_header(self, k, v):
+            pass
+        def end_headers(self):
+            pass
+
+    out = {}
+    for p in ("/sports", "/api/sports/status", "/api/sports/offers?league=nba", "/definitely-not-a-route", "/auth/me"):
+        h = H(p)
+        h.do_GET()
+        out[p] = [h.code, h.wfile.getvalue().decode("utf-8", "replace")[:200]]
+    out["sports_imported"] = sorted(m for m in sys.modules if m == "sports" or m.startswith("sports."))
+    print("RESULT" + json.dumps(out))
+""")
+
+
+def _child_env(tmp_path, **extra):
+    env = {k: v for k, v in os.environ.items() if not k.startswith("SPORTS_") and k not in ("ODDS_API_KEY",)}
+    env.update({"CS2_DATA_DIR": str(tmp_path / "esports_data"), "PYTHONIOENCODING": "utf-8"})
+    env.update(extra)
+    return env
+
+
+def _run_child(tmp_path, **extra):
+    code = f"ROOT = {str(ROOT)!r}\n" + _CHILD
+    r = subprocess.run([sys.executable, "-c", code], cwd=str(tmp_path), env=_child_env(tmp_path, **extra),
+                       capture_output=True, text=True, timeout=240, stdin=subprocess.DEVNULL)
+    line = next((x for x in r.stdout.splitlines() if x.startswith("RESULT")), None)
+    assert line, (r.stdout[-2000:], r.stderr[-2000:])
+    return json.loads(line[6:])
+
+
+def test_flags_off_esports_serves_and_sports_is_never_imported(tmp_path):
+    out = _run_child(tmp_path)
+    assert out["sports_imported"] == []                              # not even the package
+    unknown = out["/definitely-not-a-route"]
+    for p in ("/sports", "/api/sports/status", "/api/sports/offers?league=nba"):
+        assert out[p] == unknown                                     # identical to a route that never existed
+    assert out["/auth/me"][0] == 200
+
+
+def test_flags_on_without_a_store_degrades_to_sports_errors_only(tmp_path):
+    out = _run_child(tmp_path, SPORTS_API="1", SPORTS_UI="1", SPORTS_DATA_DIR=str(tmp_path / "sports_data"))
+    assert out["/sports"][0] == 200
+    assert out["/api/sports/status"][0] == 200 and '"ready": false' in out["/api/sports/status"][1]
+    assert out["/api/sports/offers?league=nba"][0] == 503
+    assert out["/auth/me"][0] == 200
+
+
+# ------------------------------------------------------------------- in-process: a sports exception
+class _H:
+    pass
+
+
+def _handler():
+    import server
+
+    class H(server.Handler):
+        def __init__(self, path):
+            self.path = path
+            self.headers, self.rfile, self.wfile = email.message.Message(), io.BytesIO(), io.BytesIO()
+            self.client_address, self.close_connection = ("10.0.0.1", 1), False
+            self.code = None
+
+        def send_response(self, code, message=None):
+            self.code = code
+
+        def send_header(self, k, v):
+            pass
+
+        def end_headers(self):
+            pass
+    return H
+
+
+def test_a_sports_exception_cannot_break_esports(monkeypatch):
+    H = _handler()
+    from sports import web
+    monkeypatch.setenv("SPORTS_API", "1")
+    monkeypatch.setenv("SPORTS_UI", "1")
+
+    def boom(*a, **k):
+        raise RuntimeError("sports exploded")
+    monkeypatch.setattr(web, "handle", boom)
+    for p in ("/api/sports/status", "/sports"):
+        h = H(p)
+        h.do_GET()
+        assert h.code == 503 and json.loads(h.wfile.getvalue())["error"] == "sports_unavailable"
+    h = H("/auth/me")
+    h.do_GET()
+    assert h.code == 200                                             # esports unaffected, same process
+
+
+def test_flags_are_off_by_default(monkeypatch):
+    from sports import flags
+    for f in flags.FLAGS:
+        monkeypatch.delenv(f, raising=False)
+    assert flags.state() == {f: False for f in flags.FLAGS}
+    monkeypatch.setenv("SPORTS_API", "yes")
+    assert flags.on("SPORTS_API") and not flags.on("SPORTS_UI")
+    monkeypatch.setenv("SPORTS_UI", "0")
+    assert not flags.on("SPORTS_UI")
+    with pytest.raises(flags.FlagOff):
+        flags.require("SPORTS_INGEST")
