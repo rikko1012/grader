@@ -47,8 +47,22 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements-test.txt
-      - name: LoL, sports and CS2 regression checks (no provider credentials)
-        run: python -m pytest lol/tests tests sports/tests -q -p no:cacheprovider
+      - name: LoL and CS2 regression checks (no provider credentials)
+        run: python -m pytest lol/tests tests -q -p no:cacheprovider
+
+  # Sports (NFL/NBA) runs as its own job: a sports failure is visible on its own and never blocks or changes the
+  # esports job above, which the manual full-history collection depends on (sports/INTEGRATION_MANIFEST.md).
+  sports-offline-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements-test.txt
+      - name: Sports regression checks (no provider credentials, no network)
+        run: python -m pytest sports/tests -q -p no:cacheprovider
 
   full-history:
     if: github.event_name == 'workflow_dispatch'

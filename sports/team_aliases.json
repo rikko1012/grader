@@ -1,0 +1,103 @@
+{
+  "_note": "Exact team-abbreviation aliases: source abbreviation -> ESPN abbreviation (the canonical one). Never fuzzy. Each entry was corroborated 2026-10-23 by the same game on the same date with the other team matching (PrizePicks / Underdog / Kalshi boards vs ESPN's scoreboard). An abbreviation equal to ESPN's needs no entry. valid_from is the first date it was corroborated; a relocation or rename closes the entry with valid_to and adds a new one.",
+  "version": "ta-1",
+  "nba": {
+    "GSW": {
+      "espn": "GS",
+      "sources": [
+        "prizepicks",
+        "underdog",
+        "kalshi"
+      ],
+      "valid_from": "2026-10-23",
+      "valid_to": null,
+      "evidence": "MEM @ GSW / MEM @ GS 2026-10-24T02:00Z"
+    },
+    "NOP": {
+      "espn": "NO",
+      "sources": [
+        "prizepicks",
+        "underdog",
+        "kalshi"
+      ],
+      "valid_from": "2026-10-23",
+      "valid_to": null,
+      "evidence": "NOP @ UTA / NO @ UTAH 2026-10-24T01:30Z"
+    },
+    "NYK": {
+      "espn": "NY",
+      "sources": [
+        "prizepicks",
+        "underdog",
+        "kalshi"
+      ],
+      "valid_from": "2026-10-23",
+      "valid_to": null,
+      "evidence": "NYK @ BOS / NY @ BOS 2026-10-23T23:00Z"
+    },
+    "SAS": {
+      "espn": "SA",
+      "sources": [
+        "prizepicks",
+        "underdog",
+        "kalshi"
+      ],
+      "valid_from": "2026-10-23",
+      "valid_to": null,
+      "evidence": "HOU @ SAS / HOU @ SA 2026-10-24T01:30Z"
+    },
+    "UTA": {
+      "espn": "UTAH",
+      "sources": [
+        "prizepicks",
+        "underdog",
+        "kalshi"
+      ],
+      "valid_from": "2026-10-23",
+      "valid_to": null,
+      "evidence": "NOP @ UTA / NO @ UTAH 2026-10-24T01:30Z"
+    },
+    "WAS": {
+      "espn": "WSH",
+      "sources": [
+        "prizepicks",
+        "underdog",
+        "kalshi"
+      ],
+      "valid_from": "2026-10-23",
+      "valid_to": null,
+      "evidence": "TOR @ WAS / TOR @ WSH 2026-10-23T23:00Z"
+    }
+  },
+  "nfl": {
+    "LA": {
+      "espn": "LAR",
+      "sources": [
+        "prizepicks"
+      ],
+      "valid_from": "2026-10-23",
+      "valid_to": null,
+      "evidence": "LA @ LV (PrizePicks) / LAR @ LV (Underdog, Kalshi, ESPN) 2026-10-25"
+    },
+    "WAS": {
+      "espn": "WSH",
+      "sources": [
+        "prizepicks",
+        "underdog",
+        "kalshi"
+      ],
+      "valid_from": "2026-10-23",
+      "valid_to": null,
+      "evidence": "unverified on 2026-10-23 (WSH not on the boards that day): applied only with a matching opponent and date"
+    },
+    "JAC": {
+      "espn": "JAX",
+      "sources": [
+        "kalshi"
+      ],
+      "valid_from": "2026-10-18",
+      "valid_to": null,
+      "evidence": "KXNFL*-26OCT18HOUJAC / ESPN 'HOU VS JAX' 2026-10-18 (settled-market verification)"
+    }
+  }
+}

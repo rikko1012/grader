@@ -1,5 +1,13 @@
 # Sports scout (NBA / NFL, plus WNBA and college)
 
+> **Integration branch note (feature/scout-sports-nfl-nba).** This README describes the data foundation as delivered
+> (`claude/dreamy-wozniak-kefq4r @ d393292`, research version `sharp-1`). The canonical layer built on it - versioned
+> contracts, the canonical store, adapters, capability gates, the worker, flags and the single server hook - is
+> documented in [API.md](API.md); the audit of this branch's assumptions (Underdog break-even, Kalshi handling, the
+> line-shift transformation) in [AUDIT.md](AUDIT.md); the pinned review, live-data location and licences in
+> [INTEGRATION_MANIFEST.md](INTEGRATION_MANIFEST.md). Where AUDIT.md corrects a statement below, the correction wins;
+> sharp-1 outputs stay as versioned research records.
+
 Every PrizePicks and Underdog player prop for NBA, NFL, WNBA, college basketball and college football, set beside the
 **sharp market's chance** of each side. The sharp market is a price the betting market itself sets. The board ranks lines
 where the pick'em line and the market disagree most. It is built the same way as the LoL side: everything lives in

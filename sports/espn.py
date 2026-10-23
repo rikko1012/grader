@@ -44,20 +44,24 @@ def _event(e):
             "completed": bool(st.get("completed")), "status": st.get("description")}
 
 
+def scoreboard_raw(lg, day, refresh=False):
+    """ESPN's scoreboard body for ONE US calendar day (cached). 2026-10-23: a date RANGE (dates=YYYYMMDD-YYYYMMDD,
+    with or without limit) answers HTTP 400 "Failed to get events endpoint." for NBA and NFL, so ranges are read one
+    day at a time (integration fix, sports/INTEGRATION_MANIFEST.md)."""
+    d = f"{day:%Y%m%d}"
+    past = day < datetime.now(timezone.utc).date() - timedelta(days=1)
+    params = {"dates": d, "limit": 500}
+    if lg["key"] == "cfb":
+        params["groups"] = 80                     # FBS (ESPN's default lists only ranked games)
+    return cache.fetch("espn:scoreboard", f"{lg['key']}:{d}", 6 * 3600 if past else 300,
+                       lambda: net.get_json(f"{SITE}/{_path(lg)}/scoreboard", params=params), refresh=refresh)
+
+
 def scoreboard(lg, start, end, refresh=False):
-    """Games whose dates fall in [start, end] (dates, US calendar days as ESPN files them). Asked ONE day at a time:
-    ESPN's scoreboard answers 400 to a dates=A-B range (NBA, 2026-10-23), so each day is its own cached request."""
+    """Games whose dates fall in [start, end] (dates, US calendar days as ESPN files them)."""
     out, seen, day = [], set(), start
-    today = datetime.now(timezone.utc).date()
     while day <= end:
-        d = f"{day:%Y%m%d}"
-        params = {"dates": d, "limit": 500}
-        if lg["key"] == "cfb":
-            params["groups"] = 80                 # FBS (ESPN's default lists only ranked games)
-        body = cache.fetch("espn:scoreboard", f"{lg['key']}:{d}", 6 * 3600 if day < today - timedelta(days=1) else 300,
-                           lambda params=params: net.get_json(f"{SITE}/{_path(lg)}/scoreboard", params=params),
-                           refresh=refresh)
-        for e in body.get("events") or []:
+        for e in scoreboard_raw(lg, day, refresh=refresh).get("events") or []:
             if e.get("id") not in seen:
                 seen.add(e.get("id"))
                 out.append(_event(e))
