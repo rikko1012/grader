@@ -475,6 +475,19 @@ class ContextSnapshot(_Record):
     def identity(self):
         return (self.source, f"{self.kind}|{self.subject_id}|{self.event_id or ''}")
 
+    def to_dict(self) -> dict:
+        # the record-type tag "kind" would overwrite the context's own kind (injury, starter, ...): keep it as context_kind
+        d = asdict(self)
+        d["context_kind"] = d.pop("kind")
+        d["kind"] = self.KIND
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict):
+        d = dict(d)
+        d["kind"] = d.pop("context_kind", None) or d.get("kind")
+        return super().from_dict(d)
+
     def validate(self):
         e = (_enum(self, "league", LEAGUES) + _enum(self, "kind", CONTEXT_KINDS) + _enum(self, "present", TRI)
              + _ts_errors(self, ("source_updated_at", "as_of", "observed_at", "known_at"), required=("observed_at",)))
