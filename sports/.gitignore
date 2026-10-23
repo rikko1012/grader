@@ -1,0 +1,2 @@
+# sports' local data (cache, forecast log, lines archive, output) - lives on the server disk, never in the code
+.data/
