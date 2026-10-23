@@ -162,3 +162,9 @@ Additive unless marked **breaking**:
   to an existing log.
 - `markets.ODDS_API["football"]` gains `player_pass_rush_yds`.
 - New CLI commands: `books`, `books-health`, `books-plan`, `books-run`, `books-verify`.
+- (66644ee) `record.export` / `record.import_`, CLI `export-forecasts` / `import-forecasts`; the first real log is in
+  `sports/research/forecasts/` (MANIFEST.json: count, time range, schema, sha256).
+- (game data) new package `sports/games/` - see its README: game store (`sports_game_*` tables), factor contract
+  `sports-factors/1`, board rows gain `factors`, forecasts gain a `factors` column (added automatically). The worker
+  (`python -m sports.books.worker`) now also runs the game-data tick each pass (`--no-games` to skip). `net.get`
+  honours a 429's Retry-After (at most 60 s); Kalshi pacing is 2 s.

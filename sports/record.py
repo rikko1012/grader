@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS forecasts (
   sharp_source TEXT, sharp_line REAL, sharp_p_over REAL, sharp_books INTEGER, sharp_limit REAL, gap REAL, far INTEGER,
   sharp_method TEXT, sharp_rungs TEXT, sharp_spread REAL,
   base_mean REAL, base_chance REAL, base_games INTEGER, model TEXT, fit TEXT, injury TEXT, role TEXT,
-  book_consensus TEXT);
+  book_consensus TEXT, factors TEXT);
 CREATE INDEX IF NOT EXISTS forecasts_offer ON forecasts (offer_id, id);
 CREATE TABLE IF NOT EXISTS settlements (
   id INTEGER PRIMARY KEY AUTOINCREMENT, forecast_id INTEGER NOT NULL, settled_at TEXT NOT NULL, outcome TEXT,
@@ -46,7 +46,7 @@ def connect(path=None):
     con.row_factory = sqlite3.Row
     con.executescript(SCHEMA)
     have = {r["name"] for r in con.execute("PRAGMA table_info(forecasts)")}
-    for col, typ in (("role", "TEXT"), ("book_consensus", "TEXT")):                   # columns added after a log was first created
+    for col, typ in (("role", "TEXT"), ("book_consensus", "TEXT"), ("factors", "TEXT")):  # added after a log was first created
         if col not in have:
             con.execute(f"ALTER TABLE forecasts ADD COLUMN {col} {typ}")
     return con
@@ -71,6 +71,14 @@ def _dt(s):
     return datetime.fromisoformat(s.replace("Z", "+00:00"))
 
 
+def _factors_json(payload):
+    """The factor values the row had (contract sports-factors/1), logged beside the chance - never part of it."""
+    if not payload:
+        return None
+    from .games.attach import compact
+    return json.dumps(compact(payload), separators=(",", ":"), default=str)
+
+
 def save(con, rows, baselines=None, now=None):
     """Append matched rows that start in the future. -> number of rows written."""
     now = now or _now()
@@ -91,15 +99,15 @@ def save(con, rows, baselines=None, now=None):
         con.execute("INSERT INTO forecasts (recorded_at, league, platform, offer_id, player, player_key, team, game, "
                     "start, market, line, odds_type, sides_offered, side, chance, push, multiplier, eff, sharp_source, "
                     "sharp_line, sharp_p_over, sharp_books, sharp_limit, gap, far, sharp_method, sharp_rungs, "
-                    "sharp_spread, base_mean, base_chance, base_games, model, fit, injury, role, book_consensus) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "sharp_spread, base_mean, base_chance, base_games, model, fit, injury, role, book_consensus, "
+                    "factors) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (_iso(now), r["league"], r["platform"], r["offer_id"], r["player"], r["player_key"], r.get("team"),
                      r.get("game"), r["start"], r["market"], r["line"], r.get("odds_type"),
                      json.dumps(r["sides_offered"]), r["side"], r["chance"], r.get("push"), r.get("multiplier"),
                      r.get("eff"), s["source"], s["line"], s["p_over"], s.get("books"), s.get("limit"), s["gap"],
                      int(bool(s["far"])), s.get("method"), json.dumps(s.get("rungs")), s.get("spread"),
                      b.get("mean"), base_chance, b.get("games"), MODEL_TAG, fit, r.get("injury"), r.get("role"),
-                     json.dumps(r["books"]) if r.get("books") else None))
+                     json.dumps(r["books"]) if r.get("books") else None, _factors_json(r.get("factors"))))
         n += 1
     con.commit()
     return n

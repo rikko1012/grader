@@ -86,6 +86,12 @@ def board(lg, refresh=False, injuries=True):
         books_cli.attach(lg, rows)              # stored sportsbook prices only - never a provider call
     except Exception as e:
         st2["books_store"] = {"ok": False, "error": str(e)[:120]}
+    try:
+        from .games import attach as games_attach
+        games_attach.attach(lg, rows)           # factors from the game store (display + log; never the chance)
+        st2["factors"] = {"ok": True, "quotes": sum(1 for r in rows if r.get("factors"))}
+    except Exception as e:
+        st2["factors"] = {"ok": False, "error": str(e)[:120]}
     return rows, {**st, **st2}
 
 
@@ -335,6 +341,82 @@ def cmd_import(a):
     print(f"  added {nf} forecasts and {ns} settlements from {a.path} (rows already in the log are skipped)")
 
 
+def cmd_games_backfill(a):
+    from .games import collect, store as gstore
+    db = gstore.connect()
+    try:
+        for season in a.season:
+            print(f"  {a.league} {season}: {collect.backfill(db, a.league, season, limit=a.limit)}")
+    finally:
+        db.close()
+
+
+def cmd_games_tick(a):
+    from .games import collect, store as gstore
+    db = gstore.connect()
+    try:
+        print(json.dumps(collect.tick(db, tuple(x for x in a.leagues.split(",") if x)), indent=1, default=str))
+    finally:
+        db.close()
+
+
+def cmd_games_derive(a):
+    from .games import collect, store as gstore
+    db = gstore.connect()
+    try:
+        print(f"  {a.league}: derived {collect.rederive(db, a.league, refit_ep=a.refit_ep, train_seasons=a.train_seasons)}"
+              " games")
+    finally:
+        db.close()
+
+
+def cmd_factors(a):
+    """One player's factor payload for his next game (contract sports-factors/1)."""
+    from .games import attach as games_attach
+    lg = config.league(a.league)
+    row = {"player_key": names.key(a.player), "team": a.team, "market": a.market,
+           "start": a.start or _next_start(lg, a.player, a.team)}
+    if not row["start"]:
+        print("  no upcoming game found for that player / team (store rosters with games-tick first)")
+        return
+    games_attach.attach(lg, [row])
+    print(json.dumps(row["factors"], indent=1, default=str) if row["factors"] else
+          "  player or game not in the game store (run games-backfill / games-tick)")
+
+
+def _next_start(lg, player, team=None):
+    from .games import store as gstore
+    db = gstore.connect()
+    try:
+        a = db.all("SELECT team_id FROM sports_game_athletes WHERE league = ? AND player_key = ?",
+                   (lg["key"], names.key(player)))
+    finally:
+        db.close()
+    if len(a) != 1:
+        return None
+    now = datetime.now(timezone.utc)
+    from datetime import timedelta
+    for e in espn.scoreboard(lg, now.date(), (now + timedelta(days=8)).date()):
+        if a[0]["team_id"] in (str((e.get("home") or {}).get("id")), str((e.get("away") or {}).get("id"))) \
+                and e.get("start") and not e.get("completed"):
+            return e["start"]
+    return None
+
+
+def cmd_factors_contract(a):
+    from .games import contract
+    print(json.dumps(contract.describe(config.league(a.league)["key"]), indent=1))
+
+
+def cmd_games_status(a):
+    from .games import collect, store as gstore
+    db = gstore.connect()
+    try:
+        print(json.dumps(collect.status(db), indent=1, default=str))
+    finally:
+        db.close()
+
+
 def cmd_watch(a):
     last_settle = 0.0
     while True:
@@ -388,6 +470,25 @@ def main(argv=None):
     for name in ("export-forecasts", "import-forecasts"):
         s = sub.add_parser(name)
         s.add_argument("path", help="gzipped JSON lines (.jsonl.gz)")
+    s = sub.add_parser("games-backfill")
+    s.add_argument("league")
+    s.add_argument("--season", type=int, nargs="+", required=True, help="ESPN season year (NBA: the year it ends)")
+    s.add_argument("--limit", type=int)
+    s = sub.add_parser("games-tick")
+    s.add_argument("--leagues", default="nba,nfl")
+    sub.add_parser("games-status")
+    s = sub.add_parser("factors")
+    s.add_argument("league")
+    s.add_argument("player")
+    s.add_argument("market")
+    s.add_argument("--team", help="board / ESPN abbreviation when the name is ambiguous")
+    s.add_argument("--start", help="game start (ISO); default: his team's next game")
+    s = sub.add_parser("factors-contract")
+    s.add_argument("league")
+    s = sub.add_parser("games-derive")
+    s.add_argument("league")
+    s.add_argument("--refit-ep", action="store_true", help="football: refit the expected-points table first")
+    s.add_argument("--train-seasons", type=int, nargs="+", help="seasons to fit on (default: all but the latest)")
     s = sub.add_parser("books")
     s.add_argument("league")
     s.add_argument("--player")
@@ -405,5 +506,7 @@ def main(argv=None):
         a.league = config.league(a.league)["key"]
     {"leagues": cmd_leagues, "slate": cmd_slate, "lines": cmd_lines, "sharp": cmd_sharp, "edges": cmd_edges,
      "player": cmd_player, "record": cmd_record, "settle": cmd_settle, "report": cmd_report,
-     "watch": cmd_watch, "export-forecasts": cmd_export, "import-forecasts": cmd_import, "books": books_cli.cmd_view, "books-health": books_cli.cmd_health,
+     "watch": cmd_watch, "export-forecasts": cmd_export, "import-forecasts": cmd_import, "games-backfill": cmd_games_backfill, "games-tick": cmd_games_tick,
+     "games-status": cmd_games_status, "games-derive": cmd_games_derive, "factors": cmd_factors,
+     "factors-contract": cmd_factors_contract, "books": books_cli.cmd_view, "books-health": books_cli.cmd_health,
      "books-plan": books_cli.cmd_plan, "books-run": books_cli.cmd_run, "books-verify": books_cli.cmd_verify}[a.cmd](a)

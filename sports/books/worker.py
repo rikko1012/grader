@@ -1,4 +1,6 @@
-"""The one scheduled odds worker - the only code that calls a sportsbook or odds provider.
+"""The one scheduled worker - the only code that calls a sportsbook, odds or game-data provider on a schedule.
+Each pass runs the books job below, then the game-data job (sports/games/collect.tick: finals, pre-game context,
+Kalshi game ladders, ESPN-supplied DraftKings prop lines, NWS weather, injuries, ratings, rosters - each when due).
 
     python -m sports.books.worker                 run forever (a pass every PASS_EVERY_S; nothing is fetched early)
     python -m sports.books.worker --once          one pass, then exit
@@ -244,6 +246,7 @@ def main(argv=None):
     p = argparse.ArgumentParser(prog="python -m sports.books.worker")
     p.add_argument("--once", action="store_true")
     p.add_argument("--leagues", default=",".join(LEAGUES))
+    p.add_argument("--no-games", action="store_true", help="books only (skip the game-data job)")
     a = p.parse_args(argv)
     leagues = tuple(x.strip() for x in a.leagues.split(",") if x.strip())
     stop = []
@@ -257,6 +260,16 @@ def main(argv=None):
         finally:
             db.close()
         print(s, flush=True)
+        if not a.no_games:
+            from ..games import collect, store as gstore
+            gdb = gstore.connect()
+            try:
+                g = collect.tick(gdb, leagues)
+            except Exception as e:
+                g = {"error": str(e)[:300]}
+            finally:
+                gdb.close()
+            print({"games": g}, flush=True)
         if a.once or stop:
             return
         for _ in range(PASS_EVERY_S):

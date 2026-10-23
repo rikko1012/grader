@@ -83,6 +83,34 @@ ODDS_API = {
                  "player_rush_reception_yds": "rush_rec_yds", "player_pass_rush_yds": "pass_rush_yds"},
 }
 
+# ESPN-supplied DraftKings prop types (core API odds/100/propBets "type.name", read 2026-10-23 on NBA and NFL games).
+# "Total X" is one line; "X Milestones" is a ladder rung "N+" (= over N - 0.5). Full game includes overtime: the NFL names
+# say "(incl. overtime)"; the NBA's say nothing, and DraftKings' NBA player props count overtime. A half / quarter
+# version of a stat is a different market and is kept with its period, never matched to a full-game line.
+ESPN_DK = {
+    "basketball": {"Total Points": "points", "Total Rebounds": "rebounds", "Total Assists": "assists",
+                   "Total 3-Point Field Goals": "threes", "Total Points, Rebounds, and Assists": "pra",
+                   "Total Points and Rebounds": "pr", "Total Points and Assists": "pa",
+                   "Total Assists and Rebounds": "ra", "Total Steals": "steals", "Total Blocks": "blocks",
+                   "Points Milestones": "points", "Rebounds Milestones": "rebounds", "Assists Milestones": "assists",
+                   "3-Point Field Goals Milestones": "threes", "Points + Assists + Rebounds Milestones": "pra",
+                   "Points + Rebounds Milestones": "pr", "Points + Assists Milestones": "pa",
+                   "Steals Milestones": "steals", "Blocks Milestones": "blocks"},
+    "football": {"Total Passing Yards (incl. overtime)": "pass_yds", "Total Passing Attempts (incl. overtime)": "pass_att",
+                 "Total Pass Completions (incl. overtime)": "pass_cmp",
+                 "Total Passing Touchdowns (incl. overtime)": "pass_td",
+                 "Total Passing Interceptions (incl. overtime)": "pass_int",
+                 "Total Rushing Yards (incl. overtime)": "rush_yds", "Total Carries (incl. overtime)": "rush_att",
+                 "Total Receptions (incl. overtime)": "rec", "Total Receiving Yards (incl. overtime)": "rec_yds",
+                 "Total Rushing Plus Receiving Yards (incl. overtime)": "rush_rec_yds",
+                 "Total Passing Plus Rushing Yards (incl. overtime)": "pass_rush_yds",
+                 "Passing Yards Milestones": "pass_yds", "Passing Attempts Milestones": "pass_att",
+                 "Passing Touchdown Milestones": "pass_td", "Interceptions Thrown Milestones": "pass_int",
+                 "Rushing Yards Milestones": "rush_yds", "Rushing Attempts Milestones": "rush_att",
+                 "Receptions Milestones": "rec", "Receiving Yards Milestones": "rec_yds",
+                 "Rushing + Receiving Yards Milestones": "rush_rec_yds"},
+}
+
 
 def market(family, key):
     return MARKETS.get(family, {}).get(key)

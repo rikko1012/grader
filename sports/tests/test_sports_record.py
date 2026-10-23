@@ -1,4 +1,5 @@
 """The forecast log: append-only saves, settlement from ESPN box scores, and the report."""
+import json
 from datetime import datetime, timezone
 
 import pytest
@@ -154,3 +155,15 @@ def test_import_tolerates_an_older_log_without_newer_columns(con, tmp_path):
     assert record.import_(con, path) == (1, 0)
     r = con.execute("SELECT role, book_consensus, chance FROM forecasts").fetchone()
     assert r["role"] is None and r["book_consensus"] is None and r["chance"] == 0.55
+
+
+def test_save_logs_factors_beside_the_chance_without_changing_it(con):
+    rows = _rows("Nikola Jokic", "nikola jokic", 25.5, 0.55)
+    chance = rows[0]["chance"]
+    rows[0]["factors"] = {"contract": "sports-factors/1", "as_of": "2026-10-22T17:00:00Z", "event_id": "1",
+                          "athlete_id": "3112335", "factors": {"min_proj": 35.1, "dvp": 1.04}, "missing": {"x": "y"}}
+    record.save(con, rows, now=BEFORE)
+    got = con.execute("SELECT chance, factors FROM forecasts").fetchone()
+    f = json.loads(got["factors"])
+    assert got["chance"] == chance and f["contract"] == "sports-factors/1" and f["f"]["dvp"] == 1.04
+    assert "missing" not in f                                         # reasons live in the registry, not every row

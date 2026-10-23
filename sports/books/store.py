@@ -73,14 +73,15 @@ def dt(s):
 class DB:
     """A thin connection wrapper: SQL is written once with '?' placeholders; rows come back as dicts."""
 
-    def __init__(self, path=None, dsn=None):
+    def __init__(self, path=None, dsn=None, schema=None):
+        schema = schema or SCHEMA
         self.pg = bool(dsn)
         if self.pg:
             import psycopg2
             import psycopg2.extras
             self.con = psycopg2.connect(dsn)
             self._cursor = lambda: self.con.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-            ddl = SCHEMA.replace("{ID}", "BIGSERIAL PRIMARY KEY").replace("{REAL}", "DOUBLE PRECISION")
+            ddl = schema.replace("{ID}", "BIGSERIAL PRIMARY KEY").replace("{REAL}", "DOUBLE PRECISION")
         else:
             p = path or (config.DATA_DIR / "books.db")
             p.parent.mkdir(parents=True, exist_ok=True)
@@ -88,7 +89,7 @@ class DB:
             self.con.row_factory = sqlite3.Row
             self.con.execute("PRAGMA journal_mode=WAL")
             self._cursor = self.con.cursor
-            ddl = SCHEMA.replace("{ID}", "INTEGER PRIMARY KEY AUTOINCREMENT").replace("{REAL}", "REAL")
+            ddl = schema.replace("{ID}", "INTEGER PRIMARY KEY AUTOINCREMENT").replace("{REAL}", "REAL")
         cur = self._cursor()
         for stmt in (s.strip() for s in ddl.split(";")):
             if stmt:

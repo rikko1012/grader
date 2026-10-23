@@ -10,9 +10,10 @@ import requests
 from . import config
 
 _GAPS = {"site.web.api.espn.com": 0.5, "site.api.espn.com": 0.5,      # ESPN: unofficial, so at most 2 / second
+         "sports.core.api.espn.com": 0.5, "api.weather.gov": 1.0,
          "guest.api.arcadia.pinnacle.com": 1.0,                       # Pinnacle guest API: 1 / second
          "partner-api.prizepicks.com": 2.0, "api.underdogfantasy.com": 1.0,
-         "api.the-odds-api.com": 1.0, "api.elections.kalshi.com": 1.5, "eu-offering-api.kambicdn.com": 1.0,
+         "api.the-odds-api.com": 1.0, "api.elections.kalshi.com": 2.0, "eu-offering-api.kambicdn.com": 1.0,
          "gamma-api.polymarket.com": 1.0}
 _LAST = {}
 _LOCK = threading.Lock()
@@ -50,7 +51,7 @@ def session():
 
 def get(url, params=None, headers=None, timeout=30, tries=3, ok=(200,)):
     """GET with pacing and retries -> Response for a status in `ok`; raises HttpError otherwise. A 429 / 5xx / dropped
-    connection is retried with a growing pause (3 s, 6 s)."""
+    connection is retried with a growing pause (3 s, 6 s), or after the 429's Retry-After (60 s at most)."""
     host = urlsplit(url).netloc
     last = None
     for attempt in range(tries):
@@ -65,6 +66,10 @@ def get(url, params=None, headers=None, timeout=30, tries=3, ok=(200,)):
             if r.status_code not in RETRY_STATUS:
                 raise HttpError(r.status_code, url, r.text[:300])
             last = HttpError(r.status_code, url, r.text[:300])
+            wait = r.headers.get("Retry-After", "")
+            if r.status_code == 429 and wait.isdigit() and attempt + 1 < tries:
+                time.sleep(min(60, int(wait)))           # the source says how long; never more than a minute
+                continue
         if attempt + 1 < tries:
             time.sleep(3 * (attempt + 1))
     if isinstance(last, HttpError):
