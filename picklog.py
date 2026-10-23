@@ -491,6 +491,12 @@ def pick_row(res, verdict, test=False):
     row["_quote"] = json.dumps(bk.get("quote"), default=str) if bk.get("quote") else None   # board quote (measurement only)
     row["_fh1"] = res.get("_fh1")                     # fh-1 shadow record (perf_shadow; board grades only) - never a live input
     row["_platform_start"] = bk.get("start")          # the platform's listed start for this line (schedule_obs; 2026-10-23)
+    try:   # vm-1 prop shadow (map context, research/map_veto/props): computed by the writer thread, only for a forecast
+        import veto_serve   # row it actually appends - never on the member's request, never a grade input
+        row["_vm1"] = {"match_id": veto_serve.match_id_of(res), "live_p_more": g.get("p_more"),
+                       "gi": {k: (dict(gi[k]) if isinstance(gi.get(k), dict) else gi.get(k)) for k in ("prop", "line", "scope", "bo", "perf")}}
+    except Exception:
+        row["_vm1"] = None
     return row
 
 
@@ -529,11 +535,20 @@ def data_revision():
     return (_REV["rev"] or "matches=?") + f";records_input=full;perf_input={pin}"
 
 
-def _shadow(row):
+def _shadow(row, vm1_in=None):
     try:
-        return json.dumps((json.loads(row.get("factors") or "{}") or {}).get("shadow"))
+        sh = (json.loads(row.get("factors") or "{}") or {}).get("shadow")
     except (ValueError, TypeError):
         return None
+    if vm1_in is not None:          # vm-1 shadow (A1 map context / C0 no-map control), added for the forecast row only
+        try:
+            import veto_serve
+            ent = veto_serve.vm1_shadow(vm1_in.get("match_id"), vm1_in.get("gi"), vm1_in.get("live_p_more"))
+        except Exception as e:     # noqa: BLE001 - a shadow never stops the pick log
+            ent = {"A1": {"eligible": None, "reason": "shadow failed", "error": type(e).__name__},
+                   "C0": {"eligible": None, "reason": "shadow failed", "error": type(e).__name__}}
+        sh = dict(sh or {}, vm1=ent)
+    return json.dumps(sh, default=str)
 
 
 def _unchanged(last, row, extra):
@@ -578,7 +593,7 @@ def _forecast(con, pid, row, kind, gi=None, extra=None):
                 "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (pid, kind, row["logged_at"], row.get("match_start"), row["line"], row["pick"], row["p_pick"],
                  row.get("p_more"), row["grade"], row["units"], row.get("lambda"), row.get("p_win"), row.get("rec_hit"),
-                 row.get("sample_maps"), row.get("model_version"), _shadow(row), gi, extra.get("probs_raw"), extra.get("data_rev"),
+                 row.get("sample_maps"), row.get("model_version"), _shadow(row, extra.get("vm1")), gi, extra.get("probs_raw"), extra.get("data_rev"),
                  extra.get("odds_source"), extra.get("odds_policy"), extra.get("mapping_rev"), extra.get("odds_sig"),
                  extra.get("git_commit"), extra.get("quote")))
     _record_mapping(con, extra.get("mapping_rev"))
@@ -682,7 +697,8 @@ def write_row(row):
     gi = row.pop("_gi", None)                       # the exact grader inputs - forecasts table only
     fh = row.pop("_fh1", None)                      # fh-1 shadow record - shadow_forecasts only
     pstart = row.pop("_platform_start", None)       # the platform's listed start - schedule_obs only
-    extra = {"probs_raw": row.pop("_probs", None), "data_rev": data_revision(), "odds_source": row.pop("_odds_src", None),
+    vm1_in = row.pop("_vm1", None)                  # vm-1 shadow inputs - forecasts.shadow only
+    extra = {"vm1": vm1_in, "probs_raw": row.pop("_probs", None), "data_rev": data_revision(), "odds_source": row.pop("_odds_src", None),
              "odds_sig": row.pop("_odds_sig", None), "odds_policy": row.pop("_odds_policy", None),
              "mapping_rev": row.pop("_mapping_rev", None), "quote": row.pop("_quote", None),
              "git_commit": os.environ.get("RENDER_GIT_COMMIT") or None}    # the deployed commit (Render sets it)

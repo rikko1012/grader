@@ -805,6 +805,19 @@ def veto_body(match_id):
 
 
 VETO_TTL = 30
+_RQ = {"t": 0.0, "n": 0, "busy": False}
+BUSY_RPS = 20              # more requests a second than this = members are being served: background veto work waits
+
+
+def members_busy():
+    """True while the server answers more than BUSY_RPS requests a second (sampled once a second; no lock, no I/O): the
+    veto background (veto_serve.BUSY) steps aside so a member crowd never queues behind its CPU work."""
+    now = time.time()
+    if now - _RQ["t"] >= 1.0:
+        n = STATS["requests"]
+        _RQ["busy"] = _RQ["t"] > 0 and (n - _RQ["n"]) / (now - _RQ["t"]) > BUSY_RPS
+        _RQ.update(t=now, n=n)
+    return _RQ["busy"]
 
 
 def _row_match_id(row):
@@ -2119,7 +2132,8 @@ def start_research():
         RESEARCH["errors"].append(f"matchid: {type(e).__name__}: {str(e)[:160]}")
     try:                                   # map veto (veto_serve, veto-1): DISPLAY + LOGGING only - its own background thread
         import veto_serve                  # builds the table in a child process, predicts board matches once per input
-        RESEARCH["veto_started"] = veto_serve.start()   # change; members only read the stored answer
+        veto_serve.BUSY = members_busy     # change; members only read the stored answer; it steps aside for a crowd
+        RESEARCH["veto_started"] = veto_serve.start()
     except Exception as e:
         RESEARCH["errors"].append(f"veto: {type(e).__name__}: {str(e)[:160]}")
     try:                                   # Thunderpick partner odds: one poller, shared request budget (admin-only until

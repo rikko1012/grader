@@ -83,6 +83,23 @@ SHOW_COMBOS = 5               # combinations shown to members
 KNOWN_TTL_H = 0.03            # BO3.gg match list cache (~2 min)
 KNOWN_KEEP_S = 1800           # a failed BO3.gg read keeps the last good confirmed maps this long
 YIELD_S = 0.01                # pause between predictions (request threads get the interpreter)
+BUSY = None                   # server.members_busy: True while a member crowd is being served
+STEP_ASIDE_MAX_S = 60         # the background waits at most this long per step for a crowd to pass
+
+
+def polite(used_s=0.0):
+    """Between two units of background work: rest at least as long as the last unit took (<= 50% of one core) and wait
+    while members are being served (bounded). Never called on a member's request."""
+    time.sleep(max(YIELD_S, used_s))
+    waited = 0.0
+    while BUSY is not None and waited < STEP_ASIDE_MAX_S:
+        try:
+            if not BUSY():
+                break
+        except Exception:
+            break
+        time.sleep(0.25)
+        waited += 0.25
 
 _LOCK = threading.Lock()      # guards STATE / _STORE / _WANT (never held during I/O or model work)
 STATE = {"table": None, "meta": None, "loaded_at": None, "table_sha": None, "error": None, "build": None,
@@ -914,11 +931,24 @@ def member_payload(inp, rec, state, now):
 
 def compute_match(m, table, table_meta, pools_today, tpools, known_entry, now):
     """(cache key, member payload or None, record or None, problem)."""
+    return _compute(m, table, table_meta, pools_today, tpools, known_entry, now)[:4]
+
+
+UNCHANGED = "unchanged"
+
+
+def _compute(m, table, table_meta, pools_today, tpools, known_entry, now, cur_key=None):
     inp, problem = match_inputs(m, table, pools_today, tpools, known_entry, now)
     if inp is None:
-        return None, None, None, problem
+        return None, None, None, problem, None
+    return _compute_inp(inp, problem, table, table_meta, now, cur_key) + (inp,)
+
+
+def _compute_inp(inp, problem, table, table_meta, now, cur_key=None):
     key = _sha({"inp": {k: v for k, v in inp.items() if k != "match_start"}, "table": (table_meta or {}).get("sha"),
                 "v": vm.version(), "s": SERVE_VERSION})
+    if cur_key is not None and key == cur_key:
+        return key, None, None, UNCHANGED            # same inputs as the stored answer: nothing is recomputed
     state = veto_state(inp["format"], inp["known_actions"]) if not inp.get("known_problem") else "pending"
     if problem:
         # contradictory confirmed data / no pool: nothing shown (no guessed panel); the attempt is still recorded
@@ -929,6 +959,83 @@ def compute_match(m, table, table_meta, pools_today, tpools, known_entry, now):
         return key, None, None, f"illegal veto: {e}"
     rec = make_record(inp, out, table_meta, state, now)
     return key, member_payload(inp, rec, state, now), rec, None
+
+
+# ---------------------------------------------------------------- vm-1 prop shadow (research/map_veto/props, AM-1)
+VM1_TOP = {"bo1": 250, "bo3": 250, "bo5": 2520}
+VM1_KEYS = ("version", "arm", "eligible", "reason", "error", "p_over", "raw", "lam", "rounds_mean", "ot_prob", "p_reach_map3",
+            "delta_p", "seq_mass", "veto_version")
+_VM1 = {"mod": None}
+
+
+def vm1_module():
+    """The frozen vm-1 module (repo-root copy of research/map_veto/props/vm1.py, byte-identical - tests check the hash).
+    Its import puts a directory three levels up on sys.path; that entry is removed again so no later import resolves
+    from outside the repo."""
+    if _VM1["mod"] is None:
+        import cands_shadow  # noqa: F401 - imported from the repo before vm1's own sys.path line runs
+        import importlib.util
+        before = list(sys.path)
+        try:                                  # loaded from THIS repo's file under its own name (never another vm1 on the path)
+            spec = importlib.util.spec_from_file_location("vm1_frozen", str(HERE / "vm1.py"))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+        finally:
+            sys.path[:] = before
+        _VM1["mod"] = mod
+    return _VM1["mod"]
+
+
+def vm1_inputs(inp, table, meta, prev=None):
+    """The vm-1 shadow's veto input for one match: veto-1's PRE-veto prediction (no confirmed actions, before = the match
+    date, full sequence list: top 250 / 2520) and vm1.match_context on the same table. Reused while its own inputs are
+    unchanged; None when the match has no usable inputs (both arms then log 'no veto-1 prediction')."""
+    if not inp or not inp.get("pool"):
+        return None
+    st = _utc(inp.get("match_start"))
+    day = max(st.date() if st else _now().date(), dt.date.fromordinal(table.cutoff)) if table.cutoff else (st or _now()).date()
+    a, b = inp["teams"]["a"], inp["teams"]["b"]
+    key = _sha({"t": (meta or {}).get("sha"), "a": a["id"], "b": b["id"], "la": a["lineup"], "lb": b["lineup"],
+                "f": inp["format"], "p": inp["pool"], "d": day.isoformat(), "e": inp.get("event"), "l": inp["listed_first"]})
+    if prev and prev.get("key") == key:
+        return prev
+    try:
+        pred = vm.predict(a["id"], b["id"], inp["format"], inp["pool"], before=day.isoformat(), event=inp.get("event"),
+                          lineup_a=a["lineup"] or None, lineup_b=b["lineup"] or None, listed_first=inp["listed_first"],
+                          table=table, top=VM1_TOP[inp["format"]], return_dist=True)
+        pred.pop("_dist", None)
+        ctx = vm1_module().match_context(table, a["id"], b["id"], inp["pool"], day.isoformat(),
+                                         lineup_a=a["lineup"] or None, lineup_b=b["lineup"] or None)
+        comp = {"format": pred["format"], "version": pred["version"],
+                "sequences": [(tuple(s), p) for s, p in pred["sequences"]]}
+        return {"key": key, "pred": comp, "ctx": ctx, "before": day.isoformat(), "pool": inp["pool"],
+                "seq_mass": round(1 - pred["sequences_remaining_mass"], 6)}
+    except Exception as e:                    # noqa: BLE001 - the shadow never stops the display
+        return {"key": key, "pred": None, "ctx": None, "error": f"{type(e).__name__}: {str(e)[:120]}"}
+
+
+def vm1_shadow(match_id, forecast_inputs, live_p_more=None):
+    """shadow['vm1'] of one CS2 forecast: arm A1 (use_maps=True) and arm C0 (use_maps=False, the no-map control) from
+    vm1.shadow_entry on the stored pre-veto prediction. Memory + arithmetic only; never raises; never the RETROSPECTIVE arm.
+    Called from the pick-log writer thread (background), never on a member's request."""
+    try:
+        vm1 = vm1_module()
+        with _LOCK:
+            e = _STORE.get(match_id) if match_id else None
+        sv = (e or {}).get("vm1") or {}
+        pred, ctx = sv.get("pred"), sv.get("ctx")
+        gi = dict(forecast_inputs or {})
+        out = {"veto_used": "pre-veto veto-1 prediction (no confirmed actions)", "match_id": match_id,
+               "before": sv.get("before"), "veto_record": (e or {}).get("record_id"),
+               **({"veto_error": sv["error"]} if sv.get("error") else {})}
+        for arm, um in (("A1", True), ("C0", False)):
+            ent = vm1.shadow_entry(gi, pred, ctx, use_maps=um, live_p_more=live_p_more)
+            out[arm] = {k: ent.get(k) for k in VM1_KEYS if k in ent}
+        return out
+    except Exception as e:                    # noqa: BLE001
+        why = f"{type(e).__name__}: {str(e)[:120]}"
+        return {"A1": {"arm": "vm-1", "eligible": None, "reason": "shadow failed", "error": why},
+                "C0": {"arm": "C0-no-map", "eligible": None, "reason": "shadow failed", "error": why}}
 
 
 def cycle(now=None, matches=None, log=True):
@@ -947,15 +1054,18 @@ def cycle(now=None, matches=None, log=True):
     n = {"matches": len(ms), "computed": 0, "unchanged": 0, "logged": 0, "problems": 0}
     probs = collections.Counter()
     for mid, m in ms.items():
-        try:
-            key, payload, rec, problem = compute_match(m, table, meta, ptoday, tpools, known.get(mid), now)
-        except Exception as e:                # noqa: BLE001 - one match never stops the pass
-            key, payload, rec, problem = None, None, None, f"error: {type(e).__name__}: {str(e)[:120]}"
+        tm = time.time()
         with _LOCK:
             cur = _STORE.get(mid)
-        if key is not None and cur and cur.get("key") == key:
+        try:
+            key, payload, rec, problem, inp = _compute(m, table, meta, ptoday, tpools, known.get(mid), now,
+                                                       (cur or {}).get("key"))
+        except Exception as e:                # noqa: BLE001 - one match never stops the pass
+            key, payload, rec, problem, inp = None, None, None, f"error: {type(e).__name__}: {str(e)[:120]}", None
+        if problem == UNCHANGED:
             n["unchanged"] += 1
             continue
+        sv = vm1_inputs(inp, table, meta, (cur or {}).get("vm1"))       # vm-1 shadow: the PRE-veto prediction
         if problem:
             n["problems"] += 1
             probs[problem.split(":")[0]] += 1
@@ -967,12 +1077,12 @@ def cycle(now=None, matches=None, log=True):
                 traceback.print_exc()
         ent = {"key": key, "payload": payload, "record_id": rec and rec["id"], "state": rec and rec["state"],
                "start": m.get("start"), "computed_at": _iso(now), "version": vm.version(), "problem": problem,
-               "cutoff": (meta or {}).get("cutoff"), "teams": [m.get("team1"), m.get("team2")]}
+               "cutoff": (meta or {}).get("cutoff"), "teams": [m.get("team1"), m.get("team2")], "vm1": sv}
         with _LOCK:
             _STORE[mid] = ent
             _WANT.pop(mid, None)
         if YIELD_S:
-            time.sleep(YIELD_S)
+            polite(time.time() - tm)
     with _LOCK:
         for mid in [k for k, e in _STORE.items() if e.get("start") and e["start"] < now - dt.timedelta(hours=LIVE_KEEP_H)]:
             _STORE.pop(mid, None)
@@ -1177,7 +1287,7 @@ def save_baselines(now=None, limit=40):
                             (hid, day, ",".join(pool), _iso(now), last["inputs"]["match_start"], json.dumps(body)))
                 con.commit()
             n += 1
-            time.sleep(YIELD_S)
+            polite()
     finally:
         con.close()
     return n

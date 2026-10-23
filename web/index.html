@@ -968,7 +968,7 @@ const pct = (x, d = 1) => x == null ? "–" : (x * 100).toFixed(d) + "%";
 // map veto panel (veto-1, display only - never a grade input; veto_serve.py). Confirmed maps are shown as confirmed; predicted
 // slots each carry their OWN chances (never one series); whole series are listed separately with the probability left
 // outside the shortlist; the forecast time and the veto state (pending / in progress / confirmed) are always shown.
-const VETO_STATE = {pending: ["Veto pending", ""], partial: ["Veto in progress", "warn"], confirmed: ["Veto confirmed", "good"]};
+const VETO_STATE = {pending: ["Veto pending", ""], partial: ["Veto in progress", ""], confirmed: ["Veto confirmed", "good"]};
 function vetoPanel(v, opt) {
   if (!v || !v.state) return "";
   const only = (opt || {}).slots;           // a Map 1 line's card shows the Map 1 slot only (as before)

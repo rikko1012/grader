@@ -457,3 +457,93 @@ def test_known_from_bo3_games_and_veto_list():
     assert steps[1] == {"step": 1, "team": "team2", "action": "removed", "map": "vertigo", "source": "BO3.gg veto"}
     assert vs.veto_state("bo3", [{"step": 3}, {"step": 4}, {"step": 7}]) == "confirmed"
     assert vs.veto_state("bo1", [{"step": 7}]) == "confirmed" and vs.veto_state("bo3", []) == "pending"
+
+
+# ---------------------------------------------------------------- vm-1 prop shadow (A1 map context vs C0 no-map control)
+GI = {"prop": "kills", "line": 29.0, "scope": "12", "bo": 3,
+      "perf": {"version": "perf-2", "lambda": 29.42, "sd": 7.9, "lambda_kills": 29.42, "hs_per_kill": 0.357}}
+
+
+def test_vm1_runs_the_frozen_copy():
+    """Production imports the repo-root copy, byte-identical to research/map_veto/props (frozen vm-1-ceabd6f325), and
+    vm1's own sys.path line is undone (no import may resolve outside the repo)."""
+    import hashlib
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    for f in ("vm1.py", "vm1_params.json"):
+        a = open(os.path.join(root, f), "rb").read()
+        b = open(os.path.join(root, "research", "map_veto", "props", f), "rb").read()
+        assert hashlib.sha256(a).hexdigest() == hashlib.sha256(b).hexdigest(), f
+    before = list(sys.path)
+    vs._VM1["mod"] = None
+    mod = vs.vm1_module()
+    assert sys.path == before and os.path.dirname(os.path.abspath(mod.__file__)) == root
+    assert mod.params_sha(mod.load_params()) == "ceabd6f325" and mod.version(mod.load_params()) == "vm-1-ceabd6f325"
+
+
+def test_vm1_shadow_present_with_both_arms_and_pre_veto_input(fresh):
+    vs.STATE["known"] = {"hltv:1": known([g(3, "nuke")])}             # Map 1 confirmed for the DISPLAY
+    vs.cycle(NOW, matches=[M()])
+    sv = vs._STORE["hltv:1"]["vm1"]
+    assert sv["seq_mass"] >= 0.98 and len(sv["pred"]["sequences"]) == 210         # every BO3 sequence (top 250)
+    assert {s[0] for s, _ in sv["pred"]["sequences"]} != {"nuke"}                   # the shadow input is PRE-veto
+    assert sv["before"] == "2026-03-01"
+    out = vs.vm1_shadow("hltv:1", GI, live_p_more=0.52)
+    assert out["veto_used"].startswith("pre-veto") and out["veto_record"] == vs._STORE["hltv:1"]["record_id"]
+    a1, c0 = out["A1"], out["C0"]
+    assert a1["arm"] == "vm-1" and c0["arm"] == "C0-no-map" and a1["eligible"] is True and c0["eligible"] is True
+    assert set(a1) <= set(vs.VM1_KEYS) and "RETROSPECTIVE" not in json.dumps(out)
+    assert 0 < a1["p_over"] < 1 and a1["seq_mass"] >= 0.98 and a1["veto_version"] == vm.version()
+    assert abs(a1["delta_p"] - (a1["p_over"] - 0.52)) < 1e-6
+    # BO5: the full 2,520-sequence list
+    vs.cycle(NOW, matches=[M(mid=5, fmt="bo5")])
+    assert len(vs._STORE["hltv:5"]["vm1"]["pred"]["sequences"]) == 2520
+
+
+def test_vm1_without_prediction_and_failure_isolated(fresh, monkeypatch):
+    out = vs.vm1_shadow("hltv:404", GI, 0.5)
+    assert out["A1"]["eligible"] is False and "no veto-1 prediction" in out["A1"]["reason"]
+    assert out["C0"]["eligible"] is False
+    vs.cycle(NOW, matches=[M()])
+    monkeypatch.setattr(vs.vm1_module(), "match_context", lambda *a, **k: 1 / 0)
+    with vs._LOCK:
+        vs._STORE["hltv:1"]["key"] = None
+        vs._STORE["hltv:1"]["vm1"] = None
+    vs.cycle(NOW, matches=[M()])
+    assert "ZeroDivisionError" in vs._STORE["hltv:1"]["vm1"]["error"] and vs.for_match("hltv:1")    # display unaffected
+    out = vs.vm1_shadow("hltv:1", GI, 0.5)
+    assert out["A1"]["eligible"] is False and out["veto_error"].startswith("ZeroDivisionError")
+    monkeypatch.setattr(vs, "vm1_module", lambda: 1 / 0)
+    out = vs.vm1_shadow("hltv:1", GI, 0.5)
+    assert out["A1"]["eligible"] is None and out["A1"]["error"].startswith("ZeroDivisionError")
+
+
+def test_vm1_in_the_forecast_log_leaves_the_live_forecast_unchanged(fresh, monkeypatch, tmp_path):
+    """The forecast row carries shadow.vm1 (A1 + C0) and shadow.veto; every live column is identical with the shadow
+    working, failing, or absent - the shadow never changes a grade."""
+    import sqlite3
+    import picklog
+    from tests import test_forecast_record as tfr
+    vs.cycle(NOW, matches=[M(mid=2399204, start=dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=6))])
+    cols = "line, pick, p_pick, p_more, grade, units, lambda, p_win, model_version, inputs, probs_raw, odds_source, odds_sig"
+    rows = {}
+    for mode in ("on", "fail", "off"):
+        monkeypatch.setattr(picklog, "DB", tmp_path / f"picks_{mode}.db")
+        monkeypatch.setattr(picklog, "_SCHEMA_OK", [False])
+        monkeypatch.setattr(picklog, "data_revision", lambda: "matches=1")
+        if mode == "fail":
+            monkeypatch.setattr(vs, "vm1_shadow", lambda *a, **k: 1 / 0)
+        res = tfr.mk_res(tfr.tp_answer(), nm_over={"slug": "hltv-2399204"})
+        row = picklog.pick_row(res, tfr.verdict(res["grade"]))
+        if mode == "off":
+            row.pop("_vm1")
+        pid = picklog.write_row(row)
+        con = sqlite3.connect(picklog.DB)
+        con.row_factory = sqlite3.Row
+        f = con.execute(f"SELECT {cols}, shadow FROM forecasts WHERE pick_id = ?", (pid,)).fetchone()
+        con.close()
+        rows[mode] = (tuple(f[c.strip()] for c in cols.split(",")), json.loads(f["shadow"]))
+    assert rows["on"][0] == rows["fail"][0] == rows["off"][0]
+    sh = rows["on"][1]
+    assert sh["vm1"]["A1"]["arm"] == "vm-1" and sh["vm1"]["C0"]["arm"] == "C0-no-map" and sh["veto"]["match_id"] == "hltv:2399204"
+    assert sh["vm1"]["A1"]["eligible"] is True
+    assert rows["fail"][1]["vm1"]["A1"]["eligible"] is None and "vm1" not in rows["off"][1]
