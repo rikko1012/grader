@@ -285,7 +285,26 @@ def test_page_and_assets_exist_and_are_scoped():
         if not sel or sel.startswith("@") or sel.startswith(("from", "to", "0%", "100%")):
             continue
         for part in sel.split(","):
-            assert part.strip().startswith(("body.ss", ".ss")), part
+            assert part.strip().startswith(("body.sw", ".sw")), part
     app = (WEB / "app.js").read_text(encoding="utf-8")
     assert "/api/sports/token" in app and "Authorization" in app and "Bearer " in app
     assert "localStorage.setItem" in app
+
+
+def test_history_ingest_skips_unchanged_logs(monkeypatch):
+    monkeypatch.setattr(snapshots, "_gamelog_bodies", lambda lg, aid, seasons, cache_only: [_gamelog_body()])
+    con = store.connect()
+    a = snapshots.ingest_history(con, "nba", [KAT], observed_at=h.T0)
+    b = snapshots.ingest_history(con, "nba", [KAT], observed_at=h.T0)
+    con.close()
+    assert a["players"] == 1 and a["inserted"] > 20 and a["invalid"] == 0
+    assert b["unchanged"] == 1 and b["inserted"] == 0 and b["duplicate"] == 0
+
+
+def test_started_games_leave_the_board_but_stay_on_the_slate(built):
+    con = store.connect()
+    snapshots.build(con, "nba", now="2026-10-23T23:30:00Z")          # 30 min after tip-off
+    con.close()
+    assert _load(built, "board.json")["markets"] == []
+    e = [x for x in _load(built, "slate.json")["events"] if x["event_id"] == "nba:espn:1"][0]
+    assert e["started"] is True

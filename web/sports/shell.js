@@ -25,13 +25,13 @@
   function mount(el, opts) {
     var active = (opts && opts.active) || "sports";
     el.innerHTML =
-      '<a class="ss-brand" href="/sports" aria-label="1time Scout Sports home"><span class="ss-mark">' + MARK + '</span>' +
-      '<span class="ss-word">1time <em>Scout</em></span></a>' +
-      '<nav class="ss-products" aria-label="Product">' + PRODUCTS.map(function (p) {
+      '<a class="sw-brand" href="/sports" aria-label="1time Scout Sports home"><span class="sw-mark">' + MARK + '</span>' +
+      '<span class="sw-word">1time <em>Scout</em></span></a>' +
+      '<nav class="sw-products" aria-label="Product">' + PRODUCTS.map(function (p) {
         var on = p.key === active;
         return '<a href="' + p.href + '"' + (on ? ' class="on" aria-current="page"' : "") + ">" + esc(p.label) + "</a>";
       }).join("") + "</nav>" +
-      '<span class="ss-grow"></span><span class="ss-who" id="ss-who"></span>';
+      '<span class="sw-grow"></span><span class="sw-who" id="sw-who"></span>';
   }
 
   function member() {
@@ -40,7 +40,7 @@
   }
 
   function showMember(info) {
-    var w = document.getElementById("ss-who");
+    var w = document.getElementById("sw-who");
     if (!w) return;
     if (info && info.name) w.innerHTML = esc(info.name) + ' · <a href="/auth/logout">Sign out</a>';
     else if (info && info.signed_in) w.innerHTML = '<a href="/auth/logout">Sign out</a>';
@@ -48,10 +48,10 @@
 
   function gate(el, info) {
     var up = info && info.upgrade;
-    el.innerHTML = '<section class="ss-gate" aria-labelledby="ss-gate-h"><h1 id="ss-gate-h">Scout Sports is for members</h1>' +
+    el.innerHTML = '<section class="sw-gate" aria-labelledby="sw-gate-h"><h1 id="sw-gate-h">Scout Sports is for members</h1>' +
       "<p>Sign in with your 1time membership to open the NBA and NFL workspace.</p>" +
-      '<p><a class="ss-btn ss-btn-primary" href="/auth/login">Sign in</a>' +
-      (up ? ' <a class="ss-btn" href="' + esc(up) + '">Get membership</a>' : "") + "</p></section>";
+      '<p><a class="sw-btn sw-btn-primary" href="/auth/login">Sign in</a>' +
+      (up ? ' <a class="sw-btn" href="' + esc(up) + '">Get membership</a>' : "") + "</p></section>";
   }
 
   var api = {PRODUCTS: PRODUCTS, mount: mount, member: member, showMember: showMember, gate: gate, esc: esc};

@@ -113,19 +113,31 @@ def _r(x, n=4):
 
 # ---------------------------------------------------------------------------------------------- store reads (worker)
 def _latest(con, kind, where="", args=(), as_of=None, limit=10 ** 7):
+    """Latest revision per (source, source_key) among rows of `kind` matching `where`, known at as_of.
+    One indexed scan, reduced in Python (SQLite's plan for the GROUP BY self-join scanned every row of the kind)."""
     cond = "kind = ?" + (f" AND {where}" if where else "")
     a = [kind, *args]
     if as_of:
         cond += " AND known_at <= ?"
         a.append(as_of)
-    q = (f"SELECT r.record_id, r.payload, r.known_at, r.revision, r.last_seen_at, r.source_key FROM records r JOIN "
-         f"(SELECT source, source_key, MAX(revision) AS rv FROM records WHERE {cond} GROUP BY source, source_key) z "
-         f"ON r.source = z.source AND r.source_key = z.source_key AND r.revision = z.rv WHERE r.kind = ? LIMIT ?")
+    best = {}
+    for row in con.execute(f"SELECT record_id, source, source_key, revision, known_at, last_seen_at FROM records "
+                           f"WHERE {cond}", a):
+        k = (row["source"], row["source_key"])
+        cur = best.get(k)
+        if cur is None or row["revision"] > cur["revision"]:
+            best[k] = row
     out = []
-    for row in con.execute(q, a + [kind, int(limit)]):
-        out.append((row["record_id"], from_dict(store._unpack(row["payload"])),
-                    {"known_at": row["known_at"], "revision": row["revision"], "last_seen_at": row["last_seen_at"],
-                     "source_key": row["source_key"]}))
+    rows = list(best.values())[:int(limit)]
+    for i in range(0, len(rows), 500):
+        chunk = rows[i:i + 500]
+        pay = {r["record_id"]: r["payload"] for r in con.execute(
+            f"SELECT record_id, payload FROM records WHERE record_id IN ({','.join('?' * len(chunk))})",
+            [r["record_id"] for r in chunk])}
+        for row in chunk:
+            out.append((row["record_id"], from_dict(store._unpack(pay[row["record_id"]])),
+                        {"known_at": row["known_at"], "revision": row["revision"], "last_seen_at": row["last_seen_at"],
+                         "source_key": row["source_key"]}))
     return out
 
 
@@ -253,7 +265,7 @@ def ingest_history(con, league, player_ids, observed_at=None, seasons=2, cache_o
     """Game logs for these players -> typed records (store.put_many; invalid ones quarantined). Idempotent: same content
     is a duplicate, a corrected game-log value is a revision."""
     observed_at = observed_at or now_utc()
-    c = {"players": 0, "no_log": 0, "errors": 0, "inserted": 0, "duplicate": 0, "revision": 0, "invalid": 0}
+    c = {"players": 0, "unchanged": 0, "no_log": 0, "errors": 0, "inserted": 0, "duplicate": 0, "revision": 0, "invalid": 0}
     for pid in list(player_ids)[:max_players]:
         aid = pid.rsplit(":", 1)[-1]
         try:
@@ -265,6 +277,11 @@ def ingest_history(con, league, player_ids, observed_at=None, seasons=2, cache_o
         if not bodies:
             c["no_log"] += 1
             continue
+        import hashlib
+        digest = hashlib.sha256(json.dumps(bodies, sort_keys=True).encode("utf-8")).hexdigest()
+        if cache.get("ui:gamelog_ingested", pid) == digest:     # same answers already stored: no 1,000 duplicate puts
+            c["unchanged"] += 1
+            continue
         recs = []
         for b in bodies:
             evs, mems, stats = gamelog_records(league, aid, b, observed_at)
@@ -272,6 +289,7 @@ def ingest_history(con, league, player_ids, observed_at=None, seasons=2, cache_o
         res = store.put_many(con, recs)
         for k in ("inserted", "duplicate", "revision", "invalid"):
             c[k] += res[k]
+        cache.put("ui:gamelog_ingested", pid, digest)
         c["players"] += 1
     return c
 
@@ -395,11 +413,13 @@ def player_games(con, league, pid, before, teams):
         if cur is None or (obs.source == "espn" and cur[1].source != "espn"):  # box score beats the game log
             by_ev[obs.event_id][obs.stat] = (rid, obs)
     evs = {}
-    for eid in by_ev:
-        rs = _latest(con, "event", "event_id = ?", [eid], before)
-        rs.sort(key=lambda x: x[1].start_source != "espn")
-        if rs:
-            evs[eid] = rs[0]
+    ids = sorted(by_ev)
+    for i in range(0, len(ids), 400):                   # one query per 400 games (was one per game)
+        chunk = ids[i:i + 400]
+        for row in _latest(con, "event", f"event_id IN ({','.join('?' * len(chunk))})", chunk, before):
+            cur = evs.get(row[1].event_id)
+            if cur is None or (row[1].start_source == "espn" and cur[1].start_source != "espn"):
+                evs[row[1].event_id] = row
     mems = defaultdict(list)
     for rid, m, _ in _latest(con, "membership", "player_id = ?", [pid], before):
         mems[m.player_id].append(m)
@@ -584,18 +604,25 @@ def build(con, league, now=None, base=None, history=True):
     # sort + slim the board: Kalshi rungs nearest the pick'em lines only (full ladder in the player file)
     board_rows = []
     for row in markets_rows.values():
+        if events[row["event_id"]][1].start_utc <= now:     # started games leave the board (shown as started on the slate)
+            continue
         row["quotes"].sort(key=lambda q: (q["platform"], q["line"]))
         row["kalshi"].sort(key=lambda q: q["line"])
         ref = [q["line"] for q in row["quotes"]] or [r["line"] for r in row["alternates"]]
         near = row["kalshi"]
         if ref and near:
             near = sorted(near, key=lambda q: min(abs(q["line"] - x) for x in ref))[:2]
-            near.sort(key=lambda q: q["line"])
+        elif near:                                       # Kalshi only: the two rungs priced nearest an even chance
+            def mid_gap(q):
+                o = next((x for x in q["sides"] if x["side"] == "over"), {})
+                return abs(((o.get("bid") or 0) + (o.get("ask") or 1)) / 2 - 0.5)
+            near = sorted(near, key=mid_gap)[:2]
+        near = sorted(near, key=lambda q: q["line"])
         board_rows.append({**{k: v for k, v in row.items() if k not in ("kalshi", "alternates", "promotional")},
                            "kalshi_near": near, "kalshi_rungs": len(row["kalshi"]),
                            "alternates": len(row["alternates"]), "promotional": len(row["promotional"])})
-    board_rows.sort(key=lambda r: (events[r["event_id"]][1].start_utc, r["event_id"], r["player"], not r["primary"],
-                                   r["stat"]))
+    board_rows.sort(key=lambda r: (events[r["event_id"]][1].start_utc, r["event_id"], not r["quotes"], r["player"],
+                                   not r["primary"], r["stat"]))
 
     # slate
     slate = []
