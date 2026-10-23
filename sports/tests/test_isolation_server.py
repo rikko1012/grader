@@ -169,3 +169,17 @@ def test_flags_are_off_by_default(monkeypatch):
     assert not flags.on("SPORTS_UI")
     with pytest.raises(flags.FlagOff):
         flags.require("SPORTS_INGEST")
+
+
+def test_rollback_is_flags_off_even_with_the_service_configured(tmp_path):
+    """Rollback proof: with every sports setting still present (mode, secret, api base, data dir) but SPORTS_UI /
+    SPORTS_API off, the esports server imports nothing from sports and every sports path - including the token
+    endpoint - is byte-identical to a route that never existed. No database restore, no esports rollback."""
+    out = _run_child(tmp_path, SPORTS_API="0", SPORTS_UI="off", SPORTS_API_MODE="service",
+                     SPORTS_TOKEN_SECRET="t" * 40, SPORTS_API_BASE="https://sports.example.test",
+                     SPORTS_DATA_DIR=str(tmp_path / "sports_data"))
+    assert out["sports_imported"] == []
+    unknown = out["/definitely-not-a-route"]
+    for p in ("/sports", "/api/sports/status", "/api/sports/offers?league=nba", "/api/sports/token"):
+        assert out[p] == unknown, p
+    assert out["/auth/me"][0] == 200

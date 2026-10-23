@@ -18,8 +18,10 @@ Resource limits (environment, defaults):
                                  a request whose Origin is not listed is refused 403 before any work
   SPORTS_SERVICE_MAX_MB    900   RSS ceiling: above it the service stops accepting work (503) and exits for a restart
                                  after in-flight requests finish (Render restarts it)
-Worker: with SPORTS_INGEST on, this process supervises ONE ingestion child (python -m sports.worker loop ...) with its
-own memory cap, restarting it with jittered exponential backoff; the child writes the store, this process only reads.
+Worker side: this process runs the SCHEDULE (schedule()) as CHILD processes, never in a request thread: long-running
+children (ingestion loop, assistant runner, lab runner; restarted with jittered exponential backoff) and periodic jobs
+(snapshot prebuild, slip spool ingest, slip settlement; each with a timeout). Children write the store / their own
+databases; this process only reads.
 """
 from __future__ import annotations
 
@@ -121,6 +123,67 @@ def feed_state():
     return out
 
 
+ALERT_RULES = {                                         # sports/RUNBOOK.md section 9 - thresholds in one place
+    "feed_stale_min": float(os.environ.get("SPORTS_ALERT_FEED_STALE_MIN", "45")),     # pick'em feeds: 10-min cadence
+    "kalshi_stale_min": float(os.environ.get("SPORTS_ALERT_KALSHI_STALE_MIN", "90")),  # Kalshi: 30-min cadence
+    "store_warn_mb": float(os.environ.get("SPORTS_ALERT_STORE_MB", "6000")),
+    "rss_warn_frac": 0.8,
+}
+
+
+def alerts(o):
+    """-> [{"level": "page"|"warn", "code", "detail"}] from an ops() snapshot. Pure function (tested)."""
+    out = []
+    ingest_on = o["flags"].get("SPORTS_INGEST")
+    w = o["worker"]
+    if ingest_on and not w.get("pid"):
+        out.append({"level": "page", "code": "worker_down", "detail": {"last_exit": w.get("last_exit"),
+                                                                       "next_start": w.get("next_start")}})
+    if ingest_on and w.get("starts", 0) >= 5 and (w.get("last_exit") or {}).get("ran_s", 9999) < 120:
+        out.append({"level": "page", "code": "worker_crash_loop", "detail": {"starts": w["starts"]}})
+    feeds = o.get("feeds") or {}
+    if ingest_on:
+        for plat, f in (feeds.get("platforms") or {}).items():
+            lim = ALERT_RULES["kalshi_stale_min"] if plat.startswith("kalshi") else ALERT_RULES["feed_stale_min"]
+            if f.get("age_min") is None or f["age_min"] > lim:
+                out.append({"level": "warn", "code": "feed_stale", "detail": {"platform": plat, **f, "limit_min": lim}})
+    mb = feeds.get("store_mb")
+    stop_mb = float(os.environ.get("SPORTS_STORE_MAX_MB", "1500"))
+    if mb is not None and mb >= stop_mb:
+        out.append({"level": "page", "code": "store_full_ingest_paused", "detail": {"store_mb": mb, "max_mb": stop_mb}})
+    elif mb is not None and mb >= min(ALERT_RULES["store_warn_mb"], 0.8 * stop_mb):
+        out.append({"level": "warn", "code": "store_large", "detail": {"store_mb": mb, "max_mb": stop_mb}})
+    if o.get("rss_mb") and o["rss_mb"] > ALERT_RULES["rss_warn_frac"] * o["rss_max_mb"]:
+        out.append({"level": "warn", "code": "service_memory_high", "detail": {"rss_mb": o["rss_mb"]}})
+    svc = o["service"]
+    if svc["requests"] and (svc["rejected_busy"] + svc["errors_5xx"]) / svc["requests"] > 0.01:
+        out.append({"level": "warn", "code": "service_shedding", "detail": {k: svc[k] for k in
+                                                                         ("requests", "rejected_busy", "errors_5xx")}})
+    if o["db_pool"].get("waits_timed_out") or o["db_pool"].get("queries_interrupted"):
+        out.append({"level": "warn", "code": "store_slow", "detail": o["db_pool"]})
+    for name, j in (o.get("jobs") or {}).items():
+        if j.get("enabled") and j.get("every_s") and j.get("failures_in_a_row", 0) >= 3:
+            out.append({"level": "warn", "code": "job_failing", "detail": {"job": name, "last_exit": j.get("last_exit")}})
+        if j.get("enabled") and not j.get("every_s") and name != "ingest-loop" and j.get("starts", 0) >= 5 \
+                and (j.get("last_exit") or {}).get("ran_s", 9999) < 120:
+            out.append({"level": "page", "code": "job_crash_loop", "detail": {"job": name, "starts": j["starts"]}})
+    if o["flags"].get("SPORTS_API"):
+        for name, sn in ((o.get("prebuilt") or {}).get("snapshots") or {}).items():
+            if sn.get("age_s") is None or sn["age_s"] > 3 * sn["max_age_s"]:
+                out.append({"level": "warn", "code": "snapshot_stale", "detail": {"snapshot": name, **sn}})
+    if not o.get("token_configured"):
+        out.append({"level": "page", "code": "token_secret_missing", "detail": "SPORTS_TOKEN_SECRET unset or short"})
+    return out
+
+
+def prebuilt_state():
+    try:
+        from . import prebuilt
+        return prebuilt.state()
+    except Exception as e:                              # noqa: BLE001
+        return {"error": type(e).__name__}
+
+
 def ops():
     with _SLOCK:
         s = dict(STATS)
@@ -129,7 +192,14 @@ def ops():
     return {"version": VERSION, "service": s, "threads_max": THREADS, "rss_mb": round(rss_mb() or 0, 1),
             "rss_max_mb": MAX_MB, "draining": _STATE["draining"], "threads": threading.active_count(),
             "db_pool": web.pool_stats(), "cache": web.cache_stats(), "flags": flags.state(), "worker": dict(WORKER),
+            "jobs": {k: dict(v) for k, v in JOBS.items()}, "prebuilt": prebuilt_state(),
             "token_configured": authtoken.configured(), "feeds": feed_state()}
+
+
+def ops_with_alerts():
+    o = ops()
+    o["alerts"] = alerts(o)
+    return o
 
 
 # ------------------------------------------------------------------------------------------------------- handler
@@ -224,7 +294,7 @@ class Handler(BaseHTTPRequestHandler):
                          and __import__("hmac").compare_digest(admin_header, os.environ["ADMIN_TOKEN"]))
         if u.path == "/api/sports/admin/ops":
             if ops_admin or (claims and claims["role"] == "admin"):
-                return self._send(200, ops(), headers=cors)
+                return self._send(200, ops_with_alerts(), headers=cors)
             return self._send(403, {"error": "admin_only"}, headers=cors)
         if claims is None:
             with _SLOCK:
@@ -317,52 +387,155 @@ def backoff(attempt, base=30.0, cap=900.0):
     return min(cap, base * (2 ** attempt)) * (0.5 + random.random() / 2)
 
 
-def supervise_worker(argv=None, stop=None):
-    """Run the ingestion loop as a child process (own memory cap SPORTS_WORKER_MAX_MB) and restart it when it exits.
-    Only with SPORTS_INGEST on; flipping the flag off and restarting the service stops ingestion."""
-    if not flags.on("SPORTS_INGEST"):
-        return
+def _py(*args):
+    return [sys.executable, *args]
+
+
+def schedule():
+    """The worker-side SCHEDULE (name -> spec). every_s None = long-running (restarted on exit with backoff);
+    otherwise periodic: run, wait for exit (killed after timeout_s), next run ~every_s after the previous start.
+    flag = the switch that must be on (read at service start: flip it and restart the service to change)."""
     leagues = os.environ.get("SPORTS_LEAGUES", "nba nfl").split()
-    argv = argv or [sys.executable, "-m", "sports.worker", "loop", *leagues,
-                    "--every", os.environ.get("SPORTS_INGEST_EVERY_MIN", "10"),
-                    "--kalshi-every", os.environ.get("SPORTS_KALSHI_EVERY_MIN", "30")]
-    WORKER["enabled"] = True
+    snap_every = min(v[1] for v in web.SNAPSHOTS.values()) if getattr(web, "SNAPSHOTS", None) else 60
+    return {
+        "ingest-loop": {"argv": _py("-m", "sports.worker", "loop", *leagues,
+                                    "--every", os.environ.get("SPORTS_INGEST_EVERY_MIN", "10"),
+                                    "--kalshi-every", os.environ.get("SPORTS_KALSHI_EVERY_MIN", "30")),
+                        "every_s": None, "timeout_s": None, "flag": "SPORTS_INGEST"},
+        "snapshots": {"argv": _py("-m", "sports.service", "snapshots"), "every_s": snap_every, "timeout_s": 120,
+                      "flag": "SPORTS_API"},
+        "slips-ingest": {"argv": _py("-m", "sports.slips", "ingest"), "every_s": 300, "timeout_s": 300,
+                         "flag": "SPORTS_INGEST"},
+        "slips-settle": {"argv": _py("-m", "sports.slips", "settle"), "every_s": 3600, "timeout_s": 900,
+                         "flag": "SPORTS_INGEST"},
+        "assistant-runner": {"argv": _py("-m", "sports.assistant.runner"), "every_s": None, "timeout_s": None,
+                             "flag": "SPORTS_ASSISTANT"},
+        "lab-runner": {"argv": _py("-m", "sports.lab.runner"), "every_s": None, "timeout_s": None,
+                       "flag": "SPORTS_TRAIN"},
+    }
+
+
+JOBS = {}                                               # name -> state (ops / alerts)
+WORKER = {"enabled": False, "pid": None, "starts": 0, "last_exit": None, "last_start": None, "next_start": None}
+
+
+def _job_on(flag):
+    if flag in flags.FLAGS:
+        return flags.on(flag)
+    return os.environ.get(flag, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _run_job(name, spec, stop):
+    st = JOBS.setdefault(name, {"enabled": True, "pid": None, "starts": 0, "last_exit": None, "last_start": None,
+                                "next_start": None, "every_s": spec["every_s"], "failures_in_a_row": 0})
+    if name == "ingest-loop":
+        WORKER.update(enabled=True)
     attempt = 0
-    while not (stop and stop.is_set()):
-        WORKER.update(last_start=time.time(), starts=WORKER["starts"] + 1, next_start=None)
+    while not stop.is_set():
         t0 = time.time()
+        st.update(last_start=t0, starts=st["starts"] + 1, next_start=None)
+        rc = None
         try:
-            p = subprocess.Popen(argv, stdin=subprocess.DEVNULL)
-            WORKER["pid"] = p.pid
-            rc = p.wait()
+            p = subprocess.Popen(spec["argv"], stdin=subprocess.DEVNULL)
+            st["pid"] = p.pid
+            if name == "ingest-loop":
+                WORKER.update(pid=p.pid, last_start=t0, starts=st["starts"], next_start=None)
+            while True:                                 # wait, but notice a stop request
+                try:
+                    rc = p.wait(timeout=1.0)
+                    break
+                except subprocess.TimeoutExpired:
+                    if stop.is_set() or (spec["timeout_s"] and time.time() - t0 > spec["timeout_s"]):
+                        p.kill()
+                        p.wait(10)
+                        rc = "timeout" if not stop.is_set() else "stopped"
+                        break
         except OSError as e:
             rc = f"spawn failed: {e}"
-        WORKER.update(pid=None, last_exit={"code": rc, "at": time.time(), "ran_s": round(time.time() - t0)})
-        attempt = 0 if time.time() - t0 > 600 else attempt + 1
-        wait = backoff(attempt)
-        WORKER["next_start"] = time.time() + wait
-        if stop and stop.wait(wait):
+        ran = round(time.time() - t0, 1)
+        st.update(pid=None, last_exit={"code": rc, "at": time.time(), "ran_s": ran})
+        st["failures_in_a_row"] = 0 if rc == 0 else st["failures_in_a_row"] + 1
+        if spec["every_s"] is None:                     # long-running: restart with backoff
+            attempt = 0 if ran > 600 else attempt + 1
+            wait = backoff(attempt)
+            if name == "ingest-loop":
+                WORKER.update(pid=None, last_exit=st["last_exit"], next_start=time.time() + wait)
+        else:                                           # periodic: next run ~every_s after this start (+-10% jitter)
+            wait = max(1.0, spec["every_s"] - ran) * (0.9 + random.random() * 0.2)
+            if rc != 0:
+                wait = max(wait, backoff(min(st["failures_in_a_row"], 5), base=spec["every_s"]))
+        st["next_start"] = time.time() + wait
+        if stop.wait(wait):
             break
-        if not stop:
-            time.sleep(wait)
+
+
+def supervise(stop=None, jobs=None):
+    """Start one supervisor thread per scheduled job whose flag is on. -> {name: thread}."""
+    stop = stop or threading.Event()
+    threads = {}
+    for name, spec in (jobs or schedule()).items():
+        if not _job_on(spec["flag"]):
+            JOBS[name] = {"enabled": False, "flag": spec["flag"]}
+            continue
+        t = threading.Thread(target=_run_job, args=(name, spec, stop), daemon=True, name=f"sports-job-{name}")
+        t.start()
+        threads[name] = t
+    return threads
+
+
+def supervise_worker(argv=None, stop=None):
+    """Run only the ingestion loop (argv overrides its command) until stop - tests / manual use."""
+    if not flags.on("SPORTS_INGEST"):
+        return
+    spec = dict(schedule()["ingest-loop"])
+    if argv:
+        spec["argv"] = argv
+    _run_job("ingest-loop", spec, stop or threading.Event())
 
 
 def serve(host="0.0.0.0", port=None):
     port = int(port or os.environ.get("PORT", "10000"))
     srv = Server((host, port))
     threading.Thread(target=_watchdog, args=(srv,), daemon=True, name="sports-watchdog").start()
-    threading.Thread(target=supervise_worker, daemon=True, name="sports-worker-supervisor").start()
+    supervise()
     print(f"scout sports service {VERSION} on {host}:{srv.server_address[1]} (threads {THREADS}, db pool "
           f"{web.DB_POOL}, token {'set' if authtoken.configured() else 'NOT SET - every request refused'})",
           flush=True)
     return srv
 
 
+def check(url):
+    """On-call / cron check: python -m sports.service --check https://scout-sports-api.onrender.com
+    (needs ADMIN_TOKEN in the environment). Prints the alerts; exit 2 on a page, 1 on a warning, 0 when clean."""
+    import urllib.request
+    req = urllib.request.Request(url.rstrip("/") + "/api/sports/admin/ops",
+                                 headers={"X-Admin-Token": os.environ.get("ADMIN_TOKEN", "")})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            o = json.loads(r.read())
+    except Exception as e:                              # noqa: BLE001
+        print(json.dumps({"level": "page", "code": "service_unreachable", "detail": f"{type(e).__name__}: {e}"}))
+        return 2
+    for a in o.get("alerts", []):
+        print(json.dumps(a, default=str))
+    levels = {a["level"] for a in o.get("alerts", [])}
+    return 2 if "page" in levels else 1 if levels else 0
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="python -m sports.service")
     p.add_argument("--host", default=os.environ.get("SPORTS_SERVICE_HOST", "0.0.0.0"))
     p.add_argument("--port", type=int, default=None)
+    p.add_argument("--check", metavar="URL", help="print the service's alerts and exit (0 clean, 1 warn, 2 page)")
+    p.add_argument("cmd", nargs="*", help="snapshots [name ...]: build the prebuilt snapshots now and exit")
     a = p.parse_args(argv)
+    if a.check:
+        raise SystemExit(check(a.check))
+    if a.cmd and a.cmd[0] == "snapshots":
+        from . import prebuilt
+        rep = prebuilt.build(a.cmd[1:] or None)
+        print(json.dumps(rep))
+        raise SystemExit(0 if all(r.get("ok") for r in rep.values()) else 1)
     srv = serve(a.host, a.port)
     try:
         srv.serve_forever()
