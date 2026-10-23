@@ -86,16 +86,15 @@ Statistical-only candidate **sm-1** (no market input of any kind)
   in the registry's `observed_effect`, kept or not.
 - **Distribution families** (one per market, chosen on tune by mean CRPS; all centred on the same sm-1 mean):
   counts (NBA points / rebounds / assists / threes, NFL rec / rush_att): Poisson; negative binomial with
-  var = mu + alpha mu^2 (alpha ML-fitted on train); opportunity mixture = joint Monte-Carlo simulation (seeded, 4,000
-  draws) of opportunity (minutes / targets / carries / attempts drawn from the train distribution of actual /
+  var = mu + alpha mu^2 (alpha ML-fitted on train); opportunity mixture = joint distribution computed by deterministic quadrature (amendment A1) of opportunity (minutes / targets / carries / attempts drawn from the train distribution of actual /
   expected opportunity) then outcome given opportunity (NB conditional on minutes; receptions ~ Binomial(targets,
   catch rate); threes ~ Binomial(3PA, 3P%)); empirical-ratio (train ratios y / mu of the same mu-quintile).
   yards (NFL pass / rush / rec yards): normal with var = a mu + b mu^2 (train fit); empirical-ratio; opportunity
   mixture (opportunity draw, then yards = n * efficiency + sqrt(n) * sigma * e with e drawn from the train
   standardised per-game residuals - right skew kept; receptions <= targets and completions <= attempts in every draw).
 - **Calibration cal-1** (fit on tune, frozen for test): per market a mean factor c (mu -> c mu) and a dispersion scale
-  s (spread around the mean scaled by s) chosen on a grid (c in 0.90..1.10 step 0.01, s in 0.80..1.30 step 0.02) by
-  tune CRPS. Probabilities used for grades are the calibrated distribution's.
+  s (spread around the mean scaled by s) on the grids c in 0.90..1.10 step 0.01, s in 0.80..1.30 step 0.02, searched
+  by coordinate descent (c with s = 1, then s, then c again; amendment A1) by tune CRPS. Probabilities used for grades are the calibrated distribution's.
 
 Market track (statistical-only and market candidates are never pooled into one claim)
 - **mi-hist** (history study only): sm-1 + game spread / total features (ESPN pickcenter NBA, nflverse closing lines
@@ -172,3 +171,15 @@ process - nothing auto-promotes.
   replaced automatically.
 - Every settlement updates the scorecard and the diagnostic queue (largest |PIT - 0.5| misses, settlement
   corrections, voids) automatically in the worker.
+
+## Amendments (each dated, all BEFORE any comparison was run)
+
+- **A1 (2026-10-23, before any fit or score):** (a) the opportunity-mixture family is computed by deterministic
+  quadrature over opportunity counts / 40 quantiles of the train opportunity-ratio distribution / 25 quantiles of the
+  train standardised residuals instead of seeded Monte-Carlo draws - same model, exact and replay-identical without a
+  seed; (b) cal-1 searches its two grids by coordinate descent instead of the full product (cost); (c) ESPN summaries
+  carry the CURRENT injury report (dates of the read day, 2026-10-23), not the report at game time, and historical
+  NBA pickcenter game lines are empty for the games checked - so NBA historical injury context is taken only from
+  box-score did-not-play rows, and NBA mi-hist runs only if game lines exist for >= 50% of eligible rows (coverage is
+  reported either way); (d) NFL rush_att has no separate opportunity under it, so its mixture family is not defined
+  (Poisson / NB / empirical-ratio compared).

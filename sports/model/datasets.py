@@ -80,6 +80,7 @@ SCHEMA = [
          air_yards_share REAL, wopr REAL, offense_snaps REAL, offense_pct REAL, rz_targets REAL, rz_carries REAL,
          i10_targets REAL, i10_carries REAL, PRIMARY KEY (game_id, player_id))""",
     "CREATE INDEX IF NOT EXISTS nfl_pg_player ON nfl_pg (player_id)",
+    "CREATE TABLE IF NOT EXISTS nfl_ids (gsis_id TEXT PRIMARY KEY, espn_id TEXT, pfr_id TEXT)",
     """CREATE TABLE IF NOT EXISTS nfl_tg (game_id TEXT NOT NULL, team TEXT NOT NULL, opp TEXT, home INTEGER,
          plays REAL, pass_plays REAL, rush_plays REAL, neutral_pass REAL, neutral_plays REAL, pass_att REAL,
          carries REAL, targets REAL, PRIMARY KEY (game_id, team))""",
@@ -327,10 +328,19 @@ def nba_crawl(con, budget_s=270, max_attempts=4, log=None):
 
 
 # ============================================================================================================== NFL
+FILE_MAX_AGE_H = 20          # a downloaded release file is reused for this long (nflverse rebuilds nightly)
+
+
 def _download(con, name, url, gz=False):
-    """GET one nflverse release file -> text (decompressed). Records sha256 / size in table files."""
-    r = net.get(url, timeout=180)
-    data = r.content
+    """GET one nflverse release file -> text (decompressed). Records sha256 / size in table files. The raw file is kept
+    under <SPORTS_DATA_DIR>/model/files/ and reused while younger than FILE_MAX_AGE_H (no repeated downloads)."""
+    local = db_path().parent / "files" / name
+    if local.exists() and time.time() - local.stat().st_mtime < FILE_MAX_AGE_H * 3600:
+        data = local.read_bytes()
+    else:
+        data = net.get(url, timeout=180).content
+        local.parent.mkdir(parents=True, exist_ok=True)
+        local.write_bytes(data)
     con.execute("INSERT OR REPLACE INTO files (name, url, fetched_at, sha256, bytes, rows) VALUES (?,?,?,?,?,NULL)",
                 (name, url, now_utc(), hashlib.sha256(data).hexdigest(), len(data)))
     con.commit()
@@ -393,6 +403,9 @@ def nfl_build(con, seasons=NFL_SEASONS, files=None, log=None):
     for r in _rows(ptxt):
         ids[r["gsis_id"]] = (r.get("espn_id") or None, r.get("pfr_id") or None)
     pfr_to_gsis = {v[1]: k for k, v in ids.items() if v[1]}
+    con.executemany("INSERT OR REPLACE INTO nfl_ids (gsis_id, espn_id, pfr_id) VALUES (?,?,?)",
+                    [(k, v[0], v[1]) for k, v in ids.items()])
+    con.commit()
     for season in seasons:
         n = 0
         stxt = get(f"stats_player_week_{season}.csv", f"{NFLVERSE}/stats_player/stats_player_week_{season}.csv")
@@ -442,8 +455,28 @@ def nfl_build(con, seasons=NFL_SEASONS, files=None, log=None):
                         "s.game_id = nfl_pg.game_id AND s.pfr_id = nfl_pg.pfr_id), offense_pct = (SELECT "
                         "s.offense_pct FROM nfl_snaps s WHERE s.game_id = nfl_pg.game_id AND s.pfr_id = nfl_pg.pfr_id) "
                         "WHERE season = ?", (season,))
+            # participation: a QB / RB / WR / TE with offensive snaps but no stats row PLAYED and recorded nothing ->
+            # an explicit zero row (without it every 0-target game would be missing and Overs would look likelier)
+            zero = []
+            have = {(r[0], r[1]) for r in con.execute("SELECT game_id, player_id FROM nfl_pg WHERE season = ?",
+                                                       (season,))}
+            for gid, pfr, team, pos, snaps, pct in sb:
+                g = pfr_to_gsis.get(pfr)
+                if not g or not snaps or pos not in ("QB", "RB", "WR", "TE", "FB") or (gid, g) in have:
+                    continue
+                h, a = gmap[gid]
+                wk = int(gid.split("_")[1])
+                zero.append((gid, g, ids[g][0], pfr, None, pos, pos if pos != "FB" else "RB", team,
+                             a if team == h else h, 1 if team == h else 0, season, wk,
+                             "regular" if wk <= 18 else "postseason", snaps, pct))
+            con.executemany("INSERT OR REPLACE INTO nfl_pg (game_id, player_id, espn_id, pfr_id, name, position, "
+                            "position_group, team, opp, home, season, week, season_type, offense_snaps, offense_pct, "
+                            "pass_att, pass_cmp, pass_yds, pass_td, pass_int, sacks, carries, rush_yds, rush_td, "
+                            "targets, rec, rec_yds, rec_td) VALUES (" + ",".join("?" * 15) + ",0,0,0,0,0,0,0,0,0,0,0,0,0)",
+                            zero)
             con.commit()
             out[f"snaps_{season}"] = len(sb)
+            out[f"zero_rows_{season}"] = len(zero)
             del sntxt, sb
         # play-by-play: red-zone opportunities per player, team plays and neutral pass rate
         try:
