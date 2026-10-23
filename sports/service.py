@@ -409,7 +409,7 @@ def schedule():
         "slips-settle": {"argv": _py("-m", "sports.slips", "settle"), "every_s": 3600, "timeout_s": 900,
                          "flag": "SPORTS_INGEST"},
         "assistant-runner": {"argv": _py("-m", "sports.assistant.runner"), "every_s": None, "timeout_s": None,
-                             "flag": "SPORTS_ASSIST"},
+                             "flag": "SPORTS_ASSISTANT"},
         "lab-runner": {"argv": _py("-m", "sports.lab.runner"), "every_s": None, "timeout_s": None,
                        "flag": "SPORTS_TRAIN"},
     }

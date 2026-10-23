@@ -1,0 +1,17 @@
+# Scout Sports API service + its worker children (render.yaml scout-sports-api). Same code as the esports image,
+# plus the sports-only dependencies (requirements-sports.txt). The esports Dockerfile is unchanged.
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    SPORTS_DATA_DIR=/sports-data \
+    PORT=10000
+
+WORKDIR /app
+COPY requirements.txt requirements-sports.txt ./
+RUN pip install --no-cache-dir -r requirements-sports.txt
+COPY . .
+RUN mkdir -p /sports-data
+
+EXPOSE 10000
+CMD ["python", "-m", "sports.service"]

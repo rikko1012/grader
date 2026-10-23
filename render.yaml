@@ -49,17 +49,20 @@ services:
       - key: SPORTS_TOKEN_SECRET
         sync: false           # >= 32 random characters; the SAME value on scout-sports-api
 
-  # Scout Sports API + its ingestion worker (owner approved 2026-10-23). Its own container, CPU, memory and disk, so a
-  # sports load / failure cannot reach esports request threads. The ingestion worker runs as a supervised CHILD
-  # process here (not a separate Render worker) because a Render disk attaches to one service only and the API must
-  # read the store the worker writes (sports/RUNBOOK.md "Architecture"). Flags OFF: the service answers only
-  # /api/sports/health until SPORTS_API=1; nothing is ingested until SPORTS_INGEST=1.
+  # Scout Sports API + its worker children (owner approved 2026-10-23). Its own container, CPU, memory and disk, so a
+  # sports load / failure cannot reach esports request threads. Ingestion, snapshot prebuild, slip spool jobs, the
+  # assistant runner and the lab runner run as supervised CHILD processes of the service (sports/service.py
+  # schedule()), each behind its own flag - not separate Render workers - because a Render disk attaches to one
+  # service only and they all share the sports store / spools on it (sports/RUNBOOK.md "Architecture").
+  # Flags OFF: the service answers only /api/sports/health until SPORTS_API=1; no child runs until its flag is on.
   - type: web
     name: scout-sports-api
     runtime: docker
+    dockerfilePath: ./Dockerfile.sports   # requirements-sports.txt (anthropic SDK); the esports Dockerfile is unchanged
     dockerCommand: python -m sports.service
-    plan: standard            # 2 GB / 1 CPU: worker cap 768 MB + service cap 900 MB (measured: worker 110-130 MB per
-                              # cycle, service <= 50 MB under 700 members) - headroom for the model / assistant agents
+    plan: standard            # 2 GB / 1 CPU for API + ingestion + assistant (measured: service <= 50 MB at 700 members,
+                              # ingestion 110-130 MB per cycle). Move to Pro (4 GB) BEFORE SPORTS_TRAIN=1 (lab training
+                              # child capped at SPORTS_WORKER_MAX_MB like the ingestion child) - RUNBOOK section 6
     region: ohio
     healthCheckPath: /api/sports/health
     autoDeploy: false         # deploy by hand during the staged rollout
@@ -79,7 +82,13 @@ services:
       - key: SPORTS_INGEST
         value: "0"
       - key: SPORTS_TRAIN
-        value: "0"
+        value: "0"            # the lab runner child (python -m sports.lab.runner)
+      - key: SPORTS_ASSISTANT
+        value: "0"            # the assistant runner child (python -m sports.assistant.runner) + its routes
+      - key: SPORTS_ASSIST_MODEL
+        value: claude-opus-5-5
+      - key: ANTHROPIC_API_KEY
+        sync: false           # read only by the assistant runner child; Environment tab only, never in git
       - key: SPORTS_TOKEN_SECRET
         sync: false           # the SAME value as on cs2-scout
       - key: SPORTS_ALLOWED_ORIGINS

@@ -3,7 +3,11 @@ before the runs). Three OS processes - esports server, sports service, this load
 writer for "ingesting".
 
 usage: python load_sports.py <code_dir> <store_dir> <out.jsonl> <config>[,<config>...] [--runs 5] [--cool 40]
+       [--routes all|core]
 configs: off | inprocess-enabled | {service,proxy}-{enabled,ingesting,failing,broken,recovering}
+  diagnostics (added AFTER series 1, labelled post-hoc): off-ingesting (esports + the writer, no sports at all),
+  service-tokenonly (700 token requests to esports, no sports-service traffic), service-notoken (sports-service
+  traffic only, one token fetched before the burst and reused - the host-sharing cost without any esports work)
   failing = sports service process DOWN; broken = service up on a corrupt store (every query raises).
 Each run appends one JSON line to out.jsonl. 700 simultaneous members; each makes the foundation's 3 esports requests,
 plus (sports on) its sports traffic: service = token (esports) + 1 sports request to the service; proxy / inprocess =
@@ -27,8 +31,14 @@ import psutil
 
 HERE = Path(__file__).resolve().parent
 MEMBERS = 700
+ROUTES = "all"               # "all" = foundation sports routes + slips + assistant; "core" = foundation routes only
 ESPORTS = ["/api/moneylines", "/auth/me", "/", "/api/board"]
 SPORTS = ["/api/sports/status", "/api/sports/offers?league=nba&limit=200", "/api/sports/offers?league=nfl&stat=rec"]
+# --routes all (default from 2026-10-23 series 3): + the merged slips and assistant routes
+SPORTS_ALL = SPORTS + ["/api/sports/slips/rules", "/api/sports/slips/pool?league=nba&platform=underdog",
+                       "/api/sports/slips/pool?league=nfl&platform=prizepicks",
+                       "/api/sports/slips/build?league=nba&platform=underdog",
+                       "/api/sports/slips/build?league=nfl&platform=prizepicks", "/api/sports/assistant/status"]
 ORIGIN = "https://cs2-scout.example.test"
 SECRET = secrets.token_hex(24)
 ADMIN = secrets.token_hex(16)
@@ -108,6 +118,8 @@ class Procs:
     def start_service(self):
         e = self.env()
         e.update({"SPORTS_API": "1", "SPORTS_DATA_DIR": self.sports_dir(), "PYTHONPATH": self.code})
+        if ROUTES == "all":
+            e["SPORTS_ASSISTANT"] = "1"                    # its routes; the runner child needs the SDK + key (absent)
         self.svc = subprocess.Popen([sys.executable, "-m", "sports.service", "--host", "127.0.0.1",
                                      "--port", str(self.svc_port)], cwd=self.code, env=e,
                                     stdout=subprocess.DEVNULL, stderr=open(Path(self.work) / "service.err", "a"),
@@ -116,9 +128,22 @@ class Procs:
         while time.time() - t0 < 30:
             st = _call(self.svc_port, "/api/sports/health")[0]
             if st == 200:
-                return time.time() - t0
+                break
             time.sleep(0.05)
-        raise RuntimeError("sports service did not start")
+        else:
+            raise RuntimeError("sports service did not start")
+        up = time.time() - t0
+        self.snapshot = None
+        if ROUTES == "all" and self.scenario != "broken":  # the worker-side prebuild must exist before members arrive
+            while time.time() - t0 < 120:
+                st, _, body, _ = _call(self.svc_port, "/api/sports/admin/ops", {"X-Admin-Token": ADMIN})
+                if st == 200:
+                    sn = json.loads(body).get("prebuilt", {}).get("snapshots", {}).get("slips_pool", {})
+                    if sn.get("age_s") is not None:
+                        self.snapshot = dict(sn, ready_after_s=round(time.time() - t0, 1))
+                        break
+                time.sleep(0.5)
+        return up
 
     def start_ingest(self):
         self.ing = subprocess.Popen([sys.executable, str(HERE / "load_sports_ingest.py"), self.code, self.sports_dir(),
@@ -166,8 +191,15 @@ class Sampler(threading.Thread):
 
     def run(self):
         psutil.cpu_percent(interval=None)
+        self.children_peak = 0.0
         while not self.stop_ev.is_set():
             self.host_cpu.append(psutil.cpu_percent(interval=None))
+            if "service" in self.procs:
+                try:
+                    kids = self.procs["service"].children(recursive=True)
+                    self.children_peak = max(self.children_peak, sum(self._rss(k) for k in kids))
+                except psutil.Error:
+                    pass
             for k, p in self.procs.items():
                 self.peak[k] = max(self.peak[k], self._rss(p))
                 try:
@@ -178,7 +210,8 @@ class Sampler(threading.Thread):
 
     def report(self):
         end = {k: self._rss(p) for k, p in self.procs.items()}
-        out = {"host_cpu_pct_mean": round(sum(self.host_cpu[1:]) / max(1, len(self.host_cpu) - 1), 1)}
+        out = {"host_cpu_pct_mean": round(sum(self.host_cpu[1:]) / max(1, len(self.host_cpu) - 1), 1),
+               "service_children_peak_mb": round(getattr(self, "children_peak", 0.0), 1)}
         return out | {k: {"rss_start_mb": round(self.start_rss[k], 1), "rss_peak_mb": round(self.peak[k], 1),
                     "rss_end_mb": round(end[k], 1), "threads_peak": self.threads[k]} for k in self.procs}
 
@@ -198,8 +231,15 @@ def burst(P, seed):
     def sports(i):
         cookie = {"Cookie": f"cs2s=good-u{i}"}
         out = []
-        p = SPORTS[i % len(SPORTS)]
-        if P.mode == "service":
+        paths = SPORTS_ALL if ROUTES == "all" else SPORTS
+        p = paths[i % len(paths)]
+        if P.mode == "service" and P.scenario == "tokenonly":
+            st, dt, _, tr = _call(P.esp_port, "/api/sports/token", cookie)
+            out.append(("token", "/api/sports/token", st, dt, tr))
+        elif P.mode == "service" and P.scenario == "notoken":
+            st, dt, _, tr = _call(P.svc_port, p, {"Authorization": f"Bearer {P.shared_token}", "Origin": ORIGIN})
+            out.append(("sports", p, st, dt, tr))
+        elif P.mode == "service":
             st, dt, body, tr = _call(P.esp_port, "/api/sports/token", cookie)
             out.append(("token", "/api/sports/token", st, dt, tr))
             tok = json.loads(body)["token"] if st == 200 else "none"
@@ -253,7 +293,8 @@ def admin_stats(P):
         if st == 200:
             d = json.loads(body)
             o["service_ops"] = {"service": d["service"], "db_pool": d["db_pool"], "cache": d["cache"],
-                                "rss_mb": d["rss_mb"], "threads": d["threads"]}
+                                "rss_mb": d["rss_mb"], "threads": d["threads"], "prebuilt": d.get("prebuilt"),
+                                "jobs": d.get("jobs"), "alerts": d.get("alerts")}
     if P.mode in ("service", "proxy"):
         st, _, body, _ = _call(P.esp_port, "/api/sports/admin/gateway", {"X-Admin-Token": ADMIN})
         if st == 200:
@@ -273,6 +314,9 @@ def run_one(code, store_dir, cfg, seed):
             P.start_ingest()
         for _ in range(20):                                # warm (same as the foundation script)
             _call(P.esp_port, "/api/moneylines", {"Cookie": "cs2s=good-warm"})
+        if P.scenario == "notoken":
+            st, _, body, _ = _call(P.esp_port, "/api/sports/token", {"Cookie": "cs2s=good-shared"})
+            P.shared_token = json.loads(body)["token"]
         S = Sampler({"esports": P.esp, "service": P.svc, "ingest": P.ing})
         time.sleep(1.0)
         S.others_cpu_before = S._others()                  # second sample = CPU % over the last second
@@ -300,6 +344,8 @@ def run_one(code, store_dir, cfg, seed):
         if P.ing:
             lines = (Path(work) / "ingest.out").read_text().splitlines()
             rec["ingest_last"] = json.loads(lines[-1]) if lines else None
+        rec["snapshot_at_start"] = getattr(P, "snapshot", None)
+        rec["routes"] = ROUTES
         rec["alive"] = {k: (p.poll() is None) for k, p in (("esports", P.esp), ("service", P.svc)) if p}
     except Exception as e:                                 # noqa: BLE001
         rec["error"] = f"{type(e).__name__}: {e}"
@@ -333,6 +379,8 @@ def main():
     cfgs = sys.argv[4].split(",")
     runs = int(sys.argv[sys.argv.index("--runs") + 1]) if "--runs" in sys.argv else 5
     cool = float(sys.argv[sys.argv.index("--cool") + 1]) if "--cool" in sys.argv else 40
+    global ROUTES
+    ROUTES = sys.argv[sys.argv.index("--routes") + 1] if "--routes" in sys.argv else "all"
     for r in range(runs):                                  # interleaved: run r of every config, then run r+1
         for cfg in cfgs:
             waited, tw = cool_down(cool)

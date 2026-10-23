@@ -98,6 +98,38 @@ ARCH_PLACEHOLDER
 | esports gateway (proxy mode only) | in-flight / slot wait / timeout | 16 / 200 ms / 2.5 s | 503 `sports_busy` / `sports_unavailable` |
 | esports gateway (proxy mode only) | circuit breaker | 5 consecutive failures -> 5 s open | immediate 503 |
 
+### 5a. Worker-side schedule (`sports/service.py schedule()`, children of the service process)
+
+| Job | Command | Kind | Flag | Timeout |
+|---|---|---|---|---|
+| ingest-loop | `python -m sports.worker loop nba nfl --every 10 --kalshi-every 30` | long-running, restarted with backoff | SPORTS_INGEST | - (own RSS cap 768 MB) |
+| snapshots | `python -m sports.service snapshots` (web.SNAPSHOTS, e.g. the slips leg pool) | every 45 s (+-10% jitter) | SPORTS_API | 120 s |
+| slips-ingest | `python -m sports.slips ingest` (slip spool -> slips.db) | every 5 min | SPORTS_INGEST | 300 s |
+| slips-settle | `python -m sports.slips settle` | hourly | SPORTS_INGEST | 900 s |
+| assistant-runner | `python -m sports.assistant.runner` (needs the `anthropic` SDK from requirements-sports.txt + ANTHROPIC_API_KEY) | long-running | SPORTS_ASSISTANT | - |
+| lab-runner | `python -m sports.lab.runner` (training; applies the worker memory cap) | long-running | SPORTS_TRAIN | - |
+
+A periodic job that fails waits with backoff (3 failures in a row -> `job_failing`); a long-running child that keeps
+dying fast -> `worker_crash_loop` / `job_crash_loop`. Flags are read when the service starts: flip a flag, then
+restart (Render: Save in the Environment tab restarts the service).
+
+### 5b. Write path from handlers (blessed 2026-10-23)
+
+Handlers never write the canonical store or any SQLite file. The only handler-caused write is a **spool**: bounded,
+non-blocking in-memory queue (full = dropped + counted) -> one writer thread -> append-only
+`<SPORTS_DATA_DIR>/<name>_spool/<UTC date>.jsonl` with a per-day byte cap; a scheduled worker job loads it into its own
+database idempotently. Reference: the slips spool (`sports/slips/log.py`: 2,000 entries, 50 MB/day; loaded by
+`slips-ingest`). Transport = the shared disk, valid because the service and every worker child run in ONE Render
+service on ONE disk. If the worker is ever split into its own Render service, spools must switch to a push transport
+(HTTP POST to the worker) - Render disks cannot be shared.
+
+### 5c. Prebuilt snapshots
+
+Heavy shared answers are registered in `web.SNAPSHOTS` and built by the `snapshots` job; `web.cached` serves the
+prebuilt value (HMAC-tagged pickle under `<SPORTS_DATA_DIR>/snapshots/`, key derived from SPORTS_TOKEN_SECRET) and only
+falls back to a request-time build on a miss (counted in `/api/sports/admin/ops` -> `prebuilt.stats`). The slips leg
+pool (~2 s cold build, slips agent's measurement) is the first entry.
+
 ## 6. Create the Render resources (owner, Render dashboard - owner approved 2026-10-23)
 
 We have no Render API access; these are the owner's clicks. Nothing here turns Sports on.
@@ -110,11 +142,15 @@ at 0). Otherwise create it by hand:
    `rikko1012/cs2-scout` -> **Connect**.
 2. **Name** `scout-sports-api`. **Region** `Ohio (US East)` (same as cs2-scout). **Branch**
    `feature/scout-sports-nfl-nba` for staging (switch to `main` only after the release merge). **Root directory**
-   empty. **Language / Runtime** `Docker`. **Dockerfile path** `./Dockerfile`.
+   empty. **Language / Runtime** `Docker`. **Dockerfile path** `./Dockerfile.sports` (installs
+   requirements-sports.txt = requirements.txt + the `anthropic` SDK; the esports `./Dockerfile` and
+   `requirements.txt` are unchanged and never get it).
 3. **Docker Command**: `python -m sports.service`
-4. **Instance type** `Standard` (2 GB RAM, 1 CPU). Reason: ingestion child capped at 768 MB (measured 110-130 MB per
-   cycle, foundation) + service capped at 900 MB (measured RSS in section 11) + headroom for the model / assistant
-   routes. `Starter` (512 MB) is a floor only with `SPORTS_WORKER_MAX_MB=300` and `SPORTS_SERVICE_MAX_MB=150`.
+4. **Instance type** `Standard` (2 GB RAM, 1 CPU) for the API + ingestion + snapshots + slip jobs + assistant.
+   Reason: ingestion child capped at 768 MB (measured 110-130 MB per cycle, foundation), service capped at 900 MB
+   (measured in section 11), snapshot / slip children are short-lived (measured in section 11). **Change to `Pro`
+   (4 GB, 2 CPU) before setting `SPORTS_TRAIN=1`**: the lab training child has its own 768 MB cap and is CPU-bound;
+   on 1 CPU it would compete with the API. `Starter` (512 MB) is not recommended.
 5. **Advanced -> Health Check Path** `/api/sports/health`. **Auto-Deploy** `No`.
 6. **Advanced -> Add Disk**: Name `scout-sports-data`, Mount Path `/sports-data`, Size `10 GB`. Reason: first
    ingestion cycle ~50 MB, then ~10-15 MB/hour at the default cadence (~0.3 GB/day, foundation measurement);
@@ -130,6 +166,9 @@ at 0). Otherwise create it by hand:
    | SPORTS_UI | 0 | no |
    | SPORTS_INGEST | 0 | no |
    | SPORTS_TRAIN | 0 | no |
+   | SPORTS_ASSISTANT | 0 | no |
+   | SPORTS_ASSIST_MODEL | claude-opus-5-5 | no |
+   | ANTHROPIC_API_KEY | the owner's Anthropic API key (only when the assistant is enabled) | **yes** |
    | SPORTS_LEAGUES | nba nfl | no |
    | SPORTS_INGEST_EVERY_MIN | 10 | no |
    | SPORTS_KALSHI_EVERY_MIN | 30 | no |
@@ -165,7 +204,11 @@ at 0). Otherwise create it by hand:
    `https://scout-sports-api.onrender.com/api/sports/status`; `/api/sports/admin/gateway` shows `mode: service`.
 4. **Page:** cs2-scout `SPORTS_UI=1` -> Save. Watch section 9 for an hour; esports `/health` latency and memory must
    stay at their usual values.
-5. `SPORTS_TRAIN` stays 0 until a model agent registers a training job and its gate passes.
+5. **Assistant (optional):** set `ANTHROPIC_API_KEY` (secret) and `SPORTS_ASSISTANT=1` on scout-sports-api -> Save.
+   The runner child starts; `/api/sports/admin/assistant` and ops `jobs.assistant-runner` show it alive; member quotas
+   per sports/assistant/config.py.
+6. **Lab / training:** upgrade scout-sports-api to `Pro` first, then `SPORTS_TRAIN=1` -> Save. Admin-only lab routes;
+   promotion still needs the registered gate and the release policy.
 
 ## 8. Disable / rollback (no database restore, no esports rollback)
 
@@ -176,7 +219,9 @@ at 0). Otherwise create it by hand:
   process imports nothing from `sports/` and `/sports`, `/sports/*`, `/api/sports/*` (token included) are
   byte-identical to unknown routes (`test_rollback_is_flags_off_even_with_the_service_configured`, run in a child
   process with every other sports setting still present).
-- **Stop ingestion only:** scout-sports-api `SPORTS_INGEST=0` -> Save. The store stays as it is.
+- **Stop ingestion only:** scout-sports-api `SPORTS_INGEST=0` -> Save. The store stays as it is (slip spools keep
+  accumulating up to their daily cap and are loaded when ingestion is back).
+- **Stop the assistant / lab only:** `SPORTS_ASSISTANT=0` / `SPORTS_TRAIN=0` -> Save.
 - The sports disk is kept; re-enabling resumes from it (jobs are idempotent / resumable). Removing the sports service
   never touches the esports disk `/data`.
 
@@ -201,6 +246,9 @@ deploys and health-check failures).
 | service_shedding | warn | (busy + 5xx) > 1% of requests | `peak_inflight` / `db_pool`: raise threads / pool or fix the slow route |
 | store_slow | warn | pool waits timed out or queries interrupted | the heavy route must answer from a snapshot |
 | token_secret_missing | page | secret unset / short | set `SPORTS_TOKEN_SECRET` on both services |
+| job_failing | warn | a periodic job (snapshots / slips-ingest / slips-settle) failed 3 times in a row | ops `jobs.<name>.last_exit`; Render logs |
+| job_crash_loop | page | assistant / lab runner: >= 5 starts and last run < 120 s | missing SDK / key, or turn its flag off |
+| snapshot_stale | warn | API on and a prebuilt snapshot older than 3x its max age (or never built) | the `snapshots` job; members fall back to request-time builds (slower, still correct) |
 
 Esports side: `/health` (unchanged) and, with `SPORTS_API=1`, `/api/sports/admin/gateway` (admin token):
 `token_minted`, `token_refused`, `not_here`, `pages`, mode.
