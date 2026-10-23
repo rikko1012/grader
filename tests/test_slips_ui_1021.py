@@ -268,6 +268,7 @@ def test_u2_send_studio_slip_to_my_slip(tmp_path):
       const lg = (i, o) => Object.assign({row_id: "ud:" + i, nick: "p" + i, line: 20.5, side: "Less", prop: "kills", scope: "12", grade: "B+", p: 0.63, units: 1, book: "underdog",
         team: "T" + i, opponent: "O" + i, start: fut, match_slug: "m" + i, market_type: "standard", model_outcomes: {over: 0.36, under: 0.63, push: 0.01}}, o || {});
       STUDIO.batch = {batch_id: "b", slips: {2: [{slip_id: "b/b1/s1", build_id: "b/b1", n: 2, book: "underdog", legs: [lg(1), lg(2)]}]}};
+      BK.underdog.rows = [lg(1), lg(2)].map(l => Object.assign({}, l, {id: l.row_id, player: l.nick, graded_line: l.line})); BK.underdog.loaded = true;
       store.set("cs2s_slip", [{p: "old", bk: "underdog", t: "kills", sc: "12", l: 1, s: "More", st: fut, now: {status: "verified"}}]);
       await studioToMySlip("b/b1/s1");
       return store.get("cs2s_slip", []).map(x => [x.p, x.l, x.s, x.g, x.pc, x.u, x.bk, x.rid, x.now.status, x.m]);
