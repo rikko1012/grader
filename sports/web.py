@@ -56,6 +56,12 @@ ROUTES = {
     "/api/sports/slips/settle": ("sports.api_slips:settle_view", MEMBER, ("GET", "POST")),
     "/api/sports/admin/slips/build": ("sports.api_slips:admin_build", ADMIN, ("GET", "POST")),
     "/api/sports/admin/slips/log": ("sports.api_slips:admin_log", ADMIN, ("GET",)),
+    "/api/sports/assistant/status": ("sports.api_assist:status", MEMBER, ("GET",)),
+    "/api/sports/assistant/ask": ("sports.api_assist:ask", MEMBER, ("GET", "POST")),
+    "/api/sports/assistant/stream": ("sports.api_assist:stream", MEMBER, ("GET",)),
+    "/api/sports/assistant/cancel": ("sports.api_assist:cancel", MEMBER, ("GET", "POST")),
+    "/api/sports/admin/assistant": ("sports.api_assist:admin_status", ADMIN, ("GET",)),
+    "/api/sports/admin/lab/*": ("sports.api_lab:route", ADMIN, ("GET", "POST")),
 }
 # ---------------------------------------------------------------------------------------------------- end of table
 

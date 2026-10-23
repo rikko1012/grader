@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scout Sports - Ask Scout</title>
+<link rel="stylesheet" href="/sports/assistant.css">
+</head>
+<body style="margin:0">
+<div class="sa-root" id="sa-root">
+  <div class="sa-wrap">
+    <header>
+      <div>
+        <h1>Ask Scout</h1>
+        <p class="sa-sub">Answers come only from Scout's records: game logs, current quotes and Scout forecasts. Every
+          number links to its source.</p>
+      </div>
+      <div class="sa-seg" role="group" aria-label="League">
+        <button type="button" data-league="nba" aria-pressed="true">NBA</button>
+        <button type="button" data-league="nfl" aria-pressed="false">NFL</button>
+      </div>
+    </header>
+
+    <form class="sa-panel" id="sa-form" autocomplete="off">
+      <label for="sa-q" class="sa-meta">Your question</label>
+      <textarea id="sa-q" maxlength="1000" placeholder="e.g. How has Jalen Brunson done against 25.5 points this season?"></textarea>
+      <div class="sa-row">
+        <span class="sa-meta" id="sa-quota" aria-live="polite"></span>
+        <span>
+          <button type="button" class="sa-btn sa-ghost sa-hidden" id="sa-stop">Stop</button>
+          <button type="submit" class="sa-btn" id="sa-ask">Ask</button>
+        </span>
+      </div>
+      <div class="sa-examples" aria-label="Example questions">
+        <button type="button">What did he score last night?</button>
+        <button type="button">Compare today's quotes for this prop</button>
+        <button type="button">What is Scout's forecast and is it validated?</button>
+      </div>
+    </form>
+
+    <section class="sa-panel sa-hidden" id="sa-out" aria-labelledby="sa-out-h">
+      <h2 id="sa-out-h">Answer</h2>
+      <div class="sa-dates" id="sa-dates"></div>
+      <div class="sa-answer" id="sa-answer" aria-live="polite"></div>
+      <div class="sa-note sa-hidden" id="sa-note" role="status"></div>
+      <ul class="sa-steps" id="sa-steps" aria-label="What Scout looked up"></ul>
+    </section>
+
+    <section class="sa-panel sa-hidden" id="sa-evidence" aria-labelledby="sa-ev-h">
+      <h2 id="sa-ev-h">Sources</h2>
+      <ol class="sa-ev" id="sa-ev"></ol>
+    </section>
+
+    <p class="sa-meta" id="sa-status" role="status"></p>
+  </div>
+</div>
+<script src="/sports/assistant.js"></script>
+</body>
+</html>
