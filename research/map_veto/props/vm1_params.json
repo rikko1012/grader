@@ -1,0 +1,67 @@
+{
+ "c0": 0.33035745040493114,
+ "c1": 0.38393997190289325,
+ "kappa": 17.308615893715984,
+ "kappa_map": {
+  "ancient": 17.56551523229657,
+  "anubis": 18.12643936544838,
+  "cache": 18.133202801876152,
+  "cobblestone": 17.289958849955624,
+  "dust2": 16.489252032124558,
+  "inferno": 17.304879654338595,
+  "mirage": 16.798100084541645,
+  "nuke": 17.664151856239094,
+  "overpass": 18.00548332756342,
+  "train": 16.658181271374417
+ },
+ "meta": {
+  "excluded_rows_all_windows": {
+   "not a legal MR12 score": 1
+  },
+  "k_shrink": 2000.0,
+  "kappa_map_raw": {
+   "ancient": 17.685376034686826,
+   "anubis": 19.023283305635534,
+   "cache": 19.872946870865622,
+   "cobblestone": 2.000012015080264,
+   "dust2": 16.175023558149903,
+   "inferno": 17.302610847055494,
+   "mirage": 16.58038949205811,
+   "nuke": 17.843120202973463,
+   "overpass": 18.859276271205328,
+   "train": 14.313549998025099
+  },
+  "n_maps": 26429,
+  "n_matches": 11615,
+  "nll_per_map": 3.2998703963084854,
+  "ot_model_before_tau": 0.09868822790138207,
+  "ot_observed": 0.11415490559612547,
+  "ot_tol": 0.01,
+  "per_map_n": {
+   "ancient": 4333,
+   "anubis": 1912,
+   "cache": 1016,
+   "cobblestone": 1,
+   "dust2": 5041,
+   "inferno": 3293,
+   "mirage": 4590,
+   "nuke": 4034,
+   "overpass": 1704,
+   "train": 505
+  },
+  "procedure": "REGISTER.md section 1.2: ML (c0, c1, log kappa) Nelder-Mead; per-map log kappa ML with (c0, c1) fixed, shrunk with weight 2000 maps; tau only if |OT model - observed| > 1.0 pt",
+  "rho_source": "rm-1 params_F6.json (fit before 2026-10-01)",
+  "window": [
+   "2025-10-22",
+   "2026-10-21"
+  ]
+ },
+ "rbar": 21.447122479094933,
+ "rho": {
+  "123_p2": 0.776503891843568,
+  "12_cm2": 0.8008550667778447,
+  "12_p2": 0.8327963457702972,
+  "1_p2": 0.7990546478010517
+ },
+ "tau": 1.1566815636048242
+}
