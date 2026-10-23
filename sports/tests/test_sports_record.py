@@ -123,3 +123,34 @@ def test_an_older_log_gains_the_role_column(tmp_path):
         assert c.execute("SELECT role FROM forecasts").fetchone()["role"] == "starter (C)"
     finally:
         c.close()
+
+
+def test_export_import_round_trip_is_idempotent_and_keeps_settlements(espn_box, con, tmp_path):
+    for player, key, line, p in (("Nikola Jokic", "nikola jokic", 12.5, 0.4), ("Aaron Gordon", "aaron gordon", 21.5, 0.6)):
+        record.save(con, _rows(player, key, line, p), now=BEFORE)
+    record.settle(con, now=AFTER)
+    path = tmp_path / "log.jsonl.gz"
+    assert record.export(con, path) == (2, 2)
+    other = record.connect(tmp_path / "other.db")
+    try:
+        other.execute("INSERT INTO forecasts (recorded_at, league, offer_id) VALUES ('x', 'nba', 'unrelated')")
+        assert record.import_(other, path) == (2, 2)
+        assert record.import_(other, path) == (0, 0)                  # a second import adds nothing
+        got = {r["player"]: (r["outcome"], r["actual"]) for r in other.execute(
+            "SELECT f.player, s.outcome, s.actual FROM forecasts f JOIN settlements s ON s.forecast_id = f.id")}
+        assert got == {"Nikola Jokic": ("over", 13.0), "Aaron Gordon": ("under", 20.0)}
+    finally:
+        other.close()
+
+
+def test_import_tolerates_an_older_log_without_newer_columns(con, tmp_path):
+    import gzip
+    import json
+    path = tmp_path / "old.jsonl.gz"
+    with gzip.open(path, "wt") as fh:
+        fh.write(json.dumps({"t": "forecast", "id": 7, "recorded_at": "2026-10-23T20:14:35Z", "league": "nba",
+                             "platform": "prizepicks", "offer_id": "pp:1", "line": 20.5, "side": "over",
+                             "chance": 0.55, "retired_column": 1}) + "\n")
+    assert record.import_(con, path) == (1, 0)
+    r = con.execute("SELECT role, book_consensus, chance FROM forecasts").fetchone()
+    assert r["role"] is None and r["book_consensus"] is None and r["chance"] == 0.55

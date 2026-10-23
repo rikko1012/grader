@@ -323,6 +323,18 @@ def cmd_report(a):
     _save(a.league or "all", "report", rep)
 
 
+def cmd_export(a):
+    with closing(record.connect()) as con:
+        nf, ns = record.export(con, a.path)
+    print(f"  wrote {nf} forecasts and {ns} settlements to {a.path}")
+
+
+def cmd_import(a):
+    with closing(record.connect()) as con:
+        nf, ns = record.import_(con, a.path)
+    print(f"  added {nf} forecasts and {ns} settlements from {a.path} (rows already in the log are skipped)")
+
+
 def cmd_watch(a):
     last_settle = 0.0
     while True:
@@ -373,6 +385,9 @@ def main(argv=None):
     for name in ("settle", "report"):
         s = sub.add_parser(name)
         s.add_argument("league", nargs="?")
+    for name in ("export-forecasts", "import-forecasts"):
+        s = sub.add_parser(name)
+        s.add_argument("path", help="gzipped JSON lines (.jsonl.gz)")
     s = sub.add_parser("books")
     s.add_argument("league")
     s.add_argument("--player")
@@ -390,5 +405,5 @@ def main(argv=None):
         a.league = config.league(a.league)["key"]
     {"leagues": cmd_leagues, "slate": cmd_slate, "lines": cmd_lines, "sharp": cmd_sharp, "edges": cmd_edges,
      "player": cmd_player, "record": cmd_record, "settle": cmd_settle, "report": cmd_report,
-     "watch": cmd_watch, "books": books_cli.cmd_view, "books-health": books_cli.cmd_health,
+     "watch": cmd_watch, "export-forecasts": cmd_export, "import-forecasts": cmd_import, "books": books_cli.cmd_view, "books-health": books_cli.cmd_health,
      "books-plan": books_cli.cmd_plan, "books-run": books_cli.cmd_run, "books-verify": books_cli.cmd_verify}[a.cmd](a)

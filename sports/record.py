@@ -247,6 +247,61 @@ def summarize(rows):
     return out
 
 
+_F_KEY = ("recorded_at", "platform", "offer_id", "line", "side", "chance")
+
+
+def export(con, path):
+    """Write the whole log (forecasts, then settlements) as gzipped JSON lines -> (forecasts, settlements). The file
+    is the portable copy: the log itself lives on one machine's disk."""
+    import gzip
+    nf = ns = 0
+    with gzip.open(path, "wt", encoding="utf-8") as fh:
+        for r in con.execute("SELECT * FROM forecasts ORDER BY id"):
+            fh.write(json.dumps({"t": "forecast", **dict(r)}) + "\n")
+            nf += 1
+        for r in con.execute("SELECT * FROM settlements ORDER BY id"):
+            fh.write(json.dumps({"t": "settlement", **dict(r)}) + "\n")
+            ns += 1
+    return nf, ns
+
+
+def import_(con, path):
+    """Append an export to this log -> (forecasts added, settlements added). Idempotent: a forecast already here (same
+    recorded_at, platform, offer, line, side, chance) is not added twice, and settlements follow their forecast to its
+    id in this log. Columns this log lacks are dropped; columns the export lacks stay empty."""
+    import gzip
+    cols = {r["name"] for r in con.execute("PRAGMA table_info(forecasts)")} - {"id"}
+    scols = {r["name"] for r in con.execute("PRAGMA table_info(settlements)")} - {"id", "forecast_id"}
+    ids, nf, ns = {}, 0, 0
+    with gzip.open(path, "rt", encoding="utf-8") as fh:
+        for line in fh:
+            r = json.loads(line)
+            if r.pop("t") == "forecast":
+                old = r.pop("id")
+                have = con.execute("SELECT id FROM forecasts WHERE " + " AND ".join(f"{c} IS ?" for c in _F_KEY),
+                                   [r.get(c) for c in _F_KEY]).fetchone()
+                if have:
+                    ids[old] = have["id"]
+                    continue
+                keep = {k: v for k, v in r.items() if k in cols}
+                cur = con.execute(f"INSERT INTO forecasts ({', '.join(keep)}) VALUES ({', '.join('?' * len(keep))})",
+                                  list(keep.values()))
+                ids[old] = cur.lastrowid
+                nf += 1
+            else:
+                fid = ids.get(r.pop("forecast_id"))
+                r.pop("id", None)
+                if fid is None or con.execute("SELECT 1 FROM settlements WHERE forecast_id = ? AND settled_at = ? AND "
+                                              "outcome IS ?", (fid, r.get("settled_at"), r.get("outcome"))).fetchone():
+                    continue
+                keep = {k: v for k, v in r.items() if k in scols}
+                con.execute(f"INSERT INTO settlements (forecast_id, {', '.join(keep)}) VALUES "
+                            f"(?, {', '.join('?' * len(keep))})", [fid, *keep.values()])
+                ns += 1
+    con.commit()
+    return nf, ns
+
+
 def report(con, league=None):
     rows = _latest_settled(con, league)
     uniq = {}
