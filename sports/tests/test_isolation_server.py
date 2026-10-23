@@ -209,3 +209,13 @@ def test_esports_pages_are_byte_identical_with_sports_ui_off_and_get_one_link_wi
         code, out = get(p)
         assert code == 200 and out.count(b'href="/sports"') == 1, p  # exactly ONE link
         assert out.replace(server._SPORTS_NAV, b"", 1) == body        # and nothing else changed
+
+
+def test_sports_nav_returns_the_same_object_per_page_version():
+    """send_shared caches ETag / gzip by body identity: the linked page must be ONE object per page version."""
+    import server
+    page = server.page()
+    a, b = server.sports_nav(page), server.sports_nav(page)
+    assert a is b and a != page
+    other = page + b" "
+    assert server.sports_nav(other) is not a

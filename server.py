@@ -3563,16 +3563,27 @@ def page():
 _SPORTS_NAV_AFTER = (b'<a id="sportlol" href="/lol">LoL</a></nav>',                      # index.html header
                      b'<a href="/lol" class="on" aria-current="page">LoL</a></nav>')       # lol.html header
 _SPORTS_NAV = b'<nav class="sportsw" aria-label="Sports"><a href="/sports">NFL / NBA</a></nav>'
+_SPORTS_NAV_MEMO = {}                                   # id(page bytes) -> (page bytes, page with the link)
 
 
 def sports_nav(body):
     """The ONE Sports link on the esports pages, added only when SPORTS_UI is on (Handler._sports_on). Pure bytes edit
     after the game switcher - no sports import; with the flag off the page bytes are untouched
-    (sports/tests/test_isolation_server.py). A page without the marker is returned unchanged."""
+    (sports/tests/test_isolation_server.py). A page without the marker is returned unchanged.
+    Memoised per page OBJECT: send_shared / encoded() cache the ETag + gzip by body identity, so a fresh copy per
+    request would recompress the page every time (measured 2026-10-23: esports p95 5.6 s at 700 members without it)."""
+    hit = _SPORTS_NAV_MEMO.get(id(body))
+    if hit is not None and hit[0] is body:
+        return hit[1]
+    out = body
     for marker in _SPORTS_NAV_AFTER:
         if marker in body:
-            return body.replace(marker, marker + _SPORTS_NAV, 1)
-    return body
+            out = body.replace(marker, marker + _SPORTS_NAV, 1)
+            break
+    if len(_SPORTS_NAV_MEMO) > 8:                        # two pages; old versions dropped when a file changes
+        _SPORTS_NAV_MEMO.clear()
+    _SPORTS_NAV_MEMO[id(body)] = (body, out)
+    return out
 
 
 def web_file(name):
