@@ -410,6 +410,11 @@ def cmd_settle(a, con):
     jobs = Jobs(con)
     out = {lg: jobs.run(f"settle:{lg}:{bucket(60)}", "settle", lambda ctx, lg=lg: settle_league(con, lg, ctx))
            for lg in (a.leagues or ["nba", "nfl"])}
+    try:                                                # model scorecard + diagnostic queue (sports/model/learning.py)
+        from .model import learning                     # never breaks settlement
+        out["model_learning"] = learning.on_settled(con)
+    except Exception as e:                              # noqa: BLE001
+        out["model_learning"] = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
     _print(out)
     return out
 

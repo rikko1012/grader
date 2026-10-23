@@ -151,3 +151,27 @@ def group_sum(keys, *vals):
     """keys -> (unique keys, sums per value array)."""
     u, inv = np.unique(np.asarray(keys), return_inverse=True)
     return u, [np.bincount(inv, weights=np.nan_to_num(np.asarray(v, float)), minlength=len(u)) for v in vals]
+
+
+def concat(a, b):
+    """Rows of a then b (b's missing columns -> NaN / '')."""
+    cols = {}
+    for c, v in a.cols.items():
+        if c in b.cols:
+            w = b.cols[c]
+        else:
+            w = np.full(len(b), "" if v.dtype == object else np.nan, dtype=v.dtype if v.dtype == object else float)
+        cols[c] = np.concatenate([v.astype(object) if v.dtype == object else v.astype(float),
+                                  np.asarray(w, dtype=object) if v.dtype == object else np.asarray(w, float)])
+    return Frame(cols, dict(a.attrs))
+
+
+def rows_frame(rows, like):
+    """List of dicts -> Frame with the columns of `like` (missing -> NaN / '')."""
+    cols = {}
+    for c, v in like.cols.items():
+        if v.dtype == object:
+            cols[c] = np.array([str(r.get(c, "") if r.get(c) is not None else "") for r in rows], dtype=object)
+        else:
+            cols[c] = np.array([np.nan if r.get(c) is None else float(r[c]) for r in rows], dtype=float)
+    return Frame(cols)

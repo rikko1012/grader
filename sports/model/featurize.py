@@ -14,7 +14,7 @@ from __future__ import annotations
 import numpy as np
 
 from . import datasets
-from .frame import Frame, ew_prior, group_starts, gshift, key_of, lag_matrix, lookup, roll_prior, take
+from .frame import Frame, concat, ew_prior, group_starts, gshift, key_of, lag_matrix, lookup, roll_prior, rows_frame, take
 
 FORECAST_LEAD_H = 1.0
 NBA_MARKETS = {"points": "pts", "rebounds": "reb", "assists": "ast", "threes": "fg3m"}
@@ -53,17 +53,50 @@ def _team_frame(con, table, league):
 
 
 # ================================================================================================================ NBA
-def nba_frame(con, h_min=5, h_rate=20):
+def _with_upcoming(pg, league, as_of, upcoming, team_like=None):
+    """Point-in-time cut (rows known at as_of) + the upcoming rows to forecast (stats unknown = NaN, is_up = 1)."""
+    pg["is_up"] = np.zeros(len(pg))
+    if as_of is not None:
+        cut = epoch([as_of])[0]
+        pg = pg[pg["ts"] + datasets.KNOWN_AFTER_H[league] * 3600 <= cut]
+    if not upcoming:
+        return pg, set()
+    rows = [dict(r, is_up=1.0, played=1.0) for r in upcoming]
+    up = rows_frame(rows, pg)
+    up["ts"] = epoch(up["start_utc"])
+    return concat(pg, up), {(r["game_id"], r["team"]) for r in upcoming}
+
+
+def _team_upcoming(tg, league, as_of, up_keys, upcoming):
+    if as_of is not None:
+        cut = epoch([as_of])[0]
+        tg = tg[tg["ts"] + datasets.KNOWN_AFTER_H[league] * 3600 <= cut]
+    if not upcoming:
+        return tg
+    seen, rows = set(), []
+    for r in upcoming:
+        for team, opp, home in ((r["team"], r["opp"], r["home"]), (r["opp"], r["team"], 1 - r["home"])):
+            if (r["game_id"], team) not in seen:
+                seen.add((r["game_id"], team))
+                rows.append({"game_id": r["game_id"], "team": team, "opp": opp, "home": home,
+                             "start_utc": r["start_utc"]})
+    up = rows_frame(rows, tg)
+    up["ts"] = epoch(up["start_utc"])
+    return concat(tg, up).sort("team", "ts")
+
+
+def nba_frame(con, h_min=5, h_rate=20, upcoming=None, as_of=None):
     pg = Frame.from_sql(con, "SELECT p.*, g.start_utc, g.season, g.season_type, g.spread_home, g.total_line "
                              "FROM nba_pg p JOIN games g ON g.league='nba' AND g.game_id = p.game_id "
                              "WHERE g.status = 'final'")
     pg["ts"] = epoch(pg["start_utc"])
+    pg, up_keys = _with_upcoming(pg, "nba", as_of, upcoming)
     pg = pg.sort("player_id", "ts")
     pg["pos_g"] = np.array([_pos_nba(p) for p in pg["position"]], dtype=object)
     gs_all = group_starts(pg["player_id"])
     pg["ew_min_all"], _ = ew_prior(np.where(pg["played"] == 1, pg["min"], np.nan), gs_all, 10)
     # ---- team context --------------------------------------------------------------------------------------------
-    tg = _team_frame(con, "nba_tg", "nba")
+    tg = _team_upcoming(_team_frame(con, "nba_tg", "nba"), "nba", as_of, up_keys, upcoming)
     tgs = group_starts(tg["team"])
     poss = tg["fga"] - tg["oreb"] + tg["tov"] + 0.44 * tg["fta"]
     min48 = np.maximum(tg["player_min"] / 5, 48)
@@ -71,6 +104,8 @@ def nba_frame(con, h_min=5, h_rate=20):
     tg["pace_l10"] = roll_prior(tg["pace"], tgs, 10, 3)
     tg["rest_days"] = (tg["ts"] - gshift(tg["ts"], tgs, 1)) / 86400
     absent = _team_absence(pg, tg, tgs)
+    if up_keys:                         # this game's absences are unknown until the injury report (never "nobody")
+        absent = np.where(np.isin(tg["game_id"], [k[0] for k in up_keys]), np.nan, absent)
     tg["absent_share"] = absent
     tg["absent_share_lag"] = gshift(absent, tgs, 1)
     tkey = key_of(tg["game_id"], tg["team"])
@@ -175,7 +210,7 @@ NFL_FILL0 = ("pass_att", "pass_cmp", "pass_yds", "carries", "rush_yds", "targets
              "rz_carries", "i10_targets", "i10_carries", "rec_air_yds")
 
 
-def nfl_frame(con, h_opp=4):
+def nfl_frame(con, h_opp=4, upcoming=None, as_of=None):
     pg = Frame.from_sql(con, "SELECT p.*, g.start_utc, g.spread_home, g.total_line, g.roof, g.temp, g.wind "
                              "FROM nfl_pg p JOIN games g ON g.league='nfl' AND g.game_id = p.game_id "
                              "WHERE g.status = 'final' AND p.position IN ('QB','RB','WR','TE','FB')")
@@ -183,10 +218,15 @@ def nfl_frame(con, h_opp=4):
     pg["ts"] = epoch(pg["start_utc"])
     for c in NFL_FILL0:
         pg[c] = np.nan_to_num(pg[c])
+    pg, up_keys = _with_upcoming(pg, "nfl", as_of, upcoming)
+    if up_keys:                                 # upcoming rows: results unknown (NaN), not 0
+        up = pg["is_up"] == 1
+        for c in NFL_FILL0:
+            pg[c] = np.where(up, np.nan, pg[c])
     played_no_target = pg["targets"] == 0
     for c in ("target_share", "air_yards_share"):
         pg[c] = np.where(np.isnan(pg[c]) & played_no_target, 0.0, pg[c])
-    tg = _team_frame(con, "nfl_tg", "nfl")
+    tg = _team_upcoming(_team_frame(con, "nfl_tg", "nfl"), "nfl", as_of, up_keys, upcoming)
     tgs = group_starts(tg["team"])
     tg["plays_l6"] = roll_prior(tg["plays"], tgs, 6, 2)
     with np.errstate(all="ignore"):
@@ -213,7 +253,7 @@ def nfl_frame(con, h_opp=4):
     akeys = key_of(pg["game_id"], pg["opp"], pg["position"])
     u, inv = np.unique(akeys, return_inverse=True)
     acols = ("targets", "rec", "rec_yds", "carries", "rush_yds", "pass_att", "pass_yds")
-    sums = {c: np.bincount(inv, weights=pg[c], minlength=len(u)) for c in acols}
+    sums = {c: np.bincount(inv, weights=np.nan_to_num(pg[c]), minlength=len(u)) for c in acols}
     parts = [x.split("|") for x in u]
     ag = Frame({"game_id": np.array([p[0] for p in parts], dtype=object),
                 "team": np.array([p[1] for p in parts], dtype=object),
