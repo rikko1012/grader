@@ -759,6 +759,24 @@ def canonical_match(team_a, team_b, start_iso, bo=None, event=None, scope="serie
         return out
 
 
+def hltv_start(hltv_match):
+    """HLTV's last known schedule time (aware UTC) for one exact HLTV match id - the live snapshot, else the persisted copy
+    of matches HLTV dropped from its schedule once they started (_rebuild). None when it was never on the schedule (a
+    match only known as finished, dated by day). Memory only, never a lookup by names or a window: settlement timing
+    evidence (picklog reschedule rule, 2026-10-23 closeout 2)."""
+    try:
+        mid = int(hltv_match)
+    except (TypeError, ValueError):
+        return None
+    with _LOCK:
+        pairs = list(_S["pairs"].values())
+    for cands in pairs:
+        for c in cands:
+            if c["matchid"] == mid and c["start"] is not None:
+                return c["start"]
+    return None
+
+
 def market_key(match_id, scope, platform, market_id):
     """One market: the match + its scope ('series', 'map1', 'map2', ...) + platform + the platform's market id.
     None when the match is unlinked. Series and map markets of one match never share a key."""

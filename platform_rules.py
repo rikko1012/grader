@@ -18,6 +18,8 @@ Read 2026-10-23 15:40-15:45 UTC (full wording and URLs: research/cs2_accuracy_2y
   every CS2-specific PrizePicks rule beyond the general DNP / lineup rules is unverified.
 """
 
+from datetime import timedelta
+
 READ_AT = "2026-10-23T15:45Z"
 PLATFORMS = ("prizepicks", "underdog")
 SCOPE_MAPS = {"1": (1,), "12": (1, 2), "123": (1, 2, 3)}
@@ -53,8 +55,14 @@ RULES = {
                    "note": "no CS2 remake / restart rule is published (the chronobreak rule is for maps rewound in game); "
                            "HLTV keeps only the final map, so a remake is not seen in the data"},
         "reschedule": {"verified": True, "action": "grade within 36 h, else void", "source": _UD_DELAYS,
+                       "void_after_h": 36,
                        "quote": "If the newly scheduled start time is 36 hours after the original scheduled start time, all "
-                                "picks will void."},
+                                "picks will void.",
+                       "grade_quote": "the newly scheduled start time is within 36 hours of the original scheduled start "
+                                      "time - the picks will grade.",
+                       "note": "applied by reschedule_decision (2026-10-23 closeout 2): the start of the identity-linked "
+                               "match (exact HLTV id / BO3.gg slug, never a wider name window) minus the ORIGINAL "
+                               "scheduled start; evidence that does not decide it leaves the pick pending"},
         "entry_min_teams": {"verified": True, "source": _UD_LINEUP,
                             "quote": "All entries must include active picks from at least two different teams."},
         "entry_size": {"verified": True, "source": _UD_PAYOUTS, "standard": (2, 8), "flex": (3, 8),
@@ -87,9 +95,11 @@ RULES = {
                                                 "as a DNP.",
                                        "note": "the CS2 threshold (play a map of the scope? every map?) is in-app only"},
         "remake": {"verified": False, "action": "not detectable", "note": "not published"},
-        "reschedule": {"verified": False, "action": "not applied", "source": _PP_DNP,
+        "reschedule": {"verified": False, "action": "not applied", "source": _PP_DNP, "void_after_h": None,
                        "quote": "Depending on the sport, picks may be DNPd when a game is canceled or postponed to a new day.",
-                       "note": "the CS2 rule is in the in-app scoring chart"},
+                       "note": "the CS2 rule is in the in-app scoring chart. Hook: once the CS2 rule is read, set verified "
+                               "True and void_after_h (hours) and reschedule_decision applies it as for Underdog; until "
+                               "then settlement is unchanged (the start evidence is still stored)"},
         "entry_min_teams": {"verified": True, "source": _PP_PICKS,
                             "quote": "You must have picks from AT LEAST 2 different teams in order for it to be a valid lineup."},
         "entry_size": {"verified": True, "source": _PP_PICKS, "power": (2, 6), "flex": (2, 6),
@@ -172,6 +182,44 @@ def forfeit_decision(platform, scope, forfeited, any_played=True):
                           f"(forfeited map {sorted(forfeited)}) - pending"}
     return {"action": r["action"], "rule": name, "verified": True,
             "reason": f"{p}: forfeited map {sorted(forfeited)} {'inside' if inside else 'outside'} the line's maps"}
+
+
+def reschedule_decision(platform, original, start_lo, start_hi=None, source=None):
+    """A pick's match was found by its exact identity; was it played inside the platform's reschedule window?
+    original: aware datetime of the ORIGINAL scheduled start. start_lo / start_hi: bounds of the identity-linked match's
+    start (exact evidence: lo == hi, start_hi None = same as lo; a date-only record: that UTC day 00:00 .. 24:00).
+    Returns {"action": "grade"|"void"|"pending"|"unchanged", "rule", "verified", "reason", "late_h"}. "unchanged" = no
+    verified reschedule rule for this platform (PrizePicks CS2, no platform): the existing settlement applies."""
+    p = platform_of(platform)
+    r = (RULES.get(p) or {}).get("reschedule") or {}
+    hours = r.get("void_after_h")
+    if p is None or not r.get("verified") or not hours:
+        return {"action": "unchanged", "rule": "reschedule", "verified": False, "late_h": None,
+                "reason": f"{p or 'no platform'}: no published CS2 reschedule rule - existing settlement"}
+    hi = start_hi if start_hi is not None else start_lo
+    src = f" ({source})" if source else ""
+    if original is None:
+        return {"action": "pending", "rule": "reschedule", "verified": True, "late_h": None,
+                "reason": f"{p}: original scheduled start unknown - the {hours} h reschedule rule cannot be checked"}
+    if start_lo is None:
+        return {"action": "pending", "rule": "reschedule", "verified": True, "late_h": None,
+                "reason": f"{p}: start of the linked match unknown{src} - the {hours} h reschedule rule cannot be checked"}
+    win = timedelta(hours=hours)
+    lo_late, hi_late = start_lo - original, hi - original
+    late_h = round(lo_late.total_seconds() / 3600, 2) if start_lo == hi else None
+    if lo_late > win:
+        return {"action": "void", "rule": "reschedule", "verified": True, "late_h": late_h,
+                "reason": f"{p}: played {round(lo_late.total_seconds() / 3600, 1)}+ h after the original scheduled start "
+                          f"{original.isoformat()}{src} - more than {hours} h: void"}
+    if hi_late <= win and lo_late >= -win:
+        return {"action": "grade", "rule": "reschedule", "verified": True, "late_h": late_h,
+                "reason": f"{p}: played within {hours} h of the original scheduled start{src}"}
+    if hi_late < -win:
+        return {"action": "pending", "rule": "reschedule", "verified": True, "late_h": late_h,
+                "reason": f"{p}: played more than {hours} h BEFORE the original scheduled start{src} - no published rule"}
+    return {"action": "pending", "rule": "reschedule", "verified": True, "late_h": None,
+            "reason": f"{p}: the start evidence{src} only bounds the start to {start_lo.isoformat()} .. {hi.isoformat()} - "
+                      f"cannot tell whether it was within {hours} h of {original.isoformat()}"}
 
 
 def dnp_decision(platform, scope, player_maps, scraped_maps):

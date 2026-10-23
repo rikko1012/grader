@@ -114,6 +114,8 @@ def _fake(monkeypatch, series, forfeits, map_state, score=None):
         def fetchone(self):
             if "forfeited_maps" in self.q:
                 return (forfeits,)
+            if "SELECT date FROM match_overview" in self.q:     # the match's UTC date (reschedule rule evidence)
+                return ("2026-10-06",)
             if "score1" in self.q:
                 return score
             return ("bo3",)

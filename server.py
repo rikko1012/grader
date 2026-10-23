@@ -2815,6 +2815,9 @@ def board_forever():
                     # the platform and the provider's market id travel with the logged forecast (one row per platform)
                     res["book"] = {"book": r.get("book") or "underdog", "market_id": r.get("market_id") or r.get("id"),
                                    "market": r.get("market"), "odds_type": lt,
+                                   # 2026-10-23: the platform's listed start for this line (picklog schedule_obs - the
+                                   # original scheduled start and any re-listing; the reschedule rule's evidence)
+                                   "start": r.get("start"),
                                    # 2026-10-15 measurement only (never a grade input): the quote this forecast was graded
                                    # on - per-side prices / payouts, the feed's own market type (PrizePicks 'promo' = a
                                    # boosted standard line), the sides offered, the provider's update time and the board's
