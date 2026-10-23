@@ -14,6 +14,7 @@ from itertools import combinations
 from pathlib import Path
 
 from bo3 import DATA_DIR
+import platform_rules
 
 BUILDER_VERSION = "slips-8"          # keep in step with BUILDER_V in web/index.html
 GRADES = {"A+", "A", "A-", "B+", "B", "B-"}
@@ -141,6 +142,13 @@ def _leg(r):
                                   "matchup", "team", "opponent", "start", "match_slug")}
 
 
+def entry_check(legs, platform=None, entry_type=None):
+    """The platform's published entry rules for these legs (platform_rules.entry_check): {"eligible": True/False/None,
+    "status": "eligible"|"refused"|"unverified", "refusals": [member-facing messages], "unverified": [admin notes]}.
+    Logged with every slip (admin output); a member page blocks only on eligible False and never shows "unverified"."""
+    return platform_rules.entry_check(legs, platform, entry_type)
+
+
 def log_recommended(rows, grader_version):
     """Log every new recommended slip (first appearance only). Returns how many were new."""
     new = 0
@@ -156,7 +164,7 @@ def log_recommended(rows, grader_version):
                 seen.add(key)
                 _append(RECOMMENDED, {"key": key, "n": n, "rank": rank, "all": p, "builder": BUILDER_VERSION,
                                       "grader": grader_version, "first_seen": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                                      "legs": ls})
+                                      "legs": ls, "entry_check": entry_check(legs)})   # the board rows carry the book
                 new += 1
     return new
 
@@ -170,8 +178,9 @@ def log_loaded(d):
     rec = {"cid": cid, "key": slip_key(legs), "logged_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
            **{k: d.get(k) for k in ("builder", "grader", "board_at", "mode", "n", "all", "pay", "pay_source")},
            "legs": [{k: l.get(k) for k in ("id", "nick", "prop", "scope", "line", "side", "p", "grade", "matchup", "start", "mult",
-                                           "match_slug", "book", "line_type", "check", "orig_line", "check_note")}
+                                           "match_slug", "book", "line_type", "check", "orig_line", "check_note", "team")}
                     for l in legs]}
+    rec["entry_check"] = entry_check(rec["legs"], d.get("book"))   # admin/log only (2026-10-23 platform rules)
     with _LOCK:
         seen = _seen("load", LOADED, "cid")
         if cid in seen:

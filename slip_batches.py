@@ -17,6 +17,13 @@ picks (frontales Over 30.5 in 19 of 24 losing member slips) carried most of the 
   and the slip pays at the smaller size; fewer than 2 legs left = refunded.
 Logged to DATA_DIR/slip_batches.jsonl (append, fsync), read at /admin/slip_batches.json.
 
+batch-4 (2026-10-23, platform rules - platform_rules.py, research/cs2_accuracy_2y/PLATFORM_RULES.md):
+- A combination Underdog's published entry rules refuse (all picks from one team - possible when a team plays two
+  matches in the window -, the same player twice on one side) is never a candidate. Every slip records entry_check
+  (eligible / refused / unverified + notes) for the admin output.
+- Settlement: after void / pushed legs drop out, live legs all from ONE team = refunded (both platforms state it), as
+  fewer than 2 live legs already was.
+
 batch-3 (2026-10-09):
 - Exact line: a leg is used only if its grade was made on the line Underdog shows NOW and by the current model
   (graded_line / graded_model on the board row) - otherwise excluded and counted.
@@ -37,8 +44,10 @@ from itertools import combinations
 from pathlib import Path
 
 from bo3 import DATA_DIR
+import platform_rules
 
-VERSION = "batch-3"           # batch-3 (2026-10-09): exact-line / current-model legs, payout multipliers, settlement
+VERSION = "batch-4"           # batch-4 (2026-10-23): platform entry rules in selection + same-team refund
+#                               batch-3 (2026-10-09): exact-line / current-model legs, payout multipliers, settlement
 #                               batch-2 (2026-10-08): inferred AWP roles no longer count as confirmed
 LOG = Path(DATA_DIR) / "slip_batches.jsonl"
 RESULTS = Path(DATA_DIR) / "slip_batch_results.jsonl"
@@ -48,6 +57,7 @@ FRESH_MIN = 120                                # grade made within this many min
 EVERY = 3600                                   # a batch at most hourly
 PAY = {2: 3.0, 3: 6.0, 4: 10.0}                # HYPOTHETICAL standard payouts - a scenario, never profit or qualification
 PER_SIZE = 3
+PLATFORM = "underdog"                          # the batches use Underdog's lines and multipliers
 CONTROLS = {"sizes": (2, 3, 4), "per_size": PER_SIZE, "sides": ("More", "Less"), "grades": GRADES}
 _LOCK = threading.Lock()
 _STATE = {"last": 0.0, "batched": None}
@@ -150,7 +160,8 @@ def _candidates(rows, sizes=CONTROLS["sizes"]):
         for gs in combinations(range(len(groups)), n):
             def rec(i, cur):
                 if i == n:
-                    if len({(x.get("nick") or x.get("player") or "").lower() for x in cur}) == n:
+                    if (len({(x.get("nick") or x.get("player") or "").lower() for x in cur}) == n
+                            and platform_rules.entry_check(cur, PLATFORM)["eligible"] is not False):
                         p = 1.0
                         for x in cur:
                             p *= x["p"]
@@ -224,9 +235,11 @@ def maybe_batch(rows, grader_version):
                "controls": {k: list(v) if isinstance(v, tuple) else v for k, v in CONTROLS.items()},
                "eligible_lines": len(ok), "eligible_matches": len({_match_key(r) for r in ok}), "excluded": why,
                "matches": used,                       # these matches never go into another batch
-               "slips": [{"kind": "diversified", "n": n, "all": p, "legs": [_leg(x) for x in legs]} for n, p, legs, _ in div]
+               "slips": [{"kind": "diversified", "n": n, "all": p, "legs": [_leg(x) for x in legs],
+                          "entry_check": platform_rules.entry_check(legs, PLATFORM)} for n, p, legs, _ in div]
                         + [{"kind": "concentrated (top chance, no exposure limit)", "n": n, "all": p,
-                            "legs": [_leg(x) for x in legs]} for n, p, legs, _ in conc]}
+                            "legs": [_leg(x) for x in legs], "entry_check": platform_rules.entry_check(legs, PLATFORM)}
+                           for n, p, legs, _ in conc]}
         with open(LOG, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec) + "\n"); f.flush(); os.fsync(f.fileno())
         _batched().update(used)
@@ -243,11 +256,12 @@ def read(last=2000):
 
 def settle_slip(slip, results):
     """results: "hit" / "miss" / "push" / "void" per leg (any None = not settled yet -> None).
-    Push / void legs drop out; the slip pays at the remaining size; fewer than 2 live legs = refunded."""
+    Push / void legs drop out; the slip pays at the remaining size; fewer than 2 live legs, or live legs all from one
+    team (2026-10-23: PrizePicks and Underdog both refund that - platform_rules.live_legs_valid), = refunded."""
     if any(x is None for x in results):
         return None
     live = [(l, x) for l, x in zip(slip["legs"], results) if x in ("hit", "miss")]
-    if len(live) < 2:
+    if len(live) < 2 or platform_rules.live_legs_valid([l for l, _ in live]) is False:
         return {"status": "refunded", "legs_live": len(live), "expected": None, "return_std": 1.0, "return_mult": 1.0}
     won = all(x == "hit" for _, x in live)
     p, m = 1.0, 1.0
