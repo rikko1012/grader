@@ -35,6 +35,7 @@ import cs2_scout
 from pick_verdict import verdict, stake_cap_reasons, _CAP_WORDS, _CAP_RE, CAP_WORD_BOOKMAKER   # one verdict for the card, board and ladder
 import hltv
 import picklog
+import platform_rules
 import slips
 import slip_batches
 import comparison
@@ -4803,6 +4804,10 @@ class Handler(BaseHTTPRequestHandler):
             books_ = {l.get("book") for l in d["legs"] if l.get("book")}
             if len(books_) > 1 or (books_ and d.get("book") in ("underdog", "prizepicks") and books_ != {d.get("book")}):
                 problems.append("one platform per slip - these legs are on " + ", ".join(sorted(map(str, books_))))
+            if not problems:                           # 2026-10-23: the platform's published entry rules (platform_rules.py)
+                ec = platform_rules.entry_check(d["legs"], d.get("book") if d.get("book") in ("underdog", "prizepicks") else None)
+                if ec.get("eligible") is False:
+                    problems.extend(ec.get("refusals") or [])
             if problems:                               # rejected on the server too: nothing logged as a valid copy
                 return self.send(409, {"error": "slip_has_unavailable_legs", "legs": problems})
             try:

@@ -1355,7 +1355,9 @@ def scope_result(r, same_day_only=False):
                 rows = hltv._series_rows(cur, ids, "2000-01-01", "AND mo.date BETWEEN %(d)s::date - 1 AND %(d)s::date + 1",
                                          {"d": day}, maxn=3, need=(1,)) if ids else []
             if link is not None and not _rename_roster_ok(cur, r, link):
-                return {"status": "none", "reason": f"HLTV match {link}: dated team rename not confirmed by its lineup - not settled"}
+                # closeout 2026-10-23: unconfirmed = pending (never voided by the clock, no BO3.gg fallback), not a guess
+                return {"status": "pending", "reason": f"HLTV match {link}: dated team rename not confirmed by its lineup - not settled",
+                        "rule": "rename-lineup", "platform": platform_rules.platform_of(_col(r, "book"))}
             opp = (r["opponent"] or "").strip()
             # an hltv-<id> pick whose opponent is listed under a renamed team's old name (dated rename, matchid
             # match-rules-3): its own match's rows against the NEW team id are this opponent; else the usual rule

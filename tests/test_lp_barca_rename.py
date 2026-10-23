@@ -288,11 +288,13 @@ def test_settlement_requires_the_barca_lineup_to_match_the_lp_roster(mi, monkeyp
         for slug, sc in (("pain-vs-lp-21-10-2026", "12"), ("hltv-2399805", "1")):        # canonical link and own HLTV id
             res = picklog.scope_result(pick("paiN", "LP", slug, scope=sc))
             assert (res["status"] == "ok") is ok, (lineup, slug, res)
-            if not ok:
-                assert "rename not confirmed" in res["reason"]
+            if not ok:                                   # pending, never "none" (which voids after VOID_AFTER_D days)
+                assert res["status"] == "pending" and "rename not confirmed" in res["reason"]
         _fake_hltv(monkeypatch, rows_2399805("lp"), teams=teams, lineup={(2399805, BARCA): lineup})
         res = picklog.scope_result(pick("LP", "paiN", "lp-vs-pain-21-10-2026"))           # an LP player's own line
         assert (res["status"] == "ok") is ok, (lineup, res)
+        if not ok:
+            assert res["status"] == "pending", res
 
 
 def test_lineup_gate_never_touches_lines_without_a_rename(mi, monkeypatch):

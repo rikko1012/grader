@@ -1934,6 +1934,13 @@ function slipClick(e) {
         [{k: "review", label: "Review slip", primary: true}]);
       return;
     }
+    // 2026-10-23 platform rules (PrizePicks + Underdog: an entry needs players from at least 2 different teams)
+    const tms = s.map(x => String(x.tm || "").trim().toLowerCase());
+    if (slipBook(s) && s.length >= 2 && tms.every(Boolean) && new Set(tms).size < 2) {
+      await ask("Add a pick from another team", `<div>${esc(bookName(slipBook(s)))} entries need players from at least 2 different teams – every pick here is on ${esc(s[0].tm)}.</div>`,
+        [{k: "review", label: "Review slip", primary: true}]);
+      return;
+    }
     copy(`${s.length}-pick ${bookName(slipBook(s)) || "custom"} slip\n` + s.map(x => `${x.p} ${isLeanV({grade: x.g}) ? `Lean ${sideTxt(x.s)}` : sideTxt(x.s).toUpperCase()} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${x.lt && x.lt !== "standard" ? " " + x.lt : ""} · ${isLeanV({grade: x.g}) ? "Lean" : x.g + (x.u != null && !(+x.u > 0) ? " · 0U" : "")} · ${((x.pc || 0) * 100).toFixed(1)}%`).join("\n"));
     try { expoAdd("slip", expoLegsManual(s)); } catch {}
     // immutable load log (no member identity): what was copied and each leg's live-line state at that moment
