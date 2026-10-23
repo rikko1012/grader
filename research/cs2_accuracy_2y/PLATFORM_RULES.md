@@ -111,6 +111,57 @@ chart for the league in question". That chart is not public. The browser pane re
   server builder's selection is unchanged, to stay in step with web/index.html.
 - Tests: 17 in tests/test_platform_rules.py. 8 of them fail without the change. Full suite: 1623 passed, 5 skipped.
 
+## Re-search, 2026-10-23 16:40-16:52 UTC (branch close2/rulelookup)
+
+Owner instruction: official sources or the signed-in app only; never infer a rule from our own past settlements. Read
+only, no login, no forms. Result: **no new rule is verified**, so nothing in settlement changed. The affected picks stay
+pending, and each one is now listed with its reason and the missing evidence.
+
+What was read:
+
+| Source | Retrieved (UTC) | Result |
+|---|---|---|
+| https://www.prizepicks.com/help-center (index, 27 articles) | 16:41 | No article on esports, CS2, maps or forfeits |
+| https://www.prizepicks.com/help-center/dnps-reboots-and-ties (Oct 19, 2026) | 16:42 | No "forfeit", "esports" or "map". It points to the chart: "Please consult the in-app scoring chart for the league in question" |
+| https://www.prizepicks.com/help-center/refunds-and-cancellations (Oct 19, 2026) | 16:42 | DNP/Reboot refunds only. No forfeit or remake |
+| https://www.prizepicks.com/help-center/potential-outcomes (Oct 19, 2026) | 16:42 | "DNP → 0 points" (group scoring). No forfeit or remake |
+| https://prizepicks.com/help-center/placing-entries (Oct 19, 2026) | 16:47 | "The scoring chart can be accessed in the app by tapping the menu in the top left corner." |
+| https://www.prizepicks.com/reboots | 16:47 | NFL/NBA/WNBA/MLB/CFB injuries only |
+| PrizePicks CS2 playbook article (Feb 21, 2025, prizepicks.com) | 16:47 | No settlement rules (a marketing article, not authoritative anyway) |
+| Web search restricted to prizepicks.com: CS2 / "Maps 1-2" / forfeit / DNP / scoring chart | 16:45 | No CS2 chart text anywhere public |
+| app.prizepicks.com/help-center in the user's Chrome (new tab) | 16:44 | **Refused by the browser tool's safety restriction.** Never loaded, so not read. Not a sign-in page |
+| https://help.underdogsports.com/en/articles/10905524-pick-em-scoring-esports (Chrome) | 16:43 | Same CS2 text as U1. The only replay rule is chronobreak: "In-game events that occurred during a period that was replayed as a result of a chronobreak will not count for settlement purposes." |
+| https://app.underdogsports.com/rules/sports/misc, Esports section (Chrome) | 16:46 | Same esports rules (forfeit, 36 h, CS2 >50%, chronobreak). No remake / restart rule |
+| help.underdogsports.com search: "remake", "restart", "replay", "replayed map" (Chrome) | 16:44 | Esports hits are only the chronobreak sentence and the partial-series sentence. Other hits: biathlon "restarted" (voids), speed skating "re-skated" (replaces). Neither is CS2 |
+
+Status per situation:
+
+| Situation | Platform | Status | Source / what is missing |
+|---|---|---|---|
+| Map forfeited inside the line's maps | PrizePicks | **unavailable**, pending | The CS2 scoring chart (app: menu > Help Center > Scoring Chart > CS2). No public page states it |
+| Map forfeited outside the line's maps (e.g. map 3 on Maps 1-2) | PrizePicks | **unavailable**, pending | Same |
+| Whole match forfeited, no map played | PrizePicks | verified earlier (P2: no participation = DNP), unchanged | P2 "does not participate in a single second/snap" |
+| Player has no row on a played in-scope map (played other maps) | PrizePicks | **unavailable**, pending | The CS2 activity rule (every map? one map? share of rounds?) is in the chart only. P2: "Different PrizePicks markets have specific rules regarding what qualifies as a DNP." |
+| Player played no map of the match | PrizePicks | verified earlier (P2), unchanged | P2 |
+| Partial-map substitution | PrizePicks | **unavailable**, not checked | Rule in the chart only. Also not detectable: HLTV map rows carry no per-player rounds. Added as `partial_map_substitution` (unverified) |
+| Remake / restarted map | PrizePicks | **unavailable** | No PrizePicks page mentions remakes or restarts |
+| Remake / restarted map | Underdog | **unavailable** | Only the chronobreak rule (a map rewound in game, LoL-style) is published. Treating a CS2 remake as a chronobreak would be inference, so it is not done |
+
+Remakes do not hold any pick pending. HLTV keeps only the final map, so a remake cannot be seen and the pick settles on
+the recorded map as before. That limitation is documented and was not changed.
+
+Code (branch close2/rulelookup, commit e5bad92; full suite 1689 passed, 5 skipped; 3 new tests in tests/test_rule_lookup.py, 2 fail before): `platform_rules.SEARCHES` and `missing_evidence()` record the above
+for each unverified rule. `picklog.rule_pending_page()` and the admin-only **`/admin/rule_pending.json?after=&limit=`**
+endpoint (limit <= 500, settlement fields only, lock-free read) list open picks with `result.rule_pending`, each with its
+reason, `rule_verified` and `missing_evidence`. When the rule is published but the data did not decide it (Underdog,
+forfeited map numbers not determinable), the entry says "data, not a rule". Production had no bounded endpoint for these
+rows (`/admin/picks.json` is unpaged and `/admin/lol/query.json` reads only the LoL databases), so the live list can be
+read only after this endpoint is deployed.
+
+To resolve: the owner opens the PrizePicks app (menu > Help Center > Scoring Chart > CS2) and pastes the text on
+forfeits, DNP / activity, substitutions and remakes. Each rule is then switched to verified in
+`platform_rules.RULES["prizepicks"]` with a test.
+
 ## Still open / unverified (exact reasons)
 
 1. **PrizePicks CS2 forfeits (inside and outside the line's maps), partial-match DNP, reschedules and remakes.** These
