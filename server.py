@@ -3803,6 +3803,10 @@ class Handler(BaseHTTPRequestHandler):
                 num = lambda k: int(q[k]) if (q.get(k) or "").isdigit() else None
                 return self.send(200, picklog.forecasts_page(after_id=num("after") or 0, cutoff_id=num("cutoff"),
                                                              limit=num("limit"), inputs=q.get("inputs") == "1"))
+            if u.path == "/admin/rule_pending.json" and self.authed(q.get("token")):
+                # 2026-10-23 closeout: open picks held pending by an unpublished platform rule (bounded page, read-only)
+                num = lambda k: int(q[k]) if (q.get(k) or "").isdigit() else None
+                return self.send(200, picklog.rule_pending_page(after_id=num("after") or 0, limit=num("limit")))
             if u.path == "/admin/post_drafts.json" and self.authed(q.get("token")):
                 # publication drafts built ONLY from saved board forecasts of lines offered now (posts.py, owner 2026-10-16)
                 import posts

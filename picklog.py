@@ -1831,6 +1831,43 @@ def export_forecasts(inputs=False, last=None):
     return rows
 
 
+RULE_PENDING_MAX = 500
+
+
+def rule_pending_page(after_id=0, limit=None):
+    """2026-10-23 closeout: the OPEN picks held pending by an unpublished platform rule (result.rule_pending), each with
+    its reason and the evidence still missing (platform_rules.missing_evidence). Bounded keyset page (<= RULE_PENDING_MAX
+    rows, settlement fields only), lock-free WAL read. Read-only: nothing is settled or changed here."""
+    limit = max(1, min(int(limit or RULE_PENDING_MAX), RULE_PENDING_MAX))
+    after_id = max(0, int(after_id or 0))
+    con = _read_db()
+    try:
+        rows = [dict(r) for r in con.execute(
+            "SELECT id, logged_at, player, team, opponent, match_slug, match_start, prop, scope, line, pick, book, test, "
+            "status, result FROM picks WHERE status = 'open' AND result LIKE '%\"rule_pending\"%' AND id > ? "
+            "ORDER BY id LIMIT ?", (after_id, limit))]
+    finally:
+        con.close()
+    out = []
+    for r in rows:
+        try:
+            rp = (json.loads(r.pop("result") or "{}") or {}).get("rule_pending")
+        except (TypeError, ValueError, AttributeError):
+            rp = None
+        if not isinstance(rp, dict):
+            continue
+        plat = rp.get("platform") or platform_rules.platform_of(r.get("book"))
+        rr = platform_rules.rule(plat, rp.get("rule")) if rp.get("rule") else {"verified": False}
+        r.update(rule_pending=rp, rule_verified=bool(rr.get("verified")),
+                 missing_evidence=platform_rules.missing_evidence(plat, rp.get("rule")) if rp.get("rule") else None)
+        if r["rule_verified"]:                      # the rule is published; the DATA did not decide it (e.g. map numbers)
+            r["missing_evidence"] = {"missing": "data, not a rule: " + str(rp.get("reason") or "")}
+        out.append(r)
+    nxt = rows[-1]["id"] if rows else after_id
+    return {"rows": out, "next_after": nxt, "done": len(rows) < limit, "limit": limit,
+            "searched_at": platform_rules.SEARCHED_AT}
+
+
 PAGE_MAX = {False: 2000, True: 500}     # rows per page without / with decoded grader inputs (~4 KB / ~20 KB a row)
 
 
