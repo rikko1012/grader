@@ -1,0 +1,225 @@
+{
+ "created_at": "2026-10-23T04:56:47.401656+00:00",
+ "data_dir": "C:\\Users\\tikic\\AppData\\Local\\Temp\\claude\\C--Users-tikic-OneDrive-Documents-cs2-scout\\6847ff60-df65-4b0c-851b-1b79f55ef3bf\\scratchpad\\cs2acc\\data",
+ "datasets": [
+  {
+   "path": "C:\\Users\\tikic\\AppData\\Local\\Temp\\claude\\C--Users-tikic-OneDrive-Documents-cs2-scout\\6847ff60-df65-4b0c-851b-1b79f55ef3bf\\scratchpad\\cs2acc\\data\\hltv_window.sqlite",
+   "source": "production HLTV Postgres (Render hltv-db), read-only session, statement_timeout 120 s",
+   "query": "export_hltv.py: per month 2024-10-01..2026-10-31, SELECT <cols> FROM <table> JOIN match_overview ON matchid WHERE date in month; dimension tables whole; html_gz never exported (metadata only)",
+   "rows": {
+    "teams": 1930,
+    "players": 6222,
+    "maps": 12,
+    "sides": 3,
+    "events": 132,
+    "team_rankings": 4619,
+    "mapstats_page_status": 11,
+    "mapstats_status": 0,
+    "match_overview": 21444,
+    "matches": 332224,
+    "match_maps": 48223,
+    "map_vetoes": 150028,
+    "player_stats": 2091168,
+    "map_player_stats": 1446879,
+    "map_headshots": 596012,
+    "map_rounds": 858871,
+    "map_round_economy": 1986326,
+    "data_issues": 190,
+    "raw_pages": 21444,
+    "mapstats_pages": 96442,
+    "scrape_queue": 21444,
+    "scrape_queue_orphans": 28,
+    "export_meta": 25
+   },
+   "bytes": 560566272,
+   "sha256": "3d9571142e7c243323bc2b48456b9ddd0a62b17dbe70acb2751ebe8f056d5f4c",
+   "created_at": "2026-10-23T04:39:00.673239+00:00"
+  },
+  {
+   "path": "C:\\Users\\tikic\\AppData\\Local\\Temp\\claude\\C--Users-tikic-OneDrive-Documents-cs2-scout\\6847ff60-df65-4b0c-851b-1b79f55ef3bf\\scratchpad\\cs2acc\\data\\rounds_archive.sqlite",
+   "source": "archived HLTV map-stats overview pages (C:/Users/tikic/cs2_scout/exports/hltv_mapstats_pages_2026-10-15, verified copy of mapstats_pages.html_gz) + 726 bodies still in the production DB (SELECT by id list)",
+   "query": "rounds_from_archive.py: round-history icons incl. the overtime box, validated vs running-score titles, HLTV map score and map_rounds",
+   "rows": {
+    "rounds": 1036860,
+    "rounds_rejected": 54,
+    "pages": 48223
+   },
+   "bytes": 71147520,
+   "sha256": "004d130a27f65a47effe349a9507bcaf127fc0dcedf45ba4dc7e5cbe3d453f11",
+   "created_at": "2026-10-23T04:52:15.958189+00:00"
+  },
+  {
+   "path": "C:\\Users\\tikic\\AppData\\Local\\Temp\\claude\\C--Users-tikic-OneDrive-Documents-cs2-scout\\6847ff60-df65-4b0c-851b-1b79f55ef3bf\\scratchpad\\cs2acc\\data\\hltv_props.sqlite",
+   "source": "production HLTV Postgres",
+   "query": "export_hltv_props.py: prop_grades, prop_lines, prop_status, upcoming_matches, thunderpick_snapshots (no body)",
+   "rows": {
+    "prop_grades": 7594,
+    "prop_lines": 280,
+    "prop_status": 2,
+    "upcoming_matches": 190,
+    "thunderpick_snapshots": 129,
+    "export_meta": 1
+   },
+   "bytes": 1658880,
+   "sha256": "1de4d6eb0b45d168aff42eb05ca6d566edac9b0d01a7dfa088c62b3aa6462adc",
+   "created_at": "2026-10-23T04:48:39.114653+00:00"
+  },
+  {
+   "path": "C:\\Users\\tikic\\AppData\\Local\\Temp\\claude\\C--Users-tikic-OneDrive-Documents-cs2-scout\\6847ff60-df65-4b0c-851b-1b79f55ef3bf\\scratchpad\\cs2acc\\data\\forecasts_lite.json",
+   "source": "production admin /admin/forecasts_page.json (keyset pages of 2000, fixed cutoff, no inputs)",
+   "query": "fetch_admin.py forecasts",
+   "rows": {
+    "rows": 80675
+   },
+   "bytes": 386272945,
+   "sha256": "ed766ce06dcc02dff9cc4f383ad4112dcc7bbc56873891b686e6bd7e070412b0",
+   "created_at": "2026-10-23T04:46:05.244952+00:00"
+  },
+  {
+   "path": "C:\\Users\\tikic\\AppData\\Local\\Temp\\claude\\C--Users-tikic-OneDrive-Documents-cs2-scout\\6847ff60-df65-4b0c-851b-1b79f55ef3bf\\scratchpad\\cs2acc\\data\\p1_units.json",
+   "source": "production admin /admin/learning/p1_units.json (paged)",
+   "query": "fetch_admin.py p1",
+   "rows": {
+    "rows": 2922
+   },
+   "bytes": 2205706,
+   "sha256": "adb645d1484e680e9fe2b4c4de8d5b17b153339cc2b9772e06220b9aaf5b2705",
+   "created_at": "2026-10-23T04:45:03.225147+00:00"
+  },
+  {
+   "path": "C:\\Users\\tikic\\AppData\\Local\\Temp\\claude\\C--Users-tikic-OneDrive-Documents-cs2-scout\\6847ff60-df65-4b0c-851b-1b79f55ef3bf\\scratchpad\\cs2acc\\data\\fh1_records.json",
+   "source": "production admin /admin/fh1.json (keyset pages of 1000, no inputs)",
+   "query": "fetch_admin.py fh1",
+   "rows": {
+    "rows": 11319
+   },
+   "bytes": 50467533,
+   "sha256": "ff76e00d2301811c1147d9aa5e20088a3c407c60ed995ba44abd5572d9954ee2",
+   "created_at": "2026-10-23T04:46:22.905866+00:00"
+  },
+  {
+   "path": "C:\\Users\\tikic\\AppData\\Local\\Temp\\claude\\C--Users-tikic-OneDrive-Documents-cs2-scout\\6847ff60-df65-4b0c-851b-1b79f55ef3bf\\scratchpad\\cs2acc\\data\\admin_status.json",
+   "source": "production admin /admin/moneylines_status, /admin/thunderpick.json, /admin/fh1.json?limit=1",
+   "query": "fetch_admin.py status",
+   "rows": {},
+   "bytes": 7632760,
+   "sha256": "295c839fcd0bcc16b7981c000cd91b722bb6ef9fa34ea1a805645cea71c0ee88",
+   "created_at": "2026-10-23T04:45:01.159303+00:00"
+  },
+  {
+   "path": "C:\\Users\\tikic\\AppData\\Local\\Temp\\claude\\C--Users-tikic-OneDrive-Documents-cs2-scout\\6847ff60-df65-4b0c-851b-1b79f55ef3bf\\scratchpad\\cs2acc\\data\\ud_moves_since_2026-09-01.json",
+   "source": "production admin /admin/ud_moves?since=2026-09-01 (Render ud_moves.db)",
+   "query": "fetch_admin.py udmoves 2026-09-01",
+   "rows": {
+    "rows": 7654
+   },
+   "bytes": 1210565,
+   "sha256": "8c4a5d7bc29258194b609b08a722b868ce600b0b2286ba2964e95b14abbc9ce4",
+   "created_at": "2026-10-23T04:45:09.766416+00:00"
+  },
+  {
+   "path": "C:\\Users\\tikic\\AppData\\Local\\Temp\\claude\\C--Users-tikic-OneDrive-Documents-cs2-scout\\6847ff60-df65-4b0c-851b-1b79f55ef3bf\\scratchpad\\cs2acc\\data\\ud_moves_since_2026-10-22.json",
+   "source": "production admin /admin/ud_moves?since=2026-10-22 (volume probe)",
+   "query": "fetch_admin.py udmoves 2026-10-22",
+   "rows": {
+    "rows": 664
+   },
+   "bytes": 106216,
+   "sha256": "0683047727dfc5b335fe2078ce6e35d22e2df8303e125e1dedf087adc7aeab52",
+   "created_at": "2026-10-23T04:44:36.476178+00:00"
+  },
+  {
+   "path": "C:\\Users\\tikic\\AppData\\Local\\Temp\\claude\\C--Users-tikic-OneDrive-Documents-cs2-scout\\6847ff60-df65-4b0c-851b-1b79f55ef3bf\\scratchpad\\cs2acc\\data\\props_data/history.csv",
+   "source": "github rikko1012/hltv-scraper branch props-data (git show; commit in props_data/COMMIT)",
+   "query": "every UD/PP line when first seen and on each move",
+   "rows": {
+    "rows": 11104
+   },
+   "bytes": 2331271,
+   "sha256": "333cb662bbdd0f63798a0f9096d76130a5bae5deb76f5355dbb70c72e592fd6e",
+   "created_at": "2026-10-23T04:48:16.101853+00:00"
+  },
+  {
+   "path": "C:\\Users\\tikic\\AppData\\Local\\Temp\\claude\\C--Users-tikic-OneDrive-Documents-cs2-scout\\6847ff60-df65-4b0c-851b-1b79f55ef3bf\\scratchpad\\cs2acc\\data\\props_data/graded.csv",
+   "source": "same branch",
+   "query": "closing line per prop graded vs HLTV",
+   "rows": {
+    "rows": 7594
+   },
+   "bytes": 1293705,
+   "sha256": "ffe4f8cd852c5413cb1c6c520f24a69bb98ed54fa01fc4a33c4248a8de1a9de0",
+   "created_at": "2026-10-23T04:48:16.033292+00:00"
+  },
+  {
+   "path": "C:\\Users\\tikic\\AppData\\Local\\Temp\\claude\\C--Users-tikic-OneDrive-Documents-cs2-scout\\6847ff60-df65-4b0c-851b-1b79f55ef3bf\\scratchpad\\cs2acc\\data\\props_data/scout.csv",
+   "source": "same branch",
+   "query": "board now with bumps",
+   "rows": {
+    "rows": 280
+   },
+   "bytes": 47189,
+   "sha256": "fa2be86c2c81ab847a82d01c5d9608f90106a66dc3b26b4f657826478d0e4230",
+   "created_at": "2026-10-23T04:48:16.229706+00:00"
+  },
+  {
+   "path": "C:\\Users\\tikic\\AppData\\Local\\Temp\\claude\\C--Users-tikic-OneDrive-Documents-cs2-scout\\6847ff60-df65-4b0c-851b-1b79f55ef3bf\\scratchpad\\cs2acc\\data\\props_data/latest.csv",
+   "source": "same branch",
+   "query": "current lines",
+   "rows": {
+    "rows": 280
+   },
+   "bytes": 54646,
+   "sha256": "3d5bceb80e9a3b20c879b05e9954ceb42d0d24040fdf210862cf7fab93f9a40b",
+   "created_at": "2026-10-23T04:48:16.164939+00:00"
+  },
+  {
+   "path": "C:\\Users\\tikic\\AppData\\Local\\Temp\\claude\\C--Users-tikic-OneDrive-Documents-cs2-scout\\6847ff60-df65-4b0c-851b-1b79f55ef3bf\\scratchpad\\cs2acc\\data\\picks_local_copy.db",
+   "source": "C:/Users/tikic/cs2_scout/picks.db (local dev DB, copied read-only)",
+   "query": "file copy",
+   "rows": {
+    "picks": 531,
+    "forecasts": 909
+   },
+   "bytes": 6709248,
+   "sha256": "358ff8dd6317a4368bbce7bf801cdc08f08b1816127e1f2d70230805e8c89526",
+   "created_at": "2026-10-23T04:46:46.485582+00:00"
+  }
+ ],
+ "external_inputs": [
+  {
+   "path": "C:\\Users\\tikic\\AppData\\Local\\Temp\\claude\\C--Users-tikic-OneDrive-Documents-cs2-scout\\6847ff60-df65-4b0c-851b-1b79f55ef3bf\\scratchpad\\picks_now.json",
+   "source": "Render /admin/picks.json export pulled 2026-10-19/20 by an earlier session (picks to 2026-10-20 00:40 UTC)",
+   "bytes": 70187225,
+   "sha256": "b988c7a37cb87df0bd92cce6df495996e3d0332b49d2e4eb3548f2888c6ab1f3",
+   "modified_at": "2026-10-20T00:43:19.432938+00:00"
+  },
+  {
+   "path": "C:\\Users\\tikic\\AppData\\Local\\Temp\\claude\\C--Users-tikic-OneDrive-Documents-cs2-scout\\6847ff60-df65-4b0c-851b-1b79f55ef3bf\\scratchpad\\picks_after_recheck.json",
+   "source": "Railway picks export 2026-10-08 23:56 UTC (earlier session)",
+   "bytes": 35213600,
+   "sha256": "368208eef00d594fc77ad9c241676fbb87019eeda54905a55e619bfb134e30bb",
+   "modified_at": "2026-10-08T23:59:01.320757+00:00"
+  },
+  {
+   "path": "C:\\Users\\tikic\\AppData\\Local\\Temp\\claude\\C--Users-tikic-OneDrive-Documents-cs2-scout\\6847ff60-df65-4b0c-851b-1b79f55ef3bf\\scratchpad\\forecasts_now2.json",
+   "source": "Railway forecast log 2026-10-07 21:11 .. 2026-10-08 23:24 UTC (earlier session)",
+   "bytes": 17157569,
+   "sha256": "99e3a3335ac95f492f1ee327cd63e40ff6ed726662132ea798f6d17f8a7f526c",
+   "modified_at": "2026-10-08T23:24:32.440026+00:00"
+  },
+  {
+   "path": "C:\\Users\\tikic\\AppData\\Local\\Temp\\claude\\C--Users-tikic-OneDrive-Documents-cs2-scout\\6847ff60-df65-4b0c-851b-1b79f55ef3bf\\scratchpad\\ud_moves.json",
+   "source": "Railway ud_moves 2026-10-04 .. 2026-10-08 (earlier session)",
+   "bytes": 3615119,
+   "sha256": "1f0a305d7784613cd4d24ce06bc33a10fdcae3baab72a5e16168f3389ab44fff",
+   "modified_at": "2026-10-08T23:01:07.311795+00:00"
+  },
+  {
+   "path": "C:\\Users\\tikic\\AppData\\Local\\Temp\\claude\\C--Users-tikic-OneDrive-Documents-cs2-scout\\6847ff60-df65-4b0c-851b-1b79f55ef3bf\\scratchpad\\ml_research\\dataset.pkl",
+   "source": "Polymarket/Kalshi series-winner research dataset 2025-10-15..2026-10-11 (DATA_CARD.md)",
+   "bytes": 7844210,
+   "sha256": "fa6a1852f59d99d286573e56fdf34149bf2e93c8b00e97bf5fe10f5f66f7aec2",
+   "modified_at": "2026-10-12T03:47:17.029623+00:00"
+  }
+ ]
+}

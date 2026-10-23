@@ -1,0 +1,3 @@
+series ending after 2 maps: maps 1-2 rounds/map - 21.74 5247 -0.62 [-0.72, -0.52]
+series with a 3rd map (no 4th): maps 1-3 rounds/map - 21.74 3561 +0.09 [+0.00, +0.19]
+  -> Maps 1-3 total vs 65.22: +0.28 [+0.01, +0.56]

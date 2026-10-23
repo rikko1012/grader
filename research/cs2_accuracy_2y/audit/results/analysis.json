@@ -1,0 +1,2080 @@
+{
+ "p1_at": "2026-10-23T04:29:55+00:00",
+ "units": 2922,
+ "matches": 170,
+ "overall": {
+  "n": 2922,
+  "matches": 170,
+  "hit": 0.5116838487972508,
+  "fav_n": 2910,
+  "logloss": 0.7017582868631845,
+  "brier": 0.25407996851471565,
+  "mean_p_fav": 0.5590136892539357
+ },
+ "classes": {
+  "I1 projection on a namesake (HLTV id not on the scoreboard; projection read that id's maps)": {
+   "note": "Lucky (Envy) 2026-10-15: id 13843 (ex-Washed) instead of 13497 - old tie-break (all-time maps); fixed 10-21 (180b6e8, 12-month maps)",
+   "units": 2,
+   "matches": 1,
+   "affected": {
+    "n": 2,
+    "matches": 1,
+    "hit": 0.0,
+    "fav_n": 2,
+    "logloss": 1.0643705177678071,
+    "brier": 0.4284450000000001,
+    "mean_p_fav": 0.654
+   },
+   "rest": {
+    "n": 2920,
+    "matches": 170,
+    "hit": 0.5120357634112792,
+    "fav_n": 2908,
+    "logloss": 0.7015099223214689,
+    "brier": 0.2539605404109586,
+    "mean_p_fav": 0.5589486301369864
+   },
+   "effect": {
+    "point": {
+     "d_hit_aff_minus_rest": -0.512,
+     "d_ll_aff_minus_rest": 0.3629,
+     "d_hit_clean_minus_all": 0.0004,
+     "d_ll_clean_minus_all": -0.0002
+    },
+    "ci95": {
+     "d_hit_clean_minus_all": [
+      0.0,
+      0.0011
+     ],
+     "d_ll_clean_minus_all": [
+      -0.0008,
+      0.0
+     ],
+     "d_hit_aff_minus_rest": [
+      -0.5376,
+      -0.4845
+     ],
+     "d_ll_aff_minus_rest": [
+      0.3532,
+      0.3717
+     ]
+    }
+   },
+   "examples": [
+    {
+     "match": "hltv:2399137",
+     "start": "2026-10-15T10:00:00+00:00",
+     "nick": "Lucky",
+     "tp_nick": "Lucky",
+     "bo3_nick": null,
+     "prop": "hs",
+     "scope": "12",
+     "line": 14.5,
+     "close_line": null,
+     "actual": 18.0,
+     "p": 0.319,
+     "book": "prizepicks",
+     "perf_version": "perf-2",
+     "version": "a310d76b55"
+    },
+    {
+     "match": "hltv:2399137",
+     "start": "2026-10-15T10:00:00+00:00",
+     "nick": "Lucky",
+     "tp_nick": "Lucky",
+     "bo3_nick": null,
+     "prop": "kills",
+     "scope": "12",
+     "line": 28.5,
+     "close_line": null,
+     "actual": 37.0,
+     "p": 0.373,
+     "book": "underdog",
+     "perf_version": "perf-2",
+     "version": "a310d76b55"
+    }
+   ]
+  },
+  "I2 namesake HLTV id saved but projection on BO3.gg (no HLTV maps in 420 d for that id)": {
+   "note": "BO3.gg 'brain' -> HLTV id 5615 'brain' (no maps); the player is HLTV 'Brain47'",
+   "units": 4,
+   "matches": 2,
+   "affected": {
+    "n": 4,
+    "matches": 2,
+    "hit": 0.75,
+    "fav_n": 4,
+    "logloss": 0.6507929126277222,
+    "brier": 0.22909725,
+    "mean_p_fav": 0.56125
+   },
+   "rest": {
+    "n": 2918,
+    "matches": 170,
+    "hit": 0.5113558155540262,
+    "fav_n": 2906,
+    "logloss": 0.7018281502959953,
+    "brier": 0.2541142148732006,
+    "mean_p_fav": 0.5590106237148732
+   },
+   "effect": {
+    "point": {
+     "d_hit_aff_minus_rest": 0.2386,
+     "d_ll_aff_minus_rest": -0.051,
+     "d_hit_clean_minus_all": -0.0003,
+     "d_ll_clean_minus_all": 0.0001
+    },
+    "ci95": {
+     "d_hit_aff_minus_rest": [
+      -0.0319,
+      0.5086
+     ],
+     "d_ll_aff_minus_rest": [
+      -0.1558,
+      0.0533
+     ],
+     "d_hit_clean_minus_all": [
+      -0.0011,
+      0.0
+     ],
+     "d_ll_clean_minus_all": [
+      -0.0001,
+      0.0003
+     ]
+    }
+   },
+   "examples": [
+    {
+     "match": "hltv:2399686",
+     "start": "2026-10-19T13:45:00+00:00",
+     "nick": "brain",
+     "tp_nick": "Brain47",
+     "bo3_nick": "brain",
+     "prop": "kills",
+     "scope": "12",
+     "line": 33.5,
+     "close_line": null,
+     "actual": 14.0,
+     "p": 0.478,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "c36104d079"
+    },
+    {
+     "match": "hltv:2399686",
+     "start": "2026-10-19T13:45:00+00:00",
+     "nick": "brain",
+     "tp_nick": "Brain47",
+     "bo3_nick": "brain",
+     "prop": "hs",
+     "scope": "12",
+     "line": 9.5,
+     "close_line": null,
+     "actual": 7.0,
+     "p": 0.571,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "c36104d079"
+    },
+    {
+     "match": "hltv:2399693",
+     "start": "2026-10-21T13:45:00+00:00",
+     "nick": "brain",
+     "tp_nick": "Brain47",
+     "bo3_nick": "brain",
+     "prop": "kills",
+     "scope": "12",
+     "line": 32.5,
+     "close_line": null,
+     "actual": 32.0,
+     "p": 0.458,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "794a775f51"
+    },
+    {
+     "match": "hltv:2399693",
+     "start": "2026-10-21T13:45:00+00:00",
+     "nick": "brain",
+     "tp_nick": "Brain47",
+     "bo3_nick": "brain",
+     "prop": "hs",
+     "scope": "12",
+     "line": 9.5,
+     "close_line": null,
+     "actual": 14.0,
+     "p": 0.61,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "794a775f51"
+    }
+   ]
+  },
+  "I3 HLTV name alias missed -> BO3.gg fallback (the player IS in HLTV under another nick)": {
+   "note": "dev1ce = HLTV 'device' (known, owner decision), Techno4K = HLTV 'Techno', brain = 'Brain47'",
+   "units": 19,
+   "matches": 10,
+   "affected": {
+    "n": 19,
+    "matches": 10,
+    "hit": 0.5263157894736842,
+    "fav_n": 19,
+    "logloss": 0.710677687630281,
+    "brier": 0.25846536842105267,
+    "mean_p_fav": 0.5713684210526315
+   },
+   "rest": {
+    "n": 2903,
+    "matches": 170,
+    "hit": 0.5115876859218264,
+    "fav_n": 2891,
+    "logloss": 0.7016999097999482,
+    "brier": 0.2540512662762657,
+    "mean_p_fav": 0.5589328281088529
+   },
+   "effect": {
+    "point": {
+     "d_hit_aff_minus_rest": 0.0147,
+     "d_ll_aff_minus_rest": 0.009,
+     "d_hit_clean_minus_all": -0.0001,
+     "d_ll_clean_minus_all": -0.0001
+    },
+    "ci95": {
+     "d_hit_aff_minus_rest": [
+      -0.2469,
+      0.2896
+     ],
+     "d_ll_aff_minus_rest": [
+      -0.0955,
+      0.1068
+     ],
+     "d_hit_clean_minus_all": [
+      -0.0017,
+      0.0016
+     ],
+     "d_ll_clean_minus_all": [
+      -0.0007,
+      0.0005
+     ]
+    }
+   },
+   "examples": [
+    {
+     "match": "hltv:2399133",
+     "start": "2026-10-13T10:00:00+00:00",
+     "nick": null,
+     "tp_nick": "device",
+     "bo3_nick": "dev1ce",
+     "prop": "kills",
+     "scope": "12",
+     "line": 32.0,
+     "close_line": null,
+     "actual": 30.0,
+     "p": 0.388,
+     "book": "prizepicks",
+     "perf_version": "perf-2-bo3",
+     "version": "1088faf157"
+    },
+    {
+     "match": "hltv:2399133",
+     "start": "2026-10-13T10:00:00+00:00",
+     "nick": null,
+     "tp_nick": "device",
+     "bo3_nick": "dev1ce",
+     "prop": "hs",
+     "scope": "12",
+     "line": 10.0,
+     "close_line": null,
+     "actual": 9.0,
+     "p": 0.395,
+     "book": "prizepicks",
+     "perf_version": "perf-2-bo3",
+     "version": "1088faf157"
+    },
+    {
+     "match": "hltv:2399265",
+     "start": "2026-10-16T17:00:00+00:00",
+     "nick": null,
+     "tp_nick": "device",
+     "bo3_nick": "dev1ce",
+     "prop": "hs",
+     "scope": "12",
+     "line": 10.5,
+     "close_line": null,
+     "actual": 14.0,
+     "p": 0.41,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "9cfcbd217a"
+    },
+    {
+     "match": "hltv:2399265",
+     "start": "2026-10-16T17:00:00+00:00",
+     "nick": null,
+     "tp_nick": "device",
+     "bo3_nick": "dev1ce",
+     "prop": "kills",
+     "scope": "12",
+     "line": 32.5,
+     "close_line": null,
+     "actual": 40.0,
+     "p": 0.388,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "9cfcbd217a"
+    },
+    {
+     "match": "hltv:2399267",
+     "start": "2026-10-17T11:00:00+00:00",
+     "nick": null,
+     "tp_nick": "device",
+     "bo3_nick": "dev1ce",
+     "prop": "kills",
+     "scope": "12",
+     "line": 32.5,
+     "close_line": null,
+     "actual": 29.0,
+     "p": 0.473,
+     "book": "prizepicks",
+     "perf_version": "perf-2-bo3",
+     "version": "9cfcbd217a"
+    },
+    {
+     "match": "hltv:2399267",
+     "start": "2026-10-17T11:00:00+00:00",
+     "nick": null,
+     "tp_nick": "device",
+     "bo3_nick": "dev1ce",
+     "prop": "hs",
+     "scope": "12",
+     "line": 9.5,
+     "close_line": null,
+     "actual": 6.0,
+     "p": 0.614,
+     "book": "prizepicks",
+     "perf_version": "perf-2-bo3",
+     "version": "9cfcbd217a"
+    },
+    {
+     "match": "hltv:2398990",
+     "start": "2026-10-19T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": "Techno",
+     "bo3_nick": "Techno4K",
+     "prop": "kills",
+     "scope": "12",
+     "line": 25.5,
+     "close_line": null,
+     "actual": 27.0,
+     "p": 0.428,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "c36104d079"
+    },
+    {
+     "match": "hltv:2398990",
+     "start": "2026-10-19T12:00:00+00:00",
+     "nick": null,
+     "tp_nick": "Techno",
+     "bo3_nick": "Techno4K",
+     "prop": "hs",
+     "scope": "12",
+     "line": 15.5,
+     "close_line": null,
+     "actual": 21.0,
+     "p": 0.354,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "c36104d079"
+    },
+    {
+     "match": "hltv:2399686",
+     "start": "2026-10-19T13:45:00+00:00",
+     "nick": "brain",
+     "tp_nick": "Brain47",
+     "bo3_nick": "brain",
+     "prop": "kills",
+     "scope": "12",
+     "line": 33.5,
+     "close_line": null,
+     "actual": 14.0,
+     "p": 0.478,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "c36104d079"
+    },
+    {
+     "match": "hltv:2399686",
+     "start": "2026-10-19T13:45:00+00:00",
+     "nick": "brain",
+     "tp_nick": "Brain47",
+     "bo3_nick": "brain",
+     "prop": "hs",
+     "scope": "12",
+     "line": 9.5,
+     "close_line": null,
+     "actual": 7.0,
+     "p": 0.571,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "c36104d079"
+    },
+    {
+     "match": "hltv:2398995",
+     "start": "2026-10-20T15:00:00+00:00",
+     "nick": null,
+     "tp_nick": "Techno",
+     "bo3_nick": "Techno4K",
+     "prop": "hs",
+     "scope": "12",
+     "line": 15.5,
+     "close_line": null,
+     "actual": 10.0,
+     "p": 0.401,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "794a775f51"
+    },
+    {
+     "match": "hltv:2398995",
+     "start": "2026-10-20T15:00:00+00:00",
+     "nick": null,
+     "tp_nick": "Techno",
+     "bo3_nick": "Techno4K",
+     "prop": "kills",
+     "scope": "12",
+     "line": 25.5,
+     "close_line": null,
+     "actual": 17.0,
+     "p": 0.404,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "794a775f51"
+    }
+   ]
+  },
+  "I4 BO3.gg fallback although HLTV has the exact nick (N0 pin: history outside N0 / not linked)": {
+   "note": "design: perf_live.player_maps reads N0 only; cm-2 never applies on the fallback path",
+   "units": 67,
+   "matches": 14,
+   "affected": {
+    "n": 67,
+    "matches": 14,
+    "hit": 0.2537313432835821,
+    "fav_n": 67,
+    "logloss": 0.8355181607665343,
+    "brier": 0.31847616417910446,
+    "mean_p_fav": 0.600044776119403
+   },
+   "rest": {
+    "n": 2855,
+    "matches": 167,
+    "hit": 0.5177629264861062,
+    "fav_n": 2843,
+    "logloss": 0.6986192635526679,
+    "brier": 0.2525687443082309,
+    "mean_p_fav": 0.5580507880910682
+   },
+   "effect": {
+    "point": {
+     "d_hit_aff_minus_rest": -0.264,
+     "d_ll_aff_minus_rest": 0.1369,
+     "d_hit_clean_minus_all": 0.0061,
+     "d_ll_clean_minus_all": -0.0031
+    },
+    "ci95": {
+     "d_hit_aff_minus_rest": [
+      -0.405,
+      -0.1004
+     ],
+     "d_ll_aff_minus_rest": [
+      0.054,
+      0.2138
+     ],
+     "d_hit_clean_minus_all": [
+      0.0015,
+      0.0119
+     ],
+     "d_ll_clean_minus_all": [
+      -0.0063,
+      -0.0008
+     ]
+    }
+   }
+  },
+  "I5 match key never resolved to an HLTV match (BO3.gg slug)": {
+   "note": "Orgless/Sokerorg listed vs HLTV 'LFO 8' / 'LFO 10' (team alias); Martyrdom vs MARKandLARRY absent from HLTV",
+   "units": 18,
+   "matches": 2,
+   "affected": {
+    "n": 18,
+    "matches": 2,
+    "hit": 0.16666666666666666,
+    "fav_n": 18,
+    "logloss": 0.7833802321097147,
+    "brier": 0.2944168888888889,
+    "mean_p_fav": 0.5898888888888889
+   },
+   "rest": {
+    "n": 2904,
+    "matches": 169,
+    "hit": 0.5138312586445366,
+    "fav_n": 2892,
+    "logloss": 0.7012523657149621,
+    "brier": 0.2538299462809915,
+    "mean_p_fav": 0.5588223140495867
+   },
+   "effect": {
+    "point": {
+     "d_hit_aff_minus_rest": -0.3472,
+     "d_ll_aff_minus_rest": 0.0821,
+     "d_hit_clean_minus_all": 0.0021,
+     "d_ll_clean_minus_all": -0.0005
+    },
+    "ci95": {
+     "d_hit_aff_minus_rest": [
+      -0.4078,
+      -0.2964
+     ],
+     "d_ll_aff_minus_rest": [
+      0.0219,
+      0.131
+     ],
+     "d_hit_clean_minus_all": [
+      0.0,
+      0.0055
+     ],
+     "d_ll_clean_minus_all": [
+      -0.0015,
+      0.0
+     ]
+    }
+   },
+   "examples": [
+    {
+     "match": "martyrdom-vs-markandlarry-12-10-2026",
+     "start": "2026-10-12T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": null,
+     "bo3_nick": "BRACE",
+     "prop": "hs",
+     "scope": "12",
+     "line": 16.5,
+     "close_line": null,
+     "actual": 22.0,
+     "p": 0.465,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "a64083e3c2"
+    },
+    {
+     "match": "martyrdom-vs-markandlarry-12-10-2026",
+     "start": "2026-10-12T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": null,
+     "bo3_nick": "micalis",
+     "prop": "hs",
+     "scope": "12",
+     "line": 16.5,
+     "close_line": null,
+     "actual": 24.0,
+     "p": 0.478,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "a64083e3c2"
+    },
+    {
+     "match": "martyrdom-vs-markandlarry-12-10-2026",
+     "start": "2026-10-12T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": null,
+     "bo3_nick": "micalis",
+     "prop": "kills",
+     "scope": "12",
+     "line": 27.5,
+     "close_line": null,
+     "actual": 30.0,
+     "p": 0.458,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "a64083e3c2"
+    },
+    {
+     "match": "martyrdom-vs-markandlarry-12-10-2026",
+     "start": "2026-10-12T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": null,
+     "bo3_nick": "sav",
+     "prop": "hs",
+     "scope": "12",
+     "line": 16.5,
+     "close_line": null,
+     "actual": 17.0,
+     "p": 0.414,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "a64083e3c2"
+    },
+    {
+     "match": "martyrdom-vs-markandlarry-12-10-2026",
+     "start": "2026-10-12T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": null,
+     "bo3_nick": "sav",
+     "prop": "kills",
+     "scope": "12",
+     "line": 28.5,
+     "close_line": null,
+     "actual": 29.0,
+     "p": 0.421,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "a64083e3c2"
+    },
+    {
+     "match": "martyrdom-vs-markandlarry-12-10-2026",
+     "start": "2026-10-12T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": null,
+     "bo3_nick": "yourwombat",
+     "prop": "kills",
+     "scope": "12",
+     "line": 29.5,
+     "close_line": null,
+     "actual": 29.0,
+     "p": 0.321,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "a64083e3c2"
+    },
+    {
+     "match": "martyrdom-vs-markandlarry-12-10-2026",
+     "start": "2026-10-12T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": null,
+     "bo3_nick": "BRACE",
+     "prop": "kills",
+     "scope": "12",
+     "line": 28.5,
+     "close_line": null,
+     "actual": 38.0,
+     "p": 0.488,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "a64083e3c2"
+    },
+    {
+     "match": "martyrdom-vs-markandlarry-12-10-2026",
+     "start": "2026-10-12T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": null,
+     "bo3_nick": "yourwombat",
+     "prop": "hs",
+     "scope": "12",
+     "line": 9.5,
+     "close_line": null,
+     "actual": 12.0,
+     "p": 0.495,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "a64083e3c2"
+    },
+    {
+     "match": "rooster-vs-orgless-aust-12-10-2026",
+     "start": "2026-10-12T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": null,
+     "bo3_nick": "c4put",
+     "prop": "hs",
+     "scope": "12",
+     "line": 13.5,
+     "close_line": null,
+     "actual": 13.0,
+     "p": 0.574,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "fe063dc2e9"
+    },
+    {
+     "match": "rooster-vs-orgless-aust-12-10-2026",
+     "start": "2026-10-12T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": null,
+     "bo3_nick": "cookie",
+     "prop": "kills",
+     "scope": "12",
+     "line": 28.5,
+     "close_line": null,
+     "actual": 25.0,
+     "p": 0.541,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "c80ac64bc8"
+    },
+    {
+     "match": "rooster-vs-orgless-aust-12-10-2026",
+     "start": "2026-10-12T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": null,
+     "bo3_nick": "c4put",
+     "prop": "kills",
+     "scope": "12",
+     "line": 23.5,
+     "close_line": null,
+     "actual": 23.0,
+     "p": 0.596,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "c80ac64bc8"
+    },
+    {
+     "match": "rooster-vs-orgless-aust-12-10-2026",
+     "start": "2026-10-12T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": null,
+     "bo3_nick": "junn",
+     "prop": "kills",
+     "scope": "12",
+     "line": 24.5,
+     "close_line": null,
+     "actual": 29.0,
+     "p": 0.639,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "c80ac64bc8"
+    }
+   ]
+  },
+  "I6 first match for this team in HLTV (roster change / stand-in) - not an error, risk marker": {
+   "note": "the player has earlier HLTV maps, none for the team he played this match for",
+   "units": 26,
+   "matches": 6,
+   "affected": {
+    "n": 26,
+    "matches": 6,
+    "hit": 0.5,
+    "fav_n": 26,
+    "logloss": 0.7025211564180284,
+    "brier": 0.2551743076923077,
+    "mean_p_fav": 0.6012307692307692
+   },
+   "rest": {
+    "n": 2896,
+    "matches": 170,
+    "hit": 0.5117891816920943,
+    "fav_n": 2884,
+    "logloss": 0.7017514378961865,
+    "brier": 0.25407014364640845,
+    "mean_p_fav": 0.5586346685082874
+   },
+   "effect": {
+    "point": {
+     "d_hit_aff_minus_rest": -0.0118,
+     "d_ll_aff_minus_rest": 0.0008,
+     "d_hit_clean_minus_all": 0.0001,
+     "d_ll_clean_minus_all": -0.0
+    },
+    "ci95": {
+     "d_hit_aff_minus_rest": [
+      -0.3228,
+      0.3168
+     ],
+     "d_ll_aff_minus_rest": [
+      -0.1141,
+      0.1109
+     ],
+     "d_hit_clean_minus_all": [
+      -0.0024,
+      0.0028
+     ],
+     "d_ll_clean_minus_all": [
+      -0.0008,
+      0.0008
+     ]
+    }
+   }
+  },
+  "I7 stand-in / not-on-listed-team flags in the saved inputs": {
+   "note": "grader gates: stand-in cap 1U / 0U",
+   "units": 33,
+   "matches": 17,
+   "affected": {
+    "n": 33,
+    "matches": 17,
+    "hit": 0.53125,
+    "fav_n": 32,
+    "logloss": 0.6981783793978806,
+    "brier": 0.252417,
+    "mean_p_fav": 0.5708181818181818
+   },
+   "rest": {
+    "n": 2889,
+    "matches": 170,
+    "hit": 0.5114662960389159,
+    "fav_n": 2878,
+    "logloss": 0.7017991788487693,
+    "brier": 0.2540989640013844,
+    "mean_p_fav": 0.5588788508134303
+   },
+   "effect": {
+    "point": {
+     "d_hit_aff_minus_rest": 0.0198,
+     "d_ll_aff_minus_rest": -0.0036,
+     "d_hit_clean_minus_all": -0.0002,
+     "d_ll_clean_minus_all": 0.0
+    },
+    "ci95": {
+     "d_hit_aff_minus_rest": [
+      -0.1823,
+      0.2157
+     ],
+     "d_ll_aff_minus_rest": [
+      -0.0618,
+      0.0566
+     ],
+     "d_hit_clean_minus_all": [
+      -0.0024,
+      0.0019
+     ],
+     "d_ll_clean_minus_all": [
+      -0.0006,
+      0.0007
+     ]
+    }
+   }
+  },
+  "I8 unconfirmed roster flag (roster_confirmed False)": {
+   "note": "risk marker only",
+   "units": 172,
+   "matches": 37,
+   "affected": {
+    "n": 172,
+    "matches": 37,
+    "hit": 0.45294117647058824,
+    "fav_n": 170,
+    "logloss": 0.7317818863847841,
+    "brier": 0.26862066279069774,
+    "mean_p_fav": 0.5769767441860465
+   },
+   "rest": {
+    "n": 2750,
+    "matches": 167,
+    "hit": 0.5153284671532846,
+    "fav_n": 2740,
+    "logloss": 0.6998804471840152,
+    "brier": 0.2531705141818177,
+    "mean_p_fav": 0.5578901818181818
+   },
+   "effect": {
+    "point": {
+     "d_hit_aff_minus_rest": -0.0624,
+     "d_ll_aff_minus_rest": 0.0319,
+     "d_hit_clean_minus_all": 0.0036,
+     "d_ll_clean_minus_all": -0.0019
+    },
+    "ci95": {
+     "d_hit_aff_minus_rest": [
+      -0.1502,
+      0.0293
+     ],
+     "d_ll_aff_minus_rest": [
+      -0.0026,
+      0.0687
+     ],
+     "d_hit_clean_minus_all": [
+      -0.0016,
+      0.0086
+     ],
+     "d_ll_clean_minus_all": [
+      -0.0041,
+      0.0001
+     ]
+    }
+   }
+  },
+  "S1 settled total differs from HLTV (production read)": {
+   "note": "",
+   "units": 0,
+   "matches": 0,
+   "affected": {
+    "n": 0
+   },
+   "rest": {
+    "n": 2922,
+    "matches": 170,
+    "hit": 0.5116838487972508,
+    "fav_n": 2910,
+    "logloss": 0.7017582868631845,
+    "brier": 0.25407996851471565,
+    "mean_p_fav": 0.5590136892539357
+   },
+   "examples": []
+  },
+  "S2 settled total not verifiable against HLTV": {
+   "note": "",
+   "units": 18,
+   "matches": 2,
+   "affected": {
+    "n": 18,
+    "matches": 2,
+    "hit": 0.16666666666666666,
+    "fav_n": 18,
+    "logloss": 0.7833802321097147,
+    "brier": 0.2944168888888889,
+    "mean_p_fav": 0.5898888888888889
+   },
+   "rest": {
+    "n": 2904,
+    "matches": 169,
+    "hit": 0.5138312586445366,
+    "fav_n": 2892,
+    "logloss": 0.7012523657149621,
+    "brier": 0.2538299462809915,
+    "mean_p_fav": 0.5588223140495867
+   },
+   "effect": {
+    "point": {
+     "d_hit_aff_minus_rest": -0.3472,
+     "d_ll_aff_minus_rest": 0.0821,
+     "d_hit_clean_minus_all": 0.0021,
+     "d_ll_clean_minus_all": -0.0005
+    },
+    "ci95": {
+     "d_hit_aff_minus_rest": [
+      -0.4078,
+      -0.2964
+     ],
+     "d_ll_aff_minus_rest": [
+      0.0219,
+      0.131
+     ],
+     "d_hit_clean_minus_all": [
+      0.0,
+      0.0055
+     ],
+     "d_ll_clean_minus_all": [
+      -0.0015,
+      0.0
+     ]
+    }
+   },
+   "examples": [
+    {
+     "match": "martyrdom-vs-markandlarry-12-10-2026",
+     "start": "2026-10-12T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": null,
+     "bo3_nick": "BRACE",
+     "prop": "hs",
+     "scope": "12",
+     "line": 16.5,
+     "close_line": null,
+     "actual": 22.0,
+     "p": 0.465,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "a64083e3c2"
+    },
+    {
+     "match": "martyrdom-vs-markandlarry-12-10-2026",
+     "start": "2026-10-12T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": null,
+     "bo3_nick": "micalis",
+     "prop": "hs",
+     "scope": "12",
+     "line": 16.5,
+     "close_line": null,
+     "actual": 24.0,
+     "p": 0.478,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "a64083e3c2"
+    },
+    {
+     "match": "martyrdom-vs-markandlarry-12-10-2026",
+     "start": "2026-10-12T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": null,
+     "bo3_nick": "micalis",
+     "prop": "kills",
+     "scope": "12",
+     "line": 27.5,
+     "close_line": null,
+     "actual": 30.0,
+     "p": 0.458,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "a64083e3c2"
+    },
+    {
+     "match": "martyrdom-vs-markandlarry-12-10-2026",
+     "start": "2026-10-12T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": null,
+     "bo3_nick": "sav",
+     "prop": "hs",
+     "scope": "12",
+     "line": 16.5,
+     "close_line": null,
+     "actual": 17.0,
+     "p": 0.414,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "a64083e3c2"
+    },
+    {
+     "match": "martyrdom-vs-markandlarry-12-10-2026",
+     "start": "2026-10-12T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": null,
+     "bo3_nick": "sav",
+     "prop": "kills",
+     "scope": "12",
+     "line": 28.5,
+     "close_line": null,
+     "actual": 29.0,
+     "p": 0.421,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "a64083e3c2"
+    },
+    {
+     "match": "martyrdom-vs-markandlarry-12-10-2026",
+     "start": "2026-10-12T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": null,
+     "bo3_nick": "yourwombat",
+     "prop": "kills",
+     "scope": "12",
+     "line": 29.5,
+     "close_line": null,
+     "actual": 29.0,
+     "p": 0.321,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "a64083e3c2"
+    },
+    {
+     "match": "martyrdom-vs-markandlarry-12-10-2026",
+     "start": "2026-10-12T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": null,
+     "bo3_nick": "BRACE",
+     "prop": "kills",
+     "scope": "12",
+     "line": 28.5,
+     "close_line": null,
+     "actual": 38.0,
+     "p": 0.488,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "a64083e3c2"
+    },
+    {
+     "match": "martyrdom-vs-markandlarry-12-10-2026",
+     "start": "2026-10-12T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": null,
+     "bo3_nick": "yourwombat",
+     "prop": "hs",
+     "scope": "12",
+     "line": 9.5,
+     "close_line": null,
+     "actual": 12.0,
+     "p": 0.495,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "a64083e3c2"
+    },
+    {
+     "match": "rooster-vs-orgless-aust-12-10-2026",
+     "start": "2026-10-12T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": null,
+     "bo3_nick": "c4put",
+     "prop": "hs",
+     "scope": "12",
+     "line": 13.5,
+     "close_line": null,
+     "actual": 13.0,
+     "p": 0.574,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "fe063dc2e9"
+    },
+    {
+     "match": "rooster-vs-orgless-aust-12-10-2026",
+     "start": "2026-10-12T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": null,
+     "bo3_nick": "cookie",
+     "prop": "kills",
+     "scope": "12",
+     "line": 28.5,
+     "close_line": null,
+     "actual": 25.0,
+     "p": 0.541,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "c80ac64bc8"
+    },
+    {
+     "match": "rooster-vs-orgless-aust-12-10-2026",
+     "start": "2026-10-12T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": null,
+     "bo3_nick": "c4put",
+     "prop": "kills",
+     "scope": "12",
+     "line": 23.5,
+     "close_line": null,
+     "actual": 23.0,
+     "p": 0.596,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "c80ac64bc8"
+    },
+    {
+     "match": "rooster-vs-orgless-aust-12-10-2026",
+     "start": "2026-10-12T09:00:00+00:00",
+     "nick": null,
+     "tp_nick": null,
+     "bo3_nick": "junn",
+     "prop": "kills",
+     "scope": "12",
+     "line": 24.5,
+     "close_line": null,
+     "actual": 29.0,
+     "p": 0.639,
+     "book": "underdog",
+     "perf_version": "perf-2-bo3",
+     "version": "c80ac64bc8"
+    }
+   ]
+  },
+  "S3 overtime on a map inside the line's scope (OT kills/HS included in the total)": {
+   "note": "settlement includes OT (HLTV scoreboard = full map); descriptive, see CX-OT",
+   "units": 792,
+   "matches": 44,
+   "affected": {
+    "n": 792,
+    "matches": 44,
+    "hit": 0.4860759493670886,
+    "fav_n": 790,
+    "logloss": 0.7072540121941585,
+    "brier": 0.25694229419191933,
+    "mean_p_fav": 0.5569280303030303
+   },
+   "rest": {
+    "n": 2130,
+    "matches": 126,
+    "hit": 0.5212264150943396,
+    "fav_n": 2120,
+    "logloss": 0.6997148058950463,
+    "brier": 0.2530156671361498,
+    "mean_p_fav": 0.5597892018779344
+   },
+   "effect": {
+    "point": {
+     "d_hit_aff_minus_rest": -0.0352,
+     "d_ll_aff_minus_rest": 0.0075,
+     "d_hit_clean_minus_all": 0.0095,
+     "d_ll_clean_minus_all": -0.002
+    },
+    "ci95": {
+     "d_hit_aff_minus_rest": [
+      -0.1011,
+      0.0294
+     ],
+     "d_ll_aff_minus_rest": [
+      -0.0126,
+      0.0276
+     ],
+     "d_hit_clean_minus_all": [
+      -0.0078,
+      0.0281
+     ],
+     "d_ll_clean_minus_all": [
+      -0.0076,
+      0.0034
+     ]
+    }
+   }
+  },
+  "S4 forfeited map / data_issues row on the match": {
+   "note": "",
+   "units": 0,
+   "matches": 0,
+   "affected": {
+    "n": 0
+   },
+   "rest": {
+    "n": 2922,
+    "matches": 170,
+    "hit": 0.5116838487972508,
+    "fav_n": 2910,
+    "logloss": 0.7017582868631845,
+    "brier": 0.25407996851471565,
+    "mean_p_fav": 0.5590136892539357
+   }
+  },
+  "S5 Maps 1-3 on a BO5 (map 4-5 excluded)": {
+   "note": "",
+   "units": 40,
+   "matches": 2,
+   "affected": {
+    "n": 40,
+    "matches": 2,
+    "hit": 0.425,
+    "fav_n": 40,
+    "logloss": 0.7208856447918113,
+    "brier": 0.26365717499999997,
+    "mean_p_fav": 0.563625
+   },
+   "rest": {
+    "n": 2882,
+    "matches": 168,
+    "hit": 0.5128919860627178,
+    "fav_n": 2870,
+    "logloss": 0.701492813470698,
+    "brier": 0.25394704406662016,
+    "mean_p_fav": 0.5589496877168633
+   },
+   "effect": {
+    "point": {
+     "d_hit_aff_minus_rest": -0.0879,
+     "d_ll_aff_minus_rest": 0.0194,
+     "d_hit_clean_minus_all": 0.0012,
+     "d_ll_clean_minus_all": -0.0003
+    },
+    "ci95": {
+     "d_hit_aff_minus_rest": [
+      -0.1793,
+      0.0057
+     ],
+     "d_ll_aff_minus_rest": [
+      0.0004,
+      0.0375
+     ],
+     "d_hit_clean_minus_all": [
+      -0.0001,
+      0.004
+     ],
+     "d_ll_clean_minus_all": [
+      -0.0008,
+      0.0
+     ]
+    }
+   }
+  },
+  "S6 Map 1 line": {
+   "note": "",
+   "units": 277,
+   "matches": 19,
+   "affected": {
+    "n": 277,
+    "matches": 19,
+    "hit": 0.44404332129963897,
+    "fav_n": 277,
+    "logloss": 0.7291427982606017,
+    "brier": 0.2674527472924189,
+    "mean_p_fav": 0.5519747292418772
+   },
+   "rest": {
+    "n": 2645,
+    "matches": 153,
+    "hit": 0.5187998480820357,
+    "fav_n": 2633,
+    "logloss": 0.6988904193179717,
+    "brier": 0.2526794922495266,
+    "mean_p_fav": 0.5597508506616257
+   },
+   "effect": {
+    "point": {
+     "d_hit_aff_minus_rest": -0.0748,
+     "d_ll_aff_minus_rest": 0.0303,
+     "d_hit_clean_minus_all": 0.0071,
+     "d_ll_clean_minus_all": -0.0029
+    },
+    "ci95": {
+     "d_hit_aff_minus_rest": [
+      -0.1523,
+      0.0058
+     ],
+     "d_ll_aff_minus_rest": [
+      0.0039,
+      0.0624
+     ],
+     "d_hit_clean_minus_all": [
+      -0.0005,
+      0.0162
+     ],
+     "d_ll_clean_minus_all": [
+      -0.0066,
+      -0.0003
+     ]
+    }
+   }
+  },
+  "D1 same player x start x stat x scope counted as >1 P1 unit (two match keys)": {
+   "note": "the BO3.gg-slug copy of a unit also scored under hltv:<id> (identity.assign links only identical team pairs)",
+   "units": 8,
+   "matches": 1,
+   "affected": {
+    "n": 8,
+    "matches": 1,
+    "hit": 0.125,
+    "fav_n": 8,
+    "logloss": 0.7299414757719836,
+    "brier": 0.26891499999999996,
+    "mean_p_fav": 0.5575
+   },
+   "rest": {
+    "n": 2914,
+    "matches": 169,
+    "hit": 0.512749827705031,
+    "fav_n": 2902,
+    "logloss": 0.701680913660964,
+    "brier": 0.2540392409059709,
+    "mean_p_fav": 0.5590178448867537
+   },
+   "effect": {
+    "point": {
+     "d_hit_aff_minus_rest": -0.3877,
+     "d_ll_aff_minus_rest": 0.0283,
+     "d_hit_clean_minus_all": 0.0011,
+     "d_ll_clean_minus_all": -0.0001
+    },
+    "ci95": {
+     "d_hit_aff_minus_rest": [
+      -0.417,
+      -0.3614
+     ],
+     "d_ll_aff_minus_rest": [
+      0.0185,
+      0.0377
+     ],
+     "d_hit_clean_minus_all": [
+      0.0,
+      0.0034
+     ],
+     "d_ll_clean_minus_all": [
+      -0.0003,
+      0.0
+     ]
+    }
+   }
+  },
+  "D2 the prop was offered on both books at forecast time (one P1 unit)": {
+   "note": "quote anchors (from 2026-10-15)",
+   "units": 1037,
+   "matches": 77,
+   "affected": {
+    "n": 1037,
+    "matches": 77,
+    "hit": 0.5251937984496124,
+    "fav_n": 1032,
+    "logloss": 0.6934625428759282,
+    "brier": 0.2501075988428161,
+    "mean_p_fav": 0.5501253616200579
+   },
+   "rest": {
+    "n": 1885,
+    "matches": 169,
+    "hit": 0.5042598509052183,
+    "fav_n": 1878,
+    "logloss": 0.7063220462874715,
+    "brier": 0.25626529867374004,
+    "mean_p_fav": 0.5639034482758621
+   },
+   "effect": {
+    "point": {
+     "d_hit_aff_minus_rest": 0.0209,
+     "d_ll_aff_minus_rest": -0.0129,
+     "d_hit_clean_minus_all": -0.0074,
+     "d_ll_clean_minus_all": 0.0046
+    },
+    "ci95": {
+     "d_hit_aff_minus_rest": [
+      -0.0285,
+      0.0706
+     ],
+     "d_ll_aff_minus_rest": [
+      -0.0281,
+      0.0029
+     ],
+     "d_hit_clean_minus_all": [
+      -0.0253,
+      0.0103
+     ],
+     "d_ll_clean_minus_all": [
+      -0.001,
+      0.0101
+     ]
+    }
+   }
+  },
+  "D3 ... and the other book's line differed": {
+   "note": "",
+   "units": 524,
+   "matches": 76,
+   "affected": {
+    "n": 524,
+    "matches": 76,
+    "hit": 0.525911708253359,
+    "fav_n": 521,
+    "logloss": 0.696390532725186,
+    "brier": 0.2515268072519081,
+    "mean_p_fav": 0.5543416030534352
+   },
+   "rest": {
+    "n": 2398,
+    "matches": 170,
+    "hit": 0.5085809962327333,
+    "fav_n": 2389,
+    "logloss": 0.7029312239642308,
+    "brier": 0.25463787364470364,
+    "mean_p_fav": 0.560034612176814
+   },
+   "effect": {
+    "point": {
+     "d_hit_aff_minus_rest": 0.0173,
+     "d_ll_aff_minus_rest": -0.0065,
+     "d_hit_clean_minus_all": -0.0031,
+     "d_ll_clean_minus_all": 0.0012
+    },
+    "ci95": {
+     "d_hit_aff_minus_rest": [
+      -0.0376,
+      0.0757
+     ],
+     "d_ll_aff_minus_rest": [
+      -0.0241,
+      0.0096
+     ],
+     "d_hit_clean_minus_all": [
+      -0.0134,
+      0.0068
+     ],
+     "d_ll_clean_minus_all": [
+      -0.0017,
+      0.0042
+     ]
+    }
+   }
+  },
+  "F1 forecast logged > 3 h before the start": {
+   "note": "",
+   "units": 652,
+   "matches": 65,
+   "affected": {
+    "n": 652,
+    "matches": 65,
+    "hit": 0.4514637904468413,
+    "fav_n": 649,
+    "logloss": 0.7234279772013742,
+    "brier": 0.2645772223926382,
+    "mean_p_fav": 0.5612530674846626
+   },
+   "rest": {
+    "n": 2270,
+    "matches": 159,
+    "hit": 0.5289694825298541,
+    "fav_n": 2261,
+    "logloss": 0.6955342172153856,
+    "brier": 0.2510648982378849,
+    "mean_p_fav": 0.5583704845814977
+   },
+   "effect": {
+    "point": {
+     "d_hit_aff_minus_rest": -0.0775,
+     "d_ll_aff_minus_rest": 0.0279,
+     "d_hit_clean_minus_all": 0.0173,
+     "d_ll_clean_minus_all": -0.0062
+    },
+    "ci95": {
+     "d_hit_aff_minus_rest": [
+      -0.137,
+      -0.0158
+     ],
+     "d_ll_aff_minus_rest": [
+      0.0061,
+      0.0509
+     ],
+     "d_hit_clean_minus_all": [
+      0.0034,
+      0.0323
+     ],
+     "d_ll_clean_minus_all": [
+      -0.0116,
+      -0.0014
+     ]
+    }
+   }
+  },
+  "F2 the P1 pick has later (regraded) forecasts inside the last 30 min": {
+   "note": "excluded by the 30-min rule",
+   "units": 1248,
+   "matches": 108,
+   "affected": {
+    "n": 1248,
+    "matches": 108,
+    "hit": 0.5056360708534622,
+    "fav_n": 1242,
+    "logloss": 0.7061220981499591,
+    "brier": 0.2561760865384616,
+    "mean_p_fav": 0.5588365384615385
+   },
+   "rest": {
+    "n": 1674,
+    "matches": 130,
+    "hit": 0.5161870503597122,
+    "fav_n": 1668,
+    "logloss": 0.6985049795239388,
+    "brier": 0.2525172712066899,
+    "mean_p_fav": 0.5591457586618876
+   },
+   "effect": {
+    "point": {
+     "d_hit_aff_minus_rest": -0.0106,
+     "d_ll_aff_minus_rest": 0.0076,
+     "d_hit_clean_minus_all": 0.0045,
+     "d_ll_clean_minus_all": -0.0033
+    },
+    "ci95": {
+     "d_hit_aff_minus_rest": [
+      -0.0632,
+      0.0406
+     ],
+     "d_ll_aff_minus_rest": [
+      -0.0099,
+      0.0262
+     ],
+     "d_hit_clean_minus_all": [
+      -0.0171,
+      0.0274
+     ],
+     "d_ll_clean_minus_all": [
+      -0.0114,
+      0.0044
+     ]
+    }
+   }
+  },
+  "F3 the line moved after the P1 forecast (scraper last line or later same-id forecast differs)": {
+   "note": "",
+   "units": 93,
+   "matches": 55,
+   "affected": {
+    "n": 93,
+    "matches": 55,
+    "hit": 0.41935483870967744,
+    "fav_n": 93,
+    "logloss": 0.7211181902929819,
+    "brier": 0.26368690322580646,
+    "mean_p_fav": 0.5661935483870968
+   },
+   "rest": {
+    "n": 2829,
+    "matches": 170,
+    "hit": 0.5147319843805467,
+    "fav_n": 2817,
+    "logloss": 0.7011218531343153,
+    "brier": 0.25376415199717184,
+    "mean_p_fav": 0.5587776599505125
+   },
+   "effect": {
+    "point": {
+     "d_hit_aff_minus_rest": -0.0954,
+     "d_ll_aff_minus_rest": 0.02,
+     "d_hit_clean_minus_all": 0.003,
+     "d_ll_clean_minus_all": -0.0006,
+     "d_hit_corrected_minus_orig": -0.0003,
+     "d_ll_corrected_minus_orig": 0.0002
+    },
+    "ci95": {
+     "d_hit_aff_minus_rest": [
+      -0.1994,
+      0.0125
+     ],
+     "d_ll_aff_minus_rest": [
+      -0.0148,
+      0.0528
+     ],
+     "d_hit_clean_minus_all": [
+      -0.0004,
+      0.0067
+     ],
+     "d_ll_clean_minus_all": [
+      -0.0018,
+      0.0004
+     ],
+     "d_hit_corrected_minus_orig": [
+      -0.0017,
+      0.0007
+     ],
+     "d_ll_corrected_minus_orig": [
+      -0.0003,
+      0.0009
+     ]
+    }
+   },
+   "examples": [
+    {
+     "match": "nip-vs-betclic-apogee-esports-12-10-2026",
+     "start": "2026-10-12T10:00:00+00:00",
+     "nick": "Prism",
+     "tp_nick": "Prism",
+     "bo3_nick": null,
+     "prop": "kills",
+     "scope": "12",
+     "line": 26.5,
+     "close_line": 25.5,
+     "actual": 18.0,
+     "p": 0.59,
+     "book": "underdog",
+     "perf_version": "perf-2",
+     "version": "c80ac64bc8"
+    },
+    {
+     "match": "nip-vs-betclic-apogee-esports-12-10-2026",
+     "start": "2026-10-12T10:00:00+00:00",
+     "nick": "adamb",
+     "tp_nick": "adamb",
+     "bo3_nick": null,
+     "prop": "hs",
+     "scope": "12",
+     "line": 15.5,
+     "close_line": 16.5,
+     "actual": 13.0,
+     "p": 0.521,
+     "book": "underdog",
+     "perf_version": "perf-2",
+     "version": "c80ac64bc8"
+    },
+    {
+     "match": "nip-vs-betclic-apogee-esports-12-10-2026",
+     "start": "2026-10-12T10:00:00+00:00",
+     "nick": "Krimbo",
+     "tp_nick": "Krimbo",
+     "bo3_nick": null,
+     "prop": "hs",
+     "scope": "12",
+     "line": 15.5,
+     "close_line": 16.5,
+     "actual": 9.0,
+     "p": 0.508,
+     "book": "underdog",
+     "perf_version": "perf-2",
+     "version": "c80ac64bc8"
+    },
+    {
+     "match": "hltv:2399130",
+     "start": "2026-10-12T10:00:00+00:00",
+     "nick": "onic",
+     "tp_nick": "onic",
+     "bo3_nick": null,
+     "prop": "kills",
+     "scope": "12",
+     "line": 25.5,
+     "close_line": 26.5,
+     "actual": 31.0,
+     "p": 0.464,
+     "book": "prizepicks",
+     "perf_version": "perf-2",
+     "version": "c80ac64bc8"
+    },
+    {
+     "match": "nip-vs-betclic-apogee-esports-12-10-2026",
+     "start": "2026-10-12T10:00:00+00:00",
+     "nick": "sjuush",
+     "tp_nick": "sjuush",
+     "bo3_nick": null,
+     "prop": "kills",
+     "scope": "12",
+     "line": 26.5,
+     "close_line": 27.5,
+     "actual": 22.0,
+     "p": 0.583,
+     "book": "underdog",
+     "perf_version": "perf-2",
+     "version": "c80ac64bc8"
+    },
+    {
+     "match": "hltv:2399130",
+     "start": "2026-10-12T10:00:00+00:00",
+     "nick": "R4DYX",
+     "tp_nick": "R4DYX",
+     "bo3_nick": null,
+     "prop": "kills",
+     "scope": "12",
+     "line": 26.5,
+     "close_line": 27.5,
+     "actual": 17.0,
+     "p": 0.553,
+     "book": "underdog",
+     "perf_version": "perf-2",
+     "version": "c80ac64bc8"
+    },
+    {
+     "match": "nip-vs-betclic-apogee-esports-12-10-2026",
+     "start": "2026-10-12T10:00:00+00:00",
+     "nick": "Qlocuu",
+     "tp_nick": "Qlocuu",
+     "bo3_nick": null,
+     "prop": "kills",
+     "scope": "12",
+     "line": 27.5,
+     "close_line": 26.5,
+     "actual": 16.0,
+     "p": 0.536,
+     "book": "prizepicks",
+     "perf_version": "perf-2",
+     "version": "c80ac64bc8"
+    },
+    {
+     "match": "hltv:2399130",
+     "start": "2026-10-12T10:00:00+00:00",
+     "nick": "zeRRoFIX",
+     "tp_nick": "zeRRoFIX",
+     "bo3_nick": null,
+     "prop": "hs",
+     "scope": "12",
+     "line": 15.5,
+     "close_line": 16.0,
+     "actual": 22.0,
+     "p": 0.455,
+     "book": "prizepicks",
+     "perf_version": "perf-2",
+     "version": "c80ac64bc8"
+    },
+    {
+     "match": "ex-keyd-stats-vs-largados_e_pelados-12-10-2026",
+     "start": "2026-10-12T21:00:00+00:00",
+     "nick": "happ",
+     "tp_nick": "happ",
+     "bo3_nick": null,
+     "prop": "hs",
+     "scope": "12",
+     "line": 13.5,
+     "close_line": 15.5,
+     "actual": 28.0,
+     "p": 0.492,
+     "book": "underdog",
+     "perf_version": "perf-2",
+     "version": "1088faf157"
+    },
+    {
+     "match": "hltv:2399230",
+     "start": "2026-10-13T01:00:00+00:00",
+     "nick": "CAJUN",
+     "tp_nick": "CAJUN",
+     "bo3_nick": null,
+     "prop": "kills",
+     "scope": "12",
+     "line": 24.5,
+     "close_line": 26.5,
+     "actual": 15.0,
+     "p": 0.635,
+     "book": "underdog",
+     "perf_version": "perf-2",
+     "version": "1088faf157"
+    },
+    {
+     "match": "hltv:2399230",
+     "start": "2026-10-13T01:00:00+00:00",
+     "nick": "Drop",
+     "tp_nick": "Drop",
+     "bo3_nick": null,
+     "prop": "hs",
+     "scope": "12",
+     "line": 15.5,
+     "close_line": 16.5,
+     "actual": 16.0,
+     "p": 0.392,
+     "book": "underdog",
+     "perf_version": "perf-2",
+     "version": "1088faf157"
+    },
+    {
+     "match": "hltv:2399230",
+     "start": "2026-10-13T01:00:00+00:00",
+     "nick": "Wolffe",
+     "tp_nick": "Wolffe",
+     "bo3_nick": null,
+     "prop": "kills",
+     "scope": "12",
+     "line": 30.5,
+     "close_line": 32.5,
+     "actual": 29.0,
+     "p": 0.436,
+     "book": "underdog",
+     "perf_version": "perf-2",
+     "version": "1088faf157"
+    }
+   ]
+  },
+  "F4 odds blip at forecast time (Thunderpick fallback)": {
+   "note": "perf lines take no market input; stake cap / shown win chance only",
+   "units": 184,
+   "matches": 18,
+   "affected": {
+    "n": 184,
+    "matches": 18,
+    "hit": 0.5380434782608695,
+    "fav_n": 184,
+    "logloss": 0.6961845180524192,
+    "brier": 0.251363081521739,
+    "mean_p_fav": 0.558375
+   },
+   "rest": {
+    "n": 2738,
+    "matches": 167,
+    "hit": 0.5099046221570066,
+    "fav_n": 2726,
+    "logloss": 0.7021328571557989,
+    "brier": 0.25426254967129225,
+    "mean_p_fav": 0.5590566106647188
+   },
+   "effect": {
+    "point": {
+     "d_hit_aff_minus_rest": 0.0281,
+     "d_ll_aff_minus_rest": -0.0059,
+     "d_hit_clean_minus_all": -0.0018,
+     "d_ll_clean_minus_all": 0.0004
+    },
+    "ci95": {
+     "d_hit_aff_minus_rest": [
+      -0.0684,
+      0.1256
+     ],
+     "d_ll_aff_minus_rest": [
+      -0.0361,
+      0.0227
+     ],
+     "d_hit_clean_minus_all": [
+      -0.0083,
+      0.0039
+     ],
+     "d_ll_clean_minus_all": [
+      -0.0014,
+      0.0024
+     ]
+    }
+   }
+  },
+  "L1 newest history map on/after the match day": {
+   "note": "",
+   "units": 0,
+   "matches": 0,
+   "affected": {
+    "n": 0
+   },
+   "rest": {
+    "n": 2922,
+    "matches": 170,
+    "hit": 0.5116838487972508,
+    "fav_n": 2910,
+    "logloss": 0.7017582868631845,
+    "brier": 0.25407996851471565,
+    "mean_p_fav": 0.5590136892539357
+   }
+  },
+  "L2 cm-2 feature day != match day or refit on/after the match day": {
+   "note": "",
+   "units": 0,
+   "matches": 0,
+   "affected": {
+    "n": 0
+   },
+   "rest": {
+    "n": 2922,
+    "matches": 170,
+    "hit": 0.5116838487972508,
+    "fav_n": 2910,
+    "logloss": 0.7017582868631845,
+    "brier": 0.25407996851471565,
+    "mean_p_fav": 0.5590136892539357
+   }
+  },
+  "L3 realized per-map numbers present in the saved inputs": {
+   "note": "",
+   "units": 0,
+   "matches": 0,
+   "affected": {
+    "n": 0
+   },
+   "rest": {
+    "n": 2922,
+    "matches": 170,
+    "hit": 0.5116838487972508,
+    "fav_n": 2910,
+    "logloss": 0.7017582868631845,
+    "brier": 0.25407996851471565,
+    "mean_p_fav": 0.5590136892539357
+   }
+  },
+  "L4 HLTV data read / odds retrieved after the forecast time": {
+   "note": "",
+   "units": 0,
+   "matches": 0,
+   "affected": {
+    "n": 0
+   },
+   "rest": {
+    "n": 2922,
+    "matches": 170,
+    "hit": 0.5116838487972508,
+    "fav_n": 2910,
+    "logloss": 0.7017582868631845,
+    "brier": 0.25407996851471565,
+    "mean_p_fav": 0.5590136892539357
+   }
+  },
+  "L5 forecast logged after the Thunderpick-listed start": {
+   "note": "",
+   "units": 0,
+   "matches": 0,
+   "affected": {
+    "n": 0
+   },
+   "rest": {
+    "n": 2922,
+    "matches": 170,
+    "hit": 0.5116838487972508,
+    "fav_n": 2910,
+    "logloss": 0.7017582868631845,
+    "brier": 0.25407996851471565,
+    "mean_p_fav": 0.5590136892539357
+   }
+  },
+  "L6 HLTV match dated before the forecast day": {
+   "note": "",
+   "units": 0,
+   "matches": 0,
+   "affected": {
+    "n": 0
+   },
+   "rest": {
+    "n": 2922,
+    "matches": 170,
+    "hit": 0.5116838487972508,
+    "fav_n": 2910,
+    "logloss": 0.7017582868631845,
+    "brier": 0.25407996851471565,
+    "mean_p_fav": 0.5590136892539357
+   }
+  },
+  "X1 any defect I1-I5 or D1": {
+   "note": "union",
+   "units": 106,
+   "matches": 25,
+   "affected": {
+    "n": 106,
+    "matches": 25,
+    "hit": 0.2830188679245283,
+    "fav_n": 106,
+    "logloss": 0.8086054533004118,
+    "brier": 0.30570885849056595,
+    "mean_p_fav": 0.5941981132075471
+   },
+   "rest": {
+    "n": 2816,
+    "matches": 166,
+    "hit": 0.5203281027104137,
+    "fav_n": 2804,
+    "logloss": 0.6977363409674648,
+    "brier": 0.252136551491477,
+    "mean_p_fav": 0.5576892755681818
+   },
+   "effect": {
+    "point": {
+     "d_hit_aff_minus_rest": -0.2373,
+     "d_ll_aff_minus_rest": 0.1109,
+     "d_hit_clean_minus_all": 0.0086,
+     "d_ll_clean_minus_all": -0.004
+    },
+    "ci95": {
+     "d_hit_aff_minus_rest": [
+      -0.3374,
+      -0.1188
+     ],
+     "d_ll_aff_minus_rest": [
+      0.0516,
+      0.1689
+     ],
+     "d_hit_clean_minus_all": [
+      0.0031,
+      0.0155
+     ],
+     "d_ll_clean_minus_all": [
+      -0.0073,
+      -0.0014
+     ]
+    }
+   }
+  },
+  "X2 any defect I1-I3, I5, D1 (excluding the N0-design class I4)": {
+   "note": "union",
+   "units": 39,
+   "matches": 13,
+   "affected": {
+    "n": 39,
+    "matches": 13,
+    "hit": 0.3333333333333333,
+    "fav_n": 39,
+    "logloss": 0.762370802012457,
+    "brier": 0.283775282051282,
+    "mean_p_fav": 0.5841538461538461
+   },
+   "rest": {
+    "n": 2883,
+    "matches": 169,
+    "hit": 0.5141065830721003,
+    "fav_n": 2871,
+    "logloss": 0.7009383464917582,
+    "brier": 0.25367826292056866,
+    "mean_p_fav": 0.5586736038848421
+   },
+   "effect": {
+    "point": {
+     "d_hit_aff_minus_rest": -0.1808,
+     "d_ll_aff_minus_rest": 0.0614,
+     "d_hit_clean_minus_all": 0.0024,
+     "d_ll_clean_minus_all": -0.0008
+    },
+    "ci95": {
+     "d_hit_aff_minus_rest": [
+      -0.3209,
+      0.0897
+     ],
+     "d_ll_aff_minus_rest": [
+      -0.0261,
+      0.1249
+     ],
+     "d_hit_clean_minus_all": [
+      -0.0007,
+      0.0063
+     ],
+     "d_ll_clean_minus_all": [
+      -0.0021,
+      0.0002
+     ]
+    }
+   }
+  }
+ },
+ "team_name_mismatches": [
+  {
+   "listed": "S\u00f6kerorg",
+   "hltv": "FORZE Reload / LFO 10",
+   "units": 13
+  },
+  {
+   "listed": "Los Ni\u00f1os",
+   "hltv": "Procyon / LOS NINOS",
+   "units": 10
+  }
+ ]
+}

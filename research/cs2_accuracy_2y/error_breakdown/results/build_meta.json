@@ -1,0 +1,27 @@
+{
+ "tables": {
+  "built_at": "2026-10-22T00:00:00+00:00",
+  "rows": 468850,
+  "full_maps": 46885,
+  "players": 5375,
+  "teams": 1518,
+  "n_refits": 103,
+  "data_start": "2025-09-01",
+  "tables_sha": "8d37c0b84875f9d7",
+  "artifact_sha": "6e586047c5b1823a",
+  "version": "cm-2",
+  "rows_raw": 469521,
+  "excluded_maps": {
+   "not_ten_rows": 61
+  },
+  "unknown_env_rows": 20,
+  "history_rule": "HLTV database maps since 2025-09-01, complete scoreboards only (ten unique players, five per team, present nonnegative kills, one positive round count); unknown environment = overall history only; rows strictly before the match day; the latest weekly opponent refit on or before it; Elo at the start of that day"
+ },
+ "rows_export": 469521,
+ "series_rows": 193150,
+ "matches": 19315,
+ "score_from": "2025-01-01",
+ "cutoff": "2026-10-22",
+ "first_refit": "2024-11-04",
+ "seconds": 79
+}
