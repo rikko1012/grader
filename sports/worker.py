@@ -489,12 +489,13 @@ def main(argv=None):
     s.add_argument("--date", required=True)
     sub.add_parser("jobs")
     s = sub.add_parser("train")
-    s.add_argument("rest", nargs="*")
+    s.add_argument("rest", nargs=argparse.REMAINDER)
     a = p.parse_args(argv)
     cap = apply_memory_cap() if a.cmd in ("ingest", "loop", "settle", "train") else None
     if a.cmd == "train":
         flags.require("SPORTS_TRAIN")
-        raise SystemExit("no training job is registered yet (model agents add them here)")
+        from .model import jobs as model_jobs           # model agent's registered training jobs (sports/model/jobs.py)
+        return model_jobs.main(a.rest)
     with store.opened() as con:
         if a.cmd == "migrate":
             _print({"schema_level": store.migrate(con), "path": str(store.db_path())})
