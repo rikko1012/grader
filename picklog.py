@@ -319,6 +319,11 @@ def _factors(res):
     except Exception as e:     # noqa: BLE001 - a shadow never stops the pick log
         out.setdefault("shadow", {})["lm0"] = {"id": LM0["id"], "version": LM0["version"], "eligible": None,
                                                "error": f"{type(e).__name__}: {str(e)[:120]}"}
+    try:   # rm-1 / th-1 (shadow, CHALLENGERS.md 2026-10-23): rounds-mixture / thin-history chances - logged, never shown
+        import cands_shadow
+        out.setdefault("shadow", {})["cands"] = cands_shadow.entries(gi, g)
+    except Exception as e:     # noqa: BLE001 - a shadow never stops the pick log
+        out.setdefault("shadow", {})["cands"] = {"error": f"{type(e).__name__}: {str(e)[:120]}"}
     try:   # shared-match challenger M1 (shadow, 2026-10-09): one simulated match per forecast - logged, never shown
         import match_model
         pf = gi.get("perf") if isinstance(gi.get("perf"), dict) else {}

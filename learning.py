@@ -781,7 +781,7 @@ def connect(db=None):
     for tbl, col in (("ledger", "lines"), ("forecast_copy", "probs_raw"), ("forecast_copy", "data_rev"),
                      ("forecast_copy", "odds_source"), ("forecast_copy", "odds_policy"), ("forecast_copy", "mapping_rev"),
                      ("forecast_copy", "odds_selected"), ("forecast_copy", "quote"), ("challengers", "provenance"),
-                     ("forecast_copy", "lm0")):
+                     ("forecast_copy", "lm0"), ("forecast_copy", "cands")):
         try:
             con.execute(f"ALTER TABLE {tbl} ADD COLUMN {col} TEXT")
         except sqlite3.OperationalError:
@@ -828,7 +828,9 @@ def read_picklog(picks_path=None, after_forecast_id=0, limit=3000):
              f"model_version, inputs{opt}{{lm0}} FROM forecasts WHERE id > ? ORDER BY id LIMIT ?")
         # lm-0 shadow (CHALLENGERS.md): only its own small entry of the shadow JSON is read, never the whole column
         try:
-            fr = [dict(r) for r in con.execute(q.format(lm0=", json_extract(shadow, '$.lm0') AS lm0" if "shadow" in fcols else ""),
+            # rm-1 / th-1 shadows (CHALLENGERS.md 2026-10-23): their own small entry too, read with the lm-0 one
+            fr = [dict(r) for r in con.execute(q.format(lm0=", json_extract(shadow, '$.lm0') AS lm0, json_extract(shadow, '$.cands') AS cands"
+                                                        if "shadow" in fcols else ""),
                                                (after_forecast_id, limit))]
         except sqlite3.OperationalError:      # no JSON1 in this SQLite build: lm-0 is simply not copied
             fr = [dict(r) for r in con.execute(q.format(lm0=""), (after_forecast_id, limit))]
@@ -1467,15 +1469,15 @@ def _copy_forecasts(con, picks, forecasts, now):
         con.execute("INSERT OR IGNORE INTO forecast_copy (forecast_id, pick_id, kind, logged_at, match_start, line, side, p_pick, "
                     "p_more, grade, units, lambda, model_version, unit_key, match_slug, player, prop, scope, source, book, "
                     "line_type, test, inputs_sha1, features, copied_at, probs_raw, data_rev, odds_source, odds_policy, "
-                    "mapping_rev, odds_selected, quote, lm0) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "mapping_rev, odds_selected, quote, lm0, cands) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (f["id"], f["pick_id"], f.get("kind"), _niso(f.get("logged_at")), _niso(f.get("match_start") or p.get("match_start")),
                      f.get("line"), f.get("pick"), f.get("p_pick"), f.get("p_more"), f.get("grade"), f.get("units"), f.get("lambda"),
                      f.get("model_version"), unit_key(p) if p else None, match_of(p) if p else None, p.get("player"), p.get("prop"),
                      p.get("scope") or "12", source_of(p) if p else None, p.get("book"), p.get("line_type"), p.get("test"),
                      f.get("inputs_sha1"), json.dumps(feat, separators=(",", ":"), default=str), _iso(now),
                      f.get("probs_raw"), f.get("data_rev"), f.get("odds_source"), o_pol, o_map, pv.get("selected"), f.get("quote"),
-                     _lm0_of(f)))
+                     _lm0_of(f), _cands_of(f)))
         last = max(last, f["id"])
         n += 1
     _set_meta(con, "last_forecast_id", last)
@@ -1900,6 +1902,96 @@ def legacy_margin_report(con, us, B=BOOT_B):
     return out
 
 
+# rm-1 / th-1 - picklog shadows from the 2-year CS2 accuracy study (CHALLENGERS.md, frozen 2026-10-23; research branch
+# research/cs2-accuracy-2y CANDIDATES.md). Reported, never promoted from this report. Forward P1 units only; decisions only at
+# the REVIEW_RULE windows (300 / 600 / 1,000 distinct matches with an eligible logged unit); th-1 also needs >= 60 cohort matches.
+CANDS_REVIEW = {
+    "rm1": {"id": "rm-1", "family": "rounds-mixture-1", "frozen_at": "2026-10-23T07:45:00+00:00", "cells": ["kills 1", "kills 123", "hs 1"],
+            "looks": [300, 600, 1000], "min_cohort_matches": 0},
+    "th1": {"id": "th-1", "family": "thin-fallback-1", "frozen_at": "2026-10-23T07:45:00+00:00", "cells": ["kills 1 (history < 150 rounds)"],
+            "looks": [300, 600, 1000], "min_cohort_matches": 60},
+}
+CANDS_RULE = ("promotion only if, at a look, the forward paired log-loss gain's 95% match-grouped interval is above 0, Brier is "
+              "not worse (point), favoured-side calibration is not worse (|gap| at most 1.0 pt worse and not significantly worse) "
+              "and coverage is identical; the Over / Under mix is reported for reading only, never a reason; the owner decides")
+
+
+def _cands_of(f):
+    """The forecast's rm-1 / th-1 shadow entries as stored JSON text (pick log json_extract, or a full shadow dict)."""
+    v = f.get("cands")
+    if v is None and f.get("shadow") is not None:
+        sh = f["shadow"]
+        try:
+            sh = json.loads(sh) if isinstance(sh, str) else sh
+        except ValueError:
+            sh = None
+        v = (sh or {}).get("cands") if isinstance(sh, dict) else None
+    if v is None:
+        return None
+    return v if isinstance(v, str) else json.dumps(v, sort_keys=True, default=str)
+
+
+def cands_report(con, us, key, B=BOOT_B):
+    """rm-1 or th-1 vs the logged live chance on the P1 units us. Every unit is counted as eligible / not eligible / not
+    logged / rejected; then paired log loss, Brier, and the favoured side (hit, mean chance, |gap|) for each arm."""
+    rv = CANDS_REVIEW[key]
+    counts, pr = collections.Counter(), []
+    for u in us:
+        r = con.execute("SELECT cands FROM forecast_copy WHERE forecast_id = ?", (u["forecast_id"],)).fetchone()
+        try:
+            e = (json.loads(r["cands"]) or {}).get(key) if r is not None and r["cands"] else None
+        except (ValueError, TypeError, AttributeError):
+            e = None
+        if e is None:
+            counts[f"not logged (forecast before {rv['id']})"] += 1
+            continue
+        if e.get("eligible") is False:
+            counts["not eligible (" + str(e.get("reason") or "?")[:60] + ")"] += 1
+            continue
+        if e.get("eligible") is not True or e.get("p_more") is None:
+            counts[f"rejected ({rv['id']} error)"] += 1
+            continue
+        lp = (e.get("live") or {}).get("p_more")
+        if lp is None or abs(float(lp) - float(u["p"])) > 1e-9:
+            counts["rejected (stored live chance differs from the P1 chance)"] += 1
+            continue
+        if u["logged"] <= rv["frozen_at"] or str(u.get("start") or "") < "2026-10-22":
+            counts["rejected (logged before the freeze / match before 2026-10-22)"] += 1
+            continue
+        pm = float(e["p_more"])
+        pr.append(dict(u, p_logged=u["p"], p_base=float(e.get("live_replay", lp)), p_ch=pm, changed=int(abs(pm - u["p"]) > 1e-9)))
+    nm = len({u["match"] for u in pr})
+    out = {"id": rv["id"], "family": rv["family"], "review": dict(rv, rule=CANDS_RULE), "counts": dict(counts),
+           "eligible_units": len(pr), "eligible_matches": nm, "next_look": next((n for n in rv["looks"] if nm < n), None),
+           "look_reached": max([n for n in rv["looks"] if nm >= n], default=None), "cohort_ok": nm >= rv["min_cohort_matches"],
+           "label": "P1 board lines, forward, eligible forecasts only - interim until a look is reached"}
+    if not pr:
+        return out
+    st = paired_stats(pr, slope=False)
+    st["gain_vs_logged_ci"] = _ci_ratio(_groups(pr, lambda u: _ll(u["p_logged"], u["over"]) - _ll(u["p_ch"], u["over"])), B=B)
+    out["paired"] = st
+    br = lambda p, y: (p - y) ** 2
+    gb = lambda u: br(u["p_logged"], u["over"]) - br(u["p_ch"], u["over"])
+    out["brier"] = {"live": _r(sum(br(u["p_logged"], u["over"]) for u in pr) / len(pr), 5),
+                    rv["id"]: _r(sum(br(u["p_ch"], u["over"]) for u in pr) / len(pr), 5),
+                    "gain": _r(sum(gb(u) for u in pr) / len(pr), 5), "gain_ci": _ci_ratio(_groups(pr, gb), B=B)}
+
+    def side(col):      # favoured side: hit rate, mean chance and |gap| per side (a tie at exactly 50% has no side - counted)
+        res = {"ties_at_50": sum(1 for u in pr if u[col] == 0.5)}
+        for s_ in ("Over", "Under"):
+            sel = [u for u in pr if (u[col] > 0.5 if s_ == "Over" else u[col] < 0.5)]
+            if not sel:
+                res[s_] = {"picks": 0}
+                continue
+            hit = sum(u["over"] if s_ == "Over" else 1 - u["over"] for u in sel) / len(sel)
+            pf = sum(u[col] if s_ == "Over" else 1 - u[col] for u in sel) / len(sel)
+            res[s_] = {"picks": len(sel), "hit": _r(hit), "mean_chance": _r(pf), "abs_gap": _r(abs(pf - hit))}
+        return res
+    out["favoured_side"] = {"live": side("p_logged"), rv["id"]: side("p_ch"),
+                            "note": "calibration by side is a promotion guard; the Over / Under mix is for reading only"}
+    return out
+
+
 # Comparison set C1 for pl-1 (registered 2026-10-15 ~03:00 UTC, before any pl-1 forward forecast had settled; an analysis
 # of pl-1's frozen shadow rows - pl-1's definition and values are unchanged). Arms on IDENTICAL book-line forecasts:
 #   A  target line only           N(L, sd_H) at L                         (pulls every chance to ~50%)
@@ -2112,6 +2204,11 @@ def product_scorecard(con, rows=None):
         out["legacy_margin"] = legacy_margin_report(con, us)
     except Exception as e:      # noqa: BLE001
         out["legacy_margin"] = {"id": LM0_REVIEW["id"], "error": f"{type(e).__name__}: {str(e)[:160]}"}
+    for k in ("rm1", "th1"):   # rm-1 / th-1 picklog shadows (CHALLENGERS.md 2026-10-23): own blocks, never affect the rest
+        try:
+            out.setdefault("candidates_2y", {})[k] = cands_report(con, us, k)
+        except Exception as e:      # noqa: BLE001
+            out.setdefault("candidates_2y", {})[k] = {"id": CANDS_REVIEW[k]["id"], "error": f"{type(e).__name__}: {str(e)[:160]}"}
     return out
 
 
@@ -2136,7 +2233,12 @@ def p1_units_export(con, now=None):
             lm = json.loads(lm["lm0"]) if lm is not None and lm["lm0"] else None
         except (ValueError, TypeError):
             lm = None
-        rows.append(dict(u, challengers=vals, lm0=lm))
+        cd = con.execute("SELECT cands FROM forecast_copy WHERE forecast_id = ?", (u["forecast_id"],)).fetchone()
+        try:                                       # rm-1 / th-1 shadow entries as stored (CHALLENGERS.md 2026-10-23)
+            cd = json.loads(cd["cands"]) if cd is not None and cd["cands"] else None
+        except (ValueError, TypeError):
+            cd = None
+        rows.append(dict(u, challengers=vals, lm0=lm, cands=cd))
     rows.sort(key=lambda u: (u["start"], u["forecast_id"]))
     return {"at": _iso(_now(now)), "protocol": PRODUCT["id"], "unit_rule": PRODUCT["unit"], "forecast_rule": PRODUCT["forecast"],
             "outcome_rule": PRODUCT["outcome"], "challengers": chs, "excluded": dict(excl), "rows": rows, "pushes": pushes}

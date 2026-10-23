@@ -5,6 +5,52 @@ same forecasts and decided only at the fixed review windows (learning.REVIEW_RUL
 matches). Passing = "eligible for review"; promotion is an explicit admin action with a recorded reason, versioned, with
 rollback. A correction or method change is a NEW family/version with its own evaluation period.
 
+## rm-1 rounds-mixture distribution and th-1 thin-history correction (families `rounds-mixture-1` / `thin-fallback-1`, versions `rm-1/2026-10-23` / `th-1/2026-10-23`; picklog shadows only)
+
+**Frozen 2026-10-23 07:45 UTC, before any forward value existed.** Source: the 2-year CS2 accuracy study (branch
+`research/cs2-accuracy-2y`: REGISTER.md rows rm-1 / th-1 registered in 6d9bb32 before any candidate number; development
+evaluation CANDIDATES.md, ec1b0a7). Both passed their registered DEVELOPMENT gate only for the cells below; development data
+were all previously inspected, so nothing is claimed until the forward review. Never shown; never changes a grade, chance or
+stake; grader.py and every file in the model_version hash are unchanged.
+
+- **rm-1 (exact).** Cells: kills Map 1, kills Maps 1-3, HS Map 1, on perf-2 / perf-2-bo3 grades. Same mean as live:
+  kills | R ~ normal(lam R / E[R], rho c sqrt(max(mu_R, 1))), mixed over R = the sum of 1 / 3 iid per-map rounds draws from the
+  frozen league pmf PI = (1 - q) P_reg + q P_ot (q = 0.11355; overtime totals 28..66 from validated round sequences incl.
+  recovered OT, 26,156 maps 2025-10-22..2026-10-21); c = the live kills spread of the forecast; rho = 0.80044 (Map 1) /
+  0.76953 (Maps 1-3). Kills chance = the live line cuts on each normal, mixed, then the live 22-78% cap. HS = the live
+  beta-binomial (kappa 100, the forecast's HS per kill) over the mixed integer kills pmf. Map 1 is the one-map case of the same
+  construction (Maps 1-2 rounds = Map 1 + Map 2 draws).
+- **th-1 (exact).** Cell: kills Map 1 on perf-2 / perf-2-bo3 grades with saved `history_rounds_weighted` < 150. lam' = lam e^a,
+  c' = c e^s; D0 (< 50 rounds) a = -0.11978, s = +0.18545; D1 (50-150) a = -0.02880, s = +0.10090; then the live normal line
+  cuts and cap. (BO3.gg-route lines use the band of their saved depth; there is no BO3.gg-specific parameter.)
+- **Constants.** `cands_shadow.py` (PI_Q, PI_REG, PI_OT, RHO, TH), sha256 of the canonical constants
+  `3d00b8c801fb160f96368e8e5b743f4d699fbac2fd920a610febef0db0744b33`; source file research/cs2_accuracy_2y/candidates/results/
+  params_FINAL.json (sha256 66a39c0c20ef2e35a5559517569ab4c3de988ec6e1a8f9ef6ffa2f10eca70c32). A change to any constant is a
+  new version with its own clock.
+- **What is stored** (`forecasts.shadow.cands = {"rm1": ..., "th1": ...}`, every appended forecast): `eligible` (False with a
+  reason and NO probability outside the cells / off perf-2), the raw Over / Under / push chances (`raw`), `p_more_model`
+  (uncapped, no push), the scored `p_more` (after the live cap - what it is judged on), `live_replay` (the live chance rebuilt
+  by the same code, a pairing check), the live grade's own `p_more`, the projection, and SEPARATELY the recommendation `rec` =
+  {side} (no grade / stake is computed for these shadows). Learning copies the entry (`forecast_copy.cands`) and reports it as
+  `scorecard.product.candidates_2y.{rm1,th1}` (`learning.cands_report`); `p1_units_export` rows carry `cands`.
+- **Forward rule (registered, REGISTER.md).** Forward set = settled P1 units of matches starting at/after the deploy (and >=
+  2026-10-22) whose P1 forecast carries an eligible entry and whose stored live chance equals the P1 chance. Looks only at
+  300 / 600 / 1,000 distinct forward matches with an eligible unit; th-1 also needs >= 60 distinct cohort matches at a look,
+  otherwise that look is skipped. Promotion needs, at a look: paired log-loss gain of P(Over | no push) vs the logged live
+  chance with its 95% match-grouped interval above 0 (pooled over the candidate's cells), Brier gain point >= 0,
+  favoured-side calibration not worse (|mean chance - hit rate| per side no more than 1.0 pt worse than live and not
+  significantly worse), coverage identical. **Never promoted for a different Over / Under mix** (rm-1 moves the mix toward
+  Unders as a by-product of the right skew: development real lines 1,259 -> 1,013 Over-favoured of 2,692 - reported, never a
+  reason), never by lowering chances without this validated correction; the owner decides (new MODEL_VERSIONS entry, rollback).
+- **Development expectation, stated before the clock starts.** rm-1's development real-line effect on its cells was +0.0029
+  (-0.0073..+0.0125) on 297 units / 21 matches - i.e. no detectable line gain; its HLTV gain is in the distribution shape
+  (Map 1 kills +0.042 nats, every fold > 0). th-1's development real-line cell had 10 units / 5 matches; the 60-cohort-match
+  minimum may not be reached before the 1,000-match look, in which case it stays a shadow ("not enough forward evidence").
+- **Code.** `cands_shadow.py` (`entries`, `rm1_entry`, `th1_entry`), called from `picklog._factors`; `learning.CANDS_REVIEW`,
+  `learning.cands_report`. Tests: tests/test_cands_shadow.py (live grades byte-identical, cells / eligibility, mean kept, Map 1
+  = one-map case, values equal the research implementation, learning copy + report). Parity on the 2,692 development P1 units
+  with the research code (F6 constants): max |difference| 5e-7 (rm-1, 297 eligible) / 4e-7 (th-1, 10 eligible).
+
 ## lm-0 - legacy pipeline without the Over margin (family `legacy-margin-0`, version `lm-0/2026-10-23`; picklog shadow only)
 
 **Frozen 2026-10-23 06:08 UTC, before any lm-0 value existed and before any outcome was looked at.** Owner decision: the live
