@@ -63,6 +63,12 @@ ROUTES = {
     "/api/sports/player": ("sports.api_board:player", MEMBER, ("GET",)),
     "/api/sports/history": ("sports.api_board:history", MEMBER, ("GET",)),
     "/api/sports/results": ("sports.api_board:results", MEMBER, ("GET",)),
+    "/api/sports/assistant/status": ("sports.api_assist:status", MEMBER, ("GET",)),
+    "/api/sports/assistant/ask": ("sports.api_assist:ask", MEMBER, ("GET", "POST")),
+    "/api/sports/assistant/stream": ("sports.api_assist:stream", MEMBER, ("GET",)),
+    "/api/sports/assistant/cancel": ("sports.api_assist:cancel", MEMBER, ("GET", "POST")),
+    "/api/sports/admin/assistant": ("sports.api_assist:admin_status", ADMIN, ("GET",)),
+    "/api/sports/admin/lab/*": ("sports.api_lab:route", ADMIN, ("GET", "POST")),
 }
 # ---------------------------------------------------------------------------------------------------- end of table
 

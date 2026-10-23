@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scout Sports - Model lab (admin)</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/sports/lab.css">
+</head>
+<body style="margin:0">
+<div class="lab-root" id="lab-root">
+  <div class="lab-wrap">
+    <header>
+      <h1>Model lab <span class="lab-tag">admin</span></h1>
+      <p class="lab-sub">Experiments train in the lab runner, never here. A result counts only if it replays from its
+        saved inputs. Lab models never replace production.</p>
+    </header>
+
+    <section class="lab-panel" id="lab-auth">
+      <label for="lab-token">Admin token</label>
+      <div class="lab-row"><input id="lab-token" type="password" autocomplete="off">
+        <button class="lab-btn" id="lab-login" type="button">Open lab</button></div>
+      <p class="lab-meta">Kept for this tab only (sessionStorage); sent as a header, never in a URL.</p>
+    </section>
+
+    <div id="lab-main" class="lab-hidden">
+      <section class="lab-panel">
+        <h2>Data and registry</h2>
+        <div id="lab-sources" class="lab-meta"></div>
+      </section>
+
+      <section class="lab-panel">
+        <h2>New experiment</h2>
+        <form id="lab-form" class="lab-grid">
+          <label>League <select name="league"><option>nba</option><option>nfl</option></select></label>
+          <label>Target stat <select name="stat"></select></label>
+          <label>Data source <select name="source"><option>ds-1</option><option>canonical</option></select></label>
+          <label>Algorithm <select name="algorithm"></select></label>
+          <label>Train from <input name="train_start" type="date" required></label>
+          <label>Train until <input name="train_end" type="date" required></label>
+          <label>Tune until <input name="tune_end" type="date" required></label>
+          <label>Test until <input name="test_end" type="date" required></label>
+          <label>Seed <input name="seed" type="number" min="0" value="20261023"></label>
+          <label>Min earlier games <input name="min_prior" type="number" min="1" max="40" value="5"></label>
+          <fieldset class="lab-feats"><legend>Features</legend><div id="lab-feats"></div></fieldset>
+          <div class="lab-row"><button class="lab-btn" type="submit">Queue</button><span id="lab-form-msg" class="lab-meta" role="status"></span></div>
+        </form>
+      </section>
+
+      <section class="lab-panel">
+        <h2>Experiments</h2>
+        <div class="lab-scroll"><table class="lab-table" id="lab-list"></table></div>
+      </section>
+
+      <section class="lab-panel lab-hidden" id="lab-detail" aria-live="polite"></section>
+    </div>
+    <p id="lab-status" class="lab-meta" role="status"></p>
+  </div>
+</div>
+<script src="/sports/lab.js"></script>
+</body>
+</html>
