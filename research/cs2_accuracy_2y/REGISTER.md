@@ -19,6 +19,7 @@ the untouched confirmation set (forward).
 ## Experiment register
 | id | date registered | hypothesis | data / split | primary metric | promotion rule | status | result |
 |---|---|---|---|---|---|---|---|
+| UT-1 | 2026-10-22 | Under concentration trace: the share of 55%+ P1 picks that are Under, the step-by-step decomposition of projection - line (perf-2 rate / prior shrink / environment blend / opponent factor / rounds; cm-2 features; grader), and whether the direction and confidence are justified by settled outcomes; implementation-bug hunt (sign, double application, rounds, stale inputs) | P1 units (learning p1_units export, latest standard board forecast >= 30 min before start, pushes excluded+counted) joined to each forecast's saved grader inputs (forecasts_page inputs=1); HLTV DB read-only for repros. Diagnostic only - DEVELOPMENT data, no model is fitted or compared for promotion | share Under; mean(proj-line), mean(actual-line), mean(actual-proj) with match-grouped bootstrap 95% CI (B=2000); printed vs won by band/side | none (diagnostic; any bug goes to a separate fix with its own version + regression test) | running | UNDER_TRACE.md |
 
 ## Prior experiments (already run - do not repeat; see phase-0 digest)
 (to be filled by phase 0)
