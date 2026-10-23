@@ -251,6 +251,35 @@ def shadow_alts(gi):
     return alts
 
 
+# lm-0 (CHALLENGERS.md, frozen 2026-10-23 06:08 UTC): the old pipeline with its Over / Under margins neutralised, on the
+# same saved inputs. Shadow only - the live CONFIG keeps over_margin 1.0 / 0.6 (owner decision).
+LM0 = {"id": "lm-0", "family": "legacy-margin-0", "version": "lm-0/2026-10-23",
+       "keys": {"over_margin": {"kills": 0.0, "hs": 0.0}, "under_margin": {"kills": 0.0, "hs": 0.0}}}
+
+
+def legacy_margin_shadow(gi, g):
+    """lm-0 entry for one live grade g graded from inputs gi. Eligible only when the LIVE grade is on the old pipeline
+    (projection_source 'legacy ...'); a performance-model grade gets an explicit not-eligible entry with no probability.
+    Raw outcome chances and the recommendation (side / grade / units) are stored apart."""
+    from grader import CONFIG, grade_leg
+    src = str((g or {}).get("projection_source") or "")
+    out = {"id": LM0["id"], "version": LM0["version"], "live_source": src or None}
+    if not src.startswith("legacy"):
+        return dict(out, eligible=False, reason="live grade not on the old pipeline (the margin never applies)")
+    gg = grade_leg(gi, dict(CONFIG, **{k: dict(v) for k, v in LM0["keys"].items()}))
+    gsrc = str(gg.get("projection_source") or "")
+    if not gsrc.startswith("legacy") or "p_more" not in gg:
+        return dict(out, eligible=False, source=gsrc or None, reason="regrade not on the old pipeline (inputs differ)")
+    import pick_verdict
+    v = pick_verdict.verdict(gg)
+    side = {"More": "Over", "Less": "Under"}.get(v.get("side"), v.get("side"))
+    return dict(out, eligible=True, source=gsrc, p_more=gg.get("p_more"), p_more_model=gg.get("p_more_model"),
+                raw=gg.get("probs_raw"), **{"lambda": gg.get("lambda_final")},
+                rec={"side": side, "grade": v.get("grade"), "units": v.get("units")},
+                live={"p_more": (g or {}).get("p_more")},
+                changed=(g or {}).get("p_more") != gg.get("p_more"))
+
+
 def _factors(res):
     """Every input and every adjustment behind this grade (for measuring each factor later)."""
     gi, g, pb = res.get("grader_inputs") or {}, res.get("grade") or {}, res.get("player_block") or {}
@@ -285,6 +314,11 @@ def _factors(res):
                                    "raw": gg.get("probs_raw"), "source": gg.get("projection_source")}
     except Exception:
         pass
+    try:   # lm-0 (shadow, 2026-10-23): the old pipeline without its Over margin - eligible old-pipeline grades only
+        out.setdefault("shadow", {})["lm0"] = legacy_margin_shadow(gi, g)
+    except Exception as e:     # noqa: BLE001 - a shadow never stops the pick log
+        out.setdefault("shadow", {})["lm0"] = {"id": LM0["id"], "version": LM0["version"], "eligible": None,
+                                               "error": f"{type(e).__name__}: {str(e)[:120]}"}
     try:   # shared-match challenger M1 (shadow, 2026-10-09): one simulated match per forecast - logged, never shown
         import match_model
         pf = gi.get("perf") if isinstance(gi.get("perf"), dict) else {}

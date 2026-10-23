@@ -17,6 +17,9 @@ what the same grader would have said with the margin neutralised. It is never sh
   form-fight halving, the tape fight, stakes and grade bands are the live ones. `under_margin` is already 0 / 0 live; it is set
   to 0 only so the comparison stays margin-free if that key ever changes. The margin acts only on a favoured Over
   (`pm > 0.5`), so an Under-favoured line has the same chance in both arms (it stays in the cohort, as an unchanged unit).
+  Consequence noted at implementation (same day, no outcome seen; the definition is unchanged): because the form-fight rule
+  runs after the margin, an Over that reaches 57% only without the margin can trigger the form-fight halving and 0 units
+  in lm-0, so lm-0 can print a LOWER Over chance than live (seen on 1 of 53 replayed production forecasts).
 - **Eligibility.** Only forecasts whose LIVE grade has `projection_source` starting with `legacy` (the old pipeline: the
   performance model was unavailable for that line). perf-2 / perf-2-bo3 / perf-cm2 grades never use the margin; they are
   logged as `{"eligible": false, "live_source": ...}` with NO lm-0 probability - never as an identical copy - and never enter
@@ -33,7 +36,8 @@ what the same grader would have said with the margin neutralised. It is never sh
   and counted.
 - **Review window.** Forward settled eligible P1 units only. Minimum **30 distinct matches and 60 units** before any reading
   beyond "interim". Why so few and why it will still be slow: legacy grades are rare - the bounded `forecasts_page` read of
-  the last 30,000 production forecasts (2026-10-16 to 10-23) found 53 legacy forecasts on 16 picks, of which 0 were P1 units
+  the last 30,000 production forecasts (2026-10-16 to 10-23) found 51 old-pipeline forecasts on 15 picks (confirmed by
+  replaying their saved inputs), of which 0 were P1 units
   (member lines, or logged less than 30 minutes before the start). A larger window is not reachable in any useful time; a
   smaller one cannot separate a few points of probability. Even at 30 matches the interval is expected to be wide: the
   likely honest outcome is "no detectable difference", and that is a valid result. If the minimum is not reached by
