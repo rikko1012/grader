@@ -1,5 +1,23 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
+## Night release 2026-10-23 (CS2 model tag unchanged: `aa6696d5d6`; operational + identity repairs, no model change)
+
+Owner-authorized consolidated release. Replay harness: 257 recent production forecasts (tag aa6696d5d6; perf-cm2 kills/HS,
+perf-2-bo3, legacy) regraded with the release code -> 257 identical chance / grade / stake / projection (pick_verdict as logged).
+- **LP -> BARCA (match-rules-3, mapping revision map-f6f61118424b):** team_aliases.json "renames": HLTV team 13304 (LP) ->
+  14107 (BARCA) valid from 2026-10-21, applied only when LP has no own HLTV match in the window and BARCA has exactly one match vs
+  that opponent; never a name alias; LP history unchanged. Evidence: LP's last match 2399205 (2026-10-14), BARCA's first 2399805 /
+  2399808 (2026-10-21), the same five player ids in LP's last four and BARCA's two matches. Effect: the PrizePicks 'LP vs paiN'
+  lines (2026-10-21) link to hltv:2399805 and can settle; a Thunderpick quote for that match can now link.
+- **lm-0 shadow (CHALLENGERS.md, frozen 2026-10-23 06:08 UTC):** the legacy Over margin stays 1.0 kills / 0.6 HS live; a shadow
+  regrade with the margins at 0 is logged for legacy-pipeline grades only (raw Over/Under/push stored apart from side/grade/units).
+- **Board / card / match table / slip consistency:** card carries graded_model + match_id; one pick = one slip identity across
+  board / card / Studio; card slip legs keep the platform's start; "excl. push" on whole-number lines everywhere; "Your side" vs
+  "Graded pick" labelled when a card is opened on the other side. Display only.
+- **Moneyline snapshot store (mlstore-1):** writes had stopped at a 500 MB FILE-size cap (628 MB); cap now on pages in use (900 MB)
+  + a 400 MB free-disk floor; raw quotes > 7 days archived to verified gzip files (rows used by evaluation kept live; deletes only
+  after a verified manifest); the outage interval is recorded per platform in ml_gaps (no backfill - no genuine copy exists).
+
 ## `aa6696d5d6` — bug-fix release (no model change): CS2 accuracy audit fixes (cs2acc-1), 2026-10-23
 
 Base: `f663af8917`. Bug-fix release (no model change): no parameter, coefficient, band, threshold, cap or factor changed; the
