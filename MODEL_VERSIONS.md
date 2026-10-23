@@ -1,5 +1,26 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
+## Closeout release 2026-10-23 (CS2 model tag unchanged: `aa6696d5d6`; settlement / identity / slips / storage, no model change)
+
+No grade, chance, stake, threshold or frozen experiment changed. Evidence: research/cs2_accuracy_2y/ (LP_BARCA_EVIDENCE.md,
+PLATFORM_RULES.md, SHADOW_CONTRACTS.md, OT_RECONCILIATION.md, corrections/).
+- Team identity `match-rules-4` (new mapping revision): LP 13304 -> BARCA 14107 from 2026-10-20 18:00 UTC (team's announcement +
+  Liquipedia); never while LP has any HLTV match of its own in the window; settling a renamed link needs >= 4 of LP's five HLTV
+  player ids in BARCA's lineup, otherwise the pick stays pending (never voided by the clock).
+- Settlement per platform (platform_rules.py, Underdog published rules): a forfeit voids only inside the line's maps; a no-show on
+  a played in-scope map voids. PrizePicks CS2 rules are in-app only: those forfeit / partial no-show cases stay pending
+  (result.rule_pending), never guessed. Lines with no platform keep the previous rule.
+- Entry rules: both platforms need picks from 2+ teams (batch builder `batch-4`, manual slip copy and /api/slip_log refuse
+  one-team entries; Studio already one pick per team); Underdog same player same side refused; unverified combinations are
+  recorded for admin only.
+- Slips: one lock rule everywhere = the earlier of the platform's listed start and the graded match start (never identity);
+  identity = match_id, else slug, else teams + UTC date; a slip's combined chance = product of each leg's SHOWN chance x (1 -
+  push), so the old pipeline's FORM FIGHT halving (which changes the shown chance) is the chance the slip uses.
+- Moneyline store `mlstore-2`: one lookup over live + archived quotes; archive moves re-verified before delete (crash-safe);
+  alerts for stopped writes (> 30 min), live size > 80% of cap, disk < 1.5x floor (admin / health only); the 2026-10-17..23
+  gap rows stay immutable.
+- cands_report prints each reached look on its frozen first-W cohort (report only).
+
 ## Shadow logging: rm-1 / th-1 (CS2 model tag unchanged: `aa6696d5d6`), 2026-10-23 - shadow only, no model change
 
 rm-1 (rounds-mixture distribution: live mean, kills mixed over a pre-match rounds + overtime distribution; logged for kills Map 1,
