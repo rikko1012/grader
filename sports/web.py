@@ -19,8 +19,19 @@ ROUTE TABLE CONTRACT (stable - other agents add exactly ONE line per route to RO
       req.role ("member" | "admin"), req.rest (prefix routes), req.json() (parsed POST body or {}).
   Keep handlers cheap: answer from precomputed snapshots; use web.cached(key, fn) (single-flight TTL cache) for shared
   answers and web.store_ro() (bounded read-only connection pool with a hard per-query time budget) for store reads.
-  Never write the store from a handler - the worker process owns writes. Member-specific answers must not be put in the
-  shared cache under a key that lacks req.member.
+  Member-specific answers must not be put in the shared cache under a key that lacks req.member.
+
+  HEAVY SHARED ANSWERS (> ~100 ms to build): register them in SNAPSHOTS below (sports/prebuilt.py) so the worker
+  side prebuilds them; web.cached then serves the prebuilt value and only falls back to building on a miss.
+
+  WRITE PATH (blessed 2026-10-23, service agent): a handler never writes the canonical store or any SQLite file. The
+  ONLY write a handler may cause is a SPOOL: a bounded, non-blocking in-memory queue (full = dropped + counted) drained
+  by one writer thread that appends JSON lines to <SPORTS_DATA_DIR>/<name>_spool/<UTC date>.jsonl with a per-day byte
+  cap; the worker side loads spools into its own database (idempotent, resumable) on the SCHEDULE in
+  sports/service.py. Transport = the shared disk: the service and the worker child run in ONE Render service
+  (scout-sports-api) on ONE disk. If the worker is ever split into its own Render service, spools must move to a
+  push transport (HTTP POST to the worker) - a Render disk cannot be shared. Reference implementation:
+  sports/slips/log.py (2,000-entry queue, 50 MB/day).
 
 Also: handle(path, query, allowed, admin) - the legacy in-process entry (SPORTS_API_MODE=inprocess, dev / tests only;
 measured +51% esports p99 at 700 members, foundation 2026-10-23) - and page bytes for /sports.
@@ -58,6 +69,14 @@ ROUTES = {
     "/api/sports/admin/slips/log": ("sports.api_slips:admin_log", ADMIN, ("GET",)),
 }
 # ---------------------------------------------------------------------------------------------------- end of table
+
+# ---------------------------------------------------------------------------------------------- SNAPSHOT TABLE
+# "<name>": ("<module>:<function>", refresh_s, max_age_s) - function(con) -> {web.cached key tuple: value}, key[0] ==
+# name. Built by the scheduled worker child (python -m sports.service snapshots), read by web.cached. ONE line each.
+SNAPSHOTS = {
+    "slips_pool": ("sports.prebuilt:slips_pool", 45, 90),
+}
+# ------------------------------------------------------------------------------------------- end of snapshot table
 
 CACHE_S = 30
 CACHE_MAX = 256
@@ -99,6 +118,11 @@ def cached(key, fn, ttl=None):
     the load and the rest wait (at most REQUEST_BUDGET_S) for its answer (measured 2026-10-23: without it, 466
     simultaneous misses ran 466 store queries and pushed the web process to 271 MB). Bounded to CACHE_MAX entries."""
     ttl = CACHE_S if ttl is None else ttl
+    if isinstance(key, tuple) and key and key[0] in SNAPSHOTS:
+        from . import prebuilt
+        val = prebuilt.lookup(key)
+        if val is not prebuilt.MISS:
+            return val
     now = time.time()
     with _LOCK:
         hit = _CACHE.get(key)
