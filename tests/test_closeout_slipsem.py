@@ -134,8 +134,9 @@ CARD = lambda start, ms, lock=None, book=None, slug="alka-vs-los-ninos", mid=Non
 
 @needs_node
 def test_card_leg_locks_at_the_earlier_start_and_keeps_its_identity(tmp_path):
-    soon, later = iso(REAL + timedelta(minutes=1)), iso(REAL + timedelta(minutes=11))
-    past = iso(REAL - timedelta(minutes=1))
+    now = datetime.now(timezone.utc)                               # not the module's REAL: the full suite reaches this > 1 min later
+    soon, later = iso(now + timedelta(minutes=30)), iso(now + timedelta(minutes=40))
+    past = iso(now - timedelta(minutes=1))
     out = run_page(tmp_path, """(() => {
       const a = legFrom(INPUT.later_platform), b = legFrom(INPUT.earlier_platform), c = legFrom(INPUT.graded_started);
       return {a: [a.st, lockIso(a)], b: lockIso(b), started: [legStarted(a), legStarted(c)], ids: [a.m, a.mid, c.m]};
