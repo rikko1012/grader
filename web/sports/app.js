@@ -881,8 +881,24 @@
           if (c.value === null || c.value === undefined) return "";
           return "<li>" + esc(c.label) + ": <b>" + esc(c.value) + "</b></li>";
         }).join("") + "</ul>" +
-          '<p class="sw-faint sw-small">Not in Scout data: ' + esc(F.not_held.join(", ")) + ".</p></div></div></section>";
+          "</div></div>" + engineContext(F.engine, mk) + '<p class="sw-faint sw-small">Not in Scout data: ' +
+          esc(F.engine && F.engine.not_held ? F.engine.not_held.map(function (x) { return x.factor + " (" + x.reason + ")"; }).join(", ") : F.not_held.join(", ")) + ".</p></section>";
         return h;
+      }
+
+      function engineContext(E, mk) {                // factor-engine values (sports-factors/1), descriptive only
+        if (!E) return "";
+        var rows = (E.by_stat || {})[mk.stat] || [];
+        if (!rows.length) return E.why_none ? '<p class="sw-faint sw-small">Matchup context: ' + esc(E.why_none) + ".</p>" : "";
+        var groups = {}, order = [];
+        rows.forEach(function (r) { if (!groups[r.group]) { groups[r.group] = []; order.push(r.group); } groups[r.group].push(r); });
+        function val(v) { return typeof v === "boolean" ? (v ? "yes" : "no") : typeof v === "number" ? S.num(v, Math.abs(v) < 10 ? 2 : 1) : esc(String(v)); }
+        return '<details class="sw-more" open><summary>' + esc(E.label) + " · " + rows.length + " values as of " + esc(S.localTime(E.as_of)) + '</summary><div class="sw-scroll"><table class="sw-mini"><caption class="sw-sr">Matchup and role context for ' + esc(mk.stat_label) + '</caption><thead><tr><th>Factor</th><th class="num">Value</th><th>Source</th></tr></thead><tbody>' +
+          order.map(function (g) {
+            return '<tr><th colspan="3" class="sw-small">' + esc(g) + "</th></tr>" + groups[g].map(function (r) {
+              return "<tr><td>" + esc(r.label) + (r.status === "proxy" ? ' <span class="sw-faint sw-small">(proxy)</span>' : "") + '</td><td class="num">' + val(r.value) + '</td><td class="sw-small sw-faint">' + esc(r.source || "") + "</td></tr>";
+            }).join("");
+          }).join("") + '</tbody></table></div><p class="sw-faint sw-small">' + esc(E.label) + ": values only, no weights. Only games finished and lines observed before " + esc(S.localTime(E.as_of)) + " are used.</p></details>";
       }
 
       function evidencePanel(P, fc, games, mk, err) {

@@ -170,7 +170,7 @@ def test_factors_have_sample_sizes_and_unheld_factors_are_named(built):
     ctx = {c["key"]: c for c in p["factors"]["context"]}
     assert ctx["teammates_out"]["value"] == 1 and ctx["teammates_out"]["items"][0]["status"] == "questionable"
     assert ctx["venue"]["value"] == "away" and ctx["back_to_back"]["value"] is False
-    assert "Usage rate" in p["factors"]["not_held"]
+    assert "Likely defender" in p["factors"]["not_held"] and "Usage rate" not in p["factors"]["not_held"]
 
 
 def test_slate_has_coverage_injuries_and_start_provenance(built):

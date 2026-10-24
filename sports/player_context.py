@@ -1,0 +1,157 @@
+"""Player-page context factors from the factor engine (sports/games/factors.py, contract sports-factors/1), built in
+the WORKER inside the snapshot build (sports/snapshots.build) - never in the web process.
+
+One LeagueData load per board (the engine's own rule), one factors.compute per (player, stat) on the board. The engine
+owns the point-in-time rules (a game's result only once it ENDED before as_of, snapshots / lines only if observed
+before it, EPA only with an expected-points table trained on earlier games). Values only - no weights. These values are
+descriptive context: the Scout model does not use them (its own inputs are the forecast's saved input row), so every
+value is labelled CONTEXT_LABEL until a registered factor test promotes a factor into a model version.
+
+NFL snap share: the engine's game store has no snap counts, but nflverse snap counts (free, CC-BY) are in the model's
+forward history copy (<SPORTS_DATA_DIR>/model/fwd/history.db, refreshed by the forecast job), read here read-only with
+the same point-in-time rule as the model (game start + 6 h <= as_of).
+
+Everything is best effort: no games store, no history copy or any error -> the section says why, the build never fails.
+"""
+from __future__ import annotations
+
+import os
+import sqlite3
+import time
+from datetime import timedelta
+
+from . import config
+from .contracts import parse_utc
+
+CONTEXT_LABEL = "Context - not yet in the Scout model"
+ENGINE_VERSION = "player-context-1"
+# owner factor-list items no source we hold has - one-word reason each (everything else comes from the engine)
+NOT_HELD = {
+    "basketball": [("Likely defender", "tracking"), ("On/off splits", "licensed"),
+                   ("Potential assists", "tracking"), ("PFF / NGS / Second Spectrum data", "licensed")],
+    "football": [("Coverage scheme (man / zone, shells)", "licensed"), ("PFF / NGS / DVOA", "licensed"),
+                 ("Defender matchup", "licensed"), ("Route participation / TPRR", "unpublished")],
+}
+SNAP_KNOWN_AFTER_H = 6
+
+
+def _tail(record_id):
+    return str(record_id).rsplit(":", 1)[-1] if record_id else None
+
+
+def _games_db():
+    from .games import store as gstore
+    if not os.environ.get("SPORTS_DB_DSN") and not (config.DATA_DIR / "games.db").exists():
+        return None
+    return gstore.connect()
+
+
+def _snap_share(hist_path, athlete_ids, as_of):
+    """{espn athlete id: {"snap_share_l3", "snap_share_season", "games", "through"}} from nflverse snap counts."""
+    out = {}
+    if not athlete_ids or not hist_path.exists():
+        return out
+    cut = (parse_utc(as_of) - timedelta(hours=SNAP_KNOWN_AFTER_H)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    con = sqlite3.connect(f"file:{hist_path.as_posix()}?mode=ro", uri=True, timeout=10)
+    try:
+        ids = sorted(athlete_ids)
+        for i in range(0, len(ids), 400):
+            part = ids[i:i + 400]
+            rows = con.execute(
+                "SELECT i.espn_id, p.offense_pct, g.start_utc, g.season FROM nfl_ids i JOIN nfl_pg p ON p.player_id = "
+                "i.gsis_id JOIN games g ON g.league = 'nfl' AND g.game_id = p.game_id WHERE g.status = 'final' AND "
+                f"g.start_utc <= ? AND p.offense_pct IS NOT NULL AND i.espn_id IN ({','.join('?' * len(part))}) "
+                "ORDER BY g.start_utc", [cut] + part).fetchall()
+            by = {}
+            for esp, pct, st, season in rows:
+                by.setdefault(str(esp), []).append((pct, st, season))
+            for esp, xs in by.items():
+                season = xs[-1][2]
+                sv = [x[0] for x in xs if x[2] == season]
+                l3 = [x[0] for x in xs[-3:]]
+                out[esp] = {"snap_share_l3": round(sum(l3) / len(l3), 4), "snap_share_season": round(sum(sv) / len(sv), 4),
+                            "games_season": len(sv), "through": xs[-1][1]}
+    finally:
+        con.close()
+    return out
+
+
+def build(league, fam, now, wanted, hist_path=None):
+    """wanted: {player record id: {"team_id", "opp_id", "event_id", "start_utc", "home", "stats": [..]}}
+    -> ({player id: section}, summary). A section: {"label", "contract", "as_of", "by_stat": {stat: [{key, label,
+    group, value, source, status}]}, "missing": {stat: {key: reason}}, "not_held": [{factor, reason}]}."""
+    t0 = time.time()
+    summ = {"version": ENGINE_VERSION, "players": 0, "computed": 0, "state": "ok"}
+    out = {}
+    if not wanted:
+        return out, dict(summ, state="no players")
+    try:
+        db = _games_db()
+    except Exception as e:                                       # noqa: BLE001 - context never breaks a build
+        db, summ["state"] = None, f"games store unavailable: {type(e).__name__}"
+    snaps = {}
+    if fam == "football":
+        try:
+            snaps = _snap_share(hist_path or (config.DATA_DIR / "model" / "fwd" / "history.db"),
+                                {_tail(p) for p in wanted}, now)
+        except (sqlite3.Error, OSError) as e:
+            summ["snap_share"] = f"unavailable: {type(e).__name__}"
+    data = None
+    if db is not None:
+        try:
+            from .games import contract, factors
+            data = factors.LeagueData(db, league, parse_utc(now))      # ONE load per board
+            reg = contract.REGISTRY[league]
+        except Exception as e:                                   # noqa: BLE001
+            summ["state"] = f"engine failed: {type(e).__name__}: {str(e)[:120]}"
+            data = None
+    for pid, w in wanted.items():
+        ath = _tail(pid)
+        sec = {"label": CONTEXT_LABEL, "contract": None, "as_of": now, "by_stat": {}, "missing": {},
+               "not_held": [{"factor": f, "reason": r} for f, r in NOT_HELD[fam]]}
+        if data is not None and w.get("event_id") and w.get("team_id") and w.get("opp_id"):
+            for stat in w.get("stats") or ():
+                try:
+                    pay = factors.compute(db, data, ath, _tail(w["team_id"]), _tail(w["opp_id"]), _tail(w["event_id"]),
+                                          w["start_utc"], stat, home=w.get("home"))
+                except Exception as e:                           # noqa: BLE001 - one player never stops the board
+                    sec["missing"][stat] = {"*": f"engine error: {type(e).__name__}"}
+                    continue
+                summ["computed"] += 1
+                sec["contract"], sec["as_of"] = pay["contract"], pay["as_of"]
+                rows = []
+                for k, v in pay["factors"].items():
+                    spec = reg.get(k)
+                    if spec is None:                             # helper fields (e.g. blowout_strike, provider)
+                        continue
+                    rows.append({"key": k, "label": spec["label"], "group": spec["group"], "value": v,
+                                 "source": spec["source"], "status": spec["status"]})
+                sec["by_stat"][stat] = rows
+                sec["missing"][stat] = {k: r for k, r in pay["missing"].items()
+                                        if (reg.get(k) or {}).get("status") != "unavailable"}
+        elif data is None:
+            sec["why_none"] = summ["state"] if summ["state"] != "ok" else "game store not present on this host"
+        else:
+            sec["why_none"] = "no upcoming game for this player in the store"
+        sn = snaps.get(ath)
+        if sn:
+            src = "nflverse snap counts (PFR, CC-BY 4.0)"
+            extra = [{"key": "snap_share_l3", "label": "Snap share L3", "group": "Usage & role",
+                      "value": sn["snap_share_l3"], "source": src, "status": "collected", "through": sn["through"]},
+                     {"key": "snap_share_season", "label": "Snap share season", "group": "Usage & role",
+                      "value": sn["snap_share_season"], "source": src, "status": "collected", "through": sn["through"],
+                      "n": sn["games_season"]}]
+            for stat in (w.get("stats") or ()):
+                sec["by_stat"].setdefault(stat, [])
+                sec["by_stat"][stat] = [r for r in sec["by_stat"][stat] if r["key"] != "snap_share"] + extra
+                sec["missing"].get(stat, {}).pop("snap_share", None)
+        out[pid] = sec
+        summ["players"] += 1
+    if db is not None:
+        try:
+            db.close()
+        except Exception:                                       # noqa: BLE001
+            pass
+    del data
+    summ["build_s"] = round(time.time() - t0, 2)
+    return out, summ
