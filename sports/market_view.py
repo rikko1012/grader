@@ -4,6 +4,10 @@ consensus by the mc-1 RULE - built in the WORKER (sports/snapshots.py), never in
 Owner decision 2026-10-23: every book we hold is a PRIMARY market source. The board's headline "Market (N books)" is
 therefore the mc-1 combination rule (sports/model/market.py, frozen 2026-10-23) applied to every VERIFIED source on the
 row: Kalshi, Polymarket, each Odds API book (oddsapi:<book>) and the books' own feeds (fanduel, betrivers).
+  - DISPLAY FRESHNESS = OBSERVED AGE: a quote counts when Scout re-read it and found it unchanged within 15 min,
+    whatever the book's own last-change time (BetRivers' changedDate on a steady price can be hours old). This is the
+    only difference from the registered mc-1 forecasts, which keep the source-time age; source time still orders
+    revisions and detects late answers (LINE_CORRECTNESS.md).
   - per source, the frozen eligibility filters of market.quote_prob (fresh <= 15 min, before the start, open, two-sided
     priced pair de-vigged multiplicatively per book; Kalshi = eligible rung YES midpoint; Polymarket = two-sided YES
     midpoint, spread <= 0.05, liquidity > 0, divided by 1 - DNP share);
@@ -25,6 +29,7 @@ A book that is shown but not in the consensus carries the frozen filter's reason
 """
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
 
@@ -131,8 +136,13 @@ def book_list(target, items, event, now, dnp):
         ok_src, why_src = source_status(plat)
         p, why = (None, why_src)
         if ok_src:
-            p, why = market.quote_prob(q, event, now, meta.get("last_seen_at"),
-                                       dnp if plat == "polymarket" else 0.0, meta.get("last_source_updated_at"))
+            # DISPLAY freshness = OUR observation age (re-read and confirmed within 15 min); the source's own change
+            # time is not used here, so a steady price re-read minutes ago is current. The registered mc-1 / mi-1
+            # forecasts keep market.quote_prob's source-time age unchanged (REGISTER.md 10); ordering and late
+            # detection keep using source time (LINE_CORRECTNESS.md).
+            qd = dataclasses.replace(q, source_updated_at=None) if q.source_updated_at else q
+            p, why = market.quote_prob(qd, event, now, meta.get("last_seen_at"),
+                                       dnp if plat == "polymarket" else 0.0, None)
         out.append({"p": plat, "l": line, "rid": rid, "kind": r["kind"], "c": r["c"], "over": r["over"],
                     "under": r["under"], "t": seen, "su": meta.get("last_source_updated_at") or q.source_updated_at,
                     "age": _age(now, seen), "in": p is not None, "pc": p, "why": None if p is not None else why})

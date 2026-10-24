@@ -155,6 +155,7 @@
   function mkSource(mk, c) {                            // the market estimate's record, one click away
     var now = Date.now(), hid = S.hiddenBooks(mk, now);
     return src({title: "Market estimate (" + (c ? S.plural(c.n, "book") : "no book") + ")",
+      freshness: "observed age: a book counts when Scout re-read its price within the last 15 min (unchanged prices included), whatever the book's own last-change time",
       rule: "mc-1 rule: equal-weight log-odds of eligible books (fresh <= 15 min, both sides priced or an exchange midpoint), each book's nearest line moved to this line with the stat's measured spread; the line's own book never counts for itself",
       "books counted": ((c && c.used) || []).map(bookName),
       "each book": S.usableBooks(mk, now).map(function (b) { return bookName(b.p) + " " + S.line(b.l) + ": " + S.bookPrice(b) + " -> Over " + S.bookChance(b) + " (" + S.age(b.t) + ")"; }),
