@@ -332,25 +332,31 @@ FILE_MAX_AGE_H = 20          # a downloaded release file is reused for this long
 
 
 def _download(con, name, url, gz=False):
-    """GET one nflverse release file -> text (decompressed). Records sha256 / size in table files. The raw file is kept
-    under <SPORTS_DATA_DIR>/model/files/ and reused while younger than FILE_MAX_AGE_H (no repeated downloads)."""
+    """GET one nflverse release file -> a text stream (decompressed on the fly). Records sha256 / size in table files.
+    The raw file is kept under <SPORTS_DATA_DIR>/model/files/ and reused while younger than FILE_MAX_AGE_H (no repeated
+    downloads). Read from disk as a stream, never decoded whole: one play-by-play season is ~19 MB gzipped but several
+    hundred MB as one Python string - past the Starter worker's memory (OOM-killed at a 340 MB cgroup)."""
     local = db_path().parent / "files" / name
-    if local.exists() and time.time() - local.stat().st_mtime < FILE_MAX_AGE_H * 3600:
-        data = local.read_bytes()
-    else:
+    if not (local.exists() and time.time() - local.stat().st_mtime < FILE_MAX_AGE_H * 3600):
         data = net.get(url, timeout=180).content
         local.parent.mkdir(parents=True, exist_ok=True)
         local.write_bytes(data)
+        del data
+    h, size = hashlib.sha256(), 0
+    with local.open("rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+            size += len(chunk)
     con.execute("INSERT OR REPLACE INTO files (name, url, fetched_at, sha256, bytes, rows) VALUES (?,?,?,?,?,NULL)",
-                (name, url, now_utc(), hashlib.sha256(data).hexdigest(), len(data)))
+                (name, url, now_utc(), h.hexdigest(), size))
     con.commit()
-    if gz:
-        data = gzip.decompress(data)
-    return data.decode("utf-8", errors="replace")
+    return io.TextIOWrapper(gzip.open(local, "rb") if gz else local.open("rb"), encoding="utf-8", errors="replace",
+                            newline="")
 
 
 def _rows(text):
-    return csv.DictReader(io.StringIO(text))
+    """text: the whole file as a str (tests) or a text stream (_download)."""
+    return csv.DictReader(io.StringIO(text) if isinstance(text, str) else text)
 
 
 def nfl_start_utc(gameday, gametime):
@@ -398,10 +404,12 @@ def nfl_build(con, seasons=NFL_SEASONS, files=None, log=None):
                      _known(start, "nfl")))
         gmap[r["game_id"]] = (r["home_team"], r["away_team"])
     con.commit()
+    del games_txt
     ptxt = get("players.csv", f"{NFLVERSE}/players/players.csv")
     ids = {}
     for r in _rows(ptxt):
         ids[r["gsis_id"]] = (r.get("espn_id") or None, r.get("pfr_id") or None)
+    del ptxt
     pfr_to_gsis = {v[1]: k for k, v in ids.items() if v[1]}
     con.executemany("INSERT OR REPLACE INTO nfl_ids (gsis_id, espn_id, pfr_id) VALUES (?,?,?)",
                     [(k, v[0], v[1]) for k, v in ids.items()])
