@@ -270,7 +270,7 @@ def label(b, side):
 
 
 def cmd_inventory(argv=None):
-    """python -m sports.books.cli inventory|inventory-show oddspapi <nba|nfl>"""
+    """python -m sports.books.cli inventory|inventory-show <thunderpick|oddspapi> <nba|nfl>"""
     import argparse
     from . import inventory
     ap = argparse.ArgumentParser(prog="python -m sports.books.cli")

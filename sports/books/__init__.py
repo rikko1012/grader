@@ -9,8 +9,7 @@ stored quotes (store.py, compare.py); nothing they do calls a provider. See spor
 Market sources for the model (sources.py, ledger.py):
 Sports market sources beyond the foundation's Kalshi reader (owner decision 2026-10-23: every book we have is a
 PRIMARY market source for sports projections). Sports-namespaced: nothing here imports an esports module
-(polymarket.py / oddspapi.py were read for endpoints and auth patterns only). Thunderpick is not a Sports source
-(owner 2026-10-24); it stays the CS2 bookmaker feed only.
+(thunderpick.py / polymarket.py / oddspapi.py were read for endpoints and auth patterns only).
 
 | source      | access                                 | NBA / NFL props verified here (2026-10-23)              | consensus |
 |-------------|----------------------------------------|---------------------------------------------------------|-----------|
@@ -22,6 +21,8 @@ PRIMARY market source for sports projections). Sports-namespaced: nothing here i
 |             |                                        | liquidity / spread filter applies)                      |           |
 | oddsapi     | ODDS_API_KEY (Render env only)         | not here: key not set locally. Parser = foundation       | yes, once |
 |             |                                        | adapters.oddsapi_offers (documented API shape)          | resolved  |
+| thunderpick | THUNDERPICK_API_KEY (Render env only)  | not here: key not set locally; sport paths for NBA / NFL | no - until|
+|             |                                        | and the player-prop market shape are UNVERIFIED          | verified  |
 | oddspapi    | ODDSPAPI_API_KEY (Render env only)     | not here: key not set locally; player-prop market ids   | no - until|
 |             |                                        | UNVERIFIED                                              | verified  |
 

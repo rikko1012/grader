@@ -260,10 +260,12 @@ BetRivers (owner decision 2026-10-23); a quote's own platform is never a source 
 forecasts keep REGISTER.md 10. The manifest's `sources` block lists per source: offers on the board, last read,
 verified flag, and for capture-only sources the stored inventory.
 
-Capture-only review (OddsPapi), on the service that holds the key (Thunderpick is not a Sports source - CS2 only):
+Capture-only review (Thunderpick / OddsPapi), on the service that holds the key:
 ```
+python -m sports.books.cli inventory thunderpick nba      # 1 request per candidate path (ledger-paced), raw gz + sha256 + key paths
+python -m sports.books.cli inventory thunderpick nfl
 python -m sports.books.cli inventory oddspapi nba         # unmetered /v4/account only
-python -m sports.books.cli inventory-show oddspapi nba    # re-print the stored summary, no request
+python -m sports.books.cli inventory-show thunderpick nba # re-print the stored summary, no request
 ```
 The format is proven only when, for one known game, the stored answer shows a player-stat market whose selections
 carry the player's name, Over and Under as separate selections, one shared numeric line, a price per selection and the

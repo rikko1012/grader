@@ -18,7 +18,7 @@ The REGISTERED mc-1 forecasts (sports/model/forward.py) keep their registered so
 the direct book feeds are single-source candidates there). This view is a display of the market, not a model record;
 its version string is DISPLAY_VERSION and the manifest names the rule and the source set.
 
-Capture-only sources (sports/books SOURCES verified=False: oddspapi) are listed with "format not
+Capture-only sources (sports/books SOURCES verified=False: thunderpick, oddspapi) are listed with "format not
 verified" and never enter a chance.
 
 Per-book chance shown (its own line, P(Over | no push) - a two-way book refunds a push):

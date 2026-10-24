@@ -10,9 +10,10 @@ Polymarket (gamma API, public) - read 2026-10-23: events by tag_slug nba / nfl; 
   consensus rule mc-1 handles it, REGISTER.md 10).
 The Odds API - foundation adapters.oddsapi_offers (documented shape) + this module's event resolution by full team
   names (exact ESPN display names) and the credit ledger. Key: ODDS_API_KEY (Render only).
-OddsPapi - CAPTURE-ONLY until verified (books/__init__.py): its inventory is the unmetered account read of the
-  guarded provider (books/oddspapi.py) - the account is shared with CS2, so capture never makes a billable OddsPapi
-  request; offers come only from that provider once enabled. (Thunderpick is not a Sports source.)
+Thunderpick / OddsPapi - CAPTURE-ONLY until verified (books/__init__.py): the answer's inventory (paths / market
+  names / counts) and a sha256 are recorded; no offer is produced from an unseen format. OddsPapi's inventory is the
+  unmetered account read of the guarded provider (books/oddspapi.py) - the account is shared with CS2, so capture
+  never makes a billable OddsPapi request; offers come only from that provider once enabled.
 """
 from __future__ import annotations
 
@@ -275,33 +276,50 @@ def oddsapi_ingest(con, league, observed_at, resolver, teams_raw):
     return out
 
 
-# ------------------------------------------------------------------------------------------------ OddsPapi capture
+# ------------------------------------------------------------------------------------- Thunderpick / OddsPapi capture
+TP_BASE = "https://aggr.mightykiwi.xyz/api/partners-odds"
+TP_PATHS = {"nba": ("sport/basketball", "basketball/nba", "basketball"), "nfl": ("sport/american-football",
+                                                                                   "american-football/nfl",
+                                                                                   "american-football")}
 OP_BASE = "https://api.oddspapi.io/v4"
 
 
 def capture(source, league):
     """Capture-only inventory of an unverified source (no offers). -> dict for coverage."""
+    if source not in SOURCES:
+        return {"source": source, "status": "not a Sports source"}
     env = SOURCES[source]["key_env"]
     k = os.environ.get(env or "")
     if not k:
         return {"source": source, "status": "key not set here"}
     inv = {"source": source, "status": "captured (unverified format)", "answers": []}
     try:
-        # the OddsPapi account is SHARED with CS2: the inventory is the unmetered GET /v4/account through the
-        # guarded provider (books/oddspapi.py) - no billable request, so nothing here can spend CS2's quota
-        from .base import FetchResult
-        from .oddspapi import BOOK_PRIORITY, OddsPapi, books_for, quota_readable, subscription
-        res = FetchResult()
-        acc = OddsPapi().account(res)
-        if not isinstance(acc, dict):
-            inv["status"] = f"error: {res.error}"
+        if source == "thunderpick":
+            for p in TP_PATHS[league]:
+                try:
+                    r = _get("thunderpick", f"{TP_BASE}/{p}", headers={"api-key": k, "Accept": "application/json"})
+                    body = r.json()
+                    names_ = sorted({m.get("name") for e in (body or []) for m in (e.get("markets") or [])})[:80]
+                    inv["answers"].append({"path": p, "events": len(body or []), "market_names": names_,
+                                           "sha256": hashlib.sha256(r.content).hexdigest()})
+                except net.HttpError as e:
+                    inv["answers"].append({"path": p, "error": f"HTTP {e.status}"})
         else:
-            sub = subscription(acc) or {}
-            inv["answers"].append({"path": "/account (unmetered)", "sport_ids": sub.get("sport_ids"),
-                                   "player_props": {b: bool(((sub.get("bookmakers") or {}).get(b) or {})
-                                                            .get("has_player_props")) for b in BOOK_PRIORITY},
-                                   "books_nba": books_for(acc, "basketball"),
-                                   "books_nfl": books_for(acc, "football"), "quota_readable": quota_readable(acc)})
+            # the OddsPapi account is SHARED with CS2: the inventory is the unmetered GET /v4/account through the
+            # guarded provider (books/oddspapi.py) - no billable request, so nothing here can spend CS2's quota
+            from .base import FetchResult
+            from .oddspapi import BOOK_PRIORITY, OddsPapi, books_for, quota_readable, subscription
+            res = FetchResult()
+            acc = OddsPapi().account(res)
+            if not isinstance(acc, dict):
+                inv["status"] = f"error: {res.error}"
+            else:
+                sub = subscription(acc) or {}
+                inv["answers"].append({"path": "/account (unmetered)", "sport_ids": sub.get("sport_ids"),
+                                       "player_props": {b: bool(((sub.get("bookmakers") or {}).get(b) or {})
+                                                                .get("has_player_props")) for b in BOOK_PRIORITY},
+                                       "books_nba": books_for(acc, "basketball"),
+                                       "books_nfl": books_for(acc, "football"), "quota_readable": quota_readable(acc)})
     except net.HttpError as e:
         inv["status"] = f"error: {str(e).replace(k, '***')[:120]}"
     return inv
@@ -334,7 +352,8 @@ def ingest(con, league, sources=("polymarket", "oddsapi", "oddspapi")):
         out["polymarket"] = polymarket_ingest(con, league, observed_at, resolver)
     if "oddsapi" in sources:
         out["oddsapi"] = oddsapi_ingest(con, league, observed_at, resolver, teams_raw)
-    if "oddspapi" in sources:
-        out["oddspapi"] = capture("oddspapi", league)
+    for s in ("oddspapi",):                      # Thunderpick removed from Sports (owner 2026-10-24)
+        if s in sources:
+            out[s] = capture(s, league)
     out["budget"] = ledger.usage()
     return out

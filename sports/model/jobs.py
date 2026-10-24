@@ -9,7 +9,7 @@ worker process. Never the web process, never at import.
   train forecast [nba nfl]                          sm-1 / mi-1 research forecasts for stored offers (writes store)
   train learn                                       settlement -> scorecard + diagnostic queue; retrain trigger check
   train snapshot                                    write the read-only API snapshot files (api_model.py reads them)
-  train books [nba nfl]                             extra market sources (Polymarket, Odds API,
+  train books [nba nfl]                             extra market sources (Polymarket, Odds API, Thunderpick /
                                                     OddsPapi capture) -> offers (SPORTS_INGEST too; credit ledger)
 
 Every job runs inside the foundation's Jobs ledger (idempotent job_key + time bucket, resumable cursor, timeout,

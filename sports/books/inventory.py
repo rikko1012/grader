@@ -1,4 +1,4 @@
-"""Capture-only inventory for the UNVERIFIED market source (oddspapi) - so a person can review what it
+"""Capture-only inventory for the UNVERIFIED market sources (thunderpick, oddspapi) - so a person can review what they
 actually return for NBA / NFL and flip VERIFIED in sports/books/__init__.py SOURCES. Worker / operator only.
 
 Nothing here parses an offer. A capture stores, per answer:
@@ -10,8 +10,9 @@ Nothing here parses an offer. A capture stores, per answer:
 The latest summary per source + league is <...>/inventory/<source>_<league>.json; the board manifest's `sources`
 block (sports/snapshots.py) carries its time, status and counts.
 
+  python -m sports.books.cli inventory thunderpick nba     # capture now (needs THUNDERPICK_API_KEY), then print
   python -m sports.books.cli inventory oddspapi nba        # unmetered /v4/account only (shared CS2 account)
-  python -m sports.books.cli inventory-show oddspapi nba     # print the stored summary, no request
+  python -m sports.books.cli inventory-show thunderpick nba  # print the stored summary, no request
 
 What proves a PLAYER-PROP format (the review checklist, also printed): for one known NBA / NFL game, a market whose
 name names a player stat (e.g. points / rebounds / passing yards), whose selections carry (a) the player's name,
@@ -113,28 +114,49 @@ def read_summary(source, league):
         return None
 
 
-def capture(source, league, key=None):
-    """One capture of an unverified source: the guarded, unmetered OddsPapi account read (no billable request).
-    structure() / save_answer() remain for a source that answers raw bodies."""
+def capture(source, league, getter=None, key=None):
+    """One capture of an unverified source. getter(path) -> (status, bytes) is injectable for tests; the default is
+    sources._get through the ledger (Thunderpick) or the guarded unmetered account read (OddsPapi)."""
     from . import SOURCES
     from . import sources as srcs
-    if source != "oddspapi":
-        raise ValueError(f"no capture for {source}")
+    if source not in SOURCES:                       # Thunderpick removed from Sports (owner 2026-10-24)
+        return {"source": source, "league": league, "status": "not a Sports source"}
     at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     env = SOURCES[source]["key_env"]
     key = key if key is not None else os.environ.get(env or "")
     out = {"source": source, "league": league, "captured_at": at, "verified": SOURCES[source]["verified"],
            "checklist": list(CHECKLIST), "answers": []}
-    if not key:
+    if not key and getter is None:
         out["status"] = f"{env} not set in this environment"
         write_summary(source, league, out)
         return out
-    inv = srcs.capture("oddspapi", league)
-    out["status"] = inv.get("status")
-    out["answers"] = inv.get("answers", [])
-    out["note"] = ("the account read is unmetered; player-prop market names need the catalog (<= 3 requests, "
-                   "guarded): SPORTS_ODDSPAPI=1 SPORTS_ODDSPAPI_MONTHLY_REQUESTS=<n> python sports_scout.py "
-                   "books-oddspapi catalog")
+    if source == "thunderpick":
+        def default_get(p):
+            r = srcs._get("thunderpick", f"{srcs.TP_BASE}/{p}", headers={"api-key": key, "Accept": "application/json"})
+            return r.status_code, r.content
+        get = getter or default_get
+        for p in srcs.TP_PATHS[league]:
+            try:
+                status, content = get(p)
+            except Exception as e:                      # noqa: BLE001 - recorded per path, key redacted
+                out["answers"].append({"path": p, "error": str(e).replace(key or "\0", "***")[:160]})
+                continue
+            f, sha = save_answer(source, league, p, content, at.replace("-", "").replace(":", ""))
+            ans = {"path": p, "http_status": status, "bytes": len(content), "sha256": sha, "raw_file": str(f)}
+            try:
+                ans["structure"] = structure(json.loads(content))
+            except ValueError:
+                ans["structure"] = None
+                ans["not_json"] = content[:200].decode("utf-8", "replace")
+            out["answers"].append(ans)
+        out["status"] = "captured (format not verified)"
+    else:
+        inv = srcs.capture("oddspapi", league)
+        out["status"] = inv.get("status")
+        out["answers"] = inv.get("answers", [])
+        out["note"] = ("the account read is unmetered; player-prop market names need the catalog (<= 3 requests, "
+                       "guarded): SPORTS_ODDSPAPI=1 SPORTS_ODDSPAPI_MONTHLY_REQUESTS=<n> python sports_scout.py "
+                       "books-oddspapi catalog")
     write_summary(source, league, out)
     return out
 
