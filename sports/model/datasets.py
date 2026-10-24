@@ -369,6 +369,30 @@ def nfl_start_utc(gameday, gametime):
     return (local - timedelta(hours=off)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def nfl_files(season):
+    """The nflverse release files nfl_build reads for one season: (name, url, gzipped, required)."""
+    return [("games.csv", f"{NFLVERSE}/schedules/games.csv", False, True),
+            ("players.csv", f"{NFLVERSE}/players/players.csv", False, True),
+            (f"stats_player_week_{season}.csv", f"{NFLVERSE}/stats_player/stats_player_week_{season}.csv", False, True),
+            (f"snap_counts_{season}.csv", f"{NFLVERSE}/snap_counts/snap_counts_{season}.csv", False, False),
+            (f"play_by_play_{season}.csv.gz", f"{NFLVERSE}/pbp/play_by_play_{season}.csv.gz", True, False)]
+
+
+def nfl_prefetch(con, season):
+    """Download (or reuse the cached copy of) every file nfl_build reads for `season` BEFORE any table changes, so a
+    source failure leaves the history as it was. Snap counts / play-by-play may be unavailable (nfl_build skips them)."""
+    out = {}
+    for name, url, gz, required in nfl_files(season):
+        try:
+            _download(con, name, url, gz).close()
+            out[name] = "ok"
+        except net.HttpError as e:
+            if required:
+                raise
+            out[name] = f"unavailable: {e}"
+    return out
+
+
 def nfl_build(con, seasons=NFL_SEASONS, files=None, log=None):
     """Download + load the NFL tables. `files` (name -> text) replaces downloads in tests. Idempotent per season."""
     files = files or {}

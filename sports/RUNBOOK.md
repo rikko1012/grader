@@ -521,8 +521,12 @@ caps over weeks unless the model jobs bound their reads (reported to the model /
   Linux (sandbox, cgroup memory limit 340 MB, RLIMIT_AS 640, fresh real-feed store, NBA refresh included): first run
   291.9 MB RSS / VmPeak 365 MB / cgroup peak 321.6 MB, 26 s, 3,121 forecasts, no OOM; rerun 288.8 MB, 46 added. With
   RLIMIT_AS 320 (the collector's cap) it fails with MemoryError - keep SPORTS_FORECAST_MAX_VM_MB at 640.
-- **Limits:** NFL features are the package's (through 2026 week 7, 94 games); the NFL refresh (nflverse files) is not
-  in this job. Grades withheld / stakes 0 until gate F (sports-gp-1).
+- **NFL refresh** (`fwd.refresh_nfl`, in this job): the current season's nflverse files (schedule, player-week stats,
+  snaps, play-by-play) reload into the installed copy at most every 12 h (`SPORTS_FORECAST_NFL_REFRESH_H`); earlier
+  seasons untouched; every file is fetched before any table changes, so a source failure keeps the data. Package: 2022-
+  2025 complete + 2026 weeks 1-7. Linux run with it (cgroup 340): 289.8 MB RSS, 26 s; a same-data reload changed 0
+  forecasts. Off with the NBA refresh: `SPORTS_FORECAST_REFRESH=0`.
+- **Limits:** grades withheld / stakes 0 until gate F (sports-gp-1).
 
 ### 13.6 Member pick tracking (pk-1, `sports/picks.py`) - UI and test picks
 
