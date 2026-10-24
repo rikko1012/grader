@@ -20,7 +20,8 @@ def test_ux_helpers_in_node():
 def test_ux_assets_wired_and_scoped():
     page = (WEB.parent / "sports.html").read_text(encoding="utf-8")
     assert "/sports/ux.css" in page and (WEB / "ux.css").exists()
-    assert page.index("/sports/picks.js") < page.index("/sports/app.js")      # modules load before the app hooks run
+    for m in ("picks.js", "tray.js"):                                       # modules load before the app hooks run
+        assert page.index("/sports/" + m) < page.index("/sports/app.js")
     css = re.sub(r"/\*.*?\*/", "", (WEB / "ux.css").read_text(encoding="utf-8"), flags=re.S)
     for rule in re.findall(r"(?:^|})\s*([^{}@][^{}]*)\{", css):
         for part in rule.strip().split(","):
@@ -34,3 +35,12 @@ def test_card_actions_hook_replaces_four_buttons():
     assert "data-track=" not in app and "data-leg=" not in app            # no "+ Over / + Under / Track Over / Track Under"
     js = (WEB / "picks.js").read_text(encoding="utf-8")
     assert "Add to slip" in js and "Track pick" in js and "/api/sports/picks/track" in js
+
+
+def test_tray_uses_slip_studio_draft_keys():
+    tray = (WEB / "tray.js").read_text(encoding="utf-8")
+    slips = (WEB / "slips.js").read_text(encoding="utf-8")
+    assert '"ss:draft:" + lg + ":" + pf' in tray and '"ss:draft:" + c.league + ":" + c.platform' in slips
+    assert '"ss:ctx"' in tray and '"ss:ctx"' in slips
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    assert "SportsTray.add(leg)" in app and "SportsTray.render(state.lg)" in app

@@ -24,3 +24,38 @@
 @media(max-width:640px){.sw .sw-act-btns .sw-btn{min-height:44px}}
 /* target size (24 px minimum) for the research card's game link - the browser a11y test flagged it at 17 px on main */
 .sw .sw-matchline a{display:inline-flex;align-items:center;min-height:24px}
+/* slip tray: bottom bar + sheet below 1200 px, side panel at >= 1200 px; shown only when the league has a draft */
+.sw .sw-tray{position:fixed;z-index:40;left:0;right:0;bottom:0;background:#121924f7;border-top:1px solid var(--line-2);box-shadow:0 -8px 24px #0006;backdrop-filter:blur(10px)}
+.sw .sw-tray[hidden]{display:none}
+.sw.sw-has-tray .sw-wrap{padding-bottom:96px}
+.sw .sw-tray-bar{display:flex;width:100%;align-items:center;justify-content:space-between;gap:10px;min-height:52px;padding:0 16px;background:transparent;border:0;color:var(--text);cursor:pointer;text-align:left;font-size:13px}
+.sw .sw-tray-bar-a{color:var(--accent-2);font-weight:600;white-space:nowrap}
+.sw .sw-tray-ok{color:#a7e9b6}.sw .sw-tray-warn{color:#f3d98d}
+.sw .sw-tray-body{display:none;padding:0 16px 14px;max-height:min(60vh,520px);overflow:auto}
+.sw .sw-tray.sw-tray-open .sw-tray-body{display:block}
+.sw .sw-tray-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin:2px 0 8px}
+.sw .sw-tray-h{font:600 14px Inter,system-ui;margin:0}.sw .sw-tray-h:focus{outline:none}
+.sw .sw-tray-n{font-size:12px;color:var(--muted);white-space:nowrap}
+.sw .sw-tray-list{list-style:none;margin:0 0 10px;padding:0}
+.sw .sw-tray-leg{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.sw .sw-tray-leg-t{min-width:0;font-size:12.5px;overflow-wrap:anywhere}.sw .sw-tray-leg-t b{display:block;font-size:13px}
+.sw .sw-tray-side{font-weight:600}.sw .sw-tray-side.over{color:var(--over)}.sw .sw-tray-side.under{color:var(--under)}
+.sw .sw-tray-meta{font-size:11.5px;color:var(--faint)}
+.sw .sw-tray-rm{flex:none;background:transparent;border:1px solid var(--line-2);color:var(--muted);border-radius:8px;min-height:36px;padding:0 10px;font-size:12px;cursor:pointer}
+.sw .sw-tray-rm:hover{color:var(--text);border-color:var(--bad)}
+.sw .sw-tray-hint{border-radius:8px;padding:8px 10px;font-size:12px;margin:0 0 10px}
+.sw .sw-tray-hint.ok{background:#5fd17a14;border:1px solid #5fd17a55;color:#c8f0d2}
+.sw .sw-tray-hint.warn{background:#e9be5214;border:1px solid #e9be5266;color:#f3d98d}
+.sw .sw-tray-hint ul{margin:0;padding-left:16px}
+.sw .sw-tray-empty,.sw .sw-tray-note{font-size:11.5px;color:var(--faint);margin:0 0 10px}
+.sw .sw-tray-switch{width:100%;margin:0 0 10px}
+.sw .sw-tray-go{width:100%}
+.sw .sw-tray-flash{animation:sw-tray-flash .6s ease-out}
+@keyframes sw-tray-flash{from{box-shadow:0 0 0 2px var(--accent)}to{box-shadow:0 0 0 0 transparent}}
+@media(min-width:1200px){
+  .sw .sw-tray{left:auto;right:16px;top:84px;bottom:auto;width:300px;max-height:calc(100vh - 100px);overflow:auto;border:1px solid var(--line-2);border-radius:14px;box-shadow:0 10px 30px #0007}
+  .sw .sw-tray-bar{display:none}
+  .sw .sw-tray-body{display:block;max-height:none;padding:14px 16px}
+  .sw.sw-has-tray .sw-wrap{padding-right:340px;padding-bottom:80px}
+}
+.sw .sw-tray-go:hover{background:var(--accent-2);color:#18120e}

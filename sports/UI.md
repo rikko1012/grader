@@ -50,6 +50,10 @@ cache, bounded 96 files / 48 MB); they never open the store.
 - Card actions (ux, `web/sports/picks.js`, hook `cardActions` in app.js): an Over / Under selector (native radios; an
   unoffered side is disabled with its reason; nothing preselected unless only one side is offered), then "Add to slip"
   and "Track pick" (disabled until a side is chosen) with one line of help.
+- Slip tray (ux, `web/sports/tray.js`, hooks `addToSlip` + `SportsTray.render` in app.js): Slip Studio's own draft
+  (`ss:draft:<league>:<platform>` + `ss:ctx`, synced across tabs by the `storage` event), shown only when the league has
+  picks - side panel at >= 1200 px, bottom bar + sheet below; picks, book, count, remove, local validation hint (entry
+  size, one pick per player, two teams, started games), "Open Slip Studio"; one book per draft; only books with picks.
 - Slip Studio: "Add to slip" writes the slips agent's draft (`localStorage ss:draft:<league>:<platform>`, leg format
   sports/slips/README.md); Slip Studio re-validates on load.
 

@@ -364,24 +364,8 @@
       event_id: o.event_id, event_ref: o.event_ref, model_version: f ? (full ? f.model_version : f.m) : null,
       p_win: f ? (o.side === "over" ? po : pu) : null, p_loss: f ? (o.side === "over" ? pu : po) : null, p_push: f ? pp : null};
   }
-  function addToSlip(leg) {
-    var key = "ss:draft:" + leg.league + ":" + leg.platform, d;
-    try {
-      d = JSON.parse(localStorage.getItem(key) || "null") || {legs: []};
-      var dup = d.legs.some(function (l) { return l.record_id === leg.record_id && l.side === leg.side; });
-      d.legs = d.legs.filter(function (l) { return l.record_id !== leg.record_id; });
-      var clean = {}; Object.keys(leg).forEach(function (k) { if (leg[k] !== null && leg[k] !== undefined) clean[k] = leg[k]; });
-      delete clean.league;
-      d.legs.push(clean); delete d.payout_key; d.saved_at = new Date().toISOString();
-      localStorage.setItem(key, JSON.stringify(d));
-      var prev = JSON.parse(localStorage.getItem("ss:ctx") || "null") || {};
-      localStorage.setItem("ss:ctx", JSON.stringify({league: leg.league, platform: leg.platform,
-        entry_type: prev.platform === leg.platform ? prev.entry_type : undefined}));
-      toast((dup ? "Already in" : "Added to") + " your " + bookName(leg.platform) + " " + leg.league.toUpperCase() + " draft (" + d.legs.length + " leg" + (d.legs.length === 1 ? "" : "s") + ").", true);
-    } catch (e) {
-      toast("This browser is not keeping drafts (storage is blocked), so the leg was not added.", false);
-    }
-  }
+  // HOOK (ux agent): the draft + persistent slip tray live in web/sports/tray.js (Slip Studio's ss:draft / ss:ctx keys).
+  function addToSlip(leg) { if (window.SportsTray) window.SportsTray.add(leg); }
   function toast(text, ok) {
     var t = document.getElementById("sw-toast");
     t.innerHTML = '<div class="sw-banner ' + (ok ? "info" : "warn") + '">' + esc(text) + (ok ? ' <a href="' + SLIP_PAGE + '">Open Slip Studio</a>' : "") + "</div>";
@@ -891,6 +875,7 @@
     setNav(r.view);
     banner.innerHTML = "";
     document.getElementById("sw-toast").innerHTML = "";
+    if (window.SportsTray) window.SportsTray.render(state.lg);                    // HOOK (ux): slip tray for this league
     if (r.view === "board") renderBoard(r.params);
     else if (r.view === "player" && r.arg) renderPlayer(r.arg, r.params);
     else if (r.view === "game" && r.arg) renderGame(r.arg);

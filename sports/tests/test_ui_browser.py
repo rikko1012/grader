@@ -128,11 +128,12 @@ def test_board_player_game_slip_same_numbers(pw, shots):
     side = "over" if "over" in choice.get_attribute("class") else "under"
     choice.click()
     act.locator("[data-act-add]").click()
-    page.wait_for_selector("#sw-toast .sw-banner")
+    page.wait_for_selector("#sw-tray:not([hidden]) .sw-tray-leg")
     drafts = page.evaluate("Object.keys(localStorage).filter(k => k.startsWith('ss:draft:')).map(k => [k, JSON.parse(localStorage.getItem(k))])")
     legs = [l for _, d in drafts for l in d["legs"] if l.get("forecast_id") == fid]
     assert legs and legs[0]["side"] == side and legs[0]["p_win"] == rec["p_" + side]
-    page.locator("#sw-toast a", has_text="Open Slip Studio").click()
+    assert legs[0]["player"] in page.locator("#sw-tray").inner_text()
+    page.locator("#sw-tray a", has_text="Open Slip Studio").click()
     page.wait_for_url(re.compile(r"/sports/slips\.html"))
     page.wait_for_timeout(1500)
     page.screenshot(path=str(shots / "slips_from_board_1280.png"), full_page=True)
@@ -322,5 +323,78 @@ def test_card_actions_selector(pw, shots):
     n = page.evaluate("Object.keys(localStorage).filter(k => k.startsWith('ss:draft:')).map(k => JSON.parse(localStorage.getItem(k)).legs.length).reduce((a, b) => a + b, 0)")
     assert n >= 1
     page.screenshot(path=str(shots / "card_actions_1280.png"))
+    assert not [e for e in errors if "favicon" not in e], errors
+    ctx.close()
+
+
+@pytest.mark.parametrize("width", [360, 1280])
+def test_slip_tray_persistent_and_in_sync(pw, shots, width):
+    """Slip tray (ux item 3): side panel (desktop) / bottom tray (mobile) with the picks, book, count, remove, Open Slip
+    Studio and a validation hint; it is Slip Studio's own draft (ss:draft / ss:ctx), so both stay in sync; it never
+    navigates by itself; only the book the picks came from is shown."""
+    ctx, page, errors = _page(pw, width, 800, has_touch=width < 768, is_mobile=width < 768)
+    page.goto(URL + "/sports#/board?lg=nba")
+    page.wait_for_selector(".sw-act", timeout=20000)
+    page.evaluate("Object.keys(localStorage).filter(k => k.startsWith('ss:')).forEach(k => localStorage.removeItem(k))")
+    page.evaluate("location.hash = '#/board?lg=nba&x=1'")
+    page.wait_for_timeout(300)
+    assert page.locator("#sw-tray").is_hidden()                                 # nothing to show: no space used
+    acts = page.locator(".sw-act:has(.sw-act-sides)").locator("visible=true")
+    added, book = [], None                                                      # two picks from the same book
+    for i in range(acts.count()):
+        a = acts.nth(i)
+        if a.locator("label.sw-act-side:not(.off)").count() == 0:
+            continue
+        bk = a.locator("xpath=ancestor::div[contains(@class,'sw-offer')][1]").locator(".sw-book").inner_text().strip()
+        if book and bk != book:
+            continue
+        book = bk
+        a.locator("label.sw-act-side:not(.off)").first.click()
+        a.locator("[data-act-add]").click()
+        added.append(i)
+        if len(added) == 2:
+            break
+    assert "#/board" in page.url and "slips" not in page.url                   # research is never left
+    tray = page.locator("#sw-tray")
+    assert tray.is_visible()
+    if width < 1200:
+        bar = tray.locator("[data-tray-toggle]")
+        assert bar.get_attribute("aria-expanded") == "false"
+        bar.focus(); page.keyboard.press("Enter")
+        assert tray.locator("[data-tray-toggle]").get_attribute("aria-expanded") == "true"
+    ctxv = page.evaluate("JSON.parse(localStorage.getItem('ss:ctx'))")
+    draft = page.evaluate("k => JSON.parse(localStorage.getItem(k))", f"ss:draft:nba:{ctxv['platform']}")
+    text = tray.inner_text()
+    books = {"prizepicks": "PrizePicks", "underdog": "Underdog"}
+    assert books[ctxv["platform"]] in text
+    for p, label in books.items():                                              # a book with no picks is never named
+        has = page.evaluate("k => (JSON.parse(localStorage.getItem(k)) || {legs: []}).legs.length", f"ss:draft:nba:{p}")
+        if not has:
+            assert label not in text, (label, text)
+    assert tray.locator(".sw-tray-leg").count() == len(draft["legs"])
+    assert tray.locator(".sw-tray-hint").count() == 1 and tray.locator(".sw-tray-hint").inner_text().strip()
+    assert tray.locator("a.sw-tray-go").get_attribute("href") == "/sports/slips.html"
+    assert _no_overflow(page)
+    page.mouse.move(0, 0)
+    a11y = page.evaluate(A11Y_JS)
+    assert not a11y["small"] and not a11y["unlabelled"] and not a11y["contrast"], a11y
+    page.screenshot(path=str(shots / f"tray_{width}.png"))
+    # Slip Studio shows the same draft; removing a leg there is reflected in the tray
+    n = len(draft["legs"])
+    sp = ctx.new_page()
+    sp.goto(URL + "/sports/slips.html")
+    sp.wait_for_timeout(1500)
+    for l in draft["legs"]:
+        assert l["player"] in sp.locator("#ss-draft").inner_text()
+    sp.locator("#ss-draft [data-rm]").first.click()
+    page.wait_for_function(f"document.querySelectorAll('#sw-tray .sw-tray-leg').length === {n - 1} || ({n - 1} === 0 && document.getElementById('sw-tray').hidden)", timeout=5000)
+    sp.close()
+    # remove from the tray (keyboard), the draft follows
+    if n - 1 > 0:
+        rm = tray.locator("[data-tray-rm]").first
+        rm.focus(); page.keyboard.press("Enter")
+        page.wait_for_timeout(200)
+        left = page.evaluate("k => (JSON.parse(localStorage.getItem(k)) || {legs: []}).legs.length", f"ss:draft:nba:{ctxv['platform']}")
+        assert left == n - 2
     assert not [e for e in errors if "favicon" not in e], errors
     ctx.close()
