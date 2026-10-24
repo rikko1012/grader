@@ -1,0 +1,897 @@
+{
+ "sport": "nba",
+ "phase": "tune",
+ "model_version": "sm-2",
+ "register": "sports/research/REGISTER.md A5",
+ "registry": "fr-2",
+ "generated_at": "2026-10-24T22:09:06Z",
+ "markets": {
+  "points": {
+   "sm1": {
+    "half_lives": [
+     3,
+     10
+    ],
+    "family": "ratio",
+    "features": [
+     "nba.usage",
+     "nba.role_stability",
+     "nba.starter_prev",
+     "nba.opp_pace",
+     "nba.teammate_absent_sameday"
+    ]
+   },
+   "stage_a": {
+    "split": "r1 (round-1 train / tune)",
+    "reference_features": [
+     "nba.usage",
+     "nba.role_stability",
+     "nba.starter_prev",
+     "nba.opp_pace",
+     "nba.teammate_absent_sameday"
+    ],
+    "fit_rows": 40770,
+    "eval_rows": 11976,
+    "eval_games": 725,
+    "reference_crps": 3.4637127839011357,
+    "tests": {
+     "nba.shot_profile": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.0010988936205744832,
+      "ci": [
+       0.00019303237907724092,
+       0.002004096389953172
+      ],
+      "beta_std": -0.005763017447220853,
+      "passed": false
+     },
+     "nba.ts_efg_ftr": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0025912345524381868,
+      "ci": [
+       -0.006447987017480426,
+       0.0012407034040903
+      ],
+      "beta_std": -0.03515472814839638,
+      "passed": false
+     },
+     "nba.team_ortg_net": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -2.484761189044393e-05,
+      "ci": [
+       -0.00041770017261176105,
+       0.00036972459350159307
+      ],
+      "beta_std": -0.001435098199701527,
+      "passed": false
+     },
+     "nba.ft_rate": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.00014038702404810317,
+      "ci": [
+       -7.977333364265339e-05,
+       0.0003578604380780662
+      ],
+      "beta_std": 0.0005976619180234077,
+      "passed": false
+     },
+     "nba.opp_drtg": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0003536009519037985,
+      "ci": [
+       -0.0029415223665632886,
+       0.0022318418805131034
+      ],
+      "beta_std": 0.018080782981208382,
+      "passed": false
+     },
+     "nba.games_in_4": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.0006791938042752262,
+      "ci": [
+       -0.000650351683174633,
+       0.0019333655978236986
+      ],
+      "beta_std": 0.006727102952038916,
+      "passed": false
+     },
+     "nba.travel": {
+      "coverage_fit": 0.9933038999264164,
+      "coverage_eval": 0.9860554442217769,
+      "crps_diff": 0.0006769706078824456,
+      "ci": [
+       -0.00043057482292774627,
+       0.0018316152080876922
+      ],
+      "beta_std": -0.006254166187045451,
+      "passed": false
+     },
+     "nba.starter_today": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.032105473446893754,
+      "ci": [
+       -0.04319386292768549,
+       -0.02192435479613274
+      ],
+      "beta_std": 0.14648175917959683,
+      "passed": true,
+      "diag": {
+       "logloss_ref": 0.6653189408276565,
+       "ece": 0.016974782899131645,
+       "in_the_large": 0.013658567134268551,
+       "cov80": 0.8024763182739062
+      }
+     },
+     "nba.teammate_absent_usage": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.015888570891783527,
+      "ci": [
+       -0.022908328902963005,
+       -0.008841389008701891
+      ],
+      "beta_std": 0.13529525203392603,
+      "passed": true,
+      "diag": {
+       "logloss_ref": 0.6682914194424864,
+       "ece": 0.01222277889111554,
+       "in_the_large": 0.009894789579158347,
+       "cov80": 0.8001013433352376
+      }
+     }
+    },
+    "passed": [
+     "nba.starter_today",
+     "nba.teammate_absent_usage"
+    ],
+    "joint": {
+     "features": [
+      "nba.starter_today",
+      "nba.teammate_absent_usage"
+     ],
+     "crps_diff": -0.04407749248496988,
+     "ci": [
+      -0.05683775347489766,
+      -0.03246079622127037
+     ],
+     "used": true,
+     "beta_std": {
+      "nba.starter_today": 0.13848811556731958,
+      "nba.teammate_absent_usage": 0.1203491467853795
+     },
+     "diag": {
+      "logloss_ref": 0.66328528037119,
+      "ece": 0.011143537074148281,
+      "in_the_large": 0.007834418837675439,
+      "cov80": 0.8012741458799015
+     },
+     "reference_diag": {
+      "logloss_ref": 0.6709422189473954,
+      "ece": 0.01757055778223117,
+      "in_the_large": 0.016784402137608567,
+      "cov80": 0.8021958341719189
+     }
+    }
+   },
+   "stage_b_lines": {
+    "split": "r2 (fit < 2026-02-01, eval 2026-02-01..07-01)",
+    "reference_features": [
+     "nba.usage",
+     "nba.role_stability",
+     "nba.starter_prev",
+     "nba.opp_pace",
+     "nba.teammate_absent_sameday",
+     "nba.starter_today",
+     "nba.teammate_absent_usage"
+    ],
+    "fit_rows": 52746,
+    "eval_rows": 9834,
+    "eval_games": 593,
+    "reference_crps": 3.4275119763066906,
+    "tests": {
+     "nba.game_total": {
+      "coverage_fit": 0.15040003033405377,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.00015857992678456733,
+      "ci": [
+       -0.003415269080768774,
+       0.0029606120069635565
+      ],
+      "beta_std": 0.010176511403982787,
+      "passed": false
+     },
+     "nba.blowout_risk": {
+      "coverage_fit": 0.15034315398324044,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.00043892617449661103,
+      "ci": [
+       -0.002617200651894845,
+       0.0017414446795688005
+      ],
+      "beta_std": 0.0006993705693932845,
+      "passed": false
+     },
+     "nba.implied_team_total": {
+      "coverage_fit": 0.15007773101277821,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0025563453325197936,
+      "ci": [
+       -0.005765052121992346,
+       0.000541050443215298
+      ],
+      "beta_std": 0.010455345829076564,
+      "passed": false
+     }
+    },
+    "passed": []
+   },
+   "sm2_features_added": [
+    "nba.starter_today",
+    "nba.teammate_absent_usage"
+   ],
+   "cal": {
+    "c": 0.99,
+    "s": 0.98,
+    "crps_raw": 3.419635291416166,
+    "crps_cal": 3.4188137882611667
+   },
+   "cal_window": "round-1 tune",
+   "challenger": true
+  },
+  "rebounds": {
+   "sm1": {
+    "half_lives": [
+     3,
+     20
+    ],
+    "family": "negbin",
+    "features": [
+     "nba.role_stability",
+     "nba.opp_pace",
+     "nba.opp_positional_defence"
+    ]
+   },
+   "stage_a": {
+    "split": "r1 (round-1 train / tune)",
+    "reference_features": [
+     "nba.role_stability",
+     "nba.opp_pace",
+     "nba.opp_positional_defence"
+    ],
+    "fit_rows": 40770,
+    "eval_rows": 11976,
+    "eval_games": 725,
+    "reference_crps": 1.3700308629025346,
+    "tests": {
+     "nba.games_in_4": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.00026258975549475614,
+      "ci": [
+       -0.0006348344153192194,
+       9.674415301526344e-05
+      ],
+      "beta_std": 0.0059828230495831925,
+      "passed": false
+     },
+     "nba.travel": {
+      "coverage_fit": 0.9933038999264164,
+      "coverage_eval": 0.9860554442217769,
+      "crps_diff": 0.00016331403401914917,
+      "ci": [
+       -1.9391446760709375e-05,
+       0.00034490747027004777
+      ],
+      "beta_std": -0.0037639786334135654,
+      "passed": false
+     },
+     "nba.starter_today": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0037360066204642195,
+      "ci": [
+       -0.00596561055908976,
+       -0.001491813873310636
+      ],
+      "beta_std": 0.04802951177278247,
+      "passed": true,
+      "diag": {
+       "logloss_ref": 0.6580618916188683,
+       "ece": 0.004823970603651888,
+       "in_the_large": -0.0011686192442096899,
+       "cov80": 0.7972992342868201
+      }
+     },
+     "nba.teammate_absent_usage": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0020386588685668743,
+      "ci": [
+       -0.004534944758116985,
+       0.00045816600315116474
+      ],
+      "beta_std": 0.04432181055435402,
+      "passed": false
+     }
+    },
+    "passed": [
+     "nba.starter_today"
+    ],
+    "joint": {
+     "features": [
+      "nba.starter_today"
+     ],
+     "crps_diff": -0.0037360066204642195,
+     "ci": [
+      -0.00596561055908976,
+      -0.001491813873310636
+     ],
+     "used": true,
+     "beta_std": {
+      "nba.starter_today": 0.04802951177278247
+     },
+     "diag": {
+      "logloss_ref": 0.6580618916188683,
+      "ece": 0.004823970603651888,
+      "in_the_large": -0.0011686192442096899,
+      "cov80": 0.7972992342868201
+     },
+     "reference_diag": {
+      "logloss_ref": 0.6601501316211414,
+      "ece": 0.006541803365329508,
+      "in_the_large": 0.0033504868337679294,
+      "cov80": 0.7976079518127733
+     }
+    }
+   },
+   "stage_b_lines": {
+    "split": "r2 (fit < 2026-02-01, eval 2026-02-01..07-01)",
+    "reference_features": [
+     "nba.role_stability",
+     "nba.opp_pace",
+     "nba.opp_positional_defence",
+     "nba.starter_today"
+    ],
+    "fit_rows": 52746,
+    "eval_rows": 9834,
+    "eval_games": 593,
+    "reference_crps": 1.3729647871116037,
+    "tests": {
+     "nba.game_total": {
+      "coverage_fit": 0.15040003033405377,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0004059586659590723,
+      "ci": [
+       -0.0006483494194263017,
+       -0.0001587097765069692
+      ],
+      "beta_std": 0.002786487435619786,
+      "passed": true,
+      "diag": {
+       "logloss_ref": 0.6602392645543063,
+       "ece": 0.008331801287998911,
+       "in_the_large": -0.001904825600211657,
+       "cov80": 0.7932073960155163
+      }
+     },
+     "nba.blowout_risk": {
+      "coverage_fit": 0.15034315398324044,
+      "coverage_eval": 1.0,
+      "crps_diff": -3.93276978869565e-05,
+      "ci": [
+       -8.994670563456778e-05,
+       1.3524090113419091e-05
+      ],
+      "beta_std": 0.00035605515318049957,
+      "passed": false
+     }
+    },
+    "passed": [
+     "nba.game_total"
+    ],
+    "joint": {
+     "features": [
+      "nba.game_total"
+     ],
+     "crps_diff": -0.0004059586659590723,
+     "ci": [
+      -0.0006483494194263017,
+      -0.0001587097765069692
+     ],
+     "used": true,
+     "beta_std": {
+      "nba.game_total": 0.002786487435619786
+     },
+     "diag": {
+      "logloss_ref": 0.6602392645543063,
+      "ece": 0.008331801287998911,
+      "in_the_large": -0.001904825600211657,
+      "cov80": 0.7932073960155163
+     },
+     "reference_diag": {
+      "logloss_ref": 0.660340943405346,
+      "ece": 0.009111707740177876,
+      "in_the_large": -0.0005693090741071272,
+      "cov80": 0.7934146347223396
+     }
+    }
+   },
+   "sm2_features_added": [
+    "nba.starter_today",
+    "nba.game_total"
+   ],
+   "cal": {
+    "c": 0.99,
+    "s": 1.0,
+    "crps_raw": 1.3725588284456447,
+    "crps_cal": 1.372517564445231
+   },
+   "cal_window": "r2 evaluation window",
+   "challenger": true
+  },
+  "assists": {
+   "sm1": {
+    "half_lives": [
+     3,
+     10
+    ],
+    "family": "negbin",
+    "features": [
+     "nba.role_stability",
+     "nba.starter_prev",
+     "nba.team_pace"
+    ]
+   },
+   "stage_a": {
+    "split": "r1 (round-1 train / tune)",
+    "reference_features": [
+     "nba.role_stability",
+     "nba.starter_prev",
+     "nba.team_pace"
+    ],
+    "fit_rows": 40770,
+    "eval_rows": 11976,
+    "eval_games": 725,
+    "reference_crps": 0.9939256472547191,
+    "tests": {
+     "nba.ast_to": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 8.445180665275479e-05,
+      "ci": [
+       -0.0005228271721721422,
+       0.0006799965506183504
+      ],
+      "beta_std": -0.023338116979239744,
+      "passed": false
+     },
+     "nba.team_ortg_net": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.00012795186570868625,
+      "ci": [
+       -0.00047260672197507855,
+       0.00021760574425500005
+      ],
+      "beta_std": -0.012591869103692522,
+      "passed": false
+     },
+     "nba.opp_drtg": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0016477252774620749,
+      "ci": [
+       -0.002719773935398104,
+       -0.0006116270055909689
+      ],
+      "beta_std": 0.0352244534322629,
+      "passed": true,
+      "diag": {
+       "logloss_ref": 0.6616401131520707,
+       "ece": 0.013830139421834243,
+       "in_the_large": 0.0005992892070036948,
+       "cov80": 0.800386295840225
+      }
+     },
+     "nba.games_in_4": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 7.79673638484411e-05,
+      "ci": [
+       -0.0004163265841549687,
+       0.0005344000755095076
+      ],
+      "beta_std": 0.014589608518201529,
+      "passed": false
+     },
+     "nba.travel": {
+      "coverage_fit": 0.9933038999264164,
+      "coverage_eval": 0.9860554442217769,
+      "crps_diff": -0.0001968685187684955,
+      "ci": [
+       -0.00039039136823628686,
+       -1.2986664344623102e-05
+      ],
+      "beta_std": -0.006851947786789059,
+      "passed": true,
+      "diag": {
+       "logloss_ref": 0.6621429277776043,
+       "ece": 0.01150677694759413,
+       "in_the_large": -0.002284602883032727,
+       "cov80": 0.8000920840279034
+      }
+     },
+     "nba.starter_today": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.010074069278383209,
+      "ci": [
+       -0.012923548137693664,
+       -0.0071889692396726376
+      ],
+      "beta_std": 0.18239166898643236,
+      "passed": true,
+      "diag": {
+       "logloss_ref": 0.6553705603197276,
+       "ece": 0.009539377683959637,
+       "in_the_large": -0.004496896213815882,
+       "cov80": 0.8008439090806065
+      }
+     },
+     "nba.teammate_absent_usage": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0006323552153842406,
+      "ci": [
+       -0.003065238887904114,
+       0.0018443818152023195
+      ],
+      "beta_std": 0.07269180920687056,
+      "passed": false
+     }
+    },
+    "passed": [
+     "nba.opp_drtg",
+     "nba.travel",
+     "nba.starter_today"
+    ],
+    "joint": {
+     "features": [
+      "nba.opp_drtg",
+      "nba.travel",
+      "nba.starter_today"
+     ],
+     "crps_diff": -0.011956063003567377,
+     "ci": [
+      -0.015134965878365967,
+      -0.008916623991104756
+     ],
+     "used": true,
+     "beta_std": {
+      "nba.opp_drtg": 0.03468805601982658,
+      "nba.travel": -0.0059049940187857735,
+      "nba.starter_today": 0.18173695545237686
+     },
+     "diag": {
+      "logloss_ref": 0.6545590889720618,
+      "ece": 0.009508014871229093,
+      "in_the_large": -0.001921103079150055,
+      "cov80": 0.8011137806633094
+     },
+     "reference_diag": {
+      "logloss_ref": 0.6622727981063317,
+      "ece": 0.01100108925373097,
+      "in_the_large": -0.0021488376149643162,
+      "cov80": 0.8000060229436371
+     }
+    }
+   },
+   "stage_b_lines": {
+    "split": "r2 (fit < 2026-02-01, eval 2026-02-01..07-01)",
+    "reference_features": [
+     "nba.role_stability",
+     "nba.starter_prev",
+     "nba.team_pace",
+     "nba.opp_drtg",
+     "nba.travel",
+     "nba.starter_today"
+    ],
+    "fit_rows": 52746,
+    "eval_rows": 9834,
+    "eval_games": 593,
+    "reference_crps": 1.009067184102898,
+    "tests": {
+     "nba.game_total": {
+      "coverage_fit": 0.15040003033405377,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0008568230185142189,
+      "ci": [
+       -0.0014808399152423247,
+       -0.00030243546903509206
+      ],
+      "beta_std": 0.012806047225366348,
+      "passed": true,
+      "diag": {
+       "logloss_ref": 0.6492159492037847,
+       "ece": 0.007698697508074325,
+       "in_the_large": 0.004057763121199265,
+       "cov80": 0.7879808010689829
+      }
+     },
+     "nba.blowout_risk": {
+      "coverage_fit": 0.15034315398324044,
+      "coverage_eval": 1.0,
+      "crps_diff": -2.0584572481053016e-05,
+      "ci": [
+       -0.0003705378911219535,
+       0.0003147719039953844
+      ],
+      "beta_std": 0.006866621283383708,
+      "passed": false
+     },
+     "nba.implied_team_total": {
+      "coverage_fit": 0.15007773101277821,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0004728005318220639,
+      "ci": [
+       -0.0007802504015768146,
+       -0.00016284632557480376
+      ],
+      "beta_std": 0.007461792041338155,
+      "passed": true,
+      "diag": {
+       "logloss_ref": 0.6494295733446895,
+       "ece": 0.008134550737538444,
+       "in_the_large": 0.006218216945201416,
+       "cov80": 0.788360817880805
+      }
+     }
+    },
+    "passed": [
+     "nba.game_total",
+     "nba.implied_team_total"
+    ],
+    "joint": {
+     "features": [
+      "nba.game_total",
+      "nba.implied_team_total"
+     ],
+     "crps_diff": -0.0008110559862010878,
+     "ci": [
+      -0.0014348214360755047,
+      -0.0002512062374959367
+     ],
+     "used": true,
+     "beta_std": {
+      "nba.game_total": 0.014704703822595644,
+      "nba.implied_team_total": -0.0029079572108193603
+     },
+     "diag": {
+      "logloss_ref": 0.6492205535130029,
+      "ece": 0.007416479207005595,
+      "in_the_large": 0.0039891537594799464,
+      "cov80": 0.7879902365044567
+     },
+     "reference_diag": {
+      "logloss_ref": 0.6496044742089601,
+      "ece": 0.00863050224720439,
+      "in_the_large": 0.007683998823888483,
+      "cov80": 0.7887332285899112
+     }
+    }
+   },
+   "sm2_features_added": [
+    "nba.opp_drtg",
+    "nba.travel",
+    "nba.starter_today",
+    "nba.game_total",
+    "nba.implied_team_total"
+   ],
+   "cal": {
+    "c": 0.99,
+    "s": 1.02,
+    "crps_raw": 1.0082561281166968,
+    "crps_cal": 1.0081279718748133
+   },
+   "cal_window": "r2 evaluation window",
+   "challenger": true
+  },
+  "threes": {
+   "sm1": {
+    "half_lives": [
+     3,
+     20
+    ],
+    "family": "negbin",
+    "features": []
+   },
+   "stage_a": {
+    "split": "r1 (round-1 train / tune)",
+    "reference_features": [],
+    "fit_rows": 40770,
+    "eval_rows": 11976,
+    "eval_games": 725,
+    "reference_crps": 0.6508560726184012,
+    "tests": {
+     "nba.opp_3pa_allowed": {
+      "coverage_fit": 0.9977924944812362,
+      "coverage_eval": 1.0,
+      "crps_diff": 4.351112329710393e-05,
+      "ci": [
+       -0.00028264520980802755,
+       0.00037321067407400745
+      ],
+      "beta_std": 0.027711622508940353,
+      "passed": false
+     },
+     "nba.shot_profile": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 3.936084999388542e-06,
+      "ci": [
+       -0.00013647409522370276,
+       0.000144986100774886
+      ],
+      "beta_std": -0.010436603570353068,
+      "passed": false
+     },
+     "nba.opp_drtg": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.00011050582287639367,
+      "ci": [
+       -0.0004949983096409872,
+       0.00025482307801692245
+      ],
+      "beta_std": 0.023806752601369965,
+      "passed": false
+     },
+     "nba.games_in_4": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -7.189116561660645e-05,
+      "ci": [
+       -0.0001758747634382231,
+       2.6875402078835436e-05
+      ],
+      "beta_std": 0.005824323872546994,
+      "passed": false
+     },
+     "nba.travel": {
+      "coverage_fit": 0.9933038999264164,
+      "coverage_eval": 0.9860554442217769,
+      "crps_diff": -0.00011497923002728033,
+      "ci": [
+       -0.0002573029519112381,
+       2.5032708906336767e-05
+      ],
+      "beta_std": -0.008662757795303328,
+      "passed": false
+     },
+     "nba.starter_today": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0013424208755666387,
+      "ci": [
+       -0.0023077720909965896,
+       -0.0004398686966328051
+      ],
+      "beta_std": 0.05624204379218394,
+      "passed": true,
+      "diag": {
+       "logloss_ref": 0.604306959342418,
+       "ece": 0.013993898817814945,
+       "in_the_large": 0.0016295640783665077,
+       "cov80": 0.7995009453396598
+      }
+     },
+     "nba.teammate_absent_usage": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.000805206729178633,
+      "ci": [
+       -0.00024384150307395528,
+       0.001924049943660069
+      ],
+      "beta_std": 0.06540011147431894,
+      "passed": false
+     }
+    },
+    "passed": [
+     "nba.starter_today"
+    ],
+    "joint": {
+     "features": [
+      "nba.starter_today"
+     ],
+     "crps_diff": -0.0013424208755666387,
+     "ci": [
+      -0.0023077720909965896,
+      -0.0004398686966328051
+     ],
+     "used": true,
+     "beta_std": {
+      "nba.starter_today": 0.05624204379218394
+     },
+     "diag": {
+      "logloss_ref": 0.604306959342418,
+      "ece": 0.013993898817814945,
+      "in_the_large": 0.0016295640783665077,
+      "cov80": 0.7995009453396598
+     },
+     "reference_diag": {
+      "logloss_ref": 0.6054032165798,
+      "ece": 0.009502945231085256,
+      "in_the_large": 0.004815292957600359,
+      "cov80": 0.8004931764447085
+     }
+    }
+   },
+   "stage_b_lines": {
+    "split": "r2 (fit < 2026-02-01, eval 2026-02-01..07-01)",
+    "reference_features": [
+     "nba.starter_today"
+    ],
+    "fit_rows": 52746,
+    "eval_rows": 9834,
+    "eval_games": 593,
+    "reference_crps": 0.6454606144757715,
+    "tests": {
+     "nba.game_total": {
+      "coverage_fit": 0.15040003033405377,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0005566531604431136,
+      "ci": [
+       -0.0013614446141131276,
+       0.00028482125974841103
+      ],
+      "beta_std": 0.031836523708106,
+      "passed": false
+     },
+     "nba.blowout_risk": {
+      "coverage_fit": 0.15034315398324044,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.00024429705240669263,
+      "ci": [
+       -0.0005998237564938143,
+       9.786498295484759e-05
+      ],
+      "beta_std": 0.0142740012575998,
+      "passed": false
+     },
+     "nba.implied_team_total": {
+      "coverage_fit": 0.15007773101277821,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0002203436331126579,
+      "ci": [
+       -0.0005915771495426779,
+       0.00015062778196240083
+      ],
+      "beta_std": 0.013124684719905352,
+      "passed": false
+     }
+    },
+    "passed": []
+   },
+   "sm2_features_added": [
+    "nba.starter_today"
+   ],
+   "cal": {
+    "c": 0.99,
+    "s": 1.0,
+    "crps_raw": 0.6495136517428346,
+    "crps_cal": 0.6494514947672989
+   },
+   "cal_window": "round-1 tune",
+   "challenger": true
+  }
+ },
+ "config_sha": "6687ea8f3b3b87fd"
+}

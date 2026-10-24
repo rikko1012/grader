@@ -100,6 +100,11 @@ def on_settled(scon, log=None, now=None, days=30):
     out = {"scorecard_rows_added": n_new, "diagnostics_added": n_diag, "events_read": len(evs), "retrain": {}}
     for sport in ("nba", "nfl"):
         out["retrain"][sport] = retrain_due(sport, lcon)
+    try:                                                # sm-2 shadow scorecard (REGISTER A5); never blocks sm-1
+        from . import shadow
+        out["shadow"] = shadow.settle(scon)
+    except Exception as e:                              # noqa: BLE001
+        out["shadow"] = {"error": f"{type(e).__name__}: {str(e)[:120]}"}
     lcon.close()
     icon.close()
     if log:
@@ -166,6 +171,66 @@ def scorecard(lcon=None, model_version=None):
         row["review_window_reached"] = max([w for w in REVIEW_WINDOWS if len(graded) >= w], default=None)
         out.append(row)
     return out
+
+
+def _band(p):
+    from . import grade_policy
+    return grade_policy.band(p) if p is not None else None
+
+
+def grade_bands(rows):
+    """Grade-band validation (REGISTER.md A5 11, sports-gp-1): settled forward props grouped by model version x league
+    x stat x band of the chosen side's UNCONDITIONAL probability (the band the grade would be, shown or not).
+    Per group: settled, graded (win / loss), pushes, voids, games, mean p (chosen side given no push), hit rate,
+    hit - p with a game-clustered bootstrap 95% interval; per (version, league, stat) also an ECE over the bands.
+    rows: scorecard dicts (model_version, league, stat, event_id, p_side, p_push, status)."""
+    groups = {}
+    for r in rows:
+        b = _band(r.get("p_side"))
+        if b is None:
+            continue
+        groups.setdefault((r["model_version"], r["league"], r["stat"]), {}).setdefault(b, []).append(r)
+    out = []
+    for (mv, lg, st), bands in sorted(groups.items()):
+        n_all, ece, rows_out = 0, 0.0, []
+        for b in ("A", "B", "C", "Lean"):
+            rs = bands.get(b, [])
+            graded = [r for r in rs if r["status"] in ("win", "loss")]
+            row = {"band": b, "settled": len(rs), "graded": len(graded), "pushes": sum(r["status"] == "push" for r in rs),
+                   "voids": sum(r["status"] == "void" for r in rs), "games": len({r["event_id"] for r in graded})}
+            if graded:
+                p = np.array([r["p_side"] / max(1e-9, 1 - (r["p_push"] or 0)) for r in graded], float)
+                hit = np.array([1.0 if r["status"] == "win" else 0.0 for r in graded])
+                games = np.array([r["event_id"] for r in graded], dtype=object)
+                m, lo, hi = evaluate.boot_mean(hit - p, games)
+                row.update(mean_p=float(p.mean()), hit_rate=float(hit.mean()), hit_minus_p=m, ci=[lo, hi])
+                n_all += len(graded)
+                ece += len(graded) * abs(float(hit.mean()) - float(p.mean()))
+            rows_out.append(row)
+        out.append({"model_version": mv, "league": lg, "stat": st, "graded": n_all,
+                    "ece_over_bands": ece / n_all if n_all else None, "bands": rows_out,
+                    "policy": "sports-gp-1: A p >= 0.60, B >= 0.5559, C >= 0.5345, Lean below (chosen side, "
+                              "unconditional p); hit rate and p conditional on no push; game-clustered 95% intervals",
+                    "shown_grade": "withheld until gate F - bands are validated whether or not letters are shown"})
+    return out
+
+
+def grade_band_report(lcon=None):
+    """Grade bands of the main scorecard + the sm-2 shadow scorecard (shadow.db), for the admin learning report."""
+    own = lcon is None
+    lcon = lcon or db()
+    cur = lcon.execute("SELECT model_version, league, stat, event_id, p_side, p_push, status FROM scorecard "
+                       "WHERE superseded = 0")
+    names = [d[0] for d in cur.description]
+    rows = [dict(zip(names, r)) for r in cur.fetchall()]
+    if own:
+        lcon.close()
+    try:
+        from . import shadow
+        rows += shadow.scorecard_rows()
+    except Exception:                                                   # noqa: BLE001 - report stays writable
+        pass
+    return grade_bands(rows)
 
 
 def forward_gate(lcon=None):

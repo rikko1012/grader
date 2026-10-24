@@ -1,0 +1,39 @@
+{
+ "artifact_shas": {
+  "nba": "2290682e04d353eb",
+  "nfl": "e5751bf215095a10"
+ },
+ "extras_rows": {
+  "nfl_pgx": 3037,
+  "nfl_tgx": 2466
+ },
+ "extras_sha256": "866dd8a34fc43a836cd08b364f4edc3914b8286219cfb60851d24c488ef37ae1",
+ "files": {
+  "ds2_extras_nfl.json.gz": {
+   "bytes": 80661,
+   "sha256": "9c68576431c3983d3fa7e08a893b1f05cc1a8cf63db24048220a736373199c6a"
+  },
+  "model_config2_nba.json": {
+   "bytes": 113972,
+   "sha256": "def789d8e811efd6aff80d129e466dd3db104646109311062d07c3ddf4709941"
+  },
+  "model_config2_nfl.json": {
+   "bytes": 158490,
+   "sha256": "784d29342e47f0ee37035675966ea57c21ab4614d7ac63dd0b4167773ec79774"
+  },
+  "sm2_nba.json": {
+   "bytes": 116270,
+   "sha256": "69a9231b54729b64e0db64236d3ae6e89ff25405d1d7f6a583b3d872c54d5589"
+  },
+  "sm2_nfl.json": {
+   "bytes": 159907,
+   "sha256": "d33cef77586bdcc3580a82fafbf47013ca732a6c5feafed67f781e0cb28d2dde"
+  }
+ },
+ "freeze_at": {
+  "nba": "2026-10-24T22:14:03Z",
+  "nfl": "2026-10-24T22:14:08Z"
+ },
+ "locked_test_L2": "every game starting after freeze_at[sport]; scored once at >= 150 NBA / >= 48 NFL games (REGISTER.md A5 8)",
+ "version": "sm2-pkg-1"
+}

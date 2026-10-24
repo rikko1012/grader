@@ -132,11 +132,21 @@ def write_snapshot(now=None):
         sc, gates, diag = learning.scorecard(), learning.forward_gate(), learning.diagnostics(200)
     except Exception as e:                                           # noqa: BLE001 - snapshot stays writable
         sc, gates, diag = [], [], [{"error": str(e)[:200]}]
+    try:
+        bands = learning.grade_band_report()
+    except Exception as e:                                           # noqa: BLE001
+        bands = [{"error": str(e)[:200]}]
+    try:
+        from . import shadow
+        shadow_state = shadow.status()
+    except Exception as e:                                           # noqa: BLE001
+        shadow_state = {"error": str(e)[:200]}
     _atomic_write(api_dir() / "model_meta.json", {
         "written_at": now, "registry": forward.registry(), "challengers": _runtime_challengers(), "artifacts": {s: _art_meta(forward.load_artifact(s))
                                                                          for s in ("nba", "nfl")},
         "features": features.with_effects(), "studies": studies})
     _atomic_write(api_dir() / "admin_learning.json", {"written_at": now, "scorecard": sc, "forward_gate": gates,
+                                                      "grade_bands": bands, "shadow": shadow_state,
                                                       "diagnostics": diag, "forecast_run": _last_forecast_run()})
     return out
 

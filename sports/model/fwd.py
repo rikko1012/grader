@@ -363,6 +363,12 @@ def run(leagues=None, forecast_at=None, log=print):
     leagues = list(leagues or ["nba", "nfl"])
     ver = verify_artifacts()
     hist = install_history()
+    try:                                                # sm-2 shadow inputs (REGISTER A5); never blocks sm-1
+        from . import shadow
+        if shadow.enabled():
+            hist["sm2_extras"] = shadow.install_extras(history_path())
+    except Exception as e:                              # noqa: BLE001
+        hist["sm2_extras"] = {"state": f"failed: {type(e).__name__}"}
     if "nba" in leagues:
         hist["nba_refresh"] = refresh_nba(forecast_at or started)
         _trim()
@@ -380,6 +386,11 @@ def run(leagues=None, forecast_at=None, log=print):
                 out["leagues"][lg] = r
                 _trim()
             after = scon.execute("SELECT COUNT(*) FROM forecast_keys").fetchone()[0]
+        try:                                            # sm-2 locked test L2 (REGISTER A5 8): count, score once
+            from . import shadow
+            out["sm2_l2"] = {lg: shadow.l2_check(lg, hcon, forecast_at or started) for lg in leagues}
+        except Exception as e:                          # noqa: BLE001 - never blocks sm-1
+            out["sm2_l2"] = {"error": f"{type(e).__name__}: {str(e)[:160]}"}
     finally:
         hcon.close()
     out["forecasts_added"] = after - before
@@ -404,7 +415,8 @@ def _summary(out):
     return {"started_at": out["started_at"], "finished_at": out.get("finished_at"), "ran_s": out.get("ran_s"),
             "flag": FLAG, "artifacts": out["artifacts"], "history": out["history"],
             "forecasts_added": out.get("forecasts_added"), "leagues": lg, "withheld_check": out.get("withheld_check"),
-            "snapshot": out.get("snapshot"), "peak_rss_mb": out.get("peak_rss_mb"), "training": out["training"]}
+            "snapshot": out.get("snapshot"), "peak_rss_mb": out.get("peak_rss_mb"), "training": out["training"],
+            "sm2_shadow": {k: r.get("shadow") for k, r in out["leagues"].items()}, "sm2_l2": out.get("sm2_l2")}
 
 
 def main(argv=None):

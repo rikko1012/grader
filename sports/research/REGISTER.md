@@ -233,3 +233,85 @@ All forward only (no historical player-prop quotes exist). Implemented in `sport
   where it actually moved the anchor (sources field of each forecast).
 - Stake policy sports-sp-1 (reachable only after gate F): A 1.0U, B 0.5U, C / Lean 0U; any data-quality code = 0U
   with its reason; the letter stays.
+
+## Amendment A5 - factor round 2 / candidate sm-2 (2026-10-24, registered BEFORE any round-2 factor was scored)
+
+Owner 2026-10-24: "make sure grades are taking into account every possible factor". Grades are sports-gp-1 bands of
+the calibrated probability, so a factor reaches a grade only by entering the distribution through a tested model
+version. Standing rule: a factor moves grades ONLY if it passes a chronological test; every other factor is shown at
+weight 0 ("tested - no measured effect") or as not available with its reason; no weight is ever set by hand.
+
+What existed when this was written: the code that computes the round-2 factors (`sports/model/featurize2.py`, ds-2
+extras tables `nfl_pgx` / `nfl_tgx` from the same nflverse play-by-play pass, registry fr-2 in `sports/features.py`) and
+the protocol code (`sports/model/study2.py`). Value ranges / coverage of the new columns were inspected (no target,
+no score). No round-2 factor had been fitted against an outcome or scored.
+
+1. **Candidates (fr-2, registry entries with `round: 2`).** Factors that were derivable but not built in fr-1, plus
+   factors whose forward source changed (NFL wind / temperature now have the NWS kickoff forecast; game spread / total
+   are now tested as model inputs, not only in the separate mi-hist track). Round-1 results of every other factor
+   STAND and are not re-tested (no second look at the same data). NBA: ts_pct, ft_rate, three_share, ast_to,
+   opp_3pa_allow, team_ortg, opp_drtg, games_in_4, travel, starter_today, teammate_absent_usage; game lines (game
+   total, |spread|, implied team total). NFL: route_proxy, target_share_trend, redzone_share, inside10, carry_share,
+   carry_share_trend, scramble_rate, qb_designed_runs, qb_adot, pass / rush / rec EPA per opportunity, team EPA / play,
+   team explosive rate, opponent defensive EPA / success / explosive allowed, neutral seconds per play, teammates out
+   (target share, carry share), rest days, post-bye, travel, wind, temperature; game lines (spread, implied total, game
+   total, |spread|). Players' own injury statuses have no point-in-time history (A1c): status "forward only (logged)",
+   recorded with every shadow forecast, testable only on forward data.
+2. **Point in time.** Own-player history = earlier rows known at the forecast (start + 4 h NBA / 6 h NFL <= forecast,
+   forecast = start - 60 min); team / opponent history = final games public before min(start - 60 min, as_of); schedule
+   facts known in advance; same-game facts (starter tonight, teammates out tonight) are used as known at the lineup /
+   inactive report - NFL inactives are published ~90 min before kickoff (before the forecast time); NBA same-game
+   facts are a stated assumption exactly like sm-1's nba.teammate_absent_sameday, and forward they come from the report
+   or are UNKNOWN (missing indicator, data-quality code). Game lines: nflverse closing line (history), ESPN pickcenter
+   NBA 2025-26 (history); forward = the games-store pickcenter snapshot observed before the forecast. Unit tests
+   enforce each of these (sports/tests/test_factors_round2.py).
+3. **Reference and candidate.** Reference = sm-1's frozen configuration for the market (half-lives, kept fr-1
+   features, family) refit on the split's fit rows. Candidate = reference + ONE round-2 factor; same family, family
+   parameters refit on the fit rows; standardised term with missing indicator exactly as sm-1 (REGISTER 5, A2).
+4. **One-at-a-time test (stage A, statistical factors).** Split = the round-1 TRAIN (fit) / TUNE (evaluate)
+   partitions (section 4). A factor PASSES iff the tune CRPS difference (candidate - reference) has a game-clustered
+   bootstrap 95% interval entirely below 0 (B = 2,000, seed 20261023). Constant or < 30 known values -> "not
+   evaluable". **Joint test:** reference + every passed factor; the market gets a stage-A sm-2 set only if the joint
+   interval is entirely below 0, otherwise no stage-A factor is added.
+5. **Game-line factors (stage B)**, on top of the stage-A set, same one-at-a-time + joint rule. NFL: round-1 split.
+   NBA: train rows have no game lines (A1c), so split **R2**: fit rows start < 2026-02-01, evaluation rows 2026-02-01
+   .. 2026-07-01. That evaluation window was the round-1 LOCKED test of sm-1; it is reused here only as a development
+   window for the new game-line factors (no claim about sm-1 changes) and is labelled so. A game-line factor is
+   evaluable only if lines cover >= 50% of the evaluation rows.
+6. **Multiple testing** is acknowledged: ~10-20 factors per market at a one-sided 2.5% false-pass rate. That is why no
+   tune pass promotes anything: the decision is the new locked test (8).
+7. **Challenger.** A market whose joint test passes gets an sm-2 configuration (cal-1 re-searched on the window it was
+   selected on, same grids) frozen in `sports/model/artifacts/model_config2_<sport>.json`, and a forward artifact
+   `sm2_<sport>.json` refit on every row known at the freeze (hash manifest `MANIFEST_SM2.json`). Markets with no pass
+   stay sm-1 only (no sm-2 artifact, nothing shadowed). sm-2 runs in SHADOW: its forecasts are recorded (own table,
+   never in the member snapshot, never a grade shown) by the forward job in the same scheduler slot.
+8. **New locked test L2 (forward, untouched).** The round-1 locked tests (NBA 2026-02-01..07-01; NFL 2025 week 10 -
+   postseason and 2026 weeks 1-7) are used. No historical period remains that no model has seen (the sm-1 artifact was
+   refit through 2026-10-22), so L2 = every game starting after the sm-2 freeze time recorded in MANIFEST_SM2.json.
+   Scored ONCE, per market, when L2 first holds >= 150 NBA games / >= 48 NFL games with box scores (checked by the
+   learning job; the result is committed as is; a later re-run is post-hoc). Both versions are scored from their
+   frozen artifacts at the registered forecast time (start - 60 min) on the same eligible rows.
+   **Promotion rule per market (all must hold):** (a) L2 CRPS sm-2 - sm-1: game-clustered 95% interval entirely below
+   0; (b) L2 log-loss at the pre-game reference line: point estimate <= that of sm-1; (c) calibration at the reference
+   line |in-the-large| <= 0.02 and ECE <= 0.03; (d) randomised-PIT 80% coverage in [0.76, 0.84] (A3); then (e) gate F
+   (section 7) at REAL offered lines on the shadow forecasts, exactly as for sm-1, log-loss compared with sm-1 on the
+   same props. Nothing promotes automatically: the owner release process decides after (a)-(e).
+9. **Metrics reported for every tested factor:** tune CRPS difference + interval, standardised coefficient, coverage
+   on fit / evaluation rows; for passed factors and the joint model also log-loss at the reference line, ECE /
+   in-the-large and 80% PIT coverage on the evaluation window. Real-line metrics exist only forward (shadow).
+10. **Display.** Every factor of the registry is shown on the player page with its status: used (value), tested - no
+   measured effect (weight 0, with its interval), not available (reason). A factor that passes tune but is only in
+   the sm-2 shadow is "in the sm-2 challenger (shadow) - not in the shown grade".
+11. **Grade-band validation.** Independently of letters being shown, the admin learning report groups settled forward
+   props by sports-gp-1 band (A / B / C / Lean of the chosen side's unconditional probability) per league x stat x
+   model version: n, games, hit rate, mean probability, hit - p with a game-clustered interval.
+- **A5a (2026-10-24, after the round-2 tune results; operational only - no criterion, threshold, split or metric
+  changes):** (a) the forward job COUNTS the L2 games each run (a SQL count, bounded) and reports "threshold reached";
+  the one-time L2 score itself is run by `python -m sports.model.shadow l2 <history.db> <sport>` (it builds full feature
+  frames, ~300 MB, too large for the forward job's 340 MB cap) and writes `<SPORTS_DATA_DIR>/model/l2_<sport>.json`
+  once; an existing result is never re-scored. (b) Known forward limitation recorded before any L2 / shadow evidence:
+  NBA `starter_today` (kept in all four NBA sm-2 markets) has NO pre-game lineup source in this build, so forward it
+  is unknown on every row and the shadow forecasts of NBA sm-2 are the degraded model (starter term at its train
+  mean). The L2 box-score test scores sm-2 with the box-score starter flag, exactly as tuned (the registered same-day
+  assumption); NBA real-line shadow evidence is labelled "starter unknown" and is not evidence for the tuned model
+  until a pre-game lineup source exists.

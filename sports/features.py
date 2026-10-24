@@ -24,11 +24,13 @@ from pathlib import Path
 
 import numpy as np
 
-REGISTRY_VERSION = "fr-1"
+REGISTRY_VERSION = "fr-2"   # fr-1 (72 entries) + round 2 (sports/research/REGISTER.md A5)
 RESULTS = Path(__file__).resolve().parent / "research" / "results"
 
 A, M, H, D, U = ("available + candidate", "available (market track)", "available historically only", "derivable later",
                  "unavailable")
+G = "available (game-line context)"           # fr-2: pre-game game spread / total, tested as an sm-2 candidate
+F = "forward only (logged, not yet testable)"  # fr-2: no point-in-time history exists; values logged forward
 PIT_OWN = "before the game: the player's earlier games (known_at = start + 4 h NBA / 6 h NFL <= forecast_at)"
 PIT_TEAM = "before the game: the team's / opponent's earlier games"
 MISS_HIST = "no earlier games -> missing -> train mean + missing indicator (thin-history rows are a declared slice)"
@@ -244,13 +246,145 @@ NFL_REG = [
        "-", "market track (forward only)", M, NFL_ALL),
 ]
 REGISTRY = REGISTRY + NFL_REG
+FR1_IDS = [r["id"] for r in REGISTRY]          # the 72 fr-1 entries (round 1, sports/research/results/model_study_*)
+FR1_REGISTRY = [dict(r) for r in REGISTRY]     # fr-1 as registered (round-1 candidate lists are unchanged)
+
+# ------------------------------------------------------------------------------------------- fr-2 (factor round 2)
+# Registered in sports/research/REGISTER.md amendment A5 BEFORE any of these was scored. "round": 2 marks the factors
+# tested in round 2 (sports/research/results/model_study2_*); round-1 results of every other entry stand.
+PIT_SAME = ("same game, known at the lineup / inactive report: history = box score; forward = the report when one is "
+            "observed before the forecast, else unknown")
+PIT_LINE = ("pre-game game line: history = ESPN pickcenter (NBA 2025-26 only) / nflverse closing line (NFL); forward "
+            "= the games-store ESPN pickcenter snapshot observed before the forecast")
+ROUND2_UPDATES = {
+    "nba.ts_efg_ftr": dict(status=A, column="ts_pct", markets=["points"], definition="EW true shooting: S_pts / (2 "
+                           "(S_fga + 0.44 S_fta)) over the player's prior games", treatment=CAND),
+    "nba.shot_profile": dict(status=A, column="three_share", markets=["threes", "points"], definition="EW 3PA share of "
+                             "FGA (box). Rim / mid zones and catch-and-shoot need play-by-play history we do not hold "
+                             "for 2023-26 (games store has ESPN shot zones only from 2026-10-23)", treatment=CAND),
+    "nba.ast_to": dict(status=A, column="ast_to", markets=["assists"], definition="EW assists / EW turnovers (floor "
+                       "0.5)", treatment=CAND),
+    "nba.opp_3pa_allowed": dict(status=A, column="opp_3pa_allow", markets=["threes"], definition="opponent's 3PA "
+                                "allowed per minute to the position group, last 15 opponent games public at forecast; "
+                                "contest rate needs tracking (absent)", treatment=CAND),
+    "nba.team_ortg_net": dict(status=A, column="team_ortg", markets=["points", "assists"], definition="team points per "
+                              "100 possessions, last 10 games public at forecast", availability=PIT_TEAM,
+                              treatment=CAND),
+    "nba.game_total": dict(status=G, availability=PIT_LINE, treatment="sm-2 candidate (game-line context, R2 split)"),
+    "nba.blowout_risk": dict(status=G, availability=PIT_LINE, treatment="sm-2 candidate (game-line context, R2 split)"),
+    "nfl.carry_share": dict(status=A, column="carry_share", definition="EW share of the team's carries",
+                            treatment=CAND),
+    "nfl.scramble": dict(status=A, column="scramble_rate", definition="QB EW scrambles / EW dropbacks (nflverse pbp "
+                         "qb_scramble, qb_dropback)", treatment=CAND),
+    "nfl.qb_throw_profile": dict(status=A, column="qb_adot", markets=["pass_yds"], definition="QB aDOT = EW passing air "
+                                 "yards / EW attempts (nflverse, incompletions included); splits vs coverage need "
+                                 "charting (absent)", treatment=CAND),
+    "nfl.seconds_per_play": dict(status=A, column="neutral_sec_play", markets=NFL_ALL, definition="team neutral-"
+                                 "situation seconds between snaps of one drive, last 6 games", availability=PIT_TEAM,
+                                 treatment=CAND),
+    "nfl.injury_redistribution": dict(status=A, column="mates_out_tshare", markets=["rec", "rec_yds", "pass_yds"],
+                                      definition="EW target share of rotation teammates (target share >= 0.08 or carry "
+                                      "share >= 0.15, played one of the last 3 team games) not playing this game",
+                                      availability=PIT_SAME, treatment=CAND),
+    "nfl.epa": dict(status=A, column="team_epa_play", markets=NFL_ALL, definition="team offensive EPA per play "
+                    "(nflverse EPA), last 6 games public at forecast", availability=PIT_TEAM, treatment=CAND),
+    "nfl.wind": dict(status=A, treatment=CAND + "; forward source = NWS kickoff forecast (games store) - history uses "
+                     "the observed game-day value"),
+    "nfl.temp": dict(status=A, treatment=CAND + "; forward source = NWS kickoff forecast (games store)"),
+    "nfl.spread": dict(status=G, availability=PIT_LINE, treatment="sm-2 candidate (game-line context)"),
+    "nfl.implied_total": dict(status=G, availability=PIT_LINE, treatment="sm-2 candidate (game-line context)"),
+}
+ROUND2_NEW = [
+    _f("nba.ft_rate", "nba", "FT rate", "EW FTA / EW FGA", "ESPN box", PIT_OWN, MISS_HIST, "free throws add points",
+       CAND, A, ["points"], "ft_rate"),
+    _f("nba.opp_drtg", "nba", "Opponent DRtg (overall)", "opponent's points allowed per 100 possessions, last 10 games "
+       "public at forecast", "ESPN team box", PIT_TEAM, "first 3 games missing", "weak defence -> more scoring", CAND, A,
+       ["points", "assists", "threes"], "opp_drtg"),
+    _f("nba.games_in_4", "nba", "Rest: games in the previous 4 days", "team games in the 4 days before (schedule)",
+       "ESPN schedule", "known in advance", "first game missing", "dense schedule -> fewer minutes", CAND, A, NBA_ALL,
+       "games_in_4"),
+    _f("nba.travel", "nba", "Travel", "km from the previous game's venue (team home cities; neutral sites unknown)",
+       "ESPN schedule + venue table", "known in advance", "first game / neutral site missing", "travel fatigue", CAND,
+       A, NBA_ALL, "travel_km"),
+    _f("nba.starter_today", "nba", "Starter status tonight", "starts this game (1/0)", "history: ESPN box starter flag; "
+       "forward: ESPN lineup (not collected pre-game yet -> unknown)", PIT_SAME, "forward: unknown without a lineup",
+       "starters play more", CAND, A, NBA_ALL, "starter_today"),
+    _f("nba.teammate_absent_usage", "nba", "Teammate injuries (usage redistribution)", "share of the rotation's EW usage "
+       "held by rotation players not playing this game", "history: ESPN box; forward: ESPN injury report (Out)",
+       PIT_SAME, "forward: unknown without a fresh report", "absent usage is redistributed", CAND, A, NBA_ALL,
+       "absent_usage"),
+    _f("nba.implied_team_total", "nba", "Implied team total", "total / 2 - team spread / 2", "as game total", PIT_LINE,
+       "missing before 2025-26", "more expected points -> more counting stats", "sm-2 candidate (game-line context, R2 "
+       "split)", G, ["points", "threes", "assists"], "implied_team_total"),
+    _f("nba.injury_status_forward", "nba", "Player's own injury status (Questionable / Probable)", "ESPN injury report",
+       "ESPN injury report (store context)", "report time", "history: no point-in-time report (A1c)", "-",
+       "logged with each shadow forecast; testable once forward reports settle", F, NBA_ALL),
+    _f("nfl.route_proxy", "nfl", "Route participation proxy", "EW snap share x team neutral pass rate (L6) - a proxy; "
+       "true routes need the participation file (none for 2026)", "nflverse snap counts + pbp", PIT_OWN, MISS_HIST,
+       "routes are the receiving opportunity", CAND, A, ["rec", "rec_yds"], "route_proxy"),
+    _f("nfl.target_share_trend", "nfl", "Target share trend (L3 vs season)", "mean target share of the last 3 games - "
+       "EW target share", "nflverse weekly", PIT_OWN, MISS_HIST, "rising role persists", CAND, A, ["rec", "rec_yds"],
+       "tshare_trend"),
+    _f("nfl.redzone_share", "nfl", "Red-zone share", "EW red-zone looks / team red-zone plays (L6)", "nflverse pbp",
+       PIT_OWN, MISS_HIST, "red-zone role", CAND, A, NFL_ALL, "rz_share"),
+    _f("nfl.inside10", "nfl", "Inside-10 looks", "EW targets + carries inside the 10", "nflverse pbp", PIT_OWN,
+       MISS_HIST, "goal-line role", CAND, A, NFL_ALL, "i10_looks"),
+    _f("nfl.carry_share_trend", "nfl", "Carry share trend (L3 vs season)", "L3 carry share - EW carry share", "nflverse",
+       PIT_OWN, MISS_HIST, "workhorse vs committee shift", CAND, A, ["rush_att", "rush_yds"], "carry_share_trend"),
+    _f("nfl.qb_designed_runs", "nfl", "QB designed runs", "QB EW carries - EW scrambles", "nflverse pbp", PIT_OWN,
+       MISS_HIST, "designed QB runs", CAND, A, ["rush_att", "rush_yds"], "designed_runs"),
+    _f("nfl.pass_epa", "nfl", "QB EPA per attempt", "EW passing EPA / EW attempts", "nflverse weekly", PIT_OWN,
+       MISS_HIST, "efficient passers gain more", CAND, A, ["pass_yds"], "pass_epa_att"),
+    _f("nfl.rush_epa", "nfl", "EPA per carry", "EW rushing EPA / EW carries", "nflverse weekly", PIT_OWN, MISS_HIST,
+       "efficient rushers gain more", CAND, A, ["rush_yds"], "rush_epa_carry"),
+    _f("nfl.rec_epa", "nfl", "EPA per target", "EW receiving EPA / EW targets", "nflverse weekly", PIT_OWN, MISS_HIST,
+       "efficient receivers gain more", CAND, A, ["rec", "rec_yds"], "rec_epa_target"),
+    _f("nfl.team_explosive", "nfl", "Team explosive-play rate", "rush 10+ / pass 20+ per play, last 6", "nflverse pbp",
+       PIT_TEAM, "first 2 games missing", "explosive offences gain yards", CAND, A, NFL_ALL, "team_explosive"),
+    _f("nfl.opp_def_epa", "nfl", "Opponent defensive EPA allowed / play (DVOA stand-in)", "EPA per play of the "
+       "offences that faced the opponent, last 6", "nflverse pbp", PIT_TEAM, "first 2 games missing", "weak defence -> "
+       "more", CAND, A, NFL_ALL, "opp_def_epa"),
+    _f("nfl.opp_def_success", "nfl", "Opponent success rate allowed", "as above, success", "nflverse pbp", PIT_TEAM,
+       "first 2 games missing", "-", CAND, A, NFL_ALL, "opp_def_success"),
+    _f("nfl.opp_def_explosive", "nfl", "Opponent explosive rate allowed", "as above, explosive", "nflverse pbp",
+       PIT_TEAM, "first 2 games missing", "-", CAND, A, NFL_ALL, "opp_def_explosive"),
+    _f("nfl.mates_out_carries", "nfl", "Injury redistribution (carries)", "EW carry share of rotation teammates not "
+       "playing this game", "history: nflverse rows; forward: ESPN injury report / inactives", PIT_SAME, "forward: "
+       "unknown without a report", "absent carries are redistributed", CAND, A, ["rush_att", "rush_yds"],
+       "mates_out_cshare"),
+    _f("nfl.rest_days", "nfl", "Rest days", "log(days since the team's previous game, clipped 3-21)", "nflverse "
+       "schedule", "known in advance", "first game missing", "rest", CAND, A, NFL_ALL, "rest_log"),
+    _f("nfl.post_bye", "nfl", "Off a bye", "10+ days since the previous game", "nflverse schedule", "known in advance",
+       "first game missing", "rest / preparation", CAND, A, NFL_ALL, "post_bye"),
+    _f("nfl.travel", "nfl", "Travel", "km from the previous game's venue (team home stadiums; neutral sites unknown)",
+       "nflverse schedule + venue table", "known in advance", "first game / international missing", "travel", CAND, A,
+       NFL_ALL, "travel_km"),
+    _f("nfl.game_total", "nfl", "Game total", "pre-game over/under", "nflverse closing line; forward games-store "
+       "pickcenter", PIT_LINE, "missing -> indicator", "high totals -> volume", "sm-2 candidate (game-line context)", G,
+       NFL_ALL, "game_total"),
+    _f("nfl.blowout_risk", "nfl", "Blowout risk", "|pre-game spread|", "as spread", PIT_LINE, "missing -> indicator",
+       "lopsided games change late usage", "sm-2 candidate (game-line context)", G, NFL_ALL, "blowout_risk"),
+    _f("nfl.injury_status_forward", "nfl", "Player's own injury status (Questionable)", "ESPN injury report",
+       "ESPN injury report", "report time", "history: no point-in-time report", "-",
+       "logged with each shadow forecast; testable once forward reports settle", F, NFL_ALL),
+]
+for _r in REGISTRY:
+    if _r["id"] in ROUND2_UPDATES:
+        _r.update(ROUND2_UPDATES[_r["id"]], round=2)
+for _r in ROUND2_NEW:
+    _r["round"] = 2
+REGISTRY = REGISTRY + ROUND2_NEW
 
 
 def candidates(sport, market, track="statistical"):
     """Registry ids tested for a market. track 'statistical' = status available + candidate; 'market' = market track
     entries with a column; 'history' = historical-only entries (tested for information only)."""
+    if track in ("round2", "round2_lines"):            # fr-2 candidates (REGISTER.md A5): statistical / game lines
+        want = (A,) if track == "round2" else (G,)
+        return [r for r in REGISTRY if r.get("round") == 2 and r["sport"] == sport and r["status"] in want
+                and r["column"] and (r["markets"] is None or market in r["markets"])]
     want = {"statistical": (A,), "market": (M,), "history": (H,)}[track]
-    return [r for r in REGISTRY if r["sport"] == sport and r["status"] in want and r["column"]
+    return [r for r in FR1_REGISTRY if r["sport"] == sport and r["status"] in want and r["column"]
             and (r["markets"] is None or market in r["markets"])]
 
 
@@ -261,6 +395,8 @@ MARKET_STAT = {"points": "pts", "rebounds": "reb", "assists": "ast", "threes": "
 def compute(df, sport, market, column):
     """The feature's pre-game value per row of a featurize.frame() (np.ndarray, NaN = unknown)."""
     g = lambda c: np.asarray(df[c], float)                               # noqa: E731
+    if "x_" + column in df:                                              # fr-2 columns (featurize2.augment)
+        return g("x_" + column)
     with np.errstate(divide="ignore", invalid="ignore"):
         if sport == "nba":
             st = MARKET_STAT[market]
@@ -292,7 +428,8 @@ def compute(df, sport, market, column):
             "neutral_pass_rate": g("npass_l6"), "team_plays": g("plays_l6"), "opp_plays": g("opp_plays_l6"),
             "wind": np.where(g("dome") == 1, 0.0, g("wind")),
             "temp": np.where(g("dome") == 1, 70.0, g("temp")),
-            "dome": g("dome"), "home": g("home"),
+            "dome": g("dome"), "home": g("home"), "game_total": g("total_line"),
+            "blowout_risk": np.abs(g("team_spread")),
             "short_week": np.where(np.isfinite(g("rest_days")), (g("rest_days") < 6).astype(float), np.nan),
             "postseason": (np.asarray(df["season_type"]) == "postseason").astype(float),
         }[column]
@@ -310,6 +447,21 @@ def with_effects():
             for fid, e in (m.get("feature_tests") or {}).items():
                 e = dict(e, study=p.name)
                 eff.setdefault(fid, {})[mk] = e
+    for p in sorted(RESULTS.glob("model_study2_*_tune.json")):          # round 2 (REGISTER.md A5)
+        try:
+            res = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        for mk, m in (res.get("markets") or {}).items():
+            added = set(m.get("sm2_features_added") or [])
+            for stage in ("stage_a", "stage_b_lines"):
+                for fid, e in ((m.get(stage) or {}).get("tests") or {}).items():
+                    eff.setdefault(fid, {})[mk] = {
+                        "study": p.name, "round": 2, "split": m[stage].get("split"),
+                        "tune_crps_diff": e.get("crps_diff"), "ci": e.get("ci"), "beta_std": e.get("beta_std"),
+                        "passed": bool(e.get("passed")), "kept": fid in added,
+                        "not_evaluable_on_tune": e.get("not_evaluable"),
+                        "in_model": "sm-2 challenger (shadow) - not in the shown grade" if fid in added else None}
     out = []
     for r in REGISTRY:
         x = dict(r)

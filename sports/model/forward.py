@@ -287,8 +287,10 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
     mcfg = market_config()
     dnp = mcfg.get("dnp_share", {}).get(league, 0.0)
     icon = inputs_db()
+    rec = _shadow_recorder(scon, hcon, league, forecast_at, absences, up)      # sm-2 SHADOW (REGISTER A5 7), never shown
     cur_hl, df = None, None
     for mk in _ordered(league, art["markets"]):
+        sh_items = []
         am = art["markets"][mk]
         hl = tuple(am["half_lives"])
         if hl != cur_hl:
@@ -338,6 +340,7 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
                                      codes, data_version, f"cal-1:{am['cal'][0]:g},{am['cal'][1]:g}",
                                      (("family_fit", am["family"]),))
             written.append(("sm-1", fc, pol, pmf, {"row": row}))
+            sh_items.append((rid, o, gk, pol.get("chosen_p")))
             # market candidates on the same offer
             per, reasons = market.eligible_quotes(o, quotes.get((o.event_id, o.player_id, o.stat), []), events,
                                                   forecast_at, dnp)
@@ -383,9 +386,24 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
                 if fcx.grade is not None or (fcx.stake_units or 0) > 0:     # sports-gp-1: withheld until gate F
                     out["graded_or_staked"] = out.get("graded_or_staked", 0) + 1
         icon.commit()
+        if rec is not None:
+            rec.market(mk, df, hl, rowpos, sh_items, events)
         log({"league": league, "market": mk, "written": out["written"]})
     icon.close()
+    if rec is not None:
+        out["shadow"] = rec.close()
     return out
+
+
+def _shadow_recorder(scon, hcon, league, forecast_at, absences, up):
+    """The sm-2 shadow recorder, or None (no artifact / SPORTS_SHADOW=0 / any error - sm-1 is never affected)."""
+    try:
+        from . import shadow
+        if not shadow.enabled() or shadow.load(league) is None:
+            return None
+        return shadow.Recorder.for_league(scon, hcon, league, forecast_at, absences, up)
+    except Exception:                                    # noqa: BLE001
+        return None
 
 
 def _market_forecast(o, rid, forecast_at, name, po, pu, pp, input_ids, used, mcfg):
