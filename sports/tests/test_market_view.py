@@ -191,7 +191,7 @@ def test_app_never_says_kalshi_market_chance():
     app = (WEB / "app.js").read_text(encoding="utf-8")
     for bad in ("Market chance Over", "the Kalshi market chance", "market prices: Kalshi, PrizePicks, Underdog"):
         assert bad not in app
-    assert "S.marketLabel" in app and "mkBooks(m.mk)" in app and "sw-mkrow" in app and "mkBooks(m.market, true)" in app
+    assert "S.marketLabel" in app and "mkBooks(m.mk, true, true)" in app and "mkBooks(m.market, true)" in app and "sw-offer-market" in app
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
