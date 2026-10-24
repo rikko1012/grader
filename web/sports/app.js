@@ -200,9 +200,9 @@
     var models = (manifest.models || []).map(function (m) {
       return esc(m.model_version) + ": " + m.forecasts + " forecasts on the board, " + m.settled + " settled" + (m.research_only ? ", research version (no grades)" : "");
     });
-    f.innerHTML = "<p>" + plats.join(" · ") + "</p><p>Models: " + (models.join(" · ") || "none on the board") + "</p>" +
+    f.innerHTML = "<details><summary>Data freshness & model details</summary><p>" + plats.join(" · ") + "</p><p>Models: " + (models.join(" · ") || "none on the board") + "</p>" +
       "<p>Snapshot " + esc(manifest.version) + " built " + esc(S.localTime(manifest.built_at)) + " · contracts " + esc(manifest.contracts) +
-      " · capabilities " + esc(manifest.capabilities) + ". Chances are unconditional: Over, Under and Push add up to 100%. History: ESPN; market prices: Kalshi, PrizePicks, Underdog.</p>";
+      " · capabilities " + esc(manifest.capabilities) + ". Chances are unconditional: Over, Under and Push add up to 100%. History: ESPN; market prices: Kalshi, PrizePicks, Underdog.</p></details>";
   }
   function setNav(view) {
     document.querySelectorAll("#sw-views a").forEach(function (a) {
@@ -449,63 +449,49 @@
     });
     return out.length ? '<div class="sw-legbtns">' + out.join("") + "</div>" : "";
   }
-  function boardTable(rows, B) {
-    var h = '<div class="sw-tablebox sw-scroll"><table class="sw-table"><caption class="sw-sr">Prop board: one group per player market, one row per book line</caption><thead><tr>' +
-      '<th scope="col">Player · game</th><th scope="col">Market</th><th scope="col">Book</th><th scope="col" class="num">Line</th><th scope="col">Offered</th>' +
-      '<th scope="col" class="num">Scout projection</th><th scope="col" class="num">Over</th><th scope="col" class="num">Under</th><th scope="col" class="num">Push</th><th scope="col">Observed</th><th scope="col">Slip</th><th scope="col"><span class="sw-sr">Source</span></th></tr></thead>';
-    rows.forEach(function (m) {
-      var qr = quoteRows(m), all = qr.q.map(function (q) { return [q, "q"]; }).concat(qr.k.map(function (q) { return [q, "k"]; }));
-      if (!all.length) all = [[null, "none"]];
-      var inj = B.injuries[m.pid];
-      h += '<tbody class="sw-mkt" data-key="' + esc(m.k) + '">';
-      all.forEach(function (x, i) {
-        var q = x[0], f = q && q.f ? B.fc[q.f] : null, c = fcCell(f, q && q.o);
-        h += "<tr>";
-        if (i === 0) {
-          h += '<td class="sw-who-cell" rowspan="' + all.length + '"><a href="' + marketHref(m, null) + '">' + esc(m.n) + "</a>" +
-            (inj ? ' <span class="sw-tag inj">' + esc(inj.status) + "</span>" : "") +
-            '<div class="sw-faint sw-small">' + esc([m.pos, m.tm].filter(Boolean).join(" · ")) + '</div><div class="sw-small"><a href="#/game/' + encodeURIComponent(m.e) + '">' + esc(m.matchup) + '</a> <span class="sw-faint">' + esc(S.localTime(m.ev && m.ev.start_utc, {weekday: "short", hour: "numeric", minute: "2-digit", timeZoneName: "short"})) + "</span></div></td>" +
-            '<td rowspan="' + all.length + '">' + esc(B.stats[m.st] || m.st) + (m.alt ? '<div class="sw-small"><a href="' + marketHref(m, null) + '">+' + m.alt + " alternate lines</a></div>" : "") +
-            (m.kr > m.kn.length ? '<div class="sw-faint sw-small">Kalshi ladder: ' + m.kr + " rungs</div>" : "") +
-            (m.cap !== "supported" ? '<div class="sw-faint sw-small">No Scout chance for this stat</div>' : "") + "</td>";
-        }
-        if (!q) {
-          h += '<td colspan="10" class="sw-faint">' + (m.alt ? "Only alternate-payout lines (goblin / demon) - open the player for them." : "No line for this filter.") + "</td>";
-        } else if (x[1] === "k") {
-          h += "<td>" + book(q.p) + '</td><td class="num"><span class="sw-line">' + S.line(q.l) + '</span></td><td class="sw-offered">YES ' + S.cents(q.k && q.k[0]) + " / " + S.cents(q.k && q.k[1]) + '</td><td colspan="4" class="sw-small">' + (kMid(q) === null ? '<span class="sw-faint">Kalshi price for Over ' + S.line(q.l) + "</span>" : "Market chance Over " + S.line(q.l) + ": <b>" + S.pct(kMid(q)) + '</b> <span class="sw-faint">(Kalshi YES mid)</span>') + '</td><td class="sw-small sw-faint">' + esc(S.age(q.t)) + "</td><td></td><td>" + quoteSource(q) + "</td>";
-        } else {
-          h += "<td>" + book(q.p) + (q.v !== "standard" && q.v !== "balanced" ? ' <span class="sw-tag">' + esc(q.v) + "</span>" : "") + '</td><td class="num"><a class="sw-line" href="' + marketHref(m, q) + '" aria-label="' + esc(m.n + " " + (B.stats[m.st] || m.st) + " " + S.line(q.l) + " on " + bookName(q.p)) + '">' + S.line(q.l) + "</a></td>" +
-            '<td class="sw-offered">' + offeredText(q.o) + (q.m && (q.m[0] !== 1 || q.m[1] !== 1) ? '<div class="sw-faint">' + (q.m[0] ? "O " + S.mult(q.m[0]) : "") + (q.m[1] ? " U " + S.mult(q.m[1]) : "") + "</div>" : "") + "</td>" +
-            '<td class="num">' + c.mean + '</td><td class="num">' + c.over + '</td><td class="num">' + c.under + '</td><td class="num">' + c.push + "</td>" +
-            '<td class="sw-small"><span class="sw-faint">' + esc(S.age(q.t)) + "</span>" + (f ? '<div class="sw-faint">' + esc(f.m) + " · " + esc(S.age(f.at)) + "</div>" : (q.g ? '<div class="sw-faint">No Scout chance yet</div>' : "")) + "</td>" +
-            "<td>" + boardLegButtons(m, q, f, B) + "</td><td>" + quoteSource(q) + (f ? fcSource(q.f, f, q) : "") + "</td>";
-        }
-        h += "</tr>";
-      });
-      h += "</tbody>";
-    });
-    return h + "</table></div>";
-  }
+  // Keep a single responsive rendering: every action retains its exact quote and forecast revision.
   function boardCards(rows, B) {
-    var h = '<div class="sw-cards">';
-    rows.forEach(function (m) {
+    function offer(m, q) {
+      var f = q.f ? B.fc[q.f] : null, c = fcCell(f, q.o);
+      return '<div class="sw-offer"><div class="sw-offer-head">' + book(q.p) +
+        '<a class="sw-line" href="' + marketHref(m, q) + '">' + S.line(q.l) +
+        ' <span>' + esc(B.stats[m.st] || m.st) + '</span></a></div>' +
+        '<div class="sw-chances"><div><span>Over</span><strong>' + c.over + '</strong></div>' +
+        '<div><span>Under</span><strong>' + c.under + '</strong></div>' +
+        '<div><span>Projection</span><strong>' + c.mean + '</strong></div></div>' +
+        (f ? '<div class="sw-small sw-faint sw-push-note">Push ' + c.push + '</div>' : '') +
+        '<div class="sw-offer-meta">' + esc(offeredText(q.o)) + ' · Observed ' + esc(S.age(q.t)) +
+        (q.v !== 'standard' && q.v !== 'balanced' ? ' · ' + esc(q.v) : '') +
+        (q.m ? ' · Multipliers O ' + S.mult(q.m[0]) + ' / U ' + S.mult(q.m[1]) : '') + '</div>' +
+        boardLegButtons(m, q, f, B) + '<div class="sw-offer-source">' + quoteSource(q) +
+        (f ? fcSource(q.f, f, q) : '<span class="sw-small sw-faint">Forecast pending</span>') + '</div></div>';
+    }
+    return '<div class="sw-research-grid">' + rows.map(function (m) {
       var qr = quoteRows(m), inj = B.injuries[m.pid];
-      h += '<article class="sw-card" aria-label="' + esc(m.n + ", " + (B.stats[m.st] || m.st)) + '"><div class="sw-card-top"><div><a href="' + marketHref(m, null) + '">' + esc(m.n) + "</a>" +
-        (inj ? ' <span class="sw-tag inj">' + esc(inj.status) + "</span>" : "") + '<div class="sw-faint sw-small">' + esc([m.pos, m.tm].filter(Boolean).join(" · ")) + " · " + esc(m.matchup) + " · " + esc(S.localTime(m.ev && m.ev.start_utc, {weekday: "short", hour: "numeric", minute: "2-digit"})) + "</div></div>" +
-        '<div class="sw-small" style="text-align:right">' + esc(B.stats[m.st] || m.st) + "</div></div>";
-      qr.q.forEach(function (q) {
-        var f = q.f ? B.fc[q.f] : null, c = fcCell(f, q.o);
-        h += '<div class="sw-qrow"><div>' + book(q.p) + ' <a class="sw-line" href="' + marketHref(m, q) + '">' + S.line(q.l) + '</a><div class="sw-offered">' + offeredText(q.o) + " · " + esc(S.age(q.t)) + "</div></div>" +
-          '<div class="sw-small sw-faint" style="text-align:right">Proj<br><b class="sw-p">' + c.mean + "</b></div>" +
-          '<div class="sw-pp"><span>O ' + c.over + "</span><span>U " + c.under + "</span>" + (f && f.pp > 0 ? "<span>P " + c.push + "</span>" : "") + "</div>" + boardLegButtons(m, q, f, B) + "</div>";
+      // A fixed book order avoids presenting a high probability or alternate as a recommendation.
+      var order = {prizepicks: 0, underdog: 1, fanduel: 2, betrivers: 3};
+      var quotes = qr.q.slice().sort(function (a, b) {
+        var rank = function (q) { return Object.prototype.hasOwnProperty.call(order, q.p) ? order[q.p] : 10; };
+        return rank(a) - rank(b);
       });
-      qr.k.forEach(function (q) {
-        h += '<div class="sw-qrow"><div>' + book(q.p) + ' <span class="sw-line">' + S.line(q.l) + '</span></div><div class="sw-small sw-faint">YES ' + S.cents(q.k && q.k[0]) + " / " + S.cents(q.k && q.k[1]) + '</div><div class="sw-small' + (kMid(q) === null ? ' sw-faint">market price' : '">market <b>' + S.pct(kMid(q)) + "</b>") + "</div></div>";
-      });
-      if (!qr.q.length && !qr.k.length) h += '<div class="sw-qrow"><div class="sw-faint sw-small">' + (m.alt ? m.alt + " alternate lines - open the player" : "No line for this filter") + "</div></div>";
-      h += "</article>";
-    });
-    return h + "</div>";
+      var h = '<article class="sw-research-card" aria-label="' + esc(m.n + ', ' + (B.stats[m.st] || m.st)) + '">' +
+        '<div class="sw-research-head"><div class="sw-avatar" aria-hidden="true">' + esc(m.n.split(' ').map(function(n){return n[0];}).slice(0,2).join('')) +
+        '</div><div><a class="sw-player-name" href="' + marketHref(m, null) + '">' + esc(m.n) + '</a>' +
+        '<div class="sw-small sw-faint">' + esc([m.tm, m.pos].filter(Boolean).join(' · ')) + '</div></div>' +
+        (inj ? '<span class="sw-tag inj">' + esc(inj.status) + '</span>' : '') + '</div>' +
+        '<div class="sw-matchline"><a href="#/game/' + encodeURIComponent(m.e) + '">' + esc(m.matchup) + '</a><span>' +
+        esc(S.localTime(m.ev && m.ev.start_utc, {weekday:'short',hour:'numeric',minute:'2-digit'})) + '</span></div>';
+      if (quotes.length) h += offer(m, quotes[0]);
+      else h += '<div class="sw-offer"><b>' + esc(B.stats[m.st] || m.st) + '</b><p class="sw-faint">' + (qr.k.length ? 'Market prices available below.' : 'No ordinary line for these filters.') + '</p></div>';
+      var remaining = quotes.length - 1 + qr.k.length;
+      if (remaining > 0) {
+        h += '<details class="sw-compare"><summary>Compare ' + remaining + ' more lines <span aria-hidden="true">＋</span></summary><div>';
+        quotes.slice(1).forEach(function(q){ h += offer(m,q); });
+        qr.k.forEach(function(q){ h += '<div class="sw-offer"><div class="sw-offer-head">' + book(q.p) + '<b>' + S.line(q.l) + '</b></div><p class="sw-small">YES ' + S.cents(q.k && q.k[0]) + ' / ' + S.cents(q.k && q.k[1]) + ' · ' + (kMid(q) === null ? 'Market price' : 'Market chance ' + S.pct(kMid(q))) + '</p><span class="sw-faint sw-small">Observed ' + esc(S.age(q.t)) + '</span> ' + quoteSource(q) + '</div>'; });
+        h += '</div></details>';
+      }
+      return h + '<a class="sw-research-link" href="' + marketHref(m,null) + '">Player history & research <span aria-hidden="true">↗</span></a></article>';
+    }).join('') + '</div>';
   }
   function renderBoard(params, onlyEvent) {
     var f = state.filters[state.lg];
@@ -522,7 +508,7 @@
       var evs = Object.keys(B.board.events).map(function (k) { return [k, matchup(B.board.events[k]) + " · " + S.localTime(B.board.events[k].start_utc, {weekday: "short", hour: "numeric", minute: "2-digit"}), B.board.events[k].start_utc]; })
         .sort(function (a, b) { return a[2] < b[2] ? -1 : 1; });
       var head = onlyEvent ? "" : '<div class="sw-eyebrow">' + state.lg.toUpperCase() + ' · Prop board</div><h1 class="sw-h1">Prop board</h1>' +
-        '<p class="sw-sub">Each row is one market. Books share a row only when the market is identical (same game, player, stat, full game, ordinary line). Over, Under and Push are Scout’s unconditional chances for that book’s line.</p>' +
+        '<p class="sw-sub">Find a player. Compare the lines. Track your research. Chances apply to the exact book and line shown; they are not validated recommendations.</p>' +
         boardFiltersHtml(B, f, evs);
       target.innerHTML = head + '<div id="sw-bcount"></div><div id="sw-bbody"></div>';
       function draw() {
@@ -542,7 +528,7 @@
           document.getElementById("sw-reset2").onclick = reset; return;
         }
         var shown = rows.slice(0, state.boardShown);
-        body.innerHTML = boardTable(shown, B) + boardCards(shown, B) +
+        body.innerHTML = boardCards(shown, B) +
           (rows.length > shown.length ? '<p style="text-align:center"><button type="button" class="sw-btn" id="sw-showmore">Show ' + Math.min(BOARD_PAGE, rows.length - shown.length) + " more (" + (rows.length - shown.length) + " left)</button></p>" : "");
         var sm = document.getElementById("sw-showmore");
         if (sm) sm.onclick = function () { state.boardShown += BOARD_PAGE; draw(); };
