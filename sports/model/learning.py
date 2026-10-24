@@ -56,52 +56,48 @@ def _pit(fc, value, pmf_row=None, lo=None):
 
 def on_settled(scon, log=None, now=None, days=30):
     """Scorecard + diagnostic queue for every forecast (of the last `days`) whose offer has a (new) settlement.
-    Idempotent: one row per forecast x current settlement; a corrected settlement supersedes the earlier row."""
+    Idempotent: one row per forecast x current settlement; a corrected settlement supersedes the earlier row.
+
+    Bounded (Starter, 2026-10-24): event by event - only events with a settlement known in the window are read, each
+    event's settlements are read once (records_event index) and only that event's forecasts are decoded; a forecast
+    already scored against its current settlement costs one indexed lookup. Never retrains (retrain_due only REPORTS
+    whether the registered trigger is met; fitting needs `train fit` under SPORTS_TRAIN)."""
     lcon = db()
     icon = forward.inputs_db()
-    rows = scon.execute("SELECT record_id FROM records WHERE kind='forecast' AND known_at >= ?",
-                        ((parse_utc(now or now_utc()) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ"),)
-                        ).fetchall()
+    cutoff = (parse_utc(now or now_utc()) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    evs = [r[0] for r in scon.execute("SELECT DISTINCT event_id FROM records WHERE kind='settlement' AND known_at >= ? "
+                                      "AND event_id IS NOT NULL ORDER BY event_id", (cutoff,))]
     n_new = n_diag = 0
-    for (fid,) in rows:
-        fc = store.get(scon, fid)
-        if fc is None or not fc.offer_snapshot_ids or fc.chosen_side is None:
+    for ev in evs:
+        by_offer = {}
+        for r in scon.execute("SELECT source, source_key, payload FROM records WHERE kind='settlement' AND event_id=? "
+                              "ORDER BY source_key, revision", (ev,)):
+            by_offer.setdefault((r["source"], r["source_key"].rsplit("|", 1)[0]), []).append(store._rec(r))
+        if not by_offer:
             continue
-        offer = store.get(scon, fc.offer_snapshot_ids[0])
-        if offer is None:
-            continue
-        alls = [s for _, s in store.settlements(scon, offer_id=offer.offer_id, platform=offer.platform)]
-        sts = [s for s in alls if s.side == fc.chosen_side] or alls     # the other side's record has the value too
-        if not sts:
-            continue
-        cur = max(sts, key=lambda s: s.revision)
-        # scored at the FORECAST's own line and side (the settlement records the offer's line at settlement time)
-        st_status, st_outcome = settlement.at_line(cur, fc.line, fc.chosen_side)
-        if lcon.execute("SELECT 1 FROM scorecard WHERE forecast_id=? AND settlement_id=?",
-                        (fid, cur.settlement_id)).fetchone():
-            continue
-        r = icon.execute("SELECT pmf_lo, pmf_json FROM inputs WHERE forecast_id=?", (fid,)).fetchone()
-        pit = _pit(fc, cur.source_value, json.loads(r[1]) if r and r[1] else None, r[0] if r else None)
-        p_side = fc.p_over if fc.chosen_side == "over" else fc.p_under
-        lcon.execute("UPDATE scorecard SET superseded=1 WHERE forecast_id=?", (fid,))
-        lcon.execute("INSERT OR IGNORE INTO scorecard VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)",
-                     (fid, cur.settlement_id, fc.model_version, fc.league, fc.stat, fc.event_id, offer.platform,
-                      fc.line, fc.chosen_side, p_side, fc.p_over, fc.p_under, fc.p_push, st_status, st_outcome,
-                      cur.source_value, pit, fc.forecast_at, cur.settled_at))
-        n_new += 1
-        kinds = []
-        if pit is not None and abs(pit - 0.5) >= 0.45:
-            kinds.append(("large_miss", f"PIT {pit:.3f}, value {cur.source_value}, line {fc.line}"))
-        if cur.status == "void":
-            kinds.append(("void", cur.reason or ""))
-        if cur.revision > 1:
-            kinds.append(("settlement_corrected", f"revision {cur.revision} supersedes {cur.supersedes}"))
-        for k, d in kinds:
-            lcon.execute("INSERT OR IGNORE INTO diagnostics VALUES (?,?,?,?,?,0)", (fid, cur.settlement_id, k, d[:300],
-                                                                                    now_utc()))
-            n_diag += 1
+        for fr in scon.execute("SELECT record_id, payload FROM records WHERE kind='forecast' AND event_id=? AND "
+                               "known_at >= ? ORDER BY rid", (ev, cutoff)).fetchall():
+            fc = store._rec(fr)
+            fid = fr["record_id"]
+            if fc is None or not fc.offer_snapshot_ids or fc.chosen_side is None:
+                continue
+            offer = store.get(scon, fc.offer_snapshot_ids[0])
+            if offer is None:
+                continue
+            alls = by_offer.get((offer.platform, offer.offer_id), [])
+            sts = [x for x in alls if x.side == fc.chosen_side] or alls  # the other side's record has the value too
+            if not sts:
+                continue
+            cur = max(sts, key=lambda x: x.revision)
+            if lcon.execute("SELECT 1 FROM scorecard WHERE forecast_id=? AND settlement_id=?",
+                            (fid, cur.settlement_id)).fetchone():
+                continue
+            a, d = _score_one(lcon, icon, fid, fc, offer, cur)
+            n_new += a
+            n_diag += d
+        lcon.commit()
     lcon.commit()
-    out = {"scorecard_rows_added": n_new, "diagnostics_added": n_diag, "retrain": {}}
+    out = {"scorecard_rows_added": n_new, "diagnostics_added": n_diag, "events_read": len(evs), "retrain": {}}
     for sport in ("nba", "nfl"):
         out["retrain"][sport] = retrain_due(sport, lcon)
     lcon.close()
@@ -109,6 +105,30 @@ def on_settled(scon, log=None, now=None, days=30):
     if log:
         log(out)
     return out
+
+
+def _score_one(lcon, icon, fid, fc, offer, cur):
+    # scored at the FORECAST's own line and side (the settlement records the offer's line at settlement time)
+    st_status, st_outcome = settlement.at_line(cur, fc.line, fc.chosen_side)
+    r = icon.execute("SELECT pmf_lo, pmf_json FROM inputs WHERE forecast_id=?", (fid,)).fetchone()
+    pit = _pit(fc, cur.source_value, json.loads(r[1]) if r and r[1] else None, r[0] if r else None)
+    p_side = fc.p_over if fc.chosen_side == "over" else fc.p_under
+    lcon.execute("UPDATE scorecard SET superseded=1 WHERE forecast_id=?", (fid,))
+    lcon.execute("INSERT OR IGNORE INTO scorecard VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)",
+                 (fid, cur.settlement_id, fc.model_version, fc.league, fc.stat, fc.event_id, offer.platform,
+                  fc.line, fc.chosen_side, p_side, fc.p_over, fc.p_under, fc.p_push, st_status, st_outcome,
+                  cur.source_value, pit, fc.forecast_at, cur.settled_at))
+    kinds = []
+    if pit is not None and abs(pit - 0.5) >= 0.45:
+        kinds.append(("large_miss", f"PIT {pit:.3f}, value {cur.source_value}, line {fc.line}"))
+    if cur.status == "void":
+        kinds.append(("void", cur.reason or ""))
+    if cur.revision > 1:
+        kinds.append(("settlement_corrected", f"revision {cur.revision} supersedes {cur.supersedes}"))
+    for k, d in kinds:
+        lcon.execute("INSERT OR IGNORE INTO diagnostics VALUES (?,?,?,?,?,0)", (fid, cur.settlement_id, k, d[:300],
+                                                                                now_utc()))
+    return 1, len(kinds)
 
 
 def scorecard(lcon=None, model_version=None):

@@ -483,6 +483,30 @@ Known growth risk: forecasts and settlements are not archived, and the model lea
 all of them - their peaks grew 78 -> 218 MB on the test copy as forecasts accumulated. They will outgrow their
 caps over weeks unless the model jobs bound their reads (reported to the model / lines owners).
 
+### 13.5 Forward forecasts without training (SPORTS_FORECAST, sports/model/fwd.py - owner 2026-10-24)
+
+- **Enable:** scout-sports-api Environment: `SPORTS_FORECAST=1`; `SPORTS_TRAIN` stays `0`. Optional:
+  `SPORTS_FORECAST_REFRESH=0` (no NBA box-score refresh), `SPORTS_FORECAST_REFRESH_S` (refresh budget, 120 s),
+  `SPORTS_FORECAST_MAX_VM_MB` (address-space backstop, 640), `SPORTS_JOB_MODEL_FORWARD_EVERY_S` (1800),
+  `SPORTS_JOB_MODEL_FORWARD_CAP_MB` (340). Disable: `SPORTS_FORECAST=0` (stored forecasts stay; nothing is deleted).
+- **What runs** (scheduler job `model-forward`, exclusive - never beside ingestion or any other child): verify
+  `sports/model/artifacts/MANIFEST.json` (sha256 of every artifact; sm-1 nba 5ec8adf73a6dad18, nfl cc56aeb8b88c31d8,
+  mc-1 8119ce6b61539999) -> on first run install the packaged ds-1 history (10.9 MB gz -> 42.6 MB,
+  `<SPORTS_DATA_DIR>/model/fwd/history.db`, sha256-checked) -> append finished NBA games from ESPN (bounded, 32 h
+  lag) -> sm-1 / mi-1 / mc-1 / mkt-* forecasts for the current board (incremental: an unchanged offer revision x
+  input key writes nothing) -> bounded model snapshot. Never: fit, learn-retrain, study, lab. A tampered artifact
+  refuses the run (`refused: frozen artifacts do not verify`), nothing written.
+- **Settlement / scorecard:** the settle job (SPORTS_INGEST) scores settled forecasts event by event
+  (learning.on_settled - bounded, never retrains) for gate F (>= 300 settled props, >= 100 games).
+- **Check it:** `GET /api/sports/admin/model/learning` -> `forecast_run` (finished_at, forecasts_added, per-league
+  written / unchanged / skipped, artifact shas, history + NBA refresh, peak_rss_mb, withheld_check) and ops
+  `scheduler.jobs.model-forward` (last_exit.code 0, last_exit.peak_rss_mb under 340).
+- **Measured** (real-feed store copy, Windows working set): 306-319 MB with 14.6k or 214.6k stored forecasts (does not
+  grow with history); snapshot 93 MB (was 218 -> 2,394 MB); scorecard step 51 MB / 0.8 s (was 51 -> 88 MB, 8.6 ->
+  109 s with 200k forecasts). Disk: ~5.1 KB per stored forecast; ~7-70 MB / day (sports/research/results/fwd_2026-10-24).
+- **Limits:** NFL features are the package's (through 2026 week 7, 94 games); the NFL refresh (nflverse files) is not
+  in this job. Grades withheld / stakes 0 until gate F (sports-gp-1).
+
 ## CHECKPOINT (sports/starter, 2026-10-24)
 
 Done: memory-reservation scheduler + caps (cf1b46b), service memory (ca2900b), compaction arch-1 + store hook
