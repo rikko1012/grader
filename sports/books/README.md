@@ -133,7 +133,10 @@ model's `chance` (`sharp-1`) is **unchanged**: the book consensus is shown and l
 ## Bridge to sc-1 (`bridge.py`)
 
 `bridge.sink(con, resolver_for)` is handed to `worker.run_once` by the canonical collector. Per game read:
-- one sc-1 `OfferSnapshot` per (feed, book, game, player, stat, period, market type, **line**); its two sides are
+- **main (standard) lines only**: alternate ladder rungs and promos stay in `books.db`'s immutable quote history.
+  They were ~85-90% of the books' lines and ~93% of their revisions (2026-10-24: FanDuel 6,976 of 7,849 lines,
+  BetRivers 4,165 of 4,984), and the model can never use them; copying them would store the same history twice;
+- one sc-1 `OfferSnapshot` per (feed, book, game, player, stat, period, **line**); its two sides are
   `SideQuote`s with the book's decimal prices. A side the book does not list is **not offered** (never invented);
 - platform = the book for its own feed (`fanduel`, `betrivers`), `oddspapi:<book>` for OddsPapi;
 - `source_updated_at` = the provider's own change time (BetRivers changedDate, OddsPapi changedAt), else `None` with

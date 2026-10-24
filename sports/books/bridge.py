@@ -3,7 +3,12 @@
 The books worker (worker.run_once) reads FanDuel / BetRivers (own public feeds) and, when enabled, OddsPapi. Each
 successful game read is handed to sink(), which stores it in the canonical store the UI snapshots and the model read.
 
-One OfferSnapshot per (feed, book, game, player, stat, period, market type, LINE): the two sides of one line are one
+Only the books' ORDINARY (standard / main) lines are bridged. Alternate ladder rungs and promos stay in the books
+store's immutable quote history (books.db) only: they are ~85-90% of the books' lines and ~93% of their price
+revisions (measured 2026-10-24: FanDuel 6,976 of 7,849 lines alternate, BetRivers 4,165 of 4,984), and the model can
+never use them (capabilities.compatible) - copying them into sc-1 would store the same history twice.
+
+One OfferSnapshot per (feed, book, game, player, stat, period, LINE): the two sides of one line are one
 offer; a side the book does not list is NOT OFFERED (never invented, never 50%). Platform = the book for its own feed
 ("fanduel", "betrivers"), "oddspapi:<book>" for OddsPapi. Prices are the book's decimal odds. source_updated_at = the
 provider's own change time when it publishes one (BetRivers changedDate, OddsPapi changedAt), else None with
@@ -46,8 +51,8 @@ def to_offers(offers, lg, event_key, observed_at, resolver=None):
     event_id = f"{league}:espn:{event_key.split(':', 1)[1]}" if event_key and event_key.startswith("espn:") else None
     groups = {}
     for o in offers:
-        if o.get("market") is None or o.get("period") not in PERIOD_SCOPE:
-            continue
+        if o.get("market") is None or o.get("period") not in PERIOD_SCOPE or o.get("market_type") != "standard":
+            continue                                    # alternates / promos: books.db history only (see above)
         groups.setdefault(_pair_key(o), {})[o["side"]] = o
     for key, sides in groups.items():
         o = next(iter(sides.values()))
@@ -70,8 +75,7 @@ def to_offers(offers, lg, event_key, observed_at, resolver=None):
             event_id=event_id, event_ref=o.get("event_name"), player_id=pid, player_name=o["player"],
             player_key=names.key(o["player"]), team=None, stat=o["market"], source_stat=o.get("stat_label") or "",
             scope=PERIOD_SCOPE[o["period"]], line=float(o["line"]), sides=quotes,
-            variant="main" if o.get("market_type") == "standard" else "alternate",
-            promotional=o.get("market_type") == "promo", availability=status, rule_version=RULE,
+            variant="main", promotional=False, availability=status, rule_version=RULE,
             listed_start_utc=o.get("start"), listed_time_kind="start", source_updated_at=upd,
             observed_at=observed_at, source_time_unknown=upd is None, extras=extras, known_at=observed_at))
     return b

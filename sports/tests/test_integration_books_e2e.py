@@ -396,12 +396,25 @@ def test_oddspapi_capture_spends_nothing_billable(monkeypatch):
 def test_bridge_never_invents_a_side():
     o = base.make_offer(provider="betrivers", book="betrivers", jurisdiction="oh", league="nba", provider_event_id="e",
                         event_name="x", start=START, player="P00", market="points", period="game", line=19.5,
-                        side="over", price_american=-120, market_type="alternate", status="open")
+                        side="over", price_american=-120, market_type="standard", status="open")
     b = bridge.to_offers([o], {"key": "nba"}, "espn:1", COLLECT_AT, None)
     (rec,) = b.records
-    assert rec.platform == "betrivers" and rec.variant == "alternate"
+    assert rec.platform == "betrivers" and rec.variant == "main"
     assert [(s.side, s.offered, s.price) for s in rec.sides] == [("over", True, round(1 + 100 / 120, 6)),
                                                                 ("under", False, None)]
+
+
+def test_only_ordinary_book_lines_reach_sc1_alternates_stay_in_the_quote_history():
+    """Alternate rungs / promos are ~85-90% of the books' lines and ~93% of their revisions (measured 2026-10-24) and
+    the model can never use them: they stay in books.db only, so the same history is not stored twice."""
+    def off(line, mt, side="over"):
+        return base.make_offer(provider="fanduel", book="fanduel", jurisdiction="oh", league="nba",
+                               provider_event_id="e", event_name="x", start=START, player="P00", market="points",
+                               period="game", line=line, side=side, price_decimal=1.9, market_type=mt, status="open")
+    offers = [off(17.5, "standard"), off(17.5, "standard", "under"), off(24.5, "alternate"), off(29.5, "alternate"),
+              off(15.5, "promo")]
+    b = bridge.to_offers(offers, {"key": "nba"}, "espn:1", COLLECT_AT, None)
+    assert [(r.line, r.variant, r.promotional) for r in b.records] == [(17.5, "main", False)]
 
 
 def test_a_complete_game_read_removes_only_that_games_missing_lines(tmp_path):

@@ -28,7 +28,7 @@ This is the ONE scheduled collector (the sports service's ingest-loop child). Ea
   oddsapi      The Odds API through books/sources.oddsapi_ingest (credit ledger; events and players resolved)
   polymarket   books/sources.polymarket_ingest
   books        FanDuel / BetRivers own feeds (+ OddsPapi when its guard allows): books/worker.run_once, each game
-               read stored as quote history AND as sc-1 offers (books/bridge.py) from the same fetch
+               read stored as quote history AND, main lines, as sc-1 offers (books/bridge.py) from the same fetch
   games        sports/games collect.tick: pre-game context (pickcenter, predictor, NWS weather), ESPN-supplied
                DraftKings prop lines, Kalshi game ladders, BPI / FPI, rosters / injuries through the same cached reads
                as above (no second request)

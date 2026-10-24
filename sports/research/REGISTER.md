@@ -201,8 +201,8 @@ process - nothing auto-promotes.
   and stored as sc-1 offers with platform `fanduel` / `betrivers`, are judged by EXACTLY the per-book rule section 10
   gives The Odds API books (both sides at the same line, decimal odds > 1, multiplicative de-vig on that exhaustive
   pair only, age from the book's own change time when it publishes one - BetRivers changedDate - else observed age,
-  <= 15 min and before the start; ordinary main lines only - their alternate lines are variant `alternate` and never
-  compatible). They are evaluated ONLY as single-source candidates `mkt-fanduel` / `mkt-betrivers`. They are NOT
+  <= 15 min and before the start; ordinary main lines only - only their main lines are stored as sc-1 offers at all,
+  their alternate rungs stay in the books' own quote history and were never compatible). They are evaluated ONLY as single-source candidates `mkt-fanduel` / `mkt-betrivers`. They are NOT
   sources of mc-1 or mi-1: those two keep the source set registered in section 10 (Kalshi, Polymarket, each Odds API
   book), so no mc-1 / mi-1 number changes because a direct feed was added and nothing is refitted. Adding them to the
   consensus would need its own dated amendment before any comparison. OddsPapi stays excluded (section 10).
