@@ -78,6 +78,10 @@ MIGRATIONS = [
         "ALTER TABLE records ADD COLUMN origin TEXT",
         "CREATE INDEX IF NOT EXISTS records_current ON records (kind, source, source_key, late, revision)",
     ]),
+    (3, [                                          # incremental forecasting (LINE_CORRECTNESS.md C11)
+        """CREATE TABLE IF NOT EXISTS forecast_keys (
+             input_key TEXT PRIMARY KEY, forecast_id TEXT NOT NULL, league TEXT, known_at TEXT NOT NULL)""",
+    ]),
 ]
 CURRENT_SQL = "late = 0"                           # the predicate every 'current' reader adds (see module docstring)
 UNIQUE_REVISION_INDEX = ("CREATE UNIQUE INDEX IF NOT EXISTS records_ident_rev ON records "
@@ -106,7 +110,7 @@ def migrate(con):
     mid-migration rolls back to the previous level), then the one-time repair of pre-fix duplicate sightings."""
     con.execute("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)")
     con.commit()
-    if _level(con) >= MIGRATIONS[-1][0] and _meta(con, "repair_prefix_duplicates") is not None:
+    if _level(con) >= MIGRATIONS[-1][0] and _meta(con, "repair_prefix_duplicates") is not None and             _meta(con, "forecast_keys_backfill") is not None:
         return _level(con)
     with _WRITE_LOCK:
         con.execute("BEGIN IMMEDIATE")
@@ -128,6 +132,8 @@ def migrate(con):
             if _meta(con, "repair_prefix_duplicates") is None:
                 report = repair_prefix_duplicates(con, _in_tx=True)
                 _set_meta(con, "repair_prefix_duplicates", json.dumps(report, sort_keys=True))
+            if _meta(con, "forecast_keys_backfill") is None:
+                _set_meta(con, "forecast_keys_backfill", json.dumps(backfill_forecast_keys(con)))
             con.commit()
         except BaseException:
             con.rollback()
@@ -279,6 +285,10 @@ def _put(con, rec, known_at):
                     "last_source_updated_at = ? WHERE record_id = ?", (seen, new_src, cur["record_id"]))
         return {"status": "duplicate", "record_id": cur["record_id"], "revision": cur["revision"]}
     if isinstance(rec, Forecast):
+        fkey = forecast_key(rec)
+        ex = con.execute("SELECT forecast_id FROM forecast_keys WHERE input_key = ?", (fkey,)).fetchone()
+        if ex:                                 # the same forecast, made again from unchanged inputs: nothing written
+            return {"status": "unchanged", "record_id": ex[0], "revision": 1}
         clash = con.execute("SELECT 1 FROM records WHERE kind='forecast' AND source_key=?",
                             (rec.forecast_id,)).fetchone()
         if clash:
@@ -302,9 +312,39 @@ def _put(con, rec, known_at):
                 (rec.KIND, rid, source, source_key, rev, stored_h, rec.schema_version, c["league"], c["event_id"],
                  c["player_id"], c["stat"], c["platform"], c["line"], c["observed_at"], known, now_utc(),
                  _pack(rec.to_dict()), c["observed_at"], late, src, src))
+    if isinstance(rec, Forecast):
+        con.execute("INSERT OR IGNORE INTO forecast_keys (input_key, forecast_id, league, known_at) VALUES (?,?,?,?)",
+                    (forecast_key(rec), rid, rec.league, known))
     if late:
         return {"status": "late", "record_id": rid, "revision": rev}
     return {"status": "inserted" if rev == 1 else "revision", "record_id": rid, "revision": rev}
+
+
+def forecast_key(fc) -> str:
+    """The INPUT KEY of a forecast (LINE_CORRECTNESS.md C11): everything in its content except the time it was made -
+    offer revision (offer_snapshot_ids), every input record id, model / artifact / data / calibration / grade-policy /
+    stake-policy versions (data_version = the hash of the feature row), and the output those inputs determine. Two
+    forecasts with one key are the same forecast made twice: only the first is stored."""
+    import hashlib
+    d = fc.hash_payload()
+    d.pop("forecast_at", None)
+    return hashlib.sha256(json.dumps(d, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+                                     default=str).encode("utf-8")).hexdigest()[:32]
+
+
+def backfill_forecast_keys(con) -> dict:
+    """Index the input keys of forecasts stored before migration 3 (oldest first: the first forecast of a key is the
+    one kept as its reference). Additive: INSERT OR IGNORE into forecast_keys; no forecast is touched."""
+    n = 0
+    for r in con.execute("SELECT record_id, league, known_at, payload FROM records WHERE kind='forecast' "
+                         "ORDER BY rid").fetchall():
+        try:
+            fc = _rec(r)
+        except (ContractError, TypeError, ValueError):
+            continue
+        n += con.execute("INSERT OR IGNORE INTO forecast_keys (input_key, forecast_id, league, known_at) "
+                         "VALUES (?,?,?,?)", (forecast_key(fc), r["record_id"], r["league"], r["known_at"])).rowcount
+    return {"indexed": n}
 
 
 def withdrawn(rec, observed_at):
@@ -318,7 +358,7 @@ def withdrawn(rec, observed_at):
 
 def put_many(con, recs) -> dict:
     """One transaction for the whole batch (BEGIN IMMEDIATE): a crash or kill mid-batch leaves none of it."""
-    counts = {"inserted": 0, "duplicate": 0, "revision": 0, "invalid": 0, "late": 0}
+    counts = {"inserted": 0, "duplicate": 0, "revision": 0, "invalid": 0, "late": 0, "unchanged": 0}
     ids, bad = [], []
     with write_tx(con):
         for r in recs:

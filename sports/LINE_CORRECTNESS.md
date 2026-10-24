@@ -47,6 +47,21 @@ columns' defaults (late = 0), i.e. exactly the old behaviour until the worker mi
 R7. **Forecast inputs are immutable.** A forecast names the offer record id it was made for (`offer_snapshot_ids`);
 that row's payload never changes, so earlier forecasts keep their original inputs and replay bit-identically.
 
+R9. **Incremental forecasting** (store migration 3, `forecast_keys`). A forecast's INPUT KEY (`store.forecast_key`) is
+its whole content except the time it was made: offer revision (`offer_snapshot_ids`), every input record id, model /
+artifact / data / calibration / grade-policy / stake-policy versions (sm-1 `data_version` = hash of the feature row),
+reason codes and the output. "Inputs changed" = any of those differs: a new offer revision, new stat observations or
+context that change the feature row, a new quote record or a quote dropping out, a new artifact or policy version.
+`store.put` returns `unchanged` (writes nothing) for a key already stored; forward writes `model/forecasts.db` only for
+inserted forecasts. model/forecasts.db `inputs` holds ONE row per stored forecast: feature row (row_json), market
+sources (market_json), PMF (pmf_lo, pmf_json), grade-policy output (policy_json), offer record id, artifact sha.
+Existing forecasts are never deleted or rewritten; forecasts stored before migration 3 are indexed once (oldest first).
+The slip pool selects forecasts by the current offers' events (an unchanged revision keeps its first forecast).
+
+R10. **Settlement at the forecast's own line** (`settlement.at_line`): settlements are keyed (platform, offer, side)
+and carry the offer's line at settlement; a forecast or slip leg made at another line is scored at its own line from
+the recorded box-score value; void (did not play) and unresolved are line-independent.
+
 R8. **Source time and observation time are separate** everywhere: `source_updated_at` / `last_source_updated_at`
 (the source's own clock, None when it gives none - never invented) vs `observed_at` / `last_seen_at` (our read).
 
@@ -76,13 +91,28 @@ R8. **Source time and observation time are separate** everywhere: `source_update
 | G7 | 4 concurrent writer processes: one consistent current row, factors agree | games.db | test_g7_concurrent_writers_keep_one_consistent_current_row | done |
 | G8 | existing games.db: additive columns; digests written under the old rule still match (no one-time burst of rows) | games.db | test_g8_existing_games_db_is_migrated_additively_and_old_digests_still_match | done |
 | G9 | provider vs observation times separate | games.db | test_g9_provider_time_and_observation_time_are_separate | done |
-| C5 | board, card, slip pool + validation, new forecast use the same revision | snapshots / slips / forward | - | remaining |
-| C6 | earlier forecasts keep inputs, replay unchanged | forward | - | remaining |
-| C10 | settlement scores a forecast at its own line | settlement / learning / slips settle | - | remaining |
-| C11 | forecasting is incremental (no new forecast for unchanged inputs) | forward | - | remaining |
+| C5 | after A->B->A: store.offers, the new forecast, board.json, the player card, the slip pool and slip validation all name revision 3; a slip built on revision 1 is refused ("changed") | snapshots / slips / forward | test_line_correctness_model::test_c5_board_card_slip_pool_validation_and_new_forecast_use_the_same_revision | done |
+| C6 | forecasts of revisions 1, 2, 3 keep their offer_snapshot_ids and replay bit-identically (also after a new artifact, under their own artifact) | forward | test_c11_forecasting_is_incremental_and_c6_earlier_forecasts_replay_unchanged | done |
+| C10 | a settlement records the offer's line at settlement; a forecast / leg made at another line is scored at ITS line from the box-score value (settlement.at_line), void/unresolved unchanged: learning.on_settled, slips.settle.settle_slip, snapshots.results_view | settlement / learning / slips settle / snapshots | test_c10_settlement_is_read_at_the_forecast_or_leg_line, test_c10_slip_leg_is_settled_at_its_own_line | done |
+| C11 | incremental forecasting: two runs with no change add 0 rows to canonical.db and model/forecasts.db; A->B and B->A add exactly one forecast per new revision; a new artifact re-forecasts once; pre-migration forecasts are indexed so the first run after deploy adds nothing; every writer (forward, sharp-2, legacy) goes through the store rule; the slip pool finds an unchanged revision's old forecast | store / forward / sharp2 / slips.pool | test_c11_forecasting_is_incremental_and_c6_earlier_forecasts_replay_unchanged, test_c11_existing_forecasts_are_indexed_on_migration_so_the_first_run_after_deploy_adds_nothing, test_c11_the_store_rule_covers_every_forecast_writer, test_c11_slip_pool_finds_an_old_forecast_of_an_unchanged_revision | done |
+| C12 | an unchanged quote re-confirmed by its source is as fresh as its NEWEST source time (was: the first sighting's), never a source time after forecast_at | model.market / forward | test_c12_an_unchanged_book_quote_is_as_fresh_as_its_newest_source_time | done |
 
 ## Results
 
 Checkpoint 1 (canonical store): `python -m pytest sports/tests -q` -> 430 passed, 10 skipped.
 Checkpoint 2 (books.db): `python -m pytest sports/tests -q` -> 443 passed, 10 skipped.
 Checkpoint 3 (games.db): `python -m pytest sports/tests -q` -> 451 passed, 10 skipped.
+Checkpoint 4 (read side + incremental forecasting): `python -m pytest sports/tests -q` -> 459 passed, 10 skipped;
+esports `python -m pytest tests lol/tests -q` -> 1782 passed, 5 skipped.
+
+Forecast growth per run (test world: one target offer, sm-1; scratch script, same world on both commits):
+
+| run | before (d85b4a7) canonical forecasts / forecasts.db rows | after |
+|---|---|---|
+| 1st (21:00) | +1 / +1 | +1 / +1 |
+| 2nd, no change (21:30) | +1 / +1 | +0 / +0 |
+| 3rd, no change (22:00) | +1 / +1 | +0 / +0 |
+
+Production measurement (Starter agent, before): +3,410 forecast records (+4.8 MB canonical.db) and +14 MB
+model/forecasts.db per run with no new offers; after this change the same run adds 0 (one forecast per offer revision
+x input key).

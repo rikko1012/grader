@@ -45,10 +45,20 @@ def prop_keys(league, player_id, stat):
     return tuple(f"{player_id}|{p}" for p in spec["parts"])
 
 
-def _forecasts_by_offer(con, league, now):
-    since = _iso(now - timedelta(hours=FORECAST_LOOKBACK_H))
-    rows = con.execute("SELECT payload FROM records WHERE kind='forecast' AND league=? AND known_at >= ?",
-                       (league, since)).fetchall()
+def _forecasts_by_offer(con, league, now, event_ids=None):
+    """Forecasts by the offer record id they were made for. Forecasting is incremental (LINE_CORRECTNESS.md C11): an
+    unchanged offer revision keeps its first forecast however old, so forecasts are selected by the EVENTS of the
+    current offers, not by a time window (the window is the fallback when no event list is given)."""
+    if event_ids is None:
+        since = _iso(now - timedelta(hours=FORECAST_LOOKBACK_H))
+        rows = con.execute("SELECT payload FROM records WHERE kind='forecast' AND league=? AND known_at >= ?",
+                           (league, since)).fetchall()
+    else:
+        ids, rows = sorted(e for e in event_ids if e), []
+        for i in range(0, len(ids), 400):
+            chunk = ids[i:i + 400]
+            rows += con.execute(f"SELECT payload FROM records WHERE kind='forecast' AND league=? AND event_id IN "
+                                f"({','.join('?' * len(chunk))})", [league, *chunk]).fetchall()
     by = {}
     for r in rows:
         f = store._rec(r)
@@ -77,7 +87,9 @@ def build(con, league, platform, now=None, policy="member"):
         "SELECT record_id, last_seen_at FROM records WHERE kind='offer' AND league=? AND platform=?",
         (league, platform)).fetchall()}
     events = {e.event_id: e for _, e in store.events(con, league=league, limit=100000)}
-    fby = _forecasts_by_offer(con, league, now)
+    live = {o.event_id for _, o in offers if o.availability == "open" and o.event_id and
+            (events.get(o.event_id) is None or (events[o.event_id].start_utc or "9") > now_s)}
+    fby = _forecasts_by_offer(con, league, now, live)
     legs, excluded, state = [], Counter(), {}
     ids = []
     for rid, o in offers:
