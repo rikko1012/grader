@@ -241,3 +241,37 @@ body.sw{--bg:#0c1017;--panel:#141a24;--panel-2:#1a2230;--line:#283140;--muted:#a
 .sw .sw-final-under{border-color:var(--under)}
 .sw .sw-final-push{border-color:var(--push)}
 .sw .sw-bar-val{font-size:12px;font-weight:600}
+/* UI QA 2026-10-24 (uiqa): fit and alignment fixes - tighten, same design language */
+.sw .sw-mkline{padding:0 20px 12px}                               /* market summary line aligned with the card text */
+.sw .sw-compare-body{padding:4px 20px 14px}
+.sw .sw-compare-body>.sw-mkbooks{margin:12px 0 0}
+.sw .sw-compare-body>.sw-mkbooks>p{margin:8px 0 0}
+.sw .sw-cmp{margin:12px 0 0}
+.sw .sw-cmp-cap{margin:0 0 6px;font:600 12px Inter,system-ui;color:var(--text)}
+.sw .sw-cmp-list{list-style:none;margin:0;padding:0}
+.sw .sw-cmp-item{padding:10px 0;border-top:1px solid var(--line);min-width:0}
+.sw .sw-cmp-item.sw-out{opacity:.72}
+.sw .sw-cmp-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.sw .sw-cmp-top .sw-line{font-size:17px;color:var(--text)}
+.sw .sw-cmp-top a.sw-line{color:var(--accent-2)}
+.sw .sw-cmp-meta{display:flex;flex-wrap:wrap;align-items:center;gap:2px 0;margin-top:4px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.sw .sw-cmp-meta>span:not(:last-of-type)::after{content:"·";margin:0 7px;color:var(--faint)}
+.sw .sw-cmp-meta>.sw-srcbtn{margin-left:10px}
+.sw .sw-cmp-item .sw-act{margin-top:8px}
+.sw .sw-altnote{padding:0 20px}
+.sw .sw-chart text{font-size:11px}.sw .sw-chart .sw-bar-val{font-size:11.5px}
+.sw table.sw-mini td .sw-link{white-space:nowrap}
+@media(max-width:640px){
+  .sw .sw-srcbtn{min-height:32px}
+  .sw .sw-offer-source .sw-srcbtn{min-height:32px}
+}
+.sw #sw-toast{top:76px}                                         /* below the 68 px sticky header, not under it */
+@media(min-width:1200px) and (max-width:1599px){.sw.sw-has-tray .sw-research-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}   /* side panel open: 2 roomy columns, not 3 cramped */
+@media(max-width:640px){
+  .sw #sw-toast{top:68px}
+  .sw .sw-mini th,.sw .sw-mini td{padding:6px 4px}.sw table.sw-mini{font-size:12px}
+  .sw .sw-mini th{text-transform:none;letter-spacing:0}
+}
+@media(max-width:640px){.sw .sw-views{gap:0}.sw .sw-views a{padding:0 7px}}   /* all five views fit at 360 px */
+/* sideways strips (game strip, phone nav): a soft right edge says "more this way"; end padding keeps the last item clear of it */
+.sw .sw-fx-strip{padding-right:28px;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent)}

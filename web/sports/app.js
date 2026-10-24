@@ -20,8 +20,16 @@
     between_rungs: "The line sits between two Kalshi rungs; the chance blends the reading from both.",
     same_line: "Kalshi lists this exact line.",
     one_sided_shift: "Read from the nearest Kalshi rung on one side of the line, moved to this line with the stat's measured spread.",
-    line_gap_beyond_fitted_range: "The nearest Kalshi rung is far from this line, so the reading leans on the fitted shape."
+    line_gap_beyond_fitted_range: "The nearest Kalshi rung is far from this line, so the reading leans on the fitted shape.",
+    statistical_only: "Built from the player's own game statistics; book prices are not an input.",
+    deterministic_quadrature: "Over, Under and Push are read exactly from the projected distribution at this line.",
+    "gp:unvalidated": "Projection only - model not yet validated.",
+    "gp:history-validated": "Projection - validated on past games, not yet on live lines.",
+    "gp:forward-validated": "Validated on live lines."
   };
+  function reasonList(codes) {                          // member text; the grade band (gp_band:*) is shadow-only, never shown
+    return (codes || []).filter(function (c) { return !/^gp_band:/.test(c); }).map(function (c) { return REASONS[c] || c; });
+  }
   var main = document.getElementById("sw-main");
   var banner = document.getElementById("sw-banner");
   var SRC = []; LEGS = [];                                          // source records for the Source dialog (per render)
@@ -167,12 +175,17 @@
     if (!shown.length) return "";
     var c = mk.c, used = (c && c.used) || [];
     return (bare ? '<div class="sw-mkbooks"><h3 class="sw-small">' : '<details class="sw-more sw-mkbooks"' + (open ? " open" : "") + "><summary>") + (S.marketShown(c) ? esc(S.marketLabel(c)) + ": Over " + S.pct0(c.po) + " at " + S.line(mk.l) + " · " : "") + S.plural(shown.length, "book") + " with a price now" + (bare ? "</h3>" : "</summary>") +
+      (bare ? '<ul class="sw-cmp-list sw-mkbook-list" aria-label="Every book on this market">' + shown.map(function (b) {
+        return '<li class="sw-cmp-item' + (b.in ? "" : " sw-out") + '"><div class="sw-cmp-top">' + book(b.p) + '<span class="sw-line">' + S.line(b.l) + (b.l !== mk.l ? ' <span class="sw-faint sw-small">(differs)</span>' : "") + "</span></div>" +
+          '<div class="sw-cmp-meta"><span>' + esc(S.bookPrice(b)) + "</span><span>Over <b>" + esc(S.bookChance(b)) + "</b> " + esc(S.KINDS[b.kind] || b.kind) + "</span><span>" + esc(S.age(b.t)) + (b.su ? "" : " (no source time)") + "</span>" +
+          '<span class="' + (b.in ? "" : "sw-faint") + '">' + esc(S.bookStatus(b)) + (b.in && c && used.indexOf(b.p) < 0 ? " (own line excluded)" : "") + "</span></div></li>";
+      }).join("") + "</ul>" :
       '<div class="sw-scroll"><table class="sw-mini"><caption class="sw-sr">Every book on this market</caption><thead><tr><th scope="col">Book</th><th scope="col" class="num">Line</th><th scope="col">Price</th><th scope="col" class="num">Over chance</th><th scope="col">Observed · counted</th></tr></thead><tbody>' +
       shown.map(function (b) {
         return "<tr" + (b.in ? "" : ' class="sw-out"') + "><td>" + book(b.p) + '</td><td class="num">' + S.line(b.l) + (b.l !== mk.l ? ' <span class="sw-faint sw-small">(differs)</span>' : "") + '</td><td class="sw-small">' + esc(S.bookPrice(b)) +
           '</td><td class="num">' + esc(S.bookChance(b)) + '<div class="sw-small sw-faint">' + esc(S.KINDS[b.kind] || b.kind) + '</div></td><td class="sw-small">' + esc(S.age(b.t)) + (b.su ? "" : ' <span class="sw-faint">(no source time)</span>') +
           '<div class="' + (b.in ? "" : "sw-faint") + '">' + esc(S.bookStatus(b)) + (b.in && c && used.indexOf(b.p) < 0 ? " (own line excluded)" : "") + "</div></td></tr>";
-      }).join("") + "</tbody></table></div>" +
+      }).join("") + "</tbody></table></div>") +
       '<p class="sw-faint sw-small">Market = every eligible book combined with equal weight on the log-odds scale (one vote per book; quotes no older than 15 min, before the start, both sides priced or an exchange midpoint; each book\u2019s nearest line moved to this line with the stat\u2019s measured spread). A line\u2019s own book is never counted for itself. The Over chances listed are each book\u2019s own line, push refunded.</p>' + (bare ? "</div>" : "</details>");
   }
   function book(p) { return '<span class="sw-book"><span class="sw-dot ' + esc(p) + '" aria-hidden="true"></span>' + esc(bookName(p)) + "</span>"; }
@@ -243,6 +256,9 @@
       var on = a.getAttribute("data-view") === view || (view === "player" || view === "game") && a.getAttribute("data-view") === "board";
       if (on) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
+    var nav = document.getElementById("sw-views"), cur = nav && nav.querySelector("[aria-current]");
+    if (cur && nav.scrollWidth > nav.clientWidth + 1)       // phones: the nav scrolls sideways - keep the current view in sight
+      nav.scrollLeft = Math.max(0, cur.offsetLeft - nav.offsetLeft - (nav.clientWidth - cur.offsetWidth) / 2);
     document.querySelectorAll("#sw-league button").forEach(function (b) {
       b.setAttribute("aria-pressed", String(b.getAttribute("data-lg") === state.lg));
     });
@@ -460,20 +476,20 @@
     return '<div class="sw-field sw-prefbook"><label for="sw-prefbook">Show first</label><select id="sw-prefbook"><option value="">No preferred book</option>' +
       Object.keys(seen).sort(function (a, b) { return bookName(a) < bookName(b) ? -1 : 1; }).map(function (p) { return '<option value="' + esc(p) + '"' + (p === cur ? " selected" : "") + ">" + esc(bookName(p)) + "</option>"; }).join("") + "</select></div>";
   }
-  function compareRow(m, q, B) {                        // one aligned row: book, line, price / multiplier, sides, observed
+  function compareRow(m, q, B) {                        // one quote: book + line, then price / multiplier, sides, observed, source
     var price = q.d && (q.d[0] || q.d[1]) ? (q.d[0] ? "O " + (+q.d[0]).toFixed(2) : "") + (q.d[0] && q.d[1] ? " · " : "") + (q.d[1] ? "U " + (+q.d[1]).toFixed(2) : "")
       : q.k ? "YES " + S.cents(q.k[0]) + " / " + S.cents(q.k[1]) : q.m ? "O " + S.mult(q.m[0]) + " · U " + S.mult(q.m[1]) : "Standard payout";
-    return "<tr><th scope=\"row\">" + book(q.p) + '</th><td class="num"><a class="sw-line" href="' + marketHref(m, q) + '">' + S.line(q.l) + "</a></td><td>" + esc(price) +
-      "</td><td>" + esc(offeredText(q.o)) + '</td><td class="sw-small">' + esc(S.age(q.t)) + "</td><td>" + quoteSource(q) + "</td></tr>" +
-      (q.p !== "kalshi" ? '<tr class="sw-cmp-act"><td colspan="6">' + renderActions(m, q, q.f ? B.fc[q.f] : null, B) + "</td></tr>" : "");
+    return '<li class="sw-cmp-item"><div class="sw-cmp-top">' + book(q.p) + '<a class="sw-line" href="' + marketHref(m, q) + '"><span class="sw-sr">Line </span>' + S.line(q.l) + "</a></div>" +
+      '<div class="sw-cmp-meta"><span><span class="sw-sr">Price / multiplier: </span>' + esc(price) + "</span><span>" + esc(offeredText(q.o)) + "</span><span>Observed " + esc(S.age(q.t)) + "</span>" + quoteSource(q) + "</div>" +
+      (q.p !== "kalshi" ? renderActions(m, q, q.f ? B.fc[q.f] : null, B) : "") + "</li>";
   }
   function compareTables(m, quotes, kq, B) {            // matching lines together; other ordinary lines apart
     if (!quotes.length && !kq.length) return "";
     var main = quotes.length ? quotes[0].l : null, all = quotes.concat(kq);
     var same = all.filter(function (q) { return q.l === main; }), other = all.filter(function (q) { return q.l !== main; });
-    function table(rows, cap) {
-      return '<div class="sw-scroll"><table class="sw-mini sw-cmp"><caption>' + esc(cap) + '</caption><thead><tr><th scope="col">Book</th><th scope="col" class="num">Line</th><th scope="col">Price / multiplier</th><th scope="col">Sides</th><th scope="col">Observed</th><th scope="col"><span class="sw-sr">Source</span></th></tr></thead><tbody>' +
-        rows.map(function (q) { return compareRow(m, q, B); }).join("") + "</tbody></table></div>";
+    function table(rows, cap) {                         // a stacked list (fits a card at every width; no sideways scroll)
+      return '<div class="sw-cmp"><h4 class="sw-cmp-cap">' + esc(cap) + '</h4><ul class="sw-cmp-list">' +
+        rows.map(function (q) { return compareRow(m, q, B); }).join("") + "</ul></div>";
     }
     return (same.length ? table(same, "Same line " + S.line(main) + " · " + S.plural(same.length, "book")) : "") +
       (other.length ? table(other.sort(function (a, b) { return a.l - b.l; }), "Other lines · " + S.plural(other.length, "line")) : "");
@@ -508,7 +524,7 @@
       else h += '<div class="sw-offer"><b>' + esc(B.stats[m.st] || m.st) + '</b><p class="sw-faint">' + (kq.length || nbk ? 'Book prices below.' : 'No ordinary line for these filters.') + '</p></div>';
       var remaining = Math.max(0, quotes.length - 1) + kq.length;
       if (remaining > 0 || nbk > 0) {
-        h += '<details class="sw-compare"><summary>' + (remaining ? 'Compare ' + S.plural(remaining, 'more line') : 'Compare books') + (nbk ? ' · ' + S.plural(nbk, 'book') : '') + ' <span aria-hidden="true">＋</span></summary><div>';
+        h += '<details class="sw-compare"><summary>' + (remaining ? 'Compare ' + S.plural(remaining, 'more line') : 'Compare books') + (nbk ? ' · ' + S.plural(nbk, 'book') : '') + ' <span aria-hidden="true">＋</span></summary><div class="sw-compare-body">';
         h += compareTables(m, quotes, kq, B);
         if (nbk) h += mkBooks(m.mk, true, true);
         h += '</div></details>';
@@ -622,12 +638,20 @@
   }
 
   // --------------------------------------------------------------------------------------------- player workspace
+  function chartW() {                                   // chart drawing width ~ its on-screen width, so 11-12 px labels stay legible
+    var vw = window.innerWidth || 1280, phone = vw <= 640;
+    var c = Math.min(vw, 1500) - (phone ? 28 : 64);
+    if (vw >= 1200 && document.body.classList.contains("sw-has-tray")) c -= 308;
+    if (vw > 1000) c = (c - 14) / 2;                       // player page: history | forecast columns
+    c -= phone ? 34 : 46;                                  // panel padding + border
+    return Math.max(260, Math.min(600, Math.round(c)));
+  }
   function svgDist(det, f, ln) {
     var p = det && det.pmf;
     if (!p || det.ladder_withheld) return null;
     var bins = p.bins.filter(function (b) { return b[2] > 0.0005; });
     if (!bins.length) return null;
-    var W = 600, H = 190, pad = 26, maxp = Math.max.apply(null, bins.map(function (b) { return b[2]; }));
+    var W = chartW(), H = 190, pad = 26, maxp = Math.max.apply(null, bins.map(function (b) { return b[2]; }));
     var lo = bins[0][0], hi = bins[bins.length - 1][0] + bins[bins.length - 1][1];
     var x = function (v) { return pad + (v - lo) / (hi - lo) * (W - 2 * pad); };
     var bars = bins.map(function (b) {
@@ -640,14 +664,16 @@
     var n = S.forecastNumbers(f);
     var label = "Scout outcome distribution for " + S.line(ln) + ": mean " + S.num(p.mean, 1) + ". Over " + n.over + ", Under " + n.under + ", Push " + n.push + ".";
     return '<svg class="sw-chart" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(label) + '">' + bars +
-      '<line x1="' + lx.toFixed(1) + '" x2="' + lx.toFixed(1) + '" y1="10" y2="' + (H - 22) + '" stroke="var(--text)" stroke-dasharray="4 3"/><text x="' + (lx + 4).toFixed(1) + '" y="20">line ' + esc(S.line(ln)) + "</text>" + ticks + "</svg>";
+      '<line x1="' + lx.toFixed(1) + '" x2="' + lx.toFixed(1) + '" y1="10" y2="' + (H - 22) + '" stroke="var(--text)" stroke-dasharray="4 3"/><text x="' + (lx > W - 60 ? lx - 4 : lx + 4).toFixed(1) + '" y="20"' + (lx > W - 60 ? ' text-anchor="end"' : "") + '>line ' + esc(S.line(ln)) + "</text>" + ticks + "</svg>";
   }
   function svgGames(games, stat, ln) {
     var gs = games.slice().reverse();
     if (!gs.length) return "";
-    var W = 600, H = 210, pad = 24, vals = gs.map(function (g) { return g.values[stat]; });
+    var W = chartW(), H = 210, pad = 24, padR = 38, vals = gs.map(function (g) { return g.values[stat]; });   // line label in the right margin
     var maxv = Math.max.apply(null, vals.concat([ln || 0])) * 1.18 || 1;
-    var bw = (W - 2 * pad) / gs.length;
+    var bw = (W - pad - padR) / gs.length;
+    var step = Math.max(Math.ceil(46 / bw), gs.length > 12 ? Math.ceil(gs.length / 10) : 1);   // date / opponent labels never collide
+    var valMode = bw >= 30 ? 2 : bw >= 19 ? 1 : 0;        // per-bar value: "▲ 12", "12", or none (the finals row above lists every value)
     var y = function (v) { return H - 34 - v / maxv * (H - 60); };
     var out = gs.map(function (g, i) {
       var v = g.values[stat], o = S.outcome(v, ln), x0 = pad + i * bw + bw * 0.15, w = bw * 0.7;
@@ -655,19 +681,19 @@
       var shape = o === "over" ? "▲" : o === "under" ? "▼" : "●";
       var rect = '<rect x="' + x0.toFixed(1) + '" y="' + y(v).toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + Math.max(1, H - 34 - y(v)).toFixed(1) + '" ' +
         (o === "under" ? 'fill="none" stroke="' + col + '" stroke-width="2"' : 'fill="' + col + '"') + "/>";
-      return rect + '<text class="sw-bar-val" x="' + (x0 + w / 2).toFixed(1) + '" y="' + (y(v) - 4).toFixed(1) + '" text-anchor="middle" style="fill:' + col + '">' + shape + " " + S.num(v, 0) + "</text>" +
-        (gs.length <= 12 || i % Math.ceil(gs.length / 10) === 0 ? '<text x="' + (x0 + w / 2).toFixed(1) + '" y="' + (H - 18) + '" text-anchor="middle">' + esc(S.shortDate(g.start_utc)) + '</text><text x="' + (x0 + w / 2).toFixed(1) + '" y="' + (H - 5) + '" text-anchor="middle">' + esc((g.home === false ? "@" : "") + (g.opponent ? g.opponent.abbr : "")) + "</text>" : "");
+      return rect + (valMode ? '<text class="sw-bar-val" x="' + (x0 + w / 2).toFixed(1) + '" y="' + (y(v) - 4).toFixed(1) + '" text-anchor="middle" style="fill:' + col + '">' + (valMode === 2 ? shape + " " : "") + S.num(v, 0) + "</text>" : "") +
+        (i % step === 0 ? '<text x="' + (x0 + w / 2).toFixed(1) + '" y="' + (H - 18) + '" text-anchor="middle">' + esc(S.shortDate(g.start_utc)) + '</text><text x="' + (x0 + w / 2).toFixed(1) + '" y="' + (H - 5) + '" text-anchor="middle">' + esc((g.home === false ? "@" : "") + (g.opponent ? g.opponent.abbr : "")) + "</text>" : "");
     }).join("");
     var lineY = y(ln);
     var s = S.windowSummary(games, stat, ln, null);
     var label = "Last " + gs.length + " games against line " + S.line(ln) + ": " + s.over + " over, " + s.under + " under, " + s.push + " push.";
     return '<svg class="sw-chart" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(label) + '">' + out +
-      '<line x1="' + pad + '" x2="' + (W - pad) + '" y1="' + lineY.toFixed(1) + '" y2="' + lineY.toFixed(1) + '" stroke="var(--text)" stroke-dasharray="5 4"/><text x="' + (W - pad) + '" y="' + (lineY - 5).toFixed(1) + '" text-anchor="end">' + esc(S.line(ln)) + "</text></svg>";
+      '<line x1="' + pad + '" x2="' + (W - padR + 2) + '" y1="' + lineY.toFixed(1) + '" y2="' + lineY.toFixed(1) + '" stroke="var(--text)" stroke-dasharray="5 4"/><text x="' + (W - 2) + '" y="' + (lineY + 4).toFixed(1) + '" text-anchor="end">' + esc(S.line(ln)) + "</text></svg>";
   }
   function svgTrend(games, part, label) {
     var gs = games.filter(function (g) { return g.participation === "played" && g.parts[part] !== undefined && g.parts[part] !== null; }).slice(0, 20).reverse();
     if (gs.length < 2) return null;
-    var W = 600, H = 150, pad = 28, vals = gs.map(function (g) { return g.parts[part]; });
+    var W = chartW(), H = 150, pad = 28, vals = gs.map(function (g) { return g.parts[part]; });
     var maxv = Math.max.apply(null, vals) * 1.15 || 1;
     var pts = gs.map(function (g, i) { return [pad + i * (W - 2 * pad) / (gs.length - 1), H - 26 - g.parts[part] / maxv * (H - 46)]; });
     var mean = vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
@@ -789,7 +815,7 @@
           h += '<div class="sw-scroll"><table class="sw-mini"><caption class="sw-sr">Scout chances at other lines from the same distribution</caption><thead><tr><th>Line</th><th class="num">Over</th><th class="num">Under</th><th class="num">Push</th><th><span class="sw-sr">Use for history</span></th></tr></thead><tbody>' +
             det.ladder.map(function (r) {
               var cur = r.line === (ps.customLine !== undefined && ps.customLine !== null ? ps.customLine : fc.line);
-              return '<tr class="' + (cur ? "sel" : "") + '"><td>' + S.line(r.line) + (r.stored ? ' <span class="sw-faint sw-small">this forecast</span>' : "") + '</td><td class="num">' + S.pct(r.p_over) + '</td><td class="num">' + S.pct(r.p_under) + '</td><td class="num">' + S.pct(r.p_push) + '</td><td><button type="button" class="sw-link sw-small" data-ladder="' + r.line + '">History at ' + S.line(r.line) + "</button></td></tr>";
+              return '<tr class="' + (cur ? "sel" : "") + '"><td>' + S.line(r.line) + (r.stored ? ' <span class="sw-faint sw-small">this forecast</span>' : "") + '</td><td class="num">' + S.pct(r.p_over) + '</td><td class="num">' + S.pct(r.p_under) + '</td><td class="num">' + S.pct(r.p_push) + '</td><td><button type="button" class="sw-link sw-small" data-ladder="' + r.line + '">History<span class="sw-sr"> at ' + S.line(r.line) + "</span></button></td></tr>";
             }).join("") + "</tbody></table></div><p class=\"sw-faint sw-small\">Every line is read from this forecast’s one distribution. Other books may not offer these lines.</p>";
         } else {
           h += '<p class="sw-muted sw-small">' + esc(det && det.ladder_withheld ? det.ladder_withheld + "." : "Not available for this forecast.") + "</p>";
@@ -799,7 +825,7 @@
             dt.factors.map(function (x) { return "<tr><td>" + esc(x.label) + (x.definition ? '<div class="sw-faint sw-small">' + esc(x.definition) + "</div>" : "") + '</td><td class="num">' + (x.value === null ? "not known" : esc(String(x.value))) + "</td></tr>"; }).join("") +
             '</tbody></table></div><p class="sw-faint sw-small">Values from the saved input row of this forecast. The model records no per-input weights, so none are shown.</p>';
         }
-        h += '<h3 style="margin-top:14px">Why this number</h3><ul class="sw-list sw-small">' + (fc.reason_codes || []).map(function (c) { return "<li>" + esc(REASONS[c] || c) + "</li>"; }).join("") + "</ul>";
+        h += '<h3 style="margin-top:14px">Why this number</h3><ul class="sw-list sw-small">' + reasonList(fc.reason_codes).map(function (t) { return "<li>" + esc(t) + "</li>"; }).join("") + "</ul>";
         if (fc.contributions && fc.contributions.length) {
           h += '<table class="sw-mini"><thead><tr><th>Computed contribution</th><th class="num">Effect</th></tr></thead><tbody>' + fc.contributions.map(function (c) { return "<tr><td>" + esc(c.label || c.feature) + '</td><td class="num">' + S.num(c.value, 2) + "</td></tr>"; }).join("") + "</tbody></table>";
         } else {

@@ -59,6 +59,7 @@
     legs.forEach(function (l) {
       if (l.start_utc && Date.parse(l.start_utc) <= t) hints.push((l.player || "A pick") + "'s game has started - remove it.");
     });
+    hints = hints.filter(function (h, i) { return hints.indexOf(h) === i; });   // the same text once (two picks, one started game)
     return {ok: !hints.length, hints: hints, min: r[0], max: r[1], entry: et};
   }
   // The draft the tray shows for a league: the Slip Studio context's platform if it is this league's, else the first

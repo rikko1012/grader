@@ -573,3 +573,130 @@ def test_back_to_board_keeps_filters_and_scroll(pw, shots):
     assert abs(page.evaluate("window.scrollY") - y0) < 40, (page.evaluate("window.scrollY"), y0, h0, page.evaluate("[document.documentElement.scrollHeight, innerHeight, document.querySelectorAll('.sw-research-card').length]"))
     assert not [e for e in errors if "favicon" not in e], errors
     ctx.close()
+
+
+FIT_JS = r"""
+() => {
+  const vis = el => { const r = el.getBoundingClientRect(); return r.width && r.height ? r : null; };
+  const out = {clipped: [], svg: [], wrapped: [], pad: []};
+  document.querySelectorAll('.sw-research-card').forEach(card => {
+    const c = card.getBoundingClientRect();
+    card.querySelectorAll('.sw-act button, .sw-act label, .sw-cmp-item a, .sw-cmp-item .sw-srcbtn').forEach(el => {
+      const r = vis(el); if (!r) return;
+      if (r.right > c.right - 4 || r.left < c.left + 4) out.clipped.push((el.innerText || '').trim().slice(0, 30) + ' ' + Math.round(r.left) + '..' + Math.round(r.right) + ' card ' + Math.round(c.left) + '..' + Math.round(c.right));
+    });
+    card.querySelectorAll('.sw-mkline, .sw-cmp-cap, .sw-altnote').forEach(el => {
+      const r = vis(el); if (!r) return;
+      const range = document.createRange(); range.selectNodeContents(el); const t = range.getBoundingClientRect();
+      if (t.width && t.left - c.left < 12) out.pad.push(el.className + ' ' + Math.round(t.left - c.left));
+    });
+  });
+  document.querySelectorAll('svg.sw-chart').forEach(s => {
+    const sc = s.getBoundingClientRect().width / s.viewBox.baseVal.width;
+    const ts = [...s.querySelectorAll('text')].map(t => [t, t.getBoundingClientRect()]).filter(([t, r]) => r.width);
+    ts.forEach(([t, r]) => { const f = parseFloat(getComputedStyle(t).fontSize) * sc; if (f < 9.5) out.svg.push('font ' + f.toFixed(1) + " '" + t.textContent + "'"); });
+    for (let i = 0; i < ts.length; i++) for (let j = i + 1; j < ts.length; j++) {
+      const a = ts[i][1], b = ts[j][1];
+      if (Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1) out.svg.push("overlap '" + ts[i][0].textContent + "' / '" + ts[j][0].textContent + "'");
+    }
+  });
+  document.querySelectorAll('.sw-act-btns .sw-btn, .sw-views a, [data-ladder], .sw-tray-go, .sw-tray-rm').forEach(el => {
+    if (!vis(el)) return;
+    const range = document.createRange(); range.selectNodeContents(el);
+    const tops = new Set([...range.getClientRects()].filter(x => x.width > 1 && x.height > 4).map(x => Math.round(x.bottom)));
+    if (tops.size > 1) out.wrapped.push((el.innerText || '').trim().slice(0, 30));
+  });
+  return out;
+}
+"""
+
+
+@pytest.mark.parametrize("width", [360, 390, 768, 1024, 1280, 1440])
+def test_uiqa_cards_compare_charts_fit(pw, shots, width):
+    """UI QA 2026-10-24: at every width the research cards' action areas and the opened comparison stay inside the card
+    (the old 6-column compare table pushed Over / Under / Track pick out of view), card text keeps the card padding,
+    chart labels are legible (>= 9.5 px) and never overlap (per-bar values thin out on narrow screens), buttons and
+    nav items never wrap, and the grade band (gp_band:*) never reaches a member page."""
+    ctx, page, errors = _page(pw, width, 900, has_touch=width < 768, is_mobile=width < 768)
+    page.goto(URL + "/sports#/board?lg=nba")
+    page.wait_for_selector(".sw-research-card", timeout=20000)
+    cards = page.locator(".sw-research-card:has(details.sw-compare)")
+    for i in range(min(cards.count(), 4)):
+        cards.nth(i).locator("details.sw-compare > summary").click()
+    side = page.locator(".sw-research-card .sw-cmp-item label.sw-act-side:not(.off)").first
+    if side.count():
+        side.click()
+    page.wait_for_timeout(200)
+    assert page.locator(".sw-research-card table.sw-cmp").count() == 0           # stacked list, no sideways table
+    assert _no_overflow(page)
+    fit = page.evaluate(FIT_JS)
+    assert not fit["clipped"] and not fit["pad"] and not fit["wrapped"], fit
+    page.screenshot(path=str(shots / f"uiqa_board_{width}.png"))
+    page.locator(".sw-research-card a.sw-line").locator("visible=true").first.click()
+    page.wait_for_selector("#sw-fc-h", timeout=20000)
+    if page.locator('[data-win="20"]').count():
+        page.locator('[data-win="20"]').first.click()
+        page.wait_for_timeout(200)
+    assert _no_overflow(page)
+    fit = page.evaluate(FIT_JS)
+    assert not fit["svg"] and not fit["wrapped"], fit
+    assert "gp_band" not in page.locator("#sw-main").inner_text()
+    cur = page.locator("#sw-views a[aria-current=page]").bounding_box()
+    nav = page.locator("#sw-views").bounding_box()
+    assert cur["x"] >= nav["x"] - 1 and cur["x"] + cur["width"] <= nav["x"] + nav["width"] + 1, (cur, nav)   # current view in sight
+    page.screenshot(path=str(shots / f"uiqa_player_{width}.png"), full_page=True)
+    assert not [e for e in errors if "favicon" not in e], errors
+    ctx.close()
+
+
+@pytest.mark.parametrize("width", [360, 1280, 1440])
+def test_uiqa_tray_toast_nav_fit(pw, shots, width):
+    """The slip tray never covers the cards (side panel at >= 1200 px) or the last action area (bottom bar), the status
+    toast sits below the sticky header, the tray hint lists each problem once, and Slip Studio's nav shows every view."""
+    ctx, page, errors = _page(pw, width, 800, has_touch=width < 768, is_mobile=width < 768)
+    page.goto(URL + "/sports#/board?lg=nba")
+    page.wait_for_selector(".sw-act", timeout=20000)
+    page.evaluate("Object.keys(localStorage).filter(k => k.startsWith('ss:')).forEach(k => localStorage.removeItem(k))")
+    page.evaluate("location.hash = '#/board?lg=nba&x=1'")
+    page.wait_for_timeout(300)
+    acts = page.locator(".sw-offer .sw-act:has(.sw-act-sides)").locator("visible=true")
+    n = 0
+    for i in range(min(acts.count(), 20)):
+        a = acts.nth(i)
+        if a.locator("label.sw-act-side:not(.off)").count() == 0:
+            continue
+        a.locator("label.sw-act-side:not(.off)").first.click()
+        a.locator("[data-act-add]").click()
+        n += 1
+        if n == 2:
+            break
+    page.wait_for_selector("#sw-tray:not([hidden])")
+    toast = page.locator("#sw-toast").bounding_box()
+    head = page.locator("#sw-top").bounding_box()
+    if toast and toast["height"]:
+        assert toast["y"] >= head["y"] + head["height"] - 1, (toast, head)
+    tray = page.locator("#sw-tray").bounding_box()
+    if width >= 1200:
+        for c in page.locator(".sw-research-card").all()[:12]:
+            b = c.bounding_box()
+            assert b["x"] + b["width"] <= tray["x"] - 8, (b, tray)
+    page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
+    page.wait_for_timeout(200)
+    covered = page.evaluate("""() => { const t = document.getElementById('sw-tray').getBoundingClientRect(); const out = [];
+      document.querySelectorAll('#sw-main .sw-act button, #sw-main .sw-act label, #sw-showmore').forEach(el => { const r = el.getBoundingClientRect();
+        if (!r.width) return; const x = r.left + r.width / 2, y = r.top + r.height / 2; if (y < 0 || y > innerHeight) return;
+        const hit = document.elementFromPoint(x, y); if (hit && document.getElementById('sw-tray').contains(hit)) out.push(el.innerText.trim()); }); return out; }""")
+    assert not covered, covered
+    hints = page.locator("#sw-tray .sw-tray-hint li").all_inner_texts()
+    assert len(hints) == len(set(hints)), hints
+    assert _no_overflow(page)
+    page.screenshot(path=str(shots / f"uiqa_tray_{width}.png"))
+    page.goto(URL + "/sports/slips.html")
+    page.wait_for_selector(".ss-nav a[aria-current=page]", timeout=20000)
+    cur = page.locator(".ss-nav a[aria-current=page]").bounding_box()
+    assert cur["x"] + cur["width"] <= width, (cur, width)
+    page.wait_for_timeout(1200)
+    small = page.evaluate("() => [...document.querySelectorAll('summary')].filter(s => { const r = s.getBoundingClientRect(); return r.width && r.height < 24; }).map(s => s.innerText)")
+    assert not small, small
+    assert _no_overflow(page)
+    ctx.close()
