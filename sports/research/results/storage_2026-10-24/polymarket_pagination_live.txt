@@ -1,0 +1,5 @@
+at 2026-10-24T02:31:33Z
+nba: game events old 117 new 117 same=True | slug days same=True (2026-10-23..2026-10-30) | offers old 2460 new 2460 same=True | quarantine old 0 new 0 | pages new {'pages': 10, 'events_seen': 170, 'truncated': False} | peak alloc MB old 126 new 81 | wall s old 2 new 14
+nfl: game events old 83 new 83 same=True | slug days same=True (2026-10-16..2026-11-13) | offers old 2056 new 2056 same=True | quarantine old 0 new 0 | pages new {'pages': 32, 'events_seen': 570, 'truncated': False} | peak alloc MB old 155 new 66 | wall s old 9 new 43
+after del ev: nba game events 117 {'pages': 10, 'events_seen': 170, 'truncated': False} peak alloc MB 71 retained MB 2.3 wall s 12
+after del ev: nfl game events 83 {'pages': 32, 'events_seen': 570, 'truncated': False} peak alloc MB 47 retained MB 2.0 wall s 38

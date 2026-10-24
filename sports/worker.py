@@ -15,8 +15,8 @@ at import time. Run it as its own service / cron:
 Bounds (environment, with defaults): SPORTS_WORKER_CONCURRENCY=2 parallel jobs; SPORTS_JOB_TIMEOUT_S=300 per job;
 SPORTS_JOB_ATTEMPTS=3 with exponential backoff + jitter (net.backoff); SPORTS_WORKER_MAX_MB=768 address-space cap
 (POSIX RLIMIT_AS; reported "unsupported" on Windows) plus an RSS check between jobs; SPORTS_STORE_MAX_MB=1500 - ingestion
-stops writing when the canonical store reaches it. Per-host request pacing is net.py's (ESPN 2/s, Kalshi 1/1.5 s,
-PrizePicks 1/2 s, Underdog 1/s).
+stops writing when everything under SPORTS_DATA_DIR (data_mb: canonical, books, games, cache, ...) reaches it. Per-host
+request pacing is net.py's (ESPN 2/s, Kalshi 1/1.5 s, PrizePicks 1/2 s, Underdog 1/s).
 
 Jobs are idempotent (job_key includes the source and a time bucket; writes are content-hashed) and resumable (a job
 that died 'running' is retried from its saved cursor).
@@ -191,10 +191,24 @@ def bucket(minutes, now=None):
     return datetime.fromtimestamp(b * minutes * 60, tz=timezone.utc).strftime("%Y%m%dT%H%M")
 
 
+def data_mb():
+    """Every file under SPORTS_DATA_DIR - the disk that fills: canonical.db AND books.db / games.db (written by this
+    loop since the books + games sources joined it), cache, forecasts, snapshots, spools. sports/RETENTION.md."""
+    tot = 0
+    for p in config.DATA_DIR.rglob("*"):
+        try:
+            if p.is_file():
+                tot += p.stat().st_size
+        except OSError:
+            continue
+    return tot / 1e6
+
+
 def _check_budget():
-    mb = store.size_mb()
+    mb = data_mb()
     if mb > STORE_MAX_MB:
-        raise BudgetExceeded(f"sports store {mb:.0f} MB > SPORTS_STORE_MAX_MB {STORE_MAX_MB:.0f}: ingestion paused")
+        raise BudgetExceeded(f"sports data {mb:.0f} MB > SPORTS_STORE_MAX_MB {STORE_MAX_MB:.0f}: ingestion paused "
+                             f"(canonical.db {store.size_mb():.0f} MB)")
 
 
 # --------------------------------------------------------------------------------------------------------- fetches
@@ -269,6 +283,32 @@ def _latest_memberships(con, league):
     return [(r["record_id"], store._rec(r)) for r in rows]
 
 
+# an offer identity not seen for this long is cold - the same boundary sports/archive.py uses to move it out of the hot
+# table (SPORTS_ARCHIVE_AFTER_H) - and is no longer a withdrawal candidate of a board read
+REMOVAL_WINDOW_H = float(os.environ.get("SPORTS_ARCHIVE_AFTER_H", "72"))
+
+
+def _board_offers(con, league, platform_prefix, observed_at):
+    """Current revision of every offer of this platform whose identity was SEEN (last_seen_at / observed_at /
+    known_at) within REMOVAL_WINDOW_H - the offers a board read can still withdraw. Through store._latest_rows, so the
+    store's own definition of "current" applies (and any later refinement of it). For every offer seen in the window
+    it returns exactly the rows of the former league-wide scan, whatever their event (missing from the store,
+    unresolved, started - the caller's per-offer checks are unchanged), so withdrawal semantics are kept; only offers
+    unseen for longer (cold, as sports/archive.py defines it) are left out. The window applies to the whole identity
+    (its latest sighting over all its rows), so the result does not depend on which revision a re-sighting touched.
+    Filtered in SQL: no payload of another platform or of cold history is decoded (measured 2026-10-24: the
+    league-wide scan decoded every offer of the league on every board read and drove the ingest child from ~120 to
+    ~250 MB)."""
+    since = (parse_utc(observed_at) - timedelta(hours=REMOVAL_WINDOW_H)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    n = len(platform_prefix)
+    rows = store._latest_rows(
+        con, "offer", "league = ? AND substr(platform, 1, ?) = ? AND (source, source_key) IN (SELECT source, source_key "
+        "FROM records WHERE kind = 'offer' AND league = ? AND substr(platform, 1, ?) = ? GROUP BY source, source_key "
+        "HAVING MAX(COALESCE(last_seen_at, observed_at, known_at)) >= ?)",
+        [league, n, platform_prefix, league, n, platform_prefix, since], None, 10_000_000)
+    return [(r["record_id"], store._rec(r)) for r in rows]
+
+
 def _store_offers(con, platform_prefix, league, batch, observed_at, read_ok):
     """Store a board read; offers seen before, still in the future and missing from a SUCCESSFUL read get a 'removed'
     revision (never on a failed read)."""
@@ -278,7 +318,7 @@ def _store_offers(con, platform_prefix, league, batch, observed_at, read_ok):
     if read_ok:
         seen = {r.offer_id for r in batch.records}
         stale = []
-        for _, o in store.offers(con, league=league, as_of=None, limit=200000):
+        for _, o in _board_offers(con, league, platform_prefix, observed_at):
             if not o.platform.startswith(platform_prefix) or o.offer_id in seen or o.availability == "removed":
                 continue
             if o.listed_start_utc and o.listed_time_kind == "start" and o.listed_start_utc <= observed_at:
