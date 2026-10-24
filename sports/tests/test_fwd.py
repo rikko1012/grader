@@ -246,3 +246,52 @@ def test_scheduler_forward_job_is_gated_by_sports_forecast_alone_and_exclusive(m
     assert not s._fits("model-forward")
     s.running = {"model-forward": (None, 0.0)}
     assert not s._fits("settle") and not s._fits("slips-ingest") and not s._fits("prebuilt")
+
+
+# ------------------------------------------------------------------------------------------- settlement scorecard
+def test_settle_scorecard_reads_only_settled_events_and_never_retrains(fworld, monkeypatch):
+    from sports.contracts import Settlement
+    scon, hcon, art, rid1 = fworld
+    fwd.run(["nba"], forecast_at=AT, log=lambda *x: None)
+    _add_past_forecasts(scon, 5000)                              # played events, no settlement: never decoded
+    fc = next(f for _, f in store.forecasts(scon, model_version="sm-1") if f.forecast_id.startswith("fc-") and
+              "syn" not in f.forecast_id)
+    offer = store.get(scon, rid1)
+    st = Settlement(settlement_id="s1", platform=offer.platform, offer_id=offer.offer_id, side=fc.chosen_side,
+                    line=offer.line, event_id=offer.event_id, player_id=offer.player_id, stat="points",
+                    status="win" if fc.chosen_side == "over" else "loss", outcome="over", source_value=20.0,
+                    source="espn", source_ref="x", rule_version="test", settled_at="2026-02-01T04:00:00Z")
+    store.put(scon, st)
+    monkeypatch.setattr(learning, "retrain", lambda *a, **k: (_ for _ in ()).throw(AssertionError("retrain")))
+    monkeypatch.setattr(forward, "fit", lambda *a, **k: (_ for _ in ()).throw(AssertionError("fit")))
+    decoded = []
+    real = store._rec
+    monkeypatch.setattr(store, "_rec", lambda row: (decoded.append(1), real(row))[1])
+    r1 = learning.on_settled(scon, now="2026-02-02T00:00:00Z")
+    assert r1["scorecard_rows_added"] == 1 and r1["events_read"] == 1
+    assert len(decoded) < 20, len(decoded)                     # this event's settlement + forecasts, not 5,000
+    assert learning.on_settled(scon, now="2026-02-02T00:00:00Z")["scorecard_rows_added"] == 0
+    # a corrected settlement (new revision) supersedes the earlier scorecard row - once
+    store.put(scon, replace(st, settlement_id="s2", revision=2, supersedes="s1", source_value=12.0, status="loss" if st.status == "win" else "win",
+                            outcome="under"))
+    assert learning.on_settled(scon, now="2026-02-02T00:00:00Z")["scorecard_rows_added"] == 1
+    sc = learning.scorecard()
+    assert sum(r["settled"] for r in sc if r["model_version"] == "sm-1") == 1
+
+
+# ---------------------------------------------------------------------------------------------- history refresh
+def test_refresh_queues_only_days_that_are_surely_final():
+    days = fwd.refresh_days("2026-10-24T07:00:00Z")            # 32 h lag: Oct 22 is the last complete US day
+    assert days[0] == "day:20261020" and days[-1] == "day:20261022"
+    assert fwd.refresh_days("2026-10-24T09:00:00Z")[-1] == "day:20261023"
+    assert fwd.refresh_days("2026-01-31T21:00:00Z") == []       # before the current season: nothing
+
+
+def test_refresh_failure_never_blocks_the_forecast(fworld, monkeypatch):
+    scon, *_ = fworld
+    monkeypatch.setattr(datasets, "nba_crawl", lambda *a, **k: (_ for _ in ()).throw(ConnectionError("espn down")))
+    monkeypatch.setattr(fwd, "refresh_days", lambda now: ["day:20260130"])
+    out = fwd.run(["nba"], forecast_at=AT, log=lambda *x: None)
+    assert out["history"]["nba_refresh"]["state"] == "failed" and out["forecasts_added"] == 1
+    monkeypatch.setenv("SPORTS_FORECAST_REFRESH", "0")
+    assert fwd.refresh_nba(AT) == {"state": "off"}

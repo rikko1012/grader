@@ -132,7 +132,8 @@ def install_history(man=None, art_dir=None, dest=None):
         mk = json.loads(marker.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         mk = None
-    if dest.exists() and mk and mk.get("db_sha256") == h["db_sha256"] and mk.get("size") == dest.stat().st_size:
+    if dest.exists() and mk and mk.get("db_sha256") == h["db_sha256"]:
+        # installed from this package (later NBA refreshes only APPEND finished games - refresh_nba)
         return {"state": "present", "path": str(dest), "db_sha256": h["db_sha256"]}
     dest.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=dest.parent, suffix=".tmp")
@@ -166,11 +167,77 @@ def install_history(man=None, art_dir=None, dest=None):
 
 
 def open_history(path=None):
-    """Read-only (immutable) connection to the installed copy: no WAL, no writes, no journal files."""
+    """Read-only connection to the installed copy (the forecast never writes it)."""
     p = Path(path) if path else history_path()
-    con = sqlite3.connect(f"file:{p.as_posix()}?mode=ro&immutable=1", uri=True, timeout=30, check_same_thread=False)
+    con = sqlite3.connect(f"file:{p.as_posix()}?mode=ro", uri=True, timeout=30, check_same_thread=False)
     con.row_factory = sqlite3.Row
     return con
+
+
+REFRESH_LAG_H = 32          # an ESPN day is crawled once its last game is surely final (late ET tips end ~05:00Z)
+
+
+def refresh_days(now_iso):
+    """Days the NBA refresh may queue: every day of the current season up to (now - REFRESH_LAG_H). A day is crawled
+    ONCE (crawl table), so it must never be read while its games are still in progress."""
+    from datetime import date, datetime, timedelta
+    t = datetime.fromisoformat(now_iso.replace("Z", "+00:00")) - timedelta(hours=REFRESH_LAG_H)
+    last = t.date()
+    out = []
+    for season, (a, b) in datasets_seasons().items():
+        d = date.fromisoformat(a)
+        end = min(last, date.fromisoformat(b)) if b else last
+        while d <= end:
+            out.append(f"day:{d:%Y%m%d}")
+            d += timedelta(days=1)
+    return out
+
+
+def datasets_seasons():
+    from . import datasets
+    return {s: v for s, v in datasets.NBA_SEASONS.items() if v[1] is None}     # the season in progress only
+
+
+def _trim():
+    """Hand freed heap back to the OS between phases (glibc malloc_trim; no-op elsewhere) so the refresh's parsed
+    ESPN bodies and the previous league's frames do not stack on the next phase's peak."""
+    import gc
+    gc.collect()
+    try:
+        import ctypes
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except (OSError, AttributeError):
+        pass
+
+
+def refresh_nba(now_iso, budget_s=None, path=None):
+    """DATA refresh, not training: append finished NBA games (ESPN box scores, the ds-1 crawl the history was built
+    with; polite pacing in sports/net.py) to the installed copy so features include games after the package date.
+    Bounded by a time budget (SPORTS_FORECAST_REFRESH_S, default 120 s); any failure keeps the existing data (the
+    forecast still runs - a transient source failure never blocks or changes forecasts). Off: SPORTS_FORECAST_REFRESH=0.
+    NFL is not refreshed here (nflverse season files are rebuilt in full - too large for this job; see RUNBOOK)."""
+    if os.environ.get("SPORTS_FORECAST_REFRESH", "1").strip().lower() not in _ON:
+        return {"state": "off"}
+    from . import datasets
+    budget_s = float(os.environ.get("SPORTS_FORECAST_REFRESH_S", "120")) if budget_s is None else budget_s
+    p = Path(path) if path else history_path()
+    try:
+        con = datasets.connect(p)
+        try:
+            from ..contracts import now_utc
+            n = 0
+            for item in refresh_days(now_iso):
+                n += con.execute("INSERT OR IGNORE INTO crawl (league, item, state, updated_at) VALUES ('nba', ?, "
+                                 "'pending', ?)", (item, now_utc())).rowcount
+            con.commit()
+            res = datasets.nba_crawl(con, budget_s=budget_s)
+            last = con.execute("SELECT MAX(start_utc) FROM games WHERE league='nba' AND status = 'final'").fetchone()
+            res.update(state="ok", days_queued=n, last_nba_game=last[0] if last else None)
+            return res
+        finally:
+            con.close()
+    except Exception as e:                              # noqa: BLE001 - never blocks the forecast
+        return {"state": "failed", "error": f"{type(e).__name__}: {str(e)[:200]}"}
 
 
 def build_history(src, out_gz):
@@ -246,6 +313,9 @@ def run(leagues=None, forecast_at=None, log=print):
     leagues = list(leagues or ["nba", "nfl"])
     ver = verify_artifacts()
     hist = install_history()
+    if "nba" in leagues:
+        hist["nba_refresh"] = refresh_nba(forecast_at or started)
+        _trim()
     hcon = open_history()
     out = {"started_at": started, "forecast_at": forecast_at, "flag": FLAG, "artifacts": ver, "history": hist,
            "leagues": {}, "training": "not run (inference only: no fit, no learn, no retrain)"}
@@ -255,6 +325,7 @@ def run(leagues=None, forecast_at=None, log=print):
             for lg in leagues:
                 r = forward.forecast_league(scon, hcon, lg, forecast_at=forecast_at, log=log)
                 out["leagues"][lg] = r
+                _trim()
             after = scon.execute("SELECT COUNT(*) FROM forecast_keys").fetchone()[0]
     finally:
         hcon.close()

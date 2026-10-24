@@ -3,13 +3,98 @@
  "store_copy": "scratchpad sports/starter/data (Starter agent's real-feed copy): canonical.db 222 MB, 80,470 offers, 1,331 events, 14,576 forecasts, 2,022 settlements; model/forecasts.db 59 MB",
  "store_copy_grown": "same + 200,000 synthetic forecasts of played events (canonical.db 538 MB, forecasts.db 895 MB)",
  "runs": [
-  {"job": "fwd run (this branch)", "forecasts_stored": 14576, "peak_rss_mb": 306.4, "s": 26.3, "forecasts_added": 0, "unchanged": {"nba sm-1": 71, "nfl sm-1": 885, "nfl mi-1": 7, "nfl mc-1": 7, "nfl mkt-polymarket": 7}},
-  {"job": "fwd run (this branch)", "forecasts_stored": 214576, "peak_rss_mb": 305.5, "s": 29.3, "forecasts_added": 0},
-  {"job": "write_snapshot (base 236ab45, reads every forecast)", "forecasts_stored": 14576, "peak_rss_mb": 218.3, "s": 3.2},
-  {"job": "write_snapshot (base 236ab45, reads every forecast)", "forecasts_stored": 214576, "peak_rss_mb": 2394.0, "s": 38.5},
-  {"job": "write_snapshot (this branch, current window only)", "forecasts_stored": 14576, "peak_rss_mb": 93.0, "s": 4.3},
-  {"job": "write_snapshot (this branch, current window only)", "forecasts_stored": 214576, "peak_rss_mb": 92.9, "s": 4.7}
+  {
+   "job": "fwd run (this branch)",
+   "forecasts_stored": 14576,
+   "peak_rss_mb": 306.4,
+   "s": 26.3,
+   "forecasts_added": 0,
+   "unchanged": {
+    "nba sm-1": 71,
+    "nfl sm-1": 885,
+    "nfl mi-1": 7,
+    "nfl mc-1": 7,
+    "nfl mkt-polymarket": 7
+   }
+  },
+  {
+   "job": "fwd run (this branch)",
+   "forecasts_stored": 214576,
+   "peak_rss_mb": 305.5,
+   "s": 29.3,
+   "forecasts_added": 0
+  },
+  {
+   "job": "write_snapshot (base 236ab45, reads every forecast)",
+   "forecasts_stored": 14576,
+   "peak_rss_mb": 218.3,
+   "s": 3.2
+  },
+  {
+   "job": "write_snapshot (base 236ab45, reads every forecast)",
+   "forecasts_stored": 214576,
+   "peak_rss_mb": 2394.0,
+   "s": 38.5
+  },
+  {
+   "job": "write_snapshot (this branch, current window only)",
+   "forecasts_stored": 14576,
+   "peak_rss_mb": 93.0,
+   "s": 4.3
+  },
+  {
+   "job": "write_snapshot (this branch, current window only)",
+   "forecasts_stored": 214576,
+   "peak_rss_mb": 92.9,
+   "s": 4.7
+  },
+  {
+   "job": "fwd run with NBA refresh (real now 2026-10-24 ~13:00Z, ESPN live)",
+   "forecasts_stored": 14576,
+   "peak_rss_mb": 316.6,
+   "s": 35.4,
+   "refresh": {
+    "days": 1,
+    "events": 12,
+    "failed": 0,
+    "last_nba_game": "2026-10-24T02:00:00Z"
+   },
+   "forecasts_added": 0
+  },
+  {
+   "job": "learning.on_settled (base 236ab45: every forecast of 30 days, per-forecast settlement scan)",
+   "forecasts_stored": 14576,
+   "peak_rss_mb": 51.0,
+   "s": 8.6
+  },
+  {
+   "job": "learning.on_settled (base 236ab45)",
+   "forecasts_stored": 214576,
+   "peak_rss_mb": 88.2,
+   "s": 109.2
+  },
+  {
+   "job": "learning.on_settled (this branch: settled events only)",
+   "forecasts_stored": 14576,
+   "peak_rss_mb": 50.9,
+   "s": 0.8,
+   "events_read": 2
+  },
+  {
+   "job": "learning.on_settled (this branch)",
+   "forecasts_stored": 214576,
+   "peak_rss_mb": 50.5,
+   "s": 0.7,
+   "events_read": 2
+  }
  ],
  "packaged_history_equivalence": "every forecast of the run on the store copy came back 'unchanged': the input key (offer revision, feature-row hash data_version, artifact, output) of forecasts made from the packaged history equals that of the forecasts the model agent made from the training history.db - same features, same probabilities",
- "cap": "scheduler cap 340 MB (exclusive); service ~52 MB peak at 700 members -> worst admitted 392 MB by reservation, ~358 MB measured"
+ "cap": "scheduler cap 340 MB (exclusive); service ~52 MB peak at 700 members -> worst admitted 392 MB by reservation, ~358 MB measured",
+ "disk": {
+  "bytes_per_forecast": "~5.1 KB: model/forecasts.db 59,437,056 B / 14,576 inputs rows = 4.08 KB + canonical forecast row ~1.0 KB (payload 639 B avg + ids/columns/indexes) + forecast_keys ~0.1 KB",
+  "changed_eligible_target_offers_per_30_min": "121 / 339 / 1,183 in the three steady windows of the copy (night, 2026-10-23 23:00 - 03:00Z); board 9.4k-10.9k open offers of not-started events",
+  "forecasts_per_changed_offer": "~0.24 (snapshot views 2,623 / board 10,886 - many offers have no ESPN-team / nflverse mapping or no fresh quote)",
+  "estimate_mb_per_day": "7-70 (central ~20) at the 30-min cadence: 5.8k-57k changes/day x 0.24 x 5.1 KB; the cadence collapses A->B->A churn inside 30 min (only the current revision at run time is forecast). Night-time sample: day slates are busier - confirm with forecast_run.forecasts_added on the service",
+  "nba_refresh": "~12 games/day appended to model/fwd/history.db (~0.1-0.2 MB/day incl. the raw summary cache)"
+ }
 }
