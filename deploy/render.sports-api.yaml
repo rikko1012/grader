@@ -13,7 +13,7 @@
 # Memory (measured 2026-10-24, sports/research/results/starter_2026-10-24): service ~34 MB idle with the slim slip
 # pool; background jobs are child processes admitted by a memory-reservation queue (sports/scheduler.py): at most ONE
 # heavy child, exclusive jobs (collector cycle 274 MB, model forecast 311 MB, fit 308 MB) alone, every child killed
-# above its cap. Disk: 10 GB to start with alerts at 80 % / 90 % (disk_80 / disk_90); Render disks can be ENLARGED
+# above its cap. Disk: existing owner-approved 5 GB to start with alerts at 80 % / 90 % (disk_80 / disk_90); Render disks can be ENLARGED
 # later without data loss (never shrunk) - projection and procedure in RUNBOOK "Starter disk".
 #
 # Flags OFF: the service answers only /api/sports/health until SPORTS_API=1; no child runs until its flag is on.
@@ -31,7 +31,7 @@ services:
     disk:
       name: scout-sports-data
       mountPath: /sports-data
-      sizeGB: 10              # start small, enlarge on the disk_80 alert (RUNBOOK "Starter disk": ~3-6 weeks per 10 GB)
+      sizeGB: 5               # existing approved disk; enlargement requires owner approval
     envVars:
       - key: PORT
         value: "10000"
@@ -90,9 +90,11 @@ services:
       - key: SPORTS_JOB_PREBUILT_EVERY_S
         value: "90"           # slip pool every 90 s (was 45 s)
       - key: SPORTS_WORKER_MAX_MB
-        value: "768"          # address-space backstop inside worker children; the scheduler's RSS caps are the limit
+        value: "310"          # RSS backstop; scheduler applies each job's measured RSS cap
+      - key: SPORTS_WORKER_MAX_VM_MB
+        value: "320"          # measured ingest/Kalshi/settle address-space cap; TRAIN stays off
       # ---- storage
       - key: SPORTS_ARCHIVE_AFTER_H
         value: "72"           # offers not seen for 72 h move to the compressed archive (nothing is deleted)
       - key: SPORTS_STORE_MAX_MB
-        value: "6000"         # ingestion pauses itself if canonical.db ever reaches 6 GB (hot window ~2-3 GB)
+        value: "4000"         # pause ingestion at 4 GB across the entire data directory

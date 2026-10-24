@@ -1,3 +1,5 @@
+> Integration correction: use the EXISTING 5 GB disk ($8.25/month base), not the historical 10 GB sizing proposal below. No enlargement is approved. SPORTS_STORE_MAX_MB=4000 counts the entire data directory; SPORTS_WORKER_MAX_MB=310 is RSS and SPORTS_WORKER_MAX_VM_MB=320 is virtual memory for measured ingestion/settlement jobs. Keep SPORTS_TRAIN=0 until model-job virtual memory is measured. See RETENTION.md for the short measured runway; proposed larger sizes below are planning scenarios only.
+
 # Scout Sports - operational runbook
 
 (Sections 1-2 were committed BEFORE any load run; the results and the rest of the runbook follow below.)
@@ -131,8 +133,8 @@ snapshots + spools over HTTP) - not a shared disk.
 | job children | memory reservation `SPORTS_CHILD_BUDGET_MB` | 310 MB | the job waits in the queue (section 5a) |
 | job children | per-job RSS cap `SPORTS_JOB_<NAME>_CAP_MB` | section 5a | child killed (`killed_over_cap`), retried with backoff, `job_over_cap` page after 2 in a row |
 | job children | per-job timeout | section 5a | child killed (`timeout`) |
-| worker child | address space `SPORTS_WORKER_MAX_MB` | 768 MB | RLIMIT_AS backstop (Linux) |
-| worker child | canonical.db size `SPORTS_STORE_MAX_MB` | 6,000 MB | ingestion pauses itself (`store_full_ingest_paused`) |
+| worker child | address space `SPORTS_WORKER_MAX_VM_MB` | 320 MB | Measured ingest/settlement only; model jobs stay off pending measurement |
+| worker child | entire data directory `SPORTS_STORE_MAX_MB` | 4,000 MB | ingestion pauses itself (`store_full_ingest_paused`) |
 | esports gateway (proxy mode only) | in-flight / slot wait / timeout | 16 / 200 ms / 2.5 s | 503 `sports_busy` / `sports_unavailable` |
 | esports gateway (proxy mode only) | circuit breaker | 5 consecutive failures -> 5 s open | immediate 503 |
 
@@ -200,7 +202,7 @@ esports-only (auto-synced - a service declared there would be created and billed
    path** `./Dockerfile.sports`; **Docker Command** `python -m sports.service`; **Health Check Path**
    `/api/sports/health`; **Auto-Deploy** `No`.
 2. **Instance type**: `Starter` (512 MB, 0.5 CPU) - section 13.1 for the memory budget.
-3. **Disks**: `scout-sports-data`, mount `/sports-data`, **10 GB** (section 13.3; enlarge on the `disk_80` alert).
+3. **Disks**: `scout-sports-data`, mount `/sports-data`, **5 GB** (existing approved disk; section 13.3; enlargement needs owner approval).
 4. **Environment**: every key in `deploy/render.sports-api.yaml` with its value. Secrets (already set by the owner or to
    be set there, never in git): `SPORTS_TOKEN_SECRET` (the same value as cs2-scout), `ADMIN_TOKEN` (same as
    cs2-scout), `ODDS_API_KEY`, `SPORTS_ALLOWED_ORIGINS` (`https://cs2-scout.onrender.com`), `ANTHROPIC_API_KEY` (only
@@ -265,7 +267,7 @@ deploys and health-check failures).
 | worker_down | page | ingest on and the collector (`ingest` job) has not finished OK for 3 cycles | ops `scheduler.jobs.ingest.last_exit`; Render logs |
 | scheduler_down | page | the job scheduler thread is not running | restart the service |
 | feed_stale | warn | ingest on and newest sighting older than 45 min (Kalshi 150 min) | check that source; a stale feed is never back-filled from another stat / scope / source |
-| store_large | warn | store >= 6 GB or 80% of `SPORTS_STORE_MAX_MB` | plan disk resize / retention |
+| store_large | warn | store >= 4 GB or 80% of `SPORTS_STORE_MAX_MB` | plan disk resize / retention |
 | store_full_ingest_paused | page | store >= `SPORTS_STORE_MAX_MB` | grow the disk, raise the cap |
 | service_memory_high | warn | RSS > 80% of `SPORTS_SERVICE_MAX_MB` | find the handler holding large answers; the watchdog restarts at 100% |
 | service_shedding | warn | (busy + 5xx) > 1% of requests | `peak_inflight` / `db_pool`: raise threads / pool or fix the slow route |
@@ -368,7 +370,7 @@ sports paths identical to unknown routes - `test_rollback_is_flags_off_even_with
 1. **+10% esports p99 budget FAILED locally (+14%, section 11) - pending staging.** The sports service now exists on
    its own Render instance (owner, 2026-10-24); staging (section 7) must show esports p99 within +10% before member
    enablement. Locally, esports can only be measured with all processes sharing one machine.
-2. **Disk beyond ~1 month:** 10 GB lasts ~3-6 weeks at the projection (13.3); enlarge on `disk_80`. Fitting 6 months
+2. **Disk runway:** the approved 5 GB reaches its 4 GB alert/pause in roughly 3-12 days in the current preliminary projection; see RETENTION.md. Do not enlarge without approval. Fitting 6 months
    in ~25 GB needs the post-release follow-up: compaction of books.db quotes and games.db market / prop lines
    (collector / lines owners; their readers must use archive-aware views). Lifetime revision counts per offer (which
    raise the 8.2x compaction ratio) are not confirmed yet - re-measure after a week of staging.
@@ -452,7 +454,8 @@ are busier, hence the range):
 
 | Disk | Disk $ / month | Total $ / month | Lasts at the projection (to the 80 % alert) |
 |---|---|---|---|
-| **10 GB (start)** | 2.50 | **9.50** | ~3-6 weeks |
+| **5 GB (existing approved)** | 1.25 | **8.25** | preliminary 3-12 days to alert/pause; see RETENTION.md |
+| 10 GB (unapproved scenario) | 2.50 | 9.50 | ~3-6 weeks |
 | 25 GB | 6.25 | 13.25 | ~2.5-4 months |
 | 50 GB | 12.50 | 19.50 | ~5-8 months |
 | 80 GB (6 months at the high estimate under 80 %) | 20.00 | 27.00 | 6+ months |
@@ -464,7 +467,7 @@ ticks) is the owner's data decision and is NOT applied.
 
 **Enlarge procedure (no data loss):** Render dashboard -> scout-sports-api -> **Disks** -> the disk -> **Edit** ->
 a larger size -> **Save**. Render keeps the data; expect a short restart. A disk can be enlarged later, never shrunk
-- grow in steps (10 -> 25 -> 50 GB). If `SPORTS_STORE_MAX_MB` (6,000) is ever the limit (`store_full_ingest_paused`),
+- grow in steps (10 -> 25 -> 50 GB). If `SPORTS_STORE_MAX_MB` (4,000) is ever the limit (`store_full_ingest_paused`),
 raise it with the disk. Alerts: `disk_80` (warn) -> plan the enlarge this week; `disk_90` (page) -> enlarge now.
 
 ### 13.4 When a memory alert fires

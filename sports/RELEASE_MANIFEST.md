@@ -1,3 +1,5 @@
+> Integration correction: use the EXISTING 5 GB disk ($8.25/month base), not the historical 10 GB sizing proposal below. No enlargement is approved. SPORTS_STORE_MAX_MB=4000 counts the entire data directory; SPORTS_WORKER_MAX_MB=310 is RSS and SPORTS_WORKER_MAX_VM_MB=320 is virtual memory for measured ingestion/settlement jobs. Keep SPORTS_TRAIN=0 until model-job virtual memory is measured. See RETENTION.md for the short measured runway; proposed larger sizes below are planning scenarios only.
+
 # Scout Sports release manifest (skeleton - the coordinator fills each TODO before the PR is marked ready)
 
 Status: **NOT RELEASED.** Production sports flags OFF on every service. Merging to main and enabling for members
@@ -30,7 +32,7 @@ No esports table, file or migration is changed. The esports disk (`/data`) is un
 | cs2-scout | SPORTS_API_MODE | service | esports mints tokens + serves the page only |
 | cs2-scout | SPORTS_API_BASE, SPORTS_TOKEN_SECRET | set (secret) | RUNBOOK section 6 |
 | scout-sports-api | SPORTS_API / SPORTS_INGEST / SPORTS_TRAIN / SPORTS_ASSISTANT | 0 / 0 / 0 / 0 | staged enable: RUNBOOK section 7 |
-| scout-sports-api | plan / disk | **Starter** (512 MB, 0.5 CPU) + 10 GB disk scout-sports-data at /sports-data (owner created the service 2026-10-24; settings in deploy/render.sports-api.yaml, applied by hand; root render.yaml stays esports-only) | image Dockerfile.sports; Starter limits / job caps / cadences in the template; disk enlarged on `disk_80` (RUNBOOK 13.3) |
+| scout-sports-api | plan / disk | **Starter** (512 MB, 0.5 CPU) + 5 GB disk scout-sports-data at /sports-data (owner created the service 2026-10-24; settings in deploy/render.sports-api.yaml, applied by hand; root render.yaml stays esports-only) | image Dockerfile.sports; Starter limits / job caps / cadences in the template; disk enlarged on `disk_80` (RUNBOOK 13.3) |
 | scout-sports-api | ODDS_API_KEY, ANTHROPIC_API_KEY, SPORTS_TOKEN_SECRET, ADMIN_TOKEN | secrets set by the owner in the Environment tab (never in git) | |
 
 ## 4. Data coverage
@@ -86,7 +88,7 @@ and `test_service_refuses_everything_without_a_secret_and_with_the_flag_off`.
 
 Service scope (RUNBOOK section 12): staging load run with the sports service on its own Render instance (the +10%
 esports p99 budget FAILED locally - 1.14x measured on one shared workstation - pending staging; member enablement
-blocked until it passes); Starter (RUNBOOK 13): offer compaction arch-2 (8.2x measured, nothing deleted), 10 GB disk
+blocked until it passes); Starter (RUNBOOK 13): offer compaction arch-2 (8.2x measured, nothing deleted), 5 GB disk
 lasts ~3-6 weeks at the projection - enlarge on disk_80; books.db / games.db compaction is the post-release follow-up
 to fit 6 months in ~25 GB; model jobs read every forecast (bound them before their caps); anthropic SDK pin
 unexercised. TODO: add the other agents' blockers.

@@ -1,0 +1,317 @@
+{
+ "what": "Local sandbox measurement of the canonical ingest cycle with real public feeds (no paid keys; production flags untouched). Window 2026-10-24 01:21-02:08 UTC: Friday-night NBA games in progress, next NBA slate ~21 h away, NFL week 8 ~39 h away.",
+ "method": "measure.py: python -m sports.worker migrate + ingest nba nfl (all SOURCES) per data dir; peak RSS via os.wait4; sizes via SQLite dbstat. profile_rss.py: in-process RSS sampler with sports/ stacks and /proc VmPeak.",
+ "first_cycle_fresh_dir": {
+  "pr17_head_506d1ae": {
+   "at": "2026-10-24T01:27:13Z",
+   "ingest": {
+    "args": [
+     "ingest",
+     "nba",
+     "nfl"
+    ],
+    "wall_s": 135.3,
+    "exit": 0,
+    "peak_rss_mb": 172.2
+   },
+   "files_mb": {
+    "cache.db": 3.838,
+    "canonical.db": 32.444
+   },
+   "data_mb": 36.3,
+   "canonical_records": {
+    "rows": 24995,
+    "data_mb": 21.733,
+    "index_mb": 10.252
+   },
+   "records_by_kind": {
+    "offer|prizepicks": 10953,
+    "offer|underdog": 4679,
+    "offer|kalshi": 3186,
+    "player|canonical": 2601,
+    "membership|espn": 2601,
+    "context|espn": 869,
+    "event|espn": 50,
+    "team|canonical": 56
+   }
+  },
+  "repair_before_memory_storage_fixes": {
+   "at": "2026-10-24T01:21:53Z",
+   "ingest": {
+    "args": [
+     "ingest",
+     "nba",
+     "nfl"
+    ],
+    "wall_s": 276.9,
+    "exit": 0,
+    "peak_rss_mb": 301.0
+   },
+   "files_mb": {
+    "books/ledger.db": 0.02,
+    "books.db": 10.117,
+    "cache.db": 4.35,
+    "canonical.db": 62.689,
+    "games.db": 9.036
+   },
+   "data_mb": 86.2,
+   "canonical_records": {
+    "rows": 45677,
+    "data_mb": 43.68,
+    "index_mb": 18.584
+   },
+   "records_by_kind": {
+    "offer|prizepicks": 11056,
+    "offer|fanduel": 7811,
+    "offer|kalshi": 6051,
+    "offer|polymarket": 4921,
+    "offer|betrivers": 4984,
+    "offer|underdog": 4678,
+    "player|canonical": 2601,
+    "membership|espn": 2601,
+    "context|espn": 868,
+    "event|espn": 50,
+    "team|canonical": 56
+   }
+  },
+  "repair_final": {
+   "at": "2026-10-24T01:49:52Z",
+   "ingest": {
+    "args": [
+     "ingest",
+     "nba",
+     "nfl"
+    ],
+    "wall_s": 266.5,
+    "exit": 0,
+    "peak_rss_mb": 211.5
+   },
+   "files_mb": {
+    "books/ledger.db": 0.02,
+    "books.db": 7.066,
+    "cache.db": 4.219,
+    "canonical.db": 43.88,
+    "games.db": 8.79
+   },
+   "data_mb": 64.0,
+   "canonical_records": {
+    "rows": 32106,
+    "data_mb": 30.241,
+    "index_mb": 13.206
+   },
+   "records_by_kind": {
+    "offer|prizepicks": 9293,
+    "offer|kalshi": 5860,
+    "offer|polymarket": 4921,
+    "offer|underdog": 4531,
+    "player|canonical": 2601,
+    "membership|espn": 2601,
+    "offer|betrivers": 647,
+    "offer|fanduel": 677,
+    "context|espn": 869,
+    "event|espn": 50,
+    "team|canonical": 56
+   }
+  },
+  "books_only_espn_books": {
+   "args": [
+    "ingest",
+    "nba",
+    "nfl",
+    "--sources",
+    "espn,books"
+   ],
+   "wall_s": 123.6,
+   "exit": 0,
+   "peak_rss_mb": 68.2
+  },
+  "games_only_espn_games": {
+   "args": [
+    "ingest",
+    "nba",
+    "nfl",
+    "--sources",
+    "espn,games"
+   ],
+   "wall_s": 139.6,
+   "exit": 0,
+   "peak_rss_mb": 96.9
+  }
+ },
+ "warm_cycles_same_dir": {
+  "cycle1": {
+   "at": "2026-10-24T01:21:53Z",
+   "ingest": {
+    "args": [
+     "ingest",
+     "nba",
+     "nfl"
+    ],
+    "wall_s": 276.9,
+    "exit": 0,
+    "peak_rss_mb": 301.0
+   },
+   "files_mb": {
+    "books/ledger.db": 0.02,
+    "books.db": 10.117,
+    "cache.db": 4.35,
+    "canonical.db": 62.689,
+    "games.db": 9.036
+   },
+   "data_mb": 86.2,
+   "canonical_records": {
+    "rows": 45677,
+    "data_mb": 43.68,
+    "index_mb": 18.584
+   },
+   "records_by_kind": {
+    "offer|prizepicks": 11056,
+    "offer|fanduel": 7811,
+    "offer|kalshi": 6051,
+    "offer|polymarket": 4921,
+    "offer|betrivers": 4984,
+    "offer|underdog": 4678,
+    "player|canonical": 2601,
+    "membership|espn": 2601,
+    "context|espn": 868,
+    "event|espn": 50,
+    "team|canonical": 56
+   }
+  },
+  "cycle2_8min_later_pre_fix_code": {
+   "at": "2026-10-24T01:34:34Z",
+   "ingest": {
+    "args": [
+     "ingest",
+     "nba",
+     "nfl"
+    ],
+    "wall_s": 81.9,
+    "exit": 0,
+    "peak_rss_mb": 343.1
+   },
+   "files_mb": {
+    "books/ledger.db": 0.02,
+    "books.db": 11.42,
+    "cache.db": 4.354,
+    "canonical.db": 77.079,
+    "games.db": 9.036
+   },
+   "data_mb": 101.9,
+   "canonical_records": {
+    "rows": 55227,
+    "data_mb": 54.288,
+    "index_mb": 22.282
+   },
+   "records_by_kind": {
+    "offer|prizepicks": 12905,
+    "offer|fanduel": 10701,
+    "offer|kalshi": 8809,
+    "offer|polymarket": 6914,
+    "offer|betrivers": 4984,
+    "offer|underdog": 4737,
+    "player|canonical": 2601,
+    "membership|espn": 2601,
+    "context|espn": 868,
+    "event|espn": 51,
+    "team|canonical": 56
+   }
+  },
+  "cycle3_31min_later_fixed_code": {
+   "at": "2026-10-24T02:05:37Z",
+   "ingest": {
+    "args": [
+     "ingest",
+     "nba",
+     "nfl"
+    ],
+    "wall_s": 162.4,
+    "exit": 0,
+    "peak_rss_mb": 200.6
+   },
+   "files_mb": {
+    "books/ledger.db": 0.029,
+    "books.db": 13.509,
+    "cache.db": 4.354,
+    "canonical.db": 99.287,
+    "games.db": 9.937
+   },
+   "data_mb": 127.1,
+   "canonical_records": {
+    "rows": 70501,
+    "data_mb": 70.349,
+    "index_mb": 28.348
+   },
+   "records_by_kind": {
+    "offer|fanduel": 15082,
+    "offer|kalshi": 12211,
+    "offer|prizepicks": 15648,
+    "offer|polymarket": 9642,
+    "offer|betrivers": 6638,
+    "offer|underdog": 5066,
+    "player|canonical": 2601,
+    "membership|espn": 2601,
+    "context|espn": 899,
+    "event|espn": 57,
+    "team|canonical": 56
+   }
+  }
+ },
+ "cycle3_note": "cycle3 includes 5,551 one-time 'removed' revisions of alternate book lines stored by the pre-fix bridge in cycles 1-2 (FanDuel 4,162, BetRivers 1,389) - an artifact of this dir only; real main-line revisions: FanDuel 219, BetRivers 265.",
+ "revisions_on_started_games_cycle2": {
+  "prizepicks": "1571/1756",
+  "kalshi": "1370/2757",
+  "polymarket": "1042/1993",
+  "underdog": "22/47"
+ },
+ "book_variant_mix_first_read": {
+  "fanduel": {
+   "alternate": 6976,
+   "main": 873
+  },
+  "betrivers": {
+   "alternate": 4165,
+   "main": 819
+  }
+ },
+ "polymarket_page_100_events": {
+  "nba_page0_json_mb": 29.4,
+  "nba_page0_python_objects_mb": 109,
+  "nfl_page4_json_mb": 30.0,
+  "nfl_page4_python_objects_mb": 111
+ },
+ "polymarket_end_date_max_rejected": {
+  "nba_game_events": "124 -> 123",
+  "nfl_game_events": "83 -> 66"
+ },
+ "warm_full_cycle_memory_fixed_code": {
+  "concurrency_2": {
+   "rss_peak_mb": 212,
+   "vm": {
+    "VmPeak": "522632 kB",
+    "VmHWM": "206340 kB"
+   }
+  },
+  "concurrency_1": {
+   "rss_peak_mb": 164,
+   "vm": {
+    "VmPeak": "337244 kB",
+    "VmHWM": "161364 kB"
+   }
+  },
+  "before_fixes_concurrency_2_rss_peak_mb": 326,
+  "rlimit_as_220_concurrency_1": {
+   "result": "every job MemoryError (3 attempts per league) at RSS ~130 MB",
+   "ingest": {
+    "args": [
+     "ingest",
+     "nba",
+     "nfl"
+    ],
+    "wall_s": 102.0,
+    "exit": 0,
+    "peak_rss_mb": 130.2
+   }
+  }
+ }
+}
