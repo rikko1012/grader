@@ -85,6 +85,7 @@ ROUTES = {
     "/api/sports/picks/track": ("sports.api_picks:track", MEMBER, ("POST",)),
     "/api/sports/picks/mine": ("sports.api_picks:mine", MEMBER, ("GET",)),
     "/api/sports/admin/picks": ("sports.api_picks:admin", ADMIN, ("GET",)),
+    "/api/sports/admin/books": ("sports.api_books:admin", ADMIN, ("GET",)),
 }
 # ---------------------------------------------------------------------------------------------------- end of table
 

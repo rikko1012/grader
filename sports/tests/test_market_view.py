@@ -280,3 +280,52 @@ def test_board_quotes_carry_book_prices_and_scout_first_preference(built):
     assert fd["d"] == [1.80, 2.05] and "nf" not in fd                  # price shown; no Scout placeholder on a book
     assert snapshots.DEFAULT_MODELS[0] == "sm-1"
     assert all(f.get("k") in ("scout", "market", "informed") for f in b["fc"].values())
+
+
+# ---------------------------------------------------------------- item 9: mapping audit + the Polymarket date fix
+def test_polymarket_slug_utc_date_resolves_by_the_markets_own_us_start_date():
+    from sports.books import sources
+    late = h.event(start="2026-10-24T00:30:00Z")                       # Oct 23 evening in the US, Oct 24 in UTC
+    mk = {"id": "9", "question": "Jayson Tatum: Points O/U 26.5", "outcomes": "[\"Yes\", \"No\"]", "bestBid": 0.48,
+          "bestAsk": 0.51, "line": 26.5, "gameStartTime": "2026-10-24 00:30:00+00", "liquidityNum": 10.0,
+          "active": True, "closed": False, "acceptingOrders": True, "sportsMarketType": "points"}
+    ev = {"id": "1", "title": "Knicks vs. Celtics", "slug": "nba-nyk-bos-2026-10-24", "markets": [mk]}
+    o = sources.polymarket_offers([ev], "nba", h.T0, h.resolver(events=[late])).records[0]
+    assert o.event_id == "nba:espn:1" and o.player_id == "nba:player:espn:4065648"
+    # a different game the same night is never matched: wrong teams stay unresolved
+    ev2 = {**ev, "slug": "nba-chi-mil-2026-10-24"}
+    o2 = sources.polymarket_offers([ev2], "nba", h.T0, h.resolver(events=[late])).records
+    assert all(x.event_id is None for x in o2)
+
+
+def test_mapping_audit_lists_mismatches_with_counts(built):
+    from sports import mapping_audit
+    con = store.connect()
+    store.put(con, book("fanduel", "fd:ghost", player_id=None, observed_at="2026-10-23T20:55:00Z"))
+    store.put(con, book("betrivers", "br:noev", event_id=None, observed_at="2026-10-23T20:55:00Z"))
+    store.put(con, book("fanduel", "fd:wrongteam", team="BOS", observed_at="2026-10-23T20:55:00Z"))   # KAT plays for NY
+    out = mapping_audit.run(con, "nba", now="2026-10-23T21:00:00Z")
+    con.close()
+    c = out["checks"]
+    assert c["player_unresolved"]["count"] == 1 and c["player_unresolved"]["by_platform"] == {"fanduel": 1}
+    assert c["event_unresolved"]["count"] == 1 and c["event_unresolved"]["by_platform"] == {"betrivers": 1}
+    assert c["team_label_mismatch"]["count"] == 1 and c["team_label_mismatch"]["examples"][0]["team"] == "BOS"
+    assert c["player_team_not_in_event"]["count"] == 0
+    assert (snapshots.snap_root() / "nba" / "mapping_audit.json").exists()
+
+
+def test_admin_books_route_serves_sources_and_audit(built):
+    from sports import api_books, mapping_audit, web
+    assert web.ROUTES["/api/sports/admin/books"] == ("sports.api_books:admin", web.ADMIN, ("GET",))
+    con = store.connect()
+    mapping_audit.run(con, "nba", now="2026-10-23T21:00:00Z")
+    con.close()
+
+    class R:
+        query = {"league": "nba"}
+    code, body = api_books.admin(R())
+    nba = body["nba"]
+    assert code == 200 and nba["sources"]["thunderpick"]["verified"] is False
+    assert nba["mapping_audit"]["offers_checked"] >= 1 and "player_unresolved" in nba["mapping_audit"]["checks"]
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    assert "Line not re-confirmed by" in app                          # stale pick'em line labelled, not hidden

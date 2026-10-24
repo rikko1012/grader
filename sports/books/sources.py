@@ -181,6 +181,14 @@ def polymarket_offers(events, league, observed_at, resolver=None):
                       ("dnp_rule", "inactive / does not take the court resolves NO (price unconditional on playing)")]
             if resolver is not None:
                 eid, why = resolver.event(day, away, home)
+                # the slug's date is the UTC date: a game starting after midnight UTC (US evening) carries the NEXT
+                # day. Same two teams, on the US date of the market's own gameStartTime (exact, never fuzzy).
+                us_day = identity.us_date(start) if start else None
+                if eid is None and us_day and us_day != day:
+                    eid, why2 = resolver.event(us_day, away, home)
+                    why = why if eid is None else None
+                    if eid is not None:
+                        day = us_day
                 if eid is None:
                     extras.append(("unresolved_event", why))
                 else:

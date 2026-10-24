@@ -232,3 +232,4 @@ body.sw{--bg:#0c1017;--panel:#141a24;--panel-2:#1a2230;--line:#283140;--muted:#a
 .sw .sw-cmp-act td { padding-top: 0; border-top: 0; }
 .sw .sw-prefbook { max-width: 260px; margin-bottom: 8px; }
 .sw .sw-altnote { margin: 6px 0; }
+.sw .sw-stale { color: var(--warn, #f0b35a); margin: 4px 0; }

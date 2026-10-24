@@ -92,6 +92,7 @@ def test_snapshot_build_failure_is_reported_not_raised(monkeypatch):
 def test_schedule_names_every_worker_side_process_with_its_flag():
     s = service.schedule()
     want = {"assistant": "SPORTS_ASSISTANT", "prebuilt": "SPORTS_API", "ui-snapshots": "SPORTS_INGEST",
+            "mapping-audit": "SPORTS_INGEST",
             "slips-ingest": "SPORTS_INGEST", "ingest": "SPORTS_INGEST", "ingest-kalshi": "SPORTS_INGEST",
             "settle": "SPORTS_INGEST", "slips-settle": "SPORTS_INGEST", "model-forward": "SPORTS_FORECAST",
             "model-forecast": "SPORTS_TRAIN",
@@ -121,7 +122,7 @@ def test_supervise_starts_one_scheduler_and_no_job_with_flags_off(monkeypatch):
     stop = threading.Event()
     sch = service.supervise(stop)
     time.sleep(0.6)
-    assert sch.running == {} and len(scheduler.JOBS) == 19 and not any(j["enabled"] for j in scheduler.JOBS.values())
+    assert sch.running == {} and len(scheduler.JOBS) == 20 and not any(j["enabled"] for j in scheduler.JOBS.values())
     stop.set()
 
 

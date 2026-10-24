@@ -575,6 +575,7 @@
         '<a class="sw-line" href="' + marketHref(m, q) + '"><span class="sw-k">Line</span> ' + S.line(q.l) +
         ' <span>' + esc(B.stats[m.st] || m.st) + ' · ' + esc(bookName(q.p)) + '</span></a></div>' +
         scoutBlock(m, q, f, B) + marketBlock(m, q, f, B) +
+        (!S.fresh(q.t, Date.now()) ? '<div class="sw-small sw-stale" role="note">Line not re-confirmed by ' + esc(bookName(q.p)) + " for " + esc(S.age(q.t).replace(/ ago$/, "")) + "</div>" : "") +
         '<div class="sw-offer-meta">' + esc(offeredText(q.o)) + priceText(q) + ' · Observed ' + esc(S.age(q.t)) +
         (q.v !== 'standard' && q.v !== 'balanced' ? ' · ' + esc(q.v) : '') +
         (q.m ? ' · Multipliers O ' + S.mult(q.m[0]) + ' / U ' + S.mult(q.m[1]) : '') + '</div>' +
