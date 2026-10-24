@@ -13,8 +13,10 @@ at import time. Run it as its own service / cron:
   python -m sports.worker train ...                     refused unless SPORTS_TRAIN=1 (model agents register jobs)
 
 Bounds (environment, with defaults): SPORTS_WORKER_CONCURRENCY=2 parallel jobs; SPORTS_JOB_TIMEOUT_S=300 per job;
-SPORTS_JOB_ATTEMPTS=3 with exponential backoff + jitter (net.backoff); SPORTS_WORKER_MAX_MB=768 address-space cap
-(POSIX RLIMIT_AS; reported "unsupported" on Windows) plus an RSS check between jobs; SPORTS_STORE_MAX_MB=1500 - ingestion
+SPORTS_JOB_ATTEMPTS=3 with exponential backoff + jitter (net.backoff); SPORTS_WORKER_MAX_MB=768 RSS ceiling (checked
+between loop cycles); SPORTS_WORKER_MAX_VM_MB (default: SPORTS_WORKER_MAX_MB) virtual address-space cap (POSIX RLIMIT_AS;
+reported "unsupported" on Windows) - virtual size runs well above RSS (thread stacks, allocator arenas, mapped
+libraries), so it is sized from VmPeak, never from the RSS budget; SPORTS_STORE_MAX_MB=1500 - ingestion
 stops writing when everything under SPORTS_DATA_DIR (data_mb: canonical, books, games, cache, ...) reaches it. Per-host
 request pacing is net.py's (ESPN 2/s, Kalshi 1/1.5 s, PrizePicks 1/2 s, Underdog 1/s).
 
@@ -51,7 +53,20 @@ from .contracts import now_utc, parse_utc
 CONCURRENCY = int(os.environ.get("SPORTS_WORKER_CONCURRENCY", "2"))
 JOB_TIMEOUT_S = int(os.environ.get("SPORTS_JOB_TIMEOUT_S", "300"))
 JOB_ATTEMPTS = int(os.environ.get("SPORTS_JOB_ATTEMPTS", "3"))
-MAX_MB = int(os.environ.get("SPORTS_WORKER_MAX_MB", "768"))
+MAX_MB = int(os.environ.get("SPORTS_WORKER_MAX_MB", "768"))           # RSS ceiling (loop exits for a clean restart)
+
+
+def vm_cap_mb(env=None):
+    """Address-space cap (RLIMIT_AS) in MB: SPORTS_WORKER_MAX_VM_MB, else SPORTS_WORKER_MAX_MB (the former single knob,
+    so an unset VM value changes nothing). Virtual size is not RSS (thread stacks, allocator arenas, mapped libraries):
+    measured 2026-10-24 on real feeds under Starter-like limits (research/results/storage_2026-10-24/constrained.jsonl),
+    the scheduler's ingest job peaks at RSS 178-194 MB but VmPeak 240-257 MB; at RLIMIT_AS 220 it died of MemoryError
+    at RSS 131 MB without MALLOC_ARENA_MAX=2 and ran pinned at the cap (no headroom) with it."""
+    env = os.environ if env is None else env
+    return int(env.get("SPORTS_WORKER_MAX_VM_MB") or env.get("SPORTS_WORKER_MAX_MB") or 768)
+
+
+MAX_VM_MB = vm_cap_mb()
 STORE_MAX_MB = float(os.environ.get("SPORTS_STORE_MAX_MB", "1500"))
 SETTLE_LOOKBACK_DAYS = 4                 # box scores re-read for corrections this long after a game
 WINDOW_DAYS = {"nba": 2, "wnba": 2, "cbb": 2, "nfl": 7, "cfb": 7}
@@ -67,7 +82,7 @@ class BudgetExceeded(RuntimeError):
 
 
 # ------------------------------------------------------------------------------------------------------ resources
-def apply_memory_cap(mb=MAX_MB):
+def apply_memory_cap(mb=MAX_VM_MB):
     try:
         import resource
     except ImportError:
