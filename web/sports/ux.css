@@ -1,0 +1,26 @@
+/* Scout Sports - ux agent: card actions (sw-act-*), slip tray (sw-tray-*), filters (sw-fx-*), My picks (sw-mp-*).
+   Every rule is scoped under .sw (the Sports page only). */
+/* card actions: Over / Under selector, then Add to slip / Track pick */
+.sw .sw-act{margin-top:10px}
+.sw .sw-act-sides{border:0;margin:0;padding:0;min-width:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.sw .sw-act-side{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:44px;border:1px solid #364355;border-radius:8px;cursor:pointer;background:#101620;padding:4px 6px;text-align:center;font-weight:600;font-size:12.5px;color:var(--text)}
+.sw .sw-act-side input{position:absolute;opacity:0;width:1px;height:1px;margin:0;pointer-events:none}
+.sw .sw-act-side:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+.sw .sw-act-side.over:has(input:checked){border-color:var(--over);background:#5fd17a1f;box-shadow:inset 0 0 0 1px var(--over)}
+.sw .sw-act-side.under:has(input:checked){border-color:var(--under);background:#ff9f6b1f;box-shadow:inset 0 0 0 1px var(--under)}
+.sw .sw-act-side:has(input:checked)::after{content:"selected";font-size:10px;font-weight:500;color:var(--muted)}
+.sw .sw-act-side.off{border-style:dashed;color:var(--faint);cursor:not-allowed;background:transparent}
+.sw .sw-act-why{font-size:10.5px;font-weight:400;color:var(--faint);line-height:1.3}
+.sw .sw-act-btns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:7px}
+.sw .sw-act-btns .sw-btn{min-height:40px;border-radius:8px;font-size:12px;white-space:nowrap}
+.sw .sw-act-add{background:#243143;color:#e1ebf9;border-color:#364355}
+.sw .sw-act-track{background:transparent;color:var(--text);border-color:#364355}
+.sw .sw-act-btns .sw-btn:disabled{background:transparent;color:var(--faint);border-style:dashed;cursor:not-allowed}
+.sw .sw-act-btns .sw-btn[aria-pressed=true]{border-color:var(--over);color:#a7e9b6}
+.sw .sw-act-help{margin:7px 0 0;font-size:11px;line-height:1.45;color:var(--faint)}
+.sw .sw-act-choose{color:var(--muted)}
+.sw .sw-act-none p{margin:0}
+.sw .sw-actions-card{display:block;max-width:440px}
+@media(max-width:640px){.sw .sw-act-btns .sw-btn{min-height:44px}}
+/* target size (24 px minimum) for the research card's game link - the browser a11y test flagged it at 17 px on main */
+.sw .sw-matchline a{display:inline-flex;align-items:center;min-height:24px}

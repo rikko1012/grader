@@ -352,13 +352,9 @@
     if (x.indexOf(platform + ":") === 0) x = x.slice(platform.length + 1);
     return x.replace(/:r\d+:[0-9a-f]+$/, "");
   }
-  function legButton(leg) {
-    LEGS.push(leg);
-    var word = leg.side === "over" ? "Over" : "Under";
-    var what = leg.player + " " + word + " " + S.line(leg.line) + " " + (leg.stat_label || leg.stat) + " on " + bookName(leg.platform);
-    return '<button type="button" class="sw-btn sw-btn-sm" data-leg="' + (LEGS.length - 1) + '" aria-label="Add ' + esc(what) + ' to the Slip Studio draft">+ ' + word + "</button>" +
-      '<button type="button" class="sw-btn sw-btn-sm" data-track="' + (LEGS.length - 1) + '" aria-label="Track ' + esc(what) + ' as my pick">Track ' + word + "</button>";
-  }
+  // HOOK (ux agent): the card's action area - Over / Under selector, "Add to slip", "Track pick" - is rendered by
+  // web/sports/picks.js (SportsPicks.actions). legs = {over: leg|null, under: leg|null}; why = reason per missing side.
+  function cardActions(legs, why, opts) { return window.SportsPicks ? window.SportsPicks.actions(legs, why, opts) : ""; }
   function makeLeg(o) {                                  // o: platform, record_id, forecast (full or compact), side, ...
     var f = o.forecast, full = f && f.p_over !== undefined;
     var po = f ? (full ? f.p_over : f.po) : null, pu = f ? (full ? f.p_under : f.pu) : null, pp = f ? (full ? f.p_push : f.pp) : null;
@@ -390,28 +386,6 @@
     var t = document.getElementById("sw-toast");
     t.innerHTML = '<div class="sw-banner ' + (ok ? "info" : "warn") + '">' + esc(text) + (ok ? ' <a href="' + SLIP_PAGE + '">Open Slip Studio</a>' : "") + "</div>";
   }
-  document.addEventListener("click", function (e) {
-    var b = e.target.closest && e.target.closest("[data-leg]");
-    if (b) { e.preventDefault(); var l = LEGS[+b.getAttribute("data-leg")]; if (l) addToSlip(l); }
-    var t = e.target.closest && e.target.closest("[data-track]");
-    if (t) { e.preventDefault(); var lt = LEGS[+t.getAttribute("data-track")]; if (lt) trackPick(lt, t); }
-  });
-  // ------------------------------------------------------------------------------------------- pick tracking
-  // "Track" records the member's pick on the sports service BEFORE the start, against this exact offer revision and
-  // forecast; the server re-checks everything live and refuses a moved line / started game. Stake 0, no grades.
-  function trackPick(leg, btn) {
-    var f = leg.forecast_id ? {p_over: leg.side === "over" ? leg.p_win : leg.p_loss, p_under: leg.side === "over" ? leg.p_loss : leg.p_win, p_push: leg.p_push} : null;
-    btn.disabled = true;
-    Api.post("/api/sports/picks/track", {picks: [{platform: leg.platform, record_id: leg.record_id, side: leg.side,
-      forecast_id: leg.forecast_id || null, shown: f, surface: route().view === "player" ? "card" : "board"}]}).then(function (b) {
-      var r = (b.results || [])[0] || {};
-      Object.keys(Api.mem).forEach(function (k) { if (k.indexOf("/api/sports/picks/") === 0) delete Api.mem[k]; });
-      if (r.ok) { btn.textContent = "Tracked"; btn.setAttribute("aria-pressed", "true"); }
-      else btn.disabled = false;
-      pickToast(r.ok ? "Tracked: " + leg.player + " " + (leg.side === "over" ? "Over " : "Under ") + S.line(leg.line) + " " + (leg.stat_label || leg.stat) + " on " + bookName(leg.platform) + ", recorded " + S.localTime(r.tracked_at) + ". Stake 0."
-        : "Not tracked: " + (r.text || "refused"), !!r.ok);
-    }, function (e) { btn.disabled = false; pickToast("Not tracked: " + (e.kind === "offline" ? "you are offline" : "the sports service did not answer") + ".", false); });
-  }
   function pickToast(text, ok) {
     document.getElementById("sw-toast").innerHTML = '<div class="sw-banner ' + (ok ? "info" : "warn") + '">' + esc(text) + (ok ? ' <a href="#/picks">My picks</a>' : "") + "</div>";
   }
@@ -441,13 +415,16 @@
     }).catch(fail);
   }
   function boardLegButtons(m, q, f, B) {
-    if (q.p === "kalshi" || !q.g) return "";
-    var out = [["over", 0], ["under", 1]].filter(function (x) { return q.o[x[1]] === 1; }).map(function (x) {
-      return legButton(makeLeg({platform: q.p, record_id: q.r, forecast_id: q.f, forecast: f, side: x[0], line: q.l, variant: q.v,
+    if (q.p === "kalshi") return "";
+    if (!q.g) return cardActions({}, {over: "Scout cannot settle this line", under: "Scout cannot settle this line"}, {compact: true});
+    var legs = {}, why = {};
+    [["over", 0], ["under", 1]].forEach(function (x) {
+      if (q.o[x[1]] !== 1) { why[x[0]] = "Not offered on " + bookName(q.p); return; }
+      legs[x[0]] = makeLeg({platform: q.p, record_id: q.r, forecast_id: q.f, forecast: f, side: x[0], line: q.l, variant: q.v,
         multiplier: q.m ? q.m[x[1]] : null, start_utc: m.ev && m.ev.start_utc, player_id: m.pid, player: m.n, team: m.tm, stat: m.st,
-        stat_label: B.stats[m.st] || m.st, event_id: m.e, event_ref: m.matchup}));
+        stat_label: B.stats[m.st] || m.st, event_id: m.e, event_ref: m.matchup});
     });
-    return out.length ? '<div class="sw-legbtns">' + out.join("") + "</div>" : "";
+    return cardActions(legs, why, {compact: true});
   }
   // Keep a single responsive rendering: every action retains its exact quote and forecast revision.
   function boardCards(rows, B) {
@@ -752,15 +729,16 @@
         if (!q || q.platform === "kalshi") return "";
         var sides = {}; q.sides.forEach(function (x) { sides[x.side] = x; });
         var ne = P.next_event;
-        var out = ["over", "under"].filter(function (x) { return sides[x] && sides[x].offered; }).map(function (x) {
-          return legButton(makeLeg({platform: q.platform, record_id: q.record_id, forecast_id: fc ? fc.forecast_id : q.forecast_id,
+        var legs = {}, why = {};
+        ["over", "under"].forEach(function (x) {
+          if (!(sides[x] && sides[x].offered)) { why[x] = (x === "over" ? "Over" : "Under") + " is not offered on " + bookName(q.platform); return; }
+          legs[x] = makeLeg({platform: q.platform, record_id: q.record_id, forecast_id: fc ? fc.forecast_id : q.forecast_id,
             forecast: fc, side: x, line: q.line, variant: q.variant, multiplier: sides[x].multiplier,
             start_utc: ne ? ne.start_utc : q.listed_start_utc, player_id: P.player_id, player: P.player, team: m.team,
             stat: m.stat, stat_label: m.stat_label, event_id: m.event_id,
-            event_ref: ne && ne.opponent ? (ne.home ? "vs " : "@ ") + ne.opponent.abbr : null}));
+            event_ref: ne && ne.opponent ? (ne.home ? "vs " : "@ ") + ne.opponent.abbr : null});
         });
-        var not = ["over", "under"].filter(function (x) { return !(sides[x] && sides[x].offered); });
-        return '<div class="sw-actions">' + out.join("") + '<a class="sw-btn sw-btn-sm" href="' + SLIP_PAGE + '">Open Slip Studio</a>' + (not.length ? '<span class="sw-faint sw-small" style="align-self:center">' + not.map(function (x) { return (x === "over" ? "Over" : "Under") + " is not offered on " + bookName(q.platform); }).join(". ") + "</span>" : "") + "</div>";
+        return '<div class="sw-actions sw-actions-card">' + cardActions(legs, why) + "</div>";
       }
 
       function historyPanel(mk, ln, q) {
@@ -941,5 +919,5 @@
     Sh.showMember(info);
     render();
   });
-  window.ScoutSportsApp = {state: state, api: Api, render: render};
+  window.ScoutSportsApp = {state: state, api: Api, render: render, addToSlip: addToSlip};
 })();

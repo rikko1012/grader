@@ -47,12 +47,15 @@ cache, bounded 96 files / 48 MB); they never open the store.
   rest are listed as "not in Scout data".
 - History windows L5/L10/L20/season + slider L1-L20: n, date window, mean, median, sd, range, strict Over / Under with
   pushes separate and the denominator; DNP games excluded and counted. Splits are labelled descriptive.
-- Slip Studio: "+ Over / + Under" writes the slips agent's draft (`localStorage ss:draft:<league>:<platform>`, leg format
+- Card actions (ux, `web/sports/picks.js`, hook `cardActions` in app.js): an Over / Under selector (native radios; an
+  unoffered side is disabled with its reason; nothing preselected unless only one side is offered), then "Add to slip"
+  and "Track pick" (disabled until a side is chosen) with one line of help.
+- Slip Studio: "Add to slip" writes the slips agent's draft (`localStorage ss:draft:<league>:<platform>`, leg format
   sports/slips/README.md); Slip Studio re-validates on load.
 
 ## Pick tracking (pk-1, sports/picks.py) and access (2026-10-24)
 
-- Every pick'em line on the board / player card has "Track Over / Track Under" next to "+ Over / + Under"; a Slip Studio
+- Every pick'em line on the board / player card has "Track pick" after the Over / Under selector; a Slip Studio
   copy that the server validated records its legs (surface `slip_copy`). `POST /api/sports/picks/track` re-checks live
   (current offer revision, open, side offered, fresh, not started, forecast made for this offer, displayed chances =
   the forecast record) and answers per pick in the status toast; the pick is spooled and loaded by the worker

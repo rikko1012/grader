@@ -123,9 +123,11 @@ def test_board_player_game_slip_same_numbers(pw, shots):
     # back to the player, add the offered Over leg -> Slip Studio draft
     page.go_back()
     page.wait_for_selector("#sw-fc-h", timeout=20000)
-    btn = page.locator("#sw-main .sw-actions [data-leg]").first
-    side = "over" if "Over" in btn.inner_text() else "under"
-    btn.click()
+    act = page.locator("#sw-main .sw-actions-card .sw-act").first
+    choice = act.locator("label.sw-act-side:not(.off)").first
+    side = "over" if "over" in choice.get_attribute("class") else "under"
+    choice.click()
+    act.locator("[data-act-add]").click()
     page.wait_for_selector("#sw-toast .sw-banner")
     drafts = page.evaluate("Object.keys(localStorage).filter(k => k.startsWith('ss:draft:')).map(k => [k, JSON.parse(localStorage.getItem(k))])")
     legs = [l for _, d in drafts for l in d["legs"] if l.get("forecast_id") == fid]
@@ -261,14 +263,18 @@ def test_keyboard_focus_labels_targets_contrast_motion(pw, shots):
 
 @pytest.mark.parametrize("width", [360, 1280])
 def test_track_pick_and_my_picks(pw, shots, width):
-    """Track Over / Under is a real button next to + Over / + Under (keyboard: focus + Enter); the server answers per
+    """Track pick is a real button after the Over / Under selector (keyboard: Space on the side, Enter on the button); the server answers per
     pick (recorded, or refused with its reason - e.g. a started game on an old snapshot) in the status toast; My picks
     renders (list or empty state) without page overflow, with labelled targets and readable contrast."""
     ctx, page, errors = _page(pw, width, 800, has_touch=width < 768, is_mobile=width < 768)
     page.goto(URL + "/sports#/board?lg=nba")
     page.wait_for_selector(".sw-count", timeout=20000)
-    btn = page.locator("[data-track]").locator("visible=true").first
-    assert btn.get_attribute("aria-label").startswith("Track ")
+    act = page.locator(".sw-act:has([data-act-track])").locator("visible=true").first
+    btn = act.locator("[data-act-track]")
+    assert btn.inner_text() == "Track pick" and btn.get_attribute("aria-label").startswith("Track pick: ") and btn.is_disabled() == (act.locator("input:checked").count() == 0)
+    act.locator("input[type=radio]:not([disabled])").first.focus()       # keyboard: focus the side, Space selects it
+    page.keyboard.press("Space")
+    assert not btn.is_disabled()
     btn.focus()
     page.keyboard.press("Enter")
     page.wait_for_function("document.getElementById('sw-toast').innerText.length > 0", timeout=20000)
@@ -284,5 +290,37 @@ def test_track_pick_and_my_picks(pw, shots, width):
     a = page.evaluate(A11Y_JS)
     assert not a["small"] and not a["unlabelled"] and not a["contrast"], a
     page.screenshot(path=str(shots / f"picks_{width}.png"), full_page=True)
+    assert not [e for e in errors if "favicon" not in e], errors
+    ctx.close()
+
+
+def test_card_actions_selector(pw, shots):
+    """Card actions (ux item 2): Over / Under selector (no side preselected when both are offered; an unoffered side is
+    disabled with its reason), then Add to slip / Track pick, disabled until a side is chosen, with the helper text."""
+    ctx, page, errors = _page(pw)
+    page.goto(URL + "/sports#/board?lg=nba")
+    page.wait_for_selector(".sw-act", timeout=20000)
+    assert page.locator("[data-leg], [data-track]").count() == 0             # the four old buttons are gone
+    acts = page.locator(".sw-act:has(.sw-act-sides)")
+    assert acts.count() > 0
+    for i in range(min(acts.count(), 30)):
+        a = acts.nth(i)
+        enabled = a.locator("input[type=radio]:not([disabled])").count()
+        checked = a.locator("input:checked").count()
+        assert checked == (1 if enabled == 1 else 0), (i, enabled, checked)
+        for off in a.locator("label.sw-act-side.off").all():
+            assert off.locator("input").is_disabled() and off.locator(".sw-act-why").inner_text().strip()
+        assert "Track" in a.locator(".sw-act-help").text_content()
+    a = acts.filter(has=page.locator("input:not(:checked):not([disabled])")).first
+    add, tr = a.locator("[data-act-add]"), a.locator("[data-act-track]")
+    if a.locator("input:checked").count() == 0:
+        assert add.is_disabled() and tr.is_disabled()
+    a.locator("label.sw-act-side:not(.off)").first.click()
+    assert not add.is_disabled() and not tr.is_disabled()
+    add.click()
+    page.wait_for_selector("#sw-toast .sw-banner")
+    n = page.evaluate("Object.keys(localStorage).filter(k => k.startsWith('ss:draft:')).map(k => JSON.parse(localStorage.getItem(k)).legs.length).reduce((a, b) => a + b, 0)")
+    assert n >= 1
+    page.screenshot(path=str(shots / "card_actions_1280.png"))
     assert not [e for e in errors if "favicon" not in e], errors
     ctx.close()
