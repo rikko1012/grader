@@ -80,7 +80,7 @@ def resolver_from_store(con, league):
     players = {p.player_id: p for _, p in ((r["record_id"], store._rec(r)) for r in
                                             store._latest_rows(con, "player", "league = ?", [league], None, 100000))}
     rows = con.execute("SELECT r.payload FROM records r JOIN (SELECT source, source_key, MAX(revision) rv FROM records "
-                       "WHERE kind='membership' AND player_id LIKE ? GROUP BY source, source_key) z ON "
+                       "WHERE late = 0 AND kind='membership' AND player_id LIKE ? GROUP BY source, source_key) z ON "
                        "r.source=z.source AND r.source_key=z.source_key AND r.revision=z.rv WHERE r.kind='membership'",
                        (f"{league}:%",)).fetchall()
     for row in rows:

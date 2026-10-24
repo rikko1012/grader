@@ -271,7 +271,7 @@ class ToolContext:
     def _all_players(self, league):
         if league not in self._players:
             rows = self.con.execute("SELECT r.record_id, r.known_at, r.payload FROM records r JOIN (SELECT source_key, "
-                                    "MAX(revision) rv FROM records WHERE kind='player' AND league=? AND known_at <= ? "
+                                    "MAX(revision) rv FROM records WHERE late = 0 AND kind='player' AND league=? AND known_at <= ? "
                                     "GROUP BY source_key) z ON r.source_key = z.source_key AND r.revision = z.rv "
                                     "WHERE r.kind='player'", (league, self.now)).fetchall()
             self._players[league] = [(r["record_id"], r["known_at"], store._unpack(r["payload"])) for r in rows]
@@ -500,7 +500,7 @@ def t_forecasts(ctx, a):
 def t_player_context(ctx, a):
     rows = []
     q = ("SELECT r.record_id, r.known_at, r.payload FROM records r JOIN (SELECT source, source_key, MAX(revision) rv "
-         "FROM records WHERE kind='context' AND player_id=? AND known_at <= ? GROUP BY source, source_key) z ON "
+         "FROM records WHERE late = 0 AND kind='context' AND player_id=? AND known_at <= ? GROUP BY source, source_key) z ON "
          "r.source = z.source AND r.source_key = z.source_key AND r.revision = z.rv WHERE r.kind='context'")
     for r in ctx.con.execute(q, (a["player_id"], ctx.now)).fetchall():
         c = store._unpack(r["payload"])

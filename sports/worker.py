@@ -263,7 +263,7 @@ def build_resolver(con, lg, observed_at, out):
 
 def _latest_memberships(con, league):
     rows = con.execute("SELECT r.* FROM records r JOIN (SELECT source, source_key, MAX(revision) rv FROM records "
-                       "WHERE kind='membership' AND player_id LIKE ? GROUP BY source, source_key) z ON "
+                       "WHERE late = 0 AND kind='membership' AND player_id LIKE ? GROUP BY source, source_key) z ON "
                        "r.source = z.source AND r.source_key = z.source_key AND r.revision = z.rv "
                        "WHERE r.kind='membership'", (f"{league}:%",)).fetchall()
     return [(r["record_id"], store._rec(r)) for r in rows]
@@ -283,7 +283,7 @@ def _store_offers(con, platform_prefix, league, batch, observed_at, read_ok):
                 continue
             if o.listed_start_utc and o.listed_time_kind == "start" and o.listed_start_utc <= observed_at:
                 continue                                 # started: it left the board because the game began
-            stale.append(replace(o, availability="removed", observed_at=observed_at, known_at=observed_at))
+            stale.append(store.withdrawn(o, observed_at))
         removed = store.put_many(con, stale)["revision"]
     return {k: res[k] for k in ("inserted", "duplicate", "revision", "invalid")} | {
         "quarantined": len(batch.quarantine), "removed": removed,

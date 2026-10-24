@@ -114,8 +114,9 @@ def _r(x, n=4):
 # ---------------------------------------------------------------------------------------------- store reads (worker)
 def _latest(con, kind, where="", args=(), as_of=None, limit=10 ** 7):
     """Latest revision per (source, source_key) among rows of `kind` matching `where`, known at as_of.
-    One indexed scan, reduced in Python (SQLite's plan for the GROUP BY self-join scanned every row of the kind)."""
-    cond = "kind = ?" + (f" AND {where}" if where else "")
+    One indexed scan, reduced in Python (SQLite's plan for the GROUP BY self-join scanned every row of the kind).
+    Same CURRENT rule as store.offers (store.CURRENT_SQL: late, delayed responses are history, never current)."""
+    cond = f"kind = ? AND {store.CURRENT_SQL}" + (f" AND {where}" if where else "")
     a = [kind, *args]
     if as_of:
         cond += " AND known_at <= ?"

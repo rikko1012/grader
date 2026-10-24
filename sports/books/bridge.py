@@ -17,7 +17,6 @@ with player_id None (never graded, shown as unresolved).
 from __future__ import annotations
 
 import hashlib
-from dataclasses import replace
 
 from .. import names, store
 from ..adapters import Batch
@@ -90,7 +89,7 @@ def store_game(con, league, platforms, event_id, batch, observed_at, complete):
             for _, o in store.offers(con, league=league, event_id=event_id, platform=p, limit=100000):
                 if (o.platform, o.offer_id) in seen or o.availability == "removed":
                     continue
-                stale.append(replace(o, availability="removed", observed_at=observed_at, known_at=observed_at))
+                stale.append(store.withdrawn(o, observed_at))
         removed = store.put_many(con, stale)["revision"]
     return {k: res[k] for k in ("inserted", "duplicate", "revision", "invalid")} | {"removed": removed}
 

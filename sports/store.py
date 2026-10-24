@@ -17,6 +17,20 @@ and UPDATE-of-history statements in MIGRATIONS. Rollback of Sports is flags-off,
 Point-in-time rule: every historical read takes `as_of` and returns only rows with known_at <= as_of (the latest
 revision KNOWN at that time). assert_known_before() is the guard model code uses for joins.
 
+CURRENT (the one rule every reader shares - sports/LINE_CORRECTNESS.md):
+  the current revision of an identity = its highest revision among rows with late = 0 (SQL: CURRENT_SQL), known at
+  as_of when one is given. put() is the only writer that decides it, inside BEGIN IMMEDIATE (one writer at a time per
+  SQLite file, across processes), and UNIQUE (kind, source, source_key, revision) makes a second row with the same
+  revision impossible - so no identity can ever have two current revisions.
+  - same content as the CURRENT revision -> duplicate: only the sighting columns move (last_seen_at = the newest
+    observation, last_source_updated_at = the newest source time, seen_count + 1); never a new revision
+  - different content (including content equal to an OLDER revision: A -> B -> A) -> a new revision, current
+  - an OLDER, delayed response (is_late()) -> stored as history with late = 1, never current: ordered by the SOURCE
+    update time when both the new record and the current revision carry one and they differ, otherwise by our
+    observation time (new observed_at < the current revision's last_seen_at)
+  Source time (source_updated_at / last_source_updated_at) and observation time (observed_at / last_seen_at) are kept
+  in separate columns; the payload is the record exactly as first observed (replay reads it, never the columns).
+
 Reads from the web process use connect(read_only=True) (mode=ro): the web never writes the sports store.
 """
 from __future__ import annotations
@@ -57,10 +71,21 @@ MIGRATIONS = [
              finished_at TEXT)""",
         "CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)",
     ]),
+    (2, [                                          # line correctness (LINE_CORRECTNESS.md): additive columns only
+        "ALTER TABLE records ADD COLUMN late INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE records ADD COLUMN source_updated_at TEXT",
+        "ALTER TABLE records ADD COLUMN last_source_updated_at TEXT",
+        "ALTER TABLE records ADD COLUMN origin TEXT",
+        "CREATE INDEX IF NOT EXISTS records_current ON records (kind, source, source_key, late, revision)",
+    ]),
 ]
+CURRENT_SQL = "late = 0"                           # the predicate every 'current' reader adds (see module docstring)
+UNIQUE_REVISION_INDEX = ("CREATE UNIQUE INDEX IF NOT EXISTS records_ident_rev ON records "
+                         "(kind, source, source_key, revision)")
+REPAIR_ORIGIN = "repair:prefix-duplicate"          # revisions written by repair_prefix_duplicates()
 FORBIDDEN_IN_MIGRATIONS = ("drop ", "rename ", "delete ", "update ", "replace into", "truncate")
 
-_WRITE_LOCK = threading.Lock()
+_WRITE_LOCK = threading.RLock()
 
 
 class LeakageError(RuntimeError):
@@ -71,19 +96,56 @@ def db_path() -> Path:
     return config.DATA_DIR / "canonical.db"
 
 
-def migrate(con):
-    con.execute("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)")
+def _level(con):
     row = con.execute("SELECT v FROM meta WHERE k = 'schema_level'").fetchone()
-    level = int(row[0]) if row else 0
-    for n, stmts in MIGRATIONS:
-        if n <= level:
-            continue
-        for s in stmts:
-            con.execute(s)
-        con.execute("INSERT OR REPLACE INTO meta (k, v) VALUES ('schema_level', ?)", (str(n),))
-        level = n
+    return int(row[0]) if row else 0
+
+
+def migrate(con):
+    """Apply missing migrations atomically (BEGIN IMMEDIATE: two processes starting together migrate once; a crash
+    mid-migration rolls back to the previous level), then the one-time repair of pre-fix duplicate sightings."""
+    con.execute("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)")
     con.commit()
+    if _level(con) >= MIGRATIONS[-1][0] and _meta(con, "repair_prefix_duplicates") is not None:
+        return _level(con)
+    with _WRITE_LOCK:
+        con.execute("BEGIN IMMEDIATE")
+        try:
+            level = _level(con)
+            for n, stmts in MIGRATIONS:
+                if n <= level:
+                    continue
+                for st in stmts:
+                    con.execute(st)
+                con.execute("INSERT OR REPLACE INTO meta (k, v) VALUES ('schema_level', ?)", (str(n),))
+                level = n
+            if _meta(con, "revision_unique") is None:
+                try:
+                    con.execute(UNIQUE_REVISION_INDEX)
+                    _set_meta(con, "revision_unique", "on")
+                except sqlite3.IntegrityError:          # an old race left two rows with one revision: kept, reported
+                    _set_meta(con, "revision_unique", "blocked: duplicate revisions exist")
+            if _meta(con, "repair_prefix_duplicates") is None:
+                report = repair_prefix_duplicates(con, _in_tx=True)
+                _set_meta(con, "repair_prefix_duplicates", json.dumps(report, sort_keys=True))
+            con.commit()
+        except BaseException:
+            con.rollback()
+            raise
     return level
+
+
+def _meta(con, k):
+    row = con.execute("SELECT v FROM meta WHERE k = ?", (k,)).fetchone()
+    return row[0] if row else None
+
+
+def _set_meta(con, k, v):
+    con.execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)", (k, v))
+
+
+_COMPAT = ("CREATE TEMP VIEW IF NOT EXISTS records AS SELECT *, 0 AS late, NULL AS source_updated_at, "
+           "NULL AS last_source_updated_at, NULL AS origin FROM main.records")
 
 
 def connect(path=None, read_only=False):
@@ -93,6 +155,12 @@ def connect(path=None, read_only=False):
             raise FileNotFoundError(f"sports store not created yet: {p}")
         con = sqlite3.connect(f"file:{p}?mode=ro", uri=True, timeout=10, check_same_thread=False)
         con.row_factory = sqlite3.Row
+        try:                                       # a store the worker has not migrated yet (level 1) is read
+            cols = {r[1] for r in con.execute("PRAGMA main.table_info(records)").fetchall()}
+            if cols and "late" not in cols:        # through a temp view with the level-2 columns' defaults
+                con.execute(_COMPAT)
+        except sqlite3.OperationalError:
+            pass
         return con
     p.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(p, timeout=30, check_same_thread=False)
@@ -131,58 +199,128 @@ def _unpack(blob):
     return json.loads(zlib.decompress(blob))
 
 
+def is_late(new_observed, new_source, cur_seen, cur_source) -> bool:
+    """THE ordering rule for a response that arrives while a current revision exists (LINE_CORRECTNESS.md R3):
+    by SOURCE update time when both carry one and they differ, else by our observation time. Late = older."""
+    if new_source and cur_source and new_source != cur_source:
+        return new_source < cur_source
+    if new_observed and cur_seen:
+        return new_observed < cur_seen
+    return False
+
+
+def _payload_source_time(row):
+    try:
+        return _unpack(row["payload"]).get("source_updated_at")
+    except (ValueError, zlib.error, TypeError, AttributeError):
+        return None
+
+
+def current_times(row):
+    """(newest observation, newest source time) of a stored revision. Rows stored before migration 2 have no source
+    columns: their source time is the payload's (the first observation's)."""
+    seen = row["last_seen_at"] or row["observed_at"] or row["known_at"]
+    src = row["last_source_updated_at"] or row["source_updated_at"] or _payload_source_time(row)
+    return seen, src
+
+
+def _current_row(con, kind, source, source_key):
+    return con.execute(f"SELECT * FROM records WHERE kind=? AND source=? AND source_key=? AND {CURRENT_SQL} "
+                       "ORDER BY revision DESC LIMIT 1", (kind, source, source_key)).fetchone()
+
+
+@contextmanager
+def write_tx(con):
+    """One atomic write: BEGIN IMMEDIATE (the SQLite write lock, across processes) unless the caller already holds a
+    transaction; commit on success, roll back on error."""
+    with _WRITE_LOCK:
+        own = not con.in_transaction
+        if own:
+            con.execute("BEGIN IMMEDIATE")
+        try:
+            yield con
+            if own:
+                con.commit()
+        except BaseException:
+            if own:
+                con.rollback()
+            raise
+
+
 def put(con, rec, known_at=None, commit=True) -> dict:
-    """Validate and store one record. -> {"status": inserted|duplicate|revision, "record_id", "revision"}.
+    """Validate and store one record. -> {"status": inserted|duplicate|revision|late, "record_id", "revision"}.
     Raises ContractError for an invalid record (callers quarantine instead of storing a bad row).
-    commit=False lets put_many write a whole batch in one transaction."""
+    commit=False lets put_many write a whole batch in one transaction (the caller commits)."""
     rec.validate_or_raise()
+    if commit:
+        with write_tx(con):
+            return _put(con, rec, known_at)
+    with _WRITE_LOCK:
+        if not con.in_transaction:
+            con.execute("BEGIN IMMEDIATE")
+        return _put(con, rec, known_at)
+
+
+def _put(con, rec, known_at):
     source, source_key = rec.identity()
     h = rec.content_hash()
     known = known_at or getattr(rec, "known_at", None) or getattr(rec, "observed_at", None) or \
         getattr(rec, "forecast_at", None) or getattr(rec, "settled_at", None) or now_utc()
-    with _WRITE_LOCK:
-        # duplicate = the same content as the LATEST revision only. Content equal to an older revision (a line that moved
-        # 20.5 -> 21.5 -> back to 20.5) is a new revision, otherwise "latest" would keep the 21.5 that no longer exists.
-        dup = con.execute("SELECT record_id, revision, content_hash FROM records WHERE kind=? AND source=? AND "
-                          "source_key=? ORDER BY revision DESC LIMIT 1", (rec.KIND, source, source_key)).fetchone()
-        if dup and dup["content_hash"].split("~", 1)[0] != h:
-            dup = None
-        if dup:                                    # same content seen again: only the sighting counter moves
-            seen = getattr(rec, "observed_at", None) or now_utc()
-            con.execute("UPDATE records SET last_seen_at = MAX(COALESCE(last_seen_at, ''), ?), seen_count = seen_count + 1 "
-                        "WHERE record_id = ?", (seen, dup["record_id"]))
-            if commit:
-                con.commit()
-            return {"status": "duplicate", "record_id": dup["record_id"], "revision": dup["revision"]}
-        if isinstance(rec, Forecast):
-            clash = con.execute("SELECT 1 FROM records WHERE kind='forecast' AND source_key=?",
-                                (rec.forecast_id,)).fetchone()
-            if clash:
-                raise ContractError(f"forecast {rec.forecast_id} already stored with other content (immutable)")
-        last = con.execute("SELECT MAX(revision) FROM records WHERE kind=? AND source=? AND source_key=?",
-                           (rec.KIND, source, source_key)).fetchone()[0]
-        rev = (last or 0) + 1
-        rid = f"{rec.KIND}:{source}:{source_key}:r{rev}:{h[:10]}" if rec.KIND != "forecast" else rec.forecast_id
-        stored_h = h                               # UNIQUE (kind, source, source_key, content_hash) is additive-only: a
-        if con.execute("SELECT 1 FROM records WHERE kind=? AND source=? AND source_key=? AND content_hash=?",
-                       (rec.KIND, source, source_key, h)).fetchone():
-            stored_h = f"{h}~r{rev}"               # returning content keeps its hash, tagged with the revision
-        c = _cols(rec)
-        con.execute("INSERT INTO records (kind, record_id, source, source_key, revision, content_hash, schema_version, "
-                    "league, event_id, player_id, stat, platform, line, observed_at, known_at, stored_at, payload, "
-                    "last_seen_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                    (rec.KIND, rid, source, source_key, rev, stored_h, rec.schema_version, c["league"], c["event_id"],
-                     c["player_id"], c["stat"], c["platform"], c["line"], c["observed_at"], known, now_utc(),
-                     _pack(rec.to_dict()), c["observed_at"]))
-        if commit:
-            con.commit()
+    obs = getattr(rec, "observed_at", None)
+    src = getattr(rec, "source_updated_at", None)
+    cur = _current_row(con, rec.KIND, source, source_key)
+    # duplicate = the same content as the CURRENT revision only. Content equal to an older revision (a line that moved
+    # 20.5 -> 21.5 -> back to 20.5) is a new revision, otherwise "latest" would keep the 21.5 that no longer exists.
+    if cur is not None and cur["content_hash"].split("~", 1)[0] == h:
+        seen = obs or now_utc()
+        _, cur_src = current_times(cur)
+        new_src = max(x for x in (cur_src, src) if x) if (cur_src or src) else None
+        con.execute("UPDATE records SET last_seen_at = MAX(COALESCE(last_seen_at, ''), ?), seen_count = seen_count + 1, "
+                    "last_source_updated_at = ? WHERE record_id = ?", (seen, new_src, cur["record_id"]))
+        return {"status": "duplicate", "record_id": cur["record_id"], "revision": cur["revision"]}
+    if isinstance(rec, Forecast):
+        clash = con.execute("SELECT 1 FROM records WHERE kind='forecast' AND source_key=?",
+                            (rec.forecast_id,)).fetchone()
+        if clash:
+            raise ContractError(f"forecast {rec.forecast_id} already stored with other content (immutable)")
+    late = 0
+    if cur is not None and rec.KIND != "forecast":
+        late = int(is_late(obs, src, *current_times(cur)))
+    last = con.execute("SELECT MAX(revision) FROM records WHERE kind=? AND source=? AND source_key=?",
+                       (rec.KIND, source, source_key)).fetchone()[0]
+    rev = (last or 0) + 1
+    rid = f"{rec.KIND}:{source}:{source_key}:r{rev}:{h[:10]}" if rec.KIND != "forecast" else rec.forecast_id
+    stored_h = h                               # UNIQUE (kind, source, source_key, content_hash) is additive-only: a
+    if con.execute("SELECT 1 FROM records WHERE kind=? AND source=? AND source_key=? AND content_hash=?",
+                   (rec.KIND, source, source_key, h)).fetchone():
+        stored_h = f"{h}~r{rev}"               # returning content keeps its hash, tagged with the revision
+    c = _cols(rec)
+    con.execute("INSERT INTO records (kind, record_id, source, source_key, revision, content_hash, schema_version, "
+                "league, event_id, player_id, stat, platform, line, observed_at, known_at, stored_at, payload, "
+                "last_seen_at, late, source_updated_at, last_source_updated_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (rec.KIND, rid, source, source_key, rev, stored_h, rec.schema_version, c["league"], c["event_id"],
+                 c["player_id"], c["stat"], c["platform"], c["line"], c["observed_at"], known, now_utc(),
+                 _pack(rec.to_dict()), c["observed_at"], late, src, src))
+    if late:
+        return {"status": "late", "record_id": rid, "revision": rev}
     return {"status": "inserted" if rev == 1 else "revision", "record_id": rid, "revision": rev}
 
 
+def withdrawn(rec, observed_at):
+    """The 'removed' revision for an offer a COMPLETE read no longer lists. Its time is OUR observation (the source
+    published nothing), so source_updated_at is cleared: a delayed older response is then ordered by observation
+    time and cannot reopen it (is_late)."""
+    from dataclasses import replace
+    return replace(rec, availability="removed", observed_at=observed_at, known_at=observed_at,
+                   source_updated_at=None, source_time_unknown=True)
+
+
 def put_many(con, recs) -> dict:
-    counts = {"inserted": 0, "duplicate": 0, "revision": 0, "invalid": 0}
+    """One transaction for the whole batch (BEGIN IMMEDIATE): a crash or kill mid-batch leaves none of it."""
+    counts = {"inserted": 0, "duplicate": 0, "revision": 0, "invalid": 0, "late": 0}
     ids, bad = [], []
-    try:
+    with write_tx(con):
         for r in recs:
             try:
                 res = put(con, r, commit=False)
@@ -192,12 +330,70 @@ def put_many(con, recs) -> dict:
                 continue
             counts[res["status"]] += 1
             ids.append(res["record_id"])
-    finally:
-        con.commit()
     for r, e in bad:
         quarantine(con, r.KIND, r.identity()[0], r.identity()[1], f"invalid: {e[:160]}", r.to_dict(),
                    getattr(r, "league", None))
     return {**counts, "record_ids": ids}
+
+
+def repair_prefix_duplicates(con, dry_run=False, _in_tx=False) -> dict:
+    """One-time, ADDITIVE repair of stores written before c0cc754: put() then matched a returning content against ANY
+    earlier revision, so A -> B -> A only moved revision 1's sighting columns (last_seen_at / seen_count: "revision 1
+    counted twice") and 'latest' kept B. Evidence in the old rows: an earlier revision SEEN AFTER the current one was
+    last seen. For each such identity a new revision is appended with the most recently seen content, known_at =
+    observed_at = that sighting time (the only time we know it was listed again; the exact return time is lost),
+    origin = REPAIR_ORIGIN:<source record id>. Nothing is updated or deleted. -> report."""
+    q = (f"SELECT o.kind, o.source, o.source_key, o.record_id, o.revision, o.last_seen_at, o.content_hash, "
+         f"cur.content_hash AS cur_h FROM records o JOIN (SELECT r.* FROM records r JOIN (SELECT kind, source, "
+         f"source_key, MAX(revision) rv FROM records WHERE kind != 'forecast' AND {CURRENT_SQL} GROUP BY kind, source, "
+         f"source_key HAVING COUNT(*) > 1) mx ON r.kind = mx.kind AND r.source = mx.source AND "
+         f"r.source_key = mx.source_key AND r.revision = mx.rv) cur ON o.kind = cur.kind AND o.source = cur.source "
+         f"AND o.source_key = cur.source_key AND o.revision < cur.revision WHERE o.late = 0 AND "
+         f"o.last_seen_at IS NOT NULL AND o.last_seen_at > COALESCE(cur.last_seen_at, cur.observed_at, cur.known_at)")
+    best = {}
+    for r in con.execute(q).fetchall():
+        if r["content_hash"].split("~", 1)[0] == r["cur_h"].split("~", 1)[0]:
+            continue
+        k = (r["kind"], r["source"], r["source_key"])
+        b = best.get(k)
+        if b is None or (r["last_seen_at"], r["revision"]) > (b["last_seen_at"], b["revision"]):
+            best[k] = r
+    report = {"identities": len(best), "by_kind": {}, "dry_run": bool(dry_run), "repaired": 0}
+    for k in sorted(best):
+        report["by_kind"][k[0]] = report["by_kind"].get(k[0], 0) + 1
+    if dry_run or not best:
+        return report
+
+    def apply():
+        n = 0
+        for (kind, source, source_key), r in sorted(best.items()):
+            old = con.execute("SELECT * FROM records WHERE record_id = ?", (r["record_id"],)).fetchone()
+            d = _unpack(old["payload"])
+            t = r["last_seen_at"]
+            if "observed_at" in d:
+                d["observed_at"] = t
+            if "known_at" in d:
+                d["known_at"] = t
+            rev = con.execute("SELECT MAX(revision) FROM records WHERE kind=? AND source=? AND source_key=?",
+                              (kind, source, source_key)).fetchone()[0] + 1
+            h = old["content_hash"].split("~", 1)[0]
+            rid = f"{kind}:{source}:{source_key}:r{rev}:{h[:10]}"
+            src = old["last_source_updated_at"] or old["source_updated_at"] or d.get("source_updated_at")
+            con.execute("INSERT INTO records (kind, record_id, source, source_key, revision, content_hash, "
+                        "schema_version, league, event_id, player_id, stat, platform, line, observed_at, known_at, "
+                        "stored_at, payload, last_seen_at, late, source_updated_at, last_source_updated_at, origin) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?)",
+                        (kind, rid, source, source_key, rev, f"{h}~r{rev}", old["schema_version"], old["league"],
+                         old["event_id"], old["player_id"], old["stat"], old["platform"], old["line"], t, t, now_utc(),
+                         _pack(d), t, src, src, f"{REPAIR_ORIGIN}:{r['record_id']}"))
+            n += 1
+        return n
+    if _in_tx:
+        report["repaired"] = apply()
+    else:
+        with write_tx(con):
+            report["repaired"] = apply()
+    return report
 
 
 def quarantine(con, kind, source, source_key, reason, payload=None, league=None, observed_at=None, commit=True):
@@ -242,20 +438,28 @@ def get(con, record_id):
 
 
 def row_meta(con, record_id):
-    row = con.execute("SELECT record_id, kind, source, source_key, revision, content_hash, known_at, stored_at, "
-                      "last_seen_at, seen_count FROM records WHERE record_id = ?", (record_id,)).fetchone()
-    return dict(row) if row else None
+    """Bookkeeping of one stored revision: observation times (observed_at = first, last_seen_at = newest), source
+    times (source_updated_at = first, last_source_updated_at = newest), late / origin, revision."""
+    row = con.execute("SELECT record_id, kind, source, source_key, revision, content_hash, observed_at, known_at, "
+                      "stored_at, last_seen_at, seen_count, late, source_updated_at, last_source_updated_at, origin, "
+                      "payload FROM records WHERE record_id = ?", (record_id,)).fetchone()
+    if not row:
+        return None
+    out = {k: row[k] for k in row.keys() if k != "payload"}
+    out["last_source_updated_at"] = current_times(row)[1]
+    return out
 
 
 def revisions(con, kind, source, source_key):
     """Every stored revision, oldest first: [(meta, record)]."""
     rows = con.execute("SELECT * FROM records WHERE kind=? AND source=? AND source_key=? ORDER BY revision",
                        (kind, source, source_key)).fetchall()
-    return [({k: r[k] for k in ("record_id", "revision", "known_at", "content_hash")}, _rec(r)) for r in rows]
+    return [({k: r[k] for k in ("record_id", "revision", "known_at", "content_hash", "late", "origin", "last_seen_at",
+                                "observed_at", "source_updated_at")}, _rec(r)) for r in rows]
 
 
 def latest(con, kind, source, source_key, as_of=None):
-    q = "SELECT * FROM records WHERE kind=? AND source=? AND source_key=?"
+    q = f"SELECT * FROM records WHERE kind=? AND source=? AND source_key=? AND {CURRENT_SQL}"
     a = [kind, source, source_key]
     if as_of:
         q += " AND known_at <= ?"
@@ -266,7 +470,7 @@ def latest(con, kind, source, source_key, as_of=None):
 
 def _latest_rows(con, kind, where, args, as_of, limit):
     """Latest revision per identity among rows matching `where`, known at as_of."""
-    cond = "kind = ?" + (f" AND {where}" if where else "")
+    cond = f"kind = ? AND {CURRENT_SQL}" + (f" AND {where}" if where else "")
     a = [kind] + list(args)
     if as_of:
         cond += " AND known_at <= ?"
@@ -278,7 +482,8 @@ def _latest_rows(con, kind, where, args, as_of, limit):
 
 
 def offers(con, league=None, event_id=None, player_id=None, stat=None, platform=None, as_of=None, limit=5000):
-    """Latest revision of each offer (per platform + provider offer id) known at as_of -> [(record_id, OfferSnapshot)]."""
+    """CURRENT revision of each offer (per platform + provider offer id) known at as_of -> [(record_id, OfferSnapshot)].
+    The board, the player card, the slip pool / validation and new forecasts all read offers through this one rule."""
     w, a = [], []
     for col, v in (("league", league), ("event_id", event_id), ("player_id", player_id), ("stat", stat),
                    ("platform", platform)):
@@ -315,7 +520,7 @@ def history(con, player_id, stat, before, as_of=None, limit=200):
 
 
 def _any_event(con, event_id, as_of):
-    row = con.execute("SELECT * FROM records WHERE kind='event' AND source_key=? AND known_at <= ? "
+    row = con.execute(f"SELECT * FROM records WHERE kind='event' AND source_key=? AND known_at <= ? AND {CURRENT_SQL} "
                       "ORDER BY revision DESC LIMIT 1", (event_id, as_of)).fetchone()
     return _rec(row)
 

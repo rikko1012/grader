@@ -81,7 +81,7 @@ def _canonical(league, stat, cutoff, path=None):
         rows = {}
         for key, part in parts.items():
             q = ("SELECT r.record_id, r.known_at, r.payload FROM records r JOIN (SELECT source, source_key, "
-                 "MAX(revision) rv FROM records WHERE kind='stat' AND league=? AND stat=? AND known_at <= ? GROUP BY "
+                 "MAX(revision) rv FROM records WHERE late = 0 AND kind='stat' AND league=? AND stat=? AND known_at <= ? GROUP BY "
                  "source, source_key) z ON r.source=z.source AND r.source_key=z.source_key AND r.revision=z.rv "
                  "WHERE r.kind='stat'")
             for rec in con.execute(q, (league, part, cutoff)).fetchall():
