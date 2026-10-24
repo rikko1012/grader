@@ -896,7 +896,7 @@
         return '<details class="sw-more" open><summary>' + esc(E.label) + " · " + rows.length + " values as of " + esc(S.localTime(E.as_of)) + '</summary><div class="sw-scroll"><table class="sw-mini"><caption class="sw-sr">Matchup and role context for ' + esc(mk.stat_label) + '</caption><thead><tr><th>Factor</th><th class="num">Value</th><th>Source</th></tr></thead><tbody>' +
           order.map(function (g) {
             return '<tr><th colspan="3" class="sw-small">' + esc(g) + "</th></tr>" + groups[g].map(function (r) {
-              return "<tr><td>" + esc(r.label) + (r.status === "proxy" ? ' <span class="sw-faint sw-small">(proxy)</span>' : "") + '</td><td class="num">' + val(r.value) + '</td><td class="sw-small sw-faint">' + esc(r.source || "") + "</td></tr>";
+              return "<tr><td>" + esc(r.label) + (r.status === "proxy" ? ' <span class="sw-faint sw-small">(proxy)</span>' : "") + (r.n ? ' <span class="sw-faint sw-small">n=' + r.n + (r.on_court_min ? " games, " + S.num(r.on_court_min, 0) + " min on court" : "") + "</span>" : "") + '</td><td class="num">' + val(r.value) + '</td><td class="sw-small sw-faint">' + esc(r.source || "") + "</td></tr>";
             }).join("");
           }).join("") + '</tbody></table></div><p class="sw-faint sw-small">' + esc(E.label) + ": values only, no weights. Only games finished and lines observed before " + esc(S.localTime(E.as_of)) + " are used.</p></details>";
       }

@@ -70,7 +70,7 @@ FACTOR_PARTS = {
 }
 # owner factor list (OWNER_FACTORS.md, 2026-10-23) entries Scout does not hold - stated as not held, never shown as known
 NOT_HELD = {          # fallback only; the player file lists player_context.NOT_HELD with a reason each
-    "basketball": ["Likely defender", "On/off splits", "Potential assists"],
+    "basketball": ["Likely defender", "Potential assists"],
     "football": ["Coverage scheme (licensed)", "PFF / NGS / DVOA (licensed)", "Defender matchup (licensed)",
                  "Route participation / TPRR"],
 }

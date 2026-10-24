@@ -44,6 +44,9 @@ def test_engine_values_per_stat_with_source_and_label(nba_store):
     assert all(set(r) >= {"key", "label", "group", "value", "source", "status"} for r in rows.values())
     assert "usg_l10" in rows and "pace_team" in rows                     # usage + pace come from the engine
     assert not any("weight" in r for r in rows.values())
+    on = rows["on_off_net"]                                              # engine's on/off, with its sample
+    assert on["label"] == player_context.ON_OFF_LABEL and on["n"] == 1 and on["on_court_min"] > 0
+    assert not any("On/off" in x["factor"] for x in sec["not_held"])
     # licensed / unavailable items are in not_held with a one-word reason, never in missing
     assert "potential_assists" not in sec["missing"]["rebounds"]
     assert {x["factor"] for x in sec["not_held"]} == {f for f, _ in player_context.NOT_HELD["basketball"]}

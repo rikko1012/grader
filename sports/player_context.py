@@ -27,12 +27,12 @@ CONTEXT_LABEL = "Context - not yet in the Scout model"
 ENGINE_VERSION = "player-context-1"
 # owner factor-list items no source we hold has - one-word reason each (everything else comes from the engine)
 NOT_HELD = {
-    "basketball": [("Likely defender", "tracking"), ("On/off splits", "licensed"),
-                   ("Potential assists", "tracking"), ("PFF / NGS / Second Spectrum data", "licensed")],
+    "basketball": [("Likely defender", "tracking"), ("Potential assists", "tracking"), ("PFF / NGS / Second Spectrum data", "licensed")],
     "football": [("Coverage scheme (man / zone, shells)", "licensed"), ("PFF / NGS / DVOA", "licensed"),
                  ("Defender matchup", "licensed"), ("Route participation / TPRR", "unpublished")],
 }
 SNAP_KNOWN_AFTER_H = 6
+ON_OFF_LABEL = "On/off (net, from lineups inferred from substitutions)"
 
 
 def _tail(record_id):
@@ -126,6 +126,11 @@ def build(league, fam, now, wanted, hist_path=None):
                         continue
                     rows.append({"key": k, "label": spec["label"], "group": spec["group"], "value": v,
                                  "source": spec["source"], "status": spec["status"]})
+                for r in rows:
+                    if r["key"] == "on_off_net":
+                        r["label"] = ON_OFF_LABEL
+                        r["n"] = pay["factors"].get("on_off_games")
+                        r["on_court_min"] = pay["factors"].get("on_off_on_min")
                 sec["by_stat"][stat] = rows
                 sec["missing"][stat] = {k: r for k, r in pay["missing"].items()
                                         if (reg.get(k) or {}).get("status") != "unavailable"}
