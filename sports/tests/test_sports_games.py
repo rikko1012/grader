@@ -81,7 +81,8 @@ def test_save_game_replaces_and_history_tables_append_only_on_change(gdb, nba_ga
     store.save_game(gdb, nba_game)
     store.save_game(gdb, nba_game)                                  # a re-read replaces, never duplicates
     assert gdb.one("SELECT COUNT(*) AS n FROM sports_game_games")["n"] == 1
-    assert gdb.one("SELECT COUNT(*) AS n FROM sports_game_plays")["n"] == len(nba_game["plays"])
+    assert gdb.one("SELECT COUNT(*) AS n FROM sports_game_plays_z")["n"] == 1            # one packed row per game
+    assert len(store.plays(gdb, "nba", "401809234")) == len(nba_game["plays"])
     assert store.has_game(gdb, "nba", "401809234")
     t0, t1 = datetime(2026, 10, 23, 20, tzinfo=timezone.utc), datetime(2026, 10, 23, 21, tzinfo=timezone.utc)
     assert store.save_snapshot(gdb, "nba", "1", "pickcenter", "espn", [{"spread": -3}], now=t0)
@@ -256,3 +257,25 @@ def test_weather_coords_and_wind_parse():
     from sports.games import weather
     assert weather.coords("Lambeau Field") == (44.501, -88.062) and weather.coords("Stade de France") is None
     assert weather._mph("10 to 15 mph") == 15
+
+
+def test_packed_plays_are_lossless_and_legacy_rows_move_over_verified(gdb, nba_game, nfl_game):
+    from sports.games import backfill_job
+    # legacy layout: plays as rows (what a store written before packing holds)
+    for g in (nba_game, nfl_game):
+        store.save_game(gdb, g)
+        lg, ev = g["game"]["league"], g["game"]["event_id"]
+        packed = store.plays(gdb, lg, ev)
+        gdb.execute("DELETE FROM sports_game_plays_z WHERE league = ? AND event_id = ?", (lg, ev))
+        for p in packed:
+            gdb.execute("INSERT INTO sports_game_plays " + store._ins(store.PLAY_COLS), [p[c] for c in store.PLAY_COLS])
+    gdb.commit()
+    before = {ev: store.plays(gdb, lg, ev) for lg, ev in (("nba", "401809234"), ("nfl", "401872996"))}
+    assert all(before.values()) and gdb.one("SELECT COUNT(*) AS n FROM sports_game_plays_z")["n"] == 0
+    assert store.pack_plays(gdb) == 2
+    assert gdb.one("SELECT COUNT(*) AS n FROM sports_game_plays")["n"] == 0
+    for (lg, ev), rows in zip((("nba", "401809234"), ("nfl", "401872996")), before.values()):
+        assert store.plays(gdb, lg, ev) == rows                   # every column of every play, exactly
+    assert any(p["x"] is not None for p in before["401809234"])    # shot locations survive
+    assert any(p["athletes"] for p in before["401872996"])
+    assert backfill_job.compact(gdb).startswith(("skipped", "vacuumed"))

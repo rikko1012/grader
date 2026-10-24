@@ -29,6 +29,32 @@ RELIST_H = 6
 DEFAULT_BUDGET_S = 150
 
 
+PACK_PER_RUN = 500
+COMPACT_MIN_FREE_MB = 32
+
+
+def compact(db):
+    """Give the space freed by packing back to the disk (SQLite VACUUM), once every legacy play row is packed and at
+    least COMPACT_MIN_FREE_MB is free. A busy database is left for the next run. -> what happened."""
+    import os
+    import sqlite3
+    if os.environ.get("SPORTS_DB_DSN"):
+        return "postgres: not needed"
+    if db.one("SELECT 1 AS x FROM sports_game_plays LIMIT 1"):
+        return "waiting: legacy play rows left"
+    free = db.one("PRAGMA freelist_count")
+    size = db.one("PRAGMA page_size")
+    free_mb = (list(free.values())[0] * list(size.values())[0]) / 1e6 if free and size else 0
+    if free_mb < COMPACT_MIN_FREE_MB:
+        return f"skipped: {free_mb:.0f} MB free"
+    try:
+        db.commit()
+        db.execute("VACUUM")
+        return f"vacuumed: {free_mb:.0f} MB returned"
+    except sqlite3.OperationalError as e:
+        return f"busy, next run: {str(e)[:80]}"
+
+
 def _seasons(lg, now):
     cur = collect.season_year(lg, now)
     return [(cur, False), (cur - 1, True)]          # (season, finished)
@@ -103,7 +129,9 @@ def main(argv=None):
     flags.require("SPORTS_INGEST")                   # writes the game store
     db = store.connect()
     try:
-        res = run(db, a.leagues, a.budget)
+        res = {"packed_games": store.pack_plays(db, limit=PACK_PER_RUN)}   # legacy row-table plays -> packed
+        res["compacted"] = compact(db)
+        res.update(run(db, a.leagues, a.budget))
     finally:
         db.close()
     print(json.dumps(res, indent=1), flush=True)

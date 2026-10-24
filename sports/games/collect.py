@@ -155,10 +155,12 @@ def rederive(db, league, refit_ep=False, train_seasons=None, progress=print):
             if not train:
                 raise ValueError("no completed earlier season to train the expected-points table on")
             marks = ",".join("?" * len(train))
-            rows = db.all("SELECT p.league, p.event_id, p.seq, p.period, p.type, p.text, p.down, p.distance, p.yte, "
-                          "p.scoring, p.turnover, p.offense_id, p.defense_id FROM sports_game_plays p JOIN "
-                          "sports_game_games g ON g.league = p.league AND g.event_id = p.event_id WHERE p.league = ? "
-                          f"AND g.completed = 1 AND g.season IN ({marks})", (lg["key"], *train))
+            keep = ("league", "event_id", "seq", "period", "type", "text", "down", "distance", "yte", "scoring",
+                    "turnover", "offense_id", "defense_id")
+            rows = [{k: p[k] for k in keep}
+                    for g in db.all(f"SELECT event_id FROM sports_game_games WHERE league = ? AND completed = 1 AND "
+                                    f"season IN ({marks})", (lg["key"], *train))
+                    for p in store.plays(db, lg["key"], g["event_id"])]
             ep = derive.fit_ep(rows)
             last = db.one(f"SELECT MAX(COALESCE(ended_at, start)) AS t FROM sports_game_games WHERE league = ? AND "
                           f"completed = 1 AND season IN ({marks})", (lg["key"], *train))
@@ -169,8 +171,7 @@ def rederive(db, league, refit_ep=False, train_seasons=None, progress=print):
         ep = ep or derive.load_ep()
     games = db.all("SELECT * FROM sports_game_games WHERE league = ? AND completed = 1", (lg["key"],))
     for i, g in enumerate(games):
-        plays = db.all("SELECT * FROM sports_game_plays WHERE league = ? AND event_id = ? ORDER BY seq",
-                       (lg["key"], g["event_id"]))
+        plays = store.plays(db, lg["key"], g["event_id"])
         players = db.all("SELECT athlete_id, team_id, starter FROM sports_game_players WHERE league = ? AND "
                          "event_id = ?", (lg["key"], g["event_id"]))
         derive_game(db, lg, g, plays, players, ep)
