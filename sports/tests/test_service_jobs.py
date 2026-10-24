@@ -96,10 +96,12 @@ def test_schedule_names_every_worker_side_process_with_its_flag():
             "settle": "SPORTS_INGEST", "slips-settle": "SPORTS_INGEST", "model-forecast": "SPORTS_TRAIN",
             "model-learn": "SPORTS_TRAIN", "model-snapshot": "SPORTS_TRAIN", "model-fit": "SPORTS_TRAIN",
             "lab": "SPORTS_TRAIN", "history": "SPORTS_INGEST", "archive": "SPORTS_INGEST",
-            "archive-verify": "SPORTS_INGEST"}
+            "archive-verify": "SPORTS_INGEST", "picks-ingest": "SPORTS_INGEST", "picks-settle": "SPORTS_INGEST"}
     assert {k: v["flag"] for k, v in s.items()} == want
     assert s["slips-ingest"]["argv"][1:] == ["-m", "sports.slips", "ingest"]
     assert s["slips-settle"]["argv"][1:] == ["-m", "sports.slips", "settle"]
+    assert s["picks-ingest"]["argv"][1:] == ["-m", "sports.picks", "ingest"]
+    assert s["picks-settle"]["argv"][1:] == ["-m", "sports.picks", "settle"]
     assert s["assistant"]["argv"][1:] == ["-m", "sports.assistant.runner", "--once"] and s["assistant"]["trigger"]
     assert s["lab"]["argv"][1:] == ["-m", "sports.lab.runner", "--once"]
     assert s["prebuilt"]["every_s"] <= min(v[2] for v in web.SNAPSHOTS.values())  # refreshed before max age
@@ -117,7 +119,7 @@ def test_supervise_starts_one_scheduler_and_no_job_with_flags_off(monkeypatch):
     stop = threading.Event()
     sch = service.supervise(stop)
     time.sleep(0.6)
-    assert sch.running == {} and len(scheduler.JOBS) == 16 and not any(j["enabled"] for j in scheduler.JOBS.values())
+    assert sch.running == {} and len(scheduler.JOBS) == 18 and not any(j["enabled"] for j in scheduler.JOBS.values())
     stop.set()
 
 
