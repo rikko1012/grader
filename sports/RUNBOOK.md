@@ -226,15 +226,16 @@ flags `SPORTS_UI=0`, `SPORTS_API=0`):
    are on: collector every 15 min, Kalshi hourly, settle hourly, UI snapshots every 3 min, prebuilt every 90 s,
    history daily, archive every 6 h (it has nothing to do until offers are 72 h old). `SPORTS_TRAIN` stays `0` (no
    model forecasts on staging unless the coordinator asks; then see 13.1 - forecast / fit run exclusive).
-2. After ~20 min and again after a few hours, from a checkout of the deployed commit:
+2. About 20 min after the deploy, from a checkout of the deployed commit:
    `ADMIN_TOKEN=... SPORTS_TOKEN_SECRET=... python scripts/load_sports_staging_check.py --api https://scout-sports-api.onrender.com`
    (secrets from the environment, never printed; exit 0 = pass). It checks health, the auth round trip (minted
    token; no / tampered token 401; CORS), each job's last run / peak RSS vs cap / over-cap kills, feed ages, store /
    archive / disk use, service RSS, gentle latency (10 sequential per route + a 40-request parallel burst) and alerts.
    `python -m sports.service --check https://scout-sports-api.onrender.com` prints the alerts alone.
 3. Render -> scout-sports-api -> Metrics: memory stays under ~450 MB including the children (13.1); restarts 0.
-4. Pass = staging check exit 0 twice (after 20 min and after >= 6 h of ingestion, so an archive pass and a history run
-   have happened), no `job_over_cap`, no paging alert.
+4. Pass = staging check exit 0 once (~20 min after the deploy), no `job_over_cap`, no paging alert. No multi-hour
+   wait (owner 2026-10-24: the six-hour re-check is dropped); the archive (6 h) and history (daily) jobs are watched by
+   the section 9 alerts as they run.
 
 **Owner-first access (`SPORTS_UI=owner`, 2026-10-24).** cs2-scout serves `/sports`, `/sports/<asset>`, the esports
 nav link and `/api/sports/token` ONLY to a paid Whop member (existing `Handler.allowed()`, checked first) whose allow id is
@@ -529,8 +530,27 @@ caps over weeks unless the model jobs bound their reads (reported to the model /
 - **Measured** (real-feed store copy, Windows working set): 306-319 MB with 14.6k or 214.6k stored forecasts (does not
   grow with history); snapshot 93 MB (was 218 -> 2,394 MB); scorecard step 51 MB / 0.8 s (was 51 -> 88 MB, 8.6 ->
   109 s with 200k forecasts). Disk: ~5.1 KB per stored forecast; ~7-70 MB / day (sports/research/results/fwd_2026-10-24).
-- **Limits:** NFL features are the package's (through 2026 week 7, 94 games); the NFL refresh (nflverse files) is not
-  in this job. Grades withheld / stakes 0 until gate F (sports-gp-1).
+  Linux (sandbox, cgroup memory limit 340 MB, RLIMIT_AS 640, fresh real-feed store, NBA refresh included): first run
+  291.9 MB RSS / VmPeak 365 MB / cgroup peak 321.6 MB, 26 s, 3,121 forecasts, no OOM; rerun 288.8 MB, 46 added. With
+  RLIMIT_AS 320 (the collector's cap) it fails with MemoryError - keep SPORTS_FORECAST_MAX_VM_MB at 640.
+- **NFL refresh** (`fwd.refresh_nfl`, in this job): the current season's nflverse files (schedule, player-week stats,
+  snaps, play-by-play) reload into the installed copy at most every 12 h (`SPORTS_FORECAST_NFL_REFRESH_H`); earlier
+  seasons untouched; every file is fetched before any table changes, so a source failure keeps the data. Package: 2022-
+  2025 complete + 2026 weeks 1-7. Linux run with it (cgroup 340): 289.8 MB RSS, 26 s; a same-data reload changed 0
+  forecasts. Off with the NBA refresh: `SPORTS_FORECAST_REFRESH=0`.
+- **Limits:** grades withheld / stakes 0 until gate F (sports-gp-1).
+
+### 13.6 Member pick tracking (pk-1, `sports/picks.py`) - UI and test picks
+
+- Routes `/api/sports/picks/track|mine` and `/api/sports/admin/picks` (no flag: live wherever this API is deployed);
+  jobs `picks-ingest` (60 s) / `picks-settle` (hourly) under SPORTS_INGEST.
+- Page (`web/sports/app.js`, served by cs2-scout from `main`): "Pick Higher / Lower" (Underdog) / "Pick More / Less"
+  (PrizePicks) on gradable pick'em lines before the start (board rows, phone cards, player page) and "My picks"
+  (`#/picks`). The page shows them only when `/api/sports/picks/mine` answers, so it stays as today against an API
+  without the routes.
+- **Test picks** (scratch, aggregated under `test`, never in the member figures): admin-token picks, picks posted with
+  `"test": true`, and every pick while scout-sports-api has `SPORTS_PICKS_SCRATCH=1`. Set it for the owner-only
+  preview (`SPORTS_UI=owner`); remove it (-> Save) when members get access, so their picks count.
 
 ## CHECKPOINT (sports/starter, 2026-10-24)
 

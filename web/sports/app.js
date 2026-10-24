@@ -408,7 +408,7 @@
       Object.keys(Api.mem).forEach(function (k) { if (k.indexOf("/api/sports/picks/") === 0) delete Api.mem[k]; });
       if (r.ok) { btn.textContent = "Tracked"; btn.setAttribute("aria-pressed", "true"); }
       else btn.disabled = false;
-      pickToast(r.ok ? "Tracked: " + leg.player + " " + (leg.side === "over" ? "Over " : "Under ") + S.line(leg.line) + " " + (leg.stat_label || leg.stat) + " on " + bookName(leg.platform) + ", recorded " + S.localTime(r.tracked_at) + ". Stake 0."
+      pickToast(r.ok ? "Tracked: " + leg.player + " " + (leg.side === "over" ? "Over " : "Under ") + S.line(leg.line) + " " + (leg.stat_label || leg.stat) + " on " + bookName(leg.platform) + ", recorded " + S.localTime(r.tracked_at) + ". Stake 0." + (r.test ? " Test record: kept apart from member results." : "")
         : "Not tracked: " + (r.text || "refused"), !!r.ok);
     }, function (e) { btn.disabled = false; pickToast("Not tracked: " + (e.kind === "offline" ? "you are offline" : "the sports service did not answer") + ".", false); });
   }
@@ -431,7 +431,7 @@
       h += '<p class="sw-count"><span><b>' + d.total + "</b> picks</span><span><b>" + c.win + "-" + c.loss + "-" + c.push + "</b> won-lost-push</span><span><b>" + c["void"] + "</b> void</span><span><b>" + c.open + "</b> not settled</span></p>";
       h += '<div class="sw-picklist">' + ps.map(function (p) {
         var r = p.result, word = p.side === "over" ? "Over" : "Under";
-        return '<article class="sw-card"><div class="sw-card-top"><div><b>' + esc(p.player || "") + "</b> " + esc(word + " " + S.line(p.line) + " " + (p.stat_label || p.stat || "")) +
+        return '<article class="sw-card"><div class="sw-card-top"><div><b>' + esc(p.player || "") + "</b> " + esc(word + " " + S.line(p.line) + " " + (p.stat_label || p.stat || "")) + (p.test ? ' <span class="sw-tag">test</span>' : "") +
           '<div class="sw-faint sw-small">' + esc(bookName(p.platform)) + " · " + esc(p.event_ref || "") + " · starts " + esc(S.localTime(p.start_utc, {weekday: "short", hour: "numeric", minute: "2-digit"})) + "</div></div>" +
           '<div class="sw-small" style="text-align:right">' + (r ? "<b>" + esc(RESULT_WORD[r.status] || r.status) + "</b>" + (r.value !== null && r.value !== undefined ? '<div class="sw-faint">final ' + esc(r.value) + "</div>" : "") + (r.corrected ? ' <span class="sw-tag">corrected</span>' : "") : '<span class="sw-faint">Not settled</span>') + "</div></div>" +
           '<div class="sw-small sw-faint">Tracked ' + esc(S.localTime(p.tracked_at)) + " · " + (p.p_side !== null && p.p_side !== undefined ? "Scout chance shown " + S.pct(p.p_side) + " · " : "") + esc(p.validation_text || "") + " · stake 0 · " +
