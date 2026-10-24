@@ -46,6 +46,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from . import cache, capabilities, config, fair, flags, forecast_detail, identity, market_view, markets, store
+from .games import board_factors
 from .contracts import (ContractError, Event, Membership, SourceId, StatObservation, from_dict, now_utc, parse_utc,
                         utc)
 
@@ -69,12 +70,14 @@ FACTOR_PARTS = {
     "football": [("targets", "Targets"), ("rec", "Receptions"), ("rush_att", "Carries"), ("pass_att", "Pass attempts")],
 }
 # owner factor list (OWNER_FACTORS.md, 2026-10-23) entries Scout does not hold - stated as not held, never shown as known
-NOT_HELD = {
-    "basketball": ["Usage rate", "Team / opponent pace", "Opponent positional defence", "Likely defender",
-                   "Shot zones (rim / mid / 3PT)", "On/off splits", "Potential assists", "Game total / spread"],
-    "football": ["Snap share", "Route participation / TPRR", "Air yards", "Red-zone work", "Coverage scheme (licensed)",
-                 "PFF / NGS / DVOA (licensed)", "Opponent positional allowance", "Game total / spread"],
-}
+def _not_held(league):
+    """Factors no source we hold publishes (the factor contract's "unavailable" entries, sports/games/contract.py) -
+    everything else on the owner's list is computed from the game store / nflverse (sports/games/board_factors.py)."""
+    from .games import contract
+    return [s["label"] for s in contract.REGISTRY[league].values() if s["status"] == "unavailable"]
+
+
+NOT_HELD = {"basketball": _not_held("nba"), "football": _not_held("nfl")}
 
 
 def models_pref():
@@ -808,6 +811,7 @@ def build(con, league, now=None, base=None, history=True):
             "markets": rows, "forecast_detail": fdetail,
             "forecasts": {fid: forecasts[fid] for fid in fdetail if fid in forecasts},
             "factors": factors(fam, games, next_ev, mates_out),
+            "engine": board_factors.read(league, pid, base),
             "history": {"games": len(games), "sources": sorted({s for g in games for s in g["source"]})}})
         _write(hi_dir / f"{safe_name(pid)}.json", {**base_meta, "player_id": pid, "family": fam, "games": games})
         n_players += 1

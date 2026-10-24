@@ -881,8 +881,42 @@
           if (c.value === null || c.value === undefined) return "";
           return "<li>" + esc(c.label) + ": <b>" + esc(c.value) + "</b></li>";
         }).join("") + "</ul>" +
-          '<p class="sw-faint sw-small">Not in Scout data: ' + esc(F.not_held.join(", ")) + ".</p></div></div></section>";
+          "</div></div>" + enginePanel(P.engine, mk) +
+          '<p class="sw-faint sw-small">Not in Scout data: ' + esc(((P.engine && P.engine.not_held) || F.not_held).join(", ")) + ".</p></section>";
         return h;
+      }
+
+      // factor-engine values for this player, game and stat (sports/games/board_factors.py; contract sports-factors/1),
+      // grouped as the contract groups them; a share / rate / probability on 0-1 is shown as a percent
+      function engineValue(k, label, v) {
+        if (v === true || v === false) return v ? "yes" : "no";
+        if (typeof v !== "number") return esc(v);
+        if (/\(%\)/.test(label)) return S.num(v, 1) + "%";
+        if (Math.abs(v) <= 1 && !/= league average|per100/.test(label + k) &&
+            /(share|_pct|_prob|_rate|rate_l10|_allowed$|success|explosive|fg_allowed)/.test(k)) return S.num(v * 100, 1) + "%";
+        var a = Math.abs(v);
+        return esc(String(a >= 100 ? Math.round(v) : Number(v.toFixed(a >= 10 ? 1 : 2))));   // 6.5, 0.93, 97.5, 4
+      }
+      function enginePanel(E, mk) {
+        if (!E || !E.by_stat) return "";
+        var vals = E.by_stat[mk.stat];
+        if (!vals) return '<p class="sw-faint sw-small">Matchup and usage data for ' + esc(mk.stat_label) + " are not computed for this game yet.</p>";
+        var groups = {}, order = [];
+        Object.keys(E.labels).forEach(function (k) {
+          if (vals[k] === undefined || vals[k] === null) return;
+          var g = E.labels[k][0];
+          if (!groups[g]) { groups[g] = []; order.push(g); }
+          groups[g].push([k, E.labels[k][1], vals[k]]);
+        });
+        if (!order.length) return "";
+        return '<h3 style="margin-top:14px">Matchup, usage and game data <span class="sw-faint sw-small">as of ' + esc(S.localTime(E.as_of)) + "</span></h3>" +
+          '<div class="sw-grid2">' + order.map(function (g) {
+            return '<div><h4 class="sw-small" style="margin:8px 0 4px">' + esc(g) + '</h4><table class="sw-mini"><tbody>' + groups[g].map(function (r) {
+              return "<tr><td>" + esc(r[1]) + '</td><td class="num">' + engineValue(r[0], r[1], r[2]) + "</td></tr>";
+            }).join("") + "</tbody></table></div>";
+          }).join("") + "</div>" +
+          '<p class="sw-faint sw-small">From ESPN box scores and play-by-play, ESPN pickcenter' + (vals.lines_provider ? " (" + esc(vals.lines_provider) + " lines)" : "") +
+          ", Kalshi game markets" + (state.lg === "nfl" ? ", nflverse snap counts and player stats" : "") + ". Descriptive: these are not model inputs until tested.</p>";
       }
 
       function evidencePanel(P, fc, games, mk, err) {
