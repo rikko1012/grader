@@ -2,7 +2,7 @@
 API's documented event-odds format."""
 import pytest
 
-from sports import config, espn, kalshi, lines, markets, names, oddsapi, pinnacle
+from sports import config, espn, kalshi, lines, markets, names, pinnacle
 from sports.tests.conftest import fixture
 
 NBA = config.league("nba")
@@ -104,30 +104,6 @@ def test_pinnacle_location_refusal_is_reported_not_worked_around(monkeypatch):
     assert q == [] and "not worked around" in st["error"] and len(calls) == 1    # not asked again for 6 h
 
 
-def test_odds_api_consensus_needs_two_books():
-    ev = {"id": "e1", "commence_time": "2026-10-24T00:00:00Z", "home_team": "Miami Heat", "away_team": "Detroit Pistons",
-          "bookmakers": [
-              {"key": "draftkings", "markets": [{"key": "player_points", "outcomes": [
-                  {"name": "Over", "description": "Bam Adebayo", "price": 1.91, "point": 17.5},
-                  {"name": "Under", "description": "Bam Adebayo", "price": 1.91, "point": 17.5},
-                  {"name": "Over", "description": "Tyler Herro", "price": 1.8, "point": 21.5},
-                  {"name": "Under", "description": "Tyler Herro", "price": 2.0, "point": 21.5}]}]},
-              {"key": "fanduel", "markets": [{"key": "player_points", "outcomes": [
-                  {"name": "Over", "description": "Bam Adebayo", "price": 1.8, "point": 17.5},
-                  {"name": "Under", "description": "Bam Adebayo", "price": 2.0, "point": 17.5}]}]}]}
-    q = oddsapi.parse_event(ev, NBA)
-    assert len(q) == 1                                # Herro has one book only: not a consensus
-    bam = q[0]
-    fd = (1 / 1.8) / (1 / 1.8 + 1 / 2.0)
-    assert bam["books"] == 2 and bam["p_over"] == pytest.approx((0.5 + fd) / 2)
-    assert bam["start"] == "2026-10-24T00:00:00Z" and bam["source"] == "consensus"
-
-
-def test_odds_api_is_off_without_a_key():
-    q, st = oddsapi.load(NBA)
-    assert q == [] and not st["ok"] and "ODDS_API_KEY" in st["error"]
-
-
 def test_espn_gamelog_basketball_and_football():
     g = espn.parse_gamelog(fixture("espn_gamelog_nba.json"), "basketball")
     assert g and all("preseason" not in str(x) for x in g)
@@ -163,3 +139,65 @@ def test_espn_search_and_injuries(monkeypatch):
     assert espn.search_athlete(NFL, "Kyle Kuzma") == []                # another league's uid
     inj = espn.injuries(NBA)
     assert inj and all(v["status"] and v["status"].lower() != "active" for v in inj.values())
+
+
+def test_polymarket_props_midpoint_spread_filter_and_dedupe():
+    from sports import polymarket
+    events = fixture("poly_nba.json")
+    q = polymarket.parse(events, NBA)
+    assert sorted((x["player"], x["market"], x["line"]) for x in q) == [
+        ("Jalen Brunson", "rebounds", 3.5), ("Paul George", "assists", 3.5), ("Paul George", "points", 17.5),
+        ("Paul George", "rebounds", 4.5)]                      # 35c / 50c spreads and the moneyline left out
+    pg = next(x for x in q if x["market"] == "points")
+    assert pg["p_over"] == pytest.approx(0.505) and pg["spread"] == pytest.approx(0.01)
+    assert pg["start"] == "2026-10-23T23:00:00Z" and pg["game"] == "nba-nyk-bos-2026-10-23"
+    twice = events + [{**events[0], "slug": "nba-nyk-bos-2026-10-23-player-props"}]
+    assert len(polymarket.parse(twice, NBA)) == len(q)       # one market in two events is read once
+
+
+def test_polymarket_keeps_only_prop_markets_when_caching(monkeypatch):
+    from sports import polymarket
+    big = fixture("poly_nba.json")[0]
+    monkeypatch.setattr(polymarket.net, "get_json", lambda url, params=None, headers=None, **kw:
+                        [{**big, "markets": [dict(m, description="x" * 5000) for m in big["markets"]]},
+                         {"slug": "nba-futures", "markets": [{"sportsMarketType": None}]}])
+    evs = polymarket._events("10345", 36)
+    assert len(evs) == 1 and len(evs[0]["markets"]) == 6                  # the moneyline and the futures event dropped
+    assert all(set(m) <= set(polymarket._KEEP) for m in evs[0]["markets"])
+    q, st = polymarket.load(config.league("cbb"))
+    assert q == [] and "no Polymarket player props" in st["error"]
+
+
+def test_espn_depth_charts_roles():
+    nfl = espn.parse_depth(fixture("espn_depth_nfl.json"), "football", "DET")
+    assert nfl["jared goff"]["role"] == "QB1" and nfl["jahmyr gibbs"]["role"] == "RB1"
+    assert nfl["sione vaki"]["role"] == "RB2" and nfl["sam laporta"]["role"] == "TE1"
+    assert "aidan hutchinson" not in nfl and "jake bates" not in nfl          # offence only
+    assert any(r["role"] == "WR1" for r in nfl.values())
+    nba = espn.parse_depth(fixture("espn_depth_nba.json"), "basketball", "NYK")
+    assert nba["jalen brunson"]["role"] == "starter (PG)"
+    assert nba[names.key("Miles McBride")]["role"] == "bench (PG #2)"        # listed twice: the higher spot kept
+
+
+def test_espn_depth_index_over_all_teams(monkeypatch):
+    calls = []
+
+    def fake(url, params=None, headers=None, **kw):
+        calls.append(url)
+        if url.endswith("/teams"):
+            return fixture("espn_teams_nfl.json")
+        if url.endswith("/teams/8/depthcharts"):
+            return fixture("espn_depth_nfl.json")
+        raise espn.net.HttpError(500, url)
+    monkeypatch.setattr(espn.net, "get_json", fake)
+    idx = espn.depth_index(NFL)
+    assert idx["jared goff"]["team"] == "DET" and idx["jared goff"]["role"] == "QB1"   # other teams failed: kept going
+    assert len(calls) == 33
+    assert espn.depth_index(config.league("cfb")) == {}
+
+
+def test_espn_splits():
+    s = espn.parse_splits(fixture("espn_splits_nfl.json"))
+    assert s["cats"]["split"]["Home"]["receptions"] == "14" and s["cats"]["split"]["Away"]["receivingYards"] == "286"
+    b = espn.parse_splits(fixture("espn_splits_nba.json"))
+    assert b["cats"]["byOpponent"]["Oklahoma City Thunder"]["avgPoints"] == "13.0"

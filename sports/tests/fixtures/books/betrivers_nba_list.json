@@ -1,0 +1,336 @@
+{
+ "_sample": {
+  "source": "Kambi rsiusoh listView/basketball/nba (real response)",
+  "observed_at": "2026-10-23T21:04:34Z",
+  "sanitized": "trimmed to a few markets; nothing else changed"
+ },
+ "events": [
+  {
+   "event": {
+    "id": 1028754210,
+    "name": "CHI Bulls @ MIL Bucks",
+    "nameDelimiter": "@",
+    "englishName": "Milwaukee Bucks - Chicago Bulls",
+    "homeName": "MIL Bucks",
+    "awayName": "CHI Bulls",
+    "start": "2026-10-23T20:15:00Z",
+    "group": "NBA",
+    "groupId": 1000093652,
+    "path": [
+     {
+      "id": 1000093204,
+      "name": "Basketball",
+      "englishName": "Basketball",
+      "termKey": "basketball"
+     },
+     {
+      "id": 1000093652,
+      "name": "NBA",
+      "englishName": "NBA",
+      "termKey": "nba"
+     }
+    ],
+    "nonLiveBoCount": 148,
+    "liveBoCount": 382,
+    "sport": "BASKETBALL",
+    "tags": [
+     "OPEN_FOR_LIVE",
+     "STREAMED_WEB",
+     "AMERICAN_DISPLAY_FORMAT",
+     "AWAY_HOME",
+     "BET_BUILDER",
+     "STREAMED_MOBILE",
+     "MATCH"
+    ],
+    "state": "STARTED"
+   },
+   "betOffers": [
+    {
+     "id": 2707076080,
+     "suspended": true,
+     "criterion": {
+      "id": 1001159732,
+      "label": "Moneyline",
+      "englishLabel": "Moneyline - Including Overtime",
+      "order": [],
+      "occurrenceType": "POINTS",
+      "lifetime": "FULL_TIME_OVERTIME"
+     },
+     "betOfferType": {
+      "id": 2,
+      "name": "Match",
+      "englishName": "Match"
+     },
+     "eventId": 1028754210,
+     "outcomes": [
+      {
+       "id": 4385060372,
+       "label": "MIL Bucks",
+       "englishLabel": "Milwaukee Bucks",
+       "odds": 1500,
+       "participant": "MIL Bucks",
+       "type": "OT_ONE",
+       "betOfferId": 2707076080,
+       "changedDate": "2026-10-23T21:03:46Z",
+       "participantId": 1000000219,
+       "oddsFractional": "1/2",
+       "oddsAmerican": "-200",
+       "status": "OPEN",
+       "cashOutStatus": "ENABLED",
+       "displayOrder": 0
+      },
+      {
+       "id": 4385060373,
+       "label": "CHI Bulls",
+       "englishLabel": "Chicago Bulls",
+       "odds": 2600,
+       "participant": "CHI Bulls",
+       "type": "OT_TWO",
+       "betOfferId": 2707076080,
+       "changedDate": "2026-10-23T21:03:46Z",
+       "participantId": 1000000215,
+       "oddsFractional": "8/5",
+       "oddsAmerican": "160",
+       "status": "OPEN",
+       "cashOutStatus": "ENABLED",
+       "displayOrder": 1
+      }
+     ],
+     "tags": [
+      "OFFERED_PREMATCH",
+      "OFFERED_LIVE",
+      "BET_BUILDER",
+      "MAIN"
+     ],
+     "sortOrder": 2,
+     "cashOutStatus": "SUSPENDED"
+    }
+   ],
+   "liveData": {
+    "eventId": 1028754210,
+    "matchClock": {
+     "minute": 18,
+     "second": 44,
+     "minutesLeftInPeriod": 5,
+     "secondsLeftInMinute": 16,
+     "period": "2nd Quarter",
+     "running": false,
+     "periodId": "QUARTER2",
+     "version": 1792789435863
+    },
+    "score": {
+     "home": "51",
+     "away": "44",
+     "info": "Q1: 32-17 | Q2: 19-27",
+     "who": "AWAY",
+     "version": 1792789411809
+    },
+    "liveStatistics": []
+   }
+  },
+  {
+   "event": {
+    "id": 1028736320,
+    "name": "NY Knicks @ BOS Celtics",
+    "nameDelimiter": "@",
+    "englishName": "Boston Celtics - New York Knicks",
+    "homeName": "BOS Celtics",
+    "awayName": "NY Knicks",
+    "start": "2026-10-23T23:00:00Z",
+    "group": "NBA",
+    "groupId": 1000093652,
+    "path": [
+     {
+      "id": 1000093204,
+      "name": "Basketball",
+      "englishName": "Basketball",
+      "termKey": "basketball"
+     },
+     {
+      "id": 1000093652,
+      "name": "NBA",
+      "englishName": "NBA",
+      "termKey": "nba"
+     }
+    ],
+    "nonLiveBoCount": 693,
+    "sport": "BASKETBALL",
+    "tags": [
+     "STREAMED_WEB",
+     "AMERICAN_DISPLAY_FORMAT",
+     "AWAY_HOME",
+     "OFFERED_LIVE",
+     "BET_BUILDER",
+     "STREAMED_MOBILE",
+     "MATCH"
+    ],
+    "state": "NOT_STARTED"
+   },
+   "betOffers": [
+    {
+     "id": 2706604268,
+     "criterion": {
+      "id": 1001159512,
+      "label": "Point Spread",
+      "englishLabel": "Point Spread - Including Overtime",
+      "order": [],
+      "occurrenceType": "POINTS",
+      "lifetime": "FULL_TIME_OVERTIME"
+     },
+     "betOfferType": {
+      "id": 1,
+      "name": "Handicap",
+      "englishName": "Handicap"
+     },
+     "eventId": 1028736320,
+     "outcomes": [
+      {
+       "id": 4383575933,
+       "label": "BOS Celtics",
+       "englishLabel": "Boston Celtics",
+       "odds": 1890,
+       "line": -2500,
+       "participant": "BOS Celtics",
+       "type": "OT_ONE",
+       "betOfferId": 2706604268,
+       "changedDate": "2026-10-23T19:11:57Z",
+       "participantId": 1000031335,
+       "oddsFractional": "22/25",
+       "oddsAmerican": "-113",
+       "status": "OPEN",
+       "cashOutStatus": "ENABLED",
+       "displayOrder": 0
+      },
+      {
+       "id": 4383575934,
+       "label": "NY Knicks",
+       "englishLabel": "New York Knicks",
+       "odds": 1930,
+       "line": 2500,
+       "participant": "NY Knicks",
+       "type": "OT_TWO",
+       "betOfferId": 2706604268,
+       "changedDate": "2026-10-23T19:11:57Z",
+       "participantId": 1000067568,
+       "oddsFractional": "10/11",
+       "oddsAmerican": "-108",
+       "status": "OPEN",
+       "cashOutStatus": "ENABLED",
+       "displayOrder": 1
+      }
+     ],
+     "tags": [
+      "OFFERED_PREMATCH",
+      "OFFERED_LIVE",
+      "MAIN_LINE",
+      "BET_BUILDER"
+     ],
+     "sortOrder": 1,
+     "cashOutStatus": "ENABLED"
+    }
+   ]
+  },
+  {
+   "event": {
+    "id": 1028754194,
+    "name": "MIN Timberwolves @ ORL Magic",
+    "nameDelimiter": "@",
+    "englishName": "Orlando Magic - Minnesota Timberwolves",
+    "homeName": "ORL Magic",
+    "awayName": "MIN Timberwolves",
+    "start": "2026-10-23T23:00:00Z",
+    "group": "NBA",
+    "groupId": 1000093652,
+    "path": [
+     {
+      "id": 1000093204,
+      "name": "Basketball",
+      "englishName": "Basketball",
+      "termKey": "basketball"
+     },
+     {
+      "id": 1000093652,
+      "name": "NBA",
+      "englishName": "NBA",
+      "termKey": "nba"
+     }
+    ],
+    "nonLiveBoCount": 717,
+    "sport": "BASKETBALL",
+    "tags": [
+     "STREAMED_WEB",
+     "AMERICAN_DISPLAY_FORMAT",
+     "AWAY_HOME",
+     "OFFERED_LIVE",
+     "BET_BUILDER",
+     "STREAMED_MOBILE",
+     "MATCH"
+    ],
+    "state": "NOT_STARTED"
+   },
+   "betOffers": [
+    {
+     "id": 2707320853,
+     "criterion": {
+      "id": 1001159512,
+      "label": "Point Spread",
+      "englishLabel": "Point Spread - Including Overtime",
+      "order": [],
+      "occurrenceType": "POINTS",
+      "lifetime": "FULL_TIME_OVERTIME"
+     },
+     "betOfferType": {
+      "id": 1,
+      "name": "Handicap",
+      "englishName": "Handicap"
+     },
+     "eventId": 1028754194,
+     "outcomes": [
+      {
+       "id": 4385881344,
+       "label": "ORL Magic",
+       "englishLabel": "Orlando Magic",
+       "odds": 1960,
+       "line": -1500,
+       "participant": "ORL Magic",
+       "type": "OT_ONE",
+       "betOfferId": 2707320853,
+       "changedDate": "2026-10-23T20:20:20Z",
+       "participantId": 1000080666,
+       "oddsFractional": "19/20",
+       "oddsAmerican": "-105",
+       "status": "OPEN",
+       "cashOutStatus": "ENABLED",
+       "displayOrder": 0
+      },
+      {
+       "id": 4385881345,
+       "label": "MIN Timberwolves",
+       "englishLabel": "Minnesota Timberwolves",
+       "odds": 1860,
+       "line": 1500,
+       "participant": "MIN Timberwolves",
+       "type": "OT_TWO",
+       "betOfferId": 2707320853,
+       "changedDate": "2026-10-23T20:20:20Z",
+       "participantId": 1000027507,
+       "oddsFractional": "17/20",
+       "oddsAmerican": "-117",
+       "status": "OPEN",
+       "cashOutStatus": "ENABLED",
+       "displayOrder": 1
+      }
+     ],
+     "tags": [
+      "OFFERED_PREMATCH",
+      "OFFERED_LIVE",
+      "MAIN_LINE",
+      "BET_BUILDER"
+     ],
+     "sortOrder": 1,
+     "cashOutStatus": "ENABLED"
+    }
+   ]
+  }
+ ]
+}

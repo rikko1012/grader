@@ -1,0 +1,30 @@
+{
+ "_note": "NOT real data. Shapes copied from the OddsPapi v4 reference (get-account, get-tournaments, get-participants, get-markets, get-odds-by-tournaments, read 2026-10-23); ids, names and prices are invented for parser tests. Real NBA / NFL coverage is unverified until the owner's coverage check.",
+ "account": {"api_key": "REDACTED-IN-FIXTURE", "current_subscription_id": "sub1", "subscriptions": [{"subscription_id": "sub1", "is_active": true, "valid_from": "2026-10-01T00:00:00Z", "valid_until": null, "bookmakers": {"draftkings": {"has_live_odds": false, "has_player_props": true}, "betmgm": {"has_live_odds": false, "has_player_props": true}, "caesars": {"has_live_odds": false, "has_player_props": false}, "pinnacle": {"has_live_odds": false, "has_player_props": false}}, "sport_ids": [10, 11, 14], "request_limit": 250, "request_count": 100, "rate_limit": null, "last_request": "2026-10-23T20:00:00Z"}]},
+ "tournaments": [{"tournamentId": 132, "tournamentSlug": "nba", "tournamentName": "NBA", "categorySlug": "usa", "categoryName": "USA", "futureFixtures": 1, "upcomingFixtures": 1, "liveFixtures": 0}, {"tournamentId": 133, "tournamentSlug": "nba-g-league", "tournamentName": "NBA G League", "categorySlug": "usa", "categoryName": "USA", "futureFixtures": 0, "upcomingFixtures": 0, "liveFixtures": 0}],
+ "participants": {"3409": "Chicago Bulls", "3410": "Milwaukee Bucks"},
+ "markets": [
+  {"marketId": 101, "marketLength": 3, "marketName": "Full Time Result", "playerProp": false, "sportId": 10, "handicap": 0, "period": "fulltime", "marketType": "1x2", "outcomes": [{"outcomeId": 101, "outcomeName": "1"}]},
+  {"marketId": 50001, "marketLength": 2, "marketName": "Player Points", "playerProp": true, "sportId": 11, "handicap": 0, "period": "fulltime", "marketType": "totals", "outcomes": [{"outcomeId": 50001, "outcomeName": "Over"}, {"outcomeId": 50002, "outcomeName": "Under"}]},
+  {"marketId": 50003, "marketLength": 2, "marketName": "Player Points 1st Half", "playerProp": true, "sportId": 11, "handicap": 0, "period": "1sthalf", "marketType": "totals", "outcomes": [{"outcomeId": 50003, "outcomeName": "Over"}, {"outcomeId": 50004, "outcomeName": "Under"}]},
+  {"marketId": 50005, "marketLength": 1, "marketName": "Player First Basket", "playerProp": true, "sportId": 11, "handicap": 0, "period": "fulltime", "marketType": "yesno", "outcomes": [{"outcomeId": 50005, "outcomeName": "Yes"}]}
+ ],
+ "odds_by_tournaments": [
+  {"fixtureId": "id9000000000000001", "participant1Id": 3409, "participant2Id": 3410, "sportId": 11, "tournamentId": 132, "statusId": 0, "hasOdds": true, "startTime": "2026-10-23T20:10:00.000Z", "updatedAt": "2026-10-23T18:00:00.000Z",
+   "bookmakerOdds": {
+    "draftkings": {"bookmakerIsActive": true, "bookmakerFixtureId": "x", "suspended": false, "markets": {
+      "50001": {"bookmakerMarketId": "m1", "marketActive": true, "outcomes": {
+        "50001": {"players": {"777": {"active": true, "bookmakerOutcomeId": "24.5/over", "bookmakerChangedAt": "2026-10-23T17:59:00.000Z", "changedAt": "2026-10-23T17:59:01.000Z", "playerName": "Josh Giddey", "price": 1.87, "priceAmerican": "-115", "priceFractional": "87/100", "mainLine": true}}},
+        "50002": {"players": {"777": {"active": true, "bookmakerOutcomeId": "24.5/under", "bookmakerChangedAt": "2026-10-23T17:59:00.000Z", "changedAt": "2026-10-23T17:59:01.000Z", "playerName": "Josh Giddey", "price": 1.95, "priceAmerican": "-105", "priceFractional": "95/100", "mainLine": true}}}}},
+      "50003": {"bookmakerMarketId": "m2", "marketActive": true, "outcomes": {
+        "50003": {"players": {"777": {"active": true, "bookmakerOutcomeId": "12.5/over", "changedAt": "2026-10-23T17:59:01.000Z", "playerName": "Josh Giddey", "price": 1.9, "priceAmerican": "-111", "mainLine": true}}}}},
+      "50005": {"bookmakerMarketId": "m3", "marketActive": true, "outcomes": {
+        "50005": {"players": {"777": {"active": true, "bookmakerOutcomeId": "yes", "changedAt": "2026-10-23T17:59:01.000Z", "playerName": "Josh Giddey", "price": 8.0, "priceAmerican": "700", "mainLine": true}}}}}}},
+    "betmgm": {"bookmakerIsActive": true, "suspended": true, "markets": {
+      "50001": {"marketActive": true, "outcomes": {
+        "50001": {"players": {"777": {"active": true, "bookmakerOutcomeId": "25.5/over", "changedAt": "2026-10-23T17:58:00.000Z", "playerName": "Josh Giddey", "price": 1.91, "priceAmerican": "-110", "mainLine": false}}}}}}},
+    "bet365": {"bookmakerIsActive": true, "suspended": false, "markets": {}}
+   }},
+  {"fixtureId": "id9000000000000002", "participant1Id": 3409, "participant2Id": 3410, "sportId": 11, "tournamentId": 132, "statusId": 1, "startTime": "2026-10-23T16:00:00.000Z", "bookmakerOdds": {}}
+ ]
+}

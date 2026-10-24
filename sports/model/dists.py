@@ -42,13 +42,12 @@ def poisson(mu, lo, ks):
     return _norm(p)
 
 
+_LGAMMA = np.vectorize(math.lgamma, otypes=[float])
+_ERF = np.vectorize(math.erf, otypes=[float])
+
+
 def _lgamma(x):
-    try:
-        from scipy.special import gammaln          # optional speed-up; identical values
-        return gammaln(x)
-    except ImportError:
-        f = np.vectorize(math.lgamma, otypes=[float])
-        return f(x)
+    return _LGAMMA(x)            # math only: the server installs no scipy (test_production_needs_no_scipy_or_pandas)
 
 
 def negbin(mu, alpha, lo, ks):
@@ -63,12 +62,7 @@ def negbin(mu, alpha, lo, ks):
 
 
 def _phi(z):
-    try:
-        from scipy.special import ndtr
-        return ndtr(z)
-    except ImportError:
-        erf = np.vectorize(math.erf, otypes=[float])
-        return 0.5 * (1.0 + erf(z / math.sqrt(2.0)))
+    return 0.5 * (1.0 + _ERF(np.asarray(z, float) / math.sqrt(2.0)))
 
 
 def normal(mu, var, lo, ks):

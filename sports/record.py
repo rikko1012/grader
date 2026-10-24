@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS forecasts (
   sides_offered TEXT, side TEXT, chance REAL, push REAL, multiplier REAL, eff REAL,
   sharp_source TEXT, sharp_line REAL, sharp_p_over REAL, sharp_books INTEGER, sharp_limit REAL, gap REAL, far INTEGER,
   sharp_method TEXT, sharp_rungs TEXT, sharp_spread REAL,
-  base_mean REAL, base_chance REAL, base_games INTEGER, model TEXT, fit TEXT, injury TEXT);
+  base_mean REAL, base_chance REAL, base_games INTEGER, model TEXT, fit TEXT, injury TEXT, role TEXT,
+  book_consensus TEXT, factors TEXT);
 CREATE INDEX IF NOT EXISTS forecasts_offer ON forecasts (offer_id, id);
 CREATE TABLE IF NOT EXISTS settlements (
   id INTEGER PRIMARY KEY AUTOINCREMENT, forecast_id INTEGER NOT NULL, settled_at TEXT NOT NULL, outcome TEXT,
@@ -44,6 +45,10 @@ def connect(path=None):
     con = sqlite3.connect(p, timeout=30)
     con.row_factory = sqlite3.Row
     con.executescript(SCHEMA)
+    have = {r["name"] for r in con.execute("PRAGMA table_info(forecasts)")}
+    for col, typ in (("role", "TEXT"), ("book_consensus", "TEXT"), ("factors", "TEXT")):  # added after a log was first created
+        if col not in have:
+            con.execute(f"ALTER TABLE forecasts ADD COLUMN {col} {typ}")
     return con
 
 
@@ -66,6 +71,14 @@ def _dt(s):
     return datetime.fromisoformat(s.replace("Z", "+00:00"))
 
 
+def _factors_json(payload):
+    """The factor values the row had (contract sports-factors/1), logged beside the chance - never part of it."""
+    if not payload:
+        return None
+    from .games.attach import compact
+    return json.dumps(compact(payload), separators=(",", ":"), default=str)
+
+
 def save(con, rows, baselines=None, now=None):
     """Append matched rows that start in the future. -> number of rows written."""
     now = now or _now()
@@ -86,14 +99,15 @@ def save(con, rows, baselines=None, now=None):
         con.execute("INSERT INTO forecasts (recorded_at, league, platform, offer_id, player, player_key, team, game, "
                     "start, market, line, odds_type, sides_offered, side, chance, push, multiplier, eff, sharp_source, "
                     "sharp_line, sharp_p_over, sharp_books, sharp_limit, gap, far, sharp_method, sharp_rungs, "
-                    "sharp_spread, base_mean, base_chance, base_games, model, fit, injury) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "sharp_spread, base_mean, base_chance, base_games, model, fit, injury, role, book_consensus, "
+                    "factors) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (_iso(now), r["league"], r["platform"], r["offer_id"], r["player"], r["player_key"], r.get("team"),
                      r.get("game"), r["start"], r["market"], r["line"], r.get("odds_type"),
                      json.dumps(r["sides_offered"]), r["side"], r["chance"], r.get("push"), r.get("multiplier"),
                      r.get("eff"), s["source"], s["line"], s["p_over"], s.get("books"), s.get("limit"), s["gap"],
                      int(bool(s["far"])), s.get("method"), json.dumps(s.get("rungs")), s.get("spread"),
-                     b.get("mean"), base_chance, b.get("games"), MODEL_TAG, fit, r.get("injury")))
+                     b.get("mean"), base_chance, b.get("games"), MODEL_TAG, fit, r.get("injury"), r.get("role"),
+                     json.dumps(r["books"]) if r.get("books") else None, _factors_json(r.get("factors"))))
         n += 1
     con.commit()
     return n
@@ -239,6 +253,61 @@ def summarize(rows):
         out["same_rows_with_baseline"] = {"props": len(both), "sharp": _scores(both, "chance"),
                                           "baseline": _scores(both, "base_chance")}
     return out
+
+
+_F_KEY = ("recorded_at", "platform", "offer_id", "line", "side", "chance")
+
+
+def export(con, path):
+    """Write the whole log (forecasts, then settlements) as gzipped JSON lines -> (forecasts, settlements). The file
+    is the portable copy: the log itself lives on one machine's disk."""
+    import gzip
+    nf = ns = 0
+    with gzip.open(path, "wt", encoding="utf-8") as fh:
+        for r in con.execute("SELECT * FROM forecasts ORDER BY id"):
+            fh.write(json.dumps({"t": "forecast", **dict(r)}) + "\n")
+            nf += 1
+        for r in con.execute("SELECT * FROM settlements ORDER BY id"):
+            fh.write(json.dumps({"t": "settlement", **dict(r)}) + "\n")
+            ns += 1
+    return nf, ns
+
+
+def import_(con, path):
+    """Append an export to this log -> (forecasts added, settlements added). Idempotent: a forecast already here (same
+    recorded_at, platform, offer, line, side, chance) is not added twice, and settlements follow their forecast to its
+    id in this log. Columns this log lacks are dropped; columns the export lacks stay empty."""
+    import gzip
+    cols = {r["name"] for r in con.execute("PRAGMA table_info(forecasts)")} - {"id"}
+    scols = {r["name"] for r in con.execute("PRAGMA table_info(settlements)")} - {"id", "forecast_id"}
+    ids, nf, ns = {}, 0, 0
+    with gzip.open(path, "rt", encoding="utf-8") as fh:
+        for line in fh:
+            r = json.loads(line)
+            if r.pop("t") == "forecast":
+                old = r.pop("id")
+                have = con.execute("SELECT id FROM forecasts WHERE " + " AND ".join(f"{c} IS ?" for c in _F_KEY),
+                                   [r.get(c) for c in _F_KEY]).fetchone()
+                if have:
+                    ids[old] = have["id"]
+                    continue
+                keep = {k: v for k, v in r.items() if k in cols}
+                cur = con.execute(f"INSERT INTO forecasts ({', '.join(keep)}) VALUES ({', '.join('?' * len(keep))})",
+                                  list(keep.values()))
+                ids[old] = cur.lastrowid
+                nf += 1
+            else:
+                fid = ids.get(r.pop("forecast_id"))
+                r.pop("id", None)
+                if fid is None or con.execute("SELECT 1 FROM settlements WHERE forecast_id = ? AND settled_at = ? AND "
+                                              "outcome IS ?", (fid, r.get("settled_at"), r.get("outcome"))).fetchone():
+                    continue
+                keep = {k: v for k, v in r.items() if k in scols}
+                con.execute(f"INSERT INTO settlements (forecast_id, {', '.join(keep)}) VALUES "
+                            f"(?, {', '.join('?' * len(keep))})", [fid, *keep.values()])
+                ns += 1
+    con.commit()
+    return nf, ns
 
 
 def report(con, league=None):

@@ -1,0 +1,905 @@
+{
+ "_sample": {
+  "source": "FanDuel OH event-page eventId=35605985 tab=receiving-props (PIT @ NO, real response)",
+  "observed_at": "2026-10-23T21:04:34Z",
+  "sanitized": "trimmed to a few markets; nothing else changed"
+ },
+ "attachments": {
+  "events": {
+   "35605985": {
+    "competitionId": 12282733,
+    "inPlay": false,
+    "eventId": 35605985,
+    "key": "EVENT:35605985",
+    "name": "Pittsburgh Steelers @ New Orleans Saints",
+    "eventTypeId": 6423,
+    "countryCode": "GB",
+    "timezone": "GMT",
+    "openDate": "2026-10-25T13:30:00.000Z",
+    "videoAvailable": false,
+    "primaryMarketId": "739.168821756"
+   }
+  },
+  "markets": {
+   "739.192711807": {
+    "marketId": "739.192711807",
+    "eventTypeId": 6423,
+    "competitionId": 12282733,
+    "eventId": 35605985,
+    "marketName": "DK Metcalf - Receiving Yds",
+    "marketTime": "2026-10-25T13:30:00.000Z",
+    "marketType": "PLAYER_X_RECEIVING_YARDS_HIGH",
+    "bspMarket": false,
+    "sgmMarket": true,
+    "inPlay": false,
+    "numberOfRunners": 2,
+    "numberOfActiveRunners": 2,
+    "numberOfWinners": 1,
+    "sortPriority": 2320,
+    "bettingType": "MOVING_HANDICAP",
+    "marketStatus": "OPEN",
+    "runners": [
+     {
+      "selectionId": 26036402,
+      "handicap": 58.5,
+      "runnerName": "DK Metcalf Over",
+      "sortPriority": 1,
+      "result": {
+       "type": "OVER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://assets.sportsbook.fanduel.com/images/team/nfl/pittsburgh_steelers_jersey.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nfl/pittsburgh_steelers.png",
+      "isPlayerSelection": true,
+      "jersey": {
+       "jerseyNumber": "4",
+       "jerseyBg": "dark"
+      },
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -114,
+        "americanOddsInt": -114
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.87719298245614
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 114
+        }
+       }
+      },
+      "previousWinRunnerOdds": []
+     },
+     {
+      "selectionId": 26036403,
+      "handicap": 58.5,
+      "runnerName": "DK Metcalf Under",
+      "sortPriority": 2,
+      "result": {
+       "type": "UNDER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://assets.sportsbook.fanduel.com/images/team/nfl/pittsburgh_steelers_jersey.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nfl/pittsburgh_steelers.png",
+      "isPlayerSelection": true,
+      "jersey": {
+       "jerseyNumber": "4",
+       "jerseyBg": "dark"
+      },
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -114,
+        "americanOddsInt": -114
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.87719298245614
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 114
+        }
+       }
+      },
+      "previousWinRunnerOdds": []
+     }
+    ],
+    "canTurnInPlay": true,
+    "associatedMarkets": [
+     {
+      "eventId": 35605985,
+      "eventTypeId": 6423,
+      "externalMarketId": "42.617941889"
+     }
+    ],
+    "isSuperSubEnabled": false,
+    "isBetProtectEligible": true,
+    "shouldDisplayStatsInRunner": true,
+    "eachwayAvailable": false,
+    "legTypes": [
+     "SIMPLE_SELECTION"
+    ]
+   },
+   "739.193181604": {
+    "marketId": "739.193181604",
+    "eventTypeId": 6423,
+    "competitionId": 12282733,
+    "eventId": 35605985,
+    "marketName": "Bryce Lance - Receiving Yds",
+    "marketTime": "2026-10-25T13:30:00.000Z",
+    "marketType": "PLAYER_X_RECEIVING_YARDS_LOW",
+    "bspMarket": false,
+    "sgmMarket": true,
+    "inPlay": false,
+    "numberOfRunners": 2,
+    "numberOfActiveRunners": 2,
+    "numberOfWinners": 1,
+    "sortPriority": 2320,
+    "bettingType": "MOVING_HANDICAP",
+    "marketStatus": "OPEN",
+    "runners": [
+     {
+      "selectionId": 103013163,
+      "handicap": 13.5,
+      "runnerName": "Bryce Lance Over",
+      "sortPriority": 1,
+      "result": {
+       "type": "OVER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://assets.sportsbook.fanduel.com/images/team/nfl/new_orleans_saints_jersey.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nfl/new_orleans_saints.png",
+      "isPlayerSelection": true,
+      "jersey": {
+       "jerseyNumber": "18",
+       "jerseyBg": "dark"
+      },
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -114,
+        "americanOddsInt": -114
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.87719298245614
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 114
+        }
+       }
+      },
+      "previousWinRunnerOdds": []
+     },
+     {
+      "selectionId": 103013166,
+      "handicap": 13.5,
+      "runnerName": "Bryce Lance Under",
+      "sortPriority": 2,
+      "result": {
+       "type": "UNDER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://assets.sportsbook.fanduel.com/images/team/nfl/new_orleans_saints_jersey.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nfl/new_orleans_saints.png",
+      "isPlayerSelection": true,
+      "jersey": {
+       "jerseyNumber": "18",
+       "jerseyBg": "dark"
+      },
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -114,
+        "americanOddsInt": -114
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.87719298245614
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 114
+        }
+       }
+      },
+      "previousWinRunnerOdds": []
+     }
+    ],
+    "canTurnInPlay": true,
+    "associatedMarkets": [
+     {
+      "eventId": 35605985,
+      "eventTypeId": 6423,
+      "externalMarketId": "42.618586509"
+     }
+    ],
+    "isSuperSubEnabled": false,
+    "isBetProtectEligible": true,
+    "shouldDisplayStatsInRunner": true,
+    "eachwayAvailable": false,
+    "legTypes": [
+     "SIMPLE_SELECTION"
+    ]
+   },
+   "739.193181606": {
+    "marketId": "739.193181606",
+    "eventTypeId": 6423,
+    "competitionId": 12282733,
+    "eventId": 35605985,
+    "marketName": "Bryce Lance - Total Receptions",
+    "marketTime": "2026-10-25T13:30:00.000Z",
+    "marketType": "PLAYER_X_RECEPTIONS_LOW",
+    "bspMarket": false,
+    "sgmMarket": true,
+    "inPlay": false,
+    "numberOfRunners": 2,
+    "numberOfActiveRunners": 2,
+    "numberOfWinners": 1,
+    "sortPriority": 2500,
+    "bettingType": "MOVING_HANDICAP",
+    "marketStatus": "OPEN",
+    "runners": [
+     {
+      "selectionId": 103013163,
+      "handicap": 1.5,
+      "runnerName": "Bryce Lance Over",
+      "sortPriority": 1,
+      "result": {
+       "type": "OVER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://assets.sportsbook.fanduel.com/images/team/nfl/new_orleans_saints_jersey.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nfl/new_orleans_saints.png",
+      "isPlayerSelection": true,
+      "jersey": {
+       "jerseyNumber": "18",
+       "jerseyBg": "dark"
+      },
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 112,
+        "americanOddsInt": 112
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 2.12
+        },
+        "fractionalOdds": {
+         "numerator": 112,
+         "denominator": 100
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 106,
+         "americanOddsInt": 106
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 2.06
+         },
+         "fractionalOdds": {
+          "numerator": 106,
+          "denominator": 100
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 103013166,
+      "handicap": 1.5,
+      "runnerName": "Bryce Lance Under",
+      "sortPriority": 2,
+      "result": {
+       "type": "UNDER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://assets.sportsbook.fanduel.com/images/team/nfl/new_orleans_saints_jersey.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nfl/new_orleans_saints.png",
+      "isPlayerSelection": true,
+      "jersey": {
+       "jerseyNumber": "18",
+       "jerseyBg": "dark"
+      },
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -148,
+        "americanOddsInt": -148
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.675675675675676
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 148
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -140,
+         "americanOddsInt": -140
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.714285714285714
+         },
+         "fractionalOdds": {
+          "numerator": 100,
+          "denominator": 140
+         }
+        }
+       }
+      ]
+     }
+    ],
+    "canTurnInPlay": true,
+    "associatedMarkets": [
+     {
+      "eventId": 35605985,
+      "eventTypeId": 6423,
+      "externalMarketId": "42.618586511"
+     }
+    ],
+    "isSuperSubEnabled": false,
+    "isBetProtectEligible": true,
+    "shouldDisplayStatsInRunner": true,
+    "eachwayAvailable": false,
+    "legTypes": [
+     "SIMPLE_SELECTION"
+    ]
+   },
+   "739.193181603": {
+    "marketId": "739.193181603",
+    "eventTypeId": 6423,
+    "competitionId": 12282733,
+    "eventId": 35605985,
+    "marketName": "Bryce Lance - Alt Receiving Yds",
+    "marketTime": "2026-10-25T13:30:00.000Z",
+    "marketType": "PLAYER_X_ALT_RECEIVING_YARDS_LOW",
+    "bspMarket": false,
+    "sgmMarket": true,
+    "inPlay": false,
+    "numberOfRunners": 8,
+    "numberOfActiveRunners": 8,
+    "numberOfWinners": 1,
+    "sortPriority": 3450,
+    "bettingType": "ODDS",
+    "marketStatus": "OPEN",
+    "runners": [
+     {
+      "selectionId": 103013178,
+      "handicap": 0,
+      "runnerName": "Bryce Lance 5+ Yards",
+      "sortPriority": 1,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://assets.sportsbook.fanduel.com/images/team/nfl/new_orleans_saints_jersey.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nfl/new_orleans_saints.png",
+      "isPlayerSelection": true,
+      "jersey": {
+       "jerseyNumber": "18",
+       "jerseyBg": "dark"
+      },
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -310,
+        "americanOddsInt": -310
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.32258064516129
+        },
+        "fractionalOdds": {
+         "numerator": 10,
+         "denominator": 31
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -320,
+         "americanOddsInt": -320
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.3125
+         },
+         "fractionalOdds": {
+          "numerator": 10,
+          "denominator": 32
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 103013165,
+      "handicap": 0,
+      "runnerName": "Bryce Lance 10+ Yards",
+      "sortPriority": 2,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://assets.sportsbook.fanduel.com/images/team/nfl/new_orleans_saints_jersey.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nfl/new_orleans_saints.png",
+      "isPlayerSelection": true,
+      "jersey": {
+       "jerseyNumber": "18",
+       "jerseyBg": "dark"
+      },
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -172,
+        "americanOddsInt": -172
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.581395348837209
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 172
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -174,
+         "americanOddsInt": -174
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.574712643678161
+         },
+         "fractionalOdds": {
+          "numerator": 100,
+          "denominator": 174
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 103013164,
+      "handicap": 0,
+      "runnerName": "Bryce Lance 15+ Yards",
+      "sortPriority": 3,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://assets.sportsbook.fanduel.com/images/team/nfl/new_orleans_saints_jersey.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nfl/new_orleans_saints.png",
+      "isPlayerSelection": true,
+      "jersey": {
+       "jerseyNumber": "18",
+       "jerseyBg": "dark"
+      },
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -104,
+        "americanOddsInt": -104
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.961538461538462
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 104
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -106,
+         "americanOddsInt": -106
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.943396226415094
+         },
+         "fractionalOdds": {
+          "numerator": 100,
+          "denominator": 106
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 103013158,
+      "handicap": 0,
+      "runnerName": "Bryce Lance 20+ Yards",
+      "sortPriority": 4,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://assets.sportsbook.fanduel.com/images/team/nfl/new_orleans_saints_jersey.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nfl/new_orleans_saints.png",
+      "isPlayerSelection": true,
+      "jersey": {
+       "jerseyNumber": "18",
+       "jerseyBg": "dark"
+      },
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 148,
+        "americanOddsInt": 148
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 2.48
+        },
+        "fractionalOdds": {
+         "numerator": 148,
+         "denominator": 100
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 146,
+         "americanOddsInt": 146
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 2.46
+         },
+         "fractionalOdds": {
+          "numerator": 146,
+          "denominator": 100
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 103013162,
+      "handicap": 0,
+      "runnerName": "Bryce Lance 25+ Yards",
+      "sortPriority": 5,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://assets.sportsbook.fanduel.com/images/team/nfl/new_orleans_saints_jersey.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nfl/new_orleans_saints.png",
+      "isPlayerSelection": true,
+      "jersey": {
+       "jerseyNumber": "18",
+       "jerseyBg": "dark"
+      },
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 205,
+        "americanOddsInt": 205
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 3.05
+        },
+        "fractionalOdds": {
+         "numerator": 205,
+         "denominator": 100
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 198,
+         "americanOddsInt": 198
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 2.98
+         },
+         "fractionalOdds": {
+          "numerator": 198,
+          "denominator": 100
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 103013169,
+      "handicap": 0,
+      "runnerName": "Bryce Lance 30+ Yards",
+      "sortPriority": 6,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://assets.sportsbook.fanduel.com/images/team/nfl/new_orleans_saints_jersey.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nfl/new_orleans_saints.png",
+      "isPlayerSelection": true,
+      "jersey": {
+       "jerseyNumber": "18",
+       "jerseyBg": "dark"
+      },
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 280,
+        "americanOddsInt": 280
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 3.8
+        },
+        "fractionalOdds": {
+         "numerator": 28,
+         "denominator": 10
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 270,
+         "americanOddsInt": 270
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 3.7
+         },
+         "fractionalOdds": {
+          "numerator": 27,
+          "denominator": 10
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 103013171,
+      "handicap": 0,
+      "runnerName": "Bryce Lance 40+ Yards",
+      "sortPriority": 7,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://assets.sportsbook.fanduel.com/images/team/nfl/new_orleans_saints_jersey.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nfl/new_orleans_saints.png",
+      "isPlayerSelection": true,
+      "jersey": {
+       "jerseyNumber": "18",
+       "jerseyBg": "dark"
+      },
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 490,
+        "americanOddsInt": 490
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 5.9
+        },
+        "fractionalOdds": {
+         "numerator": 49,
+         "denominator": 10
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 470,
+         "americanOddsInt": 470
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 5.7
+         },
+         "fractionalOdds": {
+          "numerator": 47,
+          "denominator": 10
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 103013177,
+      "handicap": 0,
+      "runnerName": "Bryce Lance 50+ Yards",
+      "sortPriority": 8,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://assets.sportsbook.fanduel.com/images/team/nfl/new_orleans_saints_jersey.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nfl/new_orleans_saints.png",
+      "isPlayerSelection": true,
+      "jersey": {
+       "jerseyNumber": "18",
+       "jerseyBg": "dark"
+      },
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 750,
+        "americanOddsInt": 750
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 8.5
+        },
+        "fractionalOdds": {
+         "numerator": 75,
+         "denominator": 10
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 700,
+         "americanOddsInt": 700
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 8
+         },
+         "fractionalOdds": {
+          "numerator": 70,
+          "denominator": 10
+         }
+        }
+       }
+      ]
+     }
+    ],
+    "canTurnInPlay": true,
+    "associatedMarkets": [
+     {
+      "eventId": 35605985,
+      "eventTypeId": 6423,
+      "externalMarketId": "42.618586510"
+     }
+    ],
+    "isSuperSubEnabled": false,
+    "isBetProtectEligible": true,
+    "shouldDisplayStatsInRunner": true,
+    "eachwayAvailable": false,
+    "legTypes": [
+     "SIMPLE_SELECTION"
+    ]
+   },
+   "739.192711772": {
+    "marketId": "739.192711772",
+    "eventTypeId": 6423,
+    "competitionId": 12282733,
+    "eventId": 35605985,
+    "marketName": "Jaylen Warren - Rushing + Receiving Yds",
+    "marketTime": "2026-10-25T13:30:00.000Z",
+    "marketType": "PLAYER_X_RUSHING_+_RECEIVING_YARDS",
+    "bspMarket": false,
+    "sgmMarket": true,
+    "inPlay": false,
+    "numberOfRunners": 2,
+    "numberOfActiveRunners": 2,
+    "numberOfWinners": 1,
+    "sortPriority": 2940,
+    "bettingType": "MOVING_HANDICAP",
+    "marketStatus": "OPEN",
+    "runners": [
+     {
+      "selectionId": 41173071,
+      "handicap": 95.5,
+      "runnerName": "Jaylen Warren Over",
+      "sortPriority": 1,
+      "result": {
+       "type": "OVER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://assets.sportsbook.fanduel.com/images/team/nfl/pittsburgh_steelers_jersey.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nfl/pittsburgh_steelers.png",
+      "isPlayerSelection": true,
+      "jersey": {
+       "jerseyNumber": "30",
+       "jerseyBg": "dark"
+      },
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -114,
+        "americanOddsInt": -114
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.87719298245614
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 114
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -113,
+         "americanOddsInt": -113
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.884955752212389
+         },
+         "fractionalOdds": {
+          "numerator": 100,
+          "denominator": 113
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 41173070,
+      "handicap": 95.5,
+      "runnerName": "Jaylen Warren Under",
+      "sortPriority": 2,
+      "result": {
+       "type": "UNDER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://assets.sportsbook.fanduel.com/images/team/nfl/pittsburgh_steelers_jersey.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nfl/pittsburgh_steelers.png",
+      "isPlayerSelection": true,
+      "jersey": {
+       "jerseyNumber": "30",
+       "jerseyBg": "dark"
+      },
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -114,
+        "americanOddsInt": -114
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.87719298245614
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 114
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -115,
+         "americanOddsInt": -115
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.869565217391304
+         },
+         "fractionalOdds": {
+          "numerator": 100,
+          "denominator": 115
+         }
+        }
+       }
+      ]
+     }
+    ],
+    "canTurnInPlay": false,
+    "associatedMarkets": [
+     {
+      "eventId": 35605985,
+      "eventTypeId": 6423,
+      "externalMarketId": "42.617941797"
+     }
+    ],
+    "isSuperSubEnabled": false,
+    "isBetProtectEligible": true,
+    "shouldDisplayStatsInRunner": true,
+    "eachwayAvailable": false,
+    "legTypes": [
+     "SIMPLE_SELECTION"
+    ]
+   }
+  }
+ }
+}

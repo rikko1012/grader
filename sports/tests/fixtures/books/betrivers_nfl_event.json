@@ -1,0 +1,334 @@
+{
+ "_sample": {
+  "source": "Kambi rsiusoh betoffer/event (PIT @ NO, real response)",
+  "observed_at": "2026-10-23T21:04:34Z",
+  "sanitized": "trimmed to a few markets; nothing else changed"
+ },
+ "betOffers": [
+  {
+   "id": 2706322296,
+   "closed": "2026-10-25T13:30:00Z",
+   "criterion": {
+    "id": 1004952425,
+    "label": "Total Receiving Yards by the Player - Including Overtime",
+    "englishLabel": "Total Receiving Yards by the Player - Including Overtime",
+    "shortLabel": "Receiving Yards",
+    "shortEnglishLabel": "Receiving Yards by Player + OT",
+    "order": [],
+    "lifetime": "FULL_TIME_OVERTIME"
+   },
+   "betOfferType": {
+    "id": 127,
+    "name": "Player Occurrence Line",
+    "englishName": "Player Occurrence Line"
+   },
+   "eventId": 1028823697,
+   "outcomes": [
+    {
+     "id": 4382721323,
+     "label": "Over",
+     "englishLabel": "Over",
+     "odds": 1880,
+     "line": 11500,
+     "participant": "Noah Fant",
+     "type": "OT_OVER",
+     "betOfferId": 2706322296,
+     "changedDate": "2026-10-23T20:11:56Z",
+     "participantId": 1005252431,
+     "oddsFractional": "22/25",
+     "oddsAmerican": "-114",
+     "status": "OPEN",
+     "cashOutStatus": "ENABLED",
+     "eventParticipantId": 1000062103,
+     "displayOrder": 0
+    },
+    {
+     "id": 4382721325,
+     "label": "Under",
+     "englishLabel": "Under",
+     "odds": 1860,
+     "line": 11500,
+     "participant": "Noah Fant",
+     "type": "OT_UNDER",
+     "betOfferId": 2706322296,
+     "changedDate": "2026-10-23T20:11:56Z",
+     "participantId": 1005252431,
+     "oddsFractional": "17/20",
+     "oddsAmerican": "-117",
+     "status": "OPEN",
+     "cashOutStatus": "ENABLED",
+     "eventParticipantId": 1000062103,
+     "displayOrder": 1
+    }
+   ],
+   "tags": [
+    "OFFERED_PREMATCH",
+    "BET_BUILDER"
+   ],
+   "cashOutStatus": "ENABLED"
+  },
+  {
+   "id": 2706379687,
+   "closed": "2026-10-25T13:30:00Z",
+   "criterion": {
+    "id": 1004952425,
+    "label": "Total Receiving Yards by the Player - Including Overtime",
+    "englishLabel": "Total Receiving Yards by the Player - Including Overtime",
+    "shortLabel": "Receiving Yards",
+    "shortEnglishLabel": "Receiving Yards by Player + OT",
+    "order": [],
+    "lifetime": "FULL_TIME_OVERTIME"
+   },
+   "betOfferType": {
+    "id": 127,
+    "name": "Player Occurrence Line",
+    "englishName": "Player Occurrence Line"
+   },
+   "eventId": 1028823697,
+   "outcomes": [
+    {
+     "id": 4382768137,
+     "label": "Over",
+     "englishLabel": "Over",
+     "odds": 1890,
+     "line": 53500,
+     "participant": "Germie Bernard",
+     "type": "OT_OVER",
+     "betOfferId": 2706379687,
+     "changedDate": "2026-10-23T20:11:56Z",
+     "participantId": 1028276810,
+     "oddsFractional": "22/25",
+     "oddsAmerican": "-113",
+     "status": "OPEN",
+     "cashOutStatus": "ENABLED",
+     "eventParticipantId": 1000000176,
+     "displayOrder": 0
+    },
+    {
+     "id": 4382768138,
+     "label": "Under",
+     "englishLabel": "Under",
+     "odds": 1850,
+     "line": 53500,
+     "participant": "Germie Bernard",
+     "type": "OT_UNDER",
+     "betOfferId": 2706379687,
+     "changedDate": "2026-10-23T20:11:56Z",
+     "participantId": 1028276810,
+     "oddsFractional": "17/20",
+     "oddsAmerican": "-118",
+     "status": "OPEN",
+     "cashOutStatus": "ENABLED",
+     "eventParticipantId": 1000000176,
+     "displayOrder": 1
+    }
+   ],
+   "tags": [
+    "OFFERED_PREMATCH",
+    "BET_BUILDER"
+   ],
+   "cashOutStatus": "ENABLED"
+  },
+  {
+   "id": 2706322201,
+   "closed": "2026-10-25T13:30:00Z",
+   "criterion": {
+    "id": 1001929138,
+    "label": "Total Receptions by the Player - Including Overtime",
+    "englishLabel": "Total Receptions by the Player - Including Overtime",
+    "shortLabel": "Receptions",
+    "shortEnglishLabel": "Receptions by Player + OT",
+    "order": [],
+    "lifetime": "FULL_TIME_OVERTIME"
+   },
+   "betOfferType": {
+    "id": 127,
+    "name": "Player Occurrence Line",
+    "englishName": "Player Occurrence Line"
+   },
+   "eventId": 1028823697,
+   "outcomes": [
+    {
+     "id": 4382720926,
+     "label": "Over",
+     "englishLabel": "Over",
+     "odds": 1700,
+     "line": 5500,
+     "participant": "Chris Olave",
+     "type": "OT_OVER",
+     "betOfferId": 2706322201,
+     "changedDate": "2026-10-23T20:11:56Z",
+     "participantId": 1005740117,
+     "oddsFractional": "7/10",
+     "oddsAmerican": "-143",
+     "status": "OPEN",
+     "cashOutStatus": "ENABLED",
+     "eventParticipantId": 1000062103,
+     "displayOrder": 0
+    }
+   ],
+   "tags": [
+    "OFFERED_PREMATCH",
+    "BET_BUILDER"
+   ],
+   "cashOutStatus": "ENABLED"
+  },
+  {
+   "id": 2706322794,
+   "closed": "2026-10-25T13:30:00Z",
+   "criterion": {
+    "id": 2100083721,
+    "label": "6+ Receptions By The Player - Including Overtime",
+    "englishLabel": "6+ Receptions By The Player - Including Overtime",
+    "shortLabel": "6+ Receptions",
+    "shortEnglishLabel": "Player 6+ Receptions + OT",
+    "order": [
+     6
+    ],
+    "lifetime": "FULL_TIME_OVERTIME"
+   },
+   "betOfferType": {
+    "id": 127,
+    "name": "Player Occurrence Line",
+    "englishName": "Player Occurrence Line"
+   },
+   "eventId": 1028823697,
+   "outcomes": [
+    {
+     "id": 4382766332,
+     "label": "Yes",
+     "englishLabel": "Yes",
+     "odds": 6100,
+     "line": 6000,
+     "participant": "Jaylen Warren",
+     "type": "OT_YES",
+     "betOfferId": 2706322794,
+     "changedDate": "2026-10-23T20:11:56Z",
+     "participantId": 1007828996,
+     "oddsFractional": "5/1",
+     "oddsAmerican": "510",
+     "status": "OPEN",
+     "cashOutStatus": "ENABLED",
+     "eventParticipantId": 1000000176,
+     "displayOrder": 0
+    }
+   ],
+   "tags": [
+    "OFFERED_PREMATCH",
+    "BET_BUILDER"
+   ],
+   "cashOutStatus": "ENABLED"
+  },
+  {
+   "id": 2706267439,
+   "closed": "2026-10-25T13:30:00Z",
+   "criterion": {
+    "id": 1002231004,
+    "label": "Touchdown Scorer",
+    "englishLabel": "Touchdown Scorer",
+    "shortLabel": "TD Scorer ",
+    "shortEnglishLabel": "TD Scorer ",
+    "order": [
+     1
+    ],
+    "occurrenceType": "TOUCHDOWNS",
+    "lifetime": "FULL_TIME_OVERTIME"
+   },
+   "betOfferType": {
+    "id": 127,
+    "name": "Player Occurrence Line",
+    "englishName": "Player Occurrence Line"
+   },
+   "eventId": 1028823697,
+   "outcomes": [
+    {
+     "id": 4382560904,
+     "label": "Yes",
+     "englishLabel": "Yes",
+     "odds": 5100,
+     "line": 1000,
+     "participant": "Tyler Shough",
+     "type": "OT_YES",
+     "betOfferId": 2706267439,
+     "changedDate": "2026-10-23T20:16:46Z",
+     "participantId": 1005740341,
+     "oddsFractional": "4/1",
+     "oddsAmerican": "410",
+     "status": "OPEN",
+     "cashOutStatus": "ENABLED",
+     "eventParticipantId": 1000062103,
+     "displayOrder": 0
+    }
+   ],
+   "tags": [
+    "OFFERED_PREMATCH",
+    "BET_BUILDER"
+   ],
+   "cashOutStatus": "ENABLED"
+  }
+ ],
+ "events": [
+  {
+   "id": 1028823697,
+   "name": "PIT Steelers vs NO Saints",
+   "nameDelimiter": "vs",
+   "englishName": "New Orleans Saints - Pittsburgh Steelers",
+   "homeName": "NO Saints",
+   "awayName": "PIT Steelers",
+   "start": "2026-10-25T13:30:00Z",
+   "group": "NFL",
+   "groupId": 1000093656,
+   "path": [
+    {
+     "id": 1000093199,
+     "name": "Football",
+     "englishName": "American Football",
+     "termKey": "american_football"
+    },
+    {
+     "id": 1000093656,
+     "name": "NFL",
+     "englishName": "NFL",
+     "termKey": "nfl"
+    }
+   ],
+   "nonLiveBoCount": 786,
+   "sport": "AMERICAN_FOOTBALL",
+   "tags": [
+    "STREAMED_WEB",
+    "AMERICAN_DISPLAY_FORMAT",
+    "AWAY_HOME",
+    "NEUTRAL_VENUE",
+    "OFFERED_LIVE",
+    "BET_BUILDER",
+    "STREAMED_MOBILE",
+    "MATCH"
+   ],
+   "state": "NOT_STARTED",
+   "participants": [
+    {
+     "participantId": 1000062103,
+     "name": "NO Saints",
+     "englishName": "New Orleans Saints",
+     "termKey": "new_orleans_saints",
+     "scratched": false,
+     "nonRunner": false,
+     "home": true,
+     "participantType": "TEAM"
+    },
+    {
+     "participantId": 1000000176,
+     "name": "PIT Steelers",
+     "englishName": "Pittsburgh Steelers",
+     "termKey": "pittsburgh_steelers",
+     "scratched": false,
+     "nonRunner": false,
+     "home": false,
+     "participantType": "TEAM"
+    }
+   ],
+   "groupSortOrder": 2001000000000000000,
+   "prematchEnd": "2026-10-25T13:30:00Z"
+  }
+ ]
+}

@@ -20,10 +20,15 @@ def private_sports_data(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "OUT_DIR", tmp_path / "output")
     monkeypatch.setattr(cache, "_local", threading.local())
     monkeypatch.delenv("ODDS_API_KEY", raising=False)
+    for k in ("ODDSPAPI_API_KEY", "odds_papi_api", "SPORTS_ODDSPAPI", "SPORTS_ODDSPAPI_MONTHLY_REQUESTS",
+              "SPORTS_ODDSPAPI_CS2_FLOOR"):
+        monkeypatch.delenv(k, raising=False)
 
     def offline(*a, **k):
         raise ConnectionError("network disabled in tests")
     monkeypatch.setattr(net, "get", offline)
+    monkeypatch.setattr(net, "_HOLD", {})                 # Retry-After holds never leak between tests
+    monkeypatch.setattr(net, "_LAST", {})                 # nor host pacing slots (a fake clock may have set them)
     yield
     con = getattr(cache._local, "con", None)
     if con is not None:

@@ -1,0 +1,61 @@
+{
+ "_sample": {
+  "source": "FanDuel OH content-managed-page customPageId=nba (real response)",
+  "observed_at": "2026-10-23T21:04:34Z",
+  "sanitized": "trimmed to a few markets; nothing else changed"
+ },
+ "attachments": {
+  "events": {
+   "36220759": {
+    "eventId": 36220759,
+    "name": "New York Knicks @ Boston Celtics",
+    "eventTypeId": 7522,
+    "competitionId": 10547864,
+    "countryCode": "GB",
+    "openDate": "2026-10-23T23:10:00.000Z",
+    "videoAvailable": false,
+    "statsAvailable": true
+   },
+   "36227587": {
+    "eventId": 36227587,
+    "name": "Milwaukee Bucks (GRAVITY) @ Cleveland Cavaliers (ARCHITECT)",
+    "eventTypeId": 7522,
+    "competitionId": 12687908,
+    "countryCode": "GB",
+    "openDate": "2026-10-23T20:47:00.000Z",
+    "videoAvailable": true,
+    "statsAvailable": false
+   },
+   "34409523": {
+    "eventId": 34409523,
+    "name": "NBA Futures",
+    "eventTypeId": 7522,
+    "competitionId": 12739957,
+    "countryCode": "GB",
+    "openDate": "2026-06-10T19:55:00.000Z",
+    "videoAvailable": false,
+    "statsAvailable": false
+   }
+  },
+  "competitions": {
+   "10547864": {
+    "name": "NBA",
+    "competitionId": 10547864,
+    "eventTypeId": 7522,
+    "eventId": 28049020
+   },
+   "12687908": {
+    "name": "eBasketball H2H GG League 4x5 Mins",
+    "competitionId": 12687908,
+    "eventTypeId": 7522,
+    "eventId": 33586006
+   },
+   "12739957": {
+    "name": "NBA Futures",
+    "competitionId": 12739957,
+    "eventTypeId": 7522,
+    "eventId": 34409523
+   }
+  }
+ }
+}
