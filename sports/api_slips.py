@@ -175,13 +175,27 @@ def _slip_in(q):
     return slip
 
 
+def _offer_lookup(platform, offer_id):
+    """The current offer from the store (bounded read-only pool, request budget) - only for a leg whose offer revision
+    changed, so the answer can name what changed. Any store trouble -> None (the slim message is used instead)."""
+    import sqlite3
+
+    from . import store
+    try:
+        with web.store_ro() as con:
+            return store.latest(con, "offer", platform, offer_id)
+    except (web.Busy, FileNotFoundError, OSError, sqlite3.Error):
+        return None
+
+
 @_bad_request
 def validate_view(req):
     q = _args(req)
     slip = _slip_in(q)
     mode = q.get("mode") or "load"
     p = _pool(slip["league"], slip["platform"])
-    res = validate.check(slip, p, mode=mode, live_current=_live_current if mode == "copy" else None)
+    res = validate.check(slip, p, mode=mode, offer_lookup=_offer_lookup,
+                         live_current=_live_current if mode == "copy" else None)
     log.spool("copied" if mode == "copy" else "loaded",
               {"member": log.member_hash(req.member), "league": slip["league"], "ok": res["ok"],
                "problems": [x["code"] for x in res["problems"]], "snapshot_id": p["snapshot_id"],

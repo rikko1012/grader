@@ -65,8 +65,17 @@ def _changes(leg, o):
     return ch or ["the offer changed"]
 
 
-def check(slip, pool, mode="load", now=None, live_current=None):
-    """live_current(platform, offer_id) -> the store's CURRENT record id right now (optional): the pool is a cached
+def _changes_slim(leg, line):
+    """What changed when only the slim snapshot is at hand (no store lookup): the line, else a generic change."""
+    if line != leg.get("line"):
+        return [f"line moved {leg.get('line')} -> {line}"]
+    return ["the offer changed"]
+
+
+def check(slip, pool, mode="load", now=None, offer_lookup=None, live_current=None):
+    """offer_lookup(platform, offer_id) -> the current OfferSnapshot (or None): used only for a leg whose offer
+    revision changed, to name exactly what changed (the slim snapshot keeps no offer objects).
+    live_current(platform, offer_id) -> the store's CURRENT record id right now (optional): the pool is a cached
     snapshot (prebuilt <= 90 s), so a copy re-checks each leg's revision live - a line that moved since the snapshot
     is "changed", never copied (LINE_CORRECTNESS.md C5)."""
     now = now or datetime.now(timezone.utc)
@@ -85,7 +94,7 @@ def check(slip, pool, mode="load", now=None, live_current=None):
                          " and ".join(sorted(rules.LABEL.get(p, str(p)) for p in plats if p))})
     for i, leg in enumerate(legs_in):
         lab = _label(leg)
-        st = pool["state"].get(leg.get("offer_id")) if leg.get("platform") == pool["platform"] else None
+        st = poolmod.offer_state(pool, leg.get("offer_id")) if leg.get("platform") == pool["platform"] else None
         if leg.get("custom"):
             problems.append({"leg": i, "code": "custom", "text": f"{lab}: custom line - hypothetical, not offered; "
                              "it can't be copied as an entry"})
@@ -95,11 +104,12 @@ def check(slip, pool, mode="load", now=None, live_current=None):
             problems.append({"leg": i, "code": "gone", "text": f"{lab}: no longer on the {rules.LABEL.get(platform, platform)} board"})
             current.append(None)
             continue
-        cur = st.get("leg")
-        if st["record_id"] != leg.get("record_id"):
-            for c in _changes(leg, st["offer"]):
+        rid, _rev, line, eligible, reason, cur = st
+        if rid != leg.get("record_id"):
+            o = offer_lookup(leg.get("platform"), leg.get("offer_id")) if offer_lookup else None
+            for c in (_changes(leg, o) if o is not None else _changes_slim(leg, line)):
                 problems.append({"leg": i, "code": "changed", "text": f"{lab}: {c}"})
-        elif live_current is not None and live_current(leg.get("platform"), leg.get("offer_id")) != st["record_id"]:
+        elif live_current is not None and live_current(leg.get("platform"), leg.get("offer_id")) != rid:
             problems.append({"leg": i, "code": "changed", "text": f"{lab}: the line changed moments ago - refresh"})
         start = (cur or leg).get("start_utc")
         if not start or start <= now_s:
@@ -108,9 +118,9 @@ def check(slip, pool, mode="load", now=None, live_current=None):
             age = (now - parse_utc(cur["last_seen_at"])).total_seconds()
             if age > poolmod.STALE_S:
                 problems.append({"leg": i, "code": "stale", "text": f"{lab}: price not fresh (seen {int(age // 60)} min ago)"})
-        if not st["eligible"]:
-            if st["reason"] != "started / locked":
-                problems.append({"leg": i, "code": "policy", "text": f"{lab}: not a Scout slip pick now ({st['reason']})"})
+        if not eligible:
+            if reason != "started / locked":
+                problems.append({"leg": i, "code": "policy", "text": f"{lab}: not a Scout slip pick now ({reason})"})
         elif cur["side"] != leg.get("side"):
             problems.append({"leg": i, "code": "side", "text": f"{lab}: Scout's side is now {cur['side_word']}"})
         elif cur["forecast_id"] != leg.get("forecast_id"):

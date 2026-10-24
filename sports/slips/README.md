@@ -73,3 +73,14 @@ probabilities, the payout schedule shown, the internal expectation and the build
 
 `/api/sports/slips/rules|pool|build|validate|settle` (MEMBER), `/api/sports/admin/slips/build|log` (ADMIN).
 Page: `web/sports/slips.html` (+ `slips.css`, `slips.js`, scoped `ss-` classes), served at `/sports/slips.html`.
+
+## Snapshot size (slim-1, 2026-10-24)
+
+The member pool keeps eligible legs only (`pool.Leg`, `__slots__`, dict-style reads) + exclusion counts + one tuple per
+current offer `(record_id, revision, line, eligible, reason, leg_index)` (`pool.offer_state`). No OfferSnapshot is
+kept; `validate.check(..., offer_lookup=)` reads the current offer from the store (bounded `web.store_ro`, ~0.1 ms per
+leg) only for a leg whose offer revision changed, to name what changed. Measured on a copy of the Starter store
+(22,776 offers, 4 pools): pickled 17.7 -> 2.2 MB, loaded 67.0 -> 6.5 MB (tracemalloc of the unpickle); with 1,114
+eligible legs (admin research policy) 68.6 -> 7.5 MB. Process RSS when the service modules load the prebuilt
+slips_pool snapshot (prebuilt.lookup, all 4 keys, same store copy): +86.0 MB at b14980d -> +7.0 MB (31 -> 38 MB).
+Test: loaded pool for 22,500 offers < 15 MB.
