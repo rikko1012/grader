@@ -448,7 +448,8 @@ def api(monkeypatch, con):
                                                                                         policy=policy))
     import sports.slips.validate as vm
     real_check = vm.check
-    monkeypatch.setattr(vm, "check", lambda slip, p, mode="load", now=None: real_check(slip, p, mode, now=w.NOW))
+    monkeypatch.setattr(vm, "check", lambda slip, p, mode="load", now=None, **kw: real_check(slip, p, mode, now=w.NOW,
+                                                                                               **kw))
     w.world(con, [(f"h{i}", f"T{i}", i, "over" if i % 2 else "under", 0.6 + 0.01 * i) for i in range(1, 7)])
     yield
 
@@ -521,3 +522,84 @@ def test_spool_is_bounded_and_never_blocks(monkeypatch):
     monkeypatch.setattr(log, "_ensure_writer", lambda: None)
     assert log.spool("loaded", {"x": 1}) is True
     assert log.spool("loaded", {"x": 2}) is False and log.stats()["dropped_queue_full"] >= 1
+
+
+# ===================================================================== slim pool representation (slim-1, 2026-10-24)
+def _walk(obj, seen=None):
+    seen = seen if seen is not None else set()
+    if id(obj) in seen:
+        return
+    seen.add(id(obj))
+    yield obj
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            yield from _walk(k, seen)
+            yield from _walk(v, seen)
+    elif isinstance(obj, (list, tuple, set, frozenset)):
+        for v in obj:
+            yield from _walk(v, seen)
+    elif isinstance(obj, pool.Leg):
+        for k in pool.LEG_FIELDS:
+            yield from _walk(getattr(obj, k), seen)
+
+
+def test_slim_pool_keeps_tuples_and_eligible_legs_only(con):
+    import pickle
+    from sports.contracts import OfferSnapshot
+    w.world(con, [("g1", "H1", 1, "over", 0.6), ("g2", "A2", 2, "under", 0.62)])
+    w.put_leg(con, w.offer("held", "H3", 3), stake=0.0)
+    store.put(con, w.ev(3))
+    p = pool.build(con, "nba", "underdog", now=w.NOW)
+    assert p["representation"] == "slim-1" and len(p["legs"]) == 2 and p["offers"] == 3
+    assert not any(isinstance(x, (OfferSnapshot, dict)) and x is not p and x is not p["state"] and x is not p["excluded"]
+                   for x in _walk(p) if not isinstance(x, (str, int, float)))
+    for oid, st in p["state"].items():
+        assert isinstance(st, tuple) and len(st) == 6
+        rid, rev, line, eligible, reason, li = st
+        assert rid.startswith("offer:") and rev == 1 and isinstance(line, float)
+        assert (li >= 0) == eligible and (reason is None) == eligible
+    held = next(st for st in p["state"].values() if not st[3])
+    assert held[4] == "held stake (0U)" and held[5] == -1
+    leg = p["legs"][0]
+    assert isinstance(leg, pool.Leg) and leg["p_win"] == leg.get("p_win") == 0.62 and leg.get("nope") is None
+    assert leg["revision"] == 1 and leg["record_id"] == p["state"][leg["offer_id"]][0]
+    with pytest.raises(KeyError):
+        leg["nope"]
+    st = pool.offer_state(p, leg["offer_id"])
+    assert st[-1] is leg and st[:3] == p["state"][leg["offer_id"]][:3]
+    back = pickle.loads(pickle.dumps(p, protocol=5))
+    assert [l.to_dict() for l in back["legs"]] == [l.to_dict() for l in p["legs"]] and back["state"] == p["state"]
+    b1 = builder.build(p, {"sides": "both", "sizes": {2: 1}})
+    b2 = builder.build(back, {"sides": "both", "sizes": {2: 1}})
+    assert b1["batch_id"] == b2["batch_id"] and json.dumps(b1, default=str)        # legs leave the builder as dicts
+
+
+def test_validate_names_the_change_through_the_store_lookup(con):
+    p = _store_world(con)
+    slip = _slip_from(p)
+    leg = slip["legs"][0]
+    o = w.offer(leg["player_id"].split(":")[-1], leg["team"], int(leg["event_id"].split(":")[-1]), multiplier=1.2,
+                oid=leg["offer_id"])
+    store.put(con, o)
+    p2 = pool.build(con, "nba", "underdog", now=w.NOW)
+    slim = validate.check(slip, p2, "copy", now=w.NOW)
+    assert not slim["ok"] and any(x["text"].endswith("the offer changed") for x in slim["problems"])
+    full = validate.check(slip, p2, "copy", now=w.NOW,
+                          offer_lookup=lambda pf, oid: store.latest(con, "offer", pf, oid))
+    assert any("payout multiplier changed (1.0 -> 1.2)" in x["text"] for x in full["problems"])
+
+
+def test_loaded_pool_for_22500_offers_is_under_15_mb(con):
+    import gc
+    import pickle
+    import tracemalloc
+    store.put(con, w.ev(1))
+    store.put_many(con, [w.offer(f"m{i}", "H1", 1, line=10.5 + i % 20, oid=f"ud:{i:08d}") for i in range(22500)])
+    raw = pickle.dumps(pool.build(con, "nba", "underdog", now=w.NOW), protocol=5)
+    gc.collect()
+    tracemalloc.start()
+    p = pickle.loads(raw)
+    loaded = tracemalloc.get_traced_memory()[0]
+    tracemalloc.stop()
+    assert p["offers"] == 22500 and len(p["state"]) == 22500
+    assert loaded < 15e6, f"loaded pool {loaded / 1e6:.1f} MB"

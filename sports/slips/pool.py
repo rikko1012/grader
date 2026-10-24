@@ -19,11 +19,20 @@ required. Never shown to members.
 One leg per offer: the forecast's chosen side only (the opposite side of a forecast is never a slip leg).
 Exposure keys: a leg's PROP keys are (player, box-score part) for every part of its market (markets.MARKETS), so an
 alternate line, another platform's copy or a combo containing the same part all collide in the reuse rules.
+
+Compact representation (slim-1, 2026-10-24 - the snapshot is loaded into the sports service, budget-capped):
+  legs     eligible legs only, as Leg records (__slots__, dict-style read access: leg["p_win"], leg.get("team"))
+  excluded reason COUNTS
+  state    {offer_id: (record_id, revision, line, eligible, reason, leg_index)} for EVERY current offer - a plain
+           tuple per offer (ST_* positions); reason is the exclusion text (interned) or None; leg_index points into
+           legs (-1 when not eligible). No OfferSnapshot is kept: validate looks the current offer up in the store
+           when it needs to name what changed (validate.check offer_lookup).
 """
 from __future__ import annotations
 
 import hashlib
 import math
+import sys
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
@@ -34,6 +43,69 @@ from . import POLICY_VERSION, rules
 STALE_S = 25 * 60            # ingestion runs every 10 min; two missed cycles + margin = not fresh
 FORECAST_LOOKBACK_H = 72
 POLICIES = ("member", "research")
+REPRESENTATION = "slim-1"
+ST_RECORD, ST_REVISION, ST_LINE, ST_ELIGIBLE, ST_REASON, ST_LEG = range(6)
+
+LEG_FIELDS = ("leg_id", "platform", "league", "offer_id", "record_id", "revision", "forecast_id", "model_version",
+              "grade_policy_version", "research_only", "event_id", "event_ref", "player_id", "player", "team", "stat",
+              "stat_label", "scope", "line", "side", "side_word", "variant", "promotional", "multiplier", "start_utc",
+              "observed_at", "last_seen_at", "source_time_unknown", "p_win", "p_loss", "p_push", "grade",
+              "stake_units", "weight", "prop_keys")
+_LEG_SET = frozenset(LEG_FIELDS)
+_INTERN = ("platform", "league", "model_version", "grade_policy_version", "event_id", "event_ref", "team", "stat",
+           "stat_label", "scope", "side", "side_word", "variant", "start_utc", "observed_at", "last_seen_at", "grade")
+
+
+def _leg_from_values(values):
+    leg = Leg.__new__(Leg)
+    for k, v in zip(LEG_FIELDS, values):
+        object.__setattr__(leg, k, v)
+    return leg
+
+
+class Leg:
+    """One eligible slip leg. __slots__ record with read-only dict-style access (leg["x"], leg.get("x"), keys()) so
+    the builder / validator / API code reads it exactly like the former dict. Pickles as a plain value tuple."""
+    __slots__ = LEG_FIELDS
+
+    def __init__(self, **kw):
+        for k in LEG_FIELDS:
+            v = kw.get(k)
+            if k in _INTERN and isinstance(v, str):
+                v = sys.intern(v)
+            object.__setattr__(self, k, v)
+
+    def __getitem__(self, k):
+        if k not in _LEG_SET:
+            raise KeyError(k)
+        return getattr(self, k)
+
+    def get(self, k, default=None):
+        return getattr(self, k) if k in _LEG_SET else default
+
+    def __contains__(self, k):
+        return k in _LEG_SET
+
+    def keys(self):
+        return LEG_FIELDS
+
+    def to_dict(self):
+        return {k: getattr(self, k) for k in LEG_FIELDS}
+
+    def __reduce__(self):
+        return _leg_from_values, (tuple(getattr(self, k) for k in LEG_FIELDS),)
+
+    def __repr__(self):
+        return f"Leg({self.leg_id})"
+
+
+def offer_state(pool, offer_id):
+    """-> (record_id, revision, line, eligible, reason, leg) for one current offer, or None. leg = the Leg or None."""
+    st = pool["state"].get(offer_id)
+    if st is None:
+        return None
+    li = st[ST_LEG]
+    return st[:ST_LEG] + ((pool["legs"][li] if li >= 0 else None),)
 
 
 def _iso(dt):
@@ -67,33 +139,41 @@ def _pick_forecast(fs, policy):
 
 def build(con, league, platform, now=None, policy="member"):
     """-> {"snapshot_id", "snapshot_at", "league", "platform", "policy", "legs": [leg], "excluded": {reason: n},
-           "offers": n, "state": {offer_id: {"record_id", "line", "eligible", "reason", "leg"?}}}"""
+           "offers": n, "state": {offer_id: (record_id, revision, line, eligible, reason, leg_index)},
+           "representation": "slim-1"}"""
     if policy not in POLICIES:
         raise ValueError("policy")
     now = now or datetime.now(timezone.utc)
     now_s = _iso(now)
     offers = store.offers(con, league=league, platform=platform, limit=100000)
-    seen = {r["record_id"]: r["last_seen_at"] for r in con.execute(
-        "SELECT record_id, last_seen_at FROM records WHERE kind='offer' AND league=? AND platform=?",
-        (league, platform)).fetchall()}
+    seen, revs = {}, {}
+    for r in con.execute("SELECT record_id, revision, last_seen_at FROM records WHERE kind='offer' AND league=? AND "
+                         "platform=?", (league, platform)).fetchall():
+        seen[r["record_id"]] = r["last_seen_at"]
+        revs[r["record_id"]] = r["revision"]
     events = {e.event_id: e for _, e in store.events(con, league=league, limit=100000)}
     fby = _forecasts_by_offer(con, league, now)
-    legs, excluded, state = [], Counter(), {}
+    legs, excluded, rows = [], Counter(), []
     ids = []
     for rid, o in offers:
         reason, leg = _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy)
-        state[o.offer_id] = {"record_id": rid, "line": o.line, "eligible": reason is None, "reason": reason,
-                             "leg": leg, "offer": o}
         if reason:
+            reason = sys.intern(reason)
             excluded[reason.split(":")[0]] += 1
         else:
+            leg = Leg(revision=revs.get(rid), **leg)
             legs.append(leg)
             ids.append(f"{rid}|{leg['forecast_id']}")
+        rows.append((o.offer_id, rid, revs.get(rid), o.line, reason, leg))
+    del offers
     legs.sort(key=lambda l: (-l["p_win"], l["leg_id"]))
+    index = {id(l): i for i, l in enumerate(legs)}
+    state = {oid: (rid, rev, line, reason is None, reason, index[id(leg)] if leg is not None else -1)
+             for oid, rid, rev, line, reason, leg in rows}
     sid = "ps-" + hashlib.sha256("|".join(sorted(ids) + [league, platform, policy]).encode()).hexdigest()[:16]
     return {"snapshot_id": sid, "snapshot_at": now_s, "league": league, "platform": platform, "policy": policy,
-            "policy_version": POLICY_VERSION, "legs": legs, "excluded": dict(excluded), "offers": len(offers),
-            "state": state}
+            "policy_version": POLICY_VERSION, "legs": legs, "excluded": dict(excluded), "offers": len(rows),
+            "state": state, "representation": REPRESENTATION}
 
 
 def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy):
