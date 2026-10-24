@@ -14,7 +14,7 @@ Eligibility per quote (same canonical event, player, stat, full-game scope, ordi
                 reason code polymarket_dnp_unmeasured_nfl)
   oddsapi:<bk>  both sides at the same line, decimal odds > 1; de-vig multiplicative per book on that exhaustive
                 pair only; age from the book's own last_update when given (else observed age) <= 15 min, before start
-  thunderpick, oddspapi: excluded until their format is verified (sports/books)
+  oddspapi: excluded until its format is verified (sports/books)
 A two-way book price at a WHOLE line refunds a push, so every source's number is P(Over | no push) at its own line.
 Line translation (market-only): the foundation's fair.at_line shape (dispersion.json) - the same one sharp-2 uses, so
 market-only never borrows sm-1. Per source, the quote nearest the target line (ties: the lower line) is used.

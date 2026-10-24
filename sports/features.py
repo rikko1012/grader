@@ -140,7 +140,7 @@ REGISTRY = [
     _f("nba.team_ortg_net", "nba", "Team ORtg / net rating", "box-derivable team points per possession", "ESPN team box",
        PIT_TEAM, "-", "-", "absent in fr-1", D),
     _f("nba.market_line", "nba", "Market: line vs distribution, implied probability, best price, movement",
-       "Kalshi ladders (sharp-2 / mi-1), book consensus (sports/books)", "Kalshi, Thunderpick, Polymarket, OddsPapi, The "
+       "Kalshi ladders (sharp-2 / mi-1), book consensus (sports/books)", "Kalshi, Polymarket, FanDuel, BetRivers, OddsPapi, The "
        "Odds API (keys on Render)", "quote observed before the start", "no eligible quote -> market candidates abstain",
        "the market prices information we lack", "market track (forward only: no historical player quotes)", M, NBA_ALL),
 ]
@@ -239,8 +239,8 @@ NFL_REG = [
        "postseason"),
     # market
     _f("nfl.market_line", "nfl", "Market: line vs distribution, de-vigged probability, best number, movement, "
-       "correlation with game / team total", "Kalshi ladders + book consensus", "Kalshi, Thunderpick, Polymarket, "
-       "OddsPapi, The Odds API", "quote observed before kickoff", "no eligible quote -> market candidates abstain",
+       "correlation with game / team total", "Kalshi ladders + book consensus", "Kalshi, Polymarket, FanDuel, "
+       "BetRivers, OddsPapi, The Odds API", "quote observed before kickoff", "no eligible quote -> market candidates abstain",
        "-", "market track (forward only)", M, NFL_ALL),
 ]
 REGISTRY = REGISTRY + NFL_REG

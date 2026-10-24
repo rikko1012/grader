@@ -6,7 +6,6 @@ Budgets (environment overrides, defaults = the free tiers we know):
   oddsapi      SPORTS_ODDSAPI_MONTHLY_CREDITS=500  reserve SPORTS_ODDSAPI_RESERVE=50 ; cost = markets x regions per
                event-odds call (the API's documented rule), 0 for /events; the answer's x-requests-remaining header,
                when present, overrides our count downward
-  thunderpick  10 requests / minute / path (partner guide) -> we use <= 4 / minute
   oddspapi     SPORTS_ODDSPAPI_MONTHLY_REQUESTS=0 (account shared with CS2; spent only through books/oddspapi.py's
                guard), >= 2 s apart
   polymarket   public; >= 1 s apart
@@ -27,7 +26,6 @@ from .. import config
 LIMITS = {
     "oddsapi": {"monthly": int(os.environ.get("SPORTS_ODDSAPI_MONTHLY_CREDITS", "500")),
                 "reserve": int(os.environ.get("SPORTS_ODDSAPI_RESERVE", "50")), "gap_s": 1.0, "per_min": 30},
-    "thunderpick": {"monthly": None, "reserve": 0, "gap_s": 15.0, "per_min": 4},
     # the OddsPapi account is shared with CS2: Sports' share defaults to 0 and is spent only by the guarded provider
     # (books/oddspapi.py: atomic allocation + fresh whole-account check + CS2 floor); capture is unmetered
     "oddspapi": {"monthly": int(os.environ.get("SPORTS_ODDSPAPI_MONTHLY_REQUESTS", "0")), "reserve": 0,

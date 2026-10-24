@@ -2,7 +2,7 @@
 wrote (manifest.json `sources` / `market_view` / `forecast_run`, mapping_audit.json): no store query, no provider call.
 
 Per league: every market source with offers on the board now, last successful read, verified flag, rows where it is
-counted in the market estimate, and for capture-only sources (thunderpick, oddspapi) the stored inventory summary
+counted in the market estimate, and for the capture-only source (oddspapi) the stored inventory summary
 (sports/books/inventory.py); the market-view counts; the last forward run; the player-team-game mapping audit.
 """
 from __future__ import annotations

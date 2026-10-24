@@ -11,7 +11,6 @@ player-prop quotes exist, so none of these has any evaluation yet. Validation st
 | Kalshi | public | points, rebounds, assists, threes, PRA, steals, blocks ("N+" ladders; 2,648 markets) | pass / rush / rec yards, receptions, rush and pass attempts, completions, TDs, INTs (3,378) | yes (sharp2.eligible_rung) |
 | Polymarket | public gamma API | points, rebounds, assists, threes, steals, blocks: 2,622 "Player: Stat O/U line" markets, 100% resolved to ESPN players | passing / rushing / receiving yards, receptions, passing attempts / completions: 2,012 markets, 1,663 resolved | yes |
 | The Odds API | ODDS_API_KEY on Render only | key not set here - parser = foundation adapter, event resolution by exact ESPN team names, credit ledger (500 / month, 50 reserve, <= 6 events x markets per cycle) | same | yes, once live |
-| Thunderpick | THUNDERPICK_API_KEY on Render only | key not set here; NBA / NFL sport paths and prop format UNVERIFIED -> capture-only inventory | same | no, until verified |
 | OddsPapi | ODDSPAPI_API_KEY on Render only | key not set here; prop market ids UNVERIFIED -> capture-only | same | no, until verified |
 
 Polymarket contract texts (NBA and NFL): YES / Over = more than the line, NO / Under = the line or fewer, overtime

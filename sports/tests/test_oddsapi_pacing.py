@@ -81,18 +81,3 @@ def test_the_poller_stops_at_the_pace_instead_of_draining_the_month(lim, monkeyp
     assert out["events"] == 6 and out["credits"] == 24 and "paced" not in out
     out2 = sources.oddsapi_ingest(None, "nba", "2026-10-24T20:30:00Z", None, [])
     assert out2["events"] == 4 and out2["paced"].startswith("paced")             # 24 + 16 = 40; the next 4 would pass 43.75
-
-
-def test_thunderpick_key_is_read_under_the_render_name_too(monkeypatch):
-    from sports.books import source_key, sources as srcs
-    monkeypatch.delenv("THUNDERPICK_API_KEY", raising=False)
-    monkeypatch.delenv("THUNDER_PICK_API", raising=False)
-    assert source_key("thunderpick") is None and srcs.key_state()["thunderpick"] == "key not set here"
-    monkeypatch.setenv("THUNDER_PICK_API", "t" * 24)                             # the name used on Render
-    assert source_key("thunderpick") == "t" * 24 and srcs.key_state()["thunderpick"] == "key set"
-
-
-def test_thunderpick_capture_runs_hourly_with_kalshi_and_stores_no_offers():
-    from sports import scheduler
-    argv = scheduler.default_jobs()["ingest-kalshi"]["argv"]
-    assert argv[argv.index("--sources") + 1] == "kalshi,thunderpick"

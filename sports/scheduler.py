@@ -80,7 +80,7 @@ def default_jobs():
                                 "espn,pp,ud,injuries,oddsapi,polymarket,books,games"),
                        every_s=900, timeout_s=900, flag="SPORTS_INGEST", cap_mb=300, cls=EXCLUSIVE, prio=3,
                        env={"SPORTS_WORKER_CONCURRENCY": "1"}),               # 271-274 MB sequential (328 parallel)
-        "ingest-kalshi": dict(argv=_py("-m", "sports.worker", "ingest", *lg, "--sources", "kalshi,thunderpick"),
+        "ingest-kalshi": dict(argv=_py("-m", "sports.worker", "ingest", *lg, "--sources", "kalshi"),
                               every_s=3600, timeout_s=900, flag="SPORTS_INGEST", cap_mb=240, cls=HEAVY, prio=3,
                               env={"SPORTS_WORKER_CONCURRENCY": "1"}),         # 147-192 MB
         "settle": dict(argv=_py("-m", "sports.worker", "settle", *lg), every_s=3600, timeout_s=900,
