@@ -518,8 +518,23 @@ caps over weeks unless the model jobs bound their reads (reported to the model /
 - **Measured** (real-feed store copy, Windows working set): 306-319 MB with 14.6k or 214.6k stored forecasts (does not
   grow with history); snapshot 93 MB (was 218 -> 2,394 MB); scorecard step 51 MB / 0.8 s (was 51 -> 88 MB, 8.6 ->
   109 s with 200k forecasts). Disk: ~5.1 KB per stored forecast; ~7-70 MB / day (sports/research/results/fwd_2026-10-24).
+  Linux (sandbox, cgroup memory limit 340 MB, RLIMIT_AS 640, fresh real-feed store, NBA refresh included): first run
+  291.9 MB RSS / VmPeak 365 MB / cgroup peak 321.6 MB, 26 s, 3,121 forecasts, no OOM; rerun 288.8 MB, 46 added. With
+  RLIMIT_AS 320 (the collector's cap) it fails with MemoryError - keep SPORTS_FORECAST_MAX_VM_MB at 640.
 - **Limits:** NFL features are the package's (through 2026 week 7, 94 games); the NFL refresh (nflverse files) is not
   in this job. Grades withheld / stakes 0 until gate F (sports-gp-1).
+
+### 13.6 Member pick tracking (pk-1, `sports/picks.py`) - UI and test picks
+
+- Routes `/api/sports/picks/track|mine` and `/api/sports/admin/picks` (no flag: live wherever this API is deployed);
+  jobs `picks-ingest` (60 s) / `picks-settle` (hourly) under SPORTS_INGEST.
+- Page (`web/sports/app.js`, served by cs2-scout from `main`): "Pick Higher / Lower" (Underdog) / "Pick More / Less"
+  (PrizePicks) on gradable pick'em lines before the start (board rows, phone cards, player page) and "My picks"
+  (`#/picks`). The page shows them only when `/api/sports/picks/mine` answers, so it stays as today against an API
+  without the routes.
+- **Test picks** (scratch, aggregated under `test`, never in the member figures): admin-token picks, picks posted with
+  `"test": true`, and every pick while scout-sports-api has `SPORTS_PICKS_SCRATCH=1`. Set it for the owner-only
+  preview (`SPORTS_UI=owner`); remove it (-> Save) when members get access, so their picks count.
 
 ## CHECKPOINT (sports/starter, 2026-10-24)
 
