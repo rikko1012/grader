@@ -483,7 +483,7 @@
         esc(S.localTime(m.ev && m.ev.start_utc, {weekday:'short',hour:'numeric',minute:'2-digit'})) + '</span></div>';
       if (quotes.length) h += offer(m, quotes[0]);
       else h += '<div class="sw-offer"><b>' + esc(B.stats[m.st] || m.st) + '</b><p class="sw-faint">' + (qr.k.length ? 'Market prices available below.' : 'No ordinary line for these filters.') + '</p></div>';
-      var remaining = quotes.length - 1 + qr.k.length;
+      var remaining = Math.max(0, quotes.length - 1) + qr.k.length;
       if (remaining > 0) {
         h += '<details class="sw-compare"><summary>Compare ' + remaining + ' more lines <span aria-hidden="true">＋</span></summary><div>';
         quotes.slice(1).forEach(function(q){ h += offer(m,q); });
