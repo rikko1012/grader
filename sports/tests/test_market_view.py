@@ -329,3 +329,22 @@ def test_admin_books_route_serves_sources_and_audit(built):
     assert nba["mapping_audit"]["offers_checked"] >= 1 and "player_unresolved" in nba["mapping_audit"]["checks"]
     app = (WEB / "app.js").read_text(encoding="utf-8")
     assert "Line not re-confirmed by" in app                          # stale pick'em line labelled, not hidden
+
+
+def test_display_freshness_is_observed_age_but_registered_mc1_keeps_source_time():
+    from sports.model import market
+    pp = h.offer()
+    # BetRivers: price last CHANGED 2 h ago (its changedDate), re-read unchanged 2 min ago
+    br = book("betrivers", "br:steady", over=1.95, under=1.87, observed_at="2026-10-23T18:00:00Z",
+              source_updated_at="2026-10-23T18:05:00Z", source_time_unknown=False)
+    meta = {"last_seen_at": "2026-10-23T20:03:00Z", "last_source_updated_at": "2026-10-23T18:05:00Z"}
+    its = [("r-pp", pp, {"last_seen_at": h.T0}), ("r-br", br, meta)]
+    mv = market_view.row_view([("r-pp", pp)], its, EV, NOW, "nba", 0.0)
+    b = mv["bk"][0]
+    assert b["in"] and b["age"] == 120 and mv["c"]["used"] == ["betrivers"]
+    assert mv["c"]["po"] == pytest.approx(devig(1.95, 1.87), abs=1e-4)
+    # the registered mc-1 path is unchanged: source-time age -> not eligible
+    p, why = market.quote_prob(br, EV, NOW, meta["last_seen_at"], 0.0, meta["last_source_updated_at"])
+    assert p is None and why == "older than 15 min"
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    assert "freshness: \"observed age" in app
