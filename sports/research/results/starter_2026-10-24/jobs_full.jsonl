@@ -1,0 +1,4 @@
+{"job": "ingest-all-but-kalshi", "rc": 0, "wall_s": 106.8, "peak_rss_mb": 327.5, "peak_rss_self_mb": 327.5, "data_mb_before": 510.6, "data_mb_after": 546.2, "offline": false, "t": "2026-10-24T01:38:16Z"}
+{"job": "ingest-all-but-kalshi", "rc": 0, "wall_s": 0.5, "peak_rss_mb": 33.2, "peak_rss_self_mb": 33.2, "data_mb_before": 546.2, "data_mb_after": 546.2, "offline": false, "t": "2026-10-24T01:38:37Z"}
+{"job": "ingest-kalshi", "rc": 0, "wall_s": 42.2, "peak_rss_mb": 189.6, "peak_rss_self_mb": 189.6, "data_mb_before": 546.2, "data_mb_after": 551.1, "offline": false, "t": "2026-10-24T01:39:19Z"}
+{"job": "ingest-all-but-kalshi", "rc": 0, "wall_s": 129.7, "peak_rss_mb": 270.9, "peak_rss_self_mb": 270.9, "data_mb_before": 551.1, "data_mb_after": 561.5, "offline": false, "t": "2026-10-24T01:41:48Z"}

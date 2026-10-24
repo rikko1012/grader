@@ -24,8 +24,8 @@ from pathlib import Path
 from . import snapshots
 
 LEAGUES = ("nba", "nfl")
-CACHE_FILES = 96                    # bounded: board/slate/... per league + recently opened players
-CACHE_BYTES = 48_000_000
+CACHE_FILES = int(os.environ.get("SPORTS_BOARD_CACHE_FILES", "96"))   # bounded: board/slate/... + recent players
+CACHE_BYTES = int(float(os.environ.get("SPORTS_BOARD_CACHE_MB", "48")) * 1_000_000)   # Starter template: 16
 _ID = re.compile(r"^(nba|nfl):player:[a-z]+:[A-Za-z0-9._-]{1,40}$")
 _FC = re.compile(r"^fc-[0-9a-f]{8,64}$")
 _LOCK = threading.Lock()

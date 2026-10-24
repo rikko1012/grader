@@ -94,7 +94,7 @@ SNAPSHOTS = {
 # ------------------------------------------------------------------------------------------- end of snapshot table
 
 CACHE_S = 30
-CACHE_MAX = 256
+CACHE_MAX = int(os.environ.get("SPORTS_CACHE_MAX", "256"))          # Starter template: 64 entries
 REQUEST_BUDGET_S = float(os.environ.get("SPORTS_REQUEST_BUDGET_S", "4"))     # hard per-query / per-wait budget
 DB_POOL = max(1, int(os.environ.get("SPORTS_DB_POOL", "4")))                 # concurrent read-only store connections
 DB_WAIT_S = float(os.environ.get("SPORTS_DB_WAIT_S", "1.0"))

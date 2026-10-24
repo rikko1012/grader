@@ -20,7 +20,7 @@ SECRET = "s" * 40
 def env(monkeypatch):
     monkeypatch.setenv("SPORTS_TOKEN_SECRET", SECRET)
     monkeypatch.setattr(web, "_CACHE", {})
-    monkeypatch.setattr(prebuilt, "_MEM", {})
+    monkeypatch.setattr(prebuilt, "_MEM", __import__("collections").OrderedDict())
     yield
 
 
@@ -46,17 +46,17 @@ def test_cached_serves_the_prebuilt_value_without_building(monkeypatch):
 def test_stale_tampered_or_unsigned_snapshots_are_never_used(monkeypatch):
     monkeypatch.setitem(web.SNAPSHOTS, "tsnap", ("x:y", 10, 60))
     prebuilt.write("tsnap", {("tsnap", "a"): 1})
-    f = prebuilt.snap_dir() / "tsnap.snap"
+    f = prebuilt._key_file("tsnap", ("tsnap", "a"))
     raw = f.read_bytes()
     f.write_bytes(raw[:-1] + bytes([raw[-1] ^ 1]))                                # flip one bit
-    monkeypatch.setattr(prebuilt, "_MEM", {})
+    monkeypatch.setattr(prebuilt, "_MEM", __import__("collections").OrderedDict())
     assert prebuilt.lookup(("tsnap", "a")) is prebuilt.MISS and prebuilt.STATS["bad_tag"] >= 1
     prebuilt.write("tsnap", {("tsnap", "a"): 1})
     monkeypatch.setitem(web.SNAPSHOTS, "tsnap", ("x:y", 10, -1))                   # older than max age
     assert prebuilt.lookup(("tsnap", "a")) is prebuilt.MISS
     monkeypatch.setitem(web.SNAPSHOTS, "tsnap", ("x:y", 10, 60))
     monkeypatch.setenv("SPORTS_TOKEN_SECRET", "other" * 10)                       # a file not signed with OUR key
-    monkeypatch.setattr(prebuilt, "_MEM", {})
+    monkeypatch.setattr(prebuilt, "_MEM", __import__("collections").OrderedDict())
     assert prebuilt.lookup(("tsnap", "a")) is prebuilt.MISS
     monkeypatch.delenv("SPORTS_TOKEN_SECRET")
     assert prebuilt.lookup(("tsnap", "a")) is prebuilt.MISS and not prebuilt.state()["enabled"]
