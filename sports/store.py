@@ -141,8 +141,12 @@ def put(con, rec, known_at=None, commit=True) -> dict:
     known = known_at or getattr(rec, "known_at", None) or getattr(rec, "observed_at", None) or \
         getattr(rec, "forecast_at", None) or getattr(rec, "settled_at", None) or now_utc()
     with _WRITE_LOCK:
-        dup = con.execute("SELECT record_id, revision FROM records WHERE kind=? AND source=? AND source_key=? AND "
-                          "content_hash=?", (rec.KIND, source, source_key, h)).fetchone()
+        # duplicate = the same content as the LATEST revision only. Content equal to an older revision (a line that moved
+        # 20.5 -> 21.5 -> back to 20.5) is a new revision, otherwise "latest" would keep the 21.5 that no longer exists.
+        dup = con.execute("SELECT record_id, revision, content_hash FROM records WHERE kind=? AND source=? AND "
+                          "source_key=? ORDER BY revision DESC LIMIT 1", (rec.KIND, source, source_key)).fetchone()
+        if dup and dup["content_hash"].split("~", 1)[0] != h:
+            dup = None
         if dup:                                    # same content seen again: only the sighting counter moves
             seen = getattr(rec, "observed_at", None) or now_utc()
             con.execute("UPDATE records SET last_seen_at = MAX(COALESCE(last_seen_at, ''), ?), seen_count = seen_count + 1 "
@@ -159,11 +163,15 @@ def put(con, rec, known_at=None, commit=True) -> dict:
                            (rec.KIND, source, source_key)).fetchone()[0]
         rev = (last or 0) + 1
         rid = f"{rec.KIND}:{source}:{source_key}:r{rev}:{h[:10]}" if rec.KIND != "forecast" else rec.forecast_id
+        stored_h = h                               # UNIQUE (kind, source, source_key, content_hash) is additive-only: a
+        if con.execute("SELECT 1 FROM records WHERE kind=? AND source=? AND source_key=? AND content_hash=?",
+                       (rec.KIND, source, source_key, h)).fetchone():
+            stored_h = f"{h}~r{rev}"               # returning content keeps its hash, tagged with the revision
         c = _cols(rec)
         con.execute("INSERT INTO records (kind, record_id, source, source_key, revision, content_hash, schema_version, "
                     "league, event_id, player_id, stat, platform, line, observed_at, known_at, stored_at, payload, "
                     "last_seen_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                    (rec.KIND, rid, source, source_key, rev, h, rec.schema_version, c["league"], c["event_id"],
+                    (rec.KIND, rid, source, source_key, rev, stored_h, rec.schema_version, c["league"], c["event_id"],
                      c["player_id"], c["stat"], c["platform"], c["line"], c["observed_at"], known, now_utc(),
                      _pack(rec.to_dict()), c["observed_at"]))
         if commit:

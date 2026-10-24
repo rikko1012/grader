@@ -55,6 +55,22 @@ def test_revisions_are_preserved_never_overwritten(db):
     assert [o.line for _, o in got] == [20.5]
 
 
+def test_a_line_that_moves_back_is_the_latest_revision(db):
+    """A -> B -> A: the third sighting is a NEW revision (before, it matched revision 1 as a duplicate and "latest"
+    kept reporting B, a line that no longer existed)."""
+    a = h.offer(line=20.5)
+    store.put(db, a)
+    store.put(db, replace(a, line=21.5, observed_at="2026-10-23T21:00:00Z", known_at="2026-10-23T21:00:00Z"))
+    r = store.put(db, replace(a, observed_at="2026-10-23T22:00:00Z", known_at="2026-10-23T22:00:00Z"))
+    assert r["status"] == "revision" and r["revision"] == 3
+    assert store.latest(db, "offer", "prizepicks", "pp:1").line == 20.5
+    assert [o.line for _, o in store.offers(db, league="nba")] == [20.5]
+    assert [x[1].line for x in store.revisions(db, "offer", "prizepicks", "pp:1")] == [20.5, 21.5, 20.5]
+    assert store.latest(db, "offer", "prizepicks", "pp:1", as_of="2026-10-23T21:30:00Z").line == 21.5
+    again = store.put(db, replace(a, observed_at="2026-10-23T22:05:00Z", known_at="2026-10-23T22:05:00Z"))
+    assert again["status"] == "duplicate" and again["revision"] == 3          # same as the latest: a sighting only
+
+
 def test_forecasts_are_immutable(db):
     f = h.forecast()
     assert store.put(db, f)["status"] == "inserted"
