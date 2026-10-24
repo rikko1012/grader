@@ -1,21 +1,22 @@
-# OPT-IN deployment template for the Scout Sports API service (sports/RUNBOOK.md section 6). NOT a live Blueprint.
+# Deployment template for the Scout Sports API service on Render STARTER (sports/RUNBOOK.md sections 6-7, "Starter").
 #
 # Render auto-syncs only the repository-root render.yaml. This file sits outside it on purpose: nothing here is
-# created by a merge or a Blueprint sync. Using it creates PAID Render resources: a Standard web service plus a 20 GB
-# persistent disk, each billed monthly. Flags at 0 do not change that - a declared service and disk are provisioned
-# and billed whatever the SPORTS_* values are.
+# created by a merge or a Blueprint sync. The owner CREATED the service scout-sports-api (2026-10-24) in the Render
+# dashboard; this file is the reference for its settings - apply them by hand in that service's Settings / Disks /
+# Environment tabs (RUNBOOK section 6). Never create a second service from it.
 #
-# Authorization status: NOT authorized. The current owner authorization covers only a necessary cheapest paid
-# Postgres; it does not cover this Standard service or its disk. Do not apply this file (New -> Blueprint pointed at
-# this path, copying it into render.yaml, or the manual steps in RUNBOOK section 6) until the owner explicitly
-# authorizes these specific resources. Release gate: the +10% esports p99 budget FAILED locally (+14%) and stays
-# pending a staging re-run (RUNBOOK sections 11-12); member enablement is blocked until that passes.
+# Owner requirement (2026-10-24): the cheapest plan that keeps every piece of data. Starter = 512 MB RAM, 0.5 CPU,
+# the cheapest PAID plan that can have a persistent disk ($7 / month + $0.25 per GB-month of disk). Member access stays
+# OFF pending a staging pass (RUNBOOK section 7). Free instances have no
+# disk and sleep - not acceptable for keeping data.
 #
-# Contents: the scout-sports-api service exactly as the staged rollout expects it. The API and its worker children
-# (ingestion, snapshot prebuild, slip spool jobs, assistant runner, lab runner) run as supervised CHILD processes of
-# the service (sports/service.py schedule()), each behind its own flag, because a Render disk attaches to one service
-# only and they all share the sports store / spools on it (sports/RUNBOOK.md "Architecture"). Flags OFF: the service
-# answers only /api/sports/health until SPORTS_API=1; no child runs until its flag is on.
+# Memory (measured 2026-10-24, sports/research/results/starter_2026-10-24): service ~34 MB idle with the slim slip
+# pool; background jobs are child processes admitted by a memory-reservation queue (sports/scheduler.py): at most ONE
+# heavy child, exclusive jobs (collector cycle 274 MB, model forecast 311 MB, fit 308 MB) alone, every child killed
+# above its cap. Disk: 10 GB to start with alerts at 80 % / 90 % (disk_80 / disk_90); Render disks can be ENLARGED
+# later without data loss (never shrunk) - projection and procedure in RUNBOOK "Starter disk".
+#
+# Flags OFF: the service answers only /api/sports/health until SPORTS_API=1; no child runs until its flag is on.
 # Secrets (sync: false) are entered in the Render dashboard, never in this file.
 services:
   - type: web
@@ -23,16 +24,14 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile.sports   # requirements-sports.txt (anthropic SDK); the esports Dockerfile is unchanged
     dockerCommand: python -m sports.service
-    plan: standard            # 2 GB / 1 CPU for API + ingestion + assistant (measured: service <= 50 MB at 700 members,
-                              # ingestion 110-130 MB per cycle). Move to Pro (4 GB) BEFORE SPORTS_TRAIN=1 (lab training
-                              # child capped at SPORTS_WORKER_MAX_MB like the ingestion child) - RUNBOOK section 6
+    plan: starter             # 512 MB / 0.5 CPU - RUNBOOK "Starter memory budget"
     region: ohio
     healthCheckPath: /api/sports/health
     autoDeploy: false         # deploy by hand during the staged rollout
     disk:
       name: scout-sports-data
       mountPath: /sports-data
-      sizeGB: 20              # measured: ~50 MB first cycle, ~300 MB history ingestion, +10-15 MB/hour (~0.3 GB/day)
+      sizeGB: 10              # start small, enlarge on the disk_80 alert (RUNBOOK "Starter disk": ~3-6 weeks per 10 GB)
     envVars:
       - key: PORT
         value: "10000"
@@ -45,36 +44,55 @@ services:
       - key: SPORTS_INGEST
         value: "0"
       - key: SPORTS_TRAIN
-        value: "0"            # the lab runner child (python -m sports.lab.runner)
+        value: "0"            # model forecast / learn / snapshot / fit + the lab (worker `train` commands need it)
       - key: SPORTS_ASSISTANT
-        value: "0"            # the assistant runner child (python -m sports.assistant.runner) + its routes
+        value: "0"            # the on-demand assistant runner + its routes
       - key: SPORTS_ASSIST_MODEL
         value: claude-opus-5-5
       - key: ANTHROPIC_API_KEY
         sync: false           # read only by the assistant runner child; Environment tab only, never in git
       - key: SPORTS_TOKEN_SECRET
-        sync: false           # the SAME value as on cs2-scout
+        sync: false           # the SAME value as on cs2-scout (already set by the owner)
       - key: SPORTS_ALLOWED_ORIGINS
-        sync: false           # https://cs2-scout.onrender.com (plus the custom domain if members use one), comma list
+        sync: false           # https://cs2-scout.onrender.com (plus the custom member domain if one is used)
       - key: ADMIN_TOKEN
         sync: false           # the same admin token as cs2-scout (X-Admin-Token for /api/sports/admin/ops)
       - key: ODDS_API_KEY
-        sync: false           # optional The Odds API key - set in the Environment tab only, never in git
+        sync: false           # The Odds API key (already saved by the owner)
       - key: SPORTS_LEAGUES
         value: nba nfl
-      - key: SPORTS_INGEST_EVERY_MIN
-        value: "10"
-      - key: SPORTS_KALSHI_EVERY_MIN
-        value: "30"
-      - key: SPORTS_WORKER_MAX_MB
-        value: "768"
-      - key: SPORTS_STORE_MAX_MB
-        value: "16000"        # ingestion pauses itself at 16 GB of the 20 GB disk
-      - key: SPORTS_SERVICE_MAX_MB
-        value: "900"
+      # ---- Starter service limits
       - key: SPORTS_SERVICE_THREADS
-        value: "32"
+        value: "16"
+      - key: SPORTS_SERVICE_MAX_MB
+        value: "160"          # the service drains and restarts above this (measured ~34 MB idle)
       - key: SPORTS_DB_POOL
-        value: "4"
+        value: "2"
       - key: SPORTS_REQUEST_BUDGET_S
         value: "4"
+      - key: SPORTS_BOARD_CACHE_MB
+        value: "16"
+      - key: SPORTS_CACHE_MAX
+        value: "64"
+      - key: SPORTS_GZIP_CACHE_MB
+        value: "12"
+      - key: SPORTS_ARCHIVE_CACHE_MB
+        value: "32"
+      # ---- Starter job scheduler (sports/scheduler.py; every job's cadence / cap can be overridden the same way)
+      - key: SPORTS_CHILD_BUDGET_MB
+        value: "310"
+      - key: SPORTS_JOB_INGEST_EVERY_S
+        value: "900"          # the collector cycle every 15 min (was 10)
+      - key: SPORTS_JOB_INGEST_KALSHI_EVERY_S
+        value: "3600"         # Kalshi hourly (was 30 min)
+      - key: SPORTS_JOB_UI_SNAPSHOTS_EVERY_S
+        value: "180"          # member page snapshots every 3 min (was 60 s)
+      - key: SPORTS_JOB_PREBUILT_EVERY_S
+        value: "90"           # slip pool every 90 s (was 45 s)
+      - key: SPORTS_WORKER_MAX_MB
+        value: "768"          # address-space backstop inside worker children; the scheduler's RSS caps are the limit
+      # ---- storage
+      - key: SPORTS_ARCHIVE_AFTER_H
+        value: "72"           # offers not seen for 72 h move to the compressed archive (nothing is deleted)
+      - key: SPORTS_STORE_MAX_MB
+        value: "6000"         # ingestion pauses itself if canonical.db ever reaches 6 GB (hot window ~2-3 GB)

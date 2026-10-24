@@ -51,7 +51,7 @@ def _env_num(name, default, cast=float):
 
 
 def budget_mb():
-    return _env_num("SPORTS_CHILD_BUDGET_MB", 290, int)
+    return _env_num("SPORTS_CHILD_BUDGET_MB", 310, int)
 
 
 def _py(*args):
@@ -68,39 +68,39 @@ def default_jobs():
                           timeout_s=300, flag="SPORTS_ASSISTANT", cap_mb=120, cls=LIGHT, prio=0),
         # what members read
         "prebuilt": dict(argv=_py("-m", "sports.service", "snapshots"), every_s=90, timeout_s=120, flag="SPORTS_API",
-                         cap_mb=200, cls=HEAVY, prio=1),                       # measured 109-168 MB
+                         cap_mb=160, cls=HEAVY, prio=1),                       # 105-109 MB (slim slip pool)
         "ui-snapshots": dict(argv=_py("-m", "sports.snapshots", "build", *lg), every_s=180, timeout_s=240,
-                             flag="SPORTS_INGEST", cap_mb=210, cls=HEAVY, prio=2),   # 135-168 MB
+                             flag="SPORTS_INGEST", cap_mb=250, cls=HEAVY, prio=2),   # 135-200 MB (grows with data)
         "slips-ingest": dict(argv=_py("-m", "sports.slips", "ingest"), every_s=300, timeout_s=300,
                              flag="SPORTS_INGEST", cap_mb=60, cls=LIGHT, prio=2),    # 23 MB
         # collection (the one collector, run as one-shot cycles; leagues one at a time)
         "ingest": dict(argv=_py("-m", "sports.worker", "ingest", *lg, "--sources",
                                 "espn,pp,ud,injuries,oddsapi,polymarket,books,games"),
-                       every_s=900, timeout_s=900, flag="SPORTS_INGEST", cap_mb=290, cls=EXCLUSIVE, prio=3,
-                       env={"SPORTS_WORKER_CONCURRENCY": "1"}),               # 271 MB sequential (328 parallel)
+                       every_s=900, timeout_s=900, flag="SPORTS_INGEST", cap_mb=300, cls=EXCLUSIVE, prio=3,
+                       env={"SPORTS_WORKER_CONCURRENCY": "1"}),               # 271-274 MB sequential (328 parallel)
         "ingest-kalshi": dict(argv=_py("-m", "sports.worker", "ingest", *lg, "--sources", "kalshi"),
-                              every_s=3600, timeout_s=900, flag="SPORTS_INGEST", cap_mb=230, cls=HEAVY, prio=3,
-                              env={"SPORTS_WORKER_CONCURRENCY": "1"}),         # 147-190 MB
+                              every_s=3600, timeout_s=900, flag="SPORTS_INGEST", cap_mb=240, cls=HEAVY, prio=3,
+                              env={"SPORTS_WORKER_CONCURRENCY": "1"}),         # 147-192 MB
         "settle": dict(argv=_py("-m", "sports.worker", "settle", *lg), every_s=3600, timeout_s=900,
                        flag="SPORTS_INGEST", cap_mb=120, cls=HEAVY, prio=4),   # 58 MB
         "slips-settle": dict(argv=_py("-m", "sports.slips", "settle"), every_s=3600, timeout_s=600,
                              flag="SPORTS_INGEST", cap_mb=60, cls=LIGHT, prio=4),    # 22 MB
         # model (worker `train` commands need SPORTS_TRAIN - foundation rule)
         "model-forecast": dict(argv=_py("-m", "sports.worker", "train", "forecast", *lg), every_s=3600, timeout_s=900,
-                               flag="SPORTS_TRAIN", cap_mb=290, cls=EXCLUSIVE, prio=5),   # 272 MB
+                               flag="SPORTS_TRAIN", cap_mb=340, cls=EXCLUSIVE, prio=5),   # 272-311 MB
         "model-learn": dict(argv=_py("-m", "sports.worker", "train", "learn"), every_s=3600, timeout_s=600,
-                            flag="SPORTS_TRAIN", cap_mb=120, cls=HEAVY, prio=5),   # 78 MB
+                            flag="SPORTS_TRAIN", cap_mb=250, cls=HEAVY, prio=5),   # 78-218 MB (reads every forecast)
         "model-snapshot": dict(argv=_py("-m", "sports.worker", "train", "snapshot"), every_s=1800, timeout_s=600,
-                               flag="SPORTS_TRAIN", cap_mb=120, cls=HEAVY, prio=5),   # 77 MB
+                               flag="SPORTS_TRAIN", cap_mb=250, cls=HEAVY, prio=5),   # 77-217 MB (reads every forecast)
         "model-fit": dict(argv=_py("-m", "sports.worker", "train", "fit"), every_s=7 * 86400, timeout_s=3600,
-                          flag="SPORTS_TRAIN", cap_mb=330, cls=EXCLUSIVE, prio=7),    # 306-309 MB
+                          flag="SPORTS_TRAIN", cap_mb=340, cls=EXCLUSIVE, prio=7),    # 306-309 MB
         "lab": dict(argv=_py("-m", "sports.lab.runner", "--once"), every_s=900, timeout_s=3600, flag="SPORTS_TRAIN",
-                    cap_mb=330, cls=EXCLUSIVE, prio=7),                        # idle 35 MB; training up to fit size
+                    cap_mb=340, cls=EXCLUSIVE, prio=7),                        # idle 34 MB; training up to fit size
         # slow / maintenance
         "history": dict(argv=_py("-m", "sports.snapshots", "history", *lg, "--max-players", "400"), every_s=86400,
                         timeout_s=10800, flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=6),   # 107 MB @ 40 players
         "archive": dict(argv=_py("-m", "sports.archive", "pass"), every_s=6 * 3600, timeout_s=1800,
-                        flag="SPORTS_INGEST", cap_mb=160, cls=HEAVY, prio=6),
+                        flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=6),      # 140 MB (80k rows)
         "archive-verify": dict(argv=_py("-m", "sports.archive", "verify"), every_s=86400, timeout_s=1800,
                                flag="SPORTS_INGEST", cap_mb=120, cls=HEAVY, prio=8),
     }

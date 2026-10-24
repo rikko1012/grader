@@ -164,17 +164,17 @@ def test_children_get_single_thread_math_and_low_priority(tmp_path):
 
 
 def test_default_job_caps_fit_the_starter_budget():
-    """The Starter plan sizing: every non-exclusive job fits the child budget; light jobs fit next to a heavy one;
-    an exclusive job plus the service cap stays under the 512 MB container (headroom stated in the RUNBOOK)."""
+    """Starter sizing (RUNBOOK 'Starter memory budget'): every non-exclusive job fits the child budget; an exclusive
+    job runs alone; service steady RSS (<= 100 MB measured with the slim slip pool) + the largest reservation stays
+    under the 512 MB container with headroom."""
     jobs = scheduler.default_jobs()
     budget = scheduler.budget_mb()
-    service_cap = 160
+    service_steady = 100
     for name, s in jobs.items():
         if s["cls"] == "exclusive":
-            assert s["cap_mb"] + service_cap <= 512 - 20, name
+            assert service_steady + s["cap_mb"] <= 450, name
         else:
             assert s["cap_mb"] <= budget, name
-    biggest_heavy = max(s["cap_mb"] for s in jobs.values() if s["cls"] == "heavy")
-    lights = sorted((s["cap_mb"] for s in jobs.values() if s["cls"] == "light"), reverse=True)
-    assert service_cap + budget <= 450                                          # the steady-state ceiling
-    assert biggest_heavy <= budget and lights[0] <= budget
+    assert service_steady + budget <= 450
+    lights = [s["cap_mb"] for s in jobs.values() if s["cls"] == "light"]
+    assert all(c <= 120 for c in lights)

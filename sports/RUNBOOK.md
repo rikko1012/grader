@@ -114,40 +114,63 @@ snapshots + spools over HTTP) - not a shared disk.
   secret, every route refused without a role, admin vs member, CORS, esports cookies ignored by the service, the proxy
   never forwards the esports admin token) and `test_isolation_server.py` (esports end to end in a child process).
 
-## 5. Resource limits (all environment-tunable; defaults in code)
+## 5. Resource limits (all environment-tunable; Starter values from deploy/render.sports-api.yaml)
 
-| Where | Limit | Default | On breach |
+| Where | Limit | Starter value (code default) | On breach |
 |---|---|---|---|
-| sports service | concurrent requests `SPORTS_SERVICE_THREADS` | 32 | wait `SPORTS_SERVICE_QUEUE_MS` 200 ms, then canned 503 `sports_busy` |
+| sports service | concurrent requests `SPORTS_SERVICE_THREADS` | 16 | wait `SPORTS_SERVICE_QUEUE_MS` 200 ms, then canned 503 `sports_busy` |
 | sports service | per-query / single-flight wait `SPORTS_REQUEST_BUDGET_S` | 4 s | SQLite progress handler interrupts -> 503 `sports_busy` |
-| sports service | read-only store connections `SPORTS_DB_POOL` | 4 | wait `SPORTS_DB_WAIT_S` 1 s -> 503 `sports_busy` |
-| sports service | answer cache | 256 entries, 30 s TTL, single-flight | oldest quarter evicted |
+| sports service | read-only store connections `SPORTS_DB_POOL` | 2 (4) | wait `SPORTS_DB_WAIT_S` 1 s -> 503 `sports_busy` |
+| sports service | answer cache `SPORTS_CACHE_MAX` | 64 entries (256), 30 s TTL, single-flight | oldest quarter evicted |
+| sports service | UI board file cache `SPORTS_BOARD_CACHE_MB` | 16 MB (48) | oldest third evicted |
+| sports service | gzip copies `SPORTS_GZIP_CACHE_MB` | 12 MB | oldest evicted |
+| sports service | archive file cache `SPORTS_ARCHIVE_CACHE_MB` | 32 MB | LRU |
+| sports service | prebuilt keys in memory `SPORTS_PREBUILT_KEYS_IN_MEMORY` | 8 | LRU |
 | sports service | POST body `SPORTS_BODY_MAX` | 64 KB | 413, unread |
-| sports service | RSS `SPORTS_SERVICE_MAX_MB` | 900 MB | stop accepting, drain 20 s, exit 3 (Render restarts) |
-| sports service | idle kept-alive connection | 30 s | closed |
-| ingestion child | address space / RSS `SPORTS_WORKER_MAX_MB` | 768 MB | RLIMIT_AS (Linux) + RSS check -> exit, restarted |
-| ingestion child | store size `SPORTS_STORE_MAX_MB` | 16,000 MB on Render (1,500 code default) | ingestion pauses itself |
-| ingestion child | jobs | timeout 300 s, 3 attempts, exponential backoff + jitter | job marked failed, loop continues |
-| supervisor | worker restarts | 30 s x 2^n (cap 15 min) x jitter 0.5-1.0; reset after 10 min healthy | `worker_crash_loop` alert |
+| sports service | RSS `SPORTS_SERVICE_MAX_MB` | 160 MB (measured ~34 MB idle) | stop accepting, drain 20 s, exit 3 (Render restarts) |
+| job children | memory reservation `SPORTS_CHILD_BUDGET_MB` | 310 MB | the job waits in the queue (section 5a) |
+| job children | per-job RSS cap `SPORTS_JOB_<NAME>_CAP_MB` | section 5a | child killed (`killed_over_cap`), retried with backoff, `job_over_cap` page after 2 in a row |
+| job children | per-job timeout | section 5a | child killed (`timeout`) |
+| worker child | address space `SPORTS_WORKER_MAX_MB` | 768 MB | RLIMIT_AS backstop (Linux) |
+| worker child | canonical.db size `SPORTS_STORE_MAX_MB` | 6,000 MB | ingestion pauses itself (`store_full_ingest_paused`) |
 | esports gateway (proxy mode only) | in-flight / slot wait / timeout | 16 / 200 ms / 2.5 s | 503 `sports_busy` / `sports_unavailable` |
 | esports gateway (proxy mode only) | circuit breaker | 5 consecutive failures -> 5 s open | immediate 503 |
 
-### 5a. Worker-side schedule (`sports/service.py schedule()`, children of the service process)
+### 5a. Worker-side jobs (`sports/scheduler.py`: ONE scheduler thread, every job a child process of the service)
 
-| Job | Command | Kind | Flag | Timeout |
-|---|---|---|---|---|
-| ingest-loop | `python -m sports.worker loop nba nfl --every 10 --kalshi-every 30` | long-running, restarted with backoff | SPORTS_INGEST | - (own RSS cap 768 MB) |
-| snapshots | `python -m sports.service snapshots` (web.SNAPSHOTS, e.g. the slips leg pool) | every 45 s (+-10% jitter) | SPORTS_API | 120 s |
-| slips-ingest | `python -m sports.slips ingest` (slip spool -> slips.db) | every 5 min | SPORTS_INGEST | 300 s |
-| slips-settle | `python -m sports.slips settle` | hourly | SPORTS_INGEST | 900 s |
-| ui-snapshots | `python -m sports.snapshots build nba nfl` (the member pages' JSON under `snapshots/<league>/`; measured 4.7 s wall for both leagues on the 2026-10-23 store, ~33 MB of files) | every 60 s | SPORTS_INGEST | 180 s |
-| ui-history | `python -m sports.snapshots history nba nfl --max-players 400` (ESPN game logs; ~300 MB / 275k records on the first full run, UI agent) | daily | SPORTS_INGEST | 3 h |
-| assistant-runner | `python -m sports.assistant.runner` (needs the `anthropic` SDK from requirements-sports.txt + ANTHROPIC_API_KEY) | long-running | SPORTS_ASSISTANT | - |
-| lab-runner | `python -m sports.lab.runner` (training; applies the worker memory cap) | long-running | SPORTS_TRAIN | - |
+Admission (memory-reservation queue): a job starts only when the caps of the running children plus its own cap fit
+`SPORTS_CHILD_BUDGET_MB` (310); at most ONE heavy child at a time; an **exclusive** job waits until nothing else runs
+and nothing else starts while it runs (so ingestion is paused during forecasting / training); priority with aging
+(a job that keeps losing moves up, `SPORTS_JOB_AGING_S` 120 s per level); a job blocked only by the heavy slot lets
+smaller jobs that fit start, a waiting exclusive job holds everything behind it. Every child: nice 10 /
+BELOW_NORMAL, `oom_score_adj` 900 (the kernel kills a child before the service), single-thread BLAS,
+`MALLOC_ARENA_MAX=2`; an RSS watchdog (0.25 s) kills it above its cap.
 
-A periodic job that fails waits with backoff (3 failures in a row -> `job_failing`); a long-running child that keeps
-dying fast -> `worker_crash_loop` / `job_crash_loop`. Flags are read when the service starts: flip a flag, then
-restart (Render: Save in the Environment tab restarts the service).
+Peak RSS measured 2026-10-24 on a copy of the real data (each job alone, `scripts/load_sports_jobs.py`; results in
+`sports/research/results/starter_2026-10-24/`). Memory of the store-reading jobs grows with the data (see 13.4).
+
+| Job | Command | Every (Starter) | Class | Cap MB | Measured peak MB | Flag |
+|---|---|---|---|---|---|---|
+| assistant | `sports.assistant.runner --once` | on demand (a queued question, checked every 2 s) | light | 120 | not measurable here (no SDK / key) | SPORTS_ASSISTANT |
+| prebuilt | `sports.service snapshots` (slip pool) | 90 s | heavy | 160 | 105-109 | SPORTS_API |
+| ui-snapshots | `sports.snapshots build nba nfl` | 180 s | heavy | 250 | 135-200 | SPORTS_INGEST |
+| slips-ingest | `sports.slips ingest` | 5 min | light | 60 | 23 | SPORTS_INGEST |
+| ingest | `sports.worker ingest nba nfl --sources espn,pp,ud,injuries,oddsapi,polymarket,books,games` (leagues one at a time) | 15 min | exclusive | 300 | 271-274 (328 with both leagues in parallel) | SPORTS_INGEST |
+| ingest-kalshi | `sports.worker ingest nba nfl --sources kalshi` | 60 min | heavy | 240 | 147-192 | SPORTS_INGEST |
+| settle | `sports.worker settle nba nfl` | 60 min | heavy | 120 | 58 | SPORTS_INGEST |
+| slips-settle | `sports.slips settle` | 60 min | light | 60 | 23 | SPORTS_INGEST |
+| model-forecast | `sports.worker train forecast nba nfl` (incremental: unchanged runs add 0 records) | 60 min | exclusive | 340 | 272-311 | SPORTS_TRAIN |
+| model-learn | `sports.worker train learn` | 60 min | heavy | 250 | 78-218 | SPORTS_TRAIN |
+| model-snapshot | `sports.worker train snapshot` | 30 min | heavy | 250 | 77-217 | SPORTS_TRAIN |
+| model-fit | `sports.worker train fit` | 7 days | exclusive | 340 | 306-309 | SPORTS_TRAIN |
+| lab | `sports.lab.runner --once` | 15 min | exclusive | 340 | 34 idle (training up to the fit size) | SPORTS_TRAIN |
+| history | `sports.snapshots history nba nfl --max-players 400` | daily | heavy | 200 | 107 (40 players) | SPORTS_INGEST |
+| archive | `sports.archive pass` (13.3) | 6 h | heavy | 200 | 140 (80k rows) | SPORTS_INGEST |
+| archive-verify | `sports.archive verify` | daily | heavy | 120 | - | SPORTS_INGEST |
+
+Flags are read when the service starts: flip a flag, then restart (Render: Save in the Environment tab restarts).
+`/api/sports/admin/ops` -> `scheduler.jobs.<name>` shows each job's last exit, peak RSS, cap, over-cap kills, queue
+time; `scheduler.stats` the peak reservation and peak children RSS.
 
 ### 5b. Write path from handlers (blessed 2026-10-23)
 
@@ -161,98 +184,56 @@ service on ONE disk. If the worker is ever split into its own Render service, sp
 
 ### 5c. Prebuilt snapshots
 
-Heavy shared answers are registered in `web.SNAPSHOTS` and built by the `snapshots` job; `web.cached` serves the
-prebuilt value (HMAC-tagged pickle under `<SPORTS_DATA_DIR>/prebuilt/`, key derived from SPORTS_TOKEN_SECRET) and only
-falls back to a request-time build on a miss (counted in `/api/sports/admin/ops` -> `prebuilt.stats`). The slips leg
-pool (~2 s cold build, slips agent's measurement) is the first entry.
+Heavy shared answers are registered in `web.SNAPSHOTS` and built by the `prebuilt` job; `web.cached` serves the
+prebuilt value (HMAC-tagged pickle, ONE FILE PER KEY under `<SPORTS_DATA_DIR>/prebuilt/<name>/`, key derived from
+SPORTS_TOKEN_SECRET; the service loads only the keys members ask for) and only falls back to a request-time build on
+a miss (counted in `/api/sports/admin/ops` -> `prebuilt.stats`). The slips leg pool is the first entry (served when at
+most 270 s old).
 
-## 6. Create the Render resources (owner, Render dashboard - NOT authorized yet)
+## 6. The Render service (owner created `scout-sports-api` on 2026-10-24 - apply these settings by hand)
 
-We have no Render API access; these are the owner's clicks. Nothing here turns Sports on, but steps 1-8 create
-**paid** resources: a `Standard` web service and a 20 GB persistent disk, both billed monthly from creation whatever
-the `SPORTS_*` flags say. The current owner authorization covers only a necessary cheapest paid Postgres; it does
-**not** cover this service or its disk. Do not run steps 1-8 until the owner explicitly authorizes these resources.
+We have no Render API access; these are the owner's clicks on the EXISTING service (never create a second one). The
+service is declared only in `deploy/render.sports-api.yaml` (reference, not a Blueprint); the root `render.yaml` stays
+esports-only (auto-synced - a service declared there would be created and billed by a merge).
 
-The service is declared only in the opt-in template `deploy/render.sports-api.yaml`, **not** in the root
-`render.yaml`: the root Blueprint is auto-synced, so a service / disk declared there would be created and billed by
-the merge itself (flags off do not prevent Blueprint provisioning). The root file carries only cs2-scout's sports
-variables (all `0` / `sync: false`). Removing the declaration from the root file does not delete a service that a
-sync already created - check the Render dashboard for `scout-sports-api` / `scout-sports-data` and delete or suspend
-them if they exist without authorization. Once authorized, either point a separate Blueprint at the template path
-or create the service by hand with the same values:
+1. **scout-sports-api -> Settings**: Branch = the branch / commit the coordinator names for staging; **Dockerfile
+   path** `./Dockerfile.sports`; **Docker Command** `python -m sports.service`; **Health Check Path**
+   `/api/sports/health`; **Auto-Deploy** `No`.
+2. **Instance type**: `Starter` (512 MB, 0.5 CPU) - section 13.1 for the memory budget.
+3. **Disks**: `scout-sports-data`, mount `/sports-data`, **10 GB** (section 13.3; enlarge on the `disk_80` alert).
+4. **Environment**: every key in `deploy/render.sports-api.yaml` with its value. Secrets (already set by the owner or to
+   be set there, never in git): `SPORTS_TOKEN_SECRET` (the same value as cs2-scout), `ADMIN_TOKEN` (same as
+   cs2-scout), `ODDS_API_KEY`, `SPORTS_ALLOWED_ORIGINS` (`https://cs2-scout.onrender.com`), `ANTHROPIC_API_KEY` (only
+   when the assistant is enabled). All `SPORTS_*` flags `0`.
+5. **Manual Deploy** of the named commit. Check `https://scout-sports-api.onrender.com/api/sports/health` ->
+   `{"ok": true, "version": "svc-1", "store_ready": false}` and `/api/sports/status` -> 401.
+6. **cs2-scout -> Environment**: `SPORTS_UI=0`, `SPORTS_API=0`, `SPORTS_API_MODE=service`,
+   `SPORTS_API_BASE=https://scout-sports-api.onrender.com`, `SPORTS_TOKEN_SECRET` (secret, same value). Member access
+   stays OFF.
 
-1. Render dashboard -> **New +** -> **Web Service** -> **Build and deploy from a Git repository** -> repository
-   `rikko1012/cs2-scout` -> **Connect**.
-2. **Name** `scout-sports-api`. **Region** `Ohio (US East)` (same as cs2-scout). **Branch**
-   `feature/scout-sports-nfl-nba` for staging (switch to `main` only after the release merge). **Root directory**
-   empty. **Language / Runtime** `Docker`. **Dockerfile path** `./Dockerfile.sports` (installs
-   requirements-sports.txt = requirements.txt + the `anthropic` SDK; the esports `./Dockerfile` and
-   `requirements.txt` are unchanged and never get it).
-3. **Docker Command**: `python -m sports.service`
-4. **Instance type** `Standard` (2 GB RAM, 1 CPU) for the API + ingestion + snapshots + slip jobs + assistant.
-   Reason: ingestion child capped at 768 MB (measured 110-130 MB per cycle, foundation), service capped at 900 MB
-   (measured in section 11), snapshot / slip children are short-lived (measured in section 11). **Change to `Pro`
-   (4 GB, 2 CPU) before setting `SPORTS_TRAIN=1`**: the lab training child has its own 768 MB cap and is CPU-bound;
-   on 1 CPU it would compete with the API. `Starter` (512 MB) is not recommended.
-5. **Advanced -> Health Check Path** `/api/sports/health`. **Auto-Deploy** `No`.
-6. **Advanced -> Add Disk**: Name `scout-sports-data`, Mount Path `/sports-data`, Size `20 GB`. Reason (measured):
-   first ingestion cycle ~50 MB; history ingestion ~300 MB (275k records, UI agent); then ~10-15 MB/hour at the
-   default cadence (~0.3 GB/day, foundation); UI snapshots ~33 MB (rewritten in place); slip spool <= 50 MB/day.
-   Ingestion pauses itself at 16 GB (`SPORTS_STORE_MAX_MB`) - roughly 7 weeks before retention / compaction is needed
-   (open item, section 12). Disks can be grown later from the Disks tab, not shrunk.
-7. **Environment -> Add Environment Variable** for each row:
+## 7. Staging (only scout-sports-api; members stay off) and later enable
 
-   | Key | Value | Secret? |
-   |---|---|---|
-   | PORT | 10000 | no |
-   | SPORTS_DATA_DIR | /sports-data | no |
-   | SPORTS_API | 0 | no |
-   | SPORTS_UI | 0 | no |
-   | SPORTS_INGEST | 0 | no |
-   | SPORTS_TRAIN | 0 | no |
-   | SPORTS_ASSISTANT | 0 | no |
-   | SPORTS_ASSIST_MODEL | claude-opus-5-5 | no |
-   | ANTHROPIC_API_KEY | the owner's Anthropic API key (only when the assistant is enabled) | **yes** |
-   | SPORTS_LEAGUES | nba nfl | no |
-   | SPORTS_INGEST_EVERY_MIN | 10 | no |
-   | SPORTS_KALSHI_EVERY_MIN | 30 | no |
-   | SPORTS_WORKER_MAX_MB | 768 | no |
-   | SPORTS_STORE_MAX_MB | 16000 | no |
-   | SPORTS_SERVICE_MAX_MB | 900 | no |
-   | SPORTS_SERVICE_THREADS | 32 | no |
-   | SPORTS_DB_POOL | 4 | no |
-   | SPORTS_REQUEST_BUDGET_S | 4 | no |
-   | SPORTS_TOKEN_SECRET | generate once: `python -c "import secrets; print(secrets.token_urlsafe(48))"` | **yes** |
-   | SPORTS_ALLOWED_ORIGINS | `https://cs2-scout.onrender.com` (comma-add the custom member domain if used) | no |
-   | ADMIN_TOKEN | the same value as cs2-scout's ADMIN_TOKEN | **yes** |
-   | ODDS_API_KEY | the owner's The Odds API key (optional) | **yes** |
+**Staging** (the coordinator's flags: `SPORTS_API=1` + `SPORTS_INGEST=1` on scout-sports-api only; cs2-scout member
+flags `SPORTS_UI=0`, `SPORTS_API=0`):
 
-8. **Create Web Service**. When the deploy is live, open `https://scout-sports-api.onrender.com/api/sports/health`
-   -> `{"ok": true, "version": "svc-1", "store_ready": false}`; `/api/sports/status` must answer 401.
-9. **cs2-scout -> Environment**, add: `SPORTS_UI=0`, `SPORTS_API=0`, `SPORTS_API_MODE=service`,
-   `SPORTS_API_BASE=https://scout-sports-api.onrender.com` (no trailing slash), `SPORTS_TOKEN_SECRET=<same value as
-   step 7>` (secret). **Save** restarts cs2-scout - do it in a quiet window; with the flags at 0 esports behaviour is
-   unchanged (`test_rollback_is_flags_off_even_with_the_service_configured`). Check `/health` afterwards as usual.
-10. Optional: **Settings -> Custom Domains** on scout-sports-api (e.g. `sports-api.<domain>`), then update
-    `SPORTS_API_BASE` on cs2-scout (and `SPORTS_ALLOWED_ORIGINS` if the member origin changed).
+1. scout-sports-api `SPORTS_INGEST=1` and `SPORTS_API=1` -> Save (restart). The scheduler starts the jobs whose flags
+   are on: collector every 15 min, Kalshi hourly, settle hourly, UI snapshots every 3 min, prebuilt every 90 s,
+   history daily, archive every 6 h (it has nothing to do until offers are 72 h old). `SPORTS_TRAIN` stays `0` (no
+   model forecasts on staging unless the coordinator asks; then see 13.1 - forecast / fit run exclusive).
+2. After ~20 min and again after a few hours, from a checkout of the deployed commit:
+   `ADMIN_TOKEN=... SPORTS_TOKEN_SECRET=... python scripts/load_sports_staging_check.py --api https://scout-sports-api.onrender.com`
+   (secrets from the environment, never printed; exit 0 = pass). It checks health, the auth round trip (minted
+   token; no / tampered token 401; CORS), each job's last run / peak RSS vs cap / over-cap kills, feed ages, store /
+   archive / disk use, service RSS, gentle latency (10 sequential per route + a 40-request parallel burst) and alerts.
+   `python -m sports.service --check https://scout-sports-api.onrender.com` prints the alerts alone.
+3. Render -> scout-sports-api -> Metrics: memory stays under ~450 MB including the children (13.1); restarts 0.
+4. Pass = staging check exit 0 twice (after 20 min and after >= 6 h of ingestion, so an archive pass and a history run
+   have happened), no `job_over_cap`, no paging alert.
 
-## 7. Enable (staged, only after the release approval; staging first)
-
-1. **Ingestion:** scout-sports-api `SPORTS_INGEST=1` -> Save (restart). The supervisor starts
-   `python -m sports.worker loop nba nfl --every 10 --kalshi-every 30` (it migrates the store on start). After 15 min
-   `python -m sports.service --check https://scout-sports-api.onrender.com` (ADMIN_TOKEN in the local environment)
-   shows no `worker_down` / `feed_stale`; `feeds.store_mb` ~50 MB, then slow growth.
-2. **Sports API:** scout-sports-api `SPORTS_API=1` -> Save. No member can reach data yet: esports mints no tokens.
-3. **Token issuing:** cs2-scout `SPORTS_API=1` -> Save (restart). Verify as admin:
-   `curl -H "X-Admin-Token: $ADMIN_TOKEN" https://cs2-scout.onrender.com/api/sports/token`, use the token against
-   `https://scout-sports-api.onrender.com/api/sports/status`; `/api/sports/admin/gateway` shows `mode: service`.
-4. **Page:** cs2-scout `SPORTS_UI=1` -> Save. Watch section 9 for an hour; esports `/health` latency and memory must
-   stay at their usual values.
-5. **Assistant (optional):** set `ANTHROPIC_API_KEY` (secret) and `SPORTS_ASSISTANT=1` on scout-sports-api -> Save.
-   The runner child starts; `/api/sports/admin/assistant` and ops `jobs.assistant-runner` show it alive; member quotas
-   per sports/assistant/config.py.
-6. **Lab / training:** upgrade scout-sports-api to `Pro` first, then `SPORTS_TRAIN=1` -> Save. Admin-only lab routes;
-   promotion still needs the registered gate and the release policy.
+**Member enable** (only after the release approval; unchanged order): cs2-scout `SPORTS_API=1` (token issuing; verify
+an admin token with `curl -H "X-Admin-Token: $ADMIN_TOKEN" https://cs2-scout.onrender.com/api/sports/token`), then
+`SPORTS_UI=1`; watch section 9 for an hour. Assistant: `ANTHROPIC_API_KEY` + `SPORTS_ASSISTANT=1`. Model forecasts /
+lab: `SPORTS_TRAIN=1` (fits Starter - exclusive jobs, 13.1).
 
 ## 8. Disable / rollback (no database restore, no esports rollback)
 
@@ -281,17 +262,19 @@ deploys and health-check failures).
 
 | Alert | Level | Rule (`service.ALERT_RULES`, env-tunable) | First response |
 |---|---|---|---|
-| worker_down | page | ingest on, no worker pid | Render logs for the child's last exit; `next_start` shows the backoff |
-| worker_crash_loop | page | >= 5 starts and last run < 120 s | logs; `SPORTS_INGEST=0` if a source keeps crashing it |
-| feed_stale | warn | ingest on and newest sighting older than 45 min (Kalshi 90 min) | check that source; a stale feed is never back-filled from another stat / scope / source |
+| worker_down | page | ingest on and the collector (`ingest` job) has not finished OK for 3 cycles | ops `scheduler.jobs.ingest.last_exit`; Render logs |
+| scheduler_down | page | the job scheduler thread is not running | restart the service |
+| feed_stale | warn | ingest on and newest sighting older than 45 min (Kalshi 150 min) | check that source; a stale feed is never back-filled from another stat / scope / source |
 | store_large | warn | store >= 6 GB or 80% of `SPORTS_STORE_MAX_MB` | plan disk resize / retention |
 | store_full_ingest_paused | page | store >= `SPORTS_STORE_MAX_MB` | grow the disk, raise the cap |
 | service_memory_high | warn | RSS > 80% of `SPORTS_SERVICE_MAX_MB` | find the handler holding large answers; the watchdog restarts at 100% |
 | service_shedding | warn | (busy + 5xx) > 1% of requests | `peak_inflight` / `db_pool`: raise threads / pool or fix the slow route |
 | store_slow | warn | pool waits timed out or queries interrupted | the heavy route must answer from a snapshot |
 | token_secret_missing | page | secret unset / short | set `SPORTS_TOKEN_SECRET` on both services |
-| job_failing | warn | a periodic job (snapshots / slips-ingest / slips-settle) failed 3 times in a row | ops `jobs.<name>.last_exit`; Render logs |
-| job_crash_loop | page | assistant / lab runner: >= 5 starts and last run < 120 s | missing SDK / key, or turn its flag off |
+| job_failing | warn | any job failed 3 times in a row | ops `jobs.<name>.last_exit`; Render logs |
+| job_over_cap | page | a job killed at its memory cap twice in a row | section 13.4 |
+| job_starved | warn | a job queued for > 30 min | section 13.4 |
+| disk_80 / disk_90 | warn / page | the sports disk >= 80 % / 90 % used | section 13.3 (enlarge) |
 | snapshot_stale | warn | API on and a prebuilt snapshot older than 3x its max age (or never built) | the `snapshots` job; members fall back to request-time builds (slower, still correct) |
 
 Esports side: `/health` (unchanged) and, with `SPORTS_API=1`, `/api/sports/admin/gateway` (admin token):
@@ -302,7 +285,7 @@ Esports side: `/health` (unchanged) and, with `SPORTS_API=1`, `/api/sports/admin
 1. Is esports affected? cs2-scout `/health`: `traffic.errors_5xx`, `avg_server_ms`, `memory_mb` vs the usual. If yes,
    kill switch (section 8) first, investigate second.
 2. `python -m sports.service --check https://scout-sports-api.onrender.com` - act on pages.
-3. Render -> scout-sports-api -> Metrics: memory below the plan with headroom; disk usage vs the 16 GB cap.
+3. Render -> scout-sports-api -> Metrics: memory under ~450 MB (13.1); disk vs the `disk_80` alert (13.3).
 4. A member reports "Sports unavailable": `/api/sports/health` up? Token endpoint 401 for that member = their Whop
    access, not sports; 503 `sports_auth_not_configured` = the secret is missing on one side.
 5. Before enabling any sports change: re-run section 11's load script on it against the section 1 budgets.
@@ -380,21 +363,128 @@ both bursts of the recovering runs included). (REPORT.md's automatic
 Rollback = `off`: the flags-off state on the same code is the baseline row of every series (no sports import,
 sports paths identical to unknown routes - `test_rollback_is_flags_off_even_with_the_service_configured`).
 
-## 12. Remaining blockers / open items (service scope)
+## 12. Remaining blockers / open items (service scope, updated 2026-10-24)
 
-1. **+10% esports p99 budget FAILED locally (+14%, section 11) - pending staging.** Needs a staging run with
-   `scout-sports-api` on its own Render instance; member enablement stays blocked until esports p99 is within +10%
-   there. That staging run needs the paid resources of item 2 first.
-2. **Render resources are owner clicks and are NOT authorized** (no Render API access here): service
-   `scout-sports-api` (Standard), disk `scout-sports-data` 20 GB - declared only in the opt-in template
-   `deploy/render.sports-api.yaml`, never in the auto-synced root `render.yaml`. The current authorization covers
-   only a necessary cheapest paid Postgres. Secrets once authorized: `SPORTS_TOKEN_SECRET` (both services),
-   `ADMIN_TOKEN`, `ODDS_API_KEY`, `ANTHROPIC_API_KEY` (only for the assistant). Upgrade to Pro before
-   `SPORTS_TRAIN=1`.
-3. **Store retention / compaction does not exist yet**: at ~0.3 GB/day the 16 GB cap is reached in ~7 weeks;
-   ingestion then pauses itself (`store_full_ingest_paused`). Needs a retention job before that.
-4. `sports/model/dists.py` imports scipy -> `test_production_needs_no_scipy_or_pandas` fails on the integration head
-   (model agent: drop the import or add scipy to requirements-sports.txt and narrow the test).
-5. The `anthropic` SDK version pin (`>=2.0,<3`) and the beta header the assistant uses were not exercised here (no
-   key); first assistant enable must be watched (`job_crash_loop`).
+1. **+10% esports p99 budget FAILED locally (+14%, section 11) - pending staging.** The sports service now exists on
+   its own Render instance (owner, 2026-10-24); staging (section 7) must show esports p99 within +10% before member
+   enablement. Locally, esports can only be measured with all processes sharing one machine.
+2. **Disk beyond ~1 month:** 10 GB lasts ~3-6 weeks at the projection (13.3); enlarge on `disk_80`. Fitting 6 months
+   in ~25 GB needs the post-release follow-up: compaction of books.db quotes and games.db market / prop lines
+   (collector / lines owners; their readers must use archive-aware views). Lifetime revision counts per offer (which
+   raise the 8.2x compaction ratio) are not confirmed yet - re-measure after a week of staging.
+3. **Model jobs read every forecast** (learn / snapshot / forecast peaks grew 78 -> 218 MB, 272 -> 311 MB on the test
+   copy); forecasts are not archived. Bound those reads before their caps are reached (model / lines owners).
+4. The `anthropic` SDK pin (`>=2.0,<3`) and the assistant's beta header were not exercised (no key); watch the first
+   enable (`job_failing` for the on-demand `assistant` job). Its memory is not measured (cap 120 MB).
+5. Books worker memory was measured only offline (36 MB, no provider calls from here); inside the collector cycle
+   (`ingest`, 274 MB measured with live sources including FanDuel / BetRivers / Polymarket / games) it is covered.
 6. Source rights: Kalshi (partner) and ESPN member display - **owner attestation 2026-10-23** (not a blocker).
+
+## 13. Starter plan (owner 2026-10-24: "the cheapest plan without getting rid of any data")
+
+### 13.1 Memory budget (512 MB container, measured)
+
+| Part | Measured | Limit |
+|---|---|---|
+| sports service, idle | 34 MB (slim slip pool) | restart above 160 MB (`SPORTS_SERVICE_MAX_MB`) |
+| sports service, 700 simultaneous members (one local core) | 50-52 MB peak | same |
+| largest heavy child (ui-snapshots / model-learn / model-snapshot) | 200-218 MB | cap 250, budget 310 |
+| exclusive child: collector cycle | 271-274 MB | cap 300, runs alone |
+| exclusive child: model forecast | 272-311 MB | cap 340, runs alone |
+| exclusive child: model fit | 306-309 MB | cap 340, runs alone |
+| worst admitted combination | service ~52 + forecast 311 = **363 MB** (by reservation: 52 + 340 = 392) | 512 MB container |
+
+Never two heavy children; the reservation (caps, not measured values) is what is admitted, so a child that grows
+is killed at its cap before the container fills; children are the kernel's first OOM victims (`oom_score_adj` 900).
+The NBA fit (308 MB) runs only when no other child runs (exclusive) - ingestion waits for it.
+
+### 13.2 CPU (0.5 CPU) and what members notice
+
+Measured with the service and its job children pinned to ONE local core (the closest local stand-in; Render's 0.5
+CPU is slower), 700 simultaneous sports requests (status / offers / slips / assistant status / board / slate /
+manifest, gzip): 2,100 / 2,100 answered 200 in 3 runs; sports p99 **1.78-1.92 s**, and **1.86-2.11 s** with a UI
+snapshot build looping beside it at low priority (sports/research/results/starter_2026-10-24/final_load.jsonl).
+Snapshot serving is file reads; jobs run at nice 10.
+
+Freshness changes members would see on Starter (all in deploy/render.sports-api.yaml, revertible):
+
+| What | Before (Standard plan) | Starter |
+|---|---|---|
+| pick'em / book / Polymarket lines collected | every 10 min | every 15 min |
+| Kalshi prices collected | every 30 min | every 60 min |
+| member board / slate / player pages rebuilt | every 60 s | every 3 min |
+| slip leg pool rebuilt (served when <= 270 s old) | every 45 s (<= 90 s) | every 90 s |
+| assistant answer start | immediate | waits for a running collector cycle (~2-3 min) or forecast run (~30-45 s) |
+| model forecasts (SPORTS_TRAIN=1) | - | hourly, exclusive |
+| a burst of 700 simultaneous sports requests | p99 ~0.3 s (16 local cores) | p99 ~2 s on one local core; slower on 0.5 CPU |
+| history of offers not seen for 72 h | instant | read back from the archive: one record 36 ms, an event's offers 0.67 s, a player's 0.21 s |
+
+### 13.3 Disk: compaction, projection, cost, enlarging
+
+**Compaction (sports/archive.py arch-2, nothing deleted):** every revision of an offer not seen for 72 h moves to
+verified lzma files (`<SPORTS_DATA_DIR>/archive/records/`) with a per-identity index in canonical.db; reads span hot
++ archive (13.2). Measured on the real copy (80,470 offer rows, 47,632 identities): hot **1,514 B / row** ->
+archived **185 B / row** (70 B file + 115 B index) = **8.2x**. That copy holds ~11 h of collection (1.69 revisions per
+identity); price-tick identities collect many more revisions over their life, which this index amortises - but the
+lifetime revision count is NOT confirmed from this copy, so the projection uses 8x.
+
+**Growth per day at the Starter cadence** (measured where stated; one night-time 15-min sample - day-time slates
+are busier, hence the range):
+
+| Item | MB / day | Basis |
+|---|---|---|
+| canonical offer revisions (raw) | 440-950 | 2.8 MB per 15-min collector cycle (measured, 1,936 revisions) x 96 + Kalshi ~7 MB x 24 + book-bridge offers (not in the sample: 0 books due) |
+| ... after compaction (8x) | **55-120** | the hot 72 h window stays ~1.3-2.9 GB (pages reused) |
+| books.db quote history (not compacted) | 35-84 | books README estimate (standard - full ladder) |
+| games.db (not compacted) | 48-96 | 0.49 MB per cycle measured x 96 |
+| forecasts (incremental) | ~10-30 | estimate; an unchanged run adds 0 (measured) |
+| slips spool / slips.db | <= 50 cap, ~0 at launch | |
+| **accumulating total** | **~150-330** | |
+
+| Horizon | Data (low - high) |
+|---|---|
+| start (store, model files, snapshots, history) | ~1 GB |
+| 1 month | ~7-14 GB |
+| 3 months | ~16-34 GB |
+| 6 months | ~29-63 GB |
+
+**Cost** (Starter $7 / month + $0.25 per GB-month):
+
+| Disk | Disk $ / month | Total $ / month | Lasts at the projection (to the 80 % alert) |
+|---|---|---|---|
+| **10 GB (start)** | 2.50 | **9.50** | ~3-6 weeks |
+| 25 GB | 6.25 | 13.25 | ~2.5-4 months |
+| 50 GB | 12.50 | 19.50 | ~5-8 months |
+| 80 GB (6 months at the high estimate under 80 %) | 20.00 | 27.00 | 6+ months |
+
+For comparison the previous template was Standard $25 + 20 GB $5 = $30. **The next step that keeps 6 months under ~25
+GB** is compacting books.db quotes and games.db market / prop lines the same way (post-release follow-up, owners:
+collector / lines code - their readers must read through archive-aware views); option 4 (collecting fewer price
+ticks) is the owner's data decision and is NOT applied.
+
+**Enlarge procedure (no data loss):** Render dashboard -> scout-sports-api -> **Disks** -> the disk -> **Edit** ->
+a larger size -> **Save**. Render keeps the data; expect a short restart. A disk can be enlarged later, never shrunk
+- grow in steps (10 -> 25 -> 50 GB). If `SPORTS_STORE_MAX_MB` (6,000) is ever the limit (`store_full_ingest_paused`),
+raise it with the disk. Alerts: `disk_80` (warn) -> plan the enlarge this week; `disk_90` (page) -> enlarge now.
+
+### 13.4 When a memory alert fires
+
+| Alert | Meaning | Do |
+|---|---|---|
+| `service_memory_high` (RSS > 80 % of 160 MB) | a cache or a handler holds large answers | ops `cache`, `encoding.cached_bodies`, `prebuilt.keys_in_memory`; lower `SPORTS_CACHE_MAX` / `SPORTS_BOARD_CACHE_MB`; the watchdog restarts the service at 160 MB |
+| `job_over_cap` (page: a job killed at its cap twice in a row) | that job's memory grew with the data (ui-snapshots, model-learn / -snapshot / -forecast read every forecast and grow) | ops `scheduler.jobs.<name>.last_exit.peak_rss_mb`; raise `SPORTS_JOB_<NAME>_CAP_MB` only while service (~50) + cap <= ~450 MB; otherwise the job's owner must bound its reads (window / stream) - last resort the Standard plan |
+| `job_starved` (a job queued > 30 min) | exclusive jobs back to back | check ops `scheduler.stats.deferred_ticks`; lengthen the exclusive jobs' `SPORTS_JOB_<NAME>_EVERY_S` |
+| Render event "out of memory" | the container hit 512 MB | the kernel kills a child first; ops / logs show which; treat as `job_over_cap` |
+
+Known growth risk: forecasts and settlements are not archived, and the model learn / snapshot / forecast jobs read
+all of them - their peaks grew 78 -> 218 MB on the test copy as forecasts accumulated. They will outgrow their
+caps over weeks unless the model jobs bound their reads (reported to the model / lines owners).
+
+## CHECKPOINT (sports/starter, 2026-10-24)
+
+Done: memory-reservation scheduler + caps (cf1b46b), service memory (ca2900b), compaction arch-1 + store hook
+(1bd3d23), archive-spanning reads (9022715), staging check + disk alerts (33a5642), arch-2 per-identity index
+(49be244), Starter caps / template / runbook (this commit). Tests: full sports suite (see the commit), esports suite,
+700-member esports load with flags off. Remaining after this release: option 2 (books / games compaction), bounded
+model-job reads, staging pass (section 7).
+

@@ -475,9 +475,10 @@ def test_paid_sports_service_is_only_in_the_opt_in_template_not_the_synced_bluep
     assert code.count("disk:") == 1 and "name: cs2-scout-data" in code
     tpl = (root / SPORTS_TEMPLATE).read_text(encoding="utf-8")
     assert set(_render_services(SPORTS_TEMPLATE)) == {"scout-sports-api"}
-    assert "name: scout-sports-data" in tpl and "sizeGB: 20" in tpl and "plan: standard" in tpl
+    assert "name: scout-sports-data" in tpl and "sizeGB: 10" in tpl and "plan: starter" in tpl   # owner 2026-10-24
     head = tpl.split("services:", 1)[0].lower()
-    assert "opt-in" in head and "not authorized" in head and "paid" in head and "pending a staging" in head
+    assert "never create a second service" in head and "paid" in head and "pending a staging" in head
+    assert "flags off" in head
     for claim in ("owner approved", "purchase approved", "approved 20"):
         assert claim not in tpl.lower() and claim not in rnd.lower(), claim
     # nothing else in the repository is a second Blueprint Render could pick up

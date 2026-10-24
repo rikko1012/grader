@@ -30,7 +30,7 @@ No esports table, file or migration is changed. The esports disk (`/data`) is un
 | cs2-scout | SPORTS_API_MODE | service | esports mints tokens + serves the page only |
 | cs2-scout | SPORTS_API_BASE, SPORTS_TOKEN_SECRET | set (secret) | RUNBOOK section 6 |
 | scout-sports-api | SPORTS_API / SPORTS_INGEST / SPORTS_TRAIN / SPORTS_ASSISTANT | 0 / 0 / 0 / 0 | staged enable: RUNBOOK section 7 |
-| scout-sports-api | SPORTS_DATA_DIR | /sports-data (20 GB disk scout-sports-data) | image Dockerfile.sports (requirements-sports.txt); declared only in the opt-in template deploy/render.sports-api.yaml, not the auto-synced root render.yaml - paid Standard service + disk NOT authorized (current authorization: a necessary cheapest paid Postgres only) |
+| scout-sports-api | plan / disk | **Starter** (512 MB, 0.5 CPU) + 10 GB disk scout-sports-data at /sports-data (owner created the service 2026-10-24; settings in deploy/render.sports-api.yaml, applied by hand; root render.yaml stays esports-only) | image Dockerfile.sports; Starter limits / job caps / cadences in the template; disk enlarged on `disk_80` (RUNBOOK 13.3) |
 | scout-sports-api | ODDS_API_KEY, ANTHROPIC_API_KEY, SPORTS_TOKEN_SECRET, ADMIN_TOKEN | secrets set by the owner in the Environment tab (never in git) | |
 
 ## 4. Data coverage
@@ -86,9 +86,10 @@ and `test_service_refuses_everything_without_a_secret_and_with_the_flag_off`.
 
 Service scope (RUNBOOK section 12): staging load run with the sports service on its own Render instance (the +10%
 esports p99 budget FAILED locally - 1.14x measured on one shared workstation - pending staging; member enablement
-blocked until it passes); the paid Render resources (deploy/render.sports-api.yaml) need an explicit owner
-authorization that does not exist yet, then the owner creates them and the secrets; store retention / compaction before the 16 GB cap (~7 weeks); scipy import in sports/model/dists.py fails
-the isolation test; anthropic SDK pin unexercised. TODO: add the other agents' blockers.
+blocked until it passes); Starter (RUNBOOK 13): offer compaction arch-2 (8.2x measured, nothing deleted), 10 GB disk
+lasts ~3-6 weeks at the projection - enlarge on disk_80; books.db / games.db compaction is the post-release follow-up
+to fit 6 months in ~25 GB; model jobs read every forecast (bound them before their caps); anthropic SDK pin
+unexercised. TODO: add the other agents' blockers.
 
 ## Coordinator verification (2026-10-24, integration head after all agent merges)
 
@@ -104,5 +105,5 @@ the isolation test; anthropic SDK pin unexercised. TODO: add the other agents' b
 | Model validation | NBA pts/reb/ast/3pm passed the registered history gate (locked test); NFL 5 markets failed; forward gate F (>= 300 settled props / 100+ games at real lines) not yet reviewable - stakes 0, letters withheld |
 
 Open before member enable: staging load run (+14% failed the +10% gate locally - pending staging), Render resources
-(opt-in template deploy/render.sports-api.yaml; paid service + disk not authorized) + secrets (owner), store retention/compaction (16 GB cap
-~7 weeks), Thunderpick / OddsPapi first live inventory review, ANTHROPIC_API_KEY + SDK exercise, forward gate F.
+(scout-sports-api created by the owner on Starter; settings per deploy/render.sports-api.yaml) + secrets (owner),
+disk enlarge procedure on disk_80 (RUNBOOK 13.3), Thunderpick / OddsPapi first live inventory review, ANTHROPIC_API_KEY + SDK exercise, forward gate F.
