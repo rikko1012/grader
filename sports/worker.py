@@ -32,6 +32,8 @@ This is the ONE scheduled collector (the sports service's ingest-loop child). Ea
   games        sports/games collect.tick: pre-game context (pickcenter, predictor, NWS weather), ESPN-supplied
                DraftKings prop lines, Kalshi game ladders, BPI / FPI, rosters / injuries through the same cached reads
                as above (no second request)
+  thunderpick  capture-only inventory (books/inventory.py: raw answers + structure, no offers) until its NBA / NFL
+               format is verified; hourly with Kalshi
 Settlement reads each final box score once and hands the same body to the game store (box score + play-by-play).
 """
 from __future__ import annotations
@@ -70,7 +72,7 @@ MAX_VM_MB = vm_cap_mb()
 STORE_MAX_MB = float(os.environ.get("SPORTS_STORE_MAX_MB", "1500"))
 SETTLE_LOOKBACK_DAYS = 4                 # box scores re-read for corrections this long after a game
 WINDOW_DAYS = {"nba": 2, "wnba": 2, "cbb": 2, "nfl": 7, "cfb": 7}
-SOURCES = ("espn", "pp", "ud", "kalshi", "injuries", "oddsapi", "polymarket", "books", "games")
+SOURCES = ("espn", "pp", "ud", "kalshi", "injuries", "oddsapi", "polymarket", "books", "games", "thunderpick")
 # cmd_ingest runs leagues on parallel threads; the books job and the game tick share per-process leases and
 # league-independent work (blocked-book probes, holds), so they run one league at a time, as one pass did before
 _COLLECT_LOCK = threading.Lock()
@@ -396,6 +398,11 @@ def ingest_league(con, league, sources=SOURCES):
         out["books"] = _ingest_books(con, lg, resolver)
     if "games" in sources:
         out["games"] = _ingest_games(lg)
+    if "thunderpick" in sources:                    # capture-only until its NBA / NFL format is verified (no offers)
+        from .books import inventory
+        inv = inventory.capture("thunderpick", league)
+        out["thunderpick"] = {"status": inv.get("status"), "answers": [
+            {k: a.get(k) for k in ("path", "http_status", "bytes", "error")} for a in inv.get("answers", [])]}
     return out
 
 

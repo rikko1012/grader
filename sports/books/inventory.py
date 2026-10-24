@@ -10,7 +10,7 @@ Nothing here parses an offer. A capture stores, per answer:
 The latest summary per source + league is <...>/inventory/<source>_<league>.json; the board manifest's `sources`
 block (sports/snapshots.py) carries its time, status and counts.
 
-  python -m sports.books.cli inventory thunderpick nba     # capture now (needs THUNDERPICK_API_KEY), then print
+  python -m sports.books.cli inventory thunderpick nba     # capture now (THUNDERPICK_API_KEY / THUNDER_PICK_API)
   python -m sports.books.cli inventory oddspapi nba        # unmetered /v4/account only (shared CS2 account)
   python -m sports.books.cli inventory-show thunderpick nba  # print the stored summary, no request
 
@@ -117,11 +117,11 @@ def read_summary(source, league):
 def capture(source, league, getter=None, key=None):
     """One capture of an unverified source. getter(path) -> (status, bytes) is injectable for tests; the default is
     sources._get through the ledger (Thunderpick) or the guarded unmetered account read (OddsPapi)."""
-    from . import SOURCES
+    from . import SOURCES, source_key
     from . import sources as srcs
     at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     env = SOURCES[source]["key_env"]
-    key = key if key is not None else os.environ.get(env or "")
+    key = key if key is not None else source_key(source)
     out = {"source": source, "league": league, "captured_at": at, "verified": SOURCES[source]["verified"],
            "checklist": list(CHECKLIST), "answers": []}
     if not key and getter is None:

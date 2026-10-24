@@ -26,6 +26,8 @@ PRIMARY market source for sports projections). Sports-namespaced: nothing here i
 | oddspapi    | ODDSPAPI_API_KEY (Render env only)     | not here: key not set locally; player-prop market ids   | no - until|
 |             |                                        | UNVERIFIED                                              | verified  |
 
+source_key(name): the source's key from its key_env or any key_alt name (never printed).
+
 A source that is not verified runs CAPTURE-ONLY (inventory of what it answers, raw answer hash, no offers) until a
 person reviews the first live inventory and flips VERIFIED - parsing an unseen format would invent data.
 """
@@ -33,7 +35,8 @@ SOURCES = {
     "kalshi": {"key_env": None, "verified": True, "consensus": True},
     "polymarket": {"key_env": None, "verified": True, "consensus": True},
     "oddsapi": {"key_env": "ODDS_API_KEY", "verified": True, "consensus": True},
-    "thunderpick": {"key_env": "THUNDERPICK_API_KEY", "verified": False, "consensus": False},
+    "thunderpick": {"key_env": "THUNDERPICK_API_KEY", "key_alt": ("THUNDER_PICK_API",), "verified": False,
+                    "consensus": False},       # THUNDER_PICK_API: the name on Render (as the CS2 module reads it)
     "oddspapi": {"key_env": "ODDSPAPI_API_KEY", "verified": False, "consensus": False},
     # the books' own public feeds (books/fanduel.py, books/betrivers.py), stored as sc-1 offers by books/bridge.py:
     # single-source market candidates mkt-fanduel / mkt-betrivers only - NOT in mc-1 / mi-1, whose registered source
@@ -41,3 +44,14 @@ SOURCES = {
     "fanduel": {"key_env": None, "verified": True, "consensus": False},
     "betrivers": {"key_env": None, "verified": True, "consensus": False},
 }
+
+
+def source_key(name):
+    """The configured key of a market source: key_env, else the first key_alt name that is set; None when none is."""
+    import os
+    meta = SOURCES[name]
+    for env in (meta.get("key_env"),) + tuple(meta.get("key_alt") or ()):
+        v = (os.environ.get(env) or "").strip() if env else ""
+        if v:
+            return v
+    return None

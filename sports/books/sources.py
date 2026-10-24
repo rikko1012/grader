@@ -24,7 +24,7 @@ import re
 
 from .. import adapters, config, identity, names, net, store
 from ..contracts import OfferSnapshot, SideQuote, now_utc, utc
-from . import SOURCES, ledger
+from . import SOURCES, ledger, source_key
 
 GAMMA = "https://gamma-api.polymarket.com"
 PM_STAT = {"nba": {"points": "points", "rebounds": "rebounds", "assists": "assists", "threes": "threes",
@@ -50,8 +50,8 @@ _PM_MARKET = ("id", "sportsMarketType", "question", "line", "outcomes", "bestBid
 
 
 def key_state():
-    return {s: ("no key needed" if not v["key_env"] else ("key set" if os.environ.get(v["key_env"]) else
-                                                          "key not set here")) for s, v in SOURCES.items()}
+    return {s: ("no key needed" if not v["key_env"] else ("key set" if source_key(s) else "key not set here"))
+            for s, v in SOURCES.items()}
 
 
 def _get(source, url, params=None, headers=None, cost=1.0):
@@ -286,8 +286,7 @@ OP_BASE = "https://api.oddspapi.io/v4"
 
 def capture(source, league):
     """Capture-only inventory of an unverified source (no offers). -> dict for coverage."""
-    env = SOURCES[source]["key_env"]
-    k = os.environ.get(env or "")
+    k = source_key(source)
     if not k:
         return {"source": source, "status": "key not set here"}
     inv = {"source": source, "status": "captured (unverified format)", "answers": []}
