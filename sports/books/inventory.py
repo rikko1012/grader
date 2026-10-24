@@ -119,6 +119,8 @@ def capture(source, league, getter=None, key=None):
     sources._get through the ledger (Thunderpick) or the guarded unmetered account read (OddsPapi)."""
     from . import SOURCES
     from . import sources as srcs
+    if source not in SOURCES:                       # Thunderpick removed from Sports (owner 2026-10-24)
+        return {"source": source, "league": league, "status": "not a Sports source"}
     at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     env = SOURCES[source]["key_env"]
     key = key if key is not None else os.environ.get(env or "")

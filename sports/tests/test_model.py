@@ -254,8 +254,8 @@ def test_unverified_sources_are_capture_only_without_keys(monkeypatch):
     from sports.books import SOURCES, sources
     for k in ("THUNDERPICK_API_KEY", "ODDSPAPI_API_KEY", "ODDS_API_KEY"):
         monkeypatch.delenv(k, raising=False)
-    assert sources.capture("thunderpick", "nba")["status"] == "key not set here"
-    assert SOURCES["thunderpick"]["consensus"] is False and SOURCES["oddspapi"]["consensus"] is False
+    assert sources.capture("thunderpick", "nba")["status"] == "not a Sports source" and "thunderpick" not in SOURCES
+    assert sources.capture("oddspapi", "nba")["status"] == "key not set here" and SOURCES["oddspapi"]["consensus"] is False
     assert sources.key_state()["oddsapi"] == "key not set here"
 
 

@@ -132,7 +132,7 @@
 
   // ------------------------------------------------------------------------------------------------- filters
   var BOOKS = {prizepicks: "PrizePicks", underdog: "Underdog", kalshi: "Kalshi", polymarket: "Polymarket",
-               fanduel: "FanDuel", betrivers: "BetRivers", thunderpick: "Thunderpick", oddspapi: "OddsPapi",
+               fanduel: "FanDuel", betrivers: "BetRivers", oddspapi: "OddsPapi",
                oddsapi: "The Odds API"};
   var FEED_BOOKS = {draftkings: "DraftKings", fanduel: "FanDuel", betmgm: "BetMGM", williamhill_us: "Caesars",
                     caesars: "Caesars", betrivers: "BetRivers", espnbet: "ESPN BET", fanatics: "Fanatics",

@@ -270,6 +270,8 @@ OP_BASE = "https://api.oddspapi.io/v4"
 
 def capture(source, league):
     """Capture-only inventory of an unverified source (no offers). -> dict for coverage."""
+    if source not in SOURCES:
+        return {"source": source, "status": "not a Sports source"}
     env = SOURCES[source]["key_env"]
     k = os.environ.get(env or "")
     if not k:
@@ -325,7 +327,7 @@ def polymarket_ingest(con, league, observed_at, resolver):
         return {"ok": False, "error": str(e)[:160]}
 
 
-def ingest(con, league, sources=("polymarket", "oddsapi", "thunderpick", "oddspapi")):
+def ingest(con, league, sources=("polymarket", "oddsapi", "oddspapi")):
     """One cycle for the extra market sources of one league. Stores offers; returns per-source coverage."""
     observed_at = now_utc()
     resolver, teams_raw = resolver_from_store(con, league)
@@ -334,7 +336,7 @@ def ingest(con, league, sources=("polymarket", "oddsapi", "thunderpick", "oddspa
         out["polymarket"] = polymarket_ingest(con, league, observed_at, resolver)
     if "oddsapi" in sources:
         out["oddsapi"] = oddsapi_ingest(con, league, observed_at, resolver, teams_raw)
-    for s in ("thunderpick", "oddspapi"):
+    for s in ("oddspapi",):                      # Thunderpick removed from Sports (owner 2026-10-24)
         if s in sources:
             out[s] = capture(s, league)
     out["budget"] = ledger.usage()

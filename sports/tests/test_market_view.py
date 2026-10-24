@@ -159,33 +159,24 @@ def test_snapshot_rows_and_manifest_carry_the_market_view(built):
     assert m["market_view"]["version"] == "mv-1" and m["market_view"]["with_consensus"] >= 1
     s = m["sources"]
     assert s["fanduel"]["offers"] >= 1 and s["fanduel"]["verified"] and s["fanduel"]["last_read_at"] == t
-    assert s["thunderpick"]["verified"] is False and s["thunderpick"]["capture"]["nba"]["status"]
+    assert "thunderpick" not in s
     assert s["oddsapi"]["offers"] == 0 and s["prizepicks"]["role"].startswith("pick'em")
     first_half = [r for r in b["markets"] + _load(built, "board_more.json")["markets"] if r["k"].endswith("first_half")]
     assert all(x["p"] != "fanduel" for r in first_half for x in (r["mk"] or {}).get("bk", []))
 
 
-def test_inventory_capture_is_structural_and_stores_the_raw_answer(tmp_path, monkeypatch):
-    from sports.books import inventory
+def test_thunderpick_is_not_a_sports_source(tmp_path, monkeypatch):
+    """Owner 2026-10-24: Thunderpick is removed from Sports - not listed, not collected, never requested."""
+    from sports.books import SOURCES, inventory, sources
     monkeypatch.setattr(inventory, "root", lambda: tmp_path / "inv")
-    body = [{"id": 1, "name": "NY Knicks - Boston Celtics", "markets": [
-        {"name": "Player Points", "selections": [{"name": "Over", "handicap": 20.5, "odds": 1.8},
-                                                 {"name": "Under", "handicap": 20.5, "odds": 2.0}]}]}]
-    raw = json.dumps(body).encode()
-    s = inventory.capture("thunderpick", "nba", getter=lambda p: (200, raw), key="k")
-    a = s["answers"][0]
-    assert a["http_status"] == 200 and len(a["sha256"]) == 64 and Path(a["raw_file"]).exists()
-    st = a["structure"]
-    assert st["names"]["[].markets[].name"] == ["Player Points"]
-    assert st["lines"]["[].markets[].selections[].handicap"] == [20.5]
-    assert inventory.read_summary("thunderpick", "nba")["status"] == "captured (format not verified)"
-    out = []
-    inventory.render(inventory.read_summary("thunderpick", "nba"), out.append)
-    assert any("Player Points" in x for x in out) and any("prop format proven only if" in x for x in out)
-    assert inventory.coverage_entry("thunderpick", "nba")["answers"][0]["sha256"] == a["sha256"]
-    # no key and no getter: nothing is requested, the reason is stored
-    assert "not set" in inventory.capture("thunderpick", "nfl", key="")["status"]
-
+    calls = []
+    monkeypatch.setattr(sources, "_get", lambda *a, **k: calls.append(a) or (_ for _ in ()).throw(AssertionError("request")))
+    assert "thunderpick" not in SOURCES
+    assert inventory.capture("thunderpick", "nba", getter=lambda p: calls.append(p) or (200, b"[]"), key="k")["status"] == "not a Sports source"
+    assert sources.capture("thunderpick", "nba")["status"] == "not a Sports source"
+    assert "thunderpick" not in sources.ingest.__defaults__[0]
+    assert calls == []
+    assert "thunderpick" not in (WEB / "stats.js").read_text(encoding="utf-8").lower()
 
 def test_app_never_says_kalshi_market_chance_and_labels_every_number():
     app = (WEB / "app.js").read_text(encoding="utf-8")
@@ -325,7 +316,7 @@ def test_admin_books_route_serves_sources_and_audit(built):
         query = {"league": "nba"}
     code, body = api_books.admin(R())
     nba = body["nba"]
-    assert code == 200 and nba["sources"]["thunderpick"]["verified"] is False
+    assert code == 200 and "thunderpick" not in nba["sources"]
     assert nba["mapping_audit"]["offers_checked"] >= 1 and "player_unresolved" in nba["mapping_audit"]["checks"]
     app = (WEB / "app.js").read_text(encoding="utf-8")
     assert "Line not re-confirmed by" in app                          # stale pick'em line labelled, not hidden

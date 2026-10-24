@@ -275,7 +275,7 @@ def cmd_inventory(argv=None):
     from . import inventory
     ap = argparse.ArgumentParser(prog="python -m sports.books.cli")
     ap.add_argument("what", choices=("inventory", "inventory-show"))
-    ap.add_argument("source", choices=("thunderpick", "oddspapi"))
+    ap.add_argument("source", choices=("oddspapi",))
     ap.add_argument("league", choices=("nba", "nfl"))
     a = ap.parse_args(argv)
     s = inventory.capture(a.source, a.league) if a.what == "inventory" else inventory.read_summary(a.source, a.league)
