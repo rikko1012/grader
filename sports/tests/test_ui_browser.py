@@ -260,3 +260,32 @@ def test_keyboard_focus_labels_targets_contrast_motion(pw, shots):
     page.evaluate("document.body.insertAdjacentHTML('beforeend', '<div class=\"sw-skel\" id=\"t-sk\"></div>')")
     assert page.evaluate("getComputedStyle(document.getElementById('t-sk')).animationName") == "none"
     ctx.close()
+
+
+@pytest.mark.parametrize("width", [360, 1280])
+def test_track_pick_and_my_picks(pw, shots, width):
+    """Track Over / Under is a real button next to + Over / + Under (keyboard: focus + Enter); the server answers per
+    pick (recorded, or refused with its reason - e.g. a started game on an old snapshot) in the status toast; My picks
+    renders (list or empty state) without page overflow, with labelled targets and readable contrast."""
+    ctx, page, errors = _page(pw, width, 800, has_touch=width < 768, is_mobile=width < 768)
+    page.goto(URL + "/sports#/board?lg=nba")
+    page.wait_for_selector(".sw-count", timeout=20000)
+    btn = page.locator("[data-track]").locator("visible=true").first
+    assert btn.get_attribute("aria-label").startswith("Track ")
+    btn.focus()
+    page.keyboard.press("Enter")
+    page.wait_for_function("document.getElementById('sw-toast').innerText.length > 0", timeout=20000)
+    toast = page.locator("#sw-toast").inner_text()
+    assert toast.startswith(("Tracked:", "Not tracked:")), toast
+    assert _no_overflow(page)
+    page.screenshot(path=str(shots / f"track_{width}.png"))
+    page.goto(URL + "/sports#/picks")
+    page.wait_for_selector("h1:has-text('My picks')", timeout=20000)
+    page.wait_for_selector(".sw-state, .sw-picklist", timeout=20000)
+    assert page.locator('#sw-views a[data-view="picks"]').get_attribute("aria-current") == "page"
+    assert _no_overflow(page)
+    a = page.evaluate(A11Y_JS)
+    assert not a["small"] and not a["unlabelled"] and not a["contrast"], a
+    page.screenshot(path=str(shots / f"picks_{width}.png"), full_page=True)
+    assert not [e for e in errors if "favicon" not in e], errors
+    ctx.close()

@@ -184,6 +184,10 @@ database idempotently. Reference: the slips spool (`sports/slips/log.py`: 2,000 
 service on ONE disk. If the worker is ever split into its own Render service, spools must switch to a push transport
 (HTTP POST to the worker) - Render disks cannot be shared.
 
+Member picks (sports/picks.py pk-1) use the same pattern: `picks_spool/` (2,000 entries, 20 MB/day) -> scheduler jobs
+`picks-ingest` (every 60 s, light, cap 60 MB) and `picks-settle` (hourly, light, cap 80 MB) -> `picks.db` (append-only,
+idempotent by pick id; settlement revisions on corrections).
+
 ### 5c. Prebuilt snapshots
 
 Heavy shared answers are registered in `web.SNAPSHOTS` and built by the `prebuilt` job; `web.cached` serves the

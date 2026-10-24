@@ -57,6 +57,27 @@
         .then(function (v) { self.minting = null; return v; }, function (e) { self.minting = null; throw e; });
       return self.minting;
     },
+    post: function (path, body) {                        // JSON POST with the same token refresh (one retry on 401)
+      var self = this;
+      var once = function (retry) {
+        return self.token(retry).then(function () {
+          return fetch(self.base + path, {method: "POST", cache: "no-store", body: JSON.stringify(body),
+            headers: {Authorization: "Bearer " + self.tok, "Content-Type": "application/json"}});
+        }).then(function (r) {
+          return r.json().catch(function () { return {}; }).then(function (b) {
+            if (r.status === 401 && !retry) return once(true);
+            if (r.status === 401 || r.status === 403) throw new ApiError("auth", r.status, b.error);
+            if (r.status === 503) throw new ApiError("unavailable", 503, b.error);
+            if (!r.ok) throw new ApiError("error", r.status, b.detail || b.error);
+            return b;
+          });
+        }, function (e) {
+          if (e instanceof ApiError) throw e;
+          throw new ApiError(navigator.onLine === false ? "offline" : "network", 0);
+        });
+      };
+      return once(false);
+    },
     get: function (path, params, opts) {
       var self = this, qs = new URLSearchParams(params || {}).toString();
       var key = path + "?" + qs, hit = self.mem[key];
@@ -334,7 +355,9 @@
   function legButton(leg) {
     LEGS.push(leg);
     var word = leg.side === "over" ? "Over" : "Under";
-    return '<button type="button" class="sw-btn sw-btn-sm" data-leg="' + (LEGS.length - 1) + '" aria-label="Add ' + esc(leg.player + " " + word + " " + S.line(leg.line) + " " + (leg.stat_label || leg.stat) + " on " + bookName(leg.platform)) + ' to the Slip Studio draft">+ ' + word + "</button>";
+    var what = leg.player + " " + word + " " + S.line(leg.line) + " " + (leg.stat_label || leg.stat) + " on " + bookName(leg.platform);
+    return '<button type="button" class="sw-btn sw-btn-sm" data-leg="' + (LEGS.length - 1) + '" aria-label="Add ' + esc(what) + ' to the Slip Studio draft">+ ' + word + "</button>" +
+      '<button type="button" class="sw-btn sw-btn-sm" data-track="' + (LEGS.length - 1) + '" aria-label="Track ' + esc(what) + ' as my pick">Track ' + word + "</button>";
   }
   function makeLeg(o) {                                  // o: platform, record_id, forecast (full or compact), side, ...
     var f = o.forecast, full = f && f.p_over !== undefined;
@@ -370,7 +393,53 @@
   document.addEventListener("click", function (e) {
     var b = e.target.closest && e.target.closest("[data-leg]");
     if (b) { e.preventDefault(); var l = LEGS[+b.getAttribute("data-leg")]; if (l) addToSlip(l); }
+    var t = e.target.closest && e.target.closest("[data-track]");
+    if (t) { e.preventDefault(); var lt = LEGS[+t.getAttribute("data-track")]; if (lt) trackPick(lt, t); }
   });
+  // ------------------------------------------------------------------------------------------- pick tracking
+  // "Track" records the member's pick on the sports service BEFORE the start, against this exact offer revision and
+  // forecast; the server re-checks everything live and refuses a moved line / started game. Stake 0, no grades.
+  function trackPick(leg, btn) {
+    var f = leg.forecast_id ? {p_over: leg.side === "over" ? leg.p_win : leg.p_loss, p_under: leg.side === "over" ? leg.p_loss : leg.p_win, p_push: leg.p_push} : null;
+    btn.disabled = true;
+    Api.post("/api/sports/picks/track", {picks: [{platform: leg.platform, record_id: leg.record_id, side: leg.side,
+      forecast_id: leg.forecast_id || null, shown: f, surface: route().view === "player" ? "card" : "board"}]}).then(function (b) {
+      var r = (b.results || [])[0] || {};
+      Object.keys(Api.mem).forEach(function (k) { if (k.indexOf("/api/sports/picks/") === 0) delete Api.mem[k]; });
+      if (r.ok) { btn.textContent = "Tracked"; btn.setAttribute("aria-pressed", "true"); }
+      else btn.disabled = false;
+      pickToast(r.ok ? "Tracked: " + leg.player + " " + (leg.side === "over" ? "Over " : "Under ") + S.line(leg.line) + " " + (leg.stat_label || leg.stat) + " on " + bookName(leg.platform) + ", recorded " + S.localTime(r.tracked_at) + ". Stake 0."
+        : "Not tracked: " + (r.text || "refused"), !!r.ok);
+    }, function (e) { btn.disabled = false; pickToast("Not tracked: " + (e.kind === "offline" ? "you are offline" : "the sports service did not answer") + ".", false); });
+  }
+  function pickToast(text, ok) {
+    document.getElementById("sw-toast").innerHTML = '<div class="sw-banner ' + (ok ? "info" : "warn") + '">' + esc(text) + (ok ? ' <a href="#/picks">My picks</a>' : "") + "</div>";
+  }
+  var RESULT_WORD = {win: "Won", loss: "Lost", push: "Push", void: "Void (did not play)", unresolved: "Unresolved"};
+  function renderPicks() {
+    var head = '<div class="sw-eyebrow">My picks</div><h1 class="sw-h1">My picks</h1>';
+    main.innerHTML = head + skeleton(4);
+    Api.get("/api/sports/picks/mine", {}, {fresh: true}).then(function (res) {
+      var d = res.data, ps = d.picks || [];
+      var h = head + '<p class="sw-sub">Each pick was recorded before its game against the exact line shown and is settled from the final box score at that line. Stakes are 0 and no grades are shown while the model is being validated.</p>';
+      if (!ps.length) {
+        main.innerHTML = h + stateBox("No tracked picks yet", "Use <b>Track Over</b> / <b>Track Under</b> on the prop board or a player page before the game starts. A recorded pick appears here within about a minute.", '<a class="sw-btn" href="#/board">Open the prop board</a>');
+        return;
+      }
+      var c = {win: 0, loss: 0, push: 0, "void": 0, open: 0};
+      ps.forEach(function (p) { var st = p.result && p.result.status; if (st && st in c) c[st]++; else c.open++; });
+      h += '<p class="sw-count"><span><b>' + d.total + "</b> picks</span><span><b>" + c.win + "-" + c.loss + "-" + c.push + "</b> won-lost-push</span><span><b>" + c["void"] + "</b> void</span><span><b>" + c.open + "</b> not settled</span></p>";
+      h += '<div class="sw-picklist">' + ps.map(function (p) {
+        var r = p.result, word = p.side === "over" ? "Over" : "Under";
+        return '<article class="sw-card"><div class="sw-card-top"><div><b>' + esc(p.player || "") + "</b> " + esc(word + " " + S.line(p.line) + " " + (p.stat_label || p.stat || "")) +
+          '<div class="sw-faint sw-small">' + esc(bookName(p.platform)) + " · " + esc(p.event_ref || "") + " · starts " + esc(S.localTime(p.start_utc, {weekday: "short", hour: "numeric", minute: "2-digit"})) + "</div></div>" +
+          '<div class="sw-small" style="text-align:right">' + (r ? "<b>" + esc(RESULT_WORD[r.status] || r.status) + "</b>" + (r.value !== null && r.value !== undefined ? '<div class="sw-faint">final ' + esc(r.value) + "</div>" : "") + (r.corrected ? ' <span class="sw-tag">corrected</span>' : "") : '<span class="sw-faint">Not settled</span>') + "</div></div>" +
+          '<div class="sw-small sw-faint">Tracked ' + esc(S.localTime(p.tracked_at)) + " · " + (p.p_side !== null && p.p_side !== undefined ? "Scout chance shown " + S.pct(p.p_side) + " · " : "") + esc(p.validation_text || "") + " · stake 0 · " +
+          src({title: "Pick record", "pick id": p.pick_id, "offer record (exact revision)": p.record_id, revision: p.revision, forecast: p.forecast_id || "none", model: p.model_version || "none", "tracked at (your time)": S.localTime(p.tracked_at), "where": p.surface}) + "</div></article>";
+      }).join("") + "</div>" + (d.total > d.shown ? '<p class="sw-faint sw-small">Newest ' + d.shown + " of " + d.total + " shown.</p>" : "");
+      main.innerHTML = h;
+    }).catch(fail);
+  }
   function boardLegButtons(m, q, f, B) {
     if (q.p === "kalshi" || !q.g) return "";
     var out = [["over", 0], ["under", 1]].filter(function (x) { return q.o[x[1]] === 1; }).map(function (x) {
@@ -426,9 +495,9 @@
         '<div class="sw-small" style="text-align:right">' + esc(B.stats[m.st] || m.st) + "</div></div>";
       qr.q.forEach(function (q) {
         var f = q.f ? B.fc[q.f] : null, c = fcCell(f, q.o);
-        h += '<div class="sw-qrow"><div>' + book(q.p) + ' <a class="sw-line" href="' + marketHref(m, q) + '">' + S.line(q.l) + '</a><div class="sw-offered">' + offeredText(q.o) + " · " + esc(S.age(q.t)) + "</div>" + boardLegButtons(m, q, f, B) + "</div>" +
+        h += '<div class="sw-qrow"><div>' + book(q.p) + ' <a class="sw-line" href="' + marketHref(m, q) + '">' + S.line(q.l) + '</a><div class="sw-offered">' + offeredText(q.o) + " · " + esc(S.age(q.t)) + "</div></div>" +
           '<div class="sw-small sw-faint" style="text-align:right">Proj<br><b class="sw-p">' + c.mean + "</b></div>" +
-          '<div class="sw-pp"><span>O ' + c.over + "</span><span>U " + c.under + "</span>" + (f && f.pp > 0 ? "<span>P " + c.push + "</span>" : "") + "</div></div>";
+          '<div class="sw-pp"><span>O ' + c.over + "</span><span>U " + c.under + "</span>" + (f && f.pp > 0 ? "<span>P " + c.push + "</span>" : "") + "</div>" + boardLegButtons(m, q, f, B) + "</div>";
       });
       qr.k.forEach(function (q) {
         h += '<div class="sw-qrow"><div>' + book(q.p) + ' <span class="sw-line">' + S.line(q.l) + '</span></div><div class="sw-small sw-faint">YES ' + S.cents(q.k && q.k[0]) + " / " + S.cents(q.k && q.k[1]) + '</div><div class="sw-small' + (kMid(q) === null ? ' sw-faint">market price' : '">market <b>' + S.pct(kMid(q)) + "</b>") + "</div></div>";
@@ -857,10 +926,12 @@
     if (r.view === "player" && r.arg && r.arg.indexOf(state.lg + ":") !== 0) state.lg = r.arg.slice(0, 3);
     setNav(r.view);
     banner.innerHTML = "";
+    document.getElementById("sw-toast").innerHTML = "";
     if (r.view === "board") renderBoard(r.params);
     else if (r.view === "player" && r.arg) renderPlayer(r.arg, r.params);
     else if (r.view === "game" && r.arg) renderGame(r.arg);
     else if (r.view === "results") renderResults();
+    else if (r.view === "picks") renderPicks();
     else renderSlate();
     var top = document.getElementById("sw-main");
     if (render.count++) { try { top.focus({preventScroll: true}); } catch (e) {} window.scrollTo(0, 0); }
