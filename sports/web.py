@@ -89,7 +89,7 @@ ROUTES = {
 # "<name>": ("<module>:<function>", refresh_s, max_age_s) - function(con) -> {web.cached key tuple: value}, key[0] ==
 # name. Built by the scheduled worker child (python -m sports.service snapshots), read by web.cached. ONE line each.
 SNAPSHOTS = {
-    "slips_pool": ("sports.prebuilt:slips_pool", 45, 90),
+    "slips_pool": ("sports.prebuilt:slips_pool", 90, 270),      # Starter: rebuilt every 90 s, served <= 270 s old
 }
 # ------------------------------------------------------------------------------------------- end of snapshot table
 

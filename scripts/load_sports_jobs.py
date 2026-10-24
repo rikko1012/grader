@@ -25,6 +25,8 @@ JOBS = {
     "slips-ingest": [PY, "-m", "sports.slips", "ingest"],
     "slips-settle": [PY, "-m", "sports.slips", "settle"],
     "ingest-pickem": [PY, "-m", "sports.worker", "ingest", "nba", "nfl", "--sources", "espn,pp,ud,injuries,oddsapi"],
+    "ingest-all-but-kalshi": [PY, "-m", "sports.worker", "ingest", "nba", "nfl", "--sources",
+                              "espn,pp,ud,injuries,oddsapi,polymarket,books,games", "--bucket-min", "1"],
     "ingest-kalshi": [PY, "-m", "sports.worker", "ingest", "nba", "nfl", "--sources", "kalshi"],
     "settle": [PY, "-m", "sports.worker", "settle", "nba", "nfl"],
     "history": [PY, "-m", "sports.snapshots", "history", "nba", "nfl", "--max-players", "40"],
@@ -47,7 +49,7 @@ def run(name):
     env = {k: v for k, v in os.environ.items() if not k.startswith("SPORTS_")}
     env.update({"SPORTS_DATA_DIR": data, "PYTHONPATH": code, "SPORTS_INGEST": "1", "SPORTS_TRAIN": "1",
                 "SPORTS_API": "1", "SPORTS_ASSISTANT": "1", "SPORTS_TOKEN_SECRET": "s" * 40, "PYTHONIOENCODING": "utf-8"})
-    env.update({k: v for k, v in os.environ.items() if k.startswith("SPORTS_JOB_") or k in (
+    env.update({k: v for k, v in os.environ.items() if k.startswith(("SPORTS_JOB_", "SPORTS_WORKER_")) or k in (
         "MALLOC_ARENA_MAX", "OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "SPORTS_WORKER_CONCURRENCY")})
     if offline:
         env.update({"HTTP_PROXY": "http://127.0.0.1:9", "HTTPS_PROXY": "http://127.0.0.1:9", "NO_PROXY": ""})

@@ -262,7 +262,7 @@ def test_service_post_body_cap_and_admin_ops(svc, monkeypatch):
     assert _get(svc, "/api/sports/admin/ops", _auth())[0] == 403
     monkeypatch.setenv("ADMIN_TOKEN", "a" * 30)
     code, body, _ = _get(svc, "/api/sports/admin/ops", {"X-Admin-Token": "a" * 30})
-    assert code == 200 and {"service", "db_pool", "cache", "feeds", "worker", "rss_mb"} <= set(body)
+    assert code == 200 and {"service", "db_pool", "cache", "feeds", "scheduler", "rss_mb"} <= set(body)
     assert _get(svc, "/api/sports/admin/ops", _auth("admin"))[0] == 200
 
 
@@ -417,26 +417,8 @@ def test_proxy_circuit_opens_on_a_dead_upstream(monkeypatch):
     assert gateway.stats()["proxy_circuit_open"]
 
 
-# ------------------------------------------------------------------------------------------------- supervisor
-def test_supervisor_is_off_without_the_ingest_flag(monkeypatch):
-    monkeypatch.delenv("SPORTS_INGEST", raising=False)
-    assert service.supervise_worker(argv=[sys.executable, "-c", "raise SystemExit(9)"]) is None
-
-
-def test_supervisor_restarts_the_worker_with_backoff(monkeypatch):
-    monkeypatch.setenv("SPORTS_INGEST", "1")
-    monkeypatch.setattr(service, "backoff", lambda attempt, **k: 0.05)
-    monkeypatch.setattr(service, "WORKER", dict(service.WORKER, starts=0))
-    stop = threading.Event()
-    t = threading.Thread(target=service.supervise_worker,
-                         kwargs={"argv": [sys.executable, "-c", "raise SystemExit(7)"], "stop": stop})
-    t.start()
-    deadline = time.time() + 20
-    while service.WORKER["starts"] < 2 and time.time() < deadline:
-        time.sleep(0.05)
-    stop.set()
-    t.join(10)
-    assert service.WORKER["starts"] >= 2 and service.WORKER["last_exit"]["code"] == 7
+# ------------------------------------------------------------------------------------------------- scheduler
+# (job lock / memory caps / triggers: sports/tests/test_scheduler.py)
 
 
 def test_backoff_is_jittered_and_capped():
@@ -535,30 +517,46 @@ def test_the_service_process_starts_with_flags_off_and_serves_nothing(tmp_path):
 
 
 def _ops(**kw):
-    o = {"flags": {"SPORTS_INGEST": True}, "worker": {"pid": 123, "starts": 1, "last_exit": None},
+    now = time.time()
+    o = {"flags": {"SPORTS_INGEST": True}, "scheduler_alive": True,
+         "scheduler": {"uptime_s": 10, "jobs": {"ingest": {"enabled": True, "every_s": 900, "last_ok_at": now - 60,
+                                                          "failures_in_a_row": 0, "last_exit": {"code": 0}}}},
          "feeds": {"store_mb": 100.0, "platforms": {"prizepicks": {"age_min": 5}, "kalshi": {"age_min": 40}}},
-         "rss_mb": 50, "rss_max_mb": 900, "service": {"requests": 1000, "rejected_busy": 0, "errors_5xx": 0},
+         "rss_mb": 50, "rss_max_mb": 160, "service": {"requests": 1000, "rejected_busy": 0, "errors_5xx": 0},
          "db_pool": {"waits_timed_out": 0, "queries_interrupted": 0}, "token_configured": True}
     for k, v in kw.items():
         o[k] = v
     return o
 
 
+def _sched(**ingest):
+    j = {"enabled": True, "every_s": 900, "last_ok_at": time.time() - 60, "failures_in_a_row": 0,
+         "last_exit": {"code": 0}}
+    j.update(ingest)
+    return {"uptime_s": 100000, "jobs": {"ingest": j}}
+
+
 def test_alerts_clean_and_each_rule(monkeypatch):
     monkeypatch.setenv("SPORTS_STORE_MAX_MB", "8000")
     assert service.alerts(_ops()) == []
     codes = lambda o: {a["code"] for a in service.alerts(o)}                      # noqa: E731
-    assert codes(_ops(worker={"pid": None, "starts": 1})) == {"worker_down"}
-    assert "worker_crash_loop" in codes(_ops(worker={"pid": 9, "starts": 6, "last_exit": {"ran_s": 10}}))
+    assert codes(_ops(scheduler_alive=False)) == {"scheduler_down"}
+    assert codes(_ops(scheduler=_sched(last_ok_at=time.time() - 4 * 900))) == {"worker_down"}
+    assert codes(_ops(scheduler=_sched(last_ok_at=None))) == {"worker_down"}      # never succeeded since start
+    assert "job_failing" in codes(_ops(scheduler=_sched(failures_in_a_row=3)))
+    assert "job_over_cap" in codes(_ops(scheduler=_sched(failures_in_a_row=2, cap_mb=290,
+                                                         last_exit={"code": "killed_over_cap (301 > 290 MB)"})))
+    assert "job_starved" in codes(_ops(scheduler=_sched(queued_since=time.time() - 4000)))
     assert codes(_ops(feeds={"store_mb": 1, "platforms": {"underdog": {"age_min": 60}, "kalshi": {"age_min": 60}}})) \
         == {"feed_stale"}                                                         # kalshi has the longer limit
     assert codes(_ops(feeds={"store_mb": 6500, "platforms": {}})) == {"store_large"}
     assert codes(_ops(feeds={"store_mb": 8100, "platforms": {}})) == {"store_full_ingest_paused"}
-    assert codes(_ops(rss_mb=800)) == {"service_memory_high"}
+    assert codes(_ops(rss_mb=140)) == {"service_memory_high"}
     assert codes(_ops(service={"requests": 100, "rejected_busy": 5, "errors_5xx": 0})) == {"service_shedding"}
     assert codes(_ops(db_pool={"waits_timed_out": 1, "queries_interrupted": 0})) == {"store_slow"}
     assert codes(_ops(token_configured=False)) == {"token_secret_missing"}
-    assert service.alerts(_ops(flags={"SPORTS_INGEST": False}, worker={"pid": None})) == []   # ingest off: no worker alerts
+    off = _ops(flags={"SPORTS_INGEST": False}, scheduler=_sched(last_ok_at=None))
+    assert service.alerts(off) == []                                             # ingest off: no collector alerts
 
 
 def test_member_answers_get_etag_304_and_gzip_once_per_body(svc, monkeypatch):

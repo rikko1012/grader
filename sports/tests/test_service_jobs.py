@@ -91,58 +91,34 @@ def test_snapshot_build_failure_is_reported_not_raised(monkeypatch):
 # --------------------------------------------------------------------------------------------------- schedule
 def test_schedule_names_every_worker_side_process_with_its_flag():
     s = service.schedule()
-    want = {"ingest-loop": "SPORTS_INGEST", "snapshots": "SPORTS_API", "slips-ingest": "SPORTS_INGEST",
-            "slips-settle": "SPORTS_INGEST", "assistant-runner": "SPORTS_ASSISTANT", "lab-runner": "SPORTS_TRAIN",
-            "ui-snapshots": "SPORTS_INGEST", "ui-history": "SPORTS_INGEST"}
+    want = {"assistant": "SPORTS_ASSISTANT", "prebuilt": "SPORTS_API", "ui-snapshots": "SPORTS_INGEST",
+            "slips-ingest": "SPORTS_INGEST", "ingest": "SPORTS_INGEST", "ingest-kalshi": "SPORTS_INGEST",
+            "settle": "SPORTS_INGEST", "slips-settle": "SPORTS_INGEST", "model-forecast": "SPORTS_TRAIN",
+            "model-learn": "SPORTS_TRAIN", "model-snapshot": "SPORTS_TRAIN", "model-fit": "SPORTS_TRAIN",
+            "lab": "SPORTS_TRAIN", "history": "SPORTS_INGEST", "archive": "SPORTS_INGEST",
+            "archive-verify": "SPORTS_INGEST"}
     assert {k: v["flag"] for k, v in s.items()} == want
     assert s["slips-ingest"]["argv"][1:] == ["-m", "sports.slips", "ingest"]
     assert s["slips-settle"]["argv"][1:] == ["-m", "sports.slips", "settle"]
-    assert s["assistant-runner"]["argv"][1:] == ["-m", "sports.assistant.runner"]
-    assert s["lab-runner"]["argv"][1:] == ["-m", "sports.lab.runner"]
-    assert s["snapshots"]["every_s"] <= min(v[2] for v in web.SNAPSHOTS.values())  # refreshed before max age
+    assert s["assistant"]["argv"][1:] == ["-m", "sports.assistant.runner", "--once"] and s["assistant"]["trigger"]
+    assert s["lab"]["argv"][1:] == ["-m", "sports.lab.runner", "--once"]
+    assert s["prebuilt"]["every_s"] <= min(v[2] for v in web.SNAPSHOTS.values())  # refreshed before max age
     for name, spec in s.items():
-        assert (spec["every_s"] is None) == (spec["timeout_s"] is None), name      # periodic jobs always time out
+        assert spec["timeout_s"], name                                         # every child is bounded in time
+        assert spec["cap_mb"] > 0 and spec["cls"] in ("light", "heavy", "exclusive"), name
+    assert {n for n, v in s.items() if v["cls"] == "exclusive"} == {"ingest", "model-forecast", "model-fit", "lab"}
 
 
-def test_supervise_starts_only_flagged_jobs(monkeypatch):
+def test_supervise_starts_one_scheduler_and_no_job_with_flags_off(monkeypatch):
     for f in ("SPORTS_INGEST", "SPORTS_API", "SPORTS_ASSISTANT", "SPORTS_TRAIN"):
         monkeypatch.delenv(f, raising=False)
-    monkeypatch.setattr(service, "JOBS", {})
+    from sports import scheduler
+    monkeypatch.setattr(scheduler, "JOBS", {})
     stop = threading.Event()
-    assert service.supervise(stop) == {}
-    assert all(not j["enabled"] for j in service.JOBS.values()) and len(service.JOBS) == 8
+    sch = service.supervise(stop)
+    time.sleep(0.6)
+    assert sch.running == {} and len(scheduler.JOBS) == 16 and not any(j["enabled"] for j in scheduler.JOBS.values())
     stop.set()
-
-
-def test_periodic_job_repeats_and_a_hung_job_is_killed(monkeypatch):
-    monkeypatch.setattr(service, "JOBS", {})
-    monkeypatch.setenv("SPORTS_API", "1")
-    stop = threading.Event()
-    jobs = {"quick": {"argv": [sys.executable, "-c", "pass"], "every_s": 0.2, "timeout_s": 5, "flag": "SPORTS_API"},
-            "hung": {"argv": [sys.executable, "-c", "import time; time.sleep(60)"], "every_s": 30, "timeout_s": 1.5,
-                     "flag": "SPORTS_API"}}
-    ts = service.supervise(stop, jobs)
-    deadline = time.time() + 30
-    while time.time() < deadline and (service.JOBS["quick"]["starts"] < 3 or not service.JOBS["hung"]["last_exit"]):
-        time.sleep(0.1)
-    stop.set()
-    for t in ts.values():
-        t.join(15)
-    assert service.JOBS["quick"]["starts"] >= 3 and service.JOBS["quick"]["last_exit"]["code"] == 0
-    assert service.JOBS["hung"]["last_exit"]["code"] == "timeout" and service.JOBS["hung"]["last_exit"]["ran_s"] < 10
-
-
-def test_job_alerts(monkeypatch):
-    base = {"flags": {"SPORTS_INGEST": False, "SPORTS_API": True}, "worker": {}, "feeds": {"platforms": {}},
-            "rss_mb": 1, "rss_max_mb": 900, "service": {"requests": 0, "rejected_busy": 0, "errors_5xx": 0},
-            "db_pool": {}, "token_configured": True,
-            "prebuilt": {"snapshots": {"slips_pool": {"age_s": 10, "max_age_s": 90}}}}
-    assert service.alerts(dict(base, jobs={})) == []
-    codes = {a["code"] for a in service.alerts(dict(base, jobs={
-        "slips-ingest": {"enabled": True, "every_s": 300, "failures_in_a_row": 3},
-        "assistant-runner": {"enabled": True, "every_s": None, "starts": 6, "last_exit": {"ran_s": 3}}},
-        prebuilt={"snapshots": {"slips_pool": {"age_s": None, "max_age_s": 90}}}))}
-    assert codes == {"job_failing", "job_crash_loop", "snapshot_stale"}
 
 
 # -------------------------------------------------------------------------------------------------- packaging
