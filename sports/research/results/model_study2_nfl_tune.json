@@ -1,0 +1,1605 @@
+{
+ "sport": "nfl",
+ "phase": "tune",
+ "model_version": "sm-2",
+ "register": "sports/research/REGISTER.md A5",
+ "registry": "fr-2",
+ "generated_at": "2026-10-24T22:08:47Z",
+ "markets": {
+  "pass_yds": {
+   "sm1": {
+    "half_lives": [
+     4,
+     4
+    ],
+    "family": "ratio",
+    "features": []
+   },
+   "stage_a": {
+    "split": "r1 (round-1 train / tune)",
+    "reference_features": [],
+    "fit_rows": 1590,
+    "eval_rows": 272,
+    "eval_games": 135,
+    "reference_crps": 45.943314889705874,
+    "tests": {
+     "nfl.qb_throw_profile": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.373587040441177,
+      "ci": [
+       0.00736203387473973,
+       0.7471788426090679
+      ],
+      "beta_std": -0.02697841612995784,
+      "passed": false
+     },
+     "nfl.seconds_per_play": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.06162398897058877,
+      "ci": [
+       -0.13136809101851818,
+       0.2497873294991429
+      ],
+      "beta_std": 0.006253367301879971,
+      "passed": false
+     },
+     "nfl.wind": {
+      "coverage_fit": 0.879874213836478,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.46917702205882217,
+      "ci": [
+       -0.8999956349420658,
+       -0.021682395233915484
+      ],
+      "beta_std": -0.03159074789403007,
+      "passed": true,
+      "diag": {
+       "logloss_ref": 0.6632452475050788,
+       "ece": 0.026011029411764724,
+       "in_the_large": 0.02224264705882356,
+       "cov80": 0.8013344226579522
+      }
+     },
+     "nfl.temp": {
+      "coverage_fit": 0.879874213836478,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.1732088235294118,
+      "ci": [
+       -0.21272623166852117,
+       0.568203084624123
+      ],
+      "beta_std": 0.019884193093674916,
+      "passed": false
+     },
+     "nfl.injury_redistribution": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.32870955882352726,
+      "ci": [
+       -0.9604412577036696,
+       0.2956024498574167
+      ],
+      "beta_std": -0.03279446969069535,
+      "passed": false
+     },
+     "nfl.epa": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.04901213235294005,
+      "ci": [
+       -0.15896112801425408,
+       0.055717232796718426
+      ],
+      "beta_std": -0.005064368126276166,
+      "passed": false
+     },
+     "nfl.redzone_share": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.07773924632352995,
+      "ci": [
+       0.01046266657879432,
+       0.14197566630791367
+      ],
+      "beta_std": -0.002937192727426379,
+      "passed": false
+     },
+     "nfl.inside10": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.07102729779411714,
+      "ci": [
+       -0.3397821221102003,
+       0.18447675537860034
+      ],
+      "beta_std": -0.008906187605173912,
+      "passed": false
+     },
+     "nfl.pass_epa": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.3094611213235294,
+      "ci": [
+       -0.6977900589274033,
+       0.05165129384296825
+      ],
+      "beta_std": 0.031284504399496545,
+      "passed": false
+     },
+     "nfl.team_explosive": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0801851102941172,
+      "ci": [
+       -0.25514127390836355,
+       0.09247076633675441
+      ],
+      "beta_std": -0.005854906927857333,
+      "passed": false
+     },
+     "nfl.opp_def_epa": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.03378069852941185,
+      "ci": [
+       -0.18630110156742768,
+       0.10805420970108194
+      ],
+      "beta_std": 0.005505475417642108,
+      "passed": false
+     },
+     "nfl.opp_def_success": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.10022362132353024,
+      "ci": [
+       -0.4343957677278664,
+       0.2264360467146427
+      ],
+      "beta_std": 0.009613497039889632,
+      "passed": false
+     },
+     "nfl.opp_def_explosive": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.1458444852941168,
+      "ci": [
+       -0.32615529725671244,
+       0.022976144301471654
+      ],
+      "beta_std": 0.005343118398437231,
+      "passed": false
+     },
+     "nfl.rest_days": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.13611084558823702,
+      "ci": [
+       -0.25424678791548877,
+       0.5607297173543534
+      ],
+      "beta_std": -0.02144139924457091,
+      "passed": false
+     },
+     "nfl.post_bye": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.05561020220588246,
+      "ci": [
+       -0.20776626664949235,
+       0.31710566840685583
+      ],
+      "beta_std": -0.012920904221144214,
+      "passed": false
+     },
+     "nfl.travel": {
+      "coverage_fit": 0.9509433962264151,
+      "coverage_eval": 0.9264705882352942,
+      "crps_diff": 0.04130891544117704,
+      "ci": [
+       -0.09579440300102567,
+       0.18150637506565165
+      ],
+      "beta_std": -0.001998351165285997,
+      "passed": false
+     }
+    },
+    "passed": [
+     "nfl.wind"
+    ],
+    "joint": {
+     "features": [
+      "nfl.wind"
+     ],
+     "crps_diff": -0.46917702205882217,
+     "ci": [
+      -0.8999956349420658,
+      -0.021682395233915484
+     ],
+     "used": true,
+     "beta_std": {
+      "nfl.wind": -0.03159074789403007
+     },
+     "diag": {
+      "logloss_ref": 0.6632452475050788,
+      "ece": 0.026011029411764724,
+      "in_the_large": 0.02224264705882356,
+      "cov80": 0.8013344226579522
+     },
+     "reference_diag": {
+      "logloss_ref": 0.6687610625270465,
+      "ece": 0.03400735294117645,
+      "in_the_large": 0.023069852941176416,
+      "cov80": 0.7939814814814817
+     }
+    }
+   },
+   "stage_b_lines": {
+    "split": "r1 (round-1 train / tune)",
+    "reference_features": [
+     "nfl.wind"
+    ],
+    "fit_rows": 1590,
+    "eval_rows": 272,
+    "eval_games": 135,
+    "reference_crps": 45.47413786764706,
+    "tests": {
+     "nfl.spread": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.04754549632352994,
+      "ci": [
+       -0.1302816494429552,
+       0.04476148875650076
+      ],
+      "beta_std": -0.001015811660375694,
+      "passed": false
+     },
+     "nfl.implied_total": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.032804227941177364,
+      "ci": [
+       -0.2300225753324281,
+       0.15068795345815492
+      ],
+      "beta_std": 0.008945649122644738,
+      "passed": false
+     },
+     "nfl.game_total": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.1855795955882368,
+      "ci": [
+       -0.4284400803947494,
+       0.05560682339899517
+      ],
+      "beta_std": 0.014027678379662798,
+      "passed": false
+     },
+     "nfl.blowout_risk": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.05652022058823477,
+      "ci": [
+       -0.08203765716530641,
+       0.19962932230024216
+      ],
+      "beta_std": 0.004349673151420544,
+      "passed": false
+     }
+    },
+    "passed": []
+   },
+   "sm2_features_added": [
+    "nfl.wind"
+   ],
+   "cal": {
+    "c": 0.99,
+    "s": 1.0,
+    "crps_raw": 45.47413786764706,
+    "crps_cal": 45.46832082898851
+   },
+   "cal_window": "round-1 tune",
+   "challenger": true
+  },
+  "rush_yds": {
+   "sm1": {
+    "half_lives": [
+     2,
+     2
+    ],
+    "family": "mixture",
+    "features": []
+   },
+   "stage_a": {
+    "split": "r1 (round-1 train / tune)",
+    "reference_features": [],
+    "fit_rows": 2535,
+    "eval_rows": 411,
+    "eval_games": 134,
+    "reference_crps": 18.090948021486625,
+    "tests": {
+     "nfl.carry_share": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.0037419696092044086,
+      "ci": [
+       -0.02335249916269982,
+       0.03227825500526356
+      ],
+      "beta_std": 0.009139604164129142,
+      "passed": false
+     },
+     "nfl.scramble": {
+      "coverage_fit": 0.10729783037475345,
+      "coverage_eval": 0.11192214111922141,
+      "crps_diff": -0.00861644206730745,
+      "ci": [
+       -0.022285859745849373,
+       0.004749626900325582
+      ],
+      "beta_std": -0.0041695251762279995,
+      "passed": false
+     },
+     "nfl.seconds_per_play": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.006512025958789829,
+      "ci": [
+       -0.019957880311017414,
+       0.007753648249045377
+      ],
+      "beta_std": -0.004362966428909769,
+      "passed": false
+     },
+     "nfl.epa": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.00028971582399641186,
+      "ci": [
+       -0.0010873088906589268,
+       0.0016836664416104855
+      ],
+      "beta_std": 0.00041122692123153035,
+      "passed": false
+     },
+     "nfl.redzone_share": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.0012445215790896959,
+      "ci": [
+       -0.011006549531058693,
+       0.013516446773637298
+      ],
+      "beta_std": 0.003908888032172105,
+      "passed": false
+     },
+     "nfl.inside10": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.012877229648654873,
+      "ci": [
+       -0.05983146075976198,
+       0.035147211389705925
+      ],
+      "beta_std": -0.013207668306867596,
+      "passed": false
+     },
+     "nfl.carry_share_trend": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.009740047071299437,
+      "ci": [
+       -0.02688748584826736,
+       0.008110028784655466
+      ],
+      "beta_std": 0.006343803512958415,
+      "passed": false
+     },
+     "nfl.qb_designed_runs": {
+      "coverage_fit": 0.10729783037475345,
+      "coverage_eval": 0.11192214111922141,
+      "crps_diff": 0.018983760229074255,
+      "ci": [
+       -0.016927812878612558,
+       0.056489884206274876
+      ],
+      "beta_std": -0.056234714814432624,
+      "passed": false
+     },
+     "nfl.rush_epa": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.01664157888669212,
+      "ci": [
+       -0.018424824664220272,
+       0.05209041964397538
+      ],
+      "beta_std": 0.01452879567513071,
+      "passed": false
+     },
+     "nfl.team_explosive": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.0010039323180454434,
+      "ci": [
+       -0.0529427124040949,
+       0.05318015282084434
+      ],
+      "beta_std": -0.012899241274974294,
+      "passed": false
+     },
+     "nfl.opp_def_epa": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.007839839451751618,
+      "ci": [
+       -0.12464213280064003,
+       0.12987409881246592
+      ],
+      "beta_std": 0.03640062695307576,
+      "passed": false
+     },
+     "nfl.opp_def_success": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.005040983519203111,
+      "ci": [
+       -0.14387030313096522,
+       0.1524344612216286
+      ],
+      "beta_std": 0.04299471764222685,
+      "passed": false
+     },
+     "nfl.opp_def_explosive": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0266261752960381,
+      "ci": [
+       -0.16438861304858388,
+       0.1128493172047541
+      ],
+      "beta_std": 0.03813359653798284,
+      "passed": false
+     },
+     "nfl.mates_out_carries": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.17070233584927588,
+      "ci": [
+       -0.33202016592569666,
+       -0.00036084859626201815
+      ],
+      "beta_std": 0.0633011474688418,
+      "passed": true,
+      "diag": {
+       "logloss_ref": 0.6433298903478075,
+       "ece": 0.0337726107219944,
+       "in_the_large": 0.03426766346913662,
+       "cov80": 0.7762165513285209
+      }
+     },
+     "nfl.rest_days": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.035147042647972325,
+      "ci": [
+       -0.10266315269031506,
+       0.02888359752835298
+      ],
+      "beta_std": -0.015258869577678776,
+      "passed": false
+     },
+     "nfl.post_bye": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.01117968926343114,
+      "ci": [
+       -0.04446034044310252,
+       0.02209685784880973
+      ],
+      "beta_std": -0.008442907481181655,
+      "passed": false
+     },
+     "nfl.travel": {
+      "coverage_fit": 0.9499013806706115,
+      "coverage_eval": 0.9294403892944039,
+      "crps_diff": 0.009096917634102544,
+      "ci": [
+       -0.006283705792228535,
+       0.02610643152716294
+      ],
+      "beta_std": 0.005085521733999329,
+      "passed": false
+     }
+    },
+    "passed": [
+     "nfl.mates_out_carries"
+    ],
+    "joint": {
+     "features": [
+      "nfl.mates_out_carries"
+     ],
+     "crps_diff": -0.17070233584927588,
+     "ci": [
+      -0.33202016592569666,
+      -0.00036084859626201815
+     ],
+     "used": true,
+     "beta_std": {
+      "nfl.mates_out_carries": 0.0633011474688418
+     },
+     "diag": {
+      "logloss_ref": 0.6433298903478075,
+      "ece": 0.0337726107219944,
+      "in_the_large": 0.03426766346913662,
+      "cov80": 0.7762165513285209
+     },
+     "reference_diag": {
+      "logloss_ref": 0.6484255957929517,
+      "ece": 0.036111249666623844,
+      "in_the_large": 0.03545980725973452,
+      "cov80": 0.7635294283191147
+     }
+    }
+   },
+   "stage_b_lines": {
+    "split": "r1 (round-1 train / tune)",
+    "reference_features": [
+     "nfl.mates_out_carries"
+    ],
+    "fit_rows": 2535,
+    "eval_rows": 411,
+    "eval_games": 134,
+    "reference_crps": 17.92024568563735,
+    "tests": {
+     "nfl.spread": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.09665569317805182,
+      "ci": [
+       -0.2333097582467711,
+       0.05234950388225906
+      ],
+      "beta_std": -0.04792166239226738,
+      "passed": false
+     },
+     "nfl.implied_total": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.09574006165170022,
+      "ci": [
+       -0.24640788965935342,
+       0.06477322161606353
+      ],
+      "beta_std": 0.0527935861036447,
+      "passed": false
+     },
+     "nfl.game_total": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0062562327699312624,
+      "ci": [
+       -0.06585654545089785,
+       0.04890205872643549
+      ],
+      "beta_std": 0.022697757134416654,
+      "passed": false
+     },
+     "nfl.blowout_risk": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.0009436251877617812,
+      "ci": [
+       -0.0005605443232856453,
+       0.0026377970073549325
+      ],
+      "beta_std": -0.0004426106723048184,
+      "passed": false
+     }
+    },
+    "passed": []
+   },
+   "sm2_features_added": [
+    "nfl.mates_out_carries"
+   ],
+   "cal": {
+    "c": 0.95,
+    "s": 0.98,
+    "crps_raw": 17.92024568563735,
+    "crps_cal": 17.853538529433486
+   },
+   "cal_window": "round-1 tune",
+   "challenger": true
+  },
+  "rec_yds": {
+   "sm1": {
+    "half_lives": [
+     8,
+     8
+    ],
+    "family": "ratio",
+    "features": [
+     "nfl.snap_share"
+    ]
+   },
+   "stage_a": {
+    "split": "r1 (round-1 train / tune)",
+    "reference_features": [
+     "nfl.snap_share"
+    ],
+    "fit_rows": 6794,
+    "eval_rows": 1148,
+    "eval_games": 135,
+    "reference_crps": 15.679993554006966,
+    "tests": {
+     "nfl.seconds_per_play": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -5.653310104530522e-05,
+      "ci": [
+       -0.0004018943948112667,
+       0.00029254931885819497
+      ],
+      "beta_std": 0.00020177896273502682,
+      "passed": false
+     },
+     "nfl.wind": {
+      "coverage_fit": 0.8704739476008243,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.03336650696864147,
+      "ci": [
+       -0.07736541827531809,
+       0.013559772189605
+      ],
+      "beta_std": -0.031901547454399666,
+      "passed": false
+     },
+     "nfl.temp": {
+      "coverage_fit": 0.8704739476008243,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.0340721472125429,
+      "ci": [
+       -0.0018517212302181637,
+       0.06919340386680814
+      ],
+      "beta_std": 0.02248252229132188,
+      "passed": false
+     },
+     "nfl.injury_redistribution": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.006708667247386779,
+      "ci": [
+       -0.029540375437185594,
+       0.016523427258381705
+      ],
+      "beta_std": 0.0134666705140532,
+      "passed": false
+     },
+     "nfl.epa": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.016983993902439286,
+      "ci": [
+       -0.06516806909741962,
+       0.03418852085264705
+      ],
+      "beta_std": 0.03566411510226856,
+      "passed": false
+     },
+     "nfl.route_proxy": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.008439372822299682,
+      "ci": [
+       -0.02951378028291788,
+       0.01188833527311019
+      ],
+      "beta_std": -0.025515043594982457,
+      "passed": false
+     },
+     "nfl.target_share_trend": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.022984081010453166,
+      "ci": [
+       -0.08759861586545122,
+       0.04061351335573142
+      ],
+      "beta_std": 0.042570672058633775,
+      "passed": false
+     },
+     "nfl.redzone_share": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.014391245644599242,
+      "ci": [
+       -0.004599809079042027,
+       0.032798201056989496
+      ],
+      "beta_std": -0.01674340436060806,
+      "passed": false
+     },
+     "nfl.inside10": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.004736585365853537,
+      "ci": [
+       -0.008462640233535608,
+       0.018156919358315707
+      ],
+      "beta_std": -0.010174593902976165,
+      "passed": false
+     },
+     "nfl.rec_epa": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.014191528745644394,
+      "ci": [
+       -0.030690162602640958,
+       0.057406838761966034
+      ],
+      "beta_std": 0.03887636659563843,
+      "passed": false
+     },
+     "nfl.team_explosive": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.03279333623693394,
+      "ci": [
+       -0.07352334727673095,
+       0.010371796513083054
+      ],
+      "beta_std": 0.024069563149271726,
+      "passed": false
+     },
+     "nfl.opp_def_epa": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.013137913763066703,
+      "ci": [
+       -0.04709863074871844,
+       0.019908591878116104
+      ],
+      "beta_std": 0.01825391961596685,
+      "passed": false
+     },
+     "nfl.opp_def_success": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.013871210801394085,
+      "ci": [
+       -0.043142917565615405,
+       0.012875668257350283
+      ],
+      "beta_std": 0.01324221948582065,
+      "passed": false
+     },
+     "nfl.opp_def_explosive": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.009516594076655118,
+      "ci": [
+       -0.03944599872472942,
+       0.021646631167450515
+      ],
+      "beta_std": 0.01851946114785507,
+      "passed": false
+     },
+     "nfl.rest_days": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.014843270905923495,
+      "ci": [
+       -0.062013501918576214,
+       0.09966073891063937
+      ],
+      "beta_std": -0.04271953819889736,
+      "passed": false
+     },
+     "nfl.post_bye": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.025856141114982748,
+      "ci": [
+       -0.039961080768265045,
+       0.09519029708080746
+      ],
+      "beta_std": -0.036868004305807174,
+      "passed": false
+     },
+     "nfl.travel": {
+      "coverage_fit": 0.9509861642625846,
+      "coverage_eval": 0.9233449477351916,
+      "crps_diff": -0.004901785714285734,
+      "ci": [
+       -0.0398136934811689,
+       0.02877497881047266
+      ],
+      "beta_std": -0.004470297470001866,
+      "passed": false
+     }
+    },
+    "passed": []
+   },
+   "stage_b_lines": {
+    "split": "r1 (round-1 train / tune)",
+    "reference_features": [
+     "nfl.snap_share"
+    ],
+    "fit_rows": 6794,
+    "eval_rows": 1148,
+    "eval_games": 135,
+    "reference_crps": 15.679993554006966,
+    "tests": {
+     "nfl.spread": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.039563828397212626,
+      "ci": [
+       -0.08198489089743605,
+       0.0004144854937853794
+      ],
+      "beta_std": -0.03009237119181151,
+      "passed": false
+     },
+     "nfl.implied_total": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.06867297473867649,
+      "ci": [
+       -0.12496960677257458,
+       -0.012977875567743598
+      ],
+      "beta_std": 0.04945906933675994,
+      "passed": true,
+      "diag": {
+       "logloss_ref": 0.651384825862403,
+       "ece": 0.021724738675958186,
+       "in_the_large": 0.01926393728222997,
+       "cov80": 0.8215310514449683
+      }
+     },
+     "nfl.game_total": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.026263458188153593,
+      "ci": [
+       -0.07714196540889788,
+       0.02158136479824402
+      ],
+      "beta_std": 0.042497710805257355,
+      "passed": false
+     },
+     "nfl.blowout_risk": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.005098606271777107,
+      "ci": [
+       -0.024539182496962936,
+       0.013895784551687523
+      ],
+      "beta_std": 0.007559044341754173,
+      "passed": false
+     }
+    },
+    "passed": [
+     "nfl.implied_total"
+    ],
+    "joint": {
+     "features": [
+      "nfl.implied_total"
+     ],
+     "crps_diff": -0.06867297473867649,
+     "ci": [
+      -0.12496960677257458,
+      -0.012977875567743598
+     ],
+     "used": true,
+     "beta_std": {
+      "nfl.implied_total": 0.04945906933675994
+     },
+     "diag": {
+      "logloss_ref": 0.651384825862403,
+      "ece": 0.021724738675958186,
+      "in_the_large": 0.01926393728222997,
+      "cov80": 0.8215310514449683
+     },
+     "reference_diag": {
+      "logloss_ref": 0.6539953804873374,
+      "ece": 0.01376742160278751,
+      "in_the_large": 0.01418989547038324,
+      "cov80": 0.8178588508574162
+     }
+    }
+   },
+   "sm2_features_added": [
+    "nfl.implied_total"
+   ],
+   "cal": {
+    "c": 0.97,
+    "s": 0.96,
+    "crps_raw": 15.61132057926829,
+    "crps_cal": 15.58631843061061
+   },
+   "cal_window": "round-1 tune",
+   "challenger": true
+  },
+  "rush_att": {
+   "sm1": {
+    "half_lives": [
+     2,
+     2
+    ],
+    "family": "ratio",
+    "features": [
+     "nfl.home"
+    ]
+   },
+   "stage_a": {
+    "split": "r1 (round-1 train / tune)",
+    "reference_features": [
+     "nfl.home"
+    ],
+    "fit_rows": 2535,
+    "eval_rows": 411,
+    "eval_games": 134,
+    "reference_crps": 2.73253899026764,
+    "tests": {
+     "nfl.carry_share": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.002374391727493883,
+      "ci": [
+       -0.005190999161628499,
+       5.5127140139523835e-05
+      ],
+      "beta_std": 0.004095557327433451,
+      "passed": false
+     },
+     "nfl.scramble": {
+      "coverage_fit": 0.10729783037475345,
+      "coverage_eval": 0.11192214111922141,
+      "crps_diff": -0.007361618004866121,
+      "ci": [
+       -0.013071678896979926,
+       -0.0014742211118638359
+      ],
+      "beta_std": -0.02316216274562001,
+      "passed": true,
+      "diag": {
+       "logloss_ref": 0.6162814915060439,
+       "ece": 0.026909975669099796,
+       "in_the_large": 0.04536496350364966,
+       "cov80": 0.8158362386464576
+      }
+     },
+     "nfl.seconds_per_play": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.006421715328467182,
+      "ci": [
+       -0.0024638294872769565,
+       0.016493331429631386
+      ],
+      "beta_std": -0.009023904959220602,
+      "passed": false
+     },
+     "nfl.epa": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0037600364963503545,
+      "ci": [
+       -0.014529809463703006,
+       0.0074243434466019515
+      ],
+      "beta_std": -0.015195459511796053,
+      "passed": false
+     },
+     "nfl.redzone_share": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0075075425790754385,
+      "ci": [
+       -0.01559622276029058,
+       0.00035362788331075524
+      ],
+      "beta_std": -0.007018529844019714,
+      "passed": false
+     },
+     "nfl.inside10": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.009924635036496295,
+      "ci": [
+       -0.026185336936205388,
+       0.00647664728839141
+      ],
+      "beta_std": -0.023630780154570853,
+      "passed": false
+     },
+     "nfl.carry_share_trend": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -3.643552311432056e-05,
+      "ci": [
+       -0.001530262435766611,
+       0.001788411591538864
+      ],
+      "beta_std": -0.0007188838910060937,
+      "passed": false
+     },
+     "nfl.qb_designed_runs": {
+      "coverage_fit": 0.10729783037475345,
+      "coverage_eval": 0.11192214111922141,
+      "crps_diff": -0.003958941605839381,
+      "ci": [
+       -0.014112058007899842,
+       0.006918900727813276
+      ],
+      "beta_std": -0.05468767551770999,
+      "passed": false
+     },
+     "nfl.team_explosive": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.006953223844282259,
+      "ci": [
+       -0.010848327290492416,
+       0.024637468824750253
+      ],
+      "beta_std": -0.021616085452015994,
+      "passed": false
+     },
+     "nfl.opp_def_epa": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.002747566909975688,
+      "ci": [
+       -0.018515065613864703,
+       0.012411881605691016
+      ],
+      "beta_std": 0.0166863553270227,
+      "passed": false
+     },
+     "nfl.opp_def_success": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.00497554744525545,
+      "ci": [
+       -0.021937967478129157,
+       0.011887571942446058
+      ],
+      "beta_std": 0.018234474454633796,
+      "passed": false
+     },
+     "nfl.opp_def_explosive": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.002325182481751851,
+      "ci": [
+       -0.016942905820338607,
+       0.021809667156906222
+      ],
+      "beta_std": 0.024585320817693608,
+      "passed": false
+     },
+     "nfl.mates_out_carries": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.04888521897810217,
+      "ci": [
+       -0.08938660052766435,
+       -0.008203466528011865
+      ],
+      "beta_std": 0.06668347140943864,
+      "passed": true,
+      "diag": {
+       "logloss_ref": 0.6064091128143658,
+       "ece": 0.06305352798053522,
+       "in_the_large": 0.04408759124087591,
+       "cov80": 0.8194347015514899
+      }
+     },
+     "nfl.rest_days": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.001301155717761625,
+      "ci": [
+       -0.010117753340507494,
+       0.012819731546708096
+      ],
+      "beta_std": -0.012602871843879171,
+      "passed": false
+     },
+     "nfl.post_bye": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0022786496350364893,
+      "ci": [
+       -0.009487161089344517,
+       0.004810487806498502
+      ],
+      "beta_std": -0.008671616955819873,
+      "passed": false
+     },
+     "nfl.travel": {
+      "coverage_fit": 0.9499013806706115,
+      "coverage_eval": 0.9294403892944039,
+      "crps_diff": 0.00523959854014601,
+      "ci": [
+       -0.0069792917807941,
+       0.01853710830378254
+      ],
+      "beta_std": 0.005688407940015996,
+      "passed": false
+     }
+    },
+    "passed": [
+     "nfl.scramble",
+     "nfl.mates_out_carries"
+    ],
+    "joint": {
+     "features": [
+      "nfl.scramble",
+      "nfl.mates_out_carries"
+     ],
+     "crps_diff": -0.04808229927007295,
+     "ci": [
+      -0.088454562058426,
+      -0.007487636198547248
+     ],
+     "used": true,
+     "beta_std": {
+      "nfl.scramble": -0.0278560393671877,
+      "nfl.mates_out_carries": 0.06738000180542958
+     },
+     "diag": {
+      "logloss_ref": 0.6065543601861757,
+      "ece": 0.06164233576642336,
+      "in_the_large": 0.044197080291970836,
+      "cov80": 0.8194411319371651
+     },
+     "reference_diag": {
+      "logloss_ref": 0.6191918296546843,
+      "ece": 0.025875912408759142,
+      "in_the_large": 0.045462287104622856,
+      "cov80": 0.8179529040842909
+     }
+    }
+   },
+   "stage_b_lines": {
+    "split": "r1 (round-1 train / tune)",
+    "reference_features": [
+     "nfl.home",
+     "nfl.scramble",
+     "nfl.mates_out_carries"
+    ],
+    "fit_rows": 2535,
+    "eval_rows": 411,
+    "eval_games": 134,
+    "reference_crps": 2.6844566909975662,
+    "tests": {
+     "nfl.spread": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.014283272506082807,
+      "ci": [
+       -0.02767489620157639,
+       -0.0011180923228767995
+      ],
+      "beta_std": -0.019573169768567444,
+      "passed": true,
+      "diag": {
+       "logloss_ref": 0.6034268491616367,
+       "ece": 0.05576642335766426,
+       "in_the_large": 0.043795620437956206,
+       "cov80": 0.8219591870099645
+      }
+     },
+     "nfl.implied_total": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.011322080291970809,
+      "ci": [
+       -0.023574735696517357,
+       0.00034163430921371106
+      ],
+      "beta_std": 0.015886866066531245,
+      "passed": false
+     },
+     "nfl.game_total": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.00011526763990269949,
+      "ci": [
+       -0.0009644042890386983,
+       0.0007419068313804031
+      ],
+      "beta_std": 0.0002734244637928778,
+      "passed": false
+     },
+     "nfl.blowout_risk": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.00043746958637471686,
+      "ci": [
+       -0.006326028079710142,
+       0.005125541789318762
+      ],
+      "beta_std": -0.0039351529380394585,
+      "passed": false
+     }
+    },
+    "passed": [
+     "nfl.spread"
+    ],
+    "joint": {
+     "features": [
+      "nfl.spread"
+     ],
+     "crps_diff": -0.014283272506082807,
+     "ci": [
+      -0.02767489620157639,
+      -0.0011180923228767995
+     ],
+     "used": true,
+     "beta_std": {
+      "nfl.spread": -0.019573169768567444
+     },
+     "diag": {
+      "logloss_ref": 0.6034268491616367,
+      "ece": 0.05576642335766426,
+      "in_the_large": 0.043795620437956206,
+      "cov80": 0.8219591870099645
+     },
+     "reference_diag": {
+      "logloss_ref": 0.6065543601861757,
+      "ece": 0.06164233576642336,
+      "in_the_large": 0.044197080291970836,
+      "cov80": 0.8194411319371651
+     }
+    }
+   },
+   "sm2_features_added": [
+    "nfl.scramble",
+    "nfl.mates_out_carries",
+    "nfl.spread"
+   ],
+   "cal": {
+    "c": 0.97,
+    "s": 0.9,
+    "crps_raw": 2.6701734184914847,
+    "crps_cal": 2.6563569144449946
+   },
+   "cal_window": "round-1 tune",
+   "challenger": true
+  },
+  "rec": {
+   "sm1": {
+    "half_lives": [
+     8,
+     8
+    ],
+    "family": "ratio",
+    "features": []
+   },
+   "stage_a": {
+    "split": "r1 (round-1 train / tune)",
+    "reference_features": [],
+    "fit_rows": 6794,
+    "eval_rows": 1148,
+    "eval_games": 135,
+    "reference_crps": 1.1560587543554008,
+    "tests": {
+     "nfl.seconds_per_play": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -9.62979094076592e-05,
+      "ci": [
+       -0.0011201375845801788,
+       0.0008036662545329046
+      ],
+      "beta_std": -0.0053106913343162815,
+      "passed": false
+     },
+     "nfl.wind": {
+      "coverage_fit": 0.8704739476008243,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0005367160278745674,
+      "ci": [
+       -0.0031406111951602016,
+       0.0020104955382839506
+      ],
+      "beta_std": -0.012380404237682122,
+      "passed": false
+     },
+     "nfl.temp": {
+      "coverage_fit": 0.8704739476008243,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.0006076872822299589,
+      "ci": [
+       -0.001590558787265278,
+       0.002677698500936238
+      ],
+      "beta_std": 0.009700796011952357,
+      "passed": false
+     },
+     "nfl.injury_redistribution": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0004961454703832601,
+      "ci": [
+       -0.004105943448233862,
+       0.003310592231959947
+      ],
+      "beta_std": 0.01924016641580941,
+      "passed": false
+     },
+     "nfl.epa": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0015980618466898881,
+      "ci": [
+       -0.0037908737063867526,
+       0.000583597690916558
+      ],
+      "beta_std": 0.012934096528173462,
+      "passed": false
+     },
+     "nfl.route_proxy": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.0005769163763066193,
+      "ci": [
+       -0.00070801904044088,
+       0.0019113166661531475
+      ],
+      "beta_std": -0.008982310076986705,
+      "passed": false
+     },
+     "nfl.target_share_trend": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0021008928571428437,
+      "ci": [
+       -0.008663367623823482,
+       0.004721101623113428
+      ],
+      "beta_std": 0.047543895352817576,
+      "passed": false
+     },
+     "nfl.redzone_share": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.00018299216027872845,
+      "ci": [
+       -0.0028489959539512847,
+       0.003298429088888134
+      ],
+      "beta_std": -0.020836966727315526,
+      "passed": false
+     },
+     "nfl.inside10": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.0005596472125435531,
+      "ci": [
+       -0.0021926108983333537,
+       0.0031255803569347463
+      ],
+      "beta_std": -0.01949290274208082,
+      "passed": false
+     },
+     "nfl.rec_epa": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0007241724738675854,
+      "ci": [
+       -0.004366580390945503,
+       0.002865123032387946
+      ],
+      "beta_std": 0.03177335582646045,
+      "passed": false
+     },
+     "nfl.team_explosive": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.002202547909407664,
+      "ci": [
+       -0.0037919531808879373,
+       -0.0005315300246212844
+      ],
+      "beta_std": 0.008594596563068057,
+      "passed": true,
+      "diag": {
+       "logloss_ref": 0.6536329072338954,
+       "ece": 0.01358885017421605,
+       "in_the_large": 0.018249128919860635,
+       "cov80": 0.8298492755701149
+      }
+     },
+     "nfl.opp_def_epa": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -8.233885017422209e-05,
+      "ci": [
+       -0.0022306782416530043,
+       0.0021742125367993966
+      ],
+      "beta_std": 0.010758656066091318,
+      "passed": false
+     },
+     "nfl.opp_def_success": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -0.0005970818815330935,
+      "ci": [
+       -0.0028844643359361715,
+       0.0017085386100818725
+      ],
+      "beta_std": 0.010897880977011479,
+      "passed": false
+     },
+     "nfl.opp_def_explosive": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.00011408972125436329,
+      "ci": [
+       -0.0005821689212067974,
+       0.000781781840595795
+      ],
+      "beta_std": 0.0036277526380760813,
+      "passed": false
+     },
+     "nfl.rest_days": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.003911454703832758,
+      "ci": [
+       -0.001749201545092292,
+       0.010100987793517478
+      ],
+      "beta_std": -0.03583978992199124,
+      "passed": false
+     },
+     "nfl.post_bye": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.0035236280487804875,
+      "ci": [
+       -0.0011413544880127103,
+       0.00847498238434345
+      ],
+      "beta_std": -0.028350672901924025,
+      "passed": false
+     },
+     "nfl.travel": {
+      "coverage_fit": 0.9509861642625846,
+      "coverage_eval": 0.9233449477351916,
+      "crps_diff": -0.002157513066202108,
+      "ci": [
+       -0.0042281271303161875,
+       -0.0003618640127330495
+      ],
+      "beta_std": -0.0015500704914627192,
+      "passed": true,
+      "diag": {
+       "logloss_ref": 0.6532384363845901,
+       "ece": 0.018758710801393724,
+       "in_the_large": 0.018000871080139313,
+       "cov80": 0.8295455488032294
+      }
+     }
+    },
+    "passed": [
+     "nfl.team_explosive",
+     "nfl.travel"
+    ],
+    "joint": {
+     "features": [
+      "nfl.team_explosive",
+      "nfl.travel"
+     ],
+     "crps_diff": -0.0032716245644599357,
+     "ci": [
+      -0.005716819681245669,
+      -0.0009362075079768712
+     ],
+     "used": true,
+     "beta_std": {
+      "nfl.team_explosive": 0.00899184124059494,
+      "nfl.travel": -0.0010071397138143507
+     },
+     "diag": {
+      "logloss_ref": 0.6528397004831411,
+      "ece": 0.012669860627177723,
+      "in_the_large": 0.017290940766550522,
+      "cov80": 0.8304619202387838
+     },
+     "reference_diag": {
+      "logloss_ref": 0.6540717947582912,
+      "ece": 0.01709494773519162,
+      "in_the_large": 0.01885017421602786,
+      "cov80": 0.8287993250905935
+     }
+    }
+   },
+   "stage_b_lines": {
+    "split": "r1 (round-1 train / tune)",
+    "reference_features": [
+     "nfl.team_explosive",
+     "nfl.travel"
+    ],
+    "fit_rows": 6794,
+    "eval_rows": 1148,
+    "eval_games": 135,
+    "reference_crps": 1.152787129790941,
+    "tests": {
+     "nfl.spread": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": -4.305313588849115e-05,
+      "ci": [
+       -0.0010636930982777014,
+       0.0009624436633282121
+      ],
+      "beta_std": -0.006891786288410522,
+      "passed": false
+     },
+     "nfl.implied_total": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.0015518510452961671,
+      "ci": [
+       -0.0016539972370612553,
+       0.005082176196684188
+      ],
+      "beta_std": 0.02321510978103938,
+      "passed": false
+     },
+     "nfl.game_total": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.0010406358885017319,
+      "ci": [
+       -0.00237332693152695,
+       0.004555292884649037
+      ],
+      "beta_std": 0.027089698872585936,
+      "passed": false
+     },
+     "nfl.blowout_risk": {
+      "coverage_fit": 1.0,
+      "coverage_eval": 1.0,
+      "crps_diff": 0.0013246080139372775,
+      "ci": [
+       -0.0009920082694617992,
+       0.003994208619918574
+      ],
+      "beta_std": 0.012998258599911128,
+      "passed": false
+     }
+    },
+    "passed": []
+   },
+   "sm2_features_added": [
+    "nfl.team_explosive",
+    "nfl.travel"
+   ],
+   "cal": {
+    "c": 0.99,
+    "s": 0.94,
+    "crps_raw": 1.152787129790941,
+    "crps_cal": 1.151186836777113
+   },
+   "cal_window": "round-1 tune",
+   "challenger": true
+  }
+ },
+ "config_sha": "4d8189e0ed354c3e"
+}
