@@ -13,6 +13,17 @@ so a shared database never collides with HLTV / LoL tables. Times are UTC ISO st
   sports_book_provider_state  health + backoff per provider: cooldown, failure streak, last success / error, credits
   sports_book_schedule        when each provider's game is next due
   sports_book_lease           one worker at a time (an expiring lease, taken atomically)
+
+Line correctness (sports/LINE_CORRECTNESS.md, same rules as the canonical store):
+  - an offer's CURRENT quote = sports_book_offer_state.last_quote_id; a quote row is written only when price / status
+    differs from that CURRENT quote (A -> B -> A on one line = three rows, the last current; a moved line is another
+    offer_key, so A -> B -> A of the line reopens the first offer: open, removed, open)
+  - A -> A moves only last_seen_at (MAX: never backwards) and last_provider_updated_at (MAX)
+  - a delayed response (older provider_updated_at when both have one and they differ, else observed before the state's
+    last_seen_at) is kept as history with late = 1 and never becomes current; it never withdraws an offer a newer read
+    saw (a removal needs state.last_seen_at <= this read's time)
+  - each game's save is ONE transaction under the write lock (SQLite BEGIN IMMEDIATE / Postgres advisory lock)
+  - provider_updated_at (the book's clock) and observed_at / last_seen_at (ours) are separate columns
 """
 import os
 import sqlite3
@@ -56,6 +67,10 @@ CREATE TABLE IF NOT EXISTS sports_book_schedule (
 CREATE TABLE IF NOT EXISTS sports_book_lease (name TEXT PRIMARY KEY, holder TEXT NOT NULL, expires_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS sports_book_settings (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT);
 """
+MIGRATIONS = (                                     # additive columns, applied by connect() when missing
+    ("sports_book_quotes", "late", "INTEGER NOT NULL DEFAULT 0"),
+    ("sports_book_offer_state", "last_provider_updated_at", "TEXT"),
+)
 QUOTE_COLS = ("offer_key", "observed_at", "fetch_id", "provider", "book", "jurisdiction", "league", "event_key",
               "provider_event_id", "event_name", "home", "away", "start", "player", "player_key", "provider_player_id",
               "market", "stat_label", "period", "line", "side", "market_type", "price_american", "price_decimal",
@@ -120,13 +135,59 @@ class DB:
     def commit(self):
         self.con.commit()
 
+    def rollback(self):
+        self.con.rollback()
+
+    def columns(self, table):
+        if self.pg:
+            return {r["column_name"] for r in self.all("SELECT column_name FROM information_schema.columns WHERE "
+                                                        "table_name = ?", (table,))}
+        return {r["name"] for r in self.all(f"PRAGMA table_info({table})")}
+
+    def begin_write(self, key="books"):
+        """Take the write lock for one atomic read-decide-write: SQLite BEGIN IMMEDIATE (one writer per file, across
+        processes); Postgres a transaction-scoped advisory lock on `key`."""
+        if self.pg:
+            self.execute("SELECT pg_advisory_xact_lock(hashtext(?))", (key,))
+        elif not self.con.in_transaction:
+            self.con.execute("BEGIN IMMEDIATE")
+
     def close(self):
         self.con.close()
 
 
 def connect(path=None, dsn=None):
     dsn = dsn if dsn is not None else os.environ.get("SPORTS_DB_DSN") or None
-    return DB(path=path, dsn=dsn)
+    db = DB(path=path, dsn=dsn)
+    migrate(db)
+    return db
+
+
+def migrate(db, migrations=MIGRATIONS):
+    """Additive only: ADD COLUMN where missing (an existing books.db keeps every row)."""
+    for table, col, ddl in migrations:
+        if col not in db.columns(table):
+            try:
+                db.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+                db.commit()
+            except Exception as e:                       # noqa: BLE001  another process added it first
+                db.rollback()
+                if col not in db.columns(table):
+                    raise e
+    return db
+
+
+def is_late(new_seen, new_source, cur_seen, cur_source):
+    """The ordering rule (LINE_CORRECTNESS.md R3): source time when both have one and they differ, else ours."""
+    if new_source and cur_source and new_source != cur_source:
+        return new_source < cur_source
+    if new_seen and cur_seen:
+        return new_seen < cur_seen
+    return False
+
+
+def _later(a, b):
+    return max(x for x in (a, b) if x) if (a or b) else None
 
 
 # ------------------------------------------------------------------------------------------------ writes (worker)
@@ -154,7 +215,9 @@ def record_events(db, provider, league, events, keys, now=None):
         db.execute("INSERT INTO sports_book_events (provider, provider_event_id, league, event_key, name, home, away, "
                    "start, first_seen_at, last_seen_at) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT (provider, "
                    "provider_event_id) DO UPDATE SET event_key = excluded.event_key, name = excluded.name, "
-                   "home = excluded.home, away = excluded.away, start = excluded.start, last_seen_at = excluded.last_seen_at",
+                   "home = excluded.home, away = excluded.away, start = excluded.start, last_seen_at = CASE WHEN "
+                   "sports_book_events.last_seen_at IS NULL OR sports_book_events.last_seen_at < excluded.last_seen_at "
+                   "THEN excluded.last_seen_at ELSE sports_book_events.last_seen_at END",
                    (provider, e.provider_event_id, league, keys.get(e.provider_event_id), e.name, e.home, e.away,
                     e.start, t, t))
     db.commit()
@@ -173,49 +236,80 @@ _INSERT_Q = (f"INSERT INTO sports_book_quotes ({', '.join(QUOTE_COLS)}) "
              f"VALUES ({', '.join('?' for _ in QUOTE_COLS)})")
 
 
+_INSERT_LATE = (f"INSERT INTO sports_book_quotes ({', '.join(QUOTE_COLS)}, late) "
+                f"VALUES ({', '.join('?' for _ in QUOTE_COLS)}, 1)")
+
+
+def _price_changed(st, o):
+    if st["price_american"] != o.get("price_american"):
+        return True
+    a, b = st["price_decimal"], o.get("price_decimal")
+    if a is None or b is None:
+        return (a is None) != (b is None)
+    return abs(a - b) > 1e-9
+
+
 def save_offers(db, fid, provider, league, provider_event_id, event_key, offers, complete, now=None):
     """Store one game's offers from one fetch. -> (new quote rows, removed). A quote row is written only when the offer
-    is new or its price / status changed; last_seen_at moves on every observation. complete=True (the fetch read the
-    whole game without error) also closes offers this game no longer lists with a 'removed' row."""
+    is new or its price / status differs from its CURRENT quote; last_seen_at moves on every observation (never
+    backwards). complete=True (the fetch read the whole game without error) also closes offers this game no longer
+    lists with a 'removed' row - only offers not seen after this read. A delayed (older) read is kept as late history
+    and changes nothing current. One transaction under the write lock."""
     t = iso(now)
     new = removed = 0
     seen = set()
-    for o in offers:
-        k = o["offer_key"]
-        if k in seen:
-            continue                                   # one offer listed twice in one answer is read once
-        seen.add(k)
-        st = db.one("SELECT s.last_quote_id, s.last_status, q.price_american, q.price_decimal FROM "
-                    "sports_book_offer_state s JOIN sports_book_quotes q ON q.id = s.last_quote_id WHERE s.offer_key = ?",
-                    (k,))
-        changed = (st is None or st["last_status"] != o["status"] or st["price_american"] != o["price_american"]
-                   or (st["price_decimal"] is not None and abs(st["price_decimal"] - o["price_decimal"]) > 1e-9))
-        if changed:
+    db.begin_write(f"books:{provider}:{provider_event_id}")
+    try:
+        for o in offers:
+            k = o["offer_key"]
+            if k in seen:
+                continue                                   # one offer listed twice in one answer is read once
+            seen.add(k)
+            st = db.one("SELECT s.last_quote_id, s.last_status, s.last_seen_at, s.last_provider_updated_at, "
+                        "q.price_american, q.price_decimal, q.provider_updated_at FROM sports_book_offer_state s "
+                        "JOIN sports_book_quotes q ON q.id = s.last_quote_id WHERE s.offer_key = ?", (k,))
+            src = o.get("provider_updated_at")
+            if st is not None:
+                cur_src = st["last_provider_updated_at"] or st["provider_updated_at"]
+                changed = st["last_status"] != o["status"] or _price_changed(st, o)
+                if not changed:
+                    db.execute("UPDATE sports_book_offer_state SET last_seen_at = CASE WHEN last_seen_at < ? THEN ? "
+                               "ELSE last_seen_at END, last_fetch_id = CASE WHEN last_seen_at <= ? THEN ? ELSE "
+                               "last_fetch_id END, event_key = COALESCE(?, event_key), last_provider_updated_at = ? "
+                               "WHERE offer_key = ?", (t, t, t, fid, event_key, _later(cur_src, src), k))
+                    continue
+                if is_late(t, src, st["last_seen_at"], cur_src):
+                    db.insert(_INSERT_LATE,
+                              _quote_row(o, fid, t, event_key))
+                    continue
             qid = db.insert(_INSERT_Q, _quote_row(o, fid, t, event_key))
             new += 1
             db.execute("INSERT INTO sports_book_offer_state (offer_key, provider, provider_event_id, league, event_key, "
-                       "player_key, market, last_quote_id, last_status, first_seen_at, last_seen_at, last_fetch_id) "
-                       "VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (offer_key) DO UPDATE SET "
-                       "last_quote_id = excluded.last_quote_id, last_status = excluded.last_status, "
+                       "player_key, market, last_quote_id, last_status, first_seen_at, last_seen_at, last_fetch_id, "
+                       "last_provider_updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (offer_key) DO UPDATE "
+                       "SET last_quote_id = excluded.last_quote_id, last_status = excluded.last_status, "
                        "event_key = excluded.event_key, last_seen_at = excluded.last_seen_at, "
-                       "last_fetch_id = excluded.last_fetch_id",
+                       "last_fetch_id = excluded.last_fetch_id, "
+                       "last_provider_updated_at = excluded.last_provider_updated_at",
                        (k, provider, provider_event_id, league, event_key, o["player_key"], o["market"], qid,
-                        o["status"], t, t, fid))
-        else:
-            db.execute("UPDATE sports_book_offer_state SET last_seen_at = ?, last_fetch_id = ?, event_key = ? "
-                       "WHERE offer_key = ?", (t, fid, event_key, k))
-    if complete:
-        gone = db.all("SELECT s.offer_key, s.last_quote_id FROM sports_book_offer_state s WHERE s.provider = ? AND "
-                      "s.provider_event_id = ? AND s.last_status != 'removed'", (provider, provider_event_id))
-        for g in gone:
-            if g["offer_key"] in seen:
-                continue
-            last = db.one("SELECT * FROM sports_book_quotes WHERE id = ?", (g["last_quote_id"],))
-            qid = db.insert(_INSERT_Q, _quote_row(last, fid, t, event_key, removed=True))
-            db.execute("UPDATE sports_book_offer_state SET last_quote_id = ?, last_status = 'removed', "
-                       "last_seen_at = ?, last_fetch_id = ? WHERE offer_key = ?", (qid, t, fid, g["offer_key"]))
-            removed += 1
-    db.commit()
+                        o["status"], t, t, fid, src))
+        if complete:
+            gone = db.all("SELECT s.offer_key, s.last_quote_id FROM sports_book_offer_state s WHERE s.provider = ? AND "
+                          "s.provider_event_id = ? AND s.last_status != 'removed' AND s.last_seen_at <= ?",
+                          (provider, provider_event_id, t))
+            for g in gone:
+                if g["offer_key"] in seen:
+                    continue
+                last = db.one("SELECT * FROM sports_book_quotes WHERE id = ?", (g["last_quote_id"],))
+                qid = db.insert(_INSERT_Q, _quote_row(last, fid, t, event_key, removed=True))
+                db.execute("UPDATE sports_book_offer_state SET last_quote_id = ?, last_status = 'removed', "
+                           "last_seen_at = ?, last_fetch_id = ?, last_provider_updated_at = NULL WHERE offer_key = ?",
+                           (qid, t, fid, g["offer_key"]))
+                removed += 1
+        db.commit()
+    except BaseException:
+        db.rollback()
+        raise
     return new, removed
 
 

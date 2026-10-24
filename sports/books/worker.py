@@ -69,7 +69,13 @@ def save_holds(db, now):
             "%Y-%m-%dT%H:%M:%SZ"), now=now)
 
 
-def _league_reads(db, name, prov, leagues, now, info, sink=None):
+def _seen_at(now, fixed):
+    """Observation time of a response = when it was READ (LINE_CORRECTNESS.md R8), not the pass start; a caller's
+    fixed clock (tests, replays) is kept."""
+    return now if fixed else _now()
+
+
+def _league_reads(db, name, prov, leagues, now, info, sink=None, fixed=True):
     """Providers that read a whole league per request (OddsPapi): due per league, every read through the provider's
     own quota guard; a budget refusal is not a failure (no backoff), it just waits for the next due time."""
     from datetime import timedelta as _td
@@ -93,18 +99,19 @@ def _league_reads(db, name, prov, leagues, now, info, sink=None):
             store.note_result(db, name, res, now=now, cooldown_until=iso(until))
             info["error"], info["cooling_down_until"] = res.error, iso(until)
             return
+        seen = _seen_at(now, fixed)
         keys = canon.keys_for(lg, name, res.events, now=now) if res.events else {}
-        store.record_events(db, name, key, res.events, keys, now=now)
+        store.record_events(db, name, key, res.events, keys, now=seen)
         by_ev = {}
         for o in res.offers:
             by_ev.setdefault(o["provider_event_id"], []).append(o)
         new = removed = 0
         for ev in res.events:
             n, r = store.save_offers(db, fid, name, key, ev.provider_event_id, keys.get(ev.provider_event_id),
-                                     by_ev.get(ev.provider_event_id, []), True, now=now)
+                                     by_ev.get(ev.provider_event_id, []), True, now=seen)
             new, removed = new + n, removed + r
             if sink is not None:
-                sink(name, lg, keys.get(ev.provider_event_id), by_ev.get(ev.provider_event_id, []), True, iso(now))
+                sink(name, lg, keys.get(ev.provider_event_id), by_ev.get(ev.provider_event_id, []), True, iso(seen))
         store.finish_fetch(db, fid, res, len(res.offers), new, removed, now=now)
         store.note_result(db, name, res, now=now)
         store.set_due(db, name, key, "league", now + _td(minutes=prov.interval_min(db, len(with_games), now)))
@@ -188,6 +195,7 @@ def run_once(db, leagues=LEAGUES, now=None, provs=None, probe=True, sink=None):
     """One pass. -> summary dict. Returns {"busy": holder} when another worker holds the lease. sink(provider, lg,
     event_key, offers, complete, observed_at) receives every successful game read - the canonical ingest
     (sports.worker) passes bridge.sink so the same fetch also lands in the sc-1 store; no second request is made."""
+    fixed = now is not None
     now = now or _now()
     if not store.take_lease(db, HOLDER, LEASE_TTL_S, now=now):
         return {"busy": True}
@@ -205,7 +213,7 @@ def run_once(db, leagues=LEAGUES, now=None, provs=None, probe=True, sink=None):
                 info["cooling_down_until"] = st["cooldown_until"]
                 continue
             if prov.kind == "feed_league":
-                _league_reads(db, name, prov, leagues, now, info, sink)
+                _league_reads(db, name, prov, leagues, now, info, sink, fixed)
                 continue
             ladder = _feed_ladder(db, now) if prov.kind == "feed" else schedule.direct_ladder()
             if ladder is None:
@@ -234,14 +242,15 @@ def run_once(db, leagues=LEAGUES, now=None, provs=None, probe=True, sink=None):
                             break
                     fid = store.start_fetch(db, name, key, "props", ev.provider_event_id, event_key, now=now)
                     res = prov.props(lg, ev)
+                    seen = _seen_at(now, fixed)
                     complete = res.error is None
                     new, removed = store.save_offers(db, fid, name, key, ev.provider_event_id, event_key, res.offers,
-                                                     complete, now=now)
+                                                     complete, now=seen)
                     store.finish_fetch(db, fid, res, len(res.offers), new, removed, now=now)
                     if complete:
                         store.note_result(db, name, res, now=now)       # a failure is noted once, below
                         if sink is not None:
-                            sink(name, lg, event_key, res.offers, True, iso(now))
+                            sink(name, lg, event_key, res.offers, True, iso(seen))
                     info["fetched"] += 1
                     info["offers"] += len(res.offers)
                     info["new_quotes"] += new

@@ -61,7 +61,14 @@ R8. **Source time and observation time are separate** everywhere: `source_update
 | C7 | concurrent processes: one current revision | canonical | test_c7_concurrent_workers_cannot_create_conflicting_current_revisions (4 processes x 40 rounds) | done |
 | C8 | existing-db migration + repair, restart | canonical | test_c8_existing_prefix_database_is_migrated_and_repaired_additively, test_c8_read_only_reader_of_an_unmigrated_store_still_reads, test_c8_two_processes_migrating_at_once_migrate_once, test_c8_worker_killed_mid_cycle_leaves_no_partial_batch_and_rerun_is_idempotent | done |
 | C9 | source vs observation times separate | canonical | test_c9_source_and_observation_times_are_separate_columns | done |
-| C1-C4,C7-C9 | same checks | sportsbook store (books.db) | - | remaining |
+| B1 | price A->B->A = 3 quote rows, final current; line A->B->A reopens the first line (open, removed, open) | books.db | test_line_correctness_books::test_b1_price_a_b_a_is_three_rows_final_a_current, test_b1_line_a_b_a_reopens_the_first_line | done |
+| B2 | A->A: last_seen_at + last_provider_updated_at move, no quote row | books.db | test_b2_a_a_moves_freshness_only | done |
+| B3 | delayed response = late history row, never current; delayed complete read never withdraws; last_seen never rewinds | books.db | test_b3_delayed_older_response_never_becomes_current, test_b3_delayed_complete_read_cannot_withdraw_what_a_newer_read_saw, test_b3_delayed_duplicate_does_not_rewind_last_seen | done |
+| B4 | withdrawal + reopen at the same line = open again; suspended without price no longer crashes the change check | books.db | test_b4_withdrawal_and_reopening_at_the_same_line, test_b4_suspended_without_price_does_not_crash | done |
+| B7 | 4 concurrent writer processes: one consistent current quote (newest observation) | books.db | test_b7_concurrent_writers_keep_one_consistent_current_quote | done |
+| B8 | existing books.db: additive ADD COLUMN, rows kept, restart idempotent | books.db | test_b8_existing_books_db_is_migrated_additively | done |
+| B9 | provider vs observation times separate; each read stamped with its own read time (was: pass start) | books.db / books worker | test_b9_provider_and_observation_times_are_separate, test_b9_books_worker_stamps_each_read_with_its_own_time | done |
+| B10 | shared books lease: released after a pass, so a second league process runs next (one ingest-loop child runs both leagues in turn under _COLLECT_LOCK in the deployed config) | books.db | test_b_lease_is_released_so_the_other_league_process_runs_next | done (decision: no per-league lease; overlap is refused, not starved) |
 | C1-C4,C7-C9 | same checks | game-data store (games.db) | - | remaining |
 | C5 | board, card, slip pool + validation, new forecast use the same revision | snapshots / slips / forward | - | remaining |
 | C6 | earlier forecasts keep inputs, replay unchanged | forward | - | remaining |
@@ -71,3 +78,4 @@ R8. **Source time and observation time are separate** everywhere: `source_update
 ## Results
 
 Checkpoint 1 (canonical store): `python -m pytest sports/tests -q` -> 430 passed, 10 skipped.
+Checkpoint 2 (books.db): `python -m pytest sports/tests -q` -> 443 passed, 10 skipped.
