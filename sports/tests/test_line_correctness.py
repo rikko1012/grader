@@ -386,3 +386,123 @@ def test_c9_source_and_observation_times_are_separate_columns(db):
     assert tuple(row) == (t(3), t(3), t(3), "2026-10-23T19:00:00Z", "2026-10-23T19:00:00Z")
     unknown = store.put(db, at(h.offer(oid="pp:9"), 3))
     assert store.row_meta(db, unknown["record_id"])["source_updated_at"] is None    # never invented
+
+
+# ------------------------------------------------------------------------------------------- A: archive interplay
+from datetime import datetime, timezone                                    # noqa: E402
+
+ARCH_NOW = datetime(2026, 10, 24, 12, 0, tzinfo=timezone.utc)
+OLD = "2026-10-10T20:%02d:00Z"
+NEW = "2026-10-24T11:%02d:00Z"
+
+
+def _arch(con):
+    from sports import archive
+    out = archive.run_pass(con, now=ARCH_NOW)
+    assert out["error"] is None, out
+    return out
+
+
+def _cur(con, oid="pp:1"):
+    return store.latest(con, "offer", "prizepicks", oid)
+
+
+def _at(rec, ts):
+    return replace(rec, observed_at=ts, known_at=ts)
+
+
+def test_a1_a_b_a_where_a_was_archived(db):
+    a = h.offer(line=20.5)
+    store.put(db, _at(a, OLD % 0))
+    store.put(db, _at(replace(a, line=21.5), OLD % 10))
+    assert _arch(db)["rows"] == 2
+    assert db.execute("SELECT COUNT(*) FROM records WHERE kind='offer'").fetchone()[0] == 0
+    r = store.put(db, _at(a, NEW % 0))                                   # A returns after B was archived
+    assert r["status"] == "revision" and r["revision"] == 3
+    assert _cur(db).line == 20.5
+    assert [(m["revision"], o.line) for m, o in store.revisions(db, "offer", "prizepicks", "pp:1")] == \
+        [(1, 20.5), (2, 21.5), (3, 20.5)]
+    assert [o.line for _, o in store.offers(db, league="nba")] == [20.5]      # the hot current listing
+    one_current_per_identity(db)
+    assert store.put(db, _at(a, NEW % 5))["status"] == "duplicate"
+
+
+def test_a1_archived_a_b_a_reads_back_the_final_a(db):
+    a = h.offer(line=20.5)
+    for line, m in ((20.5, 0), (21.5, 10), (20.5, 20)):
+        store.put(db, _at(replace(a, line=line), OLD % m))
+    _arch(db)
+    assert _cur(db).line == 20.5 and store.row_meta(db, store.offers(db, league="nba", event_id="nba:espn:1")[0][0])[
+        "revision"] == 3
+    assert store.latest(db, "offer", "prizepicks", "pp:1", as_of="2026-10-10T20:15:00Z").line == 21.5
+
+
+def test_a2_a_delayed_response_for_an_archived_identity_is_late(db):
+    a = h.offer(line=20.5)
+    store.put(db, _at(a, OLD % 0))
+    store.put(db, _at(replace(a, line=21.5), OLD % 10))
+    _arch(db)
+    late = store.put(db, _at(replace(a, line=19.5), OLD % 5))         # read at :05, stored after the archive
+    assert late["status"] == "late" and late["revision"] == 3
+    assert _cur(db).line == 21.5
+    assert store.offers(db, league="nba") == []                          # nothing current in the hot window
+    newer = store.put(db, _at(replace(a, line=19.5), NEW % 0))
+    assert newer["status"] == "revision" and newer["revision"] == 4 and _cur(db).line == 19.5
+
+
+def test_a3_withdrawal_then_archive_then_reopen_at_the_same_line(db):
+    a = h.offer(line=20.5)
+    store.put(db, _at(a, OLD % 0))
+    store.put(db, store.withdrawn(_at(a, OLD % 0), OLD % 10))
+    _arch(db)
+    assert _cur(db).availability == "removed"
+    r = store.put(db, _at(a, NEW % 0))
+    assert r["status"] == "revision" and r["revision"] == 3
+    (rid, o), = store.offers(db, league="nba")
+    assert o.availability == "open" and o.line == 20.5 and rid == r["record_id"]
+
+
+ARCH_WRITER = textwrap.dedent("""
+    import sys
+    from dataclasses import replace
+    sys.path.insert(0, {root!r})
+    from sports import config, store
+    from pathlib import Path
+    config.DATA_DIR = Path({data!r})
+    from sports.tests import helpers as h
+    i, rounds = int(sys.argv[1]), int(sys.argv[2])
+    con = store.connect()
+    for k in range(rounds):
+        tt = "2026-10-24T%02d:%02d:%02dZ" % (8 + i, k // 60, k % 60)
+        for oid in ("pp:1", "pp:%d" % (100 + i)):        # pp:1 is cold (an archive candidate) when the pass starts
+            store.put(con, replace(h.offer(oid=oid, line=20.5 + (k % 2)), observed_at=tt, known_at=tt))
+    con.close()
+""")
+
+
+def test_a4_concurrent_writers_while_the_archive_pass_runs(tmp_path):
+    from sports import archive
+    con = store.connect()
+    for i in range(2, 60):                                               # cold identities to archive
+        for m, line in ((0, 10.5), (10, 11.5)):
+            store.put(con, _at(h.offer(oid=f"pp:{i}", line=line), OLD % m))
+    store.put(con, _at(h.offer(oid="pp:1", line=20.5), OLD % 0))
+    script = tmp_path / "aw.py"
+    script.write_text(ARCH_WRITER.format(root=str(ROOT), data=str(config.DATA_DIR)), encoding="utf-8")
+    n, rounds = 3, 40
+    procs = [subprocess.Popen([sys.executable, str(script), str(i), str(rounds)], stdin=subprocess.DEVNULL)
+             for i in range(n)]
+    passes = [archive.run_pass(con, now=ARCH_NOW) for _ in range(3)]
+    assert all(p.wait(timeout=240) == 0 for p in procs)
+    passes.append(archive.run_pass(con, now=ARCH_NOW))
+    assert passes[-1]["error"] is None, passes
+    one_current_per_identity(con)
+    for oid in [f"pp:{i}" for i in range(1, 60)] + [f"pp:{100 + i}" for i in range(n)]:
+        revs = [m["revision"] for m, _ in store.revisions(con, "offer", "prizepicks", oid)]
+        assert revs == list(range(1, len(revs) + 1)), (oid, revs)        # contiguous: no number reused or lost
+    # pp:1: the newest write of all processes is current (process n-1 writes the latest clock)
+    assert _cur(con).line == 20.5 + ((rounds - 1) % 2)
+    for i in range(2, 60):
+        assert _cur(con, f"pp:{i}").line == 11.5                          # archived identities read back
+    assert archive.verify(con)["bad"] == []
+    con.close()

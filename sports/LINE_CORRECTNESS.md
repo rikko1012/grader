@@ -33,7 +33,7 @@ R5. **Atomic current decisions across processes.** Every canonical write runs in
 `put_many` = one transaction per batch), and `UNIQUE (kind, source, source_key, revision)` (`records_ident_rev`) makes
 two rows with one revision impossible. NBA / NFL workers and the service's children may write one SQLite file at once.
 
-R6. **Existing databases.** Migration 2 is additive (`ALTER TABLE ADD COLUMN late / source_updated_at /
+R6. **Existing databases.** Migration 2 is the archive schema (sports/archive.py, Starter); migration 3 is additive (`ALTER TABLE ADD COLUMN late / source_updated_at /
 last_source_updated_at / origin`, `CREATE INDEX`), applied inside `BEGIN IMMEDIATE` (concurrent starts migrate once; a
 crash rolls back). Then, once, `repair_prefix_duplicates`: pre-c0cc754 stores matched returning content against ANY
 earlier revision, so A -> B -> A only bumped revision 1's `last_seen_at` / `seen_count` and `latest` kept B (also: a
@@ -47,7 +47,7 @@ columns' defaults (late = 0), i.e. exactly the old behaviour until the worker mi
 R7. **Forecast inputs are immutable.** A forecast names the offer record id it was made for (`offer_snapshot_ids`);
 that row's payload never changes, so earlier forecasts keep their original inputs and replay bit-identically.
 
-R9. **Incremental forecasting** (store migration 3, `forecast_keys`). A forecast's INPUT KEY (`store.forecast_key`) is
+R9. **Incremental forecasting** (store migration 4, `forecast_keys`). A forecast's INPUT KEY (`store.forecast_key`) is
 its whole content except the time it was made: offer revision (`offer_snapshot_ids`), every input record id, model /
 artifact / data / calibration / grade-policy / stake-policy versions (sm-1 `data_version` = hash of the feature row),
 reason codes and the output. "Inputs changed" = any of those differs: a new offer revision, new stat observations or
@@ -55,7 +55,7 @@ context that change the feature row, a new quote record or a quote dropping out,
 `store.put` returns `unchanged` (writes nothing) for a key already stored; forward writes `model/forecasts.db` only for
 inserted forecasts. model/forecasts.db `inputs` holds ONE row per stored forecast: feature row (row_json), market
 sources (market_json), PMF (pmf_lo, pmf_json), grade-policy output (policy_json), offer record id, artifact sha.
-Existing forecasts are never deleted or rewritten; forecasts stored before migration 3 are indexed once (oldest first).
+Existing forecasts are never deleted or rewritten; forecasts stored before migration 4 are indexed once (oldest first).
 The slip pool selects forecasts by the current offers' events (an unchanged revision keeps its first forecast).
 
 R10. **Settlement at the forecast's own line** (`settlement.at_line`): settlements are keyed (platform, offer, side)
@@ -76,6 +76,10 @@ R8. **Source time and observation time are separate** everywhere: `source_update
 | C7 | concurrent processes: one current revision | canonical | test_c7_concurrent_workers_cannot_create_conflicting_current_revisions (4 processes x 40 rounds) | done |
 | C8 | existing-db migration + repair, restart | canonical | test_c8_existing_prefix_database_is_migrated_and_repaired_additively, test_c8_read_only_reader_of_an_unmigrated_store_still_reads, test_c8_two_processes_migrating_at_once_migrate_once, test_c8_worker_killed_mid_cycle_leaves_no_partial_batch_and_rerun_is_idempotent | done |
 | C9 | source vs observation times separate | canonical | test_c9_source_and_observation_times_are_separate_columns | done |
+| A1 | A->B->A where A (and B) were archived: the return continues the numbering (revision 3), is current and hot; archived A->B->A reads back the final A | canonical + archive | test_a1_a_b_a_where_a_was_archived, test_a1_archived_a_b_a_reads_back_the_final_a | done |
+| A2 | a delayed response for an archived identity is late (judged against the archived current revision) | canonical + archive | test_a2_a_delayed_response_for_an_archived_identity_is_late | done |
+| A3 | withdrawal -> archive -> reopen at the same line = open, current | canonical + archive | test_a3_withdrawal_then_archive_then_reopen_at_the_same_line | done |
+| A4 | 3 writer processes while archive passes run: unique contiguous revisions per identity across hot + archive, newest write current, archive verify clean | canonical + archive | test_a4_concurrent_writers_while_the_archive_pass_runs | done |
 | B1 | price A->B->A = 3 quote rows, final current; line A->B->A reopens the first line (open, removed, open) | books.db | test_line_correctness_books::test_b1_price_a_b_a_is_three_rows_final_a_current, test_b1_line_a_b_a_reopens_the_first_line | done |
 | B2 | A->A: last_seen_at + last_provider_updated_at move, no quote row | books.db | test_b2_a_a_moves_freshness_only | done |
 | B3 | delayed response = late history row, never current; delayed complete read never withdraws; last_seen never rewinds | books.db | test_b3_delayed_older_response_never_becomes_current, test_b3_delayed_complete_read_cannot_withdraw_what_a_newer_read_saw, test_b3_delayed_duplicate_does_not_rewind_last_seen | done |
@@ -95,6 +99,7 @@ R8. **Source time and observation time are separate** everywhere: `source_update
 | C6 | forecasts of revisions 1, 2, 3 keep their offer_snapshot_ids and replay bit-identically (also after a new artifact, under their own artifact) | forward | test_c11_forecasting_is_incremental_and_c6_earlier_forecasts_replay_unchanged | done |
 | C10 | a settlement records the offer's line at settlement; a forecast / leg made at another line is scored at ITS line from the box-score value (settlement.at_line), void/unresolved unchanged: learning.on_settled, slips.settle.settle_slip, snapshots.results_view | settlement / learning / slips settle / snapshots | test_c10_settlement_is_read_at_the_forecast_or_leg_line, test_c10_slip_leg_is_settled_at_its_own_line | done |
 | C11 | incremental forecasting: two runs with no change add 0 rows to canonical.db and model/forecasts.db; A->B and B->A add exactly one forecast per new revision; a new artifact re-forecasts once; pre-migration forecasts are indexed so the first run after deploy adds nothing; every writer (forward, sharp-2, legacy) goes through the store rule; the slip pool finds an unchanged revision's old forecast | store / forward / sharp2 / slips.pool | test_c11_forecasting_is_incremental_and_c6_earlier_forecasts_replay_unchanged, test_c11_existing_forecasts_are_indexed_on_migration_so_the_first_run_after_deploy_adds_nothing, test_c11_the_store_rule_covers_every_forecast_writer, test_c11_slip_pool_finds_an_old_forecast_of_an_unchanged_revision | done |
+| C5b | slip COPY re-checks each leg's live revision behind the cached (prebuilt <= 90 s) pool: a line that moved since the snapshot is "changed", never copied | slips.validate / api_slips | test_c5_copy_rechecks_the_live_revision_behind_a_cached_pool | done |
 | C12 | an unchanged quote re-confirmed by its source is as fresh as its NEWEST source time (was: the first sighting's), never a source time after forecast_at | model.market / forward | test_c12_an_unchanged_book_quote_is_as_fresh_as_its_newest_source_time | done |
 
 ## Results
@@ -116,3 +121,35 @@ Forecast growth per run (test world: one target offer, sm-1; scratch script, sam
 Production measurement (Starter agent, before): +3,410 forecast records (+4.8 MB canonical.db) and +14 MB
 model/forecasts.db per run with no new offers; after this change the same run adds 0 (one forecast per offer revision
 x input key).
+
+Checkpoint 5 (slip copy live check): 460 passed. Merge of sports/starter (archive): 480 passed. Checkpoint 6 (archive
+interplay A1-A4): `python -m pytest sports/tests -q` -> 485 passed, 10 skipped.
+
+## Archive interplay (sports/archive.py, Starter)
+
+- An identity is archived only as a whole (every revision, incl. late rows) once its newest sighting is 72 h old;
+  `records_all` (hot UNION archive) carries `late` and the source / origin columns, so every point-in-time and
+  scoped read applies the same CURRENT rule. A league-wide current listing reads the hot window only (by design: an
+  offer not seen for 72 h is not current).
+- A returning archived identity continues its revision numbers (`archive.identity_tail`); its archived current
+  revision is the reference for the late rule; content equal to the archived current one becomes a NEW revision
+  (the offer was gone for 72 h - a return, not a sighting).
+
+## Known limitations / decisions
+
+- Pre-fix repair (R6) cannot recover the exact time a returning line came back, nor the intermediate history of
+  A -> B -> A -> B sequences recorded before c0cc754 (the old rows only kept the last sighting): the repaired
+  revision is dated at the last sighting of the returning content. Forecasts made in that window keep the inputs
+  they were made with (B) - they are not rewritten.
+- `seen_count` of pre-fix revisions over-counts sightings of returning content (bookkeeping only; not repaired).
+- `source_time_unknown` is part of an offer's content hash (contract sc-1): a feed that flips between giving and not
+  giving a source time creates a revision. Changing the hash would re-revision every stored offer once; left as is.
+- Liquidity / book sizes / extras are excluded from the content hash (sc-1), so they keep the first sighting's values
+  on a duplicate (freshness of those fields is not tracked; prices / lines / availability are).
+- The slip pool / board are snapshots (prebuilt <= 90 s; UI snapshots per build). Between builds a surface can show
+  the previous revision; COPY re-checks live (C5b). Board and card are built in one pass from one store read, so they
+  always agree with each other.
+- The books lease is shared by leagues: a second league PROCESS finds it busy and waits for the next cycle (the
+  deployed service runs one ingest-loop child that takes leagues in turn, so no league is starved).
+- books.db / games.db on Postgres (SPORTS_DB_DSN) use a transaction-scoped advisory lock; only the SQLite path is
+  exercised by the tests (no Postgres in CI).
