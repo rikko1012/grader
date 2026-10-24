@@ -92,11 +92,11 @@ A11Y_JS = r"""
 def test_board_player_game_slip_same_numbers(pw, shots):
     ctx, page, errors = _page(pw)
     page.goto(URL + "/sports#/board?lg=nba")
-    page.wait_for_selector("table.sw-table tbody.sw-mkt", timeout=20000)
+    page.wait_for_selector(".sw-research-card", timeout=20000)
     page.screenshot(path=str(shots / "board_1280.png"))
-    over = page.locator("table.sw-table [data-fcside=over][data-fc]").first
+    over = page.locator(".sw-research-grid [data-fcside=over][data-fc]").first
     fid = over.get_attribute("data-fc")
-    board = _numbers(page, fid, "table.sw-table")
+    board = _numbers(page, fid, ".sw-research-grid")
     assert {"over", "under", "push", "mean"} <= set(board) and all(len(v) == 1 for v in board.values()), board
     # the record itself, through the API with the member token
     rec = page.evaluate("""async (fid) => { const a = window.ScoutSportsApp.api; const r = await a.get('/api/sports/forecast', {league: 'nba', id: fid}); return r.data.forecast; }""", fid)
@@ -104,7 +104,7 @@ def test_board_player_game_slip_same_numbers(pw, shots):
     assert board["over"] == {pct(rec["p_over"])} and board["under"] == {pct(rec["p_under"])} and board["push"] == {pct(rec["p_push"])}
     assert board["mean"] == {f"{rec['projection_mean']:.1f}"}
     # board -> player (the line link of that quote)
-    row = page.locator("table.sw-table tbody.sw-mkt", has=page.locator(f'[data-fc="{fid}"]')).first
+    row = page.locator(".sw-research-card", has=page.locator(f'[data-fc="{fid}"]')).first
     row.locator("a.sw-line").first.click()
     page.wait_for_selector("#sw-fc-h", timeout=20000)
     page.wait_for_timeout(300)
@@ -115,9 +115,9 @@ def test_board_player_game_slip_same_numbers(pw, shots):
     assert page.locator("svg.sw-chart").count() >= 1
     # player -> match context
     page.locator("a", has_text="Match context").first.click()
-    page.wait_for_selector("#sw-gameprops table.sw-table", timeout=20000)
+    page.wait_for_selector("#sw-gameprops .sw-research-grid", timeout=20000)
     page.screenshot(path=str(shots / "game_1280.png"))
-    game = _numbers(page, fid, "table.sw-table")
+    game = _numbers(page, fid, ".sw-research-grid")
     for k in ("over", "under", "push", "mean"):
         assert game[k] == board[k], (k, game, board)
     # back to the player, add the offered Over leg -> Slip Studio draft
@@ -152,11 +152,8 @@ def test_layouts_have_no_page_overflow(pw, shots, width, height, name):
         page.screenshot(path=str(shots / f"{view.split('?')[0]}_{name}.png"))
     page.goto(URL + "/sports#/board?lg=nba")
     page.wait_for_selector(".sw-count")
-    if width < 900:                                          # cards on phones / tablets, the table on desktop
-        assert page.locator(".sw-cards").is_visible() and not page.locator(".sw-tablebox").is_visible()
-    else:
-        assert page.locator(".sw-tablebox").is_visible() and not page.locator(".sw-cards").is_visible()
-    link = page.locator(".sw-card a.sw-line, table.sw-table a.sw-line").locator("visible=true").first
+    assert page.locator(".sw-research-grid").is_visible()
+    link = page.locator(".sw-research-card a.sw-line").locator("visible=true").first
     link.click()
     page.wait_for_selector("#sw-fc-h", timeout=20000)
     page.wait_for_timeout(200)
@@ -174,7 +171,7 @@ def test_states_empty_notready_error_offline_stale(pw, shots):
     assert "0</b> of" in page.inner_html("#sw-bcount")
     page.screenshot(path=str(shots / "state_empty.png"))
     page.click("#sw-reset2")
-    page.wait_for_selector("table.sw-table tbody.sw-mkt")
+    page.wait_for_selector(".sw-research-card")
     # filters persist across reload and back navigation
     page.select_option("#sw-stat", "rebounds")
     page.wait_for_timeout(200)
@@ -230,8 +227,8 @@ def test_partial_data_player_without_history_or_chance(pw, shots):
     page.route("**/api/sports/history*", lambda r: r.fulfill(status=503, content_type="application/json",
                                                            body=json.dumps({"error": "sports_busy"})))
     page.goto(URL + "/sports#/board?lg=nba")
-    page.wait_for_selector("table.sw-table a.sw-line")
-    page.locator("table.sw-table a.sw-line").first.click()
+    page.wait_for_selector(".sw-research-grid a.sw-line")
+    page.locator(".sw-research-grid a.sw-line").first.click()
     page.wait_for_selector("text=Game history did not load")
     page.screenshot(path=str(shots / "state_partial.png"))
     ctx.close()
@@ -240,7 +237,7 @@ def test_partial_data_player_without_history_or_chance(pw, shots):
 def test_keyboard_focus_labels_targets_contrast_motion(pw, shots):
     ctx, page, errors = _page(pw, reduced_motion="reduce")
     page.goto(URL + "/sports#/board?lg=nba")
-    page.wait_for_selector("table.sw-table tbody.sw-mkt")
+    page.wait_for_selector(".sw-research-card")
     page.keyboard.press("Tab")
     assert page.evaluate("document.activeElement.className") == "sw-skip"
     for _ in range(6):
@@ -252,11 +249,40 @@ def test_keyboard_focus_labels_targets_contrast_motion(pw, shots):
     assert not rep["contrast"], rep["contrast"][:10]
     assert rep["svgNoLabel"] == 0
     assert len(rep["small"]) == 0, rep["small"][:10]
-    page.locator("table.sw-table a.sw-line").first.click()
+    page.locator(".sw-research-grid a.sw-line").first.click()
     page.wait_for_selector("#sw-fc-h")
     rep = page.evaluate(A11Y_JS)
     assert not rep["unlabelled"] and not rep["contrast"] and rep["svgNoLabel"] == 0, rep
     # reduced motion: the skeleton shimmer is off
     page.evaluate("document.body.insertAdjacentHTML('beforeend', '<div class=\"sw-skel\" id=\"t-sk\"></div>')")
     assert page.evaluate("getComputedStyle(document.getElementById('t-sk')).animationName") == "none"
+    ctx.close()
+
+
+@pytest.mark.parametrize("width", [360, 1280])
+def test_track_pick_and_my_picks(pw, shots, width):
+    """Track Over / Under is a real button next to + Over / + Under (keyboard: focus + Enter); the server answers per
+    pick (recorded, or refused with its reason - e.g. a started game on an old snapshot) in the status toast; My picks
+    renders (list or empty state) without page overflow, with labelled targets and readable contrast."""
+    ctx, page, errors = _page(pw, width, 800, has_touch=width < 768, is_mobile=width < 768)
+    page.goto(URL + "/sports#/board?lg=nba")
+    page.wait_for_selector(".sw-count", timeout=20000)
+    btn = page.locator("[data-track]").locator("visible=true").first
+    assert btn.get_attribute("aria-label").startswith("Track ")
+    btn.focus()
+    page.keyboard.press("Enter")
+    page.wait_for_function("document.getElementById('sw-toast').innerText.length > 0", timeout=20000)
+    toast = page.locator("#sw-toast").inner_text()
+    assert toast.startswith(("Tracked:", "Not tracked:")), toast
+    assert _no_overflow(page)
+    page.screenshot(path=str(shots / f"track_{width}.png"))
+    page.goto(URL + "/sports#/picks")
+    page.wait_for_selector("h1:has-text('My picks')", timeout=20000)
+    page.wait_for_selector(".sw-state, .sw-picklist", timeout=20000)
+    assert page.locator('#sw-views a[data-view="picks"]').get_attribute("aria-current") == "page"
+    assert _no_overflow(page)
+    a = page.evaluate(A11Y_JS)
+    assert not a["small"] and not a["unlabelled"] and not a["contrast"], a
+    page.screenshot(path=str(shots / f"picks_{width}.png"), full_page=True)
+    assert not [e for e in errors if "favicon" not in e], errors
     ctx.close()

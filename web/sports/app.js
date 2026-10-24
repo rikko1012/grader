@@ -3,11 +3,7 @@
    GET /api/sports/token (esports origin, server-side paid check) -> {token, exp, api_base}; then
    api_base + /api/sports/... with "Authorization: Bearer <token>", refreshed before exp.
    Every number shown is copied from a typed record in the snapshot (record id / model version / time on the Source
-   button) or computed here from the listed per-game records (window statistics).
-   Pick tracking (sports/picks.py pk-1, shown only when /api/sports/picks/mine answers): "Pick Higher / Lower" records
-   the member's OWN prospective pick on the exact line on screen (offer revision id) with the Scout chance shown, if
-   any; the server re-checks it is current, offered, settleable and not started. "My picks" (#/picks) lists them with
-   results at the picked line. Stakes stay 0 and no grade letter is shown. */
+   button) or computed here from the listed per-game records (window statistics). */
 (function () {
   "use strict";
   var S = window.SportsStats, Sh = window.ScoutShell, esc = Sh.esc;
@@ -29,8 +25,6 @@
   var main = document.getElementById("sw-main");
   var banner = document.getElementById("sw-banner");
   var SRC = []; LEGS = [];                                          // source records for the Source dialog (per render)
-  var PICKS = {on: false, list: []};                                 // pick tracking available? + buttons this render
-  var PICK_BOOKS = {underdog: {over: "Higher", under: "Lower"}, prizepicks: {over: "More", under: "Less"}};
   var DEFAULT_FILTERS = {book: "all", stat: "all", side: "any", q: "", ev: "all", more: false};
   var state = {lg: "nba", filters: {nba: Object.assign({}, DEFAULT_FILTERS), nfl: Object.assign({}, DEFAULT_FILTERS)},
                boardShown: BOARD_PAGE, player: {}};
@@ -63,6 +57,27 @@
         .then(function (v) { self.minting = null; return v; }, function (e) { self.minting = null; throw e; });
       return self.minting;
     },
+    post: function (path, body) {                        // JSON POST with the same token refresh (one retry on 401)
+      var self = this;
+      var once = function (retry) {
+        return self.token(retry).then(function () {
+          return fetch(self.base + path, {method: "POST", cache: "no-store", body: JSON.stringify(body),
+            headers: {Authorization: "Bearer " + self.tok, "Content-Type": "application/json"}});
+        }).then(function (r) {
+          return r.json().catch(function () { return {}; }).then(function (b) {
+            if (r.status === 401 && !retry) return once(true);
+            if (r.status === 401 || r.status === 403) throw new ApiError("auth", r.status, b.error);
+            if (r.status === 503) throw new ApiError("unavailable", 503, b.error);
+            if (!r.ok) throw new ApiError("error", r.status, b.detail || b.error);
+            return b;
+          });
+        }, function (e) {
+          if (e instanceof ApiError) throw e;
+          throw new ApiError(navigator.onLine === false ? "offline" : "network", 0);
+        });
+      };
+      return once(false);
+    },
     get: function (path, params, opts) {
       var self = this, qs = new URLSearchParams(params || {}).toString();
       var key = path + "?" + qs, hit = self.mem[key];
@@ -93,27 +108,6 @@
         }
         throw e;
       });
-    },
-    post: function (path, body) {                                    // never cached; a retry after 401 is idempotent
-      var self = this;
-      var once = function (retry) {
-        return self.token(retry).then(function () {
-          return fetch(self.base + path, {method: "POST", cache: "no-store", body: JSON.stringify(body),
-            headers: {Authorization: "Bearer " + self.tok, "Content-Type": "application/json"}});
-        }).then(function (r) {
-          return r.json().catch(function () { return {}; }).then(function (b) {
-            if (r.status === 401 && !retry) return once(true);
-            if (r.status === 401 || r.status === 403) throw new ApiError("auth", r.status, b.error);
-            if (r.status === 404) throw new ApiError("notfound", 404, b.error);
-            if (!r.ok) throw new ApiError(r.status === 503 ? "unavailable" : "error", r.status, b.detail || b.error);
-            return b;
-          });
-        }, function (e) {
-          if (e instanceof ApiError) throw e;
-          throw new ApiError(navigator.onLine === false ? "offline" : "network", 0);
-        });
-      };
-      return once(false);
     }
   };
 
@@ -206,9 +200,9 @@
     var models = (manifest.models || []).map(function (m) {
       return esc(m.model_version) + ": " + m.forecasts + " forecasts on the board, " + m.settled + " settled" + (m.research_only ? ", research version (no grades)" : "");
     });
-    f.innerHTML = "<p>" + plats.join(" · ") + "</p><p>Models: " + (models.join(" · ") || "none on the board") + "</p>" +
+    f.innerHTML = "<details><summary>Data freshness & model details</summary><p>" + plats.join(" · ") + "</p><p>Models: " + (models.join(" · ") || "none on the board") + "</p>" +
       "<p>Snapshot " + esc(manifest.version) + " built " + esc(S.localTime(manifest.built_at)) + " · contracts " + esc(manifest.contracts) +
-      " · capabilities " + esc(manifest.capabilities) + ". Chances are unconditional: Over, Under and Push add up to 100%. History: ESPN; market prices: Kalshi, PrizePicks, Underdog.</p>";
+      " · capabilities " + esc(manifest.capabilities) + ". Chances are unconditional: Over, Under and Push add up to 100%. History: ESPN; market prices: Kalshi, PrizePicks, Underdog.</p></details>";
   }
   function setNav(view) {
     document.querySelectorAll("#sw-views a").forEach(function (a) {
@@ -277,7 +271,7 @@
       main.innerHTML = html;
       var body = document.getElementById("sw-slatebody");
       function draw() {
-        SRC = []; LEGS = []; PICKS.list = [];
+        SRC = []; LEGS = [];
         var q = (f.slateQ || "").toLowerCase();
         var evs = d.events.filter(function (e) {
           if (!q) return true;
@@ -361,7 +355,9 @@
   function legButton(leg) {
     LEGS.push(leg);
     var word = leg.side === "over" ? "Over" : "Under";
-    return '<button type="button" class="sw-btn sw-btn-sm" data-leg="' + (LEGS.length - 1) + '" aria-label="Add ' + esc(leg.player + " " + word + " " + S.line(leg.line) + " " + (leg.stat_label || leg.stat) + " on " + bookName(leg.platform)) + ' to the Slip Studio draft">+ ' + word + "</button>";
+    var what = leg.player + " " + word + " " + S.line(leg.line) + " " + (leg.stat_label || leg.stat) + " on " + bookName(leg.platform);
+    return '<button type="button" class="sw-btn sw-btn-sm" data-leg="' + (LEGS.length - 1) + '" aria-label="Add ' + esc(what) + ' to the Slip Studio draft">+ ' + word + "</button>" +
+      '<button type="button" class="sw-btn sw-btn-sm" data-track="' + (LEGS.length - 1) + '" aria-label="Track ' + esc(what) + ' as my pick">Track ' + word + "</button>";
   }
   function makeLeg(o) {                                  // o: platform, record_id, forecast (full or compact), side, ...
     var f = o.forecast, full = f && f.p_over !== undefined;
@@ -397,7 +393,53 @@
   document.addEventListener("click", function (e) {
     var b = e.target.closest && e.target.closest("[data-leg]");
     if (b) { e.preventDefault(); var l = LEGS[+b.getAttribute("data-leg")]; if (l) addToSlip(l); }
+    var t = e.target.closest && e.target.closest("[data-track]");
+    if (t) { e.preventDefault(); var lt = LEGS[+t.getAttribute("data-track")]; if (lt) trackPick(lt, t); }
   });
+  // ------------------------------------------------------------------------------------------- pick tracking
+  // "Track" records the member's pick on the sports service BEFORE the start, against this exact offer revision and
+  // forecast; the server re-checks everything live and refuses a moved line / started game. Stake 0, no grades.
+  function trackPick(leg, btn) {
+    var f = leg.forecast_id ? {p_over: leg.side === "over" ? leg.p_win : leg.p_loss, p_under: leg.side === "over" ? leg.p_loss : leg.p_win, p_push: leg.p_push} : null;
+    btn.disabled = true;
+    Api.post("/api/sports/picks/track", {picks: [{platform: leg.platform, record_id: leg.record_id, side: leg.side,
+      forecast_id: leg.forecast_id || null, shown: f, surface: route().view === "player" ? "card" : "board"}]}).then(function (b) {
+      var r = (b.results || [])[0] || {};
+      Object.keys(Api.mem).forEach(function (k) { if (k.indexOf("/api/sports/picks/") === 0) delete Api.mem[k]; });
+      if (r.ok) { btn.textContent = "Tracked"; btn.setAttribute("aria-pressed", "true"); }
+      else btn.disabled = false;
+      pickToast(r.ok ? "Tracked: " + leg.player + " " + (leg.side === "over" ? "Over " : "Under ") + S.line(leg.line) + " " + (leg.stat_label || leg.stat) + " on " + bookName(leg.platform) + ", recorded " + S.localTime(r.tracked_at) + ". Stake 0." + (r.test ? " Test record: kept apart from member results." : "")
+        : "Not tracked: " + (r.text || "refused"), !!r.ok);
+    }, function (e) { btn.disabled = false; pickToast("Not tracked: " + (e.kind === "offline" ? "you are offline" : "the sports service did not answer") + ".", false); });
+  }
+  function pickToast(text, ok) {
+    document.getElementById("sw-toast").innerHTML = '<div class="sw-banner ' + (ok ? "info" : "warn") + '">' + esc(text) + (ok ? ' <a href="#/picks">My picks</a>' : "") + "</div>";
+  }
+  var RESULT_WORD = {win: "Won", loss: "Lost", push: "Push", void: "Void (did not play)", unresolved: "Unresolved"};
+  function renderPicks() {
+    var head = '<div class="sw-eyebrow">My picks</div><h1 class="sw-h1">My picks</h1>';
+    main.innerHTML = head + skeleton(4);
+    Api.get("/api/sports/picks/mine", {}, {fresh: true}).then(function (res) {
+      var d = res.data, ps = d.picks || [];
+      var h = head + '<p class="sw-sub">Each pick was recorded before its game against the exact line shown and is settled from the final box score at that line. Stakes are 0 and no grades are shown while the model is being validated.</p>';
+      if (!ps.length) {
+        main.innerHTML = h + stateBox("No tracked picks yet", "Use <b>Track Over</b> / <b>Track Under</b> on the prop board or a player page before the game starts. A recorded pick appears here within about a minute.", '<a class="sw-btn" href="#/board">Open the prop board</a>');
+        return;
+      }
+      var c = {win: 0, loss: 0, push: 0, "void": 0, open: 0};
+      ps.forEach(function (p) { var st = p.result && p.result.status; if (st && st in c) c[st]++; else c.open++; });
+      h += '<p class="sw-count"><span><b>' + d.total + "</b> picks</span><span><b>" + c.win + "-" + c.loss + "-" + c.push + "</b> won-lost-push</span><span><b>" + c["void"] + "</b> void</span><span><b>" + c.open + "</b> not settled</span></p>";
+      h += '<div class="sw-picklist">' + ps.map(function (p) {
+        var r = p.result, word = p.side === "over" ? "Over" : "Under";
+        return '<article class="sw-card"><div class="sw-card-top"><div><b>' + esc(p.player || "") + "</b> " + esc(word + " " + S.line(p.line) + " " + (p.stat_label || p.stat || "")) + (p.test ? ' <span class="sw-tag">test</span>' : "") +
+          '<div class="sw-faint sw-small">' + esc(bookName(p.platform)) + " · " + esc(p.event_ref || "") + " · starts " + esc(S.localTime(p.start_utc, {weekday: "short", hour: "numeric", minute: "2-digit"})) + "</div></div>" +
+          '<div class="sw-small" style="text-align:right">' + (r ? "<b>" + esc(RESULT_WORD[r.status] || r.status) + "</b>" + (r.value !== null && r.value !== undefined ? '<div class="sw-faint">final ' + esc(r.value) + "</div>" : "") + (r.corrected ? ' <span class="sw-tag">corrected</span>' : "") : '<span class="sw-faint">Not settled</span>') + "</div></div>" +
+          '<div class="sw-small sw-faint">Tracked ' + esc(S.localTime(p.tracked_at)) + " · " + (p.p_side !== null && p.p_side !== undefined ? "Scout chance shown " + S.pct(p.p_side) + " · " : "") + esc(p.validation_text || "") + " · stake 0 · " +
+          src({title: "Pick record", "pick id": p.pick_id, "offer record (exact revision)": p.record_id, revision: p.revision, forecast: p.forecast_id || "none", model: p.model_version || "none", "tracked at (your time)": S.localTime(p.tracked_at), "where": p.surface}) + "</div></article>";
+      }).join("") + "</div>" + (d.total > d.shown ? '<p class="sw-faint sw-small">Newest ' + d.shown + " of " + d.total + " shown.</p>" : "");
+      main.innerHTML = h;
+    }).catch(fail);
+  }
   function boardLegButtons(m, q, f, B) {
     if (q.p === "kalshi" || !q.g) return "";
     var out = [["over", 0], ["under", 1]].filter(function (x) { return q.o[x[1]] === 1; }).map(function (x) {
@@ -407,100 +449,49 @@
     });
     return out.length ? '<div class="sw-legbtns">' + out.join("") + "</div>" : "";
   }
-  // q compact (p platform, r record id, o [over, under] offered, g gradable, l line); f the Scout chance SHOWN beside
-  // it ({po, pu, pp}) or null. The server refuses a pick whose shown chance differs from the forecast record.
-  function pickButtons(q, f, fid, startUtc, label, surface) {
-    var words = PICK_BOOKS[q.p];
-    if (!PICKS.on || !words || !q.r || !q.g || !startUtc || Date.parse(startUtc) <= Date.now()) return "";
-    var out = [["over", 0], ["under", 1]].filter(function (x) { return q.o[x[1]] === 1; }).map(function (x) {
-      var what = label + " " + words[x[0]] + " " + S.line(q.l) + " on " + bookName(q.p);
-      PICKS.list.push({what: what, pick: {platform: q.p, record_id: q.r, side: x[0], surface: surface,
-        forecast_id: f && fid ? fid : undefined, shown: f && fid ? {p_over: f.po, p_under: f.pu, p_push: f.pp} : undefined}});
-      return '<button type="button" class="sw-btn sw-btn-sm sw-pick" data-pick="' + (PICKS.list.length - 1) + '" aria-label="' + esc("Track my pick: " + what) + '">Pick ' + esc(words[x[0]]) + "</button>";
-    });
-    return out.length ? '<div class="sw-legbtns sw-pickbtns">' + out.join("") + "</div>" : "";
-  }
-  function pickToast(text, ok) {
-    document.getElementById("sw-toast").innerHTML = '<div class="sw-banner ' + (ok ? "info" : "warn") + '">' + esc(text) + (ok ? ' <a href="#/picks">My picks</a>' : "") + "</div>";
-  }
-  document.addEventListener("click", function (e) {
-    var b = e.target.closest && e.target.closest("[data-pick]");
-    if (!b) return;
-    e.preventDefault();
-    var p = PICKS.list[+b.getAttribute("data-pick")];
-    if (!p || b.disabled) return;
-    b.disabled = true;
-    Api.post("/api/sports/picks/track", {picks: [p.pick]}).then(function (r) {
-      var res = (r.results || [])[0] || {};
-      if (res.ok) {
-        b.textContent = "Tracked ✓";
-        pickToast("Tracked: " + p.what + (res.test ? " (test record, kept apart from member results)" : "") + ". No entry was placed anywhere.", true);
-      } else {
-        b.disabled = false;
-        pickToast("Not tracked: " + (res.text || "this line can't be tracked right now") + ".", false);
-      }
-    }, function (err) {
-      b.disabled = false;
-      pickToast(err.kind === "notfound" ? "Pick tracking is not available yet." : "The pick was not tracked (" + err.kind + "). Try again.", false);
-    });
-  });
-  function boardTable(rows, B) {
-    var h = '<div class="sw-tablebox sw-scroll"><table class="sw-table"><caption class="sw-sr">Prop board: one group per player market, one row per book line</caption><thead><tr>' +
-      '<th scope="col">Player · game</th><th scope="col">Market</th><th scope="col">Book</th><th scope="col" class="num">Line</th><th scope="col">Offered</th>' +
-      '<th scope="col" class="num">Scout projection</th><th scope="col" class="num">Over</th><th scope="col" class="num">Under</th><th scope="col" class="num">Push</th><th scope="col">Observed</th><th scope="col">' + (PICKS.on ? "Slip · My pick" : "Slip") + '</th><th scope="col"><span class="sw-sr">Source</span></th></tr></thead>';
-    rows.forEach(function (m) {
-      var qr = quoteRows(m), all = qr.q.map(function (q) { return [q, "q"]; }).concat(qr.k.map(function (q) { return [q, "k"]; }));
-      if (!all.length) all = [[null, "none"]];
-      var inj = B.injuries[m.pid];
-      h += '<tbody class="sw-mkt" data-key="' + esc(m.k) + '">';
-      all.forEach(function (x, i) {
-        var q = x[0], f = q && q.f ? B.fc[q.f] : null, c = fcCell(f, q && q.o);
-        h += "<tr>";
-        if (i === 0) {
-          h += '<td class="sw-who-cell" rowspan="' + all.length + '"><a href="' + marketHref(m, null) + '">' + esc(m.n) + "</a>" +
-            (inj ? ' <span class="sw-tag inj">' + esc(inj.status) + "</span>" : "") +
-            '<div class="sw-faint sw-small">' + esc([m.pos, m.tm].filter(Boolean).join(" · ")) + '</div><div class="sw-small"><a href="#/game/' + encodeURIComponent(m.e) + '">' + esc(m.matchup) + '</a> <span class="sw-faint">' + esc(S.localTime(m.ev && m.ev.start_utc, {weekday: "short", hour: "numeric", minute: "2-digit", timeZoneName: "short"})) + "</span></div></td>" +
-            '<td rowspan="' + all.length + '">' + esc(B.stats[m.st] || m.st) + (m.alt ? '<div class="sw-small"><a href="' + marketHref(m, null) + '">+' + m.alt + " alternate lines</a></div>" : "") +
-            (m.kr > m.kn.length ? '<div class="sw-faint sw-small">Kalshi ladder: ' + m.kr + " rungs</div>" : "") +
-            (m.cap !== "supported" ? '<div class="sw-faint sw-small">No Scout chance for this stat</div>' : "") + "</td>";
-        }
-        if (!q) {
-          h += '<td colspan="10" class="sw-faint">' + (m.alt ? "Only alternate-payout lines (goblin / demon) - open the player for them." : "No line for this filter.") + "</td>";
-        } else if (x[1] === "k") {
-          h += "<td>" + book(q.p) + '</td><td class="num"><span class="sw-line">' + S.line(q.l) + '</span></td><td class="sw-offered">YES ' + S.cents(q.k && q.k[0]) + " / " + S.cents(q.k && q.k[1]) + '</td><td colspan="4" class="sw-small">' + (kMid(q) === null ? '<span class="sw-faint">Kalshi price for Over ' + S.line(q.l) + "</span>" : "Market chance Over " + S.line(q.l) + ": <b>" + S.pct(kMid(q)) + '</b> <span class="sw-faint">(Kalshi YES mid)</span>') + '</td><td class="sw-small sw-faint">' + esc(S.age(q.t)) + "</td><td></td><td>" + quoteSource(q) + "</td>";
-        } else {
-          h += "<td>" + book(q.p) + (q.v !== "standard" && q.v !== "balanced" ? ' <span class="sw-tag">' + esc(q.v) + "</span>" : "") + '</td><td class="num"><a class="sw-line" href="' + marketHref(m, q) + '" aria-label="' + esc(m.n + " " + (B.stats[m.st] || m.st) + " " + S.line(q.l) + " on " + bookName(q.p)) + '">' + S.line(q.l) + "</a></td>" +
-            '<td class="sw-offered">' + offeredText(q.o) + (q.m && (q.m[0] !== 1 || q.m[1] !== 1) ? '<div class="sw-faint">' + (q.m[0] ? "O " + S.mult(q.m[0]) : "") + (q.m[1] ? " U " + S.mult(q.m[1]) : "") + "</div>" : "") + "</td>" +
-            '<td class="num">' + c.mean + '</td><td class="num">' + c.over + '</td><td class="num">' + c.under + '</td><td class="num">' + c.push + "</td>" +
-            '<td class="sw-small"><span class="sw-faint">' + esc(S.age(q.t)) + "</span>" + (f ? '<div class="sw-faint">' + esc(f.m) + " · " + esc(S.age(f.at)) + "</div>" : (q.g ? '<div class="sw-faint">No Scout chance yet</div>' : "")) + "</td>" +
-            "<td>" + boardLegButtons(m, q, f, B) + pickButtons(q, f, q.f, m.ev && m.ev.start_utc, m.n + " " + (B.stats[m.st] || m.st), "board") + "</td><td>" + quoteSource(q) + (f ? fcSource(q.f, f, q) : "") + "</td>";
-        }
-        h += "</tr>";
-      });
-      h += "</tbody>";
-    });
-    return h + "</table></div>";
-  }
+  // Keep a single responsive rendering: every action retains its exact quote and forecast revision.
   function boardCards(rows, B) {
-    var h = '<div class="sw-cards">';
-    rows.forEach(function (m) {
+    function offer(m, q) {
+      var f = q.f ? B.fc[q.f] : null, c = fcCell(f, q.o);
+      return '<div class="sw-offer"><div class="sw-offer-head">' + book(q.p) +
+        '<a class="sw-line" href="' + marketHref(m, q) + '">' + S.line(q.l) +
+        ' <span>' + esc(B.stats[m.st] || m.st) + '</span></a></div>' +
+        '<div class="sw-chances"><div><span>Over</span><strong>' + c.over + '</strong></div>' +
+        '<div><span>Under</span><strong>' + c.under + '</strong></div>' +
+        '<div><span>Projection</span><strong>' + c.mean + '</strong></div></div>' +
+        (f ? '<div class="sw-small sw-faint sw-push-note">Push ' + c.push + '</div>' : '') +
+        '<div class="sw-offer-meta">' + esc(offeredText(q.o)) + ' · Observed ' + esc(S.age(q.t)) +
+        (q.v !== 'standard' && q.v !== 'balanced' ? ' · ' + esc(q.v) : '') +
+        (q.m ? ' · Multipliers O ' + S.mult(q.m[0]) + ' / U ' + S.mult(q.m[1]) : '') + '</div>' +
+        boardLegButtons(m, q, f, B) + '<div class="sw-offer-source">' + quoteSource(q) +
+        (f ? fcSource(q.f, f, q) : '<span class="sw-small sw-faint">Forecast pending</span>') + '</div></div>';
+    }
+    return '<div class="sw-research-grid">' + rows.map(function (m) {
       var qr = quoteRows(m), inj = B.injuries[m.pid];
-      h += '<article class="sw-card" aria-label="' + esc(m.n + ", " + (B.stats[m.st] || m.st)) + '"><div class="sw-card-top"><div><a href="' + marketHref(m, null) + '">' + esc(m.n) + "</a>" +
-        (inj ? ' <span class="sw-tag inj">' + esc(inj.status) + "</span>" : "") + '<div class="sw-faint sw-small">' + esc([m.pos, m.tm].filter(Boolean).join(" · ")) + " · " + esc(m.matchup) + " · " + esc(S.localTime(m.ev && m.ev.start_utc, {weekday: "short", hour: "numeric", minute: "2-digit"})) + "</div></div>" +
-        '<div class="sw-small" style="text-align:right">' + esc(B.stats[m.st] || m.st) + "</div></div>";
-      qr.q.forEach(function (q) {
-        var f = q.f ? B.fc[q.f] : null, c = fcCell(f, q.o);
-        h += '<div class="sw-qrow"><div>' + book(q.p) + ' <a class="sw-line" href="' + marketHref(m, q) + '">' + S.line(q.l) + '</a><div class="sw-offered">' + offeredText(q.o) + " · " + esc(S.age(q.t)) + "</div>" + boardLegButtons(m, q, f, B) + pickButtons(q, f, q.f, m.ev && m.ev.start_utc, m.n + " " + (B.stats[m.st] || m.st), "board") + "</div>" +
-          '<div class="sw-small sw-faint" style="text-align:right">Proj<br><b class="sw-p">' + c.mean + "</b></div>" +
-          '<div class="sw-pp"><span>O ' + c.over + "</span><span>U " + c.under + "</span>" + (f && f.pp > 0 ? "<span>P " + c.push + "</span>" : "") + "</div></div>";
+      // A fixed book order avoids presenting a high probability or alternate as a recommendation.
+      var order = {prizepicks: 0, underdog: 1, fanduel: 2, betrivers: 3};
+      var quotes = qr.q.slice().sort(function (a, b) {
+        var rank = function (q) { return Object.prototype.hasOwnProperty.call(order, q.p) ? order[q.p] : 10; };
+        return rank(a) - rank(b);
       });
-      qr.k.forEach(function (q) {
-        h += '<div class="sw-qrow"><div>' + book(q.p) + ' <span class="sw-line">' + S.line(q.l) + '</span></div><div class="sw-small sw-faint">YES ' + S.cents(q.k && q.k[0]) + " / " + S.cents(q.k && q.k[1]) + '</div><div class="sw-small' + (kMid(q) === null ? ' sw-faint">market price' : '">market <b>' + S.pct(kMid(q)) + "</b>") + "</div></div>";
-      });
-      if (!qr.q.length && !qr.k.length) h += '<div class="sw-qrow"><div class="sw-faint sw-small">' + (m.alt ? m.alt + " alternate lines - open the player" : "No line for this filter") + "</div></div>";
-      h += "</article>";
-    });
-    return h + "</div>";
+      var h = '<article class="sw-research-card" aria-label="' + esc(m.n + ', ' + (B.stats[m.st] || m.st)) + '">' +
+        '<div class="sw-research-head"><div class="sw-avatar" aria-hidden="true">' + esc(m.n.split(' ').map(function(n){return n[0];}).slice(0,2).join('')) +
+        '</div><div><a class="sw-player-name" href="' + marketHref(m, null) + '">' + esc(m.n) + '</a>' +
+        '<div class="sw-small sw-faint">' + esc([m.tm, m.pos].filter(Boolean).join(' · ')) + '</div></div>' +
+        (inj ? '<span class="sw-tag inj">' + esc(inj.status) + '</span>' : '') + '</div>' +
+        '<div class="sw-matchline"><a href="#/game/' + encodeURIComponent(m.e) + '">' + esc(m.matchup) + '</a><span>' +
+        esc(S.localTime(m.ev && m.ev.start_utc, {weekday:'short',hour:'numeric',minute:'2-digit'})) + '</span></div>';
+      if (quotes.length) h += offer(m, quotes[0]);
+      else h += '<div class="sw-offer"><b>' + esc(B.stats[m.st] || m.st) + '</b><p class="sw-faint">' + (qr.k.length ? 'Market prices available below.' : 'No ordinary line for these filters.') + '</p></div>';
+      var remaining = Math.max(0, quotes.length - 1) + qr.k.length;
+      if (remaining > 0) {
+        h += '<details class="sw-compare"><summary>Compare ' + remaining + ' more lines <span aria-hidden="true">＋</span></summary><div>';
+        quotes.slice(1).forEach(function(q){ h += offer(m,q); });
+        qr.k.forEach(function(q){ h += '<div class="sw-offer"><div class="sw-offer-head">' + book(q.p) + '<b>' + S.line(q.l) + '</b></div><p class="sw-small">YES ' + S.cents(q.k && q.k[0]) + ' / ' + S.cents(q.k && q.k[1]) + ' · ' + (kMid(q) === null ? 'Market price' : 'Market chance ' + S.pct(kMid(q))) + '</p><span class="sw-faint sw-small">Observed ' + esc(S.age(q.t)) + '</span> ' + quoteSource(q) + '</div>'; });
+        h += '</div></details>';
+      }
+      return h + '<a class="sw-research-link" href="' + marketHref(m,null) + '">Player history & research <span aria-hidden="true">↗</span></a></article>';
+    }).join('') + '</div>';
   }
   function renderBoard(params, onlyEvent) {
     var f = state.filters[state.lg];
@@ -517,11 +508,11 @@
       var evs = Object.keys(B.board.events).map(function (k) { return [k, matchup(B.board.events[k]) + " · " + S.localTime(B.board.events[k].start_utc, {weekday: "short", hour: "numeric", minute: "2-digit"}), B.board.events[k].start_utc]; })
         .sort(function (a, b) { return a[2] < b[2] ? -1 : 1; });
       var head = onlyEvent ? "" : '<div class="sw-eyebrow">' + state.lg.toUpperCase() + ' · Prop board</div><h1 class="sw-h1">Prop board</h1>' +
-        '<p class="sw-sub">Each row is one market. Books share a row only when the market is identical (same game, player, stat, full game, ordinary line). Over, Under and Push are Scout’s unconditional chances for that book’s line.</p>' +
+        '<p class="sw-sub">Find a player. Compare the lines. Track your research. Chances apply to the exact book and line shown; they are not validated recommendations.</p>' +
         boardFiltersHtml(B, f, evs);
       target.innerHTML = head + '<div id="sw-bcount"></div><div id="sw-bbody"></div>';
       function draw() {
-        SRC = []; LEGS = []; PICKS.list = [];
+        SRC = []; LEGS = [];
         var ff = onlyEvent ? Object.assign({}, DEFAULT_FILTERS, {ev: onlyEvent, more: true}) : f;
         var rows = B.markets.filter(function (m) { return (ff.more || m.pr) && S.matchesFilters(m, ff); });
         var total = B.markets.filter(function (m) { return (ff.more || m.pr) && (!onlyEvent || m.e === onlyEvent); }).length;
@@ -537,7 +528,7 @@
           document.getElementById("sw-reset2").onclick = reset; return;
         }
         var shown = rows.slice(0, state.boardShown);
-        body.innerHTML = boardTable(shown, B) + boardCards(shown, B) +
+        body.innerHTML = boardCards(shown, B) +
           (rows.length > shown.length ? '<p style="text-align:center"><button type="button" class="sw-btn" id="sw-showmore">Show ' + Math.min(BOARD_PAGE, rows.length - shown.length) + " more (" + (rows.length - shown.length) + " left)</button></p>" : "");
         var sm = document.getElementById("sw-showmore");
         if (sm) sm.onclick = function () { state.boardShown += BOARD_PAGE; draw(); };
@@ -573,7 +564,7 @@
       freshness(man, got); footer(man);
       var e = got.data.events.filter(function (x) { return x.event_id === eid; })[0];
       if (!e) { main.innerHTML = errorBox({kind: "notfound"}); return; }
-      SRC = []; LEGS = []; PICKS.list = [];
+      SRC = []; LEGS = [];
       var byTeam = {};
       e.injuries.forEach(function (i) { (byTeam[i.team_id] = byTeam[i.team_id] || []).push(i); });
       function injList(t) {
@@ -671,7 +662,7 @@
       draw();
 
       function draw() {
-        SRC = []; LEGS = []; PICKS.list = [];
+        SRC = []; LEGS = [];
         var fc = sel && sel.forecast_id ? P.forecasts[sel.forecast_id] : null;
         var det = sel && sel.forecast_id ? P.forecast_detail[sel.forecast_id] : null;
         var ln = ps.customLine !== undefined && ps.customLine !== null ? ps.customLine : (sel ? sel.line : null);
@@ -769,11 +760,6 @@
             event_ref: ne && ne.opponent ? (ne.home ? "vs " : "@ ") + ne.opponent.abbr : null}));
         });
         var not = ["over", "under"].filter(function (x) { return !(sides[x] && sides[x].offered); });
-        var shownFc = fc && q.forecast_id === fc.forecast_id ? fc : null;       // the chance on screen for THIS line
-        out.push(pickButtons({p: q.platform, r: q.record_id, l: q.line, g: q.gradable === false ? 0 : 1,
-          o: [sides.over && sides.over.offered ? 1 : 0, sides.under && sides.under.offered ? 1 : 0]},
-          shownFc ? {po: shownFc.p_over, pu: shownFc.p_under, pp: shownFc.p_push} : null, shownFc ? shownFc.forecast_id : null,
-          ne ? ne.start_utc : q.listed_start_utc, P.player + " " + m.stat_label, "card"));
         return '<div class="sw-actions">' + out.join("") + '<a class="sw-btn sw-btn-sm" href="' + SLIP_PAGE + '">Open Slip Studio</a>' + (not.length ? '<span class="sw-faint sw-small" style="align-self:center">' + not.map(function (x) { return (x === "over" ? "Over" : "Under") + " is not offered on " + bookName(q.platform); }).join(". ") + "</span>" : "") + "</div>";
       }
 
@@ -895,7 +881,7 @@
     Promise.all([Api.get("/api/sports/results", {league: state.lg}), loadManifest()]).then(function (res) {
       var got = res[0], R = got.data, man = res[1] && res[1].data;
       freshness(man, got); footer(man);
-      SRC = []; LEGS = []; PICKS.list = [];
+      SRC = []; LEGS = [];
       var h = '<div class="sw-eyebrow">' + state.lg.toUpperCase() + ' · Results</div><h1 class="sw-h1">Results ledger</h1>' +
         '<p class="sw-sub">How close the projections were and how good the chances were, scored separately. Payouts appear only when a settlement records the actual stake and payout.</p>';
       var models = Object.keys(R.summary || {});
@@ -919,49 +905,6 @@
     }).catch(fail);
   }
 
-  // ---------------------------------------------------------------------------------------------------- my picks
-  var PICK_STATUS = {pending: "Pending", win: "Hit", loss: "Miss", push: "Push", "void": "Void (did not play)", unresolved: "Unresolved"};
-  function pickResult(p) {
-    var r = p.result, st = r ? r.status : "pending";
-    return esc(PICK_STATUS[st] || st) + (r && r.value !== null && r.value !== undefined ? ' <span class="sw-faint sw-small">(' + S.num(r.value, 0) + ")</span>" : "") + (r && r.corrected ? ' <span class="sw-tag">corrected</span>' : "");
-  }
-  function pickChance(p) {
-    return p.p_side === null || p.p_side === undefined ? '<span class="sw-faint">' + esc(p.validation_text || "No Scout chance on this line") + "</span>" :
-      S.pct(p.p_side) + ' <span class="sw-faint">' + esc(p.validation_text || "") + "</span>";
-  }
-  function renderPicks() {
-    var head = '<div class="sw-eyebrow">My picks</div><h1 class="sw-h1">My picks</h1>' +
-      '<p class="sw-sub">Your own picks, recorded before each game starts on the exact line you saw. Results use the line you picked. Tracking a pick places no entry anywhere and is not a Scout recommendation.</p>';
-    if (!PICKS.on) { main.innerHTML = head + stateBox("Pick tracking is not available", "Pick tracking is not switched on yet.", '<a class="sw-btn" href="#/board">Open the prop board</a>'); return; }
-    main.innerHTML = head + skeleton(4);
-    Api.get("/api/sports/picks/mine", {}, {fresh: true}).then(function (got) {
-      var d = got.data, rows = d.picks || [], tally = {};
-      if (!rows.length) {
-        main.innerHTML = head + stateBox("No picks yet", "On the prop board or a player page, use “Pick Higher / Lower” (Underdog) or “Pick More / Less” (PrizePicks) on a line before its game starts. Picks appear here within about a minute.", '<a class="sw-btn" href="#/board">Open the prop board</a>');
-        return;
-      }
-      rows.forEach(function (p) { var st = p.result ? p.result.status : "pending"; tally[st] = (tally[st] || 0) + 1; });
-      var meta = function (p) { return esc([p.league && p.league.toUpperCase(), p.team, p.event_ref].filter(Boolean).join(" · ")); };
-      var pickText = function (p) { var w = PICK_BOOKS[p.platform]; return esc(p.stat_label || p.stat) + " <b>" + esc(w ? w[p.side] : p.side) + " " + S.line(p.line) + "</b>" + (p.test ? ' <span class="sw-tag">test</span>' : ""); };
-      main.innerHTML = head + (got.stale ? '<div class="sw-banner warn">Showing your last loaded list (' + esc(got.why) + ").</div>" : "") +
-        '<p class="sw-count"><span><b>' + d.total + "</b> picks" + (d.total > rows.length ? " (newest " + rows.length + " shown)" : "") + "</span>" + Object.keys(tally).map(function (k) { return "<span><b>" + tally[k] + "</b> " + esc(PICK_STATUS[k] || k) + "</span>"; }).join("") + "</p>" +
-        '<div class="sw-tablebox sw-scroll"><table class="sw-table"><caption class="sw-sr">My tracked picks, newest first</caption><thead><tr><th scope="col">Picked</th><th scope="col">Player · game</th><th scope="col">Pick</th><th scope="col">Book</th><th scope="col">Starts</th><th scope="col">Scout chance shown</th><th scope="col">Result</th></tr></thead><tbody>' +
-        rows.map(function (p) {
-          return '<tr><td class="sw-small">' + esc(S.localTime(p.tracked_at, {month: "short", day: "numeric", hour: "numeric", minute: "2-digit"})) + "</td>" +
-            "<td>" + esc(p.player) + '<div class="sw-faint sw-small">' + meta(p) + "</div></td><td>" + pickText(p) + "</td><td>" + book(p.platform) + "</td>" +
-            '<td class="sw-small">' + esc(S.localTime(p.start_utc, {weekday: "short", hour: "numeric", minute: "2-digit"})) + '</td><td class="sw-small">' + pickChance(p) + "</td><td>" + pickResult(p) + "</td></tr>";
-        }).join("") + "</tbody></table></div>" +
-        '<div class="sw-cards">' + rows.map(function (p) {                  // phones: the table is hidden below 900px
-          return '<article class="sw-card" aria-label="' + esc(p.player + ", " + (p.stat_label || p.stat) + " " + S.line(p.line)) + '"><div class="sw-card-top"><div>' + esc(p.player) +
-            '<div class="sw-faint sw-small">' + meta(p) + " · " + esc(S.localTime(p.start_utc, {weekday: "short", hour: "numeric", minute: "2-digit"})) + "</div></div>" +
-            '<div class="sw-small" style="text-align:right">' + pickResult(p) + "</div></div>" +
-            '<div class="sw-qrow"><div>' + book(p.platform) + " " + pickText(p) + '<div class="sw-faint sw-small">Picked ' + esc(S.localTime(p.tracked_at, {month: "short", day: "numeric", hour: "numeric", minute: "2-digit"})) + "</div></div>" +
-            '<div class="sw-small" style="text-align:right">' + pickChance(p) + "</div></div></article>";
-        }).join("") + "</div>" +
-        '<p class="sw-faint sw-small">A tracked pick is a permanent record and can’t be edited. Stakes are 0: no entry, payout or return is recorded.</p>';
-    }).catch(fail);
-  }
-
   // ------------------------------------------------------------------------------------------------------ render
   function render() {
     var r = route();
@@ -969,6 +912,7 @@
     if (r.view === "player" && r.arg && r.arg.indexOf(state.lg + ":") !== 0) state.lg = r.arg.slice(0, 3);
     setNav(r.view);
     banner.innerHTML = "";
+    document.getElementById("sw-toast").innerHTML = "";
     if (r.view === "board") renderBoard(r.params);
     else if (r.view === "player" && r.arg) renderPlayer(r.arg, r.params);
     else if (r.view === "game" && r.arg) renderGame(r.arg);
@@ -995,10 +939,7 @@
   Sh.member().then(function (info) {
     if (info.required && !info.member) { Sh.gate(main, info); return; }
     Sh.showMember(info);
-    Api.get("/api/sports/picks/mine", {}, {fresh: true}).then(function () {   // answers only where pick tracking is deployed
-      PICKS.on = true;
-      document.getElementById("sw-sliplink").insertAdjacentHTML("beforebegin", '<a href="#/picks" data-view="picks">My picks</a>');
-    }, function () { /* not deployed / unavailable: pick tracking stays hidden */ }).then(render);
+    render();
   });
   window.ScoutSportsApp = {state: state, api: Api, render: render};
 })();

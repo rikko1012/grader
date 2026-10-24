@@ -50,11 +50,27 @@ cache, bounded 96 files / 48 MB); they never open the store.
 - Slip Studio: "+ Over / + Under" writes the slips agent's draft (`localStorage ss:draft:<league>:<platform>`, leg format
   sports/slips/README.md); Slip Studio re-validates on load.
 
+## Pick tracking (pk-1, sports/picks.py) and access (2026-10-24)
+
+- Every pick'em line on the board / player card has "Track Over / Track Under" next to "+ Over / + Under"; a Slip Studio
+  copy that the server validated records its legs (surface `slip_copy`). `POST /api/sports/picks/track` re-checks live
+  (current offer revision, open, side offered, fresh, not started, forecast made for this offer, displayed chances =
+  the forecast record) and answers per pick in the status toast; the pick is spooled and loaded by the worker
+  (`picks-ingest`, every 60 s). `#/picks` ("My picks") lists the member's picks with the exact revision / forecast on
+  the Source button, the chance shown, the validation text (sports-gp-1) and the result settled at the pick's own line
+  (corrections marked). Stake 0, no grade letters, no returns. Admin aggregate: `GET /api/sports/admin/picks`
+  (`python scripts/sports_picks_report.py`).
+- With no forecasts published the board says so, and Kalshi rows show the market chance (YES bid / ask mid).
+- Esports nav link -> `/sports` (server.py, SPORTS_UI); with `SPORTS_UI=owner` only allow-listed members see the page,
+  link and token (RUNBOOK section 7). Token refresh: the page and Slip Studio retry once on 401 with a fresh token.
+
 ## Known limits
 
 - `ContextSnapshot.to_dict()` overwrites the context's own `kind` with "context" (sc-1); the snapshot reads the kind
   from the stored identity (`source_key`). Contracts owner should fix the field name clash.
 - The service sends JSON without compression; board.json is ~0.7 MB per league per load (cached 60 s in the page).
   Gzip in `sports/service.py` (Accept-Encoding) would cut it ~5x.
-- Esports pages do not link to `/sports` yet: one flag-guarded link in the esports shell is the service / release
-  owner's change.
+- Picks are keyed by the token subject (HMAC of SPORTS_TOKEN_SECRET): rotating that secret starts a new "My picks"
+  list for every member (the old picks stay in picks.db and in the admin aggregate).
+- The owner's browser token is a member token; the admin aggregate is read with the report script (admin token minted
+  from the shared secret), not in the page.

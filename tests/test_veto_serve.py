@@ -526,13 +526,15 @@ def test_vm1_in_the_forecast_log_leaves_the_live_forecast_unchanged(fresh, monke
     vs.cycle(NOW, matches=[M(mid=2399204, start=dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=6))])
     cols = "line, pick, p_pick, p_more, grade, units, lambda, p_win, model_version, inputs, probs_raw, odds_source, odds_sig"
     rows = {}
+    import copy
+    answer = tfr.tp_answer()            # once: its odds retrieved_at is "now", which could cross a second between modes
     for mode in ("on", "fail", "off"):
         monkeypatch.setattr(picklog, "DB", tmp_path / f"picks_{mode}.db")
         monkeypatch.setattr(picklog, "_SCHEMA_OK", [False])
         monkeypatch.setattr(picklog, "data_revision", lambda: "matches=1")
         if mode == "fail":
             monkeypatch.setattr(vs, "vm1_shadow", lambda *a, **k: 1 / 0)
-        res = tfr.mk_res(tfr.tp_answer(), nm_over={"slug": "hltv-2399204"})
+        res = tfr.mk_res(copy.deepcopy(answer), nm_over={"slug": "hltv-2399204"})
         row = picklog.pick_row(res, tfr.verdict(res["grade"]))
         if mode == "off":
             row.pop("_vm1")
