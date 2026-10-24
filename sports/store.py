@@ -31,6 +31,11 @@ from pathlib import Path
 from . import config
 from .contracts import ContractError, Forecast, from_dict, now_utc
 
+def _archive_schema():
+    from .archive import SCHEMA                         # CREATE TABLE / CREATE INDEX only
+    return SCHEMA
+
+
 MIGRATIONS = [
     (1, [
         """CREATE TABLE IF NOT EXISTS records (
@@ -57,6 +62,7 @@ MIGRATIONS = [
              finished_at TEXT)""",
         "CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)",
     ]),
+    (2, list(_archive_schema())),                       # compaction index + manifest (sports/archive.py), additive
 ]
 FORBIDDEN_IN_MIGRATIONS = ("drop ", "rename ", "delete ", "update ", "replace into", "truncate")
 
@@ -93,6 +99,7 @@ def connect(path=None, read_only=False):
             raise FileNotFoundError(f"sports store not created yet: {p}")
         con = sqlite3.connect(f"file:{p}?mode=ro", uri=True, timeout=10, check_same_thread=False)
         con.row_factory = sqlite3.Row
+        _archive().install(con, p)                      # records_all = hot + archived rows (sports/archive.py)
         return con
     p.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(p, timeout=30, check_same_thread=False)
@@ -100,7 +107,13 @@ def connect(path=None, read_only=False):
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA busy_timeout=30000")
     migrate(con)
+    _archive().install(con, p)
     return con
+
+
+def _archive():
+    from . import archive                               # compaction of cold offer rows (Starter plan, 2026-10-24)
+    return archive
 
 
 @contextmanager
@@ -161,11 +174,15 @@ def put(con, rec, known_at=None, commit=True) -> dict:
                 raise ContractError(f"forecast {rec.forecast_id} already stored with other content (immutable)")
         last = con.execute("SELECT MAX(revision) FROM records WHERE kind=? AND source=? AND source_key=?",
                            (rec.KIND, source, source_key)).fetchone()[0]
+        tail = _archive().identity_tail(con, rec.KIND, source, source_key) if last is None else None
+        if tail:                                    # archived identity seen again: numbering continues from the archive
+            last = tail[0]
         rev = (last or 0) + 1
         rid = f"{rec.KIND}:{source}:{source_key}:r{rev}:{h[:10]}" if rec.KIND != "forecast" else rec.forecast_id
         stored_h = h                               # UNIQUE (kind, source, source_key, content_hash) is additive-only: a
         if con.execute("SELECT 1 FROM records WHERE kind=? AND source=? AND source_key=? AND content_hash=?",
-                       (rec.KIND, source, source_key, h)).fetchone():
+                       (rec.KIND, source, source_key, h)).fetchone() or \
+                (tail and str(tail[1]).split("~", 1)[0] == h):
             stored_h = f"{h}~r{rev}"               # returning content keeps its hash, tagged with the revision
         c = _cols(rec)
         con.execute("INSERT INTO records (kind, record_id, source, source_key, revision, content_hash, schema_version, "
@@ -237,25 +254,27 @@ def _rec(row):
 
 
 def get(con, record_id):
-    row = con.execute("SELECT payload FROM records WHERE record_id = ?", (record_id,)).fetchone()
+    row = con.execute("SELECT payload FROM records WHERE record_id = ?", (record_id,)).fetchone() or \
+        _archive().row_by_record_id(con, record_id)
     return _rec(row)
 
 
 def row_meta(con, record_id):
     row = con.execute("SELECT record_id, kind, source, source_key, revision, content_hash, known_at, stored_at, "
-                      "last_seen_at, seen_count FROM records WHERE record_id = ?", (record_id,)).fetchone()
+                      "last_seen_at, seen_count FROM records WHERE record_id = ?", (record_id,)).fetchone() or \
+        _archive().row_by_record_id(con, record_id)
     return dict(row) if row else None
 
 
 def revisions(con, kind, source, source_key):
     """Every stored revision, oldest first: [(meta, record)]."""
-    rows = con.execute("SELECT * FROM records WHERE kind=? AND source=? AND source_key=? ORDER BY revision",
+    rows = con.execute("SELECT * FROM records_all WHERE kind=? AND source=? AND source_key=? ORDER BY revision",
                        (kind, source, source_key)).fetchall()
     return [({k: r[k] for k in ("record_id", "revision", "known_at", "content_hash")}, _rec(r)) for r in rows]
 
 
 def latest(con, kind, source, source_key, as_of=None):
-    q = "SELECT * FROM records WHERE kind=? AND source=? AND source_key=?"
+    q = "SELECT * FROM records_all WHERE kind=? AND source=? AND source_key=?"
     a = [kind, source, source_key]
     if as_of:
         q += " AND known_at <= ?"
@@ -264,14 +283,17 @@ def latest(con, kind, source, source_key, as_of=None):
     return _rec(row)
 
 
-def _latest_rows(con, kind, where, args, as_of, limit):
-    """Latest revision per identity among rows matching `where`, known at as_of."""
+def _latest_rows(con, kind, where, args, as_of, limit, scoped=False):
+    """Latest revision per identity among rows matching `where`, known at as_of. A CURRENT (as_of None) league-wide offer
+    listing reads the hot window (offers seen in the last SPORTS_ARCHIVE_AFTER_H); point-in-time and event / player
+    scoped reads span hot + archive (records_all) - sports/archive.py."""
+    tbl = "records" if (kind == "offer" and as_of is None and not scoped) else "records_all"
     cond = "kind = ?" + (f" AND {where}" if where else "")
     a = [kind] + list(args)
     if as_of:
         cond += " AND known_at <= ?"
         a.append(as_of)
-    q = (f"SELECT r.* FROM records r JOIN (SELECT source, source_key, MAX(revision) AS rv FROM records WHERE {cond} "
+    q = (f"SELECT r.* FROM {tbl} r JOIN (SELECT source, source_key, MAX(revision) AS rv FROM {tbl} WHERE {cond} "
          f"GROUP BY source, source_key) z ON r.source = z.source AND r.source_key = z.source_key AND r.revision = z.rv "
          f"WHERE r.kind = ? ORDER BY r.known_at DESC LIMIT ?")
     return con.execute(q, a + [kind, int(limit)]).fetchall()
@@ -285,7 +307,8 @@ def offers(con, league=None, event_id=None, player_id=None, stat=None, platform=
         if v is not None:
             w.append(f"{col} = ?")
             a.append(v)
-    rows = _latest_rows(con, "offer", " AND ".join(w), a, as_of, limit)
+    rows = _latest_rows(con, "offer", " AND ".join(w), a, as_of, limit,
+                        scoped=event_id is not None or player_id is not None)
     return [(r["record_id"], _rec(r)) for r in rows]
 
 
@@ -315,7 +338,7 @@ def history(con, player_id, stat, before, as_of=None, limit=200):
 
 
 def _any_event(con, event_id, as_of):
-    row = con.execute("SELECT * FROM records WHERE kind='event' AND source_key=? AND known_at <= ? "
+    row = con.execute("SELECT * FROM records_all WHERE kind='event' AND source_key=? AND known_at <= ? "
                       "ORDER BY revision DESC LIMIT 1", (event_id, as_of)).fetchone()
     return _rec(row)
 
@@ -326,7 +349,7 @@ def forecasts(con, league=None, event_id=None, player_id=None, model_version=Non
         if v is not None:
             w.append(f"{col} = ?")
             a.append(v)
-    rows = con.execute(f"SELECT * FROM records WHERE {' AND '.join(w)} ORDER BY known_at DESC LIMIT ?",
+    rows = con.execute(f"SELECT * FROM records_all WHERE {' AND '.join(w)} ORDER BY known_at DESC LIMIT ?",
                        a + [int(limit)]).fetchall()
     recs = [(r["record_id"], _rec(r)) for r in rows]
     return [x for x in recs if model_version is None or x[1].model_version == model_version]
@@ -341,7 +364,7 @@ def settlements(con, offer_id=None, platform=None, forecast_id=None):
     if offer_id:
         w.append("source_key LIKE ?")
         a.append(f"{offer_id}|%")
-    rows = con.execute(f"SELECT * FROM records WHERE {' AND '.join(w)} ORDER BY source_key, revision", a).fetchall()
+    rows = con.execute(f"SELECT * FROM records_all WHERE {' AND '.join(w)} ORDER BY source_key, revision", a).fetchall()
     recs = [(r["record_id"], _rec(r)) for r in rows]
     if forecast_id:
         recs = [x for x in recs if forecast_id in x[1].affected_forecast_ids]

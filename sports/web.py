@@ -185,6 +185,7 @@ class _Pool:
         self.stats = {"size": size, "in_use": 0, "peak_in_use": 0, "opened": 0, "waits_timed_out": 0,
                       "queries_interrupted": 0}
         self.path = None
+        self.schema = {}
 
     def reset(self):
         while True:
@@ -216,6 +217,11 @@ class _Pool:
                 con = store.connect(read_only=True)
                 with self.lock:
                     self.stats["opened"] += 1
+            sv = con.execute("PRAGMA schema_version").fetchone()[0]
+            if self.schema.get(id(con)) != sv:          # migrated since this connection opened: refresh records_all
+                from . import archive
+                archive.install(con, path)
+                self.schema[id(con)] = sv
             deadline = time.monotonic() + (budget_s or REQUEST_BUDGET_S)
 
             def guard():
