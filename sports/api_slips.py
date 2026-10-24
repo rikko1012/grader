@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import threading
 
-from . import web
+from . import store, web
 from .slips import builder, joint, log, pool as poolmod, rules, settle, validate
 
 LEAGUES = ("nba", "nfl")
@@ -58,6 +58,12 @@ def _ctx(q):
     if platform not in rules.PLATFORMS:
         raise ValueError("platform must be underdog or prizepicks")
     return league, platform
+
+
+def _live_current(platform, offer_id):
+    """One indexed read per leg on COPY only (<= 8 legs): the store's current offer revision right now."""
+    with web.store_ro(budget_s=2) as con:
+        return store.current_record_id(con, "offer", platform, offer_id)
 
 
 def _pool(league, platform, policy="member"):
@@ -175,7 +181,7 @@ def validate_view(req):
     slip = _slip_in(q)
     mode = q.get("mode") or "load"
     p = _pool(slip["league"], slip["platform"])
-    res = validate.check(slip, p, mode=mode)
+    res = validate.check(slip, p, mode=mode, live_current=_live_current if mode == "copy" else None)
     log.spool("copied" if mode == "copy" else "loaded",
               {"member": log.member_hash(req.member), "league": slip["league"], "ok": res["ok"],
                "problems": [x["code"] for x in res["problems"]], "snapshot_id": p["snapshot_id"],

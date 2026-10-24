@@ -448,7 +448,7 @@ def api(monkeypatch, con):
                                                                                         policy=policy))
     import sports.slips.validate as vm
     real_check = vm.check
-    monkeypatch.setattr(vm, "check", lambda slip, p, mode="load", now=None: real_check(slip, p, mode, now=w.NOW))
+    monkeypatch.setattr(vm, "check", lambda slip, p, mode="load", now=None, **kw: real_check(slip, p, mode, now=w.NOW, **kw))
     w.world(con, [(f"h{i}", f"T{i}", i, "over" if i % 2 else "under", 0.6 + 0.01 * i) for i in range(1, 7)])
     yield
 

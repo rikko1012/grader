@@ -65,7 +65,10 @@ def _changes(leg, o):
     return ch or ["the offer changed"]
 
 
-def check(slip, pool, mode="load", now=None):
+def check(slip, pool, mode="load", now=None, live_current=None):
+    """live_current(platform, offer_id) -> the store's CURRENT record id right now (optional): the pool is a cached
+    snapshot (prebuilt <= 90 s), so a copy re-checks each leg's revision live - a line that moved since the snapshot
+    is "changed", never copied (LINE_CORRECTNESS.md C5)."""
     now = now or datetime.now(timezone.utc)
     now_s = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     if mode not in MODES:
@@ -96,6 +99,8 @@ def check(slip, pool, mode="load", now=None):
         if st["record_id"] != leg.get("record_id"):
             for c in _changes(leg, st["offer"]):
                 problems.append({"leg": i, "code": "changed", "text": f"{lab}: {c}"})
+        elif live_current is not None and live_current(leg.get("platform"), leg.get("offer_id")) != st["record_id"]:
+            problems.append({"leg": i, "code": "changed", "text": f"{lab}: the line changed moments ago - refresh"})
         start = (cur or leg).get("start_utc")
         if not start or start <= now_s:
             problems.append({"leg": i, "code": "locked", "text": f"{lab}: game started / locked"})

@@ -241,3 +241,22 @@ def test_c11_slip_pool_finds_an_old_forecast_of_an_unchanged_revision():
     assert st["leg"]["forecast_id"] == old.forecast_id
     assert sw.NOW - timedelta(hours=72) > datetime(2026, 10, 19, 20, tzinfo=timezone.utc)
     con.close()
+
+
+def test_c5_copy_rechecks_the_live_revision_behind_a_cached_pool():
+    """The member pool is a cached snapshot (prebuilt <= 90 s): COPY re-reads each leg's current revision."""
+    from sports.tests import slip_world as sw
+    con = store.connect()
+    store.put(con, sw.ev(1))
+    o = sw.offer("1", "A1", 1)
+    rid = store.put(con, o)["record_id"]
+    store.put(con, sw.forecast(rid, o))
+    pl = slip_pool.build(con, "nba", "underdog", now=sw.NOW)        # the cached pool
+    leg = pl["state"][o.offer_id]["leg"]
+    store.put(con, replace(o, line=21.5, observed_at="2026-10-23T20:06:00Z", known_at="2026-10-23T20:06:00Z"))
+    live = lambda p, oid: store.current_record_id(con, "offer", p, oid)          # noqa: E731
+    slip = {"platform": "underdog", "entry_type": "standard", "legs": [leg]}
+    chk = validate.check(slip, pl, mode="copy", now=sw.NOW, live_current=live)
+    assert not chk["ok"] and any(p["code"] == "changed" for p in chk["problems"]) and "copy_text" not in chk
+    assert not any(p["code"] == "changed" for p in validate.check(slip, pl, mode="copy", now=sw.NOW)["problems"])
+    con.close()

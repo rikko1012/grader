@@ -508,6 +508,14 @@ def latest(con, kind, source, source_key, as_of=None):
     return _rec(row)
 
 
+def current_record_id(con, kind, source, source_key):
+    """The CURRENT revision's record id of one identity (one indexed lookup, records_current) - the cheap live check
+    slip copy uses against a cached pool."""
+    row = con.execute(f"SELECT record_id FROM records WHERE kind=? AND source=? AND source_key=? AND {CURRENT_SQL} "
+                      "ORDER BY revision DESC LIMIT 1", (kind, source, source_key)).fetchone()
+    return row[0] if row else None
+
+
 def _latest_rows(con, kind, where, args, as_of, limit):
     """Latest revision per identity among rows matching `where`, known at as_of."""
     cond = f"kind = ? AND {CURRENT_SQL}" + (f" AND {where}" if where else "")
