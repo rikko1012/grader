@@ -219,3 +219,11 @@ body.sw{--bg:#0c1017;--panel:#141a24;--panel-2:#1a2230;--line:#283140;--muted:#a
 .sw-offer-market { margin: 4px 0; }
 .sw-mkpanel { margin-top: 12px; }
 .sw-mk b { white-space: nowrap; }
+
+/* three distinct numbers per line: Scout model / Market estimate (labelled blocks) */
+.sw .sw-num-block { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin: 8px 0; }
+.sw .sw-num-block.sw-market { border-style: dashed; }
+.sw .sw-num-label { font-size: .82rem; font-weight: 600; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 4px; }
+.sw .sw-proj { font-size: .95rem; margin-bottom: 4px; }
+.sw .sw-actions-slot:empty { display: none; }
+.sw .sw-matchline a { display: inline-block; min-height: 24px; line-height: 24px; }   /* 24 px touch target (a11y test) */

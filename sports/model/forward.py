@@ -270,6 +270,8 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
            "skipped": {}, "written": {}, "unchanged": {}, "no_forecast": {}}
     for why in skipped.values():
         out["skipped"][why] = out["skipped"].get(why, 0) + 1
+    # per (event|player[|stat]) reason no Scout forecast was made - read by the UI snapshot (sports/forecast_detail)
+    out["why_none"] = {f"{k[0]}|{k[1]}": why for k, why in skipped.items()}
     if not up:
         return out
     events = {e.event_id: e for _, e in store.events(scon, league)}
@@ -316,6 +318,9 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
                          r["start_utc"] == ev.start_utc), None)
             gk = (urow["game_id"], urow["player_id"]) if urow else None
             if gk not in pmf_of:
+                out["why_none"][f"{o.event_id}|{o.player_id}|{mk}"] = (
+                    "player not in this run's upcoming rows" if urow is None else
+                    "no player-history row for this player and game (history missing or unmapped)")
                 continue
             pmf, mean, eligible = pmf_of[gk]
             row = _row_dict(df, rowpos[gk])

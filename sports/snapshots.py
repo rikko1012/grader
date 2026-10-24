@@ -45,7 +45,7 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-from . import cache, capabilities, config, fair, flags, identity, market_view, markets, store
+from . import cache, capabilities, config, fair, flags, forecast_detail, identity, market_view, markets, store
 from .contracts import (ContractError, Event, Membership, SourceId, StatObservation, from_dict, now_utc, parse_utc,
                         utc)
 
@@ -57,7 +57,9 @@ SLATE_DAYS = {"nba": 2, "nfl": 8}                  # how far ahead the slate loo
 STARTED_KEEP_H = 4                                 # a started game stays on the slate this long (shown as started)
 LADDER_TOL = 0.005                                 # distribution must reproduce the stored chance within 0.5 points
 MAX_GAMES = 60
-DEFAULT_MODELS = ("sharp-2",)                      # display preference when several models forecast one offer
+# display preference when several models forecast one offer: Scout's own model first (owner 2026-10-24: a projection
+# is not a market estimate; market estimates are shown separately as "Market estimate")
+DEFAULT_MODELS = ("sm-1", "mi-1", "sharp-2")
 PRIMARY_STATS = capabilities.SUPPORTED
 EXTRA_PAIRS = {"fieldGoalsMade-fieldGoalsAttempted": ("fgm", "fga"),
                "freeThrowsMade-freeThrowsAttempted": ("ftm", "fta")}
@@ -348,6 +350,28 @@ def pmf(fc, max_bins=80):
     return {"family": shape, "mean": _r(mean, 4), "sd": _r(sd, 4), "bins": out}
 
 
+def pmf_ladder(fc, saved, lines):
+    """Chances at other lines from the forecast's own saved PMF (the stored line reproduces the stored chance)."""
+    lo, p = saved
+    out = []
+    for ln in sorted(set(lines) | {fc.line}):
+        if ln == fc.line:
+            out.append({"line": ln, "p_over": fc.p_over, "p_under": fc.p_under, "p_push": fc.p_push, "stored": True})
+            continue
+        o, u, pu = forecast_detail.line_probs(lo, p, float(ln))
+        out.append({"line": ln, "p_over": _r(o, 6), "p_under": _r(u, 6), "p_push": _r(pu, 6), "stored": False})
+    return out
+
+
+def pmf_chart(saved, max_bins=80):
+    lo, p = saved
+    mean = sum((lo + k) * x for k, x in enumerate(p))
+    sd = math.sqrt(max(0.0, sum(((lo + k) - mean) ** 2 * x for k, x in enumerate(p))))
+    width = max(1, int(math.ceil(len(p) / max_bins)))
+    bins = [[lo + i, width, _r(sum(p[i:i + width]), 6)] for i in range(0, len(p), width)]
+    return {"family": "pmf", "mean": _r(mean, 4), "sd": _r(sd, 4), "bins": [b for b in bins if b[2] and b[2] > 1e-6]}
+
+
 def ladder_lines(line, stat_shape, book_lines):
     step = 5.0 if stat_shape == "normal" and line >= 40 else 1.0
     base = [line + i * step for i in range(-4, 5)]
@@ -614,6 +638,10 @@ def build(con, league, now=None, base=None, history=True):
         else:
             row["alternates"].append(v)
     # sort + slim the board: Kalshi rungs nearest the pick'em lines only (full ladder in the player file)
+    # what each displayed forecast is (scout / informed / market), its 80% range, validation, used inputs, PMF
+    fd_info = forecast_detail.enrich(forecasts, league,
+                                     with_pmf_for={k for k, f in forecasts.items() if f.get("kind") != "market"})
+    run = forward_run(league)
     board_rows = []
     dnp = market_view.dnp_share(league)
     mv_stats = {"rows": 0, "with_consensus": 0, "books_listed": 0, "books_in_consensus": 0}
@@ -623,6 +651,10 @@ def build(con, league, now=None, base=None, history=True):
         mv = market_view.row_view(row_targets.get(row["key"], []), row_items.get(row["key"], []),
                                   events[row["event_id"]][1], now, league, dnp)
         row["market"] = mv
+        scout_line_reads(row, forecasts)
+        for q in row["quotes"]:
+            if q["platform"] in market_view.TARGET_BOARDS and not q.get("forecast_id") and not q.get("line_read"):
+                q["no_fc"] = no_forecast_reason(row, q, run)
         if mv:
             mv_stats["rows"] += 1
             mv_stats["with_consensus"] += 1 if mv["c"] else 0
@@ -692,6 +724,8 @@ def build(con, league, now=None, base=None, history=True):
     model_list = [{"model_version": k, **v, "settled": settled_by_model.get(k, 0)} for k, v in sorted(models.items())]
 
     manifest = {"version": SNAP_VERSION, "league": league, "built_at": now_utc(), "as_of": now,
+                "forecast_run": {k: run.get(k) for k in ("forecast_at", "finished_at", "history_through")},
+                "forecast_detail": fd_info,
                 "store_schema_level": _schema_level(con), "contracts": "sc-1",
                 "capabilities": capabilities.CAPABILITY_VERSION, "models": model_list,
                 "model_preference": list(models_pref()), "platforms": {k: dict(v) for k, v in platform_seen.items()},
@@ -726,7 +760,9 @@ def build(con, league, now=None, base=None, history=True):
     sizes["board_more"] = _write(root / "board_more.json", {**board_meta, "part": "secondary",
                                                               "markets": [compact_row(r) for r in sec],
                                                               "fc": compact_forecasts(forecasts, sec)})
-    sizes["forecasts"] = _write(root / "forecasts.json", {**base_meta, "forecasts": forecasts})
+    sizes["forecasts"] = _write(root / "forecasts.json", {**base_meta, "forecasts": {
+        k: ({**f, "detail": {x: y for x, y in f["detail"].items() if x != "pmf"}} if f.get("detail") else f)
+        for k, f in forecasts.items()}})
 
     # players
     n_players = 0
@@ -760,7 +796,11 @@ def build(con, league, now=None, base=None, history=True):
                 fc = _fc_obj(con, fid)
                 spec = markets.market(fam, r["stat"]) or {"shape": "count"}
                 lad, why = ladder(fc, ladder_lines(fc.line, spec["shape"], book_lines))
-                fdetail[fid] = {"ladder": lad, "ladder_withheld": why, "pmf": pmf(fc)}
+                chart = pmf(fc)
+                saved = ((forecasts.get(fid) or {}).get("detail") or {}).get("pmf")
+                if lad is None and saved:                    # sm-1 / mi-1: the forecast's own saved PMF
+                    lad, why, chart = pmf_ladder(fc, saved, ladder_lines(fc.line, spec["shape"], book_lines)), None,                         pmf_chart(saved)
+                fdetail[fid] = {"ladder": lad, "ladder_withheld": why, "pmf": chart}
         _write(pl_dir / f"{safe_name(pid)}.json", {
             **base_meta, "player_id": pid, "player": p.name if p else (rows[0]["player"] if rows else pid),
             "position": p.position if p else None, "player_record_id": None, "status": p.status if p else None,
@@ -789,6 +829,12 @@ def compact_quote(q):
         out["m"] = [o.get("multiplier"), u.get("multiplier")]
     if o.get("bid") is not None or o.get("ask") is not None:
         out["k"] = [o.get("bid"), o.get("ask")]
+    if q.get("line_read"):
+        out["lr"] = q["line_read"]
+    if q.get("no_fc"):
+        out["nf"] = q["no_fc"]
+    if o.get("price_format") == "decimal" or u.get("price_format") == "decimal":    # a book's own decimal prices
+        out["d"] = [o.get("price") if o.get("offered") else None, u.get("price") if u.get("offered") else None]
     return out
 
 
@@ -838,8 +884,79 @@ def compact_forecasts(forecasts, rows):
         f = forecasts[fid]
         out[fid] = {"m": f["model_version"], "mu": f["projection_mean"], "po": f["p_over"], "pu": f["p_under"],
                     "pp": f["p_push"], "at": f["forecast_at"], "ro": 1 if f["research_only"] else 0,
-                    "rv": f["for_revision"], "ln": f["line"]}
+                    "rv": f["for_revision"], "ln": f["line"], "k": f.get("kind")}
+        d = f.get("detail") or {}
+        if d.get("interval"):
+            out[fid].update(md=d.get("median"), iv=d["interval"])
+        if d.get("validation"):
+            out[fid]["vs"] = d["validation"].get("state")
     return out
+
+
+def forward_run(league):
+    """The last forward-forecast run (sports/model/fwd.py run record) for this league: forecast_at, finished_at, the
+    per-offer no-forecast reasons, and the newest final game in its history DB (= inputs through)."""
+    try:
+        from .model.fwd import run_record_path
+        rec = json.loads(Path(run_record_path()).read_text(encoding="utf-8"))
+    except Exception:                                   # noqa: BLE001 - no run yet
+        return {}
+    lg = (rec.get("leagues") or {}).get(league) or {}
+    out = {"forecast_at": lg.get("forecast_at"), "finished_at": rec.get("finished_at"),
+           "why_none": lg.get("why_none") or {}, "history_through": None}
+    hp = (rec.get("history") or {}).get("path")
+    if hp and Path(hp).exists():
+        try:
+            import sqlite3
+            c = sqlite3.connect(f"file:{Path(hp).as_posix()}?mode=ro", uri=True, timeout=5)
+            r = c.execute("SELECT MAX(start_utc) FROM games WHERE league = ? AND status = 'final'", (league,)).fetchone()
+            c.close()
+            out["history_through"] = r[0] if r else None
+        except Exception:                               # noqa: BLE001
+            pass
+    return out
+
+
+def scout_line_reads(row, forecasts):
+    """A pick'em line with no forecast of its own, in a market that HAS a Scout (sm-1 / mi-1) forecast at another
+    line: the SAME saved distribution read at this line (no new projection - inputs unchanged). Marked `line_read`
+    with the source forecast id, never stored as a forecast."""
+    src = None
+    for q in row["quotes"]:
+        f = forecasts.get(q.get("forecast_id") or "")
+        if f and f.get("kind") == "scout" and (f.get("detail") or {}).get("pmf"):
+            if src is None or f["forecast_at"] > src["forecast_at"]:
+                src = f
+    if src is None:
+        return
+    lo, pmf = src["detail"]["pmf"]
+    for q in row["quotes"]:
+        if q.get("forecast_id") or not q.get("gradable"):
+            continue
+        po, pu, pp = forecast_detail.line_probs(lo, pmf, float(q["line"]))
+        if po is None:
+            continue
+        q["line_read"] = {"f": src["forecast_id"], "ln": src["line"], "po": _r(po, 4), "pu": _r(pu, 4), "pp": _r(pp, 4)}
+
+
+def no_forecast_reason(row, q, run):
+    """Why this shown line has no Scout number - from the pipeline's actual state, most specific first."""
+    if row.get("capability") != "supported":
+        return "Market not supported by the Scout model" + (f": {row['capability_reason']}" if row.get(
+            "capability_reason") else "")
+    if not q.get("gradable"):
+        why = q.get("not_gradable_because") or []
+        return "Line not modelled: " + (why[0] if why else "not an ordinary line")
+    wn = run.get("why_none") or {}
+    w = wn.get(f"{row['event_id']}|{row['player_id']}|{row['stat']}") or wn.get(f"{row['event_id']}|{row['player_id']}")
+    if w:
+        return "No Scout forecast: " + w
+    fa = run.get("forecast_at")
+    if not fa:
+        return "No forecast run yet"
+    if (q.get("observed_at") or "") > fa:
+        return "Line appeared after the last forecast run"
+    return "No Scout forecast in the last run"
 
 
 def _schema_level(con):

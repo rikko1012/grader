@@ -187,11 +187,18 @@ def test_inventory_capture_is_structural_and_stores_the_raw_answer(tmp_path, mon
     assert "not set" in inventory.capture("thunderpick", "nfl", key="")["status"]
 
 
-def test_app_never_says_kalshi_market_chance():
+def test_app_never_says_kalshi_market_chance_and_labels_every_number():
     app = (WEB / "app.js").read_text(encoding="utf-8")
-    for bad in ("Market chance Over", "the Kalshi market chance", "market prices: Kalshi, PrizePicks, Underdog"):
+    for bad in ("Market chance Over", "the Kalshi market chance", "market prices: Kalshi, PrizePicks, Underdog",
+                "Forecast pending", "not on this book"):
         assert bad not in app
-    assert "S.marketLabel" in app and "mkBooks(m.mk, true, true)" in app and "mkBooks(m.market, true)" in app and "sw-offer-market" in app
+    assert "S.marketLabel" in app and "mkBooks(m.mk, true, true)" in app and "mkBooks(m.market, true)" in app
+    assert "scoutBlock(m, q, f, B) + marketBlock(m, q, f, B)" in app and "S.kindLabel" in app
+    assert "Projection unavailable: " in app and "S.validationText" in app
+    # every book row goes through the usable-price filter (no row without a price)
+    assert "S.quoteShown(q, Date.now())" in app and "S.usableBooks(mk, Date.now())" in app
+    # the ux agent's mount point
+    assert 'class="sw-actions-slot"' in app and "hooks: HOOKS" in app
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
@@ -199,3 +206,68 @@ def test_market_display_functions_in_node():
     script = Path(__file__).resolve().parent / "ui_market_test.js"
     r = subprocess.run(["node", str(script), str(WEB / "stats.js")], capture_output=True, text=True, timeout=60)
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+# ---------------------------------------------------------------- item 1: three distinct numbers, reasons, sources
+def test_forecast_detail_reads_the_saved_pmf_policy_and_used_inputs(tmp_path, monkeypatch):
+    import sqlite3
+    from sports import config, forecast_detail
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    (tmp_path / "model").mkdir()
+    con = sqlite3.connect(tmp_path / "model" / "forecasts.db")
+    con.execute("CREATE TABLE inputs (forecast_id TEXT PRIMARY KEY, model_version TEXT, league TEXT, market TEXT, "
+                "offer_record_id TEXT, artifact_sha TEXT, forecast_at TEXT, row_json TEXT, market_json TEXT, "
+                "pmf_lo INTEGER, pmf_json TEXT, policy_json TEXT, created_at TEXT)")
+    pmf = [0.1] * 10                                                   # uniform on 15..24
+    con.execute("INSERT INTO inputs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                ("fc-s", "sm-1", "nba", "points", "r", "a", h.T0, json.dumps({"ew_min": 31.26, "prior_n": 14}), None,
+                 15, json.dumps(pmf), json.dumps({"validation_state": "history-validated", "label": "x",
+                                                   "stake_units": 0.0, "stake_reason": "gate F"}), h.T0))
+    con.commit()
+    con.close()
+    fcs = {"fc-s": {"model_version": "sm-1"}, "fc-m": {"model_version": "mc-1"}, "fc-i": {"model_version": "mi-1"}}
+    out = forecast_detail.enrich(fcs, "nba", with_pmf_for={"fc-s"})
+    assert out == {"inputs_db": "present", "enriched": 1}
+    assert [fcs[k]["kind"] for k in ("fc-s", "fc-m", "fc-i")] == ["scout", "market", "informed"]
+    d = fcs["fc-s"]["detail"]
+    assert d["interval"] == [15, 23] and d["median"] == 19 and d["pmf"][0] == 15
+    assert d["validation"]["state"] == "history-validated" and d["validation"]["stake"] == 0.0
+    assert {x["id"]: x["value"] for x in d["factors"]} == {"ew_min": 31.3, "prior_n": 14}   # values only, no weights
+    assert forecast_detail.line_probs(15, pmf, 19) == pytest.approx((0.5, 0.4, 0.1))
+    assert forecast_detail.line_probs(15, pmf, 19.5) == pytest.approx((0.5, 0.5, 0.0))
+
+
+def test_line_change_rereads_the_same_distribution_and_reasons_come_from_the_pipeline():
+    pmf = [0.1] * 10
+    fcs = {"fc-s": {"forecast_id": "fc-s", "kind": "scout", "forecast_at": h.T0, "line": 19.5,
+                    "detail": {"pmf": [15, pmf]}}}
+    row = {"event_id": "e", "player_id": "p", "stat": "points", "capability": "supported",
+           "quotes": [{"platform": "prizepicks", "forecast_id": "fc-s", "line": 19.5, "gradable": True},
+                      {"platform": "underdog", "forecast_id": None, "line": 21.5, "gradable": True},
+                      {"platform": "fanduel", "forecast_id": None, "line": 20.5, "gradable": False}]}
+    snapshots.scout_line_reads(row, fcs)
+    lr = row["quotes"][1]["line_read"]
+    assert lr["f"] == "fc-s" and lr["ln"] == 19.5 and (lr["po"], lr["pu"], lr["pp"]) == (0.3, 0.7, 0.0)
+    assert "line_read" not in row["quotes"][2]                        # a book line is not a Scout target
+    run = {"forecast_at": "2026-10-23T20:00:00Z", "why_none": {"e|p": "player's current ESPN team is not in this event"}}
+    q = {"gradable": True, "observed_at": h.T0}
+    assert snapshots.no_forecast_reason(row, q, run) == "No Scout forecast: player's current ESPN team is not in this event"
+    assert snapshots.no_forecast_reason(row, q, {}) == "No forecast run yet"
+    assert snapshots.no_forecast_reason(row, {"gradable": True, "observed_at": "2026-10-23T21:00:00Z"},
+                                        {"forecast_at": h.T0}) == "Line appeared after the last forecast run"
+    assert snapshots.no_forecast_reason({**row, "capability": "gated", "capability_reason": "combo stat"}, q, run) == \
+        "Market not supported by the Scout model: combo stat"
+    assert snapshots.no_forecast_reason(row, {"gradable": False, "not_gradable_because": ["promotional line"]}, run) == \
+        "Line not modelled: promotional line"
+
+
+def test_board_quotes_carry_book_prices_and_scout_first_preference(built):
+    con = store.connect()
+    store.put(con, book("fanduel", "fd:kat", observed_at="2026-10-23T20:55:00Z"))
+    snapshots.build(con, "nba", now="2026-10-23T21:00:00Z")
+    con.close()
+    b = _load(built, "board.json")
+    fd = [q for r in b["markets"] for q in r["q"] if q["p"] == "fanduel"][0]
+    assert fd["d"] == [1.80, 2.05] and "nf" not in fd                  # price shown; no Scout placeholder on a book
+    assert snapshots.DEFAULT_MODELS[0] == "sm-1"
+    assert all(f.get("k") in ("scout", "market", "informed") for f in b["fc"].values())

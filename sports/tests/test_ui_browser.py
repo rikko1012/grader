@@ -94,14 +94,17 @@ def test_board_player_game_slip_same_numbers(pw, shots):
     page.goto(URL + "/sports#/board?lg=nba")
     page.wait_for_selector(".sw-research-card", timeout=20000)
     page.screenshot(path=str(shots / "board_1280.png"))
-    over = page.locator(".sw-research-grid [data-fcside=over][data-fc]").first
+    # a Scout-model number (projection shown); cards show whole-number chances, the player page 0.1 points
+    over = page.locator(".sw-research-grid .sw-scout [data-fcside=mean][data-fc]").first
     fid = over.get_attribute("data-fc")
     board = _numbers(page, fid, ".sw-research-grid")
-    assert {"over", "under", "push", "mean"} <= set(board) and all(len(v) == 1 for v in board.values()), board
+    assert {"over", "under", "mean"} <= set(board) and all(len(v) == 1 for v in board.values()), board
     # the record itself, through the API with the member token
     rec = page.evaluate("""async (fid) => { const a = window.ScoutSportsApp.api; const r = await a.get('/api/sports/forecast', {league: 'nba', id: fid}); return r.data.forecast; }""", fid)
     pct = lambda p: f"{round(p * 1000) / 10:.1f}%"
-    assert board["over"] == {pct(rec["p_over"])} and board["under"] == {pct(rec["p_under"])} and board["push"] == {pct(rec["p_push"])}
+    pct0 = lambda p: "<1%" if 0 < p < 0.005 else f"{round(p * 100)}%"
+    assert board["over"] == {pct0(rec["p_over"])} and board["under"] == {pct0(rec["p_under"])}
+    assert board.get("push", {pct0(rec["p_push"])}) == {pct0(rec["p_push"])}
     assert board["mean"] == {f"{rec['projection_mean']:.1f}"}
     # board -> player (the line link of that quote)
     row = page.locator(".sw-research-card", has=page.locator(f'[data-fc="{fid}"]')).first
@@ -110,15 +113,16 @@ def test_board_player_game_slip_same_numbers(pw, shots):
     page.wait_for_timeout(300)
     page.screenshot(path=str(shots / "player_1280.png"), full_page=True)
     player = _numbers(page, fid)
-    for k in ("over", "under", "push", "mean"):
-        assert player[k] == board[k], (k, player, board)
+    for k in ("over", "under", "push"):
+        assert player[k] == {pct(rec["p_" + k])}, (k, player, rec)
+    assert player["mean"] == board["mean"], (player, board)
     assert page.locator("svg.sw-chart").count() >= 1
     # player -> match context
     page.locator("a", has_text="Match context").first.click()
     page.wait_for_selector("#sw-gameprops .sw-research-grid", timeout=20000)
     page.screenshot(path=str(shots / "game_1280.png"))
     game = _numbers(page, fid, ".sw-research-grid")
-    for k in ("over", "under", "push", "mean"):
+    for k in board:
         assert game[k] == board[k], (k, game, board)
     # back to the player, add the offered Over leg -> Slip Studio draft
     page.go_back()

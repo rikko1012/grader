@@ -347,6 +347,7 @@ def _summary(out):
     for k, r in out["leagues"].items():
         lg[k] = {x: r.get(x) for x in ("forecast_at", "artifact", "upcoming_rows", "written", "unchanged", "skipped",
                                        "no_forecast", "injury_report", "error")}
+        lg[k]["why_none"] = dict(list((r.get("why_none") or {}).items())[:20000])   # per offer key (UI reasons)
     return {"started_at": out["started_at"], "finished_at": out.get("finished_at"), "ran_s": out.get("ran_s"),
             "flag": FLAG, "artifacts": out["artifacts"], "history": out["history"],
             "forecasts_added": out.get("forecasts_added"), "leagues": lg, "withheld_check": out.get("withheld_check"),
