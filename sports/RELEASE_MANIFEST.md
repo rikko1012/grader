@@ -8,10 +8,10 @@ need the owner's release approval (owner brief, scope section). Each row must ci
 | Item | Value |
 |---|---|
 | PR | TODO (feature/scout-sports-nfl-nba -> main) |
-| Release commit SHA | TODO (integration head at release) |
-| Base (origin/main) | TODO (foundation was 2fbfc0e, merged main 0ee4d3e / b613c0d at cf53384) |
+| Release commit SHA | the PR head (see the PR) |
+| Base (origin/main) | b613c0d (foundation was 2fbfc0e; main merged at cf53384) |
 | Data foundation pin | `origin/claude/dreamy-wozniak-kefq4r` @ d393292 (INTEGRATION_MANIFEST.md) |
-| Agent branches merged | service `sports/service` (1122c0e .. 22b832a + this manifest); TODO record the model / UI / slips / assistant heads |
+| Agent branches merged | model 42d6491, ui 4d20c89, slips 2740218, assist cde88ed, service 72c9b86; coordinator fix d57dffb (ContextSnapshot kind) |
 
 ## 2. Migrations (additive only, sports store `<SPORTS_DATA_DIR>/canonical.db`)
 
@@ -88,3 +88,19 @@ Service scope (RUNBOOK section 12): staging load run with the sports service on 
 esports p99 budget is unproven - 1.14x measured on one shared workstation); owner creates the Render resources and
 secrets; store retention / compaction before the 16 GB cap (~7 weeks); scipy import in sports/model/dists.py fails
 the isolation test; anthropic SDK pin unexercised. TODO: add the other agents' blockers.
+
+## Coordinator verification (2026-10-24, integration head after all agent merges)
+
+| Check | Result |
+|---|---|
+| Esports suite (`tests lol/tests`) | 1,782 passed, 5 skipped - identical to origin/main; no file under tests/ or lol/ differs |
+| Sports suite (`sports/tests`) | 321 passed, 9 skipped (Playwright browser tests need SPORTS_UI_BROWSER_URL) |
+| Esports model files / requirements.txt / Dockerfile | unchanged vs origin/main (model tag aa6696d5d6) |
+| Esports grading replay | 500 / 500 recent production forecasts regrade identically on this branch |
+| 700-member esports load, sports flags off | 1,226 requests, 0 5xx, p95 1.45 s (main: 1.45 - 1.73 s); conditional variant 0 5xx, p95 1.96 s |
+| Sports-enabled esports p99 (separate process, one workstation) | +14% vs off (budget +10%) - NOT met locally; must be re-measured on staging with scout-sports-api on its own instance (RUNBOOK) |
+| Data rights | Kalshi (partner) and ESPN: owner attestation 2026-10-23 |
+| Model validation | NBA pts/reb/ast/3pm passed the registered history gate (locked test); NFL 5 markets failed; forward gate F (>= 300 settled props / 100+ games at real lines) not yet reviewable - stakes 0, letters withheld |
+
+Open before member enable: staging load run, Render resources + secrets (owner), store retention/compaction (16 GB cap
+~7 weeks), Thunderpick / OddsPapi first live inventory review, ANTHROPIC_API_KEY + SDK exercise, forward gate F.
