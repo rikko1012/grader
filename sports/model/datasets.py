@@ -86,6 +86,12 @@ SCHEMA = [
          carries REAL, targets REAL, PRIMARY KEY (game_id, team))""",
     """CREATE TABLE IF NOT EXISTS nfl_snaps (game_id TEXT NOT NULL, pfr_id TEXT NOT NULL, team TEXT, position TEXT,
          offense_snaps REAL, offense_pct REAL, PRIMARY KEY (game_id, pfr_id))""",
+    # ds-2 extras (factor round 2, additive: sm-1 never reads them) - from the same nflverse play-by-play pass
+    """CREATE TABLE IF NOT EXISTS nfl_pgx (game_id TEXT NOT NULL, player_id TEXT NOT NULL, dropbacks REAL,
+         scrambles REAL, PRIMARY KEY (game_id, player_id))""",
+    """CREATE TABLE IF NOT EXISTS nfl_tgx (game_id TEXT NOT NULL, team TEXT NOT NULL, epa_sum REAL, epa_n REAL,
+         success REAL, explosive REAL, rz_looks REAL, neutral_secs REAL, neutral_gaps REAL,
+         PRIMARY KEY (game_id, team))""",
 ]
 
 
@@ -525,6 +531,7 @@ def nfl_build(con, seasons=NFL_SEASONS, files=None, log=None):
 
 def _load_pbp(con, text, gmap):
     rz, tg = {}, {}
+    xp, xt, last = {}, {}, {}
     n = 0
     for r in _rows(text):
         gid, pos = r.get("game_id"), r.get("posteam")
@@ -534,6 +541,7 @@ def _load_pbp(con, text, gmap):
         if pt not in ("pass", "run"):
             continue
         n += 1
+        _extras(r, gid, pos, pt, xp, xt, last)
         yl = _num(r.get("yardline_100"))
         t = tg.setdefault((gid, pos), {"plays": 0, "pass": 0, "rush": 0, "npass": 0, "nplays": 0})
         t["plays"] += 1
@@ -561,12 +569,81 @@ def _load_pbp(con, text, gmap):
                      t["npass"], t["nplays"]))
     con.executemany("INSERT OR REPLACE INTO nfl_tg (game_id, team, opp, home, plays, pass_plays, rush_plays, "
                     "neutral_pass, neutral_plays) VALUES (?,?,?,?,?,?,?,?,?)", rows)
+    _write_extras(con, xp, xt)
     con.execute("UPDATE nfl_tg SET pass_att = (SELECT SUM(pass_att) FROM nfl_pg p WHERE p.game_id = nfl_tg.game_id AND "
                 "p.team = nfl_tg.team), carries = (SELECT SUM(carries) FROM nfl_pg p WHERE p.game_id = nfl_tg.game_id "
                 "AND p.team = nfl_tg.team), targets = (SELECT SUM(targets) FROM nfl_pg p WHERE p.game_id = "
                 "nfl_tg.game_id AND p.team = nfl_tg.team)")
     con.commit()
     return n
+
+
+def _extras(r, gid, pos, pt, xp, xt, last):
+    """ds-2 extras accumulated in the same play-by-play pass (factor round 2; sm-1 never reads them):
+    player dropbacks / scrambles (QB), team offensive EPA / success / explosive plays (rush 10+, pass 20+), red-zone looks
+    (plays inside the 20), neutral-situation seconds between consecutive snaps of one drive (gap 0-60 s)."""
+    t = xt.setdefault((gid, pos), [0.0, 0, 0, 0, 0, 0.0, 0])
+    epa = _num(r.get("epa"))
+    if epa is not None:
+        t[0] += epa
+        t[1] += 1
+    t[2] += 1 if r.get("success") == "1" else 0
+    yg = _num(r.get("yards_gained")) or 0
+    t[3] += 1 if (pt == "run" and yg >= 10) or (pt == "pass" and yg >= 20) else 0
+    yl = _num(r.get("yardline_100"))
+    t[4] += 1 if yl is not None and yl <= 20 else 0
+    gsr, drive = _num(r.get("game_seconds_remaining")), r.get("drive")
+    sd, q, wp = _num(r.get("score_differential")), _num(r.get("qtr")), _num(r.get("wp"))
+    neutral = sd is not None and q is not None and wp is not None and abs(sd) <= 7 and q <= 3 and 0.2 <= wp <= 0.8
+    prev = last.get((gid, pos))
+    if neutral and prev and prev[0] == drive and gsr is not None and prev[1] is not None and 0 < prev[1] - gsr <= 60:
+        t[5] += prev[1] - gsr
+        t[6] += 1
+    last[(gid, pos)] = (drive, gsr)
+    if r.get("qb_dropback") == "1":
+        pid = r.get("passer_player_id") if r.get("passer_player_id") not in (None, "", "NA") else r.get("rusher_player_id")
+        if pid and pid != "NA":
+            d = xp.setdefault((gid, pid), [0, 0])
+            d[0] += 1
+            d[1] += 1 if r.get("qb_scramble") == "1" else 0
+
+
+def _write_extras(con, xp, xt):
+    con.executemany("INSERT OR REPLACE INTO nfl_pgx (game_id, player_id, dropbacks, scrambles) VALUES (?,?,?,?)",
+                    [(g, p, v[0], v[1]) for (g, p), v in xp.items()])
+    con.executemany("INSERT OR REPLACE INTO nfl_tgx (game_id, team, epa_sum, epa_n, success, explosive, rz_looks, "
+                    "neutral_secs, neutral_gaps) VALUES (?,?,?,?,?,?,?,?,?)",
+                    [(g, t, *v) for (g, t), v in xt.items()])
+
+
+def nfl_extras_from_files(con, files_dir, seasons=NFL_SEASONS):
+    """(Re)build ONLY the ds-2 extras tables from cached nflverse play-by-play files (no download, nothing else
+    changes). -> {season: plays}."""
+    import gzip as _gz
+    gmap = {r["game_id"]: (r["home"], r["away"]) for r in con.execute(
+        "SELECT game_id, home, away FROM games WHERE league = 'nfl'")}
+    out = {}
+    for season in seasons:
+        f = Path(files_dir) / f"play_by_play_{season}.csv.gz"
+        if not f.exists():
+            out[season] = "missing"
+            continue
+        xp, xt, last = {}, {}, {}
+        n = 0
+        with io.TextIOWrapper(_gz.open(f, "rb"), encoding="utf-8", errors="replace", newline="") as fh:
+            for r in _rows(fh):
+                gid, pos = r.get("game_id"), r.get("posteam")
+                if gid not in gmap or not pos or r.get("two_point_attempt") == "1":
+                    continue
+                pt = r.get("play_type")
+                if pt not in ("pass", "run"):
+                    continue
+                n += 1
+                _extras(r, gid, pos, pt, xp, xt, last)
+        _write_extras(con, xp, xt)
+        con.commit()
+        out[season] = n
+    return out
 
 
 # ========================================================================================================= coverage
