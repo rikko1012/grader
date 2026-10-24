@@ -155,9 +155,11 @@ def current_settlements(con, legs):
 
 def settle_slip(slip, by_key):
     legs = slip["legs"]
+    from ..settlement import at_line
     sts = [by_key.get((l["platform"], l["offer_id"], l["side"])) for l in legs]
-    res = entry_result(slip["platform"], slip["entry_type"], legs, [leg_status(s) for s in sts])
-    res["leg_results"] = [{"offer_id": l["offer_id"], "side": l["side"], "status": leg_status(s),
+    status = [at_line(s, l.get("line"), l["side"])[0] for l, s in zip(legs, sts)]   # each leg at ITS OWN line
+    res = entry_result(slip["platform"], slip["entry_type"], legs, status)
+    res["leg_results"] = [{"offer_id": l["offer_id"], "side": l["side"], "status": st,
                            "value": getattr(s, "source_value", None), "settlement_id": getattr(s, "settlement_id", None),
-                           "revision": getattr(s, "revision", None)} for l, s in zip(legs, sts)]
+                           "revision": getattr(s, "revision", None)} for l, s, st in zip(legs, sts, status)]
     return res

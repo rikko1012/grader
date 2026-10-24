@@ -847,7 +847,8 @@ def results_view(con, league, setts, now, base_meta):
                 seen.add(fid)
                 sides = {x.side: x for x in ss}
                 any_s = ss[0]
-                outcome = next((x.outcome for x in ss if x.outcome), None)
+                from .settlement import at_line            # the outcome at the FORECAST's line (C10)
+                outcome = next((at_line(x, fc.line, "over")[1] for x in ss if at_line(x, fc.line, "over")[1]), None)
                 actual = next((x.source_value for x in ss if x.source_value is not None), None)
                 status = "void" if all(x.status == "void" for x in ss) else (
                     "unresolved" if outcome is None else "settled")

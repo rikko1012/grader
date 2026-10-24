@@ -278,7 +278,8 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
         if q.platform in TARGETS or q.event_id is None or q.player_id is None:
             continue
         meta = store.row_meta(scon, rid)
-        quotes.setdefault((q.event_id, q.player_id, q.stat), []).append((rid, q, meta.get("last_seen_at")))
+        quotes.setdefault((q.event_id, q.player_id, q.stat), []).append((rid, q, meta.get("last_seen_at"),
+                                                                          meta.get("last_source_updated_at")))
     absences = injury_absences(scon, league, up, forecast_at)
     out["injury_report"] = "fresh ESPN report" if any(v is not None for v in absences.values()) else         ("no fresh report: same-game absence unknown" if league == "nba" else "not used")
     mcfg = market_config()

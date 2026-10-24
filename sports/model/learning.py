@@ -21,7 +21,7 @@ from datetime import timedelta
 
 import numpy as np
 
-from .. import config, store
+from .. import config, settlement, store
 from ..contracts import now_utc, parse_utc
 from . import evaluate, forward
 
@@ -70,11 +70,13 @@ def on_settled(scon, log=None, now=None, days=30):
         offer = store.get(scon, fc.offer_snapshot_ids[0])
         if offer is None:
             continue
-        sts = store.settlements(scon, offer_id=offer.offer_id, platform=offer.platform)
-        sts = [s for _, s in sts if s.side == fc.chosen_side]
+        alls = [s for _, s in store.settlements(scon, offer_id=offer.offer_id, platform=offer.platform)]
+        sts = [s for s in alls if s.side == fc.chosen_side] or alls     # the other side's record has the value too
         if not sts:
             continue
         cur = max(sts, key=lambda s: s.revision)
+        # scored at the FORECAST's own line and side (the settlement records the offer's line at settlement time)
+        st_status, st_outcome = settlement.at_line(cur, fc.line, fc.chosen_side)
         if lcon.execute("SELECT 1 FROM scorecard WHERE forecast_id=? AND settlement_id=?",
                         (fid, cur.settlement_id)).fetchone():
             continue
@@ -84,7 +86,7 @@ def on_settled(scon, log=None, now=None, days=30):
         lcon.execute("UPDATE scorecard SET superseded=1 WHERE forecast_id=?", (fid,))
         lcon.execute("INSERT OR IGNORE INTO scorecard VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)",
                      (fid, cur.settlement_id, fc.model_version, fc.league, fc.stat, fc.event_id, offer.platform,
-                      fc.line, fc.chosen_side, p_side, fc.p_over, fc.p_under, fc.p_push, cur.status, cur.outcome,
+                      fc.line, fc.chosen_side, p_side, fc.p_over, fc.p_under, fc.p_push, st_status, st_outcome,
                       cur.source_value, pit, fc.forecast_at, cur.settled_at))
         n_new += 1
         kinds = []

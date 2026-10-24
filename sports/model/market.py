@@ -70,8 +70,10 @@ def consensus_sources(per_source):
     return {s: v for s, v in per_source.items() if in_consensus(s)}
 
 
-def quote_prob(q, event, forecast_at, last_seen=None, dnp_share=0.0):
-    """-> (p_over_given_no_push at q.line, reason) or (None, why) for one source quote."""
+def quote_prob(q, event, forecast_at, last_seen=None, dnp_share=0.0, last_source=None):
+    """-> (p_over_given_no_push at q.line, reason) or (None, why) for one source quote. last_seen / last_source = the
+    revision's newest sighting and newest SOURCE time (store columns): an unchanged quote re-confirmed by the source
+    is as fresh as its latest source time, not its first one (LINE_CORRECTNESS.md R2)."""
     seen = max(x for x in (q.observed_at, last_seen) if x)
     if event is None or not event.start_utc:
         return None, "no canonical start"
@@ -85,7 +87,8 @@ def quote_prob(q, event, forecast_at, last_seen=None, dnp_share=0.0):
             return None, why
         s = q.side("over")
         return (s.bid + s.ask) / 2, None
-    age_from = q.source_updated_at or seen
+    srcs = [x for x in (q.source_updated_at, last_source) if x and x <= forecast_at]
+    age_from = max(srcs) if srcs else (q.source_updated_at or seen)
     if (parse_utc(forecast_at) - parse_utc(age_from)).total_seconds() > MAX_AGE_S:
         return None, "older than 15 min"
     if q.availability != "open":
@@ -124,18 +127,20 @@ def at_target(league, stat, src_line, p_cond, target_line):
 
 
 def eligible_quotes(target, quotes, events, forecast_at, dnp_share):
-    """quotes: [(record_id, OfferSnapshot, last_seen)] for the target's event / player / stat. -> per source the quote
-    nearest the target line: {source: (rid, line, p_cond)} + reasons."""
+    """quotes: [(record_id, OfferSnapshot, last_seen[, last_source_updated_at])] for the target's event / player / stat.
+    -> per source the quote nearest the target line: {source: (rid, line, p_cond)} + reasons."""
     best, reasons = {}, []
     ev = events.get(target.event_id)
-    for rid, q, seen in quotes:
+    for item in quotes:
+        rid, q, seen = item[:3]
+        last_src = item[3] if len(item) > 3 else None
         if q.platform == target.platform:
             continue                                         # target's own price never anchors it
         ok, why = capabilities.compatible(target, q)
         if not ok:
             reasons.append(f"{q.platform}: {why}")
             continue
-        p, why = quote_prob(q, ev, forecast_at, seen, dnp_share)
+        p, why = quote_prob(q, ev, forecast_at, seen, dnp_share, last_src)
         if p is None:
             reasons.append(f"{q.platform} {q.line:g}: {why}")
             continue

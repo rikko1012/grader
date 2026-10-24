@@ -76,6 +76,26 @@ def settle_offer(offer, obs_by_stat, event, settled_at, forecast_ids=()):
     return out
 
 
+def at_line(s, line, side=None):
+    """(status, outcome) of `side` at `line` from a leg settlement recorded at s.line (LINE_CORRECTNESS.md C10).
+    A settlement is keyed by (platform, offer_id, side) and records the offer's CURRENT line at settlement; a forecast
+    or slip leg made on an earlier revision at another line is scored at ITS OWN line from the recorded box-score
+    value. void (did not play) and unresolved do not depend on the line. -> (None, None) without a settlement."""
+    if s is None:
+        return None, None
+    side = side or s.side
+    if line is None or (abs(float(line) - float(s.line)) < 1e-9 and side == s.side):
+        if side == s.side:
+            return s.status, s.outcome
+    if s.status in ("void", "unresolved"):
+        return s.status, None
+    if s.source_value is None:
+        return "unresolved", None
+    v, ln = float(s.source_value), float(line if line is not None else s.line)
+    outcome = "over" if v > ln else ("under" if v < ln else "push")
+    return ("push" if outcome == "push" else ("win" if outcome == side else "loss")), outcome
+
+
 def record(con, settlements):
     """Store with revision chaining. -> counts."""
     c = {"inserted": 0, "unchanged": 0, "revision": 0}
