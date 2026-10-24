@@ -222,15 +222,16 @@ flags `SPORTS_UI=0`, `SPORTS_API=0`):
    are on: collector every 15 min, Kalshi hourly, settle hourly, UI snapshots every 3 min, prebuilt every 90 s,
    history daily, archive every 6 h (it has nothing to do until offers are 72 h old). `SPORTS_TRAIN` stays `0` (no
    model forecasts on staging unless the coordinator asks; then see 13.1 - forecast / fit run exclusive).
-2. After ~20 min and again after a few hours, from a checkout of the deployed commit:
+2. About 20 min after the deploy, from a checkout of the deployed commit:
    `ADMIN_TOKEN=... SPORTS_TOKEN_SECRET=... python scripts/load_sports_staging_check.py --api https://scout-sports-api.onrender.com`
    (secrets from the environment, never printed; exit 0 = pass). It checks health, the auth round trip (minted
    token; no / tampered token 401; CORS), each job's last run / peak RSS vs cap / over-cap kills, feed ages, store /
    archive / disk use, service RSS, gentle latency (10 sequential per route + a 40-request parallel burst) and alerts.
    `python -m sports.service --check https://scout-sports-api.onrender.com` prints the alerts alone.
 3. Render -> scout-sports-api -> Metrics: memory stays under ~450 MB including the children (13.1); restarts 0.
-4. Pass = staging check exit 0 twice (after 20 min and after >= 6 h of ingestion, so an archive pass and a history run
-   have happened), no `job_over_cap`, no paging alert.
+4. Pass = staging check exit 0 once (~20 min after the deploy), no `job_over_cap`, no paging alert. No multi-hour
+   wait (owner 2026-10-24: the six-hour re-check is dropped); the archive (6 h) and history (daily) jobs are watched by
+   the section 9 alerts as they run.
 
 **Owner-first access (`SPORTS_UI=owner`, 2026-10-24).** cs2-scout serves `/sports`, `/sports/<asset>`, the esports
 nav link and `/api/sports/token` ONLY to a paid Whop member (existing `Handler.allowed()`, checked first) whose allow id is
