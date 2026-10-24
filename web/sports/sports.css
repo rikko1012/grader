@@ -164,3 +164,11 @@ body.sw button,body.sw select,body.sw input{font:inherit;color:inherit}
 .sw #sw-toast{position:sticky;top:64px;z-index:5}
 .sw .sw-qrow .sw-offered{white-space:normal;overflow-wrap:anywhere}
 .sw .sw-table .sw-legbtns{display:grid;grid-template-columns:repeat(2,max-content);gap:6px}
+
+/* market view (mv-1): every book on the identical market */
+.sw-mkbooks { margin-top: 6px; }
+.sw-mkbooks tr.sw-out td { opacity: .72; }
+.sw-mkline { margin: 6px 0 2px; }
+.sw-mkq { margin: -2px 0 6px; }
+.sw-mkpanel { margin-top: 12px; }
+.sw-mk b { white-space: nowrap; }

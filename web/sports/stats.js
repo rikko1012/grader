@@ -131,7 +131,54 @@
   }
 
   // ------------------------------------------------------------------------------------------------- filters
-  var BOOKS = {prizepicks: "PrizePicks", underdog: "Underdog", kalshi: "Kalshi"};
+  var BOOKS = {prizepicks: "PrizePicks", underdog: "Underdog", kalshi: "Kalshi", polymarket: "Polymarket",
+               fanduel: "FanDuel", betrivers: "BetRivers", thunderpick: "Thunderpick", oddspapi: "OddsPapi",
+               oddsapi: "The Odds API"};
+  var FEED_BOOKS = {draftkings: "DraftKings", fanduel: "FanDuel", betmgm: "BetMGM", williamhill_us: "Caesars",
+                    caesars: "Caesars", betrivers: "BetRivers", espnbet: "ESPN BET", fanatics: "Fanatics",
+                    bovada: "Bovada", betonlineag: "BetOnline", pinnacle: "Pinnacle", ballybet: "Bally Bet"};
+  function bookName(p) {                  // "oddsapi:draftkings" -> "DraftKings (via The Odds API)"
+    if (!p) return "";
+    if (BOOKS[p]) return BOOKS[p];
+    var i = p.indexOf(":");
+    if (i > 0) {
+      var feed = p.slice(0, i), bk = p.slice(i + 1);
+      return (FEED_BOOKS[bk] || bk) + " (via " + (BOOKS[feed] || feed) + ")";
+    }
+    return p;
+  }
+
+  // ------------------------------------------------------------------- market view (mv-1, sports/market_view.py)
+  // mk = board row "mk": {l, hp, c: {po, pu, pp, n, used}, bk: [{p, l, kind, c, over, under, t, su, age, in, why}], at}
+  function marketFor(mk, rid) {           // consensus for one quote (its own platform excluded), else the headline
+    if (!mk) return null;
+    if (rid && mk.at && Object.prototype.hasOwnProperty.call(mk.at, rid)) return mk.at[rid];
+    return mk.c || null;
+  }
+  function marketLabel(c) {               // "Market (3 books)" - never "Kalshi market chance"
+    if (!c || !c.n) return "Market (no fresh book)";
+    return "Market (" + c.n + (c.n === 1 ? " book)" : " books)");
+  }
+  var KINDS = {devig: "both sides, no-vig", mid: "midpoint", one_sided: "one side priced only - no chance",
+               none: "no price"};
+  function dec(x) { return x === null || x === undefined ? "—" : (Math.round(x * 100) / 100).toFixed(2); }
+  function bookPrice(b) {                 // the book's own price, as the book gives it
+    if (b.p === "kalshi" || b.p === "polymarket") {
+      var o = b.over || [];
+      return "YES " + cents(o[0]) + " / " + cents(o[1]);
+    }
+    var parts = [];
+    if (b.over) parts.push("O " + dec(b.over));
+    if (b.under) parts.push("U " + dec(b.under));
+    return parts.join(" · ") || "no price";
+  }
+  function bookChance(b) {                // the book's own chance of Over at its own line (no push), or why none
+    if (b.c === null || b.c === undefined) return b.kind === "one_sided" ? "price only" : "—";
+    return pct(b.c);
+  }
+  function bookStatus(b) {                // in the consensus, or the frozen filter's reason
+    return b.in ? "in the market chance" : "not counted: " + (b.why || "not eligible");
+  }
 
   function matchesFilters(row, f) {       // row = decoded board market
     if (f.q) {
@@ -159,7 +206,9 @@
   var api = {pct: pct, line: line, num: num, cents: cents, mult: mult, forecastNumbers: forecastNumbers,
              outcome: outcome, median: median, sd: sd, windowSummary: windowSummary, seasonGames: seasonGames,
              splits: splits, localTime: localTime, shortDate: shortDate, age: age, ageSeconds: ageSeconds,
-             BOOKS: BOOKS, matchesFilters: matchesFilters};
+             BOOKS: BOOKS, matchesFilters: matchesFilters, bookName: bookName, marketFor: marketFor,
+             marketLabel: marketLabel, bookPrice: bookPrice, bookChance: bookChance, bookStatus: bookStatus,
+             KINDS: KINDS};
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SportsStats = api;
 })(this);

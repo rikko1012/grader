@@ -145,7 +145,25 @@
     var b = e.target.closest && e.target.closest("[data-src]");
     if (b) { e.preventDefault(); openSrc(+b.getAttribute("data-src")); }
   });
-  function bookName(p) { return S.BOOKS[p] || p; }
+  function bookName(p) { return S.bookName(p); }
+  // ------------------------------------------------------------- market view (every book on the identical market)
+  function mkShort(c, line) {                           // "Market (3 books) O 54.1% · U 45.9%" for one quote
+    if (!c || !c.n) return '<span class="sw-faint">' + esc(S.marketLabel(null)) + "</span>";
+    return '<span class="sw-mk">' + esc(S.marketLabel(c)) + ' <b class="sw-p over">O ' + S.pct(c.po) + '</b> · <b class="sw-p under">U ' + S.pct(c.pu) + "</b>" +
+      (c.pp > 0 ? " · P " + S.pct(c.pp) : "") + (line !== undefined && line !== null ? ' <span class="sw-faint">at ' + S.line(line) + "</span>" : "") + "</span>";
+  }
+  function mkBooks(mk, open) {                          // per-book list: own chance, line if different, observed age
+    if (!mk || !mk.bk || !mk.bk.length) return '<div class="sw-faint sw-small">No book prices this exact market.</div>';
+    var c = mk.c, used = (c && c.used) || [];
+    return '<details class="sw-more sw-mkbooks"' + (open ? " open" : "") + "><summary>" + esc(S.marketLabel(c)) + (c ? ": Over " + S.pct(c.po) + " at " + S.line(mk.l) : "") + " · " + mk.bk.length + (mk.bk.length === 1 ? " book prices" : " books price") + " this market</summary>" +
+      '<div class="sw-scroll"><table class="sw-mini"><caption class="sw-sr">Every book on this market</caption><thead><tr><th scope="col">Book</th><th scope="col" class="num">Line</th><th scope="col">Price</th><th scope="col" class="num">Over chance</th><th scope="col">How</th><th scope="col">Observed</th><th scope="col">Market chance</th></tr></thead><tbody>' +
+      mk.bk.map(function (b) {
+        return "<tr" + (b.in ? "" : ' class="sw-out"') + "><td>" + book(b.p) + '</td><td class="num">' + S.line(b.l) + (b.l !== mk.l ? ' <span class="sw-faint sw-small">(differs)</span>' : "") + '</td><td class="sw-small">' + esc(S.bookPrice(b)) +
+          '</td><td class="num">' + esc(S.bookChance(b)) + '</td><td class="sw-small sw-faint">' + esc(S.KINDS[b.kind] || b.kind) + '</td><td class="sw-small">' + esc(S.age(b.t)) + (b.su ? "" : ' <span class="sw-faint">(no source time)</span>') +
+          '</td><td class="sw-small' + (b.in ? "" : " sw-faint") + '">' + esc(S.bookStatus(b)) + (b.in && c && used.indexOf(b.p) < 0 ? " (own line excluded)" : "") + "</td></tr>";
+      }).join("") + "</tbody></table></div>" +
+      '<p class="sw-faint sw-small">Market = every eligible book combined with equal weight on the log-odds scale (one vote per book; quotes no older than 15 min, before the start, both sides priced or an exchange midpoint; each book\u2019s nearest line moved to this line with the stat\u2019s measured spread). A line\u2019s own book is never counted for itself. The Over chances listed are each book\u2019s own line, push refunded.</p></details>';
+  }
   function book(p) { return '<span class="sw-book"><span class="sw-dot ' + esc(p) + '" aria-hidden="true"></span>' + esc(bookName(p)) + "</span>"; }
   function teamAbbr(t) { return t && (t.abbr || t.name) || "TBD"; }
   function matchup(ev) { return ev ? teamAbbr(ev.away) + " @ " + teamAbbr(ev.home) : ""; }
@@ -202,7 +220,12 @@
     });
     f.innerHTML = "<p>" + plats.join(" · ") + "</p><p>Models: " + (models.join(" · ") || "none on the board") + "</p>" +
       "<p>Snapshot " + esc(manifest.version) + " built " + esc(S.localTime(manifest.built_at)) + " · contracts " + esc(manifest.contracts) +
-      " · capabilities " + esc(manifest.capabilities) + ". Chances are unconditional: Over, Under and Push add up to 100%. History: ESPN; market prices: Kalshi, PrizePicks, Underdog.</p>";
+      " · capabilities " + esc(manifest.capabilities) + ". Chances are unconditional: Over, Under and Push add up to 100%. History: ESPN; prices on the board: " + esc(marketSources(manifest)) + ".</p>";
+  }
+  function marketSources(manifest) {                     // the books actually on the board now (manifest.sources)
+    var s = manifest && manifest.sources || {};
+    var on = Object.keys(s).filter(function (k) { return s[k].offers > 0; }).sort().map(function (k) { return bookName(k) + (s[k].verified ? "" : " (capture-only)"); });
+    return on.join(", ") || "none on the board";
   }
   function setNav(view) {
     document.querySelectorAll("#sw-views a").forEach(function (a) {
@@ -452,7 +475,7 @@
   function boardTable(rows, B) {
     var h = '<div class="sw-tablebox sw-scroll"><table class="sw-table"><caption class="sw-sr">Prop board: one group per player market, one row per book line</caption><thead><tr>' +
       '<th scope="col">Player · game</th><th scope="col">Market</th><th scope="col">Book</th><th scope="col" class="num">Line</th><th scope="col">Offered</th>' +
-      '<th scope="col" class="num">Scout projection</th><th scope="col" class="num">Over</th><th scope="col" class="num">Under</th><th scope="col" class="num">Push</th><th scope="col">Observed</th><th scope="col">Slip</th><th scope="col"><span class="sw-sr">Source</span></th></tr></thead>';
+      '<th scope="col" class="num">Scout projection</th><th scope="col" class="num">Over</th><th scope="col" class="num">Under</th><th scope="col" class="num">Push</th><th scope="col">Market (books)</th><th scope="col">Observed</th><th scope="col">Slip</th><th scope="col"><span class="sw-sr">Source</span></th></tr></thead>';
     rows.forEach(function (m) {
       var qr = quoteRows(m), all = qr.q.map(function (q) { return [q, "q"]; }).concat(qr.k.map(function (q) { return [q, "k"]; }));
       if (!all.length) all = [[null, "none"]];
@@ -467,16 +490,17 @@
             '<div class="sw-faint sw-small">' + esc([m.pos, m.tm].filter(Boolean).join(" · ")) + '</div><div class="sw-small"><a href="#/game/' + encodeURIComponent(m.e) + '">' + esc(m.matchup) + '</a> <span class="sw-faint">' + esc(S.localTime(m.ev && m.ev.start_utc, {weekday: "short", hour: "numeric", minute: "2-digit", timeZoneName: "short"})) + "</span></div></td>" +
             '<td rowspan="' + all.length + '">' + esc(B.stats[m.st] || m.st) + (m.alt ? '<div class="sw-small"><a href="' + marketHref(m, null) + '">+' + m.alt + " alternate lines</a></div>" : "") +
             (m.kr > m.kn.length ? '<div class="sw-faint sw-small">Kalshi ladder: ' + m.kr + " rungs</div>" : "") +
-            (m.cap !== "supported" ? '<div class="sw-faint sw-small">No Scout chance for this stat</div>' : "") + "</td>";
+            (m.cap !== "supported" ? '<div class="sw-faint sw-small">No Scout chance for this stat</div>' : "") + mkBooks(m.mk) + "</td>";
         }
         if (!q) {
-          h += '<td colspan="10" class="sw-faint">' + (m.alt ? "Only alternate-payout lines (goblin / demon) - open the player for them." : "No line for this filter.") + "</td>";
+          h += '<td colspan="11" class="sw-faint">' + (m.alt ? "Only alternate-payout lines (goblin / demon) - open the player for them." : "No line for this filter.") + "</td>";
         } else if (x[1] === "k") {
-          h += "<td>" + book(q.p) + '</td><td class="num"><span class="sw-line">' + S.line(q.l) + '</span></td><td class="sw-offered">YES ' + S.cents(q.k && q.k[0]) + " / " + S.cents(q.k && q.k[1]) + '</td><td colspan="4" class="sw-small">' + (kMid(q) === null ? '<span class="sw-faint">Kalshi price for Over ' + S.line(q.l) + "</span>" : "Market chance Over " + S.line(q.l) + ": <b>" + S.pct(kMid(q)) + '</b> <span class="sw-faint">(Kalshi YES mid)</span>') + '</td><td class="sw-small sw-faint">' + esc(S.age(q.t)) + "</td><td></td><td>" + quoteSource(q) + "</td>";
+          h += "<td>" + book(q.p) + '</td><td class="num"><span class="sw-line">' + S.line(q.l) + '</span></td><td class="sw-offered">YES ' + S.cents(q.k && q.k[0]) + " / " + S.cents(q.k && q.k[1]) + '</td><td colspan="4" class="sw-small">' + (kMid(q) === null ? '<span class="sw-faint">Kalshi price for Over ' + S.line(q.l) + "</span>" : "Kalshi own Over " + S.line(q.l) + ": " + S.pct(kMid(q)) + ' <span class="sw-faint">(YES midpoint, one book)</span>') + '</td><td class="sw-small">' + mkShort(m.mk && m.mk.c, m.mk && m.mk.l) + '</td><td class="sw-small sw-faint">' + esc(S.age(q.t)) + "</td><td></td><td>" + quoteSource(q) + "</td>";
         } else {
           h += "<td>" + book(q.p) + (q.v !== "standard" && q.v !== "balanced" ? ' <span class="sw-tag">' + esc(q.v) + "</span>" : "") + '</td><td class="num"><a class="sw-line" href="' + marketHref(m, q) + '" aria-label="' + esc(m.n + " " + (B.stats[m.st] || m.st) + " " + S.line(q.l) + " on " + bookName(q.p)) + '">' + S.line(q.l) + "</a></td>" +
             '<td class="sw-offered">' + offeredText(q.o) + (q.m && (q.m[0] !== 1 || q.m[1] !== 1) ? '<div class="sw-faint">' + (q.m[0] ? "O " + S.mult(q.m[0]) : "") + (q.m[1] ? " U " + S.mult(q.m[1]) : "") + "</div>" : "") + "</td>" +
             '<td class="num">' + c.mean + '</td><td class="num">' + c.over + '</td><td class="num">' + c.under + '</td><td class="num">' + c.push + "</td>" +
+            '<td class="sw-small">' + mkShort(S.marketFor(m.mk, q.r), q.l) + "</td>" +
             '<td class="sw-small"><span class="sw-faint">' + esc(S.age(q.t)) + "</span>" + (f ? '<div class="sw-faint">' + esc(f.m) + " · " + esc(S.age(f.at)) + "</div>" : (q.g ? '<div class="sw-faint">No Scout chance yet</div>' : "")) + "</td>" +
             "<td>" + boardLegButtons(m, q, f, B) + "</td><td>" + quoteSource(q) + (f ? fcSource(q.f, f, q) : "") + "</td>";
         }
@@ -492,16 +516,20 @@
       var qr = quoteRows(m), inj = B.injuries[m.pid];
       h += '<article class="sw-card" aria-label="' + esc(m.n + ", " + (B.stats[m.st] || m.st)) + '"><div class="sw-card-top"><div><a href="' + marketHref(m, null) + '">' + esc(m.n) + "</a>" +
         (inj ? ' <span class="sw-tag inj">' + esc(inj.status) + "</span>" : "") + '<div class="sw-faint sw-small">' + esc([m.pos, m.tm].filter(Boolean).join(" · ")) + " · " + esc(m.matchup) + " · " + esc(S.localTime(m.ev && m.ev.start_utc, {weekday: "short", hour: "numeric", minute: "2-digit"})) + "</div></div>" +
-        '<div class="sw-small" style="text-align:right">' + esc(B.stats[m.st] || m.st) + "</div></div>";
+        '<div class="sw-small" style="text-align:right">' + esc(B.stats[m.st] || m.st) + "</div></div>" +
+        '<div class="sw-small sw-mkline">' + mkShort(m.mk && m.mk.c, m.mk && m.mk.l) + "</div>";
       qr.q.forEach(function (q) {
         var f = q.f ? B.fc[q.f] : null, c = fcCell(f, q.o);
         h += '<div class="sw-qrow"><div>' + book(q.p) + ' <a class="sw-line" href="' + marketHref(m, q) + '">' + S.line(q.l) + '</a><div class="sw-offered">' + offeredText(q.o) + " · " + esc(S.age(q.t)) + "</div></div>" +
           '<div class="sw-small sw-faint" style="text-align:right">Proj<br><b class="sw-p">' + c.mean + "</b></div>" +
           '<div class="sw-pp"><span>O ' + c.over + "</span><span>U " + c.under + "</span>" + (f && f.pp > 0 ? "<span>P " + c.push + "</span>" : "") + "</div>" + boardLegButtons(m, q, f, B) + "</div>";
+        var mq = S.marketFor(m.mk, q.r);
+        if (m.mk && mq !== (m.mk.c || null)) h += '<div class="sw-small sw-faint sw-mkq">' + esc(bookName(q.p)) + " " + S.line(q.l) + ": " + mkShort(mq) + "</div>";
       });
       qr.k.forEach(function (q) {
-        h += '<div class="sw-qrow"><div>' + book(q.p) + ' <span class="sw-line">' + S.line(q.l) + '</span></div><div class="sw-small sw-faint">YES ' + S.cents(q.k && q.k[0]) + " / " + S.cents(q.k && q.k[1]) + '</div><div class="sw-small' + (kMid(q) === null ? ' sw-faint">market price' : '">market <b>' + S.pct(kMid(q)) + "</b>") + "</div></div>";
+        h += '<div class="sw-qrow"><div>' + book(q.p) + ' <span class="sw-line">' + S.line(q.l) + '</span></div><div class="sw-small sw-faint">YES ' + S.cents(q.k && q.k[0]) + " / " + S.cents(q.k && q.k[1]) + '</div><div class="sw-small' + (kMid(q) === null ? ' sw-faint">price only' : '">Kalshi own ' + S.pct(kMid(q))) + "</div></div>";
       });
+      h += mkBooks(m.mk);
       if (!qr.q.length && !qr.k.length) h += '<div class="sw-qrow"><div class="sw-faint sw-small">' + (m.alt ? m.alt + " alternate lines - open the player" : "No line for this filter") + "</div></div>";
       h += "</article>";
     });
@@ -536,7 +564,7 @@
           (!ff.more && B.board.secondary_markets ? "<span>" + B.board.secondary_markets + " more under “More stats”</span>" : "") + "</p>";
         if (!total) { body.innerHTML = stateBox("No lines yet", "No " + state.lg.toUpperCase() + " props are on the board right now."); return; }
         if (!B.markets.some(function (m) { return m.q.some(function (q) { return q.f; }); }))
-          cnt.innerHTML += '<div class="sw-banner">Scout chances are not published yet. The board shows every book’s line, the Kalshi market chance where Kalshi lists the stat, and each player’s game history (open a player).</div>';
+          cnt.innerHTML += '<div class="sw-banner">Scout chances are not published yet. The board shows every book’s line, the Market chance (every fresh book that prices the identical market, combined; each book’s own chance is listed under it), and each player’s game history (open a player).</div>';
         if (!rows.length) {
           body.innerHTML = stateBox("No props match these filters", "Try another stat or book, or reset the filters.", '<button type="button" class="sw-btn" id="sw-reset2">Reset filters</button>');
           document.getElementById("sw-reset2").onclick = reset; return;
@@ -703,8 +731,14 @@
             (n ? '<span class="sw-small">O <b class="sw-p over" data-fc="' + esc(n.id) + '" data-fcside="over">' + n.over + '</b> · U <b class="sw-p under" data-fc="' + esc(n.id) + '" data-fcside="under">' + n.under + "</b></span>" : '<span class="sw-small sw-faint">' + (q.gradable ? "No Scout chance yet" : "Not graded: " + esc((q.not_gradable_because || [])[0] || "")) + "</span>") + "</button>";
         }).join("") + "</div>";
         if (m.kalshi.length) {
-          h += '<details class="sw-more"><summary>Kalshi ladder: ' + m.kalshi.length + " rungs (market prices)</summary><div class=\"sw-scroll\"><table class=\"sw-mini\"><caption class=\"sw-sr\">Kalshi rungs</caption><thead><tr><th>Rung (Over)</th><th class=\"num\">YES bid</th><th class=\"num\">YES ask</th><th class=\"num\">Volume</th><th class=\"num\">Open interest</th><th>Observed</th><th><span class=\"sw-sr\">Source</span></th></tr></thead><tbody>" +
+          h += '<details class="sw-more"><summary>Kalshi ladder: ' + m.kalshi.length + " rungs (Kalshi prices only; the Market chance above combines every book)</summary><div class=\"sw-scroll\"><table class=\"sw-mini\"><caption class=\"sw-sr\">Kalshi rungs</caption><thead><tr><th>Rung (Over)</th><th class=\"num\">YES bid</th><th class=\"num\">YES ask</th><th class=\"num\">Volume</th><th class=\"num\">Open interest</th><th>Observed</th><th><span class=\"sw-sr\">Source</span></th></tr></thead><tbody>" +
             m.kalshi.map(function (k) { var s = k.sides[0]; return "<tr><td>" + S.line(k.line) + '</td><td class="num">' + S.cents(s.bid) + '</td><td class="num">' + S.cents(s.ask) + '</td><td class="num">' + S.num(k.liquidity.volume, 0) + '</td><td class="num">' + S.num(k.liquidity.open_interest, 0) + "</td><td class=\"sw-small\">" + esc(S.age(k.last_seen_at)) + "</td><td>" + src({title: "Kalshi rung", record: k.record_id, line: k.line, "YES bid": s.bid, "YES ask": s.ask, "source time": "not given by Kalshi", "observed by Scout": k.last_seen_at, rule: k.rule_version}) + "</td></tr>"; }).join("") + "</tbody></table></div></details>";
+        }
+        if (m.market) {
+          var mq = S.marketFor(m.market, sel && sel.record_id);
+          h += '<section class="sw-panel sw-mkpanel" aria-label="Market chance"><h2>' + esc(S.marketLabel(mq)) + (sel ? " · " + esc(bookName(sel.platform)) + " " + S.line(sel.line) : "") + "</h2>" +
+            '<p class="sw-small">' + mkShort(mq, sel ? sel.line : m.market.l) + (mq && mq.used ? ' <span class="sw-faint">(' + esc(mq.used.map(bookName).join(", ")) + ")</span>" : "") + "</p>" + mkBooks(m.market, true) +
+            (fc ? '<p class="sw-faint sw-small">Scout\u2019s own chance is separate (below).</p>' : "") + "</section>";
         }
         h += '<div class="sw-grid2" style="margin-top:12px"><div>' + forecastPanel(fc, det, sel, m) + "</div><div>" + historyPanel(m, ln, sel) + "</div></div>";
         h += contextPanel(P, games, m);
@@ -720,7 +754,7 @@
         if (!q) return h + '<p class="sw-muted">No pick’em line for this stat.</p></section>';
         if (!fc) {
           return h + '<p class="sw-muted">' + (mk.capability !== "supported" ? esc(mk.capability_reason || "This stat has no Scout model.") :
-            q.gradable ? "No Scout chance for this line: no eligible Kalshi price for this player and stat when the board was built." : "This line is not graded: " + esc((q.not_gradable_because || []).join("; "))) + "</p>" + slipButtons(q, null) + "</section>";
+            q.gradable ? "No Scout forecast for this line when the board was built (the Market chance above is the books, not Scout)." : "This line is not graded: " + esc((q.not_gradable_because || []).join("; "))) + "</p>" + slipButtons(q, null) + "</section>";
         }
         var n = S.forecastNumbers(fc);
         var sides = {}; q.sides.forEach(function (s) { sides[s.side] = s; });

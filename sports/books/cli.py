@@ -267,3 +267,22 @@ def label(b, side):
         return f"{_pct(b['consensus_side'])} {len(b['consensus_books'])}bk"
     best = b["best"].get(side)
     return f"{best['book'][:3]} {_am(best['price'])}" if best else ""
+
+
+def cmd_inventory(argv=None):
+    """python -m sports.books.cli inventory|inventory-show <thunderpick|oddspapi> <nba|nfl>"""
+    import argparse
+    from . import inventory
+    ap = argparse.ArgumentParser(prog="python -m sports.books.cli")
+    ap.add_argument("what", choices=("inventory", "inventory-show"))
+    ap.add_argument("source", choices=("thunderpick", "oddspapi"))
+    ap.add_argument("league", choices=("nba", "nfl"))
+    a = ap.parse_args(argv)
+    s = inventory.capture(a.source, a.league) if a.what == "inventory" else inventory.read_summary(a.source, a.league)
+    inventory.render(s)
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(cmd_inventory(sys.argv[1:]))

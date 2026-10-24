@@ -45,7 +45,7 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-from . import cache, capabilities, config, fair, flags, identity, markets, store
+from . import cache, capabilities, config, fair, flags, identity, market_view, markets, store
 from .contracts import (ContractError, Event, Membership, SourceId, StatObservation, from_dict, now_utc, parse_utc,
                         utc)
 
@@ -122,8 +122,8 @@ def _latest(con, kind, where="", args=(), as_of=None, limit=10 ** 7):
         cond += " AND known_at <= ?"
         a.append(as_of)
     best = {}
-    for row in con.execute(f"SELECT record_id, source, source_key, revision, known_at, last_seen_at FROM records "
-                           f"WHERE {cond}", a):
+    for row in con.execute(f"SELECT record_id, source, source_key, revision, known_at, last_seen_at, "
+                           f"last_source_updated_at FROM records WHERE {cond}", a):
         k = (row["source"], row["source_key"])
         cur = best.get(k)
         if cur is None or row["revision"] > cur["revision"]:
@@ -138,7 +138,7 @@ def _latest(con, kind, where="", args=(), as_of=None, limit=10 ** 7):
         for row in chunk:
             out.append((row["record_id"], from_dict(store._unpack(pay[row["record_id"]])),
                         {"known_at": row["known_at"], "revision": row["revision"], "last_seen_at": row["last_seen_at"],
-                         "source_key": row["source_key"]}))
+                         "last_source_updated_at": row["last_source_updated_at"], "source_key": row["source_key"]}))
     return out
 
 
@@ -513,8 +513,14 @@ def build(con, league, now=None, base=None, history=True):
             continue
         events[e.event_id] = (rid, e, meta)
     # offers on these games
-    offers = [(rid, o, m) for rid, o, m in _latest(con, "offer", "league = ?", [league], now)
-              if o.event_id in events and o.availability == "open"]
+    all_offers = _latest(con, "offer", "league = ?", [league], now)
+    last_read = {}                                          # platform -> newest re-confirmation of any of its offers
+    for _, o, m in all_offers:
+        seen = m.get("last_seen_at") or o.observed_at
+        if seen and seen > last_read.get(o.platform, ""):
+            last_read[o.platform] = seen
+    offers = [(rid, o, m) for rid, o, m in all_offers if o.event_id in events and o.availability == "open"]
+    del all_offers
     unmatched = sum(1 for _, o, _ in _latest(con, "offer", "league = ? AND event_id IS NULL", [league], now))
     revs = _offer_revisions(con, league, now)
     by_rid = {rid: (rid, o, m) for rid, o, m in offers}
@@ -564,6 +570,8 @@ def build(con, league, now=None, base=None, history=True):
 
     forecasts = {}
     markets_rows = {}
+    row_items = defaultdict(list)                           # market key -> every offer of it (market view, mv-1)
+    row_targets = defaultdict(list)                         # market key -> ordinary quotes a member can act on
     platform_seen = defaultdict(lambda: {"offers": 0, "last_observed_at": None, "source_time_unknown": 0})
     for rid, o, m in offers:
         ps = platform_seen[o.platform]
@@ -586,6 +594,9 @@ def build(con, league, now=None, base=None, history=True):
                 "capability": capabilities.classify(league, o.stat).status,
                 "capability_reason": capabilities.classify(league, o.stat).reason,
                 "quotes": [], "kalshi": [], "alternates": [], "promotional": []}
+        row_items[key].append((rid, o, m))
+        if not o.promotional and o.platform != "kalshi" and o.variant in capabilities.ORDINARY_VARIANTS:
+            row_targets[key].append((rid, o))
         v = offer_view(rid, o, m)
         ch = _choose(attached.get(rid, []))
         if ch:
@@ -604,9 +615,21 @@ def build(con, league, now=None, base=None, history=True):
             row["alternates"].append(v)
     # sort + slim the board: Kalshi rungs nearest the pick'em lines only (full ladder in the player file)
     board_rows = []
+    dnp = market_view.dnp_share(league)
+    mv_stats = {"rows": 0, "with_consensus": 0, "books_listed": 0, "books_in_consensus": 0}
     for row in markets_rows.values():
         if events[row["event_id"]][1].start_utc <= now:     # started games leave the board (shown as started on the slate)
             continue
+        mv = market_view.row_view(row_targets.get(row["key"], []), row_items.get(row["key"], []),
+                                  events[row["event_id"]][1], now, league, dnp)
+        row["market"] = mv
+        if mv:
+            mv_stats["rows"] += 1
+            mv_stats["with_consensus"] += 1 if mv["c"] else 0
+            mv_stats["books_listed"] += len(mv["bk"])
+            mv_stats["books_in_consensus"] += sum(1 for b in mv["bk"] if b["in"])
+            for b in mv["bk"]:
+                platform_seen[b["p"]]["in_consensus_rows"] = platform_seen[b["p"]].get("in_consensus_rows", 0) +                     (1 if b["in"] else 0)
         row["quotes"].sort(key=lambda q: (q["platform"], q["line"]))
         row["kalshi"].sort(key=lambda q: q["line"])
         ref = [q["line"] for q in row["quotes"]] or [r["line"] for r in row["alternates"]]
@@ -672,6 +695,13 @@ def build(con, league, now=None, base=None, history=True):
                 "store_schema_level": _schema_level(con), "contracts": "sc-1",
                 "capabilities": capabilities.CAPABILITY_VERSION, "models": model_list,
                 "model_preference": list(models_pref()), "platforms": {k: dict(v) for k, v in platform_seen.items()},
+                "market_view": {"version": market_view.DISPLAY_VERSION, **mv_stats,
+                                "rule": "mc-1 rule (sports/model/market.py quote_prob filters + equal-weight log-odds "
+                                        "per source, nearest line moved with dispersion.json); target platform excluded",
+                                "sources": "every verified source: kalshi, polymarket, oddsapi:<book>, fanduel, "
+                                           "betrivers (owner decision 2026-10-23); registered mc-1 forecasts keep "
+                                           "REGISTER.md 10"},
+                "sources": source_coverage(platform_seen, last_read),
                 "counts": {"events": len(slate), "markets": len(board_rows), "offers": len(offers),
                            "forecasts": len(forecasts), "unmatched_offers": unmatched, "players": len(pids)}}
     base_meta = {"version": SNAP_VERSION, "league": league, "built_at": manifest["built_at"], "as_of": now}
@@ -766,7 +796,39 @@ def compact_row(r):
     return {"k": r["key"], "e": r["event_id"], "pid": r["player_id"], "n": r["player"], "pos": r["position"],
             "tm": r["team"], "st": r["stat"], "pr": 1 if r["primary"] else 0, "cap": r["capability"],
             "q": [compact_quote(q) for q in r["quotes"]], "kn": [compact_quote(q) for q in r["kalshi_near"]],
-            "kr": r["kalshi_rungs"], "alt": r["alternates"], "promo": r["promotional"]}
+            "kr": r["kalshi_rungs"], "alt": r["alternates"], "promo": r["promotional"], "mk": r.get("market")}
+
+
+def source_coverage(platform_seen, last_read=None):
+    """Per market source: offers on the board now, last observation, verified flag (sports/books SOURCES), plus the
+    sources that are configured but have nothing on the board. -> {source: {...}}."""
+    from .books import SOURCES
+    out = {}
+    for name, meta in SOURCES.items():
+        out[name] = {"verified": meta["verified"], "key_env": meta["key_env"], "offers": 0, "last_observed_at": None,
+                     "last_read_at": None, "platforms": [], "in_consensus_rows": 0,
+                     "role": "market source" if meta["verified"] else "capture-only (prop format not verified)"}
+    for plat, ps in platform_seen.items():
+        base = plat.split(":", 1)[0]
+        if base in market_view.TARGET_BOARDS:
+            out[base] = out.get(base) or {"verified": True, "key_env": None, "offers": 0, "last_observed_at": None,
+                                          "platforms": [], "role": "pick'em board (target, never a market source)"}
+        cur = out.setdefault(base, {"verified": False, "key_env": None, "offers": 0, "last_observed_at": None,
+                                    "platforms": [], "role": "not in sports/books SOURCES"})
+        cur["offers"] += ps["offers"]
+        cur["last_observed_at"] = max(cur["last_observed_at"] or "", ps["last_observed_at"] or "") or None
+        cur["platforms"].append(plat)
+        cur["in_consensus_rows"] = cur.get("in_consensus_rows", 0) + ps.get("in_consensus_rows", 0)
+    for plat, t in (last_read or {}).items():           # newest re-confirmation of ANY stored offer = last good read
+        base = plat.split(":", 1)[0]
+        cur = out.setdefault(base, {"verified": False, "key_env": None, "offers": 0, "last_observed_at": None,
+                                    "platforms": [], "role": "not in sports/books SOURCES"})
+        cur["last_read_at"] = max(cur.get("last_read_at") or "", t) or None
+    from .books import inventory
+    for name, meta in SOURCES.items():
+        if not meta["verified"]:
+            out[name]["capture"] = {lg: inventory.coverage_entry(name, lg) for lg in LEAGUES}
+    return out
 
 
 def compact_forecasts(forecasts, rows):
