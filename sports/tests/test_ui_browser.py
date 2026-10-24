@@ -66,6 +66,7 @@ A11Y_JS = r"""
   const bgOf = el => { while (el) { const c = getComputedStyle(el).backgroundColor; if (c && c !== "transparent" && alpha(c) >= 0.5) return c; el = el.parentElement; } return "rgb(9,11,16)"; };   // faint tints (< 50% alpha) read as the panel below
   document.querySelectorAll("a[href],button,input,select,summary").forEach(el => {
     const r = el.getBoundingClientRect(); if (!r.width || !r.height) return;
+    const dt = el.closest("details"); if (dt && !dt.open && !el.closest("summary")) return;          // inside a closed section: not shown
     const inline = el.tagName === "A" && getComputedStyle(el).display === "inline";
     const lab = (el.type === "checkbox" || el.type === "radio") && el.closest("label");
     const box = lab ? lab.getBoundingClientRect() : r;
@@ -397,4 +398,73 @@ def test_slip_tray_persistent_and_in_sync(pw, shots, width):
         left = page.evaluate("k => (JSON.parse(localStorage.getItem(k)) || {legs: []}).legs.length", f"ss:draft:nba:{ctxv['platform']}")
         assert left == n - 2
     assert not [e for e in errors if "favicon" not in e], errors
+    ctx.close()
+
+
+def test_filters_quick_strip_chips_saved_mobile(pw, shots):
+    """Filters (ux item 5): quick stat buttons, game strip, chips with remove + Clear all, saved on the device, the book
+    list = books with priced offers on the board only (owner rule 2026-10-24), secondary filters collapsed on phones."""
+    ctx, page, errors = _page(pw)
+    page.goto(URL + "/sports#/board?lg=nba")
+    page.wait_for_selector("[data-fstat]", timeout=20000)
+    page.click("[data-fclear]") if page.locator("[data-fclear]").count() else None
+    page.wait_for_selector("[data-fstat='all'][aria-pressed=true]")
+    total = int(page.inner_text("#sw-bcount b"))
+    priced = page.evaluate("""async () => { const a = window.ScoutSportsApp.api; const b = (await a.get('/api/sports/board', {league: 'nba'})).data;
+      return window.SportsFilters.pricedBooks(b.markets); }""")
+    opts = page.eval_on_selector_all("#sw-book option", "os => os.map(o => o.value)")
+    assert opts[0] == "all" and sorted(opts[1:]) == sorted(priced), (opts, priced)
+    # quick stat -> chip -> remove
+    stat = page.locator("[data-fstat]:not([data-fstat='all'])").first
+    key = stat.get_attribute("data-fstat")
+    stat.click()
+    assert stat.get_attribute("aria-pressed") == "true" and page.locator("#sw-stat").input_value() == key
+    page.wait_for_selector("[data-fchip='stat']")
+    n_stat = int(page.inner_text("#sw-bcount b"))
+    assert n_stat <= total
+    # game strip
+    g = page.locator("[data-fev]:not([data-fev='all'])").first
+    g.click()
+    page.wait_for_selector("[data-fchip='ev']")
+    assert g.get_attribute("aria-pressed") == "true"
+    # saved on this device: reload keeps both
+    page.reload()
+    page.wait_for_selector("[data-fchip='ev']", timeout=20000)
+    assert page.locator(f"[data-fstat='{key}']").get_attribute("aria-pressed") == "true"
+    page.screenshot(path=str(shots / "filters_1280.png"))
+    # chip remove (keyboard) and Clear all
+    chip = page.locator("[data-fchip='stat']")
+    chip.focus(); page.keyboard.press("Enter")
+    page.wait_for_selector("[data-fchip='stat']", state="detached")
+    assert page.locator("[data-fstat='all']").get_attribute("aria-pressed") == "true"
+    page.click("[data-fclear]")
+    page.wait_for_selector("[data-fchip]", state="detached")
+    assert int(page.inner_text("#sw-bcount b")) == total
+    # a saved book with no prices on the board: no option, no chip, falls back to All books
+    page.evaluate("""() => { const k = 'scout.sports.filters.v1'; const v = JSON.parse(localStorage.getItem(k)); v.filters.nba.book = 'no-such-book'; localStorage.setItem(k, JSON.stringify(v)); }""")
+    page.reload()
+    page.wait_for_selector("[data-fstat]", timeout=20000)
+    assert page.locator("#sw-book").input_value() == "all" and page.locator("[data-fchip='book']").count() == 0
+    a11y = page.evaluate(A11Y_JS)
+    assert not a11y["small"] and not a11y["unlabelled"] and not a11y["contrast"], a11y
+    ctx.close()
+    # phone: secondary filters collapsed so players appear sooner; the choice is remembered
+    ctx, page, errors2 = _page(pw, 360, 780, has_touch=True, is_mobile=True)
+    page.goto(URL + "/sports#/board?lg=nba")
+    page.wait_for_selector(".sw-research-card", timeout=20000)
+    det = page.locator("#sw-fx-more")
+    assert det.get_attribute("open") is None and not page.locator("#sw-book, #sw-side").first.is_visible()
+    assert page.locator("#sw-q").is_visible() and page.locator("[data-fstat]").first.is_visible()
+    top_closed = page.locator(".sw-research-card").first.bounding_box()["y"]
+    assert _no_overflow(page)
+    page.screenshot(path=str(shots / "filters_360.png"))
+    page.locator("#sw-fx-more > summary").click()
+    page.wait_for_timeout(100)
+    assert page.locator(".sw-research-card").first.bounding_box()["y"] > top_closed
+    page.reload()
+    page.wait_for_selector("#sw-fx-more", timeout=20000)
+    assert page.locator("#sw-fx-more").get_attribute("open") is not None
+    page.locator("#sw-fx-more > summary").click()
+    assert _no_overflow(page)
+    assert not [e for e in errors + errors2 if "favicon" not in e], errors + errors2
     ctx.close()

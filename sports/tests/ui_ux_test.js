@@ -53,4 +53,32 @@ ap = T.activePlatform({league: "nfl", platform: "underdog"}, {prizepicks: 2, und
 assert.deepStrictEqual([ap.platform, ap.others.length], ["prizepicks", 0]);
 ap = T.activePlatform({league: "nba", platform: "underdog"}, {prizepicks: 0, underdog: 0}, "nba");
 assert.deepStrictEqual([ap.platform, ap.others.length], ["underdog", 0]);              // only books with picks listed
+// ---------------------------------------------------------------- filters (item 5)
+const F = require(path.join(dir, "filters.js"));
+const S = require(path.join(dir, "stats.js"));
+const q = (p, o, extra) => Object.assign({p, r: "r-" + p, l: 3.5, o: o || [1, 1], t: "2026-10-24T00:00:00Z"}, extra || {});
+const mk = (st, pr, qs, kn, bk, extra) => Object.assign({n: "Pl " + st, tm: "BOS", matchup: "BOS @ NYK", st, pr, e: "ev1", q: qs, kn: kn || [], mk: bk ? {bk} : undefined}, extra || {});
+const markets = [
+  mk("points", 1, [q("prizepicks"), q("underdog", [0, 0])]),                       // underdog: no side open -> not priced
+  mk("rebounds", 1, [q("prizepicks")], [q("kalshi", null, {k: [0.4, null]})]),        // Kalshi one-sided -> not priced
+  mk("assists", 0, [q("prizepicks")], [q("kalshi", null, {k: [0.40, 0.44]})], [{p: "fanduel", l: 6.5}, {p: "betrivers", l: null}], {e: "ev2"}),
+];
+assert.deepStrictEqual(F.pricedBooks(markets), ["fanduel", "kalshi", "prizepicks"]);  // only books with prices now
+assert.deepStrictEqual(F.marketBooks(markets[2]), {prizepicks: "line", kalshi: "line", fanduel: "market"});
+assert.deepStrictEqual(F.quickStats(markets, false, {}), ["points", "rebounds"]);
+assert.deepStrictEqual(F.quickStats(markets, true, {}).length, 3);
+let fl = {book: "underdog", ev: "gone", stat: "all", side: "any", q: "", more: false};
+assert.strictEqual(F.sanitize(fl, F.pricedBooks(markets), ["ev1", "ev2"]), true);
+assert.deepStrictEqual([fl.book, fl.ev], ["all", "all"]);                             // stale book / game dropped
+fl = {book: "kalshi", ev: "ev2", stat: "assists", side: "over", q: "pl", more: true};
+const cs = F.chips(fl, {stats: {assists: "Assists"}, events: {ev2: "BOS @ NYK"}, books: ["kalshi"], bookName: (p) => p.toUpperCase()});
+assert.deepStrictEqual(cs.map(c => c.key), ["q", "stat", "ev", "book", "side", "more"]);
+assert.strictEqual(cs[3].label, "Book: KALSHI");
+assert.ok(!F.chips({book: "underdog", stat: "all", ev: "all", side: "any", q: "", more: false}, {books: ["kalshi"]}).length);  // no chip for an unpriced book
+const base = S.matchesFilters;
+const all = {book: "all", stat: "all", ev: "all", side: "any", q: "", more: true};
+assert.strictEqual(markets.filter(m => F.matches(m, all, base)).length, 3);
+assert.strictEqual(markets.filter(m => F.matches(m, Object.assign({}, all, {book: "fanduel"}), base)).length, 1);   // market-view-only book
+assert.strictEqual(markets.filter(m => F.matches(m, Object.assign({}, all, {book: "prizepicks"}), base)).length, 3);
+assert.strictEqual(markets.filter(m => F.matches(m, Object.assign({}, all, {book: "kalshi"}), base)).length, 1);   // the one-sided Kalshi quote is not a price
 console.log("ok");

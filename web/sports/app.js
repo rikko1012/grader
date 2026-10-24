@@ -322,21 +322,8 @@
       return {got: rs[0], board: b, markets: markets, fc: fc, stats: stats, injuries: b.injuries || {}};
     });
   }
-  function boardFiltersHtml(B, f, evs) {
-    var stats = {};
-    B.markets.forEach(function (m) { stats[m.st] = B.stats[m.st] || m.st; });
-    var books = {};
-    B.markets.forEach(function (m) { m.q.concat(m.kn).forEach(function (q) { books[q.p] = 1; }); });
-    function opt(v, label, cur) { return '<option value="' + esc(v) + '"' + (String(cur) === String(v) ? " selected" : "") + ">" + esc(label) + "</option>"; }
-    return '<form class="sw-filters" role="search" id="sw-bf" onsubmit="return false">' +
-      '<div class="sw-field grow"><label for="sw-q">Player or team</label><input id="sw-q" name="q" type="search" autocomplete="off" placeholder="Search players, teams" value="' + esc(f.q) + '"></div>' +
-      '<div class="sw-field"><label for="sw-book">Book</label><select id="sw-book" name="book">' + opt("all", "All books", f.book) + Object.keys(books).sort().map(function (p) { return opt(p, bookName(p), f.book); }).join("") + "</select></div>" +
-      '<div class="sw-field"><label for="sw-stat">Stat</label><select id="sw-stat" name="stat">' + opt("all", "All stats", f.stat) + Object.keys(stats).sort(function (a, b) { return stats[a] < stats[b] ? -1 : 1; }).map(function (k) { return opt(k, stats[k], f.stat); }).join("") + "</select></div>" +
-      '<div class="sw-field"><label for="sw-side">Side offered</label><select id="sw-side" name="side">' + opt("any", "Any side", f.side) + opt("over", "Over offered", f.side) + opt("under", "Under offered", f.side) + opt("both", "Both offered", f.side) + "</select></div>" +
-      '<div class="sw-field"><label for="sw-ev">Game</label><select id="sw-ev" name="ev">' + opt("all", "All games", f.ev) + evs.map(function (e) { return opt(e[0], e[1], f.ev); }).join("") + "</select></div>" +
-      '<label class="sw-chk"><input type="checkbox" id="sw-more" name="more"' + (f.more ? " checked" : "") + "> More stats</label>" +
-      '<button type="button" class="sw-btn" id="sw-reset">Reset filters</button></form>';
-  }
+  // HOOK (ux agent): the filter bar (search, quick stats, game strip, secondary filters, chips) is web/sports/filters.js.
+  function boardFiltersHtml(B, f, evs) { return window.SportsFilters.html(B, f, evs, {bookName: bookName}); }
   function quoteRows(m, fcmap, opts) {
     var qs = m.q.slice(), f = state.filters[state.lg];
     if (f.book !== "all") qs = qs.filter(function (q) { return q.p === f.book; });
@@ -475,7 +462,7 @@
       function draw() {
         SRC = []; LEGS = [];
         var ff = onlyEvent ? Object.assign({}, DEFAULT_FILTERS, {ev: onlyEvent, more: true}) : f;
-        var rows = B.markets.filter(function (m) { return (ff.more || m.pr) && S.matchesFilters(m, ff); });
+        var rows = B.markets.filter(function (m) { return (ff.more || m.pr) && window.SportsFilters.matches(m, ff, S.matchesFilters); });
         var total = B.markets.filter(function (m) { return (ff.more || m.pr) && (!onlyEvent || m.e === onlyEvent); }).length;
         var cnt = document.getElementById("sw-bcount"), body = document.getElementById("sw-bbody");
         var withFc = rows.filter(function (m) { return m.q.some(function (q) { return q.f; }); }).length;
@@ -504,12 +491,8 @@
         state.filters[state.lg] = f = Object.assign({}, DEFAULT_FILTERS); state.boardShown = BOARD_PAGE; sync(); renderBoard(null);
       }
       if (!onlyEvent) {
-        var form = document.getElementById("sw-bf");
-        form.addEventListener("input", function (ev) {
-          var t = ev.target; if (!t.name) return;
-          if (t.name === "more") { f.more = t.checked; sync(); renderBoard(null); return; }
-          f[t.name] = t.value; state.boardShown = BOARD_PAGE; sync(); draw();
-        });
+        window.SportsFilters.bind(document.getElementById("sw-bf"), f, B, evs, {bookName: bookName}, {      // HOOK (ux)
+          onChange: function (reload) { state.boardShown = BOARD_PAGE; sync(); if (reload) renderBoard(null); else draw(); }, onReset: reset});
         document.getElementById("sw-reset").addEventListener("click", reset);
         sync();
       }

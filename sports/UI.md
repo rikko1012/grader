@@ -54,6 +54,11 @@ cache, bounded 96 files / 48 MB); they never open the store.
   (`ss:draft:<league>:<platform>` + `ss:ctx`, synced across tabs by the `storage` event), shown only when the league has
   picks - side panel at >= 1200 px, bottom bar + sheet below; picks, book, count, remove, local validation hint (entry
   size, one pick per player, two teams, started games), "Open Slip Studio"; one book per draft; only books with picks.
+- Board filters (ux, `web/sports/filters.js`, hooks `boardFiltersHtml` / `SportsFilters.matches` / `SportsFilters.bind`):
+  search, quick stat buttons (10 most common), game strip, then book / all stats / side / more stats (collapsed on
+  phones, choice saved in `scout.sports.ux.v1`), chips with remove + Clear all; values saved per league in
+  `scout.sports.filters.v1`. The book list = books with a priced offer on the current board (owner 2026-10-24); a saved
+  unpriced book falls back to All books and shows no chip.
 - Slip Studio: "Add to slip" writes the slips agent's draft (`localStorage ss:draft:<league>:<platform>`, leg format
   sports/slips/README.md); Slip Studio re-validates on load.
 
