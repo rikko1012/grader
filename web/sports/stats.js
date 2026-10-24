@@ -205,6 +205,15 @@
     if (!pref) return rest;
     return rest.filter(function (q) { return q.p === pref; }).concat(rest.filter(function (q) { return q.p !== pref; }));
   }
+  var INJ = {out: "Out", questionable: "Questionable", doubtful: "Doubtful", probable: "Probable",
+             "day-to-day": "Day-to-day", day_to_day: "Day-to-day", dtd: "Day-to-day", gtd: "Game-time decision",
+             "injured reserve": "Injured reserve", ir: "Injured reserve", suspension: "Suspended", suspended: "Suspended",
+             "out for season": "Out for season", pup: "PUP list", "not active": "Inactive", inactive: "Inactive"};
+  function injuryLabel(s) {               // ESPN status words -> one readable label
+    if (!s) return "";
+    var k = String(s).trim().toLowerCase();
+    return INJ[k] || (k.charAt(0).toUpperCase() + k.slice(1)).replace(/_/g, " ");
+  }
   function plural(n, one, many) { return n + " " + (n === 1 ? one : (many || one + "s")); }
   // which kind of number a forecast record is: Scout's own model, or a model read from market prices
   var MARKET_MODELS = {"mc-1": "market consensus", "sharp-2": "Kalshi ladder", "sharp-1": "sharp books"};
@@ -269,7 +278,7 @@
              quoteShown: quoteShown, bookUsable: bookUsable, usableBooks: usableBooks, hiddenBooks: hiddenBooks,
              marketShown: marketShown, plural: plural, modelSource: modelSource, pct0: pct0, kindOf: kindOf,
              kindLabel: kindLabel, KIND_LABEL: KIND_LABEL, wholeLine: wholeLine, validationText: validationText,
-             orderQuotes: orderQuotes};
+             orderQuotes: orderQuotes, injuryLabel: injuryLabel};
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SportsStats = api;
 })(this);

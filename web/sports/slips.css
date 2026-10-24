@@ -95,3 +95,9 @@
 .ss-body{--ss-bg:#0c1017;--ss-panel:#141a24;--ss-ink:#f4f5f7;--ss-mute:#adb8c9;--ss-line:#283140;--ss-accent:#f7a45b;--ss-accent-ink:#18120e;--ss-ok:#5fd17a;--ss-warn:#e9be52;--ss-bad:#ff8a8a;--ss-chip:#1a2230;--ss-focus:#ffc595;--ss-radius:16px;font-family:Inter,system-ui,sans-serif;background:radial-gradient(ellipse at 50% -400px,#253249 0,transparent 65%),var(--ss-bg)}
 .ss-studio{max-width:1500px;padding:32px}.ss-head{padding-bottom:24px;border-bottom:1px solid var(--ss-line);margin-bottom:24px}.ss-studio h1{font-size:30px;letter-spacing:-1px;font-weight:600}.ss-kicker{color:var(--ss-accent);margin-bottom:8px}.ss-panel{padding:20px}.ss-studio select,.ss-studio input[type=number]{background:#101620;min-height:44px}.ss-field{gap:6px}.ss-grid{gap:18px}.ss-draft{top:20px}
 @media(max-width:720px){.ss-studio{padding:18px 14px}.ss-panel{padding:16px}.ss-head{gap:20px}.ss-context{width:100%}.ss-context .ss-field{flex:1;min-width:0}.ss-context select{max-width:100%}}
+/* same workspace navigation as the board (sports.html .sw-views) */
+.ss-nav { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 18px; border-bottom: 1px solid var(--ss-line); padding-bottom: 10px; }
+.ss-nav a { color: var(--ss-mute); text-decoration: none; padding: 0 12px; min-height: 44px; display: inline-flex; align-items: center; border-radius: 10px; font-weight: 500; }
+.ss-nav a[aria-current=page] { color: inherit; box-shadow: inset 0 -2px 0 var(--ss-accent); }
+.ss-nav a:focus-visible { outline: 2px solid var(--ss-accent); outline-offset: 2px; }
+@media (max-width: 640px) { .ss-nav { flex-wrap: nowrap; overflow-x: auto; } .ss-nav a { flex: 0 0 auto; font-size: 12px; white-space: nowrap; } }

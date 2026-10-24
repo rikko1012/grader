@@ -67,3 +67,7 @@ assert.deepStrictEqual(S.orderQuotes(qs, "").map(q => q.p), ["fanduel", "prizepi
 assert.deepStrictEqual(S.orderQuotes(qs, "underdog").map(q => q.p), ["underdog", "fanduel", "prizepicks"]);
 assert.deepStrictEqual(S.orderQuotes(qs, "betmgm").map(q => q.p), ["fanduel", "prizepicks", "underdog"]);
 console.log("ok");
+assert.strictEqual(S.injuryLabel("questionable"), "Questionable");
+assert.strictEqual(S.injuryLabel("DAY-TO-DAY"), "Day-to-day");
+assert.strictEqual(S.injuryLabel("injured_reserve_x"), "Injured reserve x");
+console.log("ok");

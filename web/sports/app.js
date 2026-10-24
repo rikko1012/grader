@@ -127,7 +127,7 @@
   }
 
   // --------------------------------------------------------------------------------------------- common pieces
-  function src(obj, label) { SRC.push(obj); return '<button type="button" class="sw-srcbtn" data-src="' + (SRC.length - 1) + '" aria-label="' + esc(obj.title || "Source") + '">' + esc(label || "src") + "</button>"; }
+  function src(obj, label) { SRC.push(obj); return '<button type="button" class="sw-srcbtn" data-src="' + (SRC.length - 1) + '" aria-label="' + esc(obj.title || "Source") + '">' + esc(label || "Source") + "</button>"; }
   function openSrc(i) {
     var o = SRC[i]; if (!o) return;
     var d = document.getElementById("sw-src");
@@ -226,7 +226,7 @@
       return esc(bookName(p)) + " observed " + esc(S.age(x.last_observed_at)) + (x.source_time_unknown ? " (" + x.source_time_unknown + " quotes without a source time)" : "");
     });
     var models = (manifest.models || []).map(function (m) {
-      return esc(m.model_version) + ": " + m.forecasts + " forecasts on the board, " + m.settled + " settled" + (m.research_only ? ", research version (no grades)" : "");
+      return esc(m.model_version) + ": " + S.plural(m.forecasts, "forecast") + " on the board, " + m.settled + " settled" + (m.research_only ? ", research version (no grades)" : "");
     });
     f.innerHTML = "<details><summary>Data freshness & model details</summary><p>" + plats.join(" · ") + "</p><p>Models: " + (models.join(" · ") || "none on the board") + "</p>" +
       "<p>Snapshot " + esc(manifest.version) + " built " + esc(S.localTime(manifest.built_at)) + " · contracts " + esc(manifest.contracts) +
@@ -269,7 +269,7 @@
       "made at (your time)": S.localTime(full ? f.forecast_at : f.at), "for line": S.line(full ? f.line : f.ln),
       "offer record": quote ? quote.r || quote.record_id : null,
       "made for an earlier revision": (full ? f.for_revision : f.rv) ? "yes - offer revision " + (full ? f.for_revision : f.rv) + " (same line, stat and sides)" : "no",
-      "research version": (full ? f.research_only : f.ro) ? "yes (no grade, no stake)" : "no"}, "model");
+      "research version": (full ? f.research_only : f.ro) ? "yes (no grade, no stake)" : "no"}, "Forecast record");
   }
   function quoteSource(q) {
     return src({title: bookName(q.p) + " offer", "offer record": q.r, line: S.line(q.l), variant: q.v,
@@ -277,7 +277,7 @@
       "last observed by Scout": S.localTime(q.t) + " (" + S.age(q.t) + ")",
       "source update time": q.su ? S.localTime(q.su) : "not given by the source",
       "payout multipliers": q.m ? "Over " + (q.m[0] || "-") + " / Under " + (q.m[1] || "-") : null,
-      "Kalshi YES bid / ask": q.k ? S.cents(q.k[0]) + " / " + S.cents(q.k[1]) : null});
+      "Kalshi YES bid / ask": q.k ? S.cents(q.k[0]) + " / " + S.cents(q.k[1]) : null}, "Quote record");
   }
   function kMid(q) {                                     // Kalshi YES mid (bid + ask) / 2 = the market's chance of Over
     return q && q.k && q.k[0] !== null && q.k[0] !== undefined && q.k[1] !== null && q.k[1] !== undefined ? (q.k[0] + q.k[1]) / 2 : null;
@@ -325,8 +325,8 @@
             "<div><b>" + esc(S.localTime(e.start_utc)) + "</b></div>" +
             '<div class="sw-kv"><span><b>' + c.primary + "</b> core markets</span><span><b>" + c.forecasts + "</b> Scout chances</span><span><b>" + c.players + "</b> players</span></div>" +
             '<div class="sw-kv">' + (plat || "No lines yet") + "</div>" +
-            (e.injuries.length ? '<details class="sw-more"><summary>' + e.injuries.length + " on the injury report</summary><ul class=\"sw-list\">" + e.injuries.map(function (i) {
-              return "<li>" + esc(i.player) + " (" + esc(i.team || "") + ') <span class="sw-tag inj">' + esc(i.status) + "</span>" + (i.detail ? " " + esc(i.detail) : "") + ' <span class="sw-faint sw-small">as of ' + esc(i.as_of ? S.shortDate(i.as_of) : "date not given") + "</span></li>";
+            (e.injuries.length ? '<details class="sw-more"><summary>' + S.plural(e.injuries.length, "player") + " on the injury report</summary><ul class=\"sw-list\">" + e.injuries.map(function (i) {
+              return "<li>" + esc(i.player) + " (" + esc(i.team || "") + ') <span class="sw-tag inj">' + esc(S.injuryLabel(i.status)) + "</span>" + (i.detail ? " " + esc(i.detail) : "") + ' <span class="sw-faint sw-small">as of ' + esc(i.as_of ? S.shortDate(i.as_of) : "date not given") + "</span></li>";
             }).join("") + "</ul></details>" : '<div class="sw-faint sw-small">No player of either team on the ESPN injury report.</div>') +
             '<div class="sw-actions"><a class="sw-btn sw-btn-sm" href="#/board?ev=' + encodeURIComponent(e.event_id) + '">Props for this game</a><a class="sw-btn sw-btn-sm" href="#/game/' + encodeURIComponent(e.event_id) + '">Match context</a></div></article>';
         });
@@ -589,7 +589,7 @@
         '<div class="sw-research-head"><div class="sw-avatar" aria-hidden="true">' + esc(m.n.split(' ').map(function(n){return n[0];}).slice(0,2).join('')) +
         '</div><div><a class="sw-player-name" href="' + marketHref(m, null) + '">' + esc(m.n) + '</a>' +
         '<div class="sw-small sw-faint">' + esc([m.tm, m.pos].filter(Boolean).join(' · ')) + '</div></div>' +
-        (inj ? '<span class="sw-tag inj">' + esc(inj.status) + '</span>' : '') + '</div>' +
+        (inj ? '<span class="sw-tag inj">' + esc(S.injuryLabel(inj.status)) + '</span>' : '') + '</div>' +
         '<div class="sw-matchline"><a href="#/game/' + encodeURIComponent(m.e) + '">' + esc(m.matchup) + '</a><span>' +
         esc(S.localTime(m.ev && m.ev.start_utc, {weekday:'short',hour:'numeric',minute:'2-digit'})) + '</span></div>' +
         (S.marketShown(m.mk && m.mk.c) ? '<div class="sw-small sw-mkline">' + mkShort(m.mk.c, m.mk.l) + '</div>' : '');
@@ -637,7 +637,7 @@
         var total = B.markets.filter(function (m) { return (ff.more || m.pr) && (!onlyEvent || m.e === onlyEvent); }).length;
         var cnt = document.getElementById("sw-bcount"), body = document.getElementById("sw-bbody");
         var withFc = rows.filter(function (m) { return m.q.some(function (q) { return q.f; }); }).length;
-        cnt.innerHTML = prefBookHtml(B) + '<p class="sw-count" aria-live="polite"><span><b>' + rows.length + "</b> of " + total + " markets</span><span><b>" + withFc + "</b> with a Scout chance</span>" +
+        cnt.innerHTML = prefBookHtml(B) + '<p class="sw-count" aria-live="polite"><span><b>' + rows.length + "</b> of " + total + (total === 1 ? " market" : " markets") + "</span><span><b>" + withFc + "</b> with a Scout chance</span>" +
           (!ff.more && B.board.secondary_markets ? "<span>" + B.board.secondary_markets + " more under “More stats”</span>" : "") + "</p>";
         if (!total) { body.innerHTML = stateBox("No lines yet", "No " + state.lg.toUpperCase() + " props are on the board right now."); return; }
         if (!B.markets.some(function (m) { return m.q.some(function (q) { return q.f; }); }))
@@ -698,7 +698,7 @@
       function injList(t) {
         var xs = byTeam[t.team_id] || [];
         return '<div><h3>' + esc(t.name || t.abbr) + "</h3>" + (xs.length ? '<ul class="sw-list">' + xs.map(function (i) {
-          return "<li>" + esc(i.player) + ' <span class="sw-tag inj">' + esc(i.status) + "</span> " + esc(i.detail || "") + ' <span class="sw-faint sw-small">as of ' + esc(i.as_of ? S.shortDate(i.as_of) : "date not given") + "</span> " + src({title: "Injury record", record: i.record_id, source: i.source, status: i.status, detail: i.detail, "as of": i.as_of, "observed by Scout": i.observed_at}) + "</li>";
+          return "<li>" + esc(i.player) + ' <span class="sw-tag inj">' + esc(S.injuryLabel(i.status)) + "</span> " + esc(i.detail || "") + ' <span class="sw-faint sw-small">as of ' + esc(i.as_of ? S.shortDate(i.as_of) : "date not given") + "</span> " + src({title: "Injury record", record: i.record_id, source: i.source, status: i.status, detail: i.detail, "as of": i.as_of, "observed by Scout": i.observed_at}) + "</li>";
         }).join("") + "</ul>" : '<p class="sw-faint sw-small">No player on the ESPN injury report.</p>') + "</div>";
       }
       var c = e.coverage;
@@ -803,7 +803,7 @@
         var h = '<p class="sw-crumbs"><a href="#/board">Prop board</a>' + (m.event_id ? ' › <a href="#/game/' + encodeURIComponent(m.event_id) + '">Match context</a>' : "") + " › " + esc(P.player) + "</p>";
         h += '<div class="sw-phead"><div><div class="sw-eyebrow">' + state.lg.toUpperCase() + " · Player workspace</div><h1 class=\"sw-h1\">" + esc(P.player) + "</h1>" +
           '<div class="sw-muted">' + esc([P.position, P.team && P.team.name].filter(Boolean).join(" · ")) +
-          (P.injury ? ' <span class="sw-tag inj">' + esc(P.injury.status) + "</span> " + esc(P.injury.detail || "") + " " + src({title: "Injury record", record: P.injury.record_id, status: P.injury.status, "as of": P.injury.as_of, "observed by Scout": P.injury.observed_at}) : "") + "</div>" +
+          (P.injury ? ' <span class="sw-tag inj">' + esc(S.injuryLabel(P.injury.status)) + "</span> " + esc(P.injury.detail || "") + " " + src({title: "Injury record", record: P.injury.record_id, status: P.injury.status, "as of": P.injury.as_of, "observed by Scout": P.injury.observed_at}) : "") + "</div>" +
           (ev ? '<div class="sw-small" style="margin-top:4px">Next: <b>' + (ev.home === false ? "at " : ev.home ? "vs " : "") + esc(ev.opponent ? (ev.opponent.name || ev.opponent.abbr) : "") + "</b> · " + esc(S.localTime(ev.start_utc)) + ' · <a href="#/game/' + encodeURIComponent(ev.event_id) + '">Match context</a></div>' : "") +
           "</div></div>";
         h += '<div class="sw-stats-tabs" role="group" aria-label="Stat">' + markets.map(function (x) {
@@ -824,7 +824,7 @@
         h += '<div class="sw-grid2" style="margin-top:12px"><div>' + historyPanel(m, ln, sel) + "</div><div>" + forecastPanel(fc, det, sel, m) + "</div></div>";
         h += contextPanel(P, games, m);
         if (m.kalshi.length) {
-          h += '<details class="sw-more"><summary>Kalshi ladder: ' + m.kalshi.length + " rungs (Kalshi prices only; the Market chance above combines every book)</summary><div class=\"sw-scroll\"><table class=\"sw-mini\"><caption class=\"sw-sr\">Kalshi rungs</caption><thead><tr><th>Rung (Over)</th><th class=\"num\">YES bid</th><th class=\"num\">YES ask</th><th class=\"num\">Volume</th><th class=\"num\">Open interest</th><th>Observed</th><th><span class=\"sw-sr\">Source</span></th></tr></thead><tbody>" +
+          h += '<details class="sw-more"><summary>Kalshi ladder: ' + S.plural(m.kalshi.length, "rung") + " (Kalshi prices only; the market estimate combines every book)</summary><div class=\"sw-scroll\"><table class=\"sw-mini\"><caption class=\"sw-sr\">Kalshi rungs</caption><thead><tr><th>Rung (Over)</th><th class=\"num\">YES bid</th><th class=\"num\">YES ask</th><th class=\"num\">Volume</th><th class=\"num\">Open interest</th><th>Observed</th><th><span class=\"sw-sr\">Source</span></th></tr></thead><tbody>" +
             m.kalshi.map(function (k) { var s = k.sides[0]; return "<tr><td>" + S.line(k.line) + '</td><td class="num">' + S.cents(s.bid) + '</td><td class="num">' + S.cents(s.ask) + '</td><td class="num">' + S.num(k.liquidity.volume, 0) + '</td><td class="num">' + S.num(k.liquidity.open_interest, 0) + "</td><td class=\"sw-small\">" + esc(S.age(k.last_seen_at)) + "</td><td>" + src({title: "Kalshi rung", record: k.record_id, line: k.line, "YES bid": s.bid, "YES ask": s.ask, "source time": "not given by Kalshi", "observed by Scout": k.last_seen_at, rule: k.rule_version}) + "</td></tr>"; }).join("") + "</tbody></table></div></details>";
         }
         var mq = m.market ? S.marketFor(m.market, sel && sel.record_id) : null;
@@ -970,7 +970,7 @@
             F.stats.map(function (r) { return "<tr><td>" + esc(r.label) + "</td>" + r.windows.map(function (w) { return '<td class="num">' + S.num(w.mean, 1) + ' <span class="sw-faint sw-small">n=' + w.n + "</span></td>"; }).join("") + "</tr>"; }).join("") + "</tbody></table></div>";
         }
         h += "</div><div><h3>Game context</h3><ul class=\"sw-list sw-small\">" + F.context.map(function (c) {
-          if (c.key === "teammates_out") return "<li>" + esc(c.label) + ": <b>" + c.value + "</b>" + (c.items && c.items.length ? '<ul class="sw-list">' + c.items.map(function (i) { return "<li>" + esc(i.player) + ' <span class="sw-tag inj">' + esc(i.status) + "</span></li>"; }).join("") + "</ul>" : "") + "</li>";
+          if (c.key === "teammates_out") return "<li>" + esc(c.label) + ": <b>" + c.value + "</b>" + (c.items && c.items.length ? '<ul class="sw-list">' + c.items.map(function (i) { return "<li>" + esc(i.player) + ' <span class="sw-tag inj">' + esc(S.injuryLabel(i.status)) + "</span></li>"; }).join("") + "</ul>" : "") + "</li>";
           if (c.key === "rest_days") return "<li>" + esc(c.label) + ": <b>" + S.num(c.value, 1) + "</b></li>";
           if (c.key === "back_to_back") return "<li>" + esc(c.label) + ": <b>" + (c.value ? "yes" : "no") + "</b></li>";
           if (c.value === null || c.value === undefined) return "";

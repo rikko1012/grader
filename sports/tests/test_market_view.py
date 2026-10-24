@@ -200,6 +200,12 @@ def test_app_never_says_kalshi_market_chance_and_labels_every_number():
     # item 4: aligned comparisons, alternates apart, member-chosen preferred book (no fixed order)
     assert "compareTables(m, quotes, kq, B)" in app and "sw:prefbook" in app and "alternate line" in app
     assert "var order = {prizepicks: 0" not in app
+    # item 8: clear source buttons, readable injury labels, plurals, same navigation in Slip Studio
+    assert 'esc(label || "src")' not in app and '"Forecast record"' in app and '"Quote record"' in app
+    assert "S.injuryLabel(" in app and "esc(inj.status)" not in app
+    slips = (WEB / "slips.html").read_text(encoding="utf-8")
+    for href in ("/sports#/slate", "/sports#/board", "/sports#/results", "/sports#/picks"):
+        assert href in slips
     # the ux agent's mount point
     assert 'class="sw-actions-slot"' in app and "hooks: HOOKS" in app
 
