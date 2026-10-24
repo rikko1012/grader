@@ -89,12 +89,12 @@ ROUTES = {
 # "<name>": ("<module>:<function>", refresh_s, max_age_s) - function(con) -> {web.cached key tuple: value}, key[0] ==
 # name. Built by the scheduled worker child (python -m sports.service snapshots), read by web.cached. ONE line each.
 SNAPSHOTS = {
-    "slips_pool": ("sports.prebuilt:slips_pool", 45, 90),
+    "slips_pool": ("sports.prebuilt:slips_pool", 90, 270),      # Starter: rebuilt every 90 s, served <= 270 s old
 }
 # ------------------------------------------------------------------------------------------- end of snapshot table
 
 CACHE_S = 30
-CACHE_MAX = 256
+CACHE_MAX = int(os.environ.get("SPORTS_CACHE_MAX", "256"))          # Starter template: 64 entries
 REQUEST_BUDGET_S = float(os.environ.get("SPORTS_REQUEST_BUDGET_S", "4"))     # hard per-query / per-wait budget
 DB_POOL = max(1, int(os.environ.get("SPORTS_DB_POOL", "4")))                 # concurrent read-only store connections
 DB_WAIT_S = float(os.environ.get("SPORTS_DB_WAIT_S", "1.0"))
@@ -185,6 +185,7 @@ class _Pool:
         self.stats = {"size": size, "in_use": 0, "peak_in_use": 0, "opened": 0, "waits_timed_out": 0,
                       "queries_interrupted": 0}
         self.path = None
+        self.schema = {}
 
     def reset(self):
         while True:
@@ -216,6 +217,11 @@ class _Pool:
                 con = store.connect(read_only=True)
                 with self.lock:
                     self.stats["opened"] += 1
+            sv = con.execute("PRAGMA schema_version").fetchone()[0]
+            if self.schema.get(id(con)) != sv:          # migrated since this connection opened: refresh records_all
+                from . import archive
+                archive.install(con, path)
+                self.schema[id(con)] = sv
             deadline = time.monotonic() + (budget_s or REQUEST_BUDGET_S)
 
             def guard():

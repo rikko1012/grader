@@ -1,0 +1,15 @@
+{"job": "prebuilt", "rc": 0, "wall_s": 2.1, "peak_rss_mb": 109.4, "peak_rss_self_mb": 109.4, "data_mb_before": 306.2, "data_mb_after": 318.7, "offline": true, "t": "2026-10-24T01:17:31Z"}
+{"job": "ui-snapshots", "rc": 0, "wall_s": 4.7, "peak_rss_mb": 134.5, "peak_rss_self_mb": 134.5, "data_mb_before": 318.7, "data_mb_after": 350.4, "offline": true, "t": "2026-10-24T01:17:36Z"}
+{"job": "slips-ingest", "rc": 0, "wall_s": 0.2, "peak_rss_mb": 22.7, "peak_rss_self_mb": 22.7, "data_mb_before": 350.4, "data_mb_after": 350.5, "offline": true, "t": "2026-10-24T01:17:36Z"}
+{"job": "slips-settle", "rc": 0, "wall_s": 0.2, "peak_rss_mb": 21.5, "peak_rss_self_mb": 21.5, "data_mb_before": 350.5, "data_mb_after": 350.5, "offline": true, "t": "2026-10-24T01:17:37Z"}
+{"job": "model-snapshot", "rc": 0, "wall_s": 1.5, "peak_rss_mb": 77.4, "peak_rss_self_mb": 77.4, "data_mb_before": 350.5, "data_mb_after": 349.9, "offline": true, "t": "2026-10-24T01:17:38Z"}
+{"job": "model-learn", "rc": 0, "wall_s": 1.8, "peak_rss_mb": 78.1, "peak_rss_self_mb": 78.1, "data_mb_before": 349.9, "data_mb_after": 349.9, "offline": true, "t": "2026-10-24T01:17:40Z"}
+{"job": "model-forecast", "rc": 0, "wall_s": 24.4, "peak_rss_mb": 271.9, "peak_rss_self_mb": 271.9, "data_mb_before": 349.9, "data_mb_after": 356.6, "offline": true, "t": "2026-10-24T01:18:05Z"}
+{"job": "model-fit", "rc": 0, "wall_s": 12.6, "peak_rss_mb": 308.9, "peak_rss_self_mb": 308.9, "data_mb_before": 356.6, "data_mb_after": 356.9, "offline": true, "t": "2026-10-24T01:18:35Z"}
+{"job": "lab-once", "rc": 0, "wall_s": 0.5, "peak_rss_mb": 34.5, "peak_rss_self_mb": 34.5, "data_mb_before": 356.9, "data_mb_after": 356.9, "offline": true, "t": "2026-10-24T01:18:36Z"}
+{"job": "assistant-idle", "rc": 1, "wall_s": 0.3, "peak_rss_mb": 24.2, "peak_rss_self_mb": 24.2, "data_mb_before": 356.9, "data_mb_after": 356.9, "offline": true, "t": "2026-10-24T01:18:36Z"}
+{"job": "books", "rc": 15, "wall_s": 629.1, "peak_rss_mb": 35.9, "peak_rss_self_mb": 35.9, "data_mb_before": 356.9, "data_mb_after": 357.3, "offline": true, "t": "2026-10-24T01:29:06Z"}
+{"job": "ingest-pickem", "rc": 0, "wall_s": 16.0, "peak_rss_mb": 200.4, "peak_rss_self_mb": 200.4, "data_mb_before": 357.3, "data_mb_after": 372.2, "offline": false, "t": "2026-10-24T01:29:22Z"}
+{"job": "ingest-kalshi", "rc": 0, "wall_s": 40.4, "peak_rss_mb": 147.0, "peak_rss_self_mb": 147.0, "data_mb_before": 372.2, "data_mb_after": 379.5, "offline": false, "t": "2026-10-24T01:30:02Z"}
+{"job": "settle", "rc": 0, "wall_s": 11.6, "peak_rss_mb": 58.2, "peak_rss_self_mb": 58.2, "data_mb_before": 379.5, "data_mb_after": 383.6, "offline": false, "t": "2026-10-24T01:30:14Z"}
+{"job": "history", "rc": 0, "wall_s": 81.3, "peak_rss_mb": 107.2, "peak_rss_self_mb": 107.2, "data_mb_before": 383.6, "data_mb_after": 434.8, "offline": false, "t": "2026-10-24T01:31:35Z"}

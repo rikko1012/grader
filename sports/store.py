@@ -45,6 +45,11 @@ from pathlib import Path
 from . import config
 from .contracts import ContractError, Forecast, from_dict, now_utc
 
+def _archive_schema():
+    from .archive import SCHEMA                         # CREATE TABLE / CREATE INDEX only
+    return SCHEMA
+
+
 MIGRATIONS = [
     (1, [
         """CREATE TABLE IF NOT EXISTS records (
@@ -71,14 +76,16 @@ MIGRATIONS = [
              finished_at TEXT)""",
         "CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)",
     ]),
-    (2, [                                          # line correctness (LINE_CORRECTNESS.md): additive columns only
+    (2, list(_archive_schema())),                       # compaction index + manifest (sports/archive.py), additive
+    (3, [                                          # line correctness (LINE_CORRECTNESS.md): additive columns only
         "ALTER TABLE records ADD COLUMN late INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE records ADD COLUMN source_updated_at TEXT",
         "ALTER TABLE records ADD COLUMN last_source_updated_at TEXT",
         "ALTER TABLE records ADD COLUMN origin TEXT",
         "CREATE INDEX IF NOT EXISTS records_current ON records (kind, source, source_key, late, revision)",
+        "ALTER TABLE archive_rows ADD COLUMN late INTEGER NOT NULL DEFAULT 0",
     ]),
-    (3, [                                          # incremental forecasting (LINE_CORRECTNESS.md C11)
+    (4, [                                          # incremental forecasting (LINE_CORRECTNESS.md C11)
         """CREATE TABLE IF NOT EXISTS forecast_keys (
              input_key TEXT PRIMARY KEY, forecast_id TEXT NOT NULL, league TEXT, known_at TEXT NOT NULL)""",
     ]),
@@ -110,7 +117,8 @@ def migrate(con):
     mid-migration rolls back to the previous level), then the one-time repair of pre-fix duplicate sightings."""
     con.execute("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)")
     con.commit()
-    if _level(con) >= MIGRATIONS[-1][0] and _meta(con, "repair_prefix_duplicates") is not None and             _meta(con, "forecast_keys_backfill") is not None:
+    if _level(con) >= MIGRATIONS[-1][0] and _meta(con, "repair_prefix_duplicates") is not None and \
+            _meta(con, "forecast_keys_backfill") is not None:
         return _level(con)
     with _WRITE_LOCK:
         con.execute("BEGIN IMMEDIATE")
@@ -161,12 +169,13 @@ def connect(path=None, read_only=False):
             raise FileNotFoundError(f"sports store not created yet: {p}")
         con = sqlite3.connect(f"file:{p}?mode=ro", uri=True, timeout=10, check_same_thread=False)
         con.row_factory = sqlite3.Row
-        try:                                       # a store the worker has not migrated yet (level 1) is read
+        try:                                       # a store the worker has not migrated yet (level < 3) is read
             cols = {r[1] for r in con.execute("PRAGMA main.table_info(records)").fetchall()}
-            if cols and "late" not in cols:        # through a temp view with the level-2 columns' defaults
+            if cols and "late" not in cols:        # through a temp view with the level-3 columns' defaults
                 con.execute(_COMPAT)
         except sqlite3.OperationalError:
             pass
+        _archive().install(con, p)                      # records_all = hot + archived rows (sports/archive.py)
         return con
     p.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(p, timeout=30, check_same_thread=False)
@@ -174,7 +183,13 @@ def connect(path=None, read_only=False):
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA busy_timeout=30000")
     migrate(con)
+    _archive().install(con, p)
     return con
+
+
+def _archive():
+    from . import archive                               # compaction of cold offer rows (Starter plan, 2026-10-24)
+    return archive
 
 
 @contextmanager
@@ -235,6 +250,15 @@ def _current_row(con, kind, source, source_key):
                        "ORDER BY revision DESC LIMIT 1", (kind, source, source_key)).fetchone()
 
 
+def _archived_current(con, kind, source, source_key):
+    """The CURRENT revision of an identity whose rows are all archived (sports/archive.py), via records_all."""
+    try:
+        return con.execute(f"SELECT * FROM records_all WHERE kind=? AND source=? AND source_key=? AND {CURRENT_SQL} "
+                           "ORDER BY revision DESC LIMIT 1", (kind, source, source_key)).fetchone()
+    except sqlite3.OperationalError:
+        return None
+
+
 @contextmanager
 def write_tx(con):
     """One atomic write: BEGIN IMMEDIATE (the SQLite write lock, across processes) unless the caller already holds a
@@ -281,8 +305,9 @@ def _put(con, rec, known_at):
         seen = obs or now_utc()
         _, cur_src = current_times(cur)
         new_src = max(x for x in (cur_src, src) if x) if (cur_src or src) else None
-        con.execute("UPDATE records SET last_seen_at = MAX(COALESCE(last_seen_at, ''), ?), seen_count = seen_count + 1, "
-                    "last_source_updated_at = ? WHERE record_id = ?", (seen, new_src, cur["record_id"]))
+        con.execute("UPDATE records SET last_seen_at = MAX(COALESCE(last_seen_at, ''), ?), "
+                    "seen_count = seen_count + 1, last_source_updated_at = ? WHERE record_id = ?",
+                    (seen, new_src, cur["record_id"]))
         return {"status": "duplicate", "record_id": cur["record_id"], "revision": cur["revision"]}
     if isinstance(rec, Forecast):
         fkey = forecast_key(rec)
@@ -293,16 +318,22 @@ def _put(con, rec, known_at):
                             (rec.forecast_id,)).fetchone()
         if clash:
             raise ContractError(f"forecast {rec.forecast_id} already stored with other content (immutable)")
+    last = con.execute("SELECT MAX(revision) FROM records WHERE kind=? AND source=? AND source_key=?",
+                       (rec.KIND, source, source_key)).fetchone()[0]
+    tail = _archive().identity_tail(con, rec.KIND, source, source_key) if last is None else None
+    if tail:                                    # archived identity seen again: numbering continues from the archive
+        last = tail[0]
+        if cur is None:                         # its current revision is archived: the late rule still applies
+            cur = _archived_current(con, rec.KIND, source, source_key)
     late = 0
     if cur is not None and rec.KIND != "forecast":
         late = int(is_late(obs, src, *current_times(cur)))
-    last = con.execute("SELECT MAX(revision) FROM records WHERE kind=? AND source=? AND source_key=?",
-                       (rec.KIND, source, source_key)).fetchone()[0]
     rev = (last or 0) + 1
     rid = f"{rec.KIND}:{source}:{source_key}:r{rev}:{h[:10]}" if rec.KIND != "forecast" else rec.forecast_id
     stored_h = h                               # UNIQUE (kind, source, source_key, content_hash) is additive-only: a
     if con.execute("SELECT 1 FROM records WHERE kind=? AND source=? AND source_key=? AND content_hash=?",
-                   (rec.KIND, source, source_key, h)).fetchone():
+                   (rec.KIND, source, source_key, h)).fetchone() or \
+            (tail and str(tail[1]).split("~", 1)[0] == h):
         stored_h = f"{h}~r{rev}"               # returning content keeps its hash, tagged with the revision
     c = _cols(rec)
     con.execute("INSERT INTO records (kind, record_id, source, source_key, revision, content_hash, schema_version, "
@@ -473,33 +504,35 @@ def _rec(row):
 
 
 def get(con, record_id):
-    row = con.execute("SELECT payload FROM records WHERE record_id = ?", (record_id,)).fetchone()
+    row = con.execute("SELECT payload FROM records WHERE record_id = ?", (record_id,)).fetchone() or \
+        _archive().row_by_record_id(con, record_id)
     return _rec(row)
 
 
 def row_meta(con, record_id):
     """Bookkeeping of one stored revision: observation times (observed_at = first, last_seen_at = newest), source
-    times (source_updated_at = first, last_source_updated_at = newest), late / origin, revision."""
+    times (source_updated_at = first, last_source_updated_at = newest), late / origin, revision. Hot or archived."""
     row = con.execute("SELECT record_id, kind, source, source_key, revision, content_hash, observed_at, known_at, "
                       "stored_at, last_seen_at, seen_count, late, source_updated_at, last_source_updated_at, origin, "
-                      "payload FROM records WHERE record_id = ?", (record_id,)).fetchone()
+                      "payload FROM records WHERE record_id = ?", (record_id,)).fetchone() or \
+        _archive().row_by_record_id(con, record_id)
     if not row:
         return None
-    out = {k: row[k] for k in row.keys() if k != "payload"}
+    out = {k: row[k] for k in row.keys() if k not in ("payload", "rid")}
     out["last_source_updated_at"] = current_times(row)[1]
     return out
 
 
 def revisions(con, kind, source, source_key):
     """Every stored revision, oldest first: [(meta, record)]."""
-    rows = con.execute("SELECT * FROM records WHERE kind=? AND source=? AND source_key=? ORDER BY revision",
+    rows = con.execute("SELECT * FROM records_all WHERE kind=? AND source=? AND source_key=? ORDER BY revision",
                        (kind, source, source_key)).fetchall()
     return [({k: r[k] for k in ("record_id", "revision", "known_at", "content_hash", "late", "origin", "last_seen_at",
                                 "observed_at", "source_updated_at")}, _rec(r)) for r in rows]
 
 
 def latest(con, kind, source, source_key, as_of=None):
-    q = f"SELECT * FROM records WHERE kind=? AND source=? AND source_key=? AND {CURRENT_SQL}"
+    q = f"SELECT * FROM records_all WHERE kind=? AND source=? AND source_key=? AND {CURRENT_SQL}"
     a = [kind, source, source_key]
     if as_of:
         q += " AND known_at <= ?"
@@ -510,22 +543,25 @@ def latest(con, kind, source, source_key, as_of=None):
 
 def current_record_id(con, kind, source, source_key):
     """The CURRENT revision's record id of one identity (one indexed lookup, records_current) - the cheap live check
-    slip copy uses against a cached pool."""
+    slip copy uses against a cached pool. A copy is only for a listed (hot) offer: an archived one is not current."""
     row = con.execute(f"SELECT record_id FROM records WHERE kind=? AND source=? AND source_key=? AND {CURRENT_SQL} "
                       "ORDER BY revision DESC LIMIT 1", (kind, source, source_key)).fetchone()
     return row[0] if row else None
 
 
-def _latest_rows(con, kind, where, args, as_of, limit):
-    """Latest revision per identity among rows matching `where`, known at as_of."""
+def _latest_rows(con, kind, where, args, as_of, limit, scoped=False):
+    """CURRENT revision per identity (store.CURRENT_SQL) among rows matching `where`, known at as_of. A CURRENT (as_of
+    None) league-wide offer listing reads the hot window (offers seen in the last SPORTS_ARCHIVE_AFTER_H); point-in-time
+    and event / player scoped reads span hot + archive (records_all) - sports/archive.py."""
+    tbl = "records" if (kind == "offer" and as_of is None and not scoped) else "records_all"
     cond = f"kind = ? AND {CURRENT_SQL}" + (f" AND {where}" if where else "")
     a = [kind] + list(args)
     if as_of:
         cond += " AND known_at <= ?"
         a.append(as_of)
-    q = (f"SELECT r.* FROM records r JOIN (SELECT source, source_key, MAX(revision) AS rv FROM records WHERE {cond} "
+    q = (f"SELECT r.* FROM {tbl} r JOIN (SELECT source, source_key, MAX(revision) AS rv FROM {tbl} WHERE {cond} "
          f"GROUP BY source, source_key) z ON r.source = z.source AND r.source_key = z.source_key AND r.revision = z.rv "
-         f"WHERE r.kind = ? ORDER BY r.known_at DESC LIMIT ?")
+         f"WHERE r.kind = ? ORDER BY r.known_at DESC, r.source, r.source_key LIMIT ?")
     return con.execute(q, a + [kind, int(limit)]).fetchall()
 
 
@@ -538,7 +574,8 @@ def offers(con, league=None, event_id=None, player_id=None, stat=None, platform=
         if v is not None:
             w.append(f"{col} = ?")
             a.append(v)
-    rows = _latest_rows(con, "offer", " AND ".join(w), a, as_of, limit)
+    rows = _latest_rows(con, "offer", " AND ".join(w), a, as_of, limit,
+                        scoped=event_id is not None or player_id is not None)
     return [(r["record_id"], _rec(r)) for r in rows]
 
 
@@ -568,8 +605,8 @@ def history(con, player_id, stat, before, as_of=None, limit=200):
 
 
 def _any_event(con, event_id, as_of):
-    row = con.execute(f"SELECT * FROM records WHERE kind='event' AND source_key=? AND known_at <= ? AND {CURRENT_SQL} "
-                      "ORDER BY revision DESC LIMIT 1", (event_id, as_of)).fetchone()
+    row = con.execute("SELECT * FROM records_all WHERE kind='event' AND source_key=? AND known_at <= ? AND "
+                      f"{CURRENT_SQL} ORDER BY revision DESC LIMIT 1", (event_id, as_of)).fetchone()
     return _rec(row)
 
 
@@ -579,7 +616,7 @@ def forecasts(con, league=None, event_id=None, player_id=None, model_version=Non
         if v is not None:
             w.append(f"{col} = ?")
             a.append(v)
-    rows = con.execute(f"SELECT * FROM records WHERE {' AND '.join(w)} ORDER BY known_at DESC LIMIT ?",
+    rows = con.execute(f"SELECT * FROM records_all WHERE {' AND '.join(w)} ORDER BY known_at DESC LIMIT ?",
                        a + [int(limit)]).fetchall()
     recs = [(r["record_id"], _rec(r)) for r in rows]
     return [x for x in recs if model_version is None or x[1].model_version == model_version]
@@ -594,7 +631,7 @@ def settlements(con, offer_id=None, platform=None, forecast_id=None):
     if offer_id:
         w.append("source_key LIKE ?")
         a.append(f"{offer_id}|%")
-    rows = con.execute(f"SELECT * FROM records WHERE {' AND '.join(w)} ORDER BY source_key, revision", a).fetchall()
+    rows = con.execute(f"SELECT * FROM records_all WHERE {' AND '.join(w)} ORDER BY source_key, revision", a).fetchall()
     recs = [(r["record_id"], _rec(r)) for r in rows]
     if forecast_id:
         recs = [x for x in recs if forecast_id in x[1].affected_forecast_ids]

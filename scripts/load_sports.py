@@ -8,6 +8,10 @@ configs: off | inprocess-enabled | {service,proxy}-{enabled,ingesting,failing,br
   diagnostics (added AFTER series 1, labelled post-hoc): off-ingesting (esports + the writer, no sports at all),
   service-tokenonly (700 token requests to esports, no sports-service traffic), service-notoken (sports-service
   traffic only, one token fetched before the burst and reused - the host-sharing cost without any esports work)
+  starter (2026-10-24): service-starterjob = the Starter service settings (env SPORTS_SERVICE_*, SPORTS_DB_POOL,
+  SPORTS_BOARD_CACHE_*, SPORTS_CACHE_MAX, SPORTS_GZIP_CACHE_MB, SPORTS_CHILD_BUDGET_MB passed through) with a CPU-heavy
+  job (UI snapshot build, in a loop) running beside it at low priority; LOAD_PIN=<core> pins the service, its
+  children and the job to ONE core (Render Starter has 0.5 CPU - one local core is the closest stand-in)
   failing = sports service process DOWN; broken = service up on a corrupt store (every query raises).
 Each run appends one JSON line to out.jsonl. 700 simultaneous members; each makes the foundation's 3 esports requests,
 plus (sports on) its sports traffic: service = token (esports) + 1 sports request to the service; proxy / inprocess =
@@ -97,6 +101,9 @@ class Procs:
             (d / "canonical.db").write_bytes(b"this is not a sqlite database " * 1000)
             return str(d)
         d = Path(self.work) / "store"
+        if not d.exists() and os.environ.get("LOAD_COPY_ALL"):      # the whole data folder (Starter runs)
+            shutil.copytree(self.store_dir, d)
+            return str(d)
         if not d.exists():
             d.mkdir()
             shutil.copy2(Path(self.store_dir) / "canonical.db", d / "canonical.db")
@@ -122,6 +129,9 @@ class Procs:
     def start_service(self):
         e = self.env()
         e.update({"SPORTS_API": "1", "SPORTS_DATA_DIR": self.sports_dir(), "PYTHONPATH": self.code})
+        e.update({k: v for k, v in os.environ.items() if k.startswith(("SPORTS_SERVICE_", "SPORTS_BOARD_CACHE_",
+                                                                       "SPORTS_JOB_")) or
+                  k in ("SPORTS_DB_POOL", "SPORTS_CACHE_MAX", "SPORTS_GZIP_CACHE_MB", "SPORTS_CHILD_BUDGET_MB")})
         if ROUTES == "all":
             e["SPORTS_ASSISTANT"] = "1"                    # its routes; the runner child needs the SDK + key (absent)
         self.svc = subprocess.Popen([sys.executable, "-m", "sports.service", "--host", "127.0.0.1",
@@ -148,6 +158,32 @@ class Procs:
                         break
                 time.sleep(0.5)
         return up
+
+    def start_job_loop(self):
+        """A CPU-heavy worker job (UI snapshot build, ~5-8 s, 135-168 MB) repeated for the whole run, low priority -
+        as the scheduler runs it. Stopped with the other processes."""
+        e = self.env()
+        e.update({"SPORTS_DATA_DIR": self.sports_dir(), "SPORTS_INGEST": "1", "PYTHONPATH": self.code,
+                  "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1"})
+        loop = ("import subprocess, sys\n"
+                "while True:\n"
+                "    subprocess.run([sys.executable, '-m', 'sports.snapshots', 'build', 'nba', 'nfl'],"
+                " stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n")
+        kw = {"creationflags": getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)} if os.name != "posix" else {}
+        self.ing = subprocess.Popen([sys.executable, "-c", loop], cwd=self.code, env=e, stdin=subprocess.DEVNULL, **kw)
+        time.sleep(3)
+
+    def pin(self, core):
+        for p in (self.svc, self.ing):
+            if not p:
+                continue
+            try:
+                pp = psutil.Process(p.pid)
+                for q in [pp] + pp.children(recursive=True):
+                    q.cpu_affinity([core])
+            except psutil.Error:
+                pass
+        self.pinned = core
 
     def start_ingest(self):
         self.ing = subprocess.Popen([sys.executable, str(HERE / "load_sports_ingest.py"), self.code, self.sports_dir(),
@@ -318,6 +354,10 @@ def run_one(code, store_dir, cfg, seed):
             rec["service_start_s"] = round(P.start_service(), 2)
         if P.scenario == "ingesting":
             P.start_ingest()
+        if P.scenario == "starterjob":
+            P.start_job_loop()
+        if os.environ.get("LOAD_PIN"):
+            P.pin(int(os.environ["LOAD_PIN"]))
         for _ in range(20):                                # warm (same as the foundation script)
             _call(P.esp_port, "/api/moneylines", {"Cookie": "cs2s=good-warm"})
         if P.scenario == "notoken":
@@ -347,7 +387,7 @@ def run_one(code, store_dir, cfg, seed):
         rec["processes"] = S.report()
         rec["other_python_cpu_pct_before"] = round(S.others_cpu_before, 1)
         rec.update(admin_stats(P))
-        if P.ing:
+        if P.ing and P.scenario == "ingesting":
             lines = (Path(work) / "ingest.out").read_text().splitlines()
             rec["ingest_last"] = json.loads(lines[-1]) if lines else None
         rec["snapshot_at_start"] = getattr(P, "snapshot", None)
