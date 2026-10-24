@@ -180,17 +180,34 @@ def feed_state():
             except Exception:                           # noqa: BLE001
                 pass
             out["platforms"][plat] = {"last_seen": last, "age_min": age}
+        with web.store_ro(budget_s=10) as con:
+            from . import archive
+            out["archive"] = archive.stats(con)
     except FileNotFoundError:
         out["store"] = "not_created"
     except Exception as e:                              # noqa: BLE001
         out["error"] = type(e).__name__
+    try:                                                # the disk the Starter plan pays for (alerts at 80 / 90 %)
+        import shutil
+        from . import config
+        du = shutil.disk_usage(config.DATA_DIR)
+        out["disk"] = {"total_mb": round(du.total / 1e6), "used_mb": round(du.used / 1e6),
+                       "used_pct": round(100.0 * du.used / du.total, 1)}
+        areas = {}
+        for f in config.DATA_DIR.iterdir():
+            n = sum(x.stat().st_size for x in f.rglob("*") if x.is_file()) if f.is_dir() else f.stat().st_size
+            key = f.name.split(".")[0] if f.is_file() else f.name
+            areas[key] = areas.get(key, 0) + n
+        out["data_mb"] = {k: round(v / 1e6, 1) for k, v in sorted(areas.items(), key=lambda kv: -kv[1])}
+    except (OSError, ValueError):
+        pass
     _OPS.update(t=time.time(), v=out)
     return out
 
 
 ALERT_RULES = {                                         # sports/RUNBOOK.md section 9 - thresholds in one place
     "feed_stale_min": float(os.environ.get("SPORTS_ALERT_FEED_STALE_MIN", "45")),     # pick'em feeds: 10-min cadence
-    "kalshi_stale_min": float(os.environ.get("SPORTS_ALERT_KALSHI_STALE_MIN", "90")),  # Kalshi: 30-min cadence
+    "kalshi_stale_min": float(os.environ.get("SPORTS_ALERT_KALSHI_STALE_MIN", "150")),  # Kalshi: hourly (Starter)
     "store_warn_mb": float(os.environ.get("SPORTS_ALERT_STORE_MB", "6000")),
     "rss_warn_frac": 0.8,
 }
@@ -225,6 +242,11 @@ def alerts(o):
         out.append({"level": "page", "code": "store_full_ingest_paused", "detail": {"store_mb": mb, "max_mb": stop_mb}})
     elif mb is not None and mb >= min(ALERT_RULES["store_warn_mb"], 0.8 * stop_mb):
         out.append({"level": "warn", "code": "store_large", "detail": {"store_mb": mb, "max_mb": stop_mb}})
+    disk = feeds.get("disk") or {}
+    if disk.get("used_pct") is not None and disk["used_pct"] >= 90:
+        out.append({"level": "page", "code": "disk_90", "detail": disk})
+    elif disk.get("used_pct") is not None and disk["used_pct"] >= 80:
+        out.append({"level": "warn", "code": "disk_80", "detail": disk})
     if o.get("rss_mb") and o["rss_mb"] > ALERT_RULES["rss_warn_frac"] * o["rss_max_mb"]:
         out.append({"level": "warn", "code": "service_memory_high", "detail": {"rss_mb": o["rss_mb"]}})
     svc = o["service"]

@@ -552,6 +552,8 @@ def test_alerts_clean_and_each_rule(monkeypatch):
     assert codes(_ops(feeds={"store_mb": 6500, "platforms": {}})) == {"store_large"}
     assert codes(_ops(feeds={"store_mb": 8100, "platforms": {}})) == {"store_full_ingest_paused"}
     assert codes(_ops(rss_mb=140)) == {"service_memory_high"}
+    assert codes(_ops(feeds={"store_mb": 1, "platforms": {}, "disk": {"used_pct": 81.0}})) == {"disk_80"}
+    assert codes(_ops(feeds={"store_mb": 1, "platforms": {}, "disk": {"used_pct": 93.0}})) == {"disk_90"}
     assert codes(_ops(service={"requests": 100, "rejected_busy": 5, "errors_5xx": 0})) == {"service_shedding"}
     assert codes(_ops(db_pool={"waits_timed_out": 1, "queries_interrupted": 0})) == {"store_slow"}
     assert codes(_ops(token_configured=False)) == {"token_secret_missing"}
