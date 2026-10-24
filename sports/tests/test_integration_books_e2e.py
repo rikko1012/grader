@@ -4,7 +4,7 @@ snapshot - with exactly one provider request, none from the model or the snapsho
 registered source set, settlement feeds the game store from its own fetch, and duplicate pollers are gone."""
 import json
 
-from sports import net, snapshots, store
+from sports import adapters, net, snapshots, store
 from sports import worker as canonical
 from sports.books import base, bridge, providers, sources
 from sports.books import worker as book_worker
@@ -203,6 +203,178 @@ def test_parallel_league_threads_never_run_the_books_job_or_game_tick_at_once(mo
     for j in jobs:
         j.join()
     assert peak[0] == 1
+
+
+def test_the_store_cap_counts_every_sports_file_not_only_canonical(tmp_path, monkeypatch):
+    """books.db / games.db are written by the same loop now: the cap measures the disk that fills."""
+    from sports import config
+    import pytest
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    for name, mb in (("canonical.db", 1), ("books.db", 2), ("games.db", 1), ("snapshots/nba/board.json", 0.5)):
+        (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / name).write_bytes(b"x" * int(mb * 1e6))
+    assert round(canonical.data_mb(), 1) == 4.5
+    monkeypatch.setattr(canonical, "STORE_MAX_MB", 2.5)                # canonical alone (1 MB) is under it
+    with pytest.raises(canonical.BudgetExceeded, match="sports data 4"):
+        canonical._check_budget()
+    monkeypatch.setattr(canonical, "STORE_MAX_MB", 5)
+    canonical._check_budget()
+
+
+def _old_withdrawals(con, prefix, league, seen_ids, observed_at):
+    """The withdrawal candidates of the former league-wide scan (before the bounded scan), for comparison."""
+    out = set()
+    for _, o in store.offers(con, league=league, as_of=None, limit=200000):
+        if not o.platform.startswith(prefix) or o.offer_id in seen_ids or o.availability == "removed":
+            continue
+        if o.listed_start_utc and o.listed_time_kind == "start" and o.listed_start_utc <= observed_at:
+            continue
+        out.add(o.offer_id)
+    return out
+
+
+def _edge_world(con):
+    """Offers covering every withdrawal edge: stored / unstored / unresolved / started events, no listed start,
+    another platform, an identity last seen just inside and just outside the 72 h window, a price that came back."""
+    T = "2026-10-24T02:00:00Z"
+    store.put_many(con, [h.event("nba:espn:new", start="2026-10-24T23:00:00Z", observed_at="2026-10-20T00:00:00Z",
+                                 known_at="2026-10-20T00:00:00Z"),
+                         h.event("nba:espn:started", start="2026-10-24T00:30:00Z", observed_at="2026-10-20T00:00:00Z",
+                                 known_at="2026-10-20T00:00:00Z")])
+    F = "2026-10-25T00:00:00Z"                                # listed start still ahead
+    recs = [h.offer(oid="pp:new", event_id="nba:espn:new", listed_start_utc=F, observed_at="2026-10-24T01:50:00Z"),
+            h.offer(oid="pp:unstored", event_id="nba:espn:unstored", listed_start_utc=F,
+                    observed_at="2026-10-24T01:50:00Z"),
+            h.offer(oid="pp:unresolved", event_id=None, player_id=None, listed_start_utc=F,
+                    observed_at="2026-10-24T01:50:00Z"),
+            h.offer(oid="pp:started", event_id="nba:espn:started", listed_start_utc="2026-10-24T00:30:00Z",
+                    observed_at="2026-10-24T00:20:00Z"),
+            h.offer(oid="pp:started-nostart", event_id="nba:espn:started", listed_start_utc=None,
+                    observed_at="2026-10-24T00:20:00Z"),
+            h.offer(oid="pp:edge-in", event_id="nba:espn:unstored", listed_start_utc=F,
+                    observed_at="2026-10-21T02:00:00Z"),
+            h.offer(oid="pp:edge-out", event_id="nba:espn:unstored", listed_start_utc=F,
+                    observed_at="2026-10-21T01:59:59Z"),
+            h.offer(oid="pp:moved", event_id="nba:espn:new", line=20.5, listed_start_utc=F,
+                    observed_at="2026-10-23T20:00:00Z"),
+            h.offer(platform="kalshi", oid="k:new", event_id="nba:espn:new", observed_at="2026-10-24T01:50:00Z"),
+            h.offer(platform="fanduel", oid="fd:new", event_id="nba:espn:new", observed_at="2026-10-24T01:50:00Z")]
+    store.put_many(con, recs)
+    store.put(con, h.offer(oid="pp:moved", event_id="nba:espn:new", line=21.5, listed_start_utc=F,
+                           observed_at="2026-10-24T01:00:00Z"))
+    return T
+
+
+def test_bounded_removal_scan_returns_the_old_rows_for_every_offer_seen_in_the_window(tmp_path):
+    with store.opened(tmp_path / "c.db") as con:
+        T = _edge_world(con)
+        got = {o.offer_id: o for _, o in canonical._board_offers(con, "nba", "prizepicks", T)}
+        assert set(got) == {"pp:new", "pp:unstored", "pp:unresolved", "pp:started", "pp:started-nostart", "pp:edge-in",
+                            "pp:moved"}                       # other platforms and the identity unseen > 72 h are out
+        assert got["pp:moved"].line == 21.5                   # the identity's LATEST revision
+        old = {o.offer_id: o for _, o in store.offers(con, league="nba", limit=200000) if o.platform == "prizepicks"}
+        assert all(got[k] == old[k] for k in got)             # same rows as the former league-wide scan
+
+
+def test_bounded_removal_scan_never_returns_an_older_revision_as_current(tmp_path, monkeypatch):
+    """Data written before c0cc754 can have an OLDER revision re-seen after the newer one (a price that came back
+    bumped the old row). The window is per identity, so the identity keeps its current revision."""
+    with store.opened(tmp_path / "c.db") as con:
+        store.put(con, h.offer(oid="pp:x", line=20.5, listed_start_utc="2026-10-25T00:00:00Z",
+                               observed_at="2026-10-24T00:00:00Z"))
+        store.put(con, h.offer(oid="pp:x", line=21.5, listed_start_utc="2026-10-25T00:00:00Z",
+                               observed_at="2026-10-24T00:10:00Z"))
+        n = con.execute("UPDATE records SET last_seen_at = '2026-10-24T01:55:00Z' WHERE kind = 'offer' AND revision = 1"
+                        ).rowcount
+        con.commit()
+        assert n == 1
+        monkeypatch.setattr(canonical, "REMOVAL_WINDOW_H", 1.0)       # rev 2 (00:10) outside, rev 1 (01:55) inside
+        got = canonical._board_offers(con, "nba", "prizepicks", "2026-10-24T02:00:00Z")
+        assert [(o.offer_id, o.line) for _, o in got] == [("pp:x", 21.5)]
+
+
+def test_bounded_removal_scan_withdraws_exactly_what_the_old_scan_withdrew(tmp_path):
+    """Missing-event, unresolved-event and started-event semantics: identical withdrawals to the former scan for every
+    offer seen within the window; only the identity unseen for > 72 h (cold) is no longer withdrawn."""
+    with store.opened(tmp_path / "c.db") as con:
+        T = _edge_world(con)
+        old = _old_withdrawals(con, "prizepicks", "nba", {"pp:new"}, T)
+        res = canonical._store_offers(con, "prizepicks", "nba", adapters.Batch(records=[
+            h.offer(oid="pp:new", event_id="nba:espn:new", listed_start_utc="2026-10-25T00:00:00Z",
+                    observed_at=T)]), T, True)
+        gone = {o.offer_id for _, o in store.offers(con, league="nba", limit=1000) if o.availability == "removed"}
+        assert old - gone == {"pp:edge-out"} and gone == old - {"pp:edge-out"}
+        assert gone == {"pp:unstored", "pp:unresolved", "pp:started-nostart", "pp:edge-in", "pp:moved"}
+        assert res["removed"] == 5
+        assert canonical._board_offers(con, "nba", "kalshi", T)[0][1].offer_id == "k:new"
+        partial = canonical._store_offers(con, "prizepicks", "nba", adapters.Batch(records=[]), T, False)
+        assert partial["removed"] == 0                        # a failed read still withdraws nothing
+
+
+def test_polymarket_trimmed_events_give_exactly_the_untrimmed_offers():
+    """Events trimmed to the adapter's fields (one 100-event page was ~110 MB of Python objects): the same offers come
+    out as from the untrimmed answer (live NBA / NFL comparison: research/results/storage_2026-10-24)."""
+    ev = {"id": "1", "title": "Knicks vs. Celtics", "slug": "nba-nyk-bos-2026-10-23", "startTime": "x", "tags": ["big"],
+          "markets": [{"id": "6008962", "question": "Jayson Tatum: Points O/U 26.5", "outcomes": "[\"Yes\", \"No\"]",
+                       "bestBid": 0.48, "bestAsk": 0.51, "line": 26.5, "gameStartTime": "2026-10-23 23:00:00+00",
+                       "liquidityNum": 1240.4, "volumeNum": 9.0, "lastTradePrice": 0.5, "active": True,
+                       "closed": False, "acceptingOrders": True, "sportsMarketType": "points",
+                       "updatedAt": "2026-10-23T22:34:37Z", "description": "long text " * 50, "clobTokenIds": "[1,2]"},
+                      {"id": "2", "question": "Knicks vs. Celtics: O/U 223.5", "sportsMarketType": "totals"}]}
+    full = sources.polymarket_offers([ev], "nba", "2026-10-23T22:40:00Z", h.resolver())
+    trimmed = sources._pm_trim(ev, sources.PM_STAT["nba"])
+    assert [m["id"] for m in trimmed["markets"]] == ["6008962"] and "description" not in trimmed["markets"][0]
+    assert sources.polymarket_offers([trimmed], "nba", "2026-10-23T22:40:00Z", h.resolver()).records == full.records
+
+
+class _Gamma:
+    """A provider serving an id-ordered event list by offset / limit (like Gamma with order=id&ascending=true);
+    `close_after` closes events between page requests to shift the list mid-read."""
+    def __init__(self, n, close_after=None):
+        self.events = [{"id": str(1000 + i), "slug": f"nba-nyk-bos-2026-10-{1 + i % 28:02d}", "markets": []}
+                       for i in range(n)]
+        self.close_after, self.calls = close_after or {}, []
+
+    def get(self, src, url, params=None, **k):
+        assert params["order"] == "id" and params["ascending"] == "true" and params["limit"] == sources.PM_PAGE
+        self.calls.append(params["offset"])
+        body = self.events[params["offset"]:params["offset"] + params["limit"]]
+        for eid in self.close_after.get(len(self.calls), []):          # closes AFTER this page was served
+            self.events = [e for e in self.events if e["id"] != eid]
+
+        class R:
+            def json(self_):
+                return body
+        return R()
+
+
+def test_polymarket_pagination_boundaries_never_drop_or_repeat_an_event(monkeypatch):
+    for n in (0, 1, 17, 18, 19, 20, 21, 36, 38, 40, 99, 570):
+        g = _Gamma(n)
+        monkeypatch.setattr(sources, "_get", g.get)
+        info = {}
+        got = [e["id"] for e in sources.polymarket_raw("nba", info)]
+        assert sorted(got) == sorted(e["id"] for e in g.events) and len(got) == len(set(got)), n
+        assert info["truncated"] is False and info["events_seen"] == n
+
+
+def test_polymarket_pagination_survives_events_closing_mid_read(monkeypatch):
+    """Two events close between page requests (the list shifts left by 2): the overlap keeps every remaining event."""
+    g = _Gamma(60, close_after={1: ["1001", "1002"], 2: ["1020", "1021"]})
+    keep = {e["id"] for e in g.events} - {"1001", "1002", "1020", "1021"}
+    monkeypatch.setattr(sources, "_get", g.get)
+    got = {e["id"] for e in sources.polymarket_raw("nba")}
+    assert keep <= got
+
+
+def test_polymarket_pagination_reports_a_capped_read(monkeypatch):
+    step = sources.PM_PAGE - sources.PM_OVERLAP
+    g = _Gamma(sources.PM_MAX_PAGES * step + 50)
+    monkeypatch.setattr(sources, "_get", g.get)
+    info = {}
+    sources.polymarket_raw("nba", info)
+    assert info["truncated"] is True and info["pages"] == sources.PM_MAX_PAGES
+    assert sources.PM_MAX_PAGES * step >= 1200                         # >= the former 12 pages x 100 events
 
 
 def test_oddspapi_capture_spends_nothing_billable(monkeypatch):

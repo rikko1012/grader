@@ -1,0 +1,14 @@
+real measurement store (2026-10-24 live cycles, written before c0cc754), board read at 2026-10-24T02:06:25Z; candidates = current revision not removed and not started (what a read that lists nothing would withdraw)
+window 72.0 h nba prizepicks decoded old  21735 new   5276 | candidates old  2693 new  2693 identical=True same_rows=True | peak alloc MB old  102.8 new  20.2
+window 72.0 h nba underdog   decoded old  21735 new    705 | candidates old    96 new    96 identical=True same_rows=True | peak alloc MB old  102.2 new   3.0
+window 72.0 h nba kalshi     decoded old  21735 new   2572 | candidates old  1819 new  1819 identical=True same_rows=True | peak alloc MB old  102.2 new  14.0
+window 72.0 h nfl prizepicks decoded old  18729 new   6425 | candidates old  6393 new  6393 identical=True same_rows=True | peak alloc MB old   86.8 new  24.6
+window 72.0 h nfl underdog   decoded old  18729 new   4133 | candidates old  4098 new  4098 identical=True same_rows=True | peak alloc MB old   86.4 new  18.2
+window 72.0 h nfl kalshi     decoded old  18729 new   3485 | candidates old  3485 new  3485 identical=True same_rows=True | peak alloc MB old   86.4 new  19.2
+window  0.5 h nba prizepicks decoded old  21735 new   2693 | candidates old  2693 new  2693 identical=True same_rows=True | peak alloc MB old  102.2 new  10.1
+window  0.5 h nba underdog   decoded old  21735 new    433 | candidates old    96 new    96 identical=True same_rows=True | peak alloc MB old  102.2 new   1.8
+window  0.5 h nba kalshi     decoded old  21735 new   2426 | candidates old  1819 new  1819 identical=True same_rows=True | peak alloc MB old  102.2 new  13.2
+window  0.5 h nfl prizepicks decoded old  18729 new   6424 | candidates old  6393 new  6393 identical=True same_rows=True | peak alloc MB old   86.4 new  24.6
+window  0.5 h nfl underdog   decoded old  18729 new   4130 | candidates old  4098 new  4098 identical=True same_rows=True | peak alloc MB old   86.4 new  18.5
+window  0.5 h nfl kalshi     decoded old  18729 new   3485 | candidates old  3485 new  3485 identical=True same_rows=True | peak alloc MB old   86.4 new  19.2
+ALL IDENTICAL

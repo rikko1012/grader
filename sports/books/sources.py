@@ -36,7 +36,17 @@ _Q = re.compile(r"^(?P<name>.+?): (?P<stat>[^:]+?) O/U (?P<line>-?\d+(?:\.\d+)?)
 _SLUG = re.compile(r"^(?P<lg>[a-z]+)-(?P<away>[a-z0-9]+)-(?P<home>[a-z0-9]+)-(?P<day>\d{4}-\d{2}-\d{2})")
 RULE_PM = ("polymarket-market-description: YES > line, NO <= line, full game incl. OT, inactive / DNP resolves NO, "
            "cancelled 50-50")
-PM_MAX_PAGES = 12
+# Gamma pages of 20 events: one 100-event NBA page was ~29 MB of JSON / ~110 MB of Python objects (measured
+# 2026-10-24), the ingest child's largest peak. Explicit stable order (id ascending, verified live 2026-10-24) and pages
+# that overlap by PM_OVERLAP events, de-duplicated by id, so an event that closes mid-read and shifts the list cannot
+# push another across a page boundary unseen. A read that reaches PM_MAX_PAGES with a full last page reports
+# `truncated` (never a silent cut). end_date_max was tested and rejected - it dropped real game events (NFL 83 -> 66).
+PM_PAGE = 20
+PM_OVERLAP = 2
+PM_MAX_PAGES = 70                                   # 70 x 18 new events = 1,260 >= the former 12 x 100 per league
+_PM_EVENT = ("id", "slug", "title")
+_PM_MARKET = ("id", "sportsMarketType", "question", "line", "outcomes", "bestBid", "bestAsk", "active", "closed",
+              "acceptingOrders", "gameStartTime", "updatedAt", "liquidityNum", "volumeNum", "lastTradePrice")
 
 
 def key_state():
@@ -91,17 +101,40 @@ def resolver_from_store(con, league):
 
 
 # ----------------------------------------------------------------------------------------------------- Polymarket
-def polymarket_raw(league):
-    out = []
+def _pm_trim(e, stats):
+    """Only what polymarket_offers reads: the event's id / slug / title and its markets of this league's stats (the
+    adapter skips every other sportsMarketType), each with the fields it uses."""
+    out = {k: e.get(k) for k in _PM_EVENT}
+    out["markets"] = [{k: m.get(k) for k in _PM_MARKET} for m in e.get("markets") or []
+                      if m.get("sportsMarketType") in stats]
+    return out
+
+
+def polymarket_raw(league, info=None):
+    """Every active Gamma event of the league's tag (game events kept, trimmed). info (dict) receives pages /
+    events_seen / truncated."""
+    out, seen, stats = [], set(), PM_STAT[league]
+    step = PM_PAGE - PM_OVERLAP
+    pages, full_last = 0, False
     for page in range(PM_MAX_PAGES):
         r = _get("polymarket", f"{GAMMA}/events", params={"tag_slug": league, "active": "true", "closed": "false",
-                                                           "limit": 100, "offset": page * 100})
+                                                           "order": "id", "ascending": "true", "limit": PM_PAGE,
+                                                           "offset": page * step})
         ev = r.json()
-        if not ev:
+        del r
+        pages += 1
+        for e in ev:
+            if e.get("id") in seen:
+                continue
+            seen.add(e.get("id"))
+            if _SLUG.match(e.get("slug") or ""):
+                out.append(_pm_trim(e, stats))
+        full_last = len(ev) >= PM_PAGE
+        del ev                                      # never two parsed pages alive at once
+        if not full_last:
             break
-        out += [e for e in ev if _SLUG.match(e.get("slug") or "")]
-        if len(ev) < 100:
-            break
+    if info is not None:
+        info.update(pages=pages, events_seen=len(seen), truncated=full_last and pages >= PM_MAX_PAGES)
     return out
 
 
@@ -271,11 +304,13 @@ def polymarket_ingest(con, league, observed_at, resolver):
     """One Polymarket read of a league -> stored offers (the one implementation; the canonical ingest loop and the
     manual `train books` job both call it)."""
     try:
-        evs = polymarket_raw(league)
+        info = {}
+        evs = polymarket_raw(league, info)
         b = polymarket_offers(evs, league, observed_at, resolver)
         res = store.put_many(con, b.records)
         store.quarantine_many(con, b.quarantine, league, observed_at)
-        return {"events": len(evs), "offers": len(b.records),
+        return {"events": len(evs), "offers": len(b.records), "pages": info.get("pages"),
+                "events_seen": info.get("events_seen"), "truncated": info.get("truncated"),
                 **{k: res[k] for k in ("inserted", "duplicate", "revision", "invalid")},
                 "quarantined": len(b.quarantine), "resolved_players": sum(1 for r in b.records if r.player_id)}
     except net.HttpError as e:
