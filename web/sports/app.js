@@ -606,6 +606,11 @@
       return h + '<a class="sw-research-link" href="' + marketHref(m,null) + '">Player history & research <span aria-hidden="true">↗</span></a></article>';
     }).join('') + '</div>';
   }
+  try { if ("scrollRestoration" in history) history.scrollRestoration = "manual"; } catch (e) { /* old browser */ }
+  document.addEventListener("click", function (e) {      // leaving the board: remember where the member was
+    var a = e.target.closest && e.target.closest("#sw-bbody a[href^='#/']");
+    if (a && route().view === "board") { state.boardScroll = window.scrollY; state.boardShownSaved = state.boardShown; }
+  }, true);
   function renderBoard(params, onlyEvent) {
     var f = state.filters[state.lg];
     if (params) {
@@ -648,6 +653,13 @@
           (rows.length > shown.length ? '<p style="text-align:center"><button type="button" class="sw-btn" id="sw-showmore">Show ' + Math.min(BOARD_PAGE, rows.length - shown.length) + " more (" + (rows.length - shown.length) + " left)</button></p>" : "");
         var sm = document.getElementById("sw-showmore");
         if (sm) sm.onclick = function () { state.boardShown += BOARD_PAGE; draw(); };
+        if (!onlyEvent && state.boardScroll !== undefined && state.boardScroll !== null) {   // back from a player / game
+          var y = state.boardScroll, tries = 0; state.boardScroll = null;
+          (function again() {                             // wait for the layout to be tall enough, then restore
+            window.scrollTo(0, y);
+            if (Math.abs(window.scrollY - y) > 2 && tries++ < 30) setTimeout(again, 50);
+          })();
+        }
       }
       function sync() {
         if (onlyEvent) return;
@@ -809,6 +821,8 @@
             '<span class="sw-offered">' + offeredText([sides.over && sides.over.offered ? 1 : 0, sides.under && sides.under.offered ? 1 : 0]) + "</span>" +
             (n ? '<span class="sw-small">O <b class="sw-p over" data-fc="' + esc(n.id) + '" data-fcside="over">' + n.over + '</b> · U <b class="sw-p under" data-fc="' + esc(n.id) + '" data-fcside="under">' + n.under + "</b></span>" : '<span class="sw-small sw-faint">' + (q.gradable ? "No Scout chance yet" : "Not graded: " + esc((q.not_gradable_because || [])[0] || "")) + "</span>") + "</button>";
         }).join("") + "</div>";
+        h += '<div class="sw-grid2" style="margin-top:12px"><div>' + historyPanel(m, ln, sel) + "</div><div>" + forecastPanel(fc, det, sel, m) + "</div></div>";
+        h += contextPanel(P, games, m);
         if (m.kalshi.length) {
           h += '<details class="sw-more"><summary>Kalshi ladder: ' + m.kalshi.length + " rungs (Kalshi prices only; the Market chance above combines every book)</summary><div class=\"sw-scroll\"><table class=\"sw-mini\"><caption class=\"sw-sr\">Kalshi rungs</caption><thead><tr><th>Rung (Over)</th><th class=\"num\">YES bid</th><th class=\"num\">YES ask</th><th class=\"num\">Volume</th><th class=\"num\">Open interest</th><th>Observed</th><th><span class=\"sw-sr\">Source</span></th></tr></thead><tbody>" +
             m.kalshi.map(function (k) { var s = k.sides[0]; return "<tr><td>" + S.line(k.line) + '</td><td class="num">' + S.cents(s.bid) + '</td><td class="num">' + S.cents(s.ask) + '</td><td class="num">' + S.num(k.liquidity.volume, 0) + '</td><td class="num">' + S.num(k.liquidity.open_interest, 0) + "</td><td class=\"sw-small\">" + esc(S.age(k.last_seen_at)) + "</td><td>" + src({title: "Kalshi rung", record: k.record_id, line: k.line, "YES bid": s.bid, "YES ask": s.ask, "source time": "not given by Kalshi", "observed by Scout": k.last_seen_at, rule: k.rule_version}) + "</td></tr>"; }).join("") + "</tbody></table></div></details>";
@@ -819,9 +833,7 @@
             '<p class="sw-small">' + mkShort(mq, sel ? sel.line : m.market.l) + (mq && mq.used ? ' <span class="sw-faint">(' + esc(mq.used.map(bookName).join(", ")) + ")</span>" : "") + "</p>" + mkBooks(m.market, true) +
             (fc ? '<p class="sw-faint sw-small">Scout\u2019s own chance is separate (below).</p>' : "") + "</section>";
         }
-        h += '<div class="sw-grid2" style="margin-top:12px"><div>' + forecastPanel(fc, det, sel, m) + "</div><div>" + historyPanel(m, ln, sel) + "</div></div>";
-        h += contextPanel(P, games, m);
-        h += evidencePanel(P, fc, games, m, histErr);
+        h += '<details class="sw-more sw-evidence"><summary>Source records</summary>' + evidencePanel(P, fc, games, m, histErr) + "</details>";
         main.innerHTML = h;
         bind();
       }
@@ -952,7 +964,7 @@
         var part = state.lg === "nba" ? "min" : (/rec|targets/.test(mk.stat) ? "targets" : /rush/.test(mk.stat) ? "rush_att" : "pass_att");
         var lab = {min: "Minutes", targets: "Targets", rush_att: "Carries", pass_att: "Pass attempts"}[part];
         var trend = svgTrend(games, part, lab);
-        var h = '<section class="sw-panel" aria-labelledby="sw-ctx-h"><h2 id="sw-ctx-h">Opportunity and context</h2><div class="sw-grid2"><div><h3>' + esc(lab) + " trend</h3>" + (trend || '<p class="sw-muted sw-small">Fewer than two games with ' + esc(lab.toLowerCase()) + " held.</p>");
+        var h = '<section class="sw-panel" aria-labelledby="sw-ctx-h"><h2 id="sw-ctx-h">Minutes, role and matchup</h2><div class="sw-grid2"><div><h3>' + esc(lab) + " trend</h3>" + (trend || '<p class="sw-muted sw-small">Fewer than two games with ' + esc(lab.toLowerCase()) + " held.</p>");
         if (F.stats.length) {
           h += '<div class="sw-scroll"><table class="sw-mini"><caption class="sw-sr">Opportunity averages by window</caption><thead><tr><th>Per game</th>' + F.stats[0].windows.map(function (w) { return '<th class="num">' + esc(w.window) + "</th>"; }).join("") + "</tr></thead><tbody>" +
             F.stats.map(function (r) { return "<tr><td>" + esc(r.label) + "</td>" + r.windows.map(function (w) { return '<td class="num">' + S.num(w.mean, 1) + ' <span class="sw-faint sw-small">n=' + w.n + "</span></td>"; }).join("") + "</tr>"; }).join("") + "</tbody></table></div>";
@@ -961,7 +973,8 @@
           if (c.key === "teammates_out") return "<li>" + esc(c.label) + ": <b>" + c.value + "</b>" + (c.items && c.items.length ? '<ul class="sw-list">' + c.items.map(function (i) { return "<li>" + esc(i.player) + ' <span class="sw-tag inj">' + esc(i.status) + "</span></li>"; }).join("") + "</ul>" : "") + "</li>";
           if (c.key === "rest_days") return "<li>" + esc(c.label) + ": <b>" + S.num(c.value, 1) + "</b></li>";
           if (c.key === "back_to_back") return "<li>" + esc(c.label) + ": <b>" + (c.value ? "yes" : "no") + "</b></li>";
-          return "<li>" + esc(c.label) + ": <b>" + esc(c.value === null ? "—" : c.value) + "</b></li>";
+          if (c.value === null || c.value === undefined) return "";
+          return "<li>" + esc(c.label) + ": <b>" + esc(c.value) + "</b></li>";
         }).join("") + "</ul>" +
           '<p class="sw-faint sw-small">Not in Scout data: ' + esc(F.not_held.join(", ")) + ".</p></div></div></section>";
         return h;

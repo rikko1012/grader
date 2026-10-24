@@ -290,3 +290,29 @@ def test_track_pick_and_my_picks(pw, shots, width):
     page.screenshot(path=str(shots / f"picks_{width}.png"), full_page=True)
     assert not [e for e in errors if "favicon" not in e], errors
     ctx.close()
+
+
+def test_back_to_board_keeps_filters_and_scroll(pw, shots):
+    ctx, page, errors = _page(pw)
+    page.goto(URL + "/sports#/board?lg=nba")
+    page.wait_for_selector(".sw-research-card", timeout=20000)
+    stat = page.locator("#sw-stat")
+    opts = [o for o in stat.locator("option").all_inner_texts()]
+    if len(opts) > 1:
+        stat.select_option(index=1)
+        page.wait_for_timeout(300)
+    link = page.locator(".sw-research-card a.sw-player-name").nth(6)
+    link.scroll_into_view_if_needed()
+    page.wait_for_timeout(200)
+    y0, hash0 = page.evaluate("window.scrollY"), page.evaluate("location.hash")
+    assert y0 > 300                                                   # really scrolled down the board
+    h0 = page.evaluate("[document.documentElement.scrollHeight, innerHeight]")
+    link.click()
+    page.wait_for_selector("#sw-fc-h", timeout=20000)
+    page.go_back()
+    page.wait_for_selector(".sw-research-card", timeout=20000)
+    page.wait_for_timeout(500)
+    assert page.evaluate("location.hash") == hash0
+    assert abs(page.evaluate("window.scrollY") - y0) < 40, (page.evaluate("window.scrollY"), y0, h0, page.evaluate("[document.documentElement.scrollHeight, innerHeight, document.querySelectorAll('.sw-research-card').length]"))
+    assert not [e for e in errors if "favicon" not in e], errors
+    ctx.close()
