@@ -11,6 +11,9 @@ Budgets (environment overrides, defaults = the free tiers we know):
                guard), >= 2 s apart
   polymarket   public; >= 1 s apart
 A refused reservation is recorded with its reason; nothing retries automatically past a budget.
+paced(): a monthly budget is spent EVENLY - the credits left are shared over the days left in the month and each day's
+share over its hours (spent as fast as asked, 54 credits per 15-min cycle would use 500 in ~2 h and leave the books
+dark for the rest of the month).
 """
 from __future__ import annotations
 
@@ -93,6 +96,48 @@ def _reserve(source, cost=1.0, detail=""):
                          (why or detail)[:200]))
         con.execute("COMMIT")
         return why is None, why
+    finally:
+        con.close()
+
+
+def paced(source, cost=1.0, now=None):
+    """-> (ok, reason): may `cost` be spent now without running ahead of an even spread of the month's budget? Left =
+    the monthly budget minus this month's spend (or the provider's own remaining count when lower), minus the reserve;
+    today's share = (left + spent today) / days left in the month; by hour h (UTC) the day may have spent (h + 1) / 24
+    of that share. Sources without a monthly budget are never paced."""
+    import calendar
+    lim = LIMITS[source]
+    if lim["monthly"] is None:
+        return True, None
+    now = time.time() if now is None else now
+    t = datetime.fromtimestamp(now, tz=timezone.utc)
+    day0 = t.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+    con = connect()
+    try:
+        used = con.execute("SELECT COALESCE(SUM(cost), 0) FROM log WHERE source=? AND outcome='sent' AND month=?",
+                           (source, _month(now))).fetchone()[0]
+        today = con.execute("SELECT COALESCE(SUM(cost), 0) FROM log WHERE source=? AND outcome='sent' AND at >= ? AND "
+                            "month=?", (source, day0, _month(now))).fetchone()[0]
+        st = con.execute("SELECT remaining FROM state WHERE source=?", (source,)).fetchone()
+    finally:
+        con.close()
+    left = lim["monthly"] - lim["reserve"] - used
+    if st and st[0] is not None:
+        left = min(left, st[0] - lim["reserve"])
+    days_left = calendar.monthrange(t.year, t.month)[1] - t.day + 1
+    share = max(0.0, left + today) / days_left
+    allowed = share * (t.hour + 1) / 24
+    if today + cost > allowed:
+        return False, f"paced: {today:.0f}+{cost:.0f} > {allowed:.1f} of today's {share:.1f} credits"
+    return True, None
+
+
+def last_sent(source, keys):
+    """{key: time of the latest SENT request whose detail contains key} (None = never) - least-recently-fetched first."""
+    con = connect()
+    try:
+        return {k: con.execute("SELECT MAX(at) FROM log WHERE source=? AND outcome='sent' AND detail LIKE ?",
+                               (source, f"%{k}%")).fetchone()[0] for k in keys}
     finally:
         con.close()
 

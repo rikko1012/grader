@@ -9,6 +9,9 @@ store; every table here is named sports_game_*). Times are UTC ISO strings 'YYYY
   sports_game_athletes       athlete id -> name, position, current team (team rosters + box scores)
   sports_game_teams          per game and team: every ESPN team box-score stat (numbers, "a-b" pairs split)
   sports_game_players        per game and athlete: position, starter, played / did-not-play + reason, every box stat
+  sports_game_plays_z        play-by-play, ONE compressed row per game (plays()): same columns and values as the
+                             row table below, ~7x smaller with no per-play index; the row table holds only games not
+                             yet packed (pack_plays moves them, row for row - nothing is dropped)
   sports_game_plays          play-by-play: clock, type, text, score, home win probability; basketball shot location and
                              points attempted; football down / distance / yards-to-end-zone before and after, yards,
                              yards after catch, penalty, turnover, drive, offense / defense; participants with roles
@@ -32,9 +35,11 @@ Line correctness (sports/LINE_CORRECTNESS.md, same rules as the canonical store)
     state's last_seen_at) is kept with late = 1 and never becomes current; readers (factors.py) skip late rows
   - each save is one transaction under the write lock; additive migrations only
 """
+import base64
 import hashlib
 import json
 import os
+import zlib
 
 from .. import config
 from ..books.store import DB, dt, iso  # noqa: F401  (dt / iso re-exported for the games package)
@@ -94,6 +99,9 @@ CREATE TABLE IF NOT EXISTS sports_game_fetches (
   id {ID}, kind TEXT NOT NULL, league TEXT, event_id TEXT, started_at TEXT NOT NULL, finished_at TEXT, ok INTEGER,
   http_status INTEGER, error TEXT, n_rows INTEGER);
 CREATE TABLE IF NOT EXISTS sports_game_settings (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT);
+CREATE TABLE IF NOT EXISTS sports_game_plays_z (
+  league TEXT NOT NULL, event_id TEXT NOT NULL, n INTEGER NOT NULL, cols TEXT NOT NULL, data TEXT NOT NULL,
+  PRIMARY KEY (league, event_id));
 """
 
 GAME_COLS = ("league", "event_id", "season", "season_type", "week", "start", "state", "completed", "home_id",
@@ -139,7 +147,8 @@ def _migrate(db):
 
 
 def fill_ended_at(db):
-    """A game's end = its last play's wall-clock time (ESPN), filled where missing."""
+    """A game's end = its last play's wall-clock time (ESPN), filled where missing (row-table games; a packed game
+    is saved with its ended_at from espn_game.parse)."""
     db.execute("UPDATE sports_game_games SET ended_at = (SELECT MAX(p.wallclock) FROM sports_game_plays p WHERE "
                "p.league = sports_game_games.league AND p.event_id = sports_game_games.event_id) WHERE ended_at IS "
                "NULL AND completed = 1")
@@ -163,7 +172,7 @@ def save_game(db, g):
     """Replace one game's box score and play-by-play (a re-read of a final game gives the same rows; a correction by
     ESPN replaces them). g = espn_game.parse() output."""
     lg, ev = g["game"]["league"], g["game"]["event_id"]
-    for tbl in ("sports_game_teams", "sports_game_players", "sports_game_plays"):
+    for tbl in ("sports_game_teams", "sports_game_players", "sports_game_plays", "sports_game_plays_z"):
         db.execute(f"DELETE FROM {tbl} WHERE league = ? AND event_id = ?", (lg, ev))
     db.execute("DELETE FROM sports_game_games WHERE league = ? AND event_id = ?", (lg, ev))
     db.execute("INSERT INTO sports_game_games " + _ins(GAME_COLS), [_j(g["game"].get(c)) for c in GAME_COLS])
@@ -171,10 +180,54 @@ def save_game(db, g):
         db.execute("INSERT INTO sports_game_teams " + _ins(TEAM_COLS), [_j(t.get(c)) for c in TEAM_COLS])
     for p in g["players"]:
         db.execute("INSERT INTO sports_game_players " + _ins(PLAYER_COLS), [_j(p.get(c)) for c in PLAYER_COLS])
-    sql = "INSERT INTO sports_game_plays " + _ins(PLAY_COLS)
-    for p in g["plays"]:
-        db.execute(sql, [_j(p.get(c)) for c in PLAY_COLS])
+    _put_plays(db, lg, ev, [[_j(p.get(c)) for c in PLAY_COLS[2:]] for p in g["plays"]])
     db.commit()
+
+
+# ---------------------------------------------------------------------------------------- packed play-by-play
+PLAY_PACK_COLS = PLAY_COLS[2:]                  # league / event_id are the row key
+
+
+def _put_plays(db, league, event_id, rows):
+    """One game's plays (lists in PLAY_PACK_COLS order, seq ascending) as one zlib + base64 row. Lossless: the values
+    go through JSON exactly as stored (ints, floats, text, NULL); cols names the order, so a later column addition
+    still reads old rows."""
+    rows = sorted(rows, key=lambda r: r[0])
+    data = base64.b64encode(zlib.compress(json.dumps(rows, separators=(",", ":")).encode("utf-8"), 9)).decode("ascii")
+    db.execute("INSERT INTO sports_game_plays_z (league, event_id, n, cols, data) VALUES (?,?,?,?,?)",
+               (league, event_id, len(rows), ",".join(PLAY_PACK_COLS), data))
+
+
+def plays(db, league, event_id):
+    """One game's plays in seq order, as dicts with every PLAY_COLS key - the same rows as
+    SELECT * FROM sports_game_plays ... ORDER BY seq, whether the game is packed or still in the row table."""
+    r = db.one("SELECT cols, data FROM sports_game_plays_z WHERE league = ? AND event_id = ?", (league, event_id))
+    if r:
+        cols = r["cols"].split(",")
+        return [dict({"league": league, "event_id": event_id}, **dict(zip(cols, v)))
+                for v in json.loads(zlib.decompress(base64.b64decode(r["data"])))]
+    return db.all("SELECT * FROM sports_game_plays WHERE league = ? AND event_id = ? ORDER BY seq",
+                  (league, event_id))
+
+
+def pack_plays(db, limit=None):
+    """Move row-table games into the packed table, one game per transaction, verified (the packed copy must read back
+    equal to the rows before the rows are deleted). -> games packed."""
+    games = db.all("SELECT DISTINCT league, event_id FROM sports_game_plays")
+    n = 0
+    for g in games[:limit] if limit else games:
+        rows = db.all("SELECT * FROM sports_game_plays WHERE league = ? AND event_id = ? ORDER BY seq",
+                      (g["league"], g["event_id"]))
+        db.execute("DELETE FROM sports_game_plays_z WHERE league = ? AND event_id = ?", (g["league"], g["event_id"]))
+        _put_plays(db, g["league"], g["event_id"], [[r[c] for c in PLAY_PACK_COLS] for r in rows])
+        back = plays(db, g["league"], g["event_id"])
+        if [dict(r) for r in rows] != back:
+            db.rollback()
+            raise ValueError(f"packed plays of {g['league']} {g['event_id']} do not read back equal")
+        db.execute("DELETE FROM sports_game_plays WHERE league = ? AND event_id = ?", (g["league"], g["event_id"]))
+        db.commit()
+        n += 1
+    return n
 
 
 def save_derived(db, league, event_id, players, teams, version):

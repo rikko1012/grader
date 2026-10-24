@@ -213,7 +213,19 @@ ODDS_API = "https://api.the-odds-api.com/v4"
 ODDS_MARKETS = {"nba": ["player_points", "player_rebounds", "player_assists", "player_threes"],
                 "nfl": ["player_pass_yds", "player_rush_yds", "player_reception_yds", "player_receptions",
                         "player_rush_attempts"]}
-ODDS_MAX_EVENTS = int(os.environ.get("SPORTS_ODDSAPI_MAX_EVENTS", "6"))
+ODDS_MAX_EVENTS = int(os.environ.get("SPORTS_ODDSAPI_MAX_EVENTS", "6"))      # per collection cycle
+ODDS_HORIZON_H = float(os.environ.get("SPORTS_ODDSAPI_HORIZON_H", "36"))     # games starting within this window
+
+
+def _oddsapi_order(evs, now_iso):
+    """Not-started games within ODDS_HORIZON_H, the least recently fetched first (never fetched first of all), then the
+    soonest - so a paced budget rotates through every game instead of re-reading the same six."""
+    from datetime import datetime, timedelta
+    end = (datetime.fromisoformat(now_iso.replace("Z", "+00:00")) + timedelta(hours=ODDS_HORIZON_H)) \
+        .strftime("%Y-%m-%dT%H:%M:%SZ")
+    up = [e for e in evs if e.get("id") and now_iso < (e.get("commence_time") or "") <= end]
+    last = ledger.last_sent("oddsapi", [e["id"] for e in up])
+    return sorted(up, key=lambda e: (last.get(e["id"]) or 0, e.get("commence_time") or ""))
 
 
 def oddsapi_ingest(con, league, observed_at, resolver, teams_raw):
@@ -228,8 +240,12 @@ def oddsapi_ingest(con, league, observed_at, resolver, teams_raw):
         return {"ok": False, "error": str(e).replace(k, "***")[:160]}
     full = {t["name"]: t["abbr"] for t in teams_raw}
     b = adapters.Batch()
-    for ev in sorted(evs, key=lambda e: e.get("commence_time") or "")[:ODDS_MAX_EVENTS]:
+    for ev in _oddsapi_order(evs, observed_at)[:ODDS_MAX_EVENTS]:
         mk = ODDS_MARKETS[league]
+        ok, why = ledger.paced("oddsapi", len(mk))
+        if not ok:                                           # even spread of the month's credits: wait for the next hour
+            out["paced"] = why
+            break
         try:
             body = _get("oddsapi", f"{ODDS_API}/sports/{lg['odds_api']}/events/{ev['id']}/odds",
                         params={"apiKey": k, "regions": "us", "oddsFormat": "decimal", "markets": ",".join(mk)},

@@ -160,3 +160,90 @@ def build(league, fam, now, wanted, hist_path=None):
     del data
     summ["build_s"] = round(time.time() - t0, 2)
     return out, summ
+
+
+# ------------------------------------------------------------------------------------- scheduled job (worker)
+RESULT_MAX_AGE_H = 2
+
+
+class _Sections:
+    """{player id: section} read one player file at a time (the snapshot build holds one section, not all)."""
+
+    def __init__(self, d, pids):
+        self.d, self.pids = d, pids
+
+    def get(self, pid, default=None):
+        import json
+        if pid not in self.pids:
+            return default
+        from .snapshots import safe_name
+        try:
+            return json.loads((self.d / f"{safe_name(pid)}.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return default
+
+
+def read_result(root, now, wanted_pids):
+    """The latest player-context job result for this board -> ({pid: section} read lazily per player, summary);
+    nothing when the result is older than RESULT_MAX_AGE_H."""
+    import json
+    try:
+        res = json.loads((root / "player_context.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}, {"state": "waiting for the player-context job"}
+    age_h = (parse_utc(now) - parse_utc(res["as_of"])).total_seconds() / 3600
+    if age_h > RESULT_MAX_AGE_H:
+        return {}, dict(res.get("summary") or {}, state=f"stale: player-context result {age_h:.1f} h old")
+    return (_Sections(root / "context", set(res.get("pids") or ()) & set(wanted_pids)),
+            dict(res.get("summary") or {}, computed_at=res["as_of"]))
+
+
+def main(argv=None):
+    """SPORTS_INGEST=1 python -m sports.player_context build [nba nfl] - for each league, the players the last board
+    build wanted (<snapshots>/<league>/context_wanted.json) -> <snapshots>/<league>/player_context.json."""
+    import argparse
+    import json
+    import sys
+    import tempfile
+    from . import flags
+    from .contracts import now_utc
+    from .snapshots import FAMILY, safe_name, snap_root
+    ap = argparse.ArgumentParser(prog="python -m sports.player_context")
+    ap.add_argument("cmd", choices=("build",))
+    ap.add_argument("leagues", nargs="*", default=["nba", "nfl"])
+    a = ap.parse_args(argv)
+    flags.require("SPORTS_INGEST")
+    out = {}
+    for lg in a.leagues:
+        root = snap_root() / lg
+        try:
+            w = json.loads((root / "context_wanted.json").read_text(encoding="utf-8"))["wanted"]
+        except (OSError, ValueError, KeyError):
+            out[lg] = {"state": "no board build yet"}
+            continue
+        now = now_utc()
+        by_pid, summ = build(lg, FAMILY[lg], now, w)
+        cdir = root / "context"
+        cdir.mkdir(parents=True, exist_ok=True)
+
+        def put(path, obj):
+            fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                json.dump(obj, fh, separators=(",", ":"), default=str)
+            os.replace(tmp, path)
+        names = set()
+        for pid, sec in by_pid.items():
+            names.add(f"{safe_name(pid)}.json")
+            put(cdir / f"{safe_name(pid)}.json", sec)
+        for f in cdir.glob("*.json"):                   # players no longer on the board
+            if f.name not in names:
+                f.unlink()
+        put(root / "player_context.json", {"as_of": now, "summary": summ, "pids": sorted(by_pid)})
+        out[lg] = summ
+    print(json.dumps(out, indent=1, default=str), flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(main())

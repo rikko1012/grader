@@ -20,6 +20,7 @@ def private_sports_data(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "OUT_DIR", tmp_path / "output")
     monkeypatch.setattr(cache, "_local", threading.local())
     monkeypatch.delenv("ODDS_API_KEY", raising=False)
+    monkeypatch.setenv("SPORTS_CONTEXT_INLINE", "1")      # snapshot builds compute player context in-process
     for k in ("ODDSPAPI_API_KEY", "odds_papi_api", "SPORTS_ODDSPAPI", "SPORTS_ODDSPAPI_MONTHLY_REQUESTS",
               "SPORTS_ODDSPAPI_CS2_FLOOR"):
         monkeypatch.delenv(k, raising=False)

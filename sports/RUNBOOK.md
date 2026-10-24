@@ -169,6 +169,8 @@ Peak RSS measured 2026-10-24 on a copy of the real data (each job alone, `script
 | history | `sports.snapshots history nba nfl --max-players 400` | daily | heavy | 200 | 107 (40 players) | SPORTS_INGEST |
 | archive | `sports.archive pass` (13.3) | 6 h | heavy | 200 | 140 (80k rows) | SPORTS_INGEST |
 | archive-verify | `sports.archive verify` | daily | heavy | 120 | - | SPORTS_INGEST |
+| player-context | `sports.player_context build nba nfl` (factor-engine context for the player page; ui-snapshots embeds the result per player) | 30 min | heavy | 260 | 170 (1,724 games, 13 s) | SPORTS_INGEST |
+| games-backfill | `sports.games.backfill_job --budget 120` (game store: current + previous season, resumable; ~2 h to fill, then a no-op) | 15 min | light | 60 | 43-47 | SPORTS_INGEST |
 
 Flags are read when the service starts: flip a flag, then restart (Render: Save in the Environment tab restarts).
 `/api/sports/admin/ops` -> `scheduler.jobs.<name>` shows each job's last exit, peak RSS, cap, over-cap kills, queue
