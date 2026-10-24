@@ -250,6 +250,11 @@ def _current_row(con, kind, source, source_key):
                        "ORDER BY revision DESC LIMIT 1", (kind, source, source_key)).fetchone()
 
 
+def _span(kind):
+    """The table a read of `kind` uses: only offers are ever archived (sports/archive.py), every other kind is hot."""
+    return "records_all" if kind == "offer" else "records"
+
+
 def _archived_current(con, kind, source, source_key):
     """The CURRENT revision of an identity whose rows are all archived (sports/archive.py), via records_all."""
     try:
@@ -525,14 +530,14 @@ def row_meta(con, record_id):
 
 def revisions(con, kind, source, source_key):
     """Every stored revision, oldest first: [(meta, record)]."""
-    rows = con.execute("SELECT * FROM records_all WHERE kind=? AND source=? AND source_key=? ORDER BY revision",
+    rows = con.execute(f"SELECT * FROM {_span(kind)} WHERE kind=? AND source=? AND source_key=? ORDER BY revision",
                        (kind, source, source_key)).fetchall()
     return [({k: r[k] for k in ("record_id", "revision", "known_at", "content_hash", "late", "origin", "last_seen_at",
                                 "observed_at", "source_updated_at")}, _rec(r)) for r in rows]
 
 
 def latest(con, kind, source, source_key, as_of=None):
-    q = f"SELECT * FROM records_all WHERE kind=? AND source=? AND source_key=? AND {CURRENT_SQL}"
+    q = f"SELECT * FROM {_span(kind)} WHERE kind=? AND source=? AND source_key=? AND {CURRENT_SQL}"
     a = [kind, source, source_key]
     if as_of:
         q += " AND known_at <= ?"
@@ -553,16 +558,34 @@ def _latest_rows(con, kind, where, args, as_of, limit, scoped=False):
     """CURRENT revision per identity (store.CURRENT_SQL) among rows matching `where`, known at as_of. A CURRENT (as_of
     None) league-wide offer listing reads the hot window (offers seen in the last SPORTS_ARCHIVE_AFTER_H); point-in-time
     and event / player scoped reads span hot + archive (records_all) - sports/archive.py."""
-    tbl = "records" if (kind == "offer" and as_of is None and not scoped) else "records_all"
+    tbl = "records" if (kind != "offer" or (as_of is None and not scoped)) else "records_all"   # only offers archive
     cond = f"kind = ? AND {CURRENT_SQL}" + (f" AND {where}" if where else "")
     a = [kind] + list(args)
     if as_of:
         cond += " AND known_at <= ?"
         a.append(as_of)
+    if tbl == "records_all":                        # spans the archive: select on metadata, then fetch by rid
+        return _archive_span_latest(con, cond, a, limit)
     q = (f"SELECT r.* FROM {tbl} r JOIN (SELECT source, source_key, MAX(revision) AS rv FROM {tbl} WHERE {cond} "
          f"GROUP BY source, source_key) z ON r.source = z.source AND r.source_key = z.source_key AND r.revision = z.rv "
          f"WHERE r.kind = ? ORDER BY r.known_at DESC, r.source, r.source_key LIMIT ?")
     return con.execute(q, a + [kind, int(limit)]).fetchall()
+
+
+def _archive_span_latest(con, cond, args, limit):
+    """_latest_rows over hot + archive without a self-join of the view (which would read every archived file): one
+    GROUP BY on records_meta_all (SQLite returns the bare columns of the MAX(revision) row - the same row the hot
+    query joins back to), then the chosen rows from records_all by rid, in the same order."""
+    picks = con.execute(f"SELECT rid, known_at, source, source_key, MAX(revision) FROM records_meta_all WHERE {cond} "
+                        "GROUP BY source, source_key ORDER BY known_at DESC, source, source_key LIMIT ?",
+                        list(args) + [int(limit)]).fetchall()
+    rids = [r[0] for r in picks]
+    got = {}
+    for i in range(0, len(rids), 500):
+        part = rids[i:i + 500]
+        for r in con.execute(f"SELECT * FROM records_all WHERE rid IN ({','.join('?' * len(part))})", part):
+            got[r["rid"]] = r
+    return [got[x] for x in rids if x in got]
 
 
 def offers(con, league=None, event_id=None, player_id=None, stat=None, platform=None, as_of=None, limit=5000):
@@ -605,7 +628,7 @@ def history(con, player_id, stat, before, as_of=None, limit=200):
 
 
 def _any_event(con, event_id, as_of):
-    row = con.execute("SELECT * FROM records_all WHERE kind='event' AND source_key=? AND known_at <= ? AND "
+    row = con.execute("SELECT * FROM records WHERE kind='event' AND source_key=? AND known_at <= ? AND "
                       f"{CURRENT_SQL} ORDER BY revision DESC LIMIT 1", (event_id, as_of)).fetchone()
     return _rec(row)
 
@@ -616,8 +639,8 @@ def forecasts(con, league=None, event_id=None, player_id=None, model_version=Non
         if v is not None:
             w.append(f"{col} = ?")
             a.append(v)
-    rows = con.execute(f"SELECT * FROM records_all WHERE {' AND '.join(w)} ORDER BY known_at DESC LIMIT ?",
-                       a + [int(limit)]).fetchall()
+    rows = con.execute(f"SELECT * FROM records WHERE {' AND '.join(w)} ORDER BY known_at DESC LIMIT ?",
+                       a + [int(limit)]).fetchall()                # forecasts are never archived (sports/archive.py)
     recs = [(r["record_id"], _rec(r)) for r in rows]
     return [x for x in recs if model_version is None or x[1].model_version == model_version]
 
@@ -631,7 +654,7 @@ def settlements(con, offer_id=None, platform=None, forecast_id=None):
     if offer_id:
         w.append("source_key LIKE ?")
         a.append(f"{offer_id}|%")
-    rows = con.execute(f"SELECT * FROM records_all WHERE {' AND '.join(w)} ORDER BY source_key, revision", a).fetchall()
+    rows = con.execute(f"SELECT * FROM records WHERE {' AND '.join(w)} ORDER BY source_key, revision", a).fetchall()
     recs = [(r["record_id"], _rec(r)) for r in rows]
     if forecast_id:
         recs = [x for x in recs if forecast_id in x[1].affected_forecast_ids]

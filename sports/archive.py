@@ -18,7 +18,8 @@ Where it goes (same crash-safe protocol as the esports ml_store archive, ml_stor
   A crash before the commit leaves every row hot (an orphan final file is never listed and is redone); after the
   commit the rows exist only in the verified file + index. `verify` re-reads every listed file against the manifest.
 
-Reads (transparent): install(con) adds the TEMP VIEW records_all (hot records UNION ALL archived rows, same columns;
+Reads (transparent): install(con) adds the TEMP VIEWs records_all (every column) and records_meta_all (metadata only,
+no file reads - what selections GROUP BY over before fetching the chosen rows by rid) - records_all (hot records UNION ALL archived rows, same columns;
 payload / content_hash / schema_version / stored_at come from the file through the SQL function sports_arch, files
 cached in a bounded LRU) - store.py's record lookups, point-in-time and event / player-scoped reads use it, so callers
 cannot tell where a row lives. League-wide CURRENT listings (store.offers without as_of, raw SQL on `records`) read
@@ -145,6 +146,7 @@ def install(con, db_path=None):
             src = "temp.records" if con.execute("SELECT 1 FROM temp.sqlite_master WHERE type='view' AND "
                                                 "name='records'").fetchone() else "main.records"
             con.execute(f"CREATE TEMP VIEW IF NOT EXISTS records_all AS SELECT * FROM {src}")
+            con.execute(f"CREATE TEMP VIEW IF NOT EXISTS records_meta_all AS SELECT * FROM {src}")
             return False
         path = str(db_path or con.execute("PRAGMA database_list").fetchone()[2])
         names = {}
@@ -174,21 +176,31 @@ def install(con, db_path=None):
                 cols.append("dk.v AS kind")
             elif c == "source":
                 cols.append("ds.v AS source")
-            elif c in DIM_COLS:
-                cols.append(f"(SELECT v FROM main.archive_dims WHERE id = a.{c}) AS {c}")
+            elif c in DIM_COLS:                         # joined (not a correlated subquery): filters use indexes
+                cols.append(f"d_{c}.v AS {c}")
             elif c == "late":
                 cols.append("a.late AS late" if "late" in arch_have else "0 AS late")
             elif c in FILE_COLS:
                 cols.append(f"sports_arch(a.file, a.ln, '{c}') AS {c}")
             else:
                 cols.append(f"a.{c} AS {c}")
+        dim_joins = "".join(f" LEFT JOIN main.archive_dims d_{c} ON d_{c}.id = a.{c}"
+                            for c in DIM_COLS if c not in ("kind", "source"))
         con.execute("DROP VIEW IF EXISTS temp.records_all")
         src = "temp.records" if con.execute("SELECT 1 FROM temp.sqlite_master WHERE type='view' AND "
                                             "name='records'").fetchone() else "main.records"
         hot = list(COLS) if src == "temp.records" else hot     # store.connect's compat view already has them
         con.execute("CREATE TEMP VIEW records_all AS SELECT " + ", ".join(hot) + f" FROM {src} UNION ALL "
                     "SELECT " + ", ".join(cols) + " FROM main.archive_rows a JOIN main.archive_dims dk ON dk.id = a.kind"
-                    " JOIN main.archive_dims ds ON ds.id = a.source")
+                    " JOIN main.archive_dims ds ON ds.id = a.source" + dim_joins)
+        meta = ("rid", "kind", "record_id", "source", "source_key", "revision", "league", "event_id", "player_id",
+                "stat", "platform", "line", "observed_at", "known_at", "last_seen_at", "seen_count", "late")
+        meta_cols = [x for x, c in zip(cols, COLS) if c in meta]
+        meta_hot = [x for x, c in zip(hot if src != "temp.records" else list(COLS), COLS) if c in meta]
+        con.execute("DROP VIEW IF EXISTS temp.records_meta_all")
+        con.execute("CREATE TEMP VIEW records_meta_all AS SELECT " + ", ".join(meta_hot) + f" FROM {src} UNION ALL "
+                    "SELECT " + ", ".join(meta_cols) + " FROM main.archive_rows a JOIN main.archive_dims dk ON "
+                    "dk.id = a.kind JOIN main.archive_dims ds ON ds.id = a.source" + dim_joins)
         return True
     except sqlite3.Error:
         return False
