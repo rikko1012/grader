@@ -49,6 +49,7 @@ services:
       - key: SPORTS_TOKEN_SECRET
         sync: false           # >= 32 random characters; the SAME value on scout-sports-api
 
-  # The Scout Sports API service (scout-sports-api, paid Standard instance + 20 GB disk) is deliberately NOT declared
-  # here: this file is auto-synced, so declaring it would create and bill it on merge whatever the flags say. Its
-  # declaration lives in the opt-in template deploy/render.sports-api.yaml (not authorized; RUNBOOK section 6).
+  # The Scout Sports API service (scout-sports-api) is deliberately NOT declared here: this file is auto-synced, so a
+  # service / disk declared here would be created, re-planned or resized by a merge whatever the flags say. The owner
+  # created it by hand (Starter + 5 GB disk); it is mirrored in the opt-in template deploy/render.sports-api.yaml
+  # (RUNBOOK section 6). Standard + 20 GB is not authorized (pending explicit cost approval).

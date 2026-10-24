@@ -1,15 +1,19 @@
 # OPT-IN deployment template for the Scout Sports API service (sports/RUNBOOK.md section 6). NOT a live Blueprint.
 #
-# Render auto-syncs only the repository-root render.yaml. This file sits outside it on purpose: nothing here is
-# created by a merge or a Blueprint sync. Using it creates PAID Render resources: a Standard web service plus a 20 GB
-# persistent disk, each billed monthly. Flags at 0 do not change that - a declared service and disk are provisioned
-# and billed whatever the SPORTS_* values are.
+# Render auto-syncs only the repository-root render.yaml. This file sits outside it on purpose: a merge or a
+# Blueprint sync never creates, resizes or re-plans anything from it. Declared resources are PAID and are billed from
+# creation whatever the SPORTS_* flags say.
 #
-# Authorization status: NOT authorized. The current owner authorization covers only a necessary cheapest paid
-# Postgres; it does not cover this Standard service or its disk. Do not apply this file (New -> Blueprint pointed at
-# this path, copying it into render.yaml, or the manual steps in RUNBOOK section 6) until the owner explicitly
-# authorizes these specific resources. Release gate: the +10% esports p99 budget FAILED locally (+14%) and stays
-# pending a staging re-run (RUNBOOK sections 11-12); member enablement is blocked until that passes.
+# What exists (created by the owner by hand in the Render dashboard on 2026-10-24 under the owner's Starter
+# authorization - NOT from this file): scout-sports-api, Ohio, Starter instance ($7/month) + 5 GB disk at
+# /sports-data ($1.25/month) = $8.25/month, auto-deploy off, every SPORTS_* flag 0, no secrets yet. This file mirrors
+# that instance as a record / re-creation aid. Do not apply it as a Blueprint while that service exists.
+# NOT authorized: the Standard instance ($25/month) and a 20 GB disk ($5/month) - pending the owner's explicit cost
+# approval. Do not change `plan` or `sizeGB` (here or in the dashboard) until then.
+# Memory limits below are the TEMPORARY disabled-instance values (service 200 MB / worker 220 MB / store 4,000 MB);
+# replace them only with measured Starter settings once those are merged (Starter scheduling / memory work, PR17).
+# Release gate: the +10% esports p99 budget FAILED locally (+14%) and stays pending a staging re-run (RUNBOOK
+# sections 11-12); member enablement is blocked until that passes. Workers stay off until the staged enable.
 #
 # Contents: the scout-sports-api service exactly as the staged rollout expects it. The API and its worker children
 # (ingestion, snapshot prebuild, slip spool jobs, assistant runner, lab runner) run as supervised CHILD processes of
@@ -23,16 +27,15 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile.sports   # requirements-sports.txt (anthropic SDK); the esports Dockerfile is unchanged
     dockerCommand: python -m sports.service
-    plan: standard            # 2 GB / 1 CPU for API + ingestion + assistant (measured: service <= 50 MB at 700 members,
-                              # ingestion 110-130 MB per cycle). Move to Pro (4 GB) BEFORE SPORTS_TRAIN=1 (lab training
-                              # child capped at SPORTS_WORKER_MAX_MB like the ingestion child) - RUNBOOK section 6
+    plan: starter             # 512 MB / 0.5 CPU - owner Starter authorization. Standard (2 GB / 1 CPU, $25/month) is
+                              # pending explicit cost approval; Pro (4 GB) would be needed BEFORE SPORTS_TRAIN=1
     region: ohio
     healthCheckPath: /api/sports/health
     autoDeploy: false         # deploy by hand during the staged rollout
     disk:
       name: scout-sports-data
       mountPath: /sports-data
-      sizeGB: 20              # measured: ~50 MB first cycle, ~300 MB history ingestion, +10-15 MB/hour (~0.3 GB/day)
+      sizeGB: 5               # Starter disk; growth + retention: sports/RETENTION.md (20 GB pending cost approval)
     envVars:
       - key: PORT
         value: "10000"
@@ -67,14 +70,14 @@ services:
       - key: SPORTS_KALSHI_EVERY_MIN
         value: "30"
       - key: SPORTS_WORKER_MAX_MB
-        value: "768"
+        value: "220"          # TEMPORARY disabled-instance value (see header)
       - key: SPORTS_STORE_MAX_MB
-        value: "16000"        # ingestion pauses itself at 16 GB of the 20 GB disk
+        value: "4000"         # TEMPORARY: ingestion pauses itself at 4 GB of the 5 GB disk (sports/RETENTION.md)
       - key: SPORTS_SERVICE_MAX_MB
-        value: "900"
+        value: "200"          # TEMPORARY disabled-instance value (see header)
       - key: SPORTS_SERVICE_THREADS
-        value: "32"
+        value: "32"           # Standard-sized; the Starter value comes with the measured Starter settings
       - key: SPORTS_DB_POOL
-        value: "4"
+        value: "4"            # Standard-sized; as above
       - key: SPORTS_REQUEST_BUDGET_S
         value: "4"

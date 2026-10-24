@@ -30,7 +30,8 @@ No esports table, file or migration is changed. The esports disk (`/data`) is un
 | cs2-scout | SPORTS_API_MODE | service | esports mints tokens + serves the page only |
 | cs2-scout | SPORTS_API_BASE, SPORTS_TOKEN_SECRET | set (secret) | RUNBOOK section 6 |
 | scout-sports-api | SPORTS_API / SPORTS_INGEST / SPORTS_TRAIN / SPORTS_ASSISTANT | 0 / 0 / 0 / 0 | staged enable: RUNBOOK section 7 |
-| scout-sports-api | SPORTS_DATA_DIR | /sports-data (20 GB disk scout-sports-data) | image Dockerfile.sports (requirements-sports.txt); declared only in the opt-in template deploy/render.sports-api.yaml, not the auto-synced root render.yaml - paid Standard service + disk NOT authorized (current authorization: a necessary cheapest paid Postgres only) |
+| scout-sports-api | SPORTS_DATA_DIR | /sports-data (5 GB disk scout-sports-data) | image Dockerfile.sports (requirements-sports.txt); owner-created by hand on Starter + 5 GB ($8.25/month, owner Starter authorization 2026-10-24), mirrored in the opt-in template deploy/render.sports-api.yaml, never in the auto-synced root render.yaml. Standard + 20 GB pending explicit cost approval. Retention: sports/RETENTION.md |
+| scout-sports-api | SPORTS_SERVICE_MAX_MB / SPORTS_WORKER_MAX_MB / SPORTS_STORE_MAX_MB | 200 / 220 / 4000 | TEMPORARY disabled-instance limits; replaced only by measured Starter settings once merged |
 | scout-sports-api | ODDS_API_KEY, ANTHROPIC_API_KEY, SPORTS_TOKEN_SECRET, ADMIN_TOKEN | secrets set by the owner in the Environment tab (never in git) | |
 
 ## 4. Data coverage
@@ -86,8 +87,8 @@ and `test_service_refuses_everything_without_a_secret_and_with_the_flag_off`.
 
 Service scope (RUNBOOK section 12): staging load run with the sports service on its own Render instance (the +10%
 esports p99 budget FAILED locally - 1.14x measured on one shared workstation - pending staging; member enablement
-blocked until it passes); the paid Render resources (deploy/render.sports-api.yaml) need an explicit owner
-authorization that does not exist yet, then the owner creates them and the secrets; store retention / compaction before the 16 GB cap (~7 weeks); scipy import in sports/model/dists.py fails
+blocked until it passes); scout-sports-api exists on Starter + 5 GB (Standard + 20 GB pending cost approval) and
+still needs its secrets; store retention before the 4 GB store cap on the 5 GB disk (sports/RETENTION.md); scipy import in sports/model/dists.py fails
 the isolation test; anthropic SDK pin unexercised. TODO: add the other agents' blockers.
 
 ## Coordinator verification (2026-10-24, integration head after all agent merges)
@@ -101,8 +102,8 @@ the isolation test; anthropic SDK pin unexercised. TODO: add the other agents' b
 | 700-member esports load, sports flags off | 1,226 requests, 0 5xx, p95 1.45 s (main: 1.45 - 1.73 s); conditional variant 0 5xx, p95 1.96 s |
 | Sports-enabled esports p99 (separate process, one workstation) | +14% vs off (budget +10%) - NOT met locally; must be re-measured on staging with scout-sports-api on its own instance (RUNBOOK) |
 | Data rights | Kalshi (partner) and ESPN: owner attestation 2026-10-23 |
-| Model validation | NBA pts/reb/ast/3pm passed the registered history gate (locked test); NFL 5 markets failed; forward gate F (>= 300 settled props / 100+ games at real lines) not yet reviewable - stakes 0, letters withheld |
+| Model validation | NBA pts/reb/ast/3pm passed the registered history gate (locked test); NFL 5 markets failed; forward gate F (>= 300 settled props / 100+ games at real lines) not yet reviewable - stakes 0, letters withheld. 300 / 100 is the MINIMUM sample for a registered review, not a pass: reaching it opens a review of the calibration and log-loss criteria (REGISTER.md 7); nothing promotes automatically (test_gating.py) |
 
-Open before member enable: staging load run (+14% failed the +10% gate locally - pending staging), Render resources
-(opt-in template deploy/render.sports-api.yaml; paid service + disk not authorized) + secrets (owner), store retention/compaction (16 GB cap
-~7 weeks), Thunderpick / OddsPapi first live inventory review, ANTHROPIC_API_KEY + SDK exercise, forward gate F.
+Open before member enable: staging load run (+14% failed the +10% gate locally - pending staging), secrets on the
+owner-created Starter service (deploy/render.sports-api.yaml; Standard + 20 GB pending cost approval), measured Starter
+settings, store retention (sports/RETENTION.md; 4 GB cap on the 5 GB disk), Thunderpick / OddsPapi first live inventory review, ANTHROPIC_API_KEY + SDK exercise, forward gate F.

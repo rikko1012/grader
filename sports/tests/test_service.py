@@ -493,9 +493,15 @@ def test_paid_sports_service_is_only_in_the_opt_in_template_not_the_synced_bluep
     assert code.count("disk:") == 1 and "name: cs2-scout-data" in code
     tpl = (root / SPORTS_TEMPLATE).read_text(encoding="utf-8")
     assert set(_render_services(SPORTS_TEMPLATE)) == {"scout-sports-api"}
-    assert "name: scout-sports-data" in tpl and "sizeGB: 20" in tpl and "plan: standard" in tpl
-    head = tpl.split("services:", 1)[0].lower()
+    # mirrors the owner-created Starter instance; Standard / 20 GB stay unauthorized (pending cost approval)
+    tcode = "\n".join(line.split("#", 1)[0].rstrip() for line in tpl.splitlines())
+    assert "plan: starter" in tcode and "sizeGB: 5" in tcode and "name: scout-sports-data" in tcode
+    assert "plan: standard" not in tcode and "sizeGB: 20" not in tcode and "autoDeploy: false" in tcode
+    s = _render_services(SPORTS_TEMPLATE)["scout-sports-api"]
+    assert (s["SPORTS_SERVICE_MAX_MB"], s["SPORTS_WORKER_MAX_MB"], s["SPORTS_STORE_MAX_MB"]) == ("200", "220", "4000")
+    head = " ".join(line.lstrip("#").strip() for line in tpl.split("services:", 1)[0].lower().splitlines())
     assert "opt-in" in head and "not authorized" in head and "paid" in head and "pending a staging" in head
+    assert "starter authorization" in head and "temporary" in head and "pending the owner's explicit cost" in head
     for claim in ("owner approved", "purchase approved", "approved 20"):
         assert claim not in tpl.lower() and claim not in rnd.lower(), claim
     # nothing else in the repository is a second Blueprint Render could pick up

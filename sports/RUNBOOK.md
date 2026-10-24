@@ -166,20 +166,24 @@ prebuilt value (HMAC-tagged pickle under `<SPORTS_DATA_DIR>/prebuilt/`, key deri
 falls back to a request-time build on a miss (counted in `/api/sports/admin/ops` -> `prebuilt.stats`). The slips leg
 pool (~2 s cold build, slips agent's measurement) is the first entry.
 
-## 6. Create the Render resources (owner, Render dashboard - NOT authorized yet)
+## 6. Render resources (owner, Render dashboard)
 
-We have no Render API access; these are the owner's clicks. Nothing here turns Sports on, but steps 1-8 create
-**paid** resources: a `Standard` web service and a 20 GB persistent disk, both billed monthly from creation whatever
-the `SPORTS_*` flags say. The current owner authorization covers only a necessary cheapest paid Postgres; it does
-**not** cover this service or its disk. Do not run steps 1-8 until the owner explicitly authorizes these resources.
+We have no Render API access; these are the owner's clicks. Nothing here turns Sports on. Paid resources are billed
+from creation whatever the `SPORTS_*` flags say.
 
-The service is declared only in the opt-in template `deploy/render.sports-api.yaml`, **not** in the root
-`render.yaml`: the root Blueprint is auto-synced, so a service / disk declared there would be created and billed by
-the merge itself (flags off do not prevent Blueprint provisioning). The root file carries only cs2-scout's sports
-variables (all `0` / `sync: false`). Removing the declaration from the root file does not delete a service that a
-sync already created - check the Render dashboard for `scout-sports-api` / `scout-sports-data` and delete or suspend
-them if they exist without authorization. Once authorized, either point a separate Blueprint at the template path
-or create the service by hand with the same values:
+**Status (2026-10-24):** the owner created `scout-sports-api` by hand under the owner's **Starter** authorization:
+Ohio, Starter instance ($7/month) + 5 GB disk at `/sports-data` ($1.25/month) = $8.25/month, auto-deploy off, every
+flag 0, no secrets yet, first build from `feature/scout-sports-nfl-nba` @ 506d1ae. Temporary disabled-instance limits:
+`SPORTS_SERVICE_MAX_MB=200`, `SPORTS_WORKER_MAX_MB=220`, `SPORTS_STORE_MAX_MB=4000` - replaced only by measured
+Starter settings once merged. **Not authorized:** the `Standard` instance ($25/month) and a 20 GB disk ($5/month),
+pending the owner's explicit cost approval. Do not create a second service. Disk growth / retention on 5 GB:
+`sports/RETENTION.md`.
+
+The service is mirrored in the opt-in template `deploy/render.sports-api.yaml`, **not** declared in the root
+`render.yaml`: the root Blueprint is auto-synced, so a service / disk declared there would be created, re-planned or
+resized by the merge itself (flags off do not prevent Blueprint provisioning). The root file carries only
+cs2-scout's sports variables (all `0` / `sync: false`). The steps below are the original hand-creation reference
+(Standard sizing); the Starter values above and in the template take precedence:
 
 1. Render dashboard -> **New +** -> **Web Service** -> **Build and deploy from a Git repository** -> repository
    `rikko1012/cs2-scout` -> **Connect**.
@@ -302,7 +306,7 @@ Esports side: `/health` (unchanged) and, with `SPORTS_API=1`, `/api/sports/admin
 1. Is esports affected? cs2-scout `/health`: `traffic.errors_5xx`, `avg_server_ms`, `memory_mb` vs the usual. If yes,
    kill switch (section 8) first, investigate second.
 2. `python -m sports.service --check https://scout-sports-api.onrender.com` - act on pages.
-3. Render -> scout-sports-api -> Metrics: memory below the plan with headroom; disk usage vs the 16 GB cap.
+3. Render -> scout-sports-api -> Metrics: memory below the plan with headroom; disk usage vs the store cap (`SPORTS_STORE_MAX_MB`; 4 GB on the Starter 5 GB disk).
 4. A member reports "Sports unavailable": `/api/sports/health` up? Token endpoint 401 for that member = their Whop
    access, not sports; 503 `sports_auth_not_configured` = the secret is missing on one side.
 5. Before enabling any sports change: re-run section 11's load script on it against the section 1 budgets.
@@ -384,15 +388,16 @@ sports paths identical to unknown routes - `test_rollback_is_flags_off_even_with
 
 1. **+10% esports p99 budget FAILED locally (+14%, section 11) - pending staging.** Needs a staging run with
    `scout-sports-api` on its own Render instance; member enablement stays blocked until esports p99 is within +10%
-   there. That staging run needs the paid resources of item 2 first.
-2. **Render resources are owner clicks and are NOT authorized** (no Render API access here): service
-   `scout-sports-api` (Standard), disk `scout-sports-data` 20 GB - declared only in the opt-in template
-   `deploy/render.sports-api.yaml`, never in the auto-synced root `render.yaml`. The current authorization covers
-   only a necessary cheapest paid Postgres. Secrets once authorized: `SPORTS_TOKEN_SECRET` (both services),
-   `ADMIN_TOKEN`, `ODDS_API_KEY`, `ANTHROPIC_API_KEY` (only for the assistant). Upgrade to Pro before
-   `SPORTS_TRAIN=1`.
-3. **Store retention / compaction does not exist yet**: at ~0.3 GB/day the 16 GB cap is reached in ~7 weeks;
-   ingestion then pauses itself (`store_full_ingest_paused`). Needs a retention job before that.
+   there. It runs against the owner-created Starter service (item 2); a Starter result is a Starter result - it
+   does not stand in for Standard sizing.
+2. **Render resources are owner clicks** (no Render API access here): `scout-sports-api` exists on Starter + 5 GB
+   (owner Starter authorization, 2026-10-24), mirrored in the opt-in template `deploy/render.sports-api.yaml`, never
+   in the auto-synced root `render.yaml`. Standard ($25/month) + 20 GB ($5/month) pending explicit cost approval.
+   Secrets still to set by the owner: `SPORTS_TOKEN_SECRET` (both services), `ADMIN_TOKEN`, `ODDS_API_KEY`
+   (optional), `ANTHROPIC_API_KEY` (only for the assistant). Pro would be needed before `SPORTS_TRAIN=1`.
+3. **Store retention is planned, not built**: on the Starter 5 GB disk the store cap is 4 GB
+   (`SPORTS_STORE_MAX_MB=4000`); ingestion pauses itself at the cap (`store_full_ingest_paused`). Measured growth,
+   what is never deleted, the bounded caches, alerts and the archive + read-back rule: `sports/RETENTION.md`.
 4. `sports/model/dists.py` imports scipy -> `test_production_needs_no_scipy_or_pandas` fails on the integration head
    (model agent: drop the import or add scipy to requirements-sports.txt and narrow the test).
 5. The `anthropic` SDK version pin (`>=2.0,<3`) and the beta header the assistant uses were not exercised here (no
