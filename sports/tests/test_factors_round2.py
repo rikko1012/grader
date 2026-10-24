@@ -138,12 +138,16 @@ def _first_commit(path):
 
 
 def test_registration_committed_before_round2_results():
-    reg = subprocess.run(["git", "log", "-S", "Amendment A5", "--format=%cI", "--", "sports/research/REGISTER.md"],
-                         cwd=ROOT, capture_output=True, text=True, timeout=30).stdout.split()
+    git = lambda *a: subprocess.run(["git", *a], cwd=ROOT, capture_output=True, text=True, timeout=30)  # noqa: E731
+    if git("rev-parse", "--is-shallow-repository").stdout.strip() == "true":
+        pytest.skip("shallow clone (CI): commit order is not visible")      # every file shows the same one commit
+    reg = git("log", "-S", "Amendment A5", "--format=%H", "--", "sports/research/REGISTER.md").stdout.split()
     res = _first_commit("sports/research/results/model_study2_nba_tune.json")
     if not reg or not res:
         pytest.skip("git history not available")
-    assert min(reg) < res[1], "REGISTER A5 must be committed before any round-2 result"
+    first_reg = reg[-1]                                  # the oldest commit that added the A5 text
+    # commit ORDER, not clock time (two commits in the same second compare equal)
+    assert first_reg != res[0] and git("merge-base", "--is-ancestor", first_reg, res[0]).returncode == 0,         "REGISTER A5 must be committed before any round-2 result"
     # the frozen challenger configs only for markets the registered joint test passed
     for sport in ("nba", "nfl"):
         st = json.loads((ROOT / f"sports/research/results/model_study2_{sport}_tune.json").read_text(encoding="utf-8"))
