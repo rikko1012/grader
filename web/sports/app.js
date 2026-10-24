@@ -541,6 +541,33 @@
     return "";
   }
   // Keep a single responsive rendering: every action retains its exact quote and forecast revision.
+  function prefBook() { try { return localStorage.getItem("sw:prefbook") || ""; } catch (e) { return ""; } }
+  function setPrefBook(p) { try { if (p) localStorage.setItem("sw:prefbook", p); else localStorage.removeItem("sw:prefbook"); } catch (e) { /* private mode */ } }
+  function prefBookHtml(B) {                            // member's own choice, saved per device; default = none
+    var seen = {};
+    B.markets.forEach(function (m) { m.q.forEach(function (q) { seen[q.p] = 1; }); });
+    var cur = prefBook();
+    return '<div class="sw-field sw-prefbook"><label for="sw-prefbook">Show first</label><select id="sw-prefbook"><option value="">No preferred book</option>' +
+      Object.keys(seen).sort(function (a, b) { return bookName(a) < bookName(b) ? -1 : 1; }).map(function (p) { return '<option value="' + esc(p) + '"' + (p === cur ? " selected" : "") + ">" + esc(bookName(p)) + "</option>"; }).join("") + "</select></div>";
+  }
+  function compareRow(m, q, B) {                        // one aligned row: book, line, price / multiplier, sides, observed
+    var price = q.d && (q.d[0] || q.d[1]) ? (q.d[0] ? "O " + (+q.d[0]).toFixed(2) : "") + (q.d[0] && q.d[1] ? " · " : "") + (q.d[1] ? "U " + (+q.d[1]).toFixed(2) : "")
+      : q.k ? "YES " + S.cents(q.k[0]) + " / " + S.cents(q.k[1]) : q.m ? "O " + S.mult(q.m[0]) + " · U " + S.mult(q.m[1]) : "Standard payout";
+    return "<tr><th scope=\"row\">" + book(q.p) + '</th><td class="num"><a class="sw-line" href="' + marketHref(m, q) + '">' + S.line(q.l) + "</a></td><td>" + esc(price) +
+      "</td><td>" + esc(offeredText(q.o)) + '</td><td class="sw-small">' + esc(S.age(q.t)) + "</td><td>" + quoteSource(q) + "</td></tr>" +
+      (q.p !== "kalshi" ? '<tr class="sw-cmp-act"><td colspan="6">' + renderActions(m, q, q.f ? B.fc[q.f] : null, B) + "</td></tr>" : "");
+  }
+  function compareTables(m, quotes, kq, B) {            // matching lines together; other ordinary lines apart
+    if (!quotes.length && !kq.length) return "";
+    var main = quotes.length ? quotes[0].l : null, all = quotes.concat(kq);
+    var same = all.filter(function (q) { return q.l === main; }), other = all.filter(function (q) { return q.l !== main; });
+    function table(rows, cap) {
+      return '<div class="sw-scroll"><table class="sw-mini sw-cmp"><caption>' + esc(cap) + '</caption><thead><tr><th scope="col">Book</th><th scope="col" class="num">Line</th><th scope="col">Price / multiplier</th><th scope="col">Sides</th><th scope="col">Observed</th><th scope="col"><span class="sw-sr">Source</span></th></tr></thead><tbody>' +
+        rows.map(function (q) { return compareRow(m, q, B); }).join("") + "</tbody></table></div>";
+    }
+    return (same.length ? table(same, "Same line " + S.line(main) + " · " + S.plural(same.length, "book")) : "") +
+      (other.length ? table(other.sort(function (a, b) { return a.l - b.l; }), "Other lines · " + S.plural(other.length, "line")) : "");
+  }
   function boardCards(rows, B) {
     function offer(m, q) {
       var f = q.f ? B.fc[q.f] : null;
@@ -555,13 +582,9 @@
     }
     return '<div class="sw-research-grid">' + rows.map(function (m) {
       var qr = quoteRows(m), inj = B.injuries[m.pid];
-      // A fixed book order avoids presenting a high probability or alternate as a recommendation.
-      var order = {prizepicks: 0, underdog: 1, fanduel: 2, betrivers: 3};
+      // Order: the member's preferred book first (saved on this device), then a neutral book order - never by chance.
       var kq = qr.k.filter(function (q) { return S.quoteShown(q, Date.now()); }), nbk = S.usableBooks(m.mk, Date.now()).length;
-      var quotes = qr.q.filter(function (q) { return S.quoteShown(q, Date.now()); }).sort(function (a, b) {
-        var rank = function (q) { return Object.prototype.hasOwnProperty.call(order, q.p) ? order[q.p] : 10; };
-        return rank(a) - rank(b);
-      });
+      var quotes = S.orderQuotes(qr.q.filter(function (q) { return S.quoteShown(q, Date.now()); }), prefBook());
       var h = '<article class="sw-research-card" aria-label="' + esc(m.n + ', ' + (B.stats[m.st] || m.st)) + '">' +
         '<div class="sw-research-head"><div class="sw-avatar" aria-hidden="true">' + esc(m.n.split(' ').map(function(n){return n[0];}).slice(0,2).join('')) +
         '</div><div><a class="sw-player-name" href="' + marketHref(m, null) + '">' + esc(m.n) + '</a>' +
@@ -575,11 +598,11 @@
       var remaining = Math.max(0, quotes.length - 1) + kq.length;
       if (remaining > 0 || nbk > 0) {
         h += '<details class="sw-compare"><summary>' + (remaining ? 'Compare ' + S.plural(remaining, 'more line') : 'Compare books') + (nbk ? ' · ' + S.plural(nbk, 'book') : '') + ' <span aria-hidden="true">＋</span></summary><div>';
+        h += compareTables(m, quotes, kq, B);
         if (nbk) h += mkBooks(m.mk, true, true);
-        quotes.slice(1).forEach(function(q){ h += offer(m,q); });
-        kq.forEach(function(q){ h += '<div class="sw-offer"><div class="sw-offer-head">' + book(q.p) + '<b>' + S.line(q.l) + '</b></div><p class="sw-small">YES ' + S.cents(q.k && q.k[0]) + ' / ' + S.cents(q.k && q.k[1]) + ' · ' + (kMid(q) === null ? 'Kalshi price only' : 'Kalshi own chance ' + S.pct(kMid(q)) + ' (one book)') + '</p><span class="sw-faint sw-small">Observed ' + esc(S.age(q.t)) + '</span> ' + quoteSource(q) + '</div>'; });
         h += '</div></details>';
       }
+      if (m.alt) h += '<p class="sw-small sw-faint sw-altnote">' + S.plural(m.alt, "alternate line") + ' (goblin / demon / alternate payouts) are kept apart from these comparisons: <a href="' + marketHref(m, null) + '">open the player</a>.</p>';
       return h + '<a class="sw-research-link" href="' + marketHref(m,null) + '">Player history & research <span aria-hidden="true">↗</span></a></article>';
     }).join('') + '</div>';
   }
@@ -609,7 +632,7 @@
         var total = B.markets.filter(function (m) { return (ff.more || m.pr) && (!onlyEvent || m.e === onlyEvent); }).length;
         var cnt = document.getElementById("sw-bcount"), body = document.getElementById("sw-bbody");
         var withFc = rows.filter(function (m) { return m.q.some(function (q) { return q.f; }); }).length;
-        cnt.innerHTML = '<p class="sw-count" aria-live="polite"><span><b>' + rows.length + "</b> of " + total + " markets</span><span><b>" + withFc + "</b> with a Scout chance</span>" +
+        cnt.innerHTML = prefBookHtml(B) + '<p class="sw-count" aria-live="polite"><span><b>' + rows.length + "</b> of " + total + " markets</span><span><b>" + withFc + "</b> with a Scout chance</span>" +
           (!ff.more && B.board.secondary_markets ? "<span>" + B.board.secondary_markets + " more under “More stats”</span>" : "") + "</p>";
         if (!total) { body.innerHTML = stateBox("No lines yet", "No " + state.lg.toUpperCase() + " props are on the board right now."); return; }
         if (!B.markets.some(function (m) { return m.q.some(function (q) { return q.f; }); }))
@@ -618,6 +641,8 @@
           body.innerHTML = stateBox("No props match these filters", "Try another stat or book, or reset the filters.", '<button type="button" class="sw-btn" id="sw-reset2">Reset filters</button>');
           document.getElementById("sw-reset2").onclick = reset; return;
         }
+        var pb = document.getElementById("sw-prefbook");
+        if (pb) pb.onchange = function () { setPrefBook(pb.value); draw(); };
         var shown = rows.slice(0, state.boardShown);
         body.innerHTML = boardCards(shown, B) +
           (rows.length > shown.length ? '<p style="text-align:center"><button type="button" class="sw-btn" id="sw-showmore">Show ' + Math.min(BOARD_PAGE, rows.length - shown.length) + " more (" + (rows.length - shown.length) + " left)</button></p>" : "");

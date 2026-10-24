@@ -227,3 +227,8 @@ body.sw{--bg:#0c1017;--panel:#141a24;--panel-2:#1a2230;--line:#283140;--muted:#a
 .sw .sw-proj { font-size: .95rem; margin-bottom: 4px; }
 .sw .sw-actions-slot:empty { display: none; }
 .sw .sw-matchline a { display: inline-block; min-height: 24px; line-height: 24px; }   /* 24 px touch target (a11y test) */
+.sw .sw-cmp caption { text-align: left; font-size: .8rem; font-weight: 600; padding: 6px 0; }
+.sw .sw-cmp th[scope="row"] { font-weight: 500; text-align: left; }
+.sw .sw-cmp-act td { padding-top: 0; border-top: 0; }
+.sw .sw-prefbook { max-width: 260px; margin-bottom: 8px; }
+.sw .sw-altnote { margin: 6px 0; }

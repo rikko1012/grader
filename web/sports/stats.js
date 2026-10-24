@@ -200,6 +200,11 @@
   function validationText(settled, target) {      // forward validation progress; grades and stakes withheld
     return "Research estimate · forward validation " + (settled || 0) + " of " + (target || 300) + " settled props";
   }
+  function orderQuotes(qs, pref) {        // member's preferred book first; otherwise the snapshot's neutral order
+    var rest = qs.slice();
+    if (!pref) return rest;
+    return rest.filter(function (q) { return q.p === pref; }).concat(rest.filter(function (q) { return q.p !== pref; }));
+  }
   function plural(n, one, many) { return n + " " + (n === 1 ? one : (many || one + "s")); }
   // which kind of number a forecast record is: Scout's own model, or a model read from market prices
   var MARKET_MODELS = {"mc-1": "market consensus", "sharp-2": "Kalshi ladder", "sharp-1": "sharp books"};
@@ -263,7 +268,8 @@
              KINDS: KINDS, STALE_S: STALE_S, isBook: isBook, fresh: fresh, quoteHasPrice: quoteHasPrice,
              quoteShown: quoteShown, bookUsable: bookUsable, usableBooks: usableBooks, hiddenBooks: hiddenBooks,
              marketShown: marketShown, plural: plural, modelSource: modelSource, pct0: pct0, kindOf: kindOf,
-             kindLabel: kindLabel, KIND_LABEL: KIND_LABEL, wholeLine: wholeLine, validationText: validationText};
+             kindLabel: kindLabel, KIND_LABEL: KIND_LABEL, wholeLine: wholeLine, validationText: validationText,
+             orderQuotes: orderQuotes};
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SportsStats = api;
 })(this);

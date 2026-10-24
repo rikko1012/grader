@@ -197,6 +197,9 @@ def test_app_never_says_kalshi_market_chance_and_labels_every_number():
     assert "Projection unavailable: " in app and "S.validationText" in app
     # every book row goes through the usable-price filter (no row without a price)
     assert "S.quoteShown(q, Date.now())" in app and "S.usableBooks(mk, Date.now())" in app
+    # item 4: aligned comparisons, alternates apart, member-chosen preferred book (no fixed order)
+    assert "compareTables(m, quotes, kq, B)" in app and "sw:prefbook" in app and "alternate line" in app
+    assert "var order = {prizepicks: 0" not in app
     # the ux agent's mount point
     assert 'class="sw-actions-slot"' in app and "hooks: HOOKS" in app
 

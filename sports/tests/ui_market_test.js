@@ -61,4 +61,9 @@ assert.strictEqual(S.wholeLine(4.5), false);
 assert.strictEqual(S.validationText(12), "Research estimate · forward validation 12 of 300 settled props");
 assert.strictEqual(S.plural(1, "book"), "1 book");
 assert.strictEqual(S.plural(2, "book"), "2 books");
+// preferred book first (member's choice), otherwise the neutral snapshot order; never a fixed book
+const qs = [{p: "fanduel", l: 20.5}, {p: "prizepicks", l: 20.5}, {p: "underdog", l: 21.5}];
+assert.deepStrictEqual(S.orderQuotes(qs, "").map(q => q.p), ["fanduel", "prizepicks", "underdog"]);
+assert.deepStrictEqual(S.orderQuotes(qs, "underdog").map(q => q.p), ["underdog", "fanduel", "prizepicks"]);
+assert.deepStrictEqual(S.orderQuotes(qs, "betmgm").map(q => q.p), ["fanduel", "prizepicks", "underdog"]);
 console.log("ok");
