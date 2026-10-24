@@ -195,6 +195,17 @@ process - nothing auto-promotes.
   for a forecast whose PIT is calibrated) - criterion 4 would have rejected every count market for a reason that is
   not miscalibration. The inclusive-interval number is still reported (`cov80_inclusive_interval`). Criterion 4's
   band [0.76, 0.84] is unchanged.
+- **A4 (2026-10-24, integration repair; before any mkt-fanduel / mkt-betrivers forecast exists - the code that can
+  write one lands in the same commit as this text):** the direct book feeds FanDuel (own sbapi feed, Ohio) and
+  BetRivers (Kambi offering API, Ohio), collected by the canonical ingestion loop (`sports.worker` source `books`)
+  and stored as sc-1 offers with platform `fanduel` / `betrivers`, are judged by EXACTLY the per-book rule section 10
+  gives The Odds API books (both sides at the same line, decimal odds > 1, multiplicative de-vig on that exhaustive
+  pair only, age from the book's own change time when it publishes one - BetRivers changedDate - else observed age,
+  <= 15 min and before the start; ordinary main lines only - their alternate lines are variant `alternate` and never
+  compatible). They are evaluated ONLY as single-source candidates `mkt-fanduel` / `mkt-betrivers`. They are NOT
+  sources of mc-1 or mi-1: those two keep the source set registered in section 10 (Kalshi, Polymarket, each Odds API
+  book), so no mc-1 / mi-1 number changes because a direct feed was added and nothing is refitted. Adding them to the
+  consensus would need its own dated amendment before any comparison. OddsPapi stays excluded (section 10).
 
 ## 10. Market candidates (owner decision 2026-10-23: every book is a primary source) - registered before any evaluation
 
@@ -212,7 +223,8 @@ All forward only (no historical player-prop quotes exist). Implemented in `sport
   nearest the target line (ties: lower line). Combination: equal-weight mean of log-odds over sources (weights fixed
   now; nothing estimated). 1 source = "single source", >= 2 = "consensus". The target's own platform is never a source
   for it. Unconditional output with the shape's push mass at a whole target line.
-- **mkt-<source>**: the same rule with one source (each book evaluated on its own).
+- **mkt-<source>**: the same rule with one source (each book evaluated on its own). Also the direct book feeds
+  `mkt-fanduel` / `mkt-betrivers` (amendment A4: single-source only, never in mc-1 / mi-1).
 - **mi-1 market-informed**: sm-1's calibrated PMF for the player, shifted by one mean factor c fitted (least squares on
   log-odds) to the same eligible sources' P(Over | no push).
 - Evaluation: on the same settled target offers, separately per version (sm-1, mi-1, mc-1, mkt-*, sharp-2): log-loss

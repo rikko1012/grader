@@ -460,5 +460,6 @@ def test_verify_fetches_the_next_mapped_game_once_per_league(db, no_espn, monkey
     monkeypatch.setitem(providers.PROVIDERS, "fake", p)
     out = worker.verify(db, ["fake"], ("nba",), now=NOW)
     assert p.calls == ["36220759"] and out["fake:nba"]["offers"] == 2 and out["fake:nba"]["books"] == {"fanduel": ["points"]}
-    monkeypatch.delenv("ODDS_API_KEY", raising=False)
-    assert worker.verify(db, ["theoddsapi"], ("nba",), now=NOW) == {"theoddsapi": {"skipped": "ODDS_API_KEY is not set"}}
+    # The Odds API is not a books-worker provider (its one path is books/sources.oddsapi_ingest); OddsPapi is off
+    assert "theoddsapi" not in providers.PROVIDERS
+    assert worker.verify(db, ["oddspapi"], ("nba",), now=NOW)["oddspapi"]["skipped"].startswith("disabled")

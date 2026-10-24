@@ -11,7 +11,9 @@ Polymarket (gamma API, public) - read 2026-10-23: events by tag_slug nba / nfl; 
 The Odds API - foundation adapters.oddsapi_offers (documented shape) + this module's event resolution by full team
   names (exact ESPN display names) and the credit ledger. Key: ODDS_API_KEY (Render only).
 Thunderpick / OddsPapi - CAPTURE-ONLY until verified (books/__init__.py): the answer's inventory (paths / market
-  names / counts) and a sha256 are recorded; no offer is produced from an unseen format.
+  names / counts) and a sha256 are recorded; no offer is produced from an unseen format. OddsPapi's inventory is the
+  unmetered account read of the guarded provider (books/oddspapi.py) - the account is shared with CS2, so capture
+  never makes a billable OddsPapi request; offers come only from that provider once enabled.
 """
 from __future__ import annotations
 
@@ -244,33 +246,49 @@ def capture(source, league):
                 except net.HttpError as e:
                     inv["answers"].append({"path": p, "error": f"HTTP {e.status}"})
         else:
-            r = _get("oddspapi", f"{OP_BASE}/sports", params={"apiKey": k})
-            sports = [s for s in r.json() if str(s.get("sportName", "")).lower() in ("basketball", "american football")]
-            inv["answers"].append({"path": "/sports", "matching": sports[:5],
-                                   "sha256": hashlib.sha256(r.content).hexdigest()})
+            # the OddsPapi account is SHARED with CS2: the inventory is the unmetered GET /v4/account through the
+            # guarded provider (books/oddspapi.py) - no billable request, so nothing here can spend CS2's quota
+            from .base import FetchResult
+            from .oddspapi import BOOK_PRIORITY, OddsPapi, books_for, quota_readable, subscription
+            res = FetchResult()
+            acc = OddsPapi().account(res)
+            if not isinstance(acc, dict):
+                inv["status"] = f"error: {res.error}"
+            else:
+                sub = subscription(acc) or {}
+                inv["answers"].append({"path": "/account (unmetered)", "sport_ids": sub.get("sport_ids"),
+                                       "player_props": {b: bool(((sub.get("bookmakers") or {}).get(b) or {})
+                                                                .get("has_player_props")) for b in BOOK_PRIORITY},
+                                       "books_nba": books_for(acc, "basketball"),
+                                       "books_nfl": books_for(acc, "football"), "quota_readable": quota_readable(acc)})
     except net.HttpError as e:
         inv["status"] = f"error: {str(e).replace(k, '***')[:120]}"
     return inv
 
 
 # --------------------------------------------------------------------------------------------------------- ingest
+def polymarket_ingest(con, league, observed_at, resolver):
+    """One Polymarket read of a league -> stored offers (the one implementation; the canonical ingest loop and the
+    manual `train books` job both call it)."""
+    try:
+        evs = polymarket_raw(league)
+        b = polymarket_offers(evs, league, observed_at, resolver)
+        res = store.put_many(con, b.records)
+        store.quarantine_many(con, b.quarantine, league, observed_at)
+        return {"events": len(evs), "offers": len(b.records),
+                **{k: res[k] for k in ("inserted", "duplicate", "revision", "invalid")},
+                "quarantined": len(b.quarantine), "resolved_players": sum(1 for r in b.records if r.player_id)}
+    except net.HttpError as e:
+        return {"ok": False, "error": str(e)[:160]}
+
+
 def ingest(con, league, sources=("polymarket", "oddsapi", "thunderpick", "oddspapi")):
     """One cycle for the extra market sources of one league. Stores offers; returns per-source coverage."""
     observed_at = now_utc()
     resolver, teams_raw = resolver_from_store(con, league)
     out = {"league": league, "observed_at": observed_at, "keys": key_state()}
     if "polymarket" in sources:
-        try:
-            evs = polymarket_raw(league)
-            b = polymarket_offers(evs, league, observed_at, resolver)
-            res = store.put_many(con, b.records)
-            store.quarantine_many(con, b.quarantine, league, observed_at)
-            out["polymarket"] = {"events": len(evs), "offers": len(b.records),
-                                 **{k: res[k] for k in ("inserted", "duplicate", "revision", "invalid")},
-                                 "quarantined": len(b.quarantine),
-                                 "resolved_players": sum(1 for r in b.records if r.player_id)}
-        except net.HttpError as e:
-            out["polymarket"] = {"ok": False, "error": str(e)[:160]}
+        out["polymarket"] = polymarket_ingest(con, league, observed_at, resolver)
     if "oddsapi" in sources:
         out["oddsapi"] = oddsapi_ingest(con, league, observed_at, resolver, teams_raw)
     for s in ("thunderpick", "oddspapi"):

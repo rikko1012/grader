@@ -1,7 +1,9 @@
 # Sportsbook odds ingestion (sports/books)
 
-Player-prop prices from DraftKings, FanDuel, BetMGM, Caesars and BetRivers for NBA and NFL. One scheduled worker
-collects them into Sports storage, and everything else reads that storage. No browser, no disguised client and no
+Player-prop prices from DraftKings, FanDuel, BetMGM, Caesars and BetRivers for NBA and NFL. The ONE scheduled
+collector (`python -m sports.worker loop`, source `books`) runs this package's job; everything else reads storage.
+Each successful game read is written to the immutable quote history here (`books.db`) **and**, from the same answer,
+to the canonical sc-1 store (`bridge.py`) that the board / UI snapshots and the model read - no second request. No browser, no disguised client and no
 manual tabs are involved, and nothing a member does triggers a provider call. Isolated from CS2 and LoL like the rest
 of `sports/`. **Production stays off:** this branch starts nothing on the server.
 
@@ -20,8 +22,10 @@ code, inert without `ODDS_API_KEY`; with a free Starter key it would be held to 
 | BetMGM | Refused: firewall block page (403) for a non-browser client. Probed every 6 h, never worked around | `betmgm` |
 | Caesars | Refused: CloudFront "Request blocked" (403). Probed every 6 h, never worked around | `williamhill_us`. **The Odds API lists it on paid plans only** |
 
-The Odds API (`theoddsapi.py`) is the documented feed. It needs `ODDS_API_KEY`, and without one it is skipped and
-says why. Its documentation (read 2026-10-23) says:
+The Odds API is polled in ONE place: the canonical collector's `oddsapi` source (`sources.oddsapi_ingest`, credit
+ledger `ledger.py`, events and players resolved to sc-1). `theoddsapi.py` keeps the parser it uses; the provider is not
+registered in `providers.PROVIDERS`, so this worker never calls it (it used to - a duplicate poller of the same
+credits). It needs `ODDS_API_KEY`, and without one it is skipped and says why. Its documentation (read 2026-10-23) says:
 - player props come one game at a time from `/v4/sports/{sport}/events/{id}/odds`;
 - cost = unique markets returned × regions (the five named books are one region; empty answers cost nothing);
 - `/events` is free;
@@ -126,9 +130,25 @@ service, so a separate worker cannot share the web service's SQLite file. Run th
 `record.save` stores `row["books"]` (consensus, books and quote ids) in the forecast's `book_consensus` column. The
 model's `chance` (`sharp-1`) is **unchanged**: the book consensus is shown and logged beside it, never folded into it.
 
+## Bridge to sc-1 (`bridge.py`)
+
+`bridge.sink(con, resolver_for)` is handed to `worker.run_once` by the canonical collector. Per game read:
+- one sc-1 `OfferSnapshot` per (feed, book, game, player, stat, period, market type, **line**); its two sides are
+  `SideQuote`s with the book's decimal prices. A side the book does not list is **not offered** (never invented);
+- platform = the book for its own feed (`fanduel`, `betrivers`), `oddspapi:<book>` for OddsPapi;
+- `source_updated_at` = the provider's own change time (BetRivers changedDate, OddsPapi changedAt), else `None` with
+  `source_time_unknown`; `observed_at` / `known_at` = our observation time;
+- event `espn:<id>` -> `<league>:espn:<id>`; players resolved exactly by the canonical resolver (unresolved = stored
+  with `player_id` None and a reason, never graded);
+- after a **complete** read only, that game's offers of the platform that the read no longer lists get a `removed`
+  revision (never after a failed read, never on other games).
+The model uses these as single-source candidates `mkt-fanduel` / `mkt-betrivers` only (REGISTER.md amendment A4);
+mc-1 / mi-1 keep their registered sources. The UI shows them in every row's quotes.
+
 ## Worker (`worker.py`)
 
-`python -m sports.books.worker` (forever; one pass a minute) or `python sports_scout.py books-run --once`.
+Scheduled: the canonical collector calls `run_once` each cycle. Manual: `python -m sports.books.worker` (ONE pass:
+books, then the game-data tick) or `python sports_scout.py books-run --once`. There is no second forever-loop.
 - **Lease:** one worker at a time; a second one finds the lease taken and does nothing.
 - **Game lists** are re-read every 30 min.
 - **Refresh ladder** (`schedule.py`): "full" is every 10 min inside 2 h, every 30 min inside 8 h, hourly inside 24 h,
@@ -141,8 +161,8 @@ model's `chance` (`sharp-1`) is **unchanged**: the book consensus is shown and l
   also counts. A call waits out a hold only within its own 60 s wait budget; beyond that it fails without sending.
   The worker saves holds (`hold:<host>` setting, so a restart honours them too), and the provider cools down until
   exactly that time. It is never retried early.
-- **Odds API budget:** the densest ladder whose estimated credits fit `SPORTS_ODDS_API_MONTHLY_CREDITS` (re-planned
-  daily from ESPN's real schedule, `plan.py`); every call is checked against the daily allowance and the reserve.
+- **Odds API budget:** not spent here (see Sources). The credit ledger of the canonical `oddsapi` source is
+  `ledger.py`; `plan.py` remains the estimate tool (`books-plan`).
 
 ## Storage needed (measured 2026-10-23 evening, real FanDuel + BetRivers data)
 
@@ -219,6 +239,12 @@ Additive unless marked **breaking**:
   `sports-factors/1`, board rows gain `factors`, forecasts gain a `factors` column (added automatically). The worker
   (`python -m sports.books.worker`) now also runs the game-data tick each pass (`--no-games` to skip). Kalshi
   pacing is 2 s.
+- (integration repair on PR17) ONE collector: `sports.worker` sources gain `books` (this worker's `run_once` +
+  `bridge.sink` -> sc-1) and `games` (`collect.tick`); `python -m sports.books.worker` is one pass only; the
+  `theoddsapi` provider is unregistered (Odds API polled only by `sources.oddsapi_ingest`); `books-oddspapi capture`
+  makes only the unmetered `/v4/account` read; ledger `oddspapi` monthly = `SPORTS_ODDSPAPI_MONTHLY_REQUESTS`
+  (default 0). sc-1 gains platforms `fanduel`, `betrivers`, `oddspapi:<book>`; forecasts gain `mkt-fanduel` /
+  `mkt-betrivers` (amendment A4).
 - (OddsPapi / Retry-After) new provider `oddspapi` (off by default; kind `feed_league`, read per league by the
   worker), `FetchResult.not_before` / `budget_denied` / `unmapped`, `net.HttpError.not_before` / `held`,
   `net.hold()` / `net.holds()`, CLI `books-oddspapi account|catalog`, health table gains an OddsPapi column. A

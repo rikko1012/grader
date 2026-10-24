@@ -59,13 +59,17 @@ Measured size (2026-10-23): 1,333 NBA games and 380 NFL games took 233 MB in SQL
 play-by-play. That is roughly 180 MB per NBA season and 45 MB per NFL season. One pre-game day of context adds about
 25k prop-line rows and 2k Kalshi rows (a row only on change).
 
-## Collection (`collect.py`), run by the one scheduled worker
-`python -m sports.books.worker` runs the books job, then `collect.tick`, each pass (`--no-games` for books only).
-- finals every 30 min
+## Collection (`collect.py`), run by the one scheduled collector
+The canonical collector (`python -m sports.worker loop`, source `games`) runs `collect.tick` each cycle;
+`python -m sports.books.worker` runs one manual pass. Shared, not re-fetched:
+- finals: settlement (`sports.worker settle`) fetches each final ESPN summary once and hands the same body to
+  `collect.ingest_body` (box score, play-by-play, game info) - there is no separate finals poller;
+- rosters and the injury report come from the collector's cached ESPN reads (`worker._espn_roster` 12 h,
+  `worker._espn_injuries_raw` 30 min), the same answers the sc-1 roster / injury sources use.
 - pre-game context and ESPN-supplied lines: every 30 min inside 36 h, every 6 h inside 7 days
 - Kalshi every 15 min
-- injuries every 30 min
-- BPI / FPI and rosters daily
+- injuries every 30 min (shared read)
+- BPI / FPI daily; rosters daily (shared read)
 - NWS weather with the NFL context
 
 One tick at a time (a lease) and host pacing from `net.py`. A source's `Retry-After` is obeyed in full: up to 60 s it

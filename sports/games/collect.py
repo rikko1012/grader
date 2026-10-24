@@ -6,15 +6,16 @@
     python sports_scout.py games-status
 
 A tick does only what is due (times in sports_game_settings):
-  finals     every 30 min: ESPN games of the last 3 days that are final and not yet stored -> box score + play-by-play
+  finals     NOT polled here: the canonical settlement (sports/worker.py settle_league) reads each final box score once
+             and hands the same body to ingest_body (box score + play-by-play + derived)
   context    pre-game, for games within 36 h every 30 min and within 7 days every 6 h: ESPN pickcenter / predictor /
              injuries from the game summary, and the ESPN-supplied DraftKings prop lines -> snapshots / prop history
   kalshi     every 15 min: Kalshi game ladders (winner, spread, total, team total, 1H, overtime, NFL TDs / sacks /
              turnovers) -> market history, matched to ESPN games
-  injuries   every 30 min: ESPN's league injury report -> snapshot
+  injuries   every 30 min: ESPN's league injury report -> snapshot, through the canonical worker's cached read
   weather    with the NFL context: the NWS kickoff forecast for outdoor US venues -> snapshot
   power      daily: ESPN BPI / FPI team ratings -> snapshot
-  rosters    daily: every team roster -> athlete id, name, position, team (ESPN-supplied props name athletes by id only)
+  rosters    daily: every team roster (the canonical worker's cached roster reads) -> athlete id, name, position, team (ESPN-supplied props name athletes by id only)
 One tick at a time (an expiring lease in sports_game_settings). Polite pacing per host is net.py's.
 """
 import json
@@ -23,14 +24,14 @@ import socket
 from datetime import datetime, timedelta, timezone
 
 from .. import config, espn, net
+from .. import worker as canonical
 from . import derive, espn_game, espn_props, kalshi_lines, store, weather
 from .store import dt, iso
 
 HOLDER = f"{socket.gethostname()}:{os.getpid()}"
 LEASE_TTL_S = 20 * 60
-EVERY_MIN = {"finals": 30, "kalshi": 15, "injuries": 30, "rosters": 24 * 60, "power": 24 * 60}
+EVERY_MIN = {"kalshi": 15, "injuries": 30, "rosters": 24 * 60, "power": 24 * 60}
 CONTEXT_NEAR_H, CONTEXT_NEAR_MIN, CONTEXT_FAR_H, CONTEXT_FAR_MIN = 36, 30, 7 * 24, 6 * 60
-FINALS_DAYS = 3
 STOP_AFTER_UNPLAYED = 20
 LEAGUES = ("nba", "nfl")
 
@@ -80,16 +81,28 @@ def _venue(db, lg, venue_id):
 
 
 def ingest_game(db, lg, event_id, now=None, final_only=True):
-    """Fetch and store one game -> "stored" | "not final" | error text. Football also reads the core plays (roles)."""
+    """Fetch and store one game -> "stored" | "not final" | error text (backfill / manual). Football also reads the
+    core plays (roles). The scheduled path does not call this: settlement hands its own body to ingest_body."""
+    now = now or _now()
+    try:
+        body = espn_game.summary_raw(lg, event_id)
+    except net.HttpError as e:
+        fid = store.start_fetch(db, "game", lg["key"], event_id, now=now)
+        store.finish_fetch(db, fid, False, http_status=e.status, error=str(e), now=now)
+        return str(e)
+    comp = ((body.get("header") or {}).get("competitions") or [{}])[0]
+    if final_only and not bool(((comp.get("status") or {}).get("type") or {}).get("completed")):
+        fid = store.start_fetch(db, "game", lg["key"], event_id, now=now)
+        store.finish_fetch(db, fid, True, 0, now=now)
+        return "not final"
+    return ingest_body(db, lg, event_id, body, now)
+
+
+def ingest_body(db, lg, event_id, body, now=None):
+    """Store one game from an ESPN summary body already fetched (by settlement or ingest_game) -> "stored" | error."""
     now = now or _now()
     fid = store.start_fetch(db, "game", lg["key"], event_id, now=now)
     try:
-        body = espn_game.summary_raw(lg, event_id)
-        comp = ((body.get("header") or {}).get("competitions") or [{}])[0]
-        final = bool(((comp.get("status") or {}).get("type") or {}).get("completed"))
-        if final_only and not final:
-            store.finish_fetch(db, fid, True, 0, now=now)
-            return "not final"
         core = espn_game.core_plays_raw(lg, event_id) if lg["family"] == "football" else None
         venue_id = ((body.get("gameInfo") or {}).get("venue") or {}).get("id")
         g = espn_game.parse(body, lg["key"], lg["family"], core_plays=core, venue=_venue(db, lg, venue_id),
@@ -206,14 +219,6 @@ def _games_window(lg, now, back_days, ahead_days):
     return espn.scoreboard(lg, (now - timedelta(days=back_days)).date(), (now + timedelta(days=ahead_days)).date())
 
 
-def _finals(db, lg, now):
-    n = 0
-    for e in _games_window(lg, now, FINALS_DAYS, 0):
-        if e["completed"] and not store.has_game(db, lg["key"], e["id"]):
-            n += ingest_game(db, lg, e["id"], now=now) == "stored"
-    return n
-
-
 def _context(db, lg, games, now, clock):
     """Pre-game snapshots and ESPN-supplied prop lines for games due by their distance to the start. Rows are stamped
     with the clock at the moment each game was read (a tick can run for minutes)."""
@@ -308,8 +313,8 @@ def _kalshi(db, lg, games, now, clock):
 def _rosters(db, lg, now):
     n = 0
     for t in espn.teams(lg):
-        try:
-            body = net.get_json(f"{espn.SITE}/{lg['espn'][0]}/{lg['espn'][1]}/teams/{t['id']}/roster")
+        try:                     # the canonical worker's cached roster read (same key / TTL): no second request
+            body = canonical._espn_roster(lg, t["id"])
         except net.HttpError:
             continue
         rows = []
@@ -323,7 +328,7 @@ def _rosters(db, lg, now):
 
 
 def _injuries(db, lg, now):
-    body = net.get_json(f"{espn.SITE}/{lg['espn'][0]}/{lg['espn'][1]}/injuries")
+    body = canonical._espn_injuries_raw(lg)     # the canonical worker's cached injury read: no second request
     rows = []
     for t in body.get("injuries") or []:
         for i in t.get("injuries") or []:
@@ -355,9 +360,6 @@ def tick(db, leagues=LEAGUES, now=None, clock=None):
                 if _due(db, f"rosters:{key}", EVERY_MIN["rosters"], now):
                     info["roster_athletes"] = _rosters(db, lg, now)
                     _mark(db, f"rosters:{key}", now)
-                if _due(db, f"finals:{key}", EVERY_MIN["finals"], now):
-                    info["finals_stored"] = _finals(db, lg, now)
-                    _mark(db, f"finals:{key}", now)
                 if _due(db, f"power:{key}", EVERY_MIN["power"], now):
                     info["powerindex_snapshot"] = bool(_power(db, lg, now))
                     _mark(db, f"power:{key}", now)

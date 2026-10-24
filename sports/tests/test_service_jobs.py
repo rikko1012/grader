@@ -156,7 +156,9 @@ def test_esports_image_is_unchanged_and_sports_deps_are_sports_only():
     sdock = (ROOT / "Dockerfile.sports").read_text(encoding="utf-8")
     assert "requirements-sports.txt" in sdock and "sports.service" in sdock
     rnd = (ROOT / "render.yaml").read_text(encoding="utf-8")
-    assert "dockerfilePath: ./Dockerfile.sports" in rnd and rnd.count("dockerfilePath") == 1   # esports keeps default
+    assert "dockerfilePath" not in rnd and "Dockerfile.sports" not in rnd   # esports keeps the default Dockerfile
+    tpl = (ROOT / "deploy" / "render.sports-api.yaml").read_text(encoding="utf-8")   # opt-in sports template only
+    assert "dockerfilePath: ./Dockerfile.sports" in tpl and tpl.count("dockerfilePath") == 1
 
 
 def test_the_snapshots_command_runs_in_a_child_process(tmp_path):

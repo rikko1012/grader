@@ -11,13 +11,13 @@ from .base import FetchResult
 from .betrivers import BetRivers
 from .fanduel import FanDuel
 from .oddspapi import OddsPapi
-from .theoddsapi import TheOddsAPI
 
-PROVIDERS = {"theoddsapi": TheOddsAPI(), "fanduel": FanDuel(), "betrivers": BetRivers(), "oddspapi": OddsPapi()}
+# The Odds API is NOT here: it is polled once, by the canonical path sports/books/sources.oddsapi_ingest (credit
+# ledger, resolved events / players -> sc-1 offers "oddsapi:<book>"). theoddsapi.py stays as a parser only.
+PROVIDERS = {"fanduel": FanDuel(), "betrivers": BetRivers(), "oddspapi": OddsPapi()}
 BOOKS = ("draftkings", "fanduel", "betmgm", "caesars", "betrivers")
-ROUTES = {"draftkings": ("oddspapi", "theoddsapi"), "fanduel": ("fanduel", "oddspapi", "theoddsapi"),
-          "betmgm": ("oddspapi", "theoddsapi"), "caesars": ("oddspapi", "theoddsapi"),
-          "betrivers": ("betrivers", "oddspapi", "theoddsapi")}
+ROUTES = {"draftkings": ("oddspapi",), "fanduel": ("fanduel", "oddspapi"), "betmgm": ("oddspapi",),
+          "caesars": ("oddspapi",), "betrivers": ("betrivers", "oddspapi")}
 PROBE_EVERY_H = 6
 BLOCKED = {
     "draftkings": "https://sportsbook-nash.draftkings.com/api/sportscontent/dkusoh/v1/leagues/42648",

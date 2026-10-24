@@ -1,9 +1,11 @@
-"""The one scheduled worker - the only code that calls a sportsbook, odds or game-data provider on a schedule.
-Each pass runs the books job below, then the game-data job (sports/games/collect.tick: finals, pre-game context,
-Kalshi game ladders, ESPN-supplied DraftKings prop lines, NWS weather, injuries, ratings, rosters - each when due).
+"""The books job (FanDuel / BetRivers own feeds, OddsPapi when enabled, health probes of refusing books), run by the
+CANONICAL ingest loop (sports/worker.py `loop`, source "books") - not a scheduler of its own. Every successful game read
+is stored here (immutable quote history, books.db) AND handed to the sink, which writes the same quotes to the sc-1
+store the UI and the model read (books/bridge.py). The Odds API is not polled here: the canonical Odds API path is
+sports/books/sources.oddsapi_ingest (credit ledger, resolved events and players).
 
-    python -m sports.books.worker                 run forever (a pass every PASS_EVERY_S; nothing is fetched early)
-    python -m sports.books.worker --once          one pass, then exit
+    python -m sports.worker loop nba nfl          the scheduled collector (the sports service's ingest-loop child)
+    python -m sports.books.worker                 manual: ONE pass (books + game data), then exit
     python -m sports.books.worker --leagues nba   limit leagues
 
 Each pass, under an expiring lease (a second worker finds the lease taken and does nothing - no overlapping jobs):
@@ -13,17 +15,16 @@ Each pass, under an expiring lease (a second worker finds the lease taken and do
      started games never), all of a game's markets batched in one call where the provider allows it;
   4. store offers (store.save_offers: immutable quote rows on change, last-seen time on every observation, removals
      only after a complete read) and set the game's next due time.
-The Odds API is metered: its ladder is chosen from the plan (plan.py) and every call is checked against the daily
-allowance and the reserve, using the x-requests-* headers the provider returns. Errors back off per provider
+A metered per-game "feed" provider (none registered now: The Odds API moved to sources.oddsapi_ingest) would get its
+ladder from the plan (plan.py), every call checked against the daily allowance and the reserve. OddsPapi reads a whole
+league per request through its own account-wide quota guard (_league_reads). Errors back off per provider
 (60 s doubling to 30 min; a refusal - 401 / 403 - waits 6 h). Polite pacing per host is in net.py. Member requests and
 the Scout board only ever read storage.
 """
 import argparse
 import os
-import signal
 import socket
 import sys
-import time
 from datetime import datetime, timedelta, timezone
 
 from .. import config, net
@@ -34,7 +35,6 @@ from .store import dt, iso
 
 HOLDER = f"{socket.gethostname()}:{os.getpid()}"
 LEASE_TTL_S = 15 * 60
-PASS_EVERY_S = 60
 BLOCKED_COOLDOWN_H = 6
 MAX_BACKOFF_S = 30 * 60
 LEAGUES = ("nba", "nfl")
@@ -69,7 +69,7 @@ def save_holds(db, now):
             "%Y-%m-%dT%H:%M:%SZ"), now=now)
 
 
-def _league_reads(db, name, prov, leagues, now, info):
+def _league_reads(db, name, prov, leagues, now, info, sink=None):
     """Providers that read a whole league per request (OddsPapi): due per league, every read through the provider's
     own quota guard; a budget refusal is not a failure (no backoff), it just waits for the next due time."""
     from datetime import timedelta as _td
@@ -103,6 +103,8 @@ def _league_reads(db, name, prov, leagues, now, info):
             n, r = store.save_offers(db, fid, name, key, ev.provider_event_id, keys.get(ev.provider_event_id),
                                      by_ev.get(ev.provider_event_id, []), True, now=now)
             new, removed = new + n, removed + r
+            if sink is not None:
+                sink(name, lg, keys.get(ev.provider_event_id), by_ev.get(ev.provider_event_id, []), True, iso(now))
         store.finish_fetch(db, fid, res, len(res.offers), new, removed, now=now)
         store.note_result(db, name, res, now=now)
         store.set_due(db, name, key, "league", now + _td(minutes=prov.interval_min(db, len(with_games), now)))
@@ -182,8 +184,10 @@ def _probe_blocked(db, now):
     return out
 
 
-def run_once(db, leagues=LEAGUES, now=None, provs=None, probe=True):
-    """One pass. -> summary dict. Returns {"busy": holder} when another worker holds the lease."""
+def run_once(db, leagues=LEAGUES, now=None, provs=None, probe=True, sink=None):
+    """One pass. -> summary dict. Returns {"busy": holder} when another worker holds the lease. sink(provider, lg,
+    event_key, offers, complete, observed_at) receives every successful game read - the canonical ingest
+    (sports.worker) passes bridge.sink so the same fetch also lands in the sc-1 store; no second request is made."""
     now = now or _now()
     if not store.take_lease(db, HOLDER, LEASE_TTL_S, now=now):
         return {"busy": True}
@@ -201,7 +205,7 @@ def run_once(db, leagues=LEAGUES, now=None, provs=None, probe=True):
                 info["cooling_down_until"] = st["cooldown_until"]
                 continue
             if prov.kind == "feed_league":
-                _league_reads(db, name, prov, leagues, now, info)
+                _league_reads(db, name, prov, leagues, now, info, sink)
                 continue
             ladder = _feed_ladder(db, now) if prov.kind == "feed" else schedule.direct_ladder()
             if ladder is None:
@@ -236,6 +240,8 @@ def run_once(db, leagues=LEAGUES, now=None, provs=None, probe=True):
                     store.finish_fetch(db, fid, res, len(res.offers), new, removed, now=now)
                     if complete:
                         store.note_result(db, name, res, now=now)       # a failure is noted once, below
+                        if sink is not None:
+                            sink(name, lg, event_key, res.offers, True, iso(now))
                     info["fetched"] += 1
                     info["offers"] += len(res.offers)
                     info["new_quotes"] += new
@@ -334,39 +340,27 @@ def verify(db, provider_names=None, leagues=LEAGUES, now=None):
 
 
 def main(argv=None):
+    """Manual, ONE pass only (books + game data). The scheduled collector is the canonical ingest loop
+    (python -m sports.worker loop, the sports service's ingest-loop child), which calls run_once / collect.tick itself;
+    a second forever-loop here would be a duplicate poller, so there is none."""
     p = argparse.ArgumentParser(prog="python -m sports.books.worker")
-    p.add_argument("--once", action="store_true")
+    p.add_argument("--once", action="store_true", help="kept for compatibility: a run is always one pass")
     p.add_argument("--leagues", default=",".join(LEAGUES))
     p.add_argument("--no-games", action="store_true", help="books only (skip the game-data job)")
     a = p.parse_args(argv)
     leagues = tuple(x.strip() for x in a.leagues.split(",") if x.strip())
-    stop = []
-    signal.signal(signal.SIGTERM, lambda *_: stop.append(1))
-    while True:
-        db = store.connect()
+    db = store.connect()
+    try:
+        print(run_once(db, leagues), flush=True)
+    finally:
+        db.close()
+    if not a.no_games:
+        from ..games import collect, store as gstore
+        gdb = gstore.connect()
         try:
-            s = run_once(db, leagues)
-        except Exception as e:                         # one bad pass never ends the worker
-            s = {"error": str(e)[:300]}
+            print({"games": collect.tick(gdb, leagues)}, flush=True)
         finally:
-            db.close()
-        print(s, flush=True)
-        if not a.no_games:
-            from ..games import collect, store as gstore
-            gdb = gstore.connect()
-            try:
-                g = collect.tick(gdb, leagues)
-            except Exception as e:
-                g = {"error": str(e)[:300]}
-            finally:
-                gdb.close()
-            print({"games": g}, flush=True)
-        if a.once or stop:
-            return
-        for _ in range(PASS_EVERY_S):
-            if stop:
-                return
-            time.sleep(1)
+            gdb.close()
 
 
 if __name__ == "__main__":
