@@ -275,3 +275,10 @@ body.sw{--bg:#0c1017;--panel:#141a24;--panel-2:#1a2230;--line:#283140;--muted:#a
 @media(max-width:640px){.sw .sw-views{gap:0}.sw .sw-views a{padding:0 7px}}   /* all five views fit at 360 px */
 /* sideways strips (game strip, phone nav): a soft right edge says "more this way"; end padding keeps the last item clear of it */
 .sw .sw-fx-strip{padding-right:28px;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent)}
+/* longer factor / context lists (labelled values with source + as-of): long source names wrap inside their cell instead of
+   widening the table; group header rows get breathing room */
+.sw .sw-mini td:not(.num){overflow-wrap:break-word}
+.sw .sw-mini tbody th[colspan]{padding-top:12px;color:var(--accent-2);text-align:left}
+.sw .sw-panel details.sw-more>summary{min-height:44px}
+.sw .sw-tray-head{flex-wrap:wrap;row-gap:2px}.sw .sw-tray-h{white-space:nowrap}   /* "Slip · PrizePicks · NBA" on one line; the count moves below if needed */
+@media(max-width:640px){.sw .sw-game a.sw-gamelink{display:inline-flex;align-items:center;min-height:36px}.sw .sw-matchline a{min-height:32px}}   /* phone targets */

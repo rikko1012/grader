@@ -315,7 +315,7 @@ def test_card_actions_selector(pw, shots):
         checked = a.locator("input:checked").count()
         assert checked == (1 if enabled == 1 else 0), (i, enabled, checked)
         for off in a.locator("label.sw-act-side.off").all():
-            assert off.locator("input").is_disabled() and off.locator(".sw-act-why").inner_text().strip()
+            assert off.locator("input").is_disabled() and off.locator(".sw-act-why").text_content().strip()   # text_content: also inside a closed Compare section
         assert "Track" in a.locator(".sw-act-help").text_content()
     a = acts.filter(has=page.locator("input:not(:checked):not([disabled])")).first
     add, tr = a.locator("[data-act-add]"), a.locator("[data-act-track]")
