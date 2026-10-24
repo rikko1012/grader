@@ -232,6 +232,20 @@ flags `SPORTS_UI=0`, `SPORTS_API=0`):
 4. Pass = staging check exit 0 twice (after 20 min and after >= 6 h of ingestion, so an archive pass and a history run
    have happened), no `job_over_cap`, no paging alert.
 
+**Owner-first access (`SPORTS_UI=owner`, 2026-10-24).** cs2-scout serves `/sports`, `/sports/<asset>`, the esports
+nav link and `/api/sports/token` ONLY to a paid Whop member (existing `Handler.allowed()`, checked first) whose allow id is
+in `SPORTS_UI_ALLOW` (comma-separated). Everyone else gets exactly the flags-off answer (unknown route; esports pages
+byte-identical - `test_isolation_server.py::test_everyone_else_gets_exactly_the_flags_off_answer`). Other
+`/api/sports/*` paths keep following `SPORTS_API` (leave it `0` on cs2-scout). Allow id = `"sa_" +
+sha256("scout-sports-allow|" + <Whop user id>)[:24]` (`server.sports_allow_id` = `sports.gateway.allow_id`; not tied to
+`SPORTS_TOKEN_SECRET`, so a rotation keeps it). The owner reads his own id: set `SPORTS_UI=owner` (empty allow list =
+nobody), sign in at cs2-scout, open `https://cs2-scout.onrender.com/api/sports/whoami?token=<ADMIN_TOKEN>` (admin token
+only; anyone else gets the unknown route) -> `{"allow_id": "sa_..."}`; or `python -m sports.gateway allow-id <Whop user
+id>`. Set `SPORTS_UI_ALLOW=sa_...` -> Save. cs2-scout env: `SPORTS_UI=owner`, `SPORTS_UI_ALLOW=sa_...`,
+`SPORTS_API=0`, `SPORTS_API_MODE=service`, `SPORTS_API_BASE=https://scout-sports-api.onrender.com`,
+`SPORTS_TOKEN_SECRET` (same value as scout-sports-api). scout-sports-api: `SPORTS_ALLOWED_ORIGINS` includes
+`https://cs2-scout.onrender.com` (verified live 2026-10-24: preflight 204 with that origin). Rollback: `SPORTS_UI=0`.
+
 **Member enable** (only after the release approval; unchanged order): cs2-scout `SPORTS_API=1` (token issuing; verify
 an admin token with `curl -H "X-Admin-Token: $ADMIN_TOKEN" https://cs2-scout.onrender.com/api/sports/token`), then
 `SPORTS_UI=1`; watch section 9 for an hour. Assistant: `ANTHROPIC_API_KEY` + `SPORTS_ASSISTANT=1`. Model forecasts /

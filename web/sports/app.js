@@ -225,6 +225,9 @@
       "payout multipliers": q.m ? "Over " + (q.m[0] || "-") + " / Under " + (q.m[1] || "-") : null,
       "Kalshi YES bid / ask": q.k ? S.cents(q.k[0]) + " / " + S.cents(q.k[1]) : null});
   }
+  function kMid(q) {                                     // Kalshi YES mid (bid + ask) / 2 = the market's chance of Over
+    return q && q.k && q.k[0] !== null && q.k[0] !== undefined && q.k[1] !== null && q.k[1] !== undefined ? (q.k[0] + q.k[1]) / 2 : null;
+  }
   function offeredText(o) {
     if (o[0] && o[1]) return "Over / Under";
     if (o[0]) return "Over only";
@@ -400,7 +403,7 @@
         if (!q) {
           h += '<td colspan="10" class="sw-faint">' + (m.alt ? "Only alternate-payout lines (goblin / demon) - open the player for them." : "No line for this filter.") + "</td>";
         } else if (x[1] === "k") {
-          h += "<td>" + book(q.p) + '</td><td class="num"><span class="sw-line">' + S.line(q.l) + '</span></td><td class="sw-offered">YES ' + S.cents(q.k && q.k[0]) + " / " + S.cents(q.k && q.k[1]) + '</td><td colspan="4" class="sw-faint sw-small">Kalshi price for Over ' + S.line(q.l) + '</td><td class="sw-small sw-faint">' + esc(S.age(q.t)) + "</td><td></td><td>" + quoteSource(q) + "</td>";
+          h += "<td>" + book(q.p) + '</td><td class="num"><span class="sw-line">' + S.line(q.l) + '</span></td><td class="sw-offered">YES ' + S.cents(q.k && q.k[0]) + " / " + S.cents(q.k && q.k[1]) + '</td><td colspan="4" class="sw-small">' + (kMid(q) === null ? '<span class="sw-faint">Kalshi price for Over ' + S.line(q.l) + "</span>" : "Market chance Over " + S.line(q.l) + ": <b>" + S.pct(kMid(q)) + '</b> <span class="sw-faint">(Kalshi YES mid)</span>') + '</td><td class="sw-small sw-faint">' + esc(S.age(q.t)) + "</td><td></td><td>" + quoteSource(q) + "</td>";
         } else {
           h += "<td>" + book(q.p) + (q.v !== "standard" && q.v !== "balanced" ? ' <span class="sw-tag">' + esc(q.v) + "</span>" : "") + '</td><td class="num"><a class="sw-line" href="' + marketHref(m, q) + '" aria-label="' + esc(m.n + " " + (B.stats[m.st] || m.st) + " " + S.line(q.l) + " on " + bookName(q.p)) + '">' + S.line(q.l) + "</a></td>" +
             '<td class="sw-offered">' + offeredText(q.o) + (q.m && (q.m[0] !== 1 || q.m[1] !== 1) ? '<div class="sw-faint">' + (q.m[0] ? "O " + S.mult(q.m[0]) : "") + (q.m[1] ? " U " + S.mult(q.m[1]) : "") + "</div>" : "") + "</td>" +
@@ -428,7 +431,7 @@
           '<div class="sw-pp"><span>O ' + c.over + "</span><span>U " + c.under + "</span>" + (f && f.pp > 0 ? "<span>P " + c.push + "</span>" : "") + "</div></div>";
       });
       qr.k.forEach(function (q) {
-        h += '<div class="sw-qrow"><div>' + book(q.p) + ' <span class="sw-line">' + S.line(q.l) + '</span></div><div class="sw-small sw-faint">YES ' + S.cents(q.k && q.k[0]) + " / " + S.cents(q.k && q.k[1]) + '</div><div class="sw-small sw-faint">market price</div></div>';
+        h += '<div class="sw-qrow"><div>' + book(q.p) + ' <span class="sw-line">' + S.line(q.l) + '</span></div><div class="sw-small sw-faint">YES ' + S.cents(q.k && q.k[0]) + " / " + S.cents(q.k && q.k[1]) + '</div><div class="sw-small' + (kMid(q) === null ? ' sw-faint">market price' : '">market <b>' + S.pct(kMid(q)) + "</b>") + "</div></div>";
       });
       if (!qr.q.length && !qr.k.length) h += '<div class="sw-qrow"><div class="sw-faint sw-small">' + (m.alt ? m.alt + " alternate lines - open the player" : "No line for this filter") + "</div></div>";
       h += "</article>";
@@ -463,6 +466,8 @@
         cnt.innerHTML = '<p class="sw-count" aria-live="polite"><span><b>' + rows.length + "</b> of " + total + " markets</span><span><b>" + withFc + "</b> with a Scout chance</span>" +
           (!ff.more && B.board.secondary_markets ? "<span>" + B.board.secondary_markets + " more under “More stats”</span>" : "") + "</p>";
         if (!total) { body.innerHTML = stateBox("No lines yet", "No " + state.lg.toUpperCase() + " props are on the board right now."); return; }
+        if (!B.markets.some(function (m) { return m.q.some(function (q) { return q.f; }); }))
+          cnt.innerHTML += '<div class="sw-banner">Scout chances are not published yet. The board shows every book’s line, the Kalshi market chance where Kalshi lists the stat, and each player’s game history (open a player).</div>';
         if (!rows.length) {
           body.innerHTML = stateBox("No props match these filters", "Try another stat or book, or reset the filters.", '<button type="button" class="sw-btn" id="sw-reset2">Reset filters</button>');
           document.getElementById("sw-reset2").onclick = reset; return;

@@ -219,3 +219,131 @@ def test_sports_nav_returns_the_same_object_per_page_version():
     assert a is b and a != page
     other = page + b" "
     assert server.sports_nav(other) is not a
+
+
+# --------------------------------------------------------------------------------------------------------------------
+# SPORTS_UI=owner - staged, server-side owner-first access (2026-10-24). The /sports page, its assets, the esports nav
+# link and /api/sports/token are served ONLY to a paid member whose allow id (server.sports_allow_id of the Whop user)
+# is listed in SPORTS_UI_ALLOW. Everyone else gets exactly the flags-off answer (same bytes, byte-identical pages).
+
+SECRET = "s" * 40
+OWNER, OTHER = "user_owner123", "user_other456"
+
+
+@pytest.fixture
+def env(monkeypatch):
+    import server
+    for k in ("SPORTS_API", "SPORTS_API_MODE", "SPORTS_UI_ALLOW"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("SPORTS_UI", "owner")
+    monkeypatch.setenv("SPORTS_TOKEN_SECRET", SECRET)
+    monkeypatch.setenv("SPORTS_API_BASE", "https://scout-sports-api.onrender.com")
+    monkeypatch.setenv("SPORTS_UI_ALLOW", " sa_000000000000000000000000 ," + server.sports_allow_id(OWNER))
+    monkeypatch.setattr(server, "lol_public", lambda: True)
+    monkeypatch.setattr(server, "ADMIN_TOKEN", "a" * 40)
+    return monkeypatch
+
+
+def _client(user, paid=True, admin=False):
+    H = _handler()
+
+    class M(H):
+        def member(self):
+            return {"user": user, "ok": paid, "name": "x"} if user else None
+
+        def allowed(self):
+            return bool(user and paid)
+
+    def get(path):
+        h = M(path)
+        if admin:
+            h.headers["X-Admin-Token"] = "a" * 40
+        h.do_GET()
+        return h.code, h.wfile.getvalue()
+    return get
+
+
+def _baseline(monkeypatch, user, paid=True):
+    """The same requests with SPORTS_UI unset (flags off)."""
+    with monkeypatch.context() as m:
+        m.delenv("SPORTS_UI", raising=False)
+        get = _client(user, paid)
+        return {p: get(p) for p in PATHS}
+
+
+PATHS = ("/", "/lol", "/sports", "/sports/app.js", "/sports/slips.html", "/api/sports/token", "/api/sports/whoami",
+         "/definitely-not-a-route")
+
+
+def test_allow_id_formula_is_the_same_in_server_and_gateway():
+    import server
+    from sports import gateway
+    assert server.sports_allow_id(OWNER) == gateway.allow_id(OWNER)
+    assert server.sports_allow_id(OWNER).startswith("sa_") and len(server.sports_allow_id(OWNER)) == 27
+    assert OWNER not in server.sports_allow_id(OWNER)
+
+
+def test_owner_gets_the_page_the_link_and_a_token(env):
+    import server
+    get = _client(OWNER)
+    code, body = get("/sports")
+    assert code == 200 and b"<body class=\"sw\">" in body
+    assert get("/sports/app.js")[0] == 200
+    for p in ("/", "/lol"):
+        code, body = get(p)
+        assert code == 200 and body.count(b'href="/sports"') == 1
+        assert server._SPORTS_NAV in body
+    code, body = get("/api/sports/token")
+    tok = json.loads(body)
+    assert code == 200 and tok["token"].startswith("st1.") and tok["api_base"] == "https://scout-sports-api.onrender.com"
+    from sports import authtoken
+    claims = authtoken.verify(tok["token"])
+    assert claims["role"] == "member" and claims["sub"] == authtoken.subject(OWNER)
+
+
+@pytest.mark.parametrize("user,paid", [(OTHER, True), (OWNER, False), (None, False)])
+def test_everyone_else_gets_exactly_the_flags_off_answer(env, user, paid):
+    """Another paid member, the owner without a paid session, and an anonymous visitor: every sports path and both
+    esports pages are byte-identical to SPORTS_UI unset."""
+    off = _baseline(env, user, paid)
+    get = _client(user, paid)
+    for p in PATHS:
+        assert get(p) == off[p], p
+    assert b'href="/sports"' not in get("/")[1]
+
+
+def test_an_empty_allow_list_admits_nobody(env):
+    env.setenv("SPORTS_UI_ALLOW", " , ")
+    off = _baseline(env, OWNER)
+    get = _client(OWNER)
+    for p in PATHS:
+        assert get(p) == off[p], p
+
+
+def test_whoami_needs_the_admin_token_and_never_returns_the_whop_id(env):
+    import server
+    code, body = _client(OTHER, admin=True)("/api/sports/whoami")
+    out = json.loads(body)
+    assert code == 200 and out["allow_id"] == server.sports_allow_id(OTHER) and out["paid"] is True
+    assert OTHER.encode() not in body
+    off = _baseline(env, OTHER)
+    assert _client(OTHER)("/api/sports/whoami") == off["/api/sports/whoami"]      # no admin token: unknown route
+
+
+def test_owner_mode_leaves_the_other_api_paths_on_sports_api(env):
+    """SPORTS_UI=owner gates the page + token; other /api/sports/* paths keep SPORTS_API (off -> unknown route)."""
+    off = _baseline(env, OWNER)
+    get = _client(OWNER)
+    assert get("/api/sports/status") == _client(OWNER)("/definitely-not-a-route") == off["/definitely-not-a-route"]
+
+
+def test_owner_mode_in_a_fresh_process_imports_nothing_for_non_owners(tmp_path):
+    """No Whop locally -> allowed() is True but there is no member, so nobody is the owner: every sports path equals
+    an unknown route and the esports process never imports sports."""
+    out = _run_child(tmp_path, SPORTS_UI="owner", SPORTS_UI_ALLOW="sa_" + "1" * 24, SPORTS_API_MODE="service",
+                     SPORTS_TOKEN_SECRET="t" * 40, SPORTS_API_BASE="https://sports.example.test")
+    assert out["sports_imported"] == []
+    unknown = out["/definitely-not-a-route"]
+    for p in ("/sports", "/api/sports/status", "/api/sports/offers?league=nba", "/api/sports/token"):
+        assert out[p] == unknown, p
+    assert out["/auth/me"][0] == 200

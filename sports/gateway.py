@@ -121,6 +121,24 @@ def _static(rel):
     return data, ctype
 
 
+# ------------------------------------------------------------------------------------------- owner-first access
+def allow_id(user) -> str:
+    """SPORTS_UI=owner allow-list id of a Whop user (same formula as server.sports_allow_id; tested equal)."""
+    import hashlib
+    return "sa_" + hashlib.sha256(f"scout-sports-allow|{user}".encode("utf-8")).hexdigest()[:24]
+
+
+def _whoami(member, allowed, admin):
+    """GET /api/sports/whoami?token=<ADMIN_TOKEN> (SPORTS_UI=owner only; server.py routes it here only for the admin
+    token): the allow id of the Whop session in THIS browser, to put in SPORTS_UI_ALLOW. Never the Whop id itself."""
+    if not admin():
+        return _j(403, {"error": "admin_only"})
+    user = member()
+    return _j(200, {"signed_in": bool(user), "paid": bool(allowed()), "allow_id": allow_id(user) if user else None,
+                    "set": "SPORTS_UI_ALLOW=<allow_id> on cs2-scout (comma-separate several)"},
+              {"Cache-Control": "no-store"})
+
+
 # ------------------------------------------------------------------------------------------------------- tokens
 def api_base():
     return os.environ.get("SPORTS_API_BASE", "").strip().rstrip("/") if mode() == "service" else ""
@@ -270,6 +288,8 @@ def handle_get(path, raw_query, query, member, allowed, admin, headers):
         return 200, got[0], got[1], {"Cache-Control": "private, no-cache"}
     if path == "/api/sports/token":
         return _token(member, allowed, admin, headers)
+    if path == "/api/sports/whoami":
+        return _whoami(member, allowed, admin)
     if path == "/api/sports/admin/gateway":
         if not admin():
             return _j(403, {"error": "admin_only"})
@@ -292,3 +312,12 @@ def handle_get(path, raw_query, query, member, allowed, admin, headers):
     from . import web                                   # inprocess (dev / tests only)
     code, body, ctype = web.handle(path, query, allowed=allowed, admin=admin)
     return code, body, ctype, {}
+
+
+if __name__ == "__main__":                              # python -m sports.gateway allow-id <whop user id>
+    import sys
+    if len(sys.argv) == 3 and sys.argv[1] == "allow-id":
+        print(allow_id(sys.argv[2]))
+    else:
+        print("usage: python -m sports.gateway allow-id <whop user id>")
+        sys.exit(2)

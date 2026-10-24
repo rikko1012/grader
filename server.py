@@ -3566,6 +3566,14 @@ _SPORTS_NAV = b'<nav class="sportsw" aria-label="Sports"><a href="/sports">NFL /
 _SPORTS_NAV_MEMO = {}                                   # id(page bytes) -> (page bytes, page with the link)
 
 
+def sports_allow_id(user):
+    """The allow-list id of a Whop user for SPORTS_UI=owner: "sa_" + sha256("scout-sports-allow|" + user)[:24]. A hash,
+    so no Whop id is ever written to git or env; independent of SPORTS_TOKEN_SECRET (survives a rotation). The same
+    formula is sports.gateway.allow_id (tested equal)."""
+    import hashlib
+    return "sa_" + hashlib.sha256(f"scout-sports-allow|{user}".encode("utf-8")).hexdigest()[:24]
+
+
 def sports_nav(body):
     """The ONE Sports link on the esports pages, added only when SPORTS_UI is on (Handler._sports_on). Pure bytes edit
     after the game switcher - no sports import; with the flag off the page bytes are untouched
@@ -3749,7 +3757,7 @@ class Handler(BaseHTTPRequestHandler):
                                                    "avg_server_ms": round(STATS["ms_total"] / max(STATS["requests"], 1), 1),
                                                    "since": datetime.fromtimestamp(STATS["since"], timezone.utc).isoformat(timespec="seconds")},
                                        "storage": dict(storage_cached(), **STORAGE), "ops": ops_checks()})
-            if (u.path == "/sports" or u.path.startswith(("/sports/", "/api/sports/"))) and self._sports_on(u.path):
+            if (u.path == "/sports" or u.path.startswith(("/sports/", "/api/sports/"))) and self._sports_on(u.path, q):
                 return self._sports_route(u, q)          # the ONE sports hook: flags off = this line does nothing
             if u.path in ("/", "/index.html"):
                 if self._sports_on("/sports"):                          # sports nav link: SPORTS_UI only (else unchanged)
@@ -4949,12 +4957,31 @@ class Handler(BaseHTTPRequestHandler):
         import hmac
         return bool(ADMIN_TOKEN) and token_eq(self.headers.get("X-Load-Test"), ADMIN_TOKEN)
 
-    @staticmethod
-    def _sports_on(path):
+    def _sports_on(self, path, q=None):
         """Sports (sports/, NFL/NBA) is behind SPORTS_UI (/sports, /sports/<asset>) and SPORTS_API (/api/sports/*), both
-        OFF by default. Read from the environment here, so with the flags off nothing from sports is ever imported."""
-        flag = "SPORTS_UI" if path == "/sports" or path.startswith("/sports/") else "SPORTS_API"
+        OFF by default. Read from the environment here, so with the flags off nothing from sports is ever imported.
+        SPORTS_UI=owner (staged access, 2026-10-24): the page, its assets, the nav link and /api/sports/token are served
+        ONLY to a paid member whose allow id is listed in SPORTS_UI_ALLOW (comma-separated, sports_allow_id); everyone
+        else gets exactly the flags-off answer (the request falls through to the esports routes). The other
+        /api/sports/* paths keep following SPORTS_API. /api/sports/whoami answers only the owner's admin token (to read
+        the allow id of the signed-in session) - for anyone else it is an unknown route too."""
+        page = path == "/sports" or path.startswith("/sports/")
+        if os.environ.get("SPORTS_UI", "").strip().lower() == "owner":
+            if page or path == "/api/sports/token":
+                return self._sports_owner()
+            if path == "/api/sports/whoami":
+                return self.authed((q or {}).get("token"))
+        flag = "SPORTS_UI" if page else "SPORTS_API"
         return os.environ.get(flag, "").strip().lower() in ("1", "true", "yes", "on")
+
+    def _sports_owner(self):
+        """SPORTS_UI=owner: the existing server-side paid check FIRST, then the member's allow id against the list.
+        No list = nobody (fails closed). Load-test / anonymous requests have no member, so they never qualify."""
+        allow = {x.strip().lower() for x in os.environ.get("SPORTS_UI_ALLOW", "").split(",") if x.strip()}
+        if not allow or not self.allowed():
+            return False
+        user = (self.member() or {}).get("user")
+        return bool(user) and sports_allow_id(user) in allow
 
     def _sports_route(self, u, q):
         """Sports answers through sports/gateway.py (standard library only). In the default SPORTS_API_MODE=service the
