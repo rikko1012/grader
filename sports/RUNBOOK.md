@@ -250,6 +250,13 @@ id>`. Set `SPORTS_UI_ALLOW=sa_...` -> Save. cs2-scout env: `SPORTS_UI=owner`, `S
 `SPORTS_TOKEN_SECRET` (same value as scout-sports-api). scout-sports-api: `SPORTS_ALLOWED_ORIGINS` includes
 `https://cs2-scout.onrender.com` (verified live 2026-10-24: preflight 204 with that origin). Rollback: `SPORTS_UI=0`.
 
+Load (2026-10-24, Windows workstation, `python scripts/load_sports700.py <dir> off|owner`, 700 simultaneous paid members,
+3 esports requests each = 2,100; owner mode: member u0 allow-listed and also loads /sports + mints a token, the rest
+esports-only), 5 alternating runs each: esports p95 / p99 median off 1035.0 / 1090.6 ms, owner 1046.7 / 1096.1 ms
+(x1.011 / x1.005), 0 5xx in all 10 runs, peak RSS 94-98 MB both; owner got /sports 200 + token 200. One run per mode had
+client connect retries (6,771 / 7,358 - Windows ephemeral-port exhaustion in the load generator) and 17-23 s tails; the
+medians include them.
+
 **Member enable** (only after the release approval; unchanged order): cs2-scout `SPORTS_API=1` (token issuing; verify
 an admin token with `curl -H "X-Admin-Token: $ADMIN_TOKEN" https://cs2-scout.onrender.com/api/sports/token`), then
 `SPORTS_UI=1`; watch section 9 for an hour. Assistant: `ANTHROPIC_API_KEY` + `SPORTS_ASSISTANT=1`. Model forecasts /
