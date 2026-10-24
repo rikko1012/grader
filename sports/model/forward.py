@@ -267,7 +267,7 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
         return {"error": f"no artifact for {league}: run `train fit` first"}
     up, idmap, skipped = upcoming_rows(scon, hcon, league, forecast_at)
     out = {"league": league, "forecast_at": forecast_at, "artifact": art["sha"], "upcoming_rows": len(up),
-           "skipped": {}, "written": {}, "no_forecast": {}}
+           "skipped": {}, "written": {}, "unchanged": {}, "no_forecast": {}}
     for why in skipped.values():
         out["skipped"][why] = out["skipped"].get(why, 0) + 1
     if not up:
@@ -373,6 +373,10 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
                                   json.dumps([float(x) for x in pmfx]) if pmfx is not None else None,
                                   json.dumps(polx, default=str), now_utc()))
                 out["written"][name] = out["written"].get(name, 0) + (1 if res["status"] == "inserted" else 0)
+                if res["status"] == "unchanged":
+                    out["unchanged"][name] = out["unchanged"].get(name, 0) + 1
+                if fcx.grade is not None or (fcx.stake_units or 0) > 0:     # sports-gp-1: withheld until gate F
+                    out["graded_or_staked"] = out.get("graded_or_staked", 0) + 1
         icon.commit()
         log({"league": league, "market": mk, "written": out["written"]})
     icon.close()

@@ -1,0 +1,54 @@
+{
+ "artifact_shas": {
+  "mc-1": "8119ce6b61539999",
+  "nba": "5ec8adf73a6dad18",
+  "nfl": "cc56aeb8b88c31d8"
+ },
+ "created_at": "2026-10-24",
+ "files": {
+  "history_ds1_2026-10-23.db.gz": {
+   "bytes": 10886901,
+   "sha256": "4b4417b40d08406d6d83a8f4e2f8af7c09e6c636a3c562659f5d8870a1707945"
+  },
+  "market_mc1.json": {
+   "bytes": 367,
+   "sha256": "73ef7cab54a0a558f369f899933d805e86fe04360f1c3ef14bc128cf9ec3f0a1"
+  },
+  "model_config_nba.json": {
+   "bytes": 107729,
+   "sha256": "4a695793fcd94ae5684503fd79a5873943a7ca3eccc58073821118df863899ca"
+  },
+  "model_config_nfl.json": {
+   "bytes": 184830,
+   "sha256": "6d616a8cd9d56c475f7136f0e7ac872c3e561ecaf9a60b5b5df934431b5559de"
+  },
+  "registry.json": {
+   "bytes": 1246,
+   "sha256": "92b77bfa9b7f87163489825e9a8d66e78012c5b0cd2674e7e72630669777ce60"
+  },
+  "sm1_nba.json": {
+   "bytes": 109779,
+   "sha256": "b9453a65016eb653042337f6ac1f712b816ceaa75b8b7dc5ac3c2bd0847f4bc8"
+  },
+  "sm1_nfl.json": {
+   "bytes": 152296,
+   "sha256": "a48f5c105af974218408b427290c512a90f65f51cc9c79db2413c96016e904fe"
+  }
+ },
+ "history": {
+  "build": "python -m sports.model.fwd build-history <history.db> (VACUUM INTO, empty raw + nfl_snaps, VACUUM, gzip -9 mtime 0; two builds -> identical gz sha256)",
+  "db_bytes": 42582016,
+  "db_sha256": "51888d2af3994a7b0079050736f97525e317a5eb47bbcb2cc7783b7ed616f126",
+  "emptied_tables": [
+   "raw",
+   "nfl_snaps"
+  ],
+  "file": "history_ds1_2026-10-23.db.gz",
+  "last_games": {
+   "nba": "2026-10-23T01:30:00Z"
+  },
+  "source": "model agent's ds-1 history.db (scratchpad sports/model/data_fwd/model/history.db, 83,324,928 B, byte-identical to data/model/history.db) that the frozen sm-1 artifacts were fit on (data_as_of 2026-10-23T23:00:00Z); coverage(nba) and coverage(nfl) equal each artifact's recorded dataset"
+ },
+ "rule": "sports/model/fwd.py verifies every file's sha256 and the sm-1 / mc-1 internal content shas before each forward run; a mismatch refuses the run. Never refit on Render.",
+ "version": "fwd-pkg-1"
+}

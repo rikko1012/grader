@@ -1,1 +1,2 @@
 scraper_repair/*.patch -text
+sports/model/artifacts/*.gz binary

@@ -69,42 +69,56 @@ def run(a):
 
 
 def write_snapshot(now=None):
-    """Precomputed answers for sports/api_model.py: forecasts of not-started events (latest per offer x version) with
-    their grade-policy output, PMFs of sm-1 / mi-1 (trimmed tails < 1e-9), registry, study summaries, scorecard."""
+    """Precomputed answers for sports/api_model.py: forecasts of not-started events (latest per CURRENT offer revision x
+    version) with their grade-policy output, PMFs of sm-1 / mi-1 (trimmed tails < 1e-9), registry, study summaries,
+    scorecard.
+
+    Bounded (Starter, 2026-10-24): reads only the forecasts of not-started events (records_event index), keeps those
+    made for the CURRENT offer revision (the one board / card / slip read - store.CURRENT_SQL), and reads saved
+    inputs only for the forecasts it keeps. Memory follows the current board, never the stored-forecast history."""
     from .. import features
     from . import forward, learning
     now = now or now_utc()
     out = {"written_at": now, "leagues": {}}
-    icon = forward.inputs_db()
-    pol = {r[0]: (json.loads(r[1]) if r[1] else None, r[2], json.loads(r[3]) if r[3] else None)
-           for r in icon.execute("SELECT forecast_id, policy_json, pmf_lo, pmf_json FROM inputs")}
-    icon.close()
     try:
         scon = store.connect(read_only=True)
     except FileNotFoundError:
         scon = None
+    icon = forward.inputs_db()
     for lg in ("nba", "nfl"):
-        views, pmfs = {}, {}
+        views, pmfs, pol = {}, {}, {}
         if scon is not None:
             events = {e.event_id: e for _, e in store.events(scon, lg)}
-            for rid, fc in store.forecasts(scon, league=lg, limit=200000):
-                ev = events.get(fc.event_id)
-                if ev is None or not ev.start_utc or ev.start_utc <= now:
-                    continue
-                key = (fc.offer_snapshot_ids[0] if fc.offer_snapshot_ids else rid, fc.model_version)
-                if key in views and views[key]["forecast_at"] >= fc.forecast_at:
-                    continue
+            up = sorted(eid for eid, ev in events.items() if ev.start_utc and ev.start_utc > now)
+            current = current_offer_ids(scon, lg, up)
+            for part in _chunks(up, 400):
+                for r in scon.execute(f"SELECT record_id, payload FROM records WHERE kind = 'forecast' AND event_id "
+                                      f"IN ({','.join('?' * len(part))})", part):
+                    fc = store._rec(r)
+                    if fc.league != lg or not fc.offer_snapshot_ids or fc.offer_snapshot_ids[0] not in current:
+                        continue
+                    key = (fc.offer_snapshot_ids[0], fc.model_version)
+                    if key in views and views[key][0].forecast_at >= fc.forecast_at:
+                        continue
+                    views[key] = (fc, events.get(fc.event_id))
+            ids = [fc.forecast_id for fc, _ in views.values()]
+            for part in _chunks(ids, 400):
+                for r in icon.execute(f"SELECT forecast_id, policy_json, pmf_lo, pmf_json FROM inputs WHERE "
+                                      f"forecast_id IN ({','.join('?' * len(part))})", part):
+                    pol[r[0]] = (json.loads(r[1]) if r[1] else None, r[2], json.loads(r[3]) if r[3] else None)
+            for fc, _ev in views.values():
                 p = pol.get(fc.forecast_id)
-                views[key] = view(fc, p[0] if p else None, ev)
                 if p and p[2]:
                     lo, arr = p[1], p[2]
                     a0 = next((i for i, x in enumerate(arr) if x > PMF_TRIM), 0)
                     a1 = len(arr) - next((i for i, x in enumerate(reversed(arr)) if x > PMF_TRIM), 0)
                     pmfs[fc.forecast_id] = {"lo": lo + a0, "p": arr[a0:a1]}
-        out["leagues"][lg] = {"forecasts": len(views)}
-        _atomic_write(api_dir() / f"forecasts_{lg}.json", {"written_at": now, "league": lg,
-                                                           "forecasts": list(views.values())})
+        rows = [view(fc, (pol.get(fc.forecast_id) or (None,))[0], ev) for fc, ev in views.values()]
+        out["leagues"][lg] = {"forecasts": len(rows)}
+        _atomic_write(api_dir() / f"forecasts_{lg}.json", {"written_at": now, "league": lg, "forecasts": rows})
         _atomic_write(api_dir() / f"pmf_{lg}.json", {"written_at": now, "pmf": pmfs})
+        del views, pmfs, pol, rows
+    icon.close()
     if scon is not None:
         scon.close()
     res_dir = Path(__file__).resolve().parents[1] / "research" / "results"
@@ -123,8 +137,46 @@ def write_snapshot(now=None):
                                                                          for s in ("nba", "nfl")},
         "features": features.with_effects(), "studies": studies})
     _atomic_write(api_dir() / "admin_learning.json", {"written_at": now, "scorecard": sc, "forward_gate": gates,
-                                                      "diagnostics": diag})
+                                                      "diagnostics": diag, "forecast_run": _last_forecast_run()})
     return out
+
+
+def _chunks(xs, n):
+    xs = list(xs)
+    for i in range(0, len(xs), n):
+        yield xs[i:i + n]
+
+
+def current_offer_ids(scon, league, event_ids):
+    """Record ids of the CURRENT revision (store.CURRENT_SQL) of every offer of these events - the same revision
+    store.offers gives the board, the player card, the slip pool and new forecasts. Ids only (no payloads)."""
+    out = set()
+    for part in _chunks(event_ids, 400):
+        q = (f"SELECT r.record_id FROM records r JOIN (SELECT source, source_key, MAX(revision) rv FROM records WHERE "
+             f"kind = 'offer' AND {store.CURRENT_SQL} AND league = ? AND event_id IN ({','.join('?' * len(part))}) "
+             f"GROUP BY source, source_key) z ON r.source = z.source AND r.source_key = z.source_key AND "
+             f"r.revision = z.rv WHERE r.kind = 'offer'")
+        out.update(x[0] for x in scon.execute(q, [league] + list(part)))
+    return out
+
+
+def _last_forecast_run():
+    p = api_dir() / "forecast_run.json"
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def publish_run(summary):
+    """Put the latest forward run record into admin_learning.json (GET /api/sports/admin/model/learning)."""
+    p = api_dir() / "admin_learning.json"
+    try:
+        d = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        d = {"written_at": now_utc(), "scorecard": [], "forward_gate": [], "diagnostics": []}
+    d["forecast_run"] = summary
+    _atomic_write(p, d)
 
 
 def _art_meta(a):

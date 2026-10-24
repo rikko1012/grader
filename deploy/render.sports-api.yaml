@@ -45,6 +45,9 @@ services:
         value: "0"
       - key: SPORTS_TRAIN
         value: "0"            # model forecast / learn / snapshot / fit + the lab (worker `train` commands need it)
+      - key: SPORTS_FORECAST
+        value: "0"            # forward forecasts, INFERENCE ONLY (sports/model/fwd.py; frozen hash-verified artifacts, no
+                              # fit / learn / retrain); set "1" to forecast - SPORTS_TRAIN stays "0" (RUNBOOK 13.5)
       - key: SPORTS_ASSISTANT
         value: "0"            # the on-demand assistant runner + its routes
       - key: SPORTS_ASSIST_MODEL
