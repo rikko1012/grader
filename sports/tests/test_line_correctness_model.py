@@ -24,6 +24,13 @@ CFG = {"markets": {mk: {"market": mk, "half_lives": [5, 20], "features": ["nba.h
                                                             ("assists", "poisson"), ("threes", "ratio"))}}
 
 
+
+def _pool_st(pl, offer_id):
+    """The slim pool's per-offer state (slim-1 tuples) as a dict for readable asserts."""
+    from sports.slips import pool as _pool
+    r = _pool.offer_state(pl, offer_id)
+    return None if r is None else dict(zip(("record_id", "revision", "line", "eligible", "reason", "leg"), r))
+
 def _fit(hcon, art, cal=None):
     cfg = json.loads(json.dumps(CFG))
     if cal:
@@ -150,7 +157,7 @@ def test_c5_board_card_slip_pool_validation_and_new_forecast_use_the_same_revisi
     # slip pool + validation
     pl = slip_pool.build(scon, "nba", "prizepicks", now=datetime(2026, 1, 31, 21, 55, tzinfo=timezone.utc),
                          policy="research")
-    st = pl["state"][a.offer_id]
+    st = _pool_st(pl, a.offer_id)
     assert st["record_id"] == rid3 and st["eligible"], st["reason"]
     leg = st["leg"]
     assert leg["record_id"] == rid3 and leg["forecast_id"] == new_fc.forecast_id
@@ -236,7 +243,7 @@ def test_c11_slip_pool_finds_an_old_forecast_of_an_unchanged_revision():
     store.put(con, replace(old), known_at="2026-10-19T20:00:00Z")
     store.put(con, sw.offer("1", "A1", 1, observed_at="2026-10-23T20:04:00Z"))   # still listed, unchanged
     pl = slip_pool.build(con, "nba", "underdog", now=sw.NOW)
-    st = pl["state"][o.offer_id]
+    st = _pool_st(pl, o.offer_id)
     assert st["record_id"] == rid and st["eligible"], st["reason"]
     assert st["leg"]["forecast_id"] == old.forecast_id
     assert sw.NOW - timedelta(hours=72) > datetime(2026, 10, 19, 20, tzinfo=timezone.utc)
@@ -252,7 +259,7 @@ def test_c5_copy_rechecks_the_live_revision_behind_a_cached_pool():
     rid = store.put(con, o)["record_id"]
     store.put(con, sw.forecast(rid, o))
     pl = slip_pool.build(con, "nba", "underdog", now=sw.NOW)        # the cached pool
-    leg = pl["state"][o.offer_id]["leg"]
+    leg = _pool_st(pl, o.offer_id)["leg"]
     store.put(con, replace(o, line=21.5, observed_at="2026-10-23T20:06:00Z", known_at="2026-10-23T20:06:00Z"))
     live = lambda p, oid: store.current_record_id(con, "offer", p, oid)          # noqa: E731
     slip = {"platform": "underdog", "entry_type": "standard", "legs": [leg]}
