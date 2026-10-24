@@ -33,7 +33,27 @@
     auth = await r.json();
     return auth;
   }
-  async function api(path, params) {
+  async function postApi(path, body, retried) {
+    var t = await token();
+    var r = await fetch((t.api_base || "") + path, { method: "POST", cache: "no-store", body: JSON.stringify(body),
+      headers: { Authorization: "Bearer " + t.token, "Content-Type": "application/json" } });
+    if (r.status === 401 && !retried) { auth = null; return postApi(path, body, true); }
+    var b = null;
+    try { b = await r.json(); } catch (e) { b = null; }
+    if (!r.ok) throw new Error(b && (b.detail || b.error) || ("HTTP " + r.status));
+    return b;
+  }
+  async function trackCopied(legs) {                    // a validated slip copy = the member's picks (pk-1, stake 0)
+    try {
+      var b = await postApi("/api/sports/picks/track", { picks: legs.map(function (l) {
+        return { platform: l.platform, record_id: l.record_id, side: l.side, forecast_id: l.forecast_id || null, surface: "slip_copy",
+          shown: l.forecast_id ? { p_over: l.side === "over" ? l.p_win : l.p_loss, p_under: l.side === "over" ? l.p_loss : l.p_win, p_push: l.p_push } : null };
+      }) });
+      var ok = (b.results || []).filter(function (x) { return x.ok; }).length;
+      return ok + " of " + legs.length + " picks tracked (stake 0) - see My picks.";
+    } catch (e) { return "The picks were not tracked: " + e.message; }
+  }
+  async function api(path, params, retried) {
     var t = await token();
     var qs = Object.keys(params || {}).map(function (k) {
       var v = params[k]; return encodeURIComponent(k) + "=" + encodeURIComponent(typeof v === "string" ? v : JSON.stringify(v));
@@ -41,7 +61,7 @@
     var r = await fetch((t.api_base || "") + path + (qs ? "?" + qs : ""), { headers: { Authorization: "Bearer " + t.token }, cache: "no-store" });
     var body = null;
     try { body = await r.json(); } catch (e) { body = null; }
-    if (r.status === 401) auth = null;
+    if (r.status === 401) { auth = null; if (!retried) return api(path, params, true); }
     if (!r.ok) {
       var msg = body && (body.detail || body.error) || ("HTTP " + r.status);
       if (msg === "sports_busy") msg = "Busy right now - try again in a moment.";
@@ -215,6 +235,8 @@
     try {
       await navigator.clipboard.writeText(r.copy_text);
       box.insertAdjacentHTML("afterbegin", '<p class="ss-okmsg" role="status">Copied. The slip is not entered - enter it yourself in ' + esc(LABEL[ctx().platform]) + " and check every line there.</p>");
+      var tracked = await trackCopied((r.current || []).filter(Boolean));
+      box.insertAdjacentHTML("afterbegin", '<p class="ss-note" role="status">' + esc(tracked) + ' <a href="/sports#/picks">My picks</a></p>');
     } catch (e) { box.insertAdjacentHTML("afterbegin", '<p class="ss-banner ss-bad">The browser blocked the clipboard.</p>'); }
   }
   async function result() {

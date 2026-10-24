@@ -83,6 +83,10 @@ def default_jobs():
                               env={"SPORTS_WORKER_CONCURRENCY": "1"}),         # 147-192 MB
         "settle": dict(argv=_py("-m", "sports.worker", "settle", *lg), every_s=3600, timeout_s=900,
                        flag="SPORTS_INGEST", cap_mb=120, cls=HEAVY, prio=4),   # 58 MB
+        "picks-ingest": dict(argv=_py("-m", "sports.picks", "ingest"), every_s=60, timeout_s=120,
+                             flag="SPORTS_INGEST", cap_mb=60, cls=LIGHT, prio=2),    # member picks: spool -> picks.db
+        "picks-settle": dict(argv=_py("-m", "sports.picks", "settle"), every_s=3600, timeout_s=600,
+                             flag="SPORTS_INGEST", cap_mb=80, cls=LIGHT, prio=4),
         "slips-settle": dict(argv=_py("-m", "sports.slips", "settle"), every_s=3600, timeout_s=600,
                              flag="SPORTS_INGEST", cap_mb=60, cls=LIGHT, prio=4),    # 22 MB
         # forward forecasts, INFERENCE ONLY (sports/model/fwd.py): frozen hash-verified artifacts, no fit / learn /

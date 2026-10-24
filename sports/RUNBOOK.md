@@ -184,6 +184,10 @@ database idempotently. Reference: the slips spool (`sports/slips/log.py`: 2,000 
 service on ONE disk. If the worker is ever split into its own Render service, spools must switch to a push transport
 (HTTP POST to the worker) - Render disks cannot be shared.
 
+Member picks (sports/picks.py pk-1) use the same pattern: `picks_spool/` (2,000 entries, 20 MB/day) -> scheduler jobs
+`picks-ingest` (every 60 s, light, cap 60 MB) and `picks-settle` (hourly, light, cap 80 MB) -> `picks.db` (append-only,
+idempotent by pick id; settlement revisions on corrections).
+
 ### 5c. Prebuilt snapshots
 
 Heavy shared answers are registered in `web.SNAPSHOTS` and built by the `prebuilt` job; `web.cached` serves the
@@ -245,6 +249,13 @@ id>`. Set `SPORTS_UI_ALLOW=sa_...` -> Save. cs2-scout env: `SPORTS_UI=owner`, `S
 `SPORTS_API=0`, `SPORTS_API_MODE=service`, `SPORTS_API_BASE=https://scout-sports-api.onrender.com`,
 `SPORTS_TOKEN_SECRET` (same value as scout-sports-api). scout-sports-api: `SPORTS_ALLOWED_ORIGINS` includes
 `https://cs2-scout.onrender.com` (verified live 2026-10-24: preflight 204 with that origin). Rollback: `SPORTS_UI=0`.
+
+Load (2026-10-24, Windows workstation, `python scripts/load_sports700.py <dir> off|owner`, 700 simultaneous paid members,
+3 esports requests each = 2,100; owner mode: member u0 allow-listed and also loads /sports + mints a token, the rest
+esports-only), 5 alternating runs each: esports p95 / p99 median off 1035.0 / 1090.6 ms, owner 1046.7 / 1096.1 ms
+(x1.011 / x1.005), 0 5xx in all 10 runs, peak RSS 94-98 MB both; owner got /sports 200 + token 200. One run per mode had
+client connect retries (6,771 / 7,358 - Windows ephemeral-port exhaustion in the load generator) and 17-23 s tails; the
+medians include them.
 
 **Member enable** (only after the release approval; unchanged order): cs2-scout `SPORTS_API=1` (token issuing; verify
 an admin token with `curl -H "X-Admin-Token: $ADMIN_TOKEN" https://cs2-scout.onrender.com/api/sports/token`), then

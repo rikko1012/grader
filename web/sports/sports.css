@@ -158,3 +158,9 @@ body.sw button,body.sw select,body.sw input{font:inherit;color:inherit}
 .sw .sw-table td .sw-srcbtn+.sw-srcbtn{margin-top:4px}
 .sw .sw-table td:last-child{white-space:nowrap}
 .sw .sw-legbtns .sw-btn{white-space:nowrap}
+.sw .sw-legbtns{flex-wrap:wrap}
+.sw .sw-qrow .sw-legbtns{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,max-content);gap:6px;margin-top:0}
+@media(max-width:420px){.sw .sw-qrow .sw-legbtns{grid-template-columns:repeat(2,max-content)}}
+.sw #sw-toast{position:sticky;top:64px;z-index:5}
+.sw .sw-qrow .sw-offered{white-space:normal;overflow-wrap:anywhere}
+.sw .sw-table .sw-legbtns{display:grid;grid-template-columns:repeat(2,max-content);gap:6px}

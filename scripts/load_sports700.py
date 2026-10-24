@@ -1,5 +1,7 @@
 """700 simultaneous members against esports endpoints (+ sports endpoints when enabled), in-process server with fixture
-upstreams. usage: python load_sports700.py <code_dir> <mode: off|on|failing> [sports_data_dir]
+upstreams. usage: python load_sports700.py <code_dir> <mode: off|on|failing|owner> [sports_data_dir]
+owner = SPORTS_UI=owner with ONE allow-listed member (u0), who also loads /sports and mints a token; everyone else makes
+the same esports requests as `off` (their pages are byte-identical and carry no link; 2026-10-24 access stage).
 Budgets / stop conditions set BEFORE the run: 0 errors on esports routes; esports p99 must not exceed base p99 by > 25%."""
 import http.client
 import json
@@ -22,6 +24,11 @@ if mode in ("on", "failing"):
     os.environ["SPORTS_API"] = "1"
     os.environ["SPORTS_UI"] = "1"
     os.environ["SPORTS_DATA_DIR"] = sys.argv[3]
+if mode == "owner":
+    import hashlib
+    os.environ.update({"SPORTS_UI": "owner", "SPORTS_API_MODE": "service", "SPORTS_TOKEN_SECRET": "l" * 40,
+                       "SPORTS_API_BASE": "https://sports.example.test",
+                       "SPORTS_UI_ALLOW": "sa_" + hashlib.sha256(b"scout-sports-allow|u0").hexdigest()[:24]})
 
 import hltv_store  # noqa: E402
 hltv_store.DB_PATH = __import__("pathlib").Path(tmp) / "hltv_store.db"
@@ -74,6 +81,7 @@ def call(path, member):
 
 
 ESPORTS = ["/api/moneylines", "/auth/me", "/", "/api/board"]
+OWNER_PATHS = ["/sports", "/api/sports/token"]
 SPORTS = ["/api/sports/status", "/api/sports/offers?league=nba&limit=200", "/api/sports/offers?league=nfl&stat=rec"]
 
 
@@ -81,7 +89,10 @@ def member(i):
     out = []
     for k in range(3):
         out.append(("esports", ESPORTS[(i + k) % len(ESPORTS)]) + call(ESPORTS[(i + k) % len(ESPORTS)], f"u{i}"))
-    if mode != "off":
+    if mode == "owner":                                 # only the owner has the link; the rest are esports-only
+        for p in (OWNER_PATHS if i == 0 else ()):
+            out.append(("sports", p) + call(p, f"u{i}"))
+    elif mode != "off":
         p = SPORTS[i % len(SPORTS)]
         out.append(("sports", p) + call(p, f"u{i}"))
     return out
