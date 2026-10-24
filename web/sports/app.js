@@ -490,7 +490,7 @@
             '<div class="sw-faint sw-small">' + esc([m.pos, m.tm].filter(Boolean).join(" · ")) + '</div><div class="sw-small"><a href="#/game/' + encodeURIComponent(m.e) + '">' + esc(m.matchup) + '</a> <span class="sw-faint">' + esc(S.localTime(m.ev && m.ev.start_utc, {weekday: "short", hour: "numeric", minute: "2-digit", timeZoneName: "short"})) + "</span></div></td>" +
             '<td rowspan="' + all.length + '">' + esc(B.stats[m.st] || m.st) + (m.alt ? '<div class="sw-small"><a href="' + marketHref(m, null) + '">+' + m.alt + " alternate lines</a></div>" : "") +
             (m.kr > m.kn.length ? '<div class="sw-faint sw-small">Kalshi ladder: ' + m.kr + " rungs</div>" : "") +
-            (m.cap !== "supported" ? '<div class="sw-faint sw-small">No Scout chance for this stat</div>' : "") + mkBooks(m.mk) + "</td>";
+            (m.cap !== "supported" ? '<div class="sw-faint sw-small">No Scout chance for this stat</div>' : "") + '<div class="sw-small sw-mkline">' + mkShort(m.mk && m.mk.c, m.mk && m.mk.l) + "</div></td>";
         }
         if (!q) {
           h += '<td colspan="11" class="sw-faint">' + (m.alt ? "Only alternate-payout lines (goblin / demon) - open the player for them." : "No line for this filter.") + "</td>";
@@ -506,6 +506,7 @@
         }
         h += "</tr>";
       });
+      if (m.mk && m.mk.bk && m.mk.bk.length) h += '<tr class="sw-mkrow"><td colspan="13">' + mkBooks(m.mk) + "</td></tr>";
       h += "</tbody>";
     });
     return h + "</table></div>";
