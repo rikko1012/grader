@@ -89,12 +89,10 @@ def default_jobs():
                              flag="SPORTS_INGEST", cap_mb=60, cls=LIGHT, prio=2),    # member picks: spool -> picks.db
         "picks-settle": dict(argv=_py("-m", "sports.picks", "settle"), every_s=3600, timeout_s=600,
                              flag="SPORTS_INGEST", cap_mb=80, cls=LIGHT, prio=4),
-        # factor data for the player page (sports/games): the game store is backfilled in bounded chunks, then the
-        # factor engine's values for every board player are written per player (snapshots.build embeds them)
+        # game store backfill (current + previous season, resumable, time-bounded) so the factor engine behind the
+        # player page (sports/player_context.py) has whole seasons, not only the games since launch
         "games-backfill": dict(argv=_py("-m", "sports.games.backfill_job", "--budget", "120"), every_s=900,
                                timeout_s=300, flag="SPORTS_INGEST", cap_mb=60, cls=LIGHT, prio=6),   # 43-47 MB
-        "board-factors": dict(argv=_py("-m", "sports.games.board_factors", "build", *lg), every_s=1800,
-                              timeout_s=600, flag="SPORTS_INGEST", cap_mb=260, cls=HEAVY, prio=5),   # MEASURED below
         "slips-settle": dict(argv=_py("-m", "sports.slips", "settle"), every_s=3600, timeout_s=600,
                              flag="SPORTS_INGEST", cap_mb=60, cls=LIGHT, prio=4),    # 22 MB
         # forward forecasts, INFERENCE ONLY (sports/model/fwd.py): frozen hash-verified artifacts, no fit / learn /

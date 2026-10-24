@@ -46,7 +46,6 @@ from collections import defaultdict
 from pathlib import Path
 
 from . import cache, capabilities, config, fair, flags, forecast_detail, identity, market_view, markets, store
-from .games import board_factors
 from .contracts import (ContractError, Event, Membership, SourceId, StatObservation, from_dict, now_utc, parse_utc,
                         utc)
 
@@ -70,14 +69,11 @@ FACTOR_PARTS = {
     "football": [("targets", "Targets"), ("rec", "Receptions"), ("rush_att", "Carries"), ("pass_att", "Pass attempts")],
 }
 # owner factor list (OWNER_FACTORS.md, 2026-10-23) entries Scout does not hold - stated as not held, never shown as known
-def _not_held(league):
-    """Factors no source we hold publishes (the factor contract's "unavailable" entries, sports/games/contract.py) -
-    everything else on the owner's list is computed from the game store / nflverse (sports/games/board_factors.py)."""
-    from .games import contract
-    return [s["label"] for s in contract.REGISTRY[league].values() if s["status"] == "unavailable"]
-
-
-NOT_HELD = {"basketball": _not_held("nba"), "football": _not_held("nfl")}
+NOT_HELD = {          # fallback only; the player file lists player_context.NOT_HELD with a reason each
+    "basketball": ["Likely defender", "Potential assists"],
+    "football": ["Coverage scheme (licensed)", "PFF / NGS / DVOA (licensed)", "Defender matchup (licensed)",
+                 "Route participation / TPRR"],
+}
 
 
 def models_pref():
@@ -521,6 +517,28 @@ def factors(fam, games, next_event, teams_out):
     return {"stats": out, "context": ctx, "not_held": NOT_HELD[fam]}
 
 
+def _engine_context(league, fam, now, pids, markets_rows, events, cur_team):
+    """Factor-engine context per board player (sports/player_context.py: one LeagueData load per board)."""
+    from . import player_context
+    wanted = {}
+    for pid in pids:
+        rows = [r for r in markets_rows.values() if r["player_id"] == pid]
+        evs = sorted({r["event_id"] for r in rows if r["event_id"] in events}, key=lambda x: events[x][1].start_utc)
+        tid = cur_team.get(pid)
+        if not evs or tid is None:
+            continue
+        e = events[evs[0]][1]
+        if tid not in (e.home_team_id, e.away_team_id):
+            continue
+        wanted[pid] = {"team_id": tid, "opp_id": e.away_team_id if tid == e.home_team_id else e.home_team_id,
+                       "event_id": e.event_id, "start_utc": e.start_utc, "home": tid == e.home_team_id,
+                       "stats": sorted({r["stat"] for r in rows if r["event_id"] == e.event_id and r["scope"] == "full_game"})}
+    try:
+        return player_context.build(league, fam, now, wanted)
+    except Exception as ex:                                     # noqa: BLE001 - context never breaks a build
+        return {}, {"state": f"failed: {type(ex).__name__}: {str(ex)[:120]}"}
+
+
 # --------------------------------------------------------------------------------------------------------- build
 def build(con, league, now=None, base=None, history=True):
     """Build every snapshot file of one league. -> summary counts."""
@@ -770,6 +788,8 @@ def build(con, league, now=None, base=None, history=True):
     # players
     n_players = 0
     pl_dir, hi_dir = root / "players", root / "history"
+    ctx_by_pid, ctx_summary = _engine_context(league, fam, now, pids, markets_rows, events, cur_team)
+    manifest["player_context"] = ctx_summary
     for pid in pids:
         rows = [r for r in markets_rows.values() if r["player_id"] == pid]
         p = players.get(pid)
@@ -810,8 +830,9 @@ def build(con, league, now=None, base=None, history=True):
             "team": _team_view(teams, tid) if tid else None, "injury": injuries.get(pid), "next_event": next_ev,
             "markets": rows, "forecast_detail": fdetail,
             "forecasts": {fid: forecasts[fid] for fid in fdetail if fid in forecasts},
-            "factors": factors(fam, games, next_ev, mates_out),
-            "engine": board_factors.read(league, pid, base),
+            "factors": dict(factors(fam, games, next_ev, mates_out), engine=ctx_by_pid.get(pid),
+                            not_held=[x["factor"] for x in (ctx_by_pid.get(pid) or {}).get("not_held", [])]
+                            or NOT_HELD[fam]),
             "history": {"games": len(games), "sources": sorted({s for g in games for s in g["source"]})}})
         _write(hi_dir / f"{safe_name(pid)}.json", {**base_meta, "player_id": pid, "family": fam, "games": games})
         n_players += 1

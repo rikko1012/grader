@@ -35,8 +35,6 @@ SHARP = "Kalshi and Polymarket player-prop markets"
 ESPN_DK = "ESPN-supplied DraftKings prop lines (lines only, no prices)"
 PICKEM = "PrizePicks / Underdog boards"
 CHARTING = "charting / tracking data (PFF, NFL Next Gen Stats, Second Spectrum) - not held"
-NFLVERSE = ("nflverse (snap counts from Pro-Football-Reference; nflverse player-week stats) - the installed history "
-            "copy, refreshed every 12 h")
 
 # (key, group, label, source, status, how)
 _NBA = [
@@ -110,19 +108,11 @@ _NBA = [
     ("opp_oreb_pct", "Advanced", "Opponent offensive rebound rate", BOX, "derived", "season"),
     ("opp_dreb_pct", "Advanced", "Opponent defensive rebound rate", BOX, "derived", "season"),
     ("potential_assists", "Advanced", "Potential assists", None, "unavailable", CHARTING),
-    ("defender_matchup", "Defensive matchup", "Likely defender", None, "unavailable", "matchup tracking: " + CHARTING),
     ("team_rating", "Advanced", "Team BPI", POWER, "collected", "latest daily snapshot"),
     ("opp_rating", "Advanced", "Opponent BPI", POWER, "collected", ""),
 ]
 _NFL = [
-    ("snap_share_l3", "Usage & role", "Snap share L3 (offensive snaps)", NFLVERSE, "collected",
-     "snap_counts offense_pct, mean of the last 3 games"),
-    ("snap_share_season", "Usage & role", "Snap share season", NFLVERSE, "collected",
-     "snap_counts offense_pct, season mean"),
-    ("air_yds_share", "Usage & role", "Air-yards share (all targets) L5", NFLVERSE, "collected",
-     "stats_player_week air_yards_share, mean of the last 5 games (incompletions included)"),
-    ("wopr", "Usage & role", "WOPR (1.5 x target share + 0.7 x air-yards share) L5", NFLVERSE, "collected",
-     "stats_player_week wopr, mean of the last 5 games"),
+    ("snap_share", "Usage & role", "Snap share", None, "unavailable", "snap counts are " + CHARTING),
     ("route_participation", "Usage & role", "Route participation", None, "unavailable", CHARTING),
     ("tprr", "Usage & role", "Targets per route run", None, "unavailable", CHARTING),
     ("alignment", "Usage & role", "Alignment (slot / wide / inline)", None, "unavailable", CHARTING),

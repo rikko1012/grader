@@ -390,6 +390,7 @@ def _nba(data, ath, team_id, opp_id, start, market, out, missing):
                        team_s - on_s)
         if on_net is not None and off_net is not None:
             out["on_off_net"] = _r((on_net - off_net) * 48 * 60, 1)
+            out["on_off_games"], out["on_off_on_min"] = len(tg), _r(on_s / 60, 1)   # its sample (helper keys)
     if "league_pace" not in data.memo:
         data.memo["league_pace"] = _pace([t for ts in data.team_games.values() for t in ts
                                           if t["season"] in data.window])

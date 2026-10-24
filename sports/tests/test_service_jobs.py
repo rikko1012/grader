@@ -98,8 +98,7 @@ def test_schedule_names_every_worker_side_process_with_its_flag():
             "model-forecast": "SPORTS_TRAIN",
             "model-learn": "SPORTS_TRAIN", "model-snapshot": "SPORTS_TRAIN", "model-fit": "SPORTS_TRAIN",
             "lab": "SPORTS_TRAIN", "history": "SPORTS_INGEST", "archive": "SPORTS_INGEST",
-            "archive-verify": "SPORTS_INGEST", "games-backfill": "SPORTS_INGEST",
-            "board-factors": "SPORTS_INGEST", "picks-ingest": "SPORTS_INGEST", "picks-settle": "SPORTS_INGEST"}
+            "archive-verify": "SPORTS_INGEST", "picks-ingest": "SPORTS_INGEST", "games-backfill": "SPORTS_INGEST", "picks-settle": "SPORTS_INGEST"}
     assert {k: v["flag"] for k, v in s.items()} == want
     assert s["slips-ingest"]["argv"][1:] == ["-m", "sports.slips", "ingest"]
     assert s["slips-settle"]["argv"][1:] == ["-m", "sports.slips", "settle"]
@@ -123,7 +122,7 @@ def test_supervise_starts_one_scheduler_and_no_job_with_flags_off(monkeypatch):
     stop = threading.Event()
     sch = service.supervise(stop)
     time.sleep(0.6)
-    assert sch.running == {} and len(scheduler.JOBS) == 22 and not any(j["enabled"] for j in scheduler.JOBS.values())
+    assert sch.running == {} and len(scheduler.JOBS) == 21 and not any(j["enabled"] for j in scheduler.JOBS.values())
     stop.set()
 
 
