@@ -154,7 +154,7 @@ def test_snapshot_rows_and_manifest_carry_the_market_view(built):
     assert mk["c"]["used"] == ["betrivers", "fanduel"]                # Kalshi rungs (20:00) are older than 15 min
     assert {x["why"] for x in mk["bk"] if not x["in"]} == {"quote observed 3600s before forecast (> 900s)"}
     pp = [q for q in row["q"] if q["p"] == "prizepicks"][0]
-    assert mk["at"][pp["r"]] == mk["c"]
+    assert pp["r"] not in mk["at"]                                   # same as the headline: not repeated
     m = _load(built, "manifest.json")
     assert m["market_view"]["version"] == "mv-1" and m["market_view"]["with_consensus"] >= 1
     s = m["sources"]

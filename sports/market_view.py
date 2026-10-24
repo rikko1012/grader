@@ -159,7 +159,8 @@ def row_view(targets, items, event, now, league, dnp):
       l   headline line (first pick'em line, else the first book line)
       c   headline consensus {po, pu, pp, n, used} at l, or None
       bk  per-book list (book_list)
-      at  {record_id: consensus excluding that quote's own platform, at its line} for every target quote"""
+      at  {record_id: consensus excluding that quote's own platform, at its line} for every target quote whose value
+          differs from `c` (absent = same as the headline)"""
     if not targets:
         return None
     pick = [t for t in targets if t[1].platform in TARGET_BOARDS] or targets
@@ -176,4 +177,6 @@ def row_view(targets, items, event, now, league, dnp):
     head_c = at[pick[0][0]]
     slim = [{k: (round(v, 4) if isinstance(v, float) else v) for k, v in b.items() if k not in ("rid", "pc")}
             for b in books]
-    return {"l": head.line, "hp": head.platform, "c": head_c, "bk": slim, "at": at}
+    # `at` keeps only quotes whose market chance differs from the headline (the UI falls back to `c`): size
+    return {"l": head.line, "hp": head.platform, "c": head_c, "bk": slim,
+            "at": {rid: v for rid, v in at.items() if v != head_c}}
