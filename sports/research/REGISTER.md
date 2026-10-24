@@ -305,3 +305,13 @@ no score). No round-2 factor had been fitted against an outcome or scored.
 11. **Grade-band validation.** Independently of letters being shown, the admin learning report groups settled forward
    props by sports-gp-1 band (A / B / C / Lean of the chosen side's unconditional probability) per league x stat x
    model version: n, games, hit rate, mean probability, hit - p with a game-clustered interval.
+- **A5a (2026-10-24, after the round-2 tune results; operational only - no criterion, threshold, split or metric
+  changes):** (a) the forward job COUNTS the L2 games each run (a SQL count, bounded) and reports "threshold reached";
+  the one-time L2 score itself is run by `python -m sports.model.shadow l2 <history.db> <sport>` (it builds full feature
+  frames, ~300 MB, too large for the forward job's 340 MB cap) and writes `<SPORTS_DATA_DIR>/model/l2_<sport>.json`
+  once; an existing result is never re-scored. (b) Known forward limitation recorded before any L2 / shadow evidence:
+  NBA `starter_today` (kept in all four NBA sm-2 markets) has NO pre-game lineup source in this build, so forward it
+  is unknown on every row and the shadow forecasts of NBA sm-2 are the degraded model (starter term at its train
+  mean). The L2 box-score test scores sm-2 with the box-score starter flag, exactly as tuned (the registered same-day
+  assumption); NBA real-line shadow evidence is labelled "starter unknown" and is not evidence for the tuned model
+  until a pre-game lineup source exists.

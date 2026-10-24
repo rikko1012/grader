@@ -101,14 +101,25 @@ def _last_before(df_team, df_cut, tg_team, tg_ts, tg_vals):
     return out
 
 
-def _schedule(con, league):
-    """Every scheduled or final game (known in advance): -> sorted arrays per team-game (team, ts, home team, neutral)."""
+def _schedule(con, league, df=None):
+    """Every scheduled or final game (known in advance) + the frame's upcoming games not in the table (forward rows):
+    -> sorted arrays per team-game (team, ts, game id, home team, neutral)."""
     rows = con.execute("SELECT game_id, start_utc, home, away, neutral, status FROM games WHERE league = ? AND "
                        "start_utc IS NOT NULL", (league,)).fetchall()
     out = []
+    seen = set()
     for r in rows:
         for team in (r["home"], r["away"]):
             out.append((team, r["start_utc"], r["game_id"], r["home"], int(r["neutral"] or 0)))
+            seen.add((r["game_id"], team))
+    if df is not None and "is_up" in df:
+        for i in np.flatnonzero(np.asarray(df["is_up"], float) == 1):
+            gid, team, opp = df["game_id"][i], df["team"][i], df["opp"][i]
+            host = team if df["home"][i] == 1 else opp
+            for t in (team, opp):
+                if (gid, t) not in seen:
+                    seen.add((gid, t))
+                    out.append((t, df["start_utc"][i], gid, host, 0))
     out.sort(key=lambda x: (x[0], x[1]))
     team = np.array([x[0] for x in out], dtype=object)
     ts = epoch([x[1] for x in out]) if out else np.zeros(0)
@@ -121,7 +132,7 @@ def _schedule(con, league):
 def _travel_rest(df, con, league):
     """Schedule facts known in advance: travel km from the previous game's venue, games in the previous 4 days (NBA),
     rest days. Neutral-site games have no known venue -> NaN."""
-    team, ts, gid, host, neutral = _schedule(con, league)
+    team, ts, gid, host, neutral = _schedule(con, league, df)
     venue = VENUE[league]
     gs = group_starts(team)
     loc = [None if neutral[i] else venue.get(host[i]) for i in range(len(team))]

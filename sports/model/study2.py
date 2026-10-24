@@ -223,6 +223,7 @@ def main(argv=None):
     p.add_argument("history")
     p.add_argument("sports", nargs="*")
     p.add_argument("--markets", nargs="*")
+    p.add_argument("--as-of", dest="as_of", help="fit: data known at (UTC ISO); default now")
     a = p.parse_args(argv)
     from . import datasets
     con = datasets.connect(Path(a.history))
@@ -231,7 +232,17 @@ def main(argv=None):
             run_tune(sport, con, a.markets, log=lambda x: print(x, flush=True))
         else:
             from . import shadow
-            print(json.dumps(shadow.fit(sport, con), indent=1, default=str)[:2000], flush=True)
+            print(json.dumps(shadow.fit(sport, con, as_of=a.as_of), indent=1, default=str)[:2000], flush=True)
+    if a.phase == "fit":
+        from . import shadow
+        ex = shadow.build_extras_package(con)
+        man = json.loads(shadow.MANIFEST.read_text(encoding="utf-8"))
+        man["extras_sha256"], man["extras_rows"] = ex["sha256"], ex["rows"]
+        from .fwd import _file_sha
+        man["files"][ex["file"]] = {"sha256": _file_sha(shadow.ART_DIR / ex["file"]),
+                                    "bytes": (shadow.ART_DIR / ex["file"]).stat().st_size}
+        shadow.MANIFEST.write_text(json.dumps(man, indent=1, sort_keys=True), encoding="utf-8")
+        print(json.dumps(ex), flush=True)
 
 
 if __name__ == "__main__":

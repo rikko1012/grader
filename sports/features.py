@@ -447,6 +447,21 @@ def with_effects():
             for fid, e in (m.get("feature_tests") or {}).items():
                 e = dict(e, study=p.name)
                 eff.setdefault(fid, {})[mk] = e
+    for p in sorted(RESULTS.glob("model_study2_*_tune.json")):          # round 2 (REGISTER.md A5)
+        try:
+            res = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        for mk, m in (res.get("markets") or {}).items():
+            added = set(m.get("sm2_features_added") or [])
+            for stage in ("stage_a", "stage_b_lines"):
+                for fid, e in ((m.get(stage) or {}).get("tests") or {}).items():
+                    eff.setdefault(fid, {})[mk] = {
+                        "study": p.name, "round": 2, "split": m[stage].get("split"),
+                        "tune_crps_diff": e.get("crps_diff"), "ci": e.get("ci"), "beta_std": e.get("beta_std"),
+                        "passed": bool(e.get("passed")), "kept": fid in added,
+                        "not_evaluable_on_tune": e.get("not_evaluable"),
+                        "in_model": "sm-2 challenger (shadow) - not in the shown grade" if fid in added else None}
     out = []
     for r in REGISTRY:
         x = dict(r)

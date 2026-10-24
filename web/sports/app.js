@@ -250,6 +250,43 @@
   }
   function loadManifest() { return Api.get("/api/sports/manifest", {league: state.lg}).catch(function () { return null; }); }
 
+  // ------------------------------------------------------------------------------------------ factors (fr-2)
+  // Player page "Factors" section: every registry factor for this sport + stat with its status - used by the shown
+  // model (value), part of the base projection, in the sm-2 challenger (shadow, not in the shown grade), tested with no
+  // measured effect (weight 0, with its tune interval), or not available (why). Values only, never weights.
+  var FACTORS_CACHE = {};
+  function factorsSection(lg, mk, fc) {
+    var id = "sw-factors-" + Math.random().toString(36).slice(2, 8);
+    var load = FACTORS_CACHE[lg] || (FACTORS_CACHE[lg] = Promise.all([
+      Api.get("/api/sports/model/features", {league: lg}), Api.get("/api/sports/model/registry", {league: lg})
+    ]).then(function (r) { return {features: r[0].data.features || [], artifacts: r[1].data.artifacts || {}}; },
+            function () { delete FACTORS_CACHE[lg]; return null; }));
+    load.then(function (d) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      if (!d) { el.innerHTML = '<h2>Factors</h2><p class="sw-muted sw-small">The factor list did not load.</p>'; return; }
+      var art = d.artifacts[lg], used = (art && art.markets && art.markets[mk.stat] && art.markets[mk.stat].features) || [];
+      var vals = {};
+      ((fc && fc.detail && fc.detail.factors) || []).forEach(function (x) { if (x.id) vals[x.id] = x.value; });
+      var groups = {used: [], base: [], shadow: [], none: [], na: []};
+      d.features.forEach(function (r) {
+        if (r.sport !== lg || (r.markets && r.markets.indexOf(mk.stat) < 0)) return;
+        var e = r.observed_effect && typeof r.observed_effect === "object" ? r.observed_effect[mk.stat] : null;
+        if (used.indexOf(r.id) >= 0) groups.used.push([r, vals.hasOwnProperty(r.id) ? (vals[r.id] === null ? "not known for this game" : String(vals[r.id])) : "in the model"]);
+        else if (/^part of the sm-1 base/.test(r.treatment || "")) groups.base.push([r, "part of the base projection"]);
+        else if (e && e.in_model) groups.shadow.push([r, "sm-2 challenger (shadow) - not in the shown grade"]);
+        else if (e && (e.ci || e.not_evaluable_on_tune)) groups.none.push([r, e.ci ? "weight 0 · tune change " + S.num(e.tune_crps_diff, 4) + " (" + S.num(e.ci[0], 4) + " to " + S.num(e.ci[1], 4) + ")" : "weight 0 · could not be evaluated: " + e.not_evaluable_on_tune]);
+        else groups.na.push([r, r.status === "unavailable" ? "not available: " + (r.source || "") : r.status === "forward only (logged, not yet testable)" ? "logged forward - not testable yet" : r.status === "derivable later" ? "not built yet: " + (r.source || r.treatment || "") : (r.treatment || r.status)]);
+      });
+      var titles = {used: "Used by the Scout model", base: "Base projection", shadow: "Tested - in the sm-2 challenger only", none: "Tested - no measured effect", na: "Not available or not tested"};
+      el.innerHTML = '<h2 id="' + id + '-h">Factors · ' + esc(mk.stat_label) + "</h2>" + ["used", "base", "shadow", "none", "na"].filter(function (k) { return groups[k].length; }).map(function (k) {
+        return '<details class="sw-more"' + (k === "used" ? " open" : "") + "><summary>" + esc(titles[k]) + " · " + groups[k].length + '</summary><div class="sw-scroll"><table class="sw-mini"><caption class="sw-sr">' + esc(titles[k]) + '</caption><thead><tr><th>Factor</th><th>Status</th></tr></thead><tbody>' +
+          groups[k].map(function (x) { return "<tr><td>" + esc(x[0].factor) + '<div class="sw-faint sw-small">' + esc(x[0].definition || "") + '</div></td><td class="sw-small">' + esc(x[1]) + "</td></tr>"; }).join("") + "</tbody></table></div></details>";
+      }).join("") + '<p class="sw-faint sw-small">A factor changes the projection only after a chronological test (registered before results). Values only; the model records no per-factor weights for display.</p>';
+    });
+    return '<section class="sw-panel" id="' + id + '" aria-labelledby="' + id + '-h"><h2 id="' + id + '-h">Factors · ' + esc(mk.stat_label) + '</h2><p class="sw-muted sw-small">Loading the factor list.</p></section>';
+  }
+
   // ------------------------------------------------------------------------------------------------- forecasts
   function fcCell(f, sideOffered) {
     if (!f) return {over: '<span class="sw-p na">—</span>', under: '<span class="sw-p na">—</span>', push: '<span class="sw-p na">—</span>', mean: "—"};
@@ -730,6 +767,7 @@
         }).join("") + "</div>";
         h += '<div class="sw-grid2" style="margin-top:12px"><div>' + historyPanel(m, ln, sel) + "</div><div>" + forecastPanel(fc, det, sel, m) + "</div></div>";
         h += contextPanel(P, games, m);
+        h += factorsSection(state.lg, m, fc);
         if (m.kalshi.length) {
           h += '<details class="sw-more"><summary>Kalshi ladder: ' + S.plural(m.kalshi.length, "rung") + " (Kalshi prices only; the market estimate combines every book)</summary><div class=\"sw-scroll\"><table class=\"sw-mini\"><caption class=\"sw-sr\">Kalshi rungs</caption><thead><tr><th>Rung (Over)</th><th class=\"num\">YES bid</th><th class=\"num\">YES ask</th><th class=\"num\">Volume</th><th class=\"num\">Open interest</th><th>Observed</th><th><span class=\"sw-sr\">Source</span></th></tr></thead><tbody>" +
             m.kalshi.map(function (k) { var s = k.sides[0]; return "<tr><td>" + S.line(k.line) + '</td><td class="num">' + S.cents(s.bid) + '</td><td class="num">' + S.cents(s.ask) + '</td><td class="num">' + S.num(k.liquidity.volume, 0) + '</td><td class="num">' + S.num(k.liquidity.open_interest, 0) + "</td><td class=\"sw-small\">" + esc(S.age(k.last_seen_at)) + "</td><td>" + src({title: "Kalshi rung", record: k.record_id, line: k.line, "YES bid": s.bid, "YES ask": s.ask, "source time": "not given by Kalshi", "observed by Scout": k.last_seen_at, rule: k.rule_version}) + "</td></tr>"; }).join("") + "</tbody></table></div></details>";
