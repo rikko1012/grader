@@ -158,3 +158,4 @@ body.sw button,body.sw select,body.sw input{font:inherit;color:inherit}
 .sw .sw-table td .sw-srcbtn+.sw-srcbtn{margin-top:4px}
 .sw .sw-table td:last-child{white-space:nowrap}
 .sw .sw-legbtns .sw-btn{white-space:nowrap}
+.sw .sw-pickbtns{margin-top:4px}.sw .sw-pick[disabled]{opacity:.75;cursor:default}

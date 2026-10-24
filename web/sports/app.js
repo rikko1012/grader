@@ -3,7 +3,11 @@
    GET /api/sports/token (esports origin, server-side paid check) -> {token, exp, api_base}; then
    api_base + /api/sports/... with "Authorization: Bearer <token>", refreshed before exp.
    Every number shown is copied from a typed record in the snapshot (record id / model version / time on the Source
-   button) or computed here from the listed per-game records (window statistics). */
+   button) or computed here from the listed per-game records (window statistics).
+   Pick tracking (sports/picks.py pk-1, shown only when /api/sports/picks/mine answers): "Pick Higher / Lower" records
+   the member's OWN prospective pick on the exact line on screen (offer revision id) with the Scout chance shown, if
+   any; the server re-checks it is current, offered, settleable and not started. "My picks" (#/picks) lists them with
+   results at the picked line. Stakes stay 0 and no grade letter is shown. */
 (function () {
   "use strict";
   var S = window.SportsStats, Sh = window.ScoutShell, esc = Sh.esc;
@@ -25,6 +29,8 @@
   var main = document.getElementById("sw-main");
   var banner = document.getElementById("sw-banner");
   var SRC = []; LEGS = [];                                          // source records for the Source dialog (per render)
+  var PICKS = {on: false, list: []};                                 // pick tracking available? + buttons this render
+  var PICK_BOOKS = {underdog: {over: "Higher", under: "Lower"}, prizepicks: {over: "More", under: "Less"}};
   var DEFAULT_FILTERS = {book: "all", stat: "all", side: "any", q: "", ev: "all", more: false};
   var state = {lg: "nba", filters: {nba: Object.assign({}, DEFAULT_FILTERS), nfl: Object.assign({}, DEFAULT_FILTERS)},
                boardShown: BOARD_PAGE, player: {}};
@@ -87,6 +93,27 @@
         }
         throw e;
       });
+    },
+    post: function (path, body) {                                    // never cached; a retry after 401 is idempotent
+      var self = this;
+      var once = function (retry) {
+        return self.token(retry).then(function () {
+          return fetch(self.base + path, {method: "POST", cache: "no-store", body: JSON.stringify(body),
+            headers: {Authorization: "Bearer " + self.tok, "Content-Type": "application/json"}});
+        }).then(function (r) {
+          return r.json().catch(function () { return {}; }).then(function (b) {
+            if (r.status === 401 && !retry) return once(true);
+            if (r.status === 401 || r.status === 403) throw new ApiError("auth", r.status, b.error);
+            if (r.status === 404) throw new ApiError("notfound", 404, b.error);
+            if (!r.ok) throw new ApiError(r.status === 503 ? "unavailable" : "error", r.status, b.detail || b.error);
+            return b;
+          });
+        }, function (e) {
+          if (e instanceof ApiError) throw e;
+          throw new ApiError(navigator.onLine === false ? "offline" : "network", 0);
+        });
+      };
+      return once(false);
     }
   };
 
@@ -250,7 +277,7 @@
       main.innerHTML = html;
       var body = document.getElementById("sw-slatebody");
       function draw() {
-        SRC = []; LEGS = [];
+        SRC = []; LEGS = []; PICKS.list = [];
         var q = (f.slateQ || "").toLowerCase();
         var evs = d.events.filter(function (e) {
           if (!q) return true;
@@ -380,10 +407,47 @@
     });
     return out.length ? '<div class="sw-legbtns">' + out.join("") + "</div>" : "";
   }
+  // q compact (p platform, r record id, o [over, under] offered, g gradable, l line); f the Scout chance SHOWN beside
+  // it ({po, pu, pp}) or null. The server refuses a pick whose shown chance differs from the forecast record.
+  function pickButtons(q, f, fid, startUtc, label, surface) {
+    var words = PICK_BOOKS[q.p];
+    if (!PICKS.on || !words || !q.r || !q.g || !startUtc || Date.parse(startUtc) <= Date.now()) return "";
+    var out = [["over", 0], ["under", 1]].filter(function (x) { return q.o[x[1]] === 1; }).map(function (x) {
+      var what = label + " " + words[x[0]] + " " + S.line(q.l) + " on " + bookName(q.p);
+      PICKS.list.push({what: what, pick: {platform: q.p, record_id: q.r, side: x[0], surface: surface,
+        forecast_id: f && fid ? fid : undefined, shown: f && fid ? {p_over: f.po, p_under: f.pu, p_push: f.pp} : undefined}});
+      return '<button type="button" class="sw-btn sw-btn-sm sw-pick" data-pick="' + (PICKS.list.length - 1) + '" aria-label="' + esc("Track my pick: " + what) + '">Pick ' + esc(words[x[0]]) + "</button>";
+    });
+    return out.length ? '<div class="sw-legbtns sw-pickbtns">' + out.join("") + "</div>" : "";
+  }
+  function pickToast(text, ok) {
+    document.getElementById("sw-toast").innerHTML = '<div class="sw-banner ' + (ok ? "info" : "warn") + '">' + esc(text) + (ok ? ' <a href="#/picks">My picks</a>' : "") + "</div>";
+  }
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-pick]");
+    if (!b) return;
+    e.preventDefault();
+    var p = PICKS.list[+b.getAttribute("data-pick")];
+    if (!p || b.disabled) return;
+    b.disabled = true;
+    Api.post("/api/sports/picks/track", {picks: [p.pick]}).then(function (r) {
+      var res = (r.results || [])[0] || {};
+      if (res.ok) {
+        b.textContent = "Tracked ✓";
+        pickToast("Tracked: " + p.what + ". No entry was placed anywhere.", true);
+      } else {
+        b.disabled = false;
+        pickToast("Not tracked: " + (res.text || "this line can't be tracked right now") + ".", false);
+      }
+    }, function (err) {
+      b.disabled = false;
+      pickToast(err.kind === "notfound" ? "Pick tracking is not available yet." : "The pick was not tracked (" + err.kind + "). Try again.", false);
+    });
+  });
   function boardTable(rows, B) {
     var h = '<div class="sw-tablebox sw-scroll"><table class="sw-table"><caption class="sw-sr">Prop board: one group per player market, one row per book line</caption><thead><tr>' +
       '<th scope="col">Player · game</th><th scope="col">Market</th><th scope="col">Book</th><th scope="col" class="num">Line</th><th scope="col">Offered</th>' +
-      '<th scope="col" class="num">Scout projection</th><th scope="col" class="num">Over</th><th scope="col" class="num">Under</th><th scope="col" class="num">Push</th><th scope="col">Observed</th><th scope="col">Slip</th><th scope="col"><span class="sw-sr">Source</span></th></tr></thead>';
+      '<th scope="col" class="num">Scout projection</th><th scope="col" class="num">Over</th><th scope="col" class="num">Under</th><th scope="col" class="num">Push</th><th scope="col">Observed</th><th scope="col">' + (PICKS.on ? "Slip · My pick" : "Slip") + '</th><th scope="col"><span class="sw-sr">Source</span></th></tr></thead>';
     rows.forEach(function (m) {
       var qr = quoteRows(m), all = qr.q.map(function (q) { return [q, "q"]; }).concat(qr.k.map(function (q) { return [q, "k"]; }));
       if (!all.length) all = [[null, "none"]];
@@ -409,7 +473,7 @@
             '<td class="sw-offered">' + offeredText(q.o) + (q.m && (q.m[0] !== 1 || q.m[1] !== 1) ? '<div class="sw-faint">' + (q.m[0] ? "O " + S.mult(q.m[0]) : "") + (q.m[1] ? " U " + S.mult(q.m[1]) : "") + "</div>" : "") + "</td>" +
             '<td class="num">' + c.mean + '</td><td class="num">' + c.over + '</td><td class="num">' + c.under + '</td><td class="num">' + c.push + "</td>" +
             '<td class="sw-small"><span class="sw-faint">' + esc(S.age(q.t)) + "</span>" + (f ? '<div class="sw-faint">' + esc(f.m) + " · " + esc(S.age(f.at)) + "</div>" : (q.g ? '<div class="sw-faint">No Scout chance yet</div>' : "")) + "</td>" +
-            "<td>" + boardLegButtons(m, q, f, B) + "</td><td>" + quoteSource(q) + (f ? fcSource(q.f, f, q) : "") + "</td>";
+            "<td>" + boardLegButtons(m, q, f, B) + pickButtons(q, f, q.f, m.ev && m.ev.start_utc, m.n + " " + (B.stats[m.st] || m.st), "board") + "</td><td>" + quoteSource(q) + (f ? fcSource(q.f, f, q) : "") + "</td>";
         }
         h += "</tr>";
       });
@@ -426,7 +490,7 @@
         '<div class="sw-small" style="text-align:right">' + esc(B.stats[m.st] || m.st) + "</div></div>";
       qr.q.forEach(function (q) {
         var f = q.f ? B.fc[q.f] : null, c = fcCell(f, q.o);
-        h += '<div class="sw-qrow"><div>' + book(q.p) + ' <a class="sw-line" href="' + marketHref(m, q) + '">' + S.line(q.l) + '</a><div class="sw-offered">' + offeredText(q.o) + " · " + esc(S.age(q.t)) + "</div>" + boardLegButtons(m, q, f, B) + "</div>" +
+        h += '<div class="sw-qrow"><div>' + book(q.p) + ' <a class="sw-line" href="' + marketHref(m, q) + '">' + S.line(q.l) + '</a><div class="sw-offered">' + offeredText(q.o) + " · " + esc(S.age(q.t)) + "</div>" + boardLegButtons(m, q, f, B) + pickButtons(q, f, q.f, m.ev && m.ev.start_utc, m.n + " " + (B.stats[m.st] || m.st), "board") + "</div>" +
           '<div class="sw-small sw-faint" style="text-align:right">Proj<br><b class="sw-p">' + c.mean + "</b></div>" +
           '<div class="sw-pp"><span>O ' + c.over + "</span><span>U " + c.under + "</span>" + (f && f.pp > 0 ? "<span>P " + c.push + "</span>" : "") + "</div></div>";
       });
@@ -457,7 +521,7 @@
         boardFiltersHtml(B, f, evs);
       target.innerHTML = head + '<div id="sw-bcount"></div><div id="sw-bbody"></div>';
       function draw() {
-        SRC = []; LEGS = [];
+        SRC = []; LEGS = []; PICKS.list = [];
         var ff = onlyEvent ? Object.assign({}, DEFAULT_FILTERS, {ev: onlyEvent, more: true}) : f;
         var rows = B.markets.filter(function (m) { return (ff.more || m.pr) && S.matchesFilters(m, ff); });
         var total = B.markets.filter(function (m) { return (ff.more || m.pr) && (!onlyEvent || m.e === onlyEvent); }).length;
@@ -509,7 +573,7 @@
       freshness(man, got); footer(man);
       var e = got.data.events.filter(function (x) { return x.event_id === eid; })[0];
       if (!e) { main.innerHTML = errorBox({kind: "notfound"}); return; }
-      SRC = []; LEGS = [];
+      SRC = []; LEGS = []; PICKS.list = [];
       var byTeam = {};
       e.injuries.forEach(function (i) { (byTeam[i.team_id] = byTeam[i.team_id] || []).push(i); });
       function injList(t) {
@@ -607,7 +671,7 @@
       draw();
 
       function draw() {
-        SRC = []; LEGS = [];
+        SRC = []; LEGS = []; PICKS.list = [];
         var fc = sel && sel.forecast_id ? P.forecasts[sel.forecast_id] : null;
         var det = sel && sel.forecast_id ? P.forecast_detail[sel.forecast_id] : null;
         var ln = ps.customLine !== undefined && ps.customLine !== null ? ps.customLine : (sel ? sel.line : null);
@@ -705,6 +769,11 @@
             event_ref: ne && ne.opponent ? (ne.home ? "vs " : "@ ") + ne.opponent.abbr : null}));
         });
         var not = ["over", "under"].filter(function (x) { return !(sides[x] && sides[x].offered); });
+        var shownFc = fc && q.forecast_id === fc.forecast_id ? fc : null;       // the chance on screen for THIS line
+        out.push(pickButtons({p: q.platform, r: q.record_id, l: q.line, g: q.gradable === false ? 0 : 1,
+          o: [sides.over && sides.over.offered ? 1 : 0, sides.under && sides.under.offered ? 1 : 0]},
+          shownFc ? {po: shownFc.p_over, pu: shownFc.p_under, pp: shownFc.p_push} : null, shownFc ? shownFc.forecast_id : null,
+          ne ? ne.start_utc : q.listed_start_utc, P.player + " " + m.stat_label, "card"));
         return '<div class="sw-actions">' + out.join("") + '<a class="sw-btn sw-btn-sm" href="' + SLIP_PAGE + '">Open Slip Studio</a>' + (not.length ? '<span class="sw-faint sw-small" style="align-self:center">' + not.map(function (x) { return (x === "over" ? "Over" : "Under") + " is not offered on " + bookName(q.platform); }).join(". ") + "</span>" : "") + "</div>";
       }
 
@@ -826,7 +895,7 @@
     Promise.all([Api.get("/api/sports/results", {league: state.lg}), loadManifest()]).then(function (res) {
       var got = res[0], R = got.data, man = res[1] && res[1].data;
       freshness(man, got); footer(man);
-      SRC = []; LEGS = [];
+      SRC = []; LEGS = []; PICKS.list = [];
       var h = '<div class="sw-eyebrow">' + state.lg.toUpperCase() + ' · Results</div><h1 class="sw-h1">Results ledger</h1>' +
         '<p class="sw-sub">How close the projections were and how good the chances were, scored separately. Payouts appear only when a settlement records the actual stake and payout.</p>';
       var models = Object.keys(R.summary || {});
@@ -850,6 +919,49 @@
     }).catch(fail);
   }
 
+  // ---------------------------------------------------------------------------------------------------- my picks
+  var PICK_STATUS = {pending: "Pending", win: "Hit", loss: "Miss", push: "Push", "void": "Void (did not play)", unresolved: "Unresolved"};
+  function pickResult(p) {
+    var r = p.result, st = r ? r.status : "pending";
+    return esc(PICK_STATUS[st] || st) + (r && r.value !== null && r.value !== undefined ? ' <span class="sw-faint sw-small">(' + S.num(r.value, 0) + ")</span>" : "") + (r && r.corrected ? ' <span class="sw-tag">corrected</span>' : "");
+  }
+  function pickChance(p) {
+    return p.p_side === null || p.p_side === undefined ? '<span class="sw-faint">' + esc(p.validation_text || "No Scout chance on this line") + "</span>" :
+      S.pct(p.p_side) + ' <span class="sw-faint">' + esc(p.validation_text || "") + "</span>";
+  }
+  function renderPicks() {
+    var head = '<div class="sw-eyebrow">My picks</div><h1 class="sw-h1">My picks</h1>' +
+      '<p class="sw-sub">Your own picks, recorded before each game starts on the exact line you saw. Results use the line you picked. Tracking a pick places no entry anywhere and is not a Scout recommendation.</p>';
+    if (!PICKS.on) { main.innerHTML = head + stateBox("Pick tracking is not available", "Pick tracking is not switched on yet.", '<a class="sw-btn" href="#/board">Open the prop board</a>'); return; }
+    main.innerHTML = head + skeleton(4);
+    Api.get("/api/sports/picks/mine", {}, {fresh: true}).then(function (got) {
+      var d = got.data, rows = d.picks || [], tally = {};
+      if (!rows.length) {
+        main.innerHTML = head + stateBox("No picks yet", "On the prop board or a player page, use “Pick Higher / Lower” (Underdog) or “Pick More / Less” (PrizePicks) on a line before its game starts. Picks appear here within about a minute.", '<a class="sw-btn" href="#/board">Open the prop board</a>');
+        return;
+      }
+      rows.forEach(function (p) { var st = p.result ? p.result.status : "pending"; tally[st] = (tally[st] || 0) + 1; });
+      var meta = function (p) { return esc([p.league && p.league.toUpperCase(), p.team, p.event_ref].filter(Boolean).join(" · ")); };
+      var pickText = function (p) { var w = PICK_BOOKS[p.platform]; return esc(p.stat_label || p.stat) + " <b>" + esc(w ? w[p.side] : p.side) + " " + S.line(p.line) + "</b>"; };
+      main.innerHTML = head + (got.stale ? '<div class="sw-banner warn">Showing your last loaded list (' + esc(got.why) + ").</div>" : "") +
+        '<p class="sw-count"><span><b>' + d.total + "</b> picks" + (d.total > rows.length ? " (newest " + rows.length + " shown)" : "") + "</span>" + Object.keys(tally).map(function (k) { return "<span><b>" + tally[k] + "</b> " + esc(PICK_STATUS[k] || k) + "</span>"; }).join("") + "</p>" +
+        '<div class="sw-tablebox sw-scroll"><table class="sw-table"><caption class="sw-sr">My tracked picks, newest first</caption><thead><tr><th scope="col">Picked</th><th scope="col">Player · game</th><th scope="col">Pick</th><th scope="col">Book</th><th scope="col">Starts</th><th scope="col">Scout chance shown</th><th scope="col">Result</th></tr></thead><tbody>' +
+        rows.map(function (p) {
+          return '<tr><td class="sw-small">' + esc(S.localTime(p.tracked_at, {month: "short", day: "numeric", hour: "numeric", minute: "2-digit"})) + "</td>" +
+            "<td>" + esc(p.player) + '<div class="sw-faint sw-small">' + meta(p) + "</div></td><td>" + pickText(p) + "</td><td>" + book(p.platform) + "</td>" +
+            '<td class="sw-small">' + esc(S.localTime(p.start_utc, {weekday: "short", hour: "numeric", minute: "2-digit"})) + '</td><td class="sw-small">' + pickChance(p) + "</td><td>" + pickResult(p) + "</td></tr>";
+        }).join("") + "</tbody></table></div>" +
+        '<div class="sw-cards">' + rows.map(function (p) {                  // phones: the table is hidden below 900px
+          return '<article class="sw-card" aria-label="' + esc(p.player + ", " + (p.stat_label || p.stat) + " " + S.line(p.line)) + '"><div class="sw-card-top"><div>' + esc(p.player) +
+            '<div class="sw-faint sw-small">' + meta(p) + " · " + esc(S.localTime(p.start_utc, {weekday: "short", hour: "numeric", minute: "2-digit"})) + "</div></div>" +
+            '<div class="sw-small" style="text-align:right">' + pickResult(p) + "</div></div>" +
+            '<div class="sw-qrow"><div>' + book(p.platform) + " " + pickText(p) + '<div class="sw-faint sw-small">Picked ' + esc(S.localTime(p.tracked_at, {month: "short", day: "numeric", hour: "numeric", minute: "2-digit"})) + "</div></div>" +
+            '<div class="sw-small" style="text-align:right">' + pickChance(p) + "</div></div></article>";
+        }).join("") + "</div>" +
+        '<p class="sw-faint sw-small">A tracked pick is a permanent record and can’t be edited. Stakes are 0: no entry, payout or return is recorded.</p>';
+    }).catch(fail);
+  }
+
   // ------------------------------------------------------------------------------------------------------ render
   function render() {
     var r = route();
@@ -861,6 +973,7 @@
     else if (r.view === "player" && r.arg) renderPlayer(r.arg, r.params);
     else if (r.view === "game" && r.arg) renderGame(r.arg);
     else if (r.view === "results") renderResults();
+    else if (r.view === "picks") renderPicks();
     else renderSlate();
     var top = document.getElementById("sw-main");
     if (render.count++) { try { top.focus({preventScroll: true}); } catch (e) {} window.scrollTo(0, 0); }
@@ -882,7 +995,10 @@
   Sh.member().then(function (info) {
     if (info.required && !info.member) { Sh.gate(main, info); return; }
     Sh.showMember(info);
-    render();
+    Api.get("/api/sports/picks/mine", {}, {fresh: true}).then(function () {   // answers only where pick tracking is deployed
+      PICKS.on = true;
+      document.getElementById("sw-sliplink").insertAdjacentHTML("beforebegin", '<a href="#/picks" data-view="picks">My picks</a>');
+    }, function () { /* not deployed / unavailable: pick tracking stays hidden */ }).then(render);
   });
   window.ScoutSportsApp = {state: state, api: Api, render: render};
 })();
