@@ -155,6 +155,81 @@
     else track(leg, tr);
   });
 
-  api.actions = actions; api.track = track;
+  // ------------------------------------------------------------------------------------------------ My picks
+  var TABS = [["open", "Open"], ["settled", "Settled"], ["voided", "Voided"]];
+  var cur = "open";
+  try { cur = sessionStorage.getItem("sw:mp:tab") || "open"; } catch (e) {}
+
+  function row(p, src) {
+    var c = chanceText(p), r = resultText(p), side = p.side === "over" ? "Over" : "Under";
+    var corr = p.result && p.result.corrected;
+    return '<article class="sw-card sw-mp-row"><div class="sw-card-top"><div><b>' + esc(p.player || "") + "</b> " +
+      '<span class="sw-mp-pick">' + esc(side + " " + line(p.line) + " " + (p.stat_label || p.stat || "")) + "</span>" +
+      '<div class="sw-faint sw-small">' + esc(bookName(p.platform)) + (p.event_ref ? " · " + esc(p.event_ref) : "") + (p.league ? " · " + esc(String(p.league).toUpperCase()) : "") + "</div></div>" +
+      '<div class="sw-mp-res ' + esc(p.result ? p.result.status : "open") + '"><b>' + esc(r.status) + "</b>" + (corr ? ' <span class="sw-tag">Corrected (revision ' + esc(p.result.revision) + ")</span>" : "") +
+      '<div class="sw-small sw-muted">' + esc(r.detail) + "</div></div></div>" +
+      '<dl class="sw-mp-dl"><div><dt>Recorded line</dt><dd>' + esc(side + " " + line(p.line)) + "</dd></div>" +
+      "<div><dt>Tracked</dt><dd>" + esc(trackedText(p.tracked_at)) + "</dd></div>" +
+      "<div><dt>Chance shown</dt><dd>" + esc(c.chance) + ' <span class="sw-faint">(' + esc(c.source) + ")</span></dd></div>" +
+      "<div><dt>Stake</dt><dd>0</dd></div></dl>" +
+      '<div class="sw-small sw-faint">' + esc(p.validation_text || "") + " " + (src ? src({title: "Pick record", "pick id": p.pick_id, "offer record (exact revision)": p.record_id, revision: p.revision,
+        forecast: p.forecast_id || "none", model: p.model_version || "none", "tracked at (your time)": trackedText(p.tracked_at), where: p.surface,
+        "settled at": p.result && p.result.settled_at ? trackedText(p.result.settled_at) : "not settled", "settlement revision": p.result ? p.result.revision : null}, "Source") : "") + "</div></article>";
+  }
+
+  // deps: {main, api, src, stateBox, fail, skeleton, loadModels: () => Promise<[{league, model_version, settled}]>}
+  function renderMine(deps) {
+    var main = deps.main;
+    var head = '<div class="sw-eyebrow">My picks</div><h1 class="sw-h1">My picks</h1>';
+    main.innerHTML = head + deps.skeleton(4);
+    Promise.all([deps.api.get("/api/sports/picks/mine", {}, {fresh: true}), deps.loadModels().catch(function () { return []; })]).then(function (res) {
+      drawMine(deps, head, res[0].data, res[1] || []);
+    }).catch(deps.fail);
+  }
+  function drawMine(deps, head, d, models, focusTab) {
+    var main = deps.main, ps = d.picks || [];
+    var h = head + '<p class="sw-sub">Each pick was recorded before its game at the exact line shown and is settled from the final box score at that same line. Stakes are 0; no grades or returns are shown.</p>';
+    var val = validationLines(models);
+    var valHtml = '<section class="sw-panel sw-mp-val" aria-labelledby="sw-mp-val-h"><h2 id="sw-mp-val-h">Model validation (all members, not your picks)</h2>' +
+      (val.length ? '<ul class="sw-list sw-small">' + val.map(function (v) { return "<li>" + esc(v.text) + "</li>"; }).join("") + "</ul>" : '<p class="sw-small sw-muted">Model validation: 0 of ' + GATE_N + " settled props - not yet validated.</p>") +
+      '<p class="sw-faint sw-small">The model is reviewed at ' + GATE_N + " settled props on real offered lines. Your own record above says nothing about that.</p></section>";
+    if (!ps.length) {
+      main.innerHTML = h + deps.stateBox("No tracked picks yet", "Choose <b>Over</b> or <b>Under</b> on a line, then <b>Track pick</b>, before the game starts. A recorded pick appears here within about a minute.", '<a class="sw-btn" href="#/board">Open the prop board</a>') + valHtml;
+      return;
+    }
+    var c = summary(ps);
+    h += '<section class="sw-panel sw-mp-sum" aria-labelledby="sw-mp-sum-h"><h2 id="sw-mp-sum-h">Your results</h2><div class="sw-kv">' +
+      "<span><b>" + c.win + "-" + c.loss + "-" + c.push + "</b> W-L-P</span>" +
+      "<span>Hit rate <b>" + (c.hit === null ? "—" : pct(c.hit)) + "</b> (n = " + c.decided + " decided)</span>" +
+      "<span><b>" + c["void"] + "</b> voided</span><span><b>" + c.open + "</b> open</span><span><b>" + d.total + "</b> tracked</span></div>" +
+      '<p class="sw-faint sw-small">Pushes and voids are not counted in the hit rate.' + (d.total > d.shown ? " Counts cover the newest " + d.shown + " of " + d.total + " picks." : "") + "</p></section>";
+    var by = {open: [], settled: [], voided: []};
+    ps.forEach(function (p) { by[tabOf(p)].push(p); });
+    if (!by[cur]) cur = "open";
+    h += '<div class="sw-mp-tabs" role="tablist" aria-label="My picks">' + TABS.map(function (t) {
+      var on = t[0] === cur;
+      return '<button type="button" role="tab" id="sw-mp-t-' + t[0] + '" aria-controls="sw-mp-panel" aria-selected="' + on + '" tabindex="' + (on ? 0 : -1) + '" data-mptab="' + t[0] + '">' + t[1] + ' <span class="sw-mp-n">' + by[t[0]].length + "</span></button>";
+    }).join("") + "</div>" +
+      '<div id="sw-mp-panel" role="tabpanel" aria-labelledby="sw-mp-t-' + cur + '" tabindex="0"><div class="sw-picklist">' +
+      (by[cur].length ? by[cur].map(function (p) { return row(p, deps.src); }).join("") : '<p class="sw-muted sw-small">No ' + cur + " picks.</p>") + "</div></div>" +
+      (d.total > d.shown ? '<p class="sw-faint sw-small">Newest ' + d.shown + " of " + d.total + " shown.</p>" : "") + valHtml;
+    if (deps.resetSrc) deps.resetSrc();
+    main.innerHTML = h;
+    var tl = main.querySelector(".sw-mp-tabs");
+    function pickTab(k) {
+      cur = k; try { sessionStorage.setItem("sw:mp:tab", k); } catch (e) {}
+      drawMine(deps, head, d, models, true);
+    }
+    tl.addEventListener("click", function (e) { var b = e.target.closest("[data-mptab]"); if (b) pickTab(b.getAttribute("data-mptab")); });
+    tl.addEventListener("keydown", function (e) {
+      var i = TABS.map(function (t) { return t[0]; }).indexOf(cur);
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); pickTab(TABS[(i + (e.key === "ArrowRight" ? 1 : 2)) % 3][0]); }
+      else if (e.key === "Home") { e.preventDefault(); pickTab("open"); }
+      else if (e.key === "End") { e.preventDefault(); pickTab("voided"); }
+    });
+    if (focusTab) { var b = document.getElementById("sw-mp-t-" + cur); if (b) b.focus(); }
+  }
+
+  api.actions = actions; api.track = track; api.renderMine = renderMine;
   root.SportsPicks = api;
 })(this);

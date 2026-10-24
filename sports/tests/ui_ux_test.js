@@ -81,4 +81,24 @@ assert.strictEqual(markets.filter(m => F.matches(m, all, base)).length, 3);
 assert.strictEqual(markets.filter(m => F.matches(m, Object.assign({}, all, {book: "fanduel"}), base)).length, 1);   // market-view-only book
 assert.strictEqual(markets.filter(m => F.matches(m, Object.assign({}, all, {book: "prizepicks"}), base)).length, 3);
 assert.strictEqual(markets.filter(m => F.matches(m, Object.assign({}, all, {book: "kalshi"}), base)).length, 1);   // the one-sided Kalshi quote is not a price
+// ---------------------------------------------------------------- My picks (item 7)
+const pk = (st, extra) => Object.assign({pick_id: "pk-" + st, side: "over", line: 20.5, platform: "underdog", tracked_at: "2026-10-24T18:05:00Z",
+  p_side: 0.612, displayed_source: "scout_forecast", model_version: "sharp-2", forecast_id: "fc-1",
+  result: st ? {status: st, value: 22, revision: 1, corrected: false} : null}, extra || {});
+const ps = [pk(null), pk("unresolved"), pk("win"), pk("win"), pk("loss"), pk("push"), pk("void")];
+assert.deepStrictEqual(ps.map(P.tabOf), ["open", "open", "settled", "settled", "settled", "settled", "voided"]);
+const sm = P.summary(ps);
+assert.deepStrictEqual([sm.win, sm.loss, sm.push, sm.void, sm.open, sm.decided], [2, 1, 1, 1, 2, 3]);
+assert.strictEqual(sm.hit, 2 / 3);                                                    // pushes / voids not in the rate
+assert.strictEqual(P.summary([pk(null)]).hit, null);
+assert.deepStrictEqual(P.chanceText(pk(null)), {chance: "61.2%", source: "Scout forecast · sharp-2 · fc-1"});
+assert.strictEqual(P.chanceText(pk(null, {p_side: null, forecast_id: null})).chance, "No Scout chance shown");
+assert.deepStrictEqual(P.resultText(pk("win")), {status: "Won", detail: "Final 22 vs Over 20.5"});
+assert.strictEqual(P.resultText(pk("void")).status, "Void");
+assert.strictEqual(P.resultText(pk(null)).status, "Not settled yet");
+const tt = P.trackedText("2026-10-24T18:05:00Z", {locale: "en-US", timeZone: "America/Chicago"});
+assert.ok(/1:05/.test(tt) && /CDT/.test(tt), tt);                                     // local time with the zone
+const vl = P.validationLines([{league: "nba", model_version: "sharp-2", settled: 41}, {league: "nfl", model_version: "sm-1", settled: 300}]);
+assert.strictEqual(vl[0].text, "Model validation (NBA, sharp-2): 41 of 300 settled props - not yet validated");
+assert.ok(/300 of 300/.test(vl[1].text) && /not yet validated/.test(vl[1].text));     // a window is a review, not a pass
 console.log("ok");

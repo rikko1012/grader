@@ -360,30 +360,17 @@
   function pickToast(text, ok) {
     document.getElementById("sw-toast").innerHTML = '<div class="sw-banner ' + (ok ? "info" : "warn") + '">' + esc(text) + (ok ? ' <a href="#/picks">My picks</a>' : "") + "</div>";
   }
-  var RESULT_WORD = {win: "Won", loss: "Lost", push: "Push", void: "Void (did not play)", unresolved: "Unresolved"};
+  // HOOK (ux agent): My picks (#/picks) is web/sports/picks.js (SportsPicks.renderMine) on /api/sports/picks/mine.
   function renderPicks() {
-    var head = '<div class="sw-eyebrow">My picks</div><h1 class="sw-h1">My picks</h1>';
-    main.innerHTML = head + skeleton(4);
-    Api.get("/api/sports/picks/mine", {}, {fresh: true}).then(function (res) {
-      var d = res.data, ps = d.picks || [];
-      var h = head + '<p class="sw-sub">Each pick was recorded before its game against the exact line shown and is settled from the final box score at that line. Stakes are 0 and no grades are shown while the model is being validated.</p>';
-      if (!ps.length) {
-        main.innerHTML = h + stateBox("No tracked picks yet", "Use <b>Track Over</b> / <b>Track Under</b> on the prop board or a player page before the game starts. A recorded pick appears here within about a minute.", '<a class="sw-btn" href="#/board">Open the prop board</a>');
-        return;
-      }
-      var c = {win: 0, loss: 0, push: 0, "void": 0, open: 0};
-      ps.forEach(function (p) { var st = p.result && p.result.status; if (st && st in c) c[st]++; else c.open++; });
-      h += '<p class="sw-count"><span><b>' + d.total + "</b> picks</span><span><b>" + c.win + "-" + c.loss + "-" + c.push + "</b> won-lost-push</span><span><b>" + c["void"] + "</b> void</span><span><b>" + c.open + "</b> not settled</span></p>";
-      h += '<div class="sw-picklist">' + ps.map(function (p) {
-        var r = p.result, word = p.side === "over" ? "Over" : "Under";
-        return '<article class="sw-card"><div class="sw-card-top"><div><b>' + esc(p.player || "") + "</b> " + esc(word + " " + S.line(p.line) + " " + (p.stat_label || p.stat || "")) +
-          '<div class="sw-faint sw-small">' + esc(bookName(p.platform)) + " · " + esc(p.event_ref || "") + " · starts " + esc(S.localTime(p.start_utc, {weekday: "short", hour: "numeric", minute: "2-digit"})) + "</div></div>" +
-          '<div class="sw-small" style="text-align:right">' + (r ? "<b>" + esc(RESULT_WORD[r.status] || r.status) + "</b>" + (r.value !== null && r.value !== undefined ? '<div class="sw-faint">final ' + esc(r.value) + "</div>" : "") + (r.corrected ? ' <span class="sw-tag">corrected</span>' : "") : '<span class="sw-faint">Not settled</span>') + "</div></div>" +
-          '<div class="sw-small sw-faint">Tracked ' + esc(S.localTime(p.tracked_at)) + " · " + (p.p_side !== null && p.p_side !== undefined ? "Scout chance shown " + S.pct(p.p_side) + " · " : "") + esc(p.validation_text || "") + " · stake 0 · " +
-          src({title: "Pick record", "pick id": p.pick_id, "offer record (exact revision)": p.record_id, revision: p.revision, forecast: p.forecast_id || "none", model: p.model_version || "none", "tracked at (your time)": S.localTime(p.tracked_at), "where": p.surface}) + "</div></article>";
-      }).join("") + "</div>" + (d.total > d.shown ? '<p class="sw-faint sw-small">Newest ' + d.shown + " of " + d.total + " shown.</p>" : "");
-      main.innerHTML = h;
-    }).catch(fail);
+    window.SportsPicks.renderMine({main: main, api: Api, src: src, stateBox: stateBox, fail: fail, skeleton: skeleton,
+      resetSrc: function () { SRC = []; },
+      loadModels: function () {                       // model validation progress per league (manifest model counts)
+        return Promise.all(["nba", "nfl"].map(function (lg) {
+          return Api.get("/api/sports/manifest", {league: lg}).then(function (r) {
+            return (r.data.models || []).map(function (m) { return Object.assign({league: lg}, m); });
+          }, function () { return []; });
+        })).then(function (xs) { return xs[0].concat(xs[1]); });
+      }});
   }
   function boardLegButtons(m, q, f, B) {
     if (q.p === "kalshi") return "";

@@ -78,3 +78,17 @@
 .sw .sw-fx-clear{min-height:36px;font-size:12px;padding:0 6px}
 @media(min-width:768px){.sw .sw-fx-more>summary{display:none}}
 @media(max-width:640px){.sw .sw-fx-sec .sw-field{flex:1 1 calc(50% - 12px)}.sw .sw-fx-btns button,.sw .sw-fx-strip button{min-height:44px}}
+/* My picks: tabs Open / Settled / Voided, rows, own results vs model validation */
+.sw .sw-mp-tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:0 0 12px;overflow-x:auto}
+.sw .sw-mp-tabs [role=tab]{background:transparent;border:0;border-bottom:2px solid transparent;color:var(--muted);min-height:44px;padding:0 14px;cursor:pointer;font-weight:600;white-space:nowrap}
+.sw .sw-mp-tabs [role=tab][aria-selected=true]{color:var(--text);border-bottom-color:var(--accent)}
+.sw .sw-mp-n{display:inline-block;min-width:22px;border-radius:999px;background:var(--panel-3);color:var(--text);font-size:11px;padding:0 6px;margin-left:4px}
+.sw #sw-mp-panel:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+.sw .sw-mp-pick{color:var(--text)}
+.sw .sw-mp-res{text-align:right;font-size:12.5px;min-width:0}
+.sw .sw-mp-res.win b{color:var(--over)}.sw .sw-mp-res.loss b{color:var(--under)}.sw .sw-mp-res.push b{color:var(--push)}
+.sw .sw-mp-dl{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px 12px;margin:10px 0 6px;font-size:12px}
+.sw .sw-mp-dl dt{color:var(--faint);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em}
+.sw .sw-mp-dl dd{margin:0;overflow-wrap:anywhere}
+.sw .sw-mp-sum .sw-kv{font-size:13px}
+@media(max-width:640px){.sw .sw-mp-dl{grid-template-columns:repeat(2,minmax(0,1fr))}.sw .sw-mp-row .sw-card-top{flex-direction:column}.sw .sw-mp-res{text-align:left}}

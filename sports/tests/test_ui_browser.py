@@ -468,3 +468,65 @@ def test_filters_quick_strip_chips_saved_mobile(pw, shots):
     assert _no_overflow(page)
     assert not [e for e in errors + errors2 if "favicon" not in e], errors + errors2
     ctx.close()
+
+
+MINE = {"version": "pk-1", "total": 4, "shown": 4, "stake_units": 0, "picks": [
+    {"pick_id": "pk-a", "tracked_at": "2026-10-24T18:05:00Z", "league": "nba", "platform": "underdog", "player": "Test Open",
+     "event_ref": "BOS @ NYK", "stat": "points", "stat_label": "Points", "line": 20.5, "side": "over", "record_id": "offer:ud:1:r1:aa",
+     "revision": 1, "forecast_id": "fc-a", "model_version": "sharp-2", "displayed_source": "scout_forecast", "p_side": 0.612,
+     "validation_text": "Projection only - model not yet validated", "stake_units": 0, "result": None},
+    {"pick_id": "pk-b", "tracked_at": "2026-10-23T18:05:00Z", "league": "nba", "platform": "prizepicks", "player": "Test Won",
+     "event_ref": "LAL @ GSW", "stat": "rebounds", "stat_label": "Rebounds", "line": 8.5, "side": "under", "record_id": "offer:pp:2:r1:bb",
+     "revision": 1, "forecast_id": None, "model_version": None, "displayed_source": None, "p_side": None,
+     "validation_text": "No Scout chance on this line", "stake_units": 0,
+     "result": {"status": "win", "outcome": "under", "value": 6, "revision": 1, "settled_at": "2026-10-24T06:00:00Z", "corrected": False}},
+    {"pick_id": "pk-c", "tracked_at": "2026-10-23T17:05:00Z", "league": "nba", "platform": "underdog", "player": "Test Corrected",
+     "event_ref": "LAL @ GSW", "stat": "assists", "stat_label": "Assists", "line": 5.5, "side": "over", "record_id": "offer:ud:3:r2:cc",
+     "revision": 2, "forecast_id": "fc-c", "model_version": "sharp-2", "displayed_source": "scout_forecast", "p_side": 0.55,
+     "validation_text": "Projection only - model not yet validated", "stake_units": 0,
+     "result": {"status": "loss", "outcome": "under", "value": 5, "revision": 2, "settled_at": "2026-10-24T07:00:00Z", "corrected": True}},
+    {"pick_id": "pk-d", "tracked_at": "2026-10-23T16:05:00Z", "league": "nba", "platform": "underdog", "player": "Test Void",
+     "event_ref": "LAL @ GSW", "stat": "points", "stat_label": "Points", "line": 12.5, "side": "over", "record_id": "offer:ud:4:r1:dd",
+     "revision": 1, "forecast_id": None, "model_version": None, "displayed_source": None, "p_side": None,
+     "validation_text": "No Scout chance on this line", "stake_units": 0,
+     "result": {"status": "void", "outcome": None, "value": None, "revision": 1, "settled_at": "2026-10-24T07:00:00Z", "corrected": False}}]}
+
+
+@pytest.mark.parametrize("width", [360, 1280])
+def test_my_picks_dashboard(pw, shots, width):
+    """My picks (ux item 7): tabs Open / Settled / Voided; each row = player, stat, side, recorded line, platform,
+    tracked time (local + zone), chance shown + source, settlement status, result at its own line, corrections marked;
+    the member's W-L-P + hit rate (n) separate from model validation (n of 300); stake 0, no grade letters, no returns."""
+    ctx, page, errors = _page(pw, width, 800, has_touch=width < 768, is_mobile=width < 768, timezone_id="America/Chicago")
+    page.route("**/api/sports/picks/mine*", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(MINE)))
+    page.goto(URL + "/sports#/picks")
+    page.wait_for_selector(".sw-mp-tabs", timeout=20000)
+    tabs = page.locator("[role=tab]")
+    assert tabs.all_inner_texts() == ["Open 1", "Settled 2", "Voided 1"] or [t.replace("\n", " ") for t in tabs.all_inner_texts()] == ["Open 1", "Settled 2", "Voided 1"]
+    sumtext = page.locator(".sw-mp-sum").inner_text()
+    assert "1-1-0" in sumtext and "50.0%" in sumtext and "n = 2 decided" in sumtext
+    val = page.locator(".sw-mp-val").inner_text()
+    assert re.search(r"Model validation \(NBA, [^)]+\): \d+ of 300 settled props - not yet validated", val), val
+    assert page.locator(".sw-mp-val").bounding_box()["y"] > page.locator(".sw-mp-sum").bounding_box()["y"]    # separate panels
+    row = page.locator(".sw-mp-row").first.inner_text()
+    for txt in ("Test Open", "Over 20.5", "Points", "Underdog", "61.2%", "Scout forecast", "sharp-2", "Not settled yet", "CDT"):
+        assert txt in row, (txt, row)
+    # keyboard: arrows move between tabs
+    page.locator("[role=tab][aria-selected=true]").focus()
+    page.keyboard.press("ArrowRight")
+    page.wait_for_selector("#sw-mp-t-settled[aria-selected=true]")
+    assert page.evaluate("document.activeElement.id") == "sw-mp-t-settled"
+    settled = page.locator("#sw-mp-panel").inner_text()
+    assert "Won" in settled and "Final 6 vs Under 8.5" in settled and "No Scout chance shown" in settled
+    assert "Corrected (revision 2)" in settled and "Final 5 vs Over 5.5" in settled
+    page.keyboard.press("ArrowRight")
+    page.wait_for_selector("#sw-mp-t-voided[aria-selected=true]")
+    assert "Void" in page.locator("#sw-mp-panel").inner_text()
+    body = page.locator("#sw-main").inner_text()
+    assert not re.search(r"\bgrade:? [A-F][+-]?(\s|$)|\bprofit\b|\bROI\b|\$\d|\bunits? (won|lost)\b", body, re.I), body
+    assert _no_overflow(page)
+    a = page.evaluate(A11Y_JS)
+    assert not a["small"] and not a["unlabelled"] and not a["contrast"], a
+    page.screenshot(path=str(shots / f"mypicks_{width}.png"), full_page=True)
+    assert not [e for e in errors if "favicon" not in e], errors
+    ctx.close()

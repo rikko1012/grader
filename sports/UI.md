@@ -70,7 +70,12 @@ cache, bounded 96 files / 48 MB); they never open the store.
   the forecast record) and answers per pick in the status toast; the pick is spooled and loaded by the worker
   (`picks-ingest`, every 60 s). `#/picks` ("My picks") lists the member's picks with the exact revision / forecast on
   the Source button, the chance shown, the validation text (sports-gp-1) and the result settled at the pick's own line
-  (corrections marked). Stake 0, no grade letters, no returns. Admin aggregate: `GET /api/sports/admin/picks`
+  (corrections marked). Stake 0, no grade letters, no returns. Dashboard (ux, `web/sports/picks.js` SportsPicks.renderMine, hook
+  `renderPicks`): tabs Open / Settled / Voided (arrow keys), rows with player, stat, side, recorded line, platform,
+  tracked time (local + zone), chance shown + source (forecast / model), status, result at its own line, corrections;
+  "Your results" (W-L-P, hit rate with n decided) kept separate from "Model validation: n of 300 settled props - not yet
+  validated" (per league / model version from the manifests). `/picks/mine` now also returns displayed_source,
+  forecast_at, event_id, variant and result.outcome. Admin aggregate: `GET /api/sports/admin/picks`
   (`python scripts/sports_picks_report.py`).
 - With no forecasts published the board says so, and Kalshi rows show the market chance (YES bid / ask mid).
 - Esports nav link -> `/sports` (server.py, SPORTS_UI); with `SPORTS_UI=owner` only allow-listed members see the page,

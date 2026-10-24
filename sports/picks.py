@@ -407,9 +407,12 @@ def _view(row, st):
             "start_utc": r.get("start_utc"), "stat": r.get("stat"), "stat_label": r.get("stat_label"),
             "line": r["line"], "side": r["side"], "record_id": r["record_id"], "revision": r.get("revision"),
             "forecast_id": r.get("forecast_id"), "model_version": r.get("model_version"), "displayed": d,
+            "displayed_source": r.get("displayed_source"), "forecast_at": r.get("forecast_at"),
+            "event_id": r.get("event_id"), "variant": r.get("variant"),
             "p_side": p_side, "validation_state": r.get("validation_state"),
             "validation_text": _state_text(r.get("validation_state")), "stake_units": 0,
-            "result": None if st is None else {"status": st["status"], "value": st["value"], "revision": st["revision"],
+            "result": None if st is None else {"status": st["status"], "outcome": st["outcome"], "value": st["value"],
+                                               "revision": st["revision"],
                                                "settled_at": st["settled_at"], "corrected": st["revision"] > 1}}
 
 

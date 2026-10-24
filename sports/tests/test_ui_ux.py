@@ -50,3 +50,35 @@ def test_filters_hooks():
     app = (WEB / "app.js").read_text(encoding="utf-8")
     assert "SportsFilters.html(" in app and "SportsFilters.matches(" in app and "SportsFilters.bind(" in app
     assert "scout.sports.filters.v1" in app                                       # filters stay saved on the device
+
+
+# ------------------------------------------------------------------------- My picks API fields (item 7)
+from sports import picks as _picks, settlement as _settlement, store as _store            # noqa: E402
+from sports.tests import slip_world as _w                                                   # noqa: E402
+from sports.tests.test_picks import _call, _item, _req, _track, con, tw                     # noqa: E402,F401
+
+
+def test_my_picks_carries_what_the_dashboard_shows(tw):
+    """Every field the My picks dashboard renders comes from /api/sports/picks/mine: tracked time, the chance shown
+    and its source (forecast / model), the outcome at the pick's own line, corrections (revision > 1); stake 0, no
+    grade letters, no returns."""
+    c, legs = tw
+    rid, f = legs["h1"]
+    _track([_item(rid, f)])
+    pc = _picks.connect()
+    _picks.ingest(pc)
+    o = _store.get(c, rid)
+    _settlement.record(c, [_w.settlement(o, "over", "win", 25.0)])
+    _picks.settle_all(c, pc)
+    _settlement.record(c, [_w.settlement(o, "over", "loss", 19.0, at="2026-10-24T06:00:00Z")])
+    _picks.settle_all(c, pc)                                                                # provider correction
+    pc.close()
+    code, mine = _call(_req("/api/sports/picks/mine"))
+    p = mine["picks"][0]
+    assert code == 200 and p["tracked_at"] and p["platform"] == "underdog" and p["side"] == "over"
+    assert p["p_side"] == f.p_over and p["displayed_source"] == "scout_forecast" and p["forecast_id"] == f.forecast_id
+    assert p["model_version"] == f.model_version and p["forecast_at"] == f.forecast_at and p["event_id"]
+    r = p["result"]
+    assert r["status"] == "loss" and r["value"] == 19.0 and r["revision"] == 2 and r["corrected"] is True
+    assert r["outcome"] and r["settled_at"]
+    assert p["stake_units"] == 0 and not any(k in p for k in ("grade", "grade_letter", "returns", "payout"))
