@@ -1,0 +1,15 @@
+{
+ "what": "forward inference-only job (python -m sports.model.fwd run nba nfl --at 2026-10-24T03:10:00Z) and the model snapshot, peak RSS sampled every 50 ms with psutil (Windows workstation, working set; Linux VmRSS not measured here - check scheduler.jobs.model-forward.last_exit.peak_rss_mb on the service)",
+ "store_copy": "scratchpad sports/starter/data (Starter agent's real-feed copy): canonical.db 222 MB, 80,470 offers, 1,331 events, 14,576 forecasts, 2,022 settlements; model/forecasts.db 59 MB",
+ "store_copy_grown": "same + 200,000 synthetic forecasts of played events (canonical.db 538 MB, forecasts.db 895 MB)",
+ "runs": [
+  {"job": "fwd run (this branch)", "forecasts_stored": 14576, "peak_rss_mb": 306.4, "s": 26.3, "forecasts_added": 0, "unchanged": {"nba sm-1": 71, "nfl sm-1": 885, "nfl mi-1": 7, "nfl mc-1": 7, "nfl mkt-polymarket": 7}},
+  {"job": "fwd run (this branch)", "forecasts_stored": 214576, "peak_rss_mb": 305.5, "s": 29.3, "forecasts_added": 0},
+  {"job": "write_snapshot (base 236ab45, reads every forecast)", "forecasts_stored": 14576, "peak_rss_mb": 218.3, "s": 3.2},
+  {"job": "write_snapshot (base 236ab45, reads every forecast)", "forecasts_stored": 214576, "peak_rss_mb": 2394.0, "s": 38.5},
+  {"job": "write_snapshot (this branch, current window only)", "forecasts_stored": 14576, "peak_rss_mb": 93.0, "s": 4.3},
+  {"job": "write_snapshot (this branch, current window only)", "forecasts_stored": 214576, "peak_rss_mb": 92.9, "s": 4.7}
+ ],
+ "packaged_history_equivalence": "every forecast of the run on the store copy came back 'unchanged': the input key (offer revision, feature-row hash data_version, artifact, output) of forecasts made from the packaged history equals that of the forecasts the model agent made from the training history.db - same features, same probabilities",
+ "cap": "scheduler cap 340 MB (exclusive); service ~52 MB peak at 700 members -> worst admitted 392 MB by reservation, ~358 MB measured"
+}
