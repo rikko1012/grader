@@ -655,7 +655,7 @@
       var shape = o === "over" ? "▲" : o === "under" ? "▼" : "●";
       var rect = '<rect x="' + x0.toFixed(1) + '" y="' + y(v).toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + Math.max(1, H - 34 - y(v)).toFixed(1) + '" ' +
         (o === "under" ? 'fill="none" stroke="' + col + '" stroke-width="2"' : 'fill="' + col + '"') + "/>";
-      return rect + '<text x="' + (x0 + w / 2).toFixed(1) + '" y="' + (y(v) - 4).toFixed(1) + '" text-anchor="middle" style="fill:' + col + '">' + shape + "</text>" +
+      return rect + '<text class="sw-bar-val" x="' + (x0 + w / 2).toFixed(1) + '" y="' + (y(v) - 4).toFixed(1) + '" text-anchor="middle" style="fill:' + col + '">' + shape + " " + S.num(v, 0) + "</text>" +
         (gs.length <= 12 || i % Math.ceil(gs.length / 10) === 0 ? '<text x="' + (x0 + w / 2).toFixed(1) + '" y="' + (H - 18) + '" text-anchor="middle">' + esc(S.shortDate(g.start_utc)) + '</text><text x="' + (x0 + w / 2).toFixed(1) + '" y="' + (H - 5) + '" text-anchor="middle">' + esc((g.home === false ? "@" : "") + (g.opponent ? g.opponent.abbr : "")) + "</text>" : "");
     }).join("");
     var lineY = y(ln);
@@ -840,7 +840,13 @@
           "<tr><th>Spread</th><td>sd " + S.num(sum.sd, 1) + " · range " + S.num(sum.min, 0) + "–" + S.num(sum.max, 0) + "</td></tr>" +
           "<tr><th>At " + S.line(ln) + "</th><td><b>Over " + sum.over + "</b> · <b>Under " + sum.under + "</b> · Push " + sum.push + " <span class=\"sw-faint\">of " + sum.denominator + " games</span></td></tr>" +
           (dnp ? '<tr><th>Did not play</th><td>' + dnp + ' <span class="sw-faint">(not counted)</span></td></tr>' : "") + "</tbody></table></div>";
-        h += '<h3 style="margin-top:12px">Game by game</h3>' + svgGames(used, mk.stat, ln) +
+        h += '<h3 style="margin-top:12px">Game by game</h3>' +
+          (used.length ? '<p class="sw-finals" aria-label="Final ' + esc(mk.stat_label) + ', most recent first">' + used.map(function (g) {
+            var v = g.values[mk.stat], o = S.outcome(v, ln);
+            return '<span class="sw-final sw-final-' + o + '" title="' + esc(S.shortDate(g.start_utc) + " " + (g.home === false ? "@ " : "vs ") + (g.opponent ? g.opponent.abbr : "?")) + '"><b>' + S.num(v, 0) + "</b> " +
+              (o === "over" ? "▲" : o === "under" ? "▼" : "●") + ' <span class="sw-faint">' + esc((g.home === false ? "@" : "") + (g.opponent ? g.opponent.abbr : "")) + "</span></span>";
+          }).join("") + "</p>" : "") +
+          svgGames(used, mk.stat, ln) +
           '<div class="sw-legend"><span style="color:var(--over)">▲ Over (filled)</span><span style="color:var(--under)">▼ Under (outline)</span><span style="color:var(--push)">● Push</span></div>' +
           '<details class="sw-more"><summary>Games as a table</summary><div class="sw-scroll"><table class="sw-mini"><thead><tr><th>Date</th><th>Opp</th><th class="num">' + esc(mk.stat_label) + "</th><th>At " + S.line(ln) + "</th>" + (state.lg === "nba" ? '<th class="num">Min</th>' : "") + '<th><span class="sw-sr">Source</span></th></tr></thead><tbody>' +
           used.map(function (g) {

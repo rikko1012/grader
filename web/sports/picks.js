@@ -164,7 +164,7 @@
     var c = chanceText(p), r = resultText(p), side = p.side === "over" ? "Over" : "Under";
     var corr = p.result && p.result.corrected;
     return '<article class="sw-card sw-mp-row"><div class="sw-card-top"><div><b>' + esc(p.player || "") + "</b> " +
-      '<span class="sw-mp-pick">' + esc(side + " " + line(p.line) + " " + (p.stat_label || p.stat || "")) + "</span>" +
+      '<span class="sw-mp-pick">' + esc(side + " " + line(p.line) + " " + (p.stat_label || p.stat || "")) + "</span>" + (p.test ? ' <span class="sw-tag">test</span>' : "") +
       '<div class="sw-faint sw-small">' + esc(bookName(p.platform)) + (p.event_ref ? " · " + esc(p.event_ref) : "") + (p.league ? " · " + esc(String(p.league).toUpperCase()) : "") + "</div></div>" +
       '<div class="sw-mp-res ' + esc(p.result ? p.result.status : "open") + '"><b>' + esc(r.status) + "</b>" + (corr ? ' <span class="sw-tag">Corrected (revision ' + esc(p.result.revision) + ")</span>" : "") +
       '<div class="sw-small sw-muted">' + esc(r.detail) + "</div></div></div>" +

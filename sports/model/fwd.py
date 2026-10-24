@@ -7,7 +7,8 @@ training"). Flag SPORTS_FORECAST=1 - separate from SPORTS_TRAIN, which stays 0 o
   python -m sports.model.fwd build-history <history.db>       (workstation only) rebuild the packaged history copy
 
 What runs: forward.forecast_league (sm-1 + mi-1 + mc-1 + single-source market forecasts) with the COMMITTED, frozen
-artifacts and pipeline.write_snapshot. What never runs here: forward.fit, learning.retrain, study, dataset crawls,
+artifacts and pipeline.write_snapshot, after the DATA refreshes of the installed history (refresh_nba: finished NBA
+games; refresh_nfl: the current NFL season's nflverse files, at most every 12 h). What never runs here: forward.fit, learning.retrain, study, dataset crawls,
 the lab - nothing in this module imports or calls them. Settlement + scorecard keep running in the settle job
 (worker settle -> learning.on_settled, which never retrains).
 
@@ -215,7 +216,7 @@ def refresh_nba(now_iso, budget_s=None, path=None):
     with; polite pacing in sports/net.py) to the installed copy so features include games after the package date.
     Bounded by a time budget (SPORTS_FORECAST_REFRESH_S, default 120 s); any failure keeps the existing data (the
     forecast still runs - a transient source failure never blocks or changes forecasts). Off: SPORTS_FORECAST_REFRESH=0.
-    NFL is not refreshed here (nflverse season files are rebuilt in full - too large for this job; see RUNBOOK)."""
+    NFL: refresh_nfl."""
     if os.environ.get("SPORTS_FORECAST_REFRESH", "1").strip().lower() not in _ON:
         return {"state": "off"}
     from . import datasets
@@ -238,6 +239,55 @@ def refresh_nba(now_iso, budget_s=None, path=None):
             con.close()
     except Exception as e:                              # noqa: BLE001 - never blocks the forecast
         return {"state": "failed", "error": f"{type(e).__name__}: {str(e)[:200]}"}
+
+
+NFL_REFRESH_EVERY_H = 12   # nflverse rebuilds its release files nightly; reloading more often re-reads the same files
+
+
+def nfl_season(now_iso):
+    """The NFL season in progress (or just finished): a season runs September - February."""
+    from datetime import datetime
+    t = datetime.fromisoformat(now_iso.replace("Z", "+00:00"))
+    return t.year if t.month >= 3 else t.year - 1
+
+
+def refresh_nfl(now_iso, path=None, every_h=None, files=None):
+    """DATA refresh, not training: reload the CURRENT NFL season from the nflverse release files the history was built
+    from (schedule, player-week stats, snap counts, play-by-play: datasets.nfl_build for that one season) into the
+    installed copy, so features include games after the package date. Earlier seasons are untouched. At most every
+    NFL_REFRESH_EVERY_H (SPORTS_FORECAST_NFL_REFRESH_H); files are cached ~20 h and streamed from disk (measured 104 MB
+    peak for five seasons on Linux). Every file is fetched BEFORE any table changes (datasets.nfl_prefetch), so a source
+    failure keeps the existing data; the forecast still runs either way. Off: SPORTS_FORECAST_REFRESH=0.
+    `files` (name -> text): tests."""
+    if os.environ.get("SPORTS_FORECAST_REFRESH", "1").strip().lower() not in _ON:
+        return {"state": "off"}
+    from datetime import datetime
+    from . import datasets
+    every_h = float(os.environ.get("SPORTS_FORECAST_NFL_REFRESH_H", NFL_REFRESH_EVERY_H)) if every_h is None else every_h
+    season = nfl_season(now_iso)
+    if season not in datasets.NFL_SEASONS:
+        return {"state": "skipped", "reason": f"season {season} is not a ds-1 NFL season"}
+    p = Path(path) if path else history_path()
+    try:
+        con = datasets.connect(p)
+        try:
+            row = con.execute("SELECT v FROM meta WHERE k = 'nfl_refresh_at'").fetchone()
+            if row:
+                age_h = (datetime.fromisoformat(now_iso.replace("Z", "+00:00")) -
+                         datetime.fromisoformat(row[0].replace("Z", "+00:00"))).total_seconds() / 3600
+                if 0 <= age_h < every_h:
+                    return {"state": "fresh", "season": season, "refreshed_at": row[0]}
+            pre = datasets.nfl_prefetch(con, season) if files is None else "test files"
+            res = datasets.nfl_build(con, seasons=(season,), files=files)
+            res["files"] = pre
+            con.execute("INSERT OR REPLACE INTO meta (k, v) VALUES ('nfl_refresh_at', ?)", (now_iso,))
+            con.commit()
+            last = con.execute("SELECT MAX(start_utc) FROM games WHERE league='nfl' AND status = 'final'").fetchone()
+            return dict(res, state="ok", season=season, last_nfl_game=last[0] if last else None)
+        finally:
+            con.close()
+    except Exception as e:                              # noqa: BLE001 - never blocks the forecast
+        return {"state": "failed", "season": season, "error": f"{type(e).__name__}: {str(e)[:200]}"}
 
 
 def build_history(src, out_gz):
@@ -315,6 +365,9 @@ def run(leagues=None, forecast_at=None, log=print):
     hist = install_history()
     if "nba" in leagues:
         hist["nba_refresh"] = refresh_nba(forecast_at or started)
+        _trim()
+    if "nfl" in leagues:
+        hist["nfl_refresh"] = refresh_nfl(forecast_at or started)
         _trim()
     hcon = open_history()
     out = {"started_at": started, "forecast_at": forecast_at, "flag": FLAG, "artifacts": ver, "history": hist,

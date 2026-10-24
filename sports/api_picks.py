@@ -5,6 +5,8 @@
                                  written here; answer per pick {ok, pick_id} or {ok: false, code, text}
   GET  /api/sports/picks/mine    the member's own picks (picks.db read-only, newest first, <= 200) + results
   GET  /api/sports/admin/picks   admin aggregate (counts, hit rate, Brier / log-loss, game-clustered 95% intervals)
+Test picks (picks.scratch_reason): an admin token's picks, picks posted with "test": true, and every pick while
+SPORTS_PICKS_SCRATCH=1 (the owner-only preview) are recorded with scratch=true and aggregated apart from member picks.
 Stakes are always 0; grade letters are never returned (validation state text instead); no EV / returns.
 """
 from __future__ import annotations
@@ -41,9 +43,10 @@ def track(req):
             except (ValueError, TypeError) as e:
                 return 400, {"error": "bad_request", "detail": str(e)[:160]}
             pid = picks.pick_id(mh, rec["record_id"], rec["side"])
-            queued = picks.spool(dict(rec, pick_id=pid, member=mh))
+            why = picks.scratch_reason(req.role, it)
+            queued = picks.spool(dict(rec, pick_id=pid, member=mh, scratch=why is not None, scratch_reason=why))
             out.append({"ok": queued, "pick_id": pid, "record_id": rec["record_id"], "side": rec["side"],
-                        "tracked_at": rec["tracked_at"], "stake_units": 0,
+                        "tracked_at": rec["tracked_at"], "stake_units": 0, "test": why is not None,
                         **({} if queued else {"code": "busy", "text": "Pick tracking is busy - try again"})})
     return 200, {"version": picks.VERSION, "results": out, "stake_units": 0}
 

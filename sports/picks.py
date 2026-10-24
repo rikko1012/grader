@@ -24,6 +24,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import queue
 import random
 import sqlite3
@@ -62,6 +63,17 @@ def clock():
 
 def now_s(now=None):
     return (now or clock()).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def scratch_reason(role, item):
+    """Why a pick is a TEST record (kept apart from member measurement), or None for a member pick."""
+    if role == "admin":
+        return "admin"
+    if item.get("test") is True:
+        return "marked test"
+    if os.environ.get("SPORTS_PICKS_SCRATCH", "").strip().lower() in ("1", "true", "yes", "on"):
+        return "SPORTS_PICKS_SCRATCH"
+    return None
 
 
 def member_hash(member):
@@ -410,7 +422,7 @@ def _view(row, st):
             "displayed_source": r.get("displayed_source"), "forecast_at": r.get("forecast_at"),
             "event_id": r.get("event_id"), "variant": r.get("variant"),
             "p_side": p_side, "validation_state": r.get("validation_state"),
-            "validation_text": _state_text(r.get("validation_state")), "stake_units": 0,
+            "validation_text": _state_text(r.get("validation_state")), "stake_units": 0, "test": bool(r.get("scratch")),
             "result": None if st is None else {"status": st["status"], "outcome": st["outcome"], "value": st["value"],
                                                "revision": st["revision"],
                                                "settled_at": st["settled_at"], "corrected": st["revision"] > 1}}
@@ -503,7 +515,9 @@ def aggregate(con):
                       "platform": p["platform"], "league": p.get("league"),
                       "state": p.get("validation_state") or "no_chance", "surface": p.get("surface"),
                       "key": (r["member"], p["platform"], p["offer_id"], p["side"]),
-                      "corrected": bool(st and st["revision"] > 1)})
+                      "corrected": bool(st and st["revision"] > 1), "scratch": bool(p.get("scratch"))})
+    test = [x for x in items if x["scratch"]]
+    items = [x for x in items if not x["scratch"]]          # member measurement: test picks never mixed in
     seen, dupes = set(), 0
     for x in items:
         dupes += x["key"] in seen
@@ -513,9 +527,10 @@ def aggregate(con):
         vals = sorted({x[dim] or "unknown" for x in items})
         by[dim] = {v: _group([x for x in items if (x[dim] or "unknown") == v]) for v in vals}
     return {"version": VERSION, "built_at": now_s(), "rule": "each pick at its own line; latest settlement revision",
-            "all": _group(items), "by": by, "duplicate_picks": dupes,
+            "all": _group(items), "by": by, "duplicate_picks": dupes, "test": _group(test) if test else None,
             "corrected_results": sum(1 for x in items if x["corrected"]),
-            "notes": ["hit rate = wins / (wins + losses); pushes, voids and unresolved are listed, not counted",
+            "notes": ["member picks only; test picks (admin token, marked test, SPORTS_PICKS_SCRATCH) are under 'test'",
+                      "hit rate = wins / (wins + losses); pushes, voids and unresolved are listed, not counted",
                       "Brier / log-loss of the displayed chance of the chosen side given no push, settled picks with a "
                       "Scout chance only",
                       "95% intervals: bootstrap over games (1,000 resamples, seed 7)",
