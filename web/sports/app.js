@@ -434,7 +434,7 @@
       var res = (r.results || [])[0] || {};
       if (res.ok) {
         b.textContent = "Tracked ✓";
-        pickToast("Tracked: " + p.what + ". No entry was placed anywhere.", true);
+        pickToast("Tracked: " + p.what + (res.test ? " (test record, kept apart from member results)" : "") + ". No entry was placed anywhere.", true);
       } else {
         b.disabled = false;
         pickToast("Not tracked: " + (res.text || "this line can't be tracked right now") + ".", false);
@@ -942,7 +942,7 @@
       }
       rows.forEach(function (p) { var st = p.result ? p.result.status : "pending"; tally[st] = (tally[st] || 0) + 1; });
       var meta = function (p) { return esc([p.league && p.league.toUpperCase(), p.team, p.event_ref].filter(Boolean).join(" · ")); };
-      var pickText = function (p) { var w = PICK_BOOKS[p.platform]; return esc(p.stat_label || p.stat) + " <b>" + esc(w ? w[p.side] : p.side) + " " + S.line(p.line) + "</b>"; };
+      var pickText = function (p) { var w = PICK_BOOKS[p.platform]; return esc(p.stat_label || p.stat) + " <b>" + esc(w ? w[p.side] : p.side) + " " + S.line(p.line) + "</b>" + (p.test ? ' <span class="sw-tag">test</span>' : ""); };
       main.innerHTML = head + (got.stale ? '<div class="sw-banner warn">Showing your last loaded list (' + esc(got.why) + ").</div>" : "") +
         '<p class="sw-count"><span><b>' + d.total + "</b> picks" + (d.total > rows.length ? " (newest " + rows.length + " shown)" : "") + "</span>" + Object.keys(tally).map(function (k) { return "<span><b>" + tally[k] + "</b> " + esc(PICK_STATUS[k] || k) + "</span>"; }).join("") + "</p>" +
         '<div class="sw-tablebox sw-scroll"><table class="sw-table"><caption class="sw-sr">My tracked picks, newest first</caption><thead><tr><th scope="col">Picked</th><th scope="col">Player · game</th><th scope="col">Pick</th><th scope="col">Book</th><th scope="col">Starts</th><th scope="col">Scout chance shown</th><th scope="col">Result</th></tr></thead><tbody>' +
