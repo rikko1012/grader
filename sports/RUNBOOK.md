@@ -52,7 +52,41 @@ measures more than 700 members.
 
 ## 3. Architecture
 
-ARCH_PLACEHOLDER
+**Chosen: option (a) - the sports API is its own process / Render web service (`scout-sports-api`); the esports
+server only issues signed member tokens.** `SPORTS_API_MODE=service` (default).
+
+```
+ member browser (esports origin, Whop cookie)
+   |  GET /sports, /sports/<asset>       -> cs2-scout: static bytes from memory (no data)
+   |  GET /api/sports/token              -> cs2-scout: Handler.allowed() (paid Whop check, server side) -> st1 token
+   |                                        (sports/gateway.py + sports/authtoken.py: standard library only)
+   v
+ GET https://scout-sports-api/api/sports/...   Authorization: Bearer st1...   (CORS: our origin only)
+   -> scout-sports-api (sports/service.py): verify token on EVERY route -> web.ROUTES handler -> prebuilt snapshot /
+      bounded read-only store pool (4) / single-flight cache -> JSON (gzip + ETag/304)
+   -> children of the same service (one container, one disk /sports-data): ingest loop, snapshot prebuild, UI
+      snapshots, slip spool ingest / settle, history ingestion, assistant runner, lab runner - each behind its flag
+```
+
+Options evaluated (measured with `scripts/load_sports.py`, section 11):
+
+| Option | What runs in esports request threads | Result | Verdict |
+|---|---|---|---|
+| (c) in-process (foundation) | every sports query | series 1: esports p99 x1.64, RSS +39 MB | rejected (foundation +51% reproduced in kind) |
+| (b) esports proxies `/api/sports/*` to a private sports service (bounded pool 16, 200 ms slot wait, 2.5 s budget, circuit breaker) | the whole sports request, waiting on I/O | series 1: esports p99 x1.79, RSS +10 MB, 10.7% of sports requests shed at the pool limit | rejected: it keeps esports sockets / threads busy for every sports call; raising the pool would trade sheds for more esports load |
+| (a) separate service + st1 tokens | ONE cheap token mint per member per 10 min | series 1: p99 x1.09 / p95 x1.14 (p95 budget missed); series 3 on the final code: section 11 | chosen |
+
+Why (a): it is the only option whose esports-side work is bounded and independent of sports traffic (token
+minting = one HMAC per member per token life; the page and assets are static bytes). In production the sports
+service has its own container, CPU and memory, so sports query load, ingestion, snapshot builds and the assistant /
+lab never share the esports CPU at all - the local test (one workstation, shared CPU) overstates (a)'s cost; the
+`service-notoken` diagnostic measures exactly that host-sharing share.
+
+Why the worker is NOT a separate Render background worker: a Render persistent disk attaches to exactly one service,
+and the API must read the store / snapshots / spools the worker writes. The worker therefore runs as supervised
+child processes of `scout-sports-api` (own memory caps, own process, never in a request thread). If ingestion load
+ever hurts the sports API itself, the upgrade path is a separate worker service writing to Postgres (or pushing
+snapshots + spools over HTTP) - not a shared disk.
 
 ## 4. Member auth across the boundary (st1 tokens, `sports/authtoken.py`)
 
@@ -265,3 +299,91 @@ Esports side: `/health` (unchanged) and, with `SPORTS_API=1`, `/api/sports/admin
 4. A member reports "Sports unavailable": `/api/sports/health` up? Token endpoint 401 for that member = their Whop
    access, not sports; 503 `sports_auth_not_configured` = the secret is missing on one side.
 5. Before enabling any sports change: re-run section 11's load script on it against the section 1 budgets.
+
+## 11. Load results (2026-10-23, Windows workstation, 700 simultaneous members)
+
+Evidence: `sports/research/results/load_service_2026-10-23/` (every run as JSON + `REPORT.md` from
+`scripts/load_sports_report.py`). Medians over runs [min-max]. "p99 vs off" = against the `off` median of the SAME
+series. Each run is 2,100 esports requests (identical arrivals in every mode) + 700 sports flows. Other sessions'
+test suites / model studies were running on the same machine during all series (column "other python CPU %" in
+REPORT.md; up to ~4 busy cores), so run-to-run spread is wide - read the medians, not single runs.
+
+**Series 1 - the registered comparison** (code 1122c0e + e75cc06, foundation sports routes; 5 runs each):
+
+| Config | Esports p95 ms | Esports p99 ms | p99 vs off | 5xx | Esports peak RSS MB | Sports non-200 | Verdict (section 1) |
+|---|---|---|---|---|---|---|---|
+| off (baseline) | 59.7 [57-94.1] | 69.6 [63.4-126.7] | 1.00 | 0 | 68.5 | - | - |
+| inprocess-enabled (foundation path) | 81.1 [60.6-101.6] | 114.1 [68.5-138.9] | 1.64 | 0 | 107.2 | 0 / 3,500 | FAIL |
+| service-enabled | 67.8 [64.3-89.7] | 76.1 [72.6-125.5] | 1.09 | 0 | 69.0 | 1 / 3,500 | FAIL (p95 x1.14) |
+| service-ingesting | 103.9 [77.3-127.1] | 120.9 [85.3-180.2] | 1.74 | 0 | 69.3 | 0 / 3,500 | FAIL |
+| proxy-enabled | 79.5 [62.4-113.4] | 124.9 [68.8-139.6] | 1.79 | 0 | 78.7 (+10.2) | 374 / 3,500 (busy sheds) | FAIL |
+| proxy-ingesting | 82.5 [77.5-126.5] | 93.1 [85.1-178.4] | 1.34 | 0 | 78.6 | 255 / 3,500 | FAIL |
+
+Registered decision rule: neither option passed budget 1, so **sports stays off** (it is) and this is reported as
+such. `service` is the better option on every metric and the architecture kept; the residual is analysed below.
+
+**Series 3 - final code** (integration head d57dffb + 22b832a: slips, assistant, UI board / slate / manifest routes,
+gzip + ETag, prebuilt slips pool; sports requests send `Accept-Encoding: gzip`; 5 runs each). The last three rows are
+DIAGNOSTICS added after series 1 (labelled post-hoc, not part of the registered comparison):
+
+| Config | Esports p95 ms | Esports p99 ms | p99 vs off | 5xx | Esports peak RSS MB | Token p99 ms | Sports non-200 | Sports p99 ms | Service peak RSS MB |
+|---|---|---|---|---|---|---|---|---|---|
+| off (baseline) | 57.1 [49.7-59.0] | 64.5 [54.7-67.0] | 1.00 | 0 | 68.9 | - | - | - | - |
+| service-enabled | 65.5 [63.4-68.5] | 73.3 [68.6-75.1] | **1.14** | 0 | 70.7 | 71.3 | 1 / 3,500 | 310 | 128 |
+| service-ingesting | 76.7 [71.9-82.5] | 86.7 [81.7-92.7] | 1.34 | 0 | 71.0 | 85.2 | 0 / 3,500 | 310 | 130 |
+| off-ingesting (diag.: writer only, no sports) | 63.1 [62.2-78.5] | 70.4 [68.6-88.2] | 1.09 | 0 | 68.2 | - | - | - | - |
+| service-tokenonly (diag.: token requests only) | 67.4 [63.5-74.9] | 73.7 [70.1-84.6] | 1.14 | 0 | 70.3 | 66.8 | - | - | 118 |
+| service-notoken (diag.: sports traffic only, zero extra esports requests) | 66.9 [64.0-70.5] | 75.8 [70.5-90.7] | 1.18 | 0 | 70.4 | - | 2 / 3,500 | 605 | 128 |
+
+Service-side, every series-3 enabled run: peak in-flight 32 of 32 threads, `rejected_busy` 0, store pool peak 3 of 4,
+0 pool timeouts, 0 interrupted queries; slips pool served from the prebuilt snapshot 216 / 216 times (0 misses);
+6 gzip compressions for 323 gzip answers (~10.1 MB sent per run); no alerts. Child processes (measured separately):
+`sports.service snapshots` 2.8 s wall, 166 MB peak RSS; `sports.snapshots build nba nfl` 6.0 s, 115 MB.
+
+What the numbers say (and do not say):
+- **Budget 1 (+10%) is not met on this machine.** With sports enabled the esports p99 is +8.8 ms (x1.14) and p95
+  +8.4 ms (x1.15) over a 64.5 / 57.1 ms baseline. Budgets 2-4 pass in every run: 0 esports 5xx, esports peak RSS
+  +1.8 MB, sports service <= 131 MB, pool <= 4.
+- The two diagnostics each reproduce the whole effect: the token requests alone (x1.14, sports service idle) and the
+  sports traffic alone with NO extra esports request (x1.18). On one shared workstation the cost is CPU contention
+  between processes, not work in esports threads. In production the sports traffic runs in another container (no
+  shared CPU); the token request remains - 1 per member per 10-minute token life, ~67-85 ms p99 itself.
+- "Ingesting" on this machine is dominated by the synthetic writer sharing the CPU (writer alone: x1.09; writer +
+  sports: x1.34). The production worker runs in the sports container.
+- Not measured: Render containers, more than 700 members, real network ingestion during a burst, browsers
+  (preflight requests go to the sports service, not esports).
+- **Required before any enable:** re-run `scripts/load_sports.py` (or the same scenario against staging) with the
+  sports service on its own Render instance and confirm esports p99 within +10% there. Until then the +10% claim is
+  unproven.
+
+**Series 4 - failure modes** (final code, 3 runs each; budget 5):
+
+| Scenario | Esports p99 vs off | Esports 5xx | Sports outcome |
+|---|---|---|---|
+| service-failing (service process down) | x1.16 | 0 | 700 / 700 connection refused at the sports origin (the Windows client needs ~2 s to report a refused localhost connect; no esports involvement); tokens still minted (p99 45 ms) |
+| service-broken (corrupt store, every query raises) | x1.27 | 0 | 592 / 700 fast 503 (p99 96 ms); the 108 routes that do not read the store still answered 200 |
+| service-recovering (down -> started -> burst) | x1.26 | 0 | burst 1: 700 refused; service ready 0.5 s after start, prebuilt pool 2.9 s; burst 2: 2,099 / 2,100 200 (one 503 sports_busy) - no esports restart |
+| proxy-failing | x1.15 | 0 | 700 / 700 503 (16 upstream errors, then the 16 slots / circuit breaker shed the rest); esports RSS +17 MB while sockets waited |
+| proxy-recovering | x1.14 | 0 | burst 2 started 2.9 s after the service came back, inside the breaker's 5 s open window: 700 / 700 503 - recovery waits for the breaker |
+
+Esports never returned a 5xx in any run of any series (0 of 176,400 esports requests across series 1, 3 and 4,
+both bursts of the recovering runs included). (REPORT.md's automatic
+"Verdict" column applies the enabled budget to the failure rows too; for them budget 5 is the relevant one.)
+
+Rollback = `off`: the flags-off state on the same code is the baseline row of every series (no sports import,
+sports paths identical to unknown routes - `test_rollback_is_flags_off_even_with_the_service_configured`).
+
+## 12. Remaining blockers / open items (service scope)
+
+1. **+10% esports p99 budget unproven in production** (section 11): needs a staging run with `scout-sports-api` on
+   its own Render instance. Owner action: create the resources (section 6), then run the load script against staging.
+2. **Render resources are owner clicks** (no Render API access here): service `scout-sports-api` (Standard), disk
+   `scout-sports-data` 20 GB, secrets `SPORTS_TOKEN_SECRET` (both services), `ADMIN_TOKEN`, `ODDS_API_KEY`,
+   `ANTHROPIC_API_KEY` (only for the assistant). Upgrade to Pro before `SPORTS_TRAIN=1`.
+3. **Store retention / compaction does not exist yet**: at ~0.3 GB/day the 16 GB cap is reached in ~7 weeks;
+   ingestion then pauses itself (`store_full_ingest_paused`). Needs a retention job before that.
+4. `sports/model/dists.py` imports scipy -> `test_production_needs_no_scipy_or_pandas` fails on the integration head
+   (model agent: drop the import or add scipy to requirements-sports.txt and narrow the test).
+5. The `anthropic` SDK version pin (`>=2.0,<3`) and the beta header the assistant uses were not exercised here (no
+   key); first assistant enable must be watched (`job_crash_loop`).
+6. Source rights: Kalshi (partner) and ESPN member display - **owner attestation 2026-10-23** (not a blocker).

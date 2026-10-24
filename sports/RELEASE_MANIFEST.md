@@ -11,7 +11,7 @@ need the owner's release approval (owner brief, scope section). Each row must ci
 | Release commit SHA | TODO (integration head at release) |
 | Base (origin/main) | TODO (foundation was 2fbfc0e, merged main 0ee4d3e / b613c0d at cf53384) |
 | Data foundation pin | `origin/claude/dreamy-wozniak-kefq4r` @ d393292 (INTEGRATION_MANIFEST.md) |
-| Agent branches merged | service: `sports/service` (this file's first commit); TODO model / UI / slips / assistant |
+| Agent branches merged | service `sports/service` (1122c0e .. 22b832a + this manifest); TODO record the model / UI / slips / assistant heads |
 
 ## 2. Migrations (additive only, sports store `<SPORTS_DATA_DIR>/canonical.db`)
 
@@ -29,9 +29,9 @@ No esports table, file or migration is changed. The esports disk (`/data`) is un
 | cs2-scout | SPORTS_UI / SPORTS_API | 0 / 0 | the only esports-side switches; off = sports never imported |
 | cs2-scout | SPORTS_API_MODE | service | esports mints tokens + serves the page only |
 | cs2-scout | SPORTS_API_BASE, SPORTS_TOKEN_SECRET | set (secret) | RUNBOOK section 6 |
-| scout-sports-api | SPORTS_API / SPORTS_INGEST / SPORTS_TRAIN | 0 / 0 / 0 | staged enable: RUNBOOK section 7 |
-| scout-sports-api | SPORTS_DATA_DIR | /sports-data (10 GB disk scout-sports-data) | |
-| scout-sports-api | ODDS_API_KEY | set by the owner in the Environment tab (never in git) | optional |
+| scout-sports-api | SPORTS_API / SPORTS_INGEST / SPORTS_TRAIN / SPORTS_ASSISTANT | 0 / 0 / 0 / 0 | staged enable: RUNBOOK section 7 |
+| scout-sports-api | SPORTS_DATA_DIR | /sports-data (20 GB disk scout-sports-data) | image Dockerfile.sports (requirements-sports.txt) |
+| scout-sports-api | ODDS_API_KEY, ANTHROPIC_API_KEY, SPORTS_TOKEN_SECRET, ADMIN_TOKEN | secrets set by the owner in the Environment tab (never in git) | |
 
 ## 4. Data coverage
 
@@ -60,10 +60,10 @@ resolution / sides), from sports/INTEGRATION_MANIFEST.md "Coverage snapshot" for
 
 | Check | Result | Evidence |
 |---|---|---|
-| Esports suite unchanged | TODO (service agent: see RUNBOOK section 11) | `python -m pytest tests lol/tests -q` |
-| Sports suite | TODO | `python -m pytest sports/tests -q` |
+| Esports suite unchanged | 1782 passed, 5 skipped (279.5 s) at 22b832a; no file under tests/ or lol/ differs from origin/main | `python -m pytest tests lol/tests -q` |
+| Sports suite | 297 passed, 9 skipped, 1 failed (model agent's scipy import, RUNBOOK 12.4) at 3e46fbf; re-run at release | `python -m pytest sports/tests -q` |
 | Isolation + rollback proofs | sports/tests/test_isolation_server.py, test_service.py | |
-| Load (700 members, process isolation) | RUNBOOK section 11 | scripts/load_sports.py |
+| Load (700 members, process isolation) | esports 0 5xx in 176,400 requests; esports p99 x1.14 with sports enabled on ONE workstation - the +10% budget is NOT met locally; staging re-run required (RUNBOOK 11-12) | scripts/load_sports.py, sports/research/results/load_service_2026-10-23/ |
 | Model property / calibration checks | TODO (model agent) | |
 | Settlement fixtures | TODO | |
 | Browser flow board -> player -> slip -> copy -> settled | TODO (UI agent, staging) | |
@@ -84,4 +84,7 @@ and `test_service_refuses_everything_without_a_secret_and_with_the_flag_off`.
 
 ## 10. Open blockers at release
 
-TODO (copy from RUNBOOK section 12 and the other agents' reports).
+Service scope (RUNBOOK section 12): staging load run with the sports service on its own Render instance (the +10%
+esports p99 budget is unproven - 1.14x measured on one shared workstation); owner creates the Render resources and
+secrets; store retention / compaction before the 16 GB cap (~7 weeks); scipy import in sports/model/dists.py fails
+the isolation test; anthropic SDK pin unexercised. TODO: add the other agents' blockers.
