@@ -230,6 +230,56 @@
     if (focusTab) { var b = document.getElementById("sw-mp-t-" + cur); if (b) b.focus(); }
   }
 
+  // ----------------------------------------------------------------------- hook: ScoutSportsApp.hooks.renderActions
+  // ctx = {market, quote, forecast, board} on a board / match card (compact snapshot shapes), or
+  //       {market, quote, forecast, player} on the player card (player-file shapes). -> one action area.
+  function offerIdOf(rid, platform) {                  // "offer:<platform>:<offer_id>:r<n>:<hash>" -> offer_id
+    var x = String(rid || "").replace(/^offer:/, "");
+    if (x.indexOf(platform + ":") === 0) x = x.slice(platform.length + 1);
+    return x.replace(/:r\d+:[0-9a-f]+$/, "");
+  }
+  function makeLeg(o, lg) {                            // the Slip Studio leg format (sports/slips/README.md)
+    var f = o.forecast, full = f && f.p_over !== undefined;
+    var po = f ? (full ? f.p_over : f.po) : null, pu = f ? (full ? f.p_under : f.pu) : null, pp = f ? (full ? f.p_push : f.pp) : null;
+    return {platform: o.platform, league: lg, offer_id: offerIdOf(o.record_id, o.platform), record_id: o.record_id,
+      forecast_id: o.forecast_id || null, side: o.side, line: o.line, variant: o.variant, multiplier: o.multiplier,
+      start_utc: o.start_utc, player_id: o.player_id, player: o.player, team: o.team, stat: o.stat, stat_label: o.stat_label,
+      event_id: o.event_id, event_ref: o.event_ref, model_version: f ? (full ? f.model_version : f.m) : null,
+      p_win: f ? (o.side === "over" ? po : pu) : null, p_loss: f ? (o.side === "over" ? pu : po) : null, p_push: f ? pp : null};
+  }
+  function renderActions(c) {
+    var A = app(), lg = (A && A.state && A.state.lg) || "nba", m = c.market, q = c.quote, f = c.forecast, legs = {}, why = {};
+    if (!q) return "";
+    if (c.player) {                                    // player card
+      var P = c.player, ne = P.next_event, sides = {};
+      if (q.platform === "kalshi") return "";
+      (q.sides || []).forEach(function (x) { sides[x.side] = x; });
+      ["over", "under"].forEach(function (x) {
+        if (!(sides[x] && sides[x].offered)) { why[x] = (x === "over" ? "Over" : "Under") + " is not offered on " + bookName(q.platform); return; }
+        legs[x] = makeLeg({platform: q.platform, record_id: q.record_id, forecast_id: f ? f.forecast_id : q.forecast_id,
+          forecast: f, side: x, line: q.line, variant: q.variant, multiplier: sides[x].multiplier,
+          start_utc: ne ? ne.start_utc : q.listed_start_utc, player_id: P.player_id, player: P.player, team: m.team,
+          stat: m.stat, stat_label: m.stat_label, event_id: m.event_id,
+          event_ref: ne && ne.opponent ? (ne.home ? "vs " : "@ ") + ne.opponent.abbr : null}, lg);
+      });
+      return actions(legs, why);
+    }
+    if (q.p === "kalshi" || !q.o) return "";           // board / match card
+    if (!q.g) return actions({}, {over: "Scout cannot settle this line", under: "Scout cannot settle this line"}, {compact: true});
+    var B = c.board || {stats: {}};
+    [["over", 0], ["under", 1]].forEach(function (x) {
+      if (q.o[x[1]] !== 1) { why[x[0]] = "Not offered on " + bookName(q.p); return; }
+      legs[x[0]] = makeLeg({platform: q.p, record_id: q.r, forecast_id: q.f, forecast: f, side: x[0], line: q.l, variant: q.v,
+        multiplier: q.m ? q.m[x[1]] : null, start_utc: m.ev && m.ev.start_utc, player_id: m.pid, player: m.n, team: m.tm, stat: m.st,
+        stat_label: (B.stats && B.stats[m.st]) || m.st, event_id: m.e, event_ref: m.matchup}, lg);
+    });
+    return actions(legs, why, {compact: true});
+  }
+  function register() { var A = app(); if (A && A.hooks) A.hooks.renderActions = renderActions; }
+  register();
+  document.addEventListener("DOMContentLoaded", register);
+
+  api.renderActions = renderActions;
   api.actions = actions; api.track = track; api.renderMine = renderMine;
   root.SportsPicks = api;
 })(this);

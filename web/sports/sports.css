@@ -210,3 +210,26 @@ body.sw{--bg:#0c1017;--panel:#141a24;--panel-2:#1a2230;--line:#283140;--muted:#a
 .sw .sw-foot summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600}
 @media(max-width:1150px){.sw .sw-research-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:640px){.sw .sw-wrap{padding:16px 14px 60px}.sw .sw-top{padding:0 14px;min-height:60px}.sw .sw-research-grid{grid-template-columns:1fr;gap:14px}.sw .sw-tabs{gap:10px;padding-bottom:14px;margin-bottom:20px}.sw .sw-views{flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start}.sw .sw-views a{flex:0 0 auto;font-size:12px;white-space:nowrap}.sw .sw-h1{font-size:26px}.sw .sw-filters{padding:12px}.sw .sw-offer .sw-legbtns .sw-btn{min-height:44px}.sw .sw-game{padding:18px}.sw .sw-panel{padding:16px}}
+
+/* market view (mv-1): every book on the identical market, inside the research cards' Compare section */
+.sw-mkbooks { margin: 6px 0 10px; }
+.sw-mkbooks h3 { margin: 0 0 6px; }
+.sw-mkbooks tr.sw-out td { opacity: .72; }
+.sw-mkline { margin: 6px 0 2px; }
+.sw-offer-market { margin: 4px 0; }
+.sw-mkpanel { margin-top: 12px; }
+.sw-mk b { white-space: nowrap; }
+
+/* three distinct numbers per line: Scout model / Market estimate (labelled blocks) */
+.sw .sw-num-block { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin: 8px 0; }
+.sw .sw-num-block.sw-market { border-style: dashed; }
+.sw .sw-num-label { font-size: .82rem; font-weight: 600; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 4px; }
+.sw .sw-proj { font-size: .95rem; margin-bottom: 4px; }
+.sw .sw-actions-slot:empty { display: none; }
+.sw .sw-matchline a { display: inline-block; min-height: 24px; line-height: 24px; }   /* 24 px touch target (a11y test) */
+.sw .sw-cmp caption { text-align: left; font-size: .8rem; font-weight: 600; padding: 6px 0; }
+.sw .sw-cmp th[scope="row"] { font-weight: 500; text-align: left; }
+.sw .sw-cmp-act td { padding-top: 0; border-top: 0; }
+.sw .sw-prefbook { max-width: 260px; margin-bottom: 8px; }
+.sw .sw-altnote { margin: 6px 0; }
+.sw .sw-stale { color: var(--warn, #f0b35a); margin: 4px 0; }

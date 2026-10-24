@@ -47,7 +47,7 @@ cache, bounded 96 files / 48 MB); they never open the store.
   rest are listed as "not in Scout data".
 - History windows L5/L10/L20/season + slider L1-L20: n, date window, mean, median, sd, range, strict Over / Under with
   pushes separate and the denominator; DNP games excluded and counted. Splits are labelled descriptive.
-- Card actions (ux, `web/sports/picks.js`, hook `cardActions` in app.js): an Over / Under selector (native radios; an
+- Card actions (ux, `web/sports/picks.js` registers `ScoutSportsApp.hooks.renderActions`; board, match view and player card): an Over / Under selector (native radios; an
   unoffered side is disabled with its reason; nothing preselected unless only one side is offered), then "Add to slip"
   and "Track pick" (disabled until a side is chosen) with one line of help.
 - Slip tray (ux, `web/sports/tray.js`, hooks `addToSlip` + `SportsTray.render` in app.js): Slip Studio's own draft

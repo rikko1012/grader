@@ -249,3 +249,24 @@ Additive unless marked **breaking**:
   worker), `FetchResult.not_before` / `budget_denied` / `unmapped`, `net.HttpError.not_before` / `held`,
   `net.hold()` / `net.holds()`, CLI `books-oddspapi account|catalog`, health table gains an OddsPapi column. A
   Retry-After longer than 60 s is now a persisted hold instead of a capped sleep.
+
+## Board market view (mv-1, `sports/market_view.py`) and capture-only review
+
+Every board row carries `mk`: every book that prices the identical market (same game, player, stat, scope, ordinary
+line) with its own chance at its own line (two-sided no-vig per book; Kalshi / Polymarket YES midpoint; one-sided =
+price only), its line and observed age, and the headline **Market (N books)** = the mc-1 rule (frozen filters,
+equal-weight log-odds per source, nearest line moved with dispersion.json) over every VERIFIED source incl. FanDuel /
+BetRivers (owner decision 2026-10-23); a quote's own platform is never a source for it. Registered mc-1 / mi-1
+forecasts keep REGISTER.md 10. The manifest's `sources` block lists per source: offers on the board, last read,
+verified flag, and for capture-only sources the stored inventory.
+
+Capture-only review (Thunderpick / OddsPapi), on the service that holds the key:
+```
+python -m sports.books.cli inventory thunderpick nba      # 1 request per candidate path (ledger-paced), raw gz + sha256 + key paths
+python -m sports.books.cli inventory thunderpick nfl
+python -m sports.books.cli inventory oddspapi nba         # unmetered /v4/account only
+python -m sports.books.cli inventory-show thunderpick nba # re-print the stored summary, no request
+```
+The format is proven only when, for one known game, the stored answer shows a player-stat market whose selections
+carry the player's name, Over and Under as separate selections, one shared numeric line, a price per selection and the
+event's teams / start. Only then is a parser written against the stored raw answer and VERIFIED flipped.

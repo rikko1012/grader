@@ -95,14 +95,17 @@ def test_board_player_game_slip_same_numbers(pw, shots):
     page.goto(URL + "/sports#/board?lg=nba")
     page.wait_for_selector(".sw-research-card", timeout=20000)
     page.screenshot(path=str(shots / "board_1280.png"))
-    over = page.locator(".sw-research-grid [data-fcside=over][data-fc]").first
+    # a Scout-model number (projection shown); cards show whole-number chances, the player page 0.1 points
+    over = page.locator(".sw-research-grid .sw-scout [data-fcside=mean][data-fc]").first
     fid = over.get_attribute("data-fc")
     board = _numbers(page, fid, ".sw-research-grid")
-    assert {"over", "under", "push", "mean"} <= set(board) and all(len(v) == 1 for v in board.values()), board
+    assert {"over", "under", "mean"} <= set(board) and all(len(v) == 1 for v in board.values()), board
     # the record itself, through the API with the member token
     rec = page.evaluate("""async (fid) => { const a = window.ScoutSportsApp.api; const r = await a.get('/api/sports/forecast', {league: 'nba', id: fid}); return r.data.forecast; }""", fid)
     pct = lambda p: f"{round(p * 1000) / 10:.1f}%"
-    assert board["over"] == {pct(rec["p_over"])} and board["under"] == {pct(rec["p_under"])} and board["push"] == {pct(rec["p_push"])}
+    pct0 = lambda p: "<1%" if 0 < p < 0.005 else f"{round(p * 100)}%"
+    assert board["over"] == {pct0(rec["p_over"])} and board["under"] == {pct0(rec["p_under"])}
+    assert board.get("push", {pct0(rec["p_push"])}) == {pct0(rec["p_push"])}
     assert board["mean"] == {f"{rec['projection_mean']:.1f}"}
     # board -> player (the line link of that quote)
     row = page.locator(".sw-research-card", has=page.locator(f'[data-fc="{fid}"]')).first
@@ -111,15 +114,16 @@ def test_board_player_game_slip_same_numbers(pw, shots):
     page.wait_for_timeout(300)
     page.screenshot(path=str(shots / "player_1280.png"), full_page=True)
     player = _numbers(page, fid)
-    for k in ("over", "under", "push", "mean"):
-        assert player[k] == board[k], (k, player, board)
+    for k in ("over", "under", "push"):
+        assert player[k] == {pct(rec["p_" + k])}, (k, player, rec)
+    assert player["mean"] == board["mean"], (player, board)
     assert page.locator("svg.sw-chart").count() >= 1
     # player -> match context
     page.locator("a", has_text="Match context").first.click()
     page.wait_for_selector("#sw-gameprops .sw-research-grid", timeout=20000)
     page.screenshot(path=str(shots / "game_1280.png"))
     game = _numbers(page, fid, ".sw-research-grid")
-    for k in ("over", "under", "push", "mean"):
+    for k in board:
         assert game[k] == board[k], (k, game, board)
     # back to the player, add the offered Over leg -> Slip Studio draft
     page.go_back()
@@ -324,6 +328,19 @@ def test_card_actions_selector(pw, shots):
     n = page.evaluate("Object.keys(localStorage).filter(k => k.startsWith('ss:draft:')).map(k => JSON.parse(localStorage.getItem(k)).legs.length).reduce((a, b) => a + b, 0)")
     assert n >= 1
     page.screenshot(path=str(shots / "card_actions_1280.png"))
+    # exactly one action area per offer on the board, the match view and the player card; no old buttons anywhere
+    def one_per_offer():
+        for slot in page.locator(".sw-actions-slot").all()[:40]:
+            assert slot.locator(".sw-act").count() <= 1
+        assert page.locator("[data-leg], [data-track]").count() == 0
+    one_per_offer()
+    page.locator(".sw-research-card .sw-matchline a").first.click()
+    page.wait_for_selector("#sw-gameprops .sw-act", timeout=20000)
+    one_per_offer()
+    page.locator("#sw-gameprops a.sw-line").first.click()
+    page.wait_for_selector("#sw-fc-h", timeout=20000)
+    assert page.locator("#sw-main .sw-actions-card .sw-act").count() == 1
+    one_per_offer()
     assert not [e for e in errors if "favicon" not in e], errors
     ctx.close()
 
@@ -528,5 +545,31 @@ def test_my_picks_dashboard(pw, shots, width):
     a = page.evaluate(A11Y_JS)
     assert not a["small"] and not a["unlabelled"] and not a["contrast"], a
     page.screenshot(path=str(shots / f"mypicks_{width}.png"), full_page=True)
+    assert not [e for e in errors if "favicon" not in e], errors
+    ctx.close()
+
+
+def test_back_to_board_keeps_filters_and_scroll(pw, shots):
+    ctx, page, errors = _page(pw)
+    page.goto(URL + "/sports#/board?lg=nba")
+    page.wait_for_selector(".sw-research-card", timeout=20000)
+    stat = page.locator("#sw-stat")
+    opts = [o for o in stat.locator("option").all_inner_texts()]
+    if len(opts) > 1:
+        stat.select_option(index=1)
+        page.wait_for_timeout(300)
+    link = page.locator(".sw-research-card a.sw-player-name").nth(6)
+    link.scroll_into_view_if_needed()
+    page.wait_for_timeout(200)
+    y0, hash0 = page.evaluate("window.scrollY"), page.evaluate("location.hash")
+    assert y0 > 300                                                   # really scrolled down the board
+    h0 = page.evaluate("[document.documentElement.scrollHeight, innerHeight]")
+    link.click()
+    page.wait_for_selector("#sw-fc-h", timeout=20000)
+    page.go_back()
+    page.wait_for_selector(".sw-research-card", timeout=20000)
+    page.wait_for_timeout(500)
+    assert page.evaluate("location.hash") == hash0
+    assert abs(page.evaluate("window.scrollY") - y0) < 40, (page.evaluate("window.scrollY"), y0, h0, page.evaluate("[document.documentElement.scrollHeight, innerHeight, document.querySelectorAll('.sw-research-card').length]"))
     assert not [e for e in errors if "favicon" not in e], errors
     ctx.close()

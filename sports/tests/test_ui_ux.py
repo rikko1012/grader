@@ -31,7 +31,8 @@ def test_ux_assets_wired_and_scoped():
 
 def test_card_actions_hook_replaces_four_buttons():
     app = (WEB / "app.js").read_text(encoding="utf-8")
-    assert "function cardActions(" in app and "SportsPicks.actions" in app
+    assert "HOOKS.renderActions(" in app and "hooks: HOOKS" in app                # one action area, via the shared hook
+    assert "A.hooks.renderActions = renderActions" in (WEB / "picks.js").read_text(encoding="utf-8")
     assert "data-track=" not in app and "data-leg=" not in app            # no "+ Over / + Under / Track Over / Track Under"
     js = (WEB / "picks.js").read_text(encoding="utf-8")
     assert "Add to slip" in js and "Track pick" in js and "/api/sports/picks/track" in js
@@ -43,7 +44,7 @@ def test_tray_uses_slip_studio_draft_keys():
     assert '"ss:draft:" + lg + ":" + pf' in tray and '"ss:draft:" + c.league + ":" + c.platform' in slips
     assert '"ss:ctx"' in tray and '"ss:ctx"' in slips
     app = (WEB / "app.js").read_text(encoding="utf-8")
-    assert "SportsTray.add(leg)" in app and "SportsTray.render(state.lg)" in app
+    assert "SportsTray.add(leg)" in app and "SportsTray.render(state.lg)" in app and "addToSlip: addToSlip" in app
 
 
 def test_filters_hooks():
