@@ -442,3 +442,134 @@ def test_supervisor_restarts_the_worker_with_backoff(monkeypatch):
 def test_backoff_is_jittered_and_capped():
     xs = [service.backoff(a) for a in range(12) for _ in range(20)]
     assert max(xs) <= 900 and min(xs) >= 15 and len({round(x, 3) for x in xs}) > 50
+
+
+# ------------------------------------------------------------------------------------------ deploy config / process
+def _render_services():
+    """Tiny render.yaml reader (no yaml dependency in CI): service name -> {env key: (value or None if sync:false)}."""
+    from pathlib import Path
+    out, cur, key = {}, None, None
+    for line in (Path(__file__).resolve().parents[2] / "render.yaml").read_text(encoding="utf-8").splitlines():
+        s = line.split("#", 1)[0].rstrip()
+        if s.strip().startswith("name:") and line.startswith("    name:"):
+            cur = out.setdefault(s.split(":", 1)[1].strip(), {})
+        elif s.strip().startswith("- key:"):
+            key = s.split(":", 1)[1].strip()
+            cur[key] = None
+        elif s.strip().startswith("value:") and key:
+            cur[key] = s.split(":", 1)[1].strip().strip('"')
+        elif s.strip().startswith("sync:"):
+            cur[key] = None
+    return out
+
+
+def test_render_config_keeps_every_sports_flag_off_and_secrets_out_of_git():
+    svc = _render_services()
+    assert {"cs2-scout", "scout-sports-api"} <= set(svc)
+    for name in ("cs2-scout", "scout-sports-api"):
+        for f in ("SPORTS_UI", "SPORTS_API", "SPORTS_INGEST", "SPORTS_TRAIN"):
+            assert svc[name].get(f, "0") == "0", (name, f)
+        assert "SPORTS_TOKEN_SECRET" in svc[name] and svc[name]["SPORTS_TOKEN_SECRET"] is None   # sync: false
+    assert svc["cs2-scout"]["SPORTS_API_MODE"] == "service"
+    s = svc["scout-sports-api"]
+    assert s["SPORTS_DATA_DIR"] == "/sports-data" and s["ODDS_API_KEY"] is None and s["ADMIN_TOKEN"] is None
+
+
+def test_the_service_process_starts_with_flags_off_and_serves_nothing(tmp_path):
+    import os
+    import socket
+    import subprocess
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    env = {k: v for k, v in os.environ.items() if not k.startswith("SPORTS_") and k != "ODDS_API_KEY"}
+    env.update({"SPORTS_DATA_DIR": str(tmp_path), "PYTHONPATH": str(root)})
+    p = subprocess.Popen([sys.executable, "-m", "sports.service", "--host", "127.0.0.1", "--port", str(port)],
+                         cwd=str(root), env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL)
+    try:
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            try:
+                code, body, _ = _get(port, "/api/sports/health")
+                break
+            except OSError:
+                time.sleep(0.1)
+        assert code == 200 and body["ok"] and body["store_ready"] is False
+        assert _get(port, "/api/sports/status")[0] == 401
+        code, body, _ = _get(port, "/api/sports/status", _auth())                 # child has no secret: refused
+        assert code == 503 and body["error"] == "sports_auth_not_configured"
+    finally:
+        p.kill()
+        p.wait(10)
+
+
+def _ops(**kw):
+    o = {"flags": {"SPORTS_INGEST": True}, "worker": {"pid": 123, "starts": 1, "last_exit": None},
+         "feeds": {"store_mb": 100.0, "platforms": {"prizepicks": {"age_min": 5}, "kalshi": {"age_min": 40}}},
+         "rss_mb": 50, "rss_max_mb": 900, "service": {"requests": 1000, "rejected_busy": 0, "errors_5xx": 0},
+         "db_pool": {"waits_timed_out": 0, "queries_interrupted": 0}, "token_configured": True}
+    for k, v in kw.items():
+        o[k] = v
+    return o
+
+
+def test_alerts_clean_and_each_rule(monkeypatch):
+    monkeypatch.setenv("SPORTS_STORE_MAX_MB", "8000")
+    assert service.alerts(_ops()) == []
+    codes = lambda o: {a["code"] for a in service.alerts(o)}                      # noqa: E731
+    assert codes(_ops(worker={"pid": None, "starts": 1})) == {"worker_down"}
+    assert "worker_crash_loop" in codes(_ops(worker={"pid": 9, "starts": 6, "last_exit": {"ran_s": 10}}))
+    assert codes(_ops(feeds={"store_mb": 1, "platforms": {"underdog": {"age_min": 60}, "kalshi": {"age_min": 60}}})) \
+        == {"feed_stale"}                                                         # kalshi has the longer limit
+    assert codes(_ops(feeds={"store_mb": 6500, "platforms": {}})) == {"store_large"}
+    assert codes(_ops(feeds={"store_mb": 8100, "platforms": {}})) == {"store_full_ingest_paused"}
+    assert codes(_ops(rss_mb=800)) == {"service_memory_high"}
+    assert codes(_ops(service={"requests": 100, "rejected_busy": 5, "errors_5xx": 0})) == {"service_shedding"}
+    assert codes(_ops(db_pool={"waits_timed_out": 1, "queries_interrupted": 0})) == {"store_slow"}
+    assert codes(_ops(token_configured=False)) == {"token_secret_missing"}
+    assert service.alerts(_ops(flags={"SPORTS_INGEST": False}, worker={"pid": None})) == []   # ingest off: no worker alerts
+
+
+def test_member_answers_get_etag_304_and_gzip_once_per_body(svc, monkeypatch):
+    import gzip as gz
+    big = {"rows": [{"i": i, "player": "x" * 40} for i in range(500)]}
+    monkeypatch.setitem(web.ROUTES, "/api/sports/bigsnap", ("sports.web:bigsnap", web.MEMBER, ("GET",)))
+    monkeypatch.setitem(web._HANDLERS, "sports.web:bigsnap", lambda req: (200, big))
+    built0 = service.ENC_STATS["gzip_built"]
+    code, body, hd = _get(svc, "/api/sports/bigsnap", _auth())
+    assert code == 200 and body == big and hd["Cache-Control"] == "private, no-cache" and "ETag" in hd
+    assert "Content-Encoding" not in hd                                          # no Accept-Encoding: identity
+    c = http.client.HTTPConnection("127.0.0.1", svc, timeout=10)
+    for _ in range(3):
+        c.request("GET", "/api/sports/bigsnap", headers=dict(_auth(), **{"Accept-Encoding": "gzip, deflate"}))
+        r = c.getresponse()
+        data = r.read()
+        assert r.status == 200 and r.getheader("Content-Encoding") == "gzip"
+        assert json.loads(gz.decompress(data)) == big and r.getheader("ETag").endswith('-gz"')
+    gz_etag = r.getheader("ETag")
+    c.close()
+    assert service.ENC_STATS["gzip_built"] - built0 == 1                         # compressed once, served 3 times
+    for tag in (hd["ETag"], gz_etag, "W/" + hd["ETag"]):
+        code, body, h2 = _get(svc, "/api/sports/bigsnap", dict(_auth(), **{"If-None-Match": tag}))
+        assert code == 304 and body is None
+    assert _get(svc, "/api/sports/bigsnap", dict(_auth(), **{"If-None-Match": '"other"'}))[0] == 200
+    code, _, h3 = _get(svc, "/api/sports/bigsnap")                               # no token: 401, never cached
+    assert code == 401 and h3["Cache-Control"] == "no-store" and "ETag" not in h3
+
+
+def test_gzip_single_flight_compresses_once_under_simultaneous_misses():
+    body = b'{"x": "' + b"y" * 200000 + b'"}'
+    etag = service.etag_of(body)
+    out = []
+    ts = [threading.Thread(target=lambda: out.append(service.gzipped(etag, body))) for _ in range(30)]
+    n0 = service.ENC_STATS["gzip_built"]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join(10)
+    assert len(out) == 30 and len(set(out)) == 1 and service.ENC_STATS["gzip_built"] - n0 == 1
+    assert service.accepts_gzip("br, gzip;q=0.8") and not service.accepts_gzip("gzip;q=0") and not service.accepts_gzip(None)

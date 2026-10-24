@@ -1,0 +1,39 @@
+/* Scout Sports model lab (admin) - scoped under .lab-root. */
+.lab-root { --l-bg: #f6f7f9; --l-panel: #fff; --l-ink: #15181d; --l-muted: #5d6573; --l-line: #dde2e9; --l-accent: #2456d6;
+  --l-good: #1f7a4d; --l-bad: #a1251b; --l-chip: #eef2fb;
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--l-ink); background: var(--l-bg);
+  min-height: 100vh; }
+@media (prefers-color-scheme: dark) {
+  .lab-root { --l-bg: #0f1216; --l-panel: #171b21; --l-ink: #e8ebf0; --l-muted: #9aa3b2; --l-line: #2a3039;
+    --l-accent: #6d93ff; --l-good: #6fd3a0; --l-bad: #ff8a80; --l-chip: #1f2633; }
+}
+.lab-root *, .lab-root *::before, .lab-root *::after { box-sizing: border-box; }
+.lab-root .lab-wrap { max-width: 1100px; margin: 0 auto; padding: 20px 16px 48px; }
+.lab-root h1 { font-size: 1.3rem; margin: 0; } .lab-root h2 { font-size: 1rem; margin: 0 0 10px; }
+.lab-root h3 { font-size: .92rem; margin: 14px 0 6px; }
+.lab-root .lab-tag { font-size: .7rem; vertical-align: middle; background: var(--l-chip); padding: 2px 8px; border-radius: 999px; }
+.lab-root .lab-sub, .lab-root .lab-meta { color: var(--l-muted); font-size: .86rem; }
+.lab-root .lab-panel { background: var(--l-panel); border: 1px solid var(--l-line); border-radius: 10px; padding: 14px; margin-top: 12px; }
+.lab-root .lab-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.lab-root input, .lab-root select { font: inherit; color: var(--l-ink); background: transparent; border: 1px solid var(--l-line);
+  border-radius: 6px; padding: 6px 8px; min-height: 34px; max-width: 100%; }
+.lab-root .lab-btn { font: inherit; font-weight: 600; border: 1px solid var(--l-accent); background: var(--l-accent); color: #fff;
+  border-radius: 6px; padding: 6px 14px; cursor: pointer; min-height: 34px; }
+.lab-root .lab-btn.lab-ghost { background: transparent; color: var(--l-accent); }
+.lab-root :focus-visible { outline: 3px solid rgba(36, 86, 214, .45); outline-offset: 1px; }
+.lab-root .lab-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+.lab-root .lab-grid label { display: flex; flex-direction: column; gap: 4px; font-size: .82rem; color: var(--l-muted); }
+.lab-root .lab-feats { grid-column: 1 / -1; border: 1px solid var(--l-line); border-radius: 8px; }
+.lab-root .lab-feats label { flex-direction: row; align-items: flex-start; gap: 6px; color: var(--l-ink); }
+.lab-root #lab-feats { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px; }
+.lab-root .lab-scroll { overflow-x: auto; }
+.lab-root .lab-table { border-collapse: collapse; width: 100%; font-size: .84rem; }
+.lab-root .lab-table th, .lab-root .lab-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--l-line); white-space: nowrap; }
+.lab-root .lab-table td.num, .lab-root .lab-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.lab-root .lab-table tr[data-id] { cursor: pointer; }
+.lab-root .lab-table tr[data-id]:hover { background: var(--l-chip); }
+.lab-root .lab-good { color: var(--l-good); } .lab-root .lab-bad { color: var(--l-bad); }
+.lab-root code, .lab-root pre { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .8rem; }
+.lab-root pre { background: var(--l-chip); padding: 8px; border-radius: 6px; overflow: auto; max-height: 320px; }
+.lab-root .lab-hidden { display: none !important; }
+.lab-root svg text { fill: var(--l-muted); font-size: 10px; }
