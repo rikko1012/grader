@@ -97,6 +97,15 @@ def test_removed_offers_only_after_a_successful_read(db):
 
 
 def test_memory_cap_reports_on_every_os():
-    assert isinstance(worker.apply_memory_cap(4096), str)
+    try:
+        import resource
+        before = resource.getrlimit(resource.RLIMIT_AS)
+    except ImportError:
+        before = None
+    try:
+        assert isinstance(worker.apply_memory_cap(4096), str)
+    finally:
+        if before is not None:
+            resource.setrlimit(resource.RLIMIT_AS, before)         # later tests in this process run uncapped
     r = worker.rss_mb()
     assert r is None or r > 0

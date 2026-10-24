@@ -504,9 +504,10 @@ def main(argv=None):
     s = sub.add_parser("train")
     s.add_argument("rest", nargs=argparse.REMAINDER)
     a = p.parse_args(argv)
+    if a.cmd == "train":
+        flags.require("SPORTS_TRAIN")                   # a refused command sets no memory cap on its process
     cap = apply_memory_cap() if a.cmd in ("ingest", "loop", "settle", "train") else None
     if a.cmd == "train":
-        flags.require("SPORTS_TRAIN")
         from .model import jobs as model_jobs           # model agent's registered training jobs (sports/model/jobs.py)
         return model_jobs.main(a.rest)
     with store.opened() as con:

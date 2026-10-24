@@ -1,0 +1,214 @@
+{
+ "_sample": {
+  "source": "Kambi rsiusoh listView/american_football/nfl (real response)",
+  "observed_at": "2026-10-23T21:04:34Z",
+  "sanitized": "trimmed to a few markets; nothing else changed"
+ },
+ "events": [
+  {
+   "event": {
+    "id": 1028823697,
+    "name": "PIT Steelers vs NO Saints",
+    "nameDelimiter": "vs",
+    "englishName": "New Orleans Saints - Pittsburgh Steelers",
+    "homeName": "NO Saints",
+    "awayName": "PIT Steelers",
+    "start": "2026-10-25T13:30:00Z",
+    "group": "NFL",
+    "groupId": 1000093656,
+    "path": [
+     {
+      "id": 1000093199,
+      "name": "Football",
+      "englishName": "American Football",
+      "termKey": "american_football"
+     },
+     {
+      "id": 1000093656,
+      "name": "NFL",
+      "englishName": "NFL",
+      "termKey": "nfl"
+     }
+    ],
+    "nonLiveBoCount": 786,
+    "sport": "AMERICAN_FOOTBALL",
+    "tags": [
+     "STREAMED_WEB",
+     "AMERICAN_DISPLAY_FORMAT",
+     "AWAY_HOME",
+     "NEUTRAL_VENUE",
+     "OFFERED_LIVE",
+     "BET_BUILDER",
+     "STREAMED_MOBILE",
+     "MATCH"
+    ],
+    "state": "NOT_STARTED"
+   },
+   "betOffers": [
+    {
+     "id": 2705927968,
+     "closed": "2026-10-25T13:30:00Z",
+     "criterion": {
+      "id": 1001159928,
+      "label": "Point Spread",
+      "englishLabel": "Point Spread - Including Overtime",
+      "order": [],
+      "occurrenceType": "POINTS",
+      "lifetime": "FULL_TIME_OVERTIME"
+     },
+     "betOfferType": {
+      "id": 1,
+      "name": "Handicap",
+      "englishName": "Handicap"
+     },
+     "eventId": 1028823697,
+     "outcomes": [
+      {
+       "id": 4381491547,
+       "label": "NO Saints",
+       "englishLabel": "New Orleans Saints",
+       "odds": 1950,
+       "line": 3000,
+       "participant": "NO Saints",
+       "type": "OT_ONE",
+       "betOfferId": 2705927968,
+       "changedDate": "2026-10-23T20:11:56Z",
+       "participantId": 1000062103,
+       "oddsFractional": "19/20",
+       "oddsAmerican": "-106",
+       "status": "OPEN",
+       "cashOutStatus": "ENABLED",
+       "displayOrder": 0
+      },
+      {
+       "id": 4381491548,
+       "label": "PIT Steelers",
+       "englishLabel": "Pittsburgh Steelers",
+       "odds": 1870,
+       "line": -3000,
+       "participant": "PIT Steelers",
+       "type": "OT_TWO",
+       "betOfferId": 2705927968,
+       "changedDate": "2026-10-23T20:11:56Z",
+       "participantId": 1000000176,
+       "oddsFractional": "17/20",
+       "oddsAmerican": "-115",
+       "status": "OPEN",
+       "cashOutStatus": "ENABLED",
+       "displayOrder": 1
+      }
+     ],
+     "tags": [
+      "OFFERED_PREMATCH",
+      "MAIN_LINE",
+      "BET_BUILDER"
+     ],
+     "sortOrder": 1,
+     "cashOutStatus": "ENABLED"
+    }
+   ]
+  },
+  {
+   "event": {
+    "id": 1028823698,
+    "name": "CIN Bengals @ BAL Ravens",
+    "nameDelimiter": "@",
+    "englishName": "Baltimore Ravens - Cincinnati Bengals",
+    "homeName": "BAL Ravens",
+    "awayName": "CIN Bengals",
+    "start": "2026-10-25T17:00:00Z",
+    "group": "NFL",
+    "groupId": 1000093656,
+    "path": [
+     {
+      "id": 1000093199,
+      "name": "Football",
+      "englishName": "American Football",
+      "termKey": "american_football"
+     },
+     {
+      "id": 1000093656,
+      "name": "NFL",
+      "englishName": "NFL",
+      "termKey": "nfl"
+     }
+    ],
+    "nonLiveBoCount": 605,
+    "sport": "AMERICAN_FOOTBALL",
+    "tags": [
+     "STREAMED_WEB",
+     "AMERICAN_DISPLAY_FORMAT",
+     "AWAY_HOME",
+     "OFFERED_LIVE",
+     "BET_BUILDER",
+     "STREAMED_MOBILE",
+     "MATCH"
+    ],
+    "state": "NOT_STARTED"
+   },
+   "betOffers": [
+    {
+     "id": 2705978987,
+     "closed": "2026-10-25T17:00:00Z",
+     "criterion": {
+      "id": 1001159928,
+      "label": "Point Spread",
+      "englishLabel": "Point Spread - Including Overtime",
+      "order": [],
+      "occurrenceType": "POINTS",
+      "lifetime": "FULL_TIME_OVERTIME"
+     },
+     "betOfferType": {
+      "id": 1,
+      "name": "Handicap",
+      "englishName": "Handicap"
+     },
+     "eventId": 1028823698,
+     "outcomes": [
+      {
+       "id": 4381596772,
+       "label": "BAL Ravens",
+       "englishLabel": "Baltimore Ravens",
+       "odds": 1910,
+       "line": -1000,
+       "participant": "BAL Ravens",
+       "type": "OT_ONE",
+       "betOfferId": 2705978987,
+       "changedDate": "2026-10-23T11:45:39Z",
+       "participantId": 1000049533,
+       "oddsFractional": "10/11",
+       "oddsAmerican": "-110",
+       "status": "OPEN",
+       "cashOutStatus": "ENABLED",
+       "displayOrder": 0
+      },
+      {
+       "id": 4381596773,
+       "label": "CIN Bengals",
+       "englishLabel": "Cincinnati Bengals",
+       "odds": 1910,
+       "line": 1000,
+       "participant": "CIN Bengals",
+       "type": "OT_TWO",
+       "betOfferId": 2705978987,
+       "changedDate": "2026-10-23T11:45:39Z",
+       "participantId": 1000056258,
+       "oddsFractional": "10/11",
+       "oddsAmerican": "-110",
+       "status": "OPEN",
+       "cashOutStatus": "ENABLED",
+       "displayOrder": 1
+      }
+     ],
+     "tags": [
+      "OFFERED_PREMATCH",
+      "MAIN_LINE",
+      "BET_BUILDER"
+     ],
+     "sortOrder": 1,
+     "cashOutStatus": "ENABLED"
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,2396 @@
+{
+ "_sample": {
+  "source": "FanDuel OH event-page eventId=36220759 tab=player-points (NYK @ BOS, real response)",
+  "observed_at": "2026-10-23T21:04:34Z",
+  "sanitized": "trimmed to a few markets; nothing else changed"
+ },
+ "attachments": {
+  "events": {
+   "36220759": {
+    "competitionId": 10547864,
+    "inPlay": false,
+    "eventId": 36220759,
+    "key": "EVENT:36220759",
+    "name": "New York Knicks @ Boston Celtics",
+    "eventTypeId": 7522,
+    "countryCode": "GB",
+    "timezone": "GMT",
+    "openDate": "2026-10-23T23:10:00.000Z",
+    "videoAvailable": false,
+    "primaryMarketId": "739.192984560"
+   }
+  },
+  "markets": {
+   "739.193058145": {
+    "marketId": "739.193058145",
+    "eventTypeId": 7522,
+    "competitionId": 10547864,
+    "eventId": 36220759,
+    "marketName": "Paul George - Points",
+    "marketTime": "2026-10-23T23:10:00.000Z",
+    "marketType": "PLAYER_D_TOTAL_POINTS",
+    "bspMarket": false,
+    "sgmMarket": true,
+    "inPlay": false,
+    "numberOfRunners": 2,
+    "numberOfActiveRunners": 2,
+    "numberOfWinners": 1,
+    "sortPriority": 4,
+    "bettingType": "MOVING_HANDICAP",
+    "marketStatus": "OPEN",
+    "runners": [
+     {
+      "selectionId": 12234250,
+      "handicap": 17.5,
+      "runnerName": "Paul George Over",
+      "sortPriority": 1,
+      "result": {
+       "type": "OVER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/b87da10c-33e9-4c62-bc2e-52eb32f1f1ef/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -102,
+        "americanOddsInt": -102
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.980392156862745
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 102
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -104,
+         "americanOddsInt": -104
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.961538461538462
+         },
+         "fractionalOdds": {
+          "numerator": 100,
+          "denominator": 104
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 12234251,
+      "handicap": 17.5,
+      "runnerName": "Paul George Under",
+      "sortPriority": 2,
+      "result": {
+       "type": "UNDER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/b87da10c-33e9-4c62-bc2e-52eb32f1f1ef/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -125,
+        "americanOddsInt": -125
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.8
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 125
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -122,
+         "americanOddsInt": -122
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.819672131147541
+         },
+         "fractionalOdds": {
+          "numerator": 100,
+          "denominator": 122
+         }
+        }
+       }
+      ]
+     }
+    ],
+    "canTurnInPlay": true,
+    "associatedMarkets": [
+     {
+      "eventId": 36220759,
+      "eventTypeId": 7522,
+      "externalMarketId": "42.618412807"
+     }
+    ],
+    "isSuperSubEnabled": false,
+    "isBetProtectEligible": true,
+    "shouldDisplayStatsInRunner": true,
+    "eachwayAvailable": false,
+    "legTypes": [
+     "SIMPLE_SELECTION"
+    ]
+   },
+   "739.193206163": {
+    "marketId": "739.193206163",
+    "eventTypeId": 7522,
+    "competitionId": 10547864,
+    "eventId": 36220759,
+    "marketName": "Payton Pritchard - Points",
+    "marketTime": "2026-10-23T23:10:00.000Z",
+    "marketType": "PLAYER_L_TOTAL_POINTS",
+    "bspMarket": false,
+    "sgmMarket": true,
+    "inPlay": false,
+    "numberOfRunners": 2,
+    "numberOfActiveRunners": 2,
+    "numberOfWinners": 1,
+    "sortPriority": 12,
+    "bettingType": "MOVING_HANDICAP",
+    "marketStatus": "OPEN",
+    "runners": [
+     {
+      "selectionId": 38225629,
+      "handicap": 15.5,
+      "runnerName": "Payton Pritchard Over",
+      "sortPriority": 1,
+      "result": {
+       "type": "OVER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/80f47ab1-c699-487e-b101-1657e8cb9d74/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -120,
+        "americanOddsInt": -120
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.833333333333333
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 120
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -118,
+         "americanOddsInt": -118
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.847457627118644
+         },
+         "fractionalOdds": {
+          "numerator": 100,
+          "denominator": 118
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 38225623,
+      "handicap": 15.5,
+      "runnerName": "Payton Pritchard Under",
+      "sortPriority": 2,
+      "result": {
+       "type": "UNDER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/80f47ab1-c699-487e-b101-1657e8cb9d74/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -106,
+        "americanOddsInt": -106
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.943396226415094
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 106
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -108,
+         "americanOddsInt": -108
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.925925925925926
+         },
+         "fractionalOdds": {
+          "numerator": 100,
+          "denominator": 108
+         }
+        }
+       }
+      ]
+     }
+    ],
+    "canTurnInPlay": true,
+    "associatedMarkets": [
+     {
+      "eventId": 36220759,
+      "eventTypeId": 7522,
+      "externalMarketId": "42.618622765"
+     }
+    ],
+    "isSuperSubEnabled": false,
+    "isBetProtectEligible": true,
+    "shouldDisplayStatsInRunner": true,
+    "eachwayAvailable": false,
+    "legTypes": [
+     "SIMPLE_SELECTION"
+    ]
+   },
+   "739.193365381": {
+    "marketId": "739.193365381",
+    "eventTypeId": 7522,
+    "competitionId": 10547864,
+    "eventId": 36220759,
+    "marketName": "Miles McBride - Points",
+    "marketTime": "2026-10-23T23:10:00.000Z",
+    "marketType": "PLAYER_P_TOTAL_POINTS",
+    "bspMarket": false,
+    "sgmMarket": true,
+    "inPlay": false,
+    "numberOfRunners": 2,
+    "numberOfActiveRunners": 2,
+    "numberOfWinners": 1,
+    "sortPriority": 16,
+    "bettingType": "MOVING_HANDICAP",
+    "marketStatus": "OPEN",
+    "runners": [
+     {
+      "selectionId": 42109139,
+      "handicap": 5.5,
+      "runnerName": "Miles McBride Over",
+      "sortPriority": 1,
+      "result": {
+       "type": "OVER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/83c89212-1178-4e0b-afe1-919f92fd1457/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/new_york_knicks.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "NYK",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -111,
+        "americanOddsInt": -111
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.900900900900901
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 111
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -113,
+         "americanOddsInt": -113
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.884955752212389
+         },
+         "fractionalOdds": {
+          "numerator": 100,
+          "denominator": 113
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 42109140,
+      "handicap": 5.5,
+      "runnerName": "Miles McBride Under",
+      "sortPriority": 2,
+      "result": {
+       "type": "UNDER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/83c89212-1178-4e0b-afe1-919f92fd1457/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/new_york_knicks.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "NYK",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -115,
+        "americanOddsInt": -115
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.869565217391304
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 115
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -113,
+         "americanOddsInt": -113
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.884955752212389
+         },
+         "fractionalOdds": {
+          "numerator": 100,
+          "denominator": 113
+         }
+        }
+       }
+      ]
+     }
+    ],
+    "canTurnInPlay": true,
+    "associatedMarkets": [
+     {
+      "eventId": 36220759,
+      "eventTypeId": 7522,
+      "externalMarketId": "42.618843653"
+     }
+    ],
+    "isSuperSubEnabled": false,
+    "isBetProtectEligible": true,
+    "shouldDisplayStatsInRunner": true,
+    "eachwayAvailable": false,
+    "legTypes": [
+     "SIMPLE_SELECTION"
+    ]
+   },
+   "739.193532625": {
+    "marketId": "739.193532625",
+    "eventTypeId": 7522,
+    "competitionId": 10547864,
+    "eventId": 36220759,
+    "marketName": "Neemias Queta - Alt Points",
+    "marketTime": "2026-10-23T23:10:00.000Z",
+    "marketType": "PLAYER_M_ALT_TOTAL_POINTS",
+    "bspMarket": false,
+    "sgmMarket": true,
+    "inPlay": false,
+    "numberOfRunners": 13,
+    "numberOfActiveRunners": 13,
+    "numberOfWinners": 1,
+    "sortPriority": 1125,
+    "bettingType": "ODDS",
+    "marketStatus": "OPEN",
+    "runners": [
+     {
+      "selectionId": 76052653,
+      "handicap": 0,
+      "runnerName": "Neemias Queta Over 2.5",
+      "sortPriority": 1,
+      "result": {
+       "type": "OVER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/c2406913-546a-4e86-a5f6-f8452ef580a6/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -1200,
+        "americanOddsInt": -1200
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.083333333333333
+        },
+        "fractionalOdds": {
+         "numerator": 10,
+         "denominator": 120
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -1400,
+         "americanOddsInt": -1400
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.071428571428571
+         },
+         "fractionalOdds": {
+          "numerator": 10,
+          "denominator": 140
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 64407496,
+      "handicap": 0,
+      "runnerName": "Neemias Queta Over 3.5",
+      "sortPriority": 2,
+      "result": {
+       "type": "OVER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/c2406913-546a-4e86-a5f6-f8452ef580a6/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -700,
+        "americanOddsInt": -700
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.142857142857143
+        },
+        "fractionalOdds": {
+         "numerator": 10,
+         "denominator": 70
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -800,
+         "americanOddsInt": -800
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.125
+         },
+         "fractionalOdds": {
+          "numerator": 10,
+          "denominator": 80
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 64407491,
+      "handicap": 0,
+      "runnerName": "Neemias Queta Over 4.5",
+      "sortPriority": 3,
+      "result": {
+       "type": "OVER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/c2406913-546a-4e86-a5f6-f8452ef580a6/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -350,
+        "americanOddsInt": -350
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.285714285714286
+        },
+        "fractionalOdds": {
+         "numerator": 10,
+         "denominator": 35
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -400,
+         "americanOddsInt": -400
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.25
+         },
+         "fractionalOdds": {
+          "numerator": 10,
+          "denominator": 40
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 64407497,
+      "handicap": 0,
+      "runnerName": "Neemias Queta Over 5.5",
+      "sortPriority": 4,
+      "result": {
+       "type": "OVER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/c2406913-546a-4e86-a5f6-f8452ef580a6/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -250,
+        "americanOddsInt": -250
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.4
+        },
+        "fractionalOdds": {
+         "numerator": 10,
+         "denominator": 25
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -260,
+         "americanOddsInt": -260
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.384615384615385
+         },
+         "fractionalOdds": {
+          "numerator": 10,
+          "denominator": 26
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 64407489,
+      "handicap": 0,
+      "runnerName": "Neemias Queta Over 6.5",
+      "sortPriority": 5,
+      "result": {
+       "type": "OVER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/c2406913-546a-4e86-a5f6-f8452ef580a6/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -160,
+        "americanOddsInt": -160
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.625
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 160
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -168,
+         "americanOddsInt": -168
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.595238095238095
+         },
+         "fractionalOdds": {
+          "numerator": 100,
+          "denominator": 168
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 64407493,
+      "handicap": 0,
+      "runnerName": "Neemias Queta Over 7.5",
+      "sortPriority": 6,
+      "result": {
+       "type": "OVER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/c2406913-546a-4e86-a5f6-f8452ef580a6/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -114,
+        "americanOddsInt": -114
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.87719298245614
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 114
+        }
+       }
+      },
+      "previousWinRunnerOdds": []
+     },
+     {
+      "selectionId": 64407498,
+      "handicap": 0,
+      "runnerName": "Neemias Queta Over 8.5",
+      "sortPriority": 7,
+      "result": {
+       "type": "OVER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/c2406913-546a-4e86-a5f6-f8452ef580a6/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 124,
+        "americanOddsInt": 124
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 2.24
+        },
+        "fractionalOdds": {
+         "numerator": 124,
+         "denominator": 100
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 130,
+         "americanOddsInt": 130
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 2.3
+         },
+         "fractionalOdds": {
+          "numerator": 130,
+          "denominator": 100
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 64407500,
+      "handicap": 0,
+      "runnerName": "Neemias Queta Over 9.5",
+      "sortPriority": 8,
+      "result": {
+       "type": "OVER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/c2406913-546a-4e86-a5f6-f8452ef580a6/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 174,
+        "americanOddsInt": 174
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 2.74
+        },
+        "fractionalOdds": {
+         "numerator": 174,
+         "denominator": 100
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 182,
+         "americanOddsInt": 182
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 2.82
+         },
+         "fractionalOdds": {
+          "numerator": 182,
+          "denominator": 100
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 64407499,
+      "handicap": 0,
+      "runnerName": "Neemias Queta Over 10.5",
+      "sortPriority": 9,
+      "result": {
+       "type": "OVER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/c2406913-546a-4e86-a5f6-f8452ef580a6/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 235,
+        "americanOddsInt": 235
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 3.35
+        },
+        "fractionalOdds": {
+         "numerator": 235,
+         "denominator": 100
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 240,
+         "americanOddsInt": 240
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 3.4
+         },
+         "fractionalOdds": {
+          "numerator": 240,
+          "denominator": 100
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 76009522,
+      "handicap": 0,
+      "runnerName": "Neemias Queta Over 11.5",
+      "sortPriority": 10,
+      "result": {
+       "type": "OVER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/c2406913-546a-4e86-a5f6-f8452ef580a6/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 320,
+        "americanOddsInt": 320
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 4.2
+        },
+        "fractionalOdds": {
+         "numerator": 32,
+         "denominator": 10
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 350,
+         "americanOddsInt": 350
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 4.5
+         },
+         "fractionalOdds": {
+          "numerator": 35,
+          "denominator": 10
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 76009509,
+      "handicap": 0,
+      "runnerName": "Neemias Queta Over 12.5",
+      "sortPriority": 11,
+      "result": {
+       "type": "OVER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/c2406913-546a-4e86-a5f6-f8452ef580a6/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 430,
+        "americanOddsInt": 430
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 5.3
+        },
+        "fractionalOdds": {
+         "numerator": 43,
+         "denominator": 10
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 450,
+         "americanOddsInt": 450
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 5.5
+         },
+         "fractionalOdds": {
+          "numerator": 45,
+          "denominator": 10
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 76009528,
+      "handicap": 0,
+      "runnerName": "Neemias Queta Over 13.5",
+      "sortPriority": 12,
+      "result": {
+       "type": "OVER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/c2406913-546a-4e86-a5f6-f8452ef580a6/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 580,
+        "americanOddsInt": 580
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 6.8
+        },
+        "fractionalOdds": {
+         "numerator": 58,
+         "denominator": 10
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 630,
+         "americanOddsInt": 630
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 7.3
+         },
+         "fractionalOdds": {
+          "numerator": 63,
+          "denominator": 10
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 76009474,
+      "handicap": 0,
+      "runnerName": "Neemias Queta Over 14.5",
+      "sortPriority": 13,
+      "result": {
+       "type": "OVER"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/c2406913-546a-4e86-a5f6-f8452ef580a6/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 750,
+        "americanOddsInt": 750
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 8.5
+        },
+        "fractionalOdds": {
+         "numerator": 75,
+         "denominator": 10
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 800,
+         "americanOddsInt": 800
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 9
+         },
+         "fractionalOdds": {
+          "numerator": 80,
+          "denominator": 10
+         }
+        }
+       }
+      ]
+     }
+    ],
+    "canTurnInPlay": true,
+    "associatedMarkets": [
+     {
+      "eventId": 36220759,
+      "eventTypeId": 7522,
+      "externalMarketId": "42.619108379"
+     }
+    ],
+    "isSuperSubEnabled": false,
+    "isBetProtectEligible": true,
+    "shouldDisplayStatsInRunner": true,
+    "eachwayAvailable": false,
+    "legTypes": [
+     "SIMPLE_SELECTION"
+    ]
+   },
+   "739.193056718": {
+    "marketId": "739.193056718",
+    "eventTypeId": 7522,
+    "competitionId": 10547864,
+    "eventId": 36220759,
+    "marketName": "To Score 15+ Points",
+    "marketTime": "2026-10-23T23:10:00.000Z",
+    "marketType": "TO_SCORE_15+_POINTS",
+    "bspMarket": false,
+    "sgmMarket": true,
+    "inPlay": false,
+    "numberOfRunners": 15,
+    "numberOfActiveRunners": 15,
+    "numberOfWinners": 1,
+    "sortPriority": -8889,
+    "bettingType": "ODDS",
+    "marketStatus": "OPEN",
+    "runners": [
+     {
+      "selectionId": 13080925,
+      "handicap": 0,
+      "runnerName": "Jayson Tatum",
+      "sortPriority": 1,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/f85f9506-7f21-4906-939c-c7243eb73a04/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -3500,
+        "americanOddsInt": -3500
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.028571428571429
+        },
+        "fractionalOdds": {
+         "numerator": 10,
+         "denominator": 350
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -4000,
+         "americanOddsInt": -4000
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.025
+         },
+         "fractionalOdds": {
+          "numerator": 10,
+          "denominator": 400
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 21359550,
+      "handicap": 0,
+      "runnerName": "Jalen Brunson",
+      "sortPriority": 2,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/57db104a-9786-4023-b38e-b3d9697c53be/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/new_york_knicks.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "NYK",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -2200,
+        "americanOddsInt": -2200
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.045454545454545
+        },
+        "fractionalOdds": {
+         "numerator": 10,
+         "denominator": 220
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -2500,
+         "americanOddsInt": -2500
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.04
+         },
+         "fractionalOdds": {
+          "numerator": 10,
+          "denominator": 250
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 9542187,
+      "handicap": 0,
+      "runnerName": "Karl-Anthony Towns",
+      "sortPriority": 3,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/365c4f2a-3bbc-435d-8d6d-bdde2a15d86f/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/new_york_knicks.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "NYK",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -310,
+        "americanOddsInt": -310
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.32258064516129
+        },
+        "fractionalOdds": {
+         "numerator": 10,
+         "denominator": 31
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -295,
+         "americanOddsInt": -295
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.338983050847458
+         },
+         "fractionalOdds": {
+          "numerator": 100,
+          "denominator": 295
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 5066351,
+      "handicap": 0,
+      "runnerName": "Paul George",
+      "sortPriority": 4,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/b87da10c-33e9-4c62-bc2e-52eb32f1f1ef/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -220,
+        "americanOddsInt": -220
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.454545454545455
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 220
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -215,
+         "americanOddsInt": -215
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.465116279069767
+         },
+         "fractionalOdds": {
+          "numerator": 100,
+          "denominator": 215
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 21559329,
+      "handicap": 0,
+      "runnerName": "Derrick White",
+      "sortPriority": 5,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/8a2748e9-c708-465e-8e3f-596c6a7618c6/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -162,
+        "americanOddsInt": -162
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.617283950617284
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 162
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -158,
+         "americanOddsInt": -158
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.632911392405063
+         },
+         "fractionalOdds": {
+          "numerator": 100,
+          "denominator": 158
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 26799201,
+      "handicap": 0,
+      "runnerName": "Payton Pritchard",
+      "sortPriority": 6,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/80f47ab1-c699-487e-b101-1657e8cb9d74/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -154,
+        "americanOddsInt": -154
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.649350649350649
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 154
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -156,
+         "americanOddsInt": -156
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.641025641025641
+         },
+         "fractionalOdds": {
+          "numerator": 100,
+          "denominator": 156
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 16012686,
+      "handicap": 0,
+      "runnerName": "OG Anunoby",
+      "sortPriority": 7,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/9c31fc33-b62f-4c80-aa50-6117b9769598/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/new_york_knicks.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "NYK",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -146,
+        "americanOddsInt": -146
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.684931506849315
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 146
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -142,
+         "americanOddsInt": -142
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.704225352112676
+         },
+         "fractionalOdds": {
+          "numerator": 100,
+          "denominator": 142
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 18970813,
+      "handicap": 0,
+      "runnerName": "Mikal Bridges",
+      "sortPriority": 8,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/1ce9dcdf-4921-41c3-8fea-5633dcab6da2/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/new_york_knicks.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "NYK",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 190,
+        "americanOddsInt": 190
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 2.9
+        },
+        "fractionalOdds": {
+         "numerator": 190,
+         "denominator": 100
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 180,
+         "americanOddsInt": 180
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 2.8
+         },
+         "fractionalOdds": {
+          "numerator": 180,
+          "denominator": 100
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 16421595,
+      "handicap": 0,
+      "runnerName": "Josh Hart",
+      "sortPriority": 9,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/33eb661f-1874-43c4-8393-959fe5244a58/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/new_york_knicks.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "NYK",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 200,
+        "americanOddsInt": 200
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 3
+        },
+        "fractionalOdds": {
+         "numerator": 200,
+         "denominator": 100
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 210,
+         "americanOddsInt": 210
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 3.1
+         },
+         "fractionalOdds": {
+          "numerator": 210,
+          "denominator": 100
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 36981582,
+      "handicap": 0,
+      "runnerName": "Sam Hauser",
+      "sortPriority": 10,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/523bcb86-b9d3-48ae-b946-ec73fca673f0/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 800,
+        "americanOddsInt": 800
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 9
+        },
+        "fractionalOdds": {
+         "numerator": 80,
+         "denominator": 10
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 830,
+         "americanOddsInt": 830
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 9.3
+         },
+         "fractionalOdds": {
+          "numerator": 83,
+          "denominator": 10
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 21304450,
+      "handicap": 0,
+      "runnerName": "Landry Shamet",
+      "sortPriority": 11,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/f1311ef2-6d17-4cde-8134-496505d4bf15/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/new_york_knicks.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "NYK",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 830,
+        "americanOddsInt": 830
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 9.3
+        },
+        "fractionalOdds": {
+         "numerator": 83,
+         "denominator": 10
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 870,
+         "americanOddsInt": 870
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 9.7
+         },
+         "fractionalOdds": {
+          "numerator": 87,
+          "denominator": 10
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 36981586,
+      "handicap": 0,
+      "runnerName": "Neemias Queta",
+      "sortPriority": 12,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/c2406913-546a-4e86-a5f6-f8452ef580a6/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 830,
+        "americanOddsInt": 830
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 9.3
+        },
+        "fractionalOdds": {
+         "numerator": 83,
+         "denominator": 10
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 870,
+         "americanOddsInt": 870
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 9.7
+         },
+         "fractionalOdds": {
+          "numerator": 87,
+          "denominator": 10
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 37394213,
+      "handicap": 0,
+      "runnerName": "Miles McBride",
+      "sortPriority": 13,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/83c89212-1178-4e0b-afe1-919f92fd1457/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/new_york_knicks.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "NYK",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 1300,
+        "americanOddsInt": 1300
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 14
+        },
+        "fractionalOdds": {
+         "numerator": 130,
+         "denominator": 10
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 1400,
+         "americanOddsInt": 1400
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 15
+         },
+         "fractionalOdds": {
+          "numerator": 140,
+          "denominator": 10
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 8714784,
+      "handicap": 0,
+      "runnerName": "Andre Drummond",
+      "sortPriority": 14,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/4aa95d24-7a2f-47e3-9443-4623cca846ee/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/new_york_knicks.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "NYK",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 1500,
+        "americanOddsInt": 1500
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 16
+        },
+        "fractionalOdds": {
+         "numerator": 150,
+         "denominator": 10
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 1400,
+         "americanOddsInt": 1400
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 15
+         },
+         "fractionalOdds": {
+          "numerator": 140,
+          "denominator": 10
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 20060713,
+      "handicap": 0,
+      "runnerName": "Mitchell Robinson",
+      "sortPriority": 15,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/1f0781f4-9390-4634-92f5-93cb0642c352/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 1500,
+        "americanOddsInt": 1500
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 16
+        },
+        "fractionalOdds": {
+         "numerator": 150,
+         "denominator": 10
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 1300,
+         "americanOddsInt": 1300
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 14
+         },
+         "fractionalOdds": {
+          "numerator": 130,
+          "denominator": 10
+         }
+        }
+       }
+      ]
+     }
+    ],
+    "canTurnInPlay": true,
+    "associatedMarkets": [
+     {
+      "eventId": 36220759,
+      "eventTypeId": 7522,
+      "externalMarketId": "42.618410807"
+     }
+    ],
+    "isSuperSubEnabled": false,
+    "isBetProtectEligible": true,
+    "shouldDisplayStatsInRunner": true,
+    "eachwayAvailable": false,
+    "legTypes": [
+     "SIMPLE_SELECTION"
+    ]
+   },
+   "739.193203480": {
+    "marketId": "739.193203480",
+    "eventTypeId": 7522,
+    "competitionId": 10547864,
+    "eventId": 36220759,
+    "marketName": "1st Quarter - To Score 20+ Points",
+    "marketTime": "2026-10-23T23:10:00.000Z",
+    "marketType": "1ST_QUARTER_-_TO_SCORE_20+_POINTS",
+    "bspMarket": false,
+    "sgmMarket": true,
+    "inPlay": false,
+    "numberOfRunners": 2,
+    "numberOfActiveRunners": 2,
+    "numberOfWinners": 1,
+    "sortPriority": 15000,
+    "bettingType": "ODDS",
+    "marketStatus": "OPEN",
+    "runners": [
+     {
+      "selectionId": 13080925,
+      "handicap": 0,
+      "runnerName": "Jayson Tatum",
+      "sortPriority": 1,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/f85f9506-7f21-4906-939c-c7243eb73a04/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 3500,
+        "americanOddsInt": 3500
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 36
+        },
+        "fractionalOdds": {
+         "numerator": 35,
+         "denominator": 1
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 2800,
+         "americanOddsInt": 2800
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 29
+         },
+         "fractionalOdds": {
+          "numerator": 28,
+          "denominator": 1
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 21359550,
+      "handicap": 0,
+      "runnerName": "Jalen Brunson",
+      "sortPriority": 2,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/57db104a-9786-4023-b38e-b3d9697c53be/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/new_york_knicks.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "NYK",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 7000,
+        "americanOddsInt": 7000
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 71
+        },
+        "fractionalOdds": {
+         "numerator": 70,
+         "denominator": 1
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 6500,
+         "americanOddsInt": 6500
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 66
+         },
+         "fractionalOdds": {
+          "numerator": 65,
+          "denominator": 1
+         }
+        }
+       }
+      ]
+     }
+    ],
+    "canTurnInPlay": false,
+    "associatedMarkets": [
+     {
+      "eventId": 36220759,
+      "eventTypeId": 7522,
+      "externalMarketId": "42.618619304"
+     }
+    ],
+    "isSuperSubEnabled": false,
+    "isBetProtectEligible": false,
+    "shouldDisplayStatsInRunner": true,
+    "eachwayAvailable": false,
+    "legTypes": [
+     "SIMPLE_SELECTION"
+    ]
+   },
+   "739.193203484": {
+    "marketId": "739.193203484",
+    "eventTypeId": 7522,
+    "competitionId": 10547864,
+    "eventId": 36220759,
+    "marketName": "1st Quarter - To Score 6+ Points",
+    "marketTime": "2026-10-23T23:10:00.000Z",
+    "marketType": "1ST_QUARTER_-_TO_SCORE_6+_POINTS",
+    "bspMarket": false,
+    "sgmMarket": true,
+    "inPlay": false,
+    "numberOfRunners": 9,
+    "numberOfActiveRunners": 9,
+    "numberOfWinners": 1,
+    "sortPriority": 15000,
+    "bettingType": "ODDS",
+    "marketStatus": "OPEN",
+    "runners": [
+     {
+      "selectionId": 13080925,
+      "handicap": 0,
+      "runnerName": "Jayson Tatum",
+      "sortPriority": 1,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/f85f9506-7f21-4906-939c-c7243eb73a04/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -450,
+        "americanOddsInt": -450
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.222222222222222
+        },
+        "fractionalOdds": {
+         "numerator": 10,
+         "denominator": 45
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -470,
+         "americanOddsInt": -470
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.212765957446809
+         },
+         "fractionalOdds": {
+          "numerator": 10,
+          "denominator": 47
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 21359550,
+      "handicap": 0,
+      "runnerName": "Jalen Brunson",
+      "sortPriority": 2,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/57db104a-9786-4023-b38e-b3d9697c53be/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/new_york_knicks.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "NYK",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -235,
+        "americanOddsInt": -235
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.425531914893617
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 235
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -240,
+         "americanOddsInt": -240
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.416666666666667
+         },
+         "fractionalOdds": {
+          "numerator": 100,
+          "denominator": 240
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 9542187,
+      "handicap": 0,
+      "runnerName": "Karl-Anthony Towns",
+      "sortPriority": 3,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/365c4f2a-3bbc-435d-8d6d-bdde2a15d86f/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/new_york_knicks.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "NYK",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 142,
+        "americanOddsInt": 142
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 2.42
+        },
+        "fractionalOdds": {
+         "numerator": 142,
+         "denominator": 100
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 136,
+         "americanOddsInt": 136
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 2.36
+         },
+         "fractionalOdds": {
+          "numerator": 136,
+          "denominator": 100
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 5066351,
+      "handicap": 0,
+      "runnerName": "Paul George",
+      "sortPriority": 4,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/b87da10c-33e9-4c62-bc2e-52eb32f1f1ef/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 182,
+        "americanOddsInt": 182
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 2.82
+        },
+        "fractionalOdds": {
+         "numerator": 182,
+         "denominator": 100
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 188,
+         "americanOddsInt": 188
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 2.88
+         },
+         "fractionalOdds": {
+          "numerator": 188,
+          "denominator": 100
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 16012686,
+      "handicap": 0,
+      "runnerName": "OG Anunoby",
+      "sortPriority": 5,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/9c31fc33-b62f-4c80-aa50-6117b9769598/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/new_york_knicks.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "NYK",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 240,
+        "americanOddsInt": 240
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 3.4
+        },
+        "fractionalOdds": {
+         "numerator": 240,
+         "denominator": 100
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 230,
+         "americanOddsInt": 230
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 3.3
+         },
+         "fractionalOdds": {
+          "numerator": 230,
+          "denominator": 100
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 26799201,
+      "handicap": 0,
+      "runnerName": "Payton Pritchard",
+      "sortPriority": 6,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/80f47ab1-c699-487e-b101-1657e8cb9d74/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 270,
+        "americanOddsInt": 270
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 3.7
+        },
+        "fractionalOdds": {
+         "numerator": 27,
+         "denominator": 10
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 280,
+         "americanOddsInt": 280
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 3.8
+         },
+         "fractionalOdds": {
+          "numerator": 28,
+          "denominator": 10
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 21559329,
+      "handicap": 0,
+      "runnerName": "Derrick White",
+      "sortPriority": 7,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/8a2748e9-c708-465e-8e3f-596c6a7618c6/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "BOS",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 300,
+        "americanOddsInt": 300
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 4
+        },
+        "fractionalOdds": {
+         "numerator": 30,
+         "denominator": 10
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 310,
+         "americanOddsInt": 310
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 4.1
+         },
+         "fractionalOdds": {
+          "numerator": 31,
+          "denominator": 10
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 16421595,
+      "handicap": 0,
+      "runnerName": "Josh Hart",
+      "sortPriority": 8,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/33eb661f-1874-43c4-8393-959fe5244a58/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/new_york_knicks.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "NYK",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 320,
+        "americanOddsInt": 320
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 4.2
+        },
+        "fractionalOdds": {
+         "numerator": 32,
+         "denominator": 10
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 350,
+         "americanOddsInt": 350
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 4.5
+         },
+         "fractionalOdds": {
+          "numerator": 35,
+          "denominator": 10
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 18970813,
+      "handicap": 0,
+      "runnerName": "Mikal Bridges",
+      "sortPriority": 9,
+      "result": {},
+      "runnerStatus": "ACTIVE",
+      "logo": "https://fdx-api.sportsbook.fanduel.com/images/headshots/nba/2026/1ce9dcdf-4921-41c3-8fea-5633dcab6da2/120x120.png",
+      "secondaryLogo": "https://assets.sportsbook.fanduel.com/images/team/nba/new_york_knicks.png",
+      "isPlayerSelection": true,
+      "teamAbbr": "NYK",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 350,
+        "americanOddsInt": 350
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 4.5
+        },
+        "fractionalOdds": {
+         "numerator": 35,
+         "denominator": 10
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 320,
+         "americanOddsInt": 320
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 4.2
+         },
+         "fractionalOdds": {
+          "numerator": 32,
+          "denominator": 10
+         }
+        }
+       }
+      ]
+     }
+    ],
+    "canTurnInPlay": false,
+    "associatedMarkets": [
+     {
+      "eventId": 36220759,
+      "eventTypeId": 7522,
+      "externalMarketId": "42.618619299"
+     }
+    ],
+    "isSuperSubEnabled": false,
+    "isBetProtectEligible": false,
+    "shouldDisplayStatsInRunner": true,
+    "eachwayAvailable": false,
+    "legTypes": [
+     "SIMPLE_SELECTION"
+    ]
+   },
+   "739.192984561": {
+    "marketId": "739.192984561",
+    "eventTypeId": 7522,
+    "competitionId": 10547864,
+    "eventId": 36220759,
+    "marketName": "Moneyline",
+    "marketTime": "2026-10-23T23:10:00.000Z",
+    "marketType": "MONEY_LINE",
+    "bspMarket": false,
+    "sgmMarket": true,
+    "inPlay": false,
+    "numberOfRunners": 2,
+    "numberOfActiveRunners": 2,
+    "numberOfWinners": 1,
+    "sortPriority": -9000,
+    "bettingType": "ODDS",
+    "marketStatus": "OPEN",
+    "runners": [
+     {
+      "selectionId": 237482,
+      "handicap": 0,
+      "runnerName": "New York Knicks",
+      "sortPriority": 1,
+      "result": {
+       "type": "AWAY"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://assets.sportsbook.fanduel.com/images/team/nba/new_york_knicks.png",
+      "nameAbbr": "NY Knicks",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": 120,
+        "americanOddsInt": 120
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 2.2
+        },
+        "fractionalOdds": {
+         "numerator": 120,
+         "denominator": 100
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": 118,
+         "americanOddsInt": 118
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 2.18
+         },
+         "fractionalOdds": {
+          "numerator": 118,
+          "denominator": 100
+         }
+        }
+       }
+      ]
+     },
+     {
+      "selectionId": 60427,
+      "handicap": 0,
+      "runnerName": "Boston Celtics",
+      "sortPriority": 2,
+      "result": {
+       "type": "HOME"
+      },
+      "runnerStatus": "ACTIVE",
+      "logo": "https://assets.sportsbook.fanduel.com/images/team/nba/boston_celtics.png",
+      "nameAbbr": "BOS Celtics",
+      "winRunnerOdds": {
+       "americanDisplayOdds": {
+        "americanOdds": -142,
+        "americanOddsInt": -142
+       },
+       "trueOdds": {
+        "decimalOdds": {
+         "decimalOdds": 1.704225352112676
+        },
+        "fractionalOdds": {
+         "numerator": 100,
+         "denominator": 142
+        }
+       }
+      },
+      "previousWinRunnerOdds": [
+       {
+        "americanDisplayOdds": {
+         "americanOdds": -138,
+         "americanOddsInt": -138
+        },
+        "trueOdds": {
+         "decimalOdds": {
+          "decimalOdds": 1.72463768115942
+         },
+         "fractionalOdds": {
+          "numerator": 100,
+          "denominator": 138
+         }
+        }
+       }
+      ]
+     }
+    ],
+    "canTurnInPlay": true,
+    "associatedMarkets": [
+     {
+      "eventId": 36220759,
+      "eventTypeId": 7522,
+      "externalMarketId": "42.618317134"
+     }
+    ],
+    "isSuperSubEnabled": false,
+    "isBetProtectEligible": false,
+    "shouldDisplayStatsInRunner": true,
+    "eachwayAvailable": false,
+    "legTypes": [
+     "SIMPLE_SELECTION"
+    ]
+   }
+  }
+ }
+}

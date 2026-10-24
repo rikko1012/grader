@@ -1,0 +1,21 @@
+{
+ "file": "sharp-1_2026-10-23.jsonl.gz",
+ "commit": "66644ee",
+ "sha256": "827b54a47934beb23e58c5a1d1ec83036fe73f48d5a20e1896b080916ce16738",
+ "format": "gzipped JSON lines; one object per row, field t = 'forecast' (then 'settlement'); restore with python sports_scout.py import-forecasts <file>",
+ "forecasts": 6903,
+ "settlements": 0,
+ "distinct_offers": 6903,
+ "distinct_games": 29,
+ "by_league_platform": {"nba/prizepicks": 3160, "nba/underdog": 496, "nfl/prizepicks": 2792, "nfl/underdog": 455},
+ "recorded_at": {"2026-10-23T20:14:35Z": 3656, "2026-10-23T20:18:48Z": 3247},
+ "game_starts": {"first": "2026-10-23T23:00:00Z", "last": "2026-10-27T00:15:00Z"},
+ "all_recorded_before_start": true,
+ "model": "sharp-1",
+ "dispersion_fit": "6cf346280c",
+ "sharp_source": {"kalshi": 6903},
+ "schema": ["id", "recorded_at", "league", "platform", "offer_id", "player", "player_key", "team", "game", "start", "market", "line", "odds_type", "sides_offered", "side", "chance", "push", "multiplier", "eff", "sharp_source", "sharp_line", "sharp_p_over", "sharp_books", "sharp_limit", "gap", "far", "sharp_method", "sharp_rungs", "sharp_spread", "base_mean", "base_chance", "base_games", "model", "fit", "injury", "role", "book_consensus"],
+ "schema_notes": "role and book_consensus are empty in every row: the rows were written before those columns existed (the export added them as empty). The later factors column is absent.",
+ "clock": "prospective: the two recorded_at values are the real wall-clock times of the two `record` runs. No row in this file was written with an artificial clock. The artificial-clock rows of this session (a simulated +11 minute second pass) exist only in the sportsbook quote storage test (books.db, scratch only), never in a forecast log, and are not committed.",
+ "evaluation": "prospective out-of-sample once settled: settle after the games (NBA from about 2026-10-24 05:00Z, NFL 2026-10-25 to 27), then python sports_scout.py report"
+}
