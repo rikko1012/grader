@@ -45,6 +45,11 @@ from pathlib import Path
 from . import config
 from .contracts import ContractError, Forecast, from_dict, now_utc
 
+def _archive_schema2():
+    from .archive import SCHEMA2                        # CREATE TABLE / CREATE INDEX only
+    return SCHEMA2
+
+
 def _archive_schema():
     from .archive import SCHEMA                         # CREATE TABLE / CREATE INDEX only
     return SCHEMA
@@ -89,6 +94,7 @@ MIGRATIONS = [
         """CREATE TABLE IF NOT EXISTS forecast_keys (
              input_key TEXT PRIMARY KEY, forecast_id TEXT NOT NULL, league TEXT, known_at TEXT NOT NULL)""",
     ]),
+    (5, list(_archive_schema2())),                      # per-identity archive index arch-2 (sports/archive.py)
 ]
 CURRENT_SQL = "late = 0"                           # the predicate every 'current' reader adds (see module docstring)
 UNIQUE_REVISION_INDEX = ("CREATE UNIQUE INDEX IF NOT EXISTS records_ident_rev ON records "
@@ -581,8 +587,7 @@ def _archive_span_latest(con, cond, args, limit):
                         list(args) + [int(limit)]).fetchall()
     rids = [r[0] for r in picks]
     got = {}
-    for i in range(0, len(rids), 500):
-        part = rids[i:i + 500]
+    for part in _archive().fetch_order(con, rids):  # grouped by archive file: each file is decoded once
         for r in con.execute(f"SELECT * FROM records_all WHERE rid IN ({','.join('?' * len(part))})", part):
             got[r["rid"]] = r
     return [got[x] for x in rids if x in got]
