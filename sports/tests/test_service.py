@@ -445,11 +445,14 @@ def test_backoff_is_jittered_and_capped():
 
 
 # ------------------------------------------------------------------------------------------ deploy config / process
-def _render_services():
+SPORTS_TEMPLATE = "deploy/render.sports-api.yaml"
+
+
+def _render_services(rel="render.yaml"):
     """Tiny render.yaml reader (no yaml dependency in CI): service name -> {env key: (value or None if sync:false)}."""
     from pathlib import Path
     out, cur, key = {}, None, None
-    for line in (Path(__file__).resolve().parents[2] / "render.yaml").read_text(encoding="utf-8").splitlines():
+    for line in (Path(__file__).resolve().parents[2] / rel).read_text(encoding="utf-8").splitlines():
         s = line.split("#", 1)[0].rstrip()
         if s.strip().startswith("name:") and line.startswith("    name:"):
             cur = out.setdefault(s.split(":", 1)[1].strip(), {})
@@ -464,15 +467,39 @@ def _render_services():
 
 
 def test_render_config_keeps_every_sports_flag_off_and_secrets_out_of_git():
-    svc = _render_services()
+    svc = _render_services() | _render_services(SPORTS_TEMPLATE)
     assert {"cs2-scout", "scout-sports-api"} <= set(svc)
     for name in ("cs2-scout", "scout-sports-api"):
-        for f in ("SPORTS_UI", "SPORTS_API", "SPORTS_INGEST", "SPORTS_TRAIN"):
+        for f in ("SPORTS_UI", "SPORTS_API", "SPORTS_INGEST", "SPORTS_TRAIN", "SPORTS_ASSISTANT"):
             assert svc[name].get(f, "0") == "0", (name, f)
         assert "SPORTS_TOKEN_SECRET" in svc[name] and svc[name]["SPORTS_TOKEN_SECRET"] is None   # sync: false
     assert svc["cs2-scout"]["SPORTS_API_MODE"] == "service"
     s = svc["scout-sports-api"]
     assert s["SPORTS_DATA_DIR"] == "/sports-data" and s["ODDS_API_KEY"] is None and s["ADMIN_TOKEN"] is None
+    assert s["ANTHROPIC_API_KEY"] is None
+
+
+def test_paid_sports_service_is_only_in_the_opt_in_template_not_the_synced_blueprint():
+    """The root render.yaml is auto-synced: a service / disk declared there is created and billed on merge whatever the
+    flags say. The paid scout-sports-api service + its 20 GB disk live only in the opt-in template, which claims no
+    authorization it does not have."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    rnd = (root / "render.yaml").read_text(encoding="utf-8")
+    assert set(_render_services()) == {"cs2-scout"}
+    code = "\n".join(line.split("#", 1)[0] for line in rnd.splitlines())
+    for paid in ("scout-sports-api", "scout-sports-data", "Dockerfile.sports", "sports.service"):
+        assert paid not in code, paid
+    assert code.count("disk:") == 1 and "name: cs2-scout-data" in code
+    tpl = (root / SPORTS_TEMPLATE).read_text(encoding="utf-8")
+    assert set(_render_services(SPORTS_TEMPLATE)) == {"scout-sports-api"}
+    assert "name: scout-sports-data" in tpl and "sizeGB: 20" in tpl and "plan: standard" in tpl
+    head = tpl.split("services:", 1)[0].lower()
+    assert "opt-in" in head and "not authorized" in head and "paid" in head and "pending a staging" in head
+    for claim in ("owner approved", "purchase approved", "approved 20"):
+        assert claim not in tpl.lower() and claim not in rnd.lower(), claim
+    # nothing else in the repository is a second Blueprint Render could pick up
+    assert not list(root.glob("render.y*ml.*")) and not (root / "render.yml").exists()
 
 
 def test_the_service_process_starts_with_flags_off_and_serves_nothing(tmp_path):

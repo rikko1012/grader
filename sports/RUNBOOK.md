@@ -166,13 +166,20 @@ prebuilt value (HMAC-tagged pickle under `<SPORTS_DATA_DIR>/prebuilt/`, key deri
 falls back to a request-time build on a miss (counted in `/api/sports/admin/ops` -> `prebuilt.stats`). The slips leg
 pool (~2 s cold build, slips agent's measurement) is the first entry.
 
-## 6. Create the Render resources (owner, Render dashboard - owner approved 2026-10-23)
+## 6. Create the Render resources (owner, Render dashboard - NOT authorized yet)
 
-We have no Render API access; these are the owner's clicks. Nothing here turns Sports on.
+We have no Render API access; these are the owner's clicks. Nothing here turns Sports on, but steps 1-8 create
+**paid** resources: a `Standard` web service and a 20 GB persistent disk, both billed monthly from creation whatever
+the `SPORTS_*` flags say. The current owner authorization covers only a necessary cheapest paid Postgres; it does
+**not** cover this service or its disk. Do not run steps 1-8 until the owner explicitly authorizes these resources.
 
-If cs2-scout is managed by a **Blueprint with auto-sync**, merging `render.yaml` creates `scout-sports-api` by itself
-(Render then asks for the `sync: false` values) and adds the sports variables to cs2-scout (which restarts it, flags
-at 0). Otherwise create it by hand:
+The service is declared only in the opt-in template `deploy/render.sports-api.yaml`, **not** in the root
+`render.yaml`: the root Blueprint is auto-synced, so a service / disk declared there would be created and billed by
+the merge itself (flags off do not prevent Blueprint provisioning). The root file carries only cs2-scout's sports
+variables (all `0` / `sync: false`). Removing the declaration from the root file does not delete a service that a
+sync already created - check the Render dashboard for `scout-sports-api` / `scout-sports-data` and delete or suspend
+them if they exist without authorization. Once authorized, either point a separate Blueprint at the template path
+or create the service by hand with the same values:
 
 1. Render dashboard -> **New +** -> **Web Service** -> **Build and deploy from a Git repository** -> repository
    `rikko1012/cs2-scout` -> **Connect**.
@@ -375,11 +382,15 @@ sports paths identical to unknown routes - `test_rollback_is_flags_off_even_with
 
 ## 12. Remaining blockers / open items (service scope)
 
-1. **+10% esports p99 budget unproven in production** (section 11): needs a staging run with `scout-sports-api` on
-   its own Render instance. Owner action: create the resources (section 6), then run the load script against staging.
-2. **Render resources are owner clicks** (no Render API access here): service `scout-sports-api` (Standard), disk
-   `scout-sports-data` 20 GB, secrets `SPORTS_TOKEN_SECRET` (both services), `ADMIN_TOKEN`, `ODDS_API_KEY`,
-   `ANTHROPIC_API_KEY` (only for the assistant). Upgrade to Pro before `SPORTS_TRAIN=1`.
+1. **+10% esports p99 budget FAILED locally (+14%, section 11) - pending staging.** Needs a staging run with
+   `scout-sports-api` on its own Render instance; member enablement stays blocked until esports p99 is within +10%
+   there. That staging run needs the paid resources of item 2 first.
+2. **Render resources are owner clicks and are NOT authorized** (no Render API access here): service
+   `scout-sports-api` (Standard), disk `scout-sports-data` 20 GB - declared only in the opt-in template
+   `deploy/render.sports-api.yaml`, never in the auto-synced root `render.yaml`. The current authorization covers
+   only a necessary cheapest paid Postgres. Secrets once authorized: `SPORTS_TOKEN_SECRET` (both services),
+   `ADMIN_TOKEN`, `ODDS_API_KEY`, `ANTHROPIC_API_KEY` (only for the assistant). Upgrade to Pro before
+   `SPORTS_TRAIN=1`.
 3. **Store retention / compaction does not exist yet**: at ~0.3 GB/day the 16 GB cap is reached in ~7 weeks;
    ingestion then pauses itself (`store_full_ingest_paused`). Needs a retention job before that.
 4. `sports/model/dists.py` imports scipy -> `test_production_needs_no_scipy_or_pandas` fails on the integration head

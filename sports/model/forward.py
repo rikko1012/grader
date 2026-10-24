@@ -335,18 +335,22 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
             # market candidates on the same offer
             per, reasons = market.eligible_quotes(o, quotes.get((o.event_id, o.player_id, o.stat), []), events,
                                                   forecast_at, dnp)
-            qids = tuple(v[0] for v in per.values())
+            # mi-1 and mc-1 combine exactly the registered sources (section 10); a direct book feed (amendment A4) is
+            # only ever its own single-source candidate mkt-<book>. With no direct-book quote per_c == per: unchanged
+            per_c = market.consensus_sources(per)
+            qids = tuple(v[0] for v in per_c.values())
             if per:
-                mi = market.market_informed(pmf, lo, mean, per)
+                mi = market.market_informed(pmf, lo, mean, per_c) if per_c else None
                 if mi is not None:
                     pmf_mi, cfac = mi
                     fc2, pol2 = build_forecast(o, rid, forecast_at, MARKET_INFORMED_VERSION, f"sm-1:{art['sha']}",
                                                pmf_mi, lo, float(dists.mean_of(pmf_mi[None, :], ks)[0]),
-                                               (rid,) + qids, ["market_informed", "sources:" + "+".join(sorted(per))],
+                                               (rid,) + qids, ["market_informed", "sources:" + "+".join(sorted(per_c))],
                                                data_version, f"mi-1:c={cfac:.6f}")
-                    written.append(("mi-1", fc2, pol2, pmf_mi, {"row": row, "sources": per}))
-                for name, srcs in [(market.VERSION_CONSENSUS, None)] + [(f"mkt-{s}", [s]) for s in sorted(per)]:
-                    res = market.consensus(o, per, srcs)
+                    written.append(("mi-1", fc2, pol2, pmf_mi, {"row": row, "sources": per_c}))
+                for name, srcs in ([(market.VERSION_CONSENSUS, None)] if per_c else []) + \
+                        [(f"mkt-{s}", [s]) for s in sorted(per)]:
+                    res = market.consensus(o, per_c if name == market.VERSION_CONSENSUS else per, srcs)
                     if res is None:
                         continue
                     po, pu, pp, used = res

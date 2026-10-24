@@ -35,4 +35,9 @@ SOURCES = {
     "oddsapi": {"key_env": "ODDS_API_KEY", "verified": True, "consensus": True},
     "thunderpick": {"key_env": "THUNDERPICK_API_KEY", "verified": False, "consensus": False},
     "oddspapi": {"key_env": "ODDSPAPI_API_KEY", "verified": False, "consensus": False},
+    # the books' own public feeds (books/fanduel.py, books/betrivers.py), stored as sc-1 offers by books/bridge.py:
+    # single-source market candidates mkt-fanduel / mkt-betrivers only - NOT in mc-1 / mi-1, whose registered source
+    # set (REGISTER.md section 10) is unchanged (amendment A4)
+    "fanduel": {"key_env": None, "verified": True, "consensus": False},
+    "betrivers": {"key_env": None, "verified": True, "consensus": False},
 }

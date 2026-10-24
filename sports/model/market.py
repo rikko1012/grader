@@ -1,7 +1,8 @@
 """Market candidates (REGISTER.md 10, frozen 2026-10-23 before any evaluation; forward only - no historical quotes):
 
   mc-1          market-only CONSENSUS of every eligible verified source
-  mkt-<source>  market-only, one source alone (kalshi, polymarket, oddsapi:<book>) - each book evaluated on its own
+  mkt-<source>  market-only, one source alone (kalshi, polymarket, oddsapi:<book>, and the direct book feeds fanduel /
+                betrivers - amendment A4) - each book evaluated on its own
   mi-1          market-informed: location solved from the same eligible quotes, shape = sm-1's calibrated PMF
 
 Eligibility per quote (same canonical event, player, stat, full-game scope, ordinary main / ladder line):
@@ -50,8 +51,23 @@ def _inv(x):
     return 1 / (1 + math.exp(-x))
 
 
+# the books' own public feeds (sports/books/bridge.py): judged by the SAME per-book rule as The Odds API's books, but
+# only as single-source candidates mkt-<book> - REGISTER.md section 10 amendment A4; mc-1 / mi-1 keep the registered
+# source set (in_consensus)
+DIRECT_BOOKS = ("fanduel", "betrivers")
+
+
 def source_of(platform):
     return platform if not platform.startswith("oddsapi:") else platform
+
+
+def in_consensus(source):
+    """The sources mc-1 and mi-1 combine, exactly as registered (section 10): Kalshi, Polymarket, each Odds API book."""
+    return source in ("kalshi", "polymarket") or source.startswith("oddsapi:")
+
+
+def consensus_sources(per_source):
+    return {s: v for s, v in per_source.items() if in_consensus(s)}
 
 
 def quote_prob(q, event, forecast_at, last_seen=None, dnp_share=0.0):
@@ -84,7 +100,7 @@ def quote_prob(q, event, forecast_at, last_seen=None, dnp_share=0.0):
             return None, "no liquidity"
         mid = (s.bid + s.ask) / 2
         return min(0.99, mid / (1 - dnp_share)), None
-    if q.platform.startswith("oddsapi:"):
+    if q.platform.startswith("oddsapi:") or q.platform in DIRECT_BOOKS:
         o, u = q.side("over"), q.side("under")
         if not (o and u and o.offered and u.offered and o.price and u.price and o.price > 1 and u.price > 1):
             return None, "not a two-sided priced pair"

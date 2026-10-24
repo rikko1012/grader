@@ -183,16 +183,23 @@ def parse_summary(body, family):
 
 
 def summary(lg, event_id, refresh=False):
+    return summary_and_raw(lg, event_id, refresh)[0]
+
+
+def summary_and_raw(lg, event_id, refresh=False):
+    """-> (parsed box score, raw ESPN body or None when it came from the cache). The raw body lets the canonical
+    settlement feed the game store (sports/games) from the SAME request instead of a second one."""
     key = f"{lg['key']}:{event_id}"
     hit = None if refresh else cache.get("espn:summary", key)
     if hit and hit.get("completed"):
-        return hit                                  # a final box score never changes
+        return hit, None                            # a final box score never changes
     hit = None if refresh else cache.get("espn:summary", key, 300)
     if hit:
-        return hit
-    data = parse_summary(net.get_json(f"{SITE}/{_path(lg)}/summary", params={"event": event_id}), lg["family"])
+        return hit, None
+    raw = net.get_json(f"{SITE}/{_path(lg)}/summary", params={"event": event_id})
+    data = parse_summary(raw, lg["family"])
     cache.put("espn:summary", key, data)
-    return data
+    return data, raw
 
 
 def injuries(lg, refresh=False):

@@ -2,7 +2,8 @@
 at import time. Run it as its own service / cron:
 
   python -m sports.worker migrate                       create / upgrade <SPORTS_DATA_DIR>/canonical.db (additive)
-  python -m sports.worker ingest nba nfl [--sources espn,pp,ud,kalshi,injuries,oddsapi]   one cycle   (SPORTS_INGEST)
+  python -m sports.worker ingest nba nfl [--sources espn,pp,ud,kalshi,injuries,oddsapi,polymarket,books,games]
+                                                        one cycle                                     (SPORTS_INGEST)
   python -m sports.worker loop nba nfl --every 10       ingest every N minutes + settle hourly       (SPORTS_INGEST)
   python -m sports.worker settle [nba nfl]              settle stored offers of final games           (SPORTS_INGEST)
   python -m sports.worker verify nba --date YYYY-MM-DD  Kalshi settled values vs ESPN box scores      (SPORTS_INGEST)
@@ -19,6 +20,17 @@ PrizePicks 1/2 s, Underdog 1/s).
 
 Jobs are idempotent (job_key includes the source and a time bucket; writes are content-hashed) and resumable (a job
 that died 'running' is retried from its saved cursor).
+
+This is the ONE scheduled collector (the sports service's ingest-loop child). Each source is polled here once:
+  espn / injuries / pp / ud / kalshi   ESPN events + rosters, the injury report, the pick'em boards, Kalshi props
+  oddsapi      The Odds API through books/sources.oddsapi_ingest (credit ledger; events and players resolved)
+  polymarket   books/sources.polymarket_ingest
+  books        FanDuel / BetRivers own feeds (+ OddsPapi when its guard allows): books/worker.run_once, each game
+               read stored as quote history AND as sc-1 offers (books/bridge.py) from the same fetch
+  games        sports/games collect.tick: pre-game context (pickcenter, predictor, NWS weather), ESPN-supplied
+               DraftKings prop lines, Kalshi game ladders, BPI / FPI, rosters / injuries through the same cached reads
+               as above (no second request)
+Settlement reads each final box score once and hands the same body to the game store (box score + play-by-play).
 """
 from __future__ import annotations
 
@@ -33,7 +45,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutTimeout
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
-from . import adapters, cache, config, flags, identity, kalshi, lines, net, oddsapi, settlement, store
+from . import adapters, cache, config, flags, identity, kalshi, lines, net, settlement, store
 from .contracts import now_utc, parse_utc
 
 CONCURRENCY = int(os.environ.get("SPORTS_WORKER_CONCURRENCY", "2"))
@@ -43,6 +55,10 @@ MAX_MB = int(os.environ.get("SPORTS_WORKER_MAX_MB", "768"))
 STORE_MAX_MB = float(os.environ.get("SPORTS_STORE_MAX_MB", "1500"))
 SETTLE_LOOKBACK_DAYS = 4                 # box scores re-read for corrections this long after a game
 WINDOW_DAYS = {"nba": 2, "wnba": 2, "cbb": 2, "nfl": 7, "cfb": 7}
+SOURCES = ("espn", "pp", "ud", "kalshi", "injuries", "oddsapi", "polymarket", "books", "games")
+# cmd_ingest runs leagues on parallel threads; the books job and the game tick share per-process leases and
+# league-independent work (blocked-book probes, holds), so they run one league at a time, as one pass did before
+_COLLECT_LOCK = threading.Lock()
 ESPN_SITE = "https://site.api.espn.com/apis/site/v2/sports"
 
 
@@ -274,7 +290,7 @@ def _store_offers(con, platform_prefix, league, batch, observed_at, read_ok):
         "quarantine_reasons": {f"{s}:{r}": n for (s, r), n in batch.reason_counts().items()}}
 
 
-def ingest_league(con, league, sources=("espn", "pp", "ud", "kalshi", "injuries", "oddsapi")):
+def ingest_league(con, league, sources=SOURCES):
     _check_budget()
     lg = config.league(league)
     observed_at = now_utc()
@@ -315,35 +331,45 @@ def ingest_league(con, league, sources=("espn", "pp", "ud", "kalshi", "injuries"
             out["injuries"] = {k: res[k] for k in ("inserted", "duplicate", "revision", "invalid")}
         except (net.HttpError, ValueError) as e:
             out["injuries"] = {"ok": False, "error": str(e)[:200]}
-    if "oddsapi" in sources:
-        out["oddsapi"] = {"ok": False, "error": "ODDS_API_KEY not set (optional)"} if not config.odds_api_key() \
-            else _ingest_oddsapi(con, lg, observed_at)
+    if "oddsapi" in sources:                        # the one Odds API path (ledger; events / players resolved)
+        from .books import sources as book_sources
+        out["oddsapi"] = book_sources.oddsapi_ingest(con, league, observed_at, resolver, _espn_teams(lg))
+    if "polymarket" in sources:
+        from .books import sources as book_sources
+        out["polymarket"] = book_sources.polymarket_ingest(con, league, observed_at, resolver)
+    if "books" in sources:
+        out["books"] = _ingest_books(con, lg, resolver)
+    if "games" in sources:
+        out["games"] = _ingest_games(lg)
     return out
 
 
-def _ingest_oddsapi(con, lg, observed_at):
+def _ingest_books(con, lg, resolver):
+    """FanDuel / BetRivers / OddsPapi through the books worker; every successful game read also becomes sc-1 offers."""
+    from .books import bridge, store as book_store, worker as book_worker
+    with _COLLECT_LOCK:
+        bdb = book_store.connect()
+        try:
+            sink = bridge.sink(con, lambda league: resolver)
+            res = book_worker.run_once(bdb, (lg["key"],), sink=sink)
+            res["sc1_offers"] = sink.totals
+            return res
+        except Exception as e:                          # noqa: BLE001 - one source never stops the cycle
+            return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:200]}"}
+        finally:
+            bdb.close()
 
-    try:
-        sport = lg.get("odds_api")
-        key = config.odds_api_key()
-        events = net.get_json(f"{oddsapi.BASE}/sports/{sport}/events", params={"apiKey": key})
-        b = adapters.Batch()
-        from .books import ledger                       # credit budget shared with sports/books (free tier 500/mo)
-        mk = oddsapi.CORE.get(lg["family"], [])
-        partial = False
-        for ev in sorted(events, key=lambda e: e.get("commence_time") or "")[:16]:
-            ok, why = ledger.reserve("oddsapi", len(mk), "worker ingest")
-            if not ok:
-                b.q("offer", "oddsapi", ev.get("id"), f"credit_budget: {why}")
-                partial = True                          # a partial read never marks unseen offers removed
-                break
-            body = net.get_json(f"{oddsapi.BASE}/sports/{sport}/events/{ev['id']}/odds",
-                                params={"apiKey": key, "regions": "us", "oddsFormat": "decimal",
-                                        "markets": ",".join(oddsapi.CORE.get(lg["family"], []))})
-            b.extend(adapters.oddsapi_offers(body, lg, observed_at))
-        return _store_offers(con, "oddsapi", lg["key"], b, observed_at, not partial)
-    except (net.HttpError, ValueError, KeyError) as e:
-        return {"ok": False, "error": str(e).replace(config.odds_api_key() or "\0", "***")[:200]}
+
+def _ingest_games(lg):
+    from .games import collect, store as game_store
+    with _COLLECT_LOCK:
+        gdb = game_store.connect()
+        try:
+            return collect.tick(gdb, (lg["key"],))
+        except Exception as e:                          # noqa: BLE001
+            return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:200]}"}
+        finally:
+            gdb.close()
 
 
 # ------------------------------------------------------------------------------------------------------ settlement
@@ -359,9 +385,11 @@ def settle_league(con, league, ctx=None, now=None):
     for e in sorted(evs, key=lambda x: x.start_utc):
         espn_id = e.event_id.split(":")[-1]
         try:                                    # re-read within the lookback: ESPN corrects final box scores
-            summ = espn.summary(lg, espn_id, refresh=e.status == "final")   # (14 of 2,513 NBA values, AUDIT.md)
+            summ, raw = espn.summary_and_raw(lg, espn_id, refresh=e.status == "final")   # (14 of 2,513, AUDIT.md)
         except net.HttpError:
             continue
+        if raw is not None and summ.get("completed"):
+            _game_store_final(lg, espn_id, raw)         # the game store's box score + play-by-play: same request
         observed_at = now_utc()
         if summ.get("completed") and e.status != "final":
             e = replace(e, status="final", observed_at=observed_at, known_at=observed_at)
@@ -378,8 +406,9 @@ def settle_league(con, league, ctx=None, now=None):
                     obs.setdefault(r.participant_id, {})[r.stat] = r
             sts = []
             for _, o in store.offers(con, event_id=e.event_id, limit=100000):
-                if o.player_id is None or o.platform.startswith("oddsapi"):
-                    continue
+                if o.player_id is None or o.platform.startswith(("oddsapi", "oddspapi")) or \
+                        o.platform in ("fanduel", "betrivers"):
+                    continue                            # book prices are market references, never settled offers
                 sts += settlement.settle_offer(o, obs.get(o.player_id, {}), e, observed_at)
             c = settlement.record(con, sts)
             for k, v in c.items():
@@ -391,6 +420,21 @@ def settle_league(con, league, ctx=None, now=None):
     return out
 
 
+def _game_store_final(lg, espn_id, raw):
+    """Store a final game in sports/games from the settlement's own ESPN body (first read only; never breaks
+    settlement). NFL play roles need one extra core-plays request per game - unique data, fetched once."""
+    try:
+        from .games import collect, store as game_store
+        gdb = game_store.connect()
+        try:
+            if not game_store.has_game(gdb, lg["key"], espn_id):
+                collect.ingest_body(gdb, lg, espn_id, raw)
+        finally:
+            gdb.close()
+    except Exception:                                   # noqa: BLE001
+        traceback.print_exc()
+
+
 # ------------------------------------------------------------------------------------------------------------- CLI
 def _print(x):
     print(json.dumps(x, indent=1, default=str), flush=True)
@@ -399,8 +443,7 @@ def _print(x):
 def cmd_ingest(a, con):
     flags.require("SPORTS_INGEST")
     jobs = Jobs(con)
-    srcs = tuple(s.strip() for s in a.sources.split(",")) if a.sources else \
-        ("espn", "pp", "ud", "kalshi", "injuries", "oddsapi")
+    srcs = tuple(s.strip() for s in a.sources.split(",")) if a.sources else SOURCES
     results = {}
     with ThreadPoolExecutor(max_workers=max(1, CONCURRENCY)) as ex:
         futs = {lg: ex.submit(jobs.run, f"ingest:{lg}:{','.join(srcs)}:{bucket(a.bucket_min)}", "ingest",
@@ -432,7 +475,7 @@ def cmd_loop(a, con):
     writer: ~2,700 price revisions per league per read on 2026-10-23); settle hourly."""
     flags.require("SPORTS_INGEST")
     last_settle, last_kalshi = 0.0, 0.0
-    base = tuple(s.strip() for s in a.sources.split(",")) if a.sources else         ("espn", "pp", "ud", "kalshi", "injuries", "oddsapi")
+    base = tuple(s.strip() for s in a.sources.split(",")) if a.sources else SOURCES
     while True:
         rss = rss_mb()
         if rss and rss > MAX_MB:
