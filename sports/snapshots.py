@@ -517,8 +517,12 @@ def factors(fam, games, next_event, teams_out):
     return {"stats": out, "context": ctx, "not_held": NOT_HELD[fam]}
 
 
-def _engine_context(league, fam, now, pids, markets_rows, events, cur_team):
-    """Factor-engine context per board player (sports/player_context.py: one LeagueData load per board)."""
+def _engine_context(league, fam, now, pids, markets_rows, events, cur_team, root=None):
+    """Factor-engine context per board player (sports/player_context.py). The engine's league load does not fit this
+    3-minute job once the game store holds whole seasons (measured 319 MB RSS vs its 250 MB cap with 1,724 games), so
+    by default this build only WRITES what it wants (<league>/context_wanted.json) and EMBEDS the latest result of the
+    scheduled player-context job (<league>/player_context.json, sports/player_context.main). SPORTS_CONTEXT_INLINE=1
+    computes it here instead (tests / a workstation)."""
     from . import player_context
     wanted = {}
     for pid in pids:
@@ -533,6 +537,9 @@ def _engine_context(league, fam, now, pids, markets_rows, events, cur_team):
         wanted[pid] = {"team_id": tid, "opp_id": e.away_team_id if tid == e.home_team_id else e.home_team_id,
                        "event_id": e.event_id, "start_utc": e.start_utc, "home": tid == e.home_team_id,
                        "stats": sorted({r["stat"] for r in rows if r["event_id"] == e.event_id and r["scope"] == "full_game"})}
+    if root is not None and os.environ.get("SPORTS_CONTEXT_INLINE", "").strip().lower() not in ("1", "true", "yes"):
+        _write(root / "context_wanted.json", {"as_of": now, "wanted": wanted})
+        return player_context.read_result(root, now, set(wanted))
     try:
         return player_context.build(league, fam, now, wanted)
     except Exception as ex:                                     # noqa: BLE001 - context never breaks a build
@@ -788,7 +795,7 @@ def build(con, league, now=None, base=None, history=True):
     # players
     n_players = 0
     pl_dir, hi_dir = root / "players", root / "history"
-    ctx_by_pid, ctx_summary = _engine_context(league, fam, now, pids, markets_rows, events, cur_team)
+    ctx_by_pid, ctx_summary = _engine_context(league, fam, now, pids, markets_rows, events, cur_team, root)
     manifest["player_context"] = ctx_summary
     for pid in pids:
         rows = [r for r in markets_rows.values() if r["player_id"] == pid]

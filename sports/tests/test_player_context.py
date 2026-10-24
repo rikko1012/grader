@@ -103,3 +103,30 @@ def test_snapshot_player_file_carries_engine_section(built):
     assert not {"Usage rate", "Team / opponent pace", "Game total / spread"} & set(p["factors"]["not_held"])
     man = json.loads((built["root"] / "manifest.json").read_text(encoding="utf-8"))
     assert man["player_context"]["players"] >= 1
+
+
+def test_split_path_board_writes_wanted_job_computes_board_embeds(tmp_path, monkeypatch):
+    """Production path: the 3-minute snapshot build only writes what it wants; the player-context job computes;
+    the next snapshot build embeds the result one player file at a time."""
+    import json
+    from sports import snapshots, store as cstore
+    from sports.contracts import now_utc
+    monkeypatch.delenv("SPORTS_CONTEXT_INLINE")
+    monkeypatch.setenv("SPORTS_INGEST", "1")
+    root = snapshots.snap_root() / "nba"
+    root.mkdir(parents=True)
+    pid = "nba:player:espn:3134907"
+    wanted = {pid: {"team_id": "nba:team:espn:18", "opp_id": "nba:team:espn:2", "event_id": "nba:espn:1",
+                    "start_utc": "2026-10-24T23:00:00Z", "home": False, "stats": ["points"]}}
+    (root / "context_wanted.json").write_text(json.dumps({"as_of": now_utc(), "wanted": wanted}))
+    assert player_context.main(["build", "nba"]) == 0
+    res = json.loads((root / "player_context.json").read_text())
+    assert res["pids"] == [pid] and (root / "context" / "nba_player_espn_3134907.json").exists()
+    secs, summ = player_context.read_result(root, now_utc(), {pid})
+    assert secs.get(pid)["label"] == player_context.CONTEXT_LABEL and summ["computed_at"] == res["as_of"]
+    assert secs.get("nba:player:espn:999") is None
+    stale = (__import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+             + __import__("datetime").timedelta(hours=3)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    assert player_context.read_result(root, stale, {pid})[1]["state"].startswith("stale")
+    secs, _ = snapshots._engine_context("nba", "basketball", now_utc(), [], {}, {}, {}, root)   # the board side
+    assert json.loads((root / "context_wanted.json").read_text())["wanted"] == {}

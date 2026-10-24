@@ -91,6 +91,10 @@ def default_jobs():
                              flag="SPORTS_INGEST", cap_mb=80, cls=LIGHT, prio=4),
         # game store backfill (current + previous season, resumable, time-bounded) so the factor engine behind the
         # player page (sports/player_context.py) has whole seasons, not only the games since launch
+        # the engine's player-page context, out of the 3-minute ui-snapshots job (319 MB inline with whole seasons vs
+        # its 250 MB cap); ui-snapshots embeds the latest result one player file at a time (199 MB)
+        "player-context": dict(argv=_py("-m", "sports.player_context", "build", *lg), every_s=1800, timeout_s=600,
+                               flag="SPORTS_INGEST", cap_mb=260, cls=HEAVY, prio=5),   # 170 MB, 13 s (1,724 games)
         "games-backfill": dict(argv=_py("-m", "sports.games.backfill_job", "--budget", "120"), every_s=900,
                                timeout_s=300, flag="SPORTS_INGEST", cap_mb=60, cls=LIGHT, prio=6),   # 43-47 MB
         "slips-settle": dict(argv=_py("-m", "sports.slips", "settle"), every_s=3600, timeout_s=600,
