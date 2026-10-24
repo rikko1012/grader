@@ -69,7 +69,13 @@ R8. **Source time and observation time are separate** everywhere: `source_update
 | B8 | existing books.db: additive ADD COLUMN, rows kept, restart idempotent | books.db | test_b8_existing_books_db_is_migrated_additively | done |
 | B9 | provider vs observation times separate; each read stamped with its own read time (was: pass start) | books.db / books worker | test_b9_provider_and_observation_times_are_separate, test_b9_books_worker_stamps_each_read_with_its_own_time | done |
 | B10 | shared books lease: released after a pass, so a second league process runs next (one ingest-loop child runs both leagues in turn under _COLLECT_LOCK in the deployed config) | books.db | test_b_lease_is_released_so_the_other_league_process_runs_next | done (decision: no per-league lease; overlap is refused, not starved) |
-| C1-C4,C7-C9 | same checks | game-data store (games.db) | - | remaining |
+| G1 | prop A->B->A = 3 rows, factors read the final A; Kalshi market A->B->A and closed->reopened | games.db | test_line_correctness_games::test_g1_prop_a_b_a_is_three_rows_and_factors_read_the_final_a, test_g1_kalshi_market_a_b_a_and_closed_then_reopened | done |
+| G2 | A->A with a new provider time = freshness only (was: a new history row - provider_updated_at was in the change digest) | games.db | test_g2_a_a_with_a_new_source_time_is_freshness_not_a_line_change | done |
+| G3 | delayed prop / market / snapshot = late row; factors.py (_dk, _game_lines, _snapshot) skip late rows (was: MAX(id) let a late insert win); last_seen never rewinds | games.db | test_g3_delayed_older_response_is_history_never_current | done |
+| G4 | prop closed and reopened at the same line = open again | games.db | test_g4_prop_withdrawn_and_reopened_at_the_same_line | done |
+| G7 | 4 concurrent writer processes: one consistent current row, factors agree | games.db | test_g7_concurrent_writers_keep_one_consistent_current_row | done |
+| G8 | existing games.db: additive columns; digests written under the old rule still match (no one-time burst of rows) | games.db | test_g8_existing_games_db_is_migrated_additively_and_old_digests_still_match | done |
+| G9 | provider vs observation times separate | games.db | test_g9_provider_time_and_observation_time_are_separate | done |
 | C5 | board, card, slip pool + validation, new forecast use the same revision | snapshots / slips / forward | - | remaining |
 | C6 | earlier forecasts keep inputs, replay unchanged | forward | - | remaining |
 | C10 | settlement scores a forecast at its own line | settlement / learning / slips settle | - | remaining |
@@ -79,3 +85,4 @@ R8. **Source time and observation time are separate** everywhere: `source_update
 
 Checkpoint 1 (canonical store): `python -m pytest sports/tests -q` -> 430 passed, 10 skipped.
 Checkpoint 2 (books.db): `python -m pytest sports/tests -q` -> 443 passed, 10 skipped.
+Checkpoint 3 (games.db): `python -m pytest sports/tests -q` -> 451 passed, 10 skipped.

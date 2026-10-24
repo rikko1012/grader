@@ -23,6 +23,14 @@ store; every table here is named sports_game_*). Times are UTC ISO strings 'YYYY
   sports_game_line_state     per market / prop: its latest row and when it was last SEEN (staleness)
   sports_game_fetches        every collection request: kind, league, game, HTTP status, error, rows
   sports_game_settings       collector bookkeeping (last update times)
+
+Line correctness (sports/LINE_CORRECTNESS.md, same rules as the canonical store) for snapshots / market / prop lines:
+  - a row is written only when the content differs from the CURRENT row (sports_game_line_state.last_id): A -> B -> A
+    = three rows, the last current; A -> A moves only last_seen_at (MAX) and last_provider_updated_at (MAX)
+  - change content excludes the source's own clock (prop provider_updated_at is freshness, not a line change)
+  - a delayed response (older provider_updated_at when both have one and they differ, else observed before the
+    state's last_seen_at) is kept with late = 1 and never becomes current; readers (factors.py) skip late rows
+  - each save is one transaction under the write lock; additive migrations only
 """
 import hashlib
 import json
@@ -114,16 +122,19 @@ def connect(path=None, dsn=None):
     return db
 
 
+MIGRATIONS = (
+    ("sports_game_games", "ended_at", "TEXT"),
+    ("sports_game_snapshots", "late", "INTEGER NOT NULL DEFAULT 0"),
+    ("sports_game_market_lines", "late", "INTEGER NOT NULL DEFAULT 0"),
+    ("sports_game_prop_lines", "late", "INTEGER NOT NULL DEFAULT 0"),
+    ("sports_game_line_state", "last_provider_updated_at", "TEXT"),
+)
+
+
 def _migrate(db):
     """Columns added after a store was first created (additive only)."""
-    if db.pg:
-        have = {r["column_name"] for r in db.all("SELECT column_name FROM information_schema.columns WHERE "
-                                                 "table_name = 'sports_game_games'")}
-    else:
-        have = {r["name"] for r in db.all("PRAGMA table_info(sports_game_games)")}
-    if "ended_at" not in have:
-        db.execute("ALTER TABLE sports_game_games ADD COLUMN ended_at TEXT")
-        db.commit()
+    from ..books.store import migrate
+    migrate(db, MIGRATIONS)
     fill_ended_at(db)
 
 
@@ -183,42 +194,67 @@ def digest(data):
 
 
 def save_snapshot(db, league, event_id, kind, source, data, now=None):
-    """Append a context snapshot when it differs from the last one of its kind -> True when a row was written."""
-    d = digest(data)
+    """Append a context snapshot when it differs from the CURRENT one of its kind -> True when a current row was
+    written (a delayed older read is kept as late history and returns False)."""
     key = f"snap:{league}:{event_id}:{kind}:{source}"
-    st = db.one("SELECT last_id, digest FROM sports_game_line_state WHERE key = ?", (key,))
     t = iso(now)
-    if st and st["digest"] == d:
-        db.execute("UPDATE sports_game_line_state SET last_seen_at = ? WHERE key = ?", (t, key))
+    sql = ("INSERT INTO sports_game_snapshots (league, event_id, kind, source, observed_at, digest, data, late) "
+           "VALUES (?,?,?,?,?,?,?,?)")
+    db.begin_write(f"games:{key}")
+    try:
+        out = _save_one(db, key, "sports_game_snapshots", digest(data), None, None, t,
+                        lambda late: db.insert(sql, (league, event_id, kind, source, t, digest(data),
+                                                     json.dumps(data, default=str), late)))
         db.commit()
+    except BaseException:
+        db.rollback()
+        raise
+    return out
+
+
+def _state(db, key, tbl, rid, d, t, src=None):
+    db.execute("INSERT INTO sports_game_line_state (key, tbl, last_id, digest, first_seen_at, last_seen_at, "
+               "last_provider_updated_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT (key) DO UPDATE SET "
+               "last_id = excluded.last_id, digest = excluded.digest, last_seen_at = excluded.last_seen_at, "
+               "last_provider_updated_at = excluded.last_provider_updated_at", (key, tbl, rid, d, t, t, src))
+
+
+def _later(a, b):
+    return max(x for x in (a, b) if x) if (a or b) else None
+
+
+def _save_one(db, key, tbl, d, legacy_d, src, t, insert):
+    """The one current decision for a game-store line (inside the caller's write transaction). -> True when a new
+    CURRENT row was written."""
+    from ..books.store import is_late
+    st = db.one("SELECT last_id, digest, last_seen_at, last_provider_updated_at FROM sports_game_line_state "
+                "WHERE key = ?", (key,))
+    if st and st["digest"] in (d, legacy_d):          # unchanged (legacy_d: a digest written before the change rule)
+        db.execute("UPDATE sports_game_line_state SET last_seen_at = CASE WHEN last_seen_at IS NULL OR last_seen_at < ? "
+                   "THEN ? ELSE last_seen_at END, last_provider_updated_at = ?, digest = ? WHERE key = ?",
+                   (t, t, _later(st["last_provider_updated_at"], src), d, key))
         return False
-    rid = db.insert("INSERT INTO sports_game_snapshots (league, event_id, kind, source, observed_at, digest, data) "
-                    "VALUES (?,?,?,?,?,?,?)", (league, event_id, kind, source, t, d, json.dumps(data, default=str)))
-    _state(db, key, "sports_game_snapshots", rid, d, t)
-    db.commit()
+    if st and is_late(t, src, st["last_seen_at"], st["last_provider_updated_at"]):
+        insert(1)                                     # history, never current
+        return False
+    rid = insert(0)
+    _state(db, key, tbl, rid, d, t, src)
     return True
 
 
-def _state(db, key, tbl, rid, d, t):
-    db.execute("INSERT INTO sports_game_line_state (key, tbl, last_id, digest, first_seen_at, last_seen_at) VALUES "
-               "(?,?,?,?,?,?) ON CONFLICT (key) DO UPDATE SET last_id = excluded.last_id, digest = excluded.digest, "
-               "last_seen_at = excluded.last_seen_at", (key, tbl, rid, d, t, t))
-
-
-def _save_lines(db, tbl, cols, rows, keyf, changef, now):
+def _save_lines(db, tbl, cols, rows, keyf, changef, now, srcf=lambda r: None, legacyf=None):
     t, n = iso(now), 0
-    sql = f"INSERT INTO {tbl} " + _ins(cols)
-    for r in rows:
-        key = keyf(r)
-        d = digest(changef(r))
-        st = db.one("SELECT last_id, digest FROM sports_game_line_state WHERE key = ?", (key,))
-        if st and st["digest"] == d:
-            db.execute("UPDATE sports_game_line_state SET last_seen_at = ? WHERE key = ?", (t, key))
-            continue
-        rid = db.insert(sql, [dict(r, observed_at=t).get(c) for c in cols])
-        _state(db, key, tbl, rid, d, t)
-        n += 1
-    db.commit()
+    sql = f"INSERT INTO {tbl} " + _ins(cols + ("late",))
+    db.begin_write(f"games:{tbl}")
+    try:
+        for r in rows:
+            row = dict(r, observed_at=t)
+            n += _save_one(db, keyf(r), tbl, digest(changef(r)), digest(legacyf(r)) if legacyf else None, srcf(r), t,
+                           lambda late, row=row: db.insert(sql, [row.get(c) for c in cols] + [late]))
+        db.commit()
+    except BaseException:
+        db.rollback()
+        raise
     return n
 
 
@@ -235,8 +271,10 @@ def save_prop_lines(db, rows, now=None):
     """ESPN-supplied DraftKings prop lines -> new immutable rows when a prop's line or opening line changes."""
     return _save_lines(db, "sports_game_prop_lines", PROP_COLS, rows,
                        lambda r: f"prop:{r['source']}:{r['prop_key']}",
-                       lambda r: (r.get("line"), r.get("line_open"), r.get("status"), r.get("provider_updated_at")),
-                       now)
+                       lambda r: (r.get("line"), r.get("line_open"), r.get("status")), now,
+                       srcf=lambda r: r.get("provider_updated_at"),
+                       legacyf=lambda r: (r.get("line"), r.get("line_open"), r.get("status"),
+                                          r.get("provider_updated_at")))
 
 
 def save_athletes(db, league, rows, now=None):

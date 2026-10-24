@@ -248,7 +248,7 @@ class LeagueData:
 
 def _snapshot(db, league, event_id, kind, as_of):
     r = db.one("SELECT data, observed_at FROM sports_game_snapshots WHERE league = ? AND event_id = ? AND kind = ? AND "
-               "observed_at <= ? ORDER BY id DESC LIMIT 1", (league, event_id, kind, iso(as_of)))
+               "observed_at <= ? AND late = 0 ORDER BY id DESC LIMIT 1", (league, event_id, kind, iso(as_of)))
     return (json.loads(r["data"]), r["observed_at"]) if r else (None, None)
 
 
@@ -265,7 +265,7 @@ def _game_lines(db, league, event_id, team_id, home_id, away_id, as_of, out, mis
         for k in ("spread", "game_total", "team_total"):
             missing[k] = "no ESPN pickcenter line before as_of"
     rows = db.all("SELECT m.* FROM sports_game_market_lines m JOIN (SELECT provider_market_id, MAX(id) AS id FROM "
-                  "sports_game_market_lines WHERE league = ? AND event_id = ? AND observed_at <= ? GROUP BY "
+                  "sports_game_market_lines WHERE league = ? AND event_id = ? AND observed_at <= ? AND late = 0 GROUP BY "
                   "provider_market_id) z ON z.id = m.id", (league, event_id, iso(as_of)))
     imp = kalshi_lines.implied(rows, home_id, away_id) if rows else None
     if imp and imp["home_win"] is not None:
@@ -307,7 +307,7 @@ def _power(db, league, team_id, as_of):
 def _dk(db, league, event_id, athlete_id, market, as_of):
     r = db.one("SELECT line, line_open FROM sports_game_prop_lines WHERE id = (SELECT MAX(id) FROM "
                "sports_game_prop_lines WHERE league = ? AND event_id = ? AND athlete_id = ? AND market = ? AND "
-               "period = 'game' AND kind = 'line' AND observed_at <= ?)",
+               "period = 'game' AND kind = 'line' AND observed_at <= ? AND late = 0)",
                (league, event_id, str(athlete_id), market, iso(as_of)))
     return (r["line"], r["line_open"]) if r else (None, None)
 
