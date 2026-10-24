@@ -1,0 +1,4 @@
+{"job": "model-fit", "rc": 0, "wall_s": 15.2, "peak_rss_mb": 305.7, "peak_rss_self_mb": 305.7, "data_mb_before": 434.8, "data_mb_after": 435.4, "offline": true, "t": "2026-10-24T01:32:54Z"}
+{"job": "model-forecast", "rc": 0, "wall_s": 43.8, "peak_rss_mb": 273.2, "peak_rss_self_mb": 273.2, "data_mb_before": 435.4, "data_mb_after": 484.1, "offline": true, "t": "2026-10-24T01:33:38Z"}
+{"job": "ui-snapshots", "rc": 0, "wall_s": 8.4, "peak_rss_mb": 168.1, "peak_rss_self_mb": 168.1, "data_mb_before": 484.2, "data_mb_after": 493.8, "offline": true, "t": "2026-10-24T01:33:47Z"}
+{"job": "prebuilt", "rc": 0, "wall_s": 3.6, "peak_rss_mb": 167.5, "peak_rss_self_mb": 167.5, "data_mb_before": 493.8, "data_mb_after": 498.9, "offline": true, "t": "2026-10-24T01:33:50Z"}

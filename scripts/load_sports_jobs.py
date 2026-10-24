@@ -47,7 +47,8 @@ def run(name):
     env = {k: v for k, v in os.environ.items() if not k.startswith("SPORTS_")}
     env.update({"SPORTS_DATA_DIR": data, "PYTHONPATH": code, "SPORTS_INGEST": "1", "SPORTS_TRAIN": "1",
                 "SPORTS_API": "1", "SPORTS_ASSISTANT": "1", "SPORTS_TOKEN_SECRET": "s" * 40, "PYTHONIOENCODING": "utf-8"})
-    env.update({k: v for k, v in os.environ.items() if k.startswith("SPORTS_JOB_") or k in ("MALLOC_ARENA_MAX",)})
+    env.update({k: v for k, v in os.environ.items() if k.startswith("SPORTS_JOB_") or k in (
+        "MALLOC_ARENA_MAX", "OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "SPORTS_WORKER_CONCURRENCY")})
     if offline:
         env.update({"HTTP_PROXY": "http://127.0.0.1:9", "HTTPS_PROXY": "http://127.0.0.1:9", "NO_PROXY": ""})
     before = size_mb(data)
