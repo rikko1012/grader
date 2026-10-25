@@ -11,8 +11,8 @@ DEFINITIONS
                     GATE = 300 settled props per league before any "validated" wording ("n of 300 settled props - not
                     yet validated" until then).
   projection        error = settled value - projection mean; MAE and bias (mean error).
-  Scout lean        the forecast's side only when P(side) > P(other side) AND the projection mean is on that side of
-                    the line (same rule as the sheets). Hit rate = wins / (wins + losses); pushes listed apart.
+  Scout lean        the board's lean rule (SportsRows.leanOf, sports/UI.md): Scout records only (market-only models
+                    have none); Over when P(Over) > 50% and the mean is above the line, Under mirrored. Hit rate = wins / (wins + losses); pushes listed apart.
   intervals         95% percentile bootstrap over GAMES (all rows of a game resampled together), 1,000 draws, seed 7;
                     none with fewer than 2 games.
   calibration       P(over | no push) in 10-point bands: mean stated chance vs observed Over share (pushes left out).
@@ -63,12 +63,16 @@ def cluster_ci(items, stat, reps=1000, seed=7):
 
 
 def lean_side(r):
+    """The board's lean (sports/UI.md "Prop board table", SportsRows.leanOf in web/sports/table.js - the same rule,
+    applied server-side because results are scored in the worker): market-only records have no lean; Over when
+    P(Over) > 50% and the projected mean (when present) is above the line; Under mirrored; else none."""
+    from .forecast_detail import kind
     po, pu, mu, ln = r["p_over"], r["p_under"], r["mean"], r["line"]
-    if po is None or pu is None or mu is None:
+    if po is None or pu is None or kind(r.get("model")) == "market":
         return None
-    if po > pu and mu > ln:
+    if po > 0.5 and (mu is None or mu > ln):
         return "over"
-    if pu > po and mu < ln:
+    if pu > 0.5 and (mu is None or mu < ln):
         return "under"
     return None
 
@@ -224,8 +228,8 @@ def build(con, now=None, base=None):
                            "listed apart"),
                ("gate", f"{GATE} settled props (game x player x stat) per league before 'validated'"),
                ("projection", "error = settled value - projection mean; MAE and bias"),
-               ("lean", "the forecast's side when its chance is larger AND its projection is on that side of the line;"
-                        " hit rate = wins / (wins + losses), pushes apart"),
+               ("lean", "Scout models only: Over when its chance of Over is above 50% and its projection is above the "
+                        "line (Under mirrored); hit rate = wins / (wins + losses), pushes apart"),
                ("ci", "95% bootstrap over games (1,000 draws, seed 7)"),
                ("calibration", "chance of Over given no push in 10-point bands vs the observed Over share"))}}
     size = snapshots._write(path(base), doc)

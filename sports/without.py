@@ -47,13 +47,12 @@ def _participation(con, league):
     for r in con.execute(q, (league, rep) if rep else (league,)):
         k = (r["source"], r["source_key"])
         cur = best.get(k)
-        if cur is None or r["revision"] > cur[0]:
-            best[k] = (r["revision"], r["event_id"], r["player_id"], r["payload"])
+        if cur is None or r["revision"] > cur[0]:          # decode now: keep a short string, never the payloads
+            best[k] = (r["revision"], r["event_id"], r["player_id"], store._unpack(r["payload"]).get("participation"))
     out = {}
-    for _, eid, pid, payload in best.values():
+    for _, eid, pid, part in best.values():
         if not eid or not pid:
             continue
-        part = store._unpack(payload).get("participation")
         val = "played" if part == "played" else ("dnp" if part in ("did_not_play", "inactive") else None)
         if val is None:
             continue
@@ -123,9 +122,20 @@ def build(con, league, now=None, base=None):
         if eid in events:
             by_event[eid][pid] = v
     mems = defaultdict(list)
-    for _, m, _ in snapshots._latest(con, "membership", "player_id LIKE ?", [league + ":%"], now):
-        mems[m.player_id].append((ts(m.valid_from), ts(m.valid_to) if m.valid_to else None, m.team_id,
-                                  m.source == HISTORY_SOURCE))
+    best = {}                                       # streamed: latest revision per identity as a small tuple
+    for r in con.execute(f"SELECT source, source_key, revision, known_at, payload FROM records WHERE kind='membership' "
+                         f"AND player_id LIKE ? AND {store.CURRENT_SQL}", (league + ":%",)):
+        if r["known_at"] > now:
+            continue
+        k = (r["source"], r["source_key"])
+        if k in best and best[k][0] >= r["revision"]:
+            continue
+        m = store._unpack(r["payload"])
+        best[k] = (r["revision"], m["player_id"], (ts(m["valid_from"]), ts(m["valid_to"]) if m.get("valid_to") else None,
+                                                    m["team_id"], r["source"] == HISTORY_SOURCE))
+    for _, pid, tup in best.values():
+        mems[pid].append(tup)
+    del best
     teams = {t.team_id: t for _, t, _ in snapshots._latest(con, "team", "league = ?", [league], now)}
     team_players = defaultdict(set)
     for pid, ms in mems.items():

@@ -6,28 +6,22 @@ a member request. Served by sports/api_sheets.py as plain JSON bytes.
 
 Files: <snapshots>/<league>/sheets/prizepicks.json, underdog.json, consistent.json (atomic writes).
 
-DEFINITIONS (every number traces to a snapshot record; nothing is estimated here)
-  rows        every OPEN line of that platform on a game that has not started: the ordinary line(s) (standard /
-              balanced / main) AND the platform's goblin / demon / alternate lines, each with its own variant. Promotional
-              lines are left out (not a normal line). Kalshi and sportsbooks are never rows (they are the market).
-  Scout %     Over / Under / Push at THAT exact line, unconditional, from ONE distribution per market: the row's chosen
-              forecast (the forecast on this platform's own quote first, then any quote's, then the board's line read).
-              Its stored line = the stored chances; another line = the same forecast's ladder (its own distribution) or
-              its saved PMF (sports/forecast_detail.line_probs). No distribution readable at a line -> blank, never a guess.
-  market %    the board's market estimate (mv-1 display of the mc-1 rule) at that line, excluding the platform itself;
-              only books with a usable price enter it (books without odds are not shown). Goblin / demon lines have no
-              market estimate (books do not list those lines) -> blank.
-  edge        probability POINTS = Scout chance minus market chance for the same side at the same line. Not expected
-              value, not ROI.
-  lean        "over" only when P(over) > P(under) AND the projection (mean, else median) is above the line; "under"
-              symmetric; the side must be offered on that line. Otherwise no lean - a lean never contradicts the
-              projection or the distribution.
-  L10         the player's 10 most recent games he PLAYED (history file, box score beats game log) at the CURRENT line:
-              over = value > line, under = value < line, push = equal (strict). `seasons` > 1 = the window crosses a
-              season break (shown).
+ROW SEMANTICS are the board's, not re-implemented here (sports/UI.md "Prop board table"): the platform files carry
+markets in the board's compact format (snapshots.compact_row / compact_quote / compact_forecasts) plus a bv-1 view
+(sports/board_view.row_summary), and the page builds every row with SportsRows.propRow (web/sports/table.js pr-1):
+lean, Scout chance, market chance at that line, edge (probability points), gap flag, L10 / L5, cf-1 confidence.
+What this module adds:
+  lines       every OPEN line of that platform on a game that has not started: ordinary lines AND the platform's goblin /
+              demon / alternate lines, each with its variant `v`. Promotional lines are left out. Kalshi and books are
+              never rows (they are the market).
+  lr          a Scout line read at a line that has no Scout forecast of its own: the market's newest scout / informed
+              forecast read at THAT line from its own distribution (stored line, its ladder, or its saved PMF) - the
+              board's scout_line_reads rule extended to the ladder. Unreadable -> no lr, never a guess. Market-only
+              forecasts are never read this way.
+  view        bv-1 hit counts (board_view.row_summary) at every line of the platform, alternates included.
 CONSISTENT (cs-1) - history, not a prediction
   current line = the PrizePicks standard line, else the Underdog main line. L10 / L20 = most recent 10 / 20 played games
-  at that line, strict over / under counts, pushes counted separately (a push is neither a hit nor a miss; rate =
+  at that line (board_view.played_values / hit_counts - the bv-1 filter), strict over / under counts, pushes separately (a push is neither a hit nor a miss; rate =
   hits / games in the window, so a push never helps). Minimum sample: 10 played games (L20 needs 20, else blank).
   Rank: the higher of the L10 over / under rates, then the same direction's L20 rate, then games available.
 """
@@ -39,7 +33,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import snapshots
+from . import board_view, snapshots
 from .contracts import now_utc
 
 VERSION = "sh-1"
@@ -91,79 +85,24 @@ def _reader(fid, forecasts, fdetail):
     return read
 
 
-def _row_forecast(row, platform, forecasts):
-    """The ONE forecast a row's lines are read from: this platform's own ordinary quote's forecast first, then any
-    quote's, then the board's line read source; ties -> newest."""
-    own, other = [], []
-    for q in row.get("quotes") or []:
-        fid = q.get("forecast_id") or (q.get("line_read") or {}).get("f")
-        if fid and fid in forecasts:
-            (own if q.get("platform") == platform else other).append(fid)
-    for group in (own, other):
-        if group:
-            return max(group, key=lambda x: forecasts[x].get("forecast_at") or "")
-    return None
-
-
-def lean_of(po, pu, mean, line, offered):
-    """The model's side only when the distribution AND the projection agree (never a contradicting side)."""
-    if po is None or pu is None or mean is None:
-        return None
-    if po > pu and mean > line and offered.get("over"):
-        return "over"
-    if pu > po and mean < line and offered.get("under"):
-        return "under"
-    return None
-
-
-def window(games, stat, line, n):
-    """Strict counts over the n most recent PLAYED games with a value for this stat."""
-    vals = []
-    seasons = set()
-    for g in games:                                   # history files are newest first
-        if g.get("participation") not in (None, "played"):
-            continue
-        v = (g.get("values") or {}).get(stat)
-        if v is None:
-            continue
-        vals.append(v)
-        seasons.add(g.get("season"))
-        if len(vals) >= n:
-            break
-    o = sum(1 for v in vals if v > line + 1e-9)
-    u = sum(1 for v in vals if v < line - 1e-9)
-    return {"n": len(vals), "o": o, "u": u, "p": len(vals) - o - u, "seasons": len(seasons - {None}) or (1 if vals else 0),
-            "last": vals[:n]}
-
-
-def _offered(q):
-    return {s["side"]: bool(s.get("offered")) for s in q.get("sides") or []}
-
-
-def _mult(q):
-    m = {s["side"]: s.get("multiplier") for s in q.get("sides") or [] if s.get("multiplier") is not None}
-    return [m.get("over"), m.get("under")] if m else None
-
-
-def _market_at(row, q):
-    """mv-1 market estimate at this quote's line (ordinary quotes only; `at` lists quotes whose value differs)."""
-    mk = row.get("market") or {}
-    if not mk or (q.get("variant") not in ORDINARY):
-        return None
-    at = mk.get("at") or {}
-    c = at[q["record_id"]] if q.get("record_id") in at else mk.get("c")   # absent from `at` = same as the headline
-    if not c or c.get("po") is None:
-        return None
-    return c
-
-
 # ------------------------------------------------------------------------------------------------------ builders
-def sheet_rows(player_file, history_games, platform, events, now):
-    """Rows of one player for one platform."""
+def _compact_fc(f):
+    """The board's compact forecast (snapshots.compact_forecasts format) for one full forecast view."""
+    fid = f["forecast_id"]
+    return snapshots.compact_forecasts({fid: f}, [{"quotes": [{"forecast_id": fid}], "kalshi_near": []}])[fid]
+
+
+def sheet_markets(player_file, history_games, platform, events, now):
+    """One player's markets for one platform in the BOARD's compact row format (snapshots.compact_row / compact_quote),
+    so the page builds every row with the shared SportsRows.propRow (web/sports/table.js, pr-1): lean, Scout chance,
+    market chance, edge, gap, confidence. Adds what the board does not carry: the platform's goblin / demon / alternate
+    lines (`v` = variant), a Scout line read `lr` at each such line from the market's ONE scout distribution (same
+    rule as snapshots.scout_line_reads, extended to the forecast's ladder), and the bv-1 hit counts at every line.
+    -> (markets, fc, view)"""
     pf = player_file
     forecasts = pf.get("forecasts") or {}
     fdetail = pf.get("forecast_detail") or {}
-    out = []
+    markets_out, fc, view = [], {}, {}
     for row in pf.get("markets") or []:
         ev = events.get(row.get("event_id"))
         if not ev or not ev.get("start_utc") or ev["start_utc"] <= now:
@@ -173,36 +112,31 @@ def sheet_rows(player_file, history_games, platform, events, now):
                  and q.get("availability", "open") == "open"]
         if not lines:
             continue
-        fid = _row_forecast(row, platform, forecasts)
-        read = _reader(fid, forecasts, fdetail) if fid else None
-        f = forecasts.get(fid) or {}
-        mean = f.get("projection_mean")
-        median = (f.get("detail") or {}).get("median", f.get("projection_median"))
+        scout = [fid for fid in {q.get("forecast_id") for q in row.get("quotes") or []} - {None}
+                 if forecasts.get(fid, {}).get("kind") in ("scout", "informed")]
+        src = max(scout, key=lambda x: forecasts[x].get("forecast_at") or "") if scout else None
+        read = _reader(src, forecasts, fdetail) if src else None
+        qs = []
         for q in lines:
-            line = float(q["line"])
-            got = read(line) if read else None
-            po, pu, pp, how = got if got else (None, None, None, None)
-            offered = _offered(q)
-            proj = mean if mean is not None else median
-            lean = lean_of(po, pu, proj, line, offered)
-            mk = _market_at(row, q)
-            edge = None
-            if po is not None and mk:
-                side = lean or ("over" if po >= pu else "under")
-                edge = (po - mk["po"]) if side == "over" else (pu - mk["pu"])
-            h10 = window(history_games, row["stat"], line, 10)
-            out.append({
-                "r": q.get("record_id"), "pid": row["player_id"], "n": row.get("player"), "pos": row.get("position"),
-                "tm": row.get("team"), "e": row["event_id"], "st": row["stat"], "sl": row.get("stat_label"),
-                "pr": 1 if row.get("primary") else 0, "l": line, "v": q.get("variant") or "standard",
-                "o": [1 if offered.get("over") else 0, 1 if offered.get("under") else 0], "m": _mult(q),
-                "t": q.get("last_seen_at"), "f": fid, "fm": f.get("model_version"), "fk": f.get("kind"),
-                "ro": 1 if f.get("research_only", True) else 0, "mu": _r(mean, 2), "md": _r(median, 2),
-                "po": _r(po), "pu": _r(pu), "pp": _r(pp), "how": how,
-                "mpo": _r(mk["po"]) if mk else None, "mpu": _r(mk["pu"]) if mk else None,
-                "mn": mk.get("n") if mk else None, "edge": _r(edge * 100, 1) if edge is not None else None,
-                "lean": lean, "h10": {k: h10[k] for k in ("n", "o", "u", "p", "seasons")}})
-    return out
+            cq = snapshots.compact_quote(dict(q, last_seen_at=q.get("last_seen_at") or q.get("observed_at"),
+                                              gradable=bool(q.get("gradable"))))
+            own = forecasts.get(cq.get("f") or "")
+            if own:
+                fc[own["forecast_id"]] = _compact_fc(own)
+            if not (own and own.get("kind") in ("scout", "informed")) and not cq.get("lr") and read:
+                got = read(float(q["line"]))
+                if got:
+                    cq["lr"] = {"f": src, "ln": forecasts[src]["line"], "po": _r(got[0]), "pu": _r(got[1]),
+                                "pp": _r(got[2]), "via": got[3]}
+            if (cq.get("lr") or {}).get("f") in forecasts:
+                fc[cq["lr"]["f"]] = _compact_fc(forecasts[cq["lr"]["f"]])
+            qs.append(cq)
+        markets_out.append({"k": row["key"], "e": row["event_id"], "pid": row["player_id"], "n": row.get("player"),
+                            "pos": row.get("position"), "tm": row.get("team"), "tid": row.get("team_id"),
+                            "st": row["stat"], "sl": row.get("stat_label"), "pr": 1 if row.get("primary") else 0,
+                            "cap": row.get("capability"), "mk": row.get("market"), "q": qs})
+        view[row["key"]] = board_view.row_summary(row["stat"], [q["line"] for q in lines], history_games)
+    return markets_out, fc, view
 
 
 def headline_line(row):
@@ -223,22 +157,21 @@ def consistent_rows(player_file, history_games, events, now):
         plat, line = headline_line(row)
         if plat is None:
             continue
-        w10 = window(history_games, row["stat"], line, 10)
-        if w10["n"] < MIN_SAMPLE:
+        pv = board_view.played_values(history_games, row["stat"])
+        vals = [x[0] for x in pv]
+        o10, u10, p10, n10 = board_view.hit_counts(vals, line, 10)
+        if n10 < MIN_SAMPLE:
             continue
-        w20 = window(history_games, row["stat"], line, 20)
-        o10, u10 = w10["o"] / w10["n"], w10["u"] / w10["n"]
+        o20, u20, p20, n20 = board_view.hit_counts(vals, line, 20)
         side = "over" if o10 >= u10 else "under"
-        r10 = max(o10, u10)
-        r20 = None
-        if w20["n"] >= 20:
-            r20 = (w20["o"] if side == "over" else w20["u"]) / w20["n"]
-        out.append({"pid": row["player_id"], "n": row.get("player"), "pos": row.get("position"), "tm": row.get("team"),
-                    "e": row["event_id"], "st": row["stat"], "sl": row.get("stat_label"), "pr": 1 if row.get("primary")
-                    else 0, "plat": plat, "l": line, "side": side, "r10": _r(r10, 4), "r20": _r(r20, 4),
-                    "l10": {k: w10[k] for k in ("n", "o", "u", "p", "seasons", "last")},
-                    "l20": {k: w20[k] for k in ("n", "o", "u", "p", "seasons")},
-                    "avail": len([g for g in history_games if (g.get("values") or {}).get(row["stat"]) is not None])})
+        r10 = max(o10, u10) / n10
+        r20 = ((o20 if side == "over" else u20) / n20) if n20 >= 20 else None
+        out.append({"k": row["key"], "pid": row["player_id"], "n": row.get("player"), "pos": row.get("position"),
+                    "tm": row.get("team"), "e": row["event_id"], "st": row["stat"], "sl": row.get("stat_label"),
+                    "pr": 1 if row.get("primary") else 0, "plat": plat, "l": line, "side": side, "r10": _r(r10, 4),
+                    "r20": _r(r20, 4), "l10": {"n": n10, "o": o10, "u": u10, "p": p10, "last": vals[:10],
+                                               "seasons": sorted({x[1] for x in pv[:10] if x[1] is not None})},
+                    "l20": {"n": n20, "o": o20, "u": u20, "p": p20}, "avail": len(vals)})
     return out
 
 
@@ -252,6 +185,8 @@ def build(league, now=None, base=None):
         return {"league": league, "ok": False, "error": "board snapshot not built yet"}
     events = board.get("events") or {}
     rows = {p: [] for p in PLATFORMS}
+    fcs = {p: {} for p in PLATFORMS}
+    views = {p: {} for p in PLATFORMS}
     cons = []
     players = 0
     for pf_path in sorted((root / "players").glob("*.json")):
@@ -262,27 +197,36 @@ def build(league, now=None, base=None):
         games = hist.get("games") or []
         players += 1
         for plat in PLATFORMS:
-            rows[plat] += sheet_rows(pf, games, plat, events, now)
+            m, f, v = sheet_markets(pf, games, plat, events, now)
+            rows[plat] += m
+            fcs[plat].update(f)
+            views[plat].update(v)
         cons += consistent_rows(pf, games, events, now)
         del pf, hist, games
-    ev_view = {eid: {"s": e.get("start_utc"), "a": (e.get("away") or {}).get("abbr"), "h": (e.get("home") or {}).get("abbr")}
+    ev_view = {eid: {"s": e.get("start_utc"), "st": e.get("status"), "a": (e.get("away") or {}).get("abbr"),
+                     "h": (e.get("home") or {}).get("abbr")}
                for eid, e in events.items() if e.get("start_utc") and e["start_utc"] > now}
     meta = {"version": VERSION, "league": league, "built_at": now_utc(), "as_of": now,
             "board_built_at": board.get("built_at"), "events": ev_view, "stats": board.get("stats") or {}}
-    method = {"scout": "Over / Under / Push at this exact line, unconditional, from the market's one distribution "
-                       "(stored line, else its ladder, else its saved PMF); blank when not readable",
-              "market": "market estimate (mv-1 display of the mc-1 rule) at this line without this platform; only books "
-                        "with a usable price; none for goblin / demon lines",
-              "edge": "probability points: Scout chance minus market chance, same side, same line - not EV or ROI",
-              "lean": "the model's side only when P(side) is larger AND the projection is on that side of the line, "
-                      "and the side is offered",
-              "l10": "10 most recent played games at this line: strict over / under, pushes separate"}
+    method = {"rows": "built in the page with the board's shared row (SportsRows.propRow, sports/UI.md 'Prop board "
+                      "table'): lean, Scout chance, market at this line, edge in probability points, L10 / L5, "
+                      "confidence - research until forward validation",
+              "lines": "every open line of this platform, goblin / demon / alternate included (promotions left out)",
+              "scout_at_other_lines": "read from the market's own Scout distribution at that exact line (stored line, "
+                                      "its ladder or its saved PMF); none when it cannot be read",
+              "market": "market estimate at this line without this platform, only books with a usable price; none "
+                        "for goblin / demon lines (books do not list them)"}
     sizes = {}
     d = sheet_dir(league, base)
     for plat in PLATFORMS:
-        rr = sorted(rows[plat], key=lambda x: (ev_view.get(x["e"], {}).get("s") or "", x["n"] or "", x["st"], x["l"]))
-        sizes[plat] = snapshots._write(d / f"{plat}.json", {**meta, "platform": plat, "rows": rr, "count": len(rr),
-                                                             "method": method})
+        rr = sorted(rows[plat], key=lambda x: (ev_view.get(x["e"], {}).get("s") or "", x["n"] or "", x["st"]))
+        sizes[plat] = snapshots._write(d / f"{plat}.json", {
+            **meta, "platform": plat, "markets": rr, "fc": fcs[plat], "view": views[plat],
+            "view_version": board_view.VERSION, "count": sum(len(m["q"]) for m in rr), "method": method,
+            "format": "markets = board compact rows (k, e, pid, n, pos, tm, st, mk, q[r, p, l, v, o, m, t, f, lr]); "
+                      "fc = board compact forecasts; view = bv-1 row summaries keyed by market key"})
+    for c in cons:
+        c["s"] = (ev_view.get(c["e"]) or {}).get("s")
     cons.sort(key=lambda x: (-(x["r10"] or 0), -(x["r20"] or 0), -x["avail"], x["n"] or ""))
     sizes["consistent"] = snapshots._write(d / "consistent.json", {
         **meta, "version": CONSISTENT_VERSION, "rows": cons[:CONSISTENT_MAX_ROWS], "count": len(cons),
@@ -293,7 +237,7 @@ def build(league, now=None, base=None):
                           "separately and is never a hit; rate = hits / games in the window",
                    "minimum": f"{MIN_SAMPLE} played games (L20 shown only with 20)",
                    "rank": "higher L10 rate (over or under), then the same direction's L20 rate, then games available"}})
-    return {"league": league, "ok": True, "players": players, **{p: len(rows[p]) for p in PLATFORMS},
+    return {"league": league, "ok": True, "players": players, **{p: sum(len(m["q"]) for m in rows[p]) for p in PLATFORMS},
             "consistent": len(cons), "sizes": sizes, "build_s": round(time.time() - t0, 2)}
 
 

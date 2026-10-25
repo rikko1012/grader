@@ -7,6 +7,8 @@ const SH = require(path.join(dir, "sheets.js"));
 const GW = require(path.join(dir, "without.js"));
 const RP = require(path.join(dir, "results_public.js"));
 
+const R = require(path.join(dir, "table.js"));
+
 // variants shown as such; edge is probability points, signed
 assert.strictEqual(SH.variantLabel("goblin"), "Goblin");
 assert.strictEqual(SH.variantLabel("demon"), "Demon");
@@ -15,28 +17,44 @@ assert.strictEqual(SH.edgeText(4.25), "+4.3 pts");
 assert.strictEqual(SH.edgeText(-3), "−3.0 pts");
 assert.strictEqual(SH.edgeText(null), "—");
 assert.strictEqual(SH.leanText({lean: "under"}), "Lean Under");
-assert.strictEqual(SH.leanText({lean: null}), "—");
-assert.strictEqual(SH.l10Text({n: 10, o: 6, u: 3, p: 1}), "O 6 · U 3 · P 1 (10)");
-assert.strictEqual(SH.l10Text({n: 0}), "—");
+assert.strictEqual(SH.leanText({lean: null}), "No lean");
 
-// default sort = edge descending, rows without an edge always last (either direction)
-const rows = [
-  {n: "A", st: "points", e: "e1", l: 20.5, v: "standard", edge: 2.0, po: 0.5, lean: null, h10: {n: 10, o: 5, u: 5, p: 0}},
-  {n: "B", st: "rebounds", e: "e2", l: 8.5, v: "goblin", edge: null, po: 0.7, lean: "over", h10: {n: 10, o: 8, u: 2, p: 0}},
-  {n: "C", st: "points", e: "e1", l: 15.5, v: "standard", edge: 11.5, po: 0.6, lean: "over", h10: {n: 4, o: 1, u: 3, p: 0}},
-  {n: "D", st: "assists", e: "e2", l: 5.5, v: "demon", edge: -4, po: 0.3, lean: "under", tm: "BOS", h10: {n: 0}}];
-assert.deepStrictEqual(SH.sortRows(rows, "edge", "desc").map((r) => r.n), ["C", "A", "D", "B"]);
-assert.deepStrictEqual(SH.sortRows(rows, "edge", "asc").map((r) => r.n), ["D", "A", "C", "B"]);
-assert.deepStrictEqual(SH.sortRows(rows, "player", "asc").map((r) => r.n), ["A", "B", "C", "D"]);
-assert.deepStrictEqual(SH.sortRows(rows, "l10", "desc").map((r) => r.n), ["B", "A", "C", "D"]);   // lean side's rate
-// filters: stat, game, type, lean, 10-point gaps, search (player or team)
-assert.deepStrictEqual(SH.filterRows(rows, {stat: "points"}).map((r) => r.n), ["A", "C"]);
-assert.deepStrictEqual(SH.filterRows(rows, {ev: "e2"}).map((r) => r.n), ["B", "D"]);
-assert.deepStrictEqual(SH.filterRows(rows, {variant: "goblin"}).map((r) => r.n), ["B"]);
-assert.deepStrictEqual(SH.filterRows(rows, {lean: "lean"}).map((r) => r.n), ["B", "C", "D"]);
-assert.deepStrictEqual(SH.filterRows(rows, {lean: "under"}).map((r) => r.n), ["D"]);
-assert.deepStrictEqual(SH.filterRows(rows, {gap: true}).map((r) => r.n), ["C"]);
-assert.deepStrictEqual(SH.filterRows(rows, {q: "bos"}).map((r) => r.n), ["D"]);
+// a sheet file -> rows that ARE the board's SportsRows.propRow rows (no re-implemented semantics)
+const now = Date.parse("2026-10-23T21:00:00Z");
+const D = {
+  events: {e1: {s: "2026-10-23T23:00:00Z", a: "NY", h: "BOS"}, e2: {s: "2026-10-23T20:00:00Z", a: "MIA", h: "CHA"}},
+  fc: {"fc-a": {m: "sm-1", mu: 22.0, po: 0.6, pu: 0.4, pp: 0, at: "2026-10-23T20:30:00Z", k: "scout"}},
+  view: {k1: {lines: {"20.5": [7, 3, 0, 10, 4, 1, 0, 5], "17.5": [9, 1, 0, 10, 5, 0, 0, 5]}, seasons10: [2027], played: 30}},
+  markets: [
+    {k: "k1", e: "e1", pid: "nba:player:espn:1", n: "Alpha", tm: "NY", st: "points", sl: "Points",
+     mk: {l: 20.5, c: {po: 0.52, pu: 0.48, pp: 0, n: 3}, at: {}},
+     q: [{r: "r1", p: "prizepicks", l: 20.5, v: "standard", o: [1, 1], t: "2026-10-23T20:58:00Z", f: "fc-a"},
+         {r: "r2", p: "prizepicks", l: 17.5, v: "goblin", o: [1, 0], t: "2026-10-23T20:58:00Z", lr: {f: "fc-a", ln: 20.5, po: 0.8, pu: 0.2, pp: 0}}]},
+    {k: "k2", e: "e2", pid: "nba:player:espn:2", n: "Started", st: "points", q: [{r: "r3", p: "prizepicks", l: 9.5, v: "standard", o: [1, 1]}]}]};
+const rows = SH.buildRows(D, now);
+assert.deepStrictEqual(rows.map((r) => r.rid), ["r1", "r2"]);                       // started game dropped (board rule)
+const std = rows[0], gob = rows[1];
+const ref = R.propRow(Object.assign({}, D.markets[0], {ev: {start_utc: D.events.e1.s, status: null, home: {abbr: "BOS"}, away: {abbr: "NY"}}}),
+                      D.markets[0].q[0], {fc: D.fc, view: D.view, now: now});
+for (const k of ["lean", "edge", "pLean", "gap", "leanOffered"]) assert.deepStrictEqual(std[k], ref[k], k);
+assert.deepStrictEqual(std.conf, ref.conf);
+assert.strictEqual(std.lean, "over");
+assert.ok(Math.abs(std.edge - 8) < 1e-9);                                               // 60% - 52% = +8 pts
+assert.deepStrictEqual(std.hit.l10, {o: 7, u: 3, p: 0, n: 10});
+assert.strictEqual(gob.variant, "goblin");
+assert.strictEqual(gob.scout.po, 0.8);                                                  // same distribution at 17.5
+assert.strictEqual(gob.market, null);                                                   // no market at a goblin line
+assert.strictEqual(gob.edge, null);
+assert.deepStrictEqual(gob.hit.l10, {o: 9, u: 1, p: 0, n: 10});
+// sorting: edge desc puts rows without an edge last; filters
+assert.deepStrictEqual(SH.sortRows(rows, "edge", "desc").map((r) => r.rid), ["r1", "r2"]);
+assert.deepStrictEqual(SH.sortRows(rows, "edge", "asc").map((r) => r.rid), ["r1", "r2"]);
+assert.deepStrictEqual(SH.sortRows(rows, "line", "asc").map((r) => r.rid), ["r2", "r1"]);
+assert.deepStrictEqual(SH.sortRows(rows, "l10", "desc").map((r) => r.rid), ["r2", "r1"]);
+assert.deepStrictEqual(SH.filterRows(rows, {variant: "goblin"}).map((r) => r.rid), ["r2"]);
+assert.deepStrictEqual(SH.filterRows(rows, {lean: "under"}).map((r) => r.rid), []);
+assert.deepStrictEqual(SH.filterRows(rows, {q: "alp"}).length, 2);
+assert.deepStrictEqual(SH.filterRows(rows, {stat: "rebounds"}).length, 0);
 
 // consistent: minimum rate, direction, needs-20
 const cons = [{n: "X", st: "points", e: "e1", side: "over", r10: 0.9, r20: 0.8}, {n: "Y", st: "points", e: "e1", side: "under", r10: 0.7, r20: null}];
