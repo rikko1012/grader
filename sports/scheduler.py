@@ -75,14 +75,20 @@ def default_jobs():
                               flag="SPORTS_INGEST", cap_mb=250, cls=HEAVY, prio=3),  # one offer scan per league / hour
         "slips-ingest": dict(argv=_py("-m", "sports.slips", "ingest"), every_s=300, timeout_s=300,
                              flag="SPORTS_INGEST", cap_mb=60, cls=LIGHT, prio=2),    # 23 MB
-        # collection (the one collector, run as one-shot cycles; leagues one at a time)
-        "ingest": dict(argv=_py("-m", "sports.worker", "ingest", *lg, "--sources",
-                                "espn,pp,ud,injuries,oddsapi,polymarket,books,games"),
-                       every_s=900, timeout_s=900, flag="SPORTS_INGEST", cap_mb=300, cls=EXCLUSIVE, prio=3,
-                       env={"SPORTS_WORKER_CONCURRENCY": "1"}),               # 271-274 MB sequential (328 parallel)
-        "ingest-kalshi": dict(argv=_py("-m", "sports.worker", "ingest", *lg, "--sources", "kalshi"),
-                              every_s=3600, timeout_s=900, flag="SPORTS_INGEST", cap_mb=240, cls=HEAVY, prio=3,
-                              env={"SPORTS_WORKER_CONCURRENCY": "1"}),         # 147-192 MB
+        # collection: the one collector, one job PER LEAGUE on a GAME-DAY cadence (fresh 2026-10-24, owner audit bug 1):
+        # every SPORTS_INGEST_HOT_S (300) from SPORTS_INGEST_HOT_H (2) hours before that league's earliest upcoming
+        # tip, SPORTS_INGEST_GAMEDAY_S (600) on a game day, SPORTS_INGEST_IDLE_S (900) otherwise; each successful
+        # cycle starts the board build at once ("then"). --bucket-min 1: a 5-minute cycle is never skipped as 'done'.
+        **{f"ingest-{x}": dict(argv=_py("-m", "sports.worker", "ingest", x, "--bucket-min", "1", "--sources",
+                                        "espn,pp,ud,injuries,oddsapi,polymarket,books,games"),
+                               every_s=900, cadence=("gameday", (x,)), then=("ui-snapshots",), collector=True,
+                               timeout_s=900, flag="SPORTS_INGEST", cap_mb=300, cls=EXCLUSIVE, prio=3,
+                               env={"SPORTS_WORKER_CONCURRENCY": "1"}) for x in lg},   # 191-197 MB both leagues
+        "ingest-kalshi": dict(argv=_py("-m", "sports.worker", "ingest", *lg, "--bucket-min", "1", "--sources",
+                                       "kalshi"),
+                              every_s=3600, cadence=("kalshi", tuple(lg)), then=("ui-snapshots",),
+                              timeout_s=900, flag="SPORTS_INGEST", cap_mb=240, cls=HEAVY, prio=3,
+                              env={"SPORTS_WORKER_CONCURRENCY": "1"}),         # 70-84 MB (production 2026-10-25)
         "settle": dict(argv=_py("-m", "sports.worker", "settle", *lg), every_s=3600, timeout_s=900,
                        flag="SPORTS_INGEST", cap_mb=120, cls=HEAVY, prio=4),   # 58 MB
         "picks-ingest": dict(argv=_py("-m", "sports.picks", "ingest"), every_s=60, timeout_s=120,
@@ -126,6 +132,8 @@ def default_jobs():
         key = "SPORTS_JOB_" + name.upper().replace("-", "_")
         if spec["every_s"] is not None:
             spec["every_s"] = _env_num(key + "_EVERY_S", spec["every_s"])
+            if os.environ.get(key + "_EVERY_S"):        # an explicit override pins the interval (no game-day cadence)
+                spec.pop("cadence", None)
         spec["cap_mb"] = _env_num(key + "_CAP_MB", spec["cap_mb"], int)
         if spec["cls"] == EXCLUSIVE:
             spec["cap_mb"] = max(spec["cap_mb"], 1)
@@ -212,10 +220,74 @@ def _job_on(flag):
     return os.environ.get(flag, "").strip().lower() in ("1", "true", "yes", "on")
 
 
+# ------------------------------------------------------------------------------------------------ game-day cadence
+def cadence_settings():
+    return {"hot_s": _env_num("SPORTS_INGEST_HOT_S", 300.0), "gameday_s": _env_num("SPORTS_INGEST_GAMEDAY_S", 600.0),
+            "idle_s": _env_num("SPORTS_INGEST_IDLE_S", 900.0), "hot_h": _env_num("SPORTS_INGEST_HOT_H", 2.0),
+            "gameday_h": _env_num("SPORTS_INGEST_GAMEDAY_H", 18.0),
+            "kalshi_hot_s": _env_num("SPORTS_KALSHI_HOT_S", 1200.0),
+            "kalshi_idle_s": _env_num("SPORTS_KALSHI_IDLE_S", 3600.0)}
+
+
+def _iso_ts(x):
+    from datetime import datetime
+    try:
+        return datetime.fromisoformat(str(x).replace("Z", "+00:00")).timestamp()
+    except (TypeError, ValueError):
+        return None
+
+
+def league_phase(league, now_ts, snap_root=None):
+    """'hot' (earliest upcoming tip within hot_h hours), 'gameday' (a tip within gameday_h hours or a game under way),
+    'idle', or 'unknown' (no slate file yet). From the league's slate snapshot (<snapshots>/<league>/slate.json - a
+    small file the board build writes), never the store."""
+    import json
+    from pathlib import Path
+    if snap_root is None:
+        from . import config
+        snap_root = config.DATA_DIR / "snapshots"
+    try:
+        evs = json.loads((Path(snap_root) / league / "slate.json").read_text(encoding="utf-8")).get("events") or []
+    except (OSError, ValueError):
+        return "unknown"
+    c = cadence_settings()
+    nxt, live = None, False
+    for e in evs:
+        t = _iso_ts(e.get("start_utc"))
+        if t is None or e.get("status") in ("final", "cancelled", "postponed"):
+            continue
+        if t > now_ts:
+            nxt = t if nxt is None else min(nxt, t)
+        elif now_ts - t < 4 * 3600:
+            live = True
+    if nxt is not None and nxt - now_ts <= c["hot_h"] * 3600:
+        return "hot"
+    if live or (nxt is not None and nxt - now_ts <= c["gameday_h"] * 3600):
+        return "gameday"
+    return "idle"
+
+
+def cadence_every(cadence, now_ts, snap_root=None):
+    """Seconds between runs for a ('gameday' | 'kalshi', leagues) cadence: the fastest phase over its leagues."""
+    kind, leagues = cadence
+    c = cadence_settings()
+    phases = {league_phase(x, now_ts, snap_root) for x in leagues}
+    if kind == "kalshi":
+        return c["kalshi_hot_s"] if "hot" in phases else c["kalshi_idle_s"]
+    if "hot" in phases:
+        return c["hot_s"]
+    if "gameday" in phases or "unknown" in phases:
+        return c["gameday_s"]
+    return c["idle_s"]
+
+
 # ---------------------------------------------------------------------------------------------------- scheduler
 class Scheduler:
-    def __init__(self, jobs=None, budget=None, now=time.time, tick_s=TICK_S, triggers=None, aging_s=None):
+    def __init__(self, jobs=None, budget=None, now=time.time, tick_s=TICK_S, triggers=None, aging_s=None,
+                 snap_root=None):
         self.specs = jobs if jobs is not None else default_jobs()
+        self.snap_root = snap_root
+        self._cad = {}                                  # cadence -> (computed_at, every_s): re-read every 30 s
         self.budget = budget if budget is not None else budget_mb()
         self.now = now
         self.tick_s = tick_s
@@ -251,6 +323,22 @@ class Scheduler:
             return False
         return self.reserved() + spec["cap_mb"] <= self.budget
 
+    def every(self, name):
+        """The job's current interval: its game-day cadence when it has one (cached 30 s), else every_s."""
+        spec = self.specs[name]
+        cad = spec.get("cadence")
+        if not cad:
+            return spec["every_s"]
+        t = self.now()
+        hit = self._cad.get(cad)
+        if hit is None or t - hit[0] >= 30:
+            try:
+                hit = (t, float(cadence_every(cad, t, self.snap_root)))
+            except Exception:                           # noqa: BLE001 - the cadence never stops a job
+                hit = (t, float(spec["every_s"]))
+            self._cad[cad] = hit
+        return hit[1]
+
     def due(self):
         t = self.now()
         out = []
@@ -258,6 +346,12 @@ class Scheduler:
             st = JOBS[name]
             if not st["enabled"] or name in self.running:
                 continue
+            if spec.get("cadence") and spec["every_s"] is not None:
+                e = self.every(name)
+                st["every_s"] = e
+                le = st.get("last_exit") or {}
+                if le.get("code") == 0 and st["last_start"] is not None and st["next_start"] > st["last_start"] + e:
+                    st["next_start"] = st["last_start"] + e     # a phase change (2 h before tip) pulls the next run in
             if spec["every_s"] is None:
                 trig = self.triggers.get(spec.get("trigger"))
                 ns = st["next_start"]
@@ -303,10 +397,20 @@ class Scheduler:
         if spec["every_s"] is None:                     # on demand: re-check the trigger after a short pause
             wait = 2.0 if rc == 0 else min(900.0, 30.0 * (2 ** min(st["failures_in_a_row"], 5)))
         else:
-            wait = max(1.0, spec["every_s"] - ran) * (0.9 + random.random() * 0.2)
+            every = self.every(name)
+            if spec.get("cadence"):                     # a cadence is start to start and never jitters later
+                wait = max(1.0, every - ran) * (0.95 + random.random() * 0.05)
+            else:
+                wait = max(1.0, every - ran) * (0.9 + random.random() * 0.2)
             if rc != 0:
-                wait = max(wait, min(6 * 3600.0, spec["every_s"] * (2 ** min(st["failures_in_a_row"], 4))))
+                wait = max(wait, min(6 * 3600.0, every * (2 ** min(st["failures_in_a_row"], 4))))
         st["next_start"] = self.now() + wait
+        if rc == 0:
+            for nxt in spec.get("then") or ():          # e.g. the board build right after each collector cycle
+                ns = JOBS.get(nxt) or {}
+                if ns.get("enabled") and nxt not in self.running and ns.get("next_start") is not None:
+                    ns["next_start"] = min(ns["next_start"], self.now())
+                    self._event("then", nxt, {"after": name})
         self._event("exit", name, {"code": rc, "ran_s": round(ran, 1), "peak_rss_mb": st.get("last_peak_rss_mb")})
 
     # -- one tick -------------------------------------------------------------------------------------------------

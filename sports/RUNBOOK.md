@@ -155,11 +155,11 @@ Peak RSS measured 2026-10-24 on a copy of the real data (each job alone, `script
 |---|---|---|---|---|---|---|
 | assistant | `sports.assistant.runner --once` | on demand (a queued question, checked every 2 s) | light | 120 | not measurable here (no SDK / key) | SPORTS_ASSISTANT |
 | prebuilt | `sports.service snapshots` (slip pool) | 90 s | heavy | 160 | 105-109 | SPORTS_API |
-| ui-snapshots | `sports.snapshots build nba nfl` | 180 s | heavy | 250 | 135-200 | SPORTS_INGEST |
+| ui-snapshots | `sports.snapshots build nba nfl --no-results` (slate games only, 2026-10-24) | 180 s AND right after every collector cycle | heavy | 250 | 60 on a 266k-row synthetic store (was 503; prod was killed at 254) | SPORTS_INGEST |
 | slips-ingest | `sports.slips ingest` | 5 min | light | 60 | 23 | SPORTS_INGEST |
-| ingest | `sports.worker ingest nba nfl --sources espn,pp,ud,injuries,oddsapi,polymarket,books,games` (leagues one at a time) | 15 min | exclusive | 300 | 271-274 (328 with both leagues in parallel) | SPORTS_INGEST |
-| ingest-kalshi | `sports.worker ingest nba nfl --sources kalshi` | 60 min | heavy | 240 | 147-192 | SPORTS_INGEST |
-| settle | `sports.worker settle nba nfl` | 60 min | heavy | 120 | 58 | SPORTS_INGEST |
+| ingest-nba / ingest-nfl | `sports.worker ingest <league> --bucket-min 1 --sources espn,pp,ud,injuries,oddsapi,polymarket,books,games` (one job per league) | GAME-DAY cadence per league: 5 min from 2 h before its earliest upcoming tip, 10 min on a game day (tip within 18 h or a game under way), 15 min otherwise (SPORTS_INGEST_HOT_S / _GAMEDAY_S / _IDLE_S / _HOT_H / _GAMEDAY_H) | exclusive | 300 | prod 191-197 both leagues together | SPORTS_INGEST |
+| ingest-kalshi | `sports.worker ingest nba nfl --bucket-min 1 --sources kalshi` | 20 min in a league's 2 h pre-tip window, else 60 min (SPORTS_KALSHI_HOT_S / _IDLE_S) | heavy | 240 | prod 70-84 | SPORTS_INGEST |
+| settle | `sports.worker settle nba nfl` (+ catch-up of unsettled games since SPORTS_SETTLE_FLOOR, 40 per run; then writes results.json streamed per event) | 60 min | heavy | 120 | 58 (+ ledger 71 on 80k settlements) | SPORTS_INGEST |
 | slips-settle | `sports.slips settle` | 60 min | light | 60 | 23 | SPORTS_INGEST |
 | model-forecast | `sports.worker train forecast nba nfl` (incremental: unchanged runs add 0 records) | 60 min | exclusive | 340 | 272-311 | SPORTS_TRAIN |
 | model-learn | `sports.worker train learn` | 60 min | heavy | 250 | 78-218 | SPORTS_TRAIN |

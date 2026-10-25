@@ -40,6 +40,10 @@ MAX_BACKOFF_S = 30 * 60
 LEAGUES = ("nba", "nfl")
 
 
+# a direct (credit-free) book game read that came back with NO props is re-read after this many minutes instead of the
+# ladder's next rung (24-72 h out = every 3 h): next-day props show up within ~30 min of being posted (owner audit bug 4)
+NOT_POSTED_RECHECK_MIN = float(os.environ.get("SPORTS_BOOKS_NOT_POSTED_RECHECK_MIN", "30"))
+
 def _now():
     return datetime.now(timezone.utc)
 
@@ -258,7 +262,10 @@ def run_once(db, leagues=LEAGUES, now=None, provs=None, probe=True, sink=None):
                     if not complete:
                         failed = res
                         break
-                    store.set_due(db, name, key, ev.provider_event_id, schedule.next_due(ladder, ev.start, now))
+                    nd = schedule.next_due(ladder, ev.start, now)
+                    if not res.offers and prov.kind != "feed":          # props not posted yet (night before): a free
+                        nd = min(nd, now + timedelta(minutes=NOT_POSTED_RECHECK_MIN))  # feed is re-checked soon, not in 3 h
+                    store.set_due(db, name, key, ev.provider_event_id, nd)
                     store.take_lease(db, HOLDER, LEASE_TTL_S, now=_now() if now is None else now)
                 if failed is not None:
                     break
