@@ -175,9 +175,9 @@ def test_my_picks_follows_the_league_toggle_and_hides_test_rows(browser):
     assert "NFL Player" not in body and "1 test record is not shown" in body
     assert "$" not in body and "EV" not in body and "profit" not in body.lower()
     page.click("#sw-league button[data-lg=nfl]")
-    page.wait_for_function("document.querySelector('#sw-main').innerText.indexOf('NFL Player 4') >= 0 || "
-                           "document.querySelector('#sw-main').innerText.indexOf('Settled') >= 0")
-    page.wait_for_selector(".sw-mp-rec")
+    # wait for the NFL page itself ('Settled' is a tab label on the NBA page too, so it can't be the signal)
+    page.wait_for_function("(function () { var e = document.querySelector('#sw-main .sw-eyebrow');"
+                           " return !!(e && e.textContent.indexOf('NFL') === 0 && document.querySelector('#sw-main .sw-mp-rec')); })()")
     body = page.locator("#sw-main").inner_text()
     assert "NBA Player" not in body and "NFL Player 9" not in body
     assert page.locator(".sw-mp-cur").inner_text().startswith("NFL")
@@ -369,7 +369,9 @@ def test_player_workspace_season_breaks_one_games_list_matchup_and_strip(browser
 
 def test_without_teammate_module_mount_is_called(browser):
     ctx, page, errors = _page(browser, _app_api())
-    page.add_init_script("window.SportsWithout = {render: function (el, p, g, o) { el.textContent = 'without:' + p.player + ':' + g.length + ':' + o.stat; }};")
+    # the real without.js is on the page now (sheets agent): pin a stub that the module's own assignment can't replace
+    page.add_init_script("(function () { var stub = {render: function (el, p, g, o) { el.textContent = 'without:' + p.player + ':' + g.length + ':' + o.stat; }};"
+                         " Object.defineProperty(window, 'SportsWithout', {get: function () { return stub; }, set: function () {}, configurable: true}); })();")
     page.goto(f"/sports#/player/{PID}?lg=nba&stat=points")
     page.wait_for_function("(document.getElementById('sw-without') || {textContent: ''}).textContent.indexOf('without:') === 0")
     assert page.locator("#sw-without").inner_text() == f"without:Test Wing:{len(GAMES)}:points"

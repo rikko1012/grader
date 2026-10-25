@@ -193,16 +193,19 @@
   }
 
   // deps: {main, api, src, stateBox, fail, skeleton, loadModels: () => Promise<[{league, model_version, settled}]>}
+  var MINE_SEQ = 0;                                     // a reply for an older request (other league) is ignored
   function renderMine(deps) {
     var main = deps.main;
     var lg = deps.league || "nba";
+    var seq = ++MINE_SEQ;
     var head = '<div class="sw-eyebrow">' + esc(lg.toUpperCase()) + ' · My picks</div><h1 class="sw-h1">My picks</h1>';
     main.innerHTML = head + deps.skeleton(4);
     Promise.all([deps.api.get("/api/sports/picks/mine", {league: lg}, {fresh: true}), deps.loadModels().catch(function () { return []; })]).then(function (res) {
+      if (seq !== MINE_SEQ) return;                     // the member switched league (or left) meanwhile
       res[0].data.picks = onlyLeague(res[0].data.picks, lg);
       res[0].data.lg = lg;
       drawMine(deps, head, res[0].data, res[1] || []);
-    }).catch(deps.fail);
+    }).catch(function (e) { if (seq === MINE_SEQ) deps.fail(e); });
   }
   function drawMine(deps, head, d, models, focusTab) {
     var main = deps.main, ps = d.picks || [];
