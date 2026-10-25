@@ -476,7 +476,7 @@
     });
   }
   // HOOK (ux agent): the filter bar (search, quick stats, game strip, secondary filters, chips) is web/sports/filters.js.
-  function boardFiltersHtml(B, f, evs) { return window.SportsFilters.html(B, f, evs, {bookName: bookName}); }
+  function boardFiltersHtml(B, f, evs) { return window.SportsFilters.html(B, f, evs, {bookName: bookName, lg: state.lg}); }   // #11: league placeholder
   function quoteRows(m, fcmap, opts) {
     var qs = m.q.slice(), f = state.filters[state.lg];
     if (f.book !== "all") qs = qs.filter(function (q) { return q.p === f.book; });

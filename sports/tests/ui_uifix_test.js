@@ -75,4 +75,10 @@ assert.strictEqual(L.teamTag("UTAH", "nba"), "UTA"); assert.strictEqual(L.teamTa
 assert.strictEqual(L.teamTag("gs", "nba"), "GSW"); assert.strictEqual(L.teamTag("NO", "nfl"), "NO");
 assert.strictEqual(L.teamTag("NO", "nba"), "NOP"); assert.strictEqual(L.teamTag(null, "nba"), "");
 
+// ---------------------------------------------------------------- #11: league search placeholders (slate + board + sheets)
+assert.strictEqual(L.teamPlaceholder("nfl"), "e.g. KC or Chiefs"); assert.strictEqual(L.teamPlaceholder("nba"), "e.g. BOS or Celtics");
+assert.ok(/KC or Chiefs/.test(L.searchPlaceholder("nfl")) && !/Celtics|BOS/.test(L.searchPlaceholder("nfl")));
+assert.ok(/BOS or Celtics/.test(L.searchPlaceholder("nba")));
+assert.ok(!/Celtics|Chiefs/.test(L.teamPlaceholder("mlb") + L.searchPlaceholder(undefined)));   // never another league's teams
+
 console.log("ok");

@@ -476,3 +476,16 @@ def test_team_codes_are_one_table():
     body = _re.search(r"var TEAM_ABBR = (\{.*?\n  \});", src, _re.S).group(1)
     js = _json.loads(_re.sub(r"([{,]\s*)([A-Za-z]+):", r'\1"\2":', body))
     assert js == names.TEAM_ABBR
+
+
+def test_board_search_placeholder_follows_the_league(browser):
+    """#11: the board's search box shows the league's own example (NFL: KC or Chiefs), never the NBA text."""
+    ctx, page, errors = _page(browser, _app_api())
+    page.goto("/sports#/board?lg=nfl")
+    page.wait_for_selector("#sw-q")
+    ph = page.get_attribute("#sw-q", "placeholder")
+    assert "KC or Chiefs" in ph and "Celtics" not in ph and "BOS" not in ph
+    page.click("#sw-league button[data-lg=nba]")
+    page.wait_for_function("document.getElementById('sw-q') && /BOS or Celtics/.test(document.getElementById('sw-q').placeholder)")
+    assert not errors, errors
+    ctx.close()

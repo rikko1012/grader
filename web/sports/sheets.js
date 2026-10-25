@@ -212,7 +212,7 @@
       sel("shx-variant", "Type", [["all", "All types"], ["standard", "Standard"], ["goblin", "Goblin"], ["demon", "Demon"], ["alternate", "Alternate"]], st.variant) +
       sel("shx-lean", "Lean", [["any", "Any"], ["lean", "Has a lean"], ["over", "Lean Over"], ["under", "Lean Under"]], st.lean) +
       '<label class="shx-field shx-check"><input type="checkbox" id="shx-gap"' + (st.gap ? " checked" : "") + "><span>Model vs market gap</span></label>" +
-      '<label class="shx-field"><span>Player or team</span><input id="shx-q" type="search" value="' + esc(st.q) + '" placeholder="Search"></label></div>' +
+      '<label class="shx-field"><span>Player or team</span><input id="shx-q" type="search" value="' + esc(st.q) + '" placeholder="' + esc(root.SportsLabels ? root.SportsLabels.searchPlaceholder(lg) : "Search") + '"></label></div>' +
       '<div class="shx-meta"><span id="shx-count" aria-live="polite"></span><span class="sw-faint sw-small">' + built(D) + "</span></div>" +
       '<div class="sw-scroll shx-wrap"><table class="sw-mini shx-table"><caption class="sw-sr">' + esc(sheet) + ' lines, sortable</caption><thead><tr>' +
       th("player", "Player", st) + th("game", "Game", st) + th("stat", "Stat", st) + th("line", "Line", st, 1) + th("type", "Type", st) +
@@ -259,7 +259,7 @@
       sel("shx-dir", "Direction", [["any", "Over or Under"], ["over", "Over"], ["under", "Under"]], st.dir_) +
       sel("shx-min", "L10 at least", [["0", "Any"], ["60", "60%"], ["70", "70%"], ["80", "80%"], ["90", "90%"]], st.min) +
       '<label class="shx-field shx-check"><input type="checkbox" id="shx-l20"' + (st.l20 ? " checked" : "") + "><span>Has 20 games</span></label>" +
-      '<label class="shx-field"><span>Player or team</span><input id="shx-q" type="search" value="' + esc(st.q) + '" placeholder="Search"></label></div>' +
+      '<label class="shx-field"><span>Player or team</span><input id="shx-q" type="search" value="' + esc(st.q) + '" placeholder="' + esc(root.SportsLabels ? root.SportsLabels.searchPlaceholder(lg) : "Search") + '"></label></div>' +
       '<div class="shx-meta"><span id="shx-count" aria-live="polite"></span><span class="sw-faint sw-small">' + built(D) + "</span></div>" +
       '<div class="sw-scroll shx-wrap"><table class="sw-mini shx-table"><caption class="sw-sr">Most consistent players, sortable</caption><thead><tr>' +
       th("cplayer", "Player", st) + th("game", "Game", st) + th("stat", "Stat", st) + th("line", "Line", st, 1) + th("dir", "Side", st) +

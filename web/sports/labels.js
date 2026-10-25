@@ -217,13 +217,17 @@
   }
 
   // ------------------------------------------------------------------------------------------------ search
+  // #11: every search box takes the league's own example (slate: team; board / sheets: player or team). An unknown
+  // league gets a neutral text, never another league's teams.
   var PLACEHOLDER = {nba: "e.g. BOS or Celtics", nfl: "e.g. KC or Chiefs"};
-  function teamPlaceholder(lg) { return PLACEHOLDER[lg] || PLACEHOLDER.nba; }
+  var PLAYER_PLACEHOLDER = {nba: "e.g. Jalen Brunson, BOS or Celtics", nfl: "e.g. Patrick Mahomes, KC or Chiefs"};
+  function teamPlaceholder(lg) { return PLACEHOLDER[lg] || "Search teams"; }
+  function searchPlaceholder(lg) { return PLAYER_PLACEHOLDER[lg] || "Search players, teams"; }
 
   var api = {eventStatus: eventStatus, slipReason: slipReason, gateReason: gateReason, variant: variant,
              availability: availability, participation: participation, injuryStatus: injuryStatus, injuryParts: injuryParts,
              injuryText: injuryText, seasonLabel: seasonLabel, windowLabel: windowLabel, seasonBreaks: seasonBreaks,
-             spansText: spansText, teamPlaceholder: teamPlaceholder, SLIP_REASON: SLIP_REASON, EVENT_STATUS: EVENT_STATUS,
+             spansText: spansText, teamPlaceholder: teamPlaceholder, searchPlaceholder: searchPlaceholder, SLIP_REASON: SLIP_REASON, EVENT_STATUS: EVENT_STATUS,
              titleName: titleName, ledgerName: ledgerName, ledgerRows: ledgerRows, scoutSide: scoutSide,
              statLabel: statLabel, STAT: STAT, words: words, teamTag: teamTag, TEAM_ABBR: TEAM_ABBR};
   if (typeof module !== "undefined" && module.exports) module.exports = api;
