@@ -235,11 +235,33 @@ body.ot-lol .intro {margin:0 0 24px}.ot-lol .intro h2 {font:700 34px var(--displ
 @media(max-width:640px){.ot-lol .bar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.ot-lol .bar select{width:100%;max-width:none}.bar .seg,.bar input[type=search],.bar .filter-toggle,.bar .chk{grid-column:1/-1}.bar .filter-toggle{display:block;margin:0;order:10;min-height:36px;background:transparent;border-color:var(--line);font-size:12px}.bar:not(.filters-open) #m,.bar:not(.filters-open) #scope,.bar:not(.filters-open) #t,.bar:not(.filters-open) #g,.bar:not(.filters-open) #o,.bar:not(.filters-open) .chk{display:none}.workspace-nav .seg button{font-size:13px;white-space:nowrap}.ot-lol .sheet{border-radius:0;padding:16px}.ot-lol .intro{margin-bottom:14px}}
 @media(prefers-reduced-motion:reduce){.card-grid .mcard{transition:none}.card-grid .mcard:hover{transform:none}.skel{animation:none}}
 @media(max-width:860px){.tablebox.board:not(.hide-table){display:block}.tablebox.board:not(.hide-table)+.cards{display:none}}
+/* Compare (owner 2026-10-25): up to 6 lines side by side; the verdict first; one column per line (stacked on phones) */
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.lcmp{background:none;border:1px solid var(--line-2);color:var(--muted);border-radius:8px;min-height:36px;padding:0 10px;font:600 12px Inter,system-ui;cursor:pointer;white-space:nowrap}
+.lcmp:hover{border-color:var(--accent);color:var(--accent-2)}.lcmp.on{border-color:var(--accent);color:var(--accent-2);background:#ffad6814}
+.mcw{position:relative;margin:0 0 10px}.mcw .mcard{margin:0;padding-bottom:58px}.mcw>.lcmp{position:absolute;left:14px;bottom:12px}.card-grid .mcw{margin:0}.card-grid .mcw .mcard{height:100%;padding-bottom:62px}.card-grid .mcw>.lcmp{left:20px;bottom:16px}
+.ctbtn{position:fixed;right:18px;bottom:18px;z-index:45;background:#1c2635;color:var(--accent-2);border:1px solid var(--accent);border-radius:10px;min-height:44px;padding:0 16px;font:700 13px Inter,system-ui;cursor:pointer;box-shadow:0 8px 26px #0008}
+.ctnote{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:60;background:var(--panel-2);border:1px solid var(--accent);color:var(--text);border-radius:10px;padding:9px 14px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:calc(100vw - 32px)}.ctnote.on{opacity:1}
+#ctmodal{position:fixed;inset:0;background:#000c;display:none;align-items:flex-start;justify-content:center;padding:32px 12px;overflow:auto;z-index:55}#ctmodal.open{display:flex}
+.ctsheet{max-width:1240px!important}.cttitle{font:600 20px var(--display)}
+.ctverdict{margin:0 0 14px;padding:16px;border:1px solid #ffad6855;border-radius:12px;background:linear-gradient(120deg,#22201a,#121822)}.ctverdict h3{margin:6px 0 4px;font:700 20px var(--display)}.ctverdict p{margin:6px 0}
+.ctbig b{font:700 22px var(--display);color:var(--accent-2)}
+.ctpair,.ctwarn{margin-top:10px;padding:10px 12px;border-radius:9px;font-size:13px;line-height:1.6}.ctpair{border:1px solid #b18cff55;background:#b18cff0d}.ctwarn{border:1px solid #e3b34155;background:#e3b3410d;color:#f2d27a}
+.ctgrid{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(210px,1fr);gap:10px;overflow-x:auto;padding-bottom:6px}
+.ctcol{border:1px solid var(--line);border-radius:12px;background:#0f151f;padding:12px;min-width:0}.ctcol.win{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.cthead{display:flex;gap:9px;align-items:flex-start}.ctwho{flex:1;min-width:0}.ctwho b{display:block;font-size:16px}
+.ctx{background:none;border:1px solid var(--line);color:var(--muted);border-radius:7px;min-width:34px;min-height:34px;cursor:pointer}
+.ctwin{margin:6px 0 2px;font:700 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent-2)}.ctout{margin:6px 0 2px;font-size:12px;color:var(--muted)}
+.ctf{display:grid;padding:6px 0;border-top:1px solid var(--line);font-size:13px}.ctf .k{margin:0}.ctv{overflow-wrap:anywhere}.ctline{font:700 18px var(--display)}.ctcol .actions .btn{min-height:40px}
+@media(max-width:760px){.ctbtn{right:14px;bottom:14px}#ctmodal{padding:0;background:var(--panel)}.ctsheet{border-radius:0!important;min-height:100vh;border:0!important;padding:14px 12px 80px!important}
+  .ctgrid{grid-auto-flow:row;grid-template-columns:minmax(0,1fr);grid-auto-columns:auto;overflow:visible}.ctf{grid-template-columns:minmax(96px,38%) minmax(0,1fr);gap:8px;align-items:baseline}}
 </style></head><body class="ot-lol">
 <header><div class="logo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#170b00" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg></div>
 <h1>1time <em>Esports</em></h1><nav class="sportsw" aria-label="Game"><a href="/">CS2</a><a href="/lol" class="on" aria-current="page">LoL</a></nav><span class="grow"></span><span id="who"></span></header>
 <main class="wrap" id="app" aria-live="polite"><div class="skel"></div><div class="skel"></div><div class="skel"></div><div class="skel"></div></main>
 <div id="modal" role="dialog" aria-modal="true" aria-labelledby="cardtitle"><div class="sheet" id="card"></div></div>
+<div id="ctmodal" role="dialog" aria-modal="true" aria-label="Compare lines"><div class="sheet ctsheet" id="ctsheet"></div></div>
+<button type="button" class="ctbtn" id="ctbtn" hidden>⇄ Compare (0)</button><div class="ctnote" id="ctnote" role="status" aria-live="polite"></div>
 <script>
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
@@ -356,7 +378,7 @@ function boardView() {
   if (!(D.rows || []).length) return `<div class="empty"><b>No graded LoL lines right now.</b><p class="small">Lines appear here when Underdog or PrizePicks post League of Legends kills, assists or deaths props for a match we can forecast, and the pre-match forecast has been saved.</p>${(D.match_tables || []).length ? `<button type="button" data-go="tables">See the posted lines</button>` : ""}</div>`;
   const allRows = rows(), rs = allRows.slice(0, visibleLimit);
   if (!rs.length) return `<div class="empty"><b>No lines match these filters.</b><br><button type="button" id="reset">Reset filters</button></div>`;
-  let t = `<div class="tablebox board ${F.layout === "cards" ? "hide-table" : ""}"><table><thead><tr><th>Start</th><th>Player</th><th>Opponent</th><th>Prop</th><th>Book</th><th class="num">Line</th><th class="num">Projection</th><th class="num">Over</th><th class="num">Under</th><th>Pick</th><th>Grade</th><th class="num">Stake</th></tr></thead><tbody>`;
+  let t = `<div class="tablebox board ${F.layout === "cards" ? "hide-table" : ""}"><table><thead><tr><th>Start</th><th>Player</th><th>Opponent</th><th>Prop</th><th>Book</th><th class="num">Line</th><th class="num">Projection</th><th class="num">Over</th><th class="num">Under</th><th>Pick</th><th>Grade</th><th class="num">Stake</th><th><span class="sr">Compare</span></th></tr></thead><tbody>`;
   let c = `<div class="cards ${F.layout === "cards" ? "card-grid" : ""}">`;
   for (const x of rs) {
     const k = esc(x.key);
@@ -364,10 +386,10 @@ function boardView() {
       <td><b>${esc(x.player)}</b><span class="sub">${esc(x.team || "")}${x.role ? " · " + esc(x.role) : ""}</span></td><td>${esc(x.opponent || "")}</td>
       <td>${esc(x.stat_name)}<span class="sub">${esc(x.scope)}</span></td><td>${esc(x.platform_label)}${typeTag(x.line_type)}</td>
       <td class="num"><b>${x.line}</b></td><td class="num">${num(x.projection)}</td><td class="num">${pct(x.p_over)}</td><td class="num">${pct(x.p_under)}${x.p_push > 0 ? `<span class="ot-push">Push ${pct(x.p_push)}</span>` : ""}</td>
-      <td>${pickCell(x)}</td><td>${gradeChip(x)}${savedAgo(x) ? `<span class="sub saved">${esc(savedAgo(x))}</span>` : ""}</td><td class="num">${x.units}U</td></tr>`;
-    c += `<button type="button" class="mcard" data-k="${k}"><div class="card-meta"><span>${esc(x.platform_label)}</span><span>${esc(x.scope)}</span></div><div class="top"><div class="who"><b>${esc(x.player)}</b><span class="sub">${esc(x.team || "")}${x.role ? " · " + esc(x.role) : ""} · vs ${esc(x.opponent || "")}</span><span class="sub">${when(x.start)}${startedTag(x)}</span></div><div>${gradeChip(x)}</div></div>
+      <td>${pickCell(x)}</td><td>${gradeChip(x)}${savedAgo(x) ? `<span class="sub saved">${esc(savedAgo(x))}</span>` : ""}</td><td class="num">${x.units}U</td><td>${ctBtnHtml(x)}</td></tr>`;
+    c += `<div class="mcw"><button type="button" class="mcard" data-k="${k}"><div class="card-meta"><span>${esc(x.platform_label)}</span><span>${esc(x.scope)}</span></div><div class="top"><div class="who"><b>${esc(x.player)}</b><span class="sub">${esc(x.team || "")}${x.role ? " · " + esc(x.role) : ""} · vs ${esc(x.opponent || "")}</span><span class="sub">${when(x.start)}${startedTag(x)}</span></div><div>${gradeChip(x)}</div></div>
       <div class="card-market">${esc(x.stat_name)} ${typeTag(x.line_type)}</div><div style="margin-top:4px">${pickCell(x)}</div>
-      <div class="kv"><div><span class="k">Line</span><b>${x.line}</b></div><div><span class="k">Projection</span>${num(x.projection)}</div><div><span class="k">Over</span>${pct(x.p_over)}</div><div><span class="k">Under</span>${pct(x.p_under)}</div></div><span class="card-footer small muted">Stake ${esc(x.units)}U${savedAgo(x) ? " · " + esc(savedAgo(x)) : ""}</span>${x.p_push > 0 ? `<span class="ot-push">Exactly ${x.line}: ${pct(x.p_push)} push</span>` : ""}</button>`;
+      <div class="kv"><div><span class="k">Line</span><b>${x.line}</b></div><div><span class="k">Projection</span>${num(x.projection)}</div><div><span class="k">Over</span>${pct(x.p_over)}</div><div><span class="k">Under</span>${pct(x.p_under)}</div></div><span class="card-footer small muted">Stake ${esc(x.units)}U${savedAgo(x) ? " · " + esc(savedAgo(x)) : ""}</span>${x.p_push > 0 ? `<span class="ot-push">Exactly ${x.line}: ${pct(x.p_push)} push</span>` : ""}</button>${ctBtnHtml(x)}</div>`;
   }
   return t + `</tbody></table></div>` + c + `</div><div class="results-heading"><span class="small muted">Showing ${rs.length} of ${allRows.length} matching lines</span>${rs.length < allRows.length ? `<button type="button" class="btn" id="morelines">Show 48 more lines</button>` : ""}</div><p class="small faint" style="margin-top:10px">${esc(D.stake_note)} Projection = the model's expected total for the exact games in the prop. Chances are for this line.</p>`;
 }
@@ -485,6 +507,164 @@ function factorsHtml(x) {
     ${rest.length ? `<details class="small"><summary>All ${rowsF.length} factors</summary><table class="ftab small"><tbody>${rest.map(tr).join("")}</tbody></table></details>` : ""}
     <div class="small faint" style="margin-top:6px">Values are this player's numbers relative to his role (log ratios; 0 = average). Not in any grade (decided after props close, or no data source yet): ${esc(F.not_pre_match.join("; "))}.</div>`;
 }
+// ---------- Compare (owner 2026-10-25): up to 6 lines side by side - same match or other matches, any player, prop, scope or
+// platform - with a "better line" verdict on one stated rule. Display only: every number is the board row's own (p_over /
+// p_under / grade / stake as served); nothing is recomputed and lines are never combined into one probability. Kept in this
+// browser (scout.lol.cmp): the line's key plus a copy of the row, so a line that left the board is named as such.
+const CTKEY = "scout.lol.cmp", CTMAX = 6;
+let CT = [];
+try { const x = JSON.parse(localStorage.getItem(CTKEY) || "[]"); CT = (Array.isArray(x) ? x : []).filter(i => i && i.k && i.r).slice(0, CTMAX); } catch {}
+const ctSave = () => { try { localStorage.setItem(CTKEY, JSON.stringify(CT)); } catch {} };
+const ctHas = (k) => CT.some(i => i.k === k);
+function ctPrune() {                               // a line whose match started more than 6 hours ago leaves the tray
+  const old = Date.now() - 6 * 3600000, n = CT.length;
+  CT = CT.filter(i => { const t = Date.parse(i.r.start || ""); return !(Number.isFinite(t) && t < old); });
+  if (CT.length !== n) ctSave();
+}
+function ctToggle(k) {
+  const i = CT.findIndex(x => x.k === k);
+  if (i >= 0) { CT.splice(i, 1); ctSave(); return {on: false, text: `Removed from Compare - ${CT.length} left.`}; }
+  const x = (D && D.rows || []).find(r => r.key === k);
+  if (!x) return {on: false, text: "This line is no longer on the board."};
+  if (CT.length >= CTMAX) return {on: false, full: true, text: `Compare holds ${CTMAX} lines - remove one first.`};
+  CT.push({k, at: Date.now(), r: JSON.parse(JSON.stringify(x))}); ctSave();
+  return {on: true, text: `Added to Compare - ${CT.length} of ${CTMAX}.`};
+}
+// the line now: the live board row with this key, else the saved copy (named: moved or no longer on the board)
+function ctResolve(it) {
+  const x = (D && D.rows || []).find(r => r.key === it.k);
+  if (x) return {r: x, live: true};
+  const mv = (D && D.rows || []).find(r => sameProp(r, legOf(it.r)) && r.line !== it.r.line);
+  return {r: it.r, gone: true, moved: mv ? mv.line : null};
+}
+const ctLetter = (x) => x.grade in GRANK;
+// why a line is not in the verdict (empty = eligible): Leans, sides not offered, started matches, lines no longer posted
+function ctWhyNot(c) {
+  const x = c.r;
+  if (c.gone) return c.moved != null ? `The line moved: ${x.line} → ${c.moved}.` : "This line is no longer on the board.";
+  const w = whyNot(x); if (w) return w;
+  if (!x.grade) return "No grade on this line.";
+  if (!ctLetter(x)) return `${x.grade}: the chance is under 55%.`;
+  return "";
+}
+// THE RULE: the higher chance for the graded side; a tie goes to the higher grade, then to more units
+const ctRank = (a, b) => (pside(b) - pside(a)) || ((GRANK[a.grade] ?? 9) - (GRANK[b.grade] ?? 9)) || ((+b.units || 0) - (+a.units || 0));
+const CTRULE = "Rule: the highest chance for each line's graded side wins; a tie goes to the higher grade, then to more units. Leans, sides not offered, started matches and lines no longer posted are not eligible. This compares chances only - payouts differ by platform.";
+const ctSideP = (x, side) => side === "Over" ? x.p_over : x.p_under;
+const ctOffered = (x, side) => !!(x.sides.find(s => s.side === side) || {}).offered;
+function ctState() {
+  const R = CT.map(ctResolve);
+  R.forEach(c => { c.why = ctWhyNot(c); });
+  const el = R.map((c, i) => i).filter(i => !R[i].why).sort((i, j) => ctRank(R[i].r, R[j].r) || i - j);
+  const win = el.length ? el.filter(i => ctRank(R[i].r, R[el[0]].r) === 0) : [];
+  const pairs = [];                          // the same player, prop and games in one match on both platforms (standard lines)
+  for (let i = 0; i < R.length; i++) for (let j = i + 1; j < R.length; j++) {
+    const a = R[i].r, b = R[j].r;
+    if (a.platform === b.platform || a.player !== b.player || a.team !== b.team || a.stat !== b.stat || a.scope !== b.scope || matchKey(a) !== matchKey(b)
+        || a.line_type !== "Standard" || b.line_type !== "Standard") continue;
+    const ok = [i, j].filter(k => !R[k].why).sort((x, y) => ctRank(R[x].r, R[y].r));
+    const G = ok.length ? R[ok[0]].r.pick_side : a.pick_side === b.pick_side ? a.pick_side : null;
+    if (G) pairs.push({i, j, G});
+  }
+  const groups = [];                         // lines from one match: related results - a warning, never a combined chance
+  R.forEach((c, i) => { const g = groups.find(g => matchKey(R[g[0]].r) === matchKey(c.r)); if (g) g.push(i); else groups.push([i]); });
+  // one player's same prop on two platforms is already the pair note above - the warning is for different props
+  return {R, el, win, pairs, same: groups.filter(g => g.length > 1 && new Set(g.map(i => [R[i].r.player, R[i].r.team, R[i].r.stat, R[i].r.scope].join("|"))).size > 1)};
+}
+const ctPoss = (n) => n + (/s$/.test(n) ? "'" : "'s");
+const ctName = (x) => `${esc(x.player)} ${esc(x.stat_name)} ${esc(x.scope)}`;
+function ctPairHtml(S, pr) {
+  const a = S.R[pr.i].r, b = S.R[pr.j].r, G = pr.G;
+  const at = x => `${esc(x.platform_label)} ${x.line}: ${ctOffered(x, G) ? `<b>${pct(ctSideP(x, G))}</b>` : `${G} not offered`}`;
+  let v;
+  if (a.line === b.line) v = "Same line on both platforms.";
+  else {
+    const best = (G === "Over") === (a.line < b.line) ? a : b, other = best === a ? b : a;
+    v = ctOffered(best, G) ? `<b>${esc(ctPoss(best.platform_label))} ${best.line}</b> is the better line for the ${G} (${G === "Over" ? "lower" : "higher"} line).`
+      : `${esc(best.platform_label)} does not offer the ${G} at ${best.line}; ${esc(ctPoss(other.platform_label))} ${other.line} is the line offered for it.`;
+  }
+  return `<div class="ctpair"><div><b>${ctName(a)}</b> · ${G} on both platforms</div><div>${at(a)} · ${at(b)}</div><div>${v} <span class="muted">One outcome on two platforms - pick one line, not both.</span></div></div>`;
+}
+function ctColHtml(S, i) {
+  const c = S.R[i], x = c.r, win = S.win.includes(i);
+  const f = (k, v) => `<div class="ctf"><span class="k">${k}</span><span class="ctv">${v}</span></div>`;
+  const why = slipRule(x);
+  return `<article class="ctcol${win ? " win" : ""}${c.why ? " out" : ""}">
+    <div class="cthead"><div class="ctwho"><b>${esc(x.player)}</b><span class="sub">${esc(x.team || "")}${x.role ? " · " + esc(x.role) : ""}</span></div>${gradeChip(x)}
+      <button type="button" class="ctx" data-ctrm="${i}" aria-label="Remove ${esc(x.player)} from Compare" title="Remove">✕</button></div>
+    ${win ? `<div class="ctwin">${S.win.length > 1 ? "Tied - better line" : "Better line"}</div>` : c.why ? `<div class="ctout">Not eligible - ${esc(c.why)}</div>` : ""}
+    ${f("Match", `${esc(x.match || "")}<br><span class="muted">${when(x.start)}</span>`)}
+    ${f("Prop", `${esc(x.stat_name)} · ${esc(x.scope)}`)}
+    ${f("Platform · line", `${esc(x.platform_label)} · <b class="ctline">${x.line}</b>${typeTag(x.line_type)}`)}
+    ${f("Pick", pickCell(x))}
+    ${f("Chance", x.pick_offered ? `<b>${pct(pside(x))}</b>${x.p_push > 0 ? ` <span class="faint">push ${pct(x.p_push)}</span>` : ""}` : `Over ${pct(x.p_over)} · Under ${pct(x.p_under)}`)}
+    ${f("Grade · stake", `${gradeChip(x)} · ${esc(x.units)}U`)}
+    ${f("Projection", num(x.projection))}
+    ${f("Data", esc(savedAgo(x)) || "–")}
+    <div class="actions"><button type="button" class="btn" data-ctslip="${i}" ${c.gone || why ? "disabled" : ""}>Add to slip</button><button type="button" class="btn" data-ctcard="${i}" ${c.gone ? "disabled" : ""}>Open card</button></div>
+    ${!c.gone && why && !c.why ? `<div class="small muted">${esc(why)}</div>` : ""}
+  </article>`;
+}
+function ctHtml() {
+  ctPrune();
+  const S = ctState(), n = CT.length;
+  let v;
+  if (n < 2) v = `<p>Add ${n ? "at least one more line" : "lines"} to compare (up to ${CTMAX}) - tap <b>⇄ Compare</b> on a board line or in a player's card.</p>`;
+  else if (!S.el.length) v = `<p><b>No eligible line.</b> Every line here is a Lean, has no offered side, has started or is no longer posted.</p>`;
+  else if (S.win.length > 1) v = `<h3>Tied on the rule</h3><p>${S.win.map(i => { const x = S.R[i].r; return `<b>${ctName(x)}</b> ${esc(x.pick)} (${esc(x.platform_label)}) · ${pct(pside(x))}`; }).join("<br>")}</p><p class="small muted">Same chance, grade and units.</p>`;
+  else {
+    const w = S.R[S.win[0]].r;
+    v = `<h3>${esc(w.player)} ${esc(w.pick)} ${esc(w.stat_name)} <span class="muted">· ${esc(w.scope)} · ${esc(w.platform_label)}</span>${typeTag(w.line_type)}</h3>
+      <p class="ctbig"><b>${pct(pside(w))}</b> · ${gradeChip(w)} · ${esc(w.units)}U</p>
+      <div class="actions"><button type="button" class="btn primary" data-ctslip="${S.win[0]}" ${slipRule(w) ? "disabled" : ""}>Add to slip</button><button type="button" class="btn" data-ctcard="${S.win[0]}">Open card</button>${slipRule(w) ? `<span class="actmsg">${esc(slipRule(w))}</span>` : ""}</div>`;
+  }
+  const notes = S.pairs.map(pr => ctPairHtml(S, pr)).join("") + S.same.map(g => { const x0 = S.R[g[0]].r;
+    return `<div class="ctwarn"><b>Same match - results are related.</b> ${g.map(i => `${ctName(S.R[i].r)} ${S.R[i].r.line} (${esc(S.R[i].r.platform_label)})`).join(", ")} (${esc(x0.match || "")}). Each chance is for its own line; no combined chance is shown.</div>`; }).join("");
+  return `<div class="sheet-head"><span><b class="cttitle">Compare</b> <span class="small muted">${n} of ${CTMAX} lines</span></span><span>${n ? `<button type="button" class="btn" data-ctclear="1">Clear</button> ` : ""}<button type="button" class="btn" data-ctclose="1" id="ctclose">Close ✕</button></span></div>
+    <section class="ctverdict" aria-label="Better line"><div class="eyebrow">Better line</div>${v}<p class="small muted">${CTRULE}</p>${notes}<div class="actmsg" id="ctmsg"></div></section>
+    ${n ? `<div class="ctgrid">${CT.map((it, i) => ctColHtml(S, i)).join("")}</div>` : ""}
+    <p class="small faint">${esc((D && D.stake_note) || "")} Every number is the board's own for that line.</p>`;
+}
+function ctBtnHtml(x) { const on = ctHas(x.key);
+  return `<button type="button" class="lcmp${on ? " on" : ""}" data-lcmp="${esc(x.key)}" aria-pressed="${on}" title="${on ? "In Compare - tap to remove" : "Compare this line with others"}">${on ? "✓ In Compare" : "⇄ Compare"}</button>`; }
+function ctFloat() {
+  let b = $("#ctbtn"); if (!b) return;
+  b.hidden = !CT.length; b.textContent = `⇄ Compare (${CT.length})`;
+}
+function ctOpen() {
+  $("#ctsheet").innerHTML = ctHtml(); $("#ctmodal").classList.add("open"); document.body.style.overflow = "hidden";
+  const c = $("#ctclose"); if (c && c.focus) c.focus();
+}
+function ctClose() { $("#ctmodal").classList.remove("open"); if (!$("#modal").classList.contains("open")) document.body.style.overflow = ""; ctFloat(); }
+function ctClick(e) {
+  if (e.target.id === "ctmodal" || e.target.closest("[data-ctclose]")) return ctClose();
+  const rm = e.target.closest("[data-ctrm]");
+  if (rm) { CT.splice(+rm.dataset.ctrm, 1); ctSave(); $("#ctsheet").innerHTML = ctHtml(); ctFloat(); render(); return; }
+  if (e.target.closest("[data-ctclear]")) { CT = []; ctSave(); $("#ctsheet").innerHTML = ctHtml(); ctFloat(); render(); return; }
+  const sl = e.target.closest("[data-ctslip]");
+  if (sl) {             // Add to slip's own rules (one platform, one pick per match and per player, the leg limit, started refused)
+    const it = CT[+sl.dataset.ctslip]; if (!it) return;
+    const c = ctResolve(it), x = c.r, why = c.gone ? ctWhyNot(c) : slipRule(x);
+    if (!why) { SLIP.legs.push(legOf(x)); saveSlip(); CHECK = {}; }
+    $("#ctsheet").innerHTML = ctHtml(); render();
+    const m = $("#ctmsg"); if (m) { m.className = why ? "actmsg bad" : "actmsg ok"; m.textContent = why || `Added - ${SLIP.legs.length} pick${SLIP.legs.length > 1 ? "s" : ""} in your ${x.platform_label} slip.`; }
+    return;
+  }
+  const cd = e.target.closest("[data-ctcard]");
+  if (cd) { const it = CT[+cd.dataset.ctcard]; if (it) { ctClose(); card(it.k); } }
+}
+// the Compare buttons (board rows, phone cards, the player card): toggle in place, no redraw of the board
+function ctWire() {
+  document.querySelectorAll("[data-lcmp]").forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    const k = b.dataset.lcmp, r = ctToggle(k);
+    document.querySelectorAll("[data-lcmp]").forEach(o => { if (o.dataset.lcmp !== k) return; const on = ctHas(k);
+      o.classList.toggle("on", on); o.setAttribute("aria-pressed", String(on)); o.textContent = on ? "✓ In Compare" : "⇄ Compare"; });
+    ctFloat(); ctNote(r.text + (r.on && CT.length >= 2 ? " Open Compare to see them side by side." : ""));
+  });
+}
+let ctNoteT = null;
+function ctNote(t) { const n = $("#ctnote"); if (!n) return; n.textContent = t; n.classList.add("on"); clearTimeout(ctNoteT); ctNoteT = setTimeout(() => n.classList.remove("on"), 2600); }
 function card(k, focusBack) {
   const x = (D.rows || []).find(r => r.key === k);
   if (!x) { render(); return; }                 // the line left the board since it was drawn: redraw, open nothing
@@ -502,6 +682,7 @@ function card(k, focusBack) {
     <div class="small muted" style="margin-top:8px">${esc(x.stake_reason)}</div>
     <div class="actions"><button type="button" class="btn primary" id="copypick" ${playable(x) ? "" : "disabled"}>Copy pick</button><button type="button" class="btn" id="addslip" ${slipRule(x) ? "disabled" : ""}>Add to slip</button>
       <button type="button" class="btn" id="copylink">Copy link</button>
+      ${ctBtnHtml(x)}
       <span class="actmsg ${playable(x) ? "" : "bad"}" id="actmsg">${esc(whyNot(x) || slipRule(x) || "")}</span></div>
     <h4>Recent average (not the projection)</h4><div>${per == null ? NA : `${num(per, 2)} ${esc(x.stat_name.toLowerCase())} per game over the last ${x.recent_games} games${n ? ` · ${num(per * n, 1)} over ${n} game${n > 1 ? "s" : ""}` : ""}`}</div>
     <h4>What this projection uses</h4>${(x.drivers || []).length ? `<ul class="small">${x.drivers.map(z => `<li>${esc(z)}</li>`).join("")}</ul>` : NA}
@@ -536,6 +717,7 @@ function card(k, focusBack) {
     SLIP.legs.push(legOf(x)); saveSlip(); CHECK = {};
     $("#addslip").disabled = true; $("#actmsg").className = "actmsg ok"; $("#actmsg").textContent = `Added - ${SLIP.legs.length} pick${SLIP.legs.length > 1 ? "s" : ""} in your ${x.platform_label} slip.`;
   };
+  ctWire();
   $("#closecard").focus();
 }
 function closeCard() {
@@ -607,6 +789,7 @@ function render() {
     el.onclick = () => card(el.dataset.k, el);
     if (el.tagName === "TR") el.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); card(el.dataset.k, el); } };
   });
+  ctWire(); ctFloat();
   const tb2 = $(".tablebox.board"); if (tb2) tb2.scrollLeft = sl;
   window.scrollTo(0, y);
 }
@@ -628,6 +811,7 @@ function gate(s) {
   $("#app").innerHTML = `<div class="gate"><h2>Members only</h2><p class="muted">Sign in with Whop to see the LoL board.</p><p><a href="/auth/login">Sign in</a>${s.upgrade ? ` · <a href="${esc(s.upgrade)}">Join on Whop</a>` : ""}</p></div>`;
 }
 document.addEventListener("keydown", e => {
+  if ($("#ctmodal").classList.contains("open")) { if (e.key === "Escape") ctClose(); return; }
   if (!$("#modal").classList.contains("open")) return;
   if (e.key === "Escape") closeCard();
   if (e.key === "Tab") {
@@ -638,6 +822,8 @@ document.addEventListener("keydown", e => {
   }
 });
 $("#modal").addEventListener("click", e => { if (e.target.id === "modal") closeCard(); });
+$("#ctmodal").addEventListener("click", ctClick);
+$("#ctbtn").addEventListener("click", ctOpen);
 window.addEventListener("scroll", () => { try { sessionStorage.setItem(SKEY, String(window.scrollY)); } catch {} }, {passive: true});
 (async () => {
   const s = await fetch("/auth/me").then(r => r.json()).catch(() => ({}));
