@@ -40,6 +40,26 @@ def test_recent_is_one_row_per_prop_newest_first_with_grade():
     assert len(rp.recent(rows * 1, n=1)) == 1
 
 
+@pytest.mark.parametrize("contain", [True, False])
+def test_contained_league_carries_no_research_letters(monkeypatch, contain):
+    """vg-1: with VG_CONTAIN_LEAN on, NFL (no stat passed its gate) has no grade rows, no letter in recent, no picks
+    by grade; NBA keeps its letters. With it off, NFL letters come back."""
+    from sports import board_view
+    monkeypatch.setattr(board_view, "VG_CONTAIN_LEAN", contain)
+    nfl = [_row("n1", "nfl:g1", "nfl:p1", "rec_yds", 50.5, "sm-1", "over", "win", "2026-10-20T10:00Z", "2026-10-21T05:00Z", 0.62)]
+    nba = [_row("b1", "nba:g1", "nba:p1", "points", 20.5, "sm-1", "over", "win", "2026-10-20T10:00Z", "2026-10-21T05:00Z", 0.62)]
+    G, R, M = rp.grades(nfl, "nfl"), rp.recent(nfl, league="nfl"), rp.model_gate("nfl")
+    if contain:
+        assert G["rows"] == [] and G["withheld"] == "NFL model not validated"
+        assert R[0]["grade"] is None and M["contained"] is True
+    else:
+        assert [g["n"] for g in G["rows"]] == [1, 0, 0, 0] and "withheld" not in G
+        assert R[0]["grade"] == "A" and M["contained"] is False
+    assert M["not_validated"] == "NFL model not validated"                     # the banner stays in both states
+    assert rp.grades(nba, "nba")["rows"][0]["n"] == 1 and rp.recent(nba, league="nba")[0]["grade"] == "A"
+    assert rp.model_gate("nba")["contained"] is False
+
+
 def test_model_gate_names_a_league_with_no_validated_stat():
     nfl, nba = rp.model_gate("nfl"), rp.model_gate("nba")
     assert nfl["not_validated"] == "NFL model not validated" and nfl["validated_stats"] == []
@@ -88,7 +108,8 @@ def _league(lg, props, leans, grades, recent, hh, nv=None):
             "bands": [{"band": "50-55%", "label": "probability band", "n": 50, "wins": 26, "losses": 24, "pushes": 0, "stated": 0.52,
                        "hit_rate": 0.52, "hit_rate_ci95": [0.4, 0.64]}],
             "grades": {"label": "Research grade - not validated", "rule": "rg-1", "rows": grades},
-            "recent": recent, "model_gate": {"rule": "vg-1", "validated_stats": [] if nv else ["points"], "not_validated": nv},
+            "recent": [dict(r, grade=None) for r in recent] if nv else recent,
+            "model_gate": {"rule": "vg-1", "validated_stats": [] if nv else ["points"], "not_validated": nv, "contained": bool(nv)},
             "head_to_head": {"version": "hh-1", "method": "fixture method", "rows": hh}}
 
 
@@ -98,13 +119,13 @@ NBA_GRADES = [{"grade": "A", "n": 120, "wins": 70, "losses": 48, "pushes": 2, "h
               {"grade": "C", "n": 300, "wins": 150, "losses": 148, "pushes": 2, "hit_rate": 150 / 298, "hit_rate_ci95": [0.45, 0.56]},
               {"grade": "Lean", "n": 926, "wins": 464, "losses": 454, "pushes": 8, "hit_rate": 464 / 918, "hit_rate_ci95": [0.47, 0.54]}]
 HH = [{"scout": "sm-1", "market": "mc-1", "stat": "all", "pairs": 820, "pushes": 9, "games": 140, "scout_brier": 0.2431,
-       "market_brier": 0.2489, "scout_log_loss": 0.68, "market_log_loss": 0.69, "scout_hit_rate": 0.53, "market_hit_rate": 0.52,
+       "market_brier": 0.2489, "scout_log_loss": 0.68, "market_log_loss": 0.69, "scout_hit_rate": 0.5312, "market_hit_rate": 0.5178,
        "diff": {"brier": -0.0058, "brier_ci95": [-0.0121, 0.0009], "log_loss": -0.01, "log_loss_ci95": [-0.03, 0.01],
-                "hit_rate": 0.01, "hit_rate_ci95": [-0.02, 0.04]}}]
+                "hit_rate": 0.01, "hit_rate_ci95": [-0.0102, 0.0361]}}]
 PUBLIC = {"version": "rp-1", "built_at": "2026-10-25T06:00:00Z", "as_of": "2026-10-25T06:00:00Z",
           "leagues": {"nba": _league("nba", 1566, NBA_LEANS, NBA_GRADES, _recent(23), HH),
                       "nfl": _league("nfl", 40, {"n": 30, "wins": 14, "losses": 16, "pushes": 0, "hit_rate": 14 / 30, "hit_rate_ci95": [0.3, 0.63]},
-                                     [{"grade": g, "n": 0, "wins": 0, "losses": 0, "pushes": 0, "hit_rate": None, "hit_rate_ci95": None} for g in ("A", "B", "C", "Lean")],
+                                     [],
                                      _recent(4, "nfl"), [], nv="NFL model not validated")},
           "picks": {"leagues": {"nba": {"picks": 12, "games": 5, "wins": 6, "losses": 5, "pushes": 1, "voids": 0, "pending": 2,
                                         "hit_rate": 6 / 11, "hit_rate_ci95_games": None}}, "note": "fixture"},
@@ -169,9 +190,15 @@ def _check_summary(page, lg="nba"):
         assert t.get_attribute("data-grade") == g["grade"]
         assert t.locator("[data-rx-gn]").inner_text() == f"{g['n']:,}"
         assert t.locator("[data-rx-grate]").inner_text() == f"{round(g['hit_rate'] * 100, 1):.1f}%"
-    assert page.locator(".rx-cmp").get_attribute("data-verdict") == "even"     # CI -0.0121..0.0009 includes 0
-    assert "No clear difference between Scout and the market consensus" in page.locator(".rx-cmp").inner_text()
-    assert "820 shared props from 140 games" in page.locator("[data-rx-cmp]").inner_text()
+    assert page.locator(".rx-cmp").get_attribute("data-verdict") == "even"     # hit-rate gap CI includes 0
+    assert page.locator("[data-rx-cmp-head]").inner_text() == "Scout hit 53.1% vs 51.8% for the market consensus on the same 820 props"
+    assert page.locator("[data-rx-cmp]").inner_text().startswith("No clear difference (95% range of the gap −1.0% to +3.6%)")
+    for i, g in enumerate(L["grades"]["rows"][:3]):                              # tile ranges are percentages too
+        lo, hi = g["hit_rate_ci95"]
+        assert tiles.nth(i).locator("[data-rx-grange]").inner_text() == f"{lo * 100:.1f}%–{hi * 100:.1f}%"
+    surface_txt = page.evaluate("[...document.querySelectorAll('.rx-sum,.rx-cmp,.rx-recent')].map(e => e.innerText).join(' ')")
+    import re
+    assert not re.search(r"(^|[^\d.])0\.\d", surface_txt), "raw decimal on the surface"
     # recent: 10, then Show more adds 10, then 3
     assert page.locator(".rx-pick").count() == 10
     assert "Fixture Player 0" in page.locator(".rx-pick").first.inner_text()
@@ -231,6 +258,10 @@ def test_public_results_page_league_toggle_and_fit(browser, width):
     assert page.locator("[data-rx-nv]").inner_text() == "NFL model not validated"
     assert page.locator("[data-rx-wlp]").inner_text() == "14-16-0" and page.locator(".rx-pick").count() == 4
     assert page.locator(".rx-cmp").get_attribute("data-verdict") == "none"
+    # contained league (vg-1): no grade tiles, no letters in Recent, no grade table in Details
+    assert page.locator(".rx-tile").count() == 0 and page.locator(".rx-gr").count() == 0
+    assert page.locator(".rx-recent .rx-g").count() == 0 and "research letters" not in page.locator(".rx-recent").inner_text()
+    assert page.locator('details.rx-d[data-rx="grades"]').count() == 0
     assert page.evaluate("[...document.querySelectorAll('details.rx-d')].every(x => !x.open)") and _fits(page)
     page.screenshot(path=str(SHOTS / f"results_public_nfl_{width}.png"), full_page=True)
     assert not errors, errors

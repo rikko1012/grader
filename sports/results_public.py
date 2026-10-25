@@ -208,13 +208,23 @@ def bands(rows):
     return out
 
 
-def grades(rows):
+def _contained(league, stat):
+    """vg-1 containment (board_view.VG_CONTAIN_LEAN on + the market's model failed its gate): no research letter."""
+    from . import board_view
+    return bool(league) and board_view.contain_reason(league, stat) is not None
+
+
+def grades(rows, league=None):
     """rg-1 research letters of settled Scout leans: sports-gp-1 band of the UNROUNDED unconditional lean-side chance
     (board_view.research_grade); n, W-L-P, hit rate + game-clustered 95% interval. Research - not validated. The
     board's market (N4) / sanity holds are live-board rules and are not re-applied to stored forecasts here."""
     from . import board_view
-    leans = [r for r in rows if r["status"] == "settled" and r["lean"]]
+    leans = [r for r in rows if r["status"] == "settled" and r["lean"] and not _contained(league, r["stat"])]
     out = []
+    if league and _league_contained(league):
+        from . import board_view
+        return {"label": "Research grade - not validated", "rule": "rg-1", "rows": [],
+                "withheld": board_view.NOT_VALIDATED_TEXT.format(LG=league.upper())}
     for g in ("A", "B", "C", "Lean"):
         xs = [r for r in leans if board_view.research_grade(r["p_over"] if r["lean"] == "over" else r["p_under"]) == g]
         out.append({"grade": g, "n": len(xs), "wins": sum(1 for r in xs if r["lean_result"] == "win"),
@@ -241,7 +251,8 @@ def tracked_picks():
             "hit_rate_ci95_games")
     bgl = agg.get("by_grade_league") or {}
     return {"version": agg.get("version"), "rule": agg.get("rule"),
-            "leagues": {lg: dict({k: g.get(k) for k in keep}, by_grade=bgl.get(lg))
+            "leagues": {lg: dict({k: g.get(k) for k in keep},
+                                 by_grade=None if _league_contained(lg) else bgl.get(lg))
                         for lg, g in ((agg.get("by") or {}).get("league") or {}).items()},
             "note": "member picks only (test picks excluded); each pick at its own line; hit rate = wins / (wins + "
                     "losses); never a return"}
@@ -250,7 +261,17 @@ def tracked_picks():
 RECENT_N = 50
 
 
-def recent(rows, names=None, n=RECENT_N):
+def _league_contained(league):
+    st = _league_stats(league)
+    return bool(st) and all(_contained(league, x) for x in st)
+
+
+def _league_stats(league):
+    from . import capabilities
+    return list(capabilities.SUPPORTED.get(league, ()))
+
+
+def recent(rows, names=None, n=RECENT_N, league=None):
     """rx-1: newest n settled Scout leans, one per prop (newest Scout forecast of that prop), newest settled first."""
     from . import board_view
     best = {}
@@ -266,7 +287,8 @@ def recent(rows, names=None, n=RECENT_N):
         out.append({"forecast_id": r["forecast_id"], "model": r["model"], "event_id": r["event_id"],
                     "player_id": r["player_id"], "player": (names or {}).get(r["player_id"]), "stat": r["stat"],
                     "line": r["line"], "side": r["lean"], "result": r["lean_result"], "outcome": r["outcome"],
-                    "actual": r.get("actual"), "p_side": _r(p_side), "grade": board_view.research_grade(p_side),
+                    "actual": r.get("actual"), "p_side": _r(p_side),
+                    "grade": None if _contained(league, r["stat"]) else board_view.research_grade(p_side),
                     "settled_at": r.get("settled_at"), "forecast_at": r.get("forecast_at")})
     return out
 
@@ -277,6 +299,7 @@ def model_gate(league):
     stats = list(capabilities.SUPPORTED.get(league, ()))
     ok = [st for st in stats if board_view.gate_reason(league, st) is None]
     return {"rule": board_view.GATE_VERSION, "validated_stats": ok,
+            "contained": _league_contained(league),
             "not_validated": None if ok or not stats else board_view.NOT_VALIDATED_TEXT.format(LG=league.upper())}
 
 
@@ -292,7 +315,7 @@ def build(con, now=None, base=None):
             mr = [r for r in rows if r["model"] == mv]
             models[mv] = dict(summarize(mr), research_only=all(r["research_only"] for r in mr))
         stats = {st: summarize([r for r in rows if r["stat"] == st]) for st in sorted({r["stat"] for r in rows})}
-        rec = recent(rows)
+        rec = recent(rows, league=lg)
         try:
             names = snapshots.player_names(con, {r["player_id"] for r in rec if r.get("player_id")}, now)
         except Exception:                               # noqa: BLE001 - names are a nicety; ids stay
@@ -302,7 +325,7 @@ def build(con, now=None, base=None):
         leagues[lg] = {**s, "gate": {"settled_props": s["props"], "required": GATE, "validated": False,
                                      "under_review": s["props"] >= GATE, "text": gate_text(s["props"]),
                                      "rule": GATE_RULE},
-                       "models": models, "stats": stats, "calibration": calibration(rows), "bands": bands(rows), "grades": grades(rows),
+                       "models": models, "stats": stats, "calibration": calibration(rows), "bands": bands(rows), "grades": grades(rows, lg),
                        "recent": rec, "model_gate": model_gate(lg),
                        "head_to_head": {"version": HH_VERSION, "method": HH_METHOD, "rows": head_to_head(rows)}}
     doc = {"version": VERSION, "built_at": now_utc(), "as_of": now, "leagues": leagues, "picks": tracked_picks(),

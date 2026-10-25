@@ -22,20 +22,22 @@ const tiles = RP.gradeTiles({rows: [{grade: "A", n: 120, wins: 70, losses: 48, p
 assert.deepStrictEqual(tiles.map(t => t.grade), ["A", "B", "C"]);
 assert.strictEqual(tiles[0].rateText, "59.3%"); assert.strictEqual(tiles[1].n, 0); assert.strictEqual(tiles[2].wlp, "150-150-0");
 
-// head to head: prefers the consensus all-stats row; verdict decided by the 95% interval
+// head to head: prefers the consensus all-stats row; led by hit-rate PERCENTAGES, verdict on the hit-rate gap interval
 const row = (market, pairs, ci, stat) => ({scout: "sm-1", market, stat: stat || "all", pairs, games: 140, scout_brier: 0.243,
-  market_brier: 0.249, diff: {brier: -0.006, brier_ci95: ci}});
-const hh = {rows: [row("mkt-oddsapi:fanduel", 900, [-0.02, -0.01]), row("mc-1", 820, [-0.012, 0.001]), row("mc-1", 400, [-0.03, -0.02], "points")]};
+  market_brier: 0.249, scout_hit_rate: 0.5312, market_hit_rate: 0.5178, diff: {brier: -0.006, brier_ci95: [-0.02, -0.01], hit_rate: 0.0134, hit_rate_ci95: ci}});
+const hh = {rows: [row("mkt-oddsapi:fanduel", 900, [0.01, 0.02]), row("mc-1", 820, [-0.0102, 0.0361]), row("mc-1", 400, [0.03, 0.05], "points")]};
 const pick = RP.pickH2H(hh);
 assert.strictEqual(pick.market, "mc-1"); assert.strictEqual(pick.stat, "all");
 let v = RP.h2hVerdict(pick);
-assert.strictEqual(v.verdict, "even"); assert.strictEqual(v.headline, "No clear difference between Scout and the market consensus");
-assert.ok(v.detail.indexOf("0.243") >= 0 && v.detail.indexOf("0.249") >= 0 && v.detail.indexOf("820 shared props from 140 games") >= 0);
-assert.strictEqual(RP.h2hVerdict(row("mc-1", 10, [-0.02, -0.001])).verdict, "better");
-assert.strictEqual(RP.h2hVerdict(row("mc-1", 10, [0.001, 0.02])).verdict, "worse");
+assert.strictEqual(v.verdict, "even"); assert.strictEqual(v.word, "No clear difference");
+assert.strictEqual(v.headline, "Scout hit 53.1% vs 51.8% for the market consensus on the same 820 props");
+assert.ok(v.detail.indexOf("95% range of the gap −1.0% to +3.6%") >= 0, v.detail);
+assert.ok(!/(^|[^\d.])0\.\d/.test(v.headline + v.detail), "raw decimal on the card: " + v.headline + v.detail);
+assert.strictEqual(RP.h2hVerdict(row("mc-1", 10, [0.001, 0.02])).verdict, "better");
+assert.strictEqual(RP.h2hVerdict(row("mc-1", 10, [-0.05, -0.001])).verdict, "worse");
 assert.strictEqual(RP.h2hVerdict(row("mc-1", 10, null)).verdict, "unclear");
 assert.strictEqual(RP.pickH2H({rows: [row("mkt-oddsapi:fanduel", 5, null)]}).market, "mkt-oddsapi:fanduel");
-assert.strictEqual(RP.h2hVerdict(row("mkt-oddsapi:fanduel", 5, [-1, -0.5])).headline, "Scout's chances were more accurate than FanDuel's");
+assert.ok(RP.h2hVerdict(row("mkt-oddsapi:fanduel", 5, [0.01, 0.2])).headline.indexOf("for FanDuel on the same 5 props") >= 0);
 assert.strictEqual(RP.pickH2H({rows: []}), null);
 
 // recent list: 10 first, then "Show more"
@@ -60,4 +62,16 @@ for (const code of ["sm-1", "mc-1", "mi-1", "mkt-", "rg-1", "hh-1", "rp-1"]) ass
 const nfl = RP.summaryHtml("nfl", {gate: {settled_props: 0, required: 300}, leans: {n: 0}, model_gate: {not_validated: "NFL model not validated"}});
 assert.ok(nfl.indexOf("NFL model not validated") >= 0 && nfl.indexOf("No settled Scout picks yet") >= 0);
 for (const w of ["ROI", "profit", "units"]) assert.ok(sum.indexOf(w) < 0);
+// every rate on the surface is a percentage: no raw 0.xx decimal anywhere in the summary text
+const text = sum.replace(/<[^>]+>/g, " ");
+assert.ok(!/(^|[^\d.])0\.\d/.test(text), "raw decimal on the surface: " + (text.match(/.{0,30}0\.\d.{0,30}/) || [""])[0]);
+assert.ok(text.indexOf("49.0%–54.1%") >= 0 && text.indexOf("51.7%") >= 0);
+// vg-1 contained league: no tiles, no letters in the recent list
+const cont = RP.summaryHtml("nfl", {gate: {settled_props: 40, required: 300}, leans: {n: 2, wins: 1, losses: 1, pushes: 0, hit_rate: 0.5},
+  model_gate: {not_validated: "NFL model not validated", contained: true}, grades: {rows: [], withheld: "NFL model not validated"},
+  recent: [{player: "X", stat: "rec_yds", line: 50.5, side: "over", result: "win", grade: "A"}]});
+assert.ok(cont.indexOf("rx-tile") < 0 && cont.indexOf("Graded picks") < 0 && cont.indexOf("rx-g-a") < 0 && cont.indexOf("1-1-0") >= 0);
+assert.ok(cont.indexOf("NFL model not validated") >= 0 && cont.indexOf("research letters") < 0);
+assert.strictEqual(RP.isContained({grades: {withheld: "x"}}), true);
+assert.strictEqual(RP.isContained({model_gate: {contained: false}, grades: {rows: []}}), false);
 console.log("ok");

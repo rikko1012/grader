@@ -40,10 +40,10 @@
     var rows = (hh && hh.rows) || [], tag = (opts && opts.h) || "h3", id = (opts && opts.id) ? ' id="' + escH(opts.id) + '"' : "";
     var head = "<" + tag + id + ">Scout vs market on the same props</" + tag + ">" +
       '<p class="sw-small sw-muted">Scout and one market estimate scored on exactly the same props (same game, player, stat and line, so the same result). ' +
-      "Binary Brier: 0.25 = always 50%, lower is better. Difference = Scout minus market: below 0 on Brier or log loss means Scout was closer.</p>";
+      "Brier and log loss are scores, lower is better (Brier 0.25 = always 50%); hit rates are percentages. Difference = Scout minus market: below 0 on Brier or log loss means Scout was closer.</p>";
     if (!rows.length) return head + '<p class="sw-muted">No prop has settled with both a Scout chance and a market chance yet.</p>';
-    var th = ["Scout", "Market", "Stat", "Props", "Games", "Brier: Scout", "Brier: market", "Brier difference",
-              "Log loss: Scout", "Log loss: market", "Log loss difference", "Hit rate: Scout", "Hit rate: market", "Hit rate difference"];
+    var th = ["Scout", "Market", "Stat", "Props", "Games", "Brier score: Scout", "Brier score: market", "Brier score difference",
+              "Log loss score: Scout", "Log loss score: market", "Log loss score difference", "Hit rate: Scout", "Hit rate: market", "Hit rate difference"];
     function cell(v, extra) { return '<td class="num">' + v + (extra ? '<span class="sw-faint sw-small">' + escH(extra) + "</span>" : "") + "</td>"; }
     return head + '<div class="sw-scroll"><table class="sw-mini rp-h2h"><thead><tr>' + th.map(function (t, i) {
       return '<th scope="col"' + (i >= 3 ? ' class="num"' : "") + ">" + escH(t) + "</th>"; }).join("") + "</tr></thead><tbody>" +
@@ -97,22 +97,23 @@
     var pool = mc.length ? mc : rows;
     return pool.slice().sort(function (a, b) { return (b.pairs - a.pairs) || (a.scout < b.scout ? -1 : a.scout > b.scout ? 1 : 0) || (a.market < b.market ? -1 : 1); })[0];
   }
-  // decided on the game-clustered 95% interval of the Brier difference (Scout minus market; below 0 = Scout better)
+  // led by percentages (owner 2026-10-25 "why are the results not in percentage form"): each side's hit rate on its
+  // favoured side over the same props; the verdict word is decided on the game-clustered 95% interval of the hit-rate
+  // gap (Scout minus market). Brier / log loss stay in Details, labelled as scores (lower is better).
   function h2hVerdict(r) {
     if (!r) return null;
-    var d = r.diff || {}, ci = d.brier_ci95, who = plainMarket(r.market), v;
-    if (!ci) v = "unclear";
-    else if (ci[1] < 0) v = "better";
-    else if (ci[0] > 0) v = "worse";
+    var d = r.diff || {}, ci = d.hit_rate_ci95, who = plainMarket(r.market), v;
+    if (r.scout_hit_rate === null || r.scout_hit_rate === undefined || r.market_hit_rate === null || r.market_hit_rate === undefined || !ci) v = "unclear";
+    else if (ci[0] > 0) v = "better";
+    else if (ci[1] < 0) v = "worse";
     else v = "even";
-    var head = {better: "Scout's chances were more accurate than " + who + "'s",
-                worse: "Scout's chances were less accurate than " + who + "'s",
-                even: "No clear difference between Scout and " + who,
-                unclear: "Too few games to compare Scout with " + who + " yet"}[v];
-    return {verdict: v, market: who, headline: head, pairs: r.pairs, games: r.games, scout: r.scout_brier, other: r.market_brier,
-            diff: d.brier, ci: ci,
-            detail: "Brier score " + n3(r.scout_brier) + " for Scout vs " + n3(r.market_brier) + " for " + who +
-              " on " + int(r.pairs) + " shared props from " + int(r.games) + (r.games === 1 ? " game" : " games") + " (lower is better)."};
+    var word = {better: "Scout was more accurate", worse: "Scout was less accurate", even: "No clear difference",
+                unclear: "Too few games to tell yet"}[v];
+    return {verdict: v, market: who, word: word, pairs: r.pairs, games: r.games, scout: r.scout_hit_rate, other: r.market_hit_rate,
+            diff: d.hit_rate, ci: ci,
+            headline: "Scout hit " + pct(r.scout_hit_rate) + " vs " + pct(r.market_hit_rate) + " for " + who + " on the same " + int(r.pairs) + " props",
+            detail: word + (ci ? " (95% range of the gap " + signedPct(ci[0]) + " to " + signedPct(ci[1]) + ")" : "") +
+              ". Hit rate = how often each side's favoured pick won, over " + int(r.games) + (r.games === 1 ? " game." : " games.")};
   }
   function resultWord(x) { return x === "win" ? "Won" : x === "loss" ? "Lost" : x === "push" ? "Push" : "—"; }
   function lineText(x) { return x === null || x === undefined || !isFinite(x) ? "—" : String(Math.round(x * 10) / 10); }
@@ -126,21 +127,24 @@
     var k = String(r.player_id || "").split(":").pop();
     return k ? k.replace(/[-_]+/g, " ").replace(/\b\w/g, function (c) { return c.toUpperCase(); }) : "—";
   }
-  function recentItem(r, statName) {
+  // vg-1 containment (board_view.VG_CONTAIN_LEAN): a contained league shows no research letters anywhere
+  function isContained(L) { return !!(L && ((L.model_gate && L.model_gate.contained) || (L.grades && L.grades.withheld))); }
+  function recentItem(r, statName, noGrade) {
     var side = r.side === "over" ? "Over" : r.side === "under" ? "Under" : "—";
     return '<li class="rx-pick" data-result="' + escH(r.result || "") + '"><div class="rx-pick-main"><b class="rx-pick-name">' + escH(playerName(r)) +
       '</b><span class="rx-pick-prop">' + escH(statName ? statName(r.stat) : r.stat) + " · " + side + " " + lineText(r.line) + "</span></div>" +
       '<div class="rx-pick-side"><span class="rx-res rx-res-' + escH(r.result || "none") + '">' + resultWord(r.result) + "</span>" +
       '<span class="rx-pick-meta">' + (r.actual === null || r.actual === undefined ? "" : "Final " + lineText(r.actual) + " · ") +
-      (r.grade ? '<span class="rx-g rx-g-' + escH(String(r.grade).toLowerCase()) + '">' + escH(r.grade) + "</span> · " : "") + escH(shortDay(r.settled_at)) + "</span></div></li>";
+      (r.grade && !noGrade ? '<span class="rx-g rx-g-' + escH(String(r.grade).toLowerCase()) + '">' + escH(r.grade) + "</span> · " : "") + escH(shortDay(r.settled_at)) + "</span></div></li>";
   }
   var RECENT_STEP = 10;
-  function recentHtml(recent, statName, shown) {
+  function recentHtml(recent, statName, shown, noGrade) {
     var rows = recent || [], k = Math.min(rows.length, shown || RECENT_STEP);
     if (!rows.length) return '<p class="sw-muted">No settled Scout picks yet. Picks are scored after their games are final, from the box score.</p>';
-    return '<ol class="rx-picks" data-shown="' + k + '">' + rows.slice(0, k).map(function (r) { return recentItem(r, statName); }).join("") + "</ol>" +
+    return '<ol class="rx-picks" data-shown="' + k + '">' + rows.slice(0, k).map(function (r) { return recentItem(r, statName, noGrade); }).join("") + "</ol>" +
       (rows.length > k ? '<button type="button" class="sw-btn rx-more" data-rx-more>Show more (' + int(Math.min(RECENT_STEP, rows.length - k)) + ")</button>" : "") +
-      '<p class="sw-faint sw-small">Grades are research letters (not validated). One row per prop: Scout’s side at the line it was made for.</p>';
+      (noGrade ? '<p class="sw-faint sw-small">One row per prop: Scout’s side at the line it was made for.</p>'
+                : '<p class="sw-faint sw-small">Grades are research letters (not validated). One row per prop: Scout’s side at the line it was made for.</p>');
   }
   // collapsed technical sections: [{id, title, sub, html}] -> <details> each, closed by default
   function detailsHtml(sections) {
@@ -158,7 +162,7 @@
   function summaryHtml(lg, L, opts) {
     opts = opts || {};
     var LG = String(lg || "").toUpperCase(), rec = recordView(L), tiles = gradeTiles(L && L.grades),
-        nv = L && L.model_gate && L.model_gate.not_validated, gate = (L && L.gate) || {};
+        nv = L && L.model_gate && L.model_gate.not_validated, gate = (L && L.gate) || {}, contained = isContained(L);
     var h = '<section class="sw-panel rx-sum" aria-labelledby="rx-sum-h" data-league="' + escH(lg) + '"><h2 id="rx-sum-h" class="sw-sr">' + escH(LG) + " summary</h2>" +
       (nv ? '<p class="rx-nv" data-rx-nv><b>' + escH(nv) + "</b></p>" : "") +
       '<p class="rx-status' + (gate.validated ? " ok" : "") + '" data-rx-status>' + escH(validationLine(gate)) + "</p>" +
@@ -168,37 +172,40 @@
         '<div class="rx-line"><b data-rx-rate>' + escH(rec.rateText) + "</b> hit rate on " + escH(int(rec.decided)) + " decided picks" +
         (rec.range ? ' <span class="rx-range" data-rx-range>(95% range ' + escH(rec.range) + ")</span>" : "") + "</div>";
     } else h += '<div class="rx-line sw-muted">No settled Scout picks yet.</div>';
-    h += '</div><div class="rx-gr"><div class="rx-k">Graded picks <span class="sw-grade-tag">Research grades</span></div><div class="rx-tiles">' +
+    h += "</div>";
+    if (!contained) h += '<div class="rx-gr"><div class="rx-k">Graded picks <span class="sw-grade-tag">Research grades</span></div><div class="rx-tiles">' +
       tiles.map(function (t) {
         return '<div class="rx-tile" data-grade="' + t.grade + '"><div class="rx-tile-g rx-g rx-g-' + t.grade.toLowerCase() + '">' + t.grade + "</div>" +
-          '<div class="rx-tile-v" data-rx-grate>' + escH(t.n ? t.rateText : "—") + '</div><div class="rx-tile-n">n = <span data-rx-gn>' + escH(int(t.n)) + "</span></div></div>";
-      }).join("") + "</div></div></section>";
+          '<div class="rx-tile-v" data-rx-grate>' + escH(t.n ? t.rateText : "—") + '</div><div class="rx-tile-n">n = <span data-rx-gn>' + escH(int(t.n)) + "</span></div>" +
+          (t.range ? '<div class="rx-tile-r" data-rx-grange>' + escH(t.range) + "</div>" : "") + "</div>";
+      }).join("") + "</div></div>";
+    h += "</section>";
     var v = h2hVerdict(pickH2H(opts.hh || (L && L.head_to_head)));
     h += '<section class="sw-panel rx-cmp" aria-labelledby="rx-cmp-h" data-verdict="' + (v ? v.verdict : "none") + '"><h2 id="rx-cmp-h">Scout vs the market on the same props</h2>' +
-      (v ? '<p class="rx-cmp-head"><b>' + escH(v.headline) + '</b></p><p class="sw-small sw-muted" data-rx-cmp>' + escH(v.detail) + "</p>"
+      (v ? '<p class="rx-cmp-head" data-rx-cmp-head><b>' + escH(v.headline) + '</b></p><p class="rx-cmp-word" data-rx-cmp><b>' + escH(v.word) + "</b>" + escH(v.detail.slice(v.word.length)) + "</p>"
          : '<p class="sw-muted">No prop has settled with both a Scout chance and a market chance yet.</p>') + "</section>";
     h += '<section class="sw-panel rx-recent" aria-labelledby="rx-recent-h"><h2 id="rx-recent-h">Recent settled picks</h2><div data-rx-recent>' +
-      recentHtml(L && L.recent, opts.statName) + "</div></section>";
+      recentHtml(L && L.recent, opts.statName, 0, contained) + "</div></section>";
     return h;
   }
   // "Show more" on the recent list (re-renders that list only); call after inserting summaryHtml
-  function bindRecent(rootEl, recent, statName) {
+  function bindRecent(rootEl, recent, statName, noGrade) {
     var box = rootEl && rootEl.querySelector("[data-rx-recent]");
     if (!box) return;
     box.addEventListener("click", function (e) {
       var b = e.target.closest && e.target.closest("[data-rx-more]");
       if (!b) return;
       var ol = box.querySelector("ol"), k = ol ? +ol.getAttribute("data-shown") : RECENT_STEP;
-      box.innerHTML = recentHtml(recent, statName, k + RECENT_STEP);
+      box.innerHTML = recentHtml(recent, statName, k + RECENT_STEP, noGrade);
       var items = box.querySelectorAll(".rx-pick");
       if (items[k]) { items[k].setAttribute("tabindex", "-1"); items[k].focus(); }
     });
   }
-  var BRIER_SUB = "Brier score: how far the stated chances were from what happened - lower is better; 0.25 = a coin flip.";
+  var BRIER_SUB = "Brier score (a score, not a percentage): how far the stated chances were from what happened - lower is better; 0.25 = a coin flip.";
   var api = {pct: pct, ciText: ciText, gateText: gateText, rateText: rateText, int: int, h2hHtml: h2hHtml, modelName: modelName,
              plainMarket: plainMarket, validationLine: validationLine, recordView: recordView, gradeTiles: gradeTiles,
              pickH2H: pickH2H, h2hVerdict: h2hVerdict, recentHtml: recentHtml, detailsHtml: detailsHtml, summaryHtml: summaryHtml,
-             bindRecent: bindRecent, BRIER_SUB: BRIER_SUB, RECENT_STEP: RECENT_STEP};
+             bindRecent: bindRecent, isContained: isContained, BRIER_SUB: BRIER_SUB, RECENT_STEP: RECENT_STEP};
   if (typeof module !== "undefined" && module.exports) { module.exports = api; return; }
   root.SportsResultsPublic = api;
   if (!document.getElementById("rp-main")) return;           // loaded by the app (sports.html) for h2hHtml only
@@ -245,10 +252,10 @@
                 (L.gate.rule ? '<p class="sw-small">' + esc(L.gate.rule) + "</p>" : "") +
                 '<p class="sw-small sw-muted">' + int(L.settled) + " settled forecasts · " + int(L.games) + " games · " + int(L.unresolved) + " unresolved · " + int(L.void) + " void.</p>"});
     if (!L.settled) return out;
-    out.push({id: "h2h", title: "Scout vs the market: full table", sub: BRIER_SUB + " Log loss: lower is better. Difference below 0 = Scout closer.",
+    out.push({id: "h2h", title: "Scout vs the market: full table", sub: BRIER_SUB + " Log loss score: lower is better. Score difference below 0 = Scout closer; hit-rate difference above 0 = Scout hit more often.",
               html: h2hHtml(L.head_to_head)});
     out.push({id: "grades", title: "Graded picks in full", sub: "Research letters of each settled lean (A 60%+, B 55.59%+, C 53.45%+, else Lean). Not validated; stakes 0.",
-              html: L.grades && L.grades.rows ? gradeTable(L.grades.rows, "hit_rate_ci95") : ""});
+              html: !isContained(L) && L.grades && L.grades.rows && L.grades.rows.length ? gradeTable(L.grades.rows, "hit_rate_ci95") : ""});
     out.push({id: "models", title: "Accuracy by model", sub: "Average miss (MAE): how far the final stat landed from the projection - lower is better. Bias: above 0 = finals ran higher than projected.",
               html: table(SUMMARY_HEAD, [summaryRow("All", L)].concat(Object.keys(L.models).map(function (m) { return summaryRow(m + (L.models[m].research_only ? " (research)" : ""), L.models[m]); })))});
     out.push({id: "stats", title: "Accuracy by stat", sub: "The same numbers split by stat.",
@@ -261,7 +268,7 @@
               html: table([["Probability band", 0], ["Leans", 1], ["W-L(-P)", 1], ["Mean stated", 1], ["Hit rate", 1]], L.bands.map(function (b) {
                 return "<tr><th scope=\"row\">" + esc(b.band) + '</th><td class="num">' + int(b.n) + '</td><td class="num">' + int(b.wins) + "-" + int(b.losses) + (b.pushes ? "-" + int(b.pushes) : "") + '</td><td class="num">' + pct(b.stated) + '</td><td class="num">' + pct(b.hit_rate) + '<span class="sw-faint sw-small">' + esc(ciText(b.hit_rate_ci95, true)) + "</span></td></tr>";
               }))});
-    var pk = picksSection(P, lg);
+    var pk = picksSection(P, lg, isContained(L));
     if (pk) out.push({id: "picks", title: "Picks members tracked", sub: "Member picks at their own lines (test picks excluded). Never a return.", html: pk});
     return out;
   }
@@ -271,13 +278,13 @@
     }));
   }
 
-  function picksSection(P, lg) {
+  function picksSection(P, lg, noGrade) {
     var g = P && P.leagues && P.leagues[lg];
     if (!g) return '<p class="sw-muted">No tracked picks settled yet.</p>';
     return table([["Picks", 1], ["Games", 1], ["W-L-P", 1], ["Void", 1], ["Open", 1], ["Hit rate", 1]], [
       '<tr><td class="num">' + int(g.picks) + '</td><td class="num">' + int(g.games) + '</td><td class="num">' + int(g.wins) + "-" + int(g.losses) + "-" + int(g.pushes) +
         '</td><td class="num">' + int(g.voids) + '</td><td class="num">' + int(g.pending) + '</td><td class="num">' + pct(g.hit_rate) + '<span class="sw-faint sw-small">' + esc(ciText(g.hit_rate_ci95_games, true)) + "</span></td></tr>"]) +
-      (g.by_grade && g.by_grade.rows ? '<p class="sw-small sw-muted">By grade when tracked (research):</p>' + gradeTable(g.by_grade.rows, "hit_rate_ci95_games") : "") +
+      (!noGrade && g.by_grade && g.by_grade.rows ? '<p class="sw-small sw-muted">By grade when tracked (research):</p>' + gradeTable(g.by_grade.rows, "hit_rate_ci95_games") : "") +
       '<p class="sw-faint sw-small">' + esc(P.note || "") + "</p>";
   }
   var Lb = root.SportsLabels;
@@ -304,7 +311,7 @@
                 '<p class="sw-faint sw-small">Built ' + esc(new Date(D.built_at).toLocaleString()) + " · " + esc(D.version) + "</p>"});
     h += detailsHtml(det);
     main.innerHTML = h;
-    bindRecent(main, L.recent, statName);
+    bindRecent(main, L.recent, statName, isContained(L));
     main.querySelectorAll("[data-rx-lg]").forEach(function (b) {
       b.addEventListener("click", function () {
         var x = b.getAttribute("data-rx-lg");

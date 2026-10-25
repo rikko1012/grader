@@ -1270,15 +1270,15 @@
       else h += '<section class="sw-panel"><p class="sw-muted">The summary is being prepared. The full numbers are in Details below.</p></section>';
       var det = [];
       if (RP && R.head_to_head)          // N5 hh-1: Scout vs market on the same props (full table)
-        det.push({id: "h2h", title: "Scout vs the market: full table", sub: RP.BRIER_SUB + " Log loss: lower is better. Difference below 0 = Scout closer.",
+        det.push({id: "h2h", title: "Scout vs the market: full table", sub: RP.BRIER_SUB + " Log loss score: lower is better. Score difference below 0 = Scout closer; hit-rate difference above 0 = Scout hit more often.",
                   html: RP.h2hHtml(R.head_to_head, statName, {h: "h3", id: "sw-r-h2h"})});
-      if (RP && PL && PL.grades && PL.grades.rows)
+      if (RP && PL && !RP.isContained(PL) && PL.grades && PL.grades.rows && PL.grades.rows.length)
         det.push({id: "grades", title: "Graded picks in full", sub: L.GRADE_TAG + ". " + L.GRADE_BANDS + ". Stakes 0.",
                   html: '<div class="sw-scroll"><table class="sw-mini"><thead><tr><th>Grade</th><th class="num">Settled (n)</th><th class="num">W-L-P</th><th class="num">Hit rate</th></tr></thead><tbody>' +
                     PL.grades.rows.map(function (g) { return '<tr><th scope="row" data-grade="' + esc(g.grade) + '">' + esc(g.grade) + '</th><td class="num">' + S.int(g.n) + '</td><td class="num">' + S.int(g.wins) + "-" + S.int(g.losses) + "-" + S.int(g.pushes) + '</td><td class="num">' + RP.pct(g.hit_rate) + '<span class="sw-faint sw-small">' + esc(RP.ciText(g.hit_rate_ci95, true)) + "</span></td></tr>"; }).join("") + "</tbody></table></div>"});
       if (models.length) {
-        det.push({id: "chances", title: "How good the chances were (by model)", sub: RP ? RP.BRIER_SUB + " Log loss: lower is better." : "",
-                  html: '<div class="sw-scroll"><table class="sw-mini"><thead><tr><th>Model</th><th class="num">Settled</th><th class="num">Games</th><th class="num">Brier (binary, given no push)</th><th class="num">Brier (3 outcomes: over / under / push)</th><th class="num">Log loss</th></tr></thead><tbody>' +
+        det.push({id: "chances", title: "How good the chances were (by model)", sub: RP ? RP.BRIER_SUB + " Log loss score: lower is better." : "",
+                  html: '<div class="sw-scroll"><table class="sw-mini"><thead><tr><th>Model</th><th class="num">Settled</th><th class="num">Games</th><th class="num">Brier score (binary, given no push)</th><th class="num">Brier (3 outcomes: over / under / push) score</th><th class="num">Log loss score</th></tr></thead><tbody>' +
                     models.map(function (mv) { var s = R.summary[mv], p = s.probability; return '<tr><th scope="row">' + esc(mv) + '</th><td class="num">' + S.int(s.settled) + '</td><td class="num">' + S.int(s.games) + '</td><td class="num"><b>' + S.num(p.brier_binary, 3) + "</b>" + ci(p.brier_binary_ci) + '</td><td class="num">' + S.num(p.brier, 3) + ci(p.brier_ci) + '</td><td class="num">' + S.num(p.log_loss, 3) + ci(p.log_loss_ci) + "</td></tr>"; }).join("") + "</tbody></table></div>" +
                     '<p class="sw-faint sw-small">' + esc(R.method.brier) + ".</p>"});
         det.push({id: "projection", title: "How close the projections were (by model)", sub: "Average miss (MAE): how far the final stat landed from the projection - lower is better. Bias: above 0 = finals ran higher than projected.",
@@ -1290,7 +1290,7 @@
       var led = L.ledgerRows(R.rows || []), dupes = (R.rows || []).length - led.length;
       if (led.length) det.push({id: "ledger", title: "Every settled forecast (" + S.int(led.length) + ")", sub: "One row per forecast, every model, with its source records." + (R.total_rows > R.rows.length ? " Newest " + S.int(R.rows.length) + " rows of " + S.int(R.total_rows) + "." : ""),
         html: (dupes ? '<p class="sw-small sw-faint">' + S.plural(dupes, "row") + " for the same player, stat, line, game and model (another book's copy of the line) shown once; the books are listed on the row.</p>" : "") +
-        '<div class="sw-scroll"><table class="sw-mini"><thead><tr><th>Settled</th><th>Player</th><th>Stat</th><th class="num">Line</th><th class="num">Projection</th><th class="num">Actual</th><th>Outcome</th><th class="num">Scout chance for Over/Under</th><th class="num">Brier (3 outcomes)</th><th><span class="sw-sr">Source</span></th></tr></thead><tbody>' +
+        '<div class="sw-scroll"><table class="sw-mini"><thead><tr><th>Settled</th><th>Player</th><th>Stat</th><th class="num">Line</th><th class="num">Projection</th><th class="num">Actual</th><th>Outcome</th><th class="num">Scout chance for Over/Under</th><th class="num">Brier score (3 outcomes)</th><th><span class="sw-sr">Source</span></th></tr></thead><tbody>' +
         led.map(function (r) {
           var sd = L.scoutSide(r), stat = statName(r.stat);
           return "<tr><td>" + esc(S.shortDate(r.settled_at)) + "</td><td>" + esc(L.ledgerName(r)) + (r.books.length > 1 ? ' <span class="sw-faint sw-small">' + esc(r.books.map(bookName).join(", ")) + "</span>" : "") + "</td><td>" + esc(stat) + '</td><td class="num">' + S.line(r.line) + '</td><td class="num">' + S.num(r.projection_mean, 1) + '</td><td class="num">' + S.num(r.actual, 0) + "</td><td>" + esc(r.status === "settled" ? L.words(r.outcome || "") : L.words(r.status || "")) + '</td><td class="num">' + (sd ? esc(sd.label) + " " + S.pct(sd.p) : "—") + '</td><td class="num">' + S.num(r.brier, 3) + "</td><td>" + src({title: "Settlement", "forecast id": r.forecast_id, model: r.model_version, books: r.books.map(bookName).join(", "), "settlement records": r.settlement_ids, revision: r.settlement_revision, rule: r.rule_version, "Over / Under / Push given": S.pct(r.p_over) + " / " + S.pct(r.p_under) + " / " + S.pct(r.p_push), "chance of the settled outcome": S.pct(r.p_outcome)}) + "</td></tr>";
@@ -1301,7 +1301,7 @@
         html: '<ul class="sw-list sw-small">' + Object.keys(R.method).map(function (k) { return "<li><b>" + esc(k) + ":</b> " + esc(R.method[k]) + "</li>"; }).join("") + "</ul>"});
       h += RP ? RP.detailsHtml(det) : "";
       main.innerHTML = h;
-      if (RP && PL) RP.bindRecent(main, PL.recent, statName);
+      if (RP && PL) RP.bindRecent(main, PL.recent, statName, RP.isContained(PL));
     }).catch(fail);
   }
 

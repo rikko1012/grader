@@ -287,7 +287,7 @@ const h = R.h2hHtml({method: "m", rows: [{scout: "sm-1", market: "mc-1", stat: "
   market_hit_rate: 0.55, diff: {brier: 0.011, brier_ci95: [-0.01, 0.03], log_loss: 0.02, log_loss_ci95: null,
   hit_rate: -0.05, hit_rate_ci95: [-0.2, 0.1]}}]});
 for (const t of ["Scout vs market on the same props", "Market consensus (mc-1)", "All stats", "0.262", "+0.011",
-                 "(95%: −0.010 to +0.030)", "−5.0%", "Brier: Scout"]) if (h.indexOf(t) < 0) throw new Error("missing " + t);
+                 "(95%: −0.010 to +0.030)", "−5.0%", "Brier score: Scout"]) if (h.indexOf(t) < 0) throw new Error("missing " + t);
 if (R.h2hHtml({rows: []}).indexOf("No prop has settled") < 0) throw new Error("empty state");
 if (R.modelName("mkt-oddsapi:fanduel") !== "FanDuel market") throw new Error("model name");
 console.log("ok");
