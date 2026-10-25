@@ -6,12 +6,12 @@
    button) or computed here from the listed per-game records (window statistics). */
 (function () {
   "use strict";
-  var S = window.SportsStats, Sh = window.ScoutShell, esc = Sh.esc;
+  var S = window.SportsStats, Sh = window.ScoutShell, esc = Sh.esc, L = window.SportsLabels;
   var LS_FILTERS = "scout.sports.filters.v1";
   // Slip Studio (sports/slips, web/sports/slips.html): its draft lives in localStorage "ss:draft:<league>:<platform>"
   // ({legs: [...]}, leg format in sports/slips/README.md) and its context in "ss:ctx". "+ Over / + Under" writes a leg
   // there; Slip Studio re-validates every leg on load (offer revision, line, side, forecast, start) before any copy.
-  var SLIP_PAGE = "/sports/slips.html";
+  var SLIP_PAGE = "#/slips";                            // Slip Studio is a route of this page (slips.html redirects here)
   var STALE_SNAPSHOT_S = 20 * 60, STALE_QUOTE_S = 30 * 60, CACHE_TTL_MS = 60000, BOARD_PAGE = 120;
   var REASONS = {
     market_only_baseline: "Market-only: the chance comes from Kalshi prices for this player and stat, not from his own statistics.",
@@ -206,6 +206,7 @@
   }
   function fail(e) {
     if (e && e.kind === "auth") return Sh.member().then(function (info) { Sh.gate(main, info); });
+    if (e && !(e instanceof ApiError) && window.console) console.error("sports page error", e && e.stack || e);   // a bug, not an API answer
     var box = errorBox(e || {kind: "error"});
     main.innerHTML = box;
     var b = document.getElementById("sw-retry");
@@ -240,11 +241,18 @@
       return esc(bookName(p)) + " observed " + esc(S.age(x.last_observed_at)) + (x.source_time_unknown ? " (" + x.source_time_unknown + " quotes without a source time)" : "");
     });
     var models = (manifest.models || []).map(function (m) {
-      return esc(m.model_version) + ": " + S.plural(m.forecasts, "forecast") + " on the board, " + m.settled + " settled" + (m.research_only ? ", research version (no grades)" : "");
+      return esc(modelWords(m.model_version)) + ": " + S.plural(m.forecasts, "projection") + " on the board, " + m.settled + " settled" + (m.research_only ? " (research estimate)" : "");
     });
-    f.innerHTML = "<details><summary>Data freshness & model details</summary><p>" + plats.join(" · ") + "</p><p>Models: " + (models.join(" · ") || "none on the board") + "</p>" +
-      "<p>Snapshot " + esc(manifest.version) + " built " + esc(S.localTime(manifest.built_at)) + " · contracts " + esc(manifest.contracts) +
-      " · capabilities " + esc(manifest.capabilities) + ". Chances are unconditional: Over, Under and Push add up to 100%. History: ESPN; prices on the board: " + esc(marketSources(manifest)) + ".</p></details>";
+    var tech = (manifest.models || []).map(function (m) { return esc(m.model_version); }).join(", ");
+    f.innerHTML = "<details><summary>Data freshness & model details</summary><p>" + plats.join(" · ") + "</p><p>" + (models.join(" · ") || "No projections on the board") + "</p>" +
+      "<p>Board built " + esc(S.localTime(manifest.built_at)) + ". Chances are unconditional: Over, Under and Push add up to 100%. History: ESPN; prices on the board: " + esc(marketSources(manifest)) + ".</p>" +
+      '<details class="sw-more"><summary>Technical details</summary><p class="sw-small sw-faint">Snapshot ' + esc(manifest.version) + " · contracts " + esc(manifest.contracts) + " · capabilities " + esc(manifest.capabilities) + (tech ? " · model versions " + tech : "") + "</p></details></details>";
+  }
+  function modelWords(mv) {                             // "sm-1" -> "Scout projection", "mkt-polymarket" -> "Market (Polymarket)"
+    var k = S.kindOf(mv);
+    if (k === "market") { var x = S.modelSource(mv); return x && /·/.test(x.label) ? "Market (" + x.label.split("·")[1].trim().replace(/ \(.*\)$/, "") + ")" : "Market"; }
+    if (k === "informed") return "Scout projection (market-informed)";
+    return "Scout projection";
   }
   function marketSources(manifest) {                     // the books actually on the board now (manifest.sources)
     var s = manifest && manifest.sources || {};
@@ -253,7 +261,8 @@
   }
   function setNav(view) {
     document.querySelectorAll("#sw-views a").forEach(function (a) {
-      var on = a.getAttribute("data-view") === view || (view === "player" || view === "game") && a.getAttribute("data-view") === "board";
+      var dv = a.getAttribute("data-view");
+      var on = dv === view || view === "player" && dv === "board" || view === "game" && dv === "slate";
       if (on) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
     var nav = document.getElementById("sw-views"), cur = nav && nav.querySelector("[aria-current]");
@@ -343,6 +352,47 @@
     return "No side open";
   }
 
+  // ------------------------------------------------------------------------------ uifix shared pieces (labels.js)
+  function injuryHtml(i) {                              // "Out · Shoulder" (status · body part · detail)
+    var st = L.injuryStatus(i.status), x = L.injuryParts(i.detail), rest = [x.body, x.detail].filter(Boolean).join(" · ");
+    return '<span class="sw-tag inj">' + esc(st || "Injury report") + "</span>" + (rest ? ' <span class="sw-injd">· ' + esc(rest) + "</span>" : "");
+  }
+  // ONE coverage definition on Slate and Match context: props = player markets Scout holds for the game; "with Scout
+  // projection" = book lines carrying a Scout forecast made for that exact line (snapshot coverage.forecasts).
+  function coverageKv(c) {
+    return '<div class="sw-kv"><span><b>' + c.markets + "</b> " + (c.markets === 1 ? "prop" : "props") + "</span><span><b>" + c.forecasts + "</b> " +
+      (c.forecasts === 1 ? "line" : "lines") + " with Scout projection</span><span><b>" + c.players + "</b> " + (c.players === 1 ? "player" : "players") + "</span></div>";
+  }
+  // Game lines (spread / total / moneyline) - rendered ONLY from typed fields the slate snapshot carries:
+  // e.game_lines = {spread|total|moneyline: {..., source, observed_at, history: [[iso, value], ...]}} (contract in
+  // sports/UI.md "Game lines"). A market we do not hold is left out; nothing is shown blank.
+  function spark(hist, label) {                         // tiny line-movement chart when 2+ snapshots exist
+    var xs = (hist || []).filter(function (h) { return h && typeof h[1] === "number" && isFinite(h[1]); });
+    if (xs.length < 2) return "";
+    var W = 64, H = 18, vals = xs.map(function (h) { return h[1]; }), lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+    var pts = vals.map(function (v, i) { return (2 + i * (W - 4) / (vals.length - 1)).toFixed(1) + "," + (hi === lo ? H / 2 : H - 2 - (v - lo) / (hi - lo) * (H - 4)).toFixed(1); });
+    return '<svg class="sw-spark" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(label + ": " + vals[0] + " to " + vals[vals.length - 1] + " over " + xs.length + " snapshots") + '"><polyline fill="none" stroke="var(--accent)" stroke-width="1.5" points="' + pts.join(" ") + '"/></svg>';
+  }
+  function signed(v) { var t = String(Math.round(v * 10) / 10); return v > 0 ? "+" + t : t; }
+  function american(v) { return v === null || v === undefined ? "" : (v > 0 ? "+" + v : String(v)); }
+  function lineSrc(x) { return '<span class="sw-faint sw-small">' + esc(x.source_label || x.source || "") + (x.observed_at ? " · " + esc(S.age(x.observed_at)) : "") + "</span>"; }
+  function gameLines(e) {
+    var g = e.game_lines || {}, out = [], home = teamAbbr(e.home), away = teamAbbr(e.away);
+    var sp = g.spread;
+    if (sp && typeof sp.home === "number") {
+      out.push('<li><span class="sw-k">Spread</span> <b>' + esc(home) + " " + esc(signed(sp.home)) + "</b>" + (typeof sp.away === "number" ? " · " + esc(away) + " " + esc(signed(sp.away)) : "") + " " + spark(sp.history, "Spread movement") + " " + lineSrc(sp) + "</li>");
+    }
+    var to = g.total;
+    if (to && typeof to.line === "number") out.push('<li><span class="sw-k">Total</span> <b>' + esc(S.line(to.line)) + "</b> " + spark(to.history, "Total movement") + " " + lineSrc(to) + "</li>");
+    var ml = g.moneyline;
+    if (ml && (typeof ml.home === "number" || typeof ml.home_p === "number")) {
+      var txt = typeof ml.home === "number" ? esc(away) + " " + esc(american(ml.away)) + " · " + esc(home) + " " + esc(american(ml.home))
+        : esc(home) + " win " + S.pct0(ml.home_p) + (typeof ml.away_p === "number" ? " · " + esc(away) + " " + S.pct0(ml.away_p) : "");
+      out.push('<li><span class="sw-k">Moneyline</span> <b>' + txt + "</b> " + spark(ml.history, "Moneyline movement") + " " + lineSrc(ml) + "</li>");
+    }
+    return out.length ? '<ul class="sw-glines" aria-label="Game lines">' + out.join("") + "</ul>" : "";
+  }
+
   // ---------------------------------------------------------------------------------------------------- slate
   function renderSlate() {
     main.innerHTML = '<div class="sw-eyebrow">' + state.lg.toUpperCase() + ' · Slate</div><h1 class="sw-h1">Games and coverage</h1>' + skeleton(4);
@@ -351,9 +401,9 @@
       freshness(man, got); footer(man);
       var f = state.filters[state.lg];
       var html = '<div class="sw-eyebrow">' + state.lg.toUpperCase() + ' · Slate</div><h1 class="sw-h1">Games and coverage</h1>' +
-        '<p class="sw-sub">Start times in your time zone. Coverage counts the lines Scout holds for each game.</p>' +
+        '<p class="sw-sub">Start times in your time zone. Each game lists its props, how many lines have a Scout projection, and the injury report.</p>' +
         '<div class="sw-filters" role="search"><div class="sw-field grow"><label for="sw-sq">Find a team</label>' +
-        '<input id="sw-sq" type="search" autocomplete="off" placeholder="e.g. BOS or Celtics" value="' + esc(f.slateQ || "") + '"></div>' +
+        '<input id="sw-sq" type="search" autocomplete="off" placeholder="' + esc(L.teamPlaceholder(state.lg)) + '" value="' + esc(f.slateQ || "") + '"></div>' +
         '<button type="button" class="sw-btn" id="sw-sreset">Reset</button></div><div id="sw-slatebody"></div>';
       main.innerHTML = html;
       var body = document.getElementById("sw-slatebody");
@@ -374,15 +424,18 @@
           var c = e.coverage, plat = Object.keys(c.by_platform || {}).sort().map(function (p) { return esc(bookName(p)) + " " + c.by_platform[p]; }).join(" · ");
           out += '<article class="sw-game" aria-label="' + esc(matchup(e)) + '"><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">' +
             '<a class="sw-gamelink" href="#/game/' + encodeURIComponent(e.event_id) + '">' + esc(teamAbbr(e.away)) + " @ " + esc(teamAbbr(e.home)) + "</a>" +
-            (e.started ? '<span class="sw-tag live">Started</span>' : "") + src({title: "Game record", "event record": e.record_id, "start (UTC)": e.start_utc, "start source": e.start_source, status: e.status, "observed by Scout": S.localTime(e.observed_at), reschedules: (e.reschedules || []).map(function (r) { return r.from_utc + " -> " + r.to_utc; })}) + "</div>" +
+            (e.status && e.status !== "scheduled" ? '<span class="sw-tag live">' + esc(L.eventStatus(e.status)) + "</span>" : e.started ? '<span class="sw-tag live">Started</span>' : "") + "</div>" +
             '<div class="sw-muted sw-small">' + esc(e.away.name || "") + " at " + esc(e.home.name || "") + "</div>" +
             "<div><b>" + esc(S.localTime(e.start_utc)) + "</b></div>" +
-            '<div class="sw-kv"><span><b>' + c.primary + "</b> core markets</span><span><b>" + c.forecasts + "</b> Scout chances</span><span><b>" + c.players + "</b> players</span></div>" +
-            '<div class="sw-kv">' + (plat || "No lines yet") + "</div>" +
+            gameLines(e) +
+            coverageKv(c) +
+            (plat ? '<div class="sw-kv sw-small">' + plat + "</div>" : '<div class="sw-kv sw-small sw-faint">' + (e.started ? "No open lines" : "Books have not posted props yet") + "</div>") +
             (e.injuries.length ? '<details class="sw-more"><summary>' + S.plural(e.injuries.length, "player") + " on the injury report</summary><ul class=\"sw-list\">" + e.injuries.map(function (i) {
-              return "<li>" + esc(i.player) + " (" + esc(i.team || "") + ') <span class="sw-tag inj">' + esc(S.injuryLabel(i.status)) + "</span>" + (i.detail ? " " + esc(i.detail) : "") + ' <span class="sw-faint sw-small">as of ' + esc(i.as_of ? S.shortDate(i.as_of) : "date not given") + "</span></li>";
+              return "<li>" + esc(i.player) + " (" + esc(i.team || "") + ") " + injuryHtml(i) + (i.as_of ? ' <span class="sw-faint sw-small">as of ' + esc(S.shortDate(i.as_of)) + "</span>" : "") + "</li>";
             }).join("") + "</ul></details>" : '<div class="sw-faint sw-small">No player of either team on the ESPN injury report.</div>') +
-            '<div class="sw-actions"><a class="sw-btn sw-btn-sm" href="#/board?ev=' + encodeURIComponent(e.event_id) + '">Props for this game</a><a class="sw-btn sw-btn-sm" href="#/game/' + encodeURIComponent(e.event_id) + '">Match context</a></div></article>';
+            '<div class="sw-actions"><a class="sw-btn sw-btn-sm" href="#/board?ev=' + encodeURIComponent(e.event_id) + '">Props for this game</a><a class="sw-btn sw-btn-sm" href="#/game/' + encodeURIComponent(e.event_id) + '">Match context</a></div>' +
+            '<details class="sw-more sw-gdetails"><summary>Details</summary><p class="sw-small sw-faint">Start from ' + esc(e.start_source || "the schedule") + " · checked " + esc(S.age(e.observed_at)) +
+            ((e.reschedules || []).length ? " · rescheduled " + e.reschedules.length + "x" : "") + " " + src({title: "Game record", "event record": e.record_id, "start (UTC)": e.start_utc, "start source": e.start_source, status: L.eventStatus(e.status), "observed by Scout": S.localTime(e.observed_at), reschedules: (e.reschedules || []).map(function (r) { return r.from_utc + " -> " + r.to_utc; })}) + "</p></details></article>";
         });
         out += "</div>";
         body.innerHTML = out;
@@ -432,7 +485,7 @@
   }
   // HOOK (ux agent): My picks (#/picks) is web/sports/picks.js (SportsPicks.renderMine) on /api/sports/picks/mine.
   function renderPicks() {
-    window.SportsPicks.renderMine({main: main, api: Api, src: src, stateBox: stateBox, fail: fail, skeleton: skeleton,
+    window.SportsPicks.renderMine({main: main, api: Api, src: src, league: state.lg, stateBox: stateBox, fail: fail, skeleton: skeleton,
       resetSrc: function () { SRC = []; },
       loadModels: function () {                       // model validation progress per league (manifest model counts)
         return Promise.all(["nba", "nfl"].map(function (lg) {
@@ -658,20 +711,46 @@
       function injList(t) {
         var xs = byTeam[t.team_id] || [];
         return '<div><h3>' + esc(t.name || t.abbr) + "</h3>" + (xs.length ? '<ul class="sw-list">' + xs.map(function (i) {
-          return "<li>" + esc(i.player) + ' <span class="sw-tag inj">' + esc(S.injuryLabel(i.status)) + "</span> " + esc(i.detail || "") + ' <span class="sw-faint sw-small">as of ' + esc(i.as_of ? S.shortDate(i.as_of) : "date not given") + "</span> " + src({title: "Injury record", record: i.record_id, source: i.source, status: i.status, detail: i.detail, "as of": i.as_of, "observed by Scout": i.observed_at}) + "</li>";
+          return "<li>" + esc(i.player) + " " + injuryHtml(i) + (i.as_of ? ' <span class="sw-faint sw-small">as of ' + esc(S.shortDate(i.as_of)) + "</span>" : "") + "</li>";
         }).join("") + "</ul>" : '<p class="sw-faint sw-small">No player on the ESPN injury report.</p>') + "</div>";
       }
       var c = e.coverage;
-      main.innerHTML = '<p class="sw-crumbs"><a href="#/slate">Slate</a> › <a href="#/board">Prop board</a> › Match context</p>' +
+      var gl = gameLines(e), tc = teamContext(e);
+      main.innerHTML = '<p class="sw-crumbs"><a href="#/slate?lg=' + state.lg + '">Slate</a> › Match context</p>' +
         '<div class="sw-eyebrow">' + state.lg.toUpperCase() + ' · Match context</div><h1 class="sw-h1">' + esc(e.away.name || teamAbbr(e.away)) + " at " + esc(e.home.name || teamAbbr(e.home)) + "</h1>" +
-        '<p class="sw-sub"><b>' + esc(S.localTime(e.start_utc)) + "</b> · " + esc(e.status) + (e.reschedules.length ? " · rescheduled " + e.reschedules.length + "x" : "") + " " +
-        src({title: "Game record", "event record": e.record_id, "start (UTC)": e.start_utc, "start source": e.start_source, status: e.status}) + "</p>" +
+        '<p class="sw-sub"><b>' + esc(S.localTime(e.start_utc)) + "</b> · " + esc(L.eventStatus(e.status)) + (e.reschedules.length ? " · rescheduled " + e.reschedules.length + "x" : "") + "</p>" +
+        (gl || tc ? '<section class="sw-panel" aria-labelledby="sw-tc-h"><h2 id="sw-tc-h">Game and team context</h2>' + gl + tc + "</section>" : "") +
         '<section class="sw-panel" aria-labelledby="sw-inj-h"><h2 id="sw-inj-h">Injury report</h2><div class="sw-grid2">' + injList(e.away) + injList(e.home) + "</div></section>" +
-        '<section class="sw-panel" aria-labelledby="sw-cov-h"><h2 id="sw-cov-h">Coverage</h2><div class="sw-kv"><span><b>' + c.markets + "</b> markets</span><span><b>" + c.primary + "</b> core</span><span><b>" + c.forecasts + "</b> Scout chances</span><span><b>" + c.players + "</b> players</span>" +
-        Object.keys(c.by_platform).sort().map(function (p) { return "<span>" + esc(bookName(p)) + " <b>" + c.by_platform[p] + "</b></span>"; }).join("") + "</div></section>" +
+        '<section class="sw-panel" aria-labelledby="sw-cov-h"><h2 id="sw-cov-h">Props in this game</h2>' + coverageKv(c) + '<div class="sw-kv sw-small">' +
+        Object.keys(c.by_platform).sort().map(function (p) { return "<span>" + esc(bookName(p)) + " <b>" + c.by_platform[p] + "</b></span>"; }).join("") + "</div>" +
+        '<details class="sw-more"><summary>Details</summary><p class="sw-small sw-faint">The list below shows props with a line open now; props whose only lines were taken down, or alternate lines (goblin / demon), are counted above but open on the player page. ' +
+        src({title: "Game record", "event record": e.record_id, "start (UTC)": e.start_utc, "start source": e.start_source, status: L.eventStatus(e.status)}) + "</p></details></section>" +
         '<section aria-labelledby="sw-gp-h"><h2 id="sw-gp-h" style="font-size:16px;margin:0 0 10px">Every prop in this game</h2><div id="sw-gameprops">' + skeleton(4) + "</div></section>";
       renderBoard(null, eid);
     }).catch(fail);
+  }
+
+  // Team context (match context): e.team_context = {as_of, source, home|away: {pace: {value, rank, n}, def_rating: {value,
+  // rank, n}, def_vs_pos: [{pos, stat_label, rank, allowed_pg, n}]}} - rendered only when the slate snapshot carries it.
+  function teamContext(e) {
+    var T = e.team_context;
+    if (!T || !(T.home || T.away)) return "";
+    function cell(x, unit) { return x && typeof x.value === "number" ? "<b>" + S.num(x.value, 1) + "</b>" + (unit || "") + (x.rank ? ' <span class="sw-faint">(#' + x.rank + ")</span>" : "") + (x.n ? ' <span class="sw-faint sw-small">n=' + x.n + "</span>" : "") : null; }
+    var rows = [["Pace", "pace", " poss"], ["Defensive rating", "def_rating", ""]].map(function (r) {
+      var a = cell((T.away || {})[r[1]], r[2]), h = cell((T.home || {})[r[1]], r[2]);
+      return a || h ? "<tr><th scope=\"row\">" + r[0] + "</th><td>" + (a || "") + "</td><td>" + (h || "") + "</td></tr>" : "";
+    }).join("");
+    var dvp = [];
+    [["away", e.away], ["home", e.home]].forEach(function (side) {
+      ((T[side[0]] || {}).def_vs_pos || []).forEach(function (d) {
+        if (typeof d.rank === "number" || typeof d.allowed_pg === "number") dvp.push("<li>" + esc(teamAbbr(side[1])) + " vs " + esc(d.pos) + " " + esc(d.stat_label || "") + ": " +
+          (typeof d.rank === "number" ? "<b>#" + d.rank + "</b>" : "") + (typeof d.allowed_pg === "number" ? " · allows " + S.num(d.allowed_pg, 1) + " per game" : "") + (d.n ? ' <span class="sw-faint sw-small">n=' + d.n + "</span>" : "") + "</li>");
+      });
+    });
+    if (!rows && !dvp.length) return "";
+    return (rows ? '<div class="sw-scroll"><table class="sw-mini"><caption class="sw-sr">Team context</caption><thead><tr><th></th><th scope="col">' + esc(teamAbbr(e.away)) + '</th><th scope="col">' + esc(teamAbbr(e.home)) + "</th></tr></thead><tbody>" + rows + "</tbody></table></div>" : "") +
+      (dvp.length ? '<h3 style="margin-top:10px">Defense vs position</h3><ul class="sw-list sw-small">' + dvp.join("") + "</ul>" : "") +
+      (T.as_of ? '<p class="sw-faint sw-small">' + esc(T.source || "Scout game store") + " · through " + esc(S.localTime(T.as_of, {month: "short", day: "numeric"})) + "</p>" : "");
   }
 
   // --------------------------------------------------------------------------------------------- player workspace
@@ -710,7 +789,7 @@
     var maxv = Math.max.apply(null, vals.concat([ln || 0])) * 1.18 || 1;
     var bw = (W - pad - padR) / gs.length;
     var step = Math.max(Math.ceil(46 / bw), gs.length > 12 ? Math.ceil(gs.length / 10) : 1);   // date / opponent labels never collide
-    var valMode = bw >= 30 ? 2 : bw >= 19 ? 1 : 0;        // per-bar value: "▲ 12", "12", or none (the finals row above lists every value)
+    var valMode = 0;                                      // no per-bar values: the finals row above is the one list of finals (owner audit)
     var y = function (v) { return H - 34 - v / maxv * (H - 60); };
     var out = gs.map(function (g, i) {
       var v = g.values[stat], o = S.outcome(v, ln), x0 = pad + i * bw + bw * 0.15, w = bw * 0.7;
@@ -722,9 +801,17 @@
         (i % step === 0 ? '<text x="' + (x0 + w / 2).toFixed(1) + '" y="' + (H - 18) + '" text-anchor="middle">' + esc(S.shortDate(g.start_utc)) + '</text><text x="' + (x0 + w / 2).toFixed(1) + '" y="' + (H - 5) + '" text-anchor="middle">' + esc((g.home === false ? "@" : "") + (g.opponent ? g.opponent.abbr : "")) + "</text>" : "");
     }).join("");
     var lineY = y(ln);
+    var breaks = "";
+    for (var bi = 1; bi < gs.length; bi++) {                // gs is oldest first: a break BEFORE bar bi
+      if (String(gs[bi - 1].season) !== String(gs[bi].season)) {
+        var bx = pad + bi * bw;
+        breaks += '<line class="sw-sbreak" x1="' + bx.toFixed(1) + '" x2="' + bx.toFixed(1) + '" y1="8" y2="' + (H - 32) + '" stroke="var(--faint)" stroke-dasharray="2 3"/><text x="' + (bx + 3).toFixed(1) + '" y="14" class="sw-sbreak-t">season break</text>';
+      }
+    }
     var s = S.windowSummary(games, stat, ln, null);
     var label = "Last " + gs.length + " games against line " + S.line(ln) + ": " + s.over + " over, " + s.under + " under, " + s.push + " push.";
-    return '<svg class="sw-chart" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(label) + '">' + out +
+    if (breaks) label += " " + L.spansText(games, state.lg) + ".";
+    return '<svg class="sw-chart" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(label) + '">' + out + breaks +
       '<line x1="' + pad + '" x2="' + (W - padR + 2) + '" y1="' + lineY.toFixed(1) + '" y2="' + lineY.toFixed(1) + '" stroke="var(--text)" stroke-dasharray="5 4"/><text x="' + (W - 2) + '" y="' + (lineY + 4).toFixed(1) + '" text-anchor="end">' + esc(S.line(ln)) + "</text></svg>";
   }
   function svgTrend(games, part, label) {
@@ -773,7 +860,7 @@
         var h = '<p class="sw-crumbs"><a href="#/board">Prop board</a>' + (m.event_id ? ' › <a href="#/game/' + encodeURIComponent(m.event_id) + '">Match context</a>' : "") + " › " + esc(P.player) + "</p>";
         h += '<div class="sw-phead"><div><div class="sw-eyebrow">' + state.lg.toUpperCase() + " · Player workspace</div><h1 class=\"sw-h1\">" + esc(P.player) + "</h1>" +
           '<div class="sw-muted">' + esc([P.position, P.team && P.team.name].filter(Boolean).join(" · ")) +
-          (P.injury ? ' <span class="sw-tag inj">' + esc(S.injuryLabel(P.injury.status)) + "</span> " + esc(P.injury.detail || "") + " " + src({title: "Injury record", record: P.injury.record_id, status: P.injury.status, "as of": P.injury.as_of, "observed by Scout": P.injury.observed_at}) : "") + "</div>" +
+          (P.injury ? " " + injuryHtml(P.injury) : "") + "</div>" +
           (ev ? '<div class="sw-small" style="margin-top:4px">Next: <b>' + (ev.home === false ? "at " : ev.home ? "vs " : "") + esc(ev.opponent ? (ev.opponent.name || ev.opponent.abbr) : "") + "</b> · " + esc(S.localTime(ev.start_utc)) + ' · <a href="#/game/' + encodeURIComponent(ev.event_id) + '">Match context</a></div>' : "") +
           "</div></div>";
         h += '<div class="sw-stats-tabs" role="group" aria-label="Stat">' + markets.map(function (x) {
@@ -782,16 +869,17 @@
         // comparison strip
         h += '<h2 class="sw-sr">Lines for ' + esc(m.stat_label) + "</h2>";
         if (!pick.length && !m.kalshi.length) h += '<div class="sw-state">No line for this stat.</div>';
-        h += '<div class="sw-strip" role="group" aria-label="Book lines for ' + esc(m.stat_label) + '">' + pick.map(function (q) {
+        h += '<div class="sw-stripwrap"><button type="button" class="sw-stripbtn prev" data-strip="-1" aria-label="Earlier lines" hidden>‹</button><div class="sw-strip" id="sw-strip" role="group" tabindex="0" aria-label="Book lines for ' + esc(m.stat_label) + ' (scroll sideways for more)">' + pick.map(function (q) {
           var f = q.forecast_id ? P.forecasts[q.forecast_id] : null, n = S.forecastNumbers(f), on = sel && q.record_id === sel.record_id;
           var o = [q.sides[0] && q.sides[0].offered ? 1 : 0, q.sides[1] && q.sides[1].offered ? 1 : 0];
           var sides = {}; q.sides.forEach(function (s) { sides[s.side] = s; });
           return '<button type="button" class="sw-qcard" data-q="' + esc(q.record_id) + '" aria-pressed="' + on + '">' + book(q.platform) +
             '<span><span class="sw-line">' + S.line(q.line) + "</span>" + (capVariant(q.variant) ? ' <span class="sw-tag alt">' + esc(q.variant) + "</span>" : "") + "</span>" +
             '<span class="sw-offered">' + offeredText([sides.over && sides.over.offered ? 1 : 0, sides.under && sides.under.offered ? 1 : 0]) + "</span>" +
-            (n ? '<span class="sw-small">O <b class="sw-p over" data-fc="' + esc(n.id) + '" data-fcside="over">' + n.over + '</b> · U <b class="sw-p under" data-fc="' + esc(n.id) + '" data-fcside="under">' + n.under + "</b></span>" : '<span class="sw-small sw-faint">' + (q.gradable ? "No Scout chance yet" : "Not graded: " + esc((q.not_gradable_because || [])[0] || "")) + "</span>") + "</button>";
-        }).join("") + "</div>";
-        h += '<div class="sw-grid2" style="margin-top:12px"><div>' + historyPanel(m, ln, sel) + "</div><div>" + forecastPanel(fc, det, sel, m) + "</div></div>";
+            (n ? '<span class="sw-small">O <b class="sw-p over" data-fc="' + esc(n.id) + '" data-fcside="over">' + n.over + '</b> · U <b class="sw-p under" data-fc="' + esc(n.id) + '" data-fcside="under">' + n.under + "</b></span>" : '<span class="sw-small sw-faint">' + (q.gradable ? "No Scout projection yet" : esc(L.gateReason((q.not_gradable_because || [])[0] || "") || "Not settled by Scout")) + "</span>") + "</button>";
+        }).join("") + '</div><button type="button" class="sw-stripbtn next" data-strip="1" aria-label="More lines" hidden>›</button></div>';
+        h += '<div class="sw-grid2" style="margin-top:12px"><div>' + historyPanel(m, ln, sel) + '<div id="sw-without"></div></div><div>' + forecastPanel(fc, det, sel, m) + "</div></div>";
+        h += matchupPanel(P, games, m, ln);
         h += contextPanel(P, games, m);
         h += factorsSection(state.lg, m, fc);
         if (m.kalshi.length) {
@@ -807,12 +895,16 @@
         h += '<details class="sw-more sw-evidence"><summary>Source records</summary>' + evidencePanel(P, fc, games, m, histErr) + "</details>";
         main.innerHTML = h;
         bind();
+        try {                                           // sheets agent: "Games without teammate" module mounts here
+          var wo = document.getElementById("sw-without");
+          if (wo && window.SportsWithout && window.SportsWithout.render) window.SportsWithout.render(wo, P, games, {stat: m.stat, line: ln, league: state.lg});
+        } catch (e) { /* the module never breaks the player page */ }
       }
 
       function capVariant(v) { return v && ["standard", "balanced", "main", "ladder_rung"].indexOf(v) < 0; }
 
       function forecastPanel(fc, det, q, mk) {
-        var h = '<section class="sw-panel" aria-labelledby="sw-fc-h"><h2 id="sw-fc-h">' + esc(fc ? S.kindLabel(fc.model_version) : "Scout model") + (q ? " · Line " + S.line(q.line) + " · " + esc(bookName(q.platform)) : "") + "</h2>";
+        var h = '<section class="sw-panel" aria-labelledby="sw-fc-h"><h2 id="sw-fc-h">' + esc(fc ? modelWords(fc.model_version) : "Scout projection") + (q ? " · Line " + S.line(q.line) + " · " + esc(bookName(q.platform)) : "") + "</h2>";
         if (!q) return h + '<p class="sw-muted">No pick’em line for this stat.</p></section>';
         if (!fc) {
           var lr = q.line_read, lsrc = lr ? P.forecasts[lr.f] : null;
@@ -822,7 +914,7 @@
               '<div class="sw-sides">' + ["over", "under", "push"].map(function (k) { return '<div class="sw-side"><span class="sw-k sw-small sw-faint">' + (k === "push" ? "Push" : (k === "over" ? "Over " : "Under ") + S.line(q.line)) + '</span><div class="sw-v sw-p ' + k + '">' + S.pct(lr["p" + k[0]]) + "</div></div>"; }).join("") + "</div>" + slipButtons(q, null) + "</section>";
           }
           return h + '<p class="sw-muted">Projection unavailable: ' + esc(q.no_fc || (mk.capability !== "supported" ? (mk.capability_reason || "market not supported by the Scout model") :
-            q.gradable ? "no Scout forecast for this line in the last run" : "line not modelled: " + (q.not_gradable_because || []).join("; "))) + "</p>" + slipButtons(q, null) + "</section>";
+            q.gradable ? "no Scout forecast for this line in the last run" : (q.not_gradable_because || []).map(L.gateReason).join("; "))) + "</p>" + slipButtons(q, null) + "</section>";
         }
         var n = S.forecastNumbers(fc);
         var sides = {}; q.sides.forEach(function (s) { sides[s.side] = s; });
@@ -835,7 +927,8 @@
         var dt = fc.detail || {};
         h += '<div class="sw-big"><div><span class="sw-k">Projected</span><span class="sw-v" data-fc="' + esc(n.id) + '" data-fcside="mean">' + (fc.projection_mean !== null && fc.projection_mean !== undefined ? n.mean : "unavailable") + "</span></div>" +
           (dt.interval ? '<div class="sw-small sw-muted">80% range ' + dt.interval[0] + "–" + dt.interval[1] + (dt.median !== undefined ? " · median " + dt.median : "") + "</div>" : "") +
-          '<div class="sw-small sw-muted">' + esc(fc.model_version) + " · forecast " + esc(S.localTime(fc.forecast_at)) + (man && man.forecast_run && man.forecast_run.history_through ? " · inputs through " + esc(S.localTime(man.forecast_run.history_through, {month: "short", day: "numeric"})) : "") + " " + fcSource(fc.forecast_id, fc, {r: q.record_id}) + "</div>" +
+          '<div class="sw-small sw-muted">Projected ' + esc(S.localTime(fc.forecast_at)) + (man && man.forecast_run && man.forecast_run.history_through ? " · games through " + esc(S.localTime(man.forecast_run.history_through, {month: "short", day: "numeric"})) : "") + "</div>" +
+          '<details class="sw-more sw-fcdetails"><summary>Details</summary><p class="sw-small sw-faint">Model ' + esc(fc.model_version) + " " + fcSource(fc.forecast_id, fc, {r: q.record_id}) + "</p></details>" +
           '<div class="sw-small sw-faint">' + esc(S.validationText(model ? model.settled : 0)) + " · grade and stake withheld</div></div>";
         h += '<div class="sw-sides">' + sideBox("over", "Over " + S.line(fc.line), n.over) + sideBox("under", "Under " + S.line(fc.line), n.under) + sideBox("push", "Push", n.push) + "</div>";
         h += slipButtons(q, fc);
@@ -898,24 +991,25 @@
         var used = ps.win === "season" ? played : played.slice(0, ps.win);
         var dnp = (ps.win === "season" ? gw : games).filter(function (g) { return g.participation === "did_not_play"; }).length;
         h += '<div class="sw-scroll"><table class="sw-mini"><caption class="sw-sr">Window summary</caption><tbody>' +
-          "<tr><th>Games</th><td>" + sum.n + (typeof ps.win === "number" && sum.n < ps.win ? ' <span class="sw-faint">(' + ps.win + " asked; " + sum.n + " held)</span>" : "") + (ps.win === "season" ? ' <span class="sw-faint">season ' + esc(seas.season) + "</span>" : "") + "</td></tr>" +
+          "<tr><th>Games</th><td>" + sum.n + (typeof ps.win === "number" && sum.n < ps.win ? ' <span class="sw-faint">(' + ps.win + " asked; " + sum.n + " held)</span>" : "") + (ps.win === "season" ? ' <span class="sw-faint">season ' + esc(L.seasonLabel(seas.season, state.lg)) + "</span>" : (L.spansText(used, state.lg) ? ' <span class="sw-tag sw-span2">' + esc(L.spansText(used, state.lg)) + "</span>" : "")) + "</td></tr>" +
           "<tr><th>Dates</th><td>" + (sum.n ? esc(S.shortDate(sum.from)) + " – " + esc(S.shortDate(sum.to)) : "—") + "</td></tr>" +
           "<tr><th>Mean · median</th><td>" + S.num(sum.mean, 1) + " · " + S.num(sum.median, 1) + "</td></tr>" +
           "<tr><th>Spread</th><td>sd " + S.num(sum.sd, 1) + " · range " + S.num(sum.min, 0) + "–" + S.num(sum.max, 0) + "</td></tr>" +
           "<tr><th>At " + S.line(ln) + "</th><td><b>Over " + sum.over + "</b> · <b>Under " + sum.under + "</b> · Push " + sum.push + " <span class=\"sw-faint\">of " + sum.denominator + " games</span></td></tr>" +
           (dnp ? '<tr><th>Did not play</th><td>' + dnp + ' <span class="sw-faint">(not counted)</span></td></tr>' : "") + "</tbody></table></div>";
         h += '<h3 style="margin-top:12px">Game by game</h3>' +
-          (used.length ? '<p class="sw-finals" aria-label="Final ' + esc(mk.stat_label) + ', most recent first">' + used.map(function (g) {
+          (used.length ? '<p class="sw-finals" aria-label="Final ' + esc(mk.stat_label) + ', most recent first">' + used.map(function (g, gi) {
             var v = g.values[mk.stat], o = S.outcome(v, ln);
-            return '<span class="sw-final sw-final-' + o + '" title="' + esc(S.shortDate(g.start_utc) + " " + (g.home === false ? "@ " : "vs ") + (g.opponent ? g.opponent.abbr : "?")) + '"><b>' + S.num(v, 0) + "</b> " +
+            var brk = gi > 0 && String(used[gi - 1].season) !== String(g.season) ? '<span class="sw-season-break" role="separator" aria-label="Season break: ' + esc(L.seasonLabel(g.season, state.lg)) + ' before, ' + esc(L.seasonLabel(used[gi - 1].season, state.lg)) + ' after">season break · ' + esc(L.seasonLabel(g.season, state.lg)) + "</span>" : "";
+            return brk + '<span class="sw-final sw-final-' + o + '" title="' + esc(S.shortDate(g.start_utc) + " " + (g.home === false ? "@ " : "vs ") + (g.opponent ? g.opponent.abbr : "?")) + '"><b>' + S.num(v, 0) + "</b> " +
               (o === "over" ? "▲" : o === "under" ? "▼" : "●") + ' <span class="sw-faint">' + esc((g.home === false ? "@" : "") + (g.opponent ? g.opponent.abbr : "")) + "</span></span>";
           }).join("") + "</p>" : "") +
           svgGames(used, mk.stat, ln) +
           '<div class="sw-legend"><span style="color:var(--over)">▲ Over (filled)</span><span style="color:var(--under)">▼ Under (outline)</span><span style="color:var(--push)">● Push</span></div>' +
           '<details class="sw-more"><summary>Games as a table</summary><div class="sw-scroll"><table class="sw-mini"><thead><tr><th>Date</th><th>Opp</th><th class="num">' + esc(mk.stat_label) + "</th><th>At " + S.line(ln) + "</th>" + (state.lg === "nba" ? '<th class="num">Min</th>' : "") + '<th><span class="sw-sr">Source</span></th></tr></thead><tbody>' +
-          used.map(function (g) {
+          used.map(function (g, gi) {
             var o = S.outcome(g.values[mk.stat], ln);
-            return "<tr><td>" + esc(S.shortDate(g.start_utc)) + "</td><td>" + esc((g.home === false ? "@ " : "vs ") + (g.opponent ? g.opponent.abbr : "?")) + '</td><td class="num">' + S.num(g.values[mk.stat], 0) + "</td><td>" + esc(o === "over" ? "▲ Over" : o === "under" ? "▼ Under" : "● Push") + "</td>" +
+            return (gi > 0 && String(used[gi - 1].season) !== String(g.season) ? '<tr class="sw-season-row"><td colspan="' + (state.lg === "nba" ? 6 : 5) + '">season break · ' + esc(L.seasonLabel(g.season, state.lg)) + " below</td></tr>" : "") + "<tr><td>" + esc(S.shortDate(g.start_utc)) + "</td><td>" + esc((g.home === false ? "@ " : "vs ") + (g.opponent ? g.opponent.abbr : "?")) + '</td><td class="num">' + S.num(g.values[mk.stat], 0) + "</td><td>" + esc(o === "over" ? "▲ Over" : o === "under" ? "▼ Under" : "● Push") + "</td>" +
               (state.lg === "nba" ? '<td class="num">' + S.num(g.parts.min, 0) + "</td>" : "") + "<td>" + src({title: "Game " + S.shortDate(g.start_utc), "event record": g.event_record_id, source: g.source.join(", "), "stat records": Object.keys(g.record_ids).map(function (k) { return k + ": " + g.record_ids[k]; }), "observed by Scout": g.observed_at}) + "</td></tr>";
           }).join("") + "</tbody></table></div></details>";
         // splits
@@ -928,6 +1022,38 @@
         return h + "</section>";
       }
 
+      // Matchup (owner "next month" item b): opponent defence vs position READ from the factor engine's rows in the
+      // player file (factors.engine.by_stat[stat], sports/games/factors.py - never recomputed here), and this player's
+      // own history against tonight's opponent (n, mean, Over / Under at the current line, hit rate).
+      function matchupPanel(P, games, mk, ln) {
+        var DVP_KEYS = {dvp: 1, dvp_rank: 1, dvp_allowed_pg: 1, opp_pos_allowed: 1, opp_pos_rank: 1, opp_pos_allowed_pg: 1, opp_def_rank: 1};
+        var ne = P.next_event, opp = ne && ne.opponent, out = "";
+        var E = P.factors && P.factors.engine, rows = ((E && E.by_stat) || {})[mk.stat] || [];
+        var dv = rows.filter(function (r) { return DVP_KEYS[r.key] && r.value !== null && r.value !== undefined; });
+        if (dv.length) {
+          out += '<div><h3>' + esc(opp ? (opp.abbr || opp.name) + " defense" : "Opponent defense") + " vs position</h3><ul class=\"sw-list sw-small\">" + dv.map(function (r) {
+            var v = r.key === "dvp" || r.key === "opp_pos_allowed" ? S.num(r.value, 2) + "× the league average allowed" :
+              /rank/.test(r.key) ? "#" + S.num(r.value, 0) : S.num(r.value, 1) + " per game";
+            return "<li>" + esc(r.label) + ": <b>" + esc(v) + "</b>" + (r.n ? ' <span class="sw-faint">n=' + r.n + "</span>" : "") + (r.source ? ' <span class="sw-faint">· ' + esc(r.source) + "</span>" : "") + "</li>";
+          }).join("") + "</ul></div>";
+        }
+        if (opp && opp.team_id) {
+          var vs = games.filter(function (g) { return g.participation === "played" && g.opponent && g.opponent.team_id === opp.team_id && g.values && g.values[mk.stat] !== undefined && g.values[mk.stat] !== null; });
+          if (vs.length) {
+            var sm = S.windowSummary(vs, mk.stat, ln, null), dec = sm.over + sm.under, sp = L.spansText(vs, state.lg);
+            out += "<div><h3>" + esc(P.player) + " vs " + esc(opp.abbr || opp.name) + '</h3><ul class="sw-list sw-small">' +
+              "<li>Games: <b>" + sm.n + "</b> (" + esc(S.shortDate(sm.from)) + " – " + esc(S.shortDate(sm.to)) + (sp ? ", " + esc(sp) : "") + ")</li>" +
+              "<li>Average: <b>" + S.num(sm.mean, 1) + "</b> " + esc(mk.stat_label.toLowerCase()) + " · median " + S.num(sm.median, 1) + "</li>" +
+              (ln !== null && ln !== undefined ? "<li>At " + S.line(ln) + ": <b>Over " + sm.over + "</b> · <b>Under " + sm.under + "</b>" + (sm.push ? " · Push " + sm.push : "") +
+                (dec ? " · hit rate Over " + S.pct0(sm.over / dec) + ' <span class="sw-faint">(n = ' + dec + ")</span>" : "") + "</li>" : "") +
+              "</ul></div>";
+          }
+        }
+        if (!out) return "";
+        return '<section class="sw-panel" aria-labelledby="sw-mu-h"><h2 id="sw-mu-h">Matchup · ' + esc(mk.stat_label) + '</h2><div class="sw-grid2">' + out + "</div>" +
+          '<p class="sw-faint sw-small">Descriptive: matchup numbers move the Scout projection only after a chronological test.</p></section>';
+      }
+
       function contextPanel(P, games, mk) {
         var F = P.factors || {stats: [], context: [], not_held: []};
         var part = state.lg === "nba" ? "min" : (/rec|targets/.test(mk.stat) ? "targets" : /rush/.test(mk.stat) ? "rush_att" : "pass_att");
@@ -935,11 +1061,11 @@
         var trend = svgTrend(games, part, lab);
         var h = '<section class="sw-panel" aria-labelledby="sw-ctx-h"><h2 id="sw-ctx-h">Minutes, role and matchup</h2><div class="sw-grid2"><div><h3>' + esc(lab) + " trend</h3>" + (trend || '<p class="sw-muted sw-small">Fewer than two games with ' + esc(lab.toLowerCase()) + " held.</p>");
         if (F.stats.length) {
-          h += '<div class="sw-scroll"><table class="sw-mini"><caption class="sw-sr">Opportunity averages by window</caption><thead><tr><th>Per game</th>' + F.stats[0].windows.map(function (w) { return '<th class="num">' + esc(w.window) + "</th>"; }).join("") + "</tr></thead><tbody>" +
+          h += '<div class="sw-scroll"><table class="sw-mini"><caption class="sw-sr">Opportunity averages by window</caption><thead><tr><th>Per game</th>' + F.stats[0].windows.map(function (w) { return '<th class="num">' + esc(L.windowLabel(w.window, state.lg)) + "</th>"; }).join("") + "</tr></thead><tbody>" +
             F.stats.map(function (r) { return "<tr><td>" + esc(r.label) + "</td>" + r.windows.map(function (w) { return '<td class="num">' + S.num(w.mean, 1) + ' <span class="sw-faint sw-small">n=' + w.n + "</span></td>"; }).join("") + "</tr>"; }).join("") + "</tbody></table></div>";
         }
         h += "</div><div><h3>Game context</h3><ul class=\"sw-list sw-small\">" + F.context.map(function (c) {
-          if (c.key === "teammates_out") return "<li>" + esc(c.label) + ": <b>" + c.value + "</b>" + (c.items && c.items.length ? '<ul class="sw-list">' + c.items.map(function (i) { return "<li>" + esc(i.player) + ' <span class="sw-tag inj">' + esc(S.injuryLabel(i.status)) + "</span></li>"; }).join("") + "</ul>" : "") + "</li>";
+          if (c.key === "teammates_out") return "<li>" + esc(c.label) + ": <b>" + c.value + "</b>" + (c.items && c.items.length ? '<ul class="sw-list">' + c.items.map(function (i) { return "<li>" + esc(i.player) + " " + injuryHtml(i) + "</li>"; }).join("") + "</ul>" : "") + "</li>";
           if (c.key === "rest_days") return "<li>" + esc(c.label) + ": <b>" + S.num(c.value, 1) + "</b></li>";
           if (c.key === "back_to_back") return "<li>" + esc(c.label) + ": <b>" + (c.value ? "yes" : "no") + "</b></li>";
           if (c.value === null || c.value === undefined) return "";
@@ -995,6 +1121,24 @@
         main.querySelectorAll("[data-win]").forEach(function (b) {
           b.addEventListener("click", function () { var w = b.getAttribute("data-win"); ps.win = w === "season" ? "season" : +w; draw(); var t = main.querySelector('[data-win="' + w + '"]'); if (t) t.focus(); });
         });
+        var strip = document.getElementById("sw-strip");
+        if (strip) {
+          var btns = main.querySelectorAll("[data-strip]");
+          var upd = function () {
+            var over = strip.scrollWidth > strip.clientWidth + 2;
+            btns.forEach(function (b) {
+              var dir = +b.getAttribute("data-strip");
+              b.hidden = !over || (dir < 0 ? strip.scrollLeft <= 8 : strip.scrollLeft + strip.clientWidth >= strip.scrollWidth - 8);
+            });
+            strip.classList.toggle("sw-strip-more", over);
+          };
+          btns.forEach(function (b) { b.addEventListener("click", function () { strip.scrollBy({left: +b.getAttribute("data-strip") * Math.max(180, strip.clientWidth * 0.8), behavior: "smooth"}); }); });
+          strip.addEventListener("scroll", upd, {passive: true});
+          upd();
+          var cur = strip.querySelector("[aria-pressed=true]");
+          if (cur && cur.offsetLeft + cur.offsetWidth > strip.clientWidth) strip.scrollLeft = cur.offsetLeft - 8;
+          upd();
+        }
         var rg = document.getElementById("sw-range");
         if (rg) {
           rg.addEventListener("input", function () { document.getElementById("sw-rangeout").textContent = rg.value; });
@@ -1044,6 +1188,18 @@
     }).catch(fail);
   }
 
+  function renderNotFound(r) {                          // unknown hash route: say so, never fall back silently
+    banner.innerHTML = ""; footer(null);
+    main.innerHTML = stateBox("Page not found", "There is no Scout Sports page at <b>#/" + esc([r.view, r.arg].filter(Boolean).join("/")) + "</b>.",
+      '<p><a class="sw-btn" href="#/slate?lg=' + state.lg + '">Slate</a> <a class="sw-btn" href="#/board?lg=' + state.lg + '">Prop board</a> <a class="sw-btn" href="#/picks?lg=' + state.lg + '">My picks</a></p>');
+  }
+  function renderSlips() {                              // Slip Studio inside the main shell (web/sports/slips.js)
+    banner.innerHTML = "";
+    loadManifest().then(function (m) { footer(m && m.data); });
+    if (!window.SlipStudio) { main.innerHTML = stateBox("Slip Studio did not load", "Reload the page to try again."); return; }
+    window.SlipStudio.mount(main, {league: state.lg});
+  }
+
   // ------------------------------------------------------------------------------------------------------ render
   function render() {
     var r = route();
@@ -1053,12 +1209,15 @@
     banner.innerHTML = "";
     document.getElementById("sw-toast").innerHTML = "";
     if (window.SportsTray) window.SportsTray.render(state.lg);                    // HOOK (ux): slip tray for this league
+    document.body.classList.toggle("sw-on-slips", r.view === "slips");            // Slip Studio shows the draft itself
     if (r.view === "board") renderBoard(r.params);
     else if (r.view === "player" && r.arg) renderPlayer(r.arg, r.params);
     else if (r.view === "game" && r.arg) renderGame(r.arg);
     else if (r.view === "results") renderResults();
     else if (r.view === "picks") renderPicks();
-    else renderSlate();
+    else if (r.view === "slips") renderSlips();
+    else if (r.view === "slate" && !r.arg) renderSlate();
+    else renderNotFound(r);
     var top = document.getElementById("sw-main");
     if (render.count++) { try { top.focus({preventScroll: true}); } catch (e) {} window.scrollTo(0, 0); }
   }
@@ -1067,7 +1226,7 @@
     var b = e.target.closest("button[data-lg]"); if (!b) return;
     state.lg = b.getAttribute("data-lg"); saveFilters();
     var r = route();
-    go("#/" + (r.view === "player" || r.view === "game" ? "board" : r.view) + "?lg=" + state.lg);
+    go("#/" + (r.view === "player" ? "board" : r.view === "game" ? "slate" : r.view) + "?lg=" + state.lg);
   });
   window.addEventListener("hashchange", render);
   window.addEventListener("online", function () { Api.mem = {}; render(); });

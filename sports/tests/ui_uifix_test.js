@@ -43,4 +43,11 @@ assert.strictEqual(L.spansText(gs.slice(0, 2), "nba"), "");
 assert.strictEqual(L.teamPlaceholder("nba"), "e.g. BOS or Celtics");
 assert.strictEqual(L.teamPlaceholder("nfl"), "e.g. KC or Chiefs");
 
+// ---------------------------------------------------------------- bug 6: My picks
+const P = require(path.join(dir, "picks.js"));
+const recs = P.records({record: {nba: {win: 3, loss: 2, push: 1, "void": 0, open: 2, decided: 5, hit_rate: 0.6}}}, "nba");
+assert.deepStrictEqual(recs.map(r => [r.league, r.wlp, r.current]), [["nba", "3-2-1", true], ["nfl", "0-0-0", false]]);
+const mixed = [{league: "nba"}, {league: "nfl"}, {league: "nba", test: true}];
+assert.deepStrictEqual(P.onlyLeague(mixed, "nba"), [{league: "nba"}]);
+
 console.log("ok");

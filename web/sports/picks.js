@@ -68,6 +68,20 @@
     if (r.status === "void") return {status: "Void", detail: (r.value !== null && r.value !== undefined ? v + " · " : "") + "did not play / voided by the platform"};
     return {status: RESULT_WORD[r.status] || r.status, detail: v + " vs " + side + " " + line(p.line)};
   }
+  function recordLine(r) {                             // {win, loss, push, void, open, decided, hit_rate} -> "3-2-1"
+    r = r || {};
+    return (r.win || 0) + "-" + (r.loss || 0) + "-" + (r.push || 0);
+  }
+  function records(d, lg) {                            // per-league W-L-P from the API (non-test picks only)
+    var rec = (d && d.record) || {};
+    return ["nba", "nfl"].map(function (k) {
+      var r = rec[k] || {win: 0, loss: 0, push: 0, "void": 0, open: 0, decided: 0, hit_rate: null};
+      return {league: k, current: k === lg, wlp: recordLine(r), hit: r.hit_rate, decided: r.decided || 0, open: r.open || 0, voided: r["void"] || 0};
+    });
+  }
+  function onlyLeague(ps, lg) {                        // defence in depth: the list never mixes leagues or shows test rows
+    return (ps || []).filter(function (p) { return (!lg || !p.league || p.league === lg) && !p.test; });
+  }
   function validationLines(models) {                   // model validation progress - never the member's own record
     return (models || []).map(function (m) {
       var n = m.settled || 0;
@@ -78,7 +92,8 @@
   }
 
   var api = {GATE_N: GATE_N, HELP: HELP, sideChoices: sideChoices, preselect: preselect, tabOf: tabOf, summary: summary,
-             trackedText: trackedText, chanceText: chanceText, resultText: resultText, validationLines: validationLines};
+             trackedText: trackedText, chanceText: chanceText, resultText: resultText, validationLines: validationLines,
+             records: records, recordLine: recordLine, onlyLeague: onlyLeague};
   if (typeof module !== "undefined" && module.exports) { module.exports = api; return; }
 
   // ------------------------------------------------------------------------------------------- card actions
@@ -180,29 +195,34 @@
   // deps: {main, api, src, stateBox, fail, skeleton, loadModels: () => Promise<[{league, model_version, settled}]>}
   function renderMine(deps) {
     var main = deps.main;
-    var head = '<div class="sw-eyebrow">My picks</div><h1 class="sw-h1">My picks</h1>';
+    var lg = deps.league || "nba";
+    var head = '<div class="sw-eyebrow">' + esc(lg.toUpperCase()) + ' · My picks</div><h1 class="sw-h1">My picks</h1>';
     main.innerHTML = head + deps.skeleton(4);
-    Promise.all([deps.api.get("/api/sports/picks/mine", {}, {fresh: true}), deps.loadModels().catch(function () { return []; })]).then(function (res) {
+    Promise.all([deps.api.get("/api/sports/picks/mine", {league: lg}, {fresh: true}), deps.loadModels().catch(function () { return []; })]).then(function (res) {
+      res[0].data.picks = onlyLeague(res[0].data.picks, lg);
+      res[0].data.lg = lg;
       drawMine(deps, head, res[0].data, res[1] || []);
     }).catch(deps.fail);
   }
   function drawMine(deps, head, d, models, focusTab) {
     var main = deps.main, ps = d.picks || [];
     var h = head + '<p class="sw-sub">Each pick was recorded before its game at the exact line shown and is settled from the final box score at that same line. Stakes are 0; no grades or returns are shown.</p>';
-    var val = validationLines(models);
+    var val = validationLines((models || []).filter(function (m) { return !d.lg || !m.league || m.league === d.lg; }));
+    var recs = records(d, d.lg);
+    var recHtml = '<section class="sw-panel sw-mp-sum" aria-labelledby="sw-mp-rec-h"><h2 id="sw-mp-rec-h">Your record</h2><div class="sw-kv sw-mp-rec">' +
+      recs.map(function (r) {
+        return '<span' + (r.current ? ' class="sw-mp-cur"' : "") + "><b>" + esc(r.league.toUpperCase()) + " " + esc(r.wlp) + "</b> W-L-P" +
+          (r.decided ? " · hit rate " + pct(r.hit) + " (n = " + r.decided + ")" : "") + (r.open ? " · " + r.open + " open" : "") + "</span>";
+      }).join("") + "</div>" +
+      '<p class="sw-faint sw-small">Pushes and voids are not counted in the hit rate.' + (d.hidden_test ? " " + d.hidden_test + (d.hidden_test === 1 ? " test record is" : " test records are") + " not shown." : "") + "</p></section>";
     var valHtml = '<section class="sw-panel sw-mp-val" aria-labelledby="sw-mp-val-h"><h2 id="sw-mp-val-h">Model validation (all members, not your picks)</h2>' +
       (val.length ? '<ul class="sw-list sw-small">' + val.map(function (v) { return "<li>" + esc(v.text) + "</li>"; }).join("") + "</ul>" : '<p class="sw-small sw-muted">Model validation: 0 of ' + GATE_N + " settled props - not yet validated.</p>") +
       '<p class="sw-faint sw-small">The model is reviewed at ' + GATE_N + " settled props on real offered lines. Your own record above says nothing about that.</p></section>";
     if (!ps.length) {
-      main.innerHTML = h + deps.stateBox("No tracked picks yet", "Choose <b>Over</b> or <b>Under</b> on a line, then <b>Track pick</b>, before the game starts. A recorded pick appears here within about a minute.", '<a class="sw-btn" href="#/board">Open the prop board</a>') + valHtml;
+      main.innerHTML = h + recHtml + deps.stateBox("No tracked " + esc((d.lg || "").toUpperCase()) + " picks yet", "Choose <b>Over</b> or <b>Under</b> on a line, then <b>Track pick</b>, before the game starts. A recorded pick appears here within about a minute.", '<a class="sw-btn" href="#/board">Open the prop board</a>') + valHtml;
       return;
     }
-    var c = summary(ps);
-    h += '<section class="sw-panel sw-mp-sum" aria-labelledby="sw-mp-sum-h"><h2 id="sw-mp-sum-h">Your results</h2><div class="sw-kv">' +
-      "<span><b>" + c.win + "-" + c.loss + "-" + c.push + "</b> W-L-P</span>" +
-      "<span>Hit rate <b>" + (c.hit === null ? "—" : pct(c.hit)) + "</b> (n = " + c.decided + " decided)</span>" +
-      "<span><b>" + c["void"] + "</b> voided</span><span><b>" + c.open + "</b> open</span><span><b>" + d.total + "</b> tracked</span></div>" +
-      '<p class="sw-faint sw-small">Pushes and voids are not counted in the hit rate.' + (d.total > d.shown ? " Counts cover the newest " + d.shown + " of " + d.total + " picks." : "") + "</p></section>";
+    h += recHtml;
     var by = {open: [], settled: [], voided: []};
     ps.forEach(function (p) { by[tabOf(p)].push(p); });
     if (!by[cur]) cur = "open";

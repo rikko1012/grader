@@ -7,6 +7,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/sports/sports.css">
 <link rel="stylesheet" href="/sports/ux.css">
+<link rel="stylesheet" href="/sports/slips.css">
+<link rel="stylesheet" href="/sports/uifix.css">
 </head>
 <body class="sw">
 <a class="sw-skip" href="#sw-main">Skip to content</a>
@@ -17,7 +19,7 @@
       <button type="button" data-lg="nba" aria-pressed="true">NBA</button><button type="button" data-lg="nfl" aria-pressed="false">NFL</button>
     </div>
     <div class="sw-views" id="sw-views">
-      <a href="#/slate" data-view="slate">Slate</a><a href="#/board" data-view="board">Prop board</a><a href="#/results" data-view="results">Results</a><a href="#/picks" data-view="picks">My picks</a><a href="/sports/slips.html" data-view="slips" id="sw-sliplink">Slip Studio</a>
+      <a href="#/slate" data-view="slate">Slate</a><a href="#/board" data-view="board">Prop board</a><a href="#/results" data-view="results">Results</a><a href="#/picks" data-view="picks">My picks</a><a href="#/slips" data-view="slips" id="sw-sliplink">Slip Studio</a>
     </div>
   </nav>
   <div id="sw-banner" class="sw-banners" aria-live="polite"></div><div id="sw-toast" class="sw-banners" role="status" aria-live="polite"></div>
@@ -27,8 +29,10 @@
 <dialog id="sw-src" class="sw-dialog" aria-labelledby="sw-src-h"><form method="dialog"><h2 id="sw-src-h">Source</h2><div id="sw-src-body"></div><button class="sw-btn" value="close">Close</button></form></dialog>
 <script src="/sports/shell.js"></script>
 <script src="/sports/stats.js"></script>
+<script src="/sports/labels.js"></script>
 <script src="/sports/tray.js"></script>
 <script src="/sports/filters.js"></script>
 <script src="/sports/picks.js"></script>
+<script src="/sports/slips.js"></script>
 <script src="/sports/app.js"></script>
 </body></html>

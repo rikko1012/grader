@@ -3,7 +3,9 @@
   POST /api/sports/picks/track   {"picks": [{platform, record_id, side, forecast_id?, shown?, surface}]} (<= 8)
                                  live check per pick (bounded read-only store pool, 2 s budget) -> spooled, never
                                  written here; answer per pick {ok, pick_id} or {ok: false, code, text}
-  GET  /api/sports/picks/mine    the member's own picks (picks.db read-only, newest first, <= 200) + results
+  GET  /api/sports/picks/mine    the member's own picks (picks.db read-only, newest first, <= 200) + results;
+                                 ?league=nba|nfl filters; test records hidden (admin token: &include_test=1);
+                                 record = W-L-P per league (no money)
   GET  /api/sports/admin/picks   admin aggregate (counts, hit rate, Brier / log-loss, game-clustered 95% intervals)
 Test picks (picks.scratch_reason): an admin token's picks, picks posted with "test": true, and every pick while
 SPORTS_PICKS_SCRATCH=1 (the owner-only preview) are recorded with scratch=true and aggregated apart from member picks.
@@ -59,8 +61,11 @@ def mine(req):
             con = picks.connect_ro()
         except FileNotFoundError:
             return 200, {"version": picks.VERSION, "picks": [], "total": 0, "shown": 0, "stake_units": 0}
+        q = req.query or {}
+        league = q.get("league") if q.get("league") in ("nba", "nfl") else None
+        include_test = q.get("include_test") in ("1", "true") and req.role == "admin"   # test records: admin only
         try:
-            return 200, picks.mine(con, req.member)
+            return 200, picks.mine(con, req.member, league=league, include_test=include_test)
         except sqlite3.OperationalError as e:
             if "no such table" in str(e):
                 return 200, {"version": picks.VERSION, "picks": [], "total": 0, "shown": 0, "stake_units": 0}
