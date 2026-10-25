@@ -547,7 +547,7 @@ def _engine_context(league, fam, now, pids, markets_rows, events, cur_team, root
 
 
 # --------------------------------------------------------------------------------------------------------- build
-def build(con, league, now=None, base=None, history=True):
+def build(con, league, now=None, base=None, history=True, results=True):
     """Build every snapshot file of one league. -> summary counts."""
     t0 = time.time()
     now = now or now_utc()
@@ -738,18 +738,22 @@ def build(con, league, now=None, base=None, history=True):
                       "injuries": inj})
 
     # models / validation state (facts: counts)
-    settled_by_model = defaultdict(int)
-    setts = _current_settlements(con, league)
-    for s in setts:
-        for fid in s.affected_forecast_ids:
-            if fid in forecasts:
-                settled_by_model[forecasts[fid]["model_version"]] += 1
+    # settled counts come from the results ledger (forecast <-> settlement linked by offer identity,
+    # settled_forecast_links); the ledger itself is written by the settle job (write_results) - not every 3 minutes
+    res_summary = (_read_json(root / "results.json") or {}).get("summary") or {}
+    if results:
+        res_obj = results_view(con, league, _current_settlements(con, league), now,
+                               {"version": SNAP_VERSION, "league": league, "built_at": now_utc(), "as_of": now})
+        res_summary = res_obj["summary"]
     models = defaultdict(lambda: {"forecasts": 0, "research_only": True})
     for f in forecasts.values():
         mm = models[f["model_version"]]
         mm["forecasts"] += 1
         mm["research_only"] = mm["research_only"] and f["research_only"]
-    model_list = [{"model_version": k, **v, "settled": settled_by_model.get(k, 0)} for k, v in sorted(models.items())]
+    for mv in res_summary:
+        models[mv]
+    model_list = [{"model_version": k, **v, "settled": int((res_summary.get(k) or {}).get("settled") or 0)}
+                  for k, v in sorted(models.items())]
 
     manifest = {"version": SNAP_VERSION, "league": league, "built_at": now_utc(), "as_of": now,
                 "forecast_run": {k: run.get(k) for k in ("forecast_at", "finished_at", "history_through")},
@@ -843,7 +847,8 @@ def build(con, league, now=None, base=None, history=True):
             "history": {"games": len(games), "sources": sorted({s for g in games for s in g["source"]})}})
         _write(hi_dir / f"{safe_name(pid)}.json", {**base_meta, "player_id": pid, "family": fam, "games": games})
         n_players += 1
-    sizes["results"] = _write(root / "results.json", results_view(con, league, setts, now, base_meta))
+    if results:
+        sizes["results"] = _write(root / "results.json", {**res_obj, **base_meta})
     manifest["sizes"] = sizes
     manifest["build_s"] = round(time.time() - t0, 2)
     _write(root / "manifest.json", manifest)
@@ -1019,6 +1024,25 @@ def _current_settlements(con, league):
 
 
 # ------------------------------------------------------------------------------------------------------------ results
+def _read_json(path):
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def write_results(con, league, now=None, base=None):
+    """The results ledger file (<league>/results.json) from the CURRENT settlements - called by the settle job right
+    after it settles (sports/worker.py cmd_settle), so Results moves when games settle, not with the 3-minute board
+    build (which no longer decodes every settlement). -> {"rows", "settled_by_model"}."""
+    now = now or now_utc()
+    root = snap_root(base) / league
+    meta = {"version": SNAP_VERSION, "league": league, "built_at": now_utc(), "as_of": now}
+    obj = results_view(con, league, _current_settlements(con, league), now, meta)
+    _write(root / "results.json", obj)
+    return {"rows": obj["total_rows"], "settled_by_model": {k: v["settled"] for k, v in obj["summary"].items()}}
+
+
 def _boot_ci(groups, stat_fn, reps=400, seed=7):
     """95% interval by resampling whole games (groups = [[row, ...], ...])."""
     if len(groups) < 2:
@@ -1036,6 +1060,50 @@ def _boot_ci(groups, stat_fn, reps=400, seed=7):
     return [_r(vals[int(0.025 * (len(vals) - 1))], 4), _r(vals[int(0.975 * (len(vals) - 1))], 4)]
 
 
+def settled_forecast_links(con, setts):
+    """(platform, offer_id) -> [forecast_id] for every stored forecast made on an offer that has a settlement, plus
+    {forecast_id: Forecast}. THE link between forecasts and settlements (fresh 2026-10-24, owner audit bug 2): the
+    worker settles OFFERS (settlement.settle_offer is called without forecast ids - a forecast is not known to the box
+    score), so Settlement.affected_forecast_ids is empty on every production settlement and a ledger keyed on it showed
+    0 of 2,672 forecasts settled. A forecast names the offer revision it was made for (offer_snapshot_ids); that record's
+    identity (source = platform, source_key = offer id) is the settlement's (platform, offer_id). Read side, so every
+    settlement already stored (Oct 21 on) links without rewriting a record; ids a settlement does name still count.
+    Bounded: only forecasts of events that have a settlement are decoded (records_event index)."""
+    want = {(s.platform, s.offer_id) for s in setts}
+    evs = sorted({s.event_id for s in setts if s.event_id})
+    fcs, links = {}, defaultdict(list)
+    for s in setts:
+        for fid in s.affected_forecast_ids:
+            if fid not in fcs:
+                fcs[fid] = store.get(con, fid)
+            if fid not in links[(s.platform, s.offer_id)]:
+                links[(s.platform, s.offer_id)].append(fid)
+    for i in range(0, len(evs), 400):
+        part = evs[i:i + 400]
+        rows = con.execute(f"SELECT record_id, payload FROM records WHERE kind='forecast' AND event_id IN "
+                           f"({','.join('?' * len(part))})", part).fetchall()
+        dec = [(r["record_id"], from_dict(store._unpack(r["payload"]))) for r in rows]
+        orids = sorted({o for _, fc in dec for o in (fc.offer_snapshot_ids or ())})
+        ident = {}
+        for j in range(0, len(orids), 500):
+            chunk = orids[j:j + 500]
+            for r in con.execute(f"SELECT record_id, source, source_key FROM records WHERE record_id IN "
+                                 f"({','.join('?' * len(chunk))})", chunk):
+                ident[r["record_id"]] = (r["source"], r["source_key"])
+        for orid in orids:
+            if orid not in ident:                       # archived offer revision (sports/archive.py)
+                m = store.row_meta(con, orid)
+                if m and m.get("kind") == "offer":
+                    ident[orid] = (m["source"], m["source_key"])
+        for fid, fc in dec:
+            for orid in fc.offer_snapshot_ids or ():
+                k = ident.get(orid)
+                if k in want and fid not in links[k]:
+                    links[k].append(fid)
+                    fcs.setdefault(fid, fc)
+    return links, fcs
+
+
 def results_view(con, league, setts, now, base_meta):
     """One ledger row per (forecast, settled offer side pair). Projection accuracy and probability accuracy are computed
     per forecast; returns appear only where a settlement records an actual stake and payout."""
@@ -1044,14 +1112,10 @@ def results_view(con, league, setts, now, base_meta):
     by_offer = defaultdict(list)
     for s in setts:
         by_offer[(s.platform, s.offer_id)].append(s)
-    fcs = {}
-    for s in setts:
-        for fid in s.affected_forecast_ids:
-            if fid not in fcs:
-                fcs[fid] = store.get(con, fid)
+    links, fcs = settled_forecast_links(con, setts)
     for (plat, oid), ss in by_offer.items():
-        for s in ss:
-            for fid in s.affected_forecast_ids:
+        for s in ss[:1]:
+            for fid in links.get((plat, oid), ()):
                 fc = fcs.get(fid)
                 if fc is None or fid in seen:
                     continue
@@ -1135,6 +1199,7 @@ def main(argv=None):
         s.add_argument("--cache-only", action="store_true")
         s.add_argument("--max-players", type=int, default=400)
         s.add_argument("--no-history", action="store_true")
+        s.add_argument("--no-results", action="store_true", help="leave results.json to the settle job")
     a = p.parse_args(argv)
     flags.require("SPORTS_INGEST")
     now = utc(a.now) if a.now else now_utc()
@@ -1147,7 +1212,7 @@ def main(argv=None):
                 out[lg] = ingest_history(con, lg, board_player_ids(con, lg, now), cache_only=a.cache_only,
                                          max_players=a.max_players)
             else:
-                out[lg] = build(con, lg, now=now, history=not a.no_history)
+                out[lg] = build(con, lg, now=now, history=not a.no_history, results=not a.no_results)
     print(json.dumps(out, indent=1, default=str))
     return out
 

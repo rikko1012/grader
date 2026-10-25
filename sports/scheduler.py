@@ -69,7 +69,7 @@ def default_jobs():
         # what members read
         "prebuilt": dict(argv=_py("-m", "sports.service", "snapshots"), every_s=90, timeout_s=120, flag="SPORTS_API",
                          cap_mb=160, cls=HEAVY, prio=1),                       # 105-109 MB (slim slip pool)
-        "ui-snapshots": dict(argv=_py("-m", "sports.snapshots", "build", *lg), every_s=180, timeout_s=240,
+        "ui-snapshots": dict(argv=_py("-m", "sports.snapshots", "build", *lg, "--no-results"), every_s=180, timeout_s=240,
                              flag="SPORTS_INGEST", cap_mb=250, cls=HEAVY, prio=2),   # 135-200 MB (grows with data)
         "mapping-audit": dict(argv=_py("-m", "sports.mapping_audit", *lg), every_s=3600, timeout_s=240,
                               flag="SPORTS_INGEST", cap_mb=250, cls=HEAVY, prio=3),  # one offer scan per league / hour
