@@ -1452,7 +1452,8 @@ if __name__ == "__main__":
 # Needs the scraper's match_maps (map order) and map_headshots tables; on an older scraper database
 # these return [] / None and nothing changes.
 _SERIES_SQL = """
-SELECT mo.matchid, mo.date, mm.number, mp.name, ps.k, h.hs, own.score, opp.score, t2.name, t.name, mo.lan, t2.teamid
+SELECT mo.matchid, mo.date, mm.number, mp.name, ps.k, h.hs, own.score, opp.score, t2.name, t.name, mo.lan, t2.teamid,
+       (SELECT count(*) FROM map_rounds rr WHERE rr.mapstatsid = mm.mapstatsid)
 FROM match_maps mm
 JOIN match_overview mo USING (matchid)
 JOIN maps mp ON mp.mapid = mm.mapid
@@ -1473,7 +1474,12 @@ def _series_rows(cur, ids, since, extra="", params=None, maxn=2, need=(1, 2)):
     for row in cur.fetchall():
         mid, d, num, mname, k, hs, own, opp, oname, tname, lan = row[:11]
         oid = row[11] if len(row) > 11 else None
-        by_match.setdefault(mid, []).append({"opponent_id": oid,
+        nr = row[12] if len(row) > 12 else None
+        # 2026-10-25 audit (research/esports_accuracy_2026_10_25): a map page captured before the map finished (241953,
+        # hltv:2399658: 24 round rows of a 29-round OT map) settled 19 units on its partial scoreboard. A map whose stored
+        # round history is shorter than its final score is PARTIAL: settlement waits for it (never settles on it).
+        partial = {"partial": True} if nr and nr < (own or 0) + (opp or 0) else {}   # key only when partial: rows unchanged
+        by_match.setdefault(mid, []).append({"opponent_id": oid, **partial,
             "match_id": f"hltv-{mid}", "hltv_match": mid, "date": d.isoformat(), "number": num,
             "map": "de_" + _norm(mname), "kills": k, "headshots": hs, "rounds": (own or 0) + (opp or 0),
             "won": (own or 0) > (opp or 0), "opponent": oname, "team": tname, "source": "hltv",
@@ -1530,6 +1536,8 @@ def settle_totals(nick, team, hltv_match):
     if not rows:
         return {"found": False, "transient": bad}     # unreachable: the pick log never voids on that (2026-10-11 audit)
     m12 = sorted(rows, key=lambda r: r["number"])[:2]
+    if any(r.get("partial") for r in m12):          # a map captured before it finished: wait (2026-10-25 audit)
+        return {"found": True, "kills": None, "headshots": None, "partial": True, "maps": [r["map"] for r in m12]}
     hs = [r["headshots"] for r in m12]
     return {"found": True, "kills": sum(r["kills"] for r in m12),
             "headshots": None if None in hs else sum(hs), "maps": [r["map"] for r in m12]}
@@ -1614,6 +1622,8 @@ def settle_by_day(nick, team, day, opponent):
         return {"found": False, "ambiguous": True}
     mid = on[0]["hltv_match"]
     m12 = sorted((r for r in on if r["hltv_match"] == mid), key=lambda r: r["number"])[:2]
+    if any(r.get("partial") for r in m12):          # a map captured before it finished: wait (2026-10-25 audit)
+        return {"found": False, "wait": True, "partial": True}
     hs = [r["headshots"] for r in m12]
     return {"found": True, "hltv_match": mid, "date": m12[0]["date"], "kills": sum(r["kills"] for r in m12),
             "headshots": None if None in hs else sum(hs), "maps": [r["map"] for r in m12],
@@ -1650,7 +1660,9 @@ def settle_scope(nick, team, day, opponent, scope):
     ms = sorted((r for r in on if r["hltv_match"] == mid), key=lambda r: r["number"])
     if scope == "1":
         ms = ms[:1]
-    else:
+    if any(r.get("partial") for r in ms):           # a map captured before it finished: wait (2026-10-25 audit)
+        return {"found": True, "wait": True, "partial": True}
+    if scope != "1":
         if len(ms) == 2 and ms[0]["won"] != ms[1]["won"]:
             return {"found": True, "wait": True}       # 1-1 after two maps: map 3 not in yet
         if len(ms) < 2:
