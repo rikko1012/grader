@@ -20,6 +20,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 from .. import identity
+from ..names import team_abbr
 from ..contracts import parse_utc
 from . import builder, joint, pool as poolmod, rules
 
@@ -144,12 +145,23 @@ def check(slip, pool, mode="load", now=None, offer_lookup=None, live_current=Non
     return out
 
 
+def _stat_words(l):
+    """#12: the canonical market label (markets.py), the book's raw stat name only when the key is unknown."""
+    from .. import markets
+    from ..contracts import SPORT_OF
+    spec = markets.market(SPORT_OF.get(l.get("league")), l.get("stat")) if l.get("stat") else None
+    if spec and spec.get("label"):
+        return spec["label"]
+    raw = l.get("stat_label") or l.get("stat") or ""
+    return raw.replace("_", " ").capitalize() if "_" in raw else raw
+
+
 def copy_text(platform, entry_type, legs):
     words = rules.SIDE_WORD[platform]
     lines = [f"{rules.LABEL[platform]} - {len(legs)}-pick {entry_type} - Scout Sports slip (not entered)"]
     for i, l in enumerate(legs, 1):
-        lines.append(f"{i}. {l['player']} ({l['team']}) - {l.get('event_ref') or ''} - {_et(l['start_utc'])} - "
-                     f"{l.get('stat_label') or l['stat']} {words[l['side']]} {l['line']}")
+        lines.append(f"{i}. {l['player']} ({team_abbr(l.get('league'), l['team']) or l['team']}) - {l.get('event_ref') or ''} - {_et(l['start_utc'])} - "
+                     f"{_stat_words(l)} {words[l['side']]} {l['line']}")
     if any(l.get("research_only") for l in legs):
         lines.append("Research estimates - not validated; stakes 0.")
     lines.append("Enter it yourself in the app and check every line there first: lines move, and a changed line "

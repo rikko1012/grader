@@ -39,6 +39,23 @@ def _tail(record_id):
     return str(record_id).rsplit(":", 1)[-1] if record_id else None
 
 
+def _dvp_rows(f, fam, stat):
+    """Opponent defense vs the player's position group from the engine (factors.dvp_table): stat allowed per game and
+    rank (1 = fewest allowed of `teams`), each row carrying its sample n (opponent games in the engine window)."""
+    if f.get("dvp_allowed_pg") is None:
+        return []
+    from . import markets
+    grp, n, teams = f.get("dvp_group"), f.get("dvp_n"), f.get("dvp_teams")
+    lab = (markets.market(fam, stat) or {}).get("label") or stat
+    base = {"group": "Defensive matchup" if fam == "basketball" else "Matchup", "source": "ESPN box score",
+            "status": "derived", "n": n, "pos": grp, "teams": teams}
+    rows = [dict(base, key="dvp_allowed_pg", label=f"{lab} allowed per game to {grp}", value=f["dvp_allowed_pg"])]
+    if f.get("dvp_rank") is not None:
+        rows.append(dict(base, key="dvp_rank", label=f"Rank allowing {lab} to {grp} (1 = fewest, of {teams})",
+                         value=f["dvp_rank"]))
+    return rows
+
+
 def _games_db():
     from .games import store as gstore
     if not os.environ.get("SPORTS_DB_DSN") and not (config.DATA_DIR / "games.db").exists():
@@ -126,6 +143,7 @@ def build(league, fam, now, wanted, hist_path=None):
                         continue
                     rows.append({"key": k, "label": spec["label"], "group": spec["group"], "value": v,
                                  "source": spec["source"], "status": spec["status"]})
+                rows += _dvp_rows(pay["factors"], fam, stat)
                 for r in rows:
                     if r["key"] == "on_off_net":
                         r["label"] = ON_OFF_LABEL

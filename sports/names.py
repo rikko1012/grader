@@ -44,3 +44,20 @@ def _groups():
 def key(name):
     b = _base(name)
     return _groups().get(b, b)
+
+
+# One team abbreviation per team on every member surface (owner re-audit N9, 2026-10-24: Slate "UTAH" vs slips "UTA").
+# ESPN's own short codes -> the codes the pick'em boards print. web/sports/labels.js TEAM_ABBR is the same table
+# (sports/tests/test_ui_uifix.py checks they match). Logos keep ESPN's code (their URL uses it).
+TEAM_ABBR = {
+    "nba": {"GS": "GSW", "NY": "NYK", "SA": "SAS", "NO": "NOP", "UTAH": "UTA", "WSH": "WAS"},
+    "nfl": {"WSH": "WAS"},
+}
+
+
+def team_abbr(league, abbr):
+    """'UTAH' -> 'UTA' (nba); unknown / already canonical codes are returned upper-cased; None stays None."""
+    if not abbr:
+        return None
+    a = str(abbr).strip().upper()
+    return TEAM_ABBR.get(league, {}).get(a, a)

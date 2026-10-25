@@ -8,8 +8,9 @@ DEFINITIONS
   settled forecast  a stored forward forecast with a current settlement whose outcome at the FORECAST'S OWN line is
                     known (sports/settlement.at_line, LINE_CORRECTNESS C10); void / unresolved are counted apart.
   settled prop      one (game, player, stat) with at least one settled forecast - the validation gate counts these:
-                    GATE = 300 settled props per league before any "validated" wording ("n of 300 settled props - not
-                    yet validated" until then).
+                    GATE = 300 settled props per league is the MINIMUM before the registered review (gate F,
+                    REGISTER.md 7); the count alone never validates: "1,566 settled (minimum 300) · under review",
+                    plus the one-line pass rule (GATE_RULE). "validated" stays False until a registered review passes.
   projection        error = settled value - projection mean; MAE and bias (mean error).
   Scout lean        the board's lean rule (SportsRows.leanOf, sports/UI.md): Scout records only (market-only models
                     have none); Over when P(Over) > 50% and the mean is above the line, Under mirrored. Hit rate = wins / (wins + losses); pushes listed apart.
@@ -34,6 +35,15 @@ from .contracts import now_utc
 
 VERSION = "rp-1"
 GATE = 300
+GATE_RULE = ("Pass rule (registered gate F): at least 300 settled props from 100+ games at real offered lines; "
+             "Scout's chance on its side within 3 points of how often that side hit (game-clustered interval "
+             "including 0); and a lower log-loss than the market-only baseline on the same props. Reviewed at 300, "
+             "600 and 1,000 settled props; nothing passes automatically.")
+
+
+def gate_text(n, minimum=GATE):
+    """'1,566 settled (minimum 300) · under review' - the same wording as SportsStats.validationState."""
+    return f"{n:,} settled (minimum {minimum:,})" + (" · under review" if n >= minimum else "")
 REFRESH_S = 1800
 BANDS = ((0.50, 0.55, "50-55%"), (0.55, 0.60, "55-60%"), (0.60, 0.65, "60-65%"), (0.65, 1.01, "65%+"))
 
@@ -225,9 +235,9 @@ def build(con, now=None, base=None):
             mr = [r for r in rows if r["model"] == mv]
             models[mv] = dict(summarize(mr), research_only=all(r["research_only"] for r in mr))
         stats = {st: summarize([r for r in rows if r["stat"] == st]) for st in sorted({r["stat"] for r in rows})}
-        leagues[lg] = {**s, "gate": {"settled_props": s["props"], "required": GATE, "validated": s["props"] >= GATE,
-                                     "text": (f"{s['props']} of {GATE} settled props - not yet validated"
-                                              if s["props"] < GATE else f"{s['props']} settled props")},
+        leagues[lg] = {**s, "gate": {"settled_props": s["props"], "required": GATE, "validated": False,
+                                     "under_review": s["props"] >= GATE, "text": gate_text(s["props"]),
+                                     "rule": GATE_RULE},
                        "models": models, "stats": stats, "calibration": calibration(rows), "bands": bands(rows),
                        "head_to_head": {"version": HH_VERSION, "method": HH_METHOD, "rows": head_to_head(rows)}}
     doc = {"version": VERSION, "built_at": now_utc(), "as_of": now, "leagues": leagues, "picks": tracked_picks(),
@@ -236,7 +246,8 @@ def build(con, now=None, base=None):
            "method": {k: v.strip() for k, v in (
                ("settled", "forward forecasts only, scored at their own line from the box score; void / unresolved "
                            "listed apart"),
-               ("gate", f"{GATE} settled props (game x player x stat) per league before 'validated'"),
+               ("gate", f"at least {GATE} settled props (game x player x stat) per league before the registered "
+                        f"review; {GATE_RULE}"),
                ("projection", "error = settled value - projection mean; MAE and bias"),
                ("lean", "Scout models only: Over when its chance of Over is above 50% and its projection is above the "
                         "line (Under mirrored); hit rate = wins / (wins + losses), pushes apart"),

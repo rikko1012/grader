@@ -20,7 +20,13 @@
   function lineTxt(x) { return !nn(x) ? "—" : (Math.abs(x - Math.round(x)) < 1e-9 ? String(Math.round(x)) : String(Math.round(x * 10) / 10)); }
   function edgeText(e) { return nn(e) ? R.edgeText(e) + " pts" : "—"; }
   function leanText(r) { return r.lean === "over" ? "Lean Over" : r.lean === "under" ? "Lean Under" : "No lean"; }
-  function matchup(ev, id) { var e = ev && ev[id]; return e ? (e.a || "?") + " @ " + (e.h || "?") : ""; }
+  function statOf(r) {                                            // #12: never a raw stat key
+    var Lb = root.SportsLabels || (typeof require !== "undefined" ? require("./labels.js") : null);
+    var k = r.stat || r.st, lab = r.statLabel || r.sl;
+    return Lb ? (Lb.STAT[k] || Lb.statLabel(lab || k)) : (lab || k);
+  }
+  function tag(a, lg) { var Lb = root.SportsLabels; return a && Lb ? Lb.teamTag(a, lg) : a; }   // N9: one code per team
+  function matchup(ev, id, lg) { var e = ev && ev[id]; return e ? (tag(e.a, lg) || "?") + " @ " + (tag(e.h, lg) || "?") : ""; }
   // the sheet file -> one propRow per line (started games dropped with the board's own rule)
   function buildRows(D, now) {
     now = now || Date.now();
@@ -31,7 +37,7 @@
       if (R.started(mm, now)) return;
       m.q.forEach(function (q) {
         var r = R.propRow(mm, q, {fc: D.fc || {}, view: D.view || {}, now: now});
-        r.variant = q.v || "standard"; r.statLabel = m.sl || m.st; r.mult = q.m || null; r.matchup = matchup(D.events, m.e);
+        r.variant = q.v || "standard"; r.statLabel = m.sl || m.st; r.mult = q.m || null; r.matchup = matchup(D.events, m.e, D.league);
         out.push(r);
       });
     });
@@ -40,7 +46,7 @@
   var KEYS = {
     player: function (r) { return (r.player || "").toLowerCase(); },
     game: function (r) { return r.start || r.s || r.e || ""; },
-    stat: function (r) { return r.statLabel || r.sl || r.stat || r.st; },
+    stat: function (r) { return statOf(r); },
     line: function (r) { return nn(r.line) ? r.line : r.l; },
     type: function (r) { return variantLabel(r.variant); },
     proj: function (r) { return r.scout ? r.scout.mu : null; },
@@ -100,6 +106,7 @@
 
   // ------------------------------------------------------------------------------------------------- view
   var esc = function (s) { return root.ScoutShell.esc(s); };
+  var int = function (n) { return root.SportsStats.int(n); };
   var UI = {};
   try { UI = JSON.parse(localStorage.getItem(LS) || "{}") || {}; } catch (e) { UI = {}; }
   function save() { try { localStorage.setItem(LS, JSON.stringify(UI)); } catch (e) { /* storage off */ } }
@@ -147,12 +154,12 @@
 
   function statOpts(rows, D) {
     var seen = {};
-    rows.forEach(function (r) { seen[r.stat || r.st] = r.statLabel || r.sl || (D.stats || {})[r.stat || r.st] || r.stat || r.st; });
+    rows.forEach(function (r) { seen[r.stat || r.st] = statOf(r); });
     return [["all", "All stats"]].concat(Object.keys(seen).sort(function (a, b) { return seen[a] < seen[b] ? -1 : 1; }).map(function (k) { return [k, seen[k]]; }));
   }
   function evOpts(D) {
     return [["all", "All games"]].concat(Object.keys(D.events || {}).sort(function (a, b) { return (D.events[a].s || "") < (D.events[b].s || "") ? -1 : 1; })
-      .map(function (k) { return [k, matchup(D.events, k)]; }));
+      .map(function (k) { return [k, matchup(D.events, k, D.league)]; }));
   }
   function built(D) {
     var S = root.SportsStats;
@@ -176,7 +183,7 @@
         var lean = r.lean ? '<span class="shx-lean shx-' + r.lean + '">' + esc(leanText(r)) + "</span>" + (r.leanOffered === false ? '<div class="sw-faint sw-small">not offered here</div>' : "")
           : '<span class="sw-faint">' + (r.held ? esc(r.held) : sc ? "No lean" : "No Scout chance") + "</span>";
         return "<tr>" +
-          '<th scope="row"><a href="' + playerHref(lg, {pid: r.pid, st: r.stat}) + '">' + esc(r.player) + '</a><div class="sw-faint sw-small">' + esc([r.team, r.pos].filter(Boolean).join(" · ")) + "</div></th>" +
+          '<th scope="row"><a href="' + playerHref(lg, {pid: r.pid, st: r.stat}) + '">' + esc(r.player) + '</a><div class="sw-faint sw-small">' + esc([tag(r.team, lg), r.pos].filter(Boolean).join(" · ")) + "</div></th>" +
           '<td class="sw-small">' + esc(r.matchup) + "</td>" +
           "<td>" + esc(r.statLabel) + "</td>" +
           '<td class="num">' + lineTxt(r.line) + "</td>" +
@@ -191,7 +198,7 @@
           '<td class="num">' + conf + "</td></tr>";
       }).join("");
       main.querySelector("#shx-body").innerHTML = body || '<tr><td colspan="13" class="sw-muted">No lines match these filters.</td></tr>';
-      main.querySelector("#shx-count").textContent = rows.length + " of " + all.length + " lines";
+      main.querySelector("#shx-count").textContent = int(rows.length) + " of " + int(all.length) + " lines";
       var more = main.querySelector("#shx-more");
       more.hidden = rows.length <= shown;
       more.textContent = "Show " + Math.min(PAGE, rows.length - shown) + " more";
@@ -210,7 +217,7 @@
       sel("shx-variant", "Type", [["all", "All types"], ["standard", "Standard"], ["goblin", "Goblin"], ["demon", "Demon"], ["alternate", "Alternate"]], st.variant) +
       sel("shx-lean", "Lean", [["any", "Any"], ["lean", "Has a lean"], ["over", "Lean Over"], ["under", "Lean Under"]], st.lean) +
       '<label class="shx-field shx-check"><input type="checkbox" id="shx-gap"' + (st.gap ? " checked" : "") + "><span>Model vs market gap</span></label>" +
-      '<label class="shx-field"><span>Player or team</span><input id="shx-q" type="search" value="' + esc(st.q) + '" placeholder="Search"></label></div>' +
+      '<label class="shx-field"><span>Player or team</span><input id="shx-q" type="search" value="' + esc(st.q) + '" placeholder="' + esc(root.SportsLabels ? root.SportsLabels.searchPlaceholder(lg) : "Search") + '"></label></div>' +
       '<div class="shx-meta"><span id="shx-count" aria-live="polite"></span><span class="sw-faint sw-small">' + built(D) + "</span></div>" +
       '<div class="sw-scroll shx-wrap"><table class="sw-mini shx-table"><caption class="sw-sr">' + esc(sheet) + ' lines, sortable</caption><thead><tr>' +
       th("player", "Player", st) + th("game", "Game", st) + th("stat", "Stat", st) + th("line", "Line", st, 1) + th("type", "Type", st) +
@@ -231,8 +238,8 @@
       var f = {stat: st.stat, ev: st.ev, dir: st.dir_, min: st.min, q: st.q, l20: st.l20};
       var rows = sortRows(consistentFilter(D.rows, f), st.sort, st.dir, D.events);
       main.querySelector("#shx-body").innerHTML = rows.slice(0, shown).map(function (r) {
-        return '<tr><th scope="row"><a href="' + playerHref(lg, r) + '">' + esc(r.n) + '</a><div class="sw-faint sw-small">' + esc([r.tm, r.pos].filter(Boolean).join(" · ")) + "</div></th>" +
-          '<td class="sw-small">' + esc(matchup(D.events, r.e)) + "</td><td>" + esc(r.sl || r.st) + "</td>" +
+        return '<tr><th scope="row"><a href="' + playerHref(lg, r) + '">' + esc(r.n) + '</a><div class="sw-faint sw-small">' + esc([tag(r.tm, lg), r.pos].filter(Boolean).join(" · ")) + "</div></th>" +
+          '<td class="sw-small">' + esc(matchup(D.events, r.e, D.league)) + "</td><td>" + esc(statOf(r)) + "</td>" +
           '<td class="num">' + lineTxt(r.l) + ' <span class="sw-faint sw-small">' + esc(r.plat === "prizepicks" ? "PP" : "UD") + "</span></td>" +
           '<td><span class="shx-lean shx-' + r.side + '">' + (r.side === "over" ? "Over" : "Under") + "</span></td>" +
           '<td class="num"><b>' + pctTxt(r.r10) + '</b> <span class="sw-faint sw-small">' + rate(r.l10, r.side) + (r.l10.p ? " · " + r.l10.p + " push" : "") + "</span>" + seasonsNote(r.l10, lg) + "</td>" +
@@ -240,7 +247,7 @@
           '<td class="sw-small sw-mono">' + esc((r.l10.last || []).map(lineTxt).join(" ")) + "</td>" +
           '<td class="num">' + r.avail + "</td></tr>";
       }).join("") || '<tr><td colspan="9" class="sw-muted">No players match these filters.</td></tr>';
-      main.querySelector("#shx-count").textContent = rows.length + " of " + D.count + " player lines with " + 10 + "+ games";
+      main.querySelector("#shx-count").textContent = int(rows.length) + " of " + int(D.count) + " player lines with 10+ games";
       var more = main.querySelector("#shx-more");
       more.hidden = rows.length <= shown;
       more.textContent = "Show " + Math.min(PAGE, rows.length - shown) + " more";
@@ -257,7 +264,7 @@
       sel("shx-dir", "Direction", [["any", "Over or Under"], ["over", "Over"], ["under", "Under"]], st.dir_) +
       sel("shx-min", "L10 at least", [["0", "Any"], ["60", "60%"], ["70", "70%"], ["80", "80%"], ["90", "90%"]], st.min) +
       '<label class="shx-field shx-check"><input type="checkbox" id="shx-l20"' + (st.l20 ? " checked" : "") + "><span>Has 20 games</span></label>" +
-      '<label class="shx-field"><span>Player or team</span><input id="shx-q" type="search" value="' + esc(st.q) + '" placeholder="Search"></label></div>' +
+      '<label class="shx-field"><span>Player or team</span><input id="shx-q" type="search" value="' + esc(st.q) + '" placeholder="' + esc(root.SportsLabels ? root.SportsLabels.searchPlaceholder(lg) : "Search") + '"></label></div>' +
       '<div class="shx-meta"><span id="shx-count" aria-live="polite"></span><span class="sw-faint sw-small">' + built(D) + "</span></div>" +
       '<div class="sw-scroll shx-wrap"><table class="sw-mini shx-table"><caption class="sw-sr">Most consistent players, sortable</caption><thead><tr>' +
       th("cplayer", "Player", st) + th("game", "Game", st) + th("stat", "Stat", st) + th("line", "Line", st, 1) + th("dir", "Side", st) +

@@ -47,6 +47,7 @@ from pathlib import Path
 
 from . import (board_view, cache, capabilities, config, fair, flags, forecast_detail, game_lines, identity,
                market_view, markets, scout_chance, store)
+from .names import team_abbr
 from .contracts import (ContractError, Event, Membership, SourceId, StatObservation, from_dict, now_utc, parse_utc,
                         utc)
 
@@ -737,6 +738,8 @@ def build(con, league, now=None, base=None, history=True, results=True):
                 "capability": capabilities.classify(league, o.stat).status,
                 "capability_reason": capabilities.classify(league, o.stat).reason,
                 "quotes": [], "kalshi": [], "alternates": [], "promotional": []}
+        if row["team"] is None and o.team:              # N9: the first offer may carry no team (Kalshi); any later one does
+            row["team"] = o.team
         row_items[key].append((rid, o, m))
         if not o.promotional and o.platform != "kalshi" and o.variant in capabilities.ORDINARY_VARIANTS:
             row_targets[key].append((rid, o))
@@ -771,6 +774,19 @@ def build(con, league, now=None, base=None, history=True, results=True):
     for row in markets_rows.values():
         if events[row["event_id"]][1].start_utc <= now:     # started games leave the board (shown as started on the slate)
             continue
+        ev_ = events[row["event_id"]][1]
+        if row["team_id"] not in (ev_.home_team_id, ev_.away_team_id):
+            row["team_id"] = None                         # a membership of a team not in this game (stale after a trade)
+        if row["team_id"] is None:                       # N9: no usable roster membership: the offer's team code
+            want = team_abbr(league, row["team"])         # matched to THIS game's two teams
+            for tid_ in (ev_.home_team_id, ev_.away_team_id):
+                t_ = teams.get(tid_)
+                if want and t_ is not None and team_abbr(league, t_.abbr) == want:
+                    row["team_id"] = tid_
+        if row["team_id"] is not None and teams.get(row["team_id"]) is not None:
+            row["team"] = team_abbr(league, teams[row["team_id"]].abbr) or row["team"]
+        elif row["team"]:
+            row["team"] = team_abbr(league, row["team"])
         mv = market_view.row_view(row_targets.get(row["key"], []), row_items.get(row["key"], []),
                                   events[row["event_id"]][1], now, league, dnp)
         row["market"] = mv
@@ -1305,8 +1321,22 @@ def write_results(con, league, now=None, base=None):
         part = st_events[i:i + RESULTS_EVENTS_PER_PASS]
         rows += results_view(con, league, _event_settlements(con, part), now, meta, rows_only=True)
     obj = results_from_rows(rows, meta)
+    names = player_names(con, {r["player_id"] for r in obj["rows"] if r.get("player_id")}, now)
+    for r in obj["rows"]:                              # N7: the player's record name, never the lowercase key
+        r["player"] = names.get(r.get("player_id"))
     _write(root / "results.json", obj)
     return {"rows": obj["total_rows"], "settled_by_model": {k: v["settled"] for k, v in obj["summary"].items()}}
+
+
+def player_names(con, pids, as_of=None):
+    """{player_id: name} from the latest Player record of each id (indexed records_player scan, chunked)."""
+    out, ids = {}, sorted(p for p in pids if p)
+    for i in range(0, len(ids), 400):
+        part = ids[i:i + 400]
+        for _, p, _ in _latest(con, "player", f"player_id IN ({','.join('?' * len(part))})", part, as_of):
+            if getattr(p, "name", None):
+                out[p.player_id] = p.name
+    return out
 
 
 def _boot_ci(groups, stat_fn, reps=400, seed=7):

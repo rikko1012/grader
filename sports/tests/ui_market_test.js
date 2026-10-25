@@ -58,7 +58,13 @@ assert.strictEqual(S.pct0(0.4567), "46%");
 assert.strictEqual(S.pct0(0.001), "<1%");
 assert.strictEqual(S.wholeLine(4), true);
 assert.strictEqual(S.wholeLine(4.5), false);
-assert.strictEqual(S.validationText(12), "Research estimate · forward validation 12 of 300 settled props");
+assert.strictEqual(S.validationText(12), "Research estimate · forward validation 12 settled (minimum 300)");
+// N6: thousands separators, the minimum is never a "n of 300" target, a window reached reads "under review"
+assert.strictEqual(S.validationState(1566), "1,566 settled (minimum 300) · under review");
+assert.strictEqual(S.validationState(300), "300 settled (minimum 300) · under review");
+assert.strictEqual(S.int(1234567), "1,234,567"); assert.strictEqual(S.int(999), "999"); assert.strictEqual(S.int(-1500), "-1,500");
+assert.strictEqual(S.plural(1566, "prop"), "1,566 props");
+assert.ok(/300 settled props from 100\+ games/.test(S.GATE_RULE) && /within 3 points/.test(S.GATE_RULE) && /log-loss/.test(S.GATE_RULE));
 assert.strictEqual(S.plural(1, "book"), "1 book");
 assert.strictEqual(S.plural(2, "book"), "2 books");
 // preferred book first (member's choice), otherwise the neutral snapshot order; never a fixed book

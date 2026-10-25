@@ -272,3 +272,31 @@ def test_three_outcome_brier_is_twice_binary_without_push():
     three = sum((p[k] - (1.0 if k == "over" else 0.0)) ** 2 for k in p)
     from sports import results_public as rp
     assert three == 0.5 and rp.binary_scores(0.5, 0.5, "over")[1] == 0.25
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_head_to_head_renders_in_node(tmp_path):
+    js = tmp_path / "h.js"
+    js.write_text("""
+const R = require(process.argv[2] + "/results_public.js");
+const h = R.h2hHtml({method: "m", rows: [{scout: "sm-1", market: "mc-1", stat: "all", pairs: 12, pushes: 1, games: 4,
+  scout_brier: 0.262, market_brier: 0.251, scout_log_loss: 0.71, market_log_loss: 0.69, scout_hit_rate: 0.5,
+  market_hit_rate: 0.55, diff: {brier: 0.011, brier_ci95: [-0.01, 0.03], log_loss: 0.02, log_loss_ci95: null,
+  hit_rate: -0.05, hit_rate_ci95: [-0.2, 0.1]}}]});
+for (const t of ["Scout vs market on the same props", "Market consensus (mc-1)", "All stats", "0.262", "+0.011",
+                 "(95%: −0.010 to +0.030)", "−5.0%", "Brier: Scout"]) if (h.indexOf(t) < 0) throw new Error("missing " + t);
+if (R.h2hHtml({rows: []}).indexOf("No prop has settled") < 0) throw new Error("empty state");
+if (R.modelName("mkt-oddsapi:fanduel") !== "FanDuel market") throw new Error("model name");
+console.log("ok");
+""", encoding="utf-8")
+    out = subprocess.run(["node", str(js), str(WEB)], capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0 and out.stdout.strip() == "ok", out.stdout + out.stderr
+
+
+def test_results_tab_wires_head_to_head_and_binary_brier():
+    page = (WEB.parent / "sports.html").read_text(encoding="utf-8")
+    assert page.index("/sports/results_public.js") < page.index("/sports/app.js")
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    assert "h2hHtml(R.head_to_head" in app and "brier_binary" in app and "Brier (3 outcomes: over / under / push)" in app
+    rp = (WEB / "results_public.js").read_text(encoding="utf-8")
+    assert 'if (!document.getElementById("rp-main")) return;' in rp and "h2hHtml(L.head_to_head)" in rp

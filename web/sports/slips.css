@@ -80,6 +80,10 @@
 .ss-pay li { display: flex; justify-content: space-between; gap: 8px; }
 .ss-joint { font-size: .82rem; }
 .ss-joint small { color: var(--ss-mute); display: block; }
+.ss-er { font-size: .82rem; margin: 6px 0 2px; }
+.ss-er small { color: var(--ss-mute); display: block; }
+.ss-rank { color: var(--ss-mute); font-variant-numeric: tabular-nums; }
+.ss-rank-note { margin: 0 0 8px; }
 .ss-short { border-left: 3px solid var(--ss-warn); padding: 8px 10px; background: var(--ss-chip); border-radius: 0 8px 8px 0; margin-bottom: 12px; font-size: .88rem; }
 .ss-expo { font-size: .82rem; color: var(--ss-mute); margin-bottom: 12px; }
 .ss-problems { margin: 8px 0 0; padding-left: 18px; color: var(--ss-bad); font-size: .88rem; }

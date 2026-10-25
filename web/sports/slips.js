@@ -16,6 +16,7 @@
   function getDraft() { return store(draftKey()) || { legs: [] }; }
   function setDraft(d) { d.saved_at = new Date().toISOString(); store(draftKey(), d); renderDraft(); }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function int(n) { return n == null || !isFinite(n) ? "-" : String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
   function pct(p) { return p == null ? "-" : (Math.round(p * 1000) / 10).toFixed(1) + "%"; }
   function when(iso) {
     if (!iso) return "start unknown";
@@ -96,7 +97,7 @@
   }
 
   /* ---------------------------------------------------------------- pool */
-  var L = window.SportsLabels || { slipReason: function (x) { return x; } };
+  var L = window.SportsLabels || { slipReason: function (x) { return x; }, statOf: function (l) { return l.stat_label || l.stat; } };
   var RESEARCH_TEXT = "Research estimates - not validated; stakes 0";
   function researchBanner(show) {                     // owner choice (sp-2): research legs allowed, always labelled
     var b = $("ss-research");
@@ -105,7 +106,7 @@
   }
   function reasonList(p) {
     var ex = Object.keys(p.excluded || {}).sort(function (a, b) { return p.excluded[b] - p.excluded[a]; });
-    return ex.map(function (k) { return "<li>" + esc(L.slipReason(k)) + ': <span class="ss-num">' + p.excluded[k] + "</span></li>"; }).join("");
+    return ex.map(function (k) { return "<li>" + esc(L.slipReason(k)) + ': <span class="ss-num">' + int(p.excluded[k]) + "</span></li>"; }).join("");
   }
   async function loadPool() {
     var el = $("ss-pool"); el.innerHTML = '<div class="ss-skel" aria-label="Loading picks"></div>';
@@ -117,13 +118,13 @@
       $("ss-build").disabled = !p.eligible;
       if (!p.eligible) {                               // never a silent "0 picks": a clear locked state with the reasons
         el.innerHTML = '<div class="ss-locked" role="status"><p><strong>No pick can go into a ' + esc(LABEL[ctx().platform]) + " " + esc(ctx().league.toUpperCase()) +
-          " slip right now.</strong> " + (p.offers ? "Scout holds " + p.offers + " " + esc(LABEL[ctx().platform]) + " lines, and none can be used yet:" : "No " + esc(LABEL[ctx().platform]) + " lines are on the board yet.") + "</p>" +
+          " slip right now.</strong> " + (p.offers ? "Scout holds " + int(p.offers) + " " + esc(LABEL[ctx().platform]) + " lines, and none can be used yet:" : "No " + esc(LABEL[ctx().platform]) + " lines are on the board yet.") + "</p>" +
           (p.offers ? '<ul class="ss-reasons">' + reasonList(p) + "</ul>" : "") +
           '<p class="ss-help">Lines open again as books post the next games and Scout projects them. Prices as of ' + esc(when(p.snapshot_at)) + ".</p></div>";
         return;
       }
-      el.innerHTML = '<p><strong class="ss-num">' + p.eligible + "</strong> picks can go into a slip, of " + p.offers +
-        " lines - prices as of " + esc(when(p.snapshot_at)) + "." + (nres ? " " + nres + " of them are research estimates (stake 0)." : "") + "</p>" +
+      el.innerHTML = '<p><strong class="ss-num">' + int(p.eligible) + "</strong> picks can go into a slip, of " + int(p.offers) +
+        " lines - prices as of " + esc(when(p.snapshot_at)) + "." + (nres ? " " + int(nres) + " of them are research estimates (stake 0)." : "") + "</p>" +
         (Object.keys(p.excluded || {}).length ? "<details><summary>Why other lines are left out</summary><ul class=\"ss-reasons\">" + reasonList(p) + "</ul></details>" : "");
     } catch (e) { el.innerHTML = '<p class="ss-note">' + esc(e.message) + "</p>"; }
   }
@@ -157,10 +158,10 @@
     finally { btn.disabled = false; }
   }
   function legRow(platform, l, extra) {
-    return '<li class="ss-leg"><span class="ss-who">' + esc(l.player) + ' <span class="ss-tag">' + esc(l.team) + "</span></span>" +
+    return '<li class="ss-leg"><span class="ss-who">' + esc(l.player) + ' <span class="ss-tag">' + esc(L.teamTag ? L.teamTag(l.team, l.league || ctx().league) : l.team) + "</span></span>" +
       '<span class="ss-pick"><span class="ss-side-' + l.side + '">' + esc(sideText(platform, l.side)) + "</span> " +
-      '<span class="ss-num">' + esc(l.line) + "</span></span>" +
-      '<span class="ss-meta">' + esc(l.stat_label || l.stat) + " - " + esc(l.event_ref || "") + " - " + esc(when(l.start_utc)) +
+      '<span class="ss-num">' + esc(l.line) + "</span>" + (l.platform === "underdog" && l.multiplier != null && Math.abs(l.multiplier - 1) > 1e-9 ? ' <span class="ss-tag ss-mult" title="Underdog payout multiplier for this pick">' + esc(mult2(l.multiplier)) + "</span>" : "") + "</span>" +
+      '<span class="ss-meta">' + esc(L.statOf(l)) + " - " + esc(l.event_ref || "") + " - " + esc(when(l.start_utc)) +
       (l.custom ? " - no Scout chance for a line that is not offered" : l.p_win != null ? ' - Scout chance <span class="ss-num">' + pct(l.p_win) + "</span>" + (l.p_push ? " (push " + pct(l.p_push) + ")" : "") : "") +
       (l.custom ? ' <span class="ss-tag ss-hyp">custom line - hypothetical</span>' : "") +
       (l.research_only ? ' <span class="ss-tag ss-research" title="' + esc(RESEARCH_TEXT) + '">Research estimate · stake 0</span>' : "") + "</span>" + (extra || "") + "</li>";
@@ -171,6 +172,19 @@
       return "<li><span>" + esc(r.outcome) + "</span><span class=ss-num>" + (r.multiple != null ? esc(r.multiple) + "x" : esc(r.text || "")) + (r.multiple != null && r.text ? " - " + esc(r.text) : "") + "</span></li>";
     }).join("") + "</ul>";
   }
+  // N8: expected return at the published payout (Underdog), or why there is none (PrizePicks: in-app payouts only)
+  function mult2(x) { return (Math.round(x * 100) / 100).toFixed(2) + "x"; }
+  function returnText(er, platform) {
+    if (platform === "prizepicks") return '<p class="ss-er">Payout not published<small>PrizePicks shows lineup payouts in the app only.</small></p>';
+    if (!er) return "";
+    if (er.value != null && er.shown) return '<p class="ss-er">Expected return at the published payout - research estimate: <strong class="ss-num">' + mult2(er.value) + "</strong> the entry<small>From each pick's chance and Underdog's published payout table; picks assumed independent. Not a profit figure.</small></p>";
+    return '<p class="ss-er">Expected return at the published payout: not shown<small>' + esc(er.why || "Underdog adjusts this payout for the picks' multipliers; the app shows the exact figure") + "</small></p>";
+  }
+  function rankingNote(b) {
+    var r = b.ranking;
+    if (!r) return "";
+    return '<p class="ss-note ss-rank-note" role="note">' + esc(r.note) + "</p>";
+  }
   function jointText(j) {
     if (!j) return "";
     if (!j.available) return '<p class="ss-joint">All picks hit: not given<small>' + esc(j.reason) + "</small></p>";
@@ -180,9 +194,9 @@
     var out = $("ss-results"), h = "";
     (b.shortage || []).forEach(function (s) {
       h += '<div class="ss-short" role="note"><strong>' + s.built + " of " + s.requested + " " + s.size + "-pick slips built.</strong> " +
-        '<span class="ss-num">' + s.valid_combinations + "</span> valid " + s.size + "-pick combinations exist among " + s.eligible_legs + " eligible picks in " + s.games + " games. " +
+        '<span class="ss-num">' + int(s.valid_combinations) + "</span> valid " + s.size + "-pick combinations exist among " + int(s.eligible_legs) + " eligible picks in " + int(s.games) + " games. " +
         s.reasons.map(esc).join(" ") +
-        (s.binding.length ? " Limited by: " + s.binding.map(function (x) { return esc(x.constraint) + " (" + x.slips_if_relaxed + " slips without it)"; }).join("; ") + "." : "") + "</div>";
+        (s.binding.length ? " Limited by: " + s.binding.map(function (x) { return esc(x.constraint) + " (" + int(x.slips_if_relaxed) + " slips without it)"; }).join("; ") + "." : "") + "</div>";
     });
     var ex = b.exposure || {};
     if ((ex.player || []).length || (ex.event || []).length) {
@@ -190,11 +204,12 @@
         .concat((ex.event || []).map(function (x) { return esc(x.name) + " (game) x" + x.slips; })).join(", ") + "</p>";
     }
     if (!b.slips.length) h += '<p class="ss-empty">No slip meets the rules with the current picks.</p>';
+    else h += rankingNote(b);
     h += '<div class="ss-cards">' + b.slips.map(function (s, i) {
-      return '<article class="ss-card" aria-label="Suggestion ' + (i + 1) + '"><div class="ss-card-h"><strong>' + s.size + "-pick " + esc(s.entry_type) + "</strong>" +
+      return '<article class="ss-card" aria-label="Suggestion ' + (i + 1) + '"><div class="ss-card-h"><strong><span class="ss-rank">#' + (s.rank || i + 1) + "</span> " + s.size + "-pick " + esc(s.entry_type) + "</strong>" +
         '<button class="ss-btn ss-small" type="button" data-use="' + i + '">Use this slip</button></div>' +
         '<ul class="ss-legs">' + s.legs.map(function (l) { return legRow(s.platform, l); }).join("") + "</ul>" +
-        jointText(s.joint) + payoutList(s.payout) + "</article>";
+        returnText(s.expected_return, s.platform) + jointText(s.joint) + payoutList(s.payout) + "</article>";
     }).join("") + "</div>";
     var anyRes = b.slips.some(function (s) { return s.legs.some(function (l) { return l.research_only; }); });
     if (anyRes) h = '<p class="ss-banner ss-warnmsg" role="note"><strong>' + esc(RESEARCH_TEXT) + ".</strong> Picks tagged Research estimate come from a model that has not passed its live-line check.</p>" + h;

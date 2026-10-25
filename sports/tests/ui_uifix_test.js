@@ -50,4 +50,40 @@ assert.deepStrictEqual(recs.map(r => [r.league, r.wlp, r.current]), [["nba", "3-
 const mixed = [{league: "nba"}, {league: "nfl"}, {league: "nba", test: true}];
 assert.deepStrictEqual(P.onlyLeague(mixed, "nba"), [{league: "nba"}]);
 
+// ---------------------------------------------------------------- N7: results ledger names, dedupe, side
+assert.strictEqual(L.ledgerName({player: "Zaccharie Risacher", player_key: "zaccharie risacher"}), "Zaccharie Risacher");
+assert.strictEqual(L.ledgerName({player: null, player_key: "zaccharie risacher"}), "Zaccharie Risacher");
+assert.strictEqual(L.ledgerName({player_key: "pj washington"}), "PJ Washington");
+const lr = [
+  {player_id: "nba:player:espn:9", player_key: "pj washington", stat: "rebounds", line: 7, event_id: "e1", model_version: "sm-1", platform: "prizepicks", p_over: 0.4, p_under: 0.6},
+  {player_id: "nba:player:espn:9", player_key: "pj washington", stat: "rebounds", line: 7, event_id: "e1", model_version: "sm-1", platform: "underdog", p_over: 0.4, p_under: 0.6},
+  {player_id: "nba:player:espn:9", player_key: "pj washington", stat: "rebounds", line: 7.5, event_id: "e1", model_version: "sm-1", platform: "underdog", p_over: 0.3, p_under: 0.7},
+  {player_id: "nba:player:espn:9", player_key: "pj washington", stat: "rebounds", line: 7, event_id: "e1", model_version: "mc-1", platform: "underdog", p_over: 0.5, p_under: 0.5}];
+const led = L.ledgerRows(lr);
+assert.strictEqual(led.length, 3);                                    // same player/stat/line/game/model once
+assert.deepStrictEqual(led[0].books, ["prizepicks", "underdog"]); assert.strictEqual(led[0].dupes, 1);
+assert.deepStrictEqual(L.scoutSide(lr[0]), {side: "under", label: "Under", p: 0.6});
+assert.strictEqual(L.scoutSide({p_over: null}), null);
+// #12: raw stat keys never reach a page
+assert.strictEqual(L.statLabel("three_points_made"), "3-pointers made");
+assert.strictEqual(L.statLabel("threes"), "3-pointers made");
+assert.strictEqual(L.statLabel("rec_yds"), "Receiving yards");
+assert.ok(!/_/.test(L.statLabel("some_new_stat")));
+assert.strictEqual(L.statOf({stat: "threes", stat_label: "three_points_made"}), "3-pointers made");
+assert.strictEqual(L.statOf({stat: "x_new", stat_label: "three_points_made"}), "3-pointers made");
+assert.strictEqual(L.statOf({st: "rec_yds", sl: "Receiving Yards"}), "Receiving yards");
+const PK = require(path.join(dir, "picks.js"));
+if (PK.legText) assert.ok(!/_/.test(PK.legText({player: "A", side: "over", line: 1.5, stat: "threes", stat_label: "three_points_made", platform: "underdog"})));
+
+// ---------------------------------------------------------------- N9: one team code everywhere
+assert.strictEqual(L.teamTag("UTAH", "nba"), "UTA"); assert.strictEqual(L.teamTag("UTA", "nba"), "UTA");
+assert.strictEqual(L.teamTag("gs", "nba"), "GSW"); assert.strictEqual(L.teamTag("NO", "nfl"), "NO");
+assert.strictEqual(L.teamTag("NO", "nba"), "NOP"); assert.strictEqual(L.teamTag(null, "nba"), "");
+
+// ---------------------------------------------------------------- #11: league search placeholders (slate + board + sheets)
+assert.strictEqual(L.teamPlaceholder("nfl"), "e.g. KC or Chiefs"); assert.strictEqual(L.teamPlaceholder("nba"), "e.g. BOS or Celtics");
+assert.ok(/KC or Chiefs/.test(L.searchPlaceholder("nfl")) && !/Celtics|BOS/.test(L.searchPlaceholder("nfl")));
+assert.ok(/BOS or Celtics/.test(L.searchPlaceholder("nba")));
+assert.ok(!/Celtics|Chiefs/.test(L.teamPlaceholder("mlb") + L.searchPlaceholder(undefined)));   // never another league's teams
+
 console.log("ok");

@@ -9,6 +9,7 @@
    Pure helpers exported for node (sports/tests/ui_ux_test.js). */
 (function (root) {
   "use strict";
+  function statOf(l) { var Lb = root.SportsLabels; return Lb && Lb.statOf ? Lb.statOf(l) : (l.stat_label || l.stat || ""); }   // #12
   var SLIP_PAGE = "/sports/slips.html";
   var PLATFORMS = ["prizepicks", "underdog"];
   var LABEL = {prizepicks: "PrizePicks", underdog: "Underdog"};
@@ -162,9 +163,9 @@
         '<div class="sw-tray-head"><h2 class="sw-tray-h" tabindex="-1">' + esc(title) + '</h2><span class="sw-tray-n">' + esc(plural(legs.length, "pick")) +
         (v.entry ? " · " + esc(ENTRY_LABEL[v.entry] || v.entry) + " " + v.min + "-" + v.max : "") + "</span></div>" +
         (legs.length ? '<ul class="sw-tray-list">' + legs.map(function (l, i) {
-          var side = l.side === "over" ? "Over" : "Under", what = l.player + " " + side + " " + l.line + " " + (l.stat_label || l.stat || "");
+          var side = l.side === "over" ? "Over" : "Under", what = l.player + " " + side + " " + l.line + " " + statOf(l);
           return '<li class="sw-tray-leg"><div class="sw-tray-leg-t"><b>' + esc(l.player) + '</b><span class="sw-tray-side ' + esc(l.side) + '">' + esc(side + " " + l.line) + "</span> " +
-            esc(l.stat_label || l.stat || "") + '<div class="sw-tray-meta">' + esc([l.event_ref, when(l.start_utc)].filter(Boolean).join(" · ")) + "</div></div>" +
+            esc(statOf(l)) + '<div class="sw-tray-meta">' + esc([l.event_ref, when(l.start_utc)].filter(Boolean).join(" · ")) + "</div></div>" +
             '<button type="button" class="sw-tray-rm" data-tray-rm="' + i + '" data-pf="' + esc(pf) + '" aria-label="Remove ' + esc(what) + ' from the slip">Remove</button></li>';
         }).join("") + "</ul>" : '<p class="sw-tray-empty">No picks in this draft.</p>') +
         (legs.length ? '<div class="sw-tray-hint ' + (v.ok ? "ok" : "warn") + '" role="status">' + (v.ok

@@ -449,8 +449,8 @@ def api(monkeypatch, con):
     monkeypatch.setattr(log, "_SEEN", {})
     from sports.slips import pool as pm
     real = pm.build
-    monkeypatch.setattr(pm, "build", lambda c, lg, pf, now=None, policy="member": real(c, lg, pf, now=w.NOW,
-                                                                                        policy=policy))
+    monkeypatch.setattr(pm, "build", lambda c, lg, pf, now=None, policy="member", **kw: real(c, lg, pf, now=w.NOW,
+                                                                                              policy=policy, **kw))
     import sports.slips.validate as vm
     real_check = vm.check
     monkeypatch.setattr(vm, "check", lambda slip, p, mode="load", now=None, **kw: real_check(slip, p, mode, now=w.NOW, **kw))
@@ -481,7 +481,7 @@ def test_routes_build_validate_copy_and_log_once(api):
     kinds = [x["kind"] for x in lines]
     assert kinds.count("batch") == 1 and kinds.count("copied") == 1          # recommendation logged ONCE per batch
     batch = next(x for x in lines if x["kind"] == "batch")
-    assert batch["builder_version"] == "bs-1" and batch["internal"][0]["expectation"]["basis"]
+    assert batch["builder_version"] == "bs-2" and batch["internal"][0]["expectation"]["basis"]
     assert batch["slips"][0]["legs"][0]["forecast_id"].startswith("fc-")
     copied = next(x for x in lines if x["kind"] == "copied")
     assert copied["member"] != "m_test" and copied["ok"]
@@ -607,3 +607,78 @@ def test_loaded_pool_for_22500_offers_is_under_15_mb(con):
     tracemalloc.stop()
     assert p["offers"] == 22500 and len(p["state"]) == 22500
     assert loaded < 15e6, f"loaded pool {loaded / 1e6:.1f} MB"
+
+
+# ===================================================================== N4: a side the market prices higher is no leg
+def test_pool_drops_legs_whose_side_the_market_prices_higher(con):
+    got = w.world(con, [("barnes", "TOR", 1, "over", 0.56), ("edw", "MIN", 2, "over", 0.52),
+                        ("ok", "BOS", 3, "under", 0.60), ("nomk", "NYK", 4, "over", 0.55)])
+    rb, re_, rok = got["barnes"][0], got["edw"][0], got["ok"][0]
+    boards = [{"markets": [
+        {"mk": {"l": 20.5, "c": {"po": 0.663, "pu": 0.337, "n": 2}, "at": {}}, "q": [{"r": rb, "l": 20.5}]},
+        {"mk": {"l": 20.5, "c": {"po": 0.9, "pu": 0.1, "n": 2}, "at": {re_: {"po": 0.545, "pu": 0.455, "n": 3}}},
+         "q": [{"r": re_, "l": 20.5}]},
+        {"mk": {"l": 20.5, "c": {"po": 0.45, "pu": 0.55, "n": 1}, "at": {}}, "q": [{"r": rok, "l": 20.5}]},
+        {"mk": {"l": 21.5, "c": {"po": 0.9, "pu": 0.1, "n": 1}, "at": {}}, "q": [{"r": got["nomk"][0], "l": 20.5}]},
+    ]}]
+    mk = pool.market_by_record(boards)
+    assert set(mk) == {rb, re_, rok}                         # another line's headline is never used
+    p = pool.build(con, "nba", "underdog", now=w.NOW, market_at=mk)
+    assert {l["player_id"].split(":")[-1] for l in p["legs"]} == {"ok", "nomk"}
+    assert p["excluded"]["market prices Scout's side higher"] == 2
+    assert {l["player_id"].split(":")[-1] for l in pool.build(con, "nba", "underdog", now=w.NOW)["legs"]} == \
+        {"barnes", "edw", "ok", "nomk"}                      # no board snapshot: the forecast rule alone
+
+
+# ===================================================================== N8: ranking by expected return at the published payout
+def test_published_return_underdog_standard_matches_the_table():
+    legs = [L(1, "A", 1, p=0.6), L(2, "B", 2, p=0.55)]
+    r = joint.published_return("underdog", "standard", legs)
+    assert r["shown"] and abs(r["value"] - 0.6 * 0.55 * payouts.UD_STANDARD[2]) < 1e-12
+    flex = [L(i, f"T{i}", i, p=0.6) for i in range(1, 4)]
+    rf = joint.published_return("underdog", "flex", flex)
+    assert abs(rf["value"] - payouts.ud_flex_return(3, 0.6)) < 1e-12           # same flex table as the payouts module
+
+
+def test_published_return_applies_each_pick_multiplier_and_hides_the_figure():
+    legs = [L(1, "A", 1, p=0.6, mult=1.1), L(2, "B", 2, p=0.55, mult=0.8)]
+    r = joint.published_return("underdog", "standard", legs)
+    assert not r["shown"] and abs(r["value"] - 0.6 * 0.55 * 3.5 * 1.1 * 0.8) < 1e-12
+    pp = joint.published_return("prizepicks", "power", [dict(l, platform="prizepicks") for l in legs])
+    assert pp["value"] is None and "not published" in pp["why"]
+
+
+def test_leg_weight_uses_the_underdog_multiplier_only():
+    assert abs(pool.leg_weight("underdog", 0.5, 1.2) - math.log(0.6)) < 1e-12
+    assert abs(pool.leg_weight("prizepicks", 0.5, 1.2) - math.log(0.5)) < 1e-12
+    assert abs(pool.leg_weight("underdog", 0.5, None) - math.log(0.5)) < 1e-12
+
+
+def test_build_ranks_by_expected_return_not_by_hit_chance():
+    # an 83% Under at a 0.5x multiplier must not outrank a 60% pick at 1.0x (0.415 vs 0.6 per pick)
+    def wl(pid, team, ev, p, mult):
+        return dict(L(pid, team, ev, p=p, mult=mult), weight=pool.leg_weight("underdog", p, mult))
+    legs = [wl(1, "A", 1, 0.83, 0.5), wl(2, "B", 2, 0.83, 0.5), wl(3, "C", 3, 0.6, 1.0), wl(4, "D", 4, 0.6, 1.0)]
+    b = builder.build({"platform": "underdog", "league": "nba", "policy": "member", "snapshot_id": "ps",
+                       "snapshot_at": w.OBS, "legs": legs, "excluded": {}}, {"sides": "both", "sizes": {2: 2}})
+    assert b["builder_version"] == "bs-2" and b["ranking"]["by"] == "expected_return"
+    assert "research estimate" in b["ranking"]["label"] and not any(x in b["ranking"]["note"].lower()
+                                                                     for x in ("roi", "profit "))
+    vals = [s["expected_return"]["value"] for s in b["slips"]]
+    assert vals == sorted(vals, reverse=True) and [s["rank"] for s in b["slips"]] == [1, 2]
+    assert {l["player_id"] for l in b["slips"][0]["legs"]} == {"p3", "p4"}
+    pp = [dict(l, platform="prizepicks") for l in legs]
+    b2 = builder.build({"platform": "prizepicks", "league": "nba", "policy": "member", "snapshot_id": "ps",
+                        "snapshot_at": w.OBS, "legs": pp, "excluded": {}},
+                       {"sides": "both", "sizes": {2: 2}, "entry_type": "power"})
+    assert b2["ranking"]["by"] == "joint_chance" and "payout not published" in b2["ranking"]["note"]
+    js = [s["joint"]["p_all_win"] for s in b2["slips"]]
+    assert js == sorted(js, reverse=True) and all(s["expected_return"]["value"] is None for s in b2["slips"])
+
+
+def test_copy_text_uses_the_market_label_not_the_book_raw_stat():
+    """#12: Underdog's raw 'three_points_made' never reaches the copied slip text."""
+    legs = [dict(L(1, "A", 1, stat="threes"), stat_label="three_points_made", league="nba", player="P1",
+                 start_utc=w.START), dict(L(2, "B", 2), stat_label="Points", league="nba", player="P2", start_utc=w.START)]
+    t = validate.copy_text("underdog", "standard", legs)
+    assert "3-pointers made Higher 20.5" in t and "three_points_made" not in t

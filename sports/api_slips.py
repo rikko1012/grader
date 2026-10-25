@@ -67,10 +67,23 @@ def _live_current(platform, offer_id):
         return store.current_record_id(con, "offer", platform, offer_id)
 
 
+def _board_markets(league):
+    """Market chance per offer record from the precomputed board snapshot (N4 lean rule); no snapshot -> {}."""
+    from . import api_board
+    boards = []
+    for name in ("board.json", "board_more.json"):
+        try:
+            boards.append(json.loads(api_board._read(api_board._root() / league / name)))
+        except (api_board.NotReady, ValueError, OSError):
+            continue
+    return poolmod.market_by_record(boards)
+
+
 def _pool(league, platform, policy="member"):
     def load():
+        mk = _board_markets(league)
         with web.store_ro(budget_s=15) as con:
-            return poolmod.build(con, league, platform, policy=policy)
+            return poolmod.build(con, league, platform, policy=policy, market_at=mk)
     return web.cached(("slips_pool", league, platform, policy), load, ttl=POOL_TTL)
 
 
@@ -80,6 +93,11 @@ def public_schedule(s):
 
 def public_slip(s):
     out = dict(s, payout=public_schedule(s["payout"]))
+    er = s.get("expected_return")
+    if er and not er.get("shown"):                         # an unpublished combined payout: rank only, no figure
+        out["expected_return"] = {"value": None, "shown": False, "basis": None,
+                                  "why": er.get("why") or ("Underdog adjusts this payout for the picks' multipliers; "
+                                                           "the app shows the exact figure")}
     out["payout_key"] = validate.payout_key(s["payout"])
     return out
 

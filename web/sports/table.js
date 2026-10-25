@@ -7,6 +7,10 @@
      (mc-1, sharp-*, mkt-*) are not Scout's own view: no lean, no edge.
    - Lean = Over when Scout's P(Over) > 50% AND the projected mean is above the line (Under mirrored); otherwise
      "No lean". Never a side the distribution or the projection does not support.
+   - N4 (owner re-audit 2026-10-24): when a market chance exists at this line, the lean also needs a POSITIVE edge for
+     that side (Scout chance of the side > market chance of the side). Edge <= 0 -> "No lean" (r.noLean names the
+     side and edge it would have had); the row then has no edge, no lean confidence and sorts after the leans.
+     No market chance at the line -> the distribution rule alone (edge unknown, shown "—").
    - Market chance = the market estimate (mc-1 view rule) computed AT THIS LINE for this offer (mk.at[record]) or the
      headline when it is at the same line; never a different line's number.
    - Edge (pts) = 100 x (Scout chance of the lean side - market chance of that side at that line). A probability-point
@@ -105,7 +109,11 @@
     if (sc && mkc && !held) {
       r.gapPts = 100 * (sc.po - mkc.po);
       r.gap = Math.abs(r.gapPts) >= GAP_PTS - 1e-9;
-      if (lean) { r.mLean = lean === "over" ? mkc.po : mkc.pu; r.edge = 100 * (r.pLean - r.mLean); }
+      if (lean) {
+        var mSide = lean === "over" ? mkc.po : mkc.pu, e = 100 * (r.pLean - mSide);
+        if (e > 1e-9) { r.mLean = mSide; r.edge = e; }
+        else { r.noLean = {side: lean, edge: e, why: "market prices this side higher"}; r.lean = lean = null; r.pLean = null; }
+      }
     }
     var X = sc && q.x && !held && q.x.v === "cf-2" ? q.x : null;
     if (X) {                                // server row signal (sports/board_view.py cf-2): the page only renders it
@@ -120,6 +128,12 @@
     r.leanOffered = lean ? !!(q.o && q.o[lean === "over" ? 0 : 1]) : null;
     r.conf = held ? null : X ? serverConf(X, r, now) : confidence(r, now);
     return r;
+  }
+  // the one lean rule for a Scout chance + market chance pair (surfaces without a board row: slips, sheets)
+  function leanWithMarket(sc, line, mkc) {
+    var l = leanOf(sc, line);
+    if (!l || !mkc || !nn(mkc.po) || !nn(mkc.pu)) return l;
+    return 100 * ((l === "over" ? sc.po : sc.pu) - (l === "over" ? mkc.po : mkc.pu)) > 1e-9 ? l : null;
   }
   function hitRate(r) {                                           // lean side (Over when no lean), over decided games
     if (!r.hit || !r.hit.l10.n) return null;
@@ -184,7 +198,7 @@
   function logoUrl(lg, abbr) { return abbr && /^[A-Za-z]{2,4}$/.test(abbr) ? "https://a.espncdn.com/i/teamlogos/" + lg + "/500/" + abbr.toLowerCase() + ".png" : null; }
 
   var api = {VERSION: VERSION, CONF_VERSION: CONF_VERSION, GAP_PTS: GAP_PTS, scoutAt: scoutAt, marketAt: marketAt,
-             leanOf: leanOf, hitAt: hitAt, confidence: confidence, propRow: propRow, hitRate: hitRate,
+             leanOf: leanOf, leanWithMarket: leanWithMarket, hitAt: hitAt, confidence: confidence, propRow: propRow, hitRate: hitRate,
              primaryQuote: primaryQuote, started: started, SORTS: SORTS, sortRows: sortRows, groupRows: groupRows,
              edgeText: edgeText, hitText: hitText, seasonLabel: seasonLabel, headshotUrl: headshotUrl, logoUrl: logoUrl,
              espnId: espnId};
@@ -209,7 +223,14 @@
   function initials(n) { return (n || "").split(" ").map(function (x) { return x[0] || ""; }).slice(0, 2).join(""); }
   function teamAbbrOf(m, B) {                                      // the player's ESPN team abbreviation via his team id
     var ev = m.ev || {}, t = [ev.home, ev.away].filter(function (x) { return x && x.team_id && x.team_id === m.tid; })[0];
-    return t ? t.abbr : null;
+    if (t) return t.abbr;
+    var L = root.SportsLabels, want = m.tm && L ? L.teamTag(m.tm, (m.k || "").indexOf("nfl") === 0 ? "nfl" : "nba") : null;
+    t = want ? [ev.home, ev.away].filter(function (x) { return x && x.abbr && L.teamTag(x.abbr, (x.team_id || "").slice(0, 3)) === want; })[0] : null;
+    return t ? t.abbr : null;                                       // N9: matched by code when the team id is missing
+  }
+  function teamTagOf(m, lg) {                                      // N9: the one displayed code (UTA, never UTAH)
+    var L = root.SportsLabels, ab = teamAbbrOf(m) || m.tm;
+    return ab ? (L ? L.teamTag(ab, lg) : ab) : "";
   }
 
   /* opts: {lg, B (board with markets/fc/view/stats), rows: filtered markets, href(m, q), bookName, now}
@@ -234,7 +255,7 @@
   function leanBadge(r) {
     if (!r.scout) return '<span class="sw-tb-lean none">No Scout chance</span>';
     if (r.held) return '<span class="sw-tb-lean none sw-tb-held" data-held="' + esc(r.heldCode) + '">' + esc(r.held) + "</span>";
-    if (!r.lean) return '<span class="sw-tb-lean none">No lean</span>';
+    if (!r.lean) return '<span class="sw-tb-lean none"' + (r.noLean ? ' data-nolean="' + r.noLean.side + '" title="Scout favours ' + (r.noLean.side === "over" ? "Over" : "Under") + " but the market prices it higher (" + edgeText(r.noLean.edge) + ' pts)"' : "") + ">No lean</span>";
     return '<span class="sw-tb-lean ' + r.lean + '" data-lean="' + r.lean + '">' + (r.lean === "over" ? "Over" : "Under") + "</span>" +
       (r.leanOffered === false ? '<span class="sw-tb-note">not offered here</span>' : "");
   }
@@ -265,7 +286,7 @@
       var who = '<th scope="rowgroup" class="sw-tb-player" rowspan="' + (open ? g.rows.length : 1) + '"><div class="sw-tb-who">' +
         img(headshotUrl(lg, g.pid), g.player + " headshot", "sw-tb-head", initials(g.player)) +
         '<div><a class="sw-tb-name" href="' + esc(opts.href(m, null)) + '">' + esc(g.player) + "</a>" +
-        '<div class="sw-tb-sub">' + (ab ? img(logoUrl(lg, ab), ab + " logo", "sw-tb-logo", "") : "") + esc([m.tm, m.pos].filter(Boolean).join(" · ")) + " · " +
+        '<div class="sw-tb-sub">' + (ab ? img(logoUrl(lg, ab), ab + " logo", "sw-tb-logo", "") : "") + esc([teamTagOf(m, lg), m.pos].filter(Boolean).join(" · ")) + " · " +
         '<a href="#/game/' + encodeURIComponent(m.e) + '">' + esc(m.matchup || "") + "</a> · " + esc(S.localTime(g.start, {weekday: "short", hour: "numeric", minute: "2-digit"})) + "</div>" +
         (more ? '<button type="button" class="sw-tb-exp" data-tgroup="' + esc(g.id) + '" aria-expanded="' + open + '" aria-controls="' + gid + '">' + (open ? "Hide other stats" : "+" + more + (more === 1 ? " more stat" : " more stats")) + "</button>" : "") +
         "</div></div></th>";
@@ -307,5 +328,5 @@
     return '<div class="sw-seg sw-tb-view" role="group" aria-label="Board view"><button type="button" data-tview="table" aria-pressed="' + (st.view === "table") + '">Table</button><button type="button" data-tview="cards" aria-pressed="' + (st.view === "cards") + '">Cards</button></div>';
   }
   function setView(v) { setPref("view", v === "cards" ? "cards" : "table"); }
-  root.SportsTable = {html: html, build: build, bind: bind, state: state, sortBar: sortBar, viewToggle: viewToggle, setView: setView, img: img, initials: initials, teamAbbrOf: teamAbbrOf};
+  root.SportsTable = {html: html, build: build, bind: bind, state: state, sortBar: sortBar, viewToggle: viewToggle, setView: setView, img: img, initials: initials, teamAbbrOf: teamAbbrOf, teamTagOf: teamTagOf};
 })(this);

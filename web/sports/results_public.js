@@ -11,10 +11,56 @@
     return " (95%: " + f(ci[0]) + " – " + f(ci[1]) + ")";
   }
   function gateText(g) { return g ? g.text : ""; }
+  function int(n) { return n === null || n === undefined || !isFinite(n) ? "—" : String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
   function rateText(w, l) { return w + l ? pct(w / (w + l)) : "—"; }
-  var api = {pct: pct, ciText: ciText, gateText: gateText, rateText: rateText};
+  function escH(s) {
+    return String(s === null || s === undefined ? "" : s).replace(/[&<>"']/g, function (c) {
+      return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c];
+    });
+  }
+  function n3(x) { return x === null || x === undefined || !isFinite(x) ? "—" : (Math.round(x * 1000) / 1000).toFixed(3); }
+  function sgn(x) { return x > 0 ? "+" : x < 0 ? "−" : ""; }
+  function signed3(x) { return x === null || x === undefined || !isFinite(x) ? "—" : sgn(x) + n3(Math.abs(x)); }
+  function signedPct(x) { return x === null || x === undefined || !isFinite(x) ? "—" : sgn(x) + pct(Math.abs(x)); }
+  function ci3(ci, asPct) { return ci ? " (95%: " + (asPct ? signedPct : signed3)(ci[0]) + " to " + (asPct ? signedPct : signed3)(ci[1]) + ")" : ""; }
+  var BOOKS = {fanduel: "FanDuel", betrivers: "BetRivers", draftkings: "DraftKings", kalshi: "Kalshi", polymarket: "Polymarket",
+               betmgm: "BetMGM", caesars: "Caesars", thunderpick: "Thunderpick", oddspapi: "OddsPapi"};
+  function modelName(mv) {                         // "mc-1" -> "Market consensus (mc-1)", "mkt-oddsapi:fanduel" -> "FanDuel market"
+    if (mv === "mc-1") return "Market consensus (mc-1)";
+    if (/^sharp/.test(mv || "")) return "Kalshi market (" + mv + ")";
+    var m = /^mkt-(.+)$/.exec(mv || "");
+    if (!m) return mv;
+    var src = m[1].split(":").pop();
+    return (BOOKS[src] || src) + " market";
+  }
+  /* hh-1 "Scout vs market on the same props" (sports/results_public.py head_to_head). Binary Brier is the headline
+     (chance of Over given no push vs Over / Under; 0.25 = always 50%), then log loss and hit rate, each with the
+     Scout-minus-market difference and its game-clustered 95% interval. statName(stat) -> label; opts.h heading tag. */
+  function h2hHtml(hh, statName, opts) {
+    var rows = (hh && hh.rows) || [], tag = (opts && opts.h) || "h3", id = (opts && opts.id) ? ' id="' + escH(opts.id) + '"' : "";
+    var head = "<" + tag + id + ">Scout vs market on the same props</" + tag + ">" +
+      '<p class="sw-small sw-muted">Scout and one market estimate scored on exactly the same props (same game, player, stat and line, so the same result). ' +
+      "Binary Brier: 0.25 = always 50%, lower is better. Difference = Scout minus market: below 0 on Brier or log loss means Scout was closer.</p>";
+    if (!rows.length) return head + '<p class="sw-muted">No prop has settled with both a Scout chance and a market chance yet.</p>';
+    var th = ["Scout", "Market", "Stat", "Props", "Games", "Brier: Scout", "Brier: market", "Brier difference",
+              "Log loss: Scout", "Log loss: market", "Log loss difference", "Hit rate: Scout", "Hit rate: market", "Hit rate difference"];
+    function cell(v, extra) { return '<td class="num">' + v + (extra ? '<span class="sw-faint sw-small">' + escH(extra) + "</span>" : "") + "</td>"; }
+    return head + '<div class="sw-scroll"><table class="sw-mini rp-h2h"><thead><tr>' + th.map(function (t, i) {
+      return '<th scope="col"' + (i >= 3 ? ' class="num"' : "") + ">" + escH(t) + "</th>"; }).join("") + "</tr></thead><tbody>" +
+      rows.map(function (r) {
+        var d = r.diff || {};
+        return '<tr><th scope="row">' + escH(r.scout) + "</th><td>" + escH(modelName(r.market)) + "</td><td>" +
+          escH(r.stat === "all" ? "All stats" : (statName ? statName(r.stat) : r.stat)) + "</td>" +
+          cell(int(r.pairs), r.pushes ? " +" + int(r.pushes) + " push" : "") + cell(int(r.games)) +
+          cell(n3(r.scout_brier)) + cell(n3(r.market_brier)) + cell(signed3(d.brier), ci3(d.brier_ci95)) +
+          cell(n3(r.scout_log_loss)) + cell(n3(r.market_log_loss)) + cell(signed3(d.log_loss), ci3(d.log_loss_ci95)) +
+          cell(pct(r.scout_hit_rate)) + cell(pct(r.market_hit_rate)) + cell(signedPct(d.hit_rate), ci3(d.hit_rate_ci95, true)) + "</tr>";
+      }).join("") + "</tbody></table></div>" + (hh.method ? '<p class="sw-faint sw-small">' + escH(hh.method) + "</p>" : "");
+  }
+  var api = {pct: pct, ciText: ciText, gateText: gateText, rateText: rateText, int: int, h2hHtml: h2hHtml, modelName: modelName};
   if (typeof module !== "undefined" && module.exports) { module.exports = api; return; }
   root.SportsResultsPublic = api;
+  if (!document.getElementById("rp-main")) return;           // loaded by the app (sports.html) for h2hHtml only
 
   var Sh = root.ScoutShell, esc = Sh.esc, main = document.getElementById("rp-main");
   function n2(x) { return x === null || x === undefined ? "—" : (Math.round(x * 100) / 100).toFixed(2); }
@@ -44,28 +90,30 @@
   }
   function summaryRow(label, s) {
     var L = s.leans || {}, P = s.projection || {};
-    return "<tr><th scope=\"row\">" + esc(label) + '</th><td class="num">' + s.settled + '</td><td class="num">' + s.props + '</td><td class="num">' + s.games +
+    return "<tr><th scope=\"row\">" + esc(label) + '</th><td class="num">' + int(s.settled) + '</td><td class="num">' + int(s.props) + '</td><td class="num">' + int(s.games) +
       '</td><td class="num">' + n2(P.mae) + '<span class="sw-faint sw-small">' + esc(ciText(P.mae_ci95)) + '</span></td><td class="num">' + n2(P.bias) +
-      '<span class="sw-faint sw-small">' + esc(ciText(P.bias_ci95)) + '</span></td><td class="num">' + (L.wins || 0) + "-" + (L.losses || 0) + (L.pushes ? "-" + L.pushes : "") +
+      '<span class="sw-faint sw-small">' + esc(ciText(P.bias_ci95)) + '</span></td><td class="num">' + int(L.wins || 0) + "-" + int(L.losses || 0) + (L.pushes ? "-" + int(L.pushes) : "") +
       '</td><td class="num">' + pct(L.hit_rate) + '<span class="sw-faint sw-small">' + esc(ciText(L.hit_rate_ci95, true)) + "</span></td></tr>";
   }
   var SUMMARY_HEAD = [["", 0], ["Settled", 1], ["Props", 1], ["Games", 1], ["Proj. MAE", 1], ["Bias", 1], ["Lean W-L(-P)", 1], ["Lean hit rate", 1]];
 
   function leagueSection(lg, L) {
     var h = '<section class="sw-panel" aria-labelledby="rp-' + lg + '"><h2 id="rp-' + lg + '">' + lg.toUpperCase() + "</h2>" +
-      '<p class="rp-gate' + (L.gate.validated ? " ok" : "") + '"><b>' + esc(gateText(L.gate)) + "</b></p>";
+      '<p class="rp-gate' + (L.gate.validated ? " ok" : "") + '"><b>' + esc(gateText(L.gate)) + "</b></p>" +
+      (L.gate.rule ? '<p class="sw-small sw-faint">' + esc(L.gate.rule) + "</p>" : "");
     if (!L.settled) return h + '<p class="sw-muted">No settled forecasts yet. Forecasts are scored after their games are final, from the box score, at the line each forecast was made for.' +
-      (L.unresolved || L.void ? " " + L.unresolved + " unresolved · " + L.void + " void." : "") + "</p></section>";
+      (L.unresolved || L.void ? " " + int(L.unresolved) + " unresolved · " + int(L.void) + " void." : "") + "</p></section>";
+    h += h2hHtml(L.head_to_head);
     h += "<h3>All models</h3>" + table(SUMMARY_HEAD, [summaryRow("All", L)]);
     h += "<h3>By model</h3>" + table(SUMMARY_HEAD, Object.keys(L.models).map(function (m) { return summaryRow(m + (L.models[m].research_only ? " (research)" : ""), L.models[m]); }));
     h += "<h3>By stat</h3>" + table(SUMMARY_HEAD, Object.keys(L.stats).map(function (s) { return summaryRow(s, L.stats[s]); }));
     h += '<h3>Calibration</h3><p class="sw-small sw-muted">Stated chance of Over (given no push) against how often Over happened.</p>' +
       table([["Stated Over chance", 0], ["Forecasts", 1], ["Mean stated", 1], ["Observed Over", 1]], L.calibration.map(function (c) {
-        return "<tr><th scope=\"row\">" + esc(c.band) + '</th><td class="num">' + c.n + '</td><td class="num">' + pct(c.stated) + '</td><td class="num">' + pct(c.observed) + '<span class="sw-faint sw-small">' + esc(ciText(c.observed_ci95, true)) + "</span></td></tr>";
+        return "<tr><th scope=\"row\">" + esc(c.band) + '</th><td class="num">' + int(c.n) + '</td><td class="num">' + pct(c.stated) + '</td><td class="num">' + pct(c.observed) + '<span class="sw-faint sw-small">' + esc(ciText(c.observed_ci95, true)) + "</span></td></tr>";
       }));
     h += '<h3>Leans by probability band</h3><p class="sw-small sw-muted">Grade letters are not in use; bands are the lean side’s chance given no push.</p>' +
       table([["Probability band", 0], ["Leans", 1], ["W-L(-P)", 1], ["Mean stated", 1], ["Hit rate", 1]], L.bands.map(function (b) {
-        return "<tr><th scope=\"row\">" + esc(b.band) + '</th><td class="num">' + b.n + '</td><td class="num">' + b.wins + "-" + b.losses + (b.pushes ? "-" + b.pushes : "") + '</td><td class="num">' + pct(b.stated) + '</td><td class="num">' + pct(b.hit_rate) + '<span class="sw-faint sw-small">' + esc(ciText(b.hit_rate_ci95, true)) + "</span></td></tr>";
+        return "<tr><th scope=\"row\">" + esc(b.band) + '</th><td class="num">' + int(b.n) + '</td><td class="num">' + int(b.wins) + "-" + int(b.losses) + (b.pushes ? "-" + int(b.pushes) : "") + '</td><td class="num">' + pct(b.stated) + '</td><td class="num">' + pct(b.hit_rate) + '<span class="sw-faint sw-small">' + esc(ciText(b.hit_rate_ci95, true)) + "</span></td></tr>";
       }));
     return h + "</section>";
   }
@@ -76,8 +124,8 @@
     if (!lgs.length) return h + '<p class="sw-muted">No tracked picks settled yet.</p></section>';
     return h + table([["League", 0], ["Picks", 1], ["Games", 1], ["W-L-P", 1], ["Void", 1], ["Open", 1], ["Hit rate", 1]], lgs.map(function (lg) {
       var g = P.leagues[lg];
-      return "<tr><th scope=\"row\">" + esc(lg.toUpperCase()) + '</th><td class="num">' + g.picks + '</td><td class="num">' + g.games + '</td><td class="num">' + g.wins + "-" + g.losses + "-" + g.pushes +
-        '</td><td class="num">' + g.voids + '</td><td class="num">' + g.pending + '</td><td class="num">' + pct(g.hit_rate) + '<span class="sw-faint sw-small">' + esc(ciText(g.hit_rate_ci95_games, true)) + "</span></td></tr>";
+      return "<tr><th scope=\"row\">" + esc(lg.toUpperCase()) + '</th><td class="num">' + int(g.picks) + '</td><td class="num">' + int(g.games) + '</td><td class="num">' + int(g.wins) + "-" + int(g.losses) + "-" + int(g.pushes) +
+        '</td><td class="num">' + int(g.voids) + '</td><td class="num">' + int(g.pending) + '</td><td class="num">' + pct(g.hit_rate) + '<span class="sw-faint sw-small">' + esc(ciText(g.hit_rate_ci95_games, true)) + "</span></td></tr>";
     })) + '<p class="sw-faint sw-small">' + esc(P.note || "") + "</p></section>";
   }
 

@@ -138,7 +138,7 @@ def test_slip_studio_zero_picks_is_a_clear_locked_state(browser):
     box = page.locator("#ss-pool .ss-locked")
     assert box.is_visible()
     t = box.inner_text()
-    assert "No pick can go into" in t and "1027" in t and "Game in progress" in t
+    assert "No pick can go into" in t and "1,027" in t and "Game in progress" in t
     assert "No Scout projection for this exact line yet" in t
     assert page.locator("#ss-build").is_disabled()
     assert not page.locator("#ss-research").is_visible()
@@ -397,5 +397,95 @@ def test_slip_studio_is_inside_the_main_shell(browser):
     assert "#/slips" in page.url
     page.goto("/sports/slips.html")
     page.wait_for_url("**/sports#/slips**")
+    assert not errors, errors
+    ctx.close()
+
+
+def test_stat_labels_match_the_market_definitions():
+    """#12: labels.js STAT is the member wording of sports/markets.py MARKETS (one source of labels)."""
+    import json as _json
+    import re as _re
+    from sports import markets
+    src = (Path(__file__).resolve().parents[2] / "web" / "sports" / "labels.js").read_text(encoding="utf-8")
+    stat = _json.loads(_re.search(r"var STAT = (\{.*?\});", src, _re.S).group(1))
+    want = {k: v["label"] for fam in markets.MARKETS.values() for k, v in fam.items()}
+    assert stat == want
+
+
+def test_slip_studio_ranks_by_expected_return_and_labels_it(browser):
+    """N8: Underdog suggestions say they are ranked by expected return at the published payout (research estimate),
+    show the figure only when every multiplier is 1.0, never ROI / profit; #12: no raw stat key on a leg."""
+    legs = [dict(_leg(1), stat="threes", stat_label="three_points_made"), _leg(2), dict(_leg(3), multiplier=0.85)]
+    b = _batch(legs[:2])
+    b["builder_version"] = "bs-2"
+    b["ranking"] = {"by": "expected_return", "label": "Expected return at the published payout - research estimate",
+                    "note": "Ranked by expected return at Underdog's published payout, using each pick's chance and "
+                            "payout multiplier; picks assumed independent. A multiple of the entry, not a profit."}
+    b["slips"][0].update(rank=1, expected_return={"value": 1.1774, "shown": True, "basis": "x", "why": None})
+    b["slips"].append(dict(b["slips"][0], slip_id="s2", rank=2, legs=[legs[2], _leg(4)],
+                           expected_return={"value": None, "shown": False, "basis": None, "why": None}))
+    api_ = {"/api/sports/slips/pool": dict(POOL_RESEARCH, legs=legs), "/api/sports/slips/build": b,
+            "/api/sports/manifest": {"models": [], "platforms": {}}}
+    ctx, page, errors = _page(browser, api_)
+    _open_slips(page)
+    page.click("#ss-build")
+    page.wait_for_selector(".ss-card")
+    res = page.locator("#ss-results").inner_text()
+    assert "Ranked by expected return at Underdog's published payout" in res
+    first = page.locator(".ss-card").first.inner_text()
+    assert "#1" in first and "Expected return at the published payout - research estimate: 1.18x" in first
+    second = page.locator(".ss-card").nth(1).inner_text()
+    assert "not shown" in second and "0.85x" in second
+    assert "three_points_made" not in res and "3-pointers made" in res      # #12: no raw stat key on a leg
+    low = res.lower()
+    assert "roi" not in low and "profit:" not in low
+    assert not errors, errors
+    ctx.close()
+
+
+def test_slip_studio_prizepicks_says_payout_not_published(browser):
+    legs = [dict(_leg(i), platform="prizepicks") for i in (1, 2)]
+    b = _batch(legs)
+    b["slips"][0].update(platform="prizepicks", entry_type="power", rank=1,
+                         expected_return={"value": None, "shown": False, "basis": None,
+                                          "why": "PrizePicks shows lineup payouts in the app only - payout not published"})
+    b["ranking"] = {"by": "joint_chance", "label": "All picks hit (estimate)",
+                    "note": "PrizePicks shows lineup payouts in the app only - payout not published. Ranked by the "
+                            "chance all picks hit (picks assumed independent)."}
+    api_ = {"/api/sports/slips/pool": dict(POOL_RESEARCH, platform="prizepicks", legs=legs), "/api/sports/slips/build": b,
+            "/api/sports/manifest": {"models": [], "platforms": {}}}
+    ctx, page, errors = _page(browser, api_)
+    _open_slips(page)
+    page.select_option("#ss-platform", "prizepicks")
+    page.wait_for_selector("#ss-pool p, #ss-pool .ss-locked", timeout=15000)
+    page.click("#ss-build")
+    page.wait_for_selector(".ss-card")
+    res = page.locator("#ss-results").inner_text()
+    assert "payout not published" in res and "Ranked by the chance all picks hit" in res and "Payout not published" in res
+    assert "Expected return at the published payout -" not in res
+    assert not errors, errors
+    ctx.close()
+
+
+def test_team_codes_are_one_table():
+    """N9: labels.js TEAM_ABBR == sports/names.py TEAM_ABBR (one abbreviation per team on every surface)."""
+    import json as _json
+    import re as _re
+    from sports import names
+    src = (Path(__file__).resolve().parents[2] / "web" / "sports" / "labels.js").read_text(encoding="utf-8")
+    body = _re.search(r"var TEAM_ABBR = (\{.*?\n  \});", src, _re.S).group(1)
+    js = _json.loads(_re.sub(r"([{,]\s*)([A-Za-z]+):", r'\1"\2":', body))
+    assert js == names.TEAM_ABBR
+
+
+def test_board_search_placeholder_follows_the_league(browser):
+    """#11: the board's search box shows the league's own example (NFL: KC or Chiefs), never the NBA text."""
+    ctx, page, errors = _page(browser, _app_api())
+    page.goto("/sports#/board?lg=nfl")
+    page.wait_for_selector("#sw-q")
+    ph = page.get_attribute("#sw-q", "placeholder")
+    assert "KC or Chiefs" in ph and "Celtics" not in ph and "BOS" not in ph
+    page.click("#sw-league button[data-lg=nba]")
+    page.wait_for_function("document.getElementById('sw-q') && /BOS or Celtics/.test(document.getElementById('sw-q').placeholder)")
     assert not errors, errors
     ctx.close()

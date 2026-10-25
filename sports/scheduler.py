@@ -94,15 +94,39 @@ def memory_source():
     return "cgroup" if _cgroup_limit_mb() else "default 512"
 
 
-def cap_scale(mem=None):
-    mem = memory_mb() if mem is None else mem
-    return max(1.0, min(CAP_SCALE_MAX, mem / BASE_MEMORY_MB))
+LIGHT_RESERVE_MB = 120              # light children (slips / picks ingest, assistant) kept free beside a heavy pair
+PAIR_BASE_MB = 600                  # Starter caps of the pair that may co-run: board build 300 + collector 300
+
+
+def standard(mem=None):
+    """True on a plan of 1.5 GB or more (Render Standard 2 GB, 2026-10-25): faster cadences, two heavy slots."""
+    return (memory_mb() if mem is None else mem) >= 1536
 
 
 def max_heavy(mem=None):
-    """Heavy children at once: 2 from 1.5 GB (Standard), else 1. SPORTS_MAX_HEAVY overrides."""
+    """Heavy children at once: 2 from 1.5 GB (Standard), else 1. SPORTS_MAX_HEAVY overrides (SPORTS_HEAVY_SLOTS, the
+    cloud runbook's name, is read too)."""
     mem = memory_mb() if mem is None else mem
-    return _env_num("SPORTS_MAX_HEAVY", 2 if mem >= 1536 else 1, int)
+    dflt = 2 if standard(mem) else 1
+    v = os.environ.get("SPORTS_MAX_HEAVY") or os.environ.get("SPORTS_HEAVY_SLOTS")
+    try:
+        return max(1, int(v)) if v else dflt
+    except ValueError:
+        return dflt
+
+
+def cap_scale(mem=None, budget=None, heavy=None):
+    """Starter cap x this = the cap on this plan: min(7/3, plan / 512) and - so the reservation total really holds
+    the pair it allows - never more than (budget - light reserve) / the pair's Starter caps when two heavy jobs may
+    run. Honours SPORTS_CHILD_BUDGET_MB: at 2 GB with the owner's 1200 MB -> x1.8 (board build / collector 540 MB);
+    with the default 1466 MB -> x2.243 (673 MB). Never below x1."""
+    mem = memory_mb() if mem is None else mem
+    budget = budget_mb(mem) if budget is None else budget
+    heavy = max_heavy(mem) if heavy is None else heavy
+    s = min(CAP_SCALE_MAX, mem / BASE_MEMORY_MB)
+    if heavy >= 2:
+        s = min(s, (budget - LIGHT_RESERVE_MB) / PAIR_BASE_MB)
+    return max(1.0, s)
 
 
 def budget_mb(mem=None):
@@ -120,18 +144,20 @@ def default_jobs():
     """name -> spec. cap_mb from the 2026-10-24 measurements (sports/research/results/starter_2026-10-24) with margin.
     every_s None + trigger = on demand. Starter cadences (members see the freshness in RUNBOOK 'Starter')."""
     lg = os.environ.get("SPORTS_LEAGUES", "nba nfl").split()
+    std = standard()                    # Standard plan cadences (2026-10-25); Starter values after "else"
     J = {
         # on demand, member-facing first
         "assistant": dict(argv=_py("-m", "sports.assistant.runner", "--once"), every_s=None, trigger="assistant_queued",
                           timeout_s=300, flag="SPORTS_ASSISTANT", cap_mb=120, cls=LIGHT, prio=0),
         # what members read
-        "prebuilt": dict(argv=_py("-m", "sports.service", "snapshots"), every_s=90, timeout_s=120, flag="SPORTS_API",
+        "prebuilt": dict(argv=_py("-m", "sports.service", "snapshots"), every_s=45 if std else 90, timeout_s=120, flag="SPORTS_API",
                          cap_mb=160, cls=HEAVY, prio=1, locks=("prebuilt",)),  # 105-109 MB (slim slip pool)
         # the board build, ONE PROCESS PER LEAGUE (fresh 2026-10-24): both leagues in one process were killed at
         # 251-265 MB in production; an NFL week alone measured 137 MB on one live read of every board (17k offers),
         # NBA 90 MB. Cap 300 = the envelope the exclusive model jobs already run in (340): with it reserved no other
         # heavy child and no light child fits the 310 MB budget, so service (~70) + build stays near 370 of 512 MB.
-        **{f"ui-snapshots-{x}": dict(argv=_py("-m", "sports.snapshots", "build", x, "--no-results"), every_s=180,
+        **{f"ui-snapshots-{x}": dict(argv=_py("-m", "sports.snapshots", "build", x, "--no-results"),
+                                     every_s=60 if std else 180,
                                      timeout_s=240, flag="SPORTS_INGEST", cap_mb=300, cls=HEAVY, prio=2,
                                      league=x, locks=(f"snapshots:{x}",)) for x in lg},
         "sheets": dict(argv=_py("-m", "sports.sheets", "build", *lg), every_s=300, timeout_s=300,
@@ -146,20 +172,20 @@ def default_jobs():
         # cycle starts the board build at once ("then"). --bucket-min 1: a 5-minute cycle is never skipped as 'done'.
         **{f"ingest-{x}": dict(argv=_py("-m", "sports.worker", "ingest", x, "--bucket-min", "1", "--sources",
                                         "espn,pp,ud,injuries,oddsapi,polymarket,books,games"),
-                               every_s=900, cadence=("gameday", (x,)), then=(f"ui-snapshots-{x}",), collector=True,
+                               every_s=600 if std else 900, cadence=("gameday", (x,)), then=(f"ui-snapshots-{x}",), collector=True,
                                timeout_s=900, flag="SPORTS_INGEST", cap_mb=300, cls=EXCLUSIVE, prio=3,
                                league=x, locks=("canonical", "books", "games", "cache"),
                                env={"SPORTS_WORKER_CONCURRENCY": "1"}) for x in lg},   # 191-197 MB both leagues
         "ingest-kalshi": dict(argv=_py("-m", "sports.worker", "ingest", *lg, "--bucket-min", "1", "--sources",
                                        "kalshi"),
-                              every_s=3600, cadence=("kalshi", tuple(lg)), then=tuple(f"ui-snapshots-{x}" for x in lg),
+                              every_s=1800 if std else 3600, cadence=("kalshi", tuple(lg)), then=tuple(f"ui-snapshots-{x}" for x in lg),
                               timeout_s=900, flag="SPORTS_INGEST", cap_mb=240, cls=HEAVY, prio=3,
                               locks=("canonical", "cache"), env={"SPORTS_WORKER_CONCURRENCY": "1"}),         # 70-84 MB (production 2026-10-25)
-        "settle": dict(argv=_py("-m", "sports.worker", "settle", *lg), every_s=3600, timeout_s=900,
+        "settle": dict(argv=_py("-m", "sports.worker", "settle", *lg), every_s=900 if std else 3600, timeout_s=900,
                        flag="SPORTS_INGEST", cap_mb=120, cls=HEAVY, prio=4),   # 58 MB
         "picks-ingest": dict(argv=_py("-m", "sports.picks", "ingest"), every_s=60, timeout_s=120,
                              flag="SPORTS_INGEST", cap_mb=60, cls=LIGHT, prio=2),    # member picks: spool -> picks.db
-        "picks-settle": dict(argv=_py("-m", "sports.picks", "settle"), every_s=3600, timeout_s=600,
+        "picks-settle": dict(argv=_py("-m", "sports.picks", "settle"), every_s=900 if std else 3600, timeout_s=600,
                              flag="SPORTS_INGEST", cap_mb=80, cls=LIGHT, prio=4),
         # game store backfill (current + previous season, resumable, time-bounded) so the factor engine behind the
         # player page (sports/player_context.py) has whole seasons, not only the games since launch
@@ -169,7 +195,7 @@ def default_jobs():
                                flag="SPORTS_INGEST", cap_mb=260, cls=HEAVY, prio=5),   # 170 MB, 13 s (1,724 games)
         "games-backfill": dict(argv=_py("-m", "sports.games.backfill_job", "--budget", "120"), every_s=900,
                                timeout_s=300, flag="SPORTS_INGEST", cap_mb=60, cls=LIGHT, prio=6),   # 43-47 MB
-        "slips-settle": dict(argv=_py("-m", "sports.slips", "settle"), every_s=3600, timeout_s=600,
+        "slips-settle": dict(argv=_py("-m", "sports.slips", "settle"), every_s=900 if std else 3600, timeout_s=600,
                              flag="SPORTS_INGEST", cap_mb=60, cls=LIGHT, prio=4),    # 22 MB
         # forward forecasts, INFERENCE ONLY (sports/model/fwd.py): frozen hash-verified artifacts, no fit / learn /
         # retrain. SPORTS_FORECAST - independent of SPORTS_TRAIN (owner 2026-10-24). Exclusive: never beside ingestion.
@@ -294,11 +320,14 @@ def _job_on(flag):
 
 # ------------------------------------------------------------------------------------------------ game-day cadence
 def cadence_settings():
-    return {"hot_s": _env_num("SPORTS_INGEST_HOT_S", 300.0), "gameday_s": _env_num("SPORTS_INGEST_GAMEDAY_S", 600.0),
-            "idle_s": _env_num("SPORTS_INGEST_IDLE_S", 900.0), "hot_h": _env_num("SPORTS_INGEST_HOT_H", 2.0),
+    std = standard()                    # Standard 2 GB / 1 CPU: 3 / 5 / 10 min, Kalshi 10 / 30 (Starter 5/10/15, 20/60)
+    return {"hot_s": _env_num("SPORTS_INGEST_HOT_S", 180.0 if std else 300.0),
+            "gameday_s": _env_num("SPORTS_INGEST_GAMEDAY_S", 300.0 if std else 600.0),
+            "idle_s": _env_num("SPORTS_INGEST_IDLE_S", 600.0 if std else 900.0),
+            "hot_h": _env_num("SPORTS_INGEST_HOT_H", 2.0),
             "gameday_h": _env_num("SPORTS_INGEST_GAMEDAY_H", 18.0),
-            "kalshi_hot_s": _env_num("SPORTS_KALSHI_HOT_S", 1200.0),
-            "kalshi_idle_s": _env_num("SPORTS_KALSHI_IDLE_S", 3600.0)}
+            "kalshi_hot_s": _env_num("SPORTS_KALSHI_HOT_S", 600.0 if std else 1200.0),
+            "kalshi_idle_s": _env_num("SPORTS_KALSHI_IDLE_S", 1800.0 if std else 3600.0)}
 
 
 def _iso_ts(x):

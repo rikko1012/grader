@@ -16,7 +16,12 @@ build(pool, settings) -> batch
             entry_type     the platform's entry type (Underdog standard/flex, PrizePicks power/flex)
 
 Objective (lexicographic, exact branch-and-bound over the WHOLE batch, not slip-by-slip greedy): most slips built,
-then most legs (the larger requested sizes first), then fewest reused props / players, then the largest sum of log(all-hit chance) over every slip. The search is exact
+then most legs (the larger requested sizes first), then fewest reused props / players, then the largest sum of leg
+weights over every slip. bs-2 (N8, owner re-audit 2026-10-24): a leg's weight is log(p_win x its Underdog payout
+multiplier) on Underdog - so the search maximises the all-hit expected payout at the published payout - and
+log(p_win) on PrizePicks (lineup payouts are in-app only). The batch is then RANKED: Underdog slips by
+joint.published_return (expected return at the published payout - research estimate), PrizePicks slips by the
+all-hit chance (independence-labelled), with batch["ranking"] saying which. The search is exact
 unless NODE_LIMIT is reached (then the best batch found, improved by single-leg replacement, and "exact": False).
 Inside every slip, always: distinct players, no two legs sharing a box-score part (points + PRA of one player
 collide), <= max_per_event legs per game, the platform's published entry rules (rules.entry_check), no identical slip
@@ -374,6 +379,7 @@ def slip_view(platform, entry_type, legs):
     ls = [{k: l.get(k) for k in LEG_FIELDS} for l in legs]
     return {"slip_id": _slip_id(platform, entry_type, legs), "platform": platform, "entry_type": entry_type,
             "size": len(legs), "legs": ls, "joint": joint.joint(legs), "payout": rules.schedule(platform, entry_type, legs),
+            "expected_return": joint.published_return(platform, entry_type, legs),
             "entry_check": rules.entry_check(legs, platform, entry_type)}
 
 
@@ -395,17 +401,42 @@ def exposure(slips):
     return out
 
 
+RANKING = {
+    "underdog": {"by": "expected_return", "label": joint.RETURN_LABEL,
+                 "note": "Ranked by expected return at Underdog's published payout, using each pick's chance and "
+                         "payout multiplier; picks assumed independent. A multiple of the entry, not a profit."},
+    "prizepicks": {"by": "joint_chance", "label": "All picks hit (estimate)",
+                   "note": joint.PP_NOT_PUBLISHED + ". Ranked by the chance all picks hit (picks assumed "
+                           "independent)."},
+}
+
+
+def rank_slips(platform, slips):
+    """Best first: Underdog by expected return at the published payout, PrizePicks by all-hit chance; a slip whose
+    value is unknown goes last; ties by slip id (deterministic)."""
+    def key(s):
+        if platform == "underdog":
+            v = (s.get("expected_return") or {}).get("value")
+        else:
+            v = (s.get("joint") or {}).get("p_all_win")
+        return (v is None, -(v or 0.0), s["slip_id"])
+    out = sorted(slips, key=key)
+    for i, s in enumerate(out):
+        s["rank"] = i + 1
+    return out
+
+
 def build(pool, settings):
     platform = pool["platform"]
     st = normalize(settings, platform)
     legs, truncated = _candidates(pool["legs"], st["sides"])
     picked, info = search(legs, st)
-    slips = [slip_view(platform, st["entry_type"], [legs[i] for i in idx]) for idx in picked]
+    slips = rank_slips(platform, [slip_view(platform, st["entry_type"], [legs[i] for i in idx]) for idx in picked])
     built = Counter(s["size"] for s in slips)
     batch = {"builder_version": BUILDER_VERSION, "policy_version": POLICY_VERSION, "rules_version": rules.RULES_VERSION,
              "league": pool["league"], "platform": platform, "policy": pool["policy"],
              "snapshot_id": pool["snapshot_id"], "snapshot_at": pool["snapshot_at"], "settings": st,
-             "slips": slips, "exposure": exposure(slips), "search": info,
+             "slips": slips, "ranking": RANKING.get(platform), "exposure": exposure(slips), "search": info,
              "eligible_legs": len(pool["legs"]), "excluded": pool["excluded"],
              "shortage": explain_shortage(pool["legs"], legs, st, built, truncated)}
     raw = json.dumps([pool["snapshot_id"], st, [s["slip_id"] for s in slips]], sort_keys=True, default=str)
