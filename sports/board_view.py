@@ -58,7 +58,7 @@ def gate_state(stat):
 # VG_CONTAIN_LEAN (owner decision 2026-10-25): False = a failed-gate market (NFL) shows its LEAN + research GRADE behind
 # the cf-2 / N4 / sg-1 rules, labelled NFL_TEXT next to every grade; its edge, confidence and edge ranking stay withheld
 # and it is never a slip leg. True = the full vg-1 containment (projection only) everywhere - ONE change turns it back on.
-VG_CONTAIN_LEAN = False
+VG_CONTAIN_LEAN = True                  # owner 2026-10-25: NFL letters off again after real book-line check (A pass_yds 1 of 27)
 NOT_VALIDATED_TEXT = "{LG} model not validated"
 # rg-1 research grade: the letter of sports-gp-1 band() on the UNROUNDED Scout chance of the chosen (lean) side; only for
 # a row with a lean (cf-2 / N4), never for a held row (vg-1 when contained, sg-1). Stakes stay 0.
