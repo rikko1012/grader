@@ -486,3 +486,21 @@ were motivated by results on these windows (MODEL_CARD_NFL re-audit, MODEL_CARD_
    the exact version; old forecasts are untouched (new content -> new forecast ids). The sm-2 / sm-nfl-2 shadows keep
    comparing with the frozen sm-1 probabilities. A re-run on new data makes a challenger artifact; nothing switches
    automatically. Results: `sports/research/results/model_tw1_<sport>.json`, committed as produced.
+
+- **A7b (2026-10-25, after the A7 results; registered BEFORE any so-1 fit or score) - NBA season-opening minutes
+  challenger `so-1`.** Why (post-hoc diagnostic of the A7 NBA evaluation block, labelled so in the results): the 2026-27
+  opening days (262 rows / 16 games, 2026-10-20..22) show live points bias +3.3 and EW minutes 27.6 vs 24.7 played -
+  the minutes history of a regular-season forecast is carried over from last season's playoffs / end of season.
+  That window is spent (seen) and is never evidence for so-1.
+  1. Candidate `so-1`: identical to the live arm except E[minutes]: for a REGULAR-season forecast row, the EW minutes
+     (sm-1 half-life h_m) are taken over the player's prior REGULAR-season games only (postseason and play-in games
+     skipped but still ageing the weights, ew_prior semantics); no prior regular-season game -> sm-1's all-games value.
+     Postseason / play-in rows are unchanged. Every fitted parameter refit at each origin with the same column (A7 2).
+  2. Windows (walk-forward, A7 2 procedure, never scored for this question): the first 15 regular-season game-days of
+     2024-25 and of 2025-26, pooled (30 origins); no warm-up, no selection block (nothing to choose). The 2026-27
+     opening days are reported separately as post-hoc.
+  3. Promotion rule per market: A7 7 (a), (b), (c) and the evaluation-block part of (e) on the pooled windows, paired
+     with the live arm on identical rows; the book-line parts (d) / (e) as in A7 7. A market that passes gets an so-1
+     forward artifact (sm-1 config refit on the so-1 minutes column, own hash manifest) and switches through the same
+     per-market switch for regular-season forecasts; otherwise nothing changes. Results:
+     `sports/research/results/model_so1_nba.json`.

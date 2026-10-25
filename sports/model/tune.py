@@ -241,7 +241,7 @@ def walk(sport, mk, df, cfg, v2cfg=None, log=print):
     key, order = origins(sport, d_all)
     lo, ks = dists.grid(mk)
     arms = [a for a in ARMS[mk] if a in ("v2", "sn")]
-    out = {k: [] for k in ("idx", "origin", "role", "t", "pmf_live", "y", "game", "start", "block", "lref")}
+    out = {k: [] for k in ("idx", "origin", "role", "t", "pmf_live", "y", "game", "start", "block", "lref", "stype")}
     for a in arms:
         out["pmf_" + a] = []
     lref_all = None
@@ -273,6 +273,7 @@ def walk(sport, mk, df, cfg, v2cfg=None, log=print):
         out["game"].append(np.asarray(te["game_id"]))
         out["start"].append(start[te_m])
         out["lref"].append(lref_all[te_m])
+        out["stype"].append(np.asarray(te["season_type"], dtype=object))
         if sport == "nfl":
             out["block"].append(np.array([k] * n, dtype=object))
         else:
@@ -363,6 +364,7 @@ def evaluate_market(sport, mk, w, log=print):
         cands[arm] = {"param": best, "selection_crps": {str(k): v[0] for k, v in tried.items()},
                       "P": tried[best][1], "cs": tried[best][2]}
     live = _metrics(w["pmf_live"][ev], lo, ks, y[ev], lref[ev])
+    w["dump"] = {"live": {"crps": live["crps"], "p_over_ref": live["p_over_ref"], "err": live["err"]}}
     rep = {"rows": {"warm": int((role == "warm").sum()), "sel": int(sel.sum()), "eval": int(ev.sum())},
            "games_eval": int(len(np.unique(games[ev]))),
            "origins": {r: [k for k, rr in w["order"] if rr == r] for r in ("warm", "sel", "eval")},
@@ -379,6 +381,7 @@ def evaluate_market(sport, mk, w, log=print):
                 "c_cov80": 0.76 <= su["cov80_pit"] <= 0.84,
                 "e_bands_ref": all(abs(v["hit_rate"] - v["mean_p"]) <= 0.03 for v in bands.values() if v["n"] >= 100)}
         csv = c["cs"][ev]
+        w.setdefault("dump", {})[arm] = {"crps": sc["crps"], "p_over_ref": sc["p_over_ref"], "err": sc["err"]}
         rep["candidates"][arm] = {
             "param": c["param"] if math.isfinite(c["param"]) else "inf",
             "param_unit": "game-weeks" if arm == "dr" else "days (half-life)",
@@ -414,7 +417,18 @@ def final_params(sport, mk, w, arm, param, as_of):
     return {"c": c, "s": s, "rows": int(known.sum())}
 
 
-def run(sport, con, markets=None, log=print, as_of=None):
+def _dump(path, w):
+    """Per-row evaluation-block arrays (diagnostics only; scratch, never committed)."""
+    ev = w["role"] == "eval"
+    arr = {"y": w["y"][ev], "game": w["game"][ev].astype(str), "start": w["start"][ev].astype(str),
+           "stype": w["stype"][ev].astype(str), "lref": w["lref"][ev]}
+    for arm, d in w["dump"].items():
+        for k, v in d.items():
+            arr[f"{arm}_{k}"] = np.asarray(v)
+    np.savez_compressed(path, **arr)
+
+
+def run(sport, con, markets=None, log=print, as_of=None, dump=None):
     from ..contracts import now_utc
     t0 = time.time()
     as_of = as_of or now_utc()
@@ -434,6 +448,8 @@ def run(sport, con, markets=None, log=print, as_of=None):
             log(f"[{sport}] frame {hl} built ({time.time() - t0:.0f}s)")
         w = walk(sport, mk, frames[hl], cfg[mk], v2cfg, log)
         rep = evaluate_market(sport, mk, w, log)
+        if dump:
+            _dump(Path(dump) / f"{sport}_{mk}.npz", w)
         if rep["chosen"]:
             arm = rep["chosen"]
             prm = rep["candidates"][arm]["param"]
@@ -694,6 +710,7 @@ def main(argv=None):
     p.add_argument("--as-of", dest="as_of")
     p.add_argument("--learning")
     p.add_argument("--inputs")
+    p.add_argument("--dump")
     a = p.parse_args(argv)
     log = lambda x: print(x, flush=True)                                          # noqa: E731
     if a.cmd == "status":
@@ -701,7 +718,7 @@ def main(argv=None):
     elif a.cmd == "run":
         from . import datasets
         con = datasets.connect(Path(a.history), read_only=True)
-        run(a.sport, con, a.markets.split(",") if a.markets else None, log, a.as_of)
+        run(a.sport, con, a.markets.split(",") if a.markets else None, log, a.as_of, a.dump)
     elif a.cmd == "freeze":
         print(json.dumps(freeze(a.history), indent=1))
     else:
