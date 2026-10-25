@@ -271,7 +271,7 @@
     var stat = (B.stats && B.stats[r.stat]) || r.stat;
     var h = r.hit, seasons = h && h.seasons && h.seasons.length > 1 ? h.seasons.map(function (s) { return seasonLabel(s, lg); }).join(" + ") : "";
     return '<tr class="sw-tb-row' + (extra || "") + '" data-key="' + esc(r.key) + '" data-rid="' + esc(r.rid) + '">' +
-      '<td class="sw-tb-stat" data-label="Stat"><a href="' + esc(opts.href(r.m, r.q)) + '">' + esc(stat) + "</a></td>" +
+      '<td class="sw-tb-stat" data-label="Stat"><a href="' + esc(opts.href(r.m, r.q)) + '">' + esc(stat) + "</a>" + (root.SportsCompare ? root.SportsCompare.rowButton(r) : "") + "</td>" +   // HOOK (compare)
       '<td class="sw-tb-line num" data-label="Line"><b>' + S.line(r.line) + '</b> <span class="sw-tb-book">' + esc(opts.bookName(r.book)) + "</span>" +
         (r.nBooks > 1 ? '<span class="sw-tb-note">' + r.nBooks + " books</span>" : "") + (!r.fresh ? '<span class="sw-tb-note warn">not re-confirmed</span>' : "") + "</td>" +
       '<td class="sw-tb-leanc" data-label="Lean">' + leanBadge(r) + (r.gap ? '<span class="sw-tb-gap" title="Scout and the market differ by ' + Math.abs(r.gapPts).toFixed(1) + ' points at this line">Model vs market gap</span>' : "") + "</td>" +

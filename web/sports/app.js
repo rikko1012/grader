@@ -513,11 +513,14 @@
   // The card action area (Over / Under selector, Add to slip, Track pick) is rendered by HOOKS.renderActions, which
   // web/sports/picks.js registers (SportsPicks.renderActions). Without it a card shows no controls.
   function boardLegButtons() { return ""; }
-  var HOOKS = {renderActions: null};                    // ux agent mounts its controls here (tray / picks)
+  // HOOKS.afterActions (compare agent, web/sports/compare.js): (inner html, same ctx) -> html with its Compare button.
+  var HOOKS = {renderActions: null, afterActions: null};  // ux agent mounts its controls here (tray / picks)
+  function afterActions(inner, c) { try { return HOOKS.afterActions ? HOOKS.afterActions(inner || "", c) : inner; } catch (e) { return inner; } }
   function renderActions(m, q, f, B) {
     var inner = "";
     try { inner = HOOKS.renderActions ? HOOKS.renderActions({market: m, quote: q, forecast: f, board: B}) : boardLegButtons(m, q, f, B); }
     catch (e) { inner = boardLegButtons(m, q, f, B); }
+    inner = afterActions(inner, {market: m, quote: q, forecast: f, board: B});
     return '<div class="sw-actions-slot" data-rid="' + esc(q.r) + '">' + (inner || "") + "</div>";
   }
   function priceText(q) {                                // a book's own price (pick'em lines carry multipliers)
@@ -1052,6 +1055,7 @@
         if (!q || q.platform === "kalshi" || !HOOKS.renderActions) return "";
         var inner = "";
         try { inner = HOOKS.renderActions({market: m, quote: q, forecast: fc, player: P}); } catch (e) { inner = ""; }
+        inner = afterActions(inner, {market: m, quote: q, forecast: fc, player: P});
         return '<div class="sw-actions sw-actions-card">' + (inner || "") + "</div>";
       }
 
@@ -1307,6 +1311,7 @@
     else if (r.view === "picks") renderPicks();
     else if (r.view === "sheets" && window.SportsSheets) window.SportsSheets.render({main: main, api: Api, lg: state.lg, arg: r.arg, fail: fail});   // HOOK (sheets)
     else if (r.view === "slips") renderSlips();
+    else if (r.view === "compare" && window.SportsCompare) window.SportsCompare.render({main: main, api: Api, lg: state.lg, params: r.params, loadBoard: loadBoard, fail: fail, stateBox: stateBox, skeleton: skeleton});   // HOOK (compare)
     else if (r.view === "slate" && !r.arg) renderSlate();
     else renderNotFound(r);
     var top = document.getElementById("sw-main");

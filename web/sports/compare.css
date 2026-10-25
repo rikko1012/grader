@@ -1,0 +1,55 @@
+/* Scout Sports - Compare (compare agent, cmp-1). Every rule is scoped .sw .sw-cmp-* (Sports page only). */
+.sw .sw-cmp-n{display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:5px;padding:0 5px;border-radius:9px;background:var(--accent-2);color:#10141b;font-size:11px;font-weight:700;vertical-align:1px}
+.sw .sw-cmp-n[hidden]{display:none}
+.sw .sw-cmp-add[aria-pressed="true"]{border-color:var(--accent-2);color:var(--accent-2)}
+.sw .sw-cmp-mini{display:inline-flex;align-items:center;margin-left:6px;min-height:24px;padding:0 7px;border-radius:6px;border:1px solid var(--line-2);background:var(--panel-2);color:var(--muted);font-size:11px;cursor:pointer;vertical-align:1px}
+.sw .sw-cmp-mini:hover{color:var(--accent-2)}
+.sw .sw-cmp-solo{margin-top:6px}
+.sw .sw-cmp-intro{margin:0 0 12px;max-width:820px}
+.sw .sw-cmp-shared{margin:0 0 12px}
+.sw .sw-cmp-verdict-box{margin:0 0 14px}
+.sw .sw-cmp-verdict-box h2{margin:0 0 6px}
+.sw .sw-cmp-best{margin:0 0 6px;font-size:15px}
+.sw .sw-cmp-best.none{color:var(--muted)}
+.sw .sw-cmp-order{margin:4px 0 8px 18px;padding:0;font-size:13px;color:var(--muted)}
+.sw .sw-cmp-nopick{margin:4px 0 8px;padding:0 0 0 18px;font-size:13px;color:var(--muted)}
+.sw .sw-cmp-sgw{margin:8px 0}
+.sw .sw-cmp-rule{margin:8px 0 0}
+.sw .sw-cmp-changed{margin:0 0 14px}
+.sw .sw-cmp-changed ul{margin:0;padding-left:18px;font-size:13px}
+.sw .sw-cmp-changed li{margin:4px 0}
+.sw .sw-cmp-grid{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(220px,1fr);grid-template-rows:repeat(13,auto);gap:0 10px;overflow-x:auto;padding-bottom:6px;margin:0 0 14px}
+.sw .sw-cmp-card{display:grid;grid-row:span 13;grid-template-rows:subgrid;border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:10px 12px;min-width:0}
+.sw .sw-cmp-card.best{border-color:var(--accent-2)}
+.sw .sw-cmp-f{display:flex;flex-direction:column;gap:2px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px;min-width:0}
+.sw .sw-cmp-f:last-child{border-bottom:0}
+.sw .sw-cmp-k{font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.04em}
+.sw .sw-cmp-v{overflow-wrap:anywhere}
+.sw .sw-cmp-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.sw .sw-cmp-rank{display:inline-flex;align-items:center;min-height:22px;padding:0 8px;border-radius:6px;border:1px solid var(--line-2);font-size:12px;font-weight:700;color:var(--muted)}
+.sw .sw-cmp-rank.best{color:#10141b;background:var(--accent-2);border-color:var(--accent-2)}
+.sw .sw-cmp-rank.none{font-weight:500}
+.sw .sw-cmp-x{background:none;border:0;color:var(--faint);font-size:12px;min-height:28px;cursor:pointer;text-decoration:underline}
+.sw .sw-cmp-who{margin:4px 0 0;font-size:15px}
+.sw .sw-cmp-who a{color:var(--text);text-decoration:none}
+.sw .sw-cmp-who a:hover{text-decoration:underline}
+.sw .sw-cmp-sub{font-size:12px;color:var(--faint)}
+.sw .sw-cmp-sub a{color:var(--faint)}
+.sw .sw-cmp-sg{display:inline-flex;margin-left:4px;padding:0 6px;border-radius:6px;border:1px solid #e9be5266;color:var(--warn);font-size:11px}
+.sw .sw-cmp-gap{display:inline-flex;padding:0 6px;border-radius:6px;border:1px solid #e9be5266;color:var(--warn);font-size:11px}
+.sw .sw-cmp-held{color:var(--warn)}
+.sw .sw-cmp-why{color:var(--muted)}
+.sw .sw-cmp-pos{color:var(--over)}
+.sw .sw-cmp-warn{color:var(--warn)}
+.sw .sw-cmp-research{font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em}
+.sw .sw-cmp-acts .sw-act{margin:0}
+.sw .sw-cmp-books{margin:0 0 14px}
+.sw .sw-cmp-bk{margin:10px 0 0}
+.sw .sw-cmp-bk h3{margin:0 0 4px;font-size:14px}
+.sw .sw-cmp-lean-on{font-weight:600;color:var(--accent-2)}
+.sw .sw-cmp-tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
+.sw .sw-cmp-url{width:min(520px,100%);background:var(--panel-2);border:1px solid var(--line-2);border-radius:6px;color:var(--text);padding:4px 6px;font-size:12px}
+@media(max-width:760px){
+  .sw .sw-cmp-grid{grid-auto-flow:row;grid-auto-columns:auto;grid-template-columns:minmax(0,1fr);grid-template-rows:none;gap:10px;overflow-x:visible}
+  .sw .sw-cmp-card{grid-row:auto;grid-template-rows:none}
+}

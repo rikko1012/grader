@@ -184,7 +184,7 @@
         var lean = r.lean ? '<span class="shx-lean shx-' + r.lean + '">' + (r.grade && Lg ? Lg.gradeHtml(r.grade, r.lean, r.notValidated) : esc(leanText(r))) + "</span>" + (r.leanOffered === false ? '<div class="sw-faint sw-small">not offered here</div>' : "")
           : '<span class="sw-faint">' + (r.held ? esc(r.held) : sc ? "No lean" : "No Scout chance") + "</span>";
         return "<tr>" +
-          '<th scope="row"><a href="' + playerHref(lg, {pid: r.pid, st: r.stat}) + '">' + esc(r.player) + '</a><div class="sw-faint sw-small">' + esc([tag(r.team, lg), r.pos].filter(Boolean).join(" · ")) + "</div></th>" +
+          '<th scope="row"><a href="' + playerHref(lg, {pid: r.pid, st: r.stat}) + '">' + esc(r.player) + '</a><div class="sw-faint sw-small">' + esc([tag(r.team, lg), r.pos].filter(Boolean).join(" · ")) + "</div>" + (root.SportsCompare ? root.SportsCompare.rowButton(r) : "") + "</th>" +   // HOOK (compare)
           '<td class="sw-small">' + esc(r.matchup) + "</td>" +
           "<td>" + esc(r.statLabel) + "</td>" +
           '<td class="num">' + lineTxt(r.line) + "</td>" +
