@@ -282,6 +282,11 @@ def test_slate_bettor_wording_details_toggle_lines_and_placeholder(browser):
     body = page.locator("#sw-main").inner_text()
     assert "core markets" not in body and "Scout chances" not in body
     assert "154 props" in body and "75 lines with Scout projection" in body
+    # a started game leaves the main list: counted, and listed in the collapsed "Started or finished" section
+    assert "1 upcoming game" in body and "1 started or finished" in body and "Started or finished (1)" in body
+    assert page.locator(".sw-past .sw-game").count() == 1 and not page.locator(".sw-past .sw-game").is_visible()
+    page.locator(".sw-past > summary").click()
+    body = page.locator("#sw-main").inner_text()
     assert "Game in progress" in body and "in_progress" not in body
     card = page.locator(".sw-game").first
     assert card.locator(".sw-srcbtn").count() == 1 and not card.locator(".sw-srcbtn").is_visible()   # behind Details

@@ -415,29 +415,39 @@
           return [e.home.abbr, e.home.name, e.away.abbr, e.away.name].join(" ").toLowerCase().indexOf(q) >= 0;
         });
         if (!d.events.length) { body.innerHTML = stateBox("No games on the slate", "Scout lists " + state.lg.toUpperCase() + " games from today through the next days once the schedule is published."); return; }
-        var out = '<p class="sw-count" aria-live="polite"><span><b>' + evs.length + "</b> of " + d.events.length + " games</span></p>";
+        // games that started / finished leave the main list (owner: the slate shows what can still be played);
+        // they stay one click away in a collapsed section so today's results context is not lost
+        var done = function (e) { return !!(e.started || e.locked || (e.status && e.status !== "scheduled") || (e.start_utc && Date.parse(e.start_utc) <= Date.now())); };   // the clock too: a snapshot built before tip says not started
+        var up = evs.filter(function (e) { return !done(e); }), past = evs.filter(done);
+        var out = '<p class="sw-count" aria-live="polite"><span><b>' + up.length + "</b> upcoming " + (up.length === 1 ? "game" : "games") + "</span>" +
+          (past.length ? "<span>" + past.length + " started or finished</span>" : "") + "</p>";
         if (!evs.length) { body.innerHTML = out + stateBox("No games match", "Nothing matches “" + esc(f.slateQ) + "”.", '<button class="sw-btn" type="button" id="sw-sreset2">Reset search</button>'); bindReset(); return; }
+        function card(e) {
+          var c = e.coverage, plat = Object.keys(c.by_platform || {}).sort().map(function (p) { return esc(bookName(p)) + " " + c.by_platform[p]; }).join(" · ");
+            return '<article class="sw-game" aria-label="' + esc(matchup(e)) + '"><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">' +
+              '<a class="sw-gamelink" href="#/game/' + encodeURIComponent(e.event_id) + '">' + esc(teamAbbr(e.away)) + " @ " + esc(teamAbbr(e.home)) + "</a>" +
+              (e.status && e.status !== "scheduled" ? '<span class="sw-tag live">' + esc(L.eventStatus(e.status)) + "</span>" : e.started ? '<span class="sw-tag live">Started</span>' : "") + "</div>" +
+              '<div class="sw-muted sw-small">' + esc(e.away.name || "") + " at " + esc(e.home.name || "") + "</div>" +
+              "<div><b>" + esc(S.localTime(e.start_utc)) + "</b></div>" +
+              gameLines(e) +
+              coverageKv(c) +
+              (plat ? '<div class="sw-kv sw-small">' + plat + "</div>" : '<div class="sw-kv sw-small sw-faint">' + (e.started ? "No open lines" : "Books have not posted props yet") + "</div>") +
+              (e.injuries.length ? '<details class="sw-more"><summary>' + S.plural(e.injuries.length, "player") + " on the injury report</summary><ul class=\"sw-list\">" + e.injuries.map(function (i) {
+                return "<li>" + esc(i.player) + " (" + esc(i.team || "") + ") " + injuryHtml(i) + (i.as_of ? ' <span class="sw-faint sw-small">as of ' + esc(S.shortDate(i.as_of)) + "</span>" : "") + "</li>";
+              }).join("") + "</ul></details>" : '<div class="sw-faint sw-small">No player of either team on the ESPN injury report.</div>') +
+              '<div class="sw-actions"><a class="sw-btn sw-btn-sm" href="#/board?ev=' + encodeURIComponent(e.event_id) + '">Props for this game</a><a class="sw-btn sw-btn-sm" href="#/game/' + encodeURIComponent(e.event_id) + '">Match context</a></div>' +
+              '<details class="sw-more sw-gdetails"><summary>Details</summary><p class="sw-small sw-faint">Start from ' + esc(e.start_source || "the schedule") + " · checked " + esc(S.age(e.observed_at)) +
+              ((e.reschedules || []).length ? " · rescheduled " + e.reschedules.length + "x" : "") + " " + src({title: "Game record", "event record": e.record_id, "start (UTC)": e.start_utc, "start source": e.start_source, status: L.eventStatus(e.status), "observed by Scout": S.localTime(e.observed_at), reschedules: (e.reschedules || []).map(function (r) { return r.from_utc + " -> " + r.to_utc; })}) + "</p></details></article>";
+        }
         var day = null;
-        evs.forEach(function (e) {
+        if (!up.length) out += stateBox("No upcoming games", "Every " + state.lg.toUpperCase() + " game on the slate has started. New games appear here as soon as the schedule and lines are published.");
+        up.forEach(function (e) {
           var dl = S.localTime(e.start_utc, {weekday: "long", month: "long", day: "numeric"});
           if (dl !== day) { if (day !== null) out += "</div>"; out += '<h2 class="sw-day">' + esc(dl) + '</h2><div class="sw-games">'; day = dl; }
-          var c = e.coverage, plat = Object.keys(c.by_platform || {}).sort().map(function (p) { return esc(bookName(p)) + " " + c.by_platform[p]; }).join(" · ");
-          out += '<article class="sw-game" aria-label="' + esc(matchup(e)) + '"><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">' +
-            '<a class="sw-gamelink" href="#/game/' + encodeURIComponent(e.event_id) + '">' + esc(teamAbbr(e.away)) + " @ " + esc(teamAbbr(e.home)) + "</a>" +
-            (e.status && e.status !== "scheduled" ? '<span class="sw-tag live">' + esc(L.eventStatus(e.status)) + "</span>" : e.started ? '<span class="sw-tag live">Started</span>' : "") + "</div>" +
-            '<div class="sw-muted sw-small">' + esc(e.away.name || "") + " at " + esc(e.home.name || "") + "</div>" +
-            "<div><b>" + esc(S.localTime(e.start_utc)) + "</b></div>" +
-            gameLines(e) +
-            coverageKv(c) +
-            (plat ? '<div class="sw-kv sw-small">' + plat + "</div>" : '<div class="sw-kv sw-small sw-faint">' + (e.started ? "No open lines" : "Books have not posted props yet") + "</div>") +
-            (e.injuries.length ? '<details class="sw-more"><summary>' + S.plural(e.injuries.length, "player") + " on the injury report</summary><ul class=\"sw-list\">" + e.injuries.map(function (i) {
-              return "<li>" + esc(i.player) + " (" + esc(i.team || "") + ") " + injuryHtml(i) + (i.as_of ? ' <span class="sw-faint sw-small">as of ' + esc(S.shortDate(i.as_of)) + "</span>" : "") + "</li>";
-            }).join("") + "</ul></details>" : '<div class="sw-faint sw-small">No player of either team on the ESPN injury report.</div>') +
-            '<div class="sw-actions"><a class="sw-btn sw-btn-sm" href="#/board?ev=' + encodeURIComponent(e.event_id) + '">Props for this game</a><a class="sw-btn sw-btn-sm" href="#/game/' + encodeURIComponent(e.event_id) + '">Match context</a></div>' +
-            '<details class="sw-more sw-gdetails"><summary>Details</summary><p class="sw-small sw-faint">Start from ' + esc(e.start_source || "the schedule") + " · checked " + esc(S.age(e.observed_at)) +
-            ((e.reschedules || []).length ? " · rescheduled " + e.reschedules.length + "x" : "") + " " + src({title: "Game record", "event record": e.record_id, "start (UTC)": e.start_utc, "start source": e.start_source, status: L.eventStatus(e.status), "observed by Scout": S.localTime(e.observed_at), reschedules: (e.reschedules || []).map(function (r) { return r.from_utc + " -> " + r.to_utc; })}) + "</p></details></article>";
+          out += card(e);
         });
-        out += "</div>";
+        if (day !== null) out += "</div>";
+        if (past.length) out += '<details class="sw-more sw-past"><summary>Started or finished (' + past.length + ')</summary><div class="sw-games">' + past.map(card).join("") + "</div></details>";
         body.innerHTML = out;
       }
       function bindReset() { var b = document.getElementById("sw-sreset2"); if (b) b.onclick = reset; }
