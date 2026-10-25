@@ -315,3 +315,82 @@ no score). No round-2 factor had been fitted against an outcome or scored.
   mean). The L2 box-score test scores sm-2 with the box-score starter flag, exactly as tuned (the registered same-day
   assumption); NBA real-line shadow evidence is labelled "starter unknown" and is not evidence for the tuned model
   until a pre-game lineup source exists.
+
+## Amendment A6 - NFL challenger sm-nfl-2 (participation split + bias calibration) - registered 2026-10-24, BEFORE any sm-nfl-2 fit or score
+
+Why (measured, sports/MODEL_CARD_NFL.md "Owner re-audit 2026-10-24"): sm-1 failed gate H in all five NFL markets and
+leans Under at book lines. Two causes are model structure: (1) partial-participation games (offensive snap share
+< 50%: injury exits, backup weeks) enter the opportunity history at full weight, so ~21% of the rec_yds PMF mass sits at
+<= 25% of the line; (2) pass_yds (-9.9 yds, 2026 weeks 1-7) and rush_att (-0.37 carries; -0.54 on the 2025 locked
+test) are under-forecast, and cal-1 chooses the mean factor c by CRPS, which for right-skewed outcomes tracks the
+median and moves the mean DOWN (sm-1 c = 0.94 rush_yds, 0.97 rush_att). NFL stays CONTAINED (no lean / edge /
+confidence; projection only, "NFL model not validated", sports/board_view.py vg-1) until a market passes this protocol.
+Honesty note: this design was written after sm-1's locked-test and 2026 bias numbers were known, so those spent windows
+can never be evidence for sm-nfl-2 (they are diagnostic D only, item 7).
+
+1. **Candidate sm-nfl-2 (per NFL market; nothing is selected on a scored window).** Same eligible population (section
+   3), same half-lives and family as sm-1's frozen configuration for the market, same EB efficiency (all prior games, k
+   refit on train), plus:
+   a. **Role games.** A game is FULL-ROLE iff offense_pct >= 0.50; offense_pct unknown -> full-role (as in sm-1).
+   b. **Performance given role.** E_full[opportunity] = EW mean (the market's half-life; partial games skipped but
+      ageing the weights) over the player's PRIOR full-role games only; a player with no prior full-role game uses
+      sm-1's all-games EW and carries the flag no_full_history = 1. mu_full = E_full x efficiency x exp(beta . x);
+      beta (intercept + the market's sm-2 round-2 set from A5 - pass_yds wind; rush_yds mates_out_carries; rec_yds
+      snap_share + implied_total; rush_att home + scramble + mates_out_carries + spread; rec team_explosive + travel -
+      not re-tested; same standardisation and missing indicators) fitted by the same log-link GLM on TRAIN rows whose
+      own game was full-role. Full-role component = sm-1's family for the market, parameters fitted on those rows.
+   c. **Partial component.** The empirical distribution of y / mu_full on TRAIN rows whose own game was partial (200
+      quantiles; separately for no_full_history 0 / 1, pooled when a group has < 50 rows), read like the ratio family.
+   d. **Participation model.** pi = P(full role | pre-game inputs), logistic regression fitted on all eligible TRAIN
+      rows: intercept + standardised EW snap share (all prior games), previous game's snap share, EW share of prior
+      partial games, no_full_history, position indicators (constant ones dropped); missing -> train mean. Inputs use
+      prior games only (featurize point-in-time rule). PMF = pi x P_full + (1 - pi) x P_partial (still conditional on
+      playing; a DNP is not an outcome, section 3).
+   e. **Calibration cal-2 (fitted on TUNE only; the same rule for every market).** Mean factor c = sum(y) / sum(E[X])
+      on the tune rows (removes the tune signed bias; clipped to the cal-1 range 0.90..1.10), then the spread scale s
+      by tune CRPS on the cal-1 S grid with c fixed; applied like cal-1, around the PMF's own mean.
+   f. **Forward artifact.** Configuration (a-e) with every fitted piece refit on all eligible rows known at the freeze
+      (cal-2 stays the tune-fitted one): `model_config_nflv2.json`, `smnfl2_nfl.json`, hash manifest
+      `MANIFEST_NFLV2.json` (sha256 of every file + content sha of the artifact; a mismatch refuses to load), with
+      freeze_at recorded there.
+2. **Tune report (development evidence, not a gate).** On the round-1 tune partition (2025 weeks 1-9; fitted on
+   train): sm-nfl-2 vs sm-1 (sm-1's frozen configuration refit on train) - CRPS difference with game-clustered 95%
+   interval (B = 2,000, seed 20261023), signed bias, log-loss / Brier / ECE / in-the-large at the pre-game reference
+   line L_ref (section 6), randomised-PIT 80% coverage. Sanity rule (the only tune decision): a market whose tune CRPS
+   difference interval lies entirely ABOVE 0 is dropped (no artifact, no shadow).
+3. **Held-out partition H2.** No historical NFL period remains that no NFL model has scored (ds-1 ends with 2026 week
+   7's Thursday game; every season is train / tune / locked / secondary-locked), so H2 is FORWARD ONLY: every NFL game
+   starting after freeze_at in MANIFEST_NFLV2.json.
+   - H2-box: all eligible rows of H2 games with a box score, both frozen forward artifacts (sm-1 `sm1_nfl.json`,
+     sm-nfl-2 `smnfl2_nfl.json`) at the registered forecast time (start - 60 min). Scored ONCE when H2 first holds
+     >= 48 NFL games with box scores (the forward job only counts; `python -m sports.model.nflv2 heldout` scores and
+     writes `<SPORTS_DATA_DIR>/model/heldout_nflv2.json`; an existing result is never re-scored).
+   - H2-book: sm-nfl-2 SHADOW forecasts at real target-book lines (PrizePicks / Underdog offers, recorded by the
+     forward job beside sm-1's forecast of the same offer at the same forecast time), H2 games only; one row per (game,
+     player, stat, line) = the last pre-start forecast; outcome from the box score; pushes (y = line) excluded,
+     probabilities read conditional on no push. Scored ONCE per market when it first holds >= 150 such props from
+     >= 30 games.
+4. **Metrics.** H2-box: CRPS (primary), log-loss and binary Brier at L_ref, ECE / in-the-large at L_ref,
+   randomised-PIT 80% coverage, signed bias (mean - actual), all paired with sm-1 on the same rows (game-clustered
+   intervals). H2-book: in-the-large (mean P(Over | no push) - over-rate) with the game-clustered interval of
+   (hit - p), ECE (10 bins, n >= 20 per bin), log-loss and Brier paired with sm-1 on the same props, over-rate o,
+   share s of props whose P(Over) > P(Under), signed bias of the projection vs the book line.
+5. **Per-market promotion rule (all must hold; nothing promotes automatically).**
+   (a) H2-box CRPS sm-nfl-2 - sm-1: game-clustered 95% interval entirely below 0;
+   (b) H2-box at L_ref: |in-the-large| <= 0.02 and ECE <= 0.03; (c) randomised-PIT 80% coverage in [0.76, 0.84];
+   (d) H2-box log-loss at L_ref: point estimate <= sm-1's;
+   (e) H2-book calibration: |in-the-large| <= 0.03 and the game-clustered interval of (hit - p) contains 0;
+   (f) H2-book log-loss: point estimate <= sm-1's on the same props;
+   (g) NOT one-sided: |s - o| <= 0.15 and 0.25 <= s <= 0.75 (o = that market's H2-book over-rate).
+   A market meeting (a)-(g) is PROMOTION-ELIGIBLE (it stays shadow; the owner release process decides).
+   **Display bar (stricter; lifting containment for that market is the coordinator's decision):** (a)-(g) AND the
+   H2-book sample reaches the gate-F size (>= 300 props from >= 100 games) with (e)-(g) still holding on it. Grades /
+   stakes keep gate F (section 7) unchanged. A market that fails stays contained.
+6. **Shadow.** Every market not dropped by the sanity rule (2) is recorded in SHADOW from the freeze on (it must be, or
+   H2-book could never be measured): rows in `<SPORTS_DATA_DIR>/model/shadow.db` table shadow_forecasts with
+   model_version `sm-nfl-2` (+ table shadow_inputs: the saved feature row and sm-1's probabilities for the same offer,
+   for replay and the paired book-line metrics); never a store record, never in a member snapshot, never a grade
+   shown; same scheduler slot and process as sm-1 (`model-forward`, cap 340 MB); off switch SPORTS_SHADOW_NFLV2=0.
+7. **Diagnostic D (post-hoc, never a gate input).** After the configuration is frozen, the train-fit sm-nfl-2 and sm-1
+   are also scored on sm-1's spent windows (2025 week 10 - postseason; 2026 weeks 1-7) with the same metrics,
+   labelled "post-hoc diagnostic - window already used by sm-1" and committed as is; nothing is changed after it.
