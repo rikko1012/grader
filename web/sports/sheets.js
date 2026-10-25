@@ -20,7 +20,8 @@
   function lineTxt(x) { return !nn(x) ? "—" : (Math.abs(x - Math.round(x)) < 1e-9 ? String(Math.round(x)) : String(Math.round(x * 10) / 10)); }
   function edgeText(e) { return nn(e) ? R.edgeText(e) + " pts" : "—"; }
   function leanText(r) { return r.lean === "over" ? "Lean Over" : r.lean === "under" ? "Lean Under" : "No lean"; }
-  function matchup(ev, id) { var e = ev && ev[id]; return e ? (e.a || "?") + " @ " + (e.h || "?") : ""; }
+  function tag(a, lg) { var Lb = root.SportsLabels; return a && Lb ? Lb.teamTag(a, lg) : a; }   // N9: one code per team
+  function matchup(ev, id, lg) { var e = ev && ev[id]; return e ? (tag(e.a, lg) || "?") + " @ " + (tag(e.h, lg) || "?") : ""; }
   // the sheet file -> one propRow per line (started games dropped with the board's own rule)
   function buildRows(D, now) {
     now = now || Date.now();
@@ -31,7 +32,7 @@
       if (R.started(mm, now)) return;
       m.q.forEach(function (q) {
         var r = R.propRow(mm, q, {fc: D.fc || {}, view: D.view || {}, now: now});
-        r.variant = q.v || "standard"; r.statLabel = m.sl || m.st; r.mult = q.m || null; r.matchup = matchup(D.events, m.e);
+        r.variant = q.v || "standard"; r.statLabel = m.sl || m.st; r.mult = q.m || null; r.matchup = matchup(D.events, m.e, D.league);
         out.push(r);
       });
     });
@@ -153,7 +154,7 @@
   }
   function evOpts(D) {
     return [["all", "All games"]].concat(Object.keys(D.events || {}).sort(function (a, b) { return (D.events[a].s || "") < (D.events[b].s || "") ? -1 : 1; })
-      .map(function (k) { return [k, matchup(D.events, k)]; }));
+      .map(function (k) { return [k, matchup(D.events, k, D.league)]; }));
   }
   function built(D) {
     var S = root.SportsStats;
@@ -177,7 +178,7 @@
         var lean = r.lean ? '<span class="shx-lean shx-' + r.lean + '">' + esc(leanText(r)) + "</span>" + (r.leanOffered === false ? '<div class="sw-faint sw-small">not offered here</div>' : "")
           : '<span class="sw-faint">' + (sc ? "No lean" : "No Scout chance") + "</span>";
         return "<tr>" +
-          '<th scope="row"><a href="' + playerHref(lg, {pid: r.pid, st: r.stat}) + '">' + esc(r.player) + '</a><div class="sw-faint sw-small">' + esc([r.team, r.pos].filter(Boolean).join(" · ")) + "</div></th>" +
+          '<th scope="row"><a href="' + playerHref(lg, {pid: r.pid, st: r.stat}) + '">' + esc(r.player) + '</a><div class="sw-faint sw-small">' + esc([tag(r.team, lg), r.pos].filter(Boolean).join(" · ")) + "</div></th>" +
           '<td class="sw-small">' + esc(r.matchup) + "</td>" +
           "<td>" + esc(r.statLabel) + "</td>" +
           '<td class="num">' + lineTxt(r.line) + "</td>" +
@@ -232,8 +233,8 @@
       var f = {stat: st.stat, ev: st.ev, dir: st.dir_, min: st.min, q: st.q, l20: st.l20};
       var rows = sortRows(consistentFilter(D.rows, f), st.sort, st.dir, D.events);
       main.querySelector("#shx-body").innerHTML = rows.slice(0, shown).map(function (r) {
-        return '<tr><th scope="row"><a href="' + playerHref(lg, r) + '">' + esc(r.n) + '</a><div class="sw-faint sw-small">' + esc([r.tm, r.pos].filter(Boolean).join(" · ")) + "</div></th>" +
-          '<td class="sw-small">' + esc(matchup(D.events, r.e)) + "</td><td>" + esc(r.sl || r.st) + "</td>" +
+        return '<tr><th scope="row"><a href="' + playerHref(lg, r) + '">' + esc(r.n) + '</a><div class="sw-faint sw-small">' + esc([tag(r.tm, lg), r.pos].filter(Boolean).join(" · ")) + "</div></th>" +
+          '<td class="sw-small">' + esc(matchup(D.events, r.e, D.league)) + "</td><td>" + esc(r.sl || r.st) + "</td>" +
           '<td class="num">' + lineTxt(r.l) + ' <span class="sw-faint sw-small">' + esc(r.plat === "prizepicks" ? "PP" : "UD") + "</span></td>" +
           '<td><span class="shx-lean shx-' + r.side + '">' + (r.side === "over" ? "Over" : "Under") + "</span></td>" +
           '<td class="num"><b>' + pctTxt(r.r10) + '</b> <span class="sw-faint sw-small">' + rate(r.l10, r.side) + (r.l10.p ? " · " + r.l10.p + " push" : "") + "</span>" + seasonsNote(r.l10, lg) + "</td>" +

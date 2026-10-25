@@ -70,4 +70,9 @@ assert.strictEqual(L.statLabel("threes"), "3-pointers made");
 assert.strictEqual(L.statLabel("rec_yds"), "Receiving yards");
 assert.ok(!/_/.test(L.statLabel("some_new_stat")));
 
+// ---------------------------------------------------------------- N9: one team code everywhere
+assert.strictEqual(L.teamTag("UTAH", "nba"), "UTA"); assert.strictEqual(L.teamTag("UTA", "nba"), "UTA");
+assert.strictEqual(L.teamTag("gs", "nba"), "GSW"); assert.strictEqual(L.teamTag("NO", "nfl"), "NO");
+assert.strictEqual(L.teamTag("NO", "nba"), "NOP"); assert.strictEqual(L.teamTag(null, "nba"), "");
+
 console.log("ok");

@@ -158,7 +158,7 @@
     finally { btn.disabled = false; }
   }
   function legRow(platform, l, extra) {
-    return '<li class="ss-leg"><span class="ss-who">' + esc(l.player) + ' <span class="ss-tag">' + esc(l.team) + "</span></span>" +
+    return '<li class="ss-leg"><span class="ss-who">' + esc(l.player) + ' <span class="ss-tag">' + esc(L.teamTag ? L.teamTag(l.team, l.league || ctx().league) : l.team) + "</span></span>" +
       '<span class="ss-pick"><span class="ss-side-' + l.side + '">' + esc(sideText(platform, l.side)) + "</span> " +
       '<span class="ss-num">' + esc(l.line) + "</span>" + (l.platform === "underdog" && l.multiplier != null && Math.abs(l.multiplier - 1) > 1e-9 ? ' <span class="ss-tag ss-mult" title="Underdog payout multiplier for this pick">' + esc(mult2(l.multiplier)) + "</span>" : "") + "</span>" +
       '<span class="ss-meta">' + esc(l.stat_label || l.stat) + " - " + esc(l.event_ref || "") + " - " + esc(when(l.start_utc)) +

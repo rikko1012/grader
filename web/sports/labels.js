@@ -204,6 +204,18 @@
     return {side: over ? "over" : "under", label: over ? "Over" : "Under", p: over ? r.p_over : r.p_under};
   }
 
+  // ------------------------------------------------------------------------------------------------- teams
+  // N9: one abbreviation per team everywhere = sports/names.py TEAM_ABBR (ESPN short codes -> the boards' codes)
+  var TEAM_ABBR = {
+    nba: {GS: "GSW", NY: "NYK", SA: "SAS", NO: "NOP", UTAH: "UTA", WSH: "WAS"},
+    nfl: {WSH: "WAS"}
+  };
+  function teamTag(abbr, lg) {
+    if (!abbr) return "";
+    var a = String(abbr).trim().toUpperCase();
+    return (TEAM_ABBR[lg] || {})[a] || a;
+  }
+
   // ------------------------------------------------------------------------------------------------ search
   var PLACEHOLDER = {nba: "e.g. BOS or Celtics", nfl: "e.g. KC or Chiefs"};
   function teamPlaceholder(lg) { return PLACEHOLDER[lg] || PLACEHOLDER.nba; }
@@ -213,7 +225,7 @@
              injuryText: injuryText, seasonLabel: seasonLabel, windowLabel: windowLabel, seasonBreaks: seasonBreaks,
              spansText: spansText, teamPlaceholder: teamPlaceholder, SLIP_REASON: SLIP_REASON, EVENT_STATUS: EVENT_STATUS,
              titleName: titleName, ledgerName: ledgerName, ledgerRows: ledgerRows, scoutSide: scoutSide,
-             statLabel: statLabel, STAT: STAT, words: words};
+             statLabel: statLabel, STAT: STAT, words: words, teamTag: teamTag, TEAM_ABBR: TEAM_ABBR};
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SportsLabels = api;
 })(this);

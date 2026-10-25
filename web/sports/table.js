@@ -199,7 +199,14 @@
   function initials(n) { return (n || "").split(" ").map(function (x) { return x[0] || ""; }).slice(0, 2).join(""); }
   function teamAbbrOf(m, B) {                                      // the player's ESPN team abbreviation via his team id
     var ev = m.ev || {}, t = [ev.home, ev.away].filter(function (x) { return x && x.team_id && x.team_id === m.tid; })[0];
-    return t ? t.abbr : null;
+    if (t) return t.abbr;
+    var L = root.SportsLabels, want = m.tm && L ? L.teamTag(m.tm, (m.k || "").indexOf("nfl") === 0 ? "nfl" : "nba") : null;
+    t = want ? [ev.home, ev.away].filter(function (x) { return x && x.abbr && L.teamTag(x.abbr, (x.team_id || "").slice(0, 3)) === want; })[0] : null;
+    return t ? t.abbr : null;                                       // N9: matched by code when the team id is missing
+  }
+  function teamTagOf(m, lg) {                                      // N9: the one displayed code (UTA, never UTAH)
+    var L = root.SportsLabels, ab = teamAbbrOf(m) || m.tm;
+    return ab ? (L ? L.teamTag(ab, lg) : ab) : "";
   }
 
   /* opts: {lg, B (board with markets/fc/view/stats), rows: filtered markets, href(m, q), bookName, now}
@@ -254,7 +261,7 @@
       var who = '<th scope="rowgroup" class="sw-tb-player" rowspan="' + (open ? g.rows.length : 1) + '"><div class="sw-tb-who">' +
         img(headshotUrl(lg, g.pid), g.player + " headshot", "sw-tb-head", initials(g.player)) +
         '<div><a class="sw-tb-name" href="' + esc(opts.href(m, null)) + '">' + esc(g.player) + "</a>" +
-        '<div class="sw-tb-sub">' + (ab ? img(logoUrl(lg, ab), ab + " logo", "sw-tb-logo", "") : "") + esc([m.tm, m.pos].filter(Boolean).join(" · ")) + " · " +
+        '<div class="sw-tb-sub">' + (ab ? img(logoUrl(lg, ab), ab + " logo", "sw-tb-logo", "") : "") + esc([teamTagOf(m, lg), m.pos].filter(Boolean).join(" · ")) + " · " +
         '<a href="#/game/' + encodeURIComponent(m.e) + '">' + esc(m.matchup || "") + "</a> · " + esc(S.localTime(g.start, {weekday: "short", hour: "numeric", minute: "2-digit"})) + "</div>" +
         (more ? '<button type="button" class="sw-tb-exp" data-tgroup="' + esc(g.id) + '" aria-expanded="' + open + '" aria-controls="' + gid + '">' + (open ? "Hide other stats" : "+" + more + (more === 1 ? " more stat" : " more stats")) + "</button>" : "") +
         "</div></div></th>";
@@ -296,5 +303,5 @@
     return '<div class="sw-seg sw-tb-view" role="group" aria-label="Board view"><button type="button" data-tview="table" aria-pressed="' + (st.view === "table") + '">Table</button><button type="button" data-tview="cards" aria-pressed="' + (st.view === "cards") + '">Cards</button></div>';
   }
   function setView(v) { setPref("view", v === "cards" ? "cards" : "table"); }
-  root.SportsTable = {html: html, build: build, bind: bind, state: state, sortBar: sortBar, viewToggle: viewToggle, setView: setView, img: img, initials: initials, teamAbbrOf: teamAbbrOf};
+  root.SportsTable = {html: html, build: build, bind: bind, state: state, sortBar: sortBar, viewToggle: viewToggle, setView: setView, img: img, initials: initials, teamAbbrOf: teamAbbrOf, teamTagOf: teamTagOf};
 })(this);

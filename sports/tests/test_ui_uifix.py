@@ -465,3 +465,14 @@ def test_slip_studio_prizepicks_says_payout_not_published(browser):
     assert "Expected return at the published payout -" not in res
     assert not errors, errors
     ctx.close()
+
+
+def test_team_codes_are_one_table():
+    """N9: labels.js TEAM_ABBR == sports/names.py TEAM_ABBR (one abbreviation per team on every surface)."""
+    import json as _json
+    import re as _re
+    from sports import names
+    src = (Path(__file__).resolve().parents[2] / "web" / "sports" / "labels.js").read_text(encoding="utf-8")
+    body = _re.search(r"var TEAM_ABBR = (\{.*?\n  \});", src, _re.S).group(1)
+    js = _json.loads(_re.sub(r"([{,]\s*)([A-Za-z]+):", r'\1"\2":', body))
+    assert js == names.TEAM_ABBR

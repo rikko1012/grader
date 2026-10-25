@@ -308,3 +308,31 @@ def test_started_games_leave_the_board_but_stay_on_the_slate(built):
     assert _load(built, "board.json")["markets"] == []
     e = [x for x in _load(built, "slate.json")["events"] if x["event_id"] == "nba:espn:1"][0]
     assert e["started"] is True
+
+
+def test_board_rows_carry_one_team_tag_from_the_game(tmp_path):
+    """N9: a row without a usable roster membership (none, or a stale one after a trade) gets its team from THIS
+    game's two teams by the offer's code; every tag uses one abbreviation table (ESPN 'NY' / board 'NYK' -> 'NYK')."""
+    from sports import names
+    con = store.connect()
+    for t in h.NBA_TEAMS:
+        store.put(con, Team(team_id=f"nba:team:espn:{t['id']}", league="nba", abbr=t["abbr"], name=t["name"],
+                            observed_at=h.T0, known_at=h.T0))
+    store.put(con, h.event())                                                       # NY @ BOS
+    traded = "nba:player:espn:77"
+    store.put(con, Player(player_id=KAT, league="nba", name="Karl-Anthony Towns", observed_at=h.T0, known_at=h.T0))
+    store.put(con, Player(player_id=traded, league="nba", name="Traded Guard", observed_at=h.T0, known_at=h.T0))
+    store.put(con, Membership(player_id=traded, team_id=h.CHI, valid_from="2026-07-01T00:00:00Z", source="espn",
+                              observed_at=h.T0, known_at=h.T0))                   # stale: CHI is not in this game
+    store.put(con, h.kalshi_rung(19.5, 0.55, 0.59, team=None))                     # first offer of the row: no team
+    store.put(con, h.offer())                                                       # team "NYK"
+    store.put(con, h.offer(oid="pp:t", player_id=traded, player_name="Traded Guard", player_key="traded guard",
+                           team="BOS"))
+    snapshots.build(con, "nba", now=NOW, base=tmp_path, history=False, results=False)
+    con.close()
+    b = json.loads((tmp_path / "nba" / "board.json").read_text(encoding="utf-8"))
+    rows = {m["pid"]: m for m in b["markets"] if m["st"] == "points"}
+    assert rows[KAT]["tid"] == h.NY and rows[KAT]["tm"] == "NYK"
+    assert rows[traded]["tid"] == h.BOS and rows[traded]["tm"] == "BOS"
+    assert names.team_abbr("nba", "UTAH") == "UTA" and names.team_abbr("nba", "uta") == "UTA"
+    assert names.team_abbr("nfl", "WSH") == "WAS" and names.team_abbr("nfl", "NO") == "NO"

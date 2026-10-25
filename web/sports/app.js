@@ -189,7 +189,7 @@
       '<p class="sw-faint sw-small">Market = every eligible book combined with equal weight on the log-odds scale (one vote per book; quotes no older than 15 min, before the start, both sides priced or an exchange midpoint; each book\u2019s nearest line moved to this line with the stat\u2019s measured spread). A line\u2019s own book is never counted for itself. The Over chances listed are each book\u2019s own line, push refunded.</p>' + (bare ? "</div>" : "</details>");
   }
   function book(p) { return '<span class="sw-book"><span class="sw-dot ' + esc(p) + '" aria-hidden="true"></span>' + esc(bookName(p)) + "</span>"; }
-  function teamAbbr(t) { return t && (t.abbr || t.name) || "TBD"; }
+  function teamAbbr(t) { return t && (t.abbr ? L.teamTag(t.abbr, state.lg) : t.name) || "TBD"; }   // N9: one code per team
   function matchup(ev) { return ev ? teamAbbr(ev.away) + " @ " + teamAbbr(ev.home) : ""; }
   function skeleton(n) { var s = ""; for (var i = 0; i < (n || 6); i++) s += '<div class="sw-skel" aria-hidden="true"></div>'; return '<div role="status" aria-label="Loading">' + s + '<span class="sw-sr">Loading</span></div>'; }
   function stateBox(title, text, action) {
@@ -423,7 +423,7 @@
           (past.length ? "<span>" + S.int(past.length) + " started or finished</span>" : "") + "</p>";
         if (!evs.length) { body.innerHTML = out + stateBox("No games match", "Nothing matches “" + esc(f.slateQ) + "”.", '<button class="sw-btn" type="button" id="sw-sreset2">Reset search</button>'); bindReset(); return; }
         function card(e) {
-          var c = e.coverage, plat = Object.keys(c.by_platform || {}).sort().map(function (p) { return esc(bookName(p)) + " " + S.int(c.by_platform[p]); }).join(" · ");
+          var c = e.coverage, plat = Object.keys(c.by_platform || {}).filter(function (p) { return c.by_platform[p] > 0; }).sort().map(function (p) { return esc(bookName(p)) + " " + S.int(c.by_platform[p]); }).join(" · ");
             return '<article class="sw-game" aria-label="' + esc(matchup(e)) + '"><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">' +
               '<a class="sw-gamelink" href="#/game/' + encodeURIComponent(e.event_id) + '">' + esc(teamAbbr(e.away)) + " @ " + esc(teamAbbr(e.home)) + "</a>" +
               (e.status && e.status !== "scheduled" ? '<span class="sw-tag live">' + esc(L.eventStatus(e.status)) + "</span>" : e.started ? '<span class="sw-tag live">Started</span>' : "") + "</div>" +
@@ -433,7 +433,7 @@
               coverageKv(c) +
               (plat ? '<div class="sw-kv sw-small">' + plat + "</div>" : '<div class="sw-kv sw-small sw-faint">' + (e.started ? "No open lines" : "Books have not posted props yet") + "</div>") +
               (e.injuries.length ? '<details class="sw-more"><summary>' + S.plural(e.injuries.length, "player") + " on the injury report</summary><ul class=\"sw-list\">" + e.injuries.map(function (i) {
-                return "<li>" + esc(i.player) + " (" + esc(i.team || "") + ") " + injuryHtml(i) + (i.as_of ? ' <span class="sw-faint sw-small">as of ' + esc(S.shortDate(i.as_of)) + "</span>" : "") + "</li>";
+                return "<li>" + esc(i.player) + " (" + esc(L.teamTag(i.team, state.lg)) + ") " + injuryHtml(i) + (i.as_of ? ' <span class="sw-faint sw-small">as of ' + esc(S.shortDate(i.as_of)) + "</span>" : "") + "</li>";
               }).join("") + "</ul></details>" : '<div class="sw-faint sw-small">No player of either team on the ESPN injury report.</div>') +
               '<div class="sw-actions"><a class="sw-btn sw-btn-sm" href="#/board?ev=' + encodeURIComponent(e.event_id) + '">Props for this game</a><a class="sw-btn sw-btn-sm" href="#/game/' + encodeURIComponent(e.event_id) + '">Match context</a></div>' +
               '<details class="sw-more sw-gdetails"><summary>Details</summary><p class="sw-small sw-faint">Start from ' + esc(e.start_source || "the schedule") + " · checked " + esc(S.age(e.observed_at)) +
@@ -649,7 +649,7 @@
       var h = '<article class="sw-research-card" aria-label="' + esc(m.n + ', ' + g.ms.map(function (x) { return B.stats[x.st] || x.st; }).join(', ')) + '">' +
         '<div class="sw-research-head"><div class="sw-avatar">' + T.img(R.headshotUrl(state.lg, m.pid), m.n + " headshot", "sw-tb-head", T.initials(m.n)) +
         '</div><div><a class="sw-player-name" href="' + marketHref(m, null) + '">' + esc(m.n) + '</a>' +
-        '<div class="sw-small sw-faint">' + (ab ? T.img(R.logoUrl(state.lg, ab), ab + " logo", "sw-tb-logo", "") : "") + esc([m.tm, m.pos].filter(Boolean).join(' · ')) + '</div></div>' +
+        '<div class="sw-small sw-faint">' + (ab ? T.img(R.logoUrl(state.lg, ab), ab + " logo", "sw-tb-logo", "") : "") + esc([T.teamTagOf(m, state.lg), m.pos].filter(Boolean).join(' · ')) + '</div></div>' +
         (inj ? '<span class="sw-tag inj">' + esc(S.injuryLabel(inj.status)) + '</span>' : '') + '</div>' +
         '<div class="sw-matchline"><a href="#/game/' + encodeURIComponent(m.e) + '">' + esc(m.matchup) + '</a><span>' +
         esc(S.localTime(m.ev && m.ev.start_utc, {weekday:'short',hour:'numeric',minute:'2-digit'})) + '</span></div>';
@@ -793,7 +793,7 @@
         (gl || tc ? '<section class="sw-panel" aria-labelledby="sw-tc-h"><h2 id="sw-tc-h">Game and team context</h2>' + gl + tc + "</section>" : "") +
         '<section class="sw-panel" aria-labelledby="sw-inj-h"><h2 id="sw-inj-h">Injury report</h2><div class="sw-grid2">' + injList(e.away) + injList(e.home) + "</div></section>" +
         '<section class="sw-panel" aria-labelledby="sw-cov-h"><h2 id="sw-cov-h">Props in this game</h2>' + coverageKv(c) + '<div class="sw-kv sw-small">' +
-        Object.keys(c.by_platform).sort().map(function (p) { return "<span>" + esc(bookName(p)) + " <b>" + S.int(c.by_platform[p]) + "</b></span>"; }).join("") + "</div>" +
+        Object.keys(c.by_platform).filter(function (p) { return c.by_platform[p] > 0; }).sort().map(function (p) { return "<span>" + esc(bookName(p)) + " <b>" + S.int(c.by_platform[p]) + "</b></span>"; }).join("") + "</div>" +
         '<details class="sw-more"><summary>Details</summary><p class="sw-small sw-faint">The list below shows props with a line open now; props whose only lines were taken down, or alternate lines (goblin / demon), are counted above but open on the player page. ' +
         src({title: "Game record", "event record": e.record_id, "start (UTC)": e.start_utc, "start source": e.start_source, status: L.eventStatus(e.status)}) + "</p></details></section>" +
         '<section aria-labelledby="sw-gp-h"><h2 id="sw-gp-h" style="font-size:16px;margin:0 0 10px">Every prop in this game</h2><div id="sw-gameprops">' + skeleton(4) + "</div></section>";
