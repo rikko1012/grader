@@ -5,7 +5,7 @@ serves them from a bounded in-memory cache.
 
   GET /api/sports/manifest?league=nba          build time, versions, per-source freshness, counts
   GET /api/sports/slate?league=nba             games, injuries, coverage
-  GET /api/sports/board?league=nba[&part=more] prop board (primary stats; part=more = secondary stats)
+  GET /api/sports/board?league=nba[&part=more|view] prop board (primary stats; more = secondary; view = bv-1 hit rates)
   GET /api/sports/forecast?league=nba&id=fc-.. one forecast record view (the same copy every surface renders)
   GET /api/sports/player?league=nba&id=nba:player:espn:123   Player Workspace
   GET /api/sports/history?league=nba&id=nba:player:espn:123  per-game history with typed record ids
@@ -95,9 +95,10 @@ def board(req):
     if not lg:
         return 400, {"error": "league must be nba or nfl"}
     part = req.query.get("part") or "primary"
-    if part not in ("primary", "more"):
-        return 400, {"error": "part must be primary or more"}
-    return _serve(_root() / lg / ("board.json" if part == "primary" else "board_more.json"))
+    files = {"primary": "board.json", "more": "board_more.json", "view": "board_view.json"}
+    if part not in files:
+        return 400, {"error": "part must be primary, more or view"}
+    return _serve(_root() / lg / files[part])
 
 
 def _player_file(req, folder):

@@ -93,19 +93,20 @@
     if (f.stat && f.stat !== "all" && quick.indexOf(f.stat) < 0 && labels[f.stat]) quick.push(f.stat);
     var all = Object.keys(labels).sort(function (a, b) { return labels[a] < labels[b] ? -1 : 1; });
     var ux = getUx(), open = wide() || !!ux.fxOpen;
-    var secCount = (f.book !== "all" ? 1 : 0) + (f.side !== "any" ? 1 : 0) + (f.more ? 1 : 0) + (f.stat !== "all" && quick.indexOf(f.stat) < 0 ? 1 : 0);
+    var secCount = (f.book !== "all" ? 1 : 0) + (f.side !== "any" ? 1 : 0) + (f.more ? 1 : 0);
     return '<form class="sw-filters sw-fx" role="search" id="sw-bf" onsubmit="return false" aria-label="Prop board filters">' +
       '<div class="sw-field grow"><label for="sw-q">Player or team</label><input id="sw-q" name="q" type="search" autocomplete="off" placeholder="Search players, teams" value="' + esc(f.q) + '"></div>' +
       '<div class="sw-fx-group"><span class="sw-fx-lab" id="sw-fx-stat-l">Stat</span><div class="sw-fx-btns" role="group" aria-labelledby="sw-fx-stat-l">' +
         '<button type="button" data-fstat="all" aria-pressed="' + (f.stat === "all") + '">All</button>' +
-        quick.map(function (k) { return '<button type="button" data-fstat="' + esc(k) + '" aria-pressed="' + (f.stat === k) + '">' + esc(labels[k]) + "</button>"; }).join("") + "</div></div>" +
+        quick.map(function (k) { return '<button type="button" data-fstat="' + esc(k) + '" aria-pressed="' + (f.stat === k) + '">' + esc(labels[k]) + "</button>"; }).join("") +
+        // ONE stat filter (owner audit 2026-10-24: no second "Stat" field): the full list sits in the same group
+        '<select id="sw-stat" name="stat" class="sw-fx-statall" aria-label="Every stat">' + opt("all", "Every stat…", f.stat) + all.map(function (k) { return opt(k, labels[k], f.stat); }).join("") + "</select></div></div>" +
       '<div class="sw-fx-group"><span class="sw-fx-lab" id="sw-fx-ev-l">Game</span><div class="sw-fx-strip" role="group" aria-labelledby="sw-fx-ev-l">' +
         '<button type="button" data-fev="all" aria-pressed="' + (f.ev === "all") + '">All games</button>' +
         evs.map(function (e) { return '<button type="button" data-fev="' + esc(e[0]) + '" aria-pressed="' + (f.ev === e[0]) + '">' + esc(e[1]) + "</button>"; }).join("") + "</div></div>" +
       '<details class="sw-fx-more" id="sw-fx-more"' + (open ? " open" : "") + '><summary>More filters <span class="sw-fx-n">' + (secCount ? "(" + secCount + " set)" : "") + "</span></summary><div class=\"sw-fx-sec\">" +
         (books.length ? '<div class="sw-field"><label for="sw-book">Book</label><select id="sw-book" name="book">' + opt("all", "All books", f.book) +
           books.map(function (p) { return opt(p, ctx.bookName(p), f.book); }).join("") + "</select></div>" : "") +
-        '<div class="sw-field"><label for="sw-stat">Stat</label><select id="sw-stat" name="stat">' + opt("all", "All stats", f.stat) + all.map(function (k) { return opt(k, labels[k], f.stat); }).join("") + "</select></div>" +
         '<div class="sw-field"><label for="sw-side">Side offered</label><select id="sw-side" name="side">' + opt("any", "Any side", f.side) + opt("over", "Over offered", f.side) + opt("under", "Under offered", f.side) + opt("both", "Both offered", f.side) + "</select></div>" +
         '<label class="sw-chk"><input type="checkbox" id="sw-more" name="more"' + (f.more ? " checked" : "") + "> More stats</label>" +
         '<button type="button" class="sw-btn" id="sw-reset">Reset filters</button></div></details>' +

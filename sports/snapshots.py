@@ -45,7 +45,7 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-from . import cache, capabilities, config, fair, flags, forecast_detail, identity, market_view, markets, store
+from . import board_view, cache, capabilities, config, fair, flags, forecast_detail, identity, market_view, markets, store
 from .contracts import (ContractError, Event, Membership, SourceId, StatObservation, from_dict, now_utc, parse_utc,
                         utc)
 
@@ -834,6 +834,8 @@ def build(con, league, now=None, base=None, history=True, results=True):
     pl_dir, hi_dir = root / "players", root / "history"
     ctx_by_pid, ctx_summary = _engine_context(league, fam, now, pids, markets_rows, events, cur_team, root)
     manifest["player_context"] = ctx_summary
+    view_out = board_view.StreamWriter(root / "board_view.json",       # bv-1 hit rates, streamed per player
+                                       {**base_meta, "part": "view", "rule": board_view.VERSION})
     for pid in pids:
         rows = [r for r in markets_rows.values() if r["player_id"] == pid]
         p = players.get(pid)
@@ -847,6 +849,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
                        "opponent": _team_view(teams, e.away_team_id if tid == e.home_team_id else e.home_team_id)
                        if tid in (e.home_team_id, e.away_team_id) else None}
         games = player_games(con, league, pid, now, teams) if history else []
+        view_out.add(board_view.player_rows(rows, games))
         tid = cur_team.get(pid)
         mates_out = []
         for mate in sorted(team_players.get(tid, ())):
@@ -880,6 +883,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
             "history": {"games": len(games), "sources": sorted({s for g in games for s in g["source"]})}})
         _write(hi_dir / f"{safe_name(pid)}.json", {**base_meta, "player_id": pid, "family": fam, "games": games})
         n_players += 1
+    sizes["board_view"] = view_out.close()
     if results:
         sizes["results"] = _write(root / "results.json", {**res_obj, **base_meta})
     manifest["sizes"] = sizes
@@ -910,7 +914,7 @@ def compact_quote(q):
 
 def compact_row(r):
     return {"k": r["key"], "e": r["event_id"], "pid": r["player_id"], "n": r["player"], "pos": r["position"],
-            "tm": r["team"], "st": r["stat"], "pr": 1 if r["primary"] else 0, "cap": r["capability"],
+            "tm": r["team"], "tid": r.get("team_id"), "st": r["stat"], "pr": 1 if r["primary"] else 0, "cap": r["capability"],
             "q": [compact_quote(q) for q in r["quotes"]], "kn": [compact_quote(q) for q in r["kalshi_near"]],
             "kr": r["kalshi_rungs"], "alt": r["alternates"], "promo": r["promotional"], "mk": r.get("market")}
 
