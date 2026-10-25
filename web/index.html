@@ -811,6 +811,28 @@ body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode
 .ot-featured .tplay .b2meta .pill{margin:0}
 @media(max-width:760px){.ot-featured .tplay:nth-child(n+4){display:none}}
 @media(max-width:760px){.bchips{max-width:100vw}}   /* the sticky chip row overhung the phone screen by 1px */
+/* Compare (owner 2026-10-25): up to 6 props side by side; the verdict first; one column per prop (stacked on phones) */
+.bcmp,.mccmp,.ot-cmp{background:none;border:1px solid var(--line-2);color:var(--muted);border-radius:7px;padding:6px 9px;font:600 12px Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap;min-height:34px}
+.bcmp:hover,.mccmp:hover,.ot-cmp:hover{border-color:var(--accent);color:var(--accent-2)}.bcmp.on,.mccmp.on,.ot-cmp.on{border-color:var(--accent);color:var(--accent-2);background:#f7a45b14}
+.c-act .bcmp{margin-right:6px}.mccmp{min-height:28px;padding:3px 7px;margin-left:4px}.tpact{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.tpact .bslip{margin:0}
+.ot-offerw{display:flex;flex-direction:column;gap:4px}.ot-offerw .ot-offer{flex:1}.ot-cmp{align-self:flex-start}
+.ctbtn{position:fixed;left:232px;bottom:18px;z-index:40;background:#1c2635;color:var(--accent-2);border:1px solid var(--accent);border-radius:10px;padding:11px 16px;font:700 13px var(--display);cursor:pointer;box-shadow:0 8px 26px rgba(0,0,0,.5)}
+#cttray{position:fixed;inset:0;z-index:48;background:rgba(0,0,0,.62);display:flex;justify-content:center;align-items:flex-start;padding:24px 12px}#cttray[hidden]{display:none}
+#ctbody{background:var(--bg);border:1px solid var(--line-2);border-radius:16px;width:min(1240px,100%);max-height:calc(100vh - 48px);overflow:auto;padding:0 18px 16px}
+.ctbar{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:10px;padding:14px 0 12px;background:var(--bg);border-bottom:1px solid var(--line)}.ctbar b{font:700 18px var(--display)}.ctgrow{flex:1}
+.ctverdict{margin:14px 0;padding:16px;border:1px solid #f7a45b55;border-radius:12px;background:linear-gradient(120deg,#22201a,#121822)}.ctverdict h3{margin:6px 0 4px;font:700 20px var(--display)}
+.ctbig{font-size:16px;margin:4px 0 8px}.ctbig b{font:700 22px var(--display);color:var(--accent-2)}.ctrule{margin:10px 0 0}
+.ctpair,.ctwarn{margin-top:10px;padding:10px 12px;border-radius:9px;font-size:13px;line-height:1.6}.ctpair{border:1px solid #bba5ff55;background:#bba5ff0d}.ctwarn{border:1px solid #f5c54255;background:#f5c5420d;color:#f2d27a}
+.ctgrid{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(210px,1fr);gap:10px;overflow-x:auto;padding-bottom:6px}
+.ctcol{border:1px solid var(--line);border-radius:12px;background:#0f151f;padding:12px;min-width:0;display:flex;flex-direction:column;gap:2px}.ctcol.win{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}.ctcol.out{opacity:.86}
+.cthead{display:flex;gap:9px;align-items:flex-start}.ctwho{flex:1;min-width:0}.ctwho b{display:block;font-size:16px}.ctwho .small{display:block}
+.ctx{background:none;border:1px solid var(--line);color:var(--muted);border-radius:7px;min-width:32px;min-height:32px;cursor:pointer}.ctx:hover{color:var(--text);border-color:var(--line-2)}
+.ctwin{margin:6px 0 2px;font:700 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent-2)}.ctout{margin:6px 0 2px;font-size:12px;color:var(--muted)}
+.ctf{display:grid;grid-template-columns:1fr;padding:6px 0;border-top:1px solid var(--line);font-size:13px}.ctf .k{font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em}.ctv{overflow-wrap:anywhere}.ctline{font:700 18px var(--display)}
+.ctacts{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.ctacts .go{padding:9px 16px;min-height:40px;width:auto;flex:0 0 auto}
+@media(max-width:1150px){.ctbtn{left:96px}}
+@media(max-width:760px){.ctbtn{left:14px;bottom:82px}.bcmpt{display:none}#cttray{padding:0}#ctbody{width:100%;max-height:100dvh;height:100dvh;border-radius:0;border:0;padding:0 12px 90px}
+  .ctgrid{grid-auto-flow:row;grid-template-columns:minmax(0,1fr);grid-auto-columns:auto;overflow:visible}.ctverdict{padding:13px}.ctverdict h3{font-size:18px}.ctf{grid-template-columns:minmax(96px,38%) minmax(0,1fr);gap:8px;align-items:baseline}}
 </style>
 </head>
 <body class="locked">
@@ -926,6 +948,8 @@ body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode
 <div class="toast" id="toast"></div>
 <button type="button" class="slipbtn" id="slipbtn" hidden>Slip (0)</button>
 <div class="slip" id="slip" hidden></div>
+<button type="button" class="ctbtn" id="ctbtn" hidden>⇄ Compare (0)</button>
+<div id="cttray" hidden><div id="ctbody" role="dialog" aria-modal="true" aria-label="Compare props"></div></div>
 
 <script>
 /* Pure view helpers. Deliberately do not estimate probabilities or change stakes. */
@@ -1384,6 +1408,7 @@ document.addEventListener("click", e => {
   if (act === "copy") copy(pickLine(lastCard));
   if (act === "slip") addToSlip(lastCard);
   if (act === "link") copy(shareUrl(lastCard));
+  if (act === "compare") { ctToggle(ctRowOfCard(lastCard), "card"); const on = ctHas(ctRowOfCard(lastCard)); a.classList.toggle("on", on); a.setAttribute("aria-pressed", String(on)); a.textContent = on ? "✓ In Compare" : "⇄ Compare"; }
   if (act === "nudge") { const g = lastCard.grade; gradeNow(lastCard.player_block?.player?.nick, String(g.line + +a.dataset.d), g.prop, g.line_type, g.scope, inPop, cardCtx(lastCard)); }
 });
 showRecent();
@@ -2336,6 +2361,47 @@ function floorOk(r) {
   if (gf && !(LETTERS.includes(mGrade(r)) && G_RANK[mGrade(r)] <= G_RANK[gf])) return false;
   return !cf || (r.p != null && +r.p >= cf - 1e-9);
 }
+// line discrepancy index (2026-10-19 owner; see lineGapHtml below): each platform's standard lines by player / stat / maps
+const stdKey = x => [String(x.nick || x.player).toLowerCase(), x.prop, x.scope || "12"].join("|");
+function stdIndex() {
+  const idx = {underdog: new Map(), prizepicks: new Map()};
+  for (const b of ["underdog", "prizepicks"]) for (const x of (BK[b] || {}).rows || []) {
+    if (mktType(x) !== "standard" || x.line == null) continue;
+    if (!idx[b].has(stdKey(x))) idx[b].set(stdKey(x), []); idx[b].get(stdKey(x)).push(x); }
+  return idx;
+}
+const stdSameMatch = (a, b) => /^hltv:/.test(a.match_id || "") && /^hltv:/.test(b.match_id || "") ? a.match_id === b.match_id
+  : Math.abs(Date.parse(a.start) - Date.parse(b.start)) <= 3 * 3600000;
+function gapRowOf(r, idx) {          // the other platform's standard line for this player / stat / maps / match, when it differs
+  if (mktType(r) !== "standard" || r.line == null) return null;
+  const ob = (r.book || "underdog") === "prizepicks" ? "underdog" : "prizepicks";
+  const o = ((idx || stdIndex())[ob].get(stdKey(r)) || []).find(x => stdSameMatch(x, r));
+  return o && +o.line !== +r.line ? o : null;
+}
+function lineGapHtml(r, idx) {
+  const o = gapRowOf(r, idx); if (!o) return "";
+  const ob = (r.book || "underdog") === "prizepicks" ? "underdog" : "prizepicks";
+  const d = +(+o.line - +r.line).toFixed(1), side = r.side === "Less" ? "Under" : r.side === "More" ? "Over" : null;
+  const easier = side ? ` For the ${side}, the ${side === "Over" ? "lower" : "higher"} line is the easier one; payouts can differ.` : "";
+  const tip = `Line discrepancy: ${bookName(ob)} lists ${o.line} for the same player, stat and maps – ${Math.abs(d)} ${d > 0 ? "higher" : "lower"} than this line.${easier}`;
+  return ` <span class="lgap" title="${esc(tip)}" data-tip="${esc(tip)}" tabindex="0">≠ ${esc(bookName(ob))} ${esc(o.line)}</span>`;
+}
+// bump (2026-10-19 owner): the platform moved this line from where it opened (PrizePicks: the scraper's opening line;
+// Underdog: the first line Scout observed for this player / stat / start), or while this page was open (moved_from)
+function bumpHtml(r) {
+  const from = bumpFrom(r); if (from == null) return "";
+  const up = +r.line > +from, bk = bookName(r.book || "underdog");
+  const tip = `Bumped ${up ? "up" : "down"}: ${bk} ${r.moved_from != null ? "moved this line while this page was open" : "opened this line at " + from}${r.moved_from != null && r.open_line != null && +r.open_line !== +from ? ` (opened at ${r.open_line})` : ""}; it is ${r.line} now.${r.moved_at ? " Moved " + agoTxt(r.moved_at) + "." : ""} The grade is for ${r.line}.`;
+  return ` <span class="lbump ${up ? "up" : "down"}" title="${esc(tip)}" data-tip="${esc(tip)}" tabindex="0">${up ? "▲" : "▼"} bumped from ${esc(from)}</span>`;
+}
+// the board row's pick and stake text - the same strings on the board row and in Compare
+function boardPickHtml(r, noL10) {
+  const gone = sideGone(r), sideW = r.side === "Less" ? "Under" : "Over";
+  return gone ? `<span class="pill bad" title="${esc(bookName(r.book || "underdog"))} does not offer the ${sideW} for this line any more - not a bet, not on slips; its last grade is kept for the record">${esc(gone)}</span> <span class="muted">${sideW} ${r.line}</span>`
+    : !r.side ? `<span class="muted">grading…</span>`
+    : `${esc(sideWord(r))}${r.p != null ? ` <b>${chance(r.p, r.prop)}</b>${pushTag(r.line, r.model_outcomes)}${coinFlip(r.p)}` : ""}${noL10 ? "" : l10Chip(r)}`;
+}
+const boardStakeHtml = r => sideGone(r) || !r.side ? "" : `${isLeanV(r) ? (r.state === "SCOUT" ? "No match scheduled" : "Lean") : esc(mGrade(r) || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${zeroWhy(r)}${capChip(r, r.team_name || r.team)}`;
 function drawBoard() {
   saveBFilters(); try { filtersLabel(); } catch {} try { drawChips(); } catch {} try { drawViews(); } catch {}
   try {                                       // phones: the platform tabs scroll sideways - keep the chosen one in view
@@ -2370,19 +2436,7 @@ function drawBoard() {
   $("#bscope").hidden = scopes.size < 2;
   if (!scopes.has(bscope) && scopes.size) { bscope = scopes.has("12") ? "12" : [...scopes][0]; [...$("#bscope").children].forEach(x => x.classList.toggle("on", x.dataset.v === bscope)); }
   // line discrepancy index (2026-10-19 owner; see lineGap below) - built before filtering: "Lines differ" filters on it
-  const stdIdx = {underdog: new Map(), prizepicks: new Map()};
-  const sk = x => [String(x.nick || x.player).toLowerCase(), x.prop, x.scope || "12"].join("|");
-  for (const b of ["underdog", "prizepicks"]) for (const x of (BK[b] || {}).rows || []) {
-    if (mktType(x) !== "standard" || x.line == null) continue;
-    if (!stdIdx[b].has(sk(x))) stdIdx[b].set(sk(x), []); stdIdx[b].get(sk(x)).push(x); }
-  const sameMatch = (a, b) => /^hltv:/.test(a.match_id || "") && /^hltv:/.test(b.match_id || "") ? a.match_id === b.match_id
-    : Math.abs(Date.parse(a.start) - Date.parse(b.start)) <= 3 * 3600000;
-  const gapRow = r => {             // the other platform's standard line for this player / stat / maps / match, when it differs
-    if (mktType(r) !== "standard" || r.line == null) return null;
-    const ob = (r.book || "underdog") === "prizepicks" ? "underdog" : "prizepicks";
-    const o = (stdIdx[ob].get(sk(r)) || []).find(x => sameMatch(x, r));
-    return o && +o.line !== +r.line ? o : null;
-  };
+  const stdIdx = stdIndex(), gapRow = r => gapRowOf(r, stdIdx);
   const wl = watchList();
   const rows = boardRows.filter(r => (bprop === "both" || r.prop === bprop) && (r.scope || "12") === bscope && (bside === "both" || r.side === bside)
                                     && (!$("#bbets").checked || isBet(r)) && (!$("#bflag").checked || !isFlagged(r)) && hit(r)
@@ -2399,32 +2453,13 @@ function drawBoard() {
   // match (canonical HLTV id when both have one, else starts within 3 h - a player plays one match at a time), shown next
   // to this row's market when the two differ. Goblin / demon / alt lines are never compared with standard ones. Facts only:
   // which line is easier depends on the side (lower for an Over, higher for an Under); payouts can differ.
-  const lineGap = r => {
-    const o = gapRow(r); if (!o) return "";
-    const ob = (r.book || "underdog") === "prizepicks" ? "underdog" : "prizepicks";
-    const d = +(+o.line - +r.line).toFixed(1), side = r.side === "Less" ? "Under" : r.side === "More" ? "Over" : null;
-    const easier = side ? ` For the ${side}, the ${side === "Over" ? "lower" : "higher"} line is the easier one; payouts can differ.` : "";
-    const tip = `Line discrepancy: ${bookName(ob)} lists ${o.line} for the same player, stat and maps – ${Math.abs(d)} ${d > 0 ? "higher" : "lower"} than this line.${easier}`;
-    return ` <span class="lgap" title="${esc(tip)}" data-tip="${esc(tip)}" tabindex="0">≠ ${esc(bookName(ob))} ${esc(o.line)}</span>`;
-  };
-  // bump (2026-10-19 owner): the platform moved this line from where it opened (PrizePicks: the scraper's opening line;
-  // Underdog: the first line Scout observed for this player / stat / start), or while this page was open (moved_from)
-  const bump = r => {
-    const from = bumpFrom(r); if (from == null) return "";
-    const up = +r.line > +from, bk = bookName(r.book || "underdog");
-    const tip = `Bumped ${up ? "up" : "down"}: ${bk} ${r.moved_from != null ? "moved this line while this page was open" : "opened this line at " + from}${r.moved_from != null && r.open_line != null && +r.open_line !== +from ? ` (opened at ${r.open_line})` : ""}; it is ${r.line} now.${r.moved_at ? " Moved " + agoTxt(r.moved_at) + "." : ""} The grade is for ${r.line}.`;
-    return ` <span class="lbump ${up ? "up" : "down"}" title="${esc(tip)}" data-tip="${esc(tip)}" tabindex="0">${up ? "▲" : "▼"} bumped from ${esc(from)}</span>`;
-  };
+  const lineGap = r => lineGapHtml(r, stdIdx), bump = bumpHtml;
   const rowHtml = (r, showMatch) => {
     const nick = r.nick || r.player, gone = sideGone(r), lab = !r.side ? "…" : r.state === "SCOUT" || gone ? "–" : mGrade(r) === "LEAN" ? "L" : mGrade(r);
     const ltl = !r.side ? "Still grading" : r.state === "SCOUT" ? "No match scheduled" : mGrade(r) === "LEAN" ? "Lean – 0 units" : `Grade ${mGrade(r)}${+r.units > 0 ? "" : " – 0 units"}`;
     const ds = dsOf(r), team = r.team_name || r.team, opp = r.opp_name || r.opponent;
     const bl = `${nick}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}|${r.book || "underdog"}`, wOpen = WHY_OPEN.has(bl);
-    const sideW = r.side === "Less" ? "Under" : "Over";
-    const pick = gone ? `<span class="pill bad" title="${esc(bookName(r.book || "underdog"))} does not offer the ${sideW} for this line any more - not a bet, not on slips; its last grade is kept for the record">${esc(gone)}</span> <span class="muted">${sideW} ${r.line}</span>`
-      : !r.side ? `<span class="muted">grading…</span>`
-      : `${esc(sideWord(r))}${r.p != null ? ` <b>${chance(r.p, r.prop)}</b>${pushTag(r.line, r.model_outcomes)}${coinFlip(r.p)}` : ""}${l10Chip(r)}`;
-    const stake = gone || !r.side ? "" : `${isLeanV(r) ? (r.state === "SCOUT" ? "No match scheduled" : "Lean") : esc(mGrade(r) || "–")} · ${r.units != null ? +(+r.units).toFixed(2) : 0}U${zeroWhy(r)}${capChip(r, team)}`;
+    const pick = boardPickHtml(r), stake = boardStakeHtml(r);
     const meta = [r.graded_at ? `graded ${agoTxt(r.graded_at)}` : "", r.alt && r.book !== "prizepicks" ? `alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : "",
 ].filter(Boolean).join(" · ");
     const whyB = r.side ? `<button type="button" class="bwhy" data-bwhy="1" aria-expanded="${wOpen}" title="Why this grade and stake">Why</button>` : "";
@@ -2437,7 +2472,7 @@ function drawBoard() {
       <div class="c-num"><span class="k">Proj</span>${r.proj != null ? num(r.proj, 1) : "–"}</div>
       <div class="c-pick b2pick">${pick}</div>
       <div class="c-stake">${stake}</div>
-      <div class="c-act">${whyB}${!r.side ? "<span></span>" : gone ? `<button type="button" class="bslip" disabled title="${esc(gone)}">Unavailable</button>` : r.state === "SCOUT" ? `<button type="button" class="bslip" disabled title="No upcoming match found for his team – there is nothing to enter on a slip yet">+ Slip</button>`
+      <div class="c-act">${whyB}${ctBtnRow(r)}${!r.side ? "<span></span>" : gone ? `<button type="button" class="bslip" disabled title="${esc(gone)}">Unavailable</button>` : r.state === "SCOUT" ? `<button type="button" class="bslip" disabled title="No upcoming match found for his team – there is nothing to enter on a slip yet">+ Slip</button>`
         : `<button type="button" class="bslip ${onSlip.has(slipKeyRow(r)) ? "on" : ""}" data-bslip="${esc(bslipKey(r))}">${onSlip.has(slipKeyRow(r)) ? "On slip" : "+ Slip"}</button>`}</div>
       ${meta ? `<div class="c-meta muted">${meta}</div>` : ""}${wOpen && r.side ? `<div class="c-why">${whyHtml(r)}</div>` : ""}
     </div>`; };
@@ -2495,6 +2530,8 @@ function boardClick(e) {
   if (e.target.closest(".c-why")) return;            // reading the Why panel never opens the card
   const st = e.target.closest("[data-bstar]");
   if (st) { e.stopPropagation(); toggleWatch(st.dataset.bstar); return drawBoard(); }
+  const cx = e.target.closest("[data-bcmp]");
+  if (cx) { e.stopPropagation(); const r = boardRows.find(x => bslipKey(x) === cx.dataset.bcmp); if (r) ctToggle(r, "board"); return; }
   const b = e.target.closest("[data-bslip]");
   if (b) { e.stopPropagation(); const r = boardRows.find(x => bslipKey(x) === b.dataset.bslip);
     if (r) { addToSlip(boardCard(r)); drawBoard(); } return; }
@@ -3530,6 +3567,8 @@ function render(d) {
     return {...r0, series: ser, overs, pushes, decided: n - pushes, hit_rate: n - pushes ? overs / (n - pushes) : null, avg_total: n ? +(tot.reduce((a, b) => a + b, 0) / n).toFixed(1) : null,
             median_total: n ? (tot[(n - 1) >> 1] + tot[n >> 1]) / 2 : null}; })();
   const cmpLine = sc === "123" && !has123 ? null : g.line;   // Maps 1-3 without its own record: nothing to compare
+  // Compare tray: the card's own Last 10 at this line (the tile below), for a card line that is not on the board
+  d._l10 = cmpLine != null && rf.overs != null && +(rf.decided ?? rf.matches) > 0 ? {over: +rf.overs, n: +(rf.decided ?? rf.matches), push: +rf.pushes || 0} : null;
   // last 10 in tonight's setting only (LAN or online): the heading says which, and what was left out
   const envW = rf.env === "lan" ? "LAN" : rf.env === "online" ? "online" : "";
   // edge and the vig note follow the side we recommend (More when nothing is playable)
@@ -3611,9 +3650,9 @@ function render(d) {
   }
   // an outage card with the board's saved grade: it can go on a slip (marked stale there, never verified) or be copied
   if (g.withheld && v.side && !sideGone(v)) h += `<div class="actions"><button type="button" class="chipbtn" data-act="slip" style="border-color:var(--accent)">+ Add to slip</button><button type="button" class="chipbtn" data-act="copy">Copy pick</button>
-    <button type="button" class="chipbtn" data-act="link">Copy link</button></div>`;
+    <button type="button" class="chipbtn" data-act="link">Copy link</button><button type="button" class="chipbtn" data-act="compare">⇄ Compare</button></div>`;
   if ("p_more" in g) h += `<div class="actions">${sideGone(v) ? `<span title="${esc(sideGone(v))}"><button type="button" class="chipbtn" disabled>+ Add to slip</button></span>` : v.state === "SCOUT" ? `<span title="No upcoming match found for his team – there is nothing to enter on a slip yet"><button type="button" class="chipbtn" disabled>+ Add to slip</button></span>` : `<button type="button" class="chipbtn" data-act="slip" style="border-color:var(--accent)">+ Add to slip</button>`}<button type="button" class="chipbtn" data-act="copy">Copy pick</button>
-    <button type="button" class="chipbtn" data-act="link">Copy link</button>
+    <button type="button" class="chipbtn" data-act="link">Copy link</button>${v.side ? `<button type="button" class="chipbtn${ctHas(ctRowOfCard(d)) ? " on" : ""}" data-act="compare" aria-pressed="${ctHas(ctRowOfCard(d))}">${ctHas(ctRowOfCard(d)) ? "✓ In Compare" : "⇄ Compare"}</button>` : ""}
     <button type="button" class="chipbtn" data-act="nudge" data-d="-1">Line &minus;1</button>
     <button type="button" class="chipbtn" data-act="nudge" data-d="1">Line +1</button></div>`;
   h += `</section>`;
@@ -3954,7 +3993,7 @@ function drawMatchCompare() {
     const capped = c.units_full > c.units ? ` <span class="muted small">(capped from ${c.units_full}U)</span>` : "";
     return proj + `<td class="num">${c.line}</td><td><button type="button" class="mcpick" data-mc="${esc(e.nick)}|${c.line}|${pr}" title="${esc(mcWhy(c))}
 Tap to open ${esc(e.nick)}'s ${pr === "hs" ? "headshots" : "kills"} card">
-      <b>${esc(sideWord(c))}</b> ${chance(c.p || 0, pr)}${pushTag(c.line, c.model_outcomes)}${isLeanV(c) ? (c.state === "SCOUT" ? " · No match scheduled" : "") : " · " + esc(mGrade(c) || "–")} · ${+(+c.units || 0).toFixed(2)}U${zeroWhy(c)}${capped}</button></td>`;
+      <b>${esc(sideWord(c))}</b> ${chance(c.p || 0, pr)}${pushTag(c.line, c.model_outcomes)}${isLeanV(c) ? (c.state === "SCOUT" ? " · No match scheduled" : "") : " · " + esc(mGrade(c) || "–")} · ${+(+c.units || 0).toFixed(2)}U${zeroWhy(c)}${capped}</button>${ctMcBtn(e, c, pr)}</td>`;
   };
   const dcell = e => {
     const cs = props.map(pr => e[pr]).filter(Boolean), lined = cs.filter(c => c.line != null);
@@ -3987,7 +4026,7 @@ Tap to open ${esc(e.nick)}'s ${pr === "hs" ? "headshots" : "kills"} card">
   const allEmpty = j.teams.every(t => t.players.every(e => ["kills", "hs"].every(pr => (e[pr] || {}).line == null && (e[pr] || {}).proj == null)));
   const emptyNote = j.teams.flatMap(t => t.players.flatMap(e => ["kills", "hs"].map(pr => (e[pr] || {}).note))).find(Boolean) || "";
   const pickTxt = (e, pr) => { const c = e[pr] || {}, lab = pr === "hs" ? "HS" : "Kills";
-    if (shown(c) && !c.pending) return `<button type="button" class="mcpick" data-mc="${esc(e.nick)}|${c.line}|${pr}" title="${esc(mcWhy(c))}">${lab} ${c.line}: <b>${esc(sideWord(c))}</b> ${chance(c.p || 0, pr)}${pushTag(c.line, c.model_outcomes)}${isLeanV(c) ? "" : " · " + esc(mGrade(c) || "–")} · ${+(+c.units || 0).toFixed(2)}U${zeroWhy(c)}</button>`;
+    if (shown(c) && !c.pending) return `<button type="button" class="mcpick" data-mc="${esc(e.nick)}|${c.line}|${pr}" title="${esc(mcWhy(c))}">${lab} ${c.line}: <b>${esc(sideWord(c))}</b> ${chance(c.p || 0, pr)}${pushTag(c.line, c.model_outcomes)}${isLeanV(c) ? "" : " · " + esc(mGrade(c) || "–")} · ${+(+c.units || 0).toFixed(2)}U${zeroWhy(c)}</button>${ctMcBtn(e, c, pr)}`;
     if (c.line != null) return `<span class="muted">${lab} ${c.line}: ${c.side && !c.pending ? "filtered" : "grading…"}</span>`;
     return `<span class="muted">${lab} ${c.proj != null ? `projection ${num(c.proj, 1)} · no line` : "– no projection"}</span>`; };
   const phoneList = j.teams.map(t => `<div class="mcteam"><b>${esc(t.team)}</b></div>` + [...t.players].sort((a, b) => MC.sort === "chance" ? best(b) - best(a) : a.nick.localeCompare(b.nick))
@@ -4006,6 +4045,8 @@ Tap to open ${esc(e.nick)}'s ${pr === "hs" ? "headshots" : "kills"} card">
 document.addEventListener("click", e => {
   const sg = e.target.closest("[data-mcseg] button");
   if (sg) { const k = sg.parentElement.dataset.mcseg; MC[k] = sg.dataset.v; return k === "book" ? mcFetch() : drawMatchCompare(); }
+  const mx = e.target.closest("[data-mccmp]");
+  if (mx && MC.data) { const [nick, line, prop] = mx.dataset.mccmp.split("|"); const r = ctMcRow(nick, line, prop); if (r) { ctToggle(r, "table"); drawMatchCompare(); } return; }
   const pk = e.target.closest("[data-mc]");
   if (pk && MC.data) {
     const [nick, line, prop] = pk.dataset.mc.split("|");
@@ -4013,6 +4054,210 @@ document.addEventListener("click", e => {
     gradeNow(nick, line, prop, "standard", MC.scope, !$("#cardpop").hidden, {team: c.ud_team || t?.team, opponent: c.ud_opponent || null, book: MC.book, start: MC.data.match?.start || null, side: c.side || null});
   }
 });
+// ---------- Compare (owner 2026-10-25): a member picks up to 6 props - the same match or different matches, any player, stat,
+// maps or platform - and sees them side by side with a "better line" verdict on one stated rule. Display only: every number
+// is the board row's own (the live row while the line is on the board, else the numbers saved when it was added, e.g. a
+// card's own line); nothing is regraded, no new chance is made and props are never combined into one probability.
+// Kept in this browser (cs2s_cmp).
+const CT_KEY = "cs2s_cmp", CT_MAX = 6;
+const CT_FIELDS = ["id", "book", "player", "nick", "team", "team_name", "opponent", "opp_name", "start", "match_start", "event", "prop", "scope", "line",
+  "odds_type", "line_type", "side", "p", "grade", "model_grade", "units", "units_full", "cap_n", "cap_reason", "stake_reason", "state", "unavailable",
+  "hltv_retry", "stale", "graded_at", "proj", "l10_n", "l10_over", "l10_push", "l10_avg", "open_line", "moved_from", "moved_at", "dstat",
+  "model_outcomes", "match_id", "match_slug", "settle_slug", "player_id", "under_available", "over_available", "graded_line", "_mk"];
+const ctSnap = r => { const o = {}; for (const k of CT_FIELDS) if (r[k] !== undefined && r[k] !== null) o[k] = r[k]; return o; };
+// one prop = platform | player | line | stat | maps | market type | match (the slip's own match identity, slipEvent)
+const ctKey = r => [r.book || "", String(r.nick || r.player || "").toLowerCase(), +r.line, r.prop, r.scope || "12", gradeType(r), slipEvent(r)].join("|");
+// a prop whose match started more than 6 hours ago leaves the tray on its own
+const ctList = () => { const x = store.get(CT_KEY, []), old = Date.now() - 6 * 3600000;
+  return (Array.isArray(x) ? x : []).filter(i => i && i.k && i.r && !(lockMs(i.r) != null && lockMs(i.r) < old)).slice(0, CT_MAX); };
+function ctHas(r) { try { const k = ctKey(r); return ctList().some(i => i.k === k); } catch { return false; } }   // safe before this block loads
+const ctScope = sc => SCOPE_TXT[sc || "12"] || "Maps 1–2";
+// a card in the board row's shape (the card's own grade of its own line)
+function ctRowOfCard(d) {
+  const g = d.grade || {}, v = d.verdict || {}, pb = d.player_block || {}, nm = d.next_match || {}, l = d._l10;
+  return {book: d.book || null, player: pb.player?.nick, nick: pb.player?.nick, player_id: pb.player?.id, team_name: pb.playing_for || pb.current_team,
+    opp_name: nm.opponent, start: d.line_start || nm.start, match_start: d.match_start || nm.start, event: nm.event, prop: g.prop, scope: g.scope || "12",
+    line: g.line, line_type: g.line_type || "standard", side: v.side, p: v.p, grade: v.grade, model_grade: v.model_grade, units: v.units,
+    units_full: v.units_full, cap_n: v.cap_n, cap_reason: v.cap_reason, stake_reason: v.stake_reason, state: v.state, unavailable: sideGone(v) || null,
+    hltv_retry: v.kept_from_board || v.stale || g.withheld ? true : null, graded_at: v.graded_at, proj: g.withheld ? null : g.lambda_final,
+    model_outcomes: g.probs_raw, match_id: v.match_id || null, match_slug: nm.slug || (nm.hltv_match ? "hltv-" + nm.hltv_match : null),
+    l10_n: l ? l.n : null, l10_over: l ? l.over : null, l10_push: l ? l.push : null};
+}
+// a match-table pick: the board's own row for that line when it is on the board, else the table's numbers
+function ctMcRow(nick, line, prop) {
+  const j = MC.data; if (!j) return null;
+  const t = j.teams.find(t => t.players.some(p => p.nick === nick)), c = t?.players.find(p => p.nick === nick)?.[prop];
+  if (!c || c.line == null || !c.side || c.pending) return null;
+  const bk = j.book || MC.book, st = Date.parse(j.match?.start || ""), n = String(nick).toLowerCase();
+  const live = ((BK[bk] || {}).rows || []).filter(r => String(r.nick || r.player).toLowerCase() === n && +r.line === +c.line && r.prop === prop
+    && (r.scope || "12") === MC.scope && mktType(r) === "standard" && (isNaN(st) || Math.abs(Date.parse(r.start) - st) <= 6 * 3600000));
+  if (live.length) return live.sort((a, b) => Math.abs(Date.parse(a.start) - st) - Math.abs(Date.parse(b.start) - st))[0];
+  return Object.assign({}, c, {book: bk, nick, player: nick, team_name: t.team, opp_name: (j.teams.find(x => x !== t) || {}).team, start: j.match?.start,
+    prop, scope: MC.scope, line: c.line, line_type: "standard"});
+}
+function ctBtnRow(r) { if (!r.side) return ""; const on = ctHas(r);
+  return `<button type="button" class="bcmp${on ? " on" : ""}" data-bcmp="${esc(bslipKey(r))}" aria-pressed="${on}" title="${on ? "In Compare – tap to remove" : "Compare this prop with others"}">${on ? "✓" : "⇄"}<span class="bcmpt"> Compare</span></button>`; }
+function ctMcBtn(e, c, pr) { const r = ctMcRow(e.nick, c.line, pr); if (!r) return ""; const on = ctHas(r);
+  return ` <button type="button" class="mccmp${on ? " on" : ""}" data-mccmp="${esc(e.nick)}|${c.line}|${pr}" aria-pressed="${on}" title="${on ? "In Compare – tap to remove" : "Compare this prop with others"}" aria-label="Compare ${esc(e.nick)} ${pr === "hs" ? "headshots" : "kills"} ${c.line}">${on ? "✓" : "⇄"}</button>`; }
+function ctToggle(r, src) {
+  if (!r || !r.side) return toast("This line is still being graded – nothing to compare yet");
+  const k = ctKey(r), L = ctList(), i = L.findIndex(x => x.k === k);
+  if (i >= 0) { L.splice(i, 1); store.set(CT_KEY, L); toast(`Removed from Compare – ${L.length} left`); }
+  else {
+    if (L.length >= CT_MAX) return toast(`Compare holds ${CT_MAX} props – remove one first`, 3000);
+    L.push({k, src: src || "board", at: Date.now(), r: ctSnap(r)}); store.set(CT_KEY, L);
+    toast(`Added to Compare – ${L.length} of ${CT_MAX}${L.length >= 2 ? " · open Compare to see them side by side" : ""}`, 2600);
+  }
+  ctSync();
+  try { if (!$("#board").hidden && boardRows.length) drawBoard(); } catch {}
+}
+// the prop now: the live board row with this exact identity, else the saved numbers (a line no longer on its platform's
+// board is named as such; a card's own line - typed or nudged - keeps the card's grade)
+function ctResolve(it) {
+  const s = it.r, bk = s.book;
+  if (bk && BK[bk] && BK[bk].loaded) {
+    const live = BK[bk].rows.find(x => ctKey(x) === it.k);
+    if (live) return {r: live, live: true, src: it.src};
+    if (it.src !== "card") {
+      const mv = BK[bk].rows.find(x => x.line != null && ctKey(Object.assign({}, x, {line: s.line})) === it.k);
+      return {r: s, gone: true, moved: mv ? mv.line : null, src: it.src};
+    }
+  }
+  return {r: s, src: it.src};
+}
+// why a prop is not in the verdict (empty = eligible): Leans, sides not offered, started matches, props being graded or
+// regraded, and lines no longer on the board are never "the better line"
+function ctWhyNot(x) {
+  const r = x.r;
+  if (x.gone) return x.moved != null ? `${bookName(r.book)} moved this line to ${x.moved}` : `not on ${bookName(r.book)} now`;
+  if (hasStarted(r)) return "match started – the line is locked";
+  if (!r.side || r.p == null) return "being graded";
+  if (sideGone(r)) return String(sideGone(r));
+  if (r.state === "SCOUT") return "no match scheduled";
+  if (r.hltv_retry || r.stale) return `graded ${clockTxt(r.graded_at) || "earlier"} – being regraded`;
+  if (r.graded_line != null && +r.graded_line !== +r.line) return `being graded at ${r.line}`;
+  if (!LETTERS.includes(mGrade(r))) return "Lean – the chance is under 55%";
+  return "";
+}
+// THE RULE: the higher chance for the graded side; a tie goes to the higher grade, then to more units
+const ctRank = (a, b) => (+b.p - +a.p) || ((G_RANK[mGrade(a)] ?? 9) - (G_RANK[mGrade(b)] ?? 9)) || ((+b.units || 0) - (+a.units || 0));
+const CT_RULE = "Rule: the highest chance for each prop's graded side wins; a tie goes to the higher grade, then to more units. Leans, sides not offered, started matches and props being graded are not eligible. This compares chances only – payouts differ by platform.";
+// one match: the canonical match id / slug the slip uses, or the board's own match grouping
+const ctSameEv = (a, b) => slipEvent(a) === slipEvent(b) || (!!a._mk && a._mk === b._mk) || (/^hltv:/.test(a.match_id || "") && a.match_id === b.match_id);
+// the chance of side G at this prop's line: the graded side's own chance, or the other side's (1 - p, as the card shows it)
+const ctSideP = (r, G) => r.side == null || r.p == null ? null : r.side === G ? +r.p : +(1 - +r.p).toFixed(3);
+const ctOffered = (r, G) => r.side === G ? !sideGone(r) : G === "Less" ? r.under_available !== false : r.over_available !== false;
+function ctState(L) {
+  const R = L.map(ctResolve);
+  R.forEach(x => { x.why = ctWhyNot(x); });
+  const el = R.map((x, i) => i).filter(i => !R[i].why).sort((i, j) => ctRank(R[i].r, R[j].r) || i - j);
+  const win = el.length ? el.filter(i => ctRank(R[i].r, R[el[0]].r) === 0) : [];
+  // the same player, stat and maps in one match on both platforms (standard lines only): which line is better for the side
+  const pairs = [];
+  for (let i = 0; i < R.length; i++) for (let j = i + 1; j < R.length; j++) {
+    const a = R[i].r, b = R[j].r;
+    if (!a.book || !b.book || a.book === b.book || stdKey(a) !== stdKey(b) || mktType(a) !== "standard" || mktType(b) !== "standard") continue;
+    if (!(ctSameEv(a, b) || stdSameMatch(a, b))) continue;
+    const ok = [i, j].filter(k => !R[k].why).sort((x, y) => ctRank(R[x].r, R[y].r));
+    const G = ok.length ? R[ok[0]].r.side : a.side && a.side === b.side ? a.side : null;
+    if (G) pairs.push({i, j, G});
+  }
+  // props that share one match (any players): related results - a warning, never a combined chance
+  const groups = [];
+  R.forEach((x, i) => { const g = groups.find(g => ctSameEv(R[g[0]].r, x.r)); if (g) g.push(i); else groups.push([i]); });
+  // one player's same prop on two platforms is already the pair note above - the warning is for different props
+  return {R, el, win, pairs, same: groups.filter(g => g.length > 1 && new Set(g.map(i => stdKey(R[i].r))).size > 1)};
+}
+const ctPoss = n => n + (/s$/.test(n) ? "'" : "'s");
+const ctName = r => `${esc(r.nick || r.player)} ${propWord(r.prop)} ${ctScope(r.scope)}`;
+function ctPairHtml(S, pr) {
+  const a = S.R[pr.i].r, b = S.R[pr.j].r, G = pr.G, sd = sideTxt(G);
+  const at = x => `${bookName(x.book)} ${esc(x.line)}: ${ctOffered(x, G) && ctSideP(x, G) != null ? `<b>${chance(ctSideP(x, G), x.prop)}</b>${pushTag(x.line, x.model_outcomes)}` : `${sd} not offered`}`;
+  let v;
+  if (+a.line === +b.line) v = `Same line on both platforms.`;
+  else {
+    const best = (G === "More") === (+a.line < +b.line) ? a : b, other = best === a ? b : a;
+    v = ctOffered(best, G) ? `<b>${ctPoss(bookName(best.book))} ${esc(best.line)}</b> is the better line for the ${sd} (${G === "More" ? "lower" : "higher"} line).`
+      : `${bookName(best.book)} does not offer the ${sd} at ${esc(best.line)}; ${ctPoss(bookName(other.book))} ${esc(other.line)} is the line offered for it.`;
+  }
+  return `<div class="ctpair"><div><b>${ctName(a)}</b> · ${sd} on both platforms</div><div>${at(a)} · ${at(b)}</div><div>${v} <span class="muted">One outcome on two platforms – pick one line, not both.</span></div></div>`;
+}
+function ctColHtml(S, i, onSlip, idx) {
+  const x = S.R[i], r = x.r, nick = r.nick || r.player, team = r.team_name || r.team, opp = r.opp_name || r.opponent, g = mGrade(r), gone = sideGone(r);
+  const lab = !r.side ? "…" : r.state === "SCOUT" || gone ? "–" : g === "LEAN" ? "L" : g;
+  const l = l10Of(r), ds = dsOf(r), win = S.win.includes(i), sd = r.side === "Less" ? "Under" : "Over";
+  const f = (k, v) => `<div class="ctf"><span class="k">${k}</span><span class="ctv">${v}</span></div>`;
+  const moves = [bumpHtml(r), r.book ? lineGapHtml(r, idx) : ""].join("").trim();
+  const slipOk = r.side && !gone && r.state !== "SCOUT" && !x.gone && !hasStarted(r), on = onSlip.has(slipKeyRow(r));
+  return `<article class="ctcol${win ? " win" : ""}${x.why ? " out" : ""}">
+    <div class="cthead"><span class="gtag ${!r.side || r.state === "SCOUT" || gone ? "g-scout" : gClass(g)}">${esc(lab)}</span>
+      <div class="ctwho"><b>${esc(nick)}</b><span class="muted small">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}</span></div>
+      <button type="button" class="ctx" data-ctrm="${i}" aria-label="Remove ${esc(nick)} from Compare" title="Remove">✕</button></div>
+    ${win ? `<div class="ctwin">${S.win.length > 1 ? "Tied – better line" : "Better line"}</div>` : x.why ? `<div class="ctout">Not eligible – ${esc(x.why)}</div>` : ""}
+    ${f("Match", `${shortWhen(r.start) || "–"}`)}
+    ${f("Stat", `${propWord(r.prop)} · ${ctScope(r.scope)}${mktTag(r)}`)}
+    ${f("Platform · line", `${r.book ? bookName(r.book) : "Your line"} · <b class="ctline">${esc(r.line)}</b>`)}
+    ${f("Pick · chance", boardPickHtml(r, true))}
+    ${f("Grade · stake", boardStakeHtml(r) || "–")}
+    ${f("Projection", r.proj != null ? num(r.proj, 1) : "–")}
+    ${f("Last 10 at this line", l ? `${l.k}/${l.n} ${sd}${l.push ? ` · ${l.push} push` : ""}` : "–")}
+    ${f("Line moves", moves || "–")}
+    ${f("Data", [ds ? `<span class="dstat ${ds[0]}">${esc(ds[1])}</span>` : "", r.graded_at ? `graded ${esc(agoTxt(r.graded_at))}` : ""].filter(Boolean).join(" · ") || "–")}
+    <div class="ctacts">${slipOk ? `<button type="button" class="bslip ${on ? "on" : ""}" data-ctslip="${i}">${on ? "On slip" : "+ Slip"}</button>` : `<button type="button" class="bslip" disabled>+ Slip</button>`}
+      <button type="button" class="chipbtn" data-ctcard="${i}">Open card</button></div>
+  </article>`;
+}
+function ctHtml(L) {
+  const S = ctState(L), n = L.length, idx = stdIndex(), onSlip = new Set(store.get("cs2s_slip", []).map(slipKeyLeg));
+  let v;
+  if (n < 2) v = `<p>Add ${n ? "at least one more prop" : "props"} to compare (up to ${CT_MAX}) – tap <b>⇄ Compare</b> on a board row, Top plays, the Matchroom, a card or the match table.</p>`;
+  else if (!S.el.length) v = `<p><b>No eligible prop.</b> Every prop here is a Lean, has no offered side, has started or is being graded.</p>`;
+  else {
+    const w = S.R[S.win[0]].r;
+    v = S.win.length > 1
+      ? `<h3>Tied on the rule</h3><p>${S.win.map(i => `<b>${ctName(S.R[i].r)}</b> ${esc(sideWord(S.R[i].r))} ${esc(S.R[i].r.line)} (${S.R[i].r.book ? bookName(S.R[i].r.book) : "your line"}) · ${chance(S.R[i].r.p, S.R[i].r.prop)}`).join("<br>")}</p><p class="small muted">Same chance, grade and units.</p>`
+      : `<h3>${esc(w.nick || w.player)} ${esc(sideWord(w))} ${esc(w.line)} ${propWord(w.prop)} <span class="muted">· ${ctScope(w.scope)} · ${w.book ? bookName(w.book) : "your line"}</span>${mktTag(w)}</h3>
+         <p class="ctbig"><b>${chance(w.p, w.prop)}</b>${pushTag(w.line, w.model_outcomes)} · ${boardStakeHtml(w)}</p>
+         <div class="ctacts">${!sideGone(w) && w.state !== "SCOUT" && !hasStarted(w) ? `<button type="button" class="go" data-ctslip="${S.win[0]}">${onSlip.has(slipKeyRow(w)) ? "On slip" : "+ Add to slip"}</button>` : ""}<button type="button" class="chipbtn" data-ctcard="${S.win[0]}">Open card</button></div>`;
+  }
+  const notes = S.pairs.map(pr => ctPairHtml(S, pr)).join("")
+    + S.same.map(g => { const r0 = S.R[g[0]].r;
+        return `<div class="ctwarn"><b>Same match – results are related.</b> ${g.map(i => `${ctName(S.R[i].r)} ${esc(S.R[i].r.line)}${S.R[i].r.book ? " (" + bookName(S.R[i].r.book) + ")" : ""}`).join(", ")} (${esc(r0.team_name || r0.team || "")} vs ${esc(r0.opp_name || r0.opponent || "")}). Each chance is for its own prop; no combined chance is shown.</div>`; }).join("");
+  return `<div class="ctbar"><b>Compare</b><span class="small muted">${n} of ${CT_MAX} props</span><span class="ctgrow"></span>${n ? `<button type="button" class="chipbtn" data-ctclear="1">Clear</button>` : ""}<button type="button" class="chipbtn" data-ctclose="1">✕ Close</button></div>
+    <section class="ctverdict" aria-label="Better line"><div class="eyebrow">Better line</div>${v}<p class="small muted ctrule">${CT_RULE}</p>${notes}</section>
+    ${n ? `<div class="ctgrid">${L.map((it, i) => ctColHtml(S, i, onSlip, idx)).join("")}</div>` : ""}
+    <p class="small muted">Every number is the board's own for that line (a card's own line keeps the card's numbers). Not financial advice.</p>`;
+}
+function ctSync() {
+  const n = ctList().length, b = $("#ctbtn");
+  if (b) { b.hidden = !n; b.textContent = `⇄ Compare (${n})`; }
+  if (!$("#cttray").hidden) ctDraw();
+}
+function ctDraw() { $("#ctbody").innerHTML = ctHtml(ctList()); }
+function ctOpen() {
+  $("#cttray").hidden = false; document.body.style.overflow = "hidden"; ctDraw();
+  // a prop from a platform whose board this page has not loaded yet: load that board (the one shared copy), then redraw
+  const need = [...new Set(ctList().map(i => i.r.book).filter(b => b && BK[b] && !BK[b].loaded))];
+  if (need.length) Promise.all(need.map(fetchBook)).then(() => { assignMatchKeys([...BK.underdog.rows, ...BK.prizepicks.rows]); if (!$("#cttray").hidden) ctDraw(); }).catch(() => {});
+}
+function ctClose() { if ($("#cttray").hidden) return; $("#cttray").hidden = true; if ($("#cardpop").hidden) document.body.style.overflow = ""; }
+// a prop from the tray as the card shape addToSlip expects (the slip's own rules and line checks decide)
+function ctCard(x) { const d = boardCard(x.r); if (x.src === "card" && !x.live) { delete d.from; d.book = x.r.book || null; } return d; }
+$("#ctbtn").addEventListener("click", ctOpen);
+$("#cttray").addEventListener("click", e => {
+  if (e.target.id === "cttray" || e.target.closest("[data-ctclose]")) return ctClose();
+  const L = ctList();
+  const rm = e.target.closest("[data-ctrm]");
+  if (rm) { L.splice(+rm.dataset.ctrm, 1); store.set(CT_KEY, L); ctSync(); try { if (!$("#board").hidden && boardRows.length) drawBoard(); } catch {} return; }
+  if (e.target.closest("[data-ctclear]")) { store.set(CT_KEY, []); ctSync(); try { if (!$("#board").hidden && boardRows.length) drawBoard(); } catch {} return; }
+  const sl = e.target.closest("[data-ctslip]");
+  if (sl) { const it = L[+sl.dataset.ctslip]; if (it) Promise.resolve(addToSlip(ctCard(ctResolve(it)))).then(() => { if (!$("#cttray").hidden) ctDraw(); }); return; }
+  const cd = e.target.closest("[data-ctcard]");
+  if (cd) { const it = L[+cd.dataset.ctcard]; if (!it) return; const r = ctResolve(it).r; ctClose();
+    gradeNow(r.nick || r.player, String(r.line), r.prop, gradeType(r), r.scope || "12", true, {team: r.team || r.team_name, opponent: r.opponent || r.opp_name, book: r.book || null, start: r.start, side: r.side || null}); }
+});
+window.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#cttray").hidden && !document.querySelector(".askwrap")) { e.stopImmediatePropagation(); ctClose(); } }, true);
+ctSync();
 // Matchroom reads the same board snapshot; all card requests still use gradeNow.
 // No fuzzy identity matching, quote fetching, new probability or stake calculation here.
 let otDeskRows = [], otDeskReturn = null;
@@ -4037,7 +4282,7 @@ function otTopPlays(rows) {
       <div class="tpbody"><div class="b2top"><b>${esc(nick)}</b> <span class="muted">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}</span></div>
         <div class="b2pick">${esc(sideWord(r))} ${esc(r.line)} ${propWord(r.prop)}${mapsWord(r.scope)} · <b>${chance(r.p, r.prop)}</b>${pushTag(r.line, r.model_outcomes)}${l10Chip(r)}</div>
         <div class="b2meta">${bookName(bk)}${mktTag(r)} · ${esc(g)} · ${+(+r.units).toFixed(2)}U${capChip(r, team)} · ${shortWhen(r.start)}</div>
-        <button type="button" class="bslip ${on ? "on" : ""}" data-bslip="${esc(bslipKey(r))}">${on ? "On slip" : "+ Slip"}</button></div></div>`; };
+        <span class="tpact"><button type="button" class="bslip ${on ? "on" : ""}" data-bslip="${esc(bslipKey(r))}">${on ? "On slip" : "+ Slip"}</button>${ctBtnRow(r)}</span></div></div>`; };
   return `<section class="ot-featured" aria-label="Top plays"><div class="tphead"><b>Top plays</b><span class="small muted">Highest chance under these filters · one per player · bets only</span></div>
     <div class="blist">${top.map(card).join("")}</div></section>`;
 }
@@ -4069,12 +4314,12 @@ function otOpenDesk(key, opener) {
   const offer = ({r,index}) => {
     const unavailable = sideGone(r);
     const pick = unavailable ? `${esc(unavailable)}` : r.side ? `${esc(sideWord(r))} ${esc(r.line)} · ${chance(r.p,r.prop)}${pushTag(r.line, r.model_outcomes)}` : 'Being graded';
-    return `<button type="button" class="ot-offer" data-ot-card="${index}" aria-label="Open ${esc(r.nick || r.player)} ${esc(propWord(r.prop))} ${esc(r.line)} on ${esc(bookName(r.book || 'underdog'))}">
+    return `<div class="ot-offerw"><button type="button" class="ot-offer" data-ot-card="${index}" aria-label="Open ${esc(r.nick || r.player)} ${esc(propWord(r.prop))} ${esc(r.line)} on ${esc(bookName(r.book || 'underdog'))}">
       <small>${esc(bookName(r.book || 'underdog'))} · ${esc(propWord(r.prop))} · ${esc(mktType(r))}</small>
       <span><b>Line ${esc(r.line)}</b> · Projection ${r.proj == null ? '—' : num(r.proj,1)}</span>
       <span>${pick}</span><small>${unavailable ? 'Unavailable' : `${isLeanV(r) ? (r.state === 'SCOUT' ? 'No match scheduled' : 'Lean') : esc(mGrade(r) || '')} · ${r.units == null ? '—' : esc(r.units)+'U'}${!r.units && r.stake_reason ? ' · ' + esc(r.stake_reason) : ''}`}</small>
       ${r.graded_at ? `<span class="ot-status">Graded ${esc(clockTxt(r.graded_at))} · ${esc(agoTxt(r.graded_at))}</span>` : ''}
-    </button>`;
+    </button>${r.side ? `<button type="button" class="ot-cmp${ctHas(r) ? " on" : ""}" data-ot-cmp="${index}" aria-pressed="${ctHas(r)}">${ctHas(r) ? "✓ In Compare" : "⇄ Compare"}</button>` : ""}</div>`;
   };
   dlg.innerHTML = `<div class="ot-desk-head"><div><span class="eyebrow">MATCHROOM · ${esc((SCOPE_TXT[bscope] || 'Maps 1–2'))}</span><h2 id="ot-desk-title">${esc(first.team_name || first.team)} vs ${esc(first.opp_name || first.opponent)}</h2><p>${first.event ? esc(first.event) + ' · ' : ''}${otDeskRows.length} posted lines in this platform view</p></div><button type="button" class="ot-desk-close" data-ot-close>Close</button></div>
     <div class="ot-desk-content">${otStartNotice(otDeskRows)}<div class="ot-veto" id="ot-veto"></div><p class="small muted">Players with posted lines in this view. Each offer keeps its own projection, probability, grade and stake. Select an offer for its full player analysis.</p>
@@ -4098,6 +4343,8 @@ function otCloseDesk() {
 }
 $('#ot-match-desk').addEventListener('click',e=>{
   if (e.target.closest('[data-ot-close]')) return otCloseDesk();
+  const cb=e.target.closest('[data-ot-cmp]');
+  if (cb) { const r=otDeskRows[Number(cb.dataset.otCmp)]; if (r) { ctToggle(r, "matchroom"); const on=ctHas(r); cb.classList.toggle("on", on); cb.setAttribute("aria-pressed", String(on)); cb.textContent = on ? "✓ In Compare" : "⇄ Compare"; } return; }
   const button=e.target.closest('[data-ot-card]');
   if (!button) return;
   const r=otDeskRows[Number(button.dataset.otCard)]; if (!r) return;
