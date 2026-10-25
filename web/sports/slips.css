@@ -104,3 +104,10 @@
 /* uiqa 2026-10-24: all five views fit a 360 px phone; summaries are full-size targets */
 @media (max-width: 640px) { .ss-nav { gap: 0; } .ss-nav a { padding: 0 7px; } }
 .ss-pool details summary { min-height: 44px; display: flex; align-items: center; gap: 6px; }
+/* uifix: research legs (sp-2), locked state, details toggle */
+.ss-banner.ss-warnmsg { color: var(--ss-ink); border: 1px solid var(--ss-warn); background: color-mix(in srgb, var(--ss-warn) 12%, var(--ss-panel)); }
+.ss-banner.ss-warnmsg strong { color: var(--ss-warn); }
+.ss-tag.ss-research { color: var(--ss-warn); border: 1px solid var(--ss-warn); background: transparent; }
+.ss-locked { border: 1px dashed var(--ss-line); border-radius: 8px; padding: 10px 12px; }
+.ss-reasons { margin: 6px 0; padding-left: 18px; font-size: .88rem; }
+.ss-details summary { cursor: pointer; color: var(--ss-mute); font-size: .85rem; }

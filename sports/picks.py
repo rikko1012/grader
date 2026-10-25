@@ -428,12 +428,46 @@ def _view(row, st):
                                                "settled_at": st["settled_at"], "corrected": st["revision"] > 1}}
 
 
-def mine(con, member, limit=200):
+RECORD_SCAN = 2000                                       # per-member rows read for the W-L-P record (bounded)
+
+
+def _row_league(row, payload):
+    lg = row["league"] if "league" in row.keys() else None
+    return lg or payload.get("league")
+
+
+def mine(con, member, limit=200, league=None, include_test=False):
+    """The member's own picks, newest first. league: "nba" | "nfl" | None (all). Test / scratch records (scratch_reason:
+    admin token, marked test, SPORTS_PICKS_SCRATCH preview) are HIDDEN unless include_test (the API allows that for an
+    admin token only); hidden_test counts them. record: W-L-P per league over the member's non-test picks (no money,
+    no EV, no returns)."""
     mh = member_hash(member)
-    rows = con.execute("SELECT * FROM picks WHERE member=? ORDER BY tracked_at DESC LIMIT ?", (mh, limit)).fetchall()
-    out = [_view(r, latest_settlement(con, r["pick_id"])) for r in rows]
-    n = con.execute("SELECT COUNT(*) FROM picks WHERE member=?", (mh,)).fetchone()[0]
-    return {"version": VERSION, "picks": out, "total": n, "shown": len(out), "stake_units": 0}
+    rows = con.execute("SELECT * FROM picks WHERE member=? ORDER BY tracked_at DESC LIMIT ?", (mh, RECORD_SCAN)).fetchall()
+    record, hidden, kept = {}, 0, []
+    for r in rows:
+        pl = json.loads(r["payload"])
+        lg = _row_league(r, pl)
+        test = bool(pl.get("scratch"))
+        if test and not include_test:
+            hidden += 1 if league in (None, lg) else 0
+            continue
+        if not test:
+            st = latest_settlement(con, r["pick_id"])
+            c = record.setdefault(lg or "unknown", {"win": 0, "loss": 0, "push": 0, "void": 0, "open": 0})
+            k = st["status"] if st is not None and st["status"] in ("win", "loss", "push", "void") else "open"
+            c[k] += 1
+        if league is None or lg == league:
+            kept.append(r)
+    for c in record.values():
+        c["decided"] = c["win"] + c["loss"]
+        c["hit_rate"] = round(c["win"] / c["decided"], 4) if c["decided"] else None
+    out = [_view(r, latest_settlement(con, r["pick_id"])) for r in kept[:limit]]
+    for v, r in zip(out, kept):
+        if not v.get("league"):
+            v["league"] = r["league"]
+    return {"version": VERSION, "picks": out, "total": len(kept), "shown": len(out), "stake_units": 0,
+            "league": league, "hidden_test": hidden, "include_test": bool(include_test), "record": record,
+            "record_scope": f"newest {RECORD_SCAN} picks" if len(rows) >= RECORD_SCAN else "all picks"}
 
 
 def _cluster_ci(items, stat, reps=1000, seed=7):

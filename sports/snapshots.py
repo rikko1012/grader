@@ -45,8 +45,8 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-from . import (cache, capabilities, config, fair, flags, forecast_detail, game_lines, identity, market_view, markets,
-               scout_chance, store)
+from . import (board_view, cache, capabilities, config, fair, flags, forecast_detail, game_lines, identity,
+               market_view, markets, scout_chance, store)
 from .contracts import (ContractError, Event, Membership, SourceId, StatObservation, from_dict, now_utc, parse_utc,
                         utc)
 
@@ -258,6 +258,9 @@ def gamelog_records(league, athlete_id, body, observed_at):
     return evs, mems, stats
 
 
+GAMELOG_CURRENT_TTL_S = 3 * 3600      # a current-season log is re-read after 3 h (a finished game shows the same night)
+
+
 def _gamelog_bodies(league, athlete_id, seasons, cache_only):
     from . import espn, net
     lg = config.league(league)
@@ -274,7 +277,7 @@ def _gamelog_bodies(league, athlete_id, seasons, cache_only):
             if b:
                 bodies.append(b)
         return bodies
-    body = cache.fetch("espn:gamelog", key, 6 * 3600, lambda: net.get_json(url))
+    body = cache.fetch("espn:gamelog", key, GAMELOG_CURRENT_TTL_S, lambda: net.get_json(url))
     bodies.append(body)
     season = espn._season_of(body)
     for back in range(1, seasons):
@@ -311,7 +314,11 @@ def ingest_history(con, league, player_ids, observed_at=None, seasons=2, cache_o
     is a duplicate, a corrected game-log value is a revision."""
     observed_at = observed_at or now_utc()
     c = {"players": 0, "unchanged": 0, "no_log": 0, "errors": 0, "inserted": 0, "duplicate": 0, "revision": 0, "invalid": 0}
-    for pid in list(player_ids)[:max_players]:
+    # least recently checked first (never checked first of all), so small frequent runs cover every board player
+    # instead of re-reading the same first max_players in id order
+    order = sorted(player_ids, key=lambda p: (cache.get("ui:gamelog_checked", p) or "", p))
+    for pid in order[:max_players]:
+        cache.put("ui:gamelog_checked", pid, observed_at)
         aid = pid.rsplit(":", 1)[-1]
         try:
             bodies = _gamelog_bodies(league, aid, seasons, cache_only)
@@ -906,6 +913,8 @@ def build(con, league, now=None, base=None, history=True, results=True):
     pl_dir, hi_dir = root / "players", root / "history"
     ctx_by_pid, ctx_summary = _engine_context(league, fam, now, pids, markets_rows, events, cur_team, root)
     manifest["player_context"] = ctx_summary
+    view_out = board_view.StreamWriter(root / "board_view.json",       # bv-1 hit rates, streamed per player
+                                       {**base_meta, "part": "view", "rule": board_view.VERSION})
     for pid in pids:
         rows = [r for r in markets_rows.values() if r["player_id"] == pid]
         p = players.get(pid)
@@ -919,6 +928,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
                        "opponent": _team_view(teams, e.away_team_id if tid == e.home_team_id else e.home_team_id)
                        if tid in (e.home_team_id, e.away_team_id) else None}
         games = player_games(con, league, pid, now, teams) if history else []
+        view_out.add(board_view.player_rows(rows, games))
         tid = cur_team.get(pid)
         mates_out = []
         for mate in sorted(team_players.get(tid, ())):
@@ -952,6 +962,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
             "history": {"games": len(games), "sources": sorted({s for g in games for s in g["source"]})}})
         _write(hi_dir / f"{safe_name(pid)}.json", {**base_meta, "player_id": pid, "family": fam, "games": games})
         n_players += 1
+    sizes["board_view"] = view_out.close()
     if results:
         sizes["results"] = _write(root / "results.json", {**res_obj, **base_meta})
     manifest["sizes"] = sizes
@@ -986,7 +997,7 @@ def compact_quote(q):
 
 def compact_row(r):
     return {"k": r["key"], "e": r["event_id"], "pid": r["player_id"], "n": r["player"], "pos": r["position"],
-            "tm": r["team"], "st": r["stat"], "pr": 1 if r["primary"] else 0, "cap": r["capability"],
+            "tm": r["team"], "tid": r.get("team_id"), "st": r["stat"], "pr": 1 if r["primary"] else 0, "cap": r["capability"],
             "q": [compact_quote(q) for q in r["quotes"]], "kn": [compact_quote(q) for q in r["kalshi_near"]],
             "kr": r["kalshi_rungs"], "alt": r["alternates"], "promo": r["promotional"], "mk": r.get("market"),
             "sc": r.get("sc", 0), "hid": scout_chance.hidden_reason(r)}

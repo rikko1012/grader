@@ -75,6 +75,8 @@ def default_jobs():
         # heavy child and no light child fits the 310 MB budget, so service (~70) + build stays near 370 of 512 MB.
         **{f"ui-snapshots-{x}": dict(argv=_py("-m", "sports.snapshots", "build", x, "--no-results"), every_s=180,
                                      timeout_s=240, flag="SPORTS_INGEST", cap_mb=300, cls=HEAVY, prio=2) for x in lg},
+        "sheets": dict(argv=_py("-m", "sports.sheets", "build", *lg), every_s=300, timeout_s=300,
+                       flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=3),   # 67 / 126 / 26 MB measured (synthetic 400-player league)
         "mapping-audit": dict(argv=_py("-m", "sports.mapping_audit", *lg), every_s=3600, timeout_s=240,
                               flag="SPORTS_INGEST", cap_mb=250, cls=HEAVY, prio=3),  # one offer scan per league / hour
         "slips-ingest": dict(argv=_py("-m", "sports.slips", "ingest"), every_s=300, timeout_s=300,
@@ -125,8 +127,10 @@ def default_jobs():
         "lab": dict(argv=_py("-m", "sports.lab.runner", "--once"), every_s=900, timeout_s=3600, flag="SPORTS_TRAIN",
                     cap_mb=340, cls=EXCLUSIVE, prio=7),                        # idle 34 MB; training up to fit size
         # slow / maintenance
-        "history": dict(argv=_py("-m", "sports.snapshots", "history", *lg, "--max-players", "400"), every_s=86400,
-                        timeout_s=10800, flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=6),   # 107 MB @ 40 players
+        # player game logs: small rotating batches (least recently checked first) every 15 min, so every board player
+        # is re-read within ~3 h and a finished game reaches the player page the same night
+        "history": dict(argv=_py("-m", "sports.snapshots", "history", *lg, "--max-players", "60"), every_s=900,
+                        timeout_s=900, flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=6),   # 107 MB @ 40 players
         "archive": dict(argv=_py("-m", "sports.archive", "pass"), every_s=6 * 3600, timeout_s=1800,
                         flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=6),      # 140 MB (80k rows)
         "archive-verify": dict(argv=_py("-m", "sports.archive", "verify"), every_s=86400, timeout_s=1800,

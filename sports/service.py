@@ -440,6 +440,8 @@ class Handler(BaseHTTPRequestHandler):
             if ops_admin or (claims and claims["role"] == "admin"):
                 return self._send(200, ops_with_alerts(), headers=cors)
             return self._send(403, {"error": "admin_only"}, headers=cors)
+        if claims is None and web.public_open(u.path, method):     # PUBLIC_WHEN flag on: no token needed
+            claims = {"sub": None, "role": None}
         if claims is None:
             with _SLOCK:
                 STATS["unauthorized"] += 1

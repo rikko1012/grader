@@ -72,7 +72,7 @@
   }
   function compact(l) {
     var keep = ["platform", "offer_id", "record_id", "forecast_id", "side", "line", "variant", "multiplier", "start_utc",
-      "player_id", "player", "team", "stat", "stat_label", "event_id", "event_ref", "custom", "p_win", "p_loss", "p_push", "model_version"];
+      "player_id", "player", "team", "stat", "stat_label", "event_id", "event_ref", "custom", "p_win", "p_loss", "p_push", "model_version", "research_only"];
     var o = {}; keep.forEach(function (k) { if (l[k] !== undefined && l[k] !== null) o[k] = l[k]; }); return o;
   }
   function slipPayload(d) {
@@ -96,17 +96,43 @@
   }
 
   /* ---------------------------------------------------------------- pool */
+  var L = window.SportsLabels || { slipReason: function (x) { return x; } };
+  var RESEARCH_TEXT = "Research estimates - not validated; stakes 0";
+  function researchBanner(show) {                     // owner choice (sp-2): research legs allowed, always labelled
+    var b = $("ss-research");
+    if (!b) return;
+    b.hidden = !show;
+  }
+  function reasonList(p) {
+    var ex = Object.keys(p.excluded || {}).sort(function (a, b) { return p.excluded[b] - p.excluded[a]; });
+    return ex.map(function (k) { return "<li>" + esc(L.slipReason(k)) + ': <span class="ss-num">' + p.excluded[k] + "</span></li>"; }).join("");
+  }
   async function loadPool() {
     var el = $("ss-pool"); el.innerHTML = '<div class="ss-skel" aria-label="Loading picks"></div>';
     try {
       var p = await api("/api/sports/slips/pool", { league: ctx().league, platform: ctx().platform });
       lastPool = p;
-      var ex = Object.keys(p.excluded || {}).sort(function (a, b) { return p.excluded[b] - p.excluded[a]; });
-      el.innerHTML = '<p><strong class="ss-num">' + p.eligible + "</strong> eligible picks of " + p.offers +
-        " offers - prices as of " + esc(when(p.snapshot_at)) + ".</p>" +
-        (ex.length ? "<details><summary>Why other offers are left out</summary><ul>" + ex.map(function (k) {
-          return "<li>" + esc(k) + ": <span class=ss-num>" + p.excluded[k] + "</span></li>"; }).join("") + "</ul></details>" : "");
+      var nres = p.research_legs != null ? p.research_legs : (p.legs || []).filter(function (l) { return l.research_only; }).length;
+      researchBanner(nres > 0 || draftHasResearch());
+      $("ss-build").disabled = !p.eligible;
+      if (!p.eligible) {                               // never a silent "0 picks": a clear locked state with the reasons
+        el.innerHTML = '<div class="ss-locked" role="status"><p><strong>No pick can go into a ' + esc(LABEL[ctx().platform]) + " " + esc(ctx().league.toUpperCase()) +
+          " slip right now.</strong> " + (p.offers ? "Scout holds " + p.offers + " " + esc(LABEL[ctx().platform]) + " lines, and none can be used yet:" : "No " + esc(LABEL[ctx().platform]) + " lines are on the board yet.") + "</p>" +
+          (p.offers ? '<ul class="ss-reasons">' + reasonList(p) + "</ul>" : "") +
+          '<p class="ss-help">Lines open again as books post the next games and Scout projects them. Prices as of ' + esc(when(p.snapshot_at)) + ".</p></div>";
+        return;
+      }
+      el.innerHTML = '<p><strong class="ss-num">' + p.eligible + "</strong> picks can go into a slip, of " + p.offers +
+        " lines - prices as of " + esc(when(p.snapshot_at)) + "." + (nres ? " " + nres + " of them are research estimates (stake 0)." : "") + "</p>" +
+        (Object.keys(p.excluded || {}).length ? "<details><summary>Why other lines are left out</summary><ul class=\"ss-reasons\">" + reasonList(p) + "</ul></details>" : "");
     } catch (e) { el.innerHTML = '<p class="ss-note">' + esc(e.message) + "</p>"; }
+  }
+  function draftHasResearch() {
+    var d = getDraft();
+    return d.legs.some(function (l, i) { var c = lastCheck && lastCheck.current && lastCheck.current[i]; return l.research_only || (c && c.research_only); });
+  }
+  function humanProblem(t) {                          // "...(game in_progress)" -> "...(Game in progress)"
+    return String(t || "").replace(/\(([^()]+)\)$/, function (_m, r) { return "(" + L.slipReason(r) + ")"; });
   }
 
   /* ---------------------------------------------------------------- build */
@@ -136,7 +162,8 @@
       '<span class="ss-num">' + esc(l.line) + "</span></span>" +
       '<span class="ss-meta">' + esc(l.stat_label || l.stat) + " - " + esc(l.event_ref || "") + " - " + esc(when(l.start_utc)) +
       (l.custom ? " - no Scout chance for a line that is not offered" : l.p_win != null ? ' - Scout chance <span class="ss-num">' + pct(l.p_win) + "</span>" + (l.p_push ? " (push " + pct(l.p_push) + ")" : "") : "") +
-      (l.custom ? ' <span class="ss-tag ss-hyp">custom line - hypothetical</span>' : "") + "</span>" + (extra || "") + "</li>";
+      (l.custom ? ' <span class="ss-tag ss-hyp">custom line - hypothetical</span>' : "") +
+      (l.research_only ? ' <span class="ss-tag ss-research" title="' + esc(RESEARCH_TEXT) + '">Research estimate · stake 0</span>' : "") + "</span>" + (extra || "") + "</li>";
   }
   function payoutList(p) {
     if (!p) return "";
@@ -169,7 +196,10 @@
         '<ul class="ss-legs">' + s.legs.map(function (l) { return legRow(s.platform, l); }).join("") + "</ul>" +
         jointText(s.joint) + payoutList(s.payout) + "</article>";
     }).join("") + "</div>";
-    h += '<p class="ss-note">Builder ' + esc(b.builder_version) + " - policy " + esc(b.policy_version) + " - prices as of " + esc(when(b.snapshot_at)) + (b.search && !b.search.exact ? " - search stopped at its limit (best found shown)" : "") + "</p>";
+    var anyRes = b.slips.some(function (s) { return s.legs.some(function (l) { return l.research_only; }); });
+    if (anyRes) h = '<p class="ss-banner ss-warnmsg" role="note"><strong>' + esc(RESEARCH_TEXT) + ".</strong> Picks tagged Research estimate come from a model that has not passed its live-line check.</p>" + h;
+    h += '<p class="ss-note">Prices as of ' + esc(when(b.snapshot_at)) + (b.search && !b.search.exact ? " - the search stopped at its limit (best found shown)" : "") + "</p>" +
+      '<details class="ss-details"><summary>Details</summary><p class="ss-note">Builder ' + esc(b.builder_version) + " - leg policy " + esc(b.policy_version) + " - rules " + esc(b.rules_version || "") + "</p></details>";
     out.innerHTML = h;
   }
   function useSlip(i) {
@@ -193,9 +223,11 @@
       var cur = lastCheck && lastCheck.current && lastCheck.current[i];
       if (probs[i] && cur && !l.custom) extra += ' <button class="ss-btn ss-small" type="button" data-take="' + i + '">Use current version</button>';
       extra += "</span>";
-      if (probs[i]) extra += '<ul class="ss-problems">' + probs[i].map(function (p) { return "<li>" + esc(p.text) + "</li>"; }).join("") + "</ul>";
-      return legRow(c.platform, l, extra);
+      if (probs[i]) extra += '<ul class="ss-problems">' + probs[i].map(function (p) { return "<li>" + esc(humanProblem(p.text)) + "</li>"; }).join("") + "</ul>";
+      var cur2 = lastCheck && lastCheck.current && lastCheck.current[i];
+      return legRow(c.platform, cur2 && cur2.research_only && !l.research_only ? Object.assign({}, l, { research_only: true }) : l, extra);
     }).join("") + "</ul>";
+    researchBanner((lastPool && lastPool.research_legs > 0) || draftHasResearch());
   }
   function editLine(i, v) {
     var d = getDraft(), l = d.legs[i], n = parseFloat(v);
@@ -222,7 +254,7 @@
       if (r.ok && r.payout_key && !d.payout_key) { d.payout_key = r.payout_key; store(draftKey(), d); }
       var h = r.ok ? '<p class="ss-okmsg">Every pick checked at ' + esc(when(r.checked_at)) + " (prices as of " + esc(ago(r.snapshot_at)) + ").</p>"
         : '<p role="alert"><strong>This slip changed - rebuild or reconfirm the marked picks.</strong></p><ul class="ss-problems">' +
-          r.problems.filter(function (p) { return p.leg == null; }).map(function (p) { return "<li>" + esc(p.text) + "</li>"; }).join("") + "</ul>";
+          r.problems.filter(function (p) { return p.leg == null; }).map(function (p) { return "<li>" + esc(humanProblem(p.text)) + "</li>"; }).join("") + "</ul>";
       h += jointText(r.joint) + payoutList(r.payout);
       box.innerHTML = h; renderDraft();
       return r;
@@ -255,10 +287,89 @@
   }
 
   /* ---------------------------------------------------------------- wiring */
-  function net() { var b = $("ss-net"); b.hidden = navigator.onLine; b.textContent = navigator.onLine ? "" : "You are offline - your slip is saved on this device."; }
-  document.addEventListener("DOMContentLoaded", function () {
+  function net() { var b = $("ss-net"); if (!b) return; b.hidden = navigator.onLine; b.textContent = navigator.onLine ? "" : "You are offline - your slip is saved on this device."; }
+  /* Slip Studio is a route of the main Sports page (#/slips: same header, CS2 / LoL / Sports switch, NBA / NFL toggle,
+     nav). SlipStudio.mount(container, {league}) renders the studio there; the league comes from the page toggle.
+     /sports/slips.html only redirects to /sports#/slips (old links and bookmarks keep working). */
+  var TEMPLATE = [
+    '  <header class="ss-head">',
+    '    <div>',
+    '      <p class="ss-kicker">Scout Sports</p>',
+    '      <h1 id="ss-title">Slip Studio</h1>',
+    '    </div>',
+    '    <div class="ss-context" role="group" aria-label="Sport and platform">',
+    '      <label class="ss-field ss-sport"><span>Sport</span>',
+    '        <select id="ss-league"><option value="nba">NBA</option><option value="nfl">NFL</option></select></label>',
+    '      <label class="ss-field"><span>Platform</span>',
+    '        <select id="ss-platform"><option value="underdog">Underdog</option><option value="prizepicks">PrizePicks</option></select></label>',
+    '      <label class="ss-field"><span>Entry</span><select id="ss-entry"></select></label>',
+    '    </div>',
+    '  </header>',
+    '',
+    '  <p class="ss-banner" id="ss-net" role="status" hidden></p>',
+    '  <p class="ss-banner ss-warnmsg" id="ss-research" role="note" hidden><strong>Research estimates - not validated; stakes 0.</strong>',
+    '    Picks tagged "Research estimate" come from a Scout model that has not yet passed its check on live lines. Track them, don\'t size them.</p>',
+    '',
+    '  <div class="ss-grid">',
+    '    <section class="ss-panel" aria-labelledby="ss-build-h">',
+    '      <h2 id="ss-build-h">Build suggestions</h2>',
+    '      <form id="ss-form" class="ss-form">',
+    '        <fieldset class="ss-seg" aria-describedby="ss-sides-help">',
+    '          <legend>Sides</legend>',
+    '          <label><input type="radio" name="sides" value="over"><span>Overs only</span></label>',
+    '          <label><input type="radio" name="sides" value="under"><span>Unders only</span></label>',
+    '          <label><input type="radio" name="sides" value="mixed" checked><span>Mixed</span></label>',
+    '          <label><input type="radio" name="sides" value="both"><span>Both eligible</span></label>',
+    '        </fieldset>',
+    '        <p class="ss-help" id="ss-sides-help">Mixed: every slip has at least one Over and one Under.',
+    '          Both eligible: no side rule, a slip can be all one side.</p>',
+    '        <fieldset class="ss-sizes">',
+    '          <legend>Slips per size</legend>',
+    '          <label>2 picks <input type="number" name="n2" min="0" max="10" value="0" inputmode="numeric"></label>',
+    '          <label>3 picks <input type="number" name="n3" min="0" max="10" value="3" inputmode="numeric"></label>',
+    '          <label>4 picks <input type="number" name="n4" min="0" max="10" value="0" inputmode="numeric"></label>',
+    '        </fieldset>',
+    '        <fieldset class="ss-seg">',
+    '          <legend>Overlap between slips</legend>',
+    '          <label><input type="radio" name="overlap" value="none" checked><span>No repeats</span></label>',
+    '          <label><input type="radio" name="overlap" value="allowed"><span>Allow repeats</span></label>',
+    '        </fieldset>',
+    '        <div class="ss-caps" id="ss-caps" hidden>',
+    '          <label>Same prop in up to <input type="number" name="cap_prop" min="1" max="5" value="2"> slips</label>',
+    '          <label>Same player in up to <input type="number" name="cap_player" min="1" max="5" value="2"> slips</label>',
+    '          <label>Same game in up to <input type="number" name="cap_event" min="1" max="20" value="3"> slips</label>',
+    '        </div>',
+    '        <label class="ss-check"><input type="checkbox" name="unique_events"> No game in two slips</label>',
+    '        <button class="ss-btn ss-primary" type="submit" id="ss-build">Build slips</button>',
+    '      </form>',
+    '      <div id="ss-pool" class="ss-pool" aria-live="polite"></div>',
+    '    </section>',
+    '',
+    '    <section class="ss-panel ss-results" aria-labelledby="ss-res-h">',
+    '      <h2 id="ss-res-h">Suggestions</h2>',
+    '      <div id="ss-results" aria-live="polite"><p class="ss-empty">Choose a sport and platform, then build.</p></div>',
+    '    </section>',
+    '',
+    '    <aside class="ss-panel ss-draft" aria-labelledby="ss-draft-h">',
+    '      <h2 id="ss-draft-h">Your slip <span class="ss-ctx" id="ss-draft-ctx"></span></h2>',
+    '      <div id="ss-draft"></div>',
+    '      <div class="ss-actions">',
+    '        <button class="ss-btn" type="button" id="ss-recheck">Recheck prices</button>',
+    '        <button class="ss-btn ss-primary" type="button" id="ss-copy">Copy slip</button>',
+    '        <button class="ss-btn ss-quiet" type="button" id="ss-result">Check result</button>',
+    '        <button class="ss-btn ss-quiet" type="button" id="ss-clear">Clear</button>',
+    '      </div>',
+    '      <div id="ss-check" class="ss-checkout" aria-live="assertive"></div>',
+    '    </aside>',
+    '  </div>',
+  ].join("\n");
+  var netBound = false;
+  function init(opts) {
+    opts = opts || {};
+    if (!netBound) { window.addEventListener("online", net); window.addEventListener("offline", net); netBound = true; }
+
     var c = store("ss:ctx") || {};
-    if (c.league) $("ss-league").value = c.league;
+    if (opts.league) $("ss-league").value = opts.league; else if (c.league) $("ss-league").value = c.league;
     if (c.platform) $("ss-platform").value = c.platform;
     fillEntry(c.entry_type);
     var s = store("ss:settings");
@@ -284,7 +395,15 @@
     $("ss-copy").addEventListener("click", copy);
     $("ss-result").addEventListener("click", result);
     $("ss-clear").addEventListener("click", function () { if (window.confirm("Clear this slip?")) { lastCheck = null; setDraft({ legs: [] }); $("ss-check").innerHTML = ""; } });
-    window.addEventListener("online", net); window.addEventListener("offline", net); net();
+    net();
     onCtx();
-  });
+  }
+  function mount(el, opts) {
+    lastBatch = null; lastPool = null; lastCheck = null;
+    el.innerHTML = '<div class="ss-body ss-embed"><div class="ss-studio" id="ss-studio" aria-labelledby="ss-title">' + TEMPLATE + "</div></div>";
+    if (opts && opts.league) { var f = el.querySelector(".ss-sport"); if (f) f.hidden = true; }    // the page toggle picks the league
+    init(opts);
+  }
+  window.SlipStudio = { mount: mount };
+  document.addEventListener("DOMContentLoaded", function () { if ($("ss-form")) init({}); });   // a page that carries the markup itself
 })();

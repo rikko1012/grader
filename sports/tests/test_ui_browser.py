@@ -35,8 +35,11 @@ def shots(tmp_path):
     return d
 
 
-def _page(pw, width=1280, height=900, **kw):
+def _page(pw, width=1280, height=900, view="cards", **kw):
     ctx = pw.new_context(viewport={"width": width, "height": height}, **kw)
+    # the board opens as a table (board agent); the card flows below pin the Cards view the member can choose
+    ctx.add_init_script("try { if (!localStorage.getItem('scout.sports.board.v1')) localStorage.setItem('scout.sports.board.v1', JSON.stringify({view: %s})) } catch (e) {}"
+                        % json.dumps(view))
     page = ctx.new_page()
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
