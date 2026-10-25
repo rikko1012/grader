@@ -120,21 +120,49 @@ GRADES = ("A", "B", "C", "Lean")
 GRADE_RULE = "rg-1"
 
 
-def research_grade(fc, side, league):
+def research_grade(fc, side, league, probs=None):
     """The board's research letter (sports/board_view rg-1) this forecast can carry on `side`: the lean rule (chance >
     50% and the mean on that side), no vg-1 hold while containment is on, no sg-1 ratio hold; else None. The board's
-    market (N4) and L10 holds are applied by the page before it shows a letter - a letter it did show must equal this."""
+    market (N4) and L10 holds are applied by the page before it shows a letter - a letter it did show must equal this.
+    probs = the DISPLAYED chances ({p_over, p_under}: the quote's cal-mi-1 chance when the board showed one)."""
     from . import board_view
     if fc.p_over is None or fc.p_under is None or fc.model_version not in board_view.SCOUT_MODELS:
         return None
+    po, pu = (probs["p_over"], probs["p_under"]) if probs else (fc.p_over, fc.p_under)
     line = float(fc.line)
-    if board_view.lean_of(fc.p_over, fc.p_under, fc.projection_mean, line) != side:
+    if board_view.lean_of(po, pu, fc.projection_mean, line) != side:
         return None
     if board_view.contain_reason(league, fc.stat):
         return None
     if board_view.sanity_check(fc.projection_mean, line, side) is not None:
         return None
-    return board_view.research_grade(fc.p_over if side == "over" else fc.p_under)
+    return board_view.research_grade(po if side == "over" else pu)
+
+
+_CAL = {}
+CAL_CHECK_S = 10.0
+
+
+def cal_quote(league, rid, fid):
+    """The cal-mi-1 chance the last snapshot showed on this quote for this forecast (snapshots cal.json), or None.
+    Cached per league; the file's mtime is re-checked every CAL_CHECK_S seconds (cheap under load)."""
+    import time as _t
+    from . import snapshots
+    now = _t.time()
+    c = _CAL.get(league)
+    if c is None or now - c[0] > CAL_CHECK_S:
+        p = snapshots.snap_root() / league / "cal.json"
+        try:
+            mt = p.stat().st_mtime_ns
+        except OSError:
+            mt = None
+        if c is not None and c[1] == mt:
+            _CAL[league] = (now, mt, c[2])
+        else:
+            _CAL[league] = (now, mt, snapshots.read_cal_index(league) if mt is not None else {})
+        c = _CAL[league]
+    ca = c[2].get(rid)
+    return ca if ca and ca.get("f") == fid else None
 
 
 def check(con, item, now=None):
@@ -179,7 +207,7 @@ def check(con, item, now=None):
     age = (now - parse_utc(last)).total_seconds()
     if age > STALE_S:
         raise Refused("stale", f"Price not fresh: last seen {int(age // 60)} min ago")
-    fid, fc = item.get("forecast_id"), None
+    fid, fc, ca = item.get("forecast_id"), None, None
     shown = item.get("shown") or {}
     if not isinstance(shown, dict):
         raise ValueError("shown must be an object")
@@ -201,6 +229,9 @@ def check(con, item, now=None):
                 or fc.player_id != o.player_id:
             raise Refused("forecast_mismatch", "The chance shown was made for another line - refresh")
         rec_p = {"p_over": fc.p_over, "p_under": fc.p_under, "p_push": fc.p_push}
+        ca = cal_quote(o.league, rid, fc.forecast_id)
+        if ca:                                        # cal-mi-1 (REGISTER A8): the board showed the calibrated chance
+            rec_p = {"p_over": ca["po"], "p_under": ca["pu"], "p_push": ca["pp"]}
         for k, v in shown.items():
             if v is not None and abs(v - rec_p[k]) > DISPLAY_TOL:
                 raise Refused("display_mismatch", "The chance shown differs from Scout's record - refresh")
@@ -212,7 +243,7 @@ def check(con, item, now=None):
     shown_grade = item.get("grade")
     if shown_grade is not None and shown_grade not in GRADES:
         raise ValueError("grade must be A, B, C or Lean")
-    expect = research_grade(fc, side, o.league) if fc else None
+    expect = research_grade(fc, side, o.league, displayed) if fc else None
     mismatch = None
     if shown_grade is not None and shown_grade != expect:      # never a letter the forecast record cannot carry
         mismatch, shown_grade = shown_grade, None
@@ -228,7 +259,8 @@ def check(con, item, now=None):
             "grade_policy_version": fc.grade_policy_version if fc else None,
             "forecast_at": fc.forecast_at if fc else None, "research_only": bool(fc.research_only) if fc else None,
             "validation_state": _validation_state(fc) if fc else None, "displayed": displayed,
-            "displayed_source": "scout_forecast" if fc else None, "stake_units": 0, "grade_shown": shown_grade,
+            "displayed_source": ("cal-mi-1" if fc and ca else "scout_forecast") if fc else None,
+            **({"calibration": {"v": ca["v"], "mode": ca["mode"], "raw": ca["raw"]}} if fc and ca else {}), "stake_units": 0, "grade_shown": shown_grade,
             "grade_rule": GRADE_RULE if shown_grade else None,
             **({"grade_not_recorded": mismatch} if mismatch else {})}
 

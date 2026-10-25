@@ -180,7 +180,20 @@ def market_by_record(boards):
     return out
 
 
-def build(con, league, platform, now=None, policy="member", market_at=None):
+def cal_by_record(boards):
+    """{offer record id: cal-mi-1 chance dict (po, pu, pp, f, v, mode)} from compact board snapshot objects (the
+    quote's `ca`, REGISTER A8) - a slip leg uses the SAME calibrated chance the board shows for that forecast."""
+    out = {}
+    for b in boards or ():
+        for m in (b or {}).get("markets") or ():
+            for q in m.get("q") or ():
+                ca = q.get("ca")
+                if q.get("r") and ca and ca.get("po") is not None and ca.get("pu") is not None:
+                    out[q["r"]] = ca
+    return out
+
+
+def build(con, league, platform, now=None, policy="member", market_at=None, cal_at=None):
     """-> {"snapshot_id", "snapshot_at", "league", "platform", "policy", "legs": [leg], "excluded": {reason: n},
            "offers": n, "state": {offer_id: (record_id, revision, line, eligible, reason, leg_index)},
            "representation": "slim-1"}"""
@@ -202,7 +215,7 @@ def build(con, league, platform, now=None, policy="member", market_at=None):
     legs, excluded, rows = [], Counter(), []
     ids = []
     for rid, o in offers:
-        reason, leg = _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, market_at, held)
+        reason, leg = _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, market_at, held, cal_at)
         if reason:
             reason = sys.intern(reason)
             excluded[reason.split(":")[0]] += 1
@@ -254,7 +267,7 @@ def guard_reason(f, league, rid=None, held=()):
     return f"held by the sanity guard: {board_view.SANITY_TEXT[code][6:]}" if code else None
 
 
-def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, market_at=None, held=()):
+def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, market_at=None, held=(), cal_at=None):
     if platform not in rules.PLATFORMS:
         return "not a pick'em platform", None
     ok, why = capabilities.gate(o)
@@ -278,6 +291,12 @@ def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, market_at
     if abs(f.line - o.line) > 1e-9 or f.stat != o.stat or f.player_id != o.player_id:
         return "forecast is for another line", None
     side = f.chosen_side
+    po, pu, pp = f.p_over, f.p_under, f.p_push
+    ca = (cal_at or {}).get(rid)
+    if ca and ca.get("f") == f.forecast_id and side is not None:   # cal-mi-1 (REGISTER A8): the board's chance
+        po, pu, pp = ca["po"], ca["pu"], ca.get("pp", f.p_push)
+        offered = [s_ for s_ in ("over", "under") if (o.side(s_) is not None and o.side(s_).offered)]
+        side = max(offered, key=lambda s_: po if s_ == "over" else pu) if offered else side
     if side is None:
         return "no side chosen", None
     if policy == "member":
@@ -294,8 +313,8 @@ def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, market_at
             return "held stake (0U)", None
     if not o.team:
         return "team unknown: the two-team rule cannot be checked", None
-    p_win = f.p_over if side == "over" else f.p_under
-    p_loss = f.p_under if side == "over" else f.p_over
+    p_win = po if side == "over" else pu
+    p_loss = pu if side == "over" else po
     if p_win <= 0:
         return "zero chance", None
     mk = (market_at or {}).get(rid)
@@ -309,11 +328,11 @@ def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, market_at
            "side": side, "side_word": rules.SIDE_WORD[platform][side], "variant": o.variant,
            "promotional": o.promotional, "multiplier": q.multiplier, "start_utc": start,
            "observed_at": o.observed_at, "last_seen_at": max(x for x in (seen.get(rid), o.observed_at) if x),
-           "source_time_unknown": o.source_time_unknown, "p_win": p_win, "p_loss": p_loss, "p_push": f.p_push,
+           "source_time_unknown": o.source_time_unknown, "p_win": p_win, "p_loss": p_loss, "p_push": pp,
            "grade": None if f.research_only else f.grade,
            "stake_units": 0.0 if f.research_only else f.stake_units, "weight": leg_weight(platform, p_win, q.multiplier),
            "prop_keys": prop_keys(o.league, o.player_id, o.stat),
            # rg-1: the board's research letter for this forecast / line (same unrounded chance, same lean rule)
            "research_grade": board_view.research_grade(p_win)
-           if board_view.lean_of(f.p_over, f.p_under, f.projection_mean, float(o.line)) == side else None}
+           if board_view.lean_of(po, pu, f.projection_mean, float(o.line)) == side else None}
     return None, leg

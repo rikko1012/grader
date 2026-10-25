@@ -76,14 +76,14 @@ def _board_markets(league):
             boards.append(json.loads(api_board._read(api_board._root() / league / name)))
         except (api_board.NotReady, ValueError, OSError):
             continue
-    return poolmod.market_by_record(boards)
+    return poolmod.market_by_record(boards), poolmod.cal_by_record(boards)
 
 
 def _pool(league, platform, policy="member"):
     def load():
-        mk = _board_markets(league)
+        mk, ca = _board_markets(league)
         with web.store_ro(budget_s=15) as con:
-            return poolmod.build(con, league, platform, policy=policy, market_at=mk)
+            return poolmod.build(con, league, platform, policy=policy, market_at=mk, cal_at=ca)
     return web.cached(("slips_pool", league, platform, policy), load, ttl=POOL_TTL)
 
 

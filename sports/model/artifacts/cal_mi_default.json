@@ -1,0 +1,81 @@
+{
+ "version": "cal-mi-1",
+ "register": "sports/research/REGISTER.md A8",
+ "label": "below the 20-game minimum (owner override, REGISTER A8)",
+ "source": "local: reconstructed 2026-10-23 NBA slate (7 games, 1 game-day), leave-one-game-out (A8 8)",
+ "fitted_at": "2026-10-25T22:42:15Z",
+ "data_as_of": "2026-10-25T19:00:00Z",
+ "rows": 443,
+ "lambda": 20.0,
+ "params": {
+  "nba:assists": {
+   "on": false,
+   "M": [
+    -3.8e-05,
+    0.553703,
+    0.118728
+   ],
+   "S": [
+    -0.236887,
+    0.156464
+   ],
+   "n_M": 0,
+   "n_S": 86,
+   "level_M": "league",
+   "level_S": "stat",
+   "verdict": "FAIL"
+  },
+  "nba:points": {
+   "on": false,
+   "M": [
+    0.039692,
+    0.35438,
+    0.178349
+   ],
+   "S": [
+    -0.167732,
+    -0.013788
+   ],
+   "n_M": 57,
+   "n_S": 125,
+   "level_M": "stat",
+   "level_S": "stat",
+   "verdict": "FAIL"
+  },
+  "nba:rebounds": {
+   "on": false,
+   "M": [
+    -0.070525,
+    0.361607,
+    0.071871
+   ],
+   "S": [
+    -0.258571,
+    0.093806
+   ],
+   "n_M": 51,
+   "n_S": 130,
+   "level_M": "stat",
+   "level_S": "stat",
+   "verdict": "FAIL"
+  },
+  "nba:threes": {
+   "on": false,
+   "M": [
+    -3.8e-05,
+    0.553703,
+    0.118728
+   ],
+   "S": [
+    -0.039619,
+    0.173939
+   ],
+   "n_M": 0,
+   "n_S": 102,
+   "level_M": "league",
+   "level_S": "stat",
+   "verdict": "FAIL"
+  }
+ },
+ "sha": "624212f1c8bab7e9"
+}

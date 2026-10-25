@@ -1,0 +1,575 @@
+{
+ "version": "cal-mi-1",
+ "register": "sports/research/REGISTER.md A8 8",
+ "label": "local leave-one-game-out, one night (2026-10-23 NBA, 7 games), below the 20-game minimum (owner override)",
+ "data": "scratch store board/data/canonical.db (2026-10-24 copy) + reconstructed settled props (443; 188 with a market chance from the store's own mkt-*/mc-1 forecasts at the same offer and forecast_at; sources Kalshi / Polymarket only)",
+ "walk_forward": {
+  "nba:assists": {
+   "props": 86,
+   "scored": 0,
+   "games": 0,
+   "days": 0,
+   "with_market": 0,
+   "verdict": "not evaluable",
+   "on": false,
+   "why": "no walk-forward fit for any day"
+  },
+  "nba:points": {
+   "props": 125,
+   "scored": 0,
+   "games": 0,
+   "days": 0,
+   "with_market": 0,
+   "verdict": "not evaluable",
+   "on": false,
+   "why": "no walk-forward fit for any day"
+  },
+  "nba:rebounds": {
+   "props": 130,
+   "scored": 0,
+   "games": 0,
+   "days": 0,
+   "with_market": 0,
+   "verdict": "not evaluable",
+   "on": false,
+   "why": "no walk-forward fit for any day"
+  },
+  "nba:threes": {
+   "props": 102,
+   "scored": 0,
+   "games": 0,
+   "days": 0,
+   "with_market": 0,
+   "verdict": "not evaluable",
+   "on": false,
+   "why": "no walk-forward fit for any day"
+  }
+ },
+ "logo": {
+  "nba:assists": {
+   "props": 86,
+   "scored": 86,
+   "games": 7,
+   "days": 1,
+   "with_market": 38,
+   "live": {
+    "n": 86,
+    "logloss": 0.7292367396770807,
+    "brier": 0.2648986719725548,
+    "in_the_large": 0.06341626091111818,
+    "share_over_favoured": 0.4186046511627907,
+    "over_rate": 0.4186046511627907,
+    "mean_chosen_p": 0.6092946903328306,
+    "bands": {
+     "A": {
+      "n": 43,
+      "stated": 0.6689,
+      "hit": 0.5116,
+      "ci_game": [
+       -0.34834489161602067,
+       0.0006766251735992263
+      ]
+     },
+     "B": {
+      "n": 21,
+      "stated": 0.5758,
+      "hit": 0.619,
+      "ci_game": [
+       -0.1254119997112933,
+       0.15421461210577186
+      ]
+     },
+     "C": {
+      "n": 6,
+      "stated": 0.5467,
+      "hit": 0.8333,
+      "ci_game": [
+       -0.1479014640202594,
+       0.454648655828614
+      ]
+     },
+     "Lean": {
+      "n": 16,
+      "stated": 0.5165,
+      "hit": 0.625,
+      "ci_game": [
+       -0.1608624842233674,
+       0.3061028871402977
+      ]
+     }
+    }
+   },
+   "cal_mi": {
+    "n": 86,
+    "logloss": 0.6870546406463606,
+    "brier": 0.2467028192722664,
+    "in_the_large": 0.04082379344977083,
+    "share_over_favoured": 0.19767441860465115,
+    "over_rate": 0.4186046511627907,
+    "mean_chosen_p": 0.5607657086338375,
+    "bands": {
+     "A": {
+      "n": 18,
+      "stated": 0.6241,
+      "hit": 0.6111,
+      "ci_game": [
+       -0.2495400960226244,
+       0.24481204814887972
+      ]
+     },
+     "B": {
+      "n": 18,
+      "stated": 0.5792,
+      "hit": 0.3889,
+      "ci_game": [
+       -0.5102018597507562,
+       0.12792822009947558
+      ]
+     },
+     "C": {
+      "n": 24,
+      "stated": 0.5462,
+      "hit": 0.875,
+      "ci_game": [
+       0.1684873312474802,
+       0.4538746759445237
+      ]
+     },
+     "Lean": {
+      "n": 26,
+      "stated": 0.5176,
+      "hit": 0.5385,
+      "ci_game": [
+       -0.13850808101316706,
+       0.2229334055722842
+      ]
+     }
+    }
+   },
+   "logloss_cal_minus_live": {
+    "mean": -0.042182099030720205,
+    "ci_game": [
+     -0.09558628789009019,
+     0.00403677053294091
+    ]
+   },
+   "verdict": "FAIL",
+   "on": false,
+   "why": "in-the-large +0.041; share Over 0.20 vs over rate 0.42"
+  },
+  "nba:points": {
+   "props": 125,
+   "scored": 125,
+   "games": 7,
+   "days": 1,
+   "with_market": 57,
+   "live": {
+    "n": 125,
+    "logloss": 0.788907126861869,
+    "brier": 0.2863457850301168,
+    "in_the_large": 0.02663484361056606,
+    "share_over_favoured": 0.384,
+    "over_rate": 0.456,
+    "mean_chosen_p": 0.6213990801785267,
+    "bands": {
+     "A": {
+      "n": 60,
+      "stated": 0.6964,
+      "hit": 0.4333,
+      "ci_game": [
+       -0.3981521682963048,
+       -0.0675912504166125
+      ]
+     },
+     "B": {
+      "n": 30,
+      "stated": 0.5772,
+      "hit": 0.6333,
+      "ci_game": [
+       -0.07669451085869829,
+       0.1446817017949841
+      ]
+     },
+     "C": {
+      "n": 17,
+      "stated": 0.5436,
+      "hit": 0.5294,
+      "ci_game": [
+       -0.2509773179271709,
+       0.2305877777777778
+      ]
+     },
+     "Lean": {
+      "n": 18,
+      "stated": 0.5185,
+      "hit": 0.4444,
+      "ci_game": [
+       -0.2501333333333333,
+       0.12679633276552002
+      ]
+     }
+    }
+   },
+   "cal_mi": {
+    "n": 125,
+    "logloss": 0.7217876426252746,
+    "brier": 0.2614030069186395,
+    "in_the_large": 0.01454047652044188,
+    "share_over_favoured": 0.184,
+    "over_rate": 0.456,
+    "mean_chosen_p": 0.5571330189186217,
+    "bands": {
+     "A": {
+      "n": 18,
+      "stated": 0.6616,
+      "hit": 0.3333,
+      "ci_game": [
+       -0.4634812736124168,
+       -0.07238101299372404
+      ]
+     },
+     "B": {
+      "n": 24,
+      "stated": 0.5745,
+      "hit": 0.6667,
+      "ci_game": [
+       -0.11939525193264695,
+       0.31334705335882246
+      ]
+     },
+     "C": {
+      "n": 30,
+      "stated": 0.5448,
+      "hit": 0.4333,
+      "ci_game": [
+       -0.26038105107602394,
+       -0.01965458400794707
+      ]
+     },
+     "Lean": {
+      "n": 53,
+      "stated": 0.5208,
+      "hit": 0.6038,
+      "ci_game": [
+       -0.0651918779856421,
+       0.1572571298185299
+      ]
+     }
+    }
+   },
+   "logloss_cal_minus_live": {
+    "mean": -0.06711948423659451,
+    "ci_game": [
+     -0.11349220966969764,
+     -0.012479861200867338
+    ]
+   },
+   "verdict": "FAIL",
+   "on": false,
+   "why": "share Over 0.18 vs over rate 0.46"
+  },
+  "nba:rebounds": {
+   "props": 130,
+   "scored": 130,
+   "games": 7,
+   "days": 1,
+   "with_market": 51,
+   "live": {
+    "n": 130,
+    "logloss": 0.7321748389660432,
+    "brier": 0.267469973002685,
+    "in_the_large": 0.04291229212450148,
+    "share_over_favoured": 0.36923076923076925,
+    "over_rate": 0.4153846153846154,
+    "mean_chosen_p": 0.6022347286230256,
+    "bands": {
+     "A": {
+      "n": 51,
+      "stated": 0.6857,
+      "hit": 0.4902,
+      "ci_game": [
+       -0.37149509263759856,
+       -0.04352559878904084
+      ]
+     },
+     "B": {
+      "n": 35,
+      "stated": 0.5732,
+      "hit": 0.4857,
+      "ci_game": [
+       -0.26616842370088484,
+       0.07760934863014408
+      ]
+     },
+     "C": {
+      "n": 19,
+      "stated": 0.5433,
+      "hit": 0.4737,
+      "ci_game": [
+       -0.21078187747680335,
+       0.08470447443468793
+      ]
+     },
+     "Lean": {
+      "n": 25,
+      "stated": 0.5172,
+      "hit": 0.68,
+      "ci_game": [
+       -0.16547445462184598,
+       0.3968818408303878
+      ]
+     }
+    }
+   },
+   "cal_mi": {
+    "n": 130,
+    "logloss": 0.7040139232962511,
+    "brier": 0.25507072615756715,
+    "in_the_large": 0.03148708282894552,
+    "share_over_favoured": 0.16153846153846155,
+    "over_rate": 0.4153846153846154,
+    "mean_chosen_p": 0.565136436127168,
+    "bands": {
+     "A": {
+      "n": 16,
+      "stated": 0.6354,
+      "hit": 0.25,
+      "ci_game": [
+       -0.6308488319562994,
+       -0.1395057196811276
+      ]
+     },
+     "B": {
+      "n": 64,
+      "stated": 0.5722,
+      "hit": 0.5625,
+      "ci_game": [
+       -0.05790452757523564,
+       0.03672006672739018
+      ]
+     },
+     "C": {
+      "n": 26,
+      "stated": 0.5478,
+      "hit": 0.6923,
+      "ci_game": [
+       0.006156849687914325,
+       0.28589563106961075
+      ]
+     },
+     "Lean": {
+      "n": 24,
+      "stated": 0.5182,
+      "hit": 0.375,
+      "ci_game": [
+       -0.4187199030865608,
+       -0.030410637209319115
+      ]
+     }
+    }
+   },
+   "logloss_cal_minus_live": {
+    "mean": -0.028160915669792112,
+    "ci_game": [
+     -0.05850643312834461,
+     0.02554646563176215
+    ]
+   },
+   "verdict": "FAIL",
+   "on": false,
+   "why": "in-the-large +0.031; share Over 0.16 vs over rate 0.42"
+  },
+  "nba:threes": {
+   "props": 102,
+   "scored": 102,
+   "games": 7,
+   "days": 1,
+   "with_market": 42,
+   "live": {
+    "n": 102,
+    "logloss": 0.7450677274639328,
+    "brier": 0.2677011545251674,
+    "in_the_large": -0.059174980338412564,
+    "share_over_favoured": 0.35294117647058826,
+    "over_rate": 0.5,
+    "mean_chosen_p": 0.6337988902133516,
+    "bands": {
+     "A": {
+      "n": 56,
+      "stated": 0.7035,
+      "hit": 0.5536,
+      "ci_game": [
+       -0.3230038836061999,
+       -0.019476273447870777
+      ]
+     },
+     "B": {
+      "n": 22,
+      "stated": 0.5771,
+      "hit": 0.5455,
+      "ci_game": [
+       -0.24570782038796252,
+       0.13020934480371893
+      ]
+     },
+     "C": {
+      "n": 4,
+      "stated": 0.5445,
+      "hit": 0.5,
+      "ci_game": [
+       -0.5449577798535921,
+       0.4617606723085854
+      ]
+     },
+     "Lean": {
+      "n": 20,
+      "stated": 0.5188,
+      "hit": 0.5,
+      "ci_game": [
+       -0.22322960447956974,
+       0.1966556078440617
+      ]
+     }
+    }
+   },
+   "cal_mi": {
+    "n": 102,
+    "logloss": 0.700926663442589,
+    "brier": 0.2521393059534712,
+    "in_the_large": -0.02687072761205772,
+    "share_over_favoured": 0.30392156862745096,
+    "over_rate": 0.5,
+    "mean_chosen_p": 0.5584175285930877,
+    "bands": {
+     "A": {
+      "n": 20,
+      "stated": 0.6506,
+      "hit": 0.65,
+      "ci_game": [
+       -0.26772845356651953,
+       0.22043150803033823
+      ]
+     },
+     "B": {
+      "n": 24,
+      "stated": 0.5737,
+      "hit": 0.4583,
+      "ci_game": [
+       -0.3349641017498664,
+       0.002355512522684643
+      ]
+     },
+     "C": {
+      "n": 9,
+      "stated": 0.5442,
+      "hit": 0.6667,
+      "ci_game": [
+       -0.16505386559317903,
+       0.3525755790530259
+      ]
+     },
+     "Lean": {
+      "n": 49,
+      "stated": 0.5159,
+      "hit": 0.5306,
+      "ci_game": [
+       -0.07749660939617078,
+       0.12499813930933218
+      ]
+     }
+    }
+   },
+   "logloss_cal_minus_live": {
+    "mean": -0.04414106402134379,
+    "ci_game": [
+     -0.10555341420928788,
+     -0.011356167581216381
+    ]
+   },
+   "verdict": "FAIL",
+   "on": false,
+   "why": "share Over 0.30 vs over rate 0.50"
+  }
+ },
+ "weights": {
+  "version": "cal-mi-1",
+  "register": "sports/research/REGISTER.md A8",
+  "label": "below the 20-game minimum (owner override, REGISTER A8)",
+  "source": "local: reconstructed 2026-10-23 NBA slate (7 games, 1 game-day), leave-one-game-out (A8 8)",
+  "fitted_at": "2026-10-25T22:42:15Z",
+  "data_as_of": "2026-10-25T19:00:00Z",
+  "rows": 443,
+  "lambda": 20.0,
+  "params": {
+   "nba:assists": {
+    "on": false,
+    "M": [
+     -3.8e-05,
+     0.553703,
+     0.118728
+    ],
+    "S": [
+     -0.236887,
+     0.156464
+    ],
+    "n_M": 0,
+    "n_S": 86,
+    "level_M": "league",
+    "level_S": "stat",
+    "verdict": "FAIL"
+   },
+   "nba:points": {
+    "on": false,
+    "M": [
+     0.039692,
+     0.35438,
+     0.178349
+    ],
+    "S": [
+     -0.167732,
+     -0.013788
+    ],
+    "n_M": 57,
+    "n_S": 125,
+    "level_M": "stat",
+    "level_S": "stat",
+    "verdict": "FAIL"
+   },
+   "nba:rebounds": {
+    "on": false,
+    "M": [
+     -0.070525,
+     0.361607,
+     0.071871
+    ],
+    "S": [
+     -0.258571,
+     0.093806
+    ],
+    "n_M": 51,
+    "n_S": 130,
+    "level_M": "stat",
+    "level_S": "stat",
+    "verdict": "FAIL"
+   },
+   "nba:threes": {
+    "on": false,
+    "M": [
+     -3.8e-05,
+     0.553703,
+     0.118728
+    ],
+    "S": [
+     -0.039619,
+     0.173939
+    ],
+    "n_M": 0,
+    "n_S": 102,
+    "level_M": "league",
+    "level_S": "stat",
+    "verdict": "FAIL"
+   }
+  },
+  "sha": "624212f1c8bab7e9"
+ }
+}

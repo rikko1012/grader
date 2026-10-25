@@ -20,9 +20,17 @@
   function mult(x) { return x === null || x === undefined ? "" : (Math.round(x * 100) / 100) + "x"; }
 
   // forecast record (full view or compact board copy) -> the numbers every surface shows
-  function forecastNumbers(f) {
+  // ca = the quote's cal-mi-1 chance (REGISTER A8) when the server sent one: the chances shown are then the calibrated
+  // ones (the mean / distribution stay the forecast's own)
+  function forecastNumbers(f, ca) {
     if (!f) return null;
     var full = f.p_over !== undefined;
+    if (ca && ca.po !== null && ca.po !== undefined && ca.pu !== null && ca.pu !== undefined) {
+      f = {forecast_id: f.forecast_id || f.id, model_version: full ? f.model_version : f.m,
+           forecast_at: full ? f.forecast_at : f.at, projection_mean: full ? f.projection_mean : f.mu,
+           p_over: ca.po, p_under: ca.pu, p_push: ca.pp || 0};
+      full = true;
+    }
     return {
       id: f.forecast_id || f.id || null,
       model: full ? f.model_version : f.m,

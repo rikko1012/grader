@@ -26,8 +26,17 @@
   function nn(x) { return x !== null && x !== undefined && isFinite(x); }
   function lineKey(x) { return S.line(x); }                         // = board_view.line_key
 
-  // Scout chance at this offer's line, or null (market-only records are not Scout's view)
+  // Scout chance at this offer's line, or null (market-only records are not Scout's view). cal-mi-1 (REGISTER A8):
+  // when the server sent the quote's calibrated chance q.ca, THAT is the Scout chance shown everywhere (raw in .raw)
   function scoutAt(q, fcmap) {
+    var sc = scoutRaw(q, fcmap), ca = q && q.ca;
+    if (sc && ca && nn(ca.po) && nn(ca.pu)) {
+      sc.raw = {po: sc.po, pu: sc.pu, pp: sc.pp};
+      sc.po = ca.po; sc.pu = ca.pu; sc.pp = nn(ca.pp) ? ca.pp : sc.pp; sc.cal = ca.v; sc.calMode = ca.mode;
+    }
+    return sc;
+  }
+  function scoutRaw(q, fcmap) {
     var f = q.f ? fcmap[q.f] : null;
     if (f && S.kindOf(f.m) !== "market" && nn(f.po) && nn(f.pu))
       return {po: f.po, pu: f.pu, pp: f.pp || 0, mu: nn(f.mu) ? f.mu : null, iv: f.iv || null, model: f.m, fid: f.id || q.f,
