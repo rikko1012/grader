@@ -10,6 +10,8 @@
 (function (root) {
   "use strict";
   var GATE_N = 300;                                    // sports/model/learning.py forward gate F: >= 300 settled props
+  var St = root.SportsStats || (typeof require !== "undefined" ? require("./stats.js") : null);
+  function validationState(n) { return St.validationState(n, GATE_N); }   // "1,566 settled (minimum 300) · under review"
   var HELP = "Add to slip builds a draft you can copy in Slip Studio. Track pick records this pick now, at this exact line (stake 0).";
   var RESULT_WORD = {win: "Won", loss: "Lost", push: "Push", "void": "Void", unresolved: "Not settled yet"};
 
@@ -86,8 +88,7 @@
     return (models || []).map(function (m) {
       var n = m.settled || 0;
       return {model: m.model_version, league: m.league, n: n,
-              text: "Model validation" + (m.league ? " (" + m.league.toUpperCase() + ", " : " (") + m.model_version + "): " + n + " of " + GATE_N +
-                    " settled props - " + (n < GATE_N ? "not yet validated" : "review window reached, not yet validated")};
+              text: "Model validation" + (m.league ? " (" + m.league.toUpperCase() + ", " : " (") + m.model_version + "): " + validationState(n)};
     });
   }
 
@@ -215,12 +216,12 @@
     var recHtml = '<section class="sw-panel sw-mp-sum" aria-labelledby="sw-mp-rec-h"><h2 id="sw-mp-rec-h">Your record</h2><div class="sw-kv sw-mp-rec">' +
       recs.map(function (r) {
         return '<span' + (r.current ? ' class="sw-mp-cur"' : "") + "><b>" + esc(r.league.toUpperCase()) + " " + esc(r.wlp) + "</b> W-L-P" +
-          (r.decided ? " · hit rate " + pct(r.hit) + " (n = " + r.decided + ")" : "") + (r.open ? " · " + r.open + " open" : "") + "</span>";
+          (r.decided ? " · hit rate " + pct(r.hit) + " (n = " + St.int(r.decided) + ")" : "") + (r.open ? " · " + St.int(r.open) + " open" : "") + "</span>";
       }).join("") + "</div>" +
       '<p class="sw-faint sw-small">Pushes and voids are not counted in the hit rate.' + (d.hidden_test ? " " + d.hidden_test + (d.hidden_test === 1 ? " test record is" : " test records are") + " not shown." : "") + "</p></section>";
     var valHtml = '<section class="sw-panel sw-mp-val" aria-labelledby="sw-mp-val-h"><h2 id="sw-mp-val-h">Model validation (all members, not your picks)</h2>' +
-      (val.length ? '<ul class="sw-list sw-small">' + val.map(function (v) { return "<li>" + esc(v.text) + "</li>"; }).join("") + "</ul>" : '<p class="sw-small sw-muted">Model validation: 0 of ' + GATE_N + " settled props - not yet validated.</p>") +
-      '<p class="sw-faint sw-small">The model is reviewed at ' + GATE_N + " settled props on real offered lines. Your own record above says nothing about that.</p></section>";
+      (val.length ? '<ul class="sw-list sw-small">' + val.map(function (v) { return "<li>" + esc(v.text) + "</li>"; }).join("") + "</ul>" : '<p class="sw-small sw-muted">Model validation: ' + esc(validationState(0)) + ".</p>") +
+      '<p class="sw-faint sw-small">' + esc(St.GATE_RULE) + " Your own record above says nothing about that.</p></section>";
     if (!ps.length) {
       main.innerHTML = h + recHtml + deps.stateBox("No tracked " + esc((d.lg || "").toUpperCase()) + " picks yet", "Choose <b>Over</b> or <b>Under</b> on a line, then <b>Track pick</b>, before the game starts. A recorded pick appears here within about a minute.", '<a class="sw-btn" href="#/board">Open the prop board</a>') + valHtml;
       return;

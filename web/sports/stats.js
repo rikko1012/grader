@@ -197,8 +197,25 @@
   }
   function kindLabel(model) { return KIND_LABEL[kindOf(model)] || ""; }
   function wholeLine(x) { return x !== null && x !== undefined && Math.abs(x - Math.round(x)) < 1e-9; }
+  // counts with thousands separators everywhere (owner re-audit N6: "1,566", never "1566")
+  function int(n) {
+    if (n === null || n === undefined || n === "" || !isFinite(n)) return "—";
+    var v = Math.round(Number(n)), s = String(Math.abs(v)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return (v < 0 ? "-" : "") + s;
+  }
+  /* forward validation (REGISTER.md 7, gate F; sports/model/learning.py forward_gate). The count is never shown as
+     "n of 300": 300 is the MINIMUM before the registered review, not a target that validates by itself. */
+  var GATE_N = 300;
+  var GATE_RULE = "Pass rule (registered gate F): at least 300 settled props from 100+ games at real offered lines; " +
+    "Scout's chance on its side within 3 points of how often that side hit (game-clustered interval including 0); " +
+    "and a lower log-loss than the market-only baseline on the same props. Reviewed at 300, 600 and 1,000 settled " +
+    "props; nothing passes automatically.";
+  function validationState(settled, target) {     // "1,566 settled (minimum 300) · under review"
+    var n = settled || 0, min = target || GATE_N;
+    return int(n) + " settled (minimum " + int(min) + ")" + (n >= min ? " · under review" : "");
+  }
   function validationText(settled, target) {      // forward validation progress; grades and stakes withheld
-    return "Research estimate · forward validation " + (settled || 0) + " of " + (target || 300) + " settled props";
+    return "Research estimate · forward validation " + validationState(settled, target);
   }
   function orderQuotes(qs, pref) {        // member's preferred book first; otherwise the snapshot's neutral order
     var rest = qs.slice();
@@ -214,7 +231,7 @@
     var k = String(s).trim().toLowerCase();
     return INJ[k] || (k.charAt(0).toUpperCase() + k.slice(1)).replace(/_/g, " ");
   }
-  function plural(n, one, many) { return n + " " + (n === 1 ? one : (many || one + "s")); }
+  function plural(n, one, many) { return int(n) + " " + (n === 1 ? one : (many || one + "s")); }
   // which kind of number a forecast record is: Scout's own model, or a model read from market prices
   var MARKET_MODELS = {"mc-1": "market consensus", "sharp-2": "Kalshi ladder", "sharp-1": "sharp books"};
   function modelSource(m) {
@@ -278,6 +295,7 @@
              quoteShown: quoteShown, bookUsable: bookUsable, usableBooks: usableBooks, hiddenBooks: hiddenBooks,
              marketShown: marketShown, plural: plural, modelSource: modelSource, pct0: pct0, kindOf: kindOf,
              kindLabel: kindLabel, KIND_LABEL: KIND_LABEL, wholeLine: wholeLine, validationText: validationText,
+             validationState: validationState, GATE_N: GATE_N, GATE_RULE: GATE_RULE, int: int,
              orderQuotes: orderQuotes, injuryLabel: injuryLabel};
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SportsStats = api;

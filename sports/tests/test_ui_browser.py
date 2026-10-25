@@ -516,7 +516,7 @@ MINE = {"version": "pk-1", "total": 4, "shown": 4, "stake_units": 0, "picks": [
 def test_my_picks_dashboard(pw, shots, width):
     """My picks (ux item 7): tabs Open / Settled / Voided; each row = player, stat, side, recorded line, platform,
     tracked time (local + zone), chance shown + source, settlement status, result at its own line, corrections marked;
-    the member's W-L-P + hit rate (n) separate from model validation (n of 300); stake 0, no grade letters, no returns."""
+    the member's W-L-P + hit rate (n) separate from model validation (n settled, minimum 300); stake 0, no grade letters, no returns."""
     ctx, page, errors = _page(pw, width, 800, has_touch=width < 768, is_mobile=width < 768, timezone_id="America/Chicago")
     page.route("**/api/sports/picks/mine*", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(MINE)))
     page.goto(URL + "/sports#/picks")
@@ -526,7 +526,7 @@ def test_my_picks_dashboard(pw, shots, width):
     sumtext = page.locator(".sw-mp-sum").inner_text()
     assert "1-1-0" in sumtext and "50.0%" in sumtext and "n = 2 decided" in sumtext
     val = page.locator(".sw-mp-val").inner_text()
-    assert re.search(r"Model validation \(NBA, [^)]+\): \d+ of 300 settled props - not yet validated", val), val
+    assert re.search(r"Model validation \(NBA, [^)]+\): [\d,]+ settled \(minimum 300\)", val), val
     assert page.locator(".sw-mp-val").bounding_box()["y"] > page.locator(".sw-mp-sum").bounding_box()["y"]    # separate panels
     row = page.locator(".sw-mp-row").first.inner_text()
     for txt in ("Test Open", "Over 20.5", "Points", "Underdog", "61.2%", "Scout forecast", "sharp-2", "Not settled yet", "CDT"):

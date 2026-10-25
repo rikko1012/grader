@@ -99,6 +99,6 @@ assert.strictEqual(P.resultText(pk(null)).status, "Not settled yet");
 const tt = P.trackedText("2026-10-24T18:05:00Z", {locale: "en-US", timeZone: "America/Chicago"});
 assert.ok(/1:05/.test(tt) && /CDT/.test(tt), tt);                                     // local time with the zone
 const vl = P.validationLines([{league: "nba", model_version: "sharp-2", settled: 41}, {league: "nfl", model_version: "sm-1", settled: 300}]);
-assert.strictEqual(vl[0].text, "Model validation (NBA, sharp-2): 41 of 300 settled props - not yet validated");
-assert.ok(/300 of 300/.test(vl[1].text) && /not yet validated/.test(vl[1].text));     // a window is a review, not a pass
+assert.strictEqual(vl[0].text, "Model validation (NBA, sharp-2): 41 settled (minimum 300)");
+assert.ok(/300 settled \(minimum 300\) · under review/.test(vl[1].text) && !/validated/.test(vl[1].text));   // a window is a review, not a pass
 console.log("ok");

@@ -360,8 +360,8 @@
   // ONE coverage definition on Slate and Match context: props = player markets Scout holds for the game; "with Scout
   // projection" = book lines carrying a Scout forecast made for that exact line (snapshot coverage.forecasts).
   function coverageKv(c) {
-    return '<div class="sw-kv"><span><b>' + c.markets + "</b> " + (c.markets === 1 ? "prop" : "props") + "</span><span><b>" + c.forecasts + "</b> " +
-      (c.forecasts === 1 ? "line" : "lines") + " with Scout projection</span><span><b>" + c.players + "</b> " + (c.players === 1 ? "player" : "players") + "</span></div>";
+    return '<div class="sw-kv"><span><b>' + S.int(c.markets) + "</b> " + (c.markets === 1 ? "prop" : "props") + "</span><span><b>" + S.int(c.forecasts) + "</b> " +
+      (c.forecasts === 1 ? "line" : "lines") + " with Scout projection</span><span><b>" + S.int(c.players) + "</b> " + (c.players === 1 ? "player" : "players") + "</span></div>";
   }
   // Game lines (spread / total / moneyline) - rendered ONLY from typed fields the slate snapshot carries:
   // e.game_lines = {spread|total|moneyline: {..., source, observed_at, history: [[iso, value], ...]}} (contract in
@@ -419,11 +419,11 @@
         // they stay one click away in a collapsed section so today's results context is not lost
         var done = function (e) { return !!(e.started || e.locked || (e.status && e.status !== "scheduled") || (e.start_utc && Date.parse(e.start_utc) <= Date.now())); };   // the clock too: a snapshot built before tip says not started
         var up = evs.filter(function (e) { return !done(e); }), past = evs.filter(done);
-        var out = '<p class="sw-count" aria-live="polite"><span><b>' + up.length + "</b> upcoming " + (up.length === 1 ? "game" : "games") + "</span>" +
-          (past.length ? "<span>" + past.length + " started or finished</span>" : "") + "</p>";
+        var out = '<p class="sw-count" aria-live="polite"><span><b>' + S.int(up.length) + "</b> upcoming " + (up.length === 1 ? "game" : "games") + "</span>" +
+          (past.length ? "<span>" + S.int(past.length) + " started or finished</span>" : "") + "</p>";
         if (!evs.length) { body.innerHTML = out + stateBox("No games match", "Nothing matches “" + esc(f.slateQ) + "”.", '<button class="sw-btn" type="button" id="sw-sreset2">Reset search</button>'); bindReset(); return; }
         function card(e) {
-          var c = e.coverage, plat = Object.keys(c.by_platform || {}).sort().map(function (p) { return esc(bookName(p)) + " " + c.by_platform[p]; }).join(" · ");
+          var c = e.coverage, plat = Object.keys(c.by_platform || {}).sort().map(function (p) { return esc(bookName(p)) + " " + S.int(c.by_platform[p]); }).join(" · ");
             return '<article class="sw-game" aria-label="' + esc(matchup(e)) + '"><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">' +
               '<a class="sw-gamelink" href="#/game/' + encodeURIComponent(e.event_id) + '">' + esc(teamAbbr(e.away)) + " @ " + esc(teamAbbr(e.home)) + "</a>" +
               (e.status && e.status !== "scheduled" ? '<span class="sw-tag live">' + esc(L.eventStatus(e.status)) + "</span>" : e.started ? '<span class="sw-tag live">Started</span>' : "") + "</div>" +
@@ -672,8 +672,9 @@
     var ms = (B.board.models || []).filter(function (x) { return x.forecasts > 0 && S.kindOf(x.model_version) !== "market"; });
     if (!ms.length) return "";
     return '<p class="sw-tb-valid" id="sw-validation"><b>Research estimates.</b> Forward validation: ' + ms.map(function (x) {
-      return esc(S.kindLabel(x.model_version)) + " " + (x.settled || 0) + " of 300 settled props"; }).join(" · ") +
-      ". Not validated yet: chances, edges and confidence are research, not recommendations. Edge = Scout chance minus the market chance at the same line, in probability points (not expected value).</p>";
+      return esc(S.kindLabel(x.model_version)) + " " + esc(S.validationState(x.settled)); }).join(" · ") +
+      ". Not validated yet: chances, edges and confidence are research, not recommendations. Edge = Scout chance minus the market chance at the same line, in probability points (not expected value).</p>" +
+      '<p class="sw-small sw-faint sw-tb-rule">' + esc(S.GATE_RULE) + "</p>";
   }
   function renderBoard(params, onlyEvent) {
     var f = state.filters[state.lg];
@@ -703,8 +704,8 @@
         var total = live.filter(function (m) { return (ff.more || m.pr) && (!onlyEvent || m.e === onlyEvent); }).length;
         var cnt = document.getElementById("sw-bcount"), body = document.getElementById("sw-bbody");
         var withFc = rows.filter(function (m) { return m.q.some(function (q) { return q.f; }); }).length;
-        cnt.innerHTML = prefBookHtml(B) + '<p class="sw-count" aria-live="polite"><span><b>' + rows.length + "</b> of " + total + (total === 1 ? " market" : " markets") + "</span><span><b>" + withFc + "</b> with a Scout chance</span>" +
-          (!ff.more && B.board.secondary_markets ? "<span>" + B.board.secondary_markets + " more under “More stats”</span>" : "") + "</p>";
+        cnt.innerHTML = prefBookHtml(B) + '<p class="sw-count" aria-live="polite"><span><b>' + S.int(rows.length) + "</b> of " + S.int(total) + (total === 1 ? " market" : " markets") + "</span><span><b>" + S.int(withFc) + "</b> with a Scout chance</span>" +
+          (!ff.more && B.board.secondary_markets ? "<span>" + S.int(B.board.secondary_markets) + " more under “More stats”</span>" : "") + "</p>";
         if (!total) { body.innerHTML = stateBox("No lines yet", "No " + state.lg.toUpperCase() + " props are on the board right now."); return; }
         if (!B.markets.some(function (m) { return m.q.some(function (q) { return q.f; }); }))
           cnt.innerHTML += '<div class="sw-banner">Scout chances are not published yet. The board shows every book’s line, the Market chance (every fresh book that prices the identical market, combined; each book’s own chance is listed under it), and each player’s game history (open a player).</div>';
@@ -792,7 +793,7 @@
         (gl || tc ? '<section class="sw-panel" aria-labelledby="sw-tc-h"><h2 id="sw-tc-h">Game and team context</h2>' + gl + tc + "</section>" : "") +
         '<section class="sw-panel" aria-labelledby="sw-inj-h"><h2 id="sw-inj-h">Injury report</h2><div class="sw-grid2">' + injList(e.away) + injList(e.home) + "</div></section>" +
         '<section class="sw-panel" aria-labelledby="sw-cov-h"><h2 id="sw-cov-h">Props in this game</h2>' + coverageKv(c) + '<div class="sw-kv sw-small">' +
-        Object.keys(c.by_platform).sort().map(function (p) { return "<span>" + esc(bookName(p)) + " <b>" + c.by_platform[p] + "</b></span>"; }).join("") + "</div>" +
+        Object.keys(c.by_platform).sort().map(function (p) { return "<span>" + esc(bookName(p)) + " <b>" + S.int(c.by_platform[p]) + "</b></span>"; }).join("") + "</div>" +
         '<details class="sw-more"><summary>Details</summary><p class="sw-small sw-faint">The list below shows props with a line open now; props whose only lines were taken down, or alternate lines (goblin / demon), are counted above but open on the player page. ' +
         src({title: "Game record", "event record": e.record_id, "start (UTC)": e.start_utc, "start source": e.start_source, status: L.eventStatus(e.status)}) + "</p></details></section>" +
         '<section aria-labelledby="sw-gp-h"><h2 id="sw-gp-h" style="font-size:16px;margin:0 0 10px">Every prop in this game</h2><div id="sw-gameprops">' + skeleton(4) + "</div></section>";
@@ -1245,12 +1246,12 @@
       models.forEach(function (mv) {
         var s = R.summary[mv];
         h += '<section class="sw-panel" aria-labelledby="sw-r-' + esc(mv) + '"><h2 id="sw-r-' + esc(mv) + '">' + esc(mv) + "</h2>" +
-          '<div class="sw-kv"><span><b>' + s.settled + "</b> settled</span><span><b>" + s.games + "</b> games</span><span><b>" + s.pushes + "</b> pushes</span><span><b>" + s.void + "</b> void</span></div>" +
-          '<div class="sw-grid2" style="margin-top:10px"><div><h3>Projection accuracy</h3><table class="sw-mini"><tbody><tr><th>Mean absolute error</th><td class="num">' + S.num(s.projection.mae, 2) + ci(s.projection.mae_ci) + "</td></tr><tr><th>Bias (actual − projection)</th><td class=\"num\">" + S.num(s.projection.bias, 2) + ci(s.projection.bias_ci) + '</td></tr><tr><th>Forecasts</th><td class="num">' + s.projection.n + "</td></tr></tbody></table></div>" +
-          '<div><h3>Probability accuracy</h3><table class="sw-mini"><tbody><tr><th>Brier (3 outcomes)</th><td class="num">' + S.num(s.probability.brier, 3) + ci(s.probability.brier_ci) + '</td></tr><tr><th>Log loss</th><td class="num">' + S.num(s.probability.log_loss, 3) + ci(s.probability.log_loss_ci) + '</td></tr><tr><th>Forecasts</th><td class="num">' + s.probability.n + "</td></tr></tbody></table></div></div>" +
+          '<div class="sw-kv"><span><b>' + S.int(s.settled) + "</b> settled</span><span><b>" + S.int(s.games) + "</b> games</span><span><b>" + S.int(s.pushes) + "</b> pushes</span><span><b>" + S.int(s.void) + "</b> void</span></div>" +
+          '<div class="sw-grid2" style="margin-top:10px"><div><h3>Projection accuracy</h3><table class="sw-mini"><tbody><tr><th>Mean absolute error</th><td class="num">' + S.num(s.projection.mae, 2) + ci(s.projection.mae_ci) + "</td></tr><tr><th>Bias (actual − projection)</th><td class=\"num\">" + S.num(s.projection.bias, 2) + ci(s.projection.bias_ci) + '</td></tr><tr><th>Forecasts</th><td class="num">' + S.int(s.projection.n) + "</td></tr></tbody></table></div>" +
+          '<div><h3>Probability accuracy</h3><table class="sw-mini"><tbody><tr><th>Brier (3 outcomes)</th><td class="num">' + S.num(s.probability.brier, 3) + ci(s.probability.brier_ci) + '</td></tr><tr><th>Log loss</th><td class="num">' + S.num(s.probability.log_loss, 3) + ci(s.probability.log_loss_ci) + '</td></tr><tr><th>Forecasts</th><td class="num">' + S.int(s.probability.n) + "</td></tr></tbody></table></div></div>" +
           '<h3 style="margin-top:10px">Recorded payouts</h3><p class="sw-small sw-muted">' + (s.returns.recorded ? s.returns.recorded + " settlements carry an actual stake and payout." : "No settlement records an actual stake and payout, so no returns are shown.") + "</p></section>";
       });
-      h += '<section class="sw-panel" aria-labelledby="sw-led-h"><h2 id="sw-led-h">Ledger (' + R.rows.length + (R.total_rows > R.rows.length ? " of " + R.total_rows : "") + ')</h2><div class="sw-scroll"><table class="sw-mini"><thead><tr><th>Settled</th><th>Player</th><th>Stat</th><th class="num">Line</th><th class="num">Projection</th><th class="num">Actual</th><th>Outcome</th><th class="num">Chance given</th><th class="num">Brier</th><th><span class="sw-sr">Source</span></th></tr></thead><tbody>' +
+      h += '<section class="sw-panel" aria-labelledby="sw-led-h"><h2 id="sw-led-h">Ledger (' + S.int(R.rows.length) + (R.total_rows > R.rows.length ? " of " + S.int(R.total_rows) : "") + ')</h2><div class="sw-scroll"><table class="sw-mini"><thead><tr><th>Settled</th><th>Player</th><th>Stat</th><th class="num">Line</th><th class="num">Projection</th><th class="num">Actual</th><th>Outcome</th><th class="num">Chance given</th><th class="num">Brier</th><th><span class="sw-sr">Source</span></th></tr></thead><tbody>' +
         R.rows.map(function (r) {
           return "<tr><td>" + esc(S.shortDate(r.settled_at)) + "</td><td>" + esc(r.player_key) + "</td><td>" + esc(r.stat) + '</td><td class="num">' + S.line(r.line) + '</td><td class="num">' + S.num(r.projection_mean, 1) + '</td><td class="num">' + S.num(r.actual, 0) + "</td><td>" + esc(r.status === "settled" ? r.outcome : r.status) + '</td><td class="num">' + S.pct(r.p_outcome) + '</td><td class="num">' + S.num(r.brier, 3) + "</td><td>" + src({title: "Settlement", "forecast id": r.forecast_id, model: r.model_version, "settlement records": r.settlement_ids, revision: r.settlement_revision, rule: r.rule_version, "Over / Under / Push given": S.pct(r.p_over) + " / " + S.pct(r.p_under) + " / " + S.pct(r.p_push)}) + "</td></tr>";
         }).join("") + "</tbody></table></div><p class=\"sw-faint sw-small\">" + esc(R.method.brier) + ". " + esc(R.method.ci) + ".</p></section>";

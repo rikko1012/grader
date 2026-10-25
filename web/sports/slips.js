@@ -16,6 +16,7 @@
   function getDraft() { return store(draftKey()) || { legs: [] }; }
   function setDraft(d) { d.saved_at = new Date().toISOString(); store(draftKey(), d); renderDraft(); }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function int(n) { return n == null || !isFinite(n) ? "-" : String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
   function pct(p) { return p == null ? "-" : (Math.round(p * 1000) / 10).toFixed(1) + "%"; }
   function when(iso) {
     if (!iso) return "start unknown";
@@ -105,7 +106,7 @@
   }
   function reasonList(p) {
     var ex = Object.keys(p.excluded || {}).sort(function (a, b) { return p.excluded[b] - p.excluded[a]; });
-    return ex.map(function (k) { return "<li>" + esc(L.slipReason(k)) + ': <span class="ss-num">' + p.excluded[k] + "</span></li>"; }).join("");
+    return ex.map(function (k) { return "<li>" + esc(L.slipReason(k)) + ': <span class="ss-num">' + int(p.excluded[k]) + "</span></li>"; }).join("");
   }
   async function loadPool() {
     var el = $("ss-pool"); el.innerHTML = '<div class="ss-skel" aria-label="Loading picks"></div>';
@@ -117,13 +118,13 @@
       $("ss-build").disabled = !p.eligible;
       if (!p.eligible) {                               // never a silent "0 picks": a clear locked state with the reasons
         el.innerHTML = '<div class="ss-locked" role="status"><p><strong>No pick can go into a ' + esc(LABEL[ctx().platform]) + " " + esc(ctx().league.toUpperCase()) +
-          " slip right now.</strong> " + (p.offers ? "Scout holds " + p.offers + " " + esc(LABEL[ctx().platform]) + " lines, and none can be used yet:" : "No " + esc(LABEL[ctx().platform]) + " lines are on the board yet.") + "</p>" +
+          " slip right now.</strong> " + (p.offers ? "Scout holds " + int(p.offers) + " " + esc(LABEL[ctx().platform]) + " lines, and none can be used yet:" : "No " + esc(LABEL[ctx().platform]) + " lines are on the board yet.") + "</p>" +
           (p.offers ? '<ul class="ss-reasons">' + reasonList(p) + "</ul>" : "") +
           '<p class="ss-help">Lines open again as books post the next games and Scout projects them. Prices as of ' + esc(when(p.snapshot_at)) + ".</p></div>";
         return;
       }
-      el.innerHTML = '<p><strong class="ss-num">' + p.eligible + "</strong> picks can go into a slip, of " + p.offers +
-        " lines - prices as of " + esc(when(p.snapshot_at)) + "." + (nres ? " " + nres + " of them are research estimates (stake 0)." : "") + "</p>" +
+      el.innerHTML = '<p><strong class="ss-num">' + int(p.eligible) + "</strong> picks can go into a slip, of " + int(p.offers) +
+        " lines - prices as of " + esc(when(p.snapshot_at)) + "." + (nres ? " " + int(nres) + " of them are research estimates (stake 0)." : "") + "</p>" +
         (Object.keys(p.excluded || {}).length ? "<details><summary>Why other lines are left out</summary><ul class=\"ss-reasons\">" + reasonList(p) + "</ul></details>" : "");
     } catch (e) { el.innerHTML = '<p class="ss-note">' + esc(e.message) + "</p>"; }
   }
@@ -180,9 +181,9 @@
     var out = $("ss-results"), h = "";
     (b.shortage || []).forEach(function (s) {
       h += '<div class="ss-short" role="note"><strong>' + s.built + " of " + s.requested + " " + s.size + "-pick slips built.</strong> " +
-        '<span class="ss-num">' + s.valid_combinations + "</span> valid " + s.size + "-pick combinations exist among " + s.eligible_legs + " eligible picks in " + s.games + " games. " +
+        '<span class="ss-num">' + int(s.valid_combinations) + "</span> valid " + s.size + "-pick combinations exist among " + int(s.eligible_legs) + " eligible picks in " + int(s.games) + " games. " +
         s.reasons.map(esc).join(" ") +
-        (s.binding.length ? " Limited by: " + s.binding.map(function (x) { return esc(x.constraint) + " (" + x.slips_if_relaxed + " slips without it)"; }).join("; ") + "." : "") + "</div>";
+        (s.binding.length ? " Limited by: " + s.binding.map(function (x) { return esc(x.constraint) + " (" + int(x.slips_if_relaxed) + " slips without it)"; }).join("; ") + "." : "") + "</div>";
     });
     var ex = b.exposure || {};
     if ((ex.player || []).length || (ex.event || []).length) {

@@ -138,7 +138,7 @@ def test_slip_studio_zero_picks_is_a_clear_locked_state(browser):
     box = page.locator("#ss-pool .ss-locked")
     assert box.is_visible()
     t = box.inner_text()
-    assert "No pick can go into" in t and "1027" in t and "Game in progress" in t
+    assert "No pick can go into" in t and "1,027" in t and "Game in progress" in t
     assert "No Scout projection for this exact line yet" in t
     assert page.locator("#ss-build").is_disabled()
     assert not page.locator("#ss-research").is_visible()

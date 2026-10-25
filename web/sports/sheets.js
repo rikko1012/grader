@@ -100,6 +100,7 @@
 
   // ------------------------------------------------------------------------------------------------- view
   var esc = function (s) { return root.ScoutShell.esc(s); };
+  var int = function (n) { return root.SportsStats.int(n); };
   var UI = {};
   try { UI = JSON.parse(localStorage.getItem(LS) || "{}") || {}; } catch (e) { UI = {}; }
   function save() { try { localStorage.setItem(LS, JSON.stringify(UI)); } catch (e) { /* storage off */ } }
@@ -191,7 +192,7 @@
           '<td class="num">' + conf + "</td></tr>";
       }).join("");
       main.querySelector("#shx-body").innerHTML = body || '<tr><td colspan="13" class="sw-muted">No lines match these filters.</td></tr>';
-      main.querySelector("#shx-count").textContent = rows.length + " of " + all.length + " lines";
+      main.querySelector("#shx-count").textContent = int(rows.length) + " of " + int(all.length) + " lines";
       var more = main.querySelector("#shx-more");
       more.hidden = rows.length <= shown;
       more.textContent = "Show " + Math.min(PAGE, rows.length - shown) + " more";
@@ -240,7 +241,7 @@
           '<td class="sw-small sw-mono">' + esc((r.l10.last || []).map(lineTxt).join(" ")) + "</td>" +
           '<td class="num">' + r.avail + "</td></tr>";
       }).join("") || '<tr><td colspan="9" class="sw-muted">No players match these filters.</td></tr>';
-      main.querySelector("#shx-count").textContent = rows.length + " of " + D.count + " player lines with " + 10 + "+ games";
+      main.querySelector("#shx-count").textContent = int(rows.length) + " of " + int(D.count) + " player lines with 10+ games";
       var more = main.querySelector("#shx-more");
       more.hidden = rows.length <= shown;
       more.textContent = "Show " + Math.min(PAGE, rows.length - shown) + " more";

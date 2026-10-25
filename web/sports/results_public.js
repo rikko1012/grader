@@ -11,8 +11,9 @@
     return " (95%: " + f(ci[0]) + " – " + f(ci[1]) + ")";
   }
   function gateText(g) { return g ? g.text : ""; }
+  function int(n) { return n === null || n === undefined || !isFinite(n) ? "—" : String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
   function rateText(w, l) { return w + l ? pct(w / (w + l)) : "—"; }
-  var api = {pct: pct, ciText: ciText, gateText: gateText, rateText: rateText};
+  var api = {pct: pct, ciText: ciText, gateText: gateText, rateText: rateText, int: int};
   if (typeof module !== "undefined" && module.exports) { module.exports = api; return; }
   root.SportsResultsPublic = api;
 
@@ -44,28 +45,29 @@
   }
   function summaryRow(label, s) {
     var L = s.leans || {}, P = s.projection || {};
-    return "<tr><th scope=\"row\">" + esc(label) + '</th><td class="num">' + s.settled + '</td><td class="num">' + s.props + '</td><td class="num">' + s.games +
+    return "<tr><th scope=\"row\">" + esc(label) + '</th><td class="num">' + int(s.settled) + '</td><td class="num">' + int(s.props) + '</td><td class="num">' + int(s.games) +
       '</td><td class="num">' + n2(P.mae) + '<span class="sw-faint sw-small">' + esc(ciText(P.mae_ci95)) + '</span></td><td class="num">' + n2(P.bias) +
-      '<span class="sw-faint sw-small">' + esc(ciText(P.bias_ci95)) + '</span></td><td class="num">' + (L.wins || 0) + "-" + (L.losses || 0) + (L.pushes ? "-" + L.pushes : "") +
+      '<span class="sw-faint sw-small">' + esc(ciText(P.bias_ci95)) + '</span></td><td class="num">' + int(L.wins || 0) + "-" + int(L.losses || 0) + (L.pushes ? "-" + int(L.pushes) : "") +
       '</td><td class="num">' + pct(L.hit_rate) + '<span class="sw-faint sw-small">' + esc(ciText(L.hit_rate_ci95, true)) + "</span></td></tr>";
   }
   var SUMMARY_HEAD = [["", 0], ["Settled", 1], ["Props", 1], ["Games", 1], ["Proj. MAE", 1], ["Bias", 1], ["Lean W-L(-P)", 1], ["Lean hit rate", 1]];
 
   function leagueSection(lg, L) {
     var h = '<section class="sw-panel" aria-labelledby="rp-' + lg + '"><h2 id="rp-' + lg + '">' + lg.toUpperCase() + "</h2>" +
-      '<p class="rp-gate' + (L.gate.validated ? " ok" : "") + '"><b>' + esc(gateText(L.gate)) + "</b></p>";
+      '<p class="rp-gate' + (L.gate.validated ? " ok" : "") + '"><b>' + esc(gateText(L.gate)) + "</b></p>" +
+      (L.gate.rule ? '<p class="sw-small sw-faint">' + esc(L.gate.rule) + "</p>" : "");
     if (!L.settled) return h + '<p class="sw-muted">No settled forecasts yet. Forecasts are scored after their games are final, from the box score, at the line each forecast was made for.' +
-      (L.unresolved || L.void ? " " + L.unresolved + " unresolved · " + L.void + " void." : "") + "</p></section>";
+      (L.unresolved || L.void ? " " + int(L.unresolved) + " unresolved · " + int(L.void) + " void." : "") + "</p></section>";
     h += "<h3>All models</h3>" + table(SUMMARY_HEAD, [summaryRow("All", L)]);
     h += "<h3>By model</h3>" + table(SUMMARY_HEAD, Object.keys(L.models).map(function (m) { return summaryRow(m + (L.models[m].research_only ? " (research)" : ""), L.models[m]); }));
     h += "<h3>By stat</h3>" + table(SUMMARY_HEAD, Object.keys(L.stats).map(function (s) { return summaryRow(s, L.stats[s]); }));
     h += '<h3>Calibration</h3><p class="sw-small sw-muted">Stated chance of Over (given no push) against how often Over happened.</p>' +
       table([["Stated Over chance", 0], ["Forecasts", 1], ["Mean stated", 1], ["Observed Over", 1]], L.calibration.map(function (c) {
-        return "<tr><th scope=\"row\">" + esc(c.band) + '</th><td class="num">' + c.n + '</td><td class="num">' + pct(c.stated) + '</td><td class="num">' + pct(c.observed) + '<span class="sw-faint sw-small">' + esc(ciText(c.observed_ci95, true)) + "</span></td></tr>";
+        return "<tr><th scope=\"row\">" + esc(c.band) + '</th><td class="num">' + int(c.n) + '</td><td class="num">' + pct(c.stated) + '</td><td class="num">' + pct(c.observed) + '<span class="sw-faint sw-small">' + esc(ciText(c.observed_ci95, true)) + "</span></td></tr>";
       }));
     h += '<h3>Leans by probability band</h3><p class="sw-small sw-muted">Grade letters are not in use; bands are the lean side’s chance given no push.</p>' +
       table([["Probability band", 0], ["Leans", 1], ["W-L(-P)", 1], ["Mean stated", 1], ["Hit rate", 1]], L.bands.map(function (b) {
-        return "<tr><th scope=\"row\">" + esc(b.band) + '</th><td class="num">' + b.n + '</td><td class="num">' + b.wins + "-" + b.losses + (b.pushes ? "-" + b.pushes : "") + '</td><td class="num">' + pct(b.stated) + '</td><td class="num">' + pct(b.hit_rate) + '<span class="sw-faint sw-small">' + esc(ciText(b.hit_rate_ci95, true)) + "</span></td></tr>";
+        return "<tr><th scope=\"row\">" + esc(b.band) + '</th><td class="num">' + int(b.n) + '</td><td class="num">' + int(b.wins) + "-" + int(b.losses) + (b.pushes ? "-" + int(b.pushes) : "") + '</td><td class="num">' + pct(b.stated) + '</td><td class="num">' + pct(b.hit_rate) + '<span class="sw-faint sw-small">' + esc(ciText(b.hit_rate_ci95, true)) + "</span></td></tr>";
       }));
     return h + "</section>";
   }
@@ -76,8 +78,8 @@
     if (!lgs.length) return h + '<p class="sw-muted">No tracked picks settled yet.</p></section>';
     return h + table([["League", 0], ["Picks", 1], ["Games", 1], ["W-L-P", 1], ["Void", 1], ["Open", 1], ["Hit rate", 1]], lgs.map(function (lg) {
       var g = P.leagues[lg];
-      return "<tr><th scope=\"row\">" + esc(lg.toUpperCase()) + '</th><td class="num">' + g.picks + '</td><td class="num">' + g.games + '</td><td class="num">' + g.wins + "-" + g.losses + "-" + g.pushes +
-        '</td><td class="num">' + g.voids + '</td><td class="num">' + g.pending + '</td><td class="num">' + pct(g.hit_rate) + '<span class="sw-faint sw-small">' + esc(ciText(g.hit_rate_ci95_games, true)) + "</span></td></tr>";
+      return "<tr><th scope=\"row\">" + esc(lg.toUpperCase()) + '</th><td class="num">' + int(g.picks) + '</td><td class="num">' + int(g.games) + '</td><td class="num">' + int(g.wins) + "-" + int(g.losses) + "-" + int(g.pushes) +
+        '</td><td class="num">' + int(g.voids) + '</td><td class="num">' + int(g.pending) + '</td><td class="num">' + pct(g.hit_rate) + '<span class="sw-faint sw-small">' + esc(ciText(g.hit_rate_ci95_games, true)) + "</span></td></tr>";
     })) + '<p class="sw-faint sw-small">' + esc(P.note || "") + "</p></section>";
   }
 
