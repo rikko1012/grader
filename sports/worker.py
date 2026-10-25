@@ -69,6 +69,8 @@ def vm_cap_mb(env=None):
 MAX_VM_MB = vm_cap_mb()
 STORE_MAX_MB = float(os.environ.get("SPORTS_STORE_MAX_MB", "1500"))
 SETTLE_LOOKBACK_DAYS = 4                 # box scores re-read for corrections this long after a game
+SETTLE_FLOOR = os.environ.get("SPORTS_SETTLE_FLOOR", "2026-10-20T00:00:00Z")   # catch-up reaches back to here
+SETTLE_CATCHUP_MAX = int(os.environ.get("SPORTS_SETTLE_CATCHUP_MAX", "40"))  # older unsettled games per run
 WINDOW_DAYS = {"nba": 2, "wnba": 2, "cbb": 2, "nfl": 7, "cfb": 7}
 SOURCES = ("espn", "pp", "ud", "kalshi", "injuries", "oddsapi", "polymarket", "books", "games")
 # cmd_ingest runs leagues on parallel threads; the books job and the game tick share per-process leases and
@@ -428,14 +430,43 @@ def _ingest_games(lg):
 
 
 # ------------------------------------------------------------------------------------------------------ settlement
-def settle_league(con, league, ctx=None, now=None):
+def _settled_events(con, league):
+    """event ids of this league that already hold at least one settlement record (one indexed scan)."""
+    return {r[0] for r in con.execute("SELECT DISTINCT event_id FROM records WHERE kind='settlement' AND event_id LIKE ?",
+                                      (f"{league}:%",))}
+
+
+def _events_with_offers(con, league, event_ids):
+    out = set()
+    ids = sorted(event_ids)
+    for i in range(0, len(ids), 400):
+        part = ids[i:i + 400]
+        out |= {r[0] for r in con.execute(f"SELECT DISTINCT event_id FROM records_meta_all WHERE kind='offer' AND "
+                                          f"event_id IN ({','.join('?' * len(part))})", part)}
+    return out
+
+
+def settle_league(con, league, ctx=None, now=None, since=None, max_catchup=None):
+    """Settle the stored offers of this league's started games. Every game started in the last SETTLE_LOOKBACK_DAYS is
+    re-read (ESPN corrects box scores). CATCH-UP (fresh 2026-10-24): an older game since SETTLE_FLOOR (or `since`)
+    that has offers but NO settlement yet - a missed / failed / killed cycle - is settled too, at most max_catchup per
+    run (oldest first), so a gap heals itself without re-reading every old game every hour. Idempotent: settlement.record
+    stores an unchanged result once."""
     from . import espn
     lg = config.league(league)
     now = now or now_utc()
     done = set((ctx.cursor or {}).get("done", [])) if ctx else set()
-    since = (parse_utc(now) - timedelta(days=SETTLE_LOOKBACK_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    evs = [e for e in _stored_events(con, league).values()
-           if e.start_utc and since <= e.start_utc < now and e.event_id not in done]
+    recent = (parse_utc(now) - timedelta(days=SETTLE_LOOKBACK_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    floor = since or SETTLE_FLOOR
+    stored = [e for e in _stored_events(con, league).values()
+              if e.start_utc and e.start_utc < now and e.event_id not in done and e.status not in ("cancelled",)]
+    evs = [e for e in stored if e.start_utc >= recent]
+    old = [e for e in stored if floor <= e.start_utc < recent]
+    if old:
+        have = _settled_events(con, league)
+        with_offers = _events_with_offers(con, league, {e.event_id for e in old} - have)
+        old = sorted((e for e in old if e.event_id in with_offers), key=lambda x: x.start_utc)
+        evs += old[:max_catchup if max_catchup is not None else SETTLE_CATCHUP_MAX]
     out = {"events": 0, "observations": {}, "settlements": {"inserted": 0, "unchanged": 0, "revision": 0}}
     for e in sorted(evs, key=lambda x: x.start_utc):
         espn_id = e.event_id.split(":")[-1]
@@ -514,8 +545,26 @@ def cmd_ingest(a, con):
 def cmd_settle(a, con):
     flags.require("SPORTS_INGEST")
     jobs = Jobs(con)
-    out = {lg: jobs.run(f"settle:{lg}:{bucket(60)}", "settle", lambda ctx, lg=lg: settle_league(con, lg, ctx))
-           for lg in (a.leagues or ["nba", "nfl"])}
+    since = getattr(a, "since", None)
+    if since and len(since) == 10:
+        since += "T00:00:00Z"
+    leagues = a.leagues or ["nba", "nfl"]
+    if since:                                           # explicit backfill: its own job key (never 'done' by an hourly run)
+        out = {lg: jobs.run(f"settle-backfill:{lg}:{since}:{bucket(10)}", "settle",
+                            lambda ctx, lg=lg: settle_league(con, lg, ctx, since=since, max_catchup=10 ** 6))
+               for lg in leagues}
+    else:
+        out = {lg: jobs.run(f"settle:{lg}:{bucket(getattr(a, 'bucket_min', None) or 60)}", "settle",
+                            lambda ctx, lg=lg: settle_league(con, lg, ctx)) for lg in leagues}
+    from . import snapshots                             # Results ledger right after settling (never breaks settlement)
+    out["results"] = {}
+    for lg in leagues:
+        if lg not in snapshots.LEAGUES:
+            continue
+        try:
+            out["results"][lg] = snapshots.write_results(con, lg)
+        except Exception as e:                          # noqa: BLE001
+            out["results"][lg] = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
     try:                                                # model scorecard + diagnostic queue (sports/model/learning.py)
         from .model import learning                     # never breaks settlement
         out["model_learning"] = learning.on_settled(con)
@@ -591,6 +640,8 @@ def main(argv=None):
             s.add_argument("--kalshi-every", type=int, default=30)
     s = sub.add_parser("settle")
     s.add_argument("leagues", nargs="*")
+    s.add_argument("--since", help="backfill: settle every stored game started since this date (YYYY-MM-DD)")
+    s.add_argument("--bucket-min", type=int, default=60, help="idempotency bucket of the scheduled run")
     s = sub.add_parser("forecast")
     s.add_argument("leagues", nargs="*")
     s = sub.add_parser("coverage")

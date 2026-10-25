@@ -150,6 +150,8 @@ def copy_text(platform, entry_type, legs):
     for i, l in enumerate(legs, 1):
         lines.append(f"{i}. {l['player']} ({l['team']}) - {l.get('event_ref') or ''} - {_et(l['start_utc'])} - "
                      f"{l.get('stat_label') or l['stat']} {words[l['side']]} {l['line']}")
+    if any(l.get("research_only") for l in legs):
+        lines.append("Research estimates - not validated; stakes 0.")
     lines.append("Enter it yourself in the app and check every line there first: lines move, and a changed line "
                  "needs a new check.")
     return "\n".join(lines)

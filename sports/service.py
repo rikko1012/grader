@@ -221,14 +221,17 @@ def alerts(o):
     jobs = sched.get("jobs") or {}
     if o.get("scheduler_alive") is False:
         out.append({"level": "page", "code": "scheduler_down", "detail": "the job scheduler thread is not running"})
-    ing = jobs.get("ingest") or {}
-    if ingest_on and ing.get("enabled"):
+    # the collector: "ingest" (one job) or one "ingest-<league>" job per league (game-day cadence, scheduler.py)
+    for jname in sorted(n for n in jobs if n == "ingest" or (n.startswith("ingest-") and n != "ingest-kalshi")):
+        ing = jobs.get(jname) or {}
+        if not (ingest_on and ing.get("enabled")):
+            continue
         last_ok = ing.get("last_ok_at")
-        every = ing.get("every_s") or 900
+        every = max(ing.get("every_s") or 900, 900)     # a 5-minute pre-tip cadence does not tighten the page
         if last_ok is None and (sched.get("uptime_s") or 0) > 3 * every:
-            out.append({"level": "page", "code": "worker_down", "detail": {"job": "ingest", "last_exit": ing.get("last_exit")}})
+            out.append({"level": "page", "code": "worker_down", "detail": {"job": jname, "last_exit": ing.get("last_exit")}})
         elif last_ok is not None and time.time() - last_ok > 3 * every:
-            out.append({"level": "page", "code": "worker_down", "detail": {"job": "ingest", "last_ok_age_s":
+            out.append({"level": "page", "code": "worker_down", "detail": {"job": jname, "last_ok_age_s":
                                                                            round(time.time() - last_ok)}})
     feeds = o.get("feeds") or {}
     if ingest_on:

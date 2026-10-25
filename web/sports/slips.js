@@ -72,7 +72,7 @@
   }
   function compact(l) {
     var keep = ["platform", "offer_id", "record_id", "forecast_id", "side", "line", "variant", "multiplier", "start_utc",
-      "player_id", "player", "team", "stat", "stat_label", "event_id", "event_ref", "custom", "p_win", "p_loss", "p_push", "model_version"];
+      "player_id", "player", "team", "stat", "stat_label", "event_id", "event_ref", "custom", "p_win", "p_loss", "p_push", "model_version", "research_only"];
     var o = {}; keep.forEach(function (k) { if (l[k] !== undefined && l[k] !== null) o[k] = l[k]; }); return o;
   }
   function slipPayload(d) {
@@ -96,17 +96,43 @@
   }
 
   /* ---------------------------------------------------------------- pool */
+  var L = window.SportsLabels || { slipReason: function (x) { return x; } };
+  var RESEARCH_TEXT = "Research estimates - not validated; stakes 0";
+  function researchBanner(show) {                     // owner choice (sp-2): research legs allowed, always labelled
+    var b = $("ss-research");
+    if (!b) return;
+    b.hidden = !show;
+  }
+  function reasonList(p) {
+    var ex = Object.keys(p.excluded || {}).sort(function (a, b) { return p.excluded[b] - p.excluded[a]; });
+    return ex.map(function (k) { return "<li>" + esc(L.slipReason(k)) + ': <span class="ss-num">' + p.excluded[k] + "</span></li>"; }).join("");
+  }
   async function loadPool() {
     var el = $("ss-pool"); el.innerHTML = '<div class="ss-skel" aria-label="Loading picks"></div>';
     try {
       var p = await api("/api/sports/slips/pool", { league: ctx().league, platform: ctx().platform });
       lastPool = p;
-      var ex = Object.keys(p.excluded || {}).sort(function (a, b) { return p.excluded[b] - p.excluded[a]; });
-      el.innerHTML = '<p><strong class="ss-num">' + p.eligible + "</strong> eligible picks of " + p.offers +
-        " offers - prices as of " + esc(when(p.snapshot_at)) + ".</p>" +
-        (ex.length ? "<details><summary>Why other offers are left out</summary><ul>" + ex.map(function (k) {
-          return "<li>" + esc(k) + ": <span class=ss-num>" + p.excluded[k] + "</span></li>"; }).join("") + "</ul></details>" : "");
+      var nres = p.research_legs != null ? p.research_legs : (p.legs || []).filter(function (l) { return l.research_only; }).length;
+      researchBanner(nres > 0 || draftHasResearch());
+      $("ss-build").disabled = !p.eligible;
+      if (!p.eligible) {                               // never a silent "0 picks": a clear locked state with the reasons
+        el.innerHTML = '<div class="ss-locked" role="status"><p><strong>No pick can go into a ' + esc(LABEL[ctx().platform]) + " " + esc(ctx().league.toUpperCase()) +
+          " slip right now.</strong> " + (p.offers ? "Scout holds " + p.offers + " " + esc(LABEL[ctx().platform]) + " lines, and none can be used yet:" : "No " + esc(LABEL[ctx().platform]) + " lines are on the board yet.") + "</p>" +
+          (p.offers ? '<ul class="ss-reasons">' + reasonList(p) + "</ul>" : "") +
+          '<p class="ss-help">Lines open again as books post the next games and Scout projects them. Prices as of ' + esc(when(p.snapshot_at)) + ".</p></div>";
+        return;
+      }
+      el.innerHTML = '<p><strong class="ss-num">' + p.eligible + "</strong> picks can go into a slip, of " + p.offers +
+        " lines - prices as of " + esc(when(p.snapshot_at)) + "." + (nres ? " " + nres + " of them are research estimates (stake 0)." : "") + "</p>" +
+        (Object.keys(p.excluded || {}).length ? "<details><summary>Why other lines are left out</summary><ul class=\"ss-reasons\">" + reasonList(p) + "</ul></details>" : "");
     } catch (e) { el.innerHTML = '<p class="ss-note">' + esc(e.message) + "</p>"; }
+  }
+  function draftHasResearch() {
+    var d = getDraft();
+    return d.legs.some(function (l, i) { var c = lastCheck && lastCheck.current && lastCheck.current[i]; return l.research_only || (c && c.research_only); });
+  }
+  function humanProblem(t) {                          // "...(game in_progress)" -> "...(Game in progress)"
+    return String(t || "").replace(/\(([^()]+)\)$/, function (_m, r) { return "(" + L.slipReason(r) + ")"; });
   }
 
   /* ---------------------------------------------------------------- build */
@@ -136,7 +162,8 @@
       '<span class="ss-num">' + esc(l.line) + "</span></span>" +
       '<span class="ss-meta">' + esc(l.stat_label || l.stat) + " - " + esc(l.event_ref || "") + " - " + esc(when(l.start_utc)) +
       (l.custom ? " - no Scout chance for a line that is not offered" : l.p_win != null ? ' - Scout chance <span class="ss-num">' + pct(l.p_win) + "</span>" + (l.p_push ? " (push " + pct(l.p_push) + ")" : "") : "") +
-      (l.custom ? ' <span class="ss-tag ss-hyp">custom line - hypothetical</span>' : "") + "</span>" + (extra || "") + "</li>";
+      (l.custom ? ' <span class="ss-tag ss-hyp">custom line - hypothetical</span>' : "") +
+      (l.research_only ? ' <span class="ss-tag ss-research" title="' + esc(RESEARCH_TEXT) + '">Research estimate · stake 0</span>' : "") + "</span>" + (extra || "") + "</li>";
   }
   function payoutList(p) {
     if (!p) return "";
@@ -169,7 +196,10 @@
         '<ul class="ss-legs">' + s.legs.map(function (l) { return legRow(s.platform, l); }).join("") + "</ul>" +
         jointText(s.joint) + payoutList(s.payout) + "</article>";
     }).join("") + "</div>";
-    h += '<p class="ss-note">Builder ' + esc(b.builder_version) + " - policy " + esc(b.policy_version) + " - prices as of " + esc(when(b.snapshot_at)) + (b.search && !b.search.exact ? " - search stopped at its limit (best found shown)" : "") + "</p>";
+    var anyRes = b.slips.some(function (s) { return s.legs.some(function (l) { return l.research_only; }); });
+    if (anyRes) h = '<p class="ss-banner ss-warnmsg" role="note"><strong>' + esc(RESEARCH_TEXT) + ".</strong> Picks tagged Research estimate come from a model that has not passed its live-line check.</p>" + h;
+    h += '<p class="ss-note">Prices as of ' + esc(when(b.snapshot_at)) + (b.search && !b.search.exact ? " - the search stopped at its limit (best found shown)" : "") + "</p>" +
+      '<details class="ss-details"><summary>Details</summary><p class="ss-note">Builder ' + esc(b.builder_version) + " - leg policy " + esc(b.policy_version) + " - rules " + esc(b.rules_version || "") + "</p></details>";
     out.innerHTML = h;
   }
   function useSlip(i) {
@@ -193,9 +223,11 @@
       var cur = lastCheck && lastCheck.current && lastCheck.current[i];
       if (probs[i] && cur && !l.custom) extra += ' <button class="ss-btn ss-small" type="button" data-take="' + i + '">Use current version</button>';
       extra += "</span>";
-      if (probs[i]) extra += '<ul class="ss-problems">' + probs[i].map(function (p) { return "<li>" + esc(p.text) + "</li>"; }).join("") + "</ul>";
-      return legRow(c.platform, l, extra);
+      if (probs[i]) extra += '<ul class="ss-problems">' + probs[i].map(function (p) { return "<li>" + esc(humanProblem(p.text)) + "</li>"; }).join("") + "</ul>";
+      var cur2 = lastCheck && lastCheck.current && lastCheck.current[i];
+      return legRow(c.platform, cur2 && cur2.research_only && !l.research_only ? Object.assign({}, l, { research_only: true }) : l, extra);
     }).join("") + "</ul>";
+    researchBanner((lastPool && lastPool.research_legs > 0) || draftHasResearch());
   }
   function editLine(i, v) {
     var d = getDraft(), l = d.legs[i], n = parseFloat(v);
@@ -222,7 +254,7 @@
       if (r.ok && r.payout_key && !d.payout_key) { d.payout_key = r.payout_key; store(draftKey(), d); }
       var h = r.ok ? '<p class="ss-okmsg">Every pick checked at ' + esc(when(r.checked_at)) + " (prices as of " + esc(ago(r.snapshot_at)) + ").</p>"
         : '<p role="alert"><strong>This slip changed - rebuild or reconfirm the marked picks.</strong></p><ul class="ss-problems">' +
-          r.problems.filter(function (p) { return p.leg == null; }).map(function (p) { return "<li>" + esc(p.text) + "</li>"; }).join("") + "</ul>";
+          r.problems.filter(function (p) { return p.leg == null; }).map(function (p) { return "<li>" + esc(humanProblem(p.text)) + "</li>"; }).join("") + "</ul>";
       h += jointText(r.joint) + payoutList(r.payout);
       box.innerHTML = h; renderDraft();
       return r;
