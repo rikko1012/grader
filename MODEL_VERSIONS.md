@@ -1,5 +1,27 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
+## lw-1 line-informed chance - RELEASE CANDIDATE 2026-10-25 (branch esports/accuracy; NOT shipped; owner decision; rollback LW1_LIVE=0)
+
+Registered in research/esports_accuracy_2026_10_25/REGISTER.md (d0a6237) before any number; results RESULTS.md.
+- **What changes:** every performance-model CS2 grade (perf-2, perf-cm2, perf-2-bo3; kills and HS, every scope) gets
+  `P(Over | no push) = Phi(a + w * Phi^-1(model raw chance))` (lw1.py, frozen fit on all P1 units Oct 11-25, data hash
+  eb5822b13949): kills Maps 1-2 (a +0.034, w 0.043), HS Maps 1-2 (-0.004, 0.396), kills Map 1 / Maps 1-3 (+0.017, -0.061),
+  HS Map 1 / Maps 1-3 (-0.009, 0.272). Kills cap 22-78% after it. Grade, units, side, value lines, the card chart and the
+  simulation all use one distribution: normal(line-informed projection, model sd); the card names the model's projection
+  ("Line-informed projection (model 30.2) 27.9 vs line 27.5"). Legacy grades and LoL unchanged.
+- **Unchanged:** the model's projection / chances are kept in grade.lw1 and the forecast shadow (shadow.lw1); the logged
+  forecast `lambda` stays the MODEL projection (P1 / projection_source / challengers read it); stake thresholds and rules;
+  fh-1 arms, shadow alternatives, perf-1 / prior-smooth / perf_market challengers and lc-1's input grade WITHOUT lw-1 (their
+  definitions are frozen). lb-001 transforms the published chance by definition, so it follows the live chance.
+- **Evidence (walk-forward, development):** log loss +0.0067 [+0.0011, +0.0128] vs live, Brier +0.0032; 55%+ gap 3.7 vs
+  7.4 pts; staked 56.3% (423) vs 51.3% (1,262). Equal to the 50% line baseline (-0.0001), not better. Frozen-weight reading
+  (fit <= Oct 17, Oct 18-25): log loss +0.0071 [+0.0017, +0.0131], staked 50.6% vs 49.0% (+1.6 [-3.7, +6.8], n.s.).
+- **Product impact:** on the latest 500 production forecasts, staked 187 -> 10 (kills 106 -> 0, HS 81 -> 10; 9 of 10
+  Unders); B / B+ grades 118 -> 0. Replay: lw-1 off reproduces 500 / 500 logged grades exactly; lw-1 on equals the transform
+  of the logged raw chance on 500 / 500; research vs release transform max |diff| 1e-16 on 3,361 units.
+- Also on this branch: settlement waits on a partial HLTV map scoreboard (hltv._series_rows / picklog.scope_result; 19
+  units of hltv:2399658 settled short on 2026-10-17; admin re-check needed for those picks).
+
 ## Map veto display + logging, live 2026-10-23 20:30 UTC (main 0ee4d3e, PRs #12 + #14; rollback 2fbfc0e; CS2 model tag unchanged: `aa6696d5d6`; display / logging / shadow only)
 
 No grade, chance, stake, threshold, model weight or frozen constant changed; no file the model tag hashes was edited

@@ -156,6 +156,13 @@ CONFIG = {
     "break_even": {"2-pick 3x": 0.577, "3-pick 6x": 0.550, "3-pick 5x": 0.585,
                    "4-pick 10x": 0.562, "5-pick 20x": 0.549, "6-pick 37.5x": 0.547},
 }
+# lw-1 (2026-10-25, lw1.py): line-informed chance on performance-model grades; None = off. Rollback: LW1_LIVE=0.
+# Experiments that must stay as frozen (fh-1 arms, shadow alternatives, perf challengers) grade with lw1=None.
+try:
+    import lw1 as _lw1_mod
+    CONFIG["lw1"] = dict(_lw1_mod.PARAMS) if _lw1_mod.enabled() else None
+except ImportError:                     # pragma: no cover - lw1.py ships with the grader
+    CONFIG["lw1"] = None
 GRADES = ["C", "B-", "B", "B+", "A-", "A", "A+"]
 
 
@@ -784,6 +791,29 @@ def grade_leg(d, cfg=CONFIG):
         pm = raw[0] / (raw[0] + raw[1]) if raw[0] + raw[1] > 0 else 0.5
     probs_raw = {"over": round(raw[0], 4), "under": round(raw[1], 4), "push": round(raw[2], 4),
                  "p_more_no_push": round(raw[0] / (raw[0] + raw[1]), 4) if raw[0] + raw[1] > 0 else 0.5}
+    lw = None
+    if cfg.get("lw1") and perf_on:
+        # lw-1 (2026-10-25, lw1.py): the chance keeps the book line and only the share of the model's distance from it
+        # that the settled real lines showed to be real. The model's own projection / chances are kept in "lw1"; the
+        # grade, chart and simulation all use one distribution: normal(line-informed projection, model sd).
+        import lw1 as _lw1
+        r = _lw1.chance(prop, scope, probs_raw["p_more_no_push"], cfg["lw1"])
+        if r is not None:
+            p_lw, a_lw, w_lw, z_lw = r
+            mu = _lw1.projection(line, p_lw, sd, _cuts)
+            lw = {"version": _lw1.VERSION, "a": a_lw, "w": w_lw, "z": round(z_lw, 6), "p_more_lw": round(p_lw, 6),
+                  "lambda_model": lam_final, "probs_model_raw": probs_raw, "sd": round(sd, 4),
+                  "lambda_line_informed": round(mu, 2),
+                  "p_more_model": round(min(max(pm, 1 - cfg["p_cap_kills"]), cfg["p_cap_kills"]) if prop == "kills" else pm, 3)}
+            lam_model_lw = lam_final
+            lam_final, hs_dist, pm = mu, None, p_lw
+            lam12 = mu * {"1": 2.0, "12": 1.0, "123": 2.0 / 3.0}.get(scope, 1.0)
+            raw = three()
+            probs_raw = {"over": round(raw[0], 4), "under": round(raw[1], 4), "push": round(raw[2], 4),
+                         "p_more_no_push": round(raw[0] / (raw[0] + raw[1]), 4) if raw[0] + raw[1] > 0 else 0.5}
+            flags.append(f"LINE-INFORMED ({_lw1.VERSION}): chance {p_lw:.1%} keeps the book line {line:g} plus "
+                         f"{w_lw:.0%} of the model's distance from it (model {lam_model_lw:.1f} -> {mu:.1f}; "
+                         f"model alone {lw['p_more_model']:.1%} Over)")
     if prop == "kills":                                   # fat tails: no side above the cap
         cap = cfg["p_cap_kills"]
         if pm > cap or pm < 1 - cap:
@@ -899,8 +929,12 @@ def grade_leg(d, cfg=CONFIG):
     # P(More at line L) = 1 - PHI((L + 0.5 - lam)/sd): More reaches p at L <= lam - 0.5 - z*sd,
     # Less reaches p at L >= lam - 0.5 + z*sd. Lines are x.5, so round to the right x.5.
     def more_line(z):   # highest x.5 line at or below the threshold (Over at L+0.5+: cut L)
+        if lw is not None:   # lw-1: Phi(a + w (lam_model - L*) / sd) reaches the chance; a weight near 0 never gets there
+            return None if lw["w"] <= 0.05 else math.floor(lw["lambda_model"] - sd * (z - lw["a"]) / lw["w"] - 0.5) + 0.5
         return math.floor(lam_final - m_o - z * sd - 0.5) + 0.5
     def less_line(z):   # lowest x.5 line at or above the threshold
+        if lw is not None:
+            return None if lw["w"] <= 0.05 else math.ceil(lw["lambda_model"] + sd * (z + lw["a"]) / lw["w"] - 0.5) + 0.5
         return math.ceil(lam_final + m_u + z * sd - 0.5) + 0.5
     more_at, more_a = more_line(0.3319), more_line(0.4677)
     less_at, less_a = less_line(0.3319), less_line(0.4677)
@@ -917,6 +951,7 @@ def grade_leg(d, cfg=CONFIG):
         p_more=round(pm, 3), p_less=round(1 - pm, 3), p_more_model=round(pm_model, 3), probs_raw=probs_raw,
         projection_source=(pf.get("version") if perf_on else "legacy" + (f" (performance model unavailable: {perf_missing})" if perf_missing else "")),
         p_more_model_raw=probs_raw["p_more_no_push"],      # the model's own chance (push removed), before the kills cap
+        lw1=lw,                                            # lw-1 applied: the model's own projection / chances (else None)
         # the exact distribution behind this grade (the simulation samples from it - one forecast per card)
         dist=(({"kind": "hs_bb", "lam_kills": float(pf["lambda_kills"]), "hs_per_kill": float(pf["hs_per_kill"]), "scope": scope,
                 "c": _perf.kills_c(pf, scope)})

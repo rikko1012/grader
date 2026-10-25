@@ -111,7 +111,7 @@ def grade_arm(gi, pf):
     import grader, pick_verdict
     d = copy.deepcopy(gi)
     d["perf"] = pf
-    g = grader.grade_leg(d)
+    g = grader.grade_leg(d, dict(grader.CONFIG, lw1=None))     # lw-1 (2026-10-25) never enters the arms
     return g, pick_verdict.verdict(g)
 
 
@@ -407,7 +407,7 @@ def build(res, r):
     rp = replay(snap, gi_s)
     if "error" in rp["live"] or "error" in rp["fh1"]:
         return None, "an arm has no performance-model projection: " + str(rp["live"].get("error") or rp["fh1"].get("error"))
-    pub_ok = _same(rp["pf"]["live"], pub) and (cm2_live or rp["live"]["p_more"] == g.get("p_more"))
+    pub_ok = _same(rp["pf"]["live"], pub) and (cm2_live or rp["live"]["p_more"] == (g.get("lw1") or {}).get("p_more_model", g.get("p_more")))
     p_extra_n = sum(1 for x in extra if x[0] < day)
     identical = not extra and not snap["opp"].get("extra") and not (snap.get("opp_bo3") or {}).get("extra")
     if identical and not (_same(rp["pf"]["live"], rp["pf"]["fh1"]) and rp["live"]["p_more"] == rp["fh1"]["p_more"]):
@@ -426,7 +426,7 @@ def build(res, r):
                        "inputs_sha": in_sha},
            "read_at": {"live_player": _iso(lp[0]), "live_opp": _iso(lo[0]) if lo else None, "player": _iso(p_at), "opp": _iso(o_at)},
            "inputs_sha": in_sha, "gi_sha": gi_sha}
-    lc = lc1_p(g.get("lambda_final"), g.get("line"), prop, scope)
+    lc = lc1_p(round(g["lw1"]["lambda_model"], 2) if g.get("lw1") else g.get("lambda_final"), g.get("line"), prop, scope)   # the model's projection (lw-1 keeps it)
     if lc:
         rec["lc1"] = {"p_more": lc[0], "z": lc[1], "version": LC1["version"], "from": "published projection and line"}
     rec["cm1"] = _cm1(ids, team, tid, day, lan, g.get("line"), prop, scope, (res.get("book") or {}).get("quote"))

@@ -44,3 +44,16 @@ def pin_clock(monkeypatch, at, modules):
     for m in modules:
         if getattr(m, "datetime", None) is _dt.datetime:
             monkeypatch.setattr(m, "datetime", Clock)
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "lw1: run with the live lw-1 line-informed chance (grader.CONFIG['lw1']) switched on")
+
+
+@pytest.fixture(autouse=True)
+def model_path_unless_lw1(request, monkeypatch):
+    """lw-1 (2026-10-25) sits on top of the performance model. The suite's grader tests check the model path underneath it
+    (lw-1 off); tests marked @pytest.mark.lw1 run with the live lw-1 config (tests/test_lw1.py)."""
+    import grader
+    import lw1
+    monkeypatch.setitem(grader.CONFIG, "lw1", dict(lw1.PARAMS) if request.node.get_closest_marker("lw1") else None)

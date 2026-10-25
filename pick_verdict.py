@@ -96,6 +96,11 @@ def verdict(g):
     # member wording (2026-10-10 audit): Over / Under everywhere (never More / Less), chances to 0.1% like every other
     # chance on the site, projection and gap to 0.1 like the card's Edge
     ou = "Over" if side == "More" else "Under"
+    # lw-1 (2026-10-25): the projection shown is the line-informed one (the book line plus the share of the model's
+    # distance that settled lines showed to be real); the model's own projection is named beside it
+    lwb = g.get("lw1") or {}
+    proj_word = (f"Line-informed projection (model {lwb['lambda_model']:.1f})" if lwb.get("lambda_model") is not None
+                 else "Projection")
     if g.get("scout"):
         return {"side": side, "state": "SCOUT", "grade": "SCOUT", "p": p, "units": 0.0,
                 "confidence": "scout",
@@ -109,14 +114,14 @@ def verdict(g):
     elif g.get("tape_fight"):
         why = (f"TAPE FIGHT - model {ou} {p:.1%}, but his recent record at this line disagrees - max 0.5U")
     elif units > 0:
-        why = f"Projection {g['lambda_final']:.1f} vs line {need:g} ({gap:+.1f} {stat})"
+        why = f"{proj_word} {g['lambda_final']:.1f} vs line {need:g} ({gap:+.1f} {stat})"
     else:
-        why = (f"Projection {g['lambda_final']:.1f} vs line {need:g} ({gap:+.1f} {stat}) is small next "
+        why = (f"{proj_word} {g['lambda_final']:.1f} vs line {need:g} ({gap:+.1f} {stat}) is small next "
                f"to how much his totals swing from match to match - leans {ou} {p:.1%}, 0 units")
     if g.get("zero_reason") and not no_less_side:
         # a gate (AWPer on HS, stand-in, transfer, tiny sample): still a side, never "no play"
         grade, units = "LEAN", 0.0
-        why = (f"Leans {ou} {p:.1%} (projection {g['lambda_final']:.1f} vs line {need:g}) - 0 units: "
+        why = (f"Leans {ou} {p:.1%} ({proj_word[0].lower() + proj_word[1:]} {g['lambda_final']:.1f} vs line {need:g}) - 0 units: "
                f"{g['zero_reason']}")
     if units and "max" not in why:      # a cap cut the stake: name the one that bound, in plain words
         words = stake_cap_reasons(g, {"units": units, "p": p, "side": side})

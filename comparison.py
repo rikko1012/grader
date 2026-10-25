@@ -221,7 +221,7 @@ def _internal(res):
     if pf.get("g7"):
         try:
             import grader
-            gg = grader.grade_leg(dict(gi, perf=pf["g7"]))
+            gg = grader.grade_leg(dict(gi, perf=pf["g7"]), dict(grader.CONFIG, lw1=None))
             out.append({"label": "Our previous model (G7) - internal comparison, not independent",
                         "projection": round(gg.get("lambda_final"), 2), "p_over": gg.get("p_more"),
                         "p_under": round(1 - gg["p_more"], 4) if gg.get("p_more") is not None else None,

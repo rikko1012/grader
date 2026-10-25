@@ -54,7 +54,7 @@ def _model_version():
     # cm1.py / cm2.py / cm2_model.json added 2026-10-20: cm-2 projects kills Maps 1-2 live (perf-cm2)
     for f in ("grader.py", "sim.py", "cs2_scout.py", "hltv.py", "perf.py", "perf_live.py", "scope.py", "hltv_store.py",
               "market_odds.py", "thunderpick.py", "pick_verdict.py", "bo3.py", "roles.py", "polymarket.py", "oddspapi.py",
-              "cm1.py", "cm2.py", "cm2_model.json"):
+              "cm1.py", "cm2.py", "cm2_model.json", "lw1.py"):
         try:
             h.update((Path(__file__).resolve().parent / f).read_bytes())
         except OSError:
@@ -237,6 +237,7 @@ def shadow_alts(gi):
     """The comparison versions graded on these inputs: name -> config, or (inputs, config) for a comparison that swaps
     in another performance-model projection (graded by the performance model under that projection's own version)."""
     from grader import CONFIG
+    CONFIG = dict(CONFIG, lw1=None)       # lw-1 (2026-10-25): the frozen comparisons stay as they were
     # pre_fix_v2: the behaviour before the 2026-10-09 fix (gap centred on line + 0.5; Maps 1-3 pushes removed per case)
     alts = {"old_spread": dict(CONFIG, c=1.55, c_hs=1.30),
             "no_rest_bonus": dict(CONFIG, rest_bonus=0.0),
@@ -312,6 +313,7 @@ def _factors(res):
     try:
         from grader import grade_leg
         out["shadow"] = {"live_raw": g.get("probs_raw"),     # the live grade's own Over / Under / push chances
+                         "lw1": g.get("lw1"),               # lw-1: the model-alone projection / chances behind it
                          "live_online": g.get("online_adj")}   # online weight + the bonus actually applied
         for name, cfg in shadow_alts(gi).items():
             gin, cfg = cfg if isinstance(cfg, tuple) else (gi, cfg)
@@ -374,7 +376,7 @@ def _factors(res):
     try:   # what the projection would be if predicted maps counted (to test them on real lines)
         from grader import grade_leg, CONFIG
         if gi.get("map_probs"):
-            out["lambda_with_pred_maps"] = grade_leg(gi, dict(CONFIG, use_predicted_maps=True))["lambda_final"]
+            out["lambda_with_pred_maps"] = grade_leg(gi, dict(CONFIG, use_predicted_maps=True, lw1=None))["lambda_final"]
     except Exception:
         pass
     return out
@@ -451,7 +453,9 @@ def pick_row(res, verdict, test=False):
         "profile_team": pb.get("profile_team", pb.get("current_team")),
         "opponent": nm.get("opponent"), "match_slug": nm["slug"],
         "match_start": nm.get("start"), "prop": g["prop"], "line": g["line"], "line_type": g["line_type"],
-        "lambda": g.get("lambda_final"), "fair_line": (g.get("value") or {}).get("fair_line"),
+        # lw-1 (2026-10-25): the logged lambda stays the MODEL's projection (evaluation / projection_source / challengers);
+        # the line-informed projection members see is in the grade's lw1 block (factors.shadow.lw1)
+        "lambda": round(g["lw1"]["lambda_model"], 2) if g.get("lw1") else g.get("lambda_final"), "fair_line": (g.get("value") or {}).get("fair_line"),
         "edge": round(g["lambda_final"] - g["line"], 2), "p_more": g["p_more"], "p_less": g["p_less"],
         "pick": verdict["side"], "p_pick": verdict["p"], "grade": verdict["grade"], "units": verdict["units"],
         "p_win": (g.get("detail") or {}).get("p_win"), "market": g.get("market_quality"),

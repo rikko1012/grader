@@ -87,3 +87,21 @@ Here the remaining pre-match information was tested where it matters - beyond th
 strength, thin history, BO3.gg route, book, line level, LAN, roster risk, last 10 vs line, lead time, opponent rank,
 AWPer): it is significantly WORSE than LW-1 out of sample. AWP role history is still blocked by data (dated snapshots only
 since 2026-10-09). No new projection factor qualifies.
+
+## 6. Release candidate (rule 4) and recommendation
+
+- lw1.py + grader.py (lw-1 block after the model's raw chance, before the kills cap), CONFIG["lw1"], rollback LW1_LIVE=0.
+  Experiments that must stay frozen grade with lw1=None (perf_shadow.grade_arm, picklog.shadow_alts, comparison g7,
+  perf_market, lambda_with_pred_maps); fh-1's published check and lc-1's input use the model numbers kept in grade.lw1.
+  The logged forecast lambda stays the model projection. Tests: tests/test_lw1.py (12), suite runs the model path by
+  default (conftest marker lw1).
+- Replay (scripts/replay_lw1.py): research transform vs release max |diff| 1.1e-16 (3,361 units); 500 / 500 latest
+  production forecasts reproduce exactly with lw-1 off and equal the transform of their logged raw chance with lw-1 on.
+- Impact on those 500 forecasts: staked 187 -> 10 (kills 106 -> 0, HS 81 -> 10; 9 / 10 Unders); B or better 118 -> 0.
+  Cost +0.05 ms per grade.
+- **Recommendation:** lw-1 meets the registered pass rules on probability and calibration, and the walk-forward staked hit
+  rate rose (+4.9 points, interval just above 0), but the frozen-weight reading does not establish a hit-rate gain and
+  the release would leave members about 6 staked picks a day, mostly HS Unders. It is honest about how little the
+  projection adds beyond the book line; it does not find a new edge. Shipping it is an owner decision (it removes most B
+  grades, memory grades-accuracy-not-fewer). If not shipped, keep pl-2 (the forward shadow of the same idea) running to
+  its 300-match review. The partial-map settlement fix is independent and safe to ship on its own.

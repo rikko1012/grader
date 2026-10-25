@@ -152,7 +152,7 @@ def shadow_entry(gi, grade):
         import grader
         from pick_verdict import verdict
         cand = dict(pf, **{"lambda": r["lambda"]}, lambda_kills=r["lambda_kills"], sd=r["sd"])
-        g = grader.grade_leg(dict(gi, perf=cand))
+        g = grader.grade_leg(dict(gi, perf=cand), dict(grader.CONFIG, lw1=None))
         v = verdict(g)
         out.update(status="ok", p_more=g.get("p_more"), probs_raw=g.get("probs_raw"), side=v.get("side"),
                    grade=v.get("grade"), units=v.get("units"))
