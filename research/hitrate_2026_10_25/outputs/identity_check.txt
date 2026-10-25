@@ -1,0 +1,13 @@
+Counter({'ok, actual matches a player on the graded team': 1894, 'no team ids in inputs': 187, 'team/opponent ids != HLTV match teams': 20})
+[('hltv:2399805', 13304, 4773, [4773, 14107], 'kills', 17.0), ('hltv:2399805', 13304, 4773, [4773, 14107], 'hs', 9.0), ('hltv:2399805', 4773, 13304, [4773, 14107], 'hs', 10.0), ('hltv:2399805', 4773, 13304, [4773, 14107], 'kills', 22.0), ('hltv:2399805', 13304, 4773, [4773, 14107], 'kills', 26.0), ('hltv:2399805', 13304, 4773, [4773, 14107], 'kills', 19.0), ('hltv:2399805', 13304, 4773, [4773, 14107], 'hs', 18.0), ('hltv:2399805', 13304, 4773, [4773, 14107], 'kills', 30.0), ('hltv:2399805', 4773, 13304, [4773, 14107], 'hs', 21.0), ('hltv:2399805', 4773, 13304, [4773, 14107], 'kills', 28.0), ('hltv:2399805', 4773, 13304, [4773, 14107], 'kills', 23.0), ('hltv:2399805', 4773, 13304, [4773, 14107], 'hs', 8.0), ('hltv:2399805', 4773, 13304, [4773, 14107], 'kills', 15.0), ('hltv:2399805', 4773, 13304, [4773, 14107], 'kills', 14.0), ('hltv:2399805', 4773, 13304, [4773, 14107], 'hs', 12.0), ('hltv:2399805', 13304, 4773, [4773, 14107], 'kills', 14.0), ('hltv:2399805', 13304, 4773, [4773, 14107], 'hs', 7.0), ('hltv:2399805', 13304, 4773, [4773, 14107], 'hs', 11.0), ('hltv:2399805', 13304, 4773, [4773, 14107], 'hs', 13.0), ('hltv:2399805', 4773, 13304, [4773, 14107], 'hs', 8.0)]
+roster not confirmed                     n=  85 m= 20 hit=0.447 [0.365,0.569] err=-0.38
+history rounds 0-150                     n=  52 m= 16 hit=0.385 [0.265,0.519] err=-0.74
+history rounds 150-500                   n= 152 m= 39 hit=0.474 [0.390,0.571] err=+0.17
+history rounds 500-1000000000.0          n=1897 m=116 hit=0.516 [0.485,0.545] err=+0.67
+Counter({'ok': 1944, 'opponent not in HLTV - average opponent': 105, 'thin history': 40, 'thin history; opponent not in HLTV - average opponent': 12}) Counter({'perf-cm2': 1284, 'perf-2': 740, 'perf-2-bo3': 77})
+history rounds 500-1000000000.0          n=1897 m=116 hit=0.516 [0.485,0.545] err=+0.67
+Counter({'ok': 1944, 'opponent not in HLTV - average opponent': 105, 'thin history': 40, 'thin history; opponent not in HLTV - average opponent': 12}) Counter({'perf-cm2': 1284, 'perf-2': 740, 'perf-2-bo3': 77})
+dq=ok                                    n=1944 m=115 hit=0.515 [0.482,0.545] err=+0.75
+dq=opponent not in HLTV - average opponent n= 105 m= 12 hit=0.467 [0.392,0.530] err=-1.60
+dq=thin history                          n=  40 m= 12 hit=0.375 [0.250,0.528] err=+0.39
+dq=thin history; opponent not in HLTV - average opponent n=  12 m=  5 hit=0.417 [0.200,0.700] err=-4.51

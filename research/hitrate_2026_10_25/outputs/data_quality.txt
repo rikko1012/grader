@@ -1,0 +1,51 @@
+## lead time (start - P1 forecast)
+W1 Oct11-17 lead 0.5-1h                  n= 803 m= 71 hit=0.539 [0.493,0.585] printed=0.560
+W1 Oct11-17 lead 1-3h                    n= 417 m= 51 hit=0.549 [0.485,0.616] printed=0.564
+W1 Oct11-17 lead 3-8h                    n= 245 m= 26 hit=0.380 [0.300,0.467] printed=0.562
+W1 Oct11-17 lead 8-100h                  n=  84 m= 13 hit=0.417 [0.293,0.566] printed=0.574
+W2 Oct18-24 lead 0.5-1h                  n= 757 m= 75 hit=0.507 [0.455,0.555] printed=0.558
+W2 Oct18-24 lead 1-3h                    n= 641 m= 68 hit=0.512 [0.460,0.564] printed=0.549
+W2 Oct18-24 lead 3-8h                    n= 350 m= 42 hit=0.500 [0.424,0.568] printed=0.555
+W2 Oct18-24 lead 8-100h                  n= 139 m= 22 hit=0.511 [0.369,0.645] printed=0.561
+W3 Oct25 lead 0.5-1h                     n=  42 m=  5 hit=0.548 [0.467,0.600] printed=0.552
+W3 Oct25 lead 1-3h                       n=  76 m=  8 hit=0.447 [0.313,0.607] printed=0.551
+W3 Oct25 lead 3-8h                       n=  80 m=  7 hit=0.588 [0.483,0.667] printed=0.543
+W3 Oct25 lead 8-100h                     n=  16 m=  4 hit=0.500 [0.333,0.727] printed=0.561
+## lead>=3h staked/all share by week {'W1 Oct11-17': 0.212, 'W2 Oct18-24': 0.259, 'W3 Oct25': 0.449}
+## sample_maps
+W1 Oct11-17 maps 0-10                    n=  14 m=  3 hit=0.214 [0.000,0.375] printed=0.590
+W1 Oct11-17 maps 10-25                   n= 250 m= 48 hit=0.404 [0.326,0.486] printed=0.570
+W1 Oct11-17 maps 25-50                   n= 714 m= 72 hit=0.546 [0.497,0.594] printed=0.560
+W1 Oct11-17 maps 50-10000                n= 571 m= 56 hit=0.518 [0.456,0.582] printed=0.561
+W2 Oct18-24 maps 0-10                    n=   8 m=  4 hit=0.500 [0.125,0.875] printed=0.617
+W2 Oct18-24 maps 10-25                   n= 180 m= 50 hit=0.506 [0.400,0.602] printed=0.566
+W2 Oct18-24 maps 25-50                   n= 976 m= 98 hit=0.514 [0.474,0.554] printed=0.556
+W2 Oct18-24 maps 50-10000                n= 723 m= 73 hit=0.499 [0.446,0.553] printed=0.550
+W3 Oct25 maps 10-25                      n=  30 m=  6 hit=0.500 [0.286,0.750] printed=0.575
+W3 Oct25 maps 25-50                      n= 125 m= 11 hit=0.488 [0.318,0.621] printed=0.544
+W3 Oct25 maps 50-10000                   n=  59 m=  7 hit=0.610 [0.519,0.688] printed=0.547
+## underdog (p_win)
+W1 Oct11-17 pwin 0-0.35 Over             n= 270 m= 41 hit=0.444 [0.359,0.529] printed=0.593
+W1 Oct11-17 pwin 0-0.35 Under            n=  70 m= 19 hit=0.671 [0.508,0.814] printed=0.540
+W1 Oct11-17 pwin 0.35-0.65 Over          n= 315 m= 42 hit=0.498 [0.391,0.602] printed=0.558
+W1 Oct11-17 pwin 0.35-0.65 Under         n= 448 m= 44 hit=0.511 [0.425,0.595] printed=0.559
+W1 Oct11-17 pwin 0.65-1.01 Over          n= 142 m= 39 hit=0.542 [0.426,0.649] printed=0.540
+W1 Oct11-17 pwin 0.65-1.01 Under         n= 304 m= 45 hit=0.526 [0.464,0.589] printed=0.561
+W2 Oct18-24 pwin 0-0.35 Over             n= 250 m= 37 hit=0.564 [0.457,0.676] printed=0.578
+W2 Oct18-24 pwin 0-0.35 Under            n=  87 m= 28 hit=0.563 [0.385,0.728] printed=0.544
+W2 Oct18-24 pwin 0.35-0.65 Over          n= 406 m= 62 hit=0.512 [0.434,0.586] printed=0.543
+W2 Oct18-24 pwin 0.35-0.65 Under         n= 720 m= 68 hit=0.483 [0.411,0.558] printed=0.556
+W2 Oct18-24 pwin 0.65-1.01 Over          n= 180 m= 38 hit=0.522 [0.428,0.607] printed=0.547
+W2 Oct18-24 pwin 0.65-1.01 Under         n= 244 m= 44 hit=0.484 [0.398,0.568] printed=0.556
+W3 Oct25 pwin 0-0.35 Over                n=  39 m=  5 hit=0.282 [0.027,0.610] printed=0.558
+W3 Oct25 pwin 0-0.35 Under               n=  11 m=  5 hit=0.818 [0.200,1.000] printed=0.536
+W3 Oct25 pwin 0.35-0.65 Over             n=  39 m=  6 hit=0.718 [0.458,0.907] printed=0.538
+W3 Oct25 pwin 0.35-0.65 Under            n=  75 m=  7 hit=0.493 [0.338,0.639] printed=0.554
+W3 Oct25 pwin 0.65-1.01 Over             n=  18 m=  5 hit=0.556 [0.200,0.913] printed=0.533
+W3 Oct25 pwin 0.65-1.01 Under            n=  32 m=  5 hit=0.531 [0.370,0.686] printed=0.555
+## suspicious actuals (kills M1-2 < 8, HS M1-2 < 2)
+hltv:2398992 kills 27.5 26.93 7.0 2026-10-19T17:28 c36104d079 perf-2
+## same match/prop/scope with identical actual AND lam (possible dup players)
+[]
+## units per match/prop/scope > 10
+[]

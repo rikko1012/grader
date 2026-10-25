@@ -1,0 +1,57 @@
+
+### kills Maps 1-2
+W1 Oct11-17                              n= 685 m= 76 hit=0.501 act-proj=+0.06[-0.86,+1.02] act-line=+0.17[-0.73,+1.10] proj-line=+0.11 |proj-line|=1.26 MAEproj=5.75 MAEline=5.67
+  W1 Oct11-17 perf-2                     n= 360 m= 40 hit=0.514 act-proj=+0.85[-0.56,+2.21] act-line=+0.67[-0.69,+2.03] proj-line=-0.18 |proj-line|=1.12 MAEproj=5.85 MAEline=5.84
+  W1 Oct11-17 perf-2-bo3                 n=   3 m=  3 hit=0.667 act-proj=-3.70[-17.93,+9.78] act-line=-4.83[-18.50,+7.50] proj-line=-1.14 |proj-line|=1.14 MAEproj=10.22 MAEline=9.83
+  W1 Oct11-17 pre                        n= 322 m= 36 hit=0.484 act-proj=-0.79[-2.06,+0.53] act-line=-0.34[-1.56,+0.96] proj-line=+0.45 |proj-line|=1.42 MAEproj=5.61 MAEline=5.43
+  W1 Oct11-17 side Over                  n= 334 m= 69 hit=0.494 act-proj=-1.28[-2.39,-0.13] act-line=+0.13[-0.94,+1.28] proj-line=+1.41 |proj-line|=1.41 MAEproj=5.77 MAEline=5.57
+  W1 Oct11-17 side Under                 n= 351 m= 70 hit=0.507 act-proj=+1.34[+0.23,+2.41] act-line=+0.22[-0.90,+1.31] proj-line=-1.12 |proj-line|=1.12 MAEproj=5.74 MAEline=5.76
+W2 Oct18-24                              n= 938 m=103 hit=0.517 act-proj=+0.97[-0.25,+2.17] act-line=+0.97[-0.25,+2.13] proj-line=+0.00 |proj-line|=1.09 MAEproj=6.80 MAEline=6.69
+  W2 Oct18-24 perf-2                     n= 150 m= 17 hit=0.533 act-proj=+0.28[-2.47,+3.35] act-line=+0.09[-2.70,+3.19] proj-line=-0.20 |proj-line|=0.94 MAEproj=7.24 MAEline=7.14
+  W2 Oct18-24 perf-2-bo3                 n=  40 m= 17 hit=0.525 act-proj=-0.45[-2.73,+1.69] act-line=-0.45[-2.80,+1.66] proj-line=-0.00 |proj-line|=1.57 MAEproj=5.24 MAEline=4.85
+  W2 Oct18-24 perf-cm2                   n= 748 m= 85 hit=0.513 act-proj=+1.18[-0.18,+2.49] act-line=+1.22[-0.11,+2.53] proj-line=+0.04 |proj-line|=1.09 MAEproj=6.80 MAEline=6.69
+  W2 Oct18-24 side Over                  n= 449 m= 97 hit=0.546 act-proj=+0.37[-0.92,+1.81] act-line=+1.51[+0.29,+2.89] proj-line=+1.14 |proj-line|=1.14 MAEproj=6.40 MAEline=6.31
+  W2 Oct18-24 side Under                 n= 489 m= 91 hit=0.491 act-proj=+1.51[-0.05,+3.05] act-line=+0.47[-1.09,+2.00] proj-line=-1.04 |proj-line|=1.04 MAEproj=7.17 MAEline=7.04
+W3 Oct25                                 n= 108 m= 12 hit=0.528 act-proj=-0.21[-2.97,+2.91] act-line=-0.19[-2.97,+2.90] proj-line=+0.02 |proj-line|=0.86 MAEproj=6.23 MAEline=6.11
+  W3 Oct25 perf-cm2                      n= 108 m= 12 hit=0.528 act-proj=-0.21[-2.97,+2.91] act-line=-0.19[-2.97,+2.90] proj-line=+0.02 |proj-line|=0.86 MAEproj=6.23 MAEline=6.11
+  W3 Oct25 side Over                     n=  55 m= 11 hit=0.527 act-proj=-0.81[-5.37,+3.96] act-line=+0.05[-4.38,+4.66] proj-line=+0.86 |proj-line|=0.86 MAEproj=7.04 MAEline=6.77
+  W3 Oct25 side Under                    n=  53 m= 12 hit=0.528 act-proj=+0.42[-1.61,+2.65] act-line=-0.43[-2.46,+1.80] proj-line=-0.85 |proj-line|=0.85 MAEproj=5.40 MAEline=5.42
+
+### hs Maps 1-2
+W1 Oct11-17                              n= 655 m= 76 hit=0.534 act-proj=-0.17[-0.61,+0.35] act-line=+0.01[-0.43,+0.50] proj-line=+0.18 |proj-line|=0.80 MAEproj=3.59 MAEline=3.61
+  W1 Oct11-17 perf-2                     n= 346 m= 40 hit=0.575 act-proj=+0.15[-0.43,+0.74] act-line=+0.23[-0.35,+0.83] proj-line=+0.09 |proj-line|=0.69 MAEproj=3.41 MAEline=3.50
+  W1 Oct11-17 perf-2-bo3                 n=   3 m=  3 hit=0.000 act-proj=-2.22[-5.80,+4.12] act-line=-1.50[-4.50,+3.50] proj-line=+0.72 |proj-line|=1.13 MAEproj=4.97 MAEline=3.83
+  W1 Oct11-17 pre                        n= 306 m= 36 hit=0.493 act-proj=-0.51[-1.20,+0.29] act-line=-0.23[-0.93,+0.54] proj-line=+0.28 |proj-line|=0.91 MAEproj=3.78 MAEline=3.74
+  W1 Oct11-17 side Over                  n= 298 m= 70 hit=0.510 act-proj=-0.82[-1.54,-0.15] act-line=+0.23[-0.47,+0.90] proj-line=+1.05 |proj-line|=1.05 MAEproj=3.65 MAEline=3.61
+  W1 Oct11-17 side Under                 n= 357 m= 72 hit=0.555 act-proj=+0.37[-0.16,+0.93] act-line=-0.18[-0.71,+0.39] proj-line=-0.55 |proj-line|=0.59 MAEproj=3.54 MAEline=3.62
+W2 Oct18-24                              n= 841 m=102 hit=0.511 act-proj=+0.43[-0.18,+1.08] act-line=+0.48[-0.13,+1.12] proj-line=+0.05 |proj-line|=0.70 MAEproj=4.23 MAEline=4.20
+  W2 Oct18-24 perf-2                     n= 482 m= 59 hit=0.529 act-proj=+0.08[-0.67,+0.92] act-line=+0.20[-0.58,+1.07] proj-line=+0.12 |proj-line|=0.70 MAEproj=4.24 MAEline=4.24
+  W2 Oct18-24 perf-2-bo3                 n=  37 m= 17 hit=0.432 act-proj=-0.22[-1.63,+1.10] act-line=+0.09[-1.26,+1.31] proj-line=+0.31 |proj-line|=0.93 MAEproj=3.36 MAEline=3.07
+  W2 Oct18-24 perf-cm2                   n= 322 m= 41 hit=0.494 act-proj=+1.02[-0.12,+2.09] act-line=+0.94[-0.18,+1.98] proj-line=-0.08 |proj-line|=0.66 MAEproj=4.31 MAEline=4.26
+  W2 Oct18-24 side Over                  n= 328 m= 93 hit=0.530 act-proj=+0.01[-0.83,+0.91] act-line=+0.93[+0.07,+1.84] proj-line=+0.92 |proj-line|=0.92 MAEproj=4.14 MAEline=4.16
+  W2 Oct18-24 side Under                 n= 513 m=101 hit=0.499 act-proj=+0.69[-0.01,+1.39] act-line=+0.19[-0.52,+0.89] proj-line=-0.50 |proj-line|=0.55 MAEproj=4.28 MAEline=4.23
+W3 Oct25                                 n= 106 m= 12 hit=0.519 act-proj=-0.44[-1.76,+1.00] act-line=-0.45[-1.77,+0.97] proj-line=-0.01 |proj-line|=0.66 MAEproj=3.46 MAEline=3.42
+  W3 Oct25 perf-cm2                      n= 106 m= 12 hit=0.519 act-proj=-0.44[-1.76,+1.00] act-line=-0.45[-1.77,+0.97] proj-line=-0.01 |proj-line|=0.66 MAEproj=3.46 MAEline=3.42
+  W3 Oct25 side Over                     n=  41 m= 10 hit=0.488 act-proj=-0.81[-2.94,+1.30] act-line=+0.01[-2.04,+2.02] proj-line=+0.82 |proj-line|=0.82 MAEproj=3.87 MAEline=3.74
+  W3 Oct25 side Under                    n=  65 m= 12 hit=0.538 act-proj=-0.21[-1.37,+1.11] act-line=-0.74[-1.90,+0.57] proj-line=-0.53 |proj-line|=0.56 MAEproj=3.19 MAEline=3.22
+
+### by day kills 12
+2026-10-11                               n=  48 m=  5 hit=0.500 act-proj=-2.09[-4.71,+0.27] act-line=-1.81[-4.43,+0.87] proj-line=+0.28 |proj-line|=1.42 MAEproj=5.47 MAEline=5.44
+2026-10-12                               n=  91 m= 11 hit=0.363 act-proj=-0.65[-2.66,+1.86] act-line=-0.31[-2.03,+2.07] proj-line=+0.34 |proj-line|=1.52 MAEproj=5.56 MAEline=4.99
+2026-10-13                               n=  43 m=  5 hit=0.581 act-proj=-1.26[-5.28,+2.91] act-line=-0.93[-5.12,+3.27] proj-line=+0.33 |proj-line|=1.00 MAEproj=5.89 MAEline=6.05
+2026-10-14                               n= 140 m= 15 hit=0.529 act-proj=-0.29[-2.20,+1.73] act-line=+0.33[-1.64,+2.35] proj-line=+0.62 |proj-line|=1.48 MAEproj=5.61 MAEline=5.54
+2026-10-15                               n=  95 m= 11 hit=0.526 act-proj=+1.43[-1.30,+4.47] act-line=+1.04[-1.82,+4.14] proj-line=-0.39 |proj-line|=1.22 MAEproj=6.52 MAEline=6.48
+2026-10-16                               n= 124 m= 14 hit=0.484 act-proj=+1.48[-0.76,+3.96] act-line=+1.29[-0.85,+3.66] proj-line=-0.19 |proj-line|=0.97 MAEproj=6.19 MAEline=6.17
+2026-10-17                               n= 144 m= 15 hit=0.535 act-proj=-0.17[-1.87,+1.35] act-line=-0.22[-1.84,+1.27] proj-line=-0.05 |proj-line|=1.19 MAEproj=5.20 MAEline=5.22
+2026-10-18                               n=  48 m=  5 hit=0.542 act-proj=+2.35[-3.41,+8.15] act-line=+2.30[-3.21,+7.90] proj-line=-0.05 |proj-line|=1.01 MAEproj=7.83 MAEline=7.64
+2026-10-19                               n= 106 m= 11 hit=0.538 act-proj=-0.64[-3.39,+2.62] act-line=-0.85[-3.73,+2.59] proj-line=-0.21 |proj-line|=0.95 MAEproj=7.09 MAEline=7.08
+2026-10-20                               n= 190 m= 23 hit=0.532 act-proj=-0.64[-2.29,+0.99] act-line=-0.32[-1.93,+1.35] proj-line=+0.33 |proj-line|=1.28 MAEproj=5.71 MAEline=5.58
+2026-10-21                               n= 214 m= 22 hit=0.533 act-proj=+0.26[-2.26,+2.94] act-line=+0.42[-2.16,+3.15] proj-line=+0.16 |proj-line|=1.17 MAEproj=6.75 MAEline=6.64
+2026-10-22                               n= 127 m= 15 hit=0.496 act-proj=+3.76[+0.54,+6.82] act-line=+3.42[+0.12,+6.47] proj-line=-0.34 |proj-line|=0.93 MAEproj=7.51 MAEline=7.31
+2026-10-23                               n=  85 m=  9 hit=0.447 act-proj=+1.05[-1.79,+4.61] act-line=+0.51[-2.19,+3.86] proj-line=-0.54 |proj-line|=1.01 MAEproj=6.66 MAEline=6.49
+2026-10-24                               n= 168 m= 18 hit=0.512 act-proj=+2.17[-0.98,+5.65] act-line=+2.28[-0.74,+5.62] proj-line=+0.11 |proj-line|=1.02 MAEproj=7.15 MAEline=7.09
+2026-10-25                               n= 108 m= 12 hit=0.528 act-proj=-0.21[-2.97,+2.91] act-line=-0.19[-2.97,+2.90] proj-line=+0.02 |proj-line|=0.86 MAEproj=6.23 MAEline=6.11
+
+### perf-cm2 kills 12: cm2 lam vs perf2 lam (saved)
+465 cm2 bias 2.005333333333333 perf2 bias 2.1043435439567126 MAE cm2 7.039569892473119 MAE perf2 7.073139118584104 MAE line 6.934408602150538
+(-0.07292795311301146, 0.13923108151031588)
