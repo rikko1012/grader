@@ -23,3 +23,4 @@ body.sw.sw-on-slips .sw-tray{display:none}
 .sw .sw-season-row td{color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.06em;border-top:1px dashed var(--line-2)}
 .sw .sw-sbreak-t{fill:var(--faint);font-size:10px}
 .sw .sw-span2{border-color:var(--warn);color:var(--warn)}
+.sw .sw-glines li{display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px}
