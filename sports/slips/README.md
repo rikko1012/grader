@@ -1,4 +1,4 @@
-# Slip Studio (sports/slips) - builder bs-1, policy sp-1, rules slip-rules-2026-10-23, settlement ss-1
+# Slip Studio (sports/slips) - builder bs-2 (ranked by expected return at the published payout on Underdog, all-hit chance on PrizePicks), policy sp-2, rules slip-rules-2026-10-23, settlement ss-1
 
 Owner brief sections 7, 10, 12. Pure sports code (relative imports only; `test_sports_isolation.py`).
 

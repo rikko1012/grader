@@ -216,6 +216,13 @@ def build(con, league, platform, now=None, policy="member", market_at=None):
             "state": state, "representation": REPRESENTATION}
 
 
+def leg_weight(platform, p_win, multiplier):
+    """bs-2 (N8): log(p_win x payout multiplier) on Underdog (sum over a slip = log of the all-hit expected payout at
+    the published base payout), log(p_win) on PrizePicks (no published lineup payout) or a missing multiplier."""
+    m = float(multiplier) if platform == "underdog" and multiplier is not None and float(multiplier) > 0 else 1.0
+    return math.log(p_win * m)
+
+
 def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, market_at=None):
     if platform not in rules.PLATFORMS:
         return "not a pick'em platform", None
@@ -269,6 +276,6 @@ def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, market_at
            "observed_at": o.observed_at, "last_seen_at": max(x for x in (seen.get(rid), o.observed_at) if x),
            "source_time_unknown": o.source_time_unknown, "p_win": p_win, "p_loss": p_loss, "p_push": f.p_push,
            "grade": None if f.research_only else f.grade,
-           "stake_units": 0.0 if f.research_only else f.stake_units, "weight": math.log(p_win),
+           "stake_units": 0.0 if f.research_only else f.stake_units, "weight": leg_weight(platform, p_win, q.multiplier),
            "prop_keys": prop_keys(o.league, o.player_id, o.stat)}
     return None, leg

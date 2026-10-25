@@ -93,6 +93,11 @@ def public_schedule(s):
 
 def public_slip(s):
     out = dict(s, payout=public_schedule(s["payout"]))
+    er = s.get("expected_return")
+    if er and not er.get("shown"):                         # an unpublished combined payout: rank only, no figure
+        out["expected_return"] = {"value": None, "shown": False, "basis": None,
+                                  "why": er.get("why") or ("Underdog adjusts this payout for the picks' multipliers; "
+                                                           "the app shows the exact figure")}
     out["payout_key"] = validate.payout_key(s["payout"])
     return out
 

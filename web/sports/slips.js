@@ -160,7 +160,7 @@
   function legRow(platform, l, extra) {
     return '<li class="ss-leg"><span class="ss-who">' + esc(l.player) + ' <span class="ss-tag">' + esc(l.team) + "</span></span>" +
       '<span class="ss-pick"><span class="ss-side-' + l.side + '">' + esc(sideText(platform, l.side)) + "</span> " +
-      '<span class="ss-num">' + esc(l.line) + "</span></span>" +
+      '<span class="ss-num">' + esc(l.line) + "</span>" + (l.platform === "underdog" && l.multiplier != null && Math.abs(l.multiplier - 1) > 1e-9 ? ' <span class="ss-tag ss-mult" title="Underdog payout multiplier for this pick">' + esc(mult2(l.multiplier)) + "</span>" : "") + "</span>" +
       '<span class="ss-meta">' + esc(l.stat_label || l.stat) + " - " + esc(l.event_ref || "") + " - " + esc(when(l.start_utc)) +
       (l.custom ? " - no Scout chance for a line that is not offered" : l.p_win != null ? ' - Scout chance <span class="ss-num">' + pct(l.p_win) + "</span>" + (l.p_push ? " (push " + pct(l.p_push) + ")" : "") : "") +
       (l.custom ? ' <span class="ss-tag ss-hyp">custom line - hypothetical</span>' : "") +
@@ -171,6 +171,19 @@
     return '<ul class="ss-pay">' + p.member.map(function (r) {
       return "<li><span>" + esc(r.outcome) + "</span><span class=ss-num>" + (r.multiple != null ? esc(r.multiple) + "x" : esc(r.text || "")) + (r.multiple != null && r.text ? " - " + esc(r.text) : "") + "</span></li>";
     }).join("") + "</ul>";
+  }
+  // N8: expected return at the published payout (Underdog), or why there is none (PrizePicks: in-app payouts only)
+  function mult2(x) { return (Math.round(x * 100) / 100).toFixed(2) + "x"; }
+  function returnText(er, platform) {
+    if (platform === "prizepicks") return '<p class="ss-er">Payout not published<small>PrizePicks shows lineup payouts in the app only.</small></p>';
+    if (!er) return "";
+    if (er.value != null && er.shown) return '<p class="ss-er">Expected return at the published payout - research estimate: <strong class="ss-num">' + mult2(er.value) + "</strong> the entry<small>From each pick's chance and Underdog's published payout table; picks assumed independent. Not a profit figure.</small></p>";
+    return '<p class="ss-er">Expected return at the published payout: not shown<small>' + esc(er.why || "Underdog adjusts this payout for the picks' multipliers; the app shows the exact figure") + "</small></p>";
+  }
+  function rankingNote(b) {
+    var r = b.ranking;
+    if (!r) return "";
+    return '<p class="ss-note ss-rank-note" role="note">' + esc(r.note) + "</p>";
   }
   function jointText(j) {
     if (!j) return "";
@@ -191,11 +204,12 @@
         .concat((ex.event || []).map(function (x) { return esc(x.name) + " (game) x" + x.slips; })).join(", ") + "</p>";
     }
     if (!b.slips.length) h += '<p class="ss-empty">No slip meets the rules with the current picks.</p>';
+    else h += rankingNote(b);
     h += '<div class="ss-cards">' + b.slips.map(function (s, i) {
-      return '<article class="ss-card" aria-label="Suggestion ' + (i + 1) + '"><div class="ss-card-h"><strong>' + s.size + "-pick " + esc(s.entry_type) + "</strong>" +
+      return '<article class="ss-card" aria-label="Suggestion ' + (i + 1) + '"><div class="ss-card-h"><strong><span class="ss-rank">#' + (s.rank || i + 1) + "</span> " + s.size + "-pick " + esc(s.entry_type) + "</strong>" +
         '<button class="ss-btn ss-small" type="button" data-use="' + i + '">Use this slip</button></div>' +
         '<ul class="ss-legs">' + s.legs.map(function (l) { return legRow(s.platform, l); }).join("") + "</ul>" +
-        jointText(s.joint) + payoutList(s.payout) + "</article>";
+        returnText(s.expected_return, s.platform) + jointText(s.joint) + payoutList(s.payout) + "</article>";
     }).join("") + "</div>";
     var anyRes = b.slips.some(function (s) { return s.legs.some(function (l) { return l.research_only; }); });
     if (anyRes) h = '<p class="ss-banner ss-warnmsg" role="note"><strong>' + esc(RESEARCH_TEXT) + ".</strong> Picks tagged Research estimate come from a model that has not passed its live-line check.</p>" + h;

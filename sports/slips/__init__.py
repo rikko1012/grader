@@ -11,5 +11,5 @@ Modules
   settle    slip settlement per platform rules (void / tie reduction, corrected results = revisions)
   log       slips.db: recommendations once per batch, loaded / copied slips separately, slip settlements
 """
-BUILDER_VERSION = "bs-1"
+BUILDER_VERSION = "bs-2"            # bs-2 (2026-10-24, N8): Underdog legs weighted by p x multiplier; ranked slips
 POLICY_VERSION = "sp-2"            # sp-2 (2026-10-24): research-only forecasts = labelled research legs, stake 0

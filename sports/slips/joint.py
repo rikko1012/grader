@@ -13,11 +13,21 @@ expectation(platform, entry_type, legs)
   settlement rules. Net expectation = E[multiple] - 1. Unknown payouts in a reachable outcome -> None. For a single
   straight bet this is p * d - 1 without pushes and p_win * (d - 1) - p_loss with pushes refunded (payouts.straight_ev;
   tested). Used only in the internal slip log.
+
+published_return(platform, entry_type, legs)  (N8, owner re-audit 2026-10-24 - the Slip Studio ranking)
+  The expected payout multiple of ONE entry at the platform's PUBLISHED payout, from each leg's chance: the same
+  3^n outcome sum and settlement rules as expectation(), with each pick's Underdog multiplier applied to a paying
+  entry as base x product(multipliers of the active picks) (payouts.MODIFIER_RULE). Member wording: "Expected return
+  at the published payout - research estimate" (a multiple of the entry, never ROI / profit). shown = every
+  multiplier is exactly 1.0 (the base table IS the published payout); with other multipliers the combination is
+  not published, so the figure only ranks and is not shown. PrizePicks lineup payouts are in-app only: no value,
+  "payout not published", and Slip Studio ranks those slips by the all-hit chance instead.
 """
 from __future__ import annotations
 
 from itertools import product
 
+from .. import payouts
 from . import settle
 
 INDEPENDENCE = "estimate: multiplies each pick's chance, assuming the games are independent (not measured)"
@@ -69,3 +79,36 @@ def expectation(platform, entry_type, legs, payout=None):
             return {"expected_multiple": None, "net": None, "basis": "a reachable outcome has no published payout"}
         e += p * m
     return {"expected_multiple": e, "net": e - 1.0, "basis": INDEPENDENCE + "; " + VOID_NOTE + "; internal only"}
+
+
+RETURN_LABEL = "Expected return at the published payout - research estimate"
+PP_NOT_PUBLISHED = "PrizePicks shows lineup payouts in the app only - payout not published"
+
+
+def published_return(platform, entry_type, legs):
+    """-> {"value": E[payout multiple] | None, "shown": bool, "basis", "why"}; see the module docstring."""
+    if platform != "underdog":
+        return {"value": None, "shown": False, "basis": None,
+                "why": PP_NOT_PUBLISHED if platform == "prizepicks" else "not a pick'em platform"}
+    j = joint(legs)
+    if not j["available"]:
+        return {"value": None, "shown": False, "basis": None, "why": j["reason"]}
+    mults = [l.get("multiplier") for l in legs]
+    if any(m is None or float(m) <= 0 for m in mults):
+        return {"value": None, "shown": False, "basis": None, "why": "a pick's payout multiplier is missing"}
+    plain = [dict(l, multiplier=1.0) for l in legs]
+    e = 0.0
+    for p, res in outcome_distribution(legs):
+        r = settle.entry_result(platform, entry_type, plain, res)
+        m = r["payout_multiple"]
+        if m is None:
+            return {"value": None, "shown": False, "basis": None,
+                    "why": "a reachable outcome has no published payout (" + (r.get("reason") or "unknown") + ")"}
+        if r["status"] in ("won", "partial"):
+            for leg, x in zip(legs, res):
+                if x in ("win", "loss"):
+                    m *= float(leg["multiplier"])
+        e += p * m
+    shown = all(abs(float(m) - 1.0) < 1e-9 for m in mults)
+    return {"value": e, "shown": shown, "basis": f"Underdog published payouts {payouts.UD_TABLE_VERSION}; "
+            + INDEPENDENCE + ("" if shown else "; " + payouts.MODIFIER_RULE), "why": None}
