@@ -81,6 +81,14 @@
     if (r.gap) cap(3, "model vs market gap");
     return {score: s, why: why, version: CONF_VERSION};
   }
+  // cf-2 from the server + the time-dependent stale-input cap applied at render time (same rule as cf-1)
+  function serverConf(X, r, now) {
+    var s = X.c, why = (X.cw || []).slice();
+    if (!r.lean) return {score: 1, why: why.length ? why : ["No lean"], version: X.v};
+    var fcAge = r.scout && r.scout.at ? S.ageSeconds(r.scout.at, now) : null;
+    if ((fcAge !== null && fcAge > STALE_FC_S) || !r.fresh) { s = Math.min(s, 2); why.push("stale inputs (max 2)"); }
+    return {score: s, why: why, version: X.v};
+  }
   // ONE board row for market m (decoded board row: m.ev set) and its offer q. ctx = {fc, view, now}
   function propRow(m, q, ctx) {
     var now = ctx.now || Date.now(), sc = scoutAt(q, ctx.fc || {}), mkc = marketAt(m.mk, q);
@@ -99,8 +107,18 @@
       r.gap = Math.abs(r.gapPts) >= GAP_PTS - 1e-9;
       if (lean) { r.mLean = lean === "over" ? mkc.po : mkc.pu; r.edge = 100 * (r.pLean - r.mLean); }
     }
+    var X = sc && q.x && !held && q.x.v === "cf-2" ? q.x : null;
+    if (X) {                                // server row signal (sports/board_view.py cf-2): the page only renders it
+      r.lean = lean = X.ln || null;
+      r.pLean = nn(X.pl) ? X.pl : null;
+      r.mLean = lean && mkc ? (lean === "over" ? mkc.po : mkc.pu) : null;
+      r.edge = nn(X.e) ? X.e : null;
+      r.sortKey = nn(X.s) ? X.s : null;
+      r.gapPts = nn(X.g) ? X.g : r.gapPts;
+      r.gap = nn(r.gapPts) && Math.abs(r.gapPts) >= GAP_PTS - 1e-9;
+    }
     r.leanOffered = lean ? !!(q.o && q.o[lean === "over" ? 0 : 1]) : null;
-    r.conf = held ? null : confidence(r, now);
+    r.conf = held ? null : X ? serverConf(X, r, now) : confidence(r, now);
     return r;
   }
   function hitRate(r) {                                           // lean side (Over when no lean), over decided games
@@ -127,7 +145,8 @@
     return !!(ev.start_utc && Date.parse(ev.start_utc) <= (now || Date.now()));
   }
   var SORTS = {
-    edge: {label: "Edge", dir: -1, val: function (r) { return nn(r.edge) ? r.edge : null; }},
+    // cf-2 sort key when the server sent one (single-source / > 15-pt-gap rows never above multi-source rows)
+    edge: {label: "Edge", dir: -1, val: function (r) { return r.held ? null : nn(r.sortKey) ? r.sortKey : nn(r.edge) ? r.edge : null; }},
     scout: {label: "Scout chance", dir: -1, val: function (r) { return nn(r.pLean) ? r.pLean : null; }},
     l10: {label: "L10 hit rate", dir: -1, val: hitRate},
     start: {label: "Start time", dir: 1, val: function (r) { return r.start ? Date.parse(r.start) : null; }},

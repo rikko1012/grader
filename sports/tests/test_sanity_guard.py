@@ -140,3 +140,69 @@ console.log("ok");
 """, encoding="utf-8")
     out = subprocess.run(["node", str(js), str(WEB)], capture_output=True, text=True, timeout=60)
     assert out.returncode == 0 and out.stdout.strip() == "ok", out.stdout + out.stderr
+
+
+# ------------------------------------------------------------------------------------------------ cf-2 (N3 / N4)
+L10 = [6, 4, 0, 10]
+
+
+def test_cf2_single_source_and_large_gap_caps_and_sort_penalty():
+    multi = {"po": 0.5, "pu": 0.5, "n": 3}
+    single = {"po": 0.5, "pu": 0.5, "n": 1}
+    a = board_view.signal(0.65, 0.35, 25.0, 20.5, multi, L10)            # +15 edge, 3 sources
+    assert a["ln"] == "over" and a["c"] == 3 and abs(a["e"] - 15) < 1e-9 and abs(a["s"] - 15) < 1e-9   # gap cap 3
+    b = board_view.signal(0.715, 0.285, 25.0, 20.5, single, L10)        # Barnes-like +21.5 from one book
+    assert b["c"] == 2 and "market estimate from one source (max 2)" in b["cw"]
+    assert "model vs market gap over 15 pts (max 2)" in b["cw"]
+    assert b["s"] < a["s"] and b["s"] < 0 < b["e"]                       # never ranks above a multi-source row
+    c = board_view.signal(0.62, 0.38, 25.0, 20.5, {"po": 0.42, "pu": 0.58, "n": 2}, L10)   # 20-pt gap, 2 sources
+    assert c["c"] == 2 and c["s"] < 0
+    d = board_view.signal(0.58, 0.42, 25.0, 20.5, {"po": 0.55, "pu": 0.45, "n": 4}, L10)   # small edge, all fine
+    assert d["c"] == 3 and d["s"] == d["e"]                               # 1 + >=55% + >=3 pts
+    e = board_view.signal(0.62, 0.38, 25.0, 20.5, None, L10)              # no market: no edge, no sort key
+    assert e["ln"] == "over" and "e" not in e and "s" not in e
+
+
+def test_n4_lean_only_with_a_positive_edge_for_that_side():
+    # Barnes 3PM 0.5: Scout Over 56% but the market prices Over at 66% -> no lean (was 'lean Over, edge -10.3')
+    x = board_view.signal(0.56, 0.44, 0.9, 0.5, {"po": 0.663, "pu": 0.337, "n": 3}, L10)
+    assert x["ln"] is None and x["c"] == 1 and "e" not in x
+    assert board_view.signal(0.56, 0.44, 0.9, 0.5, None, L10)["ln"] == "over"     # no market: chance + mean rule
+
+
+def test_quote_x_holds_before_signal():
+    x, code = board_view.quote_x("nfl", "rec_yds", 0.3, 0.7, 40.0, 50.5, {"po": 0.5, "pu": 0.5, "n": 3}, L10)
+    assert x["b"] == "gate" and code is None
+    x, code = board_view.quote_x("nba", "points", 0.0, 1.0, 0.1, 11.5, {"po": 0.5, "pu": 0.5, "n": 3}, L10)
+    assert x["b"] == "ratio_low" and code == "ratio_low"
+    x, code = board_view.quote_x("nba", "points", 0.62, 0.38, 25.0, 20.5, {"po": 0.55, "pu": 0.45, "n": 3}, L10)
+    assert x["v"] == "cf-2" and x["ln"] == "over" and code is None
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_table_renders_server_signal_and_sort_in_node(tmp_path):
+    js = tmp_path / "t2.js"
+    js.write_text("""
+const R = require(process.argv[2] + "/table.js");
+const T = new Date(Date.now() - 60000).toISOString();
+const fc = {f1: {id: "f1", m: "sm-1", mu: 25, po: 0.715, pu: 0.285, pp: 0, at: T},
+            f2: {id: "f2", m: "sm-1", mu: 25, po: 0.65, pu: 0.35, pp: 0, at: T}};
+const ev = {start_utc: "2099-01-01T00:00:00Z"};
+const mk = (n) => ({l: 20.5, c: {po: 0.5, pu: 0.5, pp: 0, n}});
+const view = {a: {lines: {"20.5": [6, 4, 0, 10, 3, 2, 0, 5]}}, b: {lines: {"20.5": [6, 4, 0, 10, 3, 2, 0, 5]}}};
+const qa = {r: "ra", p: "underdog", l: 20.5, o: [1, 1], t: T, f: "f1",
+            x: {v: "cf-2", ln: "over", pl: 0.715, e: 21.5, s: -178.5, g: 21.5, c: 2, cw: ["market estimate from one source (max 2)"], n: 1}};
+const qb = {r: "rb", p: "underdog", l: 20.5, o: [1, 1], t: T, f: "f2",
+            x: {v: "cf-2", ln: "over", pl: 0.65, e: 15, s: 15, g: 15, c: 3, cw: [], n: 3}};
+const ra = R.propRow({k: "a", pid: "1", n: "Scottie Barnes", st: "assists", e: "e", ev, mk: mk(1), q: [qa], kn: []}, qa, {fc, view, now: Date.now()});
+const rb = R.propRow({k: "b", pid: "2", n: "B Player", st: "points", e: "e", ev, mk: mk(3), q: [qb], kn: []}, qb, {fc, view, now: Date.now()});
+if (ra.conf.score !== 2 || ra.edge !== 21.5 || rb.conf.score !== 3) throw new Error("server conf/edge not rendered");
+const order = R.sortRows([ra, rb], "edge").map(r => r.player);
+if (order[0] !== "B Player") throw new Error("single-source row ranked first: " + order);
+const qn = Object.assign({}, qb, {x: {v: "cf-2", ln: null, c: 1, cw: ["No lean"], g: 2, n: 3}});
+const rn = R.propRow({k: "b", pid: "2", n: "B", st: "points", e: "e", ev, mk: mk(3), q: [qn], kn: []}, qn, {fc, view, now: Date.now()});
+if (rn.lean !== null || rn.edge !== null || rn.conf.score !== 1) throw new Error("N4 server no-lean not rendered");
+console.log("ok");
+""", encoding="utf-8")
+    out = subprocess.run(["node", str(js), str(WEB)], capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0 and out.stdout.strip() == "ok", out.stdout + out.stderr

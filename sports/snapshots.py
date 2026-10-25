@@ -1013,46 +1013,45 @@ def compact_row(r, league=None):
 
 
 def scout_view(q, forecasts):
-    """The Scout (sm-1 / mi-1) view at this quote's line: (po, pu, mu, model, forecast_id) or None - the offer's own
-    forecast, else the line read of the market's saved distribution (= web/sports/table.js scoutAt)."""
+    """The Scout (sm-1 / mi-1) view at this quote's line: (po, pu, mu, model, forecast_id, 80% interval) or None - the
+    offer's own forecast, else the line read of the market's saved distribution (= web/sports/table.js scoutAt)."""
     f = forecasts.get(q.get("forecast_id") or "")
     if f and f.get("kind") != "market" and f.get("p_over") is not None and f.get("p_under") is not None:
-        return f["p_over"], f["p_under"], f.get("projection_mean"), f.get("model_version"), f["forecast_id"]
+        return (f["p_over"], f["p_under"], f.get("projection_mean"), f.get("model_version"), f["forecast_id"],
+                (f.get("detail") or {}).get("interval"))
     lr = q.get("line_read")
     if lr and lr.get("po") is not None and lr.get("pu") is not None:
         s = forecasts.get(lr.get("f") or "") or {}
-        return lr["po"], lr["pu"], s.get("projection_mean"), s.get("model_version") or "sm-1", lr.get("f")
+        return (lr["po"], lr["pu"], s.get("projection_mean"), s.get("model_version") or "sm-1", lr.get("f"),
+                (s.get("detail") or {}).get("interval"))
     return None
 
 
 def guard_row(league, row, forecasts, view_row, now):
-    """vg-1 gate + sg-1 sanity guard (sports/board_view.py) for every quote of one market row with a Scout view.
-    Sets q["x"] = {"b": code, "t": member text, "v": rule} on a held quote: no lean, edge, confidence or edge rank
-    for it anywhere (board, sheets, slip pool). -> sanity log entries (sg-1 holds; vg-1 holds are only counted)."""
+    """Row signal for every quote of one market row with a Scout view (sports/board_view.quote_x): q["x"] = a hold
+    {"b", "t", "v"} (vg-1 gate / sg-1 sanity: no lean, edge, confidence or edge rank anywhere - board, sheets, slip
+    pool) or the cf-2 signal {"ln", "pl", "e", "g", "c", "cw", "s", "n", "v"}. -> sanity log entries (sg-1 holds with
+    their inputs; vg-1 holds are only counted)."""
     out = []
-    gate = board_view.gate_reason(league, row["stat"])
     for q in (row.get("quotes") or []) + (row.get("kalshi") or []) + (row.get("alternates") or []):
         q.pop("x", None)
         sv = scout_view(q, forecasts)
         if sv is None:
             continue
-        po, pu, mu, model, fid = sv
-        if gate:
-            q["x"] = {"b": "gate", "t": gate, "v": board_view.GATE_VERSION}
-            continue
+        po, pu, mu, model, fid, iv = sv
         line = float(q["line"])
-        lean = board_view.lean_of(po, pu, mu, line)
         l10 = ((view_row or {}).get("lines") or {}).get(board_view.line_key(line))
         l10 = list(l10[:4]) if l10 else None
-        code = board_view.sanity_check(mu, line, lean, l10)
+        mkc = board_view.market_at(row.get("market"), q.get("record_id"), line)
+        x, code = board_view.quote_x(league, row["stat"], po, pu, mu, line, mkc, l10, iv)
+        q["x"] = x
         if code:
-            q["x"] = {"b": code, "t": board_view.SANITY_TEXT[code], "v": board_view.SANITY_VERSION}
             out.append({"at": now, "event_id": row["event_id"], "key": row["key"], "player": row.get("player"),
                         "player_id": row["player_id"], "stat": row["stat"], "platform": q.get("platform"),
                         "record_id": q.get("record_id"), "line": line, "projection": mu, "p_over": po,
-                        "p_under": pu, "lean": lean, "l10": l10, "model": model, "forecast_id": fid,
-                        "via": "forecast" if q.get("forecast_id") == fid else "line_read", "reason": code,
-                        "rule": board_view.SANITY_VERSION})
+                        "p_under": pu, "lean": board_view.lean_of(po, pu, mu, line), "l10": l10, "model": model,
+                        "forecast_id": fid, "via": "forecast" if q.get("forecast_id") == fid else "line_read",
+                        "reason": code, "rule": board_view.SANITY_VERSION})
     return out
 
 

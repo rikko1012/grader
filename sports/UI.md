@@ -148,6 +148,17 @@ stats" expands the others in place.
 | L10 / L5 | bv-1: last 10 / 5 PLAYED games with a value for the stat (DNP excluded; same filter as `windowSummary`), strict: "↑ over ↓ under", pushes shown separately ("·1P"). When the last 10 span two seasons the seasons are named (NBA "2025-26 + 2026-27"). |
 | Conf. | cf-1 below, always labelled **Research** until forward validation passes (no grade letters). |
 
+**Server row signal (sanity agent, owner re-audit 2026-10-24 N1-N4; sports/board_view.py):** the snapshot computes
+each quote's row signal and the page renders it (`q.x`): **vg-1** a market whose sm-1 model failed its registered gate
+(registry.json; NFL: all five) shows projection + chances only, labelled "NFL model not validated - projection only" -
+no lean, edge, gap flag, confidence or edge rank; **sg-1** sanity hold (projection < 25% / > 4x the line for lines >= 2,
+or >= 60% of >= 5 strict L10 games on the side opposite the lean) - same suppression, logged with inputs to
+`<league>/sanity.json` (GET /api/sports/admin/sanity); **cf-2** = cf-1 + market estimate from one source -> max 2 +
+|gap| > 15 pts -> max 2 (stale-input cap still applied by the page at render time); lean additionally needs a POSITIVE
+edge for that side when a market chance exists (N4); **edge sort key** = edge, minus 200 for a single-source or
+> 15-pt-gap row, so such a row never ranks above a multi-source row. Rows without `q.x` (older snapshots) fall back to
+the cf-1 rule below.
+
 **cf-1 confidence (deterministic; thresholds, no weights; display only - never a grade, stake or ranking input):**
 no Scout chance -> none; no lean -> 1; otherwise start at 1 and add one step for each threshold met:
 Scout chance of the lean side >= 55%, >= 60%, edge >= +3 pts, edge >= +6 pts (the edge steps need a market chance,

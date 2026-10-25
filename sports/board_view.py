@@ -200,3 +200,110 @@ class StreamWriter:
             self._os.unlink(self.tmp)
         except OSError:
             pass
+
+
+# ------------------------------------------------------------------------------------------- cf-2 row signal (N3/N4)
+# THE board row signal, computed server-side in the snapshot (sports/snapshots.guard_row) so every surface renders the
+# same numbers: web/sports/table.js propRow reads q.x (ln lean, e edge, c / cw confidence, s edge sort key, b hold).
+#   Scout chance  the quote's sm-1 / mi-1 view at its line (own forecast or line read) - snapshots.scout_view
+#   market chance market_view mv-1 at THIS offer (mk.at[record]) or the headline when it is at the same line
+#   lean          lean_of (chance > 50% AND the mean on the same side of the line) AND, when a market chance exists,
+#                 a POSITIVE edge for that side (owner re-audit N4: never a lean the market prices higher); else none
+#   edge          100 x (Scout chance - market chance) of the lean side, probability points (not expected value)
+#   gap           |Scout Over - market Over| in points; flag at >= GAP_PTS
+#   confidence cf-2 = cf-1 (1 + steps: P(lean) >= 55%, >= 60%, edge >= 3, edge >= 6; caps: edge < 0 -> 2, thin L10
+#                 (< 10 games) -> 2, wide 80% range (> 1.5x the line) -> 3, gap >= 10 -> 3) PLUS (N3):
+#                 market estimate from ONE source -> max 2; |gap| > 15 pts -> max 2. The time-dependent stale-input
+#                 cap (forecast > 24 h, line not re-confirmed in 15 min) is applied by the page at render time.
+#   edge sort key s = edge for a row whose market estimate has >= 2 sources and |gap| <= 15; edge - SORT_PENALTY
+#                 otherwise, so a single-source / large-gap row never ranks above a multi-source row (edges are
+#                 within +-100). Held rows (vg-1 / sg-1) and rows without an edge have no key (listed last).
+CONF_VERSION = "cf-2"
+GAP_PTS, GAP_CAP_PTS, THIN_N, WIDE_REL, SORT_PENALTY = 10.0, 15.0, 10, 1.5, 200.0
+
+
+def market_at(mk, record_id, line):
+    """= table.js marketAt: the market chance at this offer's line, or None."""
+    if not mk:
+        return None
+    at = mk.get("at") or {}
+    if record_id in at:
+        c = at[record_id]
+    elif mk.get("c") and mk.get("l") is not None and float(mk["l"]) == float(line):
+        c = mk["c"]
+    else:
+        c = None
+    if c and (c.get("n") or 0) > 0 and c.get("po") is not None and c.get("pu") is not None:
+        return c
+    return None
+
+
+def signal(po, pu, mu, line, mkc, l10=None, iv=None):
+    """One quote's row signal -> {"ln", "pl", "e", "g", "c", "cw", "s", "n", "v"} (see above)."""
+    line = float(line)
+    lean = lean_of(po, pu, mu, line)
+    edge = gap = None
+    if mkc:
+        gap = 100.0 * (po - mkc["po"])
+        if lean:
+            edge = 100.0 * ((po if lean == "over" else pu) - (mkc["po"] if lean == "over" else mkc["pu"]))
+            if edge <= 0:                                   # N4: the market prices this side at least as high
+                lean, edge = None, None
+    out = {"ln": lean, "v": CONF_VERSION, "n": (mkc or {}).get("n") or 0}
+    if gap is not None:
+        out["g"] = round(gap, 2)
+    if not lean:
+        out.update(c=1, cw=["No lean"])
+        return out
+    pl = po if lean == "over" else pu
+    out["pl"] = round(pl, 4)
+    s, why = 1, []
+    if pl >= 0.55 - 1e-12:
+        s += 1
+        why.append("Scout chance >= 55%")
+    if pl >= 0.60 - 1e-12:
+        s += 1
+        why.append("Scout chance >= 60%")
+    if edge is not None and edge >= 3 - 1e-9:
+        s += 1
+        why.append("edge >= 3 pts")
+    if edge is not None and edge >= 6 - 1e-9:
+        s += 1
+        why.append("edge >= 6 pts")
+    if edge is None:
+        why.append("no market chance at this line")
+
+    def cap(n, txt):
+        nonlocal s
+        s = min(s, n)
+        why.append(f"{txt} (max {n})")
+    if not l10 or l10[3] < THIN_N:
+        cap(2, "thin history")
+    if iv and iv[0] is not None and iv[1] is not None and (iv[1] - iv[0]) > WIDE_REL * max(abs(line), 1):
+        cap(3, "wide distribution")
+    if gap is not None and abs(gap) >= GAP_PTS - 1e-9:
+        cap(3, "model vs market gap")
+    single = mkc is not None and (mkc.get("n") or 0) < 2
+    big = gap is not None and abs(gap) > GAP_CAP_PTS + 1e-9
+    if single:
+        cap(2, "market estimate from one source")
+    if big:
+        cap(2, "model vs market gap over 15 pts")
+    out.update(c=s, cw=why)
+    if edge is not None:
+        out["e"] = round(edge, 3)
+        out["s"] = round(edge - (SORT_PENALTY if (single or big) else 0.0), 3)
+    return out
+
+
+def quote_x(league, stat, po, pu, mu, line, mkc, l10=None, iv=None):
+    """The q.x a snapshot / sheet quote carries: a hold {"b", "t", "v"} (vg-1 gate, then sg-1 sanity), else the cf-2
+    signal. -> (x, sanity code or None)."""
+    gate = gate_reason(league, stat)
+    if gate:
+        return {"b": "gate", "t": gate, "v": GATE_VERSION}, None
+    sig = signal(po, pu, mu, line, mkc, l10, iv)
+    code = sanity_check(mu, line, lean_of(po, pu, mu, float(line)), l10)
+    if code:
+        return {"b": code, "t": SANITY_TEXT[code], "v": SANITY_VERSION}, code
+    return sig, None

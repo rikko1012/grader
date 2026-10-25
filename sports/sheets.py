@@ -134,23 +134,19 @@ def sheet_markets(player_file, history_games, platform, events, now):
         vr = board_view.row_summary(row["stat"], [q["line"] for q in lines], history_games)
         lg = (row.get("event_id") or "").split(":", 1)[0]
         nv = board_view.gate_reason(lg, row["stat"])
-        for cq in qs:                                 # vg-1 / sg-1 on the sheet's own line reads too (N1/N2)
-            if cq.get("x") or not (cq.get("lr") or (forecasts.get(cq.get("f") or "") or {}).get("kind") in ("scout", "informed")):
-                continue
-            if nv:
-                cq["x"] = {"b": "gate", "t": nv, "v": board_view.GATE_VERSION}
-                continue
+        for cq in qs:                                 # the board's row signal on the sheet's own line reads (cf-2)
             own = forecasts.get(cq.get("f") or "")
+            if cq.get("x") or not (cq.get("lr") or (own or {}).get("kind") in ("scout", "informed")):
+                continue
             if own and own.get("kind") in ("scout", "informed"):
-                po, pu, mu = own.get("p_over"), own.get("p_under"), own.get("projection_mean")
+                po, pu, src = own.get("p_over"), own.get("p_under"), own
             else:
-                po, pu = cq["lr"]["po"], cq["lr"]["pu"]
-                mu = (forecasts.get(cq["lr"].get("f") or "") or {}).get("projection_mean")
+                po, pu, src = cq["lr"]["po"], cq["lr"]["pu"], forecasts.get(cq["lr"].get("f") or "") or {}
             ln = float(cq["l"])
-            l10 = (vr["lines"].get(board_view.line_key(ln)) or [None])[:4]
-            code = board_view.sanity_check(mu, ln, board_view.lean_of(po, pu, mu, ln), l10 if l10[0] is not None else None)
-            if code:
-                cq["x"] = {"b": code, "t": board_view.SANITY_TEXT[code], "v": board_view.SANITY_VERSION}
+            l10 = vr["lines"].get(board_view.line_key(ln))
+            cq["x"], _ = board_view.quote_x(lg, row["stat"], po, pu, src.get("projection_mean"), ln,
+                                            board_view.market_at(row.get("market"), cq.get("r"), ln),
+                                            list(l10[:4]) if l10 else None, (src.get("detail") or {}).get("interval"))
         markets_out.append({**({"nv": nv} if nv else {}), "k": row["key"], "e": row["event_id"], "pid": row["player_id"],
                             "n": row.get("player"),
                             "pos": row.get("position"), "tm": row.get("team"), "tid": row.get("team_id"),
