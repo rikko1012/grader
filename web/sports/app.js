@@ -400,13 +400,16 @@
     return b.markets.map(function (m) { m.ev = b.events[m.e]; m.matchup = matchup(m.ev); return m; });
   }
   function loadBoard(more) {
-    var reqs = [Api.get("/api/sports/board", {league: state.lg})];
+    var reqs = [Api.get("/api/sports/board", {league: state.lg}),
+                // bv-1 per-prop history hit rates (sports/board_view.py); a board without it shows "—", never a guess
+                Api.get("/api/sports/board", {league: state.lg, part: "view"}).catch(function () { return {data: {rows: {}}}; })];
     if (more) reqs.push(Api.get("/api/sports/board", {league: state.lg, part: "more"}));
     return Promise.all(reqs).then(function (rs) {
       var b = rs[0].data, fc = Object.assign({}, b.fc), markets = decodeBoard(b), stats = b.stats;
-      if (rs[1]) { markets = markets.concat(decodeBoard(rs[1].data)); Object.assign(fc, rs[1].data.fc); }
+      if (rs[2]) { markets = markets.concat(decodeBoard(rs[2].data)); Object.assign(fc, rs[2].data.fc); }
       Object.keys(fc).forEach(function (k) { fc[k].id = k; });          // compact copies keyed by forecast id
-      return {got: rs[0], board: b, markets: markets, fc: fc, stats: stats, injuries: b.injuries || {}};
+      return {got: rs[0], board: b, markets: markets, fc: fc, stats: stats, injuries: b.injuries || {},
+              view: (rs[1].data && rs[1].data.rows) || {}};
     });
   }
   // HOOK (ux agent): the filter bar (search, quick stats, game strip, secondary filters, chips) is web/sports/filters.js.
@@ -575,6 +578,16 @@
     var a = e.target.closest && e.target.closest("#sw-bbody a[href^='#/']");
     if (a && route().view === "board") { state.boardScroll = window.scrollY; state.boardShownSaved = state.boardShown; }
   }, true);
+  // Prop board table (web/sports/table.js): view / sort saved per device (scout.sports.board.v1); default table, edge
+  var R = window.SportsRows, TB = window.SportsTable.state();
+  function setTbPref() { try { var p = JSON.parse(localStorage.getItem("scout.sports.board.v1") || "{}") || {}; p.sort = TB.sort; p.dir = TB.dir; localStorage.setItem("scout.sports.board.v1", JSON.stringify(p)); } catch (e) {} }
+  function validationLine(B) {                           // validation state ONCE per board (not on every card)
+    var ms = (B.board.models || []).filter(function (x) { return x.forecasts > 0 && S.kindOf(x.model_version) !== "market"; });
+    if (!ms.length) return "";
+    return '<p class="sw-tb-valid" id="sw-validation"><b>Research estimates.</b> Forward validation: ' + ms.map(function (x) {
+      return esc(S.kindLabel(x.model_version)) + " " + (x.settled || 0) + " of 300 settled props"; }).join(" · ") +
+      ". Not validated yet: chances, edges and confidence are research, not recommendations. Edge = Scout chance minus the market chance at the same line, in probability points (not expected value).</p>";
+  }
   function renderBoard(params, onlyEvent) {
     var f = state.filters[state.lg];
     if (params) {
@@ -588,17 +601,19 @@
       var B = res[0], man = res[1] && res[1].data;
       B.man = man;
       if (!onlyEvent) { freshness(man, B.got); footer(man); }
-      var evs = Object.keys(B.board.events).map(function (k) { return [k, matchup(B.board.events[k]) + " · " + S.localTime(B.board.events[k].start_utc, {weekday: "short", hour: "numeric", minute: "2-digit"}), B.board.events[k].start_utc]; })
+      var evs = Object.keys(B.board.events).filter(function (k) { return !R.started({ev: B.board.events[k]}, Date.now()); }).map(function (k) { return [k, matchup(B.board.events[k]) + " · " + S.localTime(B.board.events[k].start_utc, {weekday: "short", hour: "numeric", minute: "2-digit"}), B.board.events[k].start_utc]; })
         .sort(function (a, b) { return a[2] < b[2] ? -1 : 1; });
       var head = onlyEvent ? "" : '<div class="sw-eyebrow">' + state.lg.toUpperCase() + ' · Prop board</div><h1 class="sw-h1">Prop board</h1>' +
         '<p class="sw-sub">Find a player. Compare the lines. Track your research. Chances apply to the exact book and line shown; they are not validated recommendations.</p>' +
         boardFiltersHtml(B, f, evs);
-      target.innerHTML = head + '<div id="sw-bcount"></div><div id="sw-bbody"></div>';
+      target.innerHTML = head + (onlyEvent ? "" : validationLine(B) + '<div class="sw-tb-bar" id="sw-tb-bar"></div>') + '<div id="sw-bcount"></div><div id="sw-bbody"></div>';
+      if (onlyEvent) TB.view = "cards"; else TB.view = window.SportsTable.state().view;
       function draw() {
         SRC = []; LEGS = [];
         var ff = onlyEvent ? Object.assign({}, DEFAULT_FILTERS, {ev: onlyEvent, more: true}) : f;
-        var rows = B.markets.filter(function (m) { return (ff.more || m.pr) && window.SportsFilters.matches(m, ff, S.matchesFilters); });
-        var total = B.markets.filter(function (m) { return (ff.more || m.pr) && (!onlyEvent || m.e === onlyEvent); }).length;
+        var nowMs = Date.now(), live = B.markets.filter(function (m) { return !R.started(m, nowMs); });   // started games never listed
+        var rows = live.filter(function (m) { return (ff.more || m.pr) && window.SportsFilters.matches(m, ff, S.matchesFilters); });
+        var total = live.filter(function (m) { return (ff.more || m.pr) && (!onlyEvent || m.e === onlyEvent); }).length;
         var cnt = document.getElementById("sw-bcount"), body = document.getElementById("sw-bbody");
         var withFc = rows.filter(function (m) { return m.q.some(function (q) { return q.f; }); }).length;
         cnt.innerHTML = prefBookHtml(B) + '<p class="sw-count" aria-live="polite"><span><b>' + rows.length + "</b> of " + total + (total === 1 ? " market" : " markets") + "</span><span><b>" + withFc + "</b> with a Scout chance</span>" +
@@ -612,11 +627,20 @@
         }
         var pb = document.getElementById("sw-prefbook");
         if (pb) pb.onchange = function () { setPrefBook(pb.value); draw(); };
-        var shown = rows.slice(0, state.boardShown);
-        body.innerHTML = boardCards(shown, B) +
-          (rows.length > shown.length ? '<p style="text-align:center"><button type="button" class="sw-btn" id="sw-showmore">Show ' + Math.min(BOARD_PAGE, rows.length - shown.length) + " more (" + (rows.length - shown.length) + " left)</button></p>" : "");
-        var sm = document.getElementById("sw-showmore");
-        if (sm) sm.onclick = function () { state.boardShown += BOARD_PAGE; draw(); };
+        var vbar = document.getElementById("sw-tb-bar");
+        if (vbar) vbar.innerHTML = window.SportsTable.viewToggle(TB) + (TB.view === "table" ? window.SportsTable.sortBar(TB) : "");
+        if (TB.view === "table") {
+          body.innerHTML = window.SportsTable.html({lg: state.lg, B: B, rows: rows, pref: prefBook(), href: marketHref, bookName: bookName,
+            now: nowMs, limit: state.boardShown, page: BOARD_PAGE}, TB);
+          var tm = document.getElementById("sw-tb-more");
+          if (tm) tm.onclick = function () { state.boardShown += BOARD_PAGE; draw(); };
+        } else {
+          var shown = rows.slice(0, state.boardShown);
+          body.innerHTML = boardCards(shown, B) +
+            (rows.length > shown.length ? '<p style="text-align:center"><button type="button" class="sw-btn" id="sw-showmore">Show ' + Math.min(BOARD_PAGE, rows.length - shown.length) + " more (" + (rows.length - shown.length) + " left)</button></p>" : "");
+          var sm = document.getElementById("sw-showmore");
+          if (sm) sm.onclick = function () { state.boardShown += BOARD_PAGE; draw(); };
+        }
         if (!onlyEvent && state.boardScroll !== undefined && state.boardScroll !== null) {   // back from a player / game
           var y = state.boardScroll, tries = 0; state.boardScroll = null;
           (function again() {                             // wait for the layout to be tall enough, then restore
@@ -635,6 +659,18 @@
         state.filters[state.lg] = f = Object.assign({}, DEFAULT_FILTERS); state.boardShown = BOARD_PAGE; sync(); renderBoard(null);
       }
       if (!onlyEvent) {
+        var tbar = document.getElementById("sw-tb-bar");
+        tbar.addEventListener("click", function (e) {
+          var v = e.target.closest("[data-tview]"); if (!v) return;
+          TB.view = v.getAttribute("data-tview"); window.SportsTable.setView(TB.view); draw();
+          var nb = document.querySelector('[data-tview="' + TB.view + '"]'); if (nb) nb.focus();
+        });
+        tbar.addEventListener("change", function (e) {
+          if (e.target.id !== "sw-tb-sortsel") return;
+          TB.sort = e.target.value; TB.dir = null; setTbPref(); draw();
+          var x = document.getElementById("sw-tb-sortsel"); if (x) x.focus();
+        });
+        window.SportsTable.bind(document.getElementById("sw-bbody"), TB, function (after) { draw(); if (after) after(); });
         window.SportsFilters.bind(document.getElementById("sw-bf"), f, B, evs, {bookName: bookName}, {      // HOOK (ux)
           onChange: function (reload) { state.boardShown = BOARD_PAGE; sync(); if (reload) renderBoard(null); else draw(); }, onReset: reset});
         document.getElementById("sw-reset").addEventListener("click", reset);
