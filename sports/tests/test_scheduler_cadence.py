@@ -58,10 +58,11 @@ def test_default_jobs_have_one_collector_per_league_with_the_cadence(monkeypatch
     j = scheduler.default_jobs()
     for lg in ("nba", "nfl"):
         s = j[f"ingest-{lg}"]
-        assert s["cadence"] == ("gameday", (lg,)) and s["then"] == ("ui-snapshots",)
+        assert s["cadence"] == ("gameday", (lg,)) and s["then"] == (f"ui-snapshots-{lg}",)
+        assert j[f"ui-snapshots-{lg}"]["argv"][3:5] == ["build", lg] and j[f"ui-snapshots-{lg}"]["cap_mb"] == 300
         assert s["argv"][3:5] == ["ingest", lg] and "--bucket-min" in s["argv"] and s["cls"] == "exclusive"
     assert "ingest" not in j
-    assert "--no-results" in j["ui-snapshots"]["argv"]
+    assert "--no-results" in j["ui-snapshots-nba"]["argv"] and "ui-snapshots" not in j
     monkeypatch.setenv("SPORTS_JOB_INGEST_NBA_EVERY_S", "420")          # an explicit override pins the interval
     j = scheduler.default_jobs()
     assert j["ingest-nba"]["every_s"] == 420 and "cadence" not in j["ingest-nba"]

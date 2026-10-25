@@ -69,8 +69,12 @@ def default_jobs():
         # what members read
         "prebuilt": dict(argv=_py("-m", "sports.service", "snapshots"), every_s=90, timeout_s=120, flag="SPORTS_API",
                          cap_mb=160, cls=HEAVY, prio=1),                       # 105-109 MB (slim slip pool)
-        "ui-snapshots": dict(argv=_py("-m", "sports.snapshots", "build", *lg, "--no-results"), every_s=180, timeout_s=240,
-                             flag="SPORTS_INGEST", cap_mb=250, cls=HEAVY, prio=2),   # 135-200 MB (grows with data)
+        # the board build, ONE PROCESS PER LEAGUE (fresh 2026-10-24): both leagues in one process were killed at
+        # 251-265 MB in production; an NFL week alone measured 137 MB on one live read of every board (17k offers),
+        # NBA 90 MB. Cap 300 = the envelope the exclusive model jobs already run in (340): with it reserved no other
+        # heavy child and no light child fits the 310 MB budget, so service (~70) + build stays near 370 of 512 MB.
+        **{f"ui-snapshots-{x}": dict(argv=_py("-m", "sports.snapshots", "build", x, "--no-results"), every_s=180,
+                                     timeout_s=240, flag="SPORTS_INGEST", cap_mb=300, cls=HEAVY, prio=2) for x in lg},
         "mapping-audit": dict(argv=_py("-m", "sports.mapping_audit", *lg), every_s=3600, timeout_s=240,
                               flag="SPORTS_INGEST", cap_mb=250, cls=HEAVY, prio=3),  # one offer scan per league / hour
         "slips-ingest": dict(argv=_py("-m", "sports.slips", "ingest"), every_s=300, timeout_s=300,
@@ -81,12 +85,12 @@ def default_jobs():
         # cycle starts the board build at once ("then"). --bucket-min 1: a 5-minute cycle is never skipped as 'done'.
         **{f"ingest-{x}": dict(argv=_py("-m", "sports.worker", "ingest", x, "--bucket-min", "1", "--sources",
                                         "espn,pp,ud,injuries,oddsapi,polymarket,books,games"),
-                               every_s=900, cadence=("gameday", (x,)), then=("ui-snapshots",), collector=True,
+                               every_s=900, cadence=("gameday", (x,)), then=(f"ui-snapshots-{x}",), collector=True,
                                timeout_s=900, flag="SPORTS_INGEST", cap_mb=300, cls=EXCLUSIVE, prio=3,
                                env={"SPORTS_WORKER_CONCURRENCY": "1"}) for x in lg},   # 191-197 MB both leagues
         "ingest-kalshi": dict(argv=_py("-m", "sports.worker", "ingest", *lg, "--bucket-min", "1", "--sources",
                                        "kalshi"),
-                              every_s=3600, cadence=("kalshi", tuple(lg)), then=("ui-snapshots",),
+                              every_s=3600, cadence=("kalshi", tuple(lg)), then=tuple(f"ui-snapshots-{x}" for x in lg),
                               timeout_s=900, flag="SPORTS_INGEST", cap_mb=240, cls=HEAVY, prio=3,
                               env={"SPORTS_WORKER_CONCURRENCY": "1"}),         # 70-84 MB (production 2026-10-25)
         "settle": dict(argv=_py("-m", "sports.worker", "settle", *lg), every_s=3600, timeout_s=900,

@@ -150,13 +150,37 @@ def _all_forecasts(con, league, as_of, event_ids=None):
         rows = con.execute("SELECT record_id, payload FROM records WHERE kind='forecast' AND league=? AND known_at <= ?",
                            (league, as_of)).fetchall()
         return [from_dict(store._unpack(r["payload"])) for r in rows]
-    out = []
+    return _iter_forecasts(con, event_ids, as_of)
+
+
+def _rss_mb():
+    try:
+        with open("/proc/self/statm") as fh:
+            return round(int(fh.read().split()[1]) * os.sysconf("SC_PAGE_SIZE") / 1e6, 1)
+    except (OSError, ValueError, AttributeError):
+        try:
+            import psutil
+            return round(psutil.Process().memory_info().rss / 1e6, 1)
+        except Exception:                               # noqa: BLE001
+            return None
+
+
+def _stage(mem, name):
+    """RSS after a build stage -> manifest build_rss_mb and stderr (a build killed over its cap leaves the stage it
+    reached in the service log)."""
+    mb = _rss_mb()
+    mem.append([name, mb])
+    sys.stderr.write(f"  snapshots stage {name}: rss {mb} MB\n")
+    sys.stderr.flush()
+
+
+def _iter_forecasts(con, event_ids, as_of):
+    """One decoded forecast at a time (a generator: the caller keeps only what it needs)."""
     for i in range(0, len(event_ids), 400):
         part = list(event_ids[i:i + 400])
         for r in con.execute(f"SELECT payload FROM records WHERE kind='forecast' AND event_id IN "
                              f"({','.join('?' * len(part))}) AND known_at <= ?", part + [as_of]):
-            out.append(from_dict(store._unpack(r["payload"])))
-    return out
+            yield from_dict(store._unpack(r["payload"]))
 
 
 def _offer_revisions(con, league, as_of, event_ids=None):
@@ -588,6 +612,7 @@ def _engine_context(league, fam, now, pids, markets_rows, events, cur_team, root
 def build(con, league, now=None, base=None, history=True, results=True):
     """Build every snapshot file of one league. -> summary counts."""
     t0 = time.time()
+    mem = []
     now = now or now_utc()
     fam = FAMILY[league]
     root = snap_root(base) / league
@@ -623,22 +648,35 @@ def build(con, league, now=None, base=None, history=True, results=True):
     revs = _offer_revisions(con, league, now, ev_ids)
     by_rid = {rid: (rid, o, m) for rid, o, m in offers}
     by_ident = {(o.platform, o.offer_id): (rid, o, m) for rid, o, m in offers}
-    attached = defaultdict(list)                            # current offer rid -> [(forecast, rid, for_revision)]
+    # current offer rid -> [(forecast, rid, for_revision)]: STREAMED and reduced on the fly to the newest forecast per
+    # (offer, model) - the only ones _choose can pick - so memory follows offers x models, not every forecast ever
+    # made on the slate (model-forward re-forecasts every 30 min)
+    best = {}
     for fc in _all_forecasts(con, league, now, ev_ids):
         for orid in fc.offer_snapshot_ids:
             if orid in by_rid:
-                attached[orid].append((fc, orid, None))
-                continue
-            r = revs.get(orid)
-            if not r:
-                continue
-            cur = by_ident.get((r[0], r[1]))
-            if cur is None:
-                continue
-            crid, co, _ = cur
-            if (co.line == fc.line and co.stat == fc.stat and co.scope == fc.scope
-                    and tuple(sorted(co.offered_sides())) == tuple(sorted(fc.sides_available))):
-                attached[crid].append((fc, crid, r[2]))
+                hit = (fc, orid, None)
+            else:
+                r = revs.get(orid)
+                if not r:
+                    continue
+                cur = by_ident.get((r[0], r[1]))
+                if cur is None:
+                    continue
+                crid, co, _ = cur
+                if not (co.line == fc.line and co.stat == fc.stat and co.scope == fc.scope
+                        and tuple(sorted(co.offered_sides())) == tuple(sorted(fc.sides_available))):
+                    continue
+                hit = (fc, crid, r[2])
+            k = (hit[1], fc.model_version)
+            if k not in best or fc.forecast_at > best[k][0].forecast_at:
+                best[k] = hit
+    attached = defaultdict(list)
+    for (crid, _mv), hit in best.items():
+        attached[crid].append(hit)
+    fc_objs = {hit[0].forecast_id: hit[0] for hit in best.values()}     # the decoded forecasts the files need
+    del best, revs
+    _stage(mem, "offers + forecasts read")
     # players
     pids = sorted({o.player_id for _, o, _ in offers if o.player_id})
     players = {}
@@ -713,8 +751,10 @@ def build(con, league, now=None, base=None, history=True, results=True):
             row["alternates"].append(v)
     # sort + slim the board: Kalshi rungs nearest the pick'em lines only (full ladder in the player file)
     # what each displayed forecast is (scout / informed / market), its 80% range, validation, used inputs, PMF
+    _stage(mem, "market rows")
     fd_info = forecast_detail.enrich(forecasts, league,
                                      with_pmf_for={k for k, f in forecasts.items() if f.get("kind") != "market"})
+    _stage(mem, "forecast detail")
     run = forward_run(league)
     board_rows = []
     dnp = market_view.dnp_share(league)
@@ -758,6 +798,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
     board_rows.sort(key=lambda r: (events[r["event_id"]][1].start_utc, r["event_id"], not r["quotes"], r["player"],
                                    not r["primary"], r["stat"]))
 
+    _stage(mem, "board rows")
     # slate
     slate = []
     glines = game_lines.game_lines(league, {eid: e for eid, (_, e, _) in events.items()})
@@ -859,6 +900,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
         k: ({**f, "detail": {x: y for x, y in f["detail"].items() if x != "pmf"}} if f.get("detail") else f)
         for k, f in forecasts.items()}})
 
+    _stage(mem, "slate+board files")
     # players
     n_players = 0
     pl_dir, hi_dir = root / "players", root / "history"
@@ -890,7 +932,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
                 fid = q.get("forecast_id")
                 if not fid or fid in fdetail:
                     continue
-                fc = _fc_obj(con, fid)
+                fc = fc_objs.get(fid) or _fc_obj(con, fid)
                 spec = markets.market(fam, r["stat"]) or {"shape": "count"}
                 lad, why = ladder(fc, ladder_lines(fc.line, spec["shape"], book_lines))
                 chart = pmf(fc)
@@ -913,7 +955,9 @@ def build(con, league, now=None, base=None, history=True, results=True):
     if results:
         sizes["results"] = _write(root / "results.json", {**res_obj, **base_meta})
     manifest["sizes"] = sizes
+    _stage(mem, "players")
     manifest["build_s"] = round(time.time() - t0, 2)
+    manifest["build_rss_mb"] = mem
     _write(root / "manifest.json", manifest)
     return {"league": league, **manifest["counts"], "player_files": n_players, "sizes": sizes,
             "build_s": manifest["build_s"]}
