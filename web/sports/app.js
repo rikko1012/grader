@@ -1275,6 +1275,7 @@
     else if (r.view === "game" && r.arg) renderGame(r.arg);
     else if (r.view === "results") renderResults();
     else if (r.view === "picks") renderPicks();
+    else if (r.view === "sheets" && window.SportsSheets) window.SportsSheets.render({main: main, api: Api, lg: state.lg, arg: r.arg, fail: fail});   // HOOK (sheets)
     else if (r.view === "slips") renderSlips();
     else if (r.view === "slate" && !r.arg) renderSlate();
     else renderNotFound(r);

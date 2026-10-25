@@ -86,8 +86,20 @@ ROUTES = {
     "/api/sports/picks/mine": ("sports.api_picks:mine", MEMBER, ("GET",)),
     "/api/sports/admin/picks": ("sports.api_picks:admin", ADMIN, ("GET",)),
     "/api/sports/admin/books": ("sports.api_books:admin", ADMIN, ("GET",)),
+    "/api/sports/sheets": ("sports.api_sheets:sheet", MEMBER, ("GET",)),
+    "/api/sports/without": ("sports.api_sheets:without_view", MEMBER, ("GET",)),
+    "/api/sports/results/public": ("sports.api_sheets:results_view", MEMBER, ("GET",)),
 }
 # ---------------------------------------------------------------------------------------------------- end of table
+
+# PUBLIC_WHEN (sheets agent, 2026-10-24): a MEMBER route listed here is ALSO answered without a token (GET only) while
+# its environment flag is "1" - server-side, read per request, default OFF. Nothing else can be opened this way.
+PUBLIC_WHEN = {"/api/sports/results/public": "SPORTS_RESULTS_PUBLIC"}
+
+
+def public_open(path, method="GET"):
+    flag = PUBLIC_WHEN.get(path)
+    return bool(flag) and method == "GET" and ROUTES.get(path, (None, None))[1] == MEMBER and         os.environ.get(flag, "").strip() == "1"
 
 # ---------------------------------------------------------------------------------------------- SNAPSHOT TABLE
 # "<name>": ("<module>:<function>", refresh_s, max_age_s) - function(con) -> {web.cached key tuple: value}, key[0] ==
@@ -368,7 +380,7 @@ def dispatch(req: Request):
     target, access, methods = entry
     if req.method not in methods:
         return _json(405, {"error": "method_not_allowed", "allowed": list(methods)})
-    if req.role not in (MEMBER, ADMIN):
+    if req.role not in (MEMBER, ADMIN) and not public_open(req.path, req.method):
         return _json(401, {"error": "members_only"})
     if access == ADMIN and req.role != ADMIN:
         return _json(403, {"error": "admin_only"})
@@ -414,9 +426,9 @@ def handle(path, query, allowed, admin):
         if role is None:
             return _json(403, {"error": "admin_only"})
     else:
-        if not allowed():
+        if not allowed() and not public_open(path):
             return _json(401, {"error": "members_only"})
-        role = ADMIN if admin() else MEMBER
+        role = ADMIN if admin() else (MEMBER if allowed() else None)
     try:
         return dispatch(Request(path=path, query=dict(query), role=role, member="m_inprocess"))
     except Exception as e:                              # noqa: BLE001
