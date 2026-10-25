@@ -227,6 +227,10 @@ def nfl_frame(con, h_opp=4, upcoming=None, as_of=None, with_lags=True):
     for c in NFL_FILL0:
         pg[c] = np.nan_to_num(pg[c])
     pg, up_keys = _with_upcoming(pg, "nfl", as_of, upcoming)
+    # the SAME position map for the upcoming rows (sanity 2026-10-24, N2): forward rows carry nfl_pg's raw position,
+    # and an "FB" row matched no fitted position prior (eff_pos / catch_pos / allow_* keys are QB/RB/WR/TE) -> NaN
+    # efficiency -> a PMF collapsed onto 0 (Kyle Juszczyk rec_yds 0.05 projected at an 11.5 line; 11.2 once mapped)
+    pg["position"] = np.where(pg["position"] == "FB", "RB", pg["position"]).astype(object)
     if up_keys:                                 # upcoming rows: results unknown (NaN), not 0
         up = pg["is_up"] == 1
         for c in NFL_FILL0:

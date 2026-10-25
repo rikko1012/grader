@@ -144,3 +144,27 @@ nflverse weekly player stats + snap counts + play-by-play 2022-2026 (2026 throug
 - Historical evaluation uses a pre-game reference line (floor of the last-10 mean + 0.5), not book lines: books set lines with information the model lacks, so accuracy at offered lines can be lower.
 - Players outside the validated population (NBA < 5 prior games or < 15 L10 minutes; NFL < 3 games or below the pool thresholds) still get a research forecast, reason-coded `outside_validated_population` / `thin_history`.
 - Every factor of the owner's list is in `sports/features.py` with its status and measured tune effect; unavailable (licensed) factors are absent, never imputed.
+
+## Owner re-audit 2026-10-24 (N1/N2) - containment, a bug fix, measured bias
+
+- **Containment (vg-1, sports/board_view.py):** all five sm-1 NFL markets failed gate H, so no NFL row shows a lean,
+  edge, confidence or edge rank (board, sheets, slip pool). Projection + chances stay, labelled "NFL model not
+  validated - projection only". sg-1 sanity guard (all markets) holds a row when the projection is under 25% / over
+  4x the line (lines >= 2) or the strict L10 at the line contradicts the lean (>= 60% of >= 5 games on the other side).
+- **Bug fixed (featurize.nfl_frame):** training maps FB -> RB, upcoming rows kept "FB"; no position prior matched,
+  efficiency was NaN and the PMF collapsed onto 0 (Kyle Juszczyk rec_yds: 0.05 projected at 11.5; 11.2 after the
+  map, same frozen artifact). 13 of 3,747 forward NFL sm-1 forecasts on the 2026-10-24 store copy were FB rows.
+  No artifact or calibration change; forward rows of fullbacks re-forecast because their feature-row hash changes.
+- **Measured (no settled forward NFL prop exists in any reachable store; production settled rows need the service
+  admin token):** held-out signed bias (mean - actual) and calibration-in-the-large P(Over) - hit on 2026 weeks 1-7
+  (secondary locked test): pass_yds -9.9 yds / -5.7 pts, rush_att -0.37 / -3.9 pts, rec -0.13 / -2.5 pts, rec_yds
+  -1.4 / -1.4 pts, rush_yds -1.0 / +2.0 pts. At the 2026-10-24 BOOK lines (unique player x stat x line, store copy):
+  mean P(Over) 0.39 (rush_att) - 0.46 (rush_yds); the projected MEAN tracks the player's last-6 average (rec_yds
+  -1.5, rush_yds +0.7, rec -0.2; pass_yds -12.7) and P(Over) matches the player's own last-16 over-rate at the same
+  line (rec_yds 0.447 vs 0.451, rec 0.414 vs 0.427, rush_yds 0.456 vs 0.479, pass_yds 0.452 vs 0.501) EXCEPT
+  rush_att (0.387 vs 0.465). The one-direction Under edges come from (1) book lines sitting above the players'
+  history (L16 over-rate 0.43-0.50 at the line while the market estimate is ~0.50), (2) the left tail of
+  partial-participation games (snaps < 50%: injury exits, backup weeks) kept at full weight in the opportunity
+  history - 21% of rec_yds PMF mass sits at <= 25% of the line (history: 25%), which the market prices out for a
+  player expected to play his full role, (3) the rush_att / pass_yds under-forecast above. Fixing (2) / (3) is a
+  model change: a new version through REGISTER.md (held-out test first), not done silently.
