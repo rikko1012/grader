@@ -133,3 +133,17 @@ def test_results_ledger_is_streamed_per_event(monkeypatch, tmp_path):
         worker.settle_league(con, "nba", now="2026-10-24T06:00:00Z")
         out = snapshots.write_results(con, "nba", now="2026-10-24T06:00:00Z", base=tmp_path)
     assert passes == [["nba:espn:1"], ["nba:espn:2"]] and out["settled_by_model"] == {"sm-1": 2}
+
+
+def test_results_ledger_rows_carry_the_player_record_name(monkeypatch, tmp_path):
+    """Owner re-audit N7: the ledger shows 'Karl-Anthony Towns' from the player record, never the lowercase key."""
+    from sports.contracts import Player
+    _fake_espn(monkeypatch, {"nba:espn:1": 25.0})
+    with store.opened() as con:
+        _world(con)
+        store.put(con, Player(player_id=KAT, league="nba", name="Karl-Anthony Towns", observed_at="2026-10-23T20:00:00Z",
+                              known_at="2026-10-23T20:00:00Z"))
+        worker.settle_league(con, "nba", now="2026-10-24T06:00:00Z")
+        snapshots.write_results(con, "nba", now="2026-10-24T06:00:00Z", base=tmp_path)
+    row = json.loads((tmp_path / "nba" / "results.json").read_text())["rows"][0]
+    assert row["player"] == "Karl-Anthony Towns" and row["player_key"] != row["player"]

@@ -28,6 +28,49 @@
     "zero chance": "Scout gives this side no chance",
     "market prices Scout's side higher": "No lean: the market prices Scout's side higher"
   };
+  // stat labels: the canonical market keys (= sports/markets.py MARKETS labels, test_ui_uifix checks they match) plus
+  // the books' raw stat names that reach member pages (Underdog "three_points_made", ...). Never show a raw key.
+  var STAT = {"points": "Points",
+              "rebounds": "Rebounds",
+              "assists": "Assists",
+              "threes": "3-pointers made",
+              "pra": "Pts+Rebs+Asts",
+              "pr": "Pts+Rebs",
+              "pa": "Pts+Asts",
+              "ra": "Rebs+Asts",
+              "steals": "Steals",
+              "blocks": "Blocks",
+              "stocks": "Blks+Stls",
+              "turnovers": "Turnovers",
+              "pass_yds": "Pass yards",
+              "pass_att": "Pass attempts",
+              "pass_cmp": "Pass completions",
+              "pass_td": "Pass TDs",
+              "pass_int": "Interceptions thrown",
+              "rush_yds": "Rush yards",
+              "rush_att": "Rush attempts",
+              "rec": "Receptions",
+              "rec_yds": "Receiving yards",
+              "rush_rec_yds": "Rush+Rec yards",
+              "pass_rush_yds": "Pass+Rush yards",
+              "targets": "Targets"};
+  var RAW_STAT = {three_points_made: "threes", threes_made: "threes", "3pt_made": "threes", "3-pointers made": "threes",
+                  pts_rebs_asts: "pra", "pts+rebs+asts": "pra", pts_rebs: "pr", "pts+rebs": "pr", pts_asts: "pa",
+                  "pts+asts": "pa", rebs_asts: "ra", "rebs+asts": "ra", blks_stls: "stocks", "blks+stls": "stocks",
+                  blocked_shots: "blocks", passing_yds: "pass_yds", passing_yards: "pass_yds", rushing_yds: "rush_yds",
+                  rushing_yards: "rush_yds", receiving_yds: "rec_yds", receiving_yards: "rec_yds",
+                  receptions: "rec", rush_rec_yds: "rush_rec_yds", "rush+rec yds": "rush_rec_yds",
+                  passing_tds: "pass_td", passing_touchdowns: "pass_td", pass_tds: "pass_td",
+                  passing_attempts: "pass_att", completions: "pass_cmp", interceptions: "pass_int",
+                  rushing_attempts: "rush_att"};
+  function statLabel(key) {
+    if (key === null || key === undefined || key === "") return "";
+    var k = String(key), low = k.toLowerCase();
+    if (STAT[k]) return STAT[k];
+    if (STAT[low]) return STAT[low];
+    if (RAW_STAT[low]) return STAT[RAW_STAT[low]];
+    return /[_]/.test(k) || k === low ? words(k) : k;        // an unknown raw key: words, never underscores
+  }
   function cap(s) { s = String(s); return s.charAt(0).toUpperCase() + s.slice(1); }
   function words(code) { return cap(String(code).replace(/_/g, " ")); }
   function eventStatus(s) { if (!s) return ""; var k = String(s).toLowerCase(); return EVENT_STATUS[k] || words(k); }
@@ -129,6 +172,38 @@
     return "spans " + seen.length + " seasons (" + seen.map(function (s) { return seasonLabel(s, lg); }).join(" and ") + ")";
   }
 
+  // ------------------------------------------------------------------------------------------- results ledger
+  // N7 (owner re-audit 2026-10-24): proper names from the player record (row.player, sports/snapshots.write_results);
+  // a row without one falls back to the key in title case ("zaccharie risacher" -> "Zaccharie Risacher").
+  function titleName(key) {
+    return String(key || "").split(/(\s+|-)/).map(function (w) {
+      if (/^(jr|sr)\.?$/i.test(w)) return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+      if (/^(ii|iii|iv|v)$/i.test(w)) return w.toUpperCase();
+      if (/^[a-z]{1,2}$/i.test(w) && /^(pj|cj|aj|jj|tj|dj|rj|og|kj|jt|jd)$/i.test(w)) return w.toUpperCase();
+      return w ? w.charAt(0).toUpperCase() + w.slice(1) : w;
+    }).join("");
+  }
+  function ledgerName(r) { return (r && r.player) || titleName(r && r.player_key); }
+  // one row per (player, stat, line, game, model): the same forecast made for two books' copies of one line is
+  // scored once in the list; the books are kept on the row (r.books)
+  function ledgerRows(rows) {
+    var seen = {}, out = [];
+    (rows || []).forEach(function (r) {
+      var k = [r.player_id || r.player_key, r.stat, r.line, r.event_id, r.model_version].join("|");
+      var have = seen[k];
+      if (have) { if (r.platform && have.books.indexOf(r.platform) < 0) have.books.push(r.platform); have.dupes++; return; }
+      var x = Object.assign({}, r, {books: r.platform ? [r.platform] : [], dupes: 0});
+      seen[k] = x; out.push(x);
+    });
+    return out;
+  }
+  // the side Scout favoured and its chance: {side: "over"|"under", label: "Over", p}
+  function scoutSide(r) {
+    if (!r || r.p_over === null || r.p_over === undefined || r.p_under === null || r.p_under === undefined) return null;
+    var over = r.p_over >= r.p_under;
+    return {side: over ? "over" : "under", label: over ? "Over" : "Under", p: over ? r.p_over : r.p_under};
+  }
+
   // ------------------------------------------------------------------------------------------------ search
   var PLACEHOLDER = {nba: "e.g. BOS or Celtics", nfl: "e.g. KC or Chiefs"};
   function teamPlaceholder(lg) { return PLACEHOLDER[lg] || PLACEHOLDER.nba; }
@@ -136,7 +211,9 @@
   var api = {eventStatus: eventStatus, slipReason: slipReason, gateReason: gateReason, variant: variant,
              availability: availability, participation: participation, injuryStatus: injuryStatus, injuryParts: injuryParts,
              injuryText: injuryText, seasonLabel: seasonLabel, windowLabel: windowLabel, seasonBreaks: seasonBreaks,
-             spansText: spansText, teamPlaceholder: teamPlaceholder, SLIP_REASON: SLIP_REASON, EVENT_STATUS: EVENT_STATUS};
+             spansText: spansText, teamPlaceholder: teamPlaceholder, SLIP_REASON: SLIP_REASON, EVENT_STATUS: EVENT_STATUS,
+             titleName: titleName, ledgerName: ledgerName, ledgerRows: ledgerRows, scoutSide: scoutSide,
+             statLabel: statLabel, STAT: STAT, words: words};
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SportsLabels = api;
 })(this);

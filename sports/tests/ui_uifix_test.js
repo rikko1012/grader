@@ -50,4 +50,24 @@ assert.deepStrictEqual(recs.map(r => [r.league, r.wlp, r.current]), [["nba", "3-
 const mixed = [{league: "nba"}, {league: "nfl"}, {league: "nba", test: true}];
 assert.deepStrictEqual(P.onlyLeague(mixed, "nba"), [{league: "nba"}]);
 
+// ---------------------------------------------------------------- N7: results ledger names, dedupe, side
+assert.strictEqual(L.ledgerName({player: "Zaccharie Risacher", player_key: "zaccharie risacher"}), "Zaccharie Risacher");
+assert.strictEqual(L.ledgerName({player: null, player_key: "zaccharie risacher"}), "Zaccharie Risacher");
+assert.strictEqual(L.ledgerName({player_key: "pj washington"}), "PJ Washington");
+const lr = [
+  {player_id: "nba:player:espn:9", player_key: "pj washington", stat: "rebounds", line: 7, event_id: "e1", model_version: "sm-1", platform: "prizepicks", p_over: 0.4, p_under: 0.6},
+  {player_id: "nba:player:espn:9", player_key: "pj washington", stat: "rebounds", line: 7, event_id: "e1", model_version: "sm-1", platform: "underdog", p_over: 0.4, p_under: 0.6},
+  {player_id: "nba:player:espn:9", player_key: "pj washington", stat: "rebounds", line: 7.5, event_id: "e1", model_version: "sm-1", platform: "underdog", p_over: 0.3, p_under: 0.7},
+  {player_id: "nba:player:espn:9", player_key: "pj washington", stat: "rebounds", line: 7, event_id: "e1", model_version: "mc-1", platform: "underdog", p_over: 0.5, p_under: 0.5}];
+const led = L.ledgerRows(lr);
+assert.strictEqual(led.length, 3);                                    // same player/stat/line/game/model once
+assert.deepStrictEqual(led[0].books, ["prizepicks", "underdog"]); assert.strictEqual(led[0].dupes, 1);
+assert.deepStrictEqual(L.scoutSide(lr[0]), {side: "under", label: "Under", p: 0.6});
+assert.strictEqual(L.scoutSide({p_over: null}), null);
+// #12: raw stat keys never reach a page
+assert.strictEqual(L.statLabel("three_points_made"), "3-pointers made");
+assert.strictEqual(L.statLabel("threes"), "3-pointers made");
+assert.strictEqual(L.statLabel("rec_yds"), "Receiving yards");
+assert.ok(!/_/.test(L.statLabel("some_new_stat")));
+
 console.log("ok");

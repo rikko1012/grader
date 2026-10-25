@@ -399,3 +399,14 @@ def test_slip_studio_is_inside_the_main_shell(browser):
     page.wait_for_url("**/sports#/slips**")
     assert not errors, errors
     ctx.close()
+
+
+def test_stat_labels_match_the_market_definitions():
+    """#12: labels.js STAT is the member wording of sports/markets.py MARKETS (one source of labels)."""
+    import json as _json
+    import re as _re
+    from sports import markets
+    src = (Path(__file__).resolve().parents[2] / "web" / "sports" / "labels.js").read_text(encoding="utf-8")
+    stat = _json.loads(_re.search(r"var STAT = (\{.*?\});", src, _re.S).group(1))
+    want = {k: v["label"] for fam in markets.MARKETS.values() for k, v in fam.items()}
+    assert stat == want

@@ -1185,8 +1185,22 @@ def write_results(con, league, now=None, base=None):
         part = st_events[i:i + RESULTS_EVENTS_PER_PASS]
         rows += results_view(con, league, _event_settlements(con, part), now, meta, rows_only=True)
     obj = results_from_rows(rows, meta)
+    names = player_names(con, {r["player_id"] for r in obj["rows"] if r.get("player_id")}, now)
+    for r in obj["rows"]:                              # N7: the player's record name, never the lowercase key
+        r["player"] = names.get(r.get("player_id"))
     _write(root / "results.json", obj)
     return {"rows": obj["total_rows"], "settled_by_model": {k: v["settled"] for k, v in obj["summary"].items()}}
+
+
+def player_names(con, pids, as_of=None):
+    """{player_id: name} from the latest Player record of each id (indexed records_player scan, chunked)."""
+    out, ids = {}, sorted(p for p in pids if p)
+    for i in range(0, len(ids), 400):
+        part = ids[i:i + 400]
+        for _, p, _ in _latest(con, "player", f"player_id IN ({','.join('?' * len(part))})", part, as_of):
+            if getattr(p, "name", None):
+                out[p.player_id] = p.name
+    return out
 
 
 def _boot_ci(groups, stat_fn, reps=400, seed=7):
