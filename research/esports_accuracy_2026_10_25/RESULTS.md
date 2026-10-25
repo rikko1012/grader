@@ -105,3 +105,8 @@ since 2026-10-09). No new projection factor qualifies.
   projection adds beyond the book line; it does not find a new edge. Shipping it is an owner decision (it removes most B
   grades, memory grades-accuracy-not-fewer). If not shipped, keep pl-2 (the forward shadow of the same idea) running to
   its 300-match review. The partial-map settlement fix is independent and safe to ship on its own.
+- Checks on the release code: full suite 1,623 passed + the one updated identity assertion (test_prior_smooth: the
+  frozen comparisons now get the live CONFIG minus lw-1) = all green; 700-concurrent load (scripts/load700.py): 1,226
+  requests, 0 5xx, p95 1.67 s (the 87 409s are the harness's intended one-team slip refusals); consistency audit on 500
+  regraded production forecasts (scripts/audit_lw1.py): 0 side-vs-projection, units-vs-grade, chart or simulation
+  mismatches (the 44 "wording" hits are lower-case "line-informed" in Lean reasons and over-only lines).

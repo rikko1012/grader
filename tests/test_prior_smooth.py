@@ -56,7 +56,8 @@ def test_perf_shadows_graded_by_their_own_model():
     for gi in _real_inputs():
         swapped = {k: v for k, v in picklog.shadow_alts(gi).items() if isinstance(v, tuple)}
         assert set(swapped) == {"perf1_g7", "prior_smooth"}
-        assert swapped["perf1_g7"][1] is grader.CONFIG                       # perf-1 / perf-1-bo3: already live versions
+        # perf-1 / perf-1-bo3: already live versions -> the live CONFIG itself, minus lw-1 (2026-10-25: frozen comparisons)
+        assert swapped["perf1_g7"][1] == dict(grader.CONFIG, lw1=None)
         for name, (gin, cfg) in swapped.items():
             src = grader.grade_leg(gin, cfg)["projection_source"]
             assert src == gin["perf"]["version"] and not src.startswith("legacy"), (name, gi["prop"], gi["scope"], src)
