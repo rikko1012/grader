@@ -281,7 +281,7 @@ def test_slate_bettor_wording_details_toggle_lines_and_placeholder(browser):
     page.wait_for_selector(".sw-game")
     body = page.locator("#sw-main").inner_text()
     assert "core markets" not in body and "Scout chances" not in body
-    assert "154 props" in body and "75 lines with Scout projection" in body
+    assert "154 props" in body and "75 with a Scout chance" in body
     # a started game leaves the main list: counted, and listed in the collapsed "Started or finished" section
     assert "1 upcoming game" in body and "1 started or finished" in body and "Started or finished (1)" in body
     assert page.locator(".sw-past .sw-game").count() == 1 and not page.locator(".sw-past .sw-game").is_visible()
@@ -313,7 +313,7 @@ def test_match_context_nav_state_and_team_context(browser):
     tc = tc.lower()
     assert "spread" in tc and "pace" in tc and "99.1" in tc and "#3" in tc and "41.2 per game" in tc
     body = page.locator("#sw-main").inner_text()
-    assert "75 lines with Scout projection" in body and "Scout chances" not in body
+    assert "75 with a Scout chance" in body and "Scout chances" not in body
     assert "Out · Shoulder" in body
     assert not errors, errors
     ctx.close()

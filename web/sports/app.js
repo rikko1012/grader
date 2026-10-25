@@ -357,11 +357,13 @@
     var st = L.injuryStatus(i.status), x = L.injuryParts(i.detail), rest = [x.body, x.detail].filter(Boolean).join(" · ");
     return '<span class="sw-tag inj">' + esc(st || "Injury report") + "</span>" + (rest ? ' <span class="sw-injd">· ' + esc(rest) + "</span>" : "");
   }
-  // ONE coverage definition on Slate and Match context: props = player markets Scout holds for the game; "with Scout
-  // projection" = book lines carrying a Scout forecast made for that exact line (snapshot coverage.forecasts).
+  // ONE coverage definition on Slate, Match context and the board (sports/scout_chance.py sc-1): props = player
+  // markets Scout holds for the game; "with a Scout chance" = props (markets) with at least one sc-1 Scout chance
+  // (snapshot coverage.scout_chances.markets; the board counts its rows with m.sc > 0 - the same rule).
+  function scMarkets(c) { return c.scout_chances && typeof c.scout_chances.markets === "number" ? c.scout_chances.markets : c.forecasts; }
   function coverageKv(c) {
-    return '<div class="sw-kv"><span><b>' + c.markets + "</b> " + (c.markets === 1 ? "prop" : "props") + "</span><span><b>" + c.forecasts + "</b> " +
-      (c.forecasts === 1 ? "line" : "lines") + " with Scout projection</span><span><b>" + c.players + "</b> " + (c.players === 1 ? "player" : "players") + "</span></div>";
+    var n = scMarkets(c);
+    return '<div class="sw-kv"><span><b>' + c.markets + "</b> " + (c.markets === 1 ? "prop" : "props") + "</span><span><b>" + n + "</b> with a Scout chance</span><span><b>" + c.players + "</b> " + (c.players === 1 ? "player" : "players") + "</span></div>";
   }
   // Game lines (spread / total / moneyline) - rendered ONLY from typed fields the slate snapshot carries:
   // e.game_lines = {spread|total|moneyline: {..., source, observed_at, history: [[iso, value], ...]}} (contract in
@@ -401,7 +403,7 @@
       freshness(man, got); footer(man);
       var f = state.filters[state.lg];
       var html = '<div class="sw-eyebrow">' + state.lg.toUpperCase() + ' · Slate</div><h1 class="sw-h1">Games and coverage</h1>' +
-        '<p class="sw-sub">Start times in your time zone. Each game lists its props, how many lines have a Scout projection, and the injury report.</p>' +
+        '<p class="sw-sub">Start times in your time zone. Each game lists its props, how many of them have a Scout chance, and the injury report.</p>' +
         '<div class="sw-filters" role="search"><div class="sw-field grow"><label for="sw-sq">Find a team</label>' +
         '<input id="sw-sq" type="search" autocomplete="off" placeholder="' + esc(L.teamPlaceholder(state.lg)) + '" value="' + esc(f.slateQ || "") + '"></div>' +
         '<button type="button" class="sw-btn" id="sw-sreset">Reset</button></div><div id="sw-slatebody"></div>';
@@ -702,7 +704,7 @@
         var rows = live.filter(function (m) { return (ff.more || m.pr) && window.SportsFilters.matches(m, ff, S.matchesFilters); });
         var total = live.filter(function (m) { return (ff.more || m.pr) && (!onlyEvent || m.e === onlyEvent); }).length;
         var cnt = document.getElementById("sw-bcount"), body = document.getElementById("sw-bbody");
-        var withFc = rows.filter(function (m) { return m.q.some(function (q) { return q.f; }); }).length;
+        var withFc = rows.filter(function (m) { return (m.sc || 0) > 0; }).length;   // sc-1, = slate coverage.scout_chances.markets
         cnt.innerHTML = prefBookHtml(B) + '<p class="sw-count" aria-live="polite"><span><b>' + rows.length + "</b> of " + total + (total === 1 ? " market" : " markets") + "</span><span><b>" + withFc + "</b> with a Scout chance</span>" +
           (!ff.more && B.board.secondary_markets ? "<span>" + B.board.secondary_markets + " more under “More stats”</span>" : "") + "</p>";
         if (!total) { body.innerHTML = stateBox("No lines yet", "No " + state.lg.toUpperCase() + " props are on the board right now."); return; }

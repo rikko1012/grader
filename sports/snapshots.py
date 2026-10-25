@@ -756,6 +756,8 @@ def build(con, league, now=None, base=None, history=True, results=True):
             row["quotes"].append(v)
         else:
             row["alternates"].append(v)
+    for row in markets_rows.values():                   # N10: the forecast is per MARKET + LINE, not per offer
+        same_line_forecasts(row, forecasts)
     # sort + slim the board: Kalshi rungs nearest the pick'em lines only (full ladder in the player file)
     # what each displayed forecast is (scout / informed / market), its 80% range, validation, used inputs, PMF
     _stage(mem, "market rows")
@@ -1163,6 +1165,32 @@ def forward_run(league):
         except Exception:                               # noqa: BLE001
             pass
     return out
+
+
+def same_line_forecasts(row, forecasts):
+    """N10 (owner re-audit 2026-10-24): every book quoting the SAME line of the same market shows the same Scout
+    forecast. Forecasts are made for the target pick'em offers (forward run), so a sportsbook quote (FanDuel 3.5) had
+    no forecast of its own while PrizePicks / Underdog at 3.5 did ("No Scout projection yet"). An ordinary quote
+    without its own forecast takes the market's Scout (sm-1 / mi-1) forecast at the identical line - the same saved
+    distribution, the same chances - marked fc_via = "same_line" (the forecast record still names the offer it was
+    made for). Newest forecast first. -> number of quotes joined."""
+    from .forecast_detail import kind
+    by_line = {}
+    for q in row.get("quotes") or []:
+        f = forecasts.get(q.get("forecast_id") or "")
+        if f and kind(f.get("model_version")) in ("scout", "informed"):
+            k = round(float(q["line"]), 3)
+            if k not in by_line or f["forecast_at"] > forecasts[by_line[k]]["forecast_at"]:
+                by_line[k] = f["forecast_id"]
+    n = 0
+    for q in row.get("quotes") or []:
+        if q.get("forecast_id"):
+            continue
+        fid = by_line.get(round(float(q["line"]), 3))
+        if fid:
+            q["forecast_id"], q["fc_via"], q["other_models"] = fid, "same_line", []
+            n += 1
+    return n
 
 
 def scout_line_reads(row, forecasts):

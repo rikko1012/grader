@@ -11,6 +11,7 @@ import pytest
 
 from sports import board_view, snapshots
 from sports.slips import pool
+from sports.tests.test_ui_snapshots import built  # noqa: F401  (shared built-snapshot fixture)
 
 WEB = Path(__file__).resolve().parents[2] / "web" / "sports"
 
@@ -206,3 +207,36 @@ console.log("ok");
 """, encoding="utf-8")
     out = subprocess.run(["node", str(js), str(WEB)], capture_output=True, text=True, timeout=60)
     assert out.returncode == 0 and out.stdout.strip() == "ok", out.stdout + out.stderr
+
+
+# ------------------------------------------------------------------------------------------------ N10 / #5
+def test_same_line_books_share_the_market_forecast():
+    fcs = {"pp": dict(_fc("pp", 0.42, 0.58, 3.4, line=3.5), forecast_at="2026-10-24T10:00:00Z"),
+           "ud": dict(_fc("ud", 0.43, 0.57, 3.4, model="mi-1", line=3.5), kind="informed", forecast_at="2026-10-24T11:00:00Z"),
+           "mk": _fc("mk", 0.5, 0.5, None, model="mc-1", line=4.5)}
+    row = {"quotes": [{"platform": "prizepicks", "line": 3.5, "forecast_id": "pp"},
+                      {"platform": "underdog", "line": 3.5, "forecast_id": "ud"},
+                      {"platform": "fanduel", "line": 3.5, "forecast_id": None},
+                      {"platform": "betrivers", "line": 4.5, "forecast_id": "mk"},
+                      {"platform": "draftkings", "line": 4.5, "forecast_id": None}]}
+    assert snapshots.same_line_forecasts(row, fcs) == 1
+    fd = row["quotes"][2]
+    assert fd["forecast_id"] == "ud" and fd["fc_via"] == "same_line"          # newest Scout forecast at 3.5
+    assert row["quotes"][4]["forecast_id"] is None                            # a market-only forecast is not shared
+
+
+def test_one_scout_chance_count_per_game(built):
+    from sports.tests.test_ui_snapshots import _load
+    slate = _load(built, "slate.json")
+    rows = _load(built, "board.json")["markets"] + _load(built, "board_more.json")["markets"]
+    checked = 0
+    for e in slate["events"]:
+        if e["started"]:
+            continue
+        checked += 1
+        mine = [m for m in rows if m["e"] == e["event_id"]]
+        assert e["coverage"]["scout_chances"]["markets"] == sum(1 for m in mine if m["sc"] > 0)
+        assert e["coverage"]["scout_chances"]["quotes"] == sum(1 for m in mine for q in m["q"] if q.get("sc"))
+    assert checked
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    assert "scout_chances.markets" in app and "(m.sc || 0) > 0" in app and "return q.f; }); }).length" not in app
