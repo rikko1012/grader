@@ -467,6 +467,110 @@ def run(sport, con, markets=None, log=print, as_of=None, dump=None):
     return out
 
 
+# ================================================================================================== so-1 (A7b)
+SO_WINDOWS = (("2024-25 opening", "2024-10-01", "2025-07-01"), ("2025-26 opening", "2025-10-01", "2026-07-01"))
+SO_POSTHOC = ("2026-27 opening (post-hoc, seen)", "2026-10-01", "2027-07-01")
+SO_DAYS = 15
+
+
+def so_minutes(df, h_min):
+    """so-1 E[minutes] column (A7b 1): regular-season rows use the EW over prior REGULAR-season games only (postseason /
+    play-in skipped but ageing the weights); no such game, or a postseason / play-in row -> sm-1's ew_min."""
+    from .frame import ew_prior, group_starts
+    gs = group_starts(df["player_id"])
+    st = np.asarray(df["season_type"], dtype=object)
+    reg = st == "regular"
+    m, _ = ew_prior(np.where(reg, np.asarray(df["min"], float), np.nan), gs, h_min)
+    base = np.asarray(df["ew_min"], float)
+    return np.where(reg & np.isfinite(m), m, base)
+
+
+def _with_minutes(fr, col):
+    out = fr[np.ones(len(fr), bool)]
+    out["ew_min"] = np.asarray(fr[col], float)
+    for c in [c for c in out.cols if c.startswith("F_")]:
+        del out.cols[c]                                   # features recomputed from the swapped column
+    return out
+
+
+def so_walk(mk, df, cfg, window, log=print):
+    """Walk-forward over the first SO_DAYS regular-season game-days of one window: live vs so-1 (A7 2 procedure)."""
+    el = model.eligible(df, mk) & np.isfinite(df.f(f"y_{mk}"))
+    d_all = df[el]
+    start = _ts(d_all["start_utc"])
+    known = start + np.timedelta64(int(KNOWN_LAG_H["nba"] * 3600), "s")
+    s = np.asarray(d_all["start_utc"])
+    day = np.array([str(x)[:10] for x in (start - np.timedelta64(10, "h")).astype("datetime64[D]")], dtype=object)
+    reg = (np.asarray(d_all["season_type"]) == "regular") & (s >= window[1]) & (s < window[2])
+    days = sorted(set(day[reg]))[:SO_DAYS]
+    lo, ks = dists.grid(mk)
+    out = {k: [] for k in ("live", "so", "y", "game", "lref", "block")}
+    with np.errstate(all="ignore"):
+        lref_all = np.floor(np.nanmean(d_all.attrs["lags"][mk][:, :10], axis=1)) + 0.5
+    for dd in days:
+        te_m = reg & (day == dd)
+        t = start[te_m].min() - np.timedelta64(3600, "s")
+        tr_m = known <= t
+        tr, te = d_all[tr_m], d_all[te_m]
+        out["live"].append(study.pmf_for(_base_fit("nba", mk, cfg, tr), te, mk, "nba")[0])
+        tr2, te2 = _with_minutes(tr, "ew_min_so"), _with_minutes(te, "ew_min_so")
+        out["so"].append(study.pmf_for(_base_fit("nba", mk, cfg, tr2), te2, mk, "nba")[0])
+        out["y"].append(np.asarray(te[f"y_{mk}"], float))
+        out["game"].append(np.asarray(te["game_id"]))
+        out["lref"].append(lref_all[te_m])
+        out["block"].append(np.array(study.featurize.iso_week(te["ts"]), dtype=object))
+    log(f"[so-1:{mk}] {window[0]}: {len(days)} game-days {days[:1]}..{days[-1:]}")
+    return {k: np.concatenate(v) for k, v in out.items()}
+
+
+def so_score(w, mk):
+    lo, ks = dists.grid(mk)
+    games, blocks = w["game"], w["block"]
+    a = _metrics(w["so"], lo, ks, w["y"], w["lref"])
+    b = _metrics(w["live"], lo, ks, w["y"], w["lref"])
+    su, sl = _summ(a, games), _summ(b, games)
+    bands = _bands(a, games)
+    crps = evaluate.paired(a, b, games, blocks, "crps")
+    crit = {"a_crps_ci_below_0": crps["ci_game"][1] is not None and crps["ci_game"][1] < 0,
+            "b_calibration_ref": abs(su["in_the_large_ref"]) <= 0.02 and su["ece_ref"] <= 0.03,
+            "c_cov80": 0.76 <= su["cov80_pit"] <= 0.84,
+            "e_bands_ref": all(abs(v["hit_rate"] - v["mean_p"]) <= 0.03 for v in bands.values() if v["n"] >= 100)}
+    return {"rows": int(len(w["y"])), "games": int(len(np.unique(games))), "so1": su, "live": sl, "bands_ref": bands,
+            "live_bands_ref": _bands(b, games), "crps_minus_live": crps,
+            "logloss_ref_minus_live": evaluate.paired(a, b, games, blocks, "logloss_ref"),
+            "bias_minus_live": su["bias"] - sl["bias"], "criteria": {k: bool(v) for k, v in crit.items()},
+            "passed": bool(all(crit.values()))}
+
+
+def run_so1(con, log=print):
+    from ..contracts import now_utc
+    cfg = json.loads((ART_DIR / "model_config_nba.json").read_text(encoding="utf-8"))["markets"]
+    out = {"version": "so-1", "register": "sports/research/REGISTER.md A7b", "label": LABEL,
+           "generated_at": now_utc(), "markets": {}}
+    frames = {}
+    for mk in sorted(NBA_MK, key=lambda m: tuple(cfg[m]["half_lives"])):
+        hl = tuple(cfg[mk]["half_lives"])
+        if hl not in frames:
+            frames.clear()
+            df = study._frame("nba", con, hl)
+            df["ew_min_so"] = so_minutes(df, hl[0])
+            frames[hl] = df
+        df = frames[hl]
+        ws = [so_walk(mk, df, cfg[mk], w, log) for w in SO_WINDOWS]
+        pooled = {k: np.concatenate([w[k] for w in ws]) for k in ws[0]}
+        rep = {"pooled": so_score(pooled, mk), "by_window": {w[0]: so_score(x, mk) for w, x in zip(SO_WINDOWS, ws)}}
+        rep["post_hoc_2026_27"] = dict(so_score(so_walk(mk, df, cfg[mk], SO_POSTHOC, log), mk),
+                                       label="post-hoc: this window motivated A7b - never evidence")
+        out["markets"][mk] = rep
+        r = rep["pooled"]
+        log(f"[so-1:{mk}] pooled CRPS {r['crps_minus_live']['diff']:+.4f} {r['crps_minus_live']['ci_game']} bias "
+            f"{r['so1']['bias']:+.3f} vs {r['live']['bias']:+.3f} itl {r['so1']['in_the_large_ref']:+.4f} "
+            f"-> {'PASS' if r['passed'] else 'fail'} {r['criteria']}")
+    RESULTS.mkdir(parents=True, exist_ok=True)
+    (RESULTS / "model_so1_nba.json").write_text(json.dumps(out, indent=1, default=float), encoding="utf-8")
+    return out
+
+
 # ================================================================================================== freeze / load
 def art_path(sport):
     return ART_DIR / f"tw1_{sport}.json"
@@ -703,7 +807,7 @@ def main(argv=None):
     import warnings
     warnings.filterwarnings("ignore", category=RuntimeWarning)
     p = argparse.ArgumentParser(prog="python -m sports.model.tune")
-    p.add_argument("cmd", choices=["run", "freeze", "bookline", "status"])
+    p.add_argument("cmd", choices=["run", "so1", "freeze", "bookline", "status"])
     p.add_argument("history", nargs="?")
     p.add_argument("sport", nargs="?")
     p.add_argument("--markets")
@@ -719,6 +823,9 @@ def main(argv=None):
         from . import datasets
         con = datasets.connect(Path(a.history), read_only=True)
         run(a.sport, con, a.markets.split(",") if a.markets else None, log, a.as_of, a.dump)
+    elif a.cmd == "so1":
+        from . import datasets
+        run_so1(datasets.connect(Path(a.history), read_only=True), log)
     elif a.cmd == "freeze":
         print(json.dumps(freeze(a.history), indent=1))
     else:

@@ -43,6 +43,10 @@ def test_a7_registered_before_any_tw1_result():
         if not reg or not res:
             pytest.skip("git history not available")
         assert reg[-1] != res[-1] and _git("merge-base", "--is-ancestor", reg[-1], res[-1]).returncode == 0
+    reg_b = _git("log", "-S", "A7b (2026-10-25", "--format=%H", "--", "sports/research/REGISTER.md").stdout.split()
+    so = _git("log", "--diff-filter=A", "--format=%H", "--", "sports/research/results/model_so1_nba.json").stdout.split()
+    if reg_b and so:                                        # A7b (so-1) registered before its result
+        assert reg_b[-1] != so[-1] and _git("merge-base", "--is-ancestor", reg_b[-1], so[-1]).returncode == 0
     # the code that scores was not committed before the registration either
     code = _git("log", "--diff-filter=A", "--format=%H", "--", "sports/model/tune.py").stdout.split()
     assert code and _git("merge-base", "--is-ancestor", reg[-1], code[-1]).returncode == 0
@@ -121,7 +125,23 @@ def test_results_replay_from_packaged_history(hist, tmp_path, monkeypatch):
     out = tune.run("nfl", con, ["rush_att"], log=lambda *_: None, as_of=a["as_of"])
     want = a["markets"]["rush_att"]
     got = json.loads(json.dumps(out["markets"]["rush_att"], default=float))
-    assert got == want                                          # deterministic: the committed numbers replay
+    _close(got, want)                                           # deterministic: the committed numbers replay
+
+
+def _close(a, b, path=""):
+    """Equal structure; floats equal to 1e-9 relative (multithreaded BLAS may reorder a sum in the last bit)."""
+    if isinstance(a, dict):
+        assert set(a) == set(b), path
+        for k in a:
+            _close(a[k], b[k], f"{path}.{k}")
+    elif isinstance(a, list):
+        assert len(a) == len(b), path
+        for i, (x, y) in enumerate(zip(a, b)):
+            _close(x, y, f"{path}[{i}]")
+    elif isinstance(a, float) and isinstance(b, float):
+        assert a == pytest.approx(b, rel=1e-9, abs=1e-12), path
+    else:
+        assert a == b, path
 
 
 # --------------------------------------------------------------------------------------------- artifact
@@ -207,3 +227,46 @@ def test_bl1_shift_and_no_lookahead():
     b2, a2 = tune.bl_rolling(sorted(rows2, key=lambda r: r["forecast_at"]))
     np.testing.assert_array_equal(b1, b2)
     assert (a1[:100] == 0).all() and (a1[100:] != 0).all()          # first day: < 100 settled props -> live
+
+
+# --------------------------------------------------------------------------------------------- forward path
+def test_forward_switched_market_versions_and_replays(tmp_path, monkeypatch):
+    from sports import store
+    from sports.tests.test_model import _hist, _store_world
+    hcon = _hist(tmp_path)
+    monkeypatch.setattr(datasets, "db_path", lambda: tmp_path / "history.db")
+    art = tmp_path / "artifacts"
+    art.mkdir()
+    monkeypatch.setattr(forward, "ART_DIR", art)
+    cfg = {"markets": {mk: {"market": mk, "half_lives": [5, 20], "features": ["nba.home"], "family": fam,
+                            "cal": [1.0, 1.05]} for mk, fam in (("points", "negbin"), ("rebounds", "mixture"),
+                                                                ("assists", "poisson"), ("threes", "ratio"))}}
+    (art / "model_config_nba.json").write_text(json.dumps(cfg))
+    a = forward.fit("nba", hcon, as_of="2026-01-31T20:00:00Z")
+    tw_dir = tmp_path / "tw"
+    tw_dir.mkdir()
+    _art(tw_dir, {"points": {"arm": "rc", "param": 28.0, "c": 1.04, "s": 1.02}}, sm1=a["sha"])
+    monkeypatch.setattr(tune, "ART_DIR", tw_dir)
+    monkeypatch.setattr(tune, "MANIFEST", tw_dir / "MANIFEST_TW1.json")
+    with store.opened(tmp_path / "canonical.db") as scon:
+        _store_world(scon)
+        monkeypatch.setenv("SPORTS_TUNE_TW1", "0")                       # switched off -> sm-1 exactly as before
+        r0 = forward.forecast_league(scon, hcon, "nba", "2026-01-31T21:00:00Z", log=lambda *x: None)
+        assert "tw1" not in r0
+        base = [f for _, f in store.forecasts(scon, model_version="sm-1")][0]
+        assert "+tw-1:" not in base.artifact_version and "tw-1" not in base.reason_codes
+        monkeypatch.delenv("SPORTS_TUNE_TW1")
+        r1 = forward.forecast_league(scon, hcon, "nba", "2026-01-31T21:00:00Z", log=lambda *x: None)
+        assert r1["tw1"]["markets"] == ["points"] and r1["written"]["sm-1"] == 1
+        fcs = [f for _, f in store.forecasts(scon, model_version="sm-1")]
+        new = [f for f in fcs if "+tw-1:" in f.artifact_version]
+        assert len(new) == 1 and len(fcs) == 2                           # the old forecast is untouched
+        fc = new[0]
+        assert fc.artifact_version == f"sm-1:{a['sha']}+tw-1:{tune._sha({'points': {'arm': 'rc', 'param': 28.0, 'c': 1.04, 's': 1.02}})[:16]}"
+        assert fc.calibration_version.startswith("tw-1:rc:c=1.04") and "tw-1" in fc.reason_codes
+        assert fc.projection_mean == pytest.approx(1.04 * base.projection_mean, rel=2e-3)
+        assert fc.forecast_id != base.forecast_id
+        orig, again = forward.replay(fc.forecast_id, scon)
+        assert again == orig                                             # bit-identical replay of the switched record
+        orig0, again0 = forward.replay(base.forecast_id, scon)
+        assert again0 == orig0
