@@ -24,7 +24,8 @@ def _unit(match, p, over, prop="kills", scope="12", version="v1", day="2026-10-1
 def test_results_count_the_registered_pick_rule_with_pushes_apart():
     rows = [_unit("m1", 0.62, 1), _unit("m1", 0.40, 1), _unit("m2", 0.30, 0, prop="hs"), _unit("m3", 0.55, 1),   # 0.55 / 0.45: no pick
             _unit("m4", 0.70, 0, version="v2", day="2026-10-18"), _unit("m5", 0.58, 1, scope="1")]
-    out = results_view.member_results({"rows": rows, "at": "2026-10-18T06:00:00+00:00", "excluded": {"push on the board line": 3}}, B=200)
+    out = results_view.member_results({"rows": rows, "at": "2026-10-18T06:00:00+00:00", "excluded": {"push on the board line": 3}}, B=200,
+                                       map1_min=0)       # Map 1 shown here (its 500-stake gate: test_map1_results_gate.py)
     P = out["picks"]
     # picks: 0.62 Over won, 0.40 -> Under 0.60 lost, 0.30 -> Under 0.70 won (hs), 0.70 Over lost, 0.58 Over won (Map 1)
     assert (P["picks"], P["wins"], P["losses"], P["matches"]) == (5, 3, 2, 4) and P["observed"] == 0.6   # two picks in m1
