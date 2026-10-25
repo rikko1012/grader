@@ -12,4 +12,4 @@ Modules
   log       slips.db: recommendations once per batch, loaded / copied slips separately, slip settlements
 """
 BUILDER_VERSION = "bs-1"
-POLICY_VERSION = "sp-1"
+POLICY_VERSION = "sp-2"            # sp-2 (2026-10-24): research-only forecasts = labelled research legs, stake 0

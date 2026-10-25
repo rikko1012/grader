@@ -24,12 +24,17 @@ improved by single-leg replacement and the answer says `search.exact = false`. P
 side (reported). A shortage reports, per size, requested vs built, the number of valid combinations in the pool, the
 eligible legs and games, and which constraint binds (each relaxed in turn and re-measured).
 
-## Leg policy sp-1 (never relaxed to fill a shortage)
+## Leg policy sp-2 (never relaxed to fill a shortage)
 
 pick'em platform; `capabilities.gate`; game not started (event status scheduled, start known); offer seen by ingestion
 within 25 min; a forecast FOR THIS OFFER REVISION on the same line (an older revision's forecast never carries to a
-moved line); not research-only; chosen side really offered; grade present; stake > 0; team known. Exclusions are
-counted by reason. Admin-only `policy=research` allows research forecasts (labelled; never served to members).
+moved line); chosen side really offered; team known; a non-research forecast also needs a grade and stake > 0.
+sp-2 (owner choice 2026-10-24, audit bug 3): a research-only forecast is a labelled RESEARCH leg (`research_only: true`,
+`stake_units: 0`, no grade); a non-research forecast for the same offer is preferred. Slip Studio shows "Research
+estimates - not validated; stakes 0" whenever such a leg is offered, tags each one, and the copy text says so.
+Started / in-progress and not-gradable lines stay refused (reasons in member words, web/sports/labels.js); 0 eligible
+picks is a locked state listing the reasons, never a silent empty builder. Exclusions are counted by reason. Admin
+`policy=research` takes the newest forecast of any kind.
 
 ## Validation path (load and copy)
 
