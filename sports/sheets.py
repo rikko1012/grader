@@ -131,11 +131,32 @@ def sheet_markets(player_file, history_games, platform, events, now):
             if (cq.get("lr") or {}).get("f") in forecasts:
                 fc[cq["lr"]["f"]] = _compact_fc(forecasts[cq["lr"]["f"]])
             qs.append(cq)
-        markets_out.append({"k": row["key"], "e": row["event_id"], "pid": row["player_id"], "n": row.get("player"),
+        vr = board_view.row_summary(row["stat"], [q["line"] for q in lines], history_games)
+        lg = (row.get("event_id") or "").split(":", 1)[0]
+        nv = board_view.gate_reason(lg, row["stat"])
+        for cq in qs:                                 # vg-1 / sg-1 on the sheet's own line reads too (N1/N2)
+            if cq.get("x") or not (cq.get("lr") or (forecasts.get(cq.get("f") or "") or {}).get("kind") in ("scout", "informed")):
+                continue
+            if nv:
+                cq["x"] = {"b": "gate", "t": nv, "v": board_view.GATE_VERSION}
+                continue
+            own = forecasts.get(cq.get("f") or "")
+            if own and own.get("kind") in ("scout", "informed"):
+                po, pu, mu = own.get("p_over"), own.get("p_under"), own.get("projection_mean")
+            else:
+                po, pu = cq["lr"]["po"], cq["lr"]["pu"]
+                mu = (forecasts.get(cq["lr"].get("f") or "") or {}).get("projection_mean")
+            ln = float(cq["l"])
+            l10 = (vr["lines"].get(board_view.line_key(ln)) or [None])[:4]
+            code = board_view.sanity_check(mu, ln, board_view.lean_of(po, pu, mu, ln), l10 if l10[0] is not None else None)
+            if code:
+                cq["x"] = {"b": code, "t": board_view.SANITY_TEXT[code], "v": board_view.SANITY_VERSION}
+        markets_out.append({**({"nv": nv} if nv else {}), "k": row["key"], "e": row["event_id"], "pid": row["player_id"],
+                            "n": row.get("player"),
                             "pos": row.get("position"), "tm": row.get("team"), "tid": row.get("team_id"),
                             "st": row["stat"], "sl": row.get("stat_label"), "pr": 1 if row.get("primary") else 0,
                             "cap": row.get("capability"), "mk": row.get("market"), "q": qs})
-        view[row["key"]] = board_view.row_summary(row["stat"], [q["line"] for q in lines], history_games)
+        view[row["key"]] = vr
     return markets_out, fc, view
 
 

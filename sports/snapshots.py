@@ -894,15 +894,6 @@ def build(con, league, now=None, base=None, history=True, results=True):
                             "m multipliers [over, under], k Kalshi YES [bid, ask], t last seen, su source updated, "
                             "g gradable, f forecast id; fc forecasts: m model, mu mean, po/pu/pp chances, at time, "
                             "ro research only, rv offer revision it was made for"}
-    prim = [r for r in board_rows if r["primary"]]
-    sec = [r for r in board_rows if not r["primary"]]
-    sizes["board"] = _write(root / "board.json", {**board_meta, "part": "primary",
-                                                    "secondary_markets": len(sec),
-                                                    "markets": [compact_row(r) for r in prim],
-                                                    "fc": compact_forecasts(forecasts, prim)})
-    sizes["board_more"] = _write(root / "board_more.json", {**board_meta, "part": "secondary",
-                                                              "markets": [compact_row(r) for r in sec],
-                                                              "fc": compact_forecasts(forecasts, sec)})
     sizes["forecasts"] = _write(root / "forecasts.json", {**base_meta, "forecasts": {
         k: ({**f, "detail": {x: y for x, y in f["detail"].items() if x != "pmf"}} if f.get("detail") else f)
         for k, f in forecasts.items()}})
@@ -913,6 +904,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
     pl_dir, hi_dir = root / "players", root / "history"
     ctx_by_pid, ctx_summary = _engine_context(league, fam, now, pids, markets_rows, events, cur_team, root)
     manifest["player_context"] = ctx_summary
+    sanity_log = []
     view_out = board_view.StreamWriter(root / "board_view.json",       # bv-1 hit rates, streamed per player
                                        {**base_meta, "part": "view", "rule": board_view.VERSION})
     for pid in pids:
@@ -928,7 +920,10 @@ def build(con, league, now=None, base=None, history=True, results=True):
                        "opponent": _team_view(teams, e.away_team_id if tid == e.home_team_id else e.home_team_id)
                        if tid in (e.home_team_id, e.away_team_id) else None}
         games = player_games(con, league, pid, now, teams) if history else []
-        view_out.add(board_view.player_rows(rows, games))
+        vrows = board_view.player_rows(rows, games)
+        view_out.add(vrows)
+        for r in rows:                                   # vg-1 gate + sg-1 sanity guard on every Scout view (N1/N2)
+            sanity_log.extend(guard_row(league, r, forecasts, vrows.get(r["key"]), now))
         tid = cur_team.get(pid)
         mates_out = []
         for mate in sorted(team_players.get(tid, ())):
@@ -963,6 +958,17 @@ def build(con, league, now=None, base=None, history=True, results=True):
         _write(hi_dir / f"{safe_name(pid)}.json", {**base_meta, "player_id": pid, "family": fam, "games": games})
         n_players += 1
     sizes["board_view"] = view_out.close()
+    # board files AFTER the player pass: each quote carries its guard result (x) computed with the player's history
+    prim = [r for r in board_rows if r["primary"]]
+    sec = [r for r in board_rows if not r["primary"]]
+    sizes["board"] = _write(root / "board.json", {**board_meta, "part": "primary",
+                                                    "secondary_markets": len(sec),
+                                                    "markets": [compact_row(r, league) for r in prim],
+                                                    "fc": compact_forecasts(forecasts, prim)})
+    sizes["board_more"] = _write(root / "board_more.json", {**board_meta, "part": "secondary",
+                                                              "markets": [compact_row(r, league) for r in sec],
+                                                              "fc": compact_forecasts(forecasts, sec)})
+    manifest["sanity"] = write_sanity(root, sanity_log, base_meta, board_rows)
     if results:
         sizes["results"] = _write(root / "results.json", {**res_obj, **base_meta})
     manifest["sizes"] = sizes
@@ -990,17 +996,102 @@ def compact_quote(q):
         out["nf"] = q["no_fc"]
     if q.get("sc"):
         out["sc"] = 1
+    if q.get("x"):
+        out["x"] = q["x"]
     if o.get("price_format") == "decimal" or u.get("price_format") == "decimal":    # a book's own decimal prices
         out["d"] = [o.get("price") if o.get("offered") else None, u.get("price") if u.get("offered") else None]
     return out
 
 
-def compact_row(r):
-    return {"k": r["key"], "e": r["event_id"], "pid": r["player_id"], "n": r["player"], "pos": r["position"],
+def compact_row(r, league=None):
+    nv = board_view.gate_reason(league, r["stat"]) if league else None
+    return {**({"nv": nv} if nv else {}), "k": r["key"], "e": r["event_id"], "pid": r["player_id"], "n": r["player"], "pos": r["position"],
             "tm": r["team"], "tid": r.get("team_id"), "st": r["stat"], "pr": 1 if r["primary"] else 0, "cap": r["capability"],
             "q": [compact_quote(q) for q in r["quotes"]], "kn": [compact_quote(q) for q in r["kalshi_near"]],
             "kr": r["kalshi_rungs"], "alt": r["alternates"], "promo": r["promotional"], "mk": r.get("market"),
             "sc": r.get("sc", 0), "hid": scout_chance.hidden_reason(r)}
+
+
+def scout_view(q, forecasts):
+    """The Scout (sm-1 / mi-1) view at this quote's line: (po, pu, mu, model, forecast_id) or None - the offer's own
+    forecast, else the line read of the market's saved distribution (= web/sports/table.js scoutAt)."""
+    f = forecasts.get(q.get("forecast_id") or "")
+    if f and f.get("kind") != "market" and f.get("p_over") is not None and f.get("p_under") is not None:
+        return f["p_over"], f["p_under"], f.get("projection_mean"), f.get("model_version"), f["forecast_id"]
+    lr = q.get("line_read")
+    if lr and lr.get("po") is not None and lr.get("pu") is not None:
+        s = forecasts.get(lr.get("f") or "") or {}
+        return lr["po"], lr["pu"], s.get("projection_mean"), s.get("model_version") or "sm-1", lr.get("f")
+    return None
+
+
+def guard_row(league, row, forecasts, view_row, now):
+    """vg-1 gate + sg-1 sanity guard (sports/board_view.py) for every quote of one market row with a Scout view.
+    Sets q["x"] = {"b": code, "t": member text, "v": rule} on a held quote: no lean, edge, confidence or edge rank
+    for it anywhere (board, sheets, slip pool). -> sanity log entries (sg-1 holds; vg-1 holds are only counted)."""
+    out = []
+    gate = board_view.gate_reason(league, row["stat"])
+    for q in (row.get("quotes") or []) + (row.get("kalshi") or []) + (row.get("alternates") or []):
+        q.pop("x", None)
+        sv = scout_view(q, forecasts)
+        if sv is None:
+            continue
+        po, pu, mu, model, fid = sv
+        if gate:
+            q["x"] = {"b": "gate", "t": gate, "v": board_view.GATE_VERSION}
+            continue
+        line = float(q["line"])
+        lean = board_view.lean_of(po, pu, mu, line)
+        l10 = ((view_row or {}).get("lines") or {}).get(board_view.line_key(line))
+        l10 = list(l10[:4]) if l10 else None
+        code = board_view.sanity_check(mu, line, lean, l10)
+        if code:
+            q["x"] = {"b": code, "t": board_view.SANITY_TEXT[code], "v": board_view.SANITY_VERSION}
+            out.append({"at": now, "event_id": row["event_id"], "key": row["key"], "player": row.get("player"),
+                        "player_id": row["player_id"], "stat": row["stat"], "platform": q.get("platform"),
+                        "record_id": q.get("record_id"), "line": line, "projection": mu, "p_over": po,
+                        "p_under": pu, "lean": lean, "l10": l10, "model": model, "forecast_id": fid,
+                        "via": "forecast" if q.get("forecast_id") == fid else "line_read", "reason": code,
+                        "rule": board_view.SANITY_VERSION})
+    return out
+
+
+SANITY_MAX = 3000
+SANITY_LOG_MAX_BYTES = 8 * 1024 * 1024
+
+
+def write_sanity(root, entries, base_meta, board_rows):
+    """Admin sanity log (GET /api/sports/admin/sanity): <root>/sanity.json = the quotes held NOW with their inputs;
+    sanity_log.jsonl = append-only, one line per newly held quote (rotated to .1 past 8 MB). -> manifest summary."""
+    prev = {(e.get("record_id"), e.get("forecast_id"), e.get("reason"))
+            for e in ((_read_json(root / "sanity.json") or {}).get("entries") or [])}
+    gate = {}
+    for r in board_rows:
+        n = sum(1 for q in (r.get("quotes") or []) + (r.get("kalshi_near") or [])
+                if (q.get("x") or {}).get("b") == "gate")
+        if n:
+            gate[r["stat"]] = gate.get(r["stat"], 0) + n
+    reasons = {}
+    for e in entries:
+        reasons[e["reason"]] = reasons.get(e["reason"], 0) + 1
+    summary = {"rule": board_view.SANITY_VERSION, "gate_rule": board_view.GATE_VERSION, "held": len(entries),
+               "reasons": reasons, "gate_held_quotes": gate,
+               "gate": {st: board_view.gate_state(st) for st in sorted({r["stat"] for r in board_rows})}}
+    _write(root / "sanity.json", {**base_meta, **summary, "entries": entries[:SANITY_MAX],
+                                  "truncated": max(0, len(entries) - SANITY_MAX)})
+    new = [e for e in entries if (e.get("record_id"), e.get("forecast_id"), e.get("reason")) not in prev]
+    if new:
+        lp = root / "sanity_log.jsonl"
+        try:
+            if lp.exists() and lp.stat().st_size > SANITY_LOG_MAX_BYTES:
+                os.replace(lp, lp.with_suffix(".jsonl.1"))
+            with open(lp, "a", encoding="utf-8") as fh:
+                for e in new:
+                    fh.write(json.dumps(e, separators=(",", ":"), default=str) + "\n")
+        except OSError:
+            pass
+    summary["new_logged"] = len(new)
+    return summary
 
 
 def source_coverage(platform_seen, last_read=None):

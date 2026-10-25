@@ -83,19 +83,24 @@
   }
   // ONE board row for market m (decoded board row: m.ev set) and its offer q. ctx = {fc, view, now}
   function propRow(m, q, ctx) {
-    var now = ctx.now || Date.now(), sc = scoutAt(q, ctx.fc || {}), mkc = marketAt(m.mk, q), lean = leanOf(sc, q.l);
+    var now = ctx.now || Date.now(), sc = scoutAt(q, ctx.fc || {}), mkc = marketAt(m.mk, q);
+    // server guards (sports/board_view.py vg-1 gate / sg-1 sanity): a held row shows its projection + chances only -
+    // no lean, edge, gap flag, confidence or edge rank
+    var held = sc ? (q.x && q.x.b ? q.x : (m.nv ? {b: "gate", t: m.nv} : null)) : null;
+    var lean = held ? null : leanOf(sc, q.l);
     var r = {key: m.k, pid: m.pid, player: m.n, team: m.tm, pos: m.pos, stat: m.st, event: m.e,
              start: m.ev && m.ev.start_utc, line: q.l, book: q.p, rid: q.r, offered: q.o, scout: sc, lean: lean,
              pLean: null, market: mkc, mLean: null, edge: null, gapPts: null, gap: false,
-             fresh: S.fresh(q.t, now), hit: hitAt(ctx.view, m.k, q.l), version: VERSION};
+             fresh: S.fresh(q.t, now), hit: hitAt(ctx.view, m.k, q.l), version: VERSION,
+             held: held ? held.t : null, heldCode: held ? held.b : null};
     if (sc && lean) r.pLean = lean === "over" ? sc.po : sc.pu;
-    if (sc && mkc) {
+    if (sc && mkc && !held) {
       r.gapPts = 100 * (sc.po - mkc.po);
       r.gap = Math.abs(r.gapPts) >= GAP_PTS - 1e-9;
       if (lean) { r.mLean = lean === "over" ? mkc.po : mkc.pu; r.edge = 100 * (r.pLean - r.mLean); }
     }
     r.leanOffered = lean ? !!(q.o && q.o[lean === "over" ? 0 : 1]) : null;
-    r.conf = confidence(r, now);
+    r.conf = held ? null : confidence(r, now);
     return r;
   }
   function hitRate(r) {                                           // lean side (Over when no lean), over decided games
@@ -209,6 +214,7 @@
   }
   function leanBadge(r) {
     if (!r.scout) return '<span class="sw-tb-lean none">No Scout chance</span>';
+    if (r.held) return '<span class="sw-tb-lean none sw-tb-held" data-held="' + esc(r.heldCode) + '">' + esc(r.held) + "</span>";
     if (!r.lean) return '<span class="sw-tb-lean none">No lean</span>';
     return '<span class="sw-tb-lean ' + r.lean + '" data-lean="' + r.lean + '">' + (r.lean === "over" ? "Over" : "Under") + "</span>" +
       (r.leanOffered === false ? '<span class="sw-tb-note">not offered here</span>' : "");

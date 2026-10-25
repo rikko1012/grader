@@ -86,6 +86,7 @@ ROUTES = {
     "/api/sports/picks/mine": ("sports.api_picks:mine", MEMBER, ("GET",)),
     "/api/sports/admin/picks": ("sports.api_picks:admin", ADMIN, ("GET",)),
     "/api/sports/admin/books": ("sports.api_books:admin", ADMIN, ("GET",)),
+    "/api/sports/admin/sanity": ("sports.api_sanity:admin", ADMIN, ("GET",)),
     "/api/sports/sheets": ("sports.api_sheets:sheet", MEMBER, ("GET",)),
     "/api/sports/without": ("sports.api_sheets:without_view", MEMBER, ("GET",)),
     "/api/sports/results/public": ("sports.api_sheets:results_view", MEMBER, ("GET",)),

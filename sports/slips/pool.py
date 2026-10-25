@@ -16,6 +16,10 @@ substituted:
     research_only=True and stake_units=0.0, Slip Studio shows the warning "Research estimates - not validated; stakes
     0" and tags each such leg. A non-research forecast for the same offer is preferred when one exists.
   - the leg's team is known (the platforms' two-team rule must be checkable)
+  - N1/N2 guards (sports/board_view.py, member policy): a Scout (sm-1 / mi-1) forecast on a market whose model failed
+    its registered gate (vg-1: NFL today) is projection-only and never a leg; a forecast held by the sg-1 sanity guard
+    (projection under 25% / over 4x the line, or the last-10 results contradicting its side - the board's
+    sanity.json holds) is excluded too
 Policy "research" (admin only, labelled): any forecast (newest first, research or not) with a chosen side; grade /
 stake not required.
 
@@ -39,7 +43,7 @@ import sys
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
-from .. import capabilities, markets, store
+from .. import board_view, capabilities, markets, store
 from ..contracts import SPORT_OF, parse_utc
 from . import POLICY_VERSION, rules
 
@@ -172,10 +176,11 @@ def build(con, league, platform, now=None, policy="member"):
     live = {o.event_id for _, o in offers if o.availability == "open" and o.event_id and
             (events.get(o.event_id) is None or (events[o.event_id].start_utc or "9") > now_s)}
     fby = _forecasts_by_offer(con, league, now, live)
+    held = _sanity_held(league) if policy == "member" else set()
     legs, excluded, rows = [], Counter(), []
     ids = []
     for rid, o in offers:
-        reason, leg = _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy)
+        reason, leg = _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, held)
         if reason:
             reason = sys.intern(reason)
             excluded[reason.split(":")[0]] += 1
@@ -195,7 +200,32 @@ def build(con, league, platform, now=None, policy="member"):
             "state": state, "representation": REPRESENTATION}
 
 
-def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy):
+def _sanity_held(league):
+    """(record_id, forecast_id) pairs the board's last snapshot held with sg-1 (l10_contra needs the history the board
+    reads; the ratio rules are re-checked here directly)."""
+    try:
+        import json
+        from ..snapshots import snap_root
+        d = json.loads((snap_root() / league / "sanity.json").read_text(encoding="utf-8"))
+        return {(e.get("record_id"), e.get("forecast_id")) for e in d.get("entries") or ()}
+    except Exception:                                   # noqa: BLE001 - no snapshot yet: the ratio rules still apply
+        return set()
+
+
+def guard_reason(f, league, rid=None, held=()):
+    """vg-1 / sg-1 for one forecast as a slip leg -> exclusion text or None (member policy)."""
+    if f.model_version not in board_view.SCOUT_MODELS:
+        return None
+    if board_view.gate_reason(league, f.stat):
+        return "model not validated for this market: projection only"
+    side = f.chosen_side
+    code = board_view.sanity_check(f.projection_mean, f.line, side if side in ("over", "under") else None)
+    if code is None and (rid, f.forecast_id) in held:
+        code = "l10_contra"
+    return f"held by the sanity guard: {board_view.SANITY_TEXT[code][6:]}" if code else None
+
+
+def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, held=()):
     if platform not in rules.PLATFORMS:
         return "not a pick'em platform", None
     ok, why = capabilities.gate(o)
@@ -221,6 +251,10 @@ def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy):
     side = f.chosen_side
     if side is None:
         return "no side chosen", None
+    if policy == "member":
+        g = guard_reason(f, o.league, rid, held)
+        if g:
+            return g, None
     q = o.side(side)
     if q is None or not q.offered:
         return "chosen side not offered", None
