@@ -34,7 +34,7 @@ P1 units the live log loss is worse than a constant 50% by 0.0089 [0.0006, 0.016
 3. **Version changes did not cause it.** On the same perf-cm2 units, against the saved perf-2 numbers, cm-2 kills gives a log loss gain of +0.0037
    [-0.0042, +0.0117] (856 units / 97 matches), and hs-cm2 gives +0.0009 [-0.0086, +0.0109] (428 / 53).
 4. **Subgroups (small; reading only).** perf-2-bo3 in W1 went 3-22; the bo3-env-2 fix landed Oct 18, and W2 was 37-40. Thin history (< 150 weighted rounds,
-   W2+) went 20-32. "Opponent not in HLTV - average opponent" went 49-56, err -1.60: 117 units / 12 HLTV matches whose
+   W2+) went 20-32. "Opponent not in HLTV - average opponent" went 54-63 (117 units; err -1.60 on the 105 without thin history) on HLTV matches whose
    opponents exist on HLTV but only outside the pinned N0 history (rule n0-r4; the fh-1 shadow tests full history).
 
 ## Data-quality checks (W2+ P1 forecasts, saved inputs)
