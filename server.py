@@ -4,7 +4,8 @@ server.py - the web interface for cs2_scout.
 
     python server.py            then open http://localhost:8000
 
-GET /                   the page (web/index.html)
+GET /                   the page (web/index.html); with Whop sign-in on and no valid session cookie: web/landing.html
+                        (also /lol and /sports when released)
 GET /api/search?q=      player suggestions from BO3.gg
 GET /api/grade?player=&line=&prop=kills|hs&line_type=standard|goblin|demon[&slug=][&match=][&opponent=]
                         the full grade + supporting data
@@ -3604,6 +3605,31 @@ def web_file(name):
     return c["data"]
 
 
+_LANDING = {"raw": None, "url": None, "data": b""}
+LANDING_PATHS = ("/", "/index.html", "/lol", "/sports", "/sports/")
+
+
+def landing_page():
+    """The signed-out landing page (web/landing.html) with the Join on Whop link filled in. ONE bytes object per (file
+    version, join url): send_shared caches the ETag + gzip by body identity (see sports_nav)."""
+    raw, url = web_file("landing.html"), whop_auth.upgrade_url()
+    if _LANDING["raw"] is not raw or _LANDING["url"] != url:
+        _LANDING.update(raw=raw, url=url, data=raw.replace(b"{{JOIN_URL}}", htmllib.escape(url, quote=True).encode("utf-8")))
+    return _LANDING["data"]
+
+
+def landing_route(path):
+    """Paths whose signed-out visitor gets the landing page: the CS2 page always, /lol only when it is released
+    (otherwise unchanged), /sports only when SPORTS_UI is set at all (otherwise the unknown-route answer, unchanged)."""
+    if path in ("/", "/index.html"):
+        return True
+    if path == "/lol":
+        return lol_public()
+    if path in ("/sports", "/sports/"):
+        return os.environ.get("SPORTS_UI", "").strip().lower() in ("1", "true", "yes", "on", "owner")
+    return False
+
+
 STATS = {"requests": 0, "ms_total": 0.0, "since": time.time(), "errors_5xx": 0}
 LAST_MEMBER = [0.0]     # last member request on /api/* (the board worker steps aside while members are active)
 _BUSY_RE = re.compile(r"cannot connect|connection|timed? ?out|timeout|getaddrinfo|temporar|unreachable|\b50[234]\b", re.I)
@@ -3717,6 +3743,14 @@ class Handler(BaseHTTPRequestHandler):
             self._sess = s
         return self._sess
 
+    def signed_out(self):
+        """Signed-out landing (2026-10-24): Whop sign-in is on and the request carries no valid session cookie (never
+        signed in, signed out, expired). Decided from the signed cookie alone - no Whop call, no cookie written. A
+        signed-in visitor (member or not) and the owner's load tests get the pages exactly as before."""
+        if not whop_auth.enabled() or self.load_test():
+            return False
+        return not whop_auth.cookie_valid(self.cookie(whop_auth.COOKIE))
+
     def allowed(self):
         """Grading/search/board: paid Whop members (and the owner's load tests) only. On Railway the data
         stays locked if the Whop settings are ever missing - it never opens up to everyone."""
@@ -3757,6 +3791,8 @@ class Handler(BaseHTTPRequestHandler):
                                                    "avg_server_ms": round(STATS["ms_total"] / max(STATS["requests"], 1), 1),
                                                    "since": datetime.fromtimestamp(STATS["since"], timezone.utc).isoformat(timespec="seconds")},
                                        "storage": dict(storage_cached(), **STORAGE), "ops": ops_checks()})
+            if u.path in LANDING_PATHS and landing_route(u.path) and self.signed_out():     # signed-out visitors only
+                return self.send_shared(("page", "landing"), 200, landing_page(), "text/html; charset=utf-8", keep=600)
             if (u.path == "/sports" or u.path.startswith(("/sports/", "/api/sports/"))) and self._sports_on(u.path, q):
                 return self._sports_route(u, q)          # the ONE sports hook: flags off = this line does nothing
             if u.path in ("/", "/index.html"):
