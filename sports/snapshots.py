@@ -215,6 +215,9 @@ def gamelog_records(league, athlete_id, body, observed_at):
     return evs, mems, stats
 
 
+GAMELOG_CURRENT_TTL_S = 3 * 3600      # a current-season log is re-read after 3 h (a finished game shows the same night)
+
+
 def _gamelog_bodies(league, athlete_id, seasons, cache_only):
     from . import espn, net
     lg = config.league(league)
@@ -231,7 +234,7 @@ def _gamelog_bodies(league, athlete_id, seasons, cache_only):
             if b:
                 bodies.append(b)
         return bodies
-    body = cache.fetch("espn:gamelog", key, 6 * 3600, lambda: net.get_json(url))
+    body = cache.fetch("espn:gamelog", key, GAMELOG_CURRENT_TTL_S, lambda: net.get_json(url))
     bodies.append(body)
     season = espn._season_of(body)
     for back in range(1, seasons):
@@ -268,7 +271,11 @@ def ingest_history(con, league, player_ids, observed_at=None, seasons=2, cache_o
     is a duplicate, a corrected game-log value is a revision."""
     observed_at = observed_at or now_utc()
     c = {"players": 0, "unchanged": 0, "no_log": 0, "errors": 0, "inserted": 0, "duplicate": 0, "revision": 0, "invalid": 0}
-    for pid in list(player_ids)[:max_players]:
+    # least recently checked first (never checked first of all), so small frequent runs cover every board player
+    # instead of re-reading the same first max_players in id order
+    order = sorted(player_ids, key=lambda p: (cache.get("ui:gamelog_checked", p) or "", p))
+    for pid in order[:max_players]:
+        cache.put("ui:gamelog_checked", pid, observed_at)
         aid = pid.rsplit(":", 1)[-1]
         try:
             bodies = _gamelog_bodies(league, aid, seasons, cache_only)
