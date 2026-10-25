@@ -192,3 +192,19 @@ game: "Same game - results are related", never a joint chance. Share link `#/com
 is checked by `GET /api/sports/compare/check` (sports/api_compare.py, board snapshots only, index cached per file change):
 ok / moved (old -> new line) / pulled / started; refused items are listed with what changed. Tests: test_ui_compare.py +
 ui_compare_test.js.
+
+## Results layout (rx-1, owner 2026-10-25: "easier to understand, less crowded")
+
+`#/results` (app.js `renderResults`) and `/sports/results` (`results_public.js`) share one renderer
+(`SportsResultsPublic.summaryHtml / detailsHtml / bindRecent`, CSS `web/sports/results.css`, classes `rx-*`). One league
+at a time (app header toggle; public page NBA / NFL buttons, `?lg=`). Order: validation line ("1,566 settled props ·
+under review (needs 300 + passing checks)"; "NFL model not validated" when no league stat passed its sm-1 gate,
+`model_gate`) -> Scout's record (settled leans W-L-P, hit rate on decided picks, game-clustered 95% range) -> research
+grade tiles A / B / C (hit rate + n) -> one sentence "Scout vs the market on the same props" (the all-stats hh-1 row vs
+mc-1, else the row with most shared props; better / worse when the Brier-difference 95% interval excludes 0, "No clear
+difference" when it includes 0, "Too few games" without one) -> 10 newest settled leans + "Show more" (10 at a time) ->
+Details: every technical table in collapsed `<details>` with a one-sentence plain explanation each; model codes only
+there. Data: unchanged endpoints; `results_public.json` gains per league `recent` (newest 50 settled Scout leans, one per
+prop, rg-1 grade, player name) and `model_gate`. The in-app tab reads `/api/sports/results/public` for the summary and
+`/api/sports/results` for the per-model tables and the ledger; without the public file it says the summary is being
+prepared and still shows Details. Tests: test_ui_results.py + ui_results_test.js.

@@ -25,5 +25,5 @@
 .sw .rx-d{border-top:1px solid var(--line)}.sw .rx-d:first-of-type{border-top:0}
 .sw .rx-d>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600;color:var(--accent-2)}
 .sw .rx-d-sub{margin:0 0 8px}.sw .rx-d-body{padding:0 0 12px;min-width:0}
-.sw .rx-d-body .sw-scroll{max-width:100%;overflow-x:auto}
+.sw .rx-d-body .sw-scroll{max-width:100%;overflow-x:auto;position:relative}   /* keeps .sw-sr cells inside the scroll box */
 @media(min-width:760px){.sw .rx-sum{grid-template-columns:1fr 1fr}.sw .rx-nv,.sw .rx-status{grid-column:1/-1}}

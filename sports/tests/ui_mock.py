@@ -14,6 +14,8 @@ TYPES = {".js": "application/javascript", ".css": "text/css", ".html": "text/htm
 def static(path):
     if path == "/sports":
         f = WEB / "sports.html"
+    elif path == "/sports/results":                     # the public Results page (gateway serves results.html here)
+        f = WEB / "sports" / "results.html"
     elif path.startswith("/sports/"):
         f = WEB / "sports" / path[len("/sports/"):]
     else:
