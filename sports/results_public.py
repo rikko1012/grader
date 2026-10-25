@@ -219,7 +219,7 @@ def grades(rows, league=None):
     (board_view.research_grade); n, W-L-P, hit rate + game-clustered 95% interval. Research - not validated. The
     board's market (N4) / sanity holds are live-board rules and are not re-applied to stored forecasts here."""
     from . import board_view
-    leans = [r for r in rows if r["status"] == "settled" and r["lean"] and not _contained(league, r["stat"])]
+    leans = [r for r in rows if r["status"] == "settled" and r["lean"] and not _contained(league, r.get("stat"))]
     out = []
     if league and _league_contained(league):
         from . import board_view
@@ -288,7 +288,7 @@ def recent(rows, names=None, n=RECENT_N, league=None):
                     "player_id": r["player_id"], "player": (names or {}).get(r["player_id"]), "stat": r["stat"],
                     "line": r["line"], "side": r["lean"], "result": r["lean_result"], "outcome": r["outcome"],
                     "actual": r.get("actual"), "p_side": _r(p_side),
-                    "grade": None if _contained(league, r["stat"]) else board_view.research_grade(p_side),
+                    "grade": None if _contained(league, r.get("stat")) else board_view.research_grade(p_side),
                     "settled_at": r.get("settled_at"), "forecast_at": r.get("forecast_at")})
     return out
 
