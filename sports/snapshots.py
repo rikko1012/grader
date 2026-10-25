@@ -45,7 +45,8 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-from . import cache, capabilities, config, fair, flags, forecast_detail, identity, market_view, markets, store
+from . import (cache, capabilities, config, fair, flags, forecast_detail, game_lines, identity, market_view, markets,
+               scout_chance, store)
 from .contracts import (ContractError, Event, Membership, SourceId, StatObservation, from_dict, now_utc, parse_utc,
                         utc)
 
@@ -412,6 +413,25 @@ def forecast_view(fc, offer_rid, for_revision=None):
             "contributions": None}
 
 
+FRESHNESS_RULE = ("a quote's age is measured from Scout's own last observation (last_seen_at) - the source's update "
+                  "time is shown only when the source gives one (source_time_unknown stays true otherwise; no source "
+                  "time is ever invented)")
+STATUS_LABELS = {"scheduled": "Scheduled", "in_progress": "Live", "final": "Final", "postponed": "Postponed",
+                 "cancelled": "Cancelled", "delayed": "Delayed", "suspended": "Suspended"}
+
+
+def _locked(e, now):
+    """A game whose lines are closed to new picks: started (by its ESPN start) or no longer scheduled."""
+    return bool(e.start_utc <= now or (e.status or "scheduled") not in ("scheduled",))
+
+
+def status_label(e, now):
+    st = e.status or "scheduled"
+    if st == "scheduled" and e.start_utc <= now:
+        return "Started"
+    return STATUS_LABELS.get(st, st.replace("_", " ").capitalize())
+
+
 def offer_view(rid, o, meta):
     ok, why = capabilities.gate(o)
     return {"record_id": rid, "platform": o.platform, "offer_id": o.offer_id, "line": o.line, "variant": o.variant,
@@ -706,6 +726,10 @@ def build(con, league, now=None, base=None, history=True, results=True):
                                   events[row["event_id"]][1], now, league, dnp)
         row["market"] = mv
         scout_line_reads(row, forecasts)
+        for q in row["quotes"]:                          # THE Scout-chance definition (sports/scout_chance.py)
+            if scout_chance.is_scout_chance(q, forecasts, False):
+                q["sc"] = 1
+        row["sc"] = sum(1 for q in row["quotes"] if q.get("sc"))
         for q in row["quotes"]:
             if q["platform"] in market_view.TARGET_BOARDS and not q.get("forecast_id") and not q.get("line_read"):
                 q["no_fc"] = no_forecast_reason(row, q, run)
@@ -736,6 +760,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
 
     # slate
     slate = []
+    glines = game_lines.game_lines(league, {eid: e for eid, (_, e, _) in events.items()})
     by_event = defaultdict(list)
     for r in board_rows:
         by_event[r["event_id"]].append(r)
@@ -758,9 +783,12 @@ def build(con, league, now=None, base=None, history=True, results=True):
                                                           for x in e.reschedules],
                       "observed_at": e.observed_at, "home": _team_view(teams, e.home_team_id),
                       "away": _team_view(teams, e.away_team_id), "started": e.start_utc <= now,
+                      "locked": _locked(e, now), "status_label": status_label(e, now),
                       "coverage": {"markets": len(rows), "primary": sum(1 for r in rows if r["primary"]),
                                    "forecasts": sum(1 for r in rows for q in r["quotes"] if q["forecast_id"]),
+                                   "scout_chances": scout_chance.event_counts(rows, forecasts, e.start_utc <= now),
                                    "players": len({r["player_id"] for r in rows}), "by_platform": dict(plat)},
+                      "game_lines": glines.get(eid),
                       "injuries": inj})
 
     # models / validation state (facts: counts)
@@ -794,6 +822,13 @@ def build(con, league, now=None, base=None, history=True, results=True):
                                            "betrivers (owner decision 2026-10-23); registered mc-1 forecasts keep "
                                            "REGISTER.md 10"},
                 "sources": source_coverage(platform_seen, last_read),
+                "scout_chance": {"definition": scout_chance.DEFINITION, "models": list(scout_chance.MODELS),
+                                 "text": scout_chance.TEXT,
+                                 "markets": sum(1 for r in board_rows if r.get("sc")),
+                                 "quotes": sum(r.get("sc", 0) for r in board_rows)},
+                "freshness": {"age_from": "last_seen_at", "rule": FRESHNESS_RULE,
+                              "source_time_unknown": {k: v["source_time_unknown"] for k, v in platform_seen.items()
+                                                      if v["source_time_unknown"]}},
                 "counts": {"events": len(slate), "markets": len(board_rows), "offers": len(offers),
                            "forecasts": len(forecasts), "unmatched_offers": unmatched, "players": len(pids)}}
     base_meta = {"version": SNAP_VERSION, "league": league, "built_at": manifest["built_at"], "as_of": now}
@@ -803,7 +838,9 @@ def build(con, league, now=None, base=None, history=True, results=True):
     board_meta = {**base_meta, "models": model_list,
                   "stats": {k: v["label"] for k, v in markets.MARKETS[fam].items()},
                   "events": {eid: {"start_utc": e.start_utc, "status": e.status, "home": _team_view(teams, e.home_team_id),
-                                   "away": _team_view(teams, e.away_team_id)} for eid, (_, e, _) in events.items()},
+                                   "away": _team_view(teams, e.away_team_id), "started": e.start_utc <= now,
+                                   "locked": _locked(e, now), "status_label": status_label(e, now)}
+                             for eid, (_, e, _) in events.items()},
                   "injuries": {pid: injuries[pid] for pid in pids if pid in injuries},
                   "format": "compact quotes: r record id, p platform, l line, v variant, o offered [over, under], "
                             "m multipliers [over, under], k Kalshi YES [bid, ask], t last seen, su source updated, "
@@ -896,6 +933,8 @@ def compact_quote(q):
         out["lr"] = q["line_read"]
     if q.get("no_fc"):
         out["nf"] = q["no_fc"]
+    if q.get("sc"):
+        out["sc"] = 1
     if o.get("price_format") == "decimal" or u.get("price_format") == "decimal":    # a book's own decimal prices
         out["d"] = [o.get("price") if o.get("offered") else None, u.get("price") if u.get("offered") else None]
     return out
@@ -905,7 +944,8 @@ def compact_row(r):
     return {"k": r["key"], "e": r["event_id"], "pid": r["player_id"], "n": r["player"], "pos": r["position"],
             "tm": r["team"], "st": r["stat"], "pr": 1 if r["primary"] else 0, "cap": r["capability"],
             "q": [compact_quote(q) for q in r["quotes"]], "kn": [compact_quote(q) for q in r["kalshi_near"]],
-            "kr": r["kalshi_rungs"], "alt": r["alternates"], "promo": r["promotional"], "mk": r.get("market")}
+            "kr": r["kalshi_rungs"], "alt": r["alternates"], "promo": r["promotional"], "mk": r.get("market"),
+            "sc": r.get("sc", 0), "hid": scout_chance.hidden_reason(r)}
 
 
 def source_coverage(platform_seen, last_read=None):
