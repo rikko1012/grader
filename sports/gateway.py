@@ -43,6 +43,7 @@ PLACEHOLDER = (b"<!doctype html><meta charset=utf-8><meta name=viewport content=
                b"<title>Scout Sports</title><body style='font-family:system-ui;margin:2rem'><h1>Scout Sports</h1>"
                b"<p>Sports is being built and is not available yet.</p></body>")
 MODES = ("service", "proxy", "inprocess")
+PAGE_ALIASES = {"results": "results.html"}          # /sports/results = the linkable Results page (sheets agent)
 
 
 def mode():
@@ -150,7 +151,7 @@ def _token(member, allowed, admin, headers):
         return _j(403, {"error": "cross_site"})
     if not allowed():
         _bump("token_refused")
-        return _j(401, {"error": "members_only"})
+        return _j(401, {"error": "members_only", "api_base": api_base()})    # public origin (Results page)
     is_admin = bool(admin())
     user = member() or ("admin" if is_admin else None) or "local"
     try:
@@ -281,7 +282,8 @@ def handle_get(path, raw_query, query, member, allowed, admin, headers):
     """-> (status, body_bytes, content_type, headers). Called by server.py's hook only when the path's flag is on
     (SPORTS_UI for /sports and /sports/<asset>, SPORTS_API for /api/sports/*)."""
     if path == "/sports" or path.startswith("/sports/"):
-        got = _static("" if path == "/sports" else path[len("/sports/"):])
+        rel = "" if path == "/sports" else path[len("/sports/"):]
+        got = _static(PAGE_ALIASES.get(rel, rel))
         if got is None:
             return _j(404, {"error": "not found"})
         _bump("pages")

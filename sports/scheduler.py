@@ -71,6 +71,8 @@ def default_jobs():
                          cap_mb=160, cls=HEAVY, prio=1),                       # 105-109 MB (slim slip pool)
         "ui-snapshots": dict(argv=_py("-m", "sports.snapshots", "build", *lg), every_s=180, timeout_s=240,
                              flag="SPORTS_INGEST", cap_mb=250, cls=HEAVY, prio=2),   # 135-200 MB (grows with data)
+        "sheets": dict(argv=_py("-m", "sports.sheets", "build", *lg), every_s=300, timeout_s=300,
+                       flag="SPORTS_INGEST", cap_mb=160, cls=HEAVY, prio=3),   # sheets 5 min; without 1 h; results 30 min
         "mapping-audit": dict(argv=_py("-m", "sports.mapping_audit", *lg), every_s=3600, timeout_s=240,
                               flag="SPORTS_INGEST", cap_mb=250, cls=HEAVY, prio=3),  # one offer scan per league / hour
         "slips-ingest": dict(argv=_py("-m", "sports.slips", "ingest"), every_s=300, timeout_s=300,
