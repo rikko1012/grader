@@ -4132,6 +4132,7 @@ function ctWhyNot(x) {
   if (x.gone) return x.moved != null ? `${bookName(r.book)} moved this line to ${x.moved}` : `not on ${bookName(r.book)} now`;
   if (hasStarted(r)) return "match started – the line is locked";
   if (!r.side || r.p == null) return "being graded";
+  if (mktType(r) !== "standard") return "alt line – different payout, not ranked";   // Goblin / Demon / promo pay differently
   if (sideGone(r)) return String(sideGone(r));
   if (r.state === "SCOUT") return "no match scheduled";
   if (r.hltv_retry || r.stale) return `graded ${clockTxt(r.graded_at) || "earlier"} – being regraded`;
@@ -4141,7 +4142,7 @@ function ctWhyNot(x) {
 }
 // THE RULE: the higher chance for the graded side; a tie goes to the higher grade, then to more units
 const ctRank = (a, b) => (+b.p - +a.p) || ((G_RANK[mGrade(a)] ?? 9) - (G_RANK[mGrade(b)] ?? 9)) || ((+b.units || 0) - (+a.units || 0));
-const CT_RULE = "Rule: the highest chance for each prop's graded side wins; a tie goes to the higher grade, then to more units. Leans, sides not offered, started matches and props being graded are not eligible. This compares chances only – payouts differ by platform.";
+const CT_RULE = "Rule: the highest chance for each prop's graded side wins; a tie goes to the higher grade, then to more units. Only standard lines are ranked (Goblin / Demon alt lines pay differently and stay listed, not ranked); Leans, sides not offered, started matches and props being graded are not eligible. This compares chances only – payouts differ by platform.";
 // one match: the canonical match id / slug the slip uses, or the board's own match grouping
 const ctSameEv = (a, b) => slipEvent(a) === slipEvent(b) || (!!a._mk && a._mk === b._mk) || (/^hltv:/.test(a.match_id || "") && a.match_id === b.match_id);
 // the chance of side G at this prop's line: the graded side's own chance, or the other side's (1 - p, as the card shows it)

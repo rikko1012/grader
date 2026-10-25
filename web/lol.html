@@ -543,13 +543,15 @@ function ctWhyNot(c) {
   const x = c.r;
   if (c.gone) return c.moved != null ? `The line moved: ${x.line} → ${c.moved}.` : "This line is no longer on the board.";
   const w = whyNot(x); if (w) return w;
+  // alternate lines (Goblin / Demon / adjusted) pay differently, so a chance alone can't rank them against a standard line
+  if (x.line_type && x.line_type !== "Standard") return `${x.line_type} alt line – different payout, not ranked.`;
   if (!x.grade) return "No grade on this line.";
   if (!ctLetter(x)) return `${x.grade}: the chance is under 55%.`;
   return "";
 }
 // THE RULE: the higher chance for the graded side; a tie goes to the higher grade, then to more units
 const ctRank = (a, b) => (pside(b) - pside(a)) || ((GRANK[a.grade] ?? 9) - (GRANK[b.grade] ?? 9)) || ((+b.units || 0) - (+a.units || 0));
-const CTRULE = "Rule: the highest chance for each line's graded side wins; a tie goes to the higher grade, then to more units. Leans, sides not offered, started matches and lines no longer posted are not eligible. This compares chances only - payouts differ by platform.";
+const CTRULE = "Rule: the highest chance for each line's graded side wins; a tie goes to the higher grade, then to more units. Only standard lines are ranked (Goblin / Demon alt lines pay differently and stay listed, not ranked); Leans, sides not offered, started matches and lines no longer posted are not eligible. This compares chances only - payouts differ by platform.";
 const ctSideP = (x, side) => side === "Over" ? x.p_over : x.p_under;
 const ctOffered = (x, side) => !!(x.sides.find(s => s.side === side) || {}).offered;
 function ctState() {

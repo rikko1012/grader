@@ -49,8 +49,13 @@ def test_no_grade_without_a_lean_or_on_held_rows():
     assert x["ln"] == "over" and x["gr"] == "A" and x["e"] > 0
 
 
+def test_nfl_contained_by_default_again():
+    # owner 2026-10-25: NFL letters off after the real book-line check (A pass_yds 1 of 27); one flag lifts it again
+    assert board_view.VG_CONTAIN_LEAN is True
+
+
 def test_nfl_lean_and_grade_lifted_behind_the_rules_with_label(monkeypatch):
-    assert board_view.VG_CONTAIN_LEAN is False
+    monkeypatch.setattr(board_view, "VG_CONTAIN_LEAN", False)
     x, code = board_view.quote_x("nfl", "rec_yds", 0.3, 0.7, 40.0, 50.5, {"po": 0.45, "pu": 0.55, "n": 3}, L10)
     assert code is None and x["ln"] == "under" and x["gr"] == "A" and x["nv"] == "NFL model not validated"
     assert "e" not in x and "s" not in x and "g" not in x and x["c"] is None       # no edge / confidence / rank

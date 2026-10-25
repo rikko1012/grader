@@ -61,3 +61,18 @@ def test_lol_tray_holds_six_names_a_pulled_line_and_adds_through_the_slip_rules(
     assert out["full"]["text"] == "Compare holds 6 lines - remove one first."
     assert out["why"][1] == "This line is no longer on the board." and out["why"][2] == "The line moved: 4.5 → 5.5."
     assert out["legs"] == ["k0", "k3"]                                 # Add to slip from the tray: the slip's own rules
+
+
+@needs_node
+def test_lol_goblin_demon_lines_are_listed_not_ranked(tmp_path):
+    """Owner 2026-10-25: alt lines pay differently, so a high chance alone can't make them 'the better line'."""
+    a = _lol_row("k-a", "Alpha", FUTURE, p_over=0.62); a.update(grade="B")
+    g = _lol_row("k-g", "Gamma", FUTURE, p_over=0.84); g.update(grade="A+", team="GEN", opponent="T1", line_type="Goblin",
+                                                              platform="prizepicks", platform_label="PrizePicks")
+    out = run(tmp_path, "lol.html", """(() => {
+      D = INPUT; render(); ctToggle("k-a"); ctToggle("k-g");
+      const S = ctState(); return {win: S.win.map(i => S.R[i].r.key), why: S.R.map(c => c.why), h: ctHtml()};
+    })()""", {"rows": [a, g], "match_tables": []})
+    assert out["win"] == ["k-a"]                                   # 84% Goblin is not ranked over a 62% standard line
+    assert out["why"][1].startswith("Goblin alt line") and "not ranked" in out["why"][1]
+    assert "Only standard lines are ranked" in out["h"]
