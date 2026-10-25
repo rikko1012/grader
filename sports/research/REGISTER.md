@@ -504,3 +504,70 @@ were motivated by results on these windows (MODEL_CARD_NFL re-audit, MODEL_CARD_
      forward artifact (sm-1 config refit on the so-1 minutes column, own hash manifest) and switches through the same
      per-market switch for regular-season forecasts; otherwise nothing changes. Results:
      `sports/research/results/model_so1_nba.json`.
+
+## Amendment A8 - cal-mi-1 market-informed calibration of the displayed Scout chance at book lines (registered 2026-10-25, BEFORE any cal-mi fit or score)
+
+Owner 2026-10-25: "we need everything calibrated and fixed TODAY, this hit rate is terrible." What existed when this was
+written: the production bl-1 book-line check (`python -m sports.model.tune bookline`, settled forward props, ~8
+game-days per league; the owner relayed: NBA Overs won 0.54-0.67 while Scout favoured Over on 0.27-0.42 of props; NBA A
+bands stated ~0.70 hit 0.47-0.58; NFL A pass_yds 0.72 / 0.04 (27), rush_att 0.75 / 0.46, rec 0.73 / 0.56, rec_yds
+0.70 / 0.68). No cal-mi candidate had been fitted or scored; `sports/model/cal.py` is written after this text.
+Hypothesis: sm-1 ignores the information in the book line / market price (lines sit above player history).
+
+**OWNER OVERRIDE (stated risk).** The owner directs that cal-mi is evaluated NOW on the available settled props,
+below the registered 20-game minimum of A7 6 / 7(d). Risks: few independent game-days (outcomes inside one game and
+one night are correlated, so one slate can dominate a fit); the game-clustered intervals are wide and a point-estimate
+pass can be noise; walk-forward days at the start have no fit. Every result is labelled "below the 20-game minimum
+(owner override)". The decision is reversible every day (the weights file is refit daily; per-market and global off
+switches), forward evidence stays forward, and nothing here changes stakes (all stakes stay 0U, gate F unchanged).
+
+1. **Candidate `cal-mi-1`** (per league x stat). For an sm-1 Scout chance at an offered target-board line (PrizePicks
+   / Underdog; pushes excluded): s = logit P_scout(Over | no push), m = logit P_market(Over | no push).
+   - variant M (a market chance exists at that exact quote): P(Over | no push) = sigmoid(a + w_s s + w_m m);
+   - variant S (no market chance): P(Over | no push) = sigmoid(b + v_s s) (w_m = 0, v_s shrunk by the prior below).
+   Unconditional output: P'(Over) = (1 - P(Push)) q, P'(Under) = (1 - P(Push)) (1 - q), P'(Push) = sm-1's P(Push)
+   (sums to one; the push atom is unchanged). One input per side, both sides from the same q (no separate fits).
+   - Market chance at serve time = mv-1 display consensus at that exact quote (`board_view.market_at`: the offer's own
+     `mk.at[record]`, else the headline when it is at the same line; mc-1 rule, nearest line of each book moved to the
+     target line with dispersion.json = the market's line read). In the fit / evaluation (settled props) = the
+     equal-weight log-odds mean of the settled single-source forecasts `mkt-<source>` made for the same offer at the
+     same forecast_at (= the mc-1 rule over every eligible source = the mv-1 source set), else the `mc-1` row, else
+     none (variant S).
+2. **Fit.** Penalised maximum likelihood (Newton), Gaussian prior with precision LAMBDA = 20 per parameter, centred
+   on the IDENTITY (a = 0, w_s = 1, w_m = 0; b = 0, v_s = 1 = the live Scout chance). Two levels: league pooled (all
+   stats of the league; M on the rows with a market chance, S on all rows using s only); per stat with the prior
+   centred on the league fit. A level with fewer than MIN_FIT = 50 props or fewer than 2 games takes its parent (stat
+   -> league -> identity). |each parameter| is bounded by 5 (a fit outside is refused -> parent). No other shrinkage;
+   the prior centre is the live chance, never 50%.
+3. **Data (production).** `learning.db` scorecard rows of model sm-1 on PrizePicks / Underdog, superseded = 0, status
+   win / loss, value != line; one row per (event, platform, offer, stat, line) = the last pre-start forecast (offer from
+   `forecasts.db` inputs; without inputs one row per forecast as bl-1). Outcome = value > line.
+4. **Walk-forward by game-day.** Game-day D = UTC date of (forecast_at - 10 h). For day D the parameters are fitted
+   only on props whose settled_at < the earliest forecast_at of D (no look-ahead); D's props are scored with them.
+   Days whose training set gives no fit at any level are not scored (counted as such).
+5. **Metrics per league x stat** (scored walk-forward rows, paired with live on identical rows): log loss cal - live
+   with a game-clustered 95% interval (evaluate.boot_mean, B = 2,000, seed 20261023), Brier, calibration-in-the-large
+   (mean p - over rate), share favouring Over s vs realised over rate o, grade bands (sports-gp-1 on the chosen-side
+   chance) stated vs hit, and the variant mix (M / S).
+6. **Promotion rule per league x stat** (needs >= 30 scored props from >= 2 game-days, else "not evaluable" -> OFF):
+   PASS if (i) the log-loss difference's game-clustered interval is entirely below 0, OR (ii) (too few games for a
+   significant result) the log-loss difference point estimate <= 0 AND |in-the-large| <= 0.03 AND |s - o| <= 0.15.
+   PASS -> the market is ON with the parameters fitted on ALL settled props up to the run; FAIL -> OFF (the raw sm-1
+   chance is displayed). Grade bands then use the calibrated chance (owner rule: accuracy from more information, never
+   an arbitrary shrink toward 50%; the report gives w_s, w_m, v_s and the mean chosen-side chance before / after).
+7. **Forward use.** One function (`sports/model/cal.py adjust`) applied where the snapshot builds every quote's Scout
+   view (`snapshots.guard_row`, `sheets`), so the board, research grades (rg-1 = sports-gp-1 band of the calibrated
+   chance), sheets, compare, slips and tracked picks all read the same calibrated chance; the raw sm-1 chance stays in
+   the forecast record (unchanged) and in the quote's detail (`ca.raw`). mi-1 / market-only views are never
+   recalibrated. The lean rule (lean_of with the mean, N4 positive edge vs the market) and the vg-1 / sg-1 guards are
+   unchanged. Version `cal-mi-1:<params sha>`. Weights: `<SPORTS_DATA_DIR>/model/cal_mi.json` written by
+   `python -m sports.model.cal fit` (validated: schema, version, finite bounded parameters, sha; invalid -> the
+   committed default `sports/model/artifacts/cal_mi_default.json`; invalid default -> off). Per-market switch = the
+   file's `on` flag per league x stat; global off switch `SPORTS_CAL_MI=0`.
+8. **Committed default (local data).** The best local sample: settled props reconstructed from the scratch store of the
+   2026-10-23 NBA slate (one game-day, 7 games) joined to the store's own mkt-* / mc-1 forecasts at the same offer and
+   forecast_at. Walk-forward is impossible on one game-day, so the default uses the weaker leave-one-GAME-out check
+   (fit on the other games, score the held-out game) with rule 6 (ii) on >= 30 props from >= 5 games; a market that
+   passes is ON in the committed default with the parameters fitted on all local props, else OFF. Labelled
+   "local leave-one-game-out, one night, below the 20-game minimum (owner override)". The owner's Shell `fit` run on
+   production data supersedes it as soon as it is written.
