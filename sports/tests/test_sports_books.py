@@ -360,6 +360,21 @@ def test_worker_fetches_due_games_once_and_stores(db, no_espn):
     assert db.one("SELECT event_key FROM sports_book_events WHERE provider_event_id = '36220759'")["event_key"] == "espn:401"
 
 
+def test_tomorrows_game_without_props_yet_is_rechecked_in_30_minutes(db, no_espn):
+    """Owner audit bug 4: next-day props are posted the night before; a free book read that found none is re-read
+    after 30 min (not at the 24-72 h rung's 3 h), and once props are there the normal ladder applies."""
+    tomorrow = _game("tmw", "2026-10-24T23:10:00Z")                          # 26 h away: the 180-min rung
+    p = FakeProvider([tomorrow])
+    worker.run_once(db, ("nba",), NOW, {"fake": p}, probe=False)
+    worker.run_once(db, ("nba",), NOW + timedelta(minutes=29), {"fake": p}, probe=False)
+    assert p.calls == ["tmw"]
+    p.offers_by["tmw"] = _offers(event="tmw")                               # the book posts its props
+    s = worker.run_once(db, ("nba",), NOW + timedelta(minutes=31), {"fake": p}, probe=False)
+    assert p.calls == ["tmw", "tmw"] and s["providers"]["fake"]["new_quotes"] == 2
+    worker.run_once(db, ("nba",), NOW + timedelta(minutes=31 + 60), {"fake": p}, probe=False)
+    assert p.calls == ["tmw", "tmw"]                                         # posted: back on the 3-hour rung
+
+
 def test_worker_lease_prevents_overlap(db, no_espn):
     store.take_lease(db, "someone-else", 600, now=NOW)
     p = FakeProvider([_game()])

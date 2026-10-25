@@ -93,7 +93,7 @@ def test_schedule_names_every_worker_side_process_with_its_flag():
     s = service.schedule()
     want = {"assistant": "SPORTS_ASSISTANT", "prebuilt": "SPORTS_API", "ui-snapshots": "SPORTS_INGEST",
             "mapping-audit": "SPORTS_INGEST",
-            "slips-ingest": "SPORTS_INGEST", "ingest": "SPORTS_INGEST", "ingest-kalshi": "SPORTS_INGEST",
+            "slips-ingest": "SPORTS_INGEST", "ingest-nba": "SPORTS_INGEST", "ingest-nfl": "SPORTS_INGEST", "ingest-kalshi": "SPORTS_INGEST",
             "settle": "SPORTS_INGEST", "slips-settle": "SPORTS_INGEST", "model-forward": "SPORTS_FORECAST",
             "model-forecast": "SPORTS_TRAIN",
             "model-learn": "SPORTS_TRAIN", "model-snapshot": "SPORTS_TRAIN", "model-fit": "SPORTS_TRAIN",
@@ -110,7 +110,7 @@ def test_schedule_names_every_worker_side_process_with_its_flag():
     for name, spec in s.items():
         assert spec["timeout_s"], name                                         # every child is bounded in time
         assert spec["cap_mb"] > 0 and spec["cls"] in ("light", "heavy", "exclusive"), name
-    assert {n for n, v in s.items() if v["cls"] == "exclusive"} == {"ingest", "model-forward", "model-forecast", "model-fit",
+    assert {n for n, v in s.items() if v["cls"] == "exclusive"} == {"ingest-nba", "ingest-nfl", "model-forward", "model-forecast", "model-fit",
                                                                          "lab"}
 
 
@@ -122,7 +122,7 @@ def test_supervise_starts_one_scheduler_and_no_job_with_flags_off(monkeypatch):
     stop = threading.Event()
     sch = service.supervise(stop)
     time.sleep(0.6)
-    assert sch.running == {} and len(scheduler.JOBS) == 22 and not any(j["enabled"] for j in scheduler.JOBS.values())
+    assert sch.running == {} and len(scheduler.JOBS) == 23 and not any(j["enabled"] for j in scheduler.JOBS.values())
     stop.set()
 
 
