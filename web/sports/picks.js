@@ -101,7 +101,8 @@
   var REG = {}, seq = 0;                                // leg registry for the rendered action areas
   function app() { return root.ScoutSportsApp; }
   function bookName(p) { var S = root.SportsStats; return S && S.bookName ? S.bookName(p) : (S && S.BOOKS[p]) || p; }
-  function legText(l) { return l.player + " " + (l.side === "over" ? "Over " : "Under ") + line(l.line) + " " + (l.stat_label || l.stat) + " on " + bookName(l.platform); }
+  function statOf(x) { var Lb = root.SportsLabels || (typeof require !== "undefined" ? require("./labels.js") : null); return Lb ? Lb.statOf(x) : (x.stat_label || x.stat || ""); }   // #12
+  function legText(l) { return l.player + " " + (l.side === "over" ? "Over " : "Under ") + line(l.line) + " " + statOf(l) + " on " + bookName(l.platform); }
 
   // opts: {compact: bool (board card), title: "Player stat line book" for labels}
   function actions(legs, why, opts) {
@@ -113,7 +114,7 @@
     var id = "a" + (++seq), pre = preselect(ch), any = ch.filter(function (c) { return c.leg; })[0].leg;
     if (seq % 400 === 0) Object.keys(REG).forEach(function (k) { if (+k.slice(1) < seq - 4000) delete REG[k]; });
     REG[id] = {over: legs.over || null, under: legs.under || null};
-    var title = opts.title || (any.player + " " + (any.stat_label || any.stat) + " " + line(any.line) + " on " + bookName(any.platform));
+    var title = opts.title || (any.player + " " + statOf(any) + " " + line(any.line) + " on " + bookName(any.platform));
     var h = '<div class="sw-act" data-act="' + id + '"><fieldset class="sw-act-sides"><legend class="sw-sr">Side for ' + esc(title) + "</legend>" +
       ch.map(function (c) {
         var rid = id + "-" + c.side;
@@ -180,7 +181,7 @@
     var c = chanceText(p), r = resultText(p), side = p.side === "over" ? "Over" : "Under";
     var corr = p.result && p.result.corrected;
     return '<article class="sw-card sw-mp-row"><div class="sw-card-top"><div><b>' + esc(p.player || "") + "</b> " +
-      '<span class="sw-mp-pick">' + esc(side + " " + line(p.line) + " " + (p.stat_label || p.stat || "")) + "</span>" + (p.test ? ' <span class="sw-tag">test</span>' : "") +
+      '<span class="sw-mp-pick">' + esc(side + " " + line(p.line) + " " + statOf(p)) + "</span>" + (p.test ? ' <span class="sw-tag">test</span>' : "") +
       '<div class="sw-faint sw-small">' + esc(bookName(p.platform)) + (p.event_ref ? " · " + esc(p.event_ref) : "") + (p.league ? " · " + esc(String(p.league).toUpperCase()) : "") + "</div></div>" +
       '<div class="sw-mp-res ' + esc(p.result ? p.result.status : "open") + '"><b>' + esc(r.status) + "</b>" + (corr ? ' <span class="sw-tag">Corrected (revision ' + esc(p.result.revision) + ")</span>" : "") +
       '<div class="sw-small sw-muted">' + esc(r.detail) + "</div></div></div>" +

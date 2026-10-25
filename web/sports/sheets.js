@@ -20,6 +20,11 @@
   function lineTxt(x) { return !nn(x) ? "—" : (Math.abs(x - Math.round(x)) < 1e-9 ? String(Math.round(x)) : String(Math.round(x * 10) / 10)); }
   function edgeText(e) { return nn(e) ? R.edgeText(e) + " pts" : "—"; }
   function leanText(r) { return r.lean === "over" ? "Lean Over" : r.lean === "under" ? "Lean Under" : "No lean"; }
+  function statOf(r) {                                            // #12: never a raw stat key
+    var Lb = root.SportsLabels || (typeof require !== "undefined" ? require("./labels.js") : null);
+    var k = r.stat || r.st, lab = r.statLabel || r.sl;
+    return Lb ? (Lb.STAT[k] || Lb.statLabel(lab || k)) : (lab || k);
+  }
   function tag(a, lg) { var Lb = root.SportsLabels; return a && Lb ? Lb.teamTag(a, lg) : a; }   // N9: one code per team
   function matchup(ev, id, lg) { var e = ev && ev[id]; return e ? (tag(e.a, lg) || "?") + " @ " + (tag(e.h, lg) || "?") : ""; }
   // the sheet file -> one propRow per line (started games dropped with the board's own rule)
@@ -41,7 +46,7 @@
   var KEYS = {
     player: function (r) { return (r.player || "").toLowerCase(); },
     game: function (r) { return r.start || r.s || r.e || ""; },
-    stat: function (r) { return r.statLabel || r.sl || r.stat || r.st; },
+    stat: function (r) { return statOf(r); },
     line: function (r) { return nn(r.line) ? r.line : r.l; },
     type: function (r) { return variantLabel(r.variant); },
     proj: function (r) { return r.scout ? r.scout.mu : null; },
@@ -149,7 +154,7 @@
 
   function statOpts(rows, D) {
     var seen = {};
-    rows.forEach(function (r) { seen[r.stat || r.st] = r.statLabel || r.sl || (D.stats || {})[r.stat || r.st] || r.stat || r.st; });
+    rows.forEach(function (r) { seen[r.stat || r.st] = statOf(r); });
     return [["all", "All stats"]].concat(Object.keys(seen).sort(function (a, b) { return seen[a] < seen[b] ? -1 : 1; }).map(function (k) { return [k, seen[k]]; }));
   }
   function evOpts(D) {
@@ -234,7 +239,7 @@
       var rows = sortRows(consistentFilter(D.rows, f), st.sort, st.dir, D.events);
       main.querySelector("#shx-body").innerHTML = rows.slice(0, shown).map(function (r) {
         return '<tr><th scope="row"><a href="' + playerHref(lg, r) + '">' + esc(r.n) + '</a><div class="sw-faint sw-small">' + esc([tag(r.tm, lg), r.pos].filter(Boolean).join(" · ")) + "</div></th>" +
-          '<td class="sw-small">' + esc(matchup(D.events, r.e, D.league)) + "</td><td>" + esc(r.sl || r.st) + "</td>" +
+          '<td class="sw-small">' + esc(matchup(D.events, r.e, D.league)) + "</td><td>" + esc(statOf(r)) + "</td>" +
           '<td class="num">' + lineTxt(r.l) + ' <span class="sw-faint sw-small">' + esc(r.plat === "prizepicks" ? "PP" : "UD") + "</span></td>" +
           '<td><span class="shx-lean shx-' + r.side + '">' + (r.side === "over" ? "Over" : "Under") + "</span></td>" +
           '<td class="num"><b>' + pctTxt(r.r10) + '</b> <span class="sw-faint sw-small">' + rate(r.l10, r.side) + (r.l10.p ? " · " + r.l10.p + " push" : "") + "</span>" + seasonsNote(r.l10, lg) + "</td>" +

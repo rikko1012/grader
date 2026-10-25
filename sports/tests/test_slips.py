@@ -674,3 +674,11 @@ def test_build_ranks_by_expected_return_not_by_hit_chance():
     assert b2["ranking"]["by"] == "joint_chance" and "payout not published" in b2["ranking"]["note"]
     js = [s["joint"]["p_all_win"] for s in b2["slips"]]
     assert js == sorted(js, reverse=True) and all(s["expected_return"]["value"] is None for s in b2["slips"])
+
+
+def test_copy_text_uses_the_market_label_not_the_book_raw_stat():
+    """#12: Underdog's raw 'three_points_made' never reaches the copied slip text."""
+    legs = [dict(L(1, "A", 1, stat="threes"), stat_label="three_points_made", league="nba", player="P1",
+                 start_utc=w.START), dict(L(2, "B", 2), stat_label="Points", league="nba", player="P2", start_utc=w.START)]
+    t = validate.copy_text("underdog", "standard", legs)
+    assert "3-pointers made Higher 20.5" in t and "three_points_made" not in t

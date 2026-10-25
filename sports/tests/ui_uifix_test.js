@@ -69,6 +69,11 @@ assert.strictEqual(L.statLabel("three_points_made"), "3-pointers made");
 assert.strictEqual(L.statLabel("threes"), "3-pointers made");
 assert.strictEqual(L.statLabel("rec_yds"), "Receiving yards");
 assert.ok(!/_/.test(L.statLabel("some_new_stat")));
+assert.strictEqual(L.statOf({stat: "threes", stat_label: "three_points_made"}), "3-pointers made");
+assert.strictEqual(L.statOf({stat: "x_new", stat_label: "three_points_made"}), "3-pointers made");
+assert.strictEqual(L.statOf({st: "rec_yds", sl: "Receiving Yards"}), "Receiving yards");
+const PK = require(path.join(dir, "picks.js"));
+if (PK.legText) assert.ok(!/_/.test(PK.legText({player: "A", side: "over", line: 1.5, stat: "threes", stat_label: "three_points_made", platform: "underdog"})));
 
 // ---------------------------------------------------------------- N9: one team code everywhere
 assert.strictEqual(L.teamTag("UTAH", "nba"), "UTA"); assert.strictEqual(L.teamTag("UTA", "nba"), "UTA");

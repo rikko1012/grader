@@ -71,6 +71,14 @@
     if (RAW_STAT[low]) return STAT[RAW_STAT[low]];
     return /[_]/.test(k) || k === low ? words(k) : k;        // an unknown raw key: words, never underscores
   }
+  // a leg / pick / row -> its stat words: the canonical key's label first (a book's own raw name such as Underdog
+  // "three_points_made" only when the key is unknown), always through statLabel (#12)
+  function statOf(x) {
+    if (!x) return "";
+    var k = x.stat || x.st;
+    if (k && STAT[k]) return STAT[k];
+    return statLabel(x.stat_label || x.sl || x.stat || x.st);
+  }
   function cap(s) { s = String(s); return s.charAt(0).toUpperCase() + s.slice(1); }
   function words(code) { return cap(String(code).replace(/_/g, " ")); }
   function eventStatus(s) { if (!s) return ""; var k = String(s).toLowerCase(); return EVENT_STATUS[k] || words(k); }
@@ -229,7 +237,7 @@
              injuryText: injuryText, seasonLabel: seasonLabel, windowLabel: windowLabel, seasonBreaks: seasonBreaks,
              spansText: spansText, teamPlaceholder: teamPlaceholder, searchPlaceholder: searchPlaceholder, SLIP_REASON: SLIP_REASON, EVENT_STATUS: EVENT_STATUS,
              titleName: titleName, ledgerName: ledgerName, ledgerRows: ledgerRows, scoutSide: scoutSide,
-             statLabel: statLabel, STAT: STAT, words: words, teamTag: teamTag, TEAM_ABBR: TEAM_ABBR};
+             statLabel: statLabel, statOf: statOf, STAT: STAT, words: words, teamTag: teamTag, TEAM_ABBR: TEAM_ABBR};
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SportsLabels = api;
 })(this);

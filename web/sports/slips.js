@@ -97,7 +97,7 @@
   }
 
   /* ---------------------------------------------------------------- pool */
-  var L = window.SportsLabels || { slipReason: function (x) { return x; } };
+  var L = window.SportsLabels || { slipReason: function (x) { return x; }, statOf: function (l) { return l.stat_label || l.stat; } };
   var RESEARCH_TEXT = "Research estimates - not validated; stakes 0";
   function researchBanner(show) {                     // owner choice (sp-2): research legs allowed, always labelled
     var b = $("ss-research");
@@ -161,7 +161,7 @@
     return '<li class="ss-leg"><span class="ss-who">' + esc(l.player) + ' <span class="ss-tag">' + esc(L.teamTag ? L.teamTag(l.team, l.league || ctx().league) : l.team) + "</span></span>" +
       '<span class="ss-pick"><span class="ss-side-' + l.side + '">' + esc(sideText(platform, l.side)) + "</span> " +
       '<span class="ss-num">' + esc(l.line) + "</span>" + (l.platform === "underdog" && l.multiplier != null && Math.abs(l.multiplier - 1) > 1e-9 ? ' <span class="ss-tag ss-mult" title="Underdog payout multiplier for this pick">' + esc(mult2(l.multiplier)) + "</span>" : "") + "</span>" +
-      '<span class="ss-meta">' + esc(l.stat_label || l.stat) + " - " + esc(l.event_ref || "") + " - " + esc(when(l.start_utc)) +
+      '<span class="ss-meta">' + esc(L.statOf(l)) + " - " + esc(l.event_ref || "") + " - " + esc(when(l.start_utc)) +
       (l.custom ? " - no Scout chance for a line that is not offered" : l.p_win != null ? ' - Scout chance <span class="ss-num">' + pct(l.p_win) + "</span>" + (l.p_push ? " (push " + pct(l.p_push) + ")" : "") : "") +
       (l.custom ? ' <span class="ss-tag ss-hyp">custom line - hypothetical</span>' : "") +
       (l.research_only ? ' <span class="ss-tag ss-research" title="' + esc(RESEARCH_TEXT) + '">Research estimate · stake 0</span>' : "") + "</span>" + (extra || "") + "</li>";

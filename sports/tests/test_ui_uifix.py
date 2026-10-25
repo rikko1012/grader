@@ -436,7 +436,7 @@ def test_slip_studio_ranks_by_expected_return_and_labels_it(browser):
     assert "#1" in first and "Expected return at the published payout - research estimate: 1.18x" in first
     second = page.locator(".ss-card").nth(1).inner_text()
     assert "not shown" in second and "0.85x" in second
-    # (#12 raw stat key check below)
+    assert "three_points_made" not in res and "3-pointers made" in res      # #12: no raw stat key on a leg
     low = res.lower()
     assert "roi" not in low and "profit:" not in low
     assert not errors, errors
