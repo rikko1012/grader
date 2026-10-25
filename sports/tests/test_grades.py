@@ -191,3 +191,85 @@ def test_no_raw_gp_band_text_in_member_scripts():
     for p in WEB.glob("*.js"):
         txt = p.read_text(encoding="utf-8")
         assert not re.search(r"['\"]gp_band:", txt), p.name           # raw codes are filtered, letters rendered
+
+
+# ------------------------------------------------------------------------------------- rendered (ui_mock harness)
+@pytest.fixture(scope="module")
+def browser():
+    sync = pytest.importorskip("playwright.sync_api")
+    with sync.sync_playwright() as p:
+        try:
+            b = p.chromium.launch()
+        except Exception as e:                               # noqa: BLE001 - no browser binary on this machine
+            pytest.skip(f"chromium not available: {e}")
+        yield b
+        b.close()
+
+
+def _page(browser, answers):
+    from sports.tests import ui_mock
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900}, base_url=ui_mock.BASE)
+    page = ctx.new_page()
+    return ctx, page, ui_mock.install(page, answers)
+
+
+def test_slip_leg_and_my_picks_render_the_letter(browser):
+    from sports.tests import test_ui_uifix as U
+    legs = [dict(U._leg(1, True), research_grade="A"), dict(U._leg(2, True), research_grade="Lean"), U._leg(3, True)]
+    pool_doc = dict(U.POOL_RESEARCH, legs=legs)
+    ctx, page, errors = _page(browser, U._slips_api(pool_doc))
+    U._open_slips(page)
+    page.click("#ss-build")
+    page.wait_for_selector(".ss-card")
+    gs = [g.inner_text().strip() for g in page.locator(".ss-card .sw-grade").all()]
+    assert gs == ["A Over", "Lean Over"], gs
+    assert "research grade" in page.locator(".ss-card").first.inner_text().lower()
+    assert not errors, errors
+    ctx.close()
+
+    def mine(q):
+        d = U._mine(q)
+        d["picks"] = [dict(p, grade_shown="B" if i == 0 else None) for i, p in enumerate(d["picks"])]
+        d["by_grade"] = {"label": picks.GRADE_TABLE_LABEL, "rule": "rg-1", "ungraded": 1,
+                         "rows": [{"grade": g, "picks": 1 if g == "B" else 0, "n": 1 if g == "B" else 0,
+                                   "wins": 1 if g == "B" else 0, "losses": 0, "pushes": 0,
+                                   "hit_rate": 1.0 if g == "B" else None, "hit_rate_ci95_games": None}
+                                  for g in ("A", "B", "C", "Lean")]}
+        return d
+    ctx, page, errors = _page(browser, {"/api/sports/picks/mine": mine,
+                                        "/api/sports/manifest": {"models": [], "platforms": {}}})
+    page.goto("/sports#/picks?lg=nba")
+    page.wait_for_selector(".sw-mp-grades")
+    body = page.locator("#sw-main").inner_text()
+    assert "Hit rate by grade" in body and "research grade - not validated" in body.lower()
+    page.locator('[data-mptab="settled"]').click()
+    assert page.locator(".sw-mp-row .sw-grade").first.inner_text().strip() == "B Over"
+    assert "gp_band:" not in body
+    assert not errors, errors
+    ctx.close()
+
+
+def test_board_table_renders_letter_banner_and_nfl_label(browser):
+    from sports.tests import test_ui_uifix as U
+    ctx, page, errors = _page(browser, U._app_api())
+    page.goto("/sports#/slate?lg=nba")
+    page.wait_for_selector(".sw-game")
+    html = page.evaluate("""() => {
+      const T = new Date(Date.now() - 60000).toISOString();
+      const ev = {start_utc: "2099-01-01T00:00:00Z"};
+      const q = (r, x) => ({r, p: "underdog", l: 20.5, o: [1, 1], t: T, f: "f1", x});
+      const m = (k, x) => ({k, pid: "nba:player:espn:" + k, n: "Player " + k, st: "points", e: "e" + k, ev, kn: [], q: [q("r" + k, x)]});
+      const B = {fc: {f1: {id: "f1", m: "sm-1", mu: 25, po: 0.62, pu: 0.38, pp: 0, at: T}}, view: {}, stats: {points: "Points"}, events: {}};
+      const rows = [m("1", {v: "cf-2", ln: "over", pl: 0.62, gr: "A", e: 5, s: 5, c: 3, cw: [], n: 2}),
+                    m("2", {v: "cf-2", ln: "over", pl: 0.62, gr: "Lean", c: null, cw: [], n: 2, nv: "NFL model not validated"}),
+                    m("3", {b: "ratio_low", t: "Held: projection is under 25% of the line", v: "sg-1"})];
+      return SportsTable.html({lg: "nba", B, rows, href: () => "#", bookName: (p) => p, now: Date.now()}, {sort: "player"});
+    }""")
+    page.set_content("<div class='sw'>" + html + "</div>")
+    leans = [c.inner_text().strip() for c in page.locator(".sw-tb-leanc").all()]
+    assert leans[0].startswith("A Over") and "research grade" in leans[0].lower(), leans
+    assert leans[1].startswith("Lean Over") and "nfl model not validated" in leans[1].lower(), leans
+    assert leans[2].startswith("Held") and page.locator(".sw-tb-leanc").nth(2).locator(".sw-grade").count() == 0
+    assert page.locator(".sw-tb-row").nth(1).locator(".sw-tb-edge").inner_text().strip() == "—"
+    assert not errors, errors
+    ctx.close()
