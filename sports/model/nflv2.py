@@ -592,7 +592,8 @@ def book_rows(hcon, shadow_path=None, freeze_at=None):
     con.close()
     last = {}
     for r in rows:
-        if r[3] not in TARGETS or (freeze_at and (r[5] or "") <= freeze_at):
+        # target books only; H2 games only; and (REGISTER 9) only forecasts made after the freeze
+        if r[3] not in TARGETS or (freeze_at and ((r[5] or "") <= freeze_at or (r[4] or "") <= freeze_at)):
             continue
         k = (r[10], r[11], r[1], float(r[2]))
         if k not in last or r[4] > last[k][4]:

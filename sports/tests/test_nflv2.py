@@ -268,3 +268,32 @@ def test_second_recorder_does_not_wait_on_the_sm2_recorders_lock(tmp_path, monke
     assert time.time() - t < 5 and rec.con is not None
     rec.close()
     sm2.close()
+
+
+def test_book_rows_last_prestart_target_forecast_after_freeze_pushes_excluded(tmp_path):
+    hcon = datasets.connect(tmp_path / "h.db")
+    for g, y in (("G1", 60.0), ("G2", 40.0)):
+        hcon.execute("INSERT INTO games (league, game_id, start_utc, status) VALUES ('nfl', ?, '2026-11-01T18:00:00Z', "
+                     "'final')", (g,))
+        hcon.execute("INSERT INTO nfl_pg (game_id, player_id, rec_yds) VALUES (?, 'p', ?)", (g, y))
+    hcon.commit()
+    con = nflv2._db(tmp_path / "shadow.db")
+
+    def put(sid, game, platform, fat, line, po):
+        con.execute("INSERT INTO shadow_forecasts (shadow_id, model_version, league, stat, platform, line, forecast_at, "
+                    "event_start, projection_mean, p_over, p_under, p_push) VALUES (?, 'sm-nfl-2', 'nfl', 'rec_yds', ?, "
+                    "?, ?, '2026-11-01T18:00:00Z', 50, ?, ?, 0)", (sid, platform, line, fat, po, 1 - po))
+        con.execute("INSERT INTO shadow_inputs (shadow_id, model_version, ds1_game_id, ds1_player_id, sm1_p_over, "
+                    "sm1_p_under, sm1_p_push) VALUES (?, 'sm-nfl-2', ?, 'p', 0.4, 0.6, 0)", (sid, game))
+    put("a", "G1", "prizepicks", "2026-10-31T10:00:00Z", 55.5, 0.40)
+    put("b", "G1", "prizepicks", "2026-11-01T16:00:00Z", 55.5, 0.45)      # later pre-start forecast wins
+    put("c", "G1", "fanduel", "2026-11-01T16:00:00Z", 54.5, 0.50)         # not a target book
+    put("d", "G1", "underdog", "2026-11-01T19:00:00Z", 53.5, 0.50)        # after the start
+    put("e", "G2", "underdog", "2026-10-20T10:00:00Z", 35.5, 0.50)        # made before the freeze
+    put("f", "G2", "underdog", "2026-11-01T10:00:00Z", 40.0, 0.50)        # push (y = line) - excluded
+    con.commit()
+    con.close()
+    rows = nflv2.book_rows(hcon, tmp_path / "shadow.db", "2026-10-25T05:04:47Z")
+    assert list(rows) == ["rec_yds"] and len(rows["rec_yds"]) == 1
+    r, = rows["rec_yds"]
+    assert r["p_over"] == 0.45 and r["line"] == 55.5 and r["y"] == 60.0 and r["sm1_p_over"] == 0.4

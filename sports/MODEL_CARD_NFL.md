@@ -168,3 +168,7 @@ nflverse weekly player stats + snap counts + play-by-play 2022-2026 (2026 throug
   history - 21% of rec_yds PMF mass sits at <= 25% of the line (history: 25%), which the market prices out for a
   player expected to play his full role, (3) the rush_att / pass_yds under-forecast above. Fixing (2) / (3) is a
   model change: a new version through REGISTER.md (held-out test first), not done silently.
+
+- **Follow-up (2026-10-25):** challenger sm-nfl-2 (REGISTER A6: participation split + cal-2) - tune results, post-hoc
+  diagnostic and shadow state in `sports/MODEL_CARD_SMNFL2.md`. pass_yds / rec_yds / rec in shadow, rush markets
+  dropped on tune; held-out H2 is forward only (0 / 48 games); NFL stays contained.
