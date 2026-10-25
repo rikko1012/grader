@@ -144,3 +144,64 @@ def test_slip_studio_zero_picks_is_a_clear_locked_state(browser):
     assert not page.locator("#ss-research").is_visible()
     assert not errors, errors
     ctx.close()
+
+
+# ------------------------------------------------------------------------------------ My picks (bug 6)
+def _pick(i, lg, status=None, test=False):
+    return {"pick_id": f"pk{i}", "tracked_at": "2026-10-23T20:00:00Z", "league": lg, "platform": "underdog",
+            "player": f"{lg.upper()} Player {i}", "stat": "points", "stat_label": "Points", "line": 20.5, "side": "over",
+            "record_id": f"offer:underdog:ud:{i}:r1:abc", "p_side": 0.55, "displayed_source": "scout_forecast",
+            "model_version": "sm-1", "forecast_id": f"fc-{i}", "stake_units": 0, "test": test, "validation_text": "Projection only",
+            "result": None if status is None else {"status": status, "outcome": status, "value": 22, "revision": 1,
+                                                    "settled_at": "2026-10-24T05:00:00Z", "corrected": False}}
+
+
+def _mine(q):
+    lg = q.get("league")
+    nba = [_pick(1, "nba", "win"), _pick(2, "nba", "loss"), _pick(3, "nba")]
+    nfl = [_pick(4, "nfl", "win"), _pick(9, "nfl", None, test=True)]          # a stray test row: never listed
+    ps = nba if lg == "nba" else nfl if lg == "nfl" else nba + nfl
+    return {"version": "pk-1", "picks": ps, "total": len(ps), "shown": len(ps), "stake_units": 0, "hidden_test": 1,
+            "record": {"nba": {"win": 1, "loss": 1, "push": 0, "void": 0, "open": 1, "decided": 2, "hit_rate": 0.5},
+                       "nfl": {"win": 1, "loss": 0, "push": 0, "void": 0, "open": 0, "decided": 1, "hit_rate": 1.0}}}
+
+
+def test_my_picks_follows_the_league_toggle_and_hides_test_rows(browser):
+    ctx, page, errors = _page(browser, {"/api/sports/picks/mine": _mine, "/api/sports/manifest": {"models": [], "platforms": {}}})
+    page.goto("/sports#/picks?lg=nba")
+    page.wait_for_selector(".sw-mp-rec")
+    body = page.locator("#sw-main").inner_text()
+    assert "NBA 1-1-0" in body and "NFL 1-0-0" in body and "hit rate 50.0% (n = 2)" in body
+    assert "NFL Player" not in body and "1 test record is not shown" in body
+    assert "$" not in body and "EV" not in body and "profit" not in body.lower()
+    page.click("#sw-league button[data-lg=nfl]")
+    page.wait_for_function("document.querySelector('#sw-main').innerText.indexOf('NFL Player 4') >= 0 || "
+                           "document.querySelector('#sw-main').innerText.indexOf('Settled') >= 0")
+    page.wait_for_selector(".sw-mp-rec")
+    body = page.locator("#sw-main").inner_text()
+    assert "NBA Player" not in body and "NFL Player 9" not in body
+    assert page.locator(".sw-mp-cur").inner_text().startswith("NFL")
+    assert not errors, errors
+    ctx.close()
+
+
+def test_my_picks_api_filters_league_and_hides_test_unless_admin(monkeypatch, tmp_path):
+    from sports import picks
+    from sports.tests.test_picks import _req as preq, _call as pcall  # noqa: F401
+    monkeypatch.setattr(picks, "db_path", lambda: tmp_path / "picks.db")
+    pc = picks.connect()
+    mh = picks.member_hash("m_test")
+    for i, (lg, scratch) in enumerate([("nba", False), ("nfl", False), ("nfl", True)]):
+        payload = {"pick_id": f"p{i}", "tracked_at": f"2026-10-23T20:0{i}:00Z", "league": lg, "platform": "underdog",
+                   "line": 20.5, "side": "over", "record_id": f"r{i}", "scratch": scratch}
+        pc.execute("INSERT INTO picks (pick_id, member, tracked_at, league, platform, offer_id, record_id, side, line, payload) "
+                   "VALUES (?,?,?,?,?,?,?,?,?,?)", (f"p{i}", mh, payload["tracked_at"], lg, "underdog", f"o{i}", f"r{i}",
+                                                     "over", 20.5, json.dumps(payload)))
+    pc.commit()
+    m = picks.mine(pc, "m_test", league="nba")
+    assert [p["league"] for p in m["picks"]] == ["nba"] and m["hidden_test"] == 0
+    m = picks.mine(pc, "m_test", league="nfl")
+    assert [p["pick_id"] for p in m["picks"]] == ["p1"] and m["hidden_test"] == 1
+    assert m["record"]["nfl"]["open"] == 1 and m["record"]["nba"]["open"] == 1           # test row never in the record
+    assert [p["pick_id"] for p in picks.mine(pc, "m_test", league="nfl", include_test=True)["picks"]] == ["p2", "p1"]
+    pc.close()

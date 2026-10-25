@@ -1,0 +1,3 @@
+/* uifix (owner audit 2026-10-24) - every rule under body.sw / .sw, so nothing reaches an esports page or Slip Studio's ss- rules. */
+.sw .sw-mp-rec span{padding:2px 8px;border-radius:8px}
+.sw .sw-mp-rec .sw-mp-cur{background:var(--panel-2);box-shadow:inset 0 -2px 0 var(--accent)}

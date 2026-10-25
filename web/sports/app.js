@@ -432,7 +432,7 @@
   }
   // HOOK (ux agent): My picks (#/picks) is web/sports/picks.js (SportsPicks.renderMine) on /api/sports/picks/mine.
   function renderPicks() {
-    window.SportsPicks.renderMine({main: main, api: Api, src: src, stateBox: stateBox, fail: fail, skeleton: skeleton,
+    window.SportsPicks.renderMine({main: main, api: Api, src: src, league: state.lg, stateBox: stateBox, fail: fail, skeleton: skeleton,
       resetSrc: function () { SRC = []; },
       loadModels: function () {                       // model validation progress per league (manifest model counts)
         return Promise.all(["nba", "nfl"].map(function (lg) {

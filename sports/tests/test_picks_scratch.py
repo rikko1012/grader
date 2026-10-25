@@ -44,6 +44,7 @@ def test_test_picks_are_tagged_and_kept_out_of_member_measurement(tw, monkeypatc
     agg = picks.aggregate(pc)
     assert agg["all"]["picks"] == 1 and agg["all"]["members"] == 1 and agg["test"]["picks"] == 3
     assert sum(g["picks"] for g in agg["by"]["platform"].values()) == 1
-    mine = picks.mine(pc, "m_owner")["picks"]
+    assert picks.mine(pc, "m_owner")["picks"] == [] and picks.mine(pc, "m_owner")["hidden_test"] == 1   # hidden by default
+    mine = picks.mine(pc, "m_owner", include_test=True)["picks"]
     assert len(mine) == 1 and mine[0]["test"] is True
     pc.close()
