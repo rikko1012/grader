@@ -12,6 +12,8 @@ configs: off | inprocess-enabled | {service,proxy}-{enabled,ingesting,failing,br
   SPORTS_BOARD_CACHE_*, SPORTS_CACHE_MAX, SPORTS_GZIP_CACHE_MB, SPORTS_CHILD_BUDGET_MB passed through) with a CPU-heavy
   job (UI snapshot build, in a loop) running beside it at low priority; LOAD_PIN=<core> pins the service, its
   children and the job to ONE core (Render Starter has 0.5 CPU - one local core is the closest stand-in)
+  twojobs (2026-10-25, Standard plan): service-twojobs = one league's board build looped + the store writer (the
+  other league's collector stand-in) at once, both low priority; with LOAD_PIN all on one core (Standard = 1 CPU)
   failing = sports service process DOWN; broken = service up on a corrupt store (every query raises).
 Each run appends one JSON line to out.jsonl. 700 simultaneous members; each makes the foundation's 3 esports requests,
 plus (sports on) its sports traffic: service = token (esports) + 1 sports request to the service; proxy / inprocess =
@@ -85,7 +87,7 @@ class Procs:
     def __init__(self, code, cfg, store_dir, work):
         self.code, self.cfg, self.store_dir, self.work = code, cfg, store_dir, work
         self.mode, _, self.scenario = cfg.partition("-")
-        self.esp = self.svc = self.ing = None
+        self.esp = self.svc = self.ing = self.ing2 = None
         self.svc_port = _free_port()
 
     def env(self):
@@ -159,7 +161,7 @@ class Procs:
                 time.sleep(0.5)
         return up
 
-    def start_job_loop(self):
+    def start_job_loop(self, leagues=("nba", "nfl")):
         """A CPU-heavy worker job (UI snapshot build, ~5-8 s, 135-168 MB) repeated for the whole run, low priority -
         as the scheduler runs it. Stopped with the other processes."""
         e = self.env()
@@ -167,14 +169,14 @@ class Procs:
                   "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1"})
         loop = ("import subprocess, sys\n"
                 "while True:\n"
-                "    subprocess.run([sys.executable, '-m', 'sports.snapshots', 'build', 'nba', 'nfl'],"
+                f"    subprocess.run([sys.executable, '-m', 'sports.snapshots', 'build', {', '.join(repr(x) for x in leagues)}],"
                 " stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n")
         kw = {"creationflags": getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)} if os.name != "posix" else {}
         self.ing = subprocess.Popen([sys.executable, "-c", loop], cwd=self.code, env=e, stdin=subprocess.DEVNULL, **kw)
         time.sleep(3)
 
     def pin(self, core):
-        for p in (self.svc, self.ing):
+        for p in (self.svc, self.ing, self.ing2):
             if not p:
                 continue
             try:
@@ -191,8 +193,21 @@ class Procs:
                                     stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
         time.sleep(3)                                      # writer warmed and committing
 
+    def start_two_jobs(self):
+        """Standard plan (2026-10-25, 2 GB / 1 CPU): the scheduler may run two heavy children at once - one league's
+        board build (looped) beside the other league's collector (the synthetic store writer stands in, no network),
+        both at low priority."""
+        self.start_job_loop(("nba",))
+        build = self.ing
+        kw = {"creationflags": getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)} if os.name != "posix" else {}
+        self.ing2 = subprocess.Popen([sys.executable, str(HERE / "load_sports_ingest.py"), self.code, self.sports_dir(),
+                                      "300", "0.5"], stdout=open(Path(self.work) / "ingest.out", "w"),
+                                     stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, **kw)
+        self.ing = build
+        time.sleep(3)
+
     def stop(self):
-        for p in (self.ing, self.svc, self.esp):
+        for p in (self.ing, self.ing2, self.svc, self.esp):
             if p and p.poll() is None:
                 p.kill()
                 p.wait(10)
@@ -356,6 +371,8 @@ def run_one(code, store_dir, cfg, seed):
             P.start_ingest()
         if P.scenario == "starterjob":
             P.start_job_loop()
+        if P.scenario == "twojobs":
+            P.start_two_jobs()
         if os.environ.get("LOAD_PIN"):
             P.pin(int(os.environ["LOAD_PIN"]))
         for _ in range(20):                                # warm (same as the foundation script)

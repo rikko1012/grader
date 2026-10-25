@@ -148,6 +148,16 @@ smaller jobs that fit start, a waiting exclusive job holds everything behind it.
 BELOW_NORMAL, `oom_score_adj` 900 (the kernel kills a child before the service), single-thread BLAS,
 `MALLOC_ARENA_MAX=2`; an RSS watchdog (0.25 s) kills it above its cap.
 
+**Plan-aware sizing (2026-10-25, Standard 2 GB / 1 CPU).** The plan size is `SPORTS_MEMORY_MB`, else the container's
+cgroup memory limit, else 512 (ops `scheduler.memory_mb` / `memory_source` show which). From it:
+reservation total = 75% of the plan minus the service's ~70 MB (512 -> 314, 2048 -> 1466; `SPORTS_CHILD_BUDGET_MB`
+overrides); every cap in the table below is the Starter-measured cap x min(plan / 512, 7/3) (2 GB: board builds
+300 -> 700, collectors 300 -> 700, model jobs 340 -> 793; `SPORTS_JOB_<NAME>_CAP_MB` still overrides); heavy children at
+once = 2 from 1.5 GB (`SPORTS_MAX_HEAVY` overrides), and two run together only when both declare their store write
+locks, share none and are not one league's collector beside the same league's board build - in practice one
+league's board build beside the other league's collector (at 2 GB the collectors are heavy, not exclusive). Model /
+lab jobs stay exclusive. Jobs without declared locks still run one heavy at a time.
+
 Peak RSS measured 2026-10-24 on a copy of the real data (each job alone, `scripts/load_sports_jobs.py`; results in
 `sports/research/results/starter_2026-10-24/`). Memory of the store-reading jobs grows with the data (see 13.4).
 

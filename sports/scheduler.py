@@ -50,8 +50,66 @@ def _env_num(name, default, cast=float):
         return cast(default)
 
 
-def budget_mb():
-    return _env_num("SPORTS_CHILD_BUDGET_MB", 310, int)
+# ------------------------------------------------------------------------------------------------ plan-aware memory
+# The plan (fresh 2026-10-25): Starter 512 MB / 0.5 CPU, Standard 2 GB / 1 CPU. The caps below were measured on
+# Starter; on a larger plan they scale by cap_scale() (at most x CAP_SCALE_MAX, so a board build is capped at 700 MB on
+# 2 GB), the children's reservation total is ~75% of the plan minus the service's own working set, and two heavy
+# jobs may run at once when they share no store write lock (max_heavy).
+BASE_MEMORY_MB = 512
+SERVICE_MB = 70                     # the service process itself (prod rss 69 MB at 700-member load, 2026-10-24)
+CAP_SCALE_MAX = 7.0 / 3.0           # 300 MB board build -> 700 MB at 2 GB
+
+
+def _cgroup_limit_mb():
+    """The container's memory limit (cgroup v2 memory.max / v1 memory.limit_in_bytes) in MB, None when unreadable or
+    unlimited."""
+    for path in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            with open(path) as f:
+                raw = f.read().strip()
+        except OSError:
+            continue
+        if not raw.isdigit():
+            continue                                    # "max" = no limit
+        mb = int(raw) / (1024 * 1024)
+        if 128 <= mb < 1024 * 1024:                     # v1 reports ~8 EB when unlimited
+            return int(mb)
+    return None
+
+
+def memory_mb():
+    """SPORTS_MEMORY_MB, else the cgroup limit, else 512 (Starter)."""
+    v = os.environ.get("SPORTS_MEMORY_MB", "").strip()
+    if v:
+        try:
+            return max(256, int(float(v)))
+        except ValueError:
+            pass
+    return _cgroup_limit_mb() or BASE_MEMORY_MB
+
+
+def memory_source():
+    if os.environ.get("SPORTS_MEMORY_MB", "").strip():
+        return "SPORTS_MEMORY_MB"
+    return "cgroup" if _cgroup_limit_mb() else "default 512"
+
+
+def cap_scale(mem=None):
+    mem = memory_mb() if mem is None else mem
+    return max(1.0, min(CAP_SCALE_MAX, mem / BASE_MEMORY_MB))
+
+
+def max_heavy(mem=None):
+    """Heavy children at once: 2 from 1.5 GB (Standard), else 1. SPORTS_MAX_HEAVY overrides."""
+    mem = memory_mb() if mem is None else mem
+    return _env_num("SPORTS_MAX_HEAVY", 2 if mem >= 1536 else 1, int)
+
+
+def budget_mb(mem=None):
+    """Reservation total of all children: ~75% of the plan minus the service (512 -> 314 ~ the former 310;
+    2048 -> 1466). SPORTS_CHILD_BUDGET_MB overrides."""
+    mem = memory_mb() if mem is None else mem
+    return _env_num("SPORTS_CHILD_BUDGET_MB", int(mem * 0.75) - SERVICE_MB, int)
 
 
 def _py(*args):
@@ -68,13 +126,14 @@ def default_jobs():
                           timeout_s=300, flag="SPORTS_ASSISTANT", cap_mb=120, cls=LIGHT, prio=0),
         # what members read
         "prebuilt": dict(argv=_py("-m", "sports.service", "snapshots"), every_s=90, timeout_s=120, flag="SPORTS_API",
-                         cap_mb=160, cls=HEAVY, prio=1),                       # 105-109 MB (slim slip pool)
+                         cap_mb=160, cls=HEAVY, prio=1, locks=("prebuilt",)),  # 105-109 MB (slim slip pool)
         # the board build, ONE PROCESS PER LEAGUE (fresh 2026-10-24): both leagues in one process were killed at
         # 251-265 MB in production; an NFL week alone measured 137 MB on one live read of every board (17k offers),
         # NBA 90 MB. Cap 300 = the envelope the exclusive model jobs already run in (340): with it reserved no other
         # heavy child and no light child fits the 310 MB budget, so service (~70) + build stays near 370 of 512 MB.
         **{f"ui-snapshots-{x}": dict(argv=_py("-m", "sports.snapshots", "build", x, "--no-results"), every_s=180,
-                                     timeout_s=240, flag="SPORTS_INGEST", cap_mb=300, cls=HEAVY, prio=2) for x in lg},
+                                     timeout_s=240, flag="SPORTS_INGEST", cap_mb=300, cls=HEAVY, prio=2,
+                                     league=x, locks=(f"snapshots:{x}",)) for x in lg},
         "sheets": dict(argv=_py("-m", "sports.sheets", "build", *lg), every_s=300, timeout_s=300,
                        flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=3),   # 67 / 126 / 26 MB measured (synthetic 400-player league)
         "mapping-audit": dict(argv=_py("-m", "sports.mapping_audit", *lg), every_s=3600, timeout_s=240,
@@ -89,12 +148,13 @@ def default_jobs():
                                         "espn,pp,ud,injuries,oddsapi,polymarket,books,games"),
                                every_s=900, cadence=("gameday", (x,)), then=(f"ui-snapshots-{x}",), collector=True,
                                timeout_s=900, flag="SPORTS_INGEST", cap_mb=300, cls=EXCLUSIVE, prio=3,
+                               league=x, locks=("canonical", "books", "games", "cache"),
                                env={"SPORTS_WORKER_CONCURRENCY": "1"}) for x in lg},   # 191-197 MB both leagues
         "ingest-kalshi": dict(argv=_py("-m", "sports.worker", "ingest", *lg, "--bucket-min", "1", "--sources",
                                        "kalshi"),
                               every_s=3600, cadence=("kalshi", tuple(lg)), then=tuple(f"ui-snapshots-{x}" for x in lg),
                               timeout_s=900, flag="SPORTS_INGEST", cap_mb=240, cls=HEAVY, prio=3,
-                              env={"SPORTS_WORKER_CONCURRENCY": "1"}),         # 70-84 MB (production 2026-10-25)
+                              locks=("canonical", "cache"), env={"SPORTS_WORKER_CONCURRENCY": "1"}),         # 70-84 MB (production 2026-10-25)
         "settle": dict(argv=_py("-m", "sports.worker", "settle", *lg), every_s=3600, timeout_s=900,
                        flag="SPORTS_INGEST", cap_mb=120, cls=HEAVY, prio=4),   # 58 MB
         "picks-ingest": dict(argv=_py("-m", "sports.picks", "ingest"), every_s=60, timeout_s=120,
@@ -136,8 +196,12 @@ def default_jobs():
         "archive-verify": dict(argv=_py("-m", "sports.archive", "verify"), every_s=86400, timeout_s=1800,
                                flag="SPORTS_INGEST", cap_mb=120, cls=HEAVY, prio=8),
     }
+    scale, two = cap_scale(), max_heavy() >= 2
     for name, spec in J.items():
         key = "SPORTS_JOB_" + name.upper().replace("-", "_")
+        spec["cap_mb"] = int(round(spec["cap_mb"] * scale))
+        if two and spec.get("collector"):               # a collector may run beside the OTHER league's board build
+            spec["cls"] = HEAVY
         if spec["every_s"] is not None:
             spec["every_s"] = _env_num(key + "_EVERY_S", spec["every_s"])
             if os.environ.get(key + "_EVERY_S"):        # an explicit override pins the interval (no game-day cadence)
@@ -292,11 +356,12 @@ def cadence_every(cadence, now_ts, snap_root=None):
 # ---------------------------------------------------------------------------------------------------- scheduler
 class Scheduler:
     def __init__(self, jobs=None, budget=None, now=time.time, tick_s=TICK_S, triggers=None, aging_s=None,
-                 snap_root=None):
+                 snap_root=None, max_heavy_n=None):
         self.specs = jobs if jobs is not None else default_jobs()
         self.snap_root = snap_root
         self._cad = {}                                  # cadence -> (computed_at, every_s): re-read every 30 s
         self.budget = budget if budget is not None else budget_mb()
+        self.max_heavy = max_heavy_n if max_heavy_n is not None else max_heavy()
         self.now = now
         self.tick_s = tick_s
         self.aging_s = aging_s if aging_s is not None else _env_num("SPORTS_JOB_AGING_S", 120.0)
@@ -320,6 +385,15 @@ class Scheduler:
     def reserved(self):
         return sum(self.specs[n]["cap_mb"] for n in self.running)
 
+    @staticmethod
+    def _pairable(a, b):
+        """Two heavy specs may run together: both declare their store write locks, share none, and are not one
+        league's collector beside that SAME league's board build (the build follows the cycle - 'then')."""
+        la, lb = a.get("locks"), b.get("locks")
+        if not la or not lb or set(la) & set(lb):
+            return False
+        return not (a.get("league") and a.get("league") == b.get("league"))
+
     def _fits(self, name):
         spec = self.specs[name]
         classes = [self.specs[n]["cls"] for n in self.running]
@@ -327,8 +401,10 @@ class Scheduler:
             return False
         if spec["cls"] == EXCLUSIVE:
             return not self.running
-        if spec["cls"] == HEAVY and HEAVY in classes:
-            return False
+        if spec["cls"] == HEAVY:
+            heavy = [self.specs[n] for n in self.running if self.specs[n]["cls"] == HEAVY]
+            if len(heavy) >= self.max_heavy or not all(self._pairable(spec, h) for h in heavy):
+                return False
         return self.reserved() + spec["cap_mb"] <= self.budget
 
     def every(self, name):
@@ -484,4 +560,6 @@ class Scheduler:
 def state():
     with _LOCK:
         s = dict(STATS)
-    return {"budget_mb": budget_mb(), "stats": s, "jobs": {k: dict(v) for k, v in JOBS.items()}}
+    mem = memory_mb()
+    return {"budget_mb": budget_mb(mem), "memory_mb": mem, "memory_source": memory_source(),
+            "cap_scale": round(cap_scale(mem), 3), "max_heavy": max_heavy(mem), "stats": s, "jobs": {k: dict(v) for k, v in JOBS.items()}}
