@@ -1757,8 +1757,11 @@ def scope_result(r, same_day_only=False):
         if d and d["action"] == "pending":
             return {"status": "pending", "reason": d["reason"], "rule": d["rule"], "platform": plat}
     ms = sorted(on, key=lambda x: x["number"])
-    maps = [{"number": x["number"], "kills": x["kills"], "headshots": x["headshots"], "won": x["won"]} for x in ms]
     sc = _col(r, "scope") or "12"
+    if any(x.get("partial") and x["number"] <= {"1": 1, "12": 2}.get(sc, 3) for x in ms):
+        # 2026-10-25 audit: a line map captured before it finished (stored rounds < final score) - wait, never settle on it
+        return {"status": "wait", "reason": "HLTV map scoreboard incomplete (captured before the map finished)"}
+    maps = [{"number": x["number"], "kills": x["kills"], "headshots": x["headshots"], "won": x["won"]} for x in ms]
     total, used = scope_total(maps, sc, r["prop"], best_of=best_of)
     if total is None and used == MAP3_NOT_PLAYED:
         return {"status": "void", "reason": used}      # Underdog voids Maps 1-3 when map 3 isn't played
