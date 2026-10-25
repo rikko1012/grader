@@ -1,0 +1,18 @@
+{
+ "artifact_sha": "05f7f75a46f61e85",
+ "data_as_of": "2026-10-25T05:04:43Z",
+ "files": {
+  "model_config_nflv2.json": {
+   "bytes": 126553,
+   "sha256": "b00708ab19120ddff96d85c467a225d7e4b8791bea2fe1d67200cde15bc5cc55"
+  },
+  "smnfl2_nfl.json": {
+   "bytes": 127670,
+   "sha256": "bc48934070323b422558f861a26db0242e04a89e56acbf3587f98bc4650445a7"
+  }
+ },
+ "freeze_at": "2026-10-25T05:04:47Z",
+ "held_out_H2": "every NFL game starting after freeze_at (REGISTER.md A6 3): box part once at >= 48 games; book part once per market at >= 150 props / 30 games",
+ "model_version": "sm-nfl-2",
+ "version": "nflv2-pkg-1"
+}
