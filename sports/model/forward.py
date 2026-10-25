@@ -289,6 +289,9 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
     icon = inputs_db()
     rec = _shadow_recorder(scon, hcon, league, forecast_at, absences, up)      # sm-2 SHADOW (REGISTER A5 7), never shown
     rec2 = _nflv2_recorder(scon, hcon, league, forecast_at, up, rec)           # sm-nfl-2 SHADOW (REGISTER A6 6)
+    tw = _tw1(league, art["sha"])                                             # tw-1 per-market layer (REGISTER A7 8)
+    if tw is not None:
+        out["tw1"] = {"sha": tw["sha"], "markets": sorted(tw["markets"])}
     cur_hl, df = None, None
     for mk in _ordered(league, art["markets"]):
         sh_items, sm1_probs = [], {}
@@ -306,10 +309,16 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
         lo, ks = dists.grid(mk)
         # each forecast's PMF is computed from its OWN saved row (pmf_from_row) - exactly the replay path, so a
         # replay is bit-identical (a batched matrix product rounds the last bit differently from a one-row one)
-        pmf_of = {}
+        pmf_of, base_of = {}, {}
+        tw_m = (tw or {}).get("markets", {}).get(mk)
         for i in upi:
             pmf_i, mu_i = pmf_from_row(am, _row_dict(df, i), mk, league)
-            pmf_of[(df["game_id"][i], df["player_id"][i])] = (pmf_i, mu_i, bool(el[i]))
+            gk_i = (df["game_id"][i], df["player_id"][i])
+            base_of[gk_i] = pmf_i                                  # frozen sm-1 (the shadows compare with this)
+            if tw_m:
+                pmf_i, _ = _tw1_layer(tw, mk, pmf_i, lo)
+                mu_i = float(dists.mean_of(pmf_i[None, :], ks)[0])
+            pmf_of[gk_i] = (pmf_i, mu_i, bool(el[i]))
         for rid, o in store.offers(scon, league=league, stat=mk, limit=500000):
             if o.platform not in TARGETS or (o.event_id, o.player_id) not in idmap:
                 continue
@@ -337,12 +346,16 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
                 codes.append("teammate_absence_unknown")
             data_version = "ds-1:" + _sha(row)[:16]
             written = []
-            fc, pol = build_forecast(o, rid, forecast_at, MODEL_VERSION, f"sm-1:{art['sha']}", pmf, lo, mean, (rid,),
-                                     codes, data_version, f"cal-1:{am['cal'][0]:g},{am['cal'][1]:g}",
-                                     (("family_fit", am["family"]),))
+            av, cv = f"sm-1:{art['sha']}", f"cal-1:{am['cal'][0]:g},{am['cal'][1]:g}"
+            if tw_m:                                     # tw-1 switched market (A7 8): exact version in the record
+                av, cv = f"{av}+tw-1:{tw['sha']}", _tw1_layer(tw, mk, base_of[gk], lo)[1]["calibration_version"]
+                codes.append("tw-1")
+            fc, pol = build_forecast(o, rid, forecast_at, MODEL_VERSION, av, pmf, lo, mean, (rid,),
+                                     codes, data_version, cv, (("family_fit", am["family"]),))
             written.append(("sm-1", fc, pol, pmf, {"row": row}))
             sh_items.append((rid, o, gk, pol.get("chosen_p")))
-            sm1_probs[rid] = (fc.p_over, fc.p_under, fc.p_push)
+            sm1_probs[rid] = (fc.p_over, fc.p_under, fc.p_push) if not tw_m else dists.line_probs(base_of[gk], lo,
+                                                                                                    o.line)
             # market candidates on the same offer
             per, reasons = market.eligible_quotes(o, quotes.get((o.event_id, o.player_id, o.stat), []), events,
                                                   forecast_at, dnp)
@@ -354,7 +367,7 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
                 mi = market.market_informed(pmf, lo, mean, per_c) if per_c else None
                 if mi is not None:
                     pmf_mi, cfac = mi
-                    fc2, pol2 = build_forecast(o, rid, forecast_at, MARKET_INFORMED_VERSION, f"sm-1:{art['sha']}",
+                    fc2, pol2 = build_forecast(o, rid, forecast_at, MARKET_INFORMED_VERSION, av,
                                                pmf_mi, lo, float(dists.mean_of(pmf_mi[None, :], ks)[0]),
                                                (rid,) + qids, ["market_informed", "sources:" + "+".join(sorted(per_c))],
                                                data_version, f"mi-1:c={cfac:.6f}")
@@ -399,6 +412,22 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
     if rec2 is not None:
         out["shadow_nflv2"] = rec2.close()
     return out
+
+
+def _tw1(league, sm1_sha):
+    """The verified tw-1 artifact for this league built for this sm-1 artifact, or None (no artifact / hash mismatch /
+    SPORTS_TUNE_TW1=0 / any error - sm-1 is then exactly as before)."""
+    try:
+        from . import tune
+        a = tune.load(league, sm1_sha)
+        return a if a and a.get("markets") else None
+    except Exception:                                    # noqa: BLE001
+        return None
+
+
+def _tw1_layer(tw, market, pmf, lo):
+    from . import tune
+    return tune.layer(tw, market, pmf, lo)
 
 
 def _nflv2_recorder(scon, hcon, league, forecast_at, up, rec=None):
@@ -480,15 +509,24 @@ def replay(forecast_id, scon=None):
     pmf, mean = pmf_from_row(art["markets"][r["market"]], row, r["market"], r["league"])
     am = art["markets"][r["market"]]
     lo, ks = dists.grid(r["market"])
+    av, cv = f"sm-1:{art['sha']}", f"cal-1:{am['cal'][0]:g},{am['cal'][1]:g}"
+    if "+tw-1:" in (orig.artifact_version or ""):                  # tw-1 switched market (REGISTER A7 8)
+        from . import tune
+        tw = tune.load(r["league"], art["sha"])
+        if tw is None or tw["sha"] != orig.artifact_version.split("+tw-1:")[1] or r["market"] not in tw["markets"]:
+            raise RuntimeError("tw-1 artifact changed since this forecast (replay needs the saved version)")
+        pmf, meta = tune.layer(tw, r["market"], pmf, lo)
+        mean = float(dists.mean_of(pmf[None, :], ks)[0])
+        av, cv = f"{av}+tw-1:{tw['sha']}", meta["calibration_version"]
     if r["model_version"] == MODEL_VERSION:
-        fc, _ = build_forecast(offer, r["offer_record_id"], r["forecast_at"], MODEL_VERSION, f"sm-1:{art['sha']}", pmf,
+        fc, _ = build_forecast(offer, r["offer_record_id"], r["forecast_at"], MODEL_VERSION, av, pmf,
                                lo, mean, (r["offer_record_id"],), list(_codes(orig)), "ds-1:" + _sha(row)[:16],
-                               f"cal-1:{am['cal'][0]:g},{am['cal'][1]:g}", (("family_fit", am["family"]),), vstate)
+                               cv, (("family_fit", am["family"]),), vstate)
     else:
         per = {k: tuple(v) for k, v in json.loads(r["market_json"]).items()}
         pmf_mi, cfac = market.market_informed(pmf, lo, mean, per)
         fc, _ = build_forecast(offer, r["offer_record_id"], r["forecast_at"], MARKET_INFORMED_VERSION,
-                               f"sm-1:{art['sha']}", pmf_mi, lo, float(dists.mean_of(pmf_mi[None, :], ks)[0]),
+                               av, pmf_mi, lo, float(dists.mean_of(pmf_mi[None, :], ks)[0]),
                                (r["offer_record_id"],) + tuple(v[0] for v in per.values()),
                                ["market_informed", "sources:" + "+".join(sorted(per))], "ds-1:" + _sha(row)[:16],
                                f"mi-1:c={cfac:.6f}", (), vstate)
