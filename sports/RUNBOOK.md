@@ -158,6 +158,21 @@ locks, share none and are not one league's collector beside the same league's bo
 league's board build beside the other league's collector (at 2 GB the collectors are heavy, not exclusive). Model /
 lab jobs stay exclusive. Jobs without declared locks still run one heavy at a time.
 
+**Standard cadences (code defaults when the plan is >= 1.5 GB, 2026-10-25; Starter in brackets):** collector per
+league 3 / 5 / 10 min near tip / game day / otherwise [5 / 10 / 15]; Kalshi 10 / 30 min [20 / 60]; board build per
+league every 60 s and right after each collector cycle [180 s]; slip pool 45 s [90 s]; settle (+ results ledger),
+picks-settle, slips-settle every 15 min [60 min]. Model-forward stays 30 min (exclusive: on 1 CPU a 15-min cycle
+would pause every other job ~20% of the time). The board build runs beside the OTHER league's collector, so pages keep
+updating while lines are collected.
+
+**Render env on scout-sports-api (Standard).** Coherent with the values saved from the cloud runbook:
+`SPORTS_MEMORY_MB=2048` (set it; the cgroup read is the fallback), `SPORTS_CHILD_BUDGET_MB=1200` (kept: it IS the
+reservation total; caps then scale x1.8 so a board build + collector pair, 540 + 540 MB, plus 120 MB of light jobs
+fit it), `SPORTS_HEAVY_SLOTS=2` (kept: read as SPORTS_MAX_HEAVY), `SPORTS_SERVICE_MAX_MB=400` (kept: the service's
+own drain-and-restart ceiling; 400 + 1200 = 1600 of 2048 MB). DELETE any `SPORTS_JOB_<NAME>_EVERY_S` left from Starter
+(`SPORTS_JOB_INGEST_EVERY_S`, `SPORTS_JOB_INGEST_KALSHI_EVERY_S`, `SPORTS_JOB_UI_SNAPSHOTS_EVERY_S`,
+`SPORTS_JOB_PREBUILT_EVERY_S`): an explicit interval pins that job and switches its game-day cadence off.
+
 Peak RSS measured 2026-10-24 on a copy of the real data (each job alone, `scripts/load_sports_jobs.py`; results in
 `sports/research/results/starter_2026-10-24/`). Memory of the store-reading jobs grows with the data (see 13.4).
 

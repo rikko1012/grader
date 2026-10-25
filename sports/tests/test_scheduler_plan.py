@@ -17,7 +17,7 @@ PY = sys.executable
 def clean(monkeypatch):
     monkeypatch.setenv("SPORTS_API", "1")
     monkeypatch.setattr(scheduler, "JOBS", {})
-    for k in ("SPORTS_CHILD_BUDGET_MB", "SPORTS_MAX_HEAVY"):
+    for k in ("SPORTS_CHILD_BUDGET_MB", "SPORTS_MAX_HEAVY", "SPORTS_HEAVY_SLOTS"):
         monkeypatch.delenv(k, raising=False)
 
 
@@ -34,22 +34,53 @@ def test_memory_source_order(monkeypatch):
 def test_budget_caps_and_heavy_slots_scale_with_the_plan(monkeypatch):
     assert (scheduler.budget_mb(512), scheduler.max_heavy(512), scheduler.cap_scale(512)) == (314, 1, 1.0)
     assert (scheduler.budget_mb(2048), scheduler.max_heavy(2048)) == (1466, 2)
-    assert abs(scheduler.cap_scale(2048) - 7 / 3) < 1e-9 and scheduler.cap_scale(8192) == scheduler.cap_scale(2048)
+    assert abs(scheduler.cap_scale(2048) - (1466 - 120) / 600) < 1e-9                  # the pair fits the budget
+    assert abs(scheduler.cap_scale(8192, budget=6000) - 7 / 3) < 1e-9                   # never above x7/3
     monkeypatch.setenv("SPORTS_LEAGUES", "nba nfl")
     monkeypatch.setenv("SPORTS_MEMORY_MB", "512")
     small = scheduler.default_jobs()
     assert small["ui-snapshots-nfl"]["cap_mb"] == 300 and small["ingest-nfl"]["cls"] == "exclusive"
     monkeypatch.setenv("SPORTS_MEMORY_MB", "2048")
     big = scheduler.default_jobs()
-    assert big["ui-snapshots-nba"]["cap_mb"] == big["ui-snapshots-nfl"]["cap_mb"] == 700
-    assert big["ingest-nba"]["cls"] == "heavy" and big["ingest-nba"]["cap_mb"] == 700
+    assert big["ui-snapshots-nba"]["cap_mb"] == big["ui-snapshots-nfl"]["cap_mb"] == 673
+    assert big["ingest-nba"]["cls"] == "heavy" and big["ingest-nba"]["cap_mb"] == 673
     assert big["model-forward"]["cls"] == "exclusive" and big["lab"]["cls"] == "exclusive"
-    # 25% headroom: service + every heavy pair that may co-run stays inside the plan
     assert scheduler.SERVICE_MB + scheduler.budget_mb(2048) <= 0.75 * 2048
     pair = big["ui-snapshots-nba"]["cap_mb"] + big["ingest-nfl"]["cap_mb"]
-    assert pair <= scheduler.budget_mb(2048)
+    assert pair + scheduler.LIGHT_RESERVE_MB <= scheduler.budget_mb(2048)
     monkeypatch.setenv("SPORTS_JOB_UI_SNAPSHOTS_NBA_CAP_MB", "650")             # an explicit cap still wins
     assert scheduler.default_jobs()["ui-snapshots-nba"]["cap_mb"] == 650
+
+
+def test_the_owners_saved_standard_env_is_coherent(monkeypatch):
+    """Render env saved from the cloud runbook (2026-10-25): SPORTS_CHILD_BUDGET_MB=1200, SPORTS_HEAVY_SLOTS=2. The
+    reservation total is honoured and the caps shrink so the board-build + collector pair still fits it."""
+    monkeypatch.setenv("SPORTS_MEMORY_MB", "2048")
+    monkeypatch.setenv("SPORTS_CHILD_BUDGET_MB", "1200")
+    monkeypatch.setenv("SPORTS_HEAVY_SLOTS", "2")
+    monkeypatch.setenv("SPORTS_LEAGUES", "nba nfl")
+    assert scheduler.budget_mb() == 1200 and scheduler.max_heavy() == 2
+    j = scheduler.default_jobs()
+    assert j["ui-snapshots-nba"]["cap_mb"] == j["ingest-nfl"]["cap_mb"] == 540
+    assert j["ui-snapshots-nba"]["cap_mb"] + j["ingest-nfl"]["cap_mb"] + scheduler.LIGHT_RESERVE_MB <= 1200
+    monkeypatch.setenv("SPORTS_HEAVY_SLOTS", "1")
+    assert scheduler.max_heavy() == 1 and scheduler.default_jobs()["ingest-nba"]["cls"] == "exclusive"
+
+
+def test_standard_plan_cadences(monkeypatch, tmp_path):
+    monkeypatch.setenv("SPORTS_LEAGUES", "nba nfl")
+    monkeypatch.setenv("SPORTS_MEMORY_MB", "2048")
+    j = scheduler.default_jobs()
+    assert j["prebuilt"]["every_s"] == 45 and j["ui-snapshots-nba"]["every_s"] == 60
+    assert j["settle"]["every_s"] == j["picks-settle"]["every_s"] == j["slips-settle"]["every_s"] == 900
+    assert j["model-forward"]["every_s"] == 1800                                 # exclusive: not tightened on 1 CPU
+    c = scheduler.cadence_settings()
+    assert (c["hot_s"], c["gameday_s"], c["idle_s"], c["kalshi_hot_s"], c["kalshi_idle_s"]) == (180, 300, 600, 600, 1800)
+    monkeypatch.setenv("SPORTS_MEMORY_MB", "512")
+    c = scheduler.cadence_settings()
+    assert (c["hot_s"], c["gameday_s"], c["idle_s"], c["kalshi_hot_s"], c["kalshi_idle_s"]) == (300, 600, 900, 1200, 3600)
+    j = scheduler.default_jobs()
+    assert j["prebuilt"]["every_s"] == 90 and j["ui-snapshots-nba"]["every_s"] == 180 and j["settle"]["every_s"] == 3600
 
 
 def _spec(cls, locks=None, league=None, s=1.0, prio=5):

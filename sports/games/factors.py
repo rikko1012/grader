@@ -590,6 +590,74 @@ def _nfl(db, data, ath, team_id, opp_id, start, market, out, missing):
     out["vacated_tgt_share"] = _r(vac, 3)
 
 
+# ------------------------------------------------------------------------------- defense vs position: allowed + rank
+
+def dvp_table(data, market):
+    """{"groups": {group: {team_id: {"allowed_pg", "n", "rank"}}}, "teams": N} for one market, memoised on `data`
+    (one pass over data.P per market per board; only small per-team numbers are kept).
+
+    For each DEFENDING team: n = its games in the engine window (data.window seasons, results in before as_of - the
+    LeagueData rule) with the stat recorded for at least one opposing player; allowed_pg = the stat summed over the
+    opposing players of the position group who played, / n (a game where the group recorded nothing counts as 0).
+    rank: 1 = fewest allowed .. N, among the N teams with n >= MIN_TEAM_GAMES; ties share the lowest rank
+    (competition ranking "1224", compared at 1e-9 so the order of rows never matters); None below the minimum."""
+    key = ("dvp_tab", market)
+    if key in data.memo:
+        return data.memo[key]
+    fam = data.lg["family"]
+    pos_map = POS_NBA if fam == "basketball" else POS_NFL
+    seen, tot = defaultdict(set), defaultdict(lambda: defaultdict(float))
+    for r in data.P:
+        if r["season"] not in data.window or r.get("played") != 1 or not r.get("opp_id"):
+            continue
+        v = data.stat(r, market)
+        if v is None:
+            continue
+        seen[r["opp_id"]].add(r["event_id"])
+        grp = pos_map.get(r.get("position") or "")
+        if grp:
+            tot[grp][r["opp_id"]] += v
+    n = {t: len(evs) for t, evs in seen.items()}
+    del seen
+    eligible = sorted(t for t, k in n.items() if k >= MIN_TEAM_GAMES[fam])
+    groups = {}
+    for grp in sorted(set(pos_map.values())):
+        allowed = {t: tot[grp].get(t, 0.0) / k for t, k in n.items()}
+        pool = [round(allowed[t], 9) for t in eligible]
+        groups[grp] = {t: {"allowed_pg": a, "n": n[t],
+                           "rank": (1 + sum(1 for x in pool if x < round(a, 9))) if t in eligible else None}
+                       for t, a in allowed.items()}
+    res = {"groups": groups, "teams": len(eligible)}
+    data.memo[key] = res
+    return res
+
+
+def _dvp_rank(data, ath, opp_id, market, out, missing):
+    """dvp_allowed_pg / dvp_rank / dvp_n / dvp_teams / dvp_group for the opponent vs this player's position group."""
+    if not markets.market(data.lg["family"], market):
+        return
+    pos_map = POS_NBA if data.lg["family"] == "basketball" else POS_NFL
+    g = data.player_games(ath)
+    grp = pos_map.get(next((r["position"] for r in reversed(g) if r.get("position")), "") or "")
+    if not grp:
+        missing["dvp_rank"] = "player's position is not in a defense-vs-position group"
+        return
+    tab = dvp_table(data, market)
+    row = tab["groups"].get(grp, {}).get(str(opp_id))
+    out["dvp_group"] = grp
+    if not row:
+        missing["dvp_rank"] = "opponent has no game with this stat in the window before as_of"
+        return
+    out["dvp_allowed_pg"] = _r(row["allowed_pg"], 2)
+    out["dvp_n"] = row["n"]
+    out["dvp_teams"] = tab["teams"]
+    if row["rank"] is None:
+        missing["dvp_rank"] = (f"opponent has {row['n']} games in the window, fewer than "
+                               f"{MIN_TEAM_GAMES[data.lg['family']]}")
+    else:
+        out["dvp_rank"] = row["rank"]
+
+
 def _weather(db, league, event_id, as_of, out, missing):
     w, _ = _snapshot(db, league, event_id, "weather", as_of)
     if not w:
@@ -629,6 +697,7 @@ def compute(db, data, athlete_id, team_id, opp_id, event_id, start, market, home
         _weather(db, league, event_id, data.as_of, out, missing)
     if data.games:
         _form(data, data.player_games(athlete_id), market, home, out)
+        _dvp_rank(data, athlete_id, opp_id, market, out, missing)
     _game_lines(db, league, event_id, team_id, home_id, away_id, data.as_of, out, missing)
     out["team_rating"] = _power(db, league, team_id, data.as_of)
     out["opp_rating"] = _power(db, league, opp_id, data.as_of)
