@@ -253,7 +253,15 @@ def test_feed_errors_reach_members_in_words_only(site):
         "rows": []})
     site.setattr(underdog, "board", lambda wait=False: {"at": 0.0, "rows": [], "error": "ConnectionError: HTTPSConnectionPool(host='api.underdogfantasy.com', port=443)"})
     pp, ud = server.board_payload("prizepicks"), server.board_payload("underdog")
-    txt = json.dumps([pp, ud])
+    # only the strings members can read: the payload also carries float timestamps, and a clock value such as
+    # 1792954321.7 contains "5432" (an intermittent false failure in CI, 2026-10-25)
+    def _strings(o):
+        if isinstance(o, dict):
+            return [x for v in o.values() for x in _strings(v)]
+        if isinstance(o, list):
+            return [x for v in o for x in _strings(v)]
+        return [o] if isinstance(o, str) else []
+    txt = " | ".join(_strings([pp, ud]))
     for bad in ("host=", "port", "5432", "db.x.com", "HTTPSConnectionPool", "partner-api", "underdogfantasy"):
         assert bad not in txt, bad
     assert pp["feed"]["error"] and ud["error"]                      # still says there is a problem
