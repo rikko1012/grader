@@ -91,3 +91,50 @@ cache, bounded 96 files / 48 MB); they never open the store.
   list for every member (the old picks stay in picks.db and in the admin aggregate).
 - The owner's browser token is a member token; the admin aggregate is read with the report script (admin token minted
   from the shared secret), not in the page.
+
+## Prop board table (board agent, 2026-10-24: rows pr-1, confidence cf-1, hit rates bv-1)
+
+`#/board` opens as a sortable table (default sort: Edge, high first); "Cards" is a toggle saved on the device
+(`localStorage scout.sports.board.v1` = {view, sort, dir}). Module `web/sports/table.js` (+ `table.css`, classes
+`sw-tb-*`). Desktop: dense table with sortable headers (Player, Scout, Edge (pts), L10; Start time and Player also
+in the "Sort by" select that replaces the header on phones). Phones (<= 760 px): each player is one compact block of
+two-line rows - no sideways scroll at 360 px. Started games are never listed (the game's `started` flag / status
+from the snapshot when present, else `start_utc <= now`). Books without a usable price are not shown (stats.js
+`quoteShown`).
+
+**Shared row helper - reuse it, do not re-implement it:** `SportsRows.propRow(market, offer, {fc, view, now})`
+(web/sports/table.js; `require()`-able in node) and, server side, `sports/board_view.py` (`row_summary`,
+`hit_counts`, file `board_view.json`, `GET /api/sports/board?league=..&part=view`). Sheets (PrizePicks / Underdog /
+consistency) use the same functions so a row means the same thing everywhere.
+
+One row = one player + stat + the offer shown (the member's "Show first" book when it prices the market - every book
+with a price, Kalshi included - else PrizePicks, then Underdog, then the snapshot's neutral order; never chosen by
+chance or edge). A player's props are grouped: one row per player (the best prop under the current sort), "+N more
+stats" expands the others in place.
+
+| Column | Definition |
+|---|---|
+| Lean | **Over** only when Scout's own distribution gives P(Over) > 50% at this line AND the projected mean is above the line; **Under** mirrored; otherwise **No lean**. Market-only records (mc-1, sharp-*, mkt-*) are not Scout's view: "No Scout chance". A lean on a side the book does not offer is shown with "not offered here". |
+| Scout | projected mean + unconditional Over / Under % at this line: the offer's own forecast (kind scout / informed) or the same saved distribution read at this line (`lr`). |
+| Market | market estimate at THIS line for this offer (`mk.at[record]`, or the headline only when it is at the same line); the lean side's chance (Over when no lean). Never another line's number. |
+| Edge (pts) | 100 x (Scout chance of the lean side - market chance of that side at that line). Probability points, not expected value or return; no money claims. Blank without a lean or a market chance. |
+| Model vs market gap | badge when abs(Scout P(Over) - market P(Over)) >= 10 points. |
+| L10 / L5 | bv-1: last 10 / 5 PLAYED games with a value for the stat (DNP excluded; same filter as `windowSummary`), strict: "↑ over ↓ under", pushes shown separately ("·1P"). When the last 10 span two seasons the seasons are named (NBA "2025-26 + 2026-27"). |
+| Conf. | cf-1 below, always labelled **Research** until forward validation passes (no grade letters). |
+
+**cf-1 confidence (deterministic; thresholds, no weights; display only - never a grade, stake or ranking input):**
+no Scout chance -> none; no lean -> 1; otherwise start at 1 and add one step for each threshold met:
+Scout chance of the lean side >= 55%, >= 60%, edge >= +3 pts, edge >= +6 pts (the edge steps need a market chance,
+so without one the maximum is 3). Then caps, lowest applies: edge < 0 (market prices the lean side higher) -> max 2;
+thin history (fewer than 10 played games in the L10 window) -> max 2; stale inputs (forecast older than 24 h, or the
+line not re-confirmed by its book within the 15-minute rule) -> max 2; wide distribution (80% range wider than 1.5x
+the line) -> max 3; model vs market gap >= 10 pts -> max 3. The tooltip lists the steps and caps that applied. The
+thresholds are fixed display buckets, not fitted; they will be checked against settled forward results before the
+"Research" label is removed.
+
+Validation state is shown once at the top of the board (per Scout model: settled of 300); model versions, record ids,
+the forecast run line and the Source buttons sit behind each card's "Details" toggle.
+
+Images: ESPN headshots (`a.espncdn.com/i/headshots/<lg>/players/full/<ESPN id>.png`) and team logos
+(`a.espncdn.com/i/teamlogos/<lg>/500/<ESPN abbr>.png`) only for ESPN ids / abbreviations already in the store
+(owner-attested ESPN rights, 2026-10-23); lazy-loaded, 32 px, alt text, initials fallback on error; no other host.
