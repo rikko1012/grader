@@ -175,3 +175,20 @@ the forecast run line and the Source buttons sit behind each card's "Details" to
 Images: ESPN headshots (`a.espncdn.com/i/headshots/<lg>/players/full/<ESPN id>.png`) and team logos
 (`a.espncdn.com/i/teamlogos/<lg>/500/<ESPN abbr>.png`) only for ESPN ids / abbreviations already in the store
 (owner-attested ESPN rights, 2026-10-23); lazy-loaded, 32 px, alt text, initials fallback on error; no other host.
+
+## Compare (compare agent, cmp-1, 2026-10-25)
+
+`#/compare` (nav "Compare" with a count; module `web/sports/compare.js` + `compare.css`, classes `sw-cmp-*`). Members add
+up to 6 props (any game, stat, book) with **Compare**: in the Add to slip / Track pick row of board cards and the player
+card (app.js `HOOKS.afterActions`), and a small toggle next to the stat on Prop board table rows and PrizePicks / Underdog
+sheet rows (standard lines only). Stored per league on the device (`localStorage scout.sports.compare.v1`).
+Each compared prop is `SportsRows.propRow` (lean, Scout chance at that line, market chance at that line + n books, edge,
+research grade, L5/L10 at that line, cf-2 confidence, projection + 80% range, line/forecast age, sanity hold, NFL label)
+plus the existing Add to slip / Track pick selector. **Better line rule (stated on the page):** eligible = lean + positive
+edge + that side offered; order edge -> Scout chance of the lean side -> confidence (then player/stat/line/book for
+determinism); others "No pick" with the reason. Same player + stat on several books: Over -> lowest line, Under -> highest
+(books offering that side; tie -> higher Scout chance), chances from the market's saved distribution. Two props from one
+game: "Same game - results are related", never a joint chance. Share link `#/compare?lg=..&c=<platform>~<offer id>~<line>,..`
+is checked by `GET /api/sports/compare/check` (sports/api_compare.py, board snapshots only, index cached per file change):
+ok / moved (old -> new line) / pulled / started; refused items are listed with what changed. Tests: test_ui_compare.py +
+ui_compare_test.js.
