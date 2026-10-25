@@ -311,6 +311,13 @@ def _note(msg):
     del LAST_ERRORS[:-10]
 
 
+def cookie_valid(cookie_value):
+    """True for a signed, unexpired session cookie - the same first check session() makes, with no Whop call (the
+    server's signed-out landing page uses it)."""
+    s = _unsign(cookie_value)
+    return bool(s) and time.time() <= s.get("exp", 0)
+
+
 def session(cookie_value):
     """-> {'user', 'name', 'ok'} for a valid session cookie, else None. Re-checks access every RECHECK_H hours.
     After a CLEAR answer from Whop newer than the cookie's own check, 'renew' = (new cookie value, max-age s) carrying
