@@ -1398,6 +1398,8 @@ def results_view(con, league, setts, now, base_meta, rows_only=False):
                     p_out = p[outcome]
                     brier = sum((p[k] - (1.0 if k == outcome else 0.0)) ** 2 for k in p)
                     logloss = -math.log(max(1e-12, p_out))
+                from .results_public import binary_scores
+                bs = binary_scores(fc.p_over, fc.p_under, outcome)
                 err = (actual - fc.projection_mean) if (actual is not None and fc.projection_mean is not None) else None
                 rows.append({"forecast_id": fid, "model_version": fc.model_version, "event_id": fc.event_id,
                              "player_id": fc.player_id, "player_key": fc.player_key, "stat": fc.stat,
@@ -1405,6 +1407,8 @@ def results_view(con, league, setts, now, base_meta, rows_only=False):
                              "projection_mean": fc.projection_mean, "p_over": fc.p_over, "p_under": fc.p_under,
                              "p_push": fc.p_push, "status": status, "outcome": outcome, "actual": actual,
                              "p_outcome": p_out, "brier": _r(brier, 6), "log_loss": _r(logloss, 6),
+                             "brier_binary": _r(bs[1], 6) if bs else None,
+                             "log_loss_binary": _r(bs[2], 6) if bs else None,
                              "error": _r(err, 4), "settlement_ids": [x.settlement_id for x in ss],
                              "settlement_revision": max(x.revision for x in ss), "rule_version": any_s.rule_version,
                              "settled_at": max((x.settled_at or "") for x in ss) or None,
@@ -1442,6 +1446,10 @@ def results_from_rows(rows, base_meta):
         def ml(x):
             e = [r["log_loss"] for r in x if r["log_loss"] is not None]
             return sum(e) / len(e) if e else None
+
+        def mbb(x):
+            e = [r.get("brier_binary") for r in x if r.get("brier_binary") is not None]
+            return sum(e) / len(e) if e else None
         summary[mv] = {
             "settled": len(rr), "games": len(g),
             "void": sum(1 for r in rows if r["model_version"] == mv and r["status"] == "void"),
@@ -1449,10 +1457,19 @@ def results_from_rows(rows, base_meta):
             "projection": {"n": len(errs), "mae": _r(mae(rr), 4), "mae_ci": _boot_ci(g, mae),
                            "bias": _r(bias(rr), 4), "bias_ci": _boot_ci(g, bias)},
             "probability": {"n": len(rr), "brier": _r(mb(rr), 5), "brier_ci": _boot_ci(g, mb),
-                            "log_loss": _r(ml(rr), 5), "log_loss_ci": _boot_ci(g, ml)},
+                            "log_loss": _r(ml(rr), 5), "log_loss_ci": _boot_ci(g, ml),
+                            "brier_binary": _r(mbb(rr), 5), "brier_binary_ci": _boot_ci(g, mbb),
+                            "brier_binary_n": sum(1 for r in rr if r.get("brier_binary") is not None)},
             "returns": {"recorded": sum(len(r["payouts"]) for r in rows if r["model_version"] == mv)}}
+    from . import results_public as rp
+    hh = rp.head_to_head([{**r, "model": r["model_version"]} for r in rows])
     return {**base_meta, "rows": rows[:2000], "total_rows": len(rows), "summary": summary,
-            "method": {"brier": "three-outcome Brier (over / under / push) on the forecast's unconditional chances",
+            "head_to_head": {"version": rp.HH_VERSION, "method": rp.HH_METHOD, "rows": hh},
+            "method": {"brier": "three-outcome Brier (over / under / push) on the forecast's unconditional chances: "
+                                "the sum over the three outcomes, range 0-2 - a 50/50 forecast with no push scores "
+                                "0.50 on it (= 2 x the binary Brier 0.25), so ~0.5 means coin-flip skill, not a bug",
+                       "brier_binary": "binary Brier on the chance of Over given no push vs the settled Over / Under "
+                                       "(pushes left out): range 0-1, 0.25 = always 50%",
                        "log_loss": "-ln(chance the forecast gave the settled outcome)",
                        "error": "settled value minus the forecast's projection mean",
                        "ci": "95% bootstrap interval, whole games resampled (400 draws, seed 7)",

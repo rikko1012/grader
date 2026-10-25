@@ -101,13 +101,21 @@ def rows_for(con, league):
     """One row per settled-or-void forward forecast of this league."""
     from .settlement import at_line
     setts = snapshots._current_settlements(con, league)
-    by_fc = defaultdict(list)
+    # THE forecast <-> settlement link (snapshots.settled_forecast_links: offer identity, plus any ids a settlement
+    # names) - production settlements carry no affected_forecast_ids, so keying on those alone found none
+    links, fcs = snapshots.settled_forecast_links(con, setts)
+    by_offer = defaultdict(list)
     for s in setts:
-        for fid in s.affected_forecast_ids:
-            by_fc[fid].append(s)
+        by_offer[(s.platform, s.offer_id)].append(s)
+    by_fc = defaultdict(list)
+    for k, ss in by_offer.items():
+        for fid in links.get(k, ()):
+            for s in ss:
+                if s not in by_fc[fid]:
+                    by_fc[fid].append(s)
     rows = []
     for fid, ss in by_fc.items():
-        fc = store.get(con, fid)
+        fc = fcs.get(fid) or store.get(con, fid)
         if fc is None or getattr(fc, "league", league) != league:
             continue
         outcome = None
@@ -121,6 +129,7 @@ def rows_for(con, league):
         r = {"forecast_id": fid, "model": fc.model_version, "event_id": fc.event_id, "player_id": fc.player_id,
              "stat": fc.stat, "line": float(fc.line), "mean": fc.projection_mean, "p_over": fc.p_over,
              "p_under": fc.p_under, "p_push": fc.p_push, "research_only": fc.research_only,
+             "forecast_at": fc.forecast_at,
              "status": "void" if void else ("settled" if outcome else "unresolved"), "outcome": outcome,
              "error": (actual - fc.projection_mean) if (outcome and actual is not None and fc.projection_mean is not None)
              else None}
@@ -219,7 +228,8 @@ def build(con, now=None, base=None):
         leagues[lg] = {**s, "gate": {"settled_props": s["props"], "required": GATE, "validated": s["props"] >= GATE,
                                      "text": (f"{s['props']} of {GATE} settled props - not yet validated"
                                               if s["props"] < GATE else f"{s['props']} settled props")},
-                       "models": models, "stats": stats, "calibration": calibration(rows), "bands": bands(rows)}
+                       "models": models, "stats": stats, "calibration": calibration(rows), "bands": bands(rows),
+                       "head_to_head": {"version": HH_VERSION, "method": HH_METHOD, "rows": head_to_head(rows)}}
     doc = {"version": VERSION, "built_at": now_utc(), "as_of": now, "leagues": leagues, "picks": tracked_picks(),
            "grades": "withheld (owner has not turned grade letters on) - bands are probability bands",
            "returns": "none: this page measures accuracy only (no ROI, no profit, no stakes)",
@@ -244,3 +254,105 @@ def build_if_stale(con, force=False, base=None):
     except OSError:
         pass
     return build(con, base=base)
+
+
+# ------------------------------------------------------------------------------------------- hh-1 head to head (N5)
+# Scout vs market on the SAME props (owner re-audit 2026-10-24 N5): the per-model tables above score each model on
+# the props IT forecast, so their Brier scores are not comparable. hh-1 pairs them:
+#   prop key   (game, player, stat, line) - the same line, so the same settlement outcome
+#   pair       the newest forecast of a Scout model (sm-1 / mi-1) and the newest of a market model (mc-1, sharp-*,
+#              mkt-<source>) on the same key, both settled Over or Under (pushes / voids counted, not scored)
+#   scores     binary, on the chance of Over given no push q = P(Over) / (P(Over) + P(Under)):
+#              Brier (q - y)^2 (0.25 = always 50%), log loss -ln(chance given to what happened), hit rate of the
+#              side the model favoured (q = 0.5 exactly: no side, left out of that model's hit rate)
+#   difference Scout minus market per pair (Brier / log loss: negative = Scout better); 95% bootstrap interval over
+#              GAMES (all pairs of a game resampled together, 1,000 draws, seed 7)
+HH_VERSION = "hh-1"
+SCOUT = ("sm-1", "mi-1")
+
+
+def _is_market(mv):
+    return mv == "mc-1" or mv.startswith("sharp") or mv.startswith("mkt-")
+
+
+def binary_scores(p_over, p_under, outcome):
+    """-> (q, brier, log loss, favoured side or None) for a settled Over / Under outcome, or None."""
+    if outcome not in ("over", "under") or p_over is None or p_under is None or p_over + p_under <= 0:
+        return None
+    import math
+    q = p_over / (p_over + p_under)
+    y = 1.0 if outcome == "over" else 0.0
+    pq = q if y else 1 - q
+    fav = "over" if q > 0.5 else "under" if q < 0.5 else None
+    return q, (q - y) ** 2, -math.log(max(1e-12, pq)), fav
+
+
+def head_to_head(rows):
+    """rows: dicts with model, event_id, player_id, stat, line, p_over, p_under, outcome, status, forecast_at.
+    -> [{"scout", "market", "stat", "pairs", "pushes", "games", "scout_brier", ..., "diff": {...}}] (stat "all" first)."""
+    newest = {}
+    for r in rows:
+        if r.get("status") not in ("settled", "void") or not r.get("model"):
+            continue
+        k = (r["event_id"], r["player_id"], r["stat"], round(float(r["line"]), 3), r["model"])
+        if k not in newest or (r.get("forecast_at") or "") > (newest[k].get("forecast_at") or ""):
+            newest[k] = r
+    by_key = defaultdict(dict)
+    for (ev, pid, st, ln, mv), r in newest.items():
+        by_key[(ev, pid, st, ln)][mv] = r
+    pairs = defaultdict(list)
+    pushes = defaultdict(int)
+    for (ev, pid, st, ln), ms in by_key.items():
+        for s in SCOUT:
+            if s not in ms:
+                continue
+            for mk in ms:
+                if not _is_market(mk):
+                    continue
+                a, b = ms[s], ms[mk]
+                if a["status"] != "settled" or b["status"] != "settled":
+                    continue
+                if a["outcome"] == "push":
+                    for g in (st, "all"):
+                        pushes[(s, mk, g)] += 1
+                    continue
+                sa = binary_scores(a["p_over"], a["p_under"], a["outcome"])
+                sb = binary_scores(b["p_over"], b["p_under"], b["outcome"])
+                if sa is None or sb is None:
+                    continue
+                item = {"event_id": ev, "forecast_id": a.get("forecast_id"), "outcome": a["outcome"],
+                        "sb": sa[1], "mb": sb[1], "sl": sa[2], "ml": sb[2],
+                        "sh": None if sa[3] is None else (1.0 if sa[3] == a["outcome"] else 0.0),
+                        "mh": None if sb[3] is None else (1.0 if sb[3] == a["outcome"] else 0.0)}
+                for g in (st, "all"):
+                    pairs[(s, mk, g)].append(item)
+
+    def mean(key):
+        def f(xs):
+            v = [x[key] for x in xs if x[key] is not None]
+            return sum(v) / len(v) if v else None
+        return f
+
+    def diff(a, b):
+        def f(xs):
+            v = [x[a] - x[b] for x in xs if x[a] is not None and x[b] is not None]
+            return sum(v) / len(v) if v else None
+        return f
+    out = []
+    for (s, mk, g), xs in sorted(pairs.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[0][2] != "all", kv[0][2])):
+        out.append({"scout": s, "market": mk, "stat": g, "pairs": len(xs), "pushes": pushes.get((s, mk, g), 0),
+                    "games": len({x["event_id"] for x in xs}),
+                    "scout_brier": _r(mean("sb")(xs)), "market_brier": _r(mean("mb")(xs)),
+                    "scout_log_loss": _r(mean("sl")(xs)), "market_log_loss": _r(mean("ml")(xs)),
+                    "scout_hit_rate": _r(mean("sh")(xs)), "market_hit_rate": _r(mean("mh")(xs)),
+                    "diff": {"brier": _r(diff("sb", "mb")(xs)), "brier_ci95": cluster_ci(xs, diff("sb", "mb")),
+                             "log_loss": _r(diff("sl", "ml")(xs)), "log_loss_ci95": cluster_ci(xs, diff("sl", "ml")),
+                             "hit_rate": _r(diff("sh", "mh")(xs)), "hit_rate_ci95": cluster_ci(xs, diff("sh", "mh"))}})
+    return out
+
+
+HH_METHOD = ("Scout (sm-1 / mi-1) and each market estimate on the SAME props: same game, player, stat and line, so the "
+             "same settlement; newest forecast of each; pushes and voids counted, not scored. Binary scores on the "
+             "chance of Over given no push: Brier (0.25 = always 50%), log loss, hit rate of the favoured side. "
+             "Difference = Scout minus market (Brier / log loss below 0 = Scout better), 95% bootstrap interval over "
+             "games (1,000 draws, seed 7).")

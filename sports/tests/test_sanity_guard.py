@@ -240,3 +240,35 @@ def test_one_scout_chance_count_per_game(built):
     assert checked
     app = (WEB / "app.js").read_text(encoding="utf-8")
     assert "scout_chances.markets" in app and "(m.sc || 0) > 0" in app and "return q.f; }); }).length" not in app
+
+
+# ------------------------------------------------------------------------------------------------ N5 head to head
+def test_head_to_head_pairs_same_props_only():
+    from sports import results_public as rp
+
+    def r(model, ev, pid, po, outcome, line=20.5, at="2026-10-24T10:00:00Z", stat="points"):
+        return {"model": model, "event_id": ev, "player_id": pid, "stat": stat, "line": line, "p_over": po,
+                "p_under": 1 - po, "outcome": outcome, "status": "settled", "forecast_at": at, "forecast_id": f"{model}{ev}{pid}"}
+    rows = [r("sm-1", "g1", "a", 0.7, "over"), r("mc-1", "g1", "a", 0.5, "over"),
+            r("sm-1", "g1", "b", 0.3, "over"), r("mc-1", "g1", "b", 0.5, "over"),
+            r("sm-1", "g2", "c", 0.6, "under"), r("mc-1", "g2", "c", 0.55, "under"),
+            r("sm-1", "g2", "d", 0.6, "push"), r("mc-1", "g2", "d", 0.5, "push"),
+            r("sm-1", "g3", "e", 0.8, "over"),                                    # no market on this prop: unpaired
+            r("mc-1", "g3", "f", 0.5, "over"),
+            r("mc-1", "g1", "a", 0.6, "over", at="2026-10-23T10:00:00Z")]         # older market forecast: ignored
+    hh = rp.head_to_head(rows)
+    a = [x for x in hh if x["stat"] == "all" and x["market"] == "mc-1"][0]
+    assert a["pairs"] == 3 and a["pushes"] == 1 and a["games"] == 2
+    sb = ((0.7 - 1) ** 2 + (0.3 - 1) ** 2 + 0.6 ** 2) / 3
+    mb = (0.25 + 0.25 + 0.55 ** 2) / 3
+    assert abs(a["scout_brier"] - round(sb, 4)) < 1e-4 and abs(a["market_brier"] - round(mb, 4)) < 1e-4
+    assert abs(a["diff"]["brier"] - round(sb - mb, 4)) < 1e-4 and a["diff"]["brier_ci95"] is not None
+    assert a["scout_hit_rate"] == round(1 / 3, 4) and a["market_hit_rate"] == 0.0   # market 0.5 = no side
+    assert rp.binary_scores(0.5, 0.5, "over")[1] == 0.25
+
+
+def test_three_outcome_brier_is_twice_binary_without_push():
+    p = {"over": 0.5, "under": 0.5, "push": 0.0}
+    three = sum((p[k] - (1.0 if k == "over" else 0.0)) ** 2 for k in p)
+    from sports import results_public as rp
+    assert three == 0.5 and rp.binary_scores(0.5, 0.5, "over")[1] == 0.25
