@@ -73,3 +73,19 @@ def test_table_assets_wired_scoped_and_no_money_words():
 def test_confidence_rule_is_documented():
     ui = (WEB.parents[1] / "sports" / "UI.md").read_text(encoding="utf-8")
     assert "cf-1" in ui and "pr-1" in ui and "bv-1" in ui
+
+
+def test_stream_writer_is_valid_json_and_cleans_up(tmp_path):
+    p = tmp_path / "board_view.json"
+    w = board_view.StreamWriter(p, {"version": "x", "part": "view"})
+    w.add({"a|b|points|full_game": {"lines": {"1.5": [1, 0, 0, 1, 1, 0, 0, 1]}}})
+    w.add({})
+    w.add({"c": {"lines": {}}})
+    size = w.close()
+    d = json.loads(p.read_text(encoding="utf-8"))
+    assert size == p.stat().st_size and d["part"] == "view" and list(d["rows"]) == ["a|b|points|full_game", "c"]
+    w2 = board_view.StreamWriter(p, {"version": "y"})
+    w2.add({"z": {}})
+    del w2                                                                  # a failed build: tmp removed, old file kept
+    import gc; gc.collect()
+    assert [x.name for x in tmp_path.iterdir()] == ["board_view.json"] and json.loads(p.read_text())["version"] == "x"

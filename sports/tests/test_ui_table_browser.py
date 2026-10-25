@@ -124,3 +124,37 @@ def test_phone_360_fits(pw, shots):
     page.screenshot(path=str(shots / f"table_{lg}_360.png"), full_page=False)
     assert not errors, errors
     ctx.close()
+
+
+def test_cards_grouped_details_toggle_one_stat_filter_show_first(pw, shots):
+    ctx, page, errors = _page(pw, view="cards")
+    for lg in LGS:
+        page.goto(URL + f"/sports#/board?lg={lg}")
+        page.wait_for_selector(".sw-research-card, .sw-state", timeout=30000)
+        if page.locator(".sw-research-card").count():
+            break
+    else:
+        pytest.skip("no open props on the preview board")
+    page.screenshot(path=str(shots / f"cards_{lg}_1280.png"))
+    info = page.evaluate("""() => {
+      const cards = [...document.querySelectorAll('.sw-research-card')];
+      const ids = cards.map(c => c.querySelector('a.sw-player-name').getAttribute('href').split('?')[0]);
+      const visible = el => !!el.getClientRects().length && !el.closest('details:not([open])');
+      const txt = [...document.querySelectorAll('#sw-bbody *')].filter(e => visible(e) && e.children.length === 0).map(e => e.textContent).join(' ');
+      return {n: cards.length, unique: new Set(ids).size, validTop: document.querySelectorAll('#sw-validation').length,
+              researchOnCards: /forward validation/.test(txt), versionOnCards: /\bsm-1\b|\bsharp-2\b|offer:/.test(txt),
+              tech: document.querySelectorAll('#sw-bbody details.sw-tech').length,
+              statLabels: [...document.querySelectorAll('#sw-bf label, #sw-bf .sw-fx-lab')].filter(l => /^Stat$/i.test(l.textContent.trim())).length,
+              showFirst: [...document.querySelectorAll('#sw-prefbook option')].map(o => o.value).filter(Boolean)};
+    }""")
+    assert info["n"] == info["unique"], info                                  # one card per player
+    assert info["validTop"] <= 1 and not info["researchOnCards"] and not info["versionOnCards"], info
+    assert info["tech"] > 0 and info["statLabels"] == 1, info                 # details toggle; one Stat filter
+    priced = page.evaluate("""async (lg) => { const b = (await window.ScoutSportsApp.api.get('/api/sports/board', {league: lg})).data;
+      return window.SportsFilters.pricedBooks(b.markets); }""", lg)
+    assert sorted(info["showFirst"]) == sorted(priced)                       # Kalshi and every priced book
+    d = page.locator("#sw-bbody details.sw-tech").first
+    d.locator("summary").click()
+    assert d.get_attribute("open") is not None
+    assert not errors, errors
+    ctx.close()

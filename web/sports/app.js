@@ -475,21 +475,28 @@
     }
     return '<div class="sw-chances">' + sp("over", "Over", po) + sp("under", "Under", pu) + (S.wholeLine(line) || pp > 0 ? sp("push", "Push", pp) : "") + "</div>";
   }
+  // model / version / record text sits behind one "Details" toggle per block (owner audit 2026-10-24); validation state
+  // is shown once at the top of the board (validationLine)
+  function techDetails(lines, buttons) {
+    var ls = lines.filter(Boolean);
+    if (!ls.length && !buttons) return "";
+    return '<details class="sw-tech"><summary>Details</summary><div class="sw-small sw-faint">' + ls.join("<br>") + "</div>" + (buttons ? '<div class="sw-tech-src">' + buttons + "</div>" : "") + "</details>";
+  }
   function scoutBlock(m, q, f, B) {                     // Scout's own projection (sm-1) or mi-1, labelled
     var stat = (B.stats[m.st] || m.st).toLowerCase(), kind = f ? S.kindOf(f.m) : null;
     if (f && kind !== "market") {
-      return '<div class="sw-num-block sw-scout"><div class="sw-num-label">' + esc(S.kindLabel(f.m)) + ' <span class="sw-faint">' + esc(f.m) + "</span> " + fcSource(q.f, f, q) + "</div>" +
+      return '<div class="sw-num-block sw-scout"><div class="sw-num-label">' + esc(S.kindLabel(f.m)) + "</div>" +
         '<div class="sw-proj">' + (f.mu !== null && f.mu !== undefined ? 'Projected: <b data-fc="' + esc(f.id) + '" data-fcside="mean">' + S.num(f.mu, 1) + "</b> " + esc(stat) +
           (f.iv ? ' <span class="sw-faint">· 80% range ' + f.iv[0] + "–" + f.iv[1] + "</span>" : "") : '<span class="sw-faint">Projection unavailable: this record stores chances only</span>') + "</div>" +
         threeChances(f.po, f.pu, f.pp, q.l, f.id) +
-        '<div class="sw-small sw-faint">' + esc(S.validationText(settledOf(B, f.m))) + (runLine(B) ? " · " + esc(runLine(B)) : "") + "</div></div>";
+        techDetails([esc(f.m) + " · " + esc(S.validationText(settledOf(B, f.m))), runLine(B) ? esc(runLine(B)) : ""], fcSource(q.f, f, q)) + "</div>";
     }
     if (q.lr) {
       var src0 = B.fc[q.lr.f];
-      return '<div class="sw-num-block sw-scout"><div class="sw-num-label">Scout model <span class="sw-faint">sm-1 · read at this line from the forecast at ' + S.line(q.lr.ln) + "</span> " + (src0 ? fcSource(q.lr.f, src0, q) : "") + "</div>" +
+      return '<div class="sw-num-block sw-scout"><div class="sw-num-label">Scout model</div>' +
         (src0 && src0.mu !== null && src0.mu !== undefined ? '<div class="sw-proj">Projected: <b>' + S.num(src0.mu, 1) + "</b> " + esc(stat) + (src0.iv ? ' <span class="sw-faint">· 80% range ' + src0.iv[0] + "–" + src0.iv[1] + "</span>" : "") + "</div>" : "") +
         threeChances(q.lr.po, q.lr.pu, q.lr.pp, q.l, null) +
-        '<div class="sw-small sw-faint">' + esc(S.validationText(settledOf(B, "sm-1"))) + "</div></div>";
+        techDetails(["sm-1 · read at this line from the forecast at " + S.line(q.lr.ln), esc(S.validationText(settledOf(B, "sm-1")))], src0 ? fcSource(q.lr.f, src0, q) : "") + "</div>";
     }
     if (q.nf) return '<div class="sw-num-block sw-scout"><div class="sw-num-label">Scout model</div><p class="sw-small">Projection unavailable: ' + esc(q.nf) + "</p></div>";
     return "";
@@ -510,8 +517,8 @@
   function prefBook() { try { return localStorage.getItem("sw:prefbook") || ""; } catch (e) { return ""; } }
   function setPrefBook(p) { try { if (p) localStorage.setItem("sw:prefbook", p); else localStorage.removeItem("sw:prefbook"); } catch (e) { /* private mode */ } }
   function prefBookHtml(B) {                            // member's own choice, saved per device; default = none
-    var seen = {};
-    B.markets.forEach(function (m) { m.q.forEach(function (q) { seen[q.p] = 1; }); });
+    var seen = {};                                      // every book with a price on this board, Kalshi included
+    window.SportsFilters.pricedBooks(B.markets).forEach(function (p) { seen[p] = 1; });
     var cur = prefBook();
     return '<div class="sw-field sw-prefbook"><label for="sw-prefbook">Show first</label><select id="sw-prefbook"><option value="">No preferred book</option>' +
       Object.keys(seen).sort(function (a, b) { return bookName(a) < bookName(b) ? -1 : 1; }).map(function (p) { return '<option value="' + esc(p) + '"' + (p === cur ? " selected" : "") + ">" + esc(bookName(p)) + "</option>"; }).join("") + "</select></div>";
@@ -545,21 +552,16 @@
         '<div class="sw-offer-meta">' + esc(offeredText(q.o)) + priceText(q) + ' · Observed ' + esc(S.age(q.t)) +
         (q.v !== 'standard' && q.v !== 'balanced' ? ' · ' + esc(q.v) : '') +
         (q.m ? ' · Multipliers O ' + S.mult(q.m[0]) + ' / U ' + S.mult(q.m[1]) : '') + '</div>' +
-        renderActions(m, q, f, B) + '<div class="sw-offer-source">' + quoteSource(q) + '</div></div>';
+        renderActions(m, q, f, B) + techDetails(["Offer record " + esc(q.r)], quoteSource(q)) + '</div>';
     }
-    return '<div class="sw-research-grid">' + rows.map(function (m) {
-      var qr = quoteRows(m), inj = B.injuries[m.pid];
+    function body(m) {                                     // one stat of the player: its offer, compare, alternates
+      var qr = quoteRows(m), h = "";
       // Order: the member's preferred book first (saved on this device), then a neutral book order - never by chance.
       var kq = qr.k.filter(function (q) { return S.quoteShown(q, Date.now()); }), nbk = S.usableBooks(m.mk, Date.now()).length;
       var quotes = S.orderQuotes(qr.q.filter(function (q) { return S.quoteShown(q, Date.now()); }), prefBook());
-      var h = '<article class="sw-research-card" aria-label="' + esc(m.n + ', ' + (B.stats[m.st] || m.st)) + '">' +
-        '<div class="sw-research-head"><div class="sw-avatar" aria-hidden="true">' + esc(m.n.split(' ').map(function(n){return n[0];}).slice(0,2).join('')) +
-        '</div><div><a class="sw-player-name" href="' + marketHref(m, null) + '">' + esc(m.n) + '</a>' +
-        '<div class="sw-small sw-faint">' + esc([m.tm, m.pos].filter(Boolean).join(' · ')) + '</div></div>' +
-        (inj ? '<span class="sw-tag inj">' + esc(S.injuryLabel(inj.status)) + '</span>' : '') + '</div>' +
-        '<div class="sw-matchline"><a href="#/game/' + encodeURIComponent(m.e) + '">' + esc(m.matchup) + '</a><span>' +
-        esc(S.localTime(m.ev && m.ev.start_utc, {weekday:'short',hour:'numeric',minute:'2-digit'})) + '</span></div>' +
-        (S.marketShown(m.mk && m.mk.c) ? '<div class="sw-small sw-mkline">' + mkShort(m.mk.c, m.mk.l) + '</div>' : '');
+      var pk = prefBook() && !quotes.some(function (q) { return q.p === prefBook(); }) && kq.filter(function (q) { return q.p === prefBook(); })[0];
+      if (pk) { quotes = [pk].concat(quotes); kq = kq.filter(function (q) { return q !== pk; }); }   // "Show first" Kalshi
+      h += (S.marketShown(m.mk && m.mk.c) ? '<div class="sw-small sw-mkline">' + mkShort(m.mk.c, m.mk.l) + '</div>' : '');
       if (quotes.length) h += offer(m, quotes[0]);
       else h += '<div class="sw-offer"><b>' + esc(B.stats[m.st] || m.st) + '</b><p class="sw-faint">' + (kq.length || nbk ? 'Book prices below.' : 'No ordinary line for these filters.') + '</p></div>';
       var remaining = Math.max(0, quotes.length - 1) + kq.length;
@@ -570,6 +572,28 @@
         h += '</div></details>';
       }
       if (m.alt) h += '<p class="sw-small sw-faint sw-altnote">' + S.plural(m.alt, "alternate line") + ' (goblin / demon / alternate payouts) are kept apart from these comparisons: <a href="' + marketHref(m, null) + '">open the player</a>.</p>';
+      return h;
+    }
+    var groups = [], byId = {};                            // one card per player (same game); stats expand inside
+    rows.forEach(function (m) {
+      var g = m.pid + "|" + m.e;
+      if (!byId[g]) { byId[g] = {ms: []}; groups.push(byId[g]); }
+      byId[g].ms.push(m);
+    });
+    var T = window.SportsTable;
+    return '<div class="sw-research-grid">' + groups.map(function (g) {
+      var m = g.ms[0], inj = B.injuries[m.pid], ab = T.teamAbbrOf(m, B.board);
+      var h = '<article class="sw-research-card" aria-label="' + esc(m.n + ', ' + g.ms.map(function (x) { return B.stats[x.st] || x.st; }).join(', ')) + '">' +
+        '<div class="sw-research-head"><div class="sw-avatar">' + T.img(R.headshotUrl(state.lg, m.pid), m.n + " headshot", "sw-tb-head", T.initials(m.n)) +
+        '</div><div><a class="sw-player-name" href="' + marketHref(m, null) + '">' + esc(m.n) + '</a>' +
+        '<div class="sw-small sw-faint">' + (ab ? T.img(R.logoUrl(state.lg, ab), ab + " logo", "sw-tb-logo", "") : "") + esc([m.tm, m.pos].filter(Boolean).join(' · ')) + '</div></div>' +
+        (inj ? '<span class="sw-tag inj">' + esc(S.injuryLabel(inj.status)) + '</span>' : '') + '</div>' +
+        '<div class="sw-matchline"><a href="#/game/' + encodeURIComponent(m.e) + '">' + esc(m.matchup) + '</a><span>' +
+        esc(S.localTime(m.ev && m.ev.start_utc, {weekday:'short',hour:'numeric',minute:'2-digit'})) + '</span></div>';
+      h += body(m);
+      if (g.ms.length > 1) h += '<div class="sw-pcard-stats">' + g.ms.slice(1).map(function (x) {
+        return '<details data-stat-more="' + esc(x.st) + '"><summary>' + esc(B.stats[x.st] || x.st) + ' <span class="sw-faint sw-small">' + S.plural(x.q.length + x.kn.length, "line") + '</span></summary>' + body(x) + '</details>';
+      }).join('') + '</div>';
       return h + '<a class="sw-research-link" href="' + marketHref(m,null) + '">Player history & research <span aria-hidden="true">↗</span></a></article>';
     }).join('') + '</div>';
   }
