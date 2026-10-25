@@ -19,6 +19,11 @@ DEFINITIONS
   calibration       P(over | no push) in 10-point bands: mean stated chance vs observed Over share (pushes left out).
   probability band  the lean side's chance given no push: 50-55, 55-60, 60-65, 65+ (labelled "probability band" -
                     grade letters are withheld until the owner turns grades on).
+  recent            rx-1 (owner 2026-10-25 "easier to understand"): the newest RECENT_N settled Scout leans, one row
+                    per prop (game, player, stat, line; newest Scout forecast), newest settlement first - player name,
+                    stat, line, lean side, result at that line, final value, rg-1 research grade, chance of the side.
+  model gate        per league: the stats whose sm-1 model passed its registered gate (board_view.gate_state) and,
+                    when none did, the member text "<LG> model not validated" (board_view.NOT_VALIDATED_TEXT).
   tracked picks     member picks (sports/picks.py aggregate, test picks excluded): wins / losses / pushes / voids,
                     hit rate with the same game-clustered interval. Never a return.
 """
@@ -139,7 +144,8 @@ def rows_for(con, league):
         r = {"forecast_id": fid, "model": fc.model_version, "event_id": fc.event_id, "player_id": fc.player_id,
              "stat": fc.stat, "line": float(fc.line), "mean": fc.projection_mean, "p_over": fc.p_over,
              "p_under": fc.p_under, "p_push": fc.p_push, "research_only": fc.research_only,
-             "forecast_at": fc.forecast_at,
+             "forecast_at": fc.forecast_at, "actual": actual,
+             "settled_at": max((x.settled_at or "") for x in ss) or None,
              "status": "void" if void else ("settled" if outcome else "unresolved"), "outcome": outcome,
              "error": (actual - fc.projection_mean) if (outcome and actual is not None and fc.projection_mean is not None)
              else None}
@@ -241,6 +247,39 @@ def tracked_picks():
                     "losses); never a return"}
 
 
+RECENT_N = 50
+
+
+def recent(rows, names=None, n=RECENT_N):
+    """rx-1: newest n settled Scout leans, one per prop (newest Scout forecast of that prop), newest settled first."""
+    from . import board_view
+    best = {}
+    for r in rows:
+        if r["status"] != "settled" or not r["lean"]:
+            continue
+        k = (r["event_id"], r["player_id"], r["stat"], round(float(r["line"]), 3))
+        if k not in best or (r.get("forecast_at") or "") > (best[k].get("forecast_at") or ""):
+            best[k] = r
+    out = []
+    for r in sorted(best.values(), key=lambda x: (x.get("settled_at") or "", x["forecast_id"]), reverse=True)[:n]:
+        p_side = r["p_over"] if r["lean"] == "over" else r["p_under"]
+        out.append({"forecast_id": r["forecast_id"], "model": r["model"], "event_id": r["event_id"],
+                    "player_id": r["player_id"], "player": (names or {}).get(r["player_id"]), "stat": r["stat"],
+                    "line": r["line"], "side": r["lean"], "result": r["lean_result"], "outcome": r["outcome"],
+                    "actual": r.get("actual"), "p_side": _r(p_side), "grade": board_view.research_grade(p_side),
+                    "settled_at": r.get("settled_at"), "forecast_at": r.get("forecast_at")})
+    return out
+
+
+def model_gate(league):
+    """Which of the league's stats passed sm-1's registered gate; the plain member text when none did."""
+    from . import board_view, capabilities
+    stats = list(capabilities.SUPPORTED.get(league, ()))
+    ok = [st for st in stats if board_view.gate_reason(league, st) is None]
+    return {"rule": board_view.GATE_VERSION, "validated_stats": ok,
+            "not_validated": None if ok or not stats else board_view.NOT_VALIDATED_TEXT.format(LG=league.upper())}
+
+
 def build(con, now=None, base=None):
     t0 = time.time()
     now = now or now_utc()
@@ -253,10 +292,18 @@ def build(con, now=None, base=None):
             mr = [r for r in rows if r["model"] == mv]
             models[mv] = dict(summarize(mr), research_only=all(r["research_only"] for r in mr))
         stats = {st: summarize([r for r in rows if r["stat"] == st]) for st in sorted({r["stat"] for r in rows})}
+        rec = recent(rows)
+        try:
+            names = snapshots.player_names(con, {r["player_id"] for r in rec if r.get("player_id")}, now)
+        except Exception:                               # noqa: BLE001 - names are a nicety; ids stay
+            names = {}
+        for r in rec:
+            r["player"] = names.get(r["player_id"])
         leagues[lg] = {**s, "gate": {"settled_props": s["props"], "required": GATE, "validated": False,
                                      "under_review": s["props"] >= GATE, "text": gate_text(s["props"]),
                                      "rule": GATE_RULE},
                        "models": models, "stats": stats, "calibration": calibration(rows), "bands": bands(rows), "grades": grades(rows),
+                       "recent": rec, "model_gate": model_gate(lg),
                        "head_to_head": {"version": HH_VERSION, "method": HH_METHOD, "rows": head_to_head(rows)}}
     doc = {"version": VERSION, "built_at": now_utc(), "as_of": now, "leagues": leagues, "picks": tracked_picks(),
            "grades": "research grades rg-1 (owner 2026-10-25): sports-gp-1 bands of the unrounded lean-side chance - "

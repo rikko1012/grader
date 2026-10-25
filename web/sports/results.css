@@ -1,0 +1,29 @@
+/* rx-1 Results layout (owner 2026-10-25: easier to understand, less crowded). Scoped under body.sw, classes rx-*.
+   Mobile first: everything stacks at 360 px; tables only inside collapsed Details (their own scroll box). */
+.sw .rx-lg{display:flex;gap:8px;margin:0 0 14px}.sw .rx-lg-b{min-width:64px;min-height:40px}
+.sw .rx-lg-b[aria-pressed="true"]{background:var(--accent);color:#18120e;border-color:var(--accent)}
+.sw .rx-sum{display:grid;gap:14px}
+.sw .rx-nv{margin:0;padding:8px 12px;border-radius:10px;background:#2a2211;color:var(--warn);font-size:13.5px}
+.sw .rx-status{margin:0;font-size:13px;color:var(--muted)}.sw .rx-status.ok{color:var(--over)}
+.sw .rx-k{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 4px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.sw .rx-big{font:700 30px/1.15 var(--display);font-variant-numeric:tabular-nums}.sw .rx-unit{font:500 12px Inter,system-ui;color:var(--faint)}
+.sw .rx-line{font-size:14px}.sw .rx-range{color:var(--faint);font-size:12.5px;white-space:nowrap}
+.sw .rx-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.sw .rx-tile{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;text-align:center;min-width:0}
+.sw .rx-tile-g{font:700 18px var(--display)}.sw .rx-tile-v{font-weight:600;font-variant-numeric:tabular-nums}.sw .rx-tile-n{font-size:12px;color:var(--faint)}
+.sw .rx-g-a{color:var(--over)}.sw .rx-g-b{color:var(--accent-2)}.sw .rx-g-c{color:var(--push)}.sw .rx-g-lean{color:var(--muted)}
+.sw .rx-cmp-head{margin:0 0 4px;font-size:15px}
+.sw .rx-picks{list-style:none;margin:0 0 10px;padding:0}
+.sw .rx-pick{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
+.sw .rx-pick:first-child{border-top:0}
+.sw .rx-pick-main{min-width:0;display:flex;flex-direction:column}.sw .rx-pick-name{overflow-wrap:anywhere}
+.sw .rx-pick-prop{font-size:13px;color:var(--muted)}
+.sw .rx-pick-side{display:flex;flex-direction:column;align-items:flex-end;flex:0 0 auto;text-align:right}
+.sw .rx-pick-meta{font-size:12px;color:var(--faint);white-space:nowrap}
+.sw .rx-res{font-weight:700;font-size:13px}.sw .rx-res-win{color:var(--over)}.sw .rx-res-loss{color:var(--bad)}.sw .rx-res-push{color:var(--push)}
+.sw .rx-more{min-height:44px}
+.sw .rx-d{border-top:1px solid var(--line)}.sw .rx-d:first-of-type{border-top:0}
+.sw .rx-d>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600;color:var(--accent-2)}
+.sw .rx-d-sub{margin:0 0 8px}.sw .rx-d-body{padding:0 0 12px;min-width:0}
+.sw .rx-d-body .sw-scroll{max-width:100%;overflow-x:auto}
+@media(min-width:760px){.sw .rx-sum{grid-template-columns:1fr 1fr}.sw .rx-nv,.sw .rx-status{grid-column:1/-1}}
