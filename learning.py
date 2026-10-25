@@ -1812,7 +1812,8 @@ def product_units(con, rows=None, pushes=None):
             excl["push on the board line"] += 1
             if pushes is not None and p_over_of(f) is not None:
                 pushes.append({"match": r["match_slug"], "p": p_over_of(f), "prop": r["prop"], "scope": r["scope"] or "12",
-                               "version": f["model_version"] or "untagged", "start": r["match_start"], "logged": f["logged_at"]})
+                               "version": f["model_version"] or "untagged", "start": r["match_start"], "logged": f["logged_at"],
+                               "units": f["units"] or 0, "forecast_id": f["forecast_id"]})   # Map 1 staked count (results_view)
             continue
         p = p_over_of(f)
         if p is None:

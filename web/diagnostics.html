@@ -60,7 +60,9 @@ function draw() {
               && (!$("#fscope").value || s.scope === $("#fscope").value) && (!$("#fver").value || s.version === $("#fver").value);
   const rows = (D.cohorts[cohort].summary || []).filter(f);
   const ex = Object.entries(D.exclusions || {}).map(([k, v]) => `${esc(k)}: ${v}`).join(" · ");
+  const m1 = D.map1_results || {};   // owner 2026-10-25: Map 1 stays off member Results until it has the threshold of settled staked units
   $("#out").innerHTML = `<div class="small muted">Excluded: ${ex}</div>
+    <div class="small" id="map1res">Map 1 on member Results: ${m1.staked_settled ?? "–"} of ${m1.threshold ?? 500} settled staked P1 units · ${m1.shown_on_member_results ? "shown" : "hidden"} (admin diagnostics always include Map 1)</div>
     <h2>Summary</h2><div class="scroll"><table><thead><tr><th>Cohort / stat / maps / version</th><th>Lines</th><th>Matches</th><th>Hit</th><th>95% (by match)</th><th>Predicted</th><th>Log loss</th>
       <th>Proj. MAE</th><th>Bias</th><th>Bias 95%</th><th>In own 80%</th><th>Rounds bias</th><th>Top grades hit / pred.</th></tr></thead><tbody>
     ${rows.map(s => `<tr><td>${esc(s.source)} · ${esc(s.prop)} · ${esc(s.scope)} · ${esc(s.version)}</td><td>${s.n}</td><td>${s.matches}</td><td>${pc(s.hit_rate)}</td>

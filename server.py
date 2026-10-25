@@ -1074,16 +1074,36 @@ def content_book_page():
                              skipped, res)
 
 
-def results_payload():
-    """Member Results (results_view.member_results) from the learning cycle's stored P1 export."""
+_MAP1_STATUS = [0.0, None]                            # (time, results_view.map1_status) - admin diagnostics, 5 min
+
+
+def _p1_export():
     import learning
-    import results_view
     con = learning.connect()
     try:
-        ex = learning._meta(con, "p1_units") or {}
+        return learning._meta(con, "p1_units") or {}
     finally:
         con.close()
+
+
+def results_payload():
+    """Member Results (results_view.member_results) from the learning cycle's stored P1 export. Map 1 stays off it until
+    Map 1 has results_view.MAP1_RESULTS_MIN_STAKED settled staked units (owner 2026-10-25); the count is cached here too."""
+    import results_view
+    ex = _p1_export()
+    _MAP1_STATUS[:] = [time.time(), results_view.map1_status(ex)]
     return results_view.member_results(ex)
+
+
+def map1_results_status():
+    """Admin diagnostics: Map 1's settled staked P1 units vs MAP1_RESULTS_MIN_STAKED (cached 5 minutes)."""
+    import results_view
+    if _MAP1_STATUS[1] is None or time.time() - _MAP1_STATUS[0] > 300:
+        try:
+            _MAP1_STATUS[:] = [time.time(), results_view.map1_status(_p1_export())]
+        except Exception as e:
+            return {"staked_settled": None, "threshold": results_view.MAP1_RESULTS_MIN_STAKED, "error": str(e)[:200]}
+    return dict(_MAP1_STATUS[1])
 
 
 def board_payload(book="underdog"):
@@ -3946,7 +3966,7 @@ class Handler(BaseHTTPRequestHandler):
                     stale = not _DIAG.get("at") or time.time() - _DIAG["at"] > 600 or (q.get("fresh") and _DIAG["at"] <= asked)
                     if stale:
                         _DIAG.update(data=diagnostics.build_from_log(picklog, slip_batches.read()), at=time.time())
-                return self.send(200, _DIAG["data"])
+                return self.send(200, dict(_DIAG["data"], map1_results=map1_results_status()))
             if u.path in ("/content-book", "/content-book.md"):
                 # the video creator's content book (owner 2026-10-19): the 1,000-idea library + today's real lines, built
                 # on every load from verified saved forecasts (posts.drafts). Admin token, or CONTENT_BOOK_KEY - a separate

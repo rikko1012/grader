@@ -11,6 +11,11 @@ import collections
 import random
 
 RULE = 0.57
+# owner 2026-10-25: "get rid of map 1's on the result page until we have 500 stakes to go off of". Map 1 (scope "1") rows
+# and every aggregate built from them stay off the member Results view until Map 1 has this many settled STAKED P1 units
+# (units > 0 at the unit's own P1 forecast; one per player x match x stat x maps - the export's own dedupe), then they come
+# back on their own. Display only: grading, the board, the stored export and admin diagnostics are untouched.
+MAP1_RESULTS_MIN_STAKED = 500
 BANDS = ((0.57, 0.60, "57–60%"), (0.60, 0.65, "60–65%"), (0.65, 0.70, "65–70%"), (0.70, 1.01, "70% and up"))
 SCOPE = {"12": "Maps 1–2", "1": "Map 1", "123": "Maps 1–3"}
 STAT = {"kills": "Kills", "hs": "Headshots"}
@@ -43,9 +48,41 @@ def _line(picks, B=0, seed=7, **extra):
     return out
 
 
-def member_results(export, B=1000, seed=7):
+def map1_staked_settled(export):
+    """Settled P1 units on Map 1 (scope "1") with a stake (units > 0) - the scored rows plus the pushed units, each unit
+    once (the export is already one per player x match x stat x maps; a forecast id is never counted twice)."""
+    seen, n = set(), 0
+    for r in ((export or {}).get("rows") or []) + ((export or {}).get("pushes") or []):
+        if (r.get("scope") or "12") != "1" or not (r.get("units") or 0) > 0:
+            continue
+        k = r.get("forecast_id")
+        if k is not None:
+            if k in seen:
+                continue
+            seen.add(k)
+        n += 1
+    return n
+
+
+def map1_status(export, min_staked=MAP1_RESULTS_MIN_STAKED):
+    """Admin: Map 1's settled staked count against the threshold and whether member Results show Map 1."""
+    n = map1_staked_settled(export)
+    return {"staked_settled": n, "threshold": min_staked, "shown_on_member_results": n >= min_staked,
+            "as_of": (export or {}).get("at")}
+
+
+def member_results(export, B=1000, seed=7, map1_min=MAP1_RESULTS_MIN_STAKED):
     rows = (export or {}).get("rows") or []
-    excl = (export or {}).get("excluded") or {}
+    excl = dict((export or {}).get("excluded") or {})
+    pushes_in = (export or {}).get("pushes") or []
+    hide_map1 = map1_staked_settled(export) < map1_min
+    if hide_map1:                               # left out entirely: every total below is recomputed without Map 1
+        m1 = lambda r: (r.get("scope") or "12") == "1"
+        rows = [r for r in rows if not m1(r)]
+        k = "push on the board line"
+        if k in excl:
+            excl[k] = max(0, excl[k] - sum(1 for r in pushes_in if m1(r)))
+        pushes_in = [r for r in pushes_in if not m1(r)]
     picks = []
     for r in rows:
         p = r.get("p")
@@ -57,7 +94,7 @@ def member_results(export, B=1000, seed=7):
         picks.append({"match": r["match"], "printed": side_p, "win": int(r["over"] if p >= 0.5 else 1 - r["over"]),
                       "side": "Over" if p >= 0.5 else "Under", "prop": r.get("prop"), "scope": r.get("scope") or "12",
                       "version": r.get("version") or "untagged", "start": r.get("start"), "logged": r.get("logged")})
-    for r in (export or {}).get("pushes") or []:       # owner 2026-10-18: a push on a pick counts as a win here
+    for r in pushes_in:                                 # owner 2026-10-18: a push on a pick counts as a win here
         p = r.get("p")
         if p is None or max(p, 1 - p) < RULE:
             continue
@@ -77,7 +114,7 @@ def member_results(export, B=1000, seed=7):
             "definition": "Lines the board listed on a standard Underdog or PrizePicks line, graded at least 30 minutes before "
                           "the match; one result per player, match, stat and maps (refreshes and the other platform's copy are "
                           "not counted twice); settled on official stats. Lines typed in by members and goblin / demon lines "
-                          "are not included.",
+                          "are not included." + (" Map 1 lines are not included." if hide_map1 else ""),
             "lines": {"settled": len(rows), "matches": len({r['match'] for r in rows}), "first": starts[0][:10] if starts else None,
                       "last": starts[-1][:10] if starts else None, "pushes": excl.get("push on the board line", 0)},
             "picks": _line(picks, B, seed),
