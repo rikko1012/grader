@@ -60,10 +60,11 @@ LEG_FIELDS = ("leg_id", "platform", "league", "offer_id", "record_id", "revision
               "grade_policy_version", "research_only", "event_id", "event_ref", "player_id", "player", "team", "stat",
               "stat_label", "scope", "line", "side", "side_word", "variant", "promotional", "multiplier", "start_utc",
               "observed_at", "last_seen_at", "source_time_unknown", "p_win", "p_loss", "p_push", "grade",
-              "stake_units", "weight", "prop_keys")
+              "stake_units", "weight", "prop_keys", "research_grade")
 _LEG_SET = frozenset(LEG_FIELDS)
 _INTERN = ("platform", "league", "model_version", "grade_policy_version", "event_id", "event_ref", "team", "stat",
-           "stat_label", "scope", "side", "side_word", "variant", "start_utc", "observed_at", "last_seen_at", "grade")
+           "stat_label", "scope", "side", "side_word", "variant", "start_utc", "observed_at", "last_seen_at", "grade",
+           "research_grade")
 
 
 def _leg_from_values(values):
@@ -311,5 +312,8 @@ def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, market_at
            "source_time_unknown": o.source_time_unknown, "p_win": p_win, "p_loss": p_loss, "p_push": f.p_push,
            "grade": None if f.research_only else f.grade,
            "stake_units": 0.0 if f.research_only else f.stake_units, "weight": leg_weight(platform, p_win, q.multiplier),
-           "prop_keys": prop_keys(o.league, o.player_id, o.stat)}
+           "prop_keys": prop_keys(o.league, o.player_id, o.stat),
+           # rg-1: the board's research letter for this forecast / line (same unrounded chance, same lean rule)
+           "research_grade": board_view.research_grade(p_win)
+           if board_view.lean_of(f.p_over, f.p_under, f.projection_mean, float(o.line)) == side else None}
     return None, leg

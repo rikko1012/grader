@@ -48,6 +48,7 @@
     try {
       var b = await postApi("/api/sports/picks/track", { picks: legs.map(function (l) {
         return { platform: l.platform, record_id: l.record_id, side: l.side, forecast_id: l.forecast_id || null, surface: "slip_copy",
+          grade: l.forecast_id ? (l.research_grade || null) : null,
           shown: l.forecast_id ? { p_over: l.side === "over" ? l.p_win : l.p_loss, p_under: l.side === "over" ? l.p_loss : l.p_win, p_push: l.p_push } : null };
       }) });
       var ok = (b.results || []).filter(function (x) { return x.ok; }).length;
@@ -164,6 +165,7 @@
       '<span class="ss-meta">' + esc(L.statOf(l)) + " - " + esc(l.event_ref || "") + " - " + esc(when(l.start_utc)) +
       (l.custom ? " - no Scout chance for a line that is not offered" : l.p_win != null ? ' - Scout chance <span class="ss-num">' + pct(l.p_win) + "</span>" + (l.p_push ? " (push " + pct(l.p_push) + ")" : "") : "") +
       (l.custom ? ' <span class="ss-tag ss-hyp">custom line - hypothetical</span>' : "") +
+      (!l.custom && l.research_grade && L.gradeHtml ? " " + L.gradeHtml(l.research_grade, l.side, (l.league || ctx().league) === "nfl" ? "NFL model not validated" : null) : "") +
       (l.research_only ? ' <span class="ss-tag ss-research" title="' + esc(RESEARCH_TEXT) + '">Research estimate · stake 0</span>' : "") + "</span>" + (extra || "") + "</li>";
   }
   function payoutList(p) {

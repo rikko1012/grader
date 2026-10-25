@@ -9,7 +9,8 @@
   GET  /api/sports/admin/picks   admin aggregate (counts, hit rate, Brier / log-loss, game-clustered 95% intervals)
 Test picks (picks.scratch_reason): an admin token's picks, picks posted with "test": true, and every pick while
 SPORTS_PICKS_SCRATCH=1 (the owner-only preview) are recorded with scratch=true and aggregated apart from member picks.
-Stakes are always 0; grade letters are never returned (validation state text instead); no EV / returns.
+Stakes are always 0; the research grade shown when tracked (grade_shown) is returned with each pick, labelled
+research, plus a per-grade hit-rate table (by_grade); no EV / returns.
 """
 from __future__ import annotations
 

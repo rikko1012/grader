@@ -69,3 +69,9 @@
 .sw .sw-tb .sw-p{white-space:nowrap}
 .sw .sw-fx-statall{flex:0 0 auto;min-height:40px;border-radius:999px;background:#101620;border:1px solid var(--line-2);padding:0 12px;font-size:12.5px;color:var(--muted);max-width:100%}
 .sw .sw-tech-src{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+/* rg-1 research grade (owner 2026-10-25): letter + "Research grade" tag; NFL adds "NFL model not validated" */
+.sw .sw-grade{display:inline-block;font-weight:700;white-space:nowrap}
+.sw .sw-grade-tag,.sw .sw-grade-nv{font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+.sw .sw-grade-nv{color:var(--muted)}
+.sw .sw-grade-banner{margin:0 0 8px;font-size:12.5px;color:var(--muted)}
+.sw .sw-grade-line{margin:4px 0 0;font-size:12.5px}

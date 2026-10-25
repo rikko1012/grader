@@ -133,7 +133,7 @@ def sheet_markets(player_file, history_games, platform, events, now):
             qs.append(cq)
         vr = board_view.row_summary(row["stat"], [q["line"] for q in lines], history_games)
         lg = (row.get("event_id") or "").split(":", 1)[0]
-        nv = board_view.gate_reason(lg, row["stat"])
+        nv = board_view.contain_reason(lg, row["stat"])
         for cq in qs:                                 # the board's row signal on the sheet's own line reads (cf-2)
             own = forecasts.get(cq.get("f") or "")
             if cq.get("x") or not (cq.get("lr") or (own or {}).get("kind") in ("scout", "informed")):

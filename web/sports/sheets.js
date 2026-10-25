@@ -180,7 +180,8 @@
         var offer = (r.offered && !r.offered[0] ? " (no Over)" : "") + (r.offered && !r.offered[1] ? " (no Under)" : "");
         var mult = r.mult ? " " + [r.mult[0] ? "O " + (Math.round(r.mult[0] * 100) / 100) + "x" : "", r.mult[1] ? "U " + (Math.round(r.mult[1] * 100) / 100) + "x" : ""].filter(Boolean).join(" ") : "";
         var conf = r.conf ? '<span class="shx-conf" title="' + esc("cf-1 research confidence: " + r.conf.why.join("; ")) + '">' + r.conf.score + "/5</span>" : '<span class="sw-faint">—</span>';
-        var lean = r.lean ? '<span class="shx-lean shx-' + r.lean + '">' + esc(leanText(r)) + "</span>" + (r.leanOffered === false ? '<div class="sw-faint sw-small">not offered here</div>' : "")
+        var Lg = root.SportsLabels;
+        var lean = r.lean ? '<span class="shx-lean shx-' + r.lean + '">' + (r.grade && Lg ? Lg.gradeHtml(r.grade, r.lean, r.notValidated) : esc(leanText(r))) + "</span>" + (r.leanOffered === false ? '<div class="sw-faint sw-small">not offered here</div>' : "")
           : '<span class="sw-faint">' + (r.held ? esc(r.held) : sc ? "No lean" : "No Scout chance") + "</span>";
         return "<tr>" +
           '<th scope="row"><a href="' + playerHref(lg, {pid: r.pid, st: r.stat}) + '">' + esc(r.player) + '</a><div class="sw-faint sw-small">' + esc([tag(r.team, lg), r.pos].filter(Boolean).join(" · ")) + "</div></th>" +

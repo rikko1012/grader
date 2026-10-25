@@ -20,6 +20,8 @@ import math
 from pathlib import Path
 
 from .model.grade_policy import STATES as _gp_states
+from .model.grade_policy import VERSION as GRADE_POLICY
+from .model.grade_policy import band as _band
 
 VERSION = "bv-1"
 WINDOWS = (10, 5)
@@ -51,6 +53,27 @@ def gate_state(stat):
     """sm-1's registered validation state for this stat ("unvalidated" when the stat is not registered)."""
     v = ((_registry().get("versions") or {}).get("sm-1") or {}).get("validation") or {}
     return v.get(stat, "unvalidated")
+
+
+# VG_CONTAIN_LEAN (owner decision 2026-10-25): False = a failed-gate market (NFL) shows its LEAN + research GRADE behind
+# the cf-2 / N4 / sg-1 rules, labelled NFL_TEXT next to every grade; its edge, confidence and edge ranking stay withheld
+# and it is never a slip leg. True = the full vg-1 containment (projection only) everywhere - ONE change turns it back on.
+VG_CONTAIN_LEAN = False
+NOT_VALIDATED_TEXT = "{LG} model not validated"
+# rg-1 research grade: the letter of sports-gp-1 band() on the UNROUNDED Scout chance of the chosen (lean) side; only for
+# a row with a lean (cf-2 / N4), never for a held row (vg-1 when contained, sg-1). Stakes stay 0.
+GRADE_VERSION = "rg-1"
+GRADE_TAG = "Research grade - not validated"
+
+
+def research_grade(p_side):
+    """sports-gp-1 band (A >= 0.60, B >= 0.5559, C >= 0.5345, else Lean) of the unrounded chosen-side chance."""
+    return None if p_side is None else _band(float(p_side))
+
+
+def contain_reason(league, stat):
+    """The vg-1 hold text when containment is ON for this market, else None (VG_CONTAIN_LEAN)."""
+    return gate_reason(league, stat) if VG_CONTAIN_LEAN else None
 
 
 def gate_reason(league, stat):
@@ -300,10 +323,18 @@ def quote_x(league, stat, po, pu, mu, line, mkc, l10=None, iv=None):
     """The q.x a snapshot / sheet quote carries: a hold {"b", "t", "v"} (vg-1 gate, then sg-1 sanity), else the cf-2
     signal. -> (x, sanity code or None)."""
     gate = gate_reason(league, stat)
-    if gate:
+    if gate and VG_CONTAIN_LEAN:
         return {"b": "gate", "t": gate, "v": GATE_VERSION}, None
     sig = signal(po, pu, mu, line, mkc, l10, iv)
     code = sanity_check(mu, line, lean_of(po, pu, mu, float(line)), l10)
     if code:
         return {"b": code, "t": SANITY_TEXT[code], "v": SANITY_VERSION}, code
+    if sig.get("ln"):                                  # rg-1: grade from the UNROUNDED lean-side chance
+        sig["gr"] = research_grade(po if sig["ln"] == "over" else pu)
+        sig["gp"] = GRADE_POLICY
+    if gate:                                           # failed-gate market, containment lifted for lean + grade only
+        for k in ("e", "s", "g"):
+            sig.pop(k, None)
+        sig["c"], sig["cw"] = None, []
+        sig["nv"] = NOT_VALIDATED_TEXT.format(LG=(league or "").upper() or "Scout")
     return sig, None

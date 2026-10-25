@@ -1024,7 +1024,7 @@ def compact_quote(q):
 
 
 def compact_row(r, league=None):
-    nv = board_view.gate_reason(league, r["stat"]) if league else None
+    nv = board_view.contain_reason(league, r["stat"]) if league else None
     return {**({"nv": nv} if nv else {}), "k": r["key"], "e": r["event_id"], "pid": r["player_id"], "n": r["player"], "pos": r["position"],
             "tm": r["team"], "tid": r.get("team_id"), "st": r["stat"], "pr": 1 if r["primary"] else 0, "cap": r["capability"],
             "q": [compact_quote(q) for q in r["quotes"]], "kn": [compact_quote(q) for q in r["kalshi_near"]],

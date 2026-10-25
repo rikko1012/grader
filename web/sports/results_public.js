@@ -111,11 +111,17 @@
       table([["Stated Over chance", 0], ["Forecasts", 1], ["Mean stated", 1], ["Observed Over", 1]], L.calibration.map(function (c) {
         return "<tr><th scope=\"row\">" + esc(c.band) + '</th><td class="num">' + int(c.n) + '</td><td class="num">' + pct(c.stated) + '</td><td class="num">' + pct(c.observed) + '<span class="sw-faint sw-small">' + esc(ciText(c.observed_ci95, true)) + "</span></td></tr>";
       }));
-    h += '<h3>Leans by probability band</h3><p class="sw-small sw-muted">Grade letters are not in use; bands are the lean side’s chance given no push.</p>' +
+    h += '<h3>Leans by probability band</h3><p class="sw-small sw-muted">Bands are the lean side’s chance given no push (the grade table below uses the unconditional chance).</p>' +
       table([["Probability band", 0], ["Leans", 1], ["W-L(-P)", 1], ["Mean stated", 1], ["Hit rate", 1]], L.bands.map(function (b) {
         return "<tr><th scope=\"row\">" + esc(b.band) + '</th><td class="num">' + int(b.n) + '</td><td class="num">' + int(b.wins) + "-" + int(b.losses) + (b.pushes ? "-" + int(b.pushes) : "") + '</td><td class="num">' + pct(b.stated) + '</td><td class="num">' + pct(b.hit_rate) + '<span class="sw-faint sw-small">' + esc(ciText(b.hit_rate_ci95, true)) + "</span></td></tr>";
       }));
+    if (L.grades && L.grades.rows) h += '<h3>Leans by grade <span class="sw-grade-tag">Research grade - not validated</span></h3><p class="sw-small sw-muted">Letter of each settled lean’s Scout chance (A 60%+, B 55.59%+, C 53.45%+, else Lean). Research only; stakes 0.</p>' + gradeTable(L.grades.rows, "hit_rate_ci95");
     return h + "</section>";
+  }
+  function gradeTable(rows, ciKey) {                 // rg-1 per-grade hit rate with the game-clustered 95% interval
+    return table([["Grade", 0], ["Settled (n)", 1], ["W-L(-P)", 1], ["Hit rate", 1]], rows.map(function (g) {
+      return '<tr><th scope="row" data-grade="' + esc(g.grade) + '">' + esc(g.grade) + '</th><td class="num">' + int(g.n) + '</td><td class="num">' + int(g.wins) + "-" + int(g.losses) + (g.pushes ? "-" + int(g.pushes) : "") + '</td><td class="num">' + pct(g.hit_rate) + '<span class="sw-faint sw-small">' + esc(ciText(g[ciKey], true)) + "</span></td></tr>";
+    }));
   }
 
   function picksSection(P) {
@@ -126,7 +132,10 @@
       var g = P.leagues[lg];
       return "<tr><th scope=\"row\">" + esc(lg.toUpperCase()) + '</th><td class="num">' + int(g.picks) + '</td><td class="num">' + int(g.games) + '</td><td class="num">' + int(g.wins) + "-" + int(g.losses) + "-" + int(g.pushes) +
         '</td><td class="num">' + int(g.voids) + '</td><td class="num">' + int(g.pending) + '</td><td class="num">' + pct(g.hit_rate) + '<span class="sw-faint sw-small">' + esc(ciText(g.hit_rate_ci95_games, true)) + "</span></td></tr>";
-    })) + '<p class="sw-faint sw-small">' + esc(P.note || "") + "</p></section>";
+    })) + lgs.map(function (lg) {
+      var G = P.leagues[lg].by_grade;
+      return G && G.rows ? '<h3>' + esc(lg.toUpperCase()) + ' picks by grade when tracked <span class="sw-grade-tag">Research grade - not validated</span></h3>' + gradeTable(G.rows, "hit_rate_ci95_games") : "";
+    }).join("") + '<p class="sw-faint sw-small">' + esc(P.note || "") + "</p></section>";
   }
 
   function draw(got) {

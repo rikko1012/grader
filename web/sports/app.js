@@ -27,7 +27,7 @@
     "gp:history-validated": "Projection - validated on past games, not yet on live lines.",
     "gp:forward-validated": "Validated on live lines."
   };
-  function reasonList(codes) {                          // member text; the grade band (gp_band:*) is shadow-only, never shown
+  function reasonList(codes) {                          // member text; raw gp_band:* codes never shown (the letter is rendered by gradeLine)
     return (codes || []).filter(function (c) { return !/^gp_band:/.test(c); }).map(function (c) { return REASONS[c] || c; });
   }
   var main = document.getElementById("sw-main");
@@ -547,20 +547,30 @@
     if (!ls.length && !buttons) return "";
     return '<details class="sw-tech"><summary>Details</summary><div class="sw-small sw-faint">' + ls.join("<br>") + "</div>" + (buttons ? '<div class="sw-tech-src">' + buttons + "</div>" : "") + "</details>";
   }
+  // rg-1 research grade of a quote: the server's letter (sports/board_view.quote_x q.x.gr) - every surface renders it
+  function gradeLine(q) {
+    var x = q && q.x;
+    if (!x || x.b || !x.ln || !x.gr) return "";
+    return '<div class="sw-grade-line">' + L.gradeHtml(x.gr, x.ln, x.nv) + "</div>";
+  }
+  function gradeBanner(lg) {
+    return '<p class="sw-grade-banner" data-grade-banner>' + esc(L.GRADE_TAG) + " · " + esc(L.GRADE_BANDS) + " · stakes 0" +
+      (lg === "nfl" ? " · NFL model not validated" : "") + "</p>";
+  }
   function scoutBlock(m, q, f, B) {                     // Scout's own projection (sm-1) or mi-1, labelled
     var stat = (B.stats[m.st] || m.st).toLowerCase(), kind = f ? S.kindOf(f.m) : null;
     if (f && kind !== "market") {
       return '<div class="sw-num-block sw-scout"><div class="sw-num-label">' + esc(S.kindLabel(f.m)) + "</div>" +
         '<div class="sw-proj">' + (f.mu !== null && f.mu !== undefined ? 'Projected: <b data-fc="' + esc(f.id) + '" data-fcside="mean">' + S.num(f.mu, 1) + "</b> " + esc(stat) +
           (f.iv ? ' <span class="sw-faint">· 80% range ' + f.iv[0] + "–" + f.iv[1] + "</span>" : "") : '<span class="sw-faint">Projection unavailable: this record stores chances only</span>') + "</div>" +
-        threeChances(f.po, f.pu, f.pp, q.l, f.id) +
+        threeChances(f.po, f.pu, f.pp, q.l, f.id) + gradeLine(q) +
         techDetails([esc(f.m) + " · " + esc(S.validationText(settledOf(B, f.m))), runLine(B) ? esc(runLine(B)) : ""], fcSource(q.f, f, q)) + "</div>";
     }
     if (q.lr) {
       var src0 = B.fc[q.lr.f];
       return '<div class="sw-num-block sw-scout"><div class="sw-num-label">Scout model</div>' +
         (src0 && src0.mu !== null && src0.mu !== undefined ? '<div class="sw-proj">Projected: <b>' + S.num(src0.mu, 1) + "</b> " + esc(stat) + (src0.iv ? ' <span class="sw-faint">· 80% range ' + src0.iv[0] + "–" + src0.iv[1] + "</span>" : "") + "</div>" : "") +
-        threeChances(q.lr.po, q.lr.pu, q.lr.pp, q.l, null) +
+        threeChances(q.lr.po, q.lr.pu, q.lr.pp, q.l, null) + gradeLine(q) +
         techDetails(["sm-1 · read at this line from the forecast at " + S.line(q.lr.ln), esc(S.validationText(settledOf(B, "sm-1")))], src0 ? fcSource(q.lr.f, src0, q) : "") + "</div>";
     }
     if (q.nf) return '<div class="sw-num-block sw-scout"><div class="sw-num-label">Scout model</div><p class="sw-small">Projection unavailable: ' + esc(q.nf) + "</p></div>";
@@ -693,7 +703,7 @@
       if (!onlyEvent) { freshness(man, B.got); footer(man); }
       var evs = Object.keys(B.board.events).filter(function (k) { return !R.started({ev: B.board.events[k]}, Date.now()); }).map(function (k) { return [k, matchup(B.board.events[k]) + " · " + S.localTime(B.board.events[k].start_utc, {weekday: "short", hour: "numeric", minute: "2-digit"}), B.board.events[k].start_utc]; })
         .sort(function (a, b) { return a[2] < b[2] ? -1 : 1; });
-      var head = onlyEvent ? "" : '<div class="sw-eyebrow">' + state.lg.toUpperCase() + ' · Prop board</div><h1 class="sw-h1">Prop board</h1>' +
+      var head = onlyEvent ? "" : '<div class="sw-eyebrow">' + state.lg.toUpperCase() + ' · Prop board</div><h1 class="sw-h1">Prop board</h1>' + gradeBanner(state.lg) +
         '<p class="sw-sub">Find a player. Compare the lines. Track your research. Chances apply to the exact book and line shown; they are not validated recommendations.</p>' +
         boardFiltersHtml(B, f, evs);
       target.innerHTML = head + (onlyEvent ? "" : validationLine(B) + '<div class="sw-tb-bar" id="sw-tb-bar"></div>') + '<div id="sw-bcount"></div><div id="sw-bbody"></div>';
@@ -984,7 +994,7 @@
           if (lr) {
             return h + '<p class="sw-small sw-muted">Read at this line from the Scout forecast at ' + S.line(lr.ln) + " (same distribution, same inputs)" + (lsrc ? " " + fcSource(lr.f, lsrc, {r: q.record_id}) : "") + "</p>" +
               (lsrc && lsrc.projection_mean !== null ? '<div class="sw-big"><div><span class="sw-k">Projected</span><span class="sw-v">' + S.num(lsrc.projection_mean, 1) + "</span></div>" + (lsrc.detail && lsrc.detail.interval ? '<div class="sw-small sw-muted">80% range ' + lsrc.detail.interval[0] + "–" + lsrc.detail.interval[1] + "</div>" : "") + "</div>" : "") +
-              '<div class="sw-sides">' + ["over", "under", "push"].map(function (k) { return '<div class="sw-side"><span class="sw-k sw-small sw-faint">' + (k === "push" ? "Push" : (k === "over" ? "Over " : "Under ") + S.line(q.line)) + '</span><div class="sw-v sw-p ' + k + '">' + S.pct(lr["p" + k[0]]) + "</div></div>"; }).join("") + "</div>" + slipButtons(q, null) + "</section>";
+              '<div class="sw-sides">' + ["over", "under", "push"].map(function (k) { return '<div class="sw-side"><span class="sw-k sw-small sw-faint">' + (k === "push" ? "Push" : (k === "over" ? "Over " : "Under ") + S.line(q.line)) + '</span><div class="sw-v sw-p ' + k + '">' + S.pct(lr["p" + k[0]]) + "</div></div>"; }).join("") + "</div>" + gradeLine(q) + slipButtons(q, null) + "</section>";
           }
           return h + '<p class="sw-muted">Projection unavailable: ' + esc(q.no_fc || (mk.capability !== "supported" ? (mk.capability_reason || "market not supported by the Scout model") :
             q.gradable ? "no Scout forecast for this line in the last run" : (q.not_gradable_because || []).map(L.gateReason).join("; "))) + "</p>" + slipButtons(q, null) + "</section>";
@@ -1002,7 +1012,7 @@
           (dt.interval ? '<div class="sw-small sw-muted">80% range ' + dt.interval[0] + "–" + dt.interval[1] + (dt.median !== undefined ? " · median " + dt.median : "") + "</div>" : "") +
           '<div class="sw-small sw-muted">Projected ' + esc(S.localTime(fc.forecast_at)) + (man && man.forecast_run && man.forecast_run.history_through ? " · games through " + esc(S.localTime(man.forecast_run.history_through, {month: "short", day: "numeric"})) : "") + "</div>" +
           '<details class="sw-more sw-fcdetails"><summary>Details</summary><p class="sw-small sw-faint">Model ' + esc(fc.model_version) + " " + fcSource(fc.forecast_id, fc, {r: q.record_id}) + "</p></details>" +
-          '<div class="sw-small sw-faint">' + esc(S.validationText(model ? model.settled : 0)) + " · grade and stake withheld</div></div>";
+          '<div class="sw-small sw-faint">' + esc(S.validationText(model ? model.settled : 0)) + " · stake 0</div>" + gradeLine(q) + "</div>";
         h += '<div class="sw-sides">' + sideBox("over", "Over " + S.line(fc.line), n.over) + sideBox("under", "Under " + S.line(fc.line), n.under) + sideBox("push", "Push", n.push) + "</div>";
         h += slipButtons(q, fc);
         var chart = svgDist(det, fc, fc.line);

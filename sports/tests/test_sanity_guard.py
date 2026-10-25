@@ -57,7 +57,8 @@ def _row(stat, ev, quotes):
             "stat": stat, "quotes": quotes, "kalshi": [], "alternates": []}
 
 
-def test_guard_row_gate_and_sanity_and_log():
+def test_guard_row_gate_and_sanity_and_log(monkeypatch):
+    monkeypatch.setattr(board_view, "VG_CONTAIN_LEAN", True)       # the contained path (one flag turns it back on)
     fcs = {"f1": _fc("f1", 0.0, 1.0, 0.1), "f2": _fc("f2", 0.3, 0.7, 20.0, line=24.5),
            "m1": _fc("m1", 0.4, 0.6, None, model="mc-1")}
     # NFL: every Scout view is gate-held, nothing is sanity-logged; a market-only forecast is untouched
@@ -104,7 +105,8 @@ def test_slip_pool_guard():
     assert pool.guard_reason(f, "nfl") is None
 
 
-def test_compact_row_carries_gate_and_hold():
+def test_compact_row_carries_gate_and_hold(monkeypatch):
+    monkeypatch.setattr(board_view, "VG_CONTAIN_LEAN", True)
     q = {"record_id": "r", "platform": "underdog", "line": 11.5, "variant": "standard", "last_seen_at": "T",
          "source_updated_at": None, "gradable": True, "forecast_id": "f1", "sides": [],
          "x": {"b": "gate", "t": "NFL model not validated - projection only", "v": "vg-1"}}
@@ -171,7 +173,8 @@ def test_n4_lean_only_with_a_positive_edge_for_that_side():
     assert board_view.signal(0.56, 0.44, 0.9, 0.5, None, L10)["ln"] == "over"     # no market: chance + mean rule
 
 
-def test_quote_x_holds_before_signal():
+def test_quote_x_holds_before_signal(monkeypatch):
+    monkeypatch.setattr(board_view, "VG_CONTAIN_LEAN", True)
     x, code = board_view.quote_x("nfl", "rec_yds", 0.3, 0.7, 40.0, 50.5, {"po": 0.5, "pu": 0.5, "n": 3}, L10)
     assert x["b"] == "gate" and code is None
     x, code = board_view.quote_x("nba", "points", 0.0, 1.0, 0.1, 11.5, {"po": 0.5, "pu": 0.5, "n": 3}, L10)

@@ -232,7 +232,23 @@
   function teamPlaceholder(lg) { return PLACEHOLDER[lg] || "Search teams"; }
   function searchPlaceholder(lg) { return PLAYER_PLACEHOLDER[lg] || "Search players, teams"; }
 
-  var api = {eventStatus: eventStatus, slipReason: slipReason, gateReason: gateReason, variant: variant,
+  // rg-1 research grade (owner 2026-10-25): the letter is computed server-side (sports/board_view.research_grade, the
+  // sports-gp-1 band of the unrounded lean-side chance); pages only render it. "Lean" keeps the "Lean Over/Under" words.
+  var GRADE_TAG = "Research grade - not validated";
+  var GRADE_BANDS = "A: Scout chance 60% or more · B: 55.59% or more · C: 53.45% or more · Lean: above 50%";
+  function gradeWords(g, side) {
+    if (!g) return "";
+    var s = side === "over" ? "Over" : side === "under" ? "Under" : "";
+    return (g === "Lean" ? "Lean" : g) + (s ? " " + s : "");
+  }
+  function gradeHtml(g, side, nv) {               // nv: "NFL model not validated" for a failed-gate market
+    if (!g) return "";
+    var e = function (x) { return String(x).replace(/[&<>"']/g, function (c) { return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]; }); };
+    return '<span class="sw-grade sw-grade-' + (g === "Lean" ? "lean" : g.toLowerCase()) + '" data-grade="' + e(g) + '" title="' + e(GRADE_TAG + " (" + GRADE_BANDS + "). Stake 0.") + '">' +
+      e(gradeWords(g, side)) + '</span> <span class="sw-grade-tag">Research grade</span>' + (nv ? ' <span class="sw-grade-nv">' + e(nv) + "</span>" : "");
+  }
+
+  var api = {gradeWords: gradeWords, gradeHtml: gradeHtml, GRADE_TAG: GRADE_TAG, GRADE_BANDS: GRADE_BANDS, eventStatus: eventStatus, slipReason: slipReason, gateReason: gateReason, variant: variant,
              availability: availability, participation: participation, injuryStatus: injuryStatus, injuryParts: injuryParts,
              injuryText: injuryText, seasonLabel: seasonLabel, windowLabel: windowLabel, seasonBreaks: seasonBreaks,
              spansText: spansText, teamPlaceholder: teamPlaceholder, searchPlaceholder: searchPlaceholder, SLIP_REASON: SLIP_REASON, EVENT_STATUS: EVENT_STATUS,

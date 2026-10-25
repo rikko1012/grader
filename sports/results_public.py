@@ -202,6 +202,22 @@ def bands(rows):
     return out
 
 
+def grades(rows):
+    """rg-1 research letters of settled Scout leans: sports-gp-1 band of the UNROUNDED unconditional lean-side chance
+    (board_view.research_grade); n, W-L-P, hit rate + game-clustered 95% interval. Research - not validated. The
+    board's market (N4) / sanity holds are live-board rules and are not re-applied to stored forecasts here."""
+    from . import board_view
+    leans = [r for r in rows if r["status"] == "settled" and r["lean"]]
+    out = []
+    for g in ("A", "B", "C", "Lean"):
+        xs = [r for r in leans if board_view.research_grade(r["p_over"] if r["lean"] == "over" else r["p_under"]) == g]
+        out.append({"grade": g, "n": len(xs), "wins": sum(1 for r in xs if r["lean_result"] == "win"),
+                    "losses": sum(1 for r in xs if r["lean_result"] == "loss"),
+                    "pushes": sum(1 for r in xs if r["lean_result"] == "push"),
+                    "hit_rate": _r(_hit(xs)), "hit_rate_ci95": cluster_ci(xs, _hit)})
+    return {"label": "Research grade - not validated", "rule": "rg-1", "rows": out}
+
+
 def tracked_picks():
     """Member pick aggregate per league (sports/picks.py; test picks excluded there). Public-safe fields only."""
     from . import picks
@@ -217,8 +233,10 @@ def tracked_picks():
         con.close()
     keep = ("picks", "games", "wins", "losses", "pushes", "voids", "unresolved", "pending", "hit_rate",
             "hit_rate_ci95_games")
+    bgl = agg.get("by_grade_league") or {}
     return {"version": agg.get("version"), "rule": agg.get("rule"),
-            "leagues": {lg: {k: g.get(k) for k in keep} for lg, g in ((agg.get("by") or {}).get("league") or {}).items()},
+            "leagues": {lg: dict({k: g.get(k) for k in keep}, by_grade=bgl.get(lg))
+                        for lg, g in ((agg.get("by") or {}).get("league") or {}).items()},
             "note": "member picks only (test picks excluded); each pick at its own line; hit rate = wins / (wins + "
                     "losses); never a return"}
 
@@ -238,10 +256,11 @@ def build(con, now=None, base=None):
         leagues[lg] = {**s, "gate": {"settled_props": s["props"], "required": GATE, "validated": False,
                                      "under_review": s["props"] >= GATE, "text": gate_text(s["props"]),
                                      "rule": GATE_RULE},
-                       "models": models, "stats": stats, "calibration": calibration(rows), "bands": bands(rows),
+                       "models": models, "stats": stats, "calibration": calibration(rows), "bands": bands(rows), "grades": grades(rows),
                        "head_to_head": {"version": HH_VERSION, "method": HH_METHOD, "rows": head_to_head(rows)}}
     doc = {"version": VERSION, "built_at": now_utc(), "as_of": now, "leagues": leagues, "picks": tracked_picks(),
-           "grades": "withheld (owner has not turned grade letters on) - bands are probability bands",
+           "grades": "research grades rg-1 (owner 2026-10-25): sports-gp-1 bands of the unrounded lean-side chance - "
+                     "A >= 60%, B >= 55.59%, C >= 53.45%, else Lean; research, not validated; stakes 0",
            "returns": "none: this page measures accuracy only (no ROI, no profit, no stakes)",
            "method": {k: v.strip() for k, v in (
                ("settled", "forward forecasts only, scored at their own line from the box score; void / unresolved "

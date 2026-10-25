@@ -141,7 +141,7 @@
     btn.disabled = true;
     var surface = /^#\/?player/.test(location.hash) ? "card" : "board";
     A.api.post("/api/sports/picks/track", {picks: [{platform: leg.platform, record_id: leg.record_id, side: leg.side,
-      forecast_id: leg.forecast_id || null, shown: f, surface: surface}]}).then(function (b) {
+      forecast_id: leg.forecast_id || null, shown: f, grade: leg.forecast_id ? leg.research_grade || null : null, surface: surface}]}).then(function (b) {
       var r = (b.results || [])[0] || {};
       Object.keys(A.api.mem).forEach(function (k) { if (k.indexOf("/api/sports/picks/") === 0) delete A.api.mem[k]; });
       if (r.ok) { btn.textContent = "Tracked"; btn.setAttribute("aria-pressed", "true"); }
@@ -177,6 +177,15 @@
   var cur = "open";
   try { cur = sessionStorage.getItem("sw:mp:tab") || "open"; } catch (e) {}
 
+  function Lb() { return root.SportsLabels || (typeof require !== "undefined" ? require("./labels.js") : null); }
+  function gradeTableHtml(G) {                         // rg-1 per-grade hit rate (letters recorded at tracking time)
+    if (!G || !G.rows) return "";
+    var ci = function (c) { return c ? " (95%: " + pct(c[0]) + " to " + pct(c[1]) + ")" : ""; };
+    return '<section class="sw-panel sw-mp-grades" aria-labelledby="sw-mp-gr-h"><h2 id="sw-mp-gr-h">Hit rate by grade <span class="sw-grade-tag">Research grade - not validated</span></h2>' +
+      '<div class="sw-scroll"><table class="sw-mini"><thead><tr><th scope="col">Grade</th><th scope="col" class="num">Settled (n)</th><th scope="col" class="num">W-L-P</th><th scope="col" class="num">Hit rate (games-clustered 95%)</th></tr></thead><tbody>' +
+      G.rows.map(function (r) { return '<tr><th scope="row" data-grade="' + esc(r.grade) + '">' + esc(r.grade) + '</th><td class="num">' + r.n + '</td><td class="num">' + r.wins + "-" + r.losses + "-" + r.pushes + '</td><td class="num">' + (r.hit_rate === null || r.hit_rate === undefined ? "—" : pct(r.hit_rate)) + '<span class="sw-faint sw-small">' + esc(ci(r.hit_rate_ci95_games)) + "</span></td></tr>"; }).join("") +
+      '</tbody></table></div><p class="sw-faint sw-small">The grade each pick showed when you tracked it. Research only - grades are not validated; stakes are 0.' + (G.ungraded ? " " + G.ungraded + " picks had no grade." : "") + "</p></section>";
+  }
   function row(p, src) {
     var c = chanceText(p), r = resultText(p), side = p.side === "over" ? "Over" : "Under";
     var corr = p.result && p.result.corrected;
@@ -188,6 +197,7 @@
       '<dl class="sw-mp-dl"><div><dt>Recorded line</dt><dd>' + esc(side + " " + line(p.line)) + "</dd></div>" +
       "<div><dt>Tracked</dt><dd>" + esc(trackedText(p.tracked_at)) + "</dd></div>" +
       "<div><dt>Chance shown</dt><dd>" + esc(c.chance) + ' <span class="sw-faint">(' + esc(c.source) + ")</span></dd></div>" +
+      "<div><dt>Grade when tracked</dt><dd>" + (p.grade_shown && Lb() ? Lb().gradeHtml(p.grade_shown, p.side, p.league === "nfl" ? "NFL model not validated" : null) : "—") + "</dd></div>" +
       "<div><dt>Stake</dt><dd>0</dd></div></dl>" +
       '<div class="sw-small sw-faint">' + esc(p.validation_text || "") + " " + (src ? src({title: "Pick record", "pick id": p.pick_id, "offer record (exact revision)": p.record_id, revision: p.revision,
         forecast: p.forecast_id || "none", model: p.model_version || "none", "tracked at (your time)": trackedText(p.tracked_at), where: p.surface,
@@ -211,7 +221,7 @@
   }
   function drawMine(deps, head, d, models, focusTab) {
     var main = deps.main, ps = d.picks || [];
-    var h = head + '<p class="sw-sub">Each pick was recorded before its game at the exact line shown and is settled from the final box score at that same line. Stakes are 0; no grades or returns are shown.</p>';
+    var h = head + '<p class="sw-sub">Each pick was recorded before its game at the exact line shown and is settled from the final box score at that same line. Stakes are 0; grades are research grades (not validated); no returns are shown.</p>';
     var val = validationLines((models || []).filter(function (m) { return !d.lg || !m.league || m.league === d.lg; }));
     var recs = records(d, d.lg);
     var recHtml = '<section class="sw-panel sw-mp-sum" aria-labelledby="sw-mp-rec-h"><h2 id="sw-mp-rec-h">Your record</h2><div class="sw-kv sw-mp-rec">' +
@@ -227,7 +237,7 @@
       main.innerHTML = h + recHtml + deps.stateBox("No tracked " + esc((d.lg || "").toUpperCase()) + " picks yet", "Choose <b>Over</b> or <b>Under</b> on a line, then <b>Track pick</b>, before the game starts. A recorded pick appears here within about a minute.", '<a class="sw-btn" href="#/board">Open the prop board</a>') + valHtml;
       return;
     }
-    h += recHtml;
+    h += recHtml + gradeTableHtml(d.by_grade);
     var by = {open: [], settled: [], voided: []};
     ps.forEach(function (p) { by[tabOf(p)].push(p); });
     if (!by[cur]) cur = "open";
@@ -270,7 +280,12 @@
       forecast_id: o.forecast_id || null, side: o.side, line: o.line, variant: o.variant, multiplier: o.multiplier,
       start_utc: o.start_utc, player_id: o.player_id, player: o.player, team: o.team, stat: o.stat, stat_label: o.stat_label,
       event_id: o.event_id, event_ref: o.event_ref, model_version: f ? (full ? f.model_version : f.m) : null,
-      p_win: f ? (o.side === "over" ? po : pu) : null, p_loss: f ? (o.side === "over" ? pu : po) : null, p_push: f ? pp : null};
+      p_win: f ? (o.side === "over" ? po : pu) : null, p_loss: f ? (o.side === "over" ? pu : po) : null, p_push: f ? pp : null,
+      research_grade: o.grade || null, grade_nv: o.grade_nv || null};
+  }
+  function gradeOf(q, side) {                          // rg-1: the server's letter on this quote (board / player file q.x)
+    var x = q && q.x;
+    return x && !x.b && x.ln === side && x.gr ? x.gr : null;
   }
   function renderActions(c) {
     var A = app(), lg = (A && A.state && A.state.lg) || "nba", m = c.market, q = c.quote, f = c.forecast, legs = {}, why = {};
@@ -282,7 +297,7 @@
       ["over", "under"].forEach(function (x) {
         if (!(sides[x] && sides[x].offered)) { why[x] = (x === "over" ? "Over" : "Under") + " is not offered on " + bookName(q.platform); return; }
         legs[x] = makeLeg({platform: q.platform, record_id: q.record_id, forecast_id: f ? f.forecast_id : q.forecast_id,
-          forecast: f, side: x, line: q.line, variant: q.variant, multiplier: sides[x].multiplier,
+          forecast: f, side: x, grade: gradeOf(q, x), grade_nv: q.x && q.x.nv, line: q.line, variant: q.variant, multiplier: sides[x].multiplier,
           start_utc: ne ? ne.start_utc : q.listed_start_utc, player_id: P.player_id, player: P.player, team: m.team,
           stat: m.stat, stat_label: m.stat_label, event_id: m.event_id,
           event_ref: ne && ne.opponent ? (ne.home ? "vs " : "@ ") + ne.opponent.abbr : null}, lg);
@@ -294,7 +309,7 @@
     var B = c.board || {stats: {}};
     [["over", 0], ["under", 1]].forEach(function (x) {
       if (q.o[x[1]] !== 1) { why[x[0]] = "Not offered on " + bookName(q.p); return; }
-      legs[x[0]] = makeLeg({platform: q.p, record_id: q.r, forecast_id: q.f, forecast: f, side: x[0], line: q.l, variant: q.v,
+      legs[x[0]] = makeLeg({platform: q.p, record_id: q.r, forecast_id: q.f, forecast: f, side: x[0], grade: gradeOf(q, x[0]), grade_nv: q.x && q.x.nv, line: q.l, variant: q.v,
         multiplier: q.m ? q.m[x[1]] : null, start_utc: m.ev && m.ev.start_utc, player_id: m.pid, player: m.n, team: m.tm, stat: m.st,
         stat_label: (B.stats && B.stats[m.st]) || m.st, event_id: m.e, event_ref: m.matchup}, lg);
     });

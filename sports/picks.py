@@ -1,6 +1,6 @@
 """Member pick tracking pk-1 (owner 2026-10-24): prospective picks recorded against their EXACT offer revision and forecast,
-settled against real results at the pick's OWN line. Stakes are always 0 and grade letters are never shown here
-(sports-gp-1 withholds letters until forward validation passes; the validation state is shown instead). No EV / returns.
+settled against real results at the pick's OWN line. Stakes are always 0; the research grade shown at tracking time is recorded (grade_shown, rg-1) here
+(labelled 'Research grade - not validated'; the validation state text is shown too). No EV / returns.
 
 A pick = an explicit member action BEFORE the game starts: "Track" on the board / player card, or a slip copy that the
 server validated. check() refuses it unless, right now (live store read, same rule as the slip copy check):
@@ -116,6 +116,27 @@ def _num(x):
     return v
 
 
+GRADES = ("A", "B", "C", "Lean")
+GRADE_RULE = "rg-1"
+
+
+def research_grade(fc, side, league):
+    """The board's research letter (sports/board_view rg-1) this forecast can carry on `side`: the lean rule (chance >
+    50% and the mean on that side), no vg-1 hold while containment is on, no sg-1 ratio hold; else None. The board's
+    market (N4) and L10 holds are applied by the page before it shows a letter - a letter it did show must equal this."""
+    from . import board_view
+    if fc.p_over is None or fc.p_under is None or fc.model_version not in board_view.SCOUT_MODELS:
+        return None
+    line = float(fc.line)
+    if board_view.lean_of(fc.p_over, fc.p_under, fc.projection_mean, line) != side:
+        return None
+    if board_view.contain_reason(league, fc.stat):
+        return None
+    if board_view.sanity_check(fc.projection_mean, line, side) is not None:
+        return None
+    return board_view.research_grade(fc.p_over if side == "over" else fc.p_under)
+
+
 def check(con, item, now=None):
     """-> the pick record (dict) or raise Refused(code, text). ValueError for a malformed item."""
     now = now or clock()
@@ -188,6 +209,13 @@ def check(con, item, now=None):
         if any(v is not None for v in shown.values()):
             raise Refused("display_mismatch", "A chance was shown without a forecast record - refresh")
         displayed = None
+    shown_grade = item.get("grade")
+    if shown_grade is not None and shown_grade not in GRADES:
+        raise ValueError("grade must be A, B, C or Lean")
+    expect = research_grade(fc, side, o.league) if fc else None
+    mismatch = None
+    if shown_grade is not None and shown_grade != expect:      # never a letter the forecast record cannot carry
+        mismatch, shown_grade = shown_grade, None
     return {"version": VERSION, "tracked_at": t, "surface": surface, "league": o.league, "platform": platform,
             "offer_id": o.offer_id, "record_id": rid, "revision": meta.get("revision"),
             "offer_observed_at": o.observed_at, "offer_last_seen_at": last, "event_id": o.event_id,
@@ -200,7 +228,9 @@ def check(con, item, now=None):
             "grade_policy_version": fc.grade_policy_version if fc else None,
             "forecast_at": fc.forecast_at if fc else None, "research_only": bool(fc.research_only) if fc else None,
             "validation_state": _validation_state(fc) if fc else None, "displayed": displayed,
-            "displayed_source": "scout_forecast" if fc else None, "stake_units": 0, "grade_shown": None}
+            "displayed_source": "scout_forecast" if fc else None, "stake_units": 0, "grade_shown": shown_grade,
+            "grade_rule": GRADE_RULE if shown_grade else None,
+            **({"grade_not_recorded": mismatch} if mismatch else {})}
 
 
 # ------------------------------------------------------------------------------------------------------- spool
@@ -422,6 +452,7 @@ def _view(row, st):
             "displayed_source": r.get("displayed_source"), "forecast_at": r.get("forecast_at"),
             "event_id": r.get("event_id"), "variant": r.get("variant"),
             "p_side": p_side, "validation_state": r.get("validation_state"),
+            "grade_shown": r.get("grade_shown"),
             "validation_text": _state_text(r.get("validation_state")), "stake_units": 0, "test": bool(r.get("scratch")),
             "result": None if st is None else {"status": st["status"], "outcome": st["outcome"], "value": st["value"],
                                                "revision": st["revision"],
@@ -443,7 +474,7 @@ def mine(con, member, limit=200, league=None, include_test=False):
     no EV, no returns)."""
     mh = member_hash(member)
     rows = con.execute("SELECT * FROM picks WHERE member=? ORDER BY tracked_at DESC LIMIT ?", (mh, RECORD_SCAN)).fetchall()
-    record, hidden, kept = {}, 0, []
+    record, hidden, kept, graded = {}, 0, [], []
     for r in rows:
         pl = json.loads(r["payload"])
         lg = _row_league(r, pl)
@@ -456,6 +487,9 @@ def mine(con, member, limit=200, league=None, include_test=False):
             c = record.setdefault(lg or "unknown", {"win": 0, "loss": 0, "push": 0, "void": 0, "open": 0})
             k = st["status"] if st is not None and st["status"] in ("win", "loss", "push", "void") else "open"
             c[k] += 1
+            if league is None or lg == league:
+                graded.append({"pick_id": r["pick_id"], "event_id": pl.get("event_id"), "grade": pl.get("grade_shown"),
+                               "status": st["status"] if st is not None else None})
         if league is None or lg == league:
             kept.append(r)
     for c in record.values():
@@ -465,7 +499,9 @@ def mine(con, member, limit=200, league=None, include_test=False):
     for v, r in zip(out, kept):
         if not v.get("league"):
             v["league"] = r["league"]
+    by_grade = grade_table(graded)
     return {"version": VERSION, "picks": out, "total": len(kept), "shown": len(out), "stake_units": 0,
+            "by_grade": by_grade,
             "league": league, "hidden_test": hidden, "include_test": bool(include_test), "record": record,
             "record_scope": f"newest {RECORD_SCAN} picks" if len(rows) >= RECORD_SCAN else "all picks"}
 
@@ -489,6 +525,27 @@ def _cluster_ci(items, stat, reps=1000, seed=7):
         return None
     vals.sort()
     return [round(vals[int(0.025 * (len(vals) - 1))], 4), round(vals[int(0.975 * (len(vals) - 1))], 4)]
+
+
+GRADE_TABLE_LABEL = "Research grade - not validated: hit rate by the grade shown when each pick was tracked"
+
+
+def grade_table(items):
+    """Per research grade (A / B / C / Lean, the letter recorded at tracking time): n settled (win / loss), W-L-P, hit
+    rate and its game-clustered 95% interval. items: {pick_id, event_id, grade, status}. Research only."""
+    rows = []
+    for g in GRADES:
+        xs = [x for x in items if x.get("grade") == g]
+        settled = [x for x in xs if x["status"] in ("win", "loss")]
+        h = _hit(settled)
+        rows.append({"grade": g, "picks": len(xs), "n": len(settled),
+                     "wins": sum(1 for x in xs if x["status"] == "win"),
+                     "losses": sum(1 for x in xs if x["status"] == "loss"),
+                     "pushes": sum(1 for x in xs if x["status"] == "push"),
+                     "hit_rate": None if h is None else round(h, 4),
+                     "hit_rate_ci95_games": _cluster_ci(settled, _hit)})
+    return {"label": GRADE_TABLE_LABEL, "rule": GRADE_RULE, "rows": rows,
+            "ungraded": sum(1 for x in items if x.get("grade") not in GRADES)}
 
 
 def _hit(xs):
@@ -548,6 +605,7 @@ def aggregate(con):
                       "side": p["side"], "displayed": p.get("displayed"), "status": st["status"] if st else None,
                       "platform": p["platform"], "league": p.get("league"),
                       "state": p.get("validation_state") or "no_chance", "surface": p.get("surface"),
+                      "grade": p.get("grade_shown"),
                       "key": (r["member"], p["platform"], p["offer_id"], p["side"]),
                       "corrected": bool(st and st["revision"] > 1), "scratch": bool(p.get("scratch"))})
     test = [x for x in items if x["scratch"]]
@@ -563,12 +621,16 @@ def aggregate(con):
     return {"version": VERSION, "built_at": now_s(), "rule": "each pick at its own line; latest settlement revision",
             "all": _group(items), "by": by, "duplicate_picks": dupes, "test": _group(test) if test else None,
             "corrected_results": sum(1 for x in items if x["corrected"]),
+            "by_grade": grade_table(items),
+            "by_grade_league": {lg: grade_table([x for x in items if x["league"] == lg])
+                                for lg in sorted({x["league"] for x in items if x["league"]})},
             "notes": ["member picks only; test picks (admin token, marked test, SPORTS_PICKS_SCRATCH) are under 'test'",
                       "hit rate = wins / (wins + losses); pushes, voids and unresolved are listed, not counted",
                       "Brier / log-loss of the displayed chance of the chosen side given no push, settled picks with a "
                       "Scout chance only",
                       "95% intervals: bootstrap over games (1,000 resamples, seed 7)",
-                      "stakes are 0 and no grade letters are shown while sports-gp-1 validation is pending; no returns"]}
+                      "stakes are 0; research grades (rg-1, sports-gp-1 bands) are shown labelled 'Research grade - not "
+                      "validated'; by_grade uses the letter recorded when each pick was tracked; no returns"]}
 
 
 def main(argv=None):

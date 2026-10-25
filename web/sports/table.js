@@ -124,9 +124,13 @@
       r.sortKey = nn(X.s) ? X.s : null;
       r.gapPts = nn(X.g) ? X.g : r.gapPts;
       r.gap = nn(r.gapPts) && Math.abs(r.gapPts) >= GAP_PTS - 1e-9;
+      // rg-1 research grade: the server's letter for this lean (sports/board_view.quote_x), never computed here
+      r.grade = lean && X.gr ? X.gr : null;
+      r.notValidated = X.nv || null;       // failed-gate market (NFL): lean + grade only, no edge / confidence / rank
+      if (r.notValidated) { r.edge = null; r.sortKey = null; r.gapPts = null; r.gap = false; r.mLean = null; }
     }
     r.leanOffered = lean ? !!(q.o && q.o[lean === "over" ? 0 : 1]) : null;
-    r.conf = held ? null : X ? serverConf(X, r, now) : confidence(r, now);
+    r.conf = held || r.notValidated ? null : X ? serverConf(X, r, now) : confidence(r, now);
     return r;
   }
   // the one lean rule for a Scout chance + market chance pair (surfaces without a board row: slips, sheets)
@@ -256,6 +260,9 @@
     if (!r.scout) return '<span class="sw-tb-lean none">No Scout chance</span>';
     if (r.held) return '<span class="sw-tb-lean none sw-tb-held" data-held="' + esc(r.heldCode) + '">' + esc(r.held) + "</span>";
     if (!r.lean) return '<span class="sw-tb-lean none"' + (r.noLean ? ' data-nolean="' + r.noLean.side + '" title="Scout favours ' + (r.noLean.side === "over" ? "Over" : "Under") + " but the market prices it higher (" + edgeText(r.noLean.edge) + ' pts)"' : "") + ">No lean</span>";
+    var Lb = root.SportsLabels;
+    if (r.grade && Lb) return '<span class="sw-tb-lean ' + r.lean + '" data-lean="' + r.lean + '">' + Lb.gradeHtml(r.grade, r.lean, r.notValidated) + "</span>" +
+      (r.leanOffered === false ? '<span class="sw-tb-note">not offered here</span>' : "");
     return '<span class="sw-tb-lean ' + r.lean + '" data-lean="' + r.lean + '">' + (r.lean === "over" ? "Over" : "Under") + "</span>" +
       (r.leanOffered === false ? '<span class="sw-tb-note">not offered here</span>' : "");
   }
