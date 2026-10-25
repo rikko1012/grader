@@ -141,6 +141,11 @@ def write_snapshot(now=None):
         shadow_state = shadow.status()
     except Exception as e:                                           # noqa: BLE001
         shadow_state = {"error": str(e)[:200]}
+    try:
+        from . import nflv2
+        shadow_state = dict(shadow_state, nflv2=nflv2.status())     # sm-nfl-2 (REGISTER A6), admin only
+    except Exception as e:                                           # noqa: BLE001
+        shadow_state = dict(shadow_state, nflv2={"error": str(e)[:200]})
     _atomic_write(api_dir() / "model_meta.json", {
         "written_at": now, "registry": forward.registry(), "challengers": _runtime_challengers(), "artifacts": {s: _art_meta(forward.load_artifact(s))
                                                                          for s in ("nba", "nfl")},

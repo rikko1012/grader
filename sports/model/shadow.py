@@ -189,6 +189,7 @@ class Recorder:
         if self.con is not None:
             self.con.execute("DELETE FROM shadow_forecasts WHERE forecast_at < datetime('now', ?)",
                              (f"-{RETENTION_DAYS} days",))
+            self.con.commit()          # release the write lock now (a second shadow recorder shares shadow.db)
 
     @classmethod
     def for_league(cls, scon, hcon, league, forecast_at, absences, up, gdb=None):
@@ -479,7 +480,7 @@ def l2_score(sport, hcon, freeze, art):
 # ------------------------------------------------------------------------------------------------------ settling
 def settle(scon, path=None):
     """Score shadow forecasts whose offer has a settlement (same rule as learning._score_one: the forecast's OWN line
-    and chosen side). Idempotent."""
+    and chosen side), each under its OWN model_version (sm-2, sm-nfl-2). Idempotent."""
     from .. import settlement, store
     con = db(path)
     evs = [r[0] for r in con.execute("SELECT DISTINCT event_id FROM shadow_forecasts f WHERE NOT EXISTS (SELECT 1 FROM "
@@ -492,9 +493,9 @@ def settle(scon, path=None):
             by_offer.setdefault((r["source"], r["source_key"].rsplit("|", 1)[0]), []).append(store._rec(r))
         if not by_offer:
             continue
-        for sid, rid, line, side, p_side, p_push, lg, st in con.execute(
-                "SELECT shadow_id, offer_record_id, line, chosen_side, p_side, p_push, league, stat FROM "
-                "shadow_forecasts WHERE event_id = ?", (ev,)).fetchall():
+        for sid, rid, line, side, p_side, p_push, lg, st, mv in con.execute(
+                "SELECT shadow_id, offer_record_id, line, chosen_side, p_side, p_push, league, stat, model_version "
+                "FROM shadow_forecasts WHERE event_id = ?", (ev,)).fetchall():
             if side is None:
                 continue
             offer = store.get(scon, rid)
@@ -507,7 +508,7 @@ def settle(scon, path=None):
             cur = max(sts, key=lambda x: x.revision)
             status, _ = settlement.at_line(cur, line, side)
             n += con.execute("INSERT OR IGNORE INTO shadow_scorecard VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                             (sid, cur.settlement_id, VERSION, lg, st, ev, line, side, p_side, p_push, status,
+                             (sid, cur.settlement_id, mv or VERSION, lg, st, ev, line, side, p_side, p_push, status,
                               cur.source_value, cur.settled_at)).rowcount
         con.commit()
     con.close()

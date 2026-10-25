@@ -391,6 +391,12 @@ def run(leagues=None, forecast_at=None, log=print):
             out["sm2_l2"] = {lg: shadow.l2_check(lg, hcon, forecast_at or started) for lg in leagues}
         except Exception as e:                          # noqa: BLE001 - never blocks sm-1
             out["sm2_l2"] = {"error": f"{type(e).__name__}: {str(e)[:160]}"}
+        if "nfl" in leagues:
+            try:                                        # sm-nfl-2 held-out H2 (REGISTER A6 3): count only, bounded
+                from . import nflv2
+                out["nflv2_h2"] = nflv2.h2_check(hcon, forecast_at or started)
+            except Exception as e:                      # noqa: BLE001 - never blocks sm-1
+                out["nflv2_h2"] = {"error": f"{type(e).__name__}: {str(e)[:160]}"}
     finally:
         hcon.close()
     out["forecasts_added"] = after - before
@@ -416,7 +422,8 @@ def _summary(out):
             "flag": FLAG, "artifacts": out["artifacts"], "history": out["history"],
             "forecasts_added": out.get("forecasts_added"), "leagues": lg, "withheld_check": out.get("withheld_check"),
             "snapshot": out.get("snapshot"), "peak_rss_mb": out.get("peak_rss_mb"), "training": out["training"],
-            "sm2_shadow": {k: r.get("shadow") for k, r in out["leagues"].items()}, "sm2_l2": out.get("sm2_l2")}
+            "sm2_shadow": {k: r.get("shadow") for k, r in out["leagues"].items()}, "sm2_l2": out.get("sm2_l2"),
+            "nflv2_shadow": (out["leagues"].get("nfl") or {}).get("shadow_nflv2"), "nflv2_h2": out.get("nflv2_h2")}
 
 
 def main(argv=None):

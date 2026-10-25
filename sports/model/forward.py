@@ -288,9 +288,10 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
     dnp = mcfg.get("dnp_share", {}).get(league, 0.0)
     icon = inputs_db()
     rec = _shadow_recorder(scon, hcon, league, forecast_at, absences, up)      # sm-2 SHADOW (REGISTER A5 7), never shown
+    rec2 = _nflv2_recorder(scon, hcon, league, forecast_at, up, rec)           # sm-nfl-2 SHADOW (REGISTER A6 6)
     cur_hl, df = None, None
     for mk in _ordered(league, art["markets"]):
-        sh_items = []
+        sh_items, sm1_probs = [], {}
         am = art["markets"][mk]
         hl = tuple(am["half_lives"])
         if hl != cur_hl:
@@ -341,6 +342,7 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
                                      (("family_fit", am["family"]),))
             written.append(("sm-1", fc, pol, pmf, {"row": row}))
             sh_items.append((rid, o, gk, pol.get("chosen_p")))
+            sm1_probs[rid] = (fc.p_over, fc.p_under, fc.p_push)
             # market candidates on the same offer
             per, reasons = market.eligible_quotes(o, quotes.get((o.event_id, o.player_id, o.stat), []), events,
                                                   forecast_at, dnp)
@@ -388,11 +390,34 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
         icon.commit()
         if rec is not None:
             rec.market(mk, df, hl, rowpos, sh_items, events)
+        if rec2 is not None:
+            rec2.market(mk, df, hl, rowpos, sh_items, events, sm1_probs)
         log({"league": league, "market": mk, "written": out["written"]})
     icon.close()
     if rec is not None:
         out["shadow"] = rec.close()
+    if rec2 is not None:
+        out["shadow_nflv2"] = rec2.close()
     return out
+
+
+def _nflv2_recorder(scon, hcon, league, forecast_at, up, rec=None):
+    """The sm-nfl-2 shadow recorder for NFL, or None (other league / no verified artifact / SPORTS_SHADOW_NFLV2=0 /
+    any error - sm-1 is never affected). NFL teammates Out: the sm-2 recorder's report when it runs, else read here
+    with the same freshness rule (shadow._report)."""
+    if league != "nfl":
+        return None
+    try:
+        from . import nflv2, shadow
+        if not nflv2.enabled():
+            return None
+        art = nflv2.load()
+        if art is None:
+            return None
+        absences = rec.absences if rec is not None else shadow._report(scon, hcon, league, forecast_at, up)[1]
+        return nflv2.Recorder(hcon, forecast_at, absences=absences, context=getattr(rec, "context", None), art=art)
+    except Exception:                                    # noqa: BLE001
+        return None
 
 
 def _shadow_recorder(scon, hcon, league, forecast_at, absences, up):
