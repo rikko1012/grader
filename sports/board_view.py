@@ -74,3 +74,46 @@ def player_rows(rows, games):
         lines = [q.get("line") for q in r.get("quotes", []) + r.get("kalshi", [])]
         out[r["key"]] = row_summary(r["stat"], lines, games)
     return out
+
+
+class StreamWriter:
+    """Writes board_view.json row by row (no in-memory copy of all rows): tmp file in the target folder, then an atomic
+    os.replace on close(); abort() (or garbage collection before close) removes the tmp file. Memory = one player's rows at a time."""
+
+    def __init__(self, path, meta):
+        import json as _json
+        import os as _os
+        import tempfile as _tf
+        self._json, self._os, self.path = _json, _os, path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, self.tmp = _tf.mkstemp(dir=str(path.parent), prefix=".tmp-", suffix=".json")
+        self.f = _os.fdopen(fd, "w", encoding="utf-8")
+        head = _json.dumps(meta, separators=(",", ":"), default=str, allow_nan=False)
+        self.f.write(head[:-1] + ("," if len(meta) else "") + '"rows":{')
+        self.n, self.done = 0, False
+
+    def add(self, rows):
+        for k, v in rows.items():
+            self.f.write(("," if self.n else "") + self._json.dumps(k) + ":" +
+                         self._json.dumps(v, separators=(",", ":"), allow_nan=False))
+            self.n += 1
+
+    def close(self):
+        self.f.write("}}")
+        self.f.close()
+        size = self._os.path.getsize(self.tmp)
+        self._os.replace(self.tmp, self.path)
+        self.done = True
+        return size
+
+    def __del__(self):                                   # a failed build never leaves its tmp file behind
+        if not getattr(self, "done", True):
+            self.abort()
+
+    def abort(self):
+        self.done = True
+        try:
+            self.f.close()
+            self._os.unlink(self.tmp)
+        except OSError:
+            pass

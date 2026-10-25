@@ -790,7 +790,8 @@ def build(con, league, now=None, base=None, history=True):
     pl_dir, hi_dir = root / "players", root / "history"
     ctx_by_pid, ctx_summary = _engine_context(league, fam, now, pids, markets_rows, events, cur_team)
     manifest["player_context"] = ctx_summary
-    view_rows = {}                                      # board_view.json: per-prop history hit rates (bv-1)
+    view_out = board_view.StreamWriter(root / "board_view.json",       # bv-1 hit rates, streamed per player
+                                       {**base_meta, "part": "view", "rule": board_view.VERSION})
     for pid in pids:
         rows = [r for r in markets_rows.values() if r["player_id"] == pid]
         p = players.get(pid)
@@ -804,7 +805,7 @@ def build(con, league, now=None, base=None, history=True):
                        "opponent": _team_view(teams, e.away_team_id if tid == e.home_team_id else e.home_team_id)
                        if tid in (e.home_team_id, e.away_team_id) else None}
         games = player_games(con, league, pid, now, teams) if history else []
-        view_rows.update(board_view.player_rows(rows, games))
+        view_out.add(board_view.player_rows(rows, games))
         tid = cur_team.get(pid)
         mates_out = []
         for mate in sorted(team_players.get(tid, ())):
@@ -838,8 +839,7 @@ def build(con, league, now=None, base=None, history=True):
             "history": {"games": len(games), "sources": sorted({s for g in games for s in g["source"]})}})
         _write(hi_dir / f"{safe_name(pid)}.json", {**base_meta, "player_id": pid, "family": fam, "games": games})
         n_players += 1
-    sizes["board_view"] = _write(root / "board_view.json", {**base_meta, "part": "view", "rule": board_view.VERSION,
-                                                              "rows": view_rows})
+    sizes["board_view"] = view_out.close()
     sizes["results"] = _write(root / "results.json", results_view(con, league, setts, now, base_meta))
     manifest["sizes"] = sizes
     manifest["build_s"] = round(time.time() - t0, 2)
