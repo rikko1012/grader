@@ -2,6 +2,9 @@
 (sports/without.py), public Results (sports/results_public.py), their routes (sports/api_sheets.py) and the
 SPORTS_RESULTS_PUBLIC switch (sports/web.py PUBLIC_WHEN)."""
 import json
+import shutil
+import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -218,3 +221,50 @@ def test_results_route_is_members_only_unless_the_public_flag_is_on(built, monke
 def test_settlement_model_types_used_by_results_exist():
     assert Settlement.__dataclass_fields__["affected_forecast_ids"]
     assert snapshots.LEAGUES == ("nba", "nfl")
+
+
+# ---------------------------------------------------------------------------------------------------- UI modules
+WEB = Path(__file__).resolve().parents[2] / "web"
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_sheet_helpers_in_node():
+    script = Path(__file__).with_name("ui_sheets_test.js")
+    r = subprocess.run(["node", str(script), str(WEB / "sports")], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr + r.stdout
+
+
+def test_page_hooks_are_one_line_each_and_scoped():
+    page = (WEB / "sports.html").read_text(encoding="utf-8")
+    assert page.count('data-view="sheets"') == 1 and "/sports/sheets.js" in page and "/sports/without.js" in page
+    assert page.index("/sports/sheets.js") < page.index("/sports/app.js")
+    app = (WEB / "sports" / "app.js").read_text(encoding="utf-8")
+    assert app.count("window.SportsSheets.render(") == 1
+    css = (WEB / "sports" / "sheets.css").read_text(encoding="utf-8")
+    for line in css.splitlines():
+        if line.startswith((".", "@media")) and not line.startswith("@media"):
+            assert line.startswith(".sw "), line                     # every rule scoped under body.sw
+    res = (WEB / "sports" / "results.html").read_text(encoding="utf-8")
+    assert "/sports/results_public.js" in res and 'class="sw"' in res
+    for f in ("sheets.js", "without.js", "results_public.js"):
+        src = (WEB / "sports" / f).read_text(encoding="utf-8").lower()
+        assert "stake_units" not in src and "profit:" not in src                # never a return on these views
+        assert "localstorage.setitem" not in src or "try" in src
+
+
+def test_results_page_alias_and_public_api_base(monkeypatch):
+    from sports import gateway
+    monkeypatch.setenv("SPORTS_API_BASE", "https://sports.example")
+    code, body, ctype, _ = gateway.handle_get("/sports/results", "", {}, member=lambda: None, allowed=lambda: False,
+                                              admin=lambda: False, headers={})
+    assert code == 200 and b"results_public.js" in body and ctype.startswith("text/html")
+    code, body, _, _ = gateway.handle_get("/api/sports/token", "", {}, member=lambda: None, allowed=lambda: False,
+                                          admin=lambda: False, headers={})
+    assert code == 401 and json.loads(body) == {"error": "members_only", "api_base": "https://sports.example"}
+
+
+def test_sheets_job_is_registered_with_a_memory_cap():
+    from sports import scheduler
+    j = scheduler.default_jobs()["sheets"]
+    assert j["cls"] == scheduler.HEAVY and j["cap_mb"] <= 200 and j["every_s"] >= 300 and j["flag"] == "SPORTS_INGEST"
+    assert j["argv"][-3:] == ["build", "nba", "nfl"] or "build" in j["argv"]

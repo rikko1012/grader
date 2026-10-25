@@ -1,0 +1,104 @@
+/* Scout Sports public Results page (/sports/results) - sheets agent. SPORTS ONLY (esports has no results page by owner
+   rule). Data: GET <api_base>/api/sports/results/public (sports/results_public.py rp-1). Members read it with their st1
+   token; everyone else only while the sports service has SPORTS_RESULTS_PUBLIC=1 (server-side, web.PUBLIC_WHEN).
+   Accuracy only: no returns, ROI, P&L or stakes. Pure helpers (ciText, gateText, rateText) exported for node. */
+(function (root) {
+  "use strict";
+  function pct(p) { return p === null || p === undefined || !isFinite(p) ? "—" : (Math.round(p * 1000) / 10).toFixed(1) + "%"; }
+  function ciText(ci, asPct) {
+    if (!ci) return "";
+    var f = asPct ? pct : function (x) { return (Math.round(x * 100) / 100).toFixed(2); };
+    return " (95%: " + f(ci[0]) + " – " + f(ci[1]) + ")";
+  }
+  function gateText(g) { return g ? g.text : ""; }
+  function rateText(w, l) { return w + l ? pct(w / (w + l)) : "—"; }
+  var api = {pct: pct, ciText: ciText, gateText: gateText, rateText: rateText};
+  if (typeof module !== "undefined" && module.exports) { module.exports = api; return; }
+  root.SportsResultsPublic = api;
+
+  var Sh = root.ScoutShell, esc = Sh.esc, main = document.getElementById("rp-main");
+  function n2(x) { return x === null || x === undefined ? "—" : (Math.round(x * 100) / 100).toFixed(2); }
+
+  function load() {
+    return fetch("/api/sports/token", {credentials: "same-origin", cache: "no-store"}).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (b) { return {status: r.status, body: b}; });
+    }).then(function (t) {
+      var base = (t.body && t.body.api_base) || "";
+      var headers = t.status === 200 && t.body.token ? {Authorization: "Bearer " + t.body.token} : {};
+      if (t.status === 404) throw {kind: "off"};
+      return fetch(base + "/api/sports/results/public", {headers: headers, cache: "no-store"}).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (b) {
+          if (r.status === 401 || r.status === 403) throw {kind: "members"};
+          if (r.status === 503) throw {kind: "notready"};
+          if (!r.ok) throw {kind: "error"};
+          return {data: b, member: !!headers.Authorization};
+        });
+      });
+    });
+  }
+
+  function table(head, rows) {
+    return '<div class="sw-scroll"><table class="sw-mini"><thead><tr>' + head.map(function (h) {
+      return '<th scope="col"' + (h[1] ? ' class="num"' : "") + ">" + esc(h[0]) + "</th>"; }).join("") + "</tr></thead><tbody>" +
+      rows.join("") + "</tbody></table></div>";
+  }
+  function summaryRow(label, s) {
+    var L = s.leans || {}, P = s.projection || {};
+    return "<tr><th scope=\"row\">" + esc(label) + '</th><td class="num">' + s.settled + '</td><td class="num">' + s.props + '</td><td class="num">' + s.games +
+      '</td><td class="num">' + n2(P.mae) + '<span class="sw-faint sw-small">' + esc(ciText(P.mae_ci95)) + '</span></td><td class="num">' + n2(P.bias) +
+      '<span class="sw-faint sw-small">' + esc(ciText(P.bias_ci95)) + '</span></td><td class="num">' + (L.wins || 0) + "-" + (L.losses || 0) + (L.pushes ? "-" + L.pushes : "") +
+      '</td><td class="num">' + pct(L.hit_rate) + '<span class="sw-faint sw-small">' + esc(ciText(L.hit_rate_ci95, true)) + "</span></td></tr>";
+  }
+  var SUMMARY_HEAD = [["", 0], ["Settled", 1], ["Props", 1], ["Games", 1], ["Proj. MAE", 1], ["Bias", 1], ["Lean W-L(-P)", 1], ["Lean hit rate", 1]];
+
+  function leagueSection(lg, L) {
+    var h = '<section class="sw-panel" aria-labelledby="rp-' + lg + '"><h2 id="rp-' + lg + '">' + lg.toUpperCase() + "</h2>" +
+      '<p class="rp-gate' + (L.gate.validated ? " ok" : "") + '"><b>' + esc(gateText(L.gate)) + "</b></p>";
+    if (!L.settled) return h + '<p class="sw-muted">No settled forecasts yet. Forecasts are scored after their games are final, from the box score, at the line each forecast was made for.' +
+      (L.unresolved || L.void ? " " + L.unresolved + " unresolved · " + L.void + " void." : "") + "</p></section>";
+    h += "<h3>All models</h3>" + table(SUMMARY_HEAD, [summaryRow("All", L)]);
+    h += "<h3>By model</h3>" + table(SUMMARY_HEAD, Object.keys(L.models).map(function (m) { return summaryRow(m + (L.models[m].research_only ? " (research)" : ""), L.models[m]); }));
+    h += "<h3>By stat</h3>" + table(SUMMARY_HEAD, Object.keys(L.stats).map(function (s) { return summaryRow(s, L.stats[s]); }));
+    h += '<h3>Calibration</h3><p class="sw-small sw-muted">Stated chance of Over (given no push) against how often Over happened.</p>' +
+      table([["Stated Over chance", 0], ["Forecasts", 1], ["Mean stated", 1], ["Observed Over", 1]], L.calibration.map(function (c) {
+        return "<tr><th scope=\"row\">" + esc(c.band) + '</th><td class="num">' + c.n + '</td><td class="num">' + pct(c.stated) + '</td><td class="num">' + pct(c.observed) + '<span class="sw-faint sw-small">' + esc(ciText(c.observed_ci95, true)) + "</span></td></tr>";
+      }));
+    h += '<h3>Leans by probability band</h3><p class="sw-small sw-muted">Grade letters are not in use; bands are the lean side’s chance given no push.</p>' +
+      table([["Probability band", 0], ["Leans", 1], ["W-L(-P)", 1], ["Mean stated", 1], ["Hit rate", 1]], L.bands.map(function (b) {
+        return "<tr><th scope=\"row\">" + esc(b.band) + '</th><td class="num">' + b.n + '</td><td class="num">' + b.wins + "-" + b.losses + (b.pushes ? "-" + b.pushes : "") + '</td><td class="num">' + pct(b.stated) + '</td><td class="num">' + pct(b.hit_rate) + '<span class="sw-faint sw-small">' + esc(ciText(b.hit_rate_ci95, true)) + "</span></td></tr>";
+      }));
+    return h + "</section>";
+  }
+
+  function picksSection(P) {
+    var lgs = Object.keys((P && P.leagues) || {});
+    var h = '<section class="sw-panel" aria-labelledby="rp-picks"><h2 id="rp-picks">Tracked member picks</h2>';
+    if (!lgs.length) return h + '<p class="sw-muted">No tracked picks settled yet.</p></section>';
+    return h + table([["League", 0], ["Picks", 1], ["Games", 1], ["W-L-P", 1], ["Void", 1], ["Open", 1], ["Hit rate", 1]], lgs.map(function (lg) {
+      var g = P.leagues[lg];
+      return "<tr><th scope=\"row\">" + esc(lg.toUpperCase()) + '</th><td class="num">' + g.picks + '</td><td class="num">' + g.games + '</td><td class="num">' + g.wins + "-" + g.losses + "-" + g.pushes +
+        '</td><td class="num">' + g.voids + '</td><td class="num">' + g.pending + '</td><td class="num">' + pct(g.hit_rate) + '<span class="sw-faint sw-small">' + esc(ciText(g.hit_rate_ci95_games, true)) + "</span></td></tr>";
+    })) + '<p class="sw-faint sw-small">' + esc(P.note || "") + "</p></section>";
+  }
+
+  function draw(got) {
+    var D = got.data;
+    var h = '<div class="sw-eyebrow">Scout Sports · NBA / NFL</div><h1 class="sw-h1">Results</h1>' +
+      '<p class="sw-sub">Every settled forward forecast, scored against the final box score. Accuracy only - this page shows no returns, profit or ROI.</p>';
+    ["nba", "nfl"].forEach(function (lg) { if (D.leagues && D.leagues[lg]) h += leagueSection(lg, D.leagues[lg]); });
+    h += picksSection(D.picks);
+    h += '<details class="sw-more"><summary>Exact definitions</summary><ul class="sw-list sw-small">' + Object.keys(D.method || {}).map(function (k) {
+      return "<li><b>" + esc(k) + ":</b> " + esc(D.method[k]) + "</li>"; }).join("") + "<li><b>grades:</b> " + esc(D.grades || "") + "</li></ul></details>" +
+      '<p class="sw-faint sw-small">Built ' + esc(new Date(D.built_at).toLocaleString()) + " · " + esc(D.version) + "</p>";
+    main.innerHTML = h;
+  }
+
+  Sh.mount(document.getElementById("rp-top"), {active: "sports"});
+  load().then(draw, function (e) {
+    if (e && e.kind === "members") { Sh.member().then(function (info) { Sh.showMember(info); Sh.gate(main, info); }); return; }
+    var msg = e && e.kind === "notready" ? "Results are being prepared - try again in a few minutes." :
+      e && e.kind === "off" ? "Scout Sports is not open yet." : "Results could not be loaded. Esports pages are unaffected.";
+    main.innerHTML = '<h1 class="sw-h1">Results</h1><div class="sw-state"><p class="sw-muted">' + esc(msg) + "</p></div>";
+  });
+  Sh.member().then(Sh.showMember);
+})(this);

@@ -1,0 +1,32 @@
+/* Sheets agent: Sheets view (#/sheets), Games-without module (.gwx), public Results page. Scoped to body.sw + shx-/gwx-/rp-. */
+.sw .shx-tabs{display:flex;gap:4px;flex-wrap:wrap;margin:6px 0 12px}
+.sw .shx-tabs a{color:var(--muted);text-decoration:none;padding:0 12px;min-height:40px;display:inline-flex;align-items:center;border-radius:10px;border:1px solid var(--line)}
+.sw .shx-tabs a[aria-current=page]{color:var(--text);background:var(--panel-2);border-color:var(--accent)}
+.sw .shx-filters,.sw .gwx-controls{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:flex-end;margin:0 0 10px}
+.sw .shx-field{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--faint);min-width:0}
+.sw .shx-field select,.sw .shx-field input{background:var(--panel-2);border:1px solid var(--line-2);border-radius:8px;min-height:40px;padding:0 10px;max-width:100%}
+.sw .shx-field input[type=search]{min-width:160px}.sw .gwx-controls input[type=number]{width:96px}
+.sw .shx-check{flex-direction:row;align-items:center;gap:6px;min-height:40px;color:var(--muted)}
+.sw .shx-check input{width:18px;height:18px;accent-color:var(--accent)}
+.sw .shx-meta{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 6px;font-size:12.5px;color:var(--muted)}
+.sw .shx-wrap{max-height:72vh;overflow:auto;border:1px solid var(--line);border-radius:10px}
+.sw table.shx-table{min-width:980px}
+.sw .shx-table thead th{position:sticky;top:0;background:var(--panel);z-index:1}
+.sw .shx-table tbody th{font-weight:600;color:var(--text);text-transform:none;letter-spacing:0;font-size:12.5px}
+.sw .shx-table tbody tr:hover td,.sw .shx-table tbody tr:hover th{background:#ffffff06}
+.sw .shx-sort{background:none;border:0;color:inherit;font:inherit;text-transform:inherit;letter-spacing:inherit;cursor:pointer;padding:4px 0;min-height:32px}
+.sw .shx-sort:hover{color:var(--text)}
+.sw .shx-o{color:var(--over)}.sw .shx-u{color:var(--under)}
+.sw .shx-gap{color:var(--warn);font-weight:600}
+.sw .shx-var{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line-2);color:var(--muted)}
+.sw .shx-goblin{border-color:#5fd17a66;color:var(--over)}.sw .shx-demon{border-color:#ff8a8a66;color:var(--bad)}
+.sw .shx-lean{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:999px;white-space:nowrap}
+.sw .shx-lean.shx-over{background:#5fd17a1f;color:var(--over)}.sw .shx-lean.shx-under{background:#ff9f6b1f;color:var(--under)}
+.sw .shx-method{margin-top:12px}
+.sw #shx-more{margin-top:10px}
+.sw .gwx-cmp{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:0 0 10px}
+.sw .gwx-card{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.sw .gwx-card b{font:700 22px var(--display)}
+.sw .rp-gate{margin:0 0 10px;color:var(--warn)}.sw .rp-gate.ok{color:var(--over)}
+.sw .sw-panel h3{margin-top:14px}
+@media (max-width:640px){.sw .shx-field input[type=search]{min-width:0;width:100%}.sw .shx-filters .shx-field{flex:1 1 140px}}
