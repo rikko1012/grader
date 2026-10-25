@@ -10,11 +10,14 @@ substituted:
   - the offer was seen by ingestion within STALE_S (server observation age; the source's own time is often unknown)
   - a forecast exists FOR THIS OFFER REVISION (its offer_snapshot_ids name the current record id) on the same line;
     a forecast of an older revision never carries to a moved line
-  - the forecast is not research-only, has a chosen side that the offer really lists, a grade and a positive stake
-    (the grade policy's own output: a held 0U pick stays out, it is never relabelled)
+  - the forecast has a chosen side that the offer really lists; a NON-research forecast also needs a grade and a
+    positive stake (the grade policy's own output: a held 0U pick stays out, it is never relabelled)
+  - sp-2 (owner choice 2026-10-24): a RESEARCH-ONLY forecast is eligible as a labelled research leg - the leg carries
+    research_only=True and stake_units=0.0, Slip Studio shows the warning "Research estimates - not validated; stakes
+    0" and tags each such leg. A non-research forecast for the same offer is preferred when one exists.
   - the leg's team is known (the platforms' two-team rule must be checkable)
-Policy "research" (admin only, labelled): research-only forecasts with a chosen side are allowed; grade / stake not
-required. Never shown to members.
+Policy "research" (admin only, labelled): any forecast (newest first, research or not) with a chosen side; grade /
+stake not required.
 
 One leg per offer: the forecast's chosen side only (the opposite side of a forecast is never a slip leg).
 Exposure keys: a leg's PROP keys are (player, box-score part) for every part of its market (markets.MARKETS), so an
@@ -140,9 +143,13 @@ def _forecasts_by_offer(con, league, now, event_ids=None):
 
 
 def _pick_forecast(fs, policy):
-    cand = [f for f in fs if policy == "research" or not f.research_only]
-    if not cand:
-        return None, ("research forecast only" if fs else "no forecast for this exact line")
+    """member (sp-2): the newest non-research forecast, else the newest research-only one (a labelled research leg).
+    research (admin): the newest forecast of any kind."""
+    if not fs:
+        return None, "no forecast for this exact line"
+    cand = list(fs)
+    if policy == "member" and any(not f.research_only for f in cand):
+        cand = [f for f in cand if not f.research_only]
     cand.sort(key=lambda f: (f.forecast_at, f.model_version, f.forecast_id), reverse=True)
     return cand[0], None
 
@@ -217,7 +224,7 @@ def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy):
     q = o.side(side)
     if q is None or not q.offered:
         return "chosen side not offered", None
-    if policy == "member":
+    if policy == "member" and not f.research_only:
         if f.grade is None:
             return "no grade", None
         if f.stake_units is None or f.stake_units <= 0:
@@ -237,6 +244,7 @@ def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy):
            "promotional": o.promotional, "multiplier": q.multiplier, "start_utc": start,
            "observed_at": o.observed_at, "last_seen_at": max(x for x in (seen.get(rid), o.observed_at) if x),
            "source_time_unknown": o.source_time_unknown, "p_win": p_win, "p_loss": p_loss, "p_push": f.p_push,
-           "grade": f.grade, "stake_units": f.stake_units, "weight": math.log(p_win),
+           "grade": None if f.research_only else f.grade,
+           "stake_units": 0.0 if f.research_only else f.stake_units, "weight": math.log(p_win),
            "prop_keys": prop_keys(o.league, o.player_id, o.stat)}
     return None, leg

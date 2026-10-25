@@ -1,7 +1,8 @@
 """Slip Studio HTTP handlers (sports service process; route lines in sports/web.py ROUTES).
 
   GET       /api/sports/slips/rules        published platform rules used (sources, page dates, verified flags)
-  GET       /api/sports/slips/pool         ?league=&platform=  eligible legs (policy sp-1) + exclusion counts
+  GET       /api/sports/slips/pool         ?league=&platform=  eligible legs (policy sp-2) + exclusion counts +
+                                           research_legs (research-only forecasts, stake 0, labelled)
   GET|POST  /api/sports/slips/build        league, platform + builder settings (JSON body or ?settings=<json>)
   POST      /api/sports/slips/validate     {"mode": "load"|"copy", "slip": {...}} - copy text ONLY on ok
   POST      /api/sports/slips/settle       {"slip": {...}} - current settlement of a saved slip (read-only)
@@ -143,6 +144,7 @@ def pool_view(req):
     legs = [{k: l.get(k) for k in MEMBER_LEG_FIELDS} for l in p["legs"]]
     return 200, {"league": league, "platform": platform, "snapshot_at": p["snapshot_at"], "snapshot_id": p["snapshot_id"],
                  "policy_version": p["policy_version"], "offers": p["offers"], "eligible": len(legs), "legs": legs,
+                 "research_legs": sum(1 for l in legs if l.get("research_only")),
                  "excluded": p["excluded"], "stale_after_s": poolmod.STALE_S}
 
 

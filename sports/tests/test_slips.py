@@ -368,9 +368,14 @@ def test_pool_policy_exclusions(con):
     w.put_leg(con, o1)
     store.put(con, w.offer("moved", "H3", 3, line=11.5, oid="ud:moved"))
     p = pool.build(con, "nba", "underdog", now=w.NOW)
-    assert {l["player_id"].split(":")[-1] for l in p["legs"]} == {"g1", "g2"}
+    # sp-2: the research-only forecast is a labelled research leg (stake 0, no grade); everything else stays out
+    assert {l["player_id"].split(":")[-1] for l in p["legs"]} == {"g1", "g2", "research"}
+    res = [l for l in p["legs"] if l["research_only"]]
+    assert len(res) == 1 and res[0]["stake_units"] == 0.0 and res[0]["grade"] is None
+    assert all(not l["research_only"] for l in p["legs"] if l is not res[0])
     ex = p["excluded"]
-    for reason in ("held stake (0U)", "no grade", "research forecast only", "no forecast for this exact line",
+    assert "research forecast only" not in ex
+    for reason in ("held stake (0U)", "no grade", "no forecast for this exact line",
                    "chosen side not offered", "team unknown", "price not fresh", "started / locked"):
         assert ex.get(reason), (reason, ex)
     assert ex["no forecast for this exact line"] == 2                       # nofc + the moved line
