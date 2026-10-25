@@ -98,3 +98,38 @@ def test_cmd_settle_writes_the_results_ledger(monkeypatch):
         out = worker.cmd_settle(argparse.Namespace(leagues=["nba"], since="2026-10-21"), con)
     assert out["results"]["nba"]["settled_by_model"] == {"sm-1": 1}
     assert (snapshots.snap_root() / "nba" / "results.json").exists()
+
+
+def test_board_build_never_decodes_offers_or_forecasts_of_games_off_the_slate(monkeypatch, tmp_path):
+    """Owner audit bug 1 (production 2026-10-25: ui-snapshots killed over its 250 MB cap six times in a row, so the
+    board stopped refreshing): the build decoded every current offer, forecast and offer revision of the league. It
+    now reads only the slate's games (measured on a 266k-row store: peak 503 -> 60 MB, identical board.json)."""
+    with store.opened() as con:
+        _world(con, start="2026-10-12T23:00:00Z", eid="nba:espn:old", oid="pp:old")     # long finished
+        _world(con)                                                                       # on the slate
+        seen = []
+        real = snapshots.from_dict
+
+        def spy(d):
+            rec = real(d)
+            if rec.KIND in ("offer", "forecast"):         # events / teams are read whole (small) by design
+                seen.append(rec.event_id)
+            return rec
+        monkeypatch.setattr(snapshots, "from_dict", spy)
+        out = snapshots.build(con, "nba", now="2026-10-23T21:00:00Z", base=tmp_path, history=False, results=False)
+    assert out["offers"] == 1 and out["forecasts"] == 1
+    assert "nba:espn:old" not in seen
+
+
+def test_results_ledger_is_streamed_per_event(monkeypatch, tmp_path):
+    _fake_espn(monkeypatch, {"nba:espn:1": 25.0, "nba:espn:2": 10.0})
+    monkeypatch.setattr(snapshots, "RESULTS_EVENTS_PER_PASS", 1)
+    passes = []
+    real = snapshots._event_settlements
+    monkeypatch.setattr(snapshots, "_event_settlements", lambda con, ids: passes.append(list(ids)) or real(con, ids))
+    with store.opened() as con:
+        _world(con)
+        _world(con, eid="nba:espn:2", oid="pp:2")
+        worker.settle_league(con, "nba", now="2026-10-24T06:00:00Z")
+        out = snapshots.write_results(con, "nba", now="2026-10-24T06:00:00Z", base=tmp_path)
+    assert passes == [["nba:espn:1"], ["nba:espn:2"]] and out["settled_by_model"] == {"sm-1": 2}

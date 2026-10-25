@@ -143,18 +143,36 @@ def _latest(con, kind, where="", args=(), as_of=None, limit=10 ** 7):
     return out
 
 
-def _all_forecasts(con, league, as_of):
-    rows = con.execute("SELECT record_id, payload FROM records WHERE kind='forecast' AND league=? AND known_at <= ?",
-                       (league, as_of)).fetchall()
-    return [from_dict(store._unpack(r["payload"])) for r in rows]
+def _all_forecasts(con, league, as_of, event_ids=None):
+    """Forecasts of this league known at as_of - of `event_ids` only when given (the slate's games; records_event)."""
+    if event_ids is None:
+        rows = con.execute("SELECT record_id, payload FROM records WHERE kind='forecast' AND league=? AND known_at <= ?",
+                           (league, as_of)).fetchall()
+        return [from_dict(store._unpack(r["payload"])) for r in rows]
+    out = []
+    for i in range(0, len(event_ids), 400):
+        part = list(event_ids[i:i + 400])
+        for r in con.execute(f"SELECT payload FROM records WHERE kind='forecast' AND event_id IN "
+                             f"({','.join('?' * len(part))}) AND known_at <= ?", part + [as_of]):
+            out.append(from_dict(store._unpack(r["payload"])))
+    return out
 
 
-def _offer_revisions(con, league, as_of):
-    """record_id -> (platform, offer_id, revision) for every stored offer revision (to attach older-revision forecasts)."""
+def _offer_revisions(con, league, as_of, event_ids=None):
+    """record_id -> (platform, offer_id, revision) for every stored offer revision (to attach older-revision forecasts)
+    - of `event_ids` only when given."""
     out = {}
-    for r in con.execute("SELECT record_id, source, source_key, revision FROM records WHERE kind='offer' AND league=? "
-                         "AND known_at <= ?", (league, as_of)):
-        out[r["record_id"]] = (r["source"], r["source_key"], r["revision"])
+    if event_ids is None:
+        q, a = "SELECT record_id, source, source_key, revision FROM records WHERE kind='offer' AND league=? "                "AND known_at <= ?", [(league, as_of)]
+    else:
+        ids = list(event_ids)
+        a = [tuple(ids[i:i + 400]) + (as_of,) for i in range(0, len(ids), 400)]
+        q = None
+    for args in a:
+        sql = q or (f"SELECT record_id, source, source_key, revision FROM records WHERE kind='offer' AND event_id IN "
+                    f"({','.join('?' * (len(args) - 1))}) AND known_at <= ?")
+        for r in con.execute(sql, args):
+            out[r["record_id"]] = (r["source"], r["source_key"], r["revision"])
     return out
 
 
@@ -564,21 +582,29 @@ def build(con, league, now=None, base=None, history=True, results=True):
         if e.status in ("cancelled",):
             continue
         events[e.event_id] = (rid, e, meta)
-    # offers on these games
-    all_offers = _latest(con, "offer", "league = ?", [league], now)
+    # offers on these games. BOUNDED to the slate's events (fresh 2026-10-24): the former league-wide decode of every
+    # current offer + every forecast + every offer revision grew with the store and pushed this job over its cap
+    # (production 2026-10-25 01:00Z: killed_over_cap 254 > 250 MB six times in a row -> the board stopped refreshing).
+    ev_ids = sorted(events)
+    ev_in = ",".join("?" * len(ev_ids)) or "NULL"
     last_read = {}                                          # platform -> newest re-confirmation of any of its offers
-    for _, o, m in all_offers:
-        seen = m.get("last_seen_at") or o.observed_at
-        if seen and seen > last_read.get(o.platform, ""):
-            last_read[o.platform] = seen
-    offers = [(rid, o, m) for rid, o, m in all_offers if o.event_id in events and o.availability == "open"]
-    del all_offers
-    unmatched = sum(1 for _, o, _ in _latest(con, "offer", "league = ? AND event_id IS NULL", [league], now))
-    revs = _offer_revisions(con, league, now)
+    for r in con.execute(f"SELECT platform, MAX(COALESCE(last_seen_at, observed_at)) FROM records WHERE kind='offer' "
+                         f"AND league = ? AND {store.CURRENT_SQL} AND known_at <= ? GROUP BY platform", (league, now)):
+        if r[0] and r[1]:
+            last_read[r[0]] = r[1]
+    offers = [(rid, o, m) for rid, o, m in _latest(
+        con, "offer", f"league = ? AND (source, source_key) IN (SELECT source, source_key FROM records WHERE "
+                      f"kind = 'offer' AND league = ? AND event_id IN ({ev_in}))", [league, league, *ev_ids], now)
+        if o.event_id in events and o.availability == "open"]
+    unmatched = con.execute(
+        f"SELECT COUNT(*) FROM (SELECT event_id, MAX(revision) FROM records WHERE kind='offer' AND league = ? AND "
+        f"{store.CURRENT_SQL} AND known_at <= ? GROUP BY source, source_key) WHERE event_id IS NULL",
+        (league, now)).fetchone()[0]
+    revs = _offer_revisions(con, league, now, ev_ids)
     by_rid = {rid: (rid, o, m) for rid, o, m in offers}
     by_ident = {(o.platform, o.offer_id): (rid, o, m) for rid, o, m in offers}
     attached = defaultdict(list)                            # current offer rid -> [(forecast, rid, for_revision)]
-    for fc in _all_forecasts(con, league, now):
+    for fc in _all_forecasts(con, league, now, ev_ids):
         for orid in fc.offer_snapshot_ids:
             if orid in by_rid:
                 attached[orid].append((fc, orid, None))
@@ -1012,6 +1038,21 @@ def _fc_obj(con, fid):
     return _FC_CACHE[fid]
 
 
+RESULTS_EVENTS_PER_PASS = 4
+
+
+def _event_settlements(con, event_ids):
+    """CURRENT settlement per (platform, offer, side) of these events only (records_event index)."""
+    cur = {}
+    for r in con.execute(f"SELECT payload FROM records WHERE kind='settlement' AND event_id IN "
+                         f"({','.join('?' * len(event_ids))})", list(event_ids)):
+        s = from_dict(store._unpack(r["payload"]))
+        k = (s.platform, s.offer_id, s.side)
+        if k not in cur or s.revision > cur[k].revision:
+            cur[k] = s
+    return list(cur.values())
+
+
 def _current_settlements(con, league):
     cur = {}
     for _, s in store.settlements(con):
@@ -1038,7 +1079,17 @@ def write_results(con, league, now=None, base=None):
     now = now or now_utc()
     root = snap_root(base) / league
     meta = {"version": SNAP_VERSION, "league": league, "built_at": now_utc(), "as_of": now}
-    obj = results_view(con, league, _current_settlements(con, league), now, meta)
+    # STREAMED event by event (settle job cap 120 MB): only events holding a forecast are read, and only the current
+    # settlements of those events are decoded (a game's pick'em board settles ~2,000 sides; most carry no forecast)
+    fc_events = {r[0] for r in con.execute("SELECT DISTINCT event_id FROM records WHERE kind='forecast' AND league = ?",
+                                           (league,))}
+    st_events = sorted(fc_events & {r[0] for r in con.execute(
+        "SELECT DISTINCT event_id FROM records WHERE kind='settlement' AND event_id LIKE ?", (f"{league}:%",))})
+    rows = []
+    for i in range(0, len(st_events), RESULTS_EVENTS_PER_PASS):
+        part = st_events[i:i + RESULTS_EVENTS_PER_PASS]
+        rows += results_view(con, league, _event_settlements(con, part), now, meta, rows_only=True)
+    obj = results_from_rows(rows, meta)
     _write(root / "results.json", obj)
     return {"rows": obj["total_rows"], "settled_by_model": {k: v["settled"] for k, v in obj["summary"].items()}}
 
@@ -1104,7 +1155,7 @@ def settled_forecast_links(con, setts):
     return links, fcs
 
 
-def results_view(con, league, setts, now, base_meta):
+def results_view(con, league, setts, now, base_meta, rows_only=False):
     """One ledger row per (forecast, settled offer side pair). Projection accuracy and probability accuracy are computed
     per forecast; returns appear only where a settlement records an actual stake and payout."""
     rows = []
@@ -1146,6 +1197,13 @@ def results_view(con, league, setts, now, base_meta):
                              "settled_at": max((x.settled_at or "") for x in ss) or None,
                              "payouts": [{"side": x.side, "stake": x.stake, "payout": x.payout} for x in ss
                                          if x.stake is not None and x.payout is not None]})
+    if rows_only:
+        return rows
+    return results_from_rows(rows, base_meta)
+
+
+def results_from_rows(rows, base_meta):
+    """The ledger file body (summary per model + newest 2,000 rows) from ledger rows."""
     rows.sort(key=lambda r: (r["settled_at"] or "", r["forecast_id"]), reverse=True)
     summary = {}
     for mv in sorted({r["model_version"] for r in rows}):
