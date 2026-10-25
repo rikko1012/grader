@@ -64,3 +64,28 @@ live lines".
 
 Handlers only read `<SPORTS_DATA_DIR>/model/api/*.json` written by the worker (`train forecast | learn | snapshot`),
 through web.cached (single flight, keyed by file mtime): 1,000 cached calls took 0.03 s here; first load 0.02 s.
+
+## cal-mi-1 - market-informed calibration of the displayed Scout chance (REGISTER.md A8, 2026-10-25)
+
+Why: production bl-1 (owner relay 2026-10-25, ~8 game-days, below the 20-game minimum): Scout favoured Under while
+Overs won; A bands stated ~0.70 hit 0.47-0.58. Hypothesis: sm-1 ignores the book line / market price.
+
+Rule: P(Over | no push) = sigmoid(a + w_s logit P_scout + w_m logit P_market) at a quote with an mv-1 market chance,
+sigmoid(b + v_s logit P_scout) without; push atom unchanged (sums to one). Penalised ML (prior = identity = live chance,
+LAMBDA 20), league pooled then per stat; walk-forward by game-day on settled props only; promotion per league x stat
+(A8 6) sets the market's `on` flag. Code `sports/model/cal.py`; one serving function `cal.adjust` called from
+`board_view.calibrated` in `snapshots.guard_row` and `sheets`; quotes carry `ca` (calibrated po / pu / pp, raw, version,
+mode M / S); the page's `scoutAt`, match / player cards, compare, sheets, slip legs (`pool.cal_by_record`) and tracked
+picks (`snapshots` cal.json -> `picks.cal_quote`) read it. Forecast records keep the raw sm-1 chance.
+
+Switches: `SPORTS_CAL_MI=0` (global off); per market `params["<lg>:<stat>"].on`. Weights:
+`<SPORTS_DATA_DIR>/model/cal_mi.json` (owner's Shell `python -m sports.model.cal fit`), else the committed default
+`sports/model/artifacts/cal_mi_default.json`; invalid -> next; none valid -> off.
+
+Committed default (local, A8 8; `sports/research/results/cal_mi_local_nba_1023.json`): 443 reconstructed NBA props of
+one night (7 games), 188 with a market chance (Kalshi / Polymarket only). Leave-one-game-out, live -> cal-mi:
+points log loss 0.789 -> 0.722 (game CI -0.113..-0.012), threes 0.745 -> 0.701 (-0.106..-0.011), rebounds 0.732 -> 0.704
+(-0.059..+0.026), assists 0.729 -> 0.687 (-0.096..+0.004); but the share favouring Over fell to 0.16-0.30 against a
+realised over rate of 0.42-0.50 (that night's Unders) -> rule 6 (ii) FAILS for all four: every market is OFF in the
+committed default. The fitted S slope v_s was 0.16-0.26 (the raw sm-1 chance carried little information that night).
+One night is not evidence either way; the production walk-forward fit decides.

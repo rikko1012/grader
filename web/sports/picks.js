@@ -276,6 +276,8 @@
   function makeLeg(o, lg) {                            // the Slip Studio leg format (sports/slips/README.md)
     var f = o.forecast, full = f && f.p_over !== undefined;
     var po = f ? (full ? f.p_over : f.po) : null, pu = f ? (full ? f.p_under : f.pu) : null, pp = f ? (full ? f.p_push : f.pp) : null;
+    var ca = o.cal;                                    // cal-mi-1 (REGISTER A8): the calibrated chance the board shows
+    if (f && ca && ca.po !== null && ca.po !== undefined && ca.pu !== null && ca.pu !== undefined) { po = ca.po; pu = ca.pu; pp = ca.pp; }
     return {platform: o.platform, league: lg, offer_id: offerIdOf(o.record_id, o.platform), record_id: o.record_id,
       forecast_id: o.forecast_id || null, side: o.side, line: o.line, variant: o.variant, multiplier: o.multiplier,
       start_utc: o.start_utc, player_id: o.player_id, player: o.player, team: o.team, stat: o.stat, stat_label: o.stat_label,
@@ -297,7 +299,7 @@
       ["over", "under"].forEach(function (x) {
         if (!(sides[x] && sides[x].offered)) { why[x] = (x === "over" ? "Over" : "Under") + " is not offered on " + bookName(q.platform); return; }
         legs[x] = makeLeg({platform: q.platform, record_id: q.record_id, forecast_id: f ? f.forecast_id : q.forecast_id,
-          forecast: f, side: x, grade: gradeOf(q, x), grade_nv: q.x && q.x.nv, line: q.line, variant: q.variant, multiplier: sides[x].multiplier,
+          forecast: f, cal: q.cal || q.ca, side: x, grade: gradeOf(q, x), grade_nv: q.x && q.x.nv, line: q.line, variant: q.variant, multiplier: sides[x].multiplier,
           start_utc: ne ? ne.start_utc : q.listed_start_utc, player_id: P.player_id, player: P.player, team: m.team,
           stat: m.stat, stat_label: m.stat_label, event_id: m.event_id,
           event_ref: ne && ne.opponent ? (ne.home ? "vs " : "@ ") + ne.opponent.abbr : null}, lg);
@@ -309,7 +311,7 @@
     var B = c.board || {stats: {}};
     [["over", 0], ["under", 1]].forEach(function (x) {
       if (q.o[x[1]] !== 1) { why[x[0]] = "Not offered on " + bookName(q.p); return; }
-      legs[x[0]] = makeLeg({platform: q.p, record_id: q.r, forecast_id: q.f, forecast: f, side: x[0], grade: gradeOf(q, x[0]), grade_nv: q.x && q.x.nv, line: q.l, variant: q.v,
+      legs[x[0]] = makeLeg({platform: q.p, record_id: q.r, forecast_id: q.f, forecast: f, cal: q.ca || q.cal, side: x[0], grade: gradeOf(q, x[0]), grade_nv: q.x && q.x.nv, line: q.l, variant: q.v,
         multiplier: q.m ? q.m[x[1]] : null, start_utc: m.ev && m.ev.start_utc, player_id: m.pid, player: m.n, team: m.tm, stat: m.st,
         stat_label: (B.stats && B.stats[m.st]) || m.st, event_id: m.e, event_ref: m.matchup}, lg);
     });

@@ -792,6 +792,36 @@ def _bl_summary(p, hit, games, ref=None):
     return out
 
 
+def cal_mi_section(lcon, icon=None):
+    """cal-mi-1 (REGISTER A8) before / after per market and band: (1) walk-forward (fit only on props settled before
+    each game-day) with the A8 6 verdict; (2) the weights IN USE (file / default) applied to every settled prop - the
+    second is NOT out-of-sample once the weights were fitted on these props (labelled)."""
+    from . import cal
+    try:
+        rows = cal.rows_from_learning(lcon, icon)
+    except Exception as e:                              # noqa: BLE001
+        return {"error": f"{type(e).__name__}: {str(e)[:160]}"}
+    out = {"version": cal.VERSION, "label": cal.LABEL, "rows": len(rows),
+           "with_market": sum(1 for r in rows if r.get("pm") is not None), "walk_forward": cal.run_eval(rows)}
+    obj, src = cal.load(force=True)
+    inuse = {}
+    if obj:
+        by = {}
+        for r in rows:
+            by.setdefault(f"{r['league']}:{r['stat']}", []).append(r)
+        for k, rs in sorted(by.items()):
+            p = (obj.get("params") or {}).get(k)
+            hit = np.array([r["hit"] for r in rs], float)
+            games = np.array([r["event"] for r in rs], dtype=object)
+            live = np.array([r["ps"] for r in rs])
+            after = np.array([cal.q_of(p, r["ps"], r.get("pm"))[0] for r in rs]) if p and p.get("on") else live
+            inuse[k] = {"on": bool(p and p.get("on")), "before": cal.summary(live, hit, games)[0],
+                        "after": cal.summary(after, hit, games)[0]}
+    out["weights_in_use"] = {"source": src, "sha": (obj or {}).get("sha"),
+                             "label": "in-sample when these weights were fitted on the same props", "markets": inuse}
+    return out
+
+
 def status():
     from .fwd import _file_sha  # noqa: F401
     out = {"version": VERSION, "enabled": enabled(), "artifacts": {}}
@@ -839,6 +869,7 @@ def main(argv=None):
             sub = [r for r in rows if r["league"] == lg]
             if sub:
                 res["leagues"][lg] = bookline(sub, load(lg))[lg]
+        res["cal_mi"] = cal_mi_section(lcon, icon)
         print(json.dumps(res, indent=1, default=float))
 
 if __name__ == "__main__":

@@ -319,6 +319,23 @@ def signal(po, pu, mu, line, mkc, l10=None, iv=None):
     return out
 
 
+# ------------------------------------------------------------------------------- cal-mi-1 (REGISTER A8) displayed chance
+CAL_MODELS = ("sm-1",)                                 # mi-1 already uses the market; market-only views never change
+
+
+def calibrated(league, stat, po, pu, pp, model, mkc):
+    """THE displayed Scout chance at one quote: cal-mi-1 (sports/model/cal.py adjust) of an sm-1 view with the mv-1
+    market chance at that quote, or None (off: SPORTS_CAL_MI=0 / market switched off / other model) -> the raw chance
+    is shown. Every surface (board, compare, sheets, slips, tracked picks) reads the quote's `ca` written from this."""
+    if model not in CAL_MODELS or po is None or pu is None:
+        return None
+    try:
+        from .model import cal
+        return cal.adjust(league, stat, po, pu, pp, mkc)
+    except Exception:                                   # noqa: BLE001 - a calibration error never breaks a snapshot
+        return None
+
+
 def quote_x(league, stat, po, pu, mu, line, mkc, l10=None, iv=None):
     """The q.x a snapshot / sheet quote carries: a hold {"b", "t", "v"} (vg-1 gate, then sg-1 sanity), else the cf-2
     signal. -> (x, sanity code or None)."""

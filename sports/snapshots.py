@@ -989,6 +989,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
                                                               "markets": [compact_row(r, league) for r in sec],
                                                               "fc": compact_forecasts(forecasts, sec)})
     manifest["sanity"] = write_sanity(root, sanity_log, base_meta, board_rows)
+    manifest["cal_mi"] = write_cal_index(root, base_meta, board_rows)
     if results:
         sizes["results"] = _write(root / "results.json", {**res_obj, **base_meta})
     manifest["sizes"] = sizes
@@ -1018,6 +1019,8 @@ def compact_quote(q):
         out["sc"] = 1
     if q.get("x"):
         out["x"] = q["x"]
+    if q.get("cal"):                                     # cal-mi-1 displayed chance (raw sm-1 chance in ca.raw)
+        out["ca"] = q["cal"]
     if o.get("price_format") == "decimal" or u.get("price_format") == "decimal":    # a book's own decimal prices
         out["d"] = [o.get("price") if o.get("offered") else None, u.get("price") if u.get("offered") else None]
     return out
@@ -1047,6 +1050,13 @@ def scout_view(q, forecasts):
     return None
 
 
+def _view_push(q, forecasts, fid):
+    f = forecasts.get(fid or "") or {}
+    if q.get("forecast_id") == fid and f.get("p_push") is not None:
+        return f["p_push"]
+    return (q.get("line_read") or {}).get("pp") or 0.0
+
+
 def guard_row(league, row, forecasts, view_row, now):
     """Row signal for every quote of one market row with a Scout view (sports/board_view.quote_x): q["x"] = a hold
     {"b", "t", "v"} (vg-1 gate / sg-1 sanity: no lean, edge, confidence or edge rank anywhere - board, sheets, slip
@@ -1063,6 +1073,12 @@ def guard_row(league, row, forecasts, view_row, now):
         l10 = ((view_row or {}).get("lines") or {}).get(board_view.line_key(line))
         l10 = list(l10[:4]) if l10 else None
         mkc = board_view.market_at(row.get("market"), q.get("record_id"), line)
+        q.pop("cal", None)
+        ca = board_view.calibrated(league, row["stat"], po, pu, _view_push(q, forecasts, fid), model, mkc)
+        if ca:                                           # cal-mi-1 (REGISTER A8): every surface shows this chance
+            ca["f"] = fid
+            q["cal"] = ca
+            po, pu = ca["po"], ca["pu"]
         x, code = board_view.quote_x(league, row["stat"], po, pu, mu, line, mkc, l10, iv)
         q["x"] = x
         if code:
@@ -1077,6 +1093,31 @@ def guard_row(league, row, forecasts, view_row, now):
 
 SANITY_MAX = 3000
 SANITY_LOG_MAX_BYTES = 8 * 1024 * 1024
+
+
+def write_cal_index(root, base_meta, board_rows):
+    """<root>/cal.json = {record_id: the quote's cal-mi-1 chance (with its forecast id f)} - read by tracked picks
+    (sports/picks.py) and slips so they record / rank the SAME calibrated chance the board showed. -> manifest summary."""
+    from .model import cal
+    idx = {}
+    for r in board_rows:
+        for q in (r.get("quotes") or []) + (r.get("kalshi_near") or []):
+            if q.get("cal") and q.get("record_id"):
+                idx[q["record_id"]] = q["cal"]
+    obj, src = cal.load()
+    summary = {"version": cal.VERSION, "enabled": cal.enabled(), "weights": src, "sha": (obj or {}).get("sha"),
+               "markets_on": sorted(k for k, p in ((obj or {}).get("params") or {}).items() if p.get("on")),
+               "quotes": len(idx), "with_market": sum(1 for v in idx.values() if v.get("mode") == "M")}
+    _write(root / "cal.json", {**base_meta, **summary, "quotes_by_record": idx})
+    return summary
+
+
+def read_cal_index(league, base=None):
+    """{record_id: cal dict} from the last snapshot ({} when absent / unreadable)."""
+    try:
+        return (_read_json(snap_root(base) / league / "cal.json") or {}).get("quotes_by_record") or {}
+    except Exception:                                   # noqa: BLE001
+        return {}
 
 
 def write_sanity(root, entries, base_meta, board_rows):

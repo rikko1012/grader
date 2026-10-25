@@ -566,14 +566,14 @@
       return '<div class="sw-num-block sw-scout"><div class="sw-num-label">' + esc(S.kindLabel(f.m)) + "</div>" +
         '<div class="sw-proj">' + (f.mu !== null && f.mu !== undefined ? 'Projected: <b data-fc="' + esc(f.id) + '" data-fcside="mean">' + S.num(f.mu, 1) + "</b> " + esc(stat) +
           (f.iv ? ' <span class="sw-faint">· 80% range ' + f.iv[0] + "–" + f.iv[1] + "</span>" : "") : '<span class="sw-faint">Projection unavailable: this record stores chances only</span>') + "</div>" +
-        threeChances(f.po, f.pu, f.pp, q.l, f.id) + gradeLine(q) +
+        (q.ca && q.ca.f === q.f ? threeChances(q.ca.po, q.ca.pu, q.ca.pp, q.l, f.id) : threeChances(f.po, f.pu, f.pp, q.l, f.id)) + gradeLine(q) +
         techDetails([esc(f.m) + " · " + esc(S.validationText(settledOf(B, f.m))), runLine(B) ? esc(runLine(B)) : ""], fcSource(q.f, f, q)) + "</div>";
     }
     if (q.lr) {
       var src0 = B.fc[q.lr.f];
       return '<div class="sw-num-block sw-scout"><div class="sw-num-label">Scout model</div>' +
         (src0 && src0.mu !== null && src0.mu !== undefined ? '<div class="sw-proj">Projected: <b>' + S.num(src0.mu, 1) + "</b> " + esc(stat) + (src0.iv ? ' <span class="sw-faint">· 80% range ' + src0.iv[0] + "–" + src0.iv[1] + "</span>" : "") + "</div>" : "") +
-        threeChances(q.lr.po, q.lr.pu, q.lr.pp, q.l, null) + gradeLine(q) +
+        (q.ca ? threeChances(q.ca.po, q.ca.pu, q.ca.pp, q.l, null) : threeChances(q.lr.po, q.lr.pu, q.lr.pp, q.l, null)) + gradeLine(q) +
         techDetails(["sm-1 · read at this line from the forecast at " + S.line(q.lr.ln), esc(S.validationText(settledOf(B, "sm-1")))], src0 ? fcSource(q.lr.f, src0, q) : "") + "</div>";
     }
     if (q.nf) return '<div class="sw-num-block sw-scout"><div class="sw-num-label">Scout model</div><p class="sw-small">Projection unavailable: ' + esc(q.nf) + "</p></div>";
@@ -956,7 +956,7 @@
         h += '<h2 class="sw-sr">Lines for ' + esc(m.stat_label) + "</h2>";
         if (!pick.length && !m.kalshi.length) h += '<div class="sw-state">No line for this stat.</div>';
         h += '<div class="sw-stripwrap"><button type="button" class="sw-stripbtn prev" data-strip="-1" aria-label="Earlier lines" hidden>‹</button><div class="sw-strip" id="sw-strip" role="group" tabindex="0" aria-label="Book lines for ' + esc(m.stat_label) + ' (scroll sideways for more)">' + pick.map(function (q) {
-          var f = q.forecast_id ? P.forecasts[q.forecast_id] : null, n = S.forecastNumbers(f), on = sel && q.record_id === sel.record_id;
+          var f = q.forecast_id ? P.forecasts[q.forecast_id] : null, n = S.forecastNumbers(f, q.cal && q.cal.f === q.forecast_id ? q.cal : null), on = sel && q.record_id === sel.record_id;
           var o = [q.sides[0] && q.sides[0].offered ? 1 : 0, q.sides[1] && q.sides[1].offered ? 1 : 0];
           var sides = {}; q.sides.forEach(function (s) { sides[s.side] = s; });
           return '<button type="button" class="sw-qcard" data-q="' + esc(q.record_id) + '" aria-pressed="' + on + '">' + book(q.platform) +
@@ -997,12 +997,12 @@
           if (lr) {
             return h + '<p class="sw-small sw-muted">Read at this line from the Scout forecast at ' + S.line(lr.ln) + " (same distribution, same inputs)" + (lsrc ? " " + fcSource(lr.f, lsrc, {r: q.record_id}) : "") + "</p>" +
               (lsrc && lsrc.projection_mean !== null ? '<div class="sw-big"><div><span class="sw-k">Projected</span><span class="sw-v">' + S.num(lsrc.projection_mean, 1) + "</span></div>" + (lsrc.detail && lsrc.detail.interval ? '<div class="sw-small sw-muted">80% range ' + lsrc.detail.interval[0] + "–" + lsrc.detail.interval[1] + "</div>" : "") + "</div>" : "") +
-              '<div class="sw-sides">' + ["over", "under", "push"].map(function (k) { return '<div class="sw-side"><span class="sw-k sw-small sw-faint">' + (k === "push" ? "Push" : (k === "over" ? "Over " : "Under ") + S.line(q.line)) + '</span><div class="sw-v sw-p ' + k + '">' + S.pct(lr["p" + k[0]]) + "</div></div>"; }).join("") + "</div>" + gradeLine(q) + slipButtons(q, null) + "</section>";
+              '<div class="sw-sides">' + ["over", "under", "push"].map(function (k) { return '<div class="sw-side"><span class="sw-k sw-small sw-faint">' + (k === "push" ? "Push" : (k === "over" ? "Over " : "Under ") + S.line(q.line)) + '</span><div class="sw-v sw-p ' + k + '">' + S.pct((q.cal || lr)["p" + k[0]]) + "</div></div>"; }).join("") + "</div>" + gradeLine(q) + slipButtons(q, null) + "</section>";
           }
           return h + '<p class="sw-muted">Projection unavailable: ' + esc(q.no_fc || (mk.capability !== "supported" ? (mk.capability_reason || "market not supported by the Scout model") :
             q.gradable ? "no Scout forecast for this line in the last run" : (q.not_gradable_because || []).map(L.gateReason).join("; "))) + "</p>" + slipButtons(q, null) + "</section>";
         }
-        var n = S.forecastNumbers(fc);
+        var n = S.forecastNumbers(fc, q.cal && q.cal.f === fc.forecast_id ? q.cal : null);
         var sides = {}; q.sides.forEach(function (s) { sides[s.side] = s; });
         function sideBox(name, label, val) {
           var offered = name === "push" ? true : !!(sides[name] && sides[name].offered);

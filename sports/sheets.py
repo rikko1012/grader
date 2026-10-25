@@ -139,13 +139,19 @@ def sheet_markets(player_file, history_games, platform, events, now):
             if cq.get("x") or not (cq.get("lr") or (own or {}).get("kind") in ("scout", "informed")):
                 continue
             if own and own.get("kind") in ("scout", "informed"):
-                po, pu, src = own.get("p_over"), own.get("p_under"), own
+                po, pu, pp, src = own.get("p_over"), own.get("p_under"), own.get("p_push"), own
             else:
-                po, pu, src = cq["lr"]["po"], cq["lr"]["pu"], forecasts.get(cq["lr"].get("f") or "") or {}
+                po, pu, pp = cq["lr"]["po"], cq["lr"]["pu"], cq["lr"].get("pp")
+                src = forecasts.get(cq["lr"].get("f") or "") or {}
             ln = float(cq["l"])
             l10 = vr["lines"].get(board_view.line_key(ln))
-            cq["x"], _ = board_view.quote_x(lg, row["stat"], po, pu, src.get("projection_mean"), ln,
-                                            board_view.market_at(row.get("market"), cq.get("r"), ln),
+            mkc = board_view.market_at(row.get("market"), cq.get("r"), ln)
+            ca = board_view.calibrated(lg, row["stat"], po, pu, pp, src.get("model_version") or "sm-1", mkc)
+            if ca:                                    # cal-mi-1 (REGISTER A8): the same displayed chance as the board
+                ca["f"] = src.get("forecast_id")
+                cq["ca"] = ca
+                po, pu = ca["po"], ca["pu"]
+            cq["x"], _ = board_view.quote_x(lg, row["stat"], po, pu, src.get("projection_mean"), ln, mkc,
                                             list(l10[:4]) if l10 else None, (src.get("detail") or {}).get("interval"))
         markets_out.append({**({"nv": nv} if nv else {}), "k": row["key"], "e": row["event_id"], "pid": row["player_id"],
                             "n": row.get("player"),
