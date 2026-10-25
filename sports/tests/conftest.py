@@ -22,6 +22,8 @@ def private_sports_data(monkeypatch, tmp_path):
     monkeypatch.delenv("ODDS_API_KEY", raising=False)
     monkeypatch.setenv("SPORTS_CONTEXT_INLINE", "1")      # snapshot builds compute player context in-process
     monkeypatch.setenv("SPORTS_MEMORY_MB", "512")         # the Starter plan unless a test sets another (never the CI box)
+    for k in ("SPORTS_CHILD_BUDGET_MB", "SPORTS_MAX_HEAVY", "SPORTS_HEAVY_SLOTS"):
+        monkeypatch.delenv(k, raising=False)              # a workstation's / Render's saved values never leak in
     for k in ("ODDSPAPI_API_KEY", "odds_papi_api", "SPORTS_ODDSPAPI", "SPORTS_ODDSPAPI_MONTHLY_REQUESTS",
               "SPORTS_ODDSPAPI_CS2_FLOOR"):
         monkeypatch.delenv(k, raising=False)

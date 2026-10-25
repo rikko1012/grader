@@ -54,7 +54,9 @@ def _int(name, default):
 THREADS = max(2, _int("SPORTS_SERVICE_THREADS", "16"))     # Starter (512 MB / 0.5 CPU)
 QUEUE_S = _int("SPORTS_SERVICE_QUEUE_MS", "200") / 1000.0
 BODY_MAX = _int("SPORTS_BODY_MAX", "65536")
-MAX_MB = _int("SPORTS_SERVICE_MAX_MB", "160")             # Starter: service <= 160 MB, children <= budget
+from . import scheduler as _plan                        # noqa: E402 - plan size only (no job is started here)
+# service drain-and-restart ceiling: Starter 160 MB, Standard (>= 1.5 GB, 2026-10-25) 400 MB; children <= budget
+MAX_MB = _int("SPORTS_SERVICE_MAX_MB", "400" if _plan.standard() else "160")
 STATS = {"requests": 0, "errors_5xx": 0, "rejected_busy": 0, "unauthorized": 0, "forbidden_origin": 0,
          "inflight": 0, "peak_inflight": 0, "ms_total": 0.0, "started": time.time()}
 _SLOCK = threading.Lock()
