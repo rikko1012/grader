@@ -1,3 +1,25 @@
 /* uifix (owner audit 2026-10-24) - every rule under body.sw / .sw, so nothing reaches an esports page or Slip Studio's ss- rules. */
 .sw .sw-mp-rec span{padding:2px 8px;border-radius:8px}
 .sw .sw-mp-rec .sw-mp-cur{background:var(--panel-2);box-shadow:inset 0 -2px 0 var(--accent)}
+/* Slip Studio inside the main shell (#/slips): the studio keeps its ss- rules; the page frame is the shell's */
+body.sw .ss-embed{background:transparent;margin:0;font:inherit}
+body.sw .ss-embed .ss-studio{max-width:none;padding:0}
+body.sw.sw-on-slips .sw-tray{display:none}
+/* slate + match context */
+.sw .sw-glines{list-style:none;margin:6px 0;padding:0;display:grid;gap:3px;font-size:13px}
+.sw .sw-glines .sw-k{display:inline-block;min-width:78px;color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+.sw .sw-spark{vertical-align:middle}
+.sw .sw-gdetails{margin-top:6px}
+.sw .sw-injd{color:var(--muted)}
+/* player workspace: lines carousel scroll affordance */
+.sw .sw-stripwrap{position:relative;display:flex;align-items:stretch;gap:6px}
+.sw .sw-stripwrap .sw-strip{flex:1;min-width:0;scrollbar-width:thin;scrollbar-color:var(--line-2) transparent}
+.sw .sw-strip::-webkit-scrollbar{height:8px}.sw .sw-strip::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:8px}
+.sw .sw-strip.sw-strip-more{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent)}
+.sw .sw-stripbtn{flex:0 0 36px;min-height:44px;border:1px solid var(--line-2);border-radius:10px;background:var(--panel-2);color:var(--text);font-size:20px;cursor:pointer;align-self:center}
+.sw .sw-stripbtn[hidden]{display:none}
+/* season breaks */
+.sw .sw-season-break{display:inline-flex;align-items:center;padding:4px 8px;border-left:2px dashed var(--faint);color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+.sw .sw-season-row td{color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.06em;border-top:1px dashed var(--line-2)}
+.sw .sw-sbreak-t{fill:var(--faint);font-size:10px}
+.sw .sw-span2{border-color:var(--warn);color:var(--warn)}

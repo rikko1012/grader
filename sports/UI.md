@@ -3,7 +3,8 @@
 Member page `/sports` (`web/sports.html` + `web/sports/{shell,stats,app}.js`, `sports.css`; every class `sw-` under
 `body.sw`, so it cannot touch esports pages or Slip Studio's `ss-` classes). Behind `SPORTS_UI` (page) and
 `SPORTS_API` (data). Hash routes: `#/slate`, `#/board`, `#/player/<player id>?stat=&q=<offer record>`,
-`#/game/<event id>`, `#/results`; `?lg=nba|nfl`. Slip Studio is `web/sports/slips.html` (slips agent).
+`#/game/<event id>`, `#/results`, `#/picks`, `#/slips` (Slip Studio inside the shell; `/sports/slips.html` redirects
+there); `?lg=nba|nfl`. Any other hash route shows "Page not found" (never a silent fall-back to the Slate).
 
 ## Data path
 
@@ -91,3 +92,29 @@ cache, bounded 96 files / 48 MB); they never open the store.
   list for every member (the old picks stay in picks.db and in the admin aggregate).
 - The owner's browser token is a member token; the admin aggregate is read with the report script (admin token minted
   from the shared secret), not in the page.
+
+## uifix (owner audit 2026-10-24)
+
+- Member wording for raw codes lives in `web/sports/labels.js` (event status, slip exclusions, gate reasons, variants,
+  injuries "Out · Shoulder", seasons "2026-27", league search placeholders). Window rows crossing seasons say "spans 2
+  seasons" and the finals row, chart and games table mark the season break. The chart no longer prints a value on every
+  bar: the finals row is the one list of finals.
+- One coverage definition (Slate + Match context): props = markets Scout holds for the game; "lines with Scout
+  projection" = book lines carrying a forecast made for that exact line (`coverage.forecasts`).
+- Match context highlights Slate in the nav (not Prop board). Slip Studio is `#/slips` (same header, league toggle, nav).
+- Player page mount points: `<div id="sw-without">` (sheets agent: `SportsWithout.render(el, player, games, {stat, line,
+  league})`); Matchup panel = factor-engine rows (`factors.engine.by_stat[stat]`, keys dvp / dvp_rank / dvp_allowed_pg /
+  opp_pos_allowed / opp_pos_rank / opp_pos_allowed_pg / opp_def_rank) + the player's own games vs tonight's opponent.
+
+### Game lines / team context (rendered only when the slate snapshot carries them; nothing blank)
+
+    event.game_lines = {
+      "spread":    {"home": -4.5, "away": 4.5, "source": "espn_pickcenter", "source_label": "ESPN (DraftKings)",
+                    "observed_at": iso, "history": [[iso, home_spread], ...]},
+      "total":     {"line": 221.5, "source_label": ..., "observed_at": iso, "history": [[iso, total], ...]},
+      "moneyline": {"home": -180, "away": 150 (American)  OR  "home_p": 0.62, "away_p": 0.38 (Kalshi win chance),
+                    "source_label": ..., "observed_at": iso, "history": [[iso, home value], ...]}}
+    event.team_context = {"as_of": iso, "source": "...", "home"|"away": {"pace": {"value", "rank", "n"},
+      "def_rating": {"value", "rank", "n"}, "def_vs_pos": [{"pos", "stat_label", "rank", "allowed_pg", "n"}]}}
+
+A sparkline is drawn when `history` holds 2+ snapshots.

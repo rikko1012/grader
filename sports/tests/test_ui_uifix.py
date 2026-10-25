@@ -108,7 +108,7 @@ def _slips_api(pool):
 
 
 def _open_slips(page):
-    page.goto("/sports/slips.html")
+    page.goto("/sports#/slips?lg=nba")
     page.wait_for_selector("#ss-pool p, #ss-pool .ss-locked", timeout=15000)
 
 
@@ -205,3 +205,190 @@ def test_my_picks_api_filters_league_and_hides_test_unless_admin(monkeypatch, tm
     assert m["record"]["nfl"]["open"] == 1 and m["record"]["nba"]["open"] == 1           # test row never in the record
     assert [p["pick_id"] for p in picks.mine(pc, "m_test", league="nfl", include_test=True)["picks"]] == ["p2", "p1"]
     pc.close()
+
+
+# ------------------------------------------------------------------- slate / match context / player fixtures
+def _team(i, abbr, name):
+    return {"team_id": f"nba:team:espn:{i}", "abbr": abbr, "name": name}
+
+
+BOS, NY = _team(2, "BOS", "Boston Celtics"), _team(18, "NY", "New York Knicks")
+EV = {"event_id": "nba:espn:9001", "record_id": "event:espn:9001:r1:abc", "start_utc": "2030-01-01T00:00:00Z",
+      "start_source": "espn", "status": "scheduled", "reschedules": [], "observed_at": "2029-12-31T20:00:00Z",
+      "home": BOS, "away": NY, "started": False,
+      "coverage": {"markets": 154, "primary": 120, "forecasts": 75, "players": 18, "by_platform": {"prizepicks": 60, "underdog": 50}},
+      "injuries": [{"player_id": "p1", "player": "Test Guard", "team_id": NY["team_id"], "team": "NY", "status": "out",
+                    "detail": "Not Specified Shoulder", "as_of": "2029-12-31T18:00:00Z", "record_id": "ctx:1"}],
+      "game_lines": {"spread": {"home": -4.5, "away": 4.5, "source_label": "ESPN (DraftKings)", "observed_at": "2029-12-31T19:00:00Z",
+                                "history": [["2029-12-30T19:00:00Z", -3.5], ["2029-12-31T19:00:00Z", -4.5]]},
+                     "total": {"line": 221.5, "source_label": "ESPN (DraftKings)", "observed_at": "2029-12-31T19:00:00Z"},
+                     "moneyline": {"home_p": 0.66, "away_p": 0.34, "source_label": "Kalshi", "observed_at": "2029-12-31T19:30:00Z"}},
+      "team_context": {"as_of": "2029-12-31T12:00:00Z", "source": "Scout game store (ESPN box scores)",
+                       "home": {"pace": {"value": 99.1, "rank": 12, "n": 20},
+                                "def_vs_pos": [{"pos": "G", "stat_label": "Points", "rank": 3, "allowed_pg": 41.2, "n": 20}]},
+                       "away": {"pace": {"value": 96.4, "rank": 27, "n": 20}}}}
+EV2 = dict(EV, event_id="nba:espn:9002", record_id="event:espn:9002:r1:x", status="in_progress", started=True, game_lines=None,
+           team_context=None, injuries=[], coverage={"markets": 0, "primary": 0, "forecasts": 0, "players": 0, "by_platform": {}})
+MANIFEST = {"models": [{"model_version": "sm-1", "forecasts": 75, "settled": 0, "research_only": True},
+                       {"model_version": "mkt-polymarket", "forecasts": 10, "settled": 0, "research_only": True}],
+            "platforms": {}, "version": "ui-snap-1", "contracts": "sc-1", "capabilities": "cap-1",
+            "built_at": "2099-01-01T00:00:00Z", "as_of": "2099-01-01T00:00:00Z", "sources": {}}
+PID = "nba:player:espn:77"
+
+
+def _game(k, season, value, opp):
+    return {"event_id": f"nba:espn:{k}", "event_record_id": f"ev{k}",
+            "start_utc": f"2029-{12 - k // 2:02d}-{20 - (k % 2) * 10:02d}T00:00:00Z",   # newest first
+            "season": season, "season_type": "regular", "participation": "played", "values": {"points": value},
+            "parts": {"min": 30}, "home": True, "opponent": opp, "source": ["espn_gamelog"], "record_ids": {"points": f"s{k}"},
+            "observed_at": "2029-12-31T00:00:00Z"}
+
+
+GAMES = [_game(k, 2030 if k < 5 else 2029, 18 + (k % 7), NY if k % 3 == 0 else BOS) for k in range(14)]
+QUOTES = [{"record_id": f"offer:{pf}:{pf}{i}:r1:ab", "platform": pf, "line": 20.5 + i, "variant": "standard",
+           "sides": [{"side": "over", "offered": True, "multiplier": 1.0}, {"side": "under", "offered": True, "multiplier": 1.0}],
+           "last_seen_at": "2099-01-01T00:00:00Z", "forecast_id": None, "gradable": True, "not_gradable_because": []}
+          for i, pf in enumerate(["prizepicks", "underdog"] * 5)]
+PLAYER = {"player_id": PID, "player": "Test Wing", "position": "G", "team": BOS, "built_at": "2099-01-01T00:00:00Z",
+          "as_of": "2099-01-01T00:00:00Z",
+          "injury": {"status": "questionable", "detail": "Left Ankle Sprain", "record_id": "ctx:2"},
+          "next_event": {"event_id": EV["event_id"], "start_utc": EV["start_utc"], "home": True, "opponent": NY},
+          "markets": [{"stat": "points", "stat_label": "Points", "primary": True, "quotes": QUOTES, "alternates": [], "kalshi": [],
+                       "market": None, "event_id": EV["event_id"], "team": "BOS", "capability": "supported"}],
+          "forecasts": {}, "forecast_detail": {},
+          "factors": {"stats": [{"label": "Minutes", "windows": [{"window": "L5", "mean": 31, "n": 5},
+                                                                 {"window": "Season 2030", "mean": 30, "n": 5}]}],
+                      "context": [], "not_held": [],
+                      "engine": {"label": "Matchup context", "as_of": "2029-12-31T00:00:00Z", "not_held": [],
+                                 "by_stat": {"points": [
+                                     {"key": "dvp", "label": "Opponent points allowed to guards vs league", "group": "Opponent",
+                                      "value": 1.08, "n": 20, "source": "ESPN box scores"},
+                                     {"key": "pace", "label": "Opponent pace", "group": "Pace", "value": 98.2}]}}}}
+
+
+def _app_api(extra=None):
+    d = {"/api/sports/slate": {"events": [EV, EV2]}, "/api/sports/manifest": MANIFEST,
+         "/api/sports/player": PLAYER, "/api/sports/history": {"games": GAMES},
+         "/api/sports/board": {"markets": [], "events": {}, "fc": {}, "stats": {}, "injuries": {}, "models": []},
+         "/api/sports/model/features": {"features": []}, "/api/sports/model/registry": {"artifacts": {}}}
+    d.update(extra or {})
+    return d
+
+
+def test_slate_bettor_wording_details_toggle_lines_and_placeholder(browser):
+    ctx, page, errors = _page(browser, _app_api())
+    page.goto("/sports#/slate?lg=nba")
+    page.wait_for_selector(".sw-game")
+    body = page.locator("#sw-main").inner_text()
+    assert "core markets" not in body and "Scout chances" not in body
+    assert "154 props" in body and "75 lines with Scout projection" in body
+    assert "Game in progress" in body and "in_progress" not in body
+    card = page.locator(".sw-game").first
+    assert card.locator(".sw-srcbtn").count() == 1 and not card.locator(".sw-srcbtn").is_visible()   # behind Details
+    gl = card.locator(".sw-glines").inner_text()
+    assert "BOS -4.5" in gl and "221.5" in gl and "BOS win 66%" in gl and "ESPN (DraftKings)" in gl
+    assert card.locator(".sw-spark").count() == 1                   # spread has 2 snapshots; total 1 (no sparkline)
+    assert page.locator(".sw-game").nth(1).locator(".sw-glines").count() == 0      # nothing blank without lines
+    assert page.get_attribute("#sw-sq", "placeholder") == "e.g. BOS or Celtics"
+    card.locator("summary", has_text="on the injury report").click()
+    assert "Out · Shoulder" in card.inner_text() and "Not Specified" not in card.inner_text()
+    page.click("#sw-league button[data-lg=nfl]")
+    page.wait_for_function("document.getElementById('sw-sq') && document.getElementById('sw-sq').placeholder === 'e.g. KC or Chiefs'")
+    assert not errors, errors
+    ctx.close()
+
+
+def test_match_context_nav_state_and_team_context(browser):
+    ctx, page, errors = _page(browser, _app_api())
+    page.goto("/sports#/game/" + EV["event_id"] + "?lg=nba")
+    page.wait_for_selector("#sw-tc-h")
+    assert page.locator("#sw-views a[aria-current=page]").get_attribute("data-view") == "slate"
+    assert page.locator("#sw-views a[data-view=board]").get_attribute("aria-current") is None
+    tc = page.locator("#sw-tc-h").locator("xpath=..").inner_text()
+    tc = tc.lower()
+    assert "spread" in tc and "pace" in tc and "99.1" in tc and "#3" in tc and "41.2 per game" in tc
+    body = page.locator("#sw-main").inner_text()
+    assert "75 lines with Scout projection" in body and "Scout chances" not in body
+    assert "Out · Shoulder" in body
+    assert not errors, errors
+    ctx.close()
+
+
+def test_unknown_route_shows_not_found(browser):
+    ctx, page, errors = _page(browser, _app_api())
+    page.goto("/sports#/props")
+    page.wait_for_selector(".sw-state h2")
+    assert page.locator(".sw-state h2").inner_text() == "Page not found" and "#/props" in page.locator(".sw-state").inner_text()
+    assert page.locator("#sw-views a[aria-current=page]").count() == 0
+    assert not errors, errors
+    ctx.close()
+
+
+def test_footer_hides_builder_terms_behind_details(browser):
+    ctx, page, errors = _page(browser, _app_api())
+    page.goto("/sports#/slate?lg=nba")
+    page.wait_for_selector(".sw-game")
+    page.locator("#sw-foot summary").first.click()
+    vis = page.evaluate("() => { const o = document.querySelector('#sw-foot > details').cloneNode(true);"
+                        " o.querySelector('details').remove(); return o.textContent; }")
+    for term in ("cap-1", "sc-1", "mkt-polymarket", "contracts", "capabilities"):
+        assert term not in vis, term
+    assert "Scout projection" in vis and "Market (Polymarket)" in vis
+    assert "cap-1" in page.locator("#sw-foot details details").text_content()
+    assert not errors, errors
+    ctx.close()
+
+
+def test_player_workspace_season_breaks_one_games_list_matchup_and_strip(browser):
+    ctx, page, errors = _page(browser, _app_api(), width=900)
+    page.goto(f"/sports#/player/{PID}?lg=nba&stat=points")
+    page.wait_for_selector("#sw-hi-h")
+    page.click('[data-win="10"]')
+    page.wait_for_selector(".sw-finals")
+    hist = page.locator("#sw-hi-h").locator("xpath=..")
+    assert "spans 2 seasons (2028-29 and 2029-30)" in hist.inner_text()
+    assert hist.locator(".sw-finals .sw-season-break").count() == 1
+    assert page.locator("svg.sw-chart .sw-sbreak").count() == 1
+    assert page.locator("svg.sw-chart .sw-bar-val").count() == 0          # the finals row is the one list of finals
+    main = page.locator("#sw-main").inner_text()
+    k = main.lower().find("season 2030")
+    assert k < 0 and "season 2029-30" in main.lower(), main[max(0, k - 200):k + 40]
+    mu = page.locator("#sw-mu-h").locator("xpath=..").inner_text()
+    assert "1.08× the league average allowed" in mu and "n=20" in mu and "vs ny" in mu.lower() and "hit rate Over" in mu
+    assert page.locator("#sw-without").count() == 1
+    assert not page.locator(".sw-stripbtn.prev").is_visible()   # at the start: only "more lines"
+    nxt = page.locator(".sw-stripbtn.next")
+    assert nxt.is_visible()                                       # 10 lines at 900 px: more to the right
+    nxt.click()
+    page.wait_for_function("document.getElementById('sw-strip').scrollLeft > 0")
+    page.wait_for_selector(".sw-stripbtn.prev:not([hidden])")
+    assert "Questionable · Left ankle · Sprain" in page.locator(".sw-phead").inner_text()
+    assert not errors, errors
+    ctx.close()
+
+
+def test_without_teammate_module_mount_is_called(browser):
+    ctx, page, errors = _page(browser, _app_api())
+    page.add_init_script("window.SportsWithout = {render: function (el, p, g, o) { el.textContent = 'without:' + p.player + ':' + g.length + ':' + o.stat; }};")
+    page.goto(f"/sports#/player/{PID}?lg=nba&stat=points")
+    page.wait_for_function("(document.getElementById('sw-without') || {textContent: ''}).textContent.indexOf('without:') === 0")
+    assert page.locator("#sw-without").inner_text() == f"without:Test Wing:{len(GAMES)}:points"
+    assert not errors, errors
+    ctx.close()
+
+
+def test_slip_studio_is_inside_the_main_shell(browser):
+    ctx, page, errors = _page(browser, _slips_api(POOL_RESEARCH))
+    page.goto("/sports#/slips?lg=nba")
+    page.wait_for_selector("#ss-form")
+    assert page.locator(".sw-products a[aria-current=page]").inner_text() == "Sports"
+    assert page.locator("#sw-league button[data-lg=nba]").get_attribute("aria-pressed") == "true"
+    assert page.locator("#sw-views a[aria-current=page]").get_attribute("data-view") == "slips"
+    assert not page.locator(".ss-sport").is_visible()             # the page toggle picks the league
+    page.click("#sw-league button[data-lg=nfl]")
+    page.wait_for_function("document.getElementById('ss-league') && document.getElementById('ss-league').value === 'nfl'")
+    assert "#/slips" in page.url
+    page.goto("/sports/slips.html")
+    page.wait_for_url("**/sports#/slips**")
+    assert not errors, errors
+    ctx.close()
