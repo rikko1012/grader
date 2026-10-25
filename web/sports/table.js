@@ -7,6 +7,10 @@
      (mc-1, sharp-*, mkt-*) are not Scout's own view: no lean, no edge.
    - Lean = Over when Scout's P(Over) > 50% AND the projected mean is above the line (Under mirrored); otherwise
      "No lean". Never a side the distribution or the projection does not support.
+   - N4 (owner re-audit 2026-10-24): when a market chance exists at this line, the lean also needs a POSITIVE edge for
+     that side (Scout chance of the side > market chance of the side). Edge <= 0 -> "No lean" (r.noLean names the
+     side and edge it would have had); the row then has no edge, no lean confidence and sorts after the leans.
+     No market chance at the line -> the distribution rule alone (edge unknown, shown "—").
    - Market chance = the market estimate (mc-1 view rule) computed AT THIS LINE for this offer (mk.at[record]) or the
      headline when it is at the same line; never a different line's number.
    - Edge (pts) = 100 x (Scout chance of the lean side - market chance of that side at that line). A probability-point
@@ -92,11 +96,21 @@
     if (sc && mkc) {
       r.gapPts = 100 * (sc.po - mkc.po);
       r.gap = Math.abs(r.gapPts) >= GAP_PTS - 1e-9;
-      if (lean) { r.mLean = lean === "over" ? mkc.po : mkc.pu; r.edge = 100 * (r.pLean - r.mLean); }
+      if (lean) {
+        var mSide = lean === "over" ? mkc.po : mkc.pu, e = 100 * (r.pLean - mSide);
+        if (e > 1e-9) { r.mLean = mSide; r.edge = e; }
+        else { r.noLean = {side: lean, edge: e, why: "market prices this side higher"}; r.lean = lean = null; r.pLean = null; }
+      }
     }
     r.leanOffered = lean ? !!(q.o && q.o[lean === "over" ? 0 : 1]) : null;
     r.conf = confidence(r, now);
     return r;
+  }
+  // the one lean rule for a Scout chance + market chance pair (surfaces without a board row: slips, sheets)
+  function leanWithMarket(sc, line, mkc) {
+    var l = leanOf(sc, line);
+    if (!l || !mkc || !nn(mkc.po) || !nn(mkc.pu)) return l;
+    return 100 * ((l === "over" ? sc.po : sc.pu) - (l === "over" ? mkc.po : mkc.pu)) > 1e-9 ? l : null;
   }
   function hitRate(r) {                                           // lean side (Over when no lean), over decided games
     if (!r.hit || !r.hit.l10.n) return null;
@@ -160,7 +174,7 @@
   function logoUrl(lg, abbr) { return abbr && /^[A-Za-z]{2,4}$/.test(abbr) ? "https://a.espncdn.com/i/teamlogos/" + lg + "/500/" + abbr.toLowerCase() + ".png" : null; }
 
   var api = {VERSION: VERSION, CONF_VERSION: CONF_VERSION, GAP_PTS: GAP_PTS, scoutAt: scoutAt, marketAt: marketAt,
-             leanOf: leanOf, hitAt: hitAt, confidence: confidence, propRow: propRow, hitRate: hitRate,
+             leanOf: leanOf, leanWithMarket: leanWithMarket, hitAt: hitAt, confidence: confidence, propRow: propRow, hitRate: hitRate,
              primaryQuote: primaryQuote, started: started, SORTS: SORTS, sortRows: sortRows, groupRows: groupRows,
              edgeText: edgeText, hitText: hitText, seasonLabel: seasonLabel, headshotUrl: headshotUrl, logoUrl: logoUrl,
              espnId: espnId};
@@ -209,7 +223,7 @@
   }
   function leanBadge(r) {
     if (!r.scout) return '<span class="sw-tb-lean none">No Scout chance</span>';
-    if (!r.lean) return '<span class="sw-tb-lean none">No lean</span>';
+    if (!r.lean) return '<span class="sw-tb-lean none"' + (r.noLean ? ' data-nolean="' + r.noLean.side + '" title="Scout favours ' + (r.noLean.side === "over" ? "Over" : "Under") + " but the market prices it higher (" + edgeText(r.noLean.edge) + ' pts)"' : "") + ">No lean</span>";
     return '<span class="sw-tb-lean ' + r.lean + '" data-lean="' + r.lean + '">' + (r.lean === "over" ? "Over" : "Under") + "</span>" +
       (r.leanOffered === false ? '<span class="sw-tb-note">not offered here</span>' : "");
   }

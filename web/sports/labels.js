@@ -25,7 +25,8 @@
     "no grade": "No grade yet",
     "held stake (0U)": "Held: stake 0 under the grade rules",
     "team unknown": "Team not confirmed (two-team rule can't be checked)",
-    "zero chance": "Scout gives this side no chance"
+    "zero chance": "Scout gives this side no chance",
+    "market prices Scout's side higher": "No lean: the market prices Scout's side higher"
   };
   function cap(s) { s = String(s); return s.charAt(0).toUpperCase() + s.slice(1); }
   function words(code) { return cap(String(code).replace(/_/g, " ")); }

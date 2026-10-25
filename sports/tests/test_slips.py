@@ -449,8 +449,8 @@ def api(monkeypatch, con):
     monkeypatch.setattr(log, "_SEEN", {})
     from sports.slips import pool as pm
     real = pm.build
-    monkeypatch.setattr(pm, "build", lambda c, lg, pf, now=None, policy="member": real(c, lg, pf, now=w.NOW,
-                                                                                        policy=policy))
+    monkeypatch.setattr(pm, "build", lambda c, lg, pf, now=None, policy="member", **kw: real(c, lg, pf, now=w.NOW,
+                                                                                              policy=policy, **kw))
     import sports.slips.validate as vm
     real_check = vm.check
     monkeypatch.setattr(vm, "check", lambda slip, p, mode="load", now=None, **kw: real_check(slip, p, mode, now=w.NOW, **kw))
@@ -607,3 +607,24 @@ def test_loaded_pool_for_22500_offers_is_under_15_mb(con):
     tracemalloc.stop()
     assert p["offers"] == 22500 and len(p["state"]) == 22500
     assert loaded < 15e6, f"loaded pool {loaded / 1e6:.1f} MB"
+
+
+# ===================================================================== N4: a side the market prices higher is no leg
+def test_pool_drops_legs_whose_side_the_market_prices_higher(con):
+    got = w.world(con, [("barnes", "TOR", 1, "over", 0.56), ("edw", "MIN", 2, "over", 0.52),
+                        ("ok", "BOS", 3, "under", 0.60), ("nomk", "NYK", 4, "over", 0.55)])
+    rb, re_, rok = got["barnes"][0], got["edw"][0], got["ok"][0]
+    boards = [{"markets": [
+        {"mk": {"l": 20.5, "c": {"po": 0.663, "pu": 0.337, "n": 2}, "at": {}}, "q": [{"r": rb, "l": 20.5}]},
+        {"mk": {"l": 20.5, "c": {"po": 0.9, "pu": 0.1, "n": 2}, "at": {re_: {"po": 0.545, "pu": 0.455, "n": 3}}},
+         "q": [{"r": re_, "l": 20.5}]},
+        {"mk": {"l": 20.5, "c": {"po": 0.45, "pu": 0.55, "n": 1}, "at": {}}, "q": [{"r": rok, "l": 20.5}]},
+        {"mk": {"l": 21.5, "c": {"po": 0.9, "pu": 0.1, "n": 1}, "at": {}}, "q": [{"r": got["nomk"][0], "l": 20.5}]},
+    ]}]
+    mk = pool.market_by_record(boards)
+    assert set(mk) == {rb, re_, rok}                         # another line's headline is never used
+    p = pool.build(con, "nba", "underdog", now=w.NOW, market_at=mk)
+    assert {l["player_id"].split(":")[-1] for l in p["legs"]} == {"ok", "nomk"}
+    assert p["excluded"]["market prices Scout's side higher"] == 2
+    assert {l["player_id"].split(":")[-1] for l in pool.build(con, "nba", "underdog", now=w.NOW)["legs"]} == \
+        {"barnes", "edw", "ok", "nomk"}                      # no board snapshot: the forecast rule alone

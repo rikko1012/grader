@@ -65,6 +65,41 @@ const qo = {r: "r-pp", p: "underdog", l: 20.5, o: [0, 1], t: T, f: "f1"};
 r = R.propRow(Object.assign({}, m, {q: [qo]}), qo, {fc, view, now: NOW});
 assert.strictEqual(r.lean, "over"); assert.strictEqual(r.leanOffered, false);
 
+// ------------------------------------------------------------------ N4: a lean needs a positive edge for its side
+// Barnes-like: 3PM 0.5, Scout Over 56% (mean above the line) but the market prices Over at 66.3% -> edge -10.3: No lean
+const fcB = {fb: {id: "fb", m: "sm-1", mu: 0.9, po: 0.56, pu: 0.44, pp: 0, at: T, iv: [0, 2]}};
+const mB = Object.assign({}, m, {k: "kb", mk: {l: 0.5, c: {po: 0.663, pu: 0.337, pp: 0, n: 2, used: ["a", "b"]}, at: {}},
+                                  q: [{r: "r-b", p: "underdog", l: 0.5, o: [1, 1], t: T, f: "fb"}]});
+r = R.propRow(mB, mB.q[0], {fc: fcB, view: {}, now: NOW});
+assert.strictEqual(r.lean, null); assert.strictEqual(r.edge, null); assert.strictEqual(r.pLean, null);
+assert.strictEqual(r.noLean.side, "over"); assert.ok(Math.abs(r.noLean.edge - -10.3) < 1e-9, r.noLean.edge);
+assert.strictEqual(r.conf.score, 1);
+// Edwards-like: rebounds Over 52% vs market Over 54.5% (edge -2.5): No lean, never "Over" with a negative Over edge
+const fcE = {fe: {id: "fe", m: "sm-1", mu: 6.8, po: 0.52, pu: 0.48, pp: 0, at: T, iv: [3, 10]}};
+const mE = Object.assign({}, m, {k: "ke", mk: {l: 6.5, c: {po: 0.545, pu: 0.455, pp: 0, n: 3, used: ["a", "b", "c"]}, at: {}},
+                                  q: [{r: "r-e", p: "prizepicks", l: 6.5, o: [1, 1], t: T, f: "fe"}]});
+r = R.propRow(mE, mE.q[0], {fc: fcE, view: {}, now: NOW});
+assert.strictEqual(r.lean, null); assert.ok(Math.abs(r.noLean.edge - -2.5) < 1e-9);
+// edge exactly 0 is not positive
+const mZ = Object.assign({}, mE, {mk: {l: 6.5, c: {po: 0.52, pu: 0.48, pp: 0, n: 1, used: ["a"]}, at: {}}});
+assert.strictEqual(R.propRow(mZ, mZ.q[0], {fc: fcE, view: {}, now: NOW}).lean, null);
+// a positive edge keeps the lean; no market at the line keeps the distribution rule
+const mP = Object.assign({}, mE, {mk: {l: 6.5, c: {po: 0.47, pu: 0.53, pp: 0, n: 2, used: ["a", "b"]}, at: {}}});
+r = R.propRow(mP, mP.q[0], {fc: fcE, view: {}, now: NOW});
+assert.strictEqual(r.lean, "over"); assert.ok(r.edge > 0); assert.strictEqual(r.noLean, undefined);
+r = R.propRow(Object.assign({}, mE, {mk: null}), mE.q[0], {fc: fcE, view: {}, now: NOW});
+assert.strictEqual(r.lean, "over"); assert.strictEqual(r.edge, null);
+// property: every row with a lean and a market chance has edge > 0 for that side
+for (let i = 0; i < 3000; i++) {
+  const po = rnd(), mpo = rnd(), ln = 10.5, mu = ln + (rnd() - 0.5) * 6;
+  const ff = {x: {id: "x", m: "sm-1", mu, po, pu: 1 - po, pp: 0, at: T}};
+  const mm = Object.assign({}, m, {mk: {l: ln, c: {po: mpo, pu: 1 - mpo, pp: 0, n: 2, used: []}, at: {}},
+                                   q: [{r: "r-x", p: "underdog", l: ln, o: [1, 1], t: T, f: "x"}]});
+  const rr = R.propRow(mm, mm.q[0], {fc: ff, view: {}, now: NOW});
+  if (rr.lean) assert.ok(rr.edge > 0 && (rr.lean === "over" ? po > mpo : 1 - po > 1 - mpo), [po, mpo, rr.lean, rr.edge]);
+  assert.strictEqual(R.leanWithMarket({po, pu: 1 - po, mu}, ln, {po: mpo, pu: 1 - mpo}), rr.lean);
+}
+
 // ------------------------------------------------------------------ confidence cf-1 (deterministic)
 const base = {scout: {at: T, iv: [18, 24]}, lean: "over", pLean: 0.62, edge: 7, gap: false, fresh: true, line: 20.5,
               hit: {l10: {n: 10}}};

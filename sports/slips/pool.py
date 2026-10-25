@@ -16,6 +16,9 @@ substituted:
     research_only=True and stake_units=0.0, Slip Studio shows the warning "Research estimates - not validated; stakes
     0" and tags each such leg. A non-research forecast for the same offer is preferred when one exists.
   - the leg's team is known (the platforms' two-team rule must be checkable)
+  - N4 (owner re-audit 2026-10-24, the board's lean rule): when the board snapshot has a market chance AT THIS
+    offer's line (market_at, same rule as SportsRows.marketAt), Scout's chance of the chosen side must be ABOVE the
+    market's chance of that side - a side the market prices higher is no lean and never a slip leg
 Policy "research" (admin only, labelled): any forecast (newest first, research or not) with a chosen side; grade /
 stake not required.
 
@@ -154,7 +157,25 @@ def _pick_forecast(fs, policy):
     return cand[0], None
 
 
-def build(con, league, platform, now=None, policy="member"):
+def market_by_record(boards):
+    """{offer record id: (p_over, p_under)} - the market chance at each quote's own line from compact board snapshot
+    objects (snapshots.compact_row "mk": {l, c, at}); mirrors SportsRows.marketAt (web/sports/table.js): at[rid] when
+    present (None = no consensus), else the headline c when the quote is at the headline line; n > 0 only."""
+    out = {}
+    for b in boards or ():
+        for m in (b or {}).get("markets") or ():
+            mk = m.get("mk") or {}
+            at = mk.get("at") or {}
+            for q in m.get("q") or ():
+                rid = q.get("r")
+                c = at[rid] if rid in at else (mk.get("c") if mk.get("l") is not None and mk.get("l") == q.get("l")
+                                                else None)
+                if c and (c.get("n") or 0) > 0 and c.get("po") is not None and c.get("pu") is not None:
+                    out[rid] = (float(c["po"]), float(c["pu"]))
+    return out
+
+
+def build(con, league, platform, now=None, policy="member", market_at=None):
     """-> {"snapshot_id", "snapshot_at", "league", "platform", "policy", "legs": [leg], "excluded": {reason: n},
            "offers": n, "state": {offer_id: (record_id, revision, line, eligible, reason, leg_index)},
            "representation": "slim-1"}"""
@@ -175,7 +196,7 @@ def build(con, league, platform, now=None, policy="member"):
     legs, excluded, rows = [], Counter(), []
     ids = []
     for rid, o in offers:
-        reason, leg = _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy)
+        reason, leg = _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, market_at)
         if reason:
             reason = sys.intern(reason)
             excluded[reason.split(":")[0]] += 1
@@ -195,7 +216,7 @@ def build(con, league, platform, now=None, policy="member"):
             "state": state, "representation": REPRESENTATION}
 
 
-def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy):
+def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, market_at=None):
     if platform not in rules.PLATFORMS:
         return "not a pick'em platform", None
     ok, why = capabilities.gate(o)
@@ -235,6 +256,9 @@ def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy):
     p_loss = f.p_under if side == "over" else f.p_over
     if p_win <= 0:
         return "zero chance", None
+    mk = (market_at or {}).get(rid)
+    if mk is not None and p_win - (mk[0] if side == "over" else mk[1]) <= 1e-9:
+        return "market prices Scout's side higher", None
     leg = {"leg_id": f"{platform}|{o.offer_id}|{side}", "platform": platform, "league": o.league,
            "offer_id": o.offer_id, "record_id": rid, "forecast_id": f.forecast_id, "model_version": f.model_version,
            "grade_policy_version": f.grade_policy_version, "research_only": f.research_only,
