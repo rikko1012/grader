@@ -172,3 +172,46 @@ nflverse weekly player stats + snap counts + play-by-play 2022-2026 (2026 throug
 - **Follow-up (2026-10-25):** challenger sm-nfl-2 (REGISTER A6: participation split + cal-2) - tune results, post-hoc
   diagnostic and shadow state in `sports/MODEL_CARD_SMNFL2.md`. pass_yds / rec_yds / rec in shadow, rush markets
   dropped on tune; held-out H2 is forward only (0 / 48 games); NFL stays contained.
+
+
+## Walk-forward fine-tuning tw-1 (REGISTER A7, 2026-10-25) - nothing switched, NFL stays contained
+
+Protocol: `sports/research/REGISTER.md` amendment A7 (committed 6170ab6 before any A7 fit or score); code
+`sports/model/tune.py`; results `sports/research/results/model_tw1_nfl.json` (packaged ds-1
+`history_ds1_2026-10-23.db.gz`, as_of 2026-10-25T18:00Z; a re-run reproduces every number). Every fitted parameter is
+refit at each origin on games known before it; calibration layers read only earlier out-of-sample forecasts. This is
+honest out-of-sample evidence for the PROCEDURE but weaker than a never-seen period: the windows were scored before
+(labelled "walk-forward (procedure out-of-sample; windows previously inspected)"). 95% intervals are game-clustered
+(B = 2,000). Criteria A7 7: (a) CRPS interval below 0, (b) |in-the-large| <= 0.02 and ECE <= 0.03 at L_ref, (c) PIT
+80% coverage 0.76-0.84, (e) every band with n >= 100 within 0.03 of its mean probability.
+
+Span: 2025 week 10 - postseason + 2026 weeks 1-7 (warm-up 2025 weeks 1-9 feeds calibration only); selection block
+(half-life / window choice) 2025 weeks 10-14; evaluation block 2025 week 15 - 2026 week 7.
+
+| Market | Arm (h / k) | Eval rows / games | CRPS cand - live [game 95%] | in-the-large L_ref live / cand | ECE live / cand | PIT cov80 live / cand | bias live / cand | A band p / hit (cand) | Pass (a b c e) |
+|---|---|---|---|---|---|---|---|---|---|
+| rush_yds | rc (2 wk) | 547 / 171 | +0.0814 [-0.0424, +0.2059] | +0.003 / +0.022 | 0.030 / 0.037 | 0.784 / 0.777 | -0.92 / +0.64 | 0.678 / 0.661 (n 310) | n n Y n |
+| rush_yds | sn (4 wk) | 547 / 171 | +0.1411 [-0.0119, +0.2947] | +0.003 / +0.025 | 0.030 / 0.034 | 0.784 / 0.785 | -0.92 / +0.84 | 0.687 / 0.663 (n 309) | n n Y n |
+| rush_att | rc (2 wk) | 547 / 171 | +0.0127 [-0.0106, +0.0356] | -0.030 / -0.007 | 0.040 / 0.034 | 0.759 / 0.789 | -0.28 / -0.03 | 0.685 / 0.650 (n 283) | n n Y n |
+| rush_att | sn (2 wk) | 547 / 171 | +0.0358 [-0.0106, +0.0815] | -0.030 / -0.002 | 0.040 / 0.028 | 0.759 / 0.804 | -0.28 / -0.00 | 0.698 / 0.651 (n 304) | n Y Y n |
+| rush_att | dr (4 wk) | 547 / 171 | +0.0117 [-0.0047, +0.0294] | -0.030 / -0.012 | 0.040 / 0.042 | 0.759 / 0.749 | -0.28 / -0.04 | 0.692 / 0.658 (n 301) | n n n n |
+| pass_yds | rc (inf) | 343 / 170 | +0.0336 [-0.0474, +0.1126] | -0.046 / -0.049 | 0.046 / 0.049 | 0.815 / 0.814 | -4.24 / -4.86 | 0.651 / 0.516 (n 91) | n n Y Y |
+| pass_yds | v2 (inf) | 343 / 170 | -0.1593 [-1.4606, +1.1515] | -0.046 / -0.053 | 0.046 / 0.048 | 0.815 / 0.772 | -4.24 / -4.81 | 0.675 / 0.549 (n 144) | n n Y n |
+| pass_yds | dr (3 wk) | 343 / 170 | -0.0905 [-0.2589, +0.0573] | -0.046 / -0.043 | 0.046 / 0.049 | 0.815 / 0.812 | -4.24 / -3.61 | 0.644 / 0.521 (n 96) | n n Y Y |
+| rec_yds | rc (inf) | 1366 / 171 | +0.0065 [-0.0013, +0.0155] | -0.008 / -0.009 | 0.049 / 0.049 | 0.788 / 0.788 | -1.29 / -1.41 | 0.664 / 0.607 (n 766) | n n Y n |
+| rec_yds | v2 (inf) | 1366 / 171 | -0.1442 [-0.2568, -0.0265] | -0.008 / -0.009 | 0.049 / 0.030 | 0.788 / 0.789 | -1.29 / -1.31 | 0.672 / 0.636 (n 761) | Y n Y n |
+| rec | rc (2 wk) | 1366 / 171 | +0.0005 [-0.0031, +0.0041] | -0.022 / -0.026 | 0.033 / 0.027 | 0.776 / 0.787 | -0.10 / -0.12 | 0.677 / 0.620 (n 692) | n n Y n |
+| rec | v2 (2 wk) | 1366 / 171 | -0.0124 [-0.0230, -0.0017] | -0.022 / -0.022 | 0.033 / 0.030 | 0.776 / 0.797 | -0.10 / -0.11 | 0.680 / 0.627 (n 773) | Y n Y n |
+
+Live grade bands at L_ref (evaluation block):  rush_yds: A 337 p 0.683 hit 0.677, B 90 p 0.580 hit 0.578, C 51 p 0.546 hit 0.549, Lean 69 p 0.517 hit 0.667; rush_att: A 316 p 0.692 hit 0.655, B 123 p 0.580 hit 0.618, C 31 p 0.545 hit 0.710, Lean 77 p 0.514 hit 0.545; pass_yds: A 95 p 0.646 hit 0.526, B 86 p 0.574 hit 0.616, C 60 p 0.545 hit 0.467, Lean 102 p 0.515 hit 0.520; rec_yds: A 751 p 0.663 hit 0.607, B 300 p 0.580 hit 0.600, C 127 p 0.545 hit 0.551, Lean 188 p 0.519 hit 0.537; rec: A 686 p 0.674 hit 0.627, B 346 p 0.578 hit 0.572, C 207 p 0.543 hit 0.469, Lean 127 p 0.519 hit 0.559
+
+- **No NFL market passes; tw-1 switched nothing; vg-1 containment unchanged.** sm-nfl-2 (`v2`) is the only arm with a
+  real walk-forward gain: rec_yds CRPS -0.144 [-0.257, -0.027] and rec -0.012 [-0.023, -0.002], but at the reference
+  line its A band is over-confident (rec_yds 0.672 vs 0.636, rec 0.680 vs 0.627, n 761 / 773) and calibration misses
+  the band (rec_yds ECE 0.0303 > 0.03; rec in-the-large -0.022, ECE 0.0303). The live sm-1 A band is over-confident the same way in every NFL
+  market except rush_yds (pass_yds A 0.646 vs 0.526).
+- pass_yds under-forecast persists (live bias -4.2 yds, in-the-large -0.046); the rolling level factor `dr` moves it
+  to -3.6 and does not reach calibration. The RB snap-share fix `sn` removes rush_att's bias (-0.28 -> -0.00) and fixes
+  its calibration (ECE 0.028) but CRPS is worse (+0.036 [-0.011, +0.082]) and the A band is over-confident.
+- Book lines: no settled forward NFL prop is reachable (production learning.db: HTTP 401 with the available token);
+  A7 7(d) is not evaluable for NFL.

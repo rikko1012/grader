@@ -394,3 +394,113 @@ can never be evidence for sm-nfl-2 (they are diagnostic D only, item 7).
 7. **Diagnostic D (post-hoc, never a gate input).** After the configuration is frozen, the train-fit sm-nfl-2 and sm-1
    are also scored on sm-1's spent windows (2025 week 10 - postseason; 2026 weeks 1-7) with the same metrics,
    labelled "post-hoc diagnostic - window already used by sm-1" and committed as is; nothing is changed after it.
+
+## Amendment A7 - tw-1 walk-forward fine-tuning from past games (registered 2026-10-25, BEFORE any A7 candidate was fitted or scored)
+
+Owner 2026-10-25: "finish calibration for NBA and NFL ASAP" / "use previous matches to fine tune" - do not wait for
+the forward windows (A5 L2, A6 H2, ~Nov 9-10); use past games now, honestly. What existed when this was written: the
+frozen sm-1 configs (`model_config_<sport>.json`), the A6 config (`model_config_nflv2.json`), ds-1 through 2026-10-23
+UTC. No A7 candidate had been fitted against an outcome or scored; the code (`sports/model/tune.py`) is written after
+this text and implements it.
+
+**Honesty statement.** A rolling-origin (walk-forward) evaluation is honest out-of-sample evidence for the PROCEDURE:
+every forecast uses only parameters fitted on games known before its origin. It is WEAKER than a never-seen period:
+every window below has been scored before (NBA span = inside sm-1's locked test 2026-02-01..07-01 plus the 2026-27
+opening days; NFL span = sm-1's locked + secondary locked tests, also sm-nfl-2 diagnostic D), and the candidate ideas
+were motivated by results on these windows (MODEL_CARD_NFL re-audit, MODEL_CARD_SMNFL2). Every result is labelled
+"walk-forward (procedure out-of-sample; windows previously inspected)".
+
+1. **Span and origins.**
+   - NFL: one origin per game-week (season, week). Scored span = 2025 week 10 through the 2025 postseason + 2026
+     weeks 1-7. Warm-up = 2025 weeks 1-9: their out-of-sample forecasts feed calibration layers only, never scored.
+   - NBA: game-day = UTC date of (start - 10 h). Scored span = the last 60 game-days of ds-1 with eligible rows
+     (ending 2026-10-22); warm-up = the 30 game-days before it.
+   - **Selection block** = the first 25% of scored origins (NFL 5 game-weeks, NBA 15 game-days): used ONLY to choose
+     each candidate's half-life / window (item 4). **Evaluation block** = the remaining origins; every promotion
+     statistic comes from it, on identical rows for live and candidate (paired).
+2. **Procedure at origin t** (t = earliest start among the origin's games - 60 min). Fit rows = eligible rows (section
+   3) whose known_at (start + 6 h NFL / + 4 h NBA) <= t. Every fitted parameter (priors, k, GLM beta, family
+   parameters; the sm-nfl-2 participation model and partial component; the sn snap regression) is REFIT at every
+   origin on the fit rows only. Configuration (half-lives, features, family; live's cal-1) = the frozen sm-1 / A6
+   configs, chosen on windows before the span. Forecast = every eligible row of the origin's games; features are the
+   frames' point-in-time columns (prior games only). Calibration layers read only out-of-sample forecasts of EARLIER
+   origins whose rows have known_at <= t.
+3. **Arms (per market).**
+   - `live`: the sm-1 frozen config refit at each origin, cal-1 frozen (the production procedure).
+   - `rc` (all 9 markets), recency-weighted recalibration of the live distribution: PMF_rc = transform(PMF_live, c_t,
+     s_t) around its own mean (the cal-1 transform). c_t = sum w y / sum w E_live[X] over earlier OOS rows (bias
+     removal of the projection, clipped 0.90..1.10); s_t = argmin weighted CRPS over the cal-1 S grid with c_t
+     fixed; w = 0.5^(age / h), age = days from that row's start to t (NFL in weeks = days / 7). Grid h: NFL {2, 4, 8,
+     16 weeks, inf}, NBA {7, 14, 28, 56 days, inf}. Fewer than 200 earlier OOS rows -> c = s = 1 (= live).
+   - `v2` (pass_yds, rec_yds, rec - the A6 shadow markets): sm-nfl-2 (A6 1a-d, A6 features) refit at each origin;
+     its raw PMF then gets the `rc` rule fitted on its OWN earlier OOS raw forecasts (replacing cal-2's tune c).
+   - `sn` (rush_yds, rush_att), running-back fix with snap share as a continuous input (not the 50% split):
+     E[opp] = R x S. R = sum_w opp / sum_w snap over prior games with a known snap share > 0 (EW, the market's
+     half-life; no such game -> sm-1's EW opportunity). S = linear regression (fit rows) of the game's offense snap
+     share on the EW snap share, the previous game's snap share, the EW share of partial (< 50%) games and position
+     indicators, clipped to [0.05, 1]. Then sm-1's EB efficiency, intercept + GLM features and family exactly as sm-1
+     around that mean, then the `rc` rule on its own OOS raw forecasts.
+   - `dr` (pass_yds, rush_att), level drift: PMF_dr = transform(PMF_live, c_t, 1), c_t = sum y / sum E_live[X] over
+     the OOS rows of the previous k game-weeks only (k in {2, 3, 4, 6}), clipped 0.90..1.10; fewer than 100 rows -> 1.
+   - NBA: `live` and `rc` only.
+4. **Choice of h / k** per candidate x market: the lowest mean CRPS over the selection block (ties -> the longer h /
+   k). Never revisited after the evaluation block is scored.
+5. **Metrics (evaluation block).** CRPS (primary) paired cand - live with a game-clustered 95% interval (B = 2,000,
+   seed 20261023) and a date-block interval (NFL season-week, NBA ISO week); log-loss / Brier at L_ref (section 6);
+   ECE and in-the-large at L_ref; randomised-PIT 80% coverage (A3); signed bias; grade bands at L_ref: chosen side =
+   the side with the higher probability, band by sports-gp-1 (section 8) - per band n, games, mean p, hit rate,
+   hit - p with a game-clustered interval.
+6. **Book-line calibration `bl-1`** (forward, settled props). Location-only recalibration of a forecast's whole CDF
+   (one distribution for every line kept): F'(k) = sigmoid(logit F(k) + a); a fitted by maximum likelihood on the
+   binary outcome at the offered line (P(Over | no push), pushes excluded) of settled target-book props (PrizePicks /
+   Underdog; one row per (game, player, stat, line) = the last pre-start forecast) whose settlement was known BEFORE
+   the forecast's forecast_at; needs >= 100 props from >= 20 games, else a = 0; rolling (refit per forecast time),
+   scored on the later props only. No slope term: shrinking chances toward 50% is never used to fit bands (owner
+   rule). Metrics: log-loss / Brier paired with live (game-clustered interval), in-the-large, over-rate o vs share
+   favouring Over s, by market. Production settled props are in the service's learning.db (scorecard); the scorer
+   runs where the data is (`python -m sports.model.tune bookline`); a locally reconstructed sample is labelled so.
+7. **Promotion rule per market** (the candidate with its selected h / k; all must hold):
+   (a) evaluation-block CRPS cand - live: game-clustered 95% interval entirely below 0;
+   (b) at L_ref: |in-the-large| <= 0.02 and ECE <= 0.03;
+   (c) randomised-PIT 80% coverage in [0.76, 0.84];
+   (d) at book lines (>= 100 settled props from >= 20 games): log-loss cand - live point estimate <= 0 AND not
+       one-sided, |s - o| <= 0.15; below that sample "not evaluable";
+   (e) grade bands: evaluation block at L_ref, every band with n >= 100: |hit - mean p| <= 0.03; at book lines,
+       every band with >= 30 graded props: |hit - mean p| <= 0.05 or its game-clustered interval contains 0 (else
+       not evaluable).
+   Owner rule: a candidate is never chosen for moving chances toward 50%; the report gives c_t, s_t and the change in
+   mean chosen-side probability. Several passing candidates for one market -> the lowest evaluation-block CRPS (a
+   selection on the evaluation block, reported with every candidate's numbers). Multiple testing: 16 candidate x
+   market tests at a one-sided 2.5% false-pass rate each (~0.4 expected false passes), stated in the report.
+   **Decision.** (a), (b), (c) and the evaluation-block part of (e) pass, and (d) / book-line (e) pass or are not
+   evaluable -> the market SWITCHES to tw-1 (labelled "book-line evidence pending" while (d) is not evaluable; the
+   first check at >= 100 settled props is reported by the CLI, and a failure switches the market back through its
+   off switch). NFL containment (vg-1) is lifted for a market only when (a)-(e) hold with (d) and book-line (e)
+   evaluated on >= 300 props from >= 100 games (the A6 display bar). Grades / stakes keep gate F (section 7).
+8. **Freeze and forward use.** Switched markets -> `sports/model/artifacts/tw1_<sport>.json` (arm, h / k, parameters
+   fitted at the end of the span on all OOS rows, sha of the sm-1 artifact it applies to) + `MANIFEST_TW1.json`
+   (sha256 of every file + content sha; a mismatch or a different sm-1 artifact refuses to load -> sm-1 unchanged).
+   The forward job applies a switched market's layer to sm-1's PMF; per-market switch = the artifact's market list;
+   global off switch `SPORTS_TUNE_TW1=0`. Forecast records keep model_version `sm-1` (the displayed product line);
+   artifact_version `sm-1:<sha>+tw-1:<sha>`, calibration_version `tw-1:<arm>:c=..,s=..` and reason code `tw-1` name
+   the exact version; old forecasts are untouched (new content -> new forecast ids). The sm-2 / sm-nfl-2 shadows keep
+   comparing with the frozen sm-1 probabilities. A re-run on new data makes a challenger artifact; nothing switches
+   automatically. Results: `sports/research/results/model_tw1_<sport>.json`, committed as produced.
+
+- **A7b (2026-10-25, after the A7 results; registered BEFORE any so-1 fit or score) - NBA season-opening minutes
+  challenger `so-1`.** Why (post-hoc diagnostic of the A7 NBA evaluation block, labelled so in the results): the 2026-27
+  opening days (262 rows / 16 games, 2026-10-20..22) show live points bias +3.3 and EW minutes 27.6 vs 24.7 played -
+  the minutes history of a regular-season forecast is carried over from last season's playoffs / end of season.
+  That window is spent (seen) and is never evidence for so-1.
+  1. Candidate `so-1`: identical to the live arm except E[minutes]: for a REGULAR-season forecast row, the EW minutes
+     (sm-1 half-life h_m) are taken over the player's prior REGULAR-season games only (postseason and play-in games
+     skipped but still ageing the weights, ew_prior semantics); no prior regular-season game -> sm-1's all-games value.
+     Postseason / play-in rows are unchanged. Every fitted parameter refit at each origin with the same column (A7 2).
+  2. Windows (walk-forward, A7 2 procedure, never scored for this question): the first 15 regular-season game-days of
+     2024-25 and of 2025-26, pooled (30 origins); no warm-up, no selection block (nothing to choose). The 2026-27
+     opening days are reported separately as post-hoc.
+  3. Promotion rule per market: A7 7 (a), (b), (c) and the evaluation-block part of (e) on the pooled windows, paired
+     with the live arm on identical rows; the book-line parts (d) / (e) as in A7 7. A market that passes gets an so-1
+     forward artifact (sm-1 config refit on the so-1 minutes column, own hash manifest) and switches through the same
+     per-market switch for regular-season forecasts; otherwise nothing changes. Results:
+     `sports/research/results/model_so1_nba.json`.

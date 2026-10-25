@@ -1,0 +1,297 @@
+{
+ "label": "RECONSTRUCTED book-line sample (A7 6 / 7d,e): last pre-start sm-1 forecast per (game, player, stat, line) at PrizePicks / Underdog from a production store copy observed 2026-10-23T22:53Z..2026-10-24T03:09Z (artifact sm-1:5ec8adf73a6dad18), settled 2026-10-25 from the public ESPN summary box scores through sports.settlement.settle_offer; pushes (8) excluded. 7 games, one slate: below the A7 7(d) minimum (100 props from 20 games) -> NOT EVALUABLE, descriptive only; bl-1 cannot be fitted (no prop settled before these forecasts). Production settled props (service learning.db) were not reachable from this workstation (HTTP 401 with the available admin token, 2026-10-25).",
+ "report": {
+  "nba": {
+   "assists": {
+    "props": 83,
+    "games": 7,
+    "over_rate": 0.43373493975903615,
+    "evaluable": false,
+    "live": {
+     "n": 83,
+     "games": 7,
+     "logloss": 0.7234108828472137,
+     "brier": 0.2621290104201163,
+     "in_the_large": 0.04491082578034922,
+     "share_over_favoured": 0.40963855421686746,
+     "over_rate": 0.43373493975903615,
+     "not_one_sided": true,
+     "bands": {
+      "A": {
+       "n": 42,
+       "mean_p": 0.6677081416644847,
+       "hit_rate": 0.5238095238095238,
+       "ci_game": [
+        -0.34150111081085643,
+        0.020533736380498664
+       ],
+       "ok": true
+      },
+      "B": {
+       "n": 21,
+       "mean_p": 0.5758219754577345,
+       "hit_rate": 0.6190476190476191,
+       "ci_game": [
+        -0.1254119997112933,
+        0.15421461210577186
+       ],
+       "ok": true
+      },
+      "C": {
+       "n": 6,
+       "mean_p": 0.5466551967403973,
+       "hit_rate": 0.8333333333333334,
+       "ci_game": [
+        -0.1479014640202594,
+        0.454648655828614
+       ],
+       "ok": true
+      },
+      "Lean": {
+       "n": 14,
+       "mean_p": 0.5174672487356236,
+       "hit_rate": 0.6428571428571429,
+       "ci_game": [
+        -0.21678606055712413,
+        0.31681298610882513
+       ],
+       "ok": true
+      }
+     }
+    }
+   },
+   "points": {
+    "props": 124,
+    "games": 7,
+    "over_rate": 0.4596774193548387,
+    "evaluable": false,
+    "live": {
+     "n": 124,
+     "games": 7,
+     "logloss": 0.790716213349923,
+     "brier": 0.2871541615268962,
+     "in_the_large": 0.023370597828261896,
+     "share_over_favoured": 0.3870967741935484,
+     "over_rate": 0.4596774193548387,
+     "not_one_sided": true,
+     "bands": {
+      "A": {
+       "n": 60,
+       "mean_p": 0.696402894989511,
+       "hit_rate": 0.43333333333333335,
+       "ci_game": [
+        -0.3981521682963048,
+        -0.0675912504166125
+       ],
+       "ok": false
+      },
+      "B": {
+       "n": 29,
+       "mean_p": 0.5775164473821652,
+       "hit_rate": 0.6206896551724138,
+       "ci_game": [
+        -0.0781935696370457,
+        0.13357319874921778
+       ],
+       "ok": true
+      },
+      "C": {
+       "n": 17,
+       "mean_p": 0.5436470588235295,
+       "hit_rate": 0.5294117647058824,
+       "ci_game": [
+        -0.2509773179271709,
+        0.2305877777777778
+       ],
+       "ok": true
+      },
+      "Lean": {
+       "n": 18,
+       "mean_p": 0.5184519816377053,
+       "hit_rate": 0.4444444444444444,
+       "ci_game": [
+        -0.2501333333333333,
+        0.12679633276552002
+       ],
+       "ok": true
+      }
+     }
+    }
+   },
+   "rebounds": {
+    "props": 127,
+    "games": 7,
+    "over_rate": 0.4251968503937008,
+    "evaluable": false,
+    "live": {
+     "n": 127,
+     "games": 7,
+     "logloss": 0.7332472299677896,
+     "brier": 0.26792872987602023,
+     "in_the_large": 0.03241770867053567,
+     "share_over_favoured": 0.36220472440944884,
+     "over_rate": 0.4251968503937008,
+     "not_one_sided": true,
+     "bands": {
+      "A": {
+       "n": 50,
+       "mean_p": 0.6862812293705377,
+       "hit_rate": 0.48,
+       "ci_game": [
+        -0.38802842258372067,
+        -0.04914812115919838
+       ],
+       "ok": false
+      },
+      "B": {
+       "n": 33,
+       "mean_p": 0.5740168054156511,
+       "hit_rate": 0.5151515151515151,
+       "ci_game": [
+        -0.22406925672487873,
+        0.08226607723414128
+       ],
+       "ok": true
+      },
+      "C": {
+       "n": 19,
+       "mean_p": 0.5433243109069656,
+       "hit_rate": 0.47368421052631576,
+       "ci_game": [
+        -0.21078187747680335,
+        0.08470447443468793
+       ],
+       "ok": true
+      },
+      "Lean": {
+       "n": 25,
+       "mean_p": 0.5172381914137323,
+       "hit_rate": 0.68,
+       "ci_game": [
+        -0.16547445462184598,
+        0.3968818408303878
+       ],
+       "ok": true
+      }
+     }
+    }
+   },
+   "threes": {
+    "props": 101,
+    "games": 7,
+    "over_rate": 0.504950495049505,
+    "evaluable": false,
+    "live": {
+     "n": 101,
+     "games": 7,
+     "logloss": 0.7454708056341042,
+     "brier": 0.26782092246045425,
+     "in_the_large": -0.06476654973619372,
+     "share_over_favoured": 0.3465346534653465,
+     "over_rate": 0.504950495049505,
+     "not_one_sided": false,
+     "bands": {
+      "A": {
+       "n": 56,
+       "mean_p": 0.703527695712747,
+       "hit_rate": 0.5535714285714286,
+       "ci_game": [
+        -0.3230038836061999,
+        -0.019476273447870774
+       ],
+       "ok": false
+      },
+      "B": {
+       "n": 22,
+       "mean_p": 0.5771236265563885,
+       "hit_rate": 0.5454545454545454,
+       "ci_game": [
+        -0.24570782038796252,
+        0.13020934480371893
+       ],
+       "ok": true
+      },
+      "C": {
+       "n": 4,
+       "mean_p": 0.5444797957314746,
+       "hit_rate": 0.5,
+       "ci_game": [
+        -0.5449577798535921,
+        0.4617606723085854
+       ],
+       "ok": true
+      },
+      "Lean": {
+       "n": 19,
+       "mean_p": 0.5194591234654784,
+       "hit_rate": 0.5263157894736842,
+       "ci_game": [
+        -0.20940320018801567,
+        0.21666648064522506
+       ],
+       "ok": true
+      }
+     }
+    }
+   },
+   "all": {
+    "props": 435,
+    "games": 7,
+    "over_rate": 0.45517241379310347,
+    "evaluable": false,
+    "live": {
+     "n": 435,
+     "games": 7,
+     "logloss": 0.7505904903601449,
+     "brier": 0.2722774385217592,
+     "in_the_large": 0.009657885398335397,
+     "share_over_favoured": 0.37471264367816093,
+     "over_rate": 0.45517241379310347,
+     "not_one_sided": true,
+     "bands": {
+      "A": {
+       "n": 208,
+       "mean_p": 0.6900938849890372,
+       "hit_rate": 0.4951923076923077,
+       "ci_game": [
+        -0.26262734759166423,
+        -0.11662146407031043
+       ],
+       "ok": false
+      },
+      "B": {
+       "n": 105,
+       "mean_p": 0.575995360206212,
+       "hit_rate": 0.5714285714285714,
+       "ci_game": [
+        -0.08280038688603372,
+        0.046189488635606804
+       ],
+       "ok": true
+      },
+      "C": {
+       "n": 46,
+       "mean_p": 0.5439785276217527,
+       "hit_rate": 0.5434782608695652,
+       "ci_game": [
+        -0.1100475415219996,
+        0.10699895840360094
+       ],
+       "ok": true
+      },
+      "Lean": {
+       "n": 76,
+       "mean_p": 0.5181230958284844,
+       "hit_rate": 0.5789473684210527,
+       "ci_game": [
+        -0.10304249282275105,
+        0.16994573724989923
+       ],
+       "ok": true
+      }
+     }
+    }
+   }
+  }
+ }
+}

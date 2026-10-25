@@ -114,3 +114,53 @@ ESPN public site API box scores: 2023-24, 2024-25, 2025-26 (regular, play-in, pl
 - Historical evaluation uses a pre-game reference line (floor of the last-10 mean + 0.5), not book lines: books set lines with information the model lacks, so accuracy at offered lines can be lower.
 - Players outside the validated population (NBA < 5 prior games or < 15 L10 minutes; NFL < 3 games or below the pool thresholds) still get a research forecast, reason-coded `outside_validated_population` / `thin_history`.
 - Every factor of the owner's list is in `sports/features.py` with its status and measured tune effect; unavailable (licensed) factors are absent, never imputed.
+
+
+## Walk-forward fine-tuning tw-1 (REGISTER A7, 2026-10-25) - nothing switched
+
+Protocol: `sports/research/REGISTER.md` amendment A7 (committed 6170ab6 before any A7 fit or score); code
+`sports/model/tune.py`; results `sports/research/results/model_tw1_nba.json` (packaged ds-1
+`history_ds1_2026-10-23.db.gz`, as_of 2026-10-25T18:00Z; a re-run reproduces every number). Every fitted parameter is
+refit at each origin on games known before it; calibration layers read only earlier out-of-sample forecasts. This is
+honest out-of-sample evidence for the PROCEDURE but weaker than a never-seen period: the windows were scored before
+(labelled "walk-forward (procedure out-of-sample; windows previously inspected)"). 95% intervals are game-clustered
+(B = 2,000). Criteria A7 7: (a) CRPS interval below 0, (b) |in-the-large| <= 0.02 and ECE <= 0.03 at L_ref, (c) PIT
+80% coverage 0.76-0.84, (e) every band with n >= 100 within 0.03 of its mean probability.
+
+Span: the last 60 game-days of ds-1 (warm-up = the 30 before); selection block 2026-03-31..04-17 (15 game-days);
+evaluation block 2026-04-18..2026-10-22 = the 2026 playoffs (1,339 rows / 81 games) + the 2026-27 opening days
+(262 rows / 16 games).
+
+| Market | Arm (h / k) | Eval rows / games | CRPS cand - live [game 95%] | in-the-large L_ref live / cand | ECE live / cand | PIT cov80 live / cand | bias live / cand | A band p / hit (cand) | Pass (a b c e) |
+|---|---|---|---|---|---|---|---|---|---|
+| points | rc (inf) | 1601 / 97 | +0.0256 [+0.0149, +0.0369] | +0.076 / +0.094 | 0.069 / 0.085 | 0.774 / 0.774 | +0.95 / +1.25 | 0.663 / 0.668 (n 638) | n n Y n |
+| assists | rc (56 d) | 1601 / 97 | -0.0151 [-0.0211, -0.0100] | +0.109 / +0.092 | 0.109 / 0.092 | 0.784 / 0.794 | +0.54 / +0.44 | 0.671 / 0.713 (n 717) | Y n Y n |
+| rebounds | rc (7 d) | 1601 / 97 | +0.0072 [+0.0013, +0.0148] | +0.016 / +0.018 | 0.018 / 0.024 | 0.788 / 0.788 | +0.19 / +0.19 | 0.680 / 0.667 (n 777) | n Y Y n |
+| threes | rc (inf) | 1601 / 97 | +0.0009 [+0.0004, +0.0015] | +0.055 / +0.058 | 0.054 / 0.057 | 0.813 / 0.814 | +0.16 / +0.17 | 0.732 / 0.771 (n 917) | n n Y n |
+
+Live grade bands at L_ref (evaluation block):  points: A 742 p 0.664 hit 0.685, B 391 p 0.578 hit 0.560, C 178 p 0.545 hit 0.567, Lean 290 p 0.518 hit 0.479; assists: A 674 p 0.670 hit 0.708, B 378 p 0.577 hit 0.590, C 200 p 0.545 hit 0.525, Lean 349 p 0.518 hit 0.579; rebounds: A 725 p 0.681 hit 0.666, B 348 p 0.578 hit 0.566, C 190 p 0.544 hit 0.521, Lean 338 p 0.517 hit 0.500; threes: A 926 p 0.732 hit 0.771, B 303 p 0.578 hit 0.627, C 134 p 0.546 hit 0.604, Lean 238 p 0.517 hit 0.525
+
+- **No NBA market passes; nothing switched.** The recency-weighted recalibration `rc` cannot fix what is wrong in this
+  window: the evaluation block is the playoffs, where the live model over-projects (points bias +0.48, in-the-large at
+  L_ref +0.05; assists +0.51 / +0.11) - a regime change at the playoff start that the calibration fitted on the late
+  regular season (c 1.02 for points) moves the wrong way. assists' `rc` improves CRPS (-0.015 [-0.021, -0.010]) but
+  stays far out of band (in-the-large +0.092).
+- **Post-hoc (not evidence, not a gate):** the 2026-27 opening days show live points bias +3.3 (EW minutes 27.6 vs
+  24.7 played). Registered as A7b and tested on the 2024-25 and 2025-26 openings (`model_so1_nba.json`): earlier
+  openings show only +0.27 / +0.42 points bias and the regular-season-minutes challenger `so-1` does not pass:
+
+| Market | Pooled rows / games | CRPS so-1 - live [game 95%] | bias live / so-1 | in-the-large live / so-1 | Pass (a b c e) | 2026-27 opening (post-hoc) live bias / so-1 |
+|---|---|---|---|---|---|---|
+| points | 3592 / 229 | -0.0063 [-0.0253, +0.0131] | +0.341 / +0.261 | +0.018 / +0.014 | n Y Y Y | +3.34 / +2.92 |
+| assists | 3592 / 229 | -0.0011 [-0.0055, +0.0031] | +0.125 / +0.100 | +0.023 / +0.020 | n Y Y Y | +0.69 / +0.59 |
+| rebounds | 3592 / 229 | +0.0056 [-0.0026, +0.0138] | +0.109 / +0.089 | +0.015 / +0.013 | n Y Y n | +0.37 / +0.23 |
+| threes | 3592 / 229 | -0.0021 [-0.0049, +0.0007] | +0.005 / -0.001 | -0.001 / -0.003 | n Y Y Y | +0.31 / +0.27 |
+
+- **Book lines (reconstructed, not evaluable):** `model_tw1_bookline_nba_reconstructed.json` - 435 settled props
+  (8 pushes excluded) from 7 games of one slate (2026-10-23), last pre-start production sm-1 forecast per prop,
+  settled now from ESPN box scores. Over-rate 0.455 vs mean P(Over) 0.465 (share favouring Over 0.375, |s - o| 0.08);
+  A band p 0.690 vs hit 0.495 (n 208, hit - p game-clustered [-0.263, -0.117]); B 0.576 / 0.571 (105); C 0.544 /
+  0.543 (46). Below A7 7(d)'s 100 props from 20 games per market, so nothing is decided on it; it is the first real
+  book-line warning that the strongest disagreements with the book (A band) are over-confident. bl-1 could not be
+  fitted (no prop had settled before these forecasts). Production settled props (service learning.db) were not
+  reachable from this workstation (HTTP 401).

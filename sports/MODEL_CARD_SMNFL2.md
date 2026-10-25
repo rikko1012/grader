@@ -64,3 +64,10 @@ Held-out H2 (forward only - no historical NFL period is unscored): **0 / 48 game
 (saved row, sm-1 probabilities of the same offer). End to end on the 2026-10-24 store copy: sm-1 forecasts identical
 with the shadow off / on, 624 shadow rows (pass_yds 52, rec_yds 335, rec 237), peak RSS 179.3 MB vs 177.1 MB (cap
 340), +7.5 s. Off switch `SPORTS_SHADOW_NFLV2=0`. One-time scorer: `python -m sports.model.nflv2 heldout <history.db>`.
+
+## Walk-forward (REGISTER A7, 2026-10-25)
+
+Refit at every game-week of 2025 week 10 - 2026 week 7 with a rolling recalibration (arm `v2`,
+`sports/research/results/model_tw1_nfl.json`): CRPS vs live sm-1 rec_yds -0.144 [-0.257, -0.027], rec -0.012 [-0.023,
+-0.002], pass_yds -0.159 [-1.461, +1.152]. None meets A7 7 (A band over-confident at L_ref; ECE 0.0303 > 0.03 for both; rec in-the-large -0.022), so nothing
+switched; the shadow and A6 H2 continue unchanged.
