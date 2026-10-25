@@ -925,7 +925,9 @@ def build(con, league, now=None, base=None, history=True, results=True):
         vrows = board_view.player_rows(rows, games)
         view_out.add(vrows)
         for r in rows:                                   # vg-1 gate + sg-1 sanity guard on every Scout view (N1/N2)
-            sanity_log.extend(guard_row(league, r, forecasts, vrows.get(r["key"]), now))
+            log = guard_row(league, r, forecasts, vrows.get(r["key"]), now)
+            if events[r["event_id"]][1].start_utc > now:      # the admin log lists games still on the board
+                sanity_log.extend(log)
         tid = cur_team.get(pid)
         mates_out = []
         for mate in sorted(team_players.get(tid, ())):
