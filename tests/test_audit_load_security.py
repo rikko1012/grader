@@ -108,22 +108,7 @@ def test_slip_logs_read_only_their_tail(tmp_path, monkeypatch):
     assert len(slip_batches.read()) == 9
 
 
-# ------------------------------------------------------------------ 5. outbound calls have timeouts
-def test_lol_history_postgres_connect_has_a_timeout(monkeypatch):
-    import types
-    seen = {}
-
-    class Stop(Exception):
-        pass
-
-    def fake_connect(dsn, **kw):
-        seen.update(kw)
-        raise Stop()
-    monkeypatch.setitem(sys.modules, "psycopg2", types.SimpleNamespace(connect=fake_connect))
-    from lol import history
-    with pytest.raises(Stop):
-        history.DB(dsn="postgresql://example.invalid/db")
-    assert seen.get("connect_timeout") and seen["connect_timeout"] <= 30
+# 5. (LoL history connect timeout: lol/tests/test_history_connect_timeout.py - CS2 tests never import lol)
 
 
 # ------------------------------------------------------------------ 6. search: the BO3.gg fallback is rate limited per member
