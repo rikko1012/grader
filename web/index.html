@@ -1021,6 +1021,8 @@ const KCAP = 0.78;
 const isCapped = (p, prop, cap) => prop !== "hs" && p != null && Math.abs(+p - (cap ?? KCAP)) < 0.0005;   // exactly at the cap
 const capTip = cap => `Kills chances are capped at ${((cap ?? KCAP) * 100).toFixed(1)}% – big kill totals swing more than any model expects, so the grade never uses a higher kills chance.`;
 const chance = (p, prop, cap) => p == null ? "–" : isCapped(p, prop, cap) ? `<span class="capd" title="${esc(capTip(cap))}">${pct(p)} (capped)</span>` : pct(p);
+// the same as plain text (toasts, tooltips): a capped chance says so there too (2026-10-26 audit)
+const chanceTxt = (p, prop, cap) => p == null ? "–" : pct(p) + (isCapped(p, prop, cap) ? " (capped)" : "");
 // night/consistency 2026-10-23: one probability everywhere - on a whole-number line every chance shown (card, board row,
 // match table, Matchroom, slip leg) is P(side | no push); each surface says so with the same tag (the card already did)
 const pushTag = (line, mo) => line != null && +line % 1 === 0 && mo && +mo.push > 0
@@ -1727,7 +1729,7 @@ async function addToSlip(d) {
       if (leg.vs && leg.st) qs.set("start", leg.st);
       const r = await fetch("/api/grade?" + qs); n = r.ok ? await r.json() : null;
     } catch {}
-    const nv0 = n?.verdict || {}, nv = nv0.kept_from_board || sideGone(nv0) || nv0.unavailable || nv0.stale || n?.hltv_outage ? {} : nv0, row = (l, s_, p_, gr, u) => `<tr><td>${l}</td><td>${s_ ? sideTxt(s_) : "–"}</td><td class="num">${p_ != null ? pct(p_) : "–"}</td><td>${esc(gr ? gradeWord({grade: gr}) : "–")}</td><td class="num">${u ?? 0}U</td></tr>`;
+    const nv0 = n?.verdict || {}, nv = nv0.kept_from_board || sideGone(nv0) || nv0.unavailable || nv0.stale || n?.hltv_outage ? {} : nv0, row = (l, s_, p_, gr, u) => `<tr><td>${l}</td><td>${s_ ? sideTxt(s_) : "–"}</td><td class="num">${p_ != null ? chance(p_, g.prop) : "–"}</td><td>${esc(gr ? gradeWord({grade: gr}) : "–")}</td><td class="num">${u ?? 0}U</td></tr>`;
     const k = await ask(d.from === "board" ? `${bookName(used)} moved this line` : `Your line differs from ${bookName(used)}'s current line`, `${esc(nick)} ${propWord(g.prop)}${mapsWord(g.scope)}: ${d.from === "board" ? esc(c.note) : `you entered ${g.line}; ${bookName(used)} currently shows ${c.new_line}`}.
       <table style="margin-top:8px"><thead><tr><th>Line</th><th>Side</th><th class="num">Chance</th><th>Grade</th><th class="num">Stake</th></tr></thead><tbody>
       ${row(g.line + " (yours)", v.side, v.p, mGrade(v), v.units)}${n && nv.side ? row(c.new_line + " (now)", nv.side, nv.p, mGrade(nv), nv.units) : `<tr><td>${c.new_line} (now)</td><td colspan="4" class="muted">being graded – try again in a few minutes</td></tr>`}</tbody></table>`,
@@ -1844,7 +1846,7 @@ function slipHtml(s, where) {
     + s.map((x, i) => legRow(x, i, !studioOff())).join("")
     + (n < 2 ? `<div class="small muted" style="margin-top:10px">Add at least 2 picks (up to 6).</div>`
        : `<div class="slipest">${estimate ? studioChance({n, legs: s.map(x => ({line: x.l, scope: x.sc})), ...estimate}) : `<span class="small muted">Regrade every leg to calculate a combined chance.</span>`}</div>`)
-    + pairs.map(pr => `<div class="warn">${pairText(s[pr.i], s[pr.j], pr.mates)}${best ? ` <button type="button" class="chipbtn swapb" data-swap="${pr.j}" title="${esc(rowLabel(best))} – ${esc(mGrade(best))} · ${pct(best.p)}">Swap ${esc(s[pr.j].p)} for the best pick from another match</button>` : ""}</div>`).join("")
+    + pairs.map(pr => `<div class="warn">${pairText(s[pr.i], s[pr.j], pr.mates)}${best ? ` <button type="button" class="chipbtn swapb" data-swap="${pr.j}" title="${esc(rowLabel(best))} – ${esc(mGrade(best))} · ${esc(chanceTxt(best.p, best.prop))}">Swap ${esc(s[pr.j].p)} for the best pick from another match</button>` : ""}</div>`).join("")
     + (dupPlayer ? `<div class="warn">The same player appears twice – his picks move together, so the real chance differs from the %. Check your app allows it.</div>` : "")
     + (s.some(x => x.lt && x.lt !== "standard") ? `<div class="warn">Goblin / demon picks are their own PrizePicks entry type – check the entry in the app before you enter it.</div>` : "")
     + (leans ? `<div class="warn">${leans} pick${leans > 1 ? "s are" : " is a"} Lean${leans > 1 ? "s" : ""} (0 units) – the weakest legs on the slip.</div>` : "")
@@ -2233,7 +2235,7 @@ function markChip(r) {
   return ` <span class="nmark ${cls}" title="${esc(tip)}" data-tip="${esc(tip)}" tabindex="0">${esc(label)}</span>`;
 }
 // "locks in 12m": the line's own listed start, under an hour away
-const lockChip = r => { const t = Date.parse(r.start || ""), m = Math.ceil((t - Date.now()) / 60000);
+const lockChip = r => { const t = lockMs(r) ?? NaN, m = Math.ceil((t - Date.now()) / 60000);
   return isNaN(t) || m <= 0 || m > 60 ? "" : ` <span class="lockb" title="${esc(bookName(r.book || "underdog"))} locks this line at the match start">locks in ${m}m</span>`; };
 const shortWhen = s => { if (!s) return ""; const d = new Date(s); if (isNaN(d)) return "";
   const u = until(d); return d.toLocaleString([], {weekday: "short", hour: "numeric", minute: "2-digit"}) + (u ? " · " + u : ""); };
@@ -2315,10 +2317,14 @@ function whyHtml(r) {
        ? `<div class="wrow"><span class="k"></span><span><button type="button" class="chipbtn wpin" data-pin="${esc(r.id)}" data-pinbk="${esc(r.book || "underdog")}">Build around this pick</button></span></div>` : "");
 }
 const WHY_OPEN = new Set();          // board rows whose Why panel is open (kept across redraws)
-// a board row from its data-bl key (player | line | stat | maps | market type | platform)
+// a board row's data-bl key (player | line | stat | maps | market type | platform | row id). 2026-10-26 audit: without the
+// row id, two matches listing the same player / line / stat / maps / type on one platform (two BO1s in a day) resolved to
+// the first row - the card, the Why panel and Prev / Next opened the other match's line.
+const blKey = r => `${r.nick || r.player}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}|${r.book || "underdog"}|${r.id || ""}`;
 function rowOfBl(bl) {
-  const [p, l, t, sc, lt, bk] = String(bl || "").split("|");
-  return boardRows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && (x.scope || "12") === sc && mktType(x) === (lt || "standard") && (x.book || "underdog") === (bk || "underdog"));
+  const [p, l, t, sc, lt, bk, id] = String(bl || "").split("|");
+  const same = x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && (x.scope || "12") === sc && mktType(x) === (lt || "standard") && (x.book || "underdog") === (bk || "underdog");
+  return (id && boardRows.find(x => String(x.id) === id && same(x))) || boardRows.find(same);
 }
 // quick filters + floors (QoL 2026-10-21) - on the row's own data: the MODEL grade shown on the row (never its units; "Bets only"
 // stays the stake filter) and its printed chance. A side no longer offered or a line with no match shows no grade or chance.
@@ -2342,7 +2348,7 @@ function watchAlerts(before) {        // before = {book: that platform's rows be
     for (const r of BK[b].rows) {
       if (!r.side || !isWatched(r, wl) || hasStarted(r)) continue;
       const o = prev.get(markKey(r)), what = `${r.nick || r.player} ${propWord(r.prop)}${mapsWord(r.scope)} on ${bookName(b)}`;
-      if (!o) out.push(`★ ${what}: line posted at ${r.line} – ${sideWord(r)} ${pct(r.p)}`);
+      if (!o) out.push(`★ ${what}: line posted at ${r.line} – ${sideWord(r)} ${chanceTxt(r.p, r.prop)}`);
       else if (+o.line !== +r.line) out.push(`★ ${what}: line moved ${o.line} → ${r.line}`);
       else if (mGrade(o) && mGrade(r) && mGrade(o) !== mGrade(r)) out.push(`★ ${what}: grade ${gradeWord(o)} → ${gradeWord(r)}`);
     }
@@ -2458,7 +2464,7 @@ function drawBoard() {
     const nick = r.nick || r.player, gone = sideGone(r), lab = !r.side ? "…" : r.state === "SCOUT" || gone ? "–" : mGrade(r) === "LEAN" ? "L" : mGrade(r);
     const ltl = !r.side ? "Still grading" : r.state === "SCOUT" ? "No match scheduled" : mGrade(r) === "LEAN" ? "Lean – 0 units" : `Grade ${mGrade(r)}${+r.units > 0 ? "" : " – 0 units"}`;
     const ds = dsOf(r), team = r.team_name || r.team, opp = r.opp_name || r.opponent;
-    const bl = `${nick}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}|${r.book || "underdog"}`, wOpen = WHY_OPEN.has(bl);
+    const bl = blKey(r), wOpen = WHY_OPEN.has(bl);
     const pick = boardPickHtml(r), stake = boardStakeHtml(r);
     const meta = [r.graded_at ? `graded ${agoTxt(r.graded_at)}` : "", r.alt && r.book !== "prizepicks" ? `alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : "",
 ].filter(Boolean).join(" · ");
@@ -2487,7 +2493,7 @@ function drawBoard() {
   // the order the rows are drawn in (previous / next in the card): the list as sorted, or match by match
   NAV.order = (bview === "all" ? rows : (() => { const gs = new Map(); for (const r of rows) { const k = matchKey(r); if (!gs.has(k)) gs.set(k, []); gs.get(k).push(r); }
     return [...gs.values()].sort((a, b) => String(a[0].start || "9").localeCompare(String(b[0].start || "9"))).flat(); })())
-    .filter(r => r.side).map(r => `${r.nick || r.player}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}|${r.book || "underdog"}`);
+    .filter(r => r.side).map(blKey);
   let html;
   const grading = (bbook === "all" ? ["underdog", "prizepicks"] : [bbook]).reduce((a, b) => a + Math.max(0, ((BK[b] || {}).total || 0) - ((BK[b] || {}).rows || []).length), 0);
   if (!rows.length && !boardRows.length && grading) {         // after a restart the lines are graded one by one: say so
@@ -2516,8 +2522,9 @@ function boardClick(e) {
   if (e.target.closest("[data-mlall]")) { $("#mlusable").checked = false; return drawBoard(); }
   if (e.target.closest("[data-mlclear]")) { $("#bsearch").value = ""; return drawBoard(); }
   const cb = e.target.closest("[data-cmp]");
-  if (cb) { const [bk, p, l, t, sc, lt] = cb.dataset.cmp.split("|");
-    const row = BK[bk].rows.find(x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && (x.scope || "12") === sc && mktType(x) === lt);
+  if (cb) { const [bk, p, l, t, sc, lt, id] = cb.dataset.cmp.split("|");
+    const same = x => (x.nick || x.player) === p && String(x.line) === l && x.prop === t && (x.scope || "12") === sc && mktType(x) === lt;
+    const row = (id && BK[bk].rows.find(x => String(x.id) === id && same(x))) || BK[bk].rows.find(same);
     return gradeNow(p, l, t, row ? gradeType(row) : lt, sc, true, row ? {team: row.team, opponent: row.opponent, book: bk, start: row.start, side: row.side || null} : {book: bk}); }
   const wb = e.target.closest("[data-bwhy]");
   if (wb) { e.stopPropagation(); const el = wb.closest("[data-bl]"); if (!el) return;
@@ -2581,7 +2588,7 @@ function drawCompare() {
   const list = all0.filter(x => !$("#cdiff").checked || gapOf(x) > 0);
   $("#bcount").textContent = `${list.length} player markets · ${list.filter(x => x.u.length && x.p.length).length} on both platforms${$("#cdiff").checked ? ` · ${all0.length - list.length} hidden (same line, or on one platform only)` : ""}`;
   const sides = r => r.side === "More" ? [chance(r.p, r.prop), pct(1 - r.p)] : [pct(1 - r.p), chance(r.p, r.prop)];
-  const one = (bk, r) => `<button type="button" class="cmpcell" data-cmp="${bk}|${esc(r.nick || r.player)}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}" title="Open the card at this ${bookName(bk)} line">
+  const one = (bk, r) => `<button type="button" class="cmpcell" data-cmp="${bk}|${esc(r.nick || r.player)}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}|${esc(r.id || "")}" title="Open the card at this ${bookName(bk)} line">
       <span class="ln">${r.line}</span>${mktTag(r)}
       <div style="display:flex;flex-wrap:wrap;gap:0 10px"><span style="white-space:nowrap">Over ${sides(r)[0]}</span><span style="white-space:nowrap">Under ${sides(r)[1]}</span></div>
       <div class="muted">${sideGone(r) ? `<span class="pill bad">${esc(sideGone(r))}</span>` : `${esc(sideWord(r))}${isLeanV(r) ? "" : " · " + esc(mGrade(r))} · ${+(+r.units || 0).toFixed(2)}U${zeroWhy(r)}`}</div></button>`;
@@ -3215,12 +3222,12 @@ function studioRender() {
       ${norep ? "" : `<details class="studio-repeats small"><summary>Repeated players and matches</summary>${rep("Repeated players", e.repeated_players)}${rep("Repeated matches", e.repeated_matches)}</details>`}
       <details class="small muted" style="margin-top:4px"><summary>Details</summary>started ${esc(shortWhen(b.created_at).split(" · ")[0])} · ${b.builds} build${b.builds === 1 ? "" : "s"} · ${e.legs || 0} picks${e.mixed ? " · mixed overlap settings across builds" : ""}${b.superseded ? ` · ${b.superseded} replaced / changed slip${b.superseded === 1 ? "" : "s"} no longer counted` : ""}
       ${(e.rules || []).length ? `<ul>${e.rules.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</details></div>`;
-  const active = n => ((b.slips || {})[n] || []).filter(s => !s.legs.some(l => Date.parse(l.start) <= Date.now()));
+  const active = n => ((b.slips || {})[n] || []).filter(s => !s.legs.some(l => legStarted(l)));     // the one lock rule
   const lockedN = [4, 3, 2].reduce((a, n) => a + ((b.slips || {})[n] || []).length - active(n).length, 0);
   // U6: the latest build first and open, earlier builds collapsed ("Build 2 · 6 slips"); sort by chance or earliest start
   const act = [4, 3, 2].flatMap(active), seqOf = x => +((String(x.build_id || x.slip_id || "").match(/\/b(\d+)/) || [0, 0])[1]);
   const builds = new Map(); act.forEach(x => { const k = x.build_id || "?"; if (!builds.has(k)) builds.set(k, []); builds.get(k).push(x); });
-  const firstStart = x => Math.min(...x.legs.map(l => Date.parse(l.start) || 9e15));
+  const firstStart = x => Math.min(...x.legs.map(l => lockMs(l) ?? 9e15));
   const sortK = STUDIO.sort === "start" ? firstStart : x => -(x.all_hit ?? 0);
   const ord = [...builds.values()].sort((a, b) => seqOf(b[0]) - seqOf(a[0]));
   const sortBar = act.length > 1 ? `<div class="studio-sort"><span class="small muted">Sort</span><div class="seg" data-ssort role="group" aria-label="Sort slips">${[["chance", "Chance"], ["start", "Earliest start"]].map(([v, l]) =>
@@ -4277,7 +4284,7 @@ function otTopPlays(rows) {
   const onSlip = new Set(store.get("cs2s_slip", []).map(slipKeyLeg));
   const card = r => {
     const nick = r.nick || r.player, team = r.team_name || r.team, opp = r.opp_name || r.opponent, bk = r.book || "underdog", g = mGrade(r);
-    const bl = `${nick}|${r.line}|${r.prop}|${r.scope || "12"}|${mktType(r)}|${bk}`, on = onSlip.has(slipKeyRow(r));
+    const bl = blKey(r), on = onSlip.has(slipKeyRow(r));
     return `<div class="brow2 tplay" data-bl="${esc(bl)}" title="Open the full card">
       <span class="gtag ${gClass(g)}">${esc(g)}</span>
       <div class="tpbody"><div class="b2top"><b>${esc(nick)}</b> <span class="muted">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}</span></div>
