@@ -189,11 +189,9 @@
   function usableBooks(mk, now) { return mk && mk.bk ? mk.bk.filter(function (b) { return bookUsable(b, now); }) : []; }
   function hiddenBooks(mk, now) { return mk && mk.bk ? mk.bk.filter(function (b) { return !bookUsable(b, now); }) : []; }
   function marketShown(c) { return !!(c && c.n > 0); }
-  function pct0(p) {                      // cards: whole-number chances ("45%"); <1% / >99% kept honest
-    if (p === null || p === undefined || !isFinite(p)) return null;
-    if (p > 0 && p < 0.005) return "<1%";
-    if (p < 1 && p > 0.995) return ">99%";
-    return Math.round(p * 100) + "%";
+  function pct0(p) {                      // board table / cards / market lines: the SAME 0.1% text as pct() (audit
+    if (p === null || p === undefined || !isFinite(p)) return null;   // 2026-10-26: one quote, one number on every surface)
+    return pct(p);
   }
   // the three probability types (owner 2026-10-24) - one label per kind, never mixed
   var KIND_LABEL = {scout: "Scout model", informed: "Market-informed model", market: "Market estimate"};

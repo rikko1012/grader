@@ -210,15 +210,13 @@
         b.textContent = b.textContent.replace(/ [▲▼]$/, "") + (on ? (st.dir === "asc" ? " ▲" : " ▼") : "");
       });
     }
-    var research = all.some(function (r) { return r.scout; });
     main.innerHTML = head(lg, sheet) +
       '<p class="sw-sub">Every current ' + esc(sheet === "prizepicks" ? "PrizePicks" : "Underdog") + " line in one table. Scout chances are read at each exact line from one projected distribution. <b>Edge</b> = Scout chance minus the market's chance, in percentage points (not expected value). A lean is shown only when the chance and the projection agree. Every column means exactly what it means on the Prop board.</p>" +
-      (research ? '<div class="sw-banner info">Research estimates - Scout is still in forward validation; confidence is a research score, no grades or stakes.</div>' : "") +
       '<div class="shx-filters">' + sel("shx-stat", "Stat", statOpts(all, D), st.stat) + sel("shx-ev", "Game", evOpts(D), st.ev) +
       sel("shx-variant", "Type", [["all", "All types"], ["standard", "Standard"], ["goblin", "Goblin"], ["demon", "Demon"], ["alternate", "Alternate"]], st.variant) +
       sel("shx-lean", "Lean", [["any", "Any"], ["lean", "Has a lean"], ["over", "Lean Over"], ["under", "Lean Under"]], st.lean) +
       '<label class="shx-field shx-check"><input type="checkbox" id="shx-gap"' + (st.gap ? " checked" : "") + "><span>Model vs market gap</span></label>" +
-      '<label class="shx-field"><span>Player or team</span><input id="shx-q" type="search" value="' + esc(st.q) + '" placeholder="' + esc(root.SportsLabels ? root.SportsLabels.searchPlaceholder(lg) : "Search") + '"></label></div>' +
+      '<label class="shx-field"><span>Player or team</span><input id="shx-q" type="search" aria-keyshortcuts="/" value="' + esc(st.q) + '" placeholder="' + esc(root.SportsLabels ? root.SportsLabels.searchPlaceholder(lg) : "Search") + '"></label></div>' +
       '<div class="shx-meta"><span id="shx-count" aria-live="polite"></span><span class="sw-faint sw-small">' + built(D) + "</span></div>" +
       '<div class="sw-scroll shx-wrap"><table class="sw-mini shx-table"><caption class="sw-sr">' + esc(sheet) + ' lines, sortable</caption><thead><tr>' +
       th("player", "Player", st) + th("game", "Game", st) + th("stat", "Stat", st) + th("line", "Line", st, 1) + th("type", "Type", st) +
@@ -265,7 +263,7 @@
       sel("shx-dir", "Direction", [["any", "Over or Under"], ["over", "Over"], ["under", "Under"]], st.dir_) +
       sel("shx-min", "L10 at least", [["0", "Any"], ["60", "60%"], ["70", "70%"], ["80", "80%"], ["90", "90%"]], st.min) +
       '<label class="shx-field shx-check"><input type="checkbox" id="shx-l20"' + (st.l20 ? " checked" : "") + "><span>Has 20 games</span></label>" +
-      '<label class="shx-field"><span>Player or team</span><input id="shx-q" type="search" value="' + esc(st.q) + '" placeholder="' + esc(root.SportsLabels ? root.SportsLabels.searchPlaceholder(lg) : "Search") + '"></label></div>' +
+      '<label class="shx-field"><span>Player or team</span><input id="shx-q" type="search" aria-keyshortcuts="/" value="' + esc(st.q) + '" placeholder="' + esc(root.SportsLabels ? root.SportsLabels.searchPlaceholder(lg) : "Search") + '"></label></div>' +
       '<div class="shx-meta"><span id="shx-count" aria-live="polite"></span><span class="sw-faint sw-small">' + built(D) + "</span></div>" +
       '<div class="sw-scroll shx-wrap"><table class="sw-mini shx-table"><caption class="sw-sr">Most consistent players, sortable</caption><thead><tr>' +
       th("cplayer", "Player", st) + th("game", "Game", st) + th("stat", "Stat", st) + th("line", "Line", st, 1) + th("dir", "Side", st) +

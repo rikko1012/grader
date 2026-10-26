@@ -27,8 +27,9 @@
     "gp:history-validated": "Projection - validated on past games, not yet on live lines.",
     "gp:forward-validated": "Validated on live lines."
   };
-  function reasonList(codes) {                          // member text; raw gp_band:* codes never shown (the letter is rendered by gradeLine)
-    return (codes || []).filter(function (c) { return !/^gp_band:/.test(c); }).map(function (c) { return REASONS[c] || c; });
+  function reasonList(codes) {                          // member text; raw gp_band:* codes never shown (the letter is rendered by gradeLine);
+    // gp:* validation states are status labels (owner: none on member pages) - the forward count sits in the Details line
+    return (codes || []).filter(function (c) { return !/^gp_band:/.test(c) && !/^gp:/.test(c); }).map(function (c) { return REASONS[c] || c; });
   }
   var main = document.getElementById("sw-main");
   var banner = document.getElementById("sw-banner");
@@ -118,6 +119,17 @@
       });
     }
   };
+
+  // A reply that arrives after the member moved on (other league, other view, other player) must never paint over the
+  // current page: render() bumps GEN, and guard(p) settles only while the generation it was started in is current
+  // (a stale reply / error is dropped - the promise just never settles). Api.mem still caches the stale reply.
+  var GEN = 0;
+  function guard(p) {
+    var g = GEN, never = function () { return new Promise(function () {}); };
+    return p.then(function (v) { return g === GEN ? v : never(); }, function (e) { if (g === GEN) throw e; return never(); });
+  }
+  var GApi = Object.create(Api);                       // the API as the view modules see it (sheets, compare, picks)
+  GApi.get = function () { return guard(Api.get.apply(Api, arguments)); };
 
   // ------------------------------------------------------------------------------------------------- routing
   function route() {
@@ -256,7 +268,8 @@
   }
   function marketSources(manifest) {                     // the books actually on the board now (manifest.sources)
     var s = manifest && manifest.sources || {};
-    var on = Object.keys(s).filter(function (k) { return s[k].offers > 0; }).sort().map(function (k) { return bookName(k) + (s[k].verified ? "" : " (capture-only)"); });
+    // an unverified source (not verified for props) is left out rather than listed with a status label (owner: no hedge labels)
+    var on = Object.keys(s).filter(function (k) { return s[k].offers > 0 && s[k].verified; }).sort().map(function (k) { return bookName(k); });
     return on.join(", ") || "none on the board";
   }
   function setNav(view) {
@@ -396,16 +409,19 @@
   }
 
   // ---------------------------------------------------------------------------------------------------- slate
+  // one "started or finished" rule for the slate and the match context; the clock too: a snapshot built before tip
+  // says not started
+  function gameDone(e) { return !!(e.started || e.locked || (e.status && e.status !== "scheduled") || (e.start_utc && Date.parse(e.start_utc) <= Date.now())); }
   function renderSlate() {
     main.innerHTML = '<div class="sw-eyebrow">' + state.lg.toUpperCase() + ' · Slate</div><h1 class="sw-h1">Games and coverage</h1>' + skeleton(4);
-    Promise.all([Api.get("/api/sports/slate", {league: state.lg}), loadManifest()]).then(function (res) {
+    guard(Promise.all([Api.get("/api/sports/slate", {league: state.lg}), loadManifest()])).then(function (res) {
       var got = res[0], d = got.data, man = res[1] && res[1].data;
       freshness(man, got); footer(man);
       var f = state.filters[state.lg];
       var html = '<div class="sw-eyebrow">' + state.lg.toUpperCase() + ' · Slate</div><h1 class="sw-h1">Games and coverage</h1>' +
         '<p class="sw-sub">Start times in your time zone. Each game lists its props, how many of them have a Scout chance, and the injury report.</p>' +
         '<div class="sw-filters" role="search"><div class="sw-field grow"><label for="sw-sq">Find a team</label>' +
-        '<input id="sw-sq" type="search" autocomplete="off" placeholder="' + esc(L.teamPlaceholder(state.lg)) + '" value="' + esc(f.slateQ || "") + '"></div>' +
+        '<input id="sw-sq" type="search" aria-keyshortcuts="/" autocomplete="off" placeholder="' + esc(L.teamPlaceholder(state.lg)) + '" value="' + esc(f.slateQ || "") + '"></div>' +
         '<button type="button" class="sw-btn" id="sw-sreset">Reset</button></div><div id="sw-slatebody"></div>';
       main.innerHTML = html;
       var body = document.getElementById("sw-slatebody");
@@ -419,7 +435,7 @@
         if (!d.events.length) { body.innerHTML = stateBox("No games on the slate", "Scout lists " + state.lg.toUpperCase() + " games from today through the next days once the schedule is published."); return; }
         // games that started / finished leave the main list (owner: the slate shows what can still be played);
         // they stay one click away in a collapsed section so today's results context is not lost
-        var done = function (e) { return !!(e.started || e.locked || (e.status && e.status !== "scheduled") || (e.start_utc && Date.parse(e.start_utc) <= Date.now())); };   // the clock too: a snapshot built before tip says not started
+        var done = gameDone;
         var up = evs.filter(function (e) { return !done(e); }), past = evs.filter(done);
         var out = '<p class="sw-count" aria-live="polite"><span><b>' + S.int(up.length) + "</b> upcoming " + (up.length === 1 ? "game" : "games") + "</span>" +
           (past.length ? "<span>" + S.int(past.length) + " started or finished</span>" : "") + "</p>";
@@ -500,7 +516,7 @@
   }
   // HOOK (ux agent): My picks (#/picks) is web/sports/picks.js (SportsPicks.renderMine) on /api/sports/picks/mine.
   function renderPicks() {
-    window.SportsPicks.renderMine({main: main, api: Api, src: src, league: state.lg, stateBox: stateBox, fail: fail, skeleton: skeleton,
+    window.SportsPicks.renderMine({main: main, api: GApi, src: src, league: state.lg, stateBox: stateBox, fail: fail, skeleton: skeleton,
       resetSrc: function () { SRC = []; },
       loadModels: function () {                       // model validation progress per league (manifest model counts)
         return Promise.all(["nba", "nfl"].map(function (lg) {
@@ -554,9 +570,15 @@
   function gradeLine(q) {
     var x = q && q.x;
     if (!x || x.b || !x.ln || !x.gr) return "";
-    return '<div class="sw-grade-line">' + L.gradeHtml(x.gr, x.ln, x.nv) + "</div>";
+    // the board table says "not offered here" when the graded side is closed on this book; cards and the player page
+    // say the same (the side buttons below can only pick an offered side)
+    var open = q.o ? !!q.o[x.ln === "over" ? 0 : 1] : !(q.sides || []).some(function (s) { return s.side === x.ln && !s.offered; });
+    return '<div class="sw-grade-line">' + L.gradeHtml(x.gr, x.ln, x.nv) + (open ? "" : ' <span class="sw-tb-note" data-grade-closed>' +
+      (x.ln === "over" ? "Over" : "Under") + " not offered on " + esc(bookName(q.p || q.platform)) + "</span>") + "</div>";
   }
-  function gradeBanner(lg) {
+  function gradeBanner(lg, B) {                         // the letter legend only when a letter can show (vg-1 contained
+    var any = B && B.markets.some(function (m) { return (m.q || []).some(function (q) { return q.x && q.x.gr; }); });   // NFL: none)
+    if (!any) return "";
     return '<p class="sw-grade-banner" data-grade-banner>' + esc(L.GRADE_TAG) + " · " + esc(L.GRADE_BANDS) + " · stakes 0" +
       (lg === "nfl" ? " · NFL model not validated" : "") + "</p>";
   }
@@ -583,7 +605,7 @@
     var c = S.marketFor(m.mk, q.r);
     if (S.marketShown(c)) {
       return '<div class="sw-num-block sw-market"><div class="sw-num-label">' + esc(S.marketLabel(c)) + " " + mkSource(m.mk, c) + "</div>" +
-        threeChances(c.po, c.pu, c.pp, q.l, null) + '<div class="sw-small sw-faint">From book prices at line ' + S.line(q.l) + (q.p && c.used.indexOf(q.p) < 0 && S.isBook(q.p) ? ", " + esc(bookName(q.p)) + " itself not counted" : "") + "</div></div>";
+        threeChances(c.po, c.pu, c.pp, q.l, null) + '<div class="sw-small sw-faint">From book prices at line ' + S.line(q.l) + (q.p && (c.used || []).indexOf(q.p) < 0 && S.isBook(q.p) ? ", " + esc(bookName(q.p)) + " itself not counted" : "") + "</div></div>";
     }
     if (f && S.kindOf(f.m) === "market") {               // a market-only model record (no live consensus to show)
       return '<div class="sw-num-block sw-market"><div class="sw-num-label">Market estimate <span class="sw-faint">' + esc(f.m) + "</span> " + fcSource(q.f, f, q) + "</div>" +
@@ -688,7 +710,7 @@
     if (!ms.length) return "";
     return '<p class="sw-tb-valid" id="sw-validation"><b>Research estimates.</b> Forward validation: ' + ms.map(function (x) {
       return esc(S.kindLabel(x.model_version)) + " " + esc(S.validationState(x.settled)); }).join(" · ") +
-      ". Not validated yet: chances, edges and confidence are research, not recommendations. Edge = Scout chance minus the market chance at the same line, in probability points (not expected value).</p>" +
+      ". Edge = Scout chance minus the market chance at the same line, in probability points (not expected value).</p>" +
       '<p class="sw-small sw-faint sw-tb-rule">' + esc(S.GATE_RULE) + "</p>";
   }
   function renderBoard(params, onlyEvent) {
@@ -700,14 +722,14 @@
     }
     if (!onlyEvent) main.innerHTML = '<div class="sw-eyebrow">' + state.lg.toUpperCase() + ' · Prop board</div><h1 class="sw-h1">Prop board</h1>' + skeleton(8);
     var target = onlyEvent ? document.getElementById("sw-gameprops") : main;
-    Promise.all([loadBoard(f.more || !!onlyEvent), loadManifest()]).then(function (res) {
+    guard(Promise.all([loadBoard(f.more || !!onlyEvent), loadManifest()])).then(function (res) {
       var B = res[0], man = res[1] && res[1].data;
       B.man = man;
       if (!onlyEvent) { freshness(man, B.got); footer(man); }
       var evs = Object.keys(B.board.events).filter(function (k) { return !R.started({ev: B.board.events[k]}, Date.now()); }).map(function (k) { return [k, matchup(B.board.events[k]) + " · " + S.localTime(B.board.events[k].start_utc, {weekday: "short", hour: "numeric", minute: "2-digit"}), B.board.events[k].start_utc]; })
         .sort(function (a, b) { return a[2] < b[2] ? -1 : 1; });
-      var head = onlyEvent ? "" : '<div class="sw-eyebrow">' + state.lg.toUpperCase() + ' · Prop board</div><h1 class="sw-h1">Prop board</h1>' + gradeBanner(state.lg) +
-        '<p class="sw-sub">Find a player. Compare the lines. Track your research. Chances apply to the exact book and line shown; they are not validated recommendations.</p>' +
+      var head = onlyEvent ? "" : '<div class="sw-eyebrow">' + state.lg.toUpperCase() + ' · Prop board</div><h1 class="sw-h1">Prop board</h1>' + gradeBanner(state.lg, B) +
+        '<p class="sw-sub">Find a player. Compare the lines. Track your research. Chances apply to the exact book and line shown.</p>' +
         boardFiltersHtml(B, f, evs);
       target.innerHTML = head + (onlyEvent ? "" : validationLine(B) + '<div class="sw-tb-bar" id="sw-tb-bar"></div>') + '<div id="sw-bcount"></div><div id="sw-bbody"></div>';
       if (onlyEvent) TB.view = "cards"; else TB.view = window.SportsTable.state().view;
@@ -721,7 +743,13 @@
         var withFc = rows.filter(function (m) { return (m.sc || 0) > 0; }).length;   // sc-1, = slate coverage.scout_chances.markets
         cnt.innerHTML = prefBookHtml(B) + '<p class="sw-count" aria-live="polite"><span><b>' + S.int(rows.length) + "</b> of " + S.int(total) + (total === 1 ? " market" : " markets") + "</span><span><b>" + S.int(withFc) + "</b> with a Scout chance</span>" +
           (!ff.more && B.board.secondary_markets ? "<span>" + S.int(B.board.secondary_markets) + " more under “More stats”</span>" : "") + "</p>";
-        if (!total) { body.innerHTML = stateBox("No lines yet", "No " + state.lg.toUpperCase() + " props are on the board right now."); return; }
+        if (!total) {                                   // match context: a started game is not "no lines yet"
+          var gev = onlyEvent && B.board.events[onlyEvent], gone = gev && R.started({ev: gev}, nowMs);
+          body.innerHTML = gone ? stateBox("This game has started", "Props close at the start, so none are listed. Settled picks appear on the Results page after the final.", '<a class="sw-btn" href="#/results">Results</a>')
+            : onlyEvent ? stateBox("No lines yet", "Books have not posted props for this game yet. They appear here as soon as they do.")
+            : stateBox("No lines yet", "No " + state.lg.toUpperCase() + " props are on the board right now.");
+          return;
+        }
         if (!B.markets.some(function (m) { return m.q.some(function (q) { return q.f; }); }))
           cnt.innerHTML += '<div class="sw-banner">Scout chances are not published yet. The board shows every book’s line, the Market chance (every fresh book that prices the identical market, combined; each book’s own chance is listed under it), and each player’s game history (open a player).</div>';
         if (!rows.length) {
@@ -786,7 +814,7 @@
   // ---------------------------------------------------------------------------------------------- match context
   function renderGame(eid) {
     main.innerHTML = skeleton(5);
-    Promise.all([Api.get("/api/sports/slate", {league: state.lg}), loadManifest()]).then(function (res) {
+    guard(Promise.all([Api.get("/api/sports/slate", {league: state.lg}), loadManifest()])).then(function (res) {
       var got = res[0], man = res[1] && res[1].data;
       freshness(man, got); footer(man);
       var e = got.data.events.filter(function (x) { return x.event_id === eid; })[0];
@@ -812,7 +840,9 @@
         '<details class="sw-more"><summary>Details</summary><p class="sw-small sw-faint">The list below shows props with a line open now; props whose only lines were taken down, or alternate lines (goblin / demon), are counted above but open on the player page. ' +
         src({title: "Game record", "event record": e.record_id, "start (UTC)": e.start_utc, "start source": e.start_source, status: L.eventStatus(e.status)}) + "</p></details></section>" +
         '<section aria-labelledby="sw-gp-h"><h2 id="sw-gp-h" style="font-size:16px;margin:0 0 10px">Every prop in this game</h2><div id="sw-gameprops">' + skeleton(4) + "</div></section>";
-      renderBoard(null, eid);
+      if (gameDone(e)) {                                // props close at the start: say so instead of "No lines yet"
+        document.getElementById("sw-gameprops").innerHTML = stateBox("This game has started", "Props close at the start, so none are listed. Settled picks appear on the Results page after the final.", '<a class="sw-btn" href="#/results">Results</a>');
+      } else renderBoard(null, eid);
     }).catch(fail);
   }
 
@@ -916,7 +946,7 @@
   function renderPlayer(pid, params) {
     main.innerHTML = skeleton(6);
     var hp = Api.get("/api/sports/history", {league: state.lg, id: pid}).catch(function (e) { return {error: e}; });
-    Promise.all([Api.get("/api/sports/player", {league: state.lg, id: pid}), hp, loadManifest()]).then(function (res) {
+    guard(Promise.all([Api.get("/api/sports/player", {league: state.lg, id: pid}), hp, loadManifest()])).then(function (res) {
       var got = res[0], P = got.data, Hres = res[1], man = res[2] && res[2].data;
       freshness(man, got); footer(man);
       var games = Hres.data ? Hres.data.games : [];
@@ -927,12 +957,15 @@
       ps.stat = params.get("stat") || ps.stat || markets[0].stat;
       var m = markets.filter(function (x) { return x.stat === ps.stat; })[0] || markets[0];
       ps.stat = m.stat;
-      var pick = m.quotes.concat(m.alternates).filter(function (q) {   // books only with a usable price now
-        var sd = {}; q.sides.forEach(function (x) { sd[x.side] = x; });
-        var o = sd.over || {}, u = sd.under || {};
-        return S.quoteShown({p: q.platform, t: q.last_seen_at, k: o.bid !== null && o.bid !== undefined ? [o.bid, o.ask] : null,
-                             d: o.price_format === "decimal" || u.price_format === "decimal" ? [o.offered ? o.price : null, u.offered ? u.price : null] : null}, Date.now());
-      });
+      function shownQuotes(mk) {                         // books only with a usable price now (every stat tab, not only the first)
+        return mk.quotes.concat(mk.alternates).filter(function (q) {
+          var sd = {}; q.sides.forEach(function (x) { sd[x.side] = x; });
+          var o = sd.over || {}, u = sd.under || {};
+          return S.quoteShown({p: q.platform, t: q.last_seen_at, k: o.bid !== null && o.bid !== undefined ? [o.bid, o.ask] : null,
+                               d: o.price_format === "decimal" || u.price_format === "decimal" ? [o.offered ? o.price : null, u.offered ? u.price : null] : null}, Date.now());
+        });
+      }
+      var pick = shownQuotes(m);
       var sel = pick.filter(function (q) { return q.record_id === params.get("q"); })[0] || pick.filter(function (q) { return q.forecast_id; })[0] || pick[0] || null;
       ps.win = ps.win || 10;
       draw();
@@ -968,9 +1001,12 @@
         h += matchupPanel(P, games, m, ln);
         h += contextPanel(P, games, m);
         h += factorsSection(state.lg, m, fc);
-        if (m.kalshi.length) {
-          h += '<details class="sw-more"><summary>Kalshi ladder: ' + S.plural(m.kalshi.length, "rung") + " (Kalshi prices only; the market estimate combines every book)</summary><div class=\"sw-scroll\"><table class=\"sw-mini\"><caption class=\"sw-sr\">Kalshi rungs</caption><thead><tr><th>Rung (Over)</th><th class=\"num\">YES bid</th><th class=\"num\">YES ask</th><th class=\"num\">Volume</th><th class=\"num\">Open interest</th><th>Observed</th><th><span class=\"sw-sr\">Source</span></th></tr></thead><tbody>" +
-            m.kalshi.map(function (k) { var s = k.sides[0]; return "<tr><td>" + S.line(k.line) + '</td><td class="num">' + S.cents(s.bid) + '</td><td class="num">' + S.cents(s.ask) + '</td><td class="num">' + S.num(k.liquidity.volume, 0) + '</td><td class="num">' + S.num(k.liquidity.open_interest, 0) + "</td><td class=\"sw-small\">" + esc(S.age(k.last_seen_at)) + "</td><td>" + src({title: "Kalshi rung", record: k.record_id, line: k.line, "YES bid": s.bid, "YES ask": s.ask, "source time": "not given by Kalshi", "observed by Scout": k.last_seen_at, rule: k.rule_version}) + "</td></tr>"; }).join("") + "</tbody></table></div></details>";
+        var rungs = m.kalshi.filter(function (k) {      // a rung with no YES bid and no ask has no price: not listed
+          var s = k.sides && k.sides[0]; return s && ((s.bid !== null && s.bid !== undefined) || (s.ask !== null && s.ask !== undefined));
+        });
+        if (rungs.length) {
+          h += '<details class="sw-more"><summary>Kalshi ladder: ' + S.plural(rungs.length, "rung") + " (Kalshi prices only; the market estimate combines every book)</summary><div class=\"sw-scroll\"><table class=\"sw-mini\"><caption class=\"sw-sr\">Kalshi rungs</caption><thead><tr><th>Rung (Over)</th><th class=\"num\">YES bid</th><th class=\"num\">YES ask</th><th class=\"num\">Volume</th><th class=\"num\">Open interest</th><th>Observed</th><th><span class=\"sw-sr\">Source</span></th></tr></thead><tbody>" +
+            rungs.map(function (k) { var s = k.sides[0]; return "<tr><td>" + S.line(k.line) + '</td><td class="num">' + S.cents(s.bid) + '</td><td class="num">' + S.cents(s.ask) + '</td><td class="num">' + S.num(k.liquidity.volume, 0) + '</td><td class="num">' + S.num(k.liquidity.open_interest, 0) + "</td><td class=\"sw-small\">" + esc(S.age(k.last_seen_at)) + "</td><td>" + src({title: "Kalshi rung", record: k.record_id, line: k.line, "YES bid": s.bid, "YES ask": s.ask, "source time": "not given by Kalshi", "observed by Scout": k.last_seen_at, rule: k.rule_version}) + "</td></tr>"; }).join("") + "</tbody></table></div></details>";
         }
         var mq = m.market ? S.marketFor(m.market, sel && sel.record_id) : null;
         if (m.market && (S.marketShown(mq) || S.usableBooks(m.market, Date.now()).length)) {
@@ -1019,23 +1055,18 @@
         h += '<div class="sw-sides">' + sideBox("over", "Over " + S.line(fc.line), n.over) + sideBox("under", "Under " + S.line(fc.line), n.under) + sideBox("push", "Push", n.push) + "</div>";
         h += slipButtons(q, fc);
         var chart = svgDist(det, fc, fc.line);
-        h += '<h3 style="margin-top:14px">Outcome distribution</h3>';
+        // a forecast without stored distribution parameters shows neither section (no empty "not drawn" boxes)
         if (chart) {
-          h += chart + '<div class="sw-legend"><span><span class="sw-dot" style="background:var(--over)"></span>Over ' + S.line(fc.line) + '</span><span><span class="sw-dot" style="background:var(--under)"></span>Under</span>' + (n.hasPush ? '<span><span class="sw-dot" style="background:var(--push)"></span>Push</span>' : "") + "</div>" +
+          h += '<h3 style="margin-top:14px">Outcome distribution</h3>' + chart + '<div class="sw-legend"><span><span class="sw-dot" style="background:var(--over)"></span>Over ' + S.line(fc.line) + '</span><span><span class="sw-dot" style="background:var(--under)"></span>Under</span>' + (n.hasPush ? '<span><span class="sw-dot" style="background:var(--push)"></span>Push</span>' : "") + "</div>" +
             '<details class="sw-more"><summary>Distribution as a table</summary><div class="sw-scroll"><table class="sw-mini"><thead><tr><th>Value</th><th class="num">Chance</th></tr></thead><tbody>' +
             det.pmf.bins.filter(function (b) { return b[2] >= 0.005; }).map(function (b) { return "<tr><td>" + b[0] + (b[1] > 1 ? "–" + (b[0] + b[1] - 1) : "") + '</td><td class="num">' + S.pct(b[2]) + "</td></tr>"; }).join("") + "</tbody></table></div></details>";
-        } else {
-          h += '<p class="sw-muted sw-small">' + esc(det && det.ladder_withheld ? "Not drawn: " + det.ladder_withheld + "." : "This forecast stores no distribution.") + "</p>";
         }
-        h += '<h3 style="margin-top:14px">At another line</h3>';
-        if (det && det.ladder) {
-          h += '<div class="sw-scroll"><table class="sw-mini"><caption class="sw-sr">Scout chances at other lines from the same distribution</caption><thead><tr><th>Line</th><th class="num">Over</th><th class="num">Under</th><th class="num">Push</th><th><span class="sw-sr">Use for history</span></th></tr></thead><tbody>' +
+        if (det && det.ladder && det.ladder.length) {
+          h += '<h3 style="margin-top:14px">At another line</h3><div class="sw-scroll"><table class="sw-mini"><caption class="sw-sr">Scout chances at other lines from the same distribution</caption><thead><tr><th>Line</th><th class="num">Over</th><th class="num">Under</th><th class="num">Push</th><th><span class="sw-sr">Use for history</span></th></tr></thead><tbody>' +
             det.ladder.map(function (r) {
               var cur = r.line === (ps.customLine !== undefined && ps.customLine !== null ? ps.customLine : fc.line);
               return '<tr class="' + (cur ? "sel" : "") + '"><td>' + S.line(r.line) + (r.stored ? ' <span class="sw-faint sw-small">this forecast</span>' : "") + '</td><td class="num">' + S.pct(r.p_over) + '</td><td class="num">' + S.pct(r.p_under) + '</td><td class="num">' + S.pct(r.p_push) + '</td><td><button type="button" class="sw-link sw-small" data-ladder="' + r.line + '">History<span class="sw-sr"> at ' + S.line(r.line) + "</span></button></td></tr>";
             }).join("") + "</tbody></table></div><p class=\"sw-faint sw-small\">Every line is read from this forecast’s one distribution. Other books may not offer these lines.</p>";
-        } else {
-          h += '<p class="sw-muted sw-small">' + esc(det && det.ladder_withheld ? det.ladder_withheld + "." : "Not available for this forecast.") + "</p>";
         }
         if (dt.factors && dt.factors.length) {
           h += '<h3 style="margin-top:14px">Inputs the model used</h3><div class="sw-scroll"><table class="sw-mini"><caption class="sw-sr">Values of the inputs this forecast was computed from</caption><thead><tr><th>Input</th><th class="num">Value</th></tr></thead><tbody>' +
@@ -1158,8 +1189,7 @@
           if (c.value === null || c.value === undefined) return "";
           return "<li>" + esc(c.label) + ": <b>" + esc(c.value) + "</b></li>";
         }).join("") + "</ul>" +
-          "</div></div>" + engineContext(F.engine, mk) + '<p class="sw-faint sw-small">Not in Scout data: ' +
-          esc(F.engine && F.engine.not_held ? F.engine.not_held.map(function (x) { return x.factor + " (" + x.reason + ")"; }).join(", ") : F.not_held.join(", ")) + ".</p></section>";
+          "</div></div>" + engineContext(F.engine, mk) + "</section>";       // info Scout does not hold is left out, not listed
         return h;
       }
 
@@ -1192,7 +1222,7 @@
         main.querySelectorAll("[data-stat]").forEach(function (b) {
           b.addEventListener("click", function () {
             ps.stat = b.getAttribute("data-stat"); ps.customLine = null;
-            m = markets.filter(function (x) { return x.stat === ps.stat; })[0]; pick = m.quotes.concat(m.alternates);
+            m = markets.filter(function (x) { return x.stat === ps.stat; })[0]; pick = shownQuotes(m);
             sel = pick.filter(function (q) { return q.forecast_id; })[0] || pick[0] || null;
             setHashParams({lg: state.lg, stat: ps.stat, q: sel ? sel.record_id : ""}); draw();
             var t = main.querySelector('[data-stat="' + ps.stat + '"]'); if (t) t.focus();
@@ -1251,8 +1281,8 @@
   function renderResults() {
     var RP = window.SportsResultsPublic;
     main.innerHTML = '<div class="sw-eyebrow">' + state.lg.toUpperCase() + ' · Results</div><h1 class="sw-h1">Results</h1>' + skeleton(4);
-    Promise.all([Api.get("/api/sports/results", {league: state.lg}), loadManifest(),
-                 Api.get("/api/sports/results/public", {}).catch(function () { return null; })]).then(function (res) {
+    guard(Promise.all([Api.get("/api/sports/results", {league: state.lg}), loadManifest(),
+                 Api.get("/api/sports/results/public", {}).catch(function () { return null; })])).then(function (res) {
       var got = res[0], R = got.data, man = res[1] && res[1].data, pub = res[2] && res[2].data;
       var PL = pub && pub.leagues && pub.leagues[state.lg];
       freshness(man, got); footer(man);
@@ -1312,13 +1342,14 @@
   }
   function renderSlips() {                              // Slip Studio inside the main shell (web/sports/slips.js)
     banner.innerHTML = "";
-    loadManifest().then(function (m) { footer(m && m.data); });
+    guard(loadManifest()).then(function (m) { footer(m && m.data); });
     if (!window.SlipStudio) { main.innerHTML = stateBox("Slip Studio did not load", "Reload the page to try again."); return; }
     window.SlipStudio.mount(main, {league: state.lg});
   }
 
   // ------------------------------------------------------------------------------------------------------ render
   function render() {
+    GEN++;
     var r = route();
     if (r.params.get("lg") === "nba" || r.params.get("lg") === "nfl") state.lg = r.params.get("lg");
     if (r.view === "player" && r.arg && r.arg.indexOf(state.lg + ":") !== 0) state.lg = r.arg.slice(0, 3);
@@ -1332,9 +1363,9 @@
     else if (r.view === "game" && r.arg) renderGame(r.arg);
     else if (r.view === "results") renderResults();
     else if (r.view === "picks") renderPicks();
-    else if (r.view === "sheets" && window.SportsSheets) window.SportsSheets.render({main: main, api: Api, lg: state.lg, arg: r.arg, fail: fail});   // HOOK (sheets)
+    else if (r.view === "sheets" && window.SportsSheets) window.SportsSheets.render({main: main, api: GApi, lg: state.lg, arg: r.arg, fail: fail});   // HOOK (sheets)
     else if (r.view === "slips") renderSlips();
-    else if (r.view === "compare" && window.SportsCompare) window.SportsCompare.render({main: main, api: Api, lg: state.lg, params: r.params, loadBoard: loadBoard, fail: fail, stateBox: stateBox, skeleton: skeleton});   // HOOK (compare)
+    else if (r.view === "compare" && window.SportsCompare) window.SportsCompare.render({main: main, api: GApi, lg: state.lg, params: r.params, loadBoard: function (more) { return guard(loadBoard(more)); }, fail: fail, stateBox: stateBox, skeleton: skeleton});   // HOOK (compare)
     else if (r.view === "slate" && !r.arg) renderSlate();
     else renderNotFound(r);
     var top = document.getElementById("sw-main");
@@ -1346,6 +1377,15 @@
     state.lg = b.getAttribute("data-lg"); saveFilters();
     var r = route();
     go("#/" + (r.view === "player" ? "board" : r.view === "game" ? "slate" : r.view) + "?lg=" + state.lg);
+  });
+  // QoL (audit 2026-10-26): "/" jumps to the page's search box (slate, board, sheets), as on most research sites
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+    var t = e.target, tag = t && t.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (t && t.isContentEditable)) return;
+    var box = main.querySelector('input[type="search"]');
+    if (!box) return;
+    e.preventDefault(); box.focus(); try { box.select(); } catch (x) { /* old browser */ }
   });
   window.addEventListener("hashchange", render);
   window.addEventListener("online", function () { Api.mem = {}; render(); });

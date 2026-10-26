@@ -5,7 +5,8 @@
    confidence, sanity hold, NFL not-validated label); this file only ranks rows and lays them out.
    RANKING RULE (cmp-1, deterministic, stated on the page):
      eligible = a Scout lean, a positive edge for that side at that line, and that side offered by the book
-                (held rows, NFL not-validated rows, no-lean rows, rows without a market chance -> "No pick" + reason);
+                (held rows, NFL not-validated rows, no-lean rows, rows without a market chance -> "Not ranked" + reason;
+                audit 2026-10-26: "Not ranked" (the card can still carry a Lean / research grade));
      order    = edge (points) high first -> Scout chance of the lean side -> confidence -> player / stat / line / book.
    BETTER BOOK LINE (same player + stat across books): for Over the lowest line, for Under the highest line, among the
    books that offer that side; ties -> higher Scout chance at that line. Chances at each line are read from the
@@ -263,7 +264,7 @@
     var sc = r.scout, mk = r.market, s = r.lean, m = r.m;
     var head = '<div class="sw-cmp-head">' +
       (r.rank ? '<span class="sw-cmp-rank' + (r.rank === 1 ? " best" : "") + '" data-rank="' + r.rank + '">' + (r.rank === 1 ? "Better line" : "#" + r.rank) + "</span>"
-              : '<span class="sw-cmp-rank none" data-rank="none">No pick</span>') +
+              : '<span class="sw-cmp-rank none" data-rank="none">Not ranked</span>') +
       '<button type="button" class="sw-cmp-x" data-cmp-rm="' + esc(JSON.stringify(r.item)) + '" aria-label="Remove ' + esc(propTitle(B, r)) + ' from Compare">Remove</button></div>' +
       '<h3 class="sw-cmp-who"><a href="#/player/' + encodeURIComponent(r.pid) + "?lg=" + lg + "&stat=" + encodeURIComponent(r.stat) + "&q=" + encodeURIComponent(r.rid) + '">' + esc(r.player) + "</a></h3>" +
       '<div class="sw-cmp-sub">' + esc([teamTag(r, lg), r.pos].filter(Boolean).join(" · ")) + " · " + '<a href="#/game/' + encodeURIComponent(r.event) + '">' + esc(m.matchup || "") + "</a> · " +
@@ -291,7 +292,7 @@
       field("L5 at this line", hit(r.hit && r.hit.l5)) +
       field("Projection", proj) +
       field("Data", '<span class="sw-small">' + fresh + "</span>") +
-      field(r.rank ? "Verdict" : "Why no pick", r.rank ? "Rank " + r.rank + " of the props that qualify" : '<span class="sw-cmp-why">' + esc(r.why || "") + "</span>", "sw-cmp-verdict") +
+      field(r.rank ? "Verdict" : "Why not ranked", r.rank ? "Rank " + r.rank + " of the props that qualify" : '<span class="sw-cmp-why">' + esc(r.why || "") + "</span>", "sw-cmp-verdict") +
       '<div class="sw-cmp-f sw-cmp-acts">' + acts + "</div></article>";
   }
   function verdictHtml(B, res, rows, groups) {
@@ -304,7 +305,7 @@
     } else {
       h += '<p class="sw-cmp-best none" data-best="">No compared prop qualifies yet.</p>';
     }
-    if (res.noPick.length) h += '<ul class="sw-cmp-nopick">' + res.noPick.map(function (x) { return '<li><b>No pick:</b> ' + esc(propTitle(B, x.row)) + " - " + esc(x.why) + "</li>"; }).join("") + "</ul>";
+    if (res.noPick.length) h += '<ul class="sw-cmp-nopick">' + res.noPick.map(function (x) { return '<li><b>Not ranked:</b> ' + esc(propTitle(B, x.row)) + " - " + esc(x.why) + "</li>"; }).join("") + "</ul>";
     groups.forEach(function (g) {
       h += '<p class="sw-banner warn sw-cmp-sgw" role="note"><b>' + SAME_GAME + "</b> (" + esc(g.matchup) + "): " + esc(g.rows.map(function (r) { return r.player + " " + statName(B, r); }).join(", ")) +
         ". One game drives all of them, so they tend to win or lose together. Scout does not combine their chances.</p>";
@@ -393,7 +394,7 @@
         h += booksHtml(B, rows, now);
         h += '<div class="sw-cmp-tools">' + (shared ? "" : '<button type="button" class="sw-btn sw-btn-sm" id="sw-cmp-share">Copy share link</button> <button type="button" class="sw-btn sw-btn-sm" id="sw-cmp-clear">Clear comparison</button>') +
           '<span id="sw-cmp-link" class="sw-small sw-faint"></span></div>';
-        h += '<p class="sw-small sw-faint">Research only: grades, confidence and edge are not validated on settled results yet. Edge is a gap in probability points, not a return.</p>';
+        h += '<p class="sw-small sw-faint">Edge is a gap in probability points, not a return.</p>';
       }
       main.innerHTML = h + "</div>";
       bindPage(main, ctx, lg, items, shared);

@@ -54,8 +54,9 @@ assert.deepStrictEqual(S.hiddenBooks(mkx, NOW).map(b => b.p), ["betrivers", "pol
 assert.strictEqual(S.kindLabel("sm-1"), "Scout model");
 assert.strictEqual(S.kindLabel("mi-1"), "Market-informed model");
 for (const m of ["mc-1", "mkt-kalshi", "sharp-2"]) assert.strictEqual(S.kindLabel(m), "Market estimate");
-assert.strictEqual(S.pct0(0.4567), "46%");
-assert.strictEqual(S.pct0(0.001), "<1%");
+assert.strictEqual(S.pct0(0.4567), "45.7%");          // one decimal everywhere (audit 2026-10-26)
+assert.strictEqual(S.pct0(0.001), "0.1%");
+assert.strictEqual(S.pct0(null), null);
 assert.strictEqual(S.wholeLine(4), true);
 assert.strictEqual(S.wholeLine(4.5), false);
 assert.strictEqual(S.validationText(12), "Research estimate · forward validation 12 settled (minimum 300)");

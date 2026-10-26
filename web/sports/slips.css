@@ -51,7 +51,7 @@
 .ss-help { margin: -4px 0 0; font-size: .8rem; color: var(--ss-mute); }
 .ss-btn { font: inherit; min-height: 44px; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--ss-line); background: var(--ss-panel); color: var(--ss-ink); cursor: pointer; }
 .ss-btn[disabled] { opacity: .55; cursor: not-allowed; }
-.ss-primary { background: var(--ss-accent); color: var(--ss-accent-ink); border-color: var(--ss-accent); font-weight: 600; }
+.ss-primary, body.sw .ss-primary { background: var(--ss-accent); color: var(--ss-accent-ink); border-color: var(--ss-accent); font-weight: 600; }
 .ss-quiet { background: transparent; }
 .ss-small { min-height: 36px; padding: 4px 10px; font-size: .85rem; }
 .ss-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
