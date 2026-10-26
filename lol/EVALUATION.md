@@ -583,3 +583,64 @@ Decision: **fail** (A13 needs F-VALID, the spent period and the hold-out). lol-1
 - The shape evidence is consistent in the development periods (Map 1 gain about +0.005 in all three; the Under gap roughly halves),
   but it did not clear F-VALID's Maps 1-2 interval and the hold-out week's Map 1 is negative (a small week that runs high: Map 1
   assists bias +0.80, i.e. projected above actual). Attempt count: sixth candidate; no further assists candidate is registered here.
+
+## Amendment A14 (2026-10-26 15:20 UTC, registered BEFORE any lc-1 fit or score): lc-1 calibration of the shown chance against the offered line
+
+**Owner instruction (2026-10-26):** "calibrate against offered line" - an owner-authorised change to the LoL chance shown to
+members (CS2 untouched). **What existed when this was written:** the production scorecard (Oct 17-26, 1,020 settled props, 23
+series) relayed by the owner: stated chance 63.5% vs hit 55.3%; every grade overconfident (A+ 84.3% / 61.5%, B 60.5% / 53.7%);
+Lean Over hits 37.3%, Lean Under 64.7%; on the side the book offers 50.1% (595 props, series CI 41.8-58.1%); kills 56.9% vs
+assists 50.4%; PrizePicks 59.2% vs Underdog 51.6%. No lc-1 candidate had been fitted or scored; `lol/cal.py` is written after
+this text. The design copies sports cal-mi-1 (sports/research/REGISTER.md A8 + A8a) without a market chance: LoL has none
+(lol/center/prices.py: PrizePicks lists no prices; Underdog `payout_multiplier` is a payout modifier, never a probability;
+Underdog `decimal_price` / fantasy probabilities are undocumented and never a model or grade input - none is used here).
+
+**Below the registered evidence minimum (owner override, stated risk).** A6 asks for 300 settled player-markets across 60+
+series before anything is validated at real lines; this runs on 23 series. Props inside one series and one day are correlated, so
+one slate can dominate a fit; intervals are series-clustered and wide; a point-estimate pass can be noise. Every lc-1 result is
+labelled "below the A6 minimum (owner override)". Stakes stay 0U, grade bands, lol-1f's projections and fit are unchanged.
+
+1. **Candidate lc-1.** For a saved pre-match forecast at an offered line: p = the raw lol-1f / lol-1 chance P(Over | no push) =
+   p_over / (p_over + p_under). Calibrated
+   P(Over | no push) = q = sigmoid(theta . x), x = [1, logit p, z, v, goblin, demon, scope_12, scope_123], where
+   - z = (line - mean) / sd, mean = the record's projection (`lambda`), sd = sqrt(mean + mean^2 / nb_size), clipped to [-4, 4];
+   - v = +1 when the line offers Over only, -1 when it offers Under only, 0 otherwise (sides from the saved quote,
+     forecast.side_offered rules) - the "is Scout's side offered" information, signed in the Over direction;
+   - goblin / demon = PrizePicks odds_type indicators (standard / Underdog balanced = 0);
+   - scope_12 / scope_123 = Maps 1-2 / Maps 1-3 indicators (Map 1 = 0).
+   All are known before the match from the offered line and the saved forecast; no price, payout or result enters.
+   Unconditional output: P'(Over) = (1 - P(Push)) q, P'(Under) = (1 - P(Push)) (1 - q), P'(Push) unchanged (sums to one).
+2. **Fit.** Penalised maximum likelihood (Newton), Gaussian prior with precision LAMBDA = 20 per parameter centred on the
+   IDENTITY theta0 = [0, 1, 0, 0, 0, 0, 0, 0] (= the live chance, never 50%). Levels: pooled "lol:all" (prior identity), then
+   per market = stat x platform (kills:prizepicks, kills:underdog, assists:underdog, ...) with the prior centred on the pooled
+   fit. A level with fewer than 50 props or fewer than 2 series takes its parent (market -> pooled -> identity); |each
+   parameter| <= 5 (a fit outside is refused -> parent).
+3. **Data.** lol.db (production, read-only): the latest pre-match forecast (forecast_at < series_start) per (platform,
+   market_key, line) joined to the latest settlement version of that unit (learning.dashboard's join), status graded,
+   push = 0. Outcome = over_hit. Cluster = series (sid).
+4. **Walk-forward by day.** Day = UTC date of forecast_at. For day D, parameters are fitted only on props whose settled_at <
+   the earliest forecast_at of D; D's props are scored with them. Days whose training gives no fit at any level are not scored.
+5. **Metrics** (scored rows, paired with the live chance on identical rows), per market and pooled: log loss lc-1 - live with a
+   series-clustered 95% bootstrap interval (B = 2,000, seed 20261026), Brier, in-the-large (mean q - over rate), share
+   favouring Over vs over rate, LoL grade bands (forecast.BANDS on the chosen side's chance) stated vs hit, hit rate of the
+   chosen side. Reported twice: (a) all props; (b) offered-side props = the rows where the side lc-1 favours is offered on that
+   line (the rows that carry a letter grade for members under lc-1), with live's own offered-side rows reported next to it.
+6. **Promotion rule per market** (needs >= 30 scored props from >= 2 days, else "not evaluable" -> OFF). On (a) all props:
+   PASS if [(i) the log-loss difference's series-clustered interval is entirely below 0, OR (ii) the log-loss difference point
+   estimate <= 0 AND |in-the-large| <= 0.03] AND, always, |share favouring Over - over rate| <= 0.15 (the A8a balance check).
+   AND on (b) offered-side props the log-loss difference point estimate is <= 0 (not worse). PASS -> the market is ON with the
+   parameters fitted on ALL settled props up to the run; otherwise OFF (the raw chance is shown). The pooled "lol:all" verdict
+   is reported, never switched.
+7. **Forward use.** One serving function (`lol/cal.py adjust`) is applied when the forecast record is saved (the worker's
+   forecast cycle, never per member request); the record keeps the raw chance (p_over / p_under / p_push unchanged) and adds
+   cal_p_over / cal_p_under / cal_p_push / cal_version (`lc-1:<params sha>`). The shown side, grade (forecast.BANDS, unchanged),
+   "Lean Over / Under" label, offered-side check and slip reasons follow the shown chance. Every surface reads the shown chance
+   through `forecast.shown(record)`: board.json rows and match tables (member board, cards, compare, copy-pick and slip checks read
+   them), slips, the slip line check, and the admin learning dashboard (which also keeps the raw chance's metrics).
+   Weights: `<LOL_DATA_DIR>/model/lol_cal.json` written by `python -m lol.cal fit` (validated: version, schema, finite bounded
+   parameters, sha; re-read when its mtime changes, checked every 30 s; invalid -> the committed default `lol/cal_default.json`;
+   invalid default -> off). Per-market switch = the file's `on` flag; global off switch `LOL_CAL=0` (shown chance = raw at once;
+   the next forecast cycle saves raw records).
+8. **Committed default.** The walk-forward of rule 6 run once on the owner-supplied read-only pull of production (lol_forecasts
+   12,161 rows, lol_settlements 1,050 rows, 2026-10-26); a market is ON in the default only if it PASSES there, with the
+   parameters fitted on all pulled settled props; otherwise every market ships OFF. The owner's Shell `fit` run supersedes it.
