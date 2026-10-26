@@ -272,6 +272,17 @@ def test_a_malformed_pick_in_a_batch_refuses_the_request_before_any_pick_is_spoo
     picks.drain()
 
 
+def test_a_pick_on_a_postponed_game_says_postponed_not_started(tw):
+    rid, f = tw["h1"]
+    with store.opened() as con:
+        store.put(con, replace(w.ev(1, status="postponed"), observed_at="2026-10-23T20:02:00Z",
+                               known_at="2026-10-23T20:02:00Z"))
+    code, b = _call(_req("/api/sports/picks/track", {"picks": [{"platform": "underdog", "record_id": rid,
+                                                                "side": "over"}]}))
+    r = b["results"][0]
+    assert code == 200 and not r["ok"] and r["code"] == "started" and "postponed" in r["text"]
+
+
 # --------------------------------------------------------------------------- 9. compare: postponed / cancelled
 def test_compare_names_a_postponed_game_and_closes_a_cancelled_one(tmp_path, monkeypatch):
     monkeypatch.setattr(api_board, "_root", lambda: tmp_path)
@@ -353,6 +364,47 @@ def test_admin_sanity_log_is_paged(tmp_path, monkeypatch):
 def test_assistant_cancel_with_a_json_list_is_400_not_503(monkeypatch):
     code, b = _call(_req("/api/sports/assistant/cancel", [1, 2]))
     assert code == 400
+
+
+# --------------------------------------------------------------------- 15. lab export can be paged (admin)
+def test_lab_export_pages_on_request_and_stays_whole_by_default(monkeypatch):
+    from sports.lab import jobs
+    rows = [{"row_key": f"r{i}", "split": "test"} for i in range(5)]
+    monkeypatch.setattr(jobs, "predictions", lambda con, eid: list(rows))
+    q = {"id": "lx-1"}
+    code, b = _call(_req("/api/sports/admin/lab/export", role="admin", query=q))
+    assert code == 200 and b["rows"] == 5 and b["total"] == 5 and b["next_offset"] is None
+    code, b = _call(_req("/api/sports/admin/lab/export", role="admin", query=dict(q, limit="2", offset="2")))
+    assert [r["row_key"] for r in b["predictions"]] == ["r2", "r3"] and b["next_offset"] == 4
+    code, body, ctype = web.dispatch(_req("/api/sports/admin/lab/export", role="admin",
+                                          query=dict(q, format="csv", limit="2", offset="4")))
+    assert code == 200 and body.decode().splitlines()[1:] == ["r4,test" + "," * 13]
+    assert _call(_req("/api/sports/admin/lab/export", role="admin", query=dict(q, limit="x")))[0] == 400
+
+
+# ------------------------------------------- 14. public Results streams settlements by event (bounded memory)
+def test_public_results_rows_are_streamed_by_event_and_equal_the_full_read(monkeypatch):
+    from sports import results_public, snapshots
+    monkeypatch.setattr(snapshots, "RESULTS_EVENTS_PER_PASS", 2)
+    with store.opened() as con:
+        for n in range(1, 6):
+            eid, oid = f"nba:espn:{n}", f"pp:{n}"
+            ev = h.event(eid=eid, start="2026-10-23T23:00:00Z", status="final")
+            store.put(con, ev)
+            o = h.offer(oid=oid, event_id=eid, listed_start_utc="2026-10-23T23:00:00Z")
+            orid = store.put(con, o)["record_id"]
+            store.put(con, h.forecast(event_id=eid, line=20.5, offer_snapshot_ids=(orid,), model_version="sm-1",
+                                      chosen_side="over", p_over=0.55, p_under=0.45, p_push=0.0,
+                                      p_over_given_no_push=0.55, p_under_given_no_push=0.45))
+            settlement.record(con, settlement.settle_offer(o, {"pts": h.stat(value=18.0 + n, eid=eid)}, ev,
+                                                           "2026-10-24T03:00:00Z"))
+        chunks = list(results_public.settlement_chunks(con, "nba"))
+        streamed = results_public.rows_for(con, "nba")
+        full = results_public._rows_from(con, "nba", snapshots._current_settlements(con, "nba"))
+    assert [len({s.event_id for s in c}) for c in chunks] == [2, 2, 1]
+    key = (lambda r: r["forecast_id"])
+    assert sorted(streamed, key=key) == sorted(full, key=key) and len(streamed) == 5
+    assert sorted(r["outcome"] for r in streamed) == ["over", "over", "over", "under", "under"]
 
 
 # --------------------------------------------- 13. the prebuilt slip pool uses the board's market + cal-mi-1 chance

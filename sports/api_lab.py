@@ -43,13 +43,26 @@ def route(req):
             preds = jobs.predictions(con, eid)
             if preds is None:
                 return 404, {"error": "no predictions for this experiment"}
+            total = len(preds)
+            try:                                        # optional paging: &offset=&limit= (none = every row, the
+                off = max(0, int(req.query.get("offset") or 0))     # page's one-file download)
+                lim = int(req.query["limit"]) if req.query.get("limit") else None
+            except ValueError:
+                return 400, {"error": "offset / limit must be numbers"}
+            if lim is not None:
+                lim = max(1, min(50000, lim))
+                preds = preds[off:off + lim]
+            elif off:
+                preds = preds[off:]
             if req.query.get("format") == "csv":
                 buf = io.StringIO()
                 w = csv.DictWriter(buf, fieldnames=CSV_COLS, extrasaction="ignore", lineterminator="\n")
                 w.writeheader()
                 w.writerows(preds)
                 return 200, buf.getvalue().encode("utf-8"), "text/csv; charset=utf-8"
-            return 200, {"id": eid, "rows": len(preds), "predictions": preds}
+            nxt = off + len(preds) if off + len(preds) < total else None
+            return 200, {"id": eid, "rows": len(preds), "total": total, "offset": off, "next_offset": nxt,
+                         "predictions": preds}
         if sub == "replay" and req.method == "POST":
             eid = str((req.json() or {}).get("id") or "")
             try:

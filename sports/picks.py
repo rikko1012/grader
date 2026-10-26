@@ -44,6 +44,7 @@ DISPLAY_TOL = 5e-4                      # displayed chance vs the forecast recor
 SPOOL_QUEUE = 2000
 SPOOL_DAY_MAX_MB = 20
 MAX_PER_REQUEST = 8
+NOT_PLAYING = ("postponed", "cancelled", "delayed", "suspended")
 STATS = {"spooled": 0, "dropped_queue_full": 0, "dropped_day_cap": 0, "written": 0, "write_errors": 0,
          "refused": 0}
 _Q = queue.Queue(maxsize=SPOOL_QUEUE)
@@ -200,6 +201,8 @@ def check(con, item, now=None):
         o.listed_start_utc if o.listed_time_kind == "start" else None)
     if not start:
         raise Refused("start_unknown", "The game's start time is not known, so the pick cannot be time-stamped")
+    if ev is not None and ev.status in NOT_PLAYING and start > t:     # postponed is not 'started' (same code)
+        raise Refused("started", f"The game is {ev.status} - picks are recorded for scheduled games only")
     if (ev is not None and ev.status != "scheduled") or start <= t:
         raise Refused("started", "The game has started - picks are recorded before the start only")
     meta = store.row_meta(con, rid) or {}
