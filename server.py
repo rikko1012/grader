@@ -1028,6 +1028,7 @@ def ops_checks(now=None):
 
 def studio_history_payload(batches, now=None):
     """Leg results and slip outcomes for member_batches() (pure apart from the pick-log read)."""
+    import slip_builder
     now = now or datetime.now(timezone.utc)
     legs = [l for b in batches for ss in (b.get("slips") or {}).values() for s_ in ss for l in s_.get("legs") or []]
     res = slip_batches.leg_result_from_picks(picklog.rows_for_matches({l.get("match_slug") for l in legs}))
@@ -1037,7 +1038,9 @@ def studio_history_payload(batches, now=None):
         for ss in (b.get("slips") or {}).values():
             for s_ in ss:
                 rs = [res(l) if l.get("prop") != "moneyline" else None for l in s_.get("legs") or []]
-                started = any(_started(l.get("start"), now) for l in s_.get("legs") or [])
+                # the ONE lock rule (slip_builder.lock_time: listed start, graded match start, saved lock - 2026-10-26
+                # audit: only the listed start counted, so a slip locked at the graded start read 'not started')
+                started = any((lt_ := slip_builder.lock_time(l)) is not None and lt_ <= now for l in s_.get("legs") or [])
                 outcome = ("lost" if "miss" in rs else "won" if rs and all(r == "hit" for r in rs)
                            else "reduced" if rs and all(r in ("hit", "push", "void") for r in rs) else "in play" if started else "not started")
                 slips.append(dict(s_, leg_results=rs, started=started, outcome=outcome))
@@ -1402,7 +1405,10 @@ def _slip_feed(bk):
     shared by every member's check (no lock: a race only builds the same index twice)."""
     b = prizepicks.board() if bk == "prizepicks" else underdog.board()
     rows = b.get("rows") or []
-    key = (b.get("at"), len(rows), id(rows[0]) if rows else None)
+    # the feed's own read identity (2026-10-26 audit: the key held id(rows[0]), but prizepicks.board() hands out fresh row
+    # copies on every call, so the PrizePicks index was rebuilt on every member check): last good read, when Scout took it
+    # in, the feed state (it sets every row's "stale"), the error and the row count
+    key = (b.get("at"), b.get("ingested_at"), b.get("state"), b.get("error"), len(rows))
     c = _SLIP_IDX.get(bk)
     if c is None or c[0] != key:
         idx = {}
@@ -1500,7 +1506,7 @@ def slip_check(d):
         c = slip_leg_check(l, feeds)
         if c:
             out.append(dict(c, leg=i, nick=l.get("nick"), text=f"{_leg_label(l)}: {c['reason']}"))
-    books_ = {l.get("book") for l in legs if l.get("book")}
+    books_ = {str(l.get("book")) for l in legs if l.get("book")}     # a crafted non-string book: a refusal, never a 500
     if len(books_) > 1 or (books_ and d.get("book") in ("underdog", "prizepicks") and books_ != {d.get("book")}):
         names = sorted({"prizepicks": "PrizePicks", "underdog": "Underdog"}.get(str(b), str(b)) for b in books_ | (
             {d.get("book")} if d.get("book") in ("underdog", "prizepicks") else set()))

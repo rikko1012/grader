@@ -314,7 +314,7 @@ function pickCell(x) {
   const p = o ? (o.side === "Over" ? x.p_over : x.p_under) : null;
   return `<span class="pick off">${esc(x.pick_side)} unavailable</span><span class="offnote">${o ? `Offered: ${o.side} ${x.line} at ${pct(p)}` : "No side offered"}</span>`;
 }
-function started(x) { const d = new Date(x.start); return !isNaN(d) && d <= new Date(); }
+function started(x) { const t = Date.parse((x && x.start) || ""); return !isNaN(t) && t <= Date.now(); }   // no start = not started (new Date(null) is 1970)
 // Match the existing stale-feed warning: fetching a cached board does not refresh its source quote.
 function quoteIssue(x) {
   const at = Date.parse(x.line_checked || "");
@@ -795,16 +795,24 @@ function render() {
   const tb2 = $(".tablebox.board"); if (tb2) tb2.scrollLeft = sl;
   window.scrollTo(0, y);
 }
+let GATED = false;
 async function load(first) {
   let r;
   try { r = await fetch("/api/lol/board", {cache: "no-cache"}); } catch { r = null; }
-  if (r && r.status === 401) { gate(await r.json().catch(() => ({}))); return false; }
+  if (r && r.status === 401) { GATED = true; gate(await r.json().catch(() => ({}))); return false; }
   if (!r || !r.ok) {
     if (first || !D) $("#app").innerHTML = `<div class="empty"><b>The LoL board could not be loaded.</b><p class="small">${r ? "The server answered " + r.status + "." : "No connection."}</p><button type="button" id="retry">Try again</button></div>`;
     const b = $("#retry"); if (b) b.onclick = () => load(true);
     return false;
   }
-  D = await r.json();
+  let d;
+  try { d = await r.json(); } catch { d = null; }
+  if (!d || typeof d !== "object") {
+    if (first || !D) $("#app").innerHTML = `<div class="empty"><b>The LoL board could not be loaded.</b><p class="small">Try again in a moment.</p><button type="button" id="retry">Try again</button></div>`;
+    const b = $("#retry"); if (b) b.onclick = () => load(true);
+    return false;
+  }
+  D = d;
   if (openRow == null) render();
   if (first) { try { const y = +sessionStorage.getItem(SKEY); if (y) window.scrollTo(0, y); } catch {} }
   return true;
@@ -831,9 +839,8 @@ window.addEventListener("scroll", () => { try { sessionStorage.setItem(SKEY, Str
   const s = await fetch("/auth/me").then(r => r.json()).catch(() => ({}));
   if (s.required && !s.member) { gate(s); return; }
   if (s.name) $("#who").innerHTML = `${esc(s.name)} · <a href="/auth/logout">Sign out</a>`;
-  if (!await load(true)) return;
-  openLinked();
-  poll();
+  if (await load(true)) openLinked();
+  if (!GATED) poll();
 })();
 // a shared link (/lol?line=<key>) opens that line's card; a line no longer on the board says so and opens nothing
 function openLinked() {
@@ -845,6 +852,6 @@ function openLinked() {
 // refresh every 2 minutes plus a random 0-20 s (700 members never ask together), skipped while the tab is hidden;
 // the browser re-checks its copy with the server (ETag), so an unchanged board costs a 304 with no body
 function poll() {
-  setTimeout(async () => { if (document.visibilityState !== "hidden") await load(false); poll(); }, 120000 + Math.floor(Math.random() * 20000));
+  setTimeout(async () => { try { if (document.visibilityState !== "hidden" && !GATED) await load(false); } catch {} finally { if (!GATED) poll(); } }, 120000 + Math.floor(Math.random() * 20000));
 }
 </script></body></html>

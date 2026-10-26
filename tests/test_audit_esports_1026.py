@@ -214,6 +214,104 @@ def test_6_admin_report_reads_full_rows_only_for_the_listed_picks(admin, pickdb,
     assert get(f"/admin?token={TOK}").code == 200
 
 
+# ------------------------------------------------------------------ 7: the slip checks' player index is built once per feed read
+def test_7_slip_feed_index_survives_prizepicks_row_copies(site, monkeypatch):
+    rows = [{"id": str(i), "player": f"P{i}", "prop": "kills", "line": 20.5} for i in range(5)]
+    state = {"at": 100.0}
+    monkeypatch.setattr(prizepicks, "board", lambda now=None, wait=False: {"state": "ok", "at": state["at"], "ingested_at": state["at"],
+                                                                         "error": None, "rows": [dict(r, stale=False) for r in rows]})
+    monkeypatch.setattr(server, "_SLIP_IDX", {})
+    built = []
+    real_norm = server.comparison._norm
+    monkeypatch.setattr(server.comparison, "_norm", lambda s: built.append(s) or real_norm(s))
+    for _ in range(5):
+        _, idx = server._slip_feed("prizepicks")
+    assert len(built) == 5 and set(idx) == {real_norm(f"P{i}") for i in range(5)}   # one build for 5 checks (was 5 builds)
+    state["at"] = 200.0                                                              # a new read: rebuilt once
+    server._slip_feed("prizepicks")
+    server._slip_feed("prizepicks")
+    assert len(built) == 10
+
+
+# ------------------------------------------------------------------ 8: Slip history 'started' follows the one lock rule
+def test_8_studio_history_started_uses_the_graded_match_start(monkeypatch):
+    from datetime import datetime, timezone
+    monkeypatch.setattr(picklog, "rows_for_matches", lambda slugs, cap=200: [])
+    now = datetime(2026, 10, 23, 17, 5, tzinfo=timezone.utc)
+    leg = {"nick": "a", "prop": "kills", "match_slug": "m", "start": "2026-10-23T17:10:00Z", "match_start": "2026-10-23T17:00:00Z"}
+    out = server.studio_history_payload([{"batch_id": "b", "slips": {"2": [{"slip_id": "s", "legs": [leg, dict(leg, nick="b")]}]}}], now=now)
+    s = out["batches"][0]["slips"][0]
+    assert s["started"] is True and s["outcome"] == "in play"            # Underdog listed 17:10, the match started 17:00
+
+
+# ------------------------------------------------------------------ 9: a crafted leg platform is a refusal, never a 500
+def test_9_slip_log_with_a_non_string_book_is_refused_not_a_500(site, monkeypatch):
+    from tests.test_audit13_site import post
+    monkeypatch.setattr(server, "slip_leg_check", lambda leg, feeds=None, now=None: None)
+    legs = [{"nick": "a", "side": "More", "line": 20.5, "book": ["x"]}, {"nick": "b", "side": "More", "line": 20.5, "book": {"y": 1}}]
+    h = post("/api/slip_log", body=json.dumps({"legs": legs}).encode(), headers={"Content-Type": "application/json"})
+    assert h.code == 409 and "One platform per slip" in json.dumps(body(h))
+
+
+# ------------------------------------------------------------------ 10-13: page scripts (node, stub DOM)
+from tests.test_audit_h_web import run as run_page  # noqa: E402
+from tests.test_audit13_site_ui import needs_node  # noqa: E402
+
+
+@needs_node
+def test_10_board_row_key_names_the_row_when_two_matches_share_a_line(tmp_path):
+    out = run_page(tmp_path, "index.html", """(() => {
+      const base = {nick: "zont1x", player: "zont1x", line: 26.5, prop: "kills", scope: "12", book: "underdog", side: "More", p: 0.6};
+      const a = Object.assign({}, base, {id: "ud-1", team: "Spirit", opponent: "FURIA", start: "2099-01-01T10:00:00Z"});
+      const b = Object.assign({}, base, {id: "ud-2", team: "Spirit", opponent: "MOUZ", start: "2099-01-01T18:00:00Z"});
+      boardRows = [a, b];
+      return {a: rowOfBl(blKey(a)).opponent, b: rowOfBl(blKey(b)).opponent, differ: blKey(a) !== blKey(b),
+              old: rowOfBl("zont1x|26.5|kills|12|standard|underdog").opponent};
+    })()""")
+    assert out == {"a": "FURIA", "b": "MOUZ", "differ": True, "old": "FURIA"}
+
+
+@needs_node
+def test_11_lock_chip_counts_down_to_the_graded_match_start(tmp_path):
+    out = run_page(tmp_path, "index.html", """(() => {
+      const now = Date.now(), iso = m => new Date(now + m * 60000).toISOString();
+      return {early: lockChip({book: "underdog", start: iso(120), match_start: iso(30.5)}), plain: lockChip({start: iso(45.5)}),
+              far: lockChip({start: iso(300)})};
+    })()""")
+    assert "locks in 31m" in out["early"] and "locks in 46m" in out["plain"] and out["far"] == ""
+
+
+def test_11_studio_active_and_earliest_start_use_the_lock_rule():
+    html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
+    assert "!s.legs.some(l => legStarted(l))" in html and "x.legs.map(l => lockMs(l) ?? 9e15)" in html
+    assert "Date.parse(l.start) <= Date.now()" not in html
+
+
+@needs_node
+def test_12_capped_chance_says_so_in_text_too(tmp_path):
+    out = run_page(tmp_path, "index.html", """(() => ({cap: chanceTxt(0.78, "kills"), hs: chanceTxt(0.78, "hs"), none: chanceTxt(null, "kills")}))()""")
+    assert out == {"cap": "78.0% (capped)", "hs": "78.0%", "none": "–"}
+
+
+@needs_node
+def test_13_lol_board_survives_an_unreadable_body_and_null_start(tmp_path):
+    out = run_page(tmp_path, "lol.html", """(async () => {
+      fetch = async () => ({ok: true, status: 200, json: async () => { throw new SyntaxError("Unexpected token <"); }});
+      D = null;
+      const ok = await load(true);
+      return {ok, html: $("#app").innerHTML, nullStart: started({start: null}), past: started({start: "2020-01-01T00:00:00Z"})};
+    })()""")
+    assert out["ok"] is False and "could not be loaded" in out["html"]
+    assert out["nullStart"] is False and out["past"] is True
+
+
+def test_13_lol_poll_keeps_going_after_a_failed_load():
+    html = (ROOT / "web" / "lol.html").read_text(encoding="utf-8")
+    poll = html[html.index("function poll()"):html.index("function poll()") + 400]
+    assert "finally { if (!GATED) poll(); }" in poll
+    assert "if (await load(true)) openLinked();\n  if (!GATED) poll();" in html
+
+
 # ------------------------------------------------------------------ 5: LoL team win chance to 0.1% like every chance on the site
 def test_5_lol_team_win_chance_is_shown_to_one_decimal():
     html = (ROOT / "web" / "lol.html").read_text(encoding="utf-8")
