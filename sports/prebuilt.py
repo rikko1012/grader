@@ -196,6 +196,14 @@ def slips_pool(con):
     """The slips agent's member leg pool for every (league, platform), under the exact cache keys api_slips._pool
     uses: ("slips_pool", league, platform, "member"). Calls the slips module's public pool.build; admin "research"
     pools stay on-demand."""
+    from . import api_slips
     from .slips import pool, rules
-    return {("slips_pool", lg, plat, "member"): pool.build(con, lg, plat, policy="member")
-            for lg in ("nba", "nfl") for plat in rules.PLATFORMS}
+    out = {}
+    for lg in ("nba", "nfl"):
+        # the SAME inputs as the on-demand path (api_slips._pool): the board's market chance per quote (N4) and its
+        # cal-mi-1 displayed chance - without them the served pool ranked raw sm-1 chances the board no longer shows
+        mk, ca = api_slips._board_markets(lg, cached=False)
+        for plat in rules.PLATFORMS:
+            out[("slips_pool", lg, plat, "member")] = pool.build(con, lg, plat, policy="member", market_at=mk,
+                                                                 cal_at=ca)
+    return out

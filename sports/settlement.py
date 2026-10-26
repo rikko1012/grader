@@ -96,11 +96,18 @@ def at_line(s, line, side=None):
     return ("push" if outcome == "push" else ("win" if outcome == side else "loss")), outcome
 
 
+DECIDED = ("win", "loss", "push", "void")
+
+
 def record(con, settlements):
-    """Store with revision chaining. -> counts."""
-    c = {"inserted": 0, "unchanged": 0, "revision": 0}
+    """Store with revision chaining. -> counts. A decided result (win / loss / push / void) is only ever superseded by
+    another decided result: an 'unresolved' read after it (ESPN returned a partial box score) is kept out ('kept')."""
+    c = {"inserted": 0, "unchanged": 0, "revision": 0, "kept": 0}
     for s in settlements:
         prev = store.latest(con, "settlement", s.platform, f"{s.offer_id}|{s.side}")
+        if prev is not None and s.status == "unresolved" and prev.status in DECIDED:
+            c["kept"] += 1                               # a box score that lost the player / stat on a later read is
+            continue                                     # an upstream gap, never a correction: keep the decided result
         if prev is not None:
             if (prev.status, prev.outcome, prev.source_value, prev.rule_version) == \
                     (s.status, s.outcome, s.source_value, s.rule_version):

@@ -116,9 +116,11 @@ CACHE_MAX = int(os.environ.get("SPORTS_CACHE_MAX", "256"))          # Starter te
 REQUEST_BUDGET_S = float(os.environ.get("SPORTS_REQUEST_BUDGET_S", "4"))     # hard per-query / per-wait budget
 DB_POOL = max(1, int(os.environ.get("SPORTS_DB_POOL", "4")))                 # concurrent read-only store connections
 DB_WAIT_S = float(os.environ.get("SPORTS_DB_WAIT_S", "1.0"))
-_CACHE = {}
+_CACHE = {}                                             # key -> (stored_at, value, expires_at)
 _LOCK = threading.Lock()
 _FLIGHTS = {}
+SWEEP_S = 10.0                                          # expired entries are dropped at most this often (on a store)
+_SWEPT = {"t": 0.0}
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 PLACEHOLDER = (b"<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
                b"<title>Scout Sports</title><body style='font-family:system-ui;margin:2rem'><h1>Scout Sports</h1>"
@@ -176,10 +178,15 @@ def cached(key, fn, ttl=None):
         val = fn()
         flight["value"] = val
         with _LOCK:
+            t = time.time()
+            if t - _SWEPT["t"] >= SWEEP_S:              # an expired entry is never served again: release its memory
+                _SWEPT["t"] = t                         # (mtime-keyed snapshot copies used to stay until 256 keys)
+                for k in [k for k, v in _CACHE.items() if len(v) > 2 and v[2] <= t]:
+                    _CACHE.pop(k, None)
             if len(_CACHE) >= CACHE_MAX:
                 for k in sorted(_CACHE, key=lambda k: _CACHE[k][0])[:CACHE_MAX // 4]:
                     _CACHE.pop(k, None)
-            _CACHE[key] = (time.time(), val)
+            _CACHE[key] = (t, val, t + ttl)
         return val
     except Exception as e:                              # noqa: BLE001 - followers get the same failure
         flight["error"] = e

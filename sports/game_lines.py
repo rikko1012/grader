@@ -47,6 +47,9 @@ def _event_lines(db, league, espn_id, home_tid, away_tid):
             r = _row(json.loads(s["data"]))
         except (TypeError, ValueError):
             continue
+        if all(r[k] is None for k in ("spread", "total", "home_ml", "away_ml")):
+            continue                                    # a row without odds (ESPN emptied pickcenter): never shown as
+            #                                             the book's current line - the last priced row stays current
         pts.append({"t": s["observed_at"], **{k: r[k] for k in ("spread", "total", "home_ml", "away_ml")}})
         out["provider"] = r["provider"] or out["provider"]
     if pts:

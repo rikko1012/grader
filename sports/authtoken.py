@@ -101,8 +101,8 @@ def verify(token: str, now: float | None = None) -> dict:
     keys = _keys()
     if not keys:
         raise TokenError("not_configured")
-    if not isinstance(token, str) or not token or len(token) > MAX_TOKEN_LEN:
-        raise TokenError("malformed")
+    if not isinstance(token, str) or not token or len(token) > MAX_TOKEN_LEN or not token.isascii():
+        raise TokenError("malformed")                   # a non-ASCII header is malformed, never an encode crash
     parts = token.split(".")
     if len(parts) != 3 or parts[0] != VERSION or not parts[1] or not parts[2]:
         raise TokenError("malformed")

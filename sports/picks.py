@@ -431,14 +431,37 @@ def leg_settlement(store_con, platform, offer_id, side):
     return s
 
 
-def settle_all(store_con, con=None, settled_at=None):
-    """Worker job: settle every pick at its own line; a changed result = a new revision. -> counts."""
+SETTLE_WINDOW_DAYS = 21        # a pick is re-read for provider corrections this long (games <= 8 days out + 4 days)
+SETTLE_GIVE_UP_DAYS = 60       # a pick with no decided result is retried this long
+
+
+def settle_window(newest, now=None, window_days=SETTLE_WINDOW_DAYS, give_up_days=SETTLE_GIVE_UP_DAYS):
+    """(recheck_from, give_up_before) ISO cutoffs for the settle scans, measured back from the NEWEST record (or now
+    when earlier): rows newer than recheck_from are always re-read; older rows only while undecided and newer than
+    give_up_before. Bounds the hourly settle job as picks / slips accumulate (was: every row ever, every run)."""
+    from datetime import timedelta
+    ref = min(newest, now_s(now)) if newest else now_s(now)
+    t = parse_utc(ref)
+    f = "%Y-%m-%dT%H:%M:%SZ"
+    return (t - timedelta(days=window_days)).strftime(f), (t - timedelta(days=give_up_days)).strftime(f)
+
+
+def settle_all(store_con, con=None, settled_at=None, now=None):
+    """Worker job: settle every pick at its own line; a changed result = a new revision. -> counts.
+    Scans picks tracked within SETTLE_WINDOW_DAYS of the newest pick, plus older ones still undecided (no win / loss /
+    push / void yet) up to SETTLE_GIVE_UP_DAYS; a decided pick older than the window is final (skipped_final)."""
     from .settlement import at_line
     own = con is None
     con = con or connect()
-    c = {"picks": 0, "pending": 0, "inserted": 0, "revision": 0, "unchanged": 0}
+    c = {"picks": 0, "pending": 0, "inserted": 0, "revision": 0, "unchanged": 0, "skipped_final": 0}
     try:
-        for p in con.execute("SELECT pick_id, platform, offer_id, side, line FROM picks").fetchall():
+        recheck, give_up = settle_window(con.execute("SELECT MAX(tracked_at) FROM picks").fetchone()[0], now)
+        rows = con.execute(
+            "SELECT pick_id, platform, offer_id, side, line FROM picks p WHERE p.tracked_at >= ? OR "
+            "(p.tracked_at >= ? AND NOT EXISTS (SELECT 1 FROM settlements s WHERE s.pick_id = p.pick_id AND "
+            "s.status IN ('win', 'loss', 'push', 'void')))", (recheck, give_up)).fetchall()
+        c["skipped_final"] = con.execute("SELECT COUNT(*) FROM picks").fetchone()[0] - len(rows)
+        for p in rows:
             c["picks"] += 1
             s = leg_settlement(store_con, p["platform"], p["offer_id"], p["side"])
             status, outcome = at_line(s, p["line"], p["side"])

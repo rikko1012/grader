@@ -10,15 +10,11 @@ Errors: 400 bad parameter, 404 unknown team, 503 {"error": "snapshot_not_ready"}
 """
 from __future__ import annotations
 
-import json
 import re
-import threading
 
 from . import api_board, results_public, sheets, without
 
 _TEAM = re.compile(r"^(nba|nfl):team:[a-z]+:[A-Za-z0-9._-]{1,40}$")
-_LOCK = threading.Lock()
-_PARSED = {}                    # without.json path -> (mtime_ns, size, obj)
 
 
 def sheet(req):
@@ -32,19 +28,10 @@ def sheet(req):
 
 
 def _without_doc(lg):
-    p = without.path(lg)
-    try:
-        st = p.stat()
-    except OSError:
+    try:                                            # parsed once per file change, single flight (api_board.parsed)
+        return api_board.parsed(without.path(lg))
+    except api_board.NotReady:
         return None
-    key = str(p)
-    with _LOCK:
-        hit = _PARSED.get(key)
-    if not hit or hit[0] != st.st_mtime_ns or hit[1] != st.st_size:
-        hit = (st.st_mtime_ns, st.st_size, json.loads(api_board._read(p)))
-        with _LOCK:
-            _PARSED[key] = hit
-    return hit[2]
 
 
 def without_view(req):

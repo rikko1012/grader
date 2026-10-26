@@ -139,7 +139,10 @@ def cancel(req):
         return 401, {"error": "member_identity_required"}
     if req.method != "POST":
         return 405, {"error": "use POST"}
-    rid = str((req.json() or {}).get("run_id") or "")
+    d = req.json() or {}
+    if not isinstance(d, dict):                         # was: a JSON list / number -> AttributeError -> 503
+        return 400, {"error": "body must be a JSON object"}
+    rid = str(d.get("run_id") or "")
     with runs.opened() as con:
         run = runs.get_run(con, rid)
         if not run or run["member"] != who:

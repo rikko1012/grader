@@ -259,21 +259,33 @@ def record_settlement(con, slip_key, result, settled_at=None):
     return "inserted" if prev is None else "revision"
 
 
-def settle_all(store_con, con=None):
+def settle_all(store_con, con=None, now=None):
     """Worker job: settle every logged slip whose result is not final-and-unchanged. -> counts."""
     from . import settle
     own = con is None
     con = con or connect()
-    c = {"slips": 0, "pending": 0, "inserted": 0, "revision": 0, "unchanged": 0}
+    from .. import picks
+    c = {"slips": 0, "pending": 0, "inserted": 0, "revision": 0, "unchanged": 0, "skipped_final": 0}
     try:
-        for row in con.execute("SELECT slip_key, payload FROM slips").fetchall():
-            s = json.loads(row["payload"])
-            c["slips"] += 1
-            res = settle.settle_slip(s, settle.current_settlements(store_con, s["legs"]))
-            if res["status"] == "pending":
-                c["pending"] += 1
-                continue
-            c[record_settlement(con, row["slip_key"], res)] += 1
+        # bounded scan (was: every slip payload ever logged, loaded at once, every run - batches log every build):
+        # slips logged within the correction window of the newest one, plus older ones never settled (give-up cap)
+        recheck, give_up = picks.settle_window(con.execute("SELECT MAX(logged_at) FROM slips").fetchone()[0], now)
+        keys = [r[0] for r in con.execute(
+            "SELECT slip_key FROM slips s WHERE s.logged_at >= ? OR (s.logged_at >= ? AND NOT EXISTS "
+            "(SELECT 1 FROM settlements t WHERE t.slip_key = s.slip_key))", (recheck, give_up)).fetchall()]
+        c["skipped_final"] = con.execute("SELECT COUNT(*) FROM slips").fetchone()[0] - len(keys)
+        for i in range(0, len(keys), 200):              # payloads 200 at a time: memory = one chunk
+            part = keys[i:i + 200]
+            rows = con.execute(f"SELECT slip_key, payload FROM slips WHERE slip_key IN ({','.join('?' * len(part))})",
+                               part).fetchall()
+            for row in rows:
+                s = json.loads(row["payload"])
+                c["slips"] += 1
+                res = settle.settle_slip(s, settle.current_settlements(store_con, s["legs"]))
+                if res["status"] == "pending":
+                    c["pending"] += 1
+                    continue
+                c[record_settlement(con, row["slip_key"], res)] += 1
     finally:
         if own:
             con.close()
