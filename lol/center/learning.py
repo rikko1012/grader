@@ -34,27 +34,37 @@ def dashboard(con):
     series = set()
     player_props = set()
     units = []
+    from .forecast import shown, side_offered
     for r in rows:
         status[r["st"]] += 1
         if r["st"] != "graded":
             continue
         series.add(r["sid"])
         player_props.add((r["sid"], r["pid"], r["stat"], r["scope"]))
-        p = r["p_over"] / max(r["p_over"] + r["p_under"], 1e-9)       # P(over | no push) at the offered line
+        r = dict(r)
+        sh = shown(r)                         # the chance members saw (lc-1 when the record carries it, else raw)
         hit = float(r["over_hit"])
-        side_hit = (hit == 1.0) if r["model_side"] == "over" else (hit == 0.0)
-        u = {"err": r["lambda"] - r["actual"], "brier": (p - hit) ** 2,
-             "ll": -(hit * math.log(max(p, 1e-6)) + (1 - hit) * math.log(max(1 - p, 1e-6))), "p": p, "hit": hit,
-             "side_hit": side_hit, "p_side": p if r["model_side"] == "over" else 1 - p,
-             "sid": r["sid"], "offered": r["side_offered"] == 1}
+
+        def unit(po, pu, side, offered):
+            p = po / max(po + pu, 1e-9)                                # P(over | no push) at the offered line
+            return {"err": r["lambda"] - r["actual"], "brier": (p - hit) ** 2,
+                    "ll": -(hit * math.log(max(p, 1e-6)) + (1 - hit) * math.log(max(1 - p, 1e-6))), "p": p, "hit": hit,
+                    "side_hit": (hit == 1.0) if side == "over" else (hit == 0.0), "p_side": p if side == "over" else 1 - p,
+                    "sid": r["sid"], "offered": offered}
+        u = unit(sh["p_over"], sh["p_under"], sh["side"], sh["side_offered"] == 1)
         units.append(u)
         for key in ("all", f"stat {r['stat']}", f"scope {r['scope']}", f"platform {r['platform']}", f"role {r['role']}",
-                    f"grade {r['grade_label']}", f"model {r['model_version']}",
+                    f"grade {sh['grade_label']}", f"model {r['model_version']}",
                     f"fit {r['model_version']} {r['fit_sha']}",
-                    "side offered" if u["offered"] else "side not offered"):
+                    "side offered" if u["offered"] else "side not offered",
+                    f"chance shown {sh['cal'] or 'raw'}"):
             groups[key].append(u)
+        # the raw model chance on the same props (before lc-1), kept apart so both can be read side by side
+        rw = sh["raw"]
+        roff = side_offered(r["platform"], json.loads(r["sides"] or "{}"), rw["side"]) is True
+        groups["raw model chance (before lc-1)"].append(unit(rw["p_over"], rw["p_under"], rw["side"], roff))
         # Compare the displayed (unconditional) chance with decisions separately from no-push calibration.
-        printed = r["p_over"] if r["model_side"] == "over" else r["p_under"]
+        printed = sh["p_side"]
         if u["offered"] and printed >= 0.60:
             groups["offered picks printed 60%+"].append(u)
             groups[f"model {r['model_version']} offered picks printed 60%+"].append(u)

@@ -1,0 +1,85 @@
+{
+ "version": "lc-1",
+ "register": "lol/EVALUATION.md A14",
+ "label": "below the A6 minimum (owner override, lol/EVALUATION.md A14)",
+ "source": "owner-supplied read-only production pull 2026-10-26 (lol_forecasts 12,161 / lol_settlements 1,050)",
+ "features": [
+  "intercept",
+  "logit_p",
+  "z_line_gap",
+  "v_side_offered",
+  "goblin",
+  "demon",
+  "scope_12",
+  "scope_123"
+ ],
+ "fitted_at": "2026-10-26T15:25:04Z",
+ "data_as_of": "2026-10-26T00:22:48Z",
+ "rows": 1020,
+ "lambda": 20.0,
+ "pooled": {
+  "theta": [
+   -0.298039,
+   0.429687,
+   0.476344,
+   0.018778,
+   0.21774,
+   -0.417136,
+   -0.276704,
+   0.090148
+  ],
+  "level": "pooled",
+  "verdict": "FAIL (report only)"
+ },
+ "params": {
+  "assists:underdog": {
+   "on": false,
+   "theta": [
+    -0.30451,
+    0.219047,
+    0.583986,
+    0.012307,
+    0.21774,
+    -0.417136,
+    -0.365992,
+    -0.136711
+   ],
+   "n": 252,
+   "level": "market",
+   "verdict": "FAIL"
+  },
+  "kills:prizepicks": {
+   "on": false,
+   "theta": [
+    -0.359591,
+    0.402193,
+    0.560817,
+    0.043166,
+    0.338245,
+    -0.602557,
+    -0.335222,
+    0.184554
+   ],
+   "n": 497,
+   "level": "market",
+   "verdict": "FAIL"
+  },
+  "kills:underdog": {
+   "on": false,
+   "theta": [
+    -0.355027,
+    0.378213,
+    0.543985,
+    1.1e-05,
+    0.21774,
+    -0.417136,
+    -0.352243,
+    0.233179
+   ],
+   "n": 271,
+   "level": "market",
+   "verdict": "FAIL"
+  }
+ },
+ "sha": "da3a86f660438b1d"
+}

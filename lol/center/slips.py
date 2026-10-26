@@ -36,6 +36,8 @@ def candidates(con, platform, mode="mixed", exclude_roles=(), preview=False, now
     legs, out = [], {}
     for f in _latest(con, platform):
         why = []
+        sh = forecast.shown(f)              # the chance members see (lc-1 when on): side, chance and grade of the leg
+        f = dict(f, model_side=sh["side"], grade_label=sh["grade_label"])
         side = f["model_side"]
         if mode == "overs" and side != "over":
             why.append("mode overs: the model's side is under")
@@ -49,7 +51,7 @@ def candidates(con, platform, mode="mixed", exclude_roles=(), preview=False, now
         start = forecast._when(f["series_start"])
         if start and start <= now:
             why.append("series started")
-        p = f["p_over"] if side == "over" else f["p_under"]
+        p = sh["p_side"]
         if why:
             out[f["id"]] = why
             continue

@@ -644,3 +644,38 @@ labelled "below the A6 minimum (owner override)". Stakes stay 0U, grade bands, l
 8. **Committed default.** The walk-forward of rule 6 run once on the owner-supplied read-only pull of production (lol_forecasts
    12,161 rows, lol_settlements 1,050 rows, 2026-10-26); a market is ON in the default only if it PASSES there, with the
    parameters fitted on all pulled settled props; otherwise every market ships OFF. The owner's Shell `fit` run supersedes it.
+
+### A14 result (2026-10-26; lol/eval/lc1_a14_2026-10-26.json) - lc-1 FAILS in every market, every market ships OFF
+
+Run once with `python -m lol.cal eval` / `fit` on a scratch lol.db rebuilt from the owner-supplied read-only pull (no production
+call). 1,020 settled non-push props, 23 series, 9 days; the walk-forward scored 919 props (21 series, 7 days; the first days have
+nothing settled before them). Below the A6 minimum (owner override). Chances are P(chosen side | no push), %.
+
+| group | n | live stated / hit | lc-1 stated / hit | log loss lc-1 - live (series 95%) | in-the-large lc-1 | share Over lc-1 / over rate | verdict |
+|---|---|---|---|---|---|---|---|
+| kills:prizepicks | 439 | 65.2 / 60.8 | 62.5 / 63.3 | -0.013 (-0.088, +0.042) | +1.2 | 5.2 / 36.4 | FAIL: balance; offered-side worse (+0.022) |
+| kills:underdog | 249 | 60.2 / 55.4 | 59.6 / 61.5 | -0.019 (-0.068, +0.023) | +4.6 | 12.0 / 37.0 | FAIL: interval not below 0 and in-the-large; balance |
+| assists:underdog | 231 | 63.2 / 48.5 | 59.5 / 55.0 | -0.060 (-0.138, +0.008) | -2.2 | 3.0 / 42.9 | FAIL: balance |
+| all (report only) | 919 | 63.3 / 56.3 | 61.0 / 60.7 | -0.026 (-0.088, +0.024) | +1.3 | 6.5 / 38.2 | FAIL: balance |
+| kills (report only) | 688 | 63.4 / 58.9 | 61.5 / 62.6 | -0.015 (-0.078, +0.033) | +2.4 | 7.7 / 36.6 | FAIL: balance |
+| underdog (report only) | 480 | 61.7 / 52.1 | 59.5 / 58.3 | -0.039 (-0.095, +0.015) | +1.3 | 7.7 / 39.8 | FAIL: balance |
+
+Offered-side props (rows where lc-1's side is offered; live's own offered rows in brackets): all 386 props, live 61.6 / 56.7, lc-1
+59.4 / 60.6, log loss -0.007 (-0.075, +0.048) [live on its 543 offered rows 60.8 / 52.1]; kills:prizepicks 140, live 63.4 / 62.1,
+lc-1 59.4 / 62.9, log loss +0.022 [230: 62.1 / 54.8]; kills:underdog 239, live 60.3 / 54.4, lc-1 59.6 / 60.7, log loss -0.019 [241:
+60.3 / 54.4]; assists:underdog 7 props only (lc-1 calls almost every assists prop Under, and Unders are mostly not offered) [72: 58.2
+/ 36.1].
+
+Grade bands, all props (stated / hit, n): live A+ 84.2 / 64.4 (59), A 76.8 / 65.5 (84), A- 70.8 / 59.1 (127), B+ 65.5 / 57.5 (146),
+B 59.8 / 56.0 (218), B- 55.9 / 52.6 (76), Lean 52.4 / 49.3 (209); lc-1 A 76.3 / 71.0 (62), A- 71.6 / 69.2 (26), B+ 65.0 / 58.8 (238),
+B 60.3 / 59.9 (344), B- 55.9 / 65.4 (52), Lean 52.4 / 58.9 (197).
+
+Decision: **no market passes A14 6**; `lol/cal_default.json` ships every market OFF (parameters fitted on all 1,020 props are kept in
+it for reference only). **Recorded with the result.**
+- lc-1's log loss is lower in every market (point estimates -0.013 to -0.060) and its stated chances are less overconfident, but no
+  series interval is below 0, and the gain comes mostly from calling Under: the fitted intercept is about -0.35 and the weight on
+  the raw chance 0.2-0.4 (shrunk hard toward the line), so lc-1 favours Over on 3-12% of props while 36-43% went Over. That is the
+  correlated-Under risk the A8a balance check exists for (the owner's warning about too many Unders on one slate); with a 38% over rate on 21 series it cannot be told
+  apart from one low-scoring stretch. A8a's known limitation applies (an honest fit on a market far from 50% favours one side).
+- What the owner can run once more series settle: in the cs2-scout Render Shell `python -m lol.cal eval` (report only) and
+  `python -m lol.cal fit` (writes `<LOL_DATA_DIR>/model/lol_cal.json`; a market switches ON only where the rule passes).

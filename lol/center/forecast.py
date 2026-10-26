@@ -254,6 +254,43 @@ def side_offered(platform, sides, side):
     return s.get("offered")
 
 
+def shown(f):
+    """THE chance members see for one saved forecast record (dict) - every LoL surface reads it here: board.json rows and
+    match tables (member board, cards, compare, copy-pick and slip checks), slips, the slip line check, learning.
+    The calibrated chance (lc-1, lol/EVALUATION.md A14) when the record carries one and LOL_CAL is not 0; else the raw
+    chance. Side, offered-side check and grade (published BANDS, unchanged) follow from that chance."""
+    from .. import cal
+    raw = (f.get("p_over"), f.get("p_under"), f.get("p_push") or 0.0)
+    v = f.get("cal_version")
+    if v and cal.enabled() and f.get("cal_p_over") is not None and f.get("cal_p_under") is not None:
+        po, pu, pp = f["cal_p_over"], f["cal_p_under"], f.get("cal_p_push") or 0.0
+    else:
+        (po, pu, pp), v = raw, None
+    po, pu = float(po or 0.0), float(pu or 0.0)
+    side = "over" if po >= pu else "under"
+    sides = f.get("sides")
+    if isinstance(sides, str):
+        try:
+            sides = json.loads(sides or "{}")
+        except ValueError:
+            sides = {}
+    off = side_offered(f.get("platform"), sides, side)
+    p_side = po if side == "over" else pu
+    grade, units_policy = grade_and_units(p_side)
+    rside = "over" if float(raw[0] or 0) >= float(raw[1] or 0) else "under"
+    rgrade = grade_and_units(float((raw[0] if rside == "over" else raw[1]) or 0))[0]
+    if (v is None and not f.get("cal_version") and f.get("grade") and f.get("model_side") == side
+            and f.get("units_policy") is not None):
+        # an uncalibrated record shows the grade it was saved with (graded on the unrounded chance)
+        grade, units_policy = f["grade"], f["units_policy"]
+    if f.get("model_side") == rside and f.get("grade") and not f.get("cal_version"):
+        rgrade = f["grade"]
+    return {"p_over": po, "p_under": pu, "p_push": float(pp), "side": side, "p_side": p_side,
+            "side_offered": None if off is None else int(bool(off)), "grade": grade,
+            "grade_label": f"Lean {side.title()}" if grade == "Lean" else grade, "units_policy": units_policy, "cal": v,
+            "raw": {"p_over": raw[0], "p_under": raw[1], "p_push": raw[2], "side": rside, "grade": rgrade}}
+
+
 def forecast_one(con, h, offer, link, now=None, market=None):
     """-> forecast record dict (not saved) or {"skip": reason}. market(team, opponent, start) -> the match-winner price at
     this moment (lol/odds.match_odds) or None: saved with the record for forward evaluation only (A7), never an input."""
@@ -321,10 +358,6 @@ def forecast_one(con, h, offer, link, now=None, market=None):
         flags.append(pj["data_quality"])
     if not oin:
         flags.append("opponent has no stored games (opponent factor = league average)")
-    side = "over" if po >= pu else "under"
-    offered = side_offered(offer.get("platform"), offer.get("sides"), side)
-    p_side = po if side == "over" else pu
-    grade, units_policy = grade_and_units(p_side)
     if mix:
         # audit 42: the projection, median and 80% range shown with the chance are those of the same 2-or-3-game
         # distribution (mean lambda_game x (2 + p3)); the 3-game total stays in the inputs
@@ -334,14 +367,27 @@ def forecast_one(con, h, offer, link, now=None, market=None):
         lo, hi = m.interval(pj["lambda"], pj["nb_size"], 0.8)
         med = _nb_median(m, pj["lambda"], pj["nb_size"])
         lam_shown = pj["lambda"]
+    # lc-1 (lol/EVALUATION.md A14): the chance members see, calibrated against the offered line - computed ONCE here, at
+    # save time; the record keeps the raw chance (p_over / p_under / p_push) and adds the calibrated one + its version.
+    # Side, grade, Lean label, offered-side check and slip reasons follow the shown chance (shown() below).
+    from .. import cal
+    po_x, pu_x = po, pu                    # unrounded: the raw grade is exactly as before lc-1
+    po, pu, push = round(po, 4), round(pu, 4), round(push, 4)
+    ca = cal.adjust({"stat": stat, "platform": offer["platform"], "line": offer["line"], "lambda": round(lam_shown, 4),
+                     "nb_size": pj["nb_size"], "sides": offer.get("sides"), "odds_type": offer.get("odds_type"), "scope": scope,
+                     "p_over": po, "p_under": pu, "p_push": push})
+    sh = shown({"platform": offer["platform"], "sides": offer.get("sides"), "p_over": po_x, "p_under": pu_x, "p_push": push,
+                "cal_version": ca and ca["v"], "cal_p_over": ca and ca["po"], "cal_p_under": ca and ca["pu"],
+                "cal_p_push": ca and ca["pp"]})
+    side, offered, grade, units_policy = sh["side"], sh["side_offered"], sh["grade"], sh["units_policy"]
     rec = dict(sport=store.SPORT, platform=offer["platform"], market_key=offer["market_key"], line_id=offer.get("line_id"),
                quote_event_id=offer.get("_event_id"), quote_observed_at=offer.get("_observed_at"), stat=stat, scope=scope,
                market_type="single", odds_type=offer.get("odds_type"), line=offer["line"], sides=offer.get("sides"),
                sid=link["sid"], pid=pid, tid=tid, opp_tid=opp, role=role, best_of=bo, series_start=start.strftime("%Y-%m-%dT%H:%M:%SZ"),
                model_version=pj.get("version") or m.VERSION, fit_sha=fit_sha(), form=pj.get("form"), **{"lambda": round(lam_shown, 4)},
-               nb_size=pj["nb_size"], p_over=round(po, 4), p_under=round(pu, 4), p_push=round(push, 4), model_side=side,
-               side_offered=None if offered is None else int(bool(offered)), grade=grade,
-               grade_label=(f"Lean {side.title()}" if grade == "Lean" else grade), units_policy=units_policy, units=0.0,
+               nb_size=pj["nb_size"], p_over=po, p_under=pu, p_push=push, model_side=side, side_offered=offered, grade=grade,
+               grade_label=sh["grade_label"], units_policy=units_policy, units=0.0,
+               cal_version=ca and ca["v"], cal_p_over=ca and ca["po"], cal_p_under=ca and ca["pu"], cal_p_push=ca and ca["pp"],
                stake_restriction=LOL_STAKE_RESTRICTION if units_policy > 0 else None,
                inputs={k: (round(v, 4) if isinstance(v, float) else v) for k, v in pj.items()
                        if k in ("lambda_game", "player_rate", "team_factor", "opp_factor", "strength_factor", "p_win",
@@ -357,6 +403,9 @@ def forecast_one(con, h, offer, link, now=None, market=None):
     from . import prices
     rec["inputs"]["market"] = prices.classify(offer["platform"], offer)
     rec["inputs"]["team_win"] = team_win(p_win, offer, start, market)
+    if ca:
+        rec["inputs"]["calibration"] = {"version": ca["v"], "weights": ca["src"], "raw_side": sh["raw"]["side"],
+                                        "raw_grade": sh["raw"]["grade"], "register": cal.REGISTER}
     if mix:
         rec["inputs"]["lambda_3_games"] = round(pj["lambda"], 4)
         rec["inputs"]["p_3_games"] = round(mix[0][0], 4)
@@ -485,8 +534,8 @@ def slip_check(con, legs, now=None):
             why.append(f"leg {r['id']}: line check missing, invalid or older than 15 minutes")
         elif st["line"] != r["line"]:
             why.append(f"leg {r['id']}: line moved {r['line']} -> {st['line']}")
-        elif side_offered(r["platform"], json.loads(st["sides"] or "{}"), r["model_side"]) is not True:
-            why.append(f"leg {r['id']}: {r['model_side']} no longer offered")
+        elif side_offered(r["platform"], json.loads(st["sides"] or "{}"), shown(r)["side"]) is not True:
+            why.append(f"leg {r['id']}: {shown(r)['side']} no longer offered")
         if not _when(r["series_start"]):
             why.append(f"leg {r['id']}: series start missing")
         elif _when(r["series_start"]) <= now:
@@ -524,8 +573,10 @@ def _data_version(con):
 
 
 def _sha(rec):
-    return store.sha({k: rec.get(k) for k in ("quote_event_id", "line", "sides", "lambda", "nb_size", "p_over", "p_under",
-                                              "fit_sha", "flags", "series_start")})
+    keys = ("quote_event_id", "line", "sides", "lambda", "nb_size", "p_over", "p_under", "fit_sha", "flags", "series_start")
+    if rec.get("cal_version"):          # lc-1: a calibration change saves a new record; uncalibrated records hash as before
+        keys += ("cal_version", "cal_p_over")
+    return store.sha({k: rec.get(k) for k in keys})
 
 
 def run(con, db=None, now=None, market=None):
@@ -563,7 +614,8 @@ def run(con, db=None, now=None, market=None):
                 cols = ("sport", "platform", "market_key", "line_id", "quote_event_id", "quote_observed_at", "stat", "scope", "market_type",
                         "odds_type", "line", "sides", "sid", "pid", "tid", "opp_tid", "role", "best_of", "series_start", "model_version",
                         "fit_sha", "form", "lambda", "nb_size", "p_over", "p_under", "p_push", "model_side", "side_offered", "inputs",
-                        "flags", "slip_eligible", "slip_reasons", "grade", "grade_label", "units_policy", "units", "stake_restriction")
+                        "flags", "slip_eligible", "slip_reasons", "grade", "grade_label", "units_policy", "units", "stake_restriction",
+                        "cal_version", "cal_p_over", "cal_p_under", "cal_p_push")
                 vals = [json.dumps(rec[c], default=str) if c in ("sides", "inputs", "flags", "slip_reasons") else rec[c] for c in cols]
                 con.execute(f"INSERT INTO lol_forecasts (forecast_at, state_sha, {', '.join(cols)}) VALUES (?, ?, {', '.join('?' * len(cols))})",
                             [store.now_iso(), sha] + vals)
@@ -631,6 +683,7 @@ def board(con, now=None):
         f = con.execute("SELECT * FROM lol_forecasts WHERE platform = ? AND market_key = ? ORDER BY id DESC LIMIT 1",
                         (r["platform"], r["market_key"])).fetchone()
         f = dict(f) if f else None
+        sh = shown(f) if f else {}
         s = series.get(r.get("sid")) or {}
         rows.append({
             "platform": r["platform"], "market_key": r["market_key"], "player": r["player"], "team": lab(r.get("tid")) or r["team"],
@@ -641,14 +694,16 @@ def board(con, now=None):
             "sides": json.loads(r["sides"] or "{}"), "quote_seen_at": r["observed_at"], "quote_checked_at": r["checked_at"],
             "link": {"status": r.get("link_status"), "reason": r.get("link_reason"), "sid": r.get("sid"), "pid": r.get("pid")},
             "forecast": None if not f else {
-                "id": f["id"], "at": f["forecast_at"], "line": f["line"], "projection": f["lambda"], "p_over": f["p_over"],
-                "p_under": f["p_under"], "p_push": f["p_push"], "model_side": f["model_side"], "side_offered": f["side_offered"],
+                # the shown chance (lc-1 when on, else raw) - side, grade and offered check follow it; raw kept for admin
+                "id": f["id"], "at": f["forecast_at"], "line": f["line"], "projection": f["lambda"], "p_over": sh["p_over"],
+                "p_under": sh["p_under"], "p_push": sh["p_push"], "model_side": sh["side"], "side_offered": sh["side_offered"],
                 "model": f"{f['model_version']} ({f['form']}, fit {f['fit_sha']})", "inputs": json.loads(f["inputs"] or "{}"),
                 "flags": json.loads(f["flags"] or "[]"), "slip_eligible": bool(f["slip_eligible"]),
                 "slip_reasons": json.loads(f["slip_reasons"] or "[]"), "current": f["line"] == r["line"],
-                "grade": f["grade_label"], "units": f["units"], "units_policy": f["units_policy"],
-                "stake_restriction": f["stake_restriction"]},
-            "grade": (f or {}).get("grade_label"), "stake": (f or {}).get("units")})
+                "grade": sh["grade_label"], "units": f["units"], "units_policy": sh["units_policy"],
+                "stake_restriction": LOL_STAKE_RESTRICTION if sh["units_policy"] > 0 else None,
+                "calibration": sh["cal"], "raw": sh["raw"]},
+            "grade": sh.get("grade_label"), "stake": (f or {}).get("units")})
     tables = {}
     for x in rows:
         if x["link"]["sid"]:
@@ -667,7 +722,12 @@ def board(con, now=None):
     settled = [dict(r) for r in con.execute("SELECT * FROM lol_settlements WHERE settled_at >= ? ORDER BY id DESC LIMIT 500",
                                             (store.now_iso(now.timestamp() - 3 * 86400),))]
     feeds = {r[0]: r[1] for r in con.execute("SELECT platform, MAX(polled_at) FROM market_polls WHERE ok = 1 GROUP BY platform")}
+    from .. import cal
+    cw, csrc = cal.load()
     return {"at": store.now_iso(), "released_to_members": False, "feeds": feeds,
+            "calibration": {"version": cal.VERSION, "enabled": cal.enabled(), "weights": csrc, "sha": (cw or {}).get("sha"),
+                            "on": sorted(k for k, p in ((cw or {}).get("params") or {}).items() if p.get("on")),
+                            "register": cal.REGISTER},
             "grades": "model grades from the published bands; stakes held at 0U until validated at real lines",
             "rows": rows, "match_tables": list(tables.values()), "settled_recent": settled,
             "counts": {"offers": len(rows), "with_forecast": sum(1 for x in rows if x["forecast"]),

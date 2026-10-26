@@ -121,7 +121,10 @@ ADDED_COLUMNS = {"c_series": {"source": "TEXT", "source_match_id": "TEXT"},
                  "c_games": {"source": "TEXT", "source_game_id": "TEXT", "team1_kills_raw": "INTEGER", "team2_kills_raw": "INTEGER",
                              "team_kills_status": "TEXT", "winner_status": "TEXT", "winner_inferred_tid": "TEXT"},
                  "lol_forecasts": {"grade": "TEXT", "grade_label": "TEXT", "units_policy": "REAL", "units": "REAL",
-                                   "stake_restriction": "TEXT"}}
+                                   "stake_restriction": "TEXT",
+                                   # lc-1 (lol/EVALUATION.md A14): the calibrated chance shown to members + its version;
+                                   # p_over / p_under / p_push stay the raw model chance
+                                   "cal_version": "TEXT", "cal_p_over": "REAL", "cal_p_under": "REAL", "cal_p_push": "REAL"}}
 
 
 def connect(path=None, tries=6):
