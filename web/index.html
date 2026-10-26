@@ -937,7 +937,7 @@ body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode
       <p><b>Tested before it counts.</b> A factor moves the projection only after it beats the current model on matches it never saw, in date order. Maps, head-to-head, Round Swing, ratings, opening and trade kills, win chance and FACEIT are on every card as context; they move the grade only if they pass that test.</p>
       <p><b>What the grades mean</b> (the model's estimated chance the pick wins): A+ 80%+ · A 74%+ · A− 68%+ · B+ 63%+ · B 57%+ · B− 55%+ · <i>Lean</i> = under 55%. A stake rule above can hold a graded pick at 0 units - it keeps its grade and says why (e.g. "B · 59.1% · 0U — same-match exposure cap"); 0-unit picks are never in "Bets only" or built slips.<br>
       <b>Units:</b> A+ 3U · A 2U · A− 1.5U · B+ 1U · B 0.5U · B− 0.5U · Lean 0U. The chance is graded unrounded and shown to 0.1%.</p>
-      <p class="muted">Every chance on this site is the model's estimate, not a measured hit rate – it has not yet been shown to match how often picks actually win, and a 60% pick still loses 4 times in 10 even when the estimate is right. The units are the grader's stake scale: a relative size set by the grade and the stake rules above, not a tested or optimal bankroll plan. Not financial advice.</p>
+      <p class="muted">Every chance on this site is the model's estimate, not a measured hit rate – it has not yet been shown to match how often picks actually win, and a 60% pick still loses 4 times in 10 even when the estimate is right. The units are the grader's stake scale: a relative size set by the grade and the stake rules above, not a tested or optimal bankroll plan.</p>
     </div>
   </details>
 
@@ -1040,7 +1040,7 @@ function showGate(state) {
        <div class="perk"><b>Single Prop</b><span>Grade any CS2 player's kills or headshots line (Maps 1–2, Map 1 or Maps 1–3): Over or Under, the chance, a grade from A+ to B– (or Lean) and suggested units.</span></div>
        <div class="perk"><b>Slate</b><span>Paste up to 15 props and grade them all at once, then build a 2–6 pick slip and check every line before you copy.</span></div>
        <div class="perk"><b>Prop Board</b><span>Every Underdog and PrizePicks CS2 line graded ahead of time, best first – or compare both platforms' lines side by side.</span></div></div>
-     <div class="small muted" style="margin-top:8px">Projections from HLTV match data (BO3.gg as backup) – recent form, LAN or online, the opponent; lines from Underdog and PrizePicks. Not financial advice.</div>`;
+     <div class="small muted" style="margin-top:8px">Projections from HLTV match data (BO3.gg as backup) – recent form, LAN or online, the opponent; lines from Underdog and PrizePicks.</div>`;
   $("#f").style.display = "none"; $("#out").innerHTML = ""; g.hidden = false;
   const err = new URLSearchParams(location.search).get("signin_error");
   g.innerHTML = state.signed_in
@@ -1852,7 +1852,7 @@ function slipHtml(s, where) {
     + (leans ? `<div class="warn">${leans} pick${leans > 1 ? "s are" : " is a"} Lean${leans > 1 ? "s" : ""} (0 units) – the weakest legs on the slip.</div>` : "")
     + `<div class="actions"><button type="button" class="chipbtn"${page ? "" : ` id="slipcopy"`} data-slipcopy="1">Copy slip</button><button type="button" class="chipbtn" data-slipshare="1" title="A link to these picks – it opens against the current board">Share link</button>`
     + `<button type="button" class="chipbtn"${page ? "" : ` id="slipclear"`} data-slipclear="1">Clear</button>${page ? "" : `<button type="button" class="chipbtn" id="slipclose">Close</button>`}</div>
-       <div class="small muted" style="margin-top:8px">Every line is checked on ${plat ? bookName(plat) : "the platform"} before it is copied. Chances are multiplied as if the picks were independent. Not financial advice.</div>`
+       <div class="small muted" style="margin-top:8px">Every line is checked on ${plat ? bookName(plat) : "the platform"} before it is copied. Chances are multiplied as if the picks were independent.</div>`
     + (page ? "" : `<div class="slipfoot"><span>${n} pick${n === 1 ? "" : "s"}${est != null ? ` · Est. chance <b>${pct(est)}</b>` : ""}</span><button type="button" class="go" data-slipcopy="1">Copy</button></div>`);
 }
 function drawMySlip(s) {                 // U1: the Slips page's "Your slip" card
@@ -2999,7 +2999,7 @@ function drawMoneylines() {
     + `<details class="small muted" style="margin-top:10px"><summary>Which price is shown</summary>
         <p><b>Thunderpick first.</b> Bookmaker odds with the margin removed, shown while they are current (retrieved within the last 75 minutes, before the match starts).</p>
         <p><b>Exchanges.</b> Polymarket and Kalshi: each platform's bid/ask midpoint for the first team, shown to 0.1%, when the quote is open, current and tight. A last trade is never used as a price.</p>
-        <p>Only matches with a current price are listed. This tab shows market prices – no stake or recommendation. Not financial advice.</p></details>`;
+        <p>Only matches with a current price are listed. This tab shows market prices – no stake or recommendation.</p></details>`;
 }
 
 // ---------- Slip studio: the server's diversified builder (slip_builder studio-1). One batch at a time: no player,
@@ -3248,7 +3248,7 @@ function studioRender() {
     + `<details class="small muted" style="margin-top:8px"><summary>How the studio works</summary>
       ${(b.settings || studioCfg()).fill === "small" ? "Smaller slips are planned first (your Fill first choice), so 4-picks only get the picks that are left." : "Slip sizes are planned largest first, so 2-pick suggestions can't use up the picks a 4-pick needs."} Each slip takes the strongest eligible picks the batch rules allow:
       one pick per match, player and team in a slip, and – across the whole batch, every Build until you start a new batch – fresh players, props and matches first; with Repeats “When needed” the least-used picks are used again only to reach your count (never the same slip twice, never both sides of one player's stat). "Verify & copy" re-checks every line on the platform and against the current grade first; any change means a rebuild, never an old chance on a new line.
-      The all-hit chance multiplies saved outcome probabilities, which assumes the picks are independent. Older slips without push probabilities are labelled conditional on no pushes. No payouts or returns are assumed. Builder ${esc(b.builder_version || "")}. Not financial advice.</details>`;
+      The all-hit chance multiplies saved outcome probabilities, which assumes the picks are independent. Older slips without push probabilities are labelled conditional on no pushes. No payouts or returns are assumed. Builder ${esc(b.builder_version || "")}.</details>`;
 }
 async function studioLoad() {
   try {
@@ -3906,7 +3906,7 @@ function render(d) {
   const flags = (g.flags || []).map(f => fgt && /^Projection differs from his last-10 average/.test(f) ? fgt : f).filter(f => !UNSURE.test(f));
   if ((v.units || 0) > 0) flags.push("Units show the model's relative confidence (A+ 3U down to B- 0.5U) - not a payout-based edge or a proven profit; check the payout before betting");
   if (flags.length) h += `<section class="card full"><h2>Notes</h2><ul class="flags">${flags.map(f => `<li>${esc(f)}</li>`).join("")}</ul></section>`;
-  h += `<div class="small muted foot">Data: BO3.gg${oddsFooter(d)} · FACEIT${d.hltv?.found || d.hltv_context?.found ? " · HLTV" : ""}${d.csapi?.found ? " · CS API" : ""}${d.next_match?.source === "pandascore" ? " · PandaScore" : ""}${d.next_match?.source === "hltv" ? " · schedule from HLTV" : ""}${schedFooter(d)}${d.liquipedia ? ` · team from <a href="${esc(d.liquipedia.url)}" target="_blank" rel="noopener">Liquipedia</a> (CC-BY-SA 3.0)` : ""} · Not financial advice</div>`;
+  h += `<div class="small muted foot">Data: BO3.gg${oddsFooter(d)} · FACEIT${d.hltv?.found || d.hltv_context?.found ? " · HLTV" : ""}${d.csapi?.found ? " · CS API" : ""}${d.next_match?.source === "pandascore" ? " · PandaScore" : ""}${d.next_match?.source === "hltv" ? " · schedule from HLTV" : ""}${schedFooter(d)}${d.liquipedia ? ` · team from <a href="${esc(d.liquipedia.url)}" target="_blank" rel="noopener">Liquipedia</a> (CC-BY-SA 3.0)` : ""}</div>`;
   const out = $("#out"); out.innerHTML = h;
   // 2026-10-18 release: the headline card, then Overview / History / Match / Markets tabs (cardTabs); the older two-column
   // layout stays for a card without a headline section
@@ -4234,7 +4234,7 @@ function ctHtml(L) {
   return `<div class="ctbar"><b>Compare</b><span class="small muted">${n} of ${CT_MAX} props</span><span class="ctgrow"></span>${n ? `<button type="button" class="chipbtn" data-ctclear="1">Clear</button>` : ""}<button type="button" class="chipbtn" data-ctclose="1">✕ Close</button></div>
     <section class="ctverdict" aria-label="Better line"><div class="eyebrow">Better line</div>${v}<p class="small muted ctrule">${CT_RULE}</p>${notes}</section>
     ${n ? `<div class="ctgrid">${L.map((it, i) => ctColHtml(S, i, onSlip, idx)).join("")}</div>` : ""}
-    <p class="small muted">Every number is the board's own for that line (a card's own line keeps the card's numbers). Not financial advice.</p>`;
+    <p class="small muted">Every number is the board's own for that line (a card's own line keeps the card's numbers).</p>`;
 }
 function ctSync() {
   const n = ctList().length, b = $("#ctbtn");

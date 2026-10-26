@@ -446,8 +446,12 @@ def test_page_wording_rules_for_odds():
     assert "Open match on Thunderpick" in HTML and "Open in Thunderpick" not in HTML
     for s in ("Market-implied probability (margin removed, proportional)", "Raw implied (incl. margin)", "Bookmaker margin",
               "Decimal odds", "Retrieved by us", "the feed publishes no quote time", "Exchange comparison",
-              "Thunderpick bookmaker odds first", "no stake or recommendation", "Not financial advice"):
+              "Thunderpick bookmaker odds first", "no stake or recommendation"):
         assert s in HTML, s
+    # owner's standing rule: no "not financial / betting advice" lines on member pages (2026-10-26)
+    lol = (Path(__file__).resolve().parent.parent / "web" / "lol.html").read_text(encoding="utf-8")
+    for page_ in (HTML, lol):
+        assert not re.search(r"(?i)financial advice|betting advice", page_)
     # owner 2026-10-16: no unsure labels on the Moneylines tab
     for s in ("Not usable now", "Model: not validated yet", "not tied to one HLTV match", "Not linked", "price test", "may be in-play"):
         assert s not in re.sub(r"(?m)//.*$", "", HTML.split("/* ML_RENDER_BEGIN")[1].split("/* ML_RENDER_END */")[0]), s
