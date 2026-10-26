@@ -437,7 +437,8 @@ class Handler(BaseHTTPRequestHandler):
                 why = e.reason
         admin_header = self.headers.get("X-Admin-Token")
         ops_admin = bool(admin_header and os.environ.get("ADMIN_TOKEN")
-                         and __import__("hmac").compare_digest(admin_header, os.environ["ADMIN_TOKEN"]))
+                         and __import__("hmac").compare_digest(admin_header.encode("utf-8", "replace"),
+                                                               os.environ["ADMIN_TOKEN"].encode("utf-8")))
         if u.path == "/api/sports/admin/ops":
             if ops_admin or (claims and claims["role"] == "admin"):
                 return self._send(200, ops_with_alerts(), headers=cors)

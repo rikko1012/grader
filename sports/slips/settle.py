@@ -149,7 +149,11 @@ def current_settlements(con, legs):
         k = (l["platform"], l["offer_id"], l["side"])
         if k in out:
             continue
-        out[k] = store.latest(con, "settlement", l["platform"], f"{l['offer_id']}|{l['side']}")
+        s = store.latest(con, "settlement", l["platform"], f"{l['offer_id']}|{l['side']}")
+        if s is None:                   # the side was not offered at settlement: the other side's record holds the same
+            other = "under" if l["side"] == "over" else "over"      # box-score value (at_line scores THIS side) -
+            s = store.latest(con, "settlement", l["platform"], f"{l['offer_id']}|{other}")   # = picks.leg_settlement
+        out[k] = s
     return out
 
 

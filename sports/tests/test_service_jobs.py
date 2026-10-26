@@ -70,8 +70,8 @@ def test_slips_pool_is_prebuilt_under_the_handlers_exact_cache_keys(monkeypatch)
     w.world(con, [(f"h{i}", f"T{i}", i, "over" if i % 2 else "under", 0.6 + 0.01 * i) for i in range(1, 7)])
     con.close()
     real = pm.build
-    monkeypatch.setattr(pm, "build", lambda c, lg, pf, now=None, policy="member": real(c, lg, pf, now=w.NOW,
-                                                                                        policy=policy))
+    monkeypatch.setattr(pm, "build", lambda c, lg, pf, now=None, policy="member", **kw: real(c, lg, pf, now=w.NOW,
+                                                                                              policy=policy, **kw))
     rep = prebuilt.build(["slips_pool"])
     assert rep["slips_pool"]["ok"] and rep["slips_pool"]["keys"] == 4, rep
     import sports.api_slips as api

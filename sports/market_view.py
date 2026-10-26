@@ -125,6 +125,9 @@ def book_list(target, items, event, now, dnp):
         ok, why = capabilities.compatible(target, q)
         if not ok:
             continue                                     # different scope / variant / promo: not the same market
+        if reading(q)["kind"] == "none":
+            continue                                     # owner rule: a book without odds is never shown (no price,
+            #                                              no bid / ask: nothing to show or count) - its priced lines stay
         cand = (abs(q.line - target.line), q.line, rid, q, meta)
         cur = best.get(q.platform)
         if cur is None or cand[:2] < cur[:2]:

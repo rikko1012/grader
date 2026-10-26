@@ -113,7 +113,8 @@ def check(slip, pool, mode="load", now=None, offer_lookup=None, live_current=Non
         elif live_current is not None and live_current(leg.get("platform"), leg.get("offer_id")) != rid:
             problems.append({"leg": i, "code": "changed", "text": f"{lab}: the line changed moments ago - refresh"})
         start = (cur or leg).get("start_utc")
-        if not start or start <= now_s:
+        pool_locked = not eligible and reason == "started / locked"   # the pool's verdict counts when it holds no
+        if not isinstance(start, str) or not start or start <= now_s or pool_locked:   # leg (client time not trusted)
             problems.append({"leg": i, "code": "locked", "text": f"{lab}: game started / locked"})
         if cur is not None:
             age = (now - parse_utc(cur["last_seen_at"])).total_seconds()

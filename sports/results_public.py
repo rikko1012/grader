@@ -112,10 +112,29 @@ def _r(x, n=4):
     return None if x is None else round(float(x), n)
 
 
+def settlement_chunks(con, league):
+    """The CURRENT settlements of this league's events that hold a forecast, a few events at a time (the same stream
+    as snapshots.write_results; was: every settlement of the league ever stored, decoded at once - a season of
+    ~6,000 sides a day outgrows the sheets job's memory cap)."""
+    fc_events = {r[0] for r in con.execute("SELECT DISTINCT event_id FROM records WHERE kind='forecast' AND league = ?",
+                                           (league,))}
+    st_events = sorted(fc_events & {r[0] for r in con.execute(
+        "SELECT DISTINCT event_id FROM records WHERE kind='settlement' AND event_id LIKE ?", (f"{league}:%",))})
+    n = snapshots.RESULTS_EVENTS_PER_PASS
+    for i in range(0, len(st_events), n):
+        yield snapshots._event_settlements(con, st_events[i:i + n])
+
+
 def rows_for(con, league):
-    """One row per settled-or-void forward forecast of this league."""
+    """One row per settled-or-void forward forecast of this league (streamed by event, settlement_chunks)."""
+    rows = []
+    for setts in settlement_chunks(con, league):
+        rows += _rows_from(con, league, setts)
+    return rows
+
+
+def _rows_from(con, league, setts):
     from .settlement import at_line
-    setts = snapshots._current_settlements(con, league)
     # THE forecast <-> settlement link (snapshots.settled_forecast_links: offer identity, plus any ids a settlement
     # names) - production settlements carry no affected_forecast_ids, so keying on those alone found none
     links, fcs = snapshots.settled_forecast_links(con, setts)

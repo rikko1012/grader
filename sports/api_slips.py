@@ -28,6 +28,7 @@ BUILD_TTL = 60
 BUILD_CONCURRENCY = 2
 _BUILD_SLOTS = threading.BoundedSemaphore(BUILD_CONCURRENCY)
 MEMBER_LEG_FIELDS = tuple(f for f in builder.LEG_FIELDS)
+LEGS_MAX_IN = 4 * validate.MAX_LEGS     # a posted slip larger than this is refused unread (validate names 9-32 legs)
 
 
 def _bad_request(fn):
@@ -67,16 +68,21 @@ def _live_current(platform, offer_id):
         return store.current_record_id(con, "offer", platform, offer_id)
 
 
-def _board_markets(league):
-    """Market chance per offer record from the precomputed board snapshot (N4 lean rule); no snapshot -> {}."""
+def _board_markets(league, cached=True):
+    """Market chance (N4 lean rule) and cal-mi-1 chance per offer record from the precomputed board snapshots; no
+    snapshot -> {}. One board parsed at a time (memory); cached=False (worker prebuild) skips the service file cache."""
     from . import api_board
-    boards = []
+    mk, ca = {}, {}
     for name in ("board.json", "board_more.json"):
+        p = api_board._root() / league / name
         try:
-            boards.append(json.loads(api_board._read(api_board._root() / league / name)))
+            b = json.loads(api_board._read(p) if cached else p.read_bytes())
         except (api_board.NotReady, ValueError, OSError):
             continue
-    return poolmod.market_by_record(boards), poolmod.cal_by_record(boards)
+        mk.update(poolmod.market_by_record([b]))
+        ca.update(poolmod.cal_by_record([b]))
+        del b
+    return mk, ca
 
 
 def _pool(league, platform, policy="member"):
@@ -192,6 +198,10 @@ def _slip_in(q):
         raise ValueError("slip league / platform invalid")
     if not isinstance(slip.get("legs"), list):
         raise ValueError("slip legs expected")
+    if len(slip["legs"]) > LEGS_MAX_IN:
+        raise ValueError(f"at most {LEGS_MAX_IN} legs")
+    if not all(isinstance(l, dict) for l in slip["legs"]):
+        raise ValueError("each leg is an object")       # was: AttributeError deep in the check -> 503
     return slip
 
 
@@ -236,8 +246,10 @@ def settle_view(req):
     q = _args(req)
     slip = _slip_in(q)
     legs = slip["legs"]
+    if not 1 <= len(legs) <= validate.MAX_LEGS:         # one store read per leg: bounded like a copy check
+        raise ValueError(f"a slip holds 1-{validate.MAX_LEGS} picks")
     for l in legs:
-        if not all(l.get(k) for k in ("platform", "offer_id", "side")):
+        if not all(isinstance(l.get(k), str) and l.get(k) for k in ("platform", "offer_id", "side")):
             raise ValueError("each leg needs platform, offer_id and side")
     with web.store_ro() as con:
         by = settle.current_settlements(con, legs)
