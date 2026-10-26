@@ -492,7 +492,7 @@ function others(x) {
 function factorsHtml(x) {
   const F = x.factors, tw = x.team_win || (F && F.team_win) || {};
   if (!F && !tw.elo) return "";
-  const m = tw.market || {}, pw = v => v == null ? "–" : Math.round(v * 100) + "%";
+  const m = tw.market || {}, pw = v => v == null ? "–" : (v * 100).toFixed(1) + "%";   // chances to 0.1% (site rule; CS2 shows 70.5%)
   const win = `<div class="grid small"><div><span class="k">Team win chance · model (Elo)</span><b>${pw(tw.elo)}</b></div>
     <div><span class="k">Team win chance · market</span>${m.found ? `<b>${pw(m.p)}</b> <span class="faint">Polymarket${m.liquidity != null ? " · $" + Number(m.liquidity).toLocaleString() + " liquidity" : ""}</span>` : `<span class="faint">no open market</span>`}</div></div>
     <div class="small faint" style="margin-top:4px">The model's win chance is in the projection. The market's is saved with every forecast and is tested against results before it can count.</div>`;

@@ -24,6 +24,7 @@ REFRESH = 5 * 60
 _BOARD = {"at": 0.0, "rows": [], "error": None}
 _LOCK = threading.Lock()
 _BUSY = [False]
+_START = threading.Lock()      # makes "not busy -> busy" one step: concurrent member reads start ONE refresh, never several
 
 
 def norm(s):
@@ -281,8 +282,11 @@ def board(wait=False):
     """The current board. Stale -> refreshed in the background (or inline with wait=True)."""
     stale = time.time() - max(_BOARD["at"], _BOARD.get("tried", 0)) > REFRESH
     wait = wait or not (_BOARD["at"] or _BOARD.get("tried"))      # very first load: wait for it
-    if stale and not _BUSY[0]:
-        _BUSY[0] = True
+    with _START:                                       # 700 members at once: only the first stale read starts a refresh
+        start = stale and not _BUSY[0]
+        if start:
+            _BUSY[0] = True
+    if start:
         if wait:
             _refresh()
         else:
