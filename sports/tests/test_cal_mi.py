@@ -119,7 +119,7 @@ def test_committed_default_is_valid():
 
 
 # ------------------------------------------------------------------------------------------------- walk-forward
-def _rows(days=4, per_day=60, games_per_day=3, seed=1):
+def _rows(days=4, per_day=60, games_per_day=3, seed=1, a=0.3):
     import numpy as np
     rng = np.random.default_rng(seed)
     out = []
@@ -127,7 +127,7 @@ def _rows(days=4, per_day=60, games_per_day=3, seed=1):
         for i in range(per_day):
             ps = float(rng.uniform(0.2, 0.8))
             pm = float(rng.uniform(0.3, 0.7))
-            hit = float(rng.uniform() < cal._sig(0.3 + 0.3 * cal._logit(ps) + 0.8 * cal._logit(pm)))
+            hit = float(rng.uniform() < cal._sig(a + 0.3 * cal._logit(ps) + 0.8 * cal._logit(pm)))
             out.append({"fid": f"f{d}-{i}", "league": "nba", "stat": "points", "event": f"e{d}-{i % games_per_day}",
                         "line": 20.5, "po": ps, "pu": 1 - ps, "pp": 0.0, "ps": ps, "pm": pm if i % 3 else None,
                         "hit": hit, "forecast_at": f"2026-10-{20 + d:02d}T20:{i % 60:02d}:00Z",
@@ -172,7 +172,7 @@ def test_changing_a_later_outcome_never_changes_an_earlier_forecast():
 
 
 def test_fit_recovers_market_weight_and_report_verdict():
-    rows = _rows(days=6, per_day=150, games_per_day=10)
+    rows = _rows(days=6, per_day=150, games_per_day=10, a=0.0)   # ~50% over rate: A8a balance check satisfiable
     p = cal.fit_params(rows)["nba:points"]
     assert p["level_M"] == "stat" and p["M"][2] > 0.4                   # the market carries information here
     rep = cal.report(cal.walk(rows))["nba:points"]
@@ -314,3 +314,28 @@ console.log("ok");
 
 def test_weights_path_is_in_sports_data_dir():
     assert cal.weights_path() == config.DATA_DIR / "model" / "cal_mi.json"
+
+
+def _scored(q_hit, q_miss, live=0.4, days=("2026-10-24", "2026-10-25"), games=8, per=10):
+    out = []
+    for d in days:
+        for g in range(games):
+            for i in range(per):
+                hit = i % 2 == 0
+                r = {"league": "nba", "stat": "points", "event": f"{d}-g{g}", "forecast_at": f"{d}T23:00:00Z",
+                     "hit": 1.0 if hit else 0.0, "ps": live}
+                out.append((r, q_hit if hit else q_miss, "M", None))
+    return out
+
+
+def test_a8a_balance_check_blocks_a_one_sided_log_loss_pass():
+    """A8a (owner 2026-10-26): a log-loss gain from calling Over on every prop after an Over night must not switch a
+    market on - |share favouring Over - over rate| <= 0.15 is required on BOTH pass paths."""
+    one_sided = cal.report(_scored(0.95, 0.55))["nba:points"]
+    assert one_sided["logloss_cal_minus_live"]["ci_game"][1] < 0
+    assert one_sided["cal_mi"]["share_over_favoured"] == 1.0
+    assert one_sided["verdict"] == "FAIL" and one_sided["on"] is False
+    assert "share Over" in one_sided["why"]
+    balanced = cal.report(_scored(0.8, 0.45, live=0.5))["nba:points"]
+    assert abs(balanced["cal_mi"]["share_over_favoured"] - balanced["cal_mi"]["over_rate"]) <= cal.SHARE_TOL
+    assert balanced["verdict"].startswith("PASS") and balanced["on"] is True
