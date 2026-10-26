@@ -185,6 +185,35 @@ def test_4_qint_and_qdates():
     assert server.qdates({"from": "2026-10-01", "to": "2026-11-02"})[1] == "max 31 days per call"
 
 
+# ------------------------------------------------------------------ 6: /admin reads light fields for its counts, full rows only for the list
+def test_6_admin_report_reads_full_rows_only_for_the_listed_picks(admin, pickdb, monkeypatch):
+    con = picklog._db()
+    con.execute("UPDATE picks SET status = CASE WHEN id % 2 THEN 'settled' ELSE 'open' END, hit = id % 3 = 0, p_pick = 0.56 + id / 100, "
+                "units = 0.5, clv = CASE WHEN id = 3 THEN 1.5 ELSE NULL END, logged_at = '2026-10-20T10:00:00', pick = 'More', grade = 'B'")
+    con.commit()
+    con.close()
+    monkeypatch.setattr(picklog, "REPORT_ROWS", 2)
+    real = picklog._read_db
+    sqls = []
+
+    class Spy:
+        def __init__(self, c):
+            self.c = c
+
+        def execute(self, sql, *a):
+            sqls.append(sql)
+            return self.c.execute(sql, *a)
+
+        def close(self):
+            self.c.close()
+    monkeypatch.setattr(picklog, "_read_db", lambda: Spy(real()))
+    r = picklog.report()
+    assert r["total"] == 7 and r["open"] == 3 and r["settled"] == 4 and r["clv_n"] == 1
+    assert [x["id"] for x in r["rows"]] == [7, 6] and r["rows"][0]["factors"]
+    assert all("LIMIT" in s for s in sqls if "SELECT *" in s)              # never every row with factors
+    assert get(f"/admin?token={TOK}").code == 200
+
+
 # ------------------------------------------------------------------ 5: LoL team win chance to 0.1% like every chance on the site
 def test_5_lol_team_win_chance_is_shown_to_one_decimal():
     html = (ROOT / "web" / "lol.html").read_text(encoding="utf-8")

@@ -2367,10 +2367,19 @@ def _forecast_cols():
             con.close()
 
 
+REPORT_ROWS = 300                       # the newest picks the /admin page lists in full
+
+
 def report():
+    """The /admin pick-log page. 2026-10-26 audit: it read EVERY pick with SELECT * (factors and results, ~4-5 KB a row)
+    into memory to count and bucket a handful of fields and list 300 rows. Now the counts read only the fields they use
+    (every pick, light), and only the newest REPORT_ROWS picks are read in full. Same answer."""
     con = _read_db()
     try:
-        rows = [dict(r) for r in con.execute("SELECT * FROM picks WHERE COALESCE(test, 0) = 0 ORDER BY id DESC")]
+        rows = [dict(r) for r in con.execute("SELECT id, status, hit, p_pick, units, clv FROM picks "
+                                             "WHERE COALESCE(test, 0) = 0 ORDER BY id DESC")]
+        shown = [dict(r) for r in con.execute("SELECT * FROM picks WHERE COALESCE(test, 0) = 0 ORDER BY id DESC LIMIT ?",
+                                              (REPORT_ROWS,))]
     finally:
         con.close()
     settled = [r for r in rows if r["status"] == "settled"]
@@ -2405,5 +2414,5 @@ def report():
         "units_net_flat": round(units_won, 2),
         "clv_avg": round(sum(clv) / len(clv), 2) if clv else None, "clv_n": len(clv),
         "clv_positive": round(sum(c > 0 for c in clv) / len(clv), 3) if clv else None,
-        "rows": rows[:300],
+        "rows": shown,
     }

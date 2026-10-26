@@ -17,6 +17,7 @@ import copy
 import gzip
 import hashlib
 import json
+import math
 import re
 import secrets
 import shutil
@@ -5188,18 +5189,25 @@ class Handler(BaseHTTPRequestHandler):
         def pct(rows):
             return [dict(x, printed=f"{x['printed']:.1%}", actual=f"{x['actual']:.1%}") for x in rows]
 
+        def s(v):                                      # any stored value as escaped text; NULL = empty (2026-10-26 audit:
+            return "" if v is None else e(str(v))      # a pick with no chance / line type / grade made the whole page a 500)
+
+        def pc(v):
+            return f"{v:.0%}" if isinstance(v, (int, float)) and math.isfinite(v) else ""
+
         picks = []
         for x in r["rows"]:
+            x = collections.defaultdict(lambda: None, x)
             form = (f"<form method=post action=/admin/closing><input type=hidden name=token value='{tok}'>"
-                    f"<input type=hidden name=id value={x['id']}><input name=closing size=4 "
-                    f"value='{'' if x['closing_line'] is None else x['closing_line']}'><button>save</button></form>")
-            picks.append(f"<tr><td>{x['id']}</td><td>{e(x['logged_at'][:16])}</td><td>{e(x['player'])}</td>"
-                         f"<td>{e(x['opponent'] or '')}</td><td>{x['prop']} {x['line']} {e(x['line_type'])}</td>"
-                         f"<td><b>{x['pick']}</b> {e(x['grade'])} {x['p_pick']:.0%} {x['units']}U</td>"
-                         f"<td>{x['lambda']}</td><td>{e(x['market'] or '')}</td><td>{e(x['rec_hit'] or '')}</td>"
-                         f"<td>{x['status']}</td><td>{'' if x['actual'] is None else x['actual']}</td>"
+                    f"<input type=hidden name=id value={s(x['id'])}><input name=closing size=4 "
+                    f"value='{s(x['closing_line'])}'><button>save</button></form>")
+            picks.append(f"<tr><td>{s(x['id'])}</td><td>{s((x['logged_at'] or '')[:16])}</td><td>{s(x['player'])}</td>"
+                         f"<td>{s(x['opponent'])}</td><td>{s(x['prop'])} {s(x['line'])} {s(x['line_type'])}</td>"
+                         f"<td><b>{s(x['pick'])}</b> {s(x['grade'])} {pc(x['p_pick'])} {s(x['units'])}U</td>"
+                         f"<td>{s(x['lambda'])}</td><td>{s(x['market'])}</td><td>{s(x['rec_hit'])}</td>"
+                         f"<td>{s(x['status'])}</td><td>{s(x['actual'])}</td>"
                          f"<td>{'' if x['hit'] is None else ('HIT' if x['hit'] else 'miss')}</td>"
-                         f"<td>{form}</td><td>{'' if x['clv'] is None else x['clv']}</td><td>{x['requests']}</td></tr>")
+                         f"<td>{form}</td><td>{s(x['clv'])}</td><td>{s(x['requests'])}</td></tr>")
         page = f"""<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
 <title>Pick log</title><style>body{{font:14px system-ui;background:#0b0e13;color:#e8ecf3;margin:16px}}
 table{{border-collapse:collapse;margin:8px 0 20px}}td,th{{border:1px solid #252e3f;padding:4px 8px;text-align:left}}
