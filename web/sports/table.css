@@ -27,7 +27,7 @@
 .sw .sw-tb-book{color:var(--muted);font-size:12px}
 .sw .sw-tb-note{display:block;font-size:11px;color:var(--faint)}
 .sw .sw-tb-note.warn{color:var(--warn)}
-.sw .sw-tb-lean{display:inline-flex;align-items:center;border-radius:6px;padding:0 7px;min-height:22px;font-weight:700;font-size:12px;border:1px solid var(--line-2)}
+.sw .sw-tb-lean{display:inline-flex;flex-wrap:wrap;align-items:baseline;align-content:center;gap:0 6px;max-width:100%;border-radius:6px;padding:2px 7px;min-height:22px;font-weight:700;font-size:12px;border:1px solid var(--line-2)}
 .sw .sw-tb-lean.over{color:var(--over);border-color:#5fd17a88}
 .sw .sw-tb-lean.under{color:var(--under);border-color:#ff9f6b88}
 .sw .sw-tb-lean.none{color:var(--muted);font-weight:500}
@@ -65,6 +65,8 @@
   .sw .sw-tb-mkt::before,.sw .sw-tb-edge::before,.sw .sw-tb-hit::before,.sw .sw-tb-hit5::before{content:attr(data-label) " ";color:var(--faint);font-size:11px}
   .sw .sw-tb-gap{margin-left:0;margin-top:2px}
   .sw .sw-tb-leanc{display:flex!important;flex-direction:column;align-items:flex-end}
+  .sw .sw-tb-lean{justify-content:flex-end;text-align:right}          /* phones: the grade tag wraps under the letter, never over the line */
+  .sw .sw-tb-lean .sw-grade-tag,.sw .sw-tb-lean .sw-grade-nv{white-space:normal}
 }
 .sw .sw-tb .sw-p{white-space:nowrap}
 .sw .sw-fx-statall{flex:0 0 auto;min-height:40px;border-radius:999px;background:#101620;border:1px solid var(--line-2);padding:0 12px;font-size:12.5px;color:var(--muted);max-width:100%}
@@ -75,3 +77,10 @@
 .sw .sw-grade-nv{color:var(--muted)}
 .sw .sw-grade-banner{margin:0 0 8px;font-size:12.5px;color:var(--muted)}
 .sw .sw-grade-line{margin:4px 0 0;font-size:12.5px}
+/* QoL (audit 2026-10-26): wide screens - the table fits, so its header sticks under the 68 px site header while the
+   page scrolls (inside an overflow box it could only stick to the box) */
+@media(min-width:1100px){
+  .sw .sw-tb-wrap{overflow:visible}
+  .sw .sw-tb thead th{top:68px;z-index:3}
+  .sw .sw-tb thead th:first-child{border-top-left-radius:12px}.sw .sw-tb thead th:last-child{border-top-right-radius:12px}
+}

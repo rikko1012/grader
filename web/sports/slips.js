@@ -92,7 +92,7 @@
   function saveCtx() { store("ss:ctx", ctx()); }
   function onCtx() {
     fillEntry(getDraft().entry_type);
-    saveCtx(); lastBatch = null;
+    saveCtx(); lastBatch = null; lastCheck = null;          // a check belongs to one draft (league + platform)
     $("ss-results").innerHTML = '<p class="ss-empty">Build suggestions for ' + esc(LABEL[ctx().platform]) + " " + esc(ctx().league.toUpperCase()) + ".</p>";
     loadPool(); renderDraft(); if (getDraft().legs.length) check("load");
   }
@@ -109,16 +109,21 @@
     var ex = Object.keys(p.excluded || {}).sort(function (a, b) { return p.excluded[b] - p.excluded[a]; });
     return ex.map(function (k) { return "<li>" + esc(L.slipReason(k)) + ': <span class="ss-num">' + int(p.excluded[k]) + "</span></li>"; }).join("");
   }
+  // a reply for another league / platform (the member switched while it loaded) or for a page that was left is dropped
+  var SEQ = { pool: 0, check: 0, build: 0 };
+  function stale(kind, n, key, el) { return n !== SEQ[kind] || key !== draftKey() || !el || !el.isConnected; }
   async function loadPool() {
     var el = $("ss-pool"); el.innerHTML = '<div class="ss-skel" aria-label="Loading picks"></div>';
+    var n = ++SEQ.pool, key = draftKey();
     try {
       var p = await api("/api/sports/slips/pool", { league: ctx().league, platform: ctx().platform });
+      if (stale("pool", n, key, el)) return;
       lastPool = p;
       var nres = p.research_legs != null ? p.research_legs : (p.legs || []).filter(function (l) { return l.research_only; }).length;
       researchBanner(nres > 0 || draftHasResearch());
       $("ss-build").disabled = !p.eligible;
       if (!p.eligible) {                               // never a silent "0 picks": a clear locked state with the reasons
-        el.innerHTML = '<div class="ss-locked" role="status"><p><strong>No pick can go into a ' + esc(LABEL[ctx().platform]) + " " + esc(ctx().league.toUpperCase()) +
+        el.innerHTML = '<div class="ss-locked" role="status"><p><strong>No pick can go into ' + (/^[AEIOU]/.test(LABEL[ctx().platform] || "") ? "an " : "a ") + esc(LABEL[ctx().platform]) + " " + esc(ctx().league.toUpperCase()) +
           " slip right now.</strong> " + (p.offers ? "Scout holds " + int(p.offers) + " " + esc(LABEL[ctx().platform]) + " lines, and none can be used yet:" : "No " + esc(LABEL[ctx().platform]) + " lines are on the board yet.") + "</p>" +
           (p.offers ? '<ul class="ss-reasons">' + reasonList(p) + "</ul>" : "") +
           '<p class="ss-help">Lines open again as books post the next games and Scout projects them. Prices as of ' + esc(when(p.snapshot_at)) + ".</p></div>";
@@ -127,7 +132,7 @@
       el.innerHTML = '<p><strong class="ss-num">' + int(p.eligible) + "</strong> picks can go into a slip, of " + int(p.offers) +
         " lines - prices as of " + esc(when(p.snapshot_at)) + "." + (nres ? " " + int(nres) + " of them are research estimates (stake 0)." : "") + "</p>" +
         (Object.keys(p.excluded || {}).length ? "<details><summary>Why other lines are left out</summary><ul class=\"ss-reasons\">" + reasonList(p) + "</ul></details>" : "");
-    } catch (e) { el.innerHTML = '<p class="ss-note">' + esc(e.message) + "</p>"; }
+    } catch (e) { if (!stale("pool", n, key, el)) el.innerHTML = '<p class="ss-note">' + esc(e.message) + "</p>"; }
   }
   function draftHasResearch() {
     var d = getDraft();
@@ -152,10 +157,12 @@
     var s = settings();
     if (!Object.keys(s.sizes).length) { out.innerHTML = '<p class="ss-note">Ask for at least one slip.</p>'; return; }
     btn.disabled = true; out.innerHTML = '<div class="ss-skel"></div><div class="ss-skel"></div>';
+    var n = ++SEQ.build, key = draftKey();
     try {
       var b = await api("/api/sports/slips/build", { league: ctx().league, platform: ctx().platform, settings: s });
+      if (stale("build", n, key, out)) return;
       lastBatch = b; renderBatch(b);
-    } catch (e) { out.innerHTML = '<p class="ss-banner ss-bad" role="alert">' + esc(e.message) + "</p>"; }
+    } catch (e) { if (!stale("build", n, key, out)) out.innerHTML = '<p class="ss-banner ss-bad" role="alert">' + esc(e.message) + "</p>"; }
     finally { btn.disabled = false; }
   }
   function legRow(platform, l, extra) {
@@ -265,8 +272,10 @@
     var d = getDraft(), box = $("ss-check");
     if (!d.legs.length) return null;
     box.innerHTML = '<p class="ss-note">Checking with the server...</p>';
+    var n = ++SEQ.check, key = draftKey();
     try {
       var r = await api("/api/sports/slips/validate", { mode: mode, slip: slipPayload(d) });
+      if (stale("check", n, key, box)) return null;  // never a check of another draft (takeCurrent reads lastCheck)
       lastCheck = r;
       if (r.ok && r.payout_key && !d.payout_key) { d.payout_key = r.payout_key; store(draftKey(), d); }
       var h = r.ok ? '<p class="ss-okmsg">Every pick checked at ' + esc(when(r.checked_at)) + " (prices as of " + esc(ago(r.snapshot_at)) + ").</p>"
@@ -275,7 +284,7 @@
       h += jointText(r.joint) + payoutList(r.payout);
       box.innerHTML = h; renderDraft();
       return r;
-    } catch (e) { box.innerHTML = '<p class="ss-banner ss-bad" role="alert">' + esc(e.message) + " Nothing was copied.</p>"; return null; }
+    } catch (e) { if (!stale("check", n, key, box)) box.innerHTML = '<p class="ss-banner ss-bad" role="alert">' + esc(e.message) + " Nothing was copied.</p>"; return null; }
   }
   async function copy() {
     var r = await check("copy");

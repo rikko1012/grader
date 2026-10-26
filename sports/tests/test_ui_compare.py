@@ -39,7 +39,7 @@ def test_assets_wired_once_scoped_and_no_money_words():
     shown = " ".join(re.findall(r'"([^"]*)"', js))
     for word in ("ROI", "profit", "EV", "expected value", "joint", "parlay odds"):
         assert not re.search(r"\b" + word + r"\b", shown, flags=re.I), word
-    assert "Same game - results are related" in js and "Research" in js and "No pick" in js
+    assert "Same game - results are related" in js and "Research" in js and "Not ranked" in js and "No pick" not in js
     assert "localStorage.setItem" in js and "try {" in js
     assert sum(1 for k in web.ROUTES if k.startswith("/api/sports/compare")) == 1
 
@@ -200,12 +200,12 @@ def test_add_from_board_compare_verdict_same_game_and_storage(browser):
     page.goto("/sports#/compare?lg=nba")
     page.wait_for_selector(".sw-cmp-card")
     assert page.locator('#sw-views a[aria-current="page"]').get_attribute("data-view") == "compare"
-    # verdict: a (edge 6, Scout 62%) > b (edge 6, Scout 60%) > c (edge 3); d held -> No pick with the reason
+    # verdict: a (edge 6, Scout 62%) > b (edge 6, Scout 60%) > c (edge 3); d held -> Not ranked with the reason
     assert page.locator(".sw-cmp-best").get_attribute("data-best") == "offer:prizepicks:a1:r1:ab"
     ranks = page.evaluate("() => [...document.querySelectorAll('.sw-cmp-card')].map(c => c.dataset.rid + '=' + c.querySelector('[data-rank]').dataset.rank)")
     assert ranks == ["offer:prizepicks:a1:r1:ab=1", "offer:prizepicks:b1:r1:ab=2", "offer:underdog:c1:r1:ab=3", "offer:prizepicks:d1:r1:ab=none"], ranks
     vb = page.locator(".sw-cmp-verdict-box").inner_text()
-    assert "Better line = the highest edge" in vb and "No pick: Fixture Delta" in vb and "Held: projection is under 25% of the line" in vb
+    assert "Better line = the highest edge" in vb and "Not ranked: Fixture Delta" in vb and "Held: projection is under 25% of the line" in vb
     assert "Same game - results are related" in vb and "Fixture Alpha Points, Fixture Bravo Points" in vb
     assert "joint" not in vb.lower()
     first = page.locator(".sw-cmp-card").first.text_content()

@@ -17,6 +17,7 @@ import copy
 import gzip
 import hashlib
 import json
+import math
 import re
 import secrets
 import shutil
@@ -1027,6 +1028,7 @@ def ops_checks(now=None):
 
 def studio_history_payload(batches, now=None):
     """Leg results and slip outcomes for member_batches() (pure apart from the pick-log read)."""
+    import slip_builder
     now = now or datetime.now(timezone.utc)
     legs = [l for b in batches for ss in (b.get("slips") or {}).values() for s_ in ss for l in s_.get("legs") or []]
     res = slip_batches.leg_result_from_picks(picklog.rows_for_matches({l.get("match_slug") for l in legs}))
@@ -1036,7 +1038,9 @@ def studio_history_payload(batches, now=None):
         for ss in (b.get("slips") or {}).values():
             for s_ in ss:
                 rs = [res(l) if l.get("prop") != "moneyline" else None for l in s_.get("legs") or []]
-                started = any(_started(l.get("start"), now) for l in s_.get("legs") or [])
+                # the ONE lock rule (slip_builder.lock_time: listed start, graded match start, saved lock - 2026-10-26
+                # audit: only the listed start counted, so a slip locked at the graded start read 'not started')
+                started = any((lt_ := slip_builder.lock_time(l)) is not None and lt_ <= now for l in s_.get("legs") or [])
                 outcome = ("lost" if "miss" in rs else "won" if rs and all(r == "hit" for r in rs)
                            else "reduced" if rs and all(r in ("hit", "push", "void") for r in rs) else "in play" if started else "not started")
                 slips.append(dict(s_, leg_results=rs, started=started, outcome=outcome))
@@ -1401,7 +1405,12 @@ def _slip_feed(bk):
     shared by every member's check (no lock: a race only builds the same index twice)."""
     b = prizepicks.board() if bk == "prizepicks" else underdog.board()
     rows = b.get("rows") or []
-    key = (b.get("at"), len(rows), id(rows[0]) if rows else None)
+    # the feed's own read identity (2026-10-26 audit: the key held id(rows[0]), but prizepicks.board() hands out fresh row
+    # copies on every call, so the PrizePicks index was rebuilt on every member check): last good read, when Scout took it
+    # in, the feed state (it sets every row's "stale"), the error and the row count; Underdog hands out its own row objects,
+    # so their identity is a valid part of its key (a replaced board is rebuilt even within one "at")
+    key = (b.get("at"), b.get("ingested_at"), b.get("state"), b.get("error"), len(rows),
+           id(rows[0]) if rows and bk != "prizepicks" else None)
     c = _SLIP_IDX.get(bk)
     if c is None or c[0] != key:
         idx = {}
@@ -1499,7 +1508,7 @@ def slip_check(d):
         c = slip_leg_check(l, feeds)
         if c:
             out.append(dict(c, leg=i, nick=l.get("nick"), text=f"{_leg_label(l)}: {c['reason']}"))
-    books_ = {l.get("book") for l in legs if l.get("book")}
+    books_ = {str(l.get("book")) for l in legs if l.get("book")}     # a crafted non-string book: a refusal, never a 500
     if len(books_) > 1 or (books_ and d.get("book") in ("underdog", "prizepicks") and books_ != {d.get("book")}):
         names = sorted({"prizepicks": "PrizePicks", "underdog": "Underdog"}.get(str(b), str(b)) for b in books_ | (
             {d.get("book")} if d.get("book") in ("underdog", "prizepicks") else set()))
@@ -3676,35 +3685,40 @@ def failure_body(e, path=""):
                                               else "Something went wrong - please try again") + f" (ref {ref})"}
 
 
-ADMIN_TAIL_MAX = 5000      # admin tail views (comparisons, PrizePicks line history): at most this many rows a call
-
-
-def admin_last(v, default):
-    """A ?last= / ?limit= value for an admin tail view: a positive integer, at most ADMIN_TAIL_MAX; anything else = default
-    (audit 2026-10-26: int() of a typo was a 500, and no cap let one call load a whole log)."""
-    s = str(v or "").strip()
-    return max(1, min(int(s), ADMIN_TAIL_MAX)) if s.isdigit() and int(s) > 0 else default
-
-
-def tail_lines(path, n):
-    """(total line count, the last n lines) of a text file, streamed - memory is n lines, never the whole file."""
-    import collections as _c
-    try:
-        with open(path, encoding="utf-8") as f:
-            total, dq = 0, _c.deque(maxlen=n)
-            for line in f:
-                total += 1
-                dq.append(line)
-            return total, list(dq)
-    except OSError:
-        return 0, []
-
-
 def token_eq(given, secret):
     """Constant-time token check on bytes (audit 54: compare_digest on str raises TypeError for any non-ASCII value, so
     a stray header or ?token= gave a 500 / a dropped POST instead of a refusal)."""
     import hmac
     return hmac.compare_digest(str(given or "").encode("utf-8", "surrogateescape"), str(secret).encode("utf-8", "surrogateescape"))
+
+
+def qint(q, key, default, lo=None, hi=None):
+    """An integer query parameter for the admin views: a missing or malformed value is the default (2026-10-26 audit:
+    ?n=abc / ?days=abc gave a 500), clamped to [lo, hi] so no parameter can ask for an unbounded answer."""
+    try:
+        v = int(str(q.get(key) if q.get(key) not in (None, "") else default).strip())
+    except (TypeError, ValueError):
+        v = default
+    if lo is not None:
+        v = max(lo, v)
+    if hi is not None:
+        v = min(hi, v)
+    return v
+
+
+def qdates(q, max_days=31):
+    """(from, to) dates of an admin export window, or (None, error) - missing / malformed / reversed / too long windows
+    are a 400 with the reason, never a 500 (2026-10-26 audit: no ?from= raised TypeError inside fromisoformat)."""
+    from datetime import date as _d
+    try:
+        d0, d1 = _d.fromisoformat(str(q.get("from") or "")), _d.fromisoformat(str(q.get("to") or ""))
+    except ValueError:
+        return None, "from and to must be dates (YYYY-MM-DD)"
+    if d1 < d0:
+        return None, "to is before from"
+    if (d1 - d0).days > max_days:
+        return None, f"max {max_days} days per call"
+    return (d0, d1), None
 
 
 # the client (or the proxy) went away mid-response, or a write timed out: nothing more can be sent on that connection -
@@ -4055,12 +4069,19 @@ class Handler(BaseHTTPRequestHandler):
                             out["examples"].append({"player": r["player"], "line": r["line"], "prop": r["prop"], "why": why[0]})
                 return self.send(200, out)
             if u.path == "/admin/comparisons.json" and self.authed(q.get("token")):
-                # the newest `last` snapshots (<= ADMIN_TAIL_MAX), streamed: only those lines are ever held (audit 2026-10-26:
-                # the whole file was read into memory and ?last= was unbounded)
-                n = admin_last(q.get("last"), 500)
-                total, lines = tail_lines(comparison.snapshot_path(), n)
-                return self.send(200, {"version": comparison.VERSION, "total": total, "sources": comparison.SOURCES, "last": n,
-                                       "snapshots": [json.loads(x) for x in lines if x.strip()]})
+                # streamed: only the last n lines are ever held (2026-10-26 audit: the whole file was read per call and
+                # ?last= had no ceiling)
+                n = qint(q, "last", 500, 1, 5000)
+                tail, total = collections.deque(maxlen=n), 0
+                try:
+                    with open(comparison.snapshot_path(), encoding="utf-8") as f:
+                        for x in f:
+                            total += 1
+                            tail.append(x)
+                except OSError:
+                    pass
+                return self.send(200, {"version": comparison.VERSION, "total": total, "sources": comparison.SOURCES,
+                                       "snapshots": [json.loads(x) for x in tail if x.strip()]})
             if u.path == "/admin/slip_batch_results.json" and self.authed(q.get("token")):
                 new = slip_batches.settle_all(slip_batches.leg_result_from_picks(picklog.settlement_rows()))
                 return self.send(200, {"version": slip_batches.VERSION, "new": len(new), "results": slip_batches.results(),
@@ -4103,8 +4124,8 @@ class Handler(BaseHTTPRequestHandler):
                                        "page": picklog.shadow_page(after_id=num("after") or 0, cutoff_id=num("cutoff"),
                                                                    limit=num("limit"), inputs=q.get("inputs") == "1")})
             if u.path == "/admin/picks.json" and self.authed(q.get("token")):
-                # bounded keyset page (audit 2026-10-26: this was the whole picks table with factors in one response -
-                # the class of export that restarted production on 2026-10-14). Page with after=<next_after>&cutoff=<cutoff_id>.
+                # bounded keyset pages (2026-10-26 audit: the whole pick log, factors included, in one response); page
+                # with ?after=<next_after>&cutoff=<cutoff_id> until done
                 num = lambda k: int(q[k]) if (q.get(k) or "").isdigit() else None
                 return self.send(200, picklog.picks_page(after_id=num("after") or 0, cutoff_id=num("cutoff"), limit=num("limit")))
             if u.path == "/admin/mark_tests" and self.authed(q.get("token")):
@@ -4134,7 +4155,7 @@ class Handler(BaseHTTPRequestHandler):
                 for plan in sorted(whop_auth.paid_plans()):
                     st = {}
                     try:
-                        r = _rq.get(whop_auth.MEMBERSHIPS, params={"plan_id": plan, "first": int(q.get("n", 10))}, headers=H_, timeout=20)
+                        r = _rq.get(whop_auth.MEMBERSHIPS, params={"plan_id": plan, "first": qint(q, "n", 10, 1, 100)}, headers=H_, timeout=20)
                         if r.status_code != 200:
                             out["plans"][plan] = f"HTTP {r.status_code}: {whop_auth._why(r)}"; continue
                         for m in r.json().get("data") or []:
@@ -4162,7 +4183,7 @@ class Handler(BaseHTTPRequestHandler):
                 # private: members on one plan and whether the grader lets each in (Whop read-only)
                 import requests as _rq
                 r = _rq.get(whop_auth.MEMBERSHIPS, timeout=20,
-                            params={"plan_id": q.get("plan", ""), "first": int(q.get("n", 15))},
+                            params={"plan_id": q.get("plan", ""), "first": qint(q, "n", 15, 1, 100)},
                             headers={"Authorization": f"Bearer {os.environ.get('WHOP_API_KEY', '')}"})
                 if r.status_code != 200:
                     return self.send(200, {"whop_status": r.status_code, "whop_error": whop_auth._why(r)})
@@ -4175,7 +4196,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, {"plan": q.get("plan"), "memberships": rows})
             if u.path == "/admin/pp_history" and self.authed(q.get("token")):
                 # every PrizePicks line Scout observed: openings, moves, provider-id changes, removals (prizepicks.py)
-                ev = prizepicks.history(q.get("market") or None, admin_last(q.get("limit"), 500))
+                ev = prizepicks.history(q.get("market") or None, qint(q, "limit", 500, 1, 5000))
                 b = prizepicks.board()
                 return self.send(200, {"feed": {k: b.get(k) for k in ("state", "at", "checked_at", "lines", "error", "ingested_at", "source")},
                                        "ingests": prizepicks.ingests(), "events": ev,
@@ -4230,7 +4251,7 @@ class Handler(BaseHTTPRequestHandler):
                                "upcoming": rows("""SELECT book, count(*) n, sum((updated_at >= now() - interval '90 minutes')::int) seen_90min
                                             FROM prop_lines WHERE start_time > now() GROUP BY 1"""),
                                "sample": rows("""SELECT * FROM prop_lines WHERE book = %s AND start_time > now() ORDER BY start_time, player LIMIT %s""",
-                                              (q.get("book") or "prizepicks", int(q.get("n") or 12))),
+                                              (q.get("book") or "prizepicks", qint(q, "n", 12, 1, 500))),
                                "grades_columns": rows("""SELECT column_name, data_type FROM information_schema.columns
                                                   WHERE table_name = 'prop_grades' ORDER BY ordinal_position"""),
                                "grades_sample": rows("SELECT * FROM prop_grades ORDER BY 1 DESC LIMIT 3")}
@@ -4293,12 +4314,17 @@ class Handler(BaseHTTPRequestHandler):
                 db = BOARD_FILE.parent / "ud_moves.db"
                 if not db.exists():
                     return self.send(200, {"rows": []})
-                con = sqlite3.connect(db, timeout=10)
+                # bounded pages (2026-10-26 audit: ?since= with no end returned the whole table): rows in insertion order,
+                # page on with ?after=<next_after>; done = nothing more after this page
+                lim_, aft_ = qint(q, "limit", 5000, 1, 5000), qint(q, "after", 0, 0)
+                con = sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True, timeout=10)
                 try:
-                    rows = con.execute("SELECT * FROM moves WHERE at >= ? ORDER BY at", (q.get("since", ""),)).fetchall()
+                    got = con.execute("SELECT rowid, * FROM moves WHERE at >= ? AND rowid > ? ORDER BY rowid LIMIT ?",
+                                      (q.get("since", ""), aft_, lim_)).fetchall()
                 finally:
                     con.close()
-                return self.send(200, {"rows": rows})
+                return self.send(200, {"rows": [list(r[1:]) for r in got], "next_after": got[-1][0] if got else aft_,
+                                       "done": len(got) < lim_, "limit": lim_})
             if u.path == "/admin/hltv_env_rows" and self.authed(q.get("token")):
                 # private analysis: every player-map since `since` with LAN / online (match_overview.lan)
                 import hltv
@@ -4373,7 +4399,7 @@ class Handler(BaseHTTPRequestHandler):
                             JOIN matches own ON own.matchid = ps.matchid AND own.teamid = ps.teamid AND own.mapid = ps.mapid AND own.sideid = 0
                             JOIN matches opp ON opp.matchid = ps.matchid AND opp.teamid <> ps.teamid AND opp.mapid = ps.mapid AND opp.sideid = 0
                             LEFT JOIN match_maps mm ON mm.matchid = ps.matchid AND mm.mapid = ps.mapid
-                            WHERE ps.sideid = 0 AND ps.mapid <> 0 AND mo.date >= current_date - %s""", (int(q.get("days") or 120),))
+                            WHERE ps.sideid = 0 AND ps.mapid <> 0 AND mo.date >= current_date - %s""", (qint(q, "days", 120, 1, 3650),))
                         rows = cur.fetchall()
                     return self.send(200, {"rows": rows})
                 finally:
@@ -4434,7 +4460,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, veto_serve.admin(q))
             if u.path == "/admin/veto_backtest" and self.authed(q.get("token")):
                 import hltv
-                return self.send(200, hltv.veto_backtest(int(q.get("days") or 30), int(q.get("limit") or 250)))
+                return self.send(200, hltv.veto_backtest(qint(q, "days", 30, 1, 365), qint(q, "limit", 250, 1, 2000)))
             if u.path == "/admin/hltv_maps" and self.authed(q.get("token")):
                 import hltv
                 items = json.loads(q.get("items") or "[]")[:80]      # [[nick, team, day], ...]
@@ -4481,10 +4507,10 @@ class Handler(BaseHTTPRequestHandler):
                 # performance-model dataset (2026-10-08 rebuild): one row per player per map, totals side, with the
                 # map's rounds / result, map order, LAN flag, event, both teams; date window <= 31 days per call
                 import hltv
-                from datetime import date as _d
-                d0, d1 = _d.fromisoformat(q.get("from")), _d.fromisoformat(q.get("to"))
-                if (d1 - d0).days > 31:
-                    return self.send(400, {"error": "max 31 days per call"})
+                win_, bad_ = qdates(q)
+                if bad_:
+                    return self.send(400, {"error": bad_})
+                d0, d1 = win_
                 con = hltv._connect()
                 try:
                     with con.cursor() as cur:
@@ -4515,10 +4541,10 @@ class Handler(BaseHTTPRequestHandler):
                 # COLLECTION ONLY (2026-10-09): per-side player rows (sideid 1/2 as stored by the scraper) and every
                 # per-side score row, for the CT/T factor test; date window <= 31 days per call; never used in grading
                 import hltv
-                from datetime import date as _d
-                d0, d1 = _d.fromisoformat(q.get("from")), _d.fromisoformat(q.get("to"))
-                if (d1 - d0).days > 31:
-                    return self.send(400, {"error": "max 31 days per call"})
+                win_, bad_ = qdates(q)
+                if bad_:
+                    return self.send(400, {"error": bad_})
+                d0, d1 = win_
                 con = hltv._connect()
                 try:
                     with con.cursor() as cur:
@@ -4576,16 +4602,16 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/admin/timings" and self.authed(q.get("token")):
                 return self.send(200, {"member_grades_now": MEMBER_GRADES[0], "board_size": len(BOARD),
                                        "threads": [t.name for t in threading.enumerate()],
-                                       "requests": list(REQ_TIMES)[-int(q.get("n", 60)):],
-                                       "search_wait": list(SEARCH_TIMES)[-int(q.get("s", 0) or 0):] if q.get("s") else [],
-                                       "recent": list(cs2_scout.TIMINGS)[-int(q.get("n", 60)):]})
+                                       "requests": list(REQ_TIMES)[-qint(q, "n", 60, 1):],
+                                       "search_wait": list(SEARCH_TIMES)[-qint(q, "s", 1, 1):] if q.get("s") else [],
+                                       "recent": list(cs2_scout.TIMINGS)[-qint(q, "n", 60, 1):]})
             if u.path == "/admin/probe" and self.authed(q.get("token")):
                 # private: raw shape of the backup data sources (keys never included)
                 import oddspapi
                 return self.send(200, {"oddspapi": oddspapi.probe()})
             if u.path == "/admin/oddspapi_markets" and self.authed(q.get("token")):
                 import oddspapi                           # read-only source inventory (2026-10-09)
-                return self.send(200, oddspapi.markets_inventory(int(q.get("n") or 3)))
+                return self.send(200, oddspapi.markets_inventory(qint(q, "n", 3, 1, 20)))
             return self.send(404, {"error": "not found"})
         except CLIENT_GONE:
             self.close_connection = True                # the client left: not a server failure, nothing more to send
@@ -5188,18 +5214,25 @@ class Handler(BaseHTTPRequestHandler):
         def pct(rows):
             return [dict(x, printed=f"{x['printed']:.1%}", actual=f"{x['actual']:.1%}") for x in rows]
 
+        def s(v):                                      # any stored value as escaped text; NULL = empty (2026-10-26 audit:
+            return "" if v is None else e(str(v))      # a pick with no chance / line type / grade made the whole page a 500)
+
+        def pc(v):
+            return f"{v:.0%}" if isinstance(v, (int, float)) and math.isfinite(v) else ""
+
         picks = []
         for x in r["rows"]:
+            x = collections.defaultdict(lambda: None, x)
             form = (f"<form method=post action=/admin/closing><input type=hidden name=token value='{tok}'>"
-                    f"<input type=hidden name=id value={x['id']}><input name=closing size=4 "
-                    f"value='{'' if x['closing_line'] is None else x['closing_line']}'><button>save</button></form>")
-            picks.append(f"<tr><td>{x['id']}</td><td>{e(x['logged_at'][:16])}</td><td>{e(x['player'])}</td>"
-                         f"<td>{e(x['opponent'] or '')}</td><td>{x['prop']} {x['line']} {e(x['line_type'])}</td>"
-                         f"<td><b>{x['pick']}</b> {e(x['grade'])} {x['p_pick']:.0%} {x['units']}U</td>"
-                         f"<td>{x['lambda']}</td><td>{e(x['market'] or '')}</td><td>{e(x['rec_hit'] or '')}</td>"
-                         f"<td>{x['status']}</td><td>{'' if x['actual'] is None else x['actual']}</td>"
+                    f"<input type=hidden name=id value={s(x['id'])}><input name=closing size=4 "
+                    f"value='{s(x['closing_line'])}'><button>save</button></form>")
+            picks.append(f"<tr><td>{s(x['id'])}</td><td>{s((x['logged_at'] or '')[:16])}</td><td>{s(x['player'])}</td>"
+                         f"<td>{s(x['opponent'])}</td><td>{s(x['prop'])} {s(x['line'])} {s(x['line_type'])}</td>"
+                         f"<td><b>{s(x['pick'])}</b> {s(x['grade'])} {pc(x['p_pick'])} {s(x['units'])}U</td>"
+                         f"<td>{s(x['lambda'])}</td><td>{s(x['market'])}</td><td>{s(x['rec_hit'])}</td>"
+                         f"<td>{s(x['status'])}</td><td>{s(x['actual'])}</td>"
                          f"<td>{'' if x['hit'] is None else ('HIT' if x['hit'] else 'miss')}</td>"
-                         f"<td>{form}</td><td>{'' if x['clv'] is None else x['clv']}</td><td>{x['requests']}</td></tr>")
+                         f"<td>{form}</td><td>{s(x['clv'])}</td><td>{s(x['requests'])}</td></tr>")
         page = f"""<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
 <title>Pick log</title><style>body{{font:14px system-ui;background:#0b0e13;color:#e8ecf3;margin:16px}}
 table{{border-collapse:collapse;margin:8px 0 20px}}td,th{{border:1px solid #252e3f;padding:4px 8px;text-align:left}}

@@ -37,6 +37,7 @@ HISTORY = Path(DATA_DIR) / ".cache" / "pp_lines.jsonl"     # every observed open
 SNAPSHOT = Path(DATA_DIR) / ".cache" / "pp_last.json"     # the last observed board, by market (survives restarts)
 INGEST = Path(DATA_DIR) / ".cache" / "pp_ingest.jsonl"     # each new upstream read Scout took in: both timestamps
 _S = {"at": 0.0, "tried": 0.0, "rows": [], "status": {}, "error": None, "busy": False}
+_START = threading.Lock()      # makes "not busy -> busy" one step (concurrent reads start ONE background load)
 _HLOCK = threading.Lock()
 _SQL = """SELECT line_id, player, team, opponent, start_time, market, maps, line, odds_type, open_line, prev_line, move,
                  moves, moved_at, first_seen, other_line, higher, lower, stat, updated_at
@@ -457,8 +458,11 @@ def board(now=None, wait=False):
     latest read; each row's "stale" is True unless the feed is fresh ("ok"). Never blocks a member (background
     refresh; wait=True only for the board loop's first read)."""
     now = now or time.time()
-    if now - max(_S["at"], _S["tried"]) > REFRESH and not _S["busy"]:
-        _S["busy"] = True
+    with _START:                                       # 700 members at once: only the first stale read starts a load
+        start = now - max(_S["at"], _S["tried"]) > REFRESH and not _S["busy"]
+        if start:
+            _S["busy"] = True
+    if start:
         if wait and not _S["at"]:
             _load()
         else:

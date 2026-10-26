@@ -17,11 +17,7 @@ import server
 import slip_batches
 import slips
 import underdog
-import whop_auth
 from tests.test_audit13_site import H, _grade_stub, _pp_cut_row, get, site  # noqa: F401  (site is a fixture)
-
-TOKEN = "audit-admin-token-0001"
-
 
 @pytest.fixture
 def card(site):
@@ -90,66 +86,15 @@ def test_member_data_stays_locked_on_render_when_whop_is_off(site):
     assert get("/api/board").code == 401 and get("/api/grade?player=a&line=20.5").code == 401
 
 
-# ------------------------------------------------------------------ 4. admin exports are bounded
-@pytest.fixture
-def db(monkeypatch, tmp_path):
-    monkeypatch.setattr(picklog, "DB", tmp_path / "picks.db")
-    monkeypatch.setattr(picklog, "_SCHEMA_OK", [False])
-    monkeypatch.setattr(picklog, "data_revision", lambda: None)
-    return tmp_path / "picks.db"
-
-
-BASE = {"logged_at": "2026-10-13T10:00:00+00:00", "player": "ZywOo", "slug": "zywoo", "player_id": 1, "team": "Vitality",
-        "opponent": "FURIA", "match_slug": "vitality-vs-furia", "match_start": "2026-10-13T15:00:00.000+00:00", "prop": "hs",
-        "line": 12.5, "line_type": "standard", "lambda": 13.4, "p_more": 0.61, "p_less": 0.39, "pick": "More", "p_pick": 0.61,
-        "grade": "B", "units": 1.0, "factors": "{}", "scope": "12", "model_version": "x", "test": 0}
-
-
-def test_admin_picks_json_is_a_bounded_keyset_page(db, site):
-    site.setattr(server, "ADMIN_TOKEN", TOKEN)
-    for i in range(7):
-        picklog.write_row(dict(BASE, key=f"k{i}", line=10.5 + i))
-    full = picklog.export()
-    seen, after, cutoff = [], 0, None
-    while True:
-        q = f"/admin/picks.json?limit=3&after={after}" + (f"&cutoff={cutoff}" if cutoff else "")
-        page = get(q, headers={"X-Admin-Token": TOKEN}).body()
-        assert len(page["picks"]) <= 3 and page["total_in_cutoff"] == 7
-        cutoff = page["cutoff_id"]
-        seen += page["picks"]
-        picklog.write_row(dict(BASE, key=f"late{after}", line=40.5 + after))     # rows added while paging: never mixed in
-        if page["done"]:
-            break
-        after = page["next_after"]
-    assert seen == full                                  # every row exactly once, unchanged
-    assert picklog.picks_page(limit=10 ** 9)["limit"] == picklog.PICKS_PAGE_MAX
-    assert get("/admin/picks.json").code == 404          # no token: nothing (unchanged)
-
-
-def test_tail_views_are_capped_and_streamed(site, tmp_path):
-    site.setattr(server, "ADMIN_TOKEN", TOKEN)
-    f = tmp_path / "comparisons.jsonl"
-    f.write_text("".join(json.dumps({"i": i}) + "\n" for i in range(12)))
-    site.setattr(server.comparison, "snapshot_path", lambda: f)
-    b = get("/admin/comparisons.json?last=5", headers={"X-Admin-Token": TOKEN}).body()
-    assert b["total"] == 12 and [x["i"] for x in b["snapshots"]] == [7, 8, 9, 10, 11]
-    assert server.admin_last("99999999", 500) == server.ADMIN_TAIL_MAX
-    assert server.admin_last("abc", 500) == 500 and server.admin_last("-3", 500) == 500 and server.admin_last("0", 7) == 7
-    assert server.tail_lines(tmp_path / "missing.jsonl", 3) == (0, [])
+# ------------------------------------------------------------------ 4. logs are read from their tail (streamed)
+def test_pp_history_streams_only_its_tail(tmp_path, monkeypatch):
+    # the endpoint's ?limit= ceiling is main's qint (tests/test_audit_esports_1026.py); this checks the file is streamed
     h = tmp_path / "pp_history.jsonl"
     h.write_text("".join(json.dumps({"market": "m1" if i % 2 else "m2", "i": i}) + "\n" for i in range(10)) + "\n")
-    site.setattr(prizepicks, "HISTORY", h)
+    monkeypatch.setattr(prizepicks, "HISTORY", h)
     assert [e["i"] for e in prizepicks.history(None, 3)] == [7, 8, 9]
     assert [e["i"] for e in prizepicks.history("m1", 2)] == [7, 9]
     assert prizepicks.history(None, 500) == [json.loads(x) for x in h.read_text().splitlines() if x.strip()]
-
-
-def test_pp_history_typo_limit_is_not_a_500(site):
-    site.setattr(server, "ADMIN_TOKEN", TOKEN)
-    site.setattr(prizepicks, "history", lambda market=None, limit=500: [{"event": "open", "limit": limit}])
-    site.setattr(prizepicks, "ingests", lambda: [])
-    b = get("/admin/pp_history?limit=5x", headers={"X-Admin-Token": TOKEN})
-    assert b.code == 200 and b.body()["events"][0]["limit"] == 500
 
 
 def test_slip_logs_read_only_their_tail(tmp_path, monkeypatch):

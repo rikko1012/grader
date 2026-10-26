@@ -7,7 +7,7 @@ Endpoints used (all bounded / paged; ~0.3 s between pages):
   /admin/moneylines_status, /admin/thunderpick.json          status / inventory views (no upstream request)
   /admin/ud_moves?since=<day>                                Underdog line moves since a day (one day at a time)
 NOT used: /admin/forecasts.json (unpaged), /admin/picks.json (unbounded full export of the picks table when this was written).
-2026-10-26 update: /admin/picks.json is PAGED since the 2026-10-26 load/security audit (branch audit/load-security): ?after=<next_after>&cutoff=<cutoff_id>&limit=<=1000, keyset pages like /admin/forecasts_page.json; answer {picks, cutoff_id, next_after, done, total_in_cutoff, limit}.
+2026-10-26 update: /admin/picks.json is PAGED since the 2026-10-26 audits (picklog.picks_page): ?after=<next_after>&cutoff=<cutoff_id>&limit=<n> (n <= 1000), keyset pages like /admin/forecasts_page.json; answer {picks, cutoff_id, next_after, done, total_in_cutoff, page_max}.
 
 usage: python fetch_admin.py <what>   what in forecasts | p1 | fh1 | status | udmoves
 """
