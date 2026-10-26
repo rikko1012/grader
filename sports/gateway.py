@@ -38,6 +38,7 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 ASSET_DIR = WEB_DIR / "sports"
 ASSET_TYPES = {".css", ".js", ".svg", ".png", ".webp", ".woff2", ".json", ".html", ".ico"}
 ASSET_MAX = 2_000_000
+_FIXED_TYPES = {".js": "application/javascript", ".css": "text/css", ".json": "application/json", ".html": "text/html"}
 RESP_MAX = 4_000_000
 PLACEHOLDER = (b"<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
                b"<title>Scout Sports</title><body style='font-family:system-ui;margin:2rem'><h1>Scout Sports</h1>"
@@ -102,6 +103,8 @@ def _static(rel):
         ctype = mimetypes.types_map.get(f.suffix.lower(), "application/octet-stream")
         if f.suffix.lower() == ".woff2":
             ctype = "font/woff2"
+        elif f.suffix.lower() in _FIXED_TYPES:          # never the host's registry (Windows can map .js to text/plain,
+            ctype = _FIXED_TYPES[f.suffix.lower()]      # which nosniff browsers refuse to run)
         if ctype.startswith("text/") or ctype in ("application/javascript", "application/json"):
             ctype += "; charset=utf-8"
     try:
@@ -277,6 +280,18 @@ def stats():
     return out
 
 
+def inprocess_member(user):
+    """inprocess mode: the member's pseudonymous id (the same subject a st1 token carries when a secret is set), so one
+    member's per-member rows are never another's. None without a signed-in member."""
+    if not user:
+        return None
+    try:
+        return authtoken.subject(str(user))
+    except authtoken.TokenError:                        # no secret (local dev): still one id per member, never shared
+        import hashlib
+        return "m_" + hashlib.sha256(f"inprocess|{user}".encode("utf-8")).hexdigest()[:20]
+
+
 # ------------------------------------------------------------------------------------------------------ the hook
 def handle_get(path, raw_query, query, member, allowed, admin, headers):
     """-> (status, body_bytes, content_type, headers). Called by server.py's hook only when the path's flag is on
@@ -312,7 +327,7 @@ def handle_get(path, raw_query, query, member, allowed, admin, headers):
         fwd = urlencode({k: v for k, v in query.items() if k != "token"})   # the esports admin token never travels
         return _PROXY.forward(path + (f"?{fwd}" if fwd else ""), tok)
     from . import web                                   # inprocess (dev / tests only)
-    code, body, ctype = web.handle(path, query, allowed=allowed, admin=admin)
+    code, body, ctype = web.handle(path, query, allowed=allowed, admin=admin, member=inprocess_member(member()))
     return code, body, ctype, {}
 
 

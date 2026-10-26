@@ -29,6 +29,7 @@ _REV = re.compile(r":r\d+:[0-9a-f]+$")
 _LIVE = re.compile(r"in_progress|final|post|live")
 _LOCK = threading.Lock()
 _INDEX = {}                          # league -> (stamp, index)
+_BUILD_LOCKS = {lg: threading.Lock() for lg in api_board.LEAGUES}   # one index build per league at a time
 
 
 def offer_id(record_id: str, platform: str) -> str:
@@ -74,10 +75,15 @@ def _load(lg):
         hit = _INDEX.get(lg)
     if hit and hit[0] == stamp:
         return hit[1]
-    boards = [json.loads(api_board._read(p)) if s is not None else None for p, s in zip(paths, stamp)]
-    idx = build_index(boards)
-    with _LOCK:
-        _INDEX[lg] = (stamp, idx)
+    with _BUILD_LOCKS[lg]:              # single flight (audit 2026-10-26): one index build per board change, not one per
+        with _LOCK:                     # member arriving while it is built
+            hit = _INDEX.get(lg)
+        if hit and hit[0] == stamp:
+            return hit[1]
+        boards = [json.loads(api_board._read(p)) if s is not None else None for p, s in zip(paths, stamp)]
+        idx = build_index(boards)
+        with _LOCK:
+            _INDEX[lg] = (stamp, idx)
     return idx
 
 

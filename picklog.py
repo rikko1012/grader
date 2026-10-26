@@ -2138,6 +2138,32 @@ def export():
         con.close()
 
 
+PICKS_PAGE_MAX = 1000       # picks rows per admin page (~4-5 KB of factors a row -> ~5 MB a page at most)
+
+
+def picks_page(after_id=0, cutoff_id=None, limit=None):
+    """Bounded export of the picks table for /admin/picks.json (audit 2026-10-26: that view returned the whole table in
+    one response). Keyset pages on the primary key like forecasts_page: rows with after_id < id <= cutoff_id, ascending,
+    at most `limit` (<= PICKS_PAGE_MAX). The first call fixes cutoff_id (the current max id); pass it back unchanged with
+    after=<next_after> until done. Lock-free WAL read; only one page is in memory. Rows are export()'s rows, unchanged.
+    -> {picks, cutoff_id, next_after, done, total_in_cutoff, limit}"""
+    limit = max(1, min(int(limit or PICKS_PAGE_MAX), PICKS_PAGE_MAX))
+    after_id = max(0, int(after_id or 0))
+    con = _read_db()
+    try:
+        if cutoff_id is None:
+            cutoff_id = con.execute("SELECT COALESCE(MAX(id), 0) FROM picks").fetchone()[0]
+        cutoff_id = int(cutoff_id)
+        rows = [dict(r) for r in con.execute("SELECT * FROM picks WHERE id > ? AND id <= ? ORDER BY id LIMIT ?",
+                                             (after_id, cutoff_id, limit))]
+        total = con.execute("SELECT COUNT(*) FROM picks WHERE id <= ?", (cutoff_id,)).fetchone()[0]
+    finally:
+        con.close()
+    nxt = rows[-1]["id"] if rows else after_id
+    return {"picks": rows, "cutoff_id": cutoff_id, "next_after": nxt, "done": len(rows) < limit or nxt >= cutoff_id,
+            "total_in_cutoff": total, "limit": limit}
+
+
 SETTLEMENT_COLS = "player, prop, scope, match_slug, status, actual, result"   # what slip_batches.leg_result_from_picks reads
 
 

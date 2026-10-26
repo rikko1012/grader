@@ -31,6 +31,7 @@ _FC = re.compile(r"^fc-[0-9a-f]{8,64}$")
 _LOCK = threading.Lock()
 _FILES = {}                         # path -> (mtime_ns, size, bytes)
 _PARSED = {}                        # path -> (mtime_ns, size, obj) for forecasts.json only
+_PARSE_LOCK = threading.Lock()      # one forecasts.json parse at a time (two leagues; a parse is milliseconds)
 
 
 class NotReady(Exception):
@@ -140,10 +141,16 @@ def forecast(req):
     with _LOCK:
         hit = _PARSED.get(key)
     if not hit or hit[0] != st.st_mtime_ns or hit[1] != st.st_size:
-        obj = json.loads(_read(path))
-        hit = (st.st_mtime_ns, st.st_size, obj)
-        with _LOCK:
-            _PARSED[key] = hit
+        # single flight (audit 2026-10-26): when a snapshot rebuild lands, the members asking at that moment wait for ONE
+        # parse of forecasts.json instead of each parsing the whole file at once (every service thread on the same work)
+        with _PARSE_LOCK:
+            with _LOCK:
+                hit = _PARSED.get(key)
+            if not hit or hit[0] != st.st_mtime_ns or hit[1] != st.st_size:
+                obj = json.loads(_read(path))
+                hit = (st.st_mtime_ns, st.st_size, obj)
+                with _LOCK:
+                    _PARSED[key] = hit
     obj = hit[2]
     f = obj["forecasts"].get(fid)
     if f is None:

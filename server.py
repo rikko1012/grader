@@ -1694,6 +1694,7 @@ STUDIO_BODY_MAX = 16 * 1024
 POST_MAX = 20000                  # every other POST body (slip log <= 20,000 bytes; the admin closing-line form far less)
 SLIP_LOG_PER_MIN = 10             # /api/slip_log entries per member per minute
 MC_PER_MIN = 30                   # /api/match_compare requests per member per minute (audit 20; a card asks once per maps / platform)
+SEARCH_BO3_PER_MIN = 60           # /api/search lookups that go to BO3.gg (HLTV index down, query not cached) per member a minute
 MC_TEAM_MAX = 80                  # longest team / opponent name /api/match_compare accepts
 MC_START_AHEAD_D = 21             # latest match start it accepts (days ahead; a past start already projects as today)
 STUDIO_CAP_TTL = 5                # /api/slip_studio/capacity: one answer per settings shared by every member for 5 s
@@ -2614,6 +2615,7 @@ def settled_batches():
 _STUDIO_HITS, _STUDIO_EV_HITS, _STUDIO_GUARD = {}, {}, threading.Lock()
 _SLIP_LOG_HITS = {}                                   # /api/slip_log: its own per-member bucket (studio_rate_ok)
 _MC_HITS = {}                                         # /api/match_compare: its own per-member bucket (audit 20)
+_SEARCH_BO3_HITS = {}                                 # /api/search BO3.gg fallback: its own per-member bucket (audit 2026-10-26)
 
 
 def match_compare_problem(q):
@@ -3674,6 +3676,30 @@ def failure_body(e, path=""):
                                               else "Something went wrong - please try again") + f" (ref {ref})"}
 
 
+ADMIN_TAIL_MAX = 5000      # admin tail views (comparisons, PrizePicks line history): at most this many rows a call
+
+
+def admin_last(v, default):
+    """A ?last= / ?limit= value for an admin tail view: a positive integer, at most ADMIN_TAIL_MAX; anything else = default
+    (audit 2026-10-26: int() of a typo was a 500, and no cap let one call load a whole log)."""
+    s = str(v or "").strip()
+    return max(1, min(int(s), ADMIN_TAIL_MAX)) if s.isdigit() and int(s) > 0 else default
+
+
+def tail_lines(path, n):
+    """(total line count, the last n lines) of a text file, streamed - memory is n lines, never the whole file."""
+    import collections as _c
+    try:
+        with open(path, encoding="utf-8") as f:
+            total, dq = 0, _c.deque(maxlen=n)
+            for line in f:
+                total += 1
+                dq.append(line)
+            return total, list(dq)
+    except OSError:
+        return 0, []
+
+
 def token_eq(given, secret):
     """Constant-time token check on bytes (audit 54: compare_digest on str raises TypeError for any non-ASCII value, so
     a stray header or ?token= gave a 500 / a dropped POST instead of a refusal)."""
@@ -3718,6 +3744,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", headers.pop("Cache-Control", "no-store"))   # no-store unless a member route says so
+        # audit 2026-10-26: no type sniffing; the admin ?token= never travels in a Referer to another site. No frame
+        # header on purpose: Whop shows the member pages inside its app frame.
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "same-origin")
         for k, v in headers.items():
             self.send_header(k, v)
         renew, self._renew = getattr(self, "_renew", None), None
@@ -3776,7 +3806,7 @@ class Handler(BaseHTTPRequestHandler):
         stays locked if the Whop settings are ever missing - it never opens up to everyone."""
         if not whop_auth.enabled():
             return not (os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("RAILWAY_ENVIRONMENT_NAME")
-                        or os.environ.get("REQUIRE_WHOP"))
+                        or os.environ.get("REQUIRE_WHOP") or os.environ.get("RENDER"))   # Render sets RENDER=true itself
         if self.load_test():
             return True
         sess = self.member()
@@ -3889,7 +3919,7 @@ class Handler(BaseHTTPRequestHandler):
                                                               q.get("start"), q.get("maps") or "12", bk_, (q.get("match") or "")[:120] or None),
                                                 book=bk_), default=str).encode()
                 st_, body_ = shared(k_, _mc, ttl=120)
-                return self.send(st_, body_)
+                return self.send_shared(k_, st_, body_, keep=120)     # gzip + ETag/304 once per shared body (audit 2026-10-26)
             if u.path == "/api/line_check":
                 # before a pick goes on a slip: the line Underdog shows NOW for this player / stat / maps
                 book = "prizepicks" if q.get("book") == "prizepicks" else "underdog"
@@ -3916,7 +3946,7 @@ class Handler(BaseHTTPRequestHandler):
                 # the stored, immutable P1 scorecard export (learning cycle), summarised for members - shared by every
                 # member for 5 minutes; never recomputes a forecast
                 st_, body_ = shared(("results",), lambda: (200, json.dumps(results_payload(), default=str).encode()), ttl=300)
-                return self.send(st_, body_)
+                return self.send_shared(("results",), st_, body_, keep=300)
             if u.path == "/api/board":
                 # one build + encoding shared by every member for BOARD_TTL s (2026-10-13 load test: 700 members at once
                 # each rebuilt and encoded the whole board; the local test server refused half the connections meanwhile)
@@ -4025,14 +4055,12 @@ class Handler(BaseHTTPRequestHandler):
                             out["examples"].append({"player": r["player"], "line": r["line"], "prop": r["prop"], "why": why[0]})
                 return self.send(200, out)
             if u.path == "/admin/comparisons.json" and self.authed(q.get("token")):
-                try:
-                    with open(comparison.snapshot_path(), encoding="utf-8") as f:
-                        lines = f.readlines()
-                except OSError:
-                    lines = []
-                n = int(q.get("last") or 500)
-                return self.send(200, {"version": comparison.VERSION, "total": len(lines), "sources": comparison.SOURCES,
-                                       "snapshots": [json.loads(x) for x in lines[-n:] if x.strip()]})
+                # the newest `last` snapshots (<= ADMIN_TAIL_MAX), streamed: only those lines are ever held (audit 2026-10-26:
+                # the whole file was read into memory and ?last= was unbounded)
+                n = admin_last(q.get("last"), 500)
+                total, lines = tail_lines(comparison.snapshot_path(), n)
+                return self.send(200, {"version": comparison.VERSION, "total": total, "sources": comparison.SOURCES, "last": n,
+                                       "snapshots": [json.loads(x) for x in lines if x.strip()]})
             if u.path == "/admin/slip_batch_results.json" and self.authed(q.get("token")):
                 new = slip_batches.settle_all(slip_batches.leg_result_from_picks(picklog.settlement_rows()))
                 return self.send(200, {"version": slip_batches.VERSION, "new": len(new), "results": slip_batches.results(),
@@ -4075,7 +4103,10 @@ class Handler(BaseHTTPRequestHandler):
                                        "page": picklog.shadow_page(after_id=num("after") or 0, cutoff_id=num("cutoff"),
                                                                    limit=num("limit"), inputs=q.get("inputs") == "1")})
             if u.path == "/admin/picks.json" and self.authed(q.get("token")):
-                return self.send(200, {"picks": picklog.export()})
+                # bounded keyset page (audit 2026-10-26: this was the whole picks table with factors in one response -
+                # the class of export that restarted production on 2026-10-14). Page with after=<next_after>&cutoff=<cutoff_id>.
+                num = lambda k: int(q[k]) if (q.get(k) or "").isdigit() else None
+                return self.send(200, picklog.picks_page(after_id=num("after") or 0, cutoff_id=num("cutoff"), limit=num("limit")))
             if u.path == "/admin/mark_tests" and self.authed(q.get("token")):
                 ids = [int(x) for x in (q.get("ids") or "").split(",") if x.strip().isdigit()]
                 picklog.mark_tests(ids)
@@ -4144,7 +4175,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, {"plan": q.get("plan"), "memberships": rows})
             if u.path == "/admin/pp_history" and self.authed(q.get("token")):
                 # every PrizePicks line Scout observed: openings, moves, provider-id changes, removals (prizepicks.py)
-                ev = prizepicks.history(q.get("market") or None, int(q.get("limit") or 500))
+                ev = prizepicks.history(q.get("market") or None, admin_last(q.get("limit"), 500))
                 b = prizepicks.board()
                 return self.send(200, {"feed": {k: b.get(k) for k in ("state", "at", "checked_at", "lines", "error", "ingested_at", "source")},
                                        "ingests": prizepicks.ingests(), "events": ev,
@@ -4605,6 +4636,14 @@ class Handler(BaseHTTPRequestHandler):
                  "name": " ".join(x for x in (h.get("first_name"), h.get("last_name")) if x),
                  "country": (h.get("country") or {}).get("code"), "image": h.get("image_url")}
                 for h in hits]}).encode()
+        # audit 2026-10-26: only the BO3.gg fallback costs an upstream call per new query - one member typing or looping
+        # distinct queries while the HLTV index is down must not spend the shared BO3.gg allowance. Cached queries are free.
+        with _RG:
+            cached_ = _RESULTS.get(("search", ql))
+        if (not (cached_ and time.time() - cached_[0] < 3600) and not self.load_test()
+                and not studio_rate_ok(self.rate_key(), bucket=_SEARCH_BO3_HITS, limit=SEARCH_BO3_PER_MIN)):
+            return self.send(429, {"error": f"Too many searches - limit is {SEARCH_BO3_PER_MIN} a minute while search is on "
+                                            "its backup source. Wait a moment.", "results": []})
         status, body = shared(("search", ql), compute, ttl=3600)
         if status == 200:
             rows = json.loads(body)["results"]
@@ -5005,7 +5044,10 @@ class Handler(BaseHTTPRequestHandler):
             return 200, body, (5 if outage else None)    # an outage grade is reused for 5 s, not 60
 
         status, body = shared(key, compute)
-        return self.send(status, body)
+        # a card is one shared body per key (700 members on one card share it): gzip + ETag made once, 304 on revisit
+        # (audit 2026-10-26: cards of ~60 KB went uncompressed with no-store). Body bytes unchanged; non-200 via send().
+        # The compressed copy is kept 5 s (an outage card is reused for 5 s only - nothing of it may outlive that).
+        return self.send_shared(("card",) + key, status, body, keep=5)
 
     # ------------------------------------------------------------ Phase 10 admin (private)
     def load_test(self):
