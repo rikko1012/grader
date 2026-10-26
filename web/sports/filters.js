@@ -95,7 +95,7 @@
     var ux = getUx(), open = wide() || !!ux.fxOpen;
     var secCount = (f.book !== "all" ? 1 : 0) + (f.side !== "any" ? 1 : 0) + (f.more ? 1 : 0);
     return '<form class="sw-filters sw-fx" role="search" id="sw-bf" onsubmit="return false" aria-label="Prop board filters">' +
-      '<div class="sw-field grow"><label for="sw-q">Player or team</label><input id="sw-q" name="q" type="search" autocomplete="off" placeholder="' + esc(root.SportsLabels && ctx && ctx.lg ? root.SportsLabels.searchPlaceholder(ctx.lg) : "Search players, teams") + '" value="' + esc(f.q) + '"></div>' +
+      '<div class="sw-field grow"><label for="sw-q">Player or team</label><input id="sw-q" name="q" type="search" aria-keyshortcuts="/" autocomplete="off" placeholder="' + esc(root.SportsLabels && ctx && ctx.lg ? root.SportsLabels.searchPlaceholder(ctx.lg) : "Search players, teams") + '" value="' + esc(f.q) + '"></div>' +
       '<div class="sw-fx-group"><span class="sw-fx-lab" id="sw-fx-stat-l">Stat</span><div class="sw-fx-btns" role="group" aria-labelledby="sw-fx-stat-l">' +
         '<button type="button" data-fstat="all" aria-pressed="' + (f.stat === "all") + '">All</button>' +
         quick.map(function (k) { return '<button type="button" data-fstat="' + esc(k) + '" aria-pressed="' + (f.stat === k) + '">' + esc(labels[k]) + "</button>"; }).join("") +

@@ -291,7 +291,7 @@ def test_slate_bettor_wording_details_toggle_lines_and_placeholder(browser):
     card = page.locator(".sw-game").first
     assert card.locator(".sw-srcbtn").count() == 1 and not card.locator(".sw-srcbtn").is_visible()   # behind Details
     gl = card.locator(".sw-glines").inner_text()
-    assert "BOS -4.5" in gl and "221.5" in gl and "BOS win 66%" in gl and "ESPN (DraftKings)" in gl
+    assert "BOS -4.5" in gl and "221.5" in gl and "BOS win 66.0%" in gl and "ESPN (DraftKings)" in gl
     assert card.locator(".sw-spark").count() == 1                   # spread has 2 snapshots; total 1 (no sparkline)
     assert page.locator(".sw-game").nth(1).locator(".sw-glines").count() == 0      # nothing blank without lines
     assert page.get_attribute("#sw-sq", "placeholder") == "e.g. BOS or Celtics"
