@@ -1407,8 +1407,10 @@ def _slip_feed(bk):
     rows = b.get("rows") or []
     # the feed's own read identity (2026-10-26 audit: the key held id(rows[0]), but prizepicks.board() hands out fresh row
     # copies on every call, so the PrizePicks index was rebuilt on every member check): last good read, when Scout took it
-    # in, the feed state (it sets every row's "stale"), the error and the row count
-    key = (b.get("at"), b.get("ingested_at"), b.get("state"), b.get("error"), len(rows))
+    # in, the feed state (it sets every row's "stale"), the error and the row count; Underdog hands out its own row objects,
+    # so their identity is a valid part of its key (a replaced board is rebuilt even within one "at")
+    key = (b.get("at"), b.get("ingested_at"), b.get("state"), b.get("error"), len(rows),
+           id(rows[0]) if rows and bk != "prizepicks" else None)
     c = _SLIP_IDX.get(bk)
     if c is None or c[0] != key:
         idx = {}

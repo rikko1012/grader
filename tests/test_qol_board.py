@@ -42,7 +42,7 @@ def test_why_panel_shows_the_rows_own_reasons(tmp_path):
             _row(5, model_grade="LEAN", grade="LEAN", units=0.0, p=0.53, source="older model (HLTV unreachable)", dstat=["verify", "roster not confirmed"]),
             _row(6, side="Less", unavailable="Unavailable—side no longer offered")]
     out = page(tmp_path, """
-      $("#bbets").checked = false; WHY_OPEN.add("p1|27.5|kills|12|standard|underdog"); drawBoard();
+      $("#bbets").checked = false; WHY_OPEN.add(blKey(boardRows.find(x => x.id === "ud:1"))); drawBoard();   // the row key carries the row id (2026-10-26 audit)
       const r = id => boardRows.find(x => x.id === id);
       return {html: $("#boardout").innerHTML, w1: whyHtml(r("ud:1")), w3: whyHtml(r("ud:3")), w4: whyHtml(r("ud:4")), w5: whyHtml(r("ud:5")),
               w6: whyHtml(r("ud:6")), bl: rowOfBl("p4|27.5|kills|12|standard|underdog").id};""", {"rows": rows})

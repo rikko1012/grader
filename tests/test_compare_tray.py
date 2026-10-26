@@ -49,7 +49,7 @@ def test_tray_prints_the_board_rows_own_numbers_for_the_same_line(tmp_path):
       drawBoard(); const board = $("#boardout").innerHTML;
       for (const id of ["u1", "u2", "p1"]) ctToggle(byId(id), "board");
       const html = ctHtml(ctList());
-      const cells = id => { const r = byId(id), bl = `${r.nick}|${r.line}|${r.prop}|${r.scope}|standard|${r.book}`;
+      const cells = id => { const r = byId(id), bl = blKey(r);   // the row key carries the row id (2026-10-26 audit)
         const h = board.split(`data-bl="${bl}"`)[1].split('<div class="brow2 crow"')[0];
         return {stake: h.split('<div class="c-stake">')[1].split("</div>")[0], pick: boardPickHtml(r, true), chance: chance(r.p, r.prop)}; };
       return {html, board, c: ["u1", "u2", "p1"].map(cells), n: ctList().length, btn: $("#ctbtn").textContent, T};
