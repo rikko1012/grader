@@ -124,3 +124,9 @@ support@bo3.gg about access.
 ## Fixing things by hand (optional, admin only)
 - `faceit_ids.csv`: put the right FACEIT nickname in and set confidence to `manual`.
 - `igl.csv`: add `player,team` rows for in-game leaders.
+
+## Admin exports are paged
+Large admin exports return one bounded page at a time (2026-10-26 load/security audit): `/admin/picks.json` and
+`/admin/forecasts_page.json` take `?after=<next_after>&cutoff=<cutoff_id>&limit=` (picks: at most 1000 rows a page) and
+answer `cutoff_id`, `next_after` and `done` - call again with the returned `next_after` and the same `cutoff_id` until
+`done` is true. `/admin/comparisons.json?last=` and `/admin/pp_history?limit=` return at most the newest 5000 rows.

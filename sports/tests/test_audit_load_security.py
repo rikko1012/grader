@@ -1,5 +1,6 @@
 """2026-10-26 load / security audit of the sports service side: one regression test per fix (single flight on snapshot
-re-parses, the ops admin header check, per-member ids in the in-process path, fixed asset types). No network."""
+re-builds of the compare index, per-member ids in the in-process path, fixed asset types). No network. The forecast-parse
+single flight and the non-ASCII admin header are covered by sports/tests/test_audit_backend.py (origin/main's fix)."""
 import json
 import threading
 import time
@@ -7,7 +8,7 @@ import time
 import pytest
 
 from sports import api_board, api_compare, authtoken, gateway, snapshots, web
-from sports.tests.test_service import SECRET, _get, env, svc  # noqa: F401  (fixtures)
+from sports.tests.test_service import env  # noqa: F401  (fixture)
 
 
 def _snap(tmp_lg, n=50):
@@ -39,21 +40,6 @@ def _burst(fn, n=24):
     return out
 
 
-class SlowJson:
-    """json with a slow loads that counts calls - makes simultaneous cold misses overlap."""
-
-    def __init__(self):
-        self.calls = 0
-
-    def __getattr__(self, k):
-        return getattr(json, k)
-
-    def loads(self, s, *a, **k):
-        self.calls += 1
-        time.sleep(0.05)
-        return json.loads(s, *a, **k)
-
-
 @pytest.fixture
 def snaps(monkeypatch, tmp_path):
     monkeypatch.setattr(snapshots, "snap_root", lambda base=None: tmp_path / "snapshots")
@@ -62,17 +48,6 @@ def snaps(monkeypatch, tmp_path):
     monkeypatch.setattr(api_compare, "_INDEX", {})
     _snap(tmp_path / "snapshots" / "nba")
     return tmp_path / "snapshots" / "nba"
-
-
-def test_forecasts_json_is_parsed_once_when_many_members_arrive_on_a_cold_cache(snaps, monkeypatch):
-    sj = SlowJson()
-    monkeypatch.setattr(api_board, "json", sj)
-    req = web.Request(path="/api/sports/forecast", query={"league": "nba", "id": "fc-00000003"}, role="member", member="m_x")
-    out = _burst(lambda: api_board.forecast(req))
-    assert sj.calls == 1 and all(o[0] == 200 and o[1]["forecast"] == {"id": 3} for o in out)
-    _snap(snaps, n=60)                                  # a rebuild lands: parsed again, once
-    out = _burst(lambda: api_board.forecast(req))
-    assert sj.calls == 2 and all(o[0] == 200 for o in out)
 
 
 def test_compare_index_is_built_once_per_board_change(snaps, monkeypatch):
@@ -87,13 +62,6 @@ def test_compare_index_is_built_once_per_board_change(snaps, monkeypatch):
     req = web.Request(path="/api/sports/compare/check", query={"league": "nba", "items": "underdog~o1~20.5"}, role="member")
     out = _burst(lambda: api_compare.check(req))
     assert len(builds) == 1 and all(o[0] == 200 and o[1]["items"][0]["status"] == "ok" for o in out)
-
-
-def test_ops_admin_header_with_non_ascii_is_a_403_not_a_dropped_connection(svc, monkeypatch):
-    monkeypatch.setenv("ADMIN_TOKEN", "a" * 30)
-    code, body, _ = _get(svc, "/api/sports/admin/ops", {"X-Admin-Token": "\xe9" * 30})
-    assert code == 403 and body["error"] == "admin_only"
-    assert _get(svc, "/api/sports/admin/ops", {"X-Admin-Token": "a" * 30})[0] == 200
 
 
 def test_inprocess_mode_gives_each_member_their_own_id(monkeypatch):

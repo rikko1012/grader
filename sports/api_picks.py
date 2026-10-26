@@ -29,28 +29,32 @@ def track(req):
     items = body.get("picks") if "picks" in body else [body]
     if not isinstance(items, list) or not 1 <= len(items) <= picks.MAX_PER_REQUEST:
         return 400, {"error": "bad_request", "detail": f"1-{picks.MAX_PER_REQUEST} picks per request"}
+    if not all(isinstance(it, dict) for it in items):
+        return 400, {"error": "bad_request", "detail": "each pick is an object"}
     mh = picks.member_hash(req.member)
-    out = []
-    with web.store_ro(budget_s=2) as con:
-        for it in items:
-            if not isinstance(it, dict):
-                return 400, {"error": "bad_request", "detail": "each pick is an object"}
+    checked = []
+    with web.store_ro(budget_s=2) as con:          # check EVERY pick first: a malformed one refuses the request
+        for it in items:                           # before anything is spooled (was: earlier picks tracked, then 400)
             try:
-                rec = picks.check(con, it)
+                checked.append((it, picks.check(con, it), None))
             except picks.Refused as e:
-                with picks._LOCK:
-                    picks.STATS["refused"] += 1
-                out.append({"ok": False, "code": e.code, "text": e.text, "record_id": it.get("record_id"),
-                            "side": it.get("side")})
-                continue
+                checked.append((it, None, e))
             except (ValueError, TypeError) as e:
                 return 400, {"error": "bad_request", "detail": str(e)[:160]}
-            pid = picks.pick_id(mh, rec["record_id"], rec["side"])
-            why = picks.scratch_reason(req.role, it)
-            queued = picks.spool(dict(rec, pick_id=pid, member=mh, scratch=why is not None, scratch_reason=why))
-            out.append({"ok": queued, "pick_id": pid, "record_id": rec["record_id"], "side": rec["side"],
-                        "tracked_at": rec["tracked_at"], "stake_units": 0, "test": why is not None,
-                        **({} if queued else {"code": "busy", "text": "Pick tracking is busy - try again"})})
+    out = []
+    for it, rec, e in checked:
+        if e is not None:
+            with picks._LOCK:
+                picks.STATS["refused"] += 1
+            out.append({"ok": False, "code": e.code, "text": e.text, "record_id": it.get("record_id"),
+                        "side": it.get("side")})
+            continue
+        pid = picks.pick_id(mh, rec["record_id"], rec["side"])
+        why = picks.scratch_reason(req.role, it)
+        queued = picks.spool(dict(rec, pick_id=pid, member=mh, scratch=why is not None, scratch_reason=why))
+        out.append({"ok": queued, "pick_id": pid, "record_id": rec["record_id"], "side": rec["side"],
+                    "tracked_at": rec["tracked_at"], "stake_units": 0, "test": why is not None,
+                    **({} if queued else {"code": "busy", "text": "Pick tracking is busy - try again"})})
     return 200, {"version": picks.VERSION, "results": out, "stake_units": 0}
 
 

@@ -30,12 +30,20 @@ _ID = re.compile(r"^(nba|nfl):player:[a-z]+:[A-Za-z0-9._-]{1,40}$")
 _FC = re.compile(r"^fc-[0-9a-f]{8,64}$")
 _LOCK = threading.Lock()
 _FILES = {}                         # path -> (mtime_ns, size, bytes)
-_PARSED = {}                        # path -> (mtime_ns, size, obj) for forecasts.json only
-_PARSE_LOCK = threading.Lock()      # one forecasts.json parse at a time (two leagues; a parse is milliseconds)
+_PARSED = {}                        # path -> (mtime_ns, size, obj): parsed snapshot objects (api_board.parsed)
+_LOADING = {}                       # path -> Lock: ONE disk read / parse per file change (single flight)
 
 
 class NotReady(Exception):
     pass
+
+
+def _path_lock(key):
+    with _LOCK:
+        lk = _LOADING.get(key)
+        if lk is None:
+            lk = _LOADING[key] = threading.Lock()
+        return lk
 
 
 def _root():
@@ -52,14 +60,61 @@ def _read(path: Path) -> bytes:
         hit = _FILES.get(key)
         if hit and hit[0] == st.st_mtime_ns and hit[1] == st.st_size:
             return hit[2]
-    data = path.read_bytes()
+    # single flight: right after a snapshot rewrite every member's request misses at once; one thread reads the file,
+    # the others wait for its bytes (was: one full copy of a multi-MB board per concurrent request)
+    with _path_lock(key):
+        try:
+            st = path.stat()
+        except OSError:
+            raise NotReady(path.name) from None
+        with _LOCK:
+            hit = _FILES.get(key)
+            if hit and hit[0] == st.st_mtime_ns and hit[1] == st.st_size:
+                return hit[2]
+        try:
+            data = path.read_bytes()
+        except OSError:
+            raise NotReady(path.name) from None
+        _store(key, st, data)
+    return data
+
+
+def _store(key, st, data):
     with _LOCK:
         total = sum(len(v[2]) for v in _FILES.values())
         if len(_FILES) >= CACHE_FILES or total + len(data) > CACHE_BYTES:
             for k in list(_FILES)[:max(1, len(_FILES) // 3)]:      # oldest inserted first
                 _FILES.pop(k, None)
         _FILES[key] = (st.st_mtime_ns, st.st_size, data)
-    return data
+
+
+def parsed(path: Path, build=None):
+    """The JSON object of a snapshot file (optionally transformed by build(obj)), parsed ONCE per file change
+    (mtime + size) under a per-file single flight. Raises NotReady when the file does not exist."""
+    key = "parsed|" + str(path) + ("|" + build.__name__ if build else "")    # never _read's lock key
+    try:
+        st = path.stat()
+    except OSError:
+        raise NotReady(path.name) from None
+    with _LOCK:
+        hit = _PARSED.get(key)
+    if hit and hit[0] == st.st_mtime_ns and hit[1] == st.st_size:
+        return hit[2]
+    with _path_lock(key):
+        try:
+            st = path.stat()
+        except OSError:
+            raise NotReady(path.name) from None
+        with _LOCK:
+            hit = _PARSED.get(key)
+        if hit and hit[0] == st.st_mtime_ns and hit[1] == st.st_size:
+            return hit[2]
+        obj = json.loads(_read(path))
+        if build is not None:
+            obj = build(obj)
+        with _LOCK:
+            _PARSED[key] = (st.st_mtime_ns, st.st_size, obj)
+        return obj
 
 
 def _league(req):
@@ -132,27 +187,11 @@ def forecast(req):
     fid = req.query.get("id") or ""
     if not _FC.match(fid):
         return 400, {"error": "id must be a forecast id"}
-    path = _root() / lg / "forecasts.json"
     try:
-        st = path.stat()
-    except OSError:
+        obj = parsed(_root() / lg / "forecasts.json")
+    except NotReady:
         return 503, {"error": "snapshot_not_ready"}
-    key = str(path)
-    with _LOCK:
-        hit = _PARSED.get(key)
-    if not hit or hit[0] != st.st_mtime_ns or hit[1] != st.st_size:
-        # single flight (audit 2026-10-26): when a snapshot rebuild lands, the members asking at that moment wait for ONE
-        # parse of forecasts.json instead of each parsing the whole file at once (every service thread on the same work)
-        with _PARSE_LOCK:
-            with _LOCK:
-                hit = _PARSED.get(key)
-            if not hit or hit[0] != st.st_mtime_ns or hit[1] != st.st_size:
-                obj = json.loads(_read(path))
-                hit = (st.st_mtime_ns, st.st_size, obj)
-                with _LOCK:
-                    _PARSED[key] = hit
-    obj = hit[2]
-    f = obj["forecasts"].get(fid)
+    f = (obj.get("forecasts") or {}).get(fid)
     if f is None:
         return 404, {"error": "forecast_not_on_board"}
     return 200, {"version": obj.get("version"), "built_at": obj.get("built_at"), "forecast": f}

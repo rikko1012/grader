@@ -436,11 +436,9 @@ class Handler(BaseHTTPRequestHandler):
             except authtoken.TokenError as e:
                 why = e.reason
         admin_header = self.headers.get("X-Admin-Token")
-        # bytes compare (audit 2026-10-26): compare_digest on str raises TypeError for a non-ASCII header value, which
-        # dropped the connection with no response instead of a 403
         ops_admin = bool(admin_header and os.environ.get("ADMIN_TOKEN")
-                         and __import__("hmac").compare_digest(admin_header.encode("utf-8", "surrogateescape"),
-                                                               os.environ["ADMIN_TOKEN"].encode("utf-8", "surrogateescape")))
+                         and __import__("hmac").compare_digest(admin_header.encode("utf-8", "replace"),
+                                                               os.environ["ADMIN_TOKEN"].encode("utf-8")))
         if u.path == "/api/sports/admin/ops":
             if ops_admin or (claims and claims["role"] == "admin"):
                 return self._send(200, ops_with_alerts(), headers=cors)

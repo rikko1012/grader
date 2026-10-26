@@ -467,7 +467,8 @@ def settle_league(con, league, ctx=None, now=None, since=None, max_catchup=None)
         with_offers = _events_with_offers(con, league, {e.event_id for e in old} - have)
         old = sorted((e for e in old if e.event_id in with_offers), key=lambda x: x.start_utc)
         evs += old[:max_catchup if max_catchup is not None else SETTLE_CATCHUP_MAX]
-    out = {"events": 0, "observations": {}, "settlements": {"inserted": 0, "unchanged": 0, "revision": 0}}
+    out = {"events": 0, "observations": {}, "settlements": {"inserted": 0, "unchanged": 0, "revision": 0, "kept": 0},
+           "empty_box": 0}
     for e in sorted(evs, key=lambda x: x.start_utc):
         espn_id = e.event_id.split(":")[-1]
         try:                                    # re-read within the lookback: ESPN corrects final box scores
@@ -490,6 +491,10 @@ def settle_league(con, league, ctx=None, now=None, since=None, max_catchup=None)
             for r in b.records:
                 if r.KIND == "stat":
                     obs.setdefault(r.participant_id, {})[r.stat] = r
+            if not obs:                                 # completed but no box score yet / a partial ESPN answer: a
+                out["empty_box"] += 1                   # transient gap - settle on a later read, never 'unresolved'
+                out["events"] += 1                      # for every player (and the game is not marked done)
+                continue
             sts = []
             for _, o in store.offers(con, event_id=e.event_id, limit=100000):
                 if o.player_id is None or o.platform.startswith(("oddsapi", "oddspapi")) or \
@@ -498,7 +503,7 @@ def settle_league(con, league, ctx=None, now=None, since=None, max_catchup=None)
                 sts += settlement.settle_offer(o, obs.get(o.player_id, {}), e, observed_at)
             c = settlement.record(con, sts)
             for k, v in c.items():
-                out["settlements"][k] += v
+                out["settlements"][k] = out["settlements"].get(k, 0) + v
             done.add(e.event_id)
             if ctx:
                 ctx.checkpoint({"done": sorted(done)})

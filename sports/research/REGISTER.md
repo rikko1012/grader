@@ -571,3 +571,15 @@ switches), forward evidence stays forward, and nothing here changes stakes (all 
    passes is ON in the committed default with the parameters fitted on all local props, else OFF. Labelled
    "local leave-one-game-out, one night, below the 20-game minimum (owner override)". The owner's Shell `fit` run on
    production data supersedes it as soon as it is written.
+
+## Amendment A8a - balance check on both cal-mi-1 pass paths (registered 2026-10-26, BEFORE the second NBA game-day is scored)
+
+Owner decision 2026-10-26. Production `fit` on the first scored NBA night (Oct 25, 7 games) showed nba:points with a
+log-loss interval entirely below 0 while the calibrated chance favoured Over on 100% of props (over rate 56.3%): a
+one-night Over lean would have passed A8 6 (i), which had no balance condition. A8 6 is amended (stricter only):
+
+1. `|share favouring Over - over rate| <= 0.15` is REQUIRED on both paths. PASS (i) = log-loss game-clustered interval
+   entirely below 0 AND balanced; PASS (ii) unchanged (it already required it).
+2. Nothing else changes (minimums, tolerances, data, walk-forward, switches).
+3. Known limitation: a well-calibrated model on a market whose over rate is far from 50% favours that side more often
+   than the over rate, so this check can block an honest fit there; accepted (owner's correlated-night risk ranks first).

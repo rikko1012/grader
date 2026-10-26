@@ -28,7 +28,7 @@ os.environ.update({"SPORTS_DATA_DIR": str(tmp), "SPORTS_API": "1", "SPORTS_TOKEN
 
 from sports import api_board, api_compare, authtoken, service  # noqa: E402
 
-PARSES = {"forecasts": 0, "compare_index": 0}
+PARSES = {"snapshot_json": 0, "compare_index": 0}   # snapshot_json: every json.loads in api_board
 _orig_index = api_compare.build_index
 
 
@@ -46,7 +46,7 @@ class CountingJson:
 
     @staticmethod
     def loads(s, *a, **k):
-        PARSES["forecasts"] += 1
+        PARSES["snapshot_json"] += 1
         return json.loads(s, *a, **k)
 
 
@@ -117,7 +117,7 @@ for lg in ("nba", "nfl"):                               # warm once, then a snap
     call(f"/api/sports/compare/check?league={lg}&items=underdog~o0~20.5", warm)
 time.sleep(0.05)
 write_snapshots()
-PARSES.update(forecasts=0, compare_index=0)
+PARSES.update(snapshot_json=0, compare_index=0)
 t0 = time.time()
 with ThreadPoolExecutor(max_workers=MEMBERS) as ex:
     res = [x for r in ex.map(member, range(MEMBERS)) for x in r]

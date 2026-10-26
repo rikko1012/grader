@@ -340,15 +340,16 @@ def report(scored, min_eval=MIN_EVAL, min_days=MIN_EVAL_DAYS, min_games=None):
         rep["logloss_cal_minus_live"] = {"mean": m, "ci_game": [lo, hi]}
         c = rep["cal_mi"]
         enough = len(ok) >= min_eval and (rep["days"] >= min_days if min_games is None else rep["games"] >= min_games)
-        sig = hi is not None and hi < 0
-        weak = (m is not None and m <= 0 and abs(c["in_the_large"]) <= CITL_TOL and
-                abs(c["share_over_favoured"] - c["over_rate"]) <= SHARE_TOL)
+        balanced = abs(c["share_over_favoured"] - c["over_rate"]) <= SHARE_TOL  # A8a: required on both paths
+        sig = hi is not None and hi < 0 and balanced
+        weak = m is not None and m <= 0 and abs(c["in_the_large"]) <= CITL_TOL and balanced
         if not enough:
             rep.update(verdict="not evaluable", on=False,
                        why=f"needs >= {min_eval} scored props from >= " +
                            (f"{min_days} game-days" if min_games is None else f"{min_games} games"))
         elif sig and min_games is None:
-            rep.update(verdict="PASS (i)", on=True, why="log-loss interval entirely below 0")
+            rep.update(verdict="PASS (i)", on=True,
+                       why="log-loss interval entirely below 0, share favouring Over within 0.15")
         elif weak:
             rep.update(verdict="PASS (ii)", on=True,
                        why="not worse on log loss, in-the-large within 0.03, share favouring Over within 0.15")
@@ -471,8 +472,8 @@ def main(argv=None):
     res = {"version": VERSION, "label": LABEL, "register": REGISTER, "rows": len(rows),
            "with_market": sum(1 for r in rows if r.get("pm") is not None),
            "days": len({game_day(r["forecast_at"]) for r in rows}),
-           "rule": "A8 6: >= 30 scored props from >= 2 game-days; PASS (i) log-loss CI < 0, or (ii) log loss <= 0 "
-                   "and |in-the-large| <= 0.03 and |share Over - over rate| <= 0.15",
+           "rule": "A8 6 + A8a: >= 30 scored props from >= 2 game-days; |share Over - over rate| <= 0.15 always; "
+                   "PASS (i) log-loss CI < 0, or (ii) log loss <= 0 and |in-the-large| <= 0.03",
            "markets": rep}
     if a.cmd == "fit":
         obj = weights_obj(rows, rep, "production learning.db walk-forward",
