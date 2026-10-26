@@ -200,6 +200,8 @@ The current full picks table was **not** pulled: `/admin/picks.json` is an unbou
 2026-10-20 needs a bounded / paged picks endpoint, or settlement recomputed from the HLTV DB. Settled values (`actual`) are
 HLTV-derived and can be re-checked from section 4.
 
+> 2026-10-26 update: /admin/picks.json is PAGED since the 2026-10-26 audits (picklog.picks_page): ?after=<next_after>&cutoff=<cutoff_id>&limit=<n> (n <= 1000), keyset pages like /admin/forecasts_page.json; answer {picks, cutoff_id, next_after, done, total_in_cutoff, page_max}. A full picks pull is now possible page by page.
+
 ## 8. Bookmaker / market snapshots
 
 | Source | Store | Range / count | Notes |

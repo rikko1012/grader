@@ -479,11 +479,16 @@ def board(now=None, wait=False):
 
 def history(market=None, limit=500):
     """The observed line history (newest last), optionally for one market."""
+    import collections
+    out = collections.deque(maxlen=max(1, int(limit)))  # streamed (audit 2026-10-26): memory = `limit` events, never the file
     try:
-        lines = HISTORY.read_text(encoding="utf-8").splitlines()
+        with open(HISTORY, encoding="utf-8") as f:
+            for x in f:
+                if not x.strip():
+                    continue
+                e = json.loads(x)
+                if not market or e.get("market") == market:
+                    out.append(e)
     except OSError:
         return []
-    out = [json.loads(x) for x in lines if x.strip()]
-    if market:
-        out = [e for e in out if e.get("market") == market]
-    return out[-limit:]
+    return list(out)

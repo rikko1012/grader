@@ -191,9 +191,10 @@ def log_loaded(d):
 
 
 def read(path, last=5000):
+    import collections
     try:
         with open(path, encoding="utf-8") as f:
-            lines = f.readlines()[-last:]
+            lines = collections.deque(f, maxlen=last)   # streamed: memory = `last` lines, never the whole log
     except OSError:
         return []
     return [json.loads(x) for x in lines if x.strip()]

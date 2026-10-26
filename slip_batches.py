@@ -247,9 +247,10 @@ def maybe_batch(rows, grader_version):
 
 
 def read(last=2000):
+    import collections
     try:
         with open(LOG, encoding="utf-8") as f:
-            return [json.loads(x) for x in f.readlines()[-last:] if x.strip()]
+            return [json.loads(x) for x in collections.deque(f, maxlen=last) if x.strip()]   # streamed tail
     except OSError:
         return []
 

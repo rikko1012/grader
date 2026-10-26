@@ -418,9 +418,10 @@ def page():
     return f.read_bytes() if f.exists() else PLACEHOLDER
 
 
-def handle(path, query, allowed, admin):
+def handle(path, query, allowed, admin, member=None):
     """Legacy in-process entry (SPORTS_API_MODE=inprocess - dev / tests only). allowed() / admin() are the esports
-    server's own server-side checks."""
+    server's own server-side checks. member: the pseudonymous id of THIS member (gateway.inprocess_member) - per-member
+    routes (picks/mine) read only that member's rows; audit 2026-10-26: every member was "m_inprocess" (one shared id)."""
     if path == "/sports":
         if not flags.on("SPORTS_UI"):
             return _json(404, {"error": "not found"})
@@ -439,7 +440,7 @@ def handle(path, query, allowed, admin):
             return _json(401, {"error": "members_only"})
         role = ADMIN if admin() else (MEMBER if allowed() else None)
     try:
-        return dispatch(Request(path=path, query=dict(query), role=role, member="m_inprocess"))
+        return dispatch(Request(path=path, query=dict(query), role=role, member=member or "m_inprocess"))
     except Exception as e:                              # noqa: BLE001
         sys.stderr.write(f"  sports route failed: {type(e).__name__}: {str(e)[:200]}\n")
         return _json(503, {"error": "sports_unavailable"})

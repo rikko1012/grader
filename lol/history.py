@@ -64,7 +64,7 @@ class DB:
         if self.dsn:
             import psycopg2
             self.kind = "pg"
-            self.con = psycopg2.connect(self.dsn)
+            self.con = psycopg2.connect(self.dsn, connect_timeout=20)   # never hang on a dead database (audit 2026-10-26)
         else:
             self.kind = "sqlite"
             p = path or config.HISTORY_DB

@@ -1703,6 +1703,7 @@ STUDIO_BODY_MAX = 16 * 1024
 POST_MAX = 20000                  # every other POST body (slip log <= 20,000 bytes; the admin closing-line form far less)
 SLIP_LOG_PER_MIN = 10             # /api/slip_log entries per member per minute
 MC_PER_MIN = 30                   # /api/match_compare requests per member per minute (audit 20; a card asks once per maps / platform)
+SEARCH_BO3_PER_MIN = 60           # /api/search lookups that go to BO3.gg (HLTV index down, query not cached) per member a minute
 MC_TEAM_MAX = 80                  # longest team / opponent name /api/match_compare accepts
 MC_START_AHEAD_D = 21             # latest match start it accepts (days ahead; a past start already projects as today)
 STUDIO_CAP_TTL = 5                # /api/slip_studio/capacity: one answer per settings shared by every member for 5 s
@@ -2623,6 +2624,7 @@ def settled_batches():
 _STUDIO_HITS, _STUDIO_EV_HITS, _STUDIO_GUARD = {}, {}, threading.Lock()
 _SLIP_LOG_HITS = {}                                   # /api/slip_log: its own per-member bucket (studio_rate_ok)
 _MC_HITS = {}                                         # /api/match_compare: its own per-member bucket (audit 20)
+_SEARCH_BO3_HITS = {}                                 # /api/search BO3.gg fallback: its own per-member bucket (audit 2026-10-26)
 
 
 def match_compare_problem(q):
@@ -3756,6 +3758,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", headers.pop("Cache-Control", "no-store"))   # no-store unless a member route says so
+        # audit 2026-10-26: no type sniffing; the admin ?token= never travels in a Referer to another site. No frame
+        # header on purpose: Whop shows the member pages inside its app frame.
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "same-origin")
         for k, v in headers.items():
             self.send_header(k, v)
         renew, self._renew = getattr(self, "_renew", None), None
@@ -3814,7 +3820,7 @@ class Handler(BaseHTTPRequestHandler):
         stays locked if the Whop settings are ever missing - it never opens up to everyone."""
         if not whop_auth.enabled():
             return not (os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("RAILWAY_ENVIRONMENT_NAME")
-                        or os.environ.get("REQUIRE_WHOP"))
+                        or os.environ.get("REQUIRE_WHOP") or os.environ.get("RENDER"))   # Render sets RENDER=true itself
         if self.load_test():
             return True
         sess = self.member()
@@ -3927,7 +3933,7 @@ class Handler(BaseHTTPRequestHandler):
                                                               q.get("start"), q.get("maps") or "12", bk_, (q.get("match") or "")[:120] or None),
                                                 book=bk_), default=str).encode()
                 st_, body_ = shared(k_, _mc, ttl=120)
-                return self.send(st_, body_)
+                return self.send_shared(k_, st_, body_, keep=120)     # gzip + ETag/304 once per shared body (audit 2026-10-26)
             if u.path == "/api/line_check":
                 # before a pick goes on a slip: the line Underdog shows NOW for this player / stat / maps
                 book = "prizepicks" if q.get("book") == "prizepicks" else "underdog"
@@ -3954,7 +3960,7 @@ class Handler(BaseHTTPRequestHandler):
                 # the stored, immutable P1 scorecard export (learning cycle), summarised for members - shared by every
                 # member for 5 minutes; never recomputes a forecast
                 st_, body_ = shared(("results",), lambda: (200, json.dumps(results_payload(), default=str).encode()), ttl=300)
-                return self.send(st_, body_)
+                return self.send_shared(("results",), st_, body_, keep=300)
             if u.path == "/api/board":
                 # one build + encoding shared by every member for BOARD_TTL s (2026-10-13 load test: 700 members at once
                 # each rebuilt and encoded the whole board; the local test server refused half the connections meanwhile)
@@ -4656,6 +4662,14 @@ class Handler(BaseHTTPRequestHandler):
                  "name": " ".join(x for x in (h.get("first_name"), h.get("last_name")) if x),
                  "country": (h.get("country") or {}).get("code"), "image": h.get("image_url")}
                 for h in hits]}).encode()
+        # audit 2026-10-26: only the BO3.gg fallback costs an upstream call per new query - one member typing or looping
+        # distinct queries while the HLTV index is down must not spend the shared BO3.gg allowance. Cached queries are free.
+        with _RG:
+            cached_ = _RESULTS.get(("search", ql))
+        if (not (cached_ and time.time() - cached_[0] < 3600) and not self.load_test()
+                and not studio_rate_ok(self.rate_key(), bucket=_SEARCH_BO3_HITS, limit=SEARCH_BO3_PER_MIN)):
+            return self.send(429, {"error": f"Too many searches - limit is {SEARCH_BO3_PER_MIN} a minute while search is on "
+                                            "its backup source. Wait a moment.", "results": []})
         status, body = shared(("search", ql), compute, ttl=3600)
         if status == 200:
             rows = json.loads(body)["results"]
@@ -5056,7 +5070,10 @@ class Handler(BaseHTTPRequestHandler):
             return 200, body, (5 if outage else None)    # an outage grade is reused for 5 s, not 60
 
         status, body = shared(key, compute)
-        return self.send(status, body)
+        # a card is one shared body per key (700 members on one card share it): gzip + ETag made once, 304 on revisit
+        # (audit 2026-10-26: cards of ~60 KB went uncompressed with no-store). Body bytes unchanged; non-200 via send().
+        # The compressed copy is kept 5 s (an outage card is reused for 5 s only - nothing of it may outlive that).
+        return self.send_shared(("card",) + key, status, body, keep=5)
 
     # ------------------------------------------------------------ Phase 10 admin (private)
     def load_test(self):
