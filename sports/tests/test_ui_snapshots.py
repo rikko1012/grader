@@ -35,6 +35,11 @@ def test_latest_stream_does_not_decode_the_whole_offer_history(monkeypatch):
     remaining = list(rows)
     assert len(remaining) == 11
     assert [first, *remaining] == snapshots._latest(con, "offer")
+    decoded.clear()
+    current = store.iter_offers(con, league="nba")
+    first = next(current)
+    assert len(decoded) == 1
+    assert [first, *current] == store.offers(con, league="nba")
     con.close()
 
 
