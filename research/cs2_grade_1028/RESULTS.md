@@ -160,3 +160,10 @@ version 2085aa791c; 40 board rows, 40 full cards; 0 "p out of range", 0 "bad pro
 last-10 depth 10/10 on every row; AWP source HLTV weapon stats on 40/40; 10 rows "graded vs different opponent than
 Underdog" = the same team under two spellings (MIBR / Made in Brazil, name check only); 10 rows LAN/online unknown
 (one match with no event). No stake or cap was rescaled (no grader change).
+
+### 6b. sr-bo3-1 (coordinator directive after this report): second audit.py run, 2026-10-28 ~17:45 UTC
+
+version 2085aa791c (gate not yet live); 20 board rows / 20 graded; 0 grade/chance, 0 units/grade, 0 graded-but-0U
+mismatches; 2 bets (both Less), 18 leans; the same MIBR name note. **Rows on the PROVISIONAL BO3.gg route at that moment:
+0 of 20** (no row's source, flags or reason names perf-2-bo3 / PROVISIONAL), so the gate would hold 0 live rows today.
+Historically it would have held 259 first-grade board rows (100 of them staked, 31.0% hit) and 148 P1 units over Oct 11-28.

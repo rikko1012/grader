@@ -1,5 +1,24 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
+## `dbca2af0fe` — sr-bo3-1 stake gate on PROVISIONAL BO3.gg-route projections (branch grade/cs2-1028, 2026-10-28; stake rule only, no chance / grade change)
+
+Base: `2085aa791c`. Only `grader.py` changed (it is in the model hash, so the tag moves; the stake rule cannot live outside
+the hashed files because grade_leg sets the units and pick_verdict reads them). Registered in
+research/cs2_grade_1028/REGISTER.md (section sr-bo3-1) - AFTER the motivating data was seen, so its only real test is forward.
+- **What changed:** every line whose performance-model version ends in `-bo3` (perf-2-bo3: HLTV has no history for the
+  player, the projection comes from BO3.gg maps, already flagged PROVISIONAL) gets **0 units on both sides**, with the
+  reason "Provisional projection (BO3.gg route)" shown exactly like the other gd-1 0U gates (AWPer on HS, stand-in,
+  transfer, tiny sample): the model letter stays on the board and card, the pick logs LEAN like every 0U pick, Lean
+  Over / Lean Under wording, 0.1% chances, one stake per line and board = card = slips = picks are unchanged.
+- **Unchanged:** chance, projection, spread, side, letter, bands, caps, thresholds, every HLTV-route line (perf-2 /
+  perf-cm2), legacy lines, LoL. Shadow arms are untouched (they compare chances, not stakes).
+- **Evidence (development - the rule was written on it):** P1 units on this route 148 / 32 matches hit 33.8% [24.2, 44.8]
+  vs 58.8% stated; first-grade board rows 259 / 34 matches 37.4% [28.0, 46.4] (staked rows 31.0%). Both upper bounds < 50%.
+- **Forward review:** at 100 further provisional-route P1 units after activation; the gate is removed if the forward hit
+  rate's match-grouped 95% lower bound is above 50%.
+- **Rollback:** `SR_BO3_1=0` on Render (read at grade time, no deploy) or revert the commit. Tests: tests/test_sr_bo3_1.py.
+- **Live board at the time (2026-10-28 ~17:40 UTC, 40 rows):** see the audit note in research/cs2_grade_1028/RESULTS.md.
+
 ## Multilevel grading check 2026-10-28 (branch grade/cs2-1028; CS2 model tag unchanged: `2085aa791c`; research only, no model change)
 
 Owner directive 2026-10-28 ("multilevel full check for grading logic ... level up these projections and grades").

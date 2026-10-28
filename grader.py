@@ -158,6 +158,20 @@ CONFIG = {
 }
 GRADES = ["C", "B-", "B", "B+", "A-", "A", "A+"]
 
+# sr-bo3-1: 0 units on PROVISIONAL BO3.gg-route projections (perf-*-bo3). A stake rule, not a chance change: the letter,
+# chance, projection and side are untouched; the reason is shown like every other 0U gate (display gd-1). On unless the
+# environment says SR_BO3_1=0 (read at grade time so a Render env change rolls it back without a deploy); a cfg key
+# "sr_bo3_1" overrides for tests / experiments.
+SR_BO3_1_VERSION = "sr-bo3-1"
+SR_BO3_1_REASON = "Provisional projection (BO3.gg route)"
+
+
+def sr_bo3_1_enabled(cfg=None):
+    import os
+    if cfg is not None and cfg.get("sr_bo3_1") is not None:
+        return bool(cfg["sr_bo3_1"])
+    return os.environ.get("SR_BO3_1", "1").strip() != "0"
+
 
 # ---------------------------------------------------------------- math
 def phi(z):
@@ -743,6 +757,12 @@ def grade_leg(d, cfg=CONFIG):
         scale = 1.0
         if str(pf.get("version") or "").endswith("-bo3"):
             flags.append("PROVISIONAL: performance model on BO3.gg history (HLTV has no history for this player)")
+            # sr-bo3-1 (2026-10-28, research/cs2_grade_1028/REGISTER.md): STAKE gate only - the chance, projection and
+            # letter are unchanged; the side stays (Lean Over / Lean Under). Registered after the data: P1 148 units / 32
+            # matches hit 33.8% [24.2, 44.8], PICKS board 259 rows 37.4%; reviewed at 100 further provisional units.
+            # Rollback without a deploy: SR_BO3_1=0.
+            if sr_bo3_1_enabled(cfg):
+                zero_units.append(SR_BO3_1_REASON)
     hs_dist = None
     if perf_on and prop == "hs" and cfg.get("perf_hs_dist") and pf.get("lambda_kills") is not None and pf.get("hs_per_kill"):
         import perf as _perf

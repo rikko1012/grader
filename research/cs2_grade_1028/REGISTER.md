@@ -97,3 +97,25 @@ behind an env off-switch with tests and a MODEL_VERSIONS.md entry, and audit.py 
   registered cell).
 - BO1 rounds: scrape_queue records no "bo1" format, so a BO1 rounds-per-map correction cannot be built from the stored
   history without a new scrape; not registered.
+
+## sr-bo3-1 - stake gate on PROVISIONAL BO3.gg-route projections (family `stake-rule-bo3-1`; coordinator directive 2026-10-28)
+
+- **Registered AFTER the numbers were seen.** The evidence that motivates it is this check's own: P1 units on the
+  `perf-2-bo3` route 148 / 32 matches hit 33.8% [24.2, 44.8] vs 58.8% stated; PICKS board rows 259 / 34 matches 37.4%
+  [28.0, 46.4] vs 58.6% (staked 100 rows 31.0%). Both interval upper bounds sit under 50%. Because the rule was written on
+  the same data, that evidence is development evidence; the real test is forward.
+- **What it does (grader.grade_leg, `SR_BO3_1_REASON`):** every line whose performance-model version ends in `-bo3`
+  (HLTV has no history for the player; the projection comes from BO3.gg maps) gets 0 units on both sides. It is a STAKE
+  gate exactly like the other gd-1 0U gates (AWPer on HS, stand-in, transfer, tiny sample): the chance, projection,
+  spread, side and letter are unchanged; the logged grade follows the existing verdict rule (a 0U pick logs LEAN) and the
+  display shows the model letter with the reason "Provisional projection (BO3.gg route)". Lean Over / Lean Under wording,
+  0.1% chances and one stake per line are unchanged; the board, card, slips, picks and results all read the same verdict,
+  so the gate applies everywhere the other gates apply.
+- **Off switch:** `SR_BO3_1=0` in the environment (read at grade time; a Render env change rolls it back without a deploy).
+- **Forward review (the only test):** at 100 further provisional-route P1 units logged after the gate is live (first grade
+  logged after its activation), the cohort's hit rate on the model's side with a match-grouped 95% interval. The gate is
+  REMOVED if the interval's lower bound is above 50%; it stays otherwise. Reported with W-L-P, stated chance, Over / Under
+  balance, and the number of lines it held at 0U.
+- **Model tag:** grader.py is in picklog._model_version's hash, so the tag changes; the stake rule cannot live outside the
+  hashed files (units are set in grade_leg and read by pick_verdict, also hashed). No chance, grade band, cap, threshold,
+  weight or constant changed.
