@@ -208,7 +208,7 @@ class _Pool:
         self.idle = queue.LifoQueue()
         self.lock = threading.Lock()
         self.stats = {"size": size, "in_use": 0, "peak_in_use": 0, "opened": 0, "waits_timed_out": 0,
-                      "queries_interrupted": 0}
+                      "queries_interrupted": 0, "last_error_at": None}
         self.path = None
         self.schema = {}
 
@@ -226,6 +226,7 @@ class _Pool:
         if not self.slots.acquire(timeout=DB_WAIT_S):
             with self.lock:
                 self.stats["waits_timed_out"] += 1
+                self.stats["last_error_at"] = time.time()
             raise Busy("sports store pool saturated")
         con = None
         with self.lock:
@@ -258,6 +259,7 @@ class _Pool:
                 if "interrupted" in str(e):
                     with self.lock:
                         self.stats["queries_interrupted"] += 1
+                        self.stats["last_error_at"] = time.time()
                     raise Busy("store query over the request budget") from None
                 raise
             con.set_progress_handler(None, 0)
