@@ -890,3 +890,38 @@ technically (Maps 1-2 point estimates negative, Maps 1-3 below 0). The owner cho
    inputs (`ep3`: K, c, n, lambda, chance), never shown, no grade, no slip, behind `LOL_EP3_SHADOW` (default on; `=0` stops it);
    a later EVALUATION amendment decides any promotion on forward rows only. **If it fails:** recorded with its numbers here and
    nothing changes. No other candidate is tested under A16.
+
+### A16 result (2026-10-28; lol/eval/a16_2026-10-28/) - ep-3 FAILS (i), lc-1 still fails every market, the daily decision ships
+
+Registration commit c394803 (pushed before any A16 number; this text written after). Files: `ep3.json` (ep-3 walk-forward),
+`lc1_eval_1028b.json` (A14 re-run on the fresh pull). Scratch scripts live outside the repo (scratchpad lolauto1028). Fresh read-only
+pull 2026-10-28 ~16:10 UTC: lol_forecasts 15,529, lol_settlements 1,258 (unchanged since A15), history 128,568 player-game rows /
+12,857 games. Percentages = the chosen side's stated chance / hit rate; CI = series-grouped 95%.
+
+**ep-3 (kills, all scopes; K chosen per day on earlier days: 10-18 K=40, 10-22 40, 10-23 40, 10-24 20, 10-25 40, 10-26 20).**
+260 player-market units / 26 series; mean multiplier 0.933 (every unit adjusted; mean 36.8 earlier event-family games behind it).
+
+| check | live | ep-3 | result |
+|---|---|---|---|
+| (i) NB log-score gain, all scopes | - | +0.0023 (95% -0.0064, +0.0117) | **FAIL** (interval includes 0) |
+| Map 1 / Maps 1-2 / Maps 1-3 (report) | - | +0.0048 (-0.0039, +0.0131) / +0.0024 (-0.0324, +0.0299) / -0.0223 (-0.0497, +0.0050) | - |
+| (ii) MAE (bias) | 2.052 (+0.25) | 2.013 (-0.01) | pass |
+| (iii) share favouring Over vs over rate, 895 offered-line rows | 34.3% | 25.4% vs 38.1% (gap 12.7 pts <= 15) | pass |
+| (iv) chosen-side hit, same 895 rows | 60.2% (CI 53.7-65.7) stated 63.6% | 61.1% (CI 55.4-66.4) stated 65.0%; diff +0.9 pts (95% -1.3, +3.0) | pass |
+| log loss at the lines (report) | 0.6688 | 0.6678 (diff -0.0010, 95% -0.0103, +0.0081) | - |
+| letter grades (report) | 688 | 709 | - |
+
+(v) the historical guard was not run: (i) already decides FAIL. **ep-3 FAILS; nothing is wired and nothing changes** (no
+`LOL_EP3_SHADOW` switch exists). Reading: the larger K (the walk chose 40 on 4 of 6 days) removes the kills over-projection (bias
++0.25 -> -0.01, MAE -0.04) and the hit rate at the lines rises 0.9 points, but the log-score gain on 26 series of one event is not
+distinguishable from 0, and Maps 1-3 is negative. Every row is spent evidence (A15 saw the same 27 series).
+
+**lc-1 re-run (A14 6; 1,225 rows / 27 series / 10 days; walk-forward scored 1,124 / 25 / 8) - identical to A15 because nothing new
+settled:** kills:prizepicks 551 props: live 65.4 / 62.8, lc-1 62.8 / 62.1, log loss +0.0114 (-0.060, +0.063), share Over 4.2% vs
+over rate 37.8% - FAIL; kills:underdog 300: live 60.4 / 57.7, lc-1 60.1 / 59.3, +0.0037 (-0.044, +0.045), 10.0% vs 39.3% - FAIL;
+assists:underdog 273: live 62.9 / 50.2, lc-1 59.8 / 54.2, -0.0420 (-0.114, +0.028), 2.6% vs 44.0% - FAIL. **No market passes; all OFF.**
+
+**Part 1 shipped (on the branch):** `python -m lol.cal autofit` + the worker step (lol/center/worker.py `lc1_autofit`, after
+settle, once per UTC day from 06:00, child process, single BLAS thread, 900 s timeout); a dry run on the fresh pull wrote all three
+markets OFF (child peak working set 37.9 MB on Windows; 47.6 MB on a 4,800-row synthetic record in the test) and the second run
+logged "skip". Admin: `/admin/lol/learning.json` -> `lc1`; admin LoL page tab "Calibration (lc-1)". Switch `LOL_CAL_AUTOFIT=0`.
