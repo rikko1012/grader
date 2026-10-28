@@ -583,3 +583,61 @@ one-night Over lean would have passed A8 6 (i), which had no balance condition. 
 2. Nothing else changes (minimums, tolerances, data, walk-forward, switches).
 3. Known limitation: a well-calibrated model on a market whose over rate is far from 50% favours that side more often
    than the over rate, so this check can block an honest fit there; accepted (owner's correlated-night risk ranks first).
+
+## Amendment A9 - multilevel grade check gc-1 and the research-letter containment / release rule (registered 2026-10-28, BEFORE `gradecheck` was run on any settled data)
+
+Owner directive 2026-10-28: "do a multilevel full check for grading logic across every single board; we have enough
+data for NFL and NBA grades now." State when this was written: NBA research letters shown (rg-1 = sports-gp-1 band of
+the unrounded lean-side chance; A >= 0.60, B >= 0.5559, C >= 0.5345, else Lean); NFL letters OFF since 2026-10-25
+(`board_view.VG_CONTAIN_LEAN = True`, owner decision after A pass_yds hit 1 of 27 at real lines); cal-mi-1 live with
+every market OFF (A8 + A8a); stakes 0U everywhere. No `gradecheck` output existed. The CLI
+(`python -m sports.model.tune gradecheck`, sports/model/gradecheck.py) lands in the commit AFTER this text.
+
+1. **Data (gc-1).** `learning.db` scorecard rows of sm-1, superseded = 0, PrizePicks / Underdog, with the forecast's
+   saved inputs (`forecasts.db`) and, when reachable, the canonical store (offer variant, event home / away, start)
+   and the game store (ESPN pickcenter moneyline / Kalshi home-win). One row per (event, platform, offer, stat, line)
+   = the last pre-start forecast (A8 3). Status win / loss are scored; push / void / unresolved counted apart. The
+   `--days N` window is by forecast_at (default: everything).
+2. **Chance.** The raw sm-1 unconditional chance in the scorecard = the chance the board showed while the market's
+   cal-mi-1 flag is OFF. For a market whose flag is ON in the weights in use, the A8 4 walk-forward cal-mi chance
+   replaces it on the rows that have one (rows before the first fit keep the raw chance). "stated" = the mean lean-side
+   chance given no push (p_side / (1 - p_push)), the same conditioning as the hit rate wins / (wins + losses).
+3. **Side = the board lean**, never the scorecard's max-chance side: `board_view.lean_of` (chance > 50% on the side
+   where the projection mean sits; mean from the saved PMF, chance alone without one). Rows without a lean are counted
+   ("no_lean") and not scored. The scorecard's max-chance side is reported alongside as `chosen_side` for comparison
+   only. The "as shown" set additionally removes rows the live board would have held: N4 (a market chance at the quote
+   priced the lean side at least as high - from the settled `mkt-*` / `mc-1` forecasts of the same offer and
+   forecast_at, A8 1), sg-1 ratio holds (mean < 25% of the line or > 4x the line, line >= 2), and sg-1 l10_contra
+   when the history store is reachable (counted "unknown" otherwise). Letter = sports-gp-1 band of the unrounded
+   lean-side unconditional chance. vg-1 containment is NOT applied (the point is to score what the letters would be).
+4. **Levels** (per league, each with n, W-L-P, hit rate, stated, game-clustered 95% interval of the hit rate
+   (evaluate.boot_mean, B = 2,000, seed 20261023), balance = share of leans that are Over vs the realised over rate):
+   overall -> stat -> letter (A / B / C / Lean, order holds = hit(A) >= hit(B) >= hit(C) >= hit(Lean) on the bands
+   with n >= 30) -> Over / Under -> platform -> variant (standard / goblin / demon / other) -> home / away ->
+   favourite / underdog (pickcenter moneyline, else Kalshi home-win; unknown otherwise) -> |line - mean| bins (< 0.5,
+   0.5-1.5, 1.5-3, >= 3) -> market chance at the quote yes / no -> day of week and back-to-back (NBA: rest_days <= 1.1)
+   -> forecast age before start (< 1 h, 1-3 h, 3-12 h, >= 12 h) -> model / artifact sha. Also: vg-1 gate state per
+   stat, sg-1 and N4 counts with the hit rate of what they removed, cf-2 confidence bins (signal() rebuilt from the
+   saved inputs; the time-dependent stale cap left out), the cal-mi-1 walk-forward with A8a (cal.run_eval, unchanged),
+   and calibration (hit - stated, in-the-large) reported SEPARATELY from selection (hit rate vs 50%, vs the over rate).
+   Intervals from fewer than 2 games are null. Every slice with n < 30 is printed with n only (no verdict is read
+   from it).
+5. **Verdict rule per league** (read by the owner from the production output; nothing changes automatically; the
+   letters of a league change only through the owner release process). Game-day = UTC date of (event start - 10 h),
+   else of (forecast_at - 10 h). AB = the "as shown" rows with letter A or B pooled (A + B is what a member would act
+   on; C and Lean are reported but do not enter the verdict - at 53-56% stated, 150 props cannot separate them from
+   50%).
+   - **release** (NFL: the owner may set `VG_CONTAIN_LEAN = False`; NBA: letters stay on) requires ALL of:
+     (1) n(AB) >= 150 scored props from >= 3 game-days and >= 10 games;
+     (2) hit(AB) >= stated(AB) - 0.05;
+     (3) the game-clustered 95% interval of hit(AB) has lower bound >= 0.50;
+     (4) balance |share Over - over rate| <= 0.15 on AB and on the league's whole scored set;
+     (5) no stat with >= 30 AB props whose hit interval upper bound is < 0.50.
+   - **contain** (NFL stays contained; NBA: the owner withdraws the letters of the league or of the named stat):
+     n(AB) >= 150 from >= 3 game-days and (the hit(AB) interval upper bound < 0.50 OR hit(AB) < stated(AB) - 0.10);
+     or any stat with >= 60 AB props whose hit interval upper bound is < 0.50 -> "contain:<stat>".
+   - **keep** when n(AB) >= 150 from >= 3 game-days and neither release nor contain holds (letters stay as they are).
+   - **insufficient** when n(AB) < 150 or fewer than 3 game-days: no change either way.
+   A release of NFL letters keeps edges, confidence and edge ranking withheld (vg-1 unchanged) and stakes at 0U.
+6. **Nothing else changes.** sports-gp-1 bands, sports-sp-1 (0U), gate H / gate F, A8 / A8a, cf-2, N4, sg-1 and
+   `VG_CONTAIN_LEAN` are unchanged by this amendment. `gradecheck` is read-only (it writes no file and no row).
