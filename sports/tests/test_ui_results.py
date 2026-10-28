@@ -55,7 +55,7 @@ def test_contained_league_carries_no_research_letters(monkeypatch, contain):
     else:
         assert [g["n"] for g in G["rows"]] == [1, 0, 0, 0] and "withheld" not in G
         assert R[0]["grade"] == "A" and M["contained"] is False
-    assert M["not_validated"] == "NFL model not validated"                     # the banner stays in both states
+    assert M["not_validated"] == ("NFL model not validated" if contain else None)   # A9a 4: only while contained
     assert rp.grades(nba, "nba")["rows"][0]["n"] == 1 and rp.recent(nba, league="nba")[0]["grade"] == "A"
     assert rp.model_gate("nba")["contained"] is False
 

@@ -276,8 +276,8 @@ def guard_reason(f, league, rid=None, held=()):
     """vg-1 / sg-1 for one forecast as a slip leg -> exclusion text or None (member policy)."""
     if f.model_version not in board_view.SCOUT_MODELS:
         return None
-    if board_view.gate_reason(league, f.stat):
-        return "model not validated for this market: projection only"
+    if board_view.contain_reason(league, f.stat) or board_view.gate_reason(league, f.stat):
+        return "model not validated for this market: projection only"     # contained (A9a 4) or failed gate
     side = f.chosen_side
     code = board_view.sanity_check(f.projection_mean, f.line, side if side in ("over", "under") else None)
     if code is None and (rid, f.forecast_id) in held:

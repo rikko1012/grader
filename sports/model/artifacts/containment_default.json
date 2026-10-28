@@ -1,0 +1,20 @@
+{
+ "version": "ct-1",
+ "register": "sports/research/REGISTER.md A9a",
+ "updated_at": "2026-10-28T00:00:00Z",
+ "seed": "owner-run gradecheck 2026-10-28 on the live service (REGISTER A9a 1)",
+ "leagues": {
+  "nba": {"contained": true, "stats": [], "verdict": "contain", "decided": "2026-10-28", "since": "2026-10-28"},
+  "nfl": {"contained": true, "stats": [], "verdict": "insufficient", "decided": "2026-10-28", "since": "2026-10-25"}
+ },
+ "log": [
+  {"date": "2026-10-28", "league": "nba", "verdict": "contain",
+   "why": "hit 0.534 more than 0.10 below stated 0.656", "n": 1634, "game_days": 3, "hit": 0.5343,
+   "stated": 0.6556, "ci": null, "before": {"contained": false, "stats": []},
+   "after": {"contained": true, "stats": []}, "changed": true, "source": "owner-run gradecheck 2026-10-28"},
+  {"date": "2026-10-28", "league": "nfl", "verdict": "insufficient",
+   "why": "needs >= 150 A+B props from >= 3 game-days (have 900 from 2)", "n": 900, "game_days": 2, "hit": 0.5878,
+   "stated": 0.6783, "ci": null, "before": {"contained": true, "stats": []},
+   "after": {"contained": true, "stats": []}, "changed": false, "source": "owner-run gradecheck 2026-10-28"}
+ ]
+}

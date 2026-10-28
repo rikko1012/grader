@@ -11,6 +11,7 @@ MEMBER  GET /api/sports/model/forecasts?league=nba|nfl[&event_id=&player_id=&sta
         GET /api/sports/model/registry      versions, artifacts, validation states, registered study summaries
         GET /api/sports/model/features      feature registry fr-1 with observed effects
 ADMIN   GET /api/sports/admin/model/learning   scorecard, forward gate F status, diagnostic queue
+        GET /api/sports/admin/model/gradecheck[?part=headline]   daily grade check, containment, cal-mi log (A9a)
 """
 from __future__ import annotations
 
@@ -95,10 +96,31 @@ def model(req):
 
 
 def admin_model(req):
-    if (req.rest or "").strip("/") != "learning":
+    rest = (req.rest or "").strip("/")
+    if rest == "gradecheck":
+        return admin_gradecheck(req)
+    if rest != "learning":
         return 404, {"error": "not found"}
     d = _load("admin_learning.json")
     return (200, d) if d is not None else (503, {"error": "model_snapshot_not_ready"})
+
+
+def admin_gradecheck(req):
+    """GET /api/sports/admin/model/gradecheck[?part=headline] - the daily grade check (REGISTER A9a 3), read-only:
+    the headline per league, the containment state + log, the cal-mi daily decisions; without part=headline also the
+    full compact gradecheck JSON the job wrote (model/gradecheck.json). Files only; nothing is computed here."""
+    from .model import daily
+    p = daily.paths()["gradecheck"]
+    try:
+        mt = os.stat(p).st_mtime_ns
+    except FileNotFoundError:
+        mt = None
+    view = web.cached(("admin_gradecheck_view", mt), daily.admin_view, ttl=60)
+    if (req.query or {}).get("part") == "headline":
+        return 200, view
+    full = web.cached(("admin_gradecheck", mt), lambda: json.loads(p.read_text(encoding="utf-8")), ttl=300) \
+        if mt is not None else None
+    return 200, dict(view, gradecheck=full)
 
 
 def ladder_row(d, line):

@@ -72,8 +72,13 @@ def research_grade(p_side):
 
 
 def contain_reason(league, stat):
-    """The vg-1 hold text when containment is ON for this market, else None (VG_CONTAIN_LEAN)."""
-    return gate_reason(league, stat) if VG_CONTAIN_LEAN else None
+    """The contained-league hold text (GATE_TEXT, the existing wording) when this market's letters are contained, else
+    None. THE one source: sports/containment.py (env SPORTS_CONTAIN_<LG> > daily A9 5 decision > committed seed >
+    the legacy VG_CONTAIN_LEAN + failed-gate rule) - REGISTER A9a 4."""
+    from . import containment
+    if not containment.contained(league, stat):
+        return None
+    return GATE_TEXT.format(LG=(league or "").upper() or "Scout")
 
 
 def gate_reason(league, stat):
@@ -342,9 +347,10 @@ def calibrated(league, stat, po, pu, pp, model, mkc):
 def quote_x(league, stat, po, pu, mu, line, mkc, l10=None, iv=None):
     """The q.x a snapshot / sheet quote carries: a hold {"b", "t", "v"} (vg-1 gate, then sg-1 sanity), else the cf-2
     signal. -> (x, sanity code or None)."""
+    held = contain_reason(league, stat)                # A9a 4: the one containment source, both leagues
+    if held:
+        return {"b": "gate", "t": held, "v": GATE_VERSION}, None
     gate = gate_reason(league, stat)
-    if gate and VG_CONTAIN_LEAN:
-        return {"b": "gate", "t": gate, "v": GATE_VERSION}, None
     sig = signal(po, pu, mu, line, mkc, l10, iv)
     # the L10 rule reads the lean the row actually carries (after N4): a row the market already priced away has no
     # lean, so it is never "held: last-10 results contradict the lean" - the ratio rules apply either way
@@ -354,9 +360,8 @@ def quote_x(league, stat, po, pu, mu, line, mkc, l10=None, iv=None):
     if sig.get("ln"):                                  # rg-1: grade from the UNROUNDED lean-side chance
         sig["gr"] = research_grade(po if sig["ln"] == "over" else pu)
         sig["gp"] = GRADE_POLICY
-    if gate:                                           # failed-gate market, containment lifted for lean + grade only
-        for k in ("e", "s", "g"):
-            sig.pop(k, None)
+    if gate:                                           # failed-gate market, letters released: lean + grade only
+        for k in ("e", "s", "g"):                      # (A9 5: edges, confidence and rank stay withheld); the
+            sig.pop(k, None)                           # "model not validated" wording shows only while contained
         sig["c"], sig["cw"] = None, []
-        sig["nv"] = NOT_VALIDATED_TEXT.format(LG=(league or "").upper() or "Scout")
     return sig, None

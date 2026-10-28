@@ -150,9 +150,15 @@ def write_snapshot(now=None):
         "written_at": now, "registry": forward.registry(), "challengers": _runtime_challengers(), "artifacts": {s: _art_meta(forward.load_artifact(s))
                                                                          for s in ("nba", "nfl")},
         "features": features.with_effects(), "studies": studies})
+    try:                                                             # daily grade check + containment (A9a)
+        from . import daily
+        grades = daily.admin_view()
+    except Exception as e:                                           # noqa: BLE001
+        grades = {"error": str(e)[:200]}
     _atomic_write(api_dir() / "admin_learning.json", {"written_at": now, "scorecard": sc, "forward_gate": gates,
                                                       "grade_bands": bands, "shadow": shadow_state,
-                                                      "diagnostics": diag, "forecast_run": _last_forecast_run()})
+                                                      "diagnostics": diag, "forecast_run": _last_forecast_run(),
+                                                      "grades": grades})
     return out
 
 

@@ -1110,6 +1110,17 @@ def write_cal_index(root, base_meta, board_rows):
     summary = {"version": cal.VERSION, "enabled": cal.enabled(), "weights": src, "sha": (obj or {}).get("sha"),
                "markets_on": sorted(k for k, p in ((obj or {}).get("params") or {}).items() if p.get("on")),
                "quotes": len(idx), "with_market": sum(1 for v in idx.values() if v.get("mode") == "M")}
+    # A9a 6: persist the shown (calibrated) chance beside the offer's OWN forecast (a line read's chance belongs to
+    # another line's record, so it is never stored); first write wins; never breaks the snapshot
+    items = [(q["cal"].get("f"), r.get("stat"), q.get("line"), q["cal"]) for r in board_rows
+             for q in (r.get("quotes") or []) if q.get("cal") and q.get("forecast_id")
+             and q["cal"].get("f") == q.get("forecast_id")]
+    if items:
+        try:
+            from .model import shown
+            summary["shown_new"] = shown.record(base_meta.get("league"), items, base_meta.get("built_at") or now_utc())
+        except Exception as e:                          # noqa: BLE001
+            summary["shown_error"] = f"{type(e).__name__}: {str(e)[:120]}"
     _write(root / "cal.json", {**base_meta, **summary, "quotes_by_record": idx})
     return summary
 

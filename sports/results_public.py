@@ -148,6 +148,11 @@ def _rows_from(con, league, setts):
                 if s not in by_fc[fid]:
                     by_fc[fid].append(s)
     rows = []
+    try:                                                # A9a 6: the chance members saw (cal-mi ON), raw kept
+        from .model import shown as _shown
+        seen = _shown.get_many(by_fc)
+    except Exception:                                   # noqa: BLE001 - results never break on the side store
+        seen = {}
     for fid, ss in by_fc.items():
         fc = fcs.get(fid) or store.get(con, fid)
         if fc is None or getattr(fc, "league", league) != league:
@@ -168,6 +173,10 @@ def _rows_from(con, league, setts):
              "status": "void" if void else ("settled" if outcome else "unresolved"), "outcome": outcome,
              "error": (actual - fc.projection_mean) if (outcome and actual is not None and fc.projection_mean is not None)
              else None}
+        sh = seen.get(fid)
+        if sh is not None:                              # score the displayed chance; the record's raw chance kept
+            r["raw"] = [fc.p_over, fc.p_under, fc.p_push]
+            r.update(p_over=sh["p_over"], p_under=sh["p_under"], p_push=sh["p_push"], chance="shown")
         side = lean_side(r) if outcome else None
         r["lean"] = side
         r["lean_result"] = None if not side else ("push" if outcome == "push" else ("win" if outcome == side else "loss"))
@@ -237,9 +246,8 @@ def grades(rows, league=None):
     """rg-1 research letters of settled Scout leans: sports-gp-1 band of the UNROUNDED unconditional lean-side chance
     (board_view.research_grade); n, W-L-P, hit rate + game-clustered 95% interval. Research - not validated. The
     board's market (N4) / sanity holds are live-board rules and are not re-applied to stored forecasts here.
-    Known limit (A9 audit 2026-10-28): the chance here is the forecast record's raw sm-1 chance; while a market's
-    cal-mi-1 flag is ON the board shows the calibrated chance, which is not stored per forecast (tracked picks keep
-    it). Every cal-mi market is OFF (A8a), so the two agree today; `gradecheck` (A9) scores the walk-forward chance."""
+    The chance is the one members saw: the shown (cal-mi-1) chance stored beside the forecast when its market was ON
+    (sports/model/shown.py, A9a 6), else the record's raw sm-1 chance (= what the board showed while OFF)."""
     from . import board_view
     leans = [r for r in rows if r["status"] == "settled" and r["lean"] and not _contained(league, r.get("stat"))]
     out = []
@@ -316,13 +324,14 @@ def recent(rows, names=None, n=RECENT_N, league=None):
 
 
 def model_gate(league):
-    """Which of the league's stats passed sm-1's registered gate; the plain member text when none did."""
+    """Which of the league's stats passed sm-1's registered gate; the contained-league wording ("<LG> model not
+    validated", the owner's text) only while the league's letters are contained (A9a 4) - never beside released letters."""
     from . import board_view, capabilities
     stats = list(capabilities.SUPPORTED.get(league, ()))
     ok = [st for st in stats if board_view.gate_reason(league, st) is None]
-    return {"rule": board_view.GATE_VERSION, "validated_stats": ok,
-            "contained": _league_contained(league),
-            "not_validated": None if ok or not stats else board_view.NOT_VALIDATED_TEXT.format(LG=league.upper())}
+    contained = _league_contained(league)
+    return {"rule": board_view.GATE_VERSION, "validated_stats": ok, "contained": contained,
+            "not_validated": board_view.NOT_VALIDATED_TEXT.format(LG=league.upper()) if contained else None}
 
 
 def build(con, now=None, base=None):
