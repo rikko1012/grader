@@ -1,0 +1,42 @@
+Sports research workflow comparison and shipped improvements
+
+Sources reviewed (public product pages/documentation, not paid-account audits):
+Outlier saved filters: https://help.outlier.bet/en/articles/9425417-using-filters-to-define-your-sports-betting-strategy
+Outlier prop research: https://help.outlier.bet/en/articles/6711738-research-player-propositions-with-outlier-s-prop-finder
+Props.cash: https://props.cash/
+Pine Sports: https://www.pine-sports.com/
+
+Scout already has a dense prop board, player history, exact-line book comparisons,
+research forecasts, comparison selections, slip building and tracked picks. Those
+are the same broad research workflows emphasized by competing tools. The useful
+gap addressed here is repeatability: users previously had to recreate combinations
+of stat, book, game, side and player filters manually.
+
+Implemented:
+- Named saved filter views, separate NBA and NFL lists, up to 12 per league.
+- Save, apply and remove from a compact disclosure above the board.
+- Duplicate-name protection, safe handling of broken browser storage, bounded
+  names and filter values. All user-visible names are escaped.
+- Expired games and unavailable books reset to All with an explanation.
+- Saved views preserve filters, not frozen prices or projections. Data continues
+  to come from the normal live snapshot. Browser-local storage is stated clearly.
+- Responsive controls, 44px action targets, keyboard focus and status messages.
+- Missing essential page scripts now show a Reload Sports recovery screen instead
+  of throwing during initialization and leaving the workspace blank.
+
+Validation:
+Sports suite: 797 passed, 68 skipped (including browser-dependent tests), 101 warnings.
+New Node coverage: league isolation, malformed data, duplicate names, limits,
+filter normalization and missing-script recovery. Existing UX helper tests passed.
+Actual Chrome fixture checks: save, reset, apply, reload persistence, remove;
+desktop and 390px phone layout inspected. Fixture data never enters production.
+
+Further opportunities, not claimed shipped:
+- Saved player watchlists and opt-in line-change alerts, with server-side revision
+  and freshness checks before notification.
+- Research notes attached to immutable tracked picks.
+- Account-synced views across devices (requires authenticated storage and limits).
+- Expanded injury/rotation context only when sources and update cadence support it.
+Do not copy competitor EV/accuracy claims or convert research confidence into
+validated grades. These UI changes do not alter model probabilities, settlement,
+validation gates, stakes, member access or paid hosting resources.

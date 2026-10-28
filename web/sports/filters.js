@@ -74,7 +74,41 @@
     return base(m, Object.assign({}, f, {book: "all"}));
   }
 
-  var api = {quotePriced: quotePriced, marketBooks: marketBooks, pricedBooks: pricedBooks, statCounts: statCounts,
+  var VIEWS_KEY = "scout.sports.views.v1", VIEW_LIMIT = 12;
+  function viewFilters(f) {
+    f = f || {};
+    var out = {more: f.more === true};
+    ["q", "stat", "ev", "book", "side"].forEach(function (k) {
+      out[k] = typeof f[k] === "string" ? f[k].slice(0, 160) : (k === "q" ? "" : k === "side" ? "any" : "all");
+    });
+    if (["any", "over", "under", "both"].indexOf(out.side) < 0) out.side = "any";
+    return out;
+  }
+  function readViews(raw, league) {
+    try {
+      var data = JSON.parse(raw || "{}");
+      var rows = data && data[league];
+      if (!Array.isArray(rows)) return [];
+      var names = [];
+      return rows.filter(function (v) {
+        if (!v || typeof v.name !== "string" || !v.name.trim() || !v.filters) return false;
+        var name = v.name.trim().slice(0, 40);
+        if (names.indexOf(name.toLowerCase()) >= 0) return false;
+        names.push(name.toLowerCase()); return true;
+      }).slice(0, VIEW_LIMIT).map(function (v) { return {name: v.name.trim().slice(0, 40), filters: viewFilters(v.filters)}; });
+    } catch (e) { return []; }
+  }
+  function saveView(raw, league, name, filters) {
+    name = String(name || "").trim().slice(0, 40);
+    if (!name) throw new Error("Name your view first.");
+    if (["nba", "nfl"].indexOf(league) < 0) throw new Error("Choose a league first.");
+    var data = {nba: readViews(raw, "nba"), nfl: readViews(raw, "nfl")};
+    if (data[league].some(function (v) { return v.name.toLowerCase() === name.toLowerCase(); })) throw new Error("That name is already saved. Choose another name.");
+    if (data[league].length >= VIEW_LIMIT) throw new Error("You have 12 views for this league. Remove one to save another.");
+    data[league].push({name: name, filters: viewFilters(filters)});
+    return JSON.stringify(data);
+  }
+  var api = {readViews: readViews, saveView: saveView, viewFilters: viewFilters, quotePriced: quotePriced, marketBooks: marketBooks, pricedBooks: pricedBooks, statCounts: statCounts,
              quickStats: quickStats, sanitize: sanitize, chips: chips, matches: matches, QUICK_MAX: QUICK_MAX};
   if (typeof module !== "undefined" && module.exports) { module.exports = api; return; }
 
@@ -83,6 +117,12 @@
   function setUx(k, v) { try { var u = getUx(); u[k] = v; localStorage.setItem(LS_UX, JSON.stringify(u)); } catch (e) {} }
   function wide() { return (root.innerWidth || 1280) >= 768; }
   function opt(v, label, cur) { return '<option value="' + esc(v) + '"' + (String(cur) === String(v) ? " selected" : "") + ">" + esc(label) + "</option>"; }
+  function storedViews() { try { return localStorage.getItem(VIEWS_KEY); } catch (e) { return null; } }
+  function viewsHtml(lg) {
+    return readViews(storedViews(), lg).map(function (v, i) {
+      return '<span class="sw-view-pill"><button type="button" data-load-view="' + i + '" title="Apply saved filters">' + esc(v.name) + '</button><button type="button" data-delete-view="' + i + '" aria-label="Remove saved view ' + esc(v.name) + '">×</button></span>';
+    }).join("");
+  }
 
   // B: decoded board {markets, stats}; f: the league's filters; evs: [[event id, label, start]]; ctx: {bookName}
   function html(B, f, evs, ctx) {
@@ -95,6 +135,7 @@
     var ux = getUx(), open = wide() || !!ux.fxOpen;
     var secCount = (f.book !== "all" ? 1 : 0) + (f.side !== "any" ? 1 : 0) + (f.more ? 1 : 0);
     return '<form class="sw-filters sw-fx" role="search" id="sw-bf" onsubmit="return false" aria-label="Prop board filters">' +
+      '<details class="sw-saved-views"><summary>Saved research views <span class="sw-faint">· ' + readViews(storedViews(), ctx.lg).length + '</span></summary><p class="sw-faint sw-small">Keep your favorite filters for ' + esc((ctx.lg || "").toUpperCase()) + '. Saved on this browser; live lines refresh normally.</p><div id="sw-view-list" class="sw-view-list">' + viewsHtml(ctx.lg) + '</div><div class="sw-view-save"><label class="sw-sr" for="sw-view-name">New view name</label><input id="sw-view-name" maxlength="40" placeholder="Name these filters…" autocomplete="off"><button type="button" class="sw-btn" id="sw-save-view">Save current filters</button></div><p id="sw-view-feedback" class="sw-small" role="status" aria-live="polite"></p></details>' +
       '<div class="sw-field grow"><label for="sw-q">Player or team</label><input id="sw-q" name="q" type="search" aria-keyshortcuts="/" autocomplete="off" placeholder="' + esc(root.SportsLabels && ctx && ctx.lg ? root.SportsLabels.searchPlaceholder(ctx.lg) : "Search players, teams") + '" value="' + esc(f.q) + '"></div>' +
       '<div class="sw-fx-group"><span class="sw-fx-lab" id="sw-fx-stat-l">Stat</span><div class="sw-fx-btns" role="group" aria-labelledby="sw-fx-stat-l">' +
         '<button type="button" data-fstat="all" aria-pressed="' + (f.stat === "all") + '">All</button>' +
@@ -124,6 +165,44 @@
   function bind(form, f, B, evs, ctx, h) {
     var labels = {}; B.markets.forEach(function (m) { labels[m.st] = B.stats[m.st] || m.st; });
     var cctx = {stats: labels, events: evMap(evs), books: pricedBooks(B.markets), bookName: ctx.bookName};
+    function notice(message) {
+      form.querySelector("#sw-view-feedback").textContent = message;
+      form.querySelector(".sw-saved-views summary span").textContent = "· " + readViews(storedViews(), ctx.lg).length;
+    }
+    form.querySelector("#sw-save-view").addEventListener("click", function () {
+      try {
+        var input = form.querySelector("#sw-view-name");
+        var next = saveView(storedViews(), ctx.lg, input.value, f);
+        localStorage.setItem(VIEWS_KEY, next);
+        form.querySelector("#sw-view-list").innerHTML = viewsHtml(ctx.lg);
+        notice("View saved. Your filters are ready to reuse."); input.value = "";
+      } catch (e) { notice(e.name === "Error" ? e.message : "This browser could not save your view. Check browser storage settings."); }
+    });
+    form.querySelector("#sw-view-list").addEventListener("click", function (event) {
+      var load = event.target.closest("[data-load-view]"), del = event.target.closest("[data-delete-view]");
+      if (!load && !del) return;
+      var views = readViews(storedViews(), ctx.lg), i = Number((load || del).getAttribute(load ? "data-load-view" : "data-delete-view"));
+      if (!views[i]) return;
+      if (del) {
+        try {
+          var data = {nba: readViews(storedViews(), "nba"), nfl: readViews(storedViews(), "nfl")};
+          data[ctx.lg].splice(i, 1); localStorage.setItem(VIEWS_KEY, JSON.stringify(data));
+          form.querySelector("#sw-view-list").innerHTML = viewsHtml(ctx.lg); notice("Saved view removed.");
+          form.querySelector("#sw-view-name").focus();
+        } catch (e) { notice("This browser could not remove the view."); }
+        return;
+      }
+      var next = viewFilters(views[i].filters), reload = next.more !== f.more;
+      var oldBook = next.book, oldEvent = next.ev;
+      sanitize(next, cctx.books, evs.map(function (e) { return e[0]; }));
+      // Secondary stats may not be in this snapshot until the more-stats reload finishes.
+      if (!reload && next.stat !== "all" && !labels[next.stat]) next.stat = "all";
+      Object.assign(f, next); refresh();
+      var more = form.querySelector("#sw-more"); if (more) more.checked = f.more;
+      h.onChange(reload);
+      var toast = document.getElementById("sw-toast");
+      if (toast) toast.textContent = 'Applied "' + views[i].name + '".' + (oldBook !== next.book || oldEvent !== next.ev ? " Unavailable books or games were reset to All." : "");
+    });
     function refresh() {
       form.querySelectorAll("[data-fstat]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-fstat") === f.stat)); });
       form.querySelectorAll("[data-fev]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-fev") === f.ev)); });

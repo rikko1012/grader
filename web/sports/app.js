@@ -6,6 +6,15 @@
    button) or computed here from the listed per-game records (window statistics). */
 (function () {
   "use strict";
+  var missing = ["SportsStats", "ScoutShell", "SportsLabels", "SportsFilters", "SportsRows", "SportsTable"].filter(function (name) { return !window[name]; });
+  if (missing.length) {
+    var recovery = document.getElementById("sw-main");
+    if (recovery) {
+      recovery.innerHTML = '<section class="sw-card" role="alert"><h1>Sports could not finish loading</h1><p>A page component did not arrive. Reload to try again. Your saved picks and views are unchanged.</p><button type="button" class="sw-btn" id="sw-retry-load">Reload Sports</button></section>';
+      document.getElementById("sw-retry-load").addEventListener("click", function () { window.location.reload(); });
+    }
+    return;
+  }
   var S = window.SportsStats, Sh = window.ScoutShell, esc = Sh.esc, L = window.SportsLabels;
   var LS_FILTERS = "scout.sports.filters.v1";
   // Slip Studio (sports/slips, web/sports/slips.html): its draft lives in localStorage "ss:draft:<league>:<platform>"
@@ -802,7 +811,7 @@
           var x = document.getElementById("sw-tb-sortsel"); if (x) x.focus();
         });
         window.SportsTable.bind(document.getElementById("sw-bbody"), TB, function (after) { draw(); if (after) after(); });
-        window.SportsFilters.bind(document.getElementById("sw-bf"), f, B, evs, {bookName: bookName}, {      // HOOK (ux)
+        window.SportsFilters.bind(document.getElementById("sw-bf"), f, B, evs, {bookName: bookName, lg: state.lg}, {      // HOOK (ux)
           onChange: function (reload) { state.boardShown = BOARD_PAGE; sync(); if (reload) renderBoard(null); else draw(); }, onReset: reset});
         document.getElementById("sw-reset").addEventListener("click", reset);
         sync();

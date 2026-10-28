@@ -17,6 +17,13 @@ def test_ux_helpers_in_node():
     assert r.returncode == 0 and r.stdout.strip().endswith("ok"), r.stdout + r.stderr
 
 
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_saved_research_views_and_asset_recovery():
+    script = Path(__file__).resolve().parent / "ui_saved_views_test.js"
+    r = subprocess.run(["node", str(script), str(WEB)], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
 def test_ux_assets_wired_and_scoped():
     page = (WEB.parent / "sports.html").read_text(encoding="utf-8")
     assert "/sports/ux.css" in page and (WEB / "ux.css").exists()

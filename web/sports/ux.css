@@ -93,6 +93,18 @@
 .sw .sw-fx-clear{min-height:36px;font-size:12px;padding:0 6px}
 @media(min-width:768px){.sw .sw-fx-more>summary{display:none}}
 @media(max-width:640px){.sw .sw-fx-sec .sw-field{flex:1 1 calc(50% - 12px)}.sw .sw-fx-btns button,.sw .sw-fx-strip button{min-height:44px}}
+/* Reusable research views stay compact above the board on every screen size. */
+.sw .sw-saved-views{grid-column:1/-1;width:100%;border-bottom:1px solid var(--line);padding:0 0 10px}
+.sw .sw-saved-views summary{cursor:pointer;font-size:13px;font-weight:600;min-height:32px;align-content:center}
+.sw .sw-view-list{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.sw .sw-view-pill{display:inline-flex;max-width:100%;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel-3)}
+.sw .sw-view-pill button{min-height:44px;background:none;color:var(--text);border:0;padding:0 12px;cursor:pointer;overflow-wrap:anywhere}
+.sw .sw-view-pill button+button{border-left:1px solid var(--line);color:var(--muted);min-width:44px}
+.sw .sw-view-pill button:hover{background:#f7a45b1a;color:var(--accent)}
+.sw .sw-view-save{display:flex;gap:8px;flex-wrap:wrap;max-width:540px}
+.sw .sw-view-save input{min-width:0;flex:1 1 180px;min-height:44px;background:var(--panel-3);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font:inherit}
+.sw #sw-view-feedback:empty{display:none}
+.sw .sw-saved-views button:focus-visible,.sw .sw-saved-views summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 /* My picks: tabs Open / Settled / Voided, rows, own results vs model validation */
 .sw .sw-mp-tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:0 0 12px;overflow-x:auto}
 .sw .sw-mp-tabs [role=tab]{background:transparent;border:0;border-bottom:2px solid transparent;color:var(--muted);min-height:44px;padding:0 14px;cursor:pointer;font-weight:600;white-space:nowrap}
