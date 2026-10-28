@@ -346,7 +346,9 @@ def quote_x(league, stat, po, pu, mu, line, mkc, l10=None, iv=None):
     if gate and VG_CONTAIN_LEAN:
         return {"b": "gate", "t": gate, "v": GATE_VERSION}, None
     sig = signal(po, pu, mu, line, mkc, l10, iv)
-    code = sanity_check(mu, line, lean_of(po, pu, mu, float(line)), l10)
+    # the L10 rule reads the lean the row actually carries (after N4): a row the market already priced away has no
+    # lean, so it is never "held: last-10 results contradict the lean" - the ratio rules apply either way
+    code = sanity_check(mu, line, sig.get("ln"), l10)
     if code:
         return {"b": code, "t": SANITY_TEXT[code], "v": SANITY_VERSION}, code
     if sig.get("ln"):                                  # rg-1: grade from the UNROUNDED lean-side chance

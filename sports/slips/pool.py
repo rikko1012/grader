@@ -258,6 +258,20 @@ def _sanity_held(league):
         return set()
 
 
+def lean_mismatch(po, pu, mean, line, side):
+    """THE board lean rule applied to a slip leg (A9 audit 2026-10-28): a leg is the side the board leans to
+    (board_view.lean_of - chance > 50% AND the projection mean on that side of the line). A forecast whose chosen side
+    has the higher chance while its mean sits on the other side of the line is "No lean" on the board, so it is never
+    a slip leg either. -> exclusion text or None (a forecast without a mean keeps the chance-only rule)."""
+    if mean is None or side not in ("over", "under"):
+        return None
+    lean = board_view.lean_of(po, pu, mean, float(line))
+    if lean == side:
+        return None
+    return ("no lean: the projection mean is on the other side of the line" if lean is None and
+            (po if side == "over" else pu) > 0.5 else "no lean: the board does not lean to this side")
+
+
 def guard_reason(f, league, rid=None, held=()):
     """vg-1 / sg-1 for one forecast as a slip leg -> exclusion text or None (member policy)."""
     if f.model_version not in board_view.SCOUT_MODELS:
@@ -303,6 +317,9 @@ def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, market_at
         side = max(offered, key=lambda s_: po if s_ == "over" else pu) if offered else side
     if side is None:
         return "no side chosen", None
+    why = lean_mismatch(po, pu, f.projection_mean, o.line, side)
+    if why:
+        return why, None
     if policy == "member":
         g = guard_reason(f, o.league, rid, held)
         if g:
