@@ -33,5 +33,8 @@ def test_model_versions_and_challengers_record_no_model_change():
 
 
 def test_cs2_grader_path_never_imports_lol():
-    import grader, grade_display, pick_verdict  # noqa: F401
-    assert not any(m == "lol" or m.startswith("lol.") for m in sys.modules)
+    # a fresh interpreter: other tests in the same session legitimately import lol
+    import subprocess
+    code = ("import sys; import grader, grade_display, pick_verdict; "
+            "sys.exit(1 if any(m == 'lol' or m.startswith('lol.') for m in sys.modules) else 0)")
+    assert subprocess.run([sys.executable, "-c", code], cwd=str(ROOT), capture_output=True).returncode == 0
