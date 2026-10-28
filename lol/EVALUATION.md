@@ -735,3 +735,100 @@ measurably worse where events did not deviate). A pass ships on the branch only 
 save time in lol.center.forecast.forecast_one, version-tagged in the record (`lol-1f+ep2` / `lol-1f+lb1`, the uncorrected lambda
 kept in inputs), with an environment off switch (`LOL_EP2=0` / `LOL_LB1=0`) and tests; the forward record is then reported per
 version. A fail is recorded with its numbers and nothing changes. At most these three candidates are tested on this record.
+
+### A15 result (2026-10-28; lol/eval/grade_check_a15_2026-10-28/) - ep-2 and lb-1 FAIL the registered rule, lc-1 still fails, one grading-logic defect fixed
+
+Registration commit 839cd06 (this text written after it). Files: `multilevel.md` (every level), `why.md` (the component diagnostic),
+`cands.json` (ep-2 / lb-1 walk-forward), `ep2_hist.json` (the ep-2 historical guard), `lc1_eval_1028.json` (A14 re-run). Scratch
+scripts live outside the repo (scratchpad lolgrade1028). Rule used throughout: latest pre-match forecast per (platform, market_key,
+line), latest settlement version, graded, non-push; shown chance = raw (lc-1 OFF). Percentages are the chosen side's stated chance /
+hit rate; CI = series-grouped 95%.
+
+**The record.** 15,443 forecast rows (all pre-match; 0 after the series start), 1,559 latest lines, 1,258 settlement units (1,225 graded,
+16 push, 17 dnp; 301 lines on series not yet complete), **1,225 scored rows on 27 series = 529 player-markets + 696 duplicates** (other
+book / alternate line). 20 of 27 series are Worlds 2026 Main Event best-of-1s (Swiss); 2 Play-In best-of-5s (lol-1), 1 EM best-of-5,
+4 Worlds best-of-3s. Below the A6 minimum (300 player-markets across 60+ series): 529 / 27.
+
+| level (biggest findings first) | n (series) | W-L | stated / hit | hit 95% CI | bias (proj - actual) |
+|---|---|---|---|---|---|
+| all | 1,225 (27) | 703-522 | 63.5 / 57.4 | 50.6-63.4 | +0.26 |
+| **Over picks** | 405 (27) | 185-220 | 59.7 / 45.7 | 34.7-56.4 | **+1.04** |
+| Under picks | 820 (27) | 518-302 | 65.4 / 63.2 | 55.3-70.8 | -0.13 |
+| Lean Over / Lean Under | 136 / 136 | 55-81 / 79-57 | 52.4 / 40.4 and 52.5 / 58.1 | 26.4-53.9 / 45.7-69.6 | +0.82 / +0.27 |
+| kills / assists | 931 / 294 | 551-380 / 152-142 | 63.6 / 59.2 and 63.2 / 51.7 | 52.6-64.7 / 41.0-62.2 | +0.22 / +0.39 |
+| assists bot / assists top | 54 / 56 (26) | 23-31 / 27-29 | 62.5 / 42.6 and 63.0 / 48.2 | 27.3-57.6 / 37.0-58.9 | +0.61 / -0.06 |
+| scope 1 / 12 / 123 | 920 (20) / 176 (4) / 129 (3) | 517-403 / 123-53 / 63-66 | 63.2 / 56.2; 65.6 / 69.9; 63.0 / 48.8 | 48.7-63.6; 50.9-76.2; 37.8-57.1 | +0.20 / +0.44 / +0.43 |
+| PrizePicks / Underdog | 609 (24) / 616 (27) | 373-236 / 330-286 | 65.3 / 61.2 and 61.8 / 53.6 | 54.6-67.0 / 45.5-61.4 | +0.23 / +0.29 |
+| PP demon (93% Under, never offered) / goblin (66% Over) / standard | 191 / 161 / 257 | 139-52 / 83-78 / 151-106 | 70.9 / 72.8; 62.4 / 51.6; 63.0 / 58.8 | 66.7-78.9; 43.6-58.6; 49.2-67.6 | +0.28 / +0.26 / +0.17 |
+| side offered / not offered | 714 / 489 | 382-332 / 304-185 | 61.0 / 53.5 and 67.4 / 62.2 | 45.7-60.8 / 53.3-70.3 | +0.55 / -0.17 |
+| role top / mid / jungle / bot / support | 235 / 281 / 262 / 272 / 175 | 120-115 / 159-122 / 160-102 / 166-106 / 98-77 | 63.5 / 51.1; 64.7 / 56.6; 63.5 / 61.1; 64.7 / 61.0; 60.0 / 56.0 | 42.5-59.2; 47.7-65.1; 51.7-69.1; 51.7-70.1; 45.0-66.1 | +0.08 / -0.14 / +0.66 / +0.46 / +0.24 |
+| lol-1f / lol-1 (Play-In) | 1,124 (25) / 101 (2) | 656-468 / 47-54 | 63.4 / 58.4 and 65.0 / 46.5 | 51.3-64.9 / 37.8-53.6 | +0.22 / +0.70 |
+| win chance: even / favourite (>60%) / underdog (<40%) | 719 (16) / 259 (11) / 247 (11) | 444-275 / 137-122 / 122-125 | 62.9 / 61.8; 64.3 / 52.9; 64.5 / 49.4 | 54.8-68.2; 40.7-63.1; 35.6-64.4 | +0.36 / +0.76 / -0.56 |
+| history 60+ games / 30-59 / 10-29 | 1,175 / 37 / 13 | 685-490 / 15-22 / 3-10 | 63.6 / 58.3; 63.4 / 40.5; 57.6 / 23.1 | 51.7-64.1; 8.1-74.2; 0-33.3 | +0.32 / -1.74 / +0.57 |
+| grade band, all rows: A+ / A / A- / B+ / B / B- / Lean | 79 / 114 / 184 / 196 / 280 / 100 / 272 | 52-27 / 79-35 / 109-75 / 114-82 / 161-119 / 54-46 / 134-138 | 84.2 / 65.8; 76.8 / 69.3; 70.7 / 59.2; 65.6 / 58.2; 59.7 / 57.5; 55.9 / 54.0; 52.4 / 49.3 | A+ 46.0-87.5 ... Lean 41.7-56.5 | A+ -1.22, B +0.68 |
+| grade band, **member-visible (offered side)**: A+ / A / A- / B+ / B / B- / Lean | 17 / 40 / 91 / 105 / 185 / 72 / 204 | 12-5 / 26-14 / 51-40 / 59-46 / 98-87 / 41-31 / 95-109 | 82.7 / 70.6; 76.5 / 65.0; 70.7 / 56.0; 65.6 / 56.2; 59.7 / 53.0; 55.9 / 56.9; 52.5 / 46.6 | - | - |
+
+Brier / log loss of P(over | no push): all 0.247 / 0.690; kills 0.240 / 0.675; assists 0.268 / 0.736; Over picks 0.266 / 0.727; Under
+picks 0.237 / 0.671. Grade order holds on the member-visible side (A+ 70.6 > A 65.0 > A- 56.0 ~ B+ 56.2 > B 53.0; B- 56.9 and Lean 46.6 out
+of order within noise); on all rows A+ (65.8) < A (69.3) because 72 of the 79 A+ are PrizePicks demon Unders, which are never offered.
+Balance: the model favours Over on 33% of rows, 40% went Over (|0.07| <= 0.15). Projection accuracy per player-market: kills Map 1
+**+10.8%** (bias +0.28, CI +0.03..+0.52, 200 units / 20 series), kills jungle **+21%** (+0.76, CI +0.21..+1.35), kills favourites +17.5% /
+underdogs -10.3%, assists favourites +23.5% / underdogs -15.3% (CIs include 0); assists Map 1 +1.2%.
+
+**Why the projections run high (the level that explains it: the tournament, then the model version).**
+- Worlds 2026 is a low-kill event: its 19 teams score **12.75 kills per team-game at Worlds vs 15.98 in their earlier games** (16 of 19
+  teams lower; Main Event 12.78 / Play-In 12.70, game length 33 min), against MSI 2026 16.6 and EWC 2026 16.3 (which is why ep-1 found
+  nothing historically: earlier international events did not deviate). The projected team kill pool (sum of the 5 kills projections,
+  Worlds Map 1, 40 team-series) is 14.4 vs 13.0 actual (+10.8%) - the team / opponent factors (0.96 / 0.86, hl 60 d, KT / KO 10 games)
+  take the drop in only slowly.
+- lol-1f makes it worse at this event: on the same 250 kills units lol-1's own projection is +1.8% (MAE 1.946) and lol-1f's +7.1% (MAE
+  1.971); its multiplier averages 1.027 (kills) / 1.051 (assists), led by "combined kill pace (both teams)" (+4.9%) measured on
+  domestic games; the top multiplier tercile carries bias +9-17%, the bottom tercile -9%. Assists: lol-1 -3.8% (MAE 3.519), lol-1f
+  +1.6% (MAE 3.607). This is 25 series of one event, not a re-test of A7.1 (66,513 units); it is recorded for the lol-1f forward review.
+- The Over / Under asymmetry is the line's information: Over picks are where the projection sits above the line, and there the actual
+  lands 1.0 below the projection; the A+ Unders (line far above the projection) have actuals 1.4 ABOVE the projection. The offered
+  line carries information the model does not have (the same CS2 finding, pl-1 / pl-2), which lb-1 tested.
+
+**ep-2 (walk-forward on the forward record; K chosen per day on earlier days - every day chose K=20, the weakest in the grid):**
+
+| stat | units (series) | NB log-score gain (95%) | MAE live -> ep-2 | bias | lines: stated / hit live -> ep-2 | share Over -> / over rate | rule |
+|---|---|---|---|---|---|---|---|
+| kills | 260 (26) | +0.0034 (-0.0063, +0.0137); Map 1 +0.0057 (-0.0039, +0.0147) | 2.052 -> 2.004 | +0.25 -> -0.04 | 895 rows: 63.6 / 60.2 -> 65.2 / 62.7 (hit +2.5, 95% -0.3..+5.1) | 0.34 -> 0.24 / 0.38 | (i) FAIL, (ii)-(iv) pass |
+| assists | 250 (25) | -0.0122 (-0.0434, +0.0191) | 3.765 -> 3.724 | +0.40 -> -0.43 | 285 rows: 63.0 / 51.6 -> 66.5 / 49.8 | 0.32 -> 0.15 / 0.42 | (i), (iii), (iv) FAIL |
+
+Historical guard (v) with K=10, b=1 and the family key: Maps 1-2 log-score gain F-VALID -0.0011 (-0.0035, +0.0013), spent -0.0030
+(-0.0062, +0.0001) for kills (assists -0.0024 / +0.0004) - the intervals touch 0 so (v) technically holds, but every point estimate is
+negative and Maps 1-3 is below 0 in both periods (-0.0089 / -0.0066). ep-2 is a Worlds-2026-only story. **FAIL for both stats.**
+
+**lb-1 (w chosen per day; kills chose w=0.75 every day, assists 0.5 / 0.25 / 0.75):**
+
+| stat | units (series) | NB log-score gain (95%) | MAE live -> lb-1 | lines: stated / hit live -> lb-1 | log loss | share Over -> / over rate | letter grades | rule |
+|---|---|---|---|---|---|---|---|---|
+| kills | 260 (26) | +0.0319 (-0.0096, +0.0779); Map 1 +0.0474 (+0.0003, +0.0998) | 2.052 -> 1.997 | 895 rows: 63.6 / 60.2 -> 61.0 / 62.9 (hit +2.7, 95% -2.2..+7.8) | 0.669 -> 0.645 (-0.024, 95% -0.073..+0.012) | 0.34 -> **0.19** / 0.38 | 688 -> 671 | (i) FAIL, (iii) FAIL |
+| assists | 250 (25) | +0.0362 (-0.0141, +0.0851) | 3.765 -> 3.575 | 285 rows: 63.0 / 51.6 -> 58.6 / 54.0 | 0.733 -> 0.695 | 0.32 -> **0.10** / 0.42 | 226 -> 195 | (i) FAIL, (iii) FAIL |
+
+Reading: the blended projection predicts the actual total better (MAE -0.05 / -0.19, Map 1 kills log score interval just above 0) but the
+all-scope interval includes 0 on 26 series, and the balance check fails for a structural reason: once the projection sits on the x.5
+line, the negative binomial's right skew puts the median below the line, so almost every near-line prop becomes an Under (share Over
+0.19 / 0.10 against 0.38 / 0.42 real) - the correlated-Under risk A8a exists for. **FAIL for both stats; lc-2 is therefore not evaluated.**
+
+**lc-1 re-run (A14 6, fresh pull: 1,225 rows / 27 series / 10 days; walk-forward scored 1,124 / 25 / 8):** kills:prizepicks live 65.3 /
+62.8 vs lc-1 62.8 / 62.1, log loss +0.0114 (-0.060, +0.063), share Over 0.04 vs 0.38 - FAIL; kills:underdog 60.4 / 57.7 vs 60.1 / 59.3,
++0.0037 (-0.044, +0.045), 0.10 vs 0.39 - FAIL; assists:underdog 62.9 / 50.2 vs 59.8 / 54.2, -0.0420 (-0.114, +0.028), 0.03 vs 0.44 -
+FAIL. **No market passes; every market stays OFF** (`lol/cal_default.json` unchanged).
+
+**Grading-logic audit (projection -> chance -> side -> grade -> slip), every saved record re-derived with the live code.** Chance =
+NB(lambda, nb_size) at the line: 15,443 / 15,443 agree (A2 mixture rows excluded); p_over + p_under + p_push = 1: all; lambda =
+lambda_game x games and = lambda_lol1 x multiplier: all; model_side, grade, label, units_policy, side_offered, flags, slip eligibility and
+reasons: all agree except (a) 11 records graded on the unrounded chance at a band edge (gd-1, by design: shown() keeps the saved grade)
+and (b) **one defect: record 1703 (p_over = p_under = 0.5000 after rounding) was saved "Lean Under" on the unrounded chance and re-read
+by shown() as "Lean Over"** - fixed in this release (shown() keeps the saved side at a rounding tie; test
+lol/tests/test_grade_check_a15.py). Settlements: 1,258 units, no second versions, push / over_hit consistent with actual vs line,
+games counted = scope; no complete series with an unsettled latest line; platform rules verified. PrizePicks demon / goblin Unders are
+never offered (157 + 53 rows), so the member board shows "No pick" there, as intended.
+
+**Decision.** Nothing passes A15; no projection or chance change ships. On the branch: the shown() tie fix and this record. Stakes 0U,
+lc-1 OFF, lol-1f unchanged. What the owner can do next: the forward record is one event; the same walk-forward re-runs on the next pull
+(`python cands.py` in the scratchpad against a fresh `lolgrade1028`-style pull) and the lol-1f-vs-lol-1 forward comparison belongs in
+the lol-1f review at 300 player-markets. A candidate that uses the line must also address the NB-skew Under lean (a two-sided chance
+around the line, not a projection blend) before it can meet the balance check.

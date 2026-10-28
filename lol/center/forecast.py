@@ -268,6 +268,10 @@ def shown(f):
         (po, pu, pp), v = raw, None
     po, pu = float(po or 0.0), float(pu or 0.0)
     side = "over" if po >= pu else "under"
+    if v is None and not f.get("cal_version") and f.get("model_side") in ("over", "under") and abs(po - pu) < 1e-3:
+        # A15 audit: the record stores the chance rounded to 4 places; at an exact tie after rounding the side chosen
+        # on the unrounded chance at save time is the side (record 1703: saved "Lean Under", re-read as "Lean Over")
+        side = f["model_side"]
     sides = f.get("sides")
     if isinstance(sides, str):
         try:
