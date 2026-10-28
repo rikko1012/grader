@@ -344,6 +344,13 @@ Esports side: `/health` (unchanged) and, with `SPORTS_API=1`, `/api/sports/admin
 4. A member reports "Sports unavailable": `/api/sports/health` up? Token endpoint 401 for that member = their Whop
    access, not sports; 503 `sports_auth_not_configured` = the secret is missing on one side.
 5. Before enabling any sports change: re-run section 11's load script on it against the section 1 budgets.
+6. Grade check (REGISTER A9, gc-1; read-only, scout-sports-api Shell, repo root):
+   `python -m sports.model.tune gradecheck` (both leagues) / `--league nfl` / `--days 14`. Prints one compact JSON
+   (the owner pastes it back): per league the counts, overall / stat / letter / side / platform / variant / home-away /
+   favourite / line-distance / market-chance / weekday / back-to-back / forecast-age / artifact slices (n, W-L-P, hit,
+   stated, game-clustered 95% interval, Over balance), the vg-1 / sg-1 / N4 guard counts, cf-2 bins, the cal-mi-1
+   walk-forward (A8a) and the A9 5 verdict (release / keep / contain / insufficient). It reads learning.db,
+   forecasts.db, canonical.db, model/history.db and games.db under SPORTS_DATA_DIR and writes nothing.
 
 ## 11. Load results (2026-10-23, Windows workstation, 700 simultaneous members)
 

@@ -11,6 +11,7 @@ opportunity + rc), dr (live x level factor of the previous k game-weeks).
   python -m sports.model.tune run <history.db> <sport> [--markets a,b]   walk-forward + decision -> results JSON
   python -m sports.model.tune freeze <sport>                               tw1_<sport>.json + MANIFEST_TW1.json
   python -m sports.model.tune bookline [--learning learning.db --inputs forecasts.db]   bl-1 + book-line criteria
+  python -m sports.model.tune gradecheck [--league nba|nfl] [--days N]              gc-1 multilevel grade check (A9)
   python -m sports.model.tune status
 
 Forward use (A7 8): load(sport) returns the verified artifact (or None -> sm-1 unchanged); layer(art, market, pmf, lo)
@@ -837,7 +838,7 @@ def main(argv=None):
     import warnings
     warnings.filterwarnings("ignore", category=RuntimeWarning)
     p = argparse.ArgumentParser(prog="python -m sports.model.tune")
-    p.add_argument("cmd", choices=["run", "so1", "freeze", "bookline", "status"])
+    p.add_argument("cmd", choices=["run", "so1", "freeze", "bookline", "status", "gradecheck"])
     p.add_argument("history", nargs="?")
     p.add_argument("sport", nargs="?")
     p.add_argument("--markets")
@@ -845,10 +846,18 @@ def main(argv=None):
     p.add_argument("--learning")
     p.add_argument("--inputs")
     p.add_argument("--dump")
+    p.add_argument("--league", choices=["nba", "nfl"])                 # gradecheck (REGISTER A9)
+    p.add_argument("--days", type=float)
+    p.add_argument("--store")
+    p.add_argument("--history-db", dest="history_db")
+    p.add_argument("--games")
     a = p.parse_args(argv)
     log = lambda x: print(x, flush=True)                                          # noqa: E731
     if a.cmd == "status":
         print(json.dumps(status(), indent=1))
+    elif a.cmd == "gradecheck":                                   # gc-1: read-only multilevel grade check (A9)
+        from . import gradecheck
+        gradecheck.main(a)
     elif a.cmd == "run":
         from . import datasets
         con = datasets.connect(Path(a.history), read_only=True)
