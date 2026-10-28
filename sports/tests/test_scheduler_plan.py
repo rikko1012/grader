@@ -20,11 +20,17 @@ def test_growing_standard_store_jobs_have_headroom_within_existing_budget(monkey
     assert 223 < jobs["settle"]["cap_mb"] < scheduler.budget_mb()
     assert jobs["prebuilt"]["timeout_s"] == 600
     assert 612 < jobs["model-forward"]["cap_mb"] < scheduler.budget_mb()
+    monkeypatch.setenv("SPORTS_WORKER_MAX_VM_MB", "320")
+    assert scheduler._child_env(jobs["settle"])["SPORTS_WORKER_MAX_VM_MB"] == "1280"
+    assert scheduler._child_env(jobs["ingest-nba"])["SPORTS_WORKER_MAX_VM_MB"] == "320"
+    monkeypatch.setenv("SPORTS_JOB_SETTLE_VM_MB", "1024")
+    assert scheduler._child_env(scheduler.default_jobs()["settle"])["SPORTS_WORKER_MAX_VM_MB"] == "1024"
     monkeypatch.setenv("SPORTS_MEMORY_MB", "512")
     monkeypatch.delenv("SPORTS_CHILD_BUDGET_MB")
     jobs = scheduler.default_jobs()
     assert jobs["settle"]["cap_mb"] == 120
     assert jobs["prebuilt"]["timeout_s"] == 120
+    assert scheduler._child_env(jobs["settle"])["SPORTS_WORKER_MAX_VM_MB"] == "320"
 
 
 @pytest.fixture(autouse=True)
