@@ -1,0 +1,1020 @@
+{
+ "generated": "2026-10-28T16:07:22+00:00",
+ "live_model_version": "2085aa791c",
+ "review_rule": {
+  "windows": [
+   300,
+   600,
+   1000
+  ],
+  "cohort": "the first W distinct forward matches (by start) whose evaluation units are scored, frozen at decision time",
+  "min_gain": 0.002,
+  "ci_level": 0.9833,
+  "slope_band": [
+   0.8,
+   1.2
+  ],
+  "slope_ci_max_width": 1.0,
+  "slice_min_matches": 50,
+  "slice_tol": 0.005,
+  "replay_gap_max": 0.01,
+  "futility": "a failed window retires the challenger when its gain point estimate is <= 0 or it was the last window",
+  "automatic": false,
+  "on_pass": "status 'eligible for review' only; promotion is an explicit admin action with a written reason"
+ },
+ "challengers": [
+  {
+   "id": "ch-009-d2e37e88",
+   "family": "perf-refit-1",
+   "status": "shadow",
+   "frozen_at": "2026-10-21T19:23:09+00:00",
+   "next_review": "at 300 distinct forward matches (now 102)",
+   "forward_interim": {
+    "units": 1704,
+    "matches": 102,
+    "changed_units": 54,
+    "log_loss_logged": 0.6897,
+    "log_loss_live_replay": 0.6897,
+    "log_loss_challenger": 0.6901,
+    "replay_gap": 0.0,
+    "ci_level": 0.95,
+    "gain": -0.00036,
+    "gain_ci": [
+     -0.0011,
+     0.0005
+    ],
+    "gain_vs_logged": -0.00036,
+    "slices": [
+     {
+      "slice": "hs \u00b7 1",
+      "units": 2,
+      "matches": 2,
+      "gain": -0.02291
+     },
+     {
+      "slice": "hs \u00b7 12",
+      "units": 823,
+      "matches": 98,
+      "gain": -0.00087
+     },
+     {
+      "slice": "kills \u00b7 1",
+      "units": 8,
+      "matches": 6,
+      "gain": -0.00313
+     },
+     {
+      "slice": "kills \u00b7 12",
+      "units": 870,
+      "matches": 99,
+      "gain": 0.00022
+     },
+     {
+      "slice": "kills \u00b7 123",
+      "units": 1,
+      "matches": 1,
+      "gain": -0.01995
+     }
+    ],
+    "by_version": [
+     {
+      "version": "2085aa791c",
+      "units": 700,
+      "matches": 39,
+      "gain": -0.0,
+      "log_loss_challenger": 0.6786,
+      "log_loss_live_replay": 0.6786
+     },
+     {
+      "version": "aa6696d5d6",
+      "units": 764,
+      "matches": 45,
+      "gain": -0.00085,
+      "log_loss_challenger": 0.6954,
+      "log_loss_live_replay": 0.6946
+     },
+     {
+      "version": "f663af8917",
+      "units": 240,
+      "matches": 21,
+      "gain": 0.00014,
+      "log_loss_challenger": 0.7065,
+      "log_loss_live_replay": 0.7067
+     }
+    ],
+    "pooled_across_versions": true,
+    "pooling_note": "MODEL_VERSIONS.md: exact model_version tags may be pooled only inside one 'same grading' group, and no machine-readable group map exists - so every tag is reported on its own (by_version) and a pooled figure that spans more than one tag is flagged. The pre-registered decision rule is unchanged (2026-10-13 audit D8).",
+    "label": "interim - no decision is made between review windows"
+   }
+  },
+  {
+   "id": "cm-002-9f1db397",
+   "family": "complete-model-2-kills",
+   "status": "shadow",
+   "frozen_at": "2026-10-18T21:55:07+00:00",
+   "next_review": "at 300 distinct forward matches (now 150)",
+   "forward_interim": {
+    "units": 1222,
+    "matches": 150,
+    "changed_units": 1222,
+    "log_loss_logged": 0.6995,
+    "log_loss_live_replay": 0.7009,
+    "log_loss_challenger": 0.698,
+    "replay_gap": 0.0326,
+    "ci_level": 0.95,
+    "gain": 0.00295,
+    "gain_ci": [
+     -0.0022,
+     0.0084
+    ],
+    "gain_vs_logged": 0.00146,
+    "slices": [
+     {
+      "slice": "kills \u00b7 12",
+      "units": 1222,
+      "matches": 150,
+      "gain": 0.00295
+     }
+    ],
+    "by_version": [
+     {
+      "version": "2085aa791c",
+      "units": 300,
+      "matches": 37,
+      "gain": -0.00573,
+      "log_loss_challenger": 0.6867,
+      "log_loss_live_replay": 0.6809
+     },
+     {
+      "version": "794a775f51",
+      "units": 344,
+      "matches": 45,
+      "gain": 0.0038,
+      "log_loss_challenger": 0.7046,
+      "log_loss_live_replay": 0.7084
+     },
+     {
+      "version": "8404c86d3c",
+      "units": 1,
+      "matches": 1,
+      "gain": 0.39326,
+      "log_loss_challenger": 0.993,
+      "log_loss_live_replay": 1.3863
+     },
+     {
+      "version": "aa6696d5d6",
+      "units": 349,
+      "matches": 41,
+      "gain": 0.00789,
+      "log_loss_challenger": 0.7004,
+      "log_loss_live_replay": 0.7083
+     },
+     {
+      "version": "c36104d079",
+      "units": 107,
+      "matches": 13,
+      "gain": 0.01244,
+      "log_loss_challenger": 0.6804,
+      "log_loss_live_replay": 0.6928
+     },
+     {
+      "version": "f663af8917",
+      "units": 121,
+      "matches": 15,
+      "gain": -0.00386,
+      "log_loss_challenger": 0.7135,
+      "log_loss_live_replay": 0.7096
+     }
+    ],
+    "pooled_across_versions": true,
+    "pooling_note": "MODEL_VERSIONS.md: exact model_version tags may be pooled only inside one 'same grading' group, and no machine-readable group map exists - so every tag is reported on its own (by_version) and a pooled figure that spans more than one tag is flagged. The pre-registered decision rule is unchanged (2026-10-13 audit D8).",
+    "label": "interim - no decision is made between review windows"
+   }
+  },
+  {
+   "id": "cm-001-4e5f42fb",
+   "family": "complete-model-1",
+   "status": "shadow",
+   "frozen_at": "2026-10-16T22:35:14+00:00",
+   "next_review": "at 300 distinct forward matches (now 170)",
+   "forward_interim": {
+    "units": 2590,
+    "matches": 170,
+    "changed_units": 2590,
+    "log_loss_logged": 0.6937,
+    "log_loss_live_replay": 0.6952,
+    "log_loss_challenger": 0.6923,
+    "replay_gap": 0.0237,
+    "ci_level": 0.95,
+    "gain": 0.00296,
+    "gain_ci": [
+     -0.0014,
+     0.0079
+    ],
+    "gain_vs_logged": 0.00147,
+    "slices": [
+     {
+      "slice": "hs \u00b7 12",
+      "units": 1232,
+      "matches": 166,
+      "gain": 0.00178
+     },
+     {
+      "slice": "kills \u00b7 12",
+      "units": 1358,
+      "matches": 170,
+      "gain": 0.00403
+     }
+    ],
+    "by_version": [
+     {
+      "version": "2085aa791c",
+      "units": 591,
+      "matches": 37,
+      "gain": -0.00295,
+      "log_loss_challenger": 0.6814,
+      "log_loss_live_replay": 0.6785
+     },
+     {
+      "version": "65e60ea725",
+      "units": 71,
+      "matches": 4,
+      "gain": 0.0243,
+      "log_loss_challenger": 0.6885,
+      "log_loss_live_replay": 0.7128
+     },
+     {
+      "version": "794a775f51",
+      "units": 655,
+      "matches": 45,
+      "gain": 0.00232,
+      "log_loss_challenger": 0.6983,
+      "log_loss_live_replay": 0.7006
+     },
+     {
+      "version": "8404c86d3c",
+      "units": 1,
+      "matches": 1,
+      "gain": 0.39124,
+      "log_loss_challenger": 0.9951,
+      "log_loss_live_replay": 1.3863
+     },
+     {
+      "version": "9cfcbd217a",
+      "units": 185,
+      "matches": 16,
+      "gain": -0.00135,
+      "log_loss_challenger": 0.6725,
+      "log_loss_live_replay": 0.6712
+     },
+     {
+      "version": "aa6696d5d6",
+      "units": 667,
+      "matches": 41,
+      "gain": 0.00919,
+      "log_loss_challenger": 0.6978,
+      "log_loss_live_replay": 0.707
+     },
+     {
+      "version": "c36104d079",
+      "units": 202,
+      "matches": 15,
+      "gain": 0.00375,
+      "log_loss_challenger": 0.6872,
+      "log_loss_live_replay": 0.691
+     },
+     {
+      "version": "f663af8917",
+      "units": 218,
+      "matches": 16,
+      "gain": -0.00395,
+      "log_loss_challenger": 0.7081,
+      "log_loss_live_replay": 0.7042
+     }
+    ],
+    "pooled_across_versions": true,
+    "pooling_note": "MODEL_VERSIONS.md: exact model_version tags may be pooled only inside one 'same grading' group, and no machine-readable group map exists - so every tag is reported on its own (by_version) and a pooled figure that spans more than one tag is flagged. The pre-registered decision rule is unchanged (2026-10-13 audit D8).",
+    "label": "interim - no decision is made between review windows"
+   }
+  },
+  {
+   "id": "hs-001-9c8f70d8",
+   "family": "hs-calibration-1",
+   "status": "shadow",
+   "frozen_at": "2026-10-16T21:18:34+00:00",
+   "next_review": "at 300 distinct forward matches (now 169)",
+   "forward_interim": {
+    "units": 1261,
+    "matches": 169,
+    "changed_units": 1261,
+    "log_loss_logged": 0.6884,
+    "log_loss_live_replay": 0.69,
+    "log_loss_challenger": 0.6883,
+    "replay_gap": 0.0171,
+    "ci_level": 0.95,
+    "gain": 0.00169,
+    "gain_ci": [
+     -0.0036,
+     0.0062
+    ],
+    "gain_vs_logged": 7e-05,
+    "slices": [
+     {
+      "slice": "hs \u00b7 12",
+      "units": 1261,
+      "matches": 169,
+      "gain": 0.00169
+     }
+    ],
+    "by_version": [
+     {
+      "version": "2085aa791c",
+      "units": 291,
+      "matches": 37,
+      "gain": 0.00084,
+      "log_loss_challenger": 0.6751,
+      "log_loss_live_replay": 0.6759
+     },
+     {
+      "version": "65e60ea725",
+      "units": 35,
+      "matches": 4,
+      "gain": 0.01371,
+      "log_loss_challenger": 0.6965,
+      "log_loss_live_replay": 0.7102
+     },
+     {
+      "version": "794a775f51",
+      "units": 317,
+      "matches": 46,
+      "gain": 0.00034,
+      "log_loss_challenger": 0.6898,
+      "log_loss_live_replay": 0.6902
+     },
+     {
+      "version": "9cfcbd217a",
+      "units": 106,
+      "matches": 15,
+      "gain": -0.00803,
+      "log_loss_challenger": 0.6743,
+      "log_loss_live_replay": 0.6663
+     },
+     {
+      "version": "aa6696d5d6",
+      "units": 318,
+      "matches": 41,
+      "gain": 0.00844,
+      "log_loss_challenger": 0.697,
+      "log_loss_live_replay": 0.7055
+     },
+     {
+      "version": "c36104d079",
+      "units": 96,
+      "matches": 15,
+      "gain": 0.0061,
+      "log_loss_challenger": 0.6868,
+      "log_loss_live_replay": 0.6929
+     },
+     {
+      "version": "f663af8917",
+      "units": 98,
+      "matches": 15,
+      "gain": -0.01137,
+      "log_loss_challenger": 0.7082,
+      "log_loss_live_replay": 0.6969
+     }
+    ],
+    "pooled_across_versions": true,
+    "pooling_note": "MODEL_VERSIONS.md: exact model_version tags may be pooled only inside one 'same grading' group, and no machine-readable group map exists - so every tag is reported on its own (by_version) and a pooled figure that spans more than one tag is flagged. The pre-registered decision rule is unchanged (2026-10-13 audit D8).",
+    "label": "interim - no decision is made between review windows"
+   }
+  },
+  {
+   "id": "lc-001-c80c6b2e",
+   "family": "line-correction-1",
+   "status": "shadow",
+   "frozen_at": "2026-10-16T19:05:48+00:00",
+   "next_review": "at 300 distinct forward matches (now 178)",
+   "forward_interim": {
+    "units": 2761,
+    "matches": 178,
+    "changed_units": 2761,
+    "log_loss_logged": 0.6955,
+    "log_loss_live_replay": 0.6969,
+    "log_loss_challenger": 0.6932,
+    "replay_gap": 0.0222,
+    "ci_level": 0.95,
+    "gain": 0.00377,
+    "gain_ci": [
+     -0.0038,
+     0.0129
+    ],
+    "gain_vs_logged": 0.00237,
+    "slices": [
+     {
+      "slice": "hs \u00b7 1",
+      "units": 48,
+      "matches": 6,
+      "gain": 0.03634
+     },
+     {
+      "slice": "hs \u00b7 12",
+      "units": 1257,
+      "matches": 169,
+      "gain": -0.00299
+     },
+     {
+      "slice": "hs \u00b7 123",
+      "units": 10,
+      "matches": 1,
+      "gain": -0.02095
+     },
+     {
+      "slice": "kills \u00b7 1",
+      "units": 51,
+      "matches": 7,
+      "gain": 0.01956
+     },
+     {
+      "slice": "kills \u00b7 12",
+      "units": 1385,
+      "matches": 171,
+      "gain": 0.00774
+     },
+     {
+      "slice": "kills \u00b7 123",
+      "units": 10,
+      "matches": 1,
+      "gain": 0.09049
+     }
+    ],
+    "by_version": [
+     {
+      "version": "2085aa791c",
+      "units": 592,
+      "matches": 37,
+      "gain": -0.01365,
+      "log_loss_challenger": 0.6923,
+      "log_loss_live_replay": 0.6786
+     },
+     {
+      "version": "65e60ea725",
+      "units": 95,
+      "matches": 6,
+      "gain": 0.03058,
+      "log_loss_challenger": 0.6937,
+      "log_loss_live_replay": 0.7242
+     },
+     {
+      "version": "794a775f51",
+      "units": 669,
+      "matches": 46,
+      "gain": 0.00627,
+      "log_loss_challenger": 0.6928,
+      "log_loss_live_replay": 0.6991
+     },
+     {
+      "version": "807a289529",
+      "units": 1,
+      "matches": 1,
+      "gain": 0.12402,
+      "log_loss_challenger": 0.7061,
+      "log_loss_live_replay": 0.8301
+     },
+     {
+      "version": "8404c86d3c",
+      "units": 1,
+      "matches": 1,
+      "gain": 0.70768,
+      "log_loss_challenger": 0.6786,
+      "log_loss_live_replay": 1.3863
+     },
+     {
+      "version": "9cfcbd217a",
+      "units": 216,
+      "matches": 16,
+      "gain": -0.00974,
+      "log_loss_challenger": 0.6921,
+      "log_loss_live_replay": 0.6824
+     },
+     {
+      "version": "aa6696d5d6",
+      "units": 667,
+      "matches": 41,
+      "gain": 0.01325,
+      "log_loss_challenger": 0.6937,
+      "log_loss_live_replay": 0.707
+     },
+     {
+      "version": "c36104d079",
+      "units": 300,
+      "matches": 21,
+      "gain": 0.00853,
+      "log_loss_challenger": 0.6915,
+      "log_loss_live_replay": 0.7001
+     },
+     {
+      "version": "f663af8917",
+      "units": 220,
+      "matches": 16,
+      "gain": 0.00571,
+      "log_loss_challenger": 0.6981,
+      "log_loss_live_replay": 0.7038
+     }
+    ],
+    "pooled_across_versions": true,
+    "pooling_note": "MODEL_VERSIONS.md: exact model_version tags may be pooled only inside one 'same grading' group, and no machine-readable group map exists - so every tag is reported on its own (by_version) and a pooled figure that spans more than one tag is flagged. The pre-registered decision rule is unchanged (2026-10-13 audit D8).",
+    "label": "interim - no decision is made between review windows"
+   }
+  },
+  {
+   "id": "fh-001-ba7806a4",
+   "family": "full-history-1",
+   "status": "shadow",
+   "frozen_at": "2026-10-15T18:39:28+00:00",
+   "next_review": "at 300 distinct forward matches (now 198)",
+   "forward_interim": {
+    "units": 3057,
+    "matches": 198,
+    "changed_units": 2973,
+    "log_loss_logged": 0.6961,
+    "log_loss_live_replay": 0.6973,
+    "log_loss_challenger": 0.696,
+    "replay_gap": 0.0201,
+    "ci_level": 0.95,
+    "gain": 0.00138,
+    "gain_ci": [
+     -0.0014,
+     0.0042
+    ],
+    "gain_vs_logged": 0.00012,
+    "slices": [
+     {
+      "slice": "hs \u00b7 1",
+      "units": 84,
+      "matches": 13,
+      "gain": 0.00917
+     },
+     {
+      "slice": "hs \u00b7 12",
+      "units": 1354,
+      "matches": 182,
+      "gain": 0.00135
+     },
+     {
+      "slice": "hs \u00b7 123",
+      "units": 10,
+      "matches": 1,
+      "gain": 0.008
+     },
+     {
+      "slice": "kills \u00b7 1",
+      "units": 101,
+      "matches": 14,
+      "gain": -0.00495
+     },
+     {
+      "slice": "kills \u00b7 12",
+      "units": 1498,
+      "matches": 185,
+      "gain": 0.00134
+     },
+     {
+      "slice": "kills \u00b7 123",
+      "units": 10,
+      "matches": 1,
+      "gain": 0.00443
+     }
+    ],
+    "by_version": [
+     {
+      "version": "2085aa791c",
+      "units": 592,
+      "matches": 37,
+      "gain": 0.00195,
+      "log_loss_challenger": 0.6767,
+      "log_loss_live_replay": 0.6786
+     },
+     {
+      "version": "65e60ea725",
+      "units": 95,
+      "matches": 6,
+      "gain": 0.00569,
+      "log_loss_challenger": 0.7186,
+      "log_loss_live_replay": 0.7242
+     },
+     {
+      "version": "794a775f51",
+      "units": 669,
+      "matches": 46,
+      "gain": -0.00228,
+      "log_loss_challenger": 0.7014,
+      "log_loss_live_replay": 0.6991
+     },
+     {
+      "version": "807a289529",
+      "units": 1,
+      "matches": 1,
+      "gain": -0.02086,
+      "log_loss_challenger": 0.851,
+      "log_loss_live_replay": 0.8301
+     },
+     {
+      "version": "8404c86d3c",
+      "units": 1,
+      "matches": 1,
+      "gain": 0.05827,
+      "log_loss_challenger": 1.328,
+      "log_loss_live_replay": 1.3863
+     },
+     {
+      "version": "9cfcbd217a",
+      "units": 490,
+      "matches": 34,
+      "gain": -0.00712,
+      "log_loss_challenger": 0.7011,
+      "log_loss_live_replay": 0.694
+     },
+     {
+      "version": "a310d76b55",
+      "units": 22,
+      "matches": 2,
+      "gain": 0.02468,
+      "log_loss_challenger": 0.6499,
+      "log_loss_live_replay": 0.6746
+     },
+     {
+      "version": "aa6696d5d6",
+      "units": 667,
+      "matches": 41,
+      "gain": 0.00561,
+      "log_loss_challenger": 0.7013,
+      "log_loss_live_replay": 0.707
+     },
+     {
+      "version": "c36104d079",
+      "units": 300,
+      "matches": 21,
+      "gain": 0.00504,
+      "log_loss_challenger": 0.695,
+      "log_loss_live_replay": 0.7001
+     },
+     {
+      "version": "f663af8917",
+      "units": 220,
+      "matches": 16,
+      "gain": 0.00776,
+      "log_loss_challenger": 0.696,
+      "log_loss_live_replay": 0.7038
+     }
+    ],
+    "pooled_across_versions": true,
+    "pooling_note": "MODEL_VERSIONS.md: exact model_version tags may be pooled only inside one 'same grading' group, and no machine-readable group map exists - so every tag is reported on its own (by_version) and a pooled figure that spans more than one tag is flagged. The pre-registered decision rule is unchanged (2026-10-13 audit D8).",
+    "label": "interim - no decision is made between review windows"
+   }
+  },
+  {
+   "id": "pl-002-b5b076b5",
+   "family": "prop-line-2",
+   "status": "shadow",
+   "frozen_at": "2026-10-15T03:29:05+00:00",
+   "next_review": "at 300 distinct forward matches (now 210)",
+   "forward_interim": {
+    "units": 2773,
+    "matches": 210,
+    "changed_units": 2766,
+    "log_loss_logged": 0.6971,
+    "log_loss_live_replay": 0.6971,
+    "log_loss_challenger": 0.6925,
+    "replay_gap": 0.0,
+    "ci_level": 0.95,
+    "gain": 0.00466,
+    "gain_ci": [
+     -0.002,
+     0.011
+    ],
+    "gain_vs_logged": 0.00466,
+    "slices": [
+     {
+      "slice": "hs \u00b7 1",
+      "units": 112,
+      "matches": 18,
+      "gain": 0.03218
+     },
+     {
+      "slice": "hs \u00b7 12",
+      "units": 1200,
+      "matches": 189,
+      "gain": 0.0002
+     },
+     {
+      "slice": "hs \u00b7 123",
+      "units": 9,
+      "matches": 1,
+      "gain": -0.01725
+     },
+     {
+      "slice": "kills \u00b7 1",
+      "units": 131,
+      "matches": 18,
+      "gain": 0.02912
+     },
+     {
+      "slice": "kills \u00b7 12",
+      "units": 1314,
+      "matches": 191,
+      "gain": 0.00333
+     },
+     {
+      "slice": "kills \u00b7 123",
+      "units": 7,
+      "matches": 1,
+      "gain": 0.14838
+     }
+    ],
+    "by_version": [
+     {
+      "version": "2085aa791c",
+      "units": 478,
+      "matches": 37,
+      "gain": -0.00658,
+      "log_loss_challenger": 0.689,
+      "log_loss_live_replay": 0.6824
+     },
+     {
+      "version": "65e60ea725",
+      "units": 78,
+      "matches": 6,
+      "gain": 0.03034,
+      "log_loss_challenger": 0.6928,
+      "log_loss_live_replay": 0.7232
+     },
+     {
+      "version": "794a775f51",
+      "units": 575,
+      "matches": 45,
+      "gain": 0.00407,
+      "log_loss_challenger": 0.6912,
+      "log_loss_live_replay": 0.6952
+     },
+     {
+      "version": "807a289529",
+      "units": 1,
+      "matches": 1,
+      "gain": 0.13697,
+      "log_loss_challenger": 0.6931,
+      "log_loss_live_replay": 0.8301
+     },
+     {
+      "version": "8404c86d3c",
+      "units": 1,
+      "matches": 1,
+      "gain": 0.30111,
+      "log_loss_challenger": 0.6931,
+      "log_loss_live_replay": 0.9943
+     },
+     {
+      "version": "9cfcbd217a",
+      "units": 422,
+      "matches": 34,
+      "gain": 0.00477,
+      "log_loss_challenger": 0.6899,
+      "log_loss_live_replay": 0.6946
+     },
+     {
+      "version": "a310d76b55",
+      "units": 210,
+      "matches": 17,
+      "gain": 0.00613,
+      "log_loss_challenger": 0.6971,
+      "log_loss_live_replay": 0.7032
+     },
+     {
+      "version": "aa6696d5d6",
+      "units": 569,
+      "matches": 41,
+      "gain": 0.00409,
+      "log_loss_challenger": 0.6952,
+      "log_loss_live_replay": 0.6993
+     },
+     {
+      "version": "c36104d079",
+      "units": 242,
+      "matches": 18,
+      "gain": 0.00641,
+      "log_loss_challenger": 0.6953,
+      "log_loss_live_replay": 0.7017
+     },
+     {
+      "version": "f663af8917",
+      "units": 197,
+      "matches": 16,
+      "gain": 0.019,
+      "log_loss_challenger": 0.6941,
+      "log_loss_live_replay": 0.7131
+     }
+    ],
+    "pooled_across_versions": true,
+    "pooling_note": "MODEL_VERSIONS.md: exact model_version tags may be pooled only inside one 'same grading' group, and no machine-readable group map exists - so every tag is reported on its own (by_version) and a pooled figure that spans more than one tag is flagged. The pre-registered decision rule is unchanged (2026-10-13 audit D8).",
+    "label": "interim - no decision is made between review windows"
+   }
+  },
+  {
+   "id": "pl-001-bb351ec5",
+   "family": "prop-line-1",
+   "status": "blocked",
+   "frozen_at": "2026-10-15T02:22:18+00:00",
+   "next_review": null,
+   "forward_interim": {
+    "units": 0,
+    "matches": 0
+   }
+  },
+  {
+   "id": "lb-001-c9b0fc42",
+   "family": "line-blend-1",
+   "status": "shadow",
+   "frozen_at": "2026-10-12T15:49:04+00:00",
+   "next_review": "at 300 distinct forward matches (now 264)",
+   "forward_interim": {
+    "units": 4311,
+    "matches": 264,
+    "changed_units": 3937,
+    "log_loss_logged": 0.6833,
+    "log_loss_live_replay": 0.6833,
+    "log_loss_challenger": 0.6837,
+    "replay_gap": 0.0,
+    "ci_level": 0.95,
+    "gain": -0.00043,
+    "gain_ci": [
+     -0.0051,
+     0.0049
+    ],
+    "gain_vs_logged": -0.00043,
+    "slices": [
+     {
+      "slice": "hs \u00b7 1",
+      "units": 137,
+      "matches": 25,
+      "gain": 0.0
+     },
+     {
+      "slice": "hs \u00b7 12",
+      "units": 1913,
+      "matches": 237,
+      "gain": -0.00081
+     },
+     {
+      "slice": "hs \u00b7 123",
+      "units": 16,
+      "matches": 4,
+      "gain": 0.0
+     },
+     {
+      "slice": "kills \u00b7 1",
+      "units": 184,
+      "matches": 41,
+      "gain": 0.0
+     },
+     {
+      "slice": "kills \u00b7 12",
+      "units": 2046,
+      "matches": 241,
+      "gain": -0.00014
+     },
+     {
+      "slice": "kills \u00b7 123",
+      "units": 15,
+      "matches": 4,
+      "gain": 0.0
+     }
+    ],
+    "by_version": [
+     {
+      "version": "1088faf157",
+      "units": 88,
+      "matches": 7,
+      "gain": -0.03689,
+      "log_loss_challenger": 0.6244,
+      "log_loss_live_replay": 0.5875
+     },
+     {
+      "version": "17e5e85837",
+      "units": 11,
+      "matches": 2,
+      "gain": -0.03019,
+      "log_loss_challenger": 0.7004,
+      "log_loss_live_replay": 0.6702
+     },
+     {
+      "version": "2085aa791c",
+      "units": 700,
+      "matches": 39,
+      "gain": -0.00374,
+      "log_loss_challenger": 0.6823,
+      "log_loss_live_replay": 0.6786
+     },
+     {
+      "version": "23bea2fe37",
+      "units": 30,
+      "matches": 2,
+      "gain": 0.00202,
+      "log_loss_challenger": 0.6816,
+      "log_loss_live_replay": 0.6836
+     },
+     {
+      "version": "5bacea40b7",
+      "units": 2,
+      "matches": 1,
+      "gain": 0.0,
+      "log_loss_challenger": 0.1081,
+      "log_loss_live_replay": 0.1081
+     },
+     {
+      "version": "65e60ea725",
+      "units": 128,
+      "matches": 11,
+      "gain": -0.00619,
+      "log_loss_challenger": 0.6858,
+      "log_loss_live_replay": 0.6796
+     },
+     {
+      "version": "6f6e2d39d7",
+      "units": 319,
+      "matches": 22,
+      "gain": -0.00537,
+      "log_loss_challenger": 0.6806,
+      "log_loss_live_replay": 0.6752
+     },
+     {
+      "version": "794a775f51",
+      "units": 774,
+      "matches": 47,
+      "gain": 0.00188,
+      "log_loss_challenger": 0.6837,
+      "log_loss_live_replay": 0.6855
+     },
+     {
+      "version": "807a289529",
+      "units": 3,
+      "matches": 3,
+      "gain": -0.0207,
+      "log_loss_challenger": 0.3806,
+      "log_loss_live_replay": 0.3599
+     },
+     {
+      "version": "8404c86d3c",
+      "units": 1,
+      "matches": 1,
+      "gain": 0.30111,
+      "log_loss_challenger": 0.6931,
+      "log_loss_live_replay": 0.9943
+     },
+     {
+      "version": "9cfcbd217a",
+      "units": 633,
+      "matches": 42,
+      "gain": -0.00812,
+      "log_loss_challenger": 0.6853,
+      "log_loss_live_replay": 0.6772
+     },
+     {
+      "version": "a310d76b55",
+      "units": 286,
+      "matches": 18,
+      "gain": 0.00126,
+      "log_loss_challenger": 0.6943,
+      "log_loss_live_replay": 0.6955
+     },
+     {
+      "version": "aa6696d5d6",
+      "units": 764,
+      "matches": 45,
+      "gain": 0.00737,
+      "log_loss_challenger": 0.6872,
+      "log_loss_live_replay": 0.6946
+     },
+     {
+      "version": "c36104d079",
+      "units": 332,
+      "matches": 25,
+      "gain": 0.0012,
+      "log_loss_challenger": 0.6851,
+      "log_loss_live_replay": 0.6863
+     },
+     {
+      "version": "f663af8917",
+      "units": 240,
+      "matches": 21,
+      "gain": 0.01604,
+      "log_loss_challenger": 0.6907,
+      "log_loss_live_replay": 0.7067
+     }
+    ],
+    "pooled_across_versions": true,
+    "pooling_note": "MODEL_VERSIONS.md: exact model_version tags may be pooled only inside one 'same grading' group, and no machine-readable group map exists - so every tag is reported on its own (by_version) and a pooled figure that spans more than one tag is flagged. The pre-registered decision rule is unchanged (2026-10-13 audit D8).",
+    "label": "interim - no decision is made between review windows"
+   }
+  }
+ ]
+}

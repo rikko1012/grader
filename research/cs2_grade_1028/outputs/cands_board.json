@@ -1,0 +1,3040 @@
+{
+ "cands": {
+  "rm1": {
+   "cand": "rm1",
+   "units": 0,
+   "ineligible_reasons": {
+    "not a rm-1 cell (kills 12)": 725,
+    "not a rm-1 cell (hs 12)": 697
+   },
+   "cells": {}
+  },
+  "th1": {
+   "cand": "th1",
+   "units": 0,
+   "ineligible_reasons": {
+    "not a th-1 cell (kills 12)": 725,
+    "not a th-1 cell (hs 12)": 697
+   },
+   "cells": {}
+  },
+  "gd1": {
+   "counts": {
+    "lean, under 55%": 7954,
+    "letter = chance band": 7273,
+    "chance >= 55% logged LEAN (0U gate)": 1535
+   },
+   "zero_unit_reasons": {
+    "AWPer HS": 623,
+    "form fight": 273,
+    "other": 613,
+    "small sample": 26
+   }
+  }
+ },
+ "board_levels": {
+  "tag": "PICKS rule, platform board lines only (Underdog + PrizePicks)",
+  "levels": [
+   {
+    "level": "overall",
+    "rows": [
+     {
+      "n": 11232,
+      "wlp": "5795-5339-98",
+      "matches": 321,
+      "stated": 55.7,
+      "hit": 52.0,
+      "hit_ci": [
+       50.2,
+       53.7
+      ],
+      "gap": 3.7,
+      "gap_ci": [
+       1.9,
+       5.5
+      ],
+      "brier": 0.2523,
+      "logloss": 0.698,
+      "bias": -0.28,
+      "over_share": 45.1,
+      "over_rate": 49.7,
+      "balance_gap": -4.6,
+      "group": "all"
+     }
+    ]
+   },
+   {
+    "level": "platform",
+    "rows": [
+     {
+      "n": 6321,
+      "wlp": "3298-3023-0",
+      "matches": 264,
+      "stated": 55.7,
+      "hit": 52.2,
+      "hit_ci": [
+       50.0,
+       54.2
+      ],
+      "gap": 3.6,
+      "gap_ci": [
+       1.5,
+       5.7
+      ],
+      "brier": 0.2525,
+      "logloss": 0.6984,
+      "bias": -0.23,
+      "over_share": 47.8,
+      "over_rate": 49.4,
+      "balance_gap": -1.7,
+      "group": "underdog"
+     },
+     {
+      "n": 4911,
+      "wlp": "2497-2316-98",
+      "matches": 246,
+      "stated": 55.6,
+      "hit": 51.9,
+      "hit_ci": [
+       49.7,
+       53.9
+      ],
+      "gap": 3.8,
+      "gap_ci": [
+       1.6,
+       5.8
+      ],
+      "brier": 0.252,
+      "logloss": 0.6973,
+      "bias": -0.35,
+      "over_share": 41.6,
+      "over_rate": 50.1,
+      "balance_gap": -8.4,
+      "group": "prizepicks"
+     }
+    ]
+   },
+   {
+    "level": "stat",
+    "rows": [
+     {
+      "n": 6187,
+      "wlp": "3127-3026-34",
+      "matches": 318,
+      "stated": 55.6,
+      "hit": 50.8,
+      "hit_ci": [
+       48.7,
+       53.1
+      ],
+      "gap": 4.8,
+      "gap_ci": [
+       2.6,
+       6.9
+      ],
+      "brier": 0.2545,
+      "logloss": 0.7025,
+      "bias": -0.43,
+      "over_share": 47.4,
+      "over_rate": 50.2,
+      "balance_gap": -2.8,
+      "group": "kills"
+     },
+     {
+      "n": 5045,
+      "wlp": "2668-2313-64",
+      "matches": 310,
+      "stated": 55.8,
+      "hit": 53.6,
+      "hit_ci": [
+       51.5,
+       55.4
+      ],
+      "gap": 2.3,
+      "gap_ci": [
+       0.3,
+       4.3
+      ],
+      "brier": 0.2496,
+      "logloss": 0.6924,
+      "bias": -0.1,
+      "over_share": 42.3,
+      "over_rate": 49.1,
+      "balance_gap": -6.8,
+      "group": "hs"
+     }
+    ]
+   },
+   {
+    "level": "scope",
+    "rows": [
+     {
+      "n": 10546,
+      "wlp": "5485-4974-87",
+      "matches": 297,
+      "stated": 55.7,
+      "hit": 52.4,
+      "hit_ci": [
+       50.5,
+       54.3
+      ],
+      "gap": 3.3,
+      "gap_ci": [
+       1.4,
+       5.2
+      ],
+      "brier": 0.2513,
+      "logloss": 0.696,
+      "bias": -0.31,
+      "over_share": 44.6,
+      "over_rate": 49.9,
+      "balance_gap": -5.4,
+      "group": "Maps 1-2"
+     },
+     {
+      "n": 573,
+      "wlp": "259-303-11",
+      "matches": 25,
+      "stated": 55.3,
+      "hit": 46.1,
+      "hit_ci": [
+       41.5,
+       50.9
+      ],
+      "gap": 9.2,
+      "gap_ci": [
+       4.0,
+       14.2
+      ],
+      "brier": 0.2675,
+      "logloss": 0.7293,
+      "bias": 0.62,
+      "over_share": 57.3,
+      "over_rate": 42.5,
+      "balance_gap": 14.8,
+      "group": "Map 1"
+     },
+     {
+      "n": 113,
+      "wlp": "51-62-0",
+      "matches": 2,
+      "stated": 55.5,
+      "hit": 45.1,
+      "hit_ci": [
+       38.8,
+       54.3
+      ],
+      "gap": 10.4,
+      "gap_ci": [
+       0.2,
+       17.5
+      ],
+      "brier": 0.2657,
+      "logloss": 0.7248,
+      "bias": -2.65,
+      "over_share": 35.4,
+      "over_rate": 65.5,
+      "balance_gap": -30.1,
+      "group": "Maps 1-3"
+     }
+    ]
+   },
+   {
+    "level": "stat x scope",
+    "rows": [
+     {
+      "n": 5780,
+      "wlp": "2947-2805-28",
+      "matches": 294,
+      "stated": 55.6,
+      "hit": 51.2,
+      "hit_ci": [
+       49.0,
+       53.8
+      ],
+      "gap": 4.4,
+      "gap_ci": [
+       1.8,
+       6.6
+      ],
+      "brier": 0.2534,
+      "logloss": 0.7003,
+      "bias": -0.47,
+      "over_share": 46.8,
+      "over_rate": 50.4,
+      "balance_gap": -3.6,
+      "group": "('kills', 'Maps 1-2')"
+     },
+     {
+      "n": 4766,
+      "wlp": "2538-2169-59",
+      "matches": 287,
+      "stated": 55.8,
+      "hit": 53.9,
+      "hit_ci": [
+       51.9,
+       56.2
+      ],
+      "gap": 1.9,
+      "gap_ci": [
+       -0.3,
+       4.0
+      ],
+      "brier": 0.2488,
+      "logloss": 0.6908,
+      "bias": -0.1,
+      "over_share": 41.8,
+      "over_rate": 49.3,
+      "balance_gap": -7.5,
+      "group": "('hs', 'Maps 1-2')"
+     },
+     {
+      "n": 341,
+      "wlp": "154-181-6",
+      "matches": 25,
+      "stated": 55.4,
+      "hit": 46.0,
+      "hit_ci": [
+       39.8,
+       52.9
+      ],
+      "gap": 9.4,
+      "gap_ci": [
+       2.0,
+       15.8
+      ],
+      "brier": 0.2687,
+      "logloss": 0.7319,
+      "bias": 0.9,
+      "over_share": 59.1,
+      "over_rate": 40.3,
+      "balance_gap": 18.8,
+      "group": "('kills', 'Map 1')"
+     },
+     {
+      "n": 232,
+      "wlp": "105-122-5",
+      "matches": 23,
+      "stated": 55.2,
+      "hit": 46.3,
+      "hit_ci": [
+       39.8,
+       52.9
+      ],
+      "gap": 9.0,
+      "gap_ci": [
+       1.9,
+       15.9
+      ],
+      "brier": 0.2657,
+      "logloss": 0.7254,
+      "bias": 0.22,
+      "over_share": 54.6,
+      "over_rate": 45.8,
+      "balance_gap": 8.8,
+      "group": "('hs', 'Map 1')"
+     },
+     {
+      "n": 66,
+      "wlp": "26-40-0",
+      "matches": 2,
+      "stated": 55.1,
+      "hit": 39.4,
+      "hit_ci": [
+       33.3,
+       50.0
+      ],
+      "gap": 15.7,
+      "gap_ci": [
+       4.4,
+       22.2
+      ],
+      "brier": 0.2777,
+      "logloss": 0.7492,
+      "bias": -3.63,
+      "over_share": 37.9,
+      "over_rate": 77.3,
+      "balance_gap": -39.4,
+      "group": "('kills', 'Maps 1-3')"
+     },
+     {
+      "n": 47,
+      "wlp": "25-22-0",
+      "matches": 2,
+      "stated": 56.1,
+      "hit": 53.2,
+      "hit_ci": [
+       48.0,
+       59.1
+      ],
+      "gap": 2.9,
+      "gap_ci": [
+       -4.5,
+       9.4
+      ],
+      "brier": 0.249,
+      "logloss": 0.6904,
+      "bias": -1.27,
+      "over_share": 31.9,
+      "over_rate": 48.9,
+      "balance_gap": -17.0,
+      "group": "('hs', 'Maps 1-3')"
+     }
+    ]
+   },
+   {
+    "level": "grade (letter)",
+    "rows": [
+     {
+      "n": 6803,
+      "wlp": "3483-3255-65",
+      "matches": 315,
+      "stated": 53.4,
+      "hit": 51.7,
+      "hit_ci": [
+       50.2,
+       53.3
+      ],
+      "gap": 1.7,
+      "gap_ci": [
+       0.0,
+       3.2
+      ],
+      "brier": 0.2502,
+      "logloss": 0.6936,
+      "bias": -0.36,
+      "over_share": 43.6,
+      "over_rate": 50.1,
+      "balance_gap": -6.5,
+      "group": "LEAN"
+     },
+     {
+      "n": 2223,
+      "wlp": "1133-1073-17",
+      "matches": 280,
+      "stated": 59.4,
+      "hit": 51.4,
+      "hit_ci": [
+       47.4,
+       55.1
+      ],
+      "gap": 8.1,
+      "gap_ci": [
+       4.4,
+       12.1
+      ],
+      "brier": 0.2567,
+      "logloss": 0.7068,
+      "bias": -0.27,
+      "over_share": 45.8,
+      "over_rate": 49.2,
+      "balance_gap": -3.4,
+      "group": "B"
+     },
+     {
+      "n": 1530,
+      "wlp": "821-699-10",
+      "matches": 272,
+      "stated": 56.0,
+      "hit": 54.0,
+      "hit_ci": [
+       50.7,
+       57.3
+      ],
+      "gap": 1.9,
+      "gap_ci": [
+       -1.3,
+       5.3
+      ],
+      "brier": 0.2492,
+      "logloss": 0.6916,
+      "bias": -0.51,
+      "over_share": 45.1,
+      "over_rate": 50.1,
+      "balance_gap": -5.1,
+      "group": "B-"
+     },
+     {
+      "n": 522,
+      "wlp": "271-246-5",
+      "matches": 176,
+      "stated": 65.0,
+      "hit": 52.4,
+      "hit_ci": [
+       47.4,
+       58.4
+      ],
+      "gap": 12.5,
+      "gap_ci": [
+       6.5,
+       17.6
+      ],
+      "brier": 0.2657,
+      "logloss": 0.7265,
+      "bias": 0.82,
+      "over_share": 53.4,
+      "over_rate": 43.7,
+      "balance_gap": 9.7,
+      "group": "B+"
+     },
+     {
+      "n": 137,
+      "wlp": "77-59-1",
+      "matches": 64,
+      "stated": 70.1,
+      "hit": 56.6,
+      "hit_ci": [
+       45.2,
+       67.7
+      ],
+      "gap": 13.5,
+      "gap_ci": [
+       2.4,
+       24.7
+      ],
+      "brier": 0.2642,
+      "logloss": 0.726,
+      "bias": 1.15,
+      "over_share": 70.6,
+      "over_rate": 53.7,
+      "balance_gap": 16.9,
+      "group": "A-"
+     },
+     {
+      "n": 17,
+      "wlp": "10-7-0",
+      "matches": 10,
+      "stated": 75.8,
+      "hit": 58.8,
+      "hit_ci": [
+       18.2,
+       85.7
+      ],
+      "gap": 17.0,
+      "gap_ci": [
+       -10.5,
+       58.2
+      ],
+      "brier": 0.2744,
+      "logloss": 0.7566,
+      "bias": 4.53,
+      "over_share": 94.1,
+      "over_rate": 52.9,
+      "balance_gap": 41.2,
+      "group": "A"
+     }
+    ]
+   },
+   {
+    "level": "grade band",
+    "rows": [
+     {
+      "n": 6803,
+      "wlp": "3483-3255-65",
+      "matches": 315,
+      "stated": 53.4,
+      "hit": 51.7,
+      "hit_ci": [
+       50.2,
+       53.3
+      ],
+      "gap": 1.7,
+      "gap_ci": [
+       0.0,
+       3.2
+      ],
+      "brier": 0.2502,
+      "logloss": 0.6936,
+      "bias": -0.36,
+      "over_share": 43.6,
+      "over_rate": 50.1,
+      "balance_gap": -6.5,
+      "group": "Lean"
+     },
+     {
+      "n": 4275,
+      "wlp": "2225-2018-32",
+      "matches": 298,
+      "stated": 58.9,
+      "hit": 52.4,
+      "hit_ci": [
+       49.0,
+       55.4
+      ],
+      "gap": 6.4,
+      "gap_ci": [
+       3.5,
+       9.9
+      ],
+      "brier": 0.2551,
+      "logloss": 0.7038,
+      "bias": -0.22,
+      "over_share": 46.5,
+      "over_rate": 48.9,
+      "balance_gap": -2.4,
+      "group": "B"
+     },
+     {
+      "n": 154,
+      "wlp": "87-66-1",
+      "matches": 64,
+      "stated": 70.7,
+      "hit": 56.9,
+      "hit_ci": [
+       45.5,
+       67.7
+      ],
+      "gap": 13.9,
+      "gap_ci": [
+       2.9,
+       25.4
+      ],
+      "brier": 0.2653,
+      "logloss": 0.7294,
+      "bias": 1.52,
+      "over_share": 73.2,
+      "over_rate": 53.6,
+      "balance_gap": 19.6,
+      "group": "A"
+     }
+    ]
+   },
+   {
+    "level": "staked vs 0U",
+    "rows": [
+     {
+      "n": 6803,
+      "wlp": "3483-3255-65",
+      "matches": 315,
+      "stated": 53.4,
+      "hit": 51.7,
+      "hit_ci": [
+       50.2,
+       53.3
+      ],
+      "gap": 1.7,
+      "gap_ci": [
+       0.0,
+       3.2
+      ],
+      "brier": 0.2502,
+      "logloss": 0.6936,
+      "bias": -0.36,
+      "over_share": 43.6,
+      "over_rate": 50.1,
+      "balance_gap": -6.5,
+      "group": "0U"
+     },
+     {
+      "n": 4429,
+      "wlp": "2312-2084-33",
+      "matches": 299,
+      "stated": 59.3,
+      "hit": 52.6,
+      "hit_ci": [
+       49.3,
+       55.5
+      ],
+      "gap": 6.7,
+      "gap_ci": [
+       3.9,
+       10.1
+      ],
+      "brier": 0.2555,
+      "logloss": 0.7047,
+      "bias": -0.16,
+      "over_share": 47.4,
+      "over_rate": 49.0,
+      "balance_gap": -1.6,
+      "group": "staked"
+     }
+    ]
+   },
+   {
+    "level": "band x staked",
+    "rows": [
+     {
+      "n": 6803,
+      "wlp": "3483-3255-65",
+      "matches": 315,
+      "stated": 53.4,
+      "hit": 51.7,
+      "hit_ci": [
+       50.2,
+       53.3
+      ],
+      "gap": 1.7,
+      "gap_ci": [
+       0.0,
+       3.2
+      ],
+      "brier": 0.2502,
+      "logloss": 0.6936,
+      "bias": -0.36,
+      "over_share": 43.6,
+      "over_rate": 50.1,
+      "balance_gap": -6.5,
+      "group": "('Lean', '0U')"
+     },
+     {
+      "n": 4275,
+      "wlp": "2225-2018-32",
+      "matches": 298,
+      "stated": 58.9,
+      "hit": 52.4,
+      "hit_ci": [
+       49.0,
+       55.4
+      ],
+      "gap": 6.4,
+      "gap_ci": [
+       3.5,
+       9.9
+      ],
+      "brier": 0.2551,
+      "logloss": 0.7038,
+      "bias": -0.22,
+      "over_share": 46.5,
+      "over_rate": 48.9,
+      "balance_gap": -2.4,
+      "group": "('B', 'staked')"
+     },
+     {
+      "n": 154,
+      "wlp": "87-66-1",
+      "matches": 64,
+      "stated": 70.7,
+      "hit": 56.9,
+      "hit_ci": [
+       45.5,
+       67.7
+      ],
+      "gap": 13.9,
+      "gap_ci": [
+       2.9,
+       25.4
+      ],
+      "brier": 0.2653,
+      "logloss": 0.7294,
+      "bias": 1.52,
+      "over_share": 73.2,
+      "over_rate": 53.6,
+      "balance_gap": 19.6,
+      "group": "('A', 'staked')"
+     }
+    ]
+   },
+   {
+    "level": "Over vs Under",
+    "rows": [
+     {
+      "n": 6161,
+      "wlp": "3187-2925-49",
+      "matches": 313,
+      "stated": 55.7,
+      "hit": 52.1,
+      "hit_ci": [
+       49.0,
+       55.4
+      ],
+      "gap": 3.6,
+      "gap_ci": [
+       0.3,
+       6.7
+      ],
+      "brier": 0.2514,
+      "logloss": 0.6961,
+      "bias": -0.83,
+      "over_share": 0.0,
+      "over_rate": 47.9,
+      "balance_gap": -47.9,
+      "group": "Under"
+     },
+     {
+      "n": 5071,
+      "wlp": "2608-2414-49",
+      "matches": 296,
+      "stated": 55.7,
+      "hit": 51.9,
+      "hit_ci": [
+       48.5,
+       55.5
+      ],
+      "gap": 3.7,
+      "gap_ci": [
+       0.2,
+       7.2
+      ],
+      "brier": 0.2533,
+      "logloss": 0.7002,
+      "bias": 0.38,
+      "over_share": 100.0,
+      "over_rate": 51.9,
+      "balance_gap": 48.1,
+      "group": "Over"
+     }
+    ]
+   },
+   {
+    "level": "stat x side",
+    "rows": [
+     {
+      "n": 3252,
+      "wlp": "1639-1598-15",
+      "matches": 295,
+      "stated": 55.5,
+      "hit": 50.6,
+      "hit_ci": [
+       46.7,
+       54.4
+      ],
+      "gap": 4.8,
+      "gap_ci": [
+       0.9,
+       8.8
+      ],
+      "brier": 0.2534,
+      "logloss": 0.7002,
+      "bias": -1.21,
+      "over_share": 0.0,
+      "over_rate": 49.4,
+      "balance_gap": -49.4,
+      "group": "('kills', 'Under')"
+     },
+     {
+      "n": 2935,
+      "wlp": "1488-1428-19",
+      "matches": 287,
+      "stated": 55.8,
+      "hit": 51.0,
+      "hit_ci": [
+       47.1,
+       55.0
+      ],
+      "gap": 4.8,
+      "gap_ci": [
+       0.6,
+       8.9
+      ],
+      "brier": 0.2557,
+      "logloss": 0.7051,
+      "bias": 0.43,
+      "over_share": 100.0,
+      "over_rate": 51.0,
+      "balance_gap": 49.0,
+      "group": "('kills', 'Over')"
+     },
+     {
+      "n": 2909,
+      "wlp": "1548-1327-34",
+      "matches": 302,
+      "stated": 56.1,
+      "hit": 53.8,
+      "hit_ci": [
+       51.1,
+       57.2
+      ],
+      "gap": 2.2,
+      "gap_ci": [
+       -1.1,
+       4.9
+      ],
+      "brier": 0.2491,
+      "logloss": 0.6916,
+      "bias": -0.39,
+      "over_share": 0.0,
+      "over_rate": 46.2,
+      "balance_gap": -46.2,
+      "group": "('hs', 'Under')"
+     },
+     {
+      "n": 2136,
+      "wlp": "1120-986-30",
+      "matches": 278,
+      "stated": 55.5,
+      "hit": 53.2,
+      "hit_ci": [
+       49.5,
+       56.9
+      ],
+      "gap": 2.3,
+      "gap_ci": [
+       -1.3,
+       6.0
+      ],
+      "brier": 0.2501,
+      "logloss": 0.6935,
+      "bias": 0.3,
+      "over_share": 100.0,
+      "over_rate": 53.2,
+      "balance_gap": 46.8,
+      "group": "('hs', 'Over')"
+     }
+    ]
+   },
+   {
+    "level": "projection source",
+    "rows": [
+     {
+      "n": 5850,
+      "wlp": "3019-2772-59",
+      "matches": 207,
+      "stated": 55.9,
+      "hit": 52.1,
+      "hit_ci": [
+       50.0,
+       54.6
+      ],
+      "gap": 3.7,
+      "gap_ci": [
+       1.3,
+       6.0
+      ],
+      "brier": 0.2511,
+      "logloss": 0.6955,
+      "bias": -0.21,
+      "over_share": 46.4,
+      "over_rate": 49.1,
+      "balance_gap": -2.6,
+      "group": "perf-2 (HLTV N0)"
+     },
+     {
+      "n": 4986,
+      "wlp": "2618-2332-36",
+      "matches": 164,
+      "stated": 55.4,
+      "hit": 52.9,
+      "hit_ci": [
+       50.0,
+       55.9
+      ],
+      "gap": 2.5,
+      "gap_ci": [
+       -0.5,
+       5.5
+      ],
+      "brier": 0.252,
+      "logloss": 0.6975,
+      "bias": -0.44,
+      "over_share": 42.8,
+      "over_rate": 50.5,
+      "balance_gap": -7.7,
+      "group": "perf-cm2"
+     },
+     {
+      "n": 259,
+      "wlp": "96-161-2",
+      "matches": 34,
+      "stated": 58.6,
+      "hit": 37.4,
+      "hit_ci": [
+       28.1,
+       46.0
+      ],
+      "gap": 21.3,
+      "gap_ci": [
+       12.9,
+       30.8
+      ],
+      "brier": 0.2834,
+      "logloss": 0.7624,
+      "bias": 0.81,
+      "over_share": 53.3,
+      "over_rate": 46.7,
+      "balance_gap": 6.6,
+      "group": "perf-2-bo3 (BO3.gg)"
+     },
+     {
+      "n": 137,
+      "wlp": "62-74-1",
+      "matches": 15,
+      "stated": 53.1,
+      "hit": 45.6,
+      "hit_ci": [
+       32.9,
+       52.6
+      ],
+      "gap": 7.5,
+      "gap_ci": [
+       0.8,
+       20.4
+      ],
+      "brier": 0.2529,
+      "logloss": 0.6989,
+      "bias": 0.46,
+      "over_share": 57.4,
+      "over_rate": 52.9,
+      "balance_gap": 4.4,
+      "group": "legacy"
+     }
+    ]
+   },
+   {
+    "level": "line type",
+    "rows": [
+     {
+      "n": 11089,
+      "wlp": "5730-5261-98",
+      "matches": 316,
+      "stated": 55.7,
+      "hit": 52.1,
+      "hit_ci": [
+       50.2,
+       54.0
+      ],
+      "gap": 3.5,
+      "gap_ci": [
+       1.6,
+       5.4
+      ],
+      "brier": 0.2521,
+      "logloss": 0.6975,
+      "bias": -0.26,
+      "over_share": 45.4,
+      "over_rate": 49.6,
+      "balance_gap": -4.2,
+      "group": "standard"
+     },
+     {
+      "n": 132,
+      "wlp": "59-73-0",
+      "matches": 15,
+      "stated": 58.0,
+      "hit": 44.7,
+      "hit_ci": [
+       33.6,
+       55.7
+      ],
+      "gap": 13.3,
+      "gap_ci": [
+       1.6,
+       24.6
+      ],
+      "brier": 0.2695,
+      "logloss": 0.733,
+      "bias": -2.21,
+      "over_share": 12.9,
+      "over_rate": 54.5,
+      "balance_gap": -41.7,
+      "group": "demon"
+     },
+     {
+      "n": 11,
+      "wlp": "6-5-0",
+      "matches": 3,
+      "stated": 54.9,
+      "hit": 54.5,
+      "hit_ci": [
+       50.0,
+       60.0
+      ],
+      "gap": 0.4,
+      "gap_ci": [
+       -3.8,
+       4.5
+      ],
+      "brier": 0.2546,
+      "logloss": 0.7024,
+      "bias": -2.01,
+      "over_share": 100.0,
+      "over_rate": 54.5,
+      "balance_gap": 45.5,
+      "group": "goblin"
+     }
+    ]
+   },
+   {
+    "level": "series format",
+    "rows": [
+     {
+      "n": 9266,
+      "wlp": "4864-4328-74",
+      "matches": 265,
+      "stated": 55.6,
+      "hit": 52.9,
+      "hit_ci": [
+       51.0,
+       55.0
+      ],
+      "gap": 2.7,
+      "gap_ci": [
+       0.6,
+       4.6
+      ],
+      "brier": 0.2507,
+      "logloss": 0.6948,
+      "bias": -0.39,
+      "over_share": 43.7,
+      "over_rate": 50.1,
+      "balance_gap": -6.5,
+      "group": "bo3"
+     },
+     {
+      "n": 1360,
+      "wlp": "663-684-13",
+      "matches": 42,
+      "stated": 56.5,
+      "hit": 49.2,
+      "hit_ci": [
+       45.4,
+       53.3
+      ],
+      "gap": 7.3,
+      "gap_ci": [
+       3.1,
+       11.6
+      ],
+      "brier": 0.2556,
+      "logloss": 0.7049,
+      "bias": 0.24,
+      "over_share": 50.4,
+      "over_rate": 48.8,
+      "balance_gap": 1.6,
+      "group": "unknown"
+     },
+     {
+      "n": 536,
+      "wlp": "241-284-11",
+      "matches": 22,
+      "stated": 55.2,
+      "hit": 45.9,
+      "hit_ci": [
+       40.7,
+       51.5
+      ],
+      "gap": 9.3,
+      "gap_ci": [
+       3.0,
+       14.9
+      ],
+      "brier": 0.2679,
+      "logloss": 0.7302,
+      "bias": 0.77,
+      "over_share": 59.0,
+      "over_rate": 41.5,
+      "balance_gap": 17.5,
+      "group": "bo1"
+     },
+     {
+      "n": 70,
+      "wlp": "27-43-0",
+      "matches": 1,
+      "stated": 56.2,
+      "hit": 38.6,
+      "hit_ci": [
+       38.6,
+       38.6
+      ],
+      "gap": 17.6,
+      "gap_ci": [
+       17.6,
+       17.6
+      ],
+      "brier": 0.2723,
+      "logloss": 0.7379,
+      "bias": -4.26,
+      "over_share": 28.6,
+      "over_rate": 70.0,
+      "balance_gap": -41.4,
+      "group": "bo5"
+     }
+    ]
+   },
+   {
+    "level": "tier (best HLTV rank of the two teams)",
+    "rows": [
+     {
+      "n": 10601,
+      "wlp": "5477-5028-96",
+      "matches": 256,
+      "stated": 55.7,
+      "hit": 52.1,
+      "hit_ci": [
+       49.8,
+       53.9
+      ],
+      "gap": 3.6,
+      "gap_ci": [
+       1.8,
+       5.9
+      ],
+      "brier": 0.2521,
+      "logloss": 0.6976,
+      "bias": -0.31,
+      "over_share": 44.8,
+      "over_rate": 49.8,
+      "balance_gap": -5.0,
+      "group": "non-HLTV match"
+     },
+     {
+      "n": 411,
+      "wlp": "202-208-1",
+      "matches": 30,
+      "stated": 56.0,
+      "hit": 49.3,
+      "hit_ci": [
+       41.8,
+       56.7
+      ],
+      "gap": 6.7,
+      "gap_ci": [
+       -0.8,
+       14.2
+      ],
+      "brier": 0.26,
+      "logloss": 0.714,
+      "bias": -0.32,
+      "over_share": 54.4,
+      "over_rate": 51.0,
+      "balance_gap": 3.4,
+      "group": "rank 31-100"
+     },
+     {
+      "n": 143,
+      "wlp": "81-61-1",
+      "matches": 25,
+      "stated": 54.1,
+      "hit": 57.0,
+      "hit_ci": [
+       46.4,
+       66.7
+      ],
+      "gap": -2.9,
+      "gap_ci": [
+       -12.0,
+       7.2
+      ],
+      "brier": 0.2367,
+      "logloss": 0.6662,
+      "bias": 0.84,
+      "over_share": 40.8,
+      "over_rate": 45.8,
+      "balance_gap": -4.9,
+      "group": "top-30 team"
+     },
+     {
+      "n": 77,
+      "wlp": "35-42-0",
+      "matches": 10,
+      "stated": 55.2,
+      "hit": 45.5,
+      "hit_ci": [
+       33.3,
+       58.2
+      ],
+      "gap": 9.8,
+      "gap_ci": [
+       -3.2,
+       22.2
+      ],
+      "brier": 0.2619,
+      "logloss": 0.7175,
+      "bias": 2.0,
+      "over_share": 49.4,
+      "over_rate": 36.4,
+      "balance_gap": 13.0,
+      "group": "rank 100+"
+     }
+    ]
+   },
+   {
+    "level": "strength gap (player's team win chance)",
+    "rows": [
+     {
+      "n": 3746,
+      "wlp": "1897-1825-24",
+      "matches": 201,
+      "stated": 55.7,
+      "hit": 51.0,
+      "hit_ci": [
+       48.2,
+       54.1
+      ],
+      "gap": 4.7,
+      "gap_ci": [
+       1.8,
+       7.6
+      ],
+      "brier": 0.2526,
+      "logloss": 0.6986,
+      "bias": -0.76,
+      "over_share": 33.7,
+      "over_rate": 49.5,
+      "balance_gap": -15.9,
+      "group": "slight fav 50-65%"
+     },
+     {
+      "n": 2816,
+      "wlp": "1499-1280-37",
+      "matches": 153,
+      "stated": 55.3,
+      "hit": 53.9,
+      "hit_ci": [
+       51.8,
+       56.4
+      ],
+      "gap": 1.4,
+      "gap_ci": [
+       -1.2,
+       3.5
+      ],
+      "brier": 0.2495,
+      "logloss": 0.6922,
+      "bias": -0.48,
+      "over_share": 41.1,
+      "over_rate": 49.8,
+      "balance_gap": -8.7,
+      "group": "favourite 65%+"
+     },
+     {
+      "n": 2613,
+      "wlp": "1352-1248-13",
+      "matches": 162,
+      "stated": 55.2,
+      "hit": 52.0,
+      "hit_ci": [
+       48.4,
+       55.1
+      ],
+      "gap": 3.2,
+      "gap_ci": [
+       -0.1,
+       6.8
+      ],
+      "brier": 0.2512,
+      "logloss": 0.6957,
+      "bias": 0.07,
+      "over_share": 42.8,
+      "over_rate": 48.5,
+      "balance_gap": -5.7,
+      "group": "slight dog 35-50%"
+     },
+     {
+      "n": 2057,
+      "wlp": "1047-986-24",
+      "matches": 128,
+      "stated": 56.9,
+      "hit": 51.5,
+      "hit_ci": [
+       47.0,
+       55.9
+      ],
+      "gap": 5.4,
+      "gap_ci": [
+       1.0,
+       10.1
+      ],
+      "brier": 0.2569,
+      "logloss": 0.7077,
+      "bias": 0.41,
+      "over_share": 74.4,
+      "over_rate": 51.3,
+      "balance_gap": 23.1,
+      "group": "underdog <35%"
+     }
+    ]
+   },
+   {
+    "level": "strength gap x side",
+    "rows": [
+     {
+      "n": 2483,
+      "wlp": "1261-1208-14",
+      "matches": 194,
+      "stated": 56.3,
+      "hit": 51.1,
+      "hit_ci": [
+       46.4,
+       55.6
+      ],
+      "gap": 5.2,
+      "gap_ci": [
+       0.7,
+       10.1
+      ],
+      "brier": 0.2527,
+      "logloss": 0.6988,
+      "bias": -1.22,
+      "over_share": 0.0,
+      "over_rate": 48.9,
+      "balance_gap": -48.9,
+      "group": "('slight fav 50-65%', 'Under')"
+     },
+     {
+      "n": 1662,
+      "wlp": "875-761-26",
+      "matches": 146,
+      "stated": 55.7,
+      "hit": 53.5,
+      "hit_ci": [
+       49.4,
+       57.6
+      ],
+      "gap": 2.3,
+      "gap_ci": [
+       -1.9,
+       6.4
+      ],
+      "brier": 0.2504,
+      "logloss": 0.6941,
+      "bias": -0.72,
+      "over_share": 0.0,
+      "over_rate": 46.5,
+      "balance_gap": -46.5,
+      "group": "('favourite 65%+', 'Under')"
+     },
+     {
+      "n": 1533,
+      "wlp": "785-728-20",
+      "matches": 116,
+      "stated": 57.9,
+      "hit": 51.9,
+      "hit_ci": [
+       45.7,
+       59.3
+      ],
+      "gap": 6.0,
+      "gap_ci": [
+       -1.6,
+       12.4
+      ],
+      "brier": 0.2574,
+      "logloss": 0.709,
+      "bias": 0.78,
+      "over_share": 100.0,
+      "over_rate": 51.9,
+      "balance_gap": 48.1,
+      "group": "('underdog <35%', 'Over')"
+     },
+     {
+      "n": 1492,
+      "wlp": "789-698-5",
+      "matches": 150,
+      "stated": 55.4,
+      "hit": 53.1,
+      "hit_ci": [
+       47.4,
+       58.7
+      ],
+      "gap": 2.4,
+      "gap_ci": [
+       -3.0,
+       8.4
+      ],
+      "brier": 0.249,
+      "logloss": 0.6911,
+      "bias": -0.35,
+      "over_share": 0.0,
+      "over_rate": 46.9,
+      "balance_gap": -46.9,
+      "group": "('slight dog 35-50%', 'Under')"
+     },
+     {
+      "n": 1263,
+      "wlp": "636-617-10",
+      "matches": 172,
+      "stated": 54.6,
+      "hit": 50.8,
+      "hit_ci": [
+       45.0,
+       57.0
+      ],
+      "gap": 3.8,
+      "gap_ci": [
+       -2.5,
+       9.8
+      ],
+      "brier": 0.2524,
+      "logloss": 0.6981,
+      "bias": 0.14,
+      "over_share": 100.0,
+      "over_rate": 50.8,
+      "balance_gap": 49.2,
+      "group": "('slight fav 50-65%', 'Over')"
+     },
+     {
+      "n": 1154,
+      "wlp": "624-519-11",
+      "matches": 133,
+      "stated": 54.7,
+      "hit": 54.6,
+      "hit_ci": [
+       49.9,
+       59.3
+      ],
+      "gap": 0.1,
+      "gap_ci": [
+       -4.8,
+       4.9
+      ],
+      "brier": 0.2482,
+      "logloss": 0.6895,
+      "bias": -0.12,
+      "over_share": 100.0,
+      "over_rate": 54.6,
+      "balance_gap": 45.4,
+      "group": "('favourite 65%+', 'Over')"
+     },
+     {
+      "n": 1121,
+      "wlp": "563-550-8",
+      "matches": 144,
+      "stated": 54.9,
+      "hit": 50.6,
+      "hit_ci": [
+       44.7,
+       56.6
+      ],
+      "gap": 4.3,
+      "gap_ci": [
+       -2.1,
+       10.1
+      ],
+      "brier": 0.2541,
+      "logloss": 0.7018,
+      "bias": 0.62,
+      "over_share": 100.0,
+      "over_rate": 50.6,
+      "balance_gap": 49.4,
+      "group": "('slight dog 35-50%', 'Over')"
+     },
+     {
+      "n": 524,
+      "wlp": "262-258-4",
+      "matches": 100,
+      "stated": 54.1,
+      "hit": 50.4,
+      "hit_ci": [
+       41.2,
+       59.3
+      ],
+      "gap": 3.7,
+      "gap_ci": [
+       -5.5,
+       13.0
+      ],
+      "brier": 0.2553,
+      "logloss": 0.704,
+      "bias": -0.66,
+      "over_share": 0.0,
+      "over_rate": 49.6,
+      "balance_gap": -49.6,
+      "group": "('underdog <35%', 'Under')"
+     }
+    ]
+   },
+   {
+    "level": "LAN / online",
+    "rows": [
+     {
+      "n": 6865,
+      "wlp": "3554-3243-68",
+      "matches": 183,
+      "stated": 55.6,
+      "hit": 52.3,
+      "hit_ci": [
+       49.6,
+       54.8
+      ],
+      "gap": 3.3,
+      "gap_ci": [
+       0.7,
+       5.9
+      ],
+      "brier": 0.2521,
+      "logloss": 0.6977,
+      "bias": -0.33,
+      "over_share": 43.1,
+      "over_rate": 50.1,
+      "balance_gap": -7.0,
+      "group": "lan"
+     },
+     {
+      "n": 3130,
+      "wlp": "1652-1462-16",
+      "matches": 124,
+      "stated": 55.9,
+      "hit": 53.1,
+      "hit_ci": [
+       50.2,
+       55.8
+      ],
+      "gap": 2.9,
+      "gap_ci": [
+       0.1,
+       5.6
+      ],
+      "brier": 0.2507,
+      "logloss": 0.6946,
+      "bias": -0.2,
+      "over_share": 49.6,
+      "over_rate": 49.1,
+      "balance_gap": 0.5,
+      "group": "online"
+     },
+     {
+      "n": 1237,
+      "wlp": "589-634-14",
+      "matches": 105,
+      "stated": 55.9,
+      "hit": 48.2,
+      "hit_ci": [
+       43.8,
+       52.6
+      ],
+      "gap": 7.7,
+      "gap_ci": [
+       3.1,
+       12.4
+      ],
+      "brier": 0.2572,
+      "logloss": 0.708,
+      "bias": -0.23,
+      "over_share": 44.5,
+      "over_rate": 48.9,
+      "balance_gap": -4.4,
+      "group": "unknown"
+     }
+    ]
+   },
+   {
+    "level": "overtime in the series",
+    "rows": [
+     {
+      "n": 7182,
+      "wlp": "3798-3313-71",
+      "matches": 201,
+      "stated": 55.8,
+      "hit": 53.4,
+      "hit_ci": [
+       51.3,
+       55.5
+      ],
+      "gap": 2.3,
+      "gap_ci": [
+       0.2,
+       4.6
+      ],
+      "brier": 0.2506,
+      "logloss": 0.6945,
+      "bias": 1.45,
+      "over_share": 45.8,
+      "over_rate": 39.9,
+      "balance_gap": 5.9,
+      "group": "no overtime"
+     },
+     {
+      "n": 3345,
+      "wlp": "1643-1680-22",
+      "matches": 78,
+      "stated": 55.5,
+      "hit": 49.4,
+      "hit_ci": [
+       45.7,
+       53.5
+      ],
+      "gap": 6.1,
+      "gap_ci": [
+       1.9,
+       9.8
+      ],
+      "brier": 0.256,
+      "logloss": 0.7054,
+      "bias": -3.97,
+      "over_share": 41.8,
+      "over_rate": 69.9,
+      "balance_gap": -28.1,
+      "group": "overtime map"
+     },
+     {
+      "n": 705,
+      "wlp": "354-346-5",
+      "matches": 53,
+      "stated": 56.0,
+      "hit": 50.6,
+      "hit_ci": [
+       46.3,
+       55.5
+      ],
+      "gap": 5.4,
+      "gap_ci": [
+       0.5,
+       9.7
+      ],
+      "brier": 0.2522,
+      "logloss": 0.6983,
+      "bias": -0.46,
+      "over_share": 54.3,
+      "over_rate": 53.4,
+      "balance_gap": 0.9,
+      "group": "unknown"
+     }
+    ]
+   },
+   {
+    "level": "odds source",
+    "rows": [
+     {
+      "n": 7295,
+      "wlp": "3790-3452-53",
+      "matches": 224,
+      "stated": 55.5,
+      "hit": 52.3,
+      "hit_ci": [
+       50.1,
+       54.7
+      ],
+      "gap": 3.1,
+      "gap_ci": [
+       0.7,
+       5.4
+      ],
+      "brier": 0.2521,
+      "logloss": 0.6976,
+      "bias": -0.41,
+      "over_share": 42.7,
+      "over_rate": 50.0,
+      "balance_gap": -7.3,
+      "group": "thunderpick"
+     },
+     {
+      "n": 2763,
+      "wlp": "1391-1344-28",
+      "matches": 94,
+      "stated": 56.3,
+      "hit": 50.9,
+      "hit_ci": [
+       47.6,
+       54.4
+      ],
+      "gap": 5.5,
+      "gap_ci": [
+       1.9,
+       8.9
+      ],
+      "brier": 0.2535,
+      "logloss": 0.7005,
+      "bias": 0.04,
+      "over_share": 52.3,
+      "over_rate": 49.0,
+      "balance_gap": 3.4,
+      "group": "none"
+     },
+     {
+      "n": 1174,
+      "wlp": "614-543-17",
+      "matches": 111,
+      "stated": 55.7,
+      "hit": 53.1,
+      "hit_ci": [
+       49.4,
+       57.1
+      ],
+      "gap": 2.6,
+      "gap_ci": [
+       -1.2,
+       6.2
+      ],
+      "brier": 0.2504,
+      "logloss": 0.6942,
+      "bias": -0.27,
+      "over_share": 43.2,
+      "over_rate": 49.4,
+      "balance_gap": -6.1,
+      "group": "polymarket"
+     }
+    ]
+   },
+   {
+    "level": "model version tag",
+    "rows": [
+     {
+      "n": 1938,
+      "wlp": "1015-912-11",
+      "matches": 59,
+      "stated": 55.3,
+      "hit": 52.7,
+      "hit_ci": [
+       47.6,
+       57.6
+      ],
+      "gap": 2.6,
+      "gap_ci": [
+       -2.3,
+       7.7
+      ],
+      "brier": 0.2515,
+      "logloss": 0.6963,
+      "bias": -0.66,
+      "over_share": 46.9,
+      "over_rate": 51.6,
+      "balance_gap": -4.8,
+      "group": "aa6696d5d6"
+     },
+     {
+      "n": 1636,
+      "wlp": "935-681-20",
+      "matches": 50,
+      "stated": 55.2,
+      "hit": 57.9,
+      "hit_ci": [
+       53.7,
+       62.1
+      ],
+      "gap": -2.6,
+      "gap_ci": [
+       -7.0,
+       1.7
+      ],
+      "brier": 0.2448,
+      "logloss": 0.6827,
+      "bias": 0.81,
+      "over_share": 39.9,
+      "over_rate": 43.1,
+      "balance_gap": -3.2,
+      "group": "2085aa791c"
+     },
+     {
+      "n": 1280,
+      "wlp": "668-601-11",
+      "matches": 59,
+      "stated": 56.0,
+      "hit": 52.6,
+      "hit_ci": [
+       48.0,
+       57.3
+      ],
+      "gap": 3.4,
+      "gap_ci": [
+       -1.2,
+       8.1
+      ],
+      "brier": 0.253,
+      "logloss": 0.6995,
+      "bias": -0.0,
+      "over_share": 46.9,
+      "over_rate": 48.4,
+      "balance_gap": -1.5,
+      "group": "794a775f51"
+     },
+     {
+      "n": 1191,
+      "wlp": "596-581-14",
+      "matches": 43,
+      "stated": 55.8,
+      "hit": 50.6,
+      "hit_ci": [
+       46.7,
+       55.4
+      ],
+      "gap": 5.2,
+      "gap_ci": [
+       0.5,
+       9.1
+      ],
+      "brier": 0.252,
+      "logloss": 0.6973,
+      "bias": -0.56,
+      "over_share": 42.8,
+      "over_rate": 49.4,
+      "balance_gap": -6.5,
+      "group": "9cfcbd217a"
+     },
+     {
+      "n": 1011,
+      "wlp": "529-471-11",
+      "matches": 38,
+      "stated": 56.3,
+      "hit": 52.9,
+      "hit_ci": [
+       46.9,
+       59.2
+      ],
+      "gap": 3.4,
+      "gap_ci": [
+       -2.9,
+       9.2
+      ],
+      "brier": 0.2511,
+      "logloss": 0.6955,
+      "bias": -0.06,
+      "over_share": 56.1,
+      "over_rate": 49.2,
+      "balance_gap": 6.9,
+      "group": "6f6e2d39d7"
+     },
+     {
+      "n": 798,
+      "wlp": "360-437-1",
+      "matches": 29,
+      "stated": 55.8,
+      "hit": 45.2,
+      "hit_ci": [
+       37.1,
+       54.1
+      ],
+      "gap": 10.7,
+      "gap_ci": [
+       1.5,
+       19.0
+      ],
+      "brier": 0.2646,
+      "logloss": 0.7229,
+      "bias": -2.82,
+      "over_share": 32.1,
+      "over_rate": 64.4,
+      "balance_gap": -32.2,
+      "group": "f663af8917"
+     },
+     {
+      "n": 778,
+      "wlp": "399-370-9",
+      "matches": 44,
+      "stated": 55.3,
+      "hit": 51.9,
+      "hit_ci": [
+       44.9,
+       58.8
+      ],
+      "gap": 3.4,
+      "gap_ci": [
+       -3.2,
+       10.6
+      ],
+      "brier": 0.2518,
+      "logloss": 0.697,
+      "bias": -0.5,
+      "over_share": 45.5,
+      "over_rate": 49.7,
+      "balance_gap": -4.2,
+      "group": "a310d76b55"
+     },
+     {
+      "n": 644,
+      "wlp": "364-276-4",
+      "matches": 35,
+      "stated": 55.9,
+      "hit": 56.9,
+      "hit_ci": [
+       51.0,
+       62.2
+      ],
+      "gap": -1.0,
+      "gap_ci": [
+       -6.1,
+       5.2
+      ],
+      "brier": 0.2466,
+      "logloss": 0.687,
+      "bias": -0.29,
+      "over_share": 41.4,
+      "over_rate": 50.2,
+      "balance_gap": -8.8,
+      "group": "c36104d079"
+     },
+     {
+      "n": 366,
+      "wlp": "196-169-1",
+      "matches": 20,
+      "stated": 55.4,
+      "hit": 53.7,
+      "hit_ci": [
+       49.3,
+       58.1
+      ],
+      "gap": 1.7,
+      "gap_ci": [
+       -2.7,
+       5.9
+      ],
+      "brier": 0.2457,
+      "logloss": 0.6844,
+      "bias": 0.33,
+      "over_share": 47.7,
+      "over_rate": 48.5,
+      "balance_gap": -0.8,
+      "group": "1088faf157"
+     },
+     {
+      "n": 353,
+      "wlp": "149-201-3",
+      "matches": 20,
+      "stated": 54.9,
+      "hit": 42.6,
+      "hit_ci": [
+       36.7,
+       47.8
+      ],
+      "gap": 12.4,
+      "gap_ci": [
+       7.0,
+       18.4
+      ],
+      "brier": 0.2618,
+      "logloss": 0.7172,
+      "bias": -0.22,
+      "over_share": 47.7,
+      "over_rate": 48.6,
+      "balance_gap": -0.9,
+      "group": "65e60ea725"
+     },
+     {
+      "n": 246,
+      "wlp": "108-138-0",
+      "matches": 15,
+      "stated": 57.9,
+      "hit": 43.9,
+      "hit_ci": [
+       33.3,
+       55.3
+      ],
+      "gap": 14.0,
+      "gap_ci": [
+       2.8,
+       24.0
+      ],
+      "brier": 0.2649,
+      "logloss": 0.724,
+      "bias": 1.19,
+      "over_share": 45.9,
+      "over_rate": 41.1,
+      "balance_gap": 4.9,
+      "group": "a64083e3c2"
+     },
+     {
+      "n": 240,
+      "wlp": "117-121-2",
+      "matches": 13,
+      "stated": 57.4,
+      "hit": 49.2,
+      "hit_ci": [
+       44.2,
+       54.2
+      ],
+      "gap": 8.2,
+      "gap_ci": [
+       3.2,
+       13.5
+      ],
+      "brier": 0.2618,
+      "logloss": 0.7184,
+      "bias": -0.3,
+      "over_share": 58.4,
+      "over_rate": 48.7,
+      "balance_gap": 9.7,
+      "group": "313626ab10"
+     },
+     {
+      "n": 222,
+      "wlp": "119-95-8",
+      "matches": 9,
+      "stated": 57.6,
+      "hit": 55.6,
+      "hit_ci": [
+       45.2,
+       64.9
+      ],
+      "gap": 2.0,
+      "gap_ci": [
+       -7.5,
+       12.9
+      ],
+      "brier": 0.2469,
+      "logloss": 0.6863,
+      "bias": -0.24,
+      "over_share": 57.0,
+      "over_rate": 56.5,
+      "balance_gap": 0.5,
+      "group": "17e5e85837"
+     },
+     {
+      "n": 156,
+      "wlp": "75-80-1",
+      "matches": 11,
+      "stated": 54.2,
+      "hit": 48.4,
+      "hit_ci": [
+       35.1,
+       59.8
+      ],
+      "gap": 5.8,
+      "gap_ci": [
+       -6.4,
+       19.2
+      ],
+      "brier": 0.253,
+      "logloss": 0.6991,
+      "bias": 1.2,
+      "over_share": 40.6,
+      "over_rate": 43.2,
+      "balance_gap": -2.6,
+      "group": "807a289529"
+     },
+     {
+      "n": 117,
+      "wlp": "54-61-2",
+      "matches": 6,
+      "stated": 54.1,
+      "hit": 47.0,
+      "hit_ci": [
+       35.5,
+       58.8
+      ],
+      "gap": 7.2,
+      "gap_ci": [
+       -4.9,
+       19.3
+      ],
+      "brier": 0.2614,
+      "logloss": 0.7163,
+      "bias": 0.87,
+      "over_share": 51.3,
+      "over_rate": 52.2,
+      "balance_gap": -0.9,
+      "group": "fa0ff604d2"
+     },
+     {
+      "n": 51,
+      "wlp": "21-30-0",
+      "matches": 2,
+      "stated": 52.5,
+      "hit": 41.2,
+      "hit_ci": [
+       33.3,
+       45.5
+      ],
+      "gap": 11.4,
+      "gap_ci": [
+       7.4,
+       18.6
+      ],
+      "brier": 0.248,
+      "logloss": 0.6887,
+      "bias": -0.35,
+      "over_share": 56.9,
+      "over_rate": 52.9,
+      "balance_gap": 3.9,
+      "group": "70a8247c14"
+     },
+     {
+      "n": 48,
+      "wlp": "17-31-0",
+      "matches": 9,
+      "stated": 57.6,
+      "hit": 35.4,
+      "hit_ci": [
+       23.1,
+       56.1
+      ],
+      "gap": 22.2,
+      "gap_ci": [
+       0.2,
+       35.4
+      ],
+      "brier": 0.2891,
+      "logloss": 0.7744,
+      "bias": 0.43,
+      "over_share": 47.9,
+      "over_rate": 41.7,
+      "balance_gap": 6.2,
+      "group": "0d6b117256"
+     },
+     {
+      "n": 46,
+      "wlp": "21-25-0",
+      "matches": 10,
+      "stated": 55.8,
+      "hit": 45.7,
+      "hit_ci": [
+       29.4,
+       62.2
+      ],
+      "gap": 10.1,
+      "gap_ci": [
+       -6.3,
+       26.3
+      ],
+      "brier": 0.2545,
+      "logloss": 0.7021,
+      "bias": -0.35,
+      "over_share": 28.3,
+      "over_rate": 43.5,
+      "balance_gap": -15.2,
+      "group": "c80ac64bc8"
+     },
+     {
+      "n": 36,
+      "wlp": "16-20-0",
+      "matches": 7,
+      "stated": 54.3,
+      "hit": 44.4,
+      "hit_ci": [
+       28.6,
+       86.7
+      ],
+      "gap": 9.9,
+      "gap_ci": [
+       -30.6,
+       26.6
+      ],
+      "brier": 0.2602,
+      "logloss": 0.7139,
+      "bias": -4.03,
+      "over_share": 30.6,
+      "over_rate": 69.4,
+      "balance_gap": -38.9,
+      "group": "77d2cdf508"
+     }
+    ]
+   },
+   {
+    "level": "UTC start day",
+    "rows": [
+     {
+      "n": 1017,
+      "wlp": "582-425-10",
+      "matches": 26,
+      "stated": 55.3,
+      "hit": 57.8,
+      "hit_ci": [
+       51.7,
+       63.6
+      ],
+      "gap": -2.5,
+      "gap_ci": [
+       -8.3,
+       3.9
+      ],
+      "brier": 0.246,
+      "logloss": 0.6853,
+      "bias": 2.02,
+      "over_share": 41.5,
+      "over_rate": 36.6,
+      "balance_gap": 4.9,
+      "group": "2026-10-27"
+     },
+     {
+      "n": 926,
+      "wlp": "470-442-14",
+      "matches": 27,
+      "stated": 55.1,
+      "hit": 51.5,
+      "hit_ci": [
+       44.1,
+       59.0
+      ],
+      "gap": 3.5,
+      "gap_ci": [
+       -3.9,
+       11.2
+      ],
+      "brier": 0.2525,
+      "logloss": 0.6983,
+      "bias": -0.57,
+      "over_share": 43.8,
+      "over_rate": 49.2,
+      "balance_gap": -5.5,
+      "group": "2026-10-16"
+     },
+     {
+      "n": 911,
+      "wlp": "474-430-7",
+      "matches": 27,
+      "stated": 56.0,
+      "hit": 52.4,
+      "hit_ci": [
+       46.7,
+       56.9
+      ],
+      "gap": 3.6,
+      "gap_ci": [
+       -0.9,
+       9.5
+      ],
+      "brier": 0.2535,
+      "logloss": 0.7004,
+      "bias": -0.15,
+      "over_share": 46.0,
+      "over_rate": 48.7,
+      "balance_gap": -2.7,
+      "group": "2026-10-21"
+     },
+     {
+      "n": 861,
+      "wlp": "440-418-3",
+      "matches": 24,
+      "stated": 55.3,
+      "hit": 51.3,
+      "hit_ci": [
+       42.6,
+       60.5
+      ],
+      "gap": 4.0,
+      "gap_ci": [
+       -5.5,
+       12.2
+      ],
+      "brier": 0.2535,
+      "logloss": 0.7003,
+      "bias": -1.87,
+      "over_share": 52.2,
+      "over_rate": 55.7,
+      "balance_gap": -3.5,
+      "group": "2026-10-24"
+     },
+     {
+      "n": 784,
+      "wlp": "425-352-7",
+      "matches": 31,
+      "stated": 55.9,
+      "hit": 54.7,
+      "hit_ci": [
+       47.8,
+       60.4
+      ],
+      "gap": 1.2,
+      "gap_ci": [
+       -4.9,
+       8.4
+      ],
+      "brier": 0.2496,
+      "logloss": 0.6929,
+      "bias": 0.39,
+      "over_share": 46.7,
+      "over_rate": 47.2,
+      "balance_gap": -0.5,
+      "group": "2026-10-20"
+     },
+     {
+      "n": 768,
+      "wlp": "410-346-12",
+      "matches": 16,
+      "stated": 57.5,
+      "hit": 54.2,
+      "hit_ci": [
+       45.5,
+       62.9
+      ],
+      "gap": 3.3,
+      "gap_ci": [
+       -5.6,
+       12.3
+      ],
+      "brier": 0.2477,
+      "logloss": 0.6882,
+      "bias": 0.19,
+      "over_share": 57.4,
+      "over_rate": 51.3,
+      "balance_gap": 6.1,
+      "group": "2026-10-14"
+     },
+     {
+      "n": 745,
+      "wlp": "397-338-10",
+      "matches": 17,
+      "stated": 55.8,
+      "hit": 54.0,
+      "hit_ci": [
+       48.0,
+       59.0
+      ],
+      "gap": 1.8,
+      "gap_ci": [
+       -3.4,
+       7.2
+      ],
+      "brier": 0.2451,
+      "logloss": 0.6834,
+      "bias": 0.06,
+      "over_share": 45.3,
+      "over_rate": 48.3,
+      "balance_gap": -3.0,
+      "group": "2026-10-17"
+     },
+     {
+      "n": 692,
+      "wlp": "391-290-11",
+      "matches": 16,
+      "stated": 55.2,
+      "hit": 57.4,
+      "hit_ci": [
+       53.6,
+       61.4
+      ],
+      "gap": -2.2,
+      "gap_ci": [
+       -6.2,
+       1.3
+      ],
+      "brier": 0.2425,
+      "logloss": 0.678,
+      "bias": -0.64,
+      "over_share": 38.8,
+      "over_rate": 53.2,
+      "balance_gap": -14.4,
+      "group": "2026-10-26"
+     },
+     {
+      "n": 685,
+      "wlp": "347-333-5",
+      "matches": 23,
+      "stated": 55.8,
+      "hit": 51.0,
+      "hit_ci": [
+       45.3,
+       57.4
+      ],
+      "gap": 4.8,
+      "gap_ci": [
+       -1.8,
+       10.3
+      ],
+      "brier": 0.2555,
+      "logloss": 0.7046,
+      "bias": -0.71,
+      "over_share": 51.2,
+      "over_rate": 51.6,
+      "balance_gap": -0.4,
+      "group": "2026-10-15"
+     },
+     {
+      "n": 676,
+      "wlp": "321-350-5",
+      "matches": 23,
+      "stated": 55.1,
+      "hit": 47.8,
+      "hit_ci": [
+       41.0,
+       54.4
+      ],
+      "gap": 7.3,
+      "gap_ci": [
+       0.5,
+       13.9
+      ],
+      "brier": 0.2549,
+      "logloss": 0.7036,
+      "bias": -0.07,
+      "over_share": 43.4,
+      "over_rate": 48.7,
+      "balance_gap": -5.4,
+      "group": "2026-10-19"
+     },
+     {
+      "n": 626,
+      "wlp": "330-294-2",
+      "matches": 14,
+      "stated": 55.3,
+      "hit": 52.9,
+      "hit_ci": [
+       45.1,
+       61.1
+      ],
+      "gap": 2.4,
+      "gap_ci": [
+       -5.4,
+       10.5
+      ],
+      "brier": 0.2513,
+      "logloss": 0.6958,
+      "bias": 0.94,
+      "over_share": 43.9,
+      "over_rate": 43.9,
+      "balance_gap": 0.0,
+      "group": "2026-10-25"
+     },
+     {
+      "n": 552,
+      "wlp": "270-281-1",
+      "matches": 18,
+      "stated": 55.7,
+      "hit": 49.0,
+      "hit_ci": [
+       38.2,
+       58.9
+      ],
+      "gap": 6.7,
+      "gap_ci": [
+       -3.4,
+       17.9
+      ],
+      "brier": 0.2617,
+      "logloss": 0.7172,
+      "bias": -3.31,
+      "over_share": 33.6,
+      "over_rate": 65.7,
+      "balance_gap": -32.1,
+      "group": "2026-10-22"
+     },
+     {
+      "n": 502,
+      "wlp": "211-291-0",
+      "matches": 17,
+      "stated": 57.3,
+      "hit": 42.0,
+      "hit_ci": [
+       36.1,
+       48.1
+      ],
+      "gap": 15.3,
+      "gap_ci": [
+       8.7,
+       21.0
+      ],
+      "brier": 0.2683,
+      "logloss": 0.731,
+      "bias": 0.03,
+      "over_share": 49.6,
+      "over_rate": 46.2,
+      "balance_gap": 3.4,
+      "group": "2026-10-12"
+     },
+     {
+      "n": 379,
+      "wlp": "166-213-0",
+      "matches": 11,
+      "stated": 56.0,
+      "hit": 43.8,
+      "hit_ci": [
+       35.2,
+       53.6
+      ],
+      "gap": 12.2,
+      "gap_ci": [
+       2.2,
+       20.7
+      ],
+      "brier": 0.2633,
+      "logloss": 0.7197,
+      "bias": -1.38,
+      "over_share": 28.0,
+      "over_rate": 56.7,
+      "balance_gap": -28.8,
+      "group": "2026-10-23"
+     },
+     {
+      "n": 308,
+      "wlp": "130-177-1",
+      "matches": 6,
+      "stated": 55.4,
+      "hit": 42.3,
+      "hit_ci": [
+       35.4,
+       50.5
+      ],
+      "gap": 13.0,
+      "gap_ci": [
+       4.4,
+       20.3
+      ],
+      "brier": 0.2666,
+      "logloss": 0.7267,
+      "bias": -1.98,
+      "over_share": 45.0,
+      "over_rate": 53.7,
+      "balance_gap": -8.8,
+      "group": "2026-10-18"
+     },
+     {
+      "n": 298,
+      "wlp": "171-122-5",
+      "matches": 8,
+      "stated": 54.9,
+      "hit": 58.4,
+      "hit_ci": [
+       53.6,
+       63.7
+      ],
+      "gap": -3.5,
+      "gap_ci": [
+       -9.5,
+       1.8
+      ],
+      "brier": 0.2458,
+      "logloss": 0.6847,
+      "bias": -1.61,
+      "over_share": 42.7,
+      "over_rate": 58.4,
+      "balance_gap": -15.7,
+      "group": "2026-10-28"
+     },
+     {
+      "n": 254,
+      "wlp": "126-126-2",
+      "matches": 8,
+      "stated": 54.9,
+      "hit": 50.0,
+      "hit_ci": [
+       39.2,
+       59.8
+      ],
+      "gap": 4.9,
+      "gap_ci": [
+       -4.2,
+       15.7
+      ],
+      "brier": 0.2514,
+      "logloss": 0.696,
+      "bias": 0.64,
+      "over_share": 49.6,
+      "over_rate": 49.6,
+      "balance_gap": 0.0,
+      "group": "2026-10-11"
+     },
+     {
+      "n": 248,
+      "wlp": "134-111-3",
+      "matches": 9,
+      "stated": 55.6,
+      "hit": 54.7,
+      "hit_ci": [
+       48.7,
+       60.9
+      ],
+      "gap": 0.9,
+      "gap_ci": [
+       -3.1,
+       5.4
+      ],
+      "brier": 0.2462,
+      "logloss": 0.686,
+      "bias": 0.87,
+      "over_share": 43.3,
+      "over_rate": 42.0,
+      "balance_gap": 1.2,
+      "group": "2026-10-13"
+     }
+    ]
+   },
+   {
+    "level": "UTC start day, staked only",
+    "rows": [
+     {
+      "n": 403,
+      "wlp": "217-181-5",
+      "matches": 16,
+      "stated": 60.9,
+      "hit": 54.5,
+      "hit_ci": [
+       43.3,
+       66.6
+      ],
+      "gap": 6.4,
+      "gap_ci": [
+       -5.8,
+       17.0
+      ],
+      "brier": 0.2503,
+      "logloss": 0.6936,
+      "bias": 0.84,
+      "over_share": 63.3,
+      "over_rate": 49.0,
+      "balance_gap": 14.3,
+      "group": "2026-10-14"
+     },
+     {
+      "n": 386,
+      "wlp": "198-185-3",
+      "matches": 24,
+      "stated": 59.5,
+      "hit": 51.7,
+      "hit_ci": [
+       43.2,
+       58.7
+      ],
+      "gap": 7.8,
+      "gap_ci": [
+       1.2,
+       16.3
+      ],
+      "brier": 0.2564,
+      "logloss": 0.7065,
+      "bias": -0.53,
+      "over_share": 50.9,
+      "over_rate": 51.2,
+      "balance_gap": -0.3,
+      "group": "2026-10-21"
+     },
+     {
+      "n": 363,
+      "wlp": "204-158-1",
+      "matches": 25,
+      "stated": 58.8,
+      "hit": 56.4,
+      "hit_ci": [
+       45.6,
+       68.8
+      ],
+      "gap": 2.4,
+      "gap_ci": [
+       -10.3,
+       13.3
+      ],
+      "brier": 0.2519,
+      "logloss": 0.6975,
+      "bias": 1.36,
+      "over_share": 43.9,
+      "over_rate": 40.6,
+      "balance_gap": 3.3,
+      "group": "2026-10-27"
+     },
+     {
+      "n": 354,
+      "wlp": "177-177-0",
+      "matches": 23,
+      "stated": 58.4,
+      "hit": 50.0,
+      "hit_ci": [
+       35.9,
+       61.6
+      ],
+      "gap": 8.4,
+      "gap_ci": [
+       -3.1,
+       22.5
+      ],
+      "brier": 0.2567,
+      "logloss": 0.707,
+      "bias": -1.72,
+      "over_share": 56.8,
+      "over_rate": 58.2,
+      "balance_gap": -1.4,
+      "group": "2026-10-24"
+     },
+     {
+      "n": 333,
+      "wlp": "167-163-3",
+      "matches": 24,
+      "stated": 58.9,
+      "hit": 50.6,
+      "hit_ci": [
+       39.7,
+       64.3
+      ],
+      "gap": 8.3,
+      "gap_ci": [
+       -5.5,
+       19.1
+      ],
+      "brier": 0.2584,
+      "logloss": 0.7103,
+      "bias": -0.3,
+      "over_share": 48.2,
+      "over_rate": 48.5,
+      "balance_gap": -0.3,
+      "group": "2026-10-16"
+     },
+     {
+      "n": 310,
+      "wlp": "179-127-4",
+      "matches": 17,
+      "stated": 59.5,
+      "hit": 58.5,
+      "hit_ci": [
+       49.3,
+       65.2
+      ],
+      "gap": 1.0,
+      "gap_ci": [
+       -5.7,
+       10.4
+      ],
+      "brier": 0.242,
+      "logloss": 0.6775,
+      "bias": 0.16,
+      "over_share": 48.0,
+      "over_rate": 47.7,
+      "balance_gap": 0.3,
+      "group": "2026-10-17"
+     },
+     {
+      "n": 293,
+      "wlp": "165-126-2",
+      "matches": 31,
+      "stated": 59.6,
+      "hit": 56.7,
+      "hit_ci": [
+       46.4,
+       66.8
+      ],
+      "gap": 2.9,
+      "gap_ci": [
+       -7.8,
+       13.1
+      ],
+      "brier": 0.2525,
+      "logloss": 0.6995,
+      "bias": 0.76,
+      "over_share": 50.9,
+      "over_rate": 45.4,
+      "balance_gap": 5.5,
+      "group": "2026-10-20"
+     },
+     {
+      "n": 286,
+      "wlp": "141-143-2",
+      "matches": 18,
+      "stated": 59.5,
+      "hit": 49.6,
+      "hit_ci": [
+       37.2,
+       58.7
+      ],
+      "gap": 9.8,
+      "gap_ci": [
+       0.3,
+       22.1
+      ],
+      "brier": 0.2644,
+      "logloss": 0.7234,
+      "bias": -0.21,
+      "over_share": 53.5,
+      "over_rate": 46.8,
+      "balance_gap": 6.7,
+      "group": "2026-10-15"
+     },
+     {
+      "n": 247,
+      "wlp": "112-135-0",
+      "matches": 16,
+      "stated": 60.6,
+      "hit": 45.3,
+      "hit_ci": [
+       39.1,
+       53.4
+      ],
+      "gap": 15.3,
+      "gap_ci": [
+       7.1,
+       21.2
+      ],
+      "brier": 0.2757,
+      "logloss": 0.7467,
+      "bias": 0.81,
+      "over_share": 49.4,
+      "over_rate": 43.3,
+      "balance_gap": 6.1,
+      "group": "2026-10-12"
+     },
+     {
+      "n": 247,
+      "wlp": "127-119-1",
+      "matches": 14,
+      "stated": 58.6,
+      "hit": 51.6,
+      "hit_ci": [
+       39.1,
+       66.0
+      ],
+      "gap": 7.0,
+      "gap_ci": [
+       -8.0,
+       19.8
+      ],
+      "brier": 0.2575,
+      "logloss": 0.7087,
+      "bias": 1.62,
+      "over_share": 47.6,
+      "over_rate": 39.8,
+      "balance_gap": 7.7,
+      "group": "2026-10-25"
+     },
+     {
+      "n": 236,
+      "wlp": "141-90-5",
+      "matches": 14,
+      "stated": 58.6,
+      "hit": 61.0,
+      "hit_ci": [
+       54.3,
+       69.5
+      ],
+      "gap": -2.4,
+      "gap_ci": [
+       -11.0,
+       4.1
+      ],
+      "brier": 0.2352,
+      "logloss": 0.6631,
+      "bias": -0.47,
+      "over_share": 39.4,
+      "over_rate": 48.1,
+      "balance_gap": -8.7,
+      "group": "2026-10-26"
+     },
+     {
+      "n": 207,
+      "wlp": "98-108-1",
+      "matches": 17,
+      "stated": 59.1,
+      "hit": 47.6,
+      "hit_ci": [
+       29.5,
+       64.0
+      ],
+      "gap": 11.5,
+      "gap_ci": [
+       -5.0,
+       29.7
+      ],
+      "brier": 0.2631,
+      "logloss": 0.7201,
+      "bias": -2.65,
+      "over_share": 26.7,
+      "over_rate": 60.7,
+      "balance_gap": -34.0,
+      "group": "2026-10-22"
+     },
+     {
+      "n": 204,
+      "wlp": "103-101-0",
+      "matches": 21,
+      "stated": 58.4,
+      "hit": 50.5,
+      "hit_ci": [
+       39.2,
+       61.5
+      ],
+      "gap": 7.9,
+      "gap_ci": [
+       -3.2,
+       18.9
+      ],
+      "brier": 0.2585,
+      "logloss": 0.7106,
+      "bias": -1.26,
+      "over_share": 46.1,
+      "over_rate": 56.4,
+      "balance_gap": -10.3,
+      "group": "2026-10-19"
+     },
+     {
+      "n": 152,
+      "wlp": "71-81-0",
+      "matches": 10,
+      "stated": 59.2,
+      "hit": 46.7,
+      "hit_ci": [
+       35.0,
+       60.0
+      ],
+      "gap": 12.5,
+      "gap_ci": [
+       -1.5,
+       24.0
+      ],
+      "brier": 0.2635,
+      "logloss": 0.7202,
+      "bias": -1.73,
+      "over_share": 19.1,
+      "over_rate": 57.9,
+      "balance_gap": -38.8,
+      "group": "2026-10-23"
+     },
+     {
+      "n": 118,
+      "wlp": "35-83-0",
+      "matches": 6,
+      "stated": 58.8,
+      "hit": 29.7,
+      "hit_ci": [
+       18.0,
+       45.4
+      ],
+      "gap": 29.1,
+      "gap_ci": [
+       13.5,
+       40.7
+      ],
+      "brier": 0.2922,
+      "logloss": 0.7788,
+      "bias": -1.97,
+      "over_share": 45.8,
+      "over_rate": 51.7,
+      "balance_gap": -5.9,
+      "group": "2026-10-18"
+     },
+     {
+      "n": 100,
+      "wlp": "56-43-1",
+      "matches": 8,
+      "stated": 59.5,
+      "hit": 56.6,
+      "hit_ci": [
+       38.7,
+       72.5
+      ],
+      "gap": 2.9,
+      "gap_ci": [
+       -12.6,
+       20.5
+      ],
+      "brier": 0.246,
+      "logloss": 0.6852,
+      "bias": 1.14,
+      "over_share": 37.4,
+      "over_rate": 40.4,
+      "balance_gap": -3.0,
+      "group": "2026-10-11"
+     },
+     {
+      "n": 96,
+      "wlp": "62-32-2",
+      "matches": 8,
+      "stated": 59.7,
+      "hit": 66.0,
+      "hit_ci": [
+       58.6,
+       78.2
+      ],
+      "gap": -6.2,
+      "gap_ci": [
+       -20.7,
+       1.3
+      ],
+      "brier": 0.2358,
+      "logloss": 0.6656,
+      "bias": 1.14,
+      "over_share": 39.4,
+      "over_rate": 39.4,
+      "balance_gap": 0.0,
+      "group": "2026-10-13"
+     },
+     {
+      "n": 94,
+      "wlp": "59-32-3",
+      "matches": 7,
+      "stated": 58.2,
+      "hit": 64.8,
+      "hit_ci": [
+       52.8,
+       78.2
+      ],
+      "gap": -6.6,
+      "gap_ci": [
+       -21.2,
+       6.7
+      ],
+      "brier": 0.2364,
+      "logloss": 0.6659,
+      "bias": -2.83,
+      "over_share": 38.5,
+      "over_rate": 64.8,
+      "balance_gap": -26.4,
+      "group": "2026-10-28"
+     }
+    ]
+   }
+  ],
+  "order_holds": {
+   "grade band": true,
+   "grade letter": false
+  },
+  "dropped": {
+   "void": 711,
+   "owner test": 6,
+   "logged after start": 36,
+   "open": 596
+  }
+ }
+}
