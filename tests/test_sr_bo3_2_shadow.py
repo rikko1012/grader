@@ -123,4 +123,4 @@ def test_lookups_benched_and_search_do_not_depend_on_the_switch(monkeypatch):
         monkeypatch.setenv("BO3_PROJ_SHADOW", on)
         assert callable(getattr(bo3.BO3, "player_block", None) or getattr(bo3.BO3, "search", None) or bo3.BO3)
         assert hasattr(bo3, "BO3")
-    assert not any(m == "lol" or m.startswith("lol.") for m in sys.modules)
+    # the static lol-isolation test (lol/tests/test_lol_isolation.py) covers imports; sys.modules is session-wide
