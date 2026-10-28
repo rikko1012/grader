@@ -236,7 +236,10 @@ def _contained(league, stat):
 def grades(rows, league=None):
     """rg-1 research letters of settled Scout leans: sports-gp-1 band of the UNROUNDED unconditional lean-side chance
     (board_view.research_grade); n, W-L-P, hit rate + game-clustered 95% interval. Research - not validated. The
-    board's market (N4) / sanity holds are live-board rules and are not re-applied to stored forecasts here."""
+    board's market (N4) / sanity holds are live-board rules and are not re-applied to stored forecasts here.
+    Known limit (A9 audit 2026-10-28): the chance here is the forecast record's raw sm-1 chance; while a market's
+    cal-mi-1 flag is ON the board shows the calibrated chance, which is not stored per forecast (tracked picks keep
+    it). Every cal-mi market is OFF (A8a), so the two agree today; `gradecheck` (A9) scores the walk-forward chance."""
     from . import board_view
     leans = [r for r in rows if r["status"] == "settled" and r["lean"] and not _contained(league, r.get("stat"))]
     out = []
