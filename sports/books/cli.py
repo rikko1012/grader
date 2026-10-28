@@ -62,8 +62,9 @@ def health(db, now=None):
     """-> one row per book: the status table's data (also used by tests)."""
     now = now or datetime.now(timezone.utc)
     from .. import config
-    feed_ok = bool(config.odds_api_key())      # polled by the canonical path (books/sources.oddsapi_ingest), not here
-    feed_why = "" if feed_ok else "ODDS_API_KEY is not set (The Odds API is polled by sports.worker, source oddsapi)"
+    feed_ok = config.odds_api_enabled() and bool(config.odds_api_key())
+    feed_why = ("disabled: SPORTS_ODDSAPI is not 1" if not config.odds_api_enabled() else
+                "" if feed_ok else "ODDS_API_KEY is not set (The Odds API is polled by sports.worker, source oddsapi)")
     op_ok, op_why = providers.PROVIDERS["oddspapi"].configured()
     rows = []
     for book in providers.BOOKS:

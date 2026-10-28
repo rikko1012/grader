@@ -56,6 +56,7 @@ def test_games_rotate_least_recently_fetched_first_within_the_horizon(lim):
 
 
 def test_the_poller_stops_at_the_pace_instead_of_draining_the_month(lim, monkeypatch):
+    monkeypatch.setenv("SPORTS_ODDSAPI", "1")
     monkeypatch.setenv("ODDS_API_KEY", "k" * 32)
     monkeypatch.setitem(ledger.LIMITS, "oddsapi", {"monthly": 450, "reserve": 50, "gap_s": 0.0, "per_min": 1000})
     calls = []
@@ -81,3 +82,18 @@ def test_the_poller_stops_at_the_pace_instead_of_draining_the_month(lim, monkeyp
     assert out["events"] == 6 and out["credits"] == 24 and "paced" not in out
     out2 = sources.oddsapi_ingest(None, "nba", "2026-10-24T20:30:00Z", None, [])
     assert out2["events"] == 4 and out2["paced"].startswith("paced")             # 24 + 16 = 40; the next 4 would pass 43.75
+
+
+def test_free_default_never_calls_oddsapi_even_with_saved_key(monkeypatch):
+    monkeypatch.delenv("SPORTS_ODDSAPI", raising=False)
+    monkeypatch.setenv("ODDS_API_KEY", "invalid-saved-key")
+    def forbidden(*args, **kwargs):
+        raise AssertionError("disabled provider must not use network or credits")
+    monkeypatch.setattr(sources, "_get", forbidden)
+    for league in ("nba", "nfl"):
+        result = sources.oddsapi_ingest(None, league, "2026-10-28T16:00:00Z", None, [])
+        assert result["ok"] and "disabled" in result["skipped"]
+    monkeypatch.setenv("SPORTS_ODDSAPI", "1")
+    monkeypatch.delenv("ODDS_API_KEY")
+    assert sources.oddsapi_ingest(None, "nba", "2026-10-28T16:00:00Z", None, []) == {
+        "ok": False, "status": "key not set here"}

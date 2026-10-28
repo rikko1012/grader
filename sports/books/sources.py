@@ -229,6 +229,8 @@ def _oddsapi_order(evs, now_iso):
 
 
 def oddsapi_ingest(con, league, observed_at, resolver, teams_raw):
+    if not config.odds_api_enabled():
+        return {"ok": True, "skipped": "disabled: SPORTS_ODDSAPI is not 1; direct book feeds run via source books"}
     k = os.environ.get("ODDS_API_KEY")
     if not k:
         return {"ok": False, "status": "key not set here"}
