@@ -19,7 +19,7 @@ th{background:#19263a;color:var(--muted);font-size:10px;text-transform:uppercase
 <div class="eyebrow">League of Legends · data center · admin only</div>
 <h1>LoL board <span class="muted small" id="gen"></span></h1>
 <div class="note small">Not released to members. Probabilities are model estimates; grades use the published bands; stakes are held at 0U until the projection is validated at real offered lines (lol/EVALUATION.md). One saved pre-match forecast per line feeds this board, the match tables, the cards and the slip check.</div>
-<div class="bar" id="tabs"><button data-v="board" class="on">Board</button><button data-v="tables">Match tables</button><button data-v="settled">Settled</button><button data-v="status">Data center</button></div>
+<div class="bar" id="tabs"><button data-v="board" class="on">Board</button><button data-v="tables">Match tables</button><button data-v="settled">Settled</button><button data-v="status">Data center</button><button data-v="cal">Calibration (lc-1)</button></div>
 <div id="out" class="muted">Loading…</div>
 </div>
 <div id="modal" onclick="if(event.target===this)this.style.display='none'"><div class="card" id="card"></div></div>
@@ -28,7 +28,7 @@ const tok = new URLSearchParams(location.search).get("token");
 const q = (p) => fetch(p + (p.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(tok || "")).then(r => r.json());
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const pct = (x) => x == null ? "–" : (100 * x).toFixed(1) + "%";
-let B = null, S = null, view = "board";
+let B = null, S = null, L = null, view = "board";
 function sides(x) {
   const s = x.sides || {}; const o = [];
   for (const k of ["higher", "lower"]) { const v = s[k]; if (!v) continue;
@@ -96,7 +96,23 @@ function card(i) {
   document.getElementById("card").innerHTML = h + `<div class=bar><button onclick="document.getElementById('modal').style.display='none'">Close</button></div>`;
   document.getElementById("modal").style.display = "flex";
 }
+function calView() {
+  if (!L) { q("/admin/lol/learning.json").then(x => { L = x || {}; render(); }).catch(e => { L = {note: "Could not load: " + e}; render(); }); return "Loading…"; }
+  const c = L.lc1;
+  if (!c) return esc(L.note || "lc-1 status not written yet (the worker writes it with learning.json)");
+  if (c.error) return esc("lc-1 status unavailable: " + c.error);
+  let h = `<div class="card grid"><div><div class=k>Status in use</div>${c.enabled ? "calibration enabled" : "LOL_CAL=0: raw chance everywhere"} · weights ${esc(c.source || "none")} ${esc(c.sha || "")}</div><div><div class=k>Markets ON</div>${c.on && c.on.length ? c.on.map(esc).join(", ") : "none (raw model chance shown)"}</div><div><div class=k>Daily run</div>${c.autofit ? "on" : "LOL_CAL_AUTOFIT=0: off"} · last run ${esc(c.last_run || "–")} · last attempt ${esc(c.last_attempt || "–")}</div><div><div class=k>Fitted at</div>${esc(c.fitted_at || "–")}</div><div><div class=k>Consecutive fails</div>${esc(Object.entries(c.fails || {}).map(([k, v]) => k + " " + v).join(" · ") || "–")}</div></div><div class="small muted">${esc(c.rule || "")} · ${esc(c.register || "")}</div>`;
+  const t = c.table || {};
+  h += `<h2>Per market, last run (chosen side, stated / hit)</h2><div class="scroll"><table><thead><tr><th>Market</th><th class="num">Scored</th><th class="num">Series</th><th class="num">Days</th><th class="num">Live stated</th><th class="num">Live hit</th><th class="num">lc-1 stated</th><th class="num">lc-1 hit</th><th class="num">Log loss lc-1 − live (series 95%)</th><th class="num">Share Over / over rate</th><th>Verdict</th><th>Why</th></tr></thead><tbody>`;
+  for (const [k, r] of Object.entries(t)) h += `<tr><td>${esc(k)}</td><td class="num">${r.scored ?? "–"}</td><td class="num">${r.series ?? "–"}</td><td class="num">${r.days ?? "–"}</td><td class="num">${pct(r.live_stated)}</td><td class="num">${pct(r.live_hit)}</td><td class="num">${pct(r.lc1_stated)}</td><td class="num">${pct(r.lc1_hit)}</td><td class="num">${r.logloss_diff == null ? "–" : r.logloss_diff.toFixed(4)}${r.logloss_ci && r.logloss_ci[0] != null ? " (" + r.logloss_ci[0].toFixed(3) + ", " + r.logloss_ci[1].toFixed(3) + ")" : ""}</td><td class="num">${pct(r.share_over)} / ${pct(r.over_rate)}</td><td>${esc(r.verdict)}</td><td class="small">${esc(r.why)}</td></tr>`;
+  if (!Object.keys(t).length) h += `<tr><td colspan=12 class="muted">No daily run has completed yet.</td></tr>`;
+  h += `</tbody></table></div><h2>Last 10 decisions</h2><div class="scroll"><table><thead><tr><th>Date</th><th>Market</th><th>Action</th><th class="num">n</th><th class="num">Series</th><th>Verdict</th><th>Why</th></tr></thead><tbody>`;
+  for (const d of (c.decisions || []).slice().reverse()) h += `<tr><td>${esc(d.date)}</td><td>${esc(d.market)}</td><td>${esc(d.action)}</td><td class="num">${d.n ?? "–"}</td><td class="num">${d.series ?? "–"}</td><td>${esc(d.verdict || "–")}</td><td class="small">${esc(d.why || "")}</td></tr>`;
+  if (!(c.decisions || []).length) h += `<tr><td colspan=7 class="muted">No decision logged yet.</td></tr>`;
+  return h + `</tbody></table></div><div class="small muted">Log: ${esc(c.log || "")}</div>`;
+}
 function render() {
+  if (view === "cal") { document.getElementById("out").innerHTML = calView(); return; }
   document.getElementById("out").innerHTML = !B || B.note ? esc((B || {}).note || "Not written yet") : ({board: boardView, tables: tablesView, settled: settledView, status: statusView}[view])();
   document.getElementById("gen").textContent = B && B.at ? "· board " + B.at : "";
 }

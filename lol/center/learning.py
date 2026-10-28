@@ -98,9 +98,19 @@ def dashboard(con):
                          "unit": "distinct series/player/stat/scope, independent of book or alternate line",
                          "met": len(player_props) >= REQUIRED["player_markets"] and len(series) >= REQUIRED["series"]},
             "candidates": store.get_meta(con, "candidates") or [],
+            "lc1": _lc1_view(),
             "note": "forward record of saved pre-match forecasts at offered lines; all mixes versions and alternate lines; "
                     "mean_p_side and probability scores condition on no push; inspect model/fit and offered-side groups; "
                     "no promotion happens automatically"}
+
+
+def _lc1_view():
+    """lc-1 status in use + the last 10 daily decisions + the last per-market stated / hit table (lol/cal.py admin_view)."""
+    try:
+        from .. import cal
+        return cal.admin_view()
+    except Exception as e:                                   # noqa: BLE001 - the dashboard never fails on this block
+        return {"error": f"{type(e).__name__}: {str(e)[:200]}"}
 
 
 def _grouped_ci(units, n_boot=2000, seed=7):

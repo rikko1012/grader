@@ -15,6 +15,8 @@ market (A14 6) decides the `on` flag written into the weights file.
     python -m lol.cal eval   [--db PATH]               walk-forward report only (prints JSON)
     python -m lol.cal fit    [--db PATH --out PATH]    walk-forward + final fit -> weights JSON (the only writer)
     python -m lol.cal status                           the weights in use (file / default / off)
+    python -m lol.cal autofit [--db PATH --out PATH]   A16 1: the daily run (fit + hysteresis + decision log); the LoL worker
+                                                       starts it once a UTC day as a child process (LOL_CAL_AUTOFIT=0: never)
 
 --db defaults to the production lol.db (lol/center/store.db_path()), opened read-only.
 
@@ -469,17 +471,236 @@ def run_eval(rows):
     return report(walk(rows))
 
 
+# ======================================================================================================== daily decision (A16 1)
+LOG_NAME, STATE_NAME = "lol_cal_log.jsonl", "lol_cal_state.json"
+FAILS_OFF = 2                                             # an ON market switches OFF after this many consecutive daily fails
+AUTOFIT_HOUR = 6                                          # UTC hour from which the day's run may start
+
+
+def autofit_enabled():
+    return os.environ.get("LOL_CAL_AUTOFIT", "1").strip().lower() not in _OFF
+
+
+def log_path(base=None):
+    return Path(base) / LOG_NAME if base else weights_path().with_name(LOG_NAME)
+
+
+def state_path(base=None):
+    return Path(base) / STATE_NAME if base else weights_path().with_name(STATE_NAME)
+
+
+def append_log(path, recs):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as f:
+        for r in recs:
+            f.write(json.dumps(r, sort_keys=True, default=float) + "\n")
+
+
+def read_log(path, last=10):
+    """The last `last` lines of the decision log (bounded read of the file's tail)."""
+    path = Path(path)
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(max(0, size - 200_000))
+            lines = f.read().decode("utf-8", "replace").splitlines()
+    except OSError:
+        return []
+    out = []
+    for ln in lines[-last:]:
+        try:
+            out.append(json.loads(ln))
+        except ValueError:
+            continue
+    return out
+
+
+def _read_json(path):
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _write_json(path, obj):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(obj, indent=1, default=float), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def settle_signature(con):
+    """(count, latest settled_at) of lol_settlements - a day whose signature equals the last run's has nothing new."""
+    n, last = con.execute("SELECT COUNT(*), MAX(settled_at) FROM lol_settlements").fetchone()
+    return [int(n or 0), last]
+
+
+def table(rep):
+    """The per-market stated / hit table (live vs lc-1) for the admin page."""
+    out = {}
+    for k, m in rep.items():
+        a = m.get("all") or {}
+        lv, c = a.get("live") or {}, a.get("lc_1") or {}
+        out[k] = {"scored": m.get("scored"), "series": m.get("series"), "days": m.get("days"), "verdict": m.get("verdict"),
+                  "why": m.get("why"), "live_stated": lv.get("stated_chosen"), "live_hit": lv.get("hit_chosen"),
+                  "lc1_stated": c.get("stated_chosen"), "lc1_hit": c.get("hit_chosen"),
+                  "logloss_diff": (a.get("logloss_cal_minus_live") or {}).get("mean"),
+                  "logloss_ci": (a.get("logloss_cal_minus_live") or {}).get("ci_series"),
+                  "share_over": c.get("share_over_favoured"), "over_rate": c.get("over_rate")}
+    return out
+
+
+def decide(rep, fresh, prev, fails):
+    """A16 1.3 hysteresis. rep: report(); fresh: weights_obj() of today (on = today's pass); prev: the weights file in use before
+    (or None); fails: {market: consecutive daily fails}. -> (params, fails, decisions)."""
+    prev_p = (prev or {}).get("params") or {}
+    params, new_fails, dec = {}, {}, []
+    for k in sorted(set(fresh["params"]) | set(prev_p)):
+        f, p = fresh["params"].get(k), prev_p.get(k)
+        was_on = bool(p and p.get("on"))
+        passed = bool(f and f.get("on"))
+        nf = 0 if passed else int(fails.get(k, 0)) + 1
+        if passed:
+            params[k], action = dict(f, on=True), ("ON (pass)" if not was_on else "stays ON (pass, refitted)")
+        elif was_on and nf < FAILS_OFF:
+            params[k], action = dict(p, on=True, verdict=(f or {}).get("verdict", "not evaluable")), f"stays ON ({nf} of {FAILS_OFF} fails, last passing parameters)"
+        else:
+            base = f or p
+            params[k], action = dict(base, on=False), ("OFF" + (f" ({nf} consecutive fails)" if was_on else ""))
+        new_fails[k] = nf
+        m = rep.get(k) or {}
+        dec.append({"market": k, "n": m.get("scored", 0), "series": m.get("series", 0), "days": m.get("days", 0),
+                    "verdict": m.get("verdict", "not evaluable"), "why": m.get("why", "no scored props"),
+                    "on_before": was_on, "on_after": params[k]["on"], "fails": nf, "action": action})
+    return params, new_fails, dec
+
+
+def peak_rss_mb():
+    """This process's peak resident memory (MB): ru_maxrss on POSIX, PeakWorkingSetSize on Windows."""
+    try:
+        import resource
+        r = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        return round(r / (1024 * 1024 if __import__("sys").platform == "darwin" else 1024), 1)
+    except Exception:                                    # noqa: BLE001
+        pass
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class PMC(ctypes.Structure):
+            _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD), ("PeakWorkingSetSize", ctypes.c_size_t),
+                        ("WorkingSetSize", ctypes.c_size_t), ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                        ("QuotaPagedPoolUsage", ctypes.c_size_t), ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                        ("QuotaNonPagedPoolUsage", ctypes.c_size_t), ("PagefileUsage", ctypes.c_size_t),
+                        ("PeakPagefileUsage", ctypes.c_size_t)]
+        c = PMC()
+        c.cb = ctypes.sizeof(PMC)
+        k32 = ctypes.windll.kernel32
+        k32.GetCurrentProcess.restype = wintypes.HANDLE
+        f = k32.K32GetProcessMemoryInfo
+        f.argtypes, f.restype = [wintypes.HANDLE, ctypes.POINTER(PMC), wintypes.DWORD], wintypes.BOOL
+        if f(k32.GetCurrentProcess(), ctypes.byref(c), c.cb):
+            return round(c.PeakWorkingSetSize / 1e6 / 1.048576, 1)
+    except Exception:                                    # noqa: BLE001
+        pass
+    return None
+
+
+def skip_if_unchanged(sig, today, base=None):
+    """True (and one "skip" log line, state touched) when `sig` equals the last completed run's settlement signature."""
+    sp = state_path(base)
+    state = _read_json(sp) or {}
+    if state.get("signature") != sig:
+        return False
+    append_log(log_path(base), [{"date": today, "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "market": "*",
+                                 "action": "skip", "why": "no new settlement since the last run", "signature": sig}])
+    state.update(last_skip=today, last_attempt=today)
+    _write_json(sp, state)
+    return True
+
+
+def autofit(dbp, out=None, base=None, today=None, force=False):
+    """A16 1: the daily A14 fit with hysteresis. Reads lol.db read-only; writes the weights file, the state file and appends the
+    decision log. Skips (one log line) when nothing settled since the last completed run. -> summary dict."""
+    import sqlite3
+    out = Path(out) if out else (Path(base) / FILE_NAME if base else weights_path())
+    lp, sp = log_path(base or out.parent), state_path(base or out.parent)
+    today = today or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    state = _read_json(sp) or {}
+    con = sqlite3.connect(f"file:{Path(dbp).as_posix()}?mode=ro", uri=True, timeout=30)
+    try:
+        sig = settle_signature(con)
+        if not force and skip_if_unchanged(sig, today, base or out.parent):
+            return {"skipped": True, "date": today, "signature": sig, "peak_rss_mb": peak_rss_mb()}
+        rows = rows_from_db(con)
+    finally:
+        con.close()
+    rep = run_eval(rows)
+    fresh = weights_obj(rows, rep, f"daily autofit {today} (A16 1)", max((r["settled_at"] or "" for r in rows), default=None))
+    prev = None
+    try:
+        prev = validate(json.loads(out.read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        prev = None
+    if prev is None:
+        try:
+            prev = validate(json.loads(DEFAULT_PATH.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            prev = None
+    params, fails, dec = decide(rep, fresh, prev, state.get("fails") or {})
+    obj = dict(fresh, params=params)
+    obj["sha"] = _sha(params)
+    validate(obj)
+    _write_json(out, obj)
+    reset_cache()
+    for d in dec:
+        d.update(date=today, at=at, sha=obj["sha"])
+    append_log(lp, dec)
+    state.update(signature=sig, fails=fails, last_run=today, last_attempt=today, sha=obj["sha"], rows=len(rows),
+                 series=len({r["sid"] for r in rows}), table=table(rep), at=at)
+    _write_json(sp, state)
+    return {"skipped": False, "date": today, "rows": len(rows), "sha": obj["sha"], "on": sorted(k for k, p in params.items() if p["on"]),
+            "decisions": dec, "peak_rss_mb": peak_rss_mb()}
+
+
+def admin_view(base=None):
+    """The lc-1 block of /admin/lol/learning.json (pure file reads; no numpy)."""
+    obj, src = load(force=True)
+    st = _read_json(state_path(base)) or {}
+    return {"version": VERSION, "register": REGISTER + " + A16 1", "enabled": enabled(), "autofit": autofit_enabled(),
+            "source": src, "sha": (obj or {}).get("sha"), "fitted_at": (obj or {}).get("fitted_at"),
+            "on": sorted(k for k, p in ((obj or {}).get("params") or {}).items() if p.get("on")),
+            "markets": {k: {"on": p.get("on"), "verdict": p.get("verdict")} for k, p in ((obj or {}).get("params") or {}).items()},
+            "fails": st.get("fails") or {}, "last_run": st.get("last_run"), "last_attempt": st.get("last_attempt"),
+            "rule": f"A14 6 daily; ON on a pass, OFF after {FAILS_OFF} consecutive daily fails; LOL_CAL_AUTOFIT=0 stops it",
+            "table": st.get("table") or {}, "decisions": read_log(log_path(base), 10), "log": str(log_path(base))}
+
+
 def main(argv=None):
     import argparse
     import sqlite3
     import warnings
     warnings.filterwarnings("ignore", category=RuntimeWarning)
     ap = argparse.ArgumentParser(prog="python -m lol.cal")
-    ap.add_argument("cmd", choices=["fit", "eval", "status"])
+    ap.add_argument("cmd", choices=["fit", "eval", "status", "autofit"])
     ap.add_argument("--db", help="lol.db (default: the production data-center database, read-only)")
-    ap.add_argument("--out", help="weights file to write (fit only; default <LOL_DATA_DIR>/model/lol_cal.json)")
+    ap.add_argument("--out", help="weights file to write (fit / autofit; default <LOL_DATA_DIR>/model/lol_cal.json)")
     ap.add_argument("--source", help="label of the data in the weights file (fit only)")
+    ap.add_argument("--force", action="store_true", help="autofit: run even when nothing new settled")
     a = ap.parse_args(argv)
+    if a.cmd == "autofit":
+        if a.db:
+            dbp = Path(a.db)
+        else:
+            from .center import store
+            dbp = store.db_path()
+        out = Path(a.out) if a.out else weights_path()
+        print(json.dumps(autofit(dbp, out=out, base=out.parent, force=a.force), default=float))
+        return
     if a.cmd == "status":
         obj, src = load(force=True)
         print(json.dumps({"version": VERSION, "enabled": enabled(), "source": src, "path": str(weights_path()),

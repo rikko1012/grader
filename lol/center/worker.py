@@ -13,7 +13,10 @@ Inside the worker:
 - main thread: writes status.json / coverage.json / quarantine.json / links.json in DATA_DIR/lol/center every 60 s
   (atomic); exits when the parent server is gone
 
-Switches (environment): LOL_ARCHIVE=0 no market polling; LOL_LP=0 no Leaguepedia; LOL_LE=0 no LoL Esports. (LOL_DATA=0, read by server.py,
+- once per UTC day (from 06:00, right after the settle step): the A16 1 lc-1 decision as a child process
+  (`python -m lol.cal autofit`; log <LOL_DATA_DIR>/model/lol_cal_log.jsonl), skipped when nothing new settled
+
+Switches (environment): LOL_CAL_AUTOFIT=0 no daily lc-1 run; LOL_ARCHIVE=0 no market polling; LOL_LP=0 no Leaguepedia; LOL_LE=0 no LoL Esports. (LOL_DATA=0, read by server.py,
 starts nothing.) No member page reads any of this; member LoL pages are not released.
 """
 import json
@@ -121,6 +124,48 @@ def _write(name, obj):
     tmp = OUT / (name + ".tmp")
     tmp.write_text(json.dumps(obj, default=str))
     os.replace(tmp, OUT / name)
+
+
+AUTOFIT_TIMEOUT_S = 900
+REPO = __import__("pathlib").Path(__file__).resolve().parents[2]
+
+
+def lc1_autofit(con, now=None, run=None):
+    """A16 1: once per UTC day (first cycle at or after cal.AUTOFIT_HOUR), right after settlement, the A14 lc-1 decision.
+    Nothing new settled -> one skip line, no child. Otherwise `python -m lol.cal autofit` runs as a child process (numpy and the
+    fit never enter this worker's memory), single-threaded, bounded by AUTOFIT_TIMEOUT_S. One attempt per day, success or not.
+    -> summary dict, or None when not due / disabled."""
+    import subprocess
+    from datetime import datetime, timezone
+    from .. import cal
+    if not cal.autofit_enabled():
+        return None
+    now = now or datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+    if now.hour < cal.AUTOFIT_HOUR or store.get_meta(con, "lc1_autofit_day") == today:
+        return None
+    store.set_meta(con, "lc1_autofit_day", today)
+    con.commit()
+    sig = cal.settle_signature(con)
+    if cal.skip_if_unchanged(sig, today):
+        return {"at": store.now_iso(), "skipped": True, "signature": sig}
+    env = dict(os.environ, OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", MKL_NUM_THREADS="1")
+    run = run or subprocess.run
+    t0 = time.time()
+    r = run([sys.executable, "-m", "lol.cal", "autofit", "--db", str(store.db_path())], cwd=str(REPO), env=env,
+            capture_output=True, text=True, timeout=AUTOFIT_TIMEOUT_S)
+    out = {"at": store.now_iso(), "seconds": round(time.time() - t0, 1), "code": r.returncode}
+    if r.returncode != 0:
+        out["error"] = (r.stderr or "")[-400:]
+        cal.append_log(cal.log_path(), [{"date": today, "at": out["at"], "market": "*", "action": "error",
+                                         "why": f"autofit exit {r.returncode}: {(r.stderr or '').strip()[-200:]}"}])
+        return out
+    try:
+        res = json.loads((r.stdout or "").strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        return dict(out, error="no JSON from the child")
+    out.update({k: res.get(k) for k in ("skipped", "rows", "sha", "on", "peak_rss_mb")})
+    return out
 
 
 def markets_loop():
@@ -253,6 +298,10 @@ def build_loop():
                     _step(con, "forecasts", lambda: STATE.__setitem__(
                         "forecasts", {"at": store.now_iso(), "counts": forecast.run(con, market=_market_odds)}))
                     _step(con, "settle", lambda: STATE.__setitem__("settled", {"at": store.now_iso(), "counts": forecast.settle_all(con)}))
+                    # A16 1: the daily lc-1 decision right after settlement (child process; skipped when nothing new settled)
+                    lc1 = _step(con, "lc1_autofit", lambda: lc1_autofit(con))
+                    if lc1 is not None:
+                        STATE["lc1_autofit"] = lc1
                 b = _step(con, "board", lambda: forecast.board(con))
                 if b is not None:
                     try:
@@ -308,6 +357,7 @@ def write_status():
                "leaguepedia_login": dict(cargo.LOGIN, configured=bool(cargo.credentials())),
                "last_build": store.get_meta(con, "last_build"), "links": STATE["links"],
                "last_export": store.get_meta(con, "last_export"), "forecasts": STATE.get("forecasts"), "settled": STATE.get("settled"),
+               "lc1_autofit": STATE.get("lc1_autofit"),
                "history_handoff": STATE.get("handoff"), "last_history_import": store.get_meta(con, "last_handoff"),
                "quarantine": {r[0]: r[1] for r in con.execute(
                    "SELECT kind || ':' || reason, COUNT(*) FROM quarantine WHERE resolved_at IS NULL GROUP BY kind, reason")},
